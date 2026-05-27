@@ -1,9 +1,12 @@
 extends RefCounted
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const NarrativeRecordValidator = preload("res://scripts/tools/narrative_record_validator.gd")
 
-const EDITOR_DOMAINS := ["items", "recipes", "characters", "maps"]
+const EDITOR_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees"]
 const EFFECTS_DOMAIN := "json"
+
+var narrative_validator: NarrativeRecordValidator = NarrativeRecordValidator.new()
 
 
 func supports_domain(domain: String) -> bool:
@@ -29,6 +32,8 @@ func validate_record(domain: String, id_value: String, registry: ContentRegistry
 			_validate_character(id_value, record, registry, issues)
 		"maps":
 			_validate_map(id_value, record, registry, issues)
+		"dialogues", "quests", "skills", "skill_trees":
+			narrative_validator.validate_record(domain, id_value, record, registry, issues)
 		_:
 			issues.append(_issue("warning", "$", "shallow_validation", "record-level validation not implemented for domain %s" % domain))
 

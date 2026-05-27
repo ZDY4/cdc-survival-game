@@ -98,8 +98,8 @@ func _validate_changed_command(registry: ContentRegistry) -> int:
 	var checked_records := 0
 	var invalid_records := 0
 	print("mode: validate_changed")
-	print("domains: item, recipe, character, map")
-	for domain in ["items", "recipes", "characters", "maps"]:
+	print("domains: item, recipe, character, map, dialogue, quest, skill, skill_tree")
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees"]:
 		for id_value in registry.get_library(domain).keys():
 			var id_string := str(id_value)
 			var record: Dictionary = registry.get_library(domain).get(id_string, {})
@@ -593,6 +593,8 @@ func _normalize_domain(kind: String) -> String:
 			return "recipes"
 		"skill":
 			return "skills"
+		"skill_tree":
+			return "skill_trees"
 		"settlement":
 			return "settlements"
 		_:
@@ -615,6 +617,8 @@ func _singular_domain(domain: String) -> String:
 			return "recipe"
 		"skills":
 			return "skill"
+		"skill_trees":
+			return "skill_tree"
 		"settlements":
 			return "settlement"
 		_:
@@ -647,4 +651,4 @@ func _reference_domain_list() -> String:
 
 
 func _usage() -> String:
-	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|quest|skill|settlement|overworld|map> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"
+	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"

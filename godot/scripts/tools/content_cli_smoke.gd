@@ -42,8 +42,13 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "recipes", "recipe_first_aid_kit")
 	_expect_valid_record(errors, registry, "characters", "zombie_walker")
 	_expect_valid_record(errors, registry, "maps", "survivor_outpost_01")
+	_expect_valid_record(errors, registry, "dialogues", "trader_lao_wang_intro")
+	_expect_valid_record(errors, registry, "quests", "tutorial_survive")
+	_expect_valid_record(errors, registry, "skills", "survival")
+	_expect_valid_record(errors, registry, "skill_trees", "survival")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
+	_expect_invalid_dialogue_ref(errors, registry)
 	return errors
 
 
@@ -66,7 +71,7 @@ func _expect_valid_record(errors: Array[String], registry: ContentRegistry, doma
 func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) -> void:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
 	var checked := 0
-	for domain in ["items", "recipes", "characters", "maps"]:
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees"]:
 		for id_value in registry.get_library(domain).keys():
 			var validation := validator.validate_record(domain, str(id_value), registry)
 			checked += 1
@@ -98,6 +103,45 @@ func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry
 			found_unknown_item = true
 	if not found_unknown_item:
 		errors.append("invalid recipe reference smoke did not report unknown_item: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_dialogue_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("dialogues").get("trader_lao_wang_intro", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing trader_lao_wang_intro fixture for dialogue validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var nodes: Array = data.get("nodes", []).duplicate(true)
+	for i in range(nodes.size()):
+		var node: Dictionary = nodes[i].duplicate(true)
+		if str(node.get("type", "")) == "action":
+			var actions: Array = node.get("actions", []).duplicate(true)
+			for action_index in range(actions.size()):
+				var action: Dictionary = actions[action_index].duplicate(true)
+				if str(action.get("type", "")) == "start_quest":
+					action["quest_id"] = "missing_quest_for_validator_smoke"
+					actions[action_index] = action
+					node["actions"] = actions
+					nodes[i] = node
+					data["nodes"] = nodes
+					source["data"] = data
+					var validator: ContentRecordValidator = ContentRecordValidator.new()
+					var validation := validator.validate_record("dialogues", "trader_lao_wang_intro", _registry_with_override(registry, "dialogues", "trader_lao_wang_intro", source))
+					if bool(validation.get("ok", false)):
+						errors.append("expected invalid dialogue quest reference smoke to fail")
+						return
+					if not _has_issue_code(validation.get("issues", []), "unknown_quest"):
+						errors.append("invalid dialogue reference smoke did not report unknown_quest: %s" % validation.get("issues", []))
+					return
+	errors.append("dialogue validation smoke could not find start_quest action")
+
+
+func _has_issue_code(issues: Array, code: String) -> bool:
+	for issue in issues:
+		var issue_data: Dictionary = issue
+		if str(issue_data.get("code", "")) == code:
+			return true
+	return false
 
 
 func _registry_with_override(registry: ContentRegistry, domain: String, id_value: String, record: Dictionary) -> ContentRegistry:
