@@ -91,6 +91,7 @@ func load_snapshot(records: Array) -> void:
 		record.grid_position = GridCoord.from_dictionary(_dictionary_or_empty(actor_data.get("grid_position", {})))
 		record.inventory = _dictionary_or_empty(actor_data.get("inventory", {})).duplicate(true)
 		record.active_dialogue_id = str(actor_data.get("active_dialogue_id", ""))
+		record.active_container_id = str(actor_data.get("active_container_id", ""))
 		var combat: Dictionary = _dictionary_or_empty(actor_data.get("combat", {}))
 		record.max_hp = max(1.0, float(combat.get("max_hp", 1.0)))
 		record.hp = clampf(float(combat.get("hp", record.max_hp)), 0.0, record.max_hp)

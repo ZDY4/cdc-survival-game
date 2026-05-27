@@ -54,6 +54,20 @@ func _run_interaction_checks(simulation: RefCounted) -> Array[String]:
 	if talk_result.get("dialogue_id", "") != "trader_lao_wang":
 		errors.append("talk did not resolve trader_lao_wang dialogue")
 
+	var container_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "survivor_outpost_01_clinic_supply_cabinet",
+	})
+	if not bool(container_result.get("success", false)):
+		errors.append("container open failed: %s" % container_result.get("reason", "unknown"))
+	var container: Dictionary = container_result.get("container", {})
+	if container.get("container_id", "") != "survivor_outpost_01_clinic_supply_cabinet":
+		errors.append("container result used wrong id")
+	if container.get("inventory", []).size() != 2:
+		errors.append("container inventory did not expose initial entries")
+	if player.active_container_id != "survivor_outpost_01_clinic_supply_cabinet":
+		errors.append("player active container was not updated")
+
 	var transition_result: Dictionary = simulation.execute_interaction(1, {
 		"target_type": "map_object",
 		"target_id": "survivor_outpost_01_interior_door",
@@ -79,4 +93,5 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"event_count": snapshot.get("events", []).size(),
 		"player_inventory": player_inventory,
 		"player_dialogue": player_dialogue,
+		"container_sessions": snapshot.get("container_sessions", []),
 	}

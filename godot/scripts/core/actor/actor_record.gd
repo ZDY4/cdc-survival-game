@@ -13,6 +13,7 @@ var in_combat: bool = false
 var grid_position: RefCounted
 var inventory: Dictionary = {}
 var active_dialogue_id: String = ""
+var active_container_id: String = ""
 var max_hp: float = 1.0
 var hp: float = 1.0
 var attack_power: float = 1.0
@@ -35,6 +36,7 @@ func to_dictionary() -> Dictionary:
 		"grid_position": grid_position.to_dictionary(),
 		"inventory": inventory,
 		"active_dialogue_id": active_dialogue_id,
+		"active_container_id": active_container_id,
 		"combat": {
 			"max_hp": max_hp,
 			"hp": hp,

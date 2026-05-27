@@ -11,6 +11,7 @@ var unlocked_locations: Array[String] = []
 var events: Array[SimulationEvent] = []
 var map_interaction_targets: Dictionary = {}
 var consumed_interaction_targets: Dictionary = {}
+var container_sessions: Dictionary = {}
 var quest_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
@@ -130,6 +131,8 @@ func execute_interaction(actor_id: int, target: Dictionary, option_id: String = 
 			return _execute_pickup(actor_id, prompt, option)
 		"talk":
 			return _execute_talk(actor_id, prompt, option)
+		"open_container":
+			return _execute_open_container(actor_id, prompt, option)
 		"enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor":
 			return _execute_scene_transition(actor_id, prompt, option)
 		_:
@@ -153,6 +156,7 @@ func snapshot() -> Dictionary:
 		"actors": actor_registry.snapshot(),
 		"events": event_output,
 		"consumed_interaction_targets": consumed_interaction_targets.keys(),
+		"container_sessions": _container_session_snapshots(),
 		"active_quests": _active_quest_snapshots(),
 		"completed_quests": completed_quests.keys(),
 	}
@@ -171,6 +175,16 @@ func load_snapshot(snapshot_data: Dictionary) -> void:
 	consumed_interaction_targets = {}
 	for target_id in snapshot_data.get("consumed_interaction_targets", []):
 		consumed_interaction_targets[str(target_id)] = true
+	container_sessions = {}
+	for session in snapshot_data.get("container_sessions", []):
+		var session_data: Dictionary = _dictionary_or_empty(session)
+		var container_id: String = str(session_data.get("container_id", ""))
+		if not container_id.is_empty():
+			container_sessions[container_id] = {
+				"container_id": container_id,
+				"display_name": str(session_data.get("display_name", container_id)),
+				"inventory": _array_or_empty(session_data.get("inventory", [])).duplicate(true),
+			}
 	active_quests = {}
 	for quest_state in snapshot_data.get("active_quests", []):
 		var state: Dictionary = _dictionary_or_empty(quest_state)
@@ -304,6 +318,48 @@ func _execute_talk(actor_id: int, prompt: Dictionary, option: Dictionary) -> Dic
 		"prompt": prompt,
 		"dialogue_id": dialogue_id,
 	}
+
+
+func _execute_open_container(actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "prompt": prompt}
+
+	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	var target_id: String = str(option.get("target_id", target.get("target_id", "")))
+	if target_id.is_empty():
+		return {"success": false, "reason": "container_target_missing", "prompt": prompt}
+
+	var session: Dictionary = _container_session_for_target(target_id, target)
+	actor.active_container_id = target_id
+	_emit("container_opened", {
+		"actor_id": actor_id,
+		"target_id": target_id,
+		"display_name": session.get("display_name", target_id),
+		"item_count": _array_or_empty(session.get("inventory", [])).size(),
+	})
+	_emit("interaction_succeeded", {
+		"actor_id": actor_id,
+		"target_id": target_id,
+		"option_id": "open_container",
+	})
+	return {
+		"success": true,
+		"prompt": prompt,
+		"container": session.duplicate(true),
+	}
+
+
+func _container_session_for_target(target_id: String, target: Dictionary) -> Dictionary:
+	if container_sessions.has(target_id):
+		return _dictionary_or_empty(container_sessions[target_id])
+	var session := {
+		"container_id": target_id,
+		"display_name": str(target.get("display_name", target_id)),
+		"inventory": _array_or_empty(target.get("container_inventory", [])).duplicate(true),
+	}
+	container_sessions[target_id] = session
+	return session
 
 
 func _execute_scene_transition(actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:
@@ -457,6 +513,20 @@ func _active_quest_snapshots() -> Array[Dictionary]:
 	return output
 
 
+func _container_session_snapshots() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var ids: Array = container_sessions.keys()
+	ids.sort()
+	for container_id in ids:
+		var session: Dictionary = _dictionary_or_empty(container_sessions[container_id])
+		output.append({
+			"container_id": str(session.get("container_id", container_id)),
+			"display_name": str(session.get("display_name", container_id)),
+			"inventory": _array_or_empty(session.get("inventory", [])).duplicate(true),
+		})
+	return output
+
+
 func _quest_prerequisites_completed(quest_data: Dictionary) -> bool:
 	for prerequisite in quest_data.get("prerequisites", []):
 		if not completed_quests.has(str(prerequisite)):
@@ -491,6 +561,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _normalize_content_id(value: Variant) -> String:

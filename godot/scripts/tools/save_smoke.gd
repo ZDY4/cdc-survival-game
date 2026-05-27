@@ -54,6 +54,10 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"target_type": "map_object",
 		"target_id": "survivor_outpost_01_interior_door",
 	})
+	simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "survivor_outpost_01_clinic_supply_cabinet",
+	})
 	simulation.record_item_collected(1, "1007", 2)
 	var zombie: int = _register_zombie(simulation, registry)
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
@@ -93,6 +97,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	for key in ["active_map_id", "consumed_interaction_targets", "completed_quests"]:
 		if JSON.stringify(restored.get(key)) != JSON.stringify(original.get(key)):
 			errors.append("snapshot field mismatch: %s" % key)
+	if JSON.stringify(restored.get("container_sessions")) != JSON.stringify(original.get("container_sessions")):
+		errors.append("container sessions did not roundtrip")
 	if int(restored.get("schema_version", 0)) != int(original.get("schema_version", 0)):
 		errors.append("snapshot schema_version did not restore")
 	var player_original: Dictionary = _player_actor(original)
@@ -101,6 +107,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("player inventory did not roundtrip")
 	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang":
 		errors.append("player active dialogue did not roundtrip")
+	if player_restored.get("active_container_id", "") != "survivor_outpost_01_clinic_supply_cabinet":
+		errors.append("player active container did not roundtrip")
 	if _active_quest_ids(restored) != _active_quest_ids(original):
 		errors.append("active quests did not roundtrip")
 	if restored.get("events", []).size() != original.get("events", []).size():
@@ -135,6 +143,7 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"actor_count": snapshot.get("actors", []).size(),
 		"active_quests": _active_quest_ids(snapshot),
 		"completed_quests": snapshot.get("completed_quests", []),
+		"container_sessions": snapshot.get("container_sessions", []),
 		"event_count": snapshot.get("events", []).size(),
 		"player_inventory": _player_actor(snapshot).get("inventory", {}),
 	}
