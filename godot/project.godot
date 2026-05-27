@@ -1,0 +1,24 @@
+; Engine configuration file.
+; Edit with the Godot editor when possible; this file is intentionally minimal during migration.
+
+config_version=5
+
+[application]
+
+config/name="CDC Survival Game Godot Migration"
+run/main_scene="res://scenes/boot/boot.tscn"
+config/features=PackedStringArray("4.6")
+config/icon="res://icon.svg"
+
+[autoload]
+
+RuntimeBootstrap="*res://scripts/app/runtime_bootstrap.gd"
+
+[display]
+
+window/size/viewport_width=1440
+window/size/viewport_height=900
+
+[editor_plugins]
+
+enabled=PackedStringArray()
