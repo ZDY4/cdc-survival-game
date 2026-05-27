@@ -4,6 +4,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const SaveService = preload("res://scripts/app/save_service.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
 func _init() -> void:
@@ -65,6 +66,9 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	simulation.equip_item(1, "1003", "main_hand", registry.get_library("items"))
 	simulation.grant_skill_points(1, 1, "save_smoke")
 	simulation.learn_skill(1, "survival", registry.get_library("skills"))
+	var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
+	simulation.set_actor_vision_radius(1, 4)
+	simulation.refresh_actor_vision(1, topology)
 	simulation.record_item_collected(1, "1007", 2)
 	var zombie: int = _register_zombie(simulation, registry)
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
@@ -132,6 +136,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("taken container item still appeared in restored container")
 	if _active_quest_ids(restored) != _active_quest_ids(original):
 		errors.append("active quests did not roundtrip")
+	if JSON.stringify(_actor_vision_snapshot(restored, 1)) != JSON.stringify(_actor_vision_snapshot(original, 1)):
+		errors.append("player vision did not roundtrip")
 	if restored.get("events", []).size() != original.get("events", []).size():
 		errors.append("event count did not roundtrip")
 	return errors
@@ -151,6 +157,15 @@ func _active_quest_ids(snapshot: Dictionary) -> Array[String]:
 		var quest_data: Dictionary = quest
 		output.append(str(quest_data.get("quest_id", "")))
 	return output
+
+
+func _actor_vision_snapshot(snapshot: Dictionary, actor_id: int) -> Dictionary:
+	var vision: Dictionary = snapshot.get("vision", {})
+	for actor in vision.get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == actor_id:
+			return actor_data
+	return {}
 
 
 func _inventory_count(actor: Dictionary, item_id: String) -> int:

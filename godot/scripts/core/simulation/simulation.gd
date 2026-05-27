@@ -6,6 +6,7 @@ const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
 const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
+const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
 
 var actor_registry := ActorRegistry.new()
 var active_map_id: String = ""
@@ -25,6 +26,7 @@ var completed_quests: Dictionary = {}
 var _equipment_rules := EquipmentRules.new()
 var _pathfinder := Pathfinder.new()
 var _progression_rules := ProgressionRules.new()
+var _vision_rules := VisionRules.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -154,6 +156,30 @@ func learn_skill(actor_id: int, skill_id: String, skill_library: Dictionary) -> 
 		"available_skill_points": int(result.get("available_skill_points", 0)),
 	})
 	return result
+
+
+func set_actor_vision_radius(actor_id: int, radius: int) -> void:
+	_vision_rules.set_actor_radius(actor_id, radius)
+
+
+func refresh_actor_vision(actor_id: int, topology: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var update: Dictionary = _vision_rules.recompute_actor(actor_id, active_map_id, actor.grid_position.to_dictionary(), topology)
+	if bool(update.get("changed", false)):
+		_emit("actor_vision_updated", {
+			"actor_id": actor_id,
+			"active_map_id": str(update.get("active_map_id", "")),
+			"visible_cell_count": _array_or_empty(update.get("visible_cells", [])).size(),
+			"explored_cell_count": _array_or_empty(update.get("explored_cells", [])).size(),
+		})
+	update["success"] = true
+	return update
+
+
+func clear_actor_vision(actor_id: int) -> void:
+	_vision_rules.clear_actor(actor_id)
 
 
 func unlock_location(location_id: String) -> bool:
@@ -653,6 +679,7 @@ func snapshot() -> Dictionary:
 		"shop_sessions": _shop_session_snapshots(),
 		"active_quests": _active_quest_snapshots(),
 		"completed_quests": completed_quests.keys(),
+		"vision": _vision_rules.snapshot(),
 	}
 
 
@@ -706,6 +733,7 @@ func load_snapshot(snapshot_data: Dictionary) -> void:
 	completed_quests = {}
 	for quest_id in snapshot_data.get("completed_quests", []):
 		completed_quests[str(quest_id)] = true
+	_vision_rules.load_snapshot(_dictionary_or_empty(snapshot_data.get("vision", {})))
 
 
 func _emit(kind: String, payload: Dictionary) -> void:
