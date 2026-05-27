@@ -36,6 +36,7 @@ param(
         "EditorHandoff",
         "EditorBrowser",
         "MapPreview",
+        "FogShader",
         "World",
         "Scene",
         "Overworld",
@@ -84,6 +85,7 @@ $scenarioScripts = [ordered]@{
     EditorHandoff     = "res://scripts/tools/editor_handoff_smoke.gd"
     EditorBrowser     = "res://scripts/tools/editor_content_browser_smoke.gd"
     MapPreview        = "res://scripts/tools/map_preview_smoke.gd"
+    FogShader         = "res://scripts/tools/fog_shader_smoke.gd"
     World             = "res://scripts/tools/world_smoke.gd"
     Scene             = "res://scripts/tools/scene_smoke.gd"
     Overworld         = "res://scripts/tools/overworld_smoke.gd"

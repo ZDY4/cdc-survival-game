@@ -198,7 +198,7 @@ pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionM
 
 何时使用：
 
-- 修改 Godot runtime、世界生成、交互、UI、任务、战斗或存档后。
+- 修改 Godot runtime、世界生成、shader、交互、UI、任务、战斗或存档后。
 - 需要一条命令复核当前 Godot 可玩闭环。
 
 示例：
@@ -211,6 +211,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapEdit
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorHandoff
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorBrowser
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapPreview
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario FogShader
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Movement
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction

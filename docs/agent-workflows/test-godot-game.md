@@ -6,7 +6,7 @@
 
 ## When To Use
 
-- 修改 `godot/scripts/core`、`godot/scripts/world`、`godot/scripts/ui` 或 `godot/scenes/game` 后。
+- 修改 `godot/scripts/core`、`godot/scripts/world`、`godot/scripts/ui`、`godot/scenes/game` 或 `godot/assets/shaders` 后。
 - 修改共享 `data/` 内容后，需要确认 Godot loader 和 runtime 仍能跑通。
 - 需要 agent 自己给出可复跑的 Godot game smoke 结果，而不是只做人工窗口检查。
 
@@ -20,5 +20,5 @@
 ## Notes
 
 - 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
-- 单场景复核可使用 `-Scenario Runtime`、`-Scenario ContentCLI`、`-Scenario ContentEdit`、`-Scenario EditorHandoff`、`-Scenario EditorBrowser`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
+- 单场景复核可使用 `-Scenario Runtime`、`-Scenario ContentCLI`、`-Scenario ContentEdit`、`-Scenario EditorHandoff`、`-Scenario EditorBrowser`、`-Scenario FogShader`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
 - Bevy smoke 仅作为旧客户端行为对照；迁移开发优先运行本 workflow。
