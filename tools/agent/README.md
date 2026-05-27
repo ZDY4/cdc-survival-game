@@ -45,7 +45,7 @@ pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map forest
 
 用途：
 
-- 为地图改动提供标准化的视觉复核入口。
+- 为地图改动提供旧 Bevy 路径的标准化视觉复核入口。
 
 何时使用：
 
@@ -69,6 +69,30 @@ pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map factory -NoOpenEdit
 - 然后输出固定 visual review checklist。
 - 默认继续调用 `open-editor.ps1 -Map <id>` 打开或复用 `bevy_map_editor`。
 - 若使用 `-NoOpenEditor`，则只输出 CLI 复核信息，不启动 editor。
+
+### `review-godot-map-visual.ps1`
+
+用途：
+
+- 为地图改动提供 Godot 迁移路径下的标准化复核入口。
+
+何时使用：
+
+- `data/maps/*.json` 已被修改，需要验证 Godot loader、地图摘要、引用、世界快照和生成场景链路。
+- 需要替代旧 `bevy_map_editor` 视觉复核依赖，优先走 Godot 工具链。
+
+示例：
+
+```powershell
+pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outpost_01
+pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outpost_01 -NoSmoke
+```
+
+行为：
+
+- 先通过 `godot-content.ps1` 串行执行 `locate map`、`summarize map`、`references map` 和 `validate changed`。
+- 默认继续调用 `test-godot-game.ps1 -Scenario World` 和 `test-godot-game.ps1 -Scenario Scene`。
+- 输出 Godot map review checklist；当前不打开旧 Bevy editor。
 
 ### `godot-content.ps1`
 

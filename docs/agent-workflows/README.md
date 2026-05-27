@@ -15,6 +15,7 @@
 - `edit-character.md`
 - `edit-map.md`
 - `review-map-visual.md`
+- `review-godot-map-visual.md`
 - `test-bevy-game.md`
 - `test-godot-game.md`
 
@@ -22,7 +23,7 @@
 
 1. 先定位目标文件，再读相关依赖和约束，不要直接盲改。
 2. 修改后必须跑最小校验；若当前仓库存在已知编译阻塞，需要在结果里明确说明。
-3. 地图类改动默认要求再用 `bevy_map_editor` 做空间复核。
+3. 地图类改动默认优先使用 Godot map review 入口做空间复核；Bevy editor 仅保留为旧行为对照。
 4. `item / recipe / character` 优先直接改数据文件，不要依赖 editor 内 AI 入口。
 5. 不要在 editor 里重建新的 AI 聊天窗口或 provider 设置页。
 
@@ -48,6 +49,7 @@
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Quest <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
+- `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
@@ -90,6 +92,9 @@ Godot 迁移期间，内容定位、摘要、引用和全量校验优先跑 `god
 
 地图视觉复核辅助：
 
+- `review-godot-map-visual.ps1` 会先通过 Godot content CLI 执行 `locate` / `summarize` / `references` / `validate changed`
+- 默认继续运行 Godot `World` 和 `Scene` smoke，确认地图数据能进入世界快照和生成场景链路
+- Godot 迁移期间，地图改动优先使用 `review-godot-map-visual.ps1`
 - `review-map-visual.ps1` 会先串行执行 `locate` / `summarize` / `references` / `validate`
 - 随后输出固定的视觉复核 checklist
 - 默认会继续调用 `open-editor.ps1 -Map <id>` 打开或复用 `bevy_map_editor`
