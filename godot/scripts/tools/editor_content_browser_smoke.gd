@@ -43,6 +43,7 @@ func _run() -> Array[String]:
 	_expect_detail(errors, presenter, registry, "recipe", "recipe_first_aid_kit", "edit_plan_checks:")
 	_expect_detail(errors, presenter, registry, "character", "zombie_walker", "references:")
 	_expect_detail(errors, presenter, registry, "map", "survivor_outpost_01", "map_review_checks:")
+	_expect_detail(errors, presenter, registry, "item", "1006", "editable_fields:")
 	return errors
 
 

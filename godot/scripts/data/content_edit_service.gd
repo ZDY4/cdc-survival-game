@@ -1,0 +1,181 @@
+extends RefCounted
+
+const ContentPaths = preload("res://scripts/data/content_paths.gd")
+const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
+const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+
+const SUPPORTED_DOMAINS := ["items", "recipes", "characters", "maps"]
+
+const EDITABLE_FIELDS := {
+	"items": [
+		"name",
+		"description",
+		"icon_path",
+		"value",
+		"weight",
+	],
+	"recipes": [
+		"name",
+		"description",
+		"category",
+		"craft_time",
+		"experience_reward",
+		"is_default_unlocked",
+	],
+	"characters": [
+		"identity.display_name",
+		"identity.description",
+		"faction.camp_id",
+		"faction.disposition",
+		"combat.behavior",
+	],
+	"maps": [
+		"name",
+	],
+}
+
+
+func supports_domain(domain: String) -> bool:
+	return SUPPORTED_DOMAINS.has(domain)
+
+
+func editable_fields(domain: String) -> Array[String]:
+	var fields: Array[String] = []
+	for field in EDITABLE_FIELDS.get(domain, []):
+		fields.append(str(field))
+	return fields
+
+
+func save_patch(domain: String, id_value: String, patch: Dictionary, registry: ContentRegistry, options: Dictionary = {}) -> Dictionary:
+	if not supports_domain(domain):
+		return _failed("unsupported_domain", "content edit service does not support domain %s" % domain)
+	if patch.is_empty():
+		return _failed("empty_patch", "patch must contain at least one editable field")
+
+	var record: Dictionary = registry.get_library(domain).get(id_value, {})
+	if record.is_empty():
+		return _failed("not_found", "record not found: %s %s" % [domain, id_value])
+
+	var path := str(record.get("path", ""))
+	if path.is_empty():
+		return _failed("missing_path", "record has no source path")
+	if not bool(options.get("allow_external_path", false)) and not _is_under_data_root(path):
+		return _failed("path_outside_data", "refusing to write outside data root: %s" % path)
+
+	var next_data: Dictionary = _dictionary_or_empty(record.get("data", {})).duplicate(true)
+	var changed_fields: Array[String] = []
+	for field in patch.keys():
+		var field_path := str(field)
+		if not _can_edit_field(domain, field_path):
+			return _failed("unsupported_field", "field %s is not editable for %s" % [field_path, domain])
+		var before: Variant = _get_field(next_data, field_path)
+		var after: Variant = patch[field]
+		if before != after:
+			_set_field(next_data, field_path, after)
+			changed_fields.append(field_path)
+
+	var validation := _validate_data(domain, id_value, record, next_data, registry)
+	if not bool(validation.get("ok", false)):
+		return {
+			"ok": false,
+			"status": "invalid",
+			"code": "validation_failed",
+			"message": "patched content did not pass record validation",
+			"issues": validation.get("issues", []),
+			"changed_fields": changed_fields,
+			"path": path,
+		}
+
+	var formatted := JSON.stringify(next_data, "  ") + "\n"
+	if formatted.strip_edges().is_empty():
+		return _failed("serialize_failed", "failed to serialize patched content")
+
+	var before_text := FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
+	var changed := before_text != formatted
+	if not bool(options.get("dry_run", false)) and changed:
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file == null:
+			return _failed("write_failed", "failed to open %s for write: %s" % [path, error_string(FileAccess.get_open_error())])
+		file.store_string(formatted)
+
+	return {
+		"ok": true,
+		"status": "ok",
+		"domain": domain,
+		"id": id_value,
+		"path": path,
+		"relative_path": _repo_relative_path(path),
+		"changed": changed,
+		"changed_fields": changed_fields,
+		"dry_run": bool(options.get("dry_run", false)),
+	}
+
+
+func _validate_data(domain: String, id_value: String, record: Dictionary, data: Dictionary, registry: ContentRegistry) -> Dictionary:
+	var copy: ContentRegistry = ContentRegistry.new()
+	copy.libraries = registry.libraries.duplicate(true)
+	copy.files_by_domain = registry.files_by_domain.duplicate(true)
+	copy.bootstrap_config = registry.bootstrap_config.duplicate(true)
+	copy.data_root = registry.data_root
+	var library: Dictionary = copy.libraries.get(domain, {}).duplicate(true)
+	var next_record := record.duplicate(true)
+	next_record["data"] = data
+	library[id_value] = next_record
+	copy.libraries[domain] = library
+	return ContentRecordValidator.new().validate_record(domain, id_value, copy)
+
+
+func _can_edit_field(domain: String, field_path: String) -> bool:
+	return editable_fields(domain).has(field_path)
+
+
+func _get_field(data: Dictionary, field_path: String) -> Variant:
+	var current: Variant = data
+	for part in field_path.split(".", false):
+		if typeof(current) != TYPE_DICTIONARY:
+			return null
+		var dict: Dictionary = current
+		current = dict.get(part, null)
+	return current
+
+
+func _set_field(data: Dictionary, field_path: String, value: Variant) -> void:
+	var parts := field_path.split(".", false)
+	var current := data
+	for i in range(parts.size()):
+		var key := parts[i]
+		if i == parts.size() - 1:
+			current[key] = value
+			return
+		if typeof(current.get(key, null)) != TYPE_DICTIONARY:
+			current[key] = {}
+		current = current[key]
+
+
+func _is_under_data_root(path: String) -> bool:
+	var normalized := path.replace("\\", "/").simplify_path()
+	var root := ContentPaths.data_root().replace("\\", "/").simplify_path()
+	return normalized == root or normalized.begins_with(root + "/")
+
+
+func _repo_relative_path(path: String) -> String:
+	var normalized := path.replace("\\", "/")
+	var repo_root := ContentPaths.repo_root().replace("\\", "/")
+	if normalized.begins_with(repo_root + "/"):
+		return normalized.substr(repo_root.length() + 1)
+	return normalized
+
+
+func _failed(code: String, message: String) -> Dictionary:
+	return {
+		"ok": false,
+		"status": "failed",
+		"code": code,
+		"message": message,
+	}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

@@ -2,6 +2,7 @@
 extends RefCounted
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const EditorContentPresenter = preload("res://addons/cdc_game_editor/editor_content_presenter.gd")
 
@@ -83,11 +84,13 @@ func build_detail(kind: String, id_value: String, registry: ContentRegistry, rep
 		}
 
 	var domain := presenter.domain_for_kind(kind)
+	var edit_service: ContentEditService = ContentEditService.new()
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
 	var validation := validator.validate_record(domain, str(selection.get("id", "")), registry)
 	var sections: Array[String] = [
 		str(selection.get("summary", "")),
 		_validation_text(validation),
+		_editable_fields_text(domain, edit_service),
 		str(selection.get("reference_summary", "")),
 	]
 	for field in ["edit_plan_summary", "edit_plan_checklist", "review_summary", "review_checklist"]:
@@ -100,6 +103,7 @@ func build_detail(kind: String, id_value: String, registry: ContentRegistry, rep
 		"id": selection.get("id", ""),
 		"path": selection.get("path", ""),
 		"status": validation.get("status", "invalid"),
+		"editable_fields": edit_service.editable_fields(domain),
 		"text": "\n\n".join(sections),
 	}
 
@@ -119,6 +123,13 @@ func _validation_text(validation: Dictionary) -> String:
 			issue_data.get("field", "$"),
 		])
 	return "\n".join(lines)
+
+
+func _editable_fields_text(domain: String, edit_service: ContentEditService) -> String:
+	var fields := edit_service.editable_fields(domain)
+	if fields.is_empty():
+		return "editable_fields: none"
+	return "editable_fields:\n- %s" % "\n- ".join(fields)
 
 
 func _label_for_record(domain: String, data: Dictionary) -> String:

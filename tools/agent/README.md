@@ -70,7 +70,8 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map survivor_outpost_01
 
 - 写入 `tmp/editor_handoff/godot_editor.navigation.json`。
 - `CDC Agent Handoff` dock 会读取目标内容摘要和引用预览。
-- `CDC Content Browser` dock 会在 Godot editor 内浏览 `item` / `recipe` / `character` / `map`，并显示记录级校验状态与详情。
+- `CDC Content Browser` dock 会在 Godot editor 内浏览 `item` / `recipe` / `character` / `map`，并显示记录级校验状态、详情和可编辑字段清单。
+- 内容保存边界已收口到 `godot/scripts/data/content_edit_service.gd`；当前 dock 仍先保持只读，后续表单 UI 通过该服务写回 JSON。
 - 若 `CDC Agent Handoff` dock 已有最近 session，会复用现有 Godot editor。
 - 若没有最近 session，则启动 `D:\godot\godot.cmd --editor --path godot`。
 
@@ -198,6 +199,7 @@ pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionM
 ```powershell
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentCLI
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentEdit
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorHandoff
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorBrowser
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld

@@ -31,6 +31,7 @@ param(
         "All",
         "Runtime",
         "ContentCLI",
+        "ContentEdit",
         "EditorHandoff",
         "EditorBrowser",
         "World",
@@ -76,6 +77,7 @@ if (-not (Test-Path -LiteralPath $Godot)) {
 $scenarioScripts = [ordered]@{
     Runtime           = "res://scripts/tools/runtime_smoke.gd"
     ContentCLI        = "res://scripts/tools/content_cli_smoke.gd"
+    ContentEdit       = "res://scripts/tools/content_edit_service_smoke.gd"
     EditorHandoff     = "res://scripts/tools/editor_handoff_smoke.gd"
     EditorBrowser     = "res://scripts/tools/editor_content_browser_smoke.gd"
     World             = "res://scripts/tools/world_smoke.gd"
