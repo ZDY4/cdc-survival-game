@@ -29,6 +29,7 @@ func register_actor(request: Dictionary) -> ActorRecord:
 	record.attack_power = max(0.0, float(request.get("attack_power", 1.0)))
 	record.defense = max(0.0, float(request.get("defense", 0.0)))
 	record.xp_reward = max(0, int(request.get("xp_reward", 0)))
+	record.progression = _dictionary_or_empty(request.get("progression", {})).duplicate(true)
 
 	_records[record.actor_id] = record
 	_registration_order.append(record.actor_id)
@@ -102,6 +103,7 @@ func load_snapshot(records: Array) -> void:
 		record.attack_power = max(0.0, float(combat.get("attack_power", 1.0)))
 		record.defense = max(0.0, float(combat.get("defense", 0.0)))
 		record.xp_reward = max(0, int(combat.get("xp_reward", 0)))
+		record.progression = _dictionary_or_empty(actor_data.get("progression", {})).duplicate(true)
 		_records[record.actor_id] = record
 		_registration_order.append(record.actor_id)
 		_next_actor_id = max(_next_actor_id, record.actor_id + 1)

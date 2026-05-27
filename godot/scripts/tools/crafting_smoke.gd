@@ -48,6 +48,10 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("crafting did not add crafted bandage")
 	if _event_count(simulation.snapshot(), "recipe_crafted") != 1:
 		errors.append("crafting did not emit recipe_crafted event")
+	if int(player.progression.get("total_xp_earned", 0)) != 5:
+		errors.append("crafting experience reward should be added to progression")
+	if _event_count(simulation.snapshot(), "experience_granted") != 1:
+		errors.append("crafting experience reward should emit experience_granted")
 
 	var station_result: Dictionary = simulation.craft_recipe(1, "recipe_first_aid_kit", recipes)
 	if station_result.get("reason", "") != "required_station_unsupported":

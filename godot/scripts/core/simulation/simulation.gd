@@ -4,6 +4,7 @@ const ActorRegistry = preload("res://scripts/core/actor/actor_registry.gd")
 const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
+const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
 
 var actor_registry := ActorRegistry.new()
@@ -23,6 +24,7 @@ var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
 var _equipment_rules := EquipmentRules.new()
 var _pathfinder := Pathfinder.new()
+var _progression_rules := ProgressionRules.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -85,6 +87,73 @@ func turn_in_quest(actor_id: int, quest_id: String) -> Dictionary:
 	_grant_quest_rewards(actor_id, quest_id, quest_data)
 	_complete_quest(actor_id, quest_id)
 	return {"success": true, "quest_id": quest_id}
+
+
+func grant_experience(actor_id: int, amount: int, source: String = "") -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var result: Dictionary = _progression_rules.grant_experience(actor.progression, amount)
+	if not bool(result.get("changed", false)):
+		return {"success": false, "reason": "experience_amount_invalid"}
+	actor.progression = _dictionary_or_empty(result.get("state", {}))
+	_emit("experience_granted", {
+		"actor_id": actor_id,
+		"amount": int(result.get("amount", amount)),
+		"total_xp": int(result.get("total_xp", 0)),
+		"source": source,
+	})
+	for level_up in _array_or_empty(result.get("level_ups", [])):
+		var level_up_data: Dictionary = _dictionary_or_empty(level_up)
+		_emit("actor_leveled_up", {
+			"actor_id": actor_id,
+			"new_level": int(level_up_data.get("new_level", 1)),
+			"available_stat_points": int(level_up_data.get("available_stat_points", 0)),
+			"available_skill_points": int(level_up_data.get("available_skill_points", 0)),
+		})
+	return {
+		"success": true,
+		"level": int(actor.progression.get("level", 1)),
+		"current_xp": int(actor.progression.get("current_xp", 0)),
+		"available_skill_points": int(actor.progression.get("available_skill_points", 0)),
+	}
+
+
+func grant_skill_points(actor_id: int, amount: int, source: String = "") -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var result: Dictionary = _progression_rules.add_skill_points(actor.progression, amount)
+	if not bool(result.get("changed", false)):
+		return {"success": false, "reason": "skill_point_amount_invalid"}
+	actor.progression = _dictionary_or_empty(result.get("state", {}))
+	_emit("skill_points_granted", {
+		"actor_id": actor_id,
+		"amount": max(0, amount),
+		"available_skill_points": int(result.get("available_skill_points", 0)),
+		"source": source,
+	})
+	return {
+		"success": true,
+		"available_skill_points": int(actor.progression.get("available_skill_points", 0)),
+	}
+
+
+func learn_skill(actor_id: int, skill_id: String, skill_library: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var result: Dictionary = _progression_rules.learn_skill(actor.progression, skill_id, skill_library)
+	if not bool(result.get("success", false)):
+		return result
+	actor.progression = _dictionary_or_empty(result.get("state", {}))
+	_emit("skill_learned", {
+		"actor_id": actor_id,
+		"skill_id": str(result.get("skill_id", skill_id)),
+		"level": int(result.get("level", 0)),
+		"available_skill_points": int(result.get("available_skill_points", 0)),
+	})
+	return result
 
 
 func unlock_location(location_id: String) -> bool:
@@ -385,8 +454,13 @@ func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary) 
 		return {"success": false, "reason": "required_tools_unsupported"}
 	if str(recipe.get("required_station", "none")) not in ["", "none"]:
 		return {"success": false, "reason": "required_station_unsupported"}
-	if not _dictionary_or_empty(recipe.get("skill_requirements", {})).is_empty():
-		return {"success": false, "reason": "skill_requirements_unsupported"}
+	var skill_check: Dictionary = _progression_rules.meets_skill_requirements(actor.progression, _dictionary_or_empty(recipe.get("skill_requirements", {})))
+	if not bool(skill_check.get("success", false)):
+		return {
+			"success": false,
+			"reason": "missing_skills",
+			"missing_skills": skill_check.get("missing_skills", []),
+		}
 
 	var materials: Array[Dictionary] = _normalize_item_entries(recipe.get("materials", []))
 	for material in materials:
@@ -418,6 +492,8 @@ func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary) 
 		"craft_time": float(recipe.get("craft_time", 0.0)),
 		"experience_reward": int(recipe.get("experience_reward", 0)),
 	})
+	if int(recipe.get("experience_reward", 0)) > 0:
+		grant_experience(actor_id, int(recipe.get("experience_reward", 0)), "recipe:%s" % recipe_id)
 	return {
 		"success": true,
 		"recipe_id": recipe_id,
@@ -449,6 +525,7 @@ func perform_attack(actor_id: int, target_actor_id: int) -> Dictionary:
 	if defeated:
 		var defeated_definition_id: String = target.definition_id
 		var defeated_kind: String = target.kind
+		var defeated_xp_reward: int = target.xp_reward
 		actor_registry.unregister_actor(target_actor_id)
 		_emit("actor_defeated", {
 			"actor_id": target_actor_id,
@@ -456,6 +533,7 @@ func perform_attack(actor_id: int, target_actor_id: int) -> Dictionary:
 			"kind": defeated_kind,
 			"defeated_by": actor_id,
 		})
+		grant_experience(actor_id, defeated_xp_reward, "kill:%s" % defeated_definition_id)
 		record_enemy_defeated(actor_id, defeated_definition_id, defeated_kind)
 
 	return {
@@ -1113,6 +1191,10 @@ func _grant_quest_rewards(actor_id: int, quest_id: String, quest_data: Dictionar
 			if actor != null:
 				_add_actor_item(actor, item_id, count)
 	if int(rewards.get("experience", 0)) > 0 or int(rewards.get("skill_points", 0)) > 0:
+		if int(rewards.get("experience", 0)) > 0:
+			grant_experience(actor_id, int(rewards.get("experience", 0)), "quest:%s" % quest_id)
+		if int(rewards.get("skill_points", 0)) > 0:
+			grant_skill_points(actor_id, int(rewards.get("skill_points", 0)), "quest:%s" % quest_id)
 		_emit("quest_reward_granted", {
 			"actor_id": actor_id,
 			"quest_id": quest_id,

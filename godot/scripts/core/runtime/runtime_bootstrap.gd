@@ -3,8 +3,10 @@ extends RefCounted
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const Simulation = preload("res://scripts/core/simulation/simulation.gd")
 const MapBuilder = preload("res://scripts/world/map_builder.gd")
+const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
 
 var registry: RefCounted
+var _progression_rules := ProgressionRules.new()
 
 
 func _init(p_registry: RefCounted) -> void:
@@ -48,9 +50,11 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 	var identity: Dictionary = definition.get("identity", {})
 	var grid_data: Dictionary = spawn_entry.get("gridPosition", {})
 	var combat_attributes: Dictionary = _combat_attributes(definition)
+	var base_attributes: Dictionary = _base_attributes(definition)
 	var resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(definition.get("attributes", {})).get("resources", {}))
 	var hp_resource: Dictionary = _dictionary_or_empty(resources.get("hp", {}))
 	var combat: Dictionary = _dictionary_or_empty(definition.get("combat", {}))
+	var progression: Dictionary = _dictionary_or_empty(definition.get("progression", {}))
 
 	simulation.register_actor({
 		"definition_id": definition_id,
@@ -64,6 +68,7 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"attack_power": float(combat_attributes.get("attack_power", 1.0)),
 		"defense": float(combat_attributes.get("defense", 0.0)),
 		"xp_reward": int(combat.get("xp_reward", 0)),
+		"progression": _progression_rules.build_initial_state(int(progression.get("level", 1)), base_attributes),
 	})
 
 
@@ -149,6 +154,12 @@ func _combat_attributes(definition: Dictionary) -> Dictionary:
 	var attributes: Dictionary = _dictionary_or_empty(definition.get("attributes", {}))
 	var sets: Dictionary = _dictionary_or_empty(attributes.get("sets", {}))
 	return _dictionary_or_empty(sets.get("combat", {}))
+
+
+func _base_attributes(definition: Dictionary) -> Dictionary:
+	var attributes: Dictionary = _dictionary_or_empty(definition.get("attributes", {}))
+	var sets: Dictionary = _dictionary_or_empty(attributes.get("sets", {}))
+	return _dictionary_or_empty(sets.get("base", {}))
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

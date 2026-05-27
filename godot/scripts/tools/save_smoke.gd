@@ -63,6 +63,8 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	simulation.buy_item_from_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.sell_item_to_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.equip_item(1, "1003", "main_hand", registry.get_library("items"))
+	simulation.grant_skill_points(1, 1, "save_smoke")
+	simulation.learn_skill(1, "survival", registry.get_library("skills"))
 	simulation.record_item_collected(1, "1007", 2)
 	var zombie: int = _register_zombie(simulation, registry)
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
@@ -116,6 +118,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("taken container item did not roundtrip in player inventory")
 	if JSON.stringify(player_restored.get("equipment", {})) != JSON.stringify(player_original.get("equipment", {})):
 		errors.append("player equipment did not roundtrip")
+	if JSON.stringify(_normalized_progression(player_restored)) != JSON.stringify(_normalized_progression(player_original)):
+		errors.append("player progression did not roundtrip")
 	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang":
 		errors.append("player active dialogue did not roundtrip")
 	if player_restored.get("active_container_id", "") != "survivor_outpost_01_clinic_supply_cabinet":
@@ -152,6 +156,34 @@ func _active_quest_ids(snapshot: Dictionary) -> Array[String]:
 func _inventory_count(actor: Dictionary, item_id: String) -> int:
 	var inventory: Dictionary = actor.get("inventory", {})
 	return int(inventory.get(item_id, 0))
+
+
+func _normalized_progression(actor: Dictionary) -> Dictionary:
+	var progression: Dictionary = actor.get("progression", {})
+	return {
+		"level": int(progression.get("level", 0)),
+		"current_xp": int(progression.get("current_xp", 0)),
+		"total_xp_earned": int(progression.get("total_xp_earned", 0)),
+		"available_stat_points": int(progression.get("available_stat_points", 0)),
+		"available_skill_points": int(progression.get("available_skill_points", 0)),
+		"total_stat_points_earned": int(progression.get("total_stat_points_earned", 0)),
+		"total_skill_points_earned": int(progression.get("total_skill_points_earned", 0)),
+		"attributes": _sorted_key_values(progression.get("attributes", {})),
+		"learned_skills": _sorted_key_values(progression.get("learned_skills", {})),
+	}
+
+
+func _sorted_key_values(value: Variant) -> Array[Dictionary]:
+	var data: Dictionary = value if typeof(value) == TYPE_DICTIONARY else {}
+	var keys: Array = data.keys()
+	keys.sort()
+	var output: Array[Dictionary] = []
+	for key in keys:
+		output.append({
+			"id": str(key),
+			"value": int(data.get(key, 0)),
+		})
+	return output
 
 
 func _container_count(snapshot: Dictionary, container_id: String, item_id: String) -> int:
