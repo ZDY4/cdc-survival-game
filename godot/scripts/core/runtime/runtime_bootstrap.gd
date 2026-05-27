@@ -55,6 +55,8 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 	var hp_resource: Dictionary = _dictionary_or_empty(resources.get("hp", {}))
 	var combat: Dictionary = _dictionary_or_empty(definition.get("combat", {}))
 	var progression: Dictionary = _dictionary_or_empty(definition.get("progression", {}))
+	var ai: Dictionary = _dictionary_or_empty(definition.get("ai", {}))
+	var life: Dictionary = _dictionary_or_empty(definition.get("life", {}))
 
 	simulation.register_actor({
 		"definition_id": definition_id,
@@ -69,6 +71,8 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"defense": float(combat_attributes.get("defense", 0.0)),
 		"xp_reward": int(combat.get("xp_reward", 0)),
 		"progression": _progression_rules.build_initial_state(int(progression.get("level", 1)), base_attributes),
+		"ai": ai,
+		"life": life,
 	})
 
 

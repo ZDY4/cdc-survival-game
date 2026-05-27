@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ActorRegistry = preload("res://scripts/core/actor/actor_registry.gd")
+const AiRules = preload("res://scripts/core/ai/ai_rules.gd")
 const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
@@ -23,6 +24,8 @@ var shop_sessions: Dictionary = {}
 var quest_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
+var ai_intents: Dictionary = {}
+var _ai_rules := AiRules.new()
 var _equipment_rules := EquipmentRules.new()
 var _pathfinder := Pathfinder.new()
 var _progression_rules := ProgressionRules.new()
@@ -180,6 +183,31 @@ func refresh_actor_vision(actor_id: int, topology: Dictionary) -> Dictionary:
 
 func clear_actor_vision(actor_id: int) -> void:
 	_vision_rules.clear_actor(actor_id)
+
+
+func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var intent: Dictionary = _ai_rules.decide_actor_intent(actor, actor_registry.actors(), context)
+	if bool(intent.get("success", false)):
+		ai_intents[actor_id] = intent.duplicate(true)
+		_emit("ai_intent_decided", {
+			"actor_id": actor_id,
+			"intent": str(intent.get("intent", "")),
+			"target_actor_id": int(intent.get("target_actor_id", 0)),
+			"reason": str(intent.get("reason", "")),
+		})
+	return intent
+
+
+func decide_all_ai_intents(context: Dictionary = {}) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for actor in actor_registry.actors():
+		if actor.kind == "player":
+			continue
+		output.append(decide_actor_intent(actor.actor_id, context))
+	return output
 
 
 func unlock_location(location_id: String) -> bool:
@@ -679,6 +707,7 @@ func snapshot() -> Dictionary:
 		"shop_sessions": _shop_session_snapshots(),
 		"active_quests": _active_quest_snapshots(),
 		"completed_quests": completed_quests.keys(),
+		"ai_intents": _ai_intent_snapshots(),
 		"vision": _vision_rules.snapshot(),
 	}
 
@@ -733,6 +762,12 @@ func load_snapshot(snapshot_data: Dictionary) -> void:
 	completed_quests = {}
 	for quest_id in snapshot_data.get("completed_quests", []):
 		completed_quests[str(quest_id)] = true
+	ai_intents = {}
+	for intent in snapshot_data.get("ai_intents", []):
+		var intent_data: Dictionary = _dictionary_or_empty(intent)
+		var actor_id: int = int(intent_data.get("actor_id", 0))
+		if actor_id > 0:
+			ai_intents[actor_id] = intent_data.duplicate(true)
 	_vision_rules.load_snapshot(_dictionary_or_empty(snapshot_data.get("vision", {})))
 
 
@@ -1274,6 +1309,15 @@ func _active_quest_snapshots() -> Array[Dictionary]:
 			"current_node_id": str(state.get("current_node_id", "")),
 			"completed_objectives": _dictionary_or_empty(state.get("completed_objectives", {})).duplicate(true),
 		})
+	return output
+
+
+func _ai_intent_snapshots() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var ids: Array = ai_intents.keys()
+	ids.sort()
+	for actor_id in ids:
+		output.append(_dictionary_or_empty(ai_intents[actor_id]).duplicate(true))
 	return output
 
 

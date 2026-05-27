@@ -73,6 +73,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	var zombie: int = _register_zombie(simulation, registry)
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	var target: RefCounted = simulation.actor_registry.get_actor(zombie)
+	simulation.decide_actor_intent(zombie)
 	player.attack_power = 10.0
 	target.hp = 5.0
 	target.defense = 0.0
@@ -138,6 +139,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("active quests did not roundtrip")
 	if JSON.stringify(_actor_vision_snapshot(restored, 1)) != JSON.stringify(_actor_vision_snapshot(original, 1)):
 		errors.append("player vision did not roundtrip")
+	if JSON.stringify(_normalized_ai_intents(restored)) != JSON.stringify(_normalized_ai_intents(original)):
+		errors.append("ai intents did not roundtrip")
 	if restored.get("events", []).size() != original.get("events", []).size():
 		errors.append("event count did not roundtrip")
 	return errors
@@ -166,6 +169,22 @@ func _actor_vision_snapshot(snapshot: Dictionary, actor_id: int) -> Dictionary:
 		if int(actor_data.get("actor_id", 0)) == actor_id:
 			return actor_data
 	return {}
+
+
+func _normalized_ai_intents(snapshot: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for intent in snapshot.get("ai_intents", []):
+		var intent_data: Dictionary = intent
+		output.append({
+			"actor_id": int(intent_data.get("actor_id", 0)),
+			"intent": str(intent_data.get("intent", "")),
+			"target_actor_id": int(intent_data.get("target_actor_id", 0)),
+			"reason": str(intent_data.get("reason", "")),
+		})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("actor_id", 0)) < int(b.get("actor_id", 0))
+	)
+	return output
 
 
 func _inventory_count(actor: Dictionary, item_id: String) -> int:
