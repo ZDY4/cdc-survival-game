@@ -158,6 +158,34 @@ func snapshot() -> Dictionary:
 	}
 
 
+func load_snapshot(snapshot_data: Dictionary) -> void:
+	active_map_id = str(snapshot_data.get("active_map_id", ""))
+	start_location_id = str(snapshot_data.get("start_location_id", ""))
+	start_entry_point_id = str(snapshot_data.get("start_entry_point_id", ""))
+	unlocked_locations = _string_array(snapshot_data.get("unlocked_locations", []))
+	actor_registry.load_snapshot(snapshot_data.get("actors", []))
+	events = []
+	for event_data in snapshot_data.get("events", []):
+		var event: Dictionary = _dictionary_or_empty(event_data)
+		events.append(SimulationEvent.new(str(event.get("kind", "")), _dictionary_or_empty(event.get("payload", {}))))
+	consumed_interaction_targets = {}
+	for target_id in snapshot_data.get("consumed_interaction_targets", []):
+		consumed_interaction_targets[str(target_id)] = true
+	active_quests = {}
+	for quest_state in snapshot_data.get("active_quests", []):
+		var state: Dictionary = _dictionary_or_empty(quest_state)
+		var quest_id: String = str(state.get("quest_id", ""))
+		if not quest_id.is_empty():
+			active_quests[quest_id] = {
+				"quest_id": quest_id,
+				"current_node_id": str(state.get("current_node_id", "")),
+				"completed_objectives": _dictionary_or_empty(state.get("completed_objectives", {})).duplicate(true),
+			}
+	completed_quests = {}
+	for quest_id in snapshot_data.get("completed_quests", []):
+		completed_quests[str(quest_id)] = true
+
+
 func _emit(kind: String, payload: Dictionary) -> void:
 	events.append(SimulationEvent.new(kind, payload))
 
@@ -473,3 +501,10 @@ func _normalize_content_id(value: Variant) -> String:
 	if typeof(value) == TYPE_INT:
 		return str(value)
 	return str(value)
+
+
+func _string_array(values: Array) -> Array[String]:
+	var output: Array[String] = []
+	for value in values:
+		output.append(str(value))
+	return output

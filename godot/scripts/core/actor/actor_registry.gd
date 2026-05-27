@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ActorRecord = preload("res://scripts/core/actor/actor_record.gd")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 
 var _next_actor_id: int = 1
 var _records: Dictionary = {}
@@ -64,3 +65,44 @@ func snapshot() -> Array[Dictionary]:
 	for record in actors():
 		output.append(record.to_dictionary())
 	return output
+
+
+func load_snapshot(records: Array) -> void:
+	_records.clear()
+	_registration_order.clear()
+	_next_actor_id = 1
+	var sorted_records: Array = records.duplicate()
+	sorted_records.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("registration_index", 0)) < int(b.get("registration_index", 0))
+	)
+	for record_data in sorted_records:
+		var actor_data: Dictionary = record_data
+		var record := ActorRecord.new()
+		record.actor_id = int(actor_data.get("actor_id", 0))
+		record.definition_id = str(actor_data.get("definition_id", ""))
+		record.display_name = str(actor_data.get("display_name", record.definition_id))
+		record.kind = str(actor_data.get("kind", "npc"))
+		record.side = str(actor_data.get("side", "neutral"))
+		record.group_id = str(actor_data.get("group_id", "neutral"))
+		record.registration_index = int(actor_data.get("registration_index", _registration_order.size()))
+		record.ap = float(actor_data.get("ap", 0.0))
+		record.turn_open = bool(actor_data.get("turn_open", false))
+		record.in_combat = bool(actor_data.get("in_combat", false))
+		record.grid_position = GridCoord.from_dictionary(_dictionary_or_empty(actor_data.get("grid_position", {})))
+		record.inventory = _dictionary_or_empty(actor_data.get("inventory", {})).duplicate(true)
+		record.active_dialogue_id = str(actor_data.get("active_dialogue_id", ""))
+		var combat: Dictionary = _dictionary_or_empty(actor_data.get("combat", {}))
+		record.max_hp = max(1.0, float(combat.get("max_hp", 1.0)))
+		record.hp = clampf(float(combat.get("hp", record.max_hp)), 0.0, record.max_hp)
+		record.attack_power = max(0.0, float(combat.get("attack_power", 1.0)))
+		record.defense = max(0.0, float(combat.get("defense", 0.0)))
+		record.xp_reward = max(0, int(combat.get("xp_reward", 0)))
+		_records[record.actor_id] = record
+		_registration_order.append(record.actor_id)
+		_next_actor_id = max(_next_actor_id, record.actor_id + 1)
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
