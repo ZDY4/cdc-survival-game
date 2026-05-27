@@ -34,6 +34,34 @@ const EDITABLE_FIELDS := {
 	],
 }
 
+const FIELD_TYPES := {
+	"items": {
+		"name": "string",
+		"description": "string",
+		"icon_path": "string",
+		"value": "int",
+		"weight": "float",
+	},
+	"recipes": {
+		"name": "string",
+		"description": "string",
+		"category": "string",
+		"craft_time": "float",
+		"experience_reward": "int",
+		"is_default_unlocked": "bool",
+	},
+	"characters": {
+		"identity.display_name": "string",
+		"identity.description": "string",
+		"faction.camp_id": "string",
+		"faction.disposition": "string",
+		"combat.behavior": "string",
+	},
+	"maps": {
+		"name": "string",
+	},
+}
+
 
 func supports_domain(domain: String) -> bool:
 	return SUPPORTED_DOMAINS.has(domain)
@@ -44,6 +72,18 @@ func editable_fields(domain: String) -> Array[String]:
 	for field in EDITABLE_FIELDS.get(domain, []):
 		fields.append(str(field))
 	return fields
+
+
+func field_type(domain: String, field_path: String) -> String:
+	return str(_dictionary_or_empty(FIELD_TYPES.get(domain, {})).get(field_path, "string"))
+
+
+func normalize_patch(domain: String, raw_patch: Dictionary) -> Dictionary:
+	var patch: Dictionary = {}
+	for field in raw_patch.keys():
+		var field_path := str(field)
+		patch[field_path] = _coerce_value(raw_patch[field], field_type(domain, field_path))
+	return patch
 
 
 func save_patch(domain: String, id_value: String, patch: Dictionary, registry: ContentRegistry, options: Dictionary = {}) -> Dictionary:
@@ -62,14 +102,15 @@ func save_patch(domain: String, id_value: String, patch: Dictionary, registry: C
 	if not bool(options.get("allow_external_path", false)) and not _is_under_data_root(path):
 		return _failed("path_outside_data", "refusing to write outside data root: %s" % path)
 
+	var normalized_patch := normalize_patch(domain, patch)
 	var next_data: Dictionary = _dictionary_or_empty(record.get("data", {})).duplicate(true)
 	var changed_fields: Array[String] = []
-	for field in patch.keys():
+	for field in normalized_patch.keys():
 		var field_path := str(field)
 		if not _can_edit_field(domain, field_path):
 			return _failed("unsupported_field", "field %s is not editable for %s" % [field_path, domain])
 		var before: Variant = _get_field(next_data, field_path)
-		var after: Variant = patch[field]
+		var after: Variant = normalized_patch[field]
 		if before != after:
 			_set_field(next_data, field_path, after)
 			changed_fields.append(field_path)
@@ -127,6 +168,21 @@ func _validate_data(domain: String, id_value: String, record: Dictionary, data: 
 
 func _can_edit_field(domain: String, field_path: String) -> bool:
 	return editable_fields(domain).has(field_path)
+
+
+func _coerce_value(value: Variant, value_type: String) -> Variant:
+	match value_type:
+		"int":
+			return int(value)
+		"float":
+			return float(value)
+		"bool":
+			if typeof(value) == TYPE_BOOL:
+				return value
+			var text := str(value).strip_edges().to_lower()
+			return ["true", "1", "yes", "on"].has(text)
+		_:
+			return str(value)
 
 
 func _get_field(data: Dictionary, field_path: String) -> Variant:

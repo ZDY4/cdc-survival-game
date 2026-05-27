@@ -1,6 +1,8 @@
 extends SceneTree
 
 const ContentBrowserPresenter = preload("res://addons/cdc_game_editor/content_browser_presenter.gd")
+const ContentBrowserDock = preload("res://addons/cdc_game_editor/content_browser_dock.gd")
+const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 
 
@@ -44,6 +46,7 @@ func _run() -> Array[String]:
 	_expect_detail(errors, presenter, registry, "character", "zombie_walker", "references:")
 	_expect_detail(errors, presenter, registry, "map", "survivor_outpost_01", "map_review_checks:")
 	_expect_detail(errors, presenter, registry, "item", "1006", "editable_fields:")
+	_expect_dock_patch(errors, registry)
 	return errors
 
 
@@ -67,3 +70,42 @@ func _expect_detail(errors: Array[String], presenter: ContentBrowserPresenter, r
 	var text := str(detail.get("text", ""))
 	if not text.contains(required):
 		errors.append("browser detail for %s %s missing '%s'" % [kind, id_value, required])
+
+
+func _expect_dock_patch(errors: Array[String], registry: ContentRegistry) -> void:
+	var dock: ContentBrowserDock = ContentBrowserDock.new()
+	dock.repo_root = ProjectSettings.globalize_path("res://..").simplify_path()
+	dock.registry = _registry_with_temp_record(registry, "items", "1006")
+	dock.presenter = ContentBrowserPresenter.new()
+	dock.edit_service = ContentEditService.new()
+	dock.selected_kind = "item"
+	dock.selected_id = "1006"
+	var report := dock.apply_patch_for_current_selection({"name": "绷带 dock smoke"}, false, {"allow_external_path": true})
+	if not bool(report.get("ok", false)):
+		errors.append("browser dock patch failed: %s" % report)
+		return
+	var raw := FileAccess.get_file_as_string(str(report.get("path", "")))
+	if not raw.contains("绷带 dock smoke"):
+		errors.append("browser dock patch did not write expected value")
+	dock.free()
+
+
+func _registry_with_temp_record(registry: ContentRegistry, domain: String, id_value: String) -> ContentRegistry:
+	var copy: ContentRegistry = ContentRegistry.new()
+	copy.libraries = registry.libraries.duplicate(true)
+	copy.files_by_domain = registry.files_by_domain.duplicate(true)
+	copy.bootstrap_config = registry.bootstrap_config.duplicate(true)
+	copy.data_root = registry.data_root
+	var record: Dictionary = registry.get_library(domain).get(id_value, {}).duplicate(true)
+	var data: Dictionary = record.get("data", {}).duplicate(true)
+	var temp_dir := ProjectSettings.globalize_path("user://content_browser_dock_smoke").simplify_path()
+	DirAccess.make_dir_recursive_absolute(temp_dir)
+	var temp_path := temp_dir.path_join("%s_%s.json" % [domain, id_value])
+	var file := FileAccess.open(temp_path, FileAccess.WRITE)
+	file.store_string(JSON.stringify(data, "  ") + "\n")
+	record["path"] = temp_path
+	record["data"] = data
+	var library: Dictionary = copy.libraries.get(domain, {}).duplicate(true)
+	library[id_value] = record
+	copy.libraries[domain] = library
+	return copy

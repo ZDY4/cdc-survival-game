@@ -13,9 +13,13 @@ func supported_kinds() -> Array[String]:
 	return BROWSER_KINDS.duplicate()
 
 
+func domain_for_kind(kind: String) -> String:
+	return EditorContentPresenter.new().domain_for_kind(kind)
+
+
 func rows_for_kind(kind: String, registry: ContentRegistry, filter_text: String = "") -> Array[Dictionary]:
 	var presenter := EditorContentPresenter.new()
-	var domain := presenter.domain_for_kind(kind)
+	var domain := domain_for_kind(kind)
 	if domain.is_empty() or not BROWSER_KINDS.has(kind):
 		return []
 

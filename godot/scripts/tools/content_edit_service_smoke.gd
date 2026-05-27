@@ -30,6 +30,7 @@ func _run() -> Array[String]:
 
 	var service: ContentEditService = ContentEditService.new()
 	_expect_editable_fields(errors, service)
+	_expect_field_types(errors, service)
 	_expect_patch(errors, service, registry, "items", "1006", {"name": "绷带 smoke"})
 	_expect_patch(errors, service, registry, "recipes", "recipe_first_aid_kit", {"craft_time": 31.0})
 	_expect_patch(errors, service, registry, "characters", "zombie_walker", {"identity.display_name": "行尸 smoke"})
@@ -42,6 +43,20 @@ func _expect_editable_fields(errors: Array[String], service: ContentEditService)
 	for domain in ["items", "recipes", "characters", "maps"]:
 		if service.editable_fields(domain).is_empty():
 			errors.append("content edit service has no editable fields for %s" % domain)
+
+
+func _expect_field_types(errors: Array[String], service: ContentEditService) -> void:
+	var patch := service.normalize_patch("recipes", {
+		"craft_time": "31.5",
+		"experience_reward": "17",
+		"is_default_unlocked": "true",
+	})
+	if typeof(patch.get("craft_time")) != TYPE_FLOAT:
+		errors.append("craft_time should normalize to float")
+	if typeof(patch.get("experience_reward")) != TYPE_INT:
+		errors.append("experience_reward should normalize to int")
+	if typeof(patch.get("is_default_unlocked")) != TYPE_BOOL:
+		errors.append("is_default_unlocked should normalize to bool")
 
 
 func _expect_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry, domain: String, id_value: String, patch: Dictionary) -> void:
