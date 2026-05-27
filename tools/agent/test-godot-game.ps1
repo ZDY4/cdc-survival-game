@@ -32,6 +32,7 @@ param(
         "Runtime",
         "World",
         "Scene",
+        "Overworld",
         "Movement",
         "Interaction",
         "PlayerInteraction",
@@ -70,6 +71,7 @@ $scenarioScripts = [ordered]@{
     Runtime           = "res://scripts/tools/runtime_smoke.gd"
     World             = "res://scripts/tools/world_smoke.gd"
     Scene             = "res://scripts/tools/scene_smoke.gd"
+    Overworld         = "res://scripts/tools/overworld_smoke.gd"
     Movement          = "res://scripts/tools/movement_smoke.gd"
     Interaction       = "res://scripts/tools/interaction_smoke.gd"
     PlayerInteraction = "res://scripts/tools/player_interaction_smoke.gd"

@@ -99,7 +99,7 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	if not bool(loaded.get("ok", false)):
 		return ["load_snapshot failed: %s" % loaded.get("reason", "unknown")]
 
-	for key in ["active_map_id", "consumed_interaction_targets", "completed_quests"]:
+	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests"]:
 		if JSON.stringify(restored.get(key)) != JSON.stringify(original.get(key)):
 			errors.append("snapshot field mismatch: %s" % key)
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
@@ -202,6 +202,8 @@ func _normalized_inventory_entries(entries: Array) -> Array[Dictionary]:
 func _digest(snapshot: Dictionary) -> Dictionary:
 	return {
 		"active_map_id": snapshot.get("active_map_id", ""),
+		"active_location_id": snapshot.get("active_location_id", ""),
+		"active_entry_point_id": snapshot.get("active_entry_point_id", ""),
 		"actor_count": snapshot.get("actors", []).size(),
 		"active_quests": _active_quest_ids(snapshot),
 		"completed_quests": snapshot.get("completed_quests", []),

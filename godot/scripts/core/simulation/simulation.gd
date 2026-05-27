@@ -10,6 +10,8 @@ var actor_registry := ActorRegistry.new()
 var active_map_id: String = ""
 var start_location_id: String = ""
 var start_entry_point_id: String = ""
+var active_location_id: String = ""
+var active_entry_point_id: String = ""
 var unlocked_locations: Array[String] = []
 var events: Array[SimulationEvent] = []
 var map_interaction_targets: Dictionary = {}
@@ -96,6 +98,43 @@ func unlock_location(location_id: String) -> bool:
 		})
 		return true
 	return false
+
+
+func enter_location(actor_id: int, location_id: String, overworld_library: Dictionary, entry_point_override: String = "") -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var location: Dictionary = _overworld_location(location_id, overworld_library)
+	if location.is_empty():
+		return {"success": false, "reason": "unknown_location", "location_id": location_id}
+	var normalized_location_id: String = str(location.get("id", location_id))
+	if not unlocked_locations.has(normalized_location_id):
+		return {"success": false, "reason": "location_locked", "location_id": normalized_location_id}
+	var map_id: String = str(location.get("map_id", ""))
+	if map_id.is_empty():
+		return {"success": false, "reason": "location_map_missing", "location_id": normalized_location_id}
+	var entry_point_id: String = str(entry_point_override)
+	if entry_point_id.is_empty():
+		entry_point_id = str(location.get("entry_point_id", ""))
+	var previous_map_id: String = active_map_id
+	active_map_id = map_id
+	active_location_id = normalized_location_id
+	active_entry_point_id = entry_point_id
+	start_entry_point_id = entry_point_id
+	actor.active_container_id = ""
+	_emit("location_entered", {
+		"actor_id": actor_id,
+		"location_id": normalized_location_id,
+		"from_map_id": previous_map_id,
+		"to_map_id": map_id,
+		"entry_point_id": entry_point_id,
+	})
+	return {
+		"success": true,
+		"location_id": normalized_location_id,
+		"map_id": map_id,
+		"entry_point_id": entry_point_id,
+	}
 
 
 func configure_shops(shops: Dictionary) -> void:
@@ -526,6 +565,8 @@ func snapshot() -> Dictionary:
 		"active_map_id": active_map_id,
 		"start_location_id": start_location_id,
 		"start_entry_point_id": start_entry_point_id,
+		"active_location_id": active_location_id,
+		"active_entry_point_id": active_entry_point_id,
 		"unlocked_locations": unlocked_locations.duplicate(),
 		"actors": actor_registry.snapshot(),
 		"events": event_output,
@@ -541,6 +582,8 @@ func load_snapshot(snapshot_data: Dictionary) -> void:
 	active_map_id = str(snapshot_data.get("active_map_id", ""))
 	start_location_id = str(snapshot_data.get("start_location_id", ""))
 	start_entry_point_id = str(snapshot_data.get("start_entry_point_id", ""))
+	active_location_id = str(snapshot_data.get("active_location_id", snapshot_data.get("start_location_id", "")))
+	active_entry_point_id = str(snapshot_data.get("active_entry_point_id", snapshot_data.get("start_entry_point_id", "")))
 	unlocked_locations = _string_array(snapshot_data.get("unlocked_locations", []))
 	actor_registry.load_snapshot(snapshot_data.get("actors", []))
 	events = []
@@ -784,6 +827,17 @@ func _execute_scene_transition(actor_id: int, prompt: Dictionary, option: Dictio
 			"active_map_id": active_map_id,
 		},
 	}
+
+
+func _overworld_location(location_id: String, overworld_library: Dictionary) -> Dictionary:
+	for overworld_id in overworld_library.keys():
+		var record: Dictionary = _dictionary_or_empty(overworld_library[overworld_id])
+		var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+		for location in _array_or_empty(data.get("locations", [])):
+			var location_data: Dictionary = _dictionary_or_empty(location)
+			if str(location_data.get("id", "")) == location_id:
+				return location_data
+	return {}
 
 
 func _dialogue_data(dialogue_id: String, dialogue_library: Dictionary) -> Dictionary:

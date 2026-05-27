@@ -20,5 +20,5 @@
 ## Notes
 
 - 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
-- 单场景复核可使用 `-Scenario Runtime`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
+- 单场景复核可使用 `-Scenario Runtime`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
 - Bevy smoke 仅作为旧客户端行为对照；迁移开发优先运行本 workflow。

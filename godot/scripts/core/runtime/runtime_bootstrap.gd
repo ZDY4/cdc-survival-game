@@ -17,6 +17,8 @@ func build_new_game_runtime() -> Dictionary:
 	simulation.active_map_id = str(bootstrap.get("startupMapId", ""))
 	simulation.start_location_id = str(bootstrap.get("startLocationId", ""))
 	simulation.start_entry_point_id = str(bootstrap.get("startEntryPointId", ""))
+	simulation.active_location_id = simulation.start_location_id
+	simulation.active_entry_point_id = simulation.start_entry_point_id
 	simulation.unlocked_locations = _string_array(bootstrap.get("unlockedLocations", []))
 
 	for spawn_entry in bootstrap.get("spawnEntries", []):

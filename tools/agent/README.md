@@ -190,6 +190,7 @@ pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionM
 
 ```powershell
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Movement
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario DialogueAction
