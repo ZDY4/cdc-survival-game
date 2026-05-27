@@ -2,6 +2,7 @@ extends SceneTree
 
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
 
 
 func _init() -> void:
@@ -127,16 +128,12 @@ func _references_command(args: Array[String], registry: ContentRegistry) -> int:
 		printerr("not found: %s %s" % [kind, id_value])
 		return 1
 
-	match domain:
-		"items":
-			_print_references(kind, id_value, record.get("path", ""), _item_references(id_value, registry))
-			return 0
-		"maps":
-			_print_references(kind, id_value, record.get("path", ""), _map_references(id_value, registry))
-			return 0
-		_:
-			printerr("references currently supports item and map, got %s" % kind)
-			return 2
+	var reference_index: ContentReferenceIndex = ContentReferenceIndex.new()
+	if not reference_index.supports_domain(domain):
+		printerr("references currently supports %s, got %s" % [_reference_domain_list(), kind])
+		return 2
+	_print_references(kind, id_value, record.get("path", ""), reference_index.references_for(domain, id_value, registry))
+	return 0
 
 
 func _format_command(args: Array[String], registry: ContentRegistry) -> int:
@@ -288,88 +285,6 @@ func _print_summary(domain: String, id_value: String, record: Dictionary) -> voi
 			print("object_kinds: %s" % _map_object_kind_counts(data))
 
 
-func _item_references(item_id: String, registry: ContentRegistry) -> Array[Dictionary]:
-	var hits: Array[Dictionary] = []
-	for recipe_id in registry.get_library("recipes").keys():
-		var record: Dictionary = registry.get_library("recipes")[recipe_id]
-		var data: Dictionary = record["data"]
-		var output: Dictionary = _dictionary_or_empty(data.get("output", {}))
-		if ContentRegistry.normalize_content_id(output.get("item_id", "")) == item_id:
-			hits.append(_reference_hit("recipe", recipe_id, record["path"], "output.item_id"))
-		for i in range(data.get("materials", []).size()):
-			var material: Dictionary = _dictionary_or_empty(data["materials"][i])
-			if ContentRegistry.normalize_content_id(material.get("item_id", "")) == item_id:
-				hits.append(_reference_hit("recipe", recipe_id, record["path"], "materials[%d].item_id" % i))
-		_collect_tool_refs(hits, item_id, "recipe", recipe_id, record["path"], "required_tools", data.get("required_tools", []))
-		_collect_tool_refs(hits, item_id, "recipe", recipe_id, record["path"], "optional_tools", data.get("optional_tools", []))
-
-	for source_item_id in registry.get_library("items").keys():
-		var record: Dictionary = registry.get_library("items")[source_item_id]
-		var data: Dictionary = record["data"]
-		var fragments: Array = data.get("fragments", [])
-		for fragment_index in range(fragments.size()):
-			var fragment: Dictionary = _dictionary_or_empty(fragments[fragment_index])
-			match str(fragment.get("kind", "")):
-				"weapon":
-					if ContentRegistry.normalize_content_id(fragment.get("ammo_type", "")) == item_id:
-						hits.append(_reference_hit("item", source_item_id, record["path"], "fragments[%d].weapon.ammo_type" % fragment_index))
-				"crafting":
-					var crafting_recipe: Dictionary = _dictionary_or_empty(fragment.get("crafting_recipe", {}))
-					var materials: Array = crafting_recipe.get("materials", [])
-					for material_index in range(materials.size()):
-						var material: Dictionary = _dictionary_or_empty(materials[material_index])
-						if ContentRegistry.normalize_content_id(material.get("item_id", "")) == item_id:
-							hits.append(_reference_hit("item", source_item_id, record["path"], "fragments[%d].crafting.crafting_recipe.materials[%d].item_id" % [fragment_index, material_index]))
-					var yields: Array = fragment.get("deconstruct_yield", [])
-					for yield_index in range(yields.size()):
-						var yield_item: Dictionary = _dictionary_or_empty(yields[yield_index])
-						if ContentRegistry.normalize_content_id(yield_item.get("item_id", "")) == item_id:
-							hits.append(_reference_hit("item", source_item_id, record["path"], "fragments[%d].crafting.deconstruct_yield[%d].item_id" % [fragment_index, yield_index]))
-
-	for character_id in registry.get_library("characters").keys():
-		var record: Dictionary = registry.get_library("characters")[character_id]
-		var combat: Dictionary = _dictionary_or_empty(record["data"].get("combat", {}))
-		var loot: Array = combat.get("loot", [])
-		for i in range(loot.size()):
-			var entry: Dictionary = _dictionary_or_empty(loot[i])
-			if ContentRegistry.normalize_content_id(entry.get("item_id", "")) == item_id:
-				hits.append(_reference_hit("character", character_id, record["path"], "combat.loot[%d].item_id" % i))
-
-	for map_id in registry.get_library("maps").keys():
-		var record: Dictionary = registry.get_library("maps")[map_id]
-		var objects: Array = record["data"].get("objects", [])
-		for object_index in range(objects.size()):
-			var object: Dictionary = _dictionary_or_empty(objects[object_index])
-			var props: Dictionary = _dictionary_or_empty(object.get("props", {}))
-			var pickup: Dictionary = _dictionary_or_empty(props.get("pickup", {}))
-			if ContentRegistry.normalize_content_id(pickup.get("item_id", "")) == item_id:
-				hits.append(_reference_hit("map", map_id, record["path"], "objects[%d].props.pickup.item_id" % object_index))
-			var container: Dictionary = _dictionary_or_empty(props.get("container", {}))
-			var inventory: Array = container.get("initial_inventory", [])
-			for item_index in range(inventory.size()):
-				var entry: Dictionary = _dictionary_or_empty(inventory[item_index])
-				if ContentRegistry.normalize_content_id(entry.get("item_id", "")) == item_id:
-					hits.append(_reference_hit("map", map_id, record["path"], "objects[%d].props.container.initial_inventory[%d].item_id" % [object_index, item_index]))
-	return hits
-
-
-func _map_references(map_id: String, registry: ContentRegistry) -> Array[Dictionary]:
-	var hits: Array[Dictionary] = []
-	for overworld_id in registry.get_library("overworld").keys():
-		var record: Dictionary = registry.get_library("overworld")[overworld_id]
-		var locations: Array = record["data"].get("locations", [])
-		for i in range(locations.size()):
-			var location: Dictionary = _dictionary_or_empty(locations[i])
-			if str(location.get("map_id", "")) == map_id:
-				hits.append(_reference_hit("overworld", overworld_id, record["path"], "locations[%d] id=%s entry_point_id=%s kind=%s" % [
-					i,
-					location.get("id", ""),
-					location.get("entry_point_id", ""),
-					location.get("kind", ""),
-				]))
-	return hits
-
-
 func _print_references(kind: String, id_value: String, path: String, hits: Array[Dictionary]) -> void:
 	print("kind: %s" % kind)
 	print("id: %s" % id_value)
@@ -385,21 +300,6 @@ func _print_references(kind: String, id_value: String, path: String, hits: Array
 			_repo_relative_path(str(hit.get("path", ""))),
 			hit.get("detail", ""),
 		])
-
-
-func _reference_hit(source_kind: String, source_id: String, path: String, detail: String) -> Dictionary:
-	return {
-		"source_kind": source_kind,
-		"source_id": source_id,
-		"path": path,
-		"detail": detail,
-	}
-
-
-func _collect_tool_refs(hits: Array[Dictionary], item_id: String, source_kind: String, source_id: String, path: String, field: String, values: Array) -> void:
-	for i in range(values.size()):
-		if ContentRegistry.normalize_content_id(values[i]) == item_id:
-			hits.append(_reference_hit(source_kind, source_id, path, "%s[%d]" % [field, i]))
 
 
 func _map_object_kind_counts(data: Dictionary) -> String:
@@ -628,10 +528,18 @@ func _normalize_domain(kind: String) -> String:
 			return "items"
 		"character":
 			return "characters"
+		"dialogue":
+			return "dialogues"
 		"map":
 			return "maps"
+		"quest":
+			return "quests"
 		"recipe":
 			return "recipes"
+		"skill":
+			return "skills"
+		"settlement":
+			return "settlements"
 		_:
 			return kind
 
@@ -642,10 +550,18 @@ func _singular_domain(domain: String) -> String:
 			return "item"
 		"characters":
 			return "character"
+		"dialogues":
+			return "dialogue"
 		"maps":
 			return "map"
+		"quests":
+			return "quest"
 		"recipes":
 			return "recipe"
+		"skills":
+			return "skill"
+		"settlements":
+			return "settlement"
 		_:
 			return domain
 
@@ -671,5 +587,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	return {}
 
 
+func _reference_domain_list() -> String:
+	return "item, recipe, character, dialogue, quest, skill, settlement, overworld, and map"
+
+
 func _usage() -> String:
-	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|map> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"
+	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|quest|skill|settlement|overworld|map> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"

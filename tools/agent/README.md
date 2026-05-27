@@ -139,6 +139,7 @@ pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outp
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind item -Id 1006
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind map -Id survivor_outpost_01
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind item -Id 1006
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind quest -Id tutorial_survive
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind item -Id 1006
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id data/items/1006.json
@@ -148,7 +149,7 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 
 - 固定调用 `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd -- ...`。
 - 当前覆盖 `locate` / `summarize` / `references` / `validate changed` / `format` / `format changed` / `diff-summary`。
-- `references` 当前覆盖 `item` 和 `map`，与旧 `content_tools` 的主路径保持一致。
+- `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `settlement` / `overworld` / `map`，用于替代旧 `content_tools` 的常用引用查询。
 - `format` 只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量。
 
 ### `test-bevy-game.ps1`
@@ -190,6 +191,7 @@ pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionM
 
 ```powershell
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentCLI
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Movement
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction

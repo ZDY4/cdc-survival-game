@@ -32,6 +32,7 @@
 
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind recipe -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind recipe -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind recipe -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind recipe -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind recipe -Id <id>`
 

@@ -32,6 +32,7 @@
 
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind character -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind character -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind character -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind character -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind character -Id <id>`
 

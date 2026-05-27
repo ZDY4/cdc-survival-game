@@ -30,6 +30,7 @@ param(
     [ValidateSet(
         "All",
         "Runtime",
+        "ContentCLI",
         "World",
         "Scene",
         "Overworld",
@@ -72,6 +73,7 @@ if (-not (Test-Path -LiteralPath $Godot)) {
 
 $scenarioScripts = [ordered]@{
     Runtime           = "res://scripts/tools/runtime_smoke.gd"
+    ContentCLI        = "res://scripts/tools/content_cli_smoke.gd"
     World             = "res://scripts/tools/world_smoke.gd"
     Scene             = "res://scripts/tools/scene_smoke.gd"
     Overworld         = "res://scripts/tools/overworld_smoke.gd"

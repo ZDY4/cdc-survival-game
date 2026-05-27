@@ -31,10 +31,10 @@
 
 当前优先使用：
 
-- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind <item|recipe|character|map> -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind <item|recipe|character|dialogue|quest|skill|settlement|overworld|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind <item|recipe|character|map> -Id <id>`
-- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind <item|map> -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind <item|recipe|character|dialogue|quest|skill|settlement|overworld|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind <item|recipe|character|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id <file>`
