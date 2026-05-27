@@ -55,6 +55,32 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade items missing medkit")
 	if not item_text.contains("绷带 x8"):
 		errors.append("trade items missing bandage")
+
+	var buy_result: Dictionary = game_root.simulation.buy_item_from_shop(1, "trader_lao_wang_shop", "1006", 1, game_root.registry.get_library("items"))
+	if not bool(buy_result.get("success", false)):
+		errors.append("trade buy failed: %s" % buy_result.get("reason", "unknown"))
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
+	if _player_inventory_count(game_root, "1006") != 2:
+		errors.append("trade buy did not add bandage to player")
+	if _player_money(game_root) != 76:
+		errors.append("trade buy did not spend player money")
+	if not _summary_line(game_root).contains("资金 524"):
+		errors.append("trade summary did not update shop money after buy")
+	if not "\n".join(_item_lines(game_root)).contains("绷带 x7"):
+		errors.append("trade items did not reduce shop bandage stock")
+
+	var sell_result: Dictionary = game_root.simulation.sell_item_to_shop(1, "trader_lao_wang_shop", "1006", 1, game_root.registry.get_library("items"))
+	if not bool(sell_result.get("success", false)):
+		errors.append("trade sell failed: %s" % sell_result.get("reason", "unknown"))
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
+	if _player_inventory_count(game_root, "1006") != 1:
+		errors.append("trade sell did not remove bandage from player")
+	if _player_money(game_root) != 92:
+		errors.append("trade sell did not pay player money")
+	if not _summary_line(game_root).contains("资金 508"):
+		errors.append("trade summary did not update shop money after sell")
 	return errors
 
 
@@ -73,3 +99,20 @@ func _item_lines(game_root: Node) -> Array[String]:
 		if child is Label:
 			output.append((child as Label).text)
 	return output
+
+
+func _player_inventory_count(game_root: Node, item_id: String) -> int:
+	for actor in game_root.simulation.snapshot().get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == 1:
+			var inventory: Dictionary = actor_data.get("inventory", {})
+			return int(inventory.get(item_id, 0))
+	return 0
+
+
+func _player_money(game_root: Node) -> int:
+	for actor in game_root.simulation.snapshot().get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == 1:
+			return int(actor_data.get("money", 0))
+	return 0

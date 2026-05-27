@@ -56,6 +56,16 @@ func _validate_new_game_snapshot(snapshot: Dictionary) -> Array[String]:
 		errors.append("expected 3 actor_registered events")
 	if not _active_quest_ids(snapshot).has("tutorial_survive"):
 		errors.append("expected tutorial_survive to auto start")
+	var player: Dictionary = _actor_by_definition(snapshot, "player")
+	var inventory: Dictionary = player.get("inventory", {})
+	if int(player.get("money", 0)) != 100:
+		errors.append("expected default player money 100")
+	if int(inventory.get("1009", 0)) != 10:
+		errors.append("expected bootstrap ammo 1009 x10")
+	if int(inventory.get("1006", 0)) != 1:
+		errors.append("expected bootstrap item 1006 x1")
+	if snapshot.get("shop_sessions", []).size() <= 0:
+		errors.append("expected runtime shop session")
 	return errors
 
 
@@ -67,6 +77,8 @@ func _snapshot_digest(snapshot: Dictionary) -> Dictionary:
 		"active_map_id": snapshot.get("active_map_id", ""),
 		"actors": actors,
 		"active_quests": _active_quest_ids(snapshot),
+		"player_inventory": _actor_by_definition(snapshot, "player").get("inventory", {}),
+		"shop_sessions": snapshot.get("shop_sessions", []).size(),
 		"event_count": snapshot.get("events", []).size(),
 	}
 
@@ -86,3 +98,11 @@ func _active_quest_ids(snapshot: Dictionary) -> Array[String]:
 		var quest_data: Dictionary = quest
 		output.append(str(quest_data.get("quest_id", "")))
 	return output
+
+
+func _actor_by_definition(snapshot: Dictionary, definition_id: String) -> Dictionary:
+	for actor in snapshot.get("actors", []):
+		var actor_data: Dictionary = actor
+		if str(actor_data.get("definition_id", "")) == definition_id:
+			return actor_data
+	return {}

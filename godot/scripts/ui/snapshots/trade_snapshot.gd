@@ -23,7 +23,7 @@ func build(runtime_snapshot: Dictionary, target: Dictionary = {}) -> Dictionary:
 			"error": "unknown_shop",
 		}
 
-	var shop_data: Dictionary = shop_record.get("data", {})
+	var shop_data: Dictionary = _shop_session_or_definition(runtime_snapshot, shop_id, shop_record)
 	return {
 		"active": true,
 		"shop_id": shop_id,
@@ -82,6 +82,14 @@ func _shop_items(entries: Array) -> Array[Dictionary]:
 		return int(a.get("price", 0)) > int(b.get("price", 0))
 	)
 	return items
+
+
+func _shop_session_or_definition(runtime_snapshot: Dictionary, shop_id: String, shop_record: Dictionary) -> Dictionary:
+	for session in runtime_snapshot.get("shop_sessions", []):
+		var session_data: Dictionary = _dictionary_or_empty(session)
+		if str(session_data.get("shop_id", "")) == shop_id:
+			return session_data
+	return _dictionary_or_empty(shop_record.get("data", {}))
 
 
 func _item_data(item_id: String) -> Dictionary:

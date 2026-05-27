@@ -22,6 +22,8 @@ func build_new_game_runtime() -> Dictionary:
 	for spawn_entry in bootstrap.get("spawnEntries", []):
 		_register_spawn_entry(simulation, spawn_entry)
 
+	_apply_starting_inventory(simulation, bootstrap)
+	simulation.configure_shops(registry.get_library("shops"))
 	simulation.configure_quests(registry.get_library("quests"))
 	_configure_startup_map_interactions(simulation)
 	return {
@@ -61,6 +63,29 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"defense": float(combat_attributes.get("defense", 0.0)),
 		"xp_reward": int(combat.get("xp_reward", 0)),
 	})
+
+
+func _apply_starting_inventory(simulation: RefCounted, bootstrap: Dictionary) -> void:
+	var player: RefCounted = _player_actor(simulation)
+	if player == null:
+		push_error("cannot apply starting inventory: player actor missing")
+		return
+	player.money = max(0, int(bootstrap.get("money", 100)))
+	for section in ["items", "ammo"]:
+		for entry in bootstrap.get(section, []):
+			var entry_data: Dictionary = _dictionary_or_empty(entry)
+			var item_id: String = _normalize_content_id(entry_data.get("itemId", ""))
+			var count: int = max(0, int(entry_data.get("count", 0)))
+			if item_id.is_empty() or count <= 0:
+				continue
+			player.inventory[item_id] = int(player.inventory.get(item_id, 0)) + count
+
+
+func _player_actor(simulation: RefCounted) -> RefCounted:
+	for actor in simulation.actor_registry.actors():
+		if actor.kind == "player":
+			return actor
+	return null
 
 
 func _configure_startup_map_interactions(simulation: RefCounted) -> void:
@@ -117,3 +142,13 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _normalize_content_id(value: Variant) -> String:
+	if typeof(value) == TYPE_FLOAT:
+		var float_value: float = value
+		if is_equal_approx(float_value, roundf(float_value)):
+			return str(int(float_value))
+	if typeof(value) == TYPE_INT:
+		return str(value)
+	return str(value)

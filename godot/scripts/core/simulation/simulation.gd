@@ -12,6 +12,7 @@ var events: Array[SimulationEvent] = []
 var map_interaction_targets: Dictionary = {}
 var consumed_interaction_targets: Dictionary = {}
 var container_sessions: Dictionary = {}
+var shop_sessions: Dictionary = {}
 var quest_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
@@ -38,8 +39,105 @@ func configure_quests(quests: Dictionary) -> void:
 	_start_available_quests()
 
 
+func configure_shops(shops: Dictionary) -> void:
+	for shop_id in shops.keys():
+		var record: Dictionary = _dictionary_or_empty(shops[shop_id])
+		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+		var normalized_id: String = str(data.get("id", shop_id))
+		if normalized_id.is_empty():
+			normalized_id = str(shop_id)
+		shop_sessions[normalized_id] = {
+			"shop_id": normalized_id,
+			"money": max(0, int(data.get("money", 0))),
+			"buy_price_modifier": max(0.0, float(data.get("buy_price_modifier", 1.0))),
+			"sell_price_modifier": max(0.0, float(data.get("sell_price_modifier", 1.0))),
+			"inventory": _normalize_item_entries(data.get("inventory", [])),
+		}
+
+
 func record_item_collected(actor_id: int, item_id: String, count: int) -> void:
 	_advance_collect_quests(actor_id, item_id, count)
+
+
+func buy_item_from_shop(actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var shop: Dictionary = _dictionary_or_empty(shop_sessions.get(shop_id, {}))
+	if shop.is_empty():
+		return {"success": false, "reason": "unknown_shop"}
+	var normalized_item_id: String = _normalize_content_id(item_id)
+	var buy_count: int = max(1, count)
+	var available: int = _entry_count(_array_or_empty(shop.get("inventory", [])), normalized_item_id)
+	if available < buy_count:
+		return {"success": false, "reason": "shop_stock_insufficient"}
+	var unit_price: int = _trade_unit_price(normalized_item_id, float(shop.get("buy_price_modifier", 1.0)), item_library)
+	var total_price: int = unit_price * buy_count
+	if actor.money < total_price:
+		return {"success": false, "reason": "player_money_insufficient", "unit_price": unit_price, "total_price": total_price}
+
+	actor.money -= total_price
+	_add_actor_item(actor, normalized_item_id, buy_count)
+	_add_item_entries(shop["inventory"], normalized_item_id, -buy_count)
+	shop["money"] = int(shop.get("money", 0)) + total_price
+	shop_sessions[shop_id] = shop
+	_emit("trade_bought", {
+		"actor_id": actor_id,
+		"shop_id": shop_id,
+		"item_id": normalized_item_id,
+		"count": buy_count,
+		"unit_price": unit_price,
+		"total_price": total_price,
+	})
+	return {
+		"success": true,
+		"shop_id": shop_id,
+		"item_id": normalized_item_id,
+		"count": buy_count,
+		"unit_price": unit_price,
+		"total_price": total_price,
+		"shop_money": shop.get("money", 0),
+	}
+
+
+func sell_item_to_shop(actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var shop: Dictionary = _dictionary_or_empty(shop_sessions.get(shop_id, {}))
+	if shop.is_empty():
+		return {"success": false, "reason": "unknown_shop"}
+	var normalized_item_id: String = _normalize_content_id(item_id)
+	var sell_count: int = max(1, count)
+	if int(actor.inventory.get(normalized_item_id, 0)) < sell_count:
+		return {"success": false, "reason": "player_stock_insufficient"}
+	var unit_price: int = _trade_unit_price(normalized_item_id, float(shop.get("sell_price_modifier", 1.0)), item_library)
+	var total_price: int = unit_price * sell_count
+	if int(shop.get("money", 0)) < total_price:
+		return {"success": false, "reason": "shop_money_insufficient", "unit_price": unit_price, "total_price": total_price}
+
+	_add_actor_item(actor, normalized_item_id, -sell_count)
+	actor.money += total_price
+	_add_item_entries(shop["inventory"], normalized_item_id, sell_count)
+	shop["money"] = int(shop.get("money", 0)) - total_price
+	shop_sessions[shop_id] = shop
+	_emit("trade_sold", {
+		"actor_id": actor_id,
+		"shop_id": shop_id,
+		"item_id": normalized_item_id,
+		"count": sell_count,
+		"unit_price": unit_price,
+		"total_price": total_price,
+	})
+	return {
+		"success": true,
+		"shop_id": shop_id,
+		"item_id": normalized_item_id,
+		"count": sell_count,
+		"unit_price": unit_price,
+		"total_price": total_price,
+		"shop_money": shop.get("money", 0),
+	}
 
 
 func perform_attack(actor_id: int, target_actor_id: int) -> Dictionary:
@@ -157,6 +255,7 @@ func snapshot() -> Dictionary:
 		"events": event_output,
 		"consumed_interaction_targets": consumed_interaction_targets.keys(),
 		"container_sessions": _container_session_snapshots(),
+		"shop_sessions": _shop_session_snapshots(),
 		"active_quests": _active_quest_snapshots(),
 		"completed_quests": completed_quests.keys(),
 	}
@@ -184,6 +283,18 @@ func load_snapshot(snapshot_data: Dictionary) -> void:
 				"container_id": container_id,
 				"display_name": str(session_data.get("display_name", container_id)),
 				"inventory": _array_or_empty(session_data.get("inventory", [])).duplicate(true),
+			}
+	shop_sessions = {}
+	for session in snapshot_data.get("shop_sessions", []):
+		var shop_data: Dictionary = _dictionary_or_empty(session)
+		var shop_id: String = str(shop_data.get("shop_id", ""))
+		if not shop_id.is_empty():
+			shop_sessions[shop_id] = {
+				"shop_id": shop_id,
+				"money": max(0, int(shop_data.get("money", 0))),
+				"buy_price_modifier": max(0.0, float(shop_data.get("buy_price_modifier", 1.0))),
+				"sell_price_modifier": max(0.0, float(shop_data.get("sell_price_modifier", 1.0))),
+				"inventory": _normalize_item_entries(shop_data.get("inventory", [])),
 			}
 	active_quests = {}
 	for quest_state in snapshot_data.get("active_quests", []):
@@ -527,6 +638,22 @@ func _container_session_snapshots() -> Array[Dictionary]:
 	return output
 
 
+func _shop_session_snapshots() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var ids: Array = shop_sessions.keys()
+	ids.sort()
+	for shop_id in ids:
+		var session: Dictionary = _dictionary_or_empty(shop_sessions[shop_id])
+		output.append({
+			"shop_id": str(session.get("shop_id", shop_id)),
+			"money": max(0, int(session.get("money", 0))),
+			"buy_price_modifier": max(0.0, float(session.get("buy_price_modifier", 1.0))),
+			"sell_price_modifier": max(0.0, float(session.get("sell_price_modifier", 1.0))),
+			"inventory": _normalize_item_entries(session.get("inventory", [])),
+		})
+	return output
+
+
 func _quest_prerequisites_completed(quest_data: Dictionary) -> bool:
 	for prerequisite in quest_data.get("prerequisites", []):
 		if not completed_quests.has(str(prerequisite)):
@@ -555,6 +682,60 @@ func _enemy_matches_objective(enemy_definition_id: String, enemy_kind: String, e
 	if enemy_type == "zombie" and enemy_definition_id.begins_with("zombie_"):
 		return true
 	return false
+
+
+func _normalize_item_entries(entries: Variant) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for entry in _array_or_empty(entries):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var item_id: String = _normalize_content_id(entry_data.get("item_id", entry_data.get("itemId", "")))
+		var count: int = max(0, int(entry_data.get("count", 0)))
+		if item_id.is_empty() or count <= 0:
+			continue
+		output.append({
+			"item_id": item_id,
+			"count": count,
+			"price": int(entry_data.get("price", 0)),
+		})
+	return output
+
+
+func _entry_count(entries: Array, item_id: String) -> int:
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if _normalize_content_id(entry_data.get("item_id", "")) == item_id:
+			return int(entry_data.get("count", 0))
+	return 0
+
+
+func _add_item_entries(entries: Array, item_id: String, delta: int) -> void:
+	for i in range(entries.size()):
+		var entry: Dictionary = _dictionary_or_empty(entries[i])
+		if _normalize_content_id(entry.get("item_id", "")) == item_id:
+			var next_count: int = int(entry.get("count", 0)) + delta
+			if next_count <= 0:
+				entries.remove_at(i)
+			else:
+				entry["count"] = next_count
+				entries[i] = entry
+			return
+	if delta > 0:
+		entries.append({"item_id": item_id, "count": delta, "price": 0})
+
+
+func _add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:
+	var next_count: int = int(actor.inventory.get(item_id, 0)) + delta
+	if next_count <= 0:
+		actor.inventory.erase(item_id)
+	else:
+		actor.inventory[item_id] = next_count
+
+
+func _trade_unit_price(item_id: String, modifier: float, item_library: Dictionary) -> int:
+	var record: Dictionary = _dictionary_or_empty(item_library.get(item_id, {}))
+	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+	var base_value: int = max(0, int(data.get("value", 0)))
+	return max(1, int(round(float(base_value) * max(0.0, modifier))))
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
