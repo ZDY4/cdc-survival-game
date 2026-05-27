@@ -16,6 +16,7 @@ const DOMAIN_SPECS := [
 	{"domain": "world_tiles", "dir": "world_tiles", "id_field": "", "required": ["prototypes"], "recursive": false},
 	{"domain": "settlements", "dir": "settlements", "id_field": "id", "required": ["id"], "recursive": false},
 	{"domain": "shops", "dir": "shops", "id_field": "id", "required": ["id"], "recursive": false},
+	{"domain": "overworld", "dir": "overworld", "id_field": "id", "required": ["id"], "recursive": false},
 	{"domain": "appearance", "dir": "appearance", "id_field": "id", "required": ["id"], "recursive": true},
 	{"domain": "ai", "dir": "ai", "id_field": "", "required": [], "recursive": true},
 	{"domain": "json", "dir": "json", "id_field": "id", "required": [], "recursive": true},

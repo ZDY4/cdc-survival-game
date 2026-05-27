@@ -70,6 +70,32 @@ pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map factory -NoOpenEdit
 - 默认继续调用 `open-editor.ps1 -Map <id>` 打开或复用 `bevy_map_editor`。
 - 若使用 `-NoOpenEditor`，则只输出 CLI 复核信息，不启动 editor。
 
+### `godot-content.ps1`
+
+用途：
+
+- 通过 Godot headless content CLI 执行内容定位、摘要、引用和校验，作为 `content_tools` 的迁移替代入口。
+
+何时使用：
+
+- 需要在不进入 Rust workspace 的情况下检查 `data/` 内容。
+- 需要验证 Godot loader 对当前内容的读取、摘要和引用结果。
+
+示例：
+
+```powershell
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command locate -Kind item -Id 1006
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind map -Id survivor_outpost_01
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind item -Id 1006
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed
+```
+
+行为：
+
+- 固定调用 `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd`。
+- 当前覆盖 `locate` / `summarize` / `references` / `validate changed`。
+- `references` 当前覆盖 `item` 和 `map`，与旧 `content_tools` 的主路径保持一致。
+
 ### `test-bevy-game.ps1`
 
 用途：
