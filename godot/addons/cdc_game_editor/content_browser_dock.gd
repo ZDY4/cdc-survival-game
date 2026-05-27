@@ -4,6 +4,7 @@ extends VBoxContainer
 const ContentBrowserPresenter = preload("res://addons/cdc_game_editor/content_browser_presenter.gd")
 const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const TypedFieldForm = preload("res://addons/cdc_game_editor/typed_field_form.gd")
 
 var repo_root: String = ""
 var registry: ContentRegistry
@@ -121,8 +122,7 @@ func _select_row(index: int) -> void:
 
 
 func _refresh_form() -> void:
-	for child in form_container.get_children():
-		child.queue_free()
+	TypedFieldForm.clear_container(form_container)
 	edit_inputs.clear()
 	var domain: String = presenter.domain_for_kind(selected_kind)
 	if domain.is_empty():
@@ -130,16 +130,8 @@ func _refresh_form() -> void:
 	var record: Dictionary = registry.get_library(domain).get(selected_id, {})
 	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
 	for field in edit_service.editable_fields(domain):
-		var row := HBoxContainer.new()
-		var label := Label.new()
 		var field_type := edit_service.field_type(domain, field)
-		label.text = "%s (%s)" % [field, field_type]
-		label.custom_minimum_size = Vector2(160, 0)
-		row.add_child(label)
-		var input := _create_field_editor(field_type, _get_field(data, field))
-		row.add_child(input)
-		form_container.add_child(row)
-		edit_inputs[field] = input
+		edit_inputs[field] = TypedFieldForm.add_field_row(form_container, field, field_type, TypedFieldForm.get_field(data, field))
 	var button_row := HBoxContainer.new()
 	var dry_run_button := Button.new()
 	dry_run_button.text = "Dry Run"
@@ -183,10 +175,7 @@ func apply_patch_for_current_selection(patch: Dictionary, dry_run: bool = false,
 
 
 func build_patch_from_inputs() -> Dictionary:
-	var patch: Dictionary = {}
-	for field in edit_inputs.keys():
-		patch[field] = _field_editor_value(edit_inputs[field])
-	return patch
+	return TypedFieldForm.build_patch(edit_inputs)
 
 
 func _on_dry_run_pressed() -> void:
@@ -206,58 +195,6 @@ func _save_current_patch(dry_run: bool) -> void:
 	status_label.text = "Status: dry run ok" if dry_run else "Status: saved %s" % report.get("relative_path", "")
 	if dry_run:
 		detail.text = "dry_run:\n%s" % JSON.stringify(report, "\t")
-
-
-func _create_field_editor(field_type: String, value: Variant) -> Control:
-	match field_type:
-		"bool":
-			var checkbox := CheckBox.new()
-			checkbox.button_pressed = bool(value)
-			checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			return checkbox
-		"int":
-			var spinbox := SpinBox.new()
-			spinbox.step = 1.0
-			spinbox.rounded = true
-			spinbox.allow_greater = true
-			spinbox.allow_lesser = true
-			spinbox.value = float(value)
-			spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			return spinbox
-		"float":
-			var spinbox := SpinBox.new()
-			spinbox.step = 0.1
-			spinbox.allow_greater = true
-			spinbox.allow_lesser = true
-			spinbox.value = float(value)
-			spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			return spinbox
-		_:
-			var input := LineEdit.new()
-			input.text = str(value)
-			input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			return input
-
-
-func _field_editor_value(editor: Control) -> Variant:
-	if editor is CheckBox:
-		return (editor as CheckBox).button_pressed
-	if editor is SpinBox:
-		var spinbox := editor as SpinBox
-		return int(spinbox.value) if spinbox.rounded else spinbox.value
-	if editor is LineEdit:
-		return (editor as LineEdit).text
-	return null
-
-
-func _get_field(data: Dictionary, field_path: String) -> Variant:
-	var current: Variant = data
-	for part in field_path.split(".", false):
-		if typeof(current) != TYPE_DICTIONARY:
-			return ""
-		var dict: Dictionary = current
-		current = dict.get(part, "")
-	return current
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

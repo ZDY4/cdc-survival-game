@@ -4,6 +4,7 @@ const ContentBrowserPresenter = preload("res://addons/cdc_game_editor/content_br
 const ContentBrowserDock = preload("res://addons/cdc_game_editor/content_browser_dock.gd")
 const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const TypedFieldForm = preload("res://addons/cdc_game_editor/typed_field_form.gd")
 
 
 func _init() -> void:
@@ -93,10 +94,10 @@ func _expect_dock_patch(errors: Array[String], registry: ContentRegistry) -> voi
 
 func _expect_dock_typed_inputs(errors: Array[String]) -> void:
 	var dock: ContentBrowserDock = ContentBrowserDock.new()
-	var text_editor := dock._create_field_editor("string", "绷带")
-	var int_editor := dock._create_field_editor("int", 7)
-	var float_editor := dock._create_field_editor("float", 0.5)
-	var bool_editor := dock._create_field_editor("bool", false)
+	var text_editor := TypedFieldForm.create_field_editor("string", "绷带")
+	var int_editor := TypedFieldForm.create_field_editor("int", 7)
+	var float_editor := TypedFieldForm.create_field_editor("float", 0.5)
+	var bool_editor := TypedFieldForm.create_field_editor("bool", false)
 	if not (text_editor is LineEdit):
 		errors.append("string field should use LineEdit")
 	if not (int_editor is SpinBox):

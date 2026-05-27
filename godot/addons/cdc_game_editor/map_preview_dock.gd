@@ -4,6 +4,7 @@ extends VBoxContainer
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
+const TypedFieldForm = preload("res://addons/cdc_game_editor/typed_field_form.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 
 var registry: ContentRegistry
@@ -157,10 +158,7 @@ func apply_object_patch(patch: Dictionary, dry_run: bool = false, options: Dicti
 
 
 func build_object_patch_from_inputs() -> Dictionary:
-	var patch: Dictionary = {}
-	for field in object_inputs.keys():
-		patch[field] = _field_editor_value(object_inputs[field])
-	return patch
+	return TypedFieldForm.build_patch(object_inputs)
 
 
 func _on_map_selected(index: int) -> void:
@@ -213,22 +211,13 @@ func _refresh_object_options(map_data: Dictionary) -> void:
 
 
 func _refresh_object_form(object_data: Dictionary) -> void:
-	for child in object_form.get_children():
-		child.queue_free()
+	TypedFieldForm.clear_container(object_form)
 	object_inputs.clear()
 	if object_data.is_empty():
 		return
 	for field in edit_service.map_object_editable_fields():
-		var row := HBoxContainer.new()
-		var label := Label.new()
 		var field_type := edit_service.map_object_field_type(field)
-		label.text = "%s (%s)" % [field, field_type]
-		label.custom_minimum_size = Vector2(150, 0)
-		row.add_child(label)
-		var input := _create_field_editor(field_type, _get_field(object_data, field))
-		row.add_child(input)
-		object_form.add_child(row)
-		object_inputs[field] = input
+		object_inputs[field] = TypedFieldForm.add_field_row(object_form, field, field_type, TypedFieldForm.get_field(object_data, field), 150.0)
 
 	var button_row := HBoxContainer.new()
 	var dry_run_button := Button.new()
@@ -285,49 +274,6 @@ func _set_status(text: String) -> void:
 func _set_detail(text: String) -> void:
 	if detail != null:
 		detail.text = text
-
-
-func _create_field_editor(field_type: String, value: Variant) -> Control:
-	match field_type:
-		"bool":
-			var checkbox := CheckBox.new()
-			checkbox.button_pressed = bool(value)
-			checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			return checkbox
-		"int":
-			var spinbox := SpinBox.new()
-			spinbox.step = 1.0
-			spinbox.rounded = true
-			spinbox.allow_greater = true
-			spinbox.allow_lesser = true
-			spinbox.value = float(value)
-			spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			return spinbox
-		_:
-			var input := LineEdit.new()
-			input.text = str(value)
-			input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			return input
-
-
-func _field_editor_value(editor: Control) -> Variant:
-	if editor is CheckBox:
-		return (editor as CheckBox).button_pressed
-	if editor is SpinBox:
-		return int((editor as SpinBox).value)
-	if editor is LineEdit:
-		return (editor as LineEdit).text
-	return null
-
-
-func _get_field(data: Dictionary, field_path: String) -> Variant:
-	var current: Variant = data
-	for part in field_path.split(".", false):
-		if typeof(current) != TYPE_DICTIONARY:
-			return ""
-		var dict: Dictionary = current
-		current = dict.get(part, "")
-	return current
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
