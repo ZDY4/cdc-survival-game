@@ -132,12 +132,11 @@ func _refresh_form() -> void:
 	for field in edit_service.editable_fields(domain):
 		var row := HBoxContainer.new()
 		var label := Label.new()
-		label.text = "%s (%s)" % [field, edit_service.field_type(domain, field)]
+		var field_type := edit_service.field_type(domain, field)
+		label.text = "%s (%s)" % [field, field_type]
 		label.custom_minimum_size = Vector2(160, 0)
 		row.add_child(label)
-		var input := LineEdit.new()
-		input.text = str(_get_field(data, field))
-		input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var input := _create_field_editor(field_type, _get_field(data, field))
 		row.add_child(input)
 		form_container.add_child(row)
 		edit_inputs[field] = input
@@ -183,6 +182,13 @@ func apply_patch_for_current_selection(patch: Dictionary, dry_run: bool = false,
 	return report
 
 
+func build_patch_from_inputs() -> Dictionary:
+	var patch: Dictionary = {}
+	for field in edit_inputs.keys():
+		patch[field] = _field_editor_value(edit_inputs[field])
+	return patch
+
+
 func _on_dry_run_pressed() -> void:
 	_save_current_patch(true)
 
@@ -192,11 +198,7 @@ func _on_save_pressed() -> void:
 
 
 func _save_current_patch(dry_run: bool) -> void:
-	var patch: Dictionary = {}
-	for field in edit_inputs.keys():
-		var input: LineEdit = edit_inputs[field]
-		patch[field] = input.text
-	var report := apply_patch_for_current_selection(patch, dry_run)
+	var report := apply_patch_for_current_selection(build_patch_from_inputs(), dry_run)
 	if not bool(report.get("ok", false)):
 		status_label.text = "Status: save failed"
 		detail.text = "save_failed:\n%s" % JSON.stringify(report, "\t")
@@ -204,6 +206,48 @@ func _save_current_patch(dry_run: bool) -> void:
 	status_label.text = "Status: dry run ok" if dry_run else "Status: saved %s" % report.get("relative_path", "")
 	if dry_run:
 		detail.text = "dry_run:\n%s" % JSON.stringify(report, "\t")
+
+
+func _create_field_editor(field_type: String, value: Variant) -> Control:
+	match field_type:
+		"bool":
+			var checkbox := CheckBox.new()
+			checkbox.button_pressed = bool(value)
+			checkbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			return checkbox
+		"int":
+			var spinbox := SpinBox.new()
+			spinbox.step = 1.0
+			spinbox.rounded = true
+			spinbox.allow_greater = true
+			spinbox.allow_lesser = true
+			spinbox.value = float(value)
+			spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			return spinbox
+		"float":
+			var spinbox := SpinBox.new()
+			spinbox.step = 0.1
+			spinbox.allow_greater = true
+			spinbox.allow_lesser = true
+			spinbox.value = float(value)
+			spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			return spinbox
+		_:
+			var input := LineEdit.new()
+			input.text = str(value)
+			input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			return input
+
+
+func _field_editor_value(editor: Control) -> Variant:
+	if editor is CheckBox:
+		return (editor as CheckBox).button_pressed
+	if editor is SpinBox:
+		var spinbox := editor as SpinBox
+		return int(spinbox.value) if spinbox.rounded else spinbox.value
+	if editor is LineEdit:
+		return (editor as LineEdit).text
+	return null
 
 
 func _get_field(data: Dictionary, field_path: String) -> Variant:

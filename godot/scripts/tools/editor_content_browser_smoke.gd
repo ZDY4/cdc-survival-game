@@ -47,6 +47,7 @@ func _run() -> Array[String]:
 	_expect_detail(errors, presenter, registry, "map", "survivor_outpost_01", "map_review_checks:")
 	_expect_detail(errors, presenter, registry, "item", "1006", "editable_fields:")
 	_expect_dock_patch(errors, registry)
+	_expect_dock_typed_inputs(errors)
 	return errors
 
 
@@ -87,6 +88,48 @@ func _expect_dock_patch(errors: Array[String], registry: ContentRegistry) -> voi
 	var raw := FileAccess.get_file_as_string(str(report.get("path", "")))
 	if not raw.contains("绷带 dock smoke"):
 		errors.append("browser dock patch did not write expected value")
+	dock.free()
+
+
+func _expect_dock_typed_inputs(errors: Array[String]) -> void:
+	var dock: ContentBrowserDock = ContentBrowserDock.new()
+	var text_editor := dock._create_field_editor("string", "绷带")
+	var int_editor := dock._create_field_editor("int", 7)
+	var float_editor := dock._create_field_editor("float", 0.5)
+	var bool_editor := dock._create_field_editor("bool", false)
+	if not (text_editor is LineEdit):
+		errors.append("string field should use LineEdit")
+	if not (int_editor is SpinBox):
+		errors.append("int field should use SpinBox")
+	if not (float_editor is SpinBox):
+		errors.append("float field should use SpinBox")
+	if not (bool_editor is CheckBox):
+		errors.append("bool field should use CheckBox")
+
+	(text_editor as LineEdit).text = "纱布"
+	(int_editor as SpinBox).value = 13.0
+	(float_editor as SpinBox).value = 0.75
+	(bool_editor as CheckBox).button_pressed = true
+	dock.edit_inputs = {
+		"name": text_editor,
+		"value": int_editor,
+		"weight": float_editor,
+		"is_default_unlocked": bool_editor,
+	}
+	var patch := dock.build_patch_from_inputs()
+	if typeof(patch.get("name")) != TYPE_STRING:
+		errors.append("typed browser patch should preserve string values")
+	if typeof(patch.get("value")) != TYPE_INT:
+		errors.append("typed browser patch should preserve int values")
+	if typeof(patch.get("weight")) != TYPE_FLOAT:
+		errors.append("typed browser patch should preserve float values")
+	if typeof(patch.get("is_default_unlocked")) != TYPE_BOOL:
+		errors.append("typed browser patch should preserve bool values")
+	dock.edit_inputs.clear()
+	text_editor.free()
+	int_editor.free()
+	float_editor.free()
+	bool_editor.free()
 	dock.free()
 
 
