@@ -2,6 +2,8 @@ extends RefCounted
 
 const ActorRegistry = preload("res://scripts/core/actor/actor_registry.gd")
 const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
 
 var actor_registry := ActorRegistry.new()
@@ -18,6 +20,7 @@ var quest_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
 var _equipment_rules := EquipmentRules.new()
+var _pathfinder := Pathfinder.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -113,6 +116,31 @@ func configure_shops(shops: Dictionary) -> void:
 
 func record_item_collected(actor_id: int, item_id: String, count: int) -> void:
 	_advance_collect_quests(actor_id, item_id, count)
+
+
+func move_actor_to(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var goal: RefCounted = GridCoord.from_dictionary(target_position)
+	var occupied: Dictionary = _occupied_actor_cells(actor_id)
+	var path_result: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, occupied)
+	if not bool(path_result.get("success", false)):
+		return path_result
+	actor.grid_position = goal
+	_emit("actor_moved", {
+		"actor_id": actor_id,
+		"from": _array_or_empty(path_result.get("path", [])).front() if int(path_result.get("steps", 0)) > 0 else goal.to_dictionary(),
+		"to": goal.to_dictionary(),
+		"steps": int(path_result.get("steps", 0)),
+	})
+	return {
+		"success": true,
+		"actor_id": actor_id,
+		"to": goal.to_dictionary(),
+		"path": path_result.get("path", []),
+		"steps": int(path_result.get("steps", 0)),
+	}
 
 
 func equip_item(actor_id: int, item_id: String, target_slot: String, item_library: Dictionary) -> Dictionary:
@@ -561,6 +589,15 @@ func load_snapshot(snapshot_data: Dictionary) -> void:
 
 func _emit(kind: String, payload: Dictionary) -> void:
 	events.append(SimulationEvent.new(kind, payload))
+
+
+func _occupied_actor_cells(excluded_actor_id: int) -> Dictionary:
+	var output: Dictionary = {}
+	for actor in actor_registry.actors():
+		if actor.actor_id == excluded_actor_id:
+			continue
+		output[actor.grid_position.key()] = actor.actor_id
+	return output
 
 
 func _resolve_interaction_target(target: Dictionary) -> Dictionary:
