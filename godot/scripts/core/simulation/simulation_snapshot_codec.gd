@@ -1,6 +1,9 @@
 extends RefCounted
 
+const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
+
+var _inventory_entries := InventoryEntries.new()
 
 
 func build(simulation: RefCounted) -> Dictionary:
@@ -87,7 +90,7 @@ func _load_shop_sessions(entries: Variant) -> Dictionary:
 			"money": max(0, int(shop_data.get("money", 0))),
 			"buy_price_modifier": max(0.0, float(shop_data.get("buy_price_modifier", 1.0))),
 			"sell_price_modifier": max(0.0, float(shop_data.get("sell_price_modifier", 1.0))),
-			"inventory": _normalize_item_entries(shop_data.get("inventory", [])),
+			"inventory": _inventory_entries.normalize(shop_data.get("inventory", [])),
 		}
 	return output
 
@@ -172,23 +175,7 @@ func _shop_session_snapshots(shop_sessions: Dictionary) -> Array[Dictionary]:
 			"money": max(0, int(session.get("money", 0))),
 			"buy_price_modifier": max(0.0, float(session.get("buy_price_modifier", 1.0))),
 			"sell_price_modifier": max(0.0, float(session.get("sell_price_modifier", 1.0))),
-			"inventory": _normalize_item_entries(session.get("inventory", [])),
-		})
-	return output
-
-
-func _normalize_item_entries(entries: Variant) -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	for entry in _array_or_empty(entries):
-		var entry_data: Dictionary = _dictionary_or_empty(entry)
-		var item_id: String = _normalize_content_id(entry_data.get("item_id", entry_data.get("itemId", "")))
-		var count: int = max(0, int(entry_data.get("count", 0)))
-		if item_id.is_empty() or count <= 0:
-			continue
-		output.append({
-			"item_id": item_id,
-			"count": count,
-			"price": int(entry_data.get("price", 0)),
+			"inventory": _inventory_entries.normalize(session.get("inventory", [])),
 		})
 	return output
 
@@ -203,14 +190,6 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
-
-
-func _normalize_content_id(value: Variant) -> String:
-	if typeof(value) == TYPE_FLOAT:
-		var float_value: float = value
-		if is_equal_approx(float_value, round(float_value)):
-			return str(int(round(float_value)))
-	return str(value)
 
 
 func _string_array(values: Variant) -> Array[String]:
