@@ -49,6 +49,7 @@ func _run() -> Array[String]:
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
+	_expect_format_domain_support(errors, registry)
 	return errors
 
 
@@ -142,6 +143,29 @@ func _has_issue_code(issues: Array, code: String) -> bool:
 		if str(issue_data.get("code", "")) == code:
 			return true
 	return false
+
+
+func _expect_format_domain_support(errors: Array[String], registry: ContentRegistry) -> void:
+	var supported := {
+		"items": "data/items/1006.json",
+		"recipes": "data/recipes/recipe_first_aid_kit.json",
+		"characters": "data/characters/zombie_walker.json",
+		"maps": "data/maps/survivor_outpost_01.json",
+		"dialogues": "data/dialogues/trader_lao_wang_intro.json",
+		"quests": "data/quests/tutorial_survive.json",
+		"skills": "data/skills/survival.json",
+		"skill_trees": "data/skill_trees/survival.json",
+	}
+	var domain_helper = load("res://scripts/tools/content_cli_domains.gd")
+	for domain in supported.keys():
+		if not domain_helper.supports_format_domain(domain):
+			errors.append("format domain should be supported: %s" % domain)
+		var relative_path := str(supported[domain])
+		if domain_helper.domain_for_relative_path(relative_path) != domain:
+			errors.append("format path should map to %s: %s" % [domain, relative_path])
+		var record: Dictionary = registry.get_library(domain).get(relative_path.get_file().get_basename(), {})
+		if record.is_empty():
+			errors.append("format support smoke missing fixture for %s @ %s" % [domain, relative_path])
 
 
 func _registry_with_override(registry: ContentRegistry, domain: String, id_value: String, record: Dictionary) -> ContentRegistry:

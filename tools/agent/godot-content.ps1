@@ -11,8 +11,8 @@ summarize, references, validate, format, and diff-summary commands.
 Content command to run: locate, summarize, references, validate, format, or diff-summary.
 
 .PARAMETER Kind
-Content kind such as item, recipe, character, map, changed for `validate changed` / `format changed`,
-or path for `diff-summary --path`.
+Content kind such as item, recipe, character, dialogue, quest, skill, skill_tree, map,
+changed for `validate changed` / `format changed`, or path for `diff-summary --path`.
 
 .PARAMETER Id
 Content id for locate/summarize/references/validate/format, or the path for diff-summary.
@@ -31,6 +31,9 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind chan
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind item -Id 1006
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind skill_tree -Id survival
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id data/items/1006.json

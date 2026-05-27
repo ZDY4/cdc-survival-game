@@ -4,7 +4,8 @@
   "description": "降低饥饿和口渴等生存消耗。",
   "tree_id": "survival",
   "max_level": 5,
-  "prerequisites": [],
+  "prerequisites": [
+  ],
   "attribute_requirements": {
     "constitution": 5
   },

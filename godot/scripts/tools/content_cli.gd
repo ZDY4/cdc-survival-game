@@ -2,6 +2,7 @@ extends SceneTree
 
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const ContentCliDomains = preload("res://scripts/tools/content_cli_domains.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 
@@ -98,8 +99,8 @@ func _validate_changed_command(registry: ContentRegistry) -> int:
 	var checked_records := 0
 	var invalid_records := 0
 	print("mode: validate_changed")
-	print("domains: item, recipe, character, map, dialogue, quest, skill, skill_tree")
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees"]:
+	print("domains: %s" % ContentCliDomains.format_domain_names())
+	for domain in ContentCliDomains.VALIDATE_CHANGED_DOMAINS:
 		for id_value in registry.get_library(domain).keys():
 			var id_string := str(id_value)
 			var record: Dictionary = registry.get_library(domain).get(id_string, {})
@@ -183,8 +184,8 @@ func _format_command(args: Array[String], registry: ContentRegistry) -> int:
 	if record.is_empty():
 		printerr("not found: %s %s" % [args[1], id_value])
 		return 1
-	if not _supports_format_domain(domain):
-		printerr("format currently supports item, recipe, character, and map, got %s" % args[1])
+	if not ContentCliDomains.supports_format_domain(domain):
+		printerr("format currently supports %s, got %s" % [ContentCliDomains.format_domain_names(), args[1]])
 		return 2
 
 	var report: Dictionary = _format_record(domain, id_value, record)
@@ -473,7 +474,9 @@ func _format_relative_path(relative_path: String, registry: ContentRegistry) -> 
 
 
 func _changed_supported_paths() -> Array[String]:
-	var status := _git_output(["status", "--short", "--untracked-files=all", "--", "data/items", "data/recipes", "data/characters", "data/maps"])
+	var git_args: Array[String] = ["status", "--short", "--untracked-files=all", "--"]
+	git_args.append_array(ContentCliDomains.git_status_paths_for_format())
+	var status := _git_output(git_args)
 	var paths: Array[String] = []
 	if int(status.get("exit_code", 1)) != 0:
 		printerr(status.get("error", "git status failed"))
@@ -496,19 +499,7 @@ func _path_from_status_line(line: String) -> String:
 
 
 func _domain_for_relative_path(relative_path: String) -> String:
-	if relative_path.begins_with("data/items/") and relative_path.ends_with(".json"):
-		return "items"
-	if relative_path.begins_with("data/recipes/") and relative_path.ends_with(".json"):
-		return "recipes"
-	if relative_path.begins_with("data/characters/") and relative_path.ends_with(".json"):
-		return "characters"
-	if relative_path.begins_with("data/maps/") and relative_path.ends_with(".json"):
-		return "maps"
-	return ""
-
-
-func _supports_format_domain(domain: String) -> bool:
-	return ["items", "recipes", "characters", "maps"].has(domain)
+	return ContentCliDomains.domain_for_relative_path(relative_path)
 
 
 func _git_output(args: Array[String]) -> Dictionary:
