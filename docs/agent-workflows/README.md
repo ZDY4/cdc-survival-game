@@ -6,7 +6,7 @@
 
 - 不再以 Bevy editor 内聊天窗口作为 AI 入口
 - 让 Codex / OpenCode 一类 Agent 直接在仓库中读写数据
-- 统一通过共享 Rust 层和后续 CLI 做校验、格式化、摘要和 editor 复核
+- 统一通过 Godot 迁移工具链做校验、格式化、摘要和 editor 复核
 
 ## Workflow List
 
@@ -48,6 +48,12 @@
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Settlement <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Overworld <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
+- `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`
+- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
+- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
+
+旧 Rust/Bevy 对照入口仅在需要行为差异分析时使用：
+
 - `cargo run -p content_tools -- locate <item|recipe|character|map> <id>`
 - `cargo run -p content_tools -- validate <item|recipe|character|map> <id>`
 - `cargo run -p content_tools -- validate changed`
@@ -62,14 +68,8 @@
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Quest <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
-- `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`
-- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
-- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1`
-
-保底编译基线：
-
 - `cargo check -p game_editor -p bevy_item_editor -p bevy_recipe_editor -p bevy_dialogue_editor -p bevy_quest_editor -p bevy_map_editor -p content_tools`
 
 ## Editor Handoff

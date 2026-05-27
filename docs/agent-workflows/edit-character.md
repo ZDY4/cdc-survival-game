@@ -36,7 +36,7 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind character -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind character -Id <id>`
 
-保底编译基线：
+旧 Rust/Bevy 对照基线仅在需要差异分析时使用：
 
 - `cargo check -p content_tools`
 
