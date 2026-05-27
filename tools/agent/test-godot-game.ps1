@@ -32,6 +32,7 @@ param(
         "Runtime",
         "ContentCLI",
         "ContentEdit",
+        "MapEdit",
         "EditorHandoff",
         "EditorBrowser",
         "MapPreview",
@@ -79,6 +80,7 @@ $scenarioScripts = [ordered]@{
     Runtime           = "res://scripts/tools/runtime_smoke.gd"
     ContentCLI        = "res://scripts/tools/content_cli_smoke.gd"
     ContentEdit       = "res://scripts/tools/content_edit_service_smoke.gd"
+    MapEdit           = "res://scripts/tools/map_edit_service_smoke.gd"
     EditorHandoff     = "res://scripts/tools/editor_handoff_smoke.gd"
     EditorBrowser     = "res://scripts/tools/editor_content_browser_smoke.gd"
     MapPreview        = "res://scripts/tools/map_preview_smoke.gd"

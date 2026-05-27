@@ -2,13 +2,13 @@
 extends VBoxContainer
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
-const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
+const MapEditService = preload("res://scripts/data/map_edit_service.gd")
 const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
 const TypedFieldForm = preload("res://addons/cdc_game_editor/typed_field_form.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 
 var registry: ContentRegistry
-var edit_service: ContentEditService
+var edit_service: MapEditService
 var presenter: MapReviewPresenter
 var renderer: WorldSceneRenderer
 var selected_map_id := ""
@@ -28,7 +28,7 @@ var detail: RichTextLabel
 
 func _ready() -> void:
 	registry = ContentRegistry.new()
-	edit_service = ContentEditService.new()
+	edit_service = MapEditService.new()
 	presenter = MapReviewPresenter.new()
 	renderer = WorldSceneRenderer.new()
 	_build_ui()

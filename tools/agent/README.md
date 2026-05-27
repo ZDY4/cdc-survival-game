@@ -201,6 +201,7 @@ pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionM
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentCLI
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentEdit
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapEdit
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorHandoff
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorBrowser
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapPreview
