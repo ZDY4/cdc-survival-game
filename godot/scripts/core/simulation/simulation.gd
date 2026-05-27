@@ -3,6 +3,7 @@ extends RefCounted
 const ActorRegistry = preload("res://scripts/core/actor/actor_registry.gd")
 const AiRules = preload("res://scripts/core/ai/ai_rules.gd")
 const CombatRunner = preload("res://scripts/core/combat/combat_runner.gd")
+const CraftingRunner = preload("res://scripts/core/crafting/crafting_runner.gd")
 const DialogueRunner = preload("res://scripts/core/dialogue/dialogue_runner.gd")
 const EconomyTransactions = preload("res://scripts/core/economy/economy_transactions.gd")
 const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
@@ -34,6 +35,7 @@ var completed_quests: Dictionary = {}
 var ai_intents: Dictionary = {}
 var _ai_rules := AiRules.new()
 var _combat_runner := CombatRunner.new()
+var _crafting_runner := CraftingRunner.new()
 var _dialogue_runner := DialogueRunner.new()
 var _economy_transactions := EconomyTransactions.new()
 var _equipment_rules := EquipmentRules.new()
@@ -318,65 +320,7 @@ func store_item_in_container(actor_id: int, container_id: String, item_id: Strin
 
 
 func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	var record: Dictionary = _dictionary_or_empty(recipe_library.get(recipe_id, {}))
-	if record.is_empty():
-		return {"success": false, "reason": "unknown_recipe"}
-	var recipe: Dictionary = _dictionary_or_empty(record.get("data", {}))
-	if not bool(recipe.get("is_default_unlocked", false)):
-		return {"success": false, "reason": "recipe_locked"}
-	if not _array_or_empty(recipe.get("required_tools", [])).is_empty():
-		return {"success": false, "reason": "required_tools_unsupported"}
-	if str(recipe.get("required_station", "none")) not in ["", "none"]:
-		return {"success": false, "reason": "required_station_unsupported"}
-	var skill_check: Dictionary = _progression_rules.meets_skill_requirements(actor.progression, _dictionary_or_empty(recipe.get("skill_requirements", {})))
-	if not bool(skill_check.get("success", false)):
-		return {
-			"success": false,
-			"reason": "missing_skills",
-			"missing_skills": skill_check.get("missing_skills", []),
-		}
-
-	var materials: Array[Dictionary] = _inventory_entries.normalize(recipe.get("materials", []))
-	for material in materials:
-		var material_id: String = str(material.get("item_id", ""))
-		var required_count: int = int(material.get("count", 0))
-		if int(actor.inventory.get(material_id, 0)) < required_count:
-			return {
-				"success": false,
-				"reason": "materials_insufficient",
-				"item_id": material_id,
-				"required": required_count,
-				"available": int(actor.inventory.get(material_id, 0)),
-			}
-
-	var output: Dictionary = _dictionary_or_empty(recipe.get("output", {}))
-	var output_item_id: String = _normalize_content_id(output.get("item_id", ""))
-	var output_count: int = max(1, int(output.get("count", 1)))
-	if output_item_id.is_empty():
-		return {"success": false, "reason": "recipe_output_invalid"}
-
-	for material in materials:
-		_inventory_entries.add_actor_item(actor, str(material.get("item_id", "")), -int(material.get("count", 0)))
-	_inventory_entries.add_actor_item(actor, output_item_id, output_count)
-	_emit("recipe_crafted", {
-		"actor_id": actor_id,
-		"recipe_id": recipe_id,
-		"output_item_id": output_item_id,
-		"output_count": output_count,
-		"craft_time": float(recipe.get("craft_time", 0.0)),
-		"experience_reward": int(recipe.get("experience_reward", 0)),
-	})
-	if int(recipe.get("experience_reward", 0)) > 0:
-		grant_experience(actor_id, int(recipe.get("experience_reward", 0)), "recipe:%s" % recipe_id)
-	return {
-		"success": true,
-		"recipe_id": recipe_id,
-		"output_item_id": output_item_id,
-		"output_count": output_count,
-	}
+	return _crafting_runner.craft_recipe(self, _progression_rules, actor_id, recipe_id, recipe_library)
 
 
 func perform_attack(actor_id: int, target_actor_id: int) -> Dictionary:
