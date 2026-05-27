@@ -27,7 +27,6 @@ func register_actor(request: Dictionary) -> int:
 
 func configure_map_interactions(targets: Dictionary) -> void:
 	map_interaction_targets = targets.duplicate(true)
-	consumed_interaction_targets.clear()
 
 
 func query_interaction_options(actor_id: int, target: Dictionary) -> Dictionary:

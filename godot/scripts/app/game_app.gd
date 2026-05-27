@@ -5,11 +5,14 @@ const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstr
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
+const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
 
 var registry: ContentRegistry
 var simulation: RefCounted
 var world_result: Dictionary = {}
+var interaction_controller: RefCounted
+var world_container: Node3D
 var hud: Control
 
 
@@ -30,7 +33,9 @@ func _ready() -> void:
 		push_error(str(world_result.get("error", "world build failed")))
 		return
 
-	var counts: Dictionary = WorldSceneRenderer.new().render_world(self, world_result)
+	interaction_controller = PlayerInteractionController.new(registry, simulation, world_result)
+	_setup_world_container()
+	var counts: Dictionary = WorldSceneRenderer.new().render_world(world_container, world_result)
 	_setup_hud()
 	refresh_hud()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
@@ -39,8 +44,61 @@ func _ready() -> void:
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 	if hud == null or simulation == null:
 		return
+	if selected_prompt.is_empty():
+		selected_prompt = current_interaction_prompt()
 	var snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, selected_prompt)
 	hud.apply_snapshot(snapshot)
+
+
+func select_interaction_target(target: Dictionary) -> Dictionary:
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var result: Dictionary = interaction_controller.select_target(target)
+	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
+	return result
+
+
+func select_interaction_node(node: Node) -> Dictionary:
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var result: Dictionary = interaction_controller.select_node(node)
+	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
+	return result
+
+
+func clear_interaction_selection() -> Dictionary:
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var result: Dictionary = interaction_controller.clear_selection()
+	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
+	return result
+
+
+func execute_primary_interaction() -> Dictionary:
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var result: Dictionary = interaction_controller.execute_primary_interaction()
+	world_result = interaction_controller.world_result
+	# 地图切换或对象消费后需要重绘占位世界，保证 scene tree 与运行时快照一致。
+	_setup_world_container()
+	WorldSceneRenderer.new().render_world(world_container, world_result)
+	_setup_hud()
+	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
+	return result
+
+
+func current_interaction_prompt() -> Dictionary:
+	if interaction_controller == null:
+		return {}
+	return interaction_controller.current_prompt()
+
+
+func _setup_world_container() -> void:
+	if world_container != null:
+		return
+	world_container = Node3D.new()
+	world_container.name = "WorldContainer"
+	add_child(world_container)
 
 
 func _setup_hud() -> void:
@@ -49,3 +107,9 @@ func _setup_hud() -> void:
 	hud = HUD_SCENE.instantiate()
 	hud.name = "Hud"
 	add_child(hud)
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

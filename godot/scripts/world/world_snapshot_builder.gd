@@ -20,9 +20,11 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 		}
 
 	var topology := map_builder.build_from_definition(map_record["data"])
+	var map_snapshot: Dictionary = topology.to_dictionary()
+	_apply_consumed_interaction_targets(map_snapshot, runtime_snapshot.get("consumed_interaction_targets", []))
 	return {
 		"ok": true,
-		"map": topology.to_dictionary(),
+		"map": map_snapshot,
 		"actors": _actors_on_map(runtime_snapshot.get("actors", [])),
 	}
 
@@ -39,3 +41,36 @@ func _actors_on_map(actors: Array) -> Array[Dictionary]:
 			"grid_position": actor.get("grid_position", {}),
 		})
 	return output
+
+
+func _apply_consumed_interaction_targets(map_snapshot: Dictionary, consumed_values: Array) -> void:
+	var consumed: Dictionary = {}
+	for value in consumed_values:
+		consumed[str(value)] = true
+	if consumed.is_empty():
+		return
+
+	for group_name in ["interactive_objects", "trigger_objects", "pickup_objects"]:
+		map_snapshot[group_name] = _filter_active_objects(map_snapshot.get(group_name, []), consumed)
+
+	var active_targets: Dictionary = {}
+	var interaction_targets: Dictionary = _dictionary_or_empty(map_snapshot.get("interaction_targets", {}))
+	for target_id in interaction_targets.keys():
+		if not consumed.has(str(target_id)):
+			active_targets[target_id] = interaction_targets[target_id]
+	map_snapshot["interaction_targets"] = active_targets
+
+
+func _filter_active_objects(objects: Array, consumed: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for object in objects:
+		var object_data: Dictionary = object
+		if not consumed.has(str(object_data.get("object_id", ""))):
+			output.append(object_data)
+	return output
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
