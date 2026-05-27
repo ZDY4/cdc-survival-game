@@ -35,6 +35,7 @@ func _run() -> Array[String]:
 	_expect_patch(errors, service, registry, "recipes", "recipe_first_aid_kit", {"craft_time": 31.0})
 	_expect_patch(errors, service, registry, "characters", "zombie_walker", {"identity.display_name": "行尸 smoke"})
 	_expect_patch(errors, service, registry, "maps", "survivor_outpost_01", {"name": "survivor outpost smoke"})
+	_expect_map_object_patch(errors, service, registry)
 	_expect_invalid_patch(errors, service, registry)
 	return errors
 
@@ -84,6 +85,40 @@ func _expect_invalid_patch(errors: Array[String], service: ContentEditService, r
 	var persisted := FileAccess.get_file_as_string(str(isolated.get_library("recipes")["recipe_first_aid_kit"].get("path", "")))
 	if persisted.contains("-1"):
 		errors.append("invalid patch should not be written to disk")
+
+
+func _expect_map_object_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry) -> void:
+	var isolated := _registry_with_temp_record(registry, "maps", "survivor_outpost_01")
+	var report := service.save_map_object_patch(
+		"survivor_outpost_01",
+		"survivor_outpost_01_gatehouse",
+		{
+			"anchor.x": "21",
+			"anchor.z": "32",
+			"blocks_movement": "true",
+		},
+		isolated,
+		{"allow_external_path": true}
+	)
+	if not bool(report.get("ok", false)):
+		errors.append("map object patch failed: %s" % report)
+		return
+	var path := str(report.get("path", ""))
+	var raw := FileAccess.get_file_as_string(path)
+	if not raw.contains("\"x\": 21"):
+		errors.append("map object patch should write normalized x coordinate")
+	if not raw.contains("\"blocks_movement\": true"):
+		errors.append("map object patch should write normalized bool value")
+
+	var invalid := service.save_map_object_patch(
+		"survivor_outpost_01",
+		"survivor_outpost_01_gatehouse",
+		{"anchor.x": -1},
+		isolated,
+		{"allow_external_path": true}
+	)
+	if bool(invalid.get("ok", false)):
+		errors.append("invalid map object patch should fail validation")
 
 
 func _registry_with_temp_record(registry: ContentRegistry, domain: String, id_value: String) -> ContentRegistry:
