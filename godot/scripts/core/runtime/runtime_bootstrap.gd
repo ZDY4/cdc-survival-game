@@ -43,6 +43,10 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 	var faction: Dictionary = definition.get("faction", {})
 	var identity: Dictionary = definition.get("identity", {})
 	var grid_data: Dictionary = spawn_entry.get("gridPosition", {})
+	var combat_attributes: Dictionary = _combat_attributes(definition)
+	var resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(definition.get("attributes", {})).get("resources", {}))
+	var hp_resource: Dictionary = _dictionary_or_empty(resources.get("hp", {}))
+	var combat: Dictionary = _dictionary_or_empty(definition.get("combat", {}))
 
 	simulation.register_actor({
 		"definition_id": definition_id,
@@ -51,6 +55,11 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"side": _actor_side_from_disposition(str(faction.get("disposition", "neutral"))),
 		"group_id": _actor_group_id(archetype, faction),
 		"grid_position": GridCoord.from_dictionary(grid_data),
+		"max_hp": float(combat_attributes.get("max_hp", 1.0)),
+		"hp": float(hp_resource.get("current", combat_attributes.get("max_hp", 1.0))),
+		"attack_power": float(combat_attributes.get("attack_power", 1.0)),
+		"defense": float(combat_attributes.get("defense", 0.0)),
+		"xp_reward": int(combat.get("xp_reward", 0)),
 	})
 
 
@@ -96,3 +105,15 @@ func _string_array(values: Array) -> Array[String]:
 	for value in values:
 		output.append(str(value))
 	return output
+
+
+func _combat_attributes(definition: Dictionary) -> Dictionary:
+	var attributes: Dictionary = _dictionary_or_empty(definition.get("attributes", {}))
+	var sets: Dictionary = _dictionary_or_empty(attributes.get("sets", {}))
+	return _dictionary_or_empty(sets.get("combat", {}))
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

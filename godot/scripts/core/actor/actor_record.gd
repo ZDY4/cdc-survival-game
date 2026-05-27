@@ -13,6 +13,11 @@ var in_combat: bool = false
 var grid_position: RefCounted
 var inventory: Dictionary = {}
 var active_dialogue_id: String = ""
+var max_hp: float = 1.0
+var hp: float = 1.0
+var attack_power: float = 1.0
+var defense: float = 0.0
+var xp_reward: int = 0
 
 
 func to_dictionary() -> Dictionary:
@@ -30,4 +35,11 @@ func to_dictionary() -> Dictionary:
 		"grid_position": grid_position.to_dictionary(),
 		"inventory": inventory,
 		"active_dialogue_id": active_dialogue_id,
+		"combat": {
+			"max_hp": max_hp,
+			"hp": hp,
+			"attack_power": attack_power,
+			"defense": defense,
+			"xp_reward": xp_reward,
+		},
 	}

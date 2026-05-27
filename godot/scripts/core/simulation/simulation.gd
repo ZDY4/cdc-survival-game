@@ -41,6 +41,50 @@ func record_item_collected(actor_id: int, item_id: String, count: int) -> void:
 	_advance_collect_quests(actor_id, item_id, count)
 
 
+func perform_attack(actor_id: int, target_actor_id: int) -> Dictionary:
+	var attacker: RefCounted = actor_registry.get_actor(actor_id)
+	var target: RefCounted = actor_registry.get_actor(target_actor_id)
+	if attacker == null:
+		return {"success": false, "reason": "unknown_attacker"}
+	if target == null:
+		return {"success": false, "reason": "unknown_target"}
+	if target.side != "hostile" and attacker.side != "hostile":
+		return {"success": false, "reason": "target_not_hostile"}
+
+	var damage: float = max(1.0, attacker.attack_power - target.defense)
+	target.hp = max(0.0, target.hp - damage)
+	_emit("attack_performed", {
+		"actor_id": actor_id,
+		"target_actor_id": target_actor_id,
+		"damage": damage,
+		"target_hp": target.hp,
+	})
+
+	var defeated: bool = target.hp <= 0.0
+	if defeated:
+		var defeated_definition_id: String = target.definition_id
+		var defeated_kind: String = target.kind
+		actor_registry.unregister_actor(target_actor_id)
+		_emit("actor_defeated", {
+			"actor_id": target_actor_id,
+			"definition_id": defeated_definition_id,
+			"kind": defeated_kind,
+			"defeated_by": actor_id,
+		})
+		record_enemy_defeated(actor_id, defeated_definition_id, defeated_kind)
+
+	return {
+		"success": true,
+		"damage": damage,
+		"defeated": defeated,
+		"target_actor_id": target_actor_id,
+	}
+
+
+func record_enemy_defeated(actor_id: int, enemy_definition_id: String, enemy_kind: String = "enemy") -> void:
+	_advance_kill_quests(actor_id, enemy_definition_id, enemy_kind)
+
+
 func query_interaction_options(actor_id: int, target: Dictionary) -> Dictionary:
 	if actor_registry.get_actor(actor_id) == null:
 		return _failed_prompt("unknown_actor")
@@ -339,6 +383,38 @@ func _complete_quest(actor_id: int, quest_id: String) -> void:
 	_start_available_quests()
 
 
+func _advance_kill_quests(actor_id: int, enemy_definition_id: String, enemy_kind: String) -> void:
+	var completed_now: Array[String] = []
+	for quest_id in active_quests.keys():
+		var quest_data: Dictionary = _quest_data(str(quest_id))
+		var objective: Dictionary = _first_objective_node(quest_data)
+		if objective.get("objective_type", "") != "kill":
+			continue
+		var enemy_type: String = str(objective.get("enemy_type", ""))
+		if not enemy_type.is_empty() and not _enemy_matches_objective(enemy_definition_id, enemy_kind, enemy_type):
+			continue
+		var state: Dictionary = active_quests[quest_id]
+		var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
+		var objective_id: String = str(objective.get("id", ""))
+		var target_count: int = max(1, int(objective.get("count", 1)))
+		var current: int = min(target_count, int(completed.get(objective_id, 0)) + 1)
+		completed[objective_id] = current
+		state["completed_objectives"] = completed
+		active_quests[quest_id] = state
+		_emit("quest_progressed", {
+			"actor_id": actor_id,
+			"quest_id": quest_id,
+			"objective_id": objective_id,
+			"current": current,
+			"target": target_count,
+		})
+		if current >= target_count and not bool(objective.get("manual_turn_in", false)):
+			completed_now.append(str(quest_id))
+
+	for quest_id in completed_now:
+		_complete_quest(actor_id, quest_id)
+
+
 func _active_quest_snapshots() -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	var ids: Array = active_quests.keys()
@@ -373,6 +449,14 @@ func _first_objective_node(quest_data: Dictionary) -> Dictionary:
 		if node.get("type", "") == "objective":
 			return node
 	return {}
+
+
+func _enemy_matches_objective(enemy_definition_id: String, enemy_kind: String, enemy_type: String) -> bool:
+	if enemy_type == enemy_kind or enemy_type == enemy_definition_id:
+		return true
+	if enemy_type == "zombie" and enemy_definition_id.begins_with("zombie_"):
+		return true
+	return false
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
