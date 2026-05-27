@@ -58,12 +58,17 @@ func _validate_new_game_snapshot(snapshot: Dictionary) -> Array[String]:
 		errors.append("expected tutorial_survive to auto start")
 	var player: Dictionary = _actor_by_definition(snapshot, "player")
 	var inventory: Dictionary = player.get("inventory", {})
+	var equipment: Dictionary = player.get("equipment", {})
 	if int(player.get("money", 0)) != 100:
 		errors.append("expected default player money 100")
 	if int(inventory.get("1009", 0)) != 10:
 		errors.append("expected bootstrap ammo 1009 x10")
 	if int(inventory.get("1006", 0)) != 1:
 		errors.append("expected bootstrap item 1006 x1")
+	if equipment.get("main_hand", "") != "1002":
+		errors.append("expected bootstrap main_hand equipment 1002")
+	if equipment.get("body", "") != "2004":
+		errors.append("expected bootstrap body equipment 2004")
 	if snapshot.get("shop_sessions", []).size() <= 0:
 		errors.append("expected runtime shop session")
 	return errors
@@ -78,6 +83,7 @@ func _snapshot_digest(snapshot: Dictionary) -> Dictionary:
 		"actors": actors,
 		"active_quests": _active_quest_ids(snapshot),
 		"player_inventory": _actor_by_definition(snapshot, "player").get("inventory", {}),
+		"player_equipment": _actor_by_definition(snapshot, "player").get("equipment", {}),
 		"shop_sessions": snapshot.get("shop_sessions", []).size(),
 		"event_count": snapshot.get("events", []).size(),
 	}

@@ -192,6 +192,7 @@ pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionM
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Combat
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Equipment
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Crafting
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Save
 ```

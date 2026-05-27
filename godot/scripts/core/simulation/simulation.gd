@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ActorRegistry = preload("res://scripts/core/actor/actor_registry.gd")
+const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
 
 var actor_registry := ActorRegistry.new()
@@ -16,6 +17,7 @@ var shop_sessions: Dictionary = {}
 var quest_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
+var _equipment_rules := EquipmentRules.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -57,6 +59,34 @@ func configure_shops(shops: Dictionary) -> void:
 
 func record_item_collected(actor_id: int, item_id: String, count: int) -> void:
 	_advance_collect_quests(actor_id, item_id, count)
+
+
+func equip_item(actor_id: int, item_id: String, target_slot: String, item_library: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	var normalized_item_id: String = _normalize_content_id(item_id)
+	var result: Dictionary = _equipment_rules.equip_item(actor, normalized_item_id, target_slot, item_library)
+	if not bool(result.get("success", false)):
+		return result
+	_emit("item_equipped", {
+		"actor_id": actor_id,
+		"item_id": result.get("item_id", normalized_item_id),
+		"slot_id": result.get("slot_id", target_slot),
+		"previous_item_id": result.get("previous_item_id", ""),
+	})
+	return result
+
+
+func unequip_item(actor_id: int, slot_id: String) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	var result: Dictionary = _equipment_rules.unequip_item(actor, slot_id)
+	if not bool(result.get("success", false)):
+		return result
+	_emit("item_unequipped", {
+		"actor_id": actor_id,
+		"item_id": result.get("item_id", ""),
+		"slot_id": result.get("slot_id", slot_id),
+	})
+	return result
 
 
 func buy_item_from_shop(actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary) -> Dictionary:

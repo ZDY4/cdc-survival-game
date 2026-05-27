@@ -79,6 +79,17 @@ func _apply_starting_inventory(simulation: RefCounted, bootstrap: Dictionary) ->
 			if item_id.is_empty() or count <= 0:
 				continue
 			player.inventory[item_id] = int(player.inventory.get(item_id, 0)) + count
+	if bool(bootstrap.get("clearActorLoadout", false)):
+		player.equipment.clear()
+	for entry in bootstrap.get("equipment", []):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var item_id: String = _normalize_content_id(entry_data.get("itemId", ""))
+		var slot_id: String = str(entry_data.get("slotId", ""))
+		if item_id.is_empty() or slot_id.is_empty():
+			continue
+		var result: Dictionary = simulation.equip_item(player.actor_id, item_id, slot_id, registry.get_library("items"))
+		if not bool(result.get("success", false)):
+			push_error("cannot equip bootstrap item %s in slot %s: %s" % [item_id, slot_id, result.get("reason", "unknown")])
 
 
 func _player_actor(simulation: RefCounted) -> RefCounted:

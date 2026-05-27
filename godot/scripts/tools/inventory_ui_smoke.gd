@@ -31,7 +31,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var errors: Array[String] = []
 	if game_root.inventory_panel == null:
 		return ["inventory panel was not created"]
-	if not _summary_line(game_root).contains("8 类物品"):
+	if not _summary_line(game_root).contains("4 类物品"):
 		errors.append("initial inventory summary should include bootstrap inventory")
 	var initial_text: String = "\n".join(_item_lines(game_root))
 	if not initial_text.contains("手枪弹药 x10"):
@@ -48,9 +48,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var item_text: String = "\n".join(_item_lines(game_root))
 	if not item_text.contains("绷带 x3"):
 		errors.append("inventory panel missing picked bandage line")
-	if not _summary_line(game_root).contains("8 类物品"):
+	if not _summary_line(game_root).contains("4 类物品"):
 		errors.append("inventory summary did not update item count")
-	if not _summary_line(game_root).contains("2.4 kg"):
+	if not _summary_line(game_root).contains("2.1 kg"):
 		errors.append("inventory summary did not update total weight")
 	return errors
 

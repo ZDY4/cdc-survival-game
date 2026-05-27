@@ -60,6 +60,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	})
 	simulation.buy_item_from_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.sell_item_to_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
+	simulation.equip_item(1, "1003", "main_hand", registry.get_library("items"))
 	simulation.record_item_collected(1, "1007", 2)
 	var zombie: int = _register_zombie(simulation, registry)
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
@@ -109,6 +110,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	var player_restored: Dictionary = _player_actor(restored)
 	if _inventory_count(player_restored, "1006") != _inventory_count(player_original, "1006"):
 		errors.append("player inventory did not roundtrip")
+	if JSON.stringify(player_restored.get("equipment", {})) != JSON.stringify(player_original.get("equipment", {})):
+		errors.append("player equipment did not roundtrip")
 	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang":
 		errors.append("player active dialogue did not roundtrip")
 	if player_restored.get("active_container_id", "") != "survivor_outpost_01_clinic_supply_cabinet":
@@ -153,5 +156,6 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"shop_sessions": snapshot.get("shop_sessions", []),
 		"event_count": snapshot.get("events", []).size(),
 		"player_inventory": _player_actor(snapshot).get("inventory", {}),
+		"player_equipment": _player_actor(snapshot).get("equipment", {}),
 		"player_money": int(_player_actor(snapshot).get("money", 0)),
 	}

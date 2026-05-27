@@ -41,6 +41,7 @@ param(
         "TradeUI",
         "Quest",
         "Combat",
+        "Equipment",
         "Crafting",
         "Save"
     )]
@@ -75,6 +76,7 @@ $scenarioScripts = [ordered]@{
     TradeUI           = "res://scripts/tools/trade_ui_smoke.gd"
     Quest             = "res://scripts/tools/quest_smoke.gd"
     Combat            = "res://scripts/tools/combat_smoke.gd"
+    Equipment         = "res://scripts/tools/equipment_smoke.gd"
     Crafting          = "res://scripts/tools/crafting_smoke.gd"
     Save              = "res://scripts/tools/save_smoke.gd"
 }
