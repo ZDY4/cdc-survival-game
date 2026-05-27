@@ -5,7 +5,8 @@ Run the Godot map visual review flow for a map id.
 .DESCRIPTION
 This script is the repo-local Godot migration entrypoint for map review.
 It runs the Godot content CLI locate, summarize, references, and validate commands,
-then optionally runs the migrated Godot world and scene smoke scenarios.
+then optionally runs the migrated Godot target map preview smoke plus global world and scene
+runtime smoke scenarios.
 
 .PARAMETER Map
 Map id to review.
@@ -24,7 +25,8 @@ pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outp
 
 .NOTES
 This is the Godot-side replacement path for map review during migration. It does not
-open the old Bevy map editor.
+open the old Bevy map editor. The interactive Godot preview/editor surface lives in the
+`CDC Map Preview` dock.
 #>
 [CmdletBinding()]
 param(
@@ -93,6 +95,10 @@ try {
     }
 
     if (-not $NoSmoke) {
+        Invoke-Step -Title "Run Godot map preview smoke" -Action {
+            & $Godot --headless --path godot --script "res://scripts/tools/map_preview_smoke.gd" -- map $Map
+        }
+
         Invoke-Step -Title "Run Godot world snapshot smoke" -Action {
             pwsh -NoProfile -File $godotSmokeScript -Scenario World -Godot $Godot
         }
@@ -108,13 +114,14 @@ try {
     Write-Host "2. Check size, default level, entry points, object count, and object kind summary."
     Write-Host "3. Check overworld references, entry_point_id, and location kind for this map."
     if ($NoSmoke) {
-        Write-Host "4. Godot world/scene smoke was skipped by -NoSmoke; run without it before accepting spatial changes."
+        Write-Host "4. Godot map preview/world/scene smoke was skipped by -NoSmoke; run without it before accepting spatial changes."
     } else {
-        Write-Host "4. Confirm Godot loader validation and generated world/scene smoke passed."
+        Write-Host "4. Confirm Godot loader validation and target map preview smoke passed."
     }
-    Write-Host "5. If layout changed, compare the generated scene result with the intended JSON edits."
+    Write-Host "5. Treat World and Scene smoke as global runtime regressions; they currently boot the default scenario."
+    Write-Host "6. If layout changed, inspect the CDC Map Preview dock and compare the generated scene result with the intended JSON edits."
     Write-Host ""
-    Write-Host "Godot editor handoff note: use open-godot-editor.ps1 -Map $Map to inspect the dock summary, references, and map review section without opening Bevy."
+    Write-Host "Godot editor handoff note: use open-godot-editor.ps1 -Map $Map to inspect the handoff summary and the CDC Map Preview dock without opening Bevy."
 }
 finally {
     Pop-Location

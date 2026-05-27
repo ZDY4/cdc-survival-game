@@ -47,6 +47,12 @@
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>` 仅作为旧 Bevy 对照
 
+Godot editor 当前能力：
+
+- `CDC Map Preview` dock 可加载地图预览和 map review checklist。
+- `CDC Map Preview` dock 可选择地图对象，并通过 `ContentEditService` 写回位置、footprint、旋转和阻挡字段。
+- 入口点、trigger option、AI spawn 和复杂对象结构仍应按 JSON 编辑后用 Godot review 脚本复核。
+
 ## Review Policy
 
 地图改动默认不是“改完即结束”。

@@ -113,7 +113,7 @@ pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map factory -NoOpenEdit
 何时使用：
 
 - `data/maps/*.json` 已被修改，需要验证 Godot loader、地图摘要、引用、世界快照和生成场景链路。
-- 需要替代旧 `bevy_map_editor` 视觉复核依赖，优先走 Godot 工具链。
+- 需要替代旧 `bevy_map_editor` 视觉复核依赖，优先走 Godot 工具链和 `CDC Map Preview` dock。
 
 示例：
 
@@ -125,8 +125,9 @@ pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outp
 行为：
 
 - 先通过 `godot-content.ps1` 串行执行 `locate map`、`summarize map`、`references map` 和 `validate changed`。
-- 默认继续调用 `test-godot-game.ps1 -Scenario World` 和 `test-godot-game.ps1 -Scenario Scene`。
+- 默认继续运行目标地图的 `map_preview_smoke.gd`，再调用 `test-godot-game.ps1 -Scenario World` 和 `test-godot-game.ps1 -Scenario Scene` 做全局 runtime 回归。
 - 输出 Godot map review checklist；当前不打开旧 Bevy editor。
+- 进入 Godot editor 后，`CDC Map Preview` dock 可选择地图对象并通过 Godot data 层编辑位置、footprint、旋转和阻挡字段。
 
 ### `godot-content.ps1`
 
@@ -202,6 +203,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentCLI
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentEdit
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorHandoff
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorBrowser
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapPreview
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Movement
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction

@@ -14,13 +14,13 @@
 
 1. 执行 `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`。
 2. 脚本会先通过 Godot content CLI 输出地图定位、摘要、overworld 引用和 loader validate 结果。
-3. 默认继续运行 Godot `World` 和 `Scene` smoke，确认世界快照与生成场景链路未断。
-4. 如需进入 editor 复核，执行 `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`，`CDC Agent Handoff` dock 会显示地图摘要、引用和 map review 区块。
+3. 默认继续运行目标地图的 `map_preview_smoke.gd`，再运行 Godot `World` 和 `Scene` smoke；前者验证目标地图 preview dock，后两者作为默认启动场景的全局 runtime 回归。
+4. 如需进入 editor 复核，执行 `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`，`CDC Agent Handoff` dock 会显示地图摘要、引用和 map review 区块，`CDC Map Preview` dock 会显示地图预览和对象编辑表单。
 5. 按脚本和 dock 输出检查 map id、size、level、entry points、object kinds、interaction targets、AI spawn 和 overworld 引用。
 6. 若失败，先看对应 Godot CLI 或 smoke 输出，再回到 `data/maps/*.json` 或 `godot/scripts/world` 定位。
 
 ## Notes
 
-- 当前 Godot map 复核入口先提供 editor dock 里的结构化摘要和引用预览，不打开旧 Bevy editor。
+- 当前 Godot map 复核入口提供 editor dock 里的结构化摘要、引用预览、地图预览和地图对象位置/footprint/旋转/阻挡字段编辑，不打开旧 Bevy editor。
 - 如只想看内容摘要而暂时不跑 world/scene smoke，可加 `-NoSmoke`。
 - 旧 `review-map-visual.ps1` 保留为 Bevy 对照路径；Godot 迁移开发优先使用本 workflow。

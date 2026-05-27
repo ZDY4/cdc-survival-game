@@ -3,8 +3,11 @@ extends SceneTree
 const MapPreviewDock = preload("res://addons/cdc_game_editor/map_preview_dock.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 
+var target_map_id := "survivor_outpost_01"
+
 
 func _init() -> void:
+	target_map_id = _target_map_id()
 	_run.call_deferred()
 
 
@@ -18,7 +21,7 @@ func _run() -> void:
 
 	print("map_preview_smoke passed:")
 	print({
-		"covered_map": "survivor_outpost_01",
+		"covered_map": target_map_id,
 	})
 	quit(0)
 
@@ -29,7 +32,7 @@ func _run_checks() -> Array[String]:
 	get_root().add_child(dock)
 	await process_frame
 
-	var result := dock.select_map("survivor_outpost_01")
+	var result := dock.select_map(target_map_id)
 	if not bool(result.get("ok", false)):
 		errors.append("map preview select_map failed: %s" % result)
 		_cleanup(dock)
@@ -50,9 +53,10 @@ func _run_checks() -> Array[String]:
 
 	if dock.detail == null or not dock.detail.text.contains("map_review_checks:"):
 		errors.append("map preview should show review checklist text")
-	if dock.status_label == null or not dock.status_label.text.contains("survivor_outpost_01"):
+	if dock.status_label == null or not dock.status_label.text.contains(target_map_id):
 		errors.append("map preview status should include selected map id")
-	_expect_object_editing(errors, dock)
+	if target_map_id == "survivor_outpost_01":
+		_expect_object_editing(errors, dock)
 
 	_cleanup(dock)
 	return errors
@@ -102,6 +106,26 @@ func _expect_object_editing(errors: Array[String], dock: MapPreviewDock) -> void
 func _cleanup(dock: MapPreviewDock) -> void:
 	dock.queue_free()
 	await process_frame
+
+
+func _target_map_id() -> String:
+	var args := _tool_args()
+	if args.size() >= 2 and args[0] == "map":
+		return args[1]
+	return "survivor_outpost_01"
+
+
+func _tool_args() -> Array[String]:
+	var raw := OS.get_cmdline_user_args()
+	if raw.is_empty():
+		raw = OS.get_cmdline_args()
+	for i in range(raw.size()):
+		if str(raw[i]) == "map":
+			var output: Array[String] = []
+			for j in range(i, raw.size()):
+				output.append(str(raw[j]))
+			return output
+	return []
 
 
 func _registry_with_temp_record(registry: ContentRegistry, map_id: String) -> ContentRegistry:
