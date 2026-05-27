@@ -32,6 +32,7 @@ param(
         "Runtime",
         "ContentCLI",
         "EditorHandoff",
+        "EditorBrowser",
         "World",
         "Scene",
         "Overworld",
@@ -76,6 +77,7 @@ $scenarioScripts = [ordered]@{
     Runtime           = "res://scripts/tools/runtime_smoke.gd"
     ContentCLI        = "res://scripts/tools/content_cli_smoke.gd"
     EditorHandoff     = "res://scripts/tools/editor_handoff_smoke.gd"
+    EditorBrowser     = "res://scripts/tools/editor_content_browser_smoke.gd"
     World             = "res://scripts/tools/world_smoke.gd"
     Scene             = "res://scripts/tools/scene_smoke.gd"
     Overworld         = "res://scripts/tools/overworld_smoke.gd"
