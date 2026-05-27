@@ -114,7 +114,7 @@ try {
     }
     Write-Host "5. If layout changed, compare the generated scene result with the intended JSON edits."
     Write-Host ""
-    Write-Host "Current migration note: Godot map preview UI is not wired yet; this command verifies the Godot content and generated-scene path without opening Bevy."
+    Write-Host "Godot editor handoff note: use open-godot-editor.ps1 -Map $Map to inspect the dock summary, references, and map review section without opening Bevy."
 }
 finally {
     Pop-Location

@@ -39,7 +39,7 @@ func _run() -> Array[String]:
 		{"kind": "skill", "id": "survival", "must_contain": "max_level:"},
 		{"kind": "settlement", "id": "survivor_outpost_01_settlement", "must_contain": "smart_objects:"},
 		{"kind": "overworld", "id": "main_overworld", "must_contain": "locations:"},
-		{"kind": "map", "id": "survivor_outpost_01", "must_contain": "objects:"},
+		{"kind": "map", "id": "survivor_outpost_01", "must_contain": "objects:", "review_must_contain": "map_review_checks:"},
 	]
 	for target in targets:
 		var target_data: Dictionary = target
@@ -54,9 +54,17 @@ func _expect_selection(errors: Array[String], presenter: EditorContentPresenter,
 	if not bool(selection.get("ok", false)):
 		errors.append("selection failed for %s %s: %s" % [kind, id_value, selection.get("message", "")])
 		return
-	var combined_text := "%s\n%s" % [selection.get("summary", ""), selection.get("reference_summary", "")]
+	var combined_text := "%s\n%s\n%s\n%s" % [
+		selection.get("summary", ""),
+		selection.get("reference_summary", ""),
+		selection.get("review_summary", ""),
+		selection.get("review_checklist", ""),
+	]
 	var required := str(target.get("must_contain", ""))
 	if not combined_text.contains(required):
 		errors.append("selection summary for %s %s missing '%s'" % [kind, id_value, required])
+	var review_required := str(target.get("review_must_contain", ""))
+	if not review_required.is_empty() and not combined_text.contains(review_required):
+		errors.append("selection review for %s %s missing '%s'" % [kind, id_value, review_required])
 	if not str(selection.get("path", "")).begins_with("data/"):
 		errors.append("selection path for %s %s should be repo-relative data path, got %s" % [kind, id_value, selection.get("path", "")])

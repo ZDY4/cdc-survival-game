@@ -3,6 +3,7 @@ extends RefCounted
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
+const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
 
 const MAX_REFERENCE_LINES := 12
 
@@ -56,6 +57,7 @@ func build_selection(target_kind: String, target_id: String, registry: ContentRe
 
 	var reference_index: ContentReferenceIndex = ContentReferenceIndex.new()
 	var references := reference_index.references_for(domain, normalized_id, registry)
+	var review: Dictionary = _review_for_record(domain, record)
 	return {
 		"ok": true,
 		"status": "selected",
@@ -66,6 +68,8 @@ func build_selection(target_kind: String, target_id: String, registry: ContentRe
 		"references": references,
 		"reference_count": references.size(),
 		"reference_summary": _references_text(references, repo_root),
+		"review_summary": review.get("summary", ""),
+		"review_checklist": review.get("checklist", ""),
 	}
 
 
@@ -135,6 +139,12 @@ func _summary_for_record(domain: String, target_id: String, record: Dictionary, 
 			lines.append("entry_points: %d" % data.get("entry_points", []).size())
 			lines.append("objects: %d" % data.get("objects", []).size())
 	return "\n".join(lines)
+
+
+func _review_for_record(domain: String, record: Dictionary) -> Dictionary:
+	if domain != "maps":
+		return {}
+	return MapReviewPresenter.new().build_review(_dictionary_or_empty(record.get("data", {})))
 
 
 func _references_text(references: Array[Dictionary], repo_root: String) -> String:
