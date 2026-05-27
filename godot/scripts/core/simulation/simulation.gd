@@ -12,6 +12,7 @@ const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const InteractionExecutor = preload("res://scripts/core/interactions/interaction_executor.gd")
 const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
 const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
+const ProgressionRunner = preload("res://scripts/core/progression/progression_runner.gd")
 const QuestRunner = preload("res://scripts/core/quests/quest_runner.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
 const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
@@ -43,6 +44,7 @@ var _inventory_entries := InventoryEntries.new()
 var _interaction_executor := InteractionExecutor.new()
 var _pathfinder := Pathfinder.new()
 var _progression_rules := ProgressionRules.new()
+var _progression_runner := ProgressionRunner.new()
 var _quest_runner := QuestRunner.new()
 var _snapshot_codec := SimulationSnapshotCodec.new()
 var _vision_rules := VisionRules.new()
@@ -77,70 +79,15 @@ func turn_in_quest(actor_id: int, quest_id: String) -> Dictionary:
 
 
 func grant_experience(actor_id: int, amount: int, source: String = "") -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	var result: Dictionary = _progression_rules.grant_experience(actor.progression, amount)
-	if not bool(result.get("changed", false)):
-		return {"success": false, "reason": "experience_amount_invalid"}
-	actor.progression = _dictionary_or_empty(result.get("state", {}))
-	_emit("experience_granted", {
-		"actor_id": actor_id,
-		"amount": int(result.get("amount", amount)),
-		"total_xp": int(result.get("total_xp", 0)),
-		"source": source,
-	})
-	for level_up in _array_or_empty(result.get("level_ups", [])):
-		var level_up_data: Dictionary = _dictionary_or_empty(level_up)
-		_emit("actor_leveled_up", {
-			"actor_id": actor_id,
-			"new_level": int(level_up_data.get("new_level", 1)),
-			"available_stat_points": int(level_up_data.get("available_stat_points", 0)),
-			"available_skill_points": int(level_up_data.get("available_skill_points", 0)),
-		})
-	return {
-		"success": true,
-		"level": int(actor.progression.get("level", 1)),
-		"current_xp": int(actor.progression.get("current_xp", 0)),
-		"available_skill_points": int(actor.progression.get("available_skill_points", 0)),
-	}
+	return _progression_runner.grant_experience(self, _progression_rules, actor_id, amount, source)
 
 
 func grant_skill_points(actor_id: int, amount: int, source: String = "") -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	var result: Dictionary = _progression_rules.add_skill_points(actor.progression, amount)
-	if not bool(result.get("changed", false)):
-		return {"success": false, "reason": "skill_point_amount_invalid"}
-	actor.progression = _dictionary_or_empty(result.get("state", {}))
-	_emit("skill_points_granted", {
-		"actor_id": actor_id,
-		"amount": max(0, amount),
-		"available_skill_points": int(result.get("available_skill_points", 0)),
-		"source": source,
-	})
-	return {
-		"success": true,
-		"available_skill_points": int(actor.progression.get("available_skill_points", 0)),
-	}
+	return _progression_runner.grant_skill_points(self, _progression_rules, actor_id, amount, source)
 
 
 func learn_skill(actor_id: int, skill_id: String, skill_library: Dictionary) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	var result: Dictionary = _progression_rules.learn_skill(actor.progression, skill_id, skill_library)
-	if not bool(result.get("success", false)):
-		return result
-	actor.progression = _dictionary_or_empty(result.get("state", {}))
-	_emit("skill_learned", {
-		"actor_id": actor_id,
-		"skill_id": str(result.get("skill_id", skill_id)),
-		"level": int(result.get("level", 0)),
-		"available_skill_points": int(result.get("available_skill_points", 0)),
-	})
-	return result
+	return _progression_runner.learn_skill(self, _progression_rules, actor_id, skill_id, skill_library)
 
 
 func set_actor_vision_radius(actor_id: int, radius: int) -> void:
