@@ -210,6 +210,8 @@ func _expect_format_domain_support(errors: Array[String], registry: ContentRegis
 		"quests": "data/quests/tutorial_survive.json",
 		"skills": "data/skills/survival.json",
 		"skill_trees": "data/skill_trees/survival.json",
+		"settlements": "data/settlements/survivor_outpost_01_settlement.json",
+		"overworld": "data/overworld/main_overworld.json",
 	}
 	var domain_helper = load("res://scripts/tools/content_cli_domains.gd")
 	for domain in supported.keys():

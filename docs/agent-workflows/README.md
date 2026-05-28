@@ -35,7 +35,7 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind <item|recipe|character|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> -Id <id>`
-- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind <item|recipe|character|map> -Id <id>`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id <file>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Item <id>`
