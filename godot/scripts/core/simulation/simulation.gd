@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ActorRegistry = preload("res://scripts/core/actor/actor_registry.gd")
+const AiRunner = preload("res://scripts/core/ai/ai_runner.gd")
 const AiRules = preload("res://scripts/core/ai/ai_rules.gd")
 const CombatRunner = preload("res://scripts/core/combat/combat_runner.gd")
 const CraftingRunner = preload("res://scripts/core/crafting/crafting_runner.gd")
@@ -36,6 +37,7 @@ var quest_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
 var ai_intents: Dictionary = {}
+var _ai_runner := AiRunner.new()
 var _ai_rules := AiRules.new()
 var _combat_runner := CombatRunner.new()
 var _crafting_runner := CraftingRunner.new()
@@ -119,28 +121,11 @@ func clear_actor_vision(actor_id: int) -> void:
 
 
 func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	var intent: Dictionary = _ai_rules.decide_actor_intent(actor, actor_registry.actors(), context)
-	if bool(intent.get("success", false)):
-		ai_intents[actor_id] = intent.duplicate(true)
-		_emit("ai_intent_decided", {
-			"actor_id": actor_id,
-			"intent": str(intent.get("intent", "")),
-			"target_actor_id": int(intent.get("target_actor_id", 0)),
-			"reason": str(intent.get("reason", "")),
-		})
-	return intent
+	return _ai_runner.decide_actor_intent(self, _ai_rules, actor_id, context)
 
 
 func decide_all_ai_intents(context: Dictionary = {}) -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	for actor in actor_registry.actors():
-		if actor.kind == "player":
-			continue
-		output.append(decide_actor_intent(actor.actor_id, context))
-	return output
+	return _ai_runner.decide_all_ai_intents(self, _ai_rules, context)
 
 
 func unlock_location(location_id: String) -> bool:
