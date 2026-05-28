@@ -13,3 +13,4 @@ Default development should use the repository root Godot launchers:
 Use these legacy launchers only when an old Bevy behavior needs to be compared against the migrated Godot path.
 
 Additional Bevy-only maintenance notes and pre-Godot planning documents live under `legacy/bevy/docs/`.
+Archived Bevy runtime config and smoke artifacts live under `legacy/bevy/config/` and `legacy/bevy/smoke-artifacts/`.

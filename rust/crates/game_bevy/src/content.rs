@@ -223,7 +223,10 @@ pub struct RuntimeStartupConfigPath(pub PathBuf);
 
 impl Default for RuntimeStartupConfigPath {
     fn default() -> Self {
-        Self(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../config/bevy_runtime.ini"))
+        Self(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../legacy/bevy/config/bevy_runtime.ini"),
+        )
     }
 }
 

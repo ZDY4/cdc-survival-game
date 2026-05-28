@@ -142,7 +142,7 @@ impl Default for ViewerUiSettingsPath {
     fn default() -> Self {
         Self(
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../../config/bevy_viewer_ui_settings.json"),
+                .join("../../../legacy/bevy/config/bevy_viewer_ui_settings.json"),
         )
     }
 }
