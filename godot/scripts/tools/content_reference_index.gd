@@ -2,7 +2,9 @@ extends RefCounted
 
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
-const JsonLoader = preload("res://scripts/data/json_loader.gd")
+const ContentReferenceSources = preload("res://scripts/tools/content_reference_sources.gd")
+
+var _sources := ContentReferenceSources.new()
 
 
 func references_for(domain: String, id_value: String, registry: ContentRegistry) -> Array[Dictionary]:
@@ -136,8 +138,9 @@ func _character_references(character_id: String, registry: ContentRegistry) -> A
 				hits.append(_reference_hit("map", map_id, record["path"], "objects[%d].props.ai_spawn.character_id" % object_index))
 
 	# Actor talk currently resolves dialogue by definition id, so dialogue rules keyed to the character id are hard references.
-	for rule_id in _dialogue_rule_records().keys():
-		var record: Dictionary = _dictionary_or_empty(_dialogue_rule_records()[rule_id])
+	var dialogue_rules := _sources.dialogue_rule_records()
+	for rule_id in dialogue_rules.keys():
+		var record: Dictionary = _dictionary_or_empty(dialogue_rules[rule_id])
 		if str(record.get("data", {}).get("dialogue_key", "")) == character_id:
 			hits.append(_reference_hit("dialogue_rule", rule_id, record.get("path", ""), "dialogue_key"))
 	return hits
@@ -171,8 +174,9 @@ func _map_references(map_id: String, registry: ContentRegistry) -> Array[Diction
 
 func _dialogue_references(dialogue_id: String, _registry: ContentRegistry) -> Array[Dictionary]:
 	var hits: Array[Dictionary] = []
-	for rule_id in _dialogue_rule_records().keys():
-		var record: Dictionary = _dictionary_or_empty(_dialogue_rule_records()[rule_id])
+	var dialogue_rules := _sources.dialogue_rule_records()
+	for rule_id in dialogue_rules.keys():
+		var record: Dictionary = _dictionary_or_empty(dialogue_rules[rule_id])
 		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
 		if str(data.get("default_dialogue_id", "")) == dialogue_id:
 			hits.append(_reference_hit("dialogue_rule", rule_id, record.get("path", ""), "default_dialogue_id"))
@@ -204,8 +208,9 @@ func _quest_references(quest_id: String, registry: ContentRegistry) -> Array[Dic
 				if str(action.get("quest_id", action.get("questId", ""))) == quest_id:
 					hits.append(_reference_hit("dialogue", dialogue_id, record["path"], "nodes[%d].actions[%d].quest_id type=%s" % [node_index, action_index, action.get("type", "")]))
 
-	for rule_id in _dialogue_rule_records().keys():
-		var record: Dictionary = _dictionary_or_empty(_dialogue_rule_records()[rule_id])
+	var dialogue_rules := _sources.dialogue_rule_records()
+	for rule_id in dialogue_rules.keys():
+		var record: Dictionary = _dictionary_or_empty(dialogue_rules[rule_id])
 		var variants: Array = record.get("data", {}).get("variants", [])
 		for variant_index in range(variants.size()):
 			var when: Dictionary = _dictionary_or_empty(_dictionary_or_empty(variants[variant_index]).get("when", {}))
@@ -327,39 +332,11 @@ func _collect_overworld_item_refs(hits: Array[Dictionary], item_id: String, regi
 
 
 func _collect_legacy_json_item_refs(hits: Array[Dictionary], item_id: String) -> void:
-	for record in _legacy_json_records():
-		_collect_recursive_refs(hits, item_id, "item", record, ["item_id", "itemId"], ["items", "loot", "rewards", "inventory"])
+	_sources.collect_legacy_json_refs(hits, item_id, "item", ["item_id", "itemId"], ["items", "loot", "rewards", "inventory"])
 
 
 func _collect_legacy_json_scalar_refs(hits: Array[Dictionary], target_id: String, field_names: Array[String], source_kind: String) -> void:
-	for record in _legacy_json_records():
-		_collect_recursive_refs(hits, target_id, source_kind, record, field_names, [])
-
-
-func _collect_recursive_refs(hits: Array[Dictionary], target_id: String, target_kind: String, record: Dictionary, field_names: Array[String], contextual_parent_names: Array[String]) -> void:
-	_walk_recursive_refs(hits, target_id, target_kind, record, _dictionary_or_empty(record.get("data", {})), "$", "", field_names, contextual_parent_names)
-
-
-func _walk_recursive_refs(hits: Array[Dictionary], target_id: String, target_kind: String, record: Dictionary, value: Variant, path: String, parent_key: String, field_names: Array[String], contextual_parent_names: Array[String]) -> void:
-	if typeof(value) == TYPE_DICTIONARY:
-		var dict: Dictionary = value
-		for key in dict.keys():
-			var key_string := str(key)
-			var next_path := "%s.%s" % [path, key_string]
-			var next_value: Variant = dict[key]
-			if field_names.has(key_string) and _normalize_id(next_value) == target_id:
-				hits.append(_reference_hit("json", record.get("id", ""), record.get("path", ""), "%s -> %s" % [next_path, target_kind]))
-			elif key_string == "id" and contextual_parent_names.has(parent_key) and _normalize_id(next_value) == target_id:
-				hits.append(_reference_hit("json", record.get("id", ""), record.get("path", ""), "%s -> %s" % [next_path, target_kind]))
-			_walk_recursive_refs(hits, target_id, target_kind, record, next_value, next_path, key_string, field_names, contextual_parent_names)
-	elif typeof(value) == TYPE_ARRAY:
-		var values: Array = value
-		for i in range(values.size()):
-			var next_path := "%s[%d]" % [path, i]
-			var next_value: Variant = values[i]
-			if contextual_parent_names.has(parent_key) and _normalize_id(next_value) == target_id:
-				hits.append(_reference_hit("json", record.get("id", ""), record.get("path", ""), "%s -> %s" % [next_path, target_kind]))
-			_walk_recursive_refs(hits, target_id, target_kind, record, next_value, next_path, parent_key, field_names, contextual_parent_names)
+	_sources.collect_legacy_json_refs(hits, target_id, source_kind, field_names, [])
 
 
 func _collect_location_refs_from_props(hits: Array[Dictionary], location_ids: Dictionary, source_kind: String, source_id: String, path: String, object_index: int, object: Dictionary) -> void:
@@ -395,43 +372,7 @@ func _collect_string_array_refs(hits: Array[Dictionary], target_id: String, sour
 
 
 func _reference_hit(source_kind: String, source_id: String, path: String, detail: String) -> Dictionary:
-	return {
-		"source_kind": source_kind,
-		"source_id": source_id,
-		"path": path,
-		"detail": detail,
-	}
-
-
-func _dialogue_rule_records() -> Dictionary:
-	var output: Dictionary = {}
-	var root := ContentPaths.domain_path("dialogue_rules")
-	for path in JsonLoader.list_json_files(root, false):
-		var parsed: Variant = JsonLoader.read_json_file(path)
-		if typeof(parsed) != TYPE_DICTIONARY or parsed.has("__error"):
-			continue
-		var data: Dictionary = parsed
-		var id_value: String = str(data.get("dialogue_key", path.get_file().get_basename()))
-		output[id_value] = {
-			"path": path,
-			"data": data,
-		}
-	return output
-
-
-func _legacy_json_records() -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	var root := ContentPaths.domain_path("json")
-	for path in JsonLoader.list_json_files(root, true):
-		var parsed: Variant = JsonLoader.read_json_file(path)
-		if typeof(parsed) != TYPE_DICTIONARY or parsed.has("__error"):
-			continue
-		output.append({
-			"id": path.get_file().get_basename(),
-			"path": path,
-			"data": parsed,
-		})
-	return output
+	return _sources.reference_hit(source_kind, source_id, path, detail)
 
 
 func _normalize_id(id_value: Variant) -> String:
