@@ -14,7 +14,7 @@ func _init() -> void:
 
 	print("content_edit_service_smoke passed:")
 	print({
-		"covered_domains": ["item", "recipe", "character", "map", "dialogue", "quest", "skill", "skill_tree", "overworld"],
+		"covered_domains": ["item", "recipe", "character", "map", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld"],
 	})
 	quit(0)
 
@@ -39,16 +39,18 @@ func _run() -> Array[String]:
 	_expect_patch(errors, service, registry, "quests", "tutorial_survive", {"title": "补给试跑 smoke"})
 	_expect_patch(errors, service, registry, "skills", "survival", {"max_level": 6})
 	_expect_patch(errors, service, registry, "skill_trees", "survival", {"description": "生存系 smoke"})
+	_expect_patch(errors, service, registry, "settlements", "survivor_outpost_01_settlement", {"service_rules.min_guard_on_duty": 3})
 	_expect_patch(errors, service, registry, "overworld", "main_overworld", {"travel_rules.risk_multiplier": 1.25})
 	_expect_map_object_patch(errors, service, registry)
 	_expect_invalid_patch(errors, service, registry)
 	_expect_invalid_metadata_patch(errors, service, registry)
+	_expect_invalid_settlement_patch(errors, service, registry)
 	_expect_invalid_overworld_patch(errors, service, registry)
 	return errors
 
 
 func _expect_editable_fields(errors: Array[String], service: ContentEditService) -> void:
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "overworld"]:
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld"]:
 		if service.editable_fields(domain).is_empty():
 			errors.append("content edit service has no editable fields for %s" % domain)
 
@@ -70,6 +72,11 @@ func _expect_field_types(errors: Array[String], service: ContentEditService) -> 
 	})
 	if typeof(overworld_patch.get("travel_rules.risk_multiplier")) != TYPE_FLOAT:
 		errors.append("overworld risk_multiplier should normalize to float")
+	var settlement_patch := service.normalize_patch("settlements", {
+		"service_rules.min_guard_on_duty": "3",
+	})
+	if typeof(settlement_patch.get("service_rules.min_guard_on_duty")) != TYPE_INT:
+		errors.append("settlement min_guard_on_duty should normalize to int")
 
 
 func _expect_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry, domain: String, id_value: String, patch: Dictionary) -> void:
@@ -121,6 +128,18 @@ func _expect_invalid_overworld_patch(errors: Array[String], service: ContentEdit
 	var persisted := FileAccess.get_file_as_string(str(isolated.get_library("overworld")["main_overworld"].get("path", "")))
 	if persisted.contains("missing_food"):
 		errors.append("invalid overworld patch should not be written to disk")
+
+
+func _expect_invalid_settlement_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry) -> void:
+	var isolated := _registry_with_temp_record(registry, "settlements", "survivor_outpost_01_settlement")
+	var report := service.save_patch("settlements", "survivor_outpost_01_settlement", {"service_rules.quiet_hours.end_minute": 1200}, isolated, {"allow_external_path": true})
+	if bool(report.get("ok", false)):
+		errors.append("invalid settlement service rule patch should fail validation")
+	if str(report.get("code", "")) != "validation_failed":
+		errors.append("invalid settlement patch should return validation_failed, got %s" % report)
+	var persisted := FileAccess.get_file_as_string(str(isolated.get_library("settlements")["survivor_outpost_01_settlement"].get("path", "")))
+	if persisted.contains("\"end_minute\": 1200"):
+		errors.append("invalid settlement patch should not be written to disk")
 
 
 func _expect_map_object_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry) -> void:

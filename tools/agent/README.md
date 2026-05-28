@@ -72,7 +72,7 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map survivor_outpost_01
 - 写入 `tmp/editor_handoff/godot_editor.navigation.json`。
 - `CDC Agent Handoff` dock 会读取目标内容摘要和引用预览。
 - `CDC Content Browser` dock 会在 Godot editor 内浏览 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map`，并显示记录级校验状态、详情和可编辑字段清单。
-- 内容保存边界已收口到 `godot/scripts/data/content_edit_service.gd`；当前表单保存覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` 的安全元数据字段，以及 `overworld` 的 travel rule 字段；`settlement` 先保持只读。
+- 内容保存边界已收口到 `godot/scripts/data/content_edit_service.gd`；当前表单保存覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` 的安全元数据字段、`settlement` 的 service rule 字段，以及 `overworld` 的 travel rule 字段。
 - 若 `CDC Agent Handoff` dock 已有最近 session，会复用现有 Godot editor。
 - 若没有最近 session，则启动 `D:\godot\godot.cmd --editor --path godot`。
 

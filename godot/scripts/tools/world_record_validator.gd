@@ -64,6 +64,15 @@ func _validate_settlement(id_value: String, record: Dictionary, registry: Conten
 		_validate_anchor_ref(smart_object.get("anchor_id", null), field.path_join("anchor_id"), anchor_ids, issues)
 		_expect_number_at_least(issues, smart_object, "capacity", field.path_join("capacity"), 1.0)
 
+	var service_rules := _dictionary_or_empty(data.get("service_rules", {}))
+	if not service_rules.is_empty():
+		if service_rules.has("min_guard_on_duty"):
+			_expect_number_at_least(issues, service_rules, "min_guard_on_duty", "$.service_rules.min_guard_on_duty", 0.0)
+		for i in range(_array_or_empty(service_rules.get("meal_windows", [])).size()):
+			_validate_minute_window(_dictionary_or_empty(service_rules["meal_windows"][i]), "$.service_rules.meal_windows[%d]" % i, issues)
+		if service_rules.has("quiet_hours"):
+			_validate_minute_window(_dictionary_or_empty(service_rules.get("quiet_hours", {})), "$.service_rules.quiet_hours", issues)
+
 
 func _validate_overworld(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
 	var data := _dictionary_or_empty(record.get("data", {}))
@@ -170,6 +179,30 @@ func _validate_overworld_cell(cell: Dictionary, field: String, width: int, heigh
 		issues.append(_issue("error", field.path_join("x"), "cell_out_of_bounds", "x %d outside overworld width %d" % [x, width]))
 	if z < 0 or z >= height:
 		issues.append(_issue("error", field.path_join("z"), "cell_out_of_bounds", "z %d outside overworld height %d" % [z, height]))
+
+
+func _validate_minute_window(window: Dictionary, field: String, issues: Array[Dictionary]) -> void:
+	if window.is_empty():
+		issues.append(_issue("error", field, "missing_minute_window", "minute window is required"))
+		return
+	if not window.has("start_minute"):
+		issues.append(_issue("error", field.path_join("start_minute"), "missing_minute", "start_minute is required"))
+	if not window.has("end_minute"):
+		issues.append(_issue("error", field.path_join("end_minute"), "missing_minute", "end_minute is required"))
+	if not window.has("start_minute") or not window.has("end_minute"):
+		return
+	var start_minute := int(window.get("start_minute", 0))
+	var end_minute := int(window.get("end_minute", 0))
+	_validate_day_minute(start_minute, field.path_join("start_minute"), true, issues)
+	_validate_day_minute(end_minute, field.path_join("end_minute"), false, issues)
+	if end_minute <= start_minute:
+		issues.append(_issue("error", field, "invalid_minute_window", "end_minute must be greater than start_minute"))
+
+
+func _validate_day_minute(value: int, field: String, allow_zero: bool, issues: Array[Dictionary]) -> void:
+	var minimum := 0 if allow_zero else 1
+	if value < minimum or value > 1440:
+		issues.append(_issue("error", field, "minute_out_of_range", "minute %d must be between %d and 1440" % [value, minimum]))
 
 
 func _validate_entry_point(entry_point_id: Variant, field: String, map_data: Dictionary, issues: Array[Dictionary]) -> void:
