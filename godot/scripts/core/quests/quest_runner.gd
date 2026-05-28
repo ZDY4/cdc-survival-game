@@ -2,9 +2,11 @@ extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const QuestDefinitionIndex = preload("res://scripts/core/quests/quest_definition_index.gd")
+const QuestObjectiveProgress = preload("res://scripts/core/quests/quest_objective_progress.gd")
 
 var _inventory_entries := InventoryEntries.new()
 var _quest_index := QuestDefinitionIndex.new()
+var _objective_progress := QuestObjectiveProgress.new()
 
 
 func configure(simulation: RefCounted, quests: Dictionary) -> void:
@@ -94,27 +96,18 @@ func _advance_collect(simulation: RefCounted, actor_id: int, item_id: String, co
 	var completed_now: Array[String] = []
 	for quest_id in simulation.active_quests.keys():
 		var quest_data: Dictionary = _quest_data(simulation.quest_library, str(quest_id))
-		var objective: Dictionary = _quest_index.first_objective_node(quest_data)
-		if objective.get("objective_type", "") != "collect":
+		var progress: Dictionary = _objective_progress.collect_progress(str(quest_id), quest_data, simulation.active_quests[quest_id], item_id, count)
+		if not bool(progress.get("matched", false)):
 			continue
-		if _inventory_entries.normalize_content_id(objective.get("item_id", "")) != item_id:
-			continue
-		var state: Dictionary = simulation.active_quests[quest_id]
-		var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
-		var objective_id: String = str(objective.get("id", ""))
-		var target_count: int = max(1, int(objective.get("count", 1)))
-		var current: int = min(target_count, int(completed.get(objective_id, 0)) + count)
-		completed[objective_id] = current
-		state["completed_objectives"] = completed
-		simulation.active_quests[quest_id] = state
+		simulation.active_quests[quest_id] = _dictionary_or_empty(progress.get("state", {}))
 		simulation.emit_event("quest_progressed", {
 			"actor_id": actor_id,
 			"quest_id": quest_id,
-			"objective_id": objective_id,
-			"current": current,
-			"target": target_count,
+			"objective_id": str(progress.get("objective_id", "")),
+			"current": int(progress.get("current", 0)),
+			"target": int(progress.get("target", 1)),
 		})
-		if current >= target_count:
+		if bool(progress.get("completed", false)):
 			completed_now.append(str(quest_id))
 
 	for quest_id in completed_now:
@@ -183,28 +176,18 @@ func _advance_kill(simulation: RefCounted, actor_id: int, enemy_definition_id: S
 	var completed_now: Array[String] = []
 	for quest_id in simulation.active_quests.keys():
 		var quest_data: Dictionary = _quest_data(simulation.quest_library, str(quest_id))
-		var objective: Dictionary = _quest_index.first_objective_node(quest_data)
-		if objective.get("objective_type", "") != "kill":
+		var progress: Dictionary = _objective_progress.kill_progress(str(quest_id), quest_data, simulation.active_quests[quest_id], enemy_definition_id, enemy_kind)
+		if not bool(progress.get("matched", false)):
 			continue
-		var enemy_type: String = str(objective.get("enemy_type", ""))
-		if not enemy_type.is_empty() and not _quest_index.enemy_matches_objective(enemy_definition_id, enemy_kind, enemy_type):
-			continue
-		var state: Dictionary = simulation.active_quests[quest_id]
-		var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
-		var objective_id: String = str(objective.get("id", ""))
-		var target_count: int = max(1, int(objective.get("count", 1)))
-		var current: int = min(target_count, int(completed.get(objective_id, 0)) + 1)
-		completed[objective_id] = current
-		state["completed_objectives"] = completed
-		simulation.active_quests[quest_id] = state
+		simulation.active_quests[quest_id] = _dictionary_or_empty(progress.get("state", {}))
 		simulation.emit_event("quest_progressed", {
 			"actor_id": actor_id,
 			"quest_id": quest_id,
-			"objective_id": objective_id,
-			"current": current,
-			"target": target_count,
+			"objective_id": str(progress.get("objective_id", "")),
+			"current": int(progress.get("current", 0)),
+			"target": int(progress.get("target", 1)),
 		})
-		if current >= target_count:
+		if bool(progress.get("completed", false)):
 			completed_now.append(str(quest_id))
 
 	for quest_id in completed_now:
