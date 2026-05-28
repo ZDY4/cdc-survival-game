@@ -8,4 +8,4 @@ script = ""
 [[actions]]
 name = "Run"
 icon = "run"
-command = ".\\run_bevy_server.bat"
+command = ".\\run_godot_game.bat"
