@@ -340,6 +340,9 @@ Push-Location rust; cargo run -q -p content_tools -- validate changed; Pop-Locat
 Godot 侧逐步建立等价命令：
 
 ```powershell
+.\run_godot_game.bat
+.\run_godot_editor.bat
+.\run_godot_validate.bat
 D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/validate_all.gd
 D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd validate changed
 D:\godot\godot.cmd --headless --path godot --script res://scripts/app/headless_runner.gd --scenario new_game_smoke
@@ -501,6 +504,7 @@ D:\godot\godot.cmd --path godot
 - Godot runtime、内容工具、必要 editor 能覆盖日常开发。
 - 旧 Bevy smoke 的目标在 Godot smoke 中有等价覆盖；`test-godot-game.ps1 -Scenario BevyEquivalence` 输出 `WorldInteractionMenu` 到 Godot smoke 的机器可读覆盖映射。
 - 文档和 agent workflow 都已切到 Godot。
+- 根目录已有 `run_godot_game.bat`、`run_godot_editor.bat`、`run_godot_validate.bat` 作为旧 `run_bevy_*` 的迁移期默认替代入口。
 
 交付：
 
