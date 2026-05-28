@@ -19,6 +19,7 @@ const ProgressionRunner = preload("res://scripts/core/progression/progression_ru
 const QuestRunner = preload("res://scripts/core/quests/quest_runner.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
 const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
+const VisionRunner = preload("res://scripts/core/vision/vision_runner.gd")
 const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
 
 var actor_registry := ActorRegistry.new()
@@ -53,6 +54,7 @@ var _progression_rules := ProgressionRules.new()
 var _progression_runner := ProgressionRunner.new()
 var _quest_runner := QuestRunner.new()
 var _snapshot_codec := SimulationSnapshotCodec.new()
+var _vision_runner := VisionRunner.new()
 var _vision_rules := VisionRules.new()
 
 
@@ -97,27 +99,15 @@ func learn_skill(actor_id: int, skill_id: String, skill_library: Dictionary) -> 
 
 
 func set_actor_vision_radius(actor_id: int, radius: int) -> void:
-	_vision_rules.set_actor_radius(actor_id, radius)
+	_vision_runner.set_actor_vision_radius(_vision_rules, actor_id, radius)
 
 
 func refresh_actor_vision(actor_id: int, topology: Dictionary) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	var update: Dictionary = _vision_rules.recompute_actor(actor_id, active_map_id, actor.grid_position.to_dictionary(), topology)
-	if bool(update.get("changed", false)):
-		_emit("actor_vision_updated", {
-			"actor_id": actor_id,
-			"active_map_id": str(update.get("active_map_id", "")),
-			"visible_cell_count": _array_or_empty(update.get("visible_cells", [])).size(),
-			"explored_cell_count": _array_or_empty(update.get("explored_cells", [])).size(),
-		})
-	update["success"] = true
-	return update
+	return _vision_runner.refresh_actor_vision(self, _vision_rules, actor_id, topology)
 
 
 func clear_actor_vision(actor_id: int) -> void:
-	_vision_rules.clear_actor(actor_id)
+	_vision_runner.clear_actor_vision(_vision_rules, actor_id)
 
 
 func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
