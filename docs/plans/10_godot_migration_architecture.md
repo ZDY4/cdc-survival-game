@@ -376,6 +376,7 @@ D:\godot\godot.cmd --path godot
 | 新脚本 | 替代对象 | 目标 |
 | --- | --- | --- |
 | `tools/agent/test-godot-game.ps1` | `test-bevy-game.ps1` | 运行 Godot headless / smoke 场景 |
+| `tools/agent/test-godot-editor.ps1` | `tools/editor_shared/scripts/smoke_bevy_editors.ps1` | 聚合 Godot editor handoff / browser / preview / edit service smoke |
 | `tools/agent/open-godot-editor.ps1` | `open-editor.ps1` | 打开 Godot editor 并写入 handoff |
 | `tools/agent/review-godot-map-visual.ps1` | `review-map-visual.ps1` | 地图校验、摘要、视觉预览 |
 | `tools/agent/godot-content.ps1` | `content_tools` | 包装 Godot content CLI |
@@ -505,6 +506,7 @@ D:\godot\godot.cmd --path godot
 - 旧 Bevy smoke 的目标在 Godot smoke 中有等价覆盖；`test-godot-game.ps1 -Scenario BevyEquivalence` 输出 `WorldInteractionMenu` 到 Godot smoke 的机器可读覆盖映射。
 - 文档和 agent workflow 都已切到 Godot。
 - 根目录已有 `run_godot_game.bat`、`run_godot_editor.bat`、`run_godot_validate.bat` 作为旧 `run_bevy_*` 的迁移期默认替代入口。
+- `test-godot-editor.ps1` 聚合 Godot editor handoff、content browser、map preview、content edit 和 map edit smoke，替代旧 Bevy editor 聚合 smoke 的默认用途。
 
 交付：
 

@@ -17,6 +17,7 @@
 - `review-map-visual.md`
 - `review-godot-map-visual.md`
 - `test-bevy-game.md`
+- `test-godot-editor.md`
 - `test-godot-game.md`
 
 ## General Rules
@@ -49,6 +50,8 @@
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Overworld <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`
+- `pwsh -NoProfile -File tools/agent/test-godot-editor.ps1`
+- `pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario BevyEquivalence`
@@ -100,12 +103,16 @@
 
 游戏 smoke 复核：
 
+- `pwsh -NoProfile -File tools/agent/test-godot-editor.ps1`
+- `pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1`
 - `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu`
 
 Godot 迁移期间，运行时/游戏闭环优先跑 `test-godot-game.ps1`；Bevy smoke 保留为旧客户端行为对照。
+
+Godot editor 迁移期复核优先跑 `test-godot-editor.ps1`；旧 Bevy editor 聚合 smoke 仅作为行为差异对照。
 
 `BevyEquivalence` 场景会输出旧 Bevy `WorldInteractionMenu` 到 Godot smoke 的机器可读覆盖映射，用于证明拾取目标选择、HUD 交互提示、primary pickup option、执行拾取和消费节点移除已经在 Godot 侧闭环。
 
