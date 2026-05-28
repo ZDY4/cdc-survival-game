@@ -3,6 +3,8 @@ extends SceneTree
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentCliDomains = preload("res://scripts/tools/content_cli_domains.gd")
+const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd")
+const ContentJsonFormatter = preload("res://scripts/tools/content_json_formatter.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
@@ -230,47 +232,16 @@ func _diff_summary_command(args: Array[String]) -> int:
 		printerr(_usage())
 		return 2
 
-	var relative_path := _normalize_repo_path(args[2])
-	if relative_path.is_empty():
-		printerr("path is outside repo root: %s" % args[2])
+	var summary: Dictionary = ContentDiffSummary.new().summarize_path(args[2])
+	if not bool(summary.get("ok", false)):
+		printerr(summary.get("message", "diff summary failed"))
 		return 1
-
-	var status_output := _git_output(["status", "--short", "--untracked-files=all", "--", relative_path])
-	if int(status_output.get("exit_code", 1)) != 0:
-		printerr(status_output.get("error", "git status failed"))
-		return 1
-	var status_line := _first_line(str(status_output.get("stdout", ""))).strip_edges()
-
 	print("mode: diff_summary")
-	print("path: %s" % relative_path)
-	if status_line.is_empty():
-		print("status: clean")
-		print("added_lines: 0")
-		print("removed_lines: 0")
-		print("changed_hunks: 0")
-		return 0
-	if status_line.begins_with("??"):
-		var raw := FileAccess.get_file_as_string(ContentPaths.repo_root().path_join(relative_path))
-		print("status: untracked")
-		print("added_lines: %d" % raw.split("\n", false).size())
-		print("removed_lines: 0")
-		print("changed_hunks: 1")
-		return 0
-
-	var numstat := _git_output(["diff", "--numstat", "HEAD", "--", relative_path])
-	if int(numstat.get("exit_code", 1)) != 0:
-		printerr(numstat.get("error", "git diff --numstat failed"))
-		return 1
-	var counts := _parse_numstat(str(numstat.get("stdout", "")))
-	var diff := _git_output(["diff", "--no-ext-diff", "--unified=0", "HEAD", "--", relative_path])
-	if int(diff.get("exit_code", 1)) != 0:
-		printerr(diff.get("error", "git diff failed"))
-		return 1
-
-	print("status: %s" % _normalize_status_code(status_line))
-	print("added_lines: %d" % int(counts.get("added", 0)))
-	print("removed_lines: %d" % int(counts.get("removed", 0)))
-	print("changed_hunks: %d" % _changed_hunk_count(str(diff.get("stdout", ""))))
+	print("path: %s" % summary.get("path", ""))
+	print("status: %s" % summary.get("status", ""))
+	print("added_lines: %d" % int(summary.get("added_lines", 0)))
+	print("removed_lines: %d" % int(summary.get("removed_lines", 0)))
+	print("changed_hunks: %d" % int(summary.get("changed_hunks", 0)))
 	return 0
 
 
@@ -319,92 +290,16 @@ func _print_validation(kind: String, domain: String, id_value: String, record: D
 
 func _format_record(domain: String, id_value: String, record: Dictionary) -> Dictionary:
 	var path: String = str(record.get("path", ""))
-	var before := FileAccess.get_file_as_string(path)
-	var formatted := _format_json_text(before)
-	if formatted.is_empty():
-		printerr("failed to format JSON text: %s" % path)
+	var format_result := ContentJsonFormatter.write_formatted_file(path)
+	if not bool(format_result.get("ok", false)):
+		printerr(format_result.get("message", "failed to format JSON text: %s" % path))
 		return {}
-	var changed := before != formatted
-	if changed:
-		# 内容格式化是 agent 复核入口，写入失败必须带路径，方便直接定位坏文件。
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		if file == null:
-			printerr("failed to open for write: %s (%s)" % [path, error_string(FileAccess.get_open_error())])
-			return {}
-		file.store_string(formatted)
 	return {
 		"kind": _singular_domain(domain),
 		"id": id_value,
 		"relative_path": _repo_relative_path(path),
-		"changed": changed,
+		"changed": bool(format_result.get("changed", false)),
 	}
-
-
-func _format_json_text(raw: String) -> String:
-	var output := ""
-	var depth := 0
-	var in_string := false
-	var escaped := false
-	var pending_space := false
-	for i in range(raw.length()):
-		var ch := raw.substr(i, 1)
-		if in_string:
-			output += ch
-			if escaped:
-				escaped = false
-			elif ch == "\\":
-				escaped = true
-			elif ch == "\"":
-				in_string = false
-			continue
-
-		match ch:
-			" ", "\t", "\n", "\r":
-				continue
-			"\"":
-				if pending_space:
-					output += " "
-					pending_space = false
-				output += ch
-				in_string = true
-			"{", "[":
-				if pending_space:
-					output += " "
-					pending_space = false
-				output += ch
-				depth += 1
-				output += "\n" + _indent(depth)
-			"}", "]":
-				pending_space = false
-				depth -= 1
-				if depth < 0:
-					return ""
-				output = output.rstrip(" \t\r\n")
-				output += "\n" + _indent(depth) + ch
-			",":
-				pending_space = false
-				output += ch + "\n" + _indent(depth)
-			":":
-				output = output.rstrip(" \t\r\n")
-				output += ": "
-				pending_space = false
-			_:
-				if pending_space:
-					output += " "
-					pending_space = false
-				output += ch
-				var next_index := i + 1
-				if next_index < raw.length():
-					var next := raw.substr(next_index, 1)
-					if next in [" ", "\t", "\n", "\r"]:
-						pending_space = true
-	if in_string or depth != 0:
-		return ""
-	return output.rstrip(" \t\r\n") + "\n"
-
-
-func _indent(depth: int) -> String:
-	return "  ".repeat(max(0, depth))
 
 
 func _format_relative_path(relative_path: String, registry: ContentRegistry) -> Dictionary:
@@ -420,98 +315,15 @@ func _format_relative_path(relative_path: String, registry: ContentRegistry) -> 
 
 
 func _changed_supported_paths() -> Array[String]:
-	var git_args: Array[String] = ["status", "--short", "--untracked-files=all", "--"]
-	git_args.append_array(ContentCliDomains.git_status_paths_for_format())
-	var status := _git_output(git_args)
 	var paths: Array[String] = []
-	if int(status.get("exit_code", 1)) != 0:
-		printerr(status.get("error", "git status failed"))
-		return paths
-	for line in str(status.get("stdout", "")).split("\n", false):
-		var path := _path_from_status_line(line)
+	for path in ContentDiffSummary.new().changed_paths(ContentCliDomains.git_status_paths_for_format()):
 		if not path.is_empty() and _domain_for_relative_path(path) != "":
 			paths.append(path)
-	paths.sort()
 	return paths
-
-
-func _path_from_status_line(line: String) -> String:
-	if line.length() < 4:
-		return ""
-	var value := line.substr(3).strip_edges()
-	if value.find(" -> ") >= 0:
-		value = value.split(" -> ", false)[-1]
-	return value.replace("\\", "/")
 
 
 func _domain_for_relative_path(relative_path: String) -> String:
 	return ContentCliDomains.domain_for_relative_path(relative_path)
-
-
-func _git_output(args: Array[String]) -> Dictionary:
-	var output: Array = []
-	var packed := PackedStringArray(["-C", ContentPaths.repo_root()])
-	for arg in args:
-		packed.append(arg)
-	var exit_code := OS.execute("git", packed, output, true)
-	return {
-		"exit_code": exit_code,
-		"stdout": "\n".join(output),
-		"error": "git %s failed" % " ".join(args),
-	}
-
-
-func _normalize_repo_path(input_path: String) -> String:
-	var normalized := input_path.replace("\\", "/")
-	var repo_root := ContentPaths.repo_root().replace("\\", "/")
-	if normalized.is_absolute_path():
-		if not normalized.begins_with(repo_root + "/"):
-			return ""
-		return normalized.substr(repo_root.length() + 1)
-	return normalized.simplify_path()
-
-
-func _first_line(raw: String) -> String:
-	var lines := raw.split("\n", false)
-	if lines.is_empty():
-		return ""
-	return lines[0]
-
-
-func _parse_numstat(raw: String) -> Dictionary:
-	var first := _first_line(raw)
-	var parts := first.split("\t", false)
-	if parts.size() < 2:
-		parts = first.split(" ", false)
-	if parts.size() < 2:
-		return {"added": 0, "removed": 0}
-	return {
-		"added": int(parts[0]),
-		"removed": int(parts[1]),
-	}
-
-
-func _changed_hunk_count(raw: String) -> int:
-	var count := 0
-	for line in raw.split("\n", false):
-		if line.begins_with("@@"):
-			count += 1
-	return count
-
-
-func _normalize_status_code(status_line: String) -> String:
-	var code := status_line.substr(0, min(2, status_line.length()))
-	match code:
-		" M", "M ", "MM":
-			return "modified"
-		"A ", "AM":
-			return "added"
-		"R ", "RM":
-			return "renamed"
-		" D", "D ":
-			return "deleted"
-		_:
-			return "changed(%s)" % code.strip_edges()
 
 
 func _normalize_domain(kind: String) -> String:
