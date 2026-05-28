@@ -15,7 +15,7 @@
 - 新增能力先判断权威落点：内容格式进 `data` / `godot/scripts/data`，玩法规则进 `godot/scripts/core`，启动编排进 `godot/scripts/app`，画面表现进 `godot/scripts/world` 或 `godot/scripts/ui`，编辑体验进 `godot/addons/cdc_game_editor`。
 - 读写非地图 `data/` 内容时，统一走 `godot/scripts/data`；不要在 UI、editor dock 或 smoke 脚本里手写第二套 JSON 解析、路径规则或保存逻辑。
 - 读写地图布局时，优先操作 `godot/scenes/maps/*.tscn` 中的 `MapSceneRoot`、`MapEntryPointNode` 和 `MapObjectNode`；不要新增长期 JSON -> scene 转换步骤。
-- 玩法结果由 `godot/scripts/core` 计算，例如移动是否可达、攻击是否命中、任务是否推进、交易是否成立；UI 和场景只提交输入并显示结果。
+- 玩法结果由 `godot/scripts/core` 计算；场景、UI 和 editor 只提交输入、展示结果或发起工具调用，不直接决定移动、战斗、任务、交易、背包等业务结果。
 - `godot/scripts/app` 只负责启动流程、存档装配、输入转发和各核心模块串联；不要把具体战斗、任务、经济规则写进 app controller。
 - `godot/scripts/world` 只负责把地图和快照表现成场景对象；不要在渲染脚本里改变存档、任务、背包或角色属性。
 - `godot/scripts/ui` 只负责面板状态、按钮事件和 snapshot 展示；业务判断先落到 core/data，再由 UI 调用。
@@ -86,4 +86,4 @@
 
 ## 一句话原则
 
-把 `规则`、`表现`、`编辑` 拆开，统一以 Godot 数据层和核心层为权威。
+把 `内容读写`、`玩法结果`、`场景表现`、`编辑体验` 拆开，统一以 Godot 数据层和核心层为权威。
