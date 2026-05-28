@@ -1,0 +1,46 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_5dhc3"]
+[ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_mi478"]
+[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_bk63x"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_v0qwe"]
+size = Vector3(1, 0.28, 1)
+
+[node name="forest" type="Node3D" unique_id=1605746647]
+script = ExtResource("1_5dhc3")
+map_id = "forest"
+map_name = "forest"
+map_size = Vector2i(12, 12)
+
+[node name="EntryPoints" type="Node3D" parent="." unique_id=1020898249]
+
+[node name="default_entry" type="Marker3D" parent="EntryPoints" unique_id=861699103]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+script = ExtResource("2_mi478")
+entry_id = "default_entry"
+
+[node name="Objects" type="Node3D" parent="." unique_id=309234783]
+
+[node name="forest_overworld_exit" type="Node3D" parent="Objects" unique_id=800511503]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+script = ExtResource("3_bk63x")
+object_id = "forest_overworld_exit"
+kind = "trigger"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null,
+	\"trigger\": {
+		\"display_name\": \"返回大地图\",
+		\"interaction_distance\": 1.4,
+		\"interaction_kind\": \"enter_overworld\",
+		\"options\": [],
+		\"target_id\": \"forest\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/forest_overworld_exit" unique_id=1439420442]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_v0qwe")

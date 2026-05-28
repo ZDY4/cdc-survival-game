@@ -1,17 +1,19 @@
 # AGENTS.md
 
-本文件定义本仓库内 agent 的默认工作方式。当前项目主线为 Godot，不再按历史 Rust / Bevy 架构推进。
+本文件定义本仓库内 agent 的默认工作方式。
 
 ## 当前基线
 
 - 运行时和工具链基于 `Godot 4.6.3 + GDScript`。
 - Godot 命令行入口固定使用 `D:\godot\godot.cmd`，工程目录为 `godot/`。
-- `data/` 下 JSON 是当前内容权威输入源；Godot 数据层负责加载、校验、摘要、引用查询、格式化和安全写回。
+- 地图主来源为 `godot/scenes/maps/*.tscn`，后续地图布局、入口点和地图对象按 Godot scene 工作流维护；`data/maps/*.json` 只作为迁移期兼容备份。
+- 非地图内容仍以 `data/` 下 JSON 为当前权威输入源；Godot 数据层负责加载、校验、摘要、引用查询、格式化和安全写回。
 - 玩家运行时不承载内容编辑 UI；内容编辑能力放在 Godot editor 插件、headless tool 或独立脚本中。
 
 ## 架构边界
 
-- 读写 `data/` 内容时，统一走 `godot/scripts/data`；不要在 UI、editor dock 或 smoke 脚本里手写第二套 JSON 解析、路径规则或保存逻辑。
+- 读写非地图 `data/` 内容时，统一走 `godot/scripts/data`；不要在 UI、editor dock 或 smoke 脚本里手写第二套 JSON 解析、路径规则或保存逻辑。
+- 读写地图布局时，优先操作 `godot/scenes/maps/*.tscn` 中的 `MapSceneRoot`、`MapEntryPointNode` 和 `MapObjectNode`；不要新增长期 JSON -> scene 转换步骤。
 - 玩法结果由 `godot/scripts/core` 计算，例如移动是否可达、攻击是否命中、任务是否推进、交易是否成立；UI 和场景只提交输入并显示结果。
 - `godot/scripts/app` 只负责启动流程、存档装配、输入转发和各核心模块串联；不要把具体战斗、任务、经济规则写进 app controller。
 - `godot/scripts/world` 只负责把地图和快照表现成场景对象；不要在渲染脚本里改变存档、任务、背包或角色属性。
@@ -26,10 +28,11 @@
 - `godot/scripts/core`: 引擎无关的玩法规则与运行时逻辑。
 - `godot/scripts/app`: app 装配、headless runner、启动流程、玩家交互 controller。
 - `godot/scripts/world`: 地图快照、场景生成、空间表现、雾战、tile / object 渲染。
+- `godot/scenes/maps`: Godot 地图场景，承载 map id、尺寸、入口点、地图对象、footprint 和对象 props，是后续地图开发主入口。
 - `godot/scripts/ui`: HUD、背包、任务、对话、交易、容器等 UI snapshot、controller 和面板。
 - `godot/scripts/tools`: Godot headless 校验、内容 CLI、smoke 和复核脚本。
 - `godot/addons/cdc_game_editor`: 当前 Godot editor 插件，包括 handoff、content browser、map preview 和编辑 dock。
-- `data`: 当前内容权威输入源。除非明确启动资源化迁移，不要与 `.tres` / `.res` 长期双写。
+- `data`: 非地图内容权威输入源；`data/maps` 是迁移期兼容备份，不再作为新地图开发主入口。
 - `tools/agent`: repo-local agent workflow 标准入口，默认调用 Godot 工具链。
 - 根目录 `addons/` 若只包含旧备份或残留文件，不作为当前 Godot 插件来源。
 
@@ -77,7 +80,7 @@
 ## 验证与交付
 
 - 不主动新增测试文件，除非用户明确要求；优先使用现有 Godot headless smoke、`godot-content.ps1`、`validate_all.gd`、已有运行入口或最小手动 smoke。
-- 默认验证只走 Godot 工具链，不回到 Rust / Bevy。
+- 默认验证只走 Godot 工具链。
 - 若无法验证，交付时明确说明未验证项、原因和建议下一步。
 - 若修复依赖日志结论，交付时说明使用了哪个日志文件或 smoke 输出、观察到的关键信号、是否完成复现验证。
 - 完成独立开发任务并通过必要验证后，默认创建一次 Git commit；只暂存并提交与本任务直接相关的文件。若用户明确要求不提交，则不提交。

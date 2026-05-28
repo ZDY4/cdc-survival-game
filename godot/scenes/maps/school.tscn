@@ -1,0 +1,46 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_jo70m"]
+[ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_vdbl7"]
+[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_2meuj"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_77fu4"]
+size = Vector3(1, 0.28, 1)
+
+[node name="school" type="Node3D" unique_id=1033613710]
+script = ExtResource("1_jo70m")
+map_id = "school"
+map_name = "school"
+map_size = Vector2i(12, 12)
+
+[node name="EntryPoints" type="Node3D" parent="." unique_id=316292529]
+
+[node name="default_entry" type="Marker3D" parent="EntryPoints" unique_id=1768148780]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+script = ExtResource("2_vdbl7")
+entry_id = "default_entry"
+
+[node name="Objects" type="Node3D" parent="." unique_id=1305981296]
+
+[node name="school_overworld_exit" type="Node3D" parent="Objects" unique_id=1917123882]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+script = ExtResource("3_2meuj")
+object_id = "school_overworld_exit"
+kind = "trigger"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null,
+	\"trigger\": {
+		\"display_name\": \"返回大地图\",
+		\"interaction_distance\": 1.4,
+		\"interaction_kind\": \"enter_overworld\",
+		\"options\": [],
+		\"target_id\": \"school\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/school_overworld_exit" unique_id=1098781393]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_77fu4")

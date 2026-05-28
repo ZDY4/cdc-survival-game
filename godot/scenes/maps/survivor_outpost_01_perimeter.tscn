@@ -1,0 +1,495 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_2hkxp"]
+[ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_hg0fl"]
+[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_8r5r1"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_hihil"]
+size = Vector3(4, 0.28, 2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_5715b"]
+size = Vector3(3, 0.28, 2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_y1mnn"]
+size = Vector3(1, 0.28, 5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_nntio"]
+size = Vector3(1, 0.28, 5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_mxk2s"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_xjm8h"]
+size = Vector3(3, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ilrve"]
+size = Vector3(3, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_egj72"]
+size = Vector3(3, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_d62rs"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_o1e23"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_geohy"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_y7dfe"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_yvqil"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_iu5u4"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_kv5c3"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_cmlqy"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_oxytd"]
+size = Vector3(1, 0.28, 1)
+
+[node name="survivor_outpost_01_perimeter" type="Node3D" unique_id=1889836604]
+script = ExtResource("1_2hkxp")
+map_id = "survivor_outpost_01_perimeter"
+map_name = "survivor outpost 01 perimeter"
+map_size = Vector2i(20, 20)
+
+[node name="EntryPoints" type="Node3D" parent="." unique_id=195261907]
+
+[node name="default_entry" type="Marker3D" parent="EntryPoints" unique_id=770999653]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 10)
+script = ExtResource("2_hg0fl")
+entry_id = "default_entry"
+
+[node name="Objects" type="Node3D" parent="." unique_id=1434351362]
+
+[node name="survivor_outpost_01_perimeter_barricade" type="Node3D" parent="Objects" unique_id=917836155]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 7)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_barricade"
+kind = "building"
+footprint = Vector2i(4, 2)
+grid_rotation = "east"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": {
+		\"layout\": {
+			\"exterior_door_count\": 0.0,
+			\"generator\": \"solid_shell\",
+			\"min_room_size\": {
+				\"height\": 1.0,
+				\"width\": 1.0
+			},
+			\"seed\": 2101.0,
+			\"target_room_count\": 1.0
+		},
+		\"prefab_id\": \"survivor_outpost_01_perimeter_barricade\",
+		\"tile_set\": {
+			\"floor_surface_set_id\": \"building_wall/floor\",
+			\"wall_set_id\": \"building_wall\"
+		},
+		\"wall_visual\": {
+			\"kind\": \"grid\"
+		}
+	},
+	\"interactive\": null,
+	\"pickup\": null
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade" unique_id=1151158883]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0.14, 0.5)
+mesh = SubResource("BoxMesh_hihil")
+
+[node name="survivor_outpost_01_perimeter_bus_wreck" type="Node3D" parent="Objects" unique_id=66956691]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 4)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_bus_wreck"
+kind = "building"
+footprint = Vector2i(3, 2)
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": {
+		\"layout\": {
+			\"exterior_door_count\": 0.0,
+			\"generator\": \"solid_shell\",
+			\"min_room_size\": {
+				\"height\": 1.0,
+				\"width\": 1.0
+			},
+			\"seed\": 2102.0,
+			\"target_room_count\": 1.0
+		},
+		\"prefab_id\": \"survivor_outpost_01_bus_wreck\",
+		\"tile_set\": {
+			\"floor_surface_set_id\": \"building_wall/floor\",
+			\"wall_set_id\": \"building_wall\"
+		},
+		\"wall_visual\": {
+			\"kind\": \"grid\"
+		}
+	},
+	\"interactive\": null,
+	\"pickup\": null
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck" unique_id=780679723]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.14, 0.5)
+mesh = SubResource("BoxMesh_5715b")
+
+[node name="survivor_outpost_01_perimeter_return_gate" type="Node3D" parent="Objects" unique_id=1205287661]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_return_gate"
+kind = "trigger"
+footprint = Vector2i(1, 5)
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null,
+	\"trigger\": {
+		\"display_name\": \"返回幸存者据点01\",
+		\"interaction_distance\": 1.4,
+		\"interaction_kind\": \"\",
+		\"options\": [
+			{
+				\"display_name\": \"返回幸存者据点01\",
+				\"id\": \"enter_outdoor_location\",
+				\"interaction_distance\": 1.4,
+				\"kind\": \"enter_outdoor_location\",
+				\"return_spawn_id\": \"perimeter_return\",
+				\"target_id\": \"survivor_outpost_01\"
+			}
+		],
+		\"target_id\": null
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_return_gate" unique_id=1289640990]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 2)
+mesh = SubResource("BoxMesh_y1mnn")
+
+[node name="survivor_outpost_01_perimeter_to_street_b" type="Node3D" parent="Objects" unique_id=1614980204]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19, 0, 8)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_to_street_b"
+kind = "trigger"
+footprint = Vector2i(1, 5)
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null,
+	\"trigger\": {
+		\"display_name\": \"前往废弃街道B\",
+		\"interaction_distance\": 1.4,
+		\"interaction_kind\": \"enter_outdoor_location\",
+		\"options\": [],
+		\"target_id\": \"street_b\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_to_street_b" unique_id=1539819303]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 2)
+mesh = SubResource("BoxMesh_nntio")
+
+[node name="survivor_outpost_01_perimeter_overworld_exit" type="Node3D" parent="Objects" unique_id=360101079]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 10)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_overworld_exit"
+kind = "trigger"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null,
+	\"trigger\": {
+		\"display_name\": \"前往大地图\",
+		\"interaction_distance\": 1.4,
+		\"interaction_kind\": \"enter_overworld\",
+		\"options\": [],
+		\"target_id\": \"survivor_outpost_01_perimeter\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_overworld_exit" unique_id=1389911520]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_mxk2s")
+
+[node name="survivor_outpost_01_perimeter_roadblock_prop" type="Node3D" parent="Objects" unique_id=901858981]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 8)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_roadblock_prop"
+kind = "prop"
+footprint = Vector2i(3, 1)
+grid_rotation = "south"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/roadblock_concrete\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_roadblock_prop" unique_id=205950504]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.14, 0)
+mesh = SubResource("BoxMesh_xjm8h")
+
+[node name="survivor_outpost_01_perimeter_wrecked_car_prop" type="Node3D" parent="Objects" unique_id=2083508514]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 5)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_wrecked_car_prop"
+kind = "prop"
+footprint = Vector2i(3, 1)
+grid_rotation = "south"
+blocks_movement = true
+blocks_sight = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/wrecked_car\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_wrecked_car_prop" unique_id=747912951]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.14, 0)
+mesh = SubResource("BoxMesh_ilrve")
+
+[node name="survivor_outpost_01_perimeter_sandbag_prop" type="Node3D" parent="Objects" unique_id=802554652]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 14)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_sandbag_prop"
+kind = "prop"
+footprint = Vector2i(3, 1)
+grid_rotation = "south"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/sandbag_barrier\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_sandbag_prop" unique_id=999596258]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.14, 0)
+mesh = SubResource("BoxMesh_egj72")
+
+[node name="survivor_outpost_01_perimeter_dead_tree" type="Node3D" parent="Objects" unique_id=294975049]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 0, 2)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_dead_tree"
+kind = "prop"
+grid_rotation = "south"
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/tree_dead\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_dead_tree" unique_id=1949247693]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_d62rs")
+
+[node name="survivor_outpost_01_perimeter_dry_bush" type="Node3D" parent="Objects" unique_id=1695664710]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 15)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_dry_bush"
+kind = "prop"
+grid_rotation = "south"
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/bush_dry\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_dry_bush" unique_id=1398072652]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_o1e23")
+
+[node name="survivor_outpost_01_perimeter_rust_barrel" type="Node3D" parent="Objects" unique_id=1518905785]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 6)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_rust_barrel"
+kind = "prop"
+grid_rotation = "south"
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/barrel_rust\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_rust_barrel" unique_id=1792975735]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_geohy")
+
+[node name="survivor_outpost_01_perimeter_supply_box" type="Node3D" parent="Objects" unique_id=1259591628]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 12)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_supply_box"
+kind = "pickup"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": {
+		\"item_id\": \"1007\",
+		\"max_count\": 1.0,
+		\"min_count\": 1.0
+	},
+	\"visual\": {
+		\"local_offset_world\": {
+			\"x\": 0.0,
+			\"y\": 0.08,
+			\"z\": 0.0
+		},
+		\"prototype_id\": \"props/crate_wood\",
+		\"scale\": {
+			\"x\": 0.35,
+			\"y\": 0.2,
+			\"z\": 0.35
+		}
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box" unique_id=2056885697]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_y7dfe")
+
+[node name="survivor_outpost_01_perimeter_supply_box_b" type="Node3D" parent="Objects" unique_id=2026055904]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 13)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_supply_box_b"
+kind = "pickup"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": {
+		\"item_id\": \"1007\",
+		\"max_count\": 1.0,
+		\"min_count\": 1.0
+	},
+	\"visual\": {
+		\"local_offset_world\": {
+			\"x\": 0.0,
+			\"y\": 0.08,
+			\"z\": 0.0
+		},
+		\"prototype_id\": \"props/crate_wood\",
+		\"scale\": {
+			\"x\": 0.35,
+			\"y\": 0.2,
+			\"z\": 0.35
+		}
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b" unique_id=1431224586]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_yvqil")
+
+[node name="survivor_outpost_01_perimeter_scrap_cache" type="Node3D" parent="Objects" unique_id=278792427]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 15)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_scrap_cache"
+kind = "pickup"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": {
+		\"item_id\": \"1010\",
+		\"max_count\": 5.0,
+		\"min_count\": 2.0
+	},
+	\"visual\": {
+		\"local_offset_world\": {
+			\"x\": 0.0,
+			\"y\": 0.08,
+			\"z\": 0.0
+		},
+		\"prototype_id\": \"props/crate_wood\",
+		\"scale\": {
+			\"x\": 0.35,
+			\"y\": 0.2,
+			\"z\": 0.35
+		}
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache" unique_id=1215503332]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_iu5u4")
+
+[node name="survivor_outpost_01_perimeter_spawn_walker" type="Node3D" parent="Objects" unique_id=2003354482]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, 5)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_spawn_walker"
+kind = "ai_spawn"
+props_json = "{
+	\"ai_spawn\": {
+		\"auto_spawn\": true,
+		\"character_id\": \"zombie_walker\",
+		\"respawn_delay\": 24.0,
+		\"respawn_enabled\": true,
+		\"spawn_id\": \"survivor_outpost_01_perimeter_spawn_walker\",
+		\"spawn_radius\": 1.8
+	},
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_spawn_walker" unique_id=1977429457]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_kv5c3")
+
+[node name="survivor_outpost_01_perimeter_spawn_runner" type="Node3D" parent="Objects" unique_id=702515675]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 7)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_spawn_runner"
+kind = "ai_spawn"
+props_json = "{
+	\"ai_spawn\": {
+		\"auto_spawn\": true,
+		\"character_id\": \"zombie_runner\",
+		\"respawn_delay\": 28.0,
+		\"respawn_enabled\": true,
+		\"spawn_id\": \"survivor_outpost_01_perimeter_spawn_runner\",
+		\"spawn_radius\": 1.8
+	},
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_spawn_runner" unique_id=2067131966]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_cmlqy")
+
+[node name="survivor_outpost_01_perimeter_spawn_brute" type="Node3D" parent="Objects" unique_id=1277815771]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 3)
+script = ExtResource("3_8r5r1")
+object_id = "survivor_outpost_01_perimeter_spawn_brute"
+kind = "ai_spawn"
+props_json = "{
+	\"ai_spawn\": {
+		\"auto_spawn\": false,
+		\"character_id\": \"zombie_brute\",
+		\"respawn_delay\": 40.0,
+		\"respawn_enabled\": true,
+		\"spawn_id\": \"survivor_outpost_01_perimeter_spawn_brute\",
+		\"spawn_radius\": 1.5
+	},
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_spawn_brute" unique_id=1089896748]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_oxytd")

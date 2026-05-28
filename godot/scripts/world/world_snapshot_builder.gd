@@ -1,9 +1,11 @@
 extends RefCounted
 
+const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const MapBuilder = preload("res://scripts/world/map_builder.gd")
 
 var registry: RefCounted
 var map_builder := MapBuilder.new()
+var map_scene_loader := MapSceneLoader.new()
 
 
 func _init(p_registry: RefCounted) -> void:
@@ -12,14 +14,19 @@ func _init(p_registry: RefCounted) -> void:
 
 func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	var map_id := str(runtime_snapshot.get("active_map_id", ""))
-	var map_record: Dictionary = registry.get_library("maps").get(map_id, {})
-	if map_record.is_empty():
+	var map_definition_result := map_scene_loader.load_map_definition(map_id)
+	var map_definition: Dictionary = _dictionary_or_empty(map_definition_result.get("data", {}))
+	if map_definition.is_empty():
+		var map_record: Dictionary = registry.get_library("maps").get(map_id, {})
+		if not map_record.is_empty():
+			map_definition = _dictionary_or_empty(map_record.get("data", {}))
+	if map_definition.is_empty():
 		return {
 			"ok": false,
 			"error": "unknown map id %s" % map_id,
 		}
 
-	var topology := map_builder.build_from_definition(map_record["data"])
+	var topology := map_builder.build_from_definition(map_definition)
 	var map_snapshot: Dictionary = topology.to_dictionary()
 	_apply_consumed_interaction_targets(map_snapshot, runtime_snapshot.get("consumed_interaction_targets", []))
 	return {

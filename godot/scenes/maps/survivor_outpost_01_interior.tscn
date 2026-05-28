@@ -1,0 +1,61 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_jlo0r"]
+[ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_g7e2m"]
+[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_k2h52"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_be43b"]
+size = Vector3(1, 0.28, 1)
+
+[node name="survivor_outpost_01_interior" type="Node3D" unique_id=1109637509]
+script = ExtResource("1_jlo0r")
+map_id = "survivor_outpost_01_interior"
+map_name = "survivor outpost 01 interior"
+map_size = Vector2i(16, 16)
+
+[node name="EntryPoints" type="Node3D" parent="." unique_id=731934866]
+
+[node name="default_entry" type="Marker3D" parent="EntryPoints" unique_id=1194375312]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 2)
+script = ExtResource("2_g7e2m")
+entry_id = "default_entry"
+
+[node name="outdoor_return" type="Marker3D" parent="EntryPoints" unique_id=940384770]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 2)
+script = ExtResource("2_g7e2m")
+entry_id = "outdoor_return"
+
+[node name="Objects" type="Node3D" parent="." unique_id=1754347406]
+
+[node name="survivor_outpost_01_interior_exit" type="Node3D" parent="Objects" unique_id=1286480519]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 2)
+script = ExtResource("3_k2h52")
+object_id = "survivor_outpost_01_interior_exit"
+kind = "trigger"
+grid_rotation = "south"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null,
+	\"trigger\": {
+		\"display_name\": \"离开据点室内\",
+		\"interaction_distance\": 1.4,
+		\"interaction_kind\": \"\",
+		\"options\": [
+			{
+				\"display_name\": \"离开据点室内\",
+				\"id\": \"exit_to_outdoor\",
+				\"interaction_distance\": 1.4,
+				\"kind\": \"exit_to_outdoor\",
+				\"return_spawn_id\": \"interior_return\",
+				\"target_id\": \"survivor_outpost_01\"
+			}
+		],
+		\"target_id\": null
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_interior_exit" unique_id=974802131]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_be43b")

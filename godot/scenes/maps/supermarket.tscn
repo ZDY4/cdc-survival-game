@@ -1,0 +1,46 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_rb3bx"]
+[ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_cgx88"]
+[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_0qug0"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_6x6p7"]
+size = Vector3(1, 0.28, 1)
+
+[node name="supermarket" type="Node3D" unique_id=2038146612]
+script = ExtResource("1_rb3bx")
+map_id = "supermarket"
+map_name = "supermarket"
+map_size = Vector2i(12, 12)
+
+[node name="EntryPoints" type="Node3D" parent="." unique_id=267365749]
+
+[node name="default_entry" type="Marker3D" parent="EntryPoints" unique_id=1043465577]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+script = ExtResource("2_cgx88")
+entry_id = "default_entry"
+
+[node name="Objects" type="Node3D" parent="." unique_id=336601569]
+
+[node name="supermarket_overworld_exit" type="Node3D" parent="Objects" unique_id=811924634]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+script = ExtResource("3_0qug0")
+object_id = "supermarket_overworld_exit"
+kind = "trigger"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null,
+	\"trigger\": {
+		\"display_name\": \"返回大地图\",
+		\"interaction_distance\": 1.4,
+		\"interaction_kind\": \"enter_overworld\",
+		\"options\": [],
+		\"target_id\": \"supermarket\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/supermarket_overworld_exit" unique_id=98188413]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_6x6p7")

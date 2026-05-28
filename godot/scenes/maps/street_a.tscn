@@ -1,0 +1,46 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_d7g7k"]
+[ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_wly48"]
+[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_diabs"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_xv54h"]
+size = Vector3(1, 0.28, 1)
+
+[node name="street_a" type="Node3D" unique_id=1411636137]
+script = ExtResource("1_d7g7k")
+map_id = "street_a"
+map_name = "street a"
+map_size = Vector2i(12, 12)
+
+[node name="EntryPoints" type="Node3D" parent="." unique_id=277564077]
+
+[node name="default_entry" type="Marker3D" parent="EntryPoints" unique_id=1115962821]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+script = ExtResource("2_wly48")
+entry_id = "default_entry"
+
+[node name="Objects" type="Node3D" parent="." unique_id=599843727]
+
+[node name="street_a_overworld_exit" type="Node3D" parent="Objects" unique_id=255438638]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+script = ExtResource("3_diabs")
+object_id = "street_a_overworld_exit"
+kind = "trigger"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null,
+	\"trigger\": {
+		\"display_name\": \"返回大地图\",
+		\"interaction_distance\": 1.4,
+		\"interaction_kind\": \"enter_overworld\",
+		\"options\": [],
+		\"target_id\": \"street_a\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/street_a_overworld_exit" unique_id=999986443]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_xv54h")

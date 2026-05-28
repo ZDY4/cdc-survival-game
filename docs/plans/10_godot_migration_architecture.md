@@ -6,7 +6,8 @@
 
 - Godot 命令行入口：`D:\godot\godot.cmd`
 - Godot 工程目录：`godot/`
-- 内容输入源：仓库根目录 `data/`
+- 地图输入源：`godot/scenes/maps/*.tscn`
+- 非地图内容输入源：仓库根目录 `data/`
 - agent 工具入口：`tools/agent/*.ps1`
 - 默认启动脚本：`run_godot_game.bat`、`run_godot_editor.bat`、`run_godot_validate.bat`
 
@@ -20,11 +21,13 @@
 
 ## 架构边界
 
-- `data/` 中的 JSON 是当前内容权威输入源。
+- `godot/scenes/maps/*.tscn` 是当前地图布局权威输入源。
+- `data/` 中的 JSON 是非地图内容权威输入源；`data/maps` 仅保留为迁移期兼容备份。
 - `godot/scripts/data/` 负责内容路径、JSON 加载、registry、校验、引用查询、格式化和安全写回。
 - `godot/scripts/core/` 负责引擎无关规则与运行时逻辑，包括 simulation、移动、交互、战斗、经济、任务、对话、AI、视野和大地图。
 - `godot/scripts/app/` 负责 Godot app 装配、headless runner、游戏入口和 player interaction controller。
 - `godot/scripts/world/` 负责地图快照、场景生成、空间表现、雾战和 tile / object 渲染。
+- `godot/scenes/maps/` 负责 Godot 地图场景，承载入口点、地图对象、footprint 和对象 props。
 - `godot/scripts/ui/` 负责 HUD、背包、任务、对话、交易、容器等 UI snapshot、controller 和面板。
 - `godot/scripts/tools/` 负责 Godot headless 校验、内容 CLI、smoke 和复核脚本。
 - `godot/addons/cdc_game_editor/` 负责 Godot editor 插件、handoff、content browser、map preview 和编辑 dock。
@@ -33,11 +36,13 @@
 
 ## 内容迁移策略
 
-当前策略是继续让 Godot 原位读取 `data/`：
+当前策略是让地图进入 Godot scene 工作流，同时继续让非地图内容原位读取 `data/`：
 
-- 高变动策划内容继续保留 JSON。
+- 地图布局、入口点和地图对象以 `godot/scenes/maps/*.tscn` 为主来源。
+- 高变动非地图策划内容继续保留 JSON。
 - Godot 数据层负责 loader、validator、reference index、format 和 edit service。
-- 若未来需要 `.tres` / `.res` / `.tscn` 缓存或镜像，必须遵守“生成物可删、源仍唯一”的规则，不能长期双写两套权威 schema。
+- `data/maps/*.json` 是本次资源化迁移的兼容备份，不再作为新地图开发主入口。
+- 若未来需要 `.tres` / `.res` 缓存或镜像，必须遵守“生成物可删、源仍唯一”的规则，不能长期双写两套权威 schema。
 
 已覆盖内容域：
 

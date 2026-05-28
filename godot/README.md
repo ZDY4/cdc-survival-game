@@ -32,4 +32,4 @@ The underlying project launch command is:
 D:\godot\godot.cmd --path godot
 ```
 
-Source content remains in the repository-level `data/` directory. Godot scripts read that data in place for runtime, validation, and editor tooling.
+Map layouts now live in `godot/scenes/maps/*.tscn` and are loaded by the Godot runtime. Non-map source content remains in the repository-level `data/` directory. `data/maps/*.json` is kept as a migration compatibility backup, not the future map authoring path.

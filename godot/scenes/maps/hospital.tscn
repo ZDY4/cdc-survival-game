@@ -1,0 +1,434 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_1sxhu"]
+[ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_tuown"]
+[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_n4b78"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_xmg8h"]
+size = Vector3(4, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_x1pl1"]
+size = Vector3(2, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_csqc1"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_uql16"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_o3bv6"]
+size = Vector3(2, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pftow"]
+size = Vector3(3, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_46fm4"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_n8yxj"]
+size = Vector3(1, 0.28, 3)
+
+[sub_resource type="BoxMesh" id="BoxMesh_muw30"]
+size = Vector3(1, 0.28, 3)
+
+[sub_resource type="BoxMesh" id="BoxMesh_mx7db"]
+size = Vector3(2, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_sswdt"]
+size = Vector3(2, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_eefb0"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_nuj2x"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_38x1d"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_xgunl"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ff3cu"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_h754b"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_yh4qf"]
+size = Vector3(1, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_o0f3e"]
+size = Vector3(1, 0.28, 1)
+
+[node name="hospital" type="Node3D" unique_id=1745135879]
+script = ExtResource("1_1sxhu")
+map_id = "hospital"
+map_name = "hospital"
+map_size = Vector2i(16, 14)
+
+[node name="EntryPoints" type="Node3D" parent="." unique_id=1443639952]
+
+[node name="default_entry" type="Marker3D" parent="EntryPoints" unique_id=137627136]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 12)
+script = ExtResource("2_tuown")
+entry_id = "default_entry"
+
+[node name="Objects" type="Node3D" parent="." unique_id=285715326]
+
+[node name="hospital_reception_counter" type="Node3D" parent="Objects" unique_id=1563288597]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 10)
+script = ExtResource("3_n4b78")
+object_id = "hospital_reception_counter"
+kind = "prop"
+footprint = Vector2i(4, 1)
+grid_rotation = "south"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/counter_canteen\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_reception_counter" unique_id=1412393878]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0.14, 0)
+mesh = SubResource("BoxMesh_xmg8h")
+
+[node name="hospital_reception_desk" type="Node3D" parent="Objects" unique_id=422091825]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 11)
+script = ExtResource("3_n4b78")
+object_id = "hospital_reception_desk"
+kind = "prop"
+footprint = Vector2i(2, 1)
+grid_rotation = "south"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/desk_wood\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_reception_desk" unique_id=826709549]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.14, 0)
+mesh = SubResource("BoxMesh_x1pl1")
+
+[node name="hospital_waiting_chair_a" type="Node3D" parent="Objects" unique_id=1680899601]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 12)
+script = ExtResource("3_n4b78")
+object_id = "hospital_waiting_chair_a"
+kind = "prop"
+grid_rotation = "south"
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/chair_metal\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_waiting_chair_a" unique_id=808298596]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_csqc1")
+
+[node name="hospital_waiting_chair_b" type="Node3D" parent="Objects" unique_id=1584758196]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 12)
+script = ExtResource("3_n4b78")
+object_id = "hospital_waiting_chair_b"
+kind = "prop"
+grid_rotation = "south"
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/chair_metal\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_waiting_chair_b" unique_id=452555483]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_uql16")
+
+[node name="hospital_waiting_table" type="Node3D" parent="Objects" unique_id=266845186]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 12)
+script = ExtResource("3_n4b78")
+object_id = "hospital_waiting_table"
+kind = "prop"
+footprint = Vector2i(2, 1)
+grid_rotation = "south"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/table_metal\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_waiting_table" unique_id=1760561387]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.14, 0)
+mesh = SubResource("BoxMesh_o3bv6")
+
+[node name="hospital_quarantine_barricade" type="Node3D" parent="Objects" unique_id=305774026]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 8)
+script = ExtResource("3_n4b78")
+object_id = "hospital_quarantine_barricade"
+kind = "prop"
+footprint = Vector2i(3, 1)
+grid_rotation = "south"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/barricade_scrap\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_quarantine_barricade" unique_id=438798105]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.14, 0)
+mesh = SubResource("BoxMesh_pftow")
+
+[node name="hospital_supply_pallet" type="Node3D" parent="Objects" unique_id=1697702897]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 6)
+script = ExtResource("3_n4b78")
+object_id = "hospital_supply_pallet"
+kind = "prop"
+grid_rotation = "south"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/pallet_stack\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_supply_pallet" unique_id=1428723027]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_46fm4")
+
+[node name="hospital_partition_shelf_a" type="Node3D" parent="Objects" unique_id=86413057]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 9)
+script = ExtResource("3_n4b78")
+object_id = "hospital_partition_shelf_a"
+kind = "prop"
+footprint = Vector2i(1, 3)
+grid_rotation = "east"
+blocks_movement = true
+blocks_sight = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/shelf_metal\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_partition_shelf_a" unique_id=2013475041]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 1)
+mesh = SubResource("BoxMesh_n8yxj")
+
+[node name="hospital_partition_shelf_b" type="Node3D" parent="Objects" unique_id=946854776]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4)
+script = ExtResource("3_n4b78")
+object_id = "hospital_partition_shelf_b"
+kind = "prop"
+footprint = Vector2i(1, 3)
+grid_rotation = "east"
+blocks_movement = true
+blocks_sight = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/shelf_metal\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_partition_shelf_b" unique_id=1138595287]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 1)
+mesh = SubResource("BoxMesh_muw30")
+
+[node name="hospital_treatment_table" type="Node3D" parent="Objects" unique_id=1068267756]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 7)
+script = ExtResource("3_n4b78")
+object_id = "hospital_treatment_table"
+kind = "prop"
+footprint = Vector2i(2, 1)
+grid_rotation = "east"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/table_metal\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_treatment_table" unique_id=602135898]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.14, 0)
+mesh = SubResource("BoxMesh_mx7db")
+
+[node name="hospital_archive_desk" type="Node3D" parent="Objects" unique_id=624434618]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 6)
+script = ExtResource("3_n4b78")
+object_id = "hospital_archive_desk"
+kind = "prop"
+footprint = Vector2i(2, 1)
+grid_rotation = "east"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/desk_wood\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_archive_desk" unique_id=314204809]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.14, 0)
+mesh = SubResource("BoxMesh_sswdt")
+
+[node name="hospital_steel_locker_a" type="Node3D" parent="Objects" unique_id=612455093]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 2)
+script = ExtResource("3_n4b78")
+object_id = "hospital_steel_locker_a"
+kind = "prop"
+grid_rotation = "south"
+blocks_movement = true
+blocks_sight = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/locker_metal\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_steel_locker_a" unique_id=843831345]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_eefb0")
+
+[node name="hospital_steel_locker_b" type="Node3D" parent="Objects" unique_id=1570549250]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 3)
+script = ExtResource("3_n4b78")
+object_id = "hospital_steel_locker_b"
+kind = "prop"
+grid_rotation = "south"
+blocks_movement = true
+blocks_sight = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/locker_metal\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_steel_locker_b" unique_id=247834828]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_nuj2x")
+
+[node name="hospital_medical_cabinet_a" type="Node3D" parent="Objects" unique_id=31335358]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 3)
+script = ExtResource("3_n4b78")
+object_id = "hospital_medical_cabinet_a"
+kind = "prop"
+grid_rotation = "south"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/cabinet_medical\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_a" unique_id=529292887]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_38x1d")
+
+[node name="hospital_medical_cabinet_b" type="Node3D" parent="Objects" unique_id=2058951410]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 3)
+script = ExtResource("3_n4b78")
+object_id = "hospital_medical_cabinet_b"
+kind = "prop"
+grid_rotation = "south"
+blocks_movement = true
+props_json = "{
+	\"visual\": {
+		\"prototype_id\": \"props/cabinet_medical\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_b" unique_id=1367986860]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_xgunl")
+
+[node name="hospital_pickup_medkit" type="Node3D" parent="Objects" unique_id=994893678]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 2)
+script = ExtResource("3_n4b78")
+object_id = "hospital_pickup_medkit"
+kind = "pickup"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": {
+		\"item_id\": \"1005\",
+		\"max_count\": 1.0,
+		\"min_count\": 1.0
+	},
+	\"visual\": {
+		\"prototype_id\": \"props/cabinet_medical\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_pickup_medkit" unique_id=1109411515]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_ff3cu")
+
+[node name="hospital_spawn_walker_a" type="Node3D" parent="Objects" unique_id=682261158]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 7)
+script = ExtResource("3_n4b78")
+object_id = "hospital_spawn_walker_a"
+kind = "ai_spawn"
+props_json = "{
+	\"ai_spawn\": {
+		\"auto_spawn\": true,
+		\"character_id\": \"zombie_walker\",
+		\"respawn_delay\": 24.0,
+		\"respawn_enabled\": true,
+		\"spawn_id\": \"hospital_spawn_walker_a\",
+		\"spawn_radius\": 2.0
+	},
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_spawn_walker_a" unique_id=1317482721]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_h754b")
+
+[node name="hospital_spawn_runner_a" type="Node3D" parent="Objects" unique_id=1283523898]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 5)
+script = ExtResource("3_n4b78")
+object_id = "hospital_spawn_runner_a"
+kind = "ai_spawn"
+props_json = "{
+	\"ai_spawn\": {
+		\"auto_spawn\": true,
+		\"character_id\": \"zombie_runner\",
+		\"respawn_delay\": 30.0,
+		\"respawn_enabled\": true,
+		\"spawn_id\": \"hospital_spawn_runner_a\",
+		\"spawn_radius\": 2.0
+	},
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_spawn_runner_a" unique_id=917698630]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_yh4qf")
+
+[node name="hospital_overworld_exit" type="Node3D" parent="Objects" unique_id=2076505787]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 12)
+script = ExtResource("3_n4b78")
+object_id = "hospital_overworld_exit"
+kind = "trigger"
+props_json = "{
+	\"ai_spawn\": null,
+	\"building\": null,
+	\"interactive\": null,
+	\"pickup\": null,
+	\"trigger\": {
+		\"display_name\": \"返回大地图\",
+		\"interaction_distance\": 1.4,
+		\"interaction_kind\": \"enter_overworld\",
+		\"options\": [],
+		\"target_id\": \"hospital\"
+	}
+}"
+
+[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/hospital_overworld_exit" unique_id=1574366189]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+mesh = SubResource("BoxMesh_o0f3e")
