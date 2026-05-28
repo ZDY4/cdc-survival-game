@@ -50,10 +50,10 @@
 
 依赖子计划：
 
-- [01_new_game_first_15min.md](G:/Projects/cdc_survival_game/docs/plans/01_new_game_first_15min.md)
-- [02_quest_dialogue_progression.md](G:/Projects/cdc_survival_game/docs/plans/02_quest_dialogue_progression.md)
-- [03_exploration_combat_loot.md](G:/Projects/cdc_survival_game/docs/plans/03_exploration_combat_loot.md)
-- [04_outpost_and_economy.md](G:/Projects/cdc_survival_game/docs/plans/04_outpost_and_economy.md)
+- [01_new_game_first_15min.md](./01_new_game_first_15min.md)
+- [02_quest_dialogue_progression.md](./02_quest_dialogue_progression.md)
+- [03_exploration_combat_loot.md](./03_exploration_combat_loot.md)
+- [04_outpost_and_economy.md](./04_outpost_and_economy.md)
 
 ### Phase 1: 把调试入口收口成玩家入口
 
@@ -65,7 +65,7 @@
 
 依赖子计划：
 
-- [05_player_client_cleanup.md](G:/Projects/cdc_survival_game/docs/plans/05_player_client_cleanup.md)
+- [05_player_client_cleanup.md](./05_player_client_cleanup.md)
 
 ### Phase 2: 扩展第二轮内容和生产能力
 
@@ -76,7 +76,7 @@
 
 依赖子计划：
 
-- [06_content_pipeline_and_editors.md](G:/Projects/cdc_survival_game/docs/plans/06_content_pipeline_and_editors.md)
+- [06_content_pipeline_and_editors.md](./06_content_pipeline_and_editors.md)
 
 ### Phase 3: 进入表现与留存优化
 
@@ -88,7 +88,7 @@
 
 依赖子计划：
 
-- [07_presentation_audio_polish.md](G:/Projects/cdc_survival_game/docs/plans/07_presentation_audio_polish.md)
+- [07_presentation_audio_polish.md](./07_presentation_audio_polish.md)
 
 ## 当前优先级排序
 
@@ -136,8 +136,8 @@
 
 依赖子计划：
 
-- [01_new_game_first_15min.md](G:/Projects/cdc_survival_game/docs/plans/01_new_game_first_15min.md)
-- [02_quest_dialogue_progression.md](G:/Projects/cdc_survival_game/docs/plans/02_quest_dialogue_progression.md)
+- [01_new_game_first_15min.md](./01_new_game_first_15min.md)
+- [02_quest_dialogue_progression.md](./02_quest_dialogue_progression.md)
 
 ### Sprint B: 让第一个任务真的能完成
 
@@ -154,8 +154,8 @@
 
 依赖子计划：
 
-- [03_exploration_combat_loot.md](G:/Projects/cdc_survival_game/docs/plans/03_exploration_combat_loot.md)
-- [04_outpost_and_economy.md](G:/Projects/cdc_survival_game/docs/plans/04_outpost_and_economy.md)
+- [03_exploration_combat_loot.md](./03_exploration_combat_loot.md)
+- [04_outpost_and_economy.md](./04_outpost_and_economy.md)
 
 ### Sprint C: 让第一次失败不至于结束体验
 
@@ -170,8 +170,8 @@
 
 依赖子计划：
 
-- [04_outpost_and_economy.md](G:/Projects/cdc_survival_game/docs/plans/04_outpost_and_economy.md)
-- [05_player_client_cleanup.md](G:/Projects/cdc_survival_game/docs/plans/05_player_client_cleanup.md)
+- [04_outpost_and_economy.md](./04_outpost_and_economy.md)
+- [05_player_client_cleanup.md](./05_player_client_cleanup.md)
 
 ## 本轮执行规则
 
@@ -213,10 +213,10 @@
 
 ## 近期建议阅读顺序
 
-1. [01_new_game_first_15min.md](G:/Projects/cdc_survival_game/docs/plans/01_new_game_first_15min.md)
-2. [02_quest_dialogue_progression.md](G:/Projects/cdc_survival_game/docs/plans/02_quest_dialogue_progression.md)
-3. [03_exploration_combat_loot.md](G:/Projects/cdc_survival_game/docs/plans/03_exploration_combat_loot.md)
-4. [04_outpost_and_economy.md](G:/Projects/cdc_survival_game/docs/plans/04_outpost_and_economy.md)
-5. [05_player_client_cleanup.md](G:/Projects/cdc_survival_game/docs/plans/05_player_client_cleanup.md)
-6. [06_content_pipeline_and_editors.md](G:/Projects/cdc_survival_game/docs/plans/06_content_pipeline_and_editors.md)
-7. [07_presentation_audio_polish.md](G:/Projects/cdc_survival_game/docs/plans/07_presentation_audio_polish.md)
+1. [01_new_game_first_15min.md](./01_new_game_first_15min.md)
+2. [02_quest_dialogue_progression.md](./02_quest_dialogue_progression.md)
+3. [03_exploration_combat_loot.md](./03_exploration_combat_loot.md)
+4. [04_outpost_and_economy.md](./04_outpost_and_economy.md)
+5. [05_player_client_cleanup.md](./05_player_client_cleanup.md)
+6. [06_content_pipeline_and_editors.md](./06_content_pipeline_and_editors.md)
+7. [07_presentation_audio_polish.md](./07_presentation_audio_polish.md)

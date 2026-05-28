@@ -508,7 +508,7 @@ D:\godot\godot.cmd --path godot
 - 根目录已有 `run_godot_game.bat`、`run_godot_editor.bat`、`run_godot_validate.bat` 作为旧 `run_bevy_*` 的迁移期默认替代入口。
 - 旧 `run_bevy_*` 启动脚本已移入 `legacy/bevy/`，仅供旧行为对照入口引用。
 - `test-godot-editor.ps1` 聚合 Godot editor handoff、content browser、map preview、content edit 和 map edit smoke，替代旧 Bevy editor 聚合 smoke 的默认用途。
-- 旧 Bevy editor 聚合 smoke 和 Bevy-only 地图 AI 维护文档已移入 `legacy/bevy/`，不再位于默认 agent/editor 文档路径。
+- 旧 Bevy editor 聚合 smoke、Bevy-only 地图 AI 维护文档和迁移前 Bevy/Rust playable 计划已移入 `legacy/bevy/`，不再位于默认 agent/editor/plans 文档路径。
 
 交付：
 
