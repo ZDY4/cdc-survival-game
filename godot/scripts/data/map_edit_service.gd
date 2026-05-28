@@ -3,64 +3,33 @@ extends RefCounted
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const MapEditSchema = preload("res://scripts/data/map_edit_schema.gd")
 
-const MAP_OBJECT_FIELD_TYPES := {
-	"anchor.x": "int",
-	"anchor.y": "int",
-	"anchor.z": "int",
-	"footprint.width": "int",
-	"footprint.height": "int",
-	"rotation": "string",
-	"blocks_movement": "bool",
-	"blocks_sight": "bool",
-}
-
-const ENTRY_POINT_FIELD_TYPES := {
-	"grid.x": "int",
-	"grid.y": "int",
-	"grid.z": "int",
-	"facing": "string",
-}
+var _schema := MapEditSchema.new()
 
 
 func map_object_editable_fields() -> Array[String]:
-	var fields: Array[String] = []
-	for field in MAP_OBJECT_FIELD_TYPES.keys():
-		fields.append(str(field))
-	fields.sort()
-	return fields
+	return _schema.map_object_editable_fields()
 
 
 func map_object_field_type(field_path: String) -> String:
-	return str(MAP_OBJECT_FIELD_TYPES.get(field_path, "string"))
+	return _schema.map_object_field_type(field_path)
 
 
 func normalize_map_object_patch(raw_patch: Dictionary) -> Dictionary:
-	var patch: Dictionary = {}
-	for field in raw_patch.keys():
-		var field_path := str(field)
-		patch[field_path] = _coerce_value(raw_patch[field], map_object_field_type(field_path))
-	return patch
+	return _schema.normalize_map_object_patch(raw_patch)
 
 
 func entry_point_editable_fields() -> Array[String]:
-	var fields: Array[String] = []
-	for field in ENTRY_POINT_FIELD_TYPES.keys():
-		fields.append(str(field))
-	fields.sort()
-	return fields
+	return _schema.entry_point_editable_fields()
 
 
 func entry_point_field_type(field_path: String) -> String:
-	return str(ENTRY_POINT_FIELD_TYPES.get(field_path, "string"))
+	return _schema.entry_point_field_type(field_path)
 
 
 func normalize_entry_point_patch(raw_patch: Dictionary) -> Dictionary:
-	var patch: Dictionary = {}
-	for field in raw_patch.keys():
-		var field_path := str(field)
-		patch[field_path] = _coerce_value(raw_patch[field], entry_point_field_type(field_path))
-	return patch
+	return _schema.normalize_entry_point_patch(raw_patch)
 
 
 func save_map_object_patch(map_id: String, object_id: String, patch: Dictionary, registry: ContentRegistry, options: Dictionary = {}) -> Dictionary:
@@ -88,7 +57,7 @@ func save_map_object_patch(map_id: String, object_id: String, patch: Dictionary,
 	var changed_fields: Array[String] = []
 	for field in normalized_patch.keys():
 		var field_path := str(field)
-		if not MAP_OBJECT_FIELD_TYPES.has(field_path):
+		if not _schema.can_edit_map_object_field(field_path):
 			return _failed("unsupported_field", "field %s is not editable for map objects" % field_path)
 		var before: Variant = _get_field(object_data, field_path)
 		var after: Variant = normalized_patch[field]
@@ -161,7 +130,7 @@ func save_entry_point_patch(map_id: String, entry_id: String, patch: Dictionary,
 	var changed_fields: Array[String] = []
 	for field in normalized_patch.keys():
 		var field_path := str(field)
-		if not ENTRY_POINT_FIELD_TYPES.has(field_path):
+		if not _schema.can_edit_entry_point_field(field_path):
 			return _failed("unsupported_field", "field %s is not editable for entry points" % field_path)
 		var before: Variant = _get_field(entry_data, field_path)
 		var after: Variant = normalized_patch[field]
@@ -221,21 +190,6 @@ func _validate_map_data(map_id: String, record: Dictionary, data: Dictionary, re
 	library[map_id] = next_record
 	copy.libraries["maps"] = library
 	return ContentRecordValidator.new().validate_record("maps", map_id, copy)
-
-
-func _coerce_value(value: Variant, value_type: String) -> Variant:
-	match value_type:
-		"int":
-			return int(value)
-		"float":
-			return float(value)
-		"bool":
-			if typeof(value) == TYPE_BOOL:
-				return value
-			var text := str(value).strip_edges().to_lower()
-			return ["true", "1", "yes", "on"].has(text)
-		_:
-			return str(value)
 
 
 func _get_field(data: Dictionary, field_path: String) -> Variant:
