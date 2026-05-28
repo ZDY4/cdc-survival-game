@@ -12,14 +12,14 @@
 
 ## 架构边界
 
+- 新增能力先判断权威落点：内容格式进 `data` / `godot/scripts/data`，玩法规则进 `godot/scripts/core`，启动编排进 `godot/scripts/app`，画面表现进 `godot/scripts/world` 或 `godot/scripts/ui`，编辑体验进 `godot/addons/cdc_game_editor`。
 - 读写非地图 `data/` 内容时，统一走 `godot/scripts/data`；不要在 UI、editor dock 或 smoke 脚本里手写第二套 JSON 解析、路径规则或保存逻辑。
 - 读写地图布局时，优先操作 `godot/scenes/maps/*.tscn` 中的 `MapSceneRoot`、`MapEntryPointNode` 和 `MapObjectNode`；不要新增长期 JSON -> scene 转换步骤。
 - 玩法结果由 `godot/scripts/core` 计算，例如移动是否可达、攻击是否命中、任务是否推进、交易是否成立；UI 和场景只提交输入并显示结果。
 - `godot/scripts/app` 只负责启动流程、存档装配、输入转发和各核心模块串联；不要把具体战斗、任务、经济规则写进 app controller。
 - `godot/scripts/world` 只负责把地图和快照表现成场景对象；不要在渲染脚本里改变存档、任务、背包或角色属性。
 - `godot/scripts/ui` 只负责面板状态、按钮事件和 snapshot 展示；业务判断先落到 core/data，再由 UI 调用。
-- `godot/addons/cdc_game_editor` 可以做表单、预览和 handoff，但保存内容必须调用 data edit service，并通过 validator 后写回。
-- 新增能力先判断权威落点：内容格式进 `data` / `scripts/data`，玩法规则进 `scripts/core`，启动编排进 `scripts/app`，画面表现进 `scripts/world` 或 `scripts/ui`，编辑体验进 `addons/cdc_game_editor`。
+- `godot/addons/cdc_game_editor` 可以做表单、预览和 handoff，但保存内容必须调用 data / map edit service，并通过 validator 后写回。
 
 ## 目录职责
 
@@ -43,25 +43,18 @@
 - 避免创建无明确边界的 `utils.gd`、`common.gd`、`helpers.gd` 大杂烩；只有职责清晰且稳定复用时才抽公共模块。
 - 一个功能同时包含数据读写、规则计算、持久化、UI 展示时，至少拆成数据/规则层和界面/装配层。
 - 超过约 `300` 行的业务文件应评估是否拆分；超过约 `500` 行且还要新增业务逻辑时，默认先做最小必要拆分。
-- 修改臃肿文件时，尽量顺手做与本任务直接相关的职责切分，避免继续恶化。
+- 修改臃肿文件时，只有在本任务直接触及且能保持小范围时才做职责切分。
 
 ## 注释与日志
 
-- 关键逻辑、关键变量、关键函数应补充简洁中文注释，说明业务意图、重要约束、边界条件或容易误改的原因。
+- 非显然业务规则、跨层边界、重要约束或容易误改的逻辑应补充简洁中文注释。
 - 避免只复述代码字面含义的低价值注释。
 - 关键流程、关键状态变更、重要失败分支应补充可排查的日志，包含资源 id、目标对象、动作类型、失败原因或关键参数。
 - 避免无上下文、不可行动或高频刷屏的日志。
 
-## Editor 与内容工具
-
-- 数据编辑、保存、校验复用 `godot/scripts/data` 能力；editor dock 不直接绕过 edit service 写内容。
-- 强依赖 3D 场景、地图预览、空间交互的编辑能力放在 `godot/addons/cdc_game_editor` 或 Godot 场景工具侧。
-- 内容管理、表单、文本生产、批量校验优先收口到 Godot 数据层和 headless tool，再接入 dock。
-- 需求不明确时，优先把可复用能力放到 `godot/scripts/data` 或 `godot/scripts/core`，再做 UI / editor 集成。
-
 ## Agent 工具使用
 
-- 处理内容编辑、定位、摘要、引用、格式化、校验时，优先查看 `tools/agent/README.md` 和 `docs/agent-workflows/*.md`。
+- 处理内容编辑、定位、摘要、引用、格式化、校验时，先看 `tools/agent/README.md`；涉及具体流程时再看 `docs/agent-workflows/*.md`。
 - 内容 CLI 默认使用 `tools/agent/godot-content.ps1`。
 - 需要打开或复用 Godot editor 并定位目标时，优先使用 `tools/agent/open-godot-editor.ps1`。
 - 地图改动后的空间复核优先使用 `tools/agent/review-godot-map-visual.ps1`；只有需要人工查看或精修时再进入 `CDC Map Preview` dock。
@@ -79,19 +72,16 @@
 
 ## 验证与交付
 
-- 不主动新增测试文件，除非用户明确要求；优先使用现有 Godot headless smoke、`godot-content.ps1`、`validate_all.gd`、已有运行入口或最小手动 smoke。
-- 默认验证只走 Godot 工具链。
+- 不主动新增测试文件，除非用户明确要求；默认用现有 Godot headless smoke、`godot-content.ps1`、`validate_all.gd`、已有运行入口或最小手动 smoke 验证。
 - 若无法验证，交付时明确说明未验证项、原因和建议下一步。
 - 若修复依赖日志结论，交付时说明使用了哪个日志文件或 smoke 输出、观察到的关键信号、是否完成复现验证。
-- 完成独立开发任务并通过必要验证后，默认创建一次 Git commit；只暂存并提交与本任务直接相关的文件。若用户明确要求不提交，则不提交。
+- 完成涉及文件修改的独立开发任务并通过必要验证后，默认创建一次 Git commit；只暂存并提交与本任务直接相关的文件。纯审查、答疑或探索任务不提交；用户明确要求不提交时也不提交。
 - Commit message 使用简体中文，简洁说明变更目的和范围。
 
 ## 禁止事项
 
-- 不要把核心规则写回 UI、场景表现、调试层或 editor dock。
-- 不要让 editor dock 直接定义或漂移出共享 schema。
-- 不要为了短期方便重复定义共享数据结构。
-- 不要保留无必要的双实现或兼容层。
+- 不要绕过 `godot/scripts/data` 或 `godot/scripts/core`，把内容读写、共享 schema 或核心规则复制到 UI、场景表现、调试层或 editor dock。
+- 不要保留无必要的双实现、兼容层或重复共享数据结构。
 - 不要把根目录旧 `addons/` 残留当作当前 Godot 插件实现。
 
 ## 一句话原则
