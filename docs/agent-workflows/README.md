@@ -14,9 +14,7 @@
 - `edit-recipe.md`
 - `edit-character.md`
 - `edit-map.md`
-- `review-map-visual.md`
 - `review-godot-map-visual.md`
-- `test-bevy-game.md`
 - `test-godot-editor.md`
 - `test-godot-game.md`
 
@@ -75,6 +73,8 @@
 - `pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map <id>`
 - `pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1`
 - `cargo check -p game_editor -p bevy_item_editor -p bevy_recipe_editor -p bevy_dialogue_editor -p bevy_quest_editor -p bevy_map_editor -p content_tools`
+
+旧 Bevy workflow 文档已移到 `legacy/bevy/docs/agent-workflows/`。
 
 ## Editor Handoff
 
