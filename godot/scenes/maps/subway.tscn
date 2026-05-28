@@ -4,9 +4,6 @@
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_tht33"]
 [ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_bpb8r"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_r6dv3"]
-size = Vector3(1, 0.28, 1)
-
 [node name="subway" type="Node3D" unique_id=1807263420]
 script = ExtResource("1_q4mcf")
 map_id = "subway"
@@ -41,6 +38,4 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/subway_overworld_exit" unique_id=472163852]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_r6dv3")
+[node name="Visuals" type="Node3D" parent="Objects/subway_overworld_exit" unique_id=808824051]

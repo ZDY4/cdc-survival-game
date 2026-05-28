@@ -1,18 +1,14 @@
 extends RefCounted
 
+const MAP_SCENE_DIR := "res://scenes/maps"
 const GRID_SIZE := 1.0
 
 var ground_material := _material(Color(0.22, 0.26, 0.23))
-var object_material := _material(Color(0.47, 0.45, 0.38))
-var blocking_material := _material(Color(0.54, 0.25, 0.22))
-var interactive_material := _material(Color(0.22, 0.48, 0.72))
-var trigger_material := _material(Color(0.86, 0.58, 0.18))
-var pickup_material := _material(Color(0.38, 0.63, 0.32))
 var actor_material := _material(Color(0.78, 0.78, 0.68))
 var player_material := _material(Color(0.28, 0.55, 0.88))
 
 
-func render_world(parent: Node3D, world_snapshot: Dictionary) -> Dictionary:
+func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionary = {}) -> Dictionary:
 	_clear_children(parent)
 
 	var map: Dictionary = world_snapshot.get("map", {})
@@ -22,6 +18,7 @@ func render_world(parent: Node3D, world_snapshot: Dictionary) -> Dictionary:
 
 	var counts: Dictionary = {
 		"ground": 0,
+		"map_visuals": 0,
 		"objects": 0,
 		"actors": 0,
 		"lights": 0,
@@ -30,12 +27,19 @@ func render_world(parent: Node3D, world_snapshot: Dictionary) -> Dictionary:
 
 	_spawn_ground(root, map)
 	counts["ground"] = 1
-	counts["objects"] = _spawn_object_markers(root, map)
+	if bool(options.get("load_map_visuals", _should_load_map_visuals())):
+		counts["map_visuals"] = _spawn_map_scene_visuals(root, map)
+	counts["objects"] = _spawn_interaction_target_markers(root, map)
 	counts["actors"] = _spawn_actor_markers(root, _array_or_empty(world_snapshot.get("actors", [])))
 	counts["lights"] = _spawn_lights(root)
 	counts["cameras"] = _spawn_camera(root, map)
 
 	return counts
+
+
+func _should_load_map_visuals() -> bool:
+	# Headless editor import 会初始化 dock；此时实例化 glTF 场景可能触发编辑器弹窗，视觉层留给运行时和正常 editor 视口加载。
+	return not (Engine.is_editor_hint() and DisplayServer.get_name() == "headless")
 
 
 func _spawn_ground(root: Node3D, map: Dictionary) -> void:
@@ -53,33 +57,79 @@ func _spawn_ground(root: Node3D, map: Dictionary) -> void:
 	root.add_child(node)
 
 
-func _spawn_object_markers(root: Node3D, map: Dictionary) -> int:
+func _spawn_map_scene_visuals(root: Node3D, map: Dictionary) -> int:
+	var map_id := str(map.get("map_id", ""))
+	if map_id.is_empty():
+		push_warning("运行时地图缺少 map_id，无法加载 Godot 地图场景视觉层")
+		return 0
+
+	var scene_path := "%s/%s.tscn" % [MAP_SCENE_DIR, map_id]
+	if not ResourceLoader.exists(scene_path):
+		push_warning("运行时地图场景不存在，回退到基础地面: %s" % scene_path)
+		return 0
+
+	var packed: PackedScene = load(scene_path)
+	if packed == null:
+		push_warning("运行时地图场景加载失败: %s" % scene_path)
+		return 0
+
+	var visual_root := packed.instantiate()
+	if visual_root == null:
+		push_warning("运行时地图场景实例化失败: %s" % scene_path)
+		return 0
+
+	visual_root.name = "MapSceneVisuals"
+	_prepare_visual_interaction_targets(visual_root, map)
+	root.add_child(visual_root)
+	return 1
+
+
+func _prepare_visual_interaction_targets(root: Node, map: Dictionary) -> void:
+	var active_targets: Dictionary = _dictionary_or_empty(map.get("interaction_targets", {}))
+	var stale_targets: Array[Node] = []
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			pending.append(child)
+		if not node.has_method("to_object_definition"):
+			continue
+
+		var object_id := str(node.get("object_id"))
+		var kind := str(node.get("kind"))
+		if object_id.is_empty() or not ["interactive", "trigger", "pickup"].has(kind):
+			continue
+		if not active_targets.has(object_id):
+			stale_targets.append(node)
+			continue
+
+		# 视觉对象本身也携带交互元数据，后续接鼠标拾取时不用再依赖调试方块。
+		node.set_meta("interaction_target", {
+			"target_type": "map_object",
+			"target_id": object_id,
+		})
+
+	for node in stale_targets:
+		node.free()
+
+
+func _spawn_interaction_target_markers(root: Node3D, map: Dictionary) -> int:
 	var count: int = 0
 	for group_name in ["interactive_objects", "trigger_objects", "pickup_objects"]:
 		for object in _array_or_empty(map.get(group_name, [])):
-			_spawn_object_marker(root, _dictionary_or_empty(object), _material_for_object_group(group_name))
+			_spawn_interaction_target_marker(root, _dictionary_or_empty(object))
 			count += 1
-
-	var blocking_cells: Dictionary = _dictionary_or_empty(map.get("blocking_cells", {}))
-	for cell_key in blocking_cells.keys():
-		_spawn_cell_marker(root, _grid_from_key(str(cell_key)), blocking_material, "BlockingCell")
-		count += 1
-
 	return count
 
 
-func _spawn_object_marker(root: Node3D, object: Dictionary, material: Material) -> void:
+func _spawn_interaction_target_marker(root: Node3D, object: Dictionary) -> void:
 	var anchor: Dictionary = _dictionary_or_empty(object.get("anchor", {}))
 	var footprint: Dictionary = _dictionary_or_empty(object.get("footprint", {}))
 	var width: float = max(1.0, float(footprint.get("width", 1)))
 	var height: float = max(1.0, float(footprint.get("height", 1)))
-	var mesh: BoxMesh = BoxMesh.new()
-	mesh.size = Vector3(width * GRID_SIZE, 0.35, height * GRID_SIZE)
 
-	var node: MeshInstance3D = MeshInstance3D.new()
+	var node: Node3D = Node3D.new()
 	node.name = "MapObject_%s" % object.get("object_id", "")
-	node.mesh = mesh
-	node.material_override = material
 	node.set_meta("interaction_target", {
 		"target_type": "map_object",
 		"target_id": str(object.get("object_id", "")),
@@ -89,17 +139,6 @@ func _spawn_object_marker(root: Node3D, object: Dictionary, material: Material) 
 		0.18,
 		(float(anchor.get("z", 0)) + (height - 1.0) * 0.5) * GRID_SIZE
 	)
-	root.add_child(node)
-
-
-func _spawn_cell_marker(root: Node3D, grid: Dictionary, material: Material, prefix: String) -> void:
-	var mesh: BoxMesh = BoxMesh.new()
-	mesh.size = Vector3(0.72, 0.28, 0.72)
-	var node: MeshInstance3D = MeshInstance3D.new()
-	node.name = "%s_%s_%s_%s" % [prefix, grid.get("x", 0), grid.get("y", 0), grid.get("z", 0)]
-	node.mesh = mesh
-	node.material_override = material
-	node.position = _grid_to_world(grid, 0.14)
 	root.add_child(node)
 
 
@@ -148,29 +187,6 @@ func _spawn_camera(root: Node3D, map: Dictionary) -> int:
 
 func _grid_to_world(grid: Dictionary, y_offset: float) -> Vector3:
 	return Vector3(float(grid.get("x", 0)) * GRID_SIZE, float(grid.get("y", 0)) + y_offset, float(grid.get("z", 0)) * GRID_SIZE)
-
-
-func _grid_from_key(key: String) -> Dictionary:
-	var parts: PackedStringArray = key.split(":")
-	if parts.size() != 3:
-		return {"x": 0, "y": 0, "z": 0}
-	return {
-		"x": int(parts[0]),
-		"y": int(parts[1]),
-		"z": int(parts[2]),
-	}
-
-
-func _material_for_object_group(group_name: String) -> Material:
-	match group_name:
-		"interactive_objects":
-			return interactive_material
-		"trigger_objects":
-			return trigger_material
-		"pickup_objects":
-			return pickup_material
-		_:
-			return object_material
 
 
 func _clear_children(parent: Node) -> void:

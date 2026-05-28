@@ -4,9 +4,6 @@
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_g7e2m"]
 [ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_k2h52"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_be43b"]
-size = Vector3(1, 0.28, 1)
-
 [node name="survivor_outpost_01_interior" type="Node3D" unique_id=1109637509]
 script = ExtResource("1_jlo0r")
 map_id = "survivor_outpost_01_interior"
@@ -56,6 +53,4 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_interior_exit" unique_id=974802131]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_be43b")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_interior_exit" unique_id=97696174]

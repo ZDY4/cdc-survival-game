@@ -4,9 +4,6 @@
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_vfoj4"]
 [ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_sq5b0"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_cb8vh"]
-size = Vector3(1, 0.28, 1)
-
 [node name="street_b" type="Node3D" unique_id=407963758]
 script = ExtResource("1_rn423")
 map_id = "street_b"
@@ -41,6 +38,4 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/street_b_overworld_exit" unique_id=333587326]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_cb8vh")
+[node name="Visuals" type="Node3D" parent="Objects/street_b_overworld_exit" unique_id=874761161]

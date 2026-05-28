@@ -1,59 +1,389 @@
-[gd_scene format=3]
+[gd_scene format=4]
 
 [ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_2hkxp"]
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_hg0fl"]
 [ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_8r5r1"]
+[ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/floor_flat.gltf" id="4_egj72"]
+[ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/corner.gltf" id="5_d62rs"]
+[ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/straight.gltf" id="6_o1e23"]
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/roadblock_concrete.gltf" id="7_geohy"]
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/wrecked_car.gltf" id="8_y7dfe"]
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/sandbag_barrier.gltf" id="9_yvqil"]
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/tree_dead.gltf" id="10_iu5u4"]
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/bush_dry.gltf" id="11_kv5c3"]
+[ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/barrel_rust.gltf" id="12_cmlqy"]
+[ext_resource type="PackedScene" path="res://assets/container_placeholders/crate_wood.gltf" id="13_oxytd"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_hihil"]
-size = Vector3(4, 0.28, 2)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qf1gy"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_5715b"]
-size = Vector3(3, 0.28, 2)
+[sub_resource type="ArrayMesh" id="ArrayMesh_alq5c"]
+_surfaces = [{
+"aabb": AABB(-0.5, -0.055, -0.5, 1, 0.11, 1),
+"format": 34896613377,
+"index_count": 36,
+"index_data": PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcA"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 8,
+"vertex_data": PackedByteArray("AAAAAP//AAD///////8AAP//AAD//wAAAAAAAAAAAAAAAP////8AAP//AAAAAAAAAAD//wAAAAD/////AAAAAA==")
+}]
+blend_shape_mode = 0
 
-[sub_resource type="BoxMesh" id="BoxMesh_y1mnn"]
-size = Vector3(1, 0.28, 5)
+[sub_resource type="ArrayMesh" id="ArrayMesh_iylf0"]
+resource_name = "floor_flat_mesh"
+_surfaces = [{
+"aabb": AABB(-0.5, -0.055, -0.5, 1, 0.11, 1),
+"attribute_data": PackedByteArray("AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//"),
+"format": 34896613399,
+"index_count": 36,
+"index_data": PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcA"),
+"material": SubResource("StandardMaterial3D_qf1gy"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 24,
+"vertex_data": PackedByteArray("AAAAAP///n/////////+f///AAD///5/AAD//////n8AAP//AAD/////AAAAAP///////wAA//8AAAAAAAD/////AAAAAKoq////////qir/////AACqKv//AAD//6oqAAAAAP//VNUAAP//AABU1QAA/////1TVAAAAAAAAVNX/////AAD/vwAA//////+/AAD//wAA/7//////////v///AAD//wAAAAAAAAAAAAAAAAAA//8AAP//AAAAAAAA/3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_alq5c")
 
-[sub_resource type="BoxMesh" id="BoxMesh_nntio"]
-size = Vector3(1, 0.28, 5)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_x5ofe"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_mxk2s"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="ArrayMesh" id="ArrayMesh_0kgdb"]
+_surfaces = [{
+"aabb": AABB(-0.5, -1.2, -0.5, 1, 2.4, 1),
+"format": 34896613377,
+"index_count": 30,
+"index_data": PackedByteArray("AAABAAIAAAACAAMAAQAEAAIAAQAFAAQABgAHAAgABgAIAAkABwAKAAgACgAJAAgABwALAAoACgAMAAkA"),
+"lods": [0.9433982, PackedByteArray("AAABAAIAAAACAAMAAQAEAAIAAQAFAAQA")],
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 13,
+"vertex_data": PackedByteArray("//8AAMH1AAA9CgAAwfUAAD0KVPXB9QAA//9U9cH1AAA9ClT1AAAAAD0KAAAAAAAA//9U9f//AAAAAFT1//8AAAAA/////wAA////////AAAAAP//AAAAAAAAVPUAAAAA/////wAAAAA=")
+}]
+blend_shape_mode = 0
 
-[sub_resource type="BoxMesh" id="BoxMesh_xjm8h"]
-size = Vector3(3, 0.28, 1)
+[sub_resource type="ArrayMesh" id="ArrayMesh_qcb7w"]
+resource_name = "corner_mesh"
+_surfaces = [{
+"aabb": AABB(-0.5, -1.2, -0.5, 1, 2.4, 1),
+"attribute_data": PackedByteArray("/3//f+D6/3/g+v///3////9//3/g+v9/4Pr///9/////f/9/////f///kIX/f5CF/3//f////3///5CF/3+Qhf9//3////9///+mt/9/prc="),
+"format": 34896613399,
+"index_count": 30,
+"index_data": PackedByteArray("AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMA"),
+"lods": [0.9433982, PackedByteArray("AAABAAIAAAACAAMABAAFAAYABAAGAAcA")],
+"material": SubResource("StandardMaterial3D_x5ofe"),
+"primitive": 3,
+"uv_scale": Vector4(2, 4.6000004, 0, 0),
+"vertex_count": 20,
+"vertex_data": PackedByteArray("//8AAMH1//89CgAAwfX//z0KVPXB9f////9U9cH1//89CgAAwfX//z0KAAAAAP//PQpU9QAA//89ClT1wfX/////VPX/////AABU9f////8AAP//////////////////AABU9f////8AAFT1AAD//wAA//8AAP//AAD///////8AAP//AAD/v/////8AAP+//////////78AAP//////v/9//3//f/9//3//f/9//3//P/9//z//f/8//3//P/9//3//f/9//3//f/9//3//f/8//3//P/9//z//f/8//3////9/////f////3////9/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_0kgdb")
 
-[sub_resource type="BoxMesh" id="BoxMesh_ilrve"]
-size = Vector3(3, 0.28, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ukcn5"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_egj72"]
-size = Vector3(3, 0.28, 1)
+[sub_resource type="ArrayMesh" id="ArrayMesh_droyn"]
+_surfaces = [{
+"aabb": AABB(-0.5, -1.2, -0.5, 1, 2.4, 1),
+"format": 34896613377,
+"index_count": 30,
+"index_data": PackedByteArray("AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAALAAoADAAKAA0ADgAMAA0ADgAPAAwA"),
+"lods": [0.7102426, PackedByteArray("AAABAAIAAAACAAMABAAFAAYABAAGAAcA")],
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 16,
+"vertex_data": PackedByteArray("wfUAAAAAAADB9QAA//8AAMH1VPX//wAAwfVU9QAAAAA9CgAA//8AAD0KAAAAAAAAPQpU9QAAAAA9ClT1//8AAP//VPUAAAAA//9U9f//AAD///////8AAP////8AAAAAAAD//wAAAAAAAP////8AAAAAVPX//wAAAABU9QAAAAA=")
+}]
+blend_shape_mode = 0
 
-[sub_resource type="BoxMesh" id="BoxMesh_d62rs"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="ArrayMesh" id="ArrayMesh_2i6ck"]
+resource_name = "straight_mesh"
+_surfaces = [{
+"aabb": AABB(-0.5, -1.2, -0.5, 1, 2.4, 1),
+"attribute_data": PackedByteArray("/3//f////3///////3////9//3////9///////9/////f/9/////f///kIX/f5CF/3//f////3///5CF/3+Qhf9//3////9///+mt/9/prc="),
+"format": 34896613399,
+"index_count": 30,
+"index_data": PackedByteArray("AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMA"),
+"lods": [0.7102426, PackedByteArray("AAABAAIAAAACAAMABAAFAAYABAAGAAcA")],
+"material": SubResource("StandardMaterial3D_ukcn5"),
+"primitive": 3,
+"uv_scale": Vector4(2, 4.6000004, 0, 0),
+"vertex_count": 20,
+"vertex_data": PackedByteArray("wfUAAAAA///B9QAA/////8H1VPX/////wfVU9QAA//89CgAA/////z0KAAAAAP//PQpU9QAA//89ClT1////////VPUAAP////9U9f////////////////////8AAP//AABU9f////8AAFT1AAD//wAA//8AAP//AAD///////8AAP//AAD/v/////8AAP+//////////78AAP//////v/+//3//v/9//7//f/+//3//P/9//z//f/8//3//P/9//7//f/+//3//v/9//7//f/8//3//P/9//z//f/8//3////9/////f////3////9/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_droyn")
 
-[sub_resource type="BoxMesh" id="BoxMesh_o1e23"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_nxpeb"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_geohy"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="ArrayMesh" id="ArrayMesh_1lvum"]
+_surfaces = [{
+"aabb": AABB(-1.275, 0, -0.29, 2.55, 0.73, 0.58),
+"format": 34896613377,
+"index_count": 72,
+"index_data": PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcACAAJAAoACgALAAgACQAIAAwACwAKAA0ACQANAAoADgAIAAsACAAOAAwADQAOAAsADAAPAAkADQAJAA8ADwAMAA4ADgANAA8A"),
+"lods": [1.0122377, PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcA")],
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 16,
+"vertex_data": PackedByteArray("AAAAAP//AAD//0mT//8AAP//AAD//wAAAAAAAAAAAAAAAEmT//8AAP//AAAAAAAAAABJkwAAAAD//0mTAAAAAB0ex48Z4QAA4eH//xnhAADh4cePGeEAAB0ex4/lHgAAHR7//xnhAADh4ceP5R4AAB0e///lHgAA4eH//+UeAAA=")
+}]
+blend_shape_mode = 0
 
-[sub_resource type="BoxMesh" id="BoxMesh_y7dfe"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="ArrayMesh" id="ArrayMesh_i1q0c"]
+resource_name = "roadblock_concrete_mesh"
+_surfaces = [{
+"aabb": AABB(-1.275, 0, -0.29, 2.55, 0.73, 0.58),
+"attribute_data": PackedByteArray("AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//"),
+"format": 34896613399,
+"index_count": 72,
+"index_data": PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcAGAAZABoAGQAYABsAHAAdAB4AHQAcAB8AIAAhACIAIQAgACMAJAAlACYAJQAkACcAKAApACoAKQAoACsALAAtAC4ALQAsAC8A"),
+"lods": [1.0122377, PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcA")],
+"material": SubResource("StandardMaterial3D_nxpeb"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 48,
+"vertex_data": PackedByteArray("AAAAAP///n///0mT///+f///AAD///5/AABJk////n8AAEmTAAD/////AAAAAP////9JkwAA//8AAAAAAAD/////AAAAAKoq//9Jk///qir//0mTAACqKv//AAD//6oqAAAAAP//VNUAAEmTAABU1QAASZP//1TVAAAAAAAAVNX//0mTAAD/vwAASZP///+/AABJkwAA/7///0mT////v///AAD//wAAAAAAAAAAAAAAAAAA//8AAP//AAAAAAAAHR7Hjxnh/n/h4f//GeH+f+Hhx48Z4f5/HR7//xnh/n8dHv//5R7//+Hhx4/lHv//4eH//+Ue//8dHseP5R7//+Hhx4/lHqoq4eH//xnhqirh4f//5R6qKuHhx48Z4aoqHR7HjxnhVNUdHv//5R5U1R0e//8Z4VTVHR7Hj+UeVNXh4f//5R7/vx0e//8Z4f+/HR7//+Ue/7/h4f//GeH/v+Hhx48Z4QAAHR7Hj+UeAAAdHsePGeEAAOHhx4/lHgAA/3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_1lvum")
 
-[sub_resource type="BoxMesh" id="BoxMesh_yvqil"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6lqsa"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_iu5u4"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="ArrayMesh" id="ArrayMesh_whcoa"]
+_surfaces = [{
+"aabb": AABB(-1.225, 0, -0.51, 2.45, 0.87, 1.02),
+"format": 34896613377,
+"index_count": 144,
+"index_data": PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcACAAJAAoACgALAAgACQAIAAwACwAKAA0ACQANAAoADgAIAAsACAAOAAwADQAOAAsADAAPAAkADQAJAA8ADwAMAA4ADgANAA8AEAARABIAEgATABAAEQAQABQAEwASABUAEQAVABIAFgAQABMAEAAWABQAFQAWABMAFAAXABEAFQARABcAFwAUABYAFgAVABcAGAAZABoAGgAbABgAGQAYABwAGwAaAB0AGQAdABoAHgAYABsAGAAeABwAHQAeABsAHAAfABkAHQAZAB8AHwAcAB4AHgAdAB8A"),
+"lods": [0.5189414, PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcACAAJAAoACgALAAgACQAIAAwACwAKAA0ACQANAAoADgAIAAsACAAOAAwADQAOAAsADAAPAAkADQAJAA8ADwAMAA4ADgANAA8A"), 0.7784121, PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcA")],
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 32,
+"vertex_data": PackedByteArray("AAAAAP//AAD//x+T//8AAP//AAD//wAAAAAAAAAAAAAAAB+T//8AAP//AAAAAAAAAAAfkwAAAAD//x+TAAAAAKExaYTl5gAABK///+XmAAAEr2mE5eYAAKExaYQYGQAAoTH//+XmAAAEr2mEGBkAAKEx//8YGQAABK///xgZAADCvbSQbe4AAPT1+LJt7gAAtPNifm3uAADCvbSQkREAAAPAScVt7gAAtPNifpERAAADwEnFkREAAPT1+LKREQAAZQkHblnaAADNKXKsWdoAAHcs+H1Z2gAAZQkHbqUlAAC7BoKcWdoAAHcs+H2lJQAAuwaCnKUlAADNKXKspSUAAA==")
+}]
+blend_shape_mode = 0
 
-[sub_resource type="BoxMesh" id="BoxMesh_kv5c3"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="ArrayMesh" id="ArrayMesh_jmcsk"]
+resource_name = "wrecked_car_mesh"
+_surfaces = [{
+"aabb": AABB(-1.225, 0, -0.51, 2.45, 0.87, 1.02),
+"attribute_data": PackedByteArray("AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//"),
+"format": 34896613399,
+"index_count": 144,
+"index_data": PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcAGAAZABoAGQAYABsAHAAdAB4AHQAcAB8AIAAhACIAIQAgACMAJAAlACYAJQAkACcAKAApACoAKQAoACsALAAtAC4ALQAsAC8AMAAxADIAMQAwADMANAA1ADYANQA0ADcAOAA5ADoAOQA4ADsAPAA9AD4APQA8AD8AQABBAEIAQQBAAEMARABFAEYARQBEAEcASABJAEoASQBIAEsATABNAE4ATQBMAE8AUABRAFIAUQBQAFMAVABVAFYAVQBUAFcAWABZAFoAWQBYAFsAXABdAF4AXQBcAF8A"),
+"lods": [0.5189414, PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcAGAAZABoAGQAYABsAHAAdAB4AHQAcAB8AIAAhACIAIQAgACMAJAAlACYAJQAkACcAKAApACoAKQAoACsALAAtAC4ALQAsAC8A"), 0.7784121, PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcA")],
+"material": SubResource("StandardMaterial3D_6lqsa"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 96,
+"vertex_data": PackedByteArray("AAAAAP///n///x+T///+f///AAD///5/AAAfk////n8AAB+TAAD/////AAAAAP////8fkwAA//8AAAAAAAD/////AAAAAKoq//8fk///qir//x+TAACqKv//AAD//6oqAAAAAP//VNUAAB+TAABU1QAAH5P//1TVAAAAAAAAVNX//x+TAAD/vwAAH5P///+/AAAfkwAA/7///x+T////v///AAD//wAAAAAAAAAAAAAAAAAA//8AAP//AAAAAAAAoTFphOXm/n8Er///5eb+fwSvaYTl5v5/oTH//+Xm/n+hMf//GBn//wSvaYQYGf//BK///xgZ//+hMWmEGBn//wSvaYQYGaoqBK///+XmqioEr///GBmqKgSvaYTl5qoqoTFphOXmVNWhMf//GBlU1aEx///l5lTVoTFphBgZVNUEr///GBn/v6Ex///l5v+/oTH//xgZ/78Er///5eb/vwSvaYTl5gAAoTFphBgZAAChMWmE5eYAAASvaYQYGQAAwr20kG3uG3v09fiybe4be7TzYn5t7ht7A8BJxW3uG3sDwEnFkRH//7TzYn6REf//9PX4spER///CvbSQkRH//7TzYn6REW4t9PX4sm3ubi309fiykRFuLbTzYn5t7m4twr20kG3uNdgDwEnFkRE12APAScVt7jXYwr20kJERNdj09fiykREkwAPAScVt7iTAA8BJxZERJMD09fiybe4kwLTzYn5t7nQDwr20kJERdAPCvbSQbe50A7TzYn6REXQDZQkHblnaennNKXKsWdp6eXcs+H1Z2np5uwaCnFnaenm7BoKcpSX//3cs+H2lJf//zSlyrKUl//9lCQdupSX//3cs+H2lJc4mzSlyrFnazibNKXKspSXOJncs+H1Z2s4mZQkHblnarNG7BoKcpSWs0bsGgpxZ2qzRZQkHbqUlrNHNKXKspSVBwLsGgpxZ2kHAuwaCnKUlQcDNKXKsWdpBwHcs+H1Z2psEZQkHbqUlmwRlCQduWdqbBHcs+H2lJZsE/3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3//f/9//3//f/9//3//f0CHvvhAh774QIe++ECHvvjsKCcu7CgnLuwoJy7sKCcurlhWrK5YVqyuWFasrlhWrETyInlE8iJ5RPIieUTyInndwUP83cFD/N3BQ/zdwUP8/////////////////////392fvZ/dn72f3Z+9n92fvbjLDkm4yw5JuMsOSbjLDkmpVBSqKVQUqilUFKopVBSqCf3r5En96+RJ/evkSf3r5HuhHdC7oR3Qu6Ed0LuhHdC")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_whcoa")
 
-[sub_resource type="BoxMesh" id="BoxMesh_cmlqy"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_idyqf"]
 
-[sub_resource type="BoxMesh" id="BoxMesh_oxytd"]
-size = Vector3(1, 0.28, 1)
+[sub_resource type="ArrayMesh" id="ArrayMesh_ilxfo"]
+_surfaces = [{
+"aabb": AABB(-1.17, 0, -0.14, 2.34, 0.42000002, 0.28),
+"format": 34896613377,
+"index_count": 252,
+"index_data": PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcACAAJAAoACgALAAgACQAIAAwACwAKAA0ACQANAAoADgAIAAsACAAOAAwADQAOAAsADAAPAAkADQAJAA8ADwAMAA4ADgANAA8AEAARABIAEgATABAAEQAQABQAEwASABUAEQAVABIAFgAQABMAEAAWABQAFQAWABMAFAAXABEAFQARABcAFwAUABYAFgAVABcAGAAZABoAGgAbABgAGQAYABwAGwAaAB0AGQAdABoAHgAYABsAGAAeABwAHQAeABsAHAAfABkAHQAZAB8AHwAcAB4AHgAdAB8AIAAhACIAIgAjACAAIQAgACQAIwAiACUAIQAlACIAJgAgACMAIAAmACQAJQAmACMAJAAnACEAJQAhACcAJwAkACYAJgAlACcAKAApACoAKgArACgAKQAoACwAKwAqAC0AKQAtACoALgAoACsAKAAuACwALQAuACsALAAvACkALQApAC8ALwAsAC4ALgAtAC8AMAAxADIAMgAzADAAMQAwADQAMwAyADUAMQA1ADIANgAwADMAMAA2ADQANQA2ADMANAA3ADEANQAxADcANwA0ADYANgA1ADcA"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 56,
+"vertex_data": PackedByteArray("AAAAAP//AAATOxeG//8AABM7AAD//wAAAAAAAAAAAAAAABeG//8AABM7AAAAAAAAAAAXhgAAAAATOxeGAAAAAKNBAAD//wAAt3wXhv//AAC3fAAA//8AAKNBAAAAAAAAo0EXhv//AAC3fAAAAAAAAKNBF4YAAAAAt3wXhgAAAABHgwAA//8AAFu+F4b//wAAW74AAP//AABHgwAAAAAAAEeDF4b//wAAW74AAAAAAABHgxeGAAAAAFu+F4YAAAAA68QAAP//AAD//xeG//8AAP//AAD//wAA68QAAAAAAADrxBeG//8AAP//AAAAAAAA68QXhgAAAAD//xeGAAAAANEg53n//wAA5Vv/////AADlW+d5//8AANEg53kAAAAA0SD/////AADlW+d5AAAAANEg//8AAAAA5Vv//wAAAAB1Yud5//8AAImd/////wAAiZ3nef//AAB1Yud5AAAAAHVi/////wAAiZ3neQAAAAB1Yv//AAAAAImd//8AAAAAGaTnef//AAAt3/////8AAC3f53n//wAAGaTneQAAAAAZpP////8AAC3f53kAAAAAGaT//wAAAAAt3///AAAAAA==")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_g7bad"]
+resource_name = "sandbag_barrier_mesh"
+_surfaces = [{
+"aabb": AABB(-1.17, 0, -0.14, 2.34, 0.42000002, 0.28),
+"attribute_data": PackedByteArray("AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//"),
+"format": 34896613399,
+"index_count": 252,
+"index_data": PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcAGAAZABoAGQAYABsAHAAdAB4AHQAcAB8AIAAhACIAIQAgACMAJAAlACYAJQAkACcAKAApACoAKQAoACsALAAtAC4ALQAsAC8AMAAxADIAMQAwADMANAA1ADYANQA0ADcAOAA5ADoAOQA4ADsAPAA9AD4APQA8AD8AQABBAEIAQQBAAEMARABFAEYARQBEAEcASABJAEoASQBIAEsATABNAE4ATQBMAE8AUABRAFIAUQBQAFMAVABVAFYAVQBUAFcAWABZAFoAWQBYAFsAXABdAF4AXQBcAF8AYABhAGIAYQBgAGMAZABlAGYAZQBkAGcAaABpAGoAaQBoAGsAbABtAG4AbQBsAG8AcABxAHIAcQBwAHMAdAB1AHYAdQB0AHcAeAB5AHoAeQB4AHsAfAB9AH4AfQB8AH8AgACBAIIAgQCAAIMAhACFAIYAhQCEAIcAiACJAIoAiQCIAIsAjACNAI4AjQCMAI8AkACRAJIAkQCQAJMAlACVAJYAlQCUAJcAmACZAJoAmQCYAJsAnACdAJ4AnQCcAJ8AoAChAKIAoQCgAKMApAClAKYApQCkAKcA"),
+"material": SubResource("StandardMaterial3D_idyqf"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 168,
+"vertex_data": PackedByteArray("AAAAAP///n8TOxeG///+fxM7AAD///5/AAAXhv///n8AABeGAAD//xM7AAAAAP//EzsXhgAA//8AAAAAAAD//xM7AAAAAKoqEzsXhv//qioTOxeGAACqKhM7AAD//6oqAAAAAP//VNUAABeGAABU1QAAF4b//1TVAAAAAAAAVNUTOxeGAAD/vwAAF4b///+/AAAXhgAA/78TOxeG////vxM7AAD//wAAAAAAAAAAAAAAAAAA//8AABM7AAAAAAAAo0EAAP///n+3fBeG///+f7d8AAD///5/o0EXhv///n+jQReGAAD//7d8AAAAAP//t3wXhgAA//+jQQAAAAD//7d8AAAAAKoqt3wXhv//qiq3fBeGAACqKrd8AAD//6oqo0EAAP//VNWjQReGAABU1aNBF4b//1TVo0EAAAAAVNW3fBeGAAD/v6NBF4b///+/o0EXhgAA/7+3fBeG////v7d8AAD//wAAo0EAAAAAAACjQQAA//8AALd8AAAAAAAAR4MAAP///n9bvheG///+f1u+AAD///5/R4MXhv///n9HgxeGAAD//1u+AAAAAP//W74XhgAA//9HgwAAAAD//1u+AAAAAKoqW74Xhv//qipbvheGAACqKlu+AAD//6oqR4MAAP//VNVHgxeGAABU1UeDF4b//1TVR4MAAAAAVNVbvheGAAD/v0eDF4b///+/R4MXhgAA/79bvheG////v1u+AAD//wAAR4MAAAAAAABHgwAA//8AAFu+AAAAAAAA68QAAP///n///xeG///+f///AAD///5/68QXhv///n/rxBeGAAD/////AAAAAP////8XhgAA///rxAAAAAD/////AAAAAKoq//8Xhv//qir//xeGAACqKv//AAD//6oq68QAAP//VNXrxBeGAABU1evEF4b//1TV68QAAAAAVNX//xeGAAD/v+vEF4b///+/68QXhgAA/7///xeG////v///AAD//wAA68QAAAAAAADrxAAA//8AAP//AAAAAAAA0SDnef///n/lW//////+f+Vb53n///5/0SD//////n/RIP//AAD//+Vb53kAAP//5Vv//wAA///RIOd5AAD//+Vb53kAAKoq5Vv/////qirlW///AACqKuVb53n//6oq0SDnef//VNXRIP//AABU1dEg/////1TV0SDneQAAVNXlW///AAD/v9Eg//////+/0SD//wAA/7/lW///////v+Vb53n//wAA0SDneQAAAADRIOd5//8AAOVb53kAAAAAdWLnef///n+Jnf/////+f4md53n///5/dWL//////n91Yv//AAD//4md53kAAP//iZ3//wAA//91Yud5AAD//4md53kAAKoqiZ3/////qiqJnf//AACqKomd53n//6oqdWLnef//VNV1Yv//AABU1XVi/////1TVdWLneQAAVNWJnf//AAD/v3Vi//////+/dWL//wAA/7+Jnf//////v4md53n//wAAdWLneQAAAAB1Yud5//8AAImd53kAAAAAGaTnef///n8t3//////+fy3f53n///5/GaT//////n8ZpP//AAD//y3f53kAAP//Ld///wAA//8ZpOd5AAD//y3f53kAAKoqLd//////qiot3///AACqKi3f53n//6oqGaTnef//VNUZpP//AABU1Rmk/////1TVGaTneQAAVNUt3///AAD/vxmk//////+/GaT//wAA/78t3///////vy3f53n//wAAGaTneQAAAAAZpOd5//8AAC3f53kAAAAA/3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_ilxfo")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pf1b6"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_ta3x2"]
+_surfaces = [{
+"aabb": AABB(-0.54949176, 0, -0.11, 1.0989835, 1.9, 0.22),
+"format": 34896613377,
+"index_count": 108,
+"index_data": PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcACAAJAAoACgALAAgACQAIAAwACwAKAA0ACQANAAoADgAIAAsACAAOAAwADQAOAAsADAAPAAkADQAJAA8ADwAMAA4ADgANAA8AEAARABIAEgATABAAEQAQABQAEwASABUAEQAVABIAFgAQABMAEAAWABQAFQAWABMAFAAXABEAFQARABcAFwAUABYAFgAVABcA"),
+"lods": [0.58122736, PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcA")],
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 24,
+"vertex_data": PackedByteArray("X2YAAP//AACfmf////8AAJ+ZAAD//wAAX2YAAAAAAABfZv////8AAJ+ZAAAAAAAAX2b//wAAAACfmf//AAAAAGUL3qnQxQAAmfTP99DFAAD//wzp0MUAAGUL3qkuOgAAAAChuNDFAAD//wzpLjoAAAAAobguOgAAmfTP9y46AADvIQLELboAAA/e04wtugAAS9GOgS26AADvIQLE0UUAALMuR88tugAAS9GOgdFFAACzLkfP0UUAAA/e04zRRQAA")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_2d5ah"]
+resource_name = "tree_dead_mesh"
+_surfaces = [{
+"aabb": AABB(-0.54949176, 0, -0.11, 1.0989835, 1.9, 0.22),
+"attribute_data": PackedByteArray("AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//"),
+"format": 34896613399,
+"index_count": 108,
+"index_data": PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcAGAAZABoAGQAYABsAHAAdAB4AHQAcAB8AIAAhACIAIQAgACMAJAAlACYAJQAkACcAKAApACoAKQAoACsALAAtAC4ALQAsAC8AMAAxADIAMQAwADMANAA1ADYANQA0ADcAOAA5ADoAOQA4ADsAPAA9AD4APQA8AD8AQABBAEIAQQBAAEMARABFAEYARQBEAEcA"),
+"lods": [0.58122736, PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcA")],
+"material": SubResource("StandardMaterial3D_pf1b6"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 72,
+"vertex_data": PackedByteArray("X2YAAP///n+fmf/////+f5+ZAAD///5/X2b//////n9fZv//AAD//5+ZAAAAAP//n5n//wAA//9fZgAAAAD//5+ZAAAAAKoqn5n/////qiqfmf//AACqKp+ZAAD//6oqX2YAAP//VNVfZv//AABU1V9m/////1TVX2YAAAAAVNWfmf//AAD/v19m//////+/X2b//wAA/7+fmf//////v5+ZAAD//wAAX2YAAAAAAABfZgAA//8AAJ+ZAAAAAAAAZQveqdDF4m6Z9M/30MXibv//DOnQxeJuAAChuNDF4m4AAKG4Ljr/////DOkuOv//mfTP9y46//9lC96pLjr/////DOkuOi8gmfTP99DFLyCZ9M/3LjovIP//DOnQxS8gZQveqdDFPswAAKG4Ljo+zAAAobjQxT7MZQveqS46PsyZ9M/3LjrEwQAAobjQxcTBAAChuC46xMGZ9M/30MXEwf//DOnQxQ4MZQveqS46DgxlC96p0MUODP//DOkuOg4M7yECxC26XWgP3tOMLbpdaEvRjoEtul1osy5Hzy26XWizLkfP0UX//0vRjoHRRf//D97TjNFF///vIQLE0UX//0vRjoHRRbY2D97TjC26tjYP3tOM0UW2NkvRjoEturY27yECxC26D+SzLkfP0UUP5LMuR88tug/k7yECxNFFD+QP3tOM0UVVw7MuR88tulXDsy5Hz9FFVcMP3tOMLbpVw0vRjoEtupcQ7yECxNFFlxDvIQLELbqXEEvRjoHRRZcQ/3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//////////////////////4JpgemCaYHpgmmB6YJpgelTMFgfUzBYH1MwWB9TMFgfR0gjpEdII6RHSCOkR0gjpN7sQKbe7ECm3uxApt7sQKZTjClGU4wpRlOMKUZTjClG/3//f/9//3//f/9//3//f2qdlOJqnZTiap2U4mqdlOI9IYQ9PSGEPT0hhD09IYQ9xWRissVkYrLFZGKyxWRisifQE2gn0BNoJ9ATaCfQE2hOyGDvTshg707IYO9OyGDv")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_ta3x2")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_epibj"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_8yf66"]
+_surfaces = [{
+"aabb": AABB(-0.395, 0, -0.34, 0.79499996, 0.38, 0.69500005),
+"format": 34896613377,
+"index_count": 108,
+"index_data": PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcACAAJAAoACgALAAgACQAIAAwACwAKAA0ACQANAAoADgAIAAsACAAOAAwADQAOAAsADAAPAAkADQAJAA8ADwAMAA4ADgANAA8AEAARABIAEgATABAAEQAQABQAEwASABUAEQAVABIAFgAQABMAEAAWABQAFQAWABMAFAAXABEAFQARABcAFwAUABYAFgAVABcA"),
+"lods": [0.37523332, PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcA")],
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 24,
+"vertex_data": PackedByteArray("AAAAAP//AAAasf////8AABqxAAD//wAAAAAAAGg1AAAAAP////8AABqxAABoNQAAAAD//2g1AAAasf//aDUAAG5lAADNsAAA//+T182wAAD//wAAzbAAAG5lAAAAAAAAbmWT182wAAD//wAAAAAAAG5lk9cAAAAA//+T1wAAAACSOwAAlsoAANDCoLyWygAA0MIAAJbKAACSOwAA4i8AAJI7oLyWygAA0MIAAOIvAACSO6C84i8AANDCoLziLwAA")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_qugiy"]
+resource_name = "bush_dry_mesh"
+_surfaces = [{
+"aabb": AABB(-0.395, 0, -0.34, 0.79499996, 0.38, 0.69500005),
+"attribute_data": PackedByteArray("AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//"),
+"format": 34896613399,
+"index_count": 108,
+"index_data": PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcAGAAZABoAGQAYABsAHAAdAB4AHQAcAB8AIAAhACIAIQAgACMAJAAlACYAJQAkACcAKAApACoAKQAoACsALAAtAC4ALQAsAC8AMAAxADIAMQAwADMANAA1ADYANQA0ADcAOAA5ADoAOQA4ADsAPAA9AD4APQA8AD8AQABBAEIAQQBAAEMARABFAEYARQBEAEcA"),
+"lods": [0.37523332, PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcA")],
+"material": SubResource("StandardMaterial3D_epibj"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 72,
+"vertex_data": PackedByteArray("AAAAAP///n8asf/////+fxqxAAD///5/AAD//////n8AAP//aDX//xqxAABoNf//GrH//2g1//8AAAAAaDX//xqxAABoNaoqGrH/////qioasf//aDWqKhqxAAD//6oqAAAAAP//VNUAAP//aDVU1QAA/////1TVAAAAAGg1VNUasf//aDX/vwAA//////+/AAD//2g1/78asf//////vxqxAAD//wAAAAAAAGg1AAAAAAAA//8AABqxAABoNQAAbmUAAM2w/n///5PXzbD+f///AADNsP5/bmWT182w/n9uZZPXAAD/////AAAAAP////+T1wAA//9uZQAAAAD/////AAAAAKoq//+T182wqir//5PXAACqKv//AADNsKoqbmUAAM2wVNVuZZPXAABU1W5lk9fNsFTVbmUAAAAAVNX//5PXAAD/v25lk9fNsP+/bmWT1wAA/7///5PXzbD/v///AADNsAAAbmUAAAAAAABuZQAAzbAAAP//AAAAAAAAkjsAAJbK/n/QwqC8lsr+f9DCAACWyv5/kjugvJbK/n+SO6C84i///9DCAADiL///0MKgvOIv//+SOwAA4i///9DCAADiL6oq0MKgvJbKqirQwqC84i+qKtDCAACWyqoqkjsAAJbKVNWSO6C84i9U1ZI7oLyWylTVkjsAAOIvVNXQwqC84i//v5I7oLyWyv+/kjugvOIv/7/QwqC8lsr/v9DCAACWygAAkjsAAOIvAACSOwAAlsoAANDCAADiLwAA/3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_8yf66")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_j22hb"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_asdu8"]
+_surfaces = [{
+"aabb": AABB(-0.33, 0, -0.33, 0.66, 0.78, 0.66),
+"format": 34896613377,
+"index_count": 108,
+"index_data": PackedByteArray("AAABAAIAAgADAAAAAQAAAAQAAwACAAUAAQAFAAIABgAAAAMAAAAGAAQABQAGAAMABAAHAAEABQABAAcABwAEAAYABgAFAAcACAAJAAoACgALAAgACQAIAAwACwAKAA0ACQANAAoADgAIAAsACAAOAAwADQAOAAsADAAPAAkADQAJAA8ADwAMAA4ADgANAA8AEAARABIAEgATABAAEQAQABQAEwASABUAEQAVABIAFgAQABMAEAAWABQAFQAWABMAFAAXABEAFQARABcAFwAUABYAFgAVABcA"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 24,
+"vertex_data": PackedByteArray("ZBMAAJrsAACa7P//muwAAJrsAACa7AAAZBMAAGQTAABkE///muwAAJrsAABkEwAAZBP//2QTAACa7P//ZBMAAAAAaBD//wAA//8aJP//AAD//2gQ//8AAAAAaBAAAAAAAAAaJP//AAD//2gQAAAAAAAAGiQAAAAA//8aJAAAAAAAAOTb//8AAP//lu///wAA///k2///AAAAAOTbAAAAAAAAlu///wAA///k2wAAAAAAAJbvAAAAAP//lu8AAAAA")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_f0h4m"]
+resource_name = "barrel_rust_mesh"
+_surfaces = [{
+"aabb": AABB(-0.33, 0, -0.33, 0.66, 0.78, 0.66),
+"attribute_data": PackedByteArray("AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//AAAAAP///////wAAAAD/////AAAAAP//AAAAAP////8AAAAA////////AAAAAP////8AAAAA//8AAAAA////////AAAAAP//AAAAAP////8AAAAA////////AAAAAP//"),
+"format": 34896613399,
+"index_count": 108,
+"index_data": PackedByteArray("AAABAAIAAQAAAAMABAAFAAYABQAEAAcACAAJAAoACQAIAAsADAANAA4ADQAMAA8AEAARABIAEQAQABMAFAAVABYAFQAUABcAGAAZABoAGQAYABsAHAAdAB4AHQAcAB8AIAAhACIAIQAgACMAJAAlACYAJQAkACcAKAApACoAKQAoACsALAAtAC4ALQAsAC8AMAAxADIAMQAwADMANAA1ADYANQA0ADcAOAA5ADoAOQA4ADsAPAA9AD4APQA8AD8AQABBAEIAQQBAAEMARABFAEYARQBEAEcA"),
+"material": SubResource("StandardMaterial3D_j22hb"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 72,
+"vertex_data": PackedByteArray("ZBMAAJrs/n+a7P//muz+f5rsAACa7P5/ZBP//5rs/n9kE///ZBP//5rsAABkE///muz//2QT//9kEwAAZBP//5rsAABkE6oqmuz//5rsqiqa7P//ZBOqKprsAACa7KoqZBMAAJrsVNVkE///ZBNU1WQT//+a7FTVZBMAAGQTVNWa7P//ZBP/v2QT//+a7P+/ZBP//2QT/7+a7P//muz/v5rsAACa7AAAZBMAAGQTAABkEwAAmuwAAJrsAABkEwAAAABoEP///n///xok///+f///aBD///5/AAAaJP///n8AABokAAD/////aBAAAP////8aJAAA//8AAGgQAAD/////aBAAAKoq//8aJP//qir//xokAACqKv//aBD//6oqAABoEP//VNUAABokAABU1QAAGiT//1TVAABoEAAAVNX//xokAAD/vwAAGiT///+/AAAaJAAA/7///xok////v///aBD//wAAAABoEAAAAAAAAGgQ//8AAP//aBAAAAAAAADk2////n///5bv///+f///5Nv///5/AACW7////n8AAJbvAAD/////5NsAAP////+W7wAA//8AAOTbAAD/////5NsAAKoq//+W7///qir//5bvAACqKv//5Nv//6oqAADk2///VNUAAJbvAABU1QAAlu///1TVAADk2wAAVNX//5bvAAD/vwAAlu////+/AACW7wAA/7///5bv////v///5Nv//wAAAADk2wAAAAAAAOTb//8AAP//5NsAAAAA/3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8//3////9/////f////3////9/////f////3////9///+qKqoqqiqqKqoqqiqqKqoqVFWqqlRVqqpUVaqqVFWqqv///3////9/////f////3//f/8//3//P/9//z//f/8/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_asdu8")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_n0him"]
+resource_name = "material_0"
+albedo_color = Color(0.76737565, 0.64995646, 0.5168811, 1)
+roughness = 0.95
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_kthx5"]
+_surfaces = [{
+"aabb": AABB(-0.5, 0, -0.5, 1, 1, 1),
+"format": 34896613377,
+"index_count": 36,
+"index_data": PackedByteArray("AAABAAIAAAADAAEAAgABAAQAAwAEAAEABQAAAAIABQADAAAAAgAEAAYABQACAAYAAwAHAAQABQAHAAMABgAEAAcABgAHAAUA"),
+"name": "material_0",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 8,
+"vertex_data": PackedByteArray("AAAAAP//AAD///////8AAP//AAD//wAAAAD/////AAD/////AAAAAAAAAAAAAAAA//8AAAAAAAAAAP//AAAAAA==")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_j568k"]
+resource_name = "crate_wood_mesh"
+_surfaces = [{
+"aabb": AABB(-0.5, 0, -0.5, 1, 1, 1),
+"format": 34896613383,
+"index_count": 36,
+"index_data": PackedByteArray("AAABAAIAAAADAAEABAAFAAYABAAHAAUACAAJAAoACAALAAkADAANAA4ADAAPAA0AEAARABIAEAATABEAFAAVABYAFAAXABUA"),
+"material": SubResource("StandardMaterial3D_n0him"),
+"name": "material_0",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 24,
+"vertex_data": PackedByteArray("AAAAAP///7//////////v///AAD///+/AAD//////7///wAAAAD//wAA//8AAP//AAAAAAAA////////AAD/////AAD//////////wAA/////wAAAAD/////////////AAAAAAAA/78AAP//////vwAAAAD///+/AAD//wAA/78AAP////////////8AAP////////////8AAP//AAD//wAAAAAAAP////8AAP///////wAAAAD//wAAAAD//////3//f/9//3//f/9//3//f/8//7//P/+//z//v/8//7//v/9//7//f/+//3//v/9//3////9/////f////3////9//7//f/+//3//v/9//7//f/8//3//P/9//z//f/8/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_kthx5")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4qauf"]
+resource_name = "material_1"
+albedo_color = Color(0.59261936, 0.48452926, 0.36556464, 1)
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_bagj8"]
+_surfaces = [{
+"aabb": AABB(-0.5, 0, -0.5, 1, 1, 1),
+"format": 34896613377,
+"index_count": 36,
+"index_data": PackedByteArray("AAABAAIAAAADAAEAAgABAAQAAwAEAAEABQAAAAIABQADAAAAAgAEAAYABQACAAYAAwAHAAQABQAHAAMABgAEAAcABgAHAAUA"),
+"name": "material_1",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 8,
+"vertex_data": PackedByteArray("AAAAAP//AAD///////8AAP//AAD//wAAAAD/////AAD/////AAAAAAAAAAAAAAAA//8AAAAAAAAAAP//AAAAAA==")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_yq462"]
+resource_name = "crate_wood_mesh2"
+_surfaces = [{
+"aabb": AABB(-0.5, 0, -0.5, 1, 1, 1),
+"format": 34896613383,
+"index_count": 36,
+"index_data": PackedByteArray("AAABAAIAAAADAAEABAAFAAYABAAHAAUACAAJAAoACAALAAkADAANAA4ADAAPAA0AEAARABIAEAATABEAFAAVABYAFAAXABUA"),
+"material": SubResource("StandardMaterial3D_4qauf"),
+"name": "material_1",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 24,
+"vertex_data": PackedByteArray("AAAAAP///7//////////v///AAD///+/AAD//////7///wAAAAD//wAA//8AAP//AAAAAAAA////////AAD/////AAD//////////wAA/////wAAAAD/////////////AAAAAAAA/78AAP//////vwAAAAD///+/AAD//wAA/78AAP////////////8AAP////////////8AAP//AAD//wAAAAAAAP////8AAP///////wAAAAD//wAAAAD//////3//f/9//3//f/9//3//f/8//7//P/+//z//v/8//7//v/9//7//f/+//3//v/9//3////9/////f////3////9//7//f/+//3//v/9//7//f/8//3//P/9//z//f/8/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_bagj8")
 
 [node name="survivor_outpost_01_perimeter" type="Node3D" unique_id=1889836604]
 script = ExtResource("1_2hkxp")
@@ -103,9 +433,101 @@ props_json = "{
 	\"pickup\": null
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade" unique_id=1151158883]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0.14, 0.5)
-mesh = SubResource("BoxMesh_hihil")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade" unique_id=450040840]
+
+[node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1159942878 instance=ExtResource("4_egj72")]
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/building_wall_floor_flat" unique_id=1912702172]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=127457239 instance=ExtResource("5_d62rs")]
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/building_wall_corner" unique_id=1397968216]
+mesh = SubResource("ArrayMesh_qcb7w")
+
+[node name="@Node3D@561" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=103527194 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@561" unique_id=905470371]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@562" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=991585991 instance=ExtResource("5_d62rs")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@562" unique_id=1627037241]
+mesh = SubResource("ArrayMesh_qcb7w")
+
+[node name="@Node3D@563" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=75326474 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@563" unique_id=1554865875]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1934651983 instance=ExtResource("6_o1e23")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/building_wall_straight" unique_id=1265292635]
+mesh = SubResource("ArrayMesh_2i6ck")
+
+[node name="@Node3D@564" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1143381309 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@564" unique_id=1188576910]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@565" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=103879207 instance=ExtResource("6_o1e23")]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@565" unique_id=1955750227]
+mesh = SubResource("ArrayMesh_2i6ck")
+
+[node name="@Node3D@566" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1348375940 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@566" unique_id=1000464796]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@567" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=2030637281 instance=ExtResource("6_o1e23")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 2)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@567" unique_id=2090847964]
+mesh = SubResource("ArrayMesh_2i6ck")
+
+[node name="@Node3D@568" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=710697525 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 2)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@568" unique_id=171106485]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@569" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1149214747 instance=ExtResource("6_o1e23")]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0, 2)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@569" unique_id=73408486]
+mesh = SubResource("ArrayMesh_2i6ck")
+
+[node name="@Node3D@570" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1380238159 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@570" unique_id=1739773934]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@571" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=964466183 instance=ExtResource("5_d62rs")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 3)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@571" unique_id=395464039]
+mesh = SubResource("ArrayMesh_qcb7w")
+
+[node name="@Node3D@572" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=651895302 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 3)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@572" unique_id=1568725975]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@573" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1751482936 instance=ExtResource("5_d62rs")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 3)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@573" unique_id=1100869069]
+mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="survivor_outpost_01_perimeter_bus_wreck" type="Node3D" parent="Objects" unique_id=66956691]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 4)
@@ -139,9 +561,77 @@ props_json = "{
 	\"pickup\": null
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck" unique_id=780679723]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.14, 0.5)
-mesh = SubResource("BoxMesh_5715b")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck" unique_id=1270954985]
+
+[node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=349394715 instance=ExtResource("4_egj72")]
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/building_wall_floor_flat" unique_id=1131566669]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1162819546 instance=ExtResource("5_d62rs")]
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/building_wall_corner" unique_id=1195578294]
+mesh = SubResource("ArrayMesh_qcb7w")
+
+[node name="@Node3D@552" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=814319790 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@552" unique_id=406345807]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1031034861 instance=ExtResource("6_o1e23")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/building_wall_straight" unique_id=1076865574]
+mesh = SubResource("ArrayMesh_2i6ck")
+
+[node name="@Node3D@553" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1537992545 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@553" unique_id=104933140]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@554" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1658839376 instance=ExtResource("5_d62rs")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@554" unique_id=2023187287]
+mesh = SubResource("ArrayMesh_qcb7w")
+
+[node name="@Node3D@555" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1591847864 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@555" unique_id=752758686]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@556" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=589532151 instance=ExtResource("5_d62rs")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@556" unique_id=175431428]
+mesh = SubResource("ArrayMesh_qcb7w")
+
+[node name="@Node3D@557" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1787541927 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@557" unique_id=1169023010]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@558" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1135426238 instance=ExtResource("6_o1e23")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@558" unique_id=480007545]
+mesh = SubResource("ArrayMesh_2i6ck")
+
+[node name="@Node3D@559" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=31491381 instance=ExtResource("4_egj72")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@559" unique_id=1570875910]
+mesh = SubResource("ArrayMesh_iylf0")
+
+[node name="@Node3D@560" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1297729703 instance=ExtResource("5_d62rs")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 1)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@560" unique_id=988158090]
+mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="survivor_outpost_01_perimeter_return_gate" type="Node3D" parent="Objects" unique_id=1205287661]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8)
@@ -172,9 +662,7 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_return_gate" unique_id=1289640990]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 2)
-mesh = SubResource("BoxMesh_y1mnn")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_return_gate" unique_id=240339174]
 
 [node name="survivor_outpost_01_perimeter_to_street_b" type="Node3D" parent="Objects" unique_id=1614980204]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19, 0, 8)
@@ -196,9 +684,7 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_to_street_b" unique_id=1539819303]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 2)
-mesh = SubResource("BoxMesh_nntio")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_to_street_b" unique_id=2004016414]
 
 [node name="survivor_outpost_01_perimeter_overworld_exit" type="Node3D" parent="Objects" unique_id=360101079]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 10)
@@ -219,9 +705,7 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_overworld_exit" unique_id=1389911520]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_mxk2s")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_overworld_exit" unique_id=404435818]
 
 [node name="survivor_outpost_01_perimeter_roadblock_prop" type="Node3D" parent="Objects" unique_id=901858981]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 8)
@@ -237,9 +721,13 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_roadblock_prop" unique_id=205950504]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.14, 0)
-mesh = SubResource("BoxMesh_xjm8h")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_roadblock_prop" unique_id=334271206]
+
+[node name="props_roadblock_concrete" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_roadblock_prop/Visuals" unique_id=1940896975 instance=ExtResource("7_geohy")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_roadblock_prop/Visuals/props_roadblock_concrete" unique_id=981599722]
+mesh = SubResource("ArrayMesh_i1q0c")
 
 [node name="survivor_outpost_01_perimeter_wrecked_car_prop" type="Node3D" parent="Objects" unique_id=2083508514]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 5)
@@ -256,9 +744,13 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_wrecked_car_prop" unique_id=747912951]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.14, 0)
-mesh = SubResource("BoxMesh_ilrve")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_wrecked_car_prop" unique_id=1754569210]
+
+[node name="props_wrecked_car" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_wrecked_car_prop/Visuals" unique_id=1035125869 instance=ExtResource("8_y7dfe")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_wrecked_car_prop/Visuals/props_wrecked_car" unique_id=2007695891]
+mesh = SubResource("ArrayMesh_jmcsk")
 
 [node name="survivor_outpost_01_perimeter_sandbag_prop" type="Node3D" parent="Objects" unique_id=802554652]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 14)
@@ -274,9 +766,13 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_sandbag_prop" unique_id=999596258]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.14, 0)
-mesh = SubResource("BoxMesh_egj72")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_sandbag_prop" unique_id=150121858]
+
+[node name="props_sandbag_barrier" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_sandbag_prop/Visuals" unique_id=489900387 instance=ExtResource("9_yvqil")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_sandbag_prop/Visuals/props_sandbag_barrier" unique_id=1389572774]
+mesh = SubResource("ArrayMesh_g7bad")
 
 [node name="survivor_outpost_01_perimeter_dead_tree" type="Node3D" parent="Objects" unique_id=294975049]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 0, 2)
@@ -290,9 +786,13 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_dead_tree" unique_id=1949247693]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_d62rs")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_dead_tree" unique_id=1166428505]
+
+[node name="props_tree_dead" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_dead_tree/Visuals" unique_id=1145154666 instance=ExtResource("10_iu5u4")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_dead_tree/Visuals/props_tree_dead" unique_id=1661330856]
+mesh = SubResource("ArrayMesh_2d5ah")
 
 [node name="survivor_outpost_01_perimeter_dry_bush" type="Node3D" parent="Objects" unique_id=1695664710]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 15)
@@ -306,9 +806,13 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_dry_bush" unique_id=1398072652]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_o1e23")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_dry_bush" unique_id=1667248985]
+
+[node name="props_bush_dry" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_dry_bush/Visuals" unique_id=5539038 instance=ExtResource("11_kv5c3")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_dry_bush/Visuals/props_bush_dry" unique_id=1370501018]
+mesh = SubResource("ArrayMesh_qugiy")
 
 [node name="survivor_outpost_01_perimeter_rust_barrel" type="Node3D" parent="Objects" unique_id=1518905785]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 6)
@@ -322,9 +826,13 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_rust_barrel" unique_id=1792975735]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_geohy")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_rust_barrel" unique_id=1616229823]
+
+[node name="props_barrel_rust" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_rust_barrel/Visuals" unique_id=294476603 instance=ExtResource("12_cmlqy")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_rust_barrel/Visuals/props_barrel_rust" unique_id=1183926001]
+mesh = SubResource("ArrayMesh_f0h4m")
 
 [node name="survivor_outpost_01_perimeter_supply_box" type="Node3D" parent="Objects" unique_id=1259591628]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 12)
@@ -355,9 +863,26 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box" unique_id=2056885697]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_y7dfe")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_supply_box" unique_id=1717554068]
+
+[node name="props_crate_wood" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals" unique_id=830532455 instance=ExtResource("13_oxytd")]
+transform = Transform3D(0.35, 0, 0, 0, 0.2, 0, 0, 0, 0.35, 0, 0.08, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals/props_crate_wood" unique_id=691737833]
+transform = Transform3D(0.84, 0, 0, 0, 0.56, 0, 0, 0, 0.84, 0, 0, 0)
+mesh = SubResource("ArrayMesh_j568k")
+
+[node name="Mesh2" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals/props_crate_wood" unique_id=1892948818]
+transform = Transform3D(0.9, 0, 0, 0, 0.06, 0, 0, 0, 0.9, 0, 0.56, 0)
+mesh = SubResource("ArrayMesh_yq462")
+
+[node name="Mesh3" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals/props_crate_wood" unique_id=63082488]
+transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.16, 0)
+mesh = SubResource("ArrayMesh_yq462")
+
+[node name="Mesh4" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals/props_crate_wood" unique_id=727961723]
+transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.36, 0)
+mesh = SubResource("ArrayMesh_yq462")
 
 [node name="survivor_outpost_01_perimeter_supply_box_b" type="Node3D" parent="Objects" unique_id=2026055904]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 13)
@@ -388,9 +913,26 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b" unique_id=1431224586]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_yvqil")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b" unique_id=683364971]
+
+[node name="props_crate_wood" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals" unique_id=1664253667 instance=ExtResource("13_oxytd")]
+transform = Transform3D(0.35, 0, 0, 0, 0.2, 0, 0, 0, 0.35, 0, 0.08, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals/props_crate_wood" unique_id=1572160535]
+transform = Transform3D(0.84, 0, 0, 0, 0.56, 0, 0, 0, 0.84, 0, 0, 0)
+mesh = SubResource("ArrayMesh_j568k")
+
+[node name="Mesh2" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals/props_crate_wood" unique_id=207749526]
+transform = Transform3D(0.9, 0, 0, 0, 0.06, 0, 0, 0, 0.9, 0, 0.56, 0)
+mesh = SubResource("ArrayMesh_yq462")
+
+[node name="Mesh3" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals/props_crate_wood" unique_id=962763745]
+transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.16, 0)
+mesh = SubResource("ArrayMesh_yq462")
+
+[node name="Mesh4" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals/props_crate_wood" unique_id=1155497100]
+transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.36, 0)
+mesh = SubResource("ArrayMesh_yq462")
 
 [node name="survivor_outpost_01_perimeter_scrap_cache" type="Node3D" parent="Objects" unique_id=278792427]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 15)
@@ -421,9 +963,26 @@ props_json = "{
 	}
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache" unique_id=1215503332]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_iu5u4")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache" unique_id=952958504]
+
+[node name="props_crate_wood" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals" unique_id=824231683 instance=ExtResource("13_oxytd")]
+transform = Transform3D(0.35, 0, 0, 0, 0.2, 0, 0, 0, 0.35, 0, 0.08, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals/props_crate_wood" unique_id=723690812]
+transform = Transform3D(0.84, 0, 0, 0, 0.56, 0, 0, 0, 0.84, 0, 0, 0)
+mesh = SubResource("ArrayMesh_j568k")
+
+[node name="Mesh2" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals/props_crate_wood" unique_id=1816873554]
+transform = Transform3D(0.9, 0, 0, 0, 0.06, 0, 0, 0, 0.9, 0, 0.56, 0)
+mesh = SubResource("ArrayMesh_yq462")
+
+[node name="Mesh3" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals/props_crate_wood" unique_id=46557567]
+transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.16, 0)
+mesh = SubResource("ArrayMesh_yq462")
+
+[node name="Mesh4" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals/props_crate_wood" unique_id=1134071619]
+transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.36, 0)
+mesh = SubResource("ArrayMesh_yq462")
 
 [node name="survivor_outpost_01_perimeter_spawn_walker" type="Node3D" parent="Objects" unique_id=2003354482]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, 5)
@@ -444,9 +1003,7 @@ props_json = "{
 	\"pickup\": null
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_spawn_walker" unique_id=1977429457]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_kv5c3")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_spawn_walker" unique_id=976555077]
 
 [node name="survivor_outpost_01_perimeter_spawn_runner" type="Node3D" parent="Objects" unique_id=702515675]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 7)
@@ -467,9 +1024,7 @@ props_json = "{
 	\"pickup\": null
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_spawn_runner" unique_id=2067131966]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_cmlqy")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_spawn_runner" unique_id=2144794147]
 
 [node name="survivor_outpost_01_perimeter_spawn_brute" type="Node3D" parent="Objects" unique_id=1277815771]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 3)
@@ -490,6 +1045,4 @@ props_json = "{
 	\"pickup\": null
 }"
 
-[node name="EditorFootprint" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_spawn_brute" unique_id=1089896748]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
-mesh = SubResource("BoxMesh_oxytd")
+[node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_spawn_brute" unique_id=1178345488]

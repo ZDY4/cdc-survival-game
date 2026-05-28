@@ -10,7 +10,10 @@ const BROWSER_KINDS := ["item", "recipe", "character", "dialogue", "quest", "ski
 
 
 func supported_kinds() -> Array[String]:
-	return BROWSER_KINDS.duplicate()
+	var kinds: Array[String] = []
+	for kind in BROWSER_KINDS:
+		kinds.append(str(kind))
+	return kinds
 
 
 func domain_for_kind(kind: String) -> String:
