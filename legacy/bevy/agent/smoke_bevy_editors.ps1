@@ -1,3 +1,38 @@
+<#
+.SYNOPSIS
+Runs the legacy Bevy editor aggregate smoke check.
+
+.DESCRIPTION
+This legacy comparison script launches the archived Bevy editor batch files under
+`legacy/bevy/`, waits for each editor window, captures optional screenshots, and writes
+per-editor result JSON. Godot migration development should prefer
+`tools/agent/test-godot-editor.ps1`; use this script only when old Rust/Bevy editor
+behavior must be compared.
+
+.PARAMETER Editors
+Legacy Bevy editor ids to launch.
+
+.PARAMETER StartupTimeoutSec
+Maximum seconds to wait for each editor window.
+
+.PARAMETER AliveCheckSec
+Seconds to keep each editor alive before checking logs and screenshots.
+
+.PARAMETER OutputRoot
+Directory for result JSON, launcher logs, and screenshots. Defaults to `.local/smoke`.
+
+.PARAMETER KeepOpen
+Leave launched editor processes running after the smoke check.
+
+.PARAMETER SkipScreenshot
+Skip window screenshot capture.
+
+.EXAMPLE
+pwsh -NoProfile -File legacy/bevy/agent/smoke_bevy_editors.ps1
+
+.EXAMPLE
+pwsh -NoProfile -File legacy/bevy/agent/smoke_bevy_editors.ps1 -Editors bevy_map_editor -SkipScreenshot
+#>
 param(
     [string[]]$Editors = @(
         "bevy_item_editor",

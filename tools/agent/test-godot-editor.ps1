@@ -6,8 +6,8 @@ Runs deterministic Godot editor smoke scenarios.
 This script is the repo-local agent entrypoint for Godot editor migration smoke checks.
 It runs Godot 4.6.3 headless scripts that cover the CDC Agent Handoff dock, CDC Content
 Browser dock, CDC Map Preview dock, and the shared content edit services used by those
-editor surfaces. It is the migration replacement path for the old Bevy editor smoke
-aggregation under `tools/editor_shared/scripts/smoke_bevy_editors.ps1`.
+editor surfaces. It is the migration replacement path for the archived Bevy editor
+smoke aggregation under `legacy/bevy/agent/smoke_bevy_editors.ps1`.
 
 .PARAMETER Scenario
 Editor smoke scenario to run. Use `All` to run every Godot editor smoke scenario.

@@ -376,7 +376,7 @@ D:\godot\godot.cmd --path godot
 | 新脚本 | 替代对象 | 目标 |
 | --- | --- | --- |
 | `tools/agent/test-godot-game.ps1` | `test-bevy-game.ps1` | 运行 Godot headless / smoke 场景 |
-| `tools/agent/test-godot-editor.ps1` | `tools/editor_shared/scripts/smoke_bevy_editors.ps1` | 聚合 Godot editor handoff / browser / preview / edit service smoke |
+| `tools/agent/test-godot-editor.ps1` | `legacy/bevy/agent/smoke_bevy_editors.ps1` | 聚合 Godot editor handoff / browser / preview / edit service smoke |
 | `tools/agent/open-godot-editor.ps1` | `open-editor.ps1` | 打开 Godot editor 并写入 handoff |
 | `tools/agent/review-godot-map-visual.ps1` | `review-map-visual.ps1` | 地图校验、摘要、视觉预览 |
 | `tools/agent/godot-content.ps1` | `content_tools` | 包装 Godot content CLI |
