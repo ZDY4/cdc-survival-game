@@ -1,10 +1,12 @@
 extends RefCounted
 
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const VisionGeometry = preload("res://scripts/core/vision/vision_geometry.gd")
 
 const DEFAULT_VISION_RADIUS := 10
 
 var _actors: Dictionary = {}
+var _geometry := VisionGeometry.new()
 
 
 func set_actor_radius(actor_id: int, radius: int) -> void:
@@ -27,7 +29,7 @@ func recompute_actor(actor_id: int, active_map_id: String, center_data: Dictiona
 		_actors[actor_id] = state
 		return _update_result(changed, actor_id, state, [])
 
-	var visible_cells: Array[Dictionary] = compute_visible_cells(topology, center, int(state.get("radius", DEFAULT_VISION_RADIUS)))
+	var visible_cells: Array[Dictionary] = _geometry.compute_visible_cells(topology, center, int(state.get("radius", DEFAULT_VISION_RADIUS)))
 	var explored_by_map: Dictionary = _dictionary_or_empty(state.get("explored_by_map", {})).duplicate(true)
 	var explored_map: Dictionary = _dictionary_or_empty(explored_by_map.get(active_map_id, {})).duplicate(true)
 	var previous_active_map_id: String = str(state.get("active_map_id", ""))
@@ -49,28 +51,11 @@ func recompute_actor(actor_id: int, active_map_id: String, center_data: Dictiona
 
 
 func compute_visible_cells(topology: Dictionary, center: RefCounted, radius: int) -> Array[Dictionary]:
-	var normalized_radius: int = max(0, radius)
-	var bounds: Dictionary = _vision_bounds(topology, center, normalized_radius)
-	var blockers: Dictionary = _dictionary_or_empty(topology.get("sight_blocking_cells", {}))
-	var visible: Array[Dictionary] = []
-	for x in range(int(bounds.get("min_x", center.x)), int(bounds.get("max_x", center.x)) + 1):
-		var dx: int = x - center.x
-		for z in range(int(bounds.get("min_z", center.z)), int(bounds.get("max_z", center.z)) + 1):
-			var dz: int = z - center.z
-			if not _cell_intersects_vision_circle(dx, dz, float(normalized_radius)):
-				continue
-			var target := GridCoord.new(x, center.y, z)
-			if _has_line_of_sight(center, target, blockers):
-				visible.append(target.to_dictionary())
-	return _sorted_cells(visible)
+	return _geometry.compute_visible_cells(topology, center, radius)
 
 
 func has_line_of_sight(from_data: Dictionary, to_data: Dictionary, topology: Dictionary) -> bool:
-	var from: RefCounted = GridCoord.from_dictionary(from_data)
-	var to: RefCounted = GridCoord.from_dictionary(to_data)
-	if from.y != to.y:
-		return false
-	return _has_line_of_sight(from, to, _dictionary_or_empty(topology.get("sight_blocking_cells", {})))
+	return _geometry.has_line_of_sight(from_data, to_data, topology)
 
 
 func snapshot() -> Dictionary:
@@ -147,51 +132,6 @@ func _update_result(changed: bool, actor_id: int, state: Dictionary, explored_ce
 		"visible_cells": _sorted_cells(_array_or_empty(state.get("visible_cells", []))),
 		"explored_cells": _sorted_cells(explored_cells),
 	}
-
-
-func _vision_bounds(topology: Dictionary, center: RefCounted, radius: int) -> Dictionary:
-	var bounds: Dictionary = _dictionary_or_empty(topology.get("bounds", {}))
-	return {
-		"min_x": max(int(bounds.get("min_x", center.x - radius)), center.x - radius),
-		"max_x": min(int(bounds.get("max_x", center.x + radius)), center.x + radius),
-		"min_z": max(int(bounds.get("min_z", center.z - radius)), center.z - radius),
-		"max_z": min(int(bounds.get("max_z", center.z + radius)), center.z + radius),
-	}
-
-
-func _has_line_of_sight(from: RefCounted, to: RefCounted, blockers: Dictionary) -> bool:
-	if from.x == to.x and from.y == to.y and from.z == to.z:
-		return true
-	var x: int = from.x
-	var z: int = from.z
-	var dx: int = abs(to.x - x)
-	var dz: int = abs(to.z - z)
-	var sx: int = 1 if x < to.x else -1
-	var sz: int = 1 if z < to.z else -1
-	var err: int = dx - dz
-	while true:
-		if x == to.x and z == to.z:
-			return true
-		var e2: int = err * 2
-		if e2 > -dz:
-			err -= dz
-			x += sx
-		if e2 < dx:
-			err += dx
-			z += sz
-		if x == to.x and z == to.z:
-			return true
-		if blockers.has(GridCoord.new(x, from.y, z).key()):
-			return false
-	return true
-
-
-func _cell_intersects_vision_circle(dx: int, dz: int, radius: float) -> bool:
-	if radius <= 0.0:
-		return dx == 0 and dz == 0
-	var qx: float = max(0.0, float(abs(dx)) - 0.5)
-	var qz: float = max(0.0, float(abs(dz)) - 0.5)
-	return qx * qx + qz * qz <= radius * radius
 
 
 func _sorted_cells(cells: Array) -> Array[Dictionary]:
