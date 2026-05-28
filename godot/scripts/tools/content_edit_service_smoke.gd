@@ -14,7 +14,7 @@ func _init() -> void:
 
 	print("content_edit_service_smoke passed:")
 	print({
-		"covered_domains": ["item", "recipe", "character", "map", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld"],
+		"covered_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld"],
 	})
 	quit(0)
 
@@ -34,14 +34,12 @@ func _run() -> Array[String]:
 	_expect_patch(errors, service, registry, "items", "1006", {"name": "绷带 smoke"})
 	_expect_patch(errors, service, registry, "recipes", "recipe_first_aid_kit", {"craft_time": 31.0})
 	_expect_patch(errors, service, registry, "characters", "zombie_walker", {"identity.display_name": "行尸 smoke"})
-	_expect_patch(errors, service, registry, "maps", "survivor_outpost_01", {"name": "survivor outpost smoke"})
 	_expect_patch(errors, service, registry, "dialogues", "trader_lao_wang_intro", {"_comment": "老王开局对话 smoke"})
 	_expect_patch(errors, service, registry, "quests", "tutorial_survive", {"title": "补给试跑 smoke"})
 	_expect_patch(errors, service, registry, "skills", "survival", {"max_level": 6})
 	_expect_patch(errors, service, registry, "skill_trees", "survival", {"description": "生存系 smoke"})
 	_expect_patch(errors, service, registry, "settlements", "survivor_outpost_01_settlement", {"service_rules.min_guard_on_duty": 3})
 	_expect_patch(errors, service, registry, "overworld", "main_overworld", {"travel_rules.risk_multiplier": 1.25})
-	_expect_map_object_patch(errors, service, registry)
 	_expect_invalid_patch(errors, service, registry)
 	_expect_invalid_metadata_patch(errors, service, registry)
 	_expect_invalid_settlement_patch(errors, service, registry)
@@ -50,7 +48,7 @@ func _run() -> Array[String]:
 
 
 func _expect_editable_fields(errors: Array[String], service: ContentEditService) -> void:
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld"]:
+	for domain in ["items", "recipes", "characters", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld"]:
 		if service.editable_fields(domain).is_empty():
 			errors.append("content edit service has no editable fields for %s" % domain)
 
@@ -140,40 +138,6 @@ func _expect_invalid_settlement_patch(errors: Array[String], service: ContentEdi
 	var persisted := FileAccess.get_file_as_string(str(isolated.get_library("settlements")["survivor_outpost_01_settlement"].get("path", "")))
 	if persisted.contains("\"end_minute\": 1200"):
 		errors.append("invalid settlement patch should not be written to disk")
-
-
-func _expect_map_object_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry) -> void:
-	var isolated := _registry_with_temp_record(registry, "maps", "survivor_outpost_01")
-	var report := service.save_map_object_patch(
-		"survivor_outpost_01",
-		"survivor_outpost_01_gatehouse",
-		{
-			"anchor.x": "21",
-			"anchor.z": "32",
-			"blocks_movement": "true",
-		},
-		isolated,
-		{"allow_external_path": true}
-	)
-	if not bool(report.get("ok", false)):
-		errors.append("map object patch failed: %s" % report)
-		return
-	var path := str(report.get("path", ""))
-	var raw := FileAccess.get_file_as_string(path)
-	if not raw.contains("\"x\": 21"):
-		errors.append("map object patch should write normalized x coordinate")
-	if not raw.contains("\"blocks_movement\": true"):
-		errors.append("map object patch should write normalized bool value")
-
-	var invalid := service.save_map_object_patch(
-		"survivor_outpost_01",
-		"survivor_outpost_01_gatehouse",
-		{"anchor.x": -1},
-		isolated,
-		{"allow_external_path": true}
-	)
-	if bool(invalid.get("ok", false)):
-		errors.append("invalid map object patch should fail validation")
 
 
 func _registry_with_temp_record(registry: ContentRegistry, domain: String, id_value: String) -> ContentRegistry:

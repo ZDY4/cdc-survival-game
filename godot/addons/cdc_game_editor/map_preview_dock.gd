@@ -2,30 +2,24 @@
 extends VBoxContainer
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
-const MapEditService = preload("res://scripts/data/map_edit_service.gd")
-const MapEditFormPanel = preload("res://addons/cdc_game_editor/map_edit_form_panel.gd")
 const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const DOCK_MIN_SIZE := Vector2.ZERO
 const PREVIEW_MIN_SIZE := Vector2(240, 170)
 const PREVIEW_RENDER_SIZE := Vector2i(480, 340)
-const DETAIL_MIN_HEIGHT := 120.0
+const DETAIL_MIN_HEIGHT := 140.0
+const MAP_SCENE_DIR := "res://scenes/maps"
 
 var registry: ContentRegistry
-var edit_service: MapEditService
 var presenter: MapReviewPresenter
 var renderer: WorldSceneRenderer
-var entry_panel: MapEditFormPanel
-var object_panel: MapEditFormPanel
 var selected_map_id := ""
-var selected_object_id := ""
-var selected_entry_id := ""
+var selected_scene_path := ""
 var map_ids: Array[String] = []
-var object_inputs: Dictionary = {}
-var entry_inputs: Dictionary = {}
 
 var status_label: Label
 var map_option: OptionButton
+var open_scene_button: Button
 var viewport: SubViewport
 var preview_root: Node3D
 var detail: RichTextLabel
@@ -33,23 +27,20 @@ var detail: RichTextLabel
 
 func _ready() -> void:
 	registry = ContentRegistry.new()
-	edit_service = MapEditService.new()
 	presenter = MapReviewPresenter.new()
 	renderer = WorldSceneRenderer.new()
-	entry_panel = MapEditFormPanel.new()
-	object_panel = MapEditFormPanel.new()
 	_build_ui()
 	refresh_maps()
 
 
 func _build_ui() -> void:
-	name = "CDC Map Preview"
+	name = "CDC Map Review"
 	custom_minimum_size = DOCK_MIN_SIZE
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	var title := Label.new()
-	title.text = "CDC Map Preview"
+	title.text = "CDC Map Review"
 	title.add_theme_font_size_override("font_size", 16)
 	add_child(title)
 
@@ -72,10 +63,10 @@ func _build_ui() -> void:
 	refresh_button.pressed.connect(refresh_maps)
 	toolbar.add_child(refresh_button)
 
-	entry_panel.attach(self)
-	entry_panel.selected.connect(_on_entry_selected)
-	entry_panel.save_requested.connect(_save_entry_patch)
-	entry_inputs = entry_panel.inputs
+	open_scene_button = Button.new()
+	open_scene_button.text = "Open Scene"
+	open_scene_button.pressed.connect(_on_open_scene_pressed)
+	toolbar.add_child(open_scene_button)
 
 	var viewport_container := SubViewportContainer.new()
 	viewport_container.custom_minimum_size = PREVIEW_MIN_SIZE
@@ -88,16 +79,11 @@ func _build_ui() -> void:
 	viewport_container.add_child(viewport)
 
 	preview_root = Node3D.new()
-	preview_root.name = "MapPreviewRoot"
+	preview_root.name = "MapReviewRoot"
 	viewport.add_child(preview_root)
 
-	object_panel.attach(self)
-	object_panel.selected.connect(_on_object_selected)
-	object_panel.save_requested.connect(_save_object_patch)
-	object_inputs = object_panel.inputs
-
 	detail = RichTextLabel.new()
-	# 地图复核文本固定为滚动区，避免长 checklist 扩大整个 editor dock。
+	# 复核文本可能很长，固定为滚动区避免撑大 editor 面板。
 	detail.custom_minimum_size = Vector2(0, DETAIL_MIN_HEIGHT)
 	detail.fit_content = false
 	detail.scroll_active = true
@@ -111,6 +97,7 @@ func refresh_maps() -> Dictionary:
 	if load_result.has_errors():
 		_set_status("Status: map load failed")
 		_set_detail("\n".join(load_result.errors))
+		_set_open_scene_enabled(false)
 		return {"ok": false, "errors": load_result.errors}
 
 	map_ids = _sorted_map_ids(registry.get_library("maps"))
@@ -121,8 +108,10 @@ func refresh_maps() -> Dictionary:
 
 	if map_ids.is_empty():
 		selected_map_id = ""
+		selected_scene_path = ""
 		_set_status("Status: no maps found")
 		_set_detail("No maps are available.")
+		_set_open_scene_enabled(false)
 		return {"ok": false, "errors": ["no maps found"]}
 
 	var selected_index := max(0, map_ids.find(selected_map_id))
@@ -132,11 +121,13 @@ func refresh_maps() -> Dictionary:
 
 func select_map(map_id: String) -> Dictionary:
 	selected_map_id = map_id
+	selected_scene_path = scene_path_for_map(map_id)
 	var map_data: Dictionary = _map_data(map_id)
 	if map_data.is_empty():
 		_set_status("Status: map not found")
 		_set_detail("Map not found: %s" % map_id)
-		return {"ok": false, "errors": ["map not found: %s" % map_id]}
+		_set_open_scene_enabled(false)
+		return {"ok": false, "errors": ["map not found: %s" % map_id], "scene_path": selected_scene_path}
 
 	var review := presenter.build_review(map_data)
 	var world_snapshot := {
@@ -144,46 +135,32 @@ func select_map(map_id: String) -> Dictionary:
 		"actors": [],
 	}
 	var counts := renderer.render_world(preview_root, world_snapshot)
-	_refresh_entry_options(map_data)
-	_refresh_object_options(map_data)
-	_set_status("Status: preview %s | objects %d | cells %d" % [
+	var scene_exists := ResourceLoader.exists(selected_scene_path)
+	_set_open_scene_enabled(scene_exists)
+	_set_status("Status: review %s | objects %d | cells %d | scene %s" % [
 		map_id,
 		int(_dictionary_or_empty(review.get("map", {})).get("object_count", 0)),
 		int(_dictionary_or_empty(review.get("map", {})).get("occupied_cell_count", 0)),
+		"found" if scene_exists else "missing",
 	])
-	_set_detail("%s\n\n%s" % [review.get("summary", ""), review.get("checklist", "")])
+	_set_detail("%s\n\nscene_path: %s\nscene_status: %s\n\n%s" % [
+		review.get("summary", ""),
+		selected_scene_path,
+		"found" if scene_exists else "missing",
+		review.get("checklist", ""),
+	])
 	return {
 		"ok": true,
 		"map_id": map_id,
+		"scene_path": selected_scene_path,
+		"scene_exists": scene_exists,
 		"counts": counts,
 		"review": review,
 	}
 
 
-func apply_object_patch(patch: Dictionary, dry_run: bool = false, options: Dictionary = {}) -> Dictionary:
-	var save_options := options.duplicate()
-	save_options["dry_run"] = dry_run
-	var report := edit_service.save_map_object_patch(selected_map_id, selected_object_id, patch, registry, save_options)
-	if bool(report.get("ok", false)) and not dry_run:
-		refresh_maps()
-	return report
-
-
-func apply_entry_patch(patch: Dictionary, dry_run: bool = false, options: Dictionary = {}) -> Dictionary:
-	var save_options := options.duplicate()
-	save_options["dry_run"] = dry_run
-	var report := edit_service.save_entry_point_patch(selected_map_id, selected_entry_id, patch, registry, save_options)
-	if bool(report.get("ok", false)) and not dry_run:
-		refresh_maps()
-	return report
-
-
-func build_object_patch_from_inputs() -> Dictionary:
-	return object_panel.build_patch()
-
-
-func build_entry_patch_from_inputs() -> Dictionary:
-	return entry_panel.build_patch()
+func scene_path_for_map(map_id: String) -> String:
+	return MAP_SCENE_DIR.path_join("%s.tscn" % map_id)
 
 
 func _on_map_selected(index: int) -> void:
@@ -192,94 +169,22 @@ func _on_map_selected(index: int) -> void:
 	select_map(map_ids[index])
 
 
-func _on_entry_selected(entry_id: String) -> void:
-	selected_entry_id = entry_id
-	_refresh_entry_form(_entry_point_data(selected_map_id, selected_entry_id))
-
-
-func _on_object_selected(object_id: String) -> void:
-	selected_object_id = object_id
-	_refresh_object_form(_map_object_data(selected_map_id, selected_object_id))
-
-
-func _save_entry_patch(dry_run: bool) -> void:
-	var report := apply_entry_patch(build_entry_patch_from_inputs(), dry_run)
-	if not bool(report.get("ok", false)):
-		_set_status("Status: entry point save failed")
-		_set_detail("entry_point_save_failed:\n%s" % JSON.stringify(report, "\t"))
+func _on_open_scene_pressed() -> void:
+	if selected_scene_path.is_empty():
+		_set_status("Status: no map scene selected")
 		return
-	_set_status("Status: dry run ok" if dry_run else "Status: saved %s" % report.get("relative_path", ""))
-	if dry_run:
-		_set_detail("entry_point_dry_run:\n%s" % JSON.stringify(report, "\t"))
-
-
-func _save_object_patch(dry_run: bool) -> void:
-	var report := apply_object_patch(build_object_patch_from_inputs(), dry_run)
-	if not bool(report.get("ok", false)):
-		_set_status("Status: map object save failed")
-		_set_detail("map_object_save_failed:\n%s" % JSON.stringify(report, "\t"))
+	if not ResourceLoader.exists(selected_scene_path):
+		_set_status("Status: map scene missing %s" % selected_scene_path)
 		return
-	_set_status("Status: dry run ok" if dry_run else "Status: saved %s" % report.get("relative_path", ""))
-	if dry_run:
-		_set_detail("map_object_dry_run:\n%s" % JSON.stringify(report, "\t"))
-
-
-func _refresh_entry_options(map_data: Dictionary) -> void:
-	entry_panel.selected_id = selected_entry_id
-	entry_panel.refresh_options(_array_or_empty(map_data.get("entry_points", [])), "id", Callable(self, "_entry_label"))
-	selected_entry_id = entry_panel.selected_id
-	_refresh_entry_form(_entry_point_from_data(map_data, selected_entry_id))
-
-
-func _refresh_object_options(map_data: Dictionary) -> void:
-	object_panel.selected_id = selected_object_id
-	object_panel.refresh_options(_array_or_empty(map_data.get("objects", [])), "object_id", Callable(self, "_object_label"))
-	selected_object_id = object_panel.selected_id
-	_refresh_object_form(_map_object_from_data(map_data, selected_object_id))
-
-
-func _refresh_object_form(object_data: Dictionary) -> void:
-	object_panel.refresh_form(
-		object_data,
-		edit_service.map_object_editable_fields(),
-		Callable(edit_service, "map_object_field_type")
-	)
-
-
-func _refresh_entry_form(entry_data: Dictionary) -> void:
-	entry_panel.refresh_form(
-		entry_data,
-		edit_service.entry_point_editable_fields(),
-		Callable(edit_service, "entry_point_field_type")
-	)
+	if Engine.is_editor_hint():
+		EditorInterface.open_scene_from_path(selected_scene_path)
+		_set_status("Status: opened %s" % selected_scene_path)
+	else:
+		_set_status("Status: Open Scene is only available inside the Godot editor")
 
 
 func _map_data(map_id: String) -> Dictionary:
 	return _dictionary_or_empty(_dictionary_or_empty(registry.get_library("maps").get(map_id, {})).get("data", {}))
-
-
-func _entry_point_data(map_id: String, entry_id: String) -> Dictionary:
-	return _entry_point_from_data(_map_data(map_id), entry_id)
-
-
-func _entry_point_from_data(map_data: Dictionary, entry_id: String) -> Dictionary:
-	for entry in _array_or_empty(map_data.get("entry_points", [])):
-		var entry_data: Dictionary = _dictionary_or_empty(entry)
-		if str(entry_data.get("id", "")) == entry_id:
-			return entry_data
-	return {}
-
-
-func _map_object_data(map_id: String, object_id: String) -> Dictionary:
-	return _map_object_from_data(_map_data(map_id), object_id)
-
-
-func _map_object_from_data(map_data: Dictionary, object_id: String) -> Dictionary:
-	for object in _array_or_empty(map_data.get("objects", [])):
-		var object_data: Dictionary = _dictionary_or_empty(object)
-		if str(object_data.get("object_id", "")) == object_id:
-			return object_data
-	return {}
 
 
 func _sorted_map_ids(library: Dictionary) -> Array[String]:
@@ -300,25 +205,12 @@ func _set_detail(text: String) -> void:
 		detail.text = text
 
 
-func _grid_label(grid: Dictionary) -> String:
-	return "(%s,%s,%s)" % [grid.get("x", ""), grid.get("y", ""), grid.get("z", "")]
-
-
-func _entry_label(entry_data: Dictionary, entry_id: String) -> String:
-	return "%s  @ %s" % [entry_id, _grid_label(_dictionary_or_empty(entry_data.get("grid", {})))]
-
-
-func _object_label(object_data: Dictionary, object_id: String) -> String:
-	return "%s  [%s]" % [object_id, object_data.get("kind", "")]
+func _set_open_scene_enabled(enabled: bool) -> void:
+	if open_scene_button != null:
+		open_scene_button.disabled = not enabled
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
-
-
-func _array_or_empty(value: Variant) -> Array:
-	if typeof(value) == TYPE_ARRAY:
-		return value
-	return []

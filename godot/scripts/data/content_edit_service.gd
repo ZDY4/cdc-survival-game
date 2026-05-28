@@ -4,7 +4,6 @@ const ContentEditSchema = preload("res://scripts/data/content_edit_schema.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentWriteService = preload("res://scripts/data/content_write_service.gd")
-const MapEditService = preload("res://scripts/data/map_edit_service.gd")
 
 var _schema := ContentEditSchema.new()
 var _writer := ContentWriteService.new()
@@ -85,22 +84,6 @@ func save_patch(domain: String, id_value: String, patch: Dictionary, registry: C
 		"changed_fields": changed_fields,
 		"dry_run": bool(options.get("dry_run", false)),
 	}
-
-
-func map_object_editable_fields() -> Array[String]:
-	return MapEditService.new().map_object_editable_fields()
-
-
-func map_object_field_type(field_path: String) -> String:
-	return MapEditService.new().map_object_field_type(field_path)
-
-
-func normalize_map_object_patch(raw_patch: Dictionary) -> Dictionary:
-	return MapEditService.new().normalize_map_object_patch(raw_patch)
-
-
-func save_map_object_patch(map_id: String, object_id: String, patch: Dictionary, registry: ContentRegistry, options: Dictionary = {}) -> Dictionary:
-	return MapEditService.new().save_map_object_patch(map_id, object_id, patch, registry, options)
 
 
 func _validate_data(domain: String, id_value: String, record: Dictionary, data: Dictionary, registry: ContentRegistry) -> Dictionary:

@@ -19,7 +19,7 @@
 - `godot/scripts/app` 只负责启动流程、存档装配、输入转发和各核心模块串联；不要把具体战斗、任务、经济规则写进 app controller。
 - `godot/scripts/world` 只负责把地图和快照表现成场景对象；不要在渲染脚本里改变存档、任务、背包或角色属性。
 - `godot/scripts/ui` 只负责面板状态、按钮事件和 snapshot 展示；业务判断先落到 core/data，再由 UI 调用。
-- `godot/addons/cdc_game_editor` 可以做表单、预览和 handoff，但保存内容必须调用 data / map edit service，并通过 validator 后写回。
+- `godot/addons/cdc_game_editor` 可以做表单、地图复核和 handoff；非地图内容保存必须调用 data edit service，并通过 validator 后写回。
 
 ## 目录职责
 
@@ -31,7 +31,7 @@
 - `godot/scenes/maps`: Godot 地图场景，承载 map id、尺寸、入口点、地图对象、footprint 和对象 props，是后续地图开发主入口。
 - `godot/scripts/ui`: HUD、背包、任务、对话、交易、容器等 UI snapshot、controller 和面板。
 - `godot/scripts/tools`: Godot headless 校验、内容 CLI、smoke 和复核脚本。
-- `godot/addons/cdc_game_editor`: 当前 Godot editor 插件，包括 handoff、content browser、map preview 和编辑 dock。
+- `godot/addons/cdc_game_editor`: 当前 Godot editor 插件，包括 handoff、content browser、map review 和编辑 dock。
 - `data`: 非地图内容权威输入源；`data/maps` 是迁移期兼容备份，不再作为新地图开发主入口。
 - `tools/agent`: repo-local agent workflow 标准入口，默认调用 Godot 工具链。
 - 根目录 `addons/` 若只包含旧备份或残留文件，不作为当前 Godot 插件来源。
@@ -57,7 +57,7 @@
 - 处理内容编辑、定位、摘要、引用、格式化、校验时，先看 `tools/agent/README.md`；涉及具体流程时再看 `docs/agent-workflows/*.md`。
 - 内容 CLI 默认使用 `tools/agent/godot-content.ps1`。
 - 需要打开或复用 Godot editor 并定位目标时，优先使用 `tools/agent/open-godot-editor.ps1`。
-- 地图改动后的空间复核优先使用 `tools/agent/review-godot-map-visual.ps1`；只有需要人工查看或精修时再进入 `CDC Map Preview` dock。
+- 地图改动后的空间复核优先使用 `tools/agent/review-godot-map-visual.ps1`；需要人工查看或精修时打开对应 Godot map scene，并用 `CDC Map Review` dock 查看复核信息。
 - 游戏运行时 smoke 默认使用 `tools/agent/test-godot-game.ps1`。
 - Editor 插件和编辑服务 smoke 默认使用 `tools/agent/test-godot-editor.ps1`。
 - 若脚本提供 PowerShell comment-based help，先用 `Get-Help tools/agent/<script>.ps1` 确认参数、示例和副作用。

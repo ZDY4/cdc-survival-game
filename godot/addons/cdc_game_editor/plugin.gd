@@ -3,11 +3,11 @@ extends EditorPlugin
 
 const EditorHandoffDock = preload("res://addons/cdc_game_editor/editor_handoff_dock.gd")
 const ContentBrowserDock = preload("res://addons/cdc_game_editor/content_browser_dock.gd")
-const MapPreviewDock = preload("res://addons/cdc_game_editor/map_preview_dock.gd")
+const MapReviewDock = preload("res://addons/cdc_game_editor/map_preview_dock.gd")
 
 var handoff_dock: Control
 var content_browser_dock: Control
-var map_preview_dock: Control
+var map_review_dock: Control
 var editor_panel: TabContainer
 
 
@@ -19,8 +19,8 @@ func _enter_tree() -> void:
 	editor_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_browser_dock = ContentBrowserDock.new()
 	editor_panel.add_child(content_browser_dock)
-	map_preview_dock = MapPreviewDock.new()
-	editor_panel.add_child(map_preview_dock)
+	map_review_dock = MapReviewDock.new()
+	editor_panel.add_child(map_review_dock)
 	handoff_dock = EditorHandoffDock.new()
 	editor_panel.add_child(handoff_dock)
 	add_control_to_bottom_panel(editor_panel, "CDC Game Editor")
@@ -34,4 +34,4 @@ func _exit_tree() -> void:
 		editor_panel = null
 	handoff_dock = null
 	content_browser_dock = null
-	map_preview_dock = null
+	map_review_dock = null

@@ -5,7 +5,7 @@ Run the Godot map visual review flow for a map id.
 .DESCRIPTION
 This script is the repo-local Godot entrypoint for map review.
 It runs the Godot content CLI locate, summarize, references, and validate commands,
-then optionally runs the target map preview smoke plus global world and scene
+then optionally runs the target map review smoke plus global world and scene
 runtime smoke scenarios.
 
 .PARAMETER Map
@@ -24,7 +24,8 @@ pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outp
 pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outpost_01 -NoSmoke
 
 .NOTES
-The interactive Godot preview/editor surface lives in the `CDC Map Preview` dock.
+The interactive Godot review surface lives in the `CDC Map Review` dock. Map layout
+editing should happen in the corresponding `godot/scenes/maps/*.tscn` scene.
 #>
 [CmdletBinding()]
 param(
@@ -93,7 +94,7 @@ try {
     }
 
     if (-not $NoSmoke) {
-        Invoke-Step -Title "Run Godot map preview smoke" -Action {
+        Invoke-Step -Title "Run Godot map review smoke" -Action {
             & $Godot --headless --path godot --script "res://scripts/tools/map_preview_smoke.gd" -- map $Map
         }
 
@@ -112,14 +113,14 @@ try {
     Write-Host "2. Check size, default level, entry points, object count, and object kind summary."
     Write-Host "3. Check overworld references, entry_point_id, and location kind for this map."
     if ($NoSmoke) {
-        Write-Host "4. Godot map preview/world/scene smoke was skipped by -NoSmoke; run without it before accepting spatial changes."
+        Write-Host "4. Godot map review/world/scene smoke was skipped by -NoSmoke; run without it before accepting spatial changes."
     } else {
-        Write-Host "4. Confirm Godot loader validation and target map preview smoke passed."
+        Write-Host "4. Confirm Godot loader validation and target map review smoke passed."
     }
     Write-Host "5. Treat World and Scene smoke as global runtime regressions; they currently boot the default scenario."
-    Write-Host "6. If layout changed, inspect the CDC Map Preview dock and compare the generated scene result with the intended JSON edits."
+    Write-Host "6. If layout changed, open the corresponding godot/scenes/maps/*.tscn scene and use CDC Map Review only for review/checklist output."
     Write-Host ""
-    Write-Host "Godot editor handoff note: use open-godot-editor.ps1 -Map $Map to inspect the handoff summary and the CDC Map Preview dock."
+    Write-Host "Godot editor handoff note: use open-godot-editor.ps1 -Map $Map to inspect the handoff summary, then open the map scene from CDC Map Review if needed."
 }
 finally {
     Pop-Location

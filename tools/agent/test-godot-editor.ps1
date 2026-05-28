@@ -5,7 +5,7 @@ Runs deterministic Godot editor smoke scenarios.
 .DESCRIPTION
 This script is the repo-local agent entrypoint for Godot editor migration smoke checks.
 It runs Godot 4.6.3 headless scripts that cover the CDC Agent Handoff dock, CDC Content
-Browser dock, CDC Map Preview dock, and the shared content edit services used by those
+Browser dock, CDC Map Review dock, and the shared content edit services used by those
 editor surfaces.
 
 .PARAMETER Scenario
@@ -21,7 +21,7 @@ Path to the Godot command line entrypoint.
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario MapPreview
+pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario MapReview
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario All
@@ -32,9 +32,8 @@ param(
         "All",
         "EditorHandoff",
         "ContentBrowser",
-        "MapPreview",
-        "ContentEdit",
-        "MapEdit"
+        "MapReview",
+        "ContentEdit"
     )]
     [string]$Scenario = "All",
 
@@ -57,9 +56,8 @@ if (-not (Test-Path -LiteralPath $Godot)) {
 $scenarioScripts = [ordered]@{
     EditorHandoff = "res://scripts/tools/editor_handoff_smoke.gd"
     ContentBrowser = "res://scripts/tools/editor_content_browser_smoke.gd"
-    MapPreview = "res://scripts/tools/map_preview_smoke.gd"
+    MapReview = "res://scripts/tools/map_preview_smoke.gd"
     ContentEdit = "res://scripts/tools/content_edit_service_smoke.gd"
-    MapEdit = "res://scripts/tools/map_edit_service_smoke.gd"
 }
 
 $selected = @()

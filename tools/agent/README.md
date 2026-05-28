@@ -54,7 +54,7 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map survivor_outpost_01
 - 写入 `tmp/editor_handoff/godot_editor.navigation.json`。
 - `CDC Agent Handoff` dock 会读取目标内容摘要和引用预览。
 - `CDC Content Browser` dock 会在 Godot editor 内浏览 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map`，并显示记录级校验状态、详情和可编辑字段清单。
-- 内容保存边界已收口到 `godot/scripts/data/content_edit_service.gd`；当前表单保存覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` 的安全元数据字段、`settlement` 的 service rule 字段，以及 `overworld` 的 travel rule 字段。
+- 内容保存边界已收口到 `godot/scripts/data/content_edit_service.gd`；当前表单保存覆盖非地图内容的安全元数据字段、`settlement` 的 service rule 字段，以及 `overworld` 的 travel rule 字段。地图布局编辑应使用 Godot 场景编辑器。
 - 若 `CDC Agent Handoff` dock 已有最近 session，会复用现有 Godot editor。
 - 若没有最近 session，则启动 `D:\godot\godot.cmd --editor --path godot`。
 
@@ -66,8 +66,8 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map survivor_outpost_01
 
 何时使用：
 
-- `data/maps/*.json` 已被修改，需要验证 Godot loader、地图摘要、引用、世界快照和生成场景链路。
-- 需要复核地图空间结果，优先走 Godot 工具链和 `CDC Map Preview` dock。
+- `godot/scenes/maps/*.tscn` 或地图兼容数据已被修改，需要验证 Godot loader、地图摘要、引用、世界快照和生成场景链路。
+- 需要复核地图空间结果，优先走 Godot 工具链和 `CDC Map Review` dock。
 
 示例：
 
@@ -81,7 +81,7 @@ pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outp
 - 先通过 `godot-content.ps1` 串行执行 `locate map`、`summarize map`、`references map` 和 `validate changed`。
 - 默认继续运行目标地图的 `map_preview_smoke.gd`，再调用 `test-godot-game.ps1 -Scenario World` 和 `test-godot-game.ps1 -Scenario Scene` 做全局 runtime 回归。
 - 输出 Godot map review checklist。
-- 进入 Godot editor 后，`CDC Map Preview` dock 可选择地图对象并通过 Godot data 层编辑位置、footprint、旋转和阻挡字段。
+- 进入 Godot editor 后，`CDC Map Review` dock 可显示地图复核信息，并打开对应 `godot/scenes/maps/*.tscn` 供 Godot 场景编辑器维护布局。
 
 ### `godot-content.ps1`
 
@@ -129,8 +129,8 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 
 何时使用：
 
-- 修改 Godot editor plugin、handoff、content browser、map preview、内容保存服务或地图编辑服务后。
-- 需要一条命令复核 Godot editor 迁移期工具面是否仍能读取、展示、编辑和预览内容。
+- 修改 Godot editor plugin、handoff、content browser、map review 或内容保存服务后。
+- 需要一条命令复核 Godot editor 工具面是否仍能读取、展示、编辑和复核内容。
 
 示例：
 
@@ -138,9 +138,8 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario EditorHandoff
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario ContentBrowser
-pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario MapPreview
+pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario MapReview
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario ContentEdit
-pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario MapEdit
 ```
 
 行为：
@@ -168,10 +167,9 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario HeadlessNewGame
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario HeadlessWorld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentCLI
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentEdit
-pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapEdit
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorHandoff
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorBrowser
-pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapPreview
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapReview
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario FogShader
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Movement

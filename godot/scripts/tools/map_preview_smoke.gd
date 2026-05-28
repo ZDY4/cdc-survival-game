@@ -1,7 +1,6 @@
 extends SceneTree
 
-const MapPreviewDock = preload("res://addons/cdc_game_editor/map_preview_dock.gd")
-const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const MapReviewDock = preload("res://addons/cdc_game_editor/map_preview_dock.gd")
 
 var target_map_id := "survivor_outpost_01"
 
@@ -19,7 +18,7 @@ func _run() -> void:
 		quit(1)
 		return
 
-	print("map_preview_smoke passed:")
+	print("map_review_smoke passed:")
 	print({
 		"covered_map": target_map_id,
 	})
@@ -28,122 +27,48 @@ func _run() -> void:
 
 func _run_checks() -> Array[String]:
 	var errors: Array[String] = []
-	var dock: MapPreviewDock = MapPreviewDock.new()
+	var dock: MapReviewDock = MapReviewDock.new()
 	get_root().add_child(dock)
 	await process_frame
 
 	var result := dock.select_map(target_map_id)
 	if not bool(result.get("ok", false)):
-		errors.append("map preview select_map failed: %s" % result)
+		errors.append("map review select_map failed: %s" % result)
 		_cleanup(dock)
 		return errors
 
+	if str(result.get("scene_path", "")) != dock.scene_path_for_map(target_map_id):
+		errors.append("map review should expose the Godot scene path for %s" % target_map_id)
+	if not bool(result.get("scene_exists", false)):
+		errors.append("map review should find the Godot scene for %s" % target_map_id)
+
 	if dock.preview_root == null:
-		errors.append("map preview should create a preview root")
+		errors.append("map review should create a preview root")
 	elif dock.preview_root.get_node_or_null("GeneratedWorld") == null:
-		errors.append("map preview should render GeneratedWorld")
+		errors.append("map review should render GeneratedWorld")
 
 	var counts: Dictionary = result.get("counts", {})
 	if int(counts.get("ground", 0)) != 1:
-		errors.append("map preview should render one ground mesh")
+		errors.append("map review should render one ground mesh")
 	if int(counts.get("objects", 0)) <= 0:
-		errors.append("map preview should render map object markers")
+		errors.append("map review should render map object markers")
 	if int(counts.get("cameras", 0)) <= 0:
-		errors.append("map preview should render a camera")
+		errors.append("map review should render a camera")
 
 	if dock.detail == null or not dock.detail.text.contains("map_review_checks:"):
-		errors.append("map preview should show review checklist text")
+		errors.append("map review should show review checklist text")
+	if dock.detail == null or not dock.detail.text.contains("scene_path:"):
+		errors.append("map review should show the scene path")
 	if dock.status_label == null or not dock.status_label.text.contains(target_map_id):
-		errors.append("map preview status should include selected map id")
-	if target_map_id == "survivor_outpost_01":
-		_expect_object_editing(errors, dock)
-		_expect_entry_editing(errors, dock)
+		errors.append("map review status should include selected map id")
+	if dock.open_scene_button == null or dock.open_scene_button.disabled:
+		errors.append("map review should enable Open Scene for existing map scenes")
 
 	_cleanup(dock)
 	return errors
 
 
-func _expect_object_editing(errors: Array[String], dock: MapPreviewDock) -> void:
-	dock.registry = _registry_with_temp_record(dock.registry, "survivor_outpost_01")
-	var result := dock.select_map("survivor_outpost_01")
-	if not bool(result.get("ok", false)):
-		errors.append("map preview temp select_map failed: %s" % result)
-		return
-	dock.selected_object_id = "survivor_outpost_01_gatehouse"
-	dock._refresh_object_form(dock._map_object_data(dock.selected_map_id, dock.selected_object_id))
-	if dock.object_inputs.is_empty():
-		errors.append("map preview should build object edit inputs")
-		return
-
-	var anchor_x: SpinBox = dock.object_inputs.get("anchor.x", null)
-	var blocks_movement: CheckBox = dock.object_inputs.get("blocks_movement", null)
-	if anchor_x == null:
-		errors.append("map preview object form missing anchor.x editor")
-		return
-	if blocks_movement == null:
-		errors.append("map preview object form missing blocks_movement editor")
-		return
-	anchor_x.value = 21
-	blocks_movement.button_pressed = true
-	var patch := dock.build_object_patch_from_inputs()
-	if typeof(patch.get("anchor.x")) != TYPE_INT:
-		errors.append("map preview object patch should preserve int values")
-	if typeof(patch.get("blocks_movement")) != TYPE_BOOL:
-		errors.append("map preview object patch should preserve bool values")
-
-	var dry_run := dock.apply_object_patch(patch, true, {"allow_external_path": true})
-	if not bool(dry_run.get("ok", false)):
-		errors.append("map preview object dry run failed: %s" % dry_run)
-
-	var saved := dock.apply_object_patch(patch, false, {"allow_external_path": true})
-	if not bool(saved.get("ok", false)):
-		errors.append("map preview object save failed: %s" % saved)
-		return
-	var raw := FileAccess.get_file_as_string(str(saved.get("path", "")))
-	if not raw.contains("\"x\": 21"):
-		errors.append("map preview object save should write updated x coordinate")
-
-
-func _expect_entry_editing(errors: Array[String], dock: MapPreviewDock) -> void:
-	dock.registry = _registry_with_temp_record(dock.registry, "survivor_outpost_01")
-	var result := dock.select_map("survivor_outpost_01")
-	if not bool(result.get("ok", false)):
-		errors.append("map preview entry temp select_map failed: %s" % result)
-		return
-	dock.selected_entry_id = "default_entry"
-	dock._refresh_entry_form(dock._entry_point_data(dock.selected_map_id, dock.selected_entry_id))
-	if dock.entry_inputs.is_empty():
-		errors.append("map preview should build entry point edit inputs")
-		return
-
-	var grid_x: SpinBox = dock.entry_inputs.get("grid.x", null)
-	var grid_z: SpinBox = dock.entry_inputs.get("grid.z", null)
-	if grid_x == null:
-		errors.append("map preview entry form missing grid.x editor")
-		return
-	if grid_z == null:
-		errors.append("map preview entry form missing grid.z editor")
-		return
-	grid_x.value = 23
-	grid_z.value = 38
-	var patch := dock.build_entry_patch_from_inputs()
-	if typeof(patch.get("grid.x")) != TYPE_INT:
-		errors.append("map preview entry patch should preserve int values")
-
-	var dry_run := dock.apply_entry_patch(patch, true, {"allow_external_path": true})
-	if not bool(dry_run.get("ok", false)):
-		errors.append("map preview entry dry run failed: %s" % dry_run)
-
-	var saved := dock.apply_entry_patch(patch, false, {"allow_external_path": true})
-	if not bool(saved.get("ok", false)):
-		errors.append("map preview entry save failed: %s" % saved)
-		return
-	var raw := FileAccess.get_file_as_string(str(saved.get("path", "")))
-	if not raw.contains("\"x\": 23"):
-		errors.append("map preview entry save should write updated x coordinate")
-
-
-func _cleanup(dock: MapPreviewDock) -> void:
+func _cleanup(dock: MapReviewDock) -> void:
 	dock.queue_free()
 	await process_frame
 
@@ -166,24 +91,3 @@ func _tool_args() -> Array[String]:
 				output.append(str(raw[j]))
 			return output
 	return []
-
-
-func _registry_with_temp_record(registry: ContentRegistry, map_id: String) -> ContentRegistry:
-	var copy: ContentRegistry = ContentRegistry.new()
-	copy.libraries = registry.libraries.duplicate(true)
-	copy.files_by_domain = registry.files_by_domain.duplicate(true)
-	copy.bootstrap_config = registry.bootstrap_config.duplicate(true)
-	copy.data_root = registry.data_root
-	var record: Dictionary = registry.get_library("maps").get(map_id, {}).duplicate(true)
-	var data: Dictionary = record.get("data", {}).duplicate(true)
-	var temp_dir := ProjectSettings.globalize_path("user://map_preview_smoke").simplify_path()
-	DirAccess.make_dir_recursive_absolute(temp_dir)
-	var temp_path := temp_dir.path_join("maps_%s.json" % map_id)
-	var file := FileAccess.open(temp_path, FileAccess.WRITE)
-	file.store_string(JSON.stringify(data, "  ") + "\n")
-	record["path"] = temp_path
-	record["data"] = data
-	var library: Dictionary = copy.libraries.get("maps", {}).duplicate(true)
-	library[map_id] = record
-	copy.libraries["maps"] = library
-	return copy

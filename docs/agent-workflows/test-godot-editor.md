@@ -2,13 +2,13 @@
 
 ## Purpose
 
-这个 workflow 负责 Godot editor 侧的 agent smoke 复核，验证迁移后的 handoff、content browser、map preview 和共享编辑服务能在 headless 环境中跑通。
+这个 workflow 负责 Godot editor 侧的 agent smoke 复核，验证 handoff、content browser、map review 和共享编辑服务能在 headless 环境中跑通。
 
 ## When To Use
 
 - 修改 `godot/addons/cdc_game_editor` 后。
-- 修改 `godot/scripts/data/content_edit_service.gd`、map edit service 或 editor presenter 后。
-- 需要一条命令复核 Godot editor 侧 handoff、浏览、预览和编辑服务。
+- 修改 `godot/scripts/data/content_edit_service.gd` 或 editor presenter 后。
+- 需要一条命令复核 Godot editor 侧 handoff、浏览、地图复核和编辑服务。
 
 ## Expected Steps
 
@@ -20,4 +20,4 @@
 ## Notes
 
 - 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
-- 单场景复核可使用 `-Scenario EditorHandoff`、`-Scenario ContentBrowser`、`-Scenario MapPreview`、`-Scenario ContentEdit`、`-Scenario MapEdit`。
+- 单场景复核可使用 `-Scenario EditorHandoff`、`-Scenario ContentBrowser`、`-Scenario MapReview`、`-Scenario ContentEdit`。

@@ -10,19 +10,22 @@
 
 ## Primary Files
 
-- `data/maps/*.json`
+- `godot/scenes/maps/*.tscn`
 
 常见依赖：
 
+- `godot/scripts/world/map_scene_root.gd`
+- `godot/scripts/world/map_entry_point_node.gd`
+- `godot/scripts/world/map_object_node.gd`
 - `data/overworld/*.json`
 - `data/world_tiles/*.json`
 - `data/characters/*.json`
 
 ## Agent Steps
 
-1. 定位目标 map 文件。
+1. 定位目标 map scene。
 2. 先读取地图摘要、关键入口和当前校验状态。
-3. 修改 JSON。
+3. 修改 Godot `.tscn` 场景中的地图布局、入口点或对象节点。
 4. 跑最小校验。
 5. 输出本次操作摘要。
 6. 默认要求再用 Godot map review 入口做空间复核。
@@ -44,9 +47,9 @@
 
 Godot editor 当前能力：
 
-- `CDC Map Preview` dock 可加载地图预览和 map review checklist。
-- `CDC Map Preview` dock 可选择地图对象，并通过 `ContentEditService` 写回位置、footprint、旋转和阻挡字段。
-- 入口点、trigger option、AI spawn 和复杂对象结构仍应按 JSON 编辑后用 Godot review 脚本复核。
+- `CDC Map Review` dock 可加载地图预览、map review checklist，并打开对应 `.tscn` 场景。
+- 地图对象、入口点、可视节点和布局应在 Godot 场景编辑器中维护。
+- `data/maps/*.json` 只作为兼容备份，不作为新地图编辑主入口。
 
 ## Review Policy
 
