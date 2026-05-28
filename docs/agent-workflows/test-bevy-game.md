@@ -13,7 +13,7 @@
 ## Expected Steps
 
 1. 默认先执行 `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario BevyEquivalence`。
-2. 只有需要旧实现对照时，再执行 `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1`。
+2. 只有需要旧实现对照时，再执行 `pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1`。
 3. 默认场景 `WorldInteractionMenu` 会运行 `agent_smoke_right_click_pickup_opens_interaction_menu`。
 4. 检查脚本输出的 result JSON 和 console log 路径。
 5. 若失败，先看 console log 中的断言、panic 或编译错误，再回到 Rust 代码定位。

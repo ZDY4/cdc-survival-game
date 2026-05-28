@@ -66,14 +66,14 @@
 - `cargo run -p content_tools -- format <item|recipe|character|map> <id>`
 - `cargo run -p content_tools -- format changed`
 - `cargo run -p content_tools -- diff-summary --path <file>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Item <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Recipe <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Dialogue <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Quest <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
-- `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`
-- `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Item <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Recipe <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Dialogue <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Quest <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Map <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Character <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1`
 - `cargo check -p game_editor -p bevy_item_editor -p bevy_recipe_editor -p bevy_dialogue_editor -p bevy_quest_editor -p bevy_map_editor -p content_tools`
 
 ## Editor Handoff
@@ -93,13 +93,13 @@
 
 旧 Bevy editor 对照入口：
 
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Item <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Recipe <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Dialogue <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Quest <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character <id>`
-- `pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map <id>`
-- `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Item <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Recipe <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Dialogue <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Quest <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Character <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Map <id>`
+- `pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map <id>`
 
 游戏 smoke 复核：
 
@@ -107,8 +107,8 @@
 - `pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
-- `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1`
-- `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu`
+- `pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1`
+- `pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu`
 
 Godot 迁移期间，运行时/游戏闭环优先跑 `test-godot-game.ps1`；Bevy smoke 保留为旧客户端行为对照。
 
@@ -138,6 +138,6 @@ Godot 迁移期间，内容定位、摘要、引用、格式化、diff 摘要和
 - `review-godot-map-visual.ps1` 会先通过 Godot content CLI 执行 `locate` / `summarize` / `references` / `validate changed`
 - 默认继续运行 Godot `World` 和 `Scene` smoke，确认地图数据能进入世界快照和生成场景链路
 - Godot 迁移期间，地图改动优先使用 `review-godot-map-visual.ps1`
-- `review-map-visual.ps1` 会先串行执行 `locate` / `summarize` / `references` / `validate`
+- `legacy/bevy/agent/review-map-visual.ps1` 会先串行执行 `locate` / `summarize` / `references` / `validate`
 - 随后输出固定的视觉复核 checklist
-- 默认会继续调用 `open-editor.ps1 -Map <id>` 打开或复用 `bevy_map_editor`
+- 默认会继续调用 `legacy/bevy/agent/open-editor.ps1 -Map <id>` 打开或复用 `bevy_map_editor`

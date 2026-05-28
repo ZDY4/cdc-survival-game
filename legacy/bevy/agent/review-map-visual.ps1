@@ -6,7 +6,7 @@ Run the standard map visual review flow for a map id.
 This script is the standard repo-local visual review entry for map changes.
 It runs `content_tools` locate, summarize, references, and validate commands inside the Rust
 workspace, prints a fixed review checklist, and then optionally opens or reuses `bevy_map_editor`
-through `tools/agent/open-editor.ps1`.
+through `legacy/bevy/agent/open-editor.ps1`.
 
 .PARAMETER Map
 Map id to review.
@@ -15,10 +15,10 @@ Map id to review.
 When set, only print CLI review information and skip opening `bevy_map_editor`.
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map forest
+pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map forest
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map factory -NoOpenEditor
+pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map factory -NoOpenEditor
 
 .NOTES
 This workflow is intended for post-edit spatial review, not for editing map data directly inside
@@ -60,7 +60,7 @@ if ([string]::IsNullOrWhiteSpace($Map)) {
     throw "-Map requires a non-empty map id"
 }
 
-$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
 $rustWorkspaceRoot = Join-Path $repoRoot "rust"
 $contentToolsArgs = @("run", "-q", "-p", "content_tools", "--")
 
@@ -97,7 +97,7 @@ try {
 
     if (-not $NoOpenEditor) {
         Invoke-Step -Title "Open map editor for visual review" -Action {
-            pwsh -NoProfile -File (Join-Path $repoRoot "tools/agent/open-editor.ps1") -Map $Map
+            pwsh -NoProfile -File (Join-Path $repoRoot "legacy/bevy/agent/open-editor.ps1") -Map $Map
         } -ExitCodeRef ([ref]$stepExitCode)
     }
 }

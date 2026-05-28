@@ -71,7 +71,7 @@
 - 需要打开或复用 Godot editor 并定位到指定目标时，优先使用 `tools/agent/open-godot-editor.ps1`，不要只告诉用户“手动打开 editor 再搜索”。
 - 地图改动完成后，需要做空间结果复核时，优先使用 `tools/agent/review-godot-map-visual.ps1`；它会先串联 Godot map 摘要、引用、校验和 smoke，再提示进入 Godot editor 的 `CDC Map Preview` dock。
 - 游戏运行时 smoke 默认使用 `tools/agent/test-godot-game.ps1`；旧 `test-bevy-game.ps1` 只在需要旧行为差异分析时使用。
-- 旧 `open-editor.ps1`、`review-map-visual.ps1`、`test-bevy-game.ps1` 仅作为 Bevy 对照入口，不作为迁移开发默认路径。
+- 旧 `legacy/bevy/agent/open-editor.ps1`、`legacy/bevy/agent/review-map-visual.ps1`、`legacy/bevy/agent/test-bevy-game.ps1` 仅作为 Bevy 对照入口，不作为迁移开发默认路径。
 - 若脚本已提供 PowerShell comment-based help，先用 `Get-Help tools/agent/<script>.ps1` 确认参数、示例和副作用，再执行。
 - 新增 `tools/agent/` 脚本时，必须同时补这三处说明：脚本自身 help、`tools/agent/README.md`、相关 workflow 文档；不要只落脚本文件本体。
 

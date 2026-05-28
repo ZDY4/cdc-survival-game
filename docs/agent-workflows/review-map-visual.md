@@ -14,7 +14,7 @@ Godot 迁移开发默认使用 `review-godot-map-visual.md` 和 `tools/agent/rev
 ## Expected Steps
 
 1. 默认先执行 `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`。
-2. 只有需要旧实现对照时，再执行 `pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map <id>`。
+2. 只有需要旧实现对照时，再执行 `pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map <id>`。
 3. 旧脚本会先输出地图定位、摘要、overworld 引用和当前 validate 结果。
 4. 旧脚本默认会继续打开或复用 `bevy_map_editor`，并选中目标地图。
 5. 在 editor 中检查当前 level、入口点、关键对象、诊断面板、阻挡和明显不可达路径。

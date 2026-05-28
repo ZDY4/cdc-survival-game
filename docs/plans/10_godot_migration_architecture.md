@@ -332,8 +332,8 @@ Godot 直接读取仓库根目录 `data/`：
 迁移中保留以下旧命令作为对照：
 
 ```powershell
-pwsh -NoProfile -File tools/agent/test-bevy-game.ps1
-pwsh -NoProfile -File tools/agent/review-map-visual.ps1 -Map survivor_outpost_01 -NoOpenEditor
+pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1
+pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map survivor_outpost_01 -NoOpenEditor
 Push-Location rust; cargo run -q -p content_tools -- validate changed; Pop-Location
 ```
 
@@ -354,7 +354,7 @@ D:\godot\godot.cmd --path godot
 编辑器不作为第一批阻塞项。推荐顺序：
 
 1. `content_cli`: 先替代 `content_tools` 的 locate / validate / summarize / references / format。
-2. `map_preview`: 先替代 `review-map-visual.ps1` 的空间复核能力。
+2. `map_preview`: 先替代 `legacy/bevy/agent/review-map-visual.ps1` 的空间复核能力。
 3. `item_editor`、`recipe_editor`、`character_editor`: 表单型内容先迁。
 4. `dialogue_editor`、`quest_editor`、`skill_editor`: 图编辑器后迁。
 5. `model_viewer`: 迁移 glTF / socket / placeholder 预览。

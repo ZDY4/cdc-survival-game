@@ -29,22 +29,22 @@ Map id to open in `bevy_map_editor`.
 Character id to open in `bevy_character_editor`.
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/open-editor.ps1 -Item 1001
+pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Item 1001
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/open-editor.ps1 -Recipe recipe_bandage_basic
+pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Recipe recipe_bandage_basic
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/open-editor.ps1 -Dialogue trader_lao_wang
+pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Dialogue trader_lao_wang
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/open-editor.ps1 -Quest tutorial_survive
+pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Quest tutorial_survive
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/open-editor.ps1 -Map forest
+pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Map forest
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/open-editor.ps1 -Character scavenger_maya
+pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Character scavenger_maya
 
 .NOTES
 Use exactly one of `-Item`, `-Recipe`, `-Dialogue`, `-Quest`, `-Map`, or `-Character`.
@@ -172,7 +172,7 @@ if ($requestedTargets.Count -ne 1) {
     throw "use exactly one of -Item, -Recipe, -Dialogue, -Quest, -Map, or -Character"
 }
 
-$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
 
 switch ($requestedTargets[0]) {
     "item" {

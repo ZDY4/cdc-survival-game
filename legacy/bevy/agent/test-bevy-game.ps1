@@ -14,10 +14,10 @@
 console log 和 JSON result 的输出目录。默认写入 `.local/agent-smoke/bevy_game`。
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/test-bevy-game.ps1
+pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1
 
 .EXAMPLE
-pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu
+pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu
 
 .NOTES
 本 workflow 用于验证 gameplay 输入链路，不依赖 OS 窗口焦点、屏幕坐标或 OCR。
@@ -32,7 +32,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = Join-Path $repoRoot ".local\agent-smoke\bevy_game"
 }
