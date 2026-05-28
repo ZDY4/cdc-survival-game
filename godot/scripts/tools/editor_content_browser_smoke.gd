@@ -63,11 +63,13 @@ func _run() -> Array[String]:
 	_expect_detail(errors, presenter, registry, "quest", "tutorial_survive", "time_limit")
 	_expect_detail(errors, presenter, registry, "skill", "survival", "max_level")
 	_expect_detail(errors, presenter, registry, "skill_tree", "survival", "description")
+	_expect_detail(errors, presenter, registry, "overworld", "main_overworld", "travel_rules.risk_multiplier")
 	_expect_dock_patch(errors, registry)
 	_expect_dock_patch_for_domain(errors, registry, "dialogue", "dialogues", "trader_lao_wang_intro", {"_comment": "老王开局 dock smoke"})
 	_expect_dock_patch_for_domain(errors, registry, "quest", "quests", "tutorial_survive", {"title": "补给试跑 dock smoke"})
 	_expect_dock_patch_for_domain(errors, registry, "skill", "skills", "survival", {"max_level": 6})
 	_expect_dock_patch_for_domain(errors, registry, "skill_tree", "skill_trees", "survival", {"name": "生存系 dock smoke"})
+	_expect_dock_patch_for_domain(errors, registry, "overworld", "overworld", "main_overworld", {"travel_rules.risk_multiplier": 1.25})
 	_expect_read_only_form(errors, registry)
 	_expect_dock_typed_inputs(errors)
 	return errors
@@ -144,11 +146,6 @@ func _expect_read_only_form(errors: Array[String], registry: ContentRegistry) ->
 	dock._refresh_form()
 	if dock.form_container.get_child_count() != 0:
 		errors.append("settlement browser domain should not expose edit form controls")
-	dock.selected_kind = "overworld"
-	dock.selected_id = "main_overworld"
-	dock._refresh_form()
-	if dock.form_container.get_child_count() != 0:
-		errors.append("overworld browser domain should not expose edit form controls")
 	dock.form_container.free()
 	dock.free()
 

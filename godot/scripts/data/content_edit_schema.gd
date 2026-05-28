@@ -1,7 +1,7 @@
 extends RefCounted
 
 # 这里只定义迁移期可编辑字段白名单，内容 schema 权威仍来自 data/ JSON 与校验器。
-const SUPPORTED_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees"]
+const SUPPORTED_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "overworld"]
 
 const EDITABLE_FIELDS := {
 	"items": [
@@ -46,6 +46,11 @@ const EDITABLE_FIELDS := {
 	"skill_trees": [
 		"name",
 		"description",
+	],
+	"overworld": [
+		"travel_rules.food_item_id",
+		"travel_rules.night_minutes_multiplier",
+		"travel_rules.risk_multiplier",
 	],
 }
 
@@ -92,6 +97,11 @@ const FIELD_TYPES := {
 	"skill_trees": {
 		"name": "string",
 		"description": "string",
+	},
+	"overworld": {
+		"travel_rules.food_item_id": "string",
+		"travel_rules.night_minutes_multiplier": "float",
+		"travel_rules.risk_multiplier": "float",
 	},
 }
 
