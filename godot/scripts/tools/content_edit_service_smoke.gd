@@ -14,7 +14,7 @@ func _init() -> void:
 
 	print("content_edit_service_smoke passed:")
 	print({
-		"covered_domains": ["item", "recipe", "character", "map", "quest", "skill", "skill_tree"],
+		"covered_domains": ["item", "recipe", "character", "map", "dialogue", "quest", "skill", "skill_tree"],
 	})
 	quit(0)
 
@@ -35,6 +35,7 @@ func _run() -> Array[String]:
 	_expect_patch(errors, service, registry, "recipes", "recipe_first_aid_kit", {"craft_time": 31.0})
 	_expect_patch(errors, service, registry, "characters", "zombie_walker", {"identity.display_name": "行尸 smoke"})
 	_expect_patch(errors, service, registry, "maps", "survivor_outpost_01", {"name": "survivor outpost smoke"})
+	_expect_patch(errors, service, registry, "dialogues", "trader_lao_wang_intro", {"_comment": "老王开局对话 smoke"})
 	_expect_patch(errors, service, registry, "quests", "tutorial_survive", {"title": "补给试跑 smoke"})
 	_expect_patch(errors, service, registry, "skills", "survival", {"max_level": 6})
 	_expect_patch(errors, service, registry, "skill_trees", "survival", {"description": "生存系 smoke"})
@@ -45,7 +46,7 @@ func _run() -> Array[String]:
 
 
 func _expect_editable_fields(errors: Array[String], service: ContentEditService) -> void:
-	for domain in ["items", "recipes", "characters", "maps", "quests", "skills", "skill_trees"]:
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees"]:
 		if service.editable_fields(domain).is_empty():
 			errors.append("content edit service has no editable fields for %s" % domain)
 
