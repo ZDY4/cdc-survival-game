@@ -11,11 +11,13 @@
 
 ## 架构边界
 
-- 核心规则、状态计算、AI、寻路、战斗、经济、任务、对话、存档等逻辑放在 `godot/scripts/core/` 或 `godot/scripts/app/` 的运行时装配层。
-- UI、场景表现、editor dock 不得成为规则或 schema 权威；它们只能调用数据层和核心层能力。
-- 共享数据结构以 `data/` JSON、`godot/scripts/data/` loader、validator、edit service 为准，不要另起一套长期并存 schema。
-- 可复用规则和校验优先写成 Godot 引擎耦合较低的 `RefCounted` 模块；Node / scene script 负责装配、输入和表现。
-- 新功能默认只保留一套长期实现，不为历史路径保留双写、镜像或平行规则。
+- 读写 `data/` 内容时，统一走 `godot/scripts/data`；不要在 UI、editor dock 或 smoke 脚本里手写第二套 JSON 解析、路径规则或保存逻辑。
+- 玩法结果由 `godot/scripts/core` 计算，例如移动是否可达、攻击是否命中、任务是否推进、交易是否成立；UI 和场景只提交输入并显示结果。
+- `godot/scripts/app` 只负责启动流程、存档装配、输入转发和各核心模块串联；不要把具体战斗、任务、经济规则写进 app controller。
+- `godot/scripts/world` 只负责把地图和快照表现成场景对象；不要在渲染脚本里改变存档、任务、背包或角色属性。
+- `godot/scripts/ui` 只负责面板状态、按钮事件和 snapshot 展示；业务判断先落到 core/data，再由 UI 调用。
+- `godot/addons/cdc_game_editor` 可以做表单、预览和 handoff，但保存内容必须调用 data edit service，并通过 validator 后写回。
+- 新增能力先判断权威落点：内容格式进 `data` / `scripts/data`，玩法规则进 `scripts/core`，启动编排进 `scripts/app`，画面表现进 `scripts/world` 或 `scripts/ui`，编辑体验进 `addons/cdc_game_editor`。
 
 ## 目录职责
 
