@@ -1,12 +1,13 @@
 extends RefCounted
 
-const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentEditSchema = preload("res://scripts/data/content_edit_schema.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const ContentWriteService = preload("res://scripts/data/content_write_service.gd")
 const MapEditService = preload("res://scripts/data/map_edit_service.gd")
 
 var _schema := ContentEditSchema.new()
+var _writer := ContentWriteService.new()
 
 
 func supports_domain(domain: String) -> bool:
@@ -40,10 +41,9 @@ func save_patch(domain: String, id_value: String, patch: Dictionary, registry: C
 		return _failed("not_found", "record not found: %s %s" % [domain, id_value])
 
 	var path := str(record.get("path", ""))
-	if path.is_empty():
-		return _failed("missing_path", "record has no source path")
-	if not bool(options.get("allow_external_path", false)) and not _is_under_data_root(path):
-		return _failed("path_outside_data", "refusing to write outside data root: %s" % path)
+	var path_check := _writer.validate_path(path, {"allow_external_path": bool(options.get("allow_external_path", false))})
+	if not bool(path_check.get("ok", false)):
+		return path_check
 
 	var normalized_patch := normalize_patch(domain, patch)
 	var next_data: Dictionary = _dictionary_or_empty(record.get("data", {})).duplicate(true)
@@ -70,17 +70,9 @@ func save_patch(domain: String, id_value: String, patch: Dictionary, registry: C
 			"path": path,
 		}
 
-	var formatted := JSON.stringify(next_data, "  ") + "\n"
-	if formatted.strip_edges().is_empty():
-		return _failed("serialize_failed", "failed to serialize patched content")
-
-	var before_text := FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
-	var changed := before_text != formatted
-	if not bool(options.get("dry_run", false)) and changed:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		if file == null:
-			return _failed("write_failed", "failed to open %s for write: %s" % [path, error_string(FileAccess.get_open_error())])
-		file.store_string(formatted)
+	var write_result := _writer.write_json(path, next_data, options)
+	if not bool(write_result.get("ok", false)):
+		return write_result
 
 	return {
 		"ok": true,
@@ -88,8 +80,8 @@ func save_patch(domain: String, id_value: String, patch: Dictionary, registry: C
 		"domain": domain,
 		"id": id_value,
 		"path": path,
-		"relative_path": _repo_relative_path(path),
-		"changed": changed,
+		"relative_path": str(write_result.get("relative_path", path)),
+		"changed": bool(write_result.get("changed", false)),
 		"changed_fields": changed_fields,
 		"dry_run": bool(options.get("dry_run", false)),
 	}
@@ -165,20 +157,6 @@ func _set_field(data: Dictionary, field_path: String, value: Variant) -> void:
 		if typeof(current.get(key, null)) != TYPE_DICTIONARY:
 			current[key] = {}
 		current = current[key]
-
-
-func _is_under_data_root(path: String) -> bool:
-	var normalized := path.replace("\\", "/").simplify_path()
-	var root := ContentPaths.data_root().replace("\\", "/").simplify_path()
-	return normalized == root or normalized.begins_with(root + "/")
-
-
-func _repo_relative_path(path: String) -> String:
-	var normalized := path.replace("\\", "/")
-	var repo_root := ContentPaths.repo_root().replace("\\", "/")
-	if normalized.begins_with(repo_root + "/"):
-		return normalized.substr(repo_root.length() + 1)
-	return normalized
 
 
 func _failed(code: String, message: String) -> Dictionary:

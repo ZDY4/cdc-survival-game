@@ -1,11 +1,12 @@
 extends RefCounted
 
-const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const ContentWriteService = preload("res://scripts/data/content_write_service.gd")
 const MapEditSchema = preload("res://scripts/data/map_edit_schema.gd")
 
 var _schema := MapEditSchema.new()
+var _writer := ContentWriteService.new()
 
 
 func map_object_editable_fields() -> Array[String]:
@@ -41,10 +42,9 @@ func save_map_object_patch(map_id: String, object_id: String, patch: Dictionary,
 		return _failed("not_found", "map record not found: %s" % map_id)
 
 	var path := str(record.get("path", ""))
-	if path.is_empty():
-		return _failed("missing_path", "map record has no source path")
-	if not bool(options.get("allow_external_path", false)) and not _is_under_data_root(path):
-		return _failed("path_outside_data", "refusing to write outside data root: %s" % path)
+	var path_check := _writer.validate_path(path, {"allow_external_path": bool(options.get("allow_external_path", false))})
+	if not bool(path_check.get("ok", false)):
+		return path_check
 
 	var next_data: Dictionary = _dictionary_or_empty(record.get("data", {})).duplicate(true)
 	var objects: Array = _array_or_empty(next_data.get("objects", []))
@@ -81,14 +81,9 @@ func save_map_object_patch(map_id: String, object_id: String, patch: Dictionary,
 			"object_id": object_id,
 		}
 
-	var formatted := JSON.stringify(next_data, "  ") + "\n"
-	var before_text := FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
-	var changed := before_text != formatted
-	if not bool(options.get("dry_run", false)) and changed:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		if file == null:
-			return _failed("write_failed", "failed to open %s for write: %s" % [path, error_string(FileAccess.get_open_error())])
-		file.store_string(formatted)
+	var write_result := _writer.write_json(path, next_data, options)
+	if not bool(write_result.get("ok", false)):
+		return write_result
 
 	return {
 		"ok": true,
@@ -98,8 +93,8 @@ func save_map_object_patch(map_id: String, object_id: String, patch: Dictionary,
 		"map_id": map_id,
 		"object_id": object_id,
 		"path": path,
-		"relative_path": _repo_relative_path(path),
-		"changed": changed,
+		"relative_path": str(write_result.get("relative_path", path)),
+		"changed": bool(write_result.get("changed", false)),
 		"changed_fields": changed_fields,
 		"dry_run": bool(options.get("dry_run", false)),
 	}
@@ -114,10 +109,9 @@ func save_entry_point_patch(map_id: String, entry_id: String, patch: Dictionary,
 		return _failed("not_found", "map record not found: %s" % map_id)
 
 	var path := str(record.get("path", ""))
-	if path.is_empty():
-		return _failed("missing_path", "map record has no source path")
-	if not bool(options.get("allow_external_path", false)) and not _is_under_data_root(path):
-		return _failed("path_outside_data", "refusing to write outside data root: %s" % path)
+	var path_check := _writer.validate_path(path, {"allow_external_path": bool(options.get("allow_external_path", false))})
+	if not bool(path_check.get("ok", false)):
+		return path_check
 
 	var next_data: Dictionary = _dictionary_or_empty(record.get("data", {})).duplicate(true)
 	var entry_points: Array = _array_or_empty(next_data.get("entry_points", []))
@@ -154,14 +148,9 @@ func save_entry_point_patch(map_id: String, entry_id: String, patch: Dictionary,
 			"entry_id": entry_id,
 		}
 
-	var formatted := JSON.stringify(next_data, "  ") + "\n"
-	var before_text := FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
-	var changed := before_text != formatted
-	if not bool(options.get("dry_run", false)) and changed:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		if file == null:
-			return _failed("write_failed", "failed to open %s for write: %s" % [path, error_string(FileAccess.get_open_error())])
-		file.store_string(formatted)
+	var write_result := _writer.write_json(path, next_data, options)
+	if not bool(write_result.get("ok", false)):
+		return write_result
 
 	return {
 		"ok": true,
@@ -171,8 +160,8 @@ func save_entry_point_patch(map_id: String, entry_id: String, patch: Dictionary,
 		"map_id": map_id,
 		"entry_id": entry_id,
 		"path": path,
-		"relative_path": _repo_relative_path(path),
-		"changed": changed,
+		"relative_path": str(write_result.get("relative_path", path)),
+		"changed": bool(write_result.get("changed", false)),
 		"changed_fields": changed_fields,
 		"dry_run": bool(options.get("dry_run", false)),
 	}
@@ -229,20 +218,6 @@ func _set_field(data: Dictionary, field_path: String, value: Variant) -> void:
 		if typeof(current.get(key, null)) != TYPE_DICTIONARY:
 			current[key] = {}
 		current = current[key]
-
-
-func _is_under_data_root(path: String) -> bool:
-	var normalized := path.replace("\\", "/").simplify_path()
-	var root := ContentPaths.data_root().replace("\\", "/").simplify_path()
-	return normalized == root or normalized.begins_with(root + "/")
-
-
-func _repo_relative_path(path: String) -> String:
-	var normalized := path.replace("\\", "/")
-	var repo_root := ContentPaths.repo_root().replace("\\", "/")
-	if normalized.begins_with(repo_root + "/"):
-		return normalized.substr(repo_root.length() + 1)
-	return normalized
 
 
 func _failed(code: String, message: String) -> Dictionary:
