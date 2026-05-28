@@ -219,6 +219,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario FogShader
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Movement
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario BevyEquivalence
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario DialogueAction
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Combat
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContainerUI
@@ -231,6 +232,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Save
 
 - 固定调用 `D:\godot\godot.cmd --headless --path godot --script <smoke>`；`HeadlessNewGame` / `HeadlessWorld` 通过 `godot/scripts/app/headless_runner.gd` 覆盖迁移后的 Bevy server/headless 替代入口。
 - 默认 `-Scenario All` 会运行所有已迁移 Godot smoke。
+- `BevyEquivalence` 会输出旧 Bevy `WorldInteractionMenu` 到 Godot smoke 的机器可读覆盖映射，并直接复核 pickup prompt、HUD 交互行、primary option、拾取执行和节点消费。
 - 输出 console log 和 result JSON 到 `.local/agent-smoke/godot_game/<timestamp>/`。
 
 ## Maintenance Rule

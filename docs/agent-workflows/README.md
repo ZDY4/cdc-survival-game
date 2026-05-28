@@ -51,6 +51,7 @@
 - `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
+- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario BevyEquivalence`
 
 旧 Rust/Bevy 对照入口仅在需要行为差异分析时使用：
 
@@ -105,6 +106,8 @@
 - `pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu`
 
 Godot 迁移期间，运行时/游戏闭环优先跑 `test-godot-game.ps1`；Bevy smoke 保留为旧客户端行为对照。
+
+`BevyEquivalence` 场景会输出旧 Bevy `WorldInteractionMenu` 到 Godot smoke 的机器可读覆盖映射，用于证明拾取目标选择、HUD 交互提示、primary pickup option、执行拾取和消费节点移除已经在 Godot 侧闭环。
 
 Godot 迁移期间，内容定位、摘要、引用、格式化、diff 摘要和全量校验优先跑 `godot-content.ps1`；Rust `content_tools` 保留为旧基线和差异对照。
 

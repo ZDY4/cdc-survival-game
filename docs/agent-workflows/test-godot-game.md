@@ -21,5 +21,6 @@
 
 - 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
 - `HeadlessNewGame` 和 `HeadlessWorld` 通过 `godot/scripts/app/headless_runner.gd` 覆盖迁移后的 Bevy server/headless 替代入口。
-- 单场景复核可使用 `-Scenario HeadlessNewGame`、`-Scenario HeadlessWorld`、`-Scenario Runtime`、`-Scenario ContentCLI`、`-Scenario ContentEdit`、`-Scenario EditorHandoff`、`-Scenario EditorBrowser`、`-Scenario FogShader`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
+- 单场景复核可使用 `-Scenario HeadlessNewGame`、`-Scenario HeadlessWorld`、`-Scenario Runtime`、`-Scenario ContentCLI`、`-Scenario ContentEdit`、`-Scenario EditorHandoff`、`-Scenario EditorBrowser`、`-Scenario FogShader`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario PlayerInteraction`、`-Scenario BevyEquivalence`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
+- `BevyEquivalence` 会输出机器可读映射，明确旧 Bevy `WorldInteractionMenu` smoke 已由 Godot `PlayerInteraction`、`Interaction` 和 `UI` 场景覆盖，并直接断言拾取提示、HUD 行、primary option 和拾取执行结果。
 - Bevy smoke 仅作为旧客户端行为对照；迁移开发优先运行本 workflow。

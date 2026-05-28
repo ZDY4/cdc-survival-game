@@ -499,7 +499,7 @@ D:\godot\godot.cmd --path godot
 前置条件：
 
 - Godot runtime、内容工具、必要 editor 能覆盖日常开发。
-- 旧 Bevy smoke 的目标在 Godot smoke 中有等价覆盖。
+- 旧 Bevy smoke 的目标在 Godot smoke 中有等价覆盖；`test-godot-game.ps1 -Scenario BevyEquivalence` 输出 `WorldInteractionMenu` 到 Godot smoke 的机器可读覆盖映射。
 - 文档和 agent workflow 都已切到 Godot。
 
 交付：
