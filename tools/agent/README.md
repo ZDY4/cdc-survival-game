@@ -205,6 +205,8 @@ pwsh -NoProfile -File tools/agent/test-bevy-game.ps1 -Scenario WorldInteractionM
 
 ```powershell
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario HeadlessNewGame
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario HeadlessWorld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentCLI
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentEdit
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapEdit
@@ -225,7 +227,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Save
 
 行为：
 
-- 固定调用 `D:\godot\godot.cmd --headless --path godot --script <smoke>`。
+- 固定调用 `D:\godot\godot.cmd --headless --path godot --script <smoke>`；`HeadlessNewGame` / `HeadlessWorld` 通过 `godot/scripts/app/headless_runner.gd` 覆盖迁移后的 Bevy server/headless 替代入口。
 - 默认 `-Scenario All` 会运行所有已迁移 Godot smoke。
 - 输出 console log 和 result JSON 到 `.local/agent-smoke/godot_game/<timestamp>/`。
 

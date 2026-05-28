@@ -2,7 +2,7 @@
 
 ## Purpose
 
-这个 workflow 负责 Godot game 侧的 agent smoke 复核，优先验证迁移后的 runtime、世界生成、交互、UI、任务、战斗和存档闭环。
+这个 workflow 负责 Godot game 侧的 agent smoke 复核，优先验证迁移后的 headless runner、runtime、世界生成、交互、UI、任务、战斗和存档闭环。
 
 ## When To Use
 
@@ -20,5 +20,6 @@
 ## Notes
 
 - 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
-- 单场景复核可使用 `-Scenario Runtime`、`-Scenario ContentCLI`、`-Scenario ContentEdit`、`-Scenario EditorHandoff`、`-Scenario EditorBrowser`、`-Scenario FogShader`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
+- `HeadlessNewGame` 和 `HeadlessWorld` 通过 `godot/scripts/app/headless_runner.gd` 覆盖迁移后的 Bevy server/headless 替代入口。
+- 单场景复核可使用 `-Scenario HeadlessNewGame`、`-Scenario HeadlessWorld`、`-Scenario Runtime`、`-Scenario ContentCLI`、`-Scenario ContentEdit`、`-Scenario EditorHandoff`、`-Scenario EditorBrowser`、`-Scenario FogShader`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
 - Bevy smoke 仅作为旧客户端行为对照；迁移开发优先运行本 workflow。

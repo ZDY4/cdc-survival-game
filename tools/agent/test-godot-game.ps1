@@ -6,6 +6,8 @@ Runs deterministic Godot game smoke scenarios.
 This script is the repo-local agent entrypoint for Godot runtime smoke checks.
 It runs Godot 4.6.3 headless scripts from `godot/scripts/tools/`, captures console
 output, and writes a JSON result under `.local/agent-smoke/godot_game`.
+It also covers `godot/scripts/app/headless_runner.gd`, the migrated replacement
+path for Bevy server/headless smoke entrypoints.
 
 .PARAMETER Scenario
 Smoke scenario to run. Use `All` to run every migrated Godot smoke scenario.
@@ -29,6 +31,8 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All
 param(
     [ValidateSet(
         "All",
+        "HeadlessNewGame",
+        "HeadlessWorld",
         "Runtime",
         "ContentCLI",
         "ContentEdit",
@@ -78,6 +82,14 @@ if (-not (Test-Path -LiteralPath $Godot)) {
 }
 
 $scenarioScripts = [ordered]@{
+    HeadlessNewGame  = @{
+        Script = "res://scripts/app/headless_runner.gd"
+        Args = @("--scenario", "new_game_smoke")
+    }
+    HeadlessWorld    = @{
+        Script = "res://scripts/app/headless_runner.gd"
+        Args = @("--scenario", "world_smoke")
+    }
     Runtime           = "res://scripts/tools/runtime_smoke.gd"
     ContentCLI        = "res://scripts/tools/content_cli_smoke.gd"
     ContentEdit       = "res://scripts/tools/content_edit_service_smoke.gd"
@@ -127,10 +139,16 @@ $results = @()
 Push-Location $repoRoot
 try {
     foreach ($name in $selected) {
-        $scriptPath = $scenarioScripts[$name]
+        $scenarioConfig = $scenarioScripts[$name]
+        $scriptPath = $scenarioConfig
+        $scriptArgs = @()
+        if ($scenarioConfig -is [hashtable]) {
+            $scriptPath = $scenarioConfig.Script
+            $scriptArgs = @($scenarioConfig.Args)
+        }
         $consoleLog = Join-Path $runRoot ("{0}.log" -f $name)
         Write-Host "Running Godot smoke scenario '$name' with script '$scriptPath'"
-        & $Godot --headless --path godot --script $scriptPath 2>&1 |
+        & $Godot --headless --path godot --script $scriptPath @scriptArgs 2>&1 |
             Tee-Object -FilePath $consoleLog
         $exitCode = $LASTEXITCODE
         $scenarioStatus = if ($exitCode -eq 0) { "passed" } else { "failed" }
