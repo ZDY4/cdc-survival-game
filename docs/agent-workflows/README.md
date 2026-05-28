@@ -54,27 +54,7 @@
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario BevyEquivalence`
 
-旧 Rust/Bevy 对照入口仅在需要行为差异分析时使用：
-
-- `cargo run -p content_tools -- locate <item|recipe|character|map> <id>`
-- `cargo run -p content_tools -- validate <item|recipe|character|map> <id>`
-- `cargo run -p content_tools -- validate changed`
-- `cargo run -p content_tools -- summarize <item|recipe|character|map> <id>`
-- `cargo run -p content_tools -- references <item|map> <id>`
-- `cargo run -p content_tools -- format <item|recipe|character|map> <id>`
-- `cargo run -p content_tools -- format changed`
-- `cargo run -p content_tools -- diff-summary --path <file>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Item <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Recipe <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Dialogue <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Quest <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Map <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Character <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1`
-- `cargo check -p game_editor -p bevy_item_editor -p bevy_recipe_editor -p bevy_dialogue_editor -p bevy_quest_editor -p bevy_map_editor -p content_tools`
-
-旧 Bevy workflow 文档已移到 `legacy/bevy/docs/agent-workflows/`。
+旧 Rust/Bevy 对照入口和 workflow 文档已移到 `legacy/bevy/docs/agent-workflows/`；默认 workflow 不再列出 `cargo` 或旧 Bevy editor 命令。
 
 ## Editor Handoff
 
@@ -91,32 +71,20 @@
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Overworld <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
 
-旧 Bevy editor 对照入口：
-
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Item <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Recipe <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Dialogue <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Quest <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Character <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Map <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map <id>`
-
 游戏 smoke 复核：
 
 - `pwsh -NoProfile -File tools/agent/test-godot-editor.ps1`
 - `pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario All`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`
 - `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`
-- `pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1`
-- `pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1 -Scenario WorldInteractionMenu`
 
-Godot 迁移期间，运行时/游戏闭环优先跑 `test-godot-game.ps1`；Bevy smoke 保留为旧客户端行为对照。
+Godot 迁移期间，运行时/游戏闭环优先跑 `test-godot-game.ps1`；旧 Bevy smoke 只在 legacy 文档描述的差异对照场景中使用。
 
 Godot editor 迁移期复核优先跑 `test-godot-editor.ps1`；旧 Bevy editor 聚合 smoke 仅作为行为差异对照。
 
 `BevyEquivalence` 场景会输出旧 Bevy `WorldInteractionMenu` 到 Godot smoke 的机器可读覆盖映射，用于证明拾取目标选择、HUD 交互提示、primary pickup option、执行拾取和消费节点移除已经在 Godot 侧闭环。
 
-Godot 迁移期间，内容定位、摘要、引用、格式化、diff 摘要和全量校验优先跑 `godot-content.ps1`；Rust `content_tools` 保留为旧基线和差异对照。
+Godot 迁移期间，内容定位、摘要、引用、格式化、diff 摘要和全量校验优先跑 `godot-content.ps1`。
 
 当前 handoff 行为：
 
@@ -138,6 +106,3 @@ Godot 迁移期间，内容定位、摘要、引用、格式化、diff 摘要和
 - `review-godot-map-visual.ps1` 会先通过 Godot content CLI 执行 `locate` / `summarize` / `references` / `validate changed`
 - 默认继续运行 Godot `World` 和 `Scene` smoke，确认地图数据能进入世界快照和生成场景链路
 - Godot 迁移期间，地图改动优先使用 `review-godot-map-visual.ps1`
-- `legacy/bevy/agent/review-map-visual.ps1` 会先串行执行 `locate` / `summarize` / `references` / `validate`
-- 随后输出固定的视觉复核 checklist
-- 默认会继续调用 `legacy/bevy/agent/open-editor.ps1 -Map <id>` 打开或复用 `bevy_map_editor`

@@ -36,14 +36,9 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind character -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind character -Id <id>`
 
-旧 Rust/Bevy 对照基线仅在需要差异分析时使用：
-
-- `cargo check -p content_tools`
-
 如需进入 editor 复核或手工精修：
 
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Character <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Character <id>` 仅作为旧 Bevy 对照
 
 Godot `CDC Agent Handoff` dock 会显示只读 `edit_plan`，用于确认角色可编辑字段组、spawn / dialogue 影响和保存后 checklist；实际数据仍以 `data/characters/*.json` 为权威。
 

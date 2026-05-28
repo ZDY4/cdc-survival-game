@@ -38,14 +38,9 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind map -Id <id>`
 - `pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map <id>`
 
-旧 Rust/Bevy 对照基线仅在需要差异分析时使用：
-
-- `cargo check -p bevy_map_editor -p content_tools`
-
 如需进入 editor 复核或手工精修：
 
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map <id>`
-- `pwsh -NoProfile -File legacy/bevy/agent/open-editor.ps1 -Map <id>` 仅作为旧 Bevy 对照
 
 Godot editor 当前能力：
 
@@ -62,4 +57,3 @@ Godot editor 当前能力：
 - 改了哪些对象/格子/入口
 - 是否影响 selected map 的可达性或诊断
 - 是否已运行 `review-godot-map-visual.ps1`
-- 若打开旧 `bevy_map_editor`，需说明这是行为差异对照而非默认复核路径
