@@ -7,9 +7,8 @@ const CombatRunner = preload("res://scripts/core/combat/combat_runner.gd")
 const CraftingRunner = preload("res://scripts/core/crafting/crafting_runner.gd")
 const DialogueRunner = preload("res://scripts/core/dialogue/dialogue_runner.gd")
 const EconomyTransactions = preload("res://scripts/core/economy/economy_transactions.gd")
+const EquipmentRunner = preload("res://scripts/core/economy/equipment_runner.gd")
 const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
-const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
-const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const InteractionExecutor = preload("res://scripts/core/interactions/interaction_executor.gd")
 const MovementRunner = preload("res://scripts/core/movement/movement_runner.gd")
 const OverworldRunner = preload("res://scripts/core/overworld/overworld_runner.gd")
@@ -44,8 +43,8 @@ var _combat_runner := CombatRunner.new()
 var _crafting_runner := CraftingRunner.new()
 var _dialogue_runner := DialogueRunner.new()
 var _economy_transactions := EconomyTransactions.new()
+var _equipment_runner := EquipmentRunner.new()
 var _equipment_rules := EquipmentRules.new()
-var _inventory_entries := InventoryEntries.new()
 var _interaction_executor := InteractionExecutor.new()
 var _movement_runner := MovementRunner.new()
 var _overworld_runner := OverworldRunner.new()
@@ -139,31 +138,11 @@ func move_actor_to(actor_id: int, target_position: Dictionary, topology: Diction
 
 
 func equip_item(actor_id: int, item_id: String, target_slot: String, item_library: Dictionary) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	var normalized_item_id: String = _normalize_content_id(item_id)
-	var result: Dictionary = _equipment_rules.equip_item(actor, normalized_item_id, target_slot, item_library)
-	if not bool(result.get("success", false)):
-		return result
-	_emit("item_equipped", {
-		"actor_id": actor_id,
-		"item_id": result.get("item_id", normalized_item_id),
-		"slot_id": result.get("slot_id", target_slot),
-		"previous_item_id": result.get("previous_item_id", ""),
-	})
-	return result
+	return _equipment_runner.equip_item(self, _equipment_rules, actor_id, item_id, target_slot, item_library)
 
 
 func unequip_item(actor_id: int, slot_id: String) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	var result: Dictionary = _equipment_rules.unequip_item(actor, slot_id)
-	if not bool(result.get("success", false)):
-		return result
-	_emit("item_unequipped", {
-		"actor_id": actor_id,
-		"item_id": result.get("item_id", ""),
-		"slot_id": result.get("slot_id", slot_id),
-	})
-	return result
+	return _equipment_runner.unequip_item(self, _equipment_rules, actor_id, slot_id)
 
 
 func buy_item_from_shop(actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
@@ -220,26 +199,3 @@ func _emit(kind: String, payload: Dictionary) -> void:
 
 func emit_event(kind: String, payload: Dictionary) -> void:
 	_emit(kind, payload)
-
-
-func _dictionary_or_empty(value: Variant) -> Dictionary:
-	if typeof(value) == TYPE_DICTIONARY:
-		return value
-	return {}
-
-
-func _array_or_empty(value: Variant) -> Array:
-	if typeof(value) == TYPE_ARRAY:
-		return value
-	return []
-
-
-func _normalize_content_id(value: Variant) -> String:
-	return _inventory_entries.normalize_content_id(value)
-
-
-func _string_array(values: Array) -> Array[String]:
-	var output: Array[String] = []
-	for value in values:
-		output.append(str(value))
-	return output
