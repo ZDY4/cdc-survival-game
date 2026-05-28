@@ -1,7 +1,9 @@
 extends RefCounted
 
+const DialogueActionRunner = preload("res://scripts/core/dialogue/dialogue_action_runner.gd")
 const DialogueDefinitionIndex = preload("res://scripts/core/dialogue/dialogue_definition_index.gd")
 
+var _action_runner := DialogueActionRunner.new()
 var _dialogue_index := DialogueDefinitionIndex.new()
 
 
@@ -57,7 +59,7 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 			"action":
 				for action in _array_or_empty(node.get("actions", [])):
 					var action_data: Dictionary = _dictionary_or_empty(action)
-					var action_result: Dictionary = _apply_action(simulation, actor_id, action_data)
+					var action_result: Dictionary = _action_runner.apply_action(simulation, actor_id, action_data)
 					emitted_actions.append(action_result)
 				current_node_id = str(node.get("next", ""))
 			"dialog", "choice":
@@ -102,36 +104,6 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 		"finished": true,
 		"end_type": "leave",
 	}
-
-
-func _apply_action(simulation: RefCounted, actor_id: int, action: Dictionary) -> Dictionary:
-	var action_type: String = str(action.get("type", action.get("action_type", "")))
-	match action_type:
-		"start_quest":
-			var quest_id: String = str(action.get("quest_id", action.get("questId", "")))
-			var started: bool = simulation.start_quest(actor_id, quest_id)
-			return {"type": action_type, "success": started, "quest_id": quest_id}
-		"turn_in_quest":
-			var quest_id: String = str(action.get("quest_id", action.get("questId", "")))
-			var result: Dictionary = simulation.turn_in_quest(actor_id, quest_id)
-			result["type"] = action_type
-			result["quest_id"] = quest_id
-			return result
-		"unlock_location":
-			var location_id: String = str(action.get("location_id", action.get("locationId", "")))
-			var unlocked: bool = simulation.unlock_location(location_id)
-			return {"type": action_type, "success": unlocked, "location_id": location_id}
-		"open_trade":
-			simulation.emit_event("dialogue_trade_requested", {
-				"actor_id": actor_id,
-			})
-			return {"type": action_type, "success": true}
-		_:
-			simulation.emit_event("dialogue_action_unsupported", {
-				"actor_id": actor_id,
-				"action_type": action_type,
-			})
-			return {"type": action_type, "success": false, "reason": "unsupported_dialogue_action"}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
