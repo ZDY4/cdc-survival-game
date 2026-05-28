@@ -5,7 +5,7 @@ const ContentBrowserPresenter = preload("res://addons/cdc_game_editor/content_br
 const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const TypedFieldForm = preload("res://addons/cdc_game_editor/typed_field_form.gd")
-const DOCK_MIN_SIZE := Vector2(220, 0)
+const DOCK_MIN_SIZE := Vector2.ZERO
 const LIST_MIN_HEIGHT := 120.0
 const DETAIL_MIN_HEIGHT := 140.0
 

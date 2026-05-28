@@ -7,7 +7,7 @@ const EditorContentPresenter = preload("res://addons/cdc_game_editor/editor_cont
 const SESSION_FILE := "godot_editor.session.json"
 const NAVIGATION_FILE := "godot_editor.navigation.json"
 const HEARTBEAT_SECONDS := 2.0
-const DOCK_MIN_SIZE := Vector2(220, 0)
+const DOCK_MIN_SIZE := Vector2.ZERO
 const SUMMARY_MIN_HEIGHT := 140.0
 
 var repo_root: String = ""
