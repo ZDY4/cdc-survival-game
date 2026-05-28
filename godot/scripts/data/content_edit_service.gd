@@ -1,82 +1,24 @@
 extends RefCounted
 
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
+const ContentEditSchema = preload("res://scripts/data/content_edit_schema.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const MapEditService = preload("res://scripts/data/map_edit_service.gd")
 
-const SUPPORTED_DOMAINS := ["items", "recipes", "characters", "maps"]
-
-const EDITABLE_FIELDS := {
-	"items": [
-		"name",
-		"description",
-		"icon_path",
-		"value",
-		"weight",
-	],
-	"recipes": [
-		"name",
-		"description",
-		"category",
-		"craft_time",
-		"experience_reward",
-		"is_default_unlocked",
-	],
-	"characters": [
-		"identity.display_name",
-		"identity.description",
-		"faction.camp_id",
-		"faction.disposition",
-		"combat.behavior",
-	],
-	"maps": [
-		"name",
-	],
-}
-
-const FIELD_TYPES := {
-	"items": {
-		"name": "string",
-		"description": "string",
-		"icon_path": "string",
-		"value": "int",
-		"weight": "float",
-	},
-	"recipes": {
-		"name": "string",
-		"description": "string",
-		"category": "string",
-		"craft_time": "float",
-		"experience_reward": "int",
-		"is_default_unlocked": "bool",
-	},
-	"characters": {
-		"identity.display_name": "string",
-		"identity.description": "string",
-		"faction.camp_id": "string",
-		"faction.disposition": "string",
-		"combat.behavior": "string",
-	},
-	"maps": {
-		"name": "string",
-	},
-}
+var _schema := ContentEditSchema.new()
 
 
 func supports_domain(domain: String) -> bool:
-	return SUPPORTED_DOMAINS.has(domain)
+	return _schema.supports_domain(domain)
 
 
 func editable_fields(domain: String) -> Array[String]:
-	var fields: Array[String] = []
-	for field in EDITABLE_FIELDS.get(domain, []):
-		fields.append(str(field))
-	return fields
+	return _schema.editable_fields(domain)
 
 
 func field_type(domain: String, field_path: String) -> String:
-	return str(_dictionary_or_empty(FIELD_TYPES.get(domain, {})).get(field_path, "string"))
+	return _schema.field_type(domain, field_path)
 
 
 func normalize_patch(domain: String, raw_patch: Dictionary) -> Dictionary:
@@ -184,7 +126,7 @@ func _validate_data(domain: String, id_value: String, record: Dictionary, data: 
 
 
 func _can_edit_field(domain: String, field_path: String) -> bool:
-	return editable_fields(domain).has(field_path)
+	return _schema.can_edit_field(domain, field_path)
 
 
 func _coerce_value(value: Variant, value_type: String) -> Variant:
