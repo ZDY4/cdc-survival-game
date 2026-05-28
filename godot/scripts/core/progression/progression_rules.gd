@@ -1,65 +1,22 @@
 extends RefCounted
 
+const ProgressionLeveling = preload("res://scripts/core/progression/progression_leveling.gd")
+const ProgressionState = preload("res://scripts/core/progression/progression_state.gd")
+
+var _leveling := ProgressionLeveling.new()
+var _state_tools := ProgressionState.new()
+
 
 func build_initial_state(level: int, attributes: Dictionary = {}) -> Dictionary:
-	return {
-		"level": max(1, level),
-		"current_xp": 0,
-		"total_xp_earned": 0,
-		"available_stat_points": 0,
-		"available_skill_points": 0,
-		"total_stat_points_earned": 0,
-		"total_skill_points_earned": 0,
-		"learned_skills": {},
-		"attributes": _normalized_attributes(attributes),
-	}
+	return _state_tools.build_initial_state(level, attributes)
 
 
 func grant_experience(state: Dictionary, amount: int) -> Dictionary:
-	var xp_amount: int = max(0, amount)
-	if xp_amount <= 0:
-		return {"changed": false, "state": state}
-
-	var next_state: Dictionary = _normalized_state(state)
-	next_state["current_xp"] = int(next_state.get("current_xp", 0)) + xp_amount
-	next_state["total_xp_earned"] = int(next_state.get("total_xp_earned", 0)) + xp_amount
-
-	var level_ups: Array[Dictionary] = []
-	while int(next_state.get("current_xp", 0)) >= xp_to_next_level(int(next_state.get("level", 1))):
-		var required: int = xp_to_next_level(int(next_state.get("level", 1)))
-		next_state["current_xp"] = int(next_state.get("current_xp", 0)) - required
-		next_state["level"] = int(next_state.get("level", 1)) + 1
-		next_state["available_stat_points"] = int(next_state.get("available_stat_points", 0)) + 3
-		next_state["available_skill_points"] = int(next_state.get("available_skill_points", 0)) + 1
-		next_state["total_stat_points_earned"] = int(next_state.get("total_stat_points_earned", 0)) + 3
-		next_state["total_skill_points_earned"] = int(next_state.get("total_skill_points_earned", 0)) + 1
-		level_ups.append({
-			"new_level": int(next_state.get("level", 1)),
-			"available_stat_points": int(next_state.get("available_stat_points", 0)),
-			"available_skill_points": int(next_state.get("available_skill_points", 0)),
-		})
-
-	return {
-		"changed": true,
-		"state": next_state,
-		"amount": xp_amount,
-		"total_xp": int(next_state.get("current_xp", 0)),
-		"level_ups": level_ups,
-	}
+	return _leveling.grant_experience(state, amount)
 
 
 func add_skill_points(state: Dictionary, amount: int) -> Dictionary:
-	var points: int = max(0, amount)
-	var next_state: Dictionary = _normalized_state(state)
-	if points <= 0:
-		return {"changed": false, "state": next_state}
-	next_state["available_skill_points"] = int(next_state.get("available_skill_points", 0)) + points
-	next_state["total_skill_points_earned"] = int(next_state.get("total_skill_points_earned", 0)) + points
-	return {
-		"changed": true,
-		"state": next_state,
-		"available_skill_points": int(next_state.get("available_skill_points", 0)),
-	}
+	return _leveling.add_skill_points(state, amount)
 
 
 func learn_skill(state: Dictionary, skill_id: String, skill_library: Dictionary) -> Dictionary:
@@ -71,7 +28,7 @@ func learn_skill(state: Dictionary, skill_id: String, skill_library: Dictionary)
 	if skill.is_empty():
 		return {"success": false, "reason": "unknown_skill", "skill_id": normalized_skill_id}
 
-	var next_state: Dictionary = _normalized_state(state)
+	var next_state: Dictionary = _state_tools.normalized_state(state)
 	var learned: Dictionary = _dictionary_or_empty(next_state.get("learned_skills", {})).duplicate(true)
 	var current_level: int = max(0, int(learned.get(normalized_skill_id, 0)))
 	var max_level: int = max(1, int(skill.get("max_level", 1)))
@@ -118,7 +75,7 @@ func learn_skill(state: Dictionary, skill_id: String, skill_library: Dictionary)
 
 
 func meets_skill_requirements(state: Dictionary, skill_requirements: Dictionary) -> Dictionary:
-	var normalized_state: Dictionary = _normalized_state(state)
+	var normalized_state: Dictionary = _state_tools.normalized_state(state)
 	var learned: Dictionary = _dictionary_or_empty(normalized_state.get("learned_skills", {}))
 	var missing: Array[Dictionary] = []
 	for skill_id in skill_requirements.keys():
@@ -138,28 +95,7 @@ func meets_skill_requirements(state: Dictionary, skill_requirements: Dictionary)
 
 
 func xp_to_next_level(level: int) -> int:
-	return max(1, int(round(100.0 * pow(float(max(1, level)), 1.2))))
-
-
-func _normalized_state(state: Dictionary) -> Dictionary:
-	var next_state: Dictionary = state.duplicate(true)
-	next_state["level"] = max(1, int(next_state.get("level", 1)))
-	next_state["current_xp"] = max(0, int(next_state.get("current_xp", 0)))
-	next_state["total_xp_earned"] = max(0, int(next_state.get("total_xp_earned", 0)))
-	next_state["available_stat_points"] = max(0, int(next_state.get("available_stat_points", 0)))
-	next_state["available_skill_points"] = max(0, int(next_state.get("available_skill_points", 0)))
-	next_state["total_stat_points_earned"] = max(0, int(next_state.get("total_stat_points_earned", 0)))
-	next_state["total_skill_points_earned"] = max(0, int(next_state.get("total_skill_points_earned", 0)))
-	next_state["learned_skills"] = _dictionary_or_empty(next_state.get("learned_skills", {})).duplicate(true)
-	next_state["attributes"] = _normalized_attributes(_dictionary_or_empty(next_state.get("attributes", {})))
-	return next_state
-
-
-func _normalized_attributes(attributes: Dictionary) -> Dictionary:
-	var output: Dictionary = {}
-	for key in attributes.keys():
-		output[str(key)] = max(0, int(attributes.get(key, 0)))
-	return output
+	return _leveling.xp_to_next_level(level)
 
 
 func _skill_data(skill_id: String, skill_library: Dictionary) -> Dictionary:
