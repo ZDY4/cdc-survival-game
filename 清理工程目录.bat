@@ -2,10 +2,11 @@
 setlocal
 
 set "ROOT_DIR=%~dp0"
-set "RUST_DIR=%ROOT_DIR%rust"
-set "TARGET_DIR=%RUST_DIR%\target"
-set "DEBUG_DIR=%TARGET_DIR%\debug"
-set "RELEASE_DIR=%TARGET_DIR%\release"
+set "GODOT_PROJECT_FILE=%ROOT_DIR%godot\project.godot"
+set "LEGACY_RUST_DIR=%ROOT_DIR%legacy\bevy\rust"
+set "LEGACY_RUST_TARGET_DIR=%LEGACY_RUST_DIR%\target"
+set "DEBUG_DIR=%LEGACY_RUST_TARGET_DIR%\debug"
+set "RELEASE_DIR=%LEGACY_RUST_TARGET_DIR%\release"
 set "LOG_DIR=%ROOT_DIR%logs"
 set "ROOT_TARGET_DIR=%ROOT_DIR%target"
 set "TMP_DIR=%ROOT_DIR%tmp"
@@ -18,30 +19,27 @@ set "AUTO_YES=0"
 if /I "%~1"=="--yes" set "AUTO_YES=1"
 if /I "%~1"=="-y" set "AUTO_YES=1"
 
-if not exist "%RUST_DIR%\Cargo.toml" (
-    echo [ERROR] Rust workspace not found: "%RUST_DIR%"
+if not exist "%GODOT_PROJECT_FILE%" (
+    echo [ERROR] Godot project not found: "%GODOT_PROJECT_FILE%"
     exit /b 1
 )
 
 echo This script will clean project-generated files under:
-echo   "%TARGET_DIR%"
+echo   "%LEGACY_RUST_TARGET_DIR%" ^(if present^)
 echo   "%LOG_DIR%"
 echo   "%ROOT_TARGET_DIR%"
 echo   "%TMP_DIR%"
 echo   "%NPM_CACHE_LOG_DIR%"
 echo.
 echo It will clean:
-echo   - debug\incremental
-echo   - debug\*.pdb
-echo   - debug\deps\*.pdb
-echo   - release\*.pdb
-echo   - release\deps\*.pdb
+echo   - archived Rust debug\incremental ^(legacy\bevy\rust\target^)
+echo   - archived Rust debug/release *.pdb files ^(legacy\bevy\rust\target^)
 echo   - log files older than %LOG_RETENTION_DAYS% days under logs\
 echo   - *.log files older than %LOG_RETENTION_DAYS% days under target\
 echo   - npm cache log files older than %LOG_RETENTION_DAYS% days
 echo   - tools\npm-cache\_update-notifier-last-checked
 echo.
-echo It will NOT run "cargo clean".
+echo It will NOT require or run Cargo. Legacy Rust cleanup is limited to cached target files when the archive exists.
 echo.
 
 if "%AUTO_YES%"=="0" (
@@ -52,7 +50,7 @@ if "%AUTO_YES%"=="0" (
     )
 )
 
-call :clean_target_cache
+call :clean_legacy_rust_target_cache
 if errorlevel 1 exit /b 1
 
 call :clean_expired_logs
@@ -66,15 +64,15 @@ if errorlevel 1 exit /b 1
 
 echo.
 echo [DONE] Project cleanup finished.
-echo [TIP] If you ever want a full Rust cleanup, run:
-echo   cd /d "%RUST_DIR%"
+echo [TIP] If you ever need a full archived Rust cleanup for legacy comparison, run:
+echo   cd /d "%LEGACY_RUST_DIR%"
 echo   cargo clean
 
 exit /b 0
 
-:clean_target_cache
-if not exist "%TARGET_DIR%" (
-    echo [INFO] Skipping Rust target cleanup. Directory not found: "%TARGET_DIR%"
+:clean_legacy_rust_target_cache
+if not exist "%LEGACY_RUST_TARGET_DIR%" (
+    echo [INFO] Skipping archived Rust target cleanup. Directory not found: "%LEGACY_RUST_TARGET_DIR%"
     exit /b 0
 )
 
