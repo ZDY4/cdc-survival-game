@@ -3,7 +3,7 @@ extends RefCounted
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 
-const SUPPORTED_DOMAINS := ["items", "recipes", "characters", "maps"]
+const SUPPORTED_DOMAINS := ["items", "recipes", "characters", "maps", "quests", "skills", "skill_trees"]
 
 
 func supports_domain(domain: String) -> bool:
@@ -36,6 +36,12 @@ func build_plan(domain: String, record: Dictionary, references: Array[Dictionary
 			_append_character_plan(lines, checks, data, references)
 		"maps":
 			_append_map_plan(lines, checks, data, references)
+		"quests":
+			_append_quest_plan(lines, checks, data, references)
+		"skills":
+			_append_skill_plan(lines, checks, data, references)
+		"skill_trees":
+			_append_skill_tree_plan(lines, checks, data, references)
 
 	return {
 		"summary": "\n".join(lines),
@@ -96,6 +102,38 @@ func _append_map_plan(lines: Array[String], checks: Array[String], data: Diction
 	checks.append("- pickup/container/ai_spawn props must reference existing items or characters")
 
 
+func _append_quest_plan(lines: Array[String], checks: Array[String], data: Dictionary, references: Array[Dictionary]) -> void:
+	var flow: Dictionary = _dictionary_or_empty(data.get("flow", {}))
+	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
+	lines.append("fields: title, description, time_limit")
+	lines.append("title: %s" % data.get("title", ""))
+	lines.append("flow_nodes: %d" % nodes.size())
+	lines.append("dialogue_refs: %d" % _count_references_by_kind(references, "dialogue"))
+	checks.append("- metadata edits should keep title non-empty and preserve quest id")
+	checks.append("- flow, rewards, prerequisites, and objective graph remain JSON/manual edit territory")
+	checks.append("- quest metadata changes should pass Godot content validate and quest smoke")
+
+
+func _append_skill_plan(lines: Array[String], checks: Array[String], data: Dictionary, references: Array[Dictionary]) -> void:
+	lines.append("fields: name, icon, description, max_level")
+	lines.append("tree_id: %s" % data.get("tree_id", ""))
+	lines.append("max_level: %d" % int(data.get("max_level", 0)))
+	lines.append("skill_tree_refs: %d" % _count_references_by_kind(references, "skill_tree"))
+	checks.append("- max_level must stay >= 1 and should not strand existing learned skill levels")
+	checks.append("- tree_id, prerequisites, requirements, and gameplay_effect remain JSON/manual edit territory")
+	checks.append("- skill metadata changes should pass Godot content validate and progression smoke")
+
+
+func _append_skill_tree_plan(lines: Array[String], checks: Array[String], data: Dictionary, references: Array[Dictionary]) -> void:
+	lines.append("fields: name, description")
+	lines.append("skills: %d" % data.get("skills", []).size())
+	lines.append("links: %d" % data.get("links", []).size())
+	lines.append("skill_refs: %d" % _count_references_by_kind(references, "skill"))
+	checks.append("- skill list, links, and layout remain JSON/manual edit territory")
+	checks.append("- metadata edits should keep name non-empty and preserve tree id")
+	checks.append("- skill tree metadata changes should pass Godot content validate and progression smoke")
+
+
 func _editable_groups_for(domain: String, data: Dictionary) -> String:
 	match domain:
 		"items":
@@ -109,6 +147,12 @@ func _editable_groups_for(domain: String, data: Dictionary) -> String:
 			return groups
 		"maps":
 			return "metadata, levels, entry points, objects, interactions, spawns"
+		"quests":
+			return "metadata"
+		"skills":
+			return "metadata, level cap"
+		"skill_trees":
+			return "metadata"
 	return "-"
 
 

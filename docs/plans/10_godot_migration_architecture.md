@@ -232,7 +232,7 @@ godot/
 - 定义对象：角色、物品、效果、技能、技能树、配方、任务、对话、对话规则、地图、overworld、world tile、据点、商店、AI 模块。
 - 内容库：按 id 索引、重复 id 检查、引用查询。
 - 校验器：schema 必填项、枚举值、跨内容引用、地图出口覆盖、AI 内容完整性。
-- 编辑服务：item / recipe / character / map 的最小读写、格式化、诊断。
+- 编辑服务：item / recipe / character / map 的最小读写，以及 quest / skill / skill_tree 的安全元数据写回、格式化、诊断。
 
 建议用 `RefCounted` 数据类表达定义对象，用 `class_name` 暴露稳定 API；复杂嵌套字段先保留 `Dictionary`，等行为稳定后再逐步收窄类型。
 
@@ -280,8 +280,8 @@ godot/
 对齐当前多个 Bevy editor app：
 
 - 第一批只做内容浏览、定位、校验结果展示和地图/模型预览。
-- 第二批再补 item / recipe / character / map 的编辑能力。
-- 第三批补 graph 类 editor：dialogue / quest / skill tree。
+- 第二批再补 item / recipe / character / map 的编辑能力，以及 quest / skill / skill_tree 的元数据表单。
+- 第三批补 graph 类 editor：dialogue / quest flow / skill tree links。
 - 所有保存逻辑调用 `scripts/data` 编辑服务，不在插件中重复 schema。
 
 ## 数据迁移策略

@@ -59,8 +59,14 @@ func _run() -> Array[String]:
 	_expect_detail(errors, presenter, registry, "overworld", "main_overworld", "locations:")
 	_expect_detail(errors, presenter, registry, "map", "survivor_outpost_01", "map_review_checks:")
 	_expect_detail(errors, presenter, registry, "item", "1006", "editable_fields:")
+	_expect_detail(errors, presenter, registry, "quest", "tutorial_survive", "time_limit")
+	_expect_detail(errors, presenter, registry, "skill", "survival", "max_level")
+	_expect_detail(errors, presenter, registry, "skill_tree", "survival", "description")
 	_expect_read_only_form(errors, registry)
 	_expect_dock_patch(errors, registry)
+	_expect_dock_patch_for_domain(errors, registry, "quest", "quests", "tutorial_survive", {"title": "补给试跑 dock smoke"})
+	_expect_dock_patch_for_domain(errors, registry, "skill", "skills", "survival", {"max_level": 6})
+	_expect_dock_patch_for_domain(errors, registry, "skill_tree", "skill_trees", "survival", {"name": "生存系 dock smoke"})
 	_expect_dock_typed_inputs(errors)
 	return errors
 
@@ -102,6 +108,26 @@ func _expect_dock_patch(errors: Array[String], registry: ContentRegistry) -> voi
 	var raw := FileAccess.get_file_as_string(str(report.get("path", "")))
 	if not raw.contains("绷带 dock smoke"):
 		errors.append("browser dock patch did not write expected value")
+	dock.free()
+
+
+func _expect_dock_patch_for_domain(errors: Array[String], registry: ContentRegistry, kind: String, domain: String, id_value: String, patch: Dictionary) -> void:
+	var dock: ContentBrowserDock = ContentBrowserDock.new()
+	dock.repo_root = ProjectSettings.globalize_path("res://..").simplify_path()
+	dock.registry = _registry_with_temp_record(registry, domain, id_value)
+	dock.presenter = ContentBrowserPresenter.new()
+	dock.edit_service = ContentEditService.new()
+	dock.selected_kind = kind
+	dock.selected_id = id_value
+	var report := dock.apply_patch_for_current_selection(patch, false, {"allow_external_path": true})
+	if not bool(report.get("ok", false)):
+		errors.append("browser dock patch failed for %s %s: %s" % [kind, id_value, report])
+		dock.free()
+		return
+	var raw := FileAccess.get_file_as_string(str(report.get("path", "")))
+	for field in patch.keys():
+		if not raw.contains(str(patch[field])):
+			errors.append("browser dock patch for %s %s did not write %s" % [kind, id_value, field])
 	dock.free()
 
 

@@ -14,7 +14,7 @@ func _init() -> void:
 
 	print("content_edit_service_smoke passed:")
 	print({
-		"covered_domains": ["item", "recipe", "character", "map"],
+		"covered_domains": ["item", "recipe", "character", "map", "quest", "skill", "skill_tree"],
 	})
 	quit(0)
 
@@ -35,13 +35,17 @@ func _run() -> Array[String]:
 	_expect_patch(errors, service, registry, "recipes", "recipe_first_aid_kit", {"craft_time": 31.0})
 	_expect_patch(errors, service, registry, "characters", "zombie_walker", {"identity.display_name": "行尸 smoke"})
 	_expect_patch(errors, service, registry, "maps", "survivor_outpost_01", {"name": "survivor outpost smoke"})
+	_expect_patch(errors, service, registry, "quests", "tutorial_survive", {"title": "补给试跑 smoke"})
+	_expect_patch(errors, service, registry, "skills", "survival", {"max_level": 6})
+	_expect_patch(errors, service, registry, "skill_trees", "survival", {"description": "生存系 smoke"})
 	_expect_map_object_patch(errors, service, registry)
 	_expect_invalid_patch(errors, service, registry)
+	_expect_invalid_metadata_patch(errors, service, registry)
 	return errors
 
 
 func _expect_editable_fields(errors: Array[String], service: ContentEditService) -> void:
-	for domain in ["items", "recipes", "characters", "maps"]:
+	for domain in ["items", "recipes", "characters", "maps", "quests", "skills", "skill_trees"]:
 		if service.editable_fields(domain).is_empty():
 			errors.append("content edit service has no editable fields for %s" % domain)
 
@@ -85,6 +89,18 @@ func _expect_invalid_patch(errors: Array[String], service: ContentEditService, r
 	var persisted := FileAccess.get_file_as_string(str(isolated.get_library("recipes")["recipe_first_aid_kit"].get("path", "")))
 	if persisted.contains("-1"):
 		errors.append("invalid patch should not be written to disk")
+
+
+func _expect_invalid_metadata_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry) -> void:
+	var isolated := _registry_with_temp_record(registry, "skills", "survival")
+	var report := service.save_patch("skills", "survival", {"max_level": 0}, isolated, {"allow_external_path": true})
+	if bool(report.get("ok", false)):
+		errors.append("invalid skill metadata patch should fail validation")
+	if str(report.get("code", "")) != "validation_failed":
+		errors.append("invalid skill metadata patch should return validation_failed, got %s" % report)
+	var persisted := FileAccess.get_file_as_string(str(isolated.get_library("skills")["survival"].get("path", "")))
+	if persisted.contains("\"max_level\": 0"):
+		errors.append("invalid skill metadata patch should not be written to disk")
 
 
 func _expect_map_object_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry) -> void:
