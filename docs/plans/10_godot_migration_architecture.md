@@ -91,7 +91,7 @@ D:\godot\godot.cmd
 | `assets/preview_placeholders` | 20 | 角色和装备 placeholder，作为 Godot placeholder 复用 |
 | `assets/container_placeholders` | 3 | 容器模型，直接导入 |
 | `assets/fonts` | 1 | Noto Sans CJK 字体，迁到 Godot UI theme |
-| `assets/shaders` | 1 | WGSL 雾战 shader，需用 Godot shader 重写 |
+| `godot/assets/shaders` | 1 | Godot 雾战 shader，旧 WGSL 已归档到 `legacy/bevy/assets/shaders/` |
 | `assets/generated` | 0 | 保留为生成资产输出候选 |
 
 仓库已有 `addons/` 和 `ui/` 目录，但目前只发现 `addons/cdc_game_editor/editors/item_editor/item_editor.gd.bak` 一个旧 Godot 备份文件。该文件存在中文编码损坏和旧 schema 倾向，只能作为历史思路参考，不作为迁移权威。
@@ -265,7 +265,7 @@ godot/
 - 从 map / overworld 定义生成 Godot scene tree。
 - 管理 grid 到 3D 坐标转换、tile prototype 实例化、对象 footprint、门和触发器表现。
 - 将 `SimulationSnapshot` 映射为 actor、容器、掉落物、交互提示和雾战表现。
-- Godot Shader 重写 `assets/shaders/fog_of_war_post_process.wgsl`。
+- Godot 雾战表现使用 `godot/assets/shaders/fog_of_war_canvas.gdshader`；旧 `fog_of_war_post_process.wgsl` 仅保留在 `legacy/bevy/assets/shaders/` 作为行为对照。
 
 ### `scripts/ui`
 
@@ -525,7 +525,7 @@ D:\godot\godot.cmd --path godot
 - 规则体量大：先迁 playable 需要的纵向切片，再迁剩余系统。
 - GDScript 类型约束弱：关键定义和 runtime state 使用集中校验、清晰命名和单元测试补足。
 - Godot 3D tile 性能未知：先用场景实例化跑通，再评估 MultiMesh、GridMap 或自定义 mesh 合批。
-- shader 不可直接迁：WGSL 雾战需要 Godot shader 重写，并用 headless/窗口 smoke 对比可见性数据。
+- shader 不可直接迁：旧 WGSL 雾战只作为归档对照；Godot shader 通过 headless/窗口 smoke 对比可见性数据。
 - 编辑器数量多：先 CLI 和 preview，后完整编辑体验。
 - 旧数据 schema 可能夹带历史字段：Godot loader 先宽读严校，诊断可行动后再收紧。
 
