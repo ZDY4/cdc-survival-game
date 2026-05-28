@@ -10,6 +10,7 @@ const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const InteractionExecutor = preload("res://scripts/core/interactions/interaction_executor.gd")
+const MovementRunner = preload("res://scripts/core/movement/movement_runner.gd")
 const OverworldRunner = preload("res://scripts/core/overworld/overworld_runner.gd")
 const Pathfinder = preload("res://scripts/core/movement/pathfinder.gd")
 const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
@@ -43,6 +44,7 @@ var _economy_transactions := EconomyTransactions.new()
 var _equipment_rules := EquipmentRules.new()
 var _inventory_entries := InventoryEntries.new()
 var _interaction_executor := InteractionExecutor.new()
+var _movement_runner := MovementRunner.new()
 var _overworld_runner := OverworldRunner.new()
 var _pathfinder := Pathfinder.new()
 var _progression_rules := ProgressionRules.new()
@@ -158,28 +160,7 @@ func record_item_collected(actor_id: int, item_id: String, count: int) -> void:
 
 
 func move_actor_to(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	var goal: RefCounted = GridCoord.from_dictionary(target_position)
-	var occupied: Dictionary = _occupied_actor_cells(actor_id)
-	var path_result: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, occupied)
-	if not bool(path_result.get("success", false)):
-		return path_result
-	actor.grid_position = goal
-	_emit("actor_moved", {
-		"actor_id": actor_id,
-		"from": _array_or_empty(path_result.get("path", [])).front() if int(path_result.get("steps", 0)) > 0 else goal.to_dictionary(),
-		"to": goal.to_dictionary(),
-		"steps": int(path_result.get("steps", 0)),
-	})
-	return {
-		"success": true,
-		"actor_id": actor_id,
-		"to": goal.to_dictionary(),
-		"path": path_result.get("path", []),
-		"steps": int(path_result.get("steps", 0)),
-	}
+	return _movement_runner.move_actor_to(self, _pathfinder, actor_id, target_position, topology)
 
 
 func equip_item(actor_id: int, item_id: String, target_slot: String, item_library: Dictionary) -> Dictionary:
@@ -264,15 +245,6 @@ func _emit(kind: String, payload: Dictionary) -> void:
 
 func emit_event(kind: String, payload: Dictionary) -> void:
 	_emit(kind, payload)
-
-
-func _occupied_actor_cells(excluded_actor_id: int) -> Dictionary:
-	var output: Dictionary = {}
-	for actor in actor_registry.actors():
-		if actor.actor_id == excluded_actor_id:
-			continue
-		output[actor.grid_position.key()] = actor.actor_id
-	return output
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
