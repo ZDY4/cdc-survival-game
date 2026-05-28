@@ -520,6 +520,14 @@ D:\godot\godot.cmd --path godot
 
 - 仓库不再需要 `cargo`、Bevy 或 Rust workspace 即可运行游戏和工具。
 
+2026-05-28 关闭旧依赖验证记录：
+
+- `cmd /c run_godot_validate.bat` 已通过，覆盖 `data/` 下 ai、appearance、characters、dialogues、items、json、maps、overworld、quests、recipes、settlements、shops、skill_trees、skills、world_tiles。
+- `pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario All` 已通过，覆盖 editor handoff、content browser、map preview、content edit、map edit。
+- `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All` 已通过，覆盖 headless new game/world、runtime、content CLI/edit、map edit/preview、fog shader、world/scene、overworld、movement、vision、AI、interaction/player interaction、UI、dialogue、inventory/container/journal/trade、quest、combat、progression、equipment、crafting、save。
+- `BevyEquivalence` 场景已输出旧 `WorldInteractionMenu` 到 Godot `PlayerInteraction` / `Interaction` / `UI` 的机器可读覆盖映射，并断言 node selection、primary pickup option、HUD interaction line、pickup execution、inventory gain、consumed node removal。
+- 根目录 `rust/` 不存在；旧 workspace、启动脚本、agent 对照脚本和旧运行状态已收口到 `legacy/bevy/`，默认验证链路不进入 Cargo。
+
 ## 风险与处理
 
 - 规则体量大：先迁 playable 需要的纵向切片，再迁剩余系统。
