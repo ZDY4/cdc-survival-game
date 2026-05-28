@@ -56,7 +56,7 @@ $startedAt = Get-Date
 $status = "passed"
 $exitCode = 0
 
-Push-Location (Join-Path $repoRoot "rust")
+Push-Location (Join-Path $repoRoot "legacy/bevy/rust")
 try {
     Write-Host "Running Bevy game smoke scenario '$Scenario' with test filter '$testFilter'"
     & cargo test -p bevy_debug_viewer $testFilter -- --nocapture 2>&1 |

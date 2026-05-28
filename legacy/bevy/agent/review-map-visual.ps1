@@ -61,7 +61,7 @@ if ([string]::IsNullOrWhiteSpace($Map)) {
 }
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
-$rustWorkspaceRoot = Join-Path $repoRoot "rust"
+$rustWorkspaceRoot = Join-Path $repoRoot "legacy/bevy/rust"
 $contentToolsArgs = @("run", "-q", "-p", "content_tools", "--")
 
 Push-Location $rustWorkspaceRoot

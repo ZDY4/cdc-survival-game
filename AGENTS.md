@@ -7,7 +7,7 @@
 - 本项目迁移期默认运行时和工具链基于 `Godot 4.6.3 + GDScript`。
 - Godot 命令行入口固定使用 `D:\godot\godot.cmd`，工程目录为 `godot/`。
 - `data/` 下 JSON 仍是当前内容输入源；Godot 数据层负责加载、校验、摘要、引用和安全写回。
-- 旧 `rust/` 与 Bevy app 只作为行为差异分析、历史参考和迁移收尾前的对照基线，不再作为新增功能默认落点。
+- 旧 `legacy/bevy/rust/` 与 Bevy app 只作为行为差异分析、历史参考和迁移收尾前的对照基线，不再作为新增功能默认落点。
 - 内容编辑器保持独立工具形态，不把编辑能力重新塞回游戏运行时。
 
 ## 架构边界
@@ -54,7 +54,7 @@
 - `godot/addons/cdc_game_editor`: Godot editor 插件、handoff、content browser、map preview 和专用编辑 dock。
 - `data`: 当前内容权威输入源，迁移完成前不要与 `.tres` / `.res` 长期双写。
 - `tools/agent`: repo-local agent workflow 标准入口，默认走 Godot 脚本。
-- `rust` 和 `legacy/bevy/run_bevy_*.bat`: 旧 Rust/Bevy 实现与启动脚本，只在明确需要旧行为对照时使用。
+- `legacy/bevy/rust` 和 `legacy/bevy/run_bevy_*.bat`: 旧 Rust/Bevy 实现与启动脚本，只在明确需要旧行为对照时使用。
 
 ## 编辑器约束
 

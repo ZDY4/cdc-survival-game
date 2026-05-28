@@ -2,7 +2,7 @@
 setlocal
 
 set "ROOT_DIR=%~dp0..\..\"
-set "RUST_DIR=%ROOT_DIR%rust"
+set "RUST_DIR=%~dp0rust"
 set "CARGO_EXE=%USERPROFILE%\.cargo\bin\cargo.exe"
 
 if not exist "%RUST_DIR%\Cargo.toml" (

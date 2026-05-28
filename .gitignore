@@ -42,6 +42,7 @@ tmp/narrative_lab_regression_*/
 godot/.godot/
 godot/**/*.uid
 rust/target/
+legacy/bevy/rust/target/
 tools/tauri_editor/node_modules/
 tools/tauri_editor/dist/
 tools/tauri_editor/.vite/
@@ -80,6 +81,8 @@ tools/editor_shared/.env.*
 saves/bevy_viewer_latest.json
 config/bevy_viewer_ui_settings.json
 legacy/bevy/config/bevy_viewer_ui_settings.json
+legacy/bevy/logs/
+legacy/bevy/saves/
 
 # Rust lockfiles should be versioned for app crates
 !rust/Cargo.lock

@@ -31,26 +31,26 @@ D:\godot\godot.cmd
 
 ### Rust workspace
 
-`rust/Cargo.toml` 当前 workspace 包含 16 个成员：
+迁移执行进入关闭旧依赖阶段后，原根目录 `rust/` 已整体归档到 `legacy/bevy/rust/`，仅保留为旧行为对照基线。归档前的 `Cargo.toml` workspace 包含 16 个成员：
 
 | 当前模块 | 规模 | 当前职责 | Godot 目标归宿 |
 | --- | ---: | --- | --- |
-| `rust/crates/game_data` | 43 文件，约 20765 行 | 共享内容 schema、加载、引用校验、编辑服务 | `godot/scripts/data/` 与 `godot/scripts/content/` |
-| `rust/crates/game_core` | 86 文件，约 26507 行 | 引擎无关规则、模拟、战斗、经济、任务、移动、AI、视野 | `godot/scripts/core/` |
-| `rust/crates/game_bevy` | 43 文件，约 18002 行 | Bevy runtime 装配、内容加载资源、世界渲染、UI snapshot、NPC life 集成 | 拆到 `godot/scripts/app/`、`godot/scripts/world/`、`godot/scripts/ui/` |
-| `rust/crates/game_editor` | 18 文件，约 2719 行 | Bevy editor 共用壳、预览、handoff、模型工具 | `godot/addons/cdc_game_editor/` 与 `godot/tools/` |
-| `rust/crates/game_protocol` | 2 文件，约 516 行 | headless server IPC 消息 | 先废弃为迁移参考，若未来需要外部进程再用 Godot JSON/RPC 重建 |
-| `rust/apps/bevy_server` | 12 文件，约 3597 行 | headless Bevy runtime 入口、协议分发、报告 | `godot/scripts/app/headless_runner.gd` 或 CLI tool script |
-| `rust/apps/bevy_debug_viewer` | 123 文件，约 39438 行 | 当前主客户端、调试 viewer、游戏 UI、输入、渲染、存档、性能面板 | `godot/scenes/game/`、`godot/scripts/app/`、`godot/scripts/ui/`、`godot/scripts/debug/` |
-| `rust/apps/bevy_map_editor` | 13 文件，约 3403 行 | 地图专用编辑器 | `godot/addons/cdc_game_editor/editors/map_editor/` |
-| `rust/apps/bevy_character_editor` | 18 文件，约 3432 行 | 角色和 AI 预览编辑器 | `godot/addons/cdc_game_editor/editors/character_editor/` |
-| `rust/apps/bevy_gltf_viewer` | 9 文件，约 2273 行 | glTF / bbmodel 预览与 socket 编辑 | `godot/tools/model_viewer/` 或 editor dock |
-| `rust/apps/bevy_item_editor` | 9 文件，约 1436 行 | 物品编辑器 | `godot/addons/cdc_game_editor/editors/item_editor/` |
-| `rust/apps/bevy_recipe_editor` | 9 文件，约 1196 行 | 配方编辑器 | `godot/addons/cdc_game_editor/editors/recipe_editor/` |
-| `rust/apps/bevy_dialogue_editor` | 9 文件，约 1134 行 | 对话图编辑器 | `godot/addons/cdc_game_editor/editors/dialogue_editor/` |
-| `rust/apps/bevy_quest_editor` | 10 文件，约 1085 行 | 任务图编辑器 | `godot/addons/cdc_game_editor/editors/quest_editor/` |
-| `rust/apps/bevy_skill_editor` | 9 文件，约 1187 行 | 技能树编辑器 | `godot/addons/cdc_game_editor/editors/skill_editor/` |
-| `rust/apps/content_tools` | 8 文件，约 1408 行 | CLI 内容定位、摘要、引用、校验、格式化 | `godot/tools/content_cli/`，用 Godot headless 脚本替代 |
+| `legacy/bevy/rust/crates/game_data` | 43 文件，约 20765 行 | 共享内容 schema、加载、引用校验、编辑服务 | `godot/scripts/data/` 与 `godot/scripts/content/` |
+| `legacy/bevy/rust/crates/game_core` | 86 文件，约 26507 行 | 引擎无关规则、模拟、战斗、经济、任务、移动、AI、视野 | `godot/scripts/core/` |
+| `legacy/bevy/rust/crates/game_bevy` | 43 文件，约 18002 行 | Bevy runtime 装配、内容加载资源、世界渲染、UI snapshot、NPC life 集成 | 拆到 `godot/scripts/app/`、`godot/scripts/world/`、`godot/scripts/ui/` |
+| `legacy/bevy/rust/crates/game_editor` | 18 文件，约 2719 行 | Bevy editor 共用壳、预览、handoff、模型工具 | `godot/addons/cdc_game_editor/` 与 `godot/tools/` |
+| `legacy/bevy/rust/crates/game_protocol` | 2 文件，约 516 行 | headless server IPC 消息 | 先废弃为迁移参考，若未来需要外部进程再用 Godot JSON/RPC 重建 |
+| `legacy/bevy/rust/apps/bevy_server` | 12 文件，约 3597 行 | headless Bevy runtime 入口、协议分发、报告 | `godot/scripts/app/headless_runner.gd` 或 CLI tool script |
+| `legacy/bevy/rust/apps/bevy_debug_viewer` | 123 文件，约 39438 行 | 当前主客户端、调试 viewer、游戏 UI、输入、渲染、存档、性能面板 | `godot/scenes/game/`、`godot/scripts/app/`、`godot/scripts/ui/`、`godot/scripts/debug/` |
+| `legacy/bevy/rust/apps/bevy_map_editor` | 13 文件，约 3403 行 | 地图专用编辑器 | `godot/addons/cdc_game_editor/editors/map_editor/` |
+| `legacy/bevy/rust/apps/bevy_character_editor` | 18 文件，约 3432 行 | 角色和 AI 预览编辑器 | `godot/addons/cdc_game_editor/editors/character_editor/` |
+| `legacy/bevy/rust/apps/bevy_gltf_viewer` | 9 文件，约 2273 行 | glTF / bbmodel 预览与 socket 编辑 | `godot/tools/model_viewer/` 或 editor dock |
+| `legacy/bevy/rust/apps/bevy_item_editor` | 9 文件，约 1436 行 | 物品编辑器 | `godot/addons/cdc_game_editor/editors/item_editor/` |
+| `legacy/bevy/rust/apps/bevy_recipe_editor` | 9 文件，约 1196 行 | 配方编辑器 | `godot/addons/cdc_game_editor/editors/recipe_editor/` |
+| `legacy/bevy/rust/apps/bevy_dialogue_editor` | 9 文件，约 1134 行 | 对话图编辑器 | `godot/addons/cdc_game_editor/editors/dialogue_editor/` |
+| `legacy/bevy/rust/apps/bevy_quest_editor` | 10 文件，约 1085 行 | 任务图编辑器 | `godot/addons/cdc_game_editor/editors/quest_editor/` |
+| `legacy/bevy/rust/apps/bevy_skill_editor` | 9 文件，约 1187 行 | 技能树编辑器 | `godot/addons/cdc_game_editor/editors/skill_editor/` |
+| `legacy/bevy/rust/apps/content_tools` | 8 文件，约 1408 行 | CLI 内容定位、摘要、引用、校验、格式化 | `godot/tools/content_cli/`，用 Godot headless 脚本替代 |
 
 ### 内容数据
 
@@ -104,7 +104,7 @@ D:\godot\godot.cmd
 - `review-map-visual.ps1`: 地图摘要、引用、校验和 Bevy map editor 视觉复核。
 - `test-bevy-game.ps1`: Bevy game smoke 测试。
 
-当前内容 CLI 在 `rust/apps/content_tools`：
+旧内容 CLI 已归档在 `legacy/bevy/rust/apps/content_tools`：
 
 - `locate`
 - `validate`
@@ -117,7 +117,7 @@ D:\godot\godot.cmd
 
 ## 目标 Godot 工程结构
 
-Godot 工程放在仓库根目录的新目录 `godot/`，避免与现有 `assets/`、`data/`、`rust/` 在迁移期互相污染。
+Godot 工程放在仓库根目录的新目录 `godot/`，避免与现有 `assets/`、`data/`、`legacy/bevy/rust/` 在迁移期互相污染。
 
 ```text
 godot/
@@ -334,7 +334,7 @@ Godot 直接读取仓库根目录 `data/`：
 ```powershell
 pwsh -NoProfile -File legacy/bevy/agent/test-bevy-game.ps1
 pwsh -NoProfile -File legacy/bevy/agent/review-map-visual.ps1 -Map survivor_outpost_01 -NoOpenEditor
-Push-Location rust; cargo run -q -p content_tools -- validate changed; Pop-Location
+Push-Location legacy/bevy/rust; cargo run -q -p content_tools -- validate changed; Pop-Location
 ```
 
 Godot 侧逐步建立等价命令：
@@ -509,10 +509,11 @@ D:\godot\godot.cmd --path godot
 - 旧 `run_bevy_*` 启动脚本已移入 `legacy/bevy/`，仅供旧行为对照入口引用。
 - `test-godot-editor.ps1` 聚合 Godot editor handoff、content browser、map preview、content edit 和 map edit smoke，替代旧 Bevy editor 聚合 smoke 的默认用途。
 - 旧 Bevy editor 聚合 smoke、旧 Bevy workflow 文档、旧 Cargo 对照命令、Bevy-only 地图 AI 维护文档、迁移前 Bevy/Rust playable 计划、Bevy runtime 配置和旧 smoke 产物已移入 `legacy/bevy/`，不再位于默认 agent/editor/plans/config 文档或配置路径。
+- 根目录 `rust/` 已归档为 `legacy/bevy/rust/`，legacy 启动脚本和 agent 对照脚本都从归档 workspace 解析 Cargo 路径。
 
 交付：
 
-- 删除或归档 `rust/`、Bevy run bat、Bevy 专用脚本和旧日志路径。
+- 删除或归档 `rust/`、Bevy run bat、Bevy 专用脚本和旧日志路径；本轮执行先将旧 workspace 收口到 `legacy/bevy/rust/`，不再保留根目录 `rust/`。
 - 更新 `AGENTS.md` 当前基线。
 
 验证：

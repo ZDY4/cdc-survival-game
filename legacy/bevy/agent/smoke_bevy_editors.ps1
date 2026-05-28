@@ -258,7 +258,7 @@ function Get-NewLogFile {
         [datetime]$StartedAt
     )
 
-    $logDir = Join-Path $repoRoot "logs\$AppId"
+    $logDir = Join-Path $repoRoot "legacy/bevy/logs/$AppId"
     if (-not (Test-Path -LiteralPath $logDir)) {
         return $null
     }
@@ -289,7 +289,7 @@ foreach ($editorId in $Editors) {
     $screenshotPath = Join-Path $appRoot "window.png"
     $launcherWrapper = Join-Path $appRoot "launch-wrapper.cmd"
     $existingLogs = @()
-    $logDir = Join-Path $repoRoot "logs\$($config.AppId)"
+    $logDir = Join-Path $repoRoot "legacy/bevy/logs/$($config.AppId)"
     if (Test-Path -LiteralPath $logDir) {
         $existingLogs = @(Get-ChildItem -Path $logDir -Filter "*.log" -File | Select-Object -ExpandProperty FullName)
     }

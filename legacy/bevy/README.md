@@ -2,6 +2,8 @@
 
 This directory keeps the old Bevy / Rust launch scripts for behavior comparison during the Godot migration.
 
+The archived Rust workspace now lives at `legacy/bevy/rust/`. The legacy batch launchers resolve their Cargo workspace from this directory, so root-level `rust/` is no longer a default project path.
+
 Default development should use the repository root Godot launchers:
 
 ```powershell
