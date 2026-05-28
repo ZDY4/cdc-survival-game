@@ -7,13 +7,13 @@
 - `assets/` 下正式入库的 3D 资产主文件统一使用 `.gltf`
 - 几何、骨骼或动画使用外部 buffer 时，配套产物统一为 `.bin`
 - 贴图保持外部文件引用，不内嵌到 `.gltf`
-- `data/` 和共享 Rust schema 中所有正式 3D 资产路径只允许引用 `.gltf`
+- `data/` 和 Godot 内容加载层中所有正式 3D 资产路径只允许引用 `.gltf`
 - `.glb` 和 `.fbx` 只允许作为临时导入源，不允许作为正式内容引用进入仓库 schema
 
 运行时和工具链约定：
 
 - 动画、骨骼和场景层级继续通过 glTF 承载
-- Bevy 运行时继续使用现有 `GltfAssetLabel` 与 `AssetServer` 加载 `.gltf`
+- Godot 运行时和 editor 预览通过导入后的 glTF 资源加载 `.gltf`
 - placeholder bake、preview placeholder、world tile 等工具默认输出 `.gltf`，并将 `.bin` 视为标准配套产物
 
 AI 修改边界：

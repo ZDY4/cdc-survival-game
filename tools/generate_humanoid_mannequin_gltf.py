@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "assets" / "bevy_preview" / "characters" / "humanoid_mannequin.gltf"
+OUTPUT = ROOT / "assets" / "preview_placeholders" / "characters" / "humanoid_mannequin.gltf"
 
 
 def cube_geometry():

@@ -137,6 +137,7 @@ func _validate_required_fields(data: Dictionary, required: Array, path: String, 
 func _validate_references(result: ValidationResult) -> void:
 	_validate_recipe_item_refs(result)
 	_validate_bootstrap_refs(result)
+	_validate_appearance_asset_refs(result)
 
 
 func _validate_recipe_item_refs(result: ValidationResult) -> void:
@@ -173,6 +174,24 @@ func _validate_bootstrap_refs(result: ValidationResult) -> void:
 		var character_id: String = str(spawn_entries[i].get("definitionId", ""))
 		if not has_id("characters", character_id):
 			result.add_error(path, "new_game_default", "spawnEntries[%d].definitionId" % i, "unknown character id %s" % character_id)
+
+
+func _validate_appearance_asset_refs(result: ValidationResult) -> void:
+	var assets_root := ContentPaths.assets_root()
+	for appearance_id in get_library("appearance").keys():
+		var record: Dictionary = get_library("appearance")[appearance_id]
+		var path: String = record["path"]
+		var data: Dictionary = record["data"]
+		var base_model_asset := str(data.get("base_model_asset", "")).strip_edges()
+		if base_model_asset.is_empty():
+			result.add_error(path, appearance_id, "base_model_asset", "missing base model asset path")
+			continue
+		if not base_model_asset.ends_with(".gltf"):
+			result.add_error(path, appearance_id, "base_model_asset", "base model asset must reference a .gltf file")
+			continue
+		var full_path := assets_root.path_join(base_model_asset).simplify_path()
+		if not FileAccess.file_exists(full_path):
+			result.add_error(path, appearance_id, "base_model_asset", "asset file does not exist: %s" % full_path)
 
 
 func _validate_item_ref(item_id: Variant, path: String, content_id: String, field: String, result: ValidationResult) -> void:

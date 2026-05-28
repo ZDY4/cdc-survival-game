@@ -88,7 +88,7 @@ D:\godot\godot.cmd
 | 目录 | 文件数 | 迁移处理 |
 | --- | ---: | --- |
 | `assets/world_tiles` | 62 | glTF/bin tile 资产，导入 Godot 后生成 tile prototype scene |
-| `assets/bevy_preview` | 20 | 角色和装备 placeholder，先作为 Godot placeholder 复用 |
+| `assets/preview_placeholders` | 20 | 角色和装备 placeholder，作为 Godot placeholder 复用 |
 | `assets/container_placeholders` | 3 | 容器模型，直接导入 |
 | `assets/fonts` | 1 | Noto Sans CJK 字体，迁到 Godot UI theme |
 | `assets/shaders` | 1 | WGSL 雾战 shader，需用 Godot shader 重写 |

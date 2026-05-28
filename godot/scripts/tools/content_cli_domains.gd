@@ -1,7 +1,7 @@
 extends RefCounted
 
 const FORMAT_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld"]
-const VALIDATE_CHANGED_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld"]
+const VALIDATE_CHANGED_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld", "appearance"]
 const FORMAT_PATH_ROOTS := {
 	"items": "data/items/",
 	"recipes": "data/recipes/",
@@ -21,7 +21,7 @@ static func format_domain_names() -> String:
 
 
 static func validate_domain_names() -> String:
-	return "item, recipe, character, map, dialogue, quest, skill, skill_tree, settlement, overworld"
+	return "item, recipe, character, map, dialogue, quest, skill, skill_tree, settlement, overworld, appearance"
 
 
 static func git_status_paths_for_format() -> Array[String]:

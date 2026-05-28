@@ -50,6 +50,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "skill_trees", "survival")
 	_expect_valid_record(errors, registry, "settlements", "survivor_outpost_01_settlement")
 	_expect_valid_record(errors, registry, "overworld", "main_overworld")
+	_expect_valid_record(errors, registry, "appearance", "default_humanoid")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
@@ -79,7 +80,7 @@ func _expect_valid_record(errors: Array[String], registry: ContentRegistry, doma
 func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) -> void:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
 	var checked := 0
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld"]:
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld", "appearance"]:
 		for id_value in registry.get_library(domain).keys():
 			var validation := validator.validate_record(domain, str(id_value), registry)
 			checked += 1
