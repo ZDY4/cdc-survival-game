@@ -7,8 +7,7 @@
 ## When To Use
 
 - Agent 已修改 `data/maps/*.json`，并需要确认 Godot 侧能读取和生成场景。
-- 需要替代旧 `legacy/bevy/agent/review-map-visual.ps1` 的 Bevy editor 依赖做自动复核。
-- 需要给出可复跑的 Godot map review 结果，而不是只看旧 Bevy editor。
+- 需要给出可复跑的 Godot map review 结果。
 
 ## Expected Steps
 
@@ -21,6 +20,5 @@
 
 ## Notes
 
-- 当前 Godot map 复核入口提供 editor dock 里的结构化摘要、引用预览、地图预览和地图对象位置/footprint/旋转/阻挡字段编辑，不打开旧 Bevy editor。
+- 当前 Godot map 复核入口提供 editor dock 里的结构化摘要、引用预览、地图预览和地图对象位置/footprint/旋转/阻挡字段编辑。
 - 如只想看内容摘要而暂时不跑 world/scene smoke，可加 `-NoSmoke`。
-- 旧 `legacy/bevy/agent/review-map-visual.ps1` 保留为 Bevy 对照路径；Godot 迁移开发优先使用本 workflow。

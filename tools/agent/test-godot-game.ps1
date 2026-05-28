@@ -7,7 +7,7 @@ This script is the repo-local agent entrypoint for Godot runtime smoke checks.
 It runs Godot 4.6.3 headless scripts from `godot/scripts/tools/`, captures console
 output, and writes a JSON result under `.local/agent-smoke/godot_game`.
 It also covers `godot/scripts/app/headless_runner.gd`, the migrated replacement
-path for Bevy server/headless smoke entrypoints.
+path for server/headless smoke entrypoints.
 
 .PARAMETER Scenario
 Smoke scenario to run. Use `All` to run every migrated Godot smoke scenario.
@@ -49,7 +49,6 @@ param(
         "AI",
         "Interaction",
         "PlayerInteraction",
-        "BevyEquivalence",
         "UI",
         "DialogueUI",
         "DialogueAction",
@@ -107,7 +106,6 @@ $scenarioScripts = [ordered]@{
     AI                = "res://scripts/tools/ai_smoke.gd"
     Interaction       = "res://scripts/tools/interaction_smoke.gd"
     PlayerInteraction = "res://scripts/tools/player_interaction_smoke.gd"
-    BevyEquivalence   = "res://scripts/tools/bevy_equivalence_smoke.gd"
     UI                = "res://scripts/tools/ui_smoke.gd"
     DialogueUI        = "res://scripts/tools/dialogue_ui_smoke.gd"
     DialogueAction    = "res://scripts/tools/dialogue_action_smoke.gd"

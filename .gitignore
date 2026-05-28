@@ -41,7 +41,6 @@ tmp/narrative_lab_regression_*/
 *.wasm
 godot/.godot/
 godot/**/*.uid
-legacy/bevy/rust/target/
 tools/tauri_editor/node_modules/
 tools/tauri_editor/dist/
 tools/tauri_editor/.vite/
@@ -76,9 +75,5 @@ tools/narrative_lab/.env.*
 tools/editor_shared/.env
 tools/editor_shared/.env.*
 
-# Archived Bevy viewer runtime state
-legacy/bevy/config/bevy_viewer_ui_settings.json
-legacy/bevy/logs/
-legacy/bevy/saves/
 .local
 tmp

@@ -8,7 +8,7 @@
 
 - 修改 `godot/addons/cdc_game_editor` 后。
 - 修改 `godot/scripts/data/content_edit_service.gd`、map edit service 或 editor presenter 后。
-- 需要替代旧 `legacy/bevy/agent/smoke_bevy_editors.ps1` 的 Bevy editor 聚合 smoke。
+- 需要一条命令复核 Godot editor 侧 handoff、浏览、预览和编辑服务。
 
 ## Expected Steps
 
@@ -19,6 +19,5 @@
 
 ## Notes
 
-- 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行，不打开旧 Bevy editor。
+- 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
 - 单场景复核可使用 `-Scenario EditorHandoff`、`-Scenario ContentBrowser`、`-Scenario MapPreview`、`-Scenario ContentEdit`、`-Scenario MapEdit`。
-- 旧 `legacy/bevy/agent/smoke_bevy_editors.ps1` 仅作为行为差异对照；迁移开发优先运行本 workflow。

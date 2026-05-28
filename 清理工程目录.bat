@@ -3,10 +3,6 @@ setlocal
 
 set "ROOT_DIR=%~dp0"
 set "GODOT_PROJECT_FILE=%ROOT_DIR%godot\project.godot"
-set "LEGACY_RUST_DIR=%ROOT_DIR%legacy\bevy\rust"
-set "LEGACY_RUST_TARGET_DIR=%LEGACY_RUST_DIR%\target"
-set "DEBUG_DIR=%LEGACY_RUST_TARGET_DIR%\debug"
-set "RELEASE_DIR=%LEGACY_RUST_TARGET_DIR%\release"
 set "LOG_DIR=%ROOT_DIR%logs"
 set "ROOT_TARGET_DIR=%ROOT_DIR%target"
 set "TMP_DIR=%ROOT_DIR%tmp"
@@ -25,21 +21,18 @@ if not exist "%GODOT_PROJECT_FILE%" (
 )
 
 echo This script will clean project-generated files under:
-echo   "%LEGACY_RUST_TARGET_DIR%" ^(if present^)
 echo   "%LOG_DIR%"
 echo   "%ROOT_TARGET_DIR%"
 echo   "%TMP_DIR%"
 echo   "%NPM_CACHE_LOG_DIR%"
 echo.
 echo It will clean:
-echo   - archived Rust debug\incremental ^(legacy\bevy\rust\target^)
-echo   - archived Rust debug/release *.pdb files ^(legacy\bevy\rust\target^)
 echo   - log files older than %LOG_RETENTION_DAYS% days under logs\
 echo   - *.log files older than %LOG_RETENTION_DAYS% days under target\
 echo   - npm cache log files older than %LOG_RETENTION_DAYS% days
 echo   - tools\npm-cache\_update-notifier-last-checked
 echo.
-echo It will NOT require or run Cargo. Legacy Rust cleanup is limited to cached target files when the archive exists.
+echo It will only clean Godot-era generated logs and local cache files.
 echo.
 
 if "%AUTO_YES%"=="0" (
@@ -49,9 +42,6 @@ if "%AUTO_YES%"=="0" (
         exit /b 0
     )
 )
-
-call :clean_legacy_rust_target_cache
-if errorlevel 1 exit /b 1
 
 call :clean_expired_logs
 if errorlevel 1 exit /b 1
@@ -64,23 +54,7 @@ if errorlevel 1 exit /b 1
 
 echo.
 echo [DONE] Project cleanup finished.
-echo [TIP] If you ever need a full archived Rust cleanup for legacy comparison, run:
-echo   cd /d "%LEGACY_RUST_DIR%"
-echo   cargo clean
 
-exit /b 0
-
-:clean_legacy_rust_target_cache
-if not exist "%LEGACY_RUST_TARGET_DIR%" (
-    echo [INFO] Skipping archived Rust target cleanup. Directory not found: "%LEGACY_RUST_TARGET_DIR%"
-    exit /b 0
-)
-
-call :remove_dir_if_exists "%DEBUG_DIR%\incremental"
-call :remove_files_if_exist "%DEBUG_DIR%\*.pdb"
-call :remove_files_if_exist "%DEBUG_DIR%\deps\*.pdb"
-call :remove_files_if_exist "%RELEASE_DIR%\*.pdb"
-call :remove_files_if_exist "%RELEASE_DIR%\deps\*.pdb"
 exit /b 0
 
 :clean_expired_logs

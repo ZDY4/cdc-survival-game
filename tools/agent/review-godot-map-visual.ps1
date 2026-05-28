@@ -3,9 +3,9 @@
 Run the Godot map visual review flow for a map id.
 
 .DESCRIPTION
-This script is the repo-local Godot migration entrypoint for map review.
+This script is the repo-local Godot entrypoint for map review.
 It runs the Godot content CLI locate, summarize, references, and validate commands,
-then optionally runs the migrated Godot target map preview smoke plus global world and scene
+then optionally runs the target map preview smoke plus global world and scene
 runtime smoke scenarios.
 
 .PARAMETER Map
@@ -24,9 +24,7 @@ pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outp
 pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outpost_01 -NoSmoke
 
 .NOTES
-This is the Godot-side replacement path for map review during migration. It does not
-open the old Bevy map editor. The interactive Godot preview/editor surface lives in the
-`CDC Map Preview` dock.
+The interactive Godot preview/editor surface lives in the `CDC Map Preview` dock.
 #>
 [CmdletBinding()]
 param(
@@ -121,7 +119,7 @@ try {
     Write-Host "5. Treat World and Scene smoke as global runtime regressions; they currently boot the default scenario."
     Write-Host "6. If layout changed, inspect the CDC Map Preview dock and compare the generated scene result with the intended JSON edits."
     Write-Host ""
-    Write-Host "Godot editor handoff note: use open-godot-editor.ps1 -Map $Map to inspect the handoff summary and the CDC Map Preview dock without opening Bevy."
+    Write-Host "Godot editor handoff note: use open-godot-editor.ps1 -Map $Map to inspect the handoff summary and the CDC Map Preview dock."
 }
 finally {
     Pop-Location

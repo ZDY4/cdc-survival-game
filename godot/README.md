@@ -32,4 +32,4 @@ The underlying project launch command is:
 D:\godot\godot.cmd --path godot
 ```
 
-Source content remains in the repository-level `data/` directory. Godot scripts read that data in place; the archived `legacy/bevy/` tree is only for explicit behavior comparison and is not part of the default run or validation path.
+Source content remains in the repository-level `data/` directory. Godot scripts read that data in place for runtime, validation, and editor tooling.
