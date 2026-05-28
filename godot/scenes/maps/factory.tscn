@@ -426,9 +426,6 @@ props_json = "{
 [node name="props_crate_stack_large" type="Node3D" parent="Objects/factory_loading_crate_stack/Visuals" unique_id=2055818923 instance=ExtResource("4_o3kmn")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0.5, 0, 0.5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_loading_crate_stack/Visuals/props_crate_stack_large" unique_id=10144030]
-mesh = SubResource("ArrayMesh_iyy6b")
-
 [node name="factory_loading_pallet_a" type="Node3D" parent="Objects" unique_id=121932626]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 11)
 script = ExtResource("3_gh5ey")
@@ -447,9 +444,6 @@ props_json = "{
 [node name="props_pallet_stack" type="Node3D" parent="Objects/factory_loading_pallet_a/Visuals" unique_id=1984644004 instance=ExtResource("5_4ijp0")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_loading_pallet_a/Visuals/props_pallet_stack" unique_id=572246972]
-mesh = SubResource("ArrayMesh_jnnpr")
-
 [node name="factory_loading_pallet_b" type="Node3D" parent="Objects" unique_id=1983630922]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 9)
 script = ExtResource("3_gh5ey")
@@ -467,9 +461,6 @@ props_json = "{
 
 [node name="props_pallet_stack" type="Node3D" parent="Objects/factory_loading_pallet_b/Visuals" unique_id=1262160792 instance=ExtResource("5_4ijp0")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_loading_pallet_b/Visuals/props_pallet_stack" unique_id=1717143538]
-mesh = SubResource("ArrayMesh_jnnpr")
 
 [node name="factory_scrap_barricade_a" type="Node3D" parent="Objects" unique_id=1499402799]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 12)
@@ -490,9 +481,6 @@ props_json = "{
 [node name="props_barricade_scrap" type="Node3D" parent="Objects/factory_scrap_barricade_a/Visuals" unique_id=1677041795 instance=ExtResource("6_u7722")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_scrap_barricade_a/Visuals/props_barricade_scrap" unique_id=866719703]
-mesh = SubResource("ArrayMesh_3vy20")
-
 [node name="factory_scrap_barricade_b" type="Node3D" parent="Objects" unique_id=2048760284]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 8)
 script = ExtResource("3_gh5ey")
@@ -511,9 +499,6 @@ props_json = "{
 
 [node name="props_barricade_scrap" type="Node3D" parent="Objects/factory_scrap_barricade_b/Visuals" unique_id=1084116827 instance=ExtResource("6_u7722")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_scrap_barricade_b/Visuals/props_barricade_scrap" unique_id=157873297]
-mesh = SubResource("ArrayMesh_3vy20")
 
 [node name="factory_assembly_shelf_a" type="Node3D" parent="Objects" unique_id=1712430460]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 6)
@@ -535,9 +520,6 @@ props_json = "{
 [node name="props_shelf_metal" type="Node3D" parent="Objects/factory_assembly_shelf_a/Visuals" unique_id=392904917 instance=ExtResource("7_ddm01")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 1.5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_assembly_shelf_a/Visuals/props_shelf_metal" unique_id=1045381868]
-mesh = SubResource("ArrayMesh_r84vn")
-
 [node name="factory_assembly_shelf_b" type="Node3D" parent="Objects" unique_id=1745310833]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 4)
 script = ExtResource("3_gh5ey")
@@ -557,9 +539,6 @@ props_json = "{
 
 [node name="props_shelf_metal" type="Node3D" parent="Objects/factory_assembly_shelf_b/Visuals" unique_id=225921996 instance=ExtResource("7_ddm01")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 1.5)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_assembly_shelf_b/Visuals/props_shelf_metal" unique_id=943450698]
-mesh = SubResource("ArrayMesh_r84vn")
 
 [node name="factory_assembly_shelf_c" type="Node3D" parent="Objects" unique_id=1536370492]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 1)
@@ -581,9 +560,6 @@ props_json = "{
 [node name="props_shelf_metal" type="Node3D" parent="Objects/factory_assembly_shelf_c/Visuals" unique_id=1885298666 instance=ExtResource("7_ddm01")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 1)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_assembly_shelf_c/Visuals/props_shelf_metal" unique_id=18825187]
-mesh = SubResource("ArrayMesh_r84vn")
-
 [node name="factory_control_table" type="Node3D" parent="Objects" unique_id=37326844]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 4)
 script = ExtResource("3_gh5ey")
@@ -602,9 +578,6 @@ props_json = "{
 
 [node name="props_table_metal" type="Node3D" parent="Objects/factory_control_table/Visuals" unique_id=900111719 instance=ExtResource("8_pbx37")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0, 0.5)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_control_table/Visuals/props_table_metal" unique_id=1624170358]
-mesh = SubResource("ArrayMesh_xiw3s")
 
 [node name="factory_control_desk" type="Node3D" parent="Objects" unique_id=772149470]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0, 4)
@@ -625,9 +598,6 @@ props_json = "{
 [node name="props_desk_wood" type="Node3D" parent="Objects/factory_control_desk/Visuals" unique_id=597597751 instance=ExtResource("9_p8bdx")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0, 0.5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_control_desk/Visuals/props_desk_wood" unique_id=484342688]
-mesh = SubResource("ArrayMesh_thbh2")
-
 [node name="factory_control_locker_a" type="Node3D" parent="Objects" unique_id=125327426]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0, 2)
 script = ExtResource("3_gh5ey")
@@ -647,22 +617,6 @@ props_json = "{
 [node name="props_locker_metal" type="Node3D" parent="Objects/factory_control_locker_a/Visuals" unique_id=1374608231 instance=ExtResource("10_3ccdg")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_control_locker_a/Visuals/props_locker_metal" unique_id=1688371099]
-transform = Transform3D(0.66, 0, 0, 0, 1.62, 0, 0, 0, 0.54, 0, 0, 0)
-mesh = SubResource("ArrayMesh_5tet1")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/factory_control_locker_a/Visuals/props_locker_metal" unique_id=1721489824]
-transform = Transform3D(0.03, 0, 0, 0, 1.38, 0, 0, 0, 0.5, 0, 0.12, 0)
-mesh = SubResource("ArrayMesh_4el3x")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/factory_control_locker_a/Visuals/props_locker_metal" unique_id=1115524232]
-transform = Transform3D(0.08, 0, 0, 0, 0.16, 0, 0, 0, 0.04, 0.19, 0.82, 0.25)
-mesh = SubResource("ArrayMesh_dr4pt")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/factory_control_locker_a/Visuals/props_locker_metal" unique_id=2071121430]
-transform = Transform3D(0.7, 0, 0, 0, 0.05, 0, 0, 0, 0.58, 0, 1.62, 0)
-mesh = SubResource("ArrayMesh_4el3x")
-
 [node name="factory_control_locker_b" type="Node3D" parent="Objects" unique_id=1740984937]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 2)
 script = ExtResource("3_gh5ey")
@@ -681,22 +635,6 @@ props_json = "{
 
 [node name="props_locker_metal" type="Node3D" parent="Objects/factory_control_locker_b/Visuals" unique_id=330309158 instance=ExtResource("10_3ccdg")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_control_locker_b/Visuals/props_locker_metal" unique_id=1471950923]
-transform = Transform3D(0.66, 0, 0, 0, 1.62, 0, 0, 0, 0.54, 0, 0, 0)
-mesh = SubResource("ArrayMesh_5tet1")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/factory_control_locker_b/Visuals/props_locker_metal" unique_id=376117721]
-transform = Transform3D(0.03, 0, 0, 0, 1.38, 0, 0, 0, 0.5, 0, 0.12, 0)
-mesh = SubResource("ArrayMesh_4el3x")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/factory_control_locker_b/Visuals/props_locker_metal" unique_id=1987545858]
-transform = Transform3D(0.08, 0, 0, 0, 0.16, 0, 0, 0, 0.04, 0.19, 0.82, 0.25)
-mesh = SubResource("ArrayMesh_dr4pt")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/factory_control_locker_b/Visuals/props_locker_metal" unique_id=1609853546]
-transform = Transform3D(0.7, 0, 0, 0, 0.05, 0, 0, 0, 0.58, 0, 1.62, 0)
-mesh = SubResource("ArrayMesh_4el3x")
 
 [node name="factory_pickup_water" type="Node3D" parent="Objects" unique_id=422890494]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 11)
@@ -721,22 +659,6 @@ props_json = "{
 
 [node name="props_crate_wood" type="Node3D" parent="Objects/factory_pickup_water/Visuals" unique_id=830532455 instance=ExtResource("11_7gpor")]
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_pickup_water/Visuals/props_crate_wood" unique_id=691737833]
-transform = Transform3D(0.84, 0, 0, 0, 0.56, 0, 0, 0, 0.84, 0, 0, 0)
-mesh = SubResource("ArrayMesh_j568k")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/factory_pickup_water/Visuals/props_crate_wood" unique_id=1892948818]
-transform = Transform3D(0.9, 0, 0, 0, 0.06, 0, 0, 0, 0.9, 0, 0.56, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/factory_pickup_water/Visuals/props_crate_wood" unique_id=63082488]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.16, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/factory_pickup_water/Visuals/props_crate_wood" unique_id=727961723]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.36, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
 [node name="factory_pickup_bandage" type="Node3D" parent="Objects" unique_id=245374424]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 7)
 script = ExtResource("3_gh5ey")
@@ -759,22 +681,6 @@ props_json = "{
 [node name="Visuals" type="Node3D" parent="Objects/factory_pickup_bandage" unique_id=361530384]
 
 [node name="props_crate_wood" type="Node3D" parent="Objects/factory_pickup_bandage/Visuals" unique_id=314213787 instance=ExtResource("11_7gpor")]
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_pickup_bandage/Visuals/props_crate_wood" unique_id=1608915437]
-transform = Transform3D(0.84, 0, 0, 0, 0.56, 0, 0, 0, 0.84, 0, 0, 0)
-mesh = SubResource("ArrayMesh_j568k")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/factory_pickup_bandage/Visuals/props_crate_wood" unique_id=1582512816]
-transform = Transform3D(0.9, 0, 0, 0, 0.06, 0, 0, 0, 0.9, 0, 0.56, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/factory_pickup_bandage/Visuals/props_crate_wood" unique_id=863072473]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.16, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/factory_pickup_bandage/Visuals/props_crate_wood" unique_id=629932686]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.36, 0)
-mesh = SubResource("ArrayMesh_yq462")
 
 [node name="factory_pickup_scrap" type="Node3D" parent="Objects" unique_id=1154241806]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 9)
@@ -799,22 +705,6 @@ props_json = "{
 
 [node name="props_crate_wood" type="Node3D" parent="Objects/factory_pickup_scrap/Visuals" unique_id=1725663931 instance=ExtResource("11_7gpor")]
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_pickup_scrap/Visuals/props_crate_wood" unique_id=1942741728]
-transform = Transform3D(0.84, 0, 0, 0, 0.56, 0, 0, 0, 0.84, 0, 0, 0)
-mesh = SubResource("ArrayMesh_j568k")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/factory_pickup_scrap/Visuals/props_crate_wood" unique_id=1200677838]
-transform = Transform3D(0.9, 0, 0, 0, 0.06, 0, 0, 0, 0.9, 0, 0.56, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/factory_pickup_scrap/Visuals/props_crate_wood" unique_id=1103180789]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.16, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/factory_pickup_scrap/Visuals/props_crate_wood" unique_id=461367428]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.36, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
 [node name="factory_pickup_electronics" type="Node3D" parent="Objects" unique_id=1681194508]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, 5)
 script = ExtResource("3_gh5ey")
@@ -838,22 +728,6 @@ props_json = "{
 
 [node name="props_locker_metal" type="Node3D" parent="Objects/factory_pickup_electronics/Visuals" unique_id=934123026 instance=ExtResource("10_3ccdg")]
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_pickup_electronics/Visuals/props_locker_metal" unique_id=1514958945]
-transform = Transform3D(0.66, 0, 0, 0, 1.62, 0, 0, 0, 0.54, 0, 0, 0)
-mesh = SubResource("ArrayMesh_5tet1")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/factory_pickup_electronics/Visuals/props_locker_metal" unique_id=821298039]
-transform = Transform3D(0.03, 0, 0, 0, 1.38, 0, 0, 0, 0.5, 0, 0.12, 0)
-mesh = SubResource("ArrayMesh_4el3x")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/factory_pickup_electronics/Visuals/props_locker_metal" unique_id=572555698]
-transform = Transform3D(0.08, 0, 0, 0, 0.16, 0, 0, 0, 0.04, 0.19, 0.82, 0.25)
-mesh = SubResource("ArrayMesh_dr4pt")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/factory_pickup_electronics/Visuals/props_locker_metal" unique_id=2131710095]
-transform = Transform3D(0.7, 0, 0, 0, 0.05, 0, 0, 0, 0.58, 0, 1.62, 0)
-mesh = SubResource("ArrayMesh_4el3x")
-
 [node name="factory_pickup_regulator" type="Node3D" parent="Objects" unique_id=1529383356]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 1)
 script = ExtResource("3_gh5ey")
@@ -876,22 +750,6 @@ props_json = "{
 [node name="Visuals" type="Node3D" parent="Objects/factory_pickup_regulator" unique_id=203698518]
 
 [node name="props_locker_metal" type="Node3D" parent="Objects/factory_pickup_regulator/Visuals" unique_id=1719714993 instance=ExtResource("10_3ccdg")]
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/factory_pickup_regulator/Visuals/props_locker_metal" unique_id=1914030691]
-transform = Transform3D(0.66, 0, 0, 0, 1.62, 0, 0, 0, 0.54, 0, 0, 0)
-mesh = SubResource("ArrayMesh_5tet1")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/factory_pickup_regulator/Visuals/props_locker_metal" unique_id=1479081138]
-transform = Transform3D(0.03, 0, 0, 0, 1.38, 0, 0, 0, 0.5, 0, 0.12, 0)
-mesh = SubResource("ArrayMesh_4el3x")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/factory_pickup_regulator/Visuals/props_locker_metal" unique_id=2022362249]
-transform = Transform3D(0.08, 0, 0, 0, 0.16, 0, 0, 0, 0.04, 0.19, 0.82, 0.25)
-mesh = SubResource("ArrayMesh_dr4pt")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/factory_pickup_regulator/Visuals/props_locker_metal" unique_id=356293717]
-transform = Transform3D(0.7, 0, 0, 0, 0.05, 0, 0, 0, 0.58, 0, 1.62, 0)
-mesh = SubResource("ArrayMesh_4el3x")
 
 [node name="factory_spawn_walker_loading" type="Node3D" parent="Objects" unique_id=1936957171]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 10)

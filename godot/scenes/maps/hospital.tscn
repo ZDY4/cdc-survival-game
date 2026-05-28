@@ -500,9 +500,6 @@ props_json = "{
 [node name="props_counter_canteen" type="Node3D" parent="Objects/hospital_reception_counter/Visuals" unique_id=1636595095 instance=ExtResource("4_46fm4")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1.5, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_reception_counter/Visuals/props_counter_canteen" unique_id=460998268]
-mesh = SubResource("ArrayMesh_4itht")
-
 [node name="hospital_reception_desk" type="Node3D" parent="Objects" unique_id=422091825]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 11)
 script = ExtResource("3_n4b78")
@@ -522,9 +519,6 @@ props_json = "{
 [node name="props_desk_wood" type="Node3D" parent="Objects/hospital_reception_desk/Visuals" unique_id=597597751 instance=ExtResource("5_n8yxj")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0.5, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_reception_desk/Visuals/props_desk_wood" unique_id=484342688]
-mesh = SubResource("ArrayMesh_thbh2")
-
 [node name="hospital_waiting_chair_a" type="Node3D" parent="Objects" unique_id=1680899601]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 12)
 script = ExtResource("3_n4b78")
@@ -542,9 +536,6 @@ props_json = "{
 [node name="props_chair_metal" type="Node3D" parent="Objects/hospital_waiting_chair_a/Visuals" unique_id=848037439 instance=ExtResource("6_muw30")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_waiting_chair_a/Visuals/props_chair_metal" unique_id=622550953]
-mesh = SubResource("ArrayMesh_dck00")
-
 [node name="hospital_waiting_chair_b" type="Node3D" parent="Objects" unique_id=1584758196]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 12)
 script = ExtResource("3_n4b78")
@@ -561,9 +552,6 @@ props_json = "{
 
 [node name="props_chair_metal" type="Node3D" parent="Objects/hospital_waiting_chair_b/Visuals" unique_id=1180554947 instance=ExtResource("6_muw30")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_waiting_chair_b/Visuals/props_chair_metal" unique_id=27799041]
-mesh = SubResource("ArrayMesh_dck00")
 
 [node name="hospital_waiting_table" type="Node3D" parent="Objects" unique_id=266845186]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 12)
@@ -584,9 +572,6 @@ props_json = "{
 [node name="props_table_metal" type="Node3D" parent="Objects/hospital_waiting_table/Visuals" unique_id=900111719 instance=ExtResource("7_mx7db")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0.5, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_waiting_table/Visuals/props_table_metal" unique_id=1624170358]
-mesh = SubResource("ArrayMesh_xiw3s")
-
 [node name="hospital_quarantine_barricade" type="Node3D" parent="Objects" unique_id=305774026]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 8)
 script = ExtResource("3_n4b78")
@@ -606,9 +591,6 @@ props_json = "{
 [node name="props_barricade_scrap" type="Node3D" parent="Objects/hospital_quarantine_barricade/Visuals" unique_id=1677041795 instance=ExtResource("8_sswdt")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_quarantine_barricade/Visuals/props_barricade_scrap" unique_id=866719703]
-mesh = SubResource("ArrayMesh_3vy20")
-
 [node name="hospital_supply_pallet" type="Node3D" parent="Objects" unique_id=1697702897]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 6)
 script = ExtResource("3_n4b78")
@@ -626,9 +608,6 @@ props_json = "{
 
 [node name="props_pallet_stack" type="Node3D" parent="Objects/hospital_supply_pallet/Visuals" unique_id=1984644004 instance=ExtResource("9_eefb0")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_supply_pallet/Visuals/props_pallet_stack" unique_id=572246972]
-mesh = SubResource("ArrayMesh_jnnpr")
 
 [node name="hospital_partition_shelf_a" type="Node3D" parent="Objects" unique_id=86413057]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 9)
@@ -650,9 +629,6 @@ props_json = "{
 [node name="props_shelf_metal" type="Node3D" parent="Objects/hospital_partition_shelf_a/Visuals" unique_id=392904917 instance=ExtResource("10_nuj2x")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_partition_shelf_a/Visuals/props_shelf_metal" unique_id=1045381868]
-mesh = SubResource("ArrayMesh_r84vn")
-
 [node name="hospital_partition_shelf_b" type="Node3D" parent="Objects" unique_id=946854776]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4)
 script = ExtResource("3_n4b78")
@@ -673,9 +649,6 @@ props_json = "{
 [node name="props_shelf_metal" type="Node3D" parent="Objects/hospital_partition_shelf_b/Visuals" unique_id=1855787821 instance=ExtResource("10_nuj2x")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_partition_shelf_b/Visuals/props_shelf_metal" unique_id=1294692843]
-mesh = SubResource("ArrayMesh_r84vn")
-
 [node name="hospital_treatment_table" type="Node3D" parent="Objects" unique_id=1068267756]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 7)
 script = ExtResource("3_n4b78")
@@ -694,9 +667,6 @@ props_json = "{
 
 [node name="props_table_metal" type="Node3D" parent="Objects/hospital_treatment_table/Visuals" unique_id=840322723 instance=ExtResource("7_mx7db")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0, 0.5)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_treatment_table/Visuals/props_table_metal" unique_id=428821656]
-mesh = SubResource("ArrayMesh_xiw3s")
 
 [node name="hospital_archive_desk" type="Node3D" parent="Objects" unique_id=624434618]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 6)
@@ -717,9 +687,6 @@ props_json = "{
 [node name="props_desk_wood" type="Node3D" parent="Objects/hospital_archive_desk/Visuals" unique_id=1135656289 instance=ExtResource("5_n8yxj")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0, 0.5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_archive_desk/Visuals/props_desk_wood" unique_id=75469427]
-mesh = SubResource("ArrayMesh_thbh2")
-
 [node name="hospital_steel_locker_a" type="Node3D" parent="Objects" unique_id=612455093]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 2)
 script = ExtResource("3_n4b78")
@@ -738,22 +705,6 @@ props_json = "{
 
 [node name="props_locker_metal" type="Node3D" parent="Objects/hospital_steel_locker_a/Visuals" unique_id=1374608231 instance=ExtResource("11_38x1d")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_steel_locker_a/Visuals/props_locker_metal" unique_id=1688371099]
-transform = Transform3D(0.66, 0, 0, 0, 1.62, 0, 0, 0, 0.54, 0, 0, 0)
-mesh = SubResource("ArrayMesh_5tet1")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/hospital_steel_locker_a/Visuals/props_locker_metal" unique_id=1721489824]
-transform = Transform3D(0.03, 0, 0, 0, 1.38, 0, 0, 0, 0.5, 0, 0.12, 0)
-mesh = SubResource("ArrayMesh_4el3x")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/hospital_steel_locker_a/Visuals/props_locker_metal" unique_id=1115524232]
-transform = Transform3D(0.08, 0, 0, 0, 0.16, 0, 0, 0, 0.04, 0.19, 0.82, 0.25)
-mesh = SubResource("ArrayMesh_dr4pt")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/hospital_steel_locker_a/Visuals/props_locker_metal" unique_id=2071121430]
-transform = Transform3D(0.7, 0, 0, 0, 0.05, 0, 0, 0, 0.58, 0, 1.62, 0)
-mesh = SubResource("ArrayMesh_4el3x")
 
 [node name="hospital_steel_locker_b" type="Node3D" parent="Objects" unique_id=1570549250]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 3)
@@ -774,22 +725,6 @@ props_json = "{
 [node name="props_locker_metal" type="Node3D" parent="Objects/hospital_steel_locker_b/Visuals" unique_id=1338480246 instance=ExtResource("11_38x1d")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_steel_locker_b/Visuals/props_locker_metal" unique_id=57693776]
-transform = Transform3D(0.66, 0, 0, 0, 1.62, 0, 0, 0, 0.54, 0, 0, 0)
-mesh = SubResource("ArrayMesh_5tet1")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/hospital_steel_locker_b/Visuals/props_locker_metal" unique_id=799619525]
-transform = Transform3D(0.03, 0, 0, 0, 1.38, 0, 0, 0, 0.5, 0, 0.12, 0)
-mesh = SubResource("ArrayMesh_4el3x")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/hospital_steel_locker_b/Visuals/props_locker_metal" unique_id=720613235]
-transform = Transform3D(0.08, 0, 0, 0, 0.16, 0, 0, 0, 0.04, 0.19, 0.82, 0.25)
-mesh = SubResource("ArrayMesh_dr4pt")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/hospital_steel_locker_b/Visuals/props_locker_metal" unique_id=181726037]
-transform = Transform3D(0.7, 0, 0, 0, 0.05, 0, 0, 0, 0.58, 0, 1.62, 0)
-mesh = SubResource("ArrayMesh_4el3x")
-
 [node name="hospital_medical_cabinet_a" type="Node3D" parent="Objects" unique_id=31335358]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 3)
 script = ExtResource("3_n4b78")
@@ -808,26 +743,6 @@ props_json = "{
 [node name="props_cabinet_medical" type="Node3D" parent="Objects/hospital_medical_cabinet_a/Visuals" unique_id=1150664404 instance=ExtResource("12_xgunl")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_a/Visuals/props_cabinet_medical" unique_id=906764519]
-transform = Transform3D(0.92, 0, 0, 0, 1.24, 0, 0, 0, 0.34, 0, 0, 0)
-mesh = SubResource("ArrayMesh_vyrhd")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_a/Visuals/props_cabinet_medical" unique_id=422195097]
-transform = Transform3D(0.03, 0, 0, 0, 1.04, 0, 0, 0, 0.3, 0, 0.1, 0)
-mesh = SubResource("ArrayMesh_cebms")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_a/Visuals/props_cabinet_medical" unique_id=1715373180]
-transform = Transform3D(0.32, 0, 0, 0, 0.08, 0, 0, 0, 0.03, 0, 0.72, 0.19)
-mesh = SubResource("ArrayMesh_nkvlq")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_a/Visuals/props_cabinet_medical" unique_id=1313931311]
-transform = Transform3D(0.08, 0, 0, 0, 0.32, 0, 0, 0, 0.03, 0, 0.6, 0.19)
-mesh = SubResource("ArrayMesh_nkvlq")
-
-[node name="Mesh5" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_a/Visuals/props_cabinet_medical" unique_id=1263045788]
-transform = Transform3D(0.06, 0, 0, 0, 0.12, 0, 0, 0, 0.03, 0.22, 0.78, 0.18)
-mesh = SubResource("ArrayMesh_cebms")
-
 [node name="hospital_medical_cabinet_b" type="Node3D" parent="Objects" unique_id=2058951410]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 3)
 script = ExtResource("3_n4b78")
@@ -845,26 +760,6 @@ props_json = "{
 
 [node name="props_cabinet_medical" type="Node3D" parent="Objects/hospital_medical_cabinet_b/Visuals" unique_id=380678214 instance=ExtResource("12_xgunl")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_b/Visuals/props_cabinet_medical" unique_id=1659978564]
-transform = Transform3D(0.92, 0, 0, 0, 1.24, 0, 0, 0, 0.34, 0, 0, 0)
-mesh = SubResource("ArrayMesh_vyrhd")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_b/Visuals/props_cabinet_medical" unique_id=1972547621]
-transform = Transform3D(0.03, 0, 0, 0, 1.04, 0, 0, 0, 0.3, 0, 0.1, 0)
-mesh = SubResource("ArrayMesh_cebms")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_b/Visuals/props_cabinet_medical" unique_id=1405166922]
-transform = Transform3D(0.32, 0, 0, 0, 0.08, 0, 0, 0, 0.03, 0, 0.72, 0.19)
-mesh = SubResource("ArrayMesh_nkvlq")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_b/Visuals/props_cabinet_medical" unique_id=1637986768]
-transform = Transform3D(0.08, 0, 0, 0, 0.32, 0, 0, 0, 0.03, 0, 0.6, 0.19)
-mesh = SubResource("ArrayMesh_nkvlq")
-
-[node name="Mesh5" type="MeshInstance3D" parent="Objects/hospital_medical_cabinet_b/Visuals/props_cabinet_medical" unique_id=1795162870]
-transform = Transform3D(0.06, 0, 0, 0, 0.12, 0, 0, 0, 0.03, 0.22, 0.78, 0.18)
-mesh = SubResource("ArrayMesh_cebms")
 
 [node name="hospital_pickup_medkit" type="Node3D" parent="Objects" unique_id=994893678]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 2)
@@ -888,26 +783,6 @@ props_json = "{
 [node name="Visuals" type="Node3D" parent="Objects/hospital_pickup_medkit" unique_id=398380194]
 
 [node name="props_cabinet_medical" type="Node3D" parent="Objects/hospital_pickup_medkit/Visuals" unique_id=1096546904 instance=ExtResource("12_xgunl")]
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/hospital_pickup_medkit/Visuals/props_cabinet_medical" unique_id=1567934330]
-transform = Transform3D(0.92, 0, 0, 0, 1.24, 0, 0, 0, 0.34, 0, 0, 0)
-mesh = SubResource("ArrayMesh_vyrhd")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/hospital_pickup_medkit/Visuals/props_cabinet_medical" unique_id=1088443585]
-transform = Transform3D(0.03, 0, 0, 0, 1.04, 0, 0, 0, 0.3, 0, 0.1, 0)
-mesh = SubResource("ArrayMesh_cebms")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/hospital_pickup_medkit/Visuals/props_cabinet_medical" unique_id=74039046]
-transform = Transform3D(0.32, 0, 0, 0, 0.08, 0, 0, 0, 0.03, 0, 0.72, 0.19)
-mesh = SubResource("ArrayMesh_nkvlq")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/hospital_pickup_medkit/Visuals/props_cabinet_medical" unique_id=705543010]
-transform = Transform3D(0.08, 0, 0, 0, 0.32, 0, 0, 0, 0.03, 0, 0.6, 0.19)
-mesh = SubResource("ArrayMesh_nkvlq")
-
-[node name="Mesh5" type="MeshInstance3D" parent="Objects/hospital_pickup_medkit/Visuals/props_cabinet_medical" unique_id=549232972]
-transform = Transform3D(0.06, 0, 0, 0, 0.12, 0, 0, 0, 0.03, 0.22, 0.78, 0.18)
-mesh = SubResource("ArrayMesh_cebms")
 
 [node name="hospital_spawn_walker_a" type="Node3D" parent="Objects" unique_id=682261158]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 7)

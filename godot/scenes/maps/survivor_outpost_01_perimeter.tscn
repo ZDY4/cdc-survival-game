@@ -437,97 +437,49 @@ props_json = "{
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1159942878 instance=ExtResource("4_egj72")]
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/building_wall_floor_flat" unique_id=1912702172]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=127457239 instance=ExtResource("5_d62rs")]
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/building_wall_corner" unique_id=1397968216]
-mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="@Node3D@561" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=103527194 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@561" unique_id=905470371]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@562" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=991585991 instance=ExtResource("5_d62rs")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@562" unique_id=1627037241]
-mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="@Node3D@563" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=75326474 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@563" unique_id=1554865875]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1934651983 instance=ExtResource("6_o1e23")]
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 1)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/building_wall_straight" unique_id=1265292635]
-mesh = SubResource("ArrayMesh_2i6ck")
 
 [node name="@Node3D@564" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1143381309 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@564" unique_id=1188576910]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@565" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=103879207 instance=ExtResource("6_o1e23")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0, 1)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@565" unique_id=1955750227]
-mesh = SubResource("ArrayMesh_2i6ck")
 
 [node name="@Node3D@566" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1348375940 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@566" unique_id=1000464796]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@567" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=2030637281 instance=ExtResource("6_o1e23")]
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 2)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@567" unique_id=2090847964]
-mesh = SubResource("ArrayMesh_2i6ck")
 
 [node name="@Node3D@568" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=710697525 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 2)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@568" unique_id=171106485]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@569" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1149214747 instance=ExtResource("6_o1e23")]
 transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0, 2)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@569" unique_id=73408486]
-mesh = SubResource("ArrayMesh_2i6ck")
 
 [node name="@Node3D@570" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1380238159 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@570" unique_id=1739773934]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@571" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=964466183 instance=ExtResource("5_d62rs")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 3)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@571" unique_id=395464039]
-mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="@Node3D@572" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=651895302 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 3)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@572" unique_id=1568725975]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@573" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1751482936 instance=ExtResource("5_d62rs")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 3)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals/@Node3D@573" unique_id=1100869069]
-mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="survivor_outpost_01_perimeter_bus_wreck" type="Node3D" parent="Objects" unique_id=66956691]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 4)
@@ -565,73 +517,37 @@ props_json = "{
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=349394715 instance=ExtResource("4_egj72")]
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/building_wall_floor_flat" unique_id=1131566669]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1162819546 instance=ExtResource("5_d62rs")]
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/building_wall_corner" unique_id=1195578294]
-mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="@Node3D@552" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=814319790 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@552" unique_id=406345807]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1031034861 instance=ExtResource("6_o1e23")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/building_wall_straight" unique_id=1076865574]
-mesh = SubResource("ArrayMesh_2i6ck")
 
 [node name="@Node3D@553" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1537992545 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@553" unique_id=104933140]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@554" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1658839376 instance=ExtResource("5_d62rs")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@554" unique_id=2023187287]
-mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="@Node3D@555" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1591847864 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@555" unique_id=752758686]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@556" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=589532151 instance=ExtResource("5_d62rs")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 1)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@556" unique_id=175431428]
-mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="@Node3D@557" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1787541927 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@557" unique_id=1169023010]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@558" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1135426238 instance=ExtResource("6_o1e23")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 1)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@558" unique_id=480007545]
-mesh = SubResource("ArrayMesh_2i6ck")
 
 [node name="@Node3D@559" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=31491381 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 1)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@559" unique_id=1570875910]
-mesh = SubResource("ArrayMesh_iylf0")
-
 [node name="@Node3D@560" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1297729703 instance=ExtResource("5_d62rs")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 1)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals/@Node3D@560" unique_id=988158090]
-mesh = SubResource("ArrayMesh_qcb7w")
 
 [node name="survivor_outpost_01_perimeter_return_gate" type="Node3D" parent="Objects" unique_id=1205287661]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8)
@@ -726,9 +642,6 @@ props_json = "{
 [node name="props_roadblock_concrete" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_roadblock_prop/Visuals" unique_id=1940896975 instance=ExtResource("7_geohy")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_roadblock_prop/Visuals/props_roadblock_concrete" unique_id=981599722]
-mesh = SubResource("ArrayMesh_i1q0c")
-
 [node name="survivor_outpost_01_perimeter_wrecked_car_prop" type="Node3D" parent="Objects" unique_id=2083508514]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 5)
 script = ExtResource("3_8r5r1")
@@ -749,9 +662,6 @@ props_json = "{
 [node name="props_wrecked_car" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_wrecked_car_prop/Visuals" unique_id=1035125869 instance=ExtResource("8_y7dfe")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_wrecked_car_prop/Visuals/props_wrecked_car" unique_id=2007695891]
-mesh = SubResource("ArrayMesh_jmcsk")
-
 [node name="survivor_outpost_01_perimeter_sandbag_prop" type="Node3D" parent="Objects" unique_id=802554652]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 14)
 script = ExtResource("3_8r5r1")
@@ -771,9 +681,6 @@ props_json = "{
 [node name="props_sandbag_barrier" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_sandbag_prop/Visuals" unique_id=489900387 instance=ExtResource("9_yvqil")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_sandbag_prop/Visuals/props_sandbag_barrier" unique_id=1389572774]
-mesh = SubResource("ArrayMesh_g7bad")
-
 [node name="survivor_outpost_01_perimeter_dead_tree" type="Node3D" parent="Objects" unique_id=294975049]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 0, 2)
 script = ExtResource("3_8r5r1")
@@ -790,9 +697,6 @@ props_json = "{
 
 [node name="props_tree_dead" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_dead_tree/Visuals" unique_id=1145154666 instance=ExtResource("10_iu5u4")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_dead_tree/Visuals/props_tree_dead" unique_id=1661330856]
-mesh = SubResource("ArrayMesh_2d5ah")
 
 [node name="survivor_outpost_01_perimeter_dry_bush" type="Node3D" parent="Objects" unique_id=1695664710]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 15)
@@ -811,9 +715,6 @@ props_json = "{
 [node name="props_bush_dry" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_dry_bush/Visuals" unique_id=5539038 instance=ExtResource("11_kv5c3")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_dry_bush/Visuals/props_bush_dry" unique_id=1370501018]
-mesh = SubResource("ArrayMesh_qugiy")
-
 [node name="survivor_outpost_01_perimeter_rust_barrel" type="Node3D" parent="Objects" unique_id=1518905785]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 6)
 script = ExtResource("3_8r5r1")
@@ -830,9 +731,6 @@ props_json = "{
 
 [node name="props_barrel_rust" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_rust_barrel/Visuals" unique_id=294476603 instance=ExtResource("12_cmlqy")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_rust_barrel/Visuals/props_barrel_rust" unique_id=1183926001]
-mesh = SubResource("ArrayMesh_f0h4m")
 
 [node name="survivor_outpost_01_perimeter_supply_box" type="Node3D" parent="Objects" unique_id=1259591628]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 12)
@@ -868,22 +766,6 @@ props_json = "{
 [node name="props_crate_wood" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals" unique_id=830532455 instance=ExtResource("13_oxytd")]
 transform = Transform3D(0.35, 0, 0, 0, 0.2, 0, 0, 0, 0.35, 0, 0.08, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals/props_crate_wood" unique_id=691737833]
-transform = Transform3D(0.84, 0, 0, 0, 0.56, 0, 0, 0, 0.84, 0, 0, 0)
-mesh = SubResource("ArrayMesh_j568k")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals/props_crate_wood" unique_id=1892948818]
-transform = Transform3D(0.9, 0, 0, 0, 0.06, 0, 0, 0, 0.9, 0, 0.56, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals/props_crate_wood" unique_id=63082488]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.16, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box/Visuals/props_crate_wood" unique_id=727961723]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.36, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
 [node name="survivor_outpost_01_perimeter_supply_box_b" type="Node3D" parent="Objects" unique_id=2026055904]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 13)
 script = ExtResource("3_8r5r1")
@@ -918,22 +800,6 @@ props_json = "{
 [node name="props_crate_wood" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals" unique_id=1664253667 instance=ExtResource("13_oxytd")]
 transform = Transform3D(0.35, 0, 0, 0, 0.2, 0, 0, 0, 0.35, 0, 0.08, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals/props_crate_wood" unique_id=1572160535]
-transform = Transform3D(0.84, 0, 0, 0, 0.56, 0, 0, 0, 0.84, 0, 0, 0)
-mesh = SubResource("ArrayMesh_j568k")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals/props_crate_wood" unique_id=207749526]
-transform = Transform3D(0.9, 0, 0, 0, 0.06, 0, 0, 0, 0.9, 0, 0.56, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals/props_crate_wood" unique_id=962763745]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.16, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b/Visuals/props_crate_wood" unique_id=1155497100]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.36, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
 [node name="survivor_outpost_01_perimeter_scrap_cache" type="Node3D" parent="Objects" unique_id=278792427]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 15)
 script = ExtResource("3_8r5r1")
@@ -967,22 +833,6 @@ props_json = "{
 
 [node name="props_crate_wood" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals" unique_id=824231683 instance=ExtResource("13_oxytd")]
 transform = Transform3D(0.35, 0, 0, 0, 0.2, 0, 0, 0, 0.35, 0, 0.08, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals/props_crate_wood" unique_id=723690812]
-transform = Transform3D(0.84, 0, 0, 0, 0.56, 0, 0, 0, 0.84, 0, 0, 0)
-mesh = SubResource("ArrayMesh_j568k")
-
-[node name="Mesh2" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals/props_crate_wood" unique_id=1816873554]
-transform = Transform3D(0.9, 0, 0, 0, 0.06, 0, 0, 0, 0.9, 0, 0.56, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh3" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals/props_crate_wood" unique_id=46557567]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.16, 0)
-mesh = SubResource("ArrayMesh_yq462")
-
-[node name="Mesh4" type="MeshInstance3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals/props_crate_wood" unique_id=1134071619]
-transform = Transform3D(0.78, 0, 0, 0, 0.06, 0, 0, 0, 0.08, 0, 0.36, 0)
-mesh = SubResource("ArrayMesh_yq462")
 
 [node name="survivor_outpost_01_perimeter_spawn_walker" type="Node3D" parent="Objects" unique_id=2003354482]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, 5)
