@@ -5,9 +5,9 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentCliDomains = preload("res://scripts/tools/content_cli_domains.gd")
 const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd")
 const ContentJsonFormatter = preload("res://scripts/tools/content_json_formatter.gd")
-const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
-const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
-const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
+const ContentRecordCliCommands = preload("res://scripts/tools/content_record_cli_commands.gd")
+
+var _record_commands := ContentRecordCliCommands.new()
 
 
 func _init() -> void:
@@ -27,25 +27,25 @@ func _init() -> void:
 			if registry == null:
 				quit(1)
 				return
-			exit_code = _validate_command(args, registry)
+			exit_code = _record_commands.validate_command(args, registry)
 		"locate":
 			var registry: ContentRegistry = _load_registry_or_null()
 			if registry == null:
 				quit(1)
 				return
-			exit_code = _locate_command(args, registry)
+			exit_code = _record_commands.locate_command(args, registry)
 		"summarize":
 			var registry: ContentRegistry = _load_registry_or_null()
 			if registry == null:
 				quit(1)
 				return
-			exit_code = _summarize_command(args, registry)
+			exit_code = _record_commands.summarize_command(args, registry)
 		"references":
 			var registry: ContentRegistry = _load_registry_or_null()
 			if registry == null:
 				quit(1)
 				return
-			exit_code = _references_command(args, registry)
+			exit_code = _record_commands.references_command(args, registry)
 		"format":
 			var registry: ContentRegistry = _load_registry_or_null()
 			if registry == null:
@@ -80,98 +80,6 @@ func _load_registry_or_null() -> ContentRegistry:
 			printerr(error)
 		return null
 	return registry
-
-
-func _validate_command(args: Array[String], registry: ContentRegistry) -> int:
-	if args.size() == 2 and args[1] == "changed":
-		return _validate_changed_command(registry)
-	if args.size() == 3:
-		var domain := _normalize_domain(args[1])
-		var id_value := ContentRegistry.normalize_content_id(args[2])
-		var record: Dictionary = registry.get_library(domain).get(id_value, {})
-		if record.is_empty():
-			printerr("not found: %s %s" % [args[1], id_value])
-			return 1
-		return _print_validation(args[1], domain, id_value, record, registry)
-	printerr(_usage())
-	return 2
-
-
-func _validate_changed_command(registry: ContentRegistry) -> int:
-	var validator: ContentRecordValidator = ContentRecordValidator.new()
-	var checked_records := 0
-	var invalid_records := 0
-	print("mode: validate_changed")
-	print("domains: %s" % ContentCliDomains.validate_domain_names())
-	for domain in ContentCliDomains.VALIDATE_CHANGED_DOMAINS:
-		for id_value in registry.get_library(domain).keys():
-			var id_string := str(id_value)
-			var record: Dictionary = registry.get_library(domain).get(id_string, {})
-			var validation := validator.validate_record(domain, id_string, registry)
-			checked_records += 1
-			if not bool(validation.get("ok", false)):
-				invalid_records += 1
-				print("- [%s] %s @ %s" % [_singular_domain(domain), id_string, _repo_relative_path(str(record.get("path", "")))])
-				for issue in validation.get("issues", []):
-					var data: Dictionary = _dictionary_or_empty(issue)
-					print("  - [%s] %s: %s (%s)" % [
-						data.get("severity", "error"),
-						data.get("code", "validation_error"),
-						data.get("message", ""),
-						data.get("field", "$"),
-					])
-	print("checked_records: %d" % checked_records)
-	print("invalid_records: %d" % invalid_records)
-	print("status: %s" % ("ok" if invalid_records == 0 else "invalid"))
-	return 0 if invalid_records == 0 else 2
-
-
-func _locate_command(args: Array[String], registry: ContentRegistry) -> int:
-	if args.size() != 3:
-		printerr(_usage())
-		return 2
-	var domain := _normalize_domain(args[1])
-	var id_value := ContentRegistry.normalize_content_id(args[2])
-	var record: Dictionary = registry.get_library(domain).get(id_value, {})
-	if record.is_empty():
-		printerr("not found: %s %s" % [args[1], id_value])
-		return 1
-	print(record.get("path", ""))
-	return 0
-
-
-func _summarize_command(args: Array[String], registry: ContentRegistry) -> int:
-	if args.size() != 3:
-		printerr(_usage())
-		return 2
-	var domain := _normalize_domain(args[1])
-	var id_value := ContentRegistry.normalize_content_id(args[2])
-	var record: Dictionary = registry.get_library(domain).get(id_value, {})
-	if record.is_empty():
-		printerr("not found: %s %s" % [args[1], id_value])
-		return 1
-	_print_summary(domain, id_value, record)
-	return 0
-
-
-func _references_command(args: Array[String], registry: ContentRegistry) -> int:
-	if args.size() != 3:
-		printerr(_usage())
-		return 2
-	var kind: String = args[1]
-	var domain := _normalize_domain(kind)
-	var id_value := ContentRegistry.normalize_content_id(args[2])
-	var record: Dictionary = registry.get_library(domain).get(id_value, {})
-	if record.is_empty():
-		printerr("not found: %s %s" % [kind, id_value])
-		return 1
-
-	var reference_index: ContentReferenceIndex = ContentReferenceIndex.new()
-	if not reference_index.supports_domain(domain):
-		printerr("references currently supports %s, got %s" % [_reference_domain_list(), kind])
-		return 2
-	_print_references(kind, id_value, record.get("path", ""), reference_index.references_for(domain, id_value, registry))
-	return 0
 
 
 func _format_command(args: Array[String], registry: ContentRegistry) -> int:
@@ -243,49 +151,6 @@ func _diff_summary_command(args: Array[String]) -> int:
 	print("removed_lines: %d" % int(summary.get("removed_lines", 0)))
 	print("changed_hunks: %d" % int(summary.get("changed_hunks", 0)))
 	return 0
-
-
-func _print_summary(domain: String, id_value: String, record: Dictionary) -> void:
-	var presenter: ContentSummaryPresenter = ContentSummaryPresenter.new()
-	presenter.print_summary(domain, id_value, record, _repo_relative_path(str(record.get("path", ""))))
-
-
-func _print_references(kind: String, id_value: String, path: String, hits: Array[Dictionary]) -> void:
-	print("kind: %s" % kind)
-	print("id: %s" % id_value)
-	print("relative_path: %s" % _repo_relative_path(path))
-	print("reference_count: %d" % hits.size())
-	if hits.is_empty():
-		print("status: no_references_found")
-		return
-	for hit in hits:
-		print("- %s %s @ %s [%s]" % [
-			hit.get("source_kind", ""),
-			hit.get("source_id", ""),
-			_repo_relative_path(str(hit.get("path", ""))),
-			hit.get("detail", ""),
-		])
-
-
-func _print_validation(kind: String, domain: String, id_value: String, record: Dictionary, registry: ContentRegistry) -> int:
-	var validator: ContentRecordValidator = ContentRecordValidator.new()
-	var validation := validator.validate_record(domain, id_value, registry)
-	var issues: Array = validation.get("issues", [])
-	print("kind: %s" % _singular_domain(domain))
-	print("id: %s" % id_value)
-	print("relative_path: %s" % _repo_relative_path(str(record.get("path", ""))))
-	print("status: %s" % validation.get("status", "invalid"))
-	if not validator.supports_domain(domain):
-		print("- [warning] shallow_validation: validate currently checks existence only for %s" % kind)
-	for issue in issues:
-		var data: Dictionary = _dictionary_or_empty(issue)
-		print("- [%s] %s: %s (%s)" % [
-			data.get("severity", "error"),
-			data.get("code", "validation_error"),
-			data.get("message", ""),
-			data.get("field", "$"),
-		])
-	return 0 if bool(validation.get("ok", false)) else 2
 
 
 func _format_record(domain: String, id_value: String, record: Dictionary) -> Dictionary:
@@ -381,16 +246,6 @@ func _repo_relative_path(path: String) -> String:
 	if index >= 0:
 		return normalized.substr(index + 1)
 	return normalized
-
-
-func _dictionary_or_empty(value: Variant) -> Dictionary:
-	if typeof(value) == TYPE_DICTIONARY:
-		return value
-	return {}
-
-
-func _reference_domain_list() -> String:
-	return "item, recipe, character, dialogue, quest, skill, skill_tree, settlement, overworld, and map"
 
 
 func _usage() -> String:
