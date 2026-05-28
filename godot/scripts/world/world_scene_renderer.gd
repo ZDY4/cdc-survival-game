@@ -140,6 +140,8 @@ func _spawn_camera(root: Node3D, map: Dictionary) -> int:
 	camera.name = "WorldCamera"
 	camera.transform = Transform3D(Basis(), center + Vector3(18.0, 24.0, 24.0)).looking_at(center, Vector3.UP)
 	camera.fov = 48.0
+	# 运行时场景由脚本动态生成，相机必须显式设为当前视角，避免启动后只有空视口。
+	camera.current = true
 	root.add_child(camera)
 	return 1
 
