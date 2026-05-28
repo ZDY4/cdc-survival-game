@@ -1,5 +1,7 @@
 # Bevy Map AI 内容维护手册
 
+> Legacy note: 本文档记录旧 `bevy_map_editor` 地图 AI 链路，仅供 Godot 迁移期间做历史行为对照。当前默认地图复核和编辑入口是 `tools/agent/review-godot-map-visual.ps1`、`tools/agent/open-godot-editor.ps1` 和 Godot `CDC Map Preview` dock。
+
 本文档是 `bevy_map_editor` 地图 AI 内容链路的长期维护手册。
 
 它的用途不是记录“还没做完什么”，也不是阶段性计划，而是告诉后续维护者：
@@ -13,7 +15,7 @@
 
 相关但不同职责的文档：
 
-- [bevy-ai-map-editing-plan.md](/D:/Projects/cdc-survival-game/docs/editor/bevy-ai-map-editing-plan.md)：记录地图 AI 编辑链路后续还要补哪些能力
+- `bevy-ai-map-editing-plan.md`：旧地图 AI 编辑链路的历史计划文档；若本仓库已不再包含该文件，以当前 Godot 迁移计划为准。
 - 本文档：记录当前已落地实现下，内容维护者应该如何同步、验证和排查
 
 ## 何时看这份文档

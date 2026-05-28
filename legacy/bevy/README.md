@@ -11,3 +11,5 @@ Default development should use the repository root Godot launchers:
 ```
 
 Use these legacy launchers only when an old Bevy behavior needs to be compared against the migrated Godot path.
+
+Additional Bevy-only maintenance notes live under `legacy/bevy/docs/`.
