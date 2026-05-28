@@ -1,8 +1,10 @@
 extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+const QuestDefinitionIndex = preload("res://scripts/core/quests/quest_definition_index.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _quest_index := QuestDefinitionIndex.new()
 
 
 func configure(simulation: RefCounted, quests: Dictionary) -> void:
@@ -15,8 +17,8 @@ func start(simulation: RefCounted, actor_id: int, quest_id: String) -> bool:
 		return false
 	if quest_id.is_empty() or simulation.active_quests.has(quest_id) or simulation.completed_quests.has(quest_id):
 		return false
-	var quest_data: Dictionary = _quest_data(simulation, quest_id)
-	if quest_data.is_empty() or not _prerequisites_completed(simulation, quest_data):
+	var quest_data: Dictionary = _quest_data(simulation.quest_library, quest_id)
+	if quest_data.is_empty() or not _quest_index.prerequisites_completed(simulation.completed_quests, quest_data):
 		return false
 	_start(simulation, quest_id, quest_data, actor_id)
 	_advance_active(simulation, actor_id, quest_id)
@@ -28,8 +30,8 @@ func turn_in(simulation: RefCounted, actor_id: int, quest_id: String) -> Diction
 		return {"success": false, "reason": "unknown_actor"}
 	if not simulation.active_quests.has(quest_id):
 		return {"success": false, "reason": "quest_not_active"}
-	var quest_data: Dictionary = _quest_data(simulation, quest_id)
-	var objective: Dictionary = _first_objective_node(quest_data)
+	var quest_data: Dictionary = _quest_data(simulation.quest_library, quest_id)
+	var objective: Dictionary = _quest_index.first_objective_node(quest_data)
 	if objective.is_empty() or not bool(objective.get("manual_turn_in", false)):
 		return {"success": false, "reason": "quest_not_waiting_for_turn_in"}
 	var state: Dictionary = _dictionary_or_empty(simulation.active_quests.get(quest_id, {}))
@@ -67,16 +69,15 @@ func _start_available(simulation: RefCounted) -> void:
 			var quest_key: String = str(quest_id)
 			if simulation.active_quests.has(quest_key) or simulation.completed_quests.has(quest_key):
 				continue
-			var quest_record: Dictionary = _dictionary_or_empty(simulation.quest_library[quest_id])
-			var quest_data: Dictionary = _dictionary_or_empty(quest_record.get("data", {}))
-			if _prerequisites_completed(simulation, quest_data):
+			var quest_data: Dictionary = _quest_data(simulation.quest_library, quest_key)
+			if _quest_index.prerequisites_completed(simulation.completed_quests, quest_data):
 				_start(simulation, quest_key, quest_data)
 				_advance_active(simulation, 1, quest_key)
 				started = true
 
 
 func _start(simulation: RefCounted, quest_id: String, quest_data: Dictionary, actor_id: int = 1) -> void:
-	var objective: Dictionary = _first_objective_node(quest_data)
+	var objective: Dictionary = _quest_index.first_objective_node(quest_data)
 	simulation.active_quests[quest_id] = {
 		"quest_id": quest_id,
 		"current_node_id": str(objective.get("id", "")),
@@ -92,8 +93,8 @@ func _start(simulation: RefCounted, quest_id: String, quest_data: Dictionary, ac
 func _advance_collect(simulation: RefCounted, actor_id: int, item_id: String, count: int) -> void:
 	var completed_now: Array[String] = []
 	for quest_id in simulation.active_quests.keys():
-		var quest_data: Dictionary = _quest_data(simulation, str(quest_id))
-		var objective: Dictionary = _first_objective_node(quest_data)
+		var quest_data: Dictionary = _quest_data(simulation.quest_library, str(quest_id))
+		var objective: Dictionary = _quest_index.first_objective_node(quest_data)
 		if objective.get("objective_type", "") != "collect":
 			continue
 		if _inventory_entries.normalize_content_id(objective.get("item_id", "")) != item_id:
@@ -133,10 +134,10 @@ func _complete(simulation: RefCounted, actor_id: int, quest_id: String) -> void:
 
 
 func _advance_active(simulation: RefCounted, actor_id: int, quest_id: String) -> void:
-	var quest_data: Dictionary = _quest_data(simulation, quest_id)
+	var quest_data: Dictionary = _quest_data(simulation.quest_library, quest_id)
 	if quest_data.is_empty() or not simulation.active_quests.has(quest_id):
 		return
-	var objective: Dictionary = _first_objective_node(quest_data)
+	var objective: Dictionary = _quest_index.first_objective_node(quest_data)
 	if objective.is_empty():
 		return
 	var state: Dictionary = _dictionary_or_empty(simulation.active_quests.get(quest_id, {}))
@@ -153,7 +154,7 @@ func _advance_active(simulation: RefCounted, actor_id: int, quest_id: String) ->
 
 
 func _grant_rewards(simulation: RefCounted, actor_id: int, quest_id: String, quest_data: Dictionary) -> void:
-	var reward_node: Dictionary = _first_reward_node(quest_data)
+	var reward_node: Dictionary = _quest_index.first_reward_node(quest_data)
 	if reward_node.is_empty():
 		return
 	var rewards: Dictionary = _dictionary_or_empty(reward_node.get("rewards", {}))
@@ -181,12 +182,12 @@ func _grant_rewards(simulation: RefCounted, actor_id: int, quest_id: String, que
 func _advance_kill(simulation: RefCounted, actor_id: int, enemy_definition_id: String, enemy_kind: String) -> void:
 	var completed_now: Array[String] = []
 	for quest_id in simulation.active_quests.keys():
-		var quest_data: Dictionary = _quest_data(simulation, str(quest_id))
-		var objective: Dictionary = _first_objective_node(quest_data)
+		var quest_data: Dictionary = _quest_data(simulation.quest_library, str(quest_id))
+		var objective: Dictionary = _quest_index.first_objective_node(quest_data)
 		if objective.get("objective_type", "") != "kill":
 			continue
 		var enemy_type: String = str(objective.get("enemy_type", ""))
-		if not enemy_type.is_empty() and not _enemy_matches_objective(enemy_definition_id, enemy_kind, enemy_type):
+		if not enemy_type.is_empty() and not _quest_index.enemy_matches_objective(enemy_definition_id, enemy_kind, enemy_type):
 			continue
 		var state: Dictionary = simulation.active_quests[quest_id]
 		var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
@@ -210,44 +211,8 @@ func _advance_kill(simulation: RefCounted, actor_id: int, enemy_definition_id: S
 		_advance_active(simulation, actor_id, quest_id)
 
 
-func _prerequisites_completed(simulation: RefCounted, quest_data: Dictionary) -> bool:
-	for prerequisite in quest_data.get("prerequisites", []):
-		if not simulation.completed_quests.has(str(prerequisite)):
-			return false
-	return true
-
-
-func _quest_data(simulation: RefCounted, quest_id: String) -> Dictionary:
-	var record: Dictionary = _dictionary_or_empty(simulation.quest_library.get(quest_id, {}))
-	return _dictionary_or_empty(record.get("data", {}))
-
-
-func _first_objective_node(quest_data: Dictionary) -> Dictionary:
-	var flow: Dictionary = _dictionary_or_empty(quest_data.get("flow", {}))
-	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
-	for node_id in nodes.keys():
-		var node: Dictionary = _dictionary_or_empty(nodes[node_id])
-		if node.get("type", "") == "objective":
-			return node
-	return {}
-
-
-func _first_reward_node(quest_data: Dictionary) -> Dictionary:
-	var flow: Dictionary = _dictionary_or_empty(quest_data.get("flow", {}))
-	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
-	for node_id in nodes.keys():
-		var node: Dictionary = _dictionary_or_empty(nodes[node_id])
-		if node.get("type", "") == "reward":
-			return node
-	return {}
-
-
-func _enemy_matches_objective(enemy_definition_id: String, enemy_kind: String, enemy_type: String) -> bool:
-	if enemy_type == enemy_kind or enemy_type == enemy_definition_id:
-		return true
-	if enemy_type == "zombie" and enemy_definition_id.begins_with("zombie_"):
-		return true
-	return false
+func _quest_data(quest_library: Dictionary, quest_id: String) -> Dictionary:
+	return _quest_index.quest_data(quest_library, quest_id)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
