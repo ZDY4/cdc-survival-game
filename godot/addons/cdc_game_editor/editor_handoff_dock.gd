@@ -7,6 +7,8 @@ const EditorContentPresenter = preload("res://addons/cdc_game_editor/editor_cont
 const SESSION_FILE := "godot_editor.session.json"
 const NAVIGATION_FILE := "godot_editor.navigation.json"
 const HEARTBEAT_SECONDS := 2.0
+const DOCK_MIN_SIZE := Vector2(220, 0)
+const SUMMARY_MIN_HEIGHT := 140.0
 
 var repo_root: String = ""
 var handoff_dir: String = ""
@@ -49,6 +51,8 @@ func _exit_tree() -> void:
 
 func _build_ui() -> void:
 	name = "CDC Agent Handoff"
+	custom_minimum_size = DOCK_MIN_SIZE
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	var title := Label.new()
@@ -76,7 +80,9 @@ func _build_ui() -> void:
 	add_child(refresh_button)
 
 	summary_label = RichTextLabel.new()
-	summary_label.fit_content = true
+	# Handoff 摘要会包含引用和复核清单，固定为滚动区域避免撑坏 editor dock。
+	summary_label.custom_minimum_size = Vector2(0, SUMMARY_MIN_HEIGHT)
+	summary_label.fit_content = false
 	summary_label.scroll_active = true
 	summary_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	summary_label.text = "No target selected."

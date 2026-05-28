@@ -6,6 +6,10 @@ const MapEditService = preload("res://scripts/data/map_edit_service.gd")
 const MapEditFormPanel = preload("res://addons/cdc_game_editor/map_edit_form_panel.gd")
 const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
+const DOCK_MIN_SIZE := Vector2(240, 0)
+const PREVIEW_MIN_SIZE := Vector2(240, 170)
+const PREVIEW_RENDER_SIZE := Vector2i(480, 340)
+const DETAIL_MIN_HEIGHT := 120.0
 
 var registry: ContentRegistry
 var edit_service: MapEditService
@@ -40,6 +44,8 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	name = "CDC Map Preview"
+	custom_minimum_size = DOCK_MIN_SIZE
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	var title := Label.new()
@@ -56,6 +62,7 @@ func _build_ui() -> void:
 	add_child(toolbar)
 
 	map_option = OptionButton.new()
+	map_option.fit_to_longest_item = false
 	map_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	map_option.item_selected.connect(_on_map_selected)
 	toolbar.add_child(map_option)
@@ -71,12 +78,12 @@ func _build_ui() -> void:
 	entry_inputs = entry_panel.inputs
 
 	var viewport_container := SubViewportContainer.new()
-	viewport_container.custom_minimum_size = Vector2(360, 260)
+	viewport_container.custom_minimum_size = PREVIEW_MIN_SIZE
 	viewport_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	add_child(viewport_container)
 
 	viewport = SubViewport.new()
-	viewport.size = Vector2i(720, 520)
+	viewport.size = PREVIEW_RENDER_SIZE
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	viewport_container.add_child(viewport)
 
@@ -90,7 +97,9 @@ func _build_ui() -> void:
 	object_inputs = object_panel.inputs
 
 	detail = RichTextLabel.new()
-	detail.fit_content = true
+	# 地图复核文本固定为滚动区，避免长 checklist 扩大整个 editor dock。
+	detail.custom_minimum_size = Vector2(0, DETAIL_MIN_HEIGHT)
+	detail.fit_content = false
 	detail.scroll_active = true
 	detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail.text = "Select a map."

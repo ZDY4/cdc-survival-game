@@ -5,6 +5,9 @@ const ContentBrowserPresenter = preload("res://addons/cdc_game_editor/content_br
 const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const TypedFieldForm = preload("res://addons/cdc_game_editor/typed_field_form.gd")
+const DOCK_MIN_SIZE := Vector2(220, 0)
+const LIST_MIN_HEIGHT := 120.0
+const DETAIL_MIN_HEIGHT := 140.0
 
 var repo_root: String = ""
 var registry: ContentRegistry
@@ -34,6 +37,8 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	name = "CDC Content Browser"
+	custom_minimum_size = DOCK_MIN_SIZE
+	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	var title := Label.new()
@@ -47,6 +52,7 @@ func _build_ui() -> void:
 	add_child(status_label)
 
 	kind_option = OptionButton.new()
+	kind_option.fit_to_longest_item = false
 	for kind in presenter.supported_kinds():
 		kind_option.add_item(kind)
 	kind_option.item_selected.connect(_on_kind_selected)
@@ -63,6 +69,7 @@ func _build_ui() -> void:
 	add_child(refresh_button)
 
 	list = ItemList.new()
+	list.custom_minimum_size = Vector2(0, LIST_MIN_HEIGHT)
 	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	list.item_selected.connect(_on_item_selected)
 	add_child(list)
@@ -71,7 +78,9 @@ func _build_ui() -> void:
 	add_child(form_container)
 
 	detail = RichTextLabel.new()
-	detail.fit_content = true
+	# 详情文本可能很长，不能让 dock 按内容高度撑大 editor 布局。
+	detail.custom_minimum_size = Vector2(0, DETAIL_MIN_HEIGHT)
+	detail.fit_content = false
 	detail.scroll_active = true
 	detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	detail.text = "Select a content record."
