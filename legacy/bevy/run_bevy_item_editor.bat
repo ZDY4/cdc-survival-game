@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "ROOT_DIR=%~dp0"
+set "ROOT_DIR=%~dp0..\..\"
 set "RUST_DIR=%ROOT_DIR%rust"
 set "CARGO_EXE=%USERPROFILE%\.cargo\bin\cargo.exe"
 

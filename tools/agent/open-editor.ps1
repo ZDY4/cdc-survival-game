@@ -7,8 +7,8 @@ This script is the standard repo-local handoff entry for editor review and manua
 It first checks whether the target editor has a recent active session recorded under
 `tmp/editor_handoff/*.session.json`. If so, it writes a navigation request into
 `tmp/editor_handoff/*.navigation.json` so the running editor can switch selection in place.
-If no recent session exists, it launches the corresponding `run_bevy_*_editor.bat` script with
-the matching `--select-*` startup argument.
+If no recent session exists, it launches the corresponding legacy Bevy launcher under
+`legacy/bevy/run_bevy_*_editor.bat` with the matching `--select-*` startup argument.
 
 .PARAMETER Item
 Numeric item id to open in `bevy_item_editor`.
@@ -176,42 +176,42 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 
 switch ($requestedTargets[0]) {
     "item" {
-        $launcher = Join-Path $repoRoot "run_bevy_item_editor.bat"
+        $launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_item_editor.bat"
         $arguments = @("--select-item", "$Item")
     }
     "recipe" {
         if ([string]::IsNullOrWhiteSpace($Recipe)) {
             throw "-Recipe requires a non-empty recipe id"
         }
-        $launcher = Join-Path $repoRoot "run_bevy_recipe_editor.bat"
+        $launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_recipe_editor.bat"
         $arguments = @("--select-recipe", $Recipe)
     }
     "dialogue" {
         if ([string]::IsNullOrWhiteSpace($Dialogue)) {
             throw "-Dialogue requires a non-empty dialogue id"
         }
-        $launcher = Join-Path $repoRoot "run_bevy_dialogue_editor.bat"
+        $launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_dialogue_editor.bat"
         $arguments = @("--select-dialogue", $Dialogue)
     }
     "quest" {
         if ([string]::IsNullOrWhiteSpace($Quest)) {
             throw "-Quest requires a non-empty quest id"
         }
-        $launcher = Join-Path $repoRoot "run_bevy_quest_editor.bat"
+        $launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_quest_editor.bat"
         $arguments = @("--select-quest", $Quest)
     }
     "map" {
         if ([string]::IsNullOrWhiteSpace($Map)) {
             throw "-Map requires a non-empty map id"
         }
-        $launcher = Join-Path $repoRoot "run_bevy_map_editor.bat"
+        $launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_map_editor.bat"
         $arguments = @("--select-map", $Map)
     }
     "character" {
         if ([string]::IsNullOrWhiteSpace($Character)) {
             throw "-Character requires a non-empty character id"
         }
-        $launcher = Join-Path $repoRoot "run_bevy_character_editor.bat"
+        $launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_character_editor.bat"
         $arguments = @("--select-character", $Character)
     }
 }

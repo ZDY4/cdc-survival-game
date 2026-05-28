@@ -36,6 +36,6 @@ kept in sync with the Rust schema.
 2. Run `cargo check` inside `rust/`.
 3. Expand `game_data` with real content schemas from `data/`.
 4. Run `cargo run -p bevy_server` for the headless demo flow.
-5. Run `cargo run -p bevy_debug_viewer` or `../run_bevy_game.bat` for the windowed game client.
+5. Run `cargo run -p bevy_debug_viewer` or `../legacy/bevy/run_bevy_game.bat` only when旧 Bevy 行为对照 is required. The migration default is the repository root `run_godot_game.bat`.
 6. Add a transport layer in `game_protocol` or `bevy_server`.
 7. Continue migrating remaining legacy systems into `game_core`.

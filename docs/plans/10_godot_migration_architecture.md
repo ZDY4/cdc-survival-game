@@ -506,6 +506,7 @@ D:\godot\godot.cmd --path godot
 - 旧 Bevy smoke 的目标在 Godot smoke 中有等价覆盖；`test-godot-game.ps1 -Scenario BevyEquivalence` 输出 `WorldInteractionMenu` 到 Godot smoke 的机器可读覆盖映射。
 - 文档和 agent workflow 都已切到 Godot。
 - 根目录已有 `run_godot_game.bat`、`run_godot_editor.bat`、`run_godot_validate.bat` 作为旧 `run_bevy_*` 的迁移期默认替代入口。
+- 旧 `run_bevy_*` 启动脚本已移入 `legacy/bevy/`，仅供旧行为对照入口引用。
 - `test-godot-editor.ps1` 聚合 Godot editor handoff、content browser、map preview、content edit 和 map edit smoke，替代旧 Bevy editor 聚合 smoke 的默认用途。
 
 交付：

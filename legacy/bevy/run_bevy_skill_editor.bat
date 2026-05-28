@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "ROOT_DIR=%~dp0"
+set "ROOT_DIR=%~dp0..\..\"
 set "RUST_DIR=%ROOT_DIR%rust"
 set "CARGO_EXE=%USERPROFILE%\.cargo\bin\cargo.exe"
 
@@ -21,8 +21,8 @@ if not exist "%CARGO_EXE%" (
 
 pushd "%RUST_DIR%"
 
-echo Starting bevy_map_editor...
-"%CARGO_EXE%" run -p bevy_map_editor -- %*
+echo Starting bevy_skill_editor...
+"%CARGO_EXE%" run -p bevy_skill_editor -- %*
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 

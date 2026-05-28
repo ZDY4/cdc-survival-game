@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "ROOT_DIR=%~dp0"
+set "ROOT_DIR=%~dp0..\..\"
 set "RUST_DIR=%ROOT_DIR%rust"
 set "CARGO_EXE=%USERPROFILE%\.cargo\bin\cargo.exe"
 
@@ -21,8 +21,8 @@ if not exist "%CARGO_EXE%" (
 
 pushd "%RUST_DIR%"
 
-echo Starting bevy_gltf_viewer in play mode...
-"%CARGO_EXE%" run --profile play -p bevy_gltf_viewer
+echo Starting bevy_dialogue_editor...
+"%CARGO_EXE%" run -p bevy_dialogue_editor -- %*
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 

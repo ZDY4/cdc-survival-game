@@ -59,7 +59,10 @@ pub(crate) fn open_skill_in_editor(repo_root: &Path, skill_id: &str) -> Result<S
 }
 
 fn launch_item_editor(repo_root: &Path, item_id: u32) -> Result<(), String> {
-    let script_path = repo_root.join("run_bevy_item_editor.bat");
+    let script_path = repo_root
+        .join("legacy")
+        .join("bevy")
+        .join("run_bevy_item_editor.bat");
     if !script_path.exists() {
         return Err(format!(
             "item editor launcher is missing: {}",
@@ -86,7 +89,10 @@ fn launch_item_editor(repo_root: &Path, item_id: u32) -> Result<(), String> {
 }
 
 fn launch_skill_editor(repo_root: &Path, skill_id: &str) -> Result<(), String> {
-    let script_path = repo_root.join("run_bevy_skill_editor.bat");
+    let script_path = repo_root
+        .join("legacy")
+        .join("bevy")
+        .join("run_bevy_skill_editor.bat");
     if !script_path.exists() {
         return Err(format!(
             "skill editor launcher is missing: {}",

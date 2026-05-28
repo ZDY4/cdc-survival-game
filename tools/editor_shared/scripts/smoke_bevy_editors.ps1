@@ -26,32 +26,32 @@ $editorConfigs = @{
     bevy_item_editor = @{
         AppId = "bevy_item_editor"
         Title = "CDC Item Editor"
-        Launcher = Join-Path $repoRoot "run_bevy_item_editor.bat"
+        Launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_item_editor.bat"
     }
     bevy_recipe_editor = @{
         AppId = "bevy_recipe_editor"
         Title = "CDC Recipe Editor"
-        Launcher = Join-Path $repoRoot "run_bevy_recipe_editor.bat"
+        Launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_recipe_editor.bat"
     }
     bevy_dialogue_editor = @{
         AppId = "bevy_dialogue_editor"
         Title = "CDC Dialogue Viewer"
-        Launcher = Join-Path $repoRoot "run_bevy_dialogue_editor.bat"
+        Launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_dialogue_editor.bat"
     }
     bevy_quest_editor = @{
         AppId = "bevy_quest_editor"
         Title = "CDC Quest Viewer"
-        Launcher = Join-Path $repoRoot "run_bevy_quest_editor.bat"
+        Launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_quest_editor.bat"
     }
     bevy_character_editor = @{
         AppId = "bevy_character_editor"
         Title = "CDC Character Editor"
-        Launcher = Join-Path $repoRoot "run_bevy_character_editor.bat"
+        Launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_character_editor.bat"
     }
     bevy_map_editor = @{
         AppId = "bevy_map_editor"
         Title = "CDC Map Editor"
-        Launcher = Join-Path $repoRoot "run_bevy_map_editor.bat"
+        Launcher = Join-Path $repoRoot "legacy/bevy/run_bevy_map_editor.bat"
     }
 }
 

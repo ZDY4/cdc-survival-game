@@ -41,7 +41,10 @@ pub(crate) fn open_dialogue_in_editor(
 }
 
 fn launch_dialogue_editor(repo_root: &Path, dialogue_id: &str) -> Result<(), String> {
-    let script_path = repo_root.join("run_bevy_dialogue_editor.bat");
+    let script_path = repo_root
+        .join("legacy")
+        .join("bevy")
+        .join("run_bevy_dialogue_editor.bat");
     if !script_path.exists() {
         return Err(format!(
             "dialogue editor launcher is missing: {}",

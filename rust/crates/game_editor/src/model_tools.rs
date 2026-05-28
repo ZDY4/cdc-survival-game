@@ -179,7 +179,7 @@ pub fn open_model_in_gltf_viewer(
     resolve_existing_asset_path(asset_root, &relative_path, "gltf")?;
 
     let script = repo_root.join(if cfg!(windows) {
-        "run_bevy_gltf_viewer.bat"
+        "legacy/bevy/run_bevy_gltf_viewer.bat"
     } else {
         "run_bevy_gltf_viewer.sh"
     });
