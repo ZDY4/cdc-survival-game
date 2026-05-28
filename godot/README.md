@@ -32,4 +32,4 @@ The underlying project launch command is:
 D:\godot\godot.cmd --path godot
 ```
 
-During migration, source content remains in the repository-level `data/` directory. Godot scripts read that data in place so the old Rust/Bevy implementation can remain as a behavior baseline until the migration is complete.
+Source content remains in the repository-level `data/` directory. Godot scripts read that data in place; the archived `legacy/bevy/` tree is only for explicit behavior comparison and is not part of the default run or validation path.
