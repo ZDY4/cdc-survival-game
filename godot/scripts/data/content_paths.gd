@@ -1,7 +1,7 @@
 extends RefCounted
 
 const REPO_DATA_RELATIVE_PATH := "res://../data"
-const REPO_ASSETS_RELATIVE_PATH := "res://../assets"
+const REPO_ASSETS_RELATIVE_PATH := "res://assets"
 
 
 static func repo_root() -> String:
