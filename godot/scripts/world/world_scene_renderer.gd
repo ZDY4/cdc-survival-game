@@ -168,6 +168,7 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 		node.position = _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), 0.58)
 		if not _add_actor_model(node, actor_data):
 			_add_actor_fallback_mesh(node, actor_data)
+		_add_equipment_models(node, _array_or_empty(actor_data.get("equipment_visuals", [])))
 		_add_pickable_capsule(node, 0.36, 1.25)
 		root.add_child(node)
 	return actors.size()
@@ -204,6 +205,51 @@ func _add_actor_fallback_mesh(parent: Node3D, actor_data: Dictionary) -> void:
 	node.mesh = mesh
 	node.material_override = player_material if actor_data.get("kind", "") == "player" else actor_material
 	parent.add_child(node)
+
+
+func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
+	for visual in equipment_visuals:
+		var visual_data: Dictionary = _dictionary_or_empty(visual)
+		var model_asset := str(visual_data.get("model_asset", "")).strip_edges()
+		var slot_id := str(visual_data.get("slot_id", ""))
+		if model_asset.is_empty() or slot_id.is_empty():
+			continue
+		var scene_path := "%s/%s" % [ASSET_SCENE_DIR, model_asset]
+		if not ResourceLoader.exists(scene_path):
+			push_warning("装备模型资源不存在，跳过显示: %s" % scene_path)
+			continue
+		var packed: PackedScene = load(scene_path)
+		if packed == null:
+			push_warning("装备模型资源加载失败，跳过显示: %s" % scene_path)
+			continue
+		var model_root := packed.instantiate()
+		if model_root == null:
+			push_warning("装备模型资源实例化失败，跳过显示: %s" % scene_path)
+			continue
+		model_root.name = "EquipmentModel_%s" % slot_id
+		model_root.set_meta("slot_id", slot_id)
+		model_root.set_meta("item_id", str(visual_data.get("item_id", "")))
+		model_root.set_meta("model_asset", model_asset)
+		model_root.position = _equipment_model_offset(slot_id)
+		parent.add_child(model_root)
+
+
+func _equipment_model_offset(slot_id: String) -> Vector3:
+	match slot_id:
+		"main_hand", "off_hand":
+			return Vector3(0.38, 0.28, 0.0)
+		"body":
+			return Vector3(0.0, 0.18, 0.0)
+		"legs":
+			return Vector3(0.0, -0.18, 0.0)
+		"feet":
+			return Vector3(0.0, -0.42, 0.0)
+		"head":
+			return Vector3(0.0, 0.58, 0.0)
+		"back":
+			return Vector3(0.0, 0.12, 0.28)
+		_:
+			return Vector3.ZERO
 
 
 func _spawn_lights(root: Node3D) -> int:

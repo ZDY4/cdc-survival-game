@@ -106,6 +106,20 @@ func _validate_actor_model_assets(root: Node3D, errors: Array[String]) -> void:
 		errors.append("player actor model should come from default_humanoid appearance asset")
 	if player.find_child("ActorFallbackMesh", true, false) != null:
 		errors.append("player actor should not use fallback capsule mesh when appearance model exists")
+	_validate_player_equipment_models(player, errors)
+
+
+func _validate_player_equipment_models(player: Node, errors: Array[String]) -> void:
+	for slot_id in ["main_hand", "body", "legs", "feet"]:
+		var model: Node = player.find_child("EquipmentModel_%s" % slot_id, true, false)
+		if model == null:
+			errors.append("player actor should instantiate equipment model for %s" % slot_id)
+			continue
+		if str(model.get_meta("slot_id", "")) != slot_id:
+			errors.append("equipment model %s should expose slot_id metadata" % slot_id)
+	var main_hand: Node = player.find_child("EquipmentModel_main_hand", true, false)
+	if main_hand != null and str(main_hand.get_meta("model_asset", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
+		errors.append("main_hand equipment model should use dagger glTF")
 
 
 func _interaction_target_node_count(root: Node) -> int:

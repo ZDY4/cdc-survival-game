@@ -57,7 +57,23 @@ func _validate_world(world_result: Dictionary) -> Array[String]:
 			errors.append("world snapshot actor %s should belong to survivor_outpost_01" % actor_data.get("definition_id", ""))
 		if str(actor_data.get("definition_id", "")) == "player" and str(actor_data.get("model_asset", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
 			errors.append("player actor should carry appearance model asset in world snapshot")
+		if str(actor_data.get("definition_id", "")) == "player":
+			_validate_player_equipment_visuals(actor_data, errors)
 	return errors
+
+
+func _validate_player_equipment_visuals(player_actor: Dictionary, errors: Array[String]) -> void:
+	var by_slot: Dictionary = {}
+	for visual in player_actor.get("equipment_visuals", []):
+		var visual_data: Dictionary = visual
+		by_slot[str(visual_data.get("slot_id", ""))] = visual_data
+	for required_slot in ["main_hand", "body", "legs", "feet"]:
+		if not by_slot.has(required_slot):
+			errors.append("player equipment visual missing slot %s" % required_slot)
+	if by_slot.has("main_hand") and str(by_slot["main_hand"].get("model_asset", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
+		errors.append("player main_hand equipment should resolve dagger glTF")
+	if by_slot.has("body") and str(by_slot["body"].get("model_asset", "")) != "preview_placeholders/placeholders/equipment_body.gltf":
+		errors.append("player body equipment should resolve body glTF")
 
 
 func _validate_legacy_actor_appearance_fill(builder: RefCounted, runtime_snapshot: Dictionary) -> Array[String]:
