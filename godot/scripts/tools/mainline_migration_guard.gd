@@ -1,5 +1,6 @@
 extends SceneTree
 
+const REQUIRED_GODOT_VERSION := "4.6.3"
 const FORBIDDEN_FILENAMES := {
 	"Cargo.toml": true,
 	"Cargo.lock": true,
@@ -43,16 +44,37 @@ const SKIPPED_ROOTS := {
 
 func _init() -> void:
 	var root_path := ProjectSettings.globalize_path("res://..")
-	var errors := _scan_directory(root_path, "")
+	var errors := _godot_version_errors()
+	errors.append_array(_scan_directory(root_path, ""))
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
-		printerr("Godot migration guard failed: %d forbidden legacy file(s)" % errors.size())
+		printerr("Godot migration guard failed: %d issue(s)" % errors.size())
 		quit(1)
 		return
 
-	print("Godot migration guard passed: no Rust/Cargo/Bevy source files in active mainline")
+	print("Godot migration guard passed: Godot %s and no Rust/Cargo/Bevy source files in active mainline" % _godot_version_string())
 	quit(0)
+
+
+func _godot_version_errors() -> Array[String]:
+	var actual := _godot_version_string()
+	if actual.begins_with(REQUIRED_GODOT_VERSION + "."):
+		return []
+	if actual == REQUIRED_GODOT_VERSION:
+		return []
+	return ["Godot version mismatch: expected %s.x, got %s" % [REQUIRED_GODOT_VERSION, actual]]
+
+
+func _godot_version_string() -> String:
+	var version_info := Engine.get_version_info()
+	return "%s.%s.%s.%s.%s" % [
+		version_info.get("major", 0),
+		version_info.get("minor", 0),
+		version_info.get("patch", 0),
+		version_info.get("status", ""),
+		version_info.get("hash", ""),
+	]
 
 
 func _scan_directory(absolute_path: String, relative_path: String) -> Array[String]:
