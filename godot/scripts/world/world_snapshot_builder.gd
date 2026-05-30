@@ -38,18 +38,41 @@ func _actors_on_map(actors: Array, active_map_id: String) -> Array[Dictionary]:
 		var actor_map_id := str(actor.get("map_id", ""))
 		if not actor_map_id.is_empty() and actor_map_id != active_map_id:
 			continue
+		var definition_id := str(actor.get("definition_id", ""))
+		var appearance_profile_id := str(actor.get("appearance_profile_id", ""))
+		if appearance_profile_id.is_empty():
+			appearance_profile_id = _appearance_profile_id_for_actor(definition_id)
+		var model_asset := str(actor.get("model_asset", ""))
+		if model_asset.is_empty():
+			model_asset = _model_asset_for_appearance(appearance_profile_id)
 		output.append({
 			"actor_id": int(actor.get("actor_id", 0)),
-			"definition_id": str(actor.get("definition_id", "")),
+			"definition_id": definition_id,
 			"display_name": str(actor.get("display_name", "")),
 			"kind": str(actor.get("kind", "")),
 			"side": str(actor.get("side", "")),
 			"map_id": actor_map_id,
-			"appearance_profile_id": str(actor.get("appearance_profile_id", "")),
-			"model_asset": str(actor.get("model_asset", "")),
+			"appearance_profile_id": appearance_profile_id,
+			"model_asset": model_asset,
 			"grid_position": actor.get("grid_position", {}),
 		})
 	return output
+
+
+func _appearance_profile_id_for_actor(definition_id: String) -> String:
+	if registry == null or definition_id.is_empty():
+		return ""
+	var character_record: Dictionary = registry.get_library("characters").get(definition_id, {})
+	var character_data: Dictionary = _dictionary_or_empty(character_record.get("data", {}))
+	return str(character_data.get("appearance_profile_id", ""))
+
+
+func _model_asset_for_appearance(appearance_profile_id: String) -> String:
+	if registry == null or appearance_profile_id.is_empty():
+		return ""
+	var appearance_record: Dictionary = registry.get_library("appearance").get(appearance_profile_id, {})
+	var appearance_data: Dictionary = _dictionary_or_empty(appearance_record.get("data", {}))
+	return str(appearance_data.get("base_model_asset", ""))
 
 
 func _apply_consumed_interaction_targets(map_snapshot: Dictionary, consumed_values: Array) -> void:

@@ -16,13 +16,15 @@ func _init() -> void:
 		return
 
 	var runtime_snapshot: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("snapshot", {})
-	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
+	var builder := WorldSnapshotBuilder.new(registry)
+	var world_result: Dictionary = builder.build_from_runtime_snapshot(runtime_snapshot)
 	if not bool(world_result.get("ok", false)):
 		printerr(world_result.get("error", "world build failed"))
 		quit(1)
 		return
 
 	var errors := _validate_world(world_result)
+	errors.append_array(_validate_legacy_actor_appearance_fill(builder, runtime_snapshot))
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -53,7 +55,36 @@ func _validate_world(world_result: Dictionary) -> Array[String]:
 		var actor_data: Dictionary = actor
 		if str(actor_data.get("map_id", "")) != "survivor_outpost_01":
 			errors.append("world snapshot actor %s should belong to survivor_outpost_01" % actor_data.get("definition_id", ""))
+		if str(actor_data.get("definition_id", "")) == "player" and str(actor_data.get("model_asset", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
+			errors.append("player actor should carry appearance model asset in world snapshot")
 	return errors
+
+
+func _validate_legacy_actor_appearance_fill(builder: RefCounted, runtime_snapshot: Dictionary) -> Array[String]:
+	var legacy_snapshot: Dictionary = runtime_snapshot.duplicate(true)
+	var actors: Array = legacy_snapshot.get("actors", [])
+	for i in range(actors.size()):
+		var actor_data: Dictionary = actors[i]
+		if str(actor_data.get("definition_id", "")) != "player":
+			continue
+		actor_data.erase("appearance_profile_id")
+		actor_data.erase("model_asset")
+		actors[i] = actor_data
+		break
+
+	var world_result: Dictionary = builder.build_from_runtime_snapshot(legacy_snapshot)
+	if not bool(world_result.get("ok", false)):
+		return ["legacy actor appearance fill world build failed: %s" % world_result.get("error", "unknown")]
+	for actor in world_result.get("actors", []):
+		var actor_data: Dictionary = actor
+		if str(actor_data.get("definition_id", "")) != "player":
+			continue
+		if str(actor_data.get("appearance_profile_id", "")) != "default_humanoid":
+			return ["legacy player actor should fill appearance_profile_id from character definition"]
+		if str(actor_data.get("model_asset", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
+			return ["legacy player actor should fill model_asset from appearance profile"]
+		return []
+	return ["legacy world snapshot missing player actor"]
 
 
 func _digest(world_result: Dictionary) -> Dictionary:
