@@ -174,7 +174,7 @@ cmd /c run_godot_validate.bat
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed
 ```
 
-`run_godot_validate.bat` 同时执行内容全量校验和 `godot/scripts/tools/mainline_migration_guard.gd`，用于防止当前主线重新引入 Rust / Cargo / Bevy 时代源码文件。
+`run_godot_validate.bat` 同时执行内容全量校验和 `godot/scripts/tools/mainline_migration_guard.gd`，用于防止当前主线或本地旧栈残留重新引入 Rust / Cargo / Bevy 时代源码文件。
 
 Runtime 验证：
 

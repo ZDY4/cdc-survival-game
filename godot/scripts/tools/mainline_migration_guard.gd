@@ -20,7 +20,6 @@ const SKIPPED_DIRS := {
 	"tmp": true,
 }
 const SKIPPED_ROOTS := {
-	"legacy": true,
 	"logs": true,
 	"saves": true,
 }
