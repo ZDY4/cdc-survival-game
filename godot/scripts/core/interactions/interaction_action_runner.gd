@@ -1,8 +1,11 @@
 extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _map_scene_loader := MapSceneLoader.new()
 
 
 func execute(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:
@@ -129,11 +132,23 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 		return {"success": false, "reason": "scene_transition_target_missing", "prompt": prompt}
 
 	var previous_map_id: String = simulation.active_map_id
+	var target_entry_id := _target_entry_id(option)
+	var entry_result := _entry_grid_for_map(target_map_id, target_entry_id)
+	if not bool(entry_result.get("ok", false)):
+		return {"success": false, "reason": entry_result.get("reason", "scene_transition_entry_missing"), "prompt": prompt}
+
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "prompt": prompt}
+
 	simulation.active_map_id = target_map_id
+	simulation.active_entry_point_id = target_entry_id
+	actor.grid_position = GridCoord.from_dictionary(_dictionary_or_empty(entry_result.get("grid", {})))
 	simulation.emit_event("scene_transition", {
 		"actor_id": actor_id,
 		"from_map_id": previous_map_id,
 		"to_map_id": target_map_id,
+		"entry_point_id": target_entry_id,
 		"kind": option.get("kind", ""),
 	})
 	simulation.emit_event("interaction_succeeded", {
@@ -146,8 +161,32 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 		"prompt": prompt,
 		"context_snapshot": {
 			"active_map_id": simulation.active_map_id,
+			"active_entry_point_id": simulation.active_entry_point_id,
 		},
 	}
+
+
+func _target_entry_id(option: Dictionary) -> String:
+	for key in ["return_spawn_id", "target_entry_point_id", "entry_point_id"]:
+		var value := str(option.get(key, "")).strip_edges()
+		if not value.is_empty():
+			return value
+	return "default_entry"
+
+
+func _entry_grid_for_map(map_id: String, entry_id: String) -> Dictionary:
+	var map_result: Dictionary = _map_scene_loader.load_map_definition(map_id)
+	if not bool(map_result.get("ok", false)):
+		return {"ok": false, "reason": "scene_transition_map_missing"}
+	var map_data: Dictionary = _dictionary_or_empty(map_result.get("data", {}))
+	for entry in _array_or_empty(map_data.get("entry_points", [])):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("id", "")) == entry_id:
+			return {
+				"ok": true,
+				"grid": _dictionary_or_empty(entry_data.get("grid", {})),
+			}
+	return {"ok": false, "reason": "scene_transition_entry_missing"}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

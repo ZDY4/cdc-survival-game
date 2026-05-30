@@ -102,10 +102,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("door execution failed: %s" % transition_result.get("reason", "unknown"))
 	if game_root.simulation.active_map_id != "survivor_outpost_01_interior":
 		errors.append("door execution did not switch active map")
+	if game_root.simulation.active_entry_point_id != "default_entry":
+		errors.append("door execution should set interior default_entry")
 	if not _hud_world_line(game_root).contains("survivor_outpost_01_interior"):
 		errors.append("HUD world line did not refresh after map transition")
 	if game_root.fog_overlay == null or game_root.fog_overlay.material == null:
 		errors.append("fog overlay did not survive map transition redraw")
+	await process_frame
+	_expect_transition_world_redraw(errors, game_root)
 	return errors
 
 
@@ -126,16 +130,48 @@ func _hud_interaction_line(game_root: Node) -> String:
 
 
 func _expect_startup_camera_frames_player(errors: Array[String], camera: Camera3D, player_node: Node3D) -> void:
+	_expect_camera_frames_player_at(errors, camera, player_node, Vector3(24.0, 0.0, 39.0), "startup")
+
+
+func _expect_transition_world_redraw(errors: Array[String], game_root: Node) -> void:
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("transition redraw should keep generated player actor node")
+		return
+	if player_node.global_position.distance_to(Vector3(2.0, 0.58, 2.0)) > 0.1:
+		errors.append("transition should place player at survivor_outpost_01_interior default_entry")
+	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if camera == null:
+		errors.append("transition redraw should keep runtime camera")
+		return
+	_expect_camera_frames_player_at(errors, camera, player_node, Vector3(2.0, 0.0, 2.0), "transition")
+	var before_position := camera.global_position
+	var press := InputEventKey.new()
+	press.keycode = KEY_D
+	press.physical_keycode = KEY_D
+	press.pressed = true
+	game_root._input(press)
+	game_root.runtime_input_controller.process(0.25)
+	var release := InputEventKey.new()
+	release.keycode = KEY_D
+	release.physical_keycode = KEY_D
+	release.pressed = false
+	game_root._unhandled_input(release)
+	if camera.global_position.distance_to(before_position) < 0.1:
+		errors.append("transition runtime camera should still respond to keyboard input")
+
+
+func _expect_camera_frames_player_at(errors: Array[String], camera: Camera3D, player_node: Node3D, expected_focus: Vector3, label: String) -> void:
 	if not camera.current:
-		errors.append("runtime WorldCamera should be current at game start")
+		errors.append("%s WorldCamera should be current" % label)
 	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
-	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(Vector3(24.0, 0.0, 39.0)) > 0.1:
-		errors.append("runtime WorldCamera should focus the startup player entry")
+	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(expected_focus) > 0.1:
+		errors.append("%s WorldCamera should focus the active player entry" % label)
 	if camera.is_position_behind(player_node.global_position):
-		errors.append("runtime WorldCamera should face the startup player")
+		errors.append("%s WorldCamera should face the active player" % label)
 	var projected_player := camera.unproject_position(player_node.global_position)
 	if projected_player.x < 0.0 or projected_player.y < 0.0 or projected_player.x > 1440.0 or projected_player.y > 900.0:
-		errors.append("runtime startup player should be inside the default camera viewport")
+		errors.append("%s player should be inside the default camera viewport" % label)
 
 
 func _expect_camera_keyboard_movement(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
