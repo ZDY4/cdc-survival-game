@@ -174,7 +174,7 @@ cmd /c run_godot_validate.bat
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed
 ```
 
-`run_godot_validate.bat` 同时执行内容全量校验和 `godot/scripts/tools/mainline_migration_guard.gd`，用于防止当前主线或本地旧栈残留重新引入 Rust / Cargo / Bevy 时代源码文件。
+`run_godot_validate.bat` 同时执行内容全量校验和 `godot/scripts/tools/mainline_migration_guard.gd`，用于防止当前主线或本地旧栈残留重新引入 Rust / Cargo / Bevy 时代源码、旧运行入口目录或旧工具脚本名。
 
 Runtime 验证：
 
@@ -290,7 +290,7 @@ D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/validate
 
 验收：
 
-- 当前树不含 `.rs`、`Cargo.toml`、`Cargo.lock`、Bevy 专用 shader 或旧 Bevy runner。
+- 当前树不含 `.rs`、`Cargo.toml`、`Cargo.lock`、Bevy 专用 shader、旧 Bevy runner、旧 Tauri / narrative lab 工具目录或旧 `server` / `client` 运行入口。
 - `run_godot_validate.bat` 通过 Godot 内容校验和主线迁移门禁。
 - 旧实现只通过 Git 历史追溯，或被明确标记为非当前权威的兼容备份。
 

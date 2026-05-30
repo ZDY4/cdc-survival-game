@@ -9,6 +9,22 @@ const FORBIDDEN_EXTENSIONS := {
 	"wgsl": true,
 	"ron": true,
 }
+const FORBIDDEN_ROOTS := {
+	"server": true,
+	"client": true,
+}
+const FORBIDDEN_DIRECTORIES := {
+	"bevy": true,
+	"tauri_editor": true,
+	"narrative_lab": true,
+	"editor_shared": true,
+}
+const FORBIDDEN_FILE_KEYWORDS := [
+	"bevy",
+	"cargo",
+	"tauri",
+	"narrative_lab",
+]
 const SKIPPED_DIRS := {
 	".git": true,
 	".godot": true,
@@ -56,10 +72,14 @@ func _scan_directory(absolute_path: String, relative_path: String) -> Array[Stri
 		var child_relative := name if relative_path.is_empty() else "%s/%s" % [relative_path, name]
 		var child_absolute := absolute_path.path_join(name)
 		if dir.current_is_dir():
-			if _should_skip_directory(name, child_relative):
+			var directory_reason := _forbidden_directory_reason(name, child_relative)
+			if not directory_reason.is_empty():
+				errors.append("%s: %s" % [child_relative, directory_reason])
+			elif _should_skip_directory(name, child_relative):
 				name = dir.get_next()
 				continue
-			errors.append_array(_scan_directory(child_absolute, child_relative))
+			else:
+				errors.append_array(_scan_directory(child_absolute, child_relative))
 		else:
 			var reason := _forbidden_file_reason(name)
 			if not reason.is_empty():
@@ -75,10 +95,22 @@ func _should_skip_directory(name: String, relative_path: String) -> bool:
 	return not relative_path.contains("/") and SKIPPED_ROOTS.has(name)
 
 
+func _forbidden_directory_reason(directory_name: String, relative_path: String) -> String:
+	if not relative_path.contains("/") and FORBIDDEN_ROOTS.has(directory_name):
+		return "legacy runtime root is not part of the Godot mainline"
+	if FORBIDDEN_DIRECTORIES.has(directory_name):
+		return "legacy editor/runtime directory is not part of the Godot mainline"
+	return ""
+
+
 func _forbidden_file_reason(file_name: String) -> String:
 	if FORBIDDEN_FILENAMES.has(file_name):
 		return "Cargo manifest/lockfile is not part of the Godot mainline"
 	var extension := file_name.get_extension().to_lower()
 	if FORBIDDEN_EXTENSIONS.has(extension):
 		return "Rust/Bevy-era source asset extension is not part of the Godot mainline"
+	var lower_name := file_name.to_lower()
+	for keyword in FORBIDDEN_FILE_KEYWORDS:
+		if lower_name.contains(keyword):
+			return "legacy stack script/name is not part of the Godot mainline"
 	return ""
