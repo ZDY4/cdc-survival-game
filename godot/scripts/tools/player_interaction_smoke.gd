@@ -49,6 +49,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["missing generated player actor node"]
 	if player_node.global_position.distance_to(Vector3(24.0, 0.58, 39.0)) > 0.1:
 		errors.append("player actor should start at survivor_outpost_01 default_entry")
+	_expect_actor_model_instance(errors, player_node)
 
 	var pickup_node: Node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
 	if pickup_node == null:
@@ -121,6 +122,13 @@ func _player_inventory(game_root: Node) -> Dictionary:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return actor_data.get("inventory", {})
 	return {}
+
+
+func _expect_actor_model_instance(errors: Array[String], actor_node: Node3D) -> void:
+	if actor_node.find_child("ActorModel", true, false) == null:
+		errors.append("player actor should render its imported glTF model")
+	if actor_node.find_child("ActorFallbackMesh", true, false) != null:
+		errors.append("player actor should not render fallback capsule when glTF model exists")
 
 
 func _hud_world_line(game_root: Node) -> String:

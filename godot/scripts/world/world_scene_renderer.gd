@@ -1,6 +1,7 @@
 extends RefCounted
 
 const MAP_SCENE_DIR := "res://scenes/maps"
+const ASSET_SCENE_DIR := "res://assets"
 const GRID_SIZE := 1.0
 
 var ground_material := _material(Color(0.22, 0.26, 0.23))
@@ -158,21 +159,51 @@ func _spawn_interaction_target_marker(root: Node3D, object: Dictionary) -> void:
 func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 	for actor in actors:
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
-		var mesh: CapsuleMesh = CapsuleMesh.new()
-		mesh.radius = 0.28
-		mesh.height = 1.1
-		var node: MeshInstance3D = MeshInstance3D.new()
+		var node: Node3D = Node3D.new()
 		node.name = "Actor_%s_%d" % [actor_data.get("definition_id", ""), int(actor_data.get("actor_id", 0))]
-		node.mesh = mesh
-		node.material_override = player_material if actor_data.get("kind", "") == "player" else actor_material
 		node.set_meta("interaction_target", {
 			"target_type": "actor",
 			"actor_id": int(actor_data.get("actor_id", 0)),
 		})
 		node.position = _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), 0.58)
+		if not _add_actor_model(node, actor_data):
+			_add_actor_fallback_mesh(node, actor_data)
 		_add_pickable_capsule(node, 0.36, 1.25)
 		root.add_child(node)
 	return actors.size()
+
+
+func _add_actor_model(parent: Node3D, actor_data: Dictionary) -> bool:
+	var model_asset := str(actor_data.get("model_asset", "")).strip_edges()
+	if model_asset.is_empty():
+		return false
+	var scene_path := "%s/%s" % [ASSET_SCENE_DIR, model_asset]
+	if not ResourceLoader.exists(scene_path):
+		push_warning("角色模型资源不存在，使用 fallback mesh: %s" % scene_path)
+		return false
+	var packed: PackedScene = load(scene_path)
+	if packed == null:
+		push_warning("角色模型资源加载失败，使用 fallback mesh: %s" % scene_path)
+		return false
+	var model_root := packed.instantiate()
+	if model_root == null:
+		push_warning("角色模型资源实例化失败，使用 fallback mesh: %s" % scene_path)
+		return false
+	model_root.name = "ActorModel"
+	model_root.set_meta("model_asset", model_asset)
+	parent.add_child(model_root)
+	return true
+
+
+func _add_actor_fallback_mesh(parent: Node3D, actor_data: Dictionary) -> void:
+	var mesh: CapsuleMesh = CapsuleMesh.new()
+	mesh.radius = 0.28
+	mesh.height = 1.1
+	var node: MeshInstance3D = MeshInstance3D.new()
+	node.name = "ActorFallbackMesh"
+	node.mesh = mesh
+	node.material_override = player_material if actor_data.get("kind", "") == "player" else actor_material
+	parent.add_child(node)
 
 
 func _spawn_lights(root: Node3D) -> int:

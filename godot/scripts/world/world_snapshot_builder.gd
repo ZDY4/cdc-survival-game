@@ -45,6 +45,8 @@ func _actors_on_map(actors: Array, active_map_id: String) -> Array[Dictionary]:
 			"kind": str(actor.get("kind", "")),
 			"side": str(actor.get("side", "")),
 			"map_id": actor_map_id,
+			"appearance_profile_id": str(actor.get("appearance_profile_id", "")),
+			"model_asset": str(actor.get("model_asset", "")),
 			"grid_position": actor.get("grid_position", {}),
 		})
 	return output

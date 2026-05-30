@@ -60,6 +60,7 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 	var progression: Dictionary = _dictionary_or_empty(definition.get("progression", {}))
 	var ai: Dictionary = _dictionary_or_empty(definition.get("ai", {}))
 	var life: Dictionary = _dictionary_or_empty(definition.get("life", {}))
+	var appearance_profile_id := str(definition.get("appearance_profile_id", ""))
 
 	simulation.register_actor({
 		"definition_id": definition_id,
@@ -68,6 +69,8 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"side": _actor_side_from_disposition(str(faction.get("disposition", "neutral"))),
 		"group_id": _actor_group_id(archetype, faction),
 		"map_id": str(spawn_entry.get("mapId", simulation.active_map_id)),
+		"appearance_profile_id": appearance_profile_id,
+		"model_asset": _model_asset_for_appearance(appearance_profile_id),
 		"grid_position": GridCoord.from_dictionary(grid_data),
 		"max_hp": float(combat_attributes.get("max_hp", 1.0)),
 		"hp": float(hp_resource.get("current", combat_attributes.get("max_hp", 1.0))),
@@ -78,6 +81,14 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"ai": ai,
 		"life": life,
 	})
+
+
+func _model_asset_for_appearance(appearance_profile_id: String) -> String:
+	if appearance_profile_id.is_empty():
+		return ""
+	var record: Dictionary = registry.get_library("appearance").get(appearance_profile_id, {})
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+	return str(data.get("base_model_asset", ""))
 
 
 func _should_use_start_entry_grid(spawn_entry: Dictionary, definition_id: String, grid_data: Dictionary) -> bool:

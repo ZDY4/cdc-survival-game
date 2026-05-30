@@ -58,6 +58,7 @@ func _validate_scene(root: Node3D, counts: Dictionary) -> Array[String]:
 		errors.append("expected object marker meshes")
 	if int(counts.get("actors", 0)) != 3:
 		errors.append("expected 3 actor markers")
+	_validate_actor_model_assets(root, errors)
 	if int(counts.get("colliders", 0)) <= int(counts.get("actors", 0)):
 		errors.append("expected pickable colliders for ground, actors and objects")
 	if _interaction_target_node_count(root) <= 0:
@@ -92,6 +93,19 @@ func _validate_player_camera_focus(root: Node3D, errors: Array[String]) -> void:
 	var projected := camera.unproject_position(player.global_position)
 	if projected.x < 0.0 or projected.y < 0.0 or projected.x > 1440.0 or projected.y > 900.0:
 		errors.append("startup player marker should be inside the default camera viewport")
+
+
+func _validate_actor_model_assets(root: Node3D, errors: Array[String]) -> void:
+	var player: Node = root.find_child("Actor_player_1", true, false)
+	if player == null:
+		return
+	var actor_model: Node = player.find_child("ActorModel", true, false)
+	if actor_model == null:
+		errors.append("player actor should instantiate its appearance glTF model")
+	elif str(actor_model.get_meta("model_asset", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
+		errors.append("player actor model should come from default_humanoid appearance asset")
+	if player.find_child("ActorFallbackMesh", true, false) != null:
+		errors.append("player actor should not use fallback capsule mesh when appearance model exists")
 
 
 func _interaction_target_node_count(root: Node) -> int:
