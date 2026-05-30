@@ -17,13 +17,9 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	var map_definition_result := map_scene_loader.load_map_definition(map_id)
 	var map_definition: Dictionary = _dictionary_or_empty(map_definition_result.get("data", {}))
 	if map_definition.is_empty():
-		var map_record: Dictionary = registry.get_library("maps").get(map_id, {})
-		if not map_record.is_empty():
-			map_definition = _dictionary_or_empty(map_record.get("data", {}))
-	if map_definition.is_empty():
 		return {
 			"ok": false,
-			"error": "unknown map id %s" % map_id,
+			"error": str(map_definition_result.get("error", "map scene definition missing: %s" % map_id)),
 		}
 
 	var topology := map_builder.build_from_definition(map_definition)

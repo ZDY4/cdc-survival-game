@@ -16,11 +16,6 @@ func _init() -> void:
 		return
 
 	var runtime_snapshot: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("snapshot", {})
-	var map_scene_result: Dictionary = MapSceneLoader.new().load_map_definition(str(runtime_snapshot.get("active_map_id", "")))
-	if not bool(map_scene_result.get("ok", false)):
-		printerr("active runtime map must load from Godot scene: %s" % map_scene_result.get("error", "unknown"))
-		quit(1)
-		return
 	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
 	if not bool(world_result.get("ok", false)):
 		printerr(world_result.get("error", "world build failed"))

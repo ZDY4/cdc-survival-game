@@ -93,8 +93,8 @@ func _entry_grid(simulation: RefCounted, entry_id: String, fallback: Dictionary)
 	var map_definition_result := MapSceneLoader.new().load_map_definition(simulation.active_map_id)
 	var map_definition: Dictionary = _dictionary_or_empty(map_definition_result.get("data", {}))
 	if map_definition.is_empty():
-		var map_record: Dictionary = registry.get_library("maps").get(simulation.active_map_id, {})
-		map_definition = _dictionary_or_empty(map_record.get("data", {}))
+		push_error("启动入口无法读取 Godot 地图场景 %s: %s" % [simulation.active_map_id, map_definition_result.get("error", "unknown")])
+		return fallback
 	for entry in _array_or_empty(map_definition.get("entry_points", [])):
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
 		if str(entry_data.get("id", "")) == entry_id:
@@ -149,10 +149,9 @@ func _configure_startup_map_interactions(simulation: RefCounted) -> void:
 func _map_definition(map_id: String) -> Dictionary:
 	var map_definition_result := MapSceneLoader.new().load_map_definition(map_id)
 	var map_definition: Dictionary = _dictionary_or_empty(map_definition_result.get("data", {}))
-	if not map_definition.is_empty():
-		return map_definition
-	var map_record: Dictionary = registry.get_library("maps").get(map_id, {})
-	return _dictionary_or_empty(map_record.get("data", {}))
+	if map_definition.is_empty():
+		push_error("运行时地图交互无法读取 Godot 地图场景 %s: %s" % [map_id, map_definition_result.get("error", "unknown")])
+	return map_definition
 
 
 func _actor_kind_from_archetype(archetype: String) -> String:
