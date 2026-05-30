@@ -49,6 +49,10 @@ func _validate_world(world_result: Dictionary) -> Array[String]:
 	var actors: Array = world_result.get("actors", [])
 	if actors.size() != 3:
 		errors.append("expected 3 runtime actors in world snapshot")
+	for actor in actors:
+		var actor_data: Dictionary = actor
+		if str(actor_data.get("map_id", "")) != "survivor_outpost_01":
+			errors.append("world snapshot actor %s should belong to survivor_outpost_01" % actor_data.get("definition_id", ""))
 	return errors
 
 

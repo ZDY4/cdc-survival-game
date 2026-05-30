@@ -2,9 +2,11 @@ extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const MapBuilder = preload("res://scripts/world/map_builder.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _map_builder := MapBuilder.new()
 var _map_scene_loader := MapSceneLoader.new()
 
 
@@ -143,6 +145,8 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 
 	simulation.active_map_id = target_map_id
 	simulation.active_entry_point_id = target_entry_id
+	_configure_map_interactions(simulation, _dictionary_or_empty(entry_result.get("map_data", {})))
+	actor.map_id = target_map_id
 	actor.grid_position = GridCoord.from_dictionary(_dictionary_or_empty(entry_result.get("grid", {})))
 	simulation.emit_event("scene_transition", {
 		"actor_id": actor_id,
@@ -184,9 +188,17 @@ func _entry_grid_for_map(map_id: String, entry_id: String) -> Dictionary:
 		if str(entry_data.get("id", "")) == entry_id:
 			return {
 				"ok": true,
+				"map_data": map_data,
 				"grid": _dictionary_or_empty(entry_data.get("grid", {})),
 			}
 	return {"ok": false, "reason": "scene_transition_entry_missing"}
+
+
+func _configure_map_interactions(simulation: RefCounted, map_data: Dictionary) -> void:
+	if map_data.is_empty():
+		return
+	var topology: RefCounted = _map_builder.build_from_definition(map_data)
+	simulation.configure_map_interactions(topology.interaction_targets)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

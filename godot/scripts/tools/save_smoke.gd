@@ -53,14 +53,14 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	})
 	simulation.execute_interaction(1, {
 		"target_type": "map_object",
-		"target_id": "survivor_outpost_01_interior_door",
-	})
-	simulation.execute_interaction(1, {
-		"target_type": "map_object",
 		"target_id": "survivor_outpost_01_clinic_supply_cabinet",
 	})
 	simulation.take_item_from_container(1, "survivor_outpost_01_clinic_supply_cabinet", "1031", 1, registry.get_library("items"))
 	simulation.store_item_in_container(1, "survivor_outpost_01_clinic_supply_cabinet", "1008", 1, registry.get_library("items"))
+	simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "survivor_outpost_01_interior_door",
+	})
 	simulation.buy_item_from_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.sell_item_to_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.equip_item(1, "1003", "main_hand", registry.get_library("items"))

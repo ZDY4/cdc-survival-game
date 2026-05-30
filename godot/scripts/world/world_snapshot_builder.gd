@@ -28,19 +28,23 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	return {
 		"ok": true,
 		"map": map_snapshot,
-		"actors": _actors_on_map(runtime_snapshot.get("actors", [])),
+		"actors": _actors_on_map(runtime_snapshot.get("actors", []), map_id),
 	}
 
 
-func _actors_on_map(actors: Array) -> Array[Dictionary]:
+func _actors_on_map(actors: Array, active_map_id: String) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	for actor in actors:
+		var actor_map_id := str(actor.get("map_id", ""))
+		if not actor_map_id.is_empty() and actor_map_id != active_map_id:
+			continue
 		output.append({
 			"actor_id": int(actor.get("actor_id", 0)),
 			"definition_id": str(actor.get("definition_id", "")),
 			"display_name": str(actor.get("display_name", "")),
 			"kind": str(actor.get("kind", "")),
 			"side": str(actor.get("side", "")),
+			"map_id": actor_map_id,
 			"grid_position": actor.get("grid_position", {}),
 		})
 	return output

@@ -67,6 +67,7 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"kind": _actor_kind_from_archetype(archetype),
 		"side": _actor_side_from_disposition(str(faction.get("disposition", "neutral"))),
 		"group_id": _actor_group_id(archetype, faction),
+		"map_id": str(spawn_entry.get("mapId", simulation.active_map_id)),
 		"grid_position": GridCoord.from_dictionary(grid_data),
 		"max_hp": float(combat_attributes.get("max_hp", 1.0)),
 		"hp": float(hp_resource.get("current", combat_attributes.get("max_hp", 1.0))),

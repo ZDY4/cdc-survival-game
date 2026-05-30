@@ -46,6 +46,8 @@ func _validate_new_game_snapshot(snapshot: Dictionary) -> Array[String]:
 		if not expected_positions.has(definition_id):
 			errors.append("unexpected startup actor %s" % definition_id)
 			continue
+		if str(actor.get("map_id", "")) != "survivor_outpost_01":
+			errors.append("%s should start on survivor_outpost_01" % definition_id)
 		var expected: Dictionary = expected_positions[definition_id]
 		var actual: Dictionary = actor.get("grid_position", {})
 		for axis in ["x", "y", "z"]:

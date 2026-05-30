@@ -134,10 +134,19 @@ func _expect_startup_camera_frames_player(errors: Array[String], camera: Camera3
 
 
 func _expect_transition_world_redraw(errors: Array[String], game_root: Node) -> void:
+	var visible_actors: Array = game_root.world_result.get("actors", [])
+	if visible_actors.size() != 1:
+		errors.append("transition world should only render actors on survivor_outpost_01_interior")
 	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node == null:
 		errors.append("transition redraw should keep generated player actor node")
 		return
+	for stale_name in ["Actor_trader_lao_wang_2", "Actor_doctor_chen_3"]:
+		if game_root.find_child(stale_name, true, false) != null:
+			errors.append("transition redraw should not keep outdoor actor %s" % stale_name)
+	var player_snapshot: Dictionary = _actor_by_id(game_root.simulation.snapshot(), 1)
+	if str(player_snapshot.get("map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("transition should update player map_id")
 	if player_node.global_position.distance_to(Vector3(2.0, 0.58, 2.0)) > 0.1:
 		errors.append("transition should place player at survivor_outpost_01_interior default_entry")
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
@@ -172,6 +181,14 @@ func _expect_camera_frames_player_at(errors: Array[String], camera: Camera3D, pl
 	var projected_player := camera.unproject_position(player_node.global_position)
 	if projected_player.x < 0.0 or projected_player.y < 0.0 or projected_player.x > 1440.0 or projected_player.y > 900.0:
 		errors.append("%s player should be inside the default camera viewport" % label)
+
+
+func _actor_by_id(snapshot: Dictionary, actor_id: int) -> Dictionary:
+	for actor in snapshot.get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == actor_id:
+			return actor_data
+	return {}
 
 
 func _expect_camera_keyboard_movement(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
