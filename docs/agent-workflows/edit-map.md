@@ -24,7 +24,7 @@
 ## Agent Steps
 
 1. 定位目标 map scene。
-2. 先读取地图摘要、关键入口和当前校验状态。
+2. 先读取地图摘要、关键入口和当前校验状态；地图定位和摘要应来自 `godot/scenes/maps/*.tscn`。
 3. 修改 Godot `.tscn` 场景中的地图布局、入口点或对象节点。
 4. 跑最小校验。
 5. 输出本次操作摘要。
@@ -49,6 +49,7 @@ Godot editor 当前能力：
 
 - `CDC Map Review` dock 可加载地图预览、map review checklist，并打开对应 `.tscn` 场景。
 - 地图对象、入口点、可视节点和布局应在 Godot 场景编辑器中维护。
+- `locate map`、`summarize map`、`CDC Agent Handoff` 和 `CDC Map Review` 都应读取 Godot map scene 导出的定义。
 - `data/maps/*.json` 只作为兼容备份，不作为新地图编辑主入口。
 
 ## Review Policy

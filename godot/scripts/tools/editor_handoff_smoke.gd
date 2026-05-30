@@ -40,7 +40,7 @@ func _run() -> Array[String]:
 		{"kind": "skill_tree", "id": "survival", "must_contain": "links:"},
 		{"kind": "settlement", "id": "survivor_outpost_01_settlement", "must_contain": "smart_objects:"},
 		{"kind": "overworld", "id": "main_overworld", "must_contain": "locations:"},
-		{"kind": "map", "id": "survivor_outpost_01", "must_contain": "objects:", "review_must_contain": "map_review_checks:"},
+		{"kind": "map", "id": "survivor_outpost_01", "must_contain": "path: godot/scenes/maps/survivor_outpost_01.tscn", "review_must_contain": "map_review_checks:"},
 	]
 	for target in targets:
 		var target_data: Dictionary = target
@@ -73,5 +73,9 @@ func _expect_selection(errors: Array[String], presenter: EditorContentPresenter,
 	var review_required := str(target.get("review_must_contain", ""))
 	if not review_required.is_empty() and not combined_text.contains(review_required):
 		errors.append("selection review for %s %s missing '%s'" % [kind, id_value, review_required])
-	if not str(selection.get("path", "")).begins_with("data/"):
-		errors.append("selection path for %s %s should be repo-relative data path, got %s" % [kind, id_value, selection.get("path", "")])
+	var selection_path := str(selection.get("path", ""))
+	if kind == "map":
+		if not selection_path.begins_with("godot/scenes/maps/"):
+			errors.append("selection path for %s %s should be repo-relative Godot map scene path, got %s" % [kind, id_value, selection_path])
+	elif not selection_path.begins_with("data/"):
+		errors.append("selection path for %s %s should be repo-relative data path, got %s" % [kind, id_value, selection_path])

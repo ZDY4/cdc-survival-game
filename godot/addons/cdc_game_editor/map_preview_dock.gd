@@ -2,6 +2,7 @@
 extends VBoxContainer
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const DOCK_MIN_SIZE := Vector2.ZERO
@@ -11,6 +12,7 @@ const DETAIL_MIN_HEIGHT := 140.0
 const MAP_SCENE_DIR := "res://scenes/maps"
 
 var registry: ContentRegistry
+var map_scene_loader: MapSceneLoader
 var presenter: MapReviewPresenter
 var renderer: WorldSceneRenderer
 var selected_map_id := ""
@@ -27,6 +29,7 @@ var detail: RichTextLabel
 
 func _ready() -> void:
 	registry = ContentRegistry.new()
+	map_scene_loader = MapSceneLoader.new()
 	presenter = MapReviewPresenter.new()
 	renderer = WorldSceneRenderer.new()
 	_build_ui()
@@ -100,7 +103,7 @@ func refresh_maps() -> Dictionary:
 		_set_open_scene_enabled(false)
 		return {"ok": false, "errors": load_result.errors}
 
-	map_ids = _sorted_map_ids(registry.get_library("maps"))
+	map_ids = _sorted_map_ids(_map_id_index())
 	map_option.clear()
 	for map_id in map_ids:
 		var map_data: Dictionary = _map_data(map_id)
@@ -122,13 +125,14 @@ func refresh_maps() -> Dictionary:
 func select_map(map_id: String) -> Dictionary:
 	selected_map_id = map_id
 	selected_scene_path = scene_path_for_map(map_id)
-	var map_data: Dictionary = _map_data(map_id)
-	if map_data.is_empty():
+	var scene_result := _map_scene_definition(map_id)
+	if not bool(scene_result.get("ok", false)):
 		_set_status("Status: map not found")
-		_set_detail("Map not found: %s" % map_id)
+		_set_detail(str(scene_result.get("error", "Map not found: %s" % map_id)))
 		_set_open_scene_enabled(false)
-		return {"ok": false, "errors": ["map not found: %s" % map_id], "scene_path": selected_scene_path}
+		return {"ok": false, "errors": [str(scene_result.get("error", "map not found: %s" % map_id))], "scene_path": selected_scene_path}
 
+	var map_data: Dictionary = _dictionary_or_empty(scene_result.get("data", {}))
 	var review := presenter.build_review(map_data)
 	var world_snapshot := {
 		"map": review.get("map", {}),
@@ -184,7 +188,13 @@ func _on_open_scene_pressed() -> void:
 
 
 func _map_data(map_id: String) -> Dictionary:
-	return _dictionary_or_empty(_dictionary_or_empty(registry.get_library("maps").get(map_id, {})).get("data", {}))
+	return _dictionary_or_empty(_map_scene_definition(map_id).get("data", {}))
+
+
+func _map_scene_definition(map_id: String) -> Dictionary:
+	if map_scene_loader == null:
+		map_scene_loader = MapSceneLoader.new()
+	return map_scene_loader.load_map_definition(map_id)
 
 
 func _sorted_map_ids(library: Dictionary) -> Array[String]:
@@ -192,6 +202,30 @@ func _sorted_map_ids(library: Dictionary) -> Array[String]:
 	for id in library.keys():
 		ids.append(str(id))
 	ids.sort()
+	return ids
+
+
+func _map_id_index() -> Dictionary:
+	var ids := {}
+	for id in registry.get_library("maps").keys():
+		ids[str(id)] = true
+	for id in _map_scene_ids():
+		ids[id] = true
+	return ids
+
+
+func _map_scene_ids() -> Array[String]:
+	var ids: Array[String] = []
+	var dir := DirAccess.open(MAP_SCENE_DIR)
+	if dir == null:
+		return ids
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while not file_name.is_empty():
+		if not dir.current_is_dir() and file_name.ends_with(".tscn"):
+			ids.append(file_name.get_basename())
+		file_name = dir.get_next()
+	dir.list_dir_end()
 	return ids
 
 

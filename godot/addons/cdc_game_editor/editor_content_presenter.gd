@@ -5,6 +5,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
 const EditPlanPresenter = preload("res://addons/cdc_game_editor/edit_plan_presenter.gd")
 const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
+const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 
 const MAX_REFERENCE_LINES := 12
 
@@ -50,6 +51,8 @@ func build_selection(target_kind: String, target_id: String, registry: ContentRe
 
 	var normalized_id := ContentRegistry.normalize_content_id(target_id)
 	var record: Dictionary = registry.get_library(domain).get(normalized_id, {})
+	if record.is_empty() and domain == "maps":
+		record = _presentation_record(domain, normalized_id, record)
 	if record.is_empty():
 		return {
 			"ok": false,
@@ -60,15 +63,16 @@ func build_selection(target_kind: String, target_id: String, registry: ContentRe
 
 	var reference_index: ContentReferenceIndex = ContentReferenceIndex.new()
 	var references := reference_index.references_for(domain, normalized_id, registry)
-	var review: Dictionary = _review_for_record(domain, record)
-	var edit_plan: Dictionary = EditPlanPresenter.new().build_plan(domain, record, references)
+	var presentation_record := _presentation_record(domain, normalized_id, record)
+	var review: Dictionary = _review_for_record(domain, presentation_record)
+	var edit_plan: Dictionary = EditPlanPresenter.new().build_plan(domain, presentation_record, references)
 	return {
 		"ok": true,
 		"status": "selected",
 		"kind": target_kind,
 		"id": normalized_id,
-		"path": _repo_relative_path(str(record.get("path", "")), repo_root),
-		"summary": _summary_for_record(domain, normalized_id, record, repo_root),
+		"path": _repo_relative_path(str(presentation_record.get("path", "")), repo_root),
+		"summary": _summary_for_record(domain, normalized_id, presentation_record, repo_root),
 		"references": references,
 		"reference_count": references.size(),
 		"reference_summary": _references_text(references, repo_root),
@@ -157,6 +161,18 @@ func _review_for_record(domain: String, record: Dictionary) -> Dictionary:
 	return MapReviewPresenter.new().build_review(_dictionary_or_empty(record.get("data", {})))
 
 
+func _presentation_record(domain: String, target_id: String, record: Dictionary) -> Dictionary:
+	if domain != "maps":
+		return record
+	var result: Dictionary = MapSceneLoader.new().load_map_definition(target_id)
+	if not bool(result.get("ok", false)):
+		return record
+	return {
+		"path": str(result.get("path", "")),
+		"data": _dictionary_or_empty(result.get("data", {})),
+	}
+
+
 func _references_text(references: Array[Dictionary], repo_root: String) -> String:
 	if references.is_empty():
 		return "references: none"
@@ -220,6 +236,8 @@ func _kind_for_domain(domain: String) -> String:
 
 func _repo_relative_path(path: String, repo_root: String) -> String:
 	var normalized := path.replace("\\", "/")
+	if normalized.begins_with("res://"):
+		return "godot/%s" % normalized.substr("res://".length())
 	var root := repo_root.replace("\\", "/")
 	if normalized.begins_with(root + "/"):
 		return normalized.substr(root.length() + 1)

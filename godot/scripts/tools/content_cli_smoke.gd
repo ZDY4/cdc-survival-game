@@ -2,8 +2,10 @@ extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
+const ContentRecordCliCommands = preload("res://scripts/tools/content_record_cli_commands.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
+const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 
 
 func _init() -> void:
@@ -58,6 +60,7 @@ func _run() -> Array[String]:
 	_expect_invalid_overworld_entry(errors, registry)
 	_expect_format_domain_support(errors, registry)
 	_expect_summary_domains(errors, registry)
+	_expect_map_scene_summary(errors, registry)
 	return errors
 
 
@@ -245,13 +248,57 @@ func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -
 			errors.append("summary for %s %s missing '%s': %s" % [domain, id_value, test_case["expected"], output])
 
 
+func _expect_map_scene_summary(errors: Array[String], registry: ContentRegistry) -> void:
+	var map_id := "survivor_outpost_01"
+	var scene_result: Dictionary = MapSceneLoader.new().load_map_definition(map_id)
+	if not bool(scene_result.get("ok", false)):
+		errors.append("map scene summary smoke could not load %s: %s" % [map_id, scene_result.get("error", "")])
+		return
+
+	var record := {
+		"path": str(scene_result.get("path", "")),
+		"data": scene_result.get("data", {}),
+	}
+	var output := "\n".join(ContentSummaryPresenter.new().summary_lines(
+		"maps",
+		map_id,
+		record,
+		_repo_relative_path(str(record.get("path", "")))
+	))
+	if not output.contains("relative_path: godot/scenes/maps/survivor_outpost_01.tscn"):
+		errors.append("map scene summary should report Godot scene path: %s" % output)
+	var scene_object_count := _array_or_empty(_dictionary_or_empty(record.get("data", {})).get("objects", [])).size()
+	if not output.contains("objects: %d" % scene_object_count):
+		errors.append("map scene summary should use .tscn map definition object count: %s" % output)
+
+	var locate := ContentRecordCliCommands.new().locate_path(["locate", "map", map_id], registry)
+	if not bool(locate.get("ok", false)):
+		errors.append("map locate should resolve through Godot scene for %s: %s" % [map_id, locate])
+	elif str(locate.get("path", "")) != "godot/scenes/maps/survivor_outpost_01.tscn":
+		errors.append("map locate should expose Godot scene path, got %s" % locate.get("path", ""))
+
+
 func _repo_relative_path(path: String) -> String:
 	var relative_path := path.replace("\\", "/")
+	if relative_path.begins_with("res://"):
+		return "godot/%s" % relative_path.substr("res://".length())
 	var marker := "/data/"
 	var index := relative_path.find(marker)
 	if index >= 0:
 		return relative_path.substr(index + 1)
 	return relative_path
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
 
 
 func _registry_with_override(registry: ContentRegistry, domain: String, id_value: String, record: Dictionary) -> ContentRegistry:

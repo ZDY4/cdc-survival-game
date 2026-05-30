@@ -5,6 +5,7 @@ const ContentReferenceIndex = preload("res://scripts/tools/content_reference_ind
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
+const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 
 const USAGE := "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"
 
@@ -28,9 +29,28 @@ func locate_command(args: Array[String], registry: ContentRegistry) -> int:
 	var lookup := _record_lookup(args, registry)
 	if not bool(lookup.get("ok", false)):
 		return int(lookup.get("exit_code", 1))
+	if str(lookup.get("domain", "")) == "maps":
+		print(_repo_relative_path(str(lookup.get("scene_path", ""))))
+		return 0
 	var record: Dictionary = _dictionary_or_empty(lookup.get("record", {}))
 	print(record.get("path", ""))
 	return 0
+
+
+func locate_path(args: Array[String], registry: ContentRegistry) -> Dictionary:
+	var lookup := _record_lookup(args, registry)
+	if not bool(lookup.get("ok", false)):
+		return lookup
+	if str(lookup.get("domain", "")) == "maps":
+		return {
+			"ok": true,
+			"path": _repo_relative_path(str(lookup.get("scene_path", ""))),
+		}
+	var record: Dictionary = _dictionary_or_empty(lookup.get("record", {}))
+	return {
+		"ok": true,
+		"path": str(record.get("path", "")),
+	}
 
 
 func summarize_command(args: Array[String], registry: ContentRegistry) -> int:
@@ -38,11 +58,16 @@ func summarize_command(args: Array[String], registry: ContentRegistry) -> int:
 	if not bool(lookup.get("ok", false)):
 		return int(lookup.get("exit_code", 1))
 	var presenter: ContentSummaryPresenter = ContentSummaryPresenter.new()
+	var record: Dictionary = _dictionary_or_empty(lookup.get("record", {}))
+	if str(lookup.get("domain", "")) == "maps":
+		record = _map_scene_record(str(lookup.get("id", "")))
+		if record.is_empty():
+			return 1
 	presenter.print_summary(
 		str(lookup.get("domain", "")),
 		str(lookup.get("id", "")),
-		_dictionary_or_empty(lookup.get("record", {})),
-		_repo_relative_path(str(_dictionary_or_empty(lookup.get("record", {})).get("path", "")))
+		record,
+		_repo_relative_path(str(record.get("path", "")))
 	)
 	return 0
 
@@ -101,7 +126,10 @@ func _record_lookup(args: Array[String], registry: ContentRegistry) -> Dictionar
 	var domain := _normalize_domain(kind)
 	var id_value := ContentRegistry.normalize_content_id(args[2])
 	var record: Dictionary = registry.get_library(domain).get(id_value, {})
-	if record.is_empty():
+	var scene_path := ""
+	if domain == "maps":
+		scene_path = MapSceneLoader.new().scene_path(id_value)
+	if record.is_empty() and (domain != "maps" or not ResourceLoader.exists(scene_path)):
 		printerr("not found: %s %s" % [kind, id_value])
 		return {"ok": false, "exit_code": 1}
 	return {
@@ -110,6 +138,18 @@ func _record_lookup(args: Array[String], registry: ContentRegistry) -> Dictionar
 		"domain": domain,
 		"id": id_value,
 		"record": record,
+		"scene_path": scene_path,
+	}
+
+
+func _map_scene_record(map_id: String) -> Dictionary:
+	var result: Dictionary = MapSceneLoader.new().load_map_definition(map_id)
+	if not bool(result.get("ok", false)):
+		printerr(result.get("error", "failed to load map scene: %s" % map_id))
+		return {}
+	return {
+		"path": str(result.get("path", "")),
+		"data": _dictionary_or_empty(result.get("data", {})),
 	}
 
 
@@ -201,6 +241,8 @@ func _singular_domain(domain: String) -> String:
 
 func _repo_relative_path(path: String) -> String:
 	var normalized: String = path.replace("\\", "/")
+	if normalized.begins_with("res://"):
+		return "godot/%s" % normalized.substr("res://".length())
 	var marker := "/data/"
 	var index := normalized.find(marker)
 	if index >= 0:

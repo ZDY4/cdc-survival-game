@@ -78,7 +78,7 @@ pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1 -Map survivor_outp
 
 行为：
 
-- 先通过 `godot-content.ps1` 串行执行 `locate map`、`summarize map`、`references map` 和 `validate changed`。
+- 先通过 `godot-content.ps1` 串行执行 `locate map`、`summarize map`、`references map` 和 `validate changed`；其中 `locate map` / `summarize map` 读取 `godot/scenes/maps/*.tscn`，引用和兼容校验仍会覆盖迁移期 `data/maps` 备份。
 - 默认继续运行目标地图的 `map_preview_smoke.gd`，再调用 `test-godot-game.ps1 -Scenario World` 和 `test-godot-game.ps1 -Scenario Scene` 做全局 runtime 回归。
 - 输出 Godot map review checklist。
 - 进入 Godot editor 后，`CDC Map Review` dock 可显示地图复核信息，并打开对应 `godot/scenes/maps/*.tscn` 供 Godot 场景编辑器维护布局。
@@ -117,6 +117,7 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 - 固定调用 `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd -- ...`。
 - 当前覆盖 `locate` / `summarize` / `references` / `validate` / `validate changed` / `format` / `format changed` / `diff-summary`。
 - `summarize` 输出 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` 的高信号字段摘要。
+- `map locate` 和 `map summarize` 以 `godot/scenes/maps/*.tscn` 为主来源，便于地图布局继续按 Godot scene 工作流维护。
 - `validate` 对 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` 执行记录级诊断，输出 `relative_path`、`status` 和字段级 issue；`validate changed` 会批量检查这些已迁移编辑内容。
 - `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map`，用于替代旧 `content_tools` 的常用引用查询。
 - `format` 覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld`，只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量。
