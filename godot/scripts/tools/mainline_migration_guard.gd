@@ -57,6 +57,7 @@ func _init() -> void:
 	var errors := _godot_version_errors()
 	errors.append_array(_project_entry_errors(root_path))
 	errors.append_array(_root_script_errors(root_path))
+	errors.append_array(_map_scene_authority_errors(root_path))
 	errors.append_array(_scan_directory(root_path, ""))
 	if not errors.is_empty():
 		for error in errors:
@@ -65,7 +66,7 @@ func _init() -> void:
 		quit(1)
 		return
 
-	print("Godot migration guard passed: Godot %s, Godot root entrypoints, and no Rust/Cargo/Bevy source files in active mainline" % _godot_version_string())
+	print("Godot migration guard passed: Godot %s, Godot root entrypoints, Godot map scenes, and no Rust/Cargo/Bevy source files in active mainline" % _godot_version_string())
 	quit(0)
 
 
@@ -119,6 +120,29 @@ func _root_script_errors(root_path: String) -> Array[String]:
 		for expected in ROOT_SCRIPT_EXPECTATIONS[script_name]:
 			if not content.contains(str(expected)):
 				errors.append("%s missing expected command: %s" % [script_name, expected])
+	return errors
+
+
+func _map_scene_authority_errors(root_path: String) -> Array[String]:
+	var errors: Array[String] = []
+	var data_maps_path := root_path.path_join("data/maps")
+	var scene_maps_path := root_path.path_join("godot/scenes/maps")
+	var data_dir := DirAccess.open(data_maps_path)
+	if data_dir == null:
+		return ["data/maps directory is missing"]
+	if not DirAccess.dir_exists_absolute(scene_maps_path):
+		return ["godot/scenes/maps directory is missing"]
+
+	data_dir.list_dir_begin()
+	var name := data_dir.get_next()
+	while not name.is_empty():
+		if not data_dir.current_is_dir() and name.get_extension().to_lower() == "json":
+			var map_id := name.get_basename()
+			var scene_path := scene_maps_path.path_join("%s.tscn" % map_id)
+			if not FileAccess.file_exists(scene_path):
+				errors.append("map %s has data/maps backup but no Godot scene at godot/scenes/maps/%s.tscn" % [map_id, map_id])
+		name = data_dir.get_next()
+	data_dir.list_dir_end()
 	return errors
 
 
