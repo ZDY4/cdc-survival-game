@@ -31,6 +31,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All
 param(
     [ValidateSet(
         "All",
+        "MigrationGuard",
         "HeadlessNewGame",
         "HeadlessWorld",
         "Runtime",
@@ -81,6 +82,7 @@ if (-not (Test-Path -LiteralPath $Godot)) {
 }
 
 $scenarioScripts = [ordered]@{
+    MigrationGuard   = "res://scripts/tools/mainline_migration_guard.gd"
     HeadlessNewGame  = @{
         Script = "res://scripts/app/headless_runner.gd"
         Args = @("--scenario", "new_game_smoke")

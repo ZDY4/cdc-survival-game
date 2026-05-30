@@ -21,4 +21,5 @@
 
 - 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
 - `HeadlessNewGame` 和 `HeadlessWorld` 通过 `godot/scripts/app/headless_runner.gd` 覆盖 headless 启动入口。
-- 单场景复核可使用 `-Scenario HeadlessNewGame`、`-Scenario HeadlessWorld`、`-Scenario Runtime`、`-Scenario ContentCLI`、`-Scenario ContentEdit`、`-Scenario EditorHandoff`、`-Scenario EditorBrowser`、`-Scenario FogShader`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario PlayerInteraction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
+- `MigrationGuard` 会执行 `godot/scripts/tools/mainline_migration_guard.gd`，确认当前主线没有重新引入 Rust / Cargo / Bevy 时代源码文件。
+- 单场景复核可使用 `-Scenario MigrationGuard`、`-Scenario HeadlessNewGame`、`-Scenario HeadlessWorld`、`-Scenario Runtime`、`-Scenario ContentCLI`、`-Scenario ContentEdit`、`-Scenario EditorHandoff`、`-Scenario EditorBrowser`、`-Scenario FogShader`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario PlayerInteraction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等。
