@@ -60,12 +60,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if camera == null:
 		errors.append("missing runtime camera")
 	else:
+		_expect_camera_keyboard_movement(errors, game_root, camera)
 		var projected_pickup := camera.unproject_position((pickup_node as Node3D).global_position)
 		var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(projected_pickup)
 		if not bool(hover_result.get("success", false)):
 			errors.append("hover raycast failed: %s" % hover_result.get("reason", "unknown"))
 		elif str(hover_result.get("kind", "")) != "interaction":
 			errors.append("hover raycast should select interaction target")
+		_expect_hover_cursor_at_node(errors, game_root, pickup_node)
 		if not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after hover selection")
 
@@ -118,3 +120,36 @@ func _hud_world_line(game_root: Node) -> String:
 
 func _hud_interaction_line(game_root: Node) -> String:
 	return game_root.hud.get_node("HudPanel/HudLines/InteractionLine").text
+
+
+func _expect_camera_keyboard_movement(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	var before_position := camera.global_position
+	var press := InputEventKey.new()
+	press.keycode = KEY_W
+	press.physical_keycode = KEY_W
+	press.pressed = true
+	game_root._unhandled_input(press)
+	game_root.runtime_input_controller.process(0.25)
+	var release := InputEventKey.new()
+	release.keycode = KEY_W
+	release.physical_keycode = KEY_W
+	release.pressed = false
+	game_root._unhandled_input(release)
+	if camera.global_position.distance_to(before_position) < 0.1:
+		errors.append("runtime camera should move from keyboard input")
+
+
+func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target_node: Node) -> void:
+	var cursor: MeshInstance3D = game_root.find_child("HoverGridCursor", true, false) as MeshInstance3D
+	if cursor == null:
+		errors.append("missing hover grid cursor after hover update")
+		return
+	if not cursor.visible:
+		errors.append("hover grid cursor should be visible after a successful hover")
+		return
+	var target_3d := target_node as Node3D
+	if target_3d == null:
+		return
+	var expected := Vector3(roundf(target_3d.global_position.x), 0.045, roundf(target_3d.global_position.z))
+	if cursor.global_position.distance_to(expected) > 1.5:
+		errors.append("hover grid cursor should track the hovered map object cell")

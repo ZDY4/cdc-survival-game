@@ -12,6 +12,7 @@ var camera: Camera3D
 var hover_cursor: MeshInstance3D
 var selected_node: Node
 var camera_target: Vector3 = Vector3.ZERO
+var camera_key_state: Dictionary = {}
 
 
 func _init(p_game_root: Node) -> void:
@@ -43,7 +44,9 @@ func process(delta: float) -> void:
 func unhandled_input(event: InputEvent) -> void:
 	if camera == null:
 		return
-	if event is InputEventMouseMotion:
+	if event is InputEventKey:
+		_update_camera_key_state(event as InputEventKey)
+	elif event is InputEventMouseMotion:
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 			_drag_camera((event as InputEventMouseMotion).relative)
 		else:
@@ -90,18 +93,32 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 
 
 func _process_keyboard_camera(delta: float) -> void:
-	var direction := Vector3.ZERO
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		direction.z -= 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		direction.z += 1.0
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		direction.x -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		direction.x += 1.0
+	var direction := _camera_keyboard_direction()
 	if direction.is_zero_approx():
 		return
 	_move_camera(direction.normalized() * CAMERA_MOVE_SPEED * delta)
+
+
+func _camera_keyboard_direction() -> Vector3:
+	var direction := Vector3.ZERO
+	if bool(camera_key_state.get(KEY_W, false)) or bool(camera_key_state.get(KEY_UP, false)) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		direction.z -= 1.0
+	if bool(camera_key_state.get(KEY_S, false)) or bool(camera_key_state.get(KEY_DOWN, false)) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+		direction.z += 1.0
+	if bool(camera_key_state.get(KEY_A, false)) or bool(camera_key_state.get(KEY_LEFT, false)) or Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		direction.x -= 1.0
+	if bool(camera_key_state.get(KEY_D, false)) or bool(camera_key_state.get(KEY_RIGHT, false)) or Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		direction.x += 1.0
+	return direction
+
+
+func _update_camera_key_state(event: InputEventKey) -> void:
+	var key := event.keycode
+	if key == 0:
+		key = event.physical_keycode
+	if not [KEY_W, KEY_A, KEY_S, KEY_D, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT].has(key):
+		return
+	camera_key_state[key] = event.pressed and not event.echo
 
 
 func _move_camera(delta_world: Vector3) -> void:
