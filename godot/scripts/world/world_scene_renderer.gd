@@ -336,7 +336,8 @@ func _pickable_body_count(root: Node) -> int:
 
 func _clear_children(parent: Node) -> void:
 	for child in parent.get_children():
-		child.queue_free()
+		parent.remove_child(child)
+		child.free()
 
 
 static func _material(color: Color) -> StandardMaterial3D:

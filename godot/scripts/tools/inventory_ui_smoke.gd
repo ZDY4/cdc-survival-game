@@ -36,6 +36,26 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var initial_text: String = "\n".join(_item_lines(game_root))
 	if not initial_text.contains("手枪弹药 x10"):
 		errors.append("initial inventory missing bootstrap ammo")
+	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_dagger.gltf")
+
+	var equip_result: Dictionary = game_root.equip_player_item("1003", "main_hand")
+	if not bool(equip_result.get("success", false)):
+		errors.append("equipping baseball bat through game app failed: %s" % equip_result.get("reason", "unknown"))
+	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_blunt.gltf")
+	if "\n".join(_item_lines(game_root)).contains("棒球棒"):
+		errors.append("equipped baseball bat should leave inventory panel")
+
+	var unequip_result: Dictionary = game_root.unequip_player_slot("main_hand")
+	if not bool(unequip_result.get("success", false)):
+		errors.append("unequipping main hand through game app failed: %s" % unequip_result.get("reason", "unknown"))
+	if _player_node(game_root).find_child("EquipmentModel_main_hand", true, false) != null:
+		errors.append("main hand equipment model should be removed after unequip redraw")
+	if not "\n".join(_item_lines(game_root)).contains("棒球棒 x1"):
+		errors.append("unequipped baseball bat should return to inventory panel")
+	var restore_result: Dictionary = game_root.equip_player_item("1002", "main_hand")
+	if not bool(restore_result.get("success", false)):
+		errors.append("restoring bootstrap knife through game app failed: %s" % restore_result.get("reason", "unknown"))
+	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_dagger.gltf")
 
 	var pickup_node: Node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
 	if pickup_node == null:
@@ -53,6 +73,20 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _summary_line(game_root).contains("2.1 kg"):
 		errors.append("inventory summary did not update total weight")
 	return errors
+
+
+func _expect_main_hand_model(errors: Array[String], game_root: Node, expected_asset: String) -> void:
+	var player: Node = _player_node(game_root)
+	var model: Node = player.find_child("EquipmentModel_main_hand", true, false)
+	if model == null:
+		errors.append("missing main hand equipment model")
+		return
+	if str(model.get_meta("model_asset", "")) != expected_asset:
+		errors.append("main hand equipment model should use %s" % expected_asset)
+
+
+func _player_node(game_root: Node) -> Node:
+	return game_root.find_child("Actor_player_1", true, false)
 
 
 func _summary_line(game_root: Node) -> String:

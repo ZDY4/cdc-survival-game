@@ -203,6 +203,43 @@ func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func equip_player_item(item_id: String, slot_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.equip_item(1, item_id, slot_id, registry.get_library("items"))
+	if bool(result.get("success", false)):
+		_rebuild_world_after_runtime_change()
+	else:
+		refresh_inventory_panel()
+	return result
+
+
+func unequip_player_slot(slot_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.unequip_item(1, slot_id)
+	if bool(result.get("success", false)):
+		_rebuild_world_after_runtime_change()
+	else:
+		refresh_inventory_panel()
+	return result
+
+
+func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}) -> void:
+	world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+	if not bool(world_result.get("ok", false)):
+		push_error(str(world_result.get("error", "world rebuild failed")))
+		return
+	if interaction_controller != null:
+		interaction_controller.world_result = world_result
+	_setup_world_container()
+	WorldSceneRenderer.new().render_world(world_container, world_result)
+	_setup_runtime_input_controller()
+	_refresh_fog_overlay()
+	_setup_panels()
+	refresh_all_panels(selected_prompt)
+
+
 func _setup_world_container() -> void:
 	if world_container != null:
 		return
