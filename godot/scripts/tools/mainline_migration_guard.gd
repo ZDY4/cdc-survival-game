@@ -1,6 +1,16 @@
 extends SceneTree
 
 const REQUIRED_GODOT_VERSION := "4.6.3"
+const REQUIRED_MAIN_SCENE := "res://scenes/game/game_root.tscn"
+const REQUIRED_GODOT_CMD := "D:\\godot\\godot.cmd"
+const ROOT_SCRIPT_EXPECTATIONS := {
+	"run_godot_game.bat": ["call \"%GODOT_EXE%\" --path \"%ROOT_DIR%godot\""],
+	"run_godot_editor.bat": ["call \"%GODOT_EXE%\" --editor --path \"%ROOT_DIR%godot\""],
+	"run_godot_validate.bat": [
+		"call \"%GODOT_EXE%\" --headless --path \"%ROOT_DIR%godot\" --script res://scripts/tools/validate_all.gd",
+		"call \"%GODOT_EXE%\" --headless --path \"%ROOT_DIR%godot\" --script res://scripts/tools/mainline_migration_guard.gd",
+	],
+}
 const FORBIDDEN_FILENAMES := {
 	"Cargo.toml": true,
 	"Cargo.lock": true,
@@ -45,6 +55,8 @@ const SKIPPED_ROOTS := {
 func _init() -> void:
 	var root_path := ProjectSettings.globalize_path("res://..")
 	var errors := _godot_version_errors()
+	errors.append_array(_project_entry_errors(root_path))
+	errors.append_array(_root_script_errors(root_path))
 	errors.append_array(_scan_directory(root_path, ""))
 	if not errors.is_empty():
 		for error in errors:
@@ -53,7 +65,7 @@ func _init() -> void:
 		quit(1)
 		return
 
-	print("Godot migration guard passed: Godot %s and no Rust/Cargo/Bevy source files in active mainline" % _godot_version_string())
+	print("Godot migration guard passed: Godot %s, Godot root entrypoints, and no Rust/Cargo/Bevy source files in active mainline" % _godot_version_string())
 	quit(0)
 
 
@@ -75,6 +87,39 @@ func _godot_version_string() -> String:
 		version_info.get("status", ""),
 		version_info.get("hash", ""),
 	]
+
+
+func _project_entry_errors(root_path: String) -> Array[String]:
+	var errors: Array[String] = []
+	var project_path := root_path.path_join("godot/project.godot")
+	if not FileAccess.file_exists(project_path):
+		return ["godot/project.godot is missing"]
+	var config := ConfigFile.new()
+	var load_error := config.load(project_path)
+	if load_error != OK:
+		return ["cannot load godot/project.godot: %s" % error_string(load_error)]
+	var main_scene := str(config.get_value("application", "run/main_scene", ""))
+	if main_scene != REQUIRED_MAIN_SCENE:
+		errors.append("Godot main scene mismatch: expected %s, got %s" % [REQUIRED_MAIN_SCENE, main_scene])
+	return errors
+
+
+func _root_script_errors(root_path: String) -> Array[String]:
+	var errors: Array[String] = []
+	for script_name in ROOT_SCRIPT_EXPECTATIONS.keys():
+		var path := root_path.path_join(script_name)
+		if not FileAccess.file_exists(path):
+			errors.append("%s is missing" % script_name)
+			continue
+		var content := FileAccess.get_file_as_string(path).replace("\r\n", "\n")
+		if not content.contains("set \"GODOT_EXE=%s\"" % REQUIRED_GODOT_CMD):
+			errors.append("%s does not pin GODOT_EXE to %s" % [script_name, REQUIRED_GODOT_CMD])
+		if not content.contains("if not exist \"%ROOT_DIR%godot\\project.godot\""):
+			errors.append("%s does not verify godot/project.godot" % script_name)
+		for expected in ROOT_SCRIPT_EXPECTATIONS[script_name]:
+			if not content.contains(str(expected)):
+				errors.append("%s missing expected command: %s" % [script_name, expected])
+	return errors
 
 
 func _scan_directory(absolute_path: String, relative_path: String) -> Array[String]:

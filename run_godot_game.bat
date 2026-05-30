@@ -15,5 +15,5 @@ if not exist "%ROOT_DIR%godot\project.godot" (
 )
 
 echo Starting Godot Game...
-"%GODOT_EXE%" --path "%ROOT_DIR%godot" %*
+call "%GODOT_EXE%" --path "%ROOT_DIR%godot" %*
 exit /b %ERRORLEVEL%

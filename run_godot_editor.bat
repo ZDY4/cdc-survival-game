@@ -15,5 +15,5 @@ if not exist "%ROOT_DIR%godot\project.godot" (
 )
 
 echo Starting Godot Editor...
-"%GODOT_EXE%" --editor --path "%ROOT_DIR%godot" %*
+call "%GODOT_EXE%" --editor --path "%ROOT_DIR%godot" %*
 exit /b %ERRORLEVEL%
