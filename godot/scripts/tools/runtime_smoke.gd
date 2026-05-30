@@ -37,7 +37,7 @@ func _validate_new_game_snapshot(snapshot: Dictionary) -> Array[String]:
 		errors.append("expected 3 startup actors, got %d" % actors.size())
 
 	var expected_positions := {
-		"player": {"x": 0, "y": 0, "z": 0},
+		"player": {"x": 24, "y": 0, "z": 39},
 		"trader_lao_wang": {"x": 1, "y": 0, "z": 0},
 		"doctor_chen": {"x": 33, "y": 0, "z": 10},
 	}

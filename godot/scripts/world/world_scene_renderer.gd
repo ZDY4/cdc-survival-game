@@ -21,6 +21,7 @@ func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionar
 		"map_visuals": 0,
 		"objects": 0,
 		"actors": 0,
+		"colliders": 0,
 		"lights": 0,
 		"cameras": 0,
 	}
@@ -31,8 +32,9 @@ func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionar
 		counts["map_visuals"] = _spawn_map_scene_visuals(root, map)
 	counts["objects"] = _spawn_interaction_target_markers(root, map)
 	counts["actors"] = _spawn_actor_markers(root, _array_or_empty(world_snapshot.get("actors", [])))
+	counts["colliders"] = _pickable_body_count(root)
 	counts["lights"] = _spawn_lights(root)
-	counts["cameras"] = _spawn_camera(root, map)
+	counts["cameras"] = _spawn_camera(root, map, _camera_focus(world_snapshot))
 
 	return counts
 
@@ -55,6 +57,16 @@ func _spawn_ground(root: Node3D, map: Dictionary) -> void:
 	node.material_override = ground_material
 	node.position = Vector3((width - 1.0) * 0.5 * GRID_SIZE, -0.04, (height - 1.0) * 0.5 * GRID_SIZE)
 	root.add_child(node)
+
+	var body := StaticBody3D.new()
+	body.name = "GroundPicker"
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(width * GRID_SIZE, 0.12, height * GRID_SIZE)
+	shape.shape = box
+	body.add_child(shape)
+	body.position = node.position
+	root.add_child(body)
 
 
 func _spawn_map_scene_visuals(root: Node3D, map: Dictionary) -> int:
@@ -139,6 +151,7 @@ func _spawn_interaction_target_marker(root: Node3D, object: Dictionary) -> void:
 		0.18,
 		(float(anchor.get("z", 0)) + (height - 1.0) * 0.5) * GRID_SIZE
 	)
+	_add_pickable_box(node, Vector3(width * GRID_SIZE, 0.6, height * GRID_SIZE), Vector3(0.0, 0.25, 0.0))
 	root.add_child(node)
 
 
@@ -157,6 +170,7 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 			"actor_id": int(actor_data.get("actor_id", 0)),
 		})
 		node.position = _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), 0.58)
+		_add_pickable_capsule(node, 0.36, 1.25)
 		root.add_child(node)
 	return actors.size()
 
@@ -170,23 +184,77 @@ func _spawn_lights(root: Node3D) -> int:
 	return 1
 
 
-func _spawn_camera(root: Node3D, map: Dictionary) -> int:
+func _spawn_camera(root: Node3D, map: Dictionary, focus_position: Vector3) -> int:
 	var size: Dictionary = _dictionary_or_empty(map.get("size", {}))
 	var width: float = float(size.get("width", 48))
 	var height: float = float(size.get("height", 42))
-	var center: Vector3 = Vector3(width * 0.5, 0.0, height * 0.5)
+	var center: Vector3 = focus_position
+	center.x = clampf(center.x, 0.0, max(0.0, width - 1.0))
+	center.z = clampf(center.z, 0.0, max(0.0, height - 1.0))
 	var camera: Camera3D = Camera3D.new()
 	camera.name = "WorldCamera"
-	camera.transform = Transform3D(Basis(), center + Vector3(18.0, 24.0, 24.0)).looking_at(center, Vector3.UP)
-	camera.fov = 48.0
+	camera.transform = Transform3D(Basis(), center + Vector3(10.0, 16.0, 14.0)).looking_at(center, Vector3.UP)
+	camera.fov = 52.0
+	camera.set_meta("focus_position", center)
 	# 运行时场景由脚本动态生成，相机必须显式设为当前视角，避免启动后只有空视口。
 	camera.current = true
 	root.add_child(camera)
 	return 1
 
 
+func _camera_focus(world_snapshot: Dictionary) -> Vector3:
+	for actor in _array_or_empty(world_snapshot.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if actor_data.get("kind", "") == "player":
+			return _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), 0.0)
+	var map: Dictionary = _dictionary_or_empty(world_snapshot.get("map", {}))
+	var entries: Dictionary = _dictionary_or_empty(map.get("entry_points", {}))
+	if entries.has("default_entry"):
+		return _grid_to_world(_dictionary_or_empty(entries.get("default_entry", {})), 0.0)
+	var size: Dictionary = _dictionary_or_empty(map.get("size", {}))
+	return Vector3(float(size.get("width", 48)) * 0.5, 0.0, float(size.get("height", 42)) * 0.5)
+
+
 func _grid_to_world(grid: Dictionary, y_offset: float) -> Vector3:
 	return Vector3(float(grid.get("x", 0)) * GRID_SIZE, float(grid.get("y", 0)) + y_offset, float(grid.get("z", 0)) * GRID_SIZE)
+
+
+func _add_pickable_box(parent: Node3D, size: Vector3, local_position: Vector3 = Vector3.ZERO) -> void:
+	var body := StaticBody3D.new()
+	body.name = "PickableBody"
+	body.set_meta("interaction_target", parent.get_meta("interaction_target"))
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	body.add_child(shape)
+	body.position = local_position
+	parent.add_child(body)
+
+
+func _add_pickable_capsule(parent: Node3D, radius: float, height: float) -> void:
+	var body := StaticBody3D.new()
+	body.name = "PickableBody"
+	body.set_meta("interaction_target", parent.get_meta("interaction_target"))
+	var shape := CollisionShape3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = radius
+	capsule.height = height
+	shape.shape = capsule
+	body.add_child(shape)
+	parent.add_child(body)
+
+
+func _pickable_body_count(root: Node) -> int:
+	var count := 0
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is StaticBody3D:
+			count += 1
+		for child in node.get_children():
+			pending.append(child)
+	return count
 
 
 func _clear_children(parent: Node) -> void:

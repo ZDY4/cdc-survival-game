@@ -2,6 +2,7 @@ extends RefCounted
 
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const Simulation = preload("res://scripts/core/simulation/simulation.gd")
+const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const MapBuilder = preload("res://scripts/world/map_builder.gd")
 const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
 
@@ -49,6 +50,8 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 	var faction: Dictionary = definition.get("faction", {})
 	var identity: Dictionary = definition.get("identity", {})
 	var grid_data: Dictionary = spawn_entry.get("gridPosition", {})
+	if _should_use_start_entry_grid(spawn_entry, definition_id, grid_data):
+		grid_data = _entry_grid(simulation, str(spawn_entry.get("entryPointId", simulation.active_entry_point_id)), grid_data)
 	var combat_attributes: Dictionary = _combat_attributes(definition)
 	var base_attributes: Dictionary = _base_attributes(definition)
 	var resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(definition.get("attributes", {})).get("resources", {}))
@@ -74,6 +77,30 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"ai": ai,
 		"life": life,
 	})
+
+
+func _should_use_start_entry_grid(spawn_entry: Dictionary, definition_id: String, grid_data: Dictionary) -> bool:
+	if spawn_entry.has("entryPointId"):
+		return true
+	if definition_id != "player":
+		return false
+	return int(grid_data.get("x", 0)) == 0 and int(grid_data.get("y", 0)) == 0 and int(grid_data.get("z", 0)) == 0
+
+
+func _entry_grid(simulation: RefCounted, entry_id: String, fallback: Dictionary) -> Dictionary:
+	if entry_id.is_empty():
+		return fallback
+	var map_definition_result := MapSceneLoader.new().load_map_definition(simulation.active_map_id)
+	var map_definition: Dictionary = _dictionary_or_empty(map_definition_result.get("data", {}))
+	if map_definition.is_empty():
+		var map_record: Dictionary = registry.get_library("maps").get(simulation.active_map_id, {})
+		map_definition = _dictionary_or_empty(map_record.get("data", {}))
+	for entry in _array_or_empty(map_definition.get("entry_points", [])):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("id", "")) == entry_id:
+			return _dictionary_or_empty(entry_data.get("grid", fallback))
+	push_warning("启动入口 %s 在地图 %s 中不存在，继续使用 bootstrap 坐标" % [entry_id, simulation.active_map_id])
+	return fallback
 
 
 func _apply_starting_inventory(simulation: RefCounted, bootstrap: Dictionary) -> void:
@@ -111,12 +138,21 @@ func _player_actor(simulation: RefCounted) -> RefCounted:
 
 
 func _configure_startup_map_interactions(simulation: RefCounted) -> void:
-	var map_record: Dictionary = registry.get_library("maps").get(simulation.active_map_id, {})
-	if map_record.is_empty():
+	var map_definition: Dictionary = _map_definition(simulation.active_map_id)
+	if map_definition.is_empty():
 		push_error("cannot configure interactions for unknown map: %s" % simulation.active_map_id)
 		return
-	var topology: RefCounted = MapBuilder.new().build_from_definition(map_record["data"])
+	var topology: RefCounted = MapBuilder.new().build_from_definition(map_definition)
 	simulation.configure_map_interactions(topology.interaction_targets)
+
+
+func _map_definition(map_id: String) -> Dictionary:
+	var map_definition_result := MapSceneLoader.new().load_map_definition(map_id)
+	var map_definition: Dictionary = _dictionary_or_empty(map_definition_result.get("data", {}))
+	if not map_definition.is_empty():
+		return map_definition
+	var map_record: Dictionary = registry.get_library("maps").get(map_id, {})
+	return _dictionary_or_empty(map_record.get("data", {}))
 
 
 func _actor_kind_from_archetype(archetype: String) -> String:
@@ -170,6 +206,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _normalize_content_id(value: Variant) -> String:

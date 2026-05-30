@@ -6,12 +6,14 @@ const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const FogOverlayController = preload("res://scripts/world/fog_overlay_controller.gd")
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
+const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 
 var registry: ContentRegistry
 var simulation: RefCounted
 var world_result: Dictionary = {}
 var interaction_controller: RefCounted
+var runtime_input_controller: RefCounted
 var panel_controller: RefCounted
 var fog_overlay_controller: RefCounted = FogOverlayController.new()
 var world_container: Node3D
@@ -45,10 +47,21 @@ func _ready() -> void:
 	interaction_controller = PlayerInteractionController.new(registry, simulation, world_result)
 	_setup_world_container()
 	var counts: Dictionary = WorldSceneRenderer.new().render_world(world_container, world_result)
+	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
 	_setup_panels()
 	refresh_all_panels()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
+
+
+func _process(delta: float) -> void:
+	if runtime_input_controller != null:
+		runtime_input_controller.process(delta)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if runtime_input_controller != null:
+		runtime_input_controller.unhandled_input(event)
 
 
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
@@ -133,6 +146,7 @@ func execute_primary_interaction() -> Dictionary:
 	# 地图切换或对象消费后需要重绘占位世界，保证 scene tree 与运行时快照一致。
 	_setup_world_container()
 	WorldSceneRenderer.new().render_world(world_container, world_result)
+	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
 	_setup_panels()
 	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
@@ -190,6 +204,12 @@ func _setup_world_container() -> void:
 	world_container = Node3D.new()
 	world_container.name = "WorldContainer"
 	add_child(world_container)
+
+
+func _setup_runtime_input_controller() -> void:
+	if runtime_input_controller == null:
+		runtime_input_controller = GameRuntimeInputController.new(self)
+	runtime_input_controller.attach_world(world_container, world_result)
 
 
 func _refresh_fog_overlay() -> void:

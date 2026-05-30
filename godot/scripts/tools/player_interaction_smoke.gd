@@ -38,10 +38,36 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["game root did not initialize fog overlay"]
 	if game_root.fog_overlay.material == null:
 		return ["fog overlay should use shader material"]
+	if game_root.runtime_input_controller == null:
+		return ["game root did not initialize runtime input controller"]
+	if game_root.find_child("HoverGridCursor", true, false) == null:
+		return ["missing hover grid cursor"]
+
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		return ["missing generated player actor node"]
+	if player_node.global_position.distance_to(Vector3(24.0, 0.58, 39.0)) > 0.1:
+		errors.append("player actor should start at survivor_outpost_01 default_entry")
 
 	var pickup_node: Node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
 	if pickup_node == null:
 		return ["missing generated pickup node"]
+	var pickable_body: Node = pickup_node.find_child("PickableBody", true, false)
+	if pickable_body == null or not pickable_body.has_meta("interaction_target"):
+		errors.append("pickup node should expose a pickable interaction body")
+
+	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if camera == null:
+		errors.append("missing runtime camera")
+	else:
+		var projected_pickup := camera.unproject_position((pickup_node as Node3D).global_position)
+		var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(projected_pickup)
+		if not bool(hover_result.get("success", false)):
+			errors.append("hover raycast failed: %s" % hover_result.get("reason", "unknown"))
+		elif str(hover_result.get("kind", "")) != "interaction":
+			errors.append("hover raycast should select interaction target")
+		if not _hud_interaction_line(game_root).contains("拾取"):
+			errors.append("HUD did not show pickup prompt after hover selection")
 
 	var pickup_selection: Dictionary = game_root.select_interaction_node(pickup_node)
 	if not bool(pickup_selection.get("success", false)):
