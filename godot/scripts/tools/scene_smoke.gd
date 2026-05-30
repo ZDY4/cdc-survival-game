@@ -7,6 +7,10 @@ const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd"
 
 
 func _init() -> void:
+	_run.call_deferred()
+
+
+func _run() -> void:
 	var registry := ContentRegistry.new()
 	var load_result := registry.load_all()
 	if load_result.has_errors():
@@ -28,8 +32,10 @@ func _init() -> void:
 	root.add_to_group("scene_smoke_root")
 	root.set_meta("world_result", world_result)
 	get_root().add_child(root)
+	await process_frame
 
 	var counts: Dictionary = WorldSceneRenderer.new().render_world(root, world_result)
+	await process_frame
 	var errors := _validate_scene(root, counts)
 	if not errors.is_empty():
 		for error in errors:
@@ -76,9 +82,16 @@ func _validate_player_camera_focus(root: Node3D, errors: Array[String]) -> void:
 	if camera == null:
 		errors.append("missing WorldCamera")
 		return
+	if not camera.current:
+		errors.append("WorldCamera should be the current startup camera")
 	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
 	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(Vector3(24.0, 0.0, 39.0)) > 0.1:
 		errors.append("WorldCamera should focus the player/default entry at startup")
+	if camera.is_position_behind(player.global_position):
+		errors.append("WorldCamera should face the startup player marker")
+	var projected := camera.unproject_position(player.global_position)
+	if projected.x < 0.0 or projected.y < 0.0 or projected.x > 1440.0 or projected.y > 900.0:
+		errors.append("startup player marker should be inside the default camera viewport")
 
 
 func _interaction_target_node_count(root: Node) -> int:
