@@ -174,6 +174,8 @@ cmd /c run_godot_validate.bat
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed
 ```
 
+`run_godot_validate.bat` 同时执行内容全量校验和 `godot/scripts/tools/mainline_migration_guard.gd`，用于防止当前主线重新引入 Rust / Cargo / Bevy 时代源码文件。
+
 Runtime 验证：
 
 ```powershell
@@ -289,6 +291,7 @@ D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/validate
 验收：
 
 - 当前树不含 `.rs`、`Cargo.toml`、`Cargo.lock`、Bevy 专用 shader 或旧 Bevy runner。
+- `run_godot_validate.bat` 通过 Godot 内容校验和主线迁移门禁。
 - 旧实现只通过 Git 历史追溯，或被明确标记为非当前权威的兼容备份。
 
 ### P6 完成态验收
@@ -309,6 +312,7 @@ D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/validate
 
 - `godot/project.godot` 存在并作为工程入口。
 - 当前树中没有 Rust / Cargo / Bevy 源文件。
+- 根验证入口包含旧栈回归门禁，避免重新引入 Rust / Cargo / Bevy 源文件。
 - 根运行入口是 `run_godot_game.bat`、`run_godot_editor.bat`、`run_godot_validate.bat`。
 - `tools/agent` 默认走 Godot。
 - 地图场景已位于 `godot/scenes/maps/*.tscn`。
