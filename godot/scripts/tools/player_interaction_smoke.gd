@@ -62,6 +62,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_expect_camera_keyboard_movement(errors, game_root, camera)
 		_expect_camera_middle_drag(errors, game_root, camera)
+		_expect_camera_wheel_zoom(errors, game_root, camera)
 		var projected_pickup := camera.unproject_position((pickup_node as Node3D).global_position)
 		var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(projected_pickup)
 		if not bool(hover_result.get("success", false)):
@@ -167,6 +168,29 @@ func _expect_camera_middle_drag(errors: Array[String], game_root: Node, camera: 
 	game_root._unhandled_input(followup)
 	if camera.global_position.distance_to(after_drag) > 0.1:
 		errors.append("runtime camera should stop dragging after middle mouse release")
+
+
+func _expect_camera_wheel_zoom(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
+	if typeof(focus) != TYPE_VECTOR3:
+		errors.append("runtime camera should expose focus_position for zoom")
+		return
+	var target := focus as Vector3
+	var before_distance := camera.global_position.distance_to(target)
+	var wheel_up := InputEventMouseButton.new()
+	wheel_up.button_index = MOUSE_BUTTON_WHEEL_UP
+	wheel_up.pressed = true
+	game_root._unhandled_input(wheel_up)
+	var after_zoom_in := camera.global_position.distance_to(target)
+	if after_zoom_in >= before_distance:
+		errors.append("mouse wheel up should zoom camera toward focus")
+	var wheel_down := InputEventMouseButton.new()
+	wheel_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel_down.pressed = true
+	game_root._unhandled_input(wheel_down)
+	var after_zoom_out := camera.global_position.distance_to(target)
+	if after_zoom_out <= after_zoom_in:
+		errors.append("mouse wheel down should zoom camera away from focus")
 
 
 func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target_node: Node) -> void:

@@ -30,6 +30,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 		push_warning("运行时输入控制器找不到 WorldCamera，鼠标拾取和相机移动暂不可用")
 		return
 	camera_target = _vector_meta(camera, "focus_position", _player_focus_position())
+	_sync_camera_focus_meta()
 	hover_cursor.visible = false
 	selected_node = null
 
@@ -68,9 +69,9 @@ func unhandled_input(event: InputEvent) -> void:
 			if selected_node != null and game_root.has_method("execute_primary_interaction"):
 				game_root.execute_primary_interaction()
 		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
-			_zoom_camera(-1.0)
-		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
 			_zoom_camera(1.0)
+		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
+			_zoom_camera(-1.0)
 
 
 func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
@@ -135,6 +136,7 @@ func _move_camera(delta_world: Vector3) -> void:
 	camera.global_position += delta_world
 	camera_target += delta_world
 	camera.look_at(camera_target, Vector3.UP)
+	_sync_camera_focus_meta()
 
 
 func _drag_camera(relative: Vector2) -> void:
@@ -148,6 +150,12 @@ func _zoom_camera(direction: float) -> void:
 		return
 	camera.global_position = next_position
 	camera.look_at(camera_target, Vector3.UP)
+	_sync_camera_focus_meta()
+
+
+func _sync_camera_focus_meta() -> void:
+	if camera != null:
+		camera.set_meta("focus_position", camera_target)
 
 
 func _update_hover_cursor(world_position: Vector3) -> void:
