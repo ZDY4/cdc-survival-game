@@ -13,6 +13,7 @@ var hover_cursor: MeshInstance3D
 var selected_node: Node
 var camera_target: Vector3 = Vector3.ZERO
 var camera_key_state: Dictionary = {}
+var is_middle_mouse_dragging := false
 
 
 func _init(p_game_root: Node) -> void:
@@ -54,13 +55,15 @@ func unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		_update_camera_key_state(event as InputEventKey)
 	elif event is InputEventMouseMotion:
-		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
+		if is_middle_mouse_dragging:
 			_drag_camera((event as InputEventMouseMotion).relative)
 		else:
 			update_hover_at_screen_position((event as InputEventMouseMotion).position)
 	elif event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+		if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
+			is_middle_mouse_dragging = mouse_event.pressed
+		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 			update_hover_at_screen_position(mouse_event.position)
 			if selected_node != null and game_root.has_method("execute_primary_interaction"):
 				game_root.execute_primary_interaction()

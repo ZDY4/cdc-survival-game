@@ -61,6 +61,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("missing runtime camera")
 	else:
 		_expect_camera_keyboard_movement(errors, game_root, camera)
+		_expect_camera_middle_drag(errors, game_root, camera)
 		var projected_pickup := camera.unproject_position((pickup_node as Node3D).global_position)
 		var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(projected_pickup)
 		if not bool(hover_result.get("success", false)):
@@ -141,6 +142,31 @@ func _expect_camera_keyboard_movement(errors: Array[String], game_root: Node, ca
 	game_root.runtime_input_controller.process(0.25)
 	if camera.global_position.distance_to(after_release) > 0.1:
 		errors.append("runtime camera should stop after key release")
+
+
+func _expect_camera_middle_drag(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	var before_position := camera.global_position
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_MIDDLE
+	press.pressed = true
+	game_root._unhandled_input(press)
+	var drag := InputEventMouseMotion.new()
+	drag.position = Vector2(240, 160)
+	drag.relative = Vector2(80, 30)
+	game_root._unhandled_input(drag)
+	var after_drag := camera.global_position
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_MIDDLE
+	release.pressed = false
+	game_root._unhandled_input(release)
+	if after_drag.distance_to(before_position) < 0.1:
+		errors.append("runtime camera should move from middle mouse drag")
+	var followup := InputEventMouseMotion.new()
+	followup.position = Vector2(250, 170)
+	followup.relative = Vector2(80, 30)
+	game_root._unhandled_input(followup)
+	if camera.global_position.distance_to(after_drag) > 0.1:
+		errors.append("runtime camera should stop dragging after middle mouse release")
 
 
 func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target_node: Node) -> void:
