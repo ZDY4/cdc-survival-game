@@ -1,6 +1,7 @@
 extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
+const MapSceneLoaderScript = preload("res://scripts/world/map_scene_loader.gd")
 
 
 func _init() -> void:
@@ -110,6 +111,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("fog overlay did not survive map transition redraw")
 	await process_frame
 	_expect_transition_world_redraw(errors, game_root)
+	await _expect_transition_return_to_outpost(errors, game_root)
 	return errors
 
 
@@ -170,6 +172,54 @@ func _expect_transition_world_redraw(errors: Array[String], game_root: Node) -> 
 		errors.append("transition runtime camera should still respond to keyboard input")
 
 
+func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node) -> void:
+	var exit_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_exit", true, false)
+	if exit_node == null:
+		errors.append("transition redraw should expose generated interior exit node")
+		return
+
+	var exit_selection: Dictionary = game_root.select_interaction_node(exit_node)
+	if not bool(exit_selection.get("success", false)):
+		errors.append("interior exit selection failed: %s" % exit_selection.get("prompt", {}).get("reason", "unknown"))
+	var return_result: Dictionary = game_root.execute_primary_interaction()
+	if not bool(return_result.get("success", false)):
+		errors.append("interior exit execution failed: %s" % return_result.get("reason", "unknown"))
+	await process_frame
+
+	if game_root.simulation.active_map_id != "survivor_outpost_01":
+		errors.append("interior exit execution did not switch back to survivor_outpost_01")
+	if game_root.simulation.active_entry_point_id != "interior_return":
+		errors.append("interior exit execution should set survivor_outpost_01 interior_return")
+	if not _hud_world_line(game_root).contains("survivor_outpost_01"):
+		errors.append("HUD world line did not refresh after returning to outdoor map")
+
+	var visible_actors: Array = game_root.world_result.get("actors", [])
+	if visible_actors.size() != 3:
+		errors.append("return world should render survivor_outpost_01 actors again")
+	for restored_name in ["Actor_trader_lao_wang_2", "Actor_doctor_chen_3"]:
+		if game_root.find_child(restored_name, true, false) == null:
+			errors.append("return redraw should restore outdoor actor %s" % restored_name)
+
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("return redraw should keep generated player actor node")
+		return
+	var return_grid: Vector3 = _entry_grid("survivor_outpost_01", "interior_return")
+	var expected_position := Vector3(return_grid.x, 0.58, return_grid.z)
+	if player_node.global_position.distance_to(expected_position) > 0.1:
+		errors.append("return transition should place player at survivor_outpost_01 interior_return")
+	var player_snapshot: Dictionary = _actor_by_id(game_root.simulation.snapshot(), 1)
+	if str(player_snapshot.get("map_id", "")) != "survivor_outpost_01":
+		errors.append("return transition should update player map_id")
+
+	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if camera == null:
+		errors.append("return redraw should keep runtime camera")
+		return
+	_expect_camera_frames_player_at(errors, camera, player_node, return_grid, "return")
+	_expect_camera_keyboard_movement(errors, game_root, camera)
+
+
 func _expect_camera_frames_player_at(errors: Array[String], camera: Camera3D, player_node: Node3D, expected_focus: Vector3, label: String) -> void:
 	if not camera.current:
 		errors.append("%s WorldCamera should be current" % label)
@@ -181,6 +231,20 @@ func _expect_camera_frames_player_at(errors: Array[String], camera: Camera3D, pl
 	var projected_player := camera.unproject_position(player_node.global_position)
 	if projected_player.x < 0.0 or projected_player.y < 0.0 or projected_player.x > 1440.0 or projected_player.y > 900.0:
 		errors.append("%s player should be inside the default camera viewport" % label)
+
+
+func _entry_grid(map_id: String, entry_id: String) -> Vector3:
+	var scene_result: Dictionary = MapSceneLoaderScript.new().load_map_definition(map_id)
+	if not bool(scene_result.get("ok", false)):
+		return Vector3.ZERO
+	var data: Dictionary = scene_result.get("data", {})
+	for entry in data.get("entry_points", []):
+		var entry_data: Dictionary = entry
+		if str(entry_data.get("id", "")) != entry_id:
+			continue
+		var grid: Dictionary = entry_data.get("grid", {})
+		return Vector3(float(grid.get("x", 0.0)), float(grid.get("y", 0.0)), float(grid.get("z", 0.0)))
+	return Vector3.ZERO
 
 
 func _actor_by_id(snapshot: Dictionary, actor_id: int) -> Dictionary:

@@ -71,6 +71,9 @@ func _option_for_target(target_data: Dictionary) -> Dictionary:
 				"display_name": target_data.get("display_name", "进入"),
 				"target_map_id": target_data.get("target_map_id", ""),
 				"target_id": target_data.get("target_id", ""),
+				"return_spawn_id": target_data.get("return_spawn_id", ""),
+				"target_entry_point_id": target_data.get("target_entry_point_id", ""),
+				"entry_point_id": target_data.get("entry_point_id", ""),
 			}
 		"container":
 			return {

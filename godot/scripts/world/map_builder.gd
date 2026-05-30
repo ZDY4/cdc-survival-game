@@ -135,17 +135,25 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 	var props: Dictionary = _dictionary_or_empty(object_summary.get("props", {}))
 	var interaction_props: Dictionary = _dictionary_or_empty(props.get("interactive", {}))
 	var trigger_props: Dictionary = _dictionary_or_empty(props.get("trigger", {}))
+	var trigger_options: Array = _array_or_empty(trigger_props.get("options", []))
+	var primary_trigger_option: Dictionary = {}
+	if not trigger_options.is_empty():
+		primary_trigger_option = _dictionary_or_empty(trigger_options[0])
 	var pickup_props: Dictionary = _dictionary_or_empty(props.get("pickup", {}))
 	var container_props: Dictionary = _dictionary_or_empty(props.get("container", {}))
 	var interaction_kind: String = str(interaction_props.get("interaction_kind", ""))
 	if interaction_kind.is_empty():
 		interaction_kind = str(trigger_props.get("interaction_kind", ""))
 	if interaction_kind.is_empty():
+		interaction_kind = str(primary_trigger_option.get("kind", ""))
+	if interaction_kind.is_empty():
 		interaction_kind = fallback_kind
 
 	var display_name: String = str(interaction_props.get("display_name", ""))
 	if display_name.is_empty():
 		display_name = str(trigger_props.get("display_name", ""))
+	if display_name.is_empty():
+		display_name = str(primary_trigger_option.get("display_name", ""))
 	if display_name.is_empty():
 		display_name = str(container_props.get("display_name", ""))
 	if display_name.is_empty():
@@ -161,7 +169,10 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		"item_id": str(pickup_props.get("item_id", "")),
 		"min_count": int(pickup_props.get("min_count", 1)),
 		"max_count": int(pickup_props.get("max_count", pickup_props.get("min_count", 1))),
-		"target_map_id": str(trigger_props.get("target_id", interaction_props.get("target_id", ""))),
+		"target_map_id": str(primary_trigger_option.get("target_id", trigger_props.get("target_id", interaction_props.get("target_id", "")))),
+		"return_spawn_id": str(primary_trigger_option.get("return_spawn_id", trigger_props.get("return_spawn_id", ""))),
+		"target_entry_point_id": str(primary_trigger_option.get("target_entry_point_id", trigger_props.get("target_entry_point_id", ""))),
+		"entry_point_id": str(primary_trigger_option.get("entry_point_id", trigger_props.get("entry_point_id", ""))),
 		"container_inventory": _array_or_empty(container_props.get("initial_inventory", [])),
 	}
 
