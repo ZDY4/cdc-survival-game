@@ -128,7 +128,7 @@ func _expect_camera_keyboard_movement(errors: Array[String], game_root: Node, ca
 	press.keycode = KEY_W
 	press.physical_keycode = KEY_W
 	press.pressed = true
-	game_root._unhandled_input(press)
+	game_root._input(press)
 	game_root.runtime_input_controller.process(0.25)
 	var release := InputEventKey.new()
 	release.keycode = KEY_W
@@ -137,6 +137,10 @@ func _expect_camera_keyboard_movement(errors: Array[String], game_root: Node, ca
 	game_root._unhandled_input(release)
 	if camera.global_position.distance_to(before_position) < 0.1:
 		errors.append("runtime camera should move from keyboard input")
+	var after_release := camera.global_position
+	game_root.runtime_input_controller.process(0.25)
+	if camera.global_position.distance_to(after_release) > 0.1:
+		errors.append("runtime camera should stop after key release")
 
 
 func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target_node: Node) -> void:

@@ -41,6 +41,13 @@ func process(delta: float) -> void:
 		update_hover_at_screen_position(game_root.get_viewport().get_mouse_position())
 
 
+func input(event: InputEvent) -> void:
+	if camera == null:
+		return
+	if event is InputEventKey:
+		_update_camera_key_state(event as InputEventKey)
+
+
 func unhandled_input(event: InputEvent) -> void:
 	if camera == null:
 		return

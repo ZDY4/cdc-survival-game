@@ -59,6 +59,11 @@ func _process(delta: float) -> void:
 		runtime_input_controller.process(delta)
 
 
+func _input(event: InputEvent) -> void:
+	if runtime_input_controller != null:
+		runtime_input_controller.input(event)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if runtime_input_controller != null:
 		runtime_input_controller.unhandled_input(event)
