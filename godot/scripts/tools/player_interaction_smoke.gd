@@ -60,6 +60,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if camera == null:
 		errors.append("missing runtime camera")
 	else:
+		_expect_startup_camera_frames_player(errors, camera, player_node)
 		_expect_camera_keyboard_movement(errors, game_root, camera)
 		_expect_camera_middle_drag(errors, game_root, camera)
 		_expect_camera_wheel_zoom(errors, game_root, camera)
@@ -122,6 +123,19 @@ func _hud_world_line(game_root: Node) -> String:
 
 func _hud_interaction_line(game_root: Node) -> String:
 	return game_root.hud.get_node("HudPanel/HudLines/InteractionLine").text
+
+
+func _expect_startup_camera_frames_player(errors: Array[String], camera: Camera3D, player_node: Node3D) -> void:
+	if not camera.current:
+		errors.append("runtime WorldCamera should be current at game start")
+	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
+	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(Vector3(24.0, 0.0, 39.0)) > 0.1:
+		errors.append("runtime WorldCamera should focus the startup player entry")
+	if camera.is_position_behind(player_node.global_position):
+		errors.append("runtime WorldCamera should face the startup player")
+	var projected_player := camera.unproject_position(player_node.global_position)
+	if projected_player.x < 0.0 or projected_player.y < 0.0 or projected_player.x > 1440.0 or projected_player.y > 900.0:
+		errors.append("runtime startup player should be inside the default camera viewport")
 
 
 func _expect_camera_keyboard_movement(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
