@@ -10,6 +10,13 @@
 - 非地图内容仍以 `data/` 下 JSON 为当前权威输入源；Godot 数据层负责加载、校验、摘要、引用查询、格式化和安全写回。
 - 玩家运行时不承载内容编辑 UI；内容编辑能力放在 Godot editor 插件、headless tool 或独立脚本中。
 
+## 旧 Rust / Bevy 参考工程
+
+- 旧实现参考副本位于 `G:\Projects\cdc_survival_game_bevy_reference`，检出自本仓库 tag `bevy-pre-strip`，当前 HEAD 为 `be8938e`。
+- 该目录只作为迁移期行为、参数和资源组织方式的对照参考；当前仓库仍以 `Godot 4.6.3 + GDScript` 为唯一运行时和开发主线。
+- 需要还原旧相机、输入、拾取、渲染、UI、编辑器或工具行为时，优先查看参考副本下的 `rust/apps/bevy_debug_viewer/src/**`、`rust/apps/bevy_map_editor/src/**` 和 `rust/crates/**`，再按 Godot 架构边界重实现。
+- 不要把 Rust / Bevy 源码、Cargo 工程或旧 app 重新复制回当前 mainline；参考信息只能转译为 Godot scene、GDScript、数据层或文档。
+
 ## 架构边界
 
 - 新增能力先判断权威落点：内容格式进 `data` / `godot/scripts/data`，玩法规则进 `godot/scripts/core`，启动编排进 `godot/scripts/app`，画面表现进 `godot/scripts/world` 或 `godot/scripts/ui`，编辑体验进 `godot/addons/cdc_game_editor`。
