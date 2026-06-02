@@ -29,14 +29,53 @@ func _resolve_target(simulation: RefCounted, target: Dictionary) -> Dictionary:
 		"actor":
 			var actor_id: int = int(target.get("actor_id", 0))
 			var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
-			if actor == null or actor.side == "hostile":
+			if actor == null:
 				return {}
+			if actor.actor_id == int(target.get("command_actor_id", 0)) or actor.actor_id == _player_actor_id(simulation):
+				return {
+					"target_type": "actor",
+					"actor_id": actor.actor_id,
+					"definition_id": actor.definition_id,
+					"display_name": actor.display_name,
+					"kind": "wait",
+				}
+			if actor.side == "hostile":
+				return {
+					"target_type": "actor",
+					"actor_id": actor.actor_id,
+					"definition_id": actor.definition_id,
+					"display_name": actor.display_name,
+					"grid_position": actor.grid_position.to_dictionary(),
+					"kind": "attack",
+				}
 			return {
 				"target_type": "actor",
 				"actor_id": actor.actor_id,
 				"definition_id": actor.definition_id,
 				"display_name": actor.display_name,
+				"grid_position": actor.grid_position.to_dictionary(),
 				"kind": "talk",
+			}
+		"self":
+			var self_actor: RefCounted = simulation.actor_registry.get_actor(int(target.get("actor_id", _player_actor_id(simulation))))
+			if self_actor == null:
+				return {}
+			return {
+				"target_type": "actor",
+				"actor_id": self_actor.actor_id,
+				"definition_id": self_actor.definition_id,
+				"display_name": self_actor.display_name,
+				"kind": "wait",
+			}
+		"grid":
+			var grid: Dictionary = _dictionary_or_empty(target.get("grid", target.get("target_position", {})))
+			if grid.is_empty():
+				return {}
+			return {
+				"target_type": "grid",
+				"display_name": "移动",
+				"kind": "move",
+				"grid": grid,
 			}
 		_:
 			var target_id: String = str(target.get("target_id", ""))
@@ -64,6 +103,28 @@ func _option_for_target(target_data: Dictionary) -> Dictionary:
 				"display_name": "对话",
 				"dialogue_id": target_data.get("definition_id", target_data.get("target_id", "")),
 			}
+		"attack":
+			return {
+				"id": "attack",
+				"kind": "attack",
+				"display_name": "攻击",
+				"target_actor_id": int(target_data.get("actor_id", 0)),
+				"grid_position": target_data.get("grid_position", {}),
+			}
+		"wait":
+			return {
+				"id": "wait",
+				"kind": "wait",
+				"display_name": "等待",
+				"target_actor_id": int(target_data.get("actor_id", 0)),
+			}
+		"move":
+			return {
+				"id": "move",
+				"kind": "move",
+				"display_name": "移动",
+				"grid": target_data.get("grid", {}),
+			}
 		"enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor":
 			return {
 				"id": kind,
@@ -85,8 +146,21 @@ func _option_for_target(target_data: Dictionary) -> Dictionary:
 	return {}
 
 
+func _player_actor_id(simulation: RefCounted) -> int:
+	for actor in simulation.actor_registry.actors():
+		if actor.kind == "player":
+			return actor.actor_id
+	return 1
+
+
 func _failed_prompt(reason: String) -> Dictionary:
 	return {
 		"ok": false,
 		"reason": reason,
 	}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

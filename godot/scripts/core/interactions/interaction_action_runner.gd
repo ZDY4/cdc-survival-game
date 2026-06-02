@@ -18,6 +18,12 @@ func execute(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: 
 			return _execute_talk(simulation, actor_id, prompt, option)
 		"open_container":
 			return _execute_open_container(simulation, actor_id, prompt, option)
+		"attack":
+			return _execute_attack(simulation, actor_id, prompt, option)
+		"wait":
+			return _execute_wait(simulation, actor_id, prompt, option)
+		"move":
+			return {"success": false, "reason": "move_requires_player_command", "prompt": prompt}
 		"enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor":
 			return _execute_scene_transition(simulation, actor_id, prompt, option)
 		_:
@@ -113,6 +119,36 @@ func _execute_open_container(simulation: RefCounted, actor_id: int, prompt: Dict
 		"success": true,
 		"prompt": prompt,
 		"container": session.duplicate(true),
+	}
+
+
+func _execute_attack(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:
+	var target_actor_id: int = int(option.get("target_actor_id", prompt.get("target", {}).get("actor_id", 0)))
+	var result: Dictionary = simulation.perform_attack(actor_id, target_actor_id)
+	if bool(result.get("success", false)):
+		simulation.emit_event("interaction_succeeded", {
+			"actor_id": actor_id,
+			"target_id": target_actor_id,
+			"option_id": "attack",
+		})
+	result["prompt"] = prompt
+	return result
+
+
+func _execute_wait(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:
+	simulation.emit_event("actor_waited", {
+		"actor_id": actor_id,
+		"source": "interaction",
+	})
+	simulation.emit_event("interaction_succeeded", {
+		"actor_id": actor_id,
+		"target_id": actor_id,
+		"option_id": "wait",
+	})
+	return {
+		"success": true,
+		"prompt": prompt,
+		"waited": true,
 	}
 
 

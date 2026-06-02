@@ -28,6 +28,13 @@ func build(simulation: RefCounted) -> Dictionary:
 		"completed_quests": simulation.completed_quests.keys(),
 		"ai_intents": _ai_intent_snapshots(simulation.ai_intents),
 		"vision": simulation._vision_rules.snapshot(),
+		"turn_state": simulation.turn_state.duplicate(true),
+		"combat_state": simulation.combat_state.duplicate(true),
+		"pending_movement": simulation.pending_movement.duplicate(true),
+		"pending_interaction": simulation.pending_interaction.duplicate(true),
+		"corpse_containers": _corpse_container_snapshots(simulation.corpse_containers),
+		"interaction_menu": simulation.interaction_menu.duplicate(true),
+		"hotbar": simulation.hotbar.duplicate(true),
 	}
 
 
@@ -84,6 +91,23 @@ func _shop_session_snapshots(shop_sessions: Dictionary) -> Array[Dictionary]:
 			"buy_price_modifier": max(0.0, float(session.get("buy_price_modifier", 1.0))),
 			"sell_price_modifier": max(0.0, float(session.get("sell_price_modifier", 1.0))),
 			"inventory": _inventory_entries.normalize(session.get("inventory", [])),
+		})
+	return output
+
+
+func _corpse_container_snapshots(corpse_containers: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var ids: Array = corpse_containers.keys()
+	ids.sort()
+	for corpse_id in ids:
+		var corpse: Dictionary = _dictionary_or_empty(corpse_containers[corpse_id])
+		output.append({
+			"container_id": str(corpse.get("container_id", corpse_id)),
+			"map_id": str(corpse.get("map_id", "")),
+			"grid_position": _dictionary_or_empty(corpse.get("grid_position", {})).duplicate(true),
+			"display_name": str(corpse.get("display_name", corpse_id)),
+			"source_actor_definition_id": str(corpse.get("source_actor_definition_id", "")),
+			"inventory": _inventory_entries.normalize(corpse.get("inventory", [])),
 		})
 	return output
 

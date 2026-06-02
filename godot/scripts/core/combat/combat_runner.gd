@@ -1,7 +1,11 @@
 extends RefCounted
 
+const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 
-func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int) -> Dictionary:
+var _inventory_entries := InventoryEntries.new()
+
+
+func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
 	var attacker: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)
 	if attacker == null:
@@ -10,6 +14,9 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int)
 		return {"success": false, "reason": "unknown_target"}
 	if not _can_attack(attacker, target):
 		return {"success": false, "reason": "target_not_hostile"}
+	var spatial_check: Dictionary = _spatial_check(attacker, target, topology, int(options.get("range", 1)))
+	if not bool(spatial_check.get("success", false)):
+		return spatial_check
 
 	var damage: float = _resolve_damage(attacker, target)
 	target.hp = max(0.0, target.hp - damage)
@@ -18,6 +25,15 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int)
 		"target_actor_id": target_actor_id,
 		"damage": damage,
 		"target_hp": target.hp,
+	})
+	simulation.emit_event("attack_resolved", {
+		"actor_id": actor_id,
+		"target_actor_id": target_actor_id,
+		"damage": damage,
+		"target_hp": target.hp,
+		"defeated": target.hp <= 0.0,
+		"critical": false,
+		"range": int(options.get("range", 1)),
 	})
 
 	var defeated: bool = target.hp <= 0.0
@@ -33,7 +49,30 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int)
 
 
 func _can_attack(attacker: RefCounted, target: RefCounted) -> bool:
-	return target.side == "hostile" or attacker.side == "hostile"
+	if attacker.actor_id == target.actor_id:
+		return false
+	if attacker.side == "hostile":
+		return target.side != "hostile"
+	if target.side == "hostile":
+		return attacker.side != "hostile"
+	return false
+
+
+func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int) -> Dictionary:
+	if attacker.grid_position.y != target.grid_position.y:
+		return {"success": false, "reason": "target_level_mismatch"}
+	var distance: int = abs(attacker.grid_position.x - target.grid_position.x) + abs(attacker.grid_position.z - target.grid_position.z)
+	var resolved_range: int = max(1, attack_range)
+	if distance > resolved_range:
+		return {
+			"success": false,
+			"reason": "target_out_of_range",
+			"distance": distance,
+			"range": resolved_range,
+		}
+	if not topology.is_empty() and _line_blocked(attacker.grid_position, target.grid_position, topology):
+		return {"success": false, "reason": "target_line_of_sight_blocked"}
+	return {"success": true}
 
 
 func _resolve_damage(attacker: RefCounted, target: RefCounted) -> float:
@@ -44,6 +83,7 @@ func _defeat_actor(simulation: RefCounted, actor_id: int, target_actor_id: int, 
 	var defeated_definition_id: String = target.definition_id
 	var defeated_kind: String = target.kind
 	var defeated_xp_reward: int = target.xp_reward
+	var corpse: Dictionary = _create_corpse_container(simulation, target)
 	simulation.actor_registry.unregister_actor(target_actor_id)
 	simulation.emit_event("actor_defeated", {
 		"actor_id": target_actor_id,
@@ -51,5 +91,76 @@ func _defeat_actor(simulation: RefCounted, actor_id: int, target_actor_id: int, 
 		"kind": defeated_kind,
 		"defeated_by": actor_id,
 	})
+	simulation.emit_event("corpse_created", corpse.duplicate(true))
 	simulation.grant_experience(actor_id, defeated_xp_reward, "kill:%s" % defeated_definition_id)
 	simulation.record_enemy_defeated(actor_id, defeated_definition_id, defeated_kind)
+	simulation.exit_combat_if_clear()
+
+
+func _create_corpse_container(simulation: RefCounted, target: RefCounted) -> Dictionary:
+	var corpse_id: String = "corpse_%s_%d" % [target.definition_id, target.actor_id]
+	var inventory: Array[Dictionary] = _actor_inventory_entries(target)
+	var corpse := {
+		"container_id": corpse_id,
+		"map_id": target.map_id,
+		"grid_position": target.grid_position.to_dictionary(),
+		"display_name": "%s的遗留物" % target.display_name,
+		"source_actor_definition_id": target.definition_id,
+		"inventory": inventory,
+	}
+	simulation.corpse_containers[corpse_id] = corpse
+	simulation.container_sessions[corpse_id] = {
+		"container_id": corpse_id,
+		"display_name": corpse.get("display_name", corpse_id),
+		"inventory": inventory.duplicate(true),
+	}
+	simulation.map_interaction_targets[corpse_id] = {
+		"target_id": corpse_id,
+		"target_type": "map_object",
+		"display_name": corpse.get("display_name", corpse_id),
+		"kind": "container",
+		"anchor": target.grid_position.to_dictionary(),
+		"cells": [target.grid_position.to_dictionary()],
+		"container_inventory": inventory.duplicate(true),
+	}
+	return corpse
+
+
+func _actor_inventory_entries(actor: RefCounted) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var ids: Array = actor.inventory.keys()
+	ids.sort()
+	for item_id in ids:
+		var count: int = int(actor.inventory.get(item_id, 0))
+		if count > 0:
+			entries.append({"item_id": str(item_id), "count": count})
+	for slot_id in actor.equipment.keys():
+		var equipped_item_id: String = str(actor.equipment.get(slot_id, ""))
+		if equipped_item_id.is_empty():
+			continue
+		_inventory_entries.add(entries, equipped_item_id, 1)
+	return entries
+
+
+func _line_blocked(from: RefCounted, to: RefCounted, topology: Dictionary) -> bool:
+	var blockers: Dictionary = _dictionary_or_empty(topology.get("sight_blocking_cells", topology.get("blocking_cells", {})))
+	if blockers.is_empty():
+		return false
+	var dx: int = int(sign(to.x - from.x))
+	var dz: int = int(sign(to.z - from.z))
+	if dx != 0 and dz != 0:
+		return false
+	var x: int = from.x + dx
+	var z: int = from.z + dz
+	while x != to.x or z != to.z:
+		if blockers.has("%d:%d:%d" % [x, from.y, z]):
+			return true
+		x += dx
+		z += dz
+	return false
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

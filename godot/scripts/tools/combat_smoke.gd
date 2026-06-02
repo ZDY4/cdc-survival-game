@@ -3,6 +3,7 @@ extends SceneTree
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
 func _init() -> void:
@@ -34,18 +35,23 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if not _active_quest_ids(simulation.snapshot()).has("zombie_hunter"):
 		return ["zombie_hunter did not start after tutorial completion"]
 
-	var zombie_a: int = _register_character(simulation, registry, "zombie_walker", {"x": 2, "y": 0, "z": 0})
-	var zombie_b: int = _register_character(simulation, registry, "zombie_walker", {"x": 3, "y": 0, "z": 0})
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	var zombie_a: int = _register_character(simulation, registry, "zombie_walker", {"x": int(player_grid.get("x", 0)) + 1, "y": int(player_grid.get("y", 0)), "z": int(player_grid.get("z", 0))})
+	var zombie_b: int = _register_character(simulation, registry, "zombie_walker", {"x": int(player_grid.get("x", 0)) - 1, "y": int(player_grid.get("y", 0)), "z": int(player_grid.get("z", 0))})
 	_force_combat_values(simulation, zombie_a)
 	_force_combat_values(simulation, zombie_b)
+	var topology: Dictionary = _topology(simulation, registry)
 
-	var first: Dictionary = simulation.perform_attack(1, zombie_a)
+	var first: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": zombie_a, "topology": topology})
 	if not bool(first.get("success", false)) or not bool(first.get("defeated", false)):
 		errors.append("first zombie attack should defeat target")
 	if _quest_progress(simulation.snapshot(), "zombie_hunter") != 1:
 		errors.append("zombie_hunter progress should be 1 after first kill")
+	if _corpse_count(simulation.snapshot()) != 1:
+		errors.append("first zombie kill should create a corpse container")
 
-	var second: Dictionary = simulation.perform_attack(1, zombie_b)
+	var second: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": zombie_b, "topology": topology})
 	if not bool(second.get("success", false)) or not bool(second.get("defeated", false)):
 		errors.append("second zombie attack should defeat target")
 	var snapshot: Dictionary = simulation.snapshot()
@@ -53,6 +59,14 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("zombie_hunter should complete after two kills")
 	if not snapshot.get("completed_quests", []).has("zombie_hunter"):
 		errors.append("zombie_hunter missing from completed quests")
+	if _corpse_count(snapshot) != 2:
+		errors.append("second zombie kill should preserve both corpse containers")
+	if _event_count(snapshot, "attack_resolved") < 2:
+		errors.append("attacks should emit attack_resolved events")
+	if _event_count(snapshot, "corpse_created") < 2:
+		errors.append("kills should emit corpse_created events")
+	if bool(snapshot.get("combat_state", {}).get("active", true)):
+		errors.append("combat should exit after hostiles are gone")
 	return errors
 
 
@@ -113,5 +127,25 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"active_quests": snapshot.get("active_quests", []),
 		"completed_quests": snapshot.get("completed_quests", []),
 		"actors": snapshot.get("actors", []).size(),
+		"corpse_containers": snapshot.get("corpse_containers", []),
+		"combat_state": snapshot.get("combat_state", {}),
 		"event_count": snapshot.get("events", []).size(),
 	}
+
+
+func _topology(simulation: RefCounted, registry: RefCounted) -> Dictionary:
+	var world: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+	return world.get("map", {})
+
+
+func _corpse_count(snapshot: Dictionary) -> int:
+	return snapshot.get("corpse_containers", []).size()
+
+
+func _event_count(snapshot: Dictionary, kind: String) -> int:
+	var count := 0
+	for event in snapshot.get("events", []):
+		var event_data: Dictionary = event
+		if event_data.get("kind", "") == kind:
+			count += 1
+	return count

@@ -16,6 +16,7 @@ const BEVY_LEVEL_PLANE_HEIGHT := GRID_SIZE * 0.5
 var ground_material := _material(Color(0.22, 0.26, 0.23))
 var actor_material := _material(Color(0.78, 0.78, 0.68))
 var player_material := _material(Color(0.28, 0.55, 0.88))
+var corpse_material := _material(Color(0.32, 0.26, 0.22))
 
 
 func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionary = {}) -> Dictionary:
@@ -31,6 +32,7 @@ func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionar
 		"map_visuals": 0,
 		"objects": 0,
 		"actors": 0,
+		"corpses": 0,
 		"colliders": 0,
 		"lights": 0,
 		"cameras": 0,
@@ -42,6 +44,7 @@ func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionar
 		counts["map_visuals"] = _spawn_map_scene_visuals(root, map)
 	counts["objects"] = _spawn_interaction_target_markers(root, map)
 	counts["actors"] = _spawn_actor_markers(root, _array_or_empty(world_snapshot.get("actors", [])))
+	counts["corpses"] = _spawn_corpse_markers(root, _array_or_empty(world_snapshot.get("corpses", [])))
 	counts["colliders"] = _pickable_body_count(root)
 	counts["lights"] = _spawn_lights(root)
 	counts["cameras"] = _spawn_camera(root, map, _camera_focus(world_snapshot), _viewport_size(parent))
@@ -212,6 +215,28 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 		_add_pickable_capsule(node, 0.36, 1.25)
 		root.add_child(node)
 	return actors.size()
+
+
+func _spawn_corpse_markers(root: Node3D, corpses: Array) -> int:
+	for corpse in corpses:
+		var corpse_data: Dictionary = _dictionary_or_empty(corpse)
+		var node := Node3D.new()
+		node.name = "Corpse_%s" % str(corpse_data.get("container_id", ""))
+		node.set_meta("interaction_target", {
+			"target_type": "map_object",
+			"target_id": str(corpse_data.get("container_id", "")),
+		})
+		node.position = _grid_to_world(_dictionary_or_empty(corpse_data.get("grid_position", {})), 0.18)
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(0.72, 0.18, 0.5)
+		var visual := MeshInstance3D.new()
+		visual.name = "CorpseMarker"
+		visual.mesh = mesh
+		visual.material_override = corpse_material
+		node.add_child(visual)
+		_add_pickable_box(node, Vector3(0.9, 0.5, 0.75), Vector3(0.0, 0.15, 0.0))
+		root.add_child(node)
+	return corpses.size()
 
 
 func _add_actor_model(parent: Node3D, actor_data: Dictionary) -> bool:

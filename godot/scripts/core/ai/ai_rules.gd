@@ -18,7 +18,7 @@ func decide_actor_intent(actor: RefCounted, actors: Array, context: Dictionary =
 
 func _hostile_intent(actor: RefCounted, actors: Array) -> Dictionary:
 	var ai: Dictionary = _dictionary_or_empty(actor.ai)
-	var aggro_range: float = max(0.0, float(ai.get("aggro_range", 0.0)))
+	var aggro_range: float = max(0.0, float(ai.get("aggro_range", 8.0)))
 	var attack_range: float = max(0.0, float(ai.get("attack_range", 1.0)))
 	var target: RefCounted = _nearest_target(actor, actors, aggro_range)
 	if target == null:

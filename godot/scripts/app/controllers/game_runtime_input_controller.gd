@@ -92,6 +92,8 @@ func unhandled_input(event: InputEvent) -> void:
 			update_hover_at_screen_position(mouse_event.position)
 			if selected_node != null and game_root.has_method("execute_primary_interaction"):
 				game_root.execute_primary_interaction()
+		elif mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed:
+			update_hover_at_screen_position(mouse_event.position)
 		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
 			_zoom_camera_wheel(1.0)
 		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:

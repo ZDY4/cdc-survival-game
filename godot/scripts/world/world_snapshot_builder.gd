@@ -25,10 +25,13 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	var topology := map_builder.build_from_definition(map_definition)
 	var map_snapshot: Dictionary = topology.to_dictionary()
 	_apply_consumed_interaction_targets(map_snapshot, runtime_snapshot.get("consumed_interaction_targets", []))
+	var corpses: Array[Dictionary] = _corpses_on_map(runtime_snapshot.get("corpse_containers", []), map_id)
+	_apply_corpse_interaction_targets(map_snapshot, corpses)
 	return {
 		"ok": true,
 		"map": map_snapshot,
 		"actors": _actors_on_map(runtime_snapshot.get("actors", []), map_id),
+		"corpses": corpses,
 	}
 
 
@@ -140,6 +143,37 @@ func _apply_consumed_interaction_targets(map_snapshot: Dictionary, consumed_valu
 		if not consumed.has(str(target_id)):
 			active_targets[target_id] = interaction_targets[target_id]
 	map_snapshot["interaction_targets"] = active_targets
+
+
+func _corpses_on_map(corpses: Array, active_map_id: String) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for corpse in corpses:
+		var corpse_data: Dictionary = _dictionary_or_empty(corpse)
+		if str(corpse_data.get("map_id", "")) != active_map_id:
+			continue
+		output.append(corpse_data.duplicate(true))
+	return output
+
+
+func _apply_corpse_interaction_targets(map_snapshot: Dictionary, corpses: Array[Dictionary]) -> void:
+	if corpses.is_empty():
+		return
+	var targets: Dictionary = _dictionary_or_empty(map_snapshot.get("interaction_targets", {})).duplicate(true)
+	for corpse in corpses:
+		var container_id: String = str(corpse.get("container_id", ""))
+		if container_id.is_empty():
+			continue
+		var grid: Dictionary = _dictionary_or_empty(corpse.get("grid_position", {}))
+		targets[container_id] = {
+			"target_id": container_id,
+			"target_type": "map_object",
+			"display_name": str(corpse.get("display_name", container_id)),
+			"kind": "container",
+			"anchor": grid,
+			"cells": [grid],
+			"container_inventory": _array_or_empty(corpse.get("inventory", [])).duplicate(true),
+		}
+	map_snapshot["interaction_targets"] = targets
 
 
 func _filter_active_objects(objects: Array, consumed: Dictionary) -> Array[Dictionary]:

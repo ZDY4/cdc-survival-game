@@ -3,6 +3,7 @@ extends SceneTree
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
 func _init() -> void:
@@ -34,7 +35,8 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if player == null:
 		return ["player actor missing"]
 
-	var zombie_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(4, 0, 0))
+	var player_grid: RefCounted = player.grid_position
+	var zombie_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 4, player_grid.y, player_grid.z))
 	var approach: Dictionary = simulation.decide_actor_intent(zombie_id)
 	if approach.get("intent", "") != "approach":
 		errors.append("zombie should approach player inside aggro range")
@@ -42,12 +44,19 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("zombie approach should select a hostile target")
 
 	var zombie: RefCounted = simulation.actor_registry.get_actor(zombie_id)
-	zombie.grid_position = GridCoord.new(1, 0, 0)
+	zombie.grid_position = GridCoord.new(player_grid.x + 1, player_grid.y, player_grid.z)
 	var attack: Dictionary = simulation.decide_actor_intent(zombie_id)
 	if attack.get("intent", "") != "attack":
 		errors.append("zombie should attack inside attack range")
 
-	zombie.grid_position = GridCoord.new(20, 0, 0)
+	var before_hp: float = player.hp
+	var wait_result: Dictionary = simulation.submit_player_command({"kind": "wait", "topology": _topology(simulation, registry)})
+	if not bool(wait_result.get("success", false)):
+		errors.append("player wait command should advance world turn")
+	if player.hp >= before_hp:
+		errors.append("adjacent hostile should attack during world turn after wait")
+
+	zombie.grid_position = GridCoord.new(player_grid.x + 20, player_grid.y, player_grid.z)
 	var idle: Dictionary = simulation.decide_actor_intent(zombie_id)
 	if idle.get("intent", "") != "idle" or idle.get("reason", "") != "no_target_in_aggro_range":
 		errors.append("zombie should idle outside aggro range")
@@ -145,6 +154,11 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"event_count": snapshot.get("events", []).size(),
 		"ai_intents": snapshot.get("ai_intents", []),
 	}
+
+
+func _topology(simulation: RefCounted, registry: RefCounted) -> Dictionary:
+	var world: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+	return world.get("map", {})
 
 
 func _array_or_empty(value: Variant) -> Array:

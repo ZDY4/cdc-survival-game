@@ -23,6 +23,13 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.completed_quests = _load_completed_quests(snapshot_data.get("completed_quests", []))
 	simulation.ai_intents = _load_ai_intents(snapshot_data.get("ai_intents", []))
 	simulation._vision_rules.load_snapshot(_dictionary_or_empty(snapshot_data.get("vision", {})))
+	simulation.turn_state = _dictionary_or_empty(snapshot_data.get("turn_state", simulation.turn_state)).duplicate(true)
+	simulation.combat_state = _dictionary_or_empty(snapshot_data.get("combat_state", simulation.combat_state)).duplicate(true)
+	simulation.pending_movement = _dictionary_or_empty(snapshot_data.get("pending_movement", {})).duplicate(true)
+	simulation.pending_interaction = _dictionary_or_empty(snapshot_data.get("pending_interaction", {})).duplicate(true)
+	simulation.corpse_containers = _load_corpse_containers(snapshot_data.get("corpse_containers", []))
+	simulation.interaction_menu = _dictionary_or_empty(snapshot_data.get("interaction_menu", {})).duplicate(true)
+	simulation.hotbar = _dictionary_or_empty(snapshot_data.get("hotbar", {})).duplicate(true)
 
 
 func _load_events(entries: Variant) -> Array[SimulationEvent]:
@@ -101,6 +108,24 @@ func _load_ai_intents(entries: Variant) -> Dictionary:
 		var actor_id: int = int(intent_data.get("actor_id", 0))
 		if actor_id > 0:
 			output[actor_id] = intent_data.duplicate(true)
+	return output
+
+
+func _load_corpse_containers(entries: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	for corpse in _array_or_empty(entries):
+		var corpse_data: Dictionary = _dictionary_or_empty(corpse)
+		var container_id: String = str(corpse_data.get("container_id", ""))
+		if container_id.is_empty():
+			continue
+		output[container_id] = {
+			"container_id": container_id,
+			"map_id": str(corpse_data.get("map_id", "")),
+			"grid_position": _dictionary_or_empty(corpse_data.get("grid_position", {})).duplicate(true),
+			"display_name": str(corpse_data.get("display_name", container_id)),
+			"source_actor_definition_id": str(corpse_data.get("source_actor_definition_id", "")),
+			"inventory": _inventory_entries.normalize(corpse_data.get("inventory", [])),
+		}
 	return output
 
 

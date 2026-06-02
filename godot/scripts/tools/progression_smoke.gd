@@ -109,13 +109,15 @@ func _register_zombie(simulation: RefCounted, registry: RefCounted) -> int:
 	var record: Dictionary = registry.get_library("characters").get("zombie_walker", {})
 	var data: Dictionary = record.get("data", {})
 	var identity: Dictionary = data.get("identity", {})
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	var player_grid: RefCounted = player.grid_position
 	return simulation.register_actor({
 		"definition_id": "zombie_walker",
 		"display_name": str(identity.get("display_name", "zombie_walker")),
 		"kind": "enemy",
 		"side": "hostile",
 		"group_id": "infected",
-		"grid_position": GridCoord.new(2, 0, 0),
+		"grid_position": GridCoord.new(player_grid.x + 1, player_grid.y, player_grid.z),
 		"max_hp": 5.0,
 		"hp": 5.0,
 		"attack_power": 4.0,

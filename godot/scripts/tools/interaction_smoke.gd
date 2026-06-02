@@ -2,6 +2,7 @@ extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
+const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
 func _init() -> void:
@@ -15,7 +16,7 @@ func _init() -> void:
 
 	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
 	var simulation: RefCounted = runtime_result.get("simulation")
-	var errors := _run_interaction_checks(simulation)
+	var errors := _run_interaction_checks(simulation, registry)
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -27,36 +28,57 @@ func _init() -> void:
 	quit(0)
 
 
-func _run_interaction_checks(simulation: RefCounted) -> Array[String]:
+func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
-	var pickup_result: Dictionary = simulation.execute_interaction(1, {
-		"target_type": "map_object",
-		"target_id": "survivor_outpost_01_pickup_medkit",
+	var first_snapshot: Dictionary = simulation.snapshot()
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "corpse_containers", "interaction_menu", "hotbar"]:
+		if not first_snapshot.has(key):
+			errors.append("runtime snapshot missing %s" % key)
+	var topology: Dictionary = _topology(simulation, registry)
+	var pickup_result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "map_object",
+			"target_id": "survivor_outpost_01_pickup_medkit",
+		},
+		"topology": topology,
 	})
 	if not bool(pickup_result.get("success", false)):
 		errors.append("pickup failed: %s" % pickup_result.get("reason", "unknown"))
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	if int(player.inventory.get("1006", 0)) <= 0:
 		errors.append("pickup did not add item 1006 to player inventory")
-	var second_pickup: Dictionary = simulation.execute_interaction(1, {
-		"target_type": "map_object",
-		"target_id": "survivor_outpost_01_pickup_medkit",
+	var second_pickup: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "map_object",
+			"target_id": "survivor_outpost_01_pickup_medkit",
+		},
+		"topology": topology,
 	})
 	if bool(second_pickup.get("success", false)):
 		errors.append("pickup target was not consumed")
 
-	var talk_result: Dictionary = simulation.execute_interaction(1, {
-		"target_type": "actor",
-		"actor_id": 2,
+	var talk_result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "actor",
+			"actor_id": 2,
+		},
+		"topology": topology,
 	})
 	if not bool(talk_result.get("success", false)):
 		errors.append("talk failed: %s" % talk_result.get("reason", "unknown"))
 	if talk_result.get("dialogue_id", "") != "trader_lao_wang":
 		errors.append("talk did not resolve trader_lao_wang dialogue")
 
-	var container_result: Dictionary = simulation.execute_interaction(1, {
-		"target_type": "map_object",
-		"target_id": "survivor_outpost_01_clinic_supply_cabinet",
+	var container_result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "map_object",
+			"target_id": "survivor_outpost_01_clinic_supply_cabinet",
+		},
+		"topology": topology,
 	})
 	if not bool(container_result.get("success", false)):
 		errors.append("container open failed: %s" % container_result.get("reason", "unknown"))
@@ -68,15 +90,37 @@ func _run_interaction_checks(simulation: RefCounted) -> Array[String]:
 	if player.active_container_id != "survivor_outpost_01_clinic_supply_cabinet":
 		errors.append("player active container was not updated")
 
-	var transition_result: Dictionary = simulation.execute_interaction(1, {
-		"target_type": "map_object",
-		"target_id": "survivor_outpost_01_interior_door",
+	var wait_result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "self",
+			"actor_id": 1,
+		},
+		"topology": topology,
+	})
+	if not bool(wait_result.get("success", false)):
+		errors.append("self wait interaction failed: %s" % wait_result.get("reason", "unknown"))
+	if _event_count(simulation.snapshot(), "turn_ended") <= 0:
+		errors.append("self wait should end the current turn")
+
+	var transition_result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "map_object",
+			"target_id": "survivor_outpost_01_interior_door",
+		},
+		"topology": topology,
 	})
 	if not bool(transition_result.get("success", false)):
 		errors.append("scene transition failed: %s" % transition_result.get("reason", "unknown"))
 	if simulation.active_map_id != "survivor_outpost_01_interior":
 		errors.append("scene transition did not update active map")
 	return errors
+
+
+func _topology(simulation: RefCounted, registry: RefCounted) -> Dictionary:
+	var world: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+	return world.get("map", {})
 
 
 func _digest(snapshot: Dictionary) -> Dictionary:
@@ -95,3 +139,12 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"player_dialogue": player_dialogue,
 		"container_sessions": snapshot.get("container_sessions", []),
 	}
+
+
+func _event_count(snapshot: Dictionary, kind: String) -> int:
+	var count := 0
+	for event in snapshot.get("events", []):
+		var event_data: Dictionary = event
+		if event_data.get("kind", "") == kind:
+			count += 1
+	return count

@@ -54,7 +54,13 @@ func execute_primary_interaction() -> Dictionary:
 		return _execution_result(false, "player_actor_missing", {})
 
 	var option_id: String = str(selected_prompt.get("primary_option_id", ""))
-	var result: Dictionary = simulation.execute_interaction(player_actor_id, selected_target, option_id)
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"actor_id": player_actor_id,
+		"target": selected_target,
+		"option_id": option_id,
+		"topology": _dictionary_or_empty(world_result.get("map", {})),
+	})
 	if bool(result.get("success", false)):
 		_refresh_world_after_success(result)
 		# 交互成功后重新查询，已消费目标会自然变成不可用提示。
@@ -72,7 +78,9 @@ func _refresh_world_after_success(result: Dictionary) -> void:
 	var context_snapshot: Dictionary = _dictionary_or_empty(result.get("context_snapshot", {}))
 	var map_changed: bool = context_snapshot.has("active_map_id")
 	var target_consumed: bool = bool(result.get("consumed_target", false))
-	if map_changed or target_consumed:
+	var defeated: bool = bool(result.get("defeated", false))
+	var moved: bool = str(result.get("kind", "")) == "move"
+	if map_changed or target_consumed or defeated or moved:
 		_rebuild_world_for_active_map()
 
 

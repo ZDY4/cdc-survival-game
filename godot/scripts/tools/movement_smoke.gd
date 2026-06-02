@@ -31,30 +31,42 @@ func _init() -> void:
 
 func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
-	var move_result: Dictionary = simulation.move_actor_to(1, {"x": 0, "y": 0, "z": 3}, topology)
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	var start: Dictionary = player.grid_position.to_dictionary()
+	var goal: Dictionary = _first_open_neighbor(player.grid_position, topology, _occupied_actor_cells(simulation, 1))
+	var move_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": goal, "topology": topology})
 	if not bool(move_result.get("success", false)):
 		errors.append("reachable move failed: %s" % move_result.get("reason", "unknown"))
-	if int(move_result.get("steps", 0)) != 3:
-		errors.append("reachable move should take 3 steps")
-	var player: RefCounted = simulation.actor_registry.get_actor(1)
-	if player.grid_position.z != 3:
+	if int(move_result.get("steps", 0)) != 1:
+		errors.append("reachable command move should take 1 step")
+	if player.grid_position.key() == "%d:%d:%d" % [int(start.get("x", 0)), int(start.get("y", 0)), int(start.get("z", 0))]:
 		errors.append("player grid position did not update after move")
 	if _event_count(simulation.snapshot(), "actor_moved") != 1:
 		errors.append("move did not emit actor_moved")
+	if _event_count(simulation.snapshot(), "movement_step") != 1:
+		errors.append("command move did not emit movement_step")
 
 	var blocked_goal: Dictionary = _first_blocking_cell(topology)
-	var blocked_result: Dictionary = simulation.move_actor_to(1, blocked_goal, topology)
+	var blocked_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": blocked_goal, "topology": topology})
 	if blocked_result.get("reason", "") != "goal_blocked":
 		errors.append("moving into blocking cell should report goal_blocked")
 
-	var occupied_result: Dictionary = simulation.move_actor_to(1, {"x": 1, "y": 0, "z": 0}, topology)
+	var occupied_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": _actor_grid(simulation, 2), "topology": topology})
 	if occupied_result.get("reason", "") != "goal_blocked":
 		errors.append("moving into occupied actor cell should report goal_blocked")
+
+	player.ap = 0.0
+	var queued_goal: Dictionary = _first_open_neighbor(player.grid_position, topology, _occupied_actor_cells(simulation, 1))
+	var queued_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": queued_goal, "topology": topology})
+	if queued_result.get("reason", "") != "ap_insufficient_movement_queued":
+		errors.append("AP shortage should queue pending movement")
+	if simulation.snapshot().get("pending_movement", {}).is_empty():
+		errors.append("pending movement should be exposed in snapshot")
 
 	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
 	var player_snapshot: Dictionary = _actor_snapshot(world_result, 1)
 	var grid: Dictionary = player_snapshot.get("grid_position", {})
-	if int(grid.get("z", -1)) != 3:
+	if int(grid.get("x", -1)) != player.grid_position.x or int(grid.get("z", -1)) != player.grid_position.z:
 		errors.append("world snapshot did not expose moved player position")
 	return errors
 
@@ -76,6 +88,43 @@ func _actor_snapshot(world_result: Dictionary, actor_id: int) -> Dictionary:
 		if int(actor_data.get("actor_id", 0)) == actor_id:
 			return actor_data
 	return {}
+
+
+func _first_open_neighbor(coord: RefCounted, topology: Dictionary, occupied: Dictionary) -> Dictionary:
+	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var candidate := {
+			"x": coord.x + offset.x,
+			"y": coord.y,
+			"z": coord.z + offset.y,
+		}
+		var key := "%d:%d:%d" % [candidate["x"], candidate["y"], candidate["z"]]
+		if occupied.has(key):
+			continue
+		if topology.get("blocking_cells", {}).has(key):
+			continue
+		var bounds: Dictionary = topology.get("bounds", {})
+		if int(candidate["x"]) < int(bounds.get("min_x", 0)) or int(candidate["x"]) > int(bounds.get("max_x", 0)):
+			continue
+		if int(candidate["z"]) < int(bounds.get("min_z", 0)) or int(candidate["z"]) > int(bounds.get("max_z", 0)):
+			continue
+		return candidate
+	return coord.to_dictionary()
+
+
+func _occupied_actor_cells(simulation: RefCounted, excluded_actor_id: int) -> Dictionary:
+	var output: Dictionary = {}
+	for actor in simulation.actor_registry.actors():
+		if actor.actor_id == excluded_actor_id:
+			continue
+		output[actor.grid_position.key()] = actor.actor_id
+	return output
+
+
+func _actor_grid(simulation: RefCounted, actor_id: int) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {}
+	return actor.grid_position.to_dictionary()
 
 
 func _event_count(snapshot: Dictionary, kind: String) -> int:
