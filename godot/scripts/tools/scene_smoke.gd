@@ -86,8 +86,12 @@ func _validate_player_camera_focus(root: Node3D, errors: Array[String]) -> void:
 	if not camera.current:
 		errors.append("WorldCamera should be the current startup camera")
 	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
-	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(Vector3(24.0, 0.0, 39.0)) > 0.1:
+	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(Vector3(24.0, 0.5, 39.0)) > 0.1:
 		errors.append("WorldCamera should focus the player/default entry at startup")
+	if camera.projection != Camera3D.PROJECTION_PERSPECTIVE:
+		errors.append("WorldCamera should use the legacy Bevy perspective projection")
+	if absf(camera.fov - 30.0) > 0.01:
+		errors.append("WorldCamera should use the legacy Bevy 30 degree fov")
 	if camera.is_position_behind(player.global_position):
 		errors.append("WorldCamera should face the startup player marker")
 	var projected := camera.unproject_position(player.global_position)

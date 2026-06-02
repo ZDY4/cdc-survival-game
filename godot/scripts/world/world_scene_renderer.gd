@@ -3,8 +3,15 @@ extends RefCounted
 const MAP_SCENE_DIR := "res://scenes/maps"
 const ASSET_SCENE_DIR := "res://assets"
 const GRID_SIZE := 1.0
-const RUNTIME_CAMERA_OFFSET := Vector3(8.0, 22.0, 8.0)
-const RUNTIME_CAMERA_ORTHO_SIZE := 18.0
+const BEVY_CAMERA_YAW_DEGREES := 0.0
+const BEVY_CAMERA_PITCH_DEGREES := 36.0
+const BEVY_CAMERA_FOV_DEGREES := 30.0
+const BEVY_CAMERA_DISTANCE_PADDING_WORLD := 8.0
+const BEVY_VIEWPORT_PADDING_PX := 72.0
+const BEVY_HUD_RESERVED_WIDTH_PX := 620.0
+const BEVY_DEFAULT_VIEWPORT_SIZE := Vector2(1440.0, 900.0)
+const BEVY_DEFAULT_ZOOM_FACTOR := 1.0
+const BEVY_LEVEL_PLANE_HEIGHT := GRID_SIZE * 0.5
 
 var ground_material := _material(Color(0.22, 0.26, 0.23))
 var actor_material := _material(Color(0.78, 0.78, 0.68))
@@ -37,7 +44,7 @@ func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionar
 	counts["actors"] = _spawn_actor_markers(root, _array_or_empty(world_snapshot.get("actors", [])))
 	counts["colliders"] = _pickable_body_count(root)
 	counts["lights"] = _spawn_lights(root)
-	counts["cameras"] = _spawn_camera(root, map, _camera_focus(world_snapshot))
+	counts["cameras"] = _spawn_camera(root, map, _camera_focus(world_snapshot), _viewport_size(parent))
 
 	return counts
 
@@ -312,19 +319,26 @@ func _spawn_lights(root: Node3D) -> int:
 	return 1
 
 
-func _spawn_camera(root: Node3D, map: Dictionary, focus_position: Vector3) -> int:
+func _spawn_camera(root: Node3D, map: Dictionary, focus_position: Vector3, viewport_size: Vector2) -> int:
 	var size: Dictionary = _dictionary_or_empty(map.get("size", {}))
 	var width: float = float(size.get("width", 48))
 	var height: float = float(size.get("height", 42))
 	var center: Vector3 = focus_position
 	center.x = clampf(center.x, 0.0, max(0.0, width - 1.0))
 	center.z = clampf(center.z, 0.0, max(0.0, height - 1.0))
+	center.y = BEVY_LEVEL_PLANE_HEIGHT
+	var distance := _bevy_camera_world_distance(width, height, viewport_size, BEVY_DEFAULT_ZOOM_FACTOR)
 	var camera: Camera3D = Camera3D.new()
 	camera.name = "WorldCamera"
-	camera.transform = Transform3D(Basis(), center + RUNTIME_CAMERA_OFFSET).looking_at(center, Vector3.UP)
-	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = RUNTIME_CAMERA_ORTHO_SIZE
+	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	camera.fov = BEVY_CAMERA_FOV_DEGREES
+	camera.near = 0.1
+	camera.far = max(distance * 8.0, 1000.0)
+	camera.transform = Transform3D(Basis(), center + _bevy_camera_offset(distance)).looking_at(center, Vector3.BACK)
 	camera.set_meta("focus_position", center)
+	camera.set_meta("zoom_factor", BEVY_DEFAULT_ZOOM_FACTOR)
+	camera.set_meta("bevy_camera_logic", true)
+	camera.set_meta("map_size", Vector2(width, height))
 	# 运行时场景由脚本动态生成，相机必须显式设为当前视角，避免启动后只有空视口。
 	camera.current = true
 	root.add_child(camera)
@@ -335,13 +349,13 @@ func _camera_focus(world_snapshot: Dictionary) -> Vector3:
 	for actor in _array_or_empty(world_snapshot.get("actors", [])):
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
 		if actor_data.get("kind", "") == "player":
-			return _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), 0.0)
+			return _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), BEVY_LEVEL_PLANE_HEIGHT)
 	var map: Dictionary = _dictionary_or_empty(world_snapshot.get("map", {}))
 	var entries: Dictionary = _dictionary_or_empty(map.get("entry_points", {}))
 	if entries.has("default_entry"):
-		return _grid_to_world(_dictionary_or_empty(entries.get("default_entry", {})), 0.0)
+		return _grid_to_world(_dictionary_or_empty(entries.get("default_entry", {})), BEVY_LEVEL_PLANE_HEIGHT)
 	var size: Dictionary = _dictionary_or_empty(map.get("size", {}))
-	return Vector3(float(size.get("width", 48)) * 0.5, 0.0, float(size.get("height", 42)) * 0.5)
+	return Vector3(float(size.get("width", 48)) * 0.5, BEVY_LEVEL_PLANE_HEIGHT, float(size.get("height", 42)) * 0.5)
 
 
 func _grid_to_world(grid: Dictionary, y_offset: float) -> Vector3:
@@ -390,6 +404,39 @@ func _clear_children(parent: Node) -> void:
 	for child in parent.get_children():
 		parent.remove_child(child)
 		child.free()
+
+
+func _bevy_camera_offset(distance: float) -> Vector3:
+	var pitch: float = deg_to_rad(BEVY_CAMERA_PITCH_DEGREES)
+	var yaw: float = deg_to_rad(BEVY_CAMERA_YAW_DEGREES)
+	var horizontal: float = distance * cos(pitch)
+	return Vector3(horizontal * sin(yaw), distance * sin(pitch), -horizontal * cos(yaw))
+
+
+func _bevy_camera_world_distance(width: float, height: float, viewport_size: Vector2, zoom_factor: float) -> float:
+	var world_width: float = max(1.0, width) * GRID_SIZE + BEVY_CAMERA_DISTANCE_PADDING_WORLD
+	var world_depth: float = max(1.0, height) * GRID_SIZE + BEVY_CAMERA_DISTANCE_PADDING_WORLD
+	var usable_width: float = max(160.0, viewport_size.x - BEVY_HUD_RESERVED_WIDTH_PX - BEVY_VIEWPORT_PADDING_PX * 2.0)
+	var usable_height: float = max(160.0, viewport_size.y - BEVY_VIEWPORT_PADDING_PX * 2.0)
+	var vertical_fov: float = deg_to_rad(BEVY_CAMERA_FOV_DEGREES)
+	var aspect: float = max(0.1, usable_width / max(1.0, usable_height))
+	var horizontal_fov: float = 2.0 * atan(tan(vertical_fov * 0.5) * aspect)
+	var zoom: float = max(0.1, zoom_factor)
+	var half_visible_width: float = (world_width / zoom) * 0.5
+	var half_visible_depth: float = (world_depth / zoom) * 0.5
+	var width_distance: float = half_visible_width / max(0.01, tan(horizontal_fov * 0.5))
+	var depth_distance: float = half_visible_depth * max(0.1, sin(deg_to_rad(BEVY_CAMERA_PITCH_DEGREES))) / max(0.01, tan(vertical_fov * 0.5))
+	return max(max(width_distance, depth_distance), 10.0 * GRID_SIZE)
+
+
+func _viewport_size(node: Node) -> Vector2:
+	var viewport := node.get_viewport()
+	if viewport == null:
+		return BEVY_DEFAULT_VIEWPORT_SIZE
+	var size := viewport.get_visible_rect().size
+	if size.x <= 0.0 or size.y <= 0.0:
+		return BEVY_DEFAULT_VIEWPORT_SIZE
+	return size
 
 
 static func _material(color: Color) -> StandardMaterial3D:

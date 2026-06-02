@@ -76,7 +76,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("missing runtime camera")
 	else:
 		_expect_startup_camera_frames_player(errors, camera, player_node)
-		_expect_camera_keyboard_movement(errors, game_root, camera)
+		_expect_camera_keyboard_zoom_and_follow(errors, game_root, camera)
 		_expect_camera_middle_drag(errors, game_root, camera)
 		_expect_camera_wheel_zoom(errors, game_root, camera)
 		var projected_pickup := camera.unproject_position((pickup_node as Node3D).global_position)
@@ -153,7 +153,7 @@ func _hud_interaction_line(game_root: Node) -> String:
 
 
 func _expect_startup_camera_frames_player(errors: Array[String], camera: Camera3D, player_node: Node3D) -> void:
-	_expect_camera_frames_player_at(errors, camera, player_node, Vector3(24.0, 0.0, 39.0), "startup")
+	_expect_camera_frames_player_at(errors, camera, player_node, Vector3(24.0, 0.5, 39.0), "startup")
 
 
 func _expect_transition_world_redraw(errors: Array[String], game_root: Node) -> void:
@@ -176,21 +176,11 @@ func _expect_transition_world_redraw(errors: Array[String], game_root: Node) -> 
 	if camera == null:
 		errors.append("transition redraw should keep runtime camera")
 		return
-	_expect_camera_frames_player_at(errors, camera, player_node, Vector3(2.0, 0.0, 2.0), "transition")
+	_expect_camera_frames_player_at(errors, camera, player_node, Vector3(2.0, 0.5, 2.0), "transition")
 	var before_position := camera.global_position
-	var press := InputEventKey.new()
-	press.keycode = KEY_D
-	press.physical_keycode = KEY_D
-	press.pressed = true
-	game_root._input(press)
-	game_root.runtime_input_controller.process(0.25)
-	var release := InputEventKey.new()
-	release.keycode = KEY_D
-	release.physical_keycode = KEY_D
-	release.pressed = false
-	game_root._unhandled_input(release)
+	_press_camera_zoom_key(game_root, KEY_EQUAL)
 	if camera.global_position.distance_to(before_position) < 0.1:
-		errors.append("transition runtime camera should still respond to keyboard input")
+		errors.append("transition runtime camera should still respond to keyboard zoom input")
 
 
 func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node) -> void:
@@ -226,6 +216,7 @@ func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node
 		errors.append("return redraw should keep generated player actor node")
 		return
 	var return_grid: Vector3 = _entry_grid("survivor_outpost_01", "interior_return")
+	return_grid.y = 0.5
 	var expected_position := Vector3(return_grid.x, 0.58, return_grid.z)
 	if player_node.global_position.distance_to(expected_position) > 0.1:
 		errors.append("return transition should place player at survivor_outpost_01 interior_return")
@@ -238,7 +229,7 @@ func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node
 		errors.append("return redraw should keep runtime camera")
 		return
 	_expect_camera_frames_player_at(errors, camera, player_node, return_grid, "return")
-	_expect_camera_keyboard_movement(errors, game_root, camera)
+	_expect_camera_keyboard_zoom_and_follow(errors, game_root, camera)
 
 
 func _expect_camera_frames_player_at(errors: Array[String], camera: Camera3D, player_node: Node3D, expected_focus: Vector3, label: String) -> void:
@@ -247,6 +238,12 @@ func _expect_camera_frames_player_at(errors: Array[String], camera: Camera3D, pl
 	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
 	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(expected_focus) > 0.1:
 		errors.append("%s WorldCamera should focus the active player entry" % label)
+	if camera.projection != Camera3D.PROJECTION_PERSPECTIVE:
+		errors.append("%s WorldCamera should use the legacy Bevy perspective projection" % label)
+	if absf(camera.fov - 30.0) > 0.01:
+		errors.append("%s WorldCamera should use the legacy Bevy 30 degree fov" % label)
+	if not bool(camera.get_meta("bevy_camera_logic", false)):
+		errors.append("%s WorldCamera should expose Bevy camera logic metadata" % label)
 	if camera.is_position_behind(player_node.global_position):
 		errors.append("%s WorldCamera should face the active player" % label)
 	var projected_player := camera.unproject_position(player_node.global_position)
@@ -276,7 +273,7 @@ func _actor_by_id(snapshot: Dictionary, actor_id: int) -> Dictionary:
 	return {}
 
 
-func _expect_camera_keyboard_movement(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+func _expect_camera_keyboard_zoom_and_follow(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
 	var before_position := camera.global_position
 	var press := InputEventKey.new()
 	press.keycode = KEY_W
@@ -289,12 +286,17 @@ func _expect_camera_keyboard_movement(errors: Array[String], game_root: Node, ca
 	release.physical_keycode = KEY_W
 	release.pressed = false
 	game_root._unhandled_input(release)
-	if camera.global_position.distance_to(before_position) < 0.1:
-		errors.append("runtime camera should move from keyboard input")
-	var after_release := camera.global_position
-	game_root.runtime_input_controller.process(0.25)
-	if camera.global_position.distance_to(after_release) > 0.1:
-		errors.append("runtime camera should stop after key release")
+	if camera.global_position.distance_to(before_position) > 0.1:
+		errors.append("legacy runtime camera should not pan from WASD")
+	var before_zoom := camera.global_position.distance_to(camera.get_meta("focus_position", Vector3.ZERO))
+	_press_camera_zoom_key(game_root, KEY_EQUAL)
+	var after_zoom := camera.global_position.distance_to(camera.get_meta("focus_position", Vector3.ZERO))
+	if after_zoom >= before_zoom:
+		errors.append("legacy plus key should zoom camera toward focus")
+	_press_camera_zoom_key(game_root, KEY_F)
+	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
+	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(game_root.runtime_input_controller._player_focus_position()) > 0.1:
+		errors.append("legacy F key should resume player camera follow")
 
 
 func _expect_camera_middle_drag(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
@@ -323,44 +325,37 @@ func _expect_camera_middle_drag(errors: Array[String], game_root: Node, camera: 
 
 
 func _expect_camera_wheel_zoom(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
-	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
-		var before_size := camera.size
-		var wheel_up := InputEventMouseButton.new()
-		wheel_up.button_index = MOUSE_BUTTON_WHEEL_UP
-		wheel_up.pressed = true
-		game_root._unhandled_input(wheel_up)
-		var after_zoom_in := camera.size
-		if after_zoom_in >= before_size:
-			errors.append("mouse wheel up should reduce orthographic camera size")
-		var wheel_down := InputEventMouseButton.new()
-		wheel_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
-		wheel_down.pressed = true
-		game_root._unhandled_input(wheel_down)
-		var after_zoom_out := camera.size
-		if after_zoom_out <= after_zoom_in:
-			errors.append("mouse wheel down should increase orthographic camera size")
-		return
-
 	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
 	if typeof(focus) != TYPE_VECTOR3:
 		errors.append("runtime camera should expose focus_position for zoom")
 		return
 	var target := focus as Vector3
 	var before_distance := camera.global_position.distance_to(target)
+	var before_zoom := float(camera.get_meta("zoom_factor", 1.0))
 	var wheel_up := InputEventMouseButton.new()
 	wheel_up.button_index = MOUSE_BUTTON_WHEEL_UP
 	wheel_up.pressed = true
 	game_root._unhandled_input(wheel_up)
 	var after_zoom_in := camera.global_position.distance_to(target)
 	if after_zoom_in >= before_distance:
-		errors.append("mouse wheel up should zoom camera toward focus")
+		errors.append("legacy mouse wheel up should zoom camera toward focus")
+	if absf(float(camera.get_meta("zoom_factor", 0.0)) - before_zoom * 1.12) > 0.01:
+		errors.append("legacy mouse wheel should update zoom_factor by 12 percent")
 	var wheel_down := InputEventMouseButton.new()
 	wheel_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
 	wheel_down.pressed = true
 	game_root._unhandled_input(wheel_down)
 	var after_zoom_out := camera.global_position.distance_to(target)
 	if after_zoom_out <= after_zoom_in:
-		errors.append("mouse wheel down should zoom camera away from focus")
+		errors.append("legacy mouse wheel down should zoom camera away from focus")
+
+
+func _press_camera_zoom_key(game_root: Node, key: Key) -> void:
+	var press := InputEventKey.new()
+	press.keycode = key
+	press.physical_keycode = key
+	press.pressed = true
+	game_root._input(press)
 
 
 func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target_node: Node) -> void:
