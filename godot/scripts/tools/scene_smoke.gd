@@ -106,6 +106,8 @@ func _validate_actor_model_assets(root: Node3D, errors: Array[String]) -> void:
 		errors.append("player actor model should come from default_humanoid appearance asset")
 	if player.find_child("ActorFallbackMesh", true, false) != null:
 		errors.append("player actor should not use fallback capsule mesh when appearance model exists")
+	if player.find_child("PlayerRuntimeMarker", true, false) == null:
+		errors.append("player actor should include a visible runtime marker")
 	_validate_player_equipment_models(player, errors)
 
 

@@ -144,6 +144,10 @@ func _drag_camera(relative: Vector2) -> void:
 
 
 func _zoom_camera(direction: float) -> void:
+	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		camera.size = clampf(camera.size - direction * 1.5, 8.0, 36.0)
+		_sync_camera_focus_meta()
+		return
 	var forward := (camera_target - camera.global_position).normalized()
 	var next_position := camera.global_position + forward * direction * 2.0
 	if next_position.distance_to(camera_target) < 6.0 or next_position.distance_to(camera_target) > 60.0:
@@ -161,7 +165,7 @@ func _sync_camera_focus_meta() -> void:
 func _update_hover_cursor(world_position: Vector3) -> void:
 	var grid_x := roundf(world_position.x / GRID_SIZE) * GRID_SIZE
 	var grid_z := roundf(world_position.z / GRID_SIZE) * GRID_SIZE
-	hover_cursor.global_position = Vector3(grid_x, 0.045, grid_z)
+	hover_cursor.global_position = Vector3(grid_x, 0.09, grid_z)
 	hover_cursor.visible = true
 
 
@@ -211,11 +215,12 @@ func _player_focus_position() -> Vector3:
 
 func _build_hover_cursor() -> MeshInstance3D:
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.92, 0.035, 0.92)
+	mesh.size = Vector3(0.92, 0.045, 0.92)
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(1.0, 0.82, 0.18, 0.45)
+	material.albedo_color = Color(1.0, 0.82, 0.18, 0.72)
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
 	var node := MeshInstance3D.new()
 	node.name = "HoverGridCursor"
 	node.mesh = mesh

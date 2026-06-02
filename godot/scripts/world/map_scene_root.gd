@@ -4,11 +4,17 @@ extends Node3D
 
 const MapEntryPointNodeScript = preload("res://scripts/world/map_entry_point_node.gd")
 const MapObjectNodeScript = preload("res://scripts/world/map_object_node.gd")
+const GAME_ROOT_SCENE_PATH := "res://scenes/game/game_root.tscn"
 
 @export var map_id: String = ""
 @export var map_name: String = ""
 @export var map_size: Vector2i = Vector2i.ONE
 @export var default_level: int = 0
+
+
+func _ready() -> void:
+	if _should_redirect_direct_runtime_launch():
+		call_deferred("_redirect_direct_runtime_launch")
 
 
 func to_definition() -> Dictionary:
@@ -46,3 +52,13 @@ func _collect_map_nodes(node: Node, entry_points: Array[Dictionary], objects: Ar
 			if not str(object.get("object_id", "")).is_empty():
 				objects.append(object)
 		_collect_map_nodes(child, entry_points, objects)
+
+
+func _should_redirect_direct_runtime_launch() -> bool:
+	return not Engine.is_editor_hint() and get_tree() != null and get_tree().current_scene == self
+
+
+func _redirect_direct_runtime_launch() -> void:
+	var error := get_tree().change_scene_to_file(GAME_ROOT_SCENE_PATH)
+	if error != OK:
+		push_error("地图场景不能单独作为游戏运行入口，切换 GameRoot 失败: %s" % GAME_ROOT_SCENE_PATH)

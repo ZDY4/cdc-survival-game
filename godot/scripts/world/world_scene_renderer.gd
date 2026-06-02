@@ -3,6 +3,8 @@ extends RefCounted
 const MAP_SCENE_DIR := "res://scenes/maps"
 const ASSET_SCENE_DIR := "res://assets"
 const GRID_SIZE := 1.0
+const RUNTIME_CAMERA_OFFSET := Vector3(8.0, 22.0, 8.0)
+const RUNTIME_CAMERA_ORTHO_SIZE := 18.0
 
 var ground_material := _material(Color(0.22, 0.26, 0.23))
 var actor_material := _material(Color(0.78, 0.78, 0.68))
@@ -121,9 +123,38 @@ func _prepare_visual_interaction_targets(root: Node, map: Dictionary) -> void:
 			"target_type": "map_object",
 			"target_id": object_id,
 		})
+		_add_visual_pickable_body(node, active_targets.get(object_id, {}))
 
 	for node in stale_targets:
 		node.free()
+
+
+func _add_visual_pickable_body(node: Node, target_data: Variant) -> void:
+	if node.find_child("PickableBody", false, false) != null:
+		return
+	var node_3d := node as Node3D
+	if node_3d == null:
+		return
+	var target: Dictionary = _dictionary_or_empty(target_data)
+	var cells: Array = _array_or_empty(target.get("cells", []))
+	var size := Vector3(GRID_SIZE, 0.7, GRID_SIZE)
+	var center := Vector3.ZERO
+	if not cells.is_empty():
+		var min_x := INF
+		var max_x := -INF
+		var min_z := INF
+		var max_z := -INF
+		for cell in cells:
+			var cell_data: Dictionary = _dictionary_or_empty(cell)
+			var x := float(cell_data.get("x", 0.0))
+			var z := float(cell_data.get("z", 0.0))
+			min_x = minf(min_x, x)
+			max_x = maxf(max_x, x)
+			min_z = minf(min_z, z)
+			max_z = maxf(max_z, z)
+		size = Vector3((max_x - min_x + 1.0) * GRID_SIZE, 0.7, (max_z - min_z + 1.0) * GRID_SIZE)
+		center = Vector3(((min_x + max_x) * 0.5 * GRID_SIZE) - node_3d.position.x, 0.35, ((min_z + max_z) * 0.5 * GRID_SIZE) - node_3d.position.z)
+	_add_pickable_box(node_3d, size, center)
 
 
 func _spawn_interaction_target_markers(root: Node3D, map: Dictionary) -> int:
@@ -169,6 +200,8 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 		if not _add_actor_model(node, actor_data):
 			_add_actor_fallback_mesh(node, actor_data)
 		_add_equipment_models(node, _array_or_empty(actor_data.get("equipment_visuals", [])))
+		if actor_data.get("kind", "") == "player":
+			_add_player_runtime_marker(node)
 		_add_pickable_capsule(node, 0.36, 1.25)
 		root.add_child(node)
 	return actors.size()
@@ -205,6 +238,24 @@ func _add_actor_fallback_mesh(parent: Node3D, actor_data: Dictionary) -> void:
 	node.mesh = mesh
 	node.material_override = player_material if actor_data.get("kind", "") == "player" else actor_material
 	parent.add_child(node)
+
+
+func _add_player_runtime_marker(parent: Node3D) -> void:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.54
+	mesh.bottom_radius = 0.54
+	mesh.height = 0.035
+	mesh.radial_segments = 48
+	var material := _material(Color(0.1, 0.55, 1.0, 0.65))
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var marker := MeshInstance3D.new()
+	marker.name = "PlayerRuntimeMarker"
+	marker.mesh = mesh
+	marker.material_override = material
+	marker.position = Vector3(0.0, -0.52, 0.0)
+	parent.add_child(marker)
 
 
 func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
@@ -270,8 +321,9 @@ func _spawn_camera(root: Node3D, map: Dictionary, focus_position: Vector3) -> in
 	center.z = clampf(center.z, 0.0, max(0.0, height - 1.0))
 	var camera: Camera3D = Camera3D.new()
 	camera.name = "WorldCamera"
-	camera.transform = Transform3D(Basis(), center + Vector3(10.0, 16.0, 14.0)).looking_at(center, Vector3.UP)
-	camera.fov = 52.0
+	camera.transform = Transform3D(Basis(), center + RUNTIME_CAMERA_OFFSET).looking_at(center, Vector3.UP)
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.size = RUNTIME_CAMERA_ORTHO_SIZE
 	camera.set_meta("focus_position", center)
 	# 运行时场景由脚本动态生成，相机必须显式设为当前视角，避免启动后只有空视口。
 	camera.current = true

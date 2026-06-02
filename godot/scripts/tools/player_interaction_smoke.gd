@@ -50,6 +50,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if player_node.global_position.distance_to(Vector3(24.0, 0.58, 39.0)) > 0.1:
 		errors.append("player actor should start at survivor_outpost_01 default_entry")
 	_expect_actor_model_instance(errors, player_node)
+	_expect_player_runtime_marker(errors, player_node)
 
 	var pickup_node: Node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
 	if pickup_node == null:
@@ -57,6 +58,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var pickable_body: Node = pickup_node.find_child("PickableBody", true, false)
 	if pickable_body == null or not pickable_body.has_meta("interaction_target"):
 		errors.append("pickup node should expose a pickable interaction body")
+	var visual_pickup_node: Node = game_root.find_child("survivor_outpost_01_pickup_medkit", true, false)
+	if visual_pickup_node == null:
+		errors.append("missing visible pickup map scene node")
+	else:
+		var visual_pickable_body: Node = visual_pickup_node.find_child("PickableBody", false, false)
+		if visual_pickable_body == null or not visual_pickable_body.has_meta("interaction_target"):
+			errors.append("visible pickup map scene node should expose a pickable interaction body")
+		var visual_pickup_selection: Dictionary = game_root.select_interaction_node(visual_pickup_node)
+		if not bool(visual_pickup_selection.get("success", false)):
+			errors.append("visible pickup selection failed: %s" % visual_pickup_selection.get("prompt", {}).get("reason", "unknown"))
+		elif not _hud_interaction_line(game_root).contains("拾取"):
+			errors.append("HUD did not show pickup prompt after visible pickup selection")
 
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if camera == null:
@@ -310,6 +323,24 @@ func _expect_camera_middle_drag(errors: Array[String], game_root: Node, camera: 
 
 
 func _expect_camera_wheel_zoom(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		var before_size := camera.size
+		var wheel_up := InputEventMouseButton.new()
+		wheel_up.button_index = MOUSE_BUTTON_WHEEL_UP
+		wheel_up.pressed = true
+		game_root._unhandled_input(wheel_up)
+		var after_zoom_in := camera.size
+		if after_zoom_in >= before_size:
+			errors.append("mouse wheel up should reduce orthographic camera size")
+		var wheel_down := InputEventMouseButton.new()
+		wheel_down.button_index = MOUSE_BUTTON_WHEEL_DOWN
+		wheel_down.pressed = true
+		game_root._unhandled_input(wheel_down)
+		var after_zoom_out := camera.size
+		if after_zoom_out <= after_zoom_in:
+			errors.append("mouse wheel down should increase orthographic camera size")
+		return
+
 	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
 	if typeof(focus) != TYPE_VECTOR3:
 		errors.append("runtime camera should expose focus_position for zoom")
@@ -343,6 +374,19 @@ func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target
 	var target_3d := target_node as Node3D
 	if target_3d == null:
 		return
-	var expected := Vector3(roundf(target_3d.global_position.x), 0.045, roundf(target_3d.global_position.z))
+	var expected := Vector3(roundf(target_3d.global_position.x), 0.09, roundf(target_3d.global_position.z))
 	if cursor.global_position.distance_to(expected) > 1.5:
 		errors.append("hover grid cursor should track the hovered map object cell")
+	var material := cursor.material_override as StandardMaterial3D
+	if material == null or not material.no_depth_test:
+		errors.append("hover grid cursor should render above map meshes")
+
+
+func _expect_player_runtime_marker(errors: Array[String], player_node: Node3D) -> void:
+	var marker: MeshInstance3D = player_node.find_child("PlayerRuntimeMarker", true, false) as MeshInstance3D
+	if marker == null:
+		errors.append("player actor should expose a visible runtime marker")
+		return
+	var material := marker.material_override as StandardMaterial3D
+	if material == null or not material.no_depth_test:
+		errors.append("player runtime marker should render above crowded map meshes")
