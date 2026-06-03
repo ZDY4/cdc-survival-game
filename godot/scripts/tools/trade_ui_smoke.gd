@@ -130,6 +130,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should drag shop bandage to trade cart")
 	if not _cart_line(game_root).contains("购买 绷带 x1"):
 		errors.append("dragged shop item should queue cart buy")
+	if not _drop_trade_item_with_text_on_cart_entry(game_root, "shop", "绷带", 0):
+		errors.append("should drag shop bandage onto existing cart entry")
+	if not _cart_line(game_root).contains("购买 绷带 x2"):
+		errors.append("dragging same shop item onto queued item should increase count")
+	if not _cart_line(game_root).contains("应付 48") or not _cart_line(game_root).contains("确认后玩家资金 52"):
+		errors.append("dragging onto queued item should update money preview")
+	_press_cart_entry_button(game_root, 0, "DecreaseButton")
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
 	if not _drop_trade_item_with_text(game_root, "player", "绷带"):
 		errors.append("should drag player bandage to trade cart")
@@ -399,6 +406,17 @@ func _press_trade_item_with_text(game_root: Node, source: String, text: String) 
 
 
 func _drop_trade_item_with_text(game_root: Node, source: String, text: String, count: int = 1) -> bool:
+	return _drop_trade_item_with_text_on_target(game_root, source, text, null, count)
+
+
+func _drop_trade_item_with_text_on_cart_entry(game_root: Node, source: String, text: String, target_index: int, count: int = 1) -> bool:
+	var target: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartScroll/CartItemLines/CartEntry_%d" % target_index)
+	if not target is Control:
+		return false
+	return _drop_trade_item_with_text_on_target(game_root, source, text, target, count)
+
+
+func _drop_trade_item_with_text_on_target(game_root: Node, source: String, text: String, target: Control, count: int = 1) -> bool:
 	var button: Button = _trade_item_button_with_text(game_root, source, text)
 	if button == null:
 		return false
@@ -411,7 +429,7 @@ func _drop_trade_item_with_text(game_root: Node, source: String, text: String, c
 		"source": trade_source,
 		"item": item.duplicate(true),
 		"count": count,
-	}, null)
+	}, target)
 	return true
 
 

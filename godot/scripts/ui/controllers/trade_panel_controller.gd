@@ -424,6 +424,8 @@ func _drop_cart_data(position: Vector2, data: Variant, from_control: Control) ->
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 			var source: String = str(drag_data.get("source", ""))
 			var count: int = int(drag_data.get("count", 1))
+			if _merge_trade_item_into_cart_entry(item, source, count, _cart_drop_index(from_control)):
+				return
 			_queue_trade_entry(item, source, count)
 		"trade_cart_entry":
 			_reorder_cart_entry(int(drag_data.get("index", -1)), _cart_drop_index(from_control))
@@ -584,6 +586,27 @@ func _reorder_cart_entry(from_index: int, to_index: int) -> void:
 		clamped_to_index -= 1
 	_cart_entries.insert(clamped_to_index, entry)
 	_update_cart_line()
+
+
+func _merge_trade_item_into_cart_entry(item: Dictionary, source: String, count: int, target_index: int) -> bool:
+	if target_index < 0 or target_index >= _cart_entries.size():
+		return false
+	var item_id: String = str(item.get("item_id", ""))
+	var entry: Dictionary = _cart_entries[target_index]
+	if str(entry.get("source", "")) != source:
+		return false
+	if str(entry.get("item_id", "")) != item_id:
+		return false
+	if int(entry.get("unit_price", 0)) != int(item.get("price", entry.get("unit_price", 0))):
+		return false
+	var max_count: int = maxi(1, int(entry.get("max_count", entry.get("count", 1))))
+	var merged_count: int = clampi(int(entry.get("count", 1)) + maxi(1, count), 1, max_count)
+	if merged_count == int(entry.get("count", 1)):
+		return true
+	entry["count"] = merged_count
+	_cart_entries[target_index] = entry
+	_update_cart_line()
+	return true
 
 
 func _adjust_cart_entry(index: int, delta: int) -> void:
