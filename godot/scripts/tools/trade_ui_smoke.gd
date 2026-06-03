@@ -136,6 +136,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
 		errors.append("dragged player item should queue cart sell")
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
+	if not _drop_trade_item_with_text(game_root, "shop", "急救包"):
+		errors.append("should drag shop medkit to trade cart for reorder")
+	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
+		errors.append("should drag shop bandage to trade cart for reorder")
+	if not _text_ordered(_cart_line(game_root), "购买 急救包 x1", "购买 绷带 x1"):
+		errors.append("cart reorder setup should place medkit before bandage")
+	_reorder_cart_entry(game_root, 1, 0)
+	if not _text_ordered(_cart_line(game_root), "购买 绷带 x1", "购买 急救包 x1"):
+		errors.append("cart entry drag should reorder queued items")
+	if not _cart_line(game_root).contains("应付 144") or not _cart_line(game_root).contains("确认后玩家资金 -44"):
+		errors.append("cart entry reorder should keep money preview")
+	_press_clear_cart_button(game_root)
 	_press_queue_button(game_root)
 	if _player_money(game_root) != money_before_cart:
 		errors.append("queueing trade cart should not spend player money")
@@ -394,7 +406,7 @@ func _drop_trade_item_with_text(game_root: Node, source: String, text: String, c
 	var trade_source: String = str(button.get_meta("trade_source", ""))
 	if item.is_empty() or trade_source.is_empty():
 		return false
-	game_root.trade_panel.call("_drop_trade_item_data", Vector2.ZERO, {
+	game_root.trade_panel.call("_drop_cart_data", Vector2.ZERO, {
 		"kind": "trade_item",
 		"source": trade_source,
 		"item": item.duplicate(true),
@@ -469,6 +481,15 @@ func _press_cart_entry_button(game_root: Node, index: int, button_name: String) 
 		(button as Button).pressed.emit()
 
 
+func _reorder_cart_entry(game_root: Node, from_index: int, target_index: int) -> void:
+	var target: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartScroll/CartItemLines/CartEntry_%d" % target_index)
+	if target is Control:
+		game_root.trade_panel.call("_drop_cart_data", Vector2.ZERO, {
+			"kind": "trade_cart_entry",
+			"index": from_index,
+		}, target)
+
+
 func _cart_line(game_root: Node) -> String:
 	var label: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartLine")
 	if label is Label:
@@ -513,6 +534,12 @@ func _item_control_text(node: Node) -> String:
 	if node is Button:
 		return str((node as Button).text)
 	return ""
+
+
+func _text_ordered(text: String, first: String, second: String) -> bool:
+	var first_index: int = text.find(first)
+	var second_index: int = text.find(second)
+	return first_index >= 0 and second_index >= 0 and first_index < second_index
 
 
 func _player_inventory_count(game_root: Node, item_id: String) -> int:

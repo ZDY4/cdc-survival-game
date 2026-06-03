@@ -210,7 +210,7 @@
 - 已有买卖命令、店铺/玩家双栏、数量直买直卖、价格预览和交易购物车第一版；店铺栏价格、购物车预览和核心成交规则已统一按物品 `value * price_modifier` 计算；`queue buy`、`queue sell`、`adjust`、`remove`、`clear`、`confirm` 已纳入 `TradeUI` smoke。
 - 购物车净额预览、确认前库存/资金预校验、确认后玩家/店铺资金变化明细和无部分成交已纳入 `TradeUI` smoke。
 - 交易资金/库存失败提示已覆盖并纳入 `TradeUI` smoke：玩家资金不足、店铺资金不足、店铺库存不足、玩家库存不足；装备栏物品可作为 `equipment:<slot_id>` 来源出售，出售前会弹出确认，取消不成交，确认后自动卸下、入店铺库存并刷新 UI；显式 `sellable=false` / `tradeable=false` 和任务类 fragment 的不可出售规则已覆盖直卖、装备出售、购物车校验、UI 禁用态和反馈，已纳入 `TradeUI` smoke。
-- 交易拖拽第一版已纳入 `TradeUI` smoke：shop item -> cart 生成购买项，inventory/equipment -> cart 生成出售项，不可出售物品拖拽不会入队；待补 queued item 拖拽调整、重排和跨栏 sell/buy zone 视觉 polish。
+- 交易拖拽第一版已纳入 `TradeUI` smoke：shop item -> cart 生成购买项，inventory/equipment -> cart 生成出售项，不可出售物品拖拽不会入队，queued item 可拖拽重排且金额预览保持一致；待补 queued item 拖拽调整数量和跨栏 sell/buy zone 视觉 polish。
 - 交易关闭已覆盖 Esc、关闭按钮、目标不可用关闭、地图切换关闭和对话结束关闭。
 
 ## 9. 技能、热栏和进度

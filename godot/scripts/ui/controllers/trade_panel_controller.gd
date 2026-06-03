@@ -224,16 +224,16 @@ func _build_layout() -> void:
 	cart_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	cart_scroll.set_drag_forwarding(
 		Callable(self, "_empty_trade_drag_data"),
-		Callable(self, "_can_drop_trade_item_data"),
-		Callable(self, "_drop_trade_item_data")
+		Callable(self, "_can_drop_cart_data"),
+		Callable(self, "_drop_cart_data")
 	)
 	_cart_items_box = VBoxContainer.new()
 	_cart_items_box.name = "CartItemLines"
 	_cart_items_box.add_theme_constant_override("separation", 4)
 	_cart_items_box.set_drag_forwarding(
 		Callable(self, "_empty_trade_drag_data"),
-		Callable(self, "_can_drop_trade_item_data"),
-		Callable(self, "_drop_trade_item_data")
+		Callable(self, "_can_drop_cart_data"),
+		Callable(self, "_drop_cart_data")
 	)
 	cart_scroll.add_child(_cart_items_box)
 	_equipment_sell_dialog = ConfirmationDialog.new()
@@ -401,23 +401,32 @@ func _ignore_trade_item_drop(_position: Vector2, _data: Variant, _from_control: 
 	pass
 
 
-func _can_drop_trade_item_data(_position: Vector2, data: Variant, _from_control: Control) -> bool:
+func _can_drop_cart_data(_position: Vector2, data: Variant, _from_control: Control) -> bool:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
-	if str(drag_data.get("kind", "")) != "trade_item":
-		return false
-	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
-	var source: String = str(drag_data.get("source", ""))
-	return not item.is_empty() and _item_can_trade(item, source)
+	match str(drag_data.get("kind", "")):
+		"trade_item":
+			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+			var source: String = str(drag_data.get("source", ""))
+			return not item.is_empty() and _item_can_trade(item, source)
+		"trade_cart_entry":
+			var from_index: int = int(drag_data.get("index", -1))
+			return from_index >= 0 and from_index < _cart_entries.size()
+		_:
+			return false
 
 
-func _drop_trade_item_data(position: Vector2, data: Variant, from_control: Control) -> void:
-	if not _can_drop_trade_item_data(position, data, from_control):
+func _drop_cart_data(position: Vector2, data: Variant, from_control: Control) -> void:
+	if not _can_drop_cart_data(position, data, from_control):
 		return
 	var drag_data: Dictionary = _dictionary_or_empty(data)
-	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
-	var source: String = str(drag_data.get("source", ""))
-	var count: int = int(drag_data.get("count", 1))
-	_queue_trade_entry(item, source, count)
+	match str(drag_data.get("kind", "")):
+		"trade_item":
+			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+			var source: String = str(drag_data.get("source", ""))
+			var count: int = int(drag_data.get("count", 1))
+			_queue_trade_entry(item, source, count)
+		"trade_cart_entry":
+			_reorder_cart_entry(int(drag_data.get("index", -1)), _cart_drop_index(from_control))
 
 
 func _emit_selected_trade() -> void:
@@ -489,6 +498,12 @@ func _cart_entry_row(entry: Dictionary, index: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.name = "CartEntry_%d" % index
 	row.add_theme_constant_override("separation", 6)
+	row.set_meta("cart_index", index)
+	row.set_drag_forwarding(
+		Callable(self, "_get_cart_entry_drag_data"),
+		Callable(self, "_can_drop_cart_data"),
+		Callable(self, "_drop_cart_data")
+	)
 	var label := _label("CartEntryLabel")
 	label.custom_minimum_size = Vector2(332, 0)
 	var source := str(entry.get("source", ""))
@@ -527,6 +542,48 @@ func _cart_entry_row(entry: Dictionary, index: int) -> HBoxContainer:
 	row.add_child(increase_button)
 	row.add_child(remove_button)
 	return row
+
+
+func _get_cart_entry_drag_data(_position: Vector2, from_control: Control) -> Variant:
+	if from_control == null or not from_control.has_meta("cart_index"):
+		return null
+	var index: int = int(from_control.get_meta("cart_index"))
+	if index < 0 or index >= _cart_entries.size():
+		return null
+	var entry: Dictionary = _cart_entries[index]
+	var preview := Label.new()
+	var source: String = str(entry.get("source", ""))
+	var verb: String = "购买" if source == "shop" else "出售" if _is_sell_source(source) else "交易"
+	preview.text = "%s %s x%d" % [
+		verb,
+		entry.get("name", entry.get("item_id", "")),
+		int(entry.get("count", 0)),
+	]
+	set_drag_preview(preview)
+	return {
+		"kind": "trade_cart_entry",
+		"index": index,
+	}
+
+
+func _cart_drop_index(from_control: Control) -> int:
+	if from_control != null and from_control.has_meta("cart_index"):
+		return int(from_control.get_meta("cart_index"))
+	return _cart_entries.size()
+
+
+func _reorder_cart_entry(from_index: int, to_index: int) -> void:
+	if from_index < 0 or from_index >= _cart_entries.size():
+		return
+	var clamped_to_index: int = clampi(to_index, 0, _cart_entries.size())
+	if from_index == clamped_to_index or from_index + 1 == clamped_to_index:
+		return
+	var entry: Dictionary = _cart_entries[from_index]
+	_cart_entries.remove_at(from_index)
+	if clamped_to_index > from_index:
+		clamped_to_index -= 1
+	_cart_entries.insert(clamped_to_index, entry)
+	_update_cart_line()
 
 
 func _adjust_cart_entry(index: int, delta: int) -> void:
