@@ -2,6 +2,7 @@ extends Control
 
 signal close_requested
 signal trade_requested(source: String, item_id: String, count: int)
+signal trade_cart_confirmed(entries: Array)
 
 var _panel: PanelContainer
 var _title_label: Label
@@ -11,10 +12,16 @@ var _feedback_label: Label
 var _detail_label: Label
 var _quantity_spin: SpinBox
 var _trade_button: Button
+var _queue_button: Button
+var _clear_cart_button: Button
+var _confirm_cart_button: Button
+var _cart_label: Label
 var _items_box: VBoxContainer
 var _player_items_box: VBoxContainer
 var _selected_source: String = ""
 var _selected_item_id: String = ""
+var _selected_item_snapshot: Dictionary = {}
+var _cart_entries: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -34,12 +41,14 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if _panel != null:
 		_panel.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 	if not active:
+		_clear_cart()
 		return
 
 	if snapshot.has("error"):
 		_title_label.text = "Trade %s" % snapshot.get("shop_id", "")
 		_summary_label.text = "交易资源不可用: %s" % snapshot.get("error", "unknown")
 		_apply_feedback({})
+		_clear_cart()
 		_clear_items()
 		return
 
@@ -162,6 +171,40 @@ func _build_layout() -> void:
 	box.add_child(_feedback_label)
 	box.add_child(_detail_label)
 	box.add_child(trade_controls)
+	_cart_label = _label("CartLine")
+	_cart_label.text = "购物车为空"
+	var cart_controls := HBoxContainer.new()
+	cart_controls.name = "CartControls"
+	cart_controls.add_theme_constant_override("separation", 8)
+	_queue_button = Button.new()
+	_queue_button.name = "QueueButton"
+	_queue_button.text = "加入购物车"
+	_queue_button.disabled = true
+	_queue_button.pressed.connect(func() -> void:
+		_queue_selected_item()
+	)
+	_clear_cart_button = Button.new()
+	_clear_cart_button.name = "ClearCartButton"
+	_clear_cart_button.text = "清空"
+	_clear_cart_button.disabled = true
+	_clear_cart_button.pressed.connect(func() -> void:
+		_clear_cart()
+	)
+	_confirm_cart_button = Button.new()
+	_confirm_cart_button.name = "ConfirmCartButton"
+	_confirm_cart_button.text = "确认购物车"
+	_confirm_cart_button.disabled = true
+	_confirm_cart_button.pressed.connect(func() -> void:
+		if _cart_entries.is_empty():
+			return
+		trade_cart_confirmed.emit(_cart_entries.duplicate(true))
+		_clear_cart()
+	)
+	cart_controls.add_child(_queue_button)
+	cart_controls.add_child(_clear_cart_button)
+	cart_controls.add_child(_confirm_cart_button)
+	box.add_child(_cart_label)
+	box.add_child(cart_controls)
 	box.add_child(columns)
 
 
@@ -195,11 +238,13 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 		_detail_label.text = "选择物品查看价格"
 		_selected_source = ""
 		_selected_item_id = ""
+		_selected_item_snapshot = {}
 		_update_trade_controls({}, "")
 		return
 	var description := str(item.get("description", ""))
 	_selected_source = source
 	_selected_item_id = str(item.get("item_id", ""))
+	_selected_item_snapshot = item.duplicate(true)
 	_update_trade_controls(item, source)
 	_detail_label.text = "%s：%s x%d | 单价 %d | 小计 %d%s" % [
 		_source_display(source),
@@ -220,7 +265,7 @@ func _apply_feedback(feedback: Dictionary) -> void:
 
 
 func _update_trade_controls(item: Dictionary, source: String) -> void:
-	if _quantity_spin == null or _trade_button == null:
+	if _quantity_spin == null or _trade_button == null or _queue_button == null:
 		return
 	var available := maxi(1, int(item.get("count", 1)))
 	_quantity_spin.min_value = 1
@@ -228,6 +273,7 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 	_quantity_spin.value = clampi(int(_quantity_spin.value), 1, available)
 	var item_id := str(item.get("item_id", ""))
 	_trade_button.disabled = item.is_empty() or item_id.is_empty() or source.is_empty()
+	_queue_button.disabled = _trade_button.disabled
 	match source:
 		"shop":
 			_trade_button.text = "购买"
@@ -235,6 +281,58 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 			_trade_button.text = "出售"
 		_:
 			_trade_button.text = "交易"
+
+
+func _queue_selected_item() -> void:
+	if _selected_source.is_empty() or _selected_item_id.is_empty() or _selected_item_snapshot.is_empty():
+		return
+	var count := int(_quantity_spin.value if _quantity_spin != null else 1)
+	if count <= 0:
+		return
+	var entry := {
+		"source": _selected_source,
+		"item_id": _selected_item_id,
+		"name": str(_selected_item_snapshot.get("name", _selected_item_id)),
+		"count": count,
+		"unit_price": int(_selected_item_snapshot.get("price", 0)),
+	}
+	_cart_entries.append(entry)
+	_update_cart_line()
+
+
+func _clear_cart() -> void:
+	_cart_entries.clear()
+	_update_cart_line()
+
+
+func _update_cart_line() -> void:
+	if _cart_label == null:
+		return
+	if _cart_entries.is_empty():
+		_cart_label.text = "购物车为空"
+		if _clear_cart_button != null:
+			_clear_cart_button.disabled = true
+		if _confirm_cart_button != null:
+			_confirm_cart_button.disabled = true
+		return
+	var parts: Array[String] = []
+	var buy_total := 0
+	var sell_total := 0
+	for entry in _cart_entries:
+		var source := str(entry.get("source", ""))
+		var count := int(entry.get("count", 0))
+		var unit_price := int(entry.get("unit_price", 0))
+		var verb := "购买" if source == "shop" else "出售" if source == "player" else "交易"
+		parts.append("%s %s x%d" % [verb, entry.get("name", entry.get("item_id", "")), count])
+		if source == "shop":
+			buy_total += unit_price * count
+		elif source == "player":
+			sell_total += unit_price * count
+	_cart_label.text = "购物车：%s | 应付 %d | 应收 %d" % ["；".join(parts), buy_total, sell_total]
+	if _clear_cart_button != null:
+		_clear_cart_button.disabled = false
+	if _confirm_cart_button != null:
+		_confirm_cart_button.disabled = false
 
 
 func _default_detail_item(shop_items: Array, player_items: Array) -> Dictionary:

@@ -513,11 +513,11 @@
 ### 11.4 交易
 
 - [~] buy / sell 命令第一版。
-- [ ] 购物车：queue buy、queue sell、adjust、remove、clear、confirm。
+- [~] 购物车：queue buy、queue sell、clear、confirm 第一版已纳入 `TradeUI` smoke；待补 adjust、remove、单项数量调整。
 - [x] 店铺库存、玩家库存、数量直买直卖和价格预览已纳入 `TradeUI` smoke。
 - [ ] 装备出售。
 - [~] 买价 / 卖价倍率已用于价格预览；待补关系和技能影响价格。
-- [ ] 购物车总价、资金变化、确认预览。
+- [~] 购物车总价第一版已显示应付/应收；待补净额、资金变化和确认前完整预校验。
 - [x] 交易资金/库存失败提示已纳入 `TradeUI` smoke：玩家资金不足、店铺资金不足、店铺库存不足、玩家库存不足。
 - [ ] 不可出售、装备出售确认和部分成交策略。
 - [ ] 拖拽：shop -> buy zone、inventory/equipment -> sell zone。

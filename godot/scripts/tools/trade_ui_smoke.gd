@@ -69,7 +69,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _trade_button_text(game_root) != "购买":
 		errors.append("selecting shop item should set trade action to buy")
 	_set_trade_quantity(game_root, 1)
-	_press_trade_button(game_root)
+	var money_before_cart := _player_money(game_root)
+	var bandage_before_cart := _player_inventory_count(game_root, "1006")
+	_press_queue_button(game_root)
+	if not _cart_line(game_root).contains("购买 绷带 x1"):
+		errors.append("trade cart should show queued bandage buy")
+	if _player_money(game_root) != money_before_cart:
+		errors.append("queueing trade cart should not spend player money")
+	if _player_inventory_count(game_root, "1006") != bandage_before_cart:
+		errors.append("queueing trade cart should not add player item")
+	_press_confirm_cart_button(game_root)
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
 	if _player_inventory_count(game_root, "1006") != 2:
@@ -263,6 +272,25 @@ func _press_trade_button(game_root: Node) -> void:
 	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeControls/TradeButton")
 	if button is Button:
 		(button as Button).pressed.emit()
+
+
+func _press_queue_button(game_root: Node) -> void:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartControls/QueueButton")
+	if button is Button:
+		(button as Button).pressed.emit()
+
+
+func _press_confirm_cart_button(game_root: Node) -> void:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartControls/ConfirmCartButton")
+	if button is Button:
+		(button as Button).pressed.emit()
+
+
+func _cart_line(game_root: Node) -> String:
+	var label: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartLine")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
 
 
 func _trade_button_text(game_root: Node) -> String:
