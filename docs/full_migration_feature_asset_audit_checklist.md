@@ -50,6 +50,92 @@
 - [ ] UI 不能直接改业务状态，所有背包、任务、交易、战斗、制作结果必须进入 `core` 或 app controller。
 - [ ] 旧功能若决定不迁，必须标成 `[D]` 并写明 Godot 替代方案、废弃原因和验证方式。
 
+## 参考源覆盖核对
+
+本节用于防止只凭运行时印象迁移，遗漏旧工程中的工具、编辑器、数据域或资产表现。每个来源都要能在本文后续章节找到对应条目、迁移落点和验收方式。
+
+### 旧 app 覆盖
+
+- [ ] `bevy_debug_viewer`：启动、新游戏、相机、输入、picking、交互、移动、战斗、NPC runtime、UI 面板、hotbar、container、trade、debug panel、info panel、console、fog、world render 和测试辅助。
+- [ ] `bevy_map_editor`：地图选择、相机、对象选择、selection info、panel action、handoff、命令保存、地图视觉预览和 review 工作流。
+- [ ] `bevy_character_editor`：角色基础字段、战斗属性、背包、装备、外观、AI、预览 stage、handoff、窗口状态。
+- [ ] `bevy_item_editor`：物品 fragment、装备/武器/消耗品/任务物品字段、预览模型、引用选择、校验、删除和保存。
+- [ ] `bevy_recipe_editor`：配方材料、产物、分类、工具/工作台/技能要求、引用导航、校验、handoff。
+- [ ] `bevy_skill_editor`：技能树图、节点布局、前置连线、主动/被动效果、目标策略、保存和 handoff。
+- [ ] `bevy_quest_editor`：任务图、objective、奖励、对话绑定、世界状态条件、graph layout、handoff。
+- [ ] `bevy_dialogue_editor`：对话图、节点、选项、条件、动作、规则预览、连线布局和 handoff。
+- [ ] `bevy_gltf_viewer`：glTF 层级、材质、bounds、socket、灯光、相机、预览姿态和资源诊断。
+- [ ] `content_tools`：summary、references、format、diff-summary、changed、validate、content edit CLI 行为。
+- [D] `bevy_server`：旧 Bevy server 不迁；若后续需要自动化协议，只迁语义到 Godot headless/tool，不复制旧入口。
+
+### 旧 crate 覆盖
+
+- [ ] `game_core`：grid、movement、turn、runtime、simulation、interaction、combat、combat AI、relationships、quest progression、skills、overworld、survival、economy、GOAP、state persistence、runtime snapshot。
+- [ ] `game_data`：content registry、file backed edit、角色、物品、地图、交互 spec、任务、对话、对话规则、技能、配方、商店、settlement、overworld、AI、appearance、model path、validator 和迁移工具。
+- [ ] `game_bevy`：asset paths、new game、bootstrap、tile world、static world、world render、mesh picking、container visuals、character/item preview、UI、NPC life、AI spawn、reservation 和 Bevy 侧测试语义。
+- [ ] `game_editor`：editor shell、preview stage、form widgets、graph editor、handoff、window persistence、model hierarchy 和通用编辑器状态。
+- [ ] `game_protocol`：request/response、snapshot、event、error payload 和 server message 语义，仅作为 Godot tool/protocol 的参考。
+
+### 旧 data 域覆盖
+
+旧参考工程 `data/` 下当前需要逐域核对的内容规模如下。数量只用于审计范围提示，最终以实际文件和引用校验为准。
+
+- [ ] `ai`：8 个文件，覆盖行为模块、profile、GOAP / schedule 相关配置。
+- [ ] `appearance`：1 个文件，覆盖角色外观、装备覆盖和挂点引用。
+- [ ] `bootstrap`：1 个文件，覆盖新游戏初始地图、玩家、起点、初始内容。
+- [ ] `characters`：11 个文件，覆盖玩家、NPC、敌人、商人、任务角色、初始 loadout。
+- [ ] `dialogue_rules`：2 个文件，覆盖 NPC / 状态到 dialogue variant 的选择规则。
+- [ ] `dialogues`：22 个文件，覆盖对话节点、选项、条件、动作和 fallback。
+- [ ] `items`：126 个文件，覆盖消耗品、武器、装备、材料、工具、任务物品、货币和占位物。
+- [ ] `json`：65 个文件，覆盖迁移期旧 JSON 或通用内容，需要逐项判定保留、合并或废弃。
+- [ ] `maps`：12 个文件，只作为 Godot `.tscn` 地图的迁移兼容备份继续复核。
+- [ ] `overworld`：1 个文件，覆盖地点、解锁、旅行和 outdoor transition。
+- [ ] `quests`：4 个文件，覆盖任务链、目标、奖励和对话交付。
+- [ ] `recipes`：30 个文件，覆盖材料、产物、分类、技能、工具、工作台和解锁。
+- [ ] `settlements`：1 个文件，覆盖据点成员、锚点、服务和日程入口。
+- [ ] `shops`：1 个文件，覆盖商店库存、价格倍率、资金和权限。
+- [ ] `skill_trees`：3 个文件，覆盖技能树布局、前置边和分类。
+- [ ] `skills`：13 个文件，覆盖主动技能、被动技能、目标策略、效果和前置。
+- [ ] `world_tiles`：4 个文件，覆盖 surface、building wall、prop、container 等 prototype 映射。
+
+### 旧 asset 覆盖
+
+旧参考工程 `assets/` 下按目录和扩展名核对：
+
+- [ ] `assets/world_tiles`：62 个文件，含 `surface_placeholder_basic`、`building_wall`、`prop_placeholder_basic` 的 `.gltf` / `.bin`，需要对应 Godot resource、scale、origin、rotation、footprint、碰撞、picking 和 fallback 诊断。
+- [ ] `assets/bevy_preview`：20 个文件，含 humanoid mannequin、装备占位、武器占位和 README，需要迁到角色/物品/装备预览与运行时占位资源。
+- [ ] `assets/container_placeholders`：3 个 glTF，覆盖 wooden crate、medical cabinet、metal locker，需要迁到容器世界表现和编辑器预览。
+- [ ] `assets/fonts`：1 个 OTF，需要确认 UI 字体、中文显示、fallback 和 Godot import。
+- [ ] `assets/shaders`：1 个 WGSL fog shader，只迁移雾战语义和表现，不迁 WGSL runtime。
+- [ ] `.gltf`：52 个，全部需要 Godot import、`.import`、材质、依赖 `.bin`、uid 和路径稳定性复核。
+- [ ] `.bin`：31 个，全部需要跟随 glTF 依赖迁入、避免缺失或路径破裂。
+- [ ] `.bbmodel`：1 个，需判断是否作为源文件保留、是否需要 Godot 可编辑替代。
+- [ ] `.json` / `.txt`：各 1 个，需判断是否为资源元信息、README 或迁移说明。
+
+### 当前 Godot 主线覆盖
+
+- [ ] `godot/assets` 当前约 140 个资源文件，需要逐项确认来自旧资产、Godot import 派生、占位补充或新建资源。
+- [ ] `godot/scenes/maps` 当前 12 张地图 scene，需要逐图复核旧 `data/maps` 的 size、level、entry、object、trigger、footprint、rotation、prop 和视觉表现。
+- [ ] `data` 当前保留旧内容域，需要标注每个非地图 JSON 是否仍为权威输入、是否已被 Godot data layer 覆盖、是否可编辑、是否有 validator。
+
+### 单项迁移记录模板
+
+每个后续迁移 PR / commit 应在对应章节补一条这样的记录，避免只完成代码而没有过账：
+
+- [ ] 功能名：
+- [ ] 旧参考：
+- [ ] Godot 落点：
+- [ ] 数据字段：
+- [ ] 规则/公式：
+- [ ] 运行时状态：
+- [ ] 输入入口：
+- [ ] UI / HUD / tooltip：
+- [ ] 世界表现 / 资产：
+- [ ] 编辑器 / 工具：
+- [ ] 存档：
+- [ ] 验证：
+- [ ] 剩余差异：
+
 ## 功能迁移单元总索引
 
 ### A. 玩家操作闭环
