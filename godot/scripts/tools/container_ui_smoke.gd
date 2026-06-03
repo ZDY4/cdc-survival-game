@@ -59,10 +59,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_first_player_container_item(game_root)
 	if not _container_detail(game_root).contains("背包：") or not _container_detail(game_root).contains("总重"):
 		errors.append("container detail line should switch to selected player item details")
+	if _container_transfer_button_text(game_root) != "存放":
+		errors.append("selecting player item should set transfer action to store")
 
-	var take_result: Dictionary = game_root.take_active_container_item("1031", 1)
-	if not bool(take_result.get("success", false)):
-		errors.append("taking container item failed: %s" % take_result.get("reason", "unknown"))
+	if not _press_container_item_with_text(game_root, "container", "抗生素"):
+		errors.append("should select antibiotics in container column")
+	if _container_transfer_button_text(game_root) != "拿取":
+		errors.append("selecting container item should set transfer action to take")
+	_set_container_transfer_quantity(game_root, 1)
+	_press_container_transfer(game_root)
 	if not _event_seen(game_root, "container_item_taken"):
 		errors.append("taking container item should emit container_item_taken")
 	if not _inventory_text(game_root).contains("抗生素 x1"):
@@ -78,9 +83,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _container_feedback(game_root).contains("容器中没有足够的抗生素"):
 		errors.append("taking missing container item should show container failure feedback")
 
-	var store_result: Dictionary = game_root.store_active_container_item("1008", 1)
-	if not bool(store_result.get("success", false)):
-		errors.append("storing item failed: %s" % store_result.get("reason", "unknown"))
+	if not _press_container_item_with_text(game_root, "player", "水瓶"):
+		errors.append("should select water bottle in player column")
+	if _container_transfer_button_text(game_root) != "存放":
+		errors.append("selecting player item should keep transfer action as store")
+	_set_container_transfer_quantity(game_root, 1)
+	_press_container_transfer(game_root)
 	if not _container_feedback(game_root).is_empty():
 		errors.append("successful container store should clear previous failure feedback")
 	if not _event_seen(game_root, "container_item_stored"):
@@ -306,11 +314,51 @@ func _container_item_lines(game_root: Node) -> Array[String]:
 
 
 func _press_first_player_container_item(game_root: Node) -> void:
-	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/PlayerColumn/PlayerScroll/PlayerItemLines")
+	var item_box: Node = _container_item_box(game_root, "player")
 	for child in item_box.get_children():
 		if child is Button:
 			(child as Button).pressed.emit()
 			return
+
+
+func _press_container_item_with_text(game_root: Node, source: String, text: String) -> bool:
+	var item_box: Node = _container_item_box(game_root, source)
+	if item_box == null:
+		return false
+	for child in item_box.get_children():
+		if child is Button and str((child as Button).text).contains(text):
+			(child as Button).pressed.emit()
+			return true
+	return false
+
+
+func _set_container_transfer_quantity(game_root: Node, count: int) -> void:
+	var spin: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/QuantitySpin")
+	if spin is SpinBox:
+		(spin as SpinBox).value = count
+
+
+func _press_container_transfer(game_root: Node) -> void:
+	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/TransferButton")
+	if button is Button:
+		(button as Button).pressed.emit()
+
+
+func _container_transfer_button_text(game_root: Node) -> String:
+	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/TransferButton")
+	if button is Button:
+		return str((button as Button).text)
+	return ""
+
+
+func _container_item_box(game_root: Node, source: String) -> Node:
+	match source:
+		"container":
+			return game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/ItemColumns/ContainerColumn/ContainerScroll/ItemLines")
+		"player":
+			return game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/ItemColumns/PlayerColumn/PlayerScroll/PlayerItemLines")
+		_:
+			return null
 
 
 func _item_control_text(node: Node) -> String:

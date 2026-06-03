@@ -682,6 +682,16 @@ func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func transfer_active_container_item(source: String, item_id: String, count: int = 1) -> Dictionary:
+	match source:
+		"container":
+			return take_active_container_item(item_id, count)
+		"player":
+			return store_active_container_item(item_id, count)
+		_:
+			return {"success": false, "reason": "unknown_container_transfer_source", "source": source}
+
+
 func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}

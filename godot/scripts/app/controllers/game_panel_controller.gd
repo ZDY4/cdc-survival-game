@@ -241,6 +241,10 @@ func _connect_modal_close_buttons() -> void:
 		var container_close := Callable(parent, "close_active_container").bind("button")
 		if not container_panel.is_connected("close_requested", container_close):
 			container_panel.connect("close_requested", container_close)
+	if container_panel != null and container_panel.has_signal("transfer_requested"):
+		var container_transfer := Callable(parent, "transfer_active_container_item")
+		if not container_panel.is_connected("transfer_requested", container_transfer):
+			container_panel.connect("transfer_requested", container_transfer)
 
 
 func _ensure_panel(current: Control, scene: PackedScene, node_name: String) -> Control:
