@@ -35,7 +35,7 @@ func enter_location(simulation: RefCounted, actor_id: int, location_id: String, 
 	simulation.active_location_id = normalized_location_id
 	simulation.active_entry_point_id = entry_point_id
 	simulation.start_entry_point_id = entry_point_id
-	actor.active_container_id = ""
+	_clear_runtime_ui_state(simulation, actor, actor_id, normalized_location_id)
 	simulation.emit_event("location_entered", {
 		"actor_id": actor_id,
 		"location_id": normalized_location_id,
@@ -49,6 +49,39 @@ func enter_location(simulation: RefCounted, actor_id: int, location_id: String, 
 		"map_id": map_id,
 		"entry_point_id": entry_point_id,
 	}
+
+
+func _clear_runtime_ui_state(simulation: RefCounted, actor: RefCounted, actor_id: int, location_id: String) -> void:
+	var dialogue_id := str(actor.active_dialogue_id)
+	if not dialogue_id.is_empty():
+		actor.active_dialogue_id = ""
+		actor.active_dialogue_node_id = ""
+		simulation.emit_event("dialogue_closed", {
+			"actor_id": actor_id,
+			"dialogue_id": dialogue_id,
+			"reason": "location_changed:%s" % location_id,
+		})
+	var container_id := str(actor.active_container_id)
+	if not container_id.is_empty():
+		actor.active_container_id = ""
+		simulation.emit_event("container_closed", {
+			"actor_id": actor_id,
+			"container_id": container_id,
+			"reason": "location_changed:%s" % location_id,
+		})
+	var pending_movement: Dictionary = simulation.pending_movement.duplicate(true)
+	var pending_interaction: Dictionary = simulation.pending_interaction.duplicate(true)
+	var had_pending := not pending_movement.is_empty() or not pending_interaction.is_empty()
+	simulation.pending_movement.clear()
+	simulation.pending_interaction.clear()
+	simulation.interaction_menu.clear()
+	if had_pending:
+		simulation.emit_event("pending_cancelled", {
+			"actor_id": actor_id,
+			"reason": "location_changed:%s" % location_id,
+			"movement": pending_movement,
+			"interaction": pending_interaction,
+		})
 
 
 func _overworld_location(location_id: String, overworld_library: Dictionary) -> Dictionary:

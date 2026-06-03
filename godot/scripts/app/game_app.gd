@@ -918,6 +918,8 @@ func _active_trade_target_available() -> bool:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:
 		return false
+	if not str(actor.map_id).is_empty() and not simulation.active_map_id.is_empty() and str(actor.map_id) != simulation.active_map_id:
+		return false
 	var shop_id := "%s_shop" % actor.definition_id
 	return registry != null and registry.get_library("shops").has(shop_id)
 

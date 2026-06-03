@@ -109,6 +109,28 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("missing container target should close container panel")
 	if not _active_container_id(game_root).is_empty():
 		errors.append("missing container target should clear active container runtime state")
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("missing player for map switch container close check")
+		return errors
+	game_root.simulation.container_sessions["temporary_container"] = {
+		"container_id": "temporary_container",
+		"display_name": "临时容器",
+		"inventory": [],
+	}
+	player.active_container_id = "temporary_container"
+	game_root.refresh_container_panel()
+	if not game_root.container_panel.visible:
+		errors.append("temporary container should be visible before map switch")
+	game_root.simulation.unlock_location("forest")
+	var enter_result: Dictionary = game_root.simulation.enter_location(1, "forest", game_root.registry.get_library("overworld"))
+	if not bool(enter_result.get("success", false)):
+		errors.append("forest enter for container close check failed: %s" % enter_result.get("reason", "unknown"))
+	game_root.refresh_container_panel()
+	if game_root.container_panel.visible:
+		errors.append("map switch should close container panel")
+	if not _active_container_id(game_root).is_empty():
+		errors.append("map switch should clear active container runtime state")
 	return errors
 
 

@@ -93,12 +93,22 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not game_root.active_trade_target.is_empty():
 		errors.append("Esc should clear active trade target")
 	_reopen_trade(game_root, errors)
-	game_root.simulation.actor_registry.unregister_actor(2)
+	game_root.active_trade_target = {"target_type": "actor", "actor_id": 9999}
 	game_root.refresh_trade_panel()
 	if game_root.trade_panel.visible:
 		errors.append("missing trade target should close trade panel")
 	if not game_root.active_trade_target.is_empty():
 		errors.append("missing trade target should clear active trade target")
+	_reopen_trade(game_root, errors)
+	game_root.simulation.unlock_location("forest")
+	var enter_result: Dictionary = game_root.simulation.enter_location(1, "forest", game_root.registry.get_library("overworld"))
+	if not bool(enter_result.get("success", false)):
+		errors.append("forest enter for trade close check failed: %s" % enter_result.get("reason", "unknown"))
+	game_root.refresh_trade_panel()
+	if game_root.trade_panel.visible:
+		errors.append("map switch should close trade panel")
+	if not game_root.active_trade_target.is_empty():
+		errors.append("map switch should clear active trade target")
 	return errors
 
 
