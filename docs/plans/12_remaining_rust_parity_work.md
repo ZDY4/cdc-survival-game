@@ -2,6 +2,13 @@
 
 本文记录对照 `G:\Projects\cdc_survival_game_bevy_reference` 后仍未完成的 Godot 运行时恢复项。当前主线已完成第一里程碑中的基础命令入口、AP/回合状态、交互解析、攻击、击杀、尸体容器、hostile NPC attack / approach，以及交互输入闭环；以下内容仍待后续实现。
 
+## 当前边界
+
+- 目标仍是 Godot 4.6.3 + GDScript 原生实现，不把 Rust、Cargo、Bevy 或旧运行入口重新引回主线。
+- 运行时规则落在 `godot/scripts/core`，输入和启动编排落在 `godot/scripts/app`，UI 只展示 snapshot 和提交命令。
+- 地图权威是 `godot/scenes/maps/*.tscn`；`data/maps` 只保留迁移期兼容备份。
+- 本文是后续恢复工作的待办清单；完整迁移架构见 `docs/plans/10_godot_migration_architecture.md`，旧功能对照清单见 `docs/plans/11_rust_runtime_parity_checklist.md`。
+
 ## 交互与输入
 
 本阶段已恢复并通过 smoke 覆盖：
@@ -28,9 +35,18 @@
 
 ## 背包、装备、容器、交易
 
+本阶段已恢复并通过 smoke 覆盖：
+
+- `inventory_action` 统一入口已覆盖 `take_container`、`store_container`、`drop`、`equip`、`unequip`、`buy_shop`、`sell_shop`。
+- 容器拿取/存放和商店买卖改为通过 app/controller 提交统一命令，再由 core/economy 规则结算并刷新 UI。
+- 物品丢弃会从玩家背包扣除数量，在当前地图玩家脚下创建持久掉落容器，并发出 `inventory_item_dropped` 事件。
+- 容器转移、商店买卖和丢弃均支持数量参数，现有 UI smoke 覆盖了拿取、存放、买入、卖出和丢弃后的面板刷新。
+
+仍待恢复：
+
 - Inventory order、拖拽/排序、上下文菜单和数量选择弹窗未恢复。
-- 物品使用、丢弃、批量移动、容器和背包之间的完整转移流程未恢复。
-- 装备/卸下已有基础 runner，但 UI 操作、禁用状态、装备详情和旧版上下文动作仍需补齐。
+- 物品使用、批量选择/批量确认、容器和背包之间的完整拖拽转移 UI 仍待补齐。
+- 装备/卸下已有统一入口，但 UI 禁用状态、装备详情和旧版上下文动作仍需补齐。
 - 商店购物车、买卖批量确认、价格预览、资金校验提示和交易上下文菜单仍待恢复。
 
 ## 技能系统
@@ -60,7 +76,16 @@
 ## 建议后续顺序
 
 1. 补武器/弹药/攻击速度/暴击和更完整战斗退出。
-2. 补背包/容器/交易上下文操作。
+2. 补背包/容器/交易上下文菜单、数量弹窗、拖拽排序和购物车 UI。
 3. 补 Skills、Hotbar 和主动技能目标预览。
 4. 补 Crafting 面板和任务交付反馈。
 5. 补 settlement life / GOAP / 后台日程。
+
+## 阶段验收口径
+
+每个后续阶段完成时至少需要满足：
+
+- 玩法状态只通过 `Simulation.submit_player_command()` 或现有 core service 变更，不从 UI 或 world 脚本直接改背包、任务、战斗、技能或制作结果。
+- 对应 smoke 使用 `tools/agent/test-godot-game.ps1 -Scenario <Scenario>` 通过；大阶段结束后再跑 `tools/agent/test-godot-game.ps1 -Scenario All`。
+- 独立阶段完成后运行 `cmd /c run_godot_validate.bat`，确认 Godot 4.6.3 工程、地图 scene 权威和 Rust/Bevy 回归门禁仍然通过。
+- 不把 `godot/scenes/maps/survivor_outpost_01.tscn` 的本地地图调整混入功能提交，除非任务明确要求修改该地图。
