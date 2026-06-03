@@ -17,6 +17,7 @@ var _clear_cart_button: Button
 var _confirm_cart_button: Button
 var _cart_label: Label
 var _cart_items_box: VBoxContainer
+var _equipment_sell_dialog: ConfirmationDialog
 var _items_box: VBoxContainer
 var _player_items_box: VBoxContainer
 var _selected_source: String = ""
@@ -44,6 +45,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if _panel != null:
 		_panel.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 	if not active:
+		if _equipment_sell_dialog != null:
+			_equipment_sell_dialog.hide()
 		_clear_cart()
 		return
 
@@ -135,7 +138,10 @@ func _build_layout() -> void:
 			return
 		if not _item_can_trade(_selected_item_snapshot, _selected_source):
 			return
-		trade_requested.emit(_selected_source, _selected_item_id, int(_quantity_spin.value))
+		if _requires_equipment_sell_confirmation(_selected_source):
+			_open_equipment_sell_dialog()
+			return
+		_emit_selected_trade()
 	)
 	trade_controls.add_child(_quantity_spin)
 	trade_controls.add_child(_trade_button)
@@ -220,6 +226,16 @@ func _build_layout() -> void:
 	_cart_items_box.name = "CartItemLines"
 	_cart_items_box.add_theme_constant_override("separation", 4)
 	cart_scroll.add_child(_cart_items_box)
+	_equipment_sell_dialog = ConfirmationDialog.new()
+	_equipment_sell_dialog.name = "EquipmentSellConfirmDialog"
+	_equipment_sell_dialog.title = "确认出售装备"
+	_equipment_sell_dialog.dialog_text = "确定要出售已装备物品吗？"
+	_equipment_sell_dialog.confirmed.connect(func() -> void:
+		_emit_selected_trade()
+	)
+	_equipment_sell_dialog.get_ok_button().text = "出售"
+	_equipment_sell_dialog.get_cancel_button().text = "取消"
+	add_child(_equipment_sell_dialog)
 	box.add_child(_cart_label)
 	box.add_child(cart_controls)
 	box.add_child(cart_scroll)
@@ -326,6 +342,24 @@ func _queue_selected_item() -> void:
 	}
 	_cart_entries.append(entry)
 	_update_cart_line()
+
+
+func _emit_selected_trade() -> void:
+	if _selected_source.is_empty() or _selected_item_id.is_empty():
+		return
+	trade_requested.emit(_selected_source, _selected_item_id, int(_quantity_spin.value))
+
+
+func _open_equipment_sell_dialog() -> void:
+	if _equipment_sell_dialog == null:
+		return
+	var item_name: String = str(_selected_item_snapshot.get("name", _selected_item_id))
+	var price: int = int(_selected_item_snapshot.get("price", 0))
+	_equipment_sell_dialog.dialog_text = "出售已装备的 %s 将会自动卸下该装备，并获得 %d。确定出售吗？" % [
+		item_name,
+		price,
+	]
+	_equipment_sell_dialog.popup_centered()
 
 
 func _clear_cart() -> void:
@@ -456,6 +490,10 @@ func _source_display(source: String) -> String:
 
 func _is_sell_source(source: String) -> bool:
 	return source == "player" or source.begins_with("equipment:")
+
+
+func _requires_equipment_sell_confirmation(source: String) -> bool:
+	return source.begins_with("equipment:")
 
 
 func _item_can_trade(item: Dictionary, source: String) -> bool:

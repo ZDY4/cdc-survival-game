@@ -181,7 +181,27 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _trade_button_text(game_root) != "出售":
 		errors.append("selecting equipped item should set trade action to sell")
 	var dagger_stock_before := _shop_stock_count(game_root, "1002")
+	var money_before_equipped_sell := _player_money(game_root)
 	_press_trade_button(game_root)
+	if not _equipment_sell_dialog_visible(game_root):
+		errors.append("equipped item sell should open confirmation dialog")
+	if _player_equipped_item(game_root, "main_hand").is_empty():
+		errors.append("equipped item should not be sold before confirmation")
+	if _player_money(game_root) != money_before_equipped_sell:
+		errors.append("equipped item sell should not pay before confirmation")
+	if _shop_stock_count(game_root, "1002") != dagger_stock_before:
+		errors.append("equipped item sell should not update shop stock before confirmation")
+	_cancel_equipment_sell_dialog(game_root)
+	if _equipment_sell_dialog_visible(game_root):
+		errors.append("equipment sell cancel should close confirmation dialog")
+	if _player_equipped_item(game_root, "main_hand").is_empty():
+		errors.append("equipment sell cancel should keep main hand equipment")
+	if _player_money(game_root) != money_before_equipped_sell:
+		errors.append("equipment sell cancel should keep player money")
+	_press_trade_button(game_root)
+	if not _equipment_sell_dialog_visible(game_root):
+		errors.append("equipped item sell should reopen confirmation dialog")
+	_confirm_equipment_sell_dialog(game_root)
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
 	if not _player_equipped_item(game_root, "main_hand").is_empty():
@@ -360,6 +380,26 @@ func _press_trade_button(game_root: Node) -> void:
 	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeControls/TradeButton")
 	if button is Button:
 		(button as Button).pressed.emit()
+
+
+func _equipment_sell_dialog_visible(game_root: Node) -> bool:
+	var dialog: Node = game_root.trade_panel.get_node_or_null("EquipmentSellConfirmDialog")
+	if dialog is ConfirmationDialog:
+		return bool((dialog as ConfirmationDialog).visible)
+	return false
+
+
+func _cancel_equipment_sell_dialog(game_root: Node) -> void:
+	var dialog: Node = game_root.trade_panel.get_node_or_null("EquipmentSellConfirmDialog")
+	if dialog is ConfirmationDialog:
+		(dialog as ConfirmationDialog).hide()
+
+
+func _confirm_equipment_sell_dialog(game_root: Node) -> void:
+	var dialog: Node = game_root.trade_panel.get_node_or_null("EquipmentSellConfirmDialog")
+	if dialog is ConfirmationDialog:
+		(dialog as ConfirmationDialog).confirmed.emit()
+		(dialog as ConfirmationDialog).hide()
 
 
 func _press_queue_button(game_root: Node) -> void:
