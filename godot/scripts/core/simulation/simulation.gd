@@ -735,7 +735,7 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 			"skill_id": skill_id,
 			"cooldown_remaining": float(slot.get("cooldown_remaining", 0.0)),
 		}
-	var cost: float = float(command.get("ap_cost", DEFAULT_INTERACTION_AP))
+	var cost: float = float(command.get("ap_cost", activation.get("ap_cost", DEFAULT_INTERACTION_AP)))
 	if actor.ap < cost:
 		return {"success": false, "reason": "ap_insufficient", "required_ap": cost, "available_ap": actor.ap}
 	_spend_ap(actor, cost, "skill:%s" % skill_id)
@@ -753,6 +753,7 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		"slot_id": slot_id,
 		"level": learned_level,
 		"activation_mode": mode,
+		"ap_cost": cost,
 		"cooldown": cooldown,
 		"target": _dictionary_or_empty(command.get("target", {})).duplicate(true),
 	})
@@ -762,6 +763,7 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		"slot_id": slot_id,
 		"level": learned_level,
 		"activation_mode": mode,
+		"ap_cost": cost,
 		"cooldown": cooldown,
 		"ap_remaining": actor.ap,
 	}

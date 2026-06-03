@@ -150,6 +150,8 @@ func _validate_skill(id_value: String, record: Dictionary, registry: ContentRegi
 	var activation := _dictionary_or_empty(data.get("activation", {}))
 	if not activation.is_empty():
 		_expect_non_empty_string(issues, activation, "mode", "$.activation.mode")
+		if activation.has("ap_cost"):
+			_expect_number_at_least(issues, activation, "ap_cost", "$.activation.ap_cost", 0.0)
 		if activation.has("cooldown"):
 			_expect_number_at_least(issues, activation, "cooldown", "$.activation.cooldown", 0.0)
 

@@ -69,6 +69,7 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 		"level": current_level,
 		"max_level": max_level,
 		"activation_mode": activation_mode,
+		"ap_cost": float(activation.get("ap_cost", 1.0)),
 		"cooldown": float(activation.get("cooldown", 0.0)),
 		"prerequisites": _array_or_empty(skill_data.get("prerequisites", [])).duplicate(true),
 		"attribute_requirements": _dictionary_or_empty(skill_data.get("attribute_requirements", {})).duplicate(true),

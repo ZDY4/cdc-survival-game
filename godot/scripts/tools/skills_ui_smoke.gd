@@ -79,6 +79,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("bound active skill should be usable before cooldown")
 	if not _skill_line(game_root, "adrenaline_rush").contains("可用"):
 		errors.append("bound active skill should show available use state")
+	if not _skill_line(game_root, "adrenaline_rush").contains("AP 2"):
+		errors.append("bound active skill should show activation AP cost")
 	var toggle_result: Dictionary = game_root.learn_player_skill("low_profile")
 	if not bool(toggle_result.get("success", false)):
 		errors.append("low_profile learn failed: %s" % toggle_result.get("reason", "unknown"))
@@ -101,9 +103,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _event_seen(game_root, "hotbar_unbound"):
 		errors.append("clearing hotbar slot from skills panel should emit hotbar_unbound")
 	game_root.panel_controller.close_stage_panels()
+	var ap_before_skill: float = _player_ap(game_root)
 	_press_key(game_root, KEY_1)
 	await process_frame
 	game_root.refresh_skills_panel()
+	var skill_event: Dictionary = _last_event(game_root, "skill_used")
+	if abs(_player_ap(game_root) - (ap_before_skill - 2.0)) > 0.001:
+		errors.append("hotbar skill activation should spend activation AP cost")
 	if not _hotbar_line(game_root).contains("cd20"):
 		errors.append("digit 1 hotbar activation should write cooldown to hotbar")
 	if not _skill_line(game_root, "adrenaline_rush").contains("冷却 20s"):
@@ -112,6 +118,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("active skill use button should be disabled while on cooldown")
 	if not _event_seen(game_root, "skill_used"):
 		errors.append("digit 1 hotbar activation should emit skill_used")
+	if abs(float(_dictionary_or_empty(skill_event.get("payload", {})).get("ap_cost", 0.0)) - 2.0) > 0.001:
+		errors.append("skill_used event should include activation AP cost")
 	return errors
 
 
@@ -183,6 +191,29 @@ func _event_seen(game_root: Node, kind: String) -> bool:
 		if event_data.get("kind", "") == kind:
 			return true
 	return false
+
+
+func _last_event(game_root: Node, kind: String) -> Dictionary:
+	var events: Array = game_root.simulation.snapshot().get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = events[index]
+		if str(event_data.get("kind", "")) == kind:
+			return event_data
+	return {}
+
+
+func _player_ap(game_root: Node) -> float:
+	for actor in game_root.simulation.snapshot().get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == 1:
+			return float(actor_data.get("ap", 0.0))
+	return 0.0
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
 
 
 func _press_key(game_root: Node, key: int) -> void:
