@@ -63,9 +63,16 @@
 
 ## 任务系统
 
-- Journal 已有基础展示，但可交付状态、对话交付、奖励预览和完成反馈未完整恢复。
-- dialogue turn-in 和任务节点动作需要继续对照旧 Rust 行为细化。
-- 任务事件需要补齐更明确的 `quest_advanced` / `quest_completed` UI 反馈。
+本阶段已恢复并通过 smoke 覆盖：
+
+- Journal 面板已展示任务目标进度、可交付状态和奖励预览，手动交付任务会启用交付按钮。
+- Journal 交付按钮通过 app/controller 调用 core `turn_in_quest()`，完成物品扣除、奖励发放、任务完成和后续任务自动启动。
+- 对话交付后会刷新 Journal、Inventory、Skills 和 Crafting 面板，保证任务奖励和物品变化即时可见。
+
+仍待恢复：
+
+- dialogue turn-in 的分支条件、失败提示和任务节点动作需要继续对照旧 Rust 行为细化。
+- 任务完成 toast/日志、奖励领取动效、任务节点详情和更明确的 `quest_advanced` UI 反馈仍待恢复。
 
 ## 制作系统
 

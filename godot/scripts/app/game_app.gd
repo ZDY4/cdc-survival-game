@@ -221,6 +221,8 @@ func choose_dialogue_option(option_ref: Variant) -> Dictionary:
 	refresh_inventory_panel()
 	refresh_trade_panel()
 	refresh_journal_panel()
+	refresh_skills_panel()
+	refresh_crafting_panel()
 	return result
 
 
@@ -354,6 +356,17 @@ func craft_player_recipe(recipe_id: String) -> Dictionary:
 	refresh_inventory_panel()
 	refresh_crafting_panel()
 	refresh_skills_panel()
+	return result
+
+
+func turn_in_player_quest(quest_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.turn_in_quest(1, quest_id)
+	refresh_inventory_panel()
+	refresh_journal_panel()
+	refresh_skills_panel()
+	refresh_crafting_panel()
 	return result
 
 
