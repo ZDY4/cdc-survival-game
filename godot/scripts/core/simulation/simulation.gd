@@ -224,6 +224,10 @@ func sell_item_to_shop(actor_id: int, shop_id: String, item_id: String, count: i
 	return _economy_transactions.sell_item_to_shop(self, actor_id, shop_id, item_id, count, item_library)
 
 
+func confirm_trade_cart(actor_id: int, shop_id: String, entries: Array, item_library: Dictionary) -> Dictionary:
+	return _economy_transactions.confirm_trade_cart(self, actor_id, shop_id, entries, item_library)
+
+
 func take_item_from_container(actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
 	return _economy_transactions.take_item_from_container(self, actor_id, container_id, item_id, count, item_library)
 

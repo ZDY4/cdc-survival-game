@@ -762,30 +762,16 @@ func transfer_active_trade_item(source: String, item_id: String, count: int = 1)
 func confirm_active_trade_cart(entries: Array) -> Dictionary:
 	if entries.is_empty():
 		return {"success": false, "reason": "empty_trade_cart"}
-	var results: Array[Dictionary] = []
-	for index in range(entries.size()):
-		var entry: Dictionary = _dictionary_or_empty(entries[index])
-		var result: Dictionary = transfer_active_trade_item(
-			str(entry.get("source", "")),
-			str(entry.get("item_id", "")),
-			int(entry.get("count", 1))
-		)
-		results.append(result)
-		if not bool(result.get("success", false)):
-			return {
-				"success": false,
-				"reason": str(result.get("reason", "trade_cart_entry_failed")),
-				"failed_index": index,
-				"partial_success": index,
-				"results": results,
-			}
+	var shop_id: String = _active_shop_id()
+	if shop_id.is_empty():
+		var missing_result := {"success": false, "reason": "active_trade_missing"}
+		_record_trade_feedback(missing_result, "trade_cart", "", "", 0)
+		return missing_result
+	var result: Dictionary = simulation.confirm_trade_cart(1, shop_id, entries, registry.get_library("items"))
+	_record_trade_feedback(result, "trade_cart", shop_id, str(result.get("item_id", "")), int(result.get("count", 0)))
 	refresh_inventory_panel()
 	refresh_trade_panel()
-	return {
-		"success": true,
-		"count": entries.size(),
-		"results": results,
-	}
+	return result
 
 
 func equip_player_item(item_id: String, slot_id: String) -> Dictionary:

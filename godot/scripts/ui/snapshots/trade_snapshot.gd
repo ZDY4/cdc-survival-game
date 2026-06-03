@@ -175,12 +175,17 @@ func _feedback_snapshot(feedback: Dictionary, shop_id: String) -> Dictionary:
 
 
 func _feedback_text(feedback: Dictionary) -> String:
-	var item_name := _feedback_item_name(feedback)
-	var count := int(feedback.get("count", 1))
+	var item_name: String = _feedback_item_name(feedback)
+	var count: int = int(feedback.get("count", 1))
+	var action: String = str(feedback.get("action", ""))
 	match str(feedback.get("reason", "")):
 		"player_money_insufficient":
+			if action == "trade_cart":
+				return "玩家资金不足，购物车需要支付 %d。" % int(feedback.get("total_price", 0))
 			return "玩家资金不足，购买 %s x%d 需要 %d。" % [item_name, count, int(feedback.get("total_price", 0))]
 		"shop_money_insufficient":
+			if action == "trade_cart":
+				return "店铺资金不足，购物车需要支付 %d。" % int(feedback.get("total_price", 0))
 			return "店铺资金不足，收购 %s x%d 需要 %d。" % [item_name, count, int(feedback.get("total_price", 0))]
 		"shop_stock_insufficient":
 			return "店铺库存不足：%s x%d。" % [item_name, count]

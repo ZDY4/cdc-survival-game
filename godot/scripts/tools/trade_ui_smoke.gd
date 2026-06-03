@@ -92,6 +92,29 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("queueing trade cart should not spend player money")
 	if _player_inventory_count(game_root, "1006") != bandage_before_cart:
 		errors.append("queueing trade cart should not add player item")
+	_set_player_money(game_root, 30)
+	game_root.refresh_trade_panel()
+	if not _press_trade_item_with_text(game_root, "shop", "急救包"):
+		errors.append("should select shop medkit for atomic cart failure")
+	_press_queue_button(game_root)
+	if not _cart_line(game_root).contains("净付"):
+		errors.append("trade cart should show net payment preview")
+	_press_confirm_cart_button(game_root)
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
+	if not _trade_feedback(game_root).contains("玩家资金不足"):
+		errors.append("failed trade cart should show player money feedback")
+	if _player_inventory_count(game_root, "1006") != bandage_before_cart:
+		errors.append("failed trade cart should not partially buy bandage")
+	if _player_money(game_root) != 30:
+		errors.append("failed trade cart should not spend any player money")
+	if not "\n".join(_item_lines(game_root)).contains("绷带 x8"):
+		errors.append("failed trade cart should not reduce shop bandage stock")
+	_set_player_money(game_root, money_before_cart)
+	game_root.refresh_trade_panel()
+	if not _press_trade_item_with_text(game_root, "shop", "绷带"):
+		errors.append("should select shop bandage again after failed cart")
+	_press_queue_button(game_root)
 	_press_confirm_cart_button(game_root)
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()

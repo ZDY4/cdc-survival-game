@@ -342,7 +342,9 @@ func _update_cart_line() -> void:
 			buy_total += unit_price * count
 		elif source == "player":
 			sell_total += unit_price * count
-	_cart_label.text = "购物车：%s | 应付 %d | 应收 %d" % ["；".join(parts), buy_total, sell_total]
+	var net_payment := buy_total - sell_total
+	var net_text := "净付 %d" % net_payment if net_payment >= 0 else "净收 %d" % -net_payment
+	_cart_label.text = "购物车：%s | 应付 %d | 应收 %d | %s" % ["；".join(parts), buy_total, sell_total, net_text]
 	if _clear_cart_button != null:
 		_clear_cart_button.disabled = false
 	if _confirm_cart_button != null:
