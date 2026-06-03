@@ -28,6 +28,159 @@
 - `落点` 表示 Godot 主线应承载的模块。
 - `验收` 表示最小 smoke、validator 或人工复核方式。
 
+## 防遗漏拆解方式
+
+后续每迁移一个旧功能，都按下面八个维度逐项过账。任一维度没有处理，都不能把该功能标成 `[x]`。
+
+- [ ] 数据定义：旧 JSON / Rust struct / editor 表单中的字段、默认值、非法值、引用关系、版本迁移。
+- [ ] 规则计算：旧 `game_core` 中的条件判断、数值公式、失败原因、随机性、边界条件。
+- [ ] 运行时状态：snapshot、pending、cooldown、队列、持久化、跨地图、跨回合、存档 roundtrip。
+- [ ] 输入编排：键盘、鼠标、右键菜单、快捷键、UI blocker、Esc 关闭优先级、取消策略。
+- [ ] UI 展示：面板、HUD、tooltip、toast、日志、禁用态、空状态、错误反馈、文本溢出。
+- [ ] 世界表现：模型实例、位置、旋转、楼层、动画、hover/selected、高亮、碰撞、picking。
+- [ ] 工具编辑：Godot editor 插件、headless CLI、agent workflow、引用校验、安全写回。
+- [ ] 验证覆盖：现有 smoke、需新增 scenario、人工截图/试玩项、回归门禁。
+
+功能拆分时还要检查以下通用边界：
+
+- [ ] 玩家可见功能不能只恢复 core 规则，必须同时有输入入口、UI 反馈和世界表现。
+- [ ] 内容数据不能只被运行时读取，还要能被 validator、content browser、handoff 和引用查询识别。
+- [ ] 地图对象不能只在 scene 中显示，还要有 runtime target、picking proxy、阻挡/视线规则和存档策略。
+- [ ] 资产不能只导入 Godot，还要有稳定 resource path、`.import`、比例/origin 校验、fallback 诊断。
+- [ ] UI 不能直接改业务状态，所有背包、任务、交易、战斗、制作结果必须进入 `core` 或 app controller。
+- [ ] 旧功能若决定不迁，必须标成 `[D]` 并写明 Godot 替代方案、废弃原因和验证方式。
+
+## 功能迁移单元总索引
+
+### A. 玩家操作闭环
+
+- [~] 新游戏进入地图：boot、bootstrap、地图加载、玩家 actor、默认相机、HUD 初始化。
+- [~] 点击地面移动：screen pick、grid fallback、路径查询、AP 消耗、跨回合 pending、移动表现。
+- [~] 点击目标交互：actor/object/corpse/door/container/transition 解析、自动接近、抵达后执行。
+- [~] 等待/结束回合：Space、self wait、AP 消耗、敌方回合、自动回到玩家回合。
+- [~] 右键菜单：目标菜单、地面菜单、自身菜单、禁用原因、点击外部关闭。
+- [~] 面板快捷键：背包、角色、地图、任务、技能、制作、设置、Esc 关闭链。
+- [ ] 长按等待、连续推进、自动 tick、free observe 的冲突处理。
+- [ ] 输入 blocker 完整矩阵：dialogue、trade、container、quantity、discard、context menu、tooltip、drag、console、debug。
+- [ ] 鼠标 hover 光标：可走、不可走、可攻击、可对话、可拾取、可打开、可切图、不可见。
+- [ ] 多层地图操作：观察楼层、当前 actor 楼层、picking 楼层、跨层路径、楼层显隐。
+
+### B. 运行时和回合系统
+
+- [~] `Simulation.submit_player_command()` 统一入口。
+- [~] turn_state、combat_state、pending_movement、pending_interaction 基础。
+- [~] 玩家行动后 AP 不足自动推进回合基础。
+- [ ] Rust `PendingProgressionStep` 等价分帧推进。
+- [ ] actor initiative、combat round、next actor、敌方 AP 预算。
+- [ ] 行动后自动结束策略表：move、wait、attack、interact、craft、skill、cancel、UI close。
+- [ ] pending 取消规则：退不退 AP、是否结束回合、是否清 prompt、是否保留目标。
+- [ ] 事件序列号、last command result、可复现随机 seed。
+- [ ] world time、效果 tick、cooldown、AI schedule、settlement background tick。
+- [ ] snapshot schema version、新字段默认值、旧存档迁移。
+
+### C. 地图和空间规则
+
+- [~] `.tscn` 作为地图权威，`data/maps/*.json` 为兼容备份。
+- [~] `MapSceneRoot`、`MapEntryPointNode`、`MapObjectNode` 基础。
+- [~] bounds、grid、level、footprint、blocking、LOS 基础。
+- [ ] 所有地图 scene 与旧 JSON 字段逐项复核：size、levels、entry points、objects、props、rotation、trigger。
+- [ ] building footprint、wall、floor、door opening、interior/exterior、多层建筑。
+- [ ] generated door：open/closed、locked、blocking、sight blocking、自动开门、动画。
+- [ ] scene transition：目标 map、entry point、返回点、facing、清 pending、关闭 UI、相机复位。
+- [ ] overworld 进入/离开地点、地点解锁、旅行消耗、遭遇。
+- [ ] dynamic topology：门、actor、尸体、容器、掉落物对 path/LOS 的影响。
+- [ ] path failure reason：out of bounds、blocked、occupied、unreachable、different level、locked。
+
+### D. 战斗和生存规则
+
+- [~] hostile 判定、攻击距离、LOS、AP cost、基础伤害、击杀 XP、尸体容器。
+- [ ] 命中/闪避、护甲、穿甲、破甲、暴击、headshot、随机 seed。
+- [ ] melee/ranged、弹药、装填、弹匣、burst fire、spread、muzzle、projectile。
+- [ ] AOE、cleave、knockback、stun、slow、fear、poison、bleeding、regeneration。
+- [ ] 武器/装备耐久、损坏、维修、不可用状态。
+- [ ] attack preview：命中率、伤害范围、AP、弹药、LOS、目标不可攻击原因。
+- [ ] 战斗进入/退出：敌对视线、死亡、跨地图、逃离、对话/任务强制退出。
+- [ ] friendly fire、neutral 被攻击转敌对、阵营/关系变化。
+- [ ] 飘字、日志、命中/暴击/死亡反馈、攻击/受击/死亡动画、音效。
+- [ ] 生存资源：饥饿、口渴、耐力、免疫、感染、精神状态及其 tick。
+
+### E. NPC、AI 和据点生活
+
+- [~] hostile 感知、追击、攻击基础。
+- [~] friendly/neutral talk/trade/container 第一版。
+- [ ] AI target selection：最近、威胁、低血量、任务目标、友军保护。
+- [ ] AI path replanning、开门、绕路、失去视野、回巡逻/岗位。
+- [ ] AI 技能使用、远程保持距离、reload、逃跑、治疗。
+- [ ] settlement role：guard、doctor、cook、resident、trader。
+- [ ] schedule：工作、休息、巡逻、治疗、交易、睡觉、吃饭。
+- [ ] needs 和 smart objects：床、工作台、医疗点、商店、守卫点、炉灶。
+- [ ] GOAP facts、goals、actions、conditions、scores、reservation、failure trace。
+- [ ] background simulation：玩家不在地图时据点状态推进。
+- [ ] NPC diagnostics：intent、goal、action、blackboard、path、blocker、last failure。
+
+### F. 背包、装备、容器、交易
+
+- [~] 背包堆叠、拾取、丢弃、使用、装备/卸下。
+- [~] 容器打开/关闭、双栏、数量选择、超距关闭、地图切换关闭。
+- [~] 交易店铺/玩家双栏、数量买卖、价格预览、购物车、无部分成交。
+- [x] 交易中出售已装备物品。
+- [ ] inventory order、分类、排序、筛选、搜索。
+- [ ] 背包容量：重量、格子、堆叠上限、超重惩罚。
+- [ ] 任务物品：不可卖、不可丢、不可拆、不可转移。
+- [ ] 装备槽冲突：双手、盾牌、多饰品、多槽装备。
+- [ ] 装备属性派生、装备外观挂点、耐久、损坏。
+- [ ] 容器权限：锁、阵营、偷窃、任务状态、容量。
+- [ ] take/store all、双向拖拽、快捷转移。
+- [ ] 商店关系/技能/任务折扣、补货、库存持久化、资金变化明细。
+
+### G. 技能、属性、制作、任务、对话
+
+- [~] XP、level、skill point、learn skill、hotbar 第一版。
+- [~] collect/kill/dialogue/turn-in 任务基础。
+- [~] 对话打开、选项、任务动作、交易动作基础。
+- [~] recipe availability 和基础 craft。
+- [ ] 属性点分配和派生：HP/AP/命中/闪避/负重/制作/社交。
+- [ ] 主动技能：目标策略、AP、cooldown、range、AOE、效果、取消。
+- [ ] 被动技能：战斗、制作、交易、对话、探索、移动修正。
+- [ ] hotbar：多槽、替换、清空、冷却、空槽提示、数字键冲突。
+- [ ] 制作材料来源：背包、附近容器、工作台存储、地面。
+- [ ] 工具/工作台/供电/权限/技能/任务解锁要求。
+- [ ] 批量制作、制作队列、取消、完成事件、XP、任务推进。
+- [ ] 维修、拆解、产物放置、背包满 fallback。
+- [ ] 任务条件、失败/超时、互斥分支、world flags、奖励动画。
+- [ ] 对话规则 variant、条件、动作、关系变化、治疗、给/扣物品和钱。
+
+### H. 世界表现和资产
+
+- [~] glTF、bin、import、uid、font、fog shader 已迁入 Godot 目录。
+- [~] surface、wall、prop、container、weapon、equipment、humanoid mannequin 占位资产。
+- [ ] 每个 `data/world_tiles` prototype 到 Godot resource path 的明确映射。
+- [ ] 每张地图 fallback 使用次数、错误模型、重叠实例、缺碰撞、缺 picking 报告。
+- [ ] 模型 scale、origin、rotation、local offset、bounds、footprint 对齐。
+- [ ] tile/material：地面、坡道、悬崖、墙、地板、门、prop、容器。
+- [ ] actor model：玩家、NPC、感染者、尸体、掉落物、任务 marker。
+- [ ] equipment sockets：main_hand、off_hand、head、body、legs、feet、hands、back、accessory。
+- [ ] animation：idle、walk、attack、hit、death、interact、open door、pickup。
+- [ ] hover outline、selection outline、path preview、blocked cell、attack range、AOE。
+- [ ] fog/explored/unseen 三态、遮挡淡出、楼层过滤、debug overlay。
+- [ ] 音频：UI、脚步、攻击、受击、死亡、门、拾取、交易、制作、任务完成。
+
+### I. UI、编辑器、工具和验证
+
+- [~] 游戏面板：HUD、Inventory、Container、Trade、Journal、Dialogue、Skills、Crafting、Character、Map。
+- [~] Editor 插件：content browser、handoff、map review、typed field form。
+- [~] Agent 脚本：content、game smoke、editor smoke、open editor、map visual review。
+- [ ] 主菜单：新游戏、继续、存档槽、设置、退出、错误提示。
+- [ ] Settings：音量、窗口、分辨率、VSync、UI scale、键位、保存加载。
+- [ ] Tooltip/context menu/drag preview/quantity/discard/trade confirm/overworld prompt。
+- [ ] Debug console：开关、history、autocomplete、commands、结果、错误。
+- [ ] Info panels：overview、selection、actor、world、interaction、turn、events、AI、performance。
+- [ ] Editor 全域表单：items、recipes、characters、dialogues、quests、skills、settlements、overworld、appearance、ai。
+- [ ] Graph editor：dialogue、quest、skill tree。
+- [ ] glTF/socket preview：hierarchy、bounds、materials、socket、appearance/equipment preview。
+- [ ] 每个工具脚本 help、README、workflow 文档、日志路径、重跑命令。
+- [ ] smoke 全覆盖：runtime、world、UI、editor、asset、save、console、map visual。
+
 ## 0. 审计范围索引
 
 ### 0.1 旧 Rust / Bevy app
