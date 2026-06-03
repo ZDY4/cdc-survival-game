@@ -30,6 +30,7 @@ const DEFAULT_ATTACK_AP := 2.0
 const DEFAULT_INTERACTION_AP := 1.0
 const DEFAULT_ATTACK_RANGE := 1
 const NPC_AGGRO_RANGE := 8
+const COMBAT_EXIT_NO_SIGHT_TURNS := 3
 
 var actor_registry := ActorRegistry.new()
 var active_map_id: String = ""
@@ -58,6 +59,7 @@ var combat_state: Dictionary = {
 	"round": 0,
 	"participants": [],
 	"last_hostile_seen_turn": 0,
+	"turns_without_hostile_player_sight": 0,
 }
 var pending_movement: Dictionary = {}
 var pending_interaction: Dictionary = {}
@@ -728,6 +730,10 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 		var result: Dictionary = _advance_npc_turn(actor, topology)
 		results.append(result)
 		_close_turn(actor.actor_id, "npc_turn_complete")
+		if bool(combat_state.get("active", false)):
+			var visibility_result: Dictionary = update_combat_visibility_decay(topology)
+			if bool(visibility_result.get("combat_exited", false)):
+				break
 	turn_state["round"] = int(turn_state.get("round", 1)) + 1
 	return results
 
@@ -876,6 +882,7 @@ func _enter_combat(actor_ids: Array, reason: String) -> void:
 		combat_state["active"] = true
 		combat_state["round"] = int(turn_state.get("round", 1))
 		combat_state["participants"] = participants
+		combat_state["turns_without_hostile_player_sight"] = 0
 		_emit("combat_started", {
 			"participants": participants,
 			"reason": reason,
@@ -902,8 +909,97 @@ func exit_combat_if_clear(reason: String = "hostiles_cleared") -> bool:
 		actor.in_combat = false
 	combat_state["active"] = false
 	combat_state["participants"] = []
+	combat_state["turns_without_hostile_player_sight"] = 0
 	_emit("combat_ended", {"reason": reason})
 	return true
+
+
+func update_combat_visibility_decay(topology: Dictionary = {}) -> Dictionary:
+	if not bool(combat_state.get("active", false)):
+		return {"success": false, "reason": "combat_inactive"}
+	var visibility_pair: Dictionary = hostile_player_visibility_pair(topology)
+	if not visibility_pair.is_empty():
+		var previous: int = int(combat_state.get("turns_without_hostile_player_sight", 0))
+		combat_state["turns_without_hostile_player_sight"] = 0
+		combat_state["last_hostile_seen_turn"] = int(turn_state.get("round", 1))
+		if previous > 0:
+			_emit("combat_visibility_restored", {
+				"previous_no_sight_turns": previous,
+				"hostile_actor_id": int(visibility_pair.get("hostile_actor_id", 0)),
+				"player_actor_id": int(visibility_pair.get("player_actor_id", 0)),
+			})
+		return {
+			"success": true,
+			"visible": true,
+			"combat_exited": false,
+			"turns_without_hostile_player_sight": 0,
+			"visibility_pair": visibility_pair,
+		}
+
+	var no_sight_turns: int = int(combat_state.get("turns_without_hostile_player_sight", 0)) + 1
+	combat_state["turns_without_hostile_player_sight"] = no_sight_turns
+	_emit("combat_visibility_decay", {
+		"turns_without_hostile_player_sight": no_sight_turns,
+		"threshold": COMBAT_EXIT_NO_SIGHT_TURNS,
+	})
+	if no_sight_turns < COMBAT_EXIT_NO_SIGHT_TURNS:
+		return {
+			"success": true,
+			"visible": false,
+			"combat_exited": false,
+			"turns_without_hostile_player_sight": no_sight_turns,
+		}
+
+	_finish_combat_state("visibility_decay")
+	return {
+		"success": true,
+		"visible": false,
+		"combat_exited": true,
+		"reason": "visibility_decay",
+		"turns_without_hostile_player_sight": 0,
+	}
+
+
+func hostile_player_visibility_pair(topology: Dictionary = {}) -> Dictionary:
+	for hostile in actor_registry.actors():
+		if hostile.side != "hostile" or hostile.hp <= 0.0:
+			continue
+		if not hostile.map_id.is_empty() and hostile.map_id != active_map_id:
+			continue
+		for player in actor_registry.actors():
+			if player.side != "player" or player.hp <= 0.0:
+				continue
+			if not player.map_id.is_empty() and player.map_id != active_map_id:
+				continue
+			if _hostile_can_see_player(hostile, player, topology):
+				return {
+					"hostile_actor_id": hostile.actor_id,
+					"player_actor_id": player.actor_id,
+				}
+	return {}
+
+
+func _hostile_can_see_player(hostile: RefCounted, player: RefCounted, topology: Dictionary) -> bool:
+	if hostile.grid_position.y != player.grid_position.y:
+		return false
+	var dx: int = hostile.grid_position.x - player.grid_position.x
+	var dz: int = hostile.grid_position.z - player.grid_position.z
+	var radius: int = VisionRules.DEFAULT_VISION_RADIUS
+	if dx * dx + dz * dz > radius * radius:
+		return false
+	return _vision_rules.has_line_of_sight(hostile.grid_position.to_dictionary(), player.grid_position.to_dictionary(), topology)
+
+
+func _finish_combat_state(reason: String) -> void:
+	for actor in actor_registry.actors():
+		actor.in_combat = false
+		actor.turn_open = false
+	combat_state["active"] = false
+	combat_state["participants"] = []
+	combat_state["turns_without_hostile_player_sight"] = 0
+	turn_state["phase"] = "player"
+	turn_state["active_actor_id"] = _player_actor_id()
+	_emit("combat_ended", {"reason": reason})
 
 
 func _interaction_option(prompt: Dictionary, option_id: String) -> Dictionary:

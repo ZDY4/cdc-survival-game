@@ -37,6 +37,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	_expect_combat_visibility_decay(errors, simulation, registry, player, player_grid)
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
 	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
 	player.grid_position = GridCoord.from_dictionary(player_grid)
@@ -74,6 +75,86 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if bool(snapshot.get("combat_state", {}).get("active", true)):
 		errors.append("combat should exit after hostiles are gone")
 	return errors
+
+
+func _expect_combat_visibility_decay(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.turn_open = true
+	var y: int = int(player_grid.get("y", 0))
+	var near_hostile: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	})
+	var blocked_topology := _spatial_test_topology(player_grid, {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	})
+	simulation._enter_combat([1, near_hostile], "visibility_decay_smoke")
+	var first: Dictionary = simulation.update_combat_visibility_decay(blocked_topology)
+	if not bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
+		errors.append("combat should stay active after first no-sight turn")
+	if int(first.get("turns_without_hostile_player_sight", -1)) != 1:
+		errors.append("first no-sight turn should increment combat visibility counter to 1")
+	var second: Dictionary = simulation.update_combat_visibility_decay(blocked_topology)
+	if not bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
+		errors.append("combat should stay active after second no-sight turn")
+	if int(second.get("turns_without_hostile_player_sight", -1)) != 2:
+		errors.append("second no-sight turn should increment combat visibility counter to 2")
+	var third: Dictionary = simulation.update_combat_visibility_decay(blocked_topology)
+	if not bool(third.get("combat_exited", false)):
+		errors.append("third no-sight turn should exit combat")
+	if bool(simulation.snapshot().get("combat_state", {}).get("active", true)):
+		errors.append("combat should be inactive after no-sight threshold")
+
+	_restore_player_turn(simulation, player)
+	var reset_hostile: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	})
+	simulation._enter_combat([1, reset_hostile], "visibility_reset_smoke")
+	var hidden: Dictionary = simulation.update_combat_visibility_decay(blocked_topology)
+	if int(hidden.get("turns_without_hostile_player_sight", -1)) != 1:
+		errors.append("hidden hostile should increment no-sight counter before reset")
+	var hostile_actor: RefCounted = simulation.actor_registry.get_actor(reset_hostile)
+	hostile_actor.grid_position = GridCoord.from_dictionary({
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": int(player_grid.get("z", 0)) + 1,
+	})
+	var restored: Dictionary = simulation.update_combat_visibility_decay(blocked_topology)
+	if int(restored.get("turns_without_hostile_player_sight", -1)) != 0:
+		errors.append("visible hostile should reset no-sight counter to 0")
+	if not bool(restored.get("visible", false)):
+		errors.append("visible hostile should report visibility restored")
+
+	_restore_player_turn(simulation, player)
+	if simulation.actor_registry.get_actor(reset_hostile) != null:
+		simulation.actor_registry.unregister_actor(reset_hostile)
+	var far_hostile: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 5,
+		"y": y + 1,
+		"z": int(player_grid.get("z", 0)) + 5,
+	})
+	var near_again: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	})
+	simulation._enter_combat([1, near_again], "far_hostile_no_block_smoke")
+	for _i in range(3):
+		simulation.update_combat_visibility_decay(blocked_topology)
+	if bool(simulation.snapshot().get("combat_state", {}).get("active", true)):
+		errors.append("far hostile without player sight should not block visibility-decay combat exit")
+	if simulation.actor_registry.get_actor(far_hostile) == null:
+		errors.append("far hostile should remain registered after visibility-decay combat exit")
+
+	for actor_id in [near_hostile, reset_hostile, far_hostile, near_again]:
+		if simulation.actor_registry.get_actor(actor_id) != null:
+			simulation.actor_registry.unregister_actor(actor_id)
+	_restore_player_turn(simulation, player)
 
 
 func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
@@ -233,6 +314,12 @@ func _force_combat_values(simulation: RefCounted, actor_id: int) -> void:
 	target.hp = 5.0
 	target.max_hp = 5.0
 	target.defense = 0.0
+
+
+func _restore_player_turn(simulation: RefCounted, player: RefCounted) -> void:
+	player.turn_open = true
+	simulation.turn_state["phase"] = "player"
+	simulation.turn_state["active_actor_id"] = player.actor_id
 
 
 func _has_attack_resolved_for_weapon(snapshot: Dictionary, weapon_item_id: String) -> bool:

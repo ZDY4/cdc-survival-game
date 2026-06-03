@@ -25,6 +25,8 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation._vision_rules.load_snapshot(_dictionary_or_empty(snapshot_data.get("vision", {})))
 	simulation.turn_state = _dictionary_or_empty(snapshot_data.get("turn_state", simulation.turn_state)).duplicate(true)
 	simulation.combat_state = _dictionary_or_empty(snapshot_data.get("combat_state", simulation.combat_state)).duplicate(true)
+	if not simulation.combat_state.has("turns_without_hostile_player_sight"):
+		simulation.combat_state["turns_without_hostile_player_sight"] = 0
 	simulation.pending_movement = _dictionary_or_empty(snapshot_data.get("pending_movement", {})).duplicate(true)
 	simulation.pending_interaction = _dictionary_or_empty(snapshot_data.get("pending_interaction", {})).duplicate(true)
 	simulation.corpse_containers = _load_corpse_containers(snapshot_data.get("corpse_containers", []))
