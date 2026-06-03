@@ -567,7 +567,7 @@ Godot 落点：`godot/scripts/core/ai/**`、`godot/scripts/core/interactions/**`
 - [~] 背包列表、数量移动、丢弃第一版。
 - [ ] inventory order 持久化。
 - [ ] 排序、筛选、搜索、分类。
-- [ ] 选中物品详情。
+- [x] 选中物品详情，已纳入 `ContainerUI` smoke。
 - [ ] 上下文菜单：使用、装备、丢弃、拆分、检查、加入热栏、出售、存入容器。
 - [ ] 数量弹窗：增减、最大、确认、取消、非法提示。
 - [ ] 物品使用：消耗、效果、失败、任务物品限制。
@@ -830,7 +830,7 @@ Godot 落点：`godot/scenes/ui/hud.tscn`、`godot/scripts/ui/controllers/hud_co
 - [ ] Skills 面板：图形树、详情、hotbar 绑定、多树切换。
 - [ ] Crafting 面板：分类、详情、数量、工作台、队列。
 - [ ] Trade 面板：购物车、价格、拖拽、确认。
-- [~] Container 面板：空状态、双栏、滚动和基础详情已覆盖；待补数量、拖拽、选中详情。
+- [~] Container 面板：空状态、双栏、滚动、基础详情和选中详情已覆盖；待补数量、拖拽。
 - [ ] Dialogue 面板：滚动文本、选项、键盘、关闭。
 
 参考：`game_ui/panels/**`、`widgets/**`、`trade_ui/**`、`container_ui/**`。  
@@ -937,7 +937,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [ ] `Combat`：LOS、跨层、AOE、友军伤害、reload、miss/evasion、armor、seed。
 - [ ] `AI`：开门、重规划、感知丢失、技能、治疗、settlement life。
 - [ ] `InventoryUI`：上下文、数量、拖拽、排序、使用、装备详情。
-- [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情和基础失败提示已覆盖；待补双向拖拽、数量、选中详情、背包限制/权限等高级错误。
+- [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情和基础失败提示已覆盖；待补双向拖拽、数量、背包限制/权限等高级错误。
 - [ ] `TradeUI`：购物车、批量、资金不足、装备出售、价格。
 - [ ] `SkillsUI`：技能树、hotbar、多槽、目标预览、cooldown。
 - [ ] `JournalUI`：任务详情、追踪、对话交付、完成反馈。

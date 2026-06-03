@@ -54,6 +54,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("container columns should expose basic item detail text")
 	if not _container_has_scroll_columns(game_root):
 		errors.append("container panel should wrap both item columns in scroll containers")
+	if not _container_detail(game_root).contains("容器：") or not _container_detail(game_root).contains("单重"):
+		errors.append("container detail line should default to selected container item details")
+	_press_first_player_container_item(game_root)
+	if not _container_detail(game_root).contains("背包：") or not _container_detail(game_root).contains("总重"):
+		errors.append("container detail line should switch to selected player item details")
 
 	var take_result: Dictionary = game_root.take_active_container_item("1031", 1)
 	if not bool(take_result.get("success", false)):
@@ -248,6 +253,13 @@ func _container_feedback(game_root: Node) -> String:
 	return ""
 
 
+func _container_detail(game_root: Node) -> String:
+	var label: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/DetailLine")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
 func _event_seen(game_root: Node, kind: String) -> bool:
 	for event in game_root.simulation.snapshot().get("events", []):
 		var event_data: Dictionary = event
@@ -268,8 +280,9 @@ func _container_player_text(game_root: Node) -> String:
 	var output: Array[String] = []
 	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/PlayerColumn/PlayerScroll/PlayerItemLines")
 	for child in item_box.get_children():
-		if child is Label:
-			output.append((child as Label).text)
+		var text := _item_control_text(child)
+		if not text.is_empty():
+			output.append(text)
 	return "\n".join(output)
 
 
@@ -286,9 +299,26 @@ func _container_item_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
 	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/ContainerColumn/ContainerScroll/ItemLines")
 	for child in item_box.get_children():
-		if child is Label:
-			output.append((child as Label).text)
+		var text := _item_control_text(child)
+		if not text.is_empty():
+			output.append(text)
 	return output
+
+
+func _press_first_player_container_item(game_root: Node) -> void:
+	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/PlayerColumn/PlayerScroll/PlayerItemLines")
+	for child in item_box.get_children():
+		if child is Button:
+			(child as Button).pressed.emit()
+			return
+
+
+func _item_control_text(node: Node) -> String:
+	if node is Label:
+		return str((node as Label).text)
+	if node is Button:
+		return str((node as Button).text)
+	return ""
 
 
 func _container_has_scroll_columns(game_root: Node) -> bool:

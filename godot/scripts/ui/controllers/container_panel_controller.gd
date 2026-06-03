@@ -7,6 +7,7 @@ var _title_label: Label
 var _close_button: Button
 var _summary_label: Label
 var _feedback_label: Label
+var _detail_label: Label
 var _items_box: VBoxContainer
 var _player_items_box: VBoxContainer
 
@@ -34,6 +35,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		_title_label.text = "Container %s" % snapshot.get("container_id", "")
 		_summary_label.text = "容器资源不可用: %s" % snapshot.get("error", "unknown")
 		_apply_feedback({})
+		_apply_detail({}, "")
 		_clear_items()
 		return
 
@@ -51,14 +53,15 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	else:
 		for item in items:
 			var item_data: Dictionary = item
-			_items_box.add_child(_item_line(item_data))
+			_items_box.add_child(_item_line(item_data, "容器"))
 	var player_items: Array = snapshot.get("player_items", [])
 	if player_items.is_empty():
 		_player_items_box.add_child(_empty_inventory_line())
 	else:
 		for item in player_items:
 			var item_data: Dictionary = item
-			_player_items_box.add_child(_item_line(item_data))
+			_player_items_box.add_child(_item_line(item_data, "背包"))
+	_apply_detail(_default_detail_item(items, player_items), "容器" if not items.is_empty() else "背包")
 
 
 func _build_layout() -> void:
@@ -91,6 +94,7 @@ func _build_layout() -> void:
 	)
 	_summary_label = _label("SummaryLine")
 	_feedback_label = _label("FeedbackLine")
+	_detail_label = _label("DetailLine")
 	var columns := HBoxContainer.new()
 	columns.name = "ItemColumns"
 	columns.add_theme_constant_override("separation", 12)
@@ -130,21 +134,28 @@ func _build_layout() -> void:
 	box.add_child(_close_button)
 	box.add_child(_summary_label)
 	box.add_child(_feedback_label)
+	box.add_child(_detail_label)
 	box.add_child(columns)
 
 
-func _item_line(item: Dictionary) -> Label:
-	var label := _label("Item_%s" % item.get("item_id", "unknown"))
+func _item_line(item: Dictionary, source_label: String) -> Button:
+	var button := Button.new()
+	button.name = "Item_%s" % item.get("item_id", "unknown")
 	var rarity := str(item.get("rarity", ""))
 	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
-	label.text = "%s x%d | %.1f kg%s" % [
+	button.text = "%s x%d | %.1f kg%s" % [
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
 		float(item.get("total_weight", 0.0)),
 		rarity_suffix,
 	]
-	label.tooltip_text = str(item.get("description", ""))
-	return label
+	button.tooltip_text = str(item.get("description", ""))
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(func() -> void:
+		_apply_detail(item.duplicate(true), source_label)
+	)
+	return button
 
 
 func _empty_line() -> Label:
@@ -165,6 +176,34 @@ func _apply_feedback(feedback: Dictionary) -> void:
 	var text := str(feedback.get("text", ""))
 	_feedback_label.visible = not text.is_empty()
 	_feedback_label.text = text
+
+
+func _apply_detail(item: Dictionary, source_label: String) -> void:
+	if _detail_label == null:
+		return
+	if item.is_empty():
+		_detail_label.text = "选择物品查看详情"
+		return
+	var rarity := str(item.get("rarity", ""))
+	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
+	var description := str(item.get("description", ""))
+	_detail_label.text = "%s：%s x%d | 单重 %.1f kg | 总重 %.1f kg%s%s" % [
+		source_label,
+		item.get("name", item.get("item_id", "")),
+		int(item.get("count", 0)),
+		float(item.get("unit_weight", 0.0)),
+		float(item.get("total_weight", 0.0)),
+		rarity_suffix,
+		"\n%s" % description if not description.is_empty() else "",
+	]
+
+
+func _default_detail_item(items: Array, player_items: Array) -> Dictionary:
+	if not items.is_empty():
+		return _dictionary_or_empty(items[0])
+	if not player_items.is_empty():
+		return _dictionary_or_empty(player_items[0])
+	return {}
 
 
 func _label(node_name: String) -> Label:
