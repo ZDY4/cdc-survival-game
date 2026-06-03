@@ -81,6 +81,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _container_player_text(game_root).contains("抗生素 x1"):
 		errors.append("dragged antibiotics should leave player column after storing")
 
+	var invalid_take: Dictionary = game_root.take_active_container_item("1031", 0)
+	if invalid_take.get("reason", "") != "invalid_quantity":
+		errors.append("taking zero items should report invalid_quantity")
+	if not _container_feedback(game_root).contains("数量无效"):
+		errors.append("taking zero items should show invalid quantity feedback")
+	if not _container_text(game_root).contains("抗生素 x1"):
+		errors.append("invalid take quantity should not mutate container inventory")
+	var invalid_store: Dictionary = game_root.store_active_container_item("1008", 0)
+	if invalid_store.get("reason", "") != "invalid_quantity":
+		errors.append("storing zero items should report invalid_quantity")
+	if not _container_feedback(game_root).contains("数量无效"):
+		errors.append("storing zero items should show invalid quantity feedback")
+	if not _container_player_text(game_root).contains("水瓶 x1"):
+		errors.append("invalid store quantity should not mutate player inventory")
+
 	if not _press_container_item_with_text(game_root, "container", "抗生素"):
 		errors.append("should select antibiotics in container column")
 	if _container_transfer_button_text(game_root) != "拿取":

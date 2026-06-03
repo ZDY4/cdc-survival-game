@@ -148,6 +148,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "当前角色不可用，无法操作容器。"
 		"active_container_missing":
 			return "没有打开的容器。"
+		"invalid_quantity":
+			return "数量无效，请输入大于 0 的数量。"
 		_:
 			return str(feedback.get("reason", ""))
 
