@@ -599,7 +599,7 @@ Godot 落点：`godot/scripts/core/economy/equipment_*.gd`、`godot/scripts/worl
 - [ ] 双向拖拽、数量选择。
 - [ ] 容器类型：地图、尸体、掉落、商店、任务。
 - [ ] 权限：锁定、任务限制、NPC 拥有者。
-- [~] 容器关闭：Esc、关闭按钮、目标消失和地图切换已纳入 `ContainerUI` / `UIToggle` smoke；待补超出距离。
+- [x] 容器关闭：Esc、关闭按钮、目标消失、地图切换和超出距离已纳入 `ContainerUI` / `UIToggle` smoke。
 - [x] 空容器提示，已纳入 `ContainerUI` smoke。
 - [ ] 失败提示：不存在、物品不足、非法数量、背包限制、权限不足。
 
@@ -934,7 +934,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [ ] `Combat`：LOS、跨层、AOE、友军伤害、reload、miss/evasion、armor、seed。
 - [ ] `AI`：开门、重规划、感知丢失、技能、治疗、settlement life。
 - [ ] `InventoryUI`：上下文、数量、拖拽、排序、使用、装备详情。
-- [~] `ContainerUI`：关闭和空容器已覆盖；待补双向拖拽、数量、错误。
+- [~] `ContainerUI`：关闭、超距关闭和空容器已覆盖；待补双向拖拽、数量、错误。
 - [ ] `TradeUI`：购物车、批量、资金不足、装备出售、价格。
 - [ ] `SkillsUI`：技能树、hotbar、多槽、目标预览、cooldown。
 - [ ] `JournalUI`：任务详情、追踪、对话交付、完成反馈。

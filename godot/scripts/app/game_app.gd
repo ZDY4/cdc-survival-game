@@ -126,8 +126,10 @@ func refresh_trade_panel() -> void:
 func refresh_container_panel() -> void:
 	if panel_controller == null:
 		return
-	if simulation != null and not _active_container_available():
-		simulation.close_container(1, "target_unavailable")
+	if simulation != null:
+		var close_reason := _active_container_close_reason()
+		if not close_reason.is_empty():
+			simulation.close_container(1, close_reason)
 	panel_controller.refresh_container_panel()
 
 
@@ -957,11 +959,37 @@ func _active_container_id() -> String:
 	return ""
 
 
-func _active_container_available() -> bool:
+func _active_container_close_reason() -> String:
 	var container_id := _active_container_id()
 	if container_id.is_empty() or simulation == null:
+		return ""
+	if not simulation.container_sessions.has(container_id):
+		return "target_unavailable"
+	if not _active_container_in_range(container_id):
+		return "out_of_range"
+	return ""
+
+
+func _active_container_in_range(container_id: String) -> bool:
+	var target: Dictionary = _dictionary_or_empty(simulation.map_interaction_targets.get(container_id, {}))
+	if target.is_empty():
 		return true
-	return simulation.container_sessions.has(container_id)
+	var actor: RefCounted = simulation.actor_registry.get_actor(1)
+	if actor == null or actor.grid_position == null:
+		return true
+	var actor_grid: Dictionary = actor.grid_position.to_dictionary()
+	for cell in _array_or_empty(target.get("cells", [])):
+		if _grid_distance(actor_grid, _dictionary_or_empty(cell)) <= 1:
+			return true
+	if _grid_distance(actor_grid, _dictionary_or_empty(target.get("anchor", {}))) <= 1:
+		return true
+	return false
+
+
+func _grid_distance(left: Dictionary, right: Dictionary) -> int:
+	if left.is_empty() or right.is_empty() or int(left.get("y", 0)) != int(right.get("y", 0)):
+		return 999999
+	return abs(int(left.get("x", 0)) - int(right.get("x", 0))) + abs(int(left.get("z", 0)) - int(right.get("z", 0)))
 
 
 func _focused_actor_data() -> Dictionary:

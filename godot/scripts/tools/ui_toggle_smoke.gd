@@ -238,6 +238,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if not game_root.active_trade_target.is_empty():
 			errors.append("Esc should clear active trade target")
 
+	_move_player_to_interaction_target(game_root, "survivor_outpost_01_clinic_supply_cabinet")
 	var container_result: Dictionary = game_root.simulation.execute_interaction(1, {
 		"target_id": "survivor_outpost_01_clinic_supply_cabinet",
 		"command_actor_id": 1,
@@ -347,6 +348,26 @@ func _key_for_digit(digit: int) -> int:
 			return KEY_0
 
 
+func _move_player_to_interaction_target(game_root: Node, target_id: String) -> void:
+	var target: Dictionary = _dictionary_or_empty(game_root.simulation.map_interaction_targets.get(target_id, {}))
+	if target.is_empty():
+		return
+	var grid: Dictionary = {}
+	var cells: Array = target.get("cells", [])
+	if not cells.is_empty():
+		grid = _dictionary_or_empty(cells[0])
+	if grid.is_empty():
+		grid = _dictionary_or_empty(target.get("anchor", {}))
+	if grid.is_empty():
+		return
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null or player.grid_position == null:
+		return
+	player.grid_position.x = int(grid.get("x", player.grid_position.x))
+	player.grid_position.y = int(grid.get("y", player.grid_position.y))
+	player.grid_position.z = int(grid.get("z", player.grid_position.z))
+
+
 func _expect_stage_open(errors: Array[String], game_root: Node, panel_id: String, context: String) -> void:
 	if str(game_root.panel_controller.active_stage_panel) != panel_id:
 		errors.append("%s: active stage panel should be %s, got %s" % [context, panel_id, game_root.panel_controller.active_stage_panel])
@@ -440,6 +461,12 @@ func _player(game_root: Node) -> Dictionary:
 		var actor_data: Dictionary = actor
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return actor_data
+	return {}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
 	return {}
 
 
