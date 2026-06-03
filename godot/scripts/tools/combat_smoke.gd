@@ -39,6 +39,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var player_grid: Dictionary = player.grid_position.to_dictionary()
 	_expect_combat_visibility_decay(errors, simulation, registry, player, player_grid)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
+	_expect_deterministic_combat_rng(errors, simulation, registry, player, player_grid)
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
 	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
 	player.grid_position = GridCoord.from_dictionary(player_grid)
@@ -156,6 +157,94 @@ func _expect_combat_visibility_decay(errors: Array[String], simulation: RefCount
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	_restore_player_turn(simulation, player)
+
+
+func _expect_deterministic_combat_rng(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	var first_roll: float = _single_seeded_crit_roll(registry, player_grid, 77)
+	var repeated_roll: float = _single_seeded_crit_roll(registry, player_grid, 77)
+	if absf(first_roll - repeated_roll) > 0.000001:
+		errors.append("same combat RNG seed should reproduce the same crit roll")
+	var different_seed_roll: float = _single_seeded_crit_roll(registry, player_grid, 78)
+	if absf(first_roll - different_seed_roll) <= 0.000001:
+		errors.append("different combat RNG seed should alter crit roll")
+
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.equipment["main_hand"] = "1003"
+	player.ap = 20.0
+	simulation.set_combat_rng_seed(911)
+	var y: int = int(player_grid.get("y", 0))
+	var z: int = int(player_grid.get("z", 0))
+	var target_a: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": z,
+	})
+	var actor_a: RefCounted = simulation.actor_registry.get_actor(target_a)
+	actor_a.hp = 100.0
+	actor_a.max_hp = 100.0
+	actor_a.defense = 0.0
+	var first: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": target_a, "topology": _topology(simulation, registry)})
+	if int(simulation.snapshot().get("combat_state", {}).get("combat_rng_counter", -1)) != 1:
+		errors.append("combat RNG counter should advance after crit-capable attack")
+	if not first.has("crit_roll"):
+		errors.append("attack result should expose crit_roll")
+
+	var saved_snapshot: Dictionary = simulation.snapshot()
+	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	restored.load_snapshot(saved_snapshot)
+	var restored_player: RefCounted = restored.actor_registry.get_actor(1)
+	restored_player.turn_open = true
+	restored_player.ap = 20.0
+	var target_b: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) - 2,
+		"y": y,
+		"z": z,
+	})
+	var restored_target_b: int = _register_character(restored, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) - 2,
+		"y": y,
+		"z": z,
+	})
+	var actor_b: RefCounted = simulation.actor_registry.get_actor(target_b)
+	actor_b.hp = 100.0
+	actor_b.max_hp = 100.0
+	actor_b.defense = 0.0
+	var restored_actor_b: RefCounted = restored.actor_registry.get_actor(restored_target_b)
+	restored_actor_b.hp = 100.0
+	restored_actor_b.max_hp = 100.0
+	restored_actor_b.defense = 0.0
+	player.ap = 20.0
+	var continued: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": target_b, "topology": _topology(simulation, registry)})
+	var restored_continued: Dictionary = restored.submit_player_command({"kind": "attack", "target_actor_id": restored_target_b, "topology": _topology(restored, registry)})
+	if absf(float(continued.get("crit_roll", -1.0)) - float(restored_continued.get("crit_roll", -2.0))) > 0.000001:
+		errors.append("combat RNG should continue deterministically after snapshot load")
+	if int(restored.snapshot().get("combat_state", {}).get("combat_rng_counter", -1)) != 2:
+		errors.append("restored combat RNG counter should advance from loaded counter")
+
+	for actor_id in [target_a, target_b]:
+		if simulation.actor_registry.get_actor(actor_id) != null:
+			simulation.actor_registry.unregister_actor(actor_id)
+	_restore_player_turn(simulation, player)
+
+
+func _single_seeded_crit_roll(registry: RefCounted, player_grid: Dictionary, seed: int) -> float:
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.equipment["main_hand"] = "1003"
+	player.ap = 20.0
+	simulation.set_combat_rng_seed(seed)
+	var target_id: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	var target: RefCounted = simulation.actor_registry.get_actor(target_id)
+	target.hp = 100.0
+	target.max_hp = 100.0
+	target.defense = 0.0
+	var result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": target_id, "topology": _topology(simulation, registry)})
+	return float(result.get("crit_roll", -1.0))
 
 
 func _expect_attack_target_rejections(errors: Array[String], simulation: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:

@@ -18,7 +18,8 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		return spatial_check
 
 	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
-	var critical: bool = _critical_hit(attacker, target, profile)
+	var critical_roll: Dictionary = _critical_hit(simulation, attacker, target, profile)
+	var critical: bool = bool(critical_roll.get("critical", false))
 	var damage: float = _resolve_damage(attacker, target, profile, critical)
 	target.hp = max(0.0, target.hp - damage)
 	simulation.emit_event("attack_performed", {
@@ -28,6 +29,9 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"target_hp": target.hp,
 		"weapon_item_id": profile.get("item_id", ""),
 		"critical": critical,
+		"crit_roll": float(critical_roll.get("roll", 1.0)),
+		"crit_chance": float(critical_roll.get("chance", 0.0)),
+		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
 	})
 	simulation.emit_event("attack_resolved", {
 		"actor_id": actor_id,
@@ -40,6 +44,11 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"weapon_item_id": profile.get("item_id", ""),
 		"base_damage": float(profile.get("damage", attacker.attack_power)),
 		"crit_multiplier": float(profile.get("crit_multiplier", 1.0)),
+		"crit_roll": float(critical_roll.get("roll", 1.0)),
+		"crit_chance": float(critical_roll.get("chance", 0.0)),
+		"combat_rng_seed": int(simulation.combat_state.get("combat_rng_seed", 0)),
+		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
+		"combat_rng_salt": int(critical_roll.get("salt", 0)),
 	})
 
 	var defeated: bool = target.hp <= 0.0
@@ -52,6 +61,8 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"defeated": defeated,
 		"target_actor_id": target_actor_id,
 		"critical": critical,
+		"crit_roll": float(critical_roll.get("roll", 1.0)),
+		"crit_chance": float(critical_roll.get("chance", 0.0)),
 		"weapon_profile": profile,
 	}
 
@@ -123,13 +134,41 @@ func _resolve_damage(attacker: RefCounted, target: RefCounted, profile: Dictiona
 	return max(1.0, base_damage * multiplier - target.defense)
 
 
-func _critical_hit(attacker: RefCounted, target: RefCounted, profile: Dictionary) -> bool:
+func _critical_hit(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:
 	var chance: float = clampf(float(profile.get("crit_chance", 0.0)), 0.0, 1.0)
 	if chance <= 0.0:
-		return false
-	var seed_value: int = int(attacker.actor_id * 1103515245 + target.actor_id * 12345 + int(attacker.ap * 100.0))
-	var roll: float = float(abs(seed_value) % 10000) / 10000.0
-	return roll < chance
+		return {
+			"critical": false,
+			"chance": chance,
+			"roll": 1.0,
+			"counter": int(simulation.combat_state.get("combat_rng_counter", 0)),
+			"salt": 0,
+		}
+	var salt: int = int(target.actor_id ^ (attacker.actor_id << 13) ^ 3282425948)
+	var roll_data: Dictionary = _next_combat_random_unit(simulation, salt)
+	var roll: float = float(roll_data.get("roll", 1.0))
+	roll_data["critical"] = roll <= chance
+	roll_data["chance"] = chance
+	return roll_data
+
+
+func _next_combat_random_unit(simulation: RefCounted, salt: int) -> Dictionary:
+	var seed: int = max(1, abs(int(simulation.combat_state.get("combat_rng_seed", 12648430))))
+	var counter_before: int = max(0, int(simulation.combat_state.get("combat_rng_counter", 0)))
+	# Rust 参考工程用 seed + counter + salt 的 deterministic RNG；这里保持同样的状态边界，
+	# 但把计算限制在 31-bit 正整数内，避免 GDScript signed int 溢出差异影响重放。
+	var mixed: int = seed % 2147483647
+	mixed = (mixed + ((counter_before + 1) * 1103515245)) % 2147483647
+	mixed = (mixed + (abs(salt) % 2147483647) * 1664525) % 2147483647
+	mixed = (mixed + 1013904223) % 2147483647
+	var roll: float = float(mixed % 1000000) / 1000000.0
+	simulation.combat_state["combat_rng_seed"] = seed
+	simulation.combat_state["combat_rng_counter"] = counter_before + 1
+	return {
+		"roll": roll,
+		"counter": counter_before,
+		"salt": salt,
+	}
 
 
 func _defeat_actor(simulation: RefCounted, actor_id: int, target_actor_id: int, target: RefCounted) -> void:

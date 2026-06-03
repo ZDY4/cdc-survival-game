@@ -60,6 +60,8 @@ var combat_state: Dictionary = {
 	"participants": [],
 	"last_hostile_seen_turn": 0,
 	"turns_without_hostile_player_sight": 0,
+	"combat_rng_seed": 12648430,
+	"combat_rng_counter": 0,
 }
 var pending_movement: Dictionary = {}
 var pending_interaction: Dictionary = {}
@@ -240,6 +242,11 @@ func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary) 
 
 func perform_attack(actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
 	return _combat_runner.perform_attack(self, actor_id, target_actor_id, topology, options)
+
+
+func set_combat_rng_seed(seed: int) -> void:
+	combat_state["combat_rng_seed"] = max(1, abs(seed))
+	combat_state["combat_rng_counter"] = 0
 
 
 func validate_attack_target(actor_id: int, target_actor_id: int) -> Dictionary:
