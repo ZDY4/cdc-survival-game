@@ -56,8 +56,8 @@
 
 ### 3.1 键盘输入
 
-- 待迁移菜单面板快捷键：`I` 背包、`C` 角色、`M` 地图、`J` 任务、`K` 技能、`L` 制作。
-- 待迁移同键 toggle：打开对应面板，再按同键关闭；切换到另一个 stage panel 时关闭或替换当前 active panel。
+- 已迁移菜单面板快捷键：`I` 背包、`C` 角色、`M` 地图、`J` 任务、`K` 技能、`L` 制作，已纳入 `UIToggle` smoke。
+- 已迁移同键 toggle / stage panel 替换：打开对应面板、同键关闭、切换到另一个 stage panel 时替换当前 active panel，已纳入 `UIToggle` smoke。
 - 待迁移 `Esc` 关闭链路：targeting -> active dialogue -> interaction menu -> quantity modal -> trade modal -> stage panels -> settings -> pending interaction -> pending movement -> 打开 settings。
 - 部分迁移数字键：已恢复对话选项 `1-9` 和 hotbar `1-0` 基础入口并纳入 smoke；待补菜单内数量输入与快捷动作冲突处理。
 - 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、pending 取消和长按重复等待第一版；待补自由观察播放切换、长按节奏配置和 modal 冲突策略。

@@ -329,12 +329,12 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 
 ### 6.1 键盘
 
-- [ ] `I` 背包 toggle。
-- [ ] `C` 角色面板 toggle。
-- [ ] `M` 地图面板 toggle。
-- [ ] `J` 任务面板 toggle。
-- [ ] `K` 技能面板 toggle。
-- [ ] `L` 制作面板 toggle。
+- [x] `I` 背包 toggle，已纳入 `UIToggle` smoke。
+- [x] `C` 角色面板 toggle，已纳入 `UIToggle` smoke。
+- [x] `M` 地图面板 toggle，已纳入 `UIToggle` smoke。
+- [x] `J` 任务面板 toggle，已纳入 `UIToggle` smoke。
+- [x] `K` 技能面板 toggle，已纳入 `UIToggle` smoke。
+- [x] `L` 制作面板 toggle，已纳入 `UIToggle` smoke。
 - [ ] `Esc` 关闭链路：targeting -> dialogue -> interaction menu -> quantity modal -> trade modal -> stage panels -> settings -> pending interaction -> pending movement -> settings。
 - [~] `1-9` 对话选项，已覆盖基础数字选择 smoke；待补禁用选项、越界选项和 modal 冲突。
 - [~] `1-0` hotbar 激活，已覆盖基础 hotbar 使用 smoke；待补 cooldown 禁用提示、空槽提示和 modal 冲突。

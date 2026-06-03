@@ -318,8 +318,8 @@
 
 ### 6.1 键盘输入
 
-- [~] `I` inventory、`J` journal、`K` skills、`L` crafting、`C` character、`M` map 有基础或正在迁移。
-- [ ] 同键 toggle：打开、关闭、替换 active stage panel。
+- [x] `I` inventory、`J` journal、`K` skills、`L` crafting、`C` character、`M` map 快捷键，已纳入 `UIToggle` smoke。
+- [x] 同键 toggle：打开、关闭、替换 active stage panel，已纳入 `UIToggle` smoke。
 - [ ] `Esc` 关闭链路：targeting -> dialogue -> interaction menu -> quantity modal -> trade -> container -> stage panel -> settings -> pending -> settings。
 - [~] `Space`：对话推进、等待/结束回合、pending 取消、长按重复等待。已恢复单次等待、pending 取消和长按重复等待第一版；待补自由观察播放冲突策略和更细的长按节奏配置。
 - [~] 数字键：对话 `1-9`、hotbar `1-0` 已有基础入口并纳入 smoke；待补数量输入与快捷动作冲突处理。

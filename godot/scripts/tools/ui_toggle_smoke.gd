@@ -147,6 +147,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_stage_open(errors, game_root, "skills", "K should replace journal with skills")
 	if game_root.journal_panel.visible:
 		errors.append("opening skills should hide journal")
+	_press_key(game_root, KEY_L)
+	_expect_stage_open(errors, game_root, "crafting", "L should replace skills with crafting")
+	if game_root.skills_panel.visible:
+		errors.append("opening crafting should hide skills")
 
 	_press_key(game_root, KEY_ESCAPE)
 	_expect_stage_closed(errors, game_root, "Esc should close active stage panel")
