@@ -503,7 +503,7 @@
 - [ ] 双向拖拽、数量选择。
 - [ ] 容器类型：地图、尸体、掉落、商店、任务。
 - [ ] 权限：锁定、任务限制、NPC 拥有者。
-- [~] 容器关闭：Esc 和关闭按钮已纳入 `ContainerUI` / `UIToggle` smoke；待补地图切换、目标消失、超出距离。
+- [~] 容器关闭：Esc、关闭按钮和目标消失已纳入 `ContainerUI` / `UIToggle` smoke；待补地图切换、超出距离。
 - [ ] 空容器提示和失败提示。
 
 ### 11.4 交易
@@ -515,7 +515,7 @@
 - [ ] 总价、资金变化、确认预览。
 - [ ] 资金不足、库存不足、不可出售、装备出售确认。
 - [ ] 拖拽：shop -> buy zone、inventory/equipment -> sell zone。
-- [~] 交易关闭：Esc 和关闭按钮已纳入 `TradeUI` / `UIToggle` smoke；待补对话结束、地图切换、目标不可用。
+- [~] 交易关闭：Esc、关闭按钮和目标不可用已纳入 `TradeUI` / `UIToggle` smoke；待补对话结束、地图切换。
 
 参考：`game_core/src/economy.rs`、`runtime/runtime_economy.rs`、`game_ui/container_ui/**`、`game_ui/trade_ui/**`。
 落点：`godot/scripts/core/economy/**`、`godot/scripts/ui/controllers/*_panel_controller.gd`。

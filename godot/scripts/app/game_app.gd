@@ -117,6 +117,8 @@ func refresh_inventory_panel() -> void:
 func refresh_trade_panel() -> void:
 	if panel_controller == null:
 		return
+	if not _active_trade_target_available():
+		active_trade_target = {}
 	panel_controller.active_trade_target = active_trade_target
 	panel_controller.refresh_trade_panel()
 
@@ -124,6 +126,8 @@ func refresh_trade_panel() -> void:
 func refresh_container_panel() -> void:
 	if panel_controller == null:
 		return
+	if simulation != null and not _active_container_available():
+		simulation.close_container(1, "target_unavailable")
 	panel_controller.refresh_container_panel()
 
 
@@ -899,9 +903,23 @@ func _dialogue_trade_target() -> Dictionary:
 	if active_trade_target.get("target_type", "") == "actor":
 		return active_trade_target.duplicate(true)
 	return {
-		"target_type": "actor",
-		"actor_id": 0,
+		"target_type": "shop",
 	}
+
+
+func _active_trade_target_available() -> bool:
+	if active_trade_target.is_empty() or simulation == null:
+		return true
+	if str(active_trade_target.get("target_type", "")) != "actor":
+		return true
+	var actor_id := int(active_trade_target.get("actor_id", 0))
+	if actor_id <= 0:
+		return false
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return false
+	var shop_id := "%s_shop" % actor.definition_id
+	return registry != null and registry.get_library("shops").has(shop_id)
 
 
 func _current_dialogue_snapshot() -> Dictionary:
@@ -928,6 +946,13 @@ func _active_container_id() -> String:
 		if actor_data.get("kind", "") == "player":
 			return str(actor_data.get("active_container_id", ""))
 	return ""
+
+
+func _active_container_available() -> bool:
+	var container_id := _active_container_id()
+	if container_id.is_empty() or simulation == null:
+		return true
+	return simulation.container_sessions.has(container_id)
 
 
 func _focused_actor_data() -> Dictionary:

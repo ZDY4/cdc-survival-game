@@ -94,6 +94,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("Esc should close container panel")
 	if not _active_container_id(game_root).is_empty():
 		errors.append("Esc should clear active container runtime state")
+	var vanished_container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_clinic_supply_cabinet", true, false)
+	if vanished_container_node == null:
+		errors.append("missing generated container node for vanished target check")
+		return errors
+	game_root.select_interaction_node(vanished_container_node)
+	var vanished_open_result: Dictionary = _execute_primary_and_complete(game_root)
+	if not bool(vanished_open_result.get("success", false)):
+		errors.append("container reopen for vanished target check failed: %s" % vanished_open_result.get("reason", "unknown"))
+	var vanished_container_id := _active_container_id(game_root)
+	game_root.simulation.container_sessions.erase(vanished_container_id)
+	game_root.refresh_container_panel()
+	if game_root.container_panel.visible:
+		errors.append("missing container target should close container panel")
+	if not _active_container_id(game_root).is_empty():
+		errors.append("missing container target should clear active container runtime state")
 	return errors
 
 

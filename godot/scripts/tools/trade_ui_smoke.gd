@@ -92,6 +92,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("Esc should close trade panel")
 	if not game_root.active_trade_target.is_empty():
 		errors.append("Esc should clear active trade target")
+	_reopen_trade(game_root, errors)
+	game_root.simulation.actor_registry.unregister_actor(2)
+	game_root.refresh_trade_panel()
+	if game_root.trade_panel.visible:
+		errors.append("missing trade target should close trade panel")
+	if not game_root.active_trade_target.is_empty():
+		errors.append("missing trade target should clear active trade target")
 	return errors
 
 
