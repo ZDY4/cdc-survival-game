@@ -111,7 +111,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if move_camera == null:
 		errors.append("missing runtime camera before mouse ground move")
 	else:
-		_expect_mouse_left_click_ground_move(errors, game_root, move_camera)
+		await _expect_mouse_left_click_far_ground_starts_moving(errors, game_root, move_camera)
 	_expect_cancel_pending(errors, game_root)
 
 	var door_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
@@ -227,37 +227,43 @@ func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
 		errors.append("ground grid fallback selection should show move prompt")
 
 
-func _expect_mouse_left_click_ground_move(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
 	var before: Dictionary = _player_grid(game_root)
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player != null:
+		player.ap = 6.0
 	var target := {
-		"x": int(before.get("x", 0)) + 1,
+		"x": int(before.get("x", 0)) + 8,
 		"y": int(before.get("y", 0)),
 		"z": int(before.get("z", 0)),
 	}
 	var screen_position := camera.unproject_position(Vector3(float(target["x"]), 0.0, float(target["z"])))
+	var motion := InputEventMouseMotion.new()
+	motion.position = screen_position
+	game_root.get_viewport().push_input(motion, true)
+	await process_frame
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
 	click.position = screen_position
-	game_root._input(click)
+	game_root.get_viewport().push_input(click, true)
+	await process_frame
 	var after: Dictionary = _player_grid(game_root)
-	if int(after.get("x", 0)) != int(target.get("x", 0)) or int(after.get("z", 0)) != int(target.get("z", 0)):
-		errors.append("left mouse click on projected ground should move player from %s to %s, got %s" % [JSON.stringify(before), JSON.stringify(target), JSON.stringify(after)])
-	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if int(after.get("x", 0)) == int(before.get("x", 0)) and int(after.get("z", 0)) == int(before.get("z", 0)):
+		errors.append("left mouse click on far projected ground should start moving player from %s toward %s" % [JSON.stringify(before), JSON.stringify(target)])
+	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
+		errors.append("left mouse click on far projected ground should leave remaining movement pending")
+	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
 		player.ap = 6.0
 
 
 func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:
 	var before: Dictionary = _player_grid(game_root)
-	var far_target := {
-		"x": int(before.get("x", 0)) + 12,
-		"y": int(before.get("y", 0)),
-		"z": int(before.get("z", 0)),
-	}
+	var far_target := _far_open_grid_from(before, game_root.world_result.get("map", {}))
 	var move_result: Dictionary = game_root.execute_move_to_grid(far_target)
-	if bool(move_result.get("success", false)):
-		errors.append("far grid move should queue pending movement instead of completing in one turn")
+	if not bool(move_result.get("success", false)):
+		errors.append("far grid move should start partial movement before queueing: %s" % move_result.get("reason", "unknown"))
 	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
 		errors.append("far grid move should leave pending_movement")
 	var cancel_result: Dictionary = game_root.cancel_pending("smoke_cancel", false)
@@ -266,6 +272,27 @@ func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:
 	var snapshot: Dictionary = game_root.simulation.snapshot()
 	if not snapshot.get("pending_movement", {}).is_empty() or not snapshot.get("pending_interaction", {}).is_empty():
 		errors.append("cancel_pending should clear pending movement and interaction")
+
+
+func _far_open_grid_from(before: Dictionary, topology: Dictionary) -> Dictionary:
+	var bounds: Dictionary = topology.get("bounds", {})
+	var y := int(before.get("y", 0))
+	var z := int(before.get("z", 0))
+	var start_x := int(before.get("x", 0))
+	var candidates: Array[Dictionary] = []
+	for x in range(int(bounds.get("min_x", 0)), int(bounds.get("max_x", 0)) + 1):
+		if abs(x - start_x) <= 6:
+			continue
+		candidates.append({"x": x, "y": y, "z": z})
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return abs(int(a.get("x", 0)) - start_x) < abs(int(b.get("x", 0)) - start_x)
+	)
+	for candidate in candidates:
+		var key := "%d:%d:%d" % [int(candidate.get("x", 0)), y, z]
+		if topology.get("blocking_cells", {}).has(key):
+			continue
+		return candidate
+	return before.duplicate(true)
 
 
 func _player_grid(game_root: Node) -> Dictionary:

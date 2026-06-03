@@ -335,6 +335,13 @@ func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 			"available_ap": actor.ap,
 		}
 		_emit("movement_queued", pending_movement.duplicate(true))
+		var partial_move: Dictionary = _advance_pending_movement(actor, topology)
+		if not bool(partial_move.get("success", false)):
+			return partial_move
+		if int(partial_move.get("steps", 0)) > 0:
+			partial_move["reason"] = "movement_pending"
+			partial_move["pending_movement"] = pending_movement.duplicate(true)
+			return partial_move
 		return {
 			"success": false,
 			"reason": "ap_insufficient_movement_queued",

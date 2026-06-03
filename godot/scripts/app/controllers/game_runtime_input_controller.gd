@@ -114,7 +114,9 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 			return true
 		if str(hover_result.get("kind", "")) == "ground" and game_root.has_method("execute_move_to_grid"):
 			var ground_position: Vector3 = hover_result.get("position", Vector3.ZERO)
-			game_root.execute_move_to_grid(_grid_from_world_position(ground_position))
+			var grid: Dictionary = _grid_from_world_position(ground_position)
+			var result: Dictionary = game_root.execute_move_to_grid(grid)
+			print("ground click move grid=%s success=%s reason=%s" % [JSON.stringify(grid), str(result.get("success", false)), str(result.get("reason", ""))])
 			return true
 	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed:
 		var right_hover: Dictionary = update_hover_at_screen_position(mouse_event.position)
