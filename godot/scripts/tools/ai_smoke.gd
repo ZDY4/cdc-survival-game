@@ -49,12 +49,13 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if attack.get("intent", "") != "attack":
 		errors.append("zombie should attack inside attack range")
 
-	var before_hp: float = player.hp
 	var wait_result: Dictionary = simulation.submit_player_command({"kind": "wait", "topology": _topology(simulation, registry)})
 	if not bool(wait_result.get("success", false)):
 		errors.append("player wait command should advance world turn")
-	if player.hp >= before_hp:
+	if not _npc_results_include_attack(_array_or_empty(wait_result.get("npc_results", [])), zombie_id):
 		errors.append("adjacent hostile should attack during world turn after wait")
+	if _event_count(simulation.snapshot(), "attack_resolved") <= 0:
+		errors.append("adjacent hostile attack should emit attack_resolved even when armor blocks damage")
 
 	zombie.grid_position = GridCoord.new(player_grid.x + 20, player_grid.y, player_grid.z)
 	var idle: Dictionary = simulation.decide_actor_intent(zombie_id)
@@ -149,6 +150,14 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 	return count
 
 
+func _npc_results_include_attack(results: Array, actor_id: int) -> bool:
+	for result in results:
+		var result_data: Dictionary = _dictionary_or_empty(result)
+		if int(result_data.get("actor_id", 0)) == actor_id and str(result_data.get("intent", "")) == "attack":
+			return true
+	return false
+
+
 func _digest(snapshot: Dictionary) -> Dictionary:
 	return {
 		"event_count": snapshot.get("events", []).size(),
@@ -165,3 +174,9 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

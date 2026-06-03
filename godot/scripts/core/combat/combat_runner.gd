@@ -20,7 +20,8 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
 	var critical_roll: Dictionary = _critical_hit(simulation, attacker, target, profile)
 	var critical: bool = bool(critical_roll.get("critical", false))
-	var damage: float = _resolve_damage(attacker, target, profile, critical)
+	var damage_result: Dictionary = _resolve_damage(simulation, attacker, target, profile, critical)
+	var damage: float = float(damage_result.get("damage", 0.0))
 	target.hp = max(0.0, target.hp - damage)
 	simulation.emit_event("attack_performed", {
 		"actor_id": actor_id,
@@ -32,6 +33,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"crit_roll": float(critical_roll.get("roll", 1.0)),
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
 		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
+		"hit_kind": str(damage_result.get("hit_kind", "hit")),
 	})
 	simulation.emit_event("attack_resolved", {
 		"actor_id": actor_id,
@@ -46,6 +48,9 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"crit_multiplier": float(profile.get("crit_multiplier", 1.0)),
 		"crit_roll": float(critical_roll.get("roll", 1.0)),
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
+		"defense": float(damage_result.get("defense", 0.0)),
+		"damage_reduction": float(damage_result.get("damage_reduction", 0.0)),
+		"hit_kind": str(damage_result.get("hit_kind", "hit")),
 		"combat_rng_seed": int(simulation.combat_state.get("combat_rng_seed", 0)),
 		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
 		"combat_rng_salt": int(critical_roll.get("salt", 0)),
@@ -57,12 +62,14 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 
 	return {
 		"success": true,
+		"actor_id": actor_id,
 		"damage": damage,
 		"defeated": defeated,
 		"target_actor_id": target_actor_id,
 		"critical": critical,
 		"crit_roll": float(critical_roll.get("roll", 1.0)),
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
+		"hit_kind": str(damage_result.get("hit_kind", "hit")),
 		"weapon_profile": profile,
 	}
 
@@ -128,14 +135,30 @@ func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictiona
 	return {"success": true}
 
 
-func _resolve_damage(attacker: RefCounted, target: RefCounted, profile: Dictionary, critical: bool) -> float:
-	var base_damage: float = float(profile.get("damage", attacker.attack_power))
-	var multiplier: float = float(profile.get("crit_multiplier", 1.0)) if critical else 1.0
-	return max(1.0, base_damage * multiplier - target.defense)
+func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary, critical: bool) -> Dictionary:
+	var attack_damage: float = float(profile.get("damage", _combat_attribute(simulation, attacker, "attack_power", attacker.attack_power)))
+	var defense: float = max(0.0, _combat_attribute(simulation, target, "defense", target.defense))
+	var base_damage: float = max(0.0, attack_damage - defense)
+	if base_damage <= 0.0:
+		return {
+			"damage": 0.0,
+			"hit_kind": "blocked",
+			"defense": defense,
+			"damage_reduction": 0.0,
+		}
+	var damage_reduction: float = clampf(_combat_attribute(simulation, target, "damage_reduction", 0.0), 0.0, 0.95)
+	var multiplier: float = _critical_multiplier(simulation, attacker, profile) if critical else 1.0
+	var damage: float = max(1.0, round(base_damage * (1.0 - damage_reduction) * multiplier))
+	return {
+		"damage": damage,
+		"hit_kind": "crit" if critical else "hit",
+		"defense": defense,
+		"damage_reduction": damage_reduction,
+	}
 
 
 func _critical_hit(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:
-	var chance: float = clampf(float(profile.get("crit_chance", 0.0)), 0.0, 1.0)
+	var chance: float = clampf(float(profile.get("crit_chance", 0.0)) + _combat_attribute(simulation, attacker, "crit_chance", 0.0), 0.0, 1.0)
 	if chance <= 0.0:
 		return {
 			"critical": false,
@@ -150,6 +173,40 @@ func _critical_hit(simulation: RefCounted, attacker: RefCounted, target: RefCoun
 	roll_data["critical"] = roll <= chance
 	roll_data["chance"] = chance
 	return roll_data
+
+
+func _critical_multiplier(simulation: RefCounted, attacker: RefCounted, profile: Dictionary) -> float:
+	if profile.has("crit_multiplier"):
+		return max(1.0, float(profile.get("crit_multiplier", 1.0)))
+	return max(1.0, _combat_attribute(simulation, attacker, "crit_damage", 1.0))
+
+
+func _combat_attribute(simulation: RefCounted, actor: RefCounted, key: String, fallback: float = 0.0) -> float:
+	var value: float = fallback
+	if key == "attack_power":
+		value = actor.attack_power
+	elif key == "defense":
+		value = actor.defense
+	else:
+		value = float(_dictionary_or_empty(actor.combat_attributes).get(key, fallback))
+	for slot_id in actor.equipment.keys():
+		var item_id: String = str(actor.equipment.get(slot_id, ""))
+		if item_id.is_empty():
+			continue
+		value += _equipped_attribute_modifier(simulation, item_id, key)
+	return value
+
+
+func _equipped_attribute_modifier(simulation: RefCounted, item_id: String, key: String) -> float:
+	var record: Dictionary = _dictionary_or_empty(simulation.item_library.get(item_id, {}))
+	var item: Dictionary = _dictionary_or_empty(record.get("data", record))
+	for fragment in _array_or_empty(item.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) != "attribute_modifiers":
+			continue
+		var attributes: Dictionary = _dictionary_or_empty(fragment_data.get("attributes", {}))
+		return float(attributes.get(key, 0.0))
+	return 0.0
 
 
 func _next_combat_random_unit(simulation: RefCounted, salt: int) -> Dictionary:
@@ -238,3 +295,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

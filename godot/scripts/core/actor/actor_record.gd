@@ -24,6 +24,7 @@ var max_hp: float = 1.0
 var hp: float = 1.0
 var attack_power: float = 1.0
 var defense: float = 0.0
+var combat_attributes: Dictionary = {}
 var xp_reward: int = 0
 var progression: Dictionary = {}
 var ai: Dictionary = {}
@@ -57,6 +58,7 @@ func to_dictionary() -> Dictionary:
 			"hp": hp,
 			"attack_power": attack_power,
 			"defense": defense,
+			"attributes": combat_attributes.duplicate(true),
 			"xp_reward": xp_reward,
 		},
 		"progression": progression.duplicate(true),

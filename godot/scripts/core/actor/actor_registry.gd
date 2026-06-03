@@ -33,6 +33,12 @@ func register_actor(request: Dictionary) -> ActorRecord:
 	record.hp = clampf(float(request.get("hp", record.max_hp)), 0.0, record.max_hp)
 	record.attack_power = max(0.0, float(request.get("attack_power", 1.0)))
 	record.defense = max(0.0, float(request.get("defense", 0.0)))
+	record.combat_attributes = _dictionary_or_empty(request.get("combat_attributes", {})).duplicate(true)
+	if record.combat_attributes.is_empty():
+		record.combat_attributes = {
+			"attack_power": record.attack_power,
+			"defense": record.defense,
+		}
 	record.xp_reward = max(0, int(request.get("xp_reward", 0)))
 	record.progression = _dictionary_or_empty(request.get("progression", {})).duplicate(true)
 	record.ai = _dictionary_or_empty(request.get("ai", {})).duplicate(true)
@@ -112,6 +118,12 @@ func load_snapshot(records: Array) -> void:
 		record.hp = clampf(float(combat.get("hp", record.max_hp)), 0.0, record.max_hp)
 		record.attack_power = max(0.0, float(combat.get("attack_power", 1.0)))
 		record.defense = max(0.0, float(combat.get("defense", 0.0)))
+		record.combat_attributes = _dictionary_or_empty(combat.get("attributes", {})).duplicate(true)
+		if record.combat_attributes.is_empty():
+			record.combat_attributes = {
+				"attack_power": record.attack_power,
+				"defense": record.defense,
+			}
 		record.xp_reward = max(0, int(combat.get("xp_reward", 0)))
 		record.progression = _dictionary_or_empty(actor_data.get("progression", {})).duplicate(true)
 		record.ai = _dictionary_or_empty(actor_data.get("ai", {})).duplicate(true)

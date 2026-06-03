@@ -40,6 +40,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_combat_visibility_decay(errors, simulation, registry, player, player_grid)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
 	_expect_deterministic_combat_rng(errors, simulation, registry, player, player_grid)
+	_expect_combat_attribute_damage_modifiers(errors, simulation, player, player_grid)
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
 	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
 	player.grid_position = GridCoord.from_dictionary(player_grid)
@@ -245,6 +246,80 @@ func _single_seeded_crit_roll(registry: RefCounted, player_grid: Dictionary, see
 	target.defense = 0.0
 	var result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": target_id, "topology": _topology(simulation, registry)})
 	return float(result.get("crit_roll", -1.0))
+
+
+func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
+	player.combat_attributes = {
+		"attack_power": 10.0,
+		"defense": 0.0,
+		"crit_damage": 2.0,
+	}
+	simulation.set_combat_rng_seed(313)
+	var y: int = int(player_grid.get("y", 0))
+	var z: int = int(player_grid.get("z", 0))
+
+	var blocked_target: int = _register_test_actor(simulation, "blocked_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": z,
+	}, 20.0)
+	var blocked_actor: RefCounted = simulation.actor_registry.get_actor(blocked_target)
+	blocked_actor.defense = 99.0
+	blocked_actor.combat_attributes = {"damage_reduction": 0.0}
+	var blocked: Dictionary = simulation.perform_attack(player.actor_id, blocked_target, {}, {"range": 2, "weapon_profile": {"damage": 10.0, "crit_chance": 0.0}})
+	if str(blocked.get("hit_kind", "")) != "blocked":
+		errors.append("over-defended target should report blocked hit_kind")
+	if absf(float(blocked.get("damage", -1.0))) > 0.01:
+		errors.append("blocked attack should deal zero damage")
+	if absf(blocked_actor.hp - 20.0) > 0.01:
+		errors.append("blocked attack should not change target hp")
+
+	var reduced_target: int = _register_test_actor(simulation, "reduced_target", "hostile", {
+		"x": int(player_grid.get("x", 0)),
+		"y": y,
+		"z": z + 1,
+	}, 20.0)
+	var reduced_actor: RefCounted = simulation.actor_registry.get_actor(reduced_target)
+	reduced_actor.defense = 0.0
+	reduced_actor.combat_attributes = {"damage_reduction": 0.5}
+	var reduced: Dictionary = simulation.perform_attack(player.actor_id, reduced_target, {}, {"range": 2, "weapon_profile": {"damage": 20.0, "crit_chance": 0.0}})
+	if absf(float(reduced.get("damage", 0.0)) - 10.0) > 0.01:
+		errors.append("damage_reduction 0.5 should halve 20 damage")
+
+	var armored_target: int = _register_test_actor(simulation, "armored_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) - 1,
+		"y": y,
+		"z": z,
+	}, 20.0)
+	var armored_actor: RefCounted = simulation.actor_registry.get_actor(armored_target)
+	armored_actor.defense = 0.0
+	armored_actor.combat_attributes = {"damage_reduction": 0.0}
+	armored_actor.equipment["body"] = "2008"
+	var armored: Dictionary = simulation.perform_attack(player.actor_id, armored_target, {}, {"range": 2, "weapon_profile": {"damage": 20.0, "crit_chance": 0.0}})
+	if absf(float(armored.get("damage", 0.0)) - 4.0) > 0.01:
+		errors.append("equipped armor modifiers should apply defense and damage_reduction")
+
+	var crit_target: int = _register_test_actor(simulation, "crit_target", "hostile", {
+		"x": int(player_grid.get("x", 0)),
+		"y": y,
+		"z": z - 1,
+	}, 30.0)
+	var crit_actor: RefCounted = simulation.actor_registry.get_actor(crit_target)
+	crit_actor.defense = 0.0
+	crit_actor.combat_attributes = {"damage_reduction": 0.0}
+	var crit: Dictionary = simulation.perform_attack(player.actor_id, crit_target, {}, {"range": 2, "weapon_profile": {"damage": 10.0, "crit_chance": 1.0}})
+	if str(crit.get("hit_kind", "")) != "crit":
+		errors.append("forced crit should report crit hit_kind")
+	if absf(float(crit.get("damage", 0.0)) - 20.0) > 0.01:
+		errors.append("actor crit_damage should multiply critical damage when weapon has no crit_multiplier")
+
+	for actor_id in [blocked_target, reduced_target, armored_target, crit_target]:
+		if simulation.actor_registry.get_actor(actor_id) != null:
+			simulation.actor_registry.unregister_actor(actor_id)
+	player.combat_attributes = original_attributes
+	_restore_player_turn(simulation, player)
 
 
 func _expect_attack_target_rejections(errors: Array[String], simulation: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
@@ -472,6 +547,10 @@ func _register_test_actor(simulation: RefCounted, definition_id: String, side: S
 		"hp": hp,
 		"attack_power": 4.0,
 		"defense": 0.0,
+		"combat_attributes": {
+			"attack_power": 4.0,
+			"defense": 0.0,
+		},
 		"xp_reward": 0,
 	})
 
