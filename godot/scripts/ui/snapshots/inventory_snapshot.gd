@@ -42,11 +42,20 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 			"count": count,
 			"unit_weight": 0.0,
 			"total_weight": 0.0,
+			"value": 0,
+			"total_value": 0,
 			"rarity": "",
+			"category": "misc",
+			"category_label": _category_label("misc"),
+			"equip_slots": [],
+			"stackable": false,
+			"max_stack": 1,
 		}
 
 	var data: Dictionary = record.get("data", {})
 	var unit_weight: float = float(data.get("weight", 0.0))
+	var value: int = int(data.get("value", 0))
+	var category: String = _category(data)
 	return {
 		"item_id": item_id,
 		"name": str(data.get("name", item_id)),
@@ -54,7 +63,14 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"count": count,
 		"unit_weight": unit_weight,
 		"total_weight": unit_weight * float(count),
+		"value": value,
+		"total_value": value * count,
 		"rarity": _rarity(data),
+		"category": category,
+		"category_label": _category_label(category),
+		"equip_slots": _equip_slots(data),
+		"stackable": _stackable(data),
+		"max_stack": _max_stack(data),
 	}
 
 
@@ -64,6 +80,68 @@ func _rarity(item_data: Dictionary) -> String:
 		if fragment_data.get("kind", "") == "economy":
 			return str(fragment_data.get("rarity", ""))
 	return ""
+
+
+func _category(item_data: Dictionary) -> String:
+	if _has_fragment(item_data, "weapon") or _has_fragment(item_data, "equip"):
+		return "equipment"
+	if _has_fragment(item_data, "usable"):
+		return "consumable"
+	if str(item_data.get("icon_path", "")).contains("/ammo/") or str(item_data.get("name", "")).contains("弹药"):
+		return "ammo"
+	if _has_fragment(item_data, "crafting"):
+		return "material"
+	return "misc"
+
+
+func _category_label(category: String) -> String:
+	match category:
+		"equipment":
+			return "装备"
+		"consumable":
+			return "消耗"
+		"ammo":
+			return "弹药"
+		"material":
+			return "材料"
+		_:
+			return "杂项"
+
+
+func _equip_slots(item_data: Dictionary) -> Array[String]:
+	for fragment in item_data.get("fragments", []):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if fragment_data.get("kind", "") != "equip":
+			continue
+		var slots: Array[String] = []
+		for slot in fragment_data.get("slots", []):
+			slots.append(str(slot))
+		return slots
+	return []
+
+
+func _stackable(item_data: Dictionary) -> bool:
+	for fragment in item_data.get("fragments", []):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if fragment_data.get("kind", "") == "stacking":
+			return bool(fragment_data.get("stackable", false))
+	return false
+
+
+func _max_stack(item_data: Dictionary) -> int:
+	for fragment in item_data.get("fragments", []):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if fragment_data.get("kind", "") == "stacking":
+			return int(fragment_data.get("max_stack", 1))
+	return 1
+
+
+func _has_fragment(item_data: Dictionary, kind: String) -> bool:
+	for fragment in item_data.get("fragments", []):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) == kind:
+			return true
+	return false
 
 
 func _player_actor(runtime_snapshot: Dictionary) -> Dictionary:

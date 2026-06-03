@@ -14,7 +14,7 @@ func _run() -> void:
 	get_root().add_child(game_root)
 	await process_frame
 
-	var errors: Array[String] = _run_checks(game_root)
+	var errors: Array[String] = await _run_checks(game_root)
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -38,6 +38,44 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var initial_text: String = "\n".join(_item_lines(game_root))
 	if not initial_text.contains("手枪弹药 x10"):
 		errors.append("initial inventory missing bootstrap ammo")
+	if _filter_button(game_root, "FilterEquipmentButton") == null:
+		errors.append("inventory panel should expose equipment filter")
+	else:
+		_filter_button(game_root, "FilterEquipmentButton").pressed.emit()
+		await process_frame
+		var equipment_text: String = "\n".join(_item_lines(game_root))
+		if not equipment_text.contains("棒球棒 x1"):
+			errors.append("equipment filter should keep weapon rows")
+		if equipment_text.contains("手枪弹药 x10"):
+			errors.append("equipment filter should hide ammo rows")
+	if _filter_button(game_root, "FilterAmmoButton") == null:
+		errors.append("inventory panel should expose ammo filter")
+	else:
+		_filter_button(game_root, "FilterAmmoButton").pressed.emit()
+		await process_frame
+		var ammo_text: String = "\n".join(_item_lines(game_root))
+		if not ammo_text.contains("手枪弹药 x10"):
+			errors.append("ammo filter should keep ammo rows")
+		if ammo_text.contains("棒球棒 x1"):
+			errors.append("ammo filter should hide equipment rows")
+	if _filter_button(game_root, "FilterAllButton") == null:
+		errors.append("inventory panel should expose all filter")
+	else:
+		_filter_button(game_root, "FilterAllButton").pressed.emit()
+		await process_frame
+		if not "\n".join(_item_lines(game_root)).contains("棒球棒 x1"):
+			errors.append("all filter should restore inventory rows")
+	if _sort_button(game_root, "SortValueButton") == null:
+		errors.append("inventory panel should expose value sort")
+	else:
+		_sort_button(game_root, "SortValueButton").pressed.emit()
+		await process_frame
+		if not _text_ordered("\n".join(_item_lines(game_root)), "棒球棒 x1", "手枪弹药 x10"):
+			errors.append("value sort should place higher value item before ammo")
+	if not _press_inventory_item_with_text(game_root, "手枪弹药"):
+		errors.append("should select ammo row for detail")
+	if not _detail_line(game_root).contains("弹药") or not _detail_line(game_root).contains("总价 50"):
+		errors.append("inventory detail should show selected item category and value")
 	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_dagger.gltf")
 
 	var equip_result: Dictionary = game_root.equip_player_item("1003", "main_hand")
@@ -169,6 +207,45 @@ func _item_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
 	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemLines")
 	for child in item_box.get_children():
-		if child is Label:
-			output.append((child as Label).text)
+		var text := _control_text(child)
+		if not text.is_empty():
+			output.append(text)
 	return output
+
+
+func _filter_button(game_root: Node, node_name: String) -> Button:
+	return game_root.inventory_panel.find_child(node_name, true, false) as Button
+
+
+func _sort_button(game_root: Node, node_name: String) -> Button:
+	return game_root.inventory_panel.find_child(node_name, true, false) as Button
+
+
+func _press_inventory_item_with_text(game_root: Node, needle: String) -> bool:
+	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemLines")
+	for child in item_box.get_children():
+		if child is Button and str((child as Button).text).contains(needle):
+			(child as Button).pressed.emit()
+			return true
+	return false
+
+
+func _detail_line(game_root: Node) -> String:
+	var label: Node = game_root.inventory_panel.get_node_or_null("InventoryPanel/InventoryLines/DetailLine")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _text_ordered(text: String, first: String, second: String) -> bool:
+	var first_index: int = text.find(first)
+	var second_index: int = text.find(second)
+	return first_index >= 0 and second_index >= 0 and first_index < second_index
+
+
+func _control_text(control: Node) -> String:
+	if control is Button:
+		return str((control as Button).text)
+	if control is Label:
+		return str((control as Label).text)
+	return ""

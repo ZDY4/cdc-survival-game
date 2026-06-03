@@ -298,8 +298,9 @@ func _inventory_text(game_root: Node) -> String:
 	var output: Array[String] = []
 	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemLines")
 	for child in item_box.get_children():
-		if child is Label:
-			output.append((child as Label).text)
+		var text := _item_control_text(child)
+		if not text.is_empty():
+			output.append(text)
 	return "\n".join(output)
 
 
