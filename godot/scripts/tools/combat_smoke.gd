@@ -38,6 +38,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	var player_grid: Dictionary = player.grid_position.to_dictionary()
 	_expect_combat_visibility_decay(errors, simulation, registry, player, player_grid)
+	_expect_attack_target_rejections(errors, simulation, player, player_grid)
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
 	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
 	player.grid_position = GridCoord.from_dictionary(player_grid)
@@ -152,6 +153,69 @@ func _expect_combat_visibility_decay(errors: Array[String], simulation: RefCount
 		errors.append("far hostile should remain registered after visibility-decay combat exit")
 
 	for actor_id in [near_hostile, reset_hostile, far_hostile, near_again]:
+		if simulation.actor_registry.get_actor(actor_id) != null:
+			simulation.actor_registry.unregister_actor(actor_id)
+	_restore_player_turn(simulation, player)
+
+
+func _expect_attack_target_rejections(errors: Array[String], simulation: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.ap = 12.0
+	_restore_player_turn(simulation, player)
+	var base_x: int = int(player_grid.get("x", 0))
+	var y: int = int(player_grid.get("y", 0))
+	var z: int = int(player_grid.get("z", 0))
+	var friendly_id: int = _register_test_actor(simulation, "friendly_target", "friendly", {
+		"x": base_x + 1,
+		"y": y,
+		"z": z,
+	})
+	var neutral_id: int = _register_test_actor(simulation, "neutral_target", "neutral", {
+		"x": base_x,
+		"y": y,
+		"z": z + 1,
+	})
+	var dead_hostile_id: int = _register_test_actor(simulation, "dead_hostile_target", "hostile", {
+		"x": base_x - 1,
+		"y": y,
+		"z": z,
+	}, 0.0)
+
+	var before_ap: float = player.ap
+	var self_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": player.actor_id})
+	if self_result.get("reason", "") != "target_self":
+		errors.append("self attack should report target_self, got %s" % self_result.get("reason", ""))
+	if absf(player.ap - before_ap) > 0.01:
+		errors.append("self attack rejection should not spend AP")
+	if bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
+		errors.append("self attack rejection should not enter combat")
+
+	var friendly_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": friendly_id})
+	if friendly_result.get("reason", "") != "target_not_hostile":
+		errors.append("friendly attack should report target_not_hostile, got %s" % friendly_result.get("reason", ""))
+	if absf(player.ap - before_ap) > 0.01:
+		errors.append("friendly attack rejection should not spend AP")
+	if bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
+		errors.append("friendly attack rejection should not enter combat")
+
+	var neutral_result: Dictionary = simulation.perform_attack(player.actor_id, neutral_id, {}, {"range": 2})
+	if neutral_result.get("reason", "") != "target_not_hostile":
+		errors.append("neutral attack should report target_not_hostile, got %s" % neutral_result.get("reason", ""))
+	var dead_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": dead_hostile_id})
+	if dead_result.get("reason", "") != "target_defeated":
+		errors.append("dead target attack should report target_defeated, got %s" % dead_result.get("reason", ""))
+	if absf(player.ap - before_ap) > 0.01:
+		errors.append("dead target attack rejection should not spend AP")
+	if bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
+		errors.append("dead target attack rejection should not enter combat")
+
+	var hostile_actor: RefCounted = simulation.actor_registry.get_actor(dead_hostile_id)
+	hostile_actor.hp = 5.0
+	var hostile_same_side: Dictionary = simulation.perform_attack(dead_hostile_id, dead_hostile_id, {}, {"range": 2})
+	if hostile_same_side.get("reason", "") != "target_self":
+		errors.append("hostile self attack should report target_self, got %s" % hostile_same_side.get("reason", ""))
+
+	for actor_id in [friendly_id, neutral_id, dead_hostile_id]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	_restore_player_turn(simulation, player)
@@ -304,6 +368,22 @@ func _register_character(simulation: RefCounted, registry: RefCounted, definitio
 		"attack_power": float(combat_attributes.get("attack_power", 1.0)),
 		"defense": float(combat_attributes.get("defense", 0.0)),
 		"xp_reward": int(combat.get("xp_reward", 0)),
+	})
+
+
+func _register_test_actor(simulation: RefCounted, definition_id: String, side: String, grid: Dictionary, hp: float = 10.0) -> int:
+	return simulation.register_actor({
+		"definition_id": definition_id,
+		"display_name": definition_id,
+		"kind": "npc" if side != "hostile" else "enemy",
+		"side": side,
+		"group_id": side,
+		"grid_position": GridCoord.from_dictionary(grid),
+		"max_hp": max(1.0, hp),
+		"hp": hp,
+		"attack_power": 4.0,
+		"defense": 0.0,
+		"xp_reward": 0,
 	})
 
 

@@ -242,6 +242,10 @@ func perform_attack(actor_id: int, target_actor_id: int, topology: Dictionary = 
 	return _combat_runner.perform_attack(self, actor_id, target_actor_id, topology, options)
 
 
+func validate_attack_target(actor_id: int, target_actor_id: int) -> Dictionary:
+	return _combat_runner.validate_attack_target(self, actor_id, target_actor_id)
+
+
 func record_enemy_defeated(actor_id: int, enemy_definition_id: String, enemy_kind: String = "enemy") -> void:
 	_quest_runner.record_enemy_defeated(self, actor_id, enemy_definition_id, enemy_kind)
 
@@ -547,6 +551,9 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 	var target: RefCounted = actor_registry.get_actor(target_actor_id)
 	if target == null:
 		return {"success": false, "reason": "unknown_target"}
+	var target_check: Dictionary = validate_attack_target(actor.actor_id, target_actor_id)
+	if not bool(target_check.get("success", false)):
+		return target_check
 	var profile: Dictionary = _attack_profile(actor, _dictionary_or_empty(command.get("item_library", item_library)))
 	var attack_range: int = int(command.get("range", int(profile.get("range", DEFAULT_ATTACK_RANGE))))
 	if _grid_distance(actor.grid_position, target.grid_position) > attack_range:

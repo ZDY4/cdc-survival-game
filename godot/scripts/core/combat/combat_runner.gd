@@ -10,12 +10,9 @@ var _vision_geometry := VisionGeometry.new()
 func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
 	var attacker: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)
-	if attacker == null:
-		return {"success": false, "reason": "unknown_attacker"}
-	if target == null:
-		return {"success": false, "reason": "unknown_target"}
-	if not _can_attack(attacker, target):
-		return {"success": false, "reason": "target_not_hostile"}
+	var target_check: Dictionary = validate_attack_target(simulation, actor_id, target_actor_id)
+	if not bool(target_check.get("success", false)):
+		return target_check
 	var spatial_check: Dictionary = _spatial_check(attacker, target, topology, int(options.get("range", 1)))
 	if not bool(spatial_check.get("success", false)):
 		return spatial_check
@@ -57,6 +54,30 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"critical": critical,
 		"weapon_profile": profile,
 	}
+
+
+func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_id: int) -> Dictionary:
+	var attacker: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)
+	if attacker == null:
+		return {"success": false, "reason": "unknown_attacker", "actor_id": actor_id}
+	if target == null:
+		return {"success": false, "reason": "unknown_target", "target_actor_id": target_actor_id}
+	if attacker.actor_id == target.actor_id:
+		return {"success": false, "reason": "target_self", "actor_id": actor_id}
+	if attacker.hp <= 0.0:
+		return {"success": false, "reason": "attacker_defeated", "actor_id": actor_id}
+	if target.hp <= 0.0:
+		return {"success": false, "reason": "target_defeated", "target_actor_id": target_actor_id}
+	if not _can_attack(attacker, target):
+		return {
+			"success": false,
+			"reason": "target_not_hostile",
+			"attacker_side": attacker.side,
+			"target_side": target.side,
+			"target_actor_id": target_actor_id,
+		}
+	return {"success": true}
 
 
 func _can_attack(attacker: RefCounted, target: RefCounted) -> bool:
