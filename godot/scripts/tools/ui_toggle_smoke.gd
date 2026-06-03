@@ -157,6 +157,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("equipping pistol for ammo display failed: %s" % equip_pistol_result.get("reason", "unknown"))
 		elif not _equipment_line(game_root, "main_hand").contains("弹药 1009 10/12"):
 			errors.append("equipped pistol row should show available ammo and magazine capacity")
+		var reload_button: Button = _equipment_reload_button(game_root, "main_hand")
+		if reload_button == null or reload_button.disabled:
+			errors.append("equipped pistol should expose enabled reload button when spare ammo exists")
+		else:
+			var before_reload_events := _event_count(game_root, "weapon_reloaded")
+			reload_button.pressed.emit()
+			await process_frame
+			if int(player_ref.weapon_ammo.get("main_hand", 0)) != 10:
+				errors.append("character panel reload should move pistol ammo into magazine")
+			if _player_inventory_count(game_root, "1009") != 0:
+				errors.append("character panel reload should consume spare pistol ammo")
+			if _event_count(game_root, "weapon_reloaded") <= before_reload_events:
+				errors.append("character panel reload should emit weapon_reloaded")
+			if not _equipment_line(game_root, "main_hand").contains("备用 0"):
+				errors.append("reloaded pistol row should show remaining spare ammo")
+			var reloaded_button: Button = _equipment_reload_button(game_root, "main_hand")
+			if reloaded_button == null or not reloaded_button.disabled:
+				errors.append("reload button should be disabled after spare ammo is consumed")
 		var restore_knife_after_ammo_result: Dictionary = game_root.equip_player_item("1002", "main_hand")
 		if not bool(restore_knife_after_ammo_result.get("success", false)):
 			errors.append("restoring knife after ammo display failed: %s" % restore_knife_after_ammo_result.get("reason", "unknown"))
@@ -558,6 +576,13 @@ func _equipment_unequip_button(game_root: Node, slot_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node_or_null("UnequipButton") as Button
+
+
+func _equipment_reload_button(game_root: Node, slot_id: String) -> Button:
+	var row: Node = game_root.character_panel.find_child("Equipment_%s" % slot_id, true, false)
+	if row == null:
+		return null
+	return row.get_node_or_null("ReloadButton") as Button
 
 
 func _equipment_line(game_root: Node, slot_id: String) -> String:

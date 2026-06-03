@@ -64,6 +64,18 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	simulation.buy_item_from_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.sell_item_to_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.equip_item(1, "1003", "main_hand", registry.get_library("items"))
+	var player_for_reload: RefCounted = simulation.actor_registry.get_actor(1)
+	player_for_reload.inventory["1004"] = 1
+	player_for_reload.inventory["1009"] = 3
+	simulation.equip_item(1, "1004", "main_hand", registry.get_library("items"))
+	player_for_reload.ap = 6.0
+	simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "reload_equipped",
+		"slot_id": "main_hand",
+		"item_library": registry.get_library("items"),
+	})
 	simulation.grant_skill_points(1, 1, "save_smoke")
 	simulation.learn_skill(1, "survival", registry.get_library("skills"))
 	simulation.grant_skill_points(1, 2, "save_smoke")
@@ -150,6 +162,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("taken container item did not roundtrip in player inventory")
 	if JSON.stringify(player_restored.get("equipment", {})) != JSON.stringify(player_original.get("equipment", {})):
 		errors.append("player equipment did not roundtrip")
+	if JSON.stringify(_normalized_weapon_ammo(player_restored)) != JSON.stringify(_normalized_weapon_ammo(player_original)):
+		errors.append("player weapon ammo did not roundtrip")
 	if JSON.stringify(_normalized_progression(player_restored)) != JSON.stringify(_normalized_progression(player_original)):
 		errors.append("player progression did not roundtrip")
 	if JSON.stringify(restored.get("hotbar", {})) != JSON.stringify(original.get("hotbar", {})):
@@ -219,6 +233,14 @@ func _normalized_ai_intents(snapshot: Dictionary) -> Array[Dictionary]:
 func _inventory_count(actor: Dictionary, item_id: String) -> int:
 	var inventory: Dictionary = actor.get("inventory", {})
 	return int(inventory.get(item_id, 0))
+
+
+func _normalized_weapon_ammo(actor: Dictionary) -> Dictionary:
+	var output: Dictionary = {}
+	var weapon_ammo: Dictionary = actor.get("weapon_ammo", {})
+	for slot_id in weapon_ammo.keys():
+		output[str(slot_id)] = int(weapon_ammo.get(slot_id, 0))
+	return output
 
 
 func _normalized_progression(actor: Dictionary) -> Dictionary:
@@ -308,5 +330,6 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"event_count": snapshot.get("events", []).size(),
 		"player_inventory": _player_actor(snapshot).get("inventory", {}),
 		"player_equipment": _player_actor(snapshot).get("equipment", {}),
+		"player_weapon_ammo": _normalized_weapon_ammo(_player_actor(snapshot)),
 		"player_money": int(_player_actor(snapshot).get("money", 0)),
 	}

@@ -838,6 +838,23 @@ func unequip_player_slot(slot_id: String) -> Dictionary:
 	return result
 
 
+func reload_player_equipped_slot(slot_id: String = "main_hand") -> Dictionary:
+	if simulation == null:
+		var missing_result := {"success": false, "reason": "simulation_missing", "slot_id": slot_id}
+		_record_character_feedback(missing_result, "reload", slot_id, "")
+		refresh_character_panel()
+		return missing_result
+	var result: Dictionary = _submit_inventory_action({
+		"action": "reload_equipped",
+		"slot_id": slot_id,
+	})
+	_record_character_feedback(result, "reload", slot_id, str(result.get("item_id", "")))
+	refresh_hud()
+	refresh_inventory_panel()
+	refresh_character_panel()
+	return result
+
+
 func allocate_player_attribute_point(attribute: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}

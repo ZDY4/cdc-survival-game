@@ -78,6 +78,45 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var not_equippable: Dictionary = simulation.equip_item(1, "1006", "main_hand", items)
 	if not_equippable.get("reason", "") != "item_not_equippable":
 		errors.append("consumable equip should report item_not_equippable")
+	player.inventory["1004"] = 1
+	player.inventory["1009"] = 5
+	var equip_pistol: Dictionary = simulation.equip_item(1, "1004", "main_hand", items)
+	if not bool(equip_pistol.get("success", false)):
+		errors.append("pistol equip for reload failed: %s" % equip_pistol.get("reason", "unknown"))
+	player.ap = 6.0
+	var reloaded_event_count: int = _event_count(simulation.snapshot(), "weapon_reloaded")
+	var reload_result: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "reload_equipped",
+		"slot_id": "main_hand",
+		"item_library": items,
+	})
+	if not bool(reload_result.get("success", false)):
+		errors.append("reload equipped pistol failed: %s" % reload_result.get("reason", "unknown"))
+	if int(player.weapon_ammo.get("main_hand", 0)) != 5:
+		errors.append("reload should move available pistol ammo into main hand magazine")
+	if int(player.inventory.get("1009", 0)) != 0:
+		errors.append("reload should consume pistol ammo from inventory")
+	if absf(player.ap - 4.0) > 0.01:
+		errors.append("reload should consume reload_time AP")
+	if _event_count(simulation.snapshot(), "weapon_reloaded") != reloaded_event_count + 1:
+		errors.append("reload should emit weapon_reloaded")
+	var reload_without_ammo: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "reload_equipped",
+		"slot_id": "main_hand",
+		"item_library": items,
+	})
+	if str(reload_without_ammo.get("reason", "")) != "ammo_insufficient":
+		errors.append("reload without spare ammo should report ammo_insufficient")
+	player.inventory["1003"] = 1
+	var equip_bat_after_reload: Dictionary = simulation.equip_item(1, "1003", "main_hand", items)
+	if not bool(equip_bat_after_reload.get("success", false)):
+		errors.append("re-equipping bat after reload failed: %s" % equip_bat_after_reload.get("reason", "unknown"))
+	if player.weapon_ammo.has("main_hand"):
+		errors.append("replacing weapon should clear main hand magazine state")
 	return errors
 
 
@@ -96,6 +135,7 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"event_count": snapshot.get("events", []).size(),
 		"player_inventory": player.get("inventory", {}),
 		"player_equipment": player.get("equipment", {}),
+		"player_weapon_ammo": player.get("weapon_ammo", {}),
 	}
 
 

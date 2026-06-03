@@ -26,6 +26,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 	var attributes: Dictionary = _dictionary_or_empty(progression.get("attributes", {}))
 	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
+	var weapon_ammo: Dictionary = _dictionary_or_empty(player.get("weapon_ammo", {}))
 	return {
 		"owner_actor_id": int(player.get("actor_id", 0)),
 		"owner_name": str(player.get("display_name", "")),
@@ -37,12 +38,12 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"max_hp": float(_dictionary_or_empty(player.get("combat", {})).get("max_hp", 0.0)),
 		"ap": float(player.get("ap", 0.0)),
 		"attributes": attributes.duplicate(true),
-		"equipment": _equipment_snapshot(equipment, inventory),
+		"equipment": _equipment_snapshot(equipment, inventory, weapon_ammo, float(player.get("ap", 0.0))),
 		"feedback": _feedback_snapshot(feedback),
 	}
 
 
-func _equipment_snapshot(equipment: Dictionary, inventory: Dictionary) -> Array[Dictionary]:
+func _equipment_snapshot(equipment: Dictionary, inventory: Dictionary, weapon_ammo: Dictionary, actor_ap: float) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	var seen_slots: Dictionary = {}
 	for slot in EQUIPMENT_SLOTS:
@@ -50,7 +51,7 @@ func _equipment_snapshot(equipment: Dictionary, inventory: Dictionary) -> Array[
 		var slot_id: String = str(slot_data.get("slot_id", ""))
 		var actual_slot_id: String = _actual_slot_id(equipment, slot_id)
 		var item_id: String = str(equipment.get(actual_slot_id, ""))
-		rows.append(_equipment_row(slot_id, str(slot_data.get("label", slot_id)), actual_slot_id, item_id, inventory))
+		rows.append(_equipment_row(slot_id, str(slot_data.get("label", slot_id)), actual_slot_id, item_id, inventory, weapon_ammo, actor_ap))
 		seen_slots[actual_slot_id] = true
 	var extra_slots: Array = equipment.keys()
 	extra_slots.sort()
@@ -58,13 +59,14 @@ func _equipment_snapshot(equipment: Dictionary, inventory: Dictionary) -> Array[
 		var extra_slot_id: String = str(extra_slot)
 		if bool(seen_slots.get(extra_slot_id, false)):
 			continue
-		rows.append(_equipment_row(extra_slot_id, extra_slot_id, extra_slot_id, str(equipment.get(extra_slot_id, "")), inventory))
+		rows.append(_equipment_row(extra_slot_id, extra_slot_id, extra_slot_id, str(equipment.get(extra_slot_id, "")), inventory, weapon_ammo, actor_ap))
 	return rows
 
 
-func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item_id: String, inventory: Dictionary) -> Dictionary:
+func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item_id: String, inventory: Dictionary, weapon_ammo: Dictionary, actor_ap: float) -> Dictionary:
 	var data: Dictionary = _item_data(item_id)
 	var equipped: bool = not item_id.is_empty()
+	var reload: Dictionary = _reload_snapshot(data, actual_slot_id, inventory, weapon_ammo, actor_ap)
 	return {
 		"slot_id": slot_id,
 		"actual_slot_id": actual_slot_id,
@@ -75,7 +77,8 @@ func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item
 		"value": int(data.get("value", 0)),
 		"weight": float(data.get("weight", 0.0)),
 		"rarity": _rarity(data),
-		"details": _equipment_details(data, inventory),
+		"details": _equipment_details(data, inventory, reload),
+		"reload": reload,
 		"equipped": equipped,
 	}
 
@@ -103,7 +106,7 @@ func _rarity(item_data: Dictionary) -> String:
 	return ""
 
 
-func _equipment_details(item_data: Dictionary, inventory: Dictionary) -> Array[String]:
+func _equipment_details(item_data: Dictionary, inventory: Dictionary, reload: Dictionary) -> Array[String]:
 	var details: Array[String] = []
 	var weapon: Dictionary = _fragment_by_kind(item_data, "weapon")
 	if not weapon.is_empty():
@@ -116,8 +119,11 @@ func _equipment_details(item_data: Dictionary, inventory: Dictionary) -> Array[S
 		var max_ammo: int = _optional_int(weapon.get("max_ammo", 0), 0)
 		if not ammo_type.is_empty() and ammo_type != "<null>":
 			var available_ammo: int = int(inventory.get(ammo_type, 0))
+			var display_ammo: int = int(reload.get("loaded", available_ammo)) if bool(reload.get("magazine_tracked", false)) else available_ammo
 			if max_ammo > 0:
-				weapon_parts.append("弹药 %s %d/%d" % [ammo_type, available_ammo, max_ammo])
+				weapon_parts.append("弹药 %s %d/%d" % [ammo_type, display_ammo, max_ammo])
+				if bool(reload.get("magazine_tracked", false)):
+					weapon_parts.append("备用 %d" % available_ammo)
 			else:
 				weapon_parts.append("弹药 %s x%d" % [ammo_type, available_ammo])
 		details.append("武器: %s" % " / ".join(weapon_parts))
@@ -141,6 +147,31 @@ func _equipment_details(item_data: Dictionary, inventory: Dictionary) -> Array[S
 		if not visual_asset.is_empty():
 			details.append("外观: %s" % visual_asset)
 	return details
+
+
+func _reload_snapshot(item_data: Dictionary, slot_id: String, inventory: Dictionary, weapon_ammo: Dictionary, actor_ap: float) -> Dictionary:
+	var weapon: Dictionary = _fragment_by_kind(item_data, "weapon")
+	if weapon.is_empty():
+		return {}
+	var ammo_type: String = _normalize_item_id(weapon.get("ammo_type", ""))
+	var capacity: int = _optional_int(weapon.get("max_ammo", 0), 0)
+	if ammo_type.is_empty() or ammo_type == "<null>" or capacity <= 0:
+		return {}
+	var magazine_tracked: bool = weapon_ammo.has(slot_id)
+	var loaded: int = clampi(int(weapon_ammo.get(slot_id, 0)), 0, capacity)
+	var inventory_ammo: int = int(inventory.get(ammo_type, 0))
+	var reload_ap_cost: float = max(1.0, ceil(float(weapon.get("reload_time", 1.0))))
+	return {
+		"reloadable": true,
+		"can_reload": loaded < capacity and inventory_ammo > 0 and actor_ap >= reload_ap_cost,
+		"magazine_tracked": magazine_tracked,
+		"slot_id": slot_id,
+		"ammo_type": ammo_type,
+		"loaded": loaded,
+		"capacity": capacity,
+		"inventory_ammo": inventory_ammo,
+		"ap_cost": reload_ap_cost,
+	}
 
 
 func _fragment_by_kind(item_data: Dictionary, kind: String) -> Dictionary:
@@ -209,6 +240,18 @@ func _feedback_message(feedback: Dictionary) -> String:
 			return "该物品不能装备。"
 		"not_enough_items":
 			return "背包中没有该物品。"
+		"weapon_not_reloadable":
+			if not slot_label.is_empty():
+				return "%s不能装填。" % slot_label
+			return "该装备不能装填。"
+		"magazine_full":
+			if not slot_label.is_empty():
+				return "%s弹匣已满。" % slot_label
+			return "弹匣已满。"
+		"ammo_insufficient":
+			return "背包中没有可用弹药。"
+		"ap_insufficient_reload":
+			return "AP不足，无法装填。"
 		"unknown_item":
 			return "找不到要装备的物品。"
 		"unknown_actor":

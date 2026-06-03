@@ -181,7 +181,7 @@
 
 - [~] hostile 判定、攻击距离、LOS、AP cost、基础伤害、击杀 XP、尸体容器。
 - [ ] 命中/闪避、护甲、穿甲、破甲、暴击、headshot、随机 seed。
-- [ ] melee/ranged、弹药、装填、弹匣、burst fire、spread、muzzle、projectile。
+- [~] melee/ranged 和玩家已装备武器 reload 第一版：弹匣状态、背包弹药转入弹匣、攻击消耗和存档已接入；待补 burst fire、spread、muzzle、projectile、装填动画和更多弹药类型。
 - [ ] AOE、cleave、knockback、stun、slow、fear、poison、bleeding、regeneration。
 - [ ] 武器/装备耐久、损坏、维修、不可用状态。
 - [ ] attack preview：命中率、伤害范围、AP、弹药、LOS、目标不可攻击原因。
@@ -778,6 +778,7 @@
 - [~] equip/unequip 基础。
 - [~] slot 显示和装备详情基础。
 - [~] 空装备槽卸下失败提示已接入 Character 面板，并纳入 `UIToggle` smoke。
+- [~] reload equipped weapon 第一版已接入 Character 面板和 core 弹匣状态，并纳入 `Equipment` / `Combat` / `Save` / `UIToggle` smoke。
 - [ ] slot 冲突：双手武器、盾牌、饰品、多槽装备。
 - [ ] 装备属性实时派生到角色属性。
 - [ ] 装备外观挂接到角色模型。

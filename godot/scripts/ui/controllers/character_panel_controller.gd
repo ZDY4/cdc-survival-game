@@ -125,13 +125,22 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 	var label := _label("Line")
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.text = _equipment_text(data)
+	row.add_child(label)
+	var reload: Dictionary = _dictionary_or_empty(data.get("reload", {}))
+	if bool(reload.get("reloadable", false)):
+		var reload_button := _button("ReloadButton", "装", "装填 %s" % str(data.get("label", slot_id)), not bool(reload.get("can_reload", false)))
+		reload_button.pressed.connect(func() -> void:
+			var root := get_parent()
+			if root != null and root.has_method("reload_player_equipped_slot"):
+				root.reload_player_equipped_slot(actual_slot_id)
+		, CONNECT_DEFERRED)
+		row.add_child(reload_button)
 	var unequip_button := _button("UnequipButton", "卸", "卸下 %s" % str(data.get("label", slot_id)), not bool(data.get("equipped", false)))
 	unequip_button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("unequip_player_slot"):
 			root.unequip_player_slot(actual_slot_id)
 	, CONNECT_DEFERRED)
-	row.add_child(label)
 	row.add_child(unequip_button)
 	return row
 

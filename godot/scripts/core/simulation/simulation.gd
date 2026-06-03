@@ -641,6 +641,8 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 			return equip_item(actor.actor_id, str(command.get("item_id", "")), str(command.get("slot_id", "")), items)
 		"unequip":
 			return unequip_item(actor.actor_id, str(command.get("slot_id", "")))
+		"reload_equipped":
+			return _finalize_player_ap_action(actor, _submit_reload_equipped_action(actor, command, items), command, "reload")
 		"buy_shop":
 			return buy_item_from_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"sell_shop":
@@ -648,6 +650,88 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"sell_equipped_shop":
 			return sell_equipped_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("slot_id", "")), str(command.get("item_id", "")), items)
 	return {"success": false, "reason": "unknown_inventory_action"}
+
+
+func _submit_reload_equipped_action(actor: RefCounted, command: Dictionary, items: Dictionary) -> Dictionary:
+	var slot_id := str(command.get("slot_id", "main_hand")).strip_edges()
+	if slot_id.is_empty():
+		slot_id = "main_hand"
+	var item_id := str(actor.equipment.get(slot_id, ""))
+	if item_id.is_empty():
+		return {"success": false, "reason": "empty_equipment_slot", "slot_id": slot_id}
+	var weapon: Dictionary = _weapon_fragment(item_id, items)
+	if weapon.is_empty():
+		return {"success": false, "reason": "weapon_not_reloadable", "slot_id": slot_id, "item_id": item_id}
+	var ammo_type := _normalize_item_id(weapon.get("ammo_type", ""))
+	var magazine_capacity := int(weapon.get("max_ammo", 0))
+	if ammo_type.is_empty() or magazine_capacity <= 0:
+		return {"success": false, "reason": "weapon_not_reloadable", "slot_id": slot_id, "item_id": item_id}
+	var loaded_before := clampi(int(actor.weapon_ammo.get(slot_id, 0)), 0, magazine_capacity)
+	var missing := magazine_capacity - loaded_before
+	if missing <= 0:
+		return {
+			"success": false,
+			"reason": "magazine_full",
+			"slot_id": slot_id,
+			"item_id": item_id,
+			"loaded": loaded_before,
+			"capacity": magazine_capacity,
+			"ammo_type": ammo_type,
+		}
+	var available := int(actor.inventory.get(ammo_type, 0))
+	if available <= 0:
+		return {
+			"success": false,
+			"reason": "ammo_insufficient",
+			"slot_id": slot_id,
+			"item_id": item_id,
+			"ammo_type": ammo_type,
+			"required": 1,
+			"current": available,
+			"loaded": loaded_before,
+			"capacity": magazine_capacity,
+		}
+	var reload_cost: float = max(1.0, ceil(float(command.get("ap_cost", weapon.get("reload_time", DEFAULT_INTERACTION_AP)))))
+	if actor.ap < reload_cost:
+		return {
+			"success": false,
+			"reason": "ap_insufficient_reload",
+			"slot_id": slot_id,
+			"item_id": item_id,
+			"required_ap": reload_cost,
+			"available_ap": actor.ap,
+		}
+	var loaded_count: int = min(missing, available)
+	_spend_ap(actor, reload_cost, "reload")
+	actor.inventory[ammo_type] = available - loaded_count
+	if int(actor.inventory.get(ammo_type, 0)) <= 0:
+		actor.inventory.erase(ammo_type)
+	actor.weapon_ammo[slot_id] = loaded_before + loaded_count
+	_emit("weapon_reloaded", {
+		"actor_id": actor.actor_id,
+		"slot_id": slot_id,
+		"weapon_item_id": item_id,
+		"ammo_type": ammo_type,
+		"loaded": int(actor.weapon_ammo.get(slot_id, 0)),
+		"loaded_before": loaded_before,
+		"loaded_count": loaded_count,
+		"capacity": magazine_capacity,
+		"remaining_inventory": int(actor.inventory.get(ammo_type, 0)),
+		"ap_cost": reload_cost,
+	})
+	return {
+		"success": true,
+		"kind": "reload_equipped",
+		"slot_id": slot_id,
+		"item_id": item_id,
+		"ammo_type": ammo_type,
+		"loaded": int(actor.weapon_ammo.get(slot_id, 0)),
+		"loaded_before": loaded_before,
+		"loaded_count": loaded_count,
+		"capacity": magazine_capacity,
+		"remaining_inventory": int(actor.inventory.get(ammo_type, 0)),
+		"ap_cost": reload_cost,
+	}
 
 
 func _submit_learn_skill_command(actor: RefCounted, command: Dictionary) -> Dictionary:
@@ -1315,18 +1399,24 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 			"crit_chance": 0.0,
 			"crit_multiplier": 1.0,
 			"ammo_type": "",
+			"equipment_slot": "main_hand",
+			"max_ammo": 0,
 		}
 	var attack_speed: float = max(0.1, float(weapon.get("attack_speed", 1.0)))
+	var weapon_range: int = max(1, _optional_int(weapon.get("range", DEFAULT_ATTACK_RANGE), DEFAULT_ATTACK_RANGE))
+	var max_ammo: int = _optional_int(weapon.get("max_ammo", 0), 0)
 	return {
 		"item_id": equipped_item_id,
 		"damage": float(weapon.get("damage", actor.attack_power)),
-		"range": max(1, int(weapon.get("range", DEFAULT_ATTACK_RANGE))),
+		"range": weapon_range,
 		"ap_cost": max(1.0, ceil(DEFAULT_ATTACK_AP / attack_speed)),
 		"attack_speed": attack_speed,
 		"crit_chance": clampf(float(weapon.get("crit_chance", 0.0)), 0.0, 1.0),
 		"crit_multiplier": max(1.0, float(weapon.get("crit_multiplier", 1.0))),
 		"ammo_type": _normalize_item_id(weapon.get("ammo_type", "")),
 		"ammo_per_attack": 1,
+		"equipment_slot": "main_hand",
+		"max_ammo": max_ammo,
 	}
 
 
@@ -1356,6 +1446,21 @@ func _attack_ammo_check(actor: RefCounted, profile: Dictionary) -> Dictionary:
 	if ammo_type.is_empty() or ammo_type == "<null>":
 		return {"success": true}
 	var required: int = max(1, int(profile.get("ammo_per_attack", 1)))
+	var slot_id := str(profile.get("equipment_slot", "main_hand"))
+	if actor.weapon_ammo.has(slot_id):
+		var loaded: int = int(actor.weapon_ammo.get(slot_id, 0))
+		if loaded < required:
+			return {
+				"success": false,
+				"reason": "magazine_empty",
+				"slot_id": slot_id,
+				"ammo_type": ammo_type,
+				"required": required,
+				"loaded": loaded,
+				"capacity": int(profile.get("max_ammo", 0)),
+				"inventory": int(actor.inventory.get(ammo_type, 0)),
+			}
+		return {"success": true}
 	var current: int = int(actor.inventory.get(ammo_type, 0))
 	if current < required:
 		return {
@@ -1373,6 +1478,28 @@ func _consume_attack_ammo(actor: RefCounted, profile: Dictionary) -> Dictionary:
 	if ammo_type.is_empty() or ammo_type == "<null>":
 		return {"consumed": false}
 	var count: int = max(1, int(profile.get("ammo_per_attack", 1)))
+	var slot_id := str(profile.get("equipment_slot", "main_hand"))
+	if actor.weapon_ammo.has(slot_id):
+		actor.weapon_ammo[slot_id] = max(0, int(actor.weapon_ammo.get(slot_id, 0)) - count)
+		_emit("ammo_consumed", {
+			"actor_id": actor.actor_id,
+			"ammo_type": ammo_type,
+			"count": count,
+			"source": "magazine",
+			"slot_id": slot_id,
+			"loaded_remaining": int(actor.weapon_ammo.get(slot_id, 0)),
+			"remaining": int(actor.inventory.get(ammo_type, 0)),
+			"weapon_item_id": profile.get("item_id", ""),
+		})
+		return {
+			"consumed": true,
+			"source": "magazine",
+			"slot_id": slot_id,
+			"ammo_type": ammo_type,
+			"count": count,
+			"loaded_remaining": int(actor.weapon_ammo.get(slot_id, 0)),
+			"remaining": int(actor.inventory.get(ammo_type, 0)),
+		}
 	actor.inventory[ammo_type] = max(0, int(actor.inventory.get(ammo_type, 0)) - count)
 	if int(actor.inventory.get(ammo_type, 0)) <= 0:
 		actor.inventory.erase(ammo_type)
@@ -1400,6 +1527,14 @@ func _normalize_item_id(value: Variant) -> String:
 		return str(value)
 	var text := str(value).strip_edges()
 	return "" if text == "<null>" else text
+
+
+func _optional_int(value: Variant, fallback: int) -> int:
+	if value == null:
+		return fallback
+	if typeof(value) == TYPE_STRING and str(value).strip_edges().is_empty():
+		return fallback
+	return int(value)
 
 
 func _grid_distance(left: RefCounted, right: RefCounted) -> int:

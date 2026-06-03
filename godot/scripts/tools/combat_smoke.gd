@@ -477,6 +477,7 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 
 	player.equipment["main_hand"] = "1004"
 	player.inventory["1009"] = 2
+	player.weapon_ammo.erase("main_hand")
 	player.ap = 20.0
 	var pistol_target: int = _register_character(simulation, registry, "zombie_walker", {
 		"x": int(player_grid.get("x", 0)) + 8,
@@ -494,16 +495,43 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 		errors.append("pistol attack should consume one pistol ammo")
 	if absf(float(pistol_result.get("damage", 0.0)) - 25.0) > 0.01:
 		errors.append("pistol attack should use weapon damage 25")
-	player.inventory.erase("1009")
+	player.inventory["1009"] = 2
+	player.weapon_ammo["main_hand"] = 1
+	var magazine_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 7,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	var magazine_enemy: RefCounted = simulation.actor_registry.get_actor(magazine_target)
+	magazine_enemy.hp = 40.0
+	magazine_enemy.max_hp = 40.0
+	magazine_enemy.defense = 0.0
+	var magazine_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": magazine_target, "topology": topology})
+	if not bool(magazine_result.get("success", false)):
+		errors.append("loaded pistol magazine attack failed: %s" % magazine_result.get("reason", "unknown"))
+	if int(player.weapon_ammo.get("main_hand", 0)) != 0:
+		errors.append("loaded pistol attack should consume one magazine round")
+	if int(player.inventory.get("1009", 0)) != 2:
+		errors.append("loaded pistol attack should not consume spare inventory ammo")
 	var no_ammo_target: int = _register_character(simulation, registry, "zombie_walker", {
 		"x": int(player_grid.get("x", 0)) + 9,
 		"y": int(player_grid.get("y", 0)),
 		"z": int(player_grid.get("z", 0)),
 	})
 	var no_ammo: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": no_ammo_target, "topology": topology})
-	if no_ammo.get("reason", "") != "ammo_insufficient":
-		errors.append("ranged weapon without ammo should report ammo_insufficient")
-	for actor_id in [blunt_target, pistol_target, no_ammo_target]:
+	if no_ammo.get("reason", "") != "magazine_empty":
+		errors.append("ranged weapon with empty tracked magazine should report magazine_empty")
+	player.weapon_ammo.erase("main_hand")
+	player.inventory.erase("1009")
+	var inventory_no_ammo_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 10,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	var inventory_no_ammo: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": inventory_no_ammo_target, "topology": topology})
+	if inventory_no_ammo.get("reason", "") != "ammo_insufficient":
+		errors.append("ranged weapon without tracked magazine or inventory ammo should report ammo_insufficient")
+	for actor_id in [blunt_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	simulation.exit_combat_if_clear("weapon_profile_smoke_cleanup")

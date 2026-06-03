@@ -472,7 +472,7 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`vision_runner.gd`
 - [ ] damage type、armor type、resistance、weakness、armor pierce。
 - [ ] buff / debuff 对伤害的影响。
 - [ ] 武器耐久、装备特效、弹药特效。
-- [ ] reload 命令、弹匣、无弹提示、换弹 AP。
+- [~] 玩家已装备武器 reload 第一版：`reload_equipped` 命令、弹匣状态、无弹/空弹匣提示、换弹 AP、攻击消耗和存档 roundtrip 已纳入 smoke；待补装填动画、UI polish、多弹药类型和 NPC reload。
 - [ ] 伤害飘字、命中反馈、暴击/格挡/未命中提示。
 - [ ] 攻击动画、受击动画、开火/挥击音效占位。
 
@@ -586,7 +586,7 @@ Godot 落点：`godot/scripts/core/economy/**`、`godot/scripts/ui/controllers/i
 - [ ] 装备详情：属性变化、武器射程、弹药、攻速、耐久、价值。
 - [ ] 装备视觉更新：角色附件、body region、武器挂点。
 - [~] 卸下失败：空装备槽失败提示已纳入 Character 面板和 `UIToggle` smoke；待补背包空间、任务锁定、战斗限制。
-- [ ] reload equipped weapon。
+- [~] reload equipped weapon 第一版：Character 面板“装”按钮、core 弹匣状态、AP 成本、背包弹药转入弹匣和 smoke 已覆盖；待补 polish。
 
 参考：`game_data/src/appearance.rs`、`runtime/runtime_economy.rs`、`widgets/inventory_detail.rs`。  
 Godot 落点：`godot/scripts/core/economy/equipment_*.gd`、`godot/scripts/world/**`、`godot/scripts/ui/**`。  

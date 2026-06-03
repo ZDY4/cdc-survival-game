@@ -28,6 +28,7 @@ func register_actor(request: Dictionary) -> ActorRecord:
 	record.grid_position = request.get("grid_position")
 	record.inventory = _dictionary_or_empty(request.get("inventory", {})).duplicate(true)
 	record.equipment = _dictionary_or_empty(request.get("equipment", {})).duplicate(true)
+	record.weapon_ammo = _int_dictionary(request.get("weapon_ammo", {}))
 	record.money = max(0, int(request.get("money", 0)))
 	record.max_hp = max(1.0, float(request.get("max_hp", 1.0)))
 	record.hp = clampf(float(request.get("hp", record.max_hp)), 0.0, record.max_hp)
@@ -109,6 +110,7 @@ func load_snapshot(records: Array) -> void:
 		record.grid_position = GridCoord.from_dictionary(_dictionary_or_empty(actor_data.get("grid_position", {})))
 		record.inventory = _dictionary_or_empty(actor_data.get("inventory", {})).duplicate(true)
 		record.equipment = _dictionary_or_empty(actor_data.get("equipment", {})).duplicate(true)
+		record.weapon_ammo = _int_dictionary(actor_data.get("weapon_ammo", {}))
 		record.money = max(0, int(actor_data.get("money", 0)))
 		record.active_dialogue_id = str(actor_data.get("active_dialogue_id", ""))
 		record.active_dialogue_node_id = str(actor_data.get("active_dialogue_node_id", ""))
@@ -137,3 +139,10 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _int_dictionary(value: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	for key in _dictionary_or_empty(value).keys():
+		output[str(key)] = int(_dictionary_or_empty(value).get(key, 0))
+	return output
