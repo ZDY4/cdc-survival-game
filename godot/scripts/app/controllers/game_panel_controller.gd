@@ -22,6 +22,7 @@ var registry: RefCounted
 var simulation: RefCounted
 var world_result: Dictionary
 var active_trade_target: Dictionary = {}
+var active_stage_panel: String = ""
 
 var hud: Control
 var dialogue_panel: Control
@@ -49,6 +50,7 @@ func setup_panels() -> void:
 	journal_panel = _ensure_panel(journal_panel, JOURNAL_PANEL_SCENE, "JournalPanelRoot")
 	skills_panel = _ensure_panel(skills_panel, SKILLS_PANEL_SCENE, "SkillsPanelRoot")
 	crafting_panel = _ensure_panel(crafting_panel, CRAFTING_PANEL_SCENE, "CraftingPanelRoot")
+	_apply_stage_panel_visibility()
 
 
 func refresh_all(selected_prompt: Dictionary = {}) -> void:
@@ -60,6 +62,7 @@ func refresh_all(selected_prompt: Dictionary = {}) -> void:
 	refresh_journal_panel()
 	refresh_skills_panel()
 	refresh_crafting_panel()
+	_apply_stage_panel_visibility()
 
 
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
@@ -79,6 +82,7 @@ func refresh_inventory_panel() -> void:
 	if inventory_panel == null or simulation == null:
 		return
 	inventory_panel.apply_snapshot(InventorySnapshot.new(registry).build(simulation.snapshot()))
+	_apply_stage_panel_visibility()
 
 
 func refresh_trade_panel() -> void:
@@ -97,22 +101,57 @@ func refresh_journal_panel() -> void:
 	if journal_panel == null or simulation == null:
 		return
 	journal_panel.apply_snapshot(JournalSnapshot.new(registry).build(simulation.snapshot()))
+	_apply_stage_panel_visibility()
 
 
 func refresh_skills_panel() -> void:
 	if skills_panel == null or simulation == null:
 		return
 	skills_panel.apply_snapshot(SkillsSnapshot.new(registry).build(simulation.snapshot()))
+	_apply_stage_panel_visibility()
 
 
 func refresh_crafting_panel() -> void:
 	if crafting_panel == null or simulation == null:
 		return
 	crafting_panel.apply_snapshot(CraftingSnapshot.new(registry).build(simulation.snapshot()))
+	_apply_stage_panel_visibility()
 
 
 func update_world_result(value: Dictionary) -> void:
 	world_result = value
+
+
+func toggle_stage_panel(panel_id: String) -> Dictionary:
+	if not _stage_panel_ids().has(panel_id):
+		return {"success": false, "reason": "unknown_stage_panel", "panel_id": panel_id}
+	active_stage_panel = "" if active_stage_panel == panel_id else panel_id
+	_apply_stage_panel_visibility()
+	return {
+		"success": true,
+		"panel_id": panel_id,
+		"active_stage_panel": active_stage_panel,
+		"open": active_stage_panel == panel_id,
+	}
+
+
+func close_stage_panels() -> Dictionary:
+	var had_panel := not active_stage_panel.is_empty()
+	active_stage_panel = ""
+	_apply_stage_panel_visibility()
+	return {
+		"success": true,
+		"closed": had_panel,
+		"active_stage_panel": active_stage_panel,
+	}
+
+
+func any_stage_panel_open() -> bool:
+	return not active_stage_panel.is_empty()
+
+
+func gameplay_input_blocked() -> bool:
+	return any_stage_panel_open() or _panel_visible(trade_panel) or _panel_visible(container_panel) or _panel_visible(dialogue_panel)
 
 
 func close_trade_panel() -> void:
@@ -127,3 +166,35 @@ func _ensure_panel(current: Control, scene: PackedScene, node_name: String) -> C
 	panel.name = node_name
 	parent.add_child(panel)
 	return panel
+
+
+func _apply_stage_panel_visibility() -> void:
+	for panel_id in _stage_panel_ids():
+		var panel := _stage_panel(panel_id)
+		if panel == null:
+			continue
+		var open := panel_id == active_stage_panel
+		panel.visible = open
+		panel.mouse_filter = Control.MOUSE_FILTER_STOP if open else Control.MOUSE_FILTER_IGNORE
+
+
+func _stage_panel_ids() -> Array[String]:
+	return ["inventory", "journal", "skills", "crafting"]
+
+
+func _stage_panel(panel_id: String) -> Control:
+	match panel_id:
+		"inventory":
+			return inventory_panel
+		"journal":
+			return journal_panel
+		"skills":
+			return skills_panel
+		"crafting":
+			return crafting_panel
+		_:
+			return null
+
+
+func _panel_visible(panel: Control) -> bool:
+	return panel != null and panel.visible

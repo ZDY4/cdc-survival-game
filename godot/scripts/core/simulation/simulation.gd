@@ -248,6 +248,39 @@ func advance_dialogue(actor_id: int, option_ref: Variant, dialogue_library: Dict
 	return _dialogue_runner.advance(self, actor_id, option_ref, dialogue_library)
 
 
+func close_dialogue(actor_id: int, reason: String = "closed") -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "actor_missing"}
+	var dialogue_id := str(actor.active_dialogue_id)
+	if dialogue_id.is_empty():
+		return {"success": false, "reason": "dialogue_inactive"}
+	actor.active_dialogue_id = ""
+	actor.active_dialogue_node_id = ""
+	_emit("dialogue_closed", {
+		"actor_id": actor_id,
+		"dialogue_id": dialogue_id,
+		"reason": reason,
+	})
+	return {"success": true, "dialogue_id": dialogue_id}
+
+
+func close_container(actor_id: int, reason: String = "closed") -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "actor_missing"}
+	var container_id := str(actor.active_container_id)
+	if container_id.is_empty():
+		return {"success": false, "reason": "container_inactive"}
+	actor.active_container_id = ""
+	_emit("container_closed", {
+		"actor_id": actor_id,
+		"container_id": container_id,
+		"reason": reason,
+	})
+	return {"success": true, "container_id": container_id}
+
+
 func query_interaction_options(actor_id: int, target: Dictionary) -> Dictionary:
 	return _interaction_executor.query(self, actor_id, target)
 

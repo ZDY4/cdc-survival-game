@@ -133,6 +133,78 @@ func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
 	refresh_crafting_panel()
 
 
+func toggle_stage_panel(panel_id: String) -> Dictionary:
+	if panel_controller == null:
+		return {"success": false, "reason": "panel_controller_missing"}
+	var result: Dictionary = panel_controller.toggle_stage_panel(panel_id)
+	if bool(result.get("success", false)):
+		refresh_all_panels(current_interaction_prompt())
+	return result
+
+
+func close_stage_panels() -> Dictionary:
+	if panel_controller == null:
+		return {"success": false, "reason": "panel_controller_missing"}
+	return panel_controller.close_stage_panels()
+
+
+func any_stage_panel_open() -> bool:
+	return panel_controller != null and panel_controller.any_stage_panel_open()
+
+
+func gameplay_input_blocked_by_ui() -> bool:
+	return panel_controller != null and panel_controller.gameplay_input_blocked()
+
+
+func close_active_dialogue(reason: String = "closed") -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.close_dialogue(1, reason)
+	if bool(result.get("success", false)):
+		active_trade_target = {}
+		refresh_dialogue_panel()
+		refresh_trade_panel()
+		refresh_hud()
+	return result
+
+
+func close_active_container(reason: String = "closed") -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.close_container(1, reason)
+	if bool(result.get("success", false)):
+		refresh_container_panel()
+		refresh_hud()
+	return result
+
+
+func close_active_ui(reason: String = "closed") -> Dictionary:
+	if runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()):
+		runtime_input_controller.clear_selection_state()
+		return {"success": true, "closed": "selection"}
+	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
+		hud.hide_interaction_menu()
+		return {"success": true, "closed": "interaction_menu"}
+	if runtime_input_controller != null:
+		runtime_input_controller.clear_selection_state()
+	var dialogue_result := close_active_dialogue(reason)
+	if bool(dialogue_result.get("success", false)):
+		return {"success": true, "closed": "dialogue", "result": dialogue_result}
+	if not active_trade_target.is_empty():
+		close_trade_panel()
+		return {"success": true, "closed": "trade"}
+	var container_result := close_active_container(reason)
+	if bool(container_result.get("success", false)):
+		return {"success": true, "closed": "container", "result": container_result}
+	if any_stage_panel_open():
+		close_stage_panels()
+		return {"success": true, "closed": "stage_panel"}
+	var pending_result: Dictionary = cancel_pending(reason, false)
+	if bool(pending_result.get("had_pending", false)):
+		return {"success": true, "closed": "pending", "result": pending_result}
+	return {"success": false, "reason": "nothing_to_close"}
+
+
 func select_interaction_target(target: Dictionary) -> Dictionary:
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}

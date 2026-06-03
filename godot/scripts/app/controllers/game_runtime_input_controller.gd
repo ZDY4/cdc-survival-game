@@ -67,13 +67,16 @@ func input(event: InputEvent) -> void:
 	if camera == null:
 		return
 	if event is InputEventKey:
-		_handle_camera_key(event as InputEventKey)
+		if _handle_camera_key(event as InputEventKey):
+			var key_viewport := game_root.get_viewport()
+			if key_viewport != null:
+				key_viewport.set_input_as_handled()
 	elif event is InputEventMouseMotion:
-		if _mouse_over_blocking_ui():
+		if _gameplay_input_blocked_by_ui() or _mouse_over_blocking_ui():
 			return
 		_handle_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
-		if _mouse_over_blocking_ui():
+		if _gameplay_input_blocked_by_ui() or _mouse_over_blocking_ui():
 			return
 		if _handle_mouse_button(event as InputEventMouseButton):
 			var viewport := game_root.get_viewport()
@@ -87,8 +90,12 @@ func unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		_handle_camera_key(event as InputEventKey)
 	elif event is InputEventMouseMotion:
+		if _gameplay_input_blocked_by_ui():
+			return
 		_handle_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
+		if _gameplay_input_blocked_by_ui():
+			return
 		_handle_mouse_button(event as InputEventMouseButton)
 
 
@@ -164,29 +171,68 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	return {"success": true, "kind": "interaction", "node": target_node}
 
 
-func _handle_camera_key(event: InputEventKey) -> void:
+func _handle_camera_key(event: InputEventKey) -> bool:
 	if not event.pressed or event.echo:
-		return
+		return false
 	var key := event.keycode
 	if key == 0:
 		key = event.physical_keycode
+	var stage_panel := _stage_panel_for_key(key)
+	if not stage_panel.is_empty():
+		if game_root.has_method("toggle_stage_panel"):
+			game_root.toggle_stage_panel(stage_panel)
+		return true
 	if key == KEY_EQUAL or key == KEY_PLUS:
 		_scale_zoom(1.2)
+		return true
 	elif key == KEY_MINUS:
 		_scale_zoom(1.0 / 1.2)
+		return true
 	elif key == KEY_0 and event.ctrl_pressed:
 		camera_zoom_factor = 1.0
 		_apply_camera_transform()
+		return true
 	elif key == KEY_F:
 		is_camera_following_player = true
 		has_camera_drag_anchor = false
 		camera_target = _clamp_camera_target(_player_focus_position())
 		_apply_camera_transform()
-	elif key == KEY_ESCAPE or key == KEY_SPACE:
+		return true
+	elif key == KEY_ESCAPE:
+		if game_root.has_method("close_active_ui"):
+			game_root.close_active_ui("keyboard_escape")
+		return true
+	elif key == KEY_SPACE:
 		if game_root.has_method("cancel_pending"):
 			game_root.cancel_pending("keyboard", key == KEY_SPACE)
 		if game_root.hud != null and game_root.hud.has_method("hide_interaction_menu"):
 			game_root.hud.hide_interaction_menu()
+		return true
+	return false
+
+
+func clear_selection_state() -> void:
+	is_middle_mouse_dragging = false
+	has_camera_drag_anchor = false
+	_clear_selection_only()
+
+
+func has_selection_state() -> bool:
+	return selected_node != null or is_middle_mouse_dragging
+
+
+func _stage_panel_for_key(key: int) -> String:
+	match key:
+		KEY_I:
+			return "inventory"
+		KEY_J:
+			return "journal"
+		KEY_K:
+			return "skills"
+		KEY_L:
+			return "crafting"
+		_:
+			return ""
 
 
 func _begin_camera_drag(screen_position: Vector2) -> void:
@@ -406,6 +452,10 @@ func _mouse_over_blocking_ui() -> bool:
 			return true
 		current = current.get_parent() as Control
 	return false
+
+
+func _gameplay_input_blocked_by_ui() -> bool:
+	return game_root.has_method("gameplay_input_blocked_by_ui") and bool(game_root.gameplay_input_blocked_by_ui())
 
 
 func _viewport_size() -> Vector2:

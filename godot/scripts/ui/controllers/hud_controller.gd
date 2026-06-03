@@ -88,6 +88,10 @@ func hide_interaction_menu() -> void:
 	_interaction_menu.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+func is_interaction_menu_open() -> bool:
+	return _interaction_menu != null and _interaction_menu.visible
+
+
 func _line(node_name: String) -> Label:
 	var label := Label.new()
 	label.name = node_name

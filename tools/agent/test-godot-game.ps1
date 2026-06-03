@@ -50,6 +50,7 @@ param(
         "Interaction",
         "PlayerInteraction",
         "UI",
+        "UIToggle",
         "DialogueUI",
         "DialogueAction",
         "InventoryUI",
@@ -109,6 +110,7 @@ $scenarioScripts = [ordered]@{
     Interaction       = "res://scripts/tools/interaction_smoke.gd"
     PlayerInteraction = "res://scripts/tools/player_interaction_smoke.gd"
     UI                = "res://scripts/tools/ui_smoke.gd"
+    UIToggle          = "res://scripts/tools/ui_toggle_smoke.gd"
     DialogueUI        = "res://scripts/tools/dialogue_ui_smoke.gd"
     DialogueAction    = "res://scripts/tools/dialogue_action_smoke.gd"
     InventoryUI       = "res://scripts/tools/inventory_ui_smoke.gd"
