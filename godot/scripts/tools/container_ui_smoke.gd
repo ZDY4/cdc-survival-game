@@ -50,6 +50,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("container column should expose container items")
 	if not _container_player_text(game_root).contains("水瓶"):
 		errors.append("player column should expose inventory items")
+	if not _container_text(game_root).contains("kg") or not _container_player_text(game_root).contains("kg"):
+		errors.append("container columns should expose basic item detail text")
+	if not _container_has_scroll_columns(game_root):
+		errors.append("container panel should wrap both item columns in scroll containers")
 
 	var take_result: Dictionary = game_root.take_active_container_item("1031", 1)
 	if not bool(take_result.get("success", false)):
@@ -262,7 +266,7 @@ func _container_text(game_root: Node) -> String:
 
 func _container_player_text(game_root: Node) -> String:
 	var output: Array[String] = []
-	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/PlayerColumn/PlayerItemLines")
+	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/PlayerColumn/PlayerScroll/PlayerItemLines")
 	for child in item_box.get_children():
 		if child is Label:
 			output.append((child as Label).text)
@@ -280,11 +284,17 @@ func _inventory_text(game_root: Node) -> String:
 
 func _container_item_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
-	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/ContainerColumn/ItemLines")
+	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/ContainerColumn/ContainerScroll/ItemLines")
 	for child in item_box.get_children():
 		if child is Label:
 			output.append((child as Label).text)
 	return output
+
+
+func _container_has_scroll_columns(game_root: Node) -> bool:
+	var container_scroll: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/ItemColumns/ContainerColumn/ContainerScroll")
+	var player_scroll: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/ItemColumns/PlayerColumn/PlayerScroll")
+	return container_scroll is ScrollContainer and player_scroll is ScrollContainer
 
 
 func _active_container_id(game_root: Node) -> String:

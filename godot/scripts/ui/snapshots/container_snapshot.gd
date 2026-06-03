@@ -48,6 +48,7 @@ func _item_snapshots(entries: Array) -> Array[Dictionary]:
 			"description": str(item_data.get("description", "")),
 			"count": count,
 			"unit_weight": float(item_data.get("weight", 0.0)),
+			"total_weight": float(item_data.get("weight", 0.0)) * float(count),
 			"rarity": _rarity(item_data),
 		})
 
@@ -73,6 +74,7 @@ func _inventory_item_snapshots(inventory: Dictionary) -> Array[Dictionary]:
 			"description": str(item_data.get("description", "")),
 			"count": count,
 			"unit_weight": float(item_data.get("weight", 0.0)),
+			"total_weight": float(item_data.get("weight", 0.0)) * float(count),
 			"rarity": _rarity(item_data),
 		})
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:

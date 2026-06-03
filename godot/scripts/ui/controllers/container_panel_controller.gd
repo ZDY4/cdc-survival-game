@@ -99,6 +99,10 @@ func _build_layout() -> void:
 	container_column.custom_minimum_size = Vector2(250, 0)
 	var container_title := _label("ContainerColumnTitle")
 	container_title.text = "容器"
+	var container_scroll := ScrollContainer.new()
+	container_scroll.name = "ContainerScroll"
+	container_scroll.custom_minimum_size = Vector2(250, 150)
+	container_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_items_box = VBoxContainer.new()
 	_items_box.name = "ItemLines"
 	_items_box.add_theme_constant_override("separation", 4)
@@ -107,13 +111,19 @@ func _build_layout() -> void:
 	player_column.custom_minimum_size = Vector2(250, 0)
 	var player_title := _label("PlayerColumnTitle")
 	player_title.text = "背包"
+	var player_scroll := ScrollContainer.new()
+	player_scroll.name = "PlayerScroll"
+	player_scroll.custom_minimum_size = Vector2(250, 150)
+	player_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_player_items_box = VBoxContainer.new()
 	_player_items_box.name = "PlayerItemLines"
 	_player_items_box.add_theme_constant_override("separation", 4)
 	container_column.add_child(container_title)
-	container_column.add_child(_items_box)
+	container_scroll.add_child(_items_box)
+	container_column.add_child(container_scroll)
 	player_column.add_child(player_title)
-	player_column.add_child(_player_items_box)
+	player_scroll.add_child(_player_items_box)
+	player_column.add_child(player_scroll)
 	columns.add_child(container_column)
 	columns.add_child(player_column)
 	box.add_child(_title_label)
@@ -125,10 +135,15 @@ func _build_layout() -> void:
 
 func _item_line(item: Dictionary) -> Label:
 	var label := _label("Item_%s" % item.get("item_id", "unknown"))
-	label.text = "%s x%d" % [
+	var rarity := str(item.get("rarity", ""))
+	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
+	label.text = "%s x%d | %.1f kg%s" % [
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
+		float(item.get("total_weight", 0.0)),
+		rarity_suffix,
 	]
+	label.tooltip_text = str(item.get("description", ""))
 	return label
 
 
