@@ -23,7 +23,9 @@ var dialogue_panel: Control
 var inventory_panel: Control
 var trade_panel: Control
 var container_panel: Control
+var character_panel: Control
 var journal_panel: Control
+var map_panel: Control
 var skills_panel: Control
 var crafting_panel: Control
 var active_trade_target: Dictionary = {}
@@ -104,10 +106,22 @@ func refresh_container_panel() -> void:
 	panel_controller.refresh_container_panel()
 
 
+func refresh_character_panel() -> void:
+	if panel_controller == null:
+		return
+	panel_controller.refresh_character_panel()
+
+
 func refresh_journal_panel() -> void:
 	if panel_controller == null:
 		return
 	panel_controller.refresh_journal_panel()
+
+
+func refresh_map_panel() -> void:
+	if panel_controller == null:
+		return
+	panel_controller.refresh_map_panel()
 
 
 func refresh_skills_panel() -> void:
@@ -128,7 +142,9 @@ func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
 	refresh_inventory_panel()
 	refresh_trade_panel()
 	refresh_container_panel()
+	refresh_character_panel()
 	refresh_journal_panel()
+	refresh_map_panel()
 	refresh_skills_panel()
 	refresh_crafting_panel()
 
@@ -519,7 +535,9 @@ func _setup_panels() -> void:
 	inventory_panel = panel_controller.inventory_panel
 	trade_panel = panel_controller.trade_panel
 	container_panel = panel_controller.container_panel
+	character_panel = panel_controller.character_panel
 	journal_panel = panel_controller.journal_panel
+	map_panel = panel_controller.map_panel
 	skills_panel = panel_controller.skills_panel
 	crafting_panel = panel_controller.crafting_panel
 

@@ -23,7 +23,9 @@ func _run() -> void:
 	print(JSON.stringify({
 		"active_stage_panel": game_root.panel_controller.active_stage_panel,
 		"inventory_visible": game_root.inventory_panel.visible,
+		"character_visible": game_root.character_panel.visible,
 		"journal_visible": game_root.journal_panel.visible,
+		"map_visible": game_root.map_panel.visible,
 		"skills_visible": game_root.skills_panel.visible,
 		"crafting_visible": game_root.crafting_panel.visible,
 	}, "\t"))
@@ -43,6 +45,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 
 	_press_key(game_root, KEY_I)
 	_expect_stage_closed(errors, game_root, "I should close inventory")
+
+	_press_key(game_root, KEY_C)
+	_expect_stage_open(errors, game_root, "character", "C should open character")
+	if not game_root.character_panel.find_child("SummaryLine", true, false) is Label:
+		errors.append("character panel should expose SummaryLine")
+
+	_press_key(game_root, KEY_M)
+	_expect_stage_open(errors, game_root, "map", "M should replace character with map")
+	if game_root.character_panel.visible:
+		errors.append("opening map should hide character")
+	if not game_root.map_panel.find_child("SummaryLine", true, false) is Label:
+		errors.append("map panel should expose SummaryLine")
 
 	_press_key(game_root, KEY_J)
 	_expect_stage_open(errors, game_root, "journal", "J should open journal")
@@ -100,7 +114,7 @@ func _press_key(game_root: Node, key: int) -> void:
 func _expect_stage_open(errors: Array[String], game_root: Node, panel_id: String, context: String) -> void:
 	if str(game_root.panel_controller.active_stage_panel) != panel_id:
 		errors.append("%s: active stage panel should be %s, got %s" % [context, panel_id, game_root.panel_controller.active_stage_panel])
-	for id in ["inventory", "journal", "skills", "crafting"]:
+	for id in _stage_panel_ids():
 		var panel: Control = _panel(game_root, id)
 		if panel == null:
 			errors.append("%s: missing stage panel %s" % [context, id])
@@ -116,18 +130,26 @@ func _expect_stage_open(errors: Array[String], game_root: Node, panel_id: String
 func _expect_stage_closed(errors: Array[String], game_root: Node, context: String) -> void:
 	if not str(game_root.panel_controller.active_stage_panel).is_empty():
 		errors.append("%s: active stage panel should be empty" % context)
-	for id in ["inventory", "journal", "skills", "crafting"]:
+	for id in _stage_panel_ids():
 		var panel: Control = _panel(game_root, id)
 		if panel != null and panel.visible:
 			errors.append("%s: panel %s should be hidden" % [context, id])
+
+
+func _stage_panel_ids() -> Array[String]:
+	return ["inventory", "character", "journal", "map", "skills", "crafting"]
 
 
 func _panel(game_root: Node, panel_id: String) -> Control:
 	match panel_id:
 		"inventory":
 			return game_root.inventory_panel
+		"character":
+			return game_root.character_panel
 		"journal":
 			return game_root.journal_panel
+		"map":
+			return game_root.map_panel
 		"skills":
 			return game_root.skills_panel
 		"crafting":

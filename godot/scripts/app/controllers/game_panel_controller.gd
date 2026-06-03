@@ -5,7 +5,9 @@ const DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.g
 const InventorySnapshot = preload("res://scripts/ui/snapshots/inventory_snapshot.gd")
 const TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
 const ContainerSnapshot = preload("res://scripts/ui/snapshots/container_snapshot.gd")
+const CharacterSnapshot = preload("res://scripts/ui/snapshots/character_snapshot.gd")
 const JournalSnapshot = preload("res://scripts/ui/snapshots/journal_snapshot.gd")
+const MapSnapshot = preload("res://scripts/ui/snapshots/map_snapshot.gd")
 const SkillsSnapshot = preload("res://scripts/ui/snapshots/skills_snapshot.gd")
 const CraftingSnapshot = preload("res://scripts/ui/snapshots/crafting_snapshot.gd")
 const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
@@ -13,7 +15,9 @@ const DIALOGUE_PANEL_SCENE = preload("res://scenes/ui/dialogue_panel.tscn")
 const INVENTORY_PANEL_SCENE = preload("res://scenes/ui/inventory_panel.tscn")
 const TRADE_PANEL_SCENE = preload("res://scenes/ui/trade_panel.tscn")
 const CONTAINER_PANEL_SCENE = preload("res://scenes/ui/container_panel.tscn")
+const CHARACTER_PANEL_SCENE = preload("res://scenes/ui/character_panel.tscn")
 const JOURNAL_PANEL_SCENE = preload("res://scenes/ui/journal_panel.tscn")
+const MAP_PANEL_SCENE = preload("res://scenes/ui/map_panel.tscn")
 const SKILLS_PANEL_SCENE = preload("res://scenes/ui/skills_panel.tscn")
 const CRAFTING_PANEL_SCENE = preload("res://scenes/ui/crafting_panel.tscn")
 
@@ -29,7 +33,9 @@ var dialogue_panel: Control
 var inventory_panel: Control
 var trade_panel: Control
 var container_panel: Control
+var character_panel: Control
 var journal_panel: Control
+var map_panel: Control
 var skills_panel: Control
 var crafting_panel: Control
 
@@ -47,7 +53,9 @@ func setup_panels() -> void:
 	inventory_panel = _ensure_panel(inventory_panel, INVENTORY_PANEL_SCENE, "InventoryPanelRoot")
 	trade_panel = _ensure_panel(trade_panel, TRADE_PANEL_SCENE, "TradePanelRoot")
 	container_panel = _ensure_panel(container_panel, CONTAINER_PANEL_SCENE, "ContainerPanelRoot")
+	character_panel = _ensure_panel(character_panel, CHARACTER_PANEL_SCENE, "CharacterPanelRoot")
 	journal_panel = _ensure_panel(journal_panel, JOURNAL_PANEL_SCENE, "JournalPanelRoot")
+	map_panel = _ensure_panel(map_panel, MAP_PANEL_SCENE, "MapPanelRoot")
 	skills_panel = _ensure_panel(skills_panel, SKILLS_PANEL_SCENE, "SkillsPanelRoot")
 	crafting_panel = _ensure_panel(crafting_panel, CRAFTING_PANEL_SCENE, "CraftingPanelRoot")
 	_apply_stage_panel_visibility()
@@ -59,7 +67,9 @@ func refresh_all(selected_prompt: Dictionary = {}) -> void:
 	refresh_inventory_panel()
 	refresh_trade_panel()
 	refresh_container_panel()
+	refresh_character_panel()
 	refresh_journal_panel()
+	refresh_map_panel()
 	refresh_skills_panel()
 	refresh_crafting_panel()
 	_apply_stage_panel_visibility()
@@ -97,10 +107,24 @@ func refresh_container_panel() -> void:
 	container_panel.apply_snapshot(ContainerSnapshot.new(registry).build(simulation.snapshot()))
 
 
+func refresh_character_panel() -> void:
+	if character_panel == null or simulation == null:
+		return
+	character_panel.apply_snapshot(CharacterSnapshot.new(registry).build(simulation.snapshot()))
+	_apply_stage_panel_visibility()
+
+
 func refresh_journal_panel() -> void:
 	if journal_panel == null or simulation == null:
 		return
 	journal_panel.apply_snapshot(JournalSnapshot.new(registry).build(simulation.snapshot()))
+	_apply_stage_panel_visibility()
+
+
+func refresh_map_panel() -> void:
+	if map_panel == null or simulation == null:
+		return
+	map_panel.apply_snapshot(MapSnapshot.new(registry).build(simulation.snapshot(), world_result))
 	_apply_stage_panel_visibility()
 
 
@@ -179,15 +203,19 @@ func _apply_stage_panel_visibility() -> void:
 
 
 func _stage_panel_ids() -> Array[String]:
-	return ["inventory", "journal", "skills", "crafting"]
+	return ["inventory", "character", "journal", "map", "skills", "crafting"]
 
 
 func _stage_panel(panel_id: String) -> Control:
 	match panel_id:
 		"inventory":
 			return inventory_panel
+		"character":
+			return character_panel
 		"journal":
 			return journal_panel
+		"map":
+			return map_panel
 		"skills":
 			return skills_panel
 		"crafting":

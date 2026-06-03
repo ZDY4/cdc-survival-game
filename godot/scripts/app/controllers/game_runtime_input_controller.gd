@@ -225,8 +225,12 @@ func _stage_panel_for_key(key: int) -> String:
 	match key:
 		KEY_I:
 			return "inventory"
+		KEY_C:
+			return "character"
 		KEY_J:
 			return "journal"
+		KEY_M:
+			return "map"
 		KEY_K:
 			return "skills"
 		KEY_L:
