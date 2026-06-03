@@ -3,12 +3,14 @@ extends Control
 var _panel: PanelContainer
 var _title_label: Label
 var _summary_label: Label
+var _search_box: LineEdit
 var _filter_box: HBoxContainer
 var _sort_box: HBoxContainer
 var _detail_label: Label
 var _items_box: VBoxContainer
 var _category_filter: String = "all"
 var _sort_mode: String = "name"
+var _search_text: String = ""
 var _last_snapshot: Dictionary = {}
 
 
@@ -65,6 +67,16 @@ func _build_layout() -> void:
 
 	_title_label = _label("TitleLine")
 	_summary_label = _label("SummaryLine")
+	_search_box = LineEdit.new()
+	_search_box.name = "SearchBox"
+	_search_box.placeholder_text = "搜索物品"
+	_search_box.clear_button_enabled = true
+	_search_box.custom_minimum_size = Vector2(0, 28)
+	_search_box.text_changed.connect(func(text: String) -> void:
+		_search_text = text.strip_edges().to_lower()
+		if not _last_snapshot.is_empty():
+			apply_snapshot(_last_snapshot)
+	, CONNECT_DEFERRED)
 	_filter_box = HBoxContainer.new()
 	_filter_box.name = "FilterBar"
 	_filter_box.add_theme_constant_override("separation", 4)
@@ -72,15 +84,21 @@ func _build_layout() -> void:
 	_sort_box.name = "SortBar"
 	_sort_box.add_theme_constant_override("separation", 4)
 	_detail_label = _label("DetailLine")
+	var item_scroll := ScrollContainer.new()
+	item_scroll.name = "ItemScroll"
+	item_scroll.custom_minimum_size = Vector2(320, 96)
+	item_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_items_box = VBoxContainer.new()
 	_items_box.name = "ItemLines"
 	_items_box.add_theme_constant_override("separation", 4)
 	box.add_child(_title_label)
 	box.add_child(_summary_label)
+	box.add_child(_search_box)
 	box.add_child(_filter_box)
 	box.add_child(_sort_box)
 	box.add_child(_detail_label)
-	box.add_child(_items_box)
+	item_scroll.add_child(_items_box)
+	box.add_child(item_scroll)
 	_add_filter_button("FilterAllButton", "全部", "all")
 	_add_filter_button("FilterEquipmentButton", "装备", "equipment")
 	_add_filter_button("FilterConsumableButton", "消耗", "consumable")
@@ -115,6 +133,8 @@ func _visible_items(items: Array) -> Array[Dictionary]:
 		var item_data: Dictionary = item
 		if _category_filter != "all" and str(item_data.get("category", "")) != _category_filter:
 			continue
+		if not _search_matches(item_data):
+			continue
 		output.append(item_data)
 	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		match _sort_mode:
@@ -134,6 +154,19 @@ func _visible_items(items: Array) -> Array[Dictionary]:
 				return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
 	)
 	return output
+
+
+func _search_matches(item: Dictionary) -> bool:
+	if _search_text.is_empty():
+		return true
+	var haystack := "%s %s %s %s %s" % [
+		item.get("item_id", ""),
+		item.get("name", ""),
+		item.get("description", ""),
+		item.get("category", ""),
+		item.get("category_label", ""),
+	]
+	return haystack.to_lower().contains(_search_text)
 
 
 func _apply_detail(item: Dictionary) -> void:

@@ -296,7 +296,7 @@ func _container_player_text(game_root: Node) -> String:
 
 func _inventory_text(game_root: Node) -> String:
 	var output: Array[String] = []
-	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemLines")
+	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
 	for child in item_box.get_children():
 		var text := _item_control_text(child)
 		if not text.is_empty():

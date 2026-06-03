@@ -76,6 +76,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should select ammo row for detail")
 	if not _detail_line(game_root).contains("弹药") or not _detail_line(game_root).contains("总价 50"):
 		errors.append("inventory detail should show selected item category and value")
+	var item_scroll: Node = game_root.inventory_panel.get_node_or_null("InventoryPanel/InventoryLines/ItemScroll")
+	if item_scroll == null:
+		errors.append("inventory panel should wrap item rows in a scroll container")
+	var search_box: LineEdit = _search_box(game_root)
+	if search_box == null:
+		errors.append("inventory panel should expose search box")
+	else:
+		search_box.text = "水瓶"
+		search_box.text_changed.emit(search_box.text)
+		await process_frame
+		var search_text: String = "\n".join(_item_lines(game_root))
+		if not search_text.contains("水瓶 x1"):
+			errors.append("inventory search should keep matching item rows")
+		if search_text.contains("棒球棒 x1") or search_text.contains("手枪弹药 x10"):
+			errors.append("inventory search should hide non-matching rows")
+		search_box.text = ""
+		search_box.text_changed.emit(search_box.text)
+		await process_frame
 	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_dagger.gltf")
 
 	var equip_result: Dictionary = game_root.equip_player_item("1003", "main_hand")
@@ -205,7 +223,7 @@ func _summary_line(game_root: Node) -> String:
 
 func _item_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
-	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemLines")
+	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
 	for child in item_box.get_children():
 		var text := _control_text(child)
 		if not text.is_empty():
@@ -221,8 +239,12 @@ func _sort_button(game_root: Node, node_name: String) -> Button:
 	return game_root.inventory_panel.find_child(node_name, true, false) as Button
 
 
+func _search_box(game_root: Node) -> LineEdit:
+	return game_root.inventory_panel.find_child("SearchBox", true, false) as LineEdit
+
+
 func _press_inventory_item_with_text(game_root: Node, needle: String) -> bool:
-	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemLines")
+	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
 	for child in item_box.get_children():
 		if child is Button and str((child as Button).text).contains(needle):
 			(child as Button).pressed.emit()
