@@ -81,7 +81,25 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade sell did not pay player money")
 	if not _summary_line(game_root).contains("资金 508"):
 		errors.append("trade summary did not update shop money after sell")
+	_press_key(game_root, KEY_ESCAPE)
+	if game_root.trade_panel.visible:
+		errors.append("Esc should close trade panel")
+	if not game_root.active_trade_target.is_empty():
+		errors.append("Esc should clear active trade target")
 	return errors
+
+
+func _press_key(game_root: Node, key: int) -> void:
+	var event := InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = true
+	game_root.runtime_input_controller.input(event)
+	event = InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = false
+	game_root.runtime_input_controller.input(event)
 
 
 func _title_line(game_root: Node) -> String:

@@ -74,7 +74,25 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var missing_store: Dictionary = game_root.store_active_container_item("1008", 1)
 	if missing_store.get("reason", "") != "not_enough_items":
 		errors.append("storing unavailable item should report not_enough_items")
+	_press_key(game_root, KEY_ESCAPE)
+	if game_root.container_panel.visible:
+		errors.append("Esc should close container panel")
+	if not _active_container_id(game_root).is_empty():
+		errors.append("Esc should clear active container runtime state")
 	return errors
+
+
+func _press_key(game_root: Node, key: int) -> void:
+	var event := InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = true
+	game_root.runtime_input_controller.input(event)
+	event = InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = false
+	game_root.runtime_input_controller.input(event)
 
 
 func _execute_primary_and_complete(game_root: Node, max_waits: int = 8) -> Dictionary:
@@ -158,3 +176,11 @@ func _container_item_lines(game_root: Node) -> Array[String]:
 		if child is Label:
 			output.append((child as Label).text)
 	return output
+
+
+func _active_container_id(game_root: Node) -> String:
+	for actor in game_root.simulation.snapshot().get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == 1:
+			return str(actor_data.get("active_container_id", ""))
+	return ""
