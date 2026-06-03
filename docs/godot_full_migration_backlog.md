@@ -330,7 +330,7 @@
 - [x] `[` / `]`：info tab 切换。
 - [~] `A`：auto tick 第一版已迁移；observe playback 待自由观察模式迁移后补齐。
 - [~] `PageUp/PageDown`：观察楼层切换。已恢复输入、HUD 当前楼层、相机平面和 focus actor 候选切换；待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
-- [~] console、debug panel、modal、stage panel、context menu 打开时阻止 gameplay 输入。已恢复 stage/settings 与 interaction menu 第一版；待补 console、debug panel、modal、tooltip/drag 层 blocker name。
+- [~] console、debug panel、modal、stage panel、context menu 打开时阻止 gameplay 输入。已恢复 stage/settings、interaction menu、trade panel、container panel 第一版；待补 console、debug panel、quantity/discard/overworld modal、tooltip/drag 层 blocker name。
 
 参考：`bevy_debug_viewer/src/controls/keyboard.rs`、`game_ui/state_sync.rs`。
 落点：`godot/scripts/app/controllers/game_runtime_input_controller.gd`、`godot/scripts/app/game_app.gd`。

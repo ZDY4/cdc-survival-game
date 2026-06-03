@@ -221,6 +221,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		if not game_root.trade_panel.visible:
 			errors.append("digit 2 dialogue option should open trade panel")
+		if not bool(game_root.gameplay_input_blocked_by_ui()):
+			errors.append("open trade panel should block gameplay input")
 		_press_key(game_root, KEY_ESCAPE)
 		if game_root.trade_panel.visible:
 			errors.append("Esc should close active trade panel")
@@ -237,6 +239,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		if not game_root.container_panel.visible:
 			errors.append("container interaction should show container panel")
+		if not bool(game_root.gameplay_input_blocked_by_ui()):
+			errors.append("open container panel should block gameplay input")
 		_press_key(game_root, KEY_ESCAPE)
 		if game_root.container_panel.visible:
 			errors.append("Esc should close active container panel")
