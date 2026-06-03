@@ -20,7 +20,7 @@ func _init(p_registry: RefCounted) -> void:
 	registry = p_registry
 
 
-func build(runtime_snapshot: Dictionary) -> Dictionary:
+func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionary:
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var progression: Dictionary = _dictionary_or_empty(player.get("progression", {}))
 	var attributes: Dictionary = _dictionary_or_empty(progression.get("attributes", {}))
@@ -38,6 +38,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"ap": float(player.get("ap", 0.0)),
 		"attributes": attributes.duplicate(true),
 		"equipment": _equipment_snapshot(equipment, inventory),
+		"feedback": _feedback_snapshot(feedback),
 	}
 
 
@@ -181,6 +182,53 @@ func _item_name(item_id: String) -> String:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("items").get(item_id, {}))
 	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	return str(data.get("name", item_id))
+
+
+func _feedback_snapshot(feedback: Dictionary) -> Dictionary:
+	if feedback.is_empty():
+		return {}
+	var snapshot := feedback.duplicate(true)
+	snapshot["message"] = _feedback_message(snapshot)
+	return snapshot
+
+
+func _feedback_message(feedback: Dictionary) -> String:
+	var reason := str(feedback.get("reason", ""))
+	var slot_id := str(feedback.get("slot_id", ""))
+	var slot_label := _slot_label(slot_id)
+	match reason:
+		"empty_equipment_slot":
+			if not slot_label.is_empty():
+				return "%s为空，无法卸下。" % slot_label
+			return "装备槽为空，无法卸下。"
+		"invalid_equipment_slot":
+			if not slot_label.is_empty():
+				return "%s不能装备该物品。" % slot_label
+			return "不能装备到该装备槽。"
+		"item_not_equippable":
+			return "该物品不能装备。"
+		"not_enough_items":
+			return "背包中没有该物品。"
+		"unknown_item":
+			return "找不到要装备的物品。"
+		"unknown_actor":
+			return "找不到角色，无法更新装备。"
+		"simulation_missing":
+			return "运行时未就绪，无法更新装备。"
+		_:
+			if reason.is_empty():
+				return "装备操作失败。"
+			return "装备操作失败：%s" % reason
+
+
+func _slot_label(slot_id: String) -> String:
+	for slot in EQUIPMENT_SLOTS:
+		var slot_data: Dictionary = slot
+		if str(slot_data.get("slot_id", "")) == slot_id:
+			return str(slot_data.get("label", slot_id))
+	if slot_id == "accessory":
+		return "饰品"
+	return slot_id
 
 
 func _player_actor(runtime_snapshot: Dictionary) -> Dictionary:

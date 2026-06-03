@@ -171,6 +171,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var off_hand_button: Button = _equipment_unequip_button(game_root, "off_hand")
 	if off_hand_button == null or not off_hand_button.disabled:
 		errors.append("empty equipment slot unequip button should be disabled")
+	var empty_off_hand_result: Dictionary = game_root.unequip_player_slot("off_hand")
+	if bool(empty_off_hand_result.get("success", false)) or str(empty_off_hand_result.get("reason", "")) != "empty_equipment_slot":
+		errors.append("directly unequipping empty off hand should fail with empty_equipment_slot")
+	if not _character_feedback_line(game_root).contains("副手为空"):
+		errors.append("character panel should show empty slot unequip feedback")
 	var main_hand_button: Button = _equipment_unequip_button(game_root, "main_hand")
 	if main_hand_button == null or main_hand_button.disabled:
 		errors.append("equipped main hand should expose enabled unequip button")
@@ -519,6 +524,13 @@ func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: Str
 
 func _character_summary_line(game_root: Node) -> String:
 	var label: Node = game_root.character_panel.find_child("SummaryLine", true, false)
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _character_feedback_line(game_root: Node) -> String:
+	var label: Node = game_root.character_panel.find_child("FeedbackLine", true, false)
 	if label is Label:
 		return str((label as Label).text)
 	return ""

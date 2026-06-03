@@ -3,6 +3,7 @@ extends Control
 var _panel: PanelContainer
 var _summary_label: Label
 var _resource_label: Label
+var _feedback_label: Label
 var _attributes_box: VBoxContainer
 var _equipment_box: VBoxContainer
 
@@ -30,6 +31,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		float(snapshot.get("max_hp", 0.0)),
 		float(snapshot.get("ap", 0.0)),
 	]
+	_apply_feedback(_dictionary_or_empty(snapshot.get("feedback", {})))
 	_clear_box(_attributes_box)
 	_clear_box(_equipment_box)
 	for row in _attribute_rows(_dictionary_or_empty(snapshot.get("attributes", {})), available_stat_points):
@@ -59,6 +61,7 @@ func _build_layout() -> void:
 
 	_summary_label = _label("SummaryLine")
 	_resource_label = _label("ResourceLine")
+	_feedback_label = _label("FeedbackLine")
 	_attributes_box = VBoxContainer.new()
 	_attributes_box.name = "AttributeLines"
 	_attributes_box.add_theme_constant_override("separation", 3)
@@ -67,6 +70,7 @@ func _build_layout() -> void:
 	_equipment_box.add_theme_constant_override("separation", 3)
 	box.add_child(_summary_label)
 	box.add_child(_resource_label)
+	box.add_child(_feedback_label)
 	box.add_child(_section_label("AttributesTitle", "属性"))
 	box.add_child(_attributes_box)
 	box.add_child(_section_label("EquipmentTitle", "装备"))
@@ -154,6 +158,14 @@ func _equipment_detail_suffix(data: Dictionary) -> String:
 		if not text.is_empty():
 			details.append(text)
 	return "" if details.is_empty() else " | %s" % " | ".join(details)
+
+
+func _apply_feedback(feedback: Dictionary) -> void:
+	if _feedback_label == null:
+		return
+	var message := str(feedback.get("message", ""))
+	_feedback_label.text = message
+	_feedback_label.visible = not message.is_empty()
 
 
 func _section_label(node_name: String, text: String) -> Label:

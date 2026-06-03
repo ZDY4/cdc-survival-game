@@ -28,6 +28,7 @@ var world_result: Dictionary
 var active_trade_target: Dictionary = {}
 var active_trade_feedback: Dictionary = {}
 var active_container_feedback: Dictionary = {}
+var active_character_feedback: Dictionary = {}
 var active_stage_panel: String = ""
 var settings_open := false
 
@@ -124,7 +125,7 @@ func refresh_container_panel() -> void:
 func refresh_character_panel() -> void:
 	if character_panel == null or simulation == null:
 		return
-	character_panel.apply_snapshot(CharacterSnapshot.new(registry).build(simulation.snapshot()))
+	character_panel.apply_snapshot(CharacterSnapshot.new(registry).build(simulation.snapshot(), active_character_feedback))
 	_apply_stage_panel_visibility()
 
 

@@ -585,7 +585,7 @@ Godot 落点：`godot/scripts/core/economy/**`、`godot/scripts/ui/controllers/i
 - [ ] 空槽状态、槽位校验、双手武器、副手冲突、accessory 多槽。
 - [ ] 装备详情：属性变化、武器射程、弹药、攻速、耐久、价值。
 - [ ] 装备视觉更新：角色附件、body region、武器挂点。
-- [ ] 卸下失败：背包空间、任务锁定、战斗限制。
+- [~] 卸下失败：空装备槽失败提示已纳入 Character 面板和 `UIToggle` smoke；待补背包空间、任务锁定、战斗限制。
 - [ ] reload equipped weapon。
 
 参考：`game_data/src/appearance.rs`、`runtime/runtime_economy.rs`、`widgets/inventory_detail.rs`。  
