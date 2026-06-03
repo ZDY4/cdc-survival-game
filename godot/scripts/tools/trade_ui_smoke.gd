@@ -106,6 +106,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_trade_button(game_root)
 	if not _trade_feedback(game_root).contains("玩家资金不足"):
 		errors.append("trade buy failure should show player money feedback")
+	var player_stock_result: Dictionary = game_root.sell_active_trade_item("1006", 999)
+	if player_stock_result.get("reason", "") != "player_stock_insufficient":
+		errors.append("oversized trade sell should report player_stock_insufficient")
+	if not _trade_feedback(game_root).contains("背包库存不足"):
+		errors.append("oversized trade sell should show player stock feedback")
+	_set_active_shop_money(game_root, 0)
+	if not _press_trade_item_with_text(game_root, "player", "绷带"):
+		errors.append("should select player bandage for insufficient shop money check")
+	_press_trade_button(game_root)
+	if not _trade_feedback(game_root).contains("店铺资金不足"):
+		errors.append("trade sell failure should show shop money feedback")
 	_press_close_button(game_root)
 	if game_root.trade_panel.visible:
 		errors.append("close button should close trade panel")
@@ -300,3 +311,11 @@ func _set_player_money(game_root: Node, money: int) -> void:
 	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if actor != null:
 		actor.money = money
+
+
+func _set_active_shop_money(game_root: Node, money: int) -> void:
+	for shop_id in game_root.simulation.shop_sessions.keys():
+		var shop: Dictionary = game_root.simulation.shop_sessions[shop_id]
+		shop["money"] = money
+		game_root.simulation.shop_sessions[shop_id] = shop
+		return

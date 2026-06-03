@@ -619,7 +619,8 @@ Godot 落点：`godot/scripts/core/economy/container_transactions.gd`、`godot/s
 - [ ] 装备出售。
 - [~] 买价 / 卖价倍率已用于价格预览；待补关系和技能影响价格。
 - [ ] 购物车总价、资金变化、确认预览。
-- [~] 基础失败提示已纳入 `TradeUI` smoke：玩家资金不足、店铺库存不足；待补店铺资金不足、玩家库存不足、不可出售、装备出售确认。
+- [x] 交易资金/库存失败提示已纳入 `TradeUI` smoke：玩家资金不足、店铺资金不足、店铺库存不足、玩家库存不足。
+- [ ] 不可出售、装备出售确认和部分成交策略。
 - [ ] 拖拽：shop -> buy zone、inventory/equipment -> sell zone。
 - [x] 交易关闭：Esc、关闭按钮、目标不可用、地图切换和对话结束已纳入 `TradeUI` / `UIToggle` smoke。
 
@@ -940,7 +941,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [ ] `AI`：开门、重规划、感知丢失、技能、治疗、settlement life。
 - [ ] `InventoryUI`：上下文、数量、拖拽、排序、使用、装备详情。
 - [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择和基础失败提示已覆盖；待补双向拖拽、背包限制/权限等高级错误。
-- [~] `TradeUI`：店铺/玩家双栏、数量直买直卖、价格预览和基础失败提示已覆盖；待补购物车、批量、装备出售和高级失败。
+- [~] `TradeUI`：店铺/玩家双栏、数量直买直卖、价格预览和资金/库存失败提示已覆盖；待补购物车、批量、装备出售、不可出售和部分成交。
 - [ ] `SkillsUI`：技能树、hotbar、多槽、目标预览、cooldown。
 - [ ] `JournalUI`：任务详情、追踪、对话交付、完成反馈。
 - [ ] `CraftingUI`：解锁、工作台、工具、批量、队列。
