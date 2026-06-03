@@ -47,6 +47,7 @@ var active_info_panel_index: int = 0
 var auto_tick_enabled := false
 var auto_tick_elapsed_sec := 0.0
 var focused_actor_id: int = 0
+var observed_map_level: int = 0
 
 
 func _ready() -> void:
@@ -65,6 +66,7 @@ func _ready() -> void:
 	if not bool(world_result.get("ok", false)):
 		push_error(str(world_result.get("error", "world build failed")))
 		return
+	_sync_observed_level_to_map()
 
 	interaction_controller = PlayerInteractionController.new(registry, simulation, world_result)
 	_setup_world_container()
@@ -270,7 +272,45 @@ func runtime_control_snapshot() -> Dictionary:
 		"observe_mode": false,
 		"observe_playback": false,
 		"observe_speed": "x1",
+		"map_level": map_level_snapshot(),
 		"focused_actor": focused_actor_snapshot(),
+	}
+
+
+func current_map_level() -> int:
+	observed_map_level = _normalized_map_level(observed_map_level)
+	return observed_map_level
+
+
+func map_level_snapshot() -> Dictionary:
+	return {
+		"current": current_map_level(),
+		"default": _default_map_level(),
+		"available": _available_map_levels(),
+	}
+
+
+func change_observed_level(direction: int) -> Dictionary:
+	var levels: Array[int] = _available_map_levels()
+	if levels.is_empty():
+		return {"success": false, "reason": "map_level_missing", "current": observed_map_level}
+	var current_level := current_map_level()
+	var current_index := levels.find(current_level)
+	if current_index < 0:
+		current_index = 0
+	var step := 1 if direction > 0 else -1 if direction < 0 else 0
+	var next_index := clampi(current_index + step, 0, levels.size() - 1)
+	var next_level := int(levels[next_index])
+	var changed := next_level != observed_map_level
+	observed_map_level = next_level
+	if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
+		runtime_input_controller.focus_current_actor()
+	refresh_hud(current_interaction_prompt())
+	return {
+		"success": true,
+		"changed": changed,
+		"current": observed_map_level,
+		"available": levels,
 	}
 
 
@@ -756,6 +796,7 @@ func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}) -> vo
 	if not bool(world_result.get("ok", false)):
 		push_error(str(world_result.get("error", "world rebuild failed")))
 		return
+	_sync_observed_level_to_map()
 	if interaction_controller != null:
 		interaction_controller.world_result = world_result
 	_setup_world_container()
@@ -823,6 +864,7 @@ func _update_trade_target_after_interaction(result: Dictionary, executed_target:
 func _apply_interaction_execution_result(result: Dictionary, executed_target: Dictionary) -> void:
 	_update_trade_target_after_interaction(result, executed_target)
 	world_result = interaction_controller.world_result
+	_sync_observed_level_to_map()
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
 	_setup_world_container()
 	WorldSceneRenderer.new().render_world(world_container, world_result)
@@ -893,7 +935,7 @@ func _focus_actor_candidates() -> Array[Dictionary]:
 	var candidates: Array[Dictionary] = []
 	if world_result.is_empty():
 		return candidates
-	var focused_level := _current_focus_level()
+	var focused_level := current_map_level()
 	for actor in _array_or_empty(world_result.get("actors", [])):
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
 		if actor_data.is_empty():
@@ -911,15 +953,7 @@ func _focus_actor_candidates() -> Array[Dictionary]:
 
 
 func _current_focus_level() -> int:
-	for actor in _array_or_empty(world_result.get("actors", [])):
-		var actor_data: Dictionary = _dictionary_or_empty(actor)
-		if int(actor_data.get("actor_id", 0)) == focused_actor_id:
-			return int(_dictionary_or_empty(actor_data.get("grid_position", {})).get("y", 0))
-	for actor in _array_or_empty(world_result.get("actors", [])):
-		var actor_data: Dictionary = _dictionary_or_empty(actor)
-		if _is_player_side_actor(actor_data):
-			return int(_dictionary_or_empty(actor_data.get("grid_position", {})).get("y", 0))
-	return 0
+	return current_map_level()
 
 
 func _is_player_side_actor(actor_data: Dictionary) -> bool:
@@ -947,6 +981,50 @@ func _clear_focus_switch_ui_state() -> void:
 		interaction_controller.clear_selection()
 	if hud != null and hud.has_method("hide_interaction_menu"):
 		hud.hide_interaction_menu()
+
+
+func _sync_observed_level_to_map() -> void:
+	observed_map_level = _normalized_map_level(observed_map_level if not _available_map_levels().is_empty() else _default_map_level())
+
+
+func _normalized_map_level(level: int) -> int:
+	var levels: Array[int] = _available_map_levels()
+	if levels.is_empty():
+		return _default_map_level()
+	if levels.has(level):
+		return level
+	var nearest := int(levels[0])
+	var nearest_distance := absi(nearest - level)
+	for candidate in levels:
+		var distance := absi(int(candidate) - level)
+		if distance < nearest_distance:
+			nearest = int(candidate)
+			nearest_distance = distance
+	return nearest
+
+
+func _default_map_level() -> int:
+	var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	return int(map.get("default_level", 0))
+
+
+func _available_map_levels() -> Array[int]:
+	var seen: Dictionary = {}
+	var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	for level in _array_or_empty(map.get("levels", [])):
+		var level_data: Dictionary = _dictionary_or_empty(level)
+		seen[int(level_data.get("y", _default_map_level()))] = true
+	seen[_default_map_level()] = true
+	for actor in _array_or_empty(world_result.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		var grid: Dictionary = _dictionary_or_empty(actor_data.get("grid_position", {}))
+		if not grid.is_empty():
+			seen[int(grid.get("y", _default_map_level()))] = true
+	var levels: Array[int] = []
+	for key in seen.keys():
+		levels.append(int(key))
+	levels.sort()
+	return levels
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

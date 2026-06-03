@@ -62,7 +62,7 @@
 - 待迁移数字键：对话选项 `1-9`、hotbar `1-0`、菜单内数量输入或快捷动作冲突处理。
 - 待迁移 `Space`：对话推进、等待/结束回合、长按重复等待、pending 取消、自由观察播放切换。
 - 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环、相机跟随、actor busy 时阻止切换和选中/提示状态清理；待补 free observe。
-- 待迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick / observe playback、`F` 相机跟随、`PageUp/PageDown` 楼层切换。
+- 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
 - 待迁移输入阻塞：console、debug panel、modal、stage panel、trade、container、context menu 打开时阻止 gameplay 点击/移动/攻击。
 
 ### 3.2 鼠标和拾取
@@ -282,7 +282,7 @@
 
 ### 12.3 相机和遮挡
 
-- 已恢复 Bevy 风格相机角度和移动第一版；待补相机跟随 actor、手动拖拽后暂停跟随、`F` 恢复跟随。
+- 已恢复 Bevy 风格相机角度、焦点 actor 跟随、手动拖拽后暂停跟随、`F` 恢复跟随和观察楼层相机平面第一版；待补 occlusion、视觉显隐和多层地图表现细节。
 - 待补 zoom factor、视口可见范围、边界 clamp、多楼层聚焦、分辨率变化处理。
 - 待补 occlusion：建筑/墙体遮挡目标时的淡出、轮廓、选择目标 actor 的遮挡处理。
 - 待补 hover outline：actor、object、door、container、trigger 的不同轮廓颜色和优先级。

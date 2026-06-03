@@ -10,6 +10,7 @@ func build_from_definition(map_definition: Dictionary) -> MapTopology:
 	topology.name = str(map_definition.get("name", topology.map_id))
 	topology.size = _dictionary_or_empty(map_definition.get("size", {}))
 	topology.default_level = int(map_definition.get("default_level", 0))
+	topology.levels = _map_levels(map_definition, topology.default_level)
 	topology.bounds = _bounds_from_size(topology.size)
 	_collect_entry_points(topology, _array_or_empty(map_definition.get("entry_points", [])))
 	_collect_objects(topology, _array_or_empty(map_definition.get("objects", [])))
@@ -25,6 +26,24 @@ func _bounds_from_size(size: Dictionary) -> Dictionary:
 		"min_z": 0,
 		"max_z": max(0, height - 1),
 	}
+
+
+func _map_levels(map_definition: Dictionary, default_level: int) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for level in _array_or_empty(map_definition.get("levels", [])):
+		var level_data: Dictionary = _dictionary_or_empty(level)
+		if level_data.is_empty():
+			continue
+		output.append({
+			"y": int(level_data.get("y", default_level)),
+			"cells": _array_or_empty(level_data.get("cells", [])).duplicate(true),
+		})
+	if output.is_empty():
+		output.append({"y": default_level, "cells": []})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("y", 0)) < int(b.get("y", 0))
+	)
+	return output
 
 
 func _collect_entry_points(topology: MapTopology, entry_points: Array) -> void:

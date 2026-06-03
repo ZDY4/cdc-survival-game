@@ -324,12 +324,12 @@
 - [ ] `Space`：对话推进、等待/结束回合、pending 取消、长按重复等待。
 - [ ] 数字键：对话 `1-9`、hotbar `1-0`、数量输入冲突处理。
 - [~] `Tab`：可控 actor / focus actor 切换。已恢复玩家侧 focus actor 循环、相机跟随、busy actor 拒绝切换和旧 selection/menu/prompt 清理；待补 free observe。
-- [ ] `F`：恢复相机跟随。
+- [x] `F`：恢复相机跟随。
 - [x] `V`：overlay mode。
-- [ ] `/`：帮助展开。
+- [x] `/`：帮助展开。
 - [x] `[` / `]`：info tab 切换。
 - [~] `A`：auto tick 第一版已迁移；observe playback 待自由观察模式迁移后补齐。
-- [ ] `PageUp/PageDown`：楼层切换。
+- [~] `PageUp/PageDown`：观察楼层切换。已恢复输入、HUD 当前楼层、相机平面和 focus actor 候选切换；待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
 - [ ] console、debug panel、modal、stage panel 打开时阻止 gameplay 输入。
 
 参考：`bevy_debug_viewer/src/controls/keyboard.rs`、`game_ui/state_sync.rs`。

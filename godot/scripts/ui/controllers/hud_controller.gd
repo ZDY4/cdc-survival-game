@@ -273,6 +273,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var parts: Array[String] = [
 		"AutoTick %s" % ("on" if bool(control_data.get("auto_tick", false)) else "off"),
 	]
+	var map_level: Dictionary = control_data.get("map_level", {})
+	if not map_level.is_empty():
+		parts.append("Level %d" % int(map_level.get("current", 0)))
 	var focused_actor: Dictionary = control_data.get("focused_actor", {})
 	if not focused_actor.is_empty():
 		var focus_label := str(focused_actor.get("display_name", ""))

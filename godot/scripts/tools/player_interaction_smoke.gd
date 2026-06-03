@@ -518,6 +518,47 @@ func _expect_focus_actor_tab_cycle(errors: Array[String], game_root: Node) -> vo
 	_press_camera_zoom_key(game_root, KEY_TAB)
 	if int(game_root.focused_actor_snapshot().get("actor_id", 0)) != 1:
 		errors.append("Tab should wrap focus back to the player actor")
+	_expect_page_level_switch(errors, game_root, player_grid)
+
+
+func _expect_page_level_switch(errors: Array[String], game_root: Node, player_grid: Dictionary) -> void:
+	var level_grid := {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)) + 1,
+		"z": int(player_grid.get("z", 0)) + 1,
+	}
+	var level_actor_id: int = game_root.simulation.register_actor({
+		"definition_id": "player_level_smoke",
+		"display_name": "Level Smoke",
+		"kind": "player",
+		"side": "player",
+		"group_id": "player",
+		"map_id": game_root.simulation.active_map_id,
+		"grid_position": GridCoord.from_dictionary(level_grid),
+		"ap": 6.0,
+		"turn_open": false,
+		"max_hp": 10.0,
+		"hp": 10.0,
+	})
+	game_root._rebuild_world_after_runtime_change()
+	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if camera == null:
+		errors.append("level switch smoke should keep runtime camera")
+		return
+	_press_camera_zoom_key(game_root, KEY_PAGEUP)
+	if int(game_root.current_map_level()) != int(level_grid["y"]):
+		errors.append("PageUp should switch to the next available map level")
+	if int(game_root.focused_actor_snapshot().get("actor_id", 0)) != level_actor_id:
+		errors.append("PageUp should focus a player-side actor on the observed level")
+	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
+	var expected_focus := Vector3(float(level_grid["x"]), float(level_grid["y"]) + 0.5, float(level_grid["z"]))
+	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(expected_focus) > 0.1:
+		errors.append("PageUp should move camera focus to the observed level actor")
+	if not _hud_runtime_control_line(game_root).contains("Level %d" % int(level_grid["y"])):
+		errors.append("HUD runtime control line should show the observed map level")
+	_press_camera_zoom_key(game_root, KEY_PAGEDOWN)
+	if int(game_root.current_map_level()) != int(player_grid.get("y", 0)):
+		errors.append("PageDown should return to the previous map level")
 
 
 func _expect_camera_middle_drag(errors: Array[String], game_root: Node, camera: Camera3D) -> void:

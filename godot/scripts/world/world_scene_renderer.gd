@@ -351,7 +351,7 @@ func _spawn_camera(root: Node3D, map: Dictionary, focus_position: Vector3, viewp
 	var center: Vector3 = focus_position
 	center.x = clampf(center.x, 0.0, max(0.0, width - 1.0))
 	center.z = clampf(center.z, 0.0, max(0.0, height - 1.0))
-	center.y = BEVY_LEVEL_PLANE_HEIGHT
+	center.y = focus_position.y
 	var distance := _bevy_camera_world_distance(width, height, viewport_size, BEVY_DEFAULT_ZOOM_FACTOR)
 	var camera: Camera3D = Camera3D.new()
 	camera.name = "WorldCamera"

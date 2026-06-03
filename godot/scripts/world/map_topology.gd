@@ -4,6 +4,7 @@ var map_id: String = ""
 var name: String = ""
 var size: Dictionary = {}
 var default_level: int = 0
+var levels: Array[Dictionary] = []
 var bounds: Dictionary = {}
 var entry_points: Dictionary = {}
 var object_count: int = 0
@@ -24,6 +25,7 @@ func to_dictionary() -> Dictionary:
 		"name": name,
 		"size": size,
 		"default_level": default_level,
+		"levels": levels,
 		"bounds": bounds,
 		"entry_points": entry_points,
 		"object_count": object_count,

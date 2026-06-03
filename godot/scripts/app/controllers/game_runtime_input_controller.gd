@@ -42,7 +42,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 		push_warning("运行时输入控制器找不到 WorldCamera，鼠标拾取和相机移动暂不可用")
 		return
 	camera_target = _vector_meta(camera, "focus_position", _focused_actor_position())
-	camera_target.y = BEVY_LEVEL_PLANE_HEIGHT
+	camera_target.y = _level_plane_height()
 	camera_zoom_factor = _float_meta(camera, "zoom_factor", 1.0)
 	camera_map_size = _vector2_meta(camera, "map_size", _map_size())
 	is_camera_following_player = true
@@ -202,6 +202,14 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		if game_root.has_method("cycle_focused_actor"):
 			game_root.cycle_focused_actor()
 		return true
+	elif key == KEY_PAGEUP:
+		if game_root.has_method("change_observed_level"):
+			game_root.change_observed_level(1)
+		return true
+	elif key == KEY_PAGEDOWN:
+		if game_root.has_method("change_observed_level"):
+			game_root.change_observed_level(-1)
+		return true
 	elif key == KEY_V:
 		if game_root.has_method("cycle_debug_overlay_mode"):
 			game_root.cycle_debug_overlay_mode()
@@ -319,7 +327,7 @@ func _stage_panel_for_key(key: int) -> String:
 
 
 func _begin_camera_drag(screen_position: Vector2) -> void:
-	var point: Variant = _ray_point_on_horizontal_plane(screen_position, BEVY_DRAG_PLANE_HEIGHT)
+	var point: Variant = _ray_point_on_horizontal_plane(screen_position, float(_observed_level()) + BEVY_DRAG_PLANE_HEIGHT)
 	if typeof(point) != TYPE_VECTOR3:
 		has_camera_drag_anchor = false
 		return
@@ -332,7 +340,7 @@ func _drag_camera_to_screen_position(screen_position: Vector2) -> void:
 	if not has_camera_drag_anchor:
 		_begin_camera_drag(screen_position)
 		return
-	var point: Variant = _ray_point_on_horizontal_plane(screen_position, BEVY_DRAG_PLANE_HEIGHT)
+	var point: Variant = _ray_point_on_horizontal_plane(screen_position, float(_observed_level()) + BEVY_DRAG_PLANE_HEIGHT)
 	if typeof(point) != TYPE_VECTOR3:
 		return
 	var current := Vector2((point as Vector3).x, (point as Vector3).z)
@@ -405,7 +413,7 @@ func _clamp_camera_target(target: Vector3) -> Vector3:
 	var focus_max_z: float = max(height * GRID_SIZE - half_visible_depth, height * GRID_SIZE - half_cell)
 	return Vector3(
 		clampf(target.x, focus_min_x, focus_max_x) if focus_min_x <= focus_max_x else center_x,
-		BEVY_LEVEL_PLANE_HEIGHT,
+		_level_plane_height(),
 		clampf(target.z, focus_min_z, focus_max_z) if focus_min_z <= focus_max_z else center_z
 	)
 
@@ -443,7 +451,7 @@ func _sync_camera_focus_meta() -> void:
 func _update_hover_cursor(world_position: Vector3) -> void:
 	var grid_x := roundf(world_position.x / GRID_SIZE) * GRID_SIZE
 	var grid_z := roundf(world_position.z / GRID_SIZE) * GRID_SIZE
-	hover_cursor.global_position = Vector3(grid_x, 0.09, grid_z)
+	hover_cursor.global_position = Vector3(grid_x, float(_observed_level()) + 0.09, grid_z)
 	hover_cursor.visible = true
 
 
@@ -463,7 +471,7 @@ func _clear_selection_only() -> void:
 func _grid_from_world_position(world_position: Vector3) -> Dictionary:
 	return {
 		"x": int(roundf(world_position.x / GRID_SIZE)),
-		"y": 0,
+		"y": _observed_level(),
 		"z": int(roundf(world_position.z / GRID_SIZE)),
 	}
 
@@ -496,10 +504,10 @@ func _focused_actor_position() -> Vector3:
 		if not focused_grid.is_empty():
 			return Vector3(
 				float(focused_grid.get("x", 0)),
-				BEVY_LEVEL_PLANE_HEIGHT,
+				float(focused_grid.get("y", _observed_level())) + BEVY_LEVEL_PLANE_HEIGHT,
 				float(focused_grid.get("z", 0))
 			)
-	return _player_focus_position()
+	return _map_center_focus_position()
 
 
 func _player_focus_position() -> Vector3:
@@ -507,8 +515,23 @@ func _player_focus_position() -> Vector3:
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
 		if actor_data.get("kind", "") == "player":
 			var grid: Dictionary = _dictionary_or_empty(actor_data.get("grid_position", {}))
-			return Vector3(float(grid.get("x", 0)), BEVY_LEVEL_PLANE_HEIGHT, float(grid.get("z", 0)))
-	return Vector3(0.0, BEVY_LEVEL_PLANE_HEIGHT, 0.0)
+			return Vector3(float(grid.get("x", 0)), float(grid.get("y", _observed_level())) + BEVY_LEVEL_PLANE_HEIGHT, float(grid.get("z", 0)))
+	return _map_center_focus_position()
+
+
+func _map_center_focus_position() -> Vector3:
+	var size := _map_size()
+	return Vector3(size.x * GRID_SIZE * 0.5, _level_plane_height(), size.y * GRID_SIZE * 0.5)
+
+
+func _level_plane_height() -> float:
+	return float(_observed_level()) + BEVY_LEVEL_PLANE_HEIGHT
+
+
+func _observed_level() -> int:
+	if game_root.has_method("current_map_level"):
+		return int(game_root.current_map_level())
+	return 0
 
 
 func _build_hover_cursor() -> MeshInstance3D:

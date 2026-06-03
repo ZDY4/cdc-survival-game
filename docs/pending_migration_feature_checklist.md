@@ -318,13 +318,13 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [ ] `Enter` / `Space` 对话推进。
 - [ ] `Space` 等待、结束回合、长按重复、pending 取消。
 - [~] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。已恢复玩家侧 focus actor 循环、相机跟随、busy actor 拒绝切换和旧 selection/menu/prompt 清理；待补 free observe 策略。
-- [ ] `V` overlay mode。
-- [ ] `/` 控制提示展开折叠。
+- [x] `V` overlay mode。
+- [x] `/` 控制提示展开折叠。
 - [ ] `[` / `]` info panel tab 切换。
 - [ ] `A` auto tick / observe playback。
-- [ ] `F` 相机恢复跟随。
+- [x] `F` 相机恢复跟随。
 - [ ] `+` / `-` / `Ctrl+0` zoom。
-- [ ] `PageUp` / `PageDown` 楼层切换。
+- [~] `PageUp` / `PageDown` 观察楼层切换。已恢复输入、HUD 当前楼层、相机平面和 focus actor 候选切换；待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
 - [ ] console / debug panel / modal / stage panel 打开时阻止 gameplay 输入。
 
 参考：`bevy_debug_viewer/src/controls/keyboard.rs`、`game_ui/settings.rs`。  
