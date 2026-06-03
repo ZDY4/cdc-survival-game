@@ -28,6 +28,7 @@ func _run() -> void:
 		"map_visible": game_root.map_panel.visible,
 		"skills_visible": game_root.skills_panel.visible,
 		"crafting_visible": game_root.crafting_panel.visible,
+		"settings_visible": game_root.settings_panel.visible,
 	}, "\t"))
 	quit(0)
 
@@ -37,6 +38,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.panel_controller == null:
 		return ["panel controller was not created"]
 	_expect_stage_closed(errors, game_root, "initial")
+	if game_root.settings_panel == null:
+		errors.append("settings panel was not created")
+	_press_key(game_root, KEY_ESCAPE)
+	if not bool(game_root.is_settings_open()) or not game_root.settings_panel.visible:
+		errors.append("Esc with no active UI should open settings panel")
+	if not bool(game_root.gameplay_input_blocked_by_ui()):
+		errors.append("open settings should block gameplay input")
+	_press_key(game_root, KEY_ESCAPE)
+	if bool(game_root.is_settings_open()) or game_root.settings_panel.visible:
+		errors.append("Esc should close settings panel")
+	_expect_stage_closed(errors, game_root, "closing settings should keep stage panels closed")
 	var before_wait_events: int = game_root.simulation.snapshot().get("events", []).size()
 	_press_key(game_root, KEY_SPACE)
 	if game_root.simulation.snapshot().get("events", []).size() <= before_wait_events:
@@ -88,6 +100,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_press_key(game_root, KEY_ESCAPE)
 		if game_root.runtime_input_controller.has_selection_state():
 			errors.append("second Esc should clear selected interaction target")
+		if bool(game_root.is_settings_open()):
+			_press_key(game_root, KEY_ESCAPE)
 
 	var talk_result: Dictionary = game_root.simulation.execute_interaction(1, {
 		"target_type": "actor",

@@ -27,6 +27,7 @@ var simulation: RefCounted
 var world_result: Dictionary
 var active_trade_target: Dictionary = {}
 var active_stage_panel: String = ""
+var settings_open := false
 
 var hud: Control
 var dialogue_panel: Control
@@ -38,6 +39,7 @@ var journal_panel: Control
 var map_panel: Control
 var skills_panel: Control
 var crafting_panel: Control
+var settings_panel: Control
 
 
 func _init(p_parent: Node, p_registry: RefCounted, p_simulation: RefCounted, p_world_result: Dictionary) -> void:
@@ -58,7 +60,9 @@ func setup_panels() -> void:
 	map_panel = _ensure_panel(map_panel, MAP_PANEL_SCENE, "MapPanelRoot")
 	skills_panel = _ensure_panel(skills_panel, SKILLS_PANEL_SCENE, "SkillsPanelRoot")
 	crafting_panel = _ensure_panel(crafting_panel, CRAFTING_PANEL_SCENE, "CraftingPanelRoot")
+	settings_panel = _ensure_settings_panel()
 	_apply_stage_panel_visibility()
+	_apply_settings_panel_visibility()
 
 
 func refresh_all(selected_prompt: Dictionary = {}) -> void:
@@ -73,6 +77,7 @@ func refresh_all(selected_prompt: Dictionary = {}) -> void:
 	refresh_skills_panel()
 	refresh_crafting_panel()
 	_apply_stage_panel_visibility()
+	_apply_settings_panel_visibility()
 
 
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
@@ -150,7 +155,10 @@ func toggle_stage_panel(panel_id: String) -> Dictionary:
 	if not _stage_panel_ids().has(panel_id):
 		return {"success": false, "reason": "unknown_stage_panel", "panel_id": panel_id}
 	active_stage_panel = "" if active_stage_panel == panel_id else panel_id
+	if not active_stage_panel.is_empty():
+		settings_open = false
 	_apply_stage_panel_visibility()
+	_apply_settings_panel_visibility()
 	return {
 		"success": true,
 		"panel_id": panel_id,
@@ -175,7 +183,26 @@ func any_stage_panel_open() -> bool:
 
 
 func gameplay_input_blocked() -> bool:
-	return any_stage_panel_open() or _panel_visible(trade_panel) or _panel_visible(container_panel) or _panel_visible(dialogue_panel)
+	return any_stage_panel_open() or settings_open or _panel_visible(trade_panel) or _panel_visible(container_panel) or _panel_visible(dialogue_panel)
+
+
+func open_settings_panel() -> Dictionary:
+	active_stage_panel = ""
+	settings_open = true
+	_apply_stage_panel_visibility()
+	_apply_settings_panel_visibility()
+	return {"success": true, "open": true, "panel_id": "settings"}
+
+
+func close_settings_panel() -> Dictionary:
+	var was_open := settings_open
+	settings_open = false
+	_apply_settings_panel_visibility()
+	return {"success": true, "closed": was_open, "panel_id": "settings"}
+
+
+func is_settings_open() -> bool:
+	return settings_open
 
 
 func close_trade_panel() -> void:
@@ -192,6 +219,42 @@ func _ensure_panel(current: Control, scene: PackedScene, node_name: String) -> C
 	return panel
 
 
+func _ensure_settings_panel() -> Control:
+	if settings_panel != null:
+		return settings_panel
+	var root := Control.new()
+	root.name = "SettingsPanelRoot"
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.visible = false
+	parent.add_child(root)
+
+	var panel := PanelContainer.new()
+	panel.name = "SettingsPanel"
+	panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	panel.offset_left = -360
+	panel.offset_right = -16
+	panel.offset_top = 284
+	panel.offset_bottom = 508
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.name = "SettingsLines"
+	box.add_theme_constant_override("separation", 6)
+	panel.add_child(box)
+
+	var title := _settings_label("TitleLine", "设置")
+	var audio := _settings_label("AudioLine", "音量: 主音量 100% | 音乐 100% | 音效 100%")
+	var display := _settings_label("DisplayLine", "显示: 窗口模式 | VSync 开启 | UI 100%")
+	var controls := _settings_label("ControlsLine", "按键: Esc 关闭 | I/C/M/J/K/L 面板 | Space 等待")
+	box.add_child(title)
+	box.add_child(audio)
+	box.add_child(display)
+	box.add_child(controls)
+	return root
+
+
 func _apply_stage_panel_visibility() -> void:
 	for panel_id in _stage_panel_ids():
 		var panel := _stage_panel(panel_id)
@@ -200,6 +263,16 @@ func _apply_stage_panel_visibility() -> void:
 		var open := panel_id == active_stage_panel
 		panel.visible = open
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP if open else Control.MOUSE_FILTER_IGNORE
+
+
+func _apply_settings_panel_visibility() -> void:
+	if settings_panel == null:
+		return
+	settings_panel.visible = settings_open
+	settings_panel.mouse_filter = Control.MOUSE_FILTER_STOP if settings_open else Control.MOUSE_FILTER_IGNORE
+	var panel := settings_panel.get_node_or_null("SettingsPanel")
+	if panel is Control:
+		(panel as Control).mouse_filter = Control.MOUSE_FILTER_STOP if settings_open else Control.MOUSE_FILTER_IGNORE
 
 
 func _stage_panel_ids() -> Array[String]:
@@ -226,3 +299,12 @@ func _stage_panel(panel_id: String) -> Control:
 
 func _panel_visible(panel: Control) -> bool:
 	return panel != null and panel.visible
+
+
+func _settings_label(node_name: String, text: String) -> Label:
+	var label := Label.new()
+	label.name = node_name
+	label.text = text
+	label.clip_text = true
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return label

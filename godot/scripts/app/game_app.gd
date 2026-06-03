@@ -28,6 +28,7 @@ var journal_panel: Control
 var map_panel: Control
 var skills_panel: Control
 var crafting_panel: Control
+var settings_panel: Control
 var active_trade_target: Dictionary = {}
 
 
@@ -168,6 +169,10 @@ func any_stage_panel_open() -> bool:
 	return panel_controller != null and panel_controller.any_stage_panel_open()
 
 
+func is_settings_open() -> bool:
+	return panel_controller != null and panel_controller.is_settings_open()
+
+
 func gameplay_input_blocked_by_ui() -> bool:
 	return panel_controller != null and panel_controller.gameplay_input_blocked()
 
@@ -215,10 +220,18 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 	if any_stage_panel_open():
 		close_stage_panels()
 		return {"success": true, "closed": "stage_panel"}
+	if is_settings_open():
+		panel_controller.close_settings_panel()
+		refresh_all_panels(current_interaction_prompt())
+		return {"success": true, "closed": "settings"}
 	var pending_result: Dictionary = cancel_pending(reason, false)
 	if bool(pending_result.get("had_pending", false)):
 		return {"success": true, "closed": "pending", "result": pending_result}
-	return {"success": false, "reason": "nothing_to_close"}
+	if panel_controller != null:
+		panel_controller.open_settings_panel()
+		refresh_all_panels(current_interaction_prompt())
+		return {"success": true, "closed": "", "opened": "settings"}
+	return {"success": false, "reason": "panel_controller_missing"}
 
 
 func select_interaction_target(target: Dictionary) -> Dictionary:
@@ -583,6 +596,7 @@ func _setup_panels() -> void:
 	map_panel = panel_controller.map_panel
 	skills_panel = panel_controller.skills_panel
 	crafting_panel = panel_controller.crafting_panel
+	settings_panel = panel_controller.settings_panel
 
 
 func _update_trade_target_after_interaction(result: Dictionary, executed_target: Dictionary) -> void:
