@@ -1,6 +1,13 @@
-# Remaining Rust parity work
+# Rust parity remaining work
 
-本文记录对照 `G:\Projects\cdc_survival_game_bevy_reference` 后仍未完成的 Godot 运行时恢复项。当前主线已完成第一里程碑中的基础命令入口、AP/回合状态、交互解析、攻击、击杀、尸体容器、hostile NPC attack / approach，以及交互输入闭环；以下内容仍待后续实现。
+本文记录对照 `G:\Projects\cdc_survival_game_bevy_reference` 后仍未完成的 Godot 运行时恢复项。当前主线已完成第一里程碑中的基础命令入口、AP/回合状态、交互解析、攻击、击杀、尸体容器、hostile NPC attack / approach、交互输入闭环，以及背包、技能、任务、制作的第一版 UI 命令闭环；以下内容仍待后续实现。
+
+## 快速交接
+
+- 当前已完成到“第一版可玩闭环”：玩家可以通过统一命令入口移动、等待、交互、拾取、开容器、交易、攻击、学习技能、绑定并使用 hotbar 第一槽、交付任务、执行制作。
+- 未完成项主要集中在旧 Rust 细节等价：战斗 LOS / AOE / 退出规则、背包和交易的高级 UI、技能真实效果和目标预览、任务反馈、制作工具/工作台运行时、NPC settlement life / GOAP。
+- 后续实现仍应拆成小阶段提交；不要把所有剩余系统一次性塞进一个大改动。
+- `godot/scenes/maps/survivor_outpost_01.tscn` 当前可能存在本地地图调整，除非任务明确要求，不要混入功能提交。
 
 ## 当前边界
 
@@ -26,11 +33,13 @@
 
 - 玩家攻击会读取当前主手装备的 weapon fragment，按装备数据计算射程、基础伤害、攻击速度换算 AP 成本，并对远程武器执行弹药校验和消耗。
 - `attack_resolved` / `attack_performed` 事件会带出武器 id、基础伤害、暴击倍率和暴击结果；暴击使用当前 Godot 确定性 roll 第一版。
+- hostile NPC 第一版可在敌方回合攻击或接近玩家，击杀后会创建可打开的尸体容器并推进 kill 任务进度。
 
 仍待恢复：
 
-- 暴击随机种子、命中反馈和伤害事件细节仍需继续对齐旧 Rust。
-- 攻击和技能目标需要恢复 line-of-sight、同层、AOE、友军伤害策略和目标预览。
+- 暴击随机种子、命中反馈、伤害事件细节和战斗日志文案仍需继续对齐旧 Rust。
+- 攻击和技能目标需要恢复 line-of-sight、同层校验细节、AOE、友军伤害策略和目标预览。
+- 远程/近战目标预览、命中范围提示、不可攻击原因提示仍待恢复。
 - 战斗退出目前是 hostiles cleared 的第一版逻辑，仍需补齐旧版“连续若干回合无敌对视线后退出”等规则。
 
 ## 背包、装备、容器、交易
@@ -48,6 +57,7 @@
 - 物品使用、批量选择/批量确认、容器和背包之间的完整拖拽转移 UI 仍待补齐。
 - 装备/卸下已有统一入口，但 UI 禁用状态、装备详情和旧版上下文动作仍需补齐。
 - 商店购物车、买卖批量确认、价格预览、资金校验提示和交易上下文菜单仍待恢复。
+- 背包、容器和交易面板仍缺旧版那种更细的失败原因提示，例如容量、资金、不可装备、不可出售、数量非法等。
 
 ## 技能系统
 
@@ -60,7 +70,8 @@
 仍待恢复：
 
 - 多槽 hotbar 选择、技能快捷键、冷却递减 UI 和主动技能实际 gameplay effect 仍待恢复。
-- 主动技能目标策略、AOE 预览、完整技能详情、冷却提示和目标预览仍待实现。
+- 主动技能目标策略、AOE 预览、友军伤害策略、完整技能详情、冷却提示和目标预览仍待实现。
+- 当前 `use_skill` 只完成 AP / cooldown / event 的入口闭环，尚未把主动技能效果完整接回战斗、移动、治疗、对话或制作等业务系统。
 
 ## 任务系统
 
@@ -74,6 +85,7 @@
 
 - dialogue turn-in 的分支条件、失败提示和任务节点动作需要继续对照旧 Rust 行为细化。
 - 任务完成 toast/日志、奖励领取动效、任务节点详情和更明确的 `quest_advanced` UI 反馈仍待恢复。
+- Journal 仍缺旧版更完整的目标节点详情、可追踪目标提示、任务失败/替代分支和对话中交付条件提示。
 
 ## 制作系统
 
@@ -86,19 +98,53 @@
 
 - 配方解锁流程、工具要求、工作台要求当前仍只显示缺失原因，尚未恢复可满足/可使用的完整运行时支持。
 - 制作完成 toast/日志、批量制作、材料消耗预览、排序筛选和旧版详情面板仍待恢复。
+- 制作时间、制作队列、制作地点校验、工具耐久或消耗策略仍未恢复。
 
 ## NPC 扩展
 
 - 当前 NPC 第一版只覆盖 hostile attack / approach 以及友方/中立互动入口。
 - settlement life、GOAP、后台日程、巡逻执行、工作/休息状态和调试信息仍未恢复。
 - NPC 在线行为与后台行为的状态同步、失败重规划和可视化提示仍待实现。
+- 友方/中立 NPC 的脚本化互动、治疗、雇佣、阵营关系反馈、交易权限和特殊对话条件仍需按旧参考工程逐项恢复。
+
+## 推荐下一步切片
+
+### 切片 A：战斗目标校验
+
+- 在 `godot/scripts/core` 中补齐攻击 line-of-sight、同层/楼层规则、不可攻击原因、AOE 和友军伤害策略的第一版。
+- 扩展现有 Combat smoke，覆盖隔墙不可攻击、跨层不可攻击、AOE 命中、友军伤害策略和战斗退出。
+- 完成后运行 `pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Combat`、`pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All`、`cmd /c run_godot_validate.bat`。
+
+### 切片 B：背包 / 容器 / 交易高级 UI
+
+- 补数量选择弹窗、上下文菜单、拖拽转移、排序、物品使用和装备详情。
+- 交易补购物车、批量确认、价格预览、资金不足提示和买卖失败原因。
+- 完成后运行 `InventoryUI`、`ContainerUI`、`TradeUI`、`All` 和 `run_godot_validate.bat`。
+
+### 切片 C：技能真实效果
+
+- 把 active / toggle skill 从当前占位 `skill_used` 事件推进到真实 gameplay effect。
+- 补多槽 hotbar、快捷键、冷却递减显示、目标策略、AOE 预览和失败原因。
+- 完成后运行 `SkillsUI`、`Progression`、`Combat`、`Save`、`All` 和 `run_godot_validate.bat`。
+
+### 切片 D：任务与制作反馈
+
+- 任务补对话交付分支、失败提示、完成 toast/log、奖励反馈和任务节点详情。
+- 制作补配方解锁、工作台/工具运行时满足、批量制作、材料预览、制作队列和地点校验。
+- 完成后运行 `JournalUI`、`DialogueAction`、`CraftingUI`、`Progression`、`Save`、`All` 和 `run_godot_validate.bat`。
+
+### 切片 E：NPC 生活模拟
+
+- 在 hostile 战斗 AI 稳定后，再恢复 settlement life、GOAP、后台日程、巡逻、工作/休息状态和调试可视化。
+- 优先保证在线 NPC 和后台 NPC 的状态同步、失败重规划和地图切换后的持久化。
+- 完成后运行 `AI`、`Interaction`、`PlayerInteraction`、`Save`、`All` 和 `run_godot_validate.bat`。
 
 ## 建议后续顺序
 
-1. 补武器/弹药/攻击速度/暴击和更完整战斗退出。
-2. 补背包/容器/交易上下文菜单、数量弹窗、拖拽排序和购物车 UI。
-3. 补 Skills、Hotbar 和主动技能目标预览。
-4. 补 Crafting 面板和任务交付反馈。
+1. 补攻击 LOS / AOE / 友军伤害策略 / 战斗退出规则。
+2. 补背包、容器、交易上下文菜单、数量弹窗、拖拽排序和购物车 UI。
+3. 补 Skills、Hotbar 多槽、主动技能真实效果和目标预览。
+4. 补 Crafting 工具/工作台运行时、任务交付反馈和完成提示。
 5. 补 settlement life / GOAP / 后台日程。
 
 ## 阶段验收口径
