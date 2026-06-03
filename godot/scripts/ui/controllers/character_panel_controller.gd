@@ -144,7 +144,16 @@ func _equipment_text(data: Dictionary) -> String:
 		float(data.get("weight", 0.0)),
 		int(data.get("value", 0)),
 		rarity_suffix,
-	]
+	] + _equipment_detail_suffix(data)
+
+
+func _equipment_detail_suffix(data: Dictionary) -> String:
+	var details: Array[String] = []
+	for detail in _array_or_empty(data.get("details", [])):
+		var text: String = str(detail)
+		if not text.is_empty():
+			details.append(text)
+	return "" if details.is_empty() else " | %s" % " | ".join(details)
 
 
 func _section_label(node_name: String, text: String) -> Label:

@@ -140,6 +140,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("character panel should show localized main hand equipment slot")
 	if not _equipment_line(game_root, "main_hand").contains("价值 50"):
 		errors.append("equipped item row should show value summary")
+	if not _equipment_line(game_root, "main_hand").contains("武器: 伤害 12 / 射程 1 / 攻速 1.2"):
+		errors.append("main hand equipment row should show weapon damage/range/speed details")
+	if not _equipment_line(game_root, "main_hand").contains("耐久: 50/50"):
+		errors.append("main hand equipment row should show durability detail")
+	if not _equipment_line(game_root, "main_hand").contains("外观: builtin:weapon:dagger"):
+		errors.append("main hand equipment row should show appearance asset detail")
+	if not _equipment_line(game_root, "body").contains("身体: 布衣"):
+		errors.append("character panel should show body equipment slot")
+	if not _equipment_line(game_root, "body").contains("属性: defense +1.0 / insulation +0.1"):
+		errors.append("body equipment row should show attribute modifier details")
 	if not _equipment_line(game_root, "off_hand").contains("副手: 空"):
 		errors.append("character panel should show empty off hand equipment slot")
 	var off_hand_button: Button = _equipment_unequip_button(game_root, "off_hand")
