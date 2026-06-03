@@ -78,6 +78,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_queue_button(game_root)
 	if not _cart_line(game_root).contains("购物车为空"):
 		errors.append("non-sellable player item should not enter trade cart")
+	if not _drop_trade_item_with_text(game_root, "player", "绷带"):
+		errors.append("should attempt dragging non-sellable player bandage")
+	if not _cart_line(game_root).contains("购物车为空"):
+		errors.append("dragged non-sellable player item should not enter trade cart")
 	var not_sellable_result: Dictionary = game_root.sell_active_trade_item("1006", 1)
 	if str(not_sellable_result.get("reason", "")) != "item_not_sellable":
 		errors.append("non-sellable direct sell should report item_not_sellable")
@@ -122,6 +126,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_clear_cart_button(game_root)
 	if not _cart_line(game_root).contains("购物车为空"):
 		errors.append("trade cart clear should empty queued items")
+	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
+		errors.append("should drag shop bandage to trade cart")
+	if not _cart_line(game_root).contains("购买 绷带 x1"):
+		errors.append("dragged shop item should queue cart buy")
+	_press_cart_entry_button(game_root, 0, "RemoveButton")
+	if not _drop_trade_item_with_text(game_root, "player", "绷带"):
+		errors.append("should drag player bandage to trade cart")
+	if not _cart_line(game_root).contains("出售 绷带 x1"):
+		errors.append("dragged player item should queue cart sell")
+	_press_cart_entry_button(game_root, 0, "RemoveButton")
 	_press_queue_button(game_root)
 	if _player_money(game_root) != money_before_cart:
 		errors.append("queueing trade cart should not spend player money")
@@ -180,6 +194,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should select equipped dagger for trade sell")
 	if _trade_button_text(game_root) != "出售":
 		errors.append("selecting equipped item should set trade action to sell")
+	if not _drop_trade_item_with_text(game_root, "player", "主手 小刀"):
+		errors.append("should drag equipped dagger to trade cart")
+	if not _cart_line(game_root).contains("出售 主手 小刀 x1"):
+		errors.append("dragged equipped item should queue cart sell")
+	_press_cart_entry_button(game_root, 0, "RemoveButton")
 	var dagger_stock_before := _shop_stock_count(game_root, "1002")
 	var money_before_equipped_sell := _player_money(game_root)
 	_press_trade_button(game_root)
@@ -360,14 +379,38 @@ func _player_item_text(game_root: Node) -> String:
 
 
 func _press_trade_item_with_text(game_root: Node, source: String, text: String) -> bool:
+	var button: Button = _trade_item_button_with_text(game_root, source, text)
+	if button == null:
+		return false
+	button.pressed.emit()
+	return true
+
+
+func _drop_trade_item_with_text(game_root: Node, source: String, text: String, count: int = 1) -> bool:
+	var button: Button = _trade_item_button_with_text(game_root, source, text)
+	if button == null:
+		return false
+	var item: Dictionary = button.get_meta("trade_item", {})
+	var trade_source: String = str(button.get_meta("trade_source", ""))
+	if item.is_empty() or trade_source.is_empty():
+		return false
+	game_root.trade_panel.call("_drop_trade_item_data", Vector2.ZERO, {
+		"kind": "trade_item",
+		"source": trade_source,
+		"item": item.duplicate(true),
+		"count": count,
+	}, null)
+	return true
+
+
+func _trade_item_button_with_text(game_root: Node, source: String, text: String) -> Button:
 	var item_box: Node = _trade_item_box(game_root, source)
 	if item_box == null:
-		return false
+		return null
 	for child in item_box.get_children():
 		if child is Button and str((child as Button).text).contains(text):
-			(child as Button).pressed.emit()
-			return true
-	return false
+			return child as Button
+	return null
 
 
 func _set_trade_quantity(game_root: Node, count: int) -> void:

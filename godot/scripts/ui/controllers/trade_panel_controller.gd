@@ -222,9 +222,19 @@ func _build_layout() -> void:
 	cart_scroll.name = "CartScroll"
 	cart_scroll.custom_minimum_size = Vector2(580, 72)
 	cart_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	cart_scroll.set_drag_forwarding(
+		Callable(self, "_empty_trade_drag_data"),
+		Callable(self, "_can_drop_trade_item_data"),
+		Callable(self, "_drop_trade_item_data")
+	)
 	_cart_items_box = VBoxContainer.new()
 	_cart_items_box.name = "CartItemLines"
 	_cart_items_box.add_theme_constant_override("separation", 4)
+	_cart_items_box.set_drag_forwarding(
+		Callable(self, "_empty_trade_drag_data"),
+		Callable(self, "_can_drop_trade_item_data"),
+		Callable(self, "_drop_trade_item_data")
+	)
 	cart_scroll.add_child(_cart_items_box)
 	_equipment_sell_dialog = ConfirmationDialog.new()
 	_equipment_sell_dialog.name = "EquipmentSellConfirmDialog"
@@ -256,6 +266,13 @@ func _item_line(item: Dictionary, source: String) -> Button:
 	if not disabled_reason.is_empty():
 		button.tooltip_text = "%s\n%s" % [button.tooltip_text, disabled_reason] if not button.tooltip_text.is_empty() else disabled_reason
 	button.disabled = not _item_can_trade(item, source)
+	button.set_meta("trade_item", item.duplicate(true))
+	button.set_meta("trade_source", source)
+	button.set_drag_forwarding(
+		Callable(self, "_get_trade_item_drag_data"),
+		Callable(self, "_cannot_drop_trade_item_data"),
+		Callable(self, "_ignore_trade_item_drop")
+	)
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
@@ -332,16 +349,75 @@ func _queue_selected_item() -> void:
 	var count := int(_quantity_spin.value if _quantity_spin != null else 1)
 	if count <= 0:
 		return
+	_queue_trade_entry(_selected_item_snapshot, _selected_source, count)
+
+
+func _queue_trade_entry(item: Dictionary, source: String, count: int) -> bool:
+	var item_id: String = str(item.get("item_id", ""))
+	if source.is_empty() or item_id.is_empty() or not _item_can_trade(item, source):
+		return false
+	var max_count: int = maxi(1, int(item.get("count", count)))
+	var normalized_count: int = clampi(count, 1, max_count)
 	var entry := {
-		"source": _selected_source,
-		"item_id": _selected_item_id,
-		"name": str(_selected_item_snapshot.get("name", _selected_item_id)),
-		"count": count,
-		"max_count": int(_selected_item_snapshot.get("count", count)),
-		"unit_price": int(_selected_item_snapshot.get("price", 0)),
+		"source": source,
+		"item_id": item_id,
+		"name": str(item.get("name", item_id)),
+		"count": normalized_count,
+		"max_count": max_count,
+		"unit_price": int(item.get("price", 0)),
 	}
 	_cart_entries.append(entry)
 	_update_cart_line()
+	return true
+
+
+func _empty_trade_drag_data(_position: Vector2, _from_control: Control) -> Variant:
+	return null
+
+
+func _get_trade_item_drag_data(_position: Vector2, from_control: Control) -> Variant:
+	if from_control == null or not from_control.has_meta("trade_item") or not from_control.has_meta("trade_source"):
+		return null
+	var item: Dictionary = _dictionary_or_empty(from_control.get_meta("trade_item"))
+	var source: String = str(from_control.get_meta("trade_source"))
+	if item.is_empty() or source.is_empty() or not _item_can_trade(item, source):
+		return null
+	var preview := Label.new()
+	preview.text = "%s x%d" % [item.get("name", item.get("item_id", "")), int(item.get("count", 0))]
+	set_drag_preview(preview)
+	return {
+		"kind": "trade_item",
+		"source": source,
+		"item": item.duplicate(true),
+		"count": int(_quantity_spin.value if _quantity_spin != null else 1),
+	}
+
+
+func _cannot_drop_trade_item_data(_position: Vector2, _data: Variant, _from_control: Control) -> bool:
+	return false
+
+
+func _ignore_trade_item_drop(_position: Vector2, _data: Variant, _from_control: Control) -> void:
+	pass
+
+
+func _can_drop_trade_item_data(_position: Vector2, data: Variant, _from_control: Control) -> bool:
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	if str(drag_data.get("kind", "")) != "trade_item":
+		return false
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var source: String = str(drag_data.get("source", ""))
+	return not item.is_empty() and _item_can_trade(item, source)
+
+
+func _drop_trade_item_data(position: Vector2, data: Variant, from_control: Control) -> void:
+	if not _can_drop_trade_item_data(position, data, from_control):
+		return
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var source: String = str(drag_data.get("source", ""))
+	var count: int = int(drag_data.get("count", 1))
+	_queue_trade_entry(item, source, count)
 
 
 func _emit_selected_trade() -> void:
