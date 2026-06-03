@@ -73,10 +73,12 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	var player_items: Array = snapshot.get("player_items", [])
 	for item in player_items:
 		var item_data: Dictionary = item
-		_player_items_box.add_child(_item_line(item_data, "player"))
+		_player_items_box.add_child(_item_line(item_data, str(item_data.get("source", "player"))))
 	if player_items.is_empty():
 		_player_items_box.add_child(_empty_line("背包为空"))
-	_apply_detail(_default_detail_item(shop_items, player_items), "shop" if not shop_items.is_empty() else "player")
+	var default_item: Dictionary = _default_detail_item(shop_items, player_items)
+	var default_source: String = "shop" if not shop_items.is_empty() else str(default_item.get("source", "player"))
+	_apply_detail(default_item, default_source)
 
 
 func _build_layout() -> void:
@@ -290,7 +292,7 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 		"player":
 			_trade_button.text = "出售"
 		_:
-			_trade_button.text = "交易"
+			_trade_button.text = "出售" if _is_sell_source(source) else "交易"
 
 
 func _queue_selected_item() -> void:
@@ -336,11 +338,11 @@ func _update_cart_line() -> void:
 		var source := str(entry.get("source", ""))
 		var count := int(entry.get("count", 0))
 		var unit_price := int(entry.get("unit_price", 0))
-		var verb := "购买" if source == "shop" else "出售" if source == "player" else "交易"
+		var verb := "购买" if source == "shop" else "出售" if _is_sell_source(source) else "交易"
 		parts.append("%s %s x%d" % [verb, entry.get("name", entry.get("item_id", "")), count])
 		if source == "shop":
 			buy_total += unit_price * count
-		elif source == "player":
+		elif _is_sell_source(source):
 			sell_total += unit_price * count
 	var net_payment := buy_total - sell_total
 	var net_text := "净付 %d" % net_payment if net_payment >= 0 else "净收 %d" % -net_payment
@@ -358,7 +360,7 @@ func _cart_entry_row(entry: Dictionary, index: int) -> HBoxContainer:
 	var label := _label("CartEntryLabel")
 	label.custom_minimum_size = Vector2(332, 0)
 	var source := str(entry.get("source", ""))
-	var verb := "购买" if source == "shop" else "出售" if source == "player" else "交易"
+	var verb := "购买" if source == "shop" else "出售" if _is_sell_source(source) else "交易"
 	label.text = "%s %s x%d | 小计 %d" % [
 		verb,
 		entry.get("name", entry.get("item_id", "")),
@@ -427,7 +429,11 @@ func _source_display(source: String) -> String:
 		"player":
 			return "背包"
 		_:
-			return source
+			return "装备" if source.begins_with("equipment:") else source
+
+
+func _is_sell_source(source: String) -> bool:
+	return source == "player" or source.begins_with("equipment:")
 
 
 func _label(node_name: String) -> Label:

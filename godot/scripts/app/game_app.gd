@@ -749,14 +749,37 @@ func sell_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func sell_active_trade_equipment(slot_id: String, item_id: String) -> Dictionary:
+	var shop_id: String = _active_shop_id()
+	if shop_id.is_empty():
+		var missing_result := {"success": false, "reason": "active_trade_missing"}
+		_record_trade_feedback(missing_result, "sell_equipped_shop", "", item_id, 1)
+		return missing_result
+	var result: Dictionary = _submit_inventory_action({
+		"action": "sell_equipped_shop",
+		"shop_id": shop_id,
+		"slot_id": slot_id,
+		"item_id": item_id,
+		"count": 1,
+	})
+	_record_trade_feedback(result, "sell_equipped_shop", shop_id, item_id, 1)
+	if bool(result.get("success", false)):
+		_rebuild_world_after_runtime_change()
+	else:
+		refresh_inventory_panel()
+		refresh_trade_panel()
+	return result
+
+
 func transfer_active_trade_item(source: String, item_id: String, count: int = 1) -> Dictionary:
 	match source:
 		"shop":
 			return buy_active_trade_item(item_id, count)
 		"player":
 			return sell_active_trade_item(item_id, count)
-		_:
-			return {"success": false, "reason": "unknown_trade_transfer_source", "source": source}
+	if source.begins_with("equipment:"):
+		return sell_active_trade_equipment(source.trim_prefix("equipment:"), item_id)
+	return {"success": false, "reason": "unknown_trade_transfer_source", "source": source}
 
 
 func confirm_active_trade_cart(entries: Array) -> Dictionary:

@@ -224,6 +224,10 @@ func sell_item_to_shop(actor_id: int, shop_id: String, item_id: String, count: i
 	return _economy_transactions.sell_item_to_shop(self, actor_id, shop_id, item_id, count, item_library)
 
 
+func sell_equipped_item_to_shop(actor_id: int, shop_id: String, slot_id: String, item_id: String, item_library: Dictionary) -> Dictionary:
+	return _economy_transactions.sell_equipped_item_to_shop(self, actor_id, shop_id, slot_id, item_id, item_library)
+
+
 func confirm_trade_cart(actor_id: int, shop_id: String, entries: Array, item_library: Dictionary) -> Dictionary:
 	return _economy_transactions.confirm_trade_cart(self, actor_id, shop_id, entries, item_library)
 
@@ -636,6 +640,8 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 			return buy_item_from_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"sell_shop":
 			return sell_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
+		"sell_equipped_shop":
+			return sell_equipped_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("slot_id", "")), str(command.get("item_id", "")), items)
 	return {"success": false, "reason": "unknown_inventory_action"}
 
 

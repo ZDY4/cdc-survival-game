@@ -57,6 +57,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade items missing bandage")
 	if not _player_item_text(game_root).contains("绷带 x1"):
 		errors.append("trade player column missing player inventory")
+	if not _player_item_text(game_root).contains("主手 小刀 x1"):
+		errors.append("trade player column missing equipped main hand item")
 	if not _detail_line(game_root).contains("店铺：") or not _detail_line(game_root).contains("单价"):
 		errors.append("trade detail should default to selected shop item")
 	if not _press_trade_item_with_text(game_root, "player", "绷带"):
@@ -141,6 +143,22 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade sell did not pay player money")
 	if not _summary_line(game_root).contains("资金 508"):
 		errors.append("trade summary did not update shop money after sell")
+	if not _press_trade_item_with_text(game_root, "player", "主手 小刀"):
+		errors.append("should select equipped dagger for trade sell")
+	if _trade_button_text(game_root) != "出售":
+		errors.append("selecting equipped item should set trade action to sell")
+	var dagger_stock_before := _shop_stock_count(game_root, "1002")
+	_press_trade_button(game_root)
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
+	if not _player_equipped_item(game_root, "main_hand").is_empty():
+		errors.append("trade equipped sell did not clear main hand equipment")
+	if _player_money(game_root) != 132:
+		errors.append("trade equipped sell did not pay player money")
+	if _shop_stock_count(game_root, "1002") != dagger_stock_before + 1:
+		errors.append("trade equipped sell did not add dagger to shop stock")
+	if _player_item_text(game_root).contains("主手 小刀"):
+		errors.append("trade player column should remove sold equipped dagger")
 	var stock_result: Dictionary = game_root.buy_active_trade_item("1006", 999)
 	if stock_result.get("reason", "") != "shop_stock_insufficient":
 		errors.append("oversized trade buy should report shop_stock_insufficient")
@@ -381,6 +399,25 @@ func _player_money(game_root: Node) -> int:
 		var actor_data: Dictionary = actor
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return int(actor_data.get("money", 0))
+	return 0
+
+
+func _player_equipped_item(game_root: Node, slot_id: String) -> String:
+	for actor in game_root.simulation.snapshot().get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == 1:
+			var equipment: Dictionary = actor_data.get("equipment", {})
+			return str(equipment.get(slot_id, ""))
+	return ""
+
+
+func _shop_stock_count(game_root: Node, item_id: String) -> int:
+	for shop_id in game_root.simulation.shop_sessions.keys():
+		var shop: Dictionary = game_root.simulation.shop_sessions[shop_id]
+		for entry in shop.get("inventory", []):
+			var entry_data: Dictionary = entry
+			if str(entry_data.get("item_id", "")) == item_id:
+				return int(entry_data.get("count", 0))
 	return 0
 
 

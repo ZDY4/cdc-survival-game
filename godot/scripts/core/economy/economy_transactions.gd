@@ -21,6 +21,10 @@ func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, i
 	return _shop_transactions.sell_item_to_shop(simulation, actor_id, shop_id, item_id, count, item_library)
 
 
+func sell_equipped_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, slot_id: String, item_id: String, item_library: Dictionary) -> Dictionary:
+	return _shop_transactions.sell_equipped_item_to_shop(simulation, actor_id, shop_id, slot_id, item_id, item_library)
+
+
 func confirm_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, entries: Array, item_library: Dictionary) -> Dictionary:
 	return _shop_transactions.confirm_trade_cart(simulation, actor_id, shop_id, entries, item_library)
 
