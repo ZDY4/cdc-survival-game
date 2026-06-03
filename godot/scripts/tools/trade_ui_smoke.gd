@@ -56,7 +56,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not item_text.contains("绷带 x8"):
 		errors.append("trade items missing bandage")
 
-	var buy_result: Dictionary = game_root.simulation.buy_item_from_shop(1, "trader_lao_wang_shop", "1006", 1, game_root.registry.get_library("items"))
+	var buy_result: Dictionary = game_root.buy_active_trade_item("1006", 1)
 	if not bool(buy_result.get("success", false)):
 		errors.append("trade buy failed: %s" % buy_result.get("reason", "unknown"))
 	game_root.refresh_inventory_panel()
@@ -70,7 +70,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not "\n".join(_item_lines(game_root)).contains("绷带 x7"):
 		errors.append("trade items did not reduce shop bandage stock")
 
-	var sell_result: Dictionary = game_root.simulation.sell_item_to_shop(1, "trader_lao_wang_shop", "1006", 1, game_root.registry.get_library("items"))
+	var sell_result: Dictionary = game_root.sell_active_trade_item("1006", 1)
 	if not bool(sell_result.get("success", false)):
 		errors.append("trade sell failed: %s" % sell_result.get("reason", "unknown"))
 	game_root.refresh_inventory_panel()

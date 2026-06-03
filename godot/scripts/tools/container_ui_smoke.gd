@@ -50,6 +50,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var take_result: Dictionary = game_root.take_active_container_item("1031", 1)
 	if not bool(take_result.get("success", false)):
 		errors.append("taking container item failed: %s" % take_result.get("reason", "unknown"))
+	if not _event_seen(game_root, "container_item_taken"):
+		errors.append("taking container item should emit container_item_taken")
 	if not _inventory_text(game_root).contains("抗生素 x1"):
 		errors.append("inventory panel missing taken antibiotics")
 	if _container_text(game_root).contains("抗生素"):
@@ -62,6 +64,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var store_result: Dictionary = game_root.store_active_container_item("1008", 1)
 	if not bool(store_result.get("success", false)):
 		errors.append("storing item failed: %s" % store_result.get("reason", "unknown"))
+	if not _event_seen(game_root, "container_item_stored"):
+		errors.append("storing container item should emit container_item_stored")
 	if not _container_text(game_root).contains("水瓶 x1"):
 		errors.append("container panel missing stored water bottle")
 	if _inventory_text(game_root).contains("水瓶 x1"):
@@ -120,6 +124,14 @@ func _final_interaction_result(result: Dictionary) -> bool:
 
 func _container_summary(game_root: Node) -> String:
 	return game_root.container_panel.get_node("ContainerPanel/ContainerLines/SummaryLine").text
+
+
+func _event_seen(game_root: Node, kind: String) -> bool:
+	for event in game_root.simulation.snapshot().get("events", []):
+		var event_data: Dictionary = event
+		if event_data.get("kind", "") == kind:
+			return true
+	return false
 
 
 func _inventory_summary(game_root: Node) -> String:

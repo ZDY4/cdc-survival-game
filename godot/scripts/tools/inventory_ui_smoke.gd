@@ -74,6 +74,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory summary did not update item count")
 	if not _summary_line(game_root).contains("2.1 kg"):
 		errors.append("inventory summary did not update total weight")
+	var drop_result: Dictionary = game_root.drop_player_item("1006", 2)
+	if not bool(drop_result.get("success", false)):
+		errors.append("dropping picked bandages failed: %s" % drop_result.get("reason", "unknown"))
+	if _player_inventory_count(game_root, "1006") != 1:
+		errors.append("dropping bandages should remove the requested count from inventory")
+	if game_root.find_child("Corpse_%s" % drop_result.get("container_id", ""), true, false) == null:
+		errors.append("dropping inventory item should create a world drop container marker")
+	if not _event_seen(game_root, "inventory_item_dropped"):
+		errors.append("dropping inventory item should emit inventory_item_dropped")
 	return errors
 
 
@@ -134,6 +143,22 @@ func _expect_main_hand_model(errors: Array[String], game_root: Node, expected_as
 
 func _player_node(game_root: Node) -> Node:
 	return game_root.find_child("Actor_player_1", true, false)
+
+
+func _player_inventory_count(game_root: Node, item_id: String) -> int:
+	for actor in game_root.simulation.snapshot().get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == 1:
+			return int(actor_data.get("inventory", {}).get(item_id, 0))
+	return 0
+
+
+func _event_seen(game_root: Node, kind: String) -> bool:
+	for event in game_root.simulation.snapshot().get("events", []):
+		var event_data: Dictionary = event
+		if event_data.get("kind", "") == kind:
+			return true
+	return false
 
 
 func _summary_line(game_root: Node) -> String:

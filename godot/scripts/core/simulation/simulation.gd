@@ -220,6 +220,10 @@ func store_item_in_container(actor_id: int, container_id: String, item_id: Strin
 	return _economy_transactions.store_item_in_container(self, actor_id, container_id, item_id, count, item_library)
 
 
+func drop_actor_item(actor_id: int, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
+	return _economy_transactions.drop_actor_item(self, actor_id, item_id, count, item_library)
+
+
 func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary) -> Dictionary:
 	return _crafting_runner.craft_recipe(self, _progression_rules, actor_id, recipe_id, recipe_library)
 
@@ -470,15 +474,22 @@ func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary
 
 
 func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) -> Dictionary:
+	var items: Dictionary = _dictionary_or_empty(command.get("item_library", item_library))
 	match str(command.get("action", "")):
 		"take_container":
-			return take_item_from_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), _dictionary_or_empty(command.get("item_library", {})))
+			return take_item_from_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"store_container":
-			return store_item_in_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), _dictionary_or_empty(command.get("item_library", {})))
+			return store_item_in_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
+		"drop":
+			return drop_actor_item(actor.actor_id, str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"equip":
-			return equip_item(actor.actor_id, str(command.get("item_id", "")), str(command.get("slot_id", "")), _dictionary_or_empty(command.get("item_library", {})))
+			return equip_item(actor.actor_id, str(command.get("item_id", "")), str(command.get("slot_id", "")), items)
 		"unequip":
 			return unequip_item(actor.actor_id, str(command.get("slot_id", "")))
+		"buy_shop":
+			return buy_item_from_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
+		"sell_shop":
+			return sell_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 	return {"success": false, "reason": "unknown_inventory_action"}
 
 

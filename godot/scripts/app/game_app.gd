@@ -212,7 +212,12 @@ func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
 		return {"success": false, "reason": "active_container_missing"}
-	var result: Dictionary = simulation.take_item_from_container(1, container_id, item_id, count, registry.get_library("items"))
+	var result: Dictionary = _submit_inventory_action({
+		"action": "take_container",
+		"container_id": container_id,
+		"item_id": item_id,
+		"count": count,
+	})
 	refresh_inventory_panel()
 	refresh_container_panel()
 	refresh_journal_panel()
@@ -223,16 +228,70 @@ func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
 		return {"success": false, "reason": "active_container_missing"}
-	var result: Dictionary = simulation.store_item_in_container(1, container_id, item_id, count, registry.get_library("items"))
+	var result: Dictionary = _submit_inventory_action({
+		"action": "store_container",
+		"container_id": container_id,
+		"item_id": item_id,
+		"count": count,
+	})
 	refresh_inventory_panel()
 	refresh_container_panel()
+	return result
+
+
+func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = _submit_inventory_action({
+		"action": "drop",
+		"item_id": item_id,
+		"count": count,
+	})
+	if bool(result.get("success", false)):
+		_rebuild_world_after_runtime_change()
+	else:
+		refresh_inventory_panel()
+	return result
+
+
+func buy_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
+	var shop_id: String = _active_shop_id()
+	if shop_id.is_empty():
+		return {"success": false, "reason": "active_trade_missing"}
+	var result: Dictionary = _submit_inventory_action({
+		"action": "buy_shop",
+		"shop_id": shop_id,
+		"item_id": item_id,
+		"count": count,
+	})
+	refresh_inventory_panel()
+	refresh_trade_panel()
+	return result
+
+
+func sell_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
+	var shop_id: String = _active_shop_id()
+	if shop_id.is_empty():
+		return {"success": false, "reason": "active_trade_missing"}
+	var result: Dictionary = _submit_inventory_action({
+		"action": "sell_shop",
+		"shop_id": shop_id,
+		"item_id": item_id,
+		"count": count,
+	})
+	refresh_inventory_panel()
+	refresh_trade_panel()
 	return result
 
 
 func equip_player_item(item_id: String, slot_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	var result: Dictionary = simulation.equip_item(1, item_id, slot_id, registry.get_library("items"))
+	var result: Dictionary = _submit_inventory_action({
+		"action": "equip",
+		"item_id": item_id,
+		"slot_id": slot_id,
+	})
 	if bool(result.get("success", false)):
 		_rebuild_world_after_runtime_change()
 	else:
@@ -243,7 +302,10 @@ func equip_player_item(item_id: String, slot_id: String) -> Dictionary:
 func unequip_player_slot(slot_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	var result: Dictionary = simulation.unequip_item(1, slot_id)
+	var result: Dictionary = _submit_inventory_action({
+		"action": "unequip",
+		"slot_id": slot_id,
+	})
 	if bool(result.get("success", false)):
 		_rebuild_world_after_runtime_change()
 	else:
@@ -327,6 +389,16 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
 
 
+func _submit_inventory_action(action: Dictionary) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var command: Dictionary = action.duplicate(true)
+	command["kind"] = "inventory_action"
+	command["actor_id"] = 1
+	command["item_library"] = registry.get_library("items")
+	return simulation.submit_player_command(command)
+
+
 func _dialogue_trade_target() -> Dictionary:
 	if active_trade_target.get("target_type", "") == "actor":
 		return active_trade_target.duplicate(true)
@@ -334,6 +406,14 @@ func _dialogue_trade_target() -> Dictionary:
 		"target_type": "actor",
 		"actor_id": 0,
 	}
+
+
+func _active_shop_id() -> String:
+	if registry == null or simulation == null:
+		return ""
+	var TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
+	var session: Dictionary = TradeSnapshot.new(registry).resolve_trade_session(simulation.snapshot(), active_trade_target)
+	return str(session.get("shop_id", ""))
 
 
 func _active_container_id() -> String:
