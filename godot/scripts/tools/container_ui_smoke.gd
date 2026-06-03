@@ -74,6 +74,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var missing_store: Dictionary = game_root.store_active_container_item("1008", 1)
 	if missing_store.get("reason", "") != "not_enough_items":
 		errors.append("storing unavailable item should report not_enough_items")
+	_press_close_button(game_root)
+	if game_root.container_panel.visible:
+		errors.append("close button should close container panel")
+	if not _active_container_id(game_root).is_empty():
+		errors.append("close button should clear active container runtime state")
+	var reopened_container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_clinic_supply_cabinet", true, false)
+	if reopened_container_node == null:
+		errors.append("missing generated container node for reopen")
+		return errors
+	game_root.select_interaction_node(reopened_container_node)
+	var reopen_result: Dictionary = _execute_primary_and_complete(game_root)
+	if not bool(reopen_result.get("success", false)):
+		errors.append("container reopen failed: %s" % reopen_result.get("reason", "unknown"))
+	if not game_root.container_panel.visible:
+		errors.append("container panel should reopen for Esc close check")
 	_press_key(game_root, KEY_ESCAPE)
 	if game_root.container_panel.visible:
 		errors.append("Esc should close container panel")
@@ -93,6 +108,12 @@ func _press_key(game_root: Node, key: int) -> void:
 	event.physical_keycode = key
 	event.pressed = false
 	game_root.runtime_input_controller.input(event)
+
+
+func _press_close_button(game_root: Node) -> void:
+	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/CloseButton")
+	if button is Button:
+		(button as Button).pressed.emit()
 
 
 func _execute_primary_and_complete(game_root: Node, max_waits: int = 8) -> Dictionary:

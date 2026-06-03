@@ -1,7 +1,10 @@
 extends Control
 
+signal close_requested
+
 var _panel: PanelContainer
 var _title_label: Label
+var _close_button: Button
 var _summary_label: Label
 var _items_box: VBoxContainer
 
@@ -19,6 +22,9 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 
 	var active: bool = bool(snapshot.get("active", false))
 	visible = active
+	mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
+	if _panel != null:
+		_panel.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 	if not active:
 		return
 
@@ -61,11 +67,20 @@ func _build_layout() -> void:
 	_panel.add_child(box)
 
 	_title_label = _label("TitleLine")
+	_close_button = Button.new()
+	_close_button.name = "CloseButton"
+	_close_button.text = "X"
+	_close_button.tooltip_text = "关闭交易"
+	_close_button.custom_minimum_size = Vector2(28, 24)
+	_close_button.pressed.connect(func() -> void:
+		close_requested.emit()
+	)
 	_summary_label = _label("SummaryLine")
 	_items_box = VBoxContainer.new()
 	_items_box.name = "ItemLines"
 	_items_box.add_theme_constant_override("separation", 4)
 	box.add_child(_title_label)
+	box.add_child(_close_button)
 	box.add_child(_summary_label)
 	box.add_child(_items_box)
 

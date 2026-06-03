@@ -599,7 +599,7 @@ Godot 落点：`godot/scripts/core/economy/equipment_*.gd`、`godot/scripts/worl
 - [ ] 双向拖拽、数量选择。
 - [ ] 容器类型：地图、尸体、掉落、商店、任务。
 - [ ] 权限：锁定、任务限制、NPC 拥有者。
-- [~] 容器关闭：Esc 已纳入 `ContainerUI` / `UIToggle` smoke；待补按钮、地图切换、目标消失、超出距离。
+- [~] 容器关闭：Esc 和关闭按钮已纳入 `ContainerUI` / `UIToggle` smoke；待补地图切换、目标消失、超出距离。
 - [ ] 空容器提示。
 - [ ] 失败提示：不存在、物品不足、非法数量、背包限制、权限不足。
 
@@ -616,7 +616,7 @@ Godot 落点：`godot/scripts/core/economy/container_transactions.gd`、`godot/s
 - [ ] 总价、资金变化、确认预览。
 - [ ] 资金不足、库存不足、不可出售、装备出售确认。
 - [ ] 拖拽：shop -> buy zone、inventory/equipment -> sell zone。
-- [~] 交易关闭：Esc 已纳入 `TradeUI` / `UIToggle` smoke；待补按钮、对话结束、地图切换、目标不可用。
+- [~] 交易关闭：Esc 和关闭按钮已纳入 `TradeUI` / `UIToggle` smoke；待补对话结束、地图切换、目标不可用。
 
 参考：`game_ui/trade_ui/**`、`runtime/runtime_economy.rs`、`game_data/src/shop.rs`。  
 Godot 落点：`godot/scripts/core/economy/shop_transactions.gd`、`godot/scripts/ui/controllers/trade_panel_controller.gd`。  

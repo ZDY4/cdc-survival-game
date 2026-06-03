@@ -55,6 +55,7 @@ func setup_panels() -> void:
 	inventory_panel = _ensure_panel(inventory_panel, INVENTORY_PANEL_SCENE, "InventoryPanelRoot")
 	trade_panel = _ensure_panel(trade_panel, TRADE_PANEL_SCENE, "TradePanelRoot")
 	container_panel = _ensure_panel(container_panel, CONTAINER_PANEL_SCENE, "ContainerPanelRoot")
+	_connect_modal_close_buttons()
 	character_panel = _ensure_panel(character_panel, CHARACTER_PANEL_SCENE, "CharacterPanelRoot")
 	journal_panel = _ensure_panel(journal_panel, JOURNAL_PANEL_SCENE, "JournalPanelRoot")
 	map_panel = _ensure_panel(map_panel, MAP_PANEL_SCENE, "MapPanelRoot")
@@ -228,6 +229,17 @@ func is_settings_open() -> bool:
 func close_trade_panel() -> void:
 	active_trade_target = {}
 	refresh_trade_panel()
+
+
+func _connect_modal_close_buttons() -> void:
+	if trade_panel != null and trade_panel.has_signal("close_requested"):
+		var trade_close := Callable(parent, "close_trade_panel")
+		if not trade_panel.is_connected("close_requested", trade_close):
+			trade_panel.connect("close_requested", trade_close)
+	if container_panel != null and container_panel.has_signal("close_requested"):
+		var container_close := Callable(parent, "close_active_container").bind("button")
+		if not container_panel.is_connected("close_requested", container_close):
+			container_panel.connect("close_requested", container_close)
 
 
 func _ensure_panel(current: Control, scene: PackedScene, node_name: String) -> Control:

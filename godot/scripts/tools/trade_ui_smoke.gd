@@ -81,6 +81,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade sell did not pay player money")
 	if not _summary_line(game_root).contains("资金 508"):
 		errors.append("trade summary did not update shop money after sell")
+	_press_close_button(game_root)
+	if game_root.trade_panel.visible:
+		errors.append("close button should close trade panel")
+	if not game_root.active_trade_target.is_empty():
+		errors.append("close button should clear active trade target")
+	_reopen_trade(game_root, errors)
 	_press_key(game_root, KEY_ESCAPE)
 	if game_root.trade_panel.visible:
 		errors.append("Esc should close trade panel")
@@ -100,6 +106,25 @@ func _press_key(game_root: Node, key: int) -> void:
 	event.physical_keycode = key
 	event.pressed = false
 	game_root.runtime_input_controller.input(event)
+
+
+func _press_close_button(game_root: Node) -> void:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CloseButton")
+	if button is Button:
+		(button as Button).pressed.emit()
+
+
+func _reopen_trade(game_root: Node, errors: Array[String]) -> void:
+	var trader_node: Node = game_root.find_child("Actor_trader_lao_wang_2", true, false)
+	if trader_node == null:
+		errors.append("missing trader actor node for trade reopen")
+		return
+	game_root.select_interaction_node(trader_node)
+	var result: Dictionary = game_root.execute_primary_interaction()
+	if not bool(result.get("success", false)):
+		errors.append("trade reopen failed: %s" % result.get("reason", "unknown"))
+	if not game_root.trade_panel.visible:
+		errors.append("trade panel should reopen for Esc close check")
 
 
 func _title_line(game_root: Node) -> String:
