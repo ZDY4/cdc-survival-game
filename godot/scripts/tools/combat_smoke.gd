@@ -38,6 +38,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	var player_grid: Dictionary = player.grid_position.to_dictionary()
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
+	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
 	player.grid_position = GridCoord.from_dictionary(player_grid)
 	player.equipment["main_hand"] = "1002"
 	player.inventory["1009"] = 10
@@ -73,6 +74,72 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if bool(snapshot.get("combat_state", {}).get("active", true)):
 		errors.append("combat should exit after hostiles are gone")
 	return errors
+
+
+func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.equipment["main_hand"] = "1003"
+	player.ap = 20.0
+	var y: int = int(player_grid.get("y", 0))
+	var z: int = int(player_grid.get("z", 0))
+	var level_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)),
+		"y": y + 1,
+		"z": z + 1,
+	})
+	var level_result: Dictionary = simulation.perform_attack(1, level_target, {}, {"range": 10})
+	if level_result.get("reason", "") != "target_invalid_level":
+		errors.append("cross-level attack should report target_invalid_level, got %s" % level_result.get("reason", ""))
+
+	var far_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 4,
+		"y": y,
+		"z": z,
+	})
+	var far_result: Dictionary = simulation.perform_attack(1, far_target, {}, {"range": 2})
+	if far_result.get("reason", "") != "target_out_of_range":
+		errors.append("out-of-range attack should report target_out_of_range, got %s" % far_result.get("reason", ""))
+	if int(far_result.get("distance", 0)) != 4 or int(far_result.get("range", 0)) != 2:
+		errors.append("out-of-range attack should report distance and range")
+
+	var los_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": z + 2,
+	})
+	var los_topology := _spatial_test_topology(player_grid, {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": z + 1,
+	})
+	var los_result: Dictionary = simulation.perform_attack(1, los_target, los_topology, {"range": 8})
+	if los_result.get("reason", "") != "target_blocked_by_los":
+		errors.append("blocked diagonal LOS attack should report target_blocked_by_los, got %s" % los_result.get("reason", ""))
+
+	var command_los_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": z,
+	})
+	var command_los_topology := _spatial_test_topology(player_grid, {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": z,
+	})
+	player.ap = 20.0
+	var command_los_result: Dictionary = simulation.submit_player_command({
+		"kind": "attack",
+		"target_actor_id": command_los_target,
+		"topology": command_los_topology,
+		"range": 8,
+	})
+	if command_los_result.get("reason", "") != "target_blocked_by_los":
+		errors.append("submit attack with blocked LOS should report target_blocked_by_los, got %s" % command_los_result.get("reason", ""))
+
+	for actor_id in [level_target, far_target, los_target, command_los_target]:
+		if simulation.actor_registry.get_actor(actor_id) != null:
+			simulation.actor_registry.unregister_actor(actor_id)
+	simulation.exit_combat_if_clear("spatial_failure_smoke_cleanup")
 
 
 func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
@@ -221,3 +288,23 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _spatial_test_topology(player_grid: Dictionary, blocker_grid: Dictionary) -> Dictionary:
+	var px: int = int(player_grid.get("x", 0))
+	var py: int = int(player_grid.get("y", 0))
+	var pz: int = int(player_grid.get("z", 0))
+	var bx: int = int(blocker_grid.get("x", 0))
+	var by: int = int(blocker_grid.get("y", py))
+	var bz: int = int(blocker_grid.get("z", 0))
+	return {
+		"bounds": {
+			"min_x": min(px, bx) - 4,
+			"max_x": max(px, bx) + 6,
+			"min_z": min(pz, bz) - 4,
+			"max_z": max(pz, bz) + 6,
+		},
+		"sight_blocking_cells": {
+			"%d:%d:%d" % [bx, by, bz]: true,
+		},
+	}

@@ -1,8 +1,10 @@
 extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+const VisionGeometry = preload("res://scripts/core/vision/vision_geometry.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _vision_geometry := VisionGeometry.new()
 
 
 func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
@@ -69,7 +71,12 @@ func _can_attack(attacker: RefCounted, target: RefCounted) -> bool:
 
 func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int) -> Dictionary:
 	if attacker.grid_position.y != target.grid_position.y:
-		return {"success": false, "reason": "target_level_mismatch"}
+		return {
+			"success": false,
+			"reason": "target_invalid_level",
+			"attacker_grid": attacker.grid_position.to_dictionary(),
+			"target_grid": target.grid_position.to_dictionary(),
+		}
 	var distance: int = abs(attacker.grid_position.x - target.grid_position.x) + abs(attacker.grid_position.z - target.grid_position.z)
 	var resolved_range: int = max(1, attack_range)
 	if distance > resolved_range:
@@ -79,8 +86,13 @@ func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictiona
 			"distance": distance,
 			"range": resolved_range,
 		}
-	if not topology.is_empty() and _line_blocked(attacker.grid_position, target.grid_position, topology):
-		return {"success": false, "reason": "target_line_of_sight_blocked"}
+	if not topology.is_empty() and not _vision_geometry.has_line_of_sight(attacker.grid_position.to_dictionary(), target.grid_position.to_dictionary(), topology):
+		return {
+			"success": false,
+			"reason": "target_blocked_by_los",
+			"attacker_grid": attacker.grid_position.to_dictionary(),
+			"target_grid": target.grid_position.to_dictionary(),
+		}
 	return {"success": true}
 
 
@@ -160,24 +172,6 @@ func _actor_inventory_entries(actor: RefCounted) -> Array[Dictionary]:
 			continue
 		_inventory_entries.add(entries, equipped_item_id, 1)
 	return entries
-
-
-func _line_blocked(from: RefCounted, to: RefCounted, topology: Dictionary) -> bool:
-	var blockers: Dictionary = _dictionary_or_empty(topology.get("sight_blocking_cells", topology.get("blocking_cells", {})))
-	if blockers.is_empty():
-		return false
-	var dx: int = int(sign(to.x - from.x))
-	var dz: int = int(sign(to.z - from.z))
-	if dx != 0 and dz != 0:
-		return false
-	var x: int = from.x + dx
-	var z: int = from.z + dz
-	while x != to.x or z != to.z:
-		if blockers.has("%d:%d:%d" % [x, from.y, z]):
-			return true
-		x += dx
-		z += dz
-	return false
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
