@@ -237,6 +237,10 @@ func _connect_modal_close_buttons() -> void:
 		var trade_close := Callable(parent, "close_trade_panel")
 		if not trade_panel.is_connected("close_requested", trade_close):
 			trade_panel.connect("close_requested", trade_close)
+	if trade_panel != null and trade_panel.has_signal("trade_requested"):
+		var trade_transfer := Callable(parent, "transfer_active_trade_item")
+		if not trade_panel.is_connected("trade_requested", trade_transfer):
+			trade_panel.connect("trade_requested", trade_transfer)
 	if container_panel != null and container_panel.has_signal("close_requested"):
 		var container_close := Callable(parent, "close_active_container").bind("button")
 		if not container_panel.is_connected("close_requested", container_close):

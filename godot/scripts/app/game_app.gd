@@ -737,6 +737,16 @@ func sell_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func transfer_active_trade_item(source: String, item_id: String, count: int = 1) -> Dictionary:
+	match source:
+		"shop":
+			return buy_active_trade_item(item_id, count)
+		"player":
+			return sell_active_trade_item(item_id, count)
+		_:
+			return {"success": false, "reason": "unknown_trade_transfer_source", "source": source}
+
+
 func equip_player_item(item_id: String, slot_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}

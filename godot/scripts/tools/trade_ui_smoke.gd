@@ -55,10 +55,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade items missing medkit")
 	if not item_text.contains("绷带 x8"):
 		errors.append("trade items missing bandage")
+	if not _player_item_text(game_root).contains("绷带 x1"):
+		errors.append("trade player column missing player inventory")
+	if not _detail_line(game_root).contains("店铺：") or not _detail_line(game_root).contains("单价"):
+		errors.append("trade detail should default to selected shop item")
+	if not _press_trade_item_with_text(game_root, "player", "绷带"):
+		errors.append("should select player bandage in trade panel")
+	if _trade_button_text(game_root) != "出售":
+		errors.append("selecting player item should set trade action to sell")
 
-	var buy_result: Dictionary = game_root.buy_active_trade_item("1006", 1)
-	if not bool(buy_result.get("success", false)):
-		errors.append("trade buy failed: %s" % buy_result.get("reason", "unknown"))
+	if not _press_trade_item_with_text(game_root, "shop", "绷带"):
+		errors.append("should select shop bandage in trade panel")
+	if _trade_button_text(game_root) != "购买":
+		errors.append("selecting shop item should set trade action to buy")
+	_set_trade_quantity(game_root, 1)
+	_press_trade_button(game_root)
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
 	if _player_inventory_count(game_root, "1006") != 2:
@@ -70,9 +81,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not "\n".join(_item_lines(game_root)).contains("绷带 x7"):
 		errors.append("trade items did not reduce shop bandage stock")
 
-	var sell_result: Dictionary = game_root.sell_active_trade_item("1006", 1)
-	if not bool(sell_result.get("success", false)):
-		errors.append("trade sell failed: %s" % sell_result.get("reason", "unknown"))
+	if not _press_trade_item_with_text(game_root, "player", "绷带"):
+		errors.append("should select player bandage for trade sell")
+	if _trade_button_text(game_root) != "出售":
+		errors.append("selecting player item after buy should set trade action to sell")
+	_set_trade_quantity(game_root, 1)
+	_press_trade_button(game_root)
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
 	if _player_inventory_count(game_root, "1006") != 1:
@@ -172,13 +186,79 @@ func _summary_line(game_root: Node) -> String:
 	return game_root.trade_panel.get_node("TradePanel/TradeLines/SummaryLine").text
 
 
+func _detail_line(game_root: Node) -> String:
+	var label: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/DetailLine")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
 func _item_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
-	var item_box: Node = game_root.trade_panel.get_node("TradePanel/TradeLines/ItemLines")
+	var item_box: Node = _trade_item_box(game_root, "shop")
 	for child in item_box.get_children():
-		if child is Label:
-			output.append((child as Label).text)
+		var text := _item_control_text(child)
+		if not text.is_empty():
+			output.append(text)
 	return output
+
+
+func _player_item_text(game_root: Node) -> String:
+	var output: Array[String] = []
+	var item_box: Node = _trade_item_box(game_root, "player")
+	for child in item_box.get_children():
+		var text := _item_control_text(child)
+		if not text.is_empty():
+			output.append(text)
+	return "\n".join(output)
+
+
+func _press_trade_item_with_text(game_root: Node, source: String, text: String) -> bool:
+	var item_box: Node = _trade_item_box(game_root, source)
+	if item_box == null:
+		return false
+	for child in item_box.get_children():
+		if child is Button and str((child as Button).text).contains(text):
+			(child as Button).pressed.emit()
+			return true
+	return false
+
+
+func _set_trade_quantity(game_root: Node, count: int) -> void:
+	var spin: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeControls/QuantitySpin")
+	if spin is SpinBox:
+		(spin as SpinBox).value = count
+
+
+func _press_trade_button(game_root: Node) -> void:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeControls/TradeButton")
+	if button is Button:
+		(button as Button).pressed.emit()
+
+
+func _trade_button_text(game_root: Node) -> String:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeControls/TradeButton")
+	if button is Button:
+		return str((button as Button).text)
+	return ""
+
+
+func _trade_item_box(game_root: Node, source: String) -> Node:
+	match source:
+		"shop":
+			return game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeColumns/ShopColumn/ShopScroll/ItemLines")
+		"player":
+			return game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeColumns/PlayerColumn/PlayerScroll/PlayerItemLines")
+		_:
+			return null
+
+
+func _item_control_text(node: Node) -> String:
+	if node is Label:
+		return str((node as Label).text)
+	if node is Button:
+		return str((node as Button).text)
+	return ""
 
 
 func _player_inventory_count(game_root: Node, item_id: String) -> int:
