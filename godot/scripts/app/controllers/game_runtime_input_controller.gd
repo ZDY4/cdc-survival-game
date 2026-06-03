@@ -10,6 +10,8 @@ const BEVY_VIEWPORT_PADDING_PX := 72.0
 const BEVY_HUD_RESERVED_WIDTH_PX := 620.0
 const BEVY_LEVEL_PLANE_HEIGHT := GRID_SIZE * 0.5
 const BEVY_DRAG_PLANE_HEIGHT := 0.11
+const SPACE_HOLD_INITIAL_DELAY_SEC := 0.45
+const SPACE_HOLD_REPEAT_INTERVAL_SEC := 0.30
 const ZOOM_MIN := 0.5
 const ZOOM_MAX := 4.0
 
@@ -26,6 +28,9 @@ var has_camera_drag_anchor := false
 var camera_zoom_factor := 1.0
 var camera_map_size := Vector2(48.0, 42.0)
 var is_camera_following_player := true
+var is_space_wait_held := false
+var space_wait_elapsed_sec := 0.0
+var space_wait_repeated := false
 
 
 func _init(p_game_root: Node) -> void:
@@ -56,6 +61,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 func process(delta: float) -> void:
 	if camera == null:
 		return
+	_process_space_wait_hold(delta)
 	if is_camera_following_player and not is_middle_mouse_dragging:
 		camera_target = _clamp_camera_target(_focused_actor_position())
 		_apply_camera_transform()
@@ -195,11 +201,15 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 
 
 func _handle_camera_key(event: InputEventKey) -> bool:
-	if not event.pressed or event.echo:
-		return false
 	var key := event.keycode
 	if key == 0:
 		key = event.physical_keycode
+	if not event.pressed:
+		if key == KEY_SPACE:
+			_stop_space_wait_hold()
+		return false
+	if event.echo:
+		return false
 	var digit := _digit_for_key(key)
 	if digit >= 0 and not (key == KEY_0 and event.ctrl_pressed) and _handle_digit_key(digit):
 		return true
@@ -263,12 +273,59 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 			return true
 		return false
 	elif key == KEY_SPACE:
+		var result: Dictionary = {}
 		if game_root.has_method("press_space_action"):
-			game_root.press_space_action()
+			result = game_root.press_space_action()
+		_start_space_wait_hold_if_allowed(result)
 		if game_root.hud != null and game_root.hud.has_method("hide_interaction_menu"):
 			game_root.hud.hide_interaction_menu()
 		return true
 	return false
+
+
+func _process_space_wait_hold(delta: float) -> void:
+	if not is_space_wait_held:
+		return
+	if not _space_wait_repeat_allowed():
+		_stop_space_wait_hold()
+		return
+	space_wait_elapsed_sec += delta
+	var interval := SPACE_HOLD_REPEAT_INTERVAL_SEC if space_wait_repeated else SPACE_HOLD_INITIAL_DELAY_SEC
+	if space_wait_elapsed_sec < interval:
+		return
+	space_wait_elapsed_sec = 0.0
+	space_wait_repeated = true
+	if game_root.has_method("press_space_action"):
+		var result: Dictionary = game_root.press_space_action()
+		if not _space_wait_result_can_repeat(result):
+			_stop_space_wait_hold()
+
+
+func _start_space_wait_hold_if_allowed(result: Dictionary) -> void:
+	if not _space_wait_result_can_repeat(result) or not _space_wait_repeat_allowed():
+		_stop_space_wait_hold()
+		return
+	is_space_wait_held = true
+	space_wait_elapsed_sec = 0.0
+	space_wait_repeated = false
+
+
+func _stop_space_wait_hold() -> void:
+	is_space_wait_held = false
+	space_wait_elapsed_sec = 0.0
+	space_wait_repeated = false
+
+
+func _space_wait_result_can_repeat(result: Dictionary) -> bool:
+	return bool(result.get("success", false)) and (bool(result.get("waited", false)) or str(result.get("kind", "")) == "wait")
+
+
+func _space_wait_repeat_allowed() -> bool:
+	if _gameplay_input_blocked_by_ui():
+		return false
+	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()):
+		return false
+	return not _runtime_has_pending()
 
 
 func _handle_digit_key(digit: int) -> bool:
@@ -601,6 +658,14 @@ func _gameplay_input_blocked_by_ui() -> bool:
 
 func _interaction_menu_open() -> bool:
 	return game_root.hud != null and game_root.hud.has_method("is_interaction_menu_open") and bool(game_root.hud.is_interaction_menu_open())
+
+
+func _runtime_has_pending() -> bool:
+	var simulation: Variant = game_root.get("simulation") if game_root != null else null
+	if simulation == null:
+		return false
+	var snapshot: Dictionary = simulation.snapshot()
+	return not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty()
 
 
 func _viewport_size() -> Vector2:

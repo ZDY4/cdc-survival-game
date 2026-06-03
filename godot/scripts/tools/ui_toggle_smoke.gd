@@ -110,6 +110,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_key(game_root, KEY_SPACE)
 	if game_root.simulation.snapshot().get("events", []).size() <= before_wait_events:
 		errors.append("Space without active UI should wait and advance runtime events")
+	var before_held_waits := _event_count(game_root, "actor_waited")
+	_press_key_down(game_root, KEY_SPACE)
+	await _wait_process_frames(70)
+	_release_key(game_root, KEY_SPACE)
+	var after_held_waits := _event_count(game_root, "actor_waited")
+	if after_held_waits <= before_held_waits + 1:
+		errors.append("holding Space should repeat wait after the initial key press")
+	await _wait_process_frames(30)
+	if _event_count(game_root, "actor_waited") != after_held_waits:
+		errors.append("releasing Space should stop repeated wait")
 
 	_press_key(game_root, KEY_I)
 	_expect_stage_open(errors, game_root, "inventory", "I should open inventory")
@@ -179,10 +189,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 
 
 func _press_key(game_root: Node, key: int) -> void:
+	_press_key_down(game_root, key)
+	_release_key(game_root, key)
+
+
+func _press_key_down(game_root: Node, key: int) -> void:
 	var event := InputEventKey.new()
 	event.keycode = key
 	event.physical_keycode = key
 	event.pressed = true
+	game_root.runtime_input_controller.input(event)
+
+
+func _release_key(game_root: Node, key: int) -> void:
+	var event := InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = false
 	game_root.runtime_input_controller.input(event)
 
 
@@ -271,6 +294,15 @@ func _player(game_root: Node) -> Dictionary:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return actor_data
 	return {}
+
+
+func _event_count(game_root: Node, kind: String) -> int:
+	var count := 0
+	for event in game_root.simulation.snapshot().get("events", []):
+		var event_data: Dictionary = event
+		if str(event_data.get("kind", "")) == kind:
+			count += 1
+	return count
 
 
 func _wait_process_frames(count: int) -> void:
