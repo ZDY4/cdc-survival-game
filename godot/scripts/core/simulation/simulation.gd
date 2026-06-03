@@ -40,6 +40,7 @@ var map_interaction_targets: Dictionary = {}
 var consumed_interaction_targets: Dictionary = {}
 var container_sessions: Dictionary = {}
 var shop_sessions: Dictionary = {}
+var item_library: Dictionary = {}
 var quest_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
@@ -129,6 +130,10 @@ func configure_map_interactions(targets: Dictionary) -> void:
 
 func configure_quests(quests: Dictionary) -> void:
 	_quest_runner.configure(self, quests)
+
+
+func configure_items(items: Dictionary) -> void:
+	item_library = items.duplicate(true)
 
 
 func start_quest(actor_id: int, quest_id: String) -> bool:
@@ -414,7 +419,8 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 	var target: RefCounted = actor_registry.get_actor(target_actor_id)
 	if target == null:
 		return {"success": false, "reason": "unknown_target"}
-	var attack_range: int = int(command.get("range", DEFAULT_ATTACK_RANGE))
+	var profile: Dictionary = _attack_profile(actor, _dictionary_or_empty(command.get("item_library", item_library)))
+	var attack_range: int = int(command.get("range", int(profile.get("range", DEFAULT_ATTACK_RANGE))))
 	if _grid_distance(actor.grid_position, target.grid_position) > attack_range:
 		var source_target: Dictionary = _dictionary_or_empty(command.get("source_target", {
 			"target_type": "actor",
@@ -423,7 +429,7 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 		var source_option_id: String = str(command.get("source_option_id", "attack"))
 		var prompt: Dictionary = query_interaction_options(actor.actor_id, source_target)
 		return _approach_then_execute_interaction(actor, source_target, source_option_id, prompt, _dictionary_or_empty(command.get("topology", {})))
-	var attack_cost: float = float(command.get("ap_cost", DEFAULT_ATTACK_AP))
+	var attack_cost: float = float(command.get("ap_cost", profile.get("ap_cost", DEFAULT_ATTACK_AP)))
 	if actor.ap < attack_cost:
 		pending_interaction = {
 			"actor_id": actor.actor_id,
@@ -438,12 +444,19 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 			"reason": "ap_insufficient_attack_queued",
 			"pending_interaction": pending_interaction.duplicate(true),
 		}
+	var ammo_check: Dictionary = _attack_ammo_check(actor, profile)
+	if not bool(ammo_check.get("success", true)):
+		return ammo_check
 	_spend_ap(actor, attack_cost, "attack")
 	_enter_combat([actor.actor_id, target_actor_id], "player_attack")
 	var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, _dictionary_or_empty(command.get("topology", {})), {
 		"range": attack_range,
+		"weapon_profile": profile,
 	})
 	if bool(result.get("success", false)):
+		var ammo_result: Dictionary = _consume_attack_ammo(actor, profile)
+		if bool(ammo_result.get("consumed", false)):
+			result["ammo_consumed"] = ammo_result
 		pending_interaction.clear()
 	return result
 
@@ -493,7 +506,11 @@ func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
 	match str(intent.get("intent", "")):
 		"attack":
 			_enter_combat([actor.actor_id, target_actor_id], "npc_attack")
-			var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, topology, {"range": DEFAULT_ATTACK_RANGE})
+			var profile: Dictionary = _attack_profile(actor, item_library)
+			var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, topology, {
+				"range": int(profile.get("range", DEFAULT_ATTACK_RANGE)),
+				"weapon_profile": profile,
+			})
 			result["intent"] = "attack"
 			return result
 		"approach":
@@ -882,6 +899,98 @@ func _resume_pending_interaction(actor: RefCounted, topology: Dictionary, moveme
 	resumed["auto_resumed_interaction"] = true
 	resumed["resumed_pending_interaction"] = queued
 	return resumed
+
+
+func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
+	var equipped_item_id: String = str(actor.equipment.get("main_hand", ""))
+	var weapon: Dictionary = _weapon_fragment(equipped_item_id, items)
+	if weapon.is_empty():
+		return {
+			"item_id": equipped_item_id,
+			"damage": actor.attack_power,
+			"range": DEFAULT_ATTACK_RANGE,
+			"ap_cost": DEFAULT_ATTACK_AP,
+			"crit_chance": 0.0,
+			"crit_multiplier": 1.0,
+			"ammo_type": "",
+		}
+	var attack_speed: float = max(0.1, float(weapon.get("attack_speed", 1.0)))
+	return {
+		"item_id": equipped_item_id,
+		"damage": float(weapon.get("damage", actor.attack_power)),
+		"range": max(1, int(weapon.get("range", DEFAULT_ATTACK_RANGE))),
+		"ap_cost": max(1.0, ceil(DEFAULT_ATTACK_AP / attack_speed)),
+		"attack_speed": attack_speed,
+		"crit_chance": clampf(float(weapon.get("crit_chance", 0.0)), 0.0, 1.0),
+		"crit_multiplier": max(1.0, float(weapon.get("crit_multiplier", 1.0))),
+		"ammo_type": _normalize_item_id(weapon.get("ammo_type", "")),
+		"ammo_per_attack": 1,
+	}
+
+
+func _weapon_fragment(item_id: String, items: Dictionary) -> Dictionary:
+	if item_id.is_empty():
+		return {}
+	var record: Dictionary = _dictionary_or_empty(items.get(item_id, {}))
+	if record.is_empty():
+		return {}
+	var item: Dictionary = _dictionary_or_empty(record.get("data", record))
+	for fragment in _array_or_empty(item.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) == "weapon":
+			return fragment_data
+	return {}
+
+
+func _attack_ammo_check(actor: RefCounted, profile: Dictionary) -> Dictionary:
+	var ammo_type: String = str(profile.get("ammo_type", ""))
+	if ammo_type.is_empty() or ammo_type == "<null>":
+		return {"success": true}
+	var required: int = max(1, int(profile.get("ammo_per_attack", 1)))
+	var current: int = int(actor.inventory.get(ammo_type, 0))
+	if current < required:
+		return {
+			"success": false,
+			"reason": "ammo_insufficient",
+			"ammo_type": ammo_type,
+			"required": required,
+			"current": current,
+		}
+	return {"success": true}
+
+
+func _consume_attack_ammo(actor: RefCounted, profile: Dictionary) -> Dictionary:
+	var ammo_type: String = str(profile.get("ammo_type", ""))
+	if ammo_type.is_empty() or ammo_type == "<null>":
+		return {"consumed": false}
+	var count: int = max(1, int(profile.get("ammo_per_attack", 1)))
+	actor.inventory[ammo_type] = max(0, int(actor.inventory.get(ammo_type, 0)) - count)
+	if int(actor.inventory.get(ammo_type, 0)) <= 0:
+		actor.inventory.erase(ammo_type)
+	_emit("ammo_consumed", {
+		"actor_id": actor.actor_id,
+		"ammo_type": ammo_type,
+		"count": count,
+		"remaining": int(actor.inventory.get(ammo_type, 0)),
+		"weapon_item_id": profile.get("item_id", ""),
+	})
+	return {
+		"consumed": true,
+		"ammo_type": ammo_type,
+		"count": count,
+		"remaining": int(actor.inventory.get(ammo_type, 0)),
+	}
+
+
+func _normalize_item_id(value: Variant) -> String:
+	if value == null:
+		return ""
+	if typeof(value) == TYPE_FLOAT and is_equal_approx(float(value), roundf(float(value))):
+		return str(int(value))
+	if typeof(value) == TYPE_INT:
+		return str(value)
+	var text := str(value).strip_edges()
+	return "" if text == "<null>" else text
 
 
 func _grid_distance(left: RefCounted, right: RefCounted) -> int:

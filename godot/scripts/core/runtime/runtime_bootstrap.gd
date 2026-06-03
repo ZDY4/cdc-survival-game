@@ -28,6 +28,7 @@ func build_new_game_runtime() -> Dictionary:
 		_register_spawn_entry(simulation, spawn_entry)
 
 	_apply_starting_inventory(simulation, bootstrap)
+	simulation.configure_items(registry.get_library("items"))
 	simulation.configure_shops(registry.get_library("shops"))
 	simulation.configure_quests(registry.get_library("quests"))
 	_configure_startup_map_interactions(simulation)

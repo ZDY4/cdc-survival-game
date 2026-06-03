@@ -37,6 +37,11 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.equipment["main_hand"] = "1002"
+	player.inventory["1009"] = 10
+	player.ap = 20.0
 	var zombie_a: int = _register_character(simulation, registry, "zombie_walker", {"x": int(player_grid.get("x", 0)) + 1, "y": int(player_grid.get("y", 0)), "z": int(player_grid.get("z", 0))})
 	var zombie_b: int = _register_character(simulation, registry, "zombie_walker", {"x": int(player_grid.get("x", 0)) - 1, "y": int(player_grid.get("y", 0)), "z": int(player_grid.get("z", 0))})
 	_force_combat_values(simulation, zombie_a)
@@ -68,6 +73,64 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if bool(snapshot.get("combat_state", {}).get("active", true)):
 		errors.append("combat should exit after hostiles are gone")
 	return errors
+
+
+func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	var topology: Dictionary = _topology(simulation, registry)
+	player.ap = 20.0
+	player.equipment["main_hand"] = "1003"
+	var blunt_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	var blunt: RefCounted = simulation.actor_registry.get_actor(blunt_target)
+	blunt.hp = 30.0
+	blunt.max_hp = 30.0
+	blunt.defense = 0.0
+	var before_ap: float = player.ap
+	var blunt_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": blunt_target, "topology": topology})
+	if not bool(blunt_result.get("success", false)):
+		errors.append("baseball bat range-2 attack failed: %s" % blunt_result.get("reason", "unknown"))
+	if absf(float(blunt_result.get("damage", 0.0)) - 15.0) > 0.01:
+		errors.append("baseball bat attack should use weapon damage 15")
+	if absf((before_ap - player.ap) - 3.0) > 0.01:
+		errors.append("baseball bat attack should use attack_speed-derived AP cost 3")
+	if not _has_attack_resolved_for_weapon(simulation.snapshot(), "1003"):
+		errors.append("attack_resolved should include weapon item id")
+
+	player.equipment["main_hand"] = "1004"
+	player.inventory["1009"] = 2
+	player.ap = 20.0
+	var pistol_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 8,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	var pistol_enemy: RefCounted = simulation.actor_registry.get_actor(pistol_target)
+	pistol_enemy.hp = 40.0
+	pistol_enemy.max_hp = 40.0
+	pistol_enemy.defense = 0.0
+	var pistol_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": pistol_target, "topology": topology})
+	if not bool(pistol_result.get("success", false)):
+		errors.append("pistol range attack failed: %s" % pistol_result.get("reason", "unknown"))
+	if int(player.inventory.get("1009", 0)) != 1:
+		errors.append("pistol attack should consume one pistol ammo")
+	if absf(float(pistol_result.get("damage", 0.0)) - 25.0) > 0.01:
+		errors.append("pistol attack should use weapon damage 25")
+	player.inventory.erase("1009")
+	var no_ammo_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 9,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	var no_ammo: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": no_ammo_target, "topology": topology})
+	if no_ammo.get("reason", "") != "ammo_insufficient":
+		errors.append("ranged weapon without ammo should report ammo_insufficient")
+	for actor_id in [blunt_target, pistol_target, no_ammo_target]:
+		if simulation.actor_registry.get_actor(actor_id) != null:
+			simulation.actor_registry.unregister_actor(actor_id)
+	simulation.exit_combat_if_clear("weapon_profile_smoke_cleanup")
 
 
 func _register_character(simulation: RefCounted, registry: RefCounted, definition_id: String, grid: Dictionary) -> int:
@@ -103,6 +166,15 @@ func _force_combat_values(simulation: RefCounted, actor_id: int) -> void:
 	target.hp = 5.0
 	target.max_hp = 5.0
 	target.defense = 0.0
+
+
+func _has_attack_resolved_for_weapon(snapshot: Dictionary, weapon_item_id: String) -> bool:
+	for event in snapshot.get("events", []):
+		var event_data: Dictionary = event
+		var payload: Dictionary = event_data.get("payload", {})
+		if event_data.get("kind", "") == "attack_resolved" and str(payload.get("weapon_item_id", "")) == weapon_item_id:
+			return true
+	return false
 
 
 func _active_quest_ids(snapshot: Dictionary) -> Array[String]:

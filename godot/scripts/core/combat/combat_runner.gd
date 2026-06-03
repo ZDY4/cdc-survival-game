@@ -18,13 +18,17 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	if not bool(spatial_check.get("success", false)):
 		return spatial_check
 
-	var damage: float = _resolve_damage(attacker, target)
+	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
+	var critical: bool = _critical_hit(attacker, target, profile)
+	var damage: float = _resolve_damage(attacker, target, profile, critical)
 	target.hp = max(0.0, target.hp - damage)
 	simulation.emit_event("attack_performed", {
 		"actor_id": actor_id,
 		"target_actor_id": target_actor_id,
 		"damage": damage,
 		"target_hp": target.hp,
+		"weapon_item_id": profile.get("item_id", ""),
+		"critical": critical,
 	})
 	simulation.emit_event("attack_resolved", {
 		"actor_id": actor_id,
@@ -32,8 +36,11 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"damage": damage,
 		"target_hp": target.hp,
 		"defeated": target.hp <= 0.0,
-		"critical": false,
+		"critical": critical,
 		"range": int(options.get("range", 1)),
+		"weapon_item_id": profile.get("item_id", ""),
+		"base_damage": float(profile.get("damage", attacker.attack_power)),
+		"crit_multiplier": float(profile.get("crit_multiplier", 1.0)),
 	})
 
 	var defeated: bool = target.hp <= 0.0
@@ -45,6 +52,8 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"damage": damage,
 		"defeated": defeated,
 		"target_actor_id": target_actor_id,
+		"critical": critical,
+		"weapon_profile": profile,
 	}
 
 
@@ -75,8 +84,19 @@ func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictiona
 	return {"success": true}
 
 
-func _resolve_damage(attacker: RefCounted, target: RefCounted) -> float:
-	return max(1.0, attacker.attack_power - target.defense)
+func _resolve_damage(attacker: RefCounted, target: RefCounted, profile: Dictionary, critical: bool) -> float:
+	var base_damage: float = float(profile.get("damage", attacker.attack_power))
+	var multiplier: float = float(profile.get("crit_multiplier", 1.0)) if critical else 1.0
+	return max(1.0, base_damage * multiplier - target.defense)
+
+
+func _critical_hit(attacker: RefCounted, target: RefCounted, profile: Dictionary) -> bool:
+	var chance: float = clampf(float(profile.get("crit_chance", 0.0)), 0.0, 1.0)
+	if chance <= 0.0:
+		return false
+	var seed_value: int = int(attacker.actor_id * 1103515245 + target.actor_id * 12345 + int(attacker.ap * 100.0))
+	var roll: float = float(abs(seed_value) % 10000) / 10000.0
+	return roll < chance
 
 
 func _defeat_actor(simulation: RefCounted, actor_id: int, target_actor_id: int, target: RefCounted) -> void:
