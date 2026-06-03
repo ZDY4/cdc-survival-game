@@ -28,6 +28,29 @@
 Godot 落点：`godot/`、`tools/agent/`、`docs/agent-workflows/`。  
 验收：`cmd /c run_godot_validate.bat`，并检查仓库不新增 Rust / Cargo / Bevy 运行入口。
 
+### 1.1 旧 app / crate 迁移结论核对
+
+- [ ] `bevy_debug_viewer`：运行时、相机、输入、picking、UI、debug panel、info panels、console、world render、fog、NPC runtime 和自动测试语义全部迁到 Godot game scene、app controller、core、world、ui 和 tools。
+- [ ] `bevy_map_editor`：地图编辑、对象选择、地图 camera、selection info、handoff、review 和保存逻辑迁到 Godot map scene workflow、`CDC Map Review` dock 和 `tools/agent/review-godot-map-visual.ps1`。
+- [ ] `bevy_character_editor`：角色基础、外观、AI、装备、预览、camera mode、handoff 迁到 Godot editor 插件和 data edit service。
+- [ ] `bevy_item_editor`：物品 fragment、装备、武器、消耗品、模型预览、引用选择和保存校验迁到 Godot editor 插件。
+- [ ] `bevy_recipe_editor`：配方材料、产物、技能/工具/工作台要求、导航、引用校验和 handoff 迁到 Godot editor 插件。
+- [ ] `bevy_skill_editor`：技能树 graph、节点布局、前置、目标策略、效果列表、handoff 和数据保存迁到 Godot editor 插件。
+- [ ] `bevy_quest_editor`：任务 graph、objective、奖励、导航、对话绑定、handoff 和数据保存迁到 Godot editor 插件。
+- [ ] `bevy_dialogue_editor`：对话 graph、节点、选项、条件、动作、规则预览、handoff 和数据保存迁到 Godot editor 插件。
+- [ ] `bevy_gltf_viewer`：模型层级、socket editor、preview stage、camera、灯光、bounds 和资源诊断迁到 Godot editor dock、独立 preview scene 或 headless asset tool。
+- [ ] `content_tools`：`summarize`、`references`、`format`、`diff-summary`、`changed`、`content` 行为迁到 `tools/agent/godot-content.ps1` 和 `godot/scripts/data`。
+- [D] `bevy_server`：不迁旧 Bevy server 入口；若仍需远程调试或 headless simulation，单独设计 Godot/tool 协议，不复制旧 server。
+- [ ] `game_core`：只迁移玩法语义、测试行为和状态机，不复制 Rust；对应 Godot 落点为 `godot/scripts/core`。
+- [ ] `game_data`：只迁移 schema、校验、引用、格式化和编辑语义；对应 Godot 落点为 `data/` 与 `godot/scripts/data`。
+- [ ] `game_bevy`：只迁移渲染表现、相机、picking、UI 行为和 asset path 规则；对应 Godot 落点为 `godot/scripts/world`、`godot/scripts/ui` 和 `godot/assets`。
+- [ ] `game_editor`：只迁移 editor shell、preview stage、handoff、model hierarchy、flow graph 和 window persistence 语义；对应 Godot 落点为 `godot/addons/cdc_game_editor`。
+- [ ] `game_protocol`：只作为 request / response / snapshot / event payload 的后续工具接口参考；不新增 Rust protocol runtime。
+
+参考：`G:\Projects\cdc_survival_game_bevy_reference\rust\apps\**`、`G:\Projects\cdc_survival_game_bevy_reference\rust\crates\**`。
+Godot 落点：`godot/scripts/**`、`godot/addons/cdc_game_editor/**`、`tools/agent/**`。
+验收：对应 editor/game/tool smoke 加上 `mainline_migration_guard`。
+
 ## 2. 数据域与内容 schema
 
 ### 2.1 内容注册和路径
@@ -316,7 +339,7 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [ ] `1-9` 对话选项。
 - [ ] `1-0` hotbar 激活。
 - [ ] `Enter` / `Space` 对话推进。
-- [ ] `Space` 等待、结束回合、长按重复、pending 取消。
+- [~] `Space` 等待、结束回合、长按重复、pending 取消。已恢复单次等待、pending 取消和长按重复等待第一版；待补自由观察播放冲突策略和更细的长按节奏配置。
 - [~] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。已恢复玩家侧 focus actor 循环、相机跟随、busy actor 拒绝切换和旧 selection/menu/prompt 清理；待补 free observe 策略。
 - [x] `V` overlay mode。
 - [x] `/` 控制提示展开折叠。
@@ -738,6 +761,30 @@ Godot 落点：`godot/scripts/world/fog_overlay_controller.gd`、`world_scene_re
 参考：旧工程若无完整音频，也需在 Godot 主线建立占位和设置入口。  
 Godot 落点：`godot/assets/audio/**`、`godot/scripts/ui/**`、`godot/scripts/world/**`。  
 验收：manual runtime smoke、Settings smoke。
+
+### 15.7 实际资产文件组核对
+
+- [x] 字体：旧 `assets/fonts/NotoSansCJKsc-Regular.otf` 已迁入 `godot/assets/fonts/NotoSansCJKsc-Regular.otf`；待守护 Godot `.import`、UI 字体 fallback、中文缺字和 editor 预览字体。
+- [x] Fog shader：旧 `assets/shaders/fog_of_war_post_process.wgsl` 已替代为 `godot/assets/shaders/fog_of_war_canvas.gdshader`；待等价复核 visible / explored / unseen 遮罩、相机缩放和地图坐标。
+- [x] 容器模型：`cabinet_medical.gltf`、`crate_wood.gltf`、`locker_metal.gltf` 已存在于 `godot/assets/container_placeholders`；待补 collision、picking、hover outline、打开/关闭状态和 container type 映射。
+- [x] 角色预览模型：旧 `assets/bevy_preview/characters/humanoid_mannequin.gltf` 已迁到 `godot/assets/preview_placeholders/characters/humanoid_mannequin.gltf`；待补玩家、NPC、敌人、尸体和外观 profile 的真实绑定。
+- [x] 角色源模型：`humanoid_mannequin.bbmodel` 已迁入 Godot 资产目录；待确认是否仍作为编辑源、导出来源或只保留审计备份。
+- [x] 装备占位模型：`equipment_head`、`equipment_body`、`equipment_legs`、`equipment_feet`、`equipment_hands`、`equipment_back`、`equipment_accessory` 已迁入；待补装备槽 socket、body region override、scale、offset 和卸装恢复。
+- [x] 武器占位模型：`weapon_unarmed`、`weapon_light`、`weapon_heavy`、`weapon_dagger`、`weapon_sword`、`weapon_blunt`、`weapon_pole`、`weapon_pistol`、`weapon_rifle`、`weapon_shotgun` 已迁入；待补手部挂点、远程 muzzle、射程表现、reload 状态和热栏图标。
+- [x] 地表 tile 模型：`flat`、`ramp_north`、`ramp_east`、`ramp_south`、`ramp_west`、`cliff_inner_corner`、`cliff_outer_corner`、`cliff_side` 已迁入；待补 elevation、slope、cliff 拼接、材质和行走/视线阻挡等价。
+- [x] 建筑墙模型：`corner`、`cross`、`end`、`floor_flat`、`isolated`、`straight`、`t_junction` 已迁入；待补 wall height、thickness、门洞、室内外材质、遮挡淡出和多楼层显隐。
+- [x] Prop 模型：`barrel_rust`、`barricade_scrap`、`bush_dry`、`cabinet_wood`、`chair_metal`、`counter_canteen`、`crate_stack_large`、`desk_wood`、`gate_pillar_concrete`、`pallet_stack`、`roadblock_concrete`、`sandbag_barrier`、`shelf_metal`、`table_metal`、`tree_dead`、`wrecked_car` 已迁入；待补 asset id 映射、旋转 footprint、local offset、scale、阻挡和 hover。
+- [ ] 音频资产：当前未发现已迁入的 `godot/assets/audio` 资源；需要决定占位音效、音量设置、事件触发点和缺音频 fallback。
+- [ ] UI 图标资产：当前清单未确认 inventory、skill、quest、crafting、trade、container、settings、hotbar 所需图标；需要建立 icon source、Godot path 和 fallback。
+- [ ] 缩略图资产：物品、配方、技能、任务、地图地点和存档槽缩略图仍需映射或生成。
+- [ ] 地图专属资产：每张 `godot/scenes/maps/*.tscn` 的对象 asset path、fallback 使用次数、重复/重叠实例、缺 collision、缺 picking 需要在 MapVisual 报告中逐项输出。
+- [ ] `.bin` 配套文件：所有 glTF 的外部 `.bin` 需要和 Godot 导入路径一致，避免移动后模型空壳或材质丢失。
+- [ ] `.import` 和 `.uid` 守护：Godot 导入产物需要纳入校验，避免资源 uid 变化导致 scene 引用断裂。
+- [ ] 根目录 `assets/` 与 `godot/assets/` 的职责需要最终决策：若 `godot/assets/` 是运行权威，根目录 `assets/` 只能作为迁移备份或源资产目录，并需文档化同步规则。
+
+参考：`assets/**`、`godot/assets/**`、`G:\Projects\cdc_survival_game_bevy_reference\assets/**`、`game_bevy/src/asset_paths.rs`。
+Godot 落点：`godot/assets/**`、`godot/scripts/data/**`、`godot/scripts/world/**`、asset import smoke。
+验收：`AssetImport`、`MapVisual`、manual model preview、`run_godot_validate.bat`。
 
 ## 16. 游戏 UI 和面板
 
