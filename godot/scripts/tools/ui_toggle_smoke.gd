@@ -136,6 +136,33 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_stage_open(errors, game_root, "character", "C should open character")
 	if not game_root.character_panel.find_child("SummaryLine", true, false) is Label:
 		errors.append("character panel should expose SummaryLine")
+	if not _equipment_line(game_root, "main_hand").contains("主手: 小刀"):
+		errors.append("character panel should show localized main hand equipment slot")
+	if not _equipment_line(game_root, "main_hand").contains("价值 50"):
+		errors.append("equipped item row should show value summary")
+	if not _equipment_line(game_root, "off_hand").contains("副手: 空"):
+		errors.append("character panel should show empty off hand equipment slot")
+	var off_hand_button: Button = _equipment_unequip_button(game_root, "off_hand")
+	if off_hand_button == null or not off_hand_button.disabled:
+		errors.append("empty equipment slot unequip button should be disabled")
+	var main_hand_button: Button = _equipment_unequip_button(game_root, "main_hand")
+	if main_hand_button == null or main_hand_button.disabled:
+		errors.append("equipped main hand should expose enabled unequip button")
+	else:
+		var before_unequipped := _event_count(game_root, "item_unequipped")
+		main_hand_button.pressed.emit()
+		await process_frame
+		if not _equipment_line(game_root, "main_hand").contains("主手: 空"):
+			errors.append("character panel should refresh main hand as empty after unequip")
+		if _player_inventory_count(game_root, "1002") != 1:
+			errors.append("unequipping from character panel should return knife to inventory")
+		if _event_count(game_root, "item_unequipped") <= before_unequipped:
+			errors.append("unequipping from character panel should emit item_unequipped")
+		var restore_equip_result: Dictionary = game_root.equip_player_item("1002", "main_hand")
+		if not bool(restore_equip_result.get("success", false)):
+			errors.append("restoring main hand after character equipment test failed: %s" % restore_equip_result.get("reason", "unknown"))
+		elif not _equipment_line(game_root, "main_hand").contains("主手: 小刀"):
+			errors.append("character panel should refresh restored main hand equipment")
 	var initial_constitution_button: Button = _attribute_button(game_root, "constitution")
 	if initial_constitution_button == null:
 		errors.append("character panel should expose constitution allocate button")
@@ -482,6 +509,27 @@ func _attribute_line(game_root: Node, attribute: String) -> String:
 	if label is Label:
 		return str((label as Label).text)
 	return ""
+
+
+func _equipment_unequip_button(game_root: Node, slot_id: String) -> Button:
+	var row: Node = game_root.character_panel.find_child("Equipment_%s" % slot_id, true, false)
+	if row == null:
+		return null
+	return row.get_node_or_null("UnequipButton") as Button
+
+
+func _equipment_line(game_root: Node, slot_id: String) -> String:
+	var row: Node = game_root.character_panel.find_child("Equipment_%s" % slot_id, true, false)
+	if row == null:
+		return ""
+	var label: Node = row.get_node_or_null("Line")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _player_inventory_count(game_root: Node, item_id: String) -> int:
+	return int(_dictionary_or_empty(_player(game_root).get("inventory", {})).get(item_id, 0))
 
 
 func _player_max_hp(game_root: Node) -> float:

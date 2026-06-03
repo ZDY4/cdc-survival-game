@@ -98,8 +98,8 @@ func _attribute_rows(attributes: Dictionary, available_stat_points: int) -> Arra
 	return rows
 
 
-func _equipment_rows(equipment: Array) -> Array[Label]:
-	var rows: Array[Label] = []
+func _equipment_rows(equipment: Array) -> Array[Control]:
+	var rows: Array[Control] = []
 	if equipment.is_empty():
 		var empty := _label("EquipmentEmpty")
 		empty.text = "未装备"
@@ -107,10 +107,44 @@ func _equipment_rows(equipment: Array) -> Array[Label]:
 		return rows
 	for item in equipment:
 		var data: Dictionary = _dictionary_or_empty(item)
-		var label := _label("Equipment_%s" % data.get("slot_id", "unknown"))
-		label.text = "%s: %s" % [data.get("slot_id", ""), data.get("name", data.get("item_id", ""))]
-		rows.append(label)
+		rows.append(_equipment_row(data))
 	return rows
+
+
+func _equipment_row(data: Dictionary) -> HBoxContainer:
+	var slot_id: String = str(data.get("slot_id", "unknown"))
+	var actual_slot_id: String = str(data.get("actual_slot_id", slot_id))
+	var row := HBoxContainer.new()
+	row.name = "Equipment_%s" % slot_id
+	row.custom_minimum_size = Vector2(322, 28)
+	row.add_theme_constant_override("separation", 6)
+	var label := _label("Line")
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.text = _equipment_text(data)
+	var unequip_button := _button("UnequipButton", "卸", "卸下 %s" % str(data.get("label", slot_id)), not bool(data.get("equipped", false)))
+	unequip_button.pressed.connect(func() -> void:
+		var root := get_parent()
+		if root != null and root.has_method("unequip_player_slot"):
+			root.unequip_player_slot(actual_slot_id)
+	, CONNECT_DEFERRED)
+	row.add_child(label)
+	row.add_child(unequip_button)
+	return row
+
+
+func _equipment_text(data: Dictionary) -> String:
+	var label: String = str(data.get("label", data.get("slot_id", "")))
+	if not bool(data.get("equipped", false)):
+		return "%s: 空" % label
+	var rarity := str(data.get("rarity", ""))
+	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
+	return "%s: %s | %.1f kg | 价值 %d%s" % [
+		label,
+		data.get("name", data.get("item_id", "")),
+		float(data.get("weight", 0.0)),
+		int(data.get("value", 0)),
+		rarity_suffix,
+	]
 
 
 func _section_label(node_name: String, text: String) -> Label:
