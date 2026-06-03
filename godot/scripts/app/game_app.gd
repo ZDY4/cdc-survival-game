@@ -8,6 +8,7 @@ const FogOverlayController = preload("res://scripts/world/fog_overlay_controller
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
+const AUTO_TICK_INTERVAL_SEC := 0.45
 
 var registry: ContentRegistry
 var simulation: RefCounted
@@ -43,6 +44,8 @@ var info_panel_pages: Array[Dictionary] = [
 	{"id": "performance", "title": "Performance", "tab_label": "Perf"},
 ]
 var active_info_panel_index: int = 0
+var auto_tick_enabled := false
+var auto_tick_elapsed_sec := 0.0
 
 
 func _ready() -> void:
@@ -75,6 +78,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if runtime_input_controller != null:
 		runtime_input_controller.process(delta)
+	_process_auto_tick(delta)
 
 
 func _input(event: InputEvent) -> void:
@@ -214,6 +218,19 @@ func current_debug_overlay_mode() -> String:
 	return debug_overlay_mode
 
 
+func toggle_auto_tick() -> Dictionary:
+	if has_active_dialogue() or gameplay_input_blocked_by_ui():
+		return {"success": false, "reason": "ui_blocked", "enabled": auto_tick_enabled}
+	auto_tick_enabled = not auto_tick_enabled
+	auto_tick_elapsed_sec = 0.0
+	refresh_hud(current_interaction_prompt())
+	return {"success": true, "enabled": auto_tick_enabled}
+
+
+func is_auto_tick_enabled() -> bool:
+	return auto_tick_enabled
+
+
 func cycle_info_panel(direction: int) -> Dictionary:
 	if info_panel_pages.size() <= 1:
 		return {"success": false, "reason": "not_enough_info_pages"}
@@ -243,6 +260,15 @@ func info_panel_snapshot() -> Dictionary:
 		"enabled_pages": info_panel_pages.duplicate(true),
 		"active_index": active_info_panel_index,
 		"count": info_panel_pages.size(),
+	}
+
+
+func runtime_control_snapshot() -> Dictionary:
+	return {
+		"auto_tick": auto_tick_enabled,
+		"observe_mode": false,
+		"observe_playback": false,
+		"observe_speed": "x1",
 	}
 
 
@@ -457,6 +483,42 @@ func press_space_action() -> Dictionary:
 		_setup_runtime_input_controller()
 		_refresh_fog_overlay()
 	refresh_all_panels(current_interaction_prompt())
+	return result
+
+
+func _process_auto_tick(delta: float) -> void:
+	if not auto_tick_enabled:
+		auto_tick_elapsed_sec = 0.0
+		return
+	auto_tick_elapsed_sec += delta
+	if auto_tick_elapsed_sec < AUTO_TICK_INTERVAL_SEC:
+		return
+	auto_tick_elapsed_sec = 0.0
+	_submit_auto_tick_wait()
+
+
+func _submit_auto_tick_wait() -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	if has_active_dialogue() or gameplay_input_blocked_by_ui():
+		return {"success": false, "reason": "ui_blocked"}
+	var snapshot: Dictionary = simulation.snapshot()
+	if not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty():
+		return {"success": false, "reason": "pending_blocked"}
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "wait",
+		"actor_id": 1,
+		"topology": _dictionary_or_empty(world_result.get("map", {})),
+	})
+	if bool(result.get("success", false)):
+		world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+		if interaction_controller != null:
+			interaction_controller.world_result = world_result
+		_setup_world_container()
+		WorldSceneRenderer.new().render_world(world_container, world_result)
+		_setup_runtime_input_controller()
+		_refresh_fog_overlay()
+		refresh_all_panels(current_interaction_prompt())
 	return result
 
 

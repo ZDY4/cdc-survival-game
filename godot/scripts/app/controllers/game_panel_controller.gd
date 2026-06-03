@@ -88,6 +88,8 @@ func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 		snapshot["debug_overlay_mode"] = parent.current_debug_overlay_mode()
 	if parent != null and parent.has_method("info_panel_snapshot"):
 		snapshot["info_panel"] = parent.info_panel_snapshot()
+	if parent != null and parent.has_method("runtime_control_snapshot"):
+		snapshot["runtime_control"] = parent.runtime_control_snapshot()
 	hud.apply_snapshot(snapshot)
 
 

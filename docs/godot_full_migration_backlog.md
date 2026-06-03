@@ -328,7 +328,7 @@
 - [x] `V`：overlay mode。
 - [ ] `/`：帮助展开。
 - [x] `[` / `]`：info tab 切换。
-- [ ] `A`：auto tick / observe playback。
+- [~] `A`：auto tick 第一版已迁移；observe playback 待自由观察模式迁移后补齐。
 - [ ] `PageUp/PageDown`：楼层切换。
 - [ ] console、debug panel、modal、stage panel 打开时阻止 gameplay 输入。
 

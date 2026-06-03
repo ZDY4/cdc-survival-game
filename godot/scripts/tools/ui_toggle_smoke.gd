@@ -12,7 +12,7 @@ func _run() -> void:
 	get_root().add_child(game_root)
 	await process_frame
 
-	var errors: Array[String] = _run_checks(game_root)
+	var errors: Array[String] = await _run_checks(game_root)
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -50,6 +50,29 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if str(game_root.current_debug_overlay_mode()) != "off":
 		errors.append("debug overlay mode should start as off")
 	_assert_debug_overlay_line(errors, game_root, "Overlay off", "initial overlay HUD")
+	if bool(game_root.is_auto_tick_enabled()):
+		errors.append("auto tick should start disabled")
+	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
+	_press_key(game_root, KEY_A)
+	if not bool(game_root.is_auto_tick_enabled()):
+		errors.append("A should enable auto tick")
+	_assert_runtime_control_line(errors, game_root, "AutoTick on", "auto tick on HUD")
+	var before_auto_events: int = game_root.simulation.snapshot().get("events", []).size()
+	await _wait_process_frames(40)
+	if game_root.simulation.snapshot().get("events", []).size() <= before_auto_events:
+		errors.append("enabled auto tick should advance runtime events")
+	_press_key(game_root, KEY_I)
+	_expect_stage_open(errors, game_root, "inventory", "inventory should open before auto tick blocker check")
+	var blocked_events: int = game_root.simulation.snapshot().get("events", []).size()
+	await _wait_process_frames(40)
+	if game_root.simulation.snapshot().get("events", []).size() != blocked_events:
+		errors.append("open stage panel should block auto tick runtime events")
+	_press_key(game_root, KEY_ESCAPE)
+	_expect_stage_closed(errors, game_root, "Esc should close inventory after auto tick blocker check")
+	_press_key(game_root, KEY_A)
+	if bool(game_root.is_auto_tick_enabled()):
+		errors.append("second A should disable auto tick")
+	_assert_runtime_control_line(errors, game_root, "AutoTick off", "auto tick off HUD")
 	_press_key(game_root, KEY_V)
 	if str(game_root.current_debug_overlay_mode()) != "walkable":
 		errors.append("V should switch debug overlay mode to walkable")
@@ -197,6 +220,15 @@ func _assert_debug_overlay_line(errors: Array[String], game_root: Node, expected
 		errors.append("%s: DebugOverlayLine expected %s, got %s" % [context, expected, str((label as Label).text)])
 
 
+func _assert_runtime_control_line(errors: Array[String], game_root: Node, expected: String, context: String) -> void:
+	var label: Node = game_root.hud.find_child("RuntimeControlLine", true, false)
+	if not label is Label:
+		errors.append("%s: HUD should expose RuntimeControlLine" % context)
+		return
+	if str((label as Label).text) != expected:
+		errors.append("%s: RuntimeControlLine expected %s, got %s" % [context, expected, str((label as Label).text)])
+
+
 func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: String, expected_title: String, expected_line: String, context: String) -> void:
 	var page: Dictionary = game_root.current_info_panel_page()
 	if str(page.get("id", "")) != expected_id:
@@ -239,3 +271,8 @@ func _player(game_root: Node) -> Dictionary:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return actor_data
 	return {}
+
+
+func _wait_process_frames(count: int) -> void:
+	for _i in range(count):
+		await process_frame
