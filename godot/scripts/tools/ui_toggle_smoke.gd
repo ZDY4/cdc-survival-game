@@ -152,6 +152,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("body equipment row should show attribute modifier details")
 	if not _equipment_line(game_root, "off_hand").contains("副手: 空"):
 		errors.append("character panel should show empty off hand equipment slot")
+	if _equipment_model_asset(game_root, "main_hand") != "preview_placeholders/placeholders/weapon_dagger.gltf":
+		errors.append("main hand equipment model should start as dagger before character panel unequip")
 	var off_hand_button: Button = _equipment_unequip_button(game_root, "off_hand")
 	if off_hand_button == null or not off_hand_button.disabled:
 		errors.append("empty equipment slot unequip button should be disabled")
@@ -164,6 +166,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		if not _equipment_line(game_root, "main_hand").contains("主手: 空"):
 			errors.append("character panel should refresh main hand as empty after unequip")
+		if not _equipment_model_asset(game_root, "main_hand").is_empty():
+			errors.append("character panel unequip should remove main hand equipment model")
 		if _player_inventory_count(game_root, "1002") != 1:
 			errors.append("unequipping from character panel should return knife to inventory")
 		if _event_count(game_root, "item_unequipped") <= before_unequipped:
@@ -173,6 +177,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("restoring main hand after character equipment test failed: %s" % restore_equip_result.get("reason", "unknown"))
 		elif not _equipment_line(game_root, "main_hand").contains("主手: 小刀"):
 			errors.append("character panel should refresh restored main hand equipment")
+		elif _equipment_model_asset(game_root, "main_hand") != "preview_placeholders/placeholders/weapon_dagger.gltf":
+			errors.append("restoring main hand should redraw dagger equipment model")
 	var initial_constitution_button: Button = _attribute_button(game_root, "constitution")
 	if initial_constitution_button == null:
 		errors.append("character panel should expose constitution allocate button")
@@ -536,6 +542,16 @@ func _equipment_line(game_root: Node, slot_id: String) -> String:
 	if label is Label:
 		return str((label as Label).text)
 	return ""
+
+
+func _equipment_model_asset(game_root: Node, slot_id: String) -> String:
+	var player: Node = game_root.find_child("Actor_player_1", true, false)
+	if player == null:
+		return ""
+	var model: Node = player.find_child("EquipmentModel_%s" % slot_id, true, false)
+	if model == null:
+		return ""
+	return str(model.get_meta("model_asset", ""))
 
 
 func _player_inventory_count(game_root: Node, item_id: String) -> int:
