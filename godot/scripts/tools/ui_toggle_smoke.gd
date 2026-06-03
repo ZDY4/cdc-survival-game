@@ -185,6 +185,25 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if game_root.dialogue_panel.visible:
 			errors.append("Esc should hide dialogue panel")
 
+	var digit_talk_result: Dictionary = game_root.simulation.execute_interaction(1, {
+		"target_type": "actor",
+		"actor_id": 2,
+		"command_actor_id": 1,
+	})
+	game_root.refresh_dialogue_panel()
+	if not bool(digit_talk_result.get("success", false)) or str(_player(game_root).get("active_dialogue_id", "")).is_empty():
+		errors.append("direct talk interaction should reopen active dialogue for digit option test")
+	else:
+		var before_dialogue_finished := _event_count(game_root, "dialogue_finished")
+		_press_key(game_root, KEY_1)
+		await process_frame
+		if not str(_player(game_root).get("active_dialogue_id", "")).is_empty():
+			errors.append("digit 1 should choose the first dialogue option and finish the current dialogue")
+		if _event_count(game_root, "dialogue_finished") <= before_dialogue_finished:
+			errors.append("digit 1 dialogue option should emit dialogue_finished")
+		if game_root.dialogue_panel.visible:
+			errors.append("digit 1 dialogue option should hide dialogue panel after leave end")
+
 	return errors
 
 

@@ -322,7 +322,7 @@
 - [ ] 同键 toggle：打开、关闭、替换 active stage panel。
 - [ ] `Esc` 关闭链路：targeting -> dialogue -> interaction menu -> quantity modal -> trade -> container -> stage panel -> settings -> pending -> settings。
 - [~] `Space`：对话推进、等待/结束回合、pending 取消、长按重复等待。已恢复单次等待、pending 取消和长按重复等待第一版；待补自由观察播放冲突策略和更细的长按节奏配置。
-- [ ] 数字键：对话 `1-9`、hotbar `1-0`、数量输入冲突处理。
+- [~] 数字键：对话 `1-9`、hotbar `1-0` 已有基础入口并纳入 smoke；待补数量输入与快捷动作冲突处理。
 - [~] `Tab`：可控 actor / focus actor 切换。已恢复玩家侧 focus actor 循环、相机跟随、busy actor 拒绝切换和旧 selection/menu/prompt 清理；待补 free observe。
 - [x] `F`：恢复相机跟随。
 - [x] `V`：overlay mode。

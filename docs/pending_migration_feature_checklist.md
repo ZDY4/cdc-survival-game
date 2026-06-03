@@ -336,8 +336,8 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [ ] `K` 技能面板 toggle。
 - [ ] `L` 制作面板 toggle。
 - [ ] `Esc` 关闭链路：targeting -> dialogue -> interaction menu -> quantity modal -> trade modal -> stage panels -> settings -> pending interaction -> pending movement -> settings。
-- [ ] `1-9` 对话选项。
-- [ ] `1-0` hotbar 激活。
+- [~] `1-9` 对话选项，已覆盖基础数字选择 smoke；待补禁用选项、越界选项和 modal 冲突。
+- [~] `1-0` hotbar 激活，已覆盖基础 hotbar 使用 smoke；待补 cooldown 禁用提示、空槽提示和 modal 冲突。
 - [ ] `Enter` / `Space` 对话推进。
 - [~] `Space` 等待、结束回合、长按重复、pending 取消。已恢复单次等待、pending 取消和长按重复等待第一版；待补自由观察播放冲突策略和更细的长按节奏配置。
 - [~] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。已恢复玩家侧 focus actor 循环、相机跟随、busy actor 拒绝切换和旧 selection/menu/prompt 清理；待补 free observe 策略。
