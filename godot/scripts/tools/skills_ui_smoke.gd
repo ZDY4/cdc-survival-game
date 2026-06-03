@@ -39,6 +39,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills panel missing medicine skill row")
 	if _learn_button(game_root, "medicine") == null or not _learn_button(game_root, "medicine").disabled:
 		errors.append("medicine learn button should be disabled before survival prerequisite")
+	if _filter_button(game_root, "FilterActiveButton") == null:
+		errors.append("skills panel should expose active filter button")
+	else:
+		_filter_button(game_root, "FilterActiveButton").pressed.emit()
+		await process_frame
+		if not _skill_text(game_root).contains("肾上腺激发 0/3"):
+			errors.append("active filter should keep active skill rows")
+		if not _skill_text(game_root).contains("低姿潜行 0/3"):
+			errors.append("active filter should keep toggle skill rows")
+		if _skill_text(game_root).contains("生存本能 0/5"):
+			errors.append("active filter should hide passive skill rows")
+		if _filter_button(game_root, "FilterAllButton") == null:
+			errors.append("skills panel should expose all filter button")
+		else:
+			_filter_button(game_root, "FilterAllButton").pressed.emit()
+			await process_frame
+			if not _skill_text(game_root).contains("生存本能 0/5"):
+				errors.append("all filter should restore passive skill rows")
 
 	var grant_result: Dictionary = game_root.simulation.grant_skill_points(1, 1, "skills_ui_smoke")
 	if not bool(grant_result.get("success", false)):
@@ -155,6 +173,10 @@ func _skill_line(game_root: Node, skill_id: String) -> String:
 	if label is Label:
 		return str((label as Label).text)
 	return ""
+
+
+func _filter_button(game_root: Node, node_name: String) -> Button:
+	return game_root.skills_panel.find_child(node_name, true, false) as Button
 
 
 func _learn_button(game_root: Node, skill_id: String) -> Button:

@@ -3,7 +3,10 @@ extends Control
 var _panel: PanelContainer
 var _summary_label: Label
 var _hotbar_label: Label
+var _filter_box: HBoxContainer
 var _tree_box: VBoxContainer
+var _filter_mode: String = "all"
+var _last_snapshot: Dictionary = {}
 
 
 func _ready() -> void:
@@ -15,6 +18,7 @@ func _ready() -> void:
 func apply_snapshot(snapshot: Dictionary) -> void:
 	if _panel == null:
 		_build_layout()
+	_last_snapshot = snapshot.duplicate(true)
 
 	_summary_label.text = "%s Lv%d | 技能点 %d" % [
 		snapshot.get("owner_name", ""),
@@ -25,8 +29,11 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_clear_trees()
 	for tree in snapshot.get("trees", []):
 		var tree_data: Dictionary = tree
-		_tree_box.add_child(_tree_title(tree_data))
-		for skill in tree_data.get("skills", []):
+		var visible_skills: Array[Dictionary] = _visible_skills(tree_data)
+		if visible_skills.is_empty():
+			continue
+		_tree_box.add_child(_tree_title(tree_data, visible_skills.size()))
+		for skill in visible_skills:
 			var skill_data: Dictionary = skill
 			_tree_box.add_child(_skill_row(skill_data))
 
@@ -52,21 +59,52 @@ func _build_layout() -> void:
 
 	_summary_label = _label("SummaryLine")
 	_hotbar_label = _label("HotbarLine")
+	_filter_box = HBoxContainer.new()
+	_filter_box.name = "FilterBar"
+	_filter_box.add_theme_constant_override("separation", 4)
 	_tree_box = VBoxContainer.new()
 	_tree_box.name = "TreeLines"
 	_tree_box.add_theme_constant_override("separation", 4)
 	box.add_child(_summary_label)
 	box.add_child(_hotbar_label)
+	box.add_child(_filter_box)
+	_add_filter_button("FilterAllButton", "全部", "all")
+	_add_filter_button("FilterLearnedButton", "已学", "learned")
+	_add_filter_button("FilterAvailableButton", "可学", "available")
+	_add_filter_button("FilterLockedButton", "锁定", "locked")
+	_add_filter_button("FilterActiveButton", "主动", "active")
 	box.add_child(_tree_box)
 
 
-func _tree_title(tree: Dictionary) -> Label:
+func _tree_title(tree: Dictionary, visible_count: int) -> Label:
 	var label := _label("Tree_%s" % tree.get("tree_id", "unknown"))
 	label.text = "%s | %d 技能" % [
 		tree.get("name", tree.get("tree_id", "")),
-		tree.get("skills", []).size(),
+		visible_count,
 	]
 	return label
+
+
+func _visible_skills(tree: Dictionary) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	for skill in tree.get("skills", []):
+		var skill_data: Dictionary = skill
+		if _skill_matches_filter(skill_data):
+			rows.append(skill_data)
+	return rows
+
+
+func _skill_matches_filter(skill: Dictionary) -> bool:
+	match _filter_mode:
+		"learned":
+			return int(skill.get("level", 0)) > 0
+		"available":
+			return bool(skill.get("can_learn", false))
+		"locked":
+			return int(skill.get("level", 0)) <= 0 and not bool(skill.get("can_learn", false))
+		"active":
+			return str(skill.get("activation_mode", "passive")) != "passive"
+	return true
 
 
 func _skill_row(skill: Dictionary) -> HBoxContainer:
@@ -195,6 +233,39 @@ func _button(node_name: String, text: String, tooltip: String, disabled: bool) -
 	button.disabled = disabled
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	return button
+
+
+func _add_filter_button(node_name: String, text: String, mode: String) -> void:
+	var button := _button(node_name, text, "筛选%s技能" % text, false)
+	button.custom_minimum_size = Vector2(58, 28)
+	button.toggle_mode = true
+	button.button_pressed = _filter_mode == mode
+	button.pressed.connect(func() -> void:
+		_filter_mode = mode
+		_refresh_filter_buttons()
+		if not _last_snapshot.is_empty():
+			apply_snapshot(_last_snapshot)
+	, CONNECT_DEFERRED)
+	_filter_box.add_child(button)
+
+
+func _refresh_filter_buttons() -> void:
+	if _filter_box == null:
+		return
+	for child in _filter_box.get_children():
+		if child is Button:
+			var button := child as Button
+			match button.name:
+				"FilterAllButton":
+					button.button_pressed = _filter_mode == "all"
+				"FilterLearnedButton":
+					button.button_pressed = _filter_mode == "learned"
+				"FilterAvailableButton":
+					button.button_pressed = _filter_mode == "available"
+				"FilterLockedButton":
+					button.button_pressed = _filter_mode == "locked"
+				"FilterActiveButton":
+					button.button_pressed = _filter_mode == "active"
 
 
 func _label(node_name: String) -> Label:
