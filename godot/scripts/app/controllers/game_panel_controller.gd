@@ -6,12 +6,14 @@ const InventorySnapshot = preload("res://scripts/ui/snapshots/inventory_snapshot
 const TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
 const ContainerSnapshot = preload("res://scripts/ui/snapshots/container_snapshot.gd")
 const JournalSnapshot = preload("res://scripts/ui/snapshots/journal_snapshot.gd")
+const SkillsSnapshot = preload("res://scripts/ui/snapshots/skills_snapshot.gd")
 const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
 const DIALOGUE_PANEL_SCENE = preload("res://scenes/ui/dialogue_panel.tscn")
 const INVENTORY_PANEL_SCENE = preload("res://scenes/ui/inventory_panel.tscn")
 const TRADE_PANEL_SCENE = preload("res://scenes/ui/trade_panel.tscn")
 const CONTAINER_PANEL_SCENE = preload("res://scenes/ui/container_panel.tscn")
 const JOURNAL_PANEL_SCENE = preload("res://scenes/ui/journal_panel.tscn")
+const SKILLS_PANEL_SCENE = preload("res://scenes/ui/skills_panel.tscn")
 
 var parent: Node
 var registry: RefCounted
@@ -25,6 +27,7 @@ var inventory_panel: Control
 var trade_panel: Control
 var container_panel: Control
 var journal_panel: Control
+var skills_panel: Control
 
 
 func _init(p_parent: Node, p_registry: RefCounted, p_simulation: RefCounted, p_world_result: Dictionary) -> void:
@@ -41,6 +44,7 @@ func setup_panels() -> void:
 	trade_panel = _ensure_panel(trade_panel, TRADE_PANEL_SCENE, "TradePanelRoot")
 	container_panel = _ensure_panel(container_panel, CONTAINER_PANEL_SCENE, "ContainerPanelRoot")
 	journal_panel = _ensure_panel(journal_panel, JOURNAL_PANEL_SCENE, "JournalPanelRoot")
+	skills_panel = _ensure_panel(skills_panel, SKILLS_PANEL_SCENE, "SkillsPanelRoot")
 
 
 func refresh_all(selected_prompt: Dictionary = {}) -> void:
@@ -50,6 +54,7 @@ func refresh_all(selected_prompt: Dictionary = {}) -> void:
 	refresh_trade_panel()
 	refresh_container_panel()
 	refresh_journal_panel()
+	refresh_skills_panel()
 
 
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
@@ -87,6 +92,12 @@ func refresh_journal_panel() -> void:
 	if journal_panel == null or simulation == null:
 		return
 	journal_panel.apply_snapshot(JournalSnapshot.new(registry).build(simulation.snapshot()))
+
+
+func refresh_skills_panel() -> void:
+	if skills_panel == null or simulation == null:
+		return
+	skills_panel.apply_snapshot(SkillsSnapshot.new(registry).build(simulation.snapshot()))
 
 
 func update_world_result(value: Dictionary) -> void:

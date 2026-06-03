@@ -24,6 +24,7 @@ var inventory_panel: Control
 var trade_panel: Control
 var container_panel: Control
 var journal_panel: Control
+var skills_panel: Control
 var active_trade_target: Dictionary = {}
 
 
@@ -108,6 +109,12 @@ func refresh_journal_panel() -> void:
 	panel_controller.refresh_journal_panel()
 
 
+func refresh_skills_panel() -> void:
+	if panel_controller == null:
+		return
+	panel_controller.refresh_skills_panel()
+
+
 func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
 	refresh_hud(selected_prompt)
 	refresh_dialogue_panel()
@@ -115,6 +122,7 @@ func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
 	refresh_trade_panel()
 	refresh_container_panel()
 	refresh_journal_panel()
+	refresh_skills_panel()
 
 
 func select_interaction_target(target: Dictionary) -> Dictionary:
@@ -313,6 +321,19 @@ func unequip_player_slot(slot_id: String) -> Dictionary:
 	return result
 
 
+func learn_player_skill(skill_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "learn_skill",
+		"actor_id": 1,
+		"skill_id": skill_id,
+		"skill_library": registry.get_library("skills"),
+	})
+	refresh_skills_panel()
+	return result
+
+
 func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}) -> void:
 	world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
 	if not bool(world_result.get("ok", false)):
@@ -361,6 +382,7 @@ func _setup_panels() -> void:
 	trade_panel = panel_controller.trade_panel
 	container_panel = panel_controller.container_panel
 	journal_panel = panel_controller.journal_panel
+	skills_panel = panel_controller.skills_panel
 
 
 func _update_trade_target_after_interaction(result: Dictionary, executed_target: Dictionary) -> void:

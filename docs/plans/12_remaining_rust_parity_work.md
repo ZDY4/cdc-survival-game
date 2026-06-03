@@ -51,9 +51,15 @@
 
 ## 技能系统
 
-- Skills 面板未恢复；当前只有 progression / learn skill 规则入口。
-- Hotbar 绑定、技能快捷键、冷却/可用状态、主动技能释放流程未恢复。
-- 主动技能目标策略、AOE 预览、技能详情、前置和属性要求的可视化仍待实现。
+本阶段已恢复并通过 smoke 覆盖：
+
+- Skills 面板第一版已接入主 HUD 装配，展示技能树、当前等级、技能点、主动/被动模式、前置缺失、属性缺失和可学习状态。
+- 学习技能按钮通过 app/controller 提交 `Simulation.submit_player_command({"kind": "learn_skill"})`，由 core progression 规则结算并发出 `skill_learned` 事件。
+
+仍待恢复：
+
+- Hotbar 绑定、技能快捷键、冷却/可用状态和主动技能释放流程未恢复。
+- 主动技能目标策略、AOE 预览、完整技能详情、冷却提示和目标预览仍待实现。
 
 ## 任务系统
 

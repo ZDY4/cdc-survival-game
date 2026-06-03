@@ -118,6 +118,8 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 			return _submit_craft_command(actor, command)
 		"inventory_action":
 			return _submit_inventory_action_command(actor, command)
+		"learn_skill":
+			return _submit_learn_skill_command(actor, command)
 		"use_skill":
 			return _unsupported_player_command(command, "skill_commands_pending_ui")
 		_:
@@ -491,6 +493,10 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"sell_shop":
 			return sell_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 	return {"success": false, "reason": "unknown_inventory_action"}
+
+
+func _submit_learn_skill_command(actor: RefCounted, command: Dictionary) -> Dictionary:
+	return learn_skill(actor.actor_id, str(command.get("skill_id", "")), _dictionary_or_empty(command.get("skill_library", {})))
 
 
 func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:

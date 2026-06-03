@@ -1,0 +1,100 @@
+extends SceneTree
+
+const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
+
+
+func _init() -> void:
+	_run.call_deferred()
+
+
+func _run() -> void:
+	var game_root: Node = GAME_ROOT_SCENE.instantiate()
+	get_root().add_child(game_root)
+	await process_frame
+
+	var errors: Array[String] = await _run_checks(game_root)
+	if not errors.is_empty():
+		for error in errors:
+			printerr(error)
+		quit(1)
+		return
+
+	print("skills_ui_smoke passed:")
+	print(JSON.stringify({
+		"summary": _summary_line(game_root),
+		"skills": _skill_lines(game_root).slice(0, 5),
+	}, "\t"))
+	quit(0)
+
+
+func _run_checks(game_root: Node) -> Array[String]:
+	var errors: Array[String] = []
+	if game_root.skills_panel == null:
+		return ["skills panel was not created"]
+	if not _summary_line(game_root).contains("技能点 0"):
+		errors.append("initial skills summary should show zero skill points")
+	if not _skill_text(game_root).contains("生存本能 0/5"):
+		errors.append("skills panel missing survival skill row")
+	if not _skill_text(game_root).contains("医疗知识 0/3"):
+		errors.append("skills panel missing medicine skill row")
+	if _learn_button(game_root, "medicine") == null or not _learn_button(game_root, "medicine").disabled:
+		errors.append("medicine learn button should be disabled before survival prerequisite")
+
+	var grant_result: Dictionary = game_root.simulation.grant_skill_points(1, 1, "skills_ui_smoke")
+	if not bool(grant_result.get("success", false)):
+		errors.append("grant skill points failed: %s" % grant_result.get("reason", "unknown"))
+	game_root.refresh_skills_panel()
+	if not _summary_line(game_root).contains("技能点 1"):
+		errors.append("skills summary did not refresh granted skill points")
+	if _learn_button(game_root, "survival") == null or _learn_button(game_root, "survival").disabled:
+		errors.append("survival learn button should be enabled after granting skill point")
+
+	_learn_button(game_root, "survival").pressed.emit()
+	await process_frame
+	if not _summary_line(game_root).contains("技能点 0"):
+		errors.append("skills summary did not refresh consumed skill point")
+	if not _skill_text(game_root).contains("生存本能 1/5"):
+		errors.append("skills panel did not show learned survival level")
+	if not _event_seen(game_root, "skill_learned"):
+		errors.append("learning from skills panel should emit skill_learned")
+
+	game_root.simulation.grant_skill_points(1, 1, "skills_ui_smoke")
+	game_root.refresh_skills_panel()
+	if _learn_button(game_root, "medicine") == null or _learn_button(game_root, "medicine").disabled:
+		errors.append("medicine learn button should become enabled after survival prerequisite")
+	return errors
+
+
+func _summary_line(game_root: Node) -> String:
+	return game_root.skills_panel.get_node("SkillsPanel/SkillsLines/SummaryLine").text
+
+
+func _skill_lines(game_root: Node) -> Array[String]:
+	var output: Array[String] = []
+	var tree_box: Node = game_root.skills_panel.get_node("SkillsPanel/SkillsLines/TreeLines")
+	for child in tree_box.get_children():
+		if child is Label:
+			output.append((child as Label).text)
+		elif child is HBoxContainer:
+			var line: Label = child.get_node("Line")
+			output.append(line.text)
+	return output
+
+
+func _skill_text(game_root: Node) -> String:
+	return "\n".join(_skill_lines(game_root))
+
+
+func _learn_button(game_root: Node, skill_id: String) -> Button:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return null
+	return row.get_node("LearnButton") as Button
+
+
+func _event_seen(game_root: Node, kind: String) -> bool:
+	for event in game_root.simulation.snapshot().get("events", []):
+		var event_data: Dictionary = event
+		if event_data.get("kind", "") == kind:
+			return true
+	return false
