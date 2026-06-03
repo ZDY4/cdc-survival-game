@@ -65,6 +65,35 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should select player bandage in trade panel")
 	if _trade_button_text(game_root) != "出售":
 		errors.append("selecting player item should set trade action to sell")
+	_set_item_sellable(game_root, "1006", false)
+	game_root.refresh_trade_panel()
+	if not _player_item_text(game_root).contains("绷带 x1") or not _player_item_text(game_root).contains("不可出售"):
+		errors.append("non-sellable player item should show disabled reason")
+	if not _press_trade_item_with_text(game_root, "player", "绷带"):
+		errors.append("should select non-sellable player bandage in trade panel")
+	if not _trade_button_disabled(game_root):
+		errors.append("non-sellable player item should disable direct sell")
+	if not _queue_button_disabled(game_root):
+		errors.append("non-sellable player item should disable trade cart queue")
+	_press_queue_button(game_root)
+	if not _cart_line(game_root).contains("购物车为空"):
+		errors.append("non-sellable player item should not enter trade cart")
+	var not_sellable_result: Dictionary = game_root.sell_active_trade_item("1006", 1)
+	if str(not_sellable_result.get("reason", "")) != "item_not_sellable":
+		errors.append("non-sellable direct sell should report item_not_sellable")
+	if not _trade_feedback(game_root).contains("不可出售"):
+		errors.append("non-sellable direct sell should show feedback")
+	var not_sellable_cart_result: Dictionary = game_root.confirm_active_trade_cart([{
+		"source": "player",
+		"item_id": "1006",
+		"count": 1,
+	}])
+	if str(not_sellable_cart_result.get("reason", "")) != "item_not_sellable":
+		errors.append("non-sellable cart sell should report item_not_sellable")
+	if not _trade_feedback(game_root).contains("不可出售"):
+		errors.append("non-sellable cart sell should show feedback")
+	_clear_item_sellable_override(game_root, "1006")
+	game_root.refresh_trade_panel()
 
 	if not _press_trade_item_with_text(game_root, "shop", "绷带"):
 		errors.append("should select shop bandage in trade panel")
@@ -371,6 +400,20 @@ func _trade_button_text(game_root: Node) -> String:
 	return ""
 
 
+func _trade_button_disabled(game_root: Node) -> bool:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeControls/TradeButton")
+	if button is Button:
+		return bool((button as Button).disabled)
+	return true
+
+
+func _queue_button_disabled(game_root: Node) -> bool:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartControls/QueueButton")
+	if button is Button:
+		return bool((button as Button).disabled)
+	return true
+
+
 func _trade_item_box(game_root: Node, source: String) -> Node:
 	match source:
 		"shop":
@@ -437,3 +480,21 @@ func _set_active_shop_money(game_root: Node, money: int) -> void:
 		shop["money"] = money
 		game_root.simulation.shop_sessions[shop_id] = shop
 		return
+
+
+func _set_item_sellable(game_root: Node, item_id: String, sellable: bool) -> void:
+	var items: Dictionary = game_root.registry.get_library("items")
+	var record: Dictionary = items.get(item_id, {})
+	var data: Dictionary = record.get("data", {})
+	data["sellable"] = sellable
+	record["data"] = data
+	items[item_id] = record
+
+
+func _clear_item_sellable_override(game_root: Node, item_id: String) -> void:
+	var items: Dictionary = game_root.registry.get_library("items")
+	var record: Dictionary = items.get(item_id, {})
+	var data: Dictionary = record.get("data", {})
+	data.erase("sellable")
+	record["data"] = data
+	items[item_id] = record

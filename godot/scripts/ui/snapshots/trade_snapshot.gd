@@ -102,6 +102,7 @@ func _inventory_items(inventory: Dictionary, sell_price_modifier: float) -> Arra
 			continue
 		var item_data: Dictionary = _item_data(normalized_item_id)
 		var base_price := int(item_data.get("value", 0))
+		var sellable: bool = _is_item_sellable(item_data)
 		items.append({
 			"item_id": normalized_item_id,
 			"name": str(item_data.get("name", normalized_item_id)),
@@ -110,6 +111,8 @@ func _inventory_items(inventory: Dictionary, sell_price_modifier: float) -> Arra
 			"price": _trade_price(base_price, sell_price_modifier),
 			"base_price": base_price,
 			"rarity": _rarity(item_data),
+			"sellable": sellable,
+			"disabled_reason": "" if sellable else "不可出售",
 		})
 	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
@@ -126,6 +129,7 @@ func _player_trade_items(player: Dictionary, sell_price_modifier: float) -> Arra
 			continue
 		var item_data: Dictionary = _item_data(normalized_item_id)
 		var base_price: int = int(item_data.get("value", 0))
+		var sellable: bool = _is_item_sellable(item_data)
 		items.append({
 			"source": "equipment:%s" % normalized_slot_id,
 			"slot_id": normalized_slot_id,
@@ -137,6 +141,8 @@ func _player_trade_items(player: Dictionary, sell_price_modifier: float) -> Arra
 			"base_price": base_price,
 			"rarity": _rarity(item_data),
 			"equipped": true,
+			"sellable": sellable,
+			"disabled_reason": "" if sellable else "不可出售",
 		})
 	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var a_equipped: bool = bool(a.get("equipped", false))
@@ -185,6 +191,23 @@ func _rarity(item_data: Dictionary) -> String:
 	return ""
 
 
+func _is_item_sellable(item_data: Dictionary) -> bool:
+	if item_data.is_empty():
+		return true
+	for key in ["sellable", "can_sell", "tradeable"]:
+		if item_data.has(key) and not bool(item_data.get(key)):
+			return false
+	for fragment in item_data.get("fragments", []):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		var kind: String = str(fragment_data.get("kind", ""))
+		if kind in ["quest", "task", "key_item"]:
+			return false
+		for key in ["sellable", "can_sell", "tradeable"]:
+			if fragment_data.has(key) and not bool(fragment_data.get(key)):
+				return false
+	return true
+
+
 func _trade_price(base_price: int, modifier: float) -> int:
 	return max(1, int(round(float(max(0, base_price)) * max(0.0, modifier))))
 
@@ -222,6 +245,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "店铺库存不足：%s x%d。" % [item_name, count]
 		"player_stock_insufficient":
 			return "背包库存不足：%s x%d。" % [item_name, count]
+		"item_not_sellable":
+			return "该物品不可出售：%s。" % item_name
 		"unknown_shop":
 			return "店铺不存在或已经失效。"
 		"unknown_actor":

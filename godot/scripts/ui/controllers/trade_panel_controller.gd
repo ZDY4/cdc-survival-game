@@ -133,6 +133,8 @@ func _build_layout() -> void:
 	_trade_button.pressed.connect(func() -> void:
 		if _selected_source.is_empty() or _selected_item_id.is_empty():
 			return
+		if not _item_can_trade(_selected_item_snapshot, _selected_source):
+			return
 		trade_requested.emit(_selected_source, _selected_item_id, int(_quantity_spin.value))
 	)
 	trade_controls.add_child(_quantity_spin)
@@ -227,12 +229,17 @@ func _build_layout() -> void:
 func _item_line(item: Dictionary, source: String) -> Button:
 	var button := Button.new()
 	button.name = "Item_%s" % item.get("item_id", "unknown")
-	button.text = "%s x%d | %d" % [
+	var disabled_reason: String = str(item.get("disabled_reason", ""))
+	button.text = "%s x%d | %d%s" % [
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
 		int(item.get("price", 0)),
+		" | %s" % disabled_reason if not disabled_reason.is_empty() else "",
 	]
 	button.tooltip_text = str(item.get("description", ""))
+	if not disabled_reason.is_empty():
+		button.tooltip_text = "%s\n%s" % [button.tooltip_text, disabled_reason] if not button.tooltip_text.is_empty() else disabled_reason
+	button.disabled = not _item_can_trade(item, source)
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
@@ -258,17 +265,19 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 		_update_trade_controls({}, "")
 		return
 	var description := str(item.get("description", ""))
+	var disabled_reason := str(item.get("disabled_reason", ""))
 	_selected_source = source
 	_selected_item_id = str(item.get("item_id", ""))
 	_selected_item_snapshot = item.duplicate(true)
 	_update_trade_controls(item, source)
-	_detail_label.text = "%s：%s x%d | 单价 %d | 小计 %d%s" % [
+	_detail_label.text = "%s：%s x%d | 单价 %d | 小计 %d%s%s" % [
 		_source_display(source),
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
 		int(item.get("price", 0)),
 		int(item.get("price", 0)) * int(_quantity_spin.value if _quantity_spin != null else 1),
 		"\n%s" % description if not description.is_empty() else "",
+		"\n%s" % disabled_reason if not disabled_reason.is_empty() else "",
 	]
 
 
@@ -288,7 +297,7 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 	_quantity_spin.max_value = available
 	_quantity_spin.value = clampi(int(_quantity_spin.value), 1, available)
 	var item_id := str(item.get("item_id", ""))
-	_trade_button.disabled = item.is_empty() or item_id.is_empty() or source.is_empty()
+	_trade_button.disabled = item.is_empty() or item_id.is_empty() or source.is_empty() or not _item_can_trade(item, source)
 	_queue_button.disabled = _trade_button.disabled
 	match source:
 		"shop":
@@ -301,6 +310,8 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 
 func _queue_selected_item() -> void:
 	if _selected_source.is_empty() or _selected_item_id.is_empty() or _selected_item_snapshot.is_empty():
+		return
+	if not _item_can_trade(_selected_item_snapshot, _selected_source):
 		return
 	var count := int(_quantity_spin.value if _quantity_spin != null else 1)
 	if count <= 0:
@@ -445,6 +456,14 @@ func _source_display(source: String) -> String:
 
 func _is_sell_source(source: String) -> bool:
 	return source == "player" or source.begins_with("equipment:")
+
+
+func _item_can_trade(item: Dictionary, source: String) -> bool:
+	if source == "shop":
+		return true
+	if _is_sell_source(source):
+		return bool(item.get("sellable", true))
+	return true
 
 
 func _label(node_name: String) -> Label:

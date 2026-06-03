@@ -73,6 +73,8 @@ func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, i
 	var sell_count: int = max(1, count)
 	if int(actor.inventory.get(normalized_item_id, 0)) < sell_count:
 		return {"success": false, "reason": "player_stock_insufficient"}
+	if not _is_item_sellable(normalized_item_id, item_library):
+		return {"success": false, "reason": "item_not_sellable", "item_id": normalized_item_id, "count": sell_count}
 	var unit_price: int = _trade_unit_price(normalized_item_id, float(shop.get("sell_price_modifier", 1.0)), item_library)
 	var total_price: int = unit_price * sell_count
 	if int(shop.get("money", 0)) < total_price:
@@ -123,6 +125,14 @@ func sell_equipped_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: 
 			"slot_id": normalized_slot_id,
 			"item_id": normalized_item_id,
 			"equipped_item_id": equipped_item_id,
+		}
+	if not _is_item_sellable(equipped_item_id, item_library):
+		return {
+			"success": false,
+			"reason": "item_not_sellable",
+			"slot_id": normalized_slot_id,
+			"item_id": equipped_item_id,
+			"count": 1,
 		}
 	var unit_price: int = _trade_unit_price(equipped_item_id, float(shop.get("sell_price_modifier", 1.0)), item_library)
 	var total_price: int = unit_price
@@ -232,6 +242,8 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 					"total_price": buy_unit_price * count,
 				})
 			"player":
+				if not _is_item_sellable(item_id, item_library):
+					return {"success": false, "reason": "item_not_sellable", "item_id": item_id, "count": count, "failed_index": index}
 				var sell_unit_price: int = _trade_unit_price(item_id, float(shop.get("sell_price_modifier", 1.0)), item_library)
 				sell_total += sell_unit_price * count
 				sell_counts[item_id] = int(sell_counts.get(item_id, 0)) + count
@@ -246,6 +258,8 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 				var slot_id: String = _equipment_slot_from_source(source)
 				if slot_id.is_empty():
 					return {"success": false, "reason": "unknown_trade_transfer_source", "source": source, "failed_index": index}
+				if not _is_item_sellable(item_id, item_library):
+					return {"success": false, "reason": "item_not_sellable", "item_id": item_id, "slot_id": slot_id, "count": count, "failed_index": index}
 				var equipped_sell_unit_price: int = _trade_unit_price(item_id, float(shop.get("sell_price_modifier", 1.0)), item_library)
 				sell_total += equipped_sell_unit_price * count
 				equipment_sell_counts[slot_id] = int(equipment_sell_counts.get(slot_id, 0)) + count
@@ -310,6 +324,25 @@ func _trade_unit_price(item_id: String, modifier: float, item_library: Dictionar
 	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	var base_value: int = max(0, int(data.get("value", 0)))
 	return max(1, int(round(float(base_value) * max(0.0, modifier))))
+
+
+func _is_item_sellable(item_id: String, item_library: Dictionary) -> bool:
+	var record: Dictionary = _dictionary_or_empty(item_library.get(item_id, {}))
+	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+	if data.is_empty():
+		return true
+	for key in ["sellable", "can_sell", "tradeable"]:
+		if data.has(key) and not bool(data.get(key)):
+			return false
+	for fragment in _array_or_empty(data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		var kind: String = str(fragment_data.get("kind", ""))
+		if kind in ["quest", "task", "key_item"]:
+			return false
+		for key in ["sellable", "can_sell", "tradeable"]:
+			if fragment_data.has(key) and not bool(fragment_data.get(key)):
+				return false
+	return true
 
 
 func _equipment_slot_from_source(source: String) -> String:
