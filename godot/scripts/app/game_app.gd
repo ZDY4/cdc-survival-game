@@ -277,6 +277,15 @@ func runtime_control_snapshot() -> Dictionary:
 func cycle_focused_actor() -> Dictionary:
 	if gameplay_input_blocked_by_ui():
 		return {"success": false, "reason": "ui_blocked", "actor_id": focused_actor_id}
+	var focused_actor: Dictionary = _focused_actor_data()
+	var busy_state: Dictionary = _focused_actor_busy_state(focused_actor)
+	if not busy_state.is_empty():
+		return {
+			"success": false,
+			"reason": "actor_busy",
+			"actor_id": int(focused_actor.get("actor_id", focused_actor_id)),
+			"busy": busy_state,
+		}
 	var candidates: Array[Dictionary] = _focus_actor_candidates()
 	if candidates.is_empty():
 		return {"success": false, "reason": "focus_actor_missing", "actor_id": focused_actor_id}
@@ -287,6 +296,7 @@ func cycle_focused_actor() -> Dictionary:
 			break
 	var next_actor: Dictionary = candidates[(current_index + 1) % candidates.size()]
 	focused_actor_id = int(next_actor.get("actor_id", 0))
+	_clear_focus_switch_ui_state()
 	if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
 		runtime_input_controller.focus_current_actor()
 	refresh_hud(current_interaction_prompt())
@@ -914,6 +924,29 @@ func _current_focus_level() -> int:
 
 func _is_player_side_actor(actor_data: Dictionary) -> bool:
 	return str(actor_data.get("side", "")) == "player" or str(actor_data.get("kind", "")) == "player"
+
+
+func _focused_actor_busy_state(focused_actor: Dictionary) -> Dictionary:
+	if focused_actor.is_empty() or simulation == null:
+		return {}
+	var actor_id := int(focused_actor.get("actor_id", 0))
+	var snapshot: Dictionary = simulation.snapshot()
+	var pending_movement: Dictionary = _dictionary_or_empty(snapshot.get("pending_movement", {}))
+	if not pending_movement.is_empty() and int(pending_movement.get("actor_id", 0)) == actor_id:
+		return {"kind": "pending_movement", "state": pending_movement.duplicate(true)}
+	var pending_interaction: Dictionary = _dictionary_or_empty(snapshot.get("pending_interaction", {}))
+	if not pending_interaction.is_empty() and int(pending_interaction.get("actor_id", 0)) == actor_id:
+		return {"kind": "pending_interaction", "state": pending_interaction.duplicate(true)}
+	return {}
+
+
+func _clear_focus_switch_ui_state() -> void:
+	if runtime_input_controller != null and runtime_input_controller.has_method("clear_selection_state"):
+		runtime_input_controller.clear_selection_state()
+	if interaction_controller != null:
+		interaction_controller.clear_selection()
+	if hud != null and hud.has_method("hide_interaction_menu"):
+		hud.hide_interaction_menu()
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

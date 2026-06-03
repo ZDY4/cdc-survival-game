@@ -61,7 +61,7 @@
 - 待迁移 `Esc` 关闭链路：targeting -> active dialogue -> interaction menu -> quantity modal -> trade modal -> stage panels -> settings -> pending interaction -> pending movement -> 打开 settings。
 - 待迁移数字键：对话选项 `1-9`、hotbar `1-0`、菜单内数量输入或快捷动作冲突处理。
 - 待迁移 `Space`：对话推进、等待/结束回合、长按重复等待、pending 取消、自由观察播放切换。
-- 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环与相机跟随；待补 actor busy 时阻止切换、free observe 和选中/提示状态清理。
+- 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环、相机跟随、actor busy 时阻止切换和选中/提示状态清理；待补 free observe。
 - 待迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick / observe playback、`F` 相机跟随、`PageUp/PageDown` 楼层切换。
 - 待迁移输入阻塞：console、debug panel、modal、stage panel、trade、container、context menu 打开时阻止 gameplay 点击/移动/攻击。
 

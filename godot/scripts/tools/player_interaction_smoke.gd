@@ -488,6 +488,19 @@ func _expect_focus_actor_tab_cycle(errors: Array[String], game_root: Node) -> vo
 	if camera == null:
 		errors.append("focus actor smoke should keep runtime camera")
 		return
+	game_root.simulation.pending_movement = {
+		"actor_id": 1,
+		"target_position": focus_grid.duplicate(true),
+		"path": [player_grid.duplicate(true), focus_grid.duplicate(true)],
+	}
+	_press_camera_zoom_key(game_root, KEY_TAB)
+	if int(game_root.focused_actor_snapshot().get("actor_id", 0)) != 1:
+		errors.append("Tab should not switch focus while the current actor is busy")
+	game_root.simulation.pending_movement.clear()
+	var trader_node: Node = game_root.find_child("Actor_trader_lao_wang_2", true, false)
+	if trader_node != null:
+		game_root.select_interaction_node(trader_node)
+		game_root.hud.show_interaction_menu(Vector2(320, 220), game_root.current_interaction_prompt())
 	_press_camera_zoom_key(game_root, KEY_TAB)
 	var focus_snapshot: Dictionary = game_root.focused_actor_snapshot()
 	if int(focus_snapshot.get("actor_id", 0)) != focus_actor_id:
@@ -498,6 +511,10 @@ func _expect_focus_actor_tab_cycle(errors: Array[String], game_root: Node) -> vo
 		errors.append("Tab should move camera focus to the selected focus actor")
 	if not _hud_runtime_control_line(game_root).contains("Focus Smoke"):
 		errors.append("HUD runtime control line should show the focused actor")
+	if bool(game_root.hud.is_interaction_menu_open()):
+		errors.append("Tab focus switch should hide the stale interaction menu")
+	if not _hud_interaction_line(game_root).contains("Target none"):
+		errors.append("Tab focus switch should clear the stale selected target prompt")
 	_press_camera_zoom_key(game_root, KEY_TAB)
 	if int(game_root.focused_actor_snapshot().get("actor_id", 0)) != 1:
 		errors.append("Tab should wrap focus back to the player actor")
