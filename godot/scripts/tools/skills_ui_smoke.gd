@@ -57,6 +57,22 @@ func _run_checks(game_root: Node) -> Array[String]:
 			await process_frame
 			if not _skill_text(game_root).contains("生存本能 0/5"):
 				errors.append("all filter should restore passive skill rows")
+	if _tree_filter_button(game_root, "survival") == null:
+		errors.append("skills panel should expose survival tree filter button")
+	else:
+		_tree_filter_button(game_root, "survival").pressed.emit()
+		await process_frame
+		if not _skill_text(game_root).contains("生存本能 0/5"):
+			errors.append("survival tree filter should keep survival skill rows")
+		if _skill_text(game_root).contains("战斗训练 0/5"):
+			errors.append("survival tree filter should hide combat skill rows")
+		if _tree_filter_button(game_root, "all") == null:
+			errors.append("skills panel should expose all tree filter button")
+		else:
+			_tree_filter_button(game_root, "all").pressed.emit()
+			await process_frame
+			if not _skill_text(game_root).contains("战斗训练 0/5"):
+				errors.append("all tree filter should restore combat skill rows")
 
 	var grant_result: Dictionary = game_root.simulation.grant_skill_points(1, 1, "skills_ui_smoke")
 	if not bool(grant_result.get("success", false)):
@@ -176,6 +192,11 @@ func _skill_line(game_root: Node, skill_id: String) -> String:
 
 
 func _filter_button(game_root: Node, node_name: String) -> Button:
+	return game_root.skills_panel.find_child(node_name, true, false) as Button
+
+
+func _tree_filter_button(game_root: Node, tree_id: String) -> Button:
+	var node_name: String = "TreeFilterAllButton" if tree_id == "all" else "TreeFilter_%s" % tree_id
 	return game_root.skills_panel.find_child(node_name, true, false) as Button
 
 

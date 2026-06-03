@@ -4,8 +4,10 @@ var _panel: PanelContainer
 var _summary_label: Label
 var _hotbar_label: Label
 var _filter_box: HBoxContainer
+var _tree_filter_box: HBoxContainer
 var _tree_box: VBoxContainer
 var _filter_mode: String = "all"
+var _tree_filter_mode: String = "all"
 var _last_snapshot: Dictionary = {}
 
 
@@ -26,9 +28,12 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		int(snapshot.get("available_skill_points", 0)),
 	]
 	_hotbar_label.text = _hotbar_text(snapshot.get("hotbar", {}))
+	_rebuild_tree_filter_buttons(snapshot)
 	_clear_trees()
 	for tree in snapshot.get("trees", []):
 		var tree_data: Dictionary = tree
+		if not _tree_matches_filter(tree_data):
+			continue
 		var visible_skills: Array[Dictionary] = _visible_skills(tree_data)
 		if visible_skills.is_empty():
 			continue
@@ -62,6 +67,9 @@ func _build_layout() -> void:
 	_filter_box = HBoxContainer.new()
 	_filter_box.name = "FilterBar"
 	_filter_box.add_theme_constant_override("separation", 4)
+	_tree_filter_box = HBoxContainer.new()
+	_tree_filter_box.name = "TreeFilterBar"
+	_tree_filter_box.add_theme_constant_override("separation", 4)
 	_tree_box = VBoxContainer.new()
 	_tree_box.name = "TreeLines"
 	_tree_box.add_theme_constant_override("separation", 4)
@@ -73,6 +81,7 @@ func _build_layout() -> void:
 	_add_filter_button("FilterAvailableButton", "可学", "available")
 	_add_filter_button("FilterLockedButton", "锁定", "locked")
 	_add_filter_button("FilterActiveButton", "主动", "active")
+	box.add_child(_tree_filter_box)
 	box.add_child(_tree_box)
 
 
@@ -83,6 +92,10 @@ func _tree_title(tree: Dictionary, visible_count: int) -> Label:
 		visible_count,
 	]
 	return label
+
+
+func _tree_matches_filter(tree: Dictionary) -> bool:
+	return _tree_filter_mode == "all" or str(tree.get("tree_id", "")) == _tree_filter_mode
 
 
 func _visible_skills(tree: Dictionary) -> Array[Dictionary]:
@@ -247,6 +260,42 @@ func _add_filter_button(node_name: String, text: String, mode: String) -> void:
 			apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
 	_filter_box.add_child(button)
+
+
+func _rebuild_tree_filter_buttons(snapshot: Dictionary) -> void:
+	if _tree_filter_box == null:
+		return
+	var tree_ids: Array[String] = []
+	for tree in snapshot.get("trees", []):
+		var tree_data: Dictionary = tree
+		var tree_id: String = str(tree_data.get("tree_id", ""))
+		if not tree_id.is_empty():
+			tree_ids.append(tree_id)
+	if _tree_filter_mode != "all" and not tree_ids.has(_tree_filter_mode):
+		_tree_filter_mode = "all"
+	for child in _tree_filter_box.get_children():
+		_tree_filter_box.remove_child(child)
+		child.free()
+	_add_tree_filter_button("TreeFilterAllButton", "全部树", "all")
+	for tree in snapshot.get("trees", []):
+		var tree_data: Dictionary = tree
+		var tree_id: String = str(tree_data.get("tree_id", ""))
+		if tree_id.is_empty():
+			continue
+		_add_tree_filter_button("TreeFilter_%s" % tree_id, str(tree_data.get("name", tree_id)), tree_id)
+
+
+func _add_tree_filter_button(node_name: String, text: String, tree_id: String) -> void:
+	var button := _button(node_name, text, "显示%s技能树" % text, false)
+	button.custom_minimum_size = Vector2(74, 28)
+	button.toggle_mode = true
+	button.button_pressed = _tree_filter_mode == tree_id
+	button.pressed.connect(func() -> void:
+		_tree_filter_mode = tree_id
+		if not _last_snapshot.is_empty():
+			apply_snapshot(_last_snapshot)
+	, CONNECT_DEFERRED)
+	_tree_filter_box.add_child(button)
 
 
 func _refresh_filter_buttons() -> void:
