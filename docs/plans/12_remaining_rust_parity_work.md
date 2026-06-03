@@ -1,13 +1,17 @@
 # Remaining Rust parity work
 
-本文记录对照 `G:\Projects\cdc_survival_game_bevy_reference` 后仍未完成的 Godot 运行时恢复项。当前主线已完成第一里程碑中的基础命令入口、AP/回合状态、交互解析、攻击、击杀、尸体容器和 hostile NPC attack / approach；以下内容仍待后续实现。
+本文记录对照 `G:\Projects\cdc_survival_game_bevy_reference` 后仍未完成的 Godot 运行时恢复项。当前主线已完成第一里程碑中的基础命令入口、AP/回合状态、交互解析、攻击、击杀、尸体容器、hostile NPC attack / approach，以及交互输入闭环；以下内容仍待后续实现。
 
 ## 交互与输入
 
-- 右键交互菜单需要恢复为可点击按钮 UI，而不只是查询当前 prompt。
-- 空地点击需要恢复旧版 grid fallback：点击可走格时提交移动命令，点击不可走格时给出明确失败原因。
-- 点击目标需要完整支持自动接近：目标距离过远时进入 pending movement / pending interaction，抵达后自动执行原交互。
-- Esc / Space / 目标切换时的 pending movement / pending interaction 取消策略仍需按旧 Rust 行为恢复。
+本阶段已恢复并通过 smoke 覆盖：
+
+- 右键交互菜单恢复为可点击按钮 UI，可从当前 prompt 执行指定 option。
+- 空地点击恢复 grid fallback：点击可走格时提交移动命令，不可走格沿用 movement/pathfinder 失败原因。
+- 点击远距离目标支持自动接近：先写入 pending movement / pending interaction，AP 足够时自动恢复执行，AP 不足时跨回合继续移动，抵达且 AP 足够后执行原交互。
+- Esc / Space / 显式取消会清空 pending movement / pending interaction，并发出 `pending_cancelled` 事件；Space 可按当前非战斗规则结束并刷新回合。
+
+后续若继续精修输入，可再对照旧 Rust 的目标切换细节、右键上下文菜单布局和失败提示文案。
 
 ## 战斗与目标系统
 
@@ -49,9 +53,8 @@
 
 ## 建议后续顺序
 
-1. 补右键交互菜单、空地移动和 pending 自动接近。
-2. 补武器/弹药/攻击速度/暴击和更完整战斗退出。
-3. 补背包/容器/交易上下文操作。
-4. 补 Skills、Hotbar 和主动技能目标预览。
-5. 补 Crafting 面板和任务交付反馈。
-6. 补 settlement life / GOAP / 后台日程。
+1. 补武器/弹药/攻击速度/暴击和更完整战斗退出。
+2. 补背包/容器/交易上下文操作。
+3. 补 Skills、Hotbar 和主动技能目标预览。
+4. 补 Crafting 面板和任务交付反馈。
+5. 补 settlement life / GOAP / 后台日程。

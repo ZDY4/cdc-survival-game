@@ -239,6 +239,34 @@ func execute_interaction(actor_id: int, target: Dictionary, option_id: String = 
 	return _interaction_executor.execute(self, actor_id, target, option_id)
 
 
+func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, topology: Dictionary = {}) -> Dictionary:
+	var actor_id: int = _player_actor_id()
+	var had_pending: bool = not pending_movement.is_empty() or not pending_interaction.is_empty()
+	var movement: Dictionary = pending_movement.duplicate(true)
+	var interaction: Dictionary = pending_interaction.duplicate(true)
+	pending_movement.clear()
+	pending_interaction.clear()
+	interaction_menu.clear()
+	if had_pending:
+		_emit("pending_cancelled", {
+			"actor_id": actor_id,
+			"reason": reason,
+			"movement": movement,
+			"interaction": interaction,
+		})
+	if had_pending and auto_end_turn:
+		var actor: RefCounted = actor_registry.get_actor(actor_id)
+		if actor != null and actor.turn_open and not bool(combat_state.get("active", false)):
+			_close_turn(actor_id, "pending_cancelled:%s" % reason)
+			advance_world_turn(topology)
+			_open_turn(actor_id, "player_turn")
+	return {
+		"success": true,
+		"had_pending": had_pending,
+		"reason": reason,
+	}
+
+
 func snapshot() -> Dictionary:
 	return _snapshot_codec.build(self)
 
@@ -260,13 +288,16 @@ func _submit_wait_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 		"actor_id": actor.actor_id,
 		"ap_before": actor.ap,
 	})
+	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
 	_close_turn(actor.actor_id, "wait")
-	var npc_results: Array[Dictionary] = advance_world_turn(_dictionary_or_empty(command.get("topology", {})))
+	var npc_results: Array[Dictionary] = advance_world_turn(topology)
 	_open_turn(actor.actor_id, "player_turn")
+	var pending_result: Dictionary = _resume_pending_for_actor(actor, topology)
 	return {
 		"success": true,
 		"kind": "wait",
 		"npc_results": npc_results,
+		"pending_result": pending_result,
 		"turn_state": turn_state.duplicate(true),
 	}
 
@@ -347,7 +378,13 @@ func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Diction
 				"actor_id": actor.actor_id,
 				"target_actor_id": int(option.get("target_actor_id", 0)),
 				"topology": command.get("topology", {}),
+				"source_target": target,
+				"source_option_id": option_id,
 			})
+
+	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
+	if not _actor_can_reach_interaction(actor, prompt):
+		return _approach_then_execute_interaction(actor, target, option_id, prompt, topology)
 
 	var cost: float = float(command.get("ap_cost", DEFAULT_INTERACTION_AP))
 	if actor.ap < cost:
@@ -377,6 +414,15 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 	var target: RefCounted = actor_registry.get_actor(target_actor_id)
 	if target == null:
 		return {"success": false, "reason": "unknown_target"}
+	var attack_range: int = int(command.get("range", DEFAULT_ATTACK_RANGE))
+	if _grid_distance(actor.grid_position, target.grid_position) > attack_range:
+		var source_target: Dictionary = _dictionary_or_empty(command.get("source_target", {
+			"target_type": "actor",
+			"actor_id": target_actor_id,
+		}))
+		var source_option_id: String = str(command.get("source_option_id", "attack"))
+		var prompt: Dictionary = query_interaction_options(actor.actor_id, source_target)
+		return _approach_then_execute_interaction(actor, source_target, source_option_id, prompt, _dictionary_or_empty(command.get("topology", {})))
 	var attack_cost: float = float(command.get("ap_cost", DEFAULT_ATTACK_AP))
 	if actor.ap < attack_cost:
 		pending_interaction = {
@@ -395,7 +441,7 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 	_spend_ap(actor, attack_cost, "attack")
 	_enter_combat([actor.actor_id, target_actor_id], "player_attack")
 	var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, _dictionary_or_empty(command.get("topology", {})), {
-		"range": int(command.get("range", DEFAULT_ATTACK_RANGE)),
+		"range": attack_range,
 	})
 	if bool(result.get("success", false)):
 		pending_interaction.clear()
@@ -597,6 +643,251 @@ func _interaction_option(prompt: Dictionary, option_id: String) -> Dictionary:
 		if str(option_data.get("id", "")) == option_id:
 			return option_data
 	return _dictionary_or_empty(_array_or_empty(prompt.get("options", [])).front() if not _array_or_empty(prompt.get("options", [])).is_empty() else {})
+
+
+func _actor_can_reach_interaction(actor: RefCounted, prompt: Dictionary) -> bool:
+	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	match str(target.get("target_type", "")):
+		"actor":
+			var target_actor: RefCounted = actor_registry.get_actor(int(target.get("actor_id", 0)))
+			if target_actor == null:
+				return false
+			return _grid_distance(actor.grid_position, target_actor.grid_position) <= 1
+		"map_object":
+			for cell in _array_or_empty(target.get("cells", [])):
+				var cell_coord: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(cell))
+				if _grid_distance(actor.grid_position, cell_coord) <= 1:
+					return true
+			var anchor: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(target.get("anchor", {})))
+			return _grid_distance(actor.grid_position, anchor) <= 1
+		_:
+			return true
+
+
+func _approach_then_execute_interaction(actor: RefCounted, target: Dictionary, option_id: String, prompt: Dictionary, topology: Dictionary) -> Dictionary:
+	if topology.is_empty():
+		return {"success": false, "reason": "approach_topology_missing", "prompt": prompt}
+	var approach_goal: Variant = _approach_goal_for_prompt(actor, prompt, topology)
+	if typeof(approach_goal) != TYPE_DICTIONARY:
+		return {"success": false, "reason": "approach_target_unreachable", "prompt": prompt}
+	var approach_plan: Dictionary = _pathfinder.find_path(actor.grid_position, GridCoord.from_dictionary(approach_goal), topology, _occupied_actor_cells(actor.actor_id))
+	if not bool(approach_plan.get("success", false)):
+		return {
+			"success": false,
+			"reason": approach_plan.get("reason", "approach_path_unavailable"),
+			"prompt": prompt,
+			"approach_result": approach_plan,
+		}
+	pending_movement = {
+		"actor_id": actor.actor_id,
+		"target_position": approach_goal.duplicate(true),
+		"path": _array_or_empty(approach_plan.get("path", [])).duplicate(true),
+		"required_ap": float(max(0, int(approach_plan.get("steps", 0)))),
+		"available_ap": actor.ap,
+		"after_movement_interaction": {
+			"target": target.duplicate(true),
+			"option_id": option_id,
+		},
+	}
+	pending_interaction = {
+		"actor_id": actor.actor_id,
+		"target": target.duplicate(true),
+		"option_id": option_id,
+		"after_movement": true,
+	}
+	_emit("movement_queued", pending_movement.duplicate(true))
+	_emit("interaction_queued", pending_interaction.duplicate(true))
+	var move_result: Dictionary = _advance_pending_movement(actor, topology)
+	if not bool(move_result.get("success", false)):
+		return {
+			"success": false,
+			"reason": move_result.get("reason", "approach_move_failed"),
+			"move_result": move_result,
+			"pending_interaction": pending_interaction.duplicate(true),
+			"prompt": prompt,
+		}
+	if not bool(move_result.get("completed", false)):
+		return {
+			"success": true,
+			"kind": "approach_queued",
+			"reason": "approach_movement_pending",
+			"approach_result": move_result,
+			"pending_movement": pending_movement.duplicate(true),
+			"pending_interaction": pending_interaction.duplicate(true),
+			"prompt": prompt,
+		}
+	return _resume_pending_interaction(actor, topology, move_result)
+
+
+func _approach_goal_for_prompt(actor: RefCounted, prompt: Dictionary, topology: Dictionary) -> Variant:
+	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	var candidates: Array[RefCounted] = []
+	match str(target.get("target_type", "")):
+		"actor":
+			var target_actor: RefCounted = actor_registry.get_actor(int(target.get("actor_id", 0)))
+			if target_actor != null:
+				candidates = _adjacent_goals(target_actor.grid_position)
+		"map_object":
+			for cell in _array_or_empty(target.get("cells", [])):
+				var cell_coord: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(cell))
+				candidates.append_array(_adjacent_goals(cell_coord))
+			if candidates.is_empty():
+				candidates = _adjacent_goals(GridCoord.from_dictionary(_dictionary_or_empty(target.get("anchor", {}))))
+	var best_plan: Dictionary = {}
+	var best_goal: RefCounted = null
+	for goal in candidates:
+		var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, _occupied_actor_cells(actor.actor_id))
+		if not bool(plan.get("success", false)):
+			continue
+		if best_plan.is_empty() or int(plan.get("steps", 999999)) < int(best_plan.get("steps", 999999)):
+			best_plan = plan
+			best_goal = goal
+	if best_goal == null:
+		return null
+	return best_goal.to_dictionary()
+
+
+func _resume_pending_for_actor(actor: RefCounted, topology: Dictionary) -> Dictionary:
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	if pending_movement.is_empty() and pending_interaction.is_empty():
+		return {"success": true, "resumed": false}
+	if int(pending_movement.get("actor_id", actor.actor_id)) != actor.actor_id and int(pending_interaction.get("actor_id", actor.actor_id)) != actor.actor_id:
+		return {"success": false, "reason": "pending_actor_mismatch"}
+
+	var movement_result: Dictionary = {}
+	if not pending_movement.is_empty():
+		movement_result = _advance_pending_movement(actor, topology)
+		if not bool(movement_result.get("success", false)):
+			return movement_result
+		if not bool(movement_result.get("completed", false)):
+			return {
+				"success": true,
+				"resumed": true,
+				"kind": "pending_movement",
+				"pending_movement": pending_movement.duplicate(true),
+				"movement_result": movement_result,
+			}
+	if pending_interaction.is_empty():
+		return {
+			"success": true,
+			"resumed": not movement_result.is_empty(),
+			"kind": "pending_movement_completed",
+			"movement_result": movement_result,
+		}
+	return _resume_pending_interaction(actor, topology, movement_result)
+
+
+func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dictionary:
+	if pending_movement.is_empty():
+		return {"success": true, "completed": true, "steps": 0}
+	if topology.is_empty():
+		return {"success": false, "reason": "pending_move_topology_missing"}
+	var goal: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(pending_movement.get("target_position", {})))
+	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, _occupied_actor_cells(actor.actor_id))
+	if not bool(plan.get("success", false)):
+		return {
+			"success": false,
+			"reason": plan.get("reason", "pending_move_path_unavailable"),
+			"pending_movement": pending_movement.duplicate(true),
+			"path_result": plan,
+		}
+	var path: Array = _array_or_empty(plan.get("path", []))
+	var total_steps: int = int(plan.get("steps", 0))
+	if total_steps <= 0:
+		pending_movement.clear()
+		return {"success": true, "completed": true, "steps": 0, "to": actor.grid_position.to_dictionary(), "path": path}
+	var affordable_steps: int = min(total_steps, int(floor(actor.ap)))
+	if affordable_steps <= 0:
+		return {
+			"success": true,
+			"completed": false,
+			"reason": "ap_insufficient_movement_queued",
+			"steps": 0,
+			"pending_movement": pending_movement.duplicate(true),
+		}
+	var destination: Dictionary = _dictionary_or_empty(path[affordable_steps])
+	var from: Dictionary = actor.grid_position.to_dictionary()
+	_spend_ap(actor, float(affordable_steps), "pending_move")
+	actor.grid_position = GridCoord.from_dictionary(destination)
+	for step in path.slice(1, affordable_steps + 1):
+		_emit("movement_step", {
+			"actor_id": actor.actor_id,
+			"to": _dictionary_or_empty(step),
+		})
+	_emit("actor_moved", {
+		"actor_id": actor.actor_id,
+		"from": from,
+		"to": destination,
+		"steps": affordable_steps,
+	})
+	var completed := affordable_steps >= total_steps
+	if completed:
+		pending_movement.clear()
+	else:
+		pending_movement["target_position"] = goal.to_dictionary()
+		pending_movement["path"] = path.slice(affordable_steps)
+		pending_movement["required_ap"] = float(total_steps - affordable_steps)
+		pending_movement["available_ap"] = actor.ap
+		_emit("movement_queued", pending_movement.duplicate(true))
+	return {
+		"success": true,
+		"completed": completed,
+		"kind": "move",
+		"actor_id": actor.actor_id,
+		"from": from,
+		"to": destination,
+		"path": path,
+		"steps": affordable_steps,
+		"remaining_steps": max(0, total_steps - affordable_steps),
+		"ap_remaining": actor.ap,
+	}
+
+
+func _resume_pending_interaction(actor: RefCounted, topology: Dictionary, movement_result: Dictionary = {}) -> Dictionary:
+	if pending_interaction.is_empty():
+		return {
+			"success": true,
+			"resumed": false,
+			"approach_result": movement_result,
+		}
+	var queued: Dictionary = pending_interaction.duplicate(true)
+	var prompt: Dictionary = query_interaction_options(actor.actor_id, _dictionary_or_empty(queued.get("target", {})))
+	var option_id: String = str(queued.get("option_id", ""))
+	var option: Dictionary = _interaction_option(prompt, option_id)
+	var cost: float = DEFAULT_ATTACK_AP if str(option.get("kind", "")) == "attack" else DEFAULT_INTERACTION_AP
+	if actor.ap < cost:
+		pending_interaction = queued
+		pending_interaction["required_ap"] = cost
+		pending_interaction["available_ap"] = actor.ap
+		_emit("interaction_queued", pending_interaction.duplicate(true))
+		return {
+			"success": true,
+			"resumed": true,
+			"kind": "pending_interaction",
+			"reason": "ap_insufficient_interaction_queued",
+			"approach_result": movement_result,
+			"pending_interaction": pending_interaction.duplicate(true),
+			"prompt": prompt,
+		}
+	pending_interaction.clear()
+	var resumed: Dictionary = _submit_interact_command(actor, {
+		"kind": "interact",
+		"actor_id": actor.actor_id,
+		"target": _dictionary_or_empty(queued.get("target", {})),
+		"option_id": option_id,
+		"topology": topology,
+	})
+	resumed["approach_result"] = movement_result
+	resumed["auto_resumed_interaction"] = true
+	resumed["resumed_pending_interaction"] = queued
+	return resumed
+
+
+func _grid_distance(left: RefCounted, right: RefCounted) -> int:
+	if left == null or right == null or left.y != right.y:
+		return 999999
+	return abs(left.x - right.x) + abs(left.z - right.z)
 
 
 func _occupied_actor_cells(excluded_actor_id: int) -> Dictionary:

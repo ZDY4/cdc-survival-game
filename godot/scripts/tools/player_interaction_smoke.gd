@@ -2,6 +2,8 @@ extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
 const MapSceneLoaderScript = preload("res://scripts/world/map_scene_loader.gd")
+const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
+const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
 func _init() -> void:
@@ -70,6 +72,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("visible pickup selection failed: %s" % visual_pickup_selection.get("prompt", {}).get("reason", "unknown"))
 		elif not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after visible pickup selection")
+		_expect_right_click_menu_buttons(errors, game_root)
 
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if camera == null:
@@ -95,7 +98,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _hud_interaction_line(game_root).contains("拾取"):
 		errors.append("HUD did not show pickup prompt after node selection")
 
-	var pickup_result: Dictionary = game_root.execute_primary_interaction()
+	var pickup_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(pickup_result.get("success", false)):
 		errors.append("pickup execution failed: %s" % pickup_result.get("reason", "unknown"))
 	if int(_player_inventory(game_root).get("1006", 0)) <= 0:
@@ -103,6 +106,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false) != null:
 		errors.append("consumed pickup node was not removed from generated scene")
+	_expect_ground_grid_move(errors, game_root)
+	_expect_cancel_pending(errors, game_root)
 
 	var door_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
 	if door_node == null:
@@ -112,7 +117,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var door_selection: Dictionary = game_root.select_interaction_node(door_node)
 	if not bool(door_selection.get("success", false)):
 		errors.append("door selection failed: %s" % door_selection.get("prompt", {}).get("reason", "unknown"))
-	var transition_result: Dictionary = game_root.execute_primary_interaction()
+	var transition_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(transition_result.get("success", false)):
 		errors.append("door execution failed: %s" % transition_result.get("reason", "unknown"))
 	if game_root.simulation.active_map_id != "survivor_outpost_01_interior":
@@ -135,6 +140,111 @@ func _player_inventory(game_root: Node) -> Dictionary:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return actor_data.get("inventory", {})
 	return {}
+
+
+func _execute_primary_and_complete(game_root: Node, max_waits: int = 8) -> Dictionary:
+	var result: Dictionary = game_root.execute_primary_interaction()
+	var waits := 0
+	while waits < max_waits and _has_pending(game_root) and not _final_interaction_result(result):
+		waits += 1
+		var wait_result: Dictionary = game_root.simulation.submit_player_command({
+			"kind": "wait",
+			"topology": game_root.world_result.get("map", {}),
+		})
+		var pending_result: Dictionary = wait_result.get("pending_result", {})
+		result = pending_result if not pending_result.is_empty() else wait_result
+		_refresh_runtime_world(game_root, result)
+	return result
+
+
+func _refresh_runtime_world(game_root: Node, result: Dictionary) -> void:
+	var rebuilt: Dictionary = WorldSnapshotBuilder.new(game_root.registry).build_from_runtime_snapshot(game_root.simulation.snapshot())
+	if bool(rebuilt.get("ok", false)):
+		game_root.world_result = rebuilt
+		game_root.interaction_controller.world_result = rebuilt
+		game_root.simulation.configure_map_interactions(rebuilt.get("map", {}).get("interaction_targets", {}))
+	game_root._setup_world_container()
+	WorldSceneRenderer.new().render_world(game_root.world_container, game_root.world_result)
+	game_root._setup_runtime_input_controller()
+	game_root._refresh_fog_overlay()
+	game_root._setup_panels()
+	game_root.refresh_all_panels(result.get("prompt", {}))
+
+
+func _has_pending(game_root: Node) -> bool:
+	var snapshot: Dictionary = game_root.simulation.snapshot()
+	return not snapshot.get("pending_movement", {}).is_empty() or not snapshot.get("pending_interaction", {}).is_empty()
+
+
+func _final_interaction_result(result: Dictionary) -> bool:
+	if not bool(result.get("success", false)):
+		return true
+	return bool(result.get("consumed_target", false)) \
+		or result.has("dialogue_id") \
+		or result.has("container") \
+		or result.has("context_snapshot") \
+		or bool(result.get("waited", false)) \
+		or bool(result.get("defeated", false))
+
+
+func _expect_right_click_menu_buttons(errors: Array[String], game_root: Node) -> void:
+	game_root.hud.show_interaction_menu(Vector2(260, 220), game_root.current_interaction_prompt())
+	var menu: Control = game_root.hud.find_child("InteractionMenu", true, false) as Control
+	if menu == null:
+		errors.append("HUD should create right-click interaction menu")
+		return
+	if not menu.visible:
+		errors.append("right-click interaction menu should be visible for selected target")
+	var option_button: Button = menu.find_child("Option_pickup", true, false) as Button
+	if option_button == null:
+		errors.append("right-click interaction menu should expose pickup option button")
+	elif option_button.text != "拾取":
+		errors.append("right-click interaction menu pickup option should use localized display name")
+	game_root.hud.hide_interaction_menu()
+	if menu.visible:
+		errors.append("right-click interaction menu should hide on request")
+
+
+func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
+	var before: Dictionary = _player_grid(game_root)
+	var target := {
+		"x": int(before.get("x", 0)) + 1,
+		"y": int(before.get("y", 0)),
+		"z": int(before.get("z", 0)),
+	}
+	var result: Dictionary = game_root.execute_move_to_grid(target)
+	if not bool(result.get("success", false)):
+		errors.append("ground grid fallback move failed: %s" % result.get("reason", "unknown"))
+	var after: Dictionary = _player_grid(game_root)
+	if int(after.get("x", 0)) != int(target.get("x", 0)) or int(after.get("z", 0)) != int(target.get("z", 0)):
+		errors.append("ground grid fallback move should update player grid")
+	if not _hud_interaction_line(game_root).contains("移动"):
+		errors.append("ground grid fallback selection should show move prompt")
+
+
+func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:
+	var before: Dictionary = _player_grid(game_root)
+	var far_target := {
+		"x": int(before.get("x", 0)) + 12,
+		"y": int(before.get("y", 0)),
+		"z": int(before.get("z", 0)),
+	}
+	var move_result: Dictionary = game_root.execute_move_to_grid(far_target)
+	if bool(move_result.get("success", false)):
+		errors.append("far grid move should queue pending movement instead of completing in one turn")
+	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
+		errors.append("far grid move should leave pending_movement")
+	var cancel_result: Dictionary = game_root.cancel_pending("smoke_cancel", false)
+	if not bool(cancel_result.get("had_pending", false)):
+		errors.append("cancel_pending should report an existing pending action")
+	var snapshot: Dictionary = game_root.simulation.snapshot()
+	if not snapshot.get("pending_movement", {}).is_empty() or not snapshot.get("pending_interaction", {}).is_empty():
+		errors.append("cancel_pending should clear pending movement and interaction")
+
+
+func _player_grid(game_root: Node) -> Dictionary:
+	var actor: Dictionary = _actor_by_id(game_root.simulation.snapshot(), 1)
+	return actor.get("grid_position", {})
 
 
 func _expect_actor_model_instance(errors: Array[String], actor_node: Node3D) -> void:
@@ -192,7 +302,7 @@ func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node
 	var exit_selection: Dictionary = game_root.select_interaction_node(exit_node)
 	if not bool(exit_selection.get("success", false)):
 		errors.append("interior exit selection failed: %s" % exit_selection.get("prompt", {}).get("reason", "unknown"))
-	var return_result: Dictionary = game_root.execute_primary_interaction()
+	var return_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(return_result.get("success", false)):
 		errors.append("interior exit execution failed: %s" % return_result.get("reason", "unknown"))
 	await process_frame

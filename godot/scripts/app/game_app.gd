@@ -146,15 +146,41 @@ func execute_primary_interaction() -> Dictionary:
 		return {"success": false, "reason": "interaction_controller_missing"}
 	var executed_target: Dictionary = interaction_controller.selected_target.duplicate(true)
 	var result: Dictionary = interaction_controller.execute_primary_interaction()
-	_update_trade_target_after_interaction(result, executed_target)
+	_apply_interaction_execution_result(result, executed_target)
+	return result
+
+
+func execute_interaction_option(option_id: String) -> Dictionary:
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var executed_target: Dictionary = interaction_controller.selected_target.duplicate(true)
+	var result: Dictionary = interaction_controller.execute_selected_option(option_id)
+	_apply_interaction_execution_result(result, executed_target)
+	return result
+
+
+func select_grid_target(grid: Dictionary) -> Dictionary:
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var result: Dictionary = interaction_controller.select_grid(grid)
+	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
+	return result
+
+
+func execute_move_to_grid(grid: Dictionary) -> Dictionary:
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var result: Dictionary = interaction_controller.execute_move_to_grid(grid)
 	world_result = interaction_controller.world_result
-	# 地图切换或对象消费后需要重绘占位世界，保证 scene tree 与运行时快照一致。
-	_setup_world_container()
-	WorldSceneRenderer.new().render_world(world_container, world_result)
-	_setup_runtime_input_controller()
-	_refresh_fog_overlay()
-	_setup_panels()
-	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
+	_rebuild_world_after_runtime_change(_dictionary_or_empty(result.get("prompt", {})))
+	return result
+
+
+func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false) -> Dictionary:
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var result: Dictionary = interaction_controller.cancel_pending(reason, auto_end_turn)
+	refresh_all_panels(current_interaction_prompt())
 	return result
 
 
@@ -287,6 +313,18 @@ func _update_trade_target_after_interaction(result: Dictionary, executed_target:
 		option_kind = str(option.get("kind", ""))
 	if option_kind == "talk" and executed_target.get("target_type", "") == "actor":
 		active_trade_target = executed_target.duplicate(true)
+
+
+func _apply_interaction_execution_result(result: Dictionary, executed_target: Dictionary) -> void:
+	_update_trade_target_after_interaction(result, executed_target)
+	world_result = interaction_controller.world_result
+	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
+	_setup_world_container()
+	WorldSceneRenderer.new().render_world(world_container, world_result)
+	_setup_runtime_input_controller()
+	_refresh_fog_overlay()
+	_setup_panels()
+	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
 
 
 func _dialogue_trade_target() -> Dictionary:

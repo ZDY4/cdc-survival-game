@@ -35,7 +35,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		if not first_snapshot.has(key):
 			errors.append("runtime snapshot missing %s" % key)
 	var topology: Dictionary = _topology(simulation, registry)
-	var pickup_result: Dictionary = simulation.submit_player_command({
+	var pickup_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
 			"target_type": "map_object",
@@ -48,7 +48,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	if int(player.inventory.get("1006", 0)) <= 0:
 		errors.append("pickup did not add item 1006 to player inventory")
-	var second_pickup: Dictionary = simulation.submit_player_command({
+	var second_pickup: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
 			"target_type": "map_object",
@@ -59,7 +59,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	if bool(second_pickup.get("success", false)):
 		errors.append("pickup target was not consumed")
 
-	var talk_result: Dictionary = simulation.submit_player_command({
+	var talk_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
 			"target_type": "actor",
@@ -72,7 +72,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	if talk_result.get("dialogue_id", "") != "trader_lao_wang":
 		errors.append("talk did not resolve trader_lao_wang dialogue")
 
-	var container_result: Dictionary = simulation.submit_player_command({
+	var container_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
 			"target_type": "map_object",
@@ -103,7 +103,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	if _event_count(simulation.snapshot(), "turn_ended") <= 0:
 		errors.append("self wait should end the current turn")
 
-	var transition_result: Dictionary = simulation.submit_player_command({
+	var transition_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
 			"target_type": "map_object",
@@ -115,6 +115,68 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("scene transition failed: %s" % transition_result.get("reason", "unknown"))
 	if simulation.active_map_id != "survivor_outpost_01_interior":
 		errors.append("scene transition did not update active map")
+	var approach_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var approach_errors: Array[String] = _expect_auto_approach_interaction(approach_simulation, registry)
+	errors.append_array(approach_errors)
+	return errors
+
+
+func _submit_and_complete(simulation: RefCounted, registry: RefCounted, command: Dictionary, max_waits: int = 8) -> Dictionary:
+	var result: Dictionary = simulation.submit_player_command(command)
+	var waits := 0
+	while waits < max_waits and _has_pending(simulation) and not _final_interaction_result(result):
+		waits += 1
+		var wait_result: Dictionary = simulation.submit_player_command({
+			"kind": "wait",
+			"topology": _topology(simulation, registry),
+		})
+		var pending_result: Dictionary = wait_result.get("pending_result", {})
+		result = pending_result if not pending_result.is_empty() else wait_result
+	return result
+
+
+func _has_pending(simulation: RefCounted) -> bool:
+	var snapshot: Dictionary = simulation.snapshot()
+	return not snapshot.get("pending_movement", {}).is_empty() or not snapshot.get("pending_interaction", {}).is_empty()
+
+
+func _final_interaction_result(result: Dictionary) -> bool:
+	if not bool(result.get("success", false)):
+		return true
+	return bool(result.get("consumed_target", false)) \
+		or result.has("dialogue_id") \
+		or result.has("container") \
+		or result.has("context_snapshot") \
+		or bool(result.get("waited", false)) \
+		or bool(result.get("defeated", false))
+
+
+func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var topology: Dictionary = _topology(simulation, registry)
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.ap = 20.0
+	var trader: RefCounted = simulation.actor_registry.get_actor(2)
+	trader.grid_position.x = player.grid_position.x + 4
+	trader.grid_position.z = player.grid_position.z
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "actor",
+			"actor_id": trader.actor_id,
+		},
+		"topology": topology,
+	})
+	if not bool(result.get("success", false)):
+		errors.append("far talk should auto approach then execute: %s" % result.get("reason", "unknown"))
+	if not bool(result.get("auto_resumed_interaction", false)):
+		errors.append("far talk should report auto_resumed_interaction")
+	if player.active_dialogue_id != "trader_lao_wang":
+		errors.append("far talk should start trader dialogue after approach")
+	if _event_count(simulation.snapshot(), "movement_queued") <= 0:
+		errors.append("far talk should emit movement_queued before auto resume")
+	if _event_count(simulation.snapshot(), "interaction_queued") <= 0:
+		errors.append("far talk should emit interaction_queued before auto resume")
 	return errors
 
 

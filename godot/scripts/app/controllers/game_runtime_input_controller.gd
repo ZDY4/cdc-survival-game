@@ -89,11 +89,19 @@ func unhandled_input(event: InputEvent) -> void:
 			else:
 				has_camera_drag_anchor = false
 		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
-			update_hover_at_screen_position(mouse_event.position)
+			var hover_result: Dictionary = update_hover_at_screen_position(mouse_event.position)
 			if selected_node != null and game_root.has_method("execute_primary_interaction"):
 				game_root.execute_primary_interaction()
+			elif str(hover_result.get("kind", "")) == "ground" and game_root.has_method("execute_move_to_grid"):
+				var ground_position: Vector3 = hover_result.get("position", Vector3.ZERO)
+				game_root.execute_move_to_grid(_grid_from_world_position(ground_position))
 		elif mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed:
-			update_hover_at_screen_position(mouse_event.position)
+			var right_hover: Dictionary = update_hover_at_screen_position(mouse_event.position)
+			if str(right_hover.get("kind", "")) == "ground" and game_root.has_method("select_grid_target"):
+				var right_ground_position: Vector3 = right_hover.get("position", Vector3.ZERO)
+				game_root.select_grid_target(_grid_from_world_position(right_ground_position))
+			if game_root.hud != null and game_root.hud.has_method("show_interaction_menu") and game_root.has_method("current_interaction_prompt"):
+				game_root.hud.show_interaction_menu(mouse_event.position, game_root.current_interaction_prompt())
 		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
 			_zoom_camera_wheel(1.0)
 		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
@@ -147,6 +155,11 @@ func _handle_camera_key(event: InputEventKey) -> void:
 		has_camera_drag_anchor = false
 		camera_target = _clamp_camera_target(_player_focus_position())
 		_apply_camera_transform()
+	elif key == KEY_ESCAPE or key == KEY_SPACE:
+		if game_root.has_method("cancel_pending"):
+			game_root.cancel_pending("keyboard", key == KEY_SPACE)
+		if game_root.hud != null and game_root.hud.has_method("hide_interaction_menu"):
+			game_root.hud.hide_interaction_menu()
 
 
 func _begin_camera_drag(screen_position: Vector2) -> void:
@@ -289,6 +302,14 @@ func _clear_selection_only() -> void:
 	selected_node = null
 	if game_root.has_method("clear_interaction_selection"):
 		game_root.clear_interaction_selection()
+
+
+func _grid_from_world_position(world_position: Vector3) -> Dictionary:
+	return {
+		"x": int(roundf(world_position.x / GRID_SIZE)),
+		"y": 0,
+		"z": int(roundf(world_position.z / GRID_SIZE)),
+	}
 
 
 func _interaction_node(node: Node) -> Node:
