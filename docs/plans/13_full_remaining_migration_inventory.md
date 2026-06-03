@@ -196,7 +196,7 @@
 - 已有 equip / unequip 命令，角色面板固定装备槽、空槽状态、主手/副手/accessory 多槽显示和已装备槽卸下按钮第一版，并纳入 `UIToggle` smoke；允许槽校验由 core 装备规则执行。
 - 角色面板已展示装备详情第一版：价值、重量、稀有度、武器伤害/射程/攻速/弹药、耐久、属性修饰和外观资源，并纳入 `UIToggle` smoke；待补属性变化对比和更完整的装备 tooltip。
 - 已有装备视觉实时更新第一版：Inventory 和 Character 面板装备/卸下会重建世界，主手模型替换、卸下移除和恢复已纳入 `InventoryUI` / `UIToggle` smoke；待补替换 body region、武器挂点精调和更多装备槽视觉验证。
-- 待补 reload equipped weapon、弹药显示、装备特效应用、卸下失败提示。
+- 角色面板已显示远程武器当前弹药数量 / 弹匣容量第一版，并纳入 `UIToggle` smoke；待补 reload equipped weapon、装备特效应用、卸下失败提示。
 
 ### 8.3 容器
 

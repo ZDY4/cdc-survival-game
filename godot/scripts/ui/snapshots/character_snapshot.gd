@@ -25,6 +25,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	var progression: Dictionary = _dictionary_or_empty(player.get("progression", {}))
 	var attributes: Dictionary = _dictionary_or_empty(progression.get("attributes", {}))
 	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
+	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	return {
 		"owner_actor_id": int(player.get("actor_id", 0)),
 		"owner_name": str(player.get("display_name", "")),
@@ -36,11 +37,11 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"max_hp": float(_dictionary_or_empty(player.get("combat", {})).get("max_hp", 0.0)),
 		"ap": float(player.get("ap", 0.0)),
 		"attributes": attributes.duplicate(true),
-		"equipment": _equipment_snapshot(equipment),
+		"equipment": _equipment_snapshot(equipment, inventory),
 	}
 
 
-func _equipment_snapshot(equipment: Dictionary) -> Array[Dictionary]:
+func _equipment_snapshot(equipment: Dictionary, inventory: Dictionary) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	var seen_slots: Dictionary = {}
 	for slot in EQUIPMENT_SLOTS:
@@ -48,7 +49,7 @@ func _equipment_snapshot(equipment: Dictionary) -> Array[Dictionary]:
 		var slot_id: String = str(slot_data.get("slot_id", ""))
 		var actual_slot_id: String = _actual_slot_id(equipment, slot_id)
 		var item_id: String = str(equipment.get(actual_slot_id, ""))
-		rows.append(_equipment_row(slot_id, str(slot_data.get("label", slot_id)), actual_slot_id, item_id))
+		rows.append(_equipment_row(slot_id, str(slot_data.get("label", slot_id)), actual_slot_id, item_id, inventory))
 		seen_slots[actual_slot_id] = true
 	var extra_slots: Array = equipment.keys()
 	extra_slots.sort()
@@ -56,11 +57,11 @@ func _equipment_snapshot(equipment: Dictionary) -> Array[Dictionary]:
 		var extra_slot_id: String = str(extra_slot)
 		if bool(seen_slots.get(extra_slot_id, false)):
 			continue
-		rows.append(_equipment_row(extra_slot_id, extra_slot_id, extra_slot_id, str(equipment.get(extra_slot_id, ""))))
+		rows.append(_equipment_row(extra_slot_id, extra_slot_id, extra_slot_id, str(equipment.get(extra_slot_id, "")), inventory))
 	return rows
 
 
-func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item_id: String) -> Dictionary:
+func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item_id: String, inventory: Dictionary) -> Dictionary:
 	var data: Dictionary = _item_data(item_id)
 	var equipped: bool = not item_id.is_empty()
 	return {
@@ -73,7 +74,7 @@ func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item
 		"value": int(data.get("value", 0)),
 		"weight": float(data.get("weight", 0.0)),
 		"rarity": _rarity(data),
-		"details": _equipment_details(data),
+		"details": _equipment_details(data, inventory),
 		"equipped": equipped,
 	}
 
@@ -101,7 +102,7 @@ func _rarity(item_data: Dictionary) -> String:
 	return ""
 
 
-func _equipment_details(item_data: Dictionary) -> Array[String]:
+func _equipment_details(item_data: Dictionary, inventory: Dictionary) -> Array[String]:
 	var details: Array[String] = []
 	var weapon: Dictionary = _fragment_by_kind(item_data, "weapon")
 	if not weapon.is_empty():
@@ -110,10 +111,14 @@ func _equipment_details(item_data: Dictionary) -> Array[String]:
 			"射程 %d" % int(weapon.get("range", 0)),
 			"攻速 %.1f" % float(weapon.get("attack_speed", 0.0)),
 		]
-		if weapon.get("ammo_type", null) != null:
-			weapon_parts.append("弹药 %s" % str(weapon.get("ammo_type", "")))
-		if weapon.get("max_ammo", null) != null:
-			weapon_parts.append("弹匣 %d" % int(weapon.get("max_ammo", 0)))
+		var ammo_type: String = _normalize_item_id(weapon.get("ammo_type", ""))
+		var max_ammo: int = _optional_int(weapon.get("max_ammo", 0), 0)
+		if not ammo_type.is_empty() and ammo_type != "<null>":
+			var available_ammo: int = int(inventory.get(ammo_type, 0))
+			if max_ammo > 0:
+				weapon_parts.append("弹药 %s %d/%d" % [ammo_type, available_ammo, max_ammo])
+			else:
+				weapon_parts.append("弹药 %s x%d" % [ammo_type, available_ammo])
 		details.append("武器: %s" % " / ".join(weapon_parts))
 	var durability: Dictionary = _fragment_by_kind(item_data, "durability")
 	if not durability.is_empty():
@@ -148,6 +153,26 @@ func _fragment_by_kind(item_data: Dictionary, kind: String) -> Dictionary:
 func _signed_number(value: float) -> String:
 	var prefix := "+" if value >= 0.0 else ""
 	return "%s%.1f" % [prefix, value]
+
+
+func _normalize_item_id(value: Variant) -> String:
+	if value == null:
+		return ""
+	if typeof(value) == TYPE_FLOAT:
+		var float_value: float = value
+		if is_equal_approx(float_value, roundf(float_value)):
+			return str(int(float_value))
+	if typeof(value) == TYPE_INT:
+		return str(value)
+	return str(value).strip_edges()
+
+
+func _optional_int(value: Variant, fallback: int) -> int:
+	if value == null:
+		return fallback
+	if typeof(value) == TYPE_STRING and str(value).strip_edges().is_empty():
+		return fallback
+	return int(value)
 
 
 func _item_name(item_id: String) -> String:

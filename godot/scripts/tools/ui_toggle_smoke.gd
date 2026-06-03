@@ -146,6 +146,20 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("main hand equipment row should show durability detail")
 	if not _equipment_line(game_root, "main_hand").contains("外观: builtin:weapon:dagger"):
 		errors.append("main hand equipment row should show appearance asset detail")
+	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player_ref == null:
+		errors.append("player actor should exist for equipped ammo display test")
+	else:
+		player_ref.inventory["1004"] = 1
+		game_root.refresh_character_panel()
+		var equip_pistol_result: Dictionary = game_root.equip_player_item("1004", "main_hand")
+		if not bool(equip_pistol_result.get("success", false)):
+			errors.append("equipping pistol for ammo display failed: %s" % equip_pistol_result.get("reason", "unknown"))
+		elif not _equipment_line(game_root, "main_hand").contains("弹药 1009 10/12"):
+			errors.append("equipped pistol row should show available ammo and magazine capacity")
+		var restore_knife_after_ammo_result: Dictionary = game_root.equip_player_item("1002", "main_hand")
+		if not bool(restore_knife_after_ammo_result.get("success", false)):
+			errors.append("restoring knife after ammo display failed: %s" % restore_knife_after_ammo_result.get("reason", "unknown"))
 	if not _equipment_line(game_root, "body").contains("身体: 布衣"):
 		errors.append("character panel should show body equipment slot")
 	if not _equipment_line(game_root, "body").contains("属性: defense +1.0 / insulation +0.1"):
