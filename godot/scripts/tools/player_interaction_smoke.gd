@@ -107,6 +107,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false) != null:
 		errors.append("consumed pickup node was not removed from generated scene")
 	_expect_ground_grid_move(errors, game_root)
+	var move_camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if move_camera == null:
+		errors.append("missing runtime camera before mouse ground move")
+	else:
+		_expect_mouse_left_click_ground_move(errors, game_root, move_camera)
 	_expect_cancel_pending(errors, game_root)
 
 	var door_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
@@ -220,6 +225,27 @@ func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
 		errors.append("ground grid fallback move should update player grid")
 	if not _hud_interaction_line(game_root).contains("移动"):
 		errors.append("ground grid fallback selection should show move prompt")
+
+
+func _expect_mouse_left_click_ground_move(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	var before: Dictionary = _player_grid(game_root)
+	var target := {
+		"x": int(before.get("x", 0)) + 1,
+		"y": int(before.get("y", 0)),
+		"z": int(before.get("z", 0)),
+	}
+	var screen_position := camera.unproject_position(Vector3(float(target["x"]), 0.0, float(target["z"])))
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = screen_position
+	game_root._input(click)
+	var after: Dictionary = _player_grid(game_root)
+	if int(after.get("x", 0)) != int(target.get("x", 0)) or int(after.get("z", 0)) != int(target.get("z", 0)):
+		errors.append("left mouse click on projected ground should move player from %s to %s, got %s" % [JSON.stringify(before), JSON.stringify(target), JSON.stringify(after)])
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player != null:
+		player.ap = 6.0
 
 
 func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:

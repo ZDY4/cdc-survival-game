@@ -68,6 +68,17 @@ func input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey:
 		_handle_camera_key(event as InputEventKey)
+	elif event is InputEventMouseMotion:
+		if _mouse_over_blocking_ui():
+			return
+		_handle_mouse_motion(event as InputEventMouseMotion)
+	elif event is InputEventMouseButton:
+		if _mouse_over_blocking_ui():
+			return
+		if _handle_mouse_button(event as InputEventMouseButton):
+			var viewport := game_root.get_viewport()
+			if viewport != null:
+				viewport.set_input_as_handled()
 
 
 func unhandled_input(event: InputEvent) -> void:
@@ -76,36 +87,50 @@ func unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		_handle_camera_key(event as InputEventKey)
 	elif event is InputEventMouseMotion:
-		if is_middle_mouse_dragging:
-			_drag_camera_to_screen_position((event as InputEventMouseMotion).position)
-		else:
-			update_hover_at_screen_position((event as InputEventMouseMotion).position)
+		_handle_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
-		var mouse_event := event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
-			is_middle_mouse_dragging = mouse_event.pressed
-			if is_middle_mouse_dragging:
-				_begin_camera_drag(mouse_event.position)
-			else:
-				has_camera_drag_anchor = false
-		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
-			var hover_result: Dictionary = update_hover_at_screen_position(mouse_event.position)
-			if selected_node != null and game_root.has_method("execute_primary_interaction"):
-				game_root.execute_primary_interaction()
-			elif str(hover_result.get("kind", "")) == "ground" and game_root.has_method("execute_move_to_grid"):
-				var ground_position: Vector3 = hover_result.get("position", Vector3.ZERO)
-				game_root.execute_move_to_grid(_grid_from_world_position(ground_position))
-		elif mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed:
-			var right_hover: Dictionary = update_hover_at_screen_position(mouse_event.position)
-			if str(right_hover.get("kind", "")) == "ground" and game_root.has_method("select_grid_target"):
-				var right_ground_position: Vector3 = right_hover.get("position", Vector3.ZERO)
-				game_root.select_grid_target(_grid_from_world_position(right_ground_position))
-			if game_root.hud != null and game_root.hud.has_method("show_interaction_menu") and game_root.has_method("current_interaction_prompt"):
-				game_root.hud.show_interaction_menu(mouse_event.position, game_root.current_interaction_prompt())
-		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
-			_zoom_camera_wheel(1.0)
-		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
-			_zoom_camera_wheel(-1.0)
+		_handle_mouse_button(event as InputEventMouseButton)
+
+
+func _handle_mouse_motion(mouse_event: InputEventMouseMotion) -> void:
+	if is_middle_mouse_dragging:
+		_drag_camera_to_screen_position(mouse_event.position)
+	else:
+		update_hover_at_screen_position(mouse_event.position)
+
+
+func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
+	if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
+		is_middle_mouse_dragging = mouse_event.pressed
+		if is_middle_mouse_dragging:
+			_begin_camera_drag(mouse_event.position)
+		else:
+			has_camera_drag_anchor = false
+		return true
+	if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+		var hover_result: Dictionary = update_hover_at_screen_position(mouse_event.position)
+		if selected_node != null and game_root.has_method("execute_primary_interaction"):
+			game_root.execute_primary_interaction()
+			return true
+		if str(hover_result.get("kind", "")) == "ground" and game_root.has_method("execute_move_to_grid"):
+			var ground_position: Vector3 = hover_result.get("position", Vector3.ZERO)
+			game_root.execute_move_to_grid(_grid_from_world_position(ground_position))
+			return true
+	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed:
+		var right_hover: Dictionary = update_hover_at_screen_position(mouse_event.position)
+		if str(right_hover.get("kind", "")) == "ground" and game_root.has_method("select_grid_target"):
+			var right_ground_position: Vector3 = right_hover.get("position", Vector3.ZERO)
+			game_root.select_grid_target(_grid_from_world_position(right_ground_position))
+		if game_root.hud != null and game_root.hud.has_method("show_interaction_menu") and game_root.has_method("current_interaction_prompt"):
+			game_root.hud.show_interaction_menu(mouse_event.position, game_root.current_interaction_prompt())
+		return true
+	if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
+		_zoom_camera_wheel(1.0)
+		return true
+	if mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
+		_zoom_camera_wheel(-1.0)
+		return true
+	return false
 
 
 func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
@@ -366,6 +391,19 @@ func _mouse_inside_viewport() -> bool:
 	var size := viewport.get_visible_rect().size
 	var position := viewport.get_mouse_position()
 	return position.x >= 0.0 and position.y >= 0.0 and position.x <= size.x and position.y <= size.y
+
+
+func _mouse_over_blocking_ui() -> bool:
+	var viewport := game_root.get_viewport()
+	if viewport == null:
+		return false
+	var hovered := viewport.gui_get_hovered_control()
+	var current := hovered
+	while current != null:
+		if current.mouse_filter == Control.MOUSE_FILTER_STOP:
+			return true
+		current = current.get_parent() as Control
+	return false
 
 
 func _viewport_size() -> Vector2:
