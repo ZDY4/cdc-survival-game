@@ -320,7 +320,7 @@
 
 - [x] `I` inventory、`J` journal、`K` skills、`L` crafting、`C` character、`M` map 快捷键，已纳入 `UIToggle` smoke。
 - [x] 同键 toggle：打开、关闭、替换 active stage panel，已纳入 `UIToggle` smoke。
-- [~] `Esc` 关闭链路：已覆盖 selection、dialogue、interaction menu、trade、container、stage panel、settings 和无活动 UI 时打开 settings；待补 quantity/discard/overworld modal、pending 细分优先级和 blocker 诊断。
+- [~] `Esc` 关闭链路：已覆盖 selection、dialogue、interaction menu、trade、container、stage panel、settings、pending movement 和无活动 UI 时打开 settings；待补 quantity/discard/overworld modal、pending interaction 细分优先级和 blocker 诊断。
 - [~] `Space`：对话推进、等待/结束回合、pending 取消、长按重复等待。已恢复单次等待、pending 取消和长按重复等待第一版；待补自由观察播放冲突策略和更细的长按节奏配置。
 - [~] 数字键：对话 `1-9`、hotbar `1-0` 已有基础入口并纳入 smoke；待补数量输入与快捷动作冲突处理。
 - [~] `Tab`：可控 actor / focus actor 切换。已恢复玩家侧 focus actor 循环、相机跟随、busy actor 拒绝切换和旧 selection/menu/prompt 清理；待补 free observe。

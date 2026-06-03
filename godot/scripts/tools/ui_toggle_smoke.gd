@@ -243,6 +243,19 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if not str(_player(game_root).get("active_container_id", "")).is_empty():
 			errors.append("Esc should clear active container runtime state")
 
+	var player_grid: Dictionary = _player(game_root).get("grid_position", {})
+	game_root.simulation.pending_movement = {
+		"actor_id": 1,
+		"target_position": {"x": int(player_grid.get("x", 0)) + 3, "y": int(player_grid.get("y", 0)), "z": int(player_grid.get("z", 0))},
+		"path": [player_grid.duplicate(true)],
+	}
+	var before_pending_cancelled := _event_count(game_root, "pending_cancelled")
+	_press_key(game_root, KEY_ESCAPE)
+	if not game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
+		errors.append("Esc should clear pending movement")
+	if _event_count(game_root, "pending_cancelled") <= before_pending_cancelled:
+		errors.append("Esc pending cancellation should emit pending_cancelled")
+
 	return errors
 
 
