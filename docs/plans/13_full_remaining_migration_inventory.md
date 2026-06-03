@@ -207,7 +207,7 @@
 
 ### 8.4 交易
 
-- 已有买卖命令、店铺/玩家双栏、数量直买直卖、价格预览和交易购物车第一版；`queue buy`、`queue sell`、`clear`、`confirm` 已纳入 `TradeUI` smoke，待补 adjust、remove 和单项数量调整。
+- 已有买卖命令、店铺/玩家双栏、数量直买直卖、价格预览和交易购物车第一版；`queue buy`、`queue sell`、`adjust`、`remove`、`clear`、`confirm` 已纳入 `TradeUI` smoke。
 - 待补交易 UI：已装备物品出售、购物车净额预览、资金变化预览和确认前完整预校验。
 - 交易资金/库存失败提示已覆盖并纳入 `TradeUI` smoke：玩家资金不足、店铺资金不足、店铺库存不足、玩家库存不足；待补不可出售、装备出售需卸下或确认、部分成交策略。
 - 待补交易拖拽：shop item -> buy zone、inventory/equipment -> sell zone、queued item 调整。

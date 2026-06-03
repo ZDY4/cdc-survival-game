@@ -16,6 +16,7 @@ var _queue_button: Button
 var _clear_cart_button: Button
 var _confirm_cart_button: Button
 var _cart_label: Label
+var _cart_items_box: VBoxContainer
 var _items_box: VBoxContainer
 var _player_items_box: VBoxContainer
 var _selected_source: String = ""
@@ -203,8 +204,17 @@ func _build_layout() -> void:
 	cart_controls.add_child(_queue_button)
 	cart_controls.add_child(_clear_cart_button)
 	cart_controls.add_child(_confirm_cart_button)
+	var cart_scroll := ScrollContainer.new()
+	cart_scroll.name = "CartScroll"
+	cart_scroll.custom_minimum_size = Vector2(580, 72)
+	cart_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_cart_items_box = VBoxContainer.new()
+	_cart_items_box.name = "CartItemLines"
+	_cart_items_box.add_theme_constant_override("separation", 4)
+	cart_scroll.add_child(_cart_items_box)
 	box.add_child(_cart_label)
 	box.add_child(cart_controls)
+	box.add_child(cart_scroll)
 	box.add_child(columns)
 
 
@@ -294,6 +304,7 @@ func _queue_selected_item() -> void:
 		"item_id": _selected_item_id,
 		"name": str(_selected_item_snapshot.get("name", _selected_item_id)),
 		"count": count,
+		"max_count": int(_selected_item_snapshot.get("count", count)),
 		"unit_price": int(_selected_item_snapshot.get("price", 0)),
 	}
 	_cart_entries.append(entry)
@@ -308,6 +319,7 @@ func _clear_cart() -> void:
 func _update_cart_line() -> void:
 	if _cart_label == null:
 		return
+	_clear_box(_cart_items_box)
 	if _cart_entries.is_empty():
 		_cart_label.text = "购物车为空"
 		if _clear_cart_button != null:
@@ -318,7 +330,9 @@ func _update_cart_line() -> void:
 	var parts: Array[String] = []
 	var buy_total := 0
 	var sell_total := 0
-	for entry in _cart_entries:
+	for index in range(_cart_entries.size()):
+		var entry: Dictionary = _cart_entries[index]
+		_cart_items_box.add_child(_cart_entry_row(entry, index))
 		var source := str(entry.get("source", ""))
 		var count := int(entry.get("count", 0))
 		var unit_price := int(entry.get("unit_price", 0))
@@ -333,6 +347,67 @@ func _update_cart_line() -> void:
 		_clear_cart_button.disabled = false
 	if _confirm_cart_button != null:
 		_confirm_cart_button.disabled = false
+
+
+func _cart_entry_row(entry: Dictionary, index: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "CartEntry_%d" % index
+	row.add_theme_constant_override("separation", 6)
+	var label := _label("CartEntryLabel")
+	label.custom_minimum_size = Vector2(332, 0)
+	var source := str(entry.get("source", ""))
+	var verb := "购买" if source == "shop" else "出售" if source == "player" else "交易"
+	label.text = "%s %s x%d | 小计 %d" % [
+		verb,
+		entry.get("name", entry.get("item_id", "")),
+		int(entry.get("count", 0)),
+		int(entry.get("count", 0)) * int(entry.get("unit_price", 0)),
+	]
+	var decrease_button := Button.new()
+	decrease_button.name = "DecreaseButton"
+	decrease_button.text = "-"
+	decrease_button.custom_minimum_size = Vector2(28, 24)
+	decrease_button.disabled = int(entry.get("count", 0)) <= 1
+	decrease_button.pressed.connect(func() -> void:
+		_adjust_cart_entry(index, -1)
+	)
+	var increase_button := Button.new()
+	increase_button.name = "IncreaseButton"
+	increase_button.text = "+"
+	increase_button.custom_minimum_size = Vector2(28, 24)
+	increase_button.disabled = int(entry.get("count", 0)) >= int(entry.get("max_count", entry.get("count", 0)))
+	increase_button.pressed.connect(func() -> void:
+		_adjust_cart_entry(index, 1)
+	)
+	var remove_button := Button.new()
+	remove_button.name = "RemoveButton"
+	remove_button.text = "移除"
+	remove_button.custom_minimum_size = Vector2(52, 24)
+	remove_button.pressed.connect(func() -> void:
+		_remove_cart_entry(index)
+	)
+	row.add_child(label)
+	row.add_child(decrease_button)
+	row.add_child(increase_button)
+	row.add_child(remove_button)
+	return row
+
+
+func _adjust_cart_entry(index: int, delta: int) -> void:
+	if index < 0 or index >= _cart_entries.size() or delta == 0:
+		return
+	var entry := _cart_entries[index]
+	var max_count := maxi(1, int(entry.get("max_count", entry.get("count", 1))))
+	entry["count"] = clampi(int(entry.get("count", 1)) + delta, 1, max_count)
+	_cart_entries[index] = entry
+	_update_cart_line()
+
+
+func _remove_cart_entry(index: int) -> void:
+	if index < 0 or index >= _cart_entries.size():
+		return
+	_cart_entries.remove_at(index)
+	_update_cart_line()
 
 
 func _default_detail_item(shop_items: Array, player_items: Array) -> Dictionary:
@@ -371,7 +446,7 @@ func _clear_box(box: VBoxContainer) -> void:
 		return
 	for child in box.get_children():
 		box.remove_child(child)
-		child.free()
+		child.queue_free()
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

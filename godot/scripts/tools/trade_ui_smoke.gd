@@ -74,6 +74,20 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_queue_button(game_root)
 	if not _cart_line(game_root).contains("购买 绷带 x1"):
 		errors.append("trade cart should show queued bandage buy")
+	_press_cart_entry_button(game_root, 0, "IncreaseButton")
+	if not _cart_line(game_root).contains("购买 绷带 x2"):
+		errors.append("trade cart increase should update queued count")
+	_press_cart_entry_button(game_root, 0, "DecreaseButton")
+	if not _cart_line(game_root).contains("购买 绷带 x1"):
+		errors.append("trade cart decrease should update queued count")
+	_press_cart_entry_button(game_root, 0, "RemoveButton")
+	if not _cart_line(game_root).contains("购物车为空"):
+		errors.append("trade cart remove should empty queued item")
+	_press_queue_button(game_root)
+	_press_clear_cart_button(game_root)
+	if not _cart_line(game_root).contains("购物车为空"):
+		errors.append("trade cart clear should empty queued items")
+	_press_queue_button(game_root)
 	if _player_money(game_root) != money_before_cart:
 		errors.append("queueing trade cart should not spend player money")
 	if _player_inventory_count(game_root, "1006") != bandage_before_cart:
@@ -282,6 +296,18 @@ func _press_queue_button(game_root: Node) -> void:
 
 func _press_confirm_cart_button(game_root: Node) -> void:
 	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartControls/ConfirmCartButton")
+	if button is Button:
+		(button as Button).pressed.emit()
+
+
+func _press_clear_cart_button(game_root: Node) -> void:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartControls/ClearCartButton")
+	if button is Button:
+		(button as Button).pressed.emit()
+
+
+func _press_cart_entry_button(game_root: Node, index: int, button_name: String) -> void:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartScroll/CartItemLines/CartEntry_%d/%s" % [index, button_name])
 	if button is Button:
 		(button as Button).pressed.emit()
 
