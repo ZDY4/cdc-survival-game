@@ -206,8 +206,8 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 			game_root.close_active_ui("keyboard_escape")
 		return true
 	elif key == KEY_SPACE:
-		if game_root.has_method("cancel_pending"):
-			game_root.cancel_pending("keyboard", key == KEY_SPACE)
+		if game_root.has_method("press_space_action"):
+			game_root.press_space_action()
 		if game_root.hud != null and game_root.hud.has_method("hide_interaction_menu"):
 			game_root.hud.hide_interaction_menu()
 		return true

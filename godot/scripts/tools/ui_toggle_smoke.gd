@@ -37,6 +37,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.panel_controller == null:
 		return ["panel controller was not created"]
 	_expect_stage_closed(errors, game_root, "initial")
+	var before_wait_events: int = game_root.simulation.snapshot().get("events", []).size()
+	_press_key(game_root, KEY_SPACE)
+	if game_root.simulation.snapshot().get("events", []).size() <= before_wait_events:
+		errors.append("Space without active UI should wait and advance runtime events")
 
 	_press_key(game_root, KEY_I)
 	_expect_stage_open(errors, game_root, "inventory", "I should open inventory")

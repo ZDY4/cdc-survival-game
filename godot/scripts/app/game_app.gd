@@ -328,6 +328,35 @@ func has_active_dialogue() -> bool:
 	return false
 
 
+func press_space_action() -> Dictionary:
+	if has_active_dialogue():
+		return {
+			"success": false,
+			"reason": "dialogue_choice_required",
+			"active_dialogue": true,
+		}
+	var pending_result: Dictionary = cancel_pending("keyboard", true)
+	if bool(pending_result.get("had_pending", false)):
+		return pending_result
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "wait",
+		"actor_id": 1,
+		"topology": _dictionary_or_empty(world_result.get("map", {})),
+	})
+	if bool(result.get("success", false)):
+		world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+		if interaction_controller != null:
+			interaction_controller.world_result = world_result
+		_setup_world_container()
+		WorldSceneRenderer.new().render_world(world_container, world_result)
+		_setup_runtime_input_controller()
+		_refresh_fog_overlay()
+	refresh_all_panels(current_interaction_prompt())
+	return result
+
+
 func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
