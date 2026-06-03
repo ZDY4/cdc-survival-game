@@ -194,7 +194,9 @@ func is_settings_open() -> bool:
 
 
 func gameplay_input_blocked_by_ui() -> bool:
-	return panel_controller != null and panel_controller.gameplay_input_blocked()
+	if panel_controller != null and panel_controller.gameplay_input_blocked():
+		return true
+	return hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open())
 
 
 func toggle_controls_hint() -> Dictionary:
@@ -315,7 +317,7 @@ func change_observed_level(direction: int) -> Dictionary:
 
 
 func cycle_focused_actor() -> Dictionary:
-	if gameplay_input_blocked_by_ui():
+	if panel_controller != null and panel_controller.gameplay_input_blocked():
 		return {"success": false, "reason": "ui_blocked", "actor_id": focused_actor_id}
 	var focused_actor: Dictionary = _focused_actor_data()
 	var busy_state: Dictionary = _focused_actor_busy_state(focused_actor)

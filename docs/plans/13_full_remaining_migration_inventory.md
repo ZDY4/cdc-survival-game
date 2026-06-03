@@ -63,14 +63,14 @@
 - 待迁移 `Space`：对话推进、等待/结束回合、长按重复等待、pending 取消、自由观察播放切换。
 - 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环、相机跟随、actor busy 时阻止切换和选中/提示状态清理；待补 free observe。
 - 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
-- 待迁移输入阻塞：console、debug panel、modal、stage panel、trade、container、context menu 打开时阻止 gameplay 点击/移动/攻击。
+- 部分迁移输入阻塞：stage/settings 与 interaction menu 已阻止 gameplay 点击/移动/攻击，interaction menu 支持点击外部关闭；待补 console、debug panel、modal、trade、container、tooltip/drag 层和 blocker name。
 
 ### 3.2 鼠标和拾取
 
 - 待补完整 picking 优先级：UI blocker -> hotbar -> actor -> generated door -> map object -> trigger -> grid fallback。
 - 待补 ray 命中排序：actor hit fraction、object hit fraction、trigger hit fraction、door 近似 AABB、对象锚点噪声、场景切换触发器优先级。
 - 待补 hover 状态：hovered grid、hovered actor、hovered object、hovered UI blocker name、当前 prompt、可走/不可走原因。
-- 待补左键/右键差异：左键主交互或移动，右键打开上下文菜单，菜单打开时点击外部关闭。
+- 部分迁移左键/右键差异：左键主交互或移动、右键打开 interaction menu、菜单外点击关闭并阻止本次世界输入已恢复；待补完整上下文菜单项、禁用态和点击外部关闭的所有 modal 分支。
 - 待补目标切换规则：点击新目标时取消旧 pending 的 turn policy、清空旧 prompt、更新 focused target。
 - 待补鼠标拖拽：地图面板拖拽、技能树拖拽、背包/容器/交易物品拖拽、滚动条拖拽。
 
@@ -81,7 +81,7 @@
 - 待迁移 `UiContextMenuState`：库存物品、容器物品、装备槽、技能条目的上下文菜单目标和动作。
 - 待迁移 `UiHoverTooltipState`：库存、技能、场景切换、装备槽、热栏、按钮的 tooltip。
 - 待迁移 `UiInventoryDragState`：拖拽源、悬停目标、拖拽阈值、拖拽预览、装备槽可用性、一次性压制 click。
-- 待迁移 UI mouse blocker 和 blocker name，用于 gameplay 输入阻塞与 debug selection panel 显示。
+- 部分迁移 UI mouse blocker：stage/settings 与 interaction menu 已阻止 gameplay 输入；待补 blocker name、debug selection panel 显示、modal、tooltip 和 drag preview。
 
 ## 4. 移动、路径、空间与地图规则
 

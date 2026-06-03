@@ -76,9 +76,15 @@ func input(event: InputEvent) -> void:
 			return
 		_handle_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
+		var mouse_button := event as InputEventMouseButton
+		if _close_interaction_menu_on_outside_click(mouse_button):
+			var menu_viewport := game_root.get_viewport()
+			if menu_viewport != null:
+				menu_viewport.set_input_as_handled()
+			return
 		if _gameplay_input_blocked_by_ui() or _mouse_over_blocking_ui():
 			return
-		if _handle_mouse_button(event as InputEventMouseButton):
+		if _handle_mouse_button(mouse_button):
 			var viewport := game_root.get_viewport()
 			if viewport != null:
 				viewport.set_input_as_handled()
@@ -94,9 +100,12 @@ func unhandled_input(event: InputEvent) -> void:
 			return
 		_handle_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
+		var mouse_button := event as InputEventMouseButton
+		if _close_interaction_menu_on_outside_click(mouse_button):
+			return
 		if _gameplay_input_blocked_by_ui():
 			return
-		_handle_mouse_button(event as InputEventMouseButton)
+		_handle_mouse_button(mouse_button)
 
 
 func _handle_mouse_motion(mouse_event: InputEventMouseMotion) -> void:
@@ -140,6 +149,20 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 		_zoom_camera_wheel(-1.0)
 		return true
 	return false
+
+
+func _close_interaction_menu_on_outside_click(mouse_event: InputEventMouseButton) -> bool:
+	if not mouse_event.pressed:
+		return false
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT and mouse_event.button_index != MOUSE_BUTTON_RIGHT:
+		return false
+	if not _interaction_menu_open():
+		return false
+	if _mouse_over_blocking_ui():
+		return false
+	if game_root.hud != null and game_root.hud.has_method("hide_interaction_menu"):
+		game_root.hud.hide_interaction_menu()
+	return true
 
 
 func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
@@ -574,6 +597,10 @@ func _mouse_over_blocking_ui() -> bool:
 
 func _gameplay_input_blocked_by_ui() -> bool:
 	return game_root.has_method("gameplay_input_blocked_by_ui") and bool(game_root.gameplay_input_blocked_by_ui())
+
+
+func _interaction_menu_open() -> bool:
+	return game_root.hud != null and game_root.hud.has_method("is_interaction_menu_open") and bool(game_root.hud.is_interaction_menu_open())
 
 
 func _viewport_size() -> Vector2:

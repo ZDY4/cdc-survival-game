@@ -206,6 +206,18 @@ func _expect_right_click_menu_buttons(errors: Array[String], game_root: Node) ->
 		errors.append("right-click interaction menu should expose pickup option button")
 	elif option_button.text != "拾取":
 		errors.append("right-click interaction menu pickup option should use localized display name")
+	var before_grid: Dictionary = _player_grid(game_root)
+	var outside_click := InputEventMouseButton.new()
+	outside_click.button_index = MOUSE_BUTTON_LEFT
+	outside_click.pressed = true
+	outside_click.position = Vector2(900, 700)
+	game_root.runtime_input_controller.input(outside_click)
+	if menu.visible:
+		errors.append("clicking outside interaction menu should close it")
+	var after_grid: Dictionary = _player_grid(game_root)
+	if int(after_grid.get("x", 0)) != int(before_grid.get("x", 0)) or int(after_grid.get("z", 0)) != int(before_grid.get("z", 0)):
+		errors.append("clicking outside interaction menu should not pass through as world movement")
+	game_root.hud.show_interaction_menu(Vector2(260, 220), game_root.current_interaction_prompt())
 	game_root.hud.hide_interaction_menu()
 	if menu.visible:
 		errors.append("right-click interaction menu should hide on request")

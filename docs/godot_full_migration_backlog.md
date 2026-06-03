@@ -330,7 +330,7 @@
 - [x] `[` / `]`：info tab 切换。
 - [~] `A`：auto tick 第一版已迁移；observe playback 待自由观察模式迁移后补齐。
 - [~] `PageUp/PageDown`：观察楼层切换。已恢复输入、HUD 当前楼层、相机平面和 focus actor 候选切换；待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
-- [ ] console、debug panel、modal、stage panel 打开时阻止 gameplay 输入。
+- [~] console、debug panel、modal、stage panel、context menu 打开时阻止 gameplay 输入。已恢复 stage/settings 与 interaction menu 第一版；待补 console、debug panel、modal、tooltip/drag 层 blocker name。
 
 参考：`bevy_debug_viewer/src/controls/keyboard.rs`、`game_ui/state_sync.rs`。
 落点：`godot/scripts/app/controllers/game_runtime_input_controller.gd`、`godot/scripts/app/game_app.gd`。
@@ -718,7 +718,7 @@
 - [ ] hotbar dock、cooldown、tooltip。
 - [ ] observe mode dock。
 - [ ] controls hint 展开/折叠。
-- [ ] blocker / modal / context menu 层级。
+- [~] blocker / modal / context menu 层级。已恢复 interaction menu 外部点击关闭与 gameplay 输入阻塞；待补 modal、tooltip、drag preview 和 blocker name。
 
 ### 17.3 面板
 
