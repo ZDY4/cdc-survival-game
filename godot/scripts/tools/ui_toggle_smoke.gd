@@ -38,6 +38,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.panel_controller == null:
 		return ["panel controller was not created"]
 	_expect_stage_closed(errors, game_root, "initial")
+	if bool(game_root.controls_hint_visible()):
+		errors.append("controls hint should be hidden initially")
+	_press_key(game_root, KEY_SLASH)
+	if not bool(game_root.controls_hint_visible()):
+		errors.append("/ should show controls hint")
+	if not game_root.hud.find_child("ControlsHint", true, false).visible:
+		errors.append("controls hint node should be visible after /")
+	_press_key(game_root, KEY_SLASH)
+	if bool(game_root.controls_hint_visible()):
+		errors.append("/ should hide controls hint")
 	if game_root.settings_panel == null:
 		errors.append("settings panel was not created")
 	_press_key(game_root, KEY_ESCAPE)

@@ -4,9 +4,11 @@ var _world_label: Label
 var _player_label: Label
 var _inventory_label: Label
 var _interaction_label: Label
+var _controls_hint_box: VBoxContainer
 var _interaction_menu: PanelContainer
 var _menu_title_label: Label
 var _menu_options_box: VBoxContainer
+var controls_hint_visible := false
 
 
 func _ready() -> void:
@@ -39,6 +41,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		player.get("active_dialogue_id", ""),
 	]
 	_interaction_label.text = _interaction_text(interaction)
+	_apply_controls_hint()
 	_apply_interaction_menu(interaction)
 
 
@@ -69,7 +72,30 @@ func _build_layout() -> void:
 	box.add_child(_player_label)
 	box.add_child(_inventory_label)
 	box.add_child(_interaction_label)
+	_controls_hint_box = VBoxContainer.new()
+	_controls_hint_box.name = "ControlsHint"
+	_controls_hint_box.add_theme_constant_override("separation", 3)
+	_controls_hint_box.visible = false
+	box.add_child(_controls_hint_box)
+	for line in [
+		"I/C/M/J/K/L 面板 | Esc 关闭/设置 | Space 等待",
+		"1-9 对话选项 | 1-0 热栏 | 鼠标左键移动/交互",
+		"右键菜单 | 中键拖拽相机 | F 跟随 | +/- 缩放",
+	]:
+		var label := _line("ControlsHintLine")
+		label.text = line
+		_controls_hint_box.add_child(label)
 	_build_interaction_menu()
+
+
+func toggle_controls_hint() -> Dictionary:
+	controls_hint_visible = not controls_hint_visible
+	_apply_controls_hint()
+	return {"success": true, "visible": controls_hint_visible}
+
+
+func is_controls_hint_visible() -> bool:
+	return controls_hint_visible
 
 
 func show_interaction_menu(screen_position: Vector2, prompt: Dictionary) -> void:
@@ -135,6 +161,12 @@ func _apply_interaction_menu(interaction: Dictionary) -> void:
 	for option in interaction.get("options", []):
 		var option_data: Dictionary = option
 		_menu_options_box.add_child(_option_button(option_data))
+
+
+func _apply_controls_hint() -> void:
+	if _controls_hint_box == null:
+		return
+	_controls_hint_box.visible = controls_hint_visible
 
 
 func _option_button(option: Dictionary) -> Button:

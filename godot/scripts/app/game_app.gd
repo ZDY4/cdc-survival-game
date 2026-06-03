@@ -177,6 +177,16 @@ func gameplay_input_blocked_by_ui() -> bool:
 	return panel_controller != null and panel_controller.gameplay_input_blocked()
 
 
+func toggle_controls_hint() -> Dictionary:
+	if hud == null or not hud.has_method("toggle_controls_hint"):
+		return {"success": false, "reason": "hud_missing"}
+	return hud.toggle_controls_hint()
+
+
+func controls_hint_visible() -> bool:
+	return hud != null and hud.has_method("is_controls_hint_visible") and bool(hud.is_controls_hint_visible())
+
+
 func close_active_dialogue(reason: String = "closed") -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
