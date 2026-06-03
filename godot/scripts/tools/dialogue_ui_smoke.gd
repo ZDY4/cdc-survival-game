@@ -64,6 +64,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("digit 1 should choose first dialogue option and open trade")
 	if not _player(game_root).get("active_dialogue_id", "") == "":
 		errors.append("digit dialogue choice should close active dialogue after trade action")
+	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_SPACE, "Space")
+	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_ENTER, "Enter")
 	return errors
 
 
@@ -130,6 +132,30 @@ func _press_key(game_root: Node, key: int) -> void:
 	event.physical_keycode = key
 	event.pressed = true
 	game_root.runtime_input_controller.input(event)
+
+
+func _expect_key_advances_dialogue_without_options(errors: Array[String], game_root: Node, key: int, label: String) -> void:
+	game_root.close_trade_panel()
+	game_root.simulation.close_dialogue(1, "smoke_reset")
+	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if actor == null:
+		errors.append("%s dialogue advance setup missing player actor" % label)
+		return
+	actor.active_dialogue_id = "trader_lao_wang_intro"
+	actor.active_dialogue_node_id = "accept_confirm"
+	game_root.refresh_dialogue_panel()
+	if not game_root.dialogue_panel.visible:
+		errors.append("%s dialogue advance setup should show confirmation dialogue" % label)
+	if not _options_line(game_root).is_empty():
+		errors.append("%s dialogue advance setup should not expose options" % label)
+	var before_events: int = game_root.simulation.snapshot().get("events", []).size()
+	_press_key(game_root, key)
+	if not str(_player(game_root).get("active_dialogue_id", "")).is_empty():
+		errors.append("%s should finish dialogue node without choices" % label)
+	if game_root.dialogue_panel.visible:
+		errors.append("%s should hide dialogue panel after finishing no-option node" % label)
+	if game_root.simulation.snapshot().get("events", []).size() <= before_events:
+		errors.append("%s should emit dialogue advancement or finish event" % label)
 
 
 func _player(game_root: Node) -> Dictionary:

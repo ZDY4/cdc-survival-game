@@ -36,6 +36,50 @@ func advance(simulation: RefCounted, actor_id: int, option_ref: Variant, dialogu
 	return outcome
 
 
+func advance_without_choice(simulation: RefCounted, actor_id: int, dialogue_library: Dictionary) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var dialogue_id: String = str(actor.active_dialogue_id)
+	if dialogue_id.is_empty():
+		return {"success": false, "reason": "dialogue_session_missing"}
+	var dialogue: Dictionary = _dialogue_index.dialogue_data(dialogue_id, dialogue_library)
+	if dialogue.is_empty():
+		return {"success": false, "reason": "unknown_dialogue", "dialogue_id": dialogue_id}
+	var nodes: Dictionary = _dialogue_index.nodes_by_id(_array_or_empty(dialogue.get("nodes", [])))
+	var current_node_id: String = _active_node_id(actor, dialogue)
+	var current_node: Dictionary = _dictionary_or_empty(nodes.get(current_node_id, {}))
+	if current_node.is_empty():
+		return {"success": false, "reason": "dialogue_node_missing", "node_id": current_node_id}
+	var node_type: String = str(current_node.get("type", ""))
+	if node_type == "choice":
+		return {"success": false, "reason": "dialogue_choice_required", "node_id": current_node_id}
+	if node_type != "dialog":
+		return {"success": false, "reason": "dialogue_advance_unavailable", "node_id": current_node_id, "node_type": node_type}
+	var next_node_id: String = str(current_node.get("next", ""))
+	if next_node_id.is_empty():
+		actor.active_dialogue_id = ""
+		actor.active_dialogue_node_id = ""
+		simulation.emit_event("dialogue_finished", {
+			"actor_id": actor_id,
+			"dialogue_id": dialogue_id,
+			"node_id": current_node_id,
+			"end_type": "leave",
+		})
+		return {
+			"success": true,
+			"dialogue_id": dialogue_id,
+			"node_id": current_node_id,
+			"finished": true,
+			"end_type": "leave",
+		}
+	var emitted_actions: Array[Dictionary] = []
+	var outcome: Dictionary = _advance_to_node(simulation, actor_id, actor, dialogue_id, next_node_id, nodes, emitted_actions)
+	outcome["emitted_actions"] = emitted_actions
+	outcome["advanced_without_choice"] = true
+	return outcome
+
+
 func _active_node_id(actor: RefCounted, dialogue: Dictionary) -> String:
 	var current_node_id: String = str(actor.active_dialogue_node_id)
 	if not current_node_id.is_empty():

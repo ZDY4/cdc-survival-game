@@ -331,6 +331,31 @@ func choose_dialogue_option_by_index(option_index: int) -> Dictionary:
 	return choose_dialogue_option(option_index)
 
 
+func advance_dialogue_without_choice() -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var dialogue_snapshot: Dictionary = _current_dialogue_snapshot()
+	if not bool(dialogue_snapshot.get("active", false)):
+		return {"success": false, "reason": "dialogue_session_missing"}
+	if not _array_or_empty(dialogue_snapshot.get("options", [])).is_empty():
+		return {
+			"success": false,
+			"reason": "dialogue_choice_required",
+			"active_dialogue": true,
+		}
+	var result: Dictionary = simulation.advance_dialogue_without_choice(1, registry.get_library("dialogues"))
+	if bool(result.get("success", false)) and result.get("end_type", "") == "trade":
+		active_trade_target = _dialogue_trade_target()
+	refresh_dialogue_panel()
+	refresh_inventory_panel()
+	refresh_trade_panel()
+	refresh_journal_panel()
+	refresh_skills_panel()
+	refresh_crafting_panel()
+	refresh_hud()
+	return result
+
+
 func has_active_dialogue() -> bool:
 	if simulation == null:
 		return false
@@ -343,11 +368,7 @@ func has_active_dialogue() -> bool:
 
 func press_space_action() -> Dictionary:
 	if has_active_dialogue():
-		return {
-			"success": false,
-			"reason": "dialogue_choice_required",
-			"active_dialogue": true,
-		}
+		return advance_dialogue_without_choice()
 	var pending_result: Dictionary = cancel_pending("keyboard", true)
 	if bool(pending_result.get("had_pending", false)):
 		return pending_result
@@ -368,6 +389,12 @@ func press_space_action() -> Dictionary:
 		_refresh_fog_overlay()
 	refresh_all_panels(current_interaction_prompt())
 	return result
+
+
+func press_enter_action() -> Dictionary:
+	if has_active_dialogue():
+		return advance_dialogue_without_choice()
+	return {"success": false, "reason": "no_enter_action"}
 
 
 func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
@@ -644,6 +671,13 @@ func _dialogue_trade_target() -> Dictionary:
 	}
 
 
+func _current_dialogue_snapshot() -> Dictionary:
+	if panel_controller == null or simulation == null:
+		return {}
+	var DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
+	return DialogueSnapshot.new(registry).build(simulation.snapshot())
+
+
 func _active_shop_id() -> String:
 	if registry == null or simulation == null:
 		return ""
@@ -667,3 +701,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

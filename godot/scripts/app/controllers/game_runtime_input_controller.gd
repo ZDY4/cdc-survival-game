@@ -205,6 +205,11 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		if game_root.has_method("close_active_ui"):
 			game_root.close_active_ui("keyboard_escape")
 		return true
+	elif key == KEY_ENTER or key == KEY_KP_ENTER:
+		if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()) and game_root.has_method("press_enter_action"):
+			game_root.press_enter_action()
+			return true
+		return false
 	elif key == KEY_SPACE:
 		if game_root.has_method("press_space_action"):
 			game_root.press_space_action()

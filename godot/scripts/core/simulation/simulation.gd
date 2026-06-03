@@ -261,6 +261,10 @@ func advance_dialogue(actor_id: int, option_ref: Variant, dialogue_library: Dict
 	return _dialogue_runner.advance(self, actor_id, option_ref, dialogue_library)
 
 
+func advance_dialogue_without_choice(actor_id: int, dialogue_library: Dictionary) -> Dictionary:
+	return _dialogue_runner.advance_without_choice(self, actor_id, dialogue_library)
+
+
 func close_dialogue(actor_id: int, reason: String = "closed") -> Dictionary:
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	if actor == null:
