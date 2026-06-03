@@ -63,6 +63,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("enabled auto tick should advance runtime events")
 	_press_key(game_root, KEY_I)
 	_expect_stage_open(errors, game_root, "inventory", "inventory should open before auto tick blocker check")
+	_expect_blocker(errors, game_root, "stage:inventory", "open inventory blocker")
+	_assert_runtime_control_line(errors, game_root, "Blocker stage:inventory", "inventory blocker HUD")
 	var blocked_events: int = game_root.simulation.snapshot().get("events", []).size()
 	await _wait_process_frames(40)
 	if game_root.simulation.snapshot().get("events", []).size() != blocked_events:
@@ -102,6 +104,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("Esc with no active UI should open settings panel")
 	if not bool(game_root.gameplay_input_blocked_by_ui()):
 		errors.append("open settings should block gameplay input")
+	_expect_blocker(errors, game_root, "settings", "open settings blocker")
 	_press_key(game_root, KEY_ESCAPE)
 	if bool(game_root.is_settings_open()) or game_root.settings_panel.visible:
 		errors.append("Esc should close settings panel")
@@ -163,6 +166,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		game_root.hud.show_interaction_menu(Vector2(64, 64), game_root.current_interaction_prompt())
 		if not bool(game_root.hud.is_interaction_menu_open()):
 			errors.append("interaction menu should open for selected pickup")
+		_expect_blocker(errors, game_root, "interaction_menu", "open interaction menu blocker")
 		_press_key(game_root, KEY_ESCAPE)
 		if bool(game_root.hud.is_interaction_menu_open()):
 			errors.append("first Esc should close interaction menu")
@@ -223,6 +227,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("digit 2 dialogue option should open trade panel")
 		if not bool(game_root.gameplay_input_blocked_by_ui()):
 			errors.append("open trade panel should block gameplay input")
+		_expect_blocker(errors, game_root, "trade", "open trade blocker")
 		_press_key(game_root, KEY_ESCAPE)
 		if game_root.trade_panel.visible:
 			errors.append("Esc should close active trade panel")
@@ -241,6 +246,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("container interaction should show container panel")
 		if not bool(game_root.gameplay_input_blocked_by_ui()):
 			errors.append("open container panel should block gameplay input")
+		_expect_blocker(errors, game_root, "container", "open container blocker")
 		_press_key(game_root, KEY_ESCAPE)
 		if game_root.container_panel.visible:
 			errors.append("Esc should close active container panel")
@@ -340,6 +346,15 @@ func _assert_runtime_control_line(errors: Array[String], game_root: Node, expect
 		return
 	if not str((label as Label).text).contains(expected):
 		errors.append("%s: RuntimeControlLine expected to contain %s, got %s" % [context, expected, str((label as Label).text)])
+
+
+func _expect_blocker(errors: Array[String], game_root: Node, expected: String, context: String) -> void:
+	if not game_root.has_method("gameplay_input_blocker_name"):
+		errors.append("%s: game root should expose gameplay_input_blocker_name" % context)
+		return
+	var actual := str(game_root.gameplay_input_blocker_name())
+	if actual != expected:
+		errors.append("%s: blocker expected %s, got %s" % [context, expected, actual])
 
 
 func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: String, expected_title: String, expected_line: String, context: String) -> void:

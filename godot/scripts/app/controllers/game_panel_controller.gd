@@ -192,6 +192,20 @@ func gameplay_input_blocked() -> bool:
 	return any_stage_panel_open() or settings_open or _panel_visible(trade_panel) or _panel_visible(container_panel) or _panel_visible(dialogue_panel)
 
 
+func gameplay_input_blocker_name() -> String:
+	if any_stage_panel_open():
+		return "stage:%s" % active_stage_panel
+	if settings_open:
+		return "settings"
+	if _panel_visible(trade_panel):
+		return "trade"
+	if _panel_visible(container_panel):
+		return "container"
+	if _panel_visible(dialogue_panel):
+		return "dialogue"
+	return ""
+
+
 func open_settings_panel() -> Dictionary:
 	active_stage_panel = ""
 	settings_open = true

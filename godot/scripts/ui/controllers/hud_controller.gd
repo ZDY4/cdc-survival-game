@@ -282,4 +282,7 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 		if focus_label.is_empty():
 			focus_label = str(focused_actor.get("definition_id", "actor"))
 		parts.append("Focus %s#%d" % [focus_label, int(focused_actor.get("actor_id", 0))])
+	var ui_blocker := str(control_data.get("ui_blocker", ""))
+	if not ui_blocker.is_empty():
+		parts.append("Blocker %s" % ui_blocker)
 	return " | ".join(parts)

@@ -199,6 +199,14 @@ func gameplay_input_blocked_by_ui() -> bool:
 	return hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open())
 
 
+func gameplay_input_blocker_name() -> String:
+	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
+		return "interaction_menu"
+	if panel_controller != null and panel_controller.has_method("gameplay_input_blocker_name"):
+		return str(panel_controller.gameplay_input_blocker_name())
+	return ""
+
+
 func toggle_controls_hint() -> Dictionary:
 	if hud == null or not hud.has_method("toggle_controls_hint"):
 		return {"success": false, "reason": "hud_missing"}
@@ -276,6 +284,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"observe_speed": "x1",
 		"map_level": map_level_snapshot(),
 		"focused_actor": focused_actor_snapshot(),
+		"ui_blocker": gameplay_input_blocker_name(),
 	}
 
 

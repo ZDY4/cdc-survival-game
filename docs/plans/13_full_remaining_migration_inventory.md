@@ -63,7 +63,7 @@
 - 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、pending 取消和长按重复等待第一版；待补自由观察播放切换、长按节奏配置和 modal 冲突策略。
 - 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环、相机跟随、actor busy 时阻止切换和选中/提示状态清理；待补 free observe。
 - 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
-- 部分迁移输入阻塞：stage/settings、interaction menu、trade panel、container panel 已阻止 gameplay 输入，interaction menu 支持点击外部关闭；待补 console、debug panel、quantity/discard/overworld modal、tooltip/drag 层和 blocker name。
+- 部分迁移输入阻塞：stage/settings、interaction menu、trade panel、container panel 已阻止 gameplay 输入，`gameplay_input_blocker_name` 和 HUD blocker 诊断有第一版，interaction menu 支持点击外部关闭；待补 console、debug panel、quantity/discard/overworld modal、tooltip/drag 层 blocker 细分。
 
 ### 3.2 鼠标和拾取
 
