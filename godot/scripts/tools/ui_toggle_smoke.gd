@@ -136,6 +136,32 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_stage_open(errors, game_root, "character", "C should open character")
 	if not game_root.character_panel.find_child("SummaryLine", true, false) is Label:
 		errors.append("character panel should expose SummaryLine")
+	var initial_constitution_button: Button = _attribute_button(game_root, "constitution")
+	if initial_constitution_button == null:
+		errors.append("character panel should expose constitution allocate button")
+	elif not initial_constitution_button.disabled:
+		errors.append("constitution allocate button should be disabled with no stat points")
+	var hp_before_attribute: float = _player_max_hp(game_root)
+	var grant_xp_result: Dictionary = game_root.simulation.grant_experience(1, 100, "ui_toggle_smoke")
+	if not bool(grant_xp_result.get("success", false)):
+		errors.append("granting xp for character panel attribute test failed")
+	game_root.refresh_character_panel()
+	if not _character_summary_line(game_root).contains("属性点 3"):
+		errors.append("character summary should show granted stat points")
+	var constitution_button: Button = _attribute_button(game_root, "constitution")
+	if constitution_button == null or constitution_button.disabled:
+		errors.append("constitution allocate button should be enabled after stat points are available")
+	else:
+		constitution_button.pressed.emit()
+		await process_frame
+		if not _character_summary_line(game_root).contains("属性点 2"):
+			errors.append("character summary should refresh consumed stat point")
+		if not _attribute_line(game_root, "constitution").contains("constitution: 7"):
+			errors.append("character panel should refresh allocated constitution value")
+		if _player_max_hp(game_root) <= hp_before_attribute:
+			errors.append("allocating constitution from character panel should refresh max hp")
+		if _event_count(game_root, "attribute_allocated") <= 0:
+			errors.append("allocating from character panel should emit attribute_allocated")
 
 	_press_key(game_root, KEY_M)
 	_expect_stage_open(errors, game_root, "map", "M should replace character with map")
@@ -432,6 +458,34 @@ func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: Str
 		return
 	if str((label as Label).text) != expected_line:
 		errors.append("%s: InfoPanelLine expected %s, got %s" % [context, expected_line, str((label as Label).text)])
+
+
+func _character_summary_line(game_root: Node) -> String:
+	var label: Node = game_root.character_panel.find_child("SummaryLine", true, false)
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _attribute_button(game_root: Node, attribute: String) -> Button:
+	var row: Node = game_root.character_panel.find_child("Attribute_%s" % attribute, true, false)
+	if row == null:
+		return null
+	return row.get_node_or_null("AllocateButton") as Button
+
+
+func _attribute_line(game_root: Node, attribute: String) -> String:
+	var row: Node = game_root.character_panel.find_child("Attribute_%s" % attribute, true, false)
+	if row == null:
+		return ""
+	var label: Node = row.get_node_or_null("Line")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _player_max_hp(game_root: Node) -> float:
+	return float(_dictionary_or_empty(_player(game_root).get("combat", {})).get("max_hp", 0.0))
 
 
 func _stage_panel_ids() -> Array[String]:

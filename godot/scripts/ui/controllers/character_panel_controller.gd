@@ -17,11 +17,12 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if _panel == null:
 		_build_layout()
 
+	var available_stat_points: int = int(snapshot.get("available_stat_points", 0))
 	_summary_label.text = "%s Lv%d | XP %d | 属性点 %d | 技能点 %d" % [
 		snapshot.get("owner_name", ""),
 		int(snapshot.get("level", 1)),
 		int(snapshot.get("current_xp", 0)),
-		int(snapshot.get("available_stat_points", 0)),
+		available_stat_points,
 		int(snapshot.get("available_skill_points", 0)),
 	]
 	_resource_label.text = "HP %.0f/%.0f | AP %.1f" % [
@@ -31,7 +32,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	]
 	_clear_box(_attributes_box)
 	_clear_box(_equipment_box)
-	for row in _attribute_rows(_dictionary_or_empty(snapshot.get("attributes", {}))):
+	for row in _attribute_rows(_dictionary_or_empty(snapshot.get("attributes", {})), available_stat_points):
 		_attributes_box.add_child(row)
 	for row in _equipment_rows(_array_or_empty(snapshot.get("equipment", []))):
 		_equipment_box.add_child(row)
@@ -72,14 +73,28 @@ func _build_layout() -> void:
 	box.add_child(_equipment_box)
 
 
-func _attribute_rows(attributes: Dictionary) -> Array[Label]:
-	var rows: Array[Label] = []
+func _attribute_rows(attributes: Dictionary, available_stat_points: int) -> Array[Control]:
+	var rows: Array[Control] = []
 	var keys: Array = attributes.keys()
 	keys.sort()
 	for key in keys:
-		var label := _label("Attribute_%s" % key)
+		var attribute_id: String = str(key)
+		var row := HBoxContainer.new()
+		row.name = "Attribute_%s" % attribute_id
+		row.custom_minimum_size = Vector2(322, 28)
+		row.add_theme_constant_override("separation", 6)
+		var label := _label("Line")
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.text = "%s: %s" % [key, str(attributes.get(key, 0))]
-		rows.append(label)
+		var add_button := _button("AllocateButton", "+", "分配 1 点到 %s" % attribute_id, available_stat_points <= 0)
+		add_button.pressed.connect(func() -> void:
+			var root := get_parent()
+			if root != null and root.has_method("allocate_player_attribute_point"):
+				root.allocate_player_attribute_point(attribute_id)
+		, CONNECT_DEFERRED)
+		row.add_child(label)
+		row.add_child(add_button)
+		rows.append(row)
 	return rows
 
 
@@ -110,6 +125,17 @@ func _label(node_name: String) -> Label:
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _button(node_name: String, text: String, tooltip: String, disabled: bool) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	button.tooltip_text = tooltip
+	button.custom_minimum_size = Vector2(34, 28)
+	button.disabled = disabled
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	return button
 
 
 func _clear_box(box: VBoxContainer) -> void:

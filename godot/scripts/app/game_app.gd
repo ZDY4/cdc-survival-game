@@ -826,6 +826,16 @@ func unequip_player_slot(slot_id: String) -> Dictionary:
 	return result
 
 
+func allocate_player_attribute_point(attribute: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.allocate_attribute_point(1, attribute)
+	refresh_hud()
+	refresh_character_panel()
+	refresh_skills_panel()
+	return result
+
+
 func learn_player_skill(skill_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
