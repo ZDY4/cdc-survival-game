@@ -77,6 +77,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills panel should show bound hotbar skill")
 	if _use_button(game_root, "adrenaline_rush") == null or _use_button(game_root, "adrenaline_rush").disabled:
 		errors.append("bound active skill should be usable before cooldown")
+	if not _skill_line(game_root, "adrenaline_rush").contains("可用"):
+		errors.append("bound active skill should show available use state")
 	var toggle_result: Dictionary = game_root.learn_player_skill("low_profile")
 	if not bool(toggle_result.get("success", false)):
 		errors.append("low_profile learn failed: %s" % toggle_result.get("reason", "unknown"))
@@ -104,6 +106,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_skills_panel()
 	if not _hotbar_line(game_root).contains("cd20"):
 		errors.append("digit 1 hotbar activation should write cooldown to hotbar")
+	if not _skill_line(game_root, "adrenaline_rush").contains("冷却 20s"):
+		errors.append("used active skill should show cooldown use state")
+	if _use_button(game_root, "adrenaline_rush") == null or not _use_button(game_root, "adrenaline_rush").disabled:
+		errors.append("active skill use button should be disabled while on cooldown")
 	if not _event_seen(game_root, "skill_used"):
 		errors.append("digit 1 hotbar activation should emit skill_used")
 	return errors
@@ -131,6 +137,16 @@ func _skill_lines(game_root: Node) -> Array[String]:
 
 func _skill_text(game_root: Node) -> String:
 	return "\n".join(_skill_lines(game_root))
+
+
+func _skill_line(game_root: Node, skill_id: String) -> String:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return ""
+	var label: Node = row.get_node_or_null("Line")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
 
 
 func _learn_button(game_root: Node, skill_id: String) -> Button:

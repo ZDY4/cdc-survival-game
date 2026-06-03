@@ -231,7 +231,7 @@
 ### 9.3 Hotbar
 
 - 已有单组 hotbar、数字键激活、Skills 面板自动绑定到第一个空槽和清空槽按钮，已纳入 `SkillsUI` smoke；待迁移多组 hotbar、拖拽技能到槽。
-- 待补 cooldown tick、冷却遮罩、不可用原因、AP / resource cost、目标选择进入。
+- 已有 Skills 面板 hotbar 可用/冷却不可用原因文本和按钮禁用第一版，已纳入 `SkillsUI` smoke；待补 cooldown 遮罩、AP / resource cost、目标选择进入。
 - 待补观察模式 hotbar 表现：observe playback、speed、自动播放状态。
 
 ## 10. 任务、对话和剧情动作

@@ -60,6 +60,7 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 	var activation: Dictionary = _dictionary_or_empty(skill_data.get("activation", {}))
 	var activation_mode: String = str(activation.get("mode", "passive"))
 	var bound_slot: String = _bound_slot(skill_id, hotbar)
+	var use_state: Dictionary = _use_state(current_level, activation_mode, bound_slot, hotbar)
 	return {
 		"skill_id": skill_id,
 		"name": str(skill_data.get("name", skill_id)),
@@ -74,7 +75,9 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 		"can_learn": bool(availability.get("can_learn", false)),
 		"can_bind": current_level > 0 and activation_mode != "passive",
 		"bound_slot": bound_slot,
-		"can_use": current_level > 0 and activation_mode != "passive" and not bound_slot.is_empty() and float(_dictionary_or_empty(hotbar.get(bound_slot, {})).get("cooldown_remaining", 0.0)) <= 0.0,
+		"can_use": bool(use_state.get("can_use", false)),
+		"use_reason": str(use_state.get("reason", "")),
+		"cooldown_remaining": float(use_state.get("cooldown_remaining", 0.0)),
 		"learn_reason": str(availability.get("reason", "")),
 		"missing_prerequisites": _array_or_empty(availability.get("missing_prerequisites", [])).duplicate(true),
 		"missing_attributes": _array_or_empty(availability.get("missing_attributes", [])).duplicate(true),
@@ -87,6 +90,23 @@ func _bound_slot(skill_id: String, hotbar: Dictionary) -> String:
 		if str(slot.get("kind", "")) == "skill" and str(slot.get("skill_id", "")) == skill_id:
 			return str(slot_id)
 	return ""
+
+
+func _use_state(current_level: int, activation_mode: String, bound_slot: String, hotbar: Dictionary) -> Dictionary:
+	if current_level <= 0:
+		return {"can_use": false, "reason": "not_learned"}
+	if activation_mode == "passive":
+		return {"can_use": false, "reason": "passive"}
+	if bound_slot.is_empty():
+		return {"can_use": false, "reason": "unbound"}
+	var cooldown_remaining: float = float(_dictionary_or_empty(hotbar.get(bound_slot, {})).get("cooldown_remaining", 0.0))
+	if cooldown_remaining > 0.0:
+		return {
+			"can_use": false,
+			"reason": "cooldown",
+			"cooldown_remaining": cooldown_remaining,
+		}
+	return {"can_use": true, "reason": "available", "cooldown_remaining": 0.0}
 
 
 func _availability(skill_id: String, skill_data: Dictionary, progression: Dictionary, learned: Dictionary, attributes: Dictionary, current_level: int, max_level: int) -> Dictionary:

@@ -81,7 +81,7 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 		int(skill.get("level", 0)),
 		int(skill.get("max_level", 1)),
 		skill.get("activation_mode", "passive"),
-		"%s%s" % [_reason_text(skill), _binding_text(skill)],
+		"%s%s%s" % [_reason_text(skill), _binding_text(skill), _use_reason_text(skill)],
 	]
 	var skill_id := str(skill.get("skill_id", ""))
 	var learn_button := _button("LearnButton", "+", "学习 %s" % skill.get("name", skill_id), not bool(skill.get("can_learn", false)))
@@ -165,6 +165,19 @@ func _binding_text(skill: Dictionary) -> String:
 	if slot_id.is_empty():
 		return ""
 	return " | %s" % slot_id
+
+
+func _use_reason_text(skill: Dictionary) -> String:
+	match str(skill.get("use_reason", "")):
+		"available":
+			return " | 可用"
+		"cooldown":
+			return " | 冷却 %.0fs" % float(skill.get("cooldown_remaining", 0.0))
+		"unbound":
+			return " | 未绑定"
+		"passive", "not_learned", "":
+			return ""
+	return " | %s" % skill.get("use_reason", "")
 
 
 func _button(node_name: String, text: String, tooltip: String, disabled: bool) -> Button:
