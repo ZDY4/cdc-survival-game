@@ -335,7 +335,7 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [x] `J` 任务面板 toggle，已纳入 `UIToggle` smoke。
 - [x] `K` 技能面板 toggle，已纳入 `UIToggle` smoke。
 - [x] `L` 制作面板 toggle，已纳入 `UIToggle` smoke。
-- [ ] `Esc` 关闭链路：targeting -> dialogue -> interaction menu -> quantity modal -> trade modal -> stage panels -> settings -> pending interaction -> pending movement -> settings。
+- [~] `Esc` 关闭链路：已覆盖 selection、dialogue、interaction menu、trade modal、container modal、stage panels、settings 和无活动 UI 时打开 settings；待补 quantity modal、discard modal、overworld prompt、pending interaction / movement 细分优先级和 blocker 诊断。
 - [~] `1-9` 对话选项，已覆盖基础数字选择 smoke；待补禁用选项、越界选项和 modal 冲突。
 - [~] `1-0` hotbar 激活，已覆盖基础 hotbar 使用 smoke；待补 cooldown 禁用提示、空槽提示和 modal 冲突。
 - [ ] `Enter` / `Space` 对话推进。

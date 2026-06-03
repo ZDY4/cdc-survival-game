@@ -208,6 +208,41 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if game_root.dialogue_panel.visible:
 			errors.append("digit 1 dialogue option should hide dialogue panel after leave end")
 
+	var trade_talk_result: Dictionary = game_root.simulation.execute_interaction(1, {
+		"target_type": "actor",
+		"actor_id": 2,
+		"command_actor_id": 1,
+	})
+	game_root.refresh_dialogue_panel()
+	if not bool(trade_talk_result.get("success", false)) or str(_player(game_root).get("active_dialogue_id", "")).is_empty():
+		errors.append("direct talk interaction should reopen active dialogue for Esc trade close test")
+	else:
+		_press_key(game_root, KEY_2)
+		await process_frame
+		if not game_root.trade_panel.visible:
+			errors.append("digit 2 dialogue option should open trade panel")
+		_press_key(game_root, KEY_ESCAPE)
+		if game_root.trade_panel.visible:
+			errors.append("Esc should close active trade panel")
+		if not game_root.active_trade_target.is_empty():
+			errors.append("Esc should clear active trade target")
+
+	var container_result: Dictionary = game_root.simulation.execute_interaction(1, {
+		"target_id": "survivor_outpost_01_clinic_supply_cabinet",
+		"command_actor_id": 1,
+	})
+	game_root.refresh_container_panel()
+	if not bool(container_result.get("success", false)):
+		errors.append("direct container interaction should open container for Esc close test")
+	else:
+		if not game_root.container_panel.visible:
+			errors.append("container interaction should show container panel")
+		_press_key(game_root, KEY_ESCAPE)
+		if game_root.container_panel.visible:
+			errors.append("Esc should close active container panel")
+		if not str(_player(game_root).get("active_container_id", "")).is_empty():
+			errors.append("Esc should clear active container runtime state")
+
 	return errors
 
 
