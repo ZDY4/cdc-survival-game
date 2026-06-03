@@ -317,7 +317,7 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [ ] `1-0` hotbar 激活。
 - [ ] `Enter` / `Space` 对话推进。
 - [ ] `Space` 等待、结束回合、长按重复、pending 取消。
-- [ ] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。
+- [~] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。已恢复玩家侧 focus actor 循环与相机跟随；待补 busy actor 拒绝切换和 free observe 策略。
 - [ ] `V` overlay mode。
 - [ ] `/` 控制提示展开折叠。
 - [ ] `[` / `]` info panel tab 切换。

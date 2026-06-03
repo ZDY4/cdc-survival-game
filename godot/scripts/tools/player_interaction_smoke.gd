@@ -1,6 +1,7 @@
 extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const MapSceneLoaderScript = preload("res://scripts/world/map_scene_loader.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
@@ -309,6 +310,10 @@ func _hud_interaction_line(game_root: Node) -> String:
 	return game_root.hud.get_node("HudPanel/HudLines/InteractionLine").text
 
 
+func _hud_runtime_control_line(game_root: Node) -> String:
+	return game_root.hud.get_node("HudPanel/HudLines/RuntimeControlLine").text
+
+
 func _expect_startup_camera_frames_player(errors: Array[String], camera: Camera3D, player_node: Node3D) -> void:
 	_expect_camera_frames_player_at(errors, camera, player_node, Vector3(24.0, 0.5, 39.0), "startup")
 
@@ -387,6 +392,7 @@ func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node
 		return
 	_expect_camera_frames_player_at(errors, camera, player_node, return_grid, "return")
 	_expect_camera_keyboard_zoom_and_follow(errors, game_root, camera)
+	_expect_focus_actor_tab_cycle(errors, game_root)
 
 
 func _expect_camera_frames_player_at(errors: Array[String], camera: Camera3D, player_node: Node3D, expected_focus: Vector3, label: String) -> void:
@@ -454,6 +460,47 @@ func _expect_camera_keyboard_zoom_and_follow(errors: Array[String], game_root: N
 	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
 	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(game_root.runtime_input_controller._player_focus_position()) > 0.1:
 		errors.append("legacy F key should resume player camera follow")
+
+
+func _expect_focus_actor_tab_cycle(errors: Array[String], game_root: Node) -> void:
+	var player_snapshot: Dictionary = _actor_by_id(game_root.simulation.snapshot(), 1)
+	var player_grid: Dictionary = player_snapshot.get("grid_position", {})
+	var focus_grid := {
+		"x": int(player_grid.get("x", 0)) + 3,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}
+	var focus_actor_id: int = game_root.simulation.register_actor({
+		"definition_id": "player_focus_smoke",
+		"display_name": "Focus Smoke",
+		"kind": "player",
+		"side": "player",
+		"group_id": "player",
+		"map_id": game_root.simulation.active_map_id,
+		"grid_position": GridCoord.from_dictionary(focus_grid),
+		"ap": 6.0,
+		"turn_open": false,
+		"max_hp": 10.0,
+		"hp": 10.0,
+	})
+	game_root._rebuild_world_after_runtime_change()
+	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if camera == null:
+		errors.append("focus actor smoke should keep runtime camera")
+		return
+	_press_camera_zoom_key(game_root, KEY_TAB)
+	var focus_snapshot: Dictionary = game_root.focused_actor_snapshot()
+	if int(focus_snapshot.get("actor_id", 0)) != focus_actor_id:
+		errors.append("Tab should switch focus to the next player-side actor")
+	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
+	var expected_focus := Vector3(float(focus_grid["x"]), 0.5, float(focus_grid["z"]))
+	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(expected_focus) > 0.1:
+		errors.append("Tab should move camera focus to the selected focus actor")
+	if not _hud_runtime_control_line(game_root).contains("Focus Smoke"):
+		errors.append("HUD runtime control line should show the focused actor")
+	_press_camera_zoom_key(game_root, KEY_TAB)
+	if int(game_root.focused_actor_snapshot().get("actor_id", 0)) != 1:
+		errors.append("Tab should wrap focus back to the player actor")
 
 
 func _expect_camera_middle_drag(errors: Array[String], game_root: Node, camera: Camera3D) -> void:

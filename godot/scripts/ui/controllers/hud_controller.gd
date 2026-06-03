@@ -270,4 +270,13 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	if typeof(runtime_control) != TYPE_DICTIONARY:
 		return "AutoTick off"
 	var control_data: Dictionary = runtime_control
-	return "AutoTick %s" % ("on" if bool(control_data.get("auto_tick", false)) else "off")
+	var parts: Array[String] = [
+		"AutoTick %s" % ("on" if bool(control_data.get("auto_tick", false)) else "off"),
+	]
+	var focused_actor: Dictionary = control_data.get("focused_actor", {})
+	if not focused_actor.is_empty():
+		var focus_label := str(focused_actor.get("display_name", ""))
+		if focus_label.is_empty():
+			focus_label = str(focused_actor.get("definition_id", "actor"))
+		parts.append("Focus %s#%d" % [focus_label, int(focused_actor.get("actor_id", 0))])
+	return " | ".join(parts)

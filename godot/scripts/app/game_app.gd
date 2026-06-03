@@ -46,6 +46,7 @@ var info_panel_pages: Array[Dictionary] = [
 var active_info_panel_index: int = 0
 var auto_tick_enabled := false
 var auto_tick_elapsed_sec := 0.0
+var focused_actor_id: int = 0
 
 
 func _ready() -> void:
@@ -269,7 +270,45 @@ func runtime_control_snapshot() -> Dictionary:
 		"observe_mode": false,
 		"observe_playback": false,
 		"observe_speed": "x1",
+		"focused_actor": focused_actor_snapshot(),
 	}
+
+
+func cycle_focused_actor() -> Dictionary:
+	if gameplay_input_blocked_by_ui():
+		return {"success": false, "reason": "ui_blocked", "actor_id": focused_actor_id}
+	var candidates: Array[Dictionary] = _focus_actor_candidates()
+	if candidates.is_empty():
+		return {"success": false, "reason": "focus_actor_missing", "actor_id": focused_actor_id}
+	var current_index := -1
+	for index in range(candidates.size()):
+		if int(candidates[index].get("actor_id", 0)) == focused_actor_id:
+			current_index = index
+			break
+	var next_actor: Dictionary = candidates[(current_index + 1) % candidates.size()]
+	focused_actor_id = int(next_actor.get("actor_id", 0))
+	if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
+		runtime_input_controller.focus_current_actor()
+	refresh_hud(current_interaction_prompt())
+	return {"success": true, "actor": next_actor.duplicate(true), "actor_id": focused_actor_id}
+
+
+func focused_actor_snapshot() -> Dictionary:
+	var actor: Dictionary = _focused_actor_data()
+	if actor.is_empty():
+		return {}
+	return {
+		"actor_id": int(actor.get("actor_id", 0)),
+		"definition_id": str(actor.get("definition_id", "")),
+		"display_name": str(actor.get("display_name", "")),
+		"kind": str(actor.get("kind", "")),
+		"side": str(actor.get("side", "")),
+		"grid_position": _dictionary_or_empty(actor.get("grid_position", {})).duplicate(true),
+	}
+
+
+func focused_actor_grid_position() -> Dictionary:
+	return _dictionary_or_empty(focused_actor_snapshot().get("grid_position", {})).duplicate(true)
 
 
 func close_active_dialogue(reason: String = "closed") -> Dictionary:
@@ -826,6 +865,55 @@ func _active_container_id() -> String:
 		if actor_data.get("kind", "") == "player":
 			return str(actor_data.get("active_container_id", ""))
 	return ""
+
+
+func _focused_actor_data() -> Dictionary:
+	var candidates: Array[Dictionary] = _focus_actor_candidates()
+	if candidates.is_empty():
+		focused_actor_id = 0
+		return {}
+	for candidate in candidates:
+		if int(candidate.get("actor_id", 0)) == focused_actor_id:
+			return candidate.duplicate(true)
+	focused_actor_id = int(candidates[0].get("actor_id", 0))
+	return candidates[0].duplicate(true)
+
+
+func _focus_actor_candidates() -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	if world_result.is_empty():
+		return candidates
+	var focused_level := _current_focus_level()
+	for actor in _array_or_empty(world_result.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if actor_data.is_empty():
+			continue
+		if not _is_player_side_actor(actor_data):
+			continue
+		var grid: Dictionary = _dictionary_or_empty(actor_data.get("grid_position", {}))
+		if int(grid.get("y", 0)) != focused_level:
+			continue
+		candidates.append(actor_data.duplicate(true))
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("actor_id", 0)) < int(b.get("actor_id", 0))
+	)
+	return candidates
+
+
+func _current_focus_level() -> int:
+	for actor in _array_or_empty(world_result.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if int(actor_data.get("actor_id", 0)) == focused_actor_id:
+			return int(_dictionary_or_empty(actor_data.get("grid_position", {})).get("y", 0))
+	for actor in _array_or_empty(world_result.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if _is_player_side_actor(actor_data):
+			return int(_dictionary_or_empty(actor_data.get("grid_position", {})).get("y", 0))
+	return 0
+
+
+func _is_player_side_actor(actor_data: Dictionary) -> bool:
+	return str(actor_data.get("side", "")) == "player" or str(actor_data.get("kind", "")) == "player"
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

@@ -225,8 +225,8 @@ func _assert_runtime_control_line(errors: Array[String], game_root: Node, expect
 	if not label is Label:
 		errors.append("%s: HUD should expose RuntimeControlLine" % context)
 		return
-	if str((label as Label).text) != expected:
-		errors.append("%s: RuntimeControlLine expected %s, got %s" % [context, expected, str((label as Label).text)])
+	if not str((label as Label).text).contains(expected):
+		errors.append("%s: RuntimeControlLine expected to contain %s, got %s" % [context, expected, str((label as Label).text)])
 
 
 func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: String, expected_title: String, expected_line: String, context: String) -> void:

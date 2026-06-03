@@ -41,7 +41,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	if camera == null:
 		push_warning("运行时输入控制器找不到 WorldCamera，鼠标拾取和相机移动暂不可用")
 		return
-	camera_target = _vector_meta(camera, "focus_position", _player_focus_position())
+	camera_target = _vector_meta(camera, "focus_position", _focused_actor_position())
 	camera_target.y = BEVY_LEVEL_PLANE_HEIGHT
 	camera_zoom_factor = _float_meta(camera, "zoom_factor", 1.0)
 	camera_map_size = _vector2_meta(camera, "map_size", _map_size())
@@ -57,7 +57,7 @@ func process(delta: float) -> void:
 	if camera == null:
 		return
 	if is_camera_following_player and not is_middle_mouse_dragging:
-		camera_target = _clamp_camera_target(_player_focus_position())
+		camera_target = _clamp_camera_target(_focused_actor_position())
 		_apply_camera_transform()
 	if _mouse_inside_viewport():
 		update_hover_at_screen_position(game_root.get_viewport().get_mouse_position())
@@ -196,10 +196,11 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		_apply_camera_transform()
 		return true
 	elif key == KEY_F:
-		is_camera_following_player = true
-		has_camera_drag_anchor = false
-		camera_target = _clamp_camera_target(_player_focus_position())
-		_apply_camera_transform()
+		focus_current_actor()
+		return true
+	elif key == KEY_TAB:
+		if game_root.has_method("cycle_focused_actor"):
+			game_root.cycle_focused_actor()
 		return true
 	elif key == KEY_V:
 		if game_root.has_method("cycle_debug_overlay_mode"):
@@ -286,6 +287,13 @@ func clear_selection_state() -> void:
 	is_middle_mouse_dragging = false
 	has_camera_drag_anchor = false
 	_clear_selection_only()
+
+
+func focus_current_actor() -> void:
+	is_camera_following_player = true
+	has_camera_drag_anchor = false
+	camera_target = _clamp_camera_target(_focused_actor_position())
+	_apply_camera_transform()
 
 
 func has_selection_state() -> bool:
@@ -480,6 +488,18 @@ func _find_world_camera() -> Camera3D:
 		for child in node.get_children():
 			pending.append(child)
 	return null
+
+
+func _focused_actor_position() -> Vector3:
+	if game_root.has_method("focused_actor_grid_position"):
+		var focused_grid: Dictionary = _dictionary_or_empty(game_root.focused_actor_grid_position())
+		if not focused_grid.is_empty():
+			return Vector3(
+				float(focused_grid.get("x", 0)),
+				BEVY_LEVEL_PLANE_HEIGHT,
+				float(focused_grid.get("z", 0))
+			)
+	return _player_focus_position()
 
 
 func _player_focus_position() -> Vector3:

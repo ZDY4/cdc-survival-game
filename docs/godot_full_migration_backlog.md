@@ -323,7 +323,7 @@
 - [ ] `Esc` 关闭链路：targeting -> dialogue -> interaction menu -> quantity modal -> trade -> container -> stage panel -> settings -> pending -> settings。
 - [ ] `Space`：对话推进、等待/结束回合、pending 取消、长按重复等待。
 - [ ] 数字键：对话 `1-9`、hotbar `1-0`、数量输入冲突处理。
-- [ ] `Tab`：可控 actor / focus actor 切换。
+- [~] `Tab`：可控 actor / focus actor 切换。已恢复玩家侧 focus actor 循环与相机跟随；待补 busy actor 拒绝切换、free observe 和 selected/focused/current prompt 清理策略。
 - [ ] `F`：恢复相机跟随。
 - [x] `V`：overlay mode。
 - [ ] `/`：帮助展开。
