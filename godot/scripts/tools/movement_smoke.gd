@@ -46,6 +46,8 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	if _event_count(simulation.snapshot(), "movement_step") != 1:
 		errors.append("command move did not emit movement_step")
 
+	_expect_ap_depletion_auto_advances_turn(errors, simulation, topology)
+
 	var blocked_goal: Dictionary = _first_blocking_cell(topology)
 	var blocked_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": blocked_goal, "topology": topology})
 	if blocked_result.get("reason", "") != "goal_blocked":
@@ -69,6 +71,28 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	if int(grid.get("x", -1)) != player.grid_position.x or int(grid.get("z", -1)) != player.grid_position.z:
 		errors.append("world snapshot did not expose moved player position")
 	return errors
+
+
+func _expect_ap_depletion_auto_advances_turn(errors: Array[String], simulation: RefCounted, topology: Dictionary) -> void:
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.ap = 1.0
+	var round_before: int = int(simulation.snapshot().get("turn_state", {}).get("round", 0))
+	var turn_started_before: int = _event_count(simulation.snapshot(), "turn_started")
+	var turn_ended_before: int = _event_count(simulation.snapshot(), "turn_ended")
+	var goal: Dictionary = _first_open_neighbor(player.grid_position, topology, _occupied_actor_cells(simulation, 1))
+	var result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": goal, "topology": topology})
+	if not bool(result.get("success", false)):
+		errors.append("AP-depleting move failed: %s" % result.get("reason", "unknown"))
+	if not bool(result.get("auto_turn_advanced", false)):
+		errors.append("AP-depleting move should auto advance the player turn")
+	if player.ap < 1.0:
+		errors.append("auto advanced player turn should reopen with affordable AP")
+	if int(simulation.snapshot().get("turn_state", {}).get("round", 0)) <= round_before:
+		errors.append("auto advanced turn should run a world cycle and increment round")
+	if _event_count(simulation.snapshot(), "turn_ended") <= turn_ended_before:
+		errors.append("auto advanced turn should emit turn_ended")
+	if _event_count(simulation.snapshot(), "turn_started") <= turn_started_before:
+		errors.append("auto advanced turn should emit turn_started")
 
 
 func _first_blocking_cell(topology: Dictionary) -> Dictionary:

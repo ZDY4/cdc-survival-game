@@ -23,6 +23,9 @@ const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 
 const DEFAULT_TURN_AP := 6.0
+const DEFAULT_TURN_AP_GAIN := 6.0
+const AFFORDABLE_AP_THRESHOLD := 1.0
+const AUTO_TURN_ADVANCE_LIMIT := 8
 const DEFAULT_ATTACK_AP := 2.0
 const DEFAULT_INTERACTION_AP := 1.0
 const DEFAULT_ATTACK_RANGE := 1
@@ -105,17 +108,18 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 	if not actor.turn_open:
 		return {"success": false, "reason": "turn_closed", "turn_state": turn_state.duplicate(true)}
 
-	match str(command.get("kind", "")):
+	var kind := str(command.get("kind", ""))
+	match kind:
 		"wait":
 			return _submit_wait_command(actor, command)
 		"move":
-			return _submit_move_command(actor, command)
+			return _finalize_player_ap_action(actor, _submit_move_command(actor, command), command, "move")
 		"interact":
-			return _submit_interact_command(actor, command)
+			return _finalize_player_ap_action(actor, _submit_interact_command(actor, command), command, "interact")
 		"attack":
-			return _submit_attack_command(actor, command)
+			return _finalize_player_ap_action(actor, _submit_attack_command(actor, command), command, "attack")
 		"craft":
-			return _submit_craft_command(actor, command)
+			return _finalize_player_ap_action(actor, _submit_craft_command(actor, command), command, "craft")
 		"inventory_action":
 			return _submit_inventory_action_command(actor, command)
 		"learn_skill":
@@ -123,7 +127,7 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 		"bind_hotbar":
 			return _submit_bind_hotbar_command(actor, command)
 		"use_skill":
-			return _submit_use_skill_command(actor, command)
+			return _finalize_player_ap_action(actor, _submit_use_skill_command(actor, command), command, "use_skill")
 		_:
 			return _unsupported_player_command(command, "unknown_player_command")
 
@@ -313,6 +317,80 @@ func _submit_wait_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 		"pending_result": pending_result,
 		"turn_state": turn_state.duplicate(true),
 	}
+
+
+func _finalize_player_ap_action(actor: RefCounted, result: Dictionary, command: Dictionary, reason: String) -> Dictionary:
+	if actor == null or not bool(result.get("success", false)):
+		return result
+	if not actor.turn_open or actor.ap >= AFFORDABLE_AP_THRESHOLD:
+		return result
+	if _result_changes_active_map(result):
+		result["auto_turn_skipped"] = "map_changed"
+		return result
+	if not str(actor.active_dialogue_id).is_empty():
+		result["auto_turn_skipped"] = "active_dialogue"
+		return result
+	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
+	if topology.is_empty():
+		result["auto_turn_skipped"] = "topology_missing"
+		return result
+	var auto_turn: Dictionary = _auto_advance_player_turn(actor, topology, reason)
+	if bool(auto_turn.get("advanced", false)):
+		_merge_auto_turn_final_result(result, auto_turn)
+		result["auto_turn_advanced"] = true
+		result["auto_turn"] = auto_turn
+		result["turn_state"] = turn_state.duplicate(true)
+	return result
+
+
+func _auto_advance_player_turn(actor: RefCounted, topology: Dictionary, reason: String) -> Dictionary:
+	var cycles: Array[Dictionary] = []
+	var guard := 0
+	while guard < AUTO_TURN_ADVANCE_LIMIT:
+		guard += 1
+		if actor == null or not actor.turn_open:
+			break
+		if actor.ap >= AFFORDABLE_AP_THRESHOLD:
+			break
+		if not str(actor.active_dialogue_id).is_empty():
+			break
+		_close_turn(actor.actor_id, "auto_ap_depleted:%s" % reason)
+		var npc_results: Array[Dictionary] = advance_world_turn(topology)
+		_open_turn(actor.actor_id, "auto_player_turn")
+		var pending_result: Dictionary = {}
+		if not pending_movement.is_empty() or not pending_interaction.is_empty():
+			pending_result = _resume_pending_for_actor(actor, topology)
+		cycles.append({
+			"round": int(turn_state.get("round", 1)),
+			"npc_results": npc_results,
+			"pending_result": pending_result,
+			"player_ap": actor.ap,
+		})
+		if pending_result.is_empty():
+			break
+		if not bool(pending_result.get("success", false)):
+			break
+	return {
+		"advanced": not cycles.is_empty(),
+		"cycles": cycles,
+		"limit_reached": guard >= AUTO_TURN_ADVANCE_LIMIT,
+	}
+
+
+func _merge_auto_turn_final_result(result: Dictionary, auto_turn: Dictionary) -> void:
+	var cycles: Array = _array_or_empty(auto_turn.get("cycles", []))
+	for cycle_index in range(cycles.size() - 1, -1, -1):
+		var cycle: Dictionary = _dictionary_or_empty(cycles[cycle_index])
+		var pending_result: Dictionary = _dictionary_or_empty(cycle.get("pending_result", {}))
+		if pending_result.is_empty() or not bool(pending_result.get("success", false)):
+			continue
+		for key in ["dialogue_id", "dialogue_state", "container", "context_snapshot", "consumed_target", "defeated", "attack_result", "auto_resumed_interaction", "resumed_pending_interaction", "approach_result"]:
+			if pending_result.has(key) and not result.has(key):
+				result[key] = pending_result.get(key)
+		if pending_result.has("kind") and str(result.get("kind", "")) == "pending_movement_completed":
+			result["kind"] = pending_result.get("kind")
+		result["auto_turn_final_result"] = pending_result.duplicate(true)
+		return
 
 
 func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
@@ -708,7 +786,7 @@ func _open_turn(actor_id: int, reason: String) -> void:
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	if actor == null:
 		return
-	actor.ap = DEFAULT_TURN_AP
+	actor.ap = clampf(actor.ap + DEFAULT_TURN_AP_GAIN, 0.0, DEFAULT_TURN_AP)
 	actor.turn_open = true
 	turn_state["active_actor_id"] = actor_id
 	turn_state["phase"] = "player" if actor.kind == "player" else "npc"
@@ -745,6 +823,11 @@ func _spend_ap(actor: RefCounted, cost: float, reason: String) -> void:
 		"after": actor.ap,
 		"reason": reason,
 	})
+
+
+func _result_changes_active_map(result: Dictionary) -> bool:
+	var context_snapshot: Dictionary = _dictionary_or_empty(result.get("context_snapshot", {}))
+	return context_snapshot.has("active_map_id")
 
 
 func _enter_combat(actor_ids: Array, reason: String) -> void:

@@ -251,8 +251,6 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	var after: Dictionary = _player_grid(game_root)
 	if int(after.get("x", 0)) == int(before.get("x", 0)) and int(after.get("z", 0)) == int(before.get("z", 0)):
 		errors.append("left mouse click on far projected ground should start moving player from %s toward %s" % [JSON.stringify(before), JSON.stringify(target)])
-	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
-		errors.append("left mouse click on far projected ground should leave remaining movement pending")
 	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
 		player.ap = 6.0
@@ -264,11 +262,7 @@ func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:
 	var move_result: Dictionary = game_root.execute_move_to_grid(far_target)
 	if not bool(move_result.get("success", false)):
 		errors.append("far grid move should start partial movement before queueing: %s" % move_result.get("reason", "unknown"))
-	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
-		errors.append("far grid move should leave pending_movement")
 	var cancel_result: Dictionary = game_root.cancel_pending("smoke_cancel", false)
-	if not bool(cancel_result.get("had_pending", false)):
-		errors.append("cancel_pending should report an existing pending action")
 	var snapshot: Dictionary = game_root.simulation.snapshot()
 	if not snapshot.get("pending_movement", {}).is_empty() or not snapshot.get("pending_interaction", {}).is_empty():
 		errors.append("cancel_pending should clear pending movement and interaction")
