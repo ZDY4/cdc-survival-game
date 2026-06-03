@@ -164,6 +164,10 @@ func grant_skill_points(actor_id: int, amount: int, source: String = "") -> Dict
 	return _progression_runner.grant_skill_points(self, _progression_rules, actor_id, amount, source)
 
 
+func allocate_attribute_point(actor_id: int, attribute: String) -> Dictionary:
+	return _progression_runner.allocate_attribute_point(self, _progression_rules, actor_id, attribute)
+
+
 func learn_skill(actor_id: int, skill_id: String, skill_library: Dictionary) -> Dictionary:
 	return _progression_runner.learn_skill(self, _progression_rules, actor_id, skill_id, skill_library)
 

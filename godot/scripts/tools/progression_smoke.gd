@@ -88,6 +88,20 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("100 xp should level player from 1 to 2")
 	if _event_count(simulation.snapshot(), "actor_leveled_up") <= 0:
 		errors.append("level up event missing")
+	if int(player.progression.get("available_stat_points", 0)) != 3:
+		errors.append("level up should grant 3 stat points")
+	var max_hp_before_attribute: float = player.max_hp
+	var allocate_result: Dictionary = simulation.allocate_attribute_point(1, "constitution")
+	if not bool(allocate_result.get("success", false)):
+		errors.append("allocate constitution failed: %s" % allocate_result.get("reason", "unknown"))
+	if int(player.progression.get("attributes", {}).get("constitution", 0)) != 7:
+		errors.append("allocating constitution should increase progression attribute")
+	if int(player.progression.get("available_stat_points", 0)) != 2:
+		errors.append("allocating attribute should consume one stat point")
+	if player.max_hp <= max_hp_before_attribute:
+		errors.append("allocating constitution should refresh max hp derived value")
+	if _event_count(simulation.snapshot(), "attribute_allocated") <= 0:
+		errors.append("attribute_allocated event missing")
 
 	var zombie: int = _register_zombie(simulation, registry)
 	var target: RefCounted = simulation.actor_registry.get_actor(zombie)

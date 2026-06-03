@@ -19,6 +19,27 @@ func add_skill_points(state: Dictionary, amount: int) -> Dictionary:
 	return _leveling.add_skill_points(state, amount)
 
 
+func allocate_attribute_point(state: Dictionary, attribute: String) -> Dictionary:
+	var normalized_attribute: String = attribute.strip_edges().to_lower()
+	if normalized_attribute.is_empty():
+		return {"success": false, "reason": "attribute_missing"}
+	var next_state: Dictionary = _state_tools.normalized_state(state)
+	if int(next_state.get("available_stat_points", 0)) <= 0:
+		return {"success": false, "reason": "attribute_points_unavailable", "attribute": normalized_attribute}
+	var attributes: Dictionary = _dictionary_or_empty(next_state.get("attributes", {})).duplicate(true)
+	var new_value: int = int(attributes.get(normalized_attribute, 0)) + 1
+	attributes[normalized_attribute] = new_value
+	next_state["attributes"] = attributes
+	next_state["available_stat_points"] = int(next_state.get("available_stat_points", 0)) - 1
+	return {
+		"success": true,
+		"state": next_state,
+		"attribute": normalized_attribute,
+		"value": new_value,
+		"available_stat_points": int(next_state.get("available_stat_points", 0)),
+	}
+
+
 func learn_skill(state: Dictionary, skill_id: String, skill_library: Dictionary) -> Dictionary:
 	var normalized_skill_id: String = str(skill_id)
 	if normalized_skill_id.is_empty():

@@ -217,8 +217,8 @@
 
 ### 9.1 角色进度
 
-- 已有 XP、等级、技能点、属性点第一版；待补属性分配 UI、属性要求显示、升级反馈、奖励明细。
-- 待补 stat point 分配命令、撤销/确认策略、属性影响派生值刷新。
+- 已有 XP、等级、技能点、属性点第一版；属性点分配 core 命令、`attribute_allocated` 事件和 constitution / strength / agility 的最小派生刷新已纳入 `Progression` smoke；待补属性分配 UI、属性要求显示、升级反馈、奖励明细。
+- 待补属性分配撤销/确认策略和更完整的属性影响派生值刷新。
 - 待补 progression 事件：level up、skill point gained、attribute allocated、skill learned 的 UI toast 和日志。
 
 ### 9.2 技能树
