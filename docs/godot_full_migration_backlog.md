@@ -327,7 +327,7 @@
 - [ ] `F`：恢复相机跟随。
 - [x] `V`：overlay mode。
 - [ ] `/`：帮助展开。
-- [ ] `[` / `]`：info tab 切换。
+- [x] `[` / `]`：info tab 切换。
 - [ ] `A`：auto tick / observe playback。
 - [ ] `PageUp/PageDown`：楼层切换。
 - [ ] console、debug panel、modal、stage panel 打开时阻止 gameplay 输入。

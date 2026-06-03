@@ -38,6 +38,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.panel_controller == null:
 		return ["panel controller was not created"]
 	_expect_stage_closed(errors, game_root, "initial")
+	_assert_info_panel(errors, game_root, "overview", "Overview", "Info Overview 1/9", "initial info panel")
+	_press_key(game_root, KEY_BRACKETRIGHT)
+	_assert_info_panel(errors, game_root, "selection", "Selection", "Info Selection 2/9", "] should advance info panel")
+	_press_key(game_root, KEY_BRACKETLEFT)
+	_assert_info_panel(errors, game_root, "overview", "Overview", "Info Overview 1/9", "[ should return to overview")
+	_press_key(game_root, KEY_BRACKETLEFT)
+	_assert_info_panel(errors, game_root, "performance", "Performance", "Info Performance 9/9", "[ should wrap info panel")
+	_press_key(game_root, KEY_BRACKETRIGHT)
+	_assert_info_panel(errors, game_root, "overview", "Overview", "Info Overview 1/9", "] should wrap back to overview")
 	if str(game_root.current_debug_overlay_mode()) != "off":
 		errors.append("debug overlay mode should start as off")
 	_assert_debug_overlay_line(errors, game_root, "Overlay off", "initial overlay HUD")
@@ -186,6 +195,20 @@ func _assert_debug_overlay_line(errors: Array[String], game_root: Node, expected
 		return
 	if str((label as Label).text) != expected:
 		errors.append("%s: DebugOverlayLine expected %s, got %s" % [context, expected, str((label as Label).text)])
+
+
+func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: String, expected_title: String, expected_line: String, context: String) -> void:
+	var page: Dictionary = game_root.current_info_panel_page()
+	if str(page.get("id", "")) != expected_id:
+		errors.append("%s: active info panel id expected %s, got %s" % [context, expected_id, str(page.get("id", ""))])
+	if str(page.get("title", "")) != expected_title:
+		errors.append("%s: active info panel title expected %s, got %s" % [context, expected_title, str(page.get("title", ""))])
+	var label: Node = game_root.hud.find_child("InfoPanelLine", true, false)
+	if not label is Label:
+		errors.append("%s: HUD should expose InfoPanelLine" % context)
+		return
+	if str((label as Label).text) != expected_line:
+		errors.append("%s: InfoPanelLine expected %s, got %s" % [context, expected_line, str((label as Label).text)])
 
 
 func _stage_panel_ids() -> Array[String]:

@@ -5,6 +5,7 @@ var _player_label: Label
 var _inventory_label: Label
 var _interaction_label: Label
 var _debug_overlay_label: Label
+var _info_panel_label: Label
 var _controls_hint_box: VBoxContainer
 var _interaction_menu: PanelContainer
 var _menu_title_label: Label
@@ -43,6 +44,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	]
 	_interaction_label.text = _interaction_text(interaction)
 	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
+	_info_panel_label.text = _info_panel_text(snapshot.get("info_panel", {}))
 	_apply_controls_hint()
 	_apply_interaction_menu(interaction)
 
@@ -71,11 +73,13 @@ func _build_layout() -> void:
 	_inventory_label = _line("InventoryLine")
 	_interaction_label = _line("InteractionLine")
 	_debug_overlay_label = _line("DebugOverlayLine")
+	_info_panel_label = _line("InfoPanelLine")
 	box.add_child(_world_label)
 	box.add_child(_player_label)
 	box.add_child(_inventory_label)
 	box.add_child(_interaction_label)
 	box.add_child(_debug_overlay_label)
+	box.add_child(_info_panel_label)
 	_controls_hint_box = VBoxContainer.new()
 	_controls_hint_box.name = "ControlsHint"
 	_controls_hint_box.add_theme_constant_override("separation", 3)
@@ -84,7 +88,7 @@ func _build_layout() -> void:
 	for line in [
 		"I/C/M/J/K/L 面板 | Esc 关闭/设置 | Space 等待",
 		"1-9 对话选项 | 1-0 热栏 | 鼠标左键移动/交互",
-		"右键菜单 | 中键拖拽相机 | F 跟随 | V 覆盖层 | +/- 缩放",
+		"右键菜单 | 中键拖拽相机 | F 跟随 | V 覆盖层 | [/] 信息页 | +/- 缩放",
 	]:
 		var label := _line("ControlsHintLine")
 		label.text = line
@@ -241,4 +245,18 @@ func _interaction_text(interaction: Dictionary) -> String:
 	return "Target %s | Primary %s" % [
 		interaction.get("target_name", ""),
 		primary_label,
+	]
+
+
+func _info_panel_text(info_panel: Variant) -> String:
+	if typeof(info_panel) != TYPE_DICTIONARY:
+		return "Info none"
+	var info_data: Dictionary = info_panel
+	var page: Dictionary = info_data.get("active_page", {})
+	if page.is_empty():
+		return "Info none"
+	return "Info %s %d/%d" % [
+		str(page.get("title", "")),
+		int(info_data.get("active_index", 0)) + 1,
+		int(info_data.get("count", 0)),
 	]

@@ -31,6 +31,18 @@ var crafting_panel: Control
 var settings_panel: Control
 var active_trade_target: Dictionary = {}
 var debug_overlay_mode: String = "off"
+var info_panel_pages: Array[Dictionary] = [
+	{"id": "overview", "title": "Overview", "tab_label": "Overview"},
+	{"id": "selection", "title": "Selection", "tab_label": "Select"},
+	{"id": "actor", "title": "Selected Actor", "tab_label": "Actor"},
+	{"id": "world", "title": "World", "tab_label": "World"},
+	{"id": "interaction", "title": "Interaction", "tab_label": "Interact"},
+	{"id": "turn_sys", "title": "Turn System", "tab_label": "Turn"},
+	{"id": "events", "title": "Events", "tab_label": "Events"},
+	{"id": "ai", "title": "AI", "tab_label": "AI"},
+	{"id": "performance", "title": "Performance", "tab_label": "Perf"},
+]
+var active_info_panel_index: int = 0
 
 
 func _ready() -> void:
@@ -200,6 +212,38 @@ func cycle_debug_overlay_mode() -> Dictionary:
 
 func current_debug_overlay_mode() -> String:
 	return debug_overlay_mode
+
+
+func cycle_info_panel(direction: int) -> Dictionary:
+	if info_panel_pages.size() <= 1:
+		return {"success": false, "reason": "not_enough_info_pages"}
+	active_info_panel_index = posmod(active_info_panel_index + direction, info_panel_pages.size())
+	refresh_hud(current_interaction_prompt())
+	var page := current_info_panel_page()
+	return {
+		"success": true,
+		"page_id": page.get("id", ""),
+		"title": page.get("title", ""),
+		"index": active_info_panel_index,
+		"count": info_panel_pages.size(),
+	}
+
+
+func current_info_panel_page() -> Dictionary:
+	if info_panel_pages.is_empty():
+		return {}
+	active_info_panel_index = clampi(active_info_panel_index, 0, info_panel_pages.size() - 1)
+	return info_panel_pages[active_info_panel_index].duplicate(true)
+
+
+func info_panel_snapshot() -> Dictionary:
+	var page := current_info_panel_page()
+	return {
+		"active_page": page,
+		"enabled_pages": info_panel_pages.duplicate(true),
+		"active_index": active_info_panel_index,
+		"count": info_panel_pages.size(),
+	}
 
 
 func close_active_dialogue(reason: String = "closed") -> Dictionary:

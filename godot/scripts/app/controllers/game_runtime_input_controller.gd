@@ -205,6 +205,14 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		if game_root.has_method("cycle_debug_overlay_mode"):
 			game_root.cycle_debug_overlay_mode()
 		return true
+	elif key == KEY_BRACKETLEFT:
+		if game_root.has_method("cycle_info_panel"):
+			game_root.cycle_info_panel(-1)
+		return true
+	elif key == KEY_BRACKETRIGHT:
+		if game_root.has_method("cycle_info_panel"):
+			game_root.cycle_info_panel(1)
+		return true
 	elif key == KEY_SLASH:
 		if game_root.has_method("toggle_controls_hint"):
 			game_root.toggle_controls_hint()
