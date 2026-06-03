@@ -88,6 +88,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("binding a second skill should keep first hotbar slot")
 	if not _hotbar_line(game_root).contains("slot_2:low_profile"):
 		errors.append("second auto-bound skill should use the first empty hotbar slot")
+	if _clear_button(game_root, "low_profile") == null or _clear_button(game_root, "low_profile").disabled:
+		errors.append("bound toggle skill should expose enabled clear button")
+	_clear_button(game_root, "low_profile").pressed.emit()
+	await process_frame
+	if not _hotbar_line(game_root).contains("slot_1:adrenaline_rush"):
+		errors.append("clearing second hotbar slot should keep first slot")
+	if _hotbar_line(game_root).contains("slot_2:low_profile"):
+		errors.append("cleared hotbar slot should disappear from skills panel")
+	if not _event_seen(game_root, "hotbar_unbound"):
+		errors.append("clearing hotbar slot from skills panel should emit hotbar_unbound")
 	game_root.panel_controller.close_stage_panels()
 	_press_key(game_root, KEY_1)
 	await process_frame
@@ -142,6 +152,13 @@ func _use_button(game_root: Node, skill_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node("UseButton") as Button
+
+
+func _clear_button(game_root: Node, skill_id: String) -> Button:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return null
+	return row.get_node("ClearButton") as Button
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:

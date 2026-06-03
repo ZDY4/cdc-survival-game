@@ -72,7 +72,7 @@ func _tree_title(tree: Dictionary) -> Label:
 func _skill_row(skill: Dictionary) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.name = "Skill_%s" % skill.get("skill_id", "unknown")
-	row.custom_minimum_size = Vector2(392, 28)
+	row.custom_minimum_size = Vector2(430, 28)
 	row.add_theme_constant_override("separation", 6)
 	var line := _label("Line")
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -102,10 +102,18 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 		if root != null and root.has_method("use_hotbar_slot"):
 			root.use_hotbar_slot(str(skill.get("bound_slot", "")))
 	, CONNECT_DEFERRED)
+	var bound_slot_id: String = str(skill.get("bound_slot", ""))
+	var clear_button := _button("ClearButton", "X", "清空 %s" % bound_slot_id, bound_slot_id.is_empty())
+	clear_button.pressed.connect(func() -> void:
+		var root := get_parent()
+		if root != null and root.has_method("bind_player_skill_to_hotbar"):
+			root.bind_player_skill_to_hotbar(bound_slot_id, "")
+	, CONNECT_DEFERRED)
 	row.add_child(line)
 	row.add_child(learn_button)
 	row.add_child(bind_button)
 	row.add_child(use_button)
+	row.add_child(clear_button)
 	return row
 
 
