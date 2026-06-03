@@ -4,6 +4,7 @@ var _world_label: Label
 var _player_label: Label
 var _inventory_label: Label
 var _interaction_label: Label
+var _debug_overlay_label: Label
 var _controls_hint_box: VBoxContainer
 var _interaction_menu: PanelContainer
 var _menu_title_label: Label
@@ -41,6 +42,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		player.get("active_dialogue_id", ""),
 	]
 	_interaction_label.text = _interaction_text(interaction)
+	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
 	_apply_controls_hint()
 	_apply_interaction_menu(interaction)
 
@@ -68,10 +70,12 @@ func _build_layout() -> void:
 	_player_label = _line("PlayerLine")
 	_inventory_label = _line("InventoryLine")
 	_interaction_label = _line("InteractionLine")
+	_debug_overlay_label = _line("DebugOverlayLine")
 	box.add_child(_world_label)
 	box.add_child(_player_label)
 	box.add_child(_inventory_label)
 	box.add_child(_interaction_label)
+	box.add_child(_debug_overlay_label)
 	_controls_hint_box = VBoxContainer.new()
 	_controls_hint_box.name = "ControlsHint"
 	_controls_hint_box.add_theme_constant_override("separation", 3)
@@ -80,7 +84,7 @@ func _build_layout() -> void:
 	for line in [
 		"I/C/M/J/K/L 面板 | Esc 关闭/设置 | Space 等待",
 		"1-9 对话选项 | 1-0 热栏 | 鼠标左键移动/交互",
-		"右键菜单 | 中键拖拽相机 | F 跟随 | +/- 缩放",
+		"右键菜单 | 中键拖拽相机 | F 跟随 | V 覆盖层 | +/- 缩放",
 	]:
 		var label := _line("ControlsHintLine")
 		label.text = line

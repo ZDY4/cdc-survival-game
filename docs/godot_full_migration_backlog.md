@@ -325,7 +325,7 @@
 - [ ] 数字键：对话 `1-9`、hotbar `1-0`、数量输入冲突处理。
 - [ ] `Tab`：可控 actor / focus actor 切换。
 - [ ] `F`：恢复相机跟随。
-- [ ] `V`：overlay mode。
+- [x] `V`：overlay mode。
 - [ ] `/`：帮助展开。
 - [ ] `[` / `]`：info tab 切换。
 - [ ] `A`：auto tick / observe playback。

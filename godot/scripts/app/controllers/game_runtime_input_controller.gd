@@ -201,6 +201,10 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		camera_target = _clamp_camera_target(_player_focus_position())
 		_apply_camera_transform()
 		return true
+	elif key == KEY_V:
+		if game_root.has_method("cycle_debug_overlay_mode"):
+			game_root.cycle_debug_overlay_mode()
+		return true
 	elif key == KEY_SLASH:
 		if game_root.has_method("toggle_controls_hint"):
 			game_root.toggle_controls_hint()

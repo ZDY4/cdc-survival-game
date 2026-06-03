@@ -38,6 +38,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.panel_controller == null:
 		return ["panel controller was not created"]
 	_expect_stage_closed(errors, game_root, "initial")
+	if str(game_root.current_debug_overlay_mode()) != "off":
+		errors.append("debug overlay mode should start as off")
+	_assert_debug_overlay_line(errors, game_root, "Overlay off", "initial overlay HUD")
+	_press_key(game_root, KEY_V)
+	if str(game_root.current_debug_overlay_mode()) != "walkable":
+		errors.append("V should switch debug overlay mode to walkable")
+	_assert_debug_overlay_line(errors, game_root, "Overlay walkable", "walkable overlay HUD")
+	_press_key(game_root, KEY_V)
+	if str(game_root.current_debug_overlay_mode()) != "vision":
+		errors.append("second V should switch debug overlay mode to vision")
+	_assert_debug_overlay_line(errors, game_root, "Overlay vision", "vision overlay HUD")
+	_press_key(game_root, KEY_V)
+	if str(game_root.current_debug_overlay_mode()) != "off":
+		errors.append("third V should switch debug overlay mode back to off")
+	_assert_debug_overlay_line(errors, game_root, "Overlay off", "off overlay HUD")
 	if bool(game_root.controls_hint_visible()):
 		errors.append("controls hint should be hidden initially")
 	_press_key(game_root, KEY_SLASH)
@@ -162,6 +177,15 @@ func _expect_stage_closed(errors: Array[String], game_root: Node, context: Strin
 		var panel: Control = _panel(game_root, id)
 		if panel != null and panel.visible:
 			errors.append("%s: panel %s should be hidden" % [context, id])
+
+
+func _assert_debug_overlay_line(errors: Array[String], game_root: Node, expected: String, context: String) -> void:
+	var label: Node = game_root.hud.find_child("DebugOverlayLine", true, false)
+	if not label is Label:
+		errors.append("%s: HUD should expose DebugOverlayLine" % context)
+		return
+	if str((label as Label).text) != expected:
+		errors.append("%s: DebugOverlayLine expected %s, got %s" % [context, expected, str((label as Label).text)])
 
 
 func _stage_panel_ids() -> Array[String]:

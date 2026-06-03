@@ -30,6 +30,7 @@ var skills_panel: Control
 var crafting_panel: Control
 var settings_panel: Control
 var active_trade_target: Dictionary = {}
+var debug_overlay_mode: String = "off"
 
 
 func _ready() -> void:
@@ -185,6 +186,20 @@ func toggle_controls_hint() -> Dictionary:
 
 func controls_hint_visible() -> bool:
 	return hud != null and hud.has_method("is_controls_hint_visible") and bool(hud.is_controls_hint_visible())
+
+
+func cycle_debug_overlay_mode() -> Dictionary:
+	var modes := ["off", "walkable", "vision"]
+	var index := modes.find(debug_overlay_mode)
+	if index < 0:
+		index = 0
+	debug_overlay_mode = modes[(index + 1) % modes.size()]
+	refresh_hud(current_interaction_prompt())
+	return {"success": true, "mode": debug_overlay_mode}
+
+
+func current_debug_overlay_mode() -> String:
+	return debug_overlay_mode
 
 
 func close_active_dialogue(reason: String = "closed") -> Dictionary:
