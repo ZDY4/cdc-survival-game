@@ -25,6 +25,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"container_id": container_id,
 		"display_name": str(session.get("display_name", container_id)),
 		"items": _item_snapshots(session.get("inventory", [])),
+		"player_items": _inventory_item_snapshots(_dictionary_or_empty(player.get("inventory", {}))),
 	}
 	var scoped_feedback := _feedback_snapshot(feedback, container_id)
 	if not scoped_feedback.is_empty():
@@ -54,6 +55,30 @@ func _item_snapshots(entries: Array) -> Array[Dictionary]:
 		return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
 	)
 	return items
+
+
+func _inventory_item_snapshots(inventory: Dictionary) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for item_id in inventory.keys():
+		var count := int(inventory[item_id])
+		if count <= 0:
+			continue
+		var normalized_item_id := _normalize_content_id(item_id)
+		if normalized_item_id.is_empty():
+			continue
+		var item_data: Dictionary = _item_data(normalized_item_id)
+		entries.append({
+			"item_id": normalized_item_id,
+			"name": str(item_data.get("name", normalized_item_id)),
+			"description": str(item_data.get("description", "")),
+			"count": count,
+			"unit_weight": float(item_data.get("weight", 0.0)),
+			"rarity": _rarity(item_data),
+		})
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
+	)
+	return entries
 
 
 func _player_actor(runtime_snapshot: Dictionary) -> Dictionary:

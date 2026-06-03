@@ -46,6 +46,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("container panel should be visible after opening container")
 	if not _container_summary(game_root).contains("2 类物品"):
 		errors.append("container summary should expose initial entries")
+	if not _container_text(game_root).contains("抗生素"):
+		errors.append("container column should expose container items")
+	if not _container_player_text(game_root).contains("水瓶"):
+		errors.append("player column should expose inventory items")
 
 	var take_result: Dictionary = game_root.take_active_container_item("1031", 1)
 	if not bool(take_result.get("success", false)):
@@ -54,6 +58,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("taking container item should emit container_item_taken")
 	if not _inventory_text(game_root).contains("抗生素 x1"):
 		errors.append("inventory panel missing taken antibiotics")
+	if not _container_player_text(game_root).contains("抗生素 x1"):
+		errors.append("container player column missing taken antibiotics")
 	if _container_text(game_root).contains("抗生素"):
 		errors.append("container panel should remove taken antibiotics")
 
@@ -72,6 +78,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("storing container item should emit container_item_stored")
 	if not _container_text(game_root).contains("水瓶 x1"):
 		errors.append("container panel missing stored water bottle")
+	if _container_player_text(game_root).contains("水瓶 x1"):
+		errors.append("container player column should remove stored water bottle")
 	if _inventory_text(game_root).contains("水瓶 x1"):
 		errors.append("inventory panel should remove stored water bottle")
 
@@ -252,6 +260,15 @@ func _container_text(game_root: Node) -> String:
 	return "\n".join(_container_item_lines(game_root))
 
 
+func _container_player_text(game_root: Node) -> String:
+	var output: Array[String] = []
+	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/PlayerColumn/PlayerItemLines")
+	for child in item_box.get_children():
+		if child is Label:
+			output.append((child as Label).text)
+	return "\n".join(output)
+
+
 func _inventory_text(game_root: Node) -> String:
 	var output: Array[String] = []
 	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemLines")
@@ -263,7 +280,7 @@ func _inventory_text(game_root: Node) -> String:
 
 func _container_item_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
-	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemLines")
+	var item_box: Node = game_root.container_panel.get_node("ContainerPanel/ContainerLines/ItemColumns/ContainerColumn/ItemLines")
 	for child in item_box.get_children():
 		if child is Label:
 			output.append((child as Label).text)
