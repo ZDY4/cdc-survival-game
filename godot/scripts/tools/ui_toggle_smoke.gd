@@ -221,10 +221,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(trade_talk_result.get("success", false)) or str(_player(game_root).get("active_dialogue_id", "")).is_empty():
 		errors.append("direct talk interaction should reopen active dialogue for Esc trade close test")
 	else:
-		_press_key(game_root, KEY_2)
-		await process_frame
+		var trade_digit := _dialogue_option_digit(game_root, ["交易", "货"])
+		if trade_digit <= 0:
+			errors.append("direct trade dialogue should expose a trade option")
+		else:
+			_press_key(game_root, _key_for_digit(trade_digit))
+			await process_frame
 		if not game_root.trade_panel.visible:
-			errors.append("digit 2 dialogue option should open trade panel")
+			errors.append("trade dialogue option should open trade panel")
 		if not bool(game_root.gameplay_input_blocked_by_ui()):
 			errors.append("open trade panel should block gameplay input")
 		_expect_blocker(errors, game_root, "trade", "open trade blocker")
@@ -303,6 +307,44 @@ func _release_key(game_root: Node, key: int) -> void:
 	event.physical_keycode = key
 	event.pressed = false
 	game_root.runtime_input_controller.input(event)
+
+
+func _dialogue_option_digit(game_root: Node, fragments: Array[String]) -> int:
+	if not game_root.has_method("_current_dialogue_snapshot"):
+		return 0
+	var snapshot: Dictionary = game_root._current_dialogue_snapshot()
+	var options: Array = snapshot.get("options", [])
+	for index in range(options.size()):
+		var option: Dictionary = options[index]
+		var text := str(option.get("text", ""))
+		for fragment in fragments:
+			if text.contains(fragment):
+				return index + 1
+	return 0
+
+
+func _key_for_digit(digit: int) -> int:
+	match digit:
+		1:
+			return KEY_1
+		2:
+			return KEY_2
+		3:
+			return KEY_3
+		4:
+			return KEY_4
+		5:
+			return KEY_5
+		6:
+			return KEY_6
+		7:
+			return KEY_7
+		8:
+			return KEY_8
+		9:
+			return KEY_9
+		_:
+			return KEY_0
 
 
 func _expect_stage_open(errors: Array[String], game_root: Node, panel_id: String, context: String) -> void:

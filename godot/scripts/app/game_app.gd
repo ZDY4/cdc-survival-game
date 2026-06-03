@@ -515,8 +515,7 @@ func choose_dialogue_option(option_ref: Variant) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
 	var result: Dictionary = simulation.advance_dialogue(1, option_ref, registry.get_library("dialogues"))
-	if bool(result.get("success", false)) and result.get("end_type", "") == "trade":
-		active_trade_target = _dialogue_trade_target()
+	_apply_dialogue_trade_result(result)
 	refresh_dialogue_panel()
 	refresh_inventory_panel()
 	refresh_trade_panel()
@@ -543,8 +542,7 @@ func advance_dialogue_without_choice() -> Dictionary:
 			"active_dialogue": true,
 		}
 	var result: Dictionary = simulation.advance_dialogue_without_choice(1, registry.get_library("dialogues"))
-	if bool(result.get("success", false)) and result.get("end_type", "") == "trade":
-		active_trade_target = _dialogue_trade_target()
+	_apply_dialogue_trade_result(result)
 	refresh_dialogue_panel()
 	refresh_inventory_panel()
 	refresh_trade_panel()
@@ -553,6 +551,15 @@ func advance_dialogue_without_choice() -> Dictionary:
 	refresh_crafting_panel()
 	refresh_hud()
 	return result
+
+
+func _apply_dialogue_trade_result(result: Dictionary) -> void:
+	if not bool(result.get("success", false)):
+		return
+	if str(result.get("end_type", "")) == "trade":
+		active_trade_target = _dialogue_trade_target()
+	elif bool(result.get("finished", false)) or result.has("end_type"):
+		active_trade_target = {}
 
 
 func has_active_dialogue() -> bool:

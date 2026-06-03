@@ -22,6 +22,11 @@ func advance(simulation: RefCounted, actor_id: int, option_ref: Variant, dialogu
 	var current_node: Dictionary = _dictionary_or_empty(nodes.get(current_node_id, {}))
 	if current_node.is_empty():
 		return {"success": false, "reason": "dialogue_node_missing", "node_id": current_node_id}
+	if str(current_node.get("type", "")) == "dialog":
+		var next_choice: Dictionary = _dictionary_or_empty(nodes.get(str(current_node.get("next", "")), {}))
+		if str(next_choice.get("type", "")) == "choice":
+			current_node = next_choice
+			current_node_id = str(current_node.get("id", current_node_id))
 	if str(current_node.get("type", "")) != "choice":
 		return {"success": false, "reason": "dialogue_choice_unavailable", "node_id": current_node_id}
 

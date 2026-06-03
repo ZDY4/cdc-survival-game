@@ -515,7 +515,7 @@
 - [ ] 总价、资金变化、确认预览。
 - [ ] 资金不足、库存不足、不可出售、装备出售确认。
 - [ ] 拖拽：shop -> buy zone、inventory/equipment -> sell zone。
-- [~] 交易关闭：Esc、关闭按钮、目标不可用和地图切换已纳入 `TradeUI` / `UIToggle` smoke；待补对话结束。
+- [x] 交易关闭：Esc、关闭按钮、目标不可用、地图切换和对话结束已纳入 `TradeUI` / `UIToggle` smoke。
 
 参考：`game_core/src/economy.rs`、`runtime/runtime_economy.rs`、`game_ui/container_ui/**`、`game_ui/trade_ui/**`。
 落点：`godot/scripts/core/economy/**`、`godot/scripts/ui/controllers/*_panel_controller.gd`。

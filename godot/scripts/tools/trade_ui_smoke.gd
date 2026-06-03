@@ -93,6 +93,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not game_root.active_trade_target.is_empty():
 		errors.append("Esc should clear active trade target")
 	_reopen_trade(game_root, errors)
+	_close_trade_via_dialogue_leave(game_root, errors)
+	_reopen_trade(game_root, errors)
 	game_root.active_trade_target = {"target_type": "actor", "actor_id": 9999}
 	game_root.refresh_trade_panel()
 	if game_root.trade_panel.visible:
@@ -142,6 +144,24 @@ func _reopen_trade(game_root: Node, errors: Array[String]) -> void:
 		errors.append("trade reopen failed: %s" % result.get("reason", "unknown"))
 	if not game_root.trade_panel.visible:
 		errors.append("trade panel should reopen for Esc close check")
+
+
+func _close_trade_via_dialogue_leave(game_root: Node, errors: Array[String]) -> void:
+	var talk_result: Dictionary = game_root.simulation.execute_interaction(1, {
+		"target_type": "actor",
+		"actor_id": 2,
+	})
+	game_root.refresh_dialogue_panel()
+	if not bool(talk_result.get("success", false)):
+		errors.append("trade dialogue close setup failed: %s" % talk_result.get("reason", "unknown"))
+		return
+	var leave_result: Dictionary = game_root.choose_dialogue_option(2)
+	if not bool(leave_result.get("success", false)) or str(leave_result.get("end_type", "")) != "leave":
+		errors.append("dialogue leave option should finish with leave end_type")
+	if game_root.trade_panel.visible:
+		errors.append("dialogue leave should close trade panel")
+	if not game_root.active_trade_target.is_empty():
+		errors.append("dialogue leave should clear active trade target")
 
 
 func _title_line(game_root: Node) -> String:
