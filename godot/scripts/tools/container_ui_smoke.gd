@@ -60,10 +60,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var exhausted_take: Dictionary = game_root.take_active_container_item("1031", 1)
 	if exhausted_take.get("reason", "") != "container_inventory_insufficient":
 		errors.append("taking missing container item should report container_inventory_insufficient")
+	if not _container_feedback(game_root).contains("容器中没有足够的抗生素"):
+		errors.append("taking missing container item should show container failure feedback")
 
 	var store_result: Dictionary = game_root.store_active_container_item("1008", 1)
 	if not bool(store_result.get("success", false)):
 		errors.append("storing item failed: %s" % store_result.get("reason", "unknown"))
+	if not _container_feedback(game_root).is_empty():
+		errors.append("successful container store should clear previous failure feedback")
 	if not _event_seen(game_root, "container_item_stored"):
 		errors.append("storing container item should emit container_item_stored")
 	if not _container_text(game_root).contains("水瓶 x1"):
@@ -74,6 +78,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var missing_store: Dictionary = game_root.store_active_container_item("1008", 1)
 	if missing_store.get("reason", "") != "not_enough_items":
 		errors.append("storing unavailable item should report not_enough_items")
+	if not _container_feedback(game_root).contains("背包中没有足够的水瓶"):
+		errors.append("storing unavailable item should show inventory failure feedback")
 	_press_close_button(game_root)
 	if game_root.container_panel.visible:
 		errors.append("close button should close container panel")
@@ -221,6 +227,13 @@ func _final_interaction_result(result: Dictionary) -> bool:
 
 func _container_summary(game_root: Node) -> String:
 	return game_root.container_panel.get_node("ContainerPanel/ContainerLines/SummaryLine").text
+
+
+func _container_feedback(game_root: Node) -> String:
+	var label: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/FeedbackLine")
+	if label is Label and (label as Label).visible:
+		return str((label as Label).text)
+	return ""
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:

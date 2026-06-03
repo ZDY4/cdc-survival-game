@@ -7,7 +7,7 @@ func _init(p_registry: RefCounted) -> void:
 	registry = p_registry
 
 
-func build(runtime_snapshot: Dictionary) -> Dictionary:
+func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionary:
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var container_id: String = str(player.get("active_container_id", ""))
 	if container_id.is_empty():
@@ -20,12 +20,16 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 			"error": "unknown_container",
 		}
 
-	return {
+	var snapshot := {
 		"active": true,
 		"container_id": container_id,
 		"display_name": str(session.get("display_name", container_id)),
 		"items": _item_snapshots(session.get("inventory", [])),
 	}
+	var scoped_feedback := _feedback_snapshot(feedback, container_id)
+	if not scoped_feedback.is_empty():
+		snapshot["feedback"] = scoped_feedback
+	return snapshot
 
 
 func _item_snapshots(entries: Array) -> Array[Dictionary]:
@@ -79,6 +83,54 @@ func _rarity(item_data: Dictionary) -> String:
 		if fragment_data.get("kind", "") == "economy":
 			return str(fragment_data.get("rarity", ""))
 	return ""
+
+
+func _feedback_snapshot(feedback: Dictionary, container_id: String) -> Dictionary:
+	if feedback.is_empty():
+		return {}
+	if not str(feedback.get("container_id", container_id)).is_empty() and str(feedback.get("container_id", container_id)) != container_id:
+		return {}
+	var reason := str(feedback.get("reason", ""))
+	var text := _feedback_text(feedback)
+	if reason.is_empty() and text.is_empty():
+		return {}
+	return {
+		"type": str(feedback.get("type", "error")),
+		"reason": reason,
+		"text": text,
+	}
+
+
+func _feedback_text(feedback: Dictionary) -> String:
+	var explicit_text := str(feedback.get("text", ""))
+	if not explicit_text.is_empty():
+		return explicit_text
+	var item_name := _feedback_item_name(feedback)
+	var required := int(feedback.get("required", feedback.get("count", 1)))
+	var current := int(feedback.get("current", 0))
+	match str(feedback.get("reason", "")):
+		"container_inventory_insufficient":
+			return "容器中没有足够的%s，需要 %d，当前 %d。" % [item_name, required, current]
+		"not_enough_items":
+			return "背包中没有足够的%s，需要 %d，当前 %d。" % [item_name, required, current]
+		"unknown_container":
+			return "容器不存在或已经失效。"
+		"unknown_item":
+			return "物品数据不可用: %s。" % str(feedback.get("item_id", ""))
+		"unknown_actor":
+			return "当前角色不可用，无法操作容器。"
+		"active_container_missing":
+			return "没有打开的容器。"
+		_:
+			return str(feedback.get("reason", ""))
+
+
+func _feedback_item_name(feedback: Dictionary) -> String:
+	var item_id := _normalize_content_id(feedback.get("item_id", ""))
+	if item_id.is_empty():
+		return "物品"
+	var item_data := _item_data(item_id)
+	return str(item_data.get("name", item_id))
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

@@ -6,6 +6,7 @@ var _panel: PanelContainer
 var _title_label: Label
 var _close_button: Button
 var _summary_label: Label
+var _feedback_label: Label
 var _items_box: VBoxContainer
 
 
@@ -31,11 +32,13 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.has("error"):
 		_title_label.text = "Container %s" % snapshot.get("container_id", "")
 		_summary_label.text = "容器资源不可用: %s" % snapshot.get("error", "unknown")
+		_apply_feedback({})
 		_clear_items()
 		return
 
 	_title_label.text = str(snapshot.get("display_name", snapshot.get("container_id", "")))
 	_summary_label.text = "%d 类物品" % snapshot.get("items", []).size()
+	_apply_feedback(_dictionary_or_empty(snapshot.get("feedback", {})))
 	_clear_items()
 	var items: Array = snapshot.get("items", [])
 	if items.is_empty():
@@ -75,12 +78,14 @@ func _build_layout() -> void:
 		close_requested.emit()
 	)
 	_summary_label = _label("SummaryLine")
+	_feedback_label = _label("FeedbackLine")
 	_items_box = VBoxContainer.new()
 	_items_box.name = "ItemLines"
 	_items_box.add_theme_constant_override("separation", 4)
 	box.add_child(_title_label)
 	box.add_child(_close_button)
 	box.add_child(_summary_label)
+	box.add_child(_feedback_label)
 	box.add_child(_items_box)
 
 
@@ -99,6 +104,14 @@ func _empty_line() -> Label:
 	return label
 
 
+func _apply_feedback(feedback: Dictionary) -> void:
+	if _feedback_label == null:
+		return
+	var text := str(feedback.get("text", ""))
+	_feedback_label.visible = not text.is_empty()
+	_feedback_label.text = text
+
+
 func _label(node_name: String) -> Label:
 	var label := Label.new()
 	label.name = node_name
@@ -111,3 +124,9 @@ func _clear_items() -> void:
 	for child in _items_box.get_children():
 		_items_box.remove_child(child)
 		child.free()
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

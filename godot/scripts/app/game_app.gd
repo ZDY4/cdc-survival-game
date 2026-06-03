@@ -31,6 +31,7 @@ var skills_panel: Control
 var crafting_panel: Control
 var settings_panel: Control
 var active_trade_target: Dictionary = {}
+var active_container_feedback: Dictionary = {}
 var debug_overlay_mode: String = "off"
 var info_panel_pages: Array[Dictionary] = [
 	{"id": "overview", "title": "Overview", "tab_label": "Overview"},
@@ -129,7 +130,9 @@ func refresh_container_panel() -> void:
 	if simulation != null:
 		var close_reason := _active_container_close_reason()
 		if not close_reason.is_empty():
+			active_container_feedback = {}
 			simulation.close_container(1, close_reason)
+	panel_controller.active_container_feedback = active_container_feedback
 	panel_controller.refresh_container_panel()
 
 
@@ -395,6 +398,7 @@ func close_active_container(reason: String = "closed") -> Dictionary:
 		return {"success": false, "reason": "simulation_missing"}
 	var result: Dictionary = simulation.close_container(1, reason)
 	if bool(result.get("success", false)):
+		active_container_feedback = {}
 		refresh_container_panel()
 		refresh_hud()
 	return result
@@ -644,13 +648,16 @@ func press_enter_action() -> Dictionary:
 func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
-		return {"success": false, "reason": "active_container_missing"}
+		var missing_result := {"success": false, "reason": "active_container_missing"}
+		_record_container_feedback(missing_result, "take_container", "", item_id, count)
+		return missing_result
 	var result: Dictionary = _submit_inventory_action({
 		"action": "take_container",
 		"container_id": container_id,
 		"item_id": item_id,
 		"count": count,
 	})
+	_record_container_feedback(result, "take_container", container_id, item_id, count)
 	refresh_inventory_panel()
 	refresh_container_panel()
 	refresh_journal_panel()
@@ -660,13 +667,16 @@ func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
-		return {"success": false, "reason": "active_container_missing"}
+		var missing_result := {"success": false, "reason": "active_container_missing"}
+		_record_container_feedback(missing_result, "store_container", "", item_id, count)
+		return missing_result
 	var result: Dictionary = _submit_inventory_action({
 		"action": "store_container",
 		"container_id": container_id,
 		"item_id": item_id,
 		"count": count,
 	})
+	_record_container_feedback(result, "store_container", container_id, item_id, count)
 	refresh_inventory_panel()
 	refresh_container_panel()
 	return result
@@ -856,6 +866,7 @@ func _setup_panels() -> void:
 		panel_controller = GamePanelController.new(self, registry, simulation, world_result)
 	panel_controller.update_world_result(world_result)
 	panel_controller.active_trade_target = active_trade_target
+	panel_controller.active_container_feedback = active_container_feedback
 	panel_controller.setup_panels()
 	# 对外保留面板引用，方便既有 smoke 和编辑器入口继续做状态复核。
 	hud = panel_controller.hud
@@ -887,6 +898,8 @@ func _update_trade_target_after_interaction(result: Dictionary, executed_target:
 
 func _apply_interaction_execution_result(result: Dictionary, executed_target: Dictionary) -> void:
 	_update_trade_target_after_interaction(result, executed_target)
+	if _interaction_result_opens_container(result):
+		active_container_feedback = {}
 	world_result = interaction_controller.world_result
 	_sync_observed_level_to_map()
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
@@ -906,6 +919,25 @@ func _submit_inventory_action(action: Dictionary) -> Dictionary:
 	command["actor_id"] = 1
 	command["item_library"] = registry.get_library("items")
 	return simulation.submit_player_command(command)
+
+
+func _record_container_feedback(result: Dictionary, action: String, container_id: String, item_id: String, count: int) -> void:
+	if bool(result.get("success", false)):
+		active_container_feedback = {}
+		return
+	active_container_feedback = result.duplicate(true)
+	active_container_feedback["type"] = "error"
+	active_container_feedback["action"] = action
+	active_container_feedback["container_id"] = str(result.get("container_id", container_id))
+	active_container_feedback["item_id"] = str(result.get("item_id", item_id))
+	active_container_feedback["count"] = count
+
+
+func _interaction_result_opens_container(result: Dictionary) -> bool:
+	if result.has("container"):
+		return true
+	var nested_result: Dictionary = _dictionary_or_empty(result.get("result", {}))
+	return nested_result.has("container")
 
 
 func _dialogue_trade_target() -> Dictionary:
