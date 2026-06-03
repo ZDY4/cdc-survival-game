@@ -90,11 +90,11 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 		if root != null and root.has_method("learn_player_skill"):
 			root.learn_player_skill(skill_id)
 	, CONNECT_DEFERRED)
-	var bind_button := _button("BindButton", "B", "绑定 %s 到快捷栏 1" % skill.get("name", skill_id), not bool(skill.get("can_bind", false)))
+	var bind_button := _button("BindButton", "B", "绑定 %s 到第一个空快捷栏" % skill.get("name", skill_id), not bool(skill.get("can_bind", false)))
 	bind_button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("bind_player_skill_to_hotbar"):
-			root.bind_player_skill_to_hotbar("slot_1", skill_id)
+			root.bind_player_skill_to_hotbar("", skill_id)
 	, CONNECT_DEFERRED)
 	var use_button := _button("UseButton", "U", "使用 %s" % skill.get("name", skill_id), not bool(skill.get("can_use", false)))
 	use_button.pressed.connect(func() -> void:

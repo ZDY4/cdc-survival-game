@@ -77,6 +77,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills panel should show bound hotbar skill")
 	if _use_button(game_root, "adrenaline_rush") == null or _use_button(game_root, "adrenaline_rush").disabled:
 		errors.append("bound active skill should be usable before cooldown")
+	var toggle_result: Dictionary = game_root.learn_player_skill("low_profile")
+	if not bool(toggle_result.get("success", false)):
+		errors.append("low_profile learn failed: %s" % toggle_result.get("reason", "unknown"))
+	if _bind_button(game_root, "low_profile") == null or _bind_button(game_root, "low_profile").disabled:
+		errors.append("learned toggle skill should allow hotbar binding")
+	_bind_button(game_root, "low_profile").pressed.emit()
+	await process_frame
+	if not _hotbar_line(game_root).contains("slot_1:adrenaline_rush"):
+		errors.append("binding a second skill should keep first hotbar slot")
+	if not _hotbar_line(game_root).contains("slot_2:low_profile"):
+		errors.append("second auto-bound skill should use the first empty hotbar slot")
 	game_root.panel_controller.close_stage_panels()
 	_press_key(game_root, KEY_1)
 	await process_frame

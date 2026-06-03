@@ -31,6 +31,7 @@ const DEFAULT_INTERACTION_AP := 1.0
 const DEFAULT_ATTACK_RANGE := 1
 const NPC_AGGRO_RANGE := 8
 const COMBAT_EXIT_NO_SIGHT_TURNS := 3
+const HOTBAR_SLOT_COUNT := 10
 
 var actor_registry := ActorRegistry.new()
 var active_map_id: String = ""
@@ -656,9 +657,9 @@ func _submit_learn_skill_command(actor: RefCounted, command: Dictionary) -> Dict
 func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	var slot_id: String = str(command.get("slot_id", ""))
 	var skill_id: String = str(command.get("skill_id", ""))
-	if slot_id.is_empty():
-		return {"success": false, "reason": "hotbar_slot_missing"}
 	if skill_id.is_empty():
+		if slot_id.is_empty():
+			return {"success": false, "reason": "hotbar_slot_missing"}
 		hotbar.erase(slot_id)
 		_emit("hotbar_unbound", {
 			"actor_id": actor.actor_id,
@@ -673,6 +674,11 @@ func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dict
 	var activation_mode: String = str(_dictionary_or_empty(skill.get("activation", {})).get("mode", "passive"))
 	if activation_mode == "passive":
 		return {"success": false, "reason": "skill_not_bindable", "skill_id": skill_id}
+	var resolved_slot_id: String = _resolve_hotbar_bind_slot(skill_id, slot_id)
+	if resolved_slot_id.is_empty():
+		return {"success": false, "reason": "hotbar_full", "skill_id": skill_id}
+	var auto_slot: bool = slot_id.is_empty()
+	slot_id = resolved_slot_id
 	hotbar[slot_id] = {
 		"slot_id": slot_id,
 		"kind": "skill",
@@ -685,7 +691,21 @@ func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dict
 		"kind": "skill",
 		"skill_id": skill_id,
 	})
-	return {"success": true, "slot_id": slot_id, "skill_id": skill_id}
+	return {"success": true, "slot_id": slot_id, "skill_id": skill_id, "auto_slot": auto_slot}
+
+
+func _resolve_hotbar_bind_slot(skill_id: String, requested_slot_id: String) -> String:
+	if not requested_slot_id.is_empty():
+		return requested_slot_id
+	for slot_id in hotbar.keys():
+		var slot: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {}))
+		if str(slot.get("kind", "")) == "skill" and str(slot.get("skill_id", "")) == skill_id:
+			return str(slot_id)
+	for index in range(1, HOTBAR_SLOT_COUNT + 1):
+		var candidate := "slot_%d" % index
+		if _dictionary_or_empty(hotbar.get(candidate, {})).is_empty():
+			return candidate
+	return ""
 
 
 func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictionary:
