@@ -16,11 +16,20 @@
 - Godot 编辑器能力：`godot/addons/cdc_game_editor`
 - Agent 工具入口：`tools/agent`
 
+本文覆盖旧参考工程中所有需要迁移、重做、替代或明确废弃的边界：
+
+- 旧 app：`bevy_debug_viewer`、`bevy_map_editor`、`bevy_character_editor`、`bevy_item_editor`、`bevy_recipe_editor`、`bevy_skill_editor`、`bevy_quest_editor`、`bevy_dialogue_editor`、`bevy_gltf_viewer`、`bevy_server`、`content_tools`。
+- 旧 crate：`game_core`、`game_data`、`game_bevy`、`game_editor`、`game_protocol`。
+- 当前内容域：`ai`、`appearance`、`bootstrap`、`characters`、`dialogues`、`dialogue_rules`、`items`、`maps`、`overworld`、`quests`、`recipes`、`settlements`、`shops`、`skills`、`skill_trees`、`world_tiles`。
+- 当前资产类型：字体、shader、glTF、glTF `.bin`、Godot `.import`、`.uid`、Blockbench `.bbmodel`、资产映射 JSON 和说明文档。
+- 当前运行形态：主菜单、游戏运行时、Godot editor 插件、headless 工具、agent 脚本、smoke/validate。
+
 ## 状态标记
 
 - `[ ]` 尚未迁移或无等价实现
 - `[~]` 已有基础，但未达到旧行为等价或缺验证
 - `[x]` 已迁移，后续主要做防回归守护
+- `[D]` 明确废弃旧实现，但需要在本清单记录废弃原因和 Godot 替代方案
 - `参考` 指旧 Rust / Bevy 优先对照目录
 - `落点` 指 Godot 主线应放置的模块
 - `验收` 指最小 smoke、validator 或人工复核口径
@@ -35,6 +44,14 @@
 - [ ] 每个新增迁移功能都要明确权威层，避免 UI / world / editor 直接修改玩法状态。
 - [ ] 不再新增长期 JSON -> `.tscn` 地图转换流程；地图编辑应直接维护 Godot scene。
 - [ ] 对所有旧 Rust app 做迁移结论标注：迁移、替代、废弃或暂缓。
+- [ ] 旧 `bevy_debug_viewer` 运行时能力迁移为 Godot 游戏场景、运行时 controller、HUD 和 debug 面板。
+- [ ] 旧 `bevy_map_editor` 迁移为 Godot map scene 工作流、`CDC Map Review` dock 和 headless review 脚本。
+- [ ] 旧角色、物品、配方、技能、任务、对话编辑器迁移为 Godot editor 插件或 data edit service 表单，不再保留独立 Bevy app。
+- [ ] 旧 `bevy_gltf_viewer` 迁移为 Godot 资产预览、导入检查和 socket/挂点复核工具。
+- [ ] 旧 `content_tools` 迁移为 `tools/agent/godot-content.ps1` 和 Godot data tools。
+- [D] 旧 `bevy_server` 运行入口不回流；只保留协议、save、snapshot 和远程控制语义作为后续 Godot/工具接口参考。
+- [D] 旧 `game_bevy` 渲染插件不回流；只迁移相机、picking、world render、UI 视觉和 debug 观察行为。
+- [ ] 旧 `game_protocol` 中仍有价值的 request/response、snapshot、event payload 需要转译为 Godot headless tool 或自动化接口。
 - [ ] 清理根目录旧残留时要先确认不影响 Godot 当前工具链和数据入口。
 
 参考：`rust/apps/**`、`rust/crates/**`、`AGENTS.md`。
@@ -346,7 +363,40 @@
 落点：`godot/scripts/ui/**`、`godot/scripts/app/controllers/**`。
 验收：UIToggle、InventoryUI、ContainerUI、TradeUI smoke。
 
-## 7. 玩家交互系统
+## 7. 移动、路径和空间规则
+
+- [~] 点击空地提交 `move` command，移动结果由 core 计算。
+- [~] pending movement 在 AP 不足时排队，下一回合继续。
+- [ ] Rust `GridPosition` / `GridSize` / `GridDirection` / `GridRect` 语义完整转译到 Godot，不混用 world coordinate 和 grid coordinate。
+- [ ] player controlled actor、focused actor、selected actor 的移动源明确，支持后续 `Tab` 切换。
+- [ ] A* 或等价寻路的 cost、邻接、对角、禁止穿角、楼层策略与旧实现一致。
+- [ ] 路径节点保存 level、x、y、cost、remaining AP、blocked reason。
+- [ ] 移动请求校验：地图存在、目标格在 bounds 内、目标 level 可达、目标格可站立、不是被 actor 或阻挡物占用。
+- [ ] runtime obstacle 合并：关闭的门、活动 actor、临时阻挡、地图对象、战斗 zone。
+- [ ] actor 自身格在寻路时不阻挡自身，但阻挡其他 actor。
+- [ ] 允许靠近不可站立目标：pickup、container、talk、attack、door、scene transition 自动寻路到邻接可交互格。
+- [ ] 自动接近目标格选择：最近、可见、同层、可达、交互距离满足、不会穿过封闭门或危险格。
+- [ ] 移动步进事件：queued、step started、step completed、blocked、cancelled、destination reached。
+- [ ] 移动 AP 消耗：每格 cost、斜向 cost、ramp/elevation cost、overburden 或状态修正、剩余 AP 后自动推进。
+- [ ] AP 不足时保存剩余路径，下一回合按旧规则继续或等待玩家确认。
+- [ ] pending movement 被点击新目标、打开 UI、进入战斗、受击、目标失效、地图切换时的取消策略。
+- [ ] movement runner 分帧推进和动画速度分离，核心状态不能依赖视觉 tween 完成才正确。
+- [ ] 移动中相机跟随、hover 更新、路径预览清理、cursor feedback。
+- [ ] door auto-open 参与移动流程：可开门、锁门、打开失败、打开后 topology 更新。
+- [ ] AI 移动复用同一 movement runner，不做第二套路由规则。
+- [ ] NPC 追击目标丢失、路径被堵、同伴阻挡时有等待、重算或放弃策略。
+- [ ] 场景切换入口移动：到达 trigger 后执行 transition，失败时不吞掉 pending 状态。
+- [ ] 楼层移动：楼梯、ramp、entry point、PageUp/PageDown 视觉层与核心 level 分离。
+- [ ] path preview：可走路径、不可达路径、AP 分段、危险/阻挡提示。
+- [ ] debug overlay：walkable、occupied、blocks sight、path cost、level。
+- [ ] 移动 save/load：pending path、actor grid、facing、level、turn state roundtrip。
+- [ ] movement smoke 需要覆盖：空地移动、不可达目标、自动接近、AP 不足续走、门阻挡、楼层、AI 追击。
+
+参考：`game_core/src/movement.rs`、`game_core/src/grid/**`、`simulation/spatial.rs`、`runtime/runtime_movement.rs`、`bevy_debug_viewer/src/controls/mouse.rs`。
+落点：`godot/scripts/core/movement/**`、`godot/scripts/core/simulation/simulation.gd`、`godot/scripts/world/map_topology.gd`、`godot/scripts/app/controllers/player_interaction_controller.gd`。
+验收：Movement、PlayerInteraction、Combat、AI、Save smoke。
+
+## 8. 玩家交互系统
 
 - [~] actor / object / self / grid fallback 有第一版。
 - [~] pickup、open container、talk、trade、scene transition、wait、attack 有第一版。
@@ -365,9 +415,9 @@
 落点：`godot/scripts/core/interactions/**`、`godot/scripts/core/simulation/simulation.gd`。
 验收：Interaction、PlayerInteraction、Door smoke。
 
-## 8. 战斗、目标、伤害和尸体
+## 9. 战斗、目标、伤害和尸体
 
-### 8.1 攻击校验
+### 9.1 攻击校验
 
 - [~] 敌对关系、距离和同层校验有基础。
 - [ ] 攻击和技能共用 line-of-sight：墙、门、楼层、中心点遮挡。
@@ -376,7 +426,7 @@
 - [ ] 攻击前目标预览：可攻击格、目标高亮、不可攻击 reason。
 - [ ] 攻击事件中的 hit_kind、damage kind、armor result、ammo result、weapon id 稳定。
 
-### 8.2 武器、弹药、伤害
+### 9.2 武器、弹药、伤害
 
 - [~] 武器射程、弹药、攻击速度、基础伤害和暴击第一版。
 - [ ] 确定性随机种子和重放稳定性。
@@ -385,7 +435,7 @@
 - [ ] 武器耐久、消耗品、装备特效。
 - [ ] 伤害反馈：飘字、日志、暴击、击杀、受击动画、音效。
 
-### 8.3 击杀、尸体和掉落
+### 9.3 击杀、尸体和掉落
 
 - [~] 击杀、XP、kill quest、尸体容器第一版。
 - [ ] 掉落来源：背包、装备、弹药、loot table、金钱。
@@ -393,7 +443,7 @@
 - [ ] 尸体模型或标记、hover、open container、fog 影响。
 - [ ] 击杀后 AI、combat、quest、relationship、event feedback 顺序一致。
 
-### 8.4 技能目标和 AOE
+### 9.4 技能目标和 AOE
 
 - [ ] single target、grid target、self target、line、cone、radius AOE。
 - [ ] AOE 中心 LOS、中心到命中格遮挡、遮挡格排除。
@@ -405,7 +455,7 @@
 落点：`godot/scripts/core/combat/**`、`godot/scripts/core/vision/**`、`godot/scripts/ui/**`。
 验收：Combat、SkillsUI、Targeting、AI smoke。
 
-## 9. NPC、AI、阵营和生活模拟
+## 10. NPC、AI、阵营和生活模拟
 
 - [~] hostile attack / approach 第一版。
 - [ ] aggro range、LOS 感知、丢失目标、重规划、绕障、开门。
@@ -423,9 +473,9 @@
 落点：`godot/scripts/core/ai/**`、`godot/scripts/core/simulation/**`、`godot/scripts/ui/debug/**`。
 验收：AI、NpcLife、Interaction、Save smoke。
 
-## 10. 背包、装备、容器和交易
+## 11. 背包、装备、容器和交易
 
-### 10.1 背包
+### 11.1 背包
 
 - [~] 物品列表和基础操作。
 - [~] drop、take、store、buy、sell、equip、unequip 统一命令入口。
@@ -436,7 +486,7 @@
 - [ ] 拖拽：背包排序、装备槽、容器、交易 sell zone、丢弃区域。
 - [ ] 容量、重量或格子限制的旧规则确认和实现。
 
-### 10.2 装备
+### 11.2 装备
 
 - [~] equip / unequip 命令。
 - [ ] 装备槽 UI：main hand、off hand、head、body、legs、feet、hands、back、accessory。
@@ -446,7 +496,7 @@
 - [ ] 卸下失败：背包空间、任务锁定、战斗限制。
 - [ ] reload equipped weapon。
 
-### 10.3 容器
+### 11.3 容器
 
 - [~] 地图容器和尸体容器可打开、拿取、存放。
 - [ ] 双栏 UI、滚动、详情。
@@ -456,7 +506,7 @@
 - [ ] 容器关闭：Esc、按钮、地图切换、目标消失、超出距离。
 - [ ] 空容器提示和失败提示。
 
-### 10.4 交易
+### 11.4 交易
 
 - [~] buy / sell 命令第一版。
 - [ ] 购物车：queue buy、queue sell、adjust、remove、clear、confirm。
@@ -471,7 +521,7 @@
 落点：`godot/scripts/core/economy/**`、`godot/scripts/ui/controllers/*_panel_controller.gd`。
 验收：InventoryUI、ContainerUI、TradeUI、Equipment、Save smoke。
 
-## 11. 角色进度、技能 UI 和 Hotbar
+## 12. 角色进度、技能 UI 和 Hotbar
 
 - [~] XP、等级、技能点、学习技能第一版。
 - [~] hotbar 第一槽绑定和 `use_skill` 入口。
@@ -488,7 +538,7 @@
 落点：`godot/scripts/core/progression/**`、`godot/scripts/ui/controllers/skills_panel_controller.gd`、`hud_controller.gd`。
 验收：Progression、SkillsUI、UI smoke。
 
-## 12. 对话、任务、剧情和 world flags
+## 13. 对话、任务、剧情和 world flags
 
 - [~] NPC talk、dialogue panel、journal panel 第一版。
 - [ ] 对话和任务共享 world flags。
@@ -505,7 +555,7 @@
 落点：`godot/scripts/core/dialogue/**`、`godot/scripts/core/quests/**`、`godot/scripts/core/overworld/**`、`godot/scripts/ui/**`。
 验收：DialogueUI、Quest、JournalUI、Overworld、Save smoke。
 
-## 13. 制作、工作台和生产反馈
+## 14. 制作、工作台和生产反馈
 
 - [~] Crafting 面板、材料/技能校验和 `craft` 命令入口。
 - [ ] 配方解锁：任务、技能、书籍、地点、工作台、world flags。
@@ -520,7 +570,7 @@
 落点：`godot/scripts/core/crafting/**`、`godot/scripts/ui/controllers/crafting_panel_controller.gd`。
 验收：CraftingUI、Progression、InventoryUI、Save smoke。
 
-## 14. Overworld、地点和场景切换
+## 15. Overworld、地点和场景切换
 
 - [~] scene transition 第一版。
 - [ ] `InteractionContextSnapshot` 完整字段：current_map_id、active_outdoor_location_id、active_location_id、current_subscene_location_id、return ids、overworld pawn cell、entry_point_id、world_mode。
@@ -536,12 +586,16 @@
 落点：`godot/scripts/core/overworld/overworld_runner.gd`、`godot/scripts/core/interactions/**`、`godot/scripts/ui/**`。
 验收：Overworld、Interaction、Save smoke。
 
-## 15. 世界渲染、资产实例化和表现
+## 16. 世界渲染、资产实例化和表现
 
-### 15.1 已迁入资产，需要复核和映射
+### 16.1 已迁入资产，需要复核和映射
 
 - [x] 字体：`godot/assets/fonts/NotoSansCJKsc-Regular.otf`。
 - [x] 雾战 shader：`godot/assets/shaders/fog_of_war_canvas.gdshader`。
+- [x] Godot 当前已导入 glTF 资产 52 个，配套 `.bin` 31 个，`*.import` 53 个。
+- [x] 原始资产副本保留在根目录 `assets/`，Godot 使用副本位于 `godot/assets/`。
+- [x] Blockbench 源文件：`humanoid_mannequin.bbmodel`。
+- [x] glTF 迁移说明和映射辅助：`.cdc_bbmodel_links.json`、`README.txt`。
 - [x] 角色占位：`godot/assets/preview_placeholders/characters/humanoid_mannequin.gltf`。
 - [x] 装备占位：`equipment_head/body/legs/feet/hands/back/accessory.gltf`。
 - [x] 武器占位：`weapon_unarmed/light/heavy/dagger/sword/blunt/pole/pistol/rifle/shotgun.gltf`。
@@ -551,25 +605,51 @@
 - [x] prop tile：barrel、barricade、bush、cabinet、chair、counter、crate、desk、gate pillar、pallet、roadblock、sandbag、shelf、table、tree、wrecked car。
 - [ ] 每个 glTF 的 `.import` 复核：scale、rotation、origin、material、shadow、collision、resource uid。
 - [ ] 建立 asset id -> Godot resource path 映射表。
+- [ ] 建立 content visual id -> asset id -> packed scene/resource path 的三段映射，避免内容 id 直接依赖文件路径。
 - [ ] 处理 `builtin:*`、`preview_placeholders/*`、`world_tiles/*` 的兼容映射。
 - [ ] 缺 asset 的 fallback 要可识别，不再显示重叠方块。
+- [ ] fallback 按类别区分：missing character、missing item、missing container、missing tile、missing prop、missing weapon。
+- [ ] fallback 必须带 debug label 或明显材质颜色，不允许所有缺失资源显示同一种无标签方块。
 - [ ] 模型 pivot 与 grid anchor 对齐。
+- [ ] 模型 bounding box 与 footprint 对齐，避免一格模型占多格或多格模型挤在一格。
+- [ ] 模型朝向和 `rotation` 字段对齐，north/east/south/west 在地图中可目测确认。
+- [ ] 模型单位和 Godot 米制比例统一，禁止在 renderer 内硬编码临时缩放。
 - [ ] collision、picking、visual 分离。
+- [ ] 渲染 mesh、hover/pick collider、movement blocker、line-of-sight blocker 独立建模和同步。
+- [ ] 资产导入后 validator 检查 `.gltf`、`.bin`、`.import` 配对和资源可加载性。
 - [ ] 资产缺失在 validator 和运行日志中明确报错。
+- [ ] 资产变更后跑 Godot import，提交必要的 `.import`，避免其他机器首次运行资源不可用。
 
-### 15.2 Tile、建筑和 prop 表现
+### 16.2 待迁移或待替代资产类型
+
+- [ ] 旧 Bevy WGSL shader 语义确认：能迁成 Godot shader 的迁移，不能迁的标注废弃。
+- [ ] 旧 Bevy material / color palette / lighting 参数转成 Godot material、environment 或 world renderer 配置。
+- [ ] 旧 UI 字体、字号、颜色、panel spacing、icon 资源若存在，迁入 Godot theme 或明确替代。
+- [ ] 旧 debug overlay 颜色：walkable、blocked、visible、explored、selected、hover、attackable、unreachable。
+- [ ] 旧模型 preview camera、灯光、bounds、floor grid 迁入 Godot editor preview。
+- [ ] 旧 Blockbench 源和导出 glTF 的再生成流程记录到 docs 或 tools，避免手工导出不可复现。
+- [ ] 角色 body part、装备 region、weapon socket 的源资产和 placeholder 资产要建立清单。
+- [ ] 后续真实美术替换时必须保留相同 asset id 或提供迁移表。
+
+### 16.3 Tile、建筑和 prop 表现
 
 - [~] 当前已有模型实例化基础。
 - [ ] 地面 tile instancing：flat、ramp、cliff、elevation。
 - [ ] 建筑墙：corner、cross、end、straight、t_junction、isolated。
 - [ ] 建筑地板和室内/室外材质。
 - [ ] prop 按 kind / visual id 正确映射，不再退化成统一方块。
+- [ ] prop transform：anchor、footprint、rotation、local offset、scale、elevation 全部应用。
+- [ ] overlapping object 检查：同一 grid cell 中允许叠放的对象与不允许叠放的对象区分。
 - [ ] container 使用独立可识别模型。
 - [ ] trigger / transition 使用清晰标记或隐藏但可 hover 的区域。
 - [ ] door 模型和开合状态。
+- [ ] closed door 与 open door 的 visual、collision、LOS 同步变化。
+- [ ] pickup 掉落物、尸体容器、任务物品、商店容器在世界中有不同表现。
+- [ ] indoor/outdoor、roof、story visibility、墙体遮挡根据相机和楼层更新。
 - [ ] MultiMesh / scene instance 性能策略。
+- [ ] 大地图实例化不应造成运行时卡顿，必要时分层、分批或缓存场景实例。
 
-### 15.3 角色、装备和动画表现
+### 16.4 角色、装备和动画表现
 
 - [~] 玩家 / NPC 模型占位显示。
 - [ ] 玩家和 NPC 定义使用正确 appearance profile。
@@ -579,8 +659,13 @@
 - [ ] 武器挂点、装备挂点、装备替换 body region。
 - [ ] 尸体模型或标记。
 - [ ] 任务 NPC、商人、医生、守卫等视觉差异。
+- [ ] 选中 actor、hover actor、当前回合 actor、敌对 actor 的 outline 或 marker 区分。
+- [ ] actor floor / elevation 与 tile 高度一致，不能悬空或陷入地面。
+- [ ] actor 被遮挡时支持透明、outline 或 nameplate 保留。
+- [ ] actor spawn 时朝向 entry point facing 或地图对象 facing。
+- [ ] actor 受击、治疗、获得 XP、任务推进有反馈文本或 HUD feed。
 
-### 15.4 相机、遮挡、hover 和 fog
+### 16.5 相机、遮挡、hover 和 fog
 
 - [~] Bevy 风格相机角度和移动第一版。
 - [ ] 相机跟随 selected actor。
@@ -592,8 +677,12 @@
 - [ ] fog mask 与相机和地图坐标同步。
 - [ ] explored / visible / unseen 三态表现。
 - [ ] debug overlay：vision、walkable、blocked sight、level。
+- [ ] 相机初始位置按 map entry/player spawn 定位，而不是固定世界原点。
+- [ ] 鼠标 hover 光标和地面投影随相机角度、zoom 和楼层正确对齐。
+- [ ] 建筑、墙、楼层对象遮挡玩家或目标时有可读处理。
+- [ ] 视野刷新和 fog update 由 core visibility 结果驱动，world renderer 只负责表现。
 
-### 15.5 音频和反馈表现
+### 16.6 音频和反馈表现
 
 - [ ] UI 点击、hover、打开/关闭面板音效。
 - [ ] 移动脚步或移动完成音效。
@@ -608,9 +697,9 @@
 落点：`godot/assets/**`、`godot/scripts/world/**`、`godot/scripts/ui/**`。
 验收：MapVisual、World、Vision、AssetImport、manual survivor outpost review。
 
-## 16. 游戏 UI、HUD、菜单和面板
+## 17. 游戏 UI、HUD、菜单和面板
 
-### 16.1 主菜单和设置
+### 17.1 主菜单和设置
 
 - [~] main menu scene。
 - [ ] 新游戏、继续、存档槽、删除、覆盖确认。
@@ -619,7 +708,7 @@
 - [ ] 设置保存和加载。
 - [ ] 运行时错误提示：内容加载失败、地图缺失、资产缺失、Godot 版本错误、存档 schema 不兼容。
 
-### 16.2 HUD
+### 17.2 HUD
 
 - [~] 基础 HUD。
 - [ ] top badges：HP、AP、等级、XP、金钱、回合、战斗状态。
@@ -631,7 +720,7 @@
 - [ ] controls hint 展开/折叠。
 - [ ] blocker / modal / context menu 层级。
 
-### 16.3 面板
+### 17.3 面板
 
 - [~] Inventory、Journal、Container、Trade、Crafting、Skills、Character、Map 有基础 scene / controller。
 - [ ] Character 面板：属性、派生、装备、状态效果、属性点。
@@ -648,9 +737,9 @@
 落点：`godot/scenes/ui/*.tscn`、`godot/scripts/ui/**`。
 验收：UI、UIToggle、各 UI smoke。
 
-## 17. Godot editor 插件和开发工具
+## 18. Godot editor 插件和开发工具
 
-### 17.1 Editor 插件
+### 18.1 Editor 插件
 
 - [~] content browser、handoff、map review 第一版。
 - [ ] typed field form 支持嵌套对象、数组 reorder、枚举、引用选择、默认值。
@@ -664,7 +753,7 @@
 - [ ] editor validation error 定位到字段。
 - [ ] handoff 输出包含修改摘要、风险、验证建议。
 
-### 17.2 模型和预览工具
+### 18.2 模型和预览工具
 
 - [ ] glTF viewer 等价工具。
 - [ ] socket editor 等价工具。
@@ -674,7 +763,7 @@
 - [ ] preview stage camera、灯光、网格、重置视角。
 - [ ] bbmodel link / metadata 迁移策略。
 
-### 17.3 Agent workflow
+### 18.3 Agent workflow
 
 - [~] `godot-content.ps1`、`open-godot-editor.ps1`、`review-godot-map-visual.ps1`、`test-godot-game.ps1`、`test-godot-editor.ps1`。
 - [ ] 新脚本 comment-based help。
@@ -688,7 +777,7 @@
 落点：`godot/addons/cdc_game_editor/**`、`tools/agent/**`、`docs/agent-workflows/**`。
 验收：`tools/agent/test-godot-editor.ps1`、EditorForms、AssetImport smoke。
 
-## 18. Debug、Console、Info Panels 和开发观察
+## 19. Debug、Console、Info Panels 和开发观察
 
 - [ ] debug console：反引号开关、输入、history、autocomplete、suggestions。
 - [ ] console commands：restart、show fps、show overlays、observe mode、spawn、give item、teleport、unlock location。
@@ -703,7 +792,7 @@
 落点：`godot/scripts/ui/debug/**` 或明确的新 debug 模块。
 验收：ConsoleDebug、manual debug smoke。
 
-## 19. Server / protocol 参考边界
+## 20. Server / protocol 参考边界
 
 - [ ] 确认旧 `bevy_server` 是否需要 Godot 主线等价；如果不迁，需文档明确废弃。
 - [ ] 如果迁移 server 能力，需要协议消息、订阅、projection、错误响应。
@@ -715,7 +804,7 @@
 落点：待定，优先架构决策文档。
 验收：架构决策文档或 server parity smoke。
 
-## 20. 存档和加载
+## 21. 存档和加载
 
 - [~] 基础 Save smoke。
 - [ ] 存档槽列表、元信息、缩略图、活跃地图、玩家位置。
@@ -730,9 +819,9 @@
 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulation/*snapshot*`。
 验收：Save、All smoke。
 
-## 21. 验证缺口和新 smoke
+## 22. 验证缺口和新 smoke
 
-### 21.1 现有 scenario 需扩展
+### 22.1 现有 scenario 需扩展
 
 - [ ] `Interaction`：门、锁门、pickup 数量、scene transition、disabled options。
 - [ ] `PlayerInteraction`：UI blocker、右键菜单、hover prompt、actor/object/grid priority。
@@ -747,7 +836,7 @@
 - [ ] `CraftingUI`：解锁、工作台、工具、批量、队列。
 - [ ] `Save`：新增字段、旧存档迁移、跨地图状态。
 
-### 21.2 需要新增 scenario
+### 22.2 需要新增 scenario
 
 - [ ] `UIToggle`：快捷键、Esc 链路、输入阻塞。
 - [ ] `Targeting`：攻击/技能目标选择、取消、预览。
@@ -759,7 +848,7 @@
 - [ ] `NpcLife`：schedule、GOAP、background tick、presence sync。
 - [ ] `Overworld`：地点解锁、进入、返回、map panel。
 
-## 22. 建议迁移顺序
+## 23. 建议迁移顺序
 
 1. UI 开关状态机和输入阻塞：Esc 链路、快捷键 toggle、modal/context/stage panel 优先级。
 2. 地图视觉和资产映射：消除错误模型、重叠方块、fallback 不可辨认问题。
@@ -772,7 +861,7 @@
 9. Editor 全域表单、graph editor、glTF/socket preview。
 10. Console、info panels、profiling 和开发观察工具。
 
-## 23. 阶段交付规则
+## 24. 阶段交付规则
 
 - 每个迁移阶段只改相关层，不混入无关地图或资产。
 - 只提交本阶段相关文件，避免把用户正在调整的 map scene 混入提交。
