@@ -37,7 +37,11 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_title_label.text = str(snapshot.get("display_name", snapshot.get("container_id", "")))
 	_summary_label.text = "%d 类物品" % snapshot.get("items", []).size()
 	_clear_items()
-	for item in snapshot.get("items", []):
+	var items: Array = snapshot.get("items", [])
+	if items.is_empty():
+		_items_box.add_child(_empty_line())
+		return
+	for item in items:
 		var item_data: Dictionary = item
 		_items_box.add_child(_item_line(item_data))
 
@@ -86,6 +90,12 @@ func _item_line(item: Dictionary) -> Label:
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
 	]
+	return label
+
+
+func _empty_line() -> Label:
+	var label := _label("EmptyLine")
+	label.text = "容器为空"
 	return label
 
 

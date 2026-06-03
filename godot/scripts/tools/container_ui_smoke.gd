@@ -122,6 +122,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_container_panel()
 	if not game_root.container_panel.visible:
 		errors.append("temporary container should be visible before map switch")
+	if not _container_text(game_root).contains("容器为空"):
+		errors.append("empty container should show empty prompt")
 	game_root.simulation.unlock_location("forest")
 	var enter_result: Dictionary = game_root.simulation.enter_location(1, "forest", game_root.registry.get_library("overworld"))
 	if not bool(enter_result.get("success", false)):
