@@ -256,6 +256,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _event_count(game_root, "pending_cancelled") <= before_pending_cancelled:
 		errors.append("Esc pending cancellation should emit pending_cancelled")
 
+	game_root.simulation.pending_interaction = {
+		"actor_id": 1,
+		"target": {
+			"target_id": "survivor_outpost_01_clinic_supply_cabinet",
+			"target_type": "map_object",
+		},
+		"option_id": "open_container",
+	}
+	var before_pending_interaction_cancelled := _event_count(game_root, "pending_cancelled")
+	_press_key(game_root, KEY_ESCAPE)
+	if not game_root.simulation.snapshot().get("pending_interaction", {}).is_empty():
+		errors.append("Esc should clear pending interaction")
+	if _event_count(game_root, "pending_cancelled") <= before_pending_interaction_cancelled:
+		errors.append("Esc pending interaction cancellation should emit pending_cancelled")
+
 	return errors
 
 
