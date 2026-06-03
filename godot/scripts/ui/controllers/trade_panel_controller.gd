@@ -23,6 +23,8 @@ var _selected_source: String = ""
 var _selected_item_id: String = ""
 var _selected_item_snapshot: Dictionary = {}
 var _cart_entries: Array[Dictionary] = []
+var _player_money: int = 0
+var _shop_money: int = 0
 
 
 func _ready() -> void:
@@ -54,10 +56,12 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		return
 
 	var target_name: String = str(snapshot.get("target_name", ""))
+	_player_money = int(snapshot.get("player_money", 0))
+	_shop_money = int(snapshot.get("money", 0))
 	_title_label.text = "%s 的交易" % target_name if not target_name.is_empty() else "交易"
 	_summary_label.text = "玩家资金 %d | 店铺资金 %d | 买价 x%.1f | 卖价 x%.1f" % [
-		int(snapshot.get("player_money", 0)),
-		int(snapshot.get("money", 0)),
+		_player_money,
+		_shop_money,
 		float(snapshot.get("buy_price_modifier", 1.0)),
 		float(snapshot.get("sell_price_modifier", 1.0)),
 	]
@@ -346,7 +350,14 @@ func _update_cart_line() -> void:
 			sell_total += unit_price * count
 	var net_payment := buy_total - sell_total
 	var net_text := "净付 %d" % net_payment if net_payment >= 0 else "净收 %d" % -net_payment
-	_cart_label.text = "购物车：%s | 应付 %d | 应收 %d | %s" % ["；".join(parts), buy_total, sell_total, net_text]
+	_cart_label.text = "购物车：%s | 应付 %d | 应收 %d | %s | 确认后玩家资金 %d | 店铺资金 %d" % [
+		"；".join(parts),
+		buy_total,
+		sell_total,
+		net_text,
+		_player_money - net_payment,
+		_shop_money + net_payment,
+	]
 	if _clear_cart_button != null:
 		_clear_cart_button.disabled = false
 	if _confirm_cart_button != null:

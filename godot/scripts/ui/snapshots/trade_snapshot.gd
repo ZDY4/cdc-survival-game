@@ -75,7 +75,7 @@ func _shop_items(entries: Array, buy_price_modifier: float) -> Array[Dictionary]
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
 		var item_id: String = _normalize_content_id(entry_data.get("item_id", ""))
 		var item_data: Dictionary = _item_data(item_id)
-		var base_price: int = int(entry_data.get("price", item_data.get("value", 0)))
+		var base_price: int = int(item_data.get("value", 0))
 		var price: int = _trade_price(base_price, buy_price_modifier)
 		items.append({
 			"item_id": item_id,

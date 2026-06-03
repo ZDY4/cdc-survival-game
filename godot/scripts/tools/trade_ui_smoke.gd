@@ -76,9 +76,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_queue_button(game_root)
 	if not _cart_line(game_root).contains("购买 绷带 x1"):
 		errors.append("trade cart should show queued bandage buy")
+	if not _cart_line(game_root).contains("确认后玩家资金 76") or not _cart_line(game_root).contains("店铺资金 524"):
+		errors.append("trade cart should preview post-confirm player and shop money")
 	_press_cart_entry_button(game_root, 0, "IncreaseButton")
 	if not _cart_line(game_root).contains("购买 绷带 x2"):
 		errors.append("trade cart increase should update queued count")
+	if not _cart_line(game_root).contains("确认后玩家资金 52") or not _cart_line(game_root).contains("店铺资金 548"):
+		errors.append("trade cart adjusted quantity should update money preview")
 	_press_cart_entry_button(game_root, 0, "DecreaseButton")
 	if not _cart_line(game_root).contains("购买 绷带 x1"):
 		errors.append("trade cart decrease should update queued count")
