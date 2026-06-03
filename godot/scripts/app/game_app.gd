@@ -314,6 +314,20 @@ func choose_dialogue_option(option_ref: Variant) -> Dictionary:
 	return result
 
 
+func choose_dialogue_option_by_index(option_index: int) -> Dictionary:
+	return choose_dialogue_option(option_index)
+
+
+func has_active_dialogue() -> bool:
+	if simulation == null:
+		return false
+	for actor in simulation.snapshot().get("actors", []):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if actor_data.get("kind", "") == "player":
+			return not str(actor_data.get("active_dialogue_id", "")).is_empty()
+	return false
+
+
 func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():

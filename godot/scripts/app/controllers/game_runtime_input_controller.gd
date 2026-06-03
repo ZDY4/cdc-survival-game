@@ -177,6 +177,9 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 	var key := event.keycode
 	if key == 0:
 		key = event.physical_keycode
+	var digit := _digit_for_key(key)
+	if digit >= 0 and not (key == KEY_0 and event.ctrl_pressed) and _handle_digit_key(digit):
+		return true
 	var stage_panel := _stage_panel_for_key(key)
 	if not stage_panel.is_empty():
 		if game_root.has_method("toggle_stage_panel"):
@@ -209,6 +212,49 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 			game_root.hud.hide_interaction_menu()
 		return true
 	return false
+
+
+func _handle_digit_key(digit: int) -> bool:
+	if digit <= 0:
+		return false
+	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()):
+		if digit <= 9 and game_root.has_method("choose_dialogue_option_by_index"):
+			game_root.choose_dialogue_option_by_index(digit - 1)
+			return true
+		return false
+	if _gameplay_input_blocked_by_ui():
+		return false
+	if game_root.has_method("use_hotbar_slot"):
+		var slot_id := "slot_%d" % (10 if digit == 10 else digit)
+		game_root.use_hotbar_slot(slot_id)
+		return true
+	return false
+
+
+func _digit_for_key(key: int) -> int:
+	match key:
+		KEY_1:
+			return 1
+		KEY_2:
+			return 2
+		KEY_3:
+			return 3
+		KEY_4:
+			return 4
+		KEY_5:
+			return 5
+		KEY_6:
+			return 6
+		KEY_7:
+			return 7
+		KEY_8:
+			return 8
+		KEY_9:
+			return 9
+		KEY_0:
+			return 10
+		_:
+			return -1
 
 
 func clear_selection_state() -> void:

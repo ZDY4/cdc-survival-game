@@ -53,6 +53,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue text missing start node")
 	if not _options_line(game_root).contains("交易") or not _options_line(game_root).contains("离开"):
 		errors.append("dialogue options missing expected choices")
+	_press_key(game_root, KEY_1)
+	if not game_root.trade_panel.visible:
+		errors.append("digit 1 should choose first dialogue option and open trade")
+	if not _player(game_root).get("active_dialogue_id", "") == "":
+		errors.append("digit dialogue choice should close active dialogue after trade action")
 	return errors
 
 
@@ -111,3 +116,19 @@ func _text_line(game_root: Node) -> String:
 
 func _options_line(game_root: Node) -> String:
 	return game_root.dialogue_panel.get_node("DialoguePanel/DialogueLines/OptionsLine").text
+
+
+func _press_key(game_root: Node, key: int) -> void:
+	var event := InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = true
+	game_root.runtime_input_controller.input(event)
+
+
+func _player(game_root: Node) -> Dictionary:
+	for actor in game_root.simulation.snapshot().get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == 1:
+			return actor_data
+	return {}

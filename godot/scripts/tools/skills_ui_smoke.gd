@@ -77,12 +77,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills panel should show bound hotbar skill")
 	if _use_button(game_root, "adrenaline_rush") == null or _use_button(game_root, "adrenaline_rush").disabled:
 		errors.append("bound active skill should be usable before cooldown")
-	_use_button(game_root, "adrenaline_rush").pressed.emit()
+	game_root.panel_controller.close_stage_panels()
+	_press_key(game_root, KEY_1)
 	await process_frame
+	game_root.refresh_skills_panel()
 	if not _hotbar_line(game_root).contains("cd20"):
-		errors.append("using active skill should write cooldown to hotbar")
+		errors.append("digit 1 hotbar activation should write cooldown to hotbar")
 	if not _event_seen(game_root, "skill_used"):
-		errors.append("using active skill should emit skill_used")
+		errors.append("digit 1 hotbar activation should emit skill_used")
 	return errors
 
 
@@ -137,3 +139,11 @@ func _event_seen(game_root: Node, kind: String) -> bool:
 		if event_data.get("kind", "") == kind:
 			return true
 	return false
+
+
+func _press_key(game_root: Node, key: int) -> void:
+	var event := InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = true
+	game_root.runtime_input_controller.input(event)
