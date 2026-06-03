@@ -7,6 +7,7 @@ var _panel: PanelContainer
 var _title_label: Label
 var _close_button: Button
 var _summary_label: Label
+var _feedback_label: Label
 var _detail_label: Label
 var _quantity_spin: SpinBox
 var _trade_button: Button
@@ -38,6 +39,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.has("error"):
 		_title_label.text = "Trade %s" % snapshot.get("shop_id", "")
 		_summary_label.text = "交易资源不可用: %s" % snapshot.get("error", "unknown")
+		_apply_feedback({})
 		_clear_items()
 		return
 
@@ -49,6 +51,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		float(snapshot.get("buy_price_modifier", 1.0)),
 		float(snapshot.get("sell_price_modifier", 1.0)),
 	]
+	_apply_feedback(_dictionary_or_empty(snapshot.get("feedback", {})))
 	_clear_box(_items_box)
 	_clear_box(_player_items_box)
 	var shop_items: Array = snapshot.get("items", [])
@@ -95,6 +98,7 @@ func _build_layout() -> void:
 		close_requested.emit()
 	)
 	_summary_label = _label("SummaryLine")
+	_feedback_label = _label("FeedbackLine")
 	_detail_label = _label("DetailLine")
 	var trade_controls := HBoxContainer.new()
 	trade_controls.name = "TradeControls"
@@ -155,6 +159,7 @@ func _build_layout() -> void:
 	box.add_child(_title_label)
 	box.add_child(_close_button)
 	box.add_child(_summary_label)
+	box.add_child(_feedback_label)
 	box.add_child(_detail_label)
 	box.add_child(trade_controls)
 	box.add_child(columns)
@@ -204,6 +209,14 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 		int(item.get("price", 0)) * int(_quantity_spin.value if _quantity_spin != null else 1),
 		"\n%s" % description if not description.is_empty() else "",
 	]
+
+
+func _apply_feedback(feedback: Dictionary) -> void:
+	if _feedback_label == null:
+		return
+	var text := str(feedback.get("text", ""))
+	_feedback_label.visible = not text.is_empty()
+	_feedback_label.text = text
 
 
 func _update_trade_controls(item: Dictionary, source: String) -> void:

@@ -7,7 +7,7 @@ func _init(p_registry: RefCounted) -> void:
 	registry = p_registry
 
 
-func build(runtime_snapshot: Dictionary, target: Dictionary = {}) -> Dictionary:
+func build(runtime_snapshot: Dictionary, target: Dictionary = {}, feedback: Dictionary = {}) -> Dictionary:
 	if target.is_empty():
 		return {"active": false}
 	var session: Dictionary = resolve_trade_session(runtime_snapshot, target)
@@ -25,7 +25,7 @@ func build(runtime_snapshot: Dictionary, target: Dictionary = {}) -> Dictionary:
 
 	var shop_data: Dictionary = _shop_session_or_definition(runtime_snapshot, shop_id, shop_record)
 	var player: Dictionary = _player_actor(runtime_snapshot)
-	return {
+	var snapshot := {
 		"active": true,
 		"shop_id": shop_id,
 		"target_actor_id": int(session.get("target_actor_id", 0)),
@@ -37,6 +37,10 @@ func build(runtime_snapshot: Dictionary, target: Dictionary = {}) -> Dictionary:
 		"items": _shop_items(shop_data.get("inventory", []), float(shop_data.get("buy_price_modifier", 1.0))),
 		"player_items": _inventory_items(_dictionary_or_empty(player.get("inventory", {})), float(shop_data.get("sell_price_modifier", 1.0))),
 	}
+	var scoped_feedback := _feedback_snapshot(feedback, shop_id)
+	if not scoped_feedback.is_empty():
+		snapshot["feedback"] = scoped_feedback
+	return snapshot
 
 
 func resolve_trade_session(runtime_snapshot: Dictionary, target: Dictionary = {}) -> Dictionary:
@@ -152,6 +156,52 @@ func _rarity(item_data: Dictionary) -> String:
 
 func _trade_price(base_price: int, modifier: float) -> int:
 	return max(1, int(round(float(max(0, base_price)) * max(0.0, modifier))))
+
+
+func _feedback_snapshot(feedback: Dictionary, shop_id: String) -> Dictionary:
+	if feedback.is_empty():
+		return {}
+	if not str(feedback.get("shop_id", shop_id)).is_empty() and str(feedback.get("shop_id", shop_id)) != shop_id:
+		return {}
+	var reason := str(feedback.get("reason", ""))
+	var text := _feedback_text(feedback)
+	if reason.is_empty() and text.is_empty():
+		return {}
+	return {
+		"type": str(feedback.get("type", "error")),
+		"reason": reason,
+		"text": text,
+	}
+
+
+func _feedback_text(feedback: Dictionary) -> String:
+	var item_name := _feedback_item_name(feedback)
+	var count := int(feedback.get("count", 1))
+	match str(feedback.get("reason", "")):
+		"player_money_insufficient":
+			return "玩家资金不足，购买 %s x%d 需要 %d。" % [item_name, count, int(feedback.get("total_price", 0))]
+		"shop_money_insufficient":
+			return "店铺资金不足，收购 %s x%d 需要 %d。" % [item_name, count, int(feedback.get("total_price", 0))]
+		"shop_stock_insufficient":
+			return "店铺库存不足：%s x%d。" % [item_name, count]
+		"player_stock_insufficient":
+			return "背包库存不足：%s x%d。" % [item_name, count]
+		"unknown_shop":
+			return "店铺不存在或已经失效。"
+		"unknown_actor":
+			return "当前角色不可用，无法交易。"
+		"active_trade_missing":
+			return "没有打开的交易。"
+		_:
+			return str(feedback.get("reason", ""))
+
+
+func _feedback_item_name(feedback: Dictionary) -> String:
+	var item_id := _normalize_content_id(feedback.get("item_id", ""))
+	if item_id.is_empty():
+		return "物品"
+	var item_data := _item_data(item_id)
+	return str(item_data.get("name", item_id))
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

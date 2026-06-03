@@ -31,6 +31,7 @@ var skills_panel: Control
 var crafting_panel: Control
 var settings_panel: Control
 var active_trade_target: Dictionary = {}
+var active_trade_feedback: Dictionary = {}
 var active_container_feedback: Dictionary = {}
 var debug_overlay_mode: String = "off"
 var info_panel_pages: Array[Dictionary] = [
@@ -120,7 +121,9 @@ func refresh_trade_panel() -> void:
 		return
 	if not _active_trade_target_available():
 		active_trade_target = {}
+		active_trade_feedback = {}
 	panel_controller.active_trade_target = active_trade_target
+	panel_controller.active_trade_feedback = active_trade_feedback
 	panel_controller.refresh_trade_panel()
 
 
@@ -514,6 +517,7 @@ func current_interaction_prompt() -> Dictionary:
 
 func close_trade_panel() -> void:
 	active_trade_target = {}
+	active_trade_feedback = {}
 	refresh_trade_panel()
 
 
@@ -564,8 +568,10 @@ func _apply_dialogue_trade_result(result: Dictionary) -> void:
 		return
 	if str(result.get("end_type", "")) == "trade":
 		active_trade_target = _dialogue_trade_target()
+		active_trade_feedback = {}
 	elif bool(result.get("finished", false)) or result.has("end_type"):
 		active_trade_target = {}
+		active_trade_feedback = {}
 
 
 func has_active_dialogue() -> bool:
@@ -710,13 +716,16 @@ func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
 func buy_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
 	var shop_id: String = _active_shop_id()
 	if shop_id.is_empty():
-		return {"success": false, "reason": "active_trade_missing"}
+		var missing_result := {"success": false, "reason": "active_trade_missing"}
+		_record_trade_feedback(missing_result, "buy_shop", "", item_id, count)
+		return missing_result
 	var result: Dictionary = _submit_inventory_action({
 		"action": "buy_shop",
 		"shop_id": shop_id,
 		"item_id": item_id,
 		"count": count,
 	})
+	_record_trade_feedback(result, "buy_shop", shop_id, item_id, count)
 	refresh_inventory_panel()
 	refresh_trade_panel()
 	return result
@@ -725,13 +734,16 @@ func buy_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
 func sell_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
 	var shop_id: String = _active_shop_id()
 	if shop_id.is_empty():
-		return {"success": false, "reason": "active_trade_missing"}
+		var missing_result := {"success": false, "reason": "active_trade_missing"}
+		_record_trade_feedback(missing_result, "sell_shop", "", item_id, count)
+		return missing_result
 	var result: Dictionary = _submit_inventory_action({
 		"action": "sell_shop",
 		"shop_id": shop_id,
 		"item_id": item_id,
 		"count": count,
 	})
+	_record_trade_feedback(result, "sell_shop", shop_id, item_id, count)
 	refresh_inventory_panel()
 	refresh_trade_panel()
 	return result
@@ -886,6 +898,7 @@ func _setup_panels() -> void:
 		panel_controller = GamePanelController.new(self, registry, simulation, world_result)
 	panel_controller.update_world_result(world_result)
 	panel_controller.active_trade_target = active_trade_target
+	panel_controller.active_trade_feedback = active_trade_feedback
 	panel_controller.active_container_feedback = active_container_feedback
 	panel_controller.setup_panels()
 	# 对外保留面板引用，方便既有 smoke 和编辑器入口继续做状态复核。
@@ -914,6 +927,7 @@ func _update_trade_target_after_interaction(result: Dictionary, executed_target:
 		option_kind = str(option.get("kind", ""))
 	if option_kind == "talk" and executed_target.get("target_type", "") == "actor":
 		active_trade_target = executed_target.duplicate(true)
+		active_trade_feedback = {}
 
 
 func _apply_interaction_execution_result(result: Dictionary, executed_target: Dictionary) -> void:
@@ -951,6 +965,18 @@ func _record_container_feedback(result: Dictionary, action: String, container_id
 	active_container_feedback["container_id"] = str(result.get("container_id", container_id))
 	active_container_feedback["item_id"] = str(result.get("item_id", item_id))
 	active_container_feedback["count"] = count
+
+
+func _record_trade_feedback(result: Dictionary, action: String, shop_id: String, item_id: String, count: int) -> void:
+	if bool(result.get("success", false)):
+		active_trade_feedback = {}
+		return
+	active_trade_feedback = result.duplicate(true)
+	active_trade_feedback["type"] = "error"
+	active_trade_feedback["action"] = action
+	active_trade_feedback["shop_id"] = str(result.get("shop_id", shop_id))
+	active_trade_feedback["item_id"] = str(result.get("item_id", item_id))
+	active_trade_feedback["count"] = count
 
 
 func _interaction_result_opens_container(result: Dictionary) -> bool:

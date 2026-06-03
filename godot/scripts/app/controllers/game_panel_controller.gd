@@ -26,6 +26,7 @@ var registry: RefCounted
 var simulation: RefCounted
 var world_result: Dictionary
 var active_trade_target: Dictionary = {}
+var active_trade_feedback: Dictionary = {}
 var active_container_feedback: Dictionary = {}
 var active_stage_panel: String = ""
 var settings_open := false
@@ -111,7 +112,7 @@ func refresh_inventory_panel() -> void:
 func refresh_trade_panel() -> void:
 	if trade_panel == null or simulation == null:
 		return
-	trade_panel.apply_snapshot(TradeSnapshot.new(registry).build(simulation.snapshot(), active_trade_target))
+	trade_panel.apply_snapshot(TradeSnapshot.new(registry).build(simulation.snapshot(), active_trade_target, active_trade_feedback))
 
 
 func refresh_container_panel() -> void:

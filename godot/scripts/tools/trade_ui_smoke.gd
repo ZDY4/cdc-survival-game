@@ -95,6 +95,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade sell did not pay player money")
 	if not _summary_line(game_root).contains("资金 508"):
 		errors.append("trade summary did not update shop money after sell")
+	var stock_result: Dictionary = game_root.buy_active_trade_item("1006", 999)
+	if stock_result.get("reason", "") != "shop_stock_insufficient":
+		errors.append("oversized trade buy should report shop_stock_insufficient")
+	if not _trade_feedback(game_root).contains("店铺库存不足"):
+		errors.append("oversized trade buy should show shop stock feedback")
+	_set_player_money(game_root, 0)
+	if not _press_trade_item_with_text(game_root, "shop", "绷带"):
+		errors.append("should select shop bandage for insufficient money check")
+	_press_trade_button(game_root)
+	if not _trade_feedback(game_root).contains("玩家资金不足"):
+		errors.append("trade buy failure should show player money feedback")
 	_press_close_button(game_root)
 	if game_root.trade_panel.visible:
 		errors.append("close button should close trade panel")
@@ -193,6 +204,13 @@ func _detail_line(game_root: Node) -> String:
 	return ""
 
 
+func _trade_feedback(game_root: Node) -> String:
+	var label: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/FeedbackLine")
+	if label is Label and (label as Label).visible:
+		return str((label as Label).text)
+	return ""
+
+
 func _item_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
 	var item_box: Node = _trade_item_box(game_root, "shop")
@@ -276,3 +294,9 @@ func _player_money(game_root: Node) -> int:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return int(actor_data.get("money", 0))
 	return 0
+
+
+func _set_player_money(game_root: Node, money: int) -> void:
+	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if actor != null:
+		actor.money = money
