@@ -12,11 +12,12 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	var progression: Dictionary = _dictionary_or_empty(player.get("progression", {}))
 	var learned: Dictionary = _dictionary_or_empty(progression.get("learned_skills", {}))
 	var attributes: Dictionary = _dictionary_or_empty(progression.get("attributes", {}))
+	var hotbar: Dictionary = _dictionary_or_empty(runtime_snapshot.get("hotbar", {}))
 	var trees: Array[Dictionary] = []
 	var tree_ids: Array = registry.get_library("skill_trees").keys()
 	tree_ids.sort()
 	for tree_id in tree_ids:
-		var tree_view: Dictionary = _tree_snapshot(str(tree_id), progression, learned, attributes)
+		var tree_view: Dictionary = _tree_snapshot(str(tree_id), progression, learned, attributes, hotbar)
 		if not tree_view.is_empty():
 			trees.append(tree_view)
 	return {
@@ -25,19 +26,19 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"level": int(progression.get("level", 1)),
 		"available_skill_points": int(progression.get("available_skill_points", 0)),
 		"learned_skills": learned.duplicate(true),
-		"hotbar": _dictionary_or_empty(runtime_snapshot.get("hotbar", {})).duplicate(true),
+		"hotbar": hotbar.duplicate(true),
 		"trees": trees,
 	}
 
 
-func _tree_snapshot(tree_id: String, progression: Dictionary, learned: Dictionary, attributes: Dictionary) -> Dictionary:
+func _tree_snapshot(tree_id: String, progression: Dictionary, learned: Dictionary, attributes: Dictionary, hotbar: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("skill_trees").get(tree_id, {}))
 	var tree_data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if tree_data.is_empty():
 		return {}
 	var skills: Array[Dictionary] = []
 	for skill_id in _array_or_empty(tree_data.get("skills", [])):
-		var skill_view: Dictionary = _skill_snapshot(str(skill_id), progression, learned, attributes)
+		var skill_view: Dictionary = _skill_snapshot(str(skill_id), progression, learned, attributes, hotbar)
 		if not skill_view.is_empty():
 			skills.append(skill_view)
 	return {
@@ -48,7 +49,7 @@ func _tree_snapshot(tree_id: String, progression: Dictionary, learned: Dictionar
 	}
 
 
-func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Dictionary, attributes: Dictionary) -> Dictionary:
+func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Dictionary, attributes: Dictionary, hotbar: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("skills").get(skill_id, {}))
 	var skill_data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if skill_data.is_empty():
@@ -57,6 +58,8 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 	var max_level: int = max(1, int(skill_data.get("max_level", 1)))
 	var availability: Dictionary = _availability(skill_id, skill_data, progression, learned, attributes, current_level, max_level)
 	var activation: Dictionary = _dictionary_or_empty(skill_data.get("activation", {}))
+	var activation_mode: String = str(activation.get("mode", "passive"))
+	var bound_slot: String = _bound_slot(skill_id, hotbar)
 	return {
 		"skill_id": skill_id,
 		"name": str(skill_data.get("name", skill_id)),
@@ -64,15 +67,26 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 		"tree_id": str(skill_data.get("tree_id", "")),
 		"level": current_level,
 		"max_level": max_level,
-		"activation_mode": str(activation.get("mode", "passive")),
+		"activation_mode": activation_mode,
 		"cooldown": float(activation.get("cooldown", 0.0)),
 		"prerequisites": _array_or_empty(skill_data.get("prerequisites", [])).duplicate(true),
 		"attribute_requirements": _dictionary_or_empty(skill_data.get("attribute_requirements", {})).duplicate(true),
 		"can_learn": bool(availability.get("can_learn", false)),
+		"can_bind": current_level > 0 and activation_mode != "passive",
+		"bound_slot": bound_slot,
+		"can_use": current_level > 0 and activation_mode != "passive" and not bound_slot.is_empty() and float(_dictionary_or_empty(hotbar.get(bound_slot, {})).get("cooldown_remaining", 0.0)) <= 0.0,
 		"learn_reason": str(availability.get("reason", "")),
 		"missing_prerequisites": _array_or_empty(availability.get("missing_prerequisites", [])).duplicate(true),
 		"missing_attributes": _array_or_empty(availability.get("missing_attributes", [])).duplicate(true),
 	}
+
+
+func _bound_slot(skill_id: String, hotbar: Dictionary) -> String:
+	for slot_id in hotbar.keys():
+		var slot: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {}))
+		if str(slot.get("kind", "")) == "skill" and str(slot.get("skill_id", "")) == skill_id:
+			return str(slot_id)
+	return ""
 
 
 func _availability(skill_id: String, skill_data: Dictionary, progression: Dictionary, learned: Dictionary, attributes: Dictionary, current_level: int, max_level: int) -> Dictionary:

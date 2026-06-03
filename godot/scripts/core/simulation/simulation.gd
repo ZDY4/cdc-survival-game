@@ -120,8 +120,10 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 			return _submit_inventory_action_command(actor, command)
 		"learn_skill":
 			return _submit_learn_skill_command(actor, command)
+		"bind_hotbar":
+			return _submit_bind_hotbar_command(actor, command)
 		"use_skill":
-			return _unsupported_player_command(command, "skill_commands_pending_ui")
+			return _submit_use_skill_command(actor, command)
 		_:
 			return _unsupported_player_command(command, "unknown_player_command")
 
@@ -499,9 +501,104 @@ func _submit_learn_skill_command(actor: RefCounted, command: Dictionary) -> Dict
 	return learn_skill(actor.actor_id, str(command.get("skill_id", "")), _dictionary_or_empty(command.get("skill_library", {})))
 
 
+func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dictionary:
+	var slot_id: String = str(command.get("slot_id", ""))
+	var skill_id: String = str(command.get("skill_id", ""))
+	if slot_id.is_empty():
+		return {"success": false, "reason": "hotbar_slot_missing"}
+	if skill_id.is_empty():
+		hotbar.erase(slot_id)
+		_emit("hotbar_unbound", {
+			"actor_id": actor.actor_id,
+			"slot_id": slot_id,
+		})
+		return {"success": true, "slot_id": slot_id, "cleared": true}
+	var skill: Dictionary = _skill_data(skill_id, _dictionary_or_empty(command.get("skill_library", {})))
+	if skill.is_empty():
+		return {"success": false, "reason": "unknown_skill", "skill_id": skill_id}
+	if int(_dictionary_or_empty(actor.progression.get("learned_skills", {})).get(skill_id, 0)) <= 0:
+		return {"success": false, "reason": "skill_not_learned", "skill_id": skill_id}
+	var activation_mode: String = str(_dictionary_or_empty(skill.get("activation", {})).get("mode", "passive"))
+	if activation_mode == "passive":
+		return {"success": false, "reason": "skill_not_bindable", "skill_id": skill_id}
+	hotbar[slot_id] = {
+		"slot_id": slot_id,
+		"kind": "skill",
+		"skill_id": skill_id,
+		"cooldown_remaining": 0.0,
+	}
+	_emit("hotbar_bound", {
+		"actor_id": actor.actor_id,
+		"slot_id": slot_id,
+		"kind": "skill",
+		"skill_id": skill_id,
+	})
+	return {"success": true, "slot_id": slot_id, "skill_id": skill_id}
+
+
+func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictionary:
+	var slot_id: String = str(command.get("slot_id", ""))
+	var skill_id: String = str(command.get("skill_id", ""))
+	var slot: Dictionary = {}
+	if skill_id.is_empty() and not slot_id.is_empty():
+		slot = _dictionary_or_empty(hotbar.get(slot_id, {}))
+		skill_id = str(slot.get("skill_id", ""))
+	if skill_id.is_empty():
+		return {"success": false, "reason": "skill_missing"}
+	var skill: Dictionary = _skill_data(skill_id, _dictionary_or_empty(command.get("skill_library", {})))
+	if skill.is_empty():
+		return {"success": false, "reason": "unknown_skill", "skill_id": skill_id}
+	var learned_level: int = int(_dictionary_or_empty(actor.progression.get("learned_skills", {})).get(skill_id, 0))
+	if learned_level <= 0:
+		return {"success": false, "reason": "skill_not_learned", "skill_id": skill_id}
+	var activation: Dictionary = _dictionary_or_empty(skill.get("activation", {}))
+	var mode: String = str(activation.get("mode", "passive"))
+	if mode == "passive":
+		return {"success": false, "reason": "skill_not_active", "skill_id": skill_id}
+	if float(slot.get("cooldown_remaining", 0.0)) > 0.0:
+		return {
+			"success": false,
+			"reason": "skill_on_cooldown",
+			"slot_id": slot_id,
+			"skill_id": skill_id,
+			"cooldown_remaining": float(slot.get("cooldown_remaining", 0.0)),
+		}
+	var cost: float = float(command.get("ap_cost", DEFAULT_INTERACTION_AP))
+	if actor.ap < cost:
+		return {"success": false, "reason": "ap_insufficient", "required_ap": cost, "available_ap": actor.ap}
+	_spend_ap(actor, cost, "skill:%s" % skill_id)
+	var cooldown: float = max(0.0, float(activation.get("cooldown", 0.0)))
+	if not slot_id.is_empty():
+		var updated_slot: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {})).duplicate(true)
+		updated_slot["slot_id"] = slot_id
+		updated_slot["kind"] = "skill"
+		updated_slot["skill_id"] = skill_id
+		updated_slot["cooldown_remaining"] = cooldown
+		hotbar[slot_id] = updated_slot
+	_emit("skill_used", {
+		"actor_id": actor.actor_id,
+		"skill_id": skill_id,
+		"slot_id": slot_id,
+		"level": learned_level,
+		"activation_mode": mode,
+		"cooldown": cooldown,
+		"target": _dictionary_or_empty(command.get("target", {})).duplicate(true),
+	})
+	return {
+		"success": true,
+		"skill_id": skill_id,
+		"slot_id": slot_id,
+		"level": learned_level,
+		"activation_mode": mode,
+		"cooldown": cooldown,
+		"ap_remaining": actor.ap,
+	}
+
+
 func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	turn_state["phase"] = "world"
+	_tick_hotbar_cooldowns()
 	for actor in actor_registry.actors():
 		if actor.kind == "player":
 			continue
@@ -515,6 +612,21 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 		_close_turn(actor.actor_id, "npc_turn_complete")
 	turn_state["round"] = int(turn_state.get("round", 1)) + 1
 	return results
+
+
+func _tick_hotbar_cooldowns() -> void:
+	for slot_id in hotbar.keys():
+		var slot: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {})).duplicate(true)
+		var before: float = float(slot.get("cooldown_remaining", 0.0))
+		if before <= 0.0:
+			continue
+		slot["cooldown_remaining"] = max(0.0, before - 1.0)
+		hotbar[slot_id] = slot
+		_emit("hotbar_cooldown_ticked", {
+			"slot_id": str(slot_id),
+			"before": before,
+			"after": float(slot.get("cooldown_remaining", 0.0)),
+		})
 
 
 func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
@@ -957,6 +1069,13 @@ func _weapon_fragment(item_id: String, items: Dictionary) -> Dictionary:
 		if str(fragment_data.get("kind", "")) == "weapon":
 			return fragment_data
 	return {}
+
+
+func _skill_data(skill_id: String, skills: Dictionary) -> Dictionary:
+	var record: Dictionary = _dictionary_or_empty(skills.get(skill_id, {}))
+	if record.is_empty():
+		return {}
+	return _dictionary_or_empty(record.get("data", record))
 
 
 func _attack_ammo_check(actor: RefCounted, profile: Dictionary) -> Dictionary:

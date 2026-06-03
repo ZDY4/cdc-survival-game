@@ -62,11 +62,36 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_skills_panel()
 	if _learn_button(game_root, "medicine") == null or _learn_button(game_root, "medicine").disabled:
 		errors.append("medicine learn button should become enabled after survival prerequisite")
+	game_root.simulation.grant_skill_points(1, 2, "skills_ui_smoke")
+	var combat_result: Dictionary = game_root.learn_player_skill("combat")
+	if not bool(combat_result.get("success", false)):
+		errors.append("combat learn failed: %s" % combat_result.get("reason", "unknown"))
+	var active_result: Dictionary = game_root.learn_player_skill("adrenaline_rush")
+	if not bool(active_result.get("success", false)):
+		errors.append("adrenaline_rush learn failed: %s" % active_result.get("reason", "unknown"))
+	if _bind_button(game_root, "adrenaline_rush") == null or _bind_button(game_root, "adrenaline_rush").disabled:
+		errors.append("learned active skill should allow hotbar binding")
+	_bind_button(game_root, "adrenaline_rush").pressed.emit()
+	await process_frame
+	if not _hotbar_line(game_root).contains("slot_1:adrenaline_rush"):
+		errors.append("skills panel should show bound hotbar skill")
+	if _use_button(game_root, "adrenaline_rush") == null or _use_button(game_root, "adrenaline_rush").disabled:
+		errors.append("bound active skill should be usable before cooldown")
+	_use_button(game_root, "adrenaline_rush").pressed.emit()
+	await process_frame
+	if not _hotbar_line(game_root).contains("cd20"):
+		errors.append("using active skill should write cooldown to hotbar")
+	if not _event_seen(game_root, "skill_used"):
+		errors.append("using active skill should emit skill_used")
 	return errors
 
 
 func _summary_line(game_root: Node) -> String:
 	return game_root.skills_panel.get_node("SkillsPanel/SkillsLines/SummaryLine").text
+
+
+func _hotbar_line(game_root: Node) -> String:
+	return game_root.skills_panel.get_node("SkillsPanel/SkillsLines/HotbarLine").text
 
 
 func _skill_lines(game_root: Node) -> Array[String]:
@@ -90,6 +115,20 @@ func _learn_button(game_root: Node, skill_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node("LearnButton") as Button
+
+
+func _bind_button(game_root: Node, skill_id: String) -> Button:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return null
+	return row.get_node("BindButton") as Button
+
+
+func _use_button(game_root: Node, skill_id: String) -> Button:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return null
+	return row.get_node("UseButton") as Button
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:

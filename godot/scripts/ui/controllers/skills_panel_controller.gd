@@ -81,23 +81,31 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 		int(skill.get("level", 0)),
 		int(skill.get("max_level", 1)),
 		skill.get("activation_mode", "passive"),
-		_reason_text(skill),
+		"%s%s" % [_reason_text(skill), _binding_text(skill)],
 	]
-	var button := Button.new()
-	button.name = "LearnButton"
-	button.text = "+"
-	button.tooltip_text = "学习 %s" % skill.get("name", skill.get("skill_id", ""))
-	button.custom_minimum_size = Vector2(34, 28)
-	button.disabled = not bool(skill.get("can_learn", false))
-	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	var skill_id := str(skill.get("skill_id", ""))
-	button.pressed.connect(func() -> void:
+	var learn_button := _button("LearnButton", "+", "学习 %s" % skill.get("name", skill_id), not bool(skill.get("can_learn", false)))
+	learn_button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("learn_player_skill"):
 			root.learn_player_skill(skill_id)
 	, CONNECT_DEFERRED)
+	var bind_button := _button("BindButton", "B", "绑定 %s 到快捷栏 1" % skill.get("name", skill_id), not bool(skill.get("can_bind", false)))
+	bind_button.pressed.connect(func() -> void:
+		var root := get_parent()
+		if root != null and root.has_method("bind_player_skill_to_hotbar"):
+			root.bind_player_skill_to_hotbar("slot_1", skill_id)
+	, CONNECT_DEFERRED)
+	var use_button := _button("UseButton", "U", "使用 %s" % skill.get("name", skill_id), not bool(skill.get("can_use", false)))
+	use_button.pressed.connect(func() -> void:
+		var root := get_parent()
+		if root != null and root.has_method("use_hotbar_slot"):
+			root.use_hotbar_slot(str(skill.get("bound_slot", "")))
+	, CONNECT_DEFERRED)
 	row.add_child(line)
-	row.add_child(button)
+	row.add_child(learn_button)
+	row.add_child(bind_button)
+	row.add_child(use_button)
 	return row
 
 
@@ -135,8 +143,31 @@ func _hotbar_text(hotbar: Dictionary) -> String:
 	var slots: Array = hotbar.keys()
 	slots.sort()
 	for slot in slots:
-		parts.append("%s:%s" % [slot, hotbar[slot]])
+		var slot_data: Dictionary = hotbar[slot]
+		parts.append("%s:%s cd%.0f" % [
+			slot,
+			slot_data.get("skill_id", slot_data),
+			float(slot_data.get("cooldown_remaining", 0.0)),
+		])
 	return "快捷栏 %s" % " | ".join(parts)
+
+
+func _binding_text(skill: Dictionary) -> String:
+	var slot_id: String = str(skill.get("bound_slot", ""))
+	if slot_id.is_empty():
+		return ""
+	return " | %s" % slot_id
+
+
+func _button(node_name: String, text: String, tooltip: String, disabled: bool) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	button.tooltip_text = tooltip
+	button.custom_minimum_size = Vector2(34, 28)
+	button.disabled = disabled
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	return button
 
 
 func _label(node_name: String) -> Label:

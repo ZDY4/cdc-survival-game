@@ -66,6 +66,33 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	simulation.equip_item(1, "1003", "main_hand", registry.get_library("items"))
 	simulation.grant_skill_points(1, 1, "save_smoke")
 	simulation.learn_skill(1, "survival", registry.get_library("skills"))
+	simulation.grant_skill_points(1, 2, "save_smoke")
+	simulation.submit_player_command({
+		"kind": "learn_skill",
+		"actor_id": 1,
+		"skill_id": "combat",
+		"skill_library": registry.get_library("skills"),
+	})
+	simulation.submit_player_command({
+		"kind": "learn_skill",
+		"actor_id": 1,
+		"skill_id": "adrenaline_rush",
+		"skill_library": registry.get_library("skills"),
+	})
+	simulation.submit_player_command({
+		"kind": "bind_hotbar",
+		"actor_id": 1,
+		"slot_id": "slot_1",
+		"skill_id": "adrenaline_rush",
+		"skill_library": registry.get_library("skills"),
+	})
+	simulation.submit_player_command({
+		"kind": "use_skill",
+		"actor_id": 1,
+		"slot_id": "slot_1",
+		"skill_library": registry.get_library("skills"),
+		"target": {"target_type": "self"},
+	})
 	var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
 	simulation.set_actor_vision_radius(1, 4)
 	simulation.refresh_actor_vision(1, topology)
@@ -125,6 +152,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("player equipment did not roundtrip")
 	if JSON.stringify(_normalized_progression(player_restored)) != JSON.stringify(_normalized_progression(player_original)):
 		errors.append("player progression did not roundtrip")
+	if JSON.stringify(restored.get("hotbar", {})) != JSON.stringify(original.get("hotbar", {})):
+		errors.append("hotbar did not roundtrip")
 	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang":
 		errors.append("player active dialogue did not roundtrip")
 	if player_restored.get("active_container_id", "") != "survivor_outpost_01_clinic_supply_cabinet":
@@ -275,6 +304,7 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"completed_quests": snapshot.get("completed_quests", []),
 		"container_sessions": snapshot.get("container_sessions", []),
 		"shop_sessions": snapshot.get("shop_sessions", []),
+		"hotbar": snapshot.get("hotbar", {}),
 		"event_count": snapshot.get("events", []).size(),
 		"player_inventory": _player_actor(snapshot).get("inventory", {}),
 		"player_equipment": _player_actor(snapshot).get("equipment", {}),

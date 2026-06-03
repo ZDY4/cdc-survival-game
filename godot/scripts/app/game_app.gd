@@ -344,6 +344,36 @@ func learn_player_skill(skill_id: String) -> Dictionary:
 	return result
 
 
+func bind_player_skill_to_hotbar(slot_id: String, skill_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "bind_hotbar",
+		"actor_id": 1,
+		"slot_id": slot_id,
+		"skill_id": skill_id,
+		"skill_library": registry.get_library("skills"),
+	})
+	refresh_hud()
+	refresh_skills_panel()
+	return result
+
+
+func use_hotbar_slot(slot_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "use_skill",
+		"actor_id": 1,
+		"slot_id": slot_id,
+		"skill_library": registry.get_library("skills"),
+		"target": {"target_type": "self"},
+	})
+	refresh_hud()
+	refresh_skills_panel()
+	return result
+
+
 func craft_player_recipe(recipe_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}

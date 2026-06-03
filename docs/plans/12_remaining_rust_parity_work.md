@@ -55,10 +55,11 @@
 
 - Skills 面板第一版已接入主 HUD 装配，展示技能树、当前等级、技能点、主动/被动模式、前置缺失、属性缺失和可学习状态。
 - 学习技能按钮通过 app/controller 提交 `Simulation.submit_player_command({"kind": "learn_skill"})`，由 core progression 规则结算并发出 `skill_learned` 事件。
+- 已学习的主动/切换技能可绑定到 hotbar 第一槽，并通过 `use_skill` 命令消耗 AP、写入 cooldown 占位并发出 `skill_used` 事件；hotbar 已纳入 save roundtrip。
 
 仍待恢复：
 
-- Hotbar 绑定、技能快捷键、冷却/可用状态和主动技能释放流程未恢复。
+- 多槽 hotbar 选择、技能快捷键、冷却递减 UI 和主动技能实际 gameplay effect 仍待恢复。
 - 主动技能目标策略、AOE 预览、完整技能详情、冷却提示和目标预览仍待实现。
 
 ## 任务系统
