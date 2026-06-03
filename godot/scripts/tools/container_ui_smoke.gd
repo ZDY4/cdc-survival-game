@@ -62,6 +62,25 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _container_transfer_button_text(game_root) != "存放":
 		errors.append("selecting player item should set transfer action to store")
 
+	if not _drop_container_item_with_text(game_root, "container", "抗生素", "player"):
+		errors.append("should drag antibiotics from container to player column")
+	if not _event_seen(game_root, "container_item_taken"):
+		errors.append("dragging container item to player column should emit container_item_taken")
+	if not _inventory_text(game_root).contains("抗生素 x1"):
+		errors.append("dragged antibiotics should appear in inventory panel")
+	if not _container_player_text(game_root).contains("抗生素 x1"):
+		errors.append("dragged antibiotics should appear in container player column")
+	if _container_text(game_root).contains("抗生素"):
+		errors.append("dragging antibiotics out should remove them from container column")
+	if not _drop_container_item_with_text(game_root, "player", "抗生素", "container"):
+		errors.append("should drag antibiotics from player column back to container")
+	if not _event_seen(game_root, "container_item_stored"):
+		errors.append("dragging player item to container column should emit container_item_stored")
+	if not _container_text(game_root).contains("抗生素 x1"):
+		errors.append("dragged antibiotics should return to container column")
+	if _container_player_text(game_root).contains("抗生素 x1"):
+		errors.append("dragged antibiotics should leave player column after storing")
+
 	if not _press_container_item_with_text(game_root, "container", "抗生素"):
 		errors.append("should select antibiotics in container column")
 	if _container_transfer_button_text(game_root) != "拿取":
@@ -323,14 +342,39 @@ func _press_first_player_container_item(game_root: Node) -> void:
 
 
 func _press_container_item_with_text(game_root: Node, source: String, text: String) -> bool:
+	var button: Button = _container_item_button_with_text(game_root, source, text)
+	if button == null:
+		return false
+	button.pressed.emit()
+	return true
+
+
+func _drop_container_item_with_text(game_root: Node, source: String, text: String, target_source: String, count: int = 1) -> bool:
+	var button: Button = _container_item_button_with_text(game_root, source, text)
+	var target: Node = _container_item_box(game_root, target_source)
+	if button == null or not target is Control:
+		return false
+	var item: Dictionary = button.get_meta("container_item", {})
+	var drag_source: String = str(button.get_meta("container_source", ""))
+	if item.is_empty() or drag_source.is_empty():
+		return false
+	game_root.container_panel.call("_drop_container_data", Vector2.ZERO, {
+		"kind": "container_item",
+		"source": drag_source,
+		"item": item.duplicate(true),
+		"count": count,
+	}, target)
+	return true
+
+
+func _container_item_button_with_text(game_root: Node, source: String, text: String) -> Button:
 	var item_box: Node = _container_item_box(game_root, source)
 	if item_box == null:
-		return false
+		return null
 	for child in item_box.get_children():
 		if child is Button and str((child as Button).text).contains(text):
-			(child as Button).pressed.emit()
-			return true
-	return false
+			return child as Button
+	return null
 
 
 func _set_container_transfer_quantity(game_root: Node, count: int) -> void:

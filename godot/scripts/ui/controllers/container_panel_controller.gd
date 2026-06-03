@@ -137,6 +137,12 @@ func _build_layout() -> void:
 	_items_box = VBoxContainer.new()
 	_items_box.name = "ItemLines"
 	_items_box.add_theme_constant_override("separation", 4)
+	_items_box.set_meta("container_source", "container")
+	_items_box.set_drag_forwarding(
+		Callable(self, "_empty_container_drag_data"),
+		Callable(self, "_can_drop_container_data"),
+		Callable(self, "_drop_container_data")
+	)
 	var player_column := VBoxContainer.new()
 	player_column.name = "PlayerColumn"
 	player_column.custom_minimum_size = Vector2(250, 0)
@@ -149,6 +155,12 @@ func _build_layout() -> void:
 	_player_items_box = VBoxContainer.new()
 	_player_items_box.name = "PlayerItemLines"
 	_player_items_box.add_theme_constant_override("separation", 4)
+	_player_items_box.set_meta("container_source", "player")
+	_player_items_box.set_drag_forwarding(
+		Callable(self, "_empty_container_drag_data"),
+		Callable(self, "_can_drop_container_data"),
+		Callable(self, "_drop_container_data")
+	)
 	container_column.add_child(container_title)
 	container_scroll.add_child(_items_box)
 	container_column.add_child(container_scroll)
@@ -178,12 +190,80 @@ func _item_line(item: Dictionary, source: String) -> Button:
 		rarity_suffix,
 	]
 	button.tooltip_text = str(item.get("description", ""))
+	button.set_meta("container_item", item.duplicate(true))
+	button.set_meta("container_source", source)
+	button.set_drag_forwarding(
+		Callable(self, "_get_container_item_drag_data"),
+		Callable(self, "_cannot_drop_container_item_data"),
+		Callable(self, "_ignore_container_item_drop")
+	)
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
 		_apply_detail(item.duplicate(true), source)
 	)
 	return button
+
+
+func _empty_container_drag_data(_position: Vector2, _from_control: Control) -> Variant:
+	return null
+
+
+func _get_container_item_drag_data(_position: Vector2, from_control: Control) -> Variant:
+	if from_control == null or not from_control.has_meta("container_item") or not from_control.has_meta("container_source"):
+		return null
+	var item: Dictionary = _dictionary_or_empty(from_control.get_meta("container_item"))
+	var source: String = str(from_control.get_meta("container_source"))
+	var item_id: String = str(item.get("item_id", ""))
+	if item.is_empty() or source.is_empty() or item_id.is_empty():
+		return null
+	var preview := Label.new()
+	preview.text = "%s x%d" % [item.get("name", item_id), int(item.get("count", 0))]
+	set_drag_preview(preview)
+	return {
+		"kind": "container_item",
+		"source": source,
+		"item": item.duplicate(true),
+		"count": int(_quantity_spin.value if _quantity_spin != null else 1),
+	}
+
+
+func _cannot_drop_container_item_data(_position: Vector2, _data: Variant, _from_control: Control) -> bool:
+	return false
+
+
+func _ignore_container_item_drop(_position: Vector2, _data: Variant, _from_control: Control) -> void:
+	pass
+
+
+func _can_drop_container_data(_position: Vector2, data: Variant, from_control: Control) -> bool:
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	if str(drag_data.get("kind", "")) != "container_item":
+		return false
+	var source: String = str(drag_data.get("source", ""))
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var item_id: String = str(item.get("item_id", ""))
+	var target_source: String = _drop_target_source(from_control)
+	return not item_id.is_empty() and not source.is_empty() and not target_source.is_empty() and source != target_source
+
+
+func _drop_container_data(position: Vector2, data: Variant, from_control: Control) -> void:
+	if not _can_drop_container_data(position, data, from_control):
+		return
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var source: String = str(drag_data.get("source", ""))
+	var item_id: String = str(item.get("item_id", ""))
+	var available: int = maxi(1, int(item.get("count", 1)))
+	var requested: int = int(drag_data.get("count", _quantity_spin.value if _quantity_spin != null else 1))
+	var count: int = clampi(requested, 1, available)
+	transfer_requested.emit(source, item_id, count)
+
+
+func _drop_target_source(from_control: Control) -> String:
+	if from_control != null and from_control.has_meta("container_source"):
+		return str(from_control.get_meta("container_source"))
+	return ""
 
 
 func _empty_line() -> Label:
