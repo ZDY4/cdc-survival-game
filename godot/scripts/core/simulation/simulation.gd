@@ -7,6 +7,7 @@ const CombatRunner = preload("res://scripts/core/combat/combat_runner.gd")
 const CraftingRunner = preload("res://scripts/core/crafting/crafting_runner.gd")
 const DialogueRunner = preload("res://scripts/core/dialogue/dialogue_runner.gd")
 const EconomyTransactions = preload("res://scripts/core/economy/economy_transactions.gd")
+const EquipmentEffects = preload("res://scripts/core/economy/equipment_effects.gd")
 const EquipmentRunner = preload("res://scripts/core/economy/equipment_runner.gd")
 const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
 const InteractionExecutor = preload("res://scripts/core/interactions/interaction_executor.gd")
@@ -75,6 +76,7 @@ var _combat_runner := CombatRunner.new()
 var _crafting_runner := CraftingRunner.new()
 var _dialogue_runner := DialogueRunner.new()
 var _economy_transactions := EconomyTransactions.new()
+var _equipment_effects := EquipmentEffects.new()
 var _equipment_runner := EquipmentRunner.new()
 var _equipment_rules := EquipmentRules.new()
 var _interaction_executor := InteractionExecutor.new()
@@ -663,7 +665,7 @@ func _submit_reload_equipped_action(actor: RefCounted, command: Dictionary, item
 	if weapon.is_empty():
 		return {"success": false, "reason": "weapon_not_reloadable", "slot_id": slot_id, "item_id": item_id}
 	var ammo_type := _normalize_item_id(weapon.get("ammo_type", ""))
-	var magazine_capacity := int(weapon.get("max_ammo", 0))
+	var magazine_capacity := _equipment_effects.weapon_magazine_capacity(actor, weapon, items)
 	if ammo_type.is_empty() or magazine_capacity <= 0:
 		return {"success": false, "reason": "weapon_not_reloadable", "slot_id": slot_id, "item_id": item_id}
 	var loaded_before := clampi(int(actor.weapon_ammo.get(slot_id, 0)), 0, magazine_capacity)
@@ -691,7 +693,8 @@ func _submit_reload_equipped_action(actor: RefCounted, command: Dictionary, item
 			"loaded": loaded_before,
 			"capacity": magazine_capacity,
 		}
-	var reload_cost: float = max(1.0, ceil(float(command.get("ap_cost", weapon.get("reload_time", DEFAULT_INTERACTION_AP)))))
+	var override_cost: Variant = command.get("ap_cost", null) if command.has("ap_cost") else null
+	var reload_cost: float = _equipment_effects.reload_ap_cost(actor, weapon, items, override_cost)
 	if actor.ap < reload_cost:
 		return {
 			"success": false,
@@ -1404,7 +1407,7 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 		}
 	var attack_speed: float = max(0.1, float(weapon.get("attack_speed", 1.0)))
 	var weapon_range: int = max(1, _optional_int(weapon.get("range", DEFAULT_ATTACK_RANGE), DEFAULT_ATTACK_RANGE))
-	var max_ammo: int = _optional_int(weapon.get("max_ammo", 0), 0)
+	var max_ammo: int = _equipment_effects.weapon_magazine_capacity(actor, weapon, items)
 	return {
 		"item_id": equipped_item_id,
 		"damage": float(weapon.get("damage", actor.attack_power)),

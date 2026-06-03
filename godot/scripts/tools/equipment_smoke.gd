@@ -2,6 +2,7 @@ extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
+const CharacterSnapshot = preload("res://scripts/ui/snapshots/character_snapshot.gd")
 
 
 func _init() -> void:
@@ -117,6 +118,41 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("re-equipping bat after reload failed: %s" % equip_bat_after_reload.get("reason", "unknown"))
 	if player.weapon_ammo.has("main_hand"):
 		errors.append("replacing weapon should clear main hand magazine state")
+
+	player.inventory["2007"] = 1
+	var equip_vest: Dictionary = simulation.equip_item(1, "2007", "body", items)
+	if not bool(equip_vest.get("success", false)):
+		errors.append("tactical vest equip failed: %s" % equip_vest.get("reason", "unknown"))
+	player.inventory["1004"] = 1
+	player.inventory["1009"] = 40
+	var equip_capacity_pistol: Dictionary = simulation.equip_item(1, "1004", "main_hand", items)
+	if not bool(equip_capacity_pistol.get("success", false)):
+		errors.append("pistol equip for capacity bonus failed: %s" % equip_capacity_pistol.get("reason", "unknown"))
+	player.ap = 6.0
+	var capacity_reload: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "reload_equipped",
+		"slot_id": "main_hand",
+		"item_library": items,
+	})
+	if not bool(capacity_reload.get("success", false)):
+		errors.append("reload with ammo_capacity equipment failed: %s" % capacity_reload.get("reason", "unknown"))
+	if int(capacity_reload.get("capacity", 0)) != 32:
+		errors.append("ammo_capacity equipment should increase pistol magazine capacity to 32")
+	if int(player.weapon_ammo.get("main_hand", 0)) != 32:
+		errors.append("reload should fill expanded pistol magazine")
+	if int(player.inventory.get("1009", 0)) != 8:
+		errors.append("expanded reload should leave remaining spare ammo")
+	var character_snapshot: Dictionary = CharacterSnapshot.new(registry).build(simulation.snapshot())
+	var main_hand_row: Dictionary = _equipment_row(character_snapshot, "main_hand")
+	if not _details_contain(main_hand_row, "弹药 1009 32/32"):
+		errors.append("character weapon details should show expanded magazine capacity")
+	var body_row: Dictionary = _equipment_row(character_snapshot, "body")
+	if not _array_or_empty(body_row.get("effect_ids", [])).has("ammo_capacity"):
+		errors.append("character equipment snapshot should expose ammo_capacity effect id")
+	if not _details_contain(body_row, "效果: Placeholder ammo_capacity"):
+		errors.append("character equipment details should show ammo_capacity effect label")
 	return errors
 
 
@@ -139,9 +175,30 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 	}
 
 
+func _equipment_row(snapshot: Dictionary, slot_id: String) -> Dictionary:
+	for row in _array_or_empty(snapshot.get("equipment", [])):
+		var row_data: Dictionary = row
+		if str(row_data.get("slot_id", "")) == slot_id:
+			return row_data
+	return {}
+
+
+func _details_contain(row: Dictionary, expected: String) -> bool:
+	for detail in _array_or_empty(row.get("details", [])):
+		if str(detail).contains(expected):
+			return true
+	return false
+
+
 func _player_actor(snapshot: Dictionary) -> Dictionary:
 	for actor in snapshot.get("actors", []):
 		var actor_data: Dictionary = actor
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return actor_data
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

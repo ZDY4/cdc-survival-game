@@ -1,9 +1,11 @@
 extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+const EquipmentEffects = preload("res://scripts/core/economy/equipment_effects.gd")
 const VisionGeometry = preload("res://scripts/core/vision/vision_geometry.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _equipment_effects := EquipmentEffects.new()
 var _vision_geometry := VisionGeometry.new()
 
 
@@ -189,24 +191,8 @@ func _combat_attribute(simulation: RefCounted, actor: RefCounted, key: String, f
 		value = actor.defense
 	else:
 		value = float(_dictionary_or_empty(actor.combat_attributes).get(key, fallback))
-	for slot_id in actor.equipment.keys():
-		var item_id: String = str(actor.equipment.get(slot_id, ""))
-		if item_id.is_empty():
-			continue
-		value += _equipped_attribute_modifier(simulation, item_id, key)
+	value += _equipment_effects.attribute_modifier(actor, simulation.item_library, key)
 	return value
-
-
-func _equipped_attribute_modifier(simulation: RefCounted, item_id: String, key: String) -> float:
-	var record: Dictionary = _dictionary_or_empty(simulation.item_library.get(item_id, {}))
-	var item: Dictionary = _dictionary_or_empty(record.get("data", record))
-	for fragment in _array_or_empty(item.get("fragments", [])):
-		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
-		if str(fragment_data.get("kind", "")) != "attribute_modifiers":
-			continue
-		var attributes: Dictionary = _dictionary_or_empty(fragment_data.get("attributes", {}))
-		return float(attributes.get(key, 0.0))
-	return 0.0
 
 
 func _next_combat_random_unit(simulation: RefCounted, salt: int) -> Dictionary:

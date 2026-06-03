@@ -393,7 +393,7 @@
 - [ ] 任务物品 fragment：不可卖、不可丢、不可拆、任务交付条件。
 - [ ] 可拆解/修理 fragment：材料、工具、成功率、产物、耐久恢复。
 - [ ] 外观 fragment：preview model、socket、attach target、scale、offset、rotation。
-- [ ] 效果库：accuracy_bonus、armor_break、bleeding、poison、stun、slow、night_vision、inventory_bonus 等效果运行时语义。
+- [~] 效果库：装备 `equip_effect_ids` 快照展示、`ammo_capacity` 和 `reload_speed` 装备期规则第一版已迁移；accuracy_bonus、armor_break、bleeding、poison、stun、slow、night_vision、inventory_bonus 等完整运行时语义仍待迁移。
 - [ ] effect stacking：叠加、刷新、互斥、持续时间、tick、移除条件。
 - [ ] item validator：缺 fragment、非法数值、缺 effect、缺 model、slot 冲突。
 - [ ] 物品编辑器：fragment 表单、模型预览、引用选择、保存/删除。

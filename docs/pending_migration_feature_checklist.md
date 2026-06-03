@@ -466,13 +466,13 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`vision_runner.gd`
 
 - [~] 武器射程、弹药、攻击速度、基础伤害。
 - [~] 确定性暴击 seed / counter。
-- [~] attack_power、defense、damage_reduction、装备 attribute_modifiers 第一版。
+- [~] attack_power、defense、damage_reduction、装备 attribute_modifiers 第一版；装备修饰已集中到 Godot `EquipmentEffects` core 服务。
 - [ ] accuracy / evasion 命中判定。
 - [ ] block / miss / graze / crit / hit 的完整 outcome。
 - [ ] damage type、armor type、resistance、weakness、armor pierce。
 - [ ] buff / debuff 对伤害的影响。
-- [ ] 武器耐久、装备特效、弹药特效。
-- [~] 玩家已装备武器 reload 第一版：`reload_equipped` 命令、弹匣状态、无弹/空弹匣提示、换弹 AP、攻击消耗和存档 roundtrip 已纳入 smoke；待补装填动画、UI polish、多弹药类型和 NPC reload。
+- [~] 装备特效第一版：`equip_effect_ids` 已进入角色装备快照，`ammo_capacity` / `reload_speed` 已影响玩家已装备武器换弹容量和 AP 成本；待补完整 effect runtime、stacking、持续时间、on-hit 触发、武器耐久和弹药特效。
+- [~] 玩家已装备武器 reload 第一版：`reload_equipped` 命令、弹匣状态、无弹/空弹匣提示、换弹 AP、攻击消耗和存档 roundtrip 已纳入 smoke；`ammo_capacity` 扩容装填已纳入 `Equipment` smoke；待补装填动画、UI polish、多弹药类型和 NPC reload。
 - [ ] 伤害飘字、命中反馈、暴击/格挡/未命中提示。
 - [ ] 攻击动画、受击动画、开火/挥击音效占位。
 

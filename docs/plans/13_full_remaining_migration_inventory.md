@@ -141,8 +141,8 @@
 
 - 已有武器射程、弹药、攻击速度、基础伤害和暴击第一版；待补 Rust 确定性随机、seed salt、重放稳定性。
 - 待补命中/闪避/格挡/护甲/伤害类型/抗性/弱点等旧数据如果存在的完整应用。
-- 远程弹药已有玩家已装备武器 reload 第一版：`reload_equipped` 命令、弹匣状态、背包弹药转入弹匣、换弹 AP、弹匣攻击消耗、无弹/空弹匣提示和存档 roundtrip 已纳入 `Equipment` / `Combat` / `Save` smoke；待补装填动画、弹匣 UI polish、更多武器/弹药类型和 NPC reload。
-- 待补攻击装备成本：武器耐久、消耗品、装备特效触发。
+- 远程弹药已有玩家已装备武器 reload 第一版：`reload_equipped` 命令、弹匣状态、背包弹药转入弹匣、换弹 AP、弹匣攻击消耗、无弹/空弹匣提示和存档 roundtrip 已纳入 `Equipment` / `Combat` / `Save` smoke；装备 `ammo_capacity` / `reload_speed` 第一版已通过 core 装备效果服务影响换弹容量和 AP 成本；待补装填动画、弹匣 UI polish、更多武器/弹药类型和 NPC reload。
+- 待补攻击装备成本：武器耐久、消耗品、on-hit 装备/弹药特效触发。
 - 待补伤害反馈：飘字、日志、命中/暴击/击杀提示、受击动画占位、音效占位。
 
 ### 6.3 击杀和尸体
@@ -196,7 +196,7 @@
 - 已有 equip / unequip 命令，角色面板固定装备槽、空槽状态、主手/副手/accessory 多槽显示和已装备槽卸下按钮第一版，并纳入 `UIToggle` smoke；允许槽校验由 core 装备规则执行。
 - 角色面板已展示装备详情第一版：价值、重量、稀有度、武器伤害/射程/攻速/弹药、耐久、属性修饰和外观资源，并纳入 `UIToggle` smoke；待补属性变化对比和更完整的装备 tooltip。
 - 已有装备视觉实时更新第一版：Inventory 和 Character 面板装备/卸下会重建世界，主手模型替换、卸下移除和恢复已纳入 `InventoryUI` / `UIToggle` smoke；待补替换 body region、武器挂点精调和更多装备槽视觉验证。
-- 角色面板已显示远程武器当前弹药数量 / 弹匣容量第一版，并纳入 `UIToggle` smoke；空装备槽卸下失败提示已接入 Character 面板并纳入 `UIToggle` smoke；reload equipped weapon 第一版已接入 Character 面板“装”按钮、core 弹匣状态和 smoke；待补装备特效应用、更复杂卸下失败规则。
+- 角色面板已显示远程武器当前弹药数量 / 弹匣容量第一版，并纳入 `UIToggle` smoke；空装备槽卸下失败提示已接入 Character 面板并纳入 `UIToggle` smoke；reload equipped weapon 第一版已接入 Character 面板“装”按钮、core 弹匣状态和 smoke；装备效果第一版已接入 `EquipmentEffects`，覆盖装备 `attribute_modifiers` 汇总、`equip_effect_ids` 快照展示、`ammo_capacity` 扩展弹匣容量和 `reload_speed` 修正换弹 AP，并纳入 `Equipment` smoke；待补更复杂卸下失败规则、完整 effect runtime/stacking/持续时间。
 
 ### 8.3 容器
 

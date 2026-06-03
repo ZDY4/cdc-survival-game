@@ -1,6 +1,9 @@
 extends RefCounted
 
+const EquipmentEffects = preload("res://scripts/core/economy/equipment_effects.gd")
+
 var registry: RefCounted
+var _equipment_effects := EquipmentEffects.new()
 
 const EQUIPMENT_SLOTS: Array[Dictionary] = [
 	{"slot_id": "main_hand", "label": "主手"},
@@ -51,7 +54,7 @@ func _equipment_snapshot(equipment: Dictionary, inventory: Dictionary, weapon_am
 		var slot_id: String = str(slot_data.get("slot_id", ""))
 		var actual_slot_id: String = _actual_slot_id(equipment, slot_id)
 		var item_id: String = str(equipment.get(actual_slot_id, ""))
-		rows.append(_equipment_row(slot_id, str(slot_data.get("label", slot_id)), actual_slot_id, item_id, inventory, weapon_ammo, actor_ap))
+		rows.append(_equipment_row(slot_id, str(slot_data.get("label", slot_id)), actual_slot_id, item_id, equipment, inventory, weapon_ammo, actor_ap))
 		seen_slots[actual_slot_id] = true
 	var extra_slots: Array = equipment.keys()
 	extra_slots.sort()
@@ -59,14 +62,15 @@ func _equipment_snapshot(equipment: Dictionary, inventory: Dictionary, weapon_am
 		var extra_slot_id: String = str(extra_slot)
 		if bool(seen_slots.get(extra_slot_id, false)):
 			continue
-		rows.append(_equipment_row(extra_slot_id, extra_slot_id, extra_slot_id, str(equipment.get(extra_slot_id, "")), inventory, weapon_ammo, actor_ap))
+		rows.append(_equipment_row(extra_slot_id, extra_slot_id, extra_slot_id, str(equipment.get(extra_slot_id, "")), equipment, inventory, weapon_ammo, actor_ap))
 	return rows
 
 
-func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item_id: String, inventory: Dictionary, weapon_ammo: Dictionary, actor_ap: float) -> Dictionary:
+func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item_id: String, equipment: Dictionary, inventory: Dictionary, weapon_ammo: Dictionary, actor_ap: float) -> Dictionary:
 	var data: Dictionary = _item_data(item_id)
 	var equipped: bool = not item_id.is_empty()
-	var reload: Dictionary = _reload_snapshot(data, actual_slot_id, inventory, weapon_ammo, actor_ap)
+	var reload: Dictionary = _reload_snapshot(data, actual_slot_id, equipment, inventory, weapon_ammo, actor_ap)
+	var effect_ids: Array[String] = _equipment_effects.item_equip_effect_ids(item_id, _item_library())
 	return {
 		"slot_id": slot_id,
 		"actual_slot_id": actual_slot_id,
@@ -77,7 +81,9 @@ func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item
 		"value": int(data.get("value", 0)),
 		"weight": float(data.get("weight", 0.0)),
 		"rarity": _rarity(data),
-		"details": _equipment_details(data, inventory, reload),
+		"effect_ids": effect_ids,
+		"effects": _effect_labels(effect_ids),
+		"details": _equipment_details(data, inventory, reload, effect_ids),
 		"reload": reload,
 		"equipped": equipped,
 	}
@@ -94,7 +100,7 @@ func _actual_slot_id(equipment: Dictionary, slot_id: String) -> String:
 func _item_data(item_id: String) -> Dictionary:
 	if item_id.is_empty() or registry == null:
 		return {}
-	var record: Dictionary = _dictionary_or_empty(registry.get_library("items").get(item_id, {}))
+	var record: Dictionary = _dictionary_or_empty(_item_library().get(item_id, {}))
 	return _dictionary_or_empty(record.get("data", record))
 
 
@@ -106,7 +112,7 @@ func _rarity(item_data: Dictionary) -> String:
 	return ""
 
 
-func _equipment_details(item_data: Dictionary, inventory: Dictionary, reload: Dictionary) -> Array[String]:
+func _equipment_details(item_data: Dictionary, inventory: Dictionary, reload: Dictionary, effect_ids: Array[String]) -> Array[String]:
 	var details: Array[String] = []
 	var weapon: Dictionary = _fragment_by_kind(item_data, "weapon")
 	if not weapon.is_empty():
@@ -120,8 +126,9 @@ func _equipment_details(item_data: Dictionary, inventory: Dictionary, reload: Di
 		if not ammo_type.is_empty() and ammo_type != "<null>":
 			var available_ammo: int = int(inventory.get(ammo_type, 0))
 			var display_ammo: int = int(reload.get("loaded", available_ammo)) if bool(reload.get("magazine_tracked", false)) else available_ammo
-			if max_ammo > 0:
-				weapon_parts.append("弹药 %s %d/%d" % [ammo_type, display_ammo, max_ammo])
+			var display_capacity: int = int(reload.get("capacity", max_ammo))
+			if display_capacity > 0:
+				weapon_parts.append("弹药 %s %d/%d" % [ammo_type, display_ammo, display_capacity])
 				if bool(reload.get("magazine_tracked", false)):
 					weapon_parts.append("备用 %d" % available_ammo)
 			else:
@@ -141,6 +148,9 @@ func _equipment_details(item_data: Dictionary, inventory: Dictionary, reload: Di
 		for key in keys:
 			modifier_parts.append("%s %s" % [str(key), _signed_number(float(modifiers.get(key, 0.0)))])
 		details.append("属性: %s" % " / ".join(modifier_parts))
+	var effect_labels: Array[String] = _effect_labels(effect_ids)
+	if not effect_labels.is_empty():
+		details.append("效果: %s" % " / ".join(effect_labels))
 	var appearance: Dictionary = _dictionary_or_empty(_fragment_by_kind(item_data, "appearance").get("definition", {}))
 	if not appearance.is_empty():
 		var visual_asset: String = str(appearance.get("visual_asset", ""))
@@ -149,18 +159,18 @@ func _equipment_details(item_data: Dictionary, inventory: Dictionary, reload: Di
 	return details
 
 
-func _reload_snapshot(item_data: Dictionary, slot_id: String, inventory: Dictionary, weapon_ammo: Dictionary, actor_ap: float) -> Dictionary:
+func _reload_snapshot(item_data: Dictionary, slot_id: String, equipment: Dictionary, inventory: Dictionary, weapon_ammo: Dictionary, actor_ap: float) -> Dictionary:
 	var weapon: Dictionary = _fragment_by_kind(item_data, "weapon")
 	if weapon.is_empty():
 		return {}
 	var ammo_type: String = _normalize_item_id(weapon.get("ammo_type", ""))
-	var capacity: int = _optional_int(weapon.get("max_ammo", 0), 0)
+	var capacity: int = _equipment_effects.weapon_magazine_capacity_from_equipment(equipment, weapon, _item_library())
 	if ammo_type.is_empty() or ammo_type == "<null>" or capacity <= 0:
 		return {}
 	var magazine_tracked: bool = weapon_ammo.has(slot_id)
 	var loaded: int = clampi(int(weapon_ammo.get(slot_id, 0)), 0, capacity)
 	var inventory_ammo: int = int(inventory.get(ammo_type, 0))
-	var reload_ap_cost: float = max(1.0, ceil(float(weapon.get("reload_time", 1.0))))
+	var reload_ap_cost: float = _equipment_effects.reload_ap_cost_from_equipment(equipment, weapon, _item_library())
 	return {
 		"reloadable": true,
 		"can_reload": loaded < capacity and inventory_ammo > 0 and actor_ap >= reload_ap_cost,
@@ -172,6 +182,29 @@ func _reload_snapshot(item_data: Dictionary, slot_id: String, inventory: Diction
 		"inventory_ammo": inventory_ammo,
 		"ap_cost": reload_ap_cost,
 	}
+
+
+func _item_library() -> Dictionary:
+	if registry == null:
+		return {}
+	return registry.get_library("items")
+
+
+func _effect_labels(effect_ids: Array[String]) -> Array[String]:
+	var labels: Array[String] = []
+	var effects: Dictionary = _effect_library()
+	for effect_id in effect_ids:
+		var record: Dictionary = _dictionary_or_empty(effects.get(effect_id, {}))
+		var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+		var label: String = str(data.get("name", effect_id))
+		labels.append(label if not label.is_empty() else effect_id)
+	return labels
+
+
+func _effect_library() -> Dictionary:
+	if registry == null:
+		return {}
+	return registry.get_library("json")
 
 
 func _fragment_by_kind(item_data: Dictionary, kind: String) -> Dictionary:
