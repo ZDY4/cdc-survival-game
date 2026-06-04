@@ -5,6 +5,7 @@ var _summary_label: Label
 var _resource_label: Label
 var _feedback_label: Label
 var _attributes_box: VBoxContainer
+var _status_box: VBoxContainer
 var _equipment_box: VBoxContainer
 
 
@@ -33,9 +34,12 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	]
 	_apply_feedback(_dictionary_or_empty(snapshot.get("feedback", {})))
 	_clear_box(_attributes_box)
+	_clear_box(_status_box)
 	_clear_box(_equipment_box)
 	for row in _attribute_rows(_dictionary_or_empty(snapshot.get("attributes", {})), available_stat_points):
 		_attributes_box.add_child(row)
+	for row in _status_rows(_array_or_empty(snapshot.get("status_effects", []))):
+		_status_box.add_child(row)
 	for row in _equipment_rows(_array_or_empty(snapshot.get("equipment", []))):
 		_equipment_box.add_child(row)
 
@@ -65,6 +69,9 @@ func _build_layout() -> void:
 	_attributes_box = VBoxContainer.new()
 	_attributes_box.name = "AttributeLines"
 	_attributes_box.add_theme_constant_override("separation", 3)
+	_status_box = VBoxContainer.new()
+	_status_box.name = "StatusEffectLines"
+	_status_box.add_theme_constant_override("separation", 3)
 	_equipment_box = VBoxContainer.new()
 	_equipment_box.name = "EquipmentLines"
 	_equipment_box.add_theme_constant_override("separation", 3)
@@ -73,6 +80,8 @@ func _build_layout() -> void:
 	box.add_child(_feedback_label)
 	box.add_child(_section_label("AttributesTitle", "属性"))
 	box.add_child(_attributes_box)
+	box.add_child(_section_label("StatusEffectsTitle", "状态"))
+	box.add_child(_status_box)
 	box.add_child(_section_label("EquipmentTitle", "装备"))
 	box.add_child(_equipment_box)
 
@@ -100,6 +109,46 @@ func _attribute_rows(attributes: Dictionary, available_stat_points: int) -> Arra
 		row.add_child(add_button)
 		rows.append(row)
 	return rows
+
+
+func _status_rows(status_effects: Array) -> Array[Control]:
+	var rows: Array[Control] = []
+	if status_effects.is_empty():
+		var empty := _label("StatusEffectEmpty")
+		empty.text = "无状态效果"
+		rows.append(empty)
+		return rows
+	for effect in status_effects:
+		var data: Dictionary = _dictionary_or_empty(effect)
+		var row := HBoxContainer.new()
+		row.name = "StatusEffect_%s" % str(data.get("effect_id", "unknown")).replace(":", "_")
+		row.custom_minimum_size = Vector2(322, 28)
+		row.add_theme_constant_override("separation", 6)
+		var label := _label("Line")
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.text = _status_text(data)
+		row.add_child(label)
+		rows.append(row)
+	return rows
+
+
+func _status_text(data: Dictionary) -> String:
+	var parts: Array[String] = [
+		str(data.get("name", data.get("effect_id", ""))),
+		str(data.get("category", "")),
+	]
+	if int(data.get("level", 0)) > 0:
+		parts.append("Lv%d" % int(data.get("level", 0)))
+	if not bool(data.get("is_infinite", false)):
+		parts.append("%.0f回合" % float(data.get("duration_remaining", 0.0)))
+	var modifier_labels: Array[String] = []
+	for label in _array_or_empty(data.get("modifier_labels", [])):
+		var text: String = str(label)
+		if not text.is_empty():
+			modifier_labels.append(text)
+	if not modifier_labels.is_empty():
+		parts.append(" / ".join(modifier_labels))
+	return " | ".join(parts)
 
 
 func _equipment_rows(equipment: Array) -> Array[Control]:

@@ -226,7 +226,7 @@
 - 已有 Skills 面板简版；待迁移技能树图形布局、pan、节点连线、选中技能详情、前置链路高亮。
 - 已有 Skills 面板筛选条（全部 / 已学 / 可学 / 锁定 / 主动）和技能树切换第一版并纳入 `SkillsUI` smoke；待补已学/可学/锁定/属性不足/点数不足状态视觉 polish。
 - 待补技能学习确认、失败 reason、学习后热栏建议。
-- 技能效果第一版已迁移：`learn_skill` 会把被动技能 `gameplay_effect.modifiers` 转成 actor `combat.active_effects` 的常驻 passive effect，`use_skill` 会把 `activation.effect` 转成限时或 toggle effect，并发出 `skill_passive_effect_refreshed`、`skill_effect_applied`、`skill_effect_removed`、`skill_effect_expired`；`combat` 被动和 `adrenaline_rush` 主动的 `damage_bonus` 已参与战斗伤害并纳入 `Progression` / `SkillsUI` / `Combat` / `Save` smoke。待补技能效果堆叠策略、非战斗 modifier 的完整消费点、负面状态、状态 UI 和更完整 toggle polish。
+- 技能效果第一版已迁移：`learn_skill` 会把被动技能 `gameplay_effect.modifiers` 转成 actor `combat.active_effects` 的常驻 passive effect，`use_skill` 会把 `activation.effect` 转成限时或 toggle effect，并发出 `skill_passive_effect_refreshed`、`skill_effect_applied`、`skill_effect_removed`、`skill_effect_expired`；`combat` 被动和 `adrenaline_rush` 主动的 `damage_bonus` 已参与战斗伤害，角色面板已展示 passive / buff 状态效果，并纳入 `Progression` / `SkillsUI` / `Combat` / `UIToggle` / `Save` smoke。待补技能效果堆叠策略、非战斗 modifier 的完整消费点、负面状态、状态 UI polish 和更完整 toggle polish。
 
 ### 9.3 Hotbar
 
@@ -313,7 +313,7 @@
 ### 13.3 面板
 
 - 背包面板已有筛选、搜索、详情、滚动列表、选中物品操作栏、右键上下文菜单、顺序视图拖拽重排、拖到装备/丢弃按钮和丢弃确认弹窗第一版；待补实际装备槽集成、完整上下文项、跨面板拖拽、数量弹窗 polish。
-- 角色面板待补：属性、资源、装备、派生数值、属性点分配、状态效果。
+- 角色面板已有属性、资源、装备、属性点分配和状态效果第一版；状态效果会显示 actor active effects 的名称、分类、等级、剩余回合和 modifier，并纳入 `UIToggle` smoke。待补派生数值、负面状态视觉、状态来源/说明 tooltip 和更完整排版。
 - 地图面板待补：canvas、pan、zoom、地点、当前地图、overworld 路线、追踪目标。
 - Journal 面板待补：任务详情、追踪、完成/失败、奖励领取反馈。
 - Skills 面板待补：图形技能树、详情、hotbar 绑定、多树切换。

@@ -904,6 +904,7 @@ func learn_player_skill(skill_id: String) -> Dictionary:
 		"skill_id": skill_id,
 		"skill_library": registry.get_library("skills"),
 	})
+	refresh_character_panel()
 	refresh_skills_panel()
 	return result
 
@@ -934,6 +935,7 @@ func use_hotbar_slot(slot_id: String) -> Dictionary:
 		"target": {"target_type": "self"},
 	})
 	refresh_hud()
+	refresh_character_panel()
 	refresh_skills_panel()
 	return result
 

@@ -30,6 +30,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	var weapon_ammo: Dictionary = _dictionary_or_empty(player.get("weapon_ammo", {}))
+	var combat: Dictionary = _dictionary_or_empty(player.get("combat", {}))
 	return {
 		"owner_actor_id": int(player.get("actor_id", 0)),
 		"owner_name": str(player.get("display_name", "")),
@@ -37,11 +38,12 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"current_xp": int(progression.get("current_xp", 0)),
 		"available_stat_points": int(progression.get("available_stat_points", 0)),
 		"available_skill_points": int(progression.get("available_skill_points", 0)),
-		"hp": float(_dictionary_or_empty(player.get("combat", {})).get("hp", 0.0)),
-		"max_hp": float(_dictionary_or_empty(player.get("combat", {})).get("max_hp", 0.0)),
+		"hp": float(combat.get("hp", 0.0)),
+		"max_hp": float(combat.get("max_hp", 0.0)),
 		"ap": float(player.get("ap", 0.0)),
 		"attributes": attributes.duplicate(true),
 		"equipment": _equipment_snapshot(equipment, inventory, weapon_ammo, float(player.get("ap", 0.0))),
+		"status_effects": _status_effects_snapshot(_array_or_empty(combat.get("active_effects", []))),
 		"feedback": _feedback_snapshot(feedback),
 	}
 
@@ -205,6 +207,59 @@ func _effect_library() -> Dictionary:
 	if registry == null:
 		return {}
 	return registry.get_library("json")
+
+
+func _status_effects_snapshot(active_effects: Array) -> Array[Dictionary]:
+	var rows: Array[Dictionary] = []
+	for effect in active_effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		var effect_id: String = str(effect_data.get("effect_id", ""))
+		if effect_id.is_empty():
+			continue
+		rows.append({
+			"effect_id": effect_id,
+			"source": str(effect_data.get("source", "")),
+			"skill_id": str(effect_data.get("skill_id", "")),
+			"name": _status_effect_name(effect_data),
+			"category": str(effect_data.get("category", "")),
+			"level": int(effect_data.get("level", 0)),
+			"duration_remaining": float(effect_data.get("duration_remaining", 0.0)),
+			"is_infinite": bool(effect_data.get("is_infinite", false)),
+			"modifiers": _dictionary_or_empty(effect_data.get("modifiers", {})).duplicate(true),
+			"modifier_labels": _modifier_labels(_dictionary_or_empty(effect_data.get("modifiers", {}))),
+		})
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("effect_id", "")) < str(b.get("effect_id", ""))
+	)
+	return rows
+
+
+func _status_effect_name(effect: Dictionary) -> String:
+	var skill_id: String = str(effect.get("skill_id", ""))
+	if not skill_id.is_empty() and registry != null:
+		var record: Dictionary = _dictionary_or_empty(registry.get_library("skills").get(skill_id, {}))
+		var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+		var skill_name: String = str(data.get("name", ""))
+		if not skill_name.is_empty():
+			return skill_name
+	var effect_id: String = str(effect.get("effect_id", ""))
+	if not effect_id.is_empty():
+		return effect_id
+	return "状态效果"
+
+
+func _modifier_labels(modifiers: Dictionary) -> Array[String]:
+	var labels: Array[String] = []
+	var keys: Array = modifiers.keys()
+	keys.sort()
+	for key in keys:
+		labels.append("%s %s" % [str(key), _signed_modifier(float(modifiers.get(key, 0.0)))])
+	return labels
+
+
+func _signed_modifier(value: float) -> String:
+	var prefix := "+" if value >= 0.0 else ""
+	return "%s%.2f" % [prefix, value]
 
 
 func _fragment_by_kind(item_data: Dictionary, kind: String) -> Dictionary:

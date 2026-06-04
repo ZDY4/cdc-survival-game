@@ -136,6 +136,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_stage_open(errors, game_root, "character", "C should open character")
 	if not game_root.character_panel.find_child("SummaryLine", true, false) is Label:
 		errors.append("character panel should expose SummaryLine")
+	if not _status_effect_line(game_root, "StatusEffectEmpty").contains("无状态效果"):
+		errors.append("character panel should show empty status effect row before skills are learned")
 	if not _equipment_line(game_root, "main_hand").contains("主手: 小刀"):
 		errors.append("character panel should show localized main hand equipment slot")
 	if not _equipment_line(game_root, "main_hand").contains("价值 50"):
@@ -242,6 +244,22 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("allocating constitution from character panel should refresh max hp")
 		if _event_count(game_root, "attribute_allocated") <= 0:
 			errors.append("allocating from character panel should emit attribute_allocated")
+
+	game_root.simulation.grant_skill_points(1, 2, "ui_toggle_status_effects")
+	var combat_skill_result: Dictionary = game_root.learn_player_skill("combat")
+	if not bool(combat_skill_result.get("success", false)):
+		errors.append("learning combat for character status effects failed: %s" % combat_skill_result.get("reason", "unknown"))
+	if not _status_effect_line(game_root, "StatusEffect_passive_skill_combat").contains("战斗训练 | passive | Lv1 | damage_bonus +0.04"):
+		errors.append("character panel should show passive combat status effect")
+	var adrenaline_result: Dictionary = game_root.learn_player_skill("adrenaline_rush")
+	if not bool(adrenaline_result.get("success", false)):
+		errors.append("learning adrenaline rush for character status effects failed: %s" % adrenaline_result.get("reason", "unknown"))
+	game_root.bind_player_skill_to_hotbar("slot_1", "adrenaline_rush")
+	var hotbar_result: Dictionary = game_root.use_hotbar_slot("slot_1")
+	if not bool(hotbar_result.get("success", false)):
+		errors.append("using adrenaline rush for character status effects failed: %s" % hotbar_result.get("reason", "unknown"))
+	if not _status_effect_line(game_root, "StatusEffect_skill_adrenaline_rush").contains("肾上腺激发 | buff | Lv1 | 8回合 | damage_bonus +0.25"):
+		errors.append("character panel should show timed adrenaline rush status effect")
 
 	_press_key(game_root, KEY_M)
 	_expect_stage_open(errors, game_root, "map", "M should replace character with map")
@@ -565,6 +583,18 @@ func _attribute_line(game_root: Node, attribute: String) -> String:
 	var row: Node = game_root.character_panel.find_child("Attribute_%s" % attribute, true, false)
 	if row == null:
 		return ""
+	var label: Node = row.get_node_or_null("Line")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _status_effect_line(game_root: Node, node_name: String) -> String:
+	var row: Node = game_root.character_panel.find_child(node_name, true, false)
+	if row == null:
+		return ""
+	if row is Label:
+		return str((row as Label).text)
 	var label: Node = row.get_node_or_null("Line")
 	if label is Label:
 		return str((label as Label).text)
