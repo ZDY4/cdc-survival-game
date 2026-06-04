@@ -341,6 +341,26 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 			_trade_button.text = "出售" if _is_sell_source(source) else "交易"
 
 
+func has_blocking_modal() -> bool:
+	return _equipment_sell_dialog != null and _equipment_sell_dialog.visible
+
+
+func blocking_modal_name() -> String:
+	if has_blocking_modal():
+		return "equipment_sell_confirm"
+	return ""
+
+
+func close_blocking_modal() -> Dictionary:
+	if not has_blocking_modal():
+		return {"success": false, "reason": "modal_inactive"}
+	_equipment_sell_dialog.hide()
+	return {
+		"success": true,
+		"closed": "modal:equipment_sell_confirm",
+	}
+
+
 func _queue_selected_item() -> void:
 	if _selected_source.is_empty() or _selected_item_id.is_empty() or _selected_item_snapshot.is_empty():
 		return

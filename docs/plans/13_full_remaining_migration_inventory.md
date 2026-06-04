@@ -58,12 +58,12 @@
 
 - 已迁移菜单面板快捷键：`I` 背包、`C` 角色、`M` 地图、`J` 任务、`K` 技能、`L` 制作，已纳入 `UIToggle` smoke。
 - 已迁移同键 toggle / stage panel 替换：打开对应面板、同键关闭、切换到另一个 stage panel 时替换当前 active panel，已纳入 `UIToggle` smoke。
-- 部分迁移 `Esc` 关闭链路：已覆盖 selection、active dialogue、interaction menu、trade panel、container panel、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；待补 quantity modal、discard modal、overworld prompt 和 blocker 诊断。
+- 部分迁移 `Esc` 关闭链路：已覆盖 selection、active dialogue、interaction menu、trade equipment sell confirm modal、trade panel、container panel、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；待补 quantity modal、discard modal、overworld prompt 和更完整 blocker 诊断。
 - 部分迁移数字键：已恢复对话选项 `1-9` 和 hotbar `1-0` 基础入口并纳入 smoke；待补菜单内数量输入与快捷动作冲突处理。
 - 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、pending 取消和长按重复等待第一版；待补自由观察播放切换、长按节奏配置和 modal 冲突策略。
 - 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环、相机跟随、actor busy 时阻止切换和选中/提示状态清理；待补 free observe。
 - 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
-- 部分迁移输入阻塞：stage/settings、interaction menu、trade panel、container panel 已阻止 gameplay 输入，`gameplay_input_blocker_name` 和 HUD blocker 诊断有第一版，interaction menu 支持点击外部关闭；待补 console、debug panel、quantity/discard/overworld modal、tooltip/drag 层 blocker 细分。
+- 部分迁移输入阻塞：stage/settings、interaction menu、trade equipment sell confirm modal、trade panel、container panel 已阻止 gameplay 输入，`gameplay_input_blocker_name` 和 HUD blocker 诊断有第一版，interaction menu 支持点击外部关闭；待补 console、debug panel、quantity/discard/overworld modal、tooltip/drag 层 blocker 细分。
 
 ### 3.2 鼠标和拾取
 
@@ -77,11 +77,11 @@
 ### 3.3 UI 状态机
 
 - 待迁移 `UiMenuState` 等价物：active stage panel、settings panel、blocking gameplay input、close stage panels、toggle panel。
-- 待迁移 `UiModalState` 等价物：item quantity、discard modal、trade modal、container modal、overworld prompt。
+- 部分迁移 `UiModalState` 等价物：trade equipment sell confirm modal 已接入 gameplay blocker 与 Esc 优先关闭；待补 item quantity、discard modal、container modal、overworld prompt 和统一 modal stack/状态快照。
 - 待迁移 `UiContextMenuState`：库存物品、容器物品、装备槽、技能条目的上下文菜单目标和动作。
 - 待迁移 `UiHoverTooltipState`：库存、技能、场景切换、装备槽、热栏、按钮的 tooltip。
 - 待迁移 `UiInventoryDragState`：拖拽源、悬停目标、拖拽阈值、拖拽预览、装备槽可用性、一次性压制 click。
-- 部分迁移 UI mouse blocker：stage/settings 与 interaction menu 已阻止 gameplay 输入；待补 blocker name、debug selection panel 显示、modal、tooltip 和 drag preview。
+- 部分迁移 UI mouse blocker：stage/settings、interaction menu 与 trade equipment sell confirm modal 已阻止 gameplay 输入；待补 debug selection panel 显示、quantity/discard/overworld modal、tooltip 和 drag preview。
 
 ## 4. 移动、路径、空间与地图规则
 

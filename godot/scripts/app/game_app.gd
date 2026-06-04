@@ -417,6 +417,10 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 		return {"success": true, "closed": "interaction_menu"}
 	if runtime_input_controller != null:
 		runtime_input_controller.clear_selection_state()
+	if panel_controller != null and panel_controller.has_method("close_blocking_modal"):
+		var modal_result: Dictionary = panel_controller.call("close_blocking_modal")
+		if bool(modal_result.get("success", false)):
+			return {"success": true, "closed": str(modal_result.get("closed", "modal")), "result": modal_result}
 	var dialogue_result := close_active_dialogue(reason)
 	if bool(dialogue_result.get("success", false)):
 		return {"success": true, "closed": "dialogue", "result": dialogue_result}

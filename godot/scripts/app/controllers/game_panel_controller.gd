@@ -193,10 +193,13 @@ func any_stage_panel_open() -> bool:
 
 
 func gameplay_input_blocked() -> bool:
-	return any_stage_panel_open() or settings_open or _panel_visible(trade_panel) or _panel_visible(container_panel) or _panel_visible(dialogue_panel)
+	return _blocking_modal_open() or any_stage_panel_open() or settings_open or _panel_visible(trade_panel) or _panel_visible(container_panel) or _panel_visible(dialogue_panel)
 
 
 func gameplay_input_blocker_name() -> String:
+	var modal_name := _blocking_modal_name()
+	if not modal_name.is_empty():
+		return "modal:%s" % modal_name
 	if any_stage_panel_open():
 		return "stage:%s" % active_stage_panel
 	if settings_open:
@@ -232,6 +235,14 @@ func is_settings_open() -> bool:
 func close_trade_panel() -> void:
 	active_trade_target = {}
 	refresh_trade_panel()
+
+
+func close_blocking_modal() -> Dictionary:
+	if trade_panel != null and trade_panel.has_method("close_blocking_modal"):
+		var result: Dictionary = trade_panel.call("close_blocking_modal")
+		if bool(result.get("success", false)):
+			return result
+	return {"success": false, "reason": "modal_inactive"}
 
 
 func _connect_modal_close_buttons() -> void:
@@ -346,6 +357,18 @@ func _stage_panel(panel_id: String) -> Control:
 
 func _panel_visible(panel: Control) -> bool:
 	return panel != null and panel.visible
+
+
+func _blocking_modal_open() -> bool:
+	return not _blocking_modal_name().is_empty()
+
+
+func _blocking_modal_name() -> String:
+	if trade_panel != null and trade_panel.has_method("blocking_modal_name"):
+		var trade_modal := str(trade_panel.call("blocking_modal_name"))
+		if not trade_modal.is_empty():
+			return trade_modal
+	return ""
 
 
 func _settings_label(node_name: String, text: String) -> Label:

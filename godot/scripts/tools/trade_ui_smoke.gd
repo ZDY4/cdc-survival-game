@@ -234,13 +234,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("equipped item sell should not pay before confirmation")
 	if _shop_stock_count(game_root, "1002") != dagger_stock_before:
 		errors.append("equipped item sell should not update shop stock before confirmation")
-	_cancel_equipment_sell_dialog(game_root)
+	if not bool(game_root.gameplay_input_blocked_by_ui()):
+		errors.append("equipment sell confirm should block gameplay input")
+	if str(game_root.gameplay_input_blocker_name()) != "modal:equipment_sell_confirm":
+		errors.append("equipment sell confirm blocker should be modal:equipment_sell_confirm")
+	var esc_equipment_sell_result: Dictionary = game_root.close_active_ui("keyboard_escape")
+	if str(esc_equipment_sell_result.get("closed", "")) != "modal:equipment_sell_confirm":
+		errors.append("Esc should close equipment sell modal before trade panel")
 	if _equipment_sell_dialog_visible(game_root):
-		errors.append("equipment sell cancel should close confirmation dialog")
+		errors.append("Esc should hide equipment sell modal")
+	if not game_root.trade_panel.visible:
+		errors.append("Esc closing equipment sell modal should keep trade panel open")
+	if game_root.active_trade_target.is_empty():
+		errors.append("Esc closing equipment sell modal should keep active trade target")
 	if _player_equipped_item(game_root, "main_hand").is_empty():
-		errors.append("equipment sell cancel should keep main hand equipment")
+		errors.append("Esc equipment sell close should keep main hand equipment")
 	if _player_money(game_root) != money_before_equipped_sell:
-		errors.append("equipment sell cancel should keep player money")
+		errors.append("Esc equipment sell close should keep player money")
 	_press_trade_button(game_root)
 	if not _equipment_sell_dialog_visible(game_root):
 		errors.append("equipped item sell should reopen confirmation dialog")
