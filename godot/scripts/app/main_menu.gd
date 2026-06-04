@@ -246,11 +246,21 @@ func _refresh_slot_summary() -> void:
 	if not bool(summary.get("ok", false)):
 		_slot_summary_label.text = "存档不可加载: %s" % _save_failure_text(str(summary.get("reason", "unknown")))
 		return
-	_slot_summary_label.text = "地图 %s | 地点 %s | 回合 %d | Lv%d | %s" % [
+	var player: Dictionary = _dictionary_or_empty(summary.get("player", {}))
+	_slot_summary_label.text = "地图 %s | 地点 %s | %s @ %s | Lv%d HP %s/%s AP %s | 回合 %d %s | 任务 %d/%d | %s | %s" % [
 		str(summary.get("active_map_id", "")),
 		str(summary.get("active_location_id", "")),
+		str(player.get("display_name", "玩家")),
+		_grid_text(_dictionary_or_empty(player.get("grid_position", {}))),
+		int(player.get("level", summary.get("player_level", 1))),
+		_number_text(float(player.get("hp", 0.0))),
+		_number_text(float(player.get("max_hp", 0.0))),
+		_number_text(float(player.get("ap", 0.0))),
 		int(summary.get("round", 0)),
-		int(summary.get("player_level", 1)),
+		str(summary.get("turn_phase", "")),
+		int(summary.get("active_quest_count", 0)),
+		int(summary.get("completed_quest_count", 0)),
+		"战斗中" if bool(summary.get("combat_active", false)) else "探索",
 		str(summary.get("updated_at", "")),
 	]
 
@@ -308,6 +318,20 @@ func _save_failure_text(reason: String) -> String:
 			return "存档槽位无效"
 		_:
 			return "存档不可加载"
+
+
+func _grid_text(grid_position: Dictionary) -> String:
+	return "(%d,%d,%d)" % [
+		int(grid_position.get("x", 0)),
+		int(grid_position.get("y", 0)),
+		int(grid_position.get("z", 0)),
+	]
+
+
+func _number_text(value: float) -> String:
+	if is_equal_approx(value, roundf(value)):
+		return str(int(roundf(value)))
+	return "%.1f" % value
 
 
 func _set_feedback(text: String) -> void:

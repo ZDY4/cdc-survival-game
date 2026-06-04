@@ -157,6 +157,32 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		return ["save_snapshot returned false"]
 	if not bool(loaded.get("ok", false)):
 		return ["load_snapshot failed: %s" % loaded.get("reason", "unknown")]
+	var metadata: Dictionary = _dictionary_or_empty(loaded.get("metadata", {}))
+	var metadata_player: Dictionary = _dictionary_or_empty(metadata.get("player", {}))
+	if str(metadata.get("active_map_id", "")) != str(original.get("active_map_id", "")):
+		errors.append("save metadata active_map_id should match snapshot")
+	if str(metadata.get("turn_phase", "")) != str(_dictionary_or_empty(original.get("turn_state", {})).get("phase", "")):
+		errors.append("save metadata turn_phase should match snapshot")
+	if bool(metadata.get("combat_active", true)) != bool(_dictionary_or_empty(original.get("combat_state", {})).get("active", false)):
+		errors.append("save metadata combat_active should match snapshot")
+	if int(metadata.get("active_quest_count", -1)) != _array_or_empty(original.get("active_quests", [])).size():
+		errors.append("save metadata active_quest_count should match snapshot")
+	if int(metadata.get("completed_quest_count", -1)) != _array_or_empty(original.get("completed_quests", [])).size():
+		errors.append("save metadata completed_quest_count should match snapshot")
+	if int(metadata.get("container_session_count", -1)) != _array_or_empty(original.get("container_sessions", [])).size():
+		errors.append("save metadata container_session_count should match snapshot")
+	if int(metadata.get("shop_session_count", -1)) != _array_or_empty(original.get("shop_sessions", [])).size():
+		errors.append("save metadata shop_session_count should match snapshot")
+	if int(metadata.get("corpse_container_count", -1)) != _array_or_empty(original.get("corpse_containers", [])).size():
+		errors.append("save metadata corpse_container_count should match snapshot")
+	if str(metadata_player.get("display_name", "")).is_empty():
+		errors.append("save metadata player display_name should be present")
+	if _dictionary_or_empty(metadata_player.get("grid_position", {})).is_empty():
+		errors.append("save metadata player grid_position should be present")
+	if float(metadata_player.get("max_hp", 0.0)) <= 0.0:
+		errors.append("save metadata player hp/max_hp should be present")
+	if int(metadata_player.get("inventory_stack_count", 0)) <= 0 or int(metadata_player.get("inventory_item_count", 0)) <= 0:
+		errors.append("save metadata player inventory counts should be present")
 
 	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes", "world_flags"]:
 		if JSON.stringify(restored.get(key)) != JSON.stringify(original.get(key)):
@@ -394,6 +420,12 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
 
 
 func _normalized_container_sessions(snapshot: Dictionary) -> Array[Dictionary]:

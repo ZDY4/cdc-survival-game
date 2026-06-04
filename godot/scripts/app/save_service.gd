@@ -142,16 +142,45 @@ func _slot_key(slot_id: String) -> String:
 
 func _metadata_from_snapshot(slot_id: String, snapshot: Dictionary) -> Dictionary:
 	var player := _player_actor(snapshot)
+	var player_combat := _dictionary_or_empty(player.get("combat", {}))
+	var player_progression := _dictionary_or_empty(player.get("progression", {}))
+	var turn_state := _dictionary_or_empty(snapshot.get("turn_state", {}))
+	var combat_state := _dictionary_or_empty(snapshot.get("combat_state", {}))
+	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	return {
 		"slot_id": slot_id,
 		"updated_at": Time.get_datetime_string_from_system(false, true),
 		"active_map_id": str(snapshot.get("active_map_id", "")),
 		"active_location_id": str(snapshot.get("active_location_id", "")),
 		"active_entry_point_id": str(snapshot.get("active_entry_point_id", "")),
-		"round": int(_dictionary_or_empty(snapshot.get("turn_state", {})).get("round", 0)),
+		"round": int(turn_state.get("round", 0)),
+		"turn_phase": str(turn_state.get("phase", "")),
+		"active_actor_id": int(turn_state.get("active_actor_id", 0)),
+		"combat_active": bool(combat_state.get("active", false)),
+		"combat_round": int(combat_state.get("round", 0)),
 		"event_count": _array_or_empty(snapshot.get("events", [])).size(),
 		"actor_count": _array_or_empty(snapshot.get("actors", [])).size(),
-		"player_level": int(_dictionary_or_empty(player.get("progression", {})).get("level", 1)),
+		"player": {
+			"actor_id": int(player.get("actor_id", 0)),
+			"display_name": str(player.get("display_name", "")),
+			"grid_position": _dictionary_or_empty(player.get("grid_position", {})).duplicate(true),
+			"level": int(player_progression.get("level", 1)),
+			"current_xp": int(player_progression.get("current_xp", 0)),
+			"hp": float(player_combat.get("hp", 0.0)),
+			"max_hp": float(player_combat.get("max_hp", 0.0)),
+			"ap": float(player.get("ap", 0.0)),
+			"money": int(player.get("money", 0)),
+			"inventory_stack_count": inventory.keys().size(),
+			"inventory_item_count": _inventory_item_count(inventory),
+		},
+		"player_level": int(player_progression.get("level", 1)),
+		"active_quest_count": _array_or_empty(snapshot.get("active_quests", [])).size(),
+		"completed_quest_count": _array_or_empty(snapshot.get("completed_quests", [])).size(),
+		"container_session_count": _array_or_empty(snapshot.get("container_sessions", [])).size(),
+		"shop_session_count": _array_or_empty(snapshot.get("shop_sessions", [])).size(),
+		"corpse_container_count": _array_or_empty(snapshot.get("corpse_containers", [])).size(),
+		"consumed_target_count": _array_or_empty(snapshot.get("consumed_interaction_targets", [])).size(),
+		"unlocked_location_count": _array_or_empty(snapshot.get("unlocked_locations", [])).size(),
 	}
 
 
@@ -189,3 +218,10 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _inventory_item_count(inventory: Dictionary) -> int:
+	var total := 0
+	for item_id in inventory.keys():
+		total += max(0, int(inventory[item_id]))
+	return total

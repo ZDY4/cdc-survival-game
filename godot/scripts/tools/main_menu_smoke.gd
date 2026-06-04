@@ -165,9 +165,24 @@ func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
 			errors.append("slot summary should include actor/event counts: %s" % summary)
 		if str(summary.get("updated_at", "")).is_empty():
 			errors.append("slot summary should include updated_at: %s" % summary)
+		if str(summary.get("turn_phase", "")).is_empty():
+			errors.append("slot summary should include turn phase: %s" % summary)
+		if not summary.has("combat_active"):
+			errors.append("slot summary should include combat state: %s" % summary)
+		if int(summary.get("active_quest_count", -1)) < 0 or int(summary.get("completed_quest_count", -1)) < 0:
+			errors.append("slot summary should include quest counts: %s" % summary)
+		if int(summary.get("container_session_count", -1)) < 0 or int(summary.get("shop_session_count", -1)) < 0:
+			errors.append("slot summary should include container/shop counts: %s" % summary)
+		var player: Dictionary = _dictionary_or_empty(summary.get("player", {}))
+		if str(player.get("display_name", "")).is_empty():
+			errors.append("slot summary should include player display name: %s" % summary)
+		if _dictionary_or_empty(player.get("grid_position", {})).is_empty():
+			errors.append("slot summary should include player grid position: %s" % summary)
+		if float(player.get("max_hp", 0.0)) <= 0.0 or not player.has("ap"):
+			errors.append("slot summary should include player hp/ap: %s" % summary)
 	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
-	if line == null or not line.text.contains("地图 survivor_outpost_01") or not line.text.contains("Lv"):
-		errors.append("slot summary line should expose map and level metadata")
+	if line == null or not line.text.contains("地图 survivor_outpost_01") or not line.text.contains("Lv") or not line.text.contains("HP") or not line.text.contains("AP") or not line.text.contains("任务") or not line.text.contains("探索"):
+		errors.append("slot summary line should expose detailed save metadata")
 
 
 func _assert_broken_slot_feedback(errors: Array[String], menu: Control) -> void:
