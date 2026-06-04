@@ -6,6 +6,7 @@ const CONTEXT_DROP := 3
 const CONTEXT_INSPECT := 4
 const CONTEXT_HOTBAR := 5
 const CONTEXT_DECONSTRUCT := 6
+const CONTEXT_DROP_ALL := 7
 
 var _panel: PanelContainer
 var _title_label: Label
@@ -327,11 +328,13 @@ func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> 
 	_context_menu.add_item("使用", CONTEXT_USE)
 	_context_menu.add_item("装备", CONTEXT_EQUIP)
 	_context_menu.add_item("丢弃", CONTEXT_DROP)
+	_context_menu.add_item("全部丢弃", CONTEXT_DROP_ALL)
 	_context_menu.add_item("拆解", CONTEXT_DECONSTRUCT)
 	_context_menu.add_item("加入热栏", CONTEXT_HOTBAR)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_USE), not bool(item.get("usable", false)))
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_EQUIP), _array_or_empty(item.get("equip_slots", [])).is_empty())
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DROP), not bool(item.get("droppable", true)) or int(item.get("count", 0)) <= 0)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DROP_ALL), not bool(item.get("droppable", true)) or int(item.get("count", 0)) <= 0)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DECONSTRUCT), not bool(item.get("deconstructable", false)) or int(item.get("count", 0)) <= 0)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_HOTBAR), not bool(item.get("usable", false)))
 	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
@@ -361,6 +364,9 @@ func _execute_context_action(action_id: int) -> void:
 		CONTEXT_DROP:
 			if bool(_context_item.get("droppable", true)):
 				_open_discard_dialog_for_item(_context_item, _drag_drop_count(_context_item))
+		CONTEXT_DROP_ALL:
+			if bool(_context_item.get("droppable", true)):
+				_open_discard_dialog_for_item(_context_item, int(_context_item.get("count", 1)))
 		CONTEXT_DECONSTRUCT:
 			if bool(_context_item.get("deconstructable", false)) and root.has_method("deconstruct_player_item"):
 				root.deconstruct_player_item(item_id, _drag_drop_count(_context_item))

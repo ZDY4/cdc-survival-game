@@ -172,6 +172,30 @@ func _run_checks(game_root: Node) -> Array[String]:
 	player_ref.inventory.erase("1007")
 	player_ref.inventory_order.erase("1007")
 	game_root.refresh_inventory_panel()
+	player_ref.inventory["1010"] = 3
+	if not player_ref.inventory_order.has("1010"):
+		player_ref.inventory_order.append("1010")
+	game_root.refresh_inventory_panel()
+	if not _open_inventory_context_menu(game_root, "废金属"):
+		errors.append("should open context menu for temporary scrap metal")
+	elif _context_action_disabled(game_root, 7):
+		errors.append("droppable item context menu should enable drop all")
+	else:
+		_execute_inventory_context_action(game_root, 7)
+		await process_frame
+		if not _discard_dialog_visible(game_root):
+			errors.append("drop all context action should open discard confirmation dialog")
+		var drop_all_quantity_input: LineEdit = _discard_quantity_input(game_root)
+		if drop_all_quantity_input == null:
+			errors.append("drop all discard modal should expose quantity input")
+		elif drop_all_quantity_input.text != "3":
+			errors.append("drop all discard modal should start from full stack count")
+		_confirm_discard_dialog(game_root)
+		await process_frame
+		if _player_inventory_count(game_root, "1010") != 0:
+			errors.append("drop all context action should remove the whole stack")
+		if not _event_seen(game_root, "inventory_item_dropped"):
+			errors.append("drop all context action should emit inventory_item_dropped")
 	if _filter_button(game_root, "FilterEquipmentButton") == null:
 		errors.append("inventory panel should expose equipment filter")
 	else:
