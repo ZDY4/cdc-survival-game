@@ -254,7 +254,7 @@
 - 待补任务链：完成后启动后续任务、互斥任务、解锁地点、世界状态 flags。
 - Journal 详情第一版已迁移：目标节点、任务描述、目标类型/需求、当前进度、可交付状态、奖励详情、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付后的完成/奖励反馈和手动交付失败历史第一版已纳入 `JournalUI` / `UI` smoke；目标进度列表第一版已从 quest flow 中所有 objective 节点派生并在列表/详情展示，已纳入 `JournalUI` smoke。待补多分支/替代目标状态和更完整失败反馈。
 - 地图目标 marker 第一版已迁移：追踪 collect 目标会在当前地图标出匹配 pickup 或含目标物品的容器，追踪 kill 目标会标出当前地图匹配 enemy_type 的 actor；找不到目标时保留 unresolved marker 和 reason；地图面板 canvas 第一版会绘制地图边界、网格、入口点、可定位任务 marker 和 overworld inset，并支持缩放/平移按钮，已纳入 `JournalUI` / `UIToggle` smoke。待补跨地图显式路线、目标优先级、完成/失败反馈和更完整图形 polish。
-- 待补任务反馈：toast、事件日志、HUD 提醒、奖励动画占位和更完整失败反馈。
+- 任务反馈 HUD 第一版已迁移：`quest_started`、`quest_progressed`、`quest_completed`、`quest_reward_granted` 会进入 HUD event feedback，并由 `Quest` smoke 覆盖；待补 toast、事件日志、HUD 提醒过渡、奖励动画占位和更完整失败反馈。
 
 ## 11. 制作和配方
 
@@ -307,7 +307,7 @@
 
 ### 13.2 HUD 和 overlay
 
-- 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能、progression 和命令拒绝失败反馈，已纳入 `UI` / `Progression` smoke。待补更完整状态行和反馈 toast/过渡表现。
+- 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能、progression、任务推进和命令拒绝失败反馈，已纳入 `UI` / `Progression` / `Quest` smoke。待补更完整状态行和反馈 toast/过渡表现。
 - 部分迁移 interaction menu：右键位置、目标名称、可用选项、禁用选项、禁用原因 tooltip/meta 和 Esc / 外部点击关闭第一版已有；待补更完整视觉布局、按钮 hover 表现和上下文菜单 polish。
 - 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、物品数量、slot tooltip、物品使用效果摘要、AP / resource cost、AP / resource / item count insufficient、cooldown 文本/禁用态和冷却遮罩；待迁移观察模式 dock 和更完整 slot tooltip。
 - 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；待迁移 tooltip layer、context menu layer、drag preview layer、overworld prompt layer，以及更统一的 modal layer 表现。

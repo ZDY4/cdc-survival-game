@@ -491,6 +491,34 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 					int(payload.get("available_skill_points", 0)),
 				],
 			}
+		"quest_started":
+			return {
+				"kind": kind,
+				"text": "任务开始: %s" % _quest_title_from_payload(payload),
+			}
+		"quest_progressed":
+			return {
+				"kind": kind,
+				"text": "任务进度: %s %d/%d" % [
+					_quest_title_from_payload(payload),
+					int(payload.get("current", 0)),
+					int(payload.get("target", 0)),
+				],
+			}
+		"quest_completed":
+			return {
+				"kind": kind,
+				"text": "任务完成: %s" % _quest_title_from_payload(payload),
+			}
+		"quest_reward_granted":
+			return {
+				"kind": kind,
+				"text": "任务奖励: %s | XP %d | 技能点 %d" % [
+					_quest_title_from_payload(payload),
+					int(payload.get("experience", 0)),
+					int(payload.get("skill_points", 0)),
+				],
+			}
 		"player_command_rejected":
 			return {
 				"kind": kind,
@@ -560,6 +588,18 @@ func _attribute_label(attribute: String) -> String:
 	if attribute.is_empty():
 		return "属性"
 	return attribute
+
+
+func _quest_title_from_payload(payload: Dictionary) -> String:
+	var title := str(payload.get("title", ""))
+	if not title.is_empty():
+		return title
+	var quest_id := str(payload.get("quest_id", ""))
+	if registry != null and not quest_id.is_empty():
+		var record: Dictionary = _dictionary_or_empty(registry.get_library("quests").get(quest_id, {}))
+		var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+		return str(data.get("title", quest_id))
+	return quest_id if not quest_id.is_empty() else "任务"
 
 
 func _is_player_command_kind(kind: String) -> bool:
