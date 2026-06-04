@@ -90,7 +90,7 @@
 - 待确认 Godot 网格数学与 Rust 完全等价：cell distance、对角移动、禁止穿角、同层限制、bounds、levels。
 - 待补 generated building stairs 跨层 pathfinding，楼梯端点、楼层切换、目标楼层显示。
 - 待补动态阻挡：actor 占用阻挡其他 actor 但不阻挡自己，尸体/掉落/拾取物非阻挡，打开门改变阻挡。
-- 待补路径失败 reason：目标 blocked、out of bounds、不同楼层、不可达、缺门权限、目标被 actor 占据。
+- 路径失败 reason 第一版已迁移：目标静态阻挡返回 `goal_blocked` 并带 `blocker.kind=map_object`，目标被 actor 占据返回 `goal_occupied` 并带阻挡 actor id，越界返回 `goal_out_of_bounds` 并带 bounds，跨层返回 `level_mismatch` 并带起止楼层，不可达返回 `path_unreachable` 并带 visited cell count；已由 `Movement` smoke 覆盖。待补门权限、动态门阻挡、楼梯跨层和更完整 UI 文案映射。
 - 待补路径预览：hover 目标时显示预计路径、AP 消耗、可达/不可达颜色、跨回合路径状态。
 
 ### 4.2 门和建筑

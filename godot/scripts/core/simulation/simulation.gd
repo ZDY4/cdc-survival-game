@@ -2018,6 +2018,8 @@ func _normalize_player_command_result(result: Dictionary, command: Dictionary, c
 	completion_payload["result_kind"] = resolved_kind
 	completion_payload["success"] = success
 	completion_payload["reason"] = reason
+	if not success:
+		_copy_failure_context(output, completion_payload)
 	_emit("player_command_completed" if success else "player_command_rejected", completion_payload)
 	var emitted_events := _events_since(event_start_index)
 	if not output.has("events"):
@@ -2042,6 +2044,8 @@ func _normalize_player_command_result(result: Dictionary, command: Dictionary, c
 	feedback["kind"] = str(feedback.get("kind", resolved_kind))
 	feedback["success"] = bool(feedback.get("success", success))
 	feedback["reason"] = str(feedback.get("reason", reason))
+	if not success:
+		_copy_failure_context(output, feedback)
 	output["ui_feedback"] = feedback.duplicate(true)
 	_emit("ui_feedback", feedback)
 	var updated_events := _events_since(event_start_index)
@@ -2050,6 +2054,17 @@ func _normalize_player_command_result(result: Dictionary, command: Dictionary, c
 	runtime_delta["events"] = updated_events
 	output["runtime_snapshot_delta"] = runtime_delta
 	return output
+
+
+func _copy_failure_context(source: Dictionary, target: Dictionary) -> void:
+	for key in ["goal", "start", "bounds", "blocker", "start_level", "goal_level", "visited_cell_count"]:
+		if not source.has(key):
+			continue
+		var value: Variant = source.get(key)
+		if typeof(value) == TYPE_DICTIONARY:
+			target[key] = _dictionary_or_empty(value).duplicate(true)
+		else:
+			target[key] = value
 
 
 func _player_command_log_payload(command: Dictionary, actor_id: int, command_kind: String) -> Dictionary:

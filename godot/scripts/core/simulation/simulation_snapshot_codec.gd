@@ -223,12 +223,21 @@ func _recent_failure(events: Array[Dictionary]) -> Dictionary:
 		if str(event.get("kind", "")) != "player_command_rejected":
 			continue
 		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
-		return {
+		var failure := {
 			"kind": str(payload.get("kind", "")),
 			"reason": str(payload.get("reason", "")),
 			"actor_id": int(payload.get("actor_id", 0)),
 			"target": _dictionary_or_empty(payload.get("target", {})).duplicate(true),
 		}
+		for key in ["goal", "start", "bounds", "blocker", "start_level", "goal_level", "visited_cell_count"]:
+			if not payload.has(key):
+				continue
+			var value: Variant = payload.get(key)
+			if typeof(value) == TYPE_DICTIONARY:
+				failure[key] = _dictionary_or_empty(value).duplicate(true)
+			else:
+				failure[key] = value
+		return failure
 	return {}
 
 

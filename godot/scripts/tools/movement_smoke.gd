@@ -66,10 +66,18 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	var blocked_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": blocked_goal, "topology": topology})
 	if blocked_result.get("reason", "") != "goal_blocked":
 		errors.append("moving into blocking cell should report goal_blocked")
+	if str(_dictionary_or_empty(blocked_result.get("blocker", {})).get("kind", "")) != "map_object":
+		errors.append("blocked movement should expose map object blocker info")
 
 	var occupied_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": _actor_grid(simulation, 2), "topology": topology})
-	if occupied_result.get("reason", "") != "goal_blocked":
-		errors.append("moving into occupied actor cell should report goal_blocked")
+	if occupied_result.get("reason", "") != "goal_occupied":
+		errors.append("moving into occupied actor cell should report goal_occupied")
+	if int(_dictionary_or_empty(occupied_result.get("blocker", {})).get("actor_id", 0)) != 2:
+		errors.append("occupied movement should expose blocking actor id")
+	if int(_dictionary_or_empty(_dictionary_or_empty(occupied_result.get("ui_feedback", {})).get("blocker", {})).get("actor_id", 0)) != 2:
+		errors.append("occupied movement feedback should expose blocking actor id")
+	_expect_rejected_command(errors, occupied_result, "goal_occupied", "occupied movement")
+	_expect_path_failure_reasons(errors, simulation, topology)
 
 	player.ap = 0.0
 	var queued_goal: Dictionary = _first_open_neighbor(player.grid_position, topology, _occupied_actor_cells(simulation, 1))
@@ -103,6 +111,49 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	if _event_count(simulation.snapshot(), "movement_cancelled") <= movement_cancelled_before:
 		errors.append("cancel_pending should emit movement_cancelled")
 	return errors
+
+
+func _expect_path_failure_reasons(errors: Array[String], simulation: RefCounted, topology: Dictionary) -> void:
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	var bounds: Dictionary = _dictionary_or_empty(topology.get("bounds", {}))
+	var out_of_bounds_goal := {
+		"x": int(bounds.get("max_x", player.grid_position.x)) + 1,
+		"y": player.grid_position.y,
+		"z": player.grid_position.z,
+	}
+	var out_of_bounds_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": out_of_bounds_goal, "topology": topology})
+	if str(out_of_bounds_result.get("reason", "")) != "goal_out_of_bounds":
+		errors.append("out of bounds move should report goal_out_of_bounds")
+	if _dictionary_or_empty(out_of_bounds_result.get("bounds", {})).is_empty():
+		errors.append("out of bounds move should expose topology bounds")
+
+	var different_level_goal := {
+		"x": player.grid_position.x,
+		"y": player.grid_position.y + 1,
+		"z": player.grid_position.z,
+	}
+	var level_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": different_level_goal, "topology": topology})
+	if str(level_result.get("reason", "")) != "level_mismatch":
+		errors.append("different level move should report level_mismatch")
+	if int(level_result.get("start_level", -99)) != player.grid_position.y or int(level_result.get("goal_level", -99)) != player.grid_position.y + 1:
+		errors.append("level mismatch should expose start and goal levels")
+
+	var unreachable_topology: Dictionary = _minimal_unreachable_topology(player.grid_position)
+	var unreachable_goal := {
+		"x": player.grid_position.x + 1,
+		"y": player.grid_position.y,
+		"z": player.grid_position.z + 1,
+	}
+	var unreachable_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": unreachable_goal, "topology": unreachable_topology})
+	if str(unreachable_result.get("reason", "")) != "path_unreachable":
+		errors.append("sealed path should report path_unreachable")
+	if int(unreachable_result.get("visited_cell_count", 0)) < 1:
+		errors.append("unreachable path should expose visited cell count")
+	var recent_failure: Dictionary = _dictionary_or_empty(simulation.snapshot().get("recent_failure", {}))
+	if str(recent_failure.get("reason", "")) != "path_unreachable":
+		errors.append("recent_failure should expose latest path failure reason")
+	if int(recent_failure.get("visited_cell_count", 0)) < 1:
+		errors.append("recent_failure should expose latest path failure context")
 
 
 func _expect_ap_depletion_auto_advances_turn(errors: Array[String], simulation: RefCounted, topology: Dictionary) -> void:
@@ -172,6 +223,23 @@ func _expect_configured_ap_rules(registry: RefCounted) -> Array[String]:
 	if absf(player.ap - 4.0) > 0.001:
 		errors.append("configured AP max should cap auto-opened player AP at 4, got %.2f" % player.ap)
 	return errors
+
+
+func _minimal_unreachable_topology(coord: RefCounted) -> Dictionary:
+	var east_key := "%d:%d:%d" % [coord.x + 1, coord.y, coord.z]
+	var south_key := "%d:%d:%d" % [coord.x, coord.y, coord.z + 1]
+	return {
+		"bounds": {
+			"min_x": coord.x,
+			"max_x": coord.x + 1,
+			"min_z": coord.z,
+			"max_z": coord.z + 1,
+		},
+		"blocking_cells": {
+			east_key: "smoke_wall_east",
+			south_key: "smoke_wall_south",
+		},
+	}
 
 
 func _first_blocking_cell(topology: Dictionary) -> Dictionary:
