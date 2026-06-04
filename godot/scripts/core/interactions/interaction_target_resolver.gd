@@ -9,6 +9,15 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 	var target_data: Dictionary = _resolve_target(simulation, target)
 	if target_data.is_empty():
 		return _failed_prompt("interaction_target_unavailable")
+	var visibility: Dictionary = _visibility_check(simulation, actor_id, target_data)
+	if not bool(visibility.get("success", true)):
+		var failed: Dictionary = _failed_prompt(str(visibility.get("reason", "target_not_visible")))
+		failed["target"] = target_data
+		failed["target_name"] = target_data.get("display_name", "")
+		failed["target_kind"] = target_data.get("kind", target_data.get("target_type", ""))
+		failed["target_type"] = target_data.get("target_type", "")
+		failed["target_grid"] = _dictionary_or_empty(visibility.get("target_grid", {}))
+		return failed
 
 	var candidate_options: Array = _candidate_options_for_target(target_data)
 	var enabled_options: Array = []
@@ -98,6 +107,32 @@ func _resolve_target(simulation: RefCounted, target: Dictionary) -> Dictionary:
 			if target_id.is_empty() or simulation.consumed_interaction_targets.has(target_id):
 				return {}
 			return simulation.map_interaction_targets.get(target_id, {})
+
+
+func _visibility_check(simulation: RefCounted, actor_id: int, target_data: Dictionary) -> Dictionary:
+	var target_grid: Dictionary = _target_grid(target_data)
+	if target_grid.is_empty():
+		return {"success": true}
+	if simulation.has_method("is_cell_visible_to_actor") and not bool(simulation.call("is_cell_visible_to_actor", actor_id, target_grid)):
+		return {
+			"success": false,
+			"reason": "target_not_visible",
+			"target_grid": target_grid,
+		}
+	return {"success": true}
+
+
+func _target_grid(target_data: Dictionary) -> Dictionary:
+	var grid: Dictionary = _dictionary_or_empty(target_data.get("grid_position", {}))
+	if grid.is_empty():
+		grid = _dictionary_or_empty(target_data.get("anchor", {}))
+	if grid.is_empty():
+		grid = _dictionary_or_empty(target_data.get("grid", {}))
+	if grid.is_empty():
+		var cells: Array = _array_or_empty(target_data.get("cells", []))
+		if not cells.is_empty():
+			grid = _dictionary_or_empty(cells[0])
+	return grid
 
 
 func _candidate_options_for_target(target_data: Dictionary) -> Array:
@@ -261,3 +296,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

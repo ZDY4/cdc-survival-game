@@ -84,6 +84,17 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	})
 	_expect_prompt_snapshot(errors, grid_prompt, "move", "move", 0.0)
 	_expect_disabled_option(errors, grid_prompt, "pickup", "target_empty", "grid prompt")
+	var hidden_prompt_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	hidden_prompt_simulation.set_actor_vision_radius(1, 0)
+	hidden_prompt_simulation.refresh_actor_vision(1, _topology(hidden_prompt_simulation, registry))
+	var hidden_prompt: Dictionary = hidden_prompt_simulation.query_interaction_options(1, {
+		"target_type": "actor",
+		"actor_id": 2,
+	})
+	if bool(hidden_prompt.get("ok", false)) or str(hidden_prompt.get("reason", "")) != "target_not_visible":
+		errors.append("active vision should reject hidden interaction target")
+	if _dictionary_or_empty(hidden_prompt.get("target_grid", {})).is_empty():
+		errors.append("hidden interaction prompt should expose target_grid")
 	var unsupported_result: Dictionary = simulation.submit_player_command({"kind": "unsupported_contract_probe"})
 	_expect_command_result_contract(errors, unsupported_result, "unsupported_contract_probe")
 	if bool(unsupported_result.get("success", false)):

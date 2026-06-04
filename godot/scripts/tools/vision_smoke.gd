@@ -42,6 +42,16 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("zero radius vision refresh failed: %s" % zero_radius.get("reason", "unknown"))
 	if _array_or_empty(zero_radius.get("visible_cells", [])).size() != 1:
 		errors.append("zero radius should only reveal actor cell")
+	if not simulation.has_active_actor_vision(1):
+		errors.append("zero radius refresh should activate actor vision")
+	if not simulation.is_cell_visible_to_actor(1, player.grid_position.to_dictionary()):
+		errors.append("actor should see own cell")
+	if simulation.is_cell_visible_to_actor(1, {
+		"x": player.grid_position.x + 3,
+		"y": player.grid_position.y,
+		"z": player.grid_position.z,
+	}):
+		errors.append("zero radius should not see distant cells")
 	if _event_count(simulation.snapshot(), "actor_vision_updated") != 1:
 		errors.append("initial vision refresh should emit actor_vision_updated")
 

@@ -114,7 +114,7 @@
 
 - 待补 actor / object / self / grid fallback 的完整优先级和失败 reason。
 - friendly / neutral / hostile 选项差异第一版已迁移：友好/中立 actor 主交互为 `talk` 且 `attack` 进入 `disabled_options` / `target_not_hostile`，hostile actor 主交互为 `attack` 且 `talk` 进入 `disabled_options` / `target_hostile`，self target 主交互为 `wait` 且 self talk / attack 禁用；已由 `Interaction` smoke 覆盖。待补 trade、heal、inspect、关系分数和脚本化 NPC 权限。
-- 待补 target visibility：不可见目标、雾中目标、跨层目标、遮挡目标的 prompt 和禁止逻辑。
+- target visibility 第一版已迁移：当 actor 已有 active vision 时，交互 prompt 会拒绝不可见 actor / map object 并返回 `target_not_visible` 与目标格；攻击校验会拒绝不可见 actor 并返回 `target_not_visible` 与目标格；未刷新 vision 的运行时保持兼容不强制拦截。已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补雾中探索态、遮挡 target preview、UI 文案和技能共用可见性规则。
 - 待补 interaction range：不同交互类型的距离、自动接近目标格、目标不可达时提示。
 - prompt snapshot 真实禁用项第一版已迁移：pickup、container、grid、self、friendly/neutral actor、hostile actor 会输出启用 `options` 和带 `disabled_reason` / `ap_cost` 的 `disabled_options`，执行禁用 option 会返回对应 reason；HUD snapshot 已能暴露禁用项，由 `Interaction` / `UI` smoke 覆盖。待补完整 target display、动态 AP cost 来源、可见性禁用、权限禁用和 UI 文案映射。
 
@@ -292,7 +292,7 @@
 - 已有 Godot canvas fog shader 第一版；待补与旧 post-process fog 的视觉等价：探索区透明度、未探索区遮罩、边缘柔化、mask blend。
 - 待补 fog mask 与相机/地图坐标同步、地图切换重建、可见格变化平滑、性能优化。
 - 待补 `show vision` / debug overlay：可见格、已探索格、阻挡视线格、actor vision radius。
-- 待补雾战对交互和攻击的规则影响：不可见目标禁止 prompt / attack / skill。
+- 雾战对交互和攻击的规则影响第一版已迁移：active vision 下不可见目标禁止 interaction prompt 和 attack；已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补 skill target、hover prompt、雾中物体轮廓和已探索但不可见目标的显示策略。
 
 ## 13. 游戏 UI、菜单和反馈表现
 

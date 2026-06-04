@@ -99,6 +99,14 @@ func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_
 			"target_side": target.side,
 			"target_actor_id": target_actor_id,
 		}
+	if simulation.has_method("is_actor_visible_to_actor") and not bool(simulation.call("is_actor_visible_to_actor", actor_id, target_actor_id)):
+		return {
+			"success": false,
+			"reason": "target_not_visible",
+			"actor_id": actor_id,
+			"target_actor_id": target_actor_id,
+			"target_grid": target.grid_position.to_dictionary(),
+		}
 	return {"success": true}
 
 

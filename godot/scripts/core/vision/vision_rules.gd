@@ -58,6 +58,23 @@ func has_line_of_sight(from_data: Dictionary, to_data: Dictionary, topology: Dic
 	return _geometry.has_line_of_sight(from_data, to_data, topology)
 
 
+func has_active_actor_vision(actor_id: int, active_map_id: String) -> bool:
+	var state: Dictionary = _actor_state(actor_id)
+	if active_map_id.is_empty() or str(state.get("active_map_id", "")) != active_map_id:
+		return false
+	return not _array_or_empty(state.get("visible_cells", [])).is_empty()
+
+
+func is_cell_visible(actor_id: int, active_map_id: String, cell: Dictionary) -> bool:
+	if not has_active_actor_vision(actor_id, active_map_id):
+		return true
+	var key: String = _cell_key(cell)
+	for visible_cell in _array_or_empty(_actor_state(actor_id).get("visible_cells", [])):
+		if _cell_key(_dictionary_or_empty(visible_cell)) == key:
+			return true
+	return false
+
+
 func snapshot() -> Dictionary:
 	var actor_ids: Array = _actors.keys()
 	actor_ids.sort()

@@ -464,6 +464,20 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 	if int(far_result.get("distance", 0)) != 4 or int(far_result.get("range", 0)) != 2:
 		errors.append("out-of-range attack should report distance and range")
 
+	simulation.set_actor_vision_radius(1, 0)
+	simulation.refresh_actor_vision(1, _topology(simulation, registry))
+	var hidden_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": z,
+	})
+	var hidden_result: Dictionary = simulation.perform_attack(1, hidden_target, {}, {"range": 2})
+	if hidden_result.get("reason", "") != "target_not_visible":
+		errors.append("hidden target attack should report target_not_visible, got %s" % hidden_result.get("reason", ""))
+	if _dictionary_or_empty(hidden_result.get("target_grid", {})).is_empty():
+		errors.append("hidden target attack should expose target_grid")
+	simulation.clear_actor_vision(1)
+
 	var los_target: int = _register_character(simulation, registry, "zombie_walker", {
 		"x": int(player_grid.get("x", 0)) + 2,
 		"y": y,
@@ -498,7 +512,7 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 	if command_los_result.get("reason", "") != "target_blocked_by_los":
 		errors.append("submit attack with blocked LOS should report target_blocked_by_los, got %s" % command_los_result.get("reason", ""))
 
-	for actor_id in [level_target, far_target, los_target, command_los_target]:
+	for actor_id in [level_target, far_target, hidden_target, los_target, command_los_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	simulation.exit_combat_if_clear("spatial_failure_smoke_cleanup")

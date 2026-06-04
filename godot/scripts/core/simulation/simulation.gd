@@ -211,6 +211,21 @@ func clear_actor_vision(actor_id: int) -> void:
 	_vision_runner.clear_actor_vision(_vision_rules, actor_id)
 
 
+func has_active_actor_vision(actor_id: int) -> bool:
+	return _vision_rules.has_active_actor_vision(actor_id, active_map_id)
+
+
+func is_cell_visible_to_actor(actor_id: int, cell: Dictionary) -> bool:
+	return _vision_rules.is_cell_visible(actor_id, active_map_id, cell)
+
+
+func is_actor_visible_to_actor(observer_actor_id: int, target_actor_id: int) -> bool:
+	var target: RefCounted = actor_registry.get_actor(target_actor_id)
+	if target == null:
+		return false
+	return is_cell_visible_to_actor(observer_actor_id, target.grid_position.to_dictionary())
+
+
 func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
 	return _ai_runner.decide_actor_intent(self, _ai_rules, actor_id, context)
 
