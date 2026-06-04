@@ -853,6 +853,8 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 			return drop_actor_item(actor.actor_id, str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"deconstruct":
 			return deconstruct_actor_item(actor.actor_id, str(command.get("item_id", "")), int(command.get("count", 1)), items)
+		"split_stack":
+			return _split_actor_inventory_stack(actor, str(command.get("item_id", "")), int(command.get("count", 1)))
 		"reorder_inventory":
 			return _reorder_actor_inventory(actor, str(command.get("item_id", "")), int(command.get("target_index", 0)))
 		"equip":
@@ -870,6 +872,42 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"sell_equipped_shop":
 			return sell_equipped_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("slot_id", "")), str(command.get("item_id", "")), items)
 	return {"success": false, "reason": "unknown_inventory_action"}
+
+
+func _split_actor_inventory_stack(actor: RefCounted, item_id: String, count: int) -> Dictionary:
+	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
+	if normalized_item_id.is_empty():
+		return {"success": false, "reason": "invalid_item_id"}
+	var available: int = int(actor.inventory.get(normalized_item_id, 0))
+	if available <= 0:
+		return {
+			"success": false,
+			"reason": "item_not_in_inventory",
+			"item_id": normalized_item_id,
+		}
+	if count <= 0:
+		return {
+			"success": false,
+			"reason": "invalid_quantity",
+			"item_id": normalized_item_id,
+			"count": count,
+		}
+	if count >= available:
+		return {
+			"success": false,
+			"reason": "split_count_must_be_less_than_stack",
+			"item_id": normalized_item_id,
+			"count": count,
+			"available": available,
+		}
+	return {
+		"success": false,
+		"reason": "inventory_split_requires_stack_model",
+		"item_id": normalized_item_id,
+		"count": count,
+		"available": available,
+		"current_inventory_model": "merged_item_counts",
+	}
 
 
 func _reorder_actor_inventory(actor: RefCounted, item_id: String, target_index: int) -> Dictionary:

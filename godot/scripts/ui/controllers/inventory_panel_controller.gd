@@ -7,6 +7,7 @@ const CONTEXT_INSPECT := 4
 const CONTEXT_HOTBAR := 5
 const CONTEXT_DECONSTRUCT := 6
 const CONTEXT_DROP_ALL := 7
+const CONTEXT_SPLIT := 8
 
 var _panel: PanelContainer
 var _title_label: Label
@@ -329,14 +330,17 @@ func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> 
 	_context_menu.add_item("装备", CONTEXT_EQUIP)
 	_context_menu.add_item("丢弃", CONTEXT_DROP)
 	_context_menu.add_item("全部丢弃", CONTEXT_DROP_ALL)
+	_context_menu.add_item("拆分", CONTEXT_SPLIT)
 	_context_menu.add_item("拆解", CONTEXT_DECONSTRUCT)
 	_context_menu.add_item("加入热栏", CONTEXT_HOTBAR)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_USE), not bool(item.get("usable", false)))
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_EQUIP), _array_or_empty(item.get("equip_slots", [])).is_empty())
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DROP), not bool(item.get("droppable", true)) or int(item.get("count", 0)) <= 0)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DROP_ALL), not bool(item.get("droppable", true)) or int(item.get("count", 0)) <= 0)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_SPLIT), true)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DECONSTRUCT), not bool(item.get("deconstructable", false)) or int(item.get("count", 0)) <= 0)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_HOTBAR), not bool(item.get("usable", false)))
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_SPLIT), _split_context_tooltip(item))
 	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
 	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
 
@@ -367,6 +371,9 @@ func _execute_context_action(action_id: int) -> void:
 		CONTEXT_DROP_ALL:
 			if bool(_context_item.get("droppable", true)):
 				_open_discard_dialog_for_item(_context_item, int(_context_item.get("count", 1)))
+		CONTEXT_SPLIT:
+			if root.has_method("split_player_inventory_stack"):
+				root.split_player_inventory_stack(item_id, _drag_drop_count(_context_item))
 		CONTEXT_DECONSTRUCT:
 			if bool(_context_item.get("deconstructable", false)) and root.has_method("deconstruct_player_item"):
 				root.deconstruct_player_item(item_id, _drag_drop_count(_context_item))
@@ -381,6 +388,12 @@ func _apply_inspect_detail(item: Dictionary) -> void:
 		return
 	var item_name := str(item.get("name", item.get("item_id", "")))
 	_detail_label.text = "检查：%s\n%s" % [item_name, _detail_label.text]
+
+
+func _split_context_tooltip(item: Dictionary) -> String:
+	if not bool(item.get("stackable", false)) or int(item.get("count", 0)) <= 1:
+		return "只有数量大于 1 的堆叠物品才能拆分"
+	return "当前背包模型按物品 ID 合并计数；拆分需要后续多堆叠库存模型"
 
 
 func has_blocking_modal() -> bool:

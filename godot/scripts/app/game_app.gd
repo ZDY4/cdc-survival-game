@@ -776,6 +776,18 @@ func deconstruct_player_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func split_player_inventory_stack(item_id: String, count: int = 1) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = _submit_inventory_action({
+		"action": "split_stack",
+		"item_id": item_id,
+		"count": count,
+	})
+	refresh_inventory_panel()
+	return result
+
+
 func reorder_player_inventory_item(item_id: String, target_index: int) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}

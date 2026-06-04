@@ -201,6 +201,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	elif _context_action_disabled(game_root, 7):
 		errors.append("droppable item context menu should enable drop all")
 	else:
+		if not _context_action_disabled(game_root, 8):
+			errors.append("split context action should stay disabled until inventory supports multiple stacks")
+		if not _context_action_tooltip(game_root, 8).contains("多堆叠库存模型"):
+			errors.append("split context action should explain merged-count inventory limitation")
+		var scrap_before_split: int = _player_inventory_count(game_root, "1010")
+		var split_result: Dictionary = game_root.split_player_inventory_stack("1010", 1)
+		if str(split_result.get("reason", "")) != "inventory_split_requires_stack_model":
+			errors.append("split stack should report inventory model limitation")
+		if _player_inventory_count(game_root, "1010") != scrap_before_split:
+			errors.append("failed split stack should not mutate inventory")
 		_execute_inventory_context_action(game_root, 7)
 		await process_frame
 		if not _discard_dialog_visible(game_root):
@@ -660,6 +670,16 @@ func _context_action_disabled(game_root: Node, action_id: int) -> bool:
 	if index < 0:
 		return true
 	return menu.is_item_disabled(index)
+
+
+func _context_action_tooltip(game_root: Node, action_id: int) -> String:
+	var menu: PopupMenu = game_root.inventory_panel.find_child("InventoryContextMenu", true, false) as PopupMenu
+	if menu == null:
+		return ""
+	var index: int = menu.get_item_index(action_id)
+	if index < 0:
+		return ""
+	return str(menu.get_item_tooltip(index))
 
 
 func _execute_inventory_context_action(game_root: Node, action_id: int) -> void:
