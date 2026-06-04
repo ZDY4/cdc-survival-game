@@ -342,7 +342,7 @@
 
 - 为所有 glTF 建立 Godot 导入复核：scale、rotation、origin、materials、collision、shadow、visibility、resource uid 稳定性。
 - 建立 asset id -> Godot resource path 映射表，避免数据里 `builtin:*`、`preview_placeholders/*`、`world_tiles/*` 混用时找不到模型。
-- 为地图 scene 中每个 object 的 visual asset 做实例化复核，确保不再显示错误模型或重叠方块。
+- 地图 scene visual asset 实例化复核第一版已迁移：`Scene` smoke 会扫描 `godot/scenes/maps/*.tscn`，对每个声明 `props.visual` 的对象断言 `Visuals` 容器存在且已实例化子节点，当前覆盖 12 张地图 / 65 个 visual 对象；待补具体模型路径、fallback 类型、重叠检查和资产导入细节。
 - 为 container / pickup / trigger / door / corpse 设计明确的视觉资源和 fallback，不同 kind 不共用不可辨认方块；door fallback 开合状态第一版已有，待补真实美术资源替换。
 - WGSL 旧 shader 不迁代码，只迁视觉目标：grid ground、tile instancing、building wall、fog post-process 的效果要用 Godot shader / material 实现。
 - 待补音频资产策略：UI 点击、拾取、开门、交易、制作、攻击、受击、死亡、任务完成目前缺声音或占位。
@@ -382,7 +382,7 @@
 - UI toggle smoke：键盘打开/关闭面板、Esc 关闭优先级、菜单阻塞 gameplay 输入。
 - Targeting smoke：进入技能/攻击目标选择、取消、预览、确认。
 - Door 聚合 smoke 第一版已迁移：`tools/agent/test-godot-game.ps1 -Scenario Door` 会顺序运行 `World`、`Scene`、`Movement`、`AI`、`Interaction`、`PlayerInteraction` 和 `Save`，汇总覆盖锁门、开门、自动开门、hover 视觉、fallback 开合表现、阻挡和存档同步；待补更多真实门模型/碰撞/声音表现断言。
-- Map visual smoke 第一版已迁移：`Scene` smoke 会统计默认地图中声明 `props.visual` 的对象数量，并断言对应 `Visuals` 容器已实例化子节点，输出 `declared_map_visuals` / `instantiated_map_visuals`；待补每个地图 scene 的对象模型路径、fallback 统计、重叠检查和资产导入细节。
+- Map visual smoke 第一版已迁移：`Scene` smoke 会统计默认地图和所有 `godot/scenes/maps/*.tscn` 中声明 `props.visual` 的对象数量，并断言对应 `Visuals` 容器已实例化子节点，输出 `declared_map_visuals` / `instantiated_map_visuals`、`map_scene_count`、`all_map_declared_visuals` / `all_map_instantiated_visuals`；待补对象模型路径、fallback 统计、重叠检查和资产导入细节。
 - Asset import smoke：glTF scale/origin/material/collision 导入复核。
 
 ## 19. 建议迁移顺序

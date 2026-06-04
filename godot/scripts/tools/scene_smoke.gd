@@ -65,6 +65,7 @@ func _validate_scene(root: Node3D, counts: Dictionary) -> Array[String]:
 	if _interaction_target_node_count(root) <= 0:
 		errors.append("expected interaction target metadata on generated nodes")
 	_validate_declared_map_visual_assets(root, counts, errors)
+	_validate_all_map_scene_visual_assets(counts, errors)
 	if int(counts.get("lights", 0)) <= 0:
 		errors.append("expected light")
 	if int(counts.get("cameras", 0)) <= 0:
@@ -229,9 +230,62 @@ func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, erro
 	if visual_root == null:
 		errors.append("scene smoke should instantiate MapSceneVisuals")
 		return
+	var stats := _declared_visual_stats(visual_root, "runtime MapSceneVisuals", errors)
+	var declared_count := int(stats.get("declared", 0))
+	var instantiated_count := int(stats.get("instantiated", 0))
+	counts["declared_map_visuals"] = declared_count
+	counts["instantiated_map_visuals"] = instantiated_count
+	if declared_count <= 0:
+		errors.append("scene smoke expected at least one map object with declared visual props")
+	if instantiated_count != declared_count:
+		errors.append("scene smoke visual instancing mismatch %d/%d" % [instantiated_count, declared_count])
+
+
+func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[String]) -> void:
+	var dir := DirAccess.open("res://scenes/maps")
+	if dir == null:
+		errors.append("scene smoke cannot open res://scenes/maps")
+		return
+	var map_count := 0
+	var declared_total := 0
+	var instantiated_total := 0
+	dir.list_dir_begin()
+	while true:
+		var file_name := dir.get_next()
+		if file_name.is_empty():
+			break
+		if dir.current_is_dir() or not file_name.ends_with(".tscn"):
+			continue
+		map_count += 1
+		var scene_path := "res://scenes/maps/%s" % file_name
+		var packed: PackedScene = load(scene_path)
+		if packed == null:
+			errors.append("map scene visual smoke failed to load %s" % scene_path)
+			continue
+		var scene_root: Node = packed.instantiate()
+		if scene_root == null:
+			errors.append("map scene visual smoke failed to instantiate %s" % scene_path)
+			continue
+		var stats := _declared_visual_stats(scene_root, file_name, errors)
+		declared_total += int(stats.get("declared", 0))
+		instantiated_total += int(stats.get("instantiated", 0))
+		scene_root.free()
+	dir.list_dir_end()
+	counts["map_scene_count"] = map_count
+	counts["all_map_declared_visuals"] = declared_total
+	counts["all_map_instantiated_visuals"] = instantiated_total
+	if map_count <= 0:
+		errors.append("scene smoke expected at least one map scene")
+	if declared_total <= 0:
+		errors.append("scene smoke expected declared visual props across map scenes")
+	if instantiated_total != declared_total:
+		errors.append("all map scene visual instancing mismatch %d/%d" % [instantiated_total, declared_total])
+
+
+func _declared_visual_stats(root: Node, label: String, errors: Array[String]) -> Dictionary:
 	var declared_count := 0
 	var instantiated_count := 0
-	var pending: Array[Node] = [visual_root]
+	var pending: Array[Node] = [root]
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
 		for child in node.get_children():
@@ -244,20 +298,19 @@ func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, erro
 		if visual_props.is_empty():
 			continue
 		declared_count += 1
+		var object_id := str(definition.get("object_id", ""))
 		var visuals_container: Node = node.get_node_or_null("Visuals")
 		if visuals_container == null:
-			errors.append("map object %s declares visual props but has no Visuals node" % definition.get("object_id", ""))
+			errors.append("%s object %s declares visual props but has no Visuals node" % [label, object_id])
 			continue
 		if visuals_container.get_child_count() <= 0:
-			errors.append("map object %s declares visual props but instantiated no visual children" % definition.get("object_id", ""))
+			errors.append("%s object %s declares visual props but instantiated no visual children" % [label, object_id])
 			continue
 		instantiated_count += 1
-	counts["declared_map_visuals"] = declared_count
-	counts["instantiated_map_visuals"] = instantiated_count
-	if declared_count <= 0:
-		errors.append("scene smoke expected at least one map object with declared visual props")
-	if instantiated_count != declared_count:
-		errors.append("scene smoke visual instancing mismatch %d/%d" % [instantiated_count, declared_count])
+	return {
+		"declared": declared_count,
+		"instantiated": instantiated_count,
+	}
 
 
 func _interaction_target_node_count(root: Node) -> int:
