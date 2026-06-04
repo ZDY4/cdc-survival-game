@@ -107,6 +107,12 @@ func _build_layout() -> void:
 			root.use_player_item(str(_selected_item.get("item_id", "")))
 	, CONNECT_DEFERRED)
 	_equip_button = _action_button("EquipSelectedButton", "装备", "装备选中的物品")
+	_equip_button.set_meta("inventory_action_target", "equip")
+	_equip_button.set_drag_forwarding(
+		Callable(self, "_empty_inventory_drag_data"),
+		Callable(self, "_can_drop_inventory_action_data"),
+		Callable(self, "_drop_inventory_action_data")
+	)
 	_equip_button.disabled = true
 	_equip_button.pressed.connect(func() -> void:
 		if _selected_item.is_empty():
@@ -119,6 +125,12 @@ func _build_layout() -> void:
 			root.equip_player_item(str(_selected_item.get("item_id", "")), str(slots[0]))
 	, CONNECT_DEFERRED)
 	_drop_button = _action_button("DropSelectedButton", "丢弃", "丢弃选中的数量")
+	_drop_button.set_meta("inventory_action_target", "drop")
+	_drop_button.set_drag_forwarding(
+		Callable(self, "_empty_inventory_drag_data"),
+		Callable(self, "_can_drop_inventory_action_data"),
+		Callable(self, "_drop_inventory_action_data")
+	)
 	_drop_button.disabled = true
 	_drop_button.pressed.connect(func() -> void:
 		if _selected_item.is_empty():
@@ -196,12 +208,13 @@ func _empty_inventory_drag_data(_position: Vector2, _from_control: Control) -> V
 
 
 func _get_inventory_item_drag_data(_position: Vector2, from_control: Control) -> Variant:
-	if not _can_reorder_inventory() or from_control == null or not from_control.has_meta("inventory_item"):
+	if from_control == null or not from_control.has_meta("inventory_item"):
 		return null
 	var item: Dictionary = _dictionary_or_empty(from_control.get_meta("inventory_item"))
 	var item_id: String = str(item.get("item_id", ""))
 	if item.is_empty() or item_id.is_empty():
 		return null
+	_apply_detail(item.duplicate(true))
 	var preview := Label.new()
 	preview.text = "%s x%d" % [item.get("name", item_id), int(item.get("count", 0))]
 	set_drag_preview(preview)
@@ -230,6 +243,56 @@ func _drop_inventory_data(position: Vector2, data: Variant, from_control: Contro
 	var root := get_parent()
 	if root != null and root.has_method("reorder_player_inventory_item"):
 		root.reorder_player_inventory_item(str(drag_data.get("item_id", "")), _drop_target_index(from_control))
+
+
+func _can_drop_inventory_action_data(_position: Vector2, data: Variant, from_control: Control) -> bool:
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	if str(drag_data.get("kind", "")) != "inventory_item":
+		return false
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
+	if item_id.is_empty():
+		return false
+	match _inventory_action_target(from_control):
+		"equip":
+			return not _array_or_empty(item.get("equip_slots", [])).is_empty()
+		"drop":
+			return bool(item.get("droppable", true)) and int(item.get("count", 0)) > 0
+		_:
+			return false
+
+
+func _drop_inventory_action_data(position: Vector2, data: Variant, from_control: Control) -> void:
+	if not _can_drop_inventory_action_data(position, data, from_control):
+		return
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
+	var root := get_parent()
+	if root == null:
+		return
+	match _inventory_action_target(from_control):
+		"equip":
+			var slots: Array = _array_or_empty(item.get("equip_slots", []))
+			if not slots.is_empty() and root.has_method("equip_player_item"):
+				root.equip_player_item(item_id, str(slots[0]))
+		"drop":
+			if root.has_method("drop_player_item"):
+				root.drop_player_item(item_id, _drag_drop_count(item))
+
+
+func _inventory_action_target(from_control: Control) -> String:
+	if from_control != null and from_control.has_meta("inventory_action_target"):
+		return str(from_control.get_meta("inventory_action_target"))
+	return ""
+
+
+func _drag_drop_count(item: Dictionary) -> int:
+	var item_id: String = str(item.get("item_id", ""))
+	var available: int = max(1, int(item.get("count", 1)))
+	if _quantity_spin != null and str(_selected_item.get("item_id", "")) == item_id:
+		return clampi(int(_quantity_spin.value), 1, available)
+	return 1
 
 
 func _can_reorder_inventory() -> bool:

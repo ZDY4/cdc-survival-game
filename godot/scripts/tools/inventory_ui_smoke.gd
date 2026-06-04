@@ -177,8 +177,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var equip_button: Button = _equip_button(game_root)
 	if equip_button == null or equip_button.disabled:
 		errors.append("selected equippable item should enable equip button")
+	elif not _drag_inventory_item_to_action(game_root, "棒球棒", "EquipSelectedButton"):
+		errors.append("should drag baseball bat onto equip button")
 	else:
-		equip_button.pressed.emit()
 		await process_frame
 	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_blunt.gltf")
 	if "\n".join(_item_lines(game_root)).contains("棒球棒"):
@@ -221,8 +222,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		quantity_spin.value = 2
 	if drop_button == null or drop_button.disabled:
 		errors.append("selected droppable item should enable drop button")
+	elif not _drag_inventory_item_to_action(game_root, "绷带", "DropSelectedButton"):
+		errors.append("should drag bandages onto drop button")
 	else:
-		drop_button.pressed.emit()
 		await process_frame
 	if _player_inventory_count(game_root, "1006") != 1:
 		errors.append("dropping bandages should remove the requested count from inventory")
@@ -408,6 +410,20 @@ func _append_inventory_item_by_drag(game_root: Node, item_needle: String) -> boo
 		"item_id": str(source.get_meta("inventory_item").get("item_id", "")),
 		"from_index": int(source.get_meta("inventory_index", 0)),
 	}, item_box)
+	return true
+
+
+func _drag_inventory_item_to_action(game_root: Node, item_needle: String, target_button_name: String) -> bool:
+	var source: Button = _inventory_item_button(game_root, item_needle)
+	var target: Button = game_root.inventory_panel.find_child(target_button_name, true, false) as Button
+	if source == null or target == null or not source.has_meta("inventory_item"):
+		return false
+	game_root.inventory_panel.call("_drop_inventory_action_data", Vector2.ZERO, {
+		"kind": "inventory_item",
+		"item": source.get_meta("inventory_item"),
+		"item_id": str(source.get_meta("inventory_item").get("item_id", "")),
+		"from_index": int(source.get_meta("inventory_index", 0)),
+	}, target)
 	return true
 
 
