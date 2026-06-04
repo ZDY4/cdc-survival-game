@@ -10,6 +10,7 @@ const SAVE_ROOT := "user://main_menu_smoke_saves"
 const SAVE_SLOT := "continue_slot"
 const SECOND_SAVE_SLOT := "older_slot"
 const BROKEN_SAVE_SLOT := "broken_slot"
+const SECOND_SAVE_NAME := "旧营地存档"
 
 
 func _init() -> void:
@@ -33,7 +34,7 @@ func _run() -> void:
 	menu.queue_free()
 	await process_frame
 
-	_write_continue_save(errors, SECOND_SAVE_SLOT, 2)
+	_write_continue_save(errors, SECOND_SAVE_SLOT, 2, SECOND_SAVE_NAME)
 	_write_continue_save(errors, SAVE_SLOT, 1)
 	_write_broken_save()
 	var continue_menu: Control = MAIN_MENU_SCENE.instantiate()
@@ -106,7 +107,7 @@ func _assert_new_game_request(errors: Array[String], menu: Control) -> void:
 	ProjectSettings.set_setting("cdc/startup_request", {})
 
 
-func _write_continue_save(errors: Array[String], slot_id: String, player_x_offset: int) -> void:
+func _write_continue_save(errors: Array[String], slot_id: String, player_x_offset: int, display_name: String = "") -> void:
 	var registry: ContentRegistry = ContentRegistry.new()
 	var load_result: RefCounted = registry.load_all()
 	if load_result.has_errors():
@@ -117,7 +118,10 @@ func _write_continue_save(errors: Array[String], slot_id: String, player_x_offse
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	if player != null:
 		player.grid_position.x += player_x_offset
-	var saved := SaveService.new(SAVE_ROOT).save_snapshot(slot_id, simulation.snapshot())
+	var metadata_overrides := {}
+	if not display_name.is_empty():
+		metadata_overrides["slot_display_name"] = display_name
+	var saved := SaveService.new(SAVE_ROOT).save_snapshot(slot_id, simulation.snapshot(), metadata_overrides)
 	if not saved:
 		errors.append("failed to write %s save for main menu smoke" % slot_id)
 
@@ -130,6 +134,9 @@ func _write_broken_save() -> void:
 	file.store_string(JSON.stringify({
 		"schema_version": 999,
 		"slot_id": BROKEN_SAVE_SLOT,
+		"metadata": {
+			"slot_display_name": "损坏测试存档",
+		},
 		"runtime_snapshot": {},
 	}, "\t"))
 	file.close()
@@ -157,6 +164,10 @@ func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
 		errors.append("main menu should list three smoke save slots including broken slot: %s" % snapshot)
 	for slot in slots:
 		var summary: Dictionary = _dictionary_or_empty(slot)
+		if str(summary.get("slot_display_name", "")).is_empty():
+			errors.append("slot summary should include display name: %s" % summary)
+		if str(summary.get("slot_id", "")) == SECOND_SAVE_SLOT and str(summary.get("slot_display_name", "")) != SECOND_SAVE_NAME:
+			errors.append("slot summary should preserve custom display name: %s" % summary)
 		if not bool(summary.get("ok", false)):
 			continue
 		if str(summary.get("active_map_id", "")) != "survivor_outpost_01":
@@ -181,8 +192,11 @@ func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
 		if float(player.get("max_hp", 0.0)) <= 0.0 or not player.has("ap"):
 			errors.append("slot summary should include player hp/ap: %s" % summary)
 	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
-	if line == null or not line.text.contains("地图 survivor_outpost_01") or not line.text.contains("Lv") or not line.text.contains("HP") or not line.text.contains("AP") or not line.text.contains("任务") or not line.text.contains("探索"):
+	if line == null or not line.text.contains("存档") or not line.text.contains("地图 survivor_outpost_01") or not line.text.contains("Lv") or not line.text.contains("HP") or not line.text.contains("AP") or not line.text.contains("任务") or not line.text.contains("探索"):
 		errors.append("slot summary line should expose detailed save metadata")
+	var slot_option: OptionButton = menu.find_child("SaveSlotOption", true, false) as OptionButton
+	if slot_option == null or not _option_contains_text(slot_option, SECOND_SAVE_NAME):
+		errors.append("save slot option should display custom slot name")
 
 
 func _assert_broken_slot_feedback(errors: Array[String], menu: Control) -> void:
@@ -193,8 +207,8 @@ func _assert_broken_slot_feedback(errors: Array[String], menu: Control) -> void:
 	if str(snapshot.get("continue_reason", "")) != "save_schema_unsupported":
 		errors.append("broken save should expose schema reason: %s" % snapshot)
 	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
-	if line == null or not line.text.contains("存档版本不兼容"):
-		errors.append("broken save summary should explain incompatible schema")
+	if line == null or not line.text.contains("损坏测试存档") or not line.text.contains("存档版本不兼容"):
+		errors.append("broken save summary should include slot name and explain incompatible schema")
 	var continue_button: Button = menu.find_child("ContinueButton", true, false) as Button
 	if continue_button == null or not continue_button.disabled:
 		errors.append("continue button should be disabled for broken save")
@@ -246,6 +260,10 @@ func _assert_continue_request(errors: Array[String], menu: Control) -> void:
 		errors.append("continue should set startup request mode: %s" % request)
 	if _dictionary_or_empty(request.get("runtime_snapshot", {})).is_empty():
 		errors.append("continue should pass a runtime snapshot to game root")
+	var loaded: Dictionary = SaveService.new(SAVE_ROOT).load_snapshot(SECOND_SAVE_SLOT)
+	var metadata: Dictionary = _dictionary_or_empty(loaded.get("metadata", {}))
+	if str(metadata.get("slot_display_name", "")) != SECOND_SAVE_NAME:
+		errors.append("loaded save metadata should preserve slot display name: %s" % loaded)
 
 
 func _assert_game_root_loaded_continue_snapshot(errors: Array[String], game_root: Node, expected_player_x: int) -> void:
@@ -275,6 +293,13 @@ func _assert_delete_slot(errors: Array[String], menu: Control, slot_id: String) 
 	for slot in _array_or_empty(snapshot.get("slots", [])):
 		if str(_dictionary_or_empty(slot).get("slot_id", "")) == slot_id:
 			errors.append("deleted slot should not remain in menu slot list: %s" % snapshot)
+
+
+func _option_contains_text(option: OptionButton, needle: String) -> bool:
+	for i in range(option.get_item_count()):
+		if option.get_item_text(i).contains(needle):
+			return true
+	return false
 
 
 func _clear_smoke_save() -> void:

@@ -65,13 +65,15 @@ func quit_game() -> Dictionary:
 
 
 func delete_selected_slot() -> Dictionary:
+	var display_name := _selected_slot_display_name()
 	var deleted := SaveService.new(save_root).delete_snapshot(save_slot)
 	last_action = {
 		"ok": deleted,
 		"action": "delete_slot",
 		"save_slot": save_slot,
+		"slot_display_name": display_name,
 	}
-	_set_feedback("已删除存档 %s" % save_slot if deleted else "删除存档失败")
+	_set_feedback("已删除 %s" % display_name if deleted else "删除存档失败")
 	_refresh_save_slots()
 	return last_action.duplicate(true)
 
@@ -206,10 +208,10 @@ func _refresh_continue_state() -> void:
 	var available := bool(snapshot.get("continue_available", false))
 	_continue_button.disabled = not available
 	var reason := str(snapshot.get("continue_reason", ""))
-	_continue_button.tooltip_text = "加载 %s" % save_slot if available else _save_failure_text(reason)
+	_continue_button.tooltip_text = "加载 %s" % _selected_slot_display_name() if available else _save_failure_text(reason)
 	if _delete_button != null:
 		_delete_button.disabled = _selected_slot_summary().is_empty()
-		_delete_button.tooltip_text = "删除 %s" % save_slot if not _delete_button.disabled else "没有可删除的存档"
+		_delete_button.tooltip_text = "删除 %s" % _selected_slot_display_name() if not _delete_button.disabled else "没有可删除的存档"
 
 
 func _refresh_slot_option() -> void:
@@ -226,9 +228,10 @@ func _refresh_slot_option() -> void:
 	for i in range(_slot_summaries.size()):
 		var summary := _slot_summaries[i]
 		var slot_id := str(summary.get("slot_id", ""))
-		var label := "%s | %s" % [slot_id, str(summary.get("active_map_id", ""))]
+		var display_name := _slot_display_name(summary)
+		var label := "%s | %s" % [display_name, str(summary.get("active_map_id", ""))]
 		if not bool(summary.get("ok", false)):
-			label = "%s | %s" % [slot_id, _save_failure_text(str(summary.get("reason", "unknown")))]
+			label = "%s | %s" % [display_name, _save_failure_text(str(summary.get("reason", "unknown")))]
 		_slot_option.add_item(label)
 		_slot_option.set_item_metadata(i, slot_id)
 		if slot_id == save_slot:
@@ -244,10 +247,11 @@ func _refresh_slot_summary() -> void:
 		_slot_summary_label.text = "没有可继续的存档"
 		return
 	if not bool(summary.get("ok", false)):
-		_slot_summary_label.text = "存档不可加载: %s" % _save_failure_text(str(summary.get("reason", "unknown")))
+		_slot_summary_label.text = "%s | 存档不可加载: %s" % [_slot_display_name(summary), _save_failure_text(str(summary.get("reason", "unknown")))]
 		return
 	var player: Dictionary = _dictionary_or_empty(summary.get("player", {}))
-	_slot_summary_label.text = "地图 %s | 地点 %s | %s @ %s | Lv%d HP %s/%s AP %s | 回合 %d %s | 任务 %d/%d | %s | %s" % [
+	_slot_summary_label.text = "%s | 地图 %s | 地点 %s | %s @ %s | Lv%d HP %s/%s AP %s | 回合 %d %s | 任务 %d/%d | %s | %s" % [
+		_slot_display_name(summary),
 		str(summary.get("active_map_id", "")),
 		str(summary.get("active_location_id", "")),
 		str(player.get("display_name", "玩家")),
@@ -296,10 +300,22 @@ func _open_overwrite_confirm() -> Dictionary:
 		"save_slot": save_slot,
 	}
 	if _overwrite_dialog != null:
-		_overwrite_dialog.dialog_text = "槽位 %s 已有存档。开始新游戏会覆盖该槽位。" % save_slot
+		_overwrite_dialog.dialog_text = "%s 已有存档。开始新游戏会覆盖该槽位。" % _selected_slot_display_name()
 		_overwrite_dialog.popup_centered()
 	_set_feedback("请确认是否覆盖当前存档")
 	return last_action.duplicate(true)
+
+
+func _selected_slot_display_name() -> String:
+	return _slot_display_name(_selected_slot_summary())
+
+
+func _slot_display_name(summary: Dictionary) -> String:
+	var display_name := str(summary.get("slot_display_name", summary.get("display_name", ""))).strip_edges()
+	if not display_name.is_empty():
+		return display_name
+	var slot_id := str(summary.get("slot_id", save_slot)).strip_edges()
+	return "存档 %s" % slot_id if not slot_id.is_empty() else "存档"
 
 
 func _save_failure_text(reason: String) -> String:

@@ -9,17 +9,20 @@ func _init(p_save_root: String = "user://saves") -> void:
 	save_root = p_save_root
 
 
-func save_snapshot(slot_id: String, snapshot: Dictionary) -> bool:
+func save_snapshot(slot_id: String, snapshot: Dictionary, metadata_overrides: Dictionary = {}) -> bool:
 	var slot_key: String = _slot_key(slot_id)
 	if slot_key.is_empty():
 		push_error("存档失败: slot_id 为空")
 		return false
 	_ensure_save_root()
+	var metadata := _metadata_from_snapshot(slot_key, snapshot)
+	for key in metadata_overrides.keys():
+		metadata[key] = metadata_overrides[key]
 
 	var envelope: Dictionary = {
 		"schema_version": SAVE_SCHEMA_VERSION,
 		"slot_id": slot_key,
-		"metadata": _metadata_from_snapshot(slot_key, snapshot),
+		"metadata": metadata,
 		"runtime_snapshot": snapshot,
 	}
 	var file := FileAccess.open(_slot_path(slot_key), FileAccess.WRITE)
@@ -67,21 +70,24 @@ func slot_summary(slot_id: String) -> Dictionary:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return _failed_slot(slot_key, path, "save_json_invalid")
 	var envelope: Dictionary = parsed
+	var envelope_metadata: Dictionary = _dictionary_or_empty(envelope.get("metadata", {}))
 	if int(envelope.get("schema_version", 0)) != SAVE_SCHEMA_VERSION:
-		return _failed_slot(slot_key, path, "save_schema_unsupported")
+		return _failed_slot(slot_key, path, "save_schema_unsupported", envelope_metadata)
 	var snapshot: Dictionary = _dictionary_or_empty(envelope.get("runtime_snapshot", {}))
 	if snapshot.is_empty():
-		return _failed_slot(slot_key, path, "runtime_snapshot_missing")
-	var metadata: Dictionary = _dictionary_or_empty(envelope.get("metadata", {}))
+		return _failed_slot(slot_key, path, "runtime_snapshot_missing", envelope_metadata)
+	var metadata: Dictionary = envelope_metadata
 	if metadata.is_empty() and not snapshot.is_empty():
 		metadata = _metadata_from_snapshot(slot_key, snapshot)
 	var output := {
 		"ok": true,
 		"slot_id": str(envelope.get("slot_id", slot_key)),
+		"slot_display_name": _slot_display_name(str(envelope.get("slot_id", slot_key)), metadata),
 		"path": path,
 	}
 	for key in metadata.keys():
 		output[key] = metadata[key]
+	output["slot_display_name"] = _slot_display_name(str(output.get("slot_id", slot_key)), output)
 	return output
 
 
@@ -113,7 +119,7 @@ func load_snapshot(slot_id: String) -> Dictionary:
 	return {
 		"ok": true,
 		"slot_id": str(envelope.get("slot_id", slot_key)),
-		"metadata": _dictionary_or_empty(envelope.get("metadata", _metadata_from_snapshot(slot_key, runtime_snapshot))).duplicate(true),
+		"metadata": _load_metadata(str(envelope.get("slot_id", slot_key)), envelope, runtime_snapshot),
 		"runtime_snapshot": runtime_snapshot,
 	}
 
@@ -149,6 +155,7 @@ func _metadata_from_snapshot(slot_id: String, snapshot: Dictionary) -> Dictionar
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	return {
 		"slot_id": slot_id,
+		"slot_display_name": _default_slot_display_name(slot_id, snapshot),
 		"updated_at": Time.get_datetime_string_from_system(false, true),
 		"active_map_id": str(snapshot.get("active_map_id", "")),
 		"active_location_id": str(snapshot.get("active_location_id", "")),
@@ -199,13 +206,39 @@ func _failed(reason: String) -> Dictionary:
 	}
 
 
-func _failed_slot(slot_id: String, path: String, reason: String) -> Dictionary:
+func _failed_slot(slot_id: String, path: String, reason: String, metadata: Dictionary = {}) -> Dictionary:
 	return {
 		"ok": false,
 		"slot_id": slot_id,
+		"slot_display_name": _slot_display_name(slot_id, metadata),
 		"path": path,
 		"reason": reason,
 	}
+
+
+func _load_metadata(slot_id: String, envelope: Dictionary, runtime_snapshot: Dictionary) -> Dictionary:
+	var metadata: Dictionary = _dictionary_or_empty(envelope.get("metadata", _metadata_from_snapshot(slot_id, runtime_snapshot))).duplicate(true)
+	metadata["slot_display_name"] = _slot_display_name(slot_id, metadata)
+	return metadata
+
+
+func _slot_display_name(slot_id: String, metadata: Dictionary) -> String:
+	var explicit_name := str(metadata.get("slot_display_name", metadata.get("display_name", ""))).strip_edges()
+	if not explicit_name.is_empty():
+		return explicit_name
+	var player := _dictionary_or_empty(metadata.get("player", {}))
+	var player_name := str(player.get("display_name", "")).strip_edges()
+	if not player_name.is_empty():
+		return "%s 的存档" % player_name
+	return _default_slot_display_name(slot_id, {})
+
+
+func _default_slot_display_name(slot_id: String, snapshot: Dictionary) -> String:
+	var player := _player_actor(snapshot)
+	var player_name := str(player.get("display_name", "")).strip_edges()
+	if not player_name.is_empty():
+		return "%s 的存档" % player_name
+	return "存档 %s" % slot_id
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
