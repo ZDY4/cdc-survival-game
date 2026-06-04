@@ -3,10 +3,13 @@ extends RefCounted
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
 
+const CURRENT_SCHEMA_VERSION := 1
+
 var _inventory_entries := InventoryEntries.new()
 
 
 func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
+	var source_schema_version: int = int(snapshot_data.get("schema_version", 0))
 	# 这里是存档格式兼容边界：旧快照缺少 active_* 字段时仍回退到 start_*。
 	simulation.active_map_id = str(snapshot_data.get("active_map_id", ""))
 	simulation.start_location_id = str(snapshot_data.get("start_location_id", ""))
@@ -36,6 +39,11 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.corpse_containers = _load_corpse_containers(snapshot_data.get("corpse_containers", []))
 	simulation.interaction_menu = _dictionary_or_empty(snapshot_data.get("interaction_menu", {})).duplicate(true)
 	simulation.hotbar = _dictionary_or_empty(snapshot_data.get("hotbar", {})).duplicate(true)
+	if source_schema_version < CURRENT_SCHEMA_VERSION:
+		simulation.emit_event("snapshot_migrated", {
+			"from_schema_version": source_schema_version,
+			"to_schema_version": CURRENT_SCHEMA_VERSION,
+		})
 
 
 func _load_events(entries: Variant) -> Array[SimulationEvent]:

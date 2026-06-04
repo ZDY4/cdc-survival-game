@@ -3,6 +3,8 @@ extends RefCounted
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const SimulationSnapshotLoader = preload("res://scripts/core/simulation/simulation_snapshot_loader.gd")
 
+const CURRENT_SCHEMA_VERSION := 1
+
 var _inventory_entries := InventoryEntries.new()
 var _loader := SimulationSnapshotLoader.new()
 
@@ -12,7 +14,7 @@ func build(simulation: RefCounted) -> Dictionary:
 	for event in simulation.events:
 		event_output.append(event.to_dictionary())
 	return {
-		"schema_version": 1,
+		"schema_version": CURRENT_SCHEMA_VERSION,
 		"active_map_id": simulation.active_map_id,
 		"start_location_id": simulation.start_location_id,
 		"start_entry_point_id": simulation.start_entry_point_id,

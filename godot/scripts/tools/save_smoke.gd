@@ -31,6 +31,7 @@ func _init() -> void:
 		restored_simulation.load_snapshot(loaded.get("runtime_snapshot", {}))
 
 	var errors: Array[String] = _validate_roundtrip(saved, snapshot, loaded, restored_simulation.snapshot())
+	errors.append_array(_validate_legacy_snapshot_migration(snapshot, registry))
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -193,6 +194,35 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	return errors
 
 
+func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var legacy: Dictionary = snapshot.duplicate(true)
+	legacy.erase("schema_version")
+	legacy.erase("active_location_id")
+	legacy.erase("active_entry_point_id")
+	legacy.erase("combat_state")
+	legacy.erase("pending_movement")
+	legacy.erase("pending_interaction")
+	legacy.erase("corpse_containers")
+	legacy.erase("interaction_menu")
+	legacy.erase("hotbar")
+	var restored_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	restored_simulation.load_snapshot(legacy)
+	var restored: Dictionary = restored_simulation.snapshot()
+	if int(restored.get("schema_version", 0)) != 1:
+		errors.append("legacy snapshot migration should restore current schema_version")
+	if str(restored.get("active_location_id", "")) != str(snapshot.get("start_location_id", "")):
+		errors.append("legacy snapshot migration should default active_location_id from start_location_id")
+	if str(restored.get("active_entry_point_id", "")) != str(snapshot.get("start_entry_point_id", "")):
+		errors.append("legacy snapshot migration should default active_entry_point_id from start_entry_point_id")
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "corpse_containers", "interaction_menu", "hotbar"]:
+		if not restored.has(key):
+			errors.append("legacy snapshot migration missing %s" % key)
+	if not _has_event(restored, "snapshot_migrated"):
+		errors.append("legacy snapshot migration should emit snapshot_migrated")
+	return errors
+
+
 func _player_actor(snapshot: Dictionary) -> Dictionary:
 	for actor in snapshot.get("actors", []):
 		var actor_data: Dictionary = actor
@@ -298,6 +328,14 @@ func _container_count(snapshot: Dictionary, container_id: String, item_id: Strin
 			if str(entry_data.get("item_id", "")) == item_id:
 				return int(entry_data.get("count", 0))
 	return 0
+
+
+func _has_event(snapshot: Dictionary, kind: String) -> bool:
+	for event in snapshot.get("events", []):
+		var event_data: Dictionary = event
+		if str(event_data.get("kind", "")) == kind:
+			return true
+	return false
 
 
 func _normalized_container_sessions(snapshot: Dictionary) -> Array[Dictionary]:
