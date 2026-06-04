@@ -10,12 +10,13 @@ func _init(p_registry: RefCounted) -> void:
 func build(runtime_snapshot: Dictionary) -> Dictionary:
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
+	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
 	var progression: Dictionary = _dictionary_or_empty(player.get("progression", {}))
 	var recipes: Array[Dictionary] = []
 	var recipe_ids: Array = registry.get_library("recipes").keys()
 	recipe_ids.sort()
 	for recipe_id in recipe_ids:
-		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), inventory, progression)
+		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), inventory, equipment, progression)
 		if not recipe_view.is_empty():
 			recipes.append(recipe_view)
 	return {
@@ -26,7 +27,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	}
 
 
-func _recipe_snapshot(recipe_id: String, inventory: Dictionary, progression: Dictionary) -> Dictionary:
+func _recipe_snapshot(recipe_id: String, inventory: Dictionary, equipment: Dictionary, progression: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("recipes").get(recipe_id, {}))
 	var recipe: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if recipe.is_empty():
@@ -45,7 +46,8 @@ func _recipe_snapshot(recipe_id: String, inventory: Dictionary, progression: Dic
 			"required": required_count,
 			"available": int(inventory.get(item_id, 0)),
 		})
-	var availability: Dictionary = _availability(recipe, inventory, progression, materials)
+	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), inventory, equipment)
+	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools)
 	var max_craft_count: int = _max_craft_count(materials, bool(availability.get("can_craft", false)))
 	var output_count: int = max(1, int(output.get("count", 1)))
 	return {
@@ -58,7 +60,7 @@ func _recipe_snapshot(recipe_id: String, inventory: Dictionary, progression: Dic
 		"output_count": output_count,
 		"preview_output_count": output_count * max(1, max_craft_count),
 		"materials": materials,
-		"required_tools": _array_or_empty(recipe.get("required_tools", [])).duplicate(true),
+		"required_tools": required_tools,
 		"required_station": str(recipe.get("required_station", "none")),
 		"skill_requirements": _dictionary_or_empty(recipe.get("skill_requirements", {})).duplicate(true),
 		"craft_time": float(recipe.get("craft_time", 0.0)),
@@ -69,14 +71,29 @@ func _recipe_snapshot(recipe_id: String, inventory: Dictionary, progression: Dic
 		"craft_reason": str(availability.get("reason", "")),
 		"missing_materials": _array_or_empty(availability.get("missing_materials", [])).duplicate(true),
 		"missing_skills": _array_or_empty(availability.get("missing_skills", [])).duplicate(true),
+		"missing_tools": _array_or_empty(availability.get("missing_tools", [])).duplicate(true),
 	}
 
 
-func _availability(recipe: Dictionary, inventory: Dictionary, progression: Dictionary, materials: Array[Dictionary]) -> Dictionary:
+func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, materials: Array[Dictionary], required_tools: Array[Dictionary]) -> Dictionary:
 	if not bool(recipe.get("is_default_unlocked", false)):
 		return {"can_craft": false, "reason": "recipe_locked"}
-	if not _array_or_empty(recipe.get("required_tools", [])).is_empty():
-		return {"can_craft": false, "reason": "required_tools_unsupported"}
+	var missing_tools: Array[Dictionary] = []
+	for tool in required_tools:
+		var tool_data: Dictionary = _dictionary_or_empty(tool)
+		var tool_id := str(tool_data.get("item_id", ""))
+		if tool_id.is_empty():
+			continue
+		if _has_tool(tool_id, inventory, equipment):
+			continue
+		missing_tools.append({
+			"item_id": tool_id,
+			"name": str(tool_data.get("name", tool_id)),
+			"available": 0,
+			"required": 1,
+		})
+	if not missing_tools.is_empty():
+		return {"can_craft": false, "reason": "missing_tools", "missing_tools": missing_tools}
 	if str(recipe.get("required_station", "none")) not in ["", "none"]:
 		return {"can_craft": false, "reason": "required_station_unsupported"}
 	var missing_skills: Array[Dictionary] = []
@@ -107,6 +124,31 @@ func _availability(recipe: Dictionary, inventory: Dictionary, progression: Dicti
 	if not missing_materials.is_empty():
 		return {"can_craft": false, "reason": "materials_insufficient", "missing_materials": missing_materials}
 	return {"can_craft": true, "reason": "available"}
+
+
+func _required_tools_snapshot(required_tools: Array, inventory: Dictionary, equipment: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for tool in required_tools:
+		var tool_id: String = _normalize_content_id(tool)
+		if tool_id.is_empty():
+			continue
+		var has_tool := _has_tool(tool_id, inventory, equipment)
+		output.append({
+			"item_id": tool_id,
+			"name": str(_item_data(tool_id).get("name", tool_id)),
+			"available": 1 if has_tool else 0,
+			"required": 1,
+		})
+	return output
+
+
+func _has_tool(tool_id: String, inventory: Dictionary, equipment: Dictionary) -> bool:
+	if int(inventory.get(tool_id, 0)) > 0:
+		return true
+	for slot_id in equipment.keys():
+		if _normalize_content_id(equipment.get(slot_id, "")) == tool_id:
+			return true
+	return false
 
 
 func _craftable_count(recipes: Array[Dictionary]) -> int:

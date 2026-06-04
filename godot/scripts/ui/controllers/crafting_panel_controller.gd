@@ -270,14 +270,20 @@ func _missing_reason_rows(recipe: Dictionary) -> Array[Control]:
 			"定位工作台: %s" % station,
 			station
 		))
-	for tool in _array_or_empty(recipe.get("required_tools", [])):
-		var tool_id := str(tool)
+	for tool in _array_or_empty(recipe.get("missing_tools", recipe.get("required_tools", []))):
+		var tool_data: Dictionary = _tool_data(tool)
+		var tool_id := str(tool_data.get("item_id", ""))
 		if tool_id.is_empty():
 			continue
+		var tool_name := str(tool_data.get("name", tool_id))
 		rows.append(_missing_reason_button(
 			"MissingReasonTool_%s" % tool_id,
-			"定位工具: %s" % tool_id,
-			tool_id
+			"定位工具: %s %d/%d" % [
+				tool_name,
+				int(tool_data.get("available", 0)),
+				int(tool_data.get("required", 1)),
+			],
+			tool_name
 		))
 	return rows
 
@@ -321,6 +327,33 @@ func _materials_text(materials: Array, multiplier: int = 1) -> String:
 	return "无" if parts.is_empty() else ", ".join(parts)
 
 
+func _tools_text(tools: Array) -> String:
+	var parts: Array[String] = []
+	for tool in tools:
+		var data: Dictionary = _tool_data(tool)
+		var tool_name := str(data.get("name", data.get("item_id", "")))
+		if tool_name.is_empty():
+			continue
+		parts.append("%s %d/%d" % [
+			tool_name,
+			int(data.get("available", 0)),
+			int(data.get("required", 1)),
+		])
+	return "无" if parts.is_empty() else ", ".join(parts)
+
+
+func _tool_data(tool: Variant) -> Dictionary:
+	if typeof(tool) == TYPE_DICTIONARY:
+		return tool
+	var tool_id := str(tool)
+	return {
+		"item_id": tool_id,
+		"name": tool_id,
+		"available": 0,
+		"required": 1,
+	}
+
+
 func _requirements_text(recipe: Dictionary) -> String:
 	var parts: Array[String] = []
 	var station := str(recipe.get("required_station", "none"))
@@ -328,7 +361,7 @@ func _requirements_text(recipe: Dictionary) -> String:
 		parts.append("工作台 %s" % station)
 	var tools: Array = recipe.get("required_tools", [])
 	if not tools.is_empty():
-		parts.append("工具 %s" % ", ".join(tools))
+		parts.append("工具 %s" % _tools_text(tools))
 	var skills: Dictionary = _dictionary_or_empty(recipe.get("skill_requirements", {}))
 	for skill_id in skills.keys():
 		parts.append("%s Lv%d" % [skill_id, int(skills[skill_id])])
@@ -394,7 +427,11 @@ func _search_matches(recipe: Dictionary) -> bool:
 	var requirements: Array[String] = []
 	requirements.append(str(recipe.get("required_station", "")))
 	for tool in _array_or_empty(recipe.get("required_tools", [])):
-		requirements.append(str(tool))
+		var tool_data: Dictionary = _tool_data(tool)
+		requirements.append("%s %s" % [
+			tool_data.get("item_id", ""),
+			tool_data.get("name", ""),
+		])
 	for skill_id in _dictionary_or_empty(recipe.get("skill_requirements", {})).keys():
 		requirements.append(str(skill_id))
 	if not requirements.is_empty():
@@ -519,6 +556,16 @@ func _reason_text(recipe: Dictionary) -> String:
 			return "未解锁"
 		"required_tools_unsupported":
 			return "缺工具流程"
+		"missing_tools":
+			var parts: Array[String] = []
+			for item in recipe.get("missing_tools", []):
+				var data: Dictionary = _tool_data(item)
+				parts.append("%s %d/%d" % [
+					data.get("name", data.get("item_id", "")),
+					int(data.get("available", 0)),
+					int(data.get("required", 1)),
+				])
+			return "缺工具 %s" % ", ".join(parts)
 		"required_station_unsupported":
 			return "需工作台 %s" % recipe.get("required_station", "")
 		"missing_skills":
@@ -578,6 +625,8 @@ func _craft_failure_text(reason: String) -> String:
 			return "配方未解锁"
 		"required_tools_unsupported":
 			return "缺少工具流程"
+		"missing_tools":
+			return "缺少工具"
 		"required_station_unsupported":
 			return "缺少工作台"
 		"missing_skill_requirements":

@@ -80,6 +80,17 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if _event_count(simulation.snapshot(), "experience_granted") != batch_xp_events_before + 2:
 		errors.append("batch crafting experience should emit per craft")
 
+	var tool_missing: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes)
+	if tool_missing.get("reason", "") != "missing_tools":
+		errors.append("tool-gated recipe should report missing_tools before station check")
+	var missing_tools: Array = tool_missing.get("missing_tools", [])
+	if missing_tools.is_empty() or str(_dictionary_or_empty(missing_tools[0]).get("item_id", "")) != "1151":
+		errors.append("tool-gated recipe should identify missing screwdriver")
+	player.inventory["1151"] = 1
+	var tool_available: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes)
+	if tool_available.get("reason", "") != "required_station_unsupported":
+		errors.append("tool-gated recipe should advance to station check when tool is available")
+
 	var station_result: Dictionary = simulation.craft_recipe(1, "recipe_first_aid_kit", recipes)
 	if station_result.get("reason", "") != "required_station_unsupported":
 		errors.append("station-gated recipe should report required_station_unsupported")
@@ -93,6 +104,12 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
 
 
 func _digest(snapshot: Dictionary) -> Dictionary:

@@ -117,6 +117,37 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_search_box(game_root).text = ""
 		_search_box(game_root).text_changed.emit("")
 		await process_frame
+	if not _press_recipe_line(game_root, "recipe_knife_basic"):
+		errors.append("should select basic knife recipe for tool locator smoke")
+	await process_frame
+	if not _detail_text(game_root).contains("工具 螺丝刀 0/1"):
+		errors.append("crafting detail should show missing required tool")
+	if not _recipe_line(game_root, "recipe_knife_basic").contains("缺工具 螺丝刀 0/1"):
+		errors.append("tool-gated recipe row should show missing tool reason")
+	var tool_locator: Button = _missing_reason_button(game_root, "MissingReasonTool_1151")
+	if tool_locator == null:
+		errors.append("crafting detail should expose missing tool locator")
+	else:
+		tool_locator.pressed.emit()
+		await process_frame
+		if _search_box(game_root) == null or _search_box(game_root).text != "螺丝刀":
+			errors.append("missing tool locator should populate crafting search with tool name")
+		if not _recipe_text(game_root).contains("基础小刀"):
+			errors.append("missing tool locator should keep recipes that require the tool")
+		_search_box(game_root).text = ""
+		_search_box(game_root).text_changed.emit("")
+		await process_frame
+	var player_for_tool: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	player_for_tool.inventory["1151"] = 1
+	game_root.refresh_inventory_panel()
+	game_root.refresh_crafting_panel()
+	if not _press_recipe_line(game_root, "recipe_knife_basic"):
+		errors.append("should reselect basic knife recipe after adding tool")
+	await process_frame
+	if not _detail_text(game_root).contains("工具 螺丝刀 1/1"):
+		errors.append("crafting detail should show available required tool")
+	if not _recipe_line(game_root, "recipe_knife_basic").contains("需工作台 workbench"):
+		errors.append("tool-gated recipe should advance to station reason when tool exists")
 	if not _press_recipe_line(game_root, "recipe_generator"):
 		errors.append("should select generator recipe for station locator smoke")
 	await process_frame
@@ -203,6 +234,14 @@ func _recipe_lines(game_root: Node) -> Array[String]:
 
 func _recipe_text(game_root: Node) -> String:
 	return "\n".join(_recipe_lines(game_root))
+
+
+func _recipe_line(game_root: Node, recipe_id: String) -> String:
+	var row: Node = game_root.crafting_panel.find_child("Recipe_%s" % recipe_id, true, false)
+	if row == null:
+		return ""
+	var line: Node = row.get_node("Line")
+	return str((line as Button).text) if line is Button else ""
 
 
 func _craft_button(game_root: Node, recipe_id: String) -> Button:
