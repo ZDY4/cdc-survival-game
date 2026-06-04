@@ -262,6 +262,10 @@ func close_blocking_modal() -> Dictionary:
 		var result: Dictionary = trade_panel.call("close_blocking_modal")
 		if bool(result.get("success", false)):
 			return result
+	if skills_panel != null and skills_panel.has_method("close_blocking_modal"):
+		var skills_result: Dictionary = skills_panel.call("close_blocking_modal")
+		if bool(skills_result.get("success", false)):
+			return skills_result
 	return {"success": false, "reason": "modal_inactive"}
 
 
@@ -405,6 +409,10 @@ func _blocking_modal_name() -> String:
 		var trade_modal := str(trade_panel.call("blocking_modal_name"))
 		if not trade_modal.is_empty():
 			return trade_modal
+	if skills_panel != null and skills_panel.has_method("blocking_modal_name"):
+		var skills_modal := str(skills_panel.call("blocking_modal_name"))
+		if not skills_modal.is_empty():
+			return skills_modal
 	return ""
 
 

@@ -225,7 +225,7 @@
 
 - 已有 Skills 面板简版；待迁移技能树图形布局、pan、节点连线、选中技能详情、前置链路高亮。
 - 已有 Skills 面板筛选条（全部 / 已学 / 可学 / 锁定 / 主动）、技能树切换和选中技能详情第一版，并纳入 `SkillsUI` smoke；详情会展示描述、技能树、类型、前置、属性要求、学习状态和主动/切换技能的 AP / 冷却 / 绑定 / 使用状态。待补已学/可学/锁定/属性不足/点数不足状态视觉 polish。
-- 待补技能学习确认、失败 reason、学习后热栏建议。
+- 技能学习确认第一版已迁移：Skills 面板点击学习会打开确认弹窗，确认前不消耗技能点，弹窗接入 gameplay blocker 与 Esc 优先关闭，确认后走同一 `learn_skill` 核心命令并纳入 `SkillsUI` smoke；待补失败 reason 细分、学习后热栏建议。
 - 技能效果第一版已迁移：`learn_skill` 会把被动技能 `gameplay_effect.modifiers` 转成 actor `combat.active_effects` 的常驻 passive effect，`use_skill` 会把 `activation.effect` 转成限时或 toggle effect，并发出 `skill_passive_effect_refreshed`、`skill_effect_applied`、`skill_effect_removed`、`skill_effect_expired`；`combat` 被动和 `adrenaline_rush` 主动的 `damage_bonus` 已参与战斗伤害，角色面板已展示 passive / buff 状态效果，并纳入 `Progression` / `SkillsUI` / `Combat` / `UIToggle` / `Save` smoke。待补技能效果堆叠策略、非战斗 modifier 的完整消费点、负面状态、状态 UI polish 和更完整 toggle polish。
 
 ### 9.3 Hotbar
@@ -377,7 +377,7 @@
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、右键检查/使用/装备/丢弃/全部丢弃/加入热栏菜单、物品热栏触发、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；待补完整上下文菜单项、拆分、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
 - `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、双向拖拽与基础失败提示已有 smoke；待补背包限制/权限等高级错误和跨面板拖拽 polish。
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售和拖拽已有 smoke；待补跨栏 sell/buy zone 视觉 polish。
-- `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot 和 `skill_used` effect payload 已有 smoke；待补多组 hotbar、技能树 pan、目标预览、resource cost 和更完整状态 UI。
+- `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot 和 `skill_used` effect payload 已有 smoke；待补多组 hotbar、技能树 pan、目标预览、resource cost 和更完整状态 UI。
 - `JournalUI`：任务详情、目标需求、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行和已完成任务历史第一版已有 smoke；待补对话交付条件、失败历史、地图追踪和完成反馈。
 - `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、批量执行和完成反馈第一版已有 smoke；待补工具耐久/消耗、更多地图 station 标注、制作队列和取消。
 - `Save`：passive / active skill effects 已有 roundtrip；继续补新增 runtime 字段和旧存档迁移。

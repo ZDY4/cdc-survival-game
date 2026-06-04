@@ -8,9 +8,11 @@ var _tree_filter_box: HBoxContainer
 var _tree_box: VBoxContainer
 var _detail_title_label: Label
 var _detail_body_label: Label
+var _learn_confirm_dialog: ConfirmationDialog
 var _filter_mode: String = "all"
 var _tree_filter_mode: String = "all"
 var _selected_skill_id := ""
+var _pending_learn_skill: Dictionary = {}
 var _last_snapshot: Dictionary = {}
 
 
@@ -89,6 +91,14 @@ func _build_layout() -> void:
 	_tree_box.add_theme_constant_override("separation", 4)
 	_detail_title_label = _label("DetailTitleLine")
 	_detail_body_label = _label("DetailBodyLine")
+	_learn_confirm_dialog = ConfirmationDialog.new()
+	_learn_confirm_dialog.name = "LearnSkillConfirmDialog"
+	_learn_confirm_dialog.title = "确认学习技能"
+	_learn_confirm_dialog.dialog_text = "确定学习选中的技能吗？"
+	_learn_confirm_dialog.confirmed.connect(_confirm_pending_learn)
+	_learn_confirm_dialog.get_ok_button().text = "学习"
+	_learn_confirm_dialog.get_cancel_button().text = "取消"
+	add_child(_learn_confirm_dialog)
 	box.add_child(_summary_label)
 	box.add_child(_hotbar_label)
 	box.add_child(_filter_box)
@@ -171,9 +181,7 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	, CONNECT_DEFERRED)
 	var learn_button := _button("LearnButton", "+", "学习 %s" % skill.get("name", skill_id), not bool(skill.get("can_learn", false)))
 	learn_button.pressed.connect(func() -> void:
-		var root := get_parent()
-		if root != null and root.has_method("learn_player_skill"):
-			root.learn_player_skill(skill_id)
+		_open_learn_confirm(skill.duplicate(true))
 	, CONNECT_DEFERRED)
 	var bind_button := _button("BindButton", "B", "绑定 %s 到第一个空快捷栏" % skill.get("name", skill_id), not bool(skill.get("can_bind", false)))
 	bind_button.pressed.connect(func() -> void:
@@ -228,6 +236,53 @@ func _empty_skill_drop_check(_position: Vector2, _data: Variant, _from_control: 
 
 func _empty_skill_drop(_position: Vector2, _data: Variant, _from_control: Control) -> void:
 	pass
+
+
+func has_blocking_modal() -> bool:
+	return _learn_confirm_dialog != null and _learn_confirm_dialog.visible
+
+
+func blocking_modal_name() -> String:
+	if has_blocking_modal():
+		return "skill_learn_confirm"
+	return ""
+
+
+func close_blocking_modal() -> Dictionary:
+	if not has_blocking_modal():
+		return {"success": false, "reason": "modal_inactive"}
+	_learn_confirm_dialog.hide()
+	_pending_learn_skill = {}
+	return {
+		"success": true,
+		"closed": "modal:skill_learn_confirm",
+	}
+
+
+func _open_learn_confirm(skill: Dictionary) -> void:
+	if _learn_confirm_dialog == null or skill.is_empty() or not bool(skill.get("can_learn", false)):
+		return
+	_pending_learn_skill = skill.duplicate(true)
+	var skill_id := str(skill.get("skill_id", ""))
+	var skill_name := str(skill.get("name", skill_id))
+	var next_level := int(skill.get("level", 0)) + 1
+	_learn_confirm_dialog.dialog_text = "学习 %s 到 %d 级会消耗 1 个技能点。确定学习吗？" % [
+		skill_name,
+		next_level,
+	]
+	_learn_confirm_dialog.popup_centered()
+
+
+func _confirm_pending_learn() -> void:
+	var skill_id := str(_pending_learn_skill.get("skill_id", ""))
+	_pending_learn_skill = {}
+	if _learn_confirm_dialog != null:
+		_learn_confirm_dialog.hide()
+	if skill_id.is_empty():
+		return
+	var root := get_parent()
+	if root != null and root.has_method("learn_player_skill"):
+		root.learn_player_skill(skill_id)
 
 
 func _apply_detail(skill: Dictionary) -> void:

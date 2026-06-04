@@ -98,6 +98,25 @@ func _run_checks(game_root: Node) -> Array[String]:
 
 	_learn_button(game_root, "survival").pressed.emit()
 	await process_frame
+	if not _learn_confirm_dialog_visible(game_root):
+		errors.append("survival learn button should open skill learn confirmation dialog")
+	if not _summary_line(game_root).contains("技能点 1"):
+		errors.append("opening skill learn confirmation should not consume skill point")
+	if not bool(game_root.gameplay_input_blocked_by_ui()):
+		errors.append("skill learn confirmation should block gameplay input")
+	if str(game_root.gameplay_input_blocker_name()) != "modal:skill_learn_confirm":
+		errors.append("skill learn confirmation blocker should be modal:skill_learn_confirm")
+	var esc_learn_result: Dictionary = game_root.close_active_ui("keyboard_escape")
+	if str(esc_learn_result.get("closed", "")) != "modal:skill_learn_confirm":
+		errors.append("Esc should close skill learn confirmation before skills stage panel")
+	if _learn_confirm_dialog_visible(game_root):
+		errors.append("Esc should hide skill learn confirmation")
+	if not _summary_line(game_root).contains("技能点 1"):
+		errors.append("Esc cancelling skill learn confirmation should keep skill point")
+	_learn_button(game_root, "survival").pressed.emit()
+	await process_frame
+	_confirm_learn_dialog(game_root)
+	await process_frame
 	if not _summary_line(game_root).contains("技能点 0"):
 		errors.append("skills summary did not refresh consumed skill point")
 	if not _skill_text(game_root).contains("生存本能 1/5"):
@@ -321,6 +340,20 @@ func _learn_button(game_root: Node, skill_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node("LearnButton") as Button
+
+
+func _learn_confirm_dialog_visible(game_root: Node) -> bool:
+	var dialog: Node = game_root.skills_panel.get_node_or_null("LearnSkillConfirmDialog")
+	if dialog is ConfirmationDialog:
+		return bool((dialog as ConfirmationDialog).visible)
+	return false
+
+
+func _confirm_learn_dialog(game_root: Node) -> void:
+	var dialog: Node = game_root.skills_panel.get_node_or_null("LearnSkillConfirmDialog")
+	if dialog is ConfirmationDialog:
+		(dialog as ConfirmationDialog).confirmed.emit()
+		(dialog as ConfirmationDialog).hide()
 
 
 func _bind_button(game_root: Node, skill_id: String) -> Button:
