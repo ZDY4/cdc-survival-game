@@ -9,7 +9,11 @@ var _close_button: Button
 var _summary_label: Label
 var _feedback_label: Label
 var _detail_label: Label
+var _quantity_label: Label
 var _quantity_spin: SpinBox
+var _quantity_minus_button: Button
+var _quantity_plus_button: Button
+var _quantity_all_button: Button
 var _transfer_button: Button
 var _items_box: VBoxContainer
 var _player_items_box: VBoxContainer
@@ -103,6 +107,8 @@ func _build_layout() -> void:
 	var transfer_controls := HBoxContainer.new()
 	transfer_controls.name = "TransferControls"
 	transfer_controls.add_theme_constant_override("separation", 8)
+	_quantity_label = _label("QuantityLabel")
+	_quantity_label.text = "数量：-"
 	_quantity_spin = SpinBox.new()
 	_quantity_spin.name = "QuantitySpin"
 	_quantity_spin.min_value = 1
@@ -110,6 +116,23 @@ func _build_layout() -> void:
 	_quantity_spin.step = 1
 	_quantity_spin.value = 1
 	_quantity_spin.custom_minimum_size = Vector2(84, 0)
+	_quantity_spin.tooltip_text = "选择要转移的数量"
+	_quantity_spin.value_changed.connect(func(_value: float) -> void:
+		_sync_quantity_controls()
+	)
+	_quantity_minus_button = _quantity_button("QuantityMinusButton", "-", "减少 1")
+	_quantity_minus_button.pressed.connect(func() -> void:
+		_adjust_transfer_quantity(-1)
+	)
+	_quantity_plus_button = _quantity_button("QuantityPlusButton", "+", "增加 1")
+	_quantity_plus_button.pressed.connect(func() -> void:
+		_adjust_transfer_quantity(1)
+	)
+	_quantity_all_button = _quantity_button("QuantityAllButton", "全部", "选择当前堆叠的全部数量")
+	_quantity_all_button.custom_minimum_size = Vector2(48, 0)
+	_quantity_all_button.pressed.connect(func() -> void:
+		_set_transfer_quantity(_selected_available_count())
+	)
 	_transfer_button = Button.new()
 	_transfer_button.name = "TransferButton"
 	_transfer_button.text = "转移"
@@ -121,6 +144,10 @@ func _build_layout() -> void:
 		transfer_requested.emit(_selected_source, _selected_item_id, int(_quantity_spin.value))
 	)
 	transfer_controls.add_child(_quantity_spin)
+	transfer_controls.add_child(_quantity_minus_button)
+	transfer_controls.add_child(_quantity_plus_button)
+	transfer_controls.add_child(_quantity_all_button)
+	transfer_controls.add_child(_quantity_label)
 	transfer_controls.add_child(_transfer_button)
 	var columns := HBoxContainer.new()
 	columns.name = "ItemColumns"
@@ -315,12 +342,14 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 func _update_transfer_controls(item: Dictionary, source: String) -> void:
 	if _quantity_spin == null or _transfer_button == null:
 		return
-	var available := maxi(1, int(item.get("count", 1)))
+	var available := maxi(0, int(item.get("count", 0)))
+	var has_selection := not item.is_empty() and not str(item.get("item_id", "")).is_empty() and not source.is_empty()
 	_quantity_spin.min_value = 1
-	_quantity_spin.max_value = available
-	_quantity_spin.value = clampi(int(_quantity_spin.value), 1, available)
+	_quantity_spin.max_value = maxi(1, available)
+	_quantity_spin.value = clampi(int(_quantity_spin.value), 1, maxi(1, available))
+	_quantity_spin.editable = has_selection and available > 1
 	var item_id := str(item.get("item_id", ""))
-	_transfer_button.disabled = item.is_empty() or item_id.is_empty() or source.is_empty()
+	_transfer_button.disabled = not has_selection or available <= 0
 	match source:
 		"container":
 			_transfer_button.text = "拿取"
@@ -328,6 +357,62 @@ func _update_transfer_controls(item: Dictionary, source: String) -> void:
 			_transfer_button.text = "存放"
 		_:
 			_transfer_button.text = "转移"
+	_sync_quantity_controls()
+
+
+func _sync_quantity_controls() -> void:
+	if _quantity_spin == null or _transfer_button == null:
+		return
+	var available := _selected_available_count()
+	var has_selection := not _selected_item_id.is_empty() and not _selected_source.is_empty() and available > 0
+	var count := clampi(int(_quantity_spin.value), 1, maxi(1, available))
+	if int(_quantity_spin.value) != count:
+		_quantity_spin.value = count
+	if _quantity_label != null:
+		_quantity_label.text = "数量：%d/%d" % [count, available] if has_selection else "数量：-"
+		_quantity_label.tooltip_text = "当前选择数量 / 可用数量" if has_selection else "先选择容器或背包中的物品"
+	if _quantity_minus_button != null:
+		_quantity_minus_button.disabled = not has_selection or count <= 1
+	if _quantity_plus_button != null:
+		_quantity_plus_button.disabled = not has_selection or count >= available
+	if _quantity_all_button != null:
+		_quantity_all_button.disabled = not has_selection or count >= available
+	if _quantity_spin != null:
+		_quantity_spin.tooltip_text = "转移数量：%d / %d" % [count, available] if has_selection else "先选择容器或背包中的物品"
+	var action := _transfer_button.text
+	_transfer_button.tooltip_text = "%s %s x%d" % [action, _selected_item_id, count] if has_selection else "先选择要转移的物品"
+
+
+func _adjust_transfer_quantity(delta: int) -> void:
+	_set_transfer_quantity(int(_quantity_spin.value if _quantity_spin != null else 1) + delta)
+
+
+func _set_transfer_quantity(count: int) -> void:
+	if _quantity_spin == null:
+		return
+	_quantity_spin.value = clampi(count, 1, maxi(1, _selected_available_count()))
+	_sync_quantity_controls()
+
+
+func _selected_available_count() -> int:
+	if _selected_item_id.is_empty() or _selected_source.is_empty():
+		return 0
+	for item in _items_for_selected_source():
+		var item_data: Dictionary = _dictionary_or_empty(item)
+		if str(item_data.get("item_id", "")) == _selected_item_id:
+			return maxi(0, int(item_data.get("count", 0)))
+	return 0
+
+
+func _items_for_selected_source() -> Array:
+	var box: VBoxContainer = _items_box if _selected_source == "container" else _player_items_box
+	if box == null:
+		return []
+	var items: Array = []
+	for child in box.get_children():
+		if child.has_meta("container_item"):
+			items.append(_dictionary_or_empty(child.get_meta("container_item")))
+	return items
 
 
 func _default_detail_item(items: Array, player_items: Array) -> Dictionary:
@@ -354,6 +439,17 @@ func _label(node_name: String) -> Label:
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _quantity_button(node_name: String, text: String, tooltip: String) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	button.tooltip_text = tooltip
+	button.custom_minimum_size = Vector2(28, 0)
+	button.focus_mode = Control.FOCUS_NONE
+	button.disabled = true
+	return button
 
 
 func _clear_items() -> void:

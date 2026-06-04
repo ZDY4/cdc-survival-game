@@ -61,6 +61,26 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("container detail line should switch to selected player item details")
 	if _container_transfer_button_text(game_root) != "存放":
 		errors.append("selecting player item should set transfer action to store")
+	if not _press_container_item_with_text(game_root, "player", "手枪弹药"):
+		errors.append("should select stacked ammo in player column for quantity controls")
+	else:
+		if not _container_quantity_label(game_root).contains("1/10"):
+			errors.append("quantity label should show selected stacked item range")
+		_press_container_quantity_all(game_root)
+		if _container_quantity_spin_value(game_root) != 10 or not _container_quantity_label(game_root).contains("10/10"):
+			errors.append("quantity all button should select full stacked count")
+		if not _container_quantity_button_disabled(game_root, "QuantityPlusButton"):
+			errors.append("quantity plus should be disabled at max count")
+		if not _container_quantity_button_disabled(game_root, "QuantityAllButton"):
+			errors.append("quantity all should be disabled at max count")
+		if _container_quantity_button_disabled(game_root, "QuantityMinusButton"):
+			errors.append("quantity minus should be enabled above one")
+		_press_container_quantity_minus(game_root)
+		if _container_quantity_spin_value(game_root) != 9 or not _container_quantity_label(game_root).contains("9/10"):
+			errors.append("quantity minus should decrement selected count")
+		_set_container_transfer_quantity(game_root, 1)
+		if not _container_transfer_tooltip(game_root).contains("x1"):
+			errors.append("transfer tooltip should include current selected quantity")
 
 	if not _drop_container_item_with_text(game_root, "container", "抗生素", "player"):
 		errors.append("should drag antibiotics from container to player column")
@@ -414,6 +434,41 @@ func _set_container_transfer_quantity(game_root: Node, count: int) -> void:
 		(spin as SpinBox).value = count
 
 
+func _container_quantity_spin_value(game_root: Node) -> int:
+	var spin: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/QuantitySpin")
+	if spin is SpinBox:
+		return int((spin as SpinBox).value)
+	return 0
+
+
+func _container_quantity_label(game_root: Node) -> String:
+	var label: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/QuantityLabel")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _press_container_quantity_minus(game_root: Node) -> void:
+	_press_container_quantity_button(game_root, "QuantityMinusButton")
+
+
+func _press_container_quantity_all(game_root: Node) -> void:
+	_press_container_quantity_button(game_root, "QuantityAllButton")
+
+
+func _press_container_quantity_button(game_root: Node, node_name: String) -> void:
+	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/%s" % node_name)
+	if button is Button:
+		(button as Button).pressed.emit()
+
+
+func _container_quantity_button_disabled(game_root: Node, node_name: String) -> bool:
+	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/%s" % node_name)
+	if button is Button:
+		return bool((button as Button).disabled)
+	return true
+
+
 func _press_container_transfer(game_root: Node) -> void:
 	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/TransferButton")
 	if button is Button:
@@ -424,6 +479,13 @@ func _container_transfer_button_text(game_root: Node) -> String:
 	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/TransferButton")
 	if button is Button:
 		return str((button as Button).text)
+	return ""
+
+
+func _container_transfer_tooltip(game_root: Node) -> String:
+	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/TransferButton")
+	if button is Button:
+		return str((button as Button).tooltip_text)
 	return ""
 
 
