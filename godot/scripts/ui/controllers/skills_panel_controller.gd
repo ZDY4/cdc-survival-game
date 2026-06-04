@@ -3,6 +3,7 @@ extends Control
 var _panel: PanelContainer
 var _summary_label: Label
 var _hotbar_label: Label
+var _feedback_label: Label
 var _filter_box: HBoxContainer
 var _tree_filter_box: HBoxContainer
 var _tree_box: VBoxContainer
@@ -13,6 +14,7 @@ var _filter_mode: String = "all"
 var _tree_filter_mode: String = "all"
 var _selected_skill_id := ""
 var _pending_learn_skill: Dictionary = {}
+var _learn_feedback_text := ""
 var _last_snapshot: Dictionary = {}
 
 
@@ -33,6 +35,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		int(snapshot.get("available_skill_points", 0)),
 	]
 	_hotbar_label.text = _hotbar_text(snapshot.get("hotbar", {}))
+	_feedback_label.visible = not _learn_feedback_text.is_empty()
+	_feedback_label.text = _learn_feedback_text
 	_rebuild_tree_filter_buttons(snapshot)
 	_clear_trees()
 	var visible_skills: Array[Dictionary] = []
@@ -80,6 +84,7 @@ func _build_layout() -> void:
 
 	_summary_label = _label("SummaryLine")
 	_hotbar_label = _label("HotbarLine")
+	_feedback_label = _label("FeedbackLine")
 	_filter_box = HBoxContainer.new()
 	_filter_box.name = "FilterBar"
 	_filter_box.add_theme_constant_override("separation", 4)
@@ -101,6 +106,7 @@ func _build_layout() -> void:
 	add_child(_learn_confirm_dialog)
 	box.add_child(_summary_label)
 	box.add_child(_hotbar_label)
+	box.add_child(_feedback_label)
 	box.add_child(_filter_box)
 	_add_filter_button("FilterAllButton", "全部", "all")
 	_add_filter_button("FilterLearnedButton", "已学", "learned")
@@ -177,6 +183,7 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	)
 	line.pressed.connect(func() -> void:
 		_selected_skill_id = skill_id
+		_learn_feedback_text = ""
 		apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
 	var learn_button := _button("LearnButton", "+", "学习 %s" % skill.get("name", skill_id), not bool(skill.get("can_learn", false)))
@@ -275,6 +282,8 @@ func _open_learn_confirm(skill: Dictionary) -> void:
 
 func _confirm_pending_learn() -> void:
 	var skill_id := str(_pending_learn_skill.get("skill_id", ""))
+	var skill_name := str(_pending_learn_skill.get("name", skill_id))
+	var activation_mode := str(_pending_learn_skill.get("activation_mode", "passive"))
 	_pending_learn_skill = {}
 	if _learn_confirm_dialog != null:
 		_learn_confirm_dialog.hide()
@@ -282,7 +291,18 @@ func _confirm_pending_learn() -> void:
 		return
 	var root := get_parent()
 	if root != null and root.has_method("learn_player_skill"):
-		root.learn_player_skill(skill_id)
+		var result: Dictionary = root.learn_player_skill(skill_id)
+		if bool(result.get("success", false)):
+			_selected_skill_id = skill_id
+			_learn_feedback_text = _learn_feedback(skill_name, activation_mode)
+			if not _last_snapshot.is_empty():
+				apply_snapshot(_last_snapshot)
+
+
+func _learn_feedback(skill_name: String, activation_mode: String) -> String:
+	if activation_mode == "passive":
+		return "已学习 %s。" % skill_name
+	return "已学习 %s，可绑定到快捷栏。" % skill_name
 
 
 func _apply_detail(skill: Dictionary) -> void:

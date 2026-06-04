@@ -123,6 +123,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills panel did not show learned survival level")
 	if not _event_seen(game_root, "skill_learned"):
 		errors.append("learning from skills panel should emit skill_learned")
+	if not _feedback_line(game_root).contains("已学习 生存本能"):
+		errors.append("learning passive skill should show learned feedback")
 
 	game_root.simulation.grant_skill_points(1, 1, "skills_ui_smoke")
 	game_root.refresh_skills_panel()
@@ -139,9 +141,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("combat passive skill should expose damage_bonus 0.04")
 	if not _event_seen(game_root, "skill_passive_effect_refreshed"):
 		errors.append("learning passive combat skill should emit skill_passive_effect_refreshed")
-	var active_result: Dictionary = game_root.learn_player_skill("adrenaline_rush")
-	if not bool(active_result.get("success", false)):
-		errors.append("adrenaline_rush learn failed: %s" % active_result.get("reason", "unknown"))
+	game_root.refresh_skills_panel()
+	if _learn_button(game_root, "adrenaline_rush") == null or _learn_button(game_root, "adrenaline_rush").disabled:
+		errors.append("adrenaline_rush learn button should be enabled after combat prerequisite")
+	else:
+		_learn_button(game_root, "adrenaline_rush").pressed.emit()
+		await process_frame
+		_confirm_learn_dialog(game_root)
+		await process_frame
+	if not _skill_text(game_root).contains("肾上腺激发 1/3"):
+		errors.append("adrenaline_rush should be learned through skills UI confirmation")
+	if not _feedback_line(game_root).contains("已学习 肾上腺激发") or not _feedback_line(game_root).contains("可绑定到快捷栏"):
+		errors.append("learning active skill should suggest hotbar binding")
 	if _bind_button(game_root, "adrenaline_rush") == null or _bind_button(game_root, "adrenaline_rush").disabled:
 		errors.append("learned active skill should allow hotbar binding")
 	if not _drag_skill_to_hud_hotbar(game_root, "adrenaline_rush", "slot_3"):
@@ -240,6 +251,13 @@ func _summary_line(game_root: Node) -> String:
 
 func _hotbar_line(game_root: Node) -> String:
 	return game_root.skills_panel.get_node("SkillsPanel/SkillsLines/HotbarLine").text
+
+
+func _feedback_line(game_root: Node) -> String:
+	var label: Node = game_root.skills_panel.get_node_or_null("SkillsPanel/SkillsLines/FeedbackLine")
+	if label is Label and (label as Label).visible:
+		return str((label as Label).text)
+	return ""
 
 
 func _hud_hotbar_slot_text(game_root: Node, slot_id: String) -> String:

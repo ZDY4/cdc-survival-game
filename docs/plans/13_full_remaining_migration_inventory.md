@@ -225,7 +225,7 @@
 
 - 已有 Skills 面板简版；待迁移技能树图形布局、pan、节点连线、选中技能详情、前置链路高亮。
 - 已有 Skills 面板筛选条（全部 / 已学 / 可学 / 锁定 / 主动）、技能树切换和选中技能详情第一版，并纳入 `SkillsUI` smoke；详情会展示描述、技能树、类型、前置、属性要求、学习状态和主动/切换技能的 AP / 冷却 / 绑定 / 使用状态。待补已学/可学/锁定/属性不足/点数不足状态视觉 polish。
-- 技能学习确认第一版已迁移：Skills 面板点击学习会打开确认弹窗，确认前不消耗技能点，弹窗接入 gameplay blocker 与 Esc 优先关闭，确认后走同一 `learn_skill` 核心命令并纳入 `SkillsUI` smoke；待补失败 reason 细分、学习后热栏建议。
+- 技能学习确认和学习后反馈第一版已迁移：Skills 面板点击学习会打开确认弹窗，确认前不消耗技能点，弹窗接入 gameplay blocker 与 Esc 优先关闭，确认后走同一 `learn_skill` 核心命令；被动技能显示已学习反馈，主动/切换技能学习后提示可绑定到快捷栏，纳入 `SkillsUI` smoke；待补失败 reason 细分。
 - 技能效果第一版已迁移：`learn_skill` 会把被动技能 `gameplay_effect.modifiers` 转成 actor `combat.active_effects` 的常驻 passive effect，`use_skill` 会把 `activation.effect` 转成限时或 toggle effect，并发出 `skill_passive_effect_refreshed`、`skill_effect_applied`、`skill_effect_removed`、`skill_effect_expired`；`combat` 被动和 `adrenaline_rush` 主动的 `damage_bonus` 已参与战斗伤害，角色面板已展示 passive / buff 状态效果，并纳入 `Progression` / `SkillsUI` / `Combat` / `UIToggle` / `Save` smoke。待补技能效果堆叠策略、非战斗 modifier 的完整消费点、负面状态、状态 UI polish 和更完整 toggle polish。
 
 ### 9.3 Hotbar
