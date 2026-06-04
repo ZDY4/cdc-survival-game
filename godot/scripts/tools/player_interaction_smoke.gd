@@ -732,6 +732,7 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 	elif not bool(move_preview.get("reachable", false)):
 		errors.append("ground hover preview should be reachable: %s" % move_preview.get("reason", "unknown"))
 	_expect_ground_hover_cursor_preview(errors, game_root)
+	_expect_move_path_preview_markers(errors, game_root, move_preview)
 	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
 	if str(prompt.get("primary_option_id", "")) != "move":
 		errors.append("ground hover prompt should expose move primary option")
@@ -754,6 +755,33 @@ func _expect_ground_hover_cursor_preview(errors: Array[String], game_root: Node)
 		errors.append("ground hover cursor should expose material")
 	elif material.albedo_color.g <= material.albedo_color.r:
 		errors.append("reachable ground hover cursor should use green-tinted preview color")
+
+
+func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, move_preview: Dictionary) -> void:
+	var container: Node3D = game_root.find_child("MovePathPreviewMarkers", true, false) as Node3D
+	if container == null:
+		errors.append("ground hover move preview should expose MovePathPreviewMarkers")
+		return
+	var path: Array = _array_or_empty(move_preview.get("path", []))
+	if path.is_empty():
+		errors.append("ground hover move preview should expose a path")
+		return
+	if int(container.get_meta("marker_count", 0)) != path.size():
+		errors.append("move path marker count should match preview path length")
+	if int(container.get_meta("path_length", 0)) != path.size():
+		errors.append("move path container should expose path length")
+	if not bool(container.get_meta("reachable", false)):
+		errors.append("move path container should expose reachable state")
+	var marker: Node = container.find_child("MovePathPreviewMarker", true, false)
+	if marker == null:
+		errors.append("move path preview should create marker nodes")
+		return
+	if int(marker.get_meta("path_index", -1)) != 0:
+		errors.append("first move path marker should expose path index")
+	if not bool(marker.get_meta("reachable", false)):
+		errors.append("move path marker should expose reachable state")
+	if _dictionary_or_empty(marker.get_meta("grid", {})).is_empty():
+		errors.append("move path marker should expose grid metadata")
 
 
 func _near_open_grid_from(before: Dictionary, topology: Dictionary) -> Dictionary:

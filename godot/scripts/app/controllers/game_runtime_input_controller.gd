@@ -39,6 +39,7 @@ var attack_target_marker: MeshInstance3D
 var attack_target_outline: MeshInstance3D
 var attack_range_markers: Node3D
 var skill_target_preview_markers: Node3D
+var move_path_preview_markers: Node3D
 var selected_node: Node
 var camera_target: Vector3 = Vector3.ZERO
 var is_middle_mouse_dragging := false
@@ -83,6 +84,9 @@ func _init(p_game_root: Node) -> void:
 	skill_target_preview_markers = Node3D.new()
 	skill_target_preview_markers.name = "SkillTargetPreviewMarkers"
 	game_root.add_child(skill_target_preview_markers)
+	move_path_preview_markers = Node3D.new()
+	move_path_preview_markers.name = "MovePathPreviewMarkers"
+	game_root.add_child(move_path_preview_markers)
 
 
 func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void:
@@ -106,6 +110,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	attack_target_outline.visible = false
 	_clear_attack_range_markers()
 	_clear_skill_target_preview_markers()
+	_clear_move_path_preview_markers()
 	selected_node = null
 
 
@@ -448,6 +453,7 @@ func clear_selection_state() -> void:
 	has_camera_drag_anchor = false
 	_clear_selection_only()
 	_clear_skill_target_preview_markers()
+	_clear_move_path_preview_markers()
 
 
 func update_skill_target_preview_markers(preview: Dictionary) -> void:
@@ -865,6 +871,7 @@ func _move_preview_for_grid(grid: Dictionary) -> Dictionary:
 		"reachable": bool(preview.get("reachable", preview.get("success", false))),
 		"reason": str(preview.get("reason", "")),
 		"steps": int(preview.get("steps", 0)),
+		"path": _array_or_empty(preview.get("path", [])).duplicate(true),
 		"target_position": _dictionary_or_empty(preview.get("target_position", grid)).duplicate(true),
 		"blocker": _dictionary_or_empty(preview.get("blocker", {})).duplicate(true),
 		"visited_cell_count": int(preview.get("visited_cell_count", 0)),
@@ -910,10 +917,12 @@ func _apply_hover_cursor_state(move_preview: Dictionary, attack_preview: Diction
 		hover_cursor.set_meta("move_reachable", bool(move_preview.get("reachable", false)))
 		hover_cursor.set_meta("move_steps", int(move_preview.get("steps", 0)))
 		hover_cursor.set_meta("move_reason", str(move_preview.get("reason", "")))
+		_update_move_path_preview_markers(move_preview, color)
 	else:
 		hover_cursor.set_meta("move_reachable", false)
 		hover_cursor.set_meta("move_steps", 0)
 		hover_cursor.set_meta("move_reason", "")
+		_clear_move_path_preview_markers()
 	if not attack_preview.is_empty():
 		color = HOVER_COLOR_ATTACK_REACHABLE if bool(attack_preview.get("can_attack", false)) else HOVER_COLOR_ATTACK_BLOCKED
 		hover_cursor.set_meta("attack_can_attack", bool(attack_preview.get("can_attack", false)))
@@ -1133,6 +1142,49 @@ func _clear_attack_range_markers() -> void:
 	attack_range_markers.set_meta("attack_target_actor_id", 0)
 
 
+func _update_move_path_preview_markers(move_preview: Dictionary, color: Color) -> void:
+	if move_path_preview_markers == null:
+		return
+	_clear_move_path_preview_markers()
+	var path: Array = _array_or_empty(move_preview.get("path", []))
+	if path.is_empty():
+		return
+	var index := 0
+	for cell in path:
+		var grid: Dictionary = _dictionary_or_empty(cell)
+		if grid.is_empty():
+			continue
+		var marker := _build_move_path_preview_marker(color, index, path.size())
+		marker.position = Vector3(
+			float(grid.get("x", 0)),
+			float(grid.get("y", _observed_level())) + 0.12,
+			float(grid.get("z", 0))
+		)
+		marker.set_meta("grid", grid.duplicate(true))
+		marker.set_meta("path_index", index)
+		marker.set_meta("reachable", bool(move_preview.get("reachable", false)))
+		marker.set_meta("reason", str(move_preview.get("reason", "")))
+		move_path_preview_markers.add_child(marker)
+		index += 1
+	move_path_preview_markers.set_meta("marker_count", index)
+	move_path_preview_markers.set_meta("path_length", path.size())
+	move_path_preview_markers.set_meta("reachable", bool(move_preview.get("reachable", false)))
+	move_path_preview_markers.set_meta("reason", str(move_preview.get("reason", "")))
+	move_path_preview_markers.set_meta("steps", int(move_preview.get("steps", 0)))
+
+
+func _clear_move_path_preview_markers() -> void:
+	if move_path_preview_markers == null:
+		return
+	for child in move_path_preview_markers.get_children():
+		child.queue_free()
+	move_path_preview_markers.set_meta("marker_count", 0)
+	move_path_preview_markers.set_meta("path_length", 0)
+	move_path_preview_markers.set_meta("reachable", false)
+	move_path_preview_markers.set_meta("reason", "")
+	move_path_preview_markers.set_meta("steps", 0)
+
+
 func _player_actor_id() -> int:
 	for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
@@ -1337,6 +1389,22 @@ func _build_attack_range_marker(color: Color) -> MeshInstance3D:
 	material.no_depth_test = true
 	var node := MeshInstance3D.new()
 	node.name = "AttackRangeMarker"
+	node.mesh = mesh
+	node.material_override = material
+	return node
+
+
+func _build_move_path_preview_marker(color: Color, index: int, path_length: int) -> MeshInstance3D:
+	var mesh := BoxMesh.new()
+	var width := 0.42 if index == 0 or index == path_length - 1 else 0.34
+	mesh.size = Vector3(width, 0.032, width)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(color.r, color.g, color.b, 0.30)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var node := MeshInstance3D.new()
+	node.name = "MovePathPreviewMarker"
 	node.mesh = mesh
 	node.material_override = material
 	return node
