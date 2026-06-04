@@ -79,13 +79,15 @@ func delete_selected_slot() -> Dictionary:
 func main_menu_snapshot() -> Dictionary:
 	var service := SaveService.new(save_root)
 	var load_result: Dictionary = service.load_snapshot(save_slot)
+	var selected_summary := _selected_slot_summary()
+	var selected_valid := bool(selected_summary.get("ok", false))
 	return {
 		"save_slot": save_slot,
 		"save_root": save_root,
 		"slots": _slot_summaries.duplicate(true),
-		"continue_available": bool(load_result.get("ok", false)),
-		"continue_reason": "" if bool(load_result.get("ok", false)) else str(load_result.get("reason", "")),
-		"selected_slot_summary": _selected_slot_summary(),
+		"continue_available": selected_valid and bool(load_result.get("ok", false)),
+		"continue_reason": "" if selected_valid and bool(load_result.get("ok", false)) else str(selected_summary.get("reason", load_result.get("reason", ""))),
+		"selected_slot_summary": selected_summary,
 		"overwrite_confirm_visible": _overwrite_dialog != null and _overwrite_dialog.visible,
 		"last_action": last_action.duplicate(true),
 	}
@@ -203,10 +205,11 @@ func _refresh_continue_state() -> void:
 	var snapshot := main_menu_snapshot()
 	var available := bool(snapshot.get("continue_available", false))
 	_continue_button.disabled = not available
-	_continue_button.tooltip_text = "加载 %s" % save_slot if available else "未找到可继续的存档"
+	var reason := str(snapshot.get("continue_reason", ""))
+	_continue_button.tooltip_text = "加载 %s" % save_slot if available else _save_failure_text(reason)
 	if _delete_button != null:
-		_delete_button.disabled = not available
-		_delete_button.tooltip_text = "删除 %s" % save_slot if available else "没有可删除的存档"
+		_delete_button.disabled = _selected_slot_summary().is_empty()
+		_delete_button.tooltip_text = "删除 %s" % save_slot if not _delete_button.disabled else "没有可删除的存档"
 
 
 func _refresh_slot_option() -> void:
@@ -223,7 +226,10 @@ func _refresh_slot_option() -> void:
 	for i in range(_slot_summaries.size()):
 		var summary := _slot_summaries[i]
 		var slot_id := str(summary.get("slot_id", ""))
-		_slot_option.add_item("%s | %s" % [slot_id, str(summary.get("active_map_id", ""))])
+		var label := "%s | %s" % [slot_id, str(summary.get("active_map_id", ""))]
+		if not bool(summary.get("ok", false)):
+			label = "%s | %s" % [slot_id, _save_failure_text(str(summary.get("reason", "unknown")))]
+		_slot_option.add_item(label)
 		_slot_option.set_item_metadata(i, slot_id)
 		if slot_id == save_slot:
 			selected_index = i
@@ -236,6 +242,9 @@ func _refresh_slot_summary() -> void:
 	var summary := _selected_slot_summary()
 	if summary.is_empty():
 		_slot_summary_label.text = "没有可继续的存档"
+		return
+	if not bool(summary.get("ok", false)):
+		_slot_summary_label.text = "存档不可加载: %s" % _save_failure_text(str(summary.get("reason", "unknown")))
 		return
 	_slot_summary_label.text = "地图 %s | 地点 %s | 回合 %d | Lv%d | %s" % [
 		str(summary.get("active_map_id", "")),
@@ -281,6 +290,24 @@ func _open_overwrite_confirm() -> Dictionary:
 		_overwrite_dialog.popup_centered()
 	_set_feedback("请确认是否覆盖当前存档")
 	return last_action.duplicate(true)
+
+
+func _save_failure_text(reason: String) -> String:
+	match reason:
+		"save_file_missing":
+			return "未找到可继续的存档"
+		"save_file_unreadable":
+			return "存档无法读取"
+		"save_json_invalid":
+			return "存档 JSON 损坏"
+		"save_schema_unsupported":
+			return "存档版本不兼容"
+		"runtime_snapshot_missing":
+			return "存档缺少运行时快照"
+		"slot_id_empty":
+			return "存档槽位无效"
+		_:
+			return "存档不可加载"
 
 
 func _set_feedback(text: String) -> void:

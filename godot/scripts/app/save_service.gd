@@ -44,8 +44,7 @@ func list_slots() -> Array[Dictionary]:
 		if not dir.current_is_dir() and file_name.get_extension().to_lower() == "json":
 			var slot_id := file_name.get_basename()
 			var summary := slot_summary(slot_id)
-			if bool(summary.get("ok", false)):
-				slots.append(summary)
+			slots.append(summary)
 		file_name = dir.get_next()
 	dir.list_dir_end()
 	slots.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -60,17 +59,19 @@ func slot_summary(slot_id: String) -> Dictionary:
 		return _failed("slot_id_empty")
 	var path: String = _slot_path(slot_key)
 	if not FileAccess.file_exists(path):
-		return _failed("save_file_missing")
+		return _failed_slot(slot_key, path, "save_file_missing")
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		return _failed("save_file_unreadable")
+		return _failed_slot(slot_key, path, "save_file_unreadable")
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY:
-		return _failed("save_json_invalid")
+		return _failed_slot(slot_key, path, "save_json_invalid")
 	var envelope: Dictionary = parsed
 	if int(envelope.get("schema_version", 0)) != SAVE_SCHEMA_VERSION:
-		return _failed("save_schema_unsupported")
+		return _failed_slot(slot_key, path, "save_schema_unsupported")
 	var snapshot: Dictionary = _dictionary_or_empty(envelope.get("runtime_snapshot", {}))
+	if snapshot.is_empty():
+		return _failed_slot(slot_key, path, "runtime_snapshot_missing")
 	var metadata: Dictionary = _dictionary_or_empty(envelope.get("metadata", {}))
 	if metadata.is_empty() and not snapshot.is_empty():
 		metadata = _metadata_from_snapshot(slot_key, snapshot)
@@ -165,6 +166,15 @@ func _player_actor(snapshot: Dictionary) -> Dictionary:
 func _failed(reason: String) -> Dictionary:
 	return {
 		"ok": false,
+		"reason": reason,
+	}
+
+
+func _failed_slot(slot_id: String, path: String, reason: String) -> Dictionary:
+	return {
+		"ok": false,
+		"slot_id": slot_id,
+		"path": path,
 		"reason": reason,
 	}
 

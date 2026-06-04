@@ -353,10 +353,10 @@
 
 ## 16. 存档、加载和运行入口
 
-- 主菜单继续游戏、存档槽列表、删除、覆盖确认和基础存档元信息第一版已迁移；待补存档详细元信息、存档槽命名和坏档恢复策略。
+- 主菜单继续游戏、存档槽列表、删除、覆盖确认、基础存档元信息和坏档提示第一版已迁移：schema 不兼容、JSON 损坏、缺 runtime snapshot 等不可加载槽会显示原因、禁用继续并允许删除；待补存档详细元信息、存档槽命名和更完整坏档恢复策略。
 - 待补保存所有新增状态：UI 相关不一定持久，但 runtime 的 active map、actors、combat、turn、pending、corpse、containers、shops、quests、skills、hotbar、vision、world flags 已有 roundtrip；actor active skill effects 已纳入 `Save` smoke roundtrip；relationships 仍待补。
 - 待补地图切换后的保存/读取一致性，特别是 active container、consumed targets、corpse containers、unlocked locations。
-- 待补运行入口错误提示：内容加载失败、地图缺失、资产缺失、Godot 版本不对、存档 schema 不兼容。
+- 部分迁移运行入口错误提示：主菜单存档槽会显示 schema 不兼容、JSON 损坏、缺 runtime snapshot 等坏档原因并允许删除；待补内容加载失败、地图缺失、资产缺失、Godot 版本不对和进入游戏后的错误 UI。
 
 ## 17. Debug、Console、Info Panels 和开发表现
 

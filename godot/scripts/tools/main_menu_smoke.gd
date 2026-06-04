@@ -9,6 +9,7 @@ const SaveService = preload("res://scripts/app/save_service.gd")
 const SAVE_ROOT := "user://main_menu_smoke_saves"
 const SAVE_SLOT := "continue_slot"
 const SECOND_SAVE_SLOT := "older_slot"
+const BROKEN_SAVE_SLOT := "broken_slot"
 
 
 func _init() -> void:
@@ -34,11 +35,14 @@ func _run() -> void:
 
 	_write_continue_save(errors, SECOND_SAVE_SLOT, 2)
 	_write_continue_save(errors, SAVE_SLOT, 1)
+	_write_broken_save()
 	var continue_menu: Control = MAIN_MENU_SCENE.instantiate()
 	get_root().add_child(continue_menu)
 	await process_frame
 	_assert_continue_enabled_with_save(errors, continue_menu)
 	_assert_slot_metadata(errors, continue_menu)
+	await _assert_broken_slot_feedback(errors, continue_menu)
+	await _select_slot(errors, continue_menu, SAVE_SLOT)
 	_assert_new_game_overwrite_confirmation(errors, continue_menu)
 	await _select_slot(errors, continue_menu, SECOND_SAVE_SLOT)
 	_assert_continue_request(errors, continue_menu)
@@ -118,6 +122,19 @@ func _write_continue_save(errors: Array[String], slot_id: String, player_x_offse
 		errors.append("failed to write %s save for main menu smoke" % slot_id)
 
 
+func _write_broken_save() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_ROOT))
+	var file := FileAccess.open(SAVE_ROOT.path_join("%s.json" % BROKEN_SAVE_SLOT), FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify({
+		"schema_version": 999,
+		"slot_id": BROKEN_SAVE_SLOT,
+		"runtime_snapshot": {},
+	}, "\t"))
+	file.close()
+
+
 func _assert_continue_enabled_with_save(errors: Array[String], menu: Control) -> void:
 	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
 	if not bool(snapshot.get("continue_available", false)):
@@ -136,10 +153,12 @@ func _assert_continue_enabled_with_save(errors: Array[String], menu: Control) ->
 func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
 	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
 	var slots: Array = _array_or_empty(snapshot.get("slots", []))
-	if slots.size() != 2:
-		errors.append("main menu should list two smoke save slots: %s" % snapshot)
+	if slots.size() != 3:
+		errors.append("main menu should list three smoke save slots including broken slot: %s" % snapshot)
 	for slot in slots:
 		var summary: Dictionary = _dictionary_or_empty(slot)
+		if not bool(summary.get("ok", false)):
+			continue
 		if str(summary.get("active_map_id", "")) != "survivor_outpost_01":
 			errors.append("slot summary should include active map: %s" % summary)
 		if int(summary.get("actor_count", 0)) <= 0 or int(summary.get("event_count", 0)) <= 0:
@@ -149,6 +168,26 @@ func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
 	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
 	if line == null or not line.text.contains("地图 survivor_outpost_01") or not line.text.contains("Lv"):
 		errors.append("slot summary line should expose map and level metadata")
+
+
+func _assert_broken_slot_feedback(errors: Array[String], menu: Control) -> void:
+	await _select_slot(errors, menu, BROKEN_SAVE_SLOT)
+	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
+	if bool(snapshot.get("continue_available", true)):
+		errors.append("broken save slot should not be continueable: %s" % snapshot)
+	if str(snapshot.get("continue_reason", "")) != "save_schema_unsupported":
+		errors.append("broken save should expose schema reason: %s" % snapshot)
+	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
+	if line == null or not line.text.contains("存档版本不兼容"):
+		errors.append("broken save summary should explain incompatible schema")
+	var continue_button: Button = menu.find_child("ContinueButton", true, false) as Button
+	if continue_button == null or not continue_button.disabled:
+		errors.append("continue button should be disabled for broken save")
+	var delete_button: Button = menu.find_child("DeleteSlotButton", true, false) as Button
+	if delete_button == null or delete_button.disabled:
+		errors.append("delete button should remain enabled for broken save cleanup")
+	_assert_delete_slot(errors, menu, BROKEN_SAVE_SLOT)
+	await menu.get_tree().process_frame
 
 
 func _assert_new_game_overwrite_confirmation(errors: Array[String], menu: Control) -> void:
@@ -226,6 +265,7 @@ func _assert_delete_slot(errors: Array[String], menu: Control, slot_id: String) 
 func _clear_smoke_save() -> void:
 	SaveService.new(SAVE_ROOT).delete_snapshot(SAVE_SLOT)
 	SaveService.new(SAVE_ROOT).delete_snapshot(SECOND_SAVE_SLOT)
+	SaveService.new(SAVE_ROOT).delete_snapshot(BROKEN_SAVE_SLOT)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
