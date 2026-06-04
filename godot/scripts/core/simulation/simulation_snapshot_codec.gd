@@ -27,6 +27,7 @@ func build(simulation: RefCounted) -> Dictionary:
 		"actors": simulation.actor_registry.snapshot(),
 		"events": event_output,
 		"consumed_interaction_targets": simulation.consumed_interaction_targets.keys(),
+		"door_states": _door_state_snapshots(simulation.door_states),
 		"container_sessions": _container_session_snapshots(simulation.container_sessions),
 		"shop_sessions": _shop_session_snapshots(simulation.shop_sessions),
 		"active_quests": _active_quest_snapshots(simulation.active_quests),
@@ -91,6 +92,25 @@ func _container_session_snapshots(container_sessions: Dictionary) -> Array[Dicti
 			"container_id": str(session.get("container_id", container_id)),
 			"display_name": str(session.get("display_name", container_id)),
 			"inventory": _array_or_empty(session.get("inventory", [])).duplicate(true),
+		})
+	return output
+
+
+func _door_state_snapshots(door_states: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var ids: Array = door_states.keys()
+	ids.sort()
+	for door_id in ids:
+		var state: Dictionary = _dictionary_or_empty(door_states[door_id])
+		output.append({
+			"door_id": str(state.get("door_id", door_id)),
+			"object_id": str(state.get("object_id", door_id)),
+			"display_name": str(state.get("display_name", door_id)),
+			"is_open": bool(state.get("is_open", false)),
+			"locked": bool(state.get("locked", false)),
+			"blocks_movement": bool(state.get("blocks_movement", not bool(state.get("is_open", false)))),
+			"blocks_sight": bool(state.get("blocks_sight", not bool(state.get("is_open", false)))),
+			"blocks_sight_when_closed": bool(state.get("blocks_sight_when_closed", true)),
 		})
 	return output
 

@@ -77,6 +77,9 @@ func _collect_objects(topology: MapTopology, objects: Array) -> void:
 				topology.sight_blocking_cells[cell_key] = object_id
 
 		var summary: Dictionary = _object_summary(object_data, cells)
+		var door_summary: Dictionary = _door_summary(summary)
+		if not door_summary.is_empty():
+			topology.door_objects.append(door_summary)
 		var station_summary: Dictionary = _crafting_station_summary(summary)
 		if not station_summary.is_empty():
 			topology.crafting_stations.append(station_summary)
@@ -117,6 +120,9 @@ func rotated_footprint_size(footprint: Dictionary, rotation: String) -> Dictiona
 func object_effectively_blocks_movement(object: Dictionary) -> bool:
 	if bool(object.get("blocks_movement", false)):
 		return true
+	var door: Dictionary = _door_props(object)
+	if not door.is_empty():
+		return not bool(door.get("is_open", door.get("open", false)))
 	if str(object.get("kind", "")) != "building":
 		return false
 	return not _building_has_layout(object)
@@ -125,9 +131,17 @@ func object_effectively_blocks_movement(object: Dictionary) -> bool:
 func object_effectively_blocks_sight(object: Dictionary) -> bool:
 	if bool(object.get("blocks_sight", false)):
 		return true
+	var door: Dictionary = _door_props(object)
+	if not door.is_empty():
+		return not bool(door.get("is_open", door.get("open", false))) and bool(door.get("blocks_sight_when_closed", true))
 	if str(object.get("kind", "")) != "building":
 		return false
 	return not _building_has_layout(object)
+
+
+func _door_props(object: Dictionary) -> Dictionary:
+	var props: Dictionary = _dictionary_or_empty(object.get("props", {}))
+	return _dictionary_or_empty(props.get("door", {}))
 
 
 func _building_has_layout(object: Dictionary) -> bool:
@@ -157,6 +171,7 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 	var props: Dictionary = _dictionary_or_empty(object_summary.get("props", {}))
 	var interaction_props: Dictionary = _dictionary_or_empty(props.get("interactive", {}))
 	var trigger_props: Dictionary = _dictionary_or_empty(props.get("trigger", {}))
+	var door_props: Dictionary = _dictionary_or_empty(props.get("door", {}))
 	var trigger_options: Array = _array_or_empty(trigger_props.get("options", []))
 	var primary_trigger_option: Dictionary = {}
 	if not trigger_options.is_empty():
@@ -169,6 +184,10 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 	if interaction_kind.is_empty():
 		interaction_kind = str(primary_trigger_option.get("kind", ""))
 	if interaction_kind.is_empty():
+		interaction_kind = str(door_props.get("interaction_kind", ""))
+	if interaction_kind.is_empty() and not door_props.is_empty():
+		interaction_kind = "door"
+	if interaction_kind.is_empty():
 		interaction_kind = fallback_kind
 
 	var display_name: String = str(interaction_props.get("display_name", ""))
@@ -176,6 +195,8 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		display_name = str(trigger_props.get("display_name", ""))
 	if display_name.is_empty():
 		display_name = str(primary_trigger_option.get("display_name", ""))
+	if display_name.is_empty():
+		display_name = str(door_props.get("display_name", ""))
 	if display_name.is_empty():
 		display_name = str(container_props.get("display_name", ""))
 	if display_name.is_empty():
@@ -196,6 +217,29 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		"target_entry_point_id": str(primary_trigger_option.get("target_entry_point_id", trigger_props.get("target_entry_point_id", ""))),
 		"entry_point_id": str(primary_trigger_option.get("entry_point_id", trigger_props.get("entry_point_id", ""))),
 		"container_inventory": _array_or_empty(container_props.get("initial_inventory", [])),
+		"door": _door_summary(object_summary),
+	}
+
+
+func _door_summary(object_summary: Dictionary) -> Dictionary:
+	var props: Dictionary = _dictionary_or_empty(object_summary.get("props", {}))
+	var door_props: Dictionary = _dictionary_or_empty(props.get("door", {}))
+	if door_props.is_empty():
+		return {}
+	var is_open: bool = bool(door_props.get("is_open", door_props.get("open", false)))
+	var locked: bool = bool(door_props.get("locked", false))
+	var blocks_sight_when_closed: bool = bool(door_props.get("blocks_sight_when_closed", true))
+	return {
+		"door_id": str(door_props.get("door_id", object_summary.get("object_id", ""))),
+		"object_id": str(object_summary.get("object_id", "")),
+		"display_name": str(door_props.get("display_name", object_summary.get("object_id", ""))),
+		"anchor": _dictionary_or_empty(object_summary.get("anchor", {})).duplicate(true),
+		"cells": _array_or_empty(object_summary.get("cells", [])).duplicate(true),
+		"is_open": is_open,
+		"locked": locked,
+		"blocks_movement": not is_open,
+		"blocks_sight": not is_open and blocks_sight_when_closed,
+		"blocks_sight_when_closed": blocks_sight_when_closed,
 	}
 
 

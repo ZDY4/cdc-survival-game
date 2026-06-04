@@ -2,7 +2,10 @@ extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
+const Simulation = preload("res://scripts/core/simulation/simulation.gd")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
+const MapBuilder = preload("res://scripts/world/map_builder.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
@@ -25,6 +28,7 @@ func _init() -> void:
 
 	var errors := _validate_world(world_result)
 	errors.append_array(_validate_legacy_actor_appearance_fill(builder, runtime_snapshot))
+	errors.append_array(_validate_door_topology_and_runtime())
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -103,6 +107,68 @@ func _validate_legacy_actor_appearance_fill(builder: RefCounted, runtime_snapsho
 	return ["legacy world snapshot missing player actor"]
 
 
+func _validate_door_topology_and_runtime() -> Array[String]:
+	var errors: Array[String] = []
+	var map_builder := MapBuilder.new()
+	var door_map := {
+		"id": "door_smoke_map",
+		"name": "Door Smoke Map",
+		"size": {"width": 4, "height": 4},
+		"default_level": 0,
+		"entry_points": [{"id": "default_entry", "grid": {"x": 0, "y": 0, "z": 0}}],
+		"objects": [{
+			"object_id": "door_smoke_closed",
+			"kind": "interactive",
+			"anchor": {"x": 1, "y": 0, "z": 1},
+			"footprint": {"width": 1, "height": 1},
+			"rotation": "north",
+			"props": {
+				"door": {
+					"display_name": "测试门",
+					"blocks_sight_when_closed": true
+				}
+			}
+		}],
+	}
+	var topology: RefCounted = map_builder.build_from_definition(door_map)
+	var map_snapshot: Dictionary = topology.to_dictionary()
+	if map_snapshot.get("door_objects", []).size() != 1:
+		errors.append("door topology should expose one door object")
+	var door_target: Dictionary = _dictionary_or_empty(_dictionary_or_empty(map_snapshot.get("interaction_targets", {})).get("door_smoke_closed", {}))
+	if str(door_target.get("kind", "")) != "door":
+		errors.append("door interaction target should use door kind")
+	if not _dictionary_or_empty(map_snapshot.get("blocking_cells", {})).has("1:0:1"):
+		errors.append("closed door should block movement by default")
+	if not _dictionary_or_empty(map_snapshot.get("sight_blocking_cells", {})).has("1:0:1"):
+		errors.append("closed door should block sight by default")
+
+	var simulation := Simulation.new()
+	simulation.register_actor({
+		"definition_id": "player",
+		"kind": "player",
+		"display_name": "玩家",
+		"grid_position": GridCoord.new(0, 0, 0),
+	})
+	simulation.configure_map_interactions(_dictionary_or_empty(map_snapshot.get("interaction_targets", {})))
+	var toggle_result: Dictionary = simulation.toggle_door(1, "door_smoke_closed")
+	if not bool(toggle_result.get("success", false)):
+		errors.append("door toggle should succeed: %s" % toggle_result.get("reason", "unknown"))
+	var snapshot: Dictionary = simulation.snapshot()
+	var door_states: Array = _array_or_empty(snapshot.get("door_states", []))
+	if door_states.is_empty() or not bool(_dictionary_or_empty(door_states[0]).get("is_open", false)):
+		errors.append("door state should snapshot open after toggle")
+	var open_map: Dictionary = map_snapshot.duplicate(true)
+	WorldSnapshotBuilder.new(null).call("_apply_door_states", open_map, door_states)
+	if _dictionary_or_empty(open_map.get("blocking_cells", {})).has("1:0:1"):
+		errors.append("open door should remove movement blocking cell")
+	if _dictionary_or_empty(open_map.get("sight_blocking_cells", {})).has("1:0:1"):
+		errors.append("open door should remove sight blocking cell")
+	var open_target: Dictionary = _dictionary_or_empty(_dictionary_or_empty(open_map.get("interaction_targets", {})).get("door_smoke_closed", {}))
+	if not bool(_dictionary_or_empty(open_target.get("door", {})).get("is_open", false)):
+		errors.append("door interaction target should reflect open runtime state")
+	return errors
+
+
 func _digest(world_result: Dictionary) -> Dictionary:
 	var map: Dictionary = world_result.get("map", {})
 	return {
@@ -116,6 +182,19 @@ func _digest(world_result: Dictionary) -> Dictionary:
 		"interactive_count": map.get("interactive_objects", []).size(),
 		"trigger_count": map.get("trigger_objects", []).size(),
 		"pickup_count": map.get("pickup_objects", []).size(),
+		"door_count": map.get("door_objects", []).size(),
 		"ai_spawn_count": map.get("ai_spawn_objects", []).size(),
 		"actor_count": world_result.get("actors", []).size(),
 	}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

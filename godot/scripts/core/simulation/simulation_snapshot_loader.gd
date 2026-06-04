@@ -20,6 +20,7 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.actor_registry.load_snapshot(snapshot_data.get("actors", []))
 	simulation.events = _load_events(snapshot_data.get("events", []))
 	simulation.consumed_interaction_targets = _load_consumed_targets(snapshot_data.get("consumed_interaction_targets", []))
+	simulation.door_states = _load_door_states(snapshot_data.get("door_states", []))
 	simulation.container_sessions = _load_container_sessions(snapshot_data.get("container_sessions", []))
 	simulation.shop_sessions = _load_shop_sessions(snapshot_data.get("shop_sessions", []))
 	simulation.active_quests = _load_active_quests(snapshot_data.get("active_quests", []))
@@ -74,6 +75,26 @@ func _load_container_sessions(entries: Variant) -> Dictionary:
 			"container_id": container_id,
 			"display_name": str(session_data.get("display_name", container_id)),
 			"inventory": _array_or_empty(session_data.get("inventory", [])).duplicate(true),
+		}
+	return output
+
+
+func _load_door_states(entries: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	for entry in _array_or_empty(entries):
+		var state: Dictionary = _dictionary_or_empty(entry)
+		var door_id: String = str(state.get("door_id", state.get("object_id", "")))
+		if door_id.is_empty():
+			continue
+		output[door_id] = {
+			"door_id": door_id,
+			"object_id": str(state.get("object_id", door_id)),
+			"display_name": str(state.get("display_name", door_id)),
+			"is_open": bool(state.get("is_open", false)),
+			"locked": bool(state.get("locked", false)),
+			"blocks_movement": bool(state.get("blocks_movement", not bool(state.get("is_open", false)))),
+			"blocks_sight": bool(state.get("blocks_sight", not bool(state.get("is_open", false)))),
+			"blocks_sight_when_closed": bool(state.get("blocks_sight_when_closed", true)),
 		}
 	return output
 

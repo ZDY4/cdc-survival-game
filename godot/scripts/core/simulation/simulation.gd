@@ -46,6 +46,7 @@ var unlocked_locations: Array[String] = []
 var events: Array[SimulationEvent] = []
 var map_interaction_targets: Dictionary = {}
 var consumed_interaction_targets: Dictionary = {}
+var door_states: Dictionary = {}
 var container_sessions: Dictionary = {}
 var shop_sessions: Dictionary = {}
 var item_library: Dictionary = {}
@@ -153,6 +154,44 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 
 func configure_map_interactions(targets: Dictionary) -> void:
 	map_interaction_targets = targets.duplicate(true)
+
+
+func toggle_door(actor_id: int, door_id: String) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "door_id": door_id}
+	var target: Dictionary = _dictionary_or_empty(map_interaction_targets.get(door_id, {}))
+	if target.is_empty():
+		return {"success": false, "reason": "unknown_door", "door_id": door_id}
+	var door: Dictionary = _dictionary_or_empty(target.get("door", {}))
+	if door.is_empty():
+		return {"success": false, "reason": "target_not_door", "door_id": door_id}
+	if bool(door.get("locked", false)):
+		return {"success": false, "reason": "door_locked", "door_id": door_id}
+
+	var current_state: Dictionary = _dictionary_or_empty(door_states.get(door_id, door))
+	var is_open := bool(current_state.get("is_open", door.get("is_open", false)))
+	var next_state: Dictionary = door.duplicate(true)
+	next_state["is_open"] = not is_open
+	next_state["locked"] = bool(current_state.get("locked", door.get("locked", false)))
+	next_state["blocks_movement"] = not bool(next_state.get("is_open", false))
+	next_state["blocks_sight"] = not bool(next_state.get("is_open", false)) and bool(next_state.get("blocks_sight_when_closed", true))
+	door_states[door_id] = next_state
+	_emit("door_toggled", {
+		"actor_id": actor_id,
+		"door_id": door_id,
+		"target_id": door_id,
+		"is_open": bool(next_state.get("is_open", false)),
+		"locked": bool(next_state.get("locked", false)),
+		"blocks_movement": bool(next_state.get("blocks_movement", false)),
+		"blocks_sight": bool(next_state.get("blocks_sight", false)),
+	})
+	return {
+		"success": true,
+		"door_id": door_id,
+		"is_open": bool(next_state.get("is_open", false)),
+		"door": next_state.duplicate(true),
+	}
 
 
 func configure_quests(quests: Dictionary) -> void:

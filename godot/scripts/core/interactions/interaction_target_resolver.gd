@@ -186,6 +186,17 @@ func _candidate_options_for_target(target_data: Dictionary) -> Array:
 				_disabled_option("talk", "talk", "对话", "target_not_actor"),
 				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
 			]
+		"door":
+			return [
+				_option_for_target(target_data),
+				{
+					"id": "inspect",
+					"kind": "inspect",
+					"display_name": "检查",
+				},
+				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
+				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
+			]
 	return [
 		_disabled_option("inspect", "inspect", "检查", "unsupported_target_kind"),
 	]
@@ -252,6 +263,21 @@ func _option_for_target(target_data: Dictionary) -> Dictionary:
 				"kind": "open_container",
 				"display_name": "打开%s" % target_name,
 				"target_id": target_data.get("target_id", ""),
+			}
+		"door":
+			var door: Dictionary = _dictionary_or_empty(target_data.get("door", {}))
+			var door_name := str(target_data.get("display_name", door.get("display_name", "门"))).strip_edges()
+			if door_name.is_empty():
+				door_name = "门"
+			var is_open := bool(door.get("is_open", false))
+			return {
+				"id": "door_toggle",
+				"kind": "door_toggle",
+				"display_name": "关闭%s" % door_name if is_open else "打开%s" % door_name,
+				"target_id": target_data.get("target_id", ""),
+				"door_id": str(door.get("door_id", target_data.get("target_id", ""))),
+				"disabled": bool(door.get("locked", false)),
+				"disabled_reason": "door_locked" if bool(door.get("locked", false)) else "",
 			}
 	return {}
 

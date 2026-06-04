@@ -24,6 +24,7 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 
 	var topology := map_builder.build_from_definition(map_definition)
 	var map_snapshot: Dictionary = topology.to_dictionary()
+	_apply_door_states(map_snapshot, runtime_snapshot.get("door_states", []))
 	_apply_consumed_interaction_targets(map_snapshot, runtime_snapshot.get("consumed_interaction_targets", []))
 	var corpses: Array[Dictionary] = _corpses_on_map(runtime_snapshot.get("corpse_containers", []), map_id)
 	_apply_corpse_interaction_targets(map_snapshot, corpses)
@@ -143,6 +144,68 @@ func _apply_consumed_interaction_targets(map_snapshot: Dictionary, consumed_valu
 		if not consumed.has(str(target_id)):
 			active_targets[target_id] = interaction_targets[target_id]
 	map_snapshot["interaction_targets"] = active_targets
+
+
+func _apply_door_states(map_snapshot: Dictionary, state_values: Array) -> void:
+	var states: Dictionary = {}
+	for value in _array_or_empty(state_values):
+		var state: Dictionary = _dictionary_or_empty(value)
+		var door_id := str(state.get("door_id", state.get("object_id", "")))
+		if not door_id.is_empty():
+			states[door_id] = state
+	if states.is_empty():
+		return
+
+	var blocking_cells: Dictionary = _dictionary_or_empty(map_snapshot.get("blocking_cells", {})).duplicate(true)
+	var sight_blocking_cells: Dictionary = _dictionary_or_empty(map_snapshot.get("sight_blocking_cells", {})).duplicate(true)
+	var interaction_targets: Dictionary = _dictionary_or_empty(map_snapshot.get("interaction_targets", {})).duplicate(true)
+	var door_objects: Array = _array_or_empty(map_snapshot.get("door_objects", [])).duplicate(true)
+	for index in range(door_objects.size()):
+		var door: Dictionary = _dictionary_or_empty(door_objects[index])
+		var door_id := str(door.get("door_id", door.get("object_id", "")))
+		if door_id.is_empty() or not states.has(door_id):
+			continue
+		var merged: Dictionary = door.duplicate(true)
+		var state: Dictionary = _dictionary_or_empty(states[door_id])
+		for key in ["is_open", "locked", "blocks_movement", "blocks_sight", "blocks_sight_when_closed"]:
+			if state.has(key):
+				merged[key] = state[key]
+		door_objects[index] = merged
+		_apply_door_blocking_cells(merged, blocking_cells, sight_blocking_cells)
+		if interaction_targets.has(door_id):
+			var target: Dictionary = _dictionary_or_empty(interaction_targets[door_id]).duplicate(true)
+			target["door"] = merged.duplicate(true)
+			interaction_targets[door_id] = target
+	map_snapshot["door_objects"] = door_objects
+	map_snapshot["blocking_cells"] = blocking_cells
+	map_snapshot["sight_blocking_cells"] = sight_blocking_cells
+	map_snapshot["blocking_cell_count"] = blocking_cells.size()
+	map_snapshot["sight_blocking_cell_count"] = sight_blocking_cells.size()
+	map_snapshot["interaction_targets"] = interaction_targets
+
+
+func _apply_door_blocking_cells(door: Dictionary, blocking_cells: Dictionary, sight_blocking_cells: Dictionary) -> void:
+	var door_id := str(door.get("object_id", door.get("door_id", "")))
+	if door_id.is_empty():
+		return
+	for cell in _array_or_empty(door.get("cells", [])):
+		var key := _cell_key(_dictionary_or_empty(cell))
+		if key.is_empty():
+			continue
+		if bool(door.get("blocks_movement", false)):
+			blocking_cells[key] = door_id
+		elif str(blocking_cells.get(key, "")) == door_id:
+			blocking_cells.erase(key)
+		if bool(door.get("blocks_sight", false)):
+			sight_blocking_cells[key] = door_id
+		elif str(sight_blocking_cells.get(key, "")) == door_id:
+			sight_blocking_cells.erase(key)
+
+
+func _cell_key(cell: Dictionary) -> String:
+	if cell.is_empty():
+		return ""
+	return "%d:%d:%d" % [int(cell.get("x", 0)), int(cell.get("y", 0)), int(cell.get("z", 0))]
 
 
 func _corpses_on_map(corpses: Array, active_map_id: String) -> Array[Dictionary]:

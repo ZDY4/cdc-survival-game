@@ -119,6 +119,16 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
 	simulation.crafted_recipes["recipe_knife_basic"] = true
 	simulation.world_flags["outpost_workshop_restored"] = true
+	simulation.door_states["save_smoke_door"] = {
+		"door_id": "save_smoke_door",
+		"object_id": "save_smoke_door",
+		"display_name": "存档测试门",
+		"is_open": true,
+		"locked": false,
+		"blocks_movement": false,
+		"blocks_sight": false,
+		"blocks_sight_when_closed": true,
+	}
 	simulation.set_actor_vision_radius(1, 4)
 	simulation.refresh_actor_vision(1, topology)
 	simulation.record_item_collected(1, "1007", 2)
@@ -184,7 +194,7 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	if int(metadata_player.get("inventory_stack_count", 0)) <= 0 or int(metadata_player.get("inventory_item_count", 0)) <= 0:
 		errors.append("save metadata player inventory counts should be present")
 
-	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes", "world_flags"]:
+	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes", "world_flags", "door_states"]:
 		if JSON.stringify(restored.get(key)) != JSON.stringify(original.get(key)):
 			errors.append("snapshot field mismatch: %s" % key)
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
@@ -254,6 +264,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 	legacy.erase("combat_state")
 	legacy.erase("pending_movement")
 	legacy.erase("pending_interaction")
+	legacy.erase("door_states")
 	legacy.erase("corpse_containers")
 	legacy.erase("interaction_menu")
 	legacy.erase("hotbar")
@@ -266,7 +277,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 		errors.append("legacy snapshot migration should default active_location_id from start_location_id")
 	if str(restored.get("active_entry_point_id", "")) != str(snapshot.get("start_entry_point_id", "")):
 		errors.append("legacy snapshot migration should default active_entry_point_id from start_entry_point_id")
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "corpse_containers", "interaction_menu", "hotbar"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar"]:
 		if not restored.has(key):
 			errors.append("legacy snapshot migration missing %s" % key)
 	if not _has_event(restored, "snapshot_migrated"):

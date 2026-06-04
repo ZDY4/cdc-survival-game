@@ -31,7 +31,7 @@ func _init() -> void:
 func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var first_snapshot: Dictionary = simulation.snapshot()
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "corpse_containers", "interaction_menu", "hotbar"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar"]:
 		if not first_snapshot.has(key):
 			errors.append("runtime snapshot missing %s" % key)
 	_expect_initial_runtime_snapshot_fields(errors, first_snapshot)
@@ -238,6 +238,8 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	errors.append_array(_expect_container_replacement_close(container_replacement_simulation))
 	var direct_wait_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	errors.append_array(_expect_direct_self_wait_interaction(direct_wait_simulation))
+	var door_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	errors.append_array(_expect_door_interaction(door_simulation))
 	return errors
 
 
@@ -268,6 +270,7 @@ func _final_interaction_result(result: Dictionary) -> bool:
 		or result.has("container") \
 		or _has_context_snapshot(result) \
 		or bool(result.get("waited", false)) \
+		or bool(result.get("door_toggled", false)) \
 		or bool(result.get("defeated", false))
 
 
@@ -631,6 +634,81 @@ func _expect_direct_self_wait_interaction(simulation: RefCounted) -> Array[Strin
 		errors.append("direct self wait interaction should emit turn_ended")
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "wait", "wait", "幸存者")
 	return errors
+
+
+func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		return ["door interaction smoke missing player"]
+	player.ap = 10.0
+	var door_grid := {
+		"x": player.grid_position.x + 1,
+		"y": player.grid_position.y,
+		"z": player.grid_position.z,
+	}
+	simulation.configure_map_interactions({
+		"door_interaction_smoke": _door_target("door_interaction_smoke", false, false, door_grid),
+		"locked_door_interaction_smoke": _door_target("locked_door_interaction_smoke", false, true, door_grid),
+	})
+	var prompt: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "map_object",
+		"target_id": "door_interaction_smoke",
+	})
+	_expect_prompt_snapshot(errors, prompt, "door_toggle", "door_toggle", 1.0)
+	_expect_prompt_range(errors, prompt, 1, "door prompt")
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "map_object",
+			"target_id": "door_interaction_smoke",
+		},
+		"topology": {},
+	})
+	if not bool(result.get("success", false)):
+		errors.append("door toggle interaction should succeed: %s" % result.get("reason", "unknown"))
+	if not bool(result.get("door_toggled", false)) or not bool(result.get("is_open", false)):
+		errors.append("door toggle interaction should report open door")
+	if _event_count(simulation.snapshot(), "door_toggled") <= 0:
+		errors.append("door toggle should emit door_toggled")
+	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "door_toggle", "door_toggle", "测试门")
+	var locked_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "map_object",
+		"target_id": "locked_door_interaction_smoke",
+	})
+	if not bool(locked_prompt.get("ok", false)):
+		errors.append("locked door prompt should still open via inspect placeholder")
+	if str(locked_prompt.get("primary_option_id", "")) != "inspect":
+		errors.append("locked door primary option should fall back to inspect placeholder")
+	_expect_disabled_option(errors, locked_prompt, "door_toggle", "door_locked", "locked door prompt")
+	var locked_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "locked_door_interaction_smoke",
+	}, "door_toggle")
+	if bool(locked_result.get("success", false)) or str(locked_result.get("reason", "")) != "door_locked":
+		errors.append("locked door toggle should return door_locked")
+	return errors
+
+
+func _door_target(target_id: String, is_open: bool, locked: bool, grid: Dictionary) -> Dictionary:
+	return {
+		"target_id": target_id,
+		"target_type": "map_object",
+		"display_name": "测试门",
+		"kind": "door",
+		"anchor": grid.duplicate(true),
+		"cells": [grid.duplicate(true)],
+		"door": {
+			"door_id": target_id,
+			"object_id": target_id,
+			"display_name": "测试门",
+			"is_open": is_open,
+			"locked": locked,
+			"blocks_movement": not is_open,
+			"blocks_sight": not is_open,
+			"blocks_sight_when_closed": true,
+		},
+	}
 
 
 func _grid_distance(left: RefCounted, right: RefCounted) -> int:

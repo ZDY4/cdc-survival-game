@@ -24,6 +24,8 @@ func execute(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: 
 			return _execute_wait(simulation, actor_id, prompt, option)
 		"move":
 			return {"success": false, "reason": "move_requires_player_command", "prompt": prompt}
+		"door_toggle":
+			return _execute_door_toggle(simulation, actor_id, prompt, option)
 		"enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor":
 			return _execute_scene_transition(simulation, actor_id, prompt, option)
 		_:
@@ -178,6 +180,20 @@ func _execute_wait(simulation: RefCounted, actor_id: int, prompt: Dictionary, op
 	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, actor_id))
 	result["prompt"] = prompt
 	result["waited"] = true
+	return result
+
+
+func _execute_door_toggle(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:
+	var door_id := str(option.get("door_id", option.get("target_id", ""))).strip_edges()
+	if door_id.is_empty():
+		return {"success": false, "reason": "door_target_missing", "prompt": prompt}
+	var result: Dictionary = simulation.toggle_door(actor_id, door_id)
+	result["prompt"] = prompt
+	if bool(result.get("success", false)):
+		var success_payload: Dictionary = _interaction_success_payload(actor_id, prompt, option, door_id)
+		success_payload["is_open"] = bool(result.get("is_open", false))
+		simulation.emit_event("interaction_succeeded", success_payload)
+		result["door_toggled"] = true
 	return result
 
 
