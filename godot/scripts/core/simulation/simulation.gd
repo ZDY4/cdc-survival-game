@@ -1863,7 +1863,7 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 	var attack_speed: float = max(0.1, float(weapon.get("attack_speed", 1.0)))
 	var weapon_range: int = max(1, _optional_int(weapon.get("range", DEFAULT_ATTACK_RANGE), DEFAULT_ATTACK_RANGE))
 	var max_ammo: int = _equipment_effects.weapon_magazine_capacity(actor, weapon, items)
-	return {
+	var profile := {
 		"item_id": equipped_item_id,
 		"damage": float(weapon.get("damage", actor.attack_power)),
 		"range": weapon_range,
@@ -1876,6 +1876,9 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 		"equipment_slot": "main_hand",
 		"max_ammo": max_ammo,
 	}
+	if weapon.get("accuracy", null) != null:
+		profile["accuracy"] = _optional_float(weapon.get("accuracy", 0.0), 0.0)
+	return profile
 
 
 func _weapon_fragment(item_id: String, items: Dictionary) -> Dictionary:
@@ -1991,6 +1994,14 @@ func _optional_int(value: Variant, fallback: int) -> int:
 	if typeof(value) == TYPE_STRING and str(value).strip_edges().is_empty():
 		return fallback
 	return int(value)
+
+
+func _optional_float(value: Variant, fallback: float) -> float:
+	if value == null:
+		return fallback
+	if typeof(value) == TYPE_STRING and str(value).strip_edges().is_empty():
+		return fallback
+	return float(value)
 
 
 func _grid_distance(left: RefCounted, right: RefCounted) -> int:

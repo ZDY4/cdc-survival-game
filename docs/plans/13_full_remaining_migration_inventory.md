@@ -139,8 +139,9 @@
 
 ### 6.2 武器、弹药和伤害
 
-- 已有武器射程、弹药、攻击速度、基础伤害和暴击第一版；待补 Rust 确定性随机、seed salt、重放稳定性。
-- 待补命中/闪避/格挡/护甲/伤害类型/抗性/弱点等旧数据如果存在的完整应用。
+- 武器基础战斗第一版已迁移：武器射程、弹药、攻击速度、基础伤害、暴击率、暴击倍率和 `accuracy` 会进入 Godot attack profile；命中/暴击使用 deterministic combat RNG，seed / counter 会随 snapshot 保存并在加载后继续稳定重放；已由 `Combat` / `Save` smoke 覆盖。
+- 命中、闪避、格挡和护甲第一版已迁移：显式 actor / weapon `accuracy` 会进行命中判定，目标 `evasion` 会降低命中率；miss 不造成伤害、不触发暴击但保留 AP / 弹药消耗和 `attack_resolved` 反馈；防御过高会返回 `blocked`；装备 defense 和 `damage_reduction` 已参与伤害结算；已由 `Combat` smoke 覆盖。待补命中率 UI 文案、战斗日志 polish、NPC 命中体验调参、更多装备效果和旧版完整公式复核。
+- 待补伤害类型/抗性/弱点等旧数据如果存在的完整应用。
 - 远程弹药已有玩家已装备武器 reload 第一版：`reload_equipped` 命令、弹匣状态、背包弹药转入弹匣、换弹 AP、弹匣攻击消耗、无弹/空弹匣提示和存档 roundtrip 已纳入 `Equipment` / `Combat` / `Save` smoke；装备 `ammo_capacity` / `reload_speed` 第一版已通过 core 装备效果服务影响换弹容量和 AP 成本；待补装填动画、弹匣 UI polish、更多武器/弹药类型和 NPC reload。
 - 待补攻击装备成本：武器耐久、消耗品、on-hit 装备/弹药特效触发。
 - 待补伤害反馈：飘字、日志、命中/暴击/击杀提示、受击动画占位、音效占位。

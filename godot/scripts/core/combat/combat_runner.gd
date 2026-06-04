@@ -20,9 +20,18 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		return spatial_check
 
 	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
-	var critical_roll: Dictionary = _critical_hit(simulation, attacker, target, profile)
+	var hit_roll: Dictionary = _hit_check(simulation, attacker, target, profile)
+	var critical_roll: Dictionary = {
+		"critical": false,
+		"chance": _critical_chance(simulation, attacker, profile),
+		"roll": 1.0,
+		"counter": int(hit_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
+		"salt": 0,
+	}
+	if bool(hit_roll.get("hit", true)):
+		critical_roll = _critical_hit(simulation, attacker, target, profile)
 	var critical: bool = bool(critical_roll.get("critical", false))
-	var damage_result: Dictionary = _resolve_damage(simulation, attacker, target, profile, critical)
+	var damage_result: Dictionary = _resolve_damage(simulation, attacker, target, profile, critical) if bool(hit_roll.get("hit", true)) else _miss_damage_result(simulation, target, hit_roll)
 	var damage: float = float(damage_result.get("damage", 0.0))
 	target.hp = max(0.0, target.hp - damage)
 	simulation.emit_event("attack_performed", {
@@ -36,6 +45,10 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
 		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
 		"hit_kind": str(damage_result.get("hit_kind", "hit")),
+		"hit_roll": float(hit_roll.get("roll", 0.0)),
+		"hit_chance": float(hit_roll.get("chance", 1.0)),
+		"accuracy": float(hit_roll.get("accuracy", 0.0)),
+		"evasion": float(hit_roll.get("evasion", 0.0)),
 	})
 	simulation.emit_event("attack_resolved", {
 		"actor_id": actor_id,
@@ -54,6 +67,10 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"damage_reduction": float(damage_result.get("damage_reduction", 0.0)),
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
 		"hit_kind": str(damage_result.get("hit_kind", "hit")),
+		"hit_roll": float(hit_roll.get("roll", 0.0)),
+		"hit_chance": float(hit_roll.get("chance", 1.0)),
+		"accuracy": float(hit_roll.get("accuracy", 0.0)),
+		"evasion": float(hit_roll.get("evasion", 0.0)),
 		"combat_rng_seed": int(simulation.combat_state.get("combat_rng_seed", 0)),
 		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
 		"combat_rng_salt": int(critical_roll.get("salt", 0)),
@@ -73,6 +90,10 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"crit_roll": float(critical_roll.get("roll", 1.0)),
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
 		"hit_kind": str(damage_result.get("hit_kind", "hit")),
+		"hit_roll": float(hit_roll.get("roll", 0.0)),
+		"hit_chance": float(hit_roll.get("chance", 1.0)),
+		"accuracy": float(hit_roll.get("accuracy", 0.0)),
+		"evasion": float(hit_roll.get("evasion", 0.0)),
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
 		"weapon_profile": profile,
 	}
@@ -161,6 +182,43 @@ func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictiona
 	return {"success": true}
 
 
+func _hit_check(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:
+	var actor_accuracy: float = _combat_attribute(simulation, attacker, "accuracy", 0.0)
+	var weapon_accuracy: float = float(profile.get("accuracy", 0.0)) if profile.has("accuracy") else 0.0
+	var evasion: float = clampf(_combat_attribute(simulation, target, "evasion", 0.0), 0.0, 0.95)
+	var has_explicit_accuracy: bool = actor_accuracy != 0.0 or profile.has("accuracy")
+	var chance: float = clampf(((actor_accuracy + weapon_accuracy) / 100.0) - evasion, 0.0, 1.0) if has_explicit_accuracy else 1.0
+	if not has_explicit_accuracy:
+		return {
+			"hit": true,
+			"chance": chance,
+			"roll": 0.0,
+			"counter": int(simulation.combat_state.get("combat_rng_counter", 0)),
+			"salt": 0,
+			"accuracy": actor_accuracy + weapon_accuracy,
+			"evasion": evasion,
+		}
+	var salt: int = int(attacker.actor_id ^ (target.actor_id << 7) ^ 2246822519)
+	var roll_data: Dictionary = _next_combat_random_unit(simulation, salt)
+	var roll: float = float(roll_data.get("roll", 1.0))
+	roll_data["hit"] = roll <= chance
+	roll_data["chance"] = chance
+	roll_data["accuracy"] = actor_accuracy + weapon_accuracy
+	roll_data["evasion"] = evasion
+	return roll_data
+
+
+func _miss_damage_result(simulation: RefCounted, target: RefCounted, hit_roll: Dictionary) -> Dictionary:
+	return {
+		"damage": 0.0,
+		"hit_kind": "miss",
+		"defense": max(0.0, _combat_attribute(simulation, target, "defense", target.defense)),
+		"damage_reduction": clampf(_combat_attribute(simulation, target, "damage_reduction", 0.0), 0.0, 0.95),
+		"damage_bonus": 0.0,
+		"hit_chance": float(hit_roll.get("chance", 0.0)),
+	}
+
+
 func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary, critical: bool) -> Dictionary:
 	var attack_damage: float = float(profile.get("damage", _combat_attribute(simulation, attacker, "attack_power", attacker.attack_power)))
 	var defense: float = max(0.0, _combat_attribute(simulation, target, "defense", target.defense))
@@ -187,7 +245,7 @@ func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCo
 
 
 func _critical_hit(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:
-	var chance: float = clampf(float(profile.get("crit_chance", 0.0)) + _combat_attribute(simulation, attacker, "crit_chance", 0.0), 0.0, 1.0)
+	var chance: float = _critical_chance(simulation, attacker, profile)
 	if chance <= 0.0:
 		return {
 			"critical": false,
@@ -202,6 +260,10 @@ func _critical_hit(simulation: RefCounted, attacker: RefCounted, target: RefCoun
 	roll_data["critical"] = roll <= chance
 	roll_data["chance"] = chance
 	return roll_data
+
+
+func _critical_chance(simulation: RefCounted, attacker: RefCounted, profile: Dictionary) -> float:
+	return clampf(float(profile.get("crit_chance", 0.0)) + _combat_attribute(simulation, attacker, "crit_chance", 0.0), 0.0, 1.0)
 
 
 func _critical_multiplier(simulation: RefCounted, attacker: RefCounted, profile: Dictionary) -> float:

@@ -167,6 +167,7 @@ func _expect_combat_visibility_decay(errors: Array[String], simulation: RefCount
 
 
 func _expect_deterministic_combat_rng(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
 	var first_roll: float = _single_seeded_crit_roll(registry, player_grid, 77)
 	var repeated_roll: float = _single_seeded_crit_roll(registry, player_grid, 77)
 	if absf(first_roll - repeated_roll) > 0.000001:
@@ -177,6 +178,7 @@ func _expect_deterministic_combat_rng(errors: Array[String], simulation: RefCoun
 
 	player.grid_position = GridCoord.from_dictionary(player_grid)
 	player.equipment["main_hand"] = "1003"
+	player.combat_attributes["accuracy"] = 100.0
 	player.ap = 20.0
 	simulation.set_combat_rng_seed(911)
 	var y: int = int(player_grid.get("y", 0))
@@ -190,11 +192,14 @@ func _expect_deterministic_combat_rng(errors: Array[String], simulation: RefCoun
 	actor_a.hp = 100.0
 	actor_a.max_hp = 100.0
 	actor_a.defense = 0.0
+	actor_a.combat_attributes["evasion"] = 0.0
 	var first: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": target_a, "topology": _topology(simulation, registry)})
-	if int(simulation.snapshot().get("combat_state", {}).get("combat_rng_counter", -1)) != 1:
-		errors.append("combat RNG counter should advance after crit-capable attack")
+	if int(simulation.snapshot().get("combat_state", {}).get("combat_rng_counter", -1)) != 2:
+		errors.append("combat RNG counter should advance for hit and crit rolls after crit-capable attack")
 	if not first.has("crit_roll"):
 		errors.append("attack result should expose crit_roll")
+	if not first.has("hit_roll") or not first.has("hit_chance"):
+		errors.append("attack result should expose hit_roll and hit_chance")
 
 	var saved_snapshot: Dictionary = simulation.snapshot()
 	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
@@ -216,21 +221,24 @@ func _expect_deterministic_combat_rng(errors: Array[String], simulation: RefCoun
 	actor_b.hp = 100.0
 	actor_b.max_hp = 100.0
 	actor_b.defense = 0.0
+	actor_b.combat_attributes["evasion"] = 0.0
 	var restored_actor_b: RefCounted = restored.actor_registry.get_actor(restored_target_b)
 	restored_actor_b.hp = 100.0
 	restored_actor_b.max_hp = 100.0
 	restored_actor_b.defense = 0.0
+	restored_actor_b.combat_attributes["evasion"] = 0.0
 	player.ap = 20.0
 	var continued: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": target_b, "topology": _topology(simulation, registry)})
 	var restored_continued: Dictionary = restored.submit_player_command({"kind": "attack", "target_actor_id": restored_target_b, "topology": _topology(restored, registry)})
 	if absf(float(continued.get("crit_roll", -1.0)) - float(restored_continued.get("crit_roll", -2.0))) > 0.000001:
 		errors.append("combat RNG should continue deterministically after snapshot load")
-	if int(restored.snapshot().get("combat_state", {}).get("combat_rng_counter", -1)) != 2:
+	if int(restored.snapshot().get("combat_state", {}).get("combat_rng_counter", -1)) != 4:
 		errors.append("restored combat RNG counter should advance from loaded counter")
 
 	for actor_id in [target_a, target_b]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
+	player.combat_attributes = original_attributes
 	_restore_player_turn(simulation, player)
 
 
@@ -239,6 +247,7 @@ func _single_seeded_crit_roll(registry: RefCounted, player_grid: Dictionary, see
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	player.grid_position = GridCoord.from_dictionary(player_grid)
 	player.equipment["main_hand"] = "1003"
+	player.combat_attributes["accuracy"] = 100.0
 	player.ap = 20.0
 	simulation.set_combat_rng_seed(seed)
 	var target_id: int = _register_character(simulation, registry, "zombie_walker", {
@@ -250,6 +259,7 @@ func _single_seeded_crit_roll(registry: RefCounted, player_grid: Dictionary, see
 	target.hp = 100.0
 	target.max_hp = 100.0
 	target.defense = 0.0
+	target.combat_attributes["evasion"] = 0.0
 	var result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": target_id, "topology": _topology(simulation, registry)})
 	return float(result.get("crit_roll", -1.0))
 
@@ -262,11 +272,37 @@ func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation
 	player.combat_attributes = {
 		"attack_power": 10.0,
 		"defense": 0.0,
+		"accuracy": 100.0,
 		"crit_damage": 2.0,
 	}
 	simulation.set_combat_rng_seed(313)
 	var y: int = int(player_grid.get("y", 0))
 	var z: int = int(player_grid.get("z", 0))
+
+	var miss_target: int = _register_test_actor(simulation, "miss_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": z,
+	}, 20.0)
+	var miss_actor: RefCounted = simulation.actor_registry.get_actor(miss_target)
+	miss_actor.defense = 0.0
+	miss_actor.combat_attributes = {"damage_reduction": 0.0, "evasion": 0.95}
+	player.combat_attributes["accuracy"] = 0.0
+	var miss_counter_before: int = int(simulation.snapshot().get("combat_state", {}).get("combat_rng_counter", 0))
+	var missed: Dictionary = simulation.perform_attack(player.actor_id, miss_target, {}, {"range": 3, "weapon_profile": {"damage": 20.0, "crit_chance": 1.0, "accuracy": 0.0}})
+	if str(missed.get("hit_kind", "")) != "miss":
+		errors.append("zero accuracy attack against evasive target should report miss")
+	if absf(float(missed.get("damage", -1.0))) > 0.01:
+		errors.append("missed attack should deal zero damage")
+	if absf(miss_actor.hp - 20.0) > 0.01:
+		errors.append("missed attack should not change target hp")
+	if bool(missed.get("critical", false)):
+		errors.append("missed attack should not crit")
+	if absf(float(missed.get("hit_chance", -1.0))) > 0.001:
+		errors.append("missed attack should expose zero hit_chance")
+	if int(simulation.snapshot().get("combat_state", {}).get("combat_rng_counter", 0)) != miss_counter_before + 1:
+		errors.append("missed attack should consume only the hit roll")
+	player.combat_attributes["accuracy"] = 100.0
 
 	var blocked_target: int = _register_test_actor(simulation, "blocked_target", "hostile", {
 		"x": int(player_grid.get("x", 0)) + 1,
@@ -366,7 +402,7 @@ func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation
 	if absf(float(buffed.get("damage_bonus", 0.0)) - 0.29) > 0.001:
 		errors.append("buffed attack result should expose stacked 0.29 damage_bonus")
 
-	for actor_id in [blocked_target, reduced_target, armored_target, crit_target, passive_target, buffed_target]:
+	for actor_id in [miss_target, blocked_target, reduced_target, armored_target, crit_target, passive_target, buffed_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.combat_attributes = original_attributes
@@ -550,7 +586,9 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	var topology: Dictionary = _topology(simulation, registry)
 	var original_active_effects: Array[Dictionary] = player.active_effects.duplicate(true)
 	var no_active_effects: Array[Dictionary] = []
+	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
 	player.active_effects = no_active_effects
+	player.combat_attributes["accuracy"] = 100.0
 	player.ap = 20.0
 	player.equipment["main_hand"] = "1003"
 	var blunt_target: int = _register_character(simulation, registry, "zombie_walker", {
@@ -636,6 +674,7 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.active_effects = original_active_effects
+	player.combat_attributes = original_attributes
 	simulation.exit_combat_if_clear("weapon_profile_smoke_cleanup")
 
 
@@ -661,6 +700,7 @@ func _register_character(simulation: RefCounted, registry: RefCounted, definitio
 		"hp": float(hp.get("current", combat_attributes.get("max_hp", 1.0))),
 		"attack_power": float(combat_attributes.get("attack_power", 1.0)),
 		"defense": float(combat_attributes.get("defense", 0.0)),
+		"combat_attributes": combat_attributes.duplicate(true),
 		"xp_reward": int(combat.get("xp_reward", 0)),
 	})
 
@@ -689,9 +729,11 @@ func _force_combat_values(simulation: RefCounted, actor_id: int) -> void:
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	var target: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	player.attack_power = 10.0
+	player.combat_attributes["accuracy"] = 100.0
 	target.hp = 5.0
 	target.max_hp = 5.0
 	target.defense = 0.0
+	target.combat_attributes["evasion"] = 0.0
 
 
 func _restore_player_turn(simulation: RefCounted, player: RefCounted) -> void:
