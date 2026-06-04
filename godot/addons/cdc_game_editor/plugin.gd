@@ -34,7 +34,6 @@ var utility_windows: Dictionary = {}
 var cdc_menu: PopupMenu
 var editor_menu_bar: MenuBar
 var using_tool_menu_fallback := false
-var opened_window_count := 0
 
 
 func _enter_tree() -> void:
@@ -263,9 +262,17 @@ func _attach_editor_window(window: Window) -> void:
 
 func _show_window(window: Window) -> void:
 	if window.visible:
+		window.hide()
+	window.popup_centered(window.size)
+	if window.current_screen >= 0:
+		window.position = _center_position_for_window(window)
 		window.grab_focus()
 		return
-	opened_window_count += 1
-	var cascade_offset := Vector2i(32, 32) * ((opened_window_count - 1) % 6)
-	window.popup_centered(window.size)
-	window.position += cascade_offset
+	window.grab_focus()
+
+
+func _center_position_for_window(window: Window) -> Vector2i:
+	var screen_index := window.current_screen
+	var screen_position := DisplayServer.screen_get_position(screen_index)
+	var screen_size := DisplayServer.screen_get_size(screen_index)
+	return screen_position + ((screen_size - window.size) / 2)
