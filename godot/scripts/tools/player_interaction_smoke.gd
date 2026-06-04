@@ -48,6 +48,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["missing hover grid cursor"]
 	if game_root.find_child("AttackTargetMarker", true, false) == null:
 		return ["missing attack target marker"]
+	if game_root.find_child("AttackRangeMarkers", true, false) == null:
+		return ["missing attack range markers"]
 
 	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node == null:
@@ -93,6 +95,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("hover raycast should select interaction target")
 		_expect_hover_cursor_at_node(errors, game_root, pickup_node)
 		_expect_attack_marker_hidden(errors, game_root)
+		_expect_attack_range_markers_hidden(errors, game_root)
 		_expect_hover_runtime_state(errors, game_root, "interaction", "survivor_outpost_01_pickup_medkit", "pickup")
 		if not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after hover selection")
@@ -324,6 +327,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 			errors.append("HUD runtime control line should show attack hover preview, got %s" % runtime_line)
 		_expect_attack_hover_cursor_preview(errors, game_root, target_id)
 		_expect_attack_target_marker(errors, game_root, target_id)
+		_expect_attack_range_markers(errors, game_root, target_id)
 	_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
 
 
@@ -361,12 +365,43 @@ func _expect_attack_target_marker(errors: Array[String], game_root: Node, target
 		errors.append("attack target marker should render above map meshes")
 
 
+func _expect_attack_range_markers(errors: Array[String], game_root: Node, target_id: int) -> void:
+	var container: Node3D = game_root.find_child("AttackRangeMarkers", true, false) as Node3D
+	if container == null:
+		errors.append("attack hover preview should expose attack range markers container")
+		return
+	if int(container.get_meta("attack_target_actor_id", 0)) != target_id:
+		errors.append("attack range markers should expose target actor id")
+	if int(container.get_meta("marker_count", 0)) <= 0:
+		errors.append("attack range markers should expose at least one attackable candidate cell")
+	var found_marker := false
+	for child in container.get_children():
+		if child is MeshInstance3D and str(child.name) == "AttackRangeMarker":
+			found_marker = true
+			var material := (child as MeshInstance3D).material_override as StandardMaterial3D
+			if material == null or not material.no_depth_test:
+				errors.append("attack range marker should render above map meshes")
+			if _dictionary_or_empty(child.get_meta("grid", {})).is_empty():
+				errors.append("attack range marker should expose grid meta")
+			break
+	if not found_marker:
+		errors.append("attack range markers should create marker nodes")
+
+
 func _expect_attack_marker_hidden(errors: Array[String], game_root: Node) -> void:
 	var marker: MeshInstance3D = game_root.find_child("AttackTargetMarker", true, false) as MeshInstance3D
 	if marker == null:
 		errors.append("attack target marker should exist")
 	elif marker.visible:
 		errors.append("attack target marker should stay hidden for non-attack hover")
+
+
+func _expect_attack_range_markers_hidden(errors: Array[String], game_root: Node) -> void:
+	var container: Node3D = game_root.find_child("AttackRangeMarkers", true, false) as Node3D
+	if container == null:
+		errors.append("attack range markers should exist")
+	elif int(container.get_meta("marker_count", container.get_child_count())) != 0 or container.get_child_count() != 0:
+		errors.append("attack range markers should stay empty for non-attack hover")
 
 
 func _cleanup_attack_hover_preview_smoke(game_root: Node, player: RefCounted, target_id: int, original_equipment: Dictionary, original_attributes: Dictionary, original_ap: float) -> void:
