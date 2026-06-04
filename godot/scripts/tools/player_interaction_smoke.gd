@@ -48,6 +48,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["missing hover grid cursor"]
 	if game_root.find_child("AttackTargetMarker", true, false) == null:
 		return ["missing attack target marker"]
+	if game_root.find_child("AttackTargetOutline", true, false) == null:
+		return ["missing attack target outline"]
 	if game_root.find_child("AttackRangeMarkers", true, false) == null:
 		return ["missing attack range markers"]
 
@@ -95,6 +97,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("hover raycast should select interaction target")
 		_expect_hover_cursor_at_node(errors, game_root, pickup_node)
 		_expect_attack_marker_hidden(errors, game_root)
+		_expect_attack_outline_hidden(errors, game_root)
 		_expect_attack_range_markers_hidden(errors, game_root)
 		_expect_hover_runtime_state(errors, game_root, "interaction", "survivor_outpost_01_pickup_medkit", "pickup")
 		if not _hud_interaction_line(game_root).contains("拾取"):
@@ -327,6 +330,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 			errors.append("HUD runtime control line should show attack hover preview, got %s" % runtime_line)
 		_expect_attack_hover_cursor_preview(errors, game_root, target_id)
 		_expect_attack_target_marker(errors, game_root, target_id)
+		_expect_attack_target_outline(errors, game_root, target_id)
 		_expect_attack_range_markers(errors, game_root, target_id)
 	_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
 
@@ -365,6 +369,22 @@ func _expect_attack_target_marker(errors: Array[String], game_root: Node, target
 		errors.append("attack target marker should render above map meshes")
 
 
+func _expect_attack_target_outline(errors: Array[String], game_root: Node, target_id: int) -> void:
+	var outline: MeshInstance3D = game_root.find_child("AttackTargetOutline", true, false) as MeshInstance3D
+	if outline == null:
+		errors.append("attack hover preview should expose attack target outline")
+		return
+	if not outline.visible:
+		errors.append("attack target outline should be visible on attack hover")
+	if int(outline.get_meta("attack_target_actor_id", 0)) != target_id:
+		errors.append("attack target outline should expose target actor id")
+	if not bool(outline.get_meta("attack_can_attack", false)):
+		errors.append("attack target outline should expose attackable state")
+	var material := outline.material_override as StandardMaterial3D
+	if material == null or not material.no_depth_test:
+		errors.append("attack target outline should render above map meshes")
+
+
 func _expect_attack_range_markers(errors: Array[String], game_root: Node, target_id: int) -> void:
 	var container: Node3D = game_root.find_child("AttackRangeMarkers", true, false) as Node3D
 	if container == null:
@@ -394,6 +414,14 @@ func _expect_attack_marker_hidden(errors: Array[String], game_root: Node) -> voi
 		errors.append("attack target marker should exist")
 	elif marker.visible:
 		errors.append("attack target marker should stay hidden for non-attack hover")
+
+
+func _expect_attack_outline_hidden(errors: Array[String], game_root: Node) -> void:
+	var outline: MeshInstance3D = game_root.find_child("AttackTargetOutline", true, false) as MeshInstance3D
+	if outline == null:
+		errors.append("attack target outline should exist")
+	elif outline.visible:
+		errors.append("attack target outline should stay hidden for non-attack hover")
 
 
 func _expect_attack_range_markers_hidden(errors: Array[String], game_root: Node) -> void:

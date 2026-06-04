@@ -26,6 +26,7 @@ var world_result: Dictionary = {}
 var camera: Camera3D
 var hover_cursor: MeshInstance3D
 var attack_target_marker: MeshInstance3D
+var attack_target_outline: MeshInstance3D
 var attack_range_markers: Node3D
 var selected_node: Node
 var camera_target: Vector3 = Vector3.ZERO
@@ -60,6 +61,8 @@ func _init(p_game_root: Node) -> void:
 	game_root.add_child(hover_cursor)
 	attack_target_marker = _build_attack_target_marker()
 	game_root.add_child(attack_target_marker)
+	attack_target_outline = _build_attack_target_outline()
+	game_root.add_child(attack_target_outline)
 	attack_range_markers = Node3D.new()
 	attack_range_markers.name = "AttackRangeMarkers"
 	game_root.add_child(attack_range_markers)
@@ -82,6 +85,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	_apply_camera_transform()
 	hover_cursor.visible = false
 	attack_target_marker.visible = false
+	attack_target_outline.visible = false
 	_clear_attack_range_markers()
 	selected_node = null
 
@@ -824,6 +828,7 @@ func _apply_hover_cursor_state(move_preview: Dictionary, attack_preview: Diction
 		material.albedo_color = color
 	hover_cursor.set_meta("hover_color", color)
 	_update_attack_target_marker(attack_preview, color)
+	_update_attack_target_outline(attack_preview, color)
 	_update_attack_range_markers(attack_preview, color)
 
 
@@ -835,13 +840,7 @@ func _update_attack_target_marker(attack_preview: Dictionary, color: Color) -> v
 		attack_target_marker.set_meta("attack_target_actor_id", 0)
 		attack_target_marker.set_meta("attack_can_attack", false)
 		return
-	var target_grid: Dictionary = _dictionary_or_empty(attack_preview.get("target_grid", {}))
-	if target_grid.is_empty():
-		for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
-			var actor_data: Dictionary = _dictionary_or_empty(actor)
-			if int(actor_data.get("actor_id", 0)) == int(attack_preview.get("target_actor_id", 0)):
-				target_grid = _dictionary_or_empty(actor_data.get("grid_position", {}))
-				break
+	var target_grid: Dictionary = _attack_target_grid_from_preview(attack_preview)
 	if target_grid.is_empty():
 		attack_target_marker.visible = false
 		return
@@ -857,6 +856,32 @@ func _update_attack_target_marker(attack_preview: Dictionary, color: Color) -> v
 	attack_target_marker.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
 	attack_target_marker.set_meta("attack_can_attack", bool(attack_preview.get("can_attack", false)))
 	attack_target_marker.set_meta("hover_color", color)
+
+
+func _update_attack_target_outline(attack_preview: Dictionary, color: Color) -> void:
+	if attack_target_outline == null:
+		return
+	if attack_preview.is_empty():
+		attack_target_outline.visible = false
+		attack_target_outline.set_meta("attack_target_actor_id", 0)
+		attack_target_outline.set_meta("attack_can_attack", false)
+		return
+	var target_grid: Dictionary = _attack_target_grid_from_preview(attack_preview)
+	if target_grid.is_empty():
+		attack_target_outline.visible = false
+		return
+	attack_target_outline.global_position = Vector3(
+		float(target_grid.get("x", 0)),
+		float(target_grid.get("y", _observed_level())) + 0.82,
+		float(target_grid.get("z", 0))
+	)
+	var material := attack_target_outline.material_override as StandardMaterial3D
+	if material != null:
+		material.albedo_color = Color(color.r, color.g, color.b, 0.24)
+	attack_target_outline.visible = true
+	attack_target_outline.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
+	attack_target_outline.set_meta("attack_can_attack", bool(attack_preview.get("can_attack", false)))
+	attack_target_outline.set_meta("hover_color", color)
 
 
 func _update_attack_range_markers(attack_preview: Dictionary, color: Color) -> void:
@@ -883,6 +908,17 @@ func _update_attack_range_markers(attack_preview: Dictionary, color: Color) -> v
 		markers += 1
 	attack_range_markers.set_meta("marker_count", markers)
 	attack_range_markers.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
+
+
+func _attack_target_grid_from_preview(attack_preview: Dictionary) -> Dictionary:
+	var target_grid: Dictionary = _dictionary_or_empty(attack_preview.get("target_grid", {}))
+	if not target_grid.is_empty():
+		return target_grid
+	for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if int(actor_data.get("actor_id", 0)) == int(attack_preview.get("target_actor_id", 0)):
+			return _dictionary_or_empty(actor_data.get("grid_position", {}))
+	return {}
 
 
 func _attack_range_candidate_grids(target_grid: Dictionary, attack_range: int) -> Array[Dictionary]:
@@ -1078,6 +1114,25 @@ func _build_attack_target_marker() -> MeshInstance3D:
 	node.material_override = material
 	node.visible = false
 	node.rotation_degrees.x = 90.0
+	return node
+
+
+func _build_attack_target_outline() -> MeshInstance3D:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.48
+	mesh.bottom_radius = 0.48
+	mesh.height = 1.48
+	mesh.radial_segments = 24
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(HOVER_COLOR_ATTACK_REACHABLE.r, HOVER_COLOR_ATTACK_REACHABLE.g, HOVER_COLOR_ATTACK_REACHABLE.b, 0.24)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var node := MeshInstance3D.new()
+	node.name = "AttackTargetOutline"
+	node.mesh = mesh
+	node.material_override = material
+	node.visible = false
 	return node
 
 
