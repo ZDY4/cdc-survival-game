@@ -314,13 +314,22 @@ func preview_move(actor_id: int, target_position: Dictionary, topology: Dictiona
 		return {"success": false, "reason": "unknown_actor"}
 	var goal: RefCounted = GridCoord.from_dictionary(target_position)
 	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, _occupied_actor_cells(actor.actor_id))
+	var steps: int = int(plan.get("steps", 0))
+	var cost: float = float(max(0, steps))
+	var affordable_steps: int = min(steps, int(floor(actor.ap)))
 	var preview: Dictionary = {
 		"success": bool(plan.get("success", false)),
 		"target_position": goal.to_dictionary(),
 		"reason": str(plan.get("reason", "")),
 		"reachable": bool(plan.get("success", false)),
-		"steps": int(plan.get("steps", 0)),
+		"steps": steps,
 		"path": _array_or_empty(plan.get("path", [])).duplicate(true),
+		"ap_cost": cost,
+		"ap_available": actor.ap,
+		"ap_affordable": actor.ap >= cost,
+		"affordable_steps": affordable_steps,
+		"requires_pending": actor.ap < cost,
+		"pending_steps": max(0, steps - affordable_steps),
 	}
 	_copy_failure_context(plan, preview)
 	return preview

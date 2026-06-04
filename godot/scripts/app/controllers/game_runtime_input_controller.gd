@@ -19,6 +19,7 @@ const ZOOM_MAX := 4.0
 const HOVER_COLOR_INTERACTION := Color(1.0, 0.82, 0.18, 0.72)
 const HOVER_COLOR_MOVE_REACHABLE := Color(0.24, 0.95, 0.48, 0.72)
 const HOVER_COLOR_MOVE_BLOCKED := Color(1.0, 0.22, 0.18, 0.72)
+const HOVER_COLOR_MOVE_PENDING := Color(1.0, 0.78, 0.18, 0.58)
 const HOVER_COLOR_ATTACK_REACHABLE := Color(1.0, 0.45, 0.16, 0.78)
 const HOVER_COLOR_ATTACK_BLOCKED := Color(0.95, 0.12, 0.28, 0.78)
 const HOVER_COLOR_SKILL_VALID := Color(0.38, 0.68, 1.0, 0.58)
@@ -872,6 +873,12 @@ func _move_preview_for_grid(grid: Dictionary) -> Dictionary:
 		"reason": str(preview.get("reason", "")),
 		"steps": int(preview.get("steps", 0)),
 		"path": _array_or_empty(preview.get("path", [])).duplicate(true),
+		"ap_cost": float(preview.get("ap_cost", 0.0)),
+		"ap_available": float(preview.get("ap_available", 0.0)),
+		"ap_affordable": bool(preview.get("ap_affordable", true)),
+		"affordable_steps": int(preview.get("affordable_steps", 0)),
+		"requires_pending": bool(preview.get("requires_pending", false)),
+		"pending_steps": int(preview.get("pending_steps", 0)),
 		"target_position": _dictionary_or_empty(preview.get("target_position", grid)).duplicate(true),
 		"blocker": _dictionary_or_empty(preview.get("blocker", {})).duplicate(true),
 		"visited_cell_count": int(preview.get("visited_cell_count", 0)),
@@ -917,11 +924,21 @@ func _apply_hover_cursor_state(move_preview: Dictionary, attack_preview: Diction
 		hover_cursor.set_meta("move_reachable", bool(move_preview.get("reachable", false)))
 		hover_cursor.set_meta("move_steps", int(move_preview.get("steps", 0)))
 		hover_cursor.set_meta("move_reason", str(move_preview.get("reason", "")))
+		hover_cursor.set_meta("move_ap_cost", float(move_preview.get("ap_cost", 0.0)))
+		hover_cursor.set_meta("move_ap_available", float(move_preview.get("ap_available", 0.0)))
+		hover_cursor.set_meta("move_ap_affordable", bool(move_preview.get("ap_affordable", true)))
+		hover_cursor.set_meta("move_affordable_steps", int(move_preview.get("affordable_steps", 0)))
+		hover_cursor.set_meta("move_requires_pending", bool(move_preview.get("requires_pending", false)))
 		_update_move_path_preview_markers(move_preview, color)
 	else:
 		hover_cursor.set_meta("move_reachable", false)
 		hover_cursor.set_meta("move_steps", 0)
 		hover_cursor.set_meta("move_reason", "")
+		hover_cursor.set_meta("move_ap_cost", 0.0)
+		hover_cursor.set_meta("move_ap_available", 0.0)
+		hover_cursor.set_meta("move_ap_affordable", true)
+		hover_cursor.set_meta("move_affordable_steps", 0)
+		hover_cursor.set_meta("move_requires_pending", false)
 		_clear_move_path_preview_markers()
 	if not attack_preview.is_empty():
 		color = HOVER_COLOR_ATTACK_REACHABLE if bool(attack_preview.get("can_attack", false)) else HOVER_COLOR_ATTACK_BLOCKED
@@ -1149,12 +1166,16 @@ func _update_move_path_preview_markers(move_preview: Dictionary, color: Color) -
 	var path: Array = _array_or_empty(move_preview.get("path", []))
 	if path.is_empty():
 		return
+	var affordable_steps := int(move_preview.get("affordable_steps", path.size()))
 	var index := 0
 	for cell in path:
 		var grid: Dictionary = _dictionary_or_empty(cell)
 		if grid.is_empty():
 			continue
-		var marker := _build_move_path_preview_marker(color, index, path.size())
+		var step_index: int = max(0, index)
+		var within_current_ap: bool = step_index <= affordable_steps
+		var marker_color: Color = color if within_current_ap else HOVER_COLOR_MOVE_PENDING
+		var marker := _build_move_path_preview_marker(marker_color, index, path.size())
 		marker.position = Vector3(
 			float(grid.get("x", 0)),
 			float(grid.get("y", _observed_level())) + 0.12,
@@ -1162,6 +1183,9 @@ func _update_move_path_preview_markers(move_preview: Dictionary, color: Color) -
 		)
 		marker.set_meta("grid", grid.duplicate(true))
 		marker.set_meta("path_index", index)
+		marker.set_meta("step_cost", step_index)
+		marker.set_meta("within_current_ap", within_current_ap)
+		marker.set_meta("requires_pending", bool(move_preview.get("requires_pending", false)) and not within_current_ap)
 		marker.set_meta("reachable", bool(move_preview.get("reachable", false)))
 		marker.set_meta("reason", str(move_preview.get("reason", "")))
 		move_path_preview_markers.add_child(marker)
@@ -1171,6 +1195,12 @@ func _update_move_path_preview_markers(move_preview: Dictionary, color: Color) -
 	move_path_preview_markers.set_meta("reachable", bool(move_preview.get("reachable", false)))
 	move_path_preview_markers.set_meta("reason", str(move_preview.get("reason", "")))
 	move_path_preview_markers.set_meta("steps", int(move_preview.get("steps", 0)))
+	move_path_preview_markers.set_meta("ap_cost", float(move_preview.get("ap_cost", 0.0)))
+	move_path_preview_markers.set_meta("ap_available", float(move_preview.get("ap_available", 0.0)))
+	move_path_preview_markers.set_meta("ap_affordable", bool(move_preview.get("ap_affordable", true)))
+	move_path_preview_markers.set_meta("affordable_steps", affordable_steps)
+	move_path_preview_markers.set_meta("requires_pending", bool(move_preview.get("requires_pending", false)))
+	move_path_preview_markers.set_meta("pending_steps", int(move_preview.get("pending_steps", 0)))
 
 
 func _clear_move_path_preview_markers() -> void:
@@ -1183,6 +1213,12 @@ func _clear_move_path_preview_markers() -> void:
 	move_path_preview_markers.set_meta("reachable", false)
 	move_path_preview_markers.set_meta("reason", "")
 	move_path_preview_markers.set_meta("steps", 0)
+	move_path_preview_markers.set_meta("ap_cost", 0.0)
+	move_path_preview_markers.set_meta("ap_available", 0.0)
+	move_path_preview_markers.set_meta("ap_affordable", true)
+	move_path_preview_markers.set_meta("affordable_steps", 0)
+	move_path_preview_markers.set_meta("requires_pending", false)
+	move_path_preview_markers.set_meta("pending_steps", 0)
 
 
 func _player_actor_id() -> int:

@@ -717,9 +717,16 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 	var before_hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
 	if _dictionary_or_empty(before_hover.get("prompt", {})).is_empty():
 		errors.append("interaction hover snapshot should include prompt summary")
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	var old_ap := 0.0
+	if player != null:
+		old_ap = float(player.ap)
+		player.ap = 0.0
 	var target_grid: Dictionary = _near_open_grid_from(_player_grid(game_root), game_root.world_result.get("map", {}))
 	var target := Vector3(float(target_grid.get("x", 0)), 0.0, float(target_grid.get("z", 0)))
 	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(target))
+	if player != null:
+		player.ap = old_ap
 	if not bool(hover_result.get("success", false)):
 		errors.append("ground hover raycast for move preview failed: %s" % hover_result.get("reason", "unknown"))
 		return
@@ -731,6 +738,8 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 		errors.append("ground hover should include move preview")
 	elif not bool(move_preview.get("reachable", false)):
 		errors.append("ground hover preview should be reachable: %s" % move_preview.get("reason", "unknown"))
+	elif bool(move_preview.get("ap_affordable", true)):
+		errors.append("ground hover preview should expose AP-insufficient pending state")
 	_expect_ground_hover_cursor_preview(errors, game_root)
 	_expect_move_path_preview_markers(errors, game_root, move_preview)
 	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
@@ -772,6 +781,14 @@ func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, m
 		errors.append("move path container should expose path length")
 	if not bool(container.get_meta("reachable", false)):
 		errors.append("move path container should expose reachable state")
+	if bool(container.get_meta("ap_affordable", true)):
+		errors.append("move path container should expose AP affordability")
+	if not bool(container.get_meta("requires_pending", false)):
+		errors.append("move path container should expose pending requirement")
+	if int(container.get_meta("affordable_steps", -1)) != 0:
+		errors.append("move path container should expose affordable steps")
+	if int(container.get_meta("pending_steps", 0)) <= 0:
+		errors.append("move path container should expose pending steps")
 	var marker: Node = container.find_child("MovePathPreviewMarker", true, false)
 	if marker == null:
 		errors.append("move path preview should create marker nodes")
@@ -782,6 +799,17 @@ func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, m
 		errors.append("move path marker should expose reachable state")
 	if _dictionary_or_empty(marker.get_meta("grid", {})).is_empty():
 		errors.append("move path marker should expose grid metadata")
+	if int(marker.get_meta("step_cost", -1)) != 0:
+		errors.append("first move path marker should expose zero step cost")
+	if not bool(marker.get_meta("within_current_ap", false)):
+		errors.append("first move path marker should be within current AP")
+	var pending_marker: Node = null
+	for child in container.get_children():
+		if child is Node and bool((child as Node).get_meta("requires_pending", false)):
+			pending_marker = child
+			break
+	if pending_marker == null:
+		errors.append("move path preview should mark cells beyond current AP as pending")
 
 
 func _near_open_grid_from(before: Dictionary, topology: Dictionary) -> Dictionary:
