@@ -68,8 +68,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var use_button: Button = _use_button(game_root)
 	if use_button == null or use_button.disabled:
 		errors.append("selected consumable should enable use button")
+	if not _open_inventory_context_menu(game_root, "绷带"):
+		errors.append("should open context menu for bandage")
+	elif _context_action_disabled(game_root, 1):
+		errors.append("context menu should enable use for consumable")
 	else:
-		use_button.pressed.emit()
+		_execute_inventory_context_action(game_root, 1)
 		await process_frame
 		if absf(player_ref.hp - 75.0) > 0.01:
 			errors.append("using bandage should restore 25 hp")
@@ -99,6 +103,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var quest_drop_button: Button = _drop_button(game_root)
 	if quest_drop_button == null or not quest_drop_button.disabled:
 		errors.append("quest item should disable drop button")
+	if not _open_inventory_context_menu(game_root, "罐头食品"):
+		errors.append("should open context menu for quest food item")
+	else:
+		if not _context_action_disabled(game_root, 1):
+			errors.append("quest item context menu should disable use")
+		if not _context_action_disabled(game_root, 3):
+			errors.append("quest item context menu should disable drop")
 	var quest_ap_before: float = player_ref.ap
 	var quest_use: Dictionary = game_root.use_player_item("1007")
 	if str(quest_use.get("reason", "")) != "item_use_forbidden":
@@ -177,6 +188,22 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var equip_button: Button = _equip_button(game_root)
 	if equip_button == null or equip_button.disabled:
 		errors.append("selected equippable item should enable equip button")
+	elif not _open_inventory_context_menu(game_root, "棒球棒"):
+		errors.append("should open context menu for baseball bat")
+	elif _context_action_disabled(game_root, 2):
+		errors.append("context menu should enable equip for baseball bat")
+	else:
+		_execute_inventory_context_action(game_root, 2)
+		await process_frame
+	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_blunt.gltf")
+	var context_unequip_result: Dictionary = game_root.unequip_player_slot("main_hand")
+	if not bool(context_unequip_result.get("success", false)):
+		errors.append("unequipping context-equipped baseball bat failed: %s" % context_unequip_result.get("reason", "unknown"))
+	if not _press_inventory_item_with_text(game_root, "棒球棒"):
+		errors.append("should reselect baseball bat before drag equipping")
+	equip_button = _equip_button(game_root)
+	if equip_button == null or equip_button.disabled:
+		errors.append("selected equippable item should enable equip button after context unequip")
 	elif not _drag_inventory_item_to_action(game_root, "棒球棒", "EquipSelectedButton"):
 		errors.append("should drag baseball bat onto equip button")
 	else:
@@ -222,6 +249,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 		quantity_spin.value = 2
 	if drop_button == null or drop_button.disabled:
 		errors.append("selected droppable item should enable drop button")
+	elif not _open_inventory_context_menu(game_root, "绷带"):
+		errors.append("should open context menu for picked bandages")
+	elif _context_action_disabled(game_root, 3):
+		errors.append("context menu should enable drop for picked bandages")
+	else:
+		quantity_spin.value = 1
+		_execute_inventory_context_action(game_root, 3)
+		await process_frame
+	if _player_inventory_count(game_root, "1006") != 2:
+		errors.append("context dropping one bandage should leave two bandages")
+	if not _press_inventory_item_with_text(game_root, "绷带"):
+		errors.append("should reselect bandages before drag dropping")
+	quantity_spin = _quantity_spin(game_root)
+	drop_button = _drop_button(game_root)
+	if quantity_spin != null:
+		quantity_spin.value = 1
+	if drop_button == null or drop_button.disabled:
+		errors.append("selected droppable item should enable drop button after context drop")
 	elif not _drag_inventory_item_to_action(game_root, "绷带", "DropSelectedButton"):
 		errors.append("should drag bandages onto drop button")
 	else:
@@ -383,6 +428,28 @@ func _drop_button(game_root: Node) -> Button:
 
 func _quantity_spin(game_root: Node) -> SpinBox:
 	return game_root.inventory_panel.find_child("QuantitySpin", true, false) as SpinBox
+
+
+func _open_inventory_context_menu(game_root: Node, item_needle: String) -> bool:
+	var source: Button = _inventory_item_button(game_root, item_needle)
+	if source == null or not source.has_meta("inventory_item"):
+		return false
+	game_root.inventory_panel.call("_open_context_menu_for_item", source.get_meta("inventory_item"), Vector2.ZERO)
+	return true
+
+
+func _context_action_disabled(game_root: Node, action_id: int) -> bool:
+	var menu: PopupMenu = game_root.inventory_panel.find_child("InventoryContextMenu", true, false) as PopupMenu
+	if menu == null:
+		return true
+	var index: int = menu.get_item_index(action_id)
+	if index < 0:
+		return true
+	return menu.is_item_disabled(index)
+
+
+func _execute_inventory_context_action(game_root: Node, action_id: int) -> void:
+	game_root.inventory_panel.call("_execute_context_action", action_id)
 
 
 func _reorder_inventory_item_before(game_root: Node, item_needle: String, target_needle: String) -> bool:

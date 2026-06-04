@@ -1,5 +1,9 @@
 extends Control
 
+const CONTEXT_USE := 1
+const CONTEXT_EQUIP := 2
+const CONTEXT_DROP := 3
+
 var _panel: PanelContainer
 var _title_label: Label
 var _summary_label: Label
@@ -11,12 +15,14 @@ var _quantity_spin: SpinBox
 var _use_button: Button
 var _equip_button: Button
 var _drop_button: Button
+var _context_menu: PopupMenu
 var _items_box: VBoxContainer
 var _category_filter: String = "all"
 var _sort_mode: String = "order"
 var _search_text: String = ""
 var _last_snapshot: Dictionary = {}
 var _selected_item: Dictionary = {}
+var _context_item: Dictionary = {}
 
 
 func _ready() -> void:
@@ -139,6 +145,10 @@ func _build_layout() -> void:
 		if root != null and root.has_method("drop_player_item"):
 			root.drop_player_item(str(_selected_item.get("item_id", "")), int(_quantity_spin.value if _quantity_spin != null else 1))
 	, CONNECT_DEFERRED)
+	_context_menu = PopupMenu.new()
+	_context_menu.name = "InventoryContextMenu"
+	_context_menu.id_pressed.connect(_execute_context_action)
+	add_child(_context_menu)
 	var action_row := HBoxContainer.new()
 	action_row.name = "ActionBar"
 	action_row.add_theme_constant_override("separation", 4)
@@ -199,6 +209,13 @@ func _item_line(item: Dictionary) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
 		_apply_detail(item.duplicate(true))
+	)
+	button.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event == null or not mouse_event.pressed or mouse_event.button_index != MOUSE_BUTTON_RIGHT:
+			return
+		button.accept_event()
+		_open_context_menu_for_item(item.duplicate(true), button.get_global_mouse_position())
 	)
 	return button
 
@@ -279,6 +296,44 @@ func _drop_inventory_action_data(position: Vector2, data: Variant, from_control:
 		"drop":
 			if root.has_method("drop_player_item"):
 				root.drop_player_item(item_id, _drag_drop_count(item))
+
+
+func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> void:
+	if _context_menu == null:
+		return
+	_apply_detail(item.duplicate(true))
+	_context_item = item.duplicate(true)
+	_context_menu.clear()
+	_context_menu.add_item("使用", CONTEXT_USE)
+	_context_menu.add_item("装备", CONTEXT_EQUIP)
+	_context_menu.add_item("丢弃", CONTEXT_DROP)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_USE), not bool(item.get("usable", false)))
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_EQUIP), _array_or_empty(item.get("equip_slots", [])).is_empty())
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DROP), not bool(item.get("droppable", true)) or int(item.get("count", 0)) <= 0)
+	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
+	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
+
+
+func _execute_context_action(action_id: int) -> void:
+	if _context_item.is_empty():
+		return
+	var item_id: String = str(_context_item.get("item_id", ""))
+	if item_id.is_empty():
+		return
+	var root := get_parent()
+	if root == null:
+		return
+	match action_id:
+		CONTEXT_USE:
+			if bool(_context_item.get("usable", false)) and root.has_method("use_player_item"):
+				root.use_player_item(item_id)
+		CONTEXT_EQUIP:
+			var slots: Array = _array_or_empty(_context_item.get("equip_slots", []))
+			if not slots.is_empty() and root.has_method("equip_player_item"):
+				root.equip_player_item(item_id, str(slots[0]))
+		CONTEXT_DROP:
+			if bool(_context_item.get("droppable", true)) and root.has_method("drop_player_item"):
+				root.drop_player_item(item_id, _drag_drop_count(_context_item))
 
 
 func _inventory_action_target(from_control: Control) -> String:
