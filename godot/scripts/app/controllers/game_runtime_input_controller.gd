@@ -41,6 +41,8 @@ var last_hover_state: Dictionary = {
 	"actor_id": 0,
 	"ui_blocker": "",
 	"reason": "",
+	"prompt": {},
+	"move_preview": {},
 }
 
 
@@ -594,16 +596,19 @@ func _clear_selection_only() -> void:
 
 
 func _set_hover_ground(world_position: Vector3) -> bool:
+	var grid: Dictionary = _grid_from_world_position(world_position)
 	return _replace_hover_state({
 		"active": true,
 		"kind": "ground",
-		"grid": _grid_from_world_position(world_position),
+		"grid": grid,
 		"target_name": "",
 		"target_type": "grid",
 		"target_id": "",
 		"actor_id": 0,
 		"ui_blocker": _hover_ui_blocker_name(),
 		"reason": "",
+		"prompt": _hover_prompt_for_target({"target_type": "grid", "grid": grid}),
+		"move_preview": _move_preview_for_grid(grid),
 	})
 
 
@@ -629,6 +634,8 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 		"actor_id": int(metadata.get("actor_id", 0)),
 		"ui_blocker": _hover_ui_blocker_name(),
 		"reason": "",
+		"prompt": _hover_prompt_for_target(metadata),
+		"move_preview": {},
 	})
 
 
@@ -643,6 +650,8 @@ func _set_hover_failure(reason: String = "") -> bool:
 		"actor_id": 0,
 		"ui_blocker": _hover_ui_blocker_name(),
 		"reason": reason,
+		"prompt": {},
+		"move_preview": {},
 	})
 
 
@@ -661,6 +670,59 @@ func _hover_ui_blocker_name() -> String:
 	if _gameplay_input_blocked_by_ui() and game_root.has_method("gameplay_input_blocker_name"):
 		return str(game_root.gameplay_input_blocker_name())
 	return ""
+
+
+func _hover_prompt_for_target(target: Dictionary) -> Dictionary:
+	var simulation: Variant = game_root.get("simulation") if game_root != null else null
+	if simulation == null or not simulation.has_method("query_interaction_options"):
+		return {}
+	var player_id := _player_actor_id()
+	if player_id <= 0:
+		return {}
+	var prompt: Dictionary = simulation.query_interaction_options(player_id, target)
+	return {
+		"ok": bool(prompt.get("ok", false)),
+		"reason": str(prompt.get("reason", "")),
+		"target_name": str(prompt.get("target_name", "")),
+		"primary_option_id": str(prompt.get("primary_option_id", "")),
+		"primary_option_kind": str(prompt.get("primary_option_kind", "")),
+		"action_label": str(prompt.get("action_label", "")),
+		"ap_cost": float(prompt.get("ap_cost", 0.0)),
+		"target_distance": int(prompt.get("target_distance", -1)),
+		"interaction_range": int(prompt.get("interaction_range", -1)),
+		"requires_approach": bool(prompt.get("requires_approach", false)),
+		"option_count": _array_or_empty(prompt.get("options", [])).size(),
+		"disabled_option_count": _array_or_empty(prompt.get("disabled_options", [])).size(),
+	}
+
+
+func _move_preview_for_grid(grid: Dictionary) -> Dictionary:
+	var simulation: Variant = game_root.get("simulation") if game_root != null else null
+	if simulation == null or not simulation.has_method("preview_move"):
+		return {}
+	var player_id := _player_actor_id()
+	if player_id <= 0:
+		return {}
+	var preview: Dictionary = simulation.preview_move(player_id, grid, _dictionary_or_empty(world_result.get("map", {})))
+	return {
+		"reachable": bool(preview.get("reachable", preview.get("success", false))),
+		"reason": str(preview.get("reason", "")),
+		"steps": int(preview.get("steps", 0)),
+		"target_position": _dictionary_or_empty(preview.get("target_position", grid)).duplicate(true),
+		"blocker": _dictionary_or_empty(preview.get("blocker", {})).duplicate(true),
+		"visited_cell_count": int(preview.get("visited_cell_count", 0)),
+	}
+
+
+func _player_actor_id() -> int:
+	var simulation: Variant = game_root.get("simulation") if game_root != null else null
+	if simulation == null or not simulation.has_method("snapshot"):
+		return 0
+	for actor in _array_or_empty(simulation.snapshot().get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if str(actor_data.get("kind", "")) == "player":
+			return int(actor_data.get("actor_id", 0))
+	return 0
 
 
 func _grid_from_world_position(world_position: Vector3) -> Dictionary:

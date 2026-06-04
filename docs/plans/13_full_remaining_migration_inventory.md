@@ -69,7 +69,7 @@
 
 - 待补完整 picking 优先级：UI blocker -> hotbar -> actor -> generated door -> map object -> trigger -> grid fallback。
 - 待补 ray 命中排序：actor hit fraction、object hit fraction、trigger hit fraction、door 近似 AABB、对象锚点噪声、场景切换触发器优先级。
-- hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、target id/name 与格子，并由 `PlayerInteraction` smoke 覆盖；待补 actor/object 细分、当前 prompt、可走/不可走原因和路径预览颜色。
+- hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、target id/name、格子、当前 prompt 摘要、地面移动可达/不可达原因和预计步数，并由 `PlayerInteraction` smoke 覆盖；待补 actor/object 细分和路径预览颜色。
 - 部分迁移左键/右键差异：左键主交互或移动、右键打开 interaction menu、菜单外点击关闭并阻止本次世界输入已恢复；待补完整上下文菜单项、禁用态和点击外部关闭的所有 modal 分支。
 - 待补目标切换规则：点击新目标时取消旧 pending 的 turn policy、清空旧 prompt、更新 focused target。
 - 部分迁移鼠标拖拽：地图面板画布左键拖拽平移、滚轮/按钮缩放、pan 复位和状态行诊断已有第一版，并由 `UIToggle` smoke 覆盖；待补技能树拖拽、背包/容器/交易物品跨面板拖拽、滚动条拖拽和拖拽视觉 polish。

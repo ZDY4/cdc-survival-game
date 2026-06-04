@@ -93,6 +93,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_expect_hover_runtime_state(errors, game_root, "interaction", "survivor_outpost_01_pickup_medkit")
 		if not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after hover selection")
+		_expect_ground_hover_move_preview(errors, game_root, camera, player_node)
 
 	var pickup_selection: Dictionary = game_root.select_interaction_node(pickup_node)
 	if not bool(pickup_selection.get("success", false)):
@@ -389,6 +390,50 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
 		player.ap = 6.0
+
+
+func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, camera: Camera3D, player_node: Node3D) -> void:
+	var before_hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
+	if _dictionary_or_empty(before_hover.get("prompt", {})).is_empty():
+		errors.append("interaction hover snapshot should include prompt summary")
+	var target_grid: Dictionary = _near_open_grid_from(_player_grid(game_root), game_root.world_result.get("map", {}))
+	var target := Vector3(float(target_grid.get("x", 0)), 0.0, float(target_grid.get("z", 0)))
+	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(target))
+	if not bool(hover_result.get("success", false)):
+		errors.append("ground hover raycast for move preview failed: %s" % hover_result.get("reason", "unknown"))
+		return
+	var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
+	if str(hover.get("kind", "")) != "ground":
+		errors.append("ground hover move preview should set hover kind ground")
+	var move_preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
+	if move_preview.is_empty():
+		errors.append("ground hover should include move preview")
+	elif not bool(move_preview.get("reachable", false)):
+		errors.append("ground hover preview should be reachable: %s" % move_preview.get("reason", "unknown"))
+	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
+	if str(prompt.get("primary_option_id", "")) != "move":
+		errors.append("ground hover prompt should expose move primary option")
+	var runtime_line := _hud_runtime_control_line(game_root)
+	if not runtime_line.contains("Hover ground") or not runtime_line.contains("可达"):
+		errors.append("HUD runtime control line should show ground move preview, got %s" % runtime_line)
+
+
+func _near_open_grid_from(before: Dictionary, topology: Dictionary) -> Dictionary:
+	var y := int(before.get("y", 0))
+	var start_x := int(before.get("x", 0))
+	var start_z := int(before.get("z", 0))
+	var candidates := [
+		{"x": start_x + 1, "y": y, "z": start_z},
+		{"x": start_x - 1, "y": y, "z": start_z},
+		{"x": start_x, "y": y, "z": start_z + 1},
+		{"x": start_x, "y": y, "z": start_z - 1},
+	]
+	var blocking: Dictionary = _dictionary_or_empty(topology.get("blocking_cells", {}))
+	for candidate in candidates:
+		var key := "%d:%d:%d" % [int(candidate.get("x", 0)), y, int(candidate.get("z", 0))]
+		if not blocking.has(key):
+			return candidate
+	return before.duplicate(true)
 
 
 func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:

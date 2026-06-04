@@ -671,8 +671,40 @@ func _hover_control_text(value: Variant) -> String:
 		]
 	if kind == "interaction":
 		var target_name := str(hover.get("target_name", hover.get("target_id", "")))
-		return "Hover %s %s%s" % [kind, target_name, grid_text]
-	return "Hover %s%s" % [kind, grid_text]
+		return "Hover %s %s%s%s" % [kind, target_name, grid_text, _hover_prompt_text(hover)]
+	return "Hover %s%s%s%s" % [
+		kind,
+		grid_text,
+		_hover_move_preview_text(hover),
+		_hover_prompt_text(hover),
+	]
+
+
+func _hover_prompt_text(hover: Dictionary) -> String:
+	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
+	if prompt.is_empty():
+		return ""
+	if bool(prompt.get("ok", false)):
+		var action := str(prompt.get("action_label", prompt.get("primary_option_id", "")))
+		var distance := int(prompt.get("target_distance", -1))
+		var range := int(prompt.get("interaction_range", -1))
+		var approach := " 接近" if bool(prompt.get("requires_approach", false)) else ""
+		var distance_text := "" if distance < 0 or range < 0 else " 距离%d/范围%d" % [distance, range]
+		return " | %s%s%s" % [action, distance_text, approach]
+	var reason := str(prompt.get("reason", ""))
+	return "" if reason.is_empty() else " | 不可用:%s" % _disabled_reason_text(reason)
+
+
+func _hover_move_preview_text(hover: Dictionary) -> String:
+	var preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
+	if preview.is_empty():
+		return ""
+	if bool(preview.get("reachable", false)):
+		return " 可达%d步" % int(preview.get("steps", 0))
+	var reason := str(preview.get("reason", ""))
+	if reason.is_empty():
+		return " 不可达"
+	return " 不可达:%s" % _disabled_reason_text(reason)
 
 
 func _skill_targeting_text(value: Variant) -> String:

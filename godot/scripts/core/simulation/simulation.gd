@@ -269,6 +269,24 @@ func move_actor_to(actor_id: int, target_position: Dictionary, topology: Diction
 	return _movement_runner.move_actor_to(self, _pathfinder, actor_id, target_position, topology)
 
 
+func preview_move(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var goal: RefCounted = GridCoord.from_dictionary(target_position)
+	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, _occupied_actor_cells(actor.actor_id))
+	var preview: Dictionary = {
+		"success": bool(plan.get("success", false)),
+		"target_position": goal.to_dictionary(),
+		"reason": str(plan.get("reason", "")),
+		"reachable": bool(plan.get("success", false)),
+		"steps": int(plan.get("steps", 0)),
+		"path": _array_or_empty(plan.get("path", [])).duplicate(true),
+	}
+	_copy_failure_context(plan, preview)
+	return preview
+
+
 func equip_item(actor_id: int, item_id: String, target_slot: String, item_library: Dictionary) -> Dictionary:
 	return _equipment_runner.equip_item(self, _equipment_rules, actor_id, item_id, target_slot, item_library)
 
