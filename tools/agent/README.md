@@ -230,6 +230,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorHandoff
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentEditors
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapReview
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario FogShader
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Door
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Movement
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction
@@ -245,7 +246,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Save
 
 - 固定调用 `D:\godot\godot.cmd --headless --path godot --script <smoke>`；`HeadlessNewGame` / `HeadlessWorld` 通过 `godot/scripts/app/headless_runner.gd` 覆盖 headless 启动入口。
 - `MigrationGuard` 调用 `godot/scripts/tools/mainline_migration_guard.gd`，用于确认 Godot 版本为 `4.6.3`，且主线未重新引入 Rust / Cargo / Bevy 时代源码文件。
-- 默认 `-Scenario All` 会运行所有已迁移 Godot smoke。
+- 默认 `-Scenario All` 会运行所有已迁移 Godot smoke；`-Scenario Door` 是门相关链路的聚合复核，会顺序运行 `World`、`Scene`、`Movement`、`AI`、`Interaction`、`PlayerInteraction` 和 `Save`。
 - 输出 console log 和 result JSON 到 `.local/agent-smoke/godot_game/<timestamp>/`。
 
 ## Maintenance Rule

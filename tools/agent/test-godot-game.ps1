@@ -42,6 +42,7 @@ param(
         "ContentEditors",
         "MapReview",
         "FogShader",
+        "Door",
         "World",
         "Scene",
         "Overworld",
@@ -130,7 +131,9 @@ $scenarioScripts = [ordered]@{
 }
 
 $selected = @()
-if ($Scenario -eq "All") {
+if ($Scenario -eq "Door") {
+    $selected = @("World", "Scene", "Movement", "AI", "Interaction", "PlayerInteraction", "Save")
+} elseif ($Scenario -eq "All") {
     $selected = @($scenarioScripts.Keys)
 } else {
     $selected = @($Scenario)
