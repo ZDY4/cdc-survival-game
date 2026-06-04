@@ -31,7 +31,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_ta
 		},
 		"status_badges": _status_badges(runtime_snapshot, player),
 		"interaction": prompt,
-		"hotbar": _hotbar_summary(runtime_snapshot),
+		"hotbar": _hotbar_summary(runtime_snapshot, player),
 		"event_feedback": _event_feedback(runtime_snapshot),
 		"tracked_quest": {"active": false, "quest_id": ""},
 	}
@@ -121,8 +121,10 @@ func _status_badges(runtime_snapshot: Dictionary, player: Dictionary) -> Array[D
 	]
 
 
-func _hotbar_summary(runtime_snapshot: Dictionary) -> Array[Dictionary]:
+func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[Dictionary]:
 	var hotbar: Dictionary = _dictionary_or_empty(runtime_snapshot.get("hotbar", {}))
+	var player_ap: float = float(player.get("ap", 0.0))
+	var player_resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(player.get("combat", {})).get("resources", {}))
 	var output: Array[Dictionary] = []
 	for slot_index in range(1, 11):
 		var slot_id := "slot_%d" % slot_index
@@ -131,6 +133,7 @@ func _hotbar_summary(runtime_snapshot: Dictionary) -> Array[Dictionary]:
 		var skill_id := str(slot_data.get("skill_id", ""))
 		var item_id := str(slot_data.get("item_id", ""))
 		var entry_id := item_id if kind == "item" else skill_id
+		var skill_state: Dictionary = _hotbar_skill_state(kind, skill_id, slot_data, player_ap, player_resources)
 		output.append({
 			"slot_id": slot_id,
 			"key": "0" if slot_index == 10 else str(slot_index),
@@ -139,9 +142,111 @@ func _hotbar_summary(runtime_snapshot: Dictionary) -> Array[Dictionary]:
 			"item_id": item_id,
 			"label": _hotbar_label(kind, entry_id),
 			"cooldown_remaining": float(slot_data.get("cooldown_remaining", 0.0)),
+			"ap_cost": float(skill_state.get("ap_cost", 0.0)),
+			"resource_costs": _array_or_empty(skill_state.get("resource_costs", [])).duplicate(true),
+			"can_use": bool(skill_state.get("can_use", not (slot_data.is_empty() or entry_id.is_empty()))),
+			"use_reason": str(skill_state.get("reason", "")),
+			"missing_resource": _dictionary_or_empty(skill_state.get("missing_resource", {})).duplicate(true),
 			"empty": slot_data.is_empty() or entry_id.is_empty(),
 		})
 	return output
+
+
+func _hotbar_skill_state(kind: String, skill_id: String, slot_data: Dictionary, player_ap: float, resources: Dictionary) -> Dictionary:
+	if kind != "skill" or skill_id.is_empty():
+		return {"can_use": true, "reason": "available"}
+	var skill: Dictionary = _skill_data(skill_id)
+	if skill.is_empty():
+		return {"can_use": false, "reason": "unknown_skill"}
+	var activation: Dictionary = _dictionary_or_empty(skill.get("activation", {}))
+	var ap_cost: float = float(activation.get("ap_cost", 0.0))
+	var resource_costs: Array[Dictionary] = _resource_costs(activation)
+	var cooldown: float = float(slot_data.get("cooldown_remaining", 0.0))
+	if cooldown > 0.0:
+		return {
+			"can_use": false,
+			"reason": "cooldown",
+			"cooldown_remaining": cooldown,
+			"ap_cost": ap_cost,
+			"resource_costs": resource_costs.duplicate(true),
+		}
+	if player_ap + 0.0001 < ap_cost:
+		return {
+			"can_use": false,
+			"reason": "ap_insufficient",
+			"ap_cost": ap_cost,
+			"available_ap": player_ap,
+			"resource_costs": resource_costs.duplicate(true),
+		}
+	var resource_check: Dictionary = _resource_cost_check(resource_costs, resources)
+	if not bool(resource_check.get("success", false)):
+		return {
+			"can_use": false,
+			"reason": "resource_insufficient",
+			"ap_cost": ap_cost,
+			"resource_costs": resource_costs.duplicate(true),
+			"missing_resource": resource_check.duplicate(true),
+		}
+	return {
+		"can_use": true,
+		"reason": "available",
+		"ap_cost": ap_cost,
+		"resource_costs": resource_costs.duplicate(true),
+	}
+
+
+func _skill_data(skill_id: String) -> Dictionary:
+	if registry == null or skill_id.is_empty():
+		return {}
+	var record: Dictionary = _dictionary_or_empty(registry.get_library("skills").get(skill_id, {}))
+	return _dictionary_or_empty(record.get("data", record))
+
+
+func _resource_costs(activation: Dictionary) -> Array[Dictionary]:
+	var source: Variant = activation.get("resource_costs", activation.get("resource_cost", {}))
+	var output: Array[Dictionary] = []
+	if typeof(source) == TYPE_DICTIONARY:
+		var costs: Dictionary = source
+		for resource_id in costs.keys():
+			var amount: float = max(0.0, float(costs.get(resource_id, 0.0)))
+			if amount <= 0.0:
+				continue
+			output.append({"resource": _normalized_resource_id(str(resource_id)), "amount": amount})
+	elif typeof(source) == TYPE_ARRAY:
+		for entry in source:
+			var entry_data: Dictionary = _dictionary_or_empty(entry)
+			var resource_id := _normalized_resource_id(str(entry_data.get("resource", entry_data.get("resource_id", ""))))
+			var amount: float = max(0.0, float(entry_data.get("amount", entry_data.get("cost", 0.0))))
+			if resource_id.is_empty() or amount <= 0.0:
+				continue
+			output.append({"resource": resource_id, "amount": amount})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("resource", "")) < str(b.get("resource", ""))
+	)
+	return output
+
+
+func _resource_cost_check(costs: Array[Dictionary], resources: Dictionary) -> Dictionary:
+	for cost in costs:
+		var cost_data: Dictionary = _dictionary_or_empty(cost)
+		var resource_id := _normalized_resource_id(str(cost_data.get("resource", "")))
+		var required: float = max(0.0, float(cost_data.get("amount", 0.0)))
+		var resource: Dictionary = _dictionary_or_empty(resources.get(resource_id, {}))
+		var available: float = float(resource.get("current", 0.0))
+		if available + 0.0001 < required:
+			return {
+				"success": false,
+				"resource": resource_id,
+				"required_amount": required,
+				"available_amount": available,
+			}
+	return {"success": true}
+
+
+func _normalized_resource_id(resource_id: String) -> String:
+	if resource_id == "health":
+		return "hp"
+	return resource_id
 
 
 func _hotbar_label(kind: String, entry_id: String) -> String:
@@ -234,6 +339,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _number_text(value: float) -> String:

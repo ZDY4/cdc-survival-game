@@ -249,12 +249,16 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	var entry_id := item_id if kind == "item" else skill_id
 	var entry_label := str(slot.get("label", entry_id))
 	var cooldown := float(slot.get("cooldown_remaining", 0.0))
+	var use_reason := str(slot.get("use_reason", ""))
+	var can_use := bool(slot.get("can_use", true))
 	button.name = "HotbarSlot_%s" % slot_id
 	button.custom_minimum_size = Vector2(48, 28)
 	button.focus_mode = Control.FOCUS_NONE
 	button.set_meta("hotbar_slot_id", slot_id)
 	button.set_meta("cooldown_remaining", cooldown)
 	button.set_meta("cooldown_mask_visible", cooldown > 0.0)
+	button.set_meta("use_reason", use_reason)
+	button.set_meta("can_use", can_use)
 	button.set_drag_forwarding(
 		Callable(self, "_empty_hotbar_drag_data"),
 		Callable(self, "_can_drop_hotbar_skill"),
@@ -266,13 +270,8 @@ func _hotbar_button(slot: Dictionary) -> Button:
 		return button
 	var suffix := " cd%.0f" % cooldown if cooldown > 0.0 else ""
 	button.text = "%s:%s%s" % [key_label, _short_hotbar_label(entry_label), suffix]
-	button.tooltip_text = "热栏 %s | %s | %s | %s" % [
-		key_label,
-		"物品" if kind == "item" else "技能",
-		entry_label,
-		"冷却 %.0fs" % cooldown if cooldown > 0.0 else "可用",
-	]
-	button.disabled = cooldown > 0.0
+	button.tooltip_text = _hotbar_tooltip(key_label, kind, entry_label, slot)
+	button.disabled = cooldown > 0.0 or not can_use
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("use_hotbar_slot"):
@@ -291,6 +290,77 @@ func _add_hotbar_cooldown_mask(button: Button, slot_id: String, cooldown: float)
 	mask.set_anchors_preset(Control.PRESET_FULL_RECT)
 	mask.set_meta("cooldown_remaining", cooldown)
 	button.add_child(mask)
+
+
+func _hotbar_tooltip(key_label: String, kind: String, entry_label: String, slot: Dictionary) -> String:
+	var parts: Array[String] = [
+		"热栏 %s" % key_label,
+		"物品" if kind == "item" else "技能",
+		entry_label,
+	]
+	var cost_text := _hotbar_cost_text(slot)
+	if not cost_text.is_empty():
+		parts.append(cost_text)
+	parts.append(_hotbar_use_state_text(slot))
+	return " | ".join(parts)
+
+
+func _hotbar_cost_text(slot: Dictionary) -> String:
+	var parts: Array[String] = []
+	var ap_cost := float(slot.get("ap_cost", 0.0))
+	if ap_cost > 0.0:
+		parts.append("AP %.0f" % ap_cost)
+	var resource_parts: Array[String] = []
+	for cost in _array_or_empty(slot.get("resource_costs", [])):
+		var cost_data: Dictionary = _dictionary_or_empty(cost)
+		var resource_id := str(cost_data.get("resource", ""))
+		var amount := float(cost_data.get("amount", 0.0))
+		if resource_id.is_empty() or amount <= 0.0:
+			continue
+		resource_parts.append("%s %.0f" % [_resource_label(resource_id), amount])
+	if not resource_parts.is_empty():
+		parts.append("资源 %s" % " / ".join(resource_parts))
+	return " / ".join(parts)
+
+
+func _hotbar_use_state_text(slot: Dictionary) -> String:
+	match str(slot.get("use_reason", "")):
+		"cooldown":
+			return "冷却 %.0fs" % float(slot.get("cooldown_remaining", 0.0))
+		"ap_insufficient":
+			return "AP不足"
+		"resource_insufficient":
+			return _missing_resource_text(slot)
+		"unknown_skill":
+			return "未知技能"
+		"", "available":
+			return "可用"
+	return str(slot.get("use_reason", ""))
+
+
+func _missing_resource_text(slot: Dictionary) -> String:
+	var missing: Dictionary = _dictionary_or_empty(slot.get("missing_resource", {}))
+	var resource_id := str(missing.get("resource", ""))
+	var required: float = float(missing.get("required_amount", 0.0))
+	var available: float = float(missing.get("available_amount", 0.0))
+	if resource_id.is_empty():
+		return "资源不足"
+	return "资源不足 %s %.0f/%.0f" % [_resource_label(resource_id), available, required]
+
+
+func _resource_label(resource_id: String) -> String:
+	match resource_id:
+		"hp":
+			return "HP"
+		"stamina":
+			return "stamina"
+		"hunger":
+			return "hunger"
+		"thirst":
+			return "thirst"
+		"immunity":
+			return "immunity"
+	return resource_id
 
 
 func _empty_hotbar_drag_data(_position: Vector2, _from_control: Control) -> Variant:

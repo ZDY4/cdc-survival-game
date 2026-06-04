@@ -94,6 +94,10 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("event feedback line should show recent pickup interaction")
 	if typeof(snapshot.get("hotbar", [])) != TYPE_ARRAY or snapshot.get("hotbar", []).size() != 10:
 		errors.append("HUD snapshot should expose ten hotbar slots")
+	else:
+		var empty_slot: Dictionary = _dictionary_or_empty(snapshot.get("hotbar", [])[0])
+		if not empty_slot.has("can_use") or not empty_slot.has("use_reason") or not empty_slot.has("resource_costs"):
+			errors.append("HUD hotbar snapshot should expose use state fields")
 	if typeof(snapshot.get("event_feedback", [])) != TYPE_ARRAY or snapshot.get("event_feedback", []).is_empty():
 		errors.append("HUD snapshot should expose recent event feedback")
 	if typeof(snapshot.get("status_badges", [])) != TYPE_ARRAY or snapshot.get("status_badges", []).size() < 6:

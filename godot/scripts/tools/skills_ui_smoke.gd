@@ -180,6 +180,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_skills_panel()
 	if not _skill_line(game_root, "adrenaline_rush").contains("资源 stamina 3"):
 		errors.append("bound active skill should show activation resource cost")
+	game_root.refresh_hud()
+	if not _hud_hotbar_slot_tooltip(game_root, "slot_3").contains("资源 stamina 3"):
+		errors.append("HUD hotbar slot tooltip should show activation resource cost")
 	if not _press_skill_line(game_root, "adrenaline_rush"):
 		errors.append("should select adrenaline rush skill row")
 	await process_frame
@@ -271,8 +274,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if abs(_player_resource_current(game_root, "stamina") - stamina_before_insufficient) > 0.001:
 		errors.append("resource-insufficient skill use should not spend resource")
 	game_root.refresh_skills_panel()
+	game_root.refresh_hud()
 	if not _skill_line(game_root, "adrenaline_rush").contains("冷却 20s"):
 		errors.append("cooldown should remain the visible blocker while hotbar slot is cooling down")
+	var hotbar_slot: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.simulation.snapshot().get("hotbar", {})).get("slot_3", {})).duplicate(true)
+	hotbar_slot["cooldown_remaining"] = 0.0
+	game_root.simulation.hotbar["slot_3"] = hotbar_slot
+	game_root.refresh_hud()
+	if not _hud_hotbar_slot_disabled(game_root, "slot_3"):
+		errors.append("HUD hotbar slot should be disabled when activation resource is insufficient")
+	if not _hud_hotbar_slot_tooltip(game_root, "slot_3").contains("资源不足 stamina 2/3"):
+		errors.append("HUD hotbar slot tooltip should show resource-insufficient state")
 	game_root.registry.libraries["skills"] = skill_library_before_resource_cost
 	await _expect_targeted_hotbar_skill(errors, game_root)
 	return errors

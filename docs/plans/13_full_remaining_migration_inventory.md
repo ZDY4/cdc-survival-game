@@ -308,7 +308,7 @@
 
 - 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能反馈，已纳入 `UI` smoke。待补更完整状态行和反馈 toast/过渡表现。
 - 待迁移 interaction menu 视觉布局、按钮 hover/disabled、关闭、右键位置、目标名称。
-- 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、slot tooltip、cooldown 文本/禁用态和冷却遮罩；待迁移观察模式 dock 和更完整 slot tooltip。
+- 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、slot tooltip、AP / resource cost、resource insufficient、cooldown 文本/禁用态和冷却遮罩；待迁移观察模式 dock 和更完整 slot tooltip。
 - 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；待迁移 tooltip layer、context menu layer、drag preview layer、overworld prompt layer，以及更统一的 modal layer 表现。
 - 待补所有 UI 的 mouse_filter / blocker，使面板不会把点击穿透到世界。
 
