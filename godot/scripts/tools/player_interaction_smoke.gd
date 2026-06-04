@@ -90,6 +90,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		elif str(hover_result.get("kind", "")) != "interaction":
 			errors.append("hover raycast should select interaction target")
 		_expect_hover_cursor_at_node(errors, game_root, pickup_node)
+		_expect_hover_runtime_state(errors, game_root, "interaction", "survivor_outpost_01_pickup_medkit")
 		if not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after hover selection")
 
@@ -760,6 +761,23 @@ func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target
 		errors.append("hover grid cursor should render above map meshes")
 
 
+func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expected_kind: String, expected_target_id: String) -> void:
+	if not game_root.has_method("runtime_hover_snapshot"):
+		errors.append("game root should expose runtime hover snapshot")
+		return
+	var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
+	if not bool(hover.get("active", false)):
+		errors.append("runtime hover snapshot should be active after hover raycast")
+	if str(hover.get("kind", "")) != expected_kind:
+		errors.append("runtime hover snapshot kind expected %s, got %s" % [expected_kind, hover.get("kind", "")])
+	if str(hover.get("target_id", "")) != expected_target_id:
+		errors.append("runtime hover snapshot should expose target id %s, got %s" % [expected_target_id, hover.get("target_id", "")])
+	if _dictionary_or_empty(hover.get("grid", {})).is_empty():
+		errors.append("runtime hover snapshot should expose hovered grid")
+	if not _hud_runtime_control_line(game_root).contains("Hover interaction") or not _hud_runtime_control_line(game_root).contains(expected_target_id):
+		errors.append("HUD runtime control line should show hover interaction target")
+
+
 func _expect_player_runtime_marker(errors: Array[String], player_node: Node3D) -> void:
 	var marker: MeshInstance3D = player_node.find_child("PlayerRuntimeMarker", true, false) as MeshInstance3D
 	if marker == null:
@@ -774,3 +792,9 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

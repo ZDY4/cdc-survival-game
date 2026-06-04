@@ -31,6 +31,17 @@ var is_camera_following_player := true
 var is_space_wait_held := false
 var space_wait_elapsed_sec := 0.0
 var space_wait_repeated := false
+var last_hover_state: Dictionary = {
+	"active": false,
+	"kind": "",
+	"grid": {},
+	"target_name": "",
+	"target_type": "",
+	"target_id": "",
+	"actor_id": 0,
+	"ui_blocker": "",
+	"reason": "",
+}
 
 
 func _init(p_game_root: Node) -> void:
@@ -178,6 +189,7 @@ func _close_interaction_menu_on_outside_click(mouse_event: InputEventMouseButton
 
 func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	if camera == null or not camera.is_inside_tree():
+		_set_hover_failure("camera_missing")
 		return {"success": false, "reason": "camera_missing"}
 
 	var ray_from := camera.project_ray_origin(screen_position)
@@ -188,7 +200,7 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	query.collide_with_areas = false
 	var hit: Dictionary = space_state.intersect_ray(query)
 	if hit.is_empty():
-		_clear_hover()
+		_clear_hover("no_hit")
 		return {"success": false, "reason": "no_hit"}
 
 	var hit_position: Vector3 = hit.get("position", Vector3.ZERO)
@@ -197,15 +209,27 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	var target_node := _interaction_node(collider as Node)
 	if target_node == null:
 		_clear_selection_only()
+		var hover_changed := _set_hover_ground(hit_position)
+		if hover_changed and game_root.has_method("refresh_hud"):
+			game_root.refresh_hud(game_root.current_interaction_prompt() if game_root.has_method("current_interaction_prompt") else {})
 		_preview_skill_target_from_hover({"success": true, "kind": "ground", "position": hit_position})
 		return {"success": true, "kind": "ground", "position": hit_position}
 
 	if selected_node != target_node and game_root.has_method("select_interaction_node"):
 		selected_node = target_node
 		game_root.select_interaction_node(target_node)
+	var hover_changed := _set_hover_interaction(target_node, hit_position)
+	if hover_changed and game_root.has_method("refresh_hud"):
+		game_root.refresh_hud(game_root.current_interaction_prompt() if game_root.has_method("current_interaction_prompt") else {})
 	var interaction_hover := {"success": true, "kind": "interaction", "node": target_node}
 	_preview_skill_target_from_hover(interaction_hover)
 	return interaction_hover
+
+
+func hover_state_snapshot() -> Dictionary:
+	var snapshot: Dictionary = last_hover_state.duplicate(true)
+	snapshot["ui_blocker"] = _hover_ui_blocker_name()
+	return snapshot
 
 
 func _handle_camera_key(event: InputEventKey) -> bool:
@@ -555,9 +579,10 @@ func _update_hover_cursor(world_position: Vector3) -> void:
 	hover_cursor.visible = true
 
 
-func _clear_hover() -> void:
+func _clear_hover(reason: String = "") -> void:
 	hover_cursor.visible = false
 	_clear_selection_only()
+	_set_hover_failure(reason)
 
 
 func _clear_selection_only() -> void:
@@ -566,6 +591,76 @@ func _clear_selection_only() -> void:
 	selected_node = null
 	if game_root.has_method("clear_interaction_selection"):
 		game_root.clear_interaction_selection()
+
+
+func _set_hover_ground(world_position: Vector3) -> bool:
+	return _replace_hover_state({
+		"active": true,
+		"kind": "ground",
+		"grid": _grid_from_world_position(world_position),
+		"target_name": "",
+		"target_type": "grid",
+		"target_id": "",
+		"actor_id": 0,
+		"ui_blocker": _hover_ui_blocker_name(),
+		"reason": "",
+	})
+
+
+func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
+	var metadata: Dictionary = {}
+	if target_node != null and target_node.has_meta("interaction_target"):
+		var raw: Variant = target_node.get_meta("interaction_target")
+		if typeof(raw) == TYPE_DICTIONARY:
+			metadata = raw
+	var target_id := str(metadata.get("target_id", ""))
+	var target_name := str(metadata.get("target_name", metadata.get("display_name", "")))
+	if target_name.is_empty():
+		target_name = target_id
+	if target_name.is_empty() and target_node != null:
+		target_name = str(target_node.name)
+	return _replace_hover_state({
+		"active": true,
+		"kind": "interaction",
+		"grid": _grid_from_world_position(world_position),
+		"target_name": target_name,
+		"target_type": str(metadata.get("target_type", "")),
+		"target_id": target_id,
+		"actor_id": int(metadata.get("actor_id", 0)),
+		"ui_blocker": _hover_ui_blocker_name(),
+		"reason": "",
+	})
+
+
+func _set_hover_failure(reason: String = "") -> bool:
+	return _replace_hover_state({
+		"active": false,
+		"kind": "",
+		"grid": {},
+		"target_name": "",
+		"target_type": "",
+		"target_id": "",
+		"actor_id": 0,
+		"ui_blocker": _hover_ui_blocker_name(),
+		"reason": reason,
+	})
+
+
+func _replace_hover_state(next_state: Dictionary) -> bool:
+	if last_hover_state == next_state:
+		return false
+	last_hover_state = next_state
+	return true
+
+
+func _hover_ui_blocker_name() -> String:
+	if _mouse_over_blocking_ui():
+		var viewport := game_root.get_viewport()
+		var hovered := viewport.gui_get_hovered_control() if viewport != null else null
+		return str(hovered.name) if hovered != null else "ui"
+	if _gameplay_input_blocked_by_ui() and game_root.has_method("gameplay_input_blocker_name"):
+		return str(game_root.gameplay_input_blocker_name())
+	return ""
 
 
 func _grid_from_world_position(world_position: Vector3) -> Dictionary:

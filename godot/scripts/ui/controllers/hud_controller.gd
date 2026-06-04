@@ -603,7 +603,33 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var ui_blocker := str(control_data.get("ui_blocker", ""))
 	if not ui_blocker.is_empty():
 		parts.append("Blocker %s" % ui_blocker)
+	var hover_text := _hover_control_text(control_data.get("hover", {}))
+	if not hover_text.is_empty():
+		parts.append(hover_text)
 	return " | ".join(parts)
+
+
+func _hover_control_text(value: Variant) -> String:
+	var hover: Dictionary = _dictionary_or_empty(value)
+	var blocker := str(hover.get("ui_blocker", ""))
+	if not blocker.is_empty():
+		return "Hover UI %s" % blocker
+	if not bool(hover.get("active", false)):
+		var reason := str(hover.get("reason", ""))
+		return "" if reason.is_empty() else "Hover none %s" % reason
+	var kind := str(hover.get("kind", ""))
+	var grid: Dictionary = _dictionary_or_empty(hover.get("grid", {}))
+	var grid_text := ""
+	if not grid.is_empty():
+		grid_text = "@%d,%d,%d" % [
+			int(grid.get("x", 0)),
+			int(grid.get("y", 0)),
+			int(grid.get("z", 0)),
+		]
+	if kind == "interaction":
+		var target_name := str(hover.get("target_name", hover.get("target_id", "")))
+		return "Hover %s %s%s" % [kind, target_name, grid_text]
+	return "Hover %s%s" % [kind, grid_text]
 
 
 func _skill_targeting_text(value: Variant) -> String:

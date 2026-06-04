@@ -327,8 +327,15 @@ func runtime_control_snapshot() -> Dictionary:
 		"map_level": map_level_snapshot(),
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
+		"hover": runtime_hover_snapshot(),
 		"skill_targeting": _skill_targeting_snapshot(),
 	}
+
+
+func runtime_hover_snapshot() -> Dictionary:
+	if runtime_input_controller != null and runtime_input_controller.has_method("hover_state_snapshot"):
+		return runtime_input_controller.hover_state_snapshot()
+	return {"active": false}
 
 
 func settings_applied(_snapshot: Dictionary = {}) -> void:
