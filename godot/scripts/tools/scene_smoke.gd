@@ -78,6 +78,7 @@ func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary,
 	_validate_synthetic_actor_side_badges(errors)
 	_validate_quest_actor_markers(registry, errors)
 	_validate_corpse_world_markers(errors)
+	_validate_equipment_attach_points(errors)
 	return errors
 
 
@@ -226,9 +227,19 @@ func _validate_player_equipment_models(player: Node, errors: Array[String]) -> v
 			continue
 		if str(model.get_meta("slot_id", "")) != slot_id:
 			errors.append("equipment model %s should expose slot_id metadata" % slot_id)
+		if str(model.get_meta("attach_target", "")) == "":
+			errors.append("equipment model %s should expose attach_target metadata" % slot_id)
+		if not model.has_meta("attach_offset") or not model.has_meta("attach_rotation_degrees") or not model.has_meta("attach_scale"):
+			errors.append("equipment model %s should expose attachment transform metadata" % slot_id)
 	var main_hand: Node = player.find_child("EquipmentModel_main_hand", true, false)
 	if main_hand != null and str(main_hand.get_meta("model_asset", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("main_hand equipment model should use dagger glTF")
+	if main_hand != null:
+		if str(main_hand.get_meta("attach_target", "")) != "main_hand":
+			errors.append("main_hand equipment model should attach to main_hand")
+		var rotation: Vector3 = main_hand.get_meta("attach_rotation_degrees", Vector3.ZERO)
+		if absf(rotation.z) < 1.0:
+			errors.append("main_hand weapon should expose hand-held rotation")
 
 
 func _validate_actor_status_markers(root: Node3D, world_result: Dictionary, errors: Array[String]) -> void:
@@ -594,6 +605,73 @@ func _corpse_world() -> Dictionary:
 			],
 			"money": 17,
 		}],
+	}
+
+
+func _validate_equipment_attach_points(errors: Array[String]) -> void:
+	var root := Node3D.new()
+	root.name = "SceneSmokeEquipmentAttachRoot"
+	get_root().add_child(root)
+	WorldSceneRenderer.new().render_world(root, _equipment_attach_world(), {"load_map_visuals": false})
+	var actor_node: Node = root.find_child("Actor_scene_smoke_equipment_9301", true, false)
+	if actor_node == null:
+		errors.append("equipment attach smoke actor should render")
+	else:
+		for attach_target in ["head", "hands", "back", "accessory", "off_hand"]:
+			var model: Node = actor_node.find_child("EquipmentModel_%s" % attach_target, true, false)
+			if model == null:
+				errors.append("equipment attach smoke should render %s model" % attach_target)
+				continue
+			if str(model.get_meta("attach_target", "")) != attach_target:
+				errors.append("%s equipment should expose attach_target metadata" % attach_target)
+			if not model.has_meta("attach_offset") or not model.has_meta("attach_rotation_degrees") or not model.has_meta("attach_scale"):
+				errors.append("%s equipment should expose transform metadata" % attach_target)
+		var off_hand: Node = actor_node.find_child("EquipmentModel_off_hand", true, false)
+		if off_hand != null:
+			var off_rotation: Vector3 = off_hand.get_meta("attach_rotation_degrees", Vector3.ZERO)
+			if off_rotation.z <= 0.0:
+				errors.append("off_hand equipment should mirror hand-held rotation")
+		var back: Node = actor_node.find_child("EquipmentModel_back", true, false)
+		if back != null:
+			var back_offset: Vector3 = back.get_meta("attach_offset", Vector3.ZERO)
+			if back_offset.z <= 0.0:
+				errors.append("back equipment should attach behind actor")
+	root.queue_free()
+
+
+func _equipment_attach_world() -> Dictionary:
+	var visuals: Array[Dictionary] = []
+	for attach_target in ["head", "hands", "back", "accessory", "off_hand"]:
+		visuals.append({
+			"slot_id": attach_target,
+			"item_id": "scene_smoke_%s" % attach_target,
+			"visual_asset": "builtin:item:body",
+			"model_asset": "preview_placeholders/placeholders/equipment_body.gltf",
+			"attach_target": attach_target,
+			"presentation_mode": "attach",
+		})
+	return {
+		"map": {
+			"map_id": "scene_smoke_equipment_map",
+			"size": {"width": 3, "height": 3},
+			"entry_points": {"default_entry": {"x": 0, "y": 0, "z": 0}},
+			"interactive_objects": [],
+			"trigger_objects": [],
+			"pickup_objects": [],
+			"interaction_targets": {},
+		},
+		"actors": [{
+			"actor_id": 9301,
+			"definition_id": "scene_smoke_equipment",
+			"display_name": "Equipment Attach Smoke",
+			"kind": "npc",
+			"side": "friendly",
+			"grid_position": {"x": 1, "y": 0, "z": 1},
+			"equipment_visuals": visuals,
+			"ap": 3.0,
+			"combat": {"hp": 8.0, "max_hp": 8.0, "attributes": {"turn_ap_max": 6.0}},
+		}],
+		"corpses": [],
 	}
 
 

@@ -279,8 +279,8 @@
 ### 12.2 角色、装备和尸体表现
 
 - 待补 actor 模型姿态、朝向、移动插值、攻击/受击/死亡占位动画。
-- 待补装备视觉挂点：body、feet、legs、head、hands、back、accessory、main_hand、off_hand。
-- 待补武器模型方向、缩放、手持位置、开火/挥击反馈。
+- 装备视觉挂点第一版已迁移：装备视觉数据会按 `attach_target` 驱动 body、feet、legs、head、hands、back、accessory、main_hand、off_hand 的偏移、旋转和缩放，世界节点暴露 `attach_target`、`attach_offset`、`attach_rotation_degrees`、`attach_scale` metadata，`Scene` smoke 覆盖真实玩家主手装备和合成 head/hands/back/accessory/off_hand 挂点。待补真实骨骼 socket、动画绑定、精确美术校准和装备遮挡处理。
+- 待补武器开火/挥击反馈、命中特效、换弹/攻击动画和手持模型 polish。
 - 尸体模型 / 标记第一版已迁移：世界快照会生成 `Corpse_*` 节点，优先复用被击败 actor glTF，否则使用 corpse fallback；节点带 `CorpseNameLabel`、`CorpseContainerBadge`、pickable body、container/source actor/loot/money metadata，可 hover、选中并打开容器；已由 `Scene` 合成尸体 smoke 和 `PlayerInteraction` 击杀后尸体 hover/open smoke 覆盖。待补雾战显隐细节、专用尸体姿态 / 动画和视觉 polish。
 - actor label、血条、AP 条、敌友阵营颜色、side badge、可接任务 / 任务交付 NPC 标记和状态效果图标第一版已迁移：world snapshot 会转发 actor `ap`、`turn_open`、`in_combat` 和 `combat` 数据，并从 active/completed quest、dialogue rule 和 dialogue action 派生 `quest_offer` / `quest_turn_in` 的 `quest_markers`；`WorldSceneRenderer` 会为 actor 生成 `ActorNameLabel`、`ActorHealthBar`、`ActorApBar`、`ActorSideBadge`、`ActorQuestMarker`、`ActorQuestMarkerLabel` 和 `ActorStatusEffectIcons`，并由 `Scene` smoke 覆盖真实启动 actor、合成 hostile actor、`trader_lao_wang` 可接任务 marker、`doctor_chen` 可交付任务 marker，以及 passive / buff 状态效果图标 metadata。待补遮挡处理和视觉 polish。
 

@@ -804,14 +804,33 @@ func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
 		model_root.set_meta("slot_id", slot_id)
 		model_root.set_meta("item_id", str(visual_data.get("item_id", "")))
 		model_root.set_meta("model_asset", model_asset)
-		model_root.position = _equipment_model_offset(slot_id)
+		model_root.set_meta("attach_target", str(visual_data.get("attach_target", slot_id)))
+		model_root.set_meta("presentation_mode", str(visual_data.get("presentation_mode", "")))
+		_apply_equipment_model_transform(model_root as Node3D, visual_data)
 		parent.add_child(model_root)
 
 
-func _equipment_model_offset(slot_id: String) -> Vector3:
-	match slot_id:
-		"main_hand", "off_hand":
-			return Vector3(0.38, 0.28, 0.0)
+func _apply_equipment_model_transform(model_root: Node3D, visual_data: Dictionary) -> void:
+	if model_root == null:
+		return
+	var slot_id := str(visual_data.get("slot_id", ""))
+	var attach_target := str(visual_data.get("attach_target", slot_id))
+	model_root.position = _equipment_model_offset(attach_target, slot_id)
+	model_root.rotation_degrees = _equipment_model_rotation(attach_target, slot_id)
+	model_root.scale = Vector3.ONE * _equipment_model_scale(attach_target, slot_id)
+	model_root.set_meta("attach_offset", model_root.position)
+	model_root.set_meta("attach_rotation_degrees", model_root.rotation_degrees)
+	model_root.set_meta("attach_scale", model_root.scale)
+
+
+func _equipment_model_offset(attach_target: String, slot_id: String = "") -> Vector3:
+	match attach_target:
+		"main_hand":
+			return Vector3(0.36, 0.30, -0.08)
+		"off_hand":
+			return Vector3(-0.36, 0.30, -0.08)
+		"hands":
+			return Vector3(0.0, 0.28, -0.10)
 		"body":
 			return Vector3(0.0, 0.18, 0.0)
 		"legs":
@@ -819,11 +838,49 @@ func _equipment_model_offset(slot_id: String) -> Vector3:
 		"feet":
 			return Vector3(0.0, -0.42, 0.0)
 		"head":
-			return Vector3(0.0, 0.58, 0.0)
+			return Vector3(0.0, 0.62, 0.0)
 		"back":
-			return Vector3(0.0, 0.12, 0.28)
+			return Vector3(0.0, 0.15, 0.30)
+		"accessory":
+			return Vector3(0.18, 0.44, -0.18)
 		_:
-			return Vector3.ZERO
+			if slot_id == "main_hand" or slot_id == "off_hand":
+				return _equipment_model_offset(slot_id, "")
+	return Vector3.ZERO
+
+
+func _equipment_model_rotation(attach_target: String, slot_id: String = "") -> Vector3:
+	match attach_target:
+		"main_hand":
+			return Vector3(0.0, -24.0, -18.0)
+		"off_hand":
+			return Vector3(0.0, 24.0, 18.0)
+		"hands":
+			return Vector3(0.0, 0.0, 0.0)
+		"back":
+			return Vector3(0.0, 180.0, 8.0)
+		"accessory":
+			return Vector3(0.0, 18.0, 0.0)
+		_:
+			if slot_id == "main_hand" or slot_id == "off_hand":
+				return _equipment_model_rotation(slot_id, "")
+	return Vector3.ZERO
+
+
+func _equipment_model_scale(attach_target: String, slot_id: String = "") -> float:
+	match attach_target:
+		"main_hand", "off_hand":
+			return 0.92
+		"hands", "head", "accessory":
+			return 0.72
+		"back":
+			return 0.82
+		"body", "legs", "feet":
+			return 0.88
+		_:
+			if slot_id == "main_hand" or slot_id == "off_hand":
+				return _equipment_model_scale(slot_id, "")
+	return 1.0
 
 
 func _spawn_lights(root: Node3D) -> int:
