@@ -335,6 +335,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 		game_root.hud.show_interaction_menu(Vector2(64, 64), game_root.current_interaction_prompt())
 		if not bool(game_root.hud.is_interaction_menu_open()):
 			errors.append("interaction menu should open for selected pickup")
+		var disabled_container_option := _interaction_menu_disabled_option(game_root, "open_container")
+		if disabled_container_option == null:
+			errors.append("interaction menu should show disabled container option for pickup target")
+		else:
+			if not disabled_container_option.disabled:
+				errors.append("disabled interaction menu option should be disabled")
+			if str(disabled_container_option.get_meta("disabled_reason", "")) != "target_not_container":
+				errors.append("disabled interaction menu option should expose disabled reason")
+			if not str(disabled_container_option.tooltip_text).contains("target_not_container"):
+				errors.append("disabled interaction menu option tooltip should include reason")
 		_expect_blocker(errors, game_root, "interaction_menu", "open interaction menu blocker")
 		_press_key(game_root, KEY_ESCAPE)
 		if bool(game_root.hud.is_interaction_menu_open()):
@@ -843,6 +853,12 @@ func _status_effect_tooltip(game_root: Node, node_name: String) -> String:
 	if row is Control:
 		return str((row as Control).tooltip_text)
 	return ""
+
+
+func _interaction_menu_disabled_option(game_root: Node, option_id: String) -> Button:
+	if game_root.hud == null:
+		return null
+	return game_root.hud.find_child("DisabledOption_%s" % option_id, true, false) as Button
 
 
 func _equipment_unequip_button(game_root: Node, slot_id: String) -> Button:

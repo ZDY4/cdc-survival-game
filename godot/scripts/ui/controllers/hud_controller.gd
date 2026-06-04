@@ -196,6 +196,9 @@ func _apply_interaction_menu(interaction: Dictionary) -> void:
 	for option in interaction.get("options", []):
 		var option_data: Dictionary = option
 		_menu_options_box.add_child(_option_button(option_data))
+	for option in interaction.get("disabled_options", []):
+		var option_data: Dictionary = option
+		_menu_options_box.add_child(_disabled_option_button(option_data))
 
 
 func _apply_controls_hint() -> void:
@@ -208,8 +211,9 @@ func _option_button(option: Dictionary) -> Button:
 	var button := Button.new()
 	button.name = "Option_%s" % str(option.get("id", "unknown"))
 	button.text = str(option.get("display_name", option.get("id", "")))
-	button.tooltip_text = "%s (%s)" % [button.text, str(option.get("kind", ""))]
+	button.tooltip_text = _option_tooltip(option)
 	button.custom_minimum_size = Vector2(160, 28)
+	button.focus_mode = Control.FOCUS_NONE
 	var option_id := str(option.get("id", ""))
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
@@ -218,6 +222,57 @@ func _option_button(option: Dictionary) -> Button:
 		hide_interaction_menu()
 	)
 	return button
+
+
+func _disabled_option_button(option: Dictionary) -> Button:
+	var button := Button.new()
+	var option_id := str(option.get("id", "unknown"))
+	var reason := str(option.get("disabled_reason", "interaction_option_unavailable"))
+	button.name = "DisabledOption_%s" % option_id
+	button.text = "%s - %s" % [
+		str(option.get("display_name", option_id)),
+		_disabled_reason_text(reason),
+	]
+	button.tooltip_text = "%s | %s" % [_option_tooltip(option), reason]
+	button.custom_minimum_size = Vector2(160, 28)
+	button.focus_mode = Control.FOCUS_NONE
+	button.disabled = true
+	button.set_meta("option_id", option_id)
+	button.set_meta("option_kind", str(option.get("kind", "")))
+	button.set_meta("disabled_reason", reason)
+	button.set_meta("ap_cost", float(option.get("ap_cost", 0.0)))
+	return button
+
+
+func _option_tooltip(option: Dictionary) -> String:
+	var parts: Array[String] = [
+		"%s (%s)" % [str(option.get("display_name", option.get("id", ""))), str(option.get("kind", ""))],
+	]
+	var ap_cost := float(option.get("ap_cost", 0.0))
+	if ap_cost > 0.0:
+		parts.append("AP %.0f" % ap_cost)
+	if bool(option.get("disabled", false)):
+		parts.append(_disabled_reason_text(str(option.get("disabled_reason", ""))))
+	return " | ".join(parts)
+
+
+func _disabled_reason_text(reason: String) -> String:
+	match reason:
+		"target_not_container":
+			return "不是容器"
+		"target_not_hostile":
+			return "非敌对目标"
+		"target_hostile":
+			return "敌对目标"
+		"target_empty":
+			return "目标为空"
+		"target_not_visible":
+			return "目标不可见"
+		"interaction_option_unavailable":
+			return "不可用"
+	if reason.is_empty():
+		return "不可用"
+	return reason
 
 
 func _apply_hotbar(slots_value: Variant) -> void:
@@ -446,6 +501,7 @@ func _prompt_summary_for_menu(prompt: Dictionary) -> Dictionary:
 		"target_name": prompt.get("target_name", ""),
 		"primary_option_id": prompt.get("primary_option_id", ""),
 		"options": prompt.get("options", []),
+		"disabled_options": prompt.get("disabled_options", []),
 	}
 
 
