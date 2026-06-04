@@ -73,8 +73,14 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("second zombie kill should preserve both corpse containers")
 	if _event_count(snapshot, "attack_resolved") < 2:
 		errors.append("attacks should emit attack_resolved events")
+	if _event_count(snapshot, "actor_defeated") < 2:
+		errors.append("kills should emit actor_defeated events")
 	if _event_count(snapshot, "corpse_created") < 2:
 		errors.append("kills should emit corpse_created events")
+	if _event_count(snapshot, "combat_started") <= 0:
+		errors.append("attacks should emit combat_started")
+	if _event_count(snapshot, "combat_ended") <= 0:
+		errors.append("clearing hostiles should emit combat_ended")
 	if bool(snapshot.get("combat_state", {}).get("active", true)):
 		errors.append("combat should exit after hostiles are gone")
 	return errors
