@@ -70,11 +70,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("journal summary did not count completed quest")
 	if not _quest_text(game_root).contains("警戒区清剿"):
 		errors.append("journal did not show next quest after prerequisite completion")
+	if not _completed_quest_text(game_root).contains("补给试跑 | 已完成"):
+		errors.append("journal should list completed tutorial quest")
+	if not _press_completed_quest(game_root, "tutorial_survive"):
+		errors.append("should select completed tutorial quest")
+	await process_frame
+	if not _detail_text(game_root).contains("详情: 补给试跑（已完成）"):
+		errors.append("completed quest detail should show completed title")
+	if not _detail_text(game_root).contains("进度: 2/2 | 已完成"):
+		errors.append("completed quest detail should show finished progress")
+	if _track_button(game_root) == null or not _track_button(game_root).disabled:
+		errors.append("completed quest detail should disable tracking")
 	_setup_manual_turn_in_quest(game_root)
 	if not _quest_text(game_root).contains("医院取药"):
 		errors.append("journal missing manual turn-in quest")
 	if not _press_quest_title(game_root, "find_medicine"):
 		errors.append("should select manual turn-in quest title")
+	await process_frame
 	if not _detail_text(game_root).contains("需要完成目标后手动交付"):
 		errors.append("manual quest detail should explain turn-in requirement")
 	if not _quest_text(game_root).contains("技能点 1"):
@@ -85,6 +97,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	player.inventory["1005"] = 1
 	game_root.simulation.record_item_collected(1, "1005", 1)
 	game_root.refresh_journal_panel()
+	if not _press_quest_title(game_root, "find_medicine"):
+		errors.append("should reselect manual turn-in quest after progress refresh")
+	await process_frame
 	if not _quest_text(game_root).contains("可交付"):
 		errors.append("manual quest should show ready status after objective completion")
 	if not _detail_text(game_root).contains("交付: 可交付"):
@@ -95,6 +110,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if _quest_text(game_root).contains("医院取药"):
 		errors.append("manual quest should leave active journal after turn-in")
+	if not _completed_quest_text(game_root).contains("医院取药 | 已完成"):
+		errors.append("manual quest should appear in completed history after turn-in")
 	if not game_root.simulation.snapshot().get("completed_quests", []).has("find_medicine"):
 		errors.append("manual quest should be completed after journal turn-in")
 	if _player_inventory_count(game_root, "1005") != 0:
@@ -138,6 +155,10 @@ func _quest_text(game_root: Node) -> String:
 	return "\n".join(_quest_lines(game_root))
 
 
+func _completed_quest_text(game_root: Node) -> String:
+	return "\n".join(_completed_quest_lines(game_root))
+
+
 func _turn_in_button(game_root: Node, quest_id: String) -> Button:
 	var row: Node = game_root.journal_panel.find_child("Reward_%s" % quest_id, true, false)
 	if row == null:
@@ -175,6 +196,25 @@ func _press_quest_title(game_root: Node, quest_id: String) -> bool:
 
 func _quest_title_button(game_root: Node, quest_id: String) -> Button:
 	return game_root.journal_panel.find_child("Quest_%s" % quest_id, true, false) as Button
+
+
+func _completed_quest_lines(game_root: Node) -> Array[String]:
+	var output: Array[String] = []
+	var quest_box: Node = game_root.journal_panel.get_node("JournalPanel/JournalLines/CompletedQuestLines")
+	for child in quest_box.get_children():
+		if child is Button:
+			output.append((child as Button).text)
+		elif child is Label:
+			output.append((child as Label).text)
+	return output
+
+
+func _press_completed_quest(game_root: Node, quest_id: String) -> bool:
+	var button: Button = game_root.journal_panel.find_child("CompletedQuest_%s" % quest_id, true, false) as Button
+	if button == null:
+		return false
+	button.pressed.emit()
+	return true
 
 
 func _player_inventory_count(game_root: Node, item_id: String) -> int:

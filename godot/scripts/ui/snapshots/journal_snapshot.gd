@@ -18,9 +18,18 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	quests.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("title", "")) < str(b.get("title", ""))
 	)
+	var completed_quests: Array[Dictionary] = []
+	for quest_id in runtime_snapshot.get("completed_quests", []):
+		var completed_view: Dictionary = _completed_quest_view(str(quest_id))
+		if not completed_view.is_empty():
+			completed_quests.append(completed_view)
+	completed_quests.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("title", "")) < str(b.get("title", ""))
+	)
 	return {
 		"quests": quests,
-		"completed_count": runtime_snapshot.get("completed_quests", []).size(),
+		"completed_quests": completed_quests,
+		"completed_count": completed_quests.size(),
 	}
 
 
@@ -55,6 +64,36 @@ func _quest_view(state: Dictionary) -> Dictionary:
 		"turn_in_ready": turn_in_ready,
 		"status_text": _status_text(manual_turn_in, turn_in_ready, current, target),
 		"rewards": _reward_snapshot(quest_data),
+		"state": "active",
+	}
+
+
+func _completed_quest_view(quest_id: String) -> Dictionary:
+	var record: Dictionary = registry.get_library("quests").get(quest_id, {})
+	if record.is_empty():
+		return {}
+	var quest_data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+	var objective: Dictionary = _current_objective(quest_data, "")
+	var objective_id := str(objective.get("id", ""))
+	var target: int = max(1, int(objective.get("count", 0)))
+	var objective_snapshot: Dictionary = _objective_snapshot(objective, target, target)
+	return {
+		"quest_id": quest_id,
+		"title": str(quest_data.get("title", quest_id)),
+		"description": str(quest_data.get("description", "")),
+		"objective_text": str(objective.get("description", quest_data.get("description", ""))),
+		"current_node_id": "completed",
+		"objective": objective_snapshot,
+		"objective_id": objective_id,
+		"objective_type": str(objective_snapshot.get("type", "")),
+		"progress_current": target,
+		"progress_target": target,
+		"progress_percent": 1.0,
+		"manual_turn_in": bool(objective.get("manual_turn_in", false)),
+		"turn_in_ready": false,
+		"status_text": "已完成",
+		"rewards": _reward_snapshot(quest_data),
+		"state": "completed",
 	}
 
 

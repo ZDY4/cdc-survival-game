@@ -3,6 +3,7 @@ extends Control
 var _panel: PanelContainer
 var _summary_label: Label
 var _quest_box: VBoxContainer
+var _completed_box: VBoxContainer
 var _detail_title_label: Label
 var _detail_body_label: Label
 var _track_button: Button
@@ -23,27 +24,44 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 
 	_last_snapshot = snapshot.duplicate(true)
 	var quests: Array = snapshot.get("quests", [])
+	var completed_quests: Array = snapshot.get("completed_quests", [])
 	_summary_label.text = "任务 %d | 已完成 %d" % [
 		quests.size(),
 		int(snapshot.get("completed_count", 0)),
 	]
 	_clear_quests()
+	_clear_completed_quests()
 	if quests.is_empty():
 		var empty := _label("QuestEmpty")
 		empty.text = "当前没有进行中的任务"
 		_quest_box.add_child(empty)
-		_selected_quest_id = ""
-		_apply_detail({})
-		return
+	else:
+		if _selected_quest_id.is_empty() or (_quest_by_id(quests, _selected_quest_id).is_empty() and _quest_by_id(completed_quests, _selected_quest_id).is_empty()):
+			_selected_quest_id = str(_dictionary_or_empty(quests[0]).get("quest_id", ""))
+		for quest in quests:
+			var quest_data: Dictionary = quest
+			_quest_box.add_child(_quest_title(quest_data))
+			_quest_box.add_child(_quest_objective(quest_data))
+			_quest_box.add_child(_quest_reward(quest_data))
 
-	if _selected_quest_id.is_empty() or _quest_by_id(quests, _selected_quest_id).is_empty():
-		_selected_quest_id = str(_dictionary_or_empty(quests[0]).get("quest_id", ""))
-	for quest in quests:
-		var quest_data: Dictionary = quest
-		_quest_box.add_child(_quest_title(quest_data))
-		_quest_box.add_child(_quest_objective(quest_data))
-		_quest_box.add_child(_quest_reward(quest_data))
-	_apply_detail(_quest_by_id(quests, _selected_quest_id))
+	if completed_quests.is_empty():
+		var completed_empty := _label("CompletedQuestEmpty")
+		completed_empty.text = "暂无已完成任务"
+		_completed_box.add_child(completed_empty)
+	else:
+		var completed_title := _label("CompletedQuestHeader")
+		completed_title.text = "已完成"
+		_completed_box.add_child(completed_title)
+		for quest in completed_quests:
+			var completed_data: Dictionary = quest
+			_completed_box.add_child(_completed_quest_line(completed_data))
+	var selected: Dictionary = _quest_by_id(quests, _selected_quest_id)
+	if selected.is_empty():
+		selected = _quest_by_id(completed_quests, _selected_quest_id)
+	if selected.is_empty() and quests.is_empty() and not completed_quests.is_empty():
+		_selected_quest_id = str(_dictionary_or_empty(completed_quests[0]).get("quest_id", ""))
+		selected = _quest_by_id(completed_quests, _selected_quest_id)
+	_apply_detail(selected)
 
 
 func _build_layout() -> void:
@@ -69,6 +87,9 @@ func _build_layout() -> void:
 	_quest_box = VBoxContainer.new()
 	_quest_box.name = "QuestLines"
 	_quest_box.add_theme_constant_override("separation", 4)
+	_completed_box = VBoxContainer.new()
+	_completed_box.name = "CompletedQuestLines"
+	_completed_box.add_theme_constant_override("separation", 4)
 	_detail_title_label = _label("DetailTitleLine")
 	_detail_body_label = _label("DetailBodyLine")
 	_track_button = Button.new()
@@ -80,6 +101,7 @@ func _build_layout() -> void:
 	_track_button.pressed.connect(_toggle_tracked_quest, CONNECT_DEFERRED)
 	box.add_child(_summary_label)
 	box.add_child(_quest_box)
+	box.add_child(_completed_box)
 	box.add_child(_detail_title_label)
 	box.add_child(_detail_body_label)
 	box.add_child(_track_button)
@@ -94,6 +116,23 @@ func _quest_title(quest: Dictionary) -> Button:
 		str(quest.get("title", "")),
 	]
 	button.tooltip_text = "查看 %s" % quest.get("title", quest_id)
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.toggle_mode = true
+	button.button_pressed = _selected_quest_id == quest_id
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(func() -> void:
+		_selected_quest_id = quest_id
+		apply_snapshot(_last_snapshot)
+	, CONNECT_DEFERRED)
+	return button
+
+
+func _completed_quest_line(quest: Dictionary) -> Button:
+	var button := Button.new()
+	var quest_id := str(quest.get("quest_id", "unknown"))
+	button.name = "CompletedQuest_%s" % quest_id
+	button.text = "%s | 已完成" % str(quest.get("title", quest_id))
+	button.tooltip_text = "查看已完成任务 %s" % quest.get("title", quest_id)
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.toggle_mode = true
 	button.button_pressed = _selected_quest_id == quest_id
@@ -153,7 +192,11 @@ func _apply_detail(quest: Dictionary) -> void:
 		return
 	var quest_id := str(quest.get("quest_id", ""))
 	var objective: Dictionary = _dictionary_or_empty(quest.get("objective", {}))
-	_detail_title_label.text = "详情: %s" % quest.get("title", quest_id)
+	var is_completed := str(quest.get("state", "active")) == "completed"
+	_detail_title_label.text = "详情: %s%s" % [
+		quest.get("title", quest_id),
+		"（已完成）" if is_completed else "",
+	]
 	var lines: Array[String] = []
 	var description := str(quest.get("description", ""))
 	if not description.is_empty():
@@ -173,8 +216,8 @@ func _apply_detail(quest: Dictionary) -> void:
 		lines.append("交付: %s" % ("可交付" if bool(quest.get("turn_in_ready", false)) else "需要完成目标后手动交付"))
 	lines.append("奖励: %s" % _reward_text(quest.get("rewards", {})))
 	_detail_body_label.text = "\n".join(lines)
-	_track_button.disabled = false
-	_track_button.text = "取消追踪" if _tracked_quest_id == quest_id else "追踪"
+	_track_button.disabled = is_completed
+	_track_button.text = "已完成" if is_completed else ("取消追踪" if _tracked_quest_id == quest_id else "追踪")
 	_track_button.tooltip_text = "%s %s" % [_track_button.text, quest.get("title", quest_id)]
 
 
@@ -212,6 +255,12 @@ func _label(node_name: String) -> Label:
 func _clear_quests() -> void:
 	for child in _quest_box.get_children():
 		_quest_box.remove_child(child)
+		child.free()
+
+
+func _clear_completed_quests() -> void:
+	for child in _completed_box.get_children():
+		_completed_box.remove_child(child)
 		child.free()
 
 
