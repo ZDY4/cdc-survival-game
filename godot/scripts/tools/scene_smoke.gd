@@ -316,7 +316,28 @@ func _validate_synthetic_actor_side_badges(errors: Array[String]) -> void:
 			"side": "hostile",
 			"grid_position": {"x": 1, "y": 0, "z": 1},
 			"ap": 3.0,
-			"combat": {"hp": 4.0, "max_hp": 8.0, "attributes": {"turn_ap_max": 6.0}},
+			"combat": {
+				"hp": 4.0,
+				"max_hp": 8.0,
+				"attributes": {"turn_ap_max": 6.0},
+				"active_effects": [{
+					"effect_id": "passive_skill_combat",
+					"source": "skill",
+					"skill_id": "combat",
+					"category": "passive",
+					"level": 1,
+					"is_infinite": true,
+					"modifiers": {"damage_bonus": 0.04},
+				}, {
+					"effect_id": "skill_adrenaline_rush",
+					"source": "skill",
+					"skill_id": "adrenaline_rush",
+					"category": "buff",
+					"level": 1,
+					"duration_remaining": 8.0,
+					"modifiers": {"damage_bonus": 0.25},
+				}],
+			},
 		}],
 		"corpses": [],
 	}, {"load_map_visuals": false})
@@ -335,7 +356,51 @@ func _validate_synthetic_actor_side_badges(errors: Array[String]) -> void:
 		var ap_bar: Node = actor_node.find_child("ActorApBar", true, false)
 		if ap_bar == null or absf(float(ap_bar.get_meta("ratio", -1.0)) - 0.5) > 0.001:
 			errors.append("synthetic hostile actor AP bar should expose half ap ratio")
+		_validate_actor_status_effect_icons(actor_node, errors)
 	synthetic_root.queue_free()
+
+
+func _validate_actor_status_effect_icons(actor_node: Node, errors: Array[String]) -> void:
+	var container: Node = actor_node.find_child("ActorStatusEffectIcons", true, false)
+	if container == null:
+		errors.append("actor with active effects should render ActorStatusEffectIcons")
+		return
+	if int(container.get_meta("effect_count", 0)) != 2:
+		errors.append("status effect container should expose total effect_count")
+	if int(container.get_meta("visible_effect_count", 0)) != 2:
+		errors.append("status effect container should expose visible_effect_count")
+	var passive: Node = _status_effect_icon_by_effect_id(container, "passive_skill_combat")
+	if passive == null:
+		errors.append("status effect icons should include passive_skill_combat")
+	else:
+		if str(passive.get_meta("category", "")) != "passive":
+			errors.append("passive status effect icon should expose category")
+		if not bool(passive.get_meta("is_infinite", false)):
+			errors.append("passive status effect icon should expose infinite duration")
+		var modifiers: Dictionary = _dictionary_or_empty(passive.get_meta("modifiers", {}))
+		if absf(float(modifiers.get("damage_bonus", 0.0)) - 0.04) > 0.001:
+			errors.append("passive status effect icon should expose modifiers")
+	var buff: Node = _status_effect_icon_by_effect_id(container, "skill_adrenaline_rush")
+	if buff == null:
+		errors.append("status effect icons should include skill_adrenaline_rush")
+	else:
+		if str(buff.get_meta("category", "")) != "buff":
+			errors.append("buff status effect icon should expose category")
+		if absf(float(buff.get_meta("duration_remaining", 0.0)) - 8.0) > 0.001:
+			errors.append("buff status effect icon should expose duration")
+	if container.find_child("ActorStatusEffectLabel_0", true, false) == null:
+		errors.append("status effect icons should render compact labels")
+
+
+func _status_effect_icon_by_effect_id(root: Node, effect_id: String) -> Node:
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if str(node.get_meta("effect_id", "")) == effect_id and node.name.begins_with("ActorStatusEffectIcon"):
+			return node
+		for child in node.get_children():
+			pending.append(child)
+	return null
 
 
 func _validate_quest_actor_markers(registry: RefCounted, errors: Array[String]) -> void:

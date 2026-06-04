@@ -27,6 +27,10 @@ var actor_health_material := _unshaded_material(Color(0.24, 0.86, 0.34, 0.88))
 var actor_health_missing_material := _unshaded_material(Color(0.22, 0.07, 0.06, 0.72))
 var actor_ap_material := _unshaded_material(Color(0.24, 0.58, 1.0, 0.86))
 var actor_ap_missing_material := _unshaded_material(Color(0.07, 0.12, 0.22, 0.62))
+var status_buff_material := _unshaded_material(Color(0.43, 0.86, 0.38, 0.9))
+var status_passive_material := _unshaded_material(Color(0.62, 0.72, 0.95, 0.9))
+var status_debuff_material := _unshaded_material(Color(0.92, 0.22, 0.18, 0.9))
+var status_generic_material := _unshaded_material(Color(0.86, 0.78, 0.36, 0.9))
 var quest_offer_material := _unshaded_material(Color(1.0, 0.72, 0.20, 0.94))
 var quest_turn_in_ready_material := _unshaded_material(Color(1.0, 0.84, 0.18, 0.94))
 var quest_turn_in_pending_material := _unshaded_material(Color(0.34, 0.82, 1.0, 0.86))
@@ -502,6 +506,7 @@ func _add_actor_status_markers(parent: Node3D, actor_data: Dictionary) -> void:
 	_add_actor_side_badge(parent, actor_data)
 	_add_actor_resource_bar(parent, actor_data, "health", 0.98, _actor_health_ratio(actor_data), actor_health_material, actor_health_missing_material)
 	_add_actor_resource_bar(parent, actor_data, "ap", 0.86, _actor_ap_ratio(actor_data), actor_ap_material, actor_ap_missing_material)
+	_add_actor_status_effect_icons(parent, actor_data)
 
 
 func _add_actor_name_label(parent: Node3D, actor_data: Dictionary) -> void:
@@ -586,6 +591,87 @@ func _actor_side_color(side: String) -> Color:
 		"neutral":
 			return Color(1.0, 0.88, 0.32, 0.95)
 	return Color(0.82, 0.82, 0.76, 0.95)
+
+
+func _add_actor_status_effect_icons(parent: Node3D, actor_data: Dictionary) -> void:
+	var combat: Dictionary = _dictionary_or_empty(actor_data.get("combat", {}))
+	var active_effects: Array = _array_or_empty(combat.get("active_effects", []))
+	if active_effects.is_empty():
+		return
+	var container := Node3D.new()
+	container.name = "ActorStatusEffectIcons"
+	container.position = Vector3(0.0, 0.73, 0.0)
+	container.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
+	container.set_meta("effect_count", active_effects.size())
+	var visible_count: int = min(active_effects.size(), 4)
+	container.set_meta("visible_effect_count", visible_count)
+	for index in range(visible_count):
+		var effect: Dictionary = _dictionary_or_empty(active_effects[index])
+		_add_actor_status_effect_icon(container, actor_data, effect, index, visible_count)
+	parent.add_child(container)
+
+
+func _add_actor_status_effect_icon(parent: Node3D, actor_data: Dictionary, effect: Dictionary, index: int, visible_count: int) -> void:
+	var x_offset: float = (float(index) - float(visible_count - 1) * 0.5) * 0.18
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.065
+	mesh.height = 0.13
+	mesh.radial_segments = 12
+	mesh.rings = 6
+	var icon := MeshInstance3D.new()
+	icon.name = "ActorStatusEffectIcon_%d" % index
+	icon.mesh = mesh
+	icon.material_override = _status_effect_material(effect)
+	icon.position = Vector3(x_offset, 0.0, 0.0)
+	_apply_status_effect_meta(icon, actor_data, effect, index)
+	parent.add_child(icon)
+
+	var label := Label3D.new()
+	label.name = "ActorStatusEffectLabel_%d" % index
+	label.text = _status_effect_label_text(effect, index)
+	label.position = Vector3(x_offset, 0.04, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 9
+	label.modulate = Color(0.98, 0.98, 0.92, 0.94)
+	label.outline_size = 2
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.76)
+	_apply_status_effect_meta(label, actor_data, effect, index)
+	parent.add_child(label)
+
+
+func _status_effect_material(effect: Dictionary) -> StandardMaterial3D:
+	match str(effect.get("category", "")).to_lower():
+		"passive":
+			return status_passive_material
+		"debuff", "negative":
+			return status_debuff_material
+		"buff", "active":
+			return status_buff_material
+	var source := str(effect.get("source", "")).to_lower()
+	if source.contains("skill"):
+		return status_buff_material
+	return status_generic_material
+
+
+func _status_effect_label_text(effect: Dictionary, index: int) -> String:
+	var effect_id := str(effect.get("effect_id", "")).strip_edges()
+	if not effect_id.is_empty():
+		return effect_id.substr(0, 1).to_upper()
+	return str(index + 1)
+
+
+func _apply_status_effect_meta(node: Node, actor_data: Dictionary, effect: Dictionary, index: int) -> void:
+	node.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
+	node.set_meta("effect_index", index)
+	node.set_meta("effect_id", str(effect.get("effect_id", "")))
+	node.set_meta("source", str(effect.get("source", "")))
+	node.set_meta("skill_id", str(effect.get("skill_id", "")))
+	node.set_meta("category", str(effect.get("category", "")))
+	node.set_meta("level", int(effect.get("level", 0)))
+	node.set_meta("duration_remaining", float(effect.get("duration_remaining", 0.0)))
+	node.set_meta("is_infinite", bool(effect.get("is_infinite", false)))
+	node.set_meta("modifiers", _dictionary_or_empty(effect.get("modifiers", {})).duplicate(true))
 
 
 func _add_actor_quest_markers(parent: Node3D, actor_data: Dictionary) -> void:
