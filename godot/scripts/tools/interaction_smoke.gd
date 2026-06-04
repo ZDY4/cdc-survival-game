@@ -211,13 +211,23 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("scene transition failed: %s" % transition_result.get("reason", "unknown"))
 	if simulation.active_map_id != "survivor_outpost_01_interior":
 		errors.append("scene transition did not update active map")
+	if str(transition_result.get("target_map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("scene transition result should include target_map_id")
+	if str(transition_result.get("target_entry_point_id", "")).is_empty():
+		errors.append("scene transition result should include target_entry_point_id")
+	if _dictionary_or_empty(transition_result.get("grid_position", {})).is_empty():
+		errors.append("scene transition result should include grid_position")
 	var scene_transition_payload: Dictionary = _last_event_payload(simulation.snapshot(), "scene_transition")
 	if int(scene_transition_payload.get("actor_id", 0)) != 1:
 		errors.append("scene_transition should include actor_id")
+	if str(scene_transition_payload.get("target_id", "")) != "survivor_outpost_01_interior_door" or str(scene_transition_payload.get("target_name", "")).is_empty():
+		errors.append("scene_transition should include target id and name")
 	if str(scene_transition_payload.get("from_map_id", "")) != "survivor_outpost_01" or str(scene_transition_payload.get("to_map_id", "")) != "survivor_outpost_01_interior":
 		errors.append("scene_transition should include from/to map ids")
 	if str(scene_transition_payload.get("entry_point_id", "")).is_empty():
 		errors.append("scene_transition should include entry_point_id")
+	if _dictionary_or_empty(scene_transition_payload.get("grid_position", {})).is_empty():
+		errors.append("scene_transition should include grid_position")
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "enter_subscene", "enter_subscene", "进入据点室内")
 	var approach_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var approach_errors: Array[String] = _expect_auto_approach_interaction(approach_simulation, registry)

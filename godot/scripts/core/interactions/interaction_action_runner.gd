@@ -280,34 +280,57 @@ func _hp_ratio(actor: RefCounted) -> float:
 func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:
 	var target_map_id: String = str(option.get("target_map_id", ""))
 	if target_map_id.is_empty():
-		return {"success": false, "reason": "scene_transition_target_missing", "prompt": prompt}
+		return {"success": false, "reason": "scene_transition_target_missing", "prompt": prompt, "target_map_id": target_map_id}
 
 	var previous_map_id: String = simulation.active_map_id
 	var target_entry_id := _target_entry_id(option)
 	var entry_result := _entry_grid_for_map(target_map_id, target_entry_id)
 	if not bool(entry_result.get("ok", false)):
-		return {"success": false, "reason": entry_result.get("reason", "scene_transition_entry_missing"), "prompt": prompt}
+		return {
+			"success": false,
+			"reason": entry_result.get("reason", "scene_transition_entry_missing"),
+			"prompt": prompt,
+			"target_map_id": target_map_id,
+			"target_entry_point_id": target_entry_id,
+		}
 
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:
-		return {"success": false, "reason": "unknown_actor", "prompt": prompt}
+		return {"success": false, "reason": "unknown_actor", "prompt": prompt, "target_map_id": target_map_id, "target_entry_point_id": target_entry_id}
 
+	var target_grid: Dictionary = _dictionary_or_empty(entry_result.get("grid", {}))
+	var target_id: String = str(option.get("target_id", ""))
+	var target_name: String = str(option.get("display_name", prompt.get("target_name", target_id)))
 	simulation.active_map_id = target_map_id
 	simulation.active_entry_point_id = target_entry_id
 	_configure_map_interactions(simulation, _dictionary_or_empty(entry_result.get("map_data", {})))
 	actor.map_id = target_map_id
-	actor.grid_position = GridCoord.from_dictionary(_dictionary_or_empty(entry_result.get("grid", {})))
+	actor.grid_position = GridCoord.from_dictionary(target_grid)
 	simulation.emit_event("scene_transition", {
 		"actor_id": actor_id,
+		"target_id": target_id,
+		"target_name": target_name,
 		"from_map_id": previous_map_id,
 		"to_map_id": target_map_id,
 		"entry_point_id": target_entry_id,
+		"target_entry_point_id": target_entry_id,
+		"grid_position": target_grid.duplicate(true),
 		"kind": option.get("kind", ""),
 	})
-	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, option.get("target_id", "")))
+	var success_payload: Dictionary = _interaction_success_payload(actor_id, prompt, option, target_id)
+	success_payload["target_map_id"] = target_map_id
+	success_payload["target_entry_point_id"] = target_entry_id
+	simulation.emit_event("interaction_succeeded", success_payload)
 	return {
 		"success": true,
+		"kind": str(option.get("kind", "scene_transition")),
 		"prompt": prompt,
+		"target_id": target_id,
+		"target_name": target_name,
+		"from_map_id": previous_map_id,
+		"target_map_id": target_map_id,
+		"target_entry_point_id": target_entry_id,
+		"grid_position": target_grid.duplicate(true),
 		"context_snapshot": {
 			"active_map_id": simulation.active_map_id,
 			"active_entry_point_id": simulation.active_entry_point_id,
