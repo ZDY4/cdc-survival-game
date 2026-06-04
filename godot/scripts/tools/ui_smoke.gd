@@ -47,6 +47,7 @@ func _init() -> void:
 	print("ui_smoke passed:")
 	print(JSON.stringify({
 		"world_line": hud.get_node("HudPanel/HudLines/WorldLine").text,
+		"status_badge_line": hud.get_node("HudPanel/HudLines/StatusBadgeLine").text,
 		"inventory_line": hud.get_node("HudPanel/HudLines/InventoryLine").text,
 		"quest_line": hud.get_node("HudPanel/HudLines/QuestLine").text,
 		"interaction_line": hud.get_node("HudPanel/HudLines/InteractionLine").text,
@@ -61,6 +62,13 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("missing world line")
 	if not hud.get_node("HudPanel/HudLines/WorldLine").text.contains(str(snapshot.get("world", {}).get("map_id", ""))):
 		errors.append("world line missing map id")
+	if hud.get_node_or_null("HudPanel/HudLines/StatusBadgeLine") == null:
+		errors.append("missing status badge line")
+	else:
+		var status_text := str(hud.get_node("HudPanel/HudLines/StatusBadgeLine").text)
+		for token in ["HP", "AP", "Lv", "Round", "Phase", "Combat"]:
+			if not status_text.contains(token):
+				errors.append("status badge line missing %s" % token)
 	if not hud.get_node("HudPanel/HudLines/InventoryLine").text.contains("1006"):
 		errors.append("inventory line missing picked item")
 	if hud.get_node_or_null("HudPanel/HudLines/QuestLine") == null:
@@ -88,6 +96,8 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("HUD snapshot should expose ten hotbar slots")
 	if typeof(snapshot.get("event_feedback", [])) != TYPE_ARRAY or snapshot.get("event_feedback", []).is_empty():
 		errors.append("HUD snapshot should expose recent event feedback")
+	if typeof(snapshot.get("status_badges", [])) != TYPE_ARRAY or snapshot.get("status_badges", []).size() < 6:
+		errors.append("HUD snapshot should expose status badges")
 	if not snapshot.has("tracked_quest") or bool(snapshot.get("tracked_quest", {}).get("active", true)):
 		errors.append("HUD snapshot should expose inactive tracked quest by default")
 	var interaction: Dictionary = snapshot.get("interaction", {})

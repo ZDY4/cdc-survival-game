@@ -29,6 +29,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_ta
 			"trigger_count": world_snapshot.get("map", {}).get("trigger_objects", []).size(),
 			"interactive_count": world_snapshot.get("map", {}).get("interactive_objects", []).size(),
 		},
+		"status_badges": _status_badges(runtime_snapshot, player),
 		"interaction": prompt,
 		"hotbar": _hotbar_summary(runtime_snapshot),
 		"event_feedback": _event_feedback(runtime_snapshot),
@@ -70,6 +71,48 @@ func _prompt_summary(selected_target: Dictionary) -> Dictionary:
 		"options": selected_target.get("options", []),
 		"disabled_options": selected_target.get("disabled_options", []),
 	}
+
+
+func _status_badges(runtime_snapshot: Dictionary, player: Dictionary) -> Array[Dictionary]:
+	var combat: Dictionary = _dictionary_or_empty(player.get("combat", {}))
+	var progression: Dictionary = _dictionary_or_empty(player.get("progression", {}))
+	var turn_state: Dictionary = _dictionary_or_empty(runtime_snapshot.get("turn_state", {}))
+	var combat_state: Dictionary = _dictionary_or_empty(runtime_snapshot.get("combat_state", {}))
+	return [
+		{
+			"id": "hp",
+			"label": "HP",
+			"value": "%s/%s" % [
+				_number_text(float(combat.get("hp", 0.0))),
+				_number_text(float(combat.get("max_hp", 0.0))),
+			],
+		},
+		{
+			"id": "ap",
+			"label": "AP",
+			"value": _number_text(float(player.get("ap", 0.0))),
+		},
+		{
+			"id": "level",
+			"label": "Lv",
+			"value": str(int(progression.get("level", 1))),
+		},
+		{
+			"id": "round",
+			"label": "Round",
+			"value": str(int(turn_state.get("round", 0))),
+		},
+		{
+			"id": "phase",
+			"label": "Phase",
+			"value": str(turn_state.get("phase", "")),
+		},
+		{
+			"id": "combat",
+			"label": "Combat",
+			"value": "on" if bool(combat_state.get("active", false)) else "off",
+		},
+	]
 
 
 func _hotbar_summary(runtime_snapshot: Dictionary) -> Array[Dictionary]:
@@ -185,3 +228,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _number_text(value: float) -> String:
+	if is_equal_approx(value, roundf(value)):
+		return str(int(roundf(value)))
+	return "%.1f" % value

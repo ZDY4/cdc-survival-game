@@ -1,6 +1,7 @@
 extends Control
 
 var _world_label: Label
+var _status_badge_label: Label
 var _player_label: Label
 var _inventory_label: Label
 var _quest_label: Label
@@ -38,6 +39,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		int(world.get("event_count", 0)),
 		int(map.get("object_count", 0)),
 	]
+	_status_badge_label.text = _status_badge_text(snapshot.get("status_badges", []))
 	_player_label.text = "%s @ %s" % [
 		player.get("display_name", ""),
 		JSON.stringify(player.get("grid_position", {})),
@@ -77,6 +79,7 @@ func _build_layout() -> void:
 	panel.add_child(box)
 
 	_world_label = _line("WorldLine")
+	_status_badge_label = _line("StatusBadgeLine")
 	_player_label = _line("PlayerLine")
 	_inventory_label = _line("InventoryLine")
 	_quest_label = _line("QuestLine")
@@ -89,6 +92,7 @@ func _build_layout() -> void:
 	_info_panel_label = _line("InfoPanelLine")
 	_runtime_control_label = _line("RuntimeControlLine")
 	box.add_child(_world_label)
+	box.add_child(_status_badge_label)
 	box.add_child(_player_label)
 	box.add_child(_inventory_label)
 	box.add_child(_quest_label)
@@ -354,6 +358,21 @@ func _inventory_text(inventory: Dictionary) -> String:
 		parts.append("%s x%d" % [item_id, int(inventory[item_id])])
 	parts.sort()
 	return ", ".join(parts)
+
+
+func _status_badge_text(value: Variant) -> String:
+	var badges: Array = value if typeof(value) == TYPE_ARRAY else []
+	if badges.is_empty():
+		return "Status none"
+	var parts: Array[String] = []
+	for badge in badges:
+		var data: Dictionary = _dictionary_or_empty(badge)
+		var label := str(data.get("label", ""))
+		var badge_value := str(data.get("value", ""))
+		if label.is_empty() and badge_value.is_empty():
+			continue
+		parts.append("%s %s" % [label, badge_value])
+	return "Status %s" % " | ".join(parts) if not parts.is_empty() else "Status none"
 
 
 func _interaction_text(interaction: Dictionary) -> String:
