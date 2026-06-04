@@ -274,6 +274,10 @@ func drop_actor_item(actor_id: int, item_id: String, count: int, item_library: D
 	return _economy_transactions.drop_actor_item(self, actor_id, item_id, count, item_library)
 
 
+func deconstruct_actor_item(actor_id: int, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
+	return _economy_transactions.deconstruct_actor_item(self, actor_id, item_id, count, item_library)
+
+
 func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
 	return _crafting_runner.craft_recipe(self, _progression_rules, actor_id, recipe_id, recipe_library, crafting_context)
 
@@ -704,6 +708,8 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 			return store_item_in_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"drop":
 			return drop_actor_item(actor.actor_id, str(command.get("item_id", "")), int(command.get("count", 1)), items)
+		"deconstruct":
+			return deconstruct_actor_item(actor.actor_id, str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"reorder_inventory":
 			return _reorder_actor_inventory(actor, str(command.get("item_id", "")), int(command.get("target_index", 0)))
 		"equip":

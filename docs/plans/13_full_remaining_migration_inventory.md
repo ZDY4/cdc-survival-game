@@ -260,7 +260,7 @@
 - 待补制作时间：即时、排队、跨回合完成、取消制作、AP / 时间消耗。
 - 批量制作预览与执行第一版已迁移：Crafting 面板可选择数量、预览材料消耗、输出数量和最大可制作次数，并可按选择数量一次提交制作；批量 XP 和逐次 `recipe_crafted` 事件已纳入 `CraftingUI` / `Crafting` smoke；待补制作队列和取消。
 - 制作 UI 已有配方详情、材料/要求/时间/XP/缺失原因、缺失原因点击定位、数量预览、最大可制作、分类筛选、搜索、名称/分类/可制作/数量排序、完整可滚动列表和制作成功/失败反馈第一版，并纳入 `CraftingUI` smoke。
-- 待补拆解 / deconstruct，如果旧物品 fragment 中仍保留拆解产物，应进入 economy / crafting。
+- 拆解 / deconstruct 第一版已迁移：旧物品 `fragments.kind=crafting` 中的 `deconstruct_yield` 会进入 Godot economy 事务，`inventory_action=deconstruct` 会消耗源物品、按数量返还产物、刷新背包并发出 `item_deconstructed`，背包右键菜单已可触发，纳入 `Crafting` / `InventoryUI` smoke；待补拆解 AP/时间成本、工具/工作台要求、拆解预览、拆解产物 UI polish 和无法拆解原因展示。
 
 ## 12. 世界表现、渲染和相机
 

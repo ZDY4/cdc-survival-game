@@ -93,6 +93,60 @@ func drop_actor_item(simulation: RefCounted, actor_id: int, item_id: String, cou
 	}
 
 
+func deconstruct_actor_item(simulation: RefCounted, actor_id: int, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
+	if normalized_item_id.is_empty():
+		return {"success": false, "reason": "item_id_missing"}
+	var item_record: Dictionary = _dictionary_or_empty(item_library.get(normalized_item_id, {}))
+	if not item_library.is_empty() and item_record.is_empty():
+		return {"success": false, "reason": "unknown_item", "item_id": normalized_item_id}
+	var deconstruct_count: int = max(1, count)
+	var available: int = int(actor.inventory.get(normalized_item_id, 0))
+	if available < deconstruct_count:
+		return {
+			"success": false,
+			"reason": "not_enough_items",
+			"item_id": normalized_item_id,
+			"required": deconstruct_count,
+			"current": available,
+		}
+	var yields: Array[Dictionary] = _deconstruct_yield(item_record)
+	if yields.is_empty():
+		return {
+			"success": false,
+			"reason": "item_not_deconstructable",
+			"item_id": normalized_item_id,
+		}
+
+	_inventory_entries.add_actor_item(actor, normalized_item_id, -deconstruct_count)
+	var produced: Array[Dictionary] = []
+	for entry in yields:
+		var produced_item_id: String = str(entry.get("item_id", ""))
+		var produced_count: int = int(entry.get("count", 0)) * deconstruct_count
+		if produced_item_id.is_empty() or produced_count <= 0:
+			continue
+		_inventory_entries.add_actor_item(actor, produced_item_id, produced_count)
+		produced.append({
+			"item_id": produced_item_id,
+			"count": produced_count,
+		})
+	simulation.emit_event("item_deconstructed", {
+		"actor_id": actor_id,
+		"item_id": normalized_item_id,
+		"count": deconstruct_count,
+		"yield": produced.duplicate(true),
+	})
+	return {
+		"success": true,
+		"item_id": normalized_item_id,
+		"count": deconstruct_count,
+		"yield": produced,
+	}
+
+
 func _drop_container(simulation: RefCounted, container_id: String, grid_position: Dictionary) -> Dictionary:
 	if simulation.corpse_containers.has(container_id):
 		return _dictionary_or_empty(simulation.corpse_containers[container_id])
@@ -123,6 +177,18 @@ func _is_item_droppable(item_id: String, item_library: Dictionary) -> bool:
 			if fragment_data.has(key) and not bool(fragment_data.get(key)):
 				return false
 	return true
+
+
+func _deconstruct_yield(item_record: Dictionary) -> Array[Dictionary]:
+	var data: Dictionary = _dictionary_or_empty(item_record.get("data", item_record))
+	if data.is_empty():
+		return []
+	for fragment in _array_or_empty(data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) != "crafting":
+			continue
+		return _inventory_entries.normalize(fragment_data.get("deconstruct_yield", []))
+	return []
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

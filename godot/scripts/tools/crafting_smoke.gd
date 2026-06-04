@@ -185,6 +185,35 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var advanced_after_unlock: Dictionary = simulation.craft_recipe(1, "recipe_advanced_knife", recipes, crafting_context)
 	if advanced_after_unlock.get("reason", "") == "recipe_locked":
 		errors.append("advanced knife should pass recipe-chain unlock after basic knife is crafted")
+	player.inventory["1008"] = 2
+	player.inventory["1104"] = 0
+	var deconstruct_events_before := _event_count(simulation.snapshot(), "item_deconstructed")
+	var deconstructed: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "1008",
+		"count": 2,
+		"item_library": registry.get_library("items"),
+	})
+	if not bool(deconstructed.get("success", false)):
+		errors.append("deconstructing water bottles should succeed: %s" % deconstructed.get("reason", "unknown"))
+	if int(player.inventory.get("1008", 0)) != 0:
+		errors.append("deconstructing should consume selected source items")
+	if int(player.inventory.get("1104", 0)) != 2:
+		errors.append("deconstructing should add scaled yield items")
+	if _event_count(simulation.snapshot(), "item_deconstructed") != deconstruct_events_before + 1:
+		errors.append("deconstructing should emit item_deconstructed")
+	var not_deconstructable: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "1002",
+		"count": 1,
+		"item_library": registry.get_library("items"),
+	})
+	if str(not_deconstructable.get("reason", "")) != "item_not_deconstructable":
+		errors.append("item without deconstruct yield should report item_not_deconstructable")
 	return errors
 
 

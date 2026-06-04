@@ -228,6 +228,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 		search_box.text = ""
 		search_box.text_changed.emit(search_box.text)
 		await process_frame
+	if not _open_inventory_context_menu(game_root, "水瓶"):
+		errors.append("should open context menu for deconstructable water bottle")
+	elif _context_action_disabled(game_root, 6):
+		errors.append("context menu should enable deconstruct for water bottle")
+	else:
+		var bottle_count_before: int = _player_inventory_count(game_root, "1008")
+		var scrap_count_before: int = _player_inventory_count(game_root, "1104")
+		_execute_inventory_context_action(game_root, 6)
+		await process_frame
+		if _player_inventory_count(game_root, "1008") != bottle_count_before - 1:
+			errors.append("deconstructing water bottle from context should consume one bottle")
+		if _player_inventory_count(game_root, "1104") != scrap_count_before + 1:
+			errors.append("deconstructing water bottle from context should add plastic scrap")
+		if not _event_seen(game_root, "item_deconstructed"):
+			errors.append("deconstructing from inventory context should emit item_deconstructed")
 	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_dagger.gltf")
 
 	if not _press_inventory_item_with_text(game_root, "棒球棒"):
@@ -284,8 +299,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory panel missing picked bandage line")
 	if not _summary_line(game_root).contains("4 类物品"):
 		errors.append("inventory summary did not update item count")
-	if not _summary_line(game_root).contains("2.1 kg"):
-		errors.append("inventory summary did not update total weight")
+	if not _summary_line(game_root).contains("1.7 kg"):
+		errors.append("inventory summary did not update total weight after deconstructing water bottle")
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should select bandages before dropping through inventory panel")
 	var quantity_spin: SpinBox = _quantity_spin(game_root)

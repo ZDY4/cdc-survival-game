@@ -52,6 +52,8 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 			"use_ap_cost": 0.0,
 			"use_effect_ids": [],
 			"droppable": true,
+			"deconstructable": false,
+			"deconstruct_yield": [],
 			"stackable": false,
 			"max_stack": 1,
 		}
@@ -62,6 +64,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 	var category: String = _category(data)
 	var usable: Dictionary = _fragment_by_kind(data, "usable")
 	var use_allowed: bool = not usable.is_empty() and _is_item_use_allowed(data)
+	var deconstruct_yield: Array[Dictionary] = _deconstruct_yield(data)
 	return {
 		"item_id": item_id,
 		"name": str(data.get("name", item_id)),
@@ -79,6 +82,8 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"use_ap_cost": max(1.0, ceil(float(usable.get("use_time", 1.0)))) if not usable.is_empty() else 0.0,
 		"use_effect_ids": _string_array(usable.get("effect_ids", [])) if not usable.is_empty() else [],
 		"droppable": _is_item_droppable(data),
+		"deconstructable": not deconstruct_yield.is_empty(),
+		"deconstruct_yield": deconstruct_yield,
 		"stackable": _stackable(data),
 		"max_stack": _max_stack(data),
 	}
@@ -144,6 +149,26 @@ func _max_stack(item_data: Dictionary) -> int:
 		if fragment_data.get("kind", "") == "stacking":
 			return int(fragment_data.get("max_stack", 1))
 	return 1
+
+
+func _deconstruct_yield(item_data: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for fragment in _array_or_empty(item_data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) != "crafting":
+			continue
+		for entry in _array_or_empty(fragment_data.get("deconstruct_yield", [])):
+			var entry_data: Dictionary = _dictionary_or_empty(entry)
+			var item_id := str(entry_data.get("item_id", ""))
+			var count := int(entry_data.get("count", 0))
+			if item_id.is_empty() or count <= 0:
+				continue
+			output.append({
+				"item_id": item_id,
+				"count": count,
+			})
+		return output
+	return output
 
 
 func _has_fragment(item_data: Dictionary, kind: String) -> bool:
