@@ -169,7 +169,7 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 		skill.get("activation_mode", "passive"),
 		"%s%s%s%s" % [_reason_text(skill), _binding_text(skill), _activation_cost_text(skill), _use_reason_text(skill)],
 	]
-	line.tooltip_text = "查看 %s" % skill.get("name", skill.get("skill_id", ""))
+	line.tooltip_text = _skill_tooltip(skill)
 	line.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	line.toggle_mode = true
 	line.button_pressed = _selected_skill_id == str(skill.get("skill_id", ""))
@@ -328,6 +328,8 @@ func _apply_detail(skill: Dictionary) -> void:
 	])
 	lines.append("学习: %s" % _reason_text(skill))
 	lines.append("前置: %s" % _prerequisites_text(skill.get("prerequisites", [])))
+	lines.append("链路: %s" % _prerequisite_chain_text(skill))
+	lines.append("解锁: %s" % _unlocks_text(skill))
 	lines.append("属性: %s" % _attribute_requirements_text(skill.get("attribute_requirements", {})))
 	if str(skill.get("activation_mode", "passive")) != "passive":
 		lines.append("激活: AP %.0f%s | 冷却 %.0fs | 绑定 %s | 使用 %s" % [
@@ -365,6 +367,48 @@ func _reason_text(skill: Dictionary) -> String:
 				])
 			return "属性不足 %s" % ", ".join(parts)
 	return str(skill.get("learn_reason", ""))
+
+
+func _skill_tooltip(skill: Dictionary) -> String:
+	var skill_id := str(skill.get("skill_id", ""))
+	var lines: Array[String] = ["查看 %s" % skill.get("name", skill_id)]
+	var chain := _prerequisite_chain_text(skill)
+	if chain != "无":
+		lines.append("链路 %s" % chain)
+	var unlocks := _unlocks_text(skill)
+	if unlocks != "无":
+		lines.append("解锁 %s" % unlocks)
+	return "\n".join(lines)
+
+
+func _prerequisite_chain_text(skill: Dictionary) -> String:
+	var chain: Array = _array_or_empty(skill.get("prerequisite_chain", []))
+	if chain.is_empty():
+		return "无"
+	var parts: Array[String] = []
+	for index in range(chain.size() - 1, -1, -1):
+		var item: Dictionary = _dictionary_or_empty(chain[index])
+		var name := str(item.get("name", item.get("skill_id", "")))
+		if name.is_empty():
+			continue
+		parts.append(name)
+	parts.append(str(skill.get("name", skill.get("skill_id", ""))))
+	return " -> ".join(parts)
+
+
+func _unlocks_text(skill: Dictionary) -> String:
+	var unlocks: Array = _array_or_empty(skill.get("unlocks", []))
+	if unlocks.is_empty():
+		return "无"
+	var parts: Array[String] = []
+	for item in unlocks:
+		var data: Dictionary = _dictionary_or_empty(item)
+		var name := str(data.get("name", data.get("skill_id", "")))
+		if name.is_empty():
+			continue
+		var depth: int = int(data.get("depth", 1))
+		parts.append(name if depth <= 1 else "%s(%d)" % [name, depth])
+	return " / ".join(parts)
 
 
 func _hotbar_text(hotbar: Dictionary) -> String:

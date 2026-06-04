@@ -227,7 +227,7 @@
 ### 9.2 技能树
 
 - 已有 Skills 面板简版；待迁移技能树图形布局、pan、节点连线、选中技能详情、前置链路高亮。
-- 已有 Skills 面板筛选条（全部 / 已学 / 可学 / 锁定 / 主动）、技能树切换和选中技能详情第一版，并纳入 `SkillsUI` smoke；详情会展示描述、技能树、类型、前置、属性要求、学习状态和主动/切换技能的 AP / 冷却 / 绑定 / 使用状态。待补已学/可学/锁定/属性不足/点数不足状态视觉 polish。
+- 已有 Skills 面板筛选条（全部 / 已学 / 可学 / 锁定 / 主动）、技能树切换和选中技能详情第一版，并纳入 `SkillsUI` smoke；详情会展示描述、技能树、类型、前置、前置链路、下游解锁、属性要求、学习状态和主动/切换技能的 AP / 冷却 / 绑定 / 使用状态，行 tooltip 也会显示链路/解锁摘要。待补已学/可学/锁定/属性不足/点数不足状态视觉 polish。
 - 技能学习确认和学习后反馈第一版已迁移：Skills 面板点击学习会打开确认弹窗，确认前不消耗技能点，弹窗接入 gameplay blocker 与 Esc 优先关闭，确认后走同一 `learn_skill` 核心命令；被动技能显示已学习反馈，主动/切换技能学习后提示可绑定到快捷栏，纳入 `SkillsUI` smoke；待补失败 reason 细分。
 - 技能效果第一版已迁移：`learn_skill` 会把被动技能 `gameplay_effect.modifiers` 转成 actor `combat.active_effects` 的常驻 passive effect，`use_skill` 会把 `activation.effect` 转成限时或 toggle effect，并发出 `skill_passive_effect_refreshed`、`skill_effect_applied`、`skill_effect_removed`、`skill_effect_expired`；`combat` 被动和 `adrenaline_rush` 主动的 `damage_bonus` 已参与战斗伤害，角色面板已展示 passive / buff 状态效果，并纳入 `Progression` / `SkillsUI` / `Combat` / `UIToggle` / `Save` smoke。待补技能效果堆叠策略、非战斗 modifier 的完整消费点、负面状态、状态 UI polish 和更完整 toggle polish。
 
@@ -319,7 +319,7 @@
 - 角色面板已有属性、资源、装备、属性点分配、派生数值摘要和状态效果第一版；派生数值会展示生命/速度、攻击/防御/暴击、基础属性合计、装备修饰和状态修饰，状态效果会显示 actor active effects 的名称、分类、来源、等级、剩余回合和 modifier，悬停说明来源、技能 ID、持续时间、修饰和 effect id，并纳入 `UIToggle` smoke。待补负面状态视觉和更完整排版。
 - 地图面板已有当前地图、当前地点名称、入口、已解锁地点名称、对象统计、追踪任务行、追踪目标 marker 行、地图 canvas、入口点绘制、目标 marker 绘制、zoom 按钮、左键拖拽平移、pan 复位、画布状态诊断和 overworld 地点/道路 inset 第一版；待补显式 overworld 路线规划和更完整图形化地图目标 marker。
 - Journal 面板已有任务详情、可交付状态、奖励详情、目标进度列表、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；待补更完整失败反馈。
-- Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏和多树切换第一版；待补图形技能树、pan、节点连线、前置链路高亮和目标预览。
+- Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏、多树切换、前置链路和下游解锁高亮第一版；待补图形技能树、pan、节点连线和目标预览。
 - Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、批量执行和完成反馈第一版；待补制作队列和取消。
 - Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、不可出售禁用态、装备出售确认和清空；待补跨栏 sell/buy zone 视觉 polish。
 - Container 面板已有空容器提示、容器/背包双栏、滚动、基础详情、选中详情、数量选择和双向拖拽转移；待补背包限制、权限不足和跨面板拖拽 polish。
@@ -372,7 +372,7 @@
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、右键检查/使用/装备/丢弃/全部丢弃/加入热栏菜单、物品热栏触发、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；待补完整上下文菜单项、拆分、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
 - `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、双向拖拽与基础失败提示已有 smoke；待补背包限制/权限等高级错误和跨面板拖拽 polish。
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售和拖拽已有 smoke；待补跨栏 sell/buy zone 视觉 polish。
-- `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补多组 hotbar、技能树 pan、目标预览和更完整状态 UI。
+- `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补多组 hotbar、技能树 pan、目标预览和更完整状态 UI。
 - `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版已有 smoke；待补对话交付条件和更完整失败反馈。
 - `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、批量执行和完成反馈第一版已有 smoke；待补工具耐久/消耗、更多地图 station 标注、制作队列和取消。
 - `Save`：passive / active skill effects 已有 roundtrip；继续补新增 runtime 字段和旧存档迁移。

@@ -49,8 +49,19 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills detail should show selected skill description")
 	if not _detail_text(game_root).contains("前置: 生存本能"):
 		errors.append("skills detail should show prerequisite names")
+	if not _detail_text(game_root).contains("链路: 生存本能 -> 医疗知识"):
+		errors.append("skills detail should show prerequisite chain highlight")
+	if not _skill_line_tooltip(game_root, "medicine").contains("链路 生存本能 -> 医疗知识"):
+		errors.append("skills row tooltip should expose prerequisite chain")
 	if not _detail_text(game_root).contains("属性: 体质 6"):
 		errors.append("skills detail should show attribute requirements")
+	if not _press_skill_line(game_root, "survival"):
+		errors.append("should select survival skill row")
+	await process_frame
+	if not _detail_text(game_root).contains("解锁: 医疗知识 / 观察力 / 低姿潜行"):
+		errors.append("skills detail should show direct unlock chain for survival")
+	if not _skill_line_tooltip(game_root, "survival").contains("解锁 医疗知识 / 观察力 / 低姿潜行"):
+		errors.append("skills row tooltip should expose unlock chain")
 	if _learn_button(game_root, "medicine") == null or not _learn_button(game_root, "medicine").disabled:
 		errors.append("medicine learn button should be disabled before survival prerequisite")
 	if _filter_button(game_root, "FilterActiveButton") == null:
@@ -371,6 +382,16 @@ func _skill_line(game_root: Node, skill_id: String) -> String:
 		return str((label as Label).text)
 	if label is Button:
 		return str((label as Button).text)
+	return ""
+
+
+func _skill_line_tooltip(game_root: Node, skill_id: String) -> String:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return ""
+	var label: Node = row.get_node_or_null("Line")
+	if label is Button:
+		return str((label as Button).tooltip_text)
 	return ""
 
 
