@@ -1,8 +1,10 @@
 extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+const InventoryCapacity = preload("res://scripts/core/economy/inventory_capacity.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _inventory_capacity := InventoryCapacity.new()
 
 
 func take_item_from_container(simulation: RefCounted, actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
@@ -38,6 +40,12 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 			"required": transfer_count,
 			"current": available,
 		}
+	var capacity: Dictionary = _inventory_capacity.can_add_items(actor, item_library, [
+		{"item_id": normalized_item_id, "count": transfer_count},
+	])
+	if not bool(capacity.get("success", false)):
+		capacity["container_id"] = normalized_container_id
+		return capacity
 
 	_inventory_entries.add(container["inventory"], normalized_item_id, -transfer_count)
 	_inventory_entries.add_actor_item(actor, normalized_item_id, transfer_count)

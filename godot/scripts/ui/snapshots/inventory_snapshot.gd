@@ -1,6 +1,9 @@
 extends RefCounted
 
+const InventoryCapacity = preload("res://scripts/core/economy/inventory_capacity.gd")
+
 var registry: RefCounted
+var _inventory_capacity := InventoryCapacity.new()
 
 
 func _init(p_registry: RefCounted) -> void:
@@ -22,6 +25,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		item_snapshot["order_index"] = order_index
 		total_weight += float(item_snapshot.get("total_weight", 0.0))
 		items.append(item_snapshot)
+	var capacity: Dictionary = _inventory_capacity.capacity_snapshot(player, registry.get_library("items"))
 	return {
 		"owner_actor_id": int(player.get("actor_id", 0)),
 		"owner_name": str(player.get("display_name", "")),
@@ -29,6 +33,9 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"inventory_order": inventory_order,
 		"item_count": items.size(),
 		"total_weight": total_weight,
+		"max_weight": float(capacity.get("max_weight", 0.0)),
+		"remaining_weight": float(capacity.get("remaining_weight", 0.0)),
+		"over_capacity": bool(capacity.get("over_capacity", false)),
 		"feedback": _feedback_snapshot(feedback),
 	}
 
@@ -262,6 +269,14 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "AP 不足，使用 %s 需要 %.0f，当前 %.0f。" % [item_name, float(feedback.get("required_ap", 0.0)), float(feedback.get("available_ap", 0.0))]
 		"not_enough_items":
 			return "背包中没有足够的 %s，需要 %d，当前 %d。" % [item_name, int(feedback.get("required", count)), int(feedback.get("current", 0))]
+		"inventory_over_capacity":
+			return "背包负重不足，加入 %s x%d 后为 %.1f/%.1f kg，超出 %.1f kg。" % [
+				item_name,
+				count,
+				float(feedback.get("projected_weight", 0.0)),
+				float(feedback.get("max_weight", 0.0)),
+				float(feedback.get("over_by", 0.0)),
+			]
 		"item_not_usable":
 			return "%s 不能使用。" % item_name
 		"item_use_forbidden":

@@ -227,6 +227,43 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("queueing trade cart should not spend player money")
 	if _player_inventory_count(game_root, "1006") != bandage_before_cart:
 		errors.append("queueing trade cart should not add player item")
+	var capacity_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	var capacity_inventory_before: Dictionary = capacity_player.inventory.duplicate(true)
+	var capacity_order_before: Array = capacity_player.inventory_order.duplicate()
+	var capacity_equipment_before: Dictionary = capacity_player.equipment.duplicate(true)
+	var capacity_money_before: int = _player_money(game_root)
+	var capacity_shop_sessions_before: Dictionary = game_root.simulation.shop_sessions.duplicate(true)
+	capacity_player.inventory.clear()
+	capacity_player.inventory_order.clear()
+	capacity_player.equipment.clear()
+	capacity_player.inventory["1003"] = 50
+	_set_player_money(game_root, 1000)
+	game_root.refresh_trade_panel()
+	var overweight_buy: Dictionary = game_root.buy_active_trade_item("1006", 1)
+	if str(overweight_buy.get("reason", "")) != "inventory_over_capacity":
+		errors.append("overweight direct trade buy should report inventory_over_capacity")
+	if not _trade_feedback(game_root).contains("负重不足"):
+		errors.append("overweight direct trade buy should show capacity feedback")
+	if int(capacity_player.inventory.get("1003", 0)) != 50:
+		errors.append("failed overweight direct trade buy should not add item")
+	if _player_money(game_root) != 1000:
+		errors.append("failed overweight direct trade buy should not spend money")
+	var overweight_cart: Dictionary = game_root.confirm_active_trade_cart([{
+		"source": "shop",
+		"item_id": "1006",
+		"count": 1,
+	}])
+	if str(overweight_cart.get("reason", "")) != "inventory_over_capacity":
+		errors.append("overweight trade cart should report inventory_over_capacity")
+	if _player_money(game_root) != 1000:
+		errors.append("failed overweight trade cart should not spend money")
+	game_root.simulation.shop_sessions = capacity_shop_sessions_before.duplicate(true)
+	capacity_player.inventory = capacity_inventory_before
+	capacity_player.inventory_order = capacity_order_before
+	capacity_player.equipment = capacity_equipment_before
+	_set_player_money(game_root, capacity_money_before)
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
 	_set_player_money(game_root, 30)
 	game_root.refresh_trade_panel()
 	if not _press_trade_item_with_text(game_root, "shop", "急救包"):

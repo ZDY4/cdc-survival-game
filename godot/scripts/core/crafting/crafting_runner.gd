@@ -1,8 +1,10 @@
 extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+const InventoryCapacity = preload("res://scripts/core/economy/inventory_capacity.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _inventory_capacity := InventoryCapacity.new()
 
 
 func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_id: int, recipe_id: String, recipe_library: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
@@ -52,6 +54,14 @@ func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_i
 	var output_count: int = max(1, int(output.get("count", 1)))
 	if output_item_id.is_empty():
 		return {"success": false, "reason": "recipe_output_invalid"}
+	var capacity: Dictionary = _inventory_capacity.can_add_items(actor, simulation.item_library, [
+		{"item_id": output_item_id, "count": output_count},
+	], materials)
+	if not bool(capacity.get("success", false)):
+		capacity["recipe_id"] = recipe_id
+		capacity["output_item_id"] = output_item_id
+		capacity["output_count"] = output_count
+		return capacity
 
 	for material in materials:
 		_inventory_entries.add_actor_item(actor, str(material.get("item_id", "")), -int(material.get("count", 0)))

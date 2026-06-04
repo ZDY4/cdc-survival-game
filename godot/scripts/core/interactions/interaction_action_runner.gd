@@ -1,11 +1,13 @@
 extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+const InventoryCapacity = preload("res://scripts/core/economy/inventory_capacity.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const MapBuilder = preload("res://scripts/world/map_builder.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _inventory_capacity := InventoryCapacity.new()
 var _map_builder := MapBuilder.new()
 var _map_scene_loader := MapSceneLoader.new()
 
@@ -45,6 +47,14 @@ func _execute_pickup(simulation: RefCounted, actor_id: int, prompt: Dictionary, 
 	var count: int = max(1, int(option.get("count", 1)))
 	if item_id.is_empty():
 		return {"success": false, "reason": "pickup_item_invalid", "prompt": prompt}
+
+	var capacity: Dictionary = _inventory_capacity.can_add_items(actor, _dictionary_or_empty(simulation.get("item_library")), [
+		{"item_id": item_id, "count": count},
+	])
+	if not bool(capacity.get("success", false)):
+		capacity["prompt"] = prompt
+		capacity["target_id"] = str(option.get("target_id", ""))
+		return capacity
 
 	var before_count: int = int(actor.inventory.get(item_id, 0))
 	_inventory_entries.add_actor_item(actor, item_id, count)

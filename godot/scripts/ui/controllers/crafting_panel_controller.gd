@@ -712,6 +712,8 @@ func _craft_failure_text(reason: String) -> String:
 			return "技能不足"
 		"materials_insufficient":
 			return "材料不足"
+		"inventory_over_capacity":
+			return "背包负重不足"
 		"recipe_output_invalid":
 			return "产物无效"
 		"actor_missing":

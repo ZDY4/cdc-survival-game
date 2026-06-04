@@ -373,6 +373,12 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "店铺库存不足：%s x%d。" % [item_name, count]
 		"player_stock_insufficient":
 			return "背包库存不足：%s x%d。" % [item_name, count]
+		"inventory_over_capacity":
+			return "背包负重不足，购买后为 %.1f/%.1f kg，超出 %.1f kg。" % [
+				float(feedback.get("projected_weight", 0.0)),
+				float(feedback.get("max_weight", 0.0)),
+				float(feedback.get("over_by", 0.0)),
+			]
 		"item_not_sellable":
 			return "该物品不可出售：%s。" % item_name
 		"unknown_shop":

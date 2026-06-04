@@ -153,6 +153,18 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("character equipment snapshot should expose ammo_capacity effect id")
 	if not _details_contain(body_row, "效果: Placeholder ammo_capacity"):
 		errors.append("character equipment details should show ammo_capacity effect label")
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.equipment["back"] = "2020"
+	player.inventory["1003"] = 65
+	var overweight_unequip: Dictionary = simulation.unequip_item(1, "back")
+	if str(overweight_unequip.get("reason", "")) != "inventory_over_capacity":
+		errors.append("unequipping carry-capacity backpack while overloaded should report inventory_over_capacity")
+	if str(player.equipment.get("back", "")) != "2020":
+		errors.append("failed overweight backpack unequip should keep backpack equipped")
+	if int(player.inventory.get("2020", 0)) != 0:
+		errors.append("failed overweight backpack unequip should not move backpack into inventory")
 	return errors
 
 

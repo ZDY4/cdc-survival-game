@@ -1,10 +1,12 @@
 extends RefCounted
 
 const ContainerTransactions = preload("res://scripts/core/economy/container_transactions.gd")
+const InventoryCapacity = preload("res://scripts/core/economy/inventory_capacity.gd")
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const ShopTransactions = preload("res://scripts/core/economy/shop_transactions.gd")
 
 var _container_transactions := ContainerTransactions.new()
+var _inventory_capacity := InventoryCapacity.new()
 var _inventory_entries := InventoryEntries.new()
 var _shop_transactions := ShopTransactions.new()
 
@@ -125,12 +127,27 @@ func deconstruct_actor_item(simulation: RefCounted, actor_id: int, item_id: Stri
 			"reason": "item_not_deconstructable",
 			"item_id": normalized_item_id,
 		}
-
-	_inventory_entries.add_actor_item(actor, normalized_item_id, -deconstruct_count)
-	var produced: Array[Dictionary] = []
+	var produced_preview: Array = []
 	for entry in yields:
 		var produced_item_id: String = str(entry.get("item_id", ""))
 		var produced_count: int = int(entry.get("count", 0)) * deconstruct_count
+		if produced_item_id.is_empty() or produced_count <= 0:
+			continue
+		produced_preview.append({
+			"item_id": produced_item_id,
+			"count": produced_count,
+		})
+	var capacity: Dictionary = _inventory_capacity.can_add_items(actor, item_library, produced_preview, [
+		{"item_id": normalized_item_id, "count": deconstruct_count},
+	])
+	if not bool(capacity.get("success", false)):
+		return capacity
+
+	_inventory_entries.add_actor_item(actor, normalized_item_id, -deconstruct_count)
+	var produced: Array[Dictionary] = []
+	for entry in produced_preview:
+		var produced_item_id: String = str(entry.get("item_id", ""))
+		var produced_count: int = int(entry.get("count", 0))
 		if produced_item_id.is_empty() or produced_count <= 0:
 			continue
 		_inventory_entries.add_actor_item(actor, produced_item_id, produced_count)

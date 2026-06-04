@@ -1,8 +1,10 @@
 extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+const InventoryCapacity = preload("res://scripts/core/economy/inventory_capacity.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _inventory_capacity := InventoryCapacity.new()
 
 
 func configure_shops(simulation: RefCounted, shops: Dictionary) -> void:
@@ -42,6 +44,14 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 	var total_price: int = unit_price * buy_count
 	if actor.money < total_price:
 		return {"success": false, "reason": "player_money_insufficient", "unit_price": unit_price, "total_price": total_price}
+	var capacity: Dictionary = _inventory_capacity.can_add_items(actor, item_library, [
+		{"item_id": normalized_item_id, "count": buy_count},
+	])
+	if not bool(capacity.get("success", false)):
+		capacity["shop_id"] = shop_id
+		capacity["unit_price"] = unit_price
+		capacity["total_price"] = total_price
+		return capacity
 
 	actor.money -= total_price
 	_inventory_entries.add_actor_item(actor, normalized_item_id, buy_count)
@@ -367,6 +377,12 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 		return {"success": false, "reason": "player_money_insufficient", "total_price": net_payment}
 	if net_payment < 0 and int(shop.get("money", 0)) < -net_payment:
 		return {"success": false, "reason": "shop_money_insufficient", "total_price": -net_payment}
+	var capacity: Dictionary = _inventory_capacity.can_add_items(actor, item_library, _entries_for_source(normalized_entries, "shop"), _entries_for_source(normalized_entries, "player"))
+	if not bool(capacity.get("success", false)):
+		capacity["shop_id"] = shop_id
+		capacity["total_price"] = net_payment
+		capacity["entries"] = normalized_entries.duplicate(true)
+		return capacity
 	return {
 		"success": true,
 		"shop_id": shop_id,
@@ -386,6 +402,19 @@ func _trade_unit_price(item_id: String, modifier: float, item_library: Dictionar
 	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	var base_value: int = max(0, int(data.get("value", 0)))
 	return max(1, int(round(float(base_value) * max(0.0, modifier))))
+
+
+func _entries_for_source(entries: Array[Dictionary], source: String) -> Array:
+	var output: Array = []
+	for entry in entries:
+		var entry_data: Dictionary = entry
+		if str(entry_data.get("source", "")) != source:
+			continue
+		output.append({
+			"item_id": str(entry_data.get("item_id", "")),
+			"count": int(entry_data.get("count", 0)),
+		})
+	return output
 
 
 func _copy_permission_fields(session: Dictionary, data: Dictionary) -> void:

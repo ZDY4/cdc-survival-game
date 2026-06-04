@@ -160,6 +160,13 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "容器中没有足够的金钱，需要 %d，当前 %d。" % [required, current]
 		"not_enough_items":
 			return "背包中没有足够的%s，需要 %d，当前 %d。" % [item_name, required, current]
+		"inventory_over_capacity":
+			return "背包负重不足，拿取%s后为 %.1f/%.1f kg，超出 %.1f kg。" % [
+				item_name,
+				float(feedback.get("projected_weight", 0.0)),
+				float(feedback.get("max_weight", 0.0)),
+				float(feedback.get("over_by", 0.0)),
+			]
 		"unknown_container":
 			return "容器不存在或已经失效。"
 		"unknown_item":

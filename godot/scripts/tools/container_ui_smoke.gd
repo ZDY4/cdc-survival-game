@@ -104,6 +104,31 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dragged antibiotics should return to container column")
 	if _container_player_text(game_root).contains("抗生素 x1"):
 		errors.append("dragged antibiotics should leave player column after storing")
+	var capacity_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	var capacity_session_before: Dictionary = game_root.simulation.container_sessions.get("survivor_outpost_01_clinic_supply_cabinet", {}).duplicate(true)
+	var capacity_session: Dictionary = capacity_session_before.duplicate(true)
+	var capacity_inventory_before: Dictionary = capacity_player.inventory.duplicate(true)
+	var capacity_order_before: Array = capacity_player.inventory_order.duplicate()
+	var capacity_equipment_before: Dictionary = capacity_player.equipment.duplicate(true)
+	capacity_player.inventory.clear()
+	capacity_player.inventory_order.clear()
+	capacity_player.equipment.clear()
+	capacity_player.inventory["1003"] = 50
+	capacity_session["inventory"] = [{"item_id": "1003", "count": 1}]
+	game_root.simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = capacity_session
+	game_root.refresh_container_panel()
+	var overweight_take: Dictionary = game_root.take_active_container_item("1003", 1)
+	if str(overweight_take.get("reason", "")) != "inventory_over_capacity":
+		errors.append("overweight container take should report inventory_over_capacity")
+	if not _container_feedback(game_root).contains("负重不足"):
+		errors.append("overweight container take should show capacity feedback")
+	if int(capacity_player.inventory.get("1003", 0)) != 50:
+		errors.append("failed overweight container take should not add item")
+	game_root.simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = capacity_session_before.duplicate(true)
+	capacity_player.inventory = capacity_inventory_before
+	capacity_player.inventory_order = capacity_order_before
+	capacity_player.equipment = capacity_equipment_before
+	game_root.refresh_container_panel()
 
 	var invalid_take: Dictionary = game_root.take_active_container_item("1031", 0)
 	if invalid_take.get("reason", "") != "invalid_quantity":

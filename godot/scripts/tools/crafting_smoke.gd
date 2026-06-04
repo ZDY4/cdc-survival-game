@@ -258,6 +258,38 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	})
 	if str(not_deconstructable.get("reason", "")) != "item_not_deconstructable":
 		errors.append("item without deconstruct yield should report item_not_deconstructable")
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.inventory["1003"] = 50
+	player.inventory["1011"] = 10
+	var overweight_craft: Dictionary = simulation.craft_recipe(1, "recipe_bandage_basic", recipes)
+	if str(overweight_craft.get("reason", "")) != "inventory_over_capacity":
+		errors.append("overweight crafting should report inventory_over_capacity")
+	if int(player.inventory.get("1011", 0)) != 10:
+		errors.append("failed overweight craft should not consume materials")
+	if int(player.inventory.get("1006", 0)) != 0:
+		errors.append("failed overweight craft should not add output")
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.inventory["1003"] = 49
+	player.inventory["1004"] = 2
+	player.inventory["1010"] = 0
+	var overweight_deconstruct: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "1004",
+		"count": 2,
+		"item_library": registry.get_library("items"),
+	})
+	if str(overweight_deconstruct.get("reason", "")) != "inventory_over_capacity":
+		errors.append("overweight deconstruct should report inventory_over_capacity")
+	if int(player.inventory.get("1004", 0)) != 2:
+		errors.append("failed overweight deconstruct should keep source items")
+	if int(player.inventory.get("1010", 0)) != 0:
+		errors.append("failed overweight deconstruct should not add yield")
 	return errors
 
 

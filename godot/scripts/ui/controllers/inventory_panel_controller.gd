@@ -56,9 +56,12 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 
 	_last_snapshot = snapshot.duplicate(true)
 	_title_label.text = "%s 的背包" % snapshot.get("owner_name", "")
-	_summary_label.text = "%d 类物品 | %.1f kg" % [
+	var max_weight := float(snapshot.get("max_weight", 0.0))
+	var weight_text := "%.1f/%.1f kg" % [float(snapshot.get("total_weight", 0.0)), max_weight] if max_weight > 0.0 else "%.1f kg" % float(snapshot.get("total_weight", 0.0))
+	_summary_label.text = "%d 类物品 | %s%s" % [
 		int(snapshot.get("item_count", 0)),
-		float(snapshot.get("total_weight", 0.0)),
+		weight_text,
+		" | 超重" if bool(snapshot.get("over_capacity", false)) else "",
 	]
 	_apply_feedback(_dictionary_or_empty(snapshot.get("feedback", {})))
 	_refresh_filter_buttons()

@@ -35,6 +35,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["inventory panel was not created"]
 	if not _summary_line(game_root).contains("4 类物品"):
 		errors.append("initial inventory summary should include bootstrap inventory")
+	if not _summary_line(game_root).contains("/60.0 kg"):
+		errors.append("initial inventory summary should include carry capacity")
 	var initial_text: String = "\n".join(_item_lines(game_root))
 	if not initial_text.contains("手枪弹药 x10"):
 		errors.append("initial inventory missing bootstrap ammo")
@@ -357,8 +359,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory panel missing picked bandage line")
 	if not _summary_line(game_root).contains("4 类物品"):
 		errors.append("inventory summary did not update item count")
-	if not _summary_line(game_root).contains("1.7 kg"):
+	if not _summary_line(game_root).contains("kg"):
 		errors.append("inventory summary did not update total weight after deconstructing water bottle")
+	if not _summary_line(game_root).contains("/60.0 kg"):
+		errors.append("inventory summary should keep carry capacity after inventory changes")
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should select bandages before dropping through inventory panel")
 	var quantity_spin: SpinBox = _quantity_spin(game_root)

@@ -1,8 +1,10 @@
 extends RefCounted
 
 const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+const InventoryCapacity = preload("res://scripts/core/economy/inventory_capacity.gd")
 
 var _inventory_entries := InventoryEntries.new()
+var _inventory_capacity := InventoryCapacity.new()
 
 
 func equip_item(actor: RefCounted, item_id: String, requested_slot: String, item_library: Dictionary) -> Dictionary:
@@ -30,6 +32,19 @@ func equip_item(actor: RefCounted, item_id: String, requested_slot: String, item
 		}
 
 	var previous_item_id: String = str(actor.equipment.get(slot_id, ""))
+	var next_equipment: Dictionary = actor.equipment.duplicate(true)
+	next_equipment[slot_id] = item_id
+	var additions: Array = []
+	if not previous_item_id.is_empty():
+		additions.append({"item_id": previous_item_id, "count": 1})
+	var capacity: Dictionary = _inventory_capacity.can_change_inventory(actor, item_library, additions, [
+		{"item_id": item_id, "count": 1},
+	], next_equipment)
+	if not bool(capacity.get("success", false)):
+		capacity["item_id"] = item_id
+		capacity["slot_id"] = slot_id
+		capacity["previous_item_id"] = previous_item_id
+		return capacity
 	_inventory_entries.add_actor_item(actor, item_id, -1)
 	if not previous_item_id.is_empty():
 		_inventory_entries.add_actor_item(actor, previous_item_id, 1)
@@ -43,13 +58,22 @@ func equip_item(actor: RefCounted, item_id: String, requested_slot: String, item
 	}
 
 
-func unequip_item(actor: RefCounted, slot_id: String) -> Dictionary:
+func unequip_item(actor: RefCounted, slot_id: String, item_library: Dictionary = {}) -> Dictionary:
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor"}
 	var normalized_slot: String = slot_id.strip_edges()
 	var item_id: String = str(actor.equipment.get(normalized_slot, ""))
 	if item_id.is_empty():
 		return {"success": false, "reason": "empty_equipment_slot", "slot_id": normalized_slot}
+	var next_equipment: Dictionary = actor.equipment.duplicate(true)
+	next_equipment.erase(normalized_slot)
+	var capacity: Dictionary = _inventory_capacity.can_change_inventory(actor, item_library, [
+		{"item_id": item_id, "count": 1},
+	], [], next_equipment)
+	if not bool(capacity.get("success", false)):
+		capacity["item_id"] = item_id
+		capacity["slot_id"] = normalized_slot
+		return capacity
 	actor.equipment.erase(normalized_slot)
 	actor.weapon_ammo.erase(normalized_slot)
 	_inventory_entries.add_actor_item(actor, item_id, 1)

@@ -22,7 +22,7 @@ func equip_item(simulation: RefCounted, equipment_rules: RefCounted, actor_id: i
 
 func unequip_item(simulation: RefCounted, equipment_rules: RefCounted, actor_id: int, slot_id: String) -> Dictionary:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
-	var result: Dictionary = equipment_rules.unequip_item(actor, slot_id)
+	var result: Dictionary = equipment_rules.unequip_item(actor, slot_id, _dictionary_or_empty(simulation.get("item_library")))
 	if not bool(result.get("success", false)):
 		return result
 	simulation.emit_event("item_unequipped", {
@@ -31,3 +31,9 @@ func unequip_item(simulation: RefCounted, equipment_rules: RefCounted, actor_id:
 		"slot_id": result.get("slot_id", slot_id),
 	})
 	return result
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
