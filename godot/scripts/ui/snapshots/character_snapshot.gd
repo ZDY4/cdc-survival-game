@@ -222,6 +222,7 @@ func _status_effects_snapshot(active_effects: Array) -> Array[Dictionary]:
 		rows.append({
 			"effect_id": effect_id,
 			"source": str(effect_data.get("source", "")),
+			"source_label": _status_effect_source_label(effect_data),
 			"skill_id": str(effect_data.get("skill_id", "")),
 			"name": _status_effect_name(effect_data),
 			"category": str(effect_data.get("category", "")),
@@ -230,6 +231,7 @@ func _status_effects_snapshot(active_effects: Array) -> Array[Dictionary]:
 			"is_infinite": bool(effect_data.get("is_infinite", false)),
 			"modifiers": _dictionary_or_empty(effect_data.get("modifiers", {})).duplicate(true),
 			"modifier_labels": _modifier_labels(_dictionary_or_empty(effect_data.get("modifiers", {}))),
+			"tooltip": _status_effect_tooltip(effect_data),
 		})
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("effect_id", "")) < str(b.get("effect_id", ""))
@@ -360,6 +362,47 @@ func _status_effect_name(effect: Dictionary) -> String:
 	if not effect_id.is_empty():
 		return effect_id
 	return "状态效果"
+
+
+func _status_effect_source_label(effect: Dictionary) -> String:
+	var source := str(effect.get("source", ""))
+	var skill_id := str(effect.get("skill_id", ""))
+	match source:
+		"skill":
+			var skill_name := _skill_name(skill_id)
+			return "技能: %s" % (skill_name if not skill_name.is_empty() else skill_id)
+		"item":
+			return "物品"
+		"equipment":
+			return "装备"
+		_:
+			return "来源: %s" % source if not source.is_empty() else "来源未知"
+
+
+func _status_effect_tooltip(effect: Dictionary) -> String:
+	var parts: Array[String] = [
+		"来源: %s" % _status_effect_source_label(effect),
+		"类别: %s" % str(effect.get("category", "")),
+	]
+	var skill_id := str(effect.get("skill_id", ""))
+	if not skill_id.is_empty():
+		parts.append("技能ID: %s" % skill_id)
+	if int(effect.get("level", 0)) > 0:
+		parts.append("等级: %d" % int(effect.get("level", 0)))
+	parts.append("持续: 永久" if bool(effect.get("is_infinite", false)) else "剩余回合: %.0f" % float(effect.get("duration_remaining", 0.0)))
+	var modifier_labels := _modifier_labels(_dictionary_or_empty(effect.get("modifiers", {})))
+	if not modifier_labels.is_empty():
+		parts.append("修饰: %s" % " / ".join(modifier_labels))
+	parts.append("效果ID: %s" % str(effect.get("effect_id", "")))
+	return "\n".join(parts)
+
+
+func _skill_name(skill_id: String) -> String:
+	if skill_id.is_empty() or registry == null:
+		return ""
+	var record: Dictionary = _dictionary_or_empty(registry.get_library("skills").get(skill_id, {}))
+	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+	return str(data.get("name", ""))
 
 
 func _modifier_labels(modifiers: Dictionary) -> Array[String]:

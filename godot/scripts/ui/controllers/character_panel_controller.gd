@@ -156,6 +156,8 @@ func _status_rows(status_effects: Array) -> Array[Control]:
 		var label := _label("Line")
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.text = _status_text(data)
+		label.tooltip_text = str(data.get("tooltip", ""))
+		row.tooltip_text = label.tooltip_text
 		row.add_child(label)
 		rows.append(row)
 	return rows
@@ -166,6 +168,9 @@ func _status_text(data: Dictionary) -> String:
 		str(data.get("name", data.get("effect_id", ""))),
 		str(data.get("category", "")),
 	]
+	var source_label := str(data.get("source_label", ""))
+	if not source_label.is_empty():
+		parts.append(source_label)
 	if int(data.get("level", 0)) > 0:
 		parts.append("Lv%d" % int(data.get("level", 0)))
 	if not bool(data.get("is_infinite", false)):

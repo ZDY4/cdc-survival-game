@@ -255,8 +255,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var combat_skill_result: Dictionary = game_root.learn_player_skill("combat")
 	if not bool(combat_skill_result.get("success", false)):
 		errors.append("learning combat for character status effects failed: %s" % combat_skill_result.get("reason", "unknown"))
-	if not _status_effect_line(game_root, "StatusEffect_passive_skill_combat").contains("战斗训练 | passive | Lv1 | damage_bonus +0.04"):
+	if not _status_effect_line(game_root, "StatusEffect_passive_skill_combat").contains("战斗训练 | passive | 技能: 战斗训练 | Lv1 | damage_bonus +0.04"):
 		errors.append("character panel should show passive combat status effect")
+	if not _status_effect_tooltip(game_root, "StatusEffect_passive_skill_combat").contains("来源: 技能: 战斗训练") or not _status_effect_tooltip(game_root, "StatusEffect_passive_skill_combat").contains("持续: 永久"):
+		errors.append("character passive status effect should expose source and duration tooltip")
 	if not _derived_line(game_root, "effects").contains("damage_bonus +0.04"):
 		errors.append("character panel should include passive skill modifier in derived effect summary")
 	var adrenaline_result: Dictionary = game_root.learn_player_skill("adrenaline_rush")
@@ -266,8 +268,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var hotbar_result: Dictionary = game_root.use_hotbar_slot("slot_1")
 	if not bool(hotbar_result.get("success", false)):
 		errors.append("using adrenaline rush for character status effects failed: %s" % hotbar_result.get("reason", "unknown"))
-	if not _status_effect_line(game_root, "StatusEffect_skill_adrenaline_rush").contains("肾上腺激发 | buff | Lv1 | 8回合 | damage_bonus +0.25"):
+	if not _status_effect_line(game_root, "StatusEffect_skill_adrenaline_rush").contains("肾上腺激发 | buff | 技能: 肾上腺激发 | Lv1 | 8回合 | damage_bonus +0.25"):
 		errors.append("character panel should show timed adrenaline rush status effect")
+	if not _status_effect_tooltip(game_root, "StatusEffect_skill_adrenaline_rush").contains("剩余回合: 8") or not _status_effect_tooltip(game_root, "StatusEffect_skill_adrenaline_rush").contains("技能ID: adrenaline_rush"):
+		errors.append("character timed status effect should expose duration and skill tooltip")
 	if not _derived_line(game_root, "effects").contains("damage_bonus +0.29"):
 		errors.append("character panel should sum passive and active status modifiers in derived effect summary")
 
@@ -615,6 +619,18 @@ func _status_effect_line(game_root: Node, node_name: String) -> String:
 	var label: Node = row.get_node_or_null("Line")
 	if label is Label:
 		return str((label as Label).text)
+	return ""
+
+
+func _status_effect_tooltip(game_root: Node, node_name: String) -> String:
+	var row: Node = game_root.character_panel.find_child(node_name, true, false)
+	if row == null:
+		return ""
+	var label: Node = row.get_node_or_null("Line")
+	if label is Label:
+		return str((label as Label).tooltip_text)
+	if row is Control:
+		return str((row as Control).tooltip_text)
 	return ""
 
 
