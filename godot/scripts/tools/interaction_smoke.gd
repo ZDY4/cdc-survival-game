@@ -75,6 +75,9 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("talk failed: %s" % talk_result.get("reason", "unknown"))
 	if talk_result.get("dialogue_id", "") != "trader_lao_wang":
 		errors.append("talk did not resolve trader_lao_wang dialogue")
+	var dialogue_started_payload: Dictionary = _last_event_payload(simulation.snapshot(), "dialogue_started")
+	if int(dialogue_started_payload.get("actor_id", 0)) != 1 or str(dialogue_started_payload.get("dialogue_id", "")) != "trader_lao_wang":
+		errors.append("dialogue_started should include actor_id and dialogue_id")
 
 	var container_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
@@ -93,6 +96,11 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("container inventory did not expose initial entries")
 	if player.active_container_id != "survivor_outpost_01_clinic_supply_cabinet":
 		errors.append("player active container was not updated")
+	var container_opened_payload: Dictionary = _last_event_payload(simulation.snapshot(), "container_opened")
+	if int(container_opened_payload.get("actor_id", 0)) != 1 or str(container_opened_payload.get("target_id", "")) != "survivor_outpost_01_clinic_supply_cabinet":
+		errors.append("container_opened should include actor_id and target_id")
+	if int(container_opened_payload.get("item_count", -1)) != 2:
+		errors.append("container_opened should include item_count")
 
 	var wait_result: Dictionary = simulation.submit_player_command({
 		"kind": "interact",
@@ -120,6 +128,13 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("scene transition failed: %s" % transition_result.get("reason", "unknown"))
 	if simulation.active_map_id != "survivor_outpost_01_interior":
 		errors.append("scene transition did not update active map")
+	var scene_transition_payload: Dictionary = _last_event_payload(simulation.snapshot(), "scene_transition")
+	if int(scene_transition_payload.get("actor_id", 0)) != 1:
+		errors.append("scene_transition should include actor_id")
+	if str(scene_transition_payload.get("from_map_id", "")) != "survivor_outpost_01" or str(scene_transition_payload.get("to_map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("scene_transition should include from/to map ids")
+	if str(scene_transition_payload.get("entry_point_id", "")).is_empty():
+		errors.append("scene_transition should include entry_point_id")
 	var approach_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var approach_errors: Array[String] = _expect_auto_approach_interaction(approach_simulation, registry)
 	errors.append_array(approach_errors)
