@@ -614,6 +614,10 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 	var audio: Dictionary = _dictionary_or_empty(applied.get("audio", {}))
 	if not bool(_dictionary_or_empty(audio.get("Master", {})).get("applied", false)):
 		errors.append("settings master volume should apply to audio bus: %s" % applied)
+	if not bool(_dictionary_or_empty(audio.get("Music", {})).get("applied", false)):
+		errors.append("settings music volume should apply to audio bus: %s" % applied)
+	if not bool(_dictionary_or_empty(audio.get("SFX", {})).get("applied", false)):
+		errors.append("settings SFX volume should apply to audio bus: %s" % applied)
 	var display: Dictionary = _dictionary_or_empty(applied.get("display", {}))
 	if not bool(display.get("applied", false)) and str(display.get("reason", "")) != "headless":
 		errors.append("settings display changes should apply or be explicitly skipped in headless: %s" % applied)
