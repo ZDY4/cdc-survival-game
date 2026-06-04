@@ -37,6 +37,7 @@ func build(simulation: RefCounted) -> Dictionary:
 		"corpse_containers": _corpse_container_snapshots(simulation.corpse_containers),
 		"interaction_menu": simulation.interaction_menu.duplicate(true),
 		"hotbar": simulation.hotbar.duplicate(true),
+		"crafted_recipes": simulation.crafted_recipes.keys(),
 	}
 
 

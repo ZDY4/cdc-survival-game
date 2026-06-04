@@ -13,8 +13,9 @@ func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_i
 	if record.is_empty():
 		return {"success": false, "reason": "unknown_recipe"}
 	var recipe: Dictionary = _dictionary_or_empty(record.get("data", {}))
-	if not bool(recipe.get("is_default_unlocked", false)):
-		return {"success": false, "reason": "recipe_locked"}
+	var unlock_check: Dictionary = _unlock_check(simulation, recipe)
+	if not bool(unlock_check.get("success", false)):
+		return unlock_check
 	var missing_tools: Array[Dictionary] = _missing_required_tools(actor, _array_or_empty(recipe.get("required_tools", [])), simulation.item_library)
 	if not missing_tools.is_empty():
 		return {
@@ -65,6 +66,7 @@ func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_i
 	})
 	if int(recipe.get("experience_reward", 0)) > 0:
 		simulation.grant_experience(actor_id, int(recipe.get("experience_reward", 0)), "recipe:%s" % recipe_id)
+	_mark_recipe_crafted(simulation, actor_id, recipe_id)
 	return {
 		"success": true,
 		"recipe_id": recipe_id,
@@ -117,6 +119,48 @@ func _item_name(item_id: String, item_library: Dictionary) -> String:
 	var record: Dictionary = _dictionary_or_empty(item_library.get(item_id, {}))
 	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	return str(data.get("name", item_id))
+
+
+func _unlock_check(simulation: RefCounted, recipe: Dictionary) -> Dictionary:
+	if bool(recipe.get("is_default_unlocked", false)):
+		return {"success": true, "unlock_source": "default"}
+	var missing: Array[Dictionary] = []
+	for condition in _array_or_empty(recipe.get("unlock_conditions", [])):
+		var condition_data: Dictionary = _dictionary_or_empty(condition)
+		var condition_type := str(condition_data.get("type", ""))
+		match condition_type:
+			"recipe":
+				var required_recipe_id := str(condition_data.get("id", ""))
+				if required_recipe_id.is_empty() or not simulation.crafted_recipes.has(required_recipe_id):
+					missing.append({
+						"type": "recipe",
+						"id": required_recipe_id,
+					})
+			_:
+				missing.append({
+					"type": condition_type,
+					"id": str(condition_data.get("id", "")),
+					"unsupported": true,
+				})
+	if missing.is_empty() and not _array_or_empty(recipe.get("unlock_conditions", [])).is_empty():
+		return {"success": true, "unlock_source": "conditions"}
+	return {
+		"success": false,
+		"reason": "recipe_locked",
+		"missing_unlock_conditions": missing,
+	}
+
+
+func _mark_recipe_crafted(simulation: RefCounted, actor_id: int, recipe_id: String) -> void:
+	if recipe_id.is_empty():
+		return
+	var was_known: bool = simulation.crafted_recipes.has(recipe_id)
+	simulation.crafted_recipes[recipe_id] = true
+	if not was_known:
+		simulation.emit_event("recipe_unlocked", {
+			"actor_id": actor_id,
+			"source_recipe_id": recipe_id,
+		})
 
 
 func _station_check(actor: RefCounted, required_station: String, crafting_context: Dictionary) -> Dictionary:

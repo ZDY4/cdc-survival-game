@@ -12,11 +12,12 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
 	var progression: Dictionary = _dictionary_or_empty(player.get("progression", {}))
+	var crafted_recipes: Dictionary = _flag_dictionary(runtime_snapshot.get("crafted_recipes", []))
 	var recipes: Array[Dictionary] = []
 	var recipe_ids: Array = registry.get_library("recipes").keys()
 	recipe_ids.sort()
 	for recipe_id in recipe_ids:
-		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), player, inventory, equipment, progression, crafting_context)
+		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), player, inventory, equipment, progression, crafted_recipes, crafting_context)
 		if not recipe_view.is_empty():
 			recipes.append(recipe_view)
 	return {
@@ -27,7 +28,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	}
 
 
-func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, crafting_context: Dictionary) -> Dictionary:
+func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, crafting_context: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("recipes").get(recipe_id, {}))
 	var recipe: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if recipe.is_empty():
@@ -49,7 +50,8 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), inventory, equipment)
 	var required_station := str(recipe.get("required_station", "none"))
 	var station_check: Dictionary = _station_check(player, required_station, crafting_context)
-	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check)
+	var unlock_check: Dictionary = _unlock_check(recipe, crafted_recipes)
+	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check, unlock_check)
 	var max_craft_count: int = _max_craft_count(materials, bool(availability.get("can_craft", false)))
 	var output_count: int = max(1, int(output.get("count", 1)))
 	return {
@@ -69,18 +71,20 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 		"craft_time": float(recipe.get("craft_time", 0.0)),
 		"experience_reward": int(recipe.get("experience_reward", 0)),
 		"is_default_unlocked": bool(recipe.get("is_default_unlocked", false)),
+		"unlock_conditions": _unlock_condition_snapshot(recipe),
 		"can_craft": bool(availability.get("can_craft", false)),
 		"max_craft_count": max_craft_count,
 		"craft_reason": str(availability.get("reason", "")),
+		"missing_unlock_conditions": _array_or_empty(availability.get("missing_unlock_conditions", [])).duplicate(true),
 		"missing_materials": _array_or_empty(availability.get("missing_materials", [])).duplicate(true),
 		"missing_skills": _array_or_empty(availability.get("missing_skills", [])).duplicate(true),
 		"missing_tools": _array_or_empty(availability.get("missing_tools", [])).duplicate(true),
 	}
 
 
-func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, materials: Array[Dictionary], required_tools: Array[Dictionary], station_check: Dictionary) -> Dictionary:
-	if not bool(recipe.get("is_default_unlocked", false)):
-		return {"can_craft": false, "reason": "recipe_locked"}
+func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, materials: Array[Dictionary], required_tools: Array[Dictionary], station_check: Dictionary, unlock_check: Dictionary) -> Dictionary:
+	if not bool(unlock_check.get("success", false)):
+		return unlock_check
 	var missing_tools: Array[Dictionary] = []
 	for tool in required_tools:
 		var tool_data: Dictionary = _dictionary_or_empty(tool)
@@ -127,6 +131,54 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 	if not missing_materials.is_empty():
 		return {"can_craft": false, "reason": "materials_insufficient", "missing_materials": missing_materials}
 	return {"can_craft": true, "reason": "available"}
+
+
+func _unlock_check(recipe: Dictionary, crafted_recipes: Dictionary) -> Dictionary:
+	if bool(recipe.get("is_default_unlocked", false)):
+		return {"success": true}
+	var missing: Array[Dictionary] = []
+	for condition in _array_or_empty(recipe.get("unlock_conditions", [])):
+		var data: Dictionary = _dictionary_or_empty(condition)
+		var condition_type := str(data.get("type", ""))
+		match condition_type:
+			"recipe":
+				var recipe_id := str(data.get("id", ""))
+				if recipe_id.is_empty() or not crafted_recipes.has(recipe_id):
+					missing.append(_unlock_condition_view(data))
+			_:
+				var unsupported := _unlock_condition_view(data)
+				unsupported["unsupported"] = true
+				missing.append(unsupported)
+	if missing.is_empty() and not _array_or_empty(recipe.get("unlock_conditions", [])).is_empty():
+		return {"success": true}
+	return {
+		"success": false,
+		"can_craft": false,
+		"reason": "recipe_locked",
+		"missing_unlock_conditions": missing,
+	}
+
+
+func _unlock_condition_snapshot(recipe: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for condition in _array_or_empty(recipe.get("unlock_conditions", [])):
+		output.append(_unlock_condition_view(_dictionary_or_empty(condition)))
+	return output
+
+
+func _unlock_condition_view(condition: Dictionary) -> Dictionary:
+	var condition_type := str(condition.get("type", ""))
+	var condition_id := str(condition.get("id", ""))
+	var display_name := condition_id
+	if condition_type == "recipe":
+		var recipe_record: Dictionary = _dictionary_or_empty(registry.get_library("recipes").get(condition_id, {}))
+		var recipe_data: Dictionary = _dictionary_or_empty(recipe_record.get("data", recipe_record))
+		display_name = str(recipe_data.get("name", condition_id))
+	return {
+		"type": condition_type,
+		"id": condition_id,
+		"display_name": display_name,
+	}
 
 
 func _station_check(player: Dictionary, required_station: String, crafting_context: Dictionary) -> Dictionary:
@@ -266,3 +318,10 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _flag_dictionary(values: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	for value in _array_or_empty(values):
+		output[str(value)] = true
+	return output

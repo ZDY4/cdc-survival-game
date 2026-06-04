@@ -82,6 +82,13 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if _event_count(simulation.snapshot(), "experience_granted") != batch_xp_events_before + 2:
 		errors.append("batch crafting experience should emit per craft")
 
+	var recipe_locked: Dictionary = simulation.craft_recipe(1, "recipe_advanced_knife", recipes)
+	if recipe_locked.get("reason", "") != "recipe_locked":
+		errors.append("recipe-chain gated recipe should report recipe_locked before source recipe is crafted")
+	var missing_unlocks: Array = recipe_locked.get("missing_unlock_conditions", [])
+	if missing_unlocks.is_empty() or str(_dictionary_or_empty(missing_unlocks[0]).get("id", "")) != "recipe_knife_basic":
+		errors.append("recipe-chain gated recipe should identify missing source recipe")
+
 	var tool_missing: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes)
 	if tool_missing.get("reason", "") != "missing_tools":
 		errors.append("tool-gated recipe should report missing_tools before station check")
@@ -118,6 +125,21 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("station-gated craft should consume materials")
 	if int(player.inventory.get("1009", 0)) != 20:
 		errors.append("station-gated craft should add pistol ammo output")
+	player.inventory["1010"] = 3
+	player.inventory["1012"] = 1
+	player.progression["learned_skills"]["crafting"] = 1
+	var recipe_unlocked_events_before := _event_count(simulation.snapshot(), "recipe_unlocked")
+	var basic_knife_craft: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes, crafting_context)
+	if not bool(basic_knife_craft.get("success", false)):
+		errors.append("basic knife craft should unlock recipe-chain source: %s" % basic_knife_craft.get("reason", "unknown"))
+	var crafted_recipes: Array = simulation.snapshot().get("crafted_recipes", [])
+	if not crafted_recipes.has("recipe_knife_basic"):
+		errors.append("crafted_recipes should include crafted source recipe")
+	if _event_count(simulation.snapshot(), "recipe_unlocked") != recipe_unlocked_events_before + 1:
+		errors.append("crafting a recipe for the first time should emit recipe_unlocked")
+	var advanced_after_unlock: Dictionary = simulation.craft_recipe(1, "recipe_advanced_knife", recipes, crafting_context)
+	if advanced_after_unlock.get("reason", "") == "recipe_locked":
+		errors.append("advanced knife should pass recipe-chain unlock after basic knife is crafted")
 	return errors
 
 

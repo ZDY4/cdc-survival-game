@@ -39,6 +39,7 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.corpse_containers = _load_corpse_containers(snapshot_data.get("corpse_containers", []))
 	simulation.interaction_menu = _dictionary_or_empty(snapshot_data.get("interaction_menu", {})).duplicate(true)
 	simulation.hotbar = _dictionary_or_empty(snapshot_data.get("hotbar", {})).duplicate(true)
+	simulation.crafted_recipes = _load_flag_dictionary(snapshot_data.get("crafted_recipes", []))
 	if source_schema_version < CURRENT_SCHEMA_VERSION:
 		simulation.emit_event("snapshot_migrated", {
 			"from_schema_version": source_schema_version,
@@ -109,9 +110,13 @@ func _load_active_quests(entries: Variant) -> Dictionary:
 
 
 func _load_completed_quests(entries: Variant) -> Dictionary:
+	return _load_flag_dictionary(entries)
+
+
+func _load_flag_dictionary(entries: Variant) -> Dictionary:
 	var output: Dictionary = {}
-	for quest_id in _array_or_empty(entries):
-		output[str(quest_id)] = true
+	for value in _array_or_empty(entries):
+		output[str(value)] = true
 	return output
 
 

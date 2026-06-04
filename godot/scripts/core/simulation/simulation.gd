@@ -73,6 +73,7 @@ var pending_interaction: Dictionary = {}
 var corpse_containers: Dictionary = {}
 var interaction_menu: Dictionary = {}
 var hotbar: Dictionary = {}
+var crafted_recipes: Dictionary = {}
 var _ai_runner := AiRunner.new()
 var _ai_rules := AiRules.new()
 var _combat_runner := CombatRunner.new()

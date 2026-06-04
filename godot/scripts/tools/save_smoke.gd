@@ -117,6 +117,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"target": {"target_type": "self"},
 	})
 	var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
+	simulation.crafted_recipes["recipe_knife_basic"] = true
 	simulation.set_actor_vision_radius(1, 4)
 	simulation.refresh_actor_vision(1, topology)
 	simulation.record_item_collected(1, "1007", 2)
@@ -156,7 +157,7 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	if not bool(loaded.get("ok", false)):
 		return ["load_snapshot failed: %s" % loaded.get("reason", "unknown")]
 
-	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests"]:
+	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes"]:
 		if JSON.stringify(restored.get(key)) != JSON.stringify(original.get(key)):
 			errors.append("snapshot field mismatch: %s" % key)
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
@@ -185,6 +186,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("player active skill effects did not roundtrip")
 	if JSON.stringify(restored.get("hotbar", {})) != JSON.stringify(original.get("hotbar", {})):
 		errors.append("hotbar did not roundtrip")
+	if not _array_or_empty(restored.get("crafted_recipes", [])).has("recipe_knife_basic"):
+		errors.append("crafted_recipes should roundtrip non-empty recipe unlock state")
 	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang":
 		errors.append("player active dialogue did not roundtrip")
 	if player_restored.get("active_container_id", "") != "survivor_outpost_01_clinic_supply_cabinet":
@@ -384,6 +387,12 @@ func _has_event(snapshot: Dictionary, kind: String) -> bool:
 	return false
 
 
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
+
+
 func _normalized_container_sessions(snapshot: Dictionary) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	for container in snapshot.get("container_sessions", []):
@@ -425,6 +434,7 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"actor_count": snapshot.get("actors", []).size(),
 		"active_quests": _active_quest_ids(snapshot),
 		"completed_quests": snapshot.get("completed_quests", []),
+		"crafted_recipes": snapshot.get("crafted_recipes", []),
 		"container_sessions": snapshot.get("container_sessions", []),
 		"shop_sessions": snapshot.get("shop_sessions", []),
 		"hotbar": snapshot.get("hotbar", {}),

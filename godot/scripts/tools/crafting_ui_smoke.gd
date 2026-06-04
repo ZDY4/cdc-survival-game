@@ -52,6 +52,26 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("weapon category filter should hide medical recipes")
 	if not _recipe_text(game_root).contains("小刀"):
 		errors.append("weapon category filter should show weapon recipes")
+	if not _recipe_line(game_root, "recipe_advanced_knife").contains("未解锁 基础小刀"):
+		errors.append("recipe-chain gated recipe row should show missing source recipe")
+	if not _press_recipe_line(game_root, "recipe_advanced_knife"):
+		errors.append("should select advanced knife recipe for unlock locator smoke")
+	await process_frame
+	if not _detail_text(game_root).contains("解锁 配方 基础小刀"):
+		errors.append("crafting detail should show recipe unlock requirement")
+	var unlock_locator: Button = _missing_reason_button(game_root, "MissingReasonUnlock_recipe_knife_basic")
+	if unlock_locator == null:
+		errors.append("crafting detail should expose missing recipe unlock locator")
+	else:
+		unlock_locator.pressed.emit()
+		await process_frame
+		if _search_box(game_root) == null or _search_box(game_root).text != "基础小刀":
+			errors.append("missing unlock locator should populate crafting search with source recipe name")
+		if not _recipe_text(game_root).contains("基础小刀"):
+			errors.append("missing unlock locator should keep source recipe visible")
+		_search_box(game_root).text = ""
+		_search_box(game_root).text_changed.emit("")
+		await process_frame
 	_press_category_button(game_root, "medical")
 	await process_frame
 	if not _summary_line(game_root).contains("医疗"):
@@ -171,6 +191,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not _detail_text(game_root).contains("工作坊工作台 距离"):
 		errors.append("crafting detail should show nearby workbench availability")
+	player_for_tool.inventory["1010"] = 3
+	player_for_tool.inventory["1012"] = 1
+	player_for_tool.progression["learned_skills"]["crafting"] = 1
+	var unlock_craft_result: Dictionary = game_root.simulation.craft_recipe(1, "recipe_knife_basic", game_root.registry.get_library("recipes"), game_root.call("_crafting_context"))
+	if not bool(unlock_craft_result.get("success", false)):
+		errors.append("crafting source recipe for unlock should succeed: %s" % unlock_craft_result.get("reason", "unknown"))
+	game_root.refresh_inventory_panel()
+	game_root.refresh_crafting_panel()
+	if not _press_recipe_line(game_root, "recipe_advanced_knife"):
+		errors.append("should select advanced knife after source recipe craft")
+	await process_frame
+	if _recipe_line(game_root, "recipe_advanced_knife").contains("未解锁 基础小刀"):
+		errors.append("advanced knife row should stop showing recipe-chain lock after source recipe is crafted")
+	if _missing_reason_button(game_root, "MissingReasonUnlock_recipe_knife_basic") != null:
+		errors.append("advanced knife detail should stop exposing recipe unlock locator after source recipe is crafted")
 
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	player.inventory["1011"] = 4

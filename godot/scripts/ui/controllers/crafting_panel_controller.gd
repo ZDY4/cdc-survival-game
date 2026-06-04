@@ -219,6 +219,17 @@ func _apply_detail(recipe: Dictionary) -> void:
 
 func _missing_reason_rows(recipe: Dictionary) -> Array[Control]:
 	var rows: Array[Control] = []
+	for condition in _array_or_empty(recipe.get("missing_unlock_conditions", [])):
+		var condition_data: Dictionary = _dictionary_or_empty(condition)
+		var condition_id := str(condition_data.get("id", ""))
+		if condition_id.is_empty():
+			continue
+		var condition_name := str(condition_data.get("display_name", condition_id))
+		rows.append(_missing_reason_button(
+			"MissingReasonUnlock_%s" % condition_id,
+			"定位解锁: %s" % condition_name,
+			condition_name
+		))
 	for material in _array_or_empty(recipe.get("missing_materials", [])):
 		var data: Dictionary = _dictionary_or_empty(material)
 		var query := str(data.get("name", data.get("item_id", "")))
@@ -346,6 +357,22 @@ func _tools_text(tools: Array) -> String:
 	return "无" if parts.is_empty() else ", ".join(parts)
 
 
+func _unlock_conditions_text(conditions: Array) -> String:
+	var parts: Array[String] = []
+	for condition in conditions:
+		var data: Dictionary = _dictionary_or_empty(condition)
+		var condition_type := str(data.get("type", ""))
+		var display_name := str(data.get("display_name", data.get("id", "")))
+		if display_name.is_empty():
+			continue
+		match condition_type:
+			"recipe":
+				parts.append("配方 %s" % display_name)
+			_:
+				parts.append("%s %s" % [condition_type, display_name])
+	return "无" if parts.is_empty() else ", ".join(parts)
+
+
 func _tool_data(tool: Variant) -> Dictionary:
 	if typeof(tool) == TYPE_DICTIONARY:
 		return tool
@@ -373,6 +400,9 @@ func _requirements_text(recipe: Dictionary) -> String:
 	var tools: Array = recipe.get("required_tools", [])
 	if not tools.is_empty():
 		parts.append("工具 %s" % _tools_text(tools))
+	var unlocks: Array = recipe.get("unlock_conditions", [])
+	if not unlocks.is_empty():
+		parts.append("解锁 %s" % _unlock_conditions_text(unlocks))
 	var skills: Dictionary = _dictionary_or_empty(recipe.get("skill_requirements", {}))
 	for skill_id in skills.keys():
 		parts.append("%s Lv%d" % [skill_id, int(skills[skill_id])])
@@ -445,6 +475,13 @@ func _search_matches(recipe: Dictionary) -> bool:
 		])
 	for skill_id in _dictionary_or_empty(recipe.get("skill_requirements", {})).keys():
 		requirements.append(str(skill_id))
+	for condition in _array_or_empty(recipe.get("unlock_conditions", [])):
+		var condition_data: Dictionary = _dictionary_or_empty(condition)
+		requirements.append("%s %s %s" % [
+			condition_data.get("type", ""),
+			condition_data.get("id", ""),
+			condition_data.get("display_name", ""),
+		])
 	if not requirements.is_empty():
 		haystack = "%s %s" % [haystack, " ".join(requirements)]
 	if not material_names.is_empty():
@@ -564,7 +601,11 @@ func _reason_text(recipe: Dictionary) -> String:
 		"available":
 			return "可制作"
 		"recipe_locked":
-			return "未解锁"
+			var parts: Array[String] = []
+			for condition in recipe.get("missing_unlock_conditions", []):
+				var data: Dictionary = _dictionary_or_empty(condition)
+				parts.append(str(data.get("display_name", data.get("id", ""))))
+			return "未解锁 %s" % ", ".join(parts) if not parts.is_empty() else "未解锁"
 		"required_tools_unsupported":
 			return "缺工具流程"
 		"missing_tools":
