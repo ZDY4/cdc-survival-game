@@ -21,6 +21,8 @@ const HOVER_COLOR_MOVE_REACHABLE := Color(0.24, 0.95, 0.48, 0.72)
 const HOVER_COLOR_MOVE_BLOCKED := Color(1.0, 0.22, 0.18, 0.72)
 const HOVER_COLOR_ATTACK_REACHABLE := Color(1.0, 0.45, 0.16, 0.78)
 const HOVER_COLOR_ATTACK_BLOCKED := Color(0.95, 0.12, 0.28, 0.78)
+const HOVER_COLOR_SKILL_VALID := Color(0.38, 0.68, 1.0, 0.58)
+const HOVER_COLOR_SKILL_BLOCKED := Color(0.96, 0.18, 0.55, 0.52)
 const HOVER_COLOR_PICKUP := Color(0.35, 0.82, 1.0, 0.50)
 const HOVER_COLOR_CONTAINER := Color(0.36, 0.95, 0.62, 0.50)
 const HOVER_COLOR_TRIGGER := Color(0.70, 0.55, 1.0, 0.50)
@@ -36,6 +38,7 @@ var hover_target_outline: MeshInstance3D
 var attack_target_marker: MeshInstance3D
 var attack_target_outline: MeshInstance3D
 var attack_range_markers: Node3D
+var skill_target_preview_markers: Node3D
 var selected_node: Node
 var camera_target: Vector3 = Vector3.ZERO
 var is_middle_mouse_dragging := false
@@ -77,6 +80,9 @@ func _init(p_game_root: Node) -> void:
 	attack_range_markers = Node3D.new()
 	attack_range_markers.name = "AttackRangeMarkers"
 	game_root.add_child(attack_range_markers)
+	skill_target_preview_markers = Node3D.new()
+	skill_target_preview_markers.name = "SkillTargetPreviewMarkers"
+	game_root.add_child(skill_target_preview_markers)
 
 
 func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void:
@@ -99,6 +105,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	attack_target_marker.visible = false
 	attack_target_outline.visible = false
 	_clear_attack_range_markers()
+	_clear_skill_target_preview_markers()
 	selected_node = null
 
 
@@ -440,6 +447,61 @@ func clear_selection_state() -> void:
 	is_middle_mouse_dragging = false
 	has_camera_drag_anchor = false
 	_clear_selection_only()
+	_clear_skill_target_preview_markers()
+
+
+func update_skill_target_preview_markers(preview: Dictionary) -> void:
+	if skill_target_preview_markers == null:
+		return
+	_clear_skill_target_preview_markers()
+	if preview.is_empty():
+		return
+	var color := HOVER_COLOR_SKILL_VALID if bool(preview.get("success", false)) else HOVER_COLOR_SKILL_BLOCKED
+	var skill_id := str(preview.get("skill_id", ""))
+	var target_shape := str(preview.get("target_shape", preview.get("shape", "")))
+	var cell_count := 0
+	for cell in _array_or_empty(preview.get("affected_cells", [])):
+		var grid: Dictionary = _dictionary_or_empty(cell)
+		if grid.is_empty():
+			continue
+		var marker := _build_skill_target_cell_marker(color)
+		marker.position = Vector3(
+			float(grid.get("x", 0)),
+			float(grid.get("y", _observed_level())) + 0.16,
+			float(grid.get("z", 0))
+		)
+		marker.set_meta("grid", grid.duplicate(true))
+		marker.set_meta("skill_id", skill_id)
+		marker.set_meta("target_shape", target_shape)
+		marker.set_meta("preview_success", bool(preview.get("success", false)))
+		marker.set_meta("reason", str(preview.get("reason", "")))
+		skill_target_preview_markers.add_child(marker)
+		cell_count += 1
+	var actor_count := 0
+	for actor_id_value in _array_or_empty(preview.get("affected_actor_ids", [])):
+		var actor_id := int(actor_id_value)
+		var actor_grid := _actor_grid(actor_id)
+		if actor_grid.is_empty():
+			continue
+		var outline := _build_skill_target_actor_marker(color)
+		outline.position = Vector3(
+			float(actor_grid.get("x", 0)),
+			float(actor_grid.get("y", _observed_level())) + 0.84,
+			float(actor_grid.get("z", 0))
+		)
+		outline.set_meta("actor_id", actor_id)
+		outline.set_meta("skill_id", skill_id)
+		outline.set_meta("target_shape", target_shape)
+		outline.set_meta("preview_success", bool(preview.get("success", false)))
+		outline.set_meta("reason", str(preview.get("reason", "")))
+		skill_target_preview_markers.add_child(outline)
+		actor_count += 1
+	skill_target_preview_markers.set_meta("skill_id", skill_id)
+	skill_target_preview_markers.set_meta("target_shape", target_shape)
+	skill_target_preview_markers.set_meta("preview_success", bool(preview.get("success", false)))
+	skill_target_preview_markers.set_meta("reason", str(preview.get("reason", "")))
+	skill_target_preview_markers.set_meta("cell_marker_count", cell_count)
+	skill_target_preview_markers.set_meta("actor_marker_count", actor_count)
 
 
 func focus_current_actor() -> void:
@@ -1105,9 +1167,11 @@ func _interaction_node(node: Node) -> Node:
 
 func _preview_skill_target_from_hover(hover_result: Dictionary) -> void:
 	if not _skill_targeting_active() or not game_root.has_method("preview_active_skill_target"):
+		_clear_skill_target_preview_markers()
 		return
 	var target: Dictionary = _skill_target_from_hover(hover_result)
 	if target.is_empty():
+		_clear_skill_target_preview_markers()
 		return
 	game_root.preview_active_skill_target(target)
 
@@ -1278,6 +1342,39 @@ func _build_attack_range_marker(color: Color) -> MeshInstance3D:
 	return node
 
 
+func _build_skill_target_cell_marker(color: Color) -> MeshInstance3D:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.78, 0.04, 0.78)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var node := MeshInstance3D.new()
+	node.name = "SkillTargetCellMarker"
+	node.mesh = mesh
+	node.material_override = material
+	return node
+
+
+func _build_skill_target_actor_marker(color: Color) -> MeshInstance3D:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.52
+	mesh.bottom_radius = 0.52
+	mesh.height = 1.50
+	mesh.radial_segments = 24
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(color.r, color.g, color.b, minf(0.32, color.a))
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var node := MeshInstance3D.new()
+	node.name = "SkillTargetActorMarker"
+	node.mesh = mesh
+	node.material_override = material
+	return node
+
+
 func _mouse_inside_viewport() -> bool:
 	var viewport := game_root.get_viewport()
 	if viewport == null:
@@ -1314,6 +1411,27 @@ func _runtime_has_pending() -> bool:
 		return false
 	var snapshot: Dictionary = simulation.snapshot()
 	return not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty()
+
+
+func _actor_grid(actor_id: int) -> Dictionary:
+	for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if int(actor_data.get("actor_id", 0)) == actor_id:
+			return _dictionary_or_empty(actor_data.get("grid_position", {})).duplicate(true)
+	return {}
+
+
+func _clear_skill_target_preview_markers() -> void:
+	if skill_target_preview_markers == null:
+		return
+	for child in skill_target_preview_markers.get_children():
+		child.queue_free()
+	skill_target_preview_markers.set_meta("skill_id", "")
+	skill_target_preview_markers.set_meta("target_shape", "")
+	skill_target_preview_markers.set_meta("preview_success", false)
+	skill_target_preview_markers.set_meta("reason", "")
+	skill_target_preview_markers.set_meta("cell_marker_count", 0)
+	skill_target_preview_markers.set_meta("actor_marker_count", 0)
 
 
 func _viewport_size() -> Vector2:

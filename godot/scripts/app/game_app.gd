@@ -1078,6 +1078,8 @@ func preview_active_skill_target(target: Dictionary) -> Dictionary:
 	var skill_id := str(active_skill_targeting.get("skill_id", ""))
 	var preview: Dictionary = simulation.preview_skill_target(1, skill_id, registry.get_library("skills"), target, _dictionary_or_empty(world_result.get("map", {})))
 	active_skill_target_preview = preview.duplicate(true)
+	if runtime_input_controller != null and runtime_input_controller.has_method("update_skill_target_preview_markers"):
+		runtime_input_controller.update_skill_target_preview_markers(active_skill_target_preview)
 	refresh_hud(current_interaction_prompt())
 	return preview
 
@@ -1102,6 +1104,8 @@ func confirm_active_skill_target(target: Dictionary = {}) -> Dictionary:
 	if bool(result.get("success", false)):
 		active_skill_targeting = {}
 		active_skill_target_preview = {}
+		if runtime_input_controller != null and runtime_input_controller.has_method("update_skill_target_preview_markers"):
+			runtime_input_controller.update_skill_target_preview_markers({})
 	refresh_hud(current_interaction_prompt())
 	refresh_character_panel()
 	refresh_skills_panel()
@@ -1114,6 +1118,8 @@ func cancel_active_skill_targeting(reason: String = "cancelled") -> Dictionary:
 	var cancelled := active_skill_targeting.duplicate(true)
 	active_skill_targeting = {}
 	active_skill_target_preview = {}
+	if runtime_input_controller != null and runtime_input_controller.has_method("update_skill_target_preview_markers"):
+		runtime_input_controller.update_skill_target_preview_markers({})
 	refresh_hud(current_interaction_prompt())
 	return {"success": true, "closed": "skill_targeting", "reason": reason, "targeting": cancelled}
 

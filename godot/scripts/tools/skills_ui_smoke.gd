@@ -536,6 +536,7 @@ func _expect_targeted_hotbar_skill(errors: Array[String], game_root: Node) -> vo
 		var preview: Dictionary = game_root.preview_active_skill_target({"target_type": "actor", "actor_id": hostile_id})
 		if not bool(preview.get("success", false)):
 			errors.append("targeted hotbar skill preview should succeed: %s" % preview.get("reason", "unknown"))
+		_validate_skill_target_preview_markers(errors, game_root, true, 1, 1, hostile_id, "valid hostile skill preview")
 		game_root.refresh_hud()
 		if not _skill_targeting_line(game_root).contains("Skill Target"):
 			errors.append("HUD should show active skill targeting preview line")
@@ -548,6 +549,7 @@ func _expect_targeted_hotbar_skill(errors: Array[String], game_root: Node) -> vo
 	var friendly_preview: Dictionary = game_root.preview_active_skill_target({"target_type": "actor", "actor_id": 2})
 	if bool(friendly_preview.get("success", false)) or str(friendly_preview.get("reason", "")) != "skill_target_not_hostile":
 		errors.append("targeted hotbar skill preview should reject friendly target")
+	_validate_skill_target_preview_markers(errors, game_root, false, 0, 0, 0, "invalid friendly skill preview")
 	game_root.refresh_hud()
 	if not _skill_targeting_line(game_root).contains("需要敌对目标"):
 		errors.append("HUD skill targeting failure should localize invalid target reason")
@@ -556,9 +558,12 @@ func _expect_targeted_hotbar_skill(errors: Array[String], game_root: Node) -> vo
 		errors.append("Esc should close active skill targeting before other UI")
 	if bool(game_root.has_active_skill_targeting()):
 		errors.append("skill targeting should be inactive after Esc")
+	_validate_skill_target_preview_markers(errors, game_root, false, 0, 0, 0, "Esc skill preview clear")
 	_press_key(game_root, KEY_4)
 	await game_root.get_tree().process_frame
 	if hostile_id > 0:
+		game_root.preview_active_skill_target({"target_type": "actor", "actor_id": hostile_id})
+		_validate_skill_target_preview_markers(errors, game_root, true, 1, 1, hostile_id, "confirm setup skill preview")
 		var ap_before: float = _player_ap(game_root)
 		var result: Dictionary = game_root.confirm_active_skill_target({"target_type": "actor", "actor_id": hostile_id})
 		if not bool(result.get("success", false)):
@@ -571,11 +576,39 @@ func _expect_targeted_hotbar_skill(errors: Array[String], game_root: Node) -> vo
 		var event_preview: Dictionary = _dictionary_or_empty(_dictionary_or_empty(event.get("payload", {})).get("target_preview", {}))
 		if int(_array_or_empty(event_preview.get("affected_actor_ids", [])).size()) <= 0:
 			errors.append("targeted skill_used event should include affected actor ids")
+		_validate_skill_target_preview_markers(errors, game_root, false, 0, 0, 0, "confirmed skill preview clear")
 	game_root.registry.libraries["skills"] = original_library
 	if game_root.simulation.actor_registry.get_actor(hostile_id) != null:
 		game_root.simulation.actor_registry.unregister_actor(hostile_id)
 	game_root.refresh_hud()
 	game_root.refresh_skills_panel()
+
+
+func _validate_skill_target_preview_markers(errors: Array[String], game_root: Node, expected_success: bool, expected_cell_count: int, expected_actor_count: int, expected_actor_id: int, context: String) -> void:
+	var container: Node = game_root.find_child("SkillTargetPreviewMarkers", true, false)
+	if container == null:
+		errors.append("%s: missing SkillTargetPreviewMarkers container" % context)
+		return
+	if bool(container.get_meta("preview_success", false)) != expected_success:
+		errors.append("%s: preview_success should be %s" % [context, str(expected_success)])
+	if int(container.get_meta("cell_marker_count", -1)) != expected_cell_count:
+		errors.append("%s: cell marker count expected %d got %d" % [context, expected_cell_count, int(container.get_meta("cell_marker_count", -1))])
+	if int(container.get_meta("actor_marker_count", -1)) != expected_actor_count:
+		errors.append("%s: actor marker count expected %d got %d" % [context, expected_actor_count, int(container.get_meta("actor_marker_count", -1))])
+	if expected_actor_id > 0:
+		var marker: Node = container.find_child("SkillTargetActorMarker", true, false)
+		if marker == null:
+			errors.append("%s: missing SkillTargetActorMarker" % context)
+		else:
+			if int(marker.get_meta("actor_id", 0)) != expected_actor_id:
+				errors.append("%s: actor marker should expose affected actor id" % context)
+			if str(marker.get_meta("skill_id", "")) != "adrenaline_rush":
+				errors.append("%s: actor marker should expose skill id" % context)
+		var cell: Node = container.find_child("SkillTargetCellMarker", true, false)
+		if cell == null:
+			errors.append("%s: missing SkillTargetCellMarker" % context)
+		elif str(cell.get_meta("skill_id", "")) != "adrenaline_rush":
+			errors.append("%s: cell marker should expose skill id" % context)
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:
