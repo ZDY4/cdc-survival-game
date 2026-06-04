@@ -9,6 +9,7 @@ var _recipe_box: VBoxContainer
 var _detail_title_label: Label
 var _detail_body_label: Label
 var _quantity_spin: SpinBox
+var _feedback_label: Label
 var _category_filter := "all"
 var _sort_mode := "name"
 var _search_text := ""
@@ -95,6 +96,7 @@ func _build_layout() -> void:
 	_recipe_box.add_theme_constant_override("separation", 4)
 	_detail_title_label = _label("DetailTitleLine")
 	_detail_body_label = _label("DetailBodyLine")
+	_feedback_label = _label("FeedbackLine")
 	_quantity_spin = SpinBox.new()
 	_quantity_spin.name = "CraftQuantitySpin"
 	_quantity_spin.min_value = 1
@@ -122,6 +124,7 @@ func _build_layout() -> void:
 	box.add_child(_detail_title_label)
 	box.add_child(_detail_body_label)
 	box.add_child(_quantity_spin)
+	box.add_child(_feedback_label)
 
 
 func _recipe_row(recipe: Dictionary) -> HBoxContainer:
@@ -162,7 +165,8 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("craft_player_recipe"):
-			root.craft_player_recipe(recipe_id)
+			var result: Dictionary = root.craft_player_recipe(recipe_id)
+			_set_feedback_from_result(result, recipe)
 	, CONNECT_DEFERRED)
 	row.add_child(line)
 	row.add_child(button)
@@ -429,6 +433,50 @@ func _reason_text(recipe: Dictionary) -> String:
 				])
 			return "材料不足 %s" % ", ".join(parts)
 	return str(recipe.get("craft_reason", ""))
+
+
+func _set_feedback_from_result(result: Dictionary, recipe: Dictionary) -> void:
+	if _feedback_label == null:
+		return
+	var recipe_id := str(recipe.get("recipe_id", result.get("recipe_id", "")))
+	var recipe_name := str(recipe.get("name", recipe_id))
+	if bool(result.get("success", false)):
+		var output: Dictionary = _dictionary_or_empty(result.get("output", {}))
+		var output_item_id := str(result.get("output_item_id", output.get("item_id", recipe.get("output_item_id", ""))))
+		var output_count := int(result.get("output_count", output.get("count", recipe.get("output_count", 1))))
+		_feedback_label.text = "已制作: %s -> %s x%d" % [
+			recipe_name,
+			recipe.get("output_name", output_item_id),
+			output_count,
+		]
+		return
+	_feedback_label.text = "制作失败: %s | %s" % [
+		recipe_name,
+		_craft_failure_text(str(result.get("reason", "unknown"))),
+	]
+
+
+func _craft_failure_text(reason: String) -> String:
+	match reason:
+		"simulation_missing":
+			return "运行时未就绪"
+		"unknown_recipe":
+			return "未知配方"
+		"recipe_locked":
+			return "配方未解锁"
+		"required_tools_unsupported":
+			return "缺少工具流程"
+		"required_station_unsupported":
+			return "缺少工作台"
+		"missing_skill_requirements":
+			return "技能不足"
+		"materials_insufficient":
+			return "材料不足"
+		"recipe_output_invalid":
+			return "产物无效"
+		"actor_missing":
+			return "角色不存在"
+	return reason
 
 
 func _label(node_name: String) -> Label:

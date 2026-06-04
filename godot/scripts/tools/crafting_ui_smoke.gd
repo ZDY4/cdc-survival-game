@@ -73,6 +73,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if _craft_button(game_root, "recipe_bandage_basic") == null or not _craft_button(game_root, "recipe_bandage_basic").disabled:
 		errors.append("basic bandage craft button should be disabled before cloth is available")
+	var locked_result: Dictionary = game_root.craft_player_recipe("recipe_antibody_serum")
+	game_root.crafting_panel.call("_set_feedback_from_result", locked_result, _recipe_snapshot(game_root, "recipe_antibody_serum"))
+	if not _feedback_text(game_root).contains("制作失败: 抗体血清 | 配方未解锁"):
+		errors.append("crafting panel should show failed craft feedback")
 	if not _press_recipe_line(game_root, "recipe_bandage_basic"):
 		errors.append("should select basic bandage recipe for detail")
 	await process_frame
@@ -115,6 +119,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 
 	_craft_button(game_root, "recipe_bandage_basic").pressed.emit()
 	await process_frame
+	if not _feedback_text(game_root).contains("已制作: 基础绷带 -> 绷带 x1"):
+		errors.append("crafting panel should show successful craft feedback")
 	if _player_inventory_count(game_root, "1011") != 2:
 		errors.append("crafting from panel should consume cloth")
 	if _player_inventory_count(game_root, "1006") != 2:
@@ -209,6 +215,22 @@ func _detail_text(game_root: Node) -> String:
 	if body is Label:
 		parts.append((body as Label).text)
 	return "\n".join(parts)
+
+
+func _feedback_text(game_root: Node) -> String:
+	var label: Node = game_root.crafting_panel.find_child("FeedbackLine", true, false)
+	if label is Label:
+		return (label as Label).text
+	return ""
+
+
+func _recipe_snapshot(game_root: Node, recipe_id: String) -> Dictionary:
+	var snapshot: Dictionary = game_root.crafting_panel.get("_last_snapshot")
+	for recipe in snapshot.get("recipes", []):
+		var recipe_data: Dictionary = recipe
+		if str(recipe_data.get("recipe_id", "")) == recipe_id:
+			return recipe_data
+	return {"recipe_id": recipe_id, "name": recipe_id}
 
 
 func _player_inventory_count(game_root: Node, item_id: String) -> int:
