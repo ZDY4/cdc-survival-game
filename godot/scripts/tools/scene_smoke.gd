@@ -64,6 +64,7 @@ func _validate_scene(root: Node3D, counts: Dictionary) -> Array[String]:
 		errors.append("expected pickable colliders for ground, actors and objects")
 	if _interaction_target_node_count(root) <= 0:
 		errors.append("expected interaction target metadata on generated nodes")
+	_validate_declared_map_visual_assets(root, counts, errors)
 	if int(counts.get("lights", 0)) <= 0:
 		errors.append("expected light")
 	if int(counts.get("cameras", 0)) <= 0:
@@ -223,6 +224,42 @@ func _validate_player_equipment_models(player: Node, errors: Array[String]) -> v
 		errors.append("main_hand equipment model should use dagger glTF")
 
 
+func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, errors: Array[String]) -> void:
+	var visual_root: Node = root.find_child("MapSceneVisuals", true, false)
+	if visual_root == null:
+		errors.append("scene smoke should instantiate MapSceneVisuals")
+		return
+	var declared_count := 0
+	var instantiated_count := 0
+	var pending: Array[Node] = [visual_root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			pending.append(child)
+		if not node.has_method("to_object_definition"):
+			continue
+		var definition: Dictionary = node.call("to_object_definition")
+		var props: Dictionary = _dictionary_or_empty(definition.get("props", {}))
+		var visual_props: Dictionary = _dictionary_or_empty(props.get("visual", {}))
+		if visual_props.is_empty():
+			continue
+		declared_count += 1
+		var visuals_container: Node = node.get_node_or_null("Visuals")
+		if visuals_container == null:
+			errors.append("map object %s declares visual props but has no Visuals node" % definition.get("object_id", ""))
+			continue
+		if visuals_container.get_child_count() <= 0:
+			errors.append("map object %s declares visual props but instantiated no visual children" % definition.get("object_id", ""))
+			continue
+		instantiated_count += 1
+	counts["declared_map_visuals"] = declared_count
+	counts["instantiated_map_visuals"] = instantiated_count
+	if declared_count <= 0:
+		errors.append("scene smoke expected at least one map object with declared visual props")
+	if instantiated_count != declared_count:
+		errors.append("scene smoke visual instancing mismatch %d/%d" % [instantiated_count, declared_count])
+
+
 func _interaction_target_node_count(root: Node) -> int:
 	var count: int = 0
 	var pending: Array[Node] = [root]
@@ -233,3 +270,9 @@ func _interaction_target_node_count(root: Node) -> int:
 		for child in node.get_children():
 			pending.append(child)
 	return count
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

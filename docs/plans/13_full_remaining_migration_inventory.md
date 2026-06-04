@@ -382,7 +382,7 @@
 - UI toggle smoke：键盘打开/关闭面板、Esc 关闭优先级、菜单阻塞 gameplay 输入。
 - Targeting smoke：进入技能/攻击目标选择、取消、预览、确认。
 - Door 聚合 smoke 第一版已迁移：`tools/agent/test-godot-game.ps1 -Scenario Door` 会顺序运行 `World`、`Scene`、`Movement`、`AI`、`Interaction`、`PlayerInteraction` 和 `Save`，汇总覆盖锁门、开门、自动开门、hover 视觉、fallback 开合表现、阻挡和存档同步；待补更多真实门模型/碰撞/声音表现断言。
-- Map visual smoke：每个地图 scene 的对象模型路径、实例数量、fallback 统计、重叠检查。
+- Map visual smoke 第一版已迁移：`Scene` smoke 会统计默认地图中声明 `props.visual` 的对象数量，并断言对应 `Visuals` 容器已实例化子节点，输出 `declared_map_visuals` / `instantiated_map_visuals`；待补每个地图 scene 的对象模型路径、fallback 统计、重叠检查和资产导入细节。
 - Asset import smoke：glTF scale/origin/material/collision 导入复核。
 
 ## 19. 建议迁移顺序
