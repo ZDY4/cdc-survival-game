@@ -37,10 +37,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("journal missing tutorial quest title")
 	if not _quest_text(game_root).contains("进度: 0/2"):
 		errors.append("journal missing initial objective progress")
+	if not _quest_text(game_root).contains("- 摸一遍警戒区前沿补给点，带回 2 罐罐头: 0/2"):
+		errors.append("journal missing structured objective progress row")
 	if not _detail_text(game_root).contains("老王让你去据点外警戒区"):
 		errors.append("journal detail should show selected quest description")
 	if not _detail_text(game_root).contains("需求: 罐头食品 x2"):
 		errors.append("journal detail should show objective requirement")
+	if not _detail_text(game_root).contains("目标进度:") or not _detail_text(game_root).contains("- 摸一遍警戒区前沿补给点，带回 2 罐罐头: 0/2 | 进行中"):
+		errors.append("journal detail should show structured objective progress list")
 	var track_button: Button = _track_button(game_root)
 	if track_button == null or track_button.disabled:
 		errors.append("journal should expose enabled track button for selected quest")
@@ -74,6 +78,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_journal_panel()
 	if not _quest_text(game_root).contains("进度: 1/2"):
 		errors.append("journal did not refresh collect progress")
+	if not _quest_text(game_root).contains("- 摸一遍警戒区前沿补给点，带回 2 罐罐头: 1/2"):
+		errors.append("journal objective progress row did not refresh collect progress")
 
 	player.inventory["1007"] = 2
 	game_root.simulation.record_item_collected(1, "1007", 1)
@@ -91,6 +97,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("completed quest detail should show completed title")
 	if not _detail_text(game_root).contains("进度: 2/2 | 已完成"):
 		errors.append("completed quest detail should show finished progress")
+	if not _detail_text(game_root).contains("- 摸一遍警戒区前沿补给点，带回 2 罐罐头: 2/2 | 完成"):
+		errors.append("completed quest detail should show completed structured progress")
 	if _track_button(game_root) == null or not _track_button(game_root).disabled:
 		errors.append("completed quest detail should disable tracking")
 	_setup_manual_turn_in_quest(game_root)

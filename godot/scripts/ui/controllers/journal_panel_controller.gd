@@ -51,6 +51,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 			var quest_data: Dictionary = quest
 			_quest_box.add_child(_quest_title(quest_data))
 			_quest_box.add_child(_quest_objective(quest_data))
+			for progress in _array_or_empty(quest_data.get("objective_progress", [])):
+				_quest_box.add_child(_objective_progress_line(str(quest_data.get("quest_id", "unknown")), _dictionary_or_empty(progress)))
 			_quest_box.add_child(_quest_reward(quest_data))
 
 	if completed_quests.is_empty():
@@ -168,6 +170,19 @@ func _quest_objective(quest: Dictionary) -> Label:
 	return label
 
 
+func _objective_progress_line(quest_id: String, progress: Dictionary) -> Label:
+	var objective_id := str(progress.get("id", "unknown"))
+	var label := _label("ObjectiveProgress_%s_%s" % [quest_id, objective_id])
+	label.text = "- %s: %d/%d | %s | %s" % [
+		str(progress.get("description", progress.get("requirement_text", objective_id))),
+		int(progress.get("current", 0)),
+		int(progress.get("target", 0)),
+		str(progress.get("requirement_text", "")),
+		"完成" if str(progress.get("state", "")) == "completed" else "进行中",
+	]
+	return label
+
+
 func _quest_reward(quest: Dictionary) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.name = "Reward_%s" % quest.get("quest_id", "unknown")
@@ -234,6 +249,10 @@ func _apply_detail(quest: Dictionary) -> void:
 		int(quest.get("progress_target", 0)),
 		quest.get("status_text", ""),
 	])
+	var progress_lines := _objective_progress_texts(quest.get("objective_progress", []))
+	if not progress_lines.is_empty():
+		lines.append("目标进度:")
+		lines.append_array(progress_lines)
 	if bool(quest.get("manual_turn_in", false)):
 		lines.append("交付: %s" % ("可交付" if bool(quest.get("turn_in_ready", false)) else "需要完成目标后手动交付"))
 	lines.append("奖励: %s" % _reward_text(quest.get("rewards", {})))
@@ -266,6 +285,19 @@ func _reward_text(rewards: Dictionary) -> String:
 	if int(rewards.get("skill_points", 0)) > 0:
 		parts.append("技能点 %d" % int(rewards.get("skill_points", 0)))
 	return "无" if parts.is_empty() else " / ".join(parts)
+
+
+func _objective_progress_texts(value: Variant) -> Array[String]:
+	var result: Array[String] = []
+	for progress in _array_or_empty(value):
+		var progress_data: Dictionary = _dictionary_or_empty(progress)
+		result.append("- %s: %d/%d | %s" % [
+			str(progress_data.get("description", progress_data.get("requirement_text", progress_data.get("id", "")))),
+			int(progress_data.get("current", 0)),
+			int(progress_data.get("target", 0)),
+			"完成" if str(progress_data.get("state", "")) == "completed" else "进行中",
+		])
+	return result
 
 
 func _turn_in_failure_text(reason: String) -> String:
@@ -329,3 +361,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

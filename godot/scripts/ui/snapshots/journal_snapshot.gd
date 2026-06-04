@@ -48,6 +48,7 @@ func _quest_view(state: Dictionary) -> Dictionary:
 	var manual_turn_in: bool = bool(objective.get("manual_turn_in", false))
 	var turn_in_ready: bool = manual_turn_in and current >= target
 	var objective_snapshot: Dictionary = _objective_snapshot(objective, current, target)
+	var objective_progress: Array[Dictionary] = _objective_progress_list(quest_data, completed)
 	return {
 		"quest_id": quest_id,
 		"title": str(quest_data.get("title", quest_id)),
@@ -55,6 +56,7 @@ func _quest_view(state: Dictionary) -> Dictionary:
 		"objective_text": str(objective.get("description", quest_data.get("description", ""))),
 		"current_node_id": str(state.get("current_node_id", objective_id)),
 		"objective": objective_snapshot,
+		"objective_progress": objective_progress,
 		"objective_id": objective_id,
 		"objective_type": str(objective_snapshot.get("type", "")),
 		"progress_current": current,
@@ -77,6 +79,7 @@ func _completed_quest_view(quest_id: String) -> Dictionary:
 	var objective_id := str(objective.get("id", ""))
 	var target: int = max(1, int(objective.get("count", 0)))
 	var objective_snapshot: Dictionary = _objective_snapshot(objective, target, target)
+	var objective_progress: Array[Dictionary] = _completed_objective_progress_list(quest_data)
 	return {
 		"quest_id": quest_id,
 		"title": str(quest_data.get("title", quest_id)),
@@ -84,6 +87,7 @@ func _completed_quest_view(quest_id: String) -> Dictionary:
 		"objective_text": str(objective.get("description", quest_data.get("description", ""))),
 		"current_node_id": "completed",
 		"objective": objective_snapshot,
+		"objective_progress": objective_progress,
 		"objective_id": objective_id,
 		"objective_type": str(objective_snapshot.get("type", "")),
 		"progress_current": target,
@@ -127,6 +131,55 @@ func _reward_snapshot(quest_data: Dictionary) -> Dictionary:
 		"experience": int(rewards.get("experience", 0)),
 		"skill_points": int(rewards.get("skill_points", 0)),
 	}
+
+
+func _objective_progress_list(quest_data: Dictionary, completed: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for objective in _all_objectives(quest_data):
+		var objective_data: Dictionary = _dictionary_or_empty(objective)
+		var objective_id: String = str(objective_data.get("id", ""))
+		var target: int = max(1, int(objective_data.get("count", 0)))
+		var current: int = int(completed.get(objective_id, 0)) if not objective_id.is_empty() else 0
+		var snapshot: Dictionary = _objective_snapshot(objective_data, current, target)
+		snapshot["state"] = "completed" if current >= target else "active"
+		snapshot["progress_percent"] = float(current) / float(max(1, target))
+		result.append(snapshot)
+	return result
+
+
+func _completed_objective_progress_list(quest_data: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for objective in _all_objectives(quest_data):
+		var objective_data: Dictionary = _dictionary_or_empty(objective)
+		var target: int = max(1, int(objective_data.get("count", 0)))
+		var snapshot: Dictionary = _objective_snapshot(objective_data, target, target)
+		snapshot["state"] = "completed"
+		snapshot["progress_percent"] = 1.0
+		result.append(snapshot)
+	return result
+
+
+func _all_objectives(quest_data: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var flow: Dictionary = _dictionary_or_empty(quest_data.get("flow", {}))
+	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
+	var keys: Array = nodes.keys()
+	keys.sort_custom(func(a: Variant, b: Variant) -> bool:
+		var a_node: Dictionary = _dictionary_or_empty(nodes.get(a, {}))
+		var b_node: Dictionary = _dictionary_or_empty(nodes.get(b, {}))
+		var a_pos: Dictionary = _dictionary_or_empty(a_node.get("position", {}))
+		var b_pos: Dictionary = _dictionary_or_empty(b_node.get("position", {}))
+		var ay := float(a_pos.get("y", 0.0))
+		var by := float(b_pos.get("y", 0.0))
+		if not is_equal_approx(ay, by):
+			return ay < by
+		return float(a_pos.get("x", 0.0)) < float(b_pos.get("x", 0.0))
+	)
+	for node_id in keys:
+		var node: Dictionary = _dictionary_or_empty(nodes.get(node_id, {}))
+		if str(node.get("type", "")) == "objective":
+			result.append(node)
+	return result
 
 
 func _objective_snapshot(objective: Dictionary, current: int, target: int) -> Dictionary:
