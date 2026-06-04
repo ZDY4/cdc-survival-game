@@ -13,11 +13,12 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	var learned: Dictionary = _dictionary_or_empty(progression.get("learned_skills", {}))
 	var attributes: Dictionary = _dictionary_or_empty(progression.get("attributes", {}))
 	var hotbar: Dictionary = _dictionary_or_empty(runtime_snapshot.get("hotbar", {}))
+	var resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(player.get("combat", {})).get("resources", {}))
 	var trees: Array[Dictionary] = []
 	var tree_ids: Array = registry.get_library("skill_trees").keys()
 	tree_ids.sort()
 	for tree_id in tree_ids:
-		var tree_view: Dictionary = _tree_snapshot(str(tree_id), progression, learned, attributes, hotbar)
+		var tree_view: Dictionary = _tree_snapshot(str(tree_id), progression, learned, attributes, hotbar, resources)
 		if not tree_view.is_empty():
 			trees.append(tree_view)
 	return {
@@ -31,14 +32,14 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	}
 
 
-func _tree_snapshot(tree_id: String, progression: Dictionary, learned: Dictionary, attributes: Dictionary, hotbar: Dictionary) -> Dictionary:
+func _tree_snapshot(tree_id: String, progression: Dictionary, learned: Dictionary, attributes: Dictionary, hotbar: Dictionary, resources: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("skill_trees").get(tree_id, {}))
 	var tree_data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if tree_data.is_empty():
 		return {}
 	var skills: Array[Dictionary] = []
 	for skill_id in _array_or_empty(tree_data.get("skills", [])):
-		var skill_view: Dictionary = _skill_snapshot(str(skill_id), progression, learned, attributes, hotbar)
+		var skill_view: Dictionary = _skill_snapshot(str(skill_id), progression, learned, attributes, hotbar, resources)
 		if not skill_view.is_empty():
 			skills.append(skill_view)
 	return {
@@ -49,7 +50,7 @@ func _tree_snapshot(tree_id: String, progression: Dictionary, learned: Dictionar
 	}
 
 
-func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Dictionary, attributes: Dictionary, hotbar: Dictionary) -> Dictionary:
+func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Dictionary, attributes: Dictionary, hotbar: Dictionary, resources: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("skills").get(skill_id, {}))
 	var skill_data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if skill_data.is_empty():
@@ -60,7 +61,8 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 	var activation: Dictionary = _dictionary_or_empty(skill_data.get("activation", {}))
 	var activation_mode: String = str(activation.get("mode", "passive"))
 	var bound_slot: String = _bound_slot(skill_id, hotbar)
-	var use_state: Dictionary = _use_state(current_level, activation_mode, bound_slot, hotbar)
+	var resource_costs: Array[Dictionary] = _resource_costs(activation)
+	var use_state: Dictionary = _use_state(current_level, activation_mode, bound_slot, hotbar, resource_costs, resources)
 	return {
 		"skill_id": skill_id,
 		"name": str(skill_data.get("name", skill_id)),
@@ -70,6 +72,7 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 		"max_level": max_level,
 		"activation_mode": activation_mode,
 		"ap_cost": float(activation.get("ap_cost", 1.0)),
+		"resource_costs": resource_costs.duplicate(true),
 		"cooldown": float(activation.get("cooldown", 0.0)),
 		"prerequisites": _array_or_empty(skill_data.get("prerequisites", [])).duplicate(true),
 		"attribute_requirements": _dictionary_or_empty(skill_data.get("attribute_requirements", {})).duplicate(true),
@@ -79,6 +82,7 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 		"can_use": bool(use_state.get("can_use", false)),
 		"use_reason": str(use_state.get("reason", "")),
 		"cooldown_remaining": float(use_state.get("cooldown_remaining", 0.0)),
+		"missing_resource": _dictionary_or_empty(use_state.get("missing_resource", {})).duplicate(true),
 		"learn_reason": str(availability.get("reason", "")),
 		"missing_prerequisites": _array_or_empty(availability.get("missing_prerequisites", [])).duplicate(true),
 		"missing_attributes": _array_or_empty(availability.get("missing_attributes", [])).duplicate(true),
@@ -93,7 +97,7 @@ func _bound_slot(skill_id: String, hotbar: Dictionary) -> String:
 	return ""
 
 
-func _use_state(current_level: int, activation_mode: String, bound_slot: String, hotbar: Dictionary) -> Dictionary:
+func _use_state(current_level: int, activation_mode: String, bound_slot: String, hotbar: Dictionary, resource_costs: Array[Dictionary], resources: Dictionary) -> Dictionary:
 	if current_level <= 0:
 		return {"can_use": false, "reason": "not_learned"}
 	if activation_mode == "passive":
@@ -107,7 +111,62 @@ func _use_state(current_level: int, activation_mode: String, bound_slot: String,
 			"reason": "cooldown",
 			"cooldown_remaining": cooldown_remaining,
 		}
+	var resource_check: Dictionary = _resource_cost_check(resource_costs, resources)
+	if not bool(resource_check.get("success", false)):
+		return {
+			"can_use": false,
+			"reason": "resource_insufficient",
+			"cooldown_remaining": 0.0,
+			"missing_resource": resource_check.duplicate(true),
+		}
 	return {"can_use": true, "reason": "available", "cooldown_remaining": 0.0}
+
+
+func _resource_costs(activation: Dictionary) -> Array[Dictionary]:
+	var source: Variant = activation.get("resource_costs", activation.get("resource_cost", {}))
+	var output: Array[Dictionary] = []
+	if typeof(source) == TYPE_DICTIONARY:
+		var costs: Dictionary = source
+		for resource_id in costs.keys():
+			var amount: float = max(0.0, float(costs.get(resource_id, 0.0)))
+			if amount <= 0.0:
+				continue
+			output.append({"resource": _normalized_resource_id(str(resource_id)), "amount": amount})
+	elif typeof(source) == TYPE_ARRAY:
+		for entry in source:
+			var entry_data: Dictionary = _dictionary_or_empty(entry)
+			var resource_id := _normalized_resource_id(str(entry_data.get("resource", entry_data.get("resource_id", ""))))
+			var amount: float = max(0.0, float(entry_data.get("amount", entry_data.get("cost", 0.0))))
+			if resource_id.is_empty() or amount <= 0.0:
+				continue
+			output.append({"resource": resource_id, "amount": amount})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("resource", "")) < str(b.get("resource", ""))
+	)
+	return output
+
+
+func _resource_cost_check(costs: Array[Dictionary], resources: Dictionary) -> Dictionary:
+	for cost in costs:
+		var cost_data: Dictionary = _dictionary_or_empty(cost)
+		var resource_id := _normalized_resource_id(str(cost_data.get("resource", "")))
+		var required: float = max(0.0, float(cost_data.get("amount", 0.0)))
+		var resource: Dictionary = _dictionary_or_empty(resources.get(resource_id, {}))
+		var available: float = float(resource.get("current", 0.0))
+		if available + 0.0001 < required:
+			return {
+				"success": false,
+				"resource": resource_id,
+				"required_amount": required,
+				"available_amount": available,
+			}
+	return {"success": true}
+
+
+func _normalized_resource_id(resource_id: String) -> String:
+	if resource_id == "health":
+		return "hp"
+	return resource_id
 
 
 func _availability(skill_id: String, skill_data: Dictionary, progression: Dictionary, learned: Dictionary, attributes: Dictionary, current_level: int, max_level: int) -> Dictionary:

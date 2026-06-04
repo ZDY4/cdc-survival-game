@@ -330,8 +330,9 @@ func _apply_detail(skill: Dictionary) -> void:
 	lines.append("前置: %s" % _prerequisites_text(skill.get("prerequisites", [])))
 	lines.append("属性: %s" % _attribute_requirements_text(skill.get("attribute_requirements", {})))
 	if str(skill.get("activation_mode", "passive")) != "passive":
-		lines.append("激活: AP %.0f | 冷却 %.0fs | 绑定 %s | 使用 %s" % [
+		lines.append("激活: AP %.0f%s | 冷却 %.0fs | 绑定 %s | 使用 %s" % [
 			float(skill.get("ap_cost", 1.0)),
+			_resource_cost_suffix(skill),
 			float(skill.get("cooldown", 0.0)),
 			"无" if str(skill.get("bound_slot", "")).is_empty() else str(skill.get("bound_slot", "")),
 			_use_state_text(skill),
@@ -392,7 +393,7 @@ func _binding_text(skill: Dictionary) -> String:
 func _activation_cost_text(skill: Dictionary) -> String:
 	if str(skill.get("activation_mode", "passive")) == "passive":
 		return ""
-	return " | AP %.0f" % float(skill.get("ap_cost", 1.0))
+	return " | AP %.0f%s" % [float(skill.get("ap_cost", 1.0)), _resource_cost_suffix(skill)]
 
 
 func _use_reason_text(skill: Dictionary) -> String:
@@ -401,6 +402,8 @@ func _use_reason_text(skill: Dictionary) -> String:
 			return " | 可用"
 		"cooldown":
 			return " | 冷却 %.0fs" % float(skill.get("cooldown_remaining", 0.0))
+		"resource_insufficient":
+			return " | %s" % _missing_resource_text(skill)
 		"unbound":
 			return " | 未绑定"
 		"passive", "not_learned", "":
@@ -414,6 +417,8 @@ func _use_state_text(skill: Dictionary) -> String:
 			return "可用"
 		"cooldown":
 			return "冷却 %.0fs" % float(skill.get("cooldown_remaining", 0.0))
+		"resource_insufficient":
+			return _missing_resource_text(skill)
 		"unbound":
 			return "未绑定"
 		"not_learned":
@@ -423,6 +428,45 @@ func _use_state_text(skill: Dictionary) -> String:
 		"":
 			return "无"
 	return str(skill.get("use_reason", ""))
+
+
+func _resource_cost_suffix(skill: Dictionary) -> String:
+	var costs: Array[String] = []
+	for cost in _array_or_empty(skill.get("resource_costs", [])):
+		var cost_data: Dictionary = _dictionary_or_empty(cost)
+		var resource_id := str(cost_data.get("resource", ""))
+		var amount: float = float(cost_data.get("amount", 0.0))
+		if resource_id.is_empty() or amount <= 0.0:
+			continue
+		costs.append("%s %.0f" % [_resource_label(resource_id), amount])
+	if costs.is_empty():
+		return ""
+	return " | 资源 %s" % " / ".join(costs)
+
+
+func _missing_resource_text(skill: Dictionary) -> String:
+	var missing: Dictionary = _dictionary_or_empty(skill.get("missing_resource", {}))
+	var resource_id := str(missing.get("resource", missing.get("required_resource", "")))
+	var required: float = float(missing.get("required_amount", 0.0))
+	var available: float = float(missing.get("available_amount", 0.0))
+	if resource_id.is_empty():
+		return "资源不足"
+	return "资源不足 %s %.0f/%.0f" % [_resource_label(resource_id), available, required]
+
+
+func _resource_label(resource_id: String) -> String:
+	match resource_id:
+		"hp":
+			return "HP"
+		"stamina":
+			return "stamina"
+		"hunger":
+			return "hunger"
+		"thirst":
+			return "thirst"
+		"immunity":
+			return "immunity"
+	return resource_id
 
 
 func _activation_label(mode: String) -> String:
@@ -586,3 +630,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

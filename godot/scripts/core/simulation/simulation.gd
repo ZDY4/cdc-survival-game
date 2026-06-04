@@ -1057,7 +1057,13 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 	var cost: float = float(command.get("ap_cost", activation.get("ap_cost", DEFAULT_INTERACTION_AP)))
 	if actor.ap < cost:
 		return {"success": false, "reason": "ap_insufficient", "required_ap": cost, "available_ap": actor.ap}
+	var resource_costs: Array[Dictionary] = _skill_resource_costs(activation)
+	var resource_check: Dictionary = _skill_resource_cost_check(actor, resource_costs)
+	if not bool(resource_check.get("success", false)):
+		resource_check["skill_id"] = skill_id
+		return resource_check
 	_spend_ap(actor, cost, "skill:%s" % skill_id)
+	var spent_resources: Array[Dictionary] = _spend_skill_resources(actor, resource_costs, "skill:%s" % skill_id)
 	var cooldown: float = max(0.0, float(activation.get("cooldown", 0.0)))
 	if not slot_id.is_empty():
 		var updated_slot: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {})).duplicate(true)
@@ -1074,6 +1080,8 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		"level": learned_level,
 		"activation_mode": mode,
 		"ap_cost": cost,
+		"resource_costs": resource_costs.duplicate(true),
+		"spent_resources": spent_resources.duplicate(true),
 		"cooldown": cooldown,
 		"effect": _dictionary_or_empty(effect_result.get("effect", {})).duplicate(true),
 		"effect_removed": bool(effect_result.get("removed", false)),
@@ -1089,6 +1097,8 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		"level": learned_level,
 		"activation_mode": mode,
 		"ap_cost": cost,
+		"resource_costs": resource_costs.duplicate(true),
+		"spent_resources": spent_resources.duplicate(true),
 		"cooldown": cooldown,
 		"effect": _dictionary_or_empty(effect_result.get("effect", {})).duplicate(true),
 		"effect_removed": bool(effect_result.get("removed", false)),
@@ -1099,6 +1109,104 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		"affected_cells": _array_or_empty(target_preview.get("affected_cells", [])).duplicate(true),
 		"ap_remaining": actor.ap,
 	}
+
+
+func _skill_resource_costs(activation: Dictionary) -> Array[Dictionary]:
+	var source: Variant = activation.get("resource_costs", activation.get("resource_cost", {}))
+	var output: Array[Dictionary] = []
+	if typeof(source) == TYPE_DICTIONARY:
+		var costs: Dictionary = source
+		for resource_id in costs.keys():
+			var amount: float = max(0.0, float(costs.get(resource_id, 0.0)))
+			if amount <= 0.0:
+				continue
+			output.append({
+				"resource": _normalized_resource_id(str(resource_id)),
+				"amount": amount,
+			})
+	elif typeof(source) == TYPE_ARRAY:
+		for entry in source:
+			var entry_data: Dictionary = _dictionary_or_empty(entry)
+			var resource_id := _normalized_resource_id(str(entry_data.get("resource", entry_data.get("resource_id", ""))))
+			var amount: float = max(0.0, float(entry_data.get("amount", entry_data.get("cost", 0.0))))
+			if resource_id.is_empty() or amount <= 0.0:
+				continue
+			output.append({
+				"resource": resource_id,
+				"amount": amount,
+			})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("resource", "")) < str(b.get("resource", ""))
+	)
+	return output
+
+
+func _skill_resource_cost_check(actor: RefCounted, costs: Array[Dictionary]) -> Dictionary:
+	for cost in costs:
+		var cost_data: Dictionary = _dictionary_or_empty(cost)
+		var resource_id := _normalized_resource_id(str(cost_data.get("resource", "")))
+		var required: float = max(0.0, float(cost_data.get("amount", 0.0)))
+		var available: float = _actor_resource_current(actor, resource_id)
+		if available + 0.0001 < required:
+			return {
+				"success": false,
+				"reason": "resource_insufficient",
+				"resource": resource_id,
+				"required_resource": resource_id,
+				"required_amount": required,
+				"available_amount": available,
+				"resource_costs": costs.duplicate(true),
+			}
+	return {"success": true, "resource_costs": costs.duplicate(true)}
+
+
+func _spend_skill_resources(actor: RefCounted, costs: Array[Dictionary], reason: String) -> Array[Dictionary]:
+	var spent: Array[Dictionary] = []
+	for cost in costs:
+		var cost_data: Dictionary = _dictionary_or_empty(cost)
+		var resource_id := _normalized_resource_id(str(cost_data.get("resource", "")))
+		var amount: float = max(0.0, float(cost_data.get("amount", 0.0)))
+		if resource_id.is_empty() or amount <= 0.0:
+			continue
+		var before: float = _actor_resource_current(actor, resource_id)
+		var max_value: float = _actor_resource_max(actor, resource_id)
+		var after: float = clampf(before - amount, 0.0, max_value)
+		if resource_id == "hp":
+			actor.hp = after
+			actor.resources["hp"] = {"current": actor.hp, "max": actor.max_hp}
+		else:
+			actor.resources[resource_id] = {
+				"current": after,
+				"max": max_value,
+			}
+		spent.append({
+			"resource": resource_id,
+			"amount": amount,
+			"before": before,
+			"after": after,
+			"reason": reason,
+		})
+	return spent
+
+
+func _actor_resource_current(actor: RefCounted, resource_id: String) -> float:
+	var normalized_id := _normalized_resource_id(resource_id)
+	if normalized_id == "hp":
+		return actor.hp
+	return float(_dictionary_or_empty(actor.resources.get(normalized_id, {})).get("current", 0.0))
+
+
+func _actor_resource_max(actor: RefCounted, resource_id: String) -> float:
+	var normalized_id := _normalized_resource_id(resource_id)
+	if normalized_id == "hp":
+		return actor.max_hp
+	return max(1.0, float(_dictionary_or_empty(actor.resources.get(normalized_id, {})).get("max", 100.0)))
+
+
+func _normalized_resource_id(resource_id: String) -> String:
+	if resource_id == "health":
+		return "hp"
+	return resource_id
 
 
 func _apply_skill_activation_effect(actor: RefCounted, skill_id: String, learned_level: int, activation: Dictionary, mode: String) -> Dictionary:

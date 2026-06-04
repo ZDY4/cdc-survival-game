@@ -174,6 +174,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("bound active skill should show available use state")
 	if not _skill_line(game_root, "adrenaline_rush").contains("AP 2"):
 		errors.append("bound active skill should show activation AP cost")
+	var skill_library_before_resource_cost: Dictionary = game_root.registry.libraries.get("skills", {}).duplicate(true)
+	_patch_adrenaline_resource_cost(game_root, {"stamina": 3.0})
+	_set_player_resource(game_root, "stamina", 5.0, 10.0)
+	game_root.refresh_skills_panel()
+	if not _skill_line(game_root, "adrenaline_rush").contains("资源 stamina 3"):
+		errors.append("bound active skill should show activation resource cost")
 	if not _press_skill_line(game_root, "adrenaline_rush"):
 		errors.append("should select adrenaline rush skill row")
 	await process_frame
@@ -181,7 +187,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills detail should show active skill level")
 	if not _detail_text(game_root).contains("类型: 主动"):
 		errors.append("skills detail should show active skill type")
-	if not _detail_text(game_root).contains("激活: AP 2 | 冷却 20s | 绑定 slot_3 | 使用 可用"):
+	if not _detail_text(game_root).contains("激活: AP 2 | 资源 stamina 3 | 冷却 20s | 绑定 slot_3 | 使用 可用"):
 		errors.append("skills detail should show active skill activation state")
 	var toggle_result: Dictionary = game_root.learn_player_skill("low_profile")
 	if not bool(toggle_result.get("success", false)):
@@ -206,6 +212,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("clearing hotbar slot from skills panel should emit hotbar_unbound")
 	game_root.panel_controller.close_stage_panels()
 	var ap_before_skill: float = _player_ap(game_root)
+	var stamina_before_skill: float = _player_resource_current(game_root, "stamina")
 	_press_key(game_root, KEY_3)
 	await process_frame
 	game_root.refresh_skills_panel()
@@ -213,6 +220,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var active_effect: Dictionary = _active_skill_effect(game_root, "adrenaline_rush")
 	if abs(_player_ap(game_root) - (ap_before_skill - 2.0)) > 0.001:
 		errors.append("hotbar skill activation should spend activation AP cost")
+	if abs(_player_resource_current(game_root, "stamina") - (stamina_before_skill - 3.0)) > 0.001:
+		errors.append("hotbar skill activation should spend activation resource cost")
 	if not _hotbar_line(game_root).contains("cd20"):
 		errors.append("digit 3 hotbar activation should write cooldown to hotbar")
 	if active_effect.is_empty():
@@ -240,9 +249,31 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("digit 3 hotbar activation should emit skill_used")
 	if abs(float(_dictionary_or_empty(skill_event.get("payload", {})).get("ap_cost", 0.0)) - 2.0) > 0.001:
 		errors.append("skill_used event should include activation AP cost")
+	var spent_resources: Array = _array_or_empty(_dictionary_or_empty(skill_event.get("payload", {})).get("spent_resources", []))
+	if spent_resources.is_empty() or str(_dictionary_or_empty(spent_resources[0]).get("resource", "")) != "stamina":
+		errors.append("skill_used event should include spent stamina resource")
 	var event_effect: Dictionary = _dictionary_or_empty(_dictionary_or_empty(skill_event.get("payload", {})).get("effect", {}))
 	if absf(float(_dictionary_or_empty(event_effect.get("modifiers", {})).get("damage_bonus", 0.0)) - 0.25) > 0.001:
 		errors.append("skill_used event should include resolved damage_bonus effect modifier")
+	var ap_before_insufficient: float = _player_ap(game_root)
+	var stamina_before_insufficient: float = _player_resource_current(game_root, "stamina")
+	var insufficient_result: Dictionary = game_root.simulation.submit_player_command({
+		"kind": "use_skill",
+		"actor_id": 1,
+		"skill_id": "adrenaline_rush",
+		"skill_library": game_root.registry.get_library("skills"),
+		"target": {"target_type": "self"},
+	})
+	if bool(insufficient_result.get("success", false)) or str(insufficient_result.get("reason", "")) != "resource_insufficient":
+		errors.append("resource-insufficient skill use should be rejected")
+	if abs(_player_ap(game_root) - ap_before_insufficient) > 0.001:
+		errors.append("resource-insufficient skill use should not spend AP")
+	if abs(_player_resource_current(game_root, "stamina") - stamina_before_insufficient) > 0.001:
+		errors.append("resource-insufficient skill use should not spend resource")
+	game_root.refresh_skills_panel()
+	if not _skill_line(game_root, "adrenaline_rush").contains("冷却 20s"):
+		errors.append("cooldown should remain the visible blocker while hotbar slot is cooling down")
+	game_root.registry.libraries["skills"] = skill_library_before_resource_cost
 	await _expect_targeted_hotbar_skill(errors, game_root)
 	return errors
 
@@ -535,6 +566,40 @@ func _active_skill_effect(game_root: Node, skill_id: String) -> Dictionary:
 		if str(effect_data.get("skill_id", "")) == skill_id:
 			return effect_data
 	return {}
+
+
+func _patch_adrenaline_resource_cost(game_root: Node, resource_costs: Dictionary) -> void:
+	var skill_library: Dictionary = game_root.registry.libraries.get("skills", {}).duplicate(true)
+	var record: Dictionary = _dictionary_or_empty(skill_library.get("adrenaline_rush", {})).duplicate(true)
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {})).duplicate(true)
+	var activation: Dictionary = _dictionary_or_empty(data.get("activation", {})).duplicate(true)
+	activation["resource_costs"] = resource_costs.duplicate(true)
+	data["activation"] = activation
+	record["data"] = data
+	skill_library["adrenaline_rush"] = record
+	game_root.registry.libraries["skills"] = skill_library
+
+
+func _set_player_resource(game_root: Node, resource_id: String, current: float, max_value: float) -> void:
+	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if actor == null:
+		return
+	var normalized_id := "hp" if resource_id == "health" else resource_id
+	if normalized_id == "hp":
+		actor.max_hp = max(1.0, max_value)
+		actor.hp = clampf(current, 0.0, actor.max_hp)
+		actor.resources["hp"] = {"current": actor.hp, "max": actor.max_hp}
+		return
+	actor.resources[normalized_id] = {
+		"current": clampf(current, 0.0, max(1.0, max_value)),
+		"max": max(1.0, max_value),
+	}
+
+
+func _player_resource_current(game_root: Node, resource_id: String) -> float:
+	var normalized_id := "hp" if resource_id == "health" else resource_id
+	var resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(_player_actor_snapshot(game_root).get("combat", {})).get("resources", {}))
+	return float(_dictionary_or_empty(resources.get(normalized_id, {})).get("current", 0.0))
 
 
 func _player_actor_snapshot(game_root: Node) -> Dictionary:
