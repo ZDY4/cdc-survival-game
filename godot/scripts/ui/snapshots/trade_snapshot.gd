@@ -261,6 +261,14 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "当前角色不可用，无法交易。"
 		"active_trade_missing":
 			return "没有打开的交易。"
+		"trade_relationship_too_low":
+			return "关系不足，当前商人拒绝交易。"
+		"trade_relationship_too_high":
+			return "关系条件不符，当前商人拒绝交易。"
+		"trade_world_flag_missing":
+			return "缺少交易许可，当前商店暂不可用。"
+		"trade_world_flag_blocked":
+			return "交易许可已失效，当前商店暂不可用。"
 		_:
 			return str(feedback.get("reason", ""))
 

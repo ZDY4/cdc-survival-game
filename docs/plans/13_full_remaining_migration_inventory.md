@@ -180,7 +180,7 @@
 ### 7.3 关系和阵营
 
 - relationship scores 第一版已迁移：运行时会按 actor side / group 初始化 pair 分数，`set_relationship_score` 会 clamp 到 `[-100, 100]` 并发出 `relationship_changed`，payload 带 actor/target 显示名、score_before、score 和 score_delta，snapshot / save 已 roundtrip，对话规则的 `relation_score_min/max` 已读取真实分数；任务 reward 可调整关系分数，奖励 HUD 会显示关系变化对象和增量，独立关系变化事件也会进入 HUD 中文反馈；已由 `Interaction` / `Quest` / `Save` smoke 覆盖。待补敌对状态动态切换和关系历史。
-- 关系驱动敌对判定第一版已迁移：`Simulation.actor_hostility()` 会结合 side / group 和 relationship score 判断 hostile，低于阈值的友好/中立 NPC 会在交互菜单中切换为攻击目标并禁用对话，关系缓和后的 hostile side 目标会被攻击校验拒绝，hostile AI 也会停止把玩家作为目标；攻击失败会暴露 relationship_score / hostility_reason，交互 target 会暴露 relationship_score / hostility_reason；任务前置条件已支持 relationship / world_flag / item / completed quest 结构化条件；已由 `Interaction` / `Combat` / `AI` / `Quest` / `Save` smoke 覆盖。待补交易权限和更多对话分支的关系/阵营影响，以及敌对状态变化的 UI 提示 polish。
+- 关系驱动敌对判定第一版已迁移：`Simulation.actor_hostility()` 会结合 side / group 和 relationship score 判断 hostile，低于阈值的友好/中立 NPC 会在交互菜单中切换为攻击目标并禁用对话，关系缓和后的 hostile side 目标会被攻击校验拒绝，hostile AI 也会停止把玩家作为目标；攻击失败会暴露 relationship_score / hostility_reason，交互 target 会暴露 relationship_score / hostility_reason；任务前置条件已支持 relationship / world_flag / item / completed quest 结构化条件；交易权限第一版已支持 shop session 的 relationship min/max、required / blocked world flags、目标 actor 推断、存档 roundtrip 和 UI 失败反馈；已由 `Interaction` / `Combat` / `AI` / `Quest` / `TradeUI` / `Save` smoke 覆盖。待补更多对话分支的关系/阵营影响，以及敌对状态变化的 UI 提示 polish。
 - 待补治疗、雇佣、跟随、队友、护送、敌对转中立等脚本化 NPC 互动。
 
 ## 8. 背包、装备、容器和交易
@@ -214,6 +214,7 @@
 - 购物车净额预览、确认前库存/资金预校验、确认后玩家/店铺资金变化明细和无部分成交已纳入 `TradeUI` smoke。
 - 交易资金/库存失败提示已覆盖并纳入 `TradeUI` smoke：玩家资金不足、店铺资金不足、店铺库存不足、玩家库存不足；装备栏物品可作为 `equipment:<slot_id>` 来源出售，出售前会弹出确认，取消不成交，确认后自动卸下、入店铺库存并刷新 UI；显式 `sellable=false` / `tradeable=false` 和任务类 fragment 的不可出售规则已覆盖直卖、装备出售、购物车校验、UI 禁用态和反馈，已纳入 `TradeUI` smoke。
 - 交易拖拽第一版已纳入 `TradeUI` smoke：shop item -> cart / buy drop zone 生成购买项，inventory/equipment -> cart / sell drop zone 生成出售项，buy zone 会拒绝玩家出售源，sell zone 会拒绝店铺购买源，drop zone 已显示接受/拒绝来源并暴露稳定拒绝 reason，不可出售物品拖拽不会入队，queued item 可拖拽重排且金额预览保持一致，同源同物品拖到已有 queued item 会合并增加数量并受上限约束；待补 drop zone hover 高亮、drag preview 和更细禁用说明 polish。
+- 交易权限第一版已迁移：shop session 可配置 `target_actor_id` / `target_actor_definition_id`、`required_relationship_min/max`、`required_world_flags` 和 `blocked_world_flags`，直买、直卖、装备出售和购物车确认统一由 core 拒绝，反馈 reason 覆盖 `trade_relationship_too_low/high`、`trade_world_flag_missing/blocked` 并随 shop session 存档 roundtrip；已纳入 `TradeUI` / `Save` smoke。待补交易面板禁用态预览、对话分支中权限原因展示和更细致的商店权限 UI polish。
 - 交易关闭已覆盖 Esc、关闭按钮、目标不可用关闭、地图切换关闭和对话结束关闭；`trade_closed` payload 第一版已记录 actor、reason、target actor 和 shop id，并纳入 `TradeUI` smoke。
 
 ## 9. 技能、热栏和进度

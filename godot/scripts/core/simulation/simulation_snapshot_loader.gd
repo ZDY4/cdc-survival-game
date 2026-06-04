@@ -109,14 +109,29 @@ func _load_shop_sessions(entries: Variant) -> Dictionary:
 		var shop_id: String = str(shop_data.get("shop_id", ""))
 		if shop_id.is_empty():
 			continue
-		output[shop_id] = {
+		var loaded_session := {
 			"shop_id": shop_id,
 			"money": max(0, int(shop_data.get("money", 0))),
 			"buy_price_modifier": max(0.0, float(shop_data.get("buy_price_modifier", 1.0))),
 			"sell_price_modifier": max(0.0, float(shop_data.get("sell_price_modifier", 1.0))),
 			"inventory": _inventory_entries.normalize(shop_data.get("inventory", [])),
 		}
+		_copy_optional_keys(loaded_session, shop_data, [
+			"target_actor_id",
+			"target_actor_definition_id",
+			"required_relationship_min",
+			"required_relationship_max",
+			"required_world_flags",
+			"blocked_world_flags",
+		])
+		output[shop_id] = loaded_session
 	return output
+
+
+func _copy_optional_keys(target: Dictionary, source: Dictionary, keys: Array[String]) -> void:
+	for key in keys:
+		if source.has(key):
+			target[key] = source.get(key)
 
 
 func _load_active_quests(entries: Variant) -> Dictionary:

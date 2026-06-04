@@ -148,14 +148,29 @@ func _shop_session_snapshots(shop_sessions: Dictionary) -> Array[Dictionary]:
 	ids.sort()
 	for shop_id in ids:
 		var session: Dictionary = _dictionary_or_empty(shop_sessions[shop_id])
-		output.append({
+		var snapshot := {
 			"shop_id": str(session.get("shop_id", shop_id)),
 			"money": max(0, int(session.get("money", 0))),
 			"buy_price_modifier": max(0.0, float(session.get("buy_price_modifier", 1.0))),
 			"sell_price_modifier": max(0.0, float(session.get("sell_price_modifier", 1.0))),
 			"inventory": _inventory_entries.normalize(session.get("inventory", [])),
-		})
+		}
+		_copy_optional_keys(snapshot, session, [
+			"target_actor_id",
+			"target_actor_definition_id",
+			"required_relationship_min",
+			"required_relationship_max",
+			"required_world_flags",
+			"blocked_world_flags",
+		])
+		output.append(snapshot)
 	return output
+
+
+func _copy_optional_keys(target: Dictionary, source: Dictionary, keys: Array[String]) -> void:
+	for key in keys:
+		if source.has(key):
+			target[key] = source.get(key)
 
 
 func _corpse_container_snapshots(corpse_containers: Dictionary) -> Array[Dictionary]:

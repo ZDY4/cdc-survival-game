@@ -12,13 +12,15 @@ func configure_shops(simulation: RefCounted, shops: Dictionary) -> void:
 		var normalized_id: String = str(data.get("id", shop_id))
 		if normalized_id.is_empty():
 			normalized_id = str(shop_id)
-		simulation.shop_sessions[normalized_id] = {
+		var session := {
 			"shop_id": normalized_id,
 			"money": max(0, int(data.get("money", 0))),
 			"buy_price_modifier": max(0.0, float(data.get("buy_price_modifier", 1.0))),
 			"sell_price_modifier": max(0.0, float(data.get("sell_price_modifier", 1.0))),
 			"inventory": _inventory_entries.normalize(data.get("inventory", [])),
 		}
+		_copy_permission_fields(session, data)
+		simulation.shop_sessions[normalized_id] = session
 
 
 func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
@@ -28,6 +30,9 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 	var shop: Dictionary = _dictionary_or_empty(simulation.shop_sessions.get(shop_id, {}))
 	if shop.is_empty():
 		return {"success": false, "reason": "unknown_shop"}
+	var permission: Dictionary = _trade_permission(simulation, actor_id, shop_id, shop)
+	if not bool(permission.get("success", false)):
+		return permission
 	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
 	var buy_count: int = max(1, count)
 	var available: int = _inventory_entries.count(_array_or_empty(shop.get("inventory", [])), normalized_item_id)
@@ -80,6 +85,9 @@ func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, i
 	var shop: Dictionary = _dictionary_or_empty(simulation.shop_sessions.get(shop_id, {}))
 	if shop.is_empty():
 		return {"success": false, "reason": "unknown_shop"}
+	var permission: Dictionary = _trade_permission(simulation, actor_id, shop_id, shop)
+	if not bool(permission.get("success", false)):
+		return permission
 	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
 	var sell_count: int = max(1, count)
 	if int(actor.inventory.get(normalized_item_id, 0)) < sell_count:
@@ -133,6 +141,9 @@ func sell_equipped_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: 
 	var shop: Dictionary = _dictionary_or_empty(simulation.shop_sessions.get(shop_id, {}))
 	if shop.is_empty():
 		return {"success": false, "reason": "unknown_shop"}
+	var permission: Dictionary = _trade_permission(simulation, actor_id, shop_id, shop)
+	if not bool(permission.get("success", false)):
+		return permission
 	var normalized_slot_id: String = slot_id.strip_edges()
 	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
 	var equipped_item_id: String = _inventory_entries.normalize_content_id(actor.equipment.get(normalized_slot_id, ""))
@@ -264,6 +275,9 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 	var shop: Dictionary = _dictionary_or_empty(simulation.shop_sessions.get(shop_id, {}))
 	if shop.is_empty():
 		return {"success": false, "reason": "unknown_shop"}
+	var permission: Dictionary = _trade_permission(simulation, actor_id, shop_id, shop)
+	if not bool(permission.get("success", false)):
+		return permission
 	var normalized_entries: Array[Dictionary] = []
 	var buy_counts: Dictionary = {}
 	var sell_counts: Dictionary = {}
@@ -372,6 +386,119 @@ func _trade_unit_price(item_id: String, modifier: float, item_library: Dictionar
 	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	var base_value: int = max(0, int(data.get("value", 0)))
 	return max(1, int(round(float(base_value) * max(0.0, modifier))))
+
+
+func _copy_permission_fields(session: Dictionary, data: Dictionary) -> void:
+	for key in [
+		"target_actor_id",
+		"target_actor_definition_id",
+		"required_relationship_min",
+		"required_relationship_max",
+		"required_world_flags",
+		"blocked_world_flags",
+	]:
+		if data.has(key):
+			session[key] = data.get(key)
+	var camel_case_aliases := {
+		"targetActorId": "target_actor_id",
+		"targetActorDefinitionId": "target_actor_definition_id",
+		"requiredRelationshipMin": "required_relationship_min",
+		"requiredRelationshipMax": "required_relationship_max",
+		"requiredWorldFlags": "required_world_flags",
+		"blockedWorldFlags": "blocked_world_flags",
+	}
+	for source_key in camel_case_aliases.keys():
+		if data.has(source_key):
+			session[str(camel_case_aliases[source_key])] = data.get(source_key)
+
+
+func _trade_permission(simulation: RefCounted, actor_id: int, shop_id: String, shop: Dictionary) -> Dictionary:
+	var target_actor_id: int = _trade_target_actor_id(simulation, shop_id, shop)
+	var result := {
+		"success": true,
+		"shop_id": shop_id,
+		"target_actor_id": target_actor_id,
+	}
+	for flag_id in _normalized_string_array(shop.get("required_world_flags", [])):
+		if not _simulation_world_flags(simulation).has(flag_id):
+			return _trade_permission_failure(result, "trade_world_flag_missing", {
+				"flag_id": flag_id,
+				"required_world_flags": _normalized_string_array(shop.get("required_world_flags", [])),
+			})
+	for flag_id in _normalized_string_array(shop.get("blocked_world_flags", [])):
+		if _simulation_world_flags(simulation).has(flag_id):
+			return _trade_permission_failure(result, "trade_world_flag_blocked", {
+				"flag_id": flag_id,
+				"blocked_world_flags": _normalized_string_array(shop.get("blocked_world_flags", [])),
+			})
+	if target_actor_id > 0 and (shop.has("required_relationship_min") or shop.has("required_relationship_max")):
+		var score: float = _relationship_score(simulation, actor_id, target_actor_id)
+		result["relationship_score"] = score
+		if shop.has("required_relationship_min"):
+			var min_score: float = float(shop.get("required_relationship_min", -100.0))
+			if score < min_score:
+				return _trade_permission_failure(result, "trade_relationship_too_low", {
+					"relationship_score": score,
+					"required_relationship_min": min_score,
+				})
+		if shop.has("required_relationship_max"):
+			var max_score: float = float(shop.get("required_relationship_max", 100.0))
+			if score > max_score:
+				return _trade_permission_failure(result, "trade_relationship_too_high", {
+					"relationship_score": score,
+					"required_relationship_max": max_score,
+				})
+	return result
+
+
+func _trade_permission_failure(base: Dictionary, reason: String, extra: Dictionary) -> Dictionary:
+	var output: Dictionary = base.duplicate(true)
+	output["success"] = false
+	output["reason"] = reason
+	for key in extra.keys():
+		output[key] = extra[key]
+	return output
+
+
+func _trade_target_actor_id(simulation: RefCounted, shop_id: String, shop: Dictionary) -> int:
+	var explicit_id: int = int(shop.get("target_actor_id", 0))
+	if explicit_id > 0:
+		return explicit_id
+	var definition_id: String = str(shop.get("target_actor_definition_id", "")).strip_edges()
+	if definition_id.is_empty() and shop_id.ends_with("_shop"):
+		definition_id = shop_id.trim_suffix("_shop")
+	if definition_id.is_empty() or simulation == null or simulation.actor_registry == null:
+		return 0
+	for actor in simulation.actor_registry.actors():
+		if actor != null and str(actor.definition_id) == definition_id:
+			return int(actor.actor_id)
+	return 0
+
+
+func _relationship_score(simulation: RefCounted, actor_id: int, target_actor_id: int) -> float:
+	if simulation != null and simulation.has_method("relationship_score"):
+		return float(simulation.relationship_score(actor_id, target_actor_id))
+	return 0.0
+
+
+func _simulation_world_flags(simulation: RefCounted) -> Dictionary:
+	if simulation != null:
+		return _dictionary_or_empty(simulation.get("world_flags"))
+	return {}
+
+
+func _normalized_string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	if typeof(value) == TYPE_STRING:
+		var normalized_value: String = str(value).strip_edges()
+		if not normalized_value.is_empty():
+			output.append(normalized_value)
+		return output
+	for entry in _array_or_empty(value):
+		var normalized_entry: String = str(entry).strip_edges()
+		if not normalized_entry.is_empty():
+			output.append(normalized_entry)
+	return output
 
 
 func _is_item_sellable(item_id: String, item_library: Dictionary) -> bool:

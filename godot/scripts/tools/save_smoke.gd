@@ -119,6 +119,12 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
 	simulation.crafted_recipes["recipe_knife_basic"] = true
 	simulation.world_flags["outpost_workshop_restored"] = true
+	var trader_shop: Dictionary = simulation.shop_sessions.get("trader_lao_wang_shop", {}).duplicate(true)
+	trader_shop["target_actor_definition_id"] = "trader_lao_wang"
+	trader_shop["required_relationship_min"] = 10.0
+	trader_shop["required_world_flags"] = ["outpost_workshop_restored"]
+	trader_shop["blocked_world_flags"] = ["trader_banned"]
+	simulation.shop_sessions["trader_lao_wang_shop"] = trader_shop
 	simulation.door_states["save_smoke_door"] = {
 		"door_id": "save_smoke_door",
 		"object_id": "save_smoke_door",
@@ -202,6 +208,15 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("container sessions did not roundtrip")
 	if JSON.stringify(restored.get("shop_sessions")) != JSON.stringify(original.get("shop_sessions")):
 		errors.append("shop sessions did not roundtrip")
+	var restored_trader_shop: Dictionary = _shop_session(restored, "trader_lao_wang_shop")
+	if str(restored_trader_shop.get("target_actor_definition_id", "")) != "trader_lao_wang":
+		errors.append("shop permission target definition did not roundtrip")
+	if absf(float(restored_trader_shop.get("required_relationship_min", 0.0)) - 10.0) > 0.001:
+		errors.append("shop relationship permission did not roundtrip")
+	if not _array_or_empty(restored_trader_shop.get("required_world_flags", [])).has("outpost_workshop_restored"):
+		errors.append("shop required world flags did not roundtrip")
+	if not _array_or_empty(restored_trader_shop.get("blocked_world_flags", [])).has("trader_banned"):
+		errors.append("shop blocked world flags did not roundtrip")
 	if int(restored.get("schema_version", 0)) != int(original.get("schema_version", 0)):
 		errors.append("snapshot schema_version did not restore")
 	var player_original: Dictionary = _player_actor(original)
@@ -324,6 +339,14 @@ func _relationship_score(snapshot: Dictionary, actor_id: int, target_actor_id: i
 		if int(relationship.get("actor_id", 0)) == left and int(relationship.get("target_actor_id", 0)) == right:
 			return float(relationship.get("score", 0.0))
 	return 0.0
+
+
+func _shop_session(snapshot: Dictionary, shop_id: String) -> Dictionary:
+	for entry in snapshot.get("shop_sessions", []):
+		var session: Dictionary = _dictionary_or_empty(entry)
+		if str(session.get("shop_id", "")) == shop_id:
+			return session
+	return {}
 
 
 func _normalized_ai_intents(snapshot: Dictionary) -> Array[Dictionary]:

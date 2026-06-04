@@ -335,6 +335,41 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade equipped sell did not add dagger to shop stock")
 	if _player_item_text(game_root).contains("主手 小刀"):
 		errors.append("trade player column should remove sold equipped dagger")
+	var permission_shop_snapshot: Dictionary = game_root.simulation.shop_sessions.duplicate(true)
+	var relationship_before_permission: float = float(game_root.simulation.relationship_score(1, 2))
+	var permission_shop: Dictionary = game_root.simulation.shop_sessions.get("trader_lao_wang_shop", {}).duplicate(true)
+	permission_shop["required_relationship_min"] = 25.0
+	permission_shop["target_actor_definition_id"] = "trader_lao_wang"
+	game_root.simulation.shop_sessions["trader_lao_wang_shop"] = permission_shop
+	game_root.simulation.set_relationship_score(1, 2, -25.0, "trade_ui_permission_low")
+	var denied_buy_result: Dictionary = game_root.buy_active_trade_item("1006", 1)
+	if str(denied_buy_result.get("reason", "")) != "trade_relationship_too_low":
+		errors.append("low relationship trade buy should report trade_relationship_too_low")
+	if not _trade_feedback(game_root).contains("关系不足"):
+		errors.append("low relationship trade buy should show relationship feedback")
+	var denied_sell_result: Dictionary = game_root.sell_active_trade_item("1006", 1)
+	if str(denied_sell_result.get("reason", "")) != "trade_relationship_too_low":
+		errors.append("low relationship trade sell should report trade_relationship_too_low")
+	var denied_cart_result: Dictionary = game_root.confirm_active_trade_cart([{
+		"source": "shop",
+		"item_id": "1006",
+		"count": 1,
+	}])
+	if str(denied_cart_result.get("reason", "")) != "trade_relationship_too_low":
+		errors.append("low relationship trade cart should report trade_relationship_too_low")
+	game_root.simulation.set_relationship_score(1, 2, 50.0, "trade_ui_permission_restored")
+	var allowed_buy_before_money: int = _player_money(game_root)
+	var allowed_buy_before_count: int = _player_inventory_count(game_root, "1006")
+	var allowed_buy_result: Dictionary = game_root.buy_active_trade_item("1006", 1)
+	if not bool(allowed_buy_result.get("success", false)):
+		errors.append("restored relationship trade buy should succeed: %s" % allowed_buy_result.get("reason", "unknown"))
+	elif _player_money(game_root) >= allowed_buy_before_money or _player_inventory_count(game_root, "1006") <= allowed_buy_before_count:
+		errors.append("restored relationship trade buy should update money and inventory")
+	game_root.simulation.shop_sessions = permission_shop_snapshot.duplicate(true)
+	game_root.simulation.set_relationship_score(1, 2, relationship_before_permission, "trade_ui_permission_snapshot_restore")
+	_set_player_money(game_root, 132)
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
 	var stock_result: Dictionary = game_root.buy_active_trade_item("1006", 999)
 	if stock_result.get("reason", "") != "shop_stock_insufficient":
 		errors.append("oversized trade buy should report shop_stock_insufficient")
