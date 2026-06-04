@@ -143,9 +143,8 @@ func _nearest_target(actor: RefCounted, actors: Array, aggro_range: float, conte
 			continue
 		if not _same_active_map(actor, candidate, str(context.get("active_map_id", ""))):
 			continue
-		if _same_side(actor, candidate):
-			continue
-		if actor.side != "hostile" and candidate.side != "hostile":
+		var hostility: Dictionary = _hostility(actor, candidate, context)
+		if not bool(hostility.get("hostile", false)):
 			continue
 		var distance: float = _grid_distance(actor.grid_position, candidate.grid_position)
 		if distance > aggro_range:
@@ -192,6 +191,17 @@ func _same_side(left: RefCounted, right: RefCounted) -> bool:
 	if left.side == right.side:
 		return true
 	return not left.group_id.is_empty() and left.group_id == right.group_id
+
+
+func _hostility(actor: RefCounted, candidate: RefCounted, context: Dictionary) -> Dictionary:
+	var resolver: Callable = context.get("hostility_resolver", Callable())
+	if resolver.is_valid():
+		return _dictionary_or_empty(resolver.call(actor.actor_id, candidate.actor_id))
+	if _same_side(actor, candidate):
+		return {"hostile": false, "reason": "same_side", "score": 0.0}
+	if actor.side == "hostile" or candidate.side == "hostile":
+		return {"hostile": true, "reason": "side_hostile", "score": 0.0}
+	return {"hostile": false, "reason": "neutral", "score": 0.0}
 
 
 func _grid_distance(left: RefCounted, right: RefCounted) -> float:

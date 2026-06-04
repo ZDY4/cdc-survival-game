@@ -460,10 +460,27 @@ func _expect_attack_target_rejections(errors: Array[String], simulation: RefCoun
 		errors.append("friendly attack rejection should not spend AP")
 	if bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
 		errors.append("friendly attack rejection should not enter combat")
+	var relation_hostile_result: Dictionary = simulation.set_relationship_score(player.actor_id, friendly_id, -75.0, "combat_smoke_relation_hostile")
+	if not bool(relation_hostile_result.get("success", false)):
+		errors.append("combat smoke should make friendly target relationship-hostile")
+	var relation_attack: Dictionary = simulation.preview_attack(player.actor_id, friendly_id, {}, {"range": 2})
+	if not bool(relation_attack.get("can_attack", false)):
+		errors.append("relationship-hostile friendly target should become attackable: %s" % relation_attack.get("reason", "unknown"))
+	simulation.set_relationship_score(player.actor_id, friendly_id, 50.0, "combat_smoke_relation_restored")
 
 	var neutral_result: Dictionary = simulation.perform_attack(player.actor_id, neutral_id, {}, {"range": 2})
 	if neutral_result.get("reason", "") != "target_not_hostile":
 		errors.append("neutral attack should report target_not_hostile, got %s" % neutral_result.get("reason", ""))
+	var hostile_actor_for_relation: RefCounted = simulation.actor_registry.get_actor(dead_hostile_id)
+	hostile_actor_for_relation.hp = 5.0
+	simulation.set_relationship_score(player.actor_id, dead_hostile_id, 25.0, "combat_smoke_hostile_pacified")
+	var pacified_hostile: Dictionary = simulation.perform_attack(player.actor_id, dead_hostile_id, {}, {"range": 2})
+	if pacified_hostile.get("reason", "") != "target_not_hostile":
+		errors.append("positive relationship should pacify hostile side attack target, got %s" % pacified_hostile.get("reason", ""))
+	if str(pacified_hostile.get("hostility_reason", "")) != "relationship_non_hostile":
+		errors.append("pacified hostile rejection should expose relationship_non_hostile")
+	simulation.set_relationship_score(player.actor_id, dead_hostile_id, -100.0, "combat_smoke_hostile_restored")
+	hostile_actor_for_relation.hp = 0.0
 	var dead_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": dead_hostile_id})
 	if dead_result.get("reason", "") != "target_defeated":
 		errors.append("dead target attack should report target_defeated, got %s" % dead_result.get("reason", ""))

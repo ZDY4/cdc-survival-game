@@ -35,6 +35,8 @@ const DEFAULT_ATTACK_RANGE := 1
 const NPC_AGGRO_RANGE := 8
 const COMBAT_EXIT_NO_SIGHT_TURNS := 3
 const HOTBAR_SLOT_COUNT := 10
+const RELATIONSHIP_HOSTILE_THRESHOLD := -50.0
+const RELATIONSHIP_FRIENDLY_THRESHOLD := 0.0
 
 var actor_registry := ActorRegistry.new()
 var active_map_id: String = ""
@@ -272,12 +274,54 @@ func is_actor_visible_to_actor(observer_actor_id: int, target_actor_id: int) -> 
 	return is_cell_visible_to_actor(observer_actor_id, target.grid_position.to_dictionary())
 
 
+func actor_hostility(actor_id: int, target_actor_id: int) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	var target: RefCounted = actor_registry.get_actor(target_actor_id)
+	if actor == null or target == null:
+		return {"hostile": false, "reason": "unknown_actor_pair", "score": 0.0}
+	if actor.actor_id == target.actor_id:
+		return {"hostile": false, "reason": "self", "score": 100.0}
+	var score: float = relationship_score(actor.actor_id, target.actor_id)
+	var same_group: bool = _actors_share_side_or_group(actor, target)
+	var side_hostile: bool = actor.side == "hostile" or target.side == "hostile"
+	var hostile: bool = false
+	var reason: String = "neutral"
+	if score <= RELATIONSHIP_HOSTILE_THRESHOLD:
+		hostile = true
+		reason = "relationship_hostile"
+	elif side_hostile and score < RELATIONSHIP_FRIENDLY_THRESHOLD:
+		hostile = true
+		reason = "side_hostile"
+	elif same_group:
+		hostile = false
+		reason = "same_group"
+	else:
+		hostile = false
+		reason = "relationship_non_hostile" if score >= RELATIONSHIP_FRIENDLY_THRESHOLD else "neutral"
+	return {
+		"hostile": hostile,
+		"reason": reason,
+		"score": score,
+		"threshold": RELATIONSHIP_HOSTILE_THRESHOLD,
+		"actor_side": actor.side,
+		"target_side": target.side,
+		"actor_group_id": actor.group_id,
+		"target_group_id": target.group_id,
+	}
+
+
+func are_actors_hostile(actor_id: int, target_actor_id: int) -> bool:
+	return bool(actor_hostility(actor_id, target_actor_id).get("hostile", false))
+
+
 func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
 	var resolved_context: Dictionary = context.duplicate(true)
 	if not resolved_context.has("weapon_profile"):
 		var actor: RefCounted = actor_registry.get_actor(actor_id)
 		if actor != null:
 			resolved_context["weapon_profile"] = _npc_weapon_context(actor, _attack_profile(actor, item_library))
+	if not resolved_context.has("hostility_resolver"):
+		resolved_context["hostility_resolver"] = Callable(self, "actor_hostility")
 	return _ai_runner.decide_actor_intent(self, _ai_rules, actor_id, resolved_context)
 
 
@@ -3162,6 +3206,14 @@ func _relationship_key(actor_id: int, target_actor_id: int) -> String:
 	var left: int = min(actor_id, target_actor_id)
 	var right: int = max(actor_id, target_actor_id)
 	return "%d:%d" % [left, right]
+
+
+func _actors_share_side_or_group(actor: RefCounted, target_actor: RefCounted) -> bool:
+	if actor == null or target_actor == null:
+		return false
+	if not actor.group_id.is_empty() and actor.group_id == target_actor.group_id:
+		return true
+	return not actor.side.is_empty() and actor.side == target_actor.side
 
 
 func _default_relationship_score(actor: RefCounted, target_actor: RefCounted) -> float:

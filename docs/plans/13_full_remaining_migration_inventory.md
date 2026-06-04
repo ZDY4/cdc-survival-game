@@ -180,7 +180,7 @@
 ### 7.3 关系和阵营
 
 - relationship scores 第一版已迁移：运行时会按 actor side / group 初始化 pair 分数，`set_relationship_score` 会 clamp 到 `[-100, 100]` 并发出 `relationship_changed`，payload 带 actor/target 显示名、score_before、score 和 score_delta，snapshot / save 已 roundtrip，对话规则的 `relation_score_min/max` 已读取真实分数；任务 reward 可调整关系分数，奖励 HUD 会显示关系变化对象和增量，独立关系变化事件也会进入 HUD 中文反馈；已由 `Interaction` / `Quest` / `Save` smoke 覆盖。待补敌对状态动态切换和关系历史。
-- 待补阵营敌对/友好/中立对交互菜单、战斗进入、任务条件、交易权限和更多对话分支的影响；当前战斗/AI 的敌对判定仍主要沿用 side。
+- 关系驱动敌对判定第一版已迁移：`Simulation.actor_hostility()` 会结合 side / group 和 relationship score 判断 hostile，低于阈值的友好/中立 NPC 会在交互菜单中切换为攻击目标并禁用对话，关系缓和后的 hostile side 目标会被攻击校验拒绝，hostile AI 也会停止把玩家作为目标；攻击失败会暴露 relationship_score / hostility_reason，交互 target 会暴露 relationship_score / hostility_reason；已由 `Interaction` / `Combat` / `AI` / `Save` smoke 覆盖。待补任务条件、交易权限和更多对话分支的关系/阵营影响，以及敌对状态变化的 UI 提示 polish。
 - 待补治疗、雇佣、跟随、队友、护送、敌对转中立等脚本化 NPC 互动。
 
 ## 8. 背包、装备、容器和交易

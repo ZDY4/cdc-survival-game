@@ -69,9 +69,20 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	}, "attack")
 	if bool(disabled_execute.get("success", false)) or str(disabled_execute.get("reason", "")) != "target_not_hostile":
 		errors.append("executing a disabled friendly attack option should return target_not_hostile")
+	simulation.set_relationship_score(1, 2, -75.0, "interaction_smoke_relation_hostile")
+	var relationship_hostile_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "actor",
+		"actor_id": 2,
+	})
+	_expect_prompt_snapshot(errors, relationship_hostile_prompt, "attack", "attack", 2.0)
+	if str(_dictionary_or_empty(relationship_hostile_prompt.get("target", {})).get("hostility_reason", "")) != "relationship_hostile":
+		errors.append("relationship-hostile prompt should expose relationship_hostile reason")
+	_expect_disabled_option(errors, relationship_hostile_prompt, "talk", "target_hostile", "relationship hostile prompt")
+	simulation.set_relationship_score(1, 2, 50.0, "interaction_smoke_relation_restored")
 	var hostile_prompt_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var hostile_actor: RefCounted = hostile_prompt_simulation.actor_registry.get_actor(2)
 	hostile_actor.side = "hostile"
+	hostile_prompt_simulation.set_relationship_score(1, hostile_actor.actor_id, -75.0, "interaction_smoke_side_hostile")
 	var hostile_prompt: Dictionary = hostile_prompt_simulation.query_interaction_options(1, {
 		"target_type": "actor",
 		"actor_id": hostile_actor.actor_id,
@@ -713,9 +724,9 @@ func _expect_relationship_dialogue_rules(simulation: RefCounted, registry: RefCo
 		errors.append("trusted relationship talk should succeed: %s" % trusted_talk.get("reason", "unknown"))
 	if str(trusted_talk.get("dialogue_id", "")) != "trader_lao_wang_trusted":
 		errors.append("trusted relationship should select trusted dialogue")
-	var cold_result: Dictionary = simulation.set_relationship_score(1, 2, -150.0, "interaction_smoke_cold")
-	if not bool(cold_result.get("success", false)) or absf(float(cold_result.get("score", 0.0)) + 100.0) > 0.001:
-		errors.append("relationship score should clamp to -100")
+	var cold_result: Dictionary = simulation.set_relationship_score(1, 2, -25.0, "interaction_smoke_cold")
+	if not bool(cold_result.get("success", false)) or absf(float(cold_result.get("score", 0.0)) + 25.0) > 0.001:
+		errors.append("relationship score should be settable for cold dialogue")
 	var cold_talk: Dictionary = simulation.execute_interaction(1, {
 		"target_type": "actor",
 		"actor_id": 2,
@@ -724,12 +735,15 @@ func _expect_relationship_dialogue_rules(simulation: RefCounted, registry: RefCo
 		errors.append("cold relationship talk should succeed: %s" % cold_talk.get("reason", "unknown"))
 	if str(cold_talk.get("dialogue_id", "")) != "trader_lao_wang_cold":
 		errors.append("cold relationship should select cold dialogue")
+	var clamped_result: Dictionary = simulation.set_relationship_score(1, 2, -150.0, "interaction_smoke_clamped")
+	if not bool(clamped_result.get("success", false)) or absf(float(clamped_result.get("score", 0.0)) + 100.0) > 0.001:
+		errors.append("relationship score should clamp to -100")
 	var feedback: Array = HudSnapshot.new(registry).build(simulation.snapshot(), {}, {}).get("event_feedback", [])
 	var has_relationship_feedback := false
 	for event in feedback:
 		var event_data: Dictionary = _dictionary_or_empty(event)
 		var feedback_text := str(event_data.get("text", ""))
-		if str(event_data.get("kind", "")) == "relationship_changed" and feedback_text.contains("关系:") and feedback_text.contains("75") and feedback_text.contains("-100") and feedback_text.contains("-175"):
+		if str(event_data.get("kind", "")) == "relationship_changed" and feedback_text.contains("关系:") and feedback_text.contains("-25") and feedback_text.contains("-100") and feedback_text.contains("-75"):
 			has_relationship_feedback = true
 			break
 	if not has_relationship_feedback:

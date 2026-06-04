@@ -162,13 +162,16 @@ func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_
 		return {"success": false, "reason": "attacker_defeated", "actor_id": actor_id}
 	if target.hp <= 0.0:
 		return {"success": false, "reason": "target_defeated", "target_actor_id": target_actor_id}
-	if not _can_attack(attacker, target):
+	var hostility: Dictionary = _actor_hostility(simulation, attacker, target)
+	if not bool(hostility.get("hostile", _can_attack(attacker, target))):
 		return {
 			"success": false,
 			"reason": "target_not_hostile",
 			"actor_id": actor_id,
 			"attacker_side": attacker.side,
 			"target_side": target.side,
+			"relationship_score": float(hostility.get("score", 0.0)),
+			"hostility_reason": str(hostility.get("reason", "")),
 			"target_actor_id": target_actor_id,
 		}
 	if simulation.has_method("is_actor_visible_to_actor") and not bool(simulation.call("is_actor_visible_to_actor", actor_id, target_actor_id)):
@@ -191,6 +194,12 @@ func _can_attack(attacker: RefCounted, target: RefCounted) -> bool:
 	if target.side == "hostile":
 		return attacker.side != "hostile"
 	return false
+
+
+func _actor_hostility(simulation: RefCounted, attacker: RefCounted, target: RefCounted) -> Dictionary:
+	if simulation != null and simulation.has_method("actor_hostility"):
+		return _dictionary_or_empty(simulation.call("actor_hostility", attacker.actor_id, target.actor_id))
+	return {"hostile": _can_attack(attacker, target), "reason": "legacy_side", "score": 0.0}
 
 
 func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int) -> Dictionary:

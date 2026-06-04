@@ -67,6 +67,14 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("adjacent hostile should attack during world turn after wait")
 	if _event_count(simulation.snapshot(), "attack_resolved") <= 0:
 		errors.append("adjacent hostile attack should emit attack_resolved even when armor blocks damage")
+	simulation.set_relationship_score(player.actor_id, zombie_id, 25.0, "ai_smoke_pacified")
+	var pacified: Dictionary = simulation.decide_actor_intent(zombie_id, {
+		"topology": _topology(simulation, registry),
+		"active_map_id": simulation.active_map_id,
+	})
+	if pacified.get("intent", "") != "idle" or pacified.get("reason", "") != "no_target_in_aggro_range":
+		errors.append("positive relationship should stop hostile AI targeting player, got %s/%s" % [pacified.get("intent", ""), pacified.get("reason", "")])
+	simulation.set_relationship_score(player.actor_id, zombie_id, -100.0, "ai_smoke_restore_hostile")
 
 	_expect_hostile_weapon_and_reload_intents(errors, simulation, registry, player_grid)
 	errors.append_array(_expect_hostile_auto_open_door(registry))

@@ -70,7 +70,8 @@ func _resolve_target(simulation: RefCounted, target: Dictionary) -> Dictionary:
 					"display_name": actor.display_name,
 					"kind": "wait",
 				}
-			if actor.side == "hostile":
+			var hostility: Dictionary = _actor_hostility(simulation, _player_actor_id(simulation), actor.actor_id)
+			if bool(hostility.get("hostile", actor.side == "hostile")):
 				return {
 					"target_type": "actor",
 					"actor_id": actor.actor_id,
@@ -78,6 +79,8 @@ func _resolve_target(simulation: RefCounted, target: Dictionary) -> Dictionary:
 					"display_name": actor.display_name,
 					"grid_position": actor.grid_position.to_dictionary(),
 					"kind": "attack",
+					"relationship_score": float(hostility.get("score", 0.0)),
+					"hostility_reason": str(hostility.get("reason", "")),
 				}
 			return {
 				"target_type": "actor",
@@ -86,6 +89,8 @@ func _resolve_target(simulation: RefCounted, target: Dictionary) -> Dictionary:
 				"display_name": actor.display_name,
 				"grid_position": actor.grid_position.to_dictionary(),
 				"kind": "talk",
+				"relationship_score": float(hostility.get("score", 0.0)),
+				"hostility_reason": str(hostility.get("reason", "")),
 			}
 		"self":
 			var self_actor: RefCounted = simulation.actor_registry.get_actor(int(target.get("actor_id", _player_actor_id(simulation))))
@@ -126,6 +131,12 @@ func _visibility_check(simulation: RefCounted, actor_id: int, target_data: Dicti
 			"target_grid": target_grid,
 		}
 	return {"success": true}
+
+
+func _actor_hostility(simulation: RefCounted, actor_id: int, target_actor_id: int) -> Dictionary:
+	if simulation != null and simulation.has_method("actor_hostility"):
+		return _dictionary_or_empty(simulation.call("actor_hostility", actor_id, target_actor_id))
+	return {"hostile": false, "reason": "hostility_api_missing", "score": 0.0}
 
 
 func _target_grid(target_data: Dictionary) -> Dictionary:
