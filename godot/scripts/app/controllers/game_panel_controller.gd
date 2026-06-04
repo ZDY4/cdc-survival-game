@@ -68,6 +68,7 @@ func setup_panels() -> void:
 	skills_panel = _ensure_panel(skills_panel, SKILLS_PANEL_SCENE, "SkillsPanelRoot")
 	crafting_panel = _ensure_panel(crafting_panel, CRAFTING_PANEL_SCENE, "CraftingPanelRoot")
 	settings_panel = _ensure_settings_panel()
+	apply_ui_scale()
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
 
@@ -83,6 +84,7 @@ func refresh_all(selected_prompt: Dictionary = {}) -> void:
 	refresh_map_panel()
 	refresh_skills_panel()
 	refresh_crafting_panel()
+	apply_ui_scale()
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
 
@@ -350,11 +352,38 @@ func _apply_stage_panel_visibility() -> void:
 func _apply_settings_panel_visibility() -> void:
 	if settings_panel == null:
 		return
+	apply_ui_scale()
 	settings_panel.visible = settings_open
 	settings_panel.mouse_filter = Control.MOUSE_FILTER_STOP if settings_open else Control.MOUSE_FILTER_IGNORE
 	var panel := settings_panel.get_node_or_null("SettingsPanel")
 	if panel is Control:
 		(panel as Control).mouse_filter = Control.MOUSE_FILTER_STOP if settings_open else Control.MOUSE_FILTER_IGNORE
+
+
+func apply_ui_scale() -> void:
+	var factor := clampf(float(ProjectSettings.get_setting("cdc/ui_scale_factor", 1.0)), 0.75, 1.5)
+	for panel in _all_ui_roots():
+		var control := panel as Control
+		if control == null:
+			continue
+		control.scale = Vector2(factor, factor)
+		control.set_meta("cdc_ui_scale_factor", factor)
+
+
+func _all_ui_roots() -> Array[Control]:
+	return [
+		hud,
+		dialogue_panel,
+		inventory_panel,
+		trade_panel,
+		container_panel,
+		character_panel,
+		journal_panel,
+		map_panel,
+		skills_panel,
+		crafting_panel,
+		settings_panel,
+	]
 
 
 func _stage_panel_ids() -> Array[String]:

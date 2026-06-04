@@ -328,6 +328,11 @@ func runtime_control_snapshot() -> Dictionary:
 	}
 
 
+func settings_applied(_snapshot: Dictionary = {}) -> void:
+	if panel_controller != null and panel_controller.has_method("apply_ui_scale"):
+		panel_controller.apply_ui_scale()
+
+
 func current_map_level() -> int:
 	observed_map_level = _normalized_map_level(observed_map_level)
 	return observed_map_level

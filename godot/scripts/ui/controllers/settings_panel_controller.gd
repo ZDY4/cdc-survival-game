@@ -308,13 +308,15 @@ func _save_settings() -> void:
 func _apply_settings() -> void:
 	var audio: Dictionary = _apply_audio_settings()
 	var display: Dictionary = _apply_display_settings()
+	var ui_scale: Dictionary = _apply_ui_scale_settings()
 	var keybinding: Dictionary = _apply_keybinding_settings()
 	last_apply_result = {
 		"audio": audio,
 		"display": display,
-		"ui_scale": {"requested": int(settings_state.get("ui_scale", 100)), "applied": false, "reason": "ui_theme_runtime_pending"},
+		"ui_scale": ui_scale,
 		"keybinding": keybinding,
 	}
+	_notify_settings_applied()
 
 
 func _apply_audio_settings() -> Dictionary:
@@ -374,6 +376,23 @@ func _apply_keybinding_settings() -> Dictionary:
 		"profile": profile,
 		"panel_keys": _panel_key_labels_for_profile(profile),
 	}
+
+
+func _apply_ui_scale_settings() -> Dictionary:
+	var percent := clampi(int(settings_state.get("ui_scale", 100)), 75, 150)
+	var factor := float(percent) / 100.0
+	ProjectSettings.set_setting("cdc/ui_scale_factor", factor)
+	return {
+		"applied": true,
+		"percent": percent,
+		"factor": factor,
+	}
+
+
+func _notify_settings_applied() -> void:
+	var target := get_parent()
+	if target != null and target.has_method("settings_applied"):
+		target.call("settings_applied", settings_snapshot())
 
 
 func _panel_key_labels_for_profile(profile: String) -> Dictionary:

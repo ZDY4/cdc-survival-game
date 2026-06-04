@@ -624,6 +624,10 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 	var panel_keys: Dictionary = _dictionary_or_empty(keybinding.get("panel_keys", {}))
 	if str(panel_keys.get("inventory", "")) != "Q":
 		errors.append("left handed keybinding should expose remapped panel keys: %s" % applied)
+	var ui_scale: Dictionary = _dictionary_or_empty(applied.get("ui_scale", {}))
+	if not bool(ui_scale.get("applied", false)) or not is_equal_approx(float(ui_scale.get("factor", 0.0)), 1.25):
+		errors.append("settings UI scale should apply to runtime UI roots: %s" % applied)
+	_assert_ui_scale_factor(errors, game_root, 1.25, "changed settings")
 	var display: Dictionary = _dictionary_or_empty(applied.get("display", {}))
 	if not bool(display.get("applied", false)) and str(display.get("reason", "")) != "headless":
 		errors.append("settings display changes should apply or be explicitly skipped in headless: %s" % applied)
@@ -740,9 +744,22 @@ func _assert_settings_reset_defaults(errors: Array[String], game_root: Node) -> 
 		errors.append("reset settings should restore default display: %s" % snapshot)
 	if int(snapshot.get("ui_scale", 0)) != 100 or str(snapshot.get("keybinding_profile", "")) != "default":
 		errors.append("reset settings should restore default UI/control state: %s" % snapshot)
+	_assert_ui_scale_factor(errors, game_root, 1.0, "reset settings")
 	if not _settings_line(game_root, "AudioLine").contains("主音量 100%") or not _settings_line(game_root, "DisplayLine").contains("窗口模式") or not _settings_line(game_root, "ControlsLine").contains("默认"):
 		errors.append("reset settings should refresh visible summary lines")
 	_assert_settings_file_envelope(errors, 100, "windowed", "default")
+
+
+func _assert_ui_scale_factor(errors: Array[String], game_root: Node, expected: float, context: String) -> void:
+	for root in [game_root.hud, game_root.inventory_panel, game_root.settings_panel]:
+		var control := root as Control
+		if control == null:
+			errors.append("%s: missing UI root for scale assertion" % context)
+			continue
+		if not is_equal_approx(control.scale.x, expected) or not is_equal_approx(control.scale.y, expected):
+			errors.append("%s: UI root %s should have scale %.2f, got %s" % [context, control.name, expected, control.scale])
+		if not is_equal_approx(float(control.get_meta("cdc_ui_scale_factor", 0.0)), expected):
+			errors.append("%s: UI root %s should expose scale metadata %.2f" % [context, control.name, expected])
 
 
 func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: String, expected_title: String, expected_line: String, context: String) -> void:
