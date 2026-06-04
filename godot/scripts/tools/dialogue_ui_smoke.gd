@@ -14,7 +14,7 @@ func _run() -> void:
 	get_root().add_child(game_root)
 	await process_frame
 
-	var errors: Array[String] = _run_checks(game_root)
+	var errors: Array[String] = await _run_checks(game_root)
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -55,17 +55,28 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue text missing start node")
 	if not _options_line(game_root).contains("看看货") or not _options_line(game_root).contains("明白"):
 		errors.append("dialogue options missing expected choices")
+	if not _options_line(game_root).contains("选择:"):
+		errors.append("dialogue options line should show explicit choice hint")
+	var trade_button: Button = _option_button(game_root, 2)
+	if trade_button == null:
+		errors.append("dialogue panel should expose option button 2")
+	elif not str(trade_button.text).contains("看看货"):
+		errors.append("dialogue option button 2 should show option text")
+	elif not str(trade_button.tooltip_text).contains("trade_action"):
+		errors.append("dialogue option button tooltip should expose next node id")
 	var before_events: int = game_root.simulation.snapshot().get("events", []).size()
 	_press_key(game_root, KEY_SPACE)
 	if not _player(game_root).get("active_dialogue_id", "") == "trader_lao_wang_tutorial_active":
 		errors.append("Space should not close dialogue when choices are available")
 	if game_root.simulation.snapshot().get("events", []).size() != before_events:
 		errors.append("Space on choice dialogue should not advance world turn or emit events")
-	_press_key(game_root, KEY_2)
+	if trade_button != null:
+		trade_button.pressed.emit()
+		await process_frame
 	if not game_root.trade_panel.visible:
-		errors.append("digit 2 should choose trade dialogue option and open trade")
+		errors.append("dialogue option button should choose trade dialogue option and open trade")
 	if not _player(game_root).get("active_dialogue_id", "") == "":
-		errors.append("digit dialogue choice should close active dialogue after trade action")
+		errors.append("dialogue option button should close active dialogue after trade action")
 	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_SPACE, "Space")
 	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_ENTER, "Enter")
 	return errors
@@ -136,6 +147,17 @@ func _options_line(game_root: Node) -> String:
 	return game_root.dialogue_panel.get_node("DialoguePanel/DialogueLines/OptionsLine").text
 
 
+func _option_button(game_root: Node, index: int) -> Button:
+	return game_root.dialogue_panel.find_child("DialogueOption_%d" % index, true, false) as Button
+
+
+func _option_button_count(game_root: Node) -> int:
+	var box: Node = game_root.dialogue_panel.get_node_or_null("DialoguePanel/DialogueLines/OptionButtons")
+	if box == null:
+		return 0
+	return box.get_child_count()
+
+
 func _press_key(game_root: Node, key: int) -> void:
 	var event := InputEventKey.new()
 	event.keycode = key
@@ -156,8 +178,10 @@ func _expect_key_advances_dialogue_without_options(errors: Array[String], game_r
 	game_root.refresh_dialogue_panel()
 	if not game_root.dialogue_panel.visible:
 		errors.append("%s dialogue advance setup should show confirmation dialogue" % label)
-	if not _options_line(game_root).is_empty():
-		errors.append("%s dialogue advance setup should not expose options" % label)
+	if not _options_line(game_root).contains("Space / Enter 继续"):
+		errors.append("%s dialogue advance setup should show no-choice continue hint" % label)
+	if _option_button_count(game_root) != 0:
+		errors.append("%s dialogue advance setup should not expose option buttons" % label)
 	var before_events: int = game_root.simulation.snapshot().get("events", []).size()
 	_press_key(game_root, key)
 	if not str(_player(game_root).get("active_dialogue_id", "")).is_empty():
