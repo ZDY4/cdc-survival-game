@@ -33,10 +33,44 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["crafting panel was not created"]
 	if not _summary_line(game_root).contains("配方"):
 		errors.append("crafting summary should show recipe count")
+	if _search_box(game_root) == null:
+		errors.append("crafting panel should expose recipe search")
+	if _category_button(game_root, "medical") == null:
+		errors.append("crafting panel should expose medical category filter")
+	if _sort_button(game_root, "SortCraftableButton") == null:
+		errors.append("crafting panel should expose craftable sort")
+	if _recipe_lines(game_root).size() <= 8:
+		errors.append("crafting panel should show full scrollable recipe list")
 	if not _recipe_text(game_root).contains("基础绷带"):
 		errors.append("crafting panel missing basic bandage recipe")
 	if not _recipe_text(game_root).contains("材料不足"):
 		errors.append("basic bandage should initially show missing materials")
+	_press_category_button(game_root, "weapon")
+	await process_frame
+	if _recipe_text(game_root).contains("基础绷带"):
+		errors.append("weapon category filter should hide medical recipes")
+	if not _recipe_text(game_root).contains("小刀"):
+		errors.append("weapon category filter should show weapon recipes")
+	_press_category_button(game_root, "medical")
+	await process_frame
+	if not _summary_line(game_root).contains("医疗"):
+		errors.append("crafting summary should show active category")
+	if not _recipe_text(game_root).contains("基础绷带"):
+		errors.append("medical category filter should show bandage recipe")
+	var search := _search_box(game_root)
+	if search != null:
+		search.text = "血清"
+		search.text_changed.emit(search.text)
+		await process_frame
+		if not _recipe_text(game_root).contains("抗体血清"):
+			errors.append("crafting search should match recipe names")
+		if _recipe_text(game_root).contains("基础绷带"):
+			errors.append("crafting search should hide non-matching recipes")
+		search.text = ""
+		search.text_changed.emit(search.text)
+		await process_frame
+	_press_category_button(game_root, "all")
+	await process_frame
 	if _craft_button(game_root, "recipe_bandage_basic") == null or not _craft_button(game_root, "recipe_bandage_basic").disabled:
 		errors.append("basic bandage craft button should be disabled before cloth is available")
 	if not _press_recipe_line(game_root, "recipe_bandage_basic"):
@@ -53,6 +87,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	player.inventory["1011"] = 4
 	game_root.refresh_inventory_panel()
 	game_root.refresh_crafting_panel()
+	_press_sort_button(game_root, "SortCraftableButton")
+	await process_frame
+	if not _summary_line(game_root).contains("可制作优先"):
+		errors.append("crafting summary should show active sort mode")
+	if _recipe_lines(game_root).is_empty() or not _recipe_lines(game_root)[0].contains("基础绷带"):
+		errors.append("craftable sort should move craftable recipes to the top")
 	if _craft_button(game_root, "recipe_bandage_basic") == null or _craft_button(game_root, "recipe_bandage_basic").disabled:
 		errors.append("basic bandage craft button should become enabled after cloth is available")
 	if not _press_recipe_line(game_root, "recipe_bandage_basic"):
@@ -92,7 +132,9 @@ func _summary_line(game_root: Node) -> String:
 
 func _recipe_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
-	var recipe_box: Node = game_root.crafting_panel.get_node("CraftingPanel/CraftingLines/RecipeLines")
+	var recipe_box: Node = game_root.crafting_panel.find_child("RecipeLines", true, false)
+	if recipe_box == null:
+		return output
 	for child in recipe_box.get_children():
 		if child is HBoxContainer:
 			var line: Node = child.get_node("Line")
@@ -112,6 +154,35 @@ func _craft_button(game_root: Node, recipe_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node("CraftButton") as Button
+
+
+func _search_box(game_root: Node) -> LineEdit:
+	return game_root.crafting_panel.find_child("SearchBox", true, false) as LineEdit
+
+
+func _category_button(game_root: Node, category: String) -> Button:
+	var node_name := "FilterCategoryAllButton" if category == "all" else "FilterCategory_%s" % category
+	return game_root.crafting_panel.find_child(node_name, true, false) as Button
+
+
+func _sort_button(game_root: Node, node_name: String) -> Button:
+	return game_root.crafting_panel.find_child(node_name, true, false) as Button
+
+
+func _press_category_button(game_root: Node, category: String) -> bool:
+	var button := _category_button(game_root, category)
+	if button == null:
+		return false
+	button.pressed.emit()
+	return true
+
+
+func _press_sort_button(game_root: Node, node_name: String) -> bool:
+	var button := _sort_button(game_root, node_name)
+	if button == null:
+		return false
+	button.pressed.emit()
+	return true
 
 
 func _press_recipe_line(game_root: Node, recipe_id: String) -> bool:
