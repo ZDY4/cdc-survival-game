@@ -220,6 +220,8 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	errors.append_array(approach_errors)
 	var range_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	errors.append_array(_expect_talk_range_direct_interaction(range_simulation, registry))
+	var container_replacement_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	errors.append_array(_expect_container_replacement_close(container_replacement_simulation))
 	var direct_wait_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	errors.append_array(_expect_direct_self_wait_interaction(direct_wait_simulation))
 	return errors
@@ -566,6 +568,33 @@ func _expect_talk_range_direct_interaction(simulation: RefCounted, registry: Ref
 	var prompt: Dictionary = _dictionary_or_empty(result.get("prompt", {}))
 	if int(prompt.get("interaction_range", -1)) != 2 or bool(prompt.get("requires_approach", true)):
 		errors.append("range-2 talk prompt should expose no approach required")
+	return errors
+
+
+func _expect_container_replacement_close(simulation: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var clinic_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "survivor_outpost_01_clinic_supply_cabinet",
+	})
+	if not bool(clinic_result.get("success", false)):
+		return ["container replacement setup failed: %s" % clinic_result.get("reason", "unknown")]
+	var canteen_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "survivor_outpost_01_canteen_food_crate",
+	})
+	if not bool(canteen_result.get("success", false)):
+		return ["container replacement open failed: %s" % canteen_result.get("reason", "unknown")]
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null or player.active_container_id != "survivor_outpost_01_canteen_food_crate":
+		errors.append("opening a new container should replace active container id")
+	var payload: Dictionary = _last_event_payload(simulation.snapshot(), "container_closed")
+	if str(payload.get("container_id", "")) != "survivor_outpost_01_clinic_supply_cabinet":
+		errors.append("container replacement should close previous container")
+	if str(payload.get("reason", "")) != "replaced":
+		errors.append("container replacement close reason should be replaced")
+	if str(payload.get("next_container_id", "")) != "survivor_outpost_01_canteen_food_crate":
+		errors.append("container replacement should include next_container_id")
 	return errors
 
 

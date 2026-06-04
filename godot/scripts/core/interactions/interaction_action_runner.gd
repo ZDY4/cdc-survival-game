@@ -107,6 +107,14 @@ func _execute_open_container(simulation: RefCounted, actor_id: int, prompt: Dict
 		return {"success": false, "reason": "container_target_missing", "prompt": prompt}
 
 	var session: Dictionary = _container_session_for_target(simulation, target_id, target)
+	var previous_container_id := str(actor.active_container_id)
+	if not previous_container_id.is_empty() and previous_container_id != target_id:
+		simulation.emit_event("container_closed", {
+			"actor_id": actor_id,
+			"container_id": previous_container_id,
+			"reason": "replaced",
+			"next_container_id": target_id,
+		})
 	actor.active_container_id = target_id
 	simulation.emit_event("container_opened", {
 		"actor_id": actor_id,
