@@ -103,7 +103,7 @@
 
 ### 4.3 地图切换和 overworld
 
-- 待补 scene transition 触发器完整逻辑：目标 map、entry point、目标名称、不可进入原因、进入后 facing、返回点记录。
+- scene transition 触发器第一版已迁移：目标 map、entry point、目标名称、缺地图/缺入口失败原因、返回 map / entry 记录和进入后 entry facing 已进入 result、`scene_transition` 事件、`interaction_succeeded` payload 与 context snapshot；`MapEntryPointNode.facing` 会经 `MapBuilder` 保留到 topology，`WorldSnapshotBuilder` 会从 `scene_transition.entry_facing` 派生 actor 朝向，并由 `Interaction` / `Scene` smoke 覆盖。待补确认 prompt、overworld 解锁条件和更完整无法进入原因 UI。
 - 部分迁移 overworld 位置进入、返回和解锁地点；地图面板定位第一版已从 `data/overworld` 展示世界地图尺寸、当前地点坐标、地点解锁数量、道路格摘要和画布 inset，并由 `UIToggle` smoke 覆盖。待补最近到达地点、显式路线规划、进入/返回 prompt 和无法进入原因 UI。
 - 部分迁移地图切换后的运行时清理：pending、active dialogue、active container 和 active trade 会在位置进入或刷新时关闭并发出带 reason 的事件，已由 `Overworld` / `TradeUI` smoke 覆盖；待补相机重新定位和雾战重建。
 - 待补所有 `godot/scenes/maps/*.tscn` 与旧 JSON 备份的字段等价复核：size、levels、entry points、objects、footprints、rotations、props、triggers。
@@ -124,7 +124,7 @@
 - pickup 数量和合并第一版已迁移：地图 pickup 按 scene 中 `max_count` 确定性发放，物品会合并进 actor inventory，result、`pickup_granted` 与 `interaction_succeeded` payload 会暴露 `item_id`、`count`、`inventory_before`、`inventory_after`，地图目标会进入 consumed 集合，并由 `Interaction` smoke 覆盖；任务收集进度已接入 `record_item_collected`。待补部分拾取、数量弹窗、拾取失败细分、拾取音效和 UI 提示 polish。
 - open_container 第一版已迁移：地图容器、尸体容器和掉落容器都统一进入 `container_sessions`，打开容器会设置 actor `active_container_id` 并发出 `container_opened`，拿取/存放会持久化 session；关闭按钮、Esc、距离过远、目标消失、切换地图和打开另一个容器都会清理 active container 并发出关闭事件，已由 `Interaction` / `ContainerUI` / `Combat` / `InventoryUI` / `Save` smoke 覆盖。待补容器 id 规范的完整文档、锁定/权限、部分拿取数量弹窗 polish、容器音效和 hover/open 表现。
 - talk 规则选择第一版已迁移：`data/dialogue_rules` 进入 Godot data registry，启动时配置到 `Simulation`，talk 会按 NPC `definition_id` 解析 dialogue rule，按 active/completed quests、玩家物品数量、relation score、NPC role/on_shift 和玩家 HP 比例选择变体；找不到规则时回退到直接 dialogue id，找不到变体时回退 default dialogue。`dialogue_started` 和 `interaction_succeeded` 会暴露 requested / resolved dialogue、rule key 和 source，并由 `Interaction` / `DialogueUI` / `DialogueAction` / `Save` smoke 覆盖。待补 schedule/on_shift 真实时间判定、fallback 台词生成和对话 UI 文案 polish。
-- scene_transition 目标反馈第一版已迁移：场景切换 result、`scene_transition` 事件和 `interaction_succeeded` payload 会暴露 target id/name、from/to map、target entry point 和落点 grid，失败时返回 target map / entry 诊断；已由 `Interaction` smoke 覆盖。待补确认 prompt、无法进入原因 UI 文案、overworld 解锁条件、返回点记录和进入后 facing。
+- scene_transition 目标反馈第一版已迁移：场景切换 result、`scene_transition` 事件和 `interaction_succeeded` payload 会暴露 target id/name、from/to map、target entry point、entry facing、返回 map / entry 和落点 grid，失败时返回 target map / entry 诊断；已由 `Interaction` / `Scene` smoke 覆盖。待补确认 prompt、无法进入原因 UI 文案和 overworld 解锁条件。
 - wait self interaction 第一版已恢复：self target 会暴露“等待”菜单项，等待会进入现有回合推进逻辑并产出事件反馈；待补更完整的 modal 冲突策略和视觉 polish。
 
 ## 6. 战斗、目标和伤害

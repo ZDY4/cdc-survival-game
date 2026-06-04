@@ -336,8 +336,10 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 		return {"success": false, "reason": "unknown_actor", "prompt": prompt, "target_map_id": target_map_id, "target_entry_point_id": target_entry_id}
 
 	var target_grid: Dictionary = _dictionary_or_empty(entry_result.get("grid", {}))
+	var entry_facing: String = str(entry_result.get("facing", "")).strip_edges()
 	var target_id: String = str(option.get("target_id", ""))
 	var target_name: String = str(option.get("display_name", prompt.get("target_name", target_id)))
+	var previous_entry_point_id: String = str(simulation.active_entry_point_id)
 	simulation.active_map_id = target_map_id
 	simulation.active_entry_point_id = target_entry_id
 	_configure_map_interactions(simulation, _dictionary_or_empty(entry_result.get("map_data", {})))
@@ -351,12 +353,18 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 		"to_map_id": target_map_id,
 		"entry_point_id": target_entry_id,
 		"target_entry_point_id": target_entry_id,
+		"entry_facing": entry_facing,
 		"grid_position": target_grid.duplicate(true),
+		"return_map_id": previous_map_id,
+		"return_entry_point_id": previous_entry_point_id,
 		"kind": option.get("kind", ""),
 	})
 	var success_payload: Dictionary = _interaction_success_payload(actor_id, prompt, option, target_id)
 	success_payload["target_map_id"] = target_map_id
 	success_payload["target_entry_point_id"] = target_entry_id
+	success_payload["entry_facing"] = entry_facing
+	success_payload["return_map_id"] = previous_map_id
+	success_payload["return_entry_point_id"] = previous_entry_point_id
 	simulation.emit_event("interaction_succeeded", success_payload)
 	return {
 		"success": true,
@@ -367,10 +375,16 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 		"from_map_id": previous_map_id,
 		"target_map_id": target_map_id,
 		"target_entry_point_id": target_entry_id,
+		"entry_facing": entry_facing,
 		"grid_position": target_grid.duplicate(true),
+		"return_map_id": previous_map_id,
+		"return_entry_point_id": previous_entry_point_id,
 		"context_snapshot": {
 			"active_map_id": simulation.active_map_id,
 			"active_entry_point_id": simulation.active_entry_point_id,
+			"entry_facing": entry_facing,
+			"return_map_id": previous_map_id,
+			"return_entry_point_id": previous_entry_point_id,
 		},
 	}
 
@@ -395,6 +409,7 @@ func _entry_grid_for_map(map_id: String, entry_id: String) -> Dictionary:
 				"ok": true,
 				"map_data": map_data,
 				"grid": _dictionary_or_empty(entry_data.get("grid", {})),
+				"facing": str(entry_data.get("facing", "")).strip_edges(),
 			}
 	return {"ok": false, "reason": "scene_transition_entry_missing"}
 

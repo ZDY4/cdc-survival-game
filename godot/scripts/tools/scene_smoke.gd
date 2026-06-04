@@ -833,12 +833,16 @@ func _validate_actor_facing_markers(registry: RefCounted, errors: Array[String])
 	var attacker_actor: Dictionary = _actor_by_id(_array_or_empty(world_result.get("actors", [])), 9502)
 	if str(attacker_actor.get("facing_direction", "")) != "north" or absf(float(attacker_actor.get("facing_yaw_degrees", -1.0))) > 0.001:
 		errors.append("attacking actor should face north from attack_resolved event")
+	var transitioned_actor: Dictionary = _actor_by_id(_array_or_empty(world_result.get("actors", [])), 9504)
+	if str(transitioned_actor.get("facing_direction", "")) != "south" or absf(float(transitioned_actor.get("facing_yaw_degrees", -1.0)) - 180.0) > 0.001:
+		errors.append("transitioned actor should face south from scene_transition entry facing")
 	var root := Node3D.new()
 	root.name = "SceneSmokeActorFacingRoot"
 	get_root().add_child(root)
 	WorldSceneRenderer.new().render_world(root, world_result, {"load_map_visuals": false})
 	_validate_actor_facing_node(root, 9501, "east", 90.0, "movement", errors)
 	_validate_actor_facing_node(root, 9502, "north", 0.0, "attack", errors)
+	_validate_actor_facing_node(root, 9504, "south", 180.0, "scene_transition", errors)
 	root.queue_free()
 
 
@@ -890,6 +894,16 @@ func _actor_facing_runtime_snapshot() -> Dictionary:
 			"grid_position": {"x": 8, "y": 0, "z": 6},
 			"ap": 3.0,
 			"combat": {"hp": 10.0, "max_hp": 10.0, "attributes": {"turn_ap_max": 6.0}},
+		}, {
+			"actor_id": 9504,
+			"definition_id": "scene_smoke_facing",
+			"display_name": "Facing Transition Smoke",
+			"kind": "npc",
+			"side": "friendly",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 2, "y": 0, "z": 2},
+			"ap": 3.0,
+			"combat": {"hp": 10.0, "max_hp": 10.0, "attributes": {"turn_ap_max": 6.0}},
 		}],
 		"events": [{
 			"kind": "actor_moved",
@@ -900,7 +914,7 @@ func _actor_facing_runtime_snapshot() -> Dictionary:
 				"steps": 1,
 			},
 		}, {
-			"kind": "attack_resolved",
+		"kind": "attack_resolved",
 			"payload": {
 				"actor_id": 9502,
 				"target_actor_id": 9503,
@@ -909,6 +923,15 @@ func _actor_facing_runtime_snapshot() -> Dictionary:
 				"critical": false,
 				"hit_kind": "hit",
 				"defeated": false,
+			},
+		}, {
+			"kind": "scene_transition",
+			"payload": {
+				"actor_id": 9504,
+				"to_map_id": "survivor_outpost_01",
+				"entry_point_id": "default_entry",
+				"entry_facing": "south",
+				"grid_position": {"x": 2, "y": 0, "z": 2},
 			},
 		}],
 		"corpse_containers": [],

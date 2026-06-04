@@ -16,11 +16,13 @@ map_size = Vector2i(16, 16)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 2)
 script = ExtResource("2_g7e2m")
 entry_id = "default_entry"
+facing = "south"
 
 [node name="outdoor_return" type="Marker3D" parent="EntryPoints" unique_id=940384770]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 2)
 script = ExtResource("2_g7e2m")
 entry_id = "outdoor_return"
+facing = "south"
 
 [node name="Objects" type="Node3D" parent="." unique_id=1754347406]
 

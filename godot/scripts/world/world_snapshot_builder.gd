@@ -208,6 +208,10 @@ func _recent_facing_by_actor(events: Array, actors_by_id: Dictionary) -> Diction
 			var attack_facing := _facing_from_grids(_dictionary_or_empty(attacker.get("grid_position", {})), _dictionary_or_empty(target.get("grid_position", {})), sequence, "attack")
 			if not attack_facing.is_empty():
 				output[attacker_id] = attack_facing
+		elif kind == "scene_transition":
+			var transition_facing := _facing_from_direction(str(payload.get("entry_facing", "")), _dictionary_or_empty(payload.get("grid_position", {})), sequence, "scene_transition")
+			if not transition_facing.is_empty():
+				output[int(payload.get("actor_id", 0))] = transition_facing
 	return output
 
 
@@ -225,6 +229,19 @@ func _facing_from_grids(from_grid: Dictionary, to_grid: Dictionary, sequence: in
 		"source": source,
 		"from": from_grid.duplicate(true),
 		"to": to_grid.duplicate(true),
+		"event_sequence": sequence,
+	}
+
+
+func _facing_from_direction(direction_value: String, grid: Dictionary, sequence: int, source: String) -> Dictionary:
+	var direction := direction_value.strip_edges().to_lower()
+	if not direction in ["north", "east", "south", "west"]:
+		return {}
+	return {
+		"direction": direction,
+		"yaw_degrees": _direction_yaw_degrees(direction),
+		"source": source,
+		"grid": grid.duplicate(true),
 		"event_sequence": sequence,
 	}
 

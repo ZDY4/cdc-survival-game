@@ -227,6 +227,12 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("scene transition result should include target_map_id")
 	if str(transition_result.get("target_entry_point_id", "")).is_empty():
 		errors.append("scene transition result should include target_entry_point_id")
+	if str(transition_result.get("entry_facing", "")) != "south":
+		errors.append("scene transition result should include target entry facing")
+	if str(transition_result.get("return_map_id", "")) != "survivor_outpost_01":
+		errors.append("scene transition result should include return map id")
+	if str(transition_result.get("return_entry_point_id", "")) != "default_entry":
+		errors.append("scene transition result should include previous active entry as return point")
 	if _dictionary_or_empty(transition_result.get("grid_position", {})).is_empty():
 		errors.append("scene transition result should include grid_position")
 	var scene_transition_payload: Dictionary = _last_event_payload(simulation.snapshot(), "scene_transition")
@@ -238,6 +244,10 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("scene_transition should include from/to map ids")
 	if str(scene_transition_payload.get("entry_point_id", "")).is_empty():
 		errors.append("scene_transition should include entry_point_id")
+	if str(scene_transition_payload.get("entry_facing", "")) != "south":
+		errors.append("scene_transition should include entry_facing")
+	if str(scene_transition_payload.get("return_map_id", "")) != "survivor_outpost_01" or str(scene_transition_payload.get("return_entry_point_id", "")) != "default_entry":
+		errors.append("scene_transition should include return map and entry")
 	if _dictionary_or_empty(scene_transition_payload.get("grid_position", {})).is_empty():
 		errors.append("scene_transition should include grid_position")
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "enter_subscene", "enter_subscene", "进入据点室内")

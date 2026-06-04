@@ -758,16 +758,19 @@ map_size = Vector2i(48, 42)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 39)
 script = ExtResource("2_76465")
 entry_id = "default_entry"
+facing = "north"
 
 [node name="perimeter_return" type="Marker3D" parent="EntryPoints" unique_id=166407545]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 46, 0, 10)
 script = ExtResource("2_76465")
 entry_id = "perimeter_return"
+facing = "west"
 
 [node name="interior_return" type="Marker3D" parent="EntryPoints" unique_id=1247444155]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 21)
 script = ExtResource("2_76465")
 entry_id = "interior_return"
+facing = "south"
 
 [node name="Objects" type="Node3D" parent="." unique_id=1329802975]
 

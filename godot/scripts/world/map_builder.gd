@@ -53,7 +53,11 @@ func _collect_entry_points(topology: MapTopology, entry_points: Array) -> void:
 		if entry_id.is_empty():
 			continue
 		var grid: Dictionary = _dictionary_or_empty(entry_data.get("grid", {}))
-		topology.entry_points[entry_id] = GridCoord.from_dictionary(grid).to_dictionary()
+		var entry_summary: Dictionary = GridCoord.from_dictionary(grid).to_dictionary()
+		entry_summary["id"] = entry_id
+		if entry_data.has("facing"):
+			entry_summary["facing"] = str(entry_data.get("facing", "")).strip_edges()
+		topology.entry_points[entry_id] = entry_summary
 
 
 func _collect_objects(topology: MapTopology, objects: Array) -> void:
