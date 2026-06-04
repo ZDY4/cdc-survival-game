@@ -11,6 +11,7 @@ const SAVE_SLOT := "continue_slot"
 const SECOND_SAVE_SLOT := "older_slot"
 const BROKEN_SAVE_SLOT := "broken_slot"
 const SECOND_SAVE_NAME := "旧营地存档"
+const RENAMED_SAVE_NAME := "重命名后的继续存档"
 
 
 func _init() -> void:
@@ -42,6 +43,7 @@ func _run() -> void:
 	await process_frame
 	_assert_continue_enabled_with_save(errors, continue_menu)
 	_assert_slot_metadata(errors, continue_menu)
+	await _assert_slot_rename(errors, continue_menu, SAVE_SLOT, RENAMED_SAVE_NAME)
 	await _assert_broken_slot_feedback(errors, continue_menu)
 	await _select_slot(errors, continue_menu, SAVE_SLOT)
 	_assert_new_game_overwrite_confirmation(errors, continue_menu)
@@ -197,6 +199,39 @@ func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
 	var slot_option: OptionButton = menu.find_child("SaveSlotOption", true, false) as OptionButton
 	if slot_option == null or not _option_contains_text(slot_option, SECOND_SAVE_NAME):
 		errors.append("save slot option should display custom slot name")
+
+
+func _assert_slot_rename(errors: Array[String], menu: Control, slot_id: String, display_name: String) -> void:
+	await _select_slot(errors, menu, slot_id)
+	var name_edit: LineEdit = menu.find_child("SaveSlotNameEdit", true, false) as LineEdit
+	var rename_button: Button = menu.find_child("RenameSlotButton", true, false) as Button
+	if name_edit == null:
+		errors.append("save slot rename input missing")
+		return
+	if rename_button == null:
+		errors.append("save slot rename button missing")
+		return
+	if not name_edit.editable or rename_button.disabled:
+		errors.append("save slot rename controls should be enabled for selected save")
+	name_edit.text = display_name
+	rename_button.pressed.emit()
+	await menu.get_tree().process_frame
+	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
+	var selected_summary: Dictionary = _dictionary_or_empty(snapshot.get("selected_slot_summary", {}))
+	if str(selected_summary.get("slot_display_name", "")) != display_name:
+		errors.append("renamed slot summary should expose new display name: %s" % snapshot)
+	if str(_dictionary_or_empty(snapshot.get("last_action", {})).get("action", "")) != "rename_slot" or not bool(_dictionary_or_empty(snapshot.get("last_action", {})).get("ok", false)):
+		errors.append("rename slot should update last_action: %s" % snapshot)
+	var slot_option: OptionButton = menu.find_child("SaveSlotOption", true, false) as OptionButton
+	if slot_option == null or not _option_contains_text(slot_option, display_name):
+		errors.append("save slot option should display renamed slot")
+	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
+	if line == null or not line.text.contains(display_name):
+		errors.append("slot summary line should display renamed slot")
+	var loaded: Dictionary = SaveService.new(SAVE_ROOT).load_snapshot(slot_id)
+	var metadata: Dictionary = _dictionary_or_empty(loaded.get("metadata", {}))
+	if str(metadata.get("slot_display_name", "")) != display_name:
+		errors.append("renamed save metadata should persist display name: %s" % loaded)
 
 
 func _assert_broken_slot_feedback(errors: Array[String], menu: Control) -> void:

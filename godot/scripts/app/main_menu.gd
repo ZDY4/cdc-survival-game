@@ -13,6 +13,8 @@ var _slot_option: OptionButton
 var _overwrite_dialog: ConfirmationDialog
 var _delete_button: Button
 var _continue_button: Button
+var _slot_name_edit: LineEdit
+var _rename_button: Button
 var _slot_summary_label: Label
 var _feedback_label: Label
 var _slot_summaries: Array[Dictionary] = []
@@ -74,6 +76,35 @@ func delete_selected_slot() -> Dictionary:
 		"slot_display_name": display_name,
 	}
 	_set_feedback("已删除 %s" % display_name if deleted else "删除存档失败")
+	_refresh_save_slots()
+	return last_action.duplicate(true)
+
+
+func rename_selected_slot() -> Dictionary:
+	var summary := _selected_slot_summary()
+	if summary.is_empty():
+		last_action = {
+			"ok": false,
+			"action": "rename_slot",
+			"reason": "selected_slot_missing",
+			"save_slot": save_slot,
+		}
+		_set_feedback("没有可重命名的存档")
+		_refresh_rename_state()
+		return last_action.duplicate(true)
+	var display_name := _slot_name_edit.text.strip_edges() if _slot_name_edit != null else ""
+	var result: Dictionary = SaveService.new(save_root).rename_slot(save_slot, display_name)
+	last_action = {
+		"ok": bool(result.get("ok", false)),
+		"action": "rename_slot",
+		"save_slot": save_slot,
+		"slot_display_name": str(result.get("slot_display_name", display_name)),
+		"reason": str(result.get("reason", "")),
+	}
+	if bool(result.get("ok", false)):
+		_set_feedback("已重命名为 %s" % str(result.get("slot_display_name", display_name)))
+	else:
+		_set_feedback(_rename_failure_text(str(result.get("reason", ""))))
 	_refresh_save_slots()
 	return last_action.duplicate(true)
 
@@ -150,6 +181,26 @@ func _build_layout() -> void:
 	_slot_option.focus_mode = Control.FOCUS_NONE
 	_slot_option.item_selected.connect(_select_save_slot)
 	box.add_child(_slot_option)
+	var rename_row := HBoxContainer.new()
+	rename_row.name = "SaveSlotRenameRow"
+	rename_row.add_theme_constant_override("separation", 6)
+	_slot_name_edit = LineEdit.new()
+	_slot_name_edit.name = "SaveSlotNameEdit"
+	_slot_name_edit.placeholder_text = "存档名称"
+	_slot_name_edit.clear_button_enabled = true
+	_slot_name_edit.custom_minimum_size = Vector2(190, 30)
+	_slot_name_edit.text_submitted.connect(func(_text: String) -> void:
+		rename_selected_slot()
+	)
+	_rename_button = Button.new()
+	_rename_button.name = "RenameSlotButton"
+	_rename_button.text = "重命名"
+	_rename_button.custom_minimum_size = Vector2(78, 30)
+	_rename_button.focus_mode = Control.FOCUS_NONE
+	_rename_button.pressed.connect(rename_selected_slot)
+	rename_row.add_child(_slot_name_edit)
+	rename_row.add_child(_rename_button)
+	box.add_child(rename_row)
 	_slot_summary_label = Label.new()
 	_slot_summary_label.name = "SaveSlotSummaryLine"
 	_slot_summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -198,6 +249,7 @@ func _refresh_save_slots() -> void:
 	ProjectSettings.set_setting("cdc/main_menu_save_slot", save_slot)
 	_refresh_slot_option()
 	_refresh_continue_state()
+	_refresh_rename_state()
 	_refresh_slot_summary()
 
 
@@ -212,6 +264,7 @@ func _refresh_continue_state() -> void:
 	if _delete_button != null:
 		_delete_button.disabled = _selected_slot_summary().is_empty()
 		_delete_button.tooltip_text = "删除 %s" % _selected_slot_display_name() if not _delete_button.disabled else "没有可删除的存档"
+	_refresh_rename_state()
 
 
 func _refresh_slot_option() -> void:
@@ -278,6 +331,7 @@ func _select_save_slot(index: int) -> void:
 	save_slot = selected
 	ProjectSettings.set_setting("cdc/main_menu_save_slot", save_slot)
 	_refresh_continue_state()
+	_refresh_rename_state()
 	_refresh_slot_summary()
 
 
@@ -318,6 +372,18 @@ func _slot_display_name(summary: Dictionary) -> String:
 	return "存档 %s" % slot_id if not slot_id.is_empty() else "存档"
 
 
+func _refresh_rename_state() -> void:
+	var summary := _selected_slot_summary()
+	var has_slot := not summary.is_empty()
+	if _slot_name_edit != null:
+		_slot_name_edit.editable = has_slot
+		_slot_name_edit.text = _slot_display_name(summary) if has_slot else ""
+		_slot_name_edit.tooltip_text = "编辑当前存档槽显示名" if has_slot else "没有可重命名的存档"
+	if _rename_button != null:
+		_rename_button.disabled = not has_slot
+		_rename_button.tooltip_text = "保存当前存档槽显示名" if has_slot else "没有可重命名的存档"
+
+
 func _save_failure_text(reason: String) -> String:
 	match reason:
 		"save_file_missing":
@@ -334,6 +400,24 @@ func _save_failure_text(reason: String) -> String:
 			return "存档槽位无效"
 		_:
 			return "存档不可加载"
+
+
+func _rename_failure_text(reason: String) -> String:
+	match reason:
+		"slot_display_name_empty":
+			return "存档名称不能为空"
+		"save_file_missing":
+			return "未找到可重命名的存档"
+		"save_file_unreadable":
+			return "存档无法读取"
+		"save_json_invalid":
+			return "存档 JSON 损坏，无法重命名"
+		"save_file_unwritable":
+			return "存档无法写入"
+		"slot_id_empty":
+			return "存档槽位无效"
+		_:
+			return "重命名存档失败"
 
 
 func _grid_text(grid_position: Dictionary) -> String:

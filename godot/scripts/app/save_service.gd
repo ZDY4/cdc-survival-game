@@ -124,6 +124,38 @@ func load_snapshot(slot_id: String) -> Dictionary:
 	}
 
 
+func rename_slot(slot_id: String, display_name: String) -> Dictionary:
+	var slot_key: String = _slot_key(slot_id)
+	if slot_key.is_empty():
+		return _failed("slot_id_empty")
+	var normalized_name := display_name.strip_edges()
+	if normalized_name.is_empty():
+		return _failed("slot_display_name_empty")
+	var path: String = _slot_path(slot_key)
+	if not FileAccess.file_exists(path):
+		return _failed("save_file_missing")
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return _failed("save_file_unreadable")
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return _failed("save_json_invalid")
+	var envelope: Dictionary = parsed
+	var metadata: Dictionary = _dictionary_or_empty(envelope.get("metadata", {})).duplicate(true)
+	metadata["slot_display_name"] = normalized_name
+	envelope["metadata"] = metadata
+	var write_file := FileAccess.open(path, FileAccess.WRITE)
+	if write_file == null:
+		return _failed("save_file_unwritable")
+	write_file.store_string(JSON.stringify(envelope, "\t"))
+	return {
+		"ok": true,
+		"slot_id": str(envelope.get("slot_id", slot_key)),
+		"slot_display_name": normalized_name,
+		"path": path,
+	}
+
+
 func delete_snapshot(slot_id: String) -> bool:
 	var slot_key: String = _slot_key(slot_id)
 	if slot_key.is_empty():
