@@ -205,6 +205,13 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 	row.name = "Equipment_%s" % slot_id
 	row.custom_minimum_size = Vector2(322, 28)
 	row.add_theme_constant_override("separation", 6)
+	row.set_meta("equipment_slot", actual_slot_id)
+	row.set_meta("equipment_display_slot", slot_id)
+	row.set_drag_forwarding(
+		Callable(self, "_empty_character_drag_data"),
+		Callable(self, "_can_drop_equipment_data"),
+		Callable(self, "_drop_equipment_data")
+	)
 	var label := _label("Line")
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.text = _equipment_text(data)
@@ -226,6 +233,47 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 	, CONNECT_DEFERRED)
 	row.add_child(unequip_button)
 	return row
+
+
+func _empty_character_drag_data(_position: Vector2, _from_control: Control) -> Variant:
+	return null
+
+
+func _can_drop_equipment_data(_position: Vector2, data: Variant, from_control: Control) -> bool:
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	if str(drag_data.get("kind", "")) != "inventory_item":
+		return false
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
+	var slot_id: String = _drop_equipment_slot(from_control)
+	if item_id.is_empty() or slot_id.is_empty():
+		return false
+	return _item_can_equip_to_slot(item, slot_id)
+
+
+func _drop_equipment_data(position: Vector2, data: Variant, from_control: Control) -> void:
+	if not _can_drop_equipment_data(position, data, from_control):
+		return
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
+	var slot_id: String = _drop_equipment_slot(from_control)
+	var root := get_parent()
+	if root != null and root.has_method("equip_player_item"):
+		root.equip_player_item(item_id, slot_id)
+
+
+func _drop_equipment_slot(from_control: Control) -> String:
+	if from_control != null and from_control.has_meta("equipment_slot"):
+		return str(from_control.get_meta("equipment_slot"))
+	return ""
+
+
+func _item_can_equip_to_slot(item: Dictionary, slot_id: String) -> bool:
+	for candidate in _array_or_empty(item.get("equip_slots", [])):
+		if str(candidate) == slot_id:
+			return true
+	return false
 
 
 func _equipment_text(data: Dictionary) -> String:

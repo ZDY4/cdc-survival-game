@@ -220,6 +220,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("character panel should show empty off hand equipment slot")
 	if _equipment_model_asset(game_root, "main_hand") != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("main hand equipment model should start as dagger before character panel unequip")
+	game_root.refresh_inventory_panel()
+	var before_drag_equipped := _event_count(game_root, "item_equipped")
+	if not _drop_inventory_item_to_equipment_slot(game_root, "棒球棒", "main_hand"):
+		errors.append("should drag inventory baseball bat to main hand equipment slot")
+	else:
+		await process_frame
+		if not _equipment_line(game_root, "main_hand").contains("主手: 棒球棒"):
+			errors.append("inventory drag to equipment slot should equip baseball bat")
+		if _player_inventory_count(game_root, "1003") != 0:
+			errors.append("dragged baseball bat should leave inventory after equip")
+		if _player_inventory_count(game_root, "1002") != 1:
+			errors.append("replaced dagger should return to inventory after drag equip")
+		if _event_count(game_root, "item_equipped") <= before_drag_equipped:
+			errors.append("inventory drag to equipment slot should emit item_equipped")
+		var restore_dagger_after_drag_result: Dictionary = game_root.equip_player_item("1002", "main_hand")
+		if not bool(restore_dagger_after_drag_result.get("success", false)):
+			errors.append("restoring dagger after equipment drag failed: %s" % restore_dagger_after_drag_result.get("reason", "unknown"))
 	var off_hand_button: Button = _equipment_unequip_button(game_root, "off_hand")
 	if off_hand_button == null or not off_hand_button.disabled:
 		errors.append("empty equipment slot unequip button should be disabled")
@@ -935,6 +952,31 @@ func _equipment_reload_button(game_root: Node, slot_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node_or_null("ReloadButton") as Button
+
+
+func _drop_inventory_item_to_equipment_slot(game_root: Node, item_text: String, slot_id: String) -> bool:
+	var source: Button = _inventory_item_button(game_root, item_text)
+	var target: Node = game_root.character_panel.find_child("Equipment_%s" % slot_id, true, false)
+	if source == null or not source.has_meta("inventory_item") or not target is Control:
+		return false
+	var item: Dictionary = source.get_meta("inventory_item", {})
+	if item.is_empty():
+		return false
+	game_root.character_panel.call("_drop_equipment_data", Vector2.ZERO, {
+		"kind": "inventory_item",
+		"item": item.duplicate(true),
+		"item_id": str(item.get("item_id", "")),
+		"count": 1,
+	}, target)
+	return true
+
+
+func _inventory_item_button(game_root: Node, needle: String) -> Button:
+	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
+	for child in item_box.get_children():
+		if child is Button and str((child as Button).text).contains(needle):
+			return child as Button
+	return null
 
 
 func _equipment_line(game_root: Node, slot_id: String) -> String:
