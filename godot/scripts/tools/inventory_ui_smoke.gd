@@ -243,6 +243,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should select bandages before dropping through inventory panel")
 	var quantity_spin: SpinBox = _quantity_spin(game_root)
 	var drop_button: Button = _drop_button(game_root)
+	var discard_quantity_input: LineEdit = null
 	if quantity_spin == null:
 		errors.append("inventory panel should expose quantity spin")
 	else:
@@ -254,12 +255,39 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		if not _discard_dialog_visible(game_root):
 			errors.append("drop button should open discard confirmation dialog")
+		discard_quantity_input = _discard_quantity_input(game_root)
+		if discard_quantity_input == null:
+			errors.append("discard modal should expose quantity input")
+		elif discard_quantity_input.text != "2":
+			errors.append("discard modal quantity should start from selected action quantity")
 		if _player_inventory_count(game_root, "1006") != 3:
 			errors.append("opening discard confirmation should not mutate inventory")
 		if not bool(game_root.gameplay_input_blocked_by_ui()):
 			errors.append("discard confirmation should block gameplay input")
 		if str(game_root.gameplay_input_blocker_name()) != "modal:inventory_discard_confirm":
 			errors.append("discard confirmation blocker should be modal:inventory_discard_confirm")
+		if discard_quantity_input != null:
+			discard_quantity_input.text = "0"
+			_emit_discard_confirm(game_root)
+			await process_frame
+			if not _discard_dialog_visible(game_root):
+				errors.append("invalid discard quantity should keep modal open")
+			if not _discard_error_text(game_root).contains("大于 0"):
+				errors.append("invalid discard quantity should show reason")
+			if _player_inventory_count(game_root, "1006") != 3:
+				errors.append("invalid discard quantity should not mutate inventory")
+			_press_discard_quantity_button(game_root, "DiscardQuantityMaxButton")
+			await process_frame
+			if discard_quantity_input.text != "3":
+				errors.append("discard max button should use available inventory count")
+			_press_discard_quantity_button(game_root, "DiscardQuantityMinusButton")
+			await process_frame
+			if discard_quantity_input.text != "2":
+				errors.append("discard minus button should decrease quantity")
+			_press_discard_quantity_button(game_root, "DiscardQuantityPlusButton")
+			await process_frame
+			if discard_quantity_input.text != "3":
+				errors.append("discard plus button should increase quantity")
 		var esc_discard_result: Dictionary = game_root.close_active_ui("keyboard_escape")
 		if str(esc_discard_result.get("closed", "")) != "modal:inventory_discard_confirm":
 			errors.append("Esc should close inventory discard modal before other UI")
@@ -277,6 +305,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		if not _discard_dialog_visible(game_root):
 			errors.append("context drop should open discard confirmation dialog")
+		discard_quantity_input = _discard_quantity_input(game_root)
+		if discard_quantity_input == null:
+			errors.append("context drop should expose discard modal quantity input")
+		else:
+			discard_quantity_input.text = "1"
 		if _player_inventory_count(game_root, "1006") != 3:
 			errors.append("context drop confirmation should not mutate inventory before confirm")
 		_confirm_discard_dialog(game_root)
@@ -480,6 +513,29 @@ func _confirm_discard_dialog(game_root: Node) -> void:
 	if dialog is ConfirmationDialog:
 		(dialog as ConfirmationDialog).confirmed.emit()
 		(dialog as ConfirmationDialog).hide()
+
+
+func _emit_discard_confirm(game_root: Node) -> void:
+	var dialog: Node = game_root.inventory_panel.get_node_or_null("DiscardConfirmDialog")
+	if dialog is ConfirmationDialog:
+		(dialog as ConfirmationDialog).confirmed.emit()
+
+
+func _discard_quantity_input(game_root: Node) -> LineEdit:
+	return game_root.inventory_panel.find_child("DiscardQuantityInput", true, false) as LineEdit
+
+
+func _discard_error_text(game_root: Node) -> String:
+	var label: Node = game_root.inventory_panel.find_child("DiscardQuantityError", true, false)
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _press_discard_quantity_button(game_root: Node, button_name: String) -> void:
+	var button: Button = game_root.inventory_panel.find_child(button_name, true, false) as Button
+	if button != null and not button.disabled:
+		button.pressed.emit()
 
 
 func _open_inventory_context_menu(game_root: Node, item_needle: String) -> bool:

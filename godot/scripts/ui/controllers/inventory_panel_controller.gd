@@ -17,6 +17,12 @@ var _equip_button: Button
 var _drop_button: Button
 var _context_menu: PopupMenu
 var _discard_dialog: ConfirmationDialog
+var _discard_quantity_input: LineEdit
+var _discard_quantity_label: Label
+var _discard_error_label: Label
+var _discard_minus_button: Button
+var _discard_plus_button: Button
+var _discard_max_button: Button
 var _items_box: VBoxContainer
 var _category_filter: String = "all"
 var _sort_mode: String = "order"
@@ -26,6 +32,7 @@ var _selected_item: Dictionary = {}
 var _context_item: Dictionary = {}
 var _pending_discard_item: Dictionary = {}
 var _pending_discard_count := 0
+var _pending_discard_available := 0
 
 
 func _ready() -> void:
@@ -157,6 +164,7 @@ func _build_layout() -> void:
 	_discard_dialog.confirmed.connect(_confirm_pending_discard)
 	_discard_dialog.get_ok_button().text = "丢弃"
 	_discard_dialog.get_cancel_button().text = "取消"
+	_build_discard_quantity_controls()
 	add_child(_discard_dialog)
 	var action_row := HBoxContainer.new()
 	action_row.name = "ActionBar"
@@ -360,6 +368,8 @@ func close_blocking_modal() -> Dictionary:
 	_discard_dialog.hide()
 	_pending_discard_item = {}
 	_pending_discard_count = 0
+	_pending_discard_available = 0
+	_clear_discard_quantity_error()
 	return {
 		"success": true,
 		"closed": "modal:inventory_discard_confirm",
@@ -376,25 +386,152 @@ func _open_discard_dialog_for_item(item: Dictionary, count: int) -> void:
 	var normalized_count := clampi(count, 1, available)
 	_pending_discard_item = item.duplicate(true)
 	_pending_discard_count = normalized_count
+	_pending_discard_available = available
 	_discard_dialog.dialog_text = "丢弃 %s x%d 会在当前位置生成掉落容器。确定丢弃吗？" % [
 		item.get("name", item_id),
 		normalized_count,
 	]
+	_refresh_discard_quantity_controls(normalized_count, available)
 	_discard_dialog.popup_centered()
 
 
 func _confirm_pending_discard() -> void:
-	if _pending_discard_item.is_empty() or _pending_discard_count <= 0:
+	if _pending_discard_item.is_empty():
 		return
 	var item_id := str(_pending_discard_item.get("item_id", ""))
-	var count := _pending_discard_count
+	var count := _discard_quantity_value()
+	var available := _current_inventory_count(item_id)
+	if available <= 0:
+		available = _pending_discard_available
+	if count <= 0:
+		_set_discard_quantity_error("请输入大于 0 的数量")
+		return
+	if count > available:
+		_set_discard_quantity_error("数量不能超过当前持有的 %d" % available)
+		return
 	_pending_discard_item = {}
 	_pending_discard_count = 0
+	_pending_discard_available = 0
 	if _discard_dialog != null:
 		_discard_dialog.hide()
+	_clear_discard_quantity_error()
 	var root := get_parent()
 	if root != null and root.has_method("drop_player_item"):
 		root.drop_player_item(item_id, count)
+
+
+func _build_discard_quantity_controls() -> void:
+	if _discard_dialog == null:
+		return
+	var box := VBoxContainer.new()
+	box.name = "DiscardQuantityBox"
+	box.add_theme_constant_override("separation", 6)
+	_discard_quantity_label = _label("DiscardQuantityLabel")
+	_discard_quantity_label.text = "数量"
+	_discard_quantity_input = LineEdit.new()
+	_discard_quantity_input.name = "DiscardQuantityInput"
+	_discard_quantity_input.custom_minimum_size = Vector2(88, 28)
+	_discard_quantity_input.placeholder_text = "数量"
+	_discard_quantity_input.text_changed.connect(func(_text: String) -> void:
+		_refresh_discard_dialog_text(_discard_quantity_value())
+		_clear_discard_quantity_error()
+	, CONNECT_DEFERRED)
+	_discard_quantity_input.text_submitted.connect(func(_text: String) -> void:
+		_confirm_pending_discard()
+	, CONNECT_DEFERRED)
+	_discard_minus_button = _action_button("DiscardQuantityMinusButton", "-", "减少 1")
+	_discard_minus_button.pressed.connect(func() -> void:
+		_adjust_discard_quantity(-1)
+	, CONNECT_DEFERRED)
+	_discard_plus_button = _action_button("DiscardQuantityPlusButton", "+", "增加 1")
+	_discard_plus_button.pressed.connect(func() -> void:
+		_adjust_discard_quantity(1)
+	, CONNECT_DEFERRED)
+	_discard_max_button = _action_button("DiscardQuantityMaxButton", "最大", "设为最大数量")
+	_discard_max_button.pressed.connect(func() -> void:
+		_set_discard_quantity(_pending_discard_available)
+	, CONNECT_DEFERRED)
+	var row := HBoxContainer.new()
+	row.name = "DiscardQuantityControls"
+	row.add_theme_constant_override("separation", 4)
+	row.add_child(_discard_minus_button)
+	row.add_child(_discard_quantity_input)
+	row.add_child(_discard_plus_button)
+	row.add_child(_discard_max_button)
+	_discard_error_label = _label("DiscardQuantityError")
+	_discard_error_label.text = ""
+	_discard_error_label.modulate = Color(1.0, 0.32, 0.26)
+	box.add_child(_discard_quantity_label)
+	box.add_child(row)
+	box.add_child(_discard_error_label)
+	_discard_dialog.add_child(box)
+
+
+func _refresh_discard_quantity_controls(count: int, available: int) -> void:
+	if _discard_quantity_input == null:
+		return
+	_discard_quantity_input.text = str(clampi(count, 1, maxi(1, available)))
+	_refresh_discard_dialog_text(int(_discard_quantity_input.text))
+	if _discard_quantity_label != null:
+		_discard_quantity_label.text = "数量：1-%d" % maxi(1, available)
+	if _discard_minus_button != null:
+		_discard_minus_button.disabled = available <= 1
+	if _discard_plus_button != null:
+		_discard_plus_button.disabled = available <= 1
+	if _discard_max_button != null:
+		_discard_max_button.disabled = available <= 1
+	_clear_discard_quantity_error()
+
+
+func _discard_quantity_value() -> int:
+	if _discard_quantity_input == null:
+		return _pending_discard_count
+	var text := _discard_quantity_input.text.strip_edges()
+	if not text.is_valid_int():
+		return 0
+	return int(text)
+
+
+func _set_discard_quantity(count: int) -> void:
+	if _discard_quantity_input == null:
+		return
+	_discard_quantity_input.text = str(clampi(count, 1, maxi(1, _pending_discard_available)))
+	_refresh_discard_dialog_text(int(_discard_quantity_input.text))
+	_clear_discard_quantity_error()
+
+
+func _adjust_discard_quantity(delta: int) -> void:
+	_set_discard_quantity(_discard_quantity_value() + delta)
+
+
+func _set_discard_quantity_error(message: String) -> void:
+	if _discard_error_label != null:
+		_discard_error_label.text = message
+
+
+func _clear_discard_quantity_error() -> void:
+	if _discard_error_label != null:
+		_discard_error_label.text = ""
+
+
+func _refresh_discard_dialog_text(count: int) -> void:
+	if _discard_dialog == null or _pending_discard_item.is_empty():
+		return
+	var item_id := str(_pending_discard_item.get("item_id", ""))
+	if item_id.is_empty():
+		return
+	_discard_dialog.dialog_text = "丢弃 %s x%d 会在当前位置生成掉落容器。确定丢弃吗？" % [
+		_pending_discard_item.get("name", item_id),
+		maxi(0, count),
+	]
+
+
+func _current_inventory_count(item_id: String) -> int:
+	for item in _array_or_empty(_last_snapshot.get("items", [])):
+		var item_data: Dictionary = item
+		if str(item_data.get("item_id", "")) == item_id:
+			return int(item_data.get("count", 0))
+	return 0
 
 
 func _inventory_action_target(from_control: Control) -> String:
