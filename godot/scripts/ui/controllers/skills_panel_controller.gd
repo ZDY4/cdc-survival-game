@@ -6,8 +6,11 @@ var _hotbar_label: Label
 var _filter_box: HBoxContainer
 var _tree_filter_box: HBoxContainer
 var _tree_box: VBoxContainer
+var _detail_title_label: Label
+var _detail_body_label: Label
 var _filter_mode: String = "all"
 var _tree_filter_mode: String = "all"
+var _selected_skill_id := ""
 var _last_snapshot: Dictionary = {}
 
 
@@ -30,17 +33,28 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_hotbar_label.text = _hotbar_text(snapshot.get("hotbar", {}))
 	_rebuild_tree_filter_buttons(snapshot)
 	_clear_trees()
+	var visible_skills: Array[Dictionary] = []
 	for tree in snapshot.get("trees", []):
 		var tree_data: Dictionary = tree
 		if not _tree_matches_filter(tree_data):
 			continue
-		var visible_skills: Array[Dictionary] = _visible_skills(tree_data)
-		if visible_skills.is_empty():
+		var tree_visible_skills: Array[Dictionary] = _visible_skills(tree_data)
+		if tree_visible_skills.is_empty():
 			continue
-		_tree_box.add_child(_tree_title(tree_data, visible_skills.size()))
-		for skill in visible_skills:
+		_tree_box.add_child(_tree_title(tree_data, tree_visible_skills.size()))
+		for skill in tree_visible_skills:
 			var skill_data: Dictionary = skill
+			visible_skills.append(skill_data)
 			_tree_box.add_child(_skill_row(skill_data))
+	if visible_skills.is_empty():
+		var empty := _label("SkillEmptyLine")
+		empty.text = "没有符合筛选的技能"
+		_tree_box.add_child(empty)
+		_apply_detail({})
+		return
+	if _selected_skill_id.is_empty() or _skill_by_id(visible_skills, _selected_skill_id).is_empty():
+		_selected_skill_id = str(visible_skills[0].get("skill_id", ""))
+	_apply_detail(_skill_by_id(visible_skills, _selected_skill_id))
 
 
 func _build_layout() -> void:
@@ -73,6 +87,8 @@ func _build_layout() -> void:
 	_tree_box = VBoxContainer.new()
 	_tree_box.name = "TreeLines"
 	_tree_box.add_theme_constant_override("separation", 4)
+	_detail_title_label = _label("DetailTitleLine")
+	_detail_body_label = _label("DetailBodyLine")
 	box.add_child(_summary_label)
 	box.add_child(_hotbar_label)
 	box.add_child(_filter_box)
@@ -83,6 +99,8 @@ func _build_layout() -> void:
 	_add_filter_button("FilterActiveButton", "主动", "active")
 	box.add_child(_tree_filter_box)
 	box.add_child(_tree_box)
+	box.add_child(_detail_title_label)
+	box.add_child(_detail_body_label)
 
 
 func _tree_title(tree: Dictionary, visible_count: int) -> Label:
@@ -125,7 +143,8 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	row.name = "Skill_%s" % skill.get("skill_id", "unknown")
 	row.custom_minimum_size = Vector2(430, 28)
 	row.add_theme_constant_override("separation", 6)
-	var line := _label("Line")
+	var line := Button.new()
+	line.name = "Line"
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	line.text = "%s %d/%d | %s | %s" % [
 		skill.get("name", skill.get("skill_id", "")),
@@ -134,7 +153,16 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 		skill.get("activation_mode", "passive"),
 		"%s%s%s%s" % [_reason_text(skill), _binding_text(skill), _activation_cost_text(skill), _use_reason_text(skill)],
 	]
+	line.tooltip_text = "查看 %s" % skill.get("name", skill.get("skill_id", ""))
+	line.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	line.toggle_mode = true
+	line.button_pressed = _selected_skill_id == str(skill.get("skill_id", ""))
+	line.focus_mode = Control.FOCUS_NONE
 	var skill_id := str(skill.get("skill_id", ""))
+	line.pressed.connect(func() -> void:
+		_selected_skill_id = skill_id
+		apply_snapshot(_last_snapshot)
+	, CONNECT_DEFERRED)
 	var learn_button := _button("LearnButton", "+", "学习 %s" % skill.get("name", skill_id), not bool(skill.get("can_learn", false)))
 	learn_button.pressed.connect(func() -> void:
 		var root := get_parent()
@@ -166,6 +194,40 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	row.add_child(use_button)
 	row.add_child(clear_button)
 	return row
+
+
+func _apply_detail(skill: Dictionary) -> void:
+	if _detail_title_label == null or _detail_body_label == null:
+		return
+	if skill.is_empty():
+		_detail_title_label.text = "技能详情"
+		_detail_body_label.text = "选择技能查看详情"
+		return
+	var skill_id := str(skill.get("skill_id", ""))
+	_detail_title_label.text = "详情: %s %d/%d" % [
+		skill.get("name", skill_id),
+		int(skill.get("level", 0)),
+		int(skill.get("max_level", 1)),
+	]
+	var lines: Array[String] = []
+	var description := str(skill.get("description", ""))
+	if not description.is_empty():
+		lines.append(description)
+	lines.append("技能树: %s | 类型: %s" % [
+		_tree_name_for_id(str(skill.get("tree_id", ""))),
+		_activation_label(str(skill.get("activation_mode", "passive"))),
+	])
+	lines.append("学习: %s" % _reason_text(skill))
+	lines.append("前置: %s" % _prerequisites_text(skill.get("prerequisites", [])))
+	lines.append("属性: %s" % _attribute_requirements_text(skill.get("attribute_requirements", {})))
+	if str(skill.get("activation_mode", "passive")) != "passive":
+		lines.append("激活: AP %.0f | 冷却 %.0fs | 绑定 %s | 使用 %s" % [
+			float(skill.get("ap_cost", 1.0)),
+			float(skill.get("cooldown", 0.0)),
+			"无" if str(skill.get("bound_slot", "")).is_empty() else str(skill.get("bound_slot", "")),
+			_use_state_text(skill),
+		])
+	_detail_body_label.text = "\n".join(lines)
 
 
 func _reason_text(skill: Dictionary) -> String:
@@ -235,6 +297,78 @@ func _use_reason_text(skill: Dictionary) -> String:
 		"passive", "not_learned", "":
 			return ""
 	return " | %s" % skill.get("use_reason", "")
+
+
+func _use_state_text(skill: Dictionary) -> String:
+	match str(skill.get("use_reason", "")):
+		"available":
+			return "可用"
+		"cooldown":
+			return "冷却 %.0fs" % float(skill.get("cooldown_remaining", 0.0))
+		"unbound":
+			return "未绑定"
+		"not_learned":
+			return "未学习"
+		"passive":
+			return "被动"
+		"":
+			return "无"
+	return str(skill.get("use_reason", ""))
+
+
+func _activation_label(mode: String) -> String:
+	match mode:
+		"active":
+			return "主动"
+		"toggle":
+			return "切换"
+	return "被动"
+
+
+func _prerequisites_text(prerequisites: Array) -> String:
+	var parts: Array[String] = []
+	for prerequisite in prerequisites:
+		var prerequisite_id := str(prerequisite)
+		parts.append(_skill_name_for_id(prerequisite_id))
+	return "无" if parts.is_empty() else ", ".join(parts)
+
+
+func _attribute_requirements_text(requirements: Dictionary) -> String:
+	var parts: Array[String] = []
+	var keys: Array = requirements.keys()
+	keys.sort()
+	for key in keys:
+		parts.append("%s %d" % [_attribute_label(str(key)), int(requirements.get(key, 0))])
+	return "无" if parts.is_empty() else " / ".join(parts)
+
+
+func _attribute_label(attribute: String) -> String:
+	match attribute:
+		"strength":
+			return "力量"
+		"agility":
+			return "敏捷"
+		"constitution":
+			return "体质"
+	return attribute
+
+
+func _skill_name_for_id(skill_id: String) -> String:
+	for tree in _last_snapshot.get("trees", []):
+		var tree_data: Dictionary = tree
+		for skill in tree_data.get("skills", []):
+			var skill_data: Dictionary = skill
+			if str(skill_data.get("skill_id", "")) == skill_id:
+				return str(skill_data.get("name", skill_id))
+	return skill_id
+
+
+func _tree_name_for_id(tree_id: String) -> String:
+	for tree in _last_snapshot.get("trees", []):
+		var tree_data: Dictionary = tree
+		if str(tree_data.get("tree_id", "")) == tree_id:
+			return str(tree_data.get("name", tree_id))
+	return tree_id
 
 
 func _button(node_name: String, text: String, tooltip: String, disabled: bool) -> Button:
@@ -329,3 +463,11 @@ func _clear_trees() -> void:
 	for child in _tree_box.get_children():
 		_tree_box.remove_child(child)
 		child.free()
+
+
+func _skill_by_id(skills: Array[Dictionary], skill_id: String) -> Dictionary:
+	for skill in skills:
+		var skill_data: Dictionary = skill
+		if str(skill_data.get("skill_id", "")) == skill_id:
+			return skill_data
+	return {}

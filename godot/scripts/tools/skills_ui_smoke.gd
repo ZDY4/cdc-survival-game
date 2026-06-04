@@ -37,6 +37,19 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills panel missing survival skill row")
 	if not _skill_text(game_root).contains("医疗知识 0/3"):
 		errors.append("skills panel missing medicine skill row")
+	if not _detail_text(game_root).contains("详情: 战斗训练 0/5"):
+		errors.append("skills detail should select the first visible skill by default")
+	if not _press_skill_line(game_root, "medicine"):
+		errors.append("should select medicine skill row")
+	await process_frame
+	if not _detail_text(game_root).contains("详情: 医疗知识 0/3"):
+		errors.append("skills detail should show selected skill title")
+	if not _detail_text(game_root).contains("提升治疗与恢复相关判定"):
+		errors.append("skills detail should show selected skill description")
+	if not _detail_text(game_root).contains("前置: 生存本能"):
+		errors.append("skills detail should show prerequisite names")
+	if not _detail_text(game_root).contains("属性: 体质 6"):
+		errors.append("skills detail should show attribute requirements")
 	if _learn_button(game_root, "medicine") == null or not _learn_button(game_root, "medicine").disabled:
 		errors.append("medicine learn button should be disabled before survival prerequisite")
 	if _filter_button(game_root, "FilterActiveButton") == null:
@@ -127,6 +140,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("bound active skill should show available use state")
 	if not _skill_line(game_root, "adrenaline_rush").contains("AP 2"):
 		errors.append("bound active skill should show activation AP cost")
+	if not _press_skill_line(game_root, "adrenaline_rush"):
+		errors.append("should select adrenaline rush skill row")
+	await process_frame
+	if not _detail_text(game_root).contains("详情: 肾上腺激发 1/3"):
+		errors.append("skills detail should show active skill level")
+	if not _detail_text(game_root).contains("类型: 主动"):
+		errors.append("skills detail should show active skill type")
+	if not _detail_text(game_root).contains("激活: AP 2 | 冷却 20s | 绑定 slot_1 | 使用 可用"):
+		errors.append("skills detail should show active skill activation state")
 	var toggle_result: Dictionary = game_root.learn_player_skill("low_profile")
 	if not bool(toggle_result.get("success", false)):
 		errors.append("low_profile learn failed: %s" % toggle_result.get("reason", "unknown"))
@@ -172,6 +194,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("HUD hotbar slot tooltip should show cooldown")
 	if not _skill_line(game_root, "adrenaline_rush").contains("冷却 20s"):
 		errors.append("used active skill should show cooldown use state")
+	if not _detail_text(game_root).contains("使用 冷却 20s"):
+		errors.append("skills detail should refresh active skill cooldown state")
 	if _use_button(game_root, "adrenaline_rush") == null or not _use_button(game_root, "adrenaline_rush").disabled:
 		errors.append("active skill use button should be disabled while on cooldown")
 	if not _event_seen(game_root, "skill_used"):
@@ -218,8 +242,11 @@ func _skill_lines(game_root: Node) -> Array[String]:
 		if child is Label:
 			output.append((child as Label).text)
 		elif child is HBoxContainer:
-			var line: Label = child.get_node("Line")
-			output.append(line.text)
+			var line: Node = child.get_node("Line")
+			if line is Button:
+				output.append((line as Button).text)
+			elif line is Label:
+				output.append((line as Label).text)
 	return output
 
 
@@ -234,7 +261,31 @@ func _skill_line(game_root: Node, skill_id: String) -> String:
 	var label: Node = row.get_node_or_null("Line")
 	if label is Label:
 		return str((label as Label).text)
+	if label is Button:
+		return str((label as Button).text)
 	return ""
+
+
+func _press_skill_line(game_root: Node, skill_id: String) -> bool:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return false
+	var line: Button = row.get_node("Line") as Button
+	if line == null:
+		return false
+	line.pressed.emit()
+	return true
+
+
+func _detail_text(game_root: Node) -> String:
+	var title: Node = game_root.skills_panel.find_child("DetailTitleLine", true, false)
+	var body: Node = game_root.skills_panel.find_child("DetailBodyLine", true, false)
+	var parts: Array[String] = []
+	if title is Label:
+		parts.append((title as Label).text)
+	if body is Label:
+		parts.append((body as Label).text)
+	return "\n".join(parts)
 
 
 func _filter_button(game_root: Node, node_name: String) -> Button:
