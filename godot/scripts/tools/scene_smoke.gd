@@ -66,6 +66,7 @@ func _validate_scene(root: Node3D, counts: Dictionary) -> Array[String]:
 		errors.append("expected interaction target metadata on generated nodes")
 	_validate_declared_map_visual_assets(root, counts, errors)
 	_validate_all_map_scene_visual_assets(counts, errors)
+	_validate_imported_gltf_assets(counts, errors)
 	if int(counts.get("lights", 0)) <= 0:
 		errors.append("expected light")
 	if int(counts.get("cameras", 0)) <= 0:
@@ -310,6 +311,92 @@ func _declared_visual_stats(root: Node, label: String, errors: Array[String]) ->
 	return {
 		"declared": declared_count,
 		"instantiated": instantiated_count,
+	}
+
+
+func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -> void:
+	var asset_paths: Array[String] = []
+	_collect_gltf_assets("res://assets", asset_paths, errors)
+	asset_paths.sort()
+	var mesh_total := 0
+	var material_total := 0
+	var zero_bounds: Array[String] = []
+	for asset_path in asset_paths:
+		if not ResourceLoader.exists(asset_path):
+			errors.append("gltf asset missing imported resource: %s" % asset_path)
+			continue
+		var packed: PackedScene = load(asset_path)
+		if packed == null:
+			errors.append("gltf asset failed to load as PackedScene: %s" % asset_path)
+			continue
+		var instance: Node = packed.instantiate()
+		if instance == null:
+			errors.append("gltf asset failed to instantiate: %s" % asset_path)
+			continue
+		var stats := _gltf_instance_stats(instance)
+		var mesh_count := int(stats.get("mesh_count", 0))
+		var material_count := int(stats.get("material_count", 0))
+		mesh_total += mesh_count
+		material_total += material_count
+		if mesh_count <= 0:
+			errors.append("gltf asset should contain at least one mesh: %s" % asset_path)
+		var bounds: AABB = stats.get("bounds", AABB())
+		if bounds.size.length() <= 0.001:
+			zero_bounds.append(asset_path)
+		instance.free()
+	for asset_path in zero_bounds:
+		errors.append("gltf asset should have non-zero visual bounds: %s" % asset_path)
+	counts["gltf_asset_count"] = asset_paths.size()
+	counts["gltf_mesh_count"] = mesh_total
+	counts["gltf_material_count"] = material_total
+	if asset_paths.is_empty():
+		errors.append("scene smoke expected glTF assets under res://assets")
+
+
+func _collect_gltf_assets(root_path: String, output: Array[String], errors: Array[String]) -> void:
+	var dir := DirAccess.open(root_path)
+	if dir == null:
+		errors.append("cannot open asset directory %s" % root_path)
+		return
+	dir.list_dir_begin()
+	while true:
+		var entry := dir.get_next()
+		if entry.is_empty():
+			break
+		var path := "%s/%s" % [root_path, entry]
+		if dir.current_is_dir():
+			_collect_gltf_assets(path, output, errors)
+		elif entry.ends_with(".gltf") or entry.ends_with(".glb"):
+			output.append(path)
+	dir.list_dir_end()
+
+
+func _gltf_instance_stats(root: Node) -> Dictionary:
+	var mesh_count := 0
+	var material_count := 0
+	var has_bounds := false
+	var bounds := AABB()
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			pending.append(child)
+		var mesh_node := node as MeshInstance3D
+		if mesh_node == null or mesh_node.mesh == null:
+			continue
+		mesh_count += 1
+		var mesh_bounds := mesh_node.get_aabb()
+		bounds = mesh_bounds if not has_bounds else bounds.merge(mesh_bounds)
+		has_bounds = true
+		for surface_index in range(mesh_node.mesh.get_surface_count()):
+			if mesh_node.mesh.surface_get_material(surface_index) != null:
+				material_count += 1
+		if mesh_node.material_override != null:
+			material_count += 1
+	return {
+		"mesh_count": mesh_count,
+		"material_count": material_count,
+		"bounds": bounds,
 	}
 
 
