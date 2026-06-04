@@ -70,6 +70,14 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	var grid: Dictionary = player_snapshot.get("grid_position", {})
 	if int(grid.get("x", -1)) != player.grid_position.x or int(grid.get("z", -1)) != player.grid_position.z:
 		errors.append("world snapshot did not expose moved player position")
+	var movement_cancelled_before: int = _event_count(simulation.snapshot(), "movement_cancelled")
+	var cancel_result: Dictionary = simulation.cancel_pending("movement_smoke_cancelled")
+	if not bool(cancel_result.get("had_pending", false)):
+		errors.append("cancel_pending should report the queued movement")
+	if not simulation.snapshot().get("pending_movement", {}).is_empty():
+		errors.append("cancel_pending should clear pending movement")
+	if _event_count(simulation.snapshot(), "movement_cancelled") <= movement_cancelled_before:
+		errors.append("cancel_pending should emit movement_cancelled")
 	return errors
 
 

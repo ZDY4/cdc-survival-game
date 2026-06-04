@@ -220,6 +220,8 @@ func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCoun
 		errors.append("far talk should emit movement_queued before auto resume")
 	if _event_count(simulation.snapshot(), "interaction_queued") <= 0:
 		errors.append("far talk should emit interaction_queued before auto resume")
+	if _event_count(simulation.snapshot(), "interaction_resumed") <= 0:
+		errors.append("far talk should emit interaction_resumed after auto approach")
 	return errors
 
 

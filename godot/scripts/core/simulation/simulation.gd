@@ -343,6 +343,12 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 	pending_interaction.clear()
 	interaction_menu.clear()
 	if had_pending:
+		if not movement.is_empty():
+			_emit("movement_cancelled", {
+				"actor_id": int(movement.get("actor_id", actor_id)),
+				"reason": reason,
+				"pending_movement": movement.duplicate(true),
+			})
 		_emit("pending_cancelled", {
 			"actor_id": actor_id,
 			"reason": reason,
@@ -1470,6 +1476,15 @@ func _resume_pending_interaction(actor: RefCounted, topology: Dictionary, moveme
 	resumed["approach_result"] = movement_result
 	resumed["auto_resumed_interaction"] = true
 	resumed["resumed_pending_interaction"] = queued
+	_emit("interaction_resumed", {
+		"actor_id": actor.actor_id,
+		"target": _dictionary_or_empty(queued.get("target", {})),
+		"option_id": option_id,
+		"option_kind": str(option.get("kind", "")),
+		"success": bool(resumed.get("success", false)),
+		"reason": str(resumed.get("reason", "ok" if bool(resumed.get("success", false)) else "unknown")),
+		"result_kind": str(resumed.get("kind", "")),
+	})
 	return resumed
 
 
