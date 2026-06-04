@@ -1,6 +1,7 @@
 extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 
 
 func _init() -> void:
@@ -242,6 +243,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var event_effect: Dictionary = _dictionary_or_empty(_dictionary_or_empty(skill_event.get("payload", {})).get("effect", {}))
 	if absf(float(_dictionary_or_empty(event_effect.get("modifiers", {})).get("damage_bonus", 0.0)) - 0.25) > 0.001:
 		errors.append("skill_used event should include resolved damage_bonus effect modifier")
+	await _expect_targeted_hotbar_skill(errors, game_root)
 	return errors
 
 
@@ -289,6 +291,13 @@ func _hud_hotbar_cooldown_mask_value(game_root: Node, slot_id: String) -> float:
 	if mask == null:
 		return 0.0
 	return float(mask.get_meta("cooldown_remaining", 0.0))
+
+
+func _skill_targeting_line(game_root: Node) -> String:
+	var label: Label = game_root.hud.find_child("SkillTargetingLine", true, false) as Label
+	if label == null or not label.visible:
+		return ""
+	return str(label.text)
 
 
 func _skill_lines(game_root: Node) -> Array[String]:
@@ -412,6 +421,89 @@ func _drag_skill_to_hud_hotbar(game_root: Node, skill_id: String, slot_id: Strin
 	return true
 
 
+func _expect_targeted_hotbar_skill(errors: Array[String], game_root: Node) -> void:
+	var original_library: Dictionary = game_root.registry.libraries.get("skills", {}).duplicate(true)
+	var targeted_library: Dictionary = original_library.duplicate(true)
+	var record: Dictionary = _dictionary_or_empty(targeted_library.get("adrenaline_rush", {})).duplicate(true)
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {})).duplicate(true)
+	var activation: Dictionary = _dictionary_or_empty(data.get("activation", {})).duplicate(true)
+	activation["cooldown"] = 0.0
+	activation["targeting"] = {
+		"kind": "single",
+		"policy": "hostile_only",
+		"range": 12,
+		"requires_los": false,
+	}
+	data["activation"] = activation
+	record["data"] = data
+	targeted_library["adrenaline_rush"] = record
+	game_root.registry.libraries["skills"] = targeted_library
+	var player_grid: Dictionary = _dictionary_or_empty(_player_actor_snapshot(game_root).get("grid_position", {}))
+	var hostile_id: int = game_root.simulation.register_actor({
+		"definition_id": "skills_ui_target_hostile",
+		"display_name": "skills_ui_target_hostile",
+		"kind": "enemy",
+		"side": "hostile",
+		"group_id": "hostile",
+		"grid_position": GridCoord.from_dictionary({
+			"x": int(player_grid.get("x", 0)) + 2,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		}),
+		"max_hp": 10.0,
+		"hp": 10.0,
+		"attack_power": 4.0,
+		"defense": 0.0,
+		"combat_attributes": {
+			"attack_power": 4.0,
+			"defense": 0.0,
+		},
+		"xp_reward": 0,
+	})
+	game_root.bind_player_skill_to_hotbar("slot_4", "adrenaline_rush")
+	await game_root.get_tree().process_frame
+	_press_key(game_root, KEY_4)
+	await game_root.get_tree().process_frame
+	if not bool(game_root.has_active_skill_targeting()):
+		errors.append("targeted hotbar skill should enter target selection mode")
+	if hostile_id <= 0:
+		errors.append("targeted hotbar skill smoke needs a hostile actor")
+	else:
+		var preview: Dictionary = game_root.preview_active_skill_target({"target_type": "actor", "actor_id": hostile_id})
+		if not bool(preview.get("success", false)):
+			errors.append("targeted hotbar skill preview should succeed: %s" % preview.get("reason", "unknown"))
+		game_root.refresh_hud()
+		if not _skill_targeting_line(game_root).contains("Skill Target"):
+			errors.append("HUD should show active skill targeting preview line")
+		if not _skill_targeting_line(game_root).contains("1目标"):
+			errors.append("HUD skill targeting preview should show affected actor count")
+	var esc_result: Dictionary = game_root.close_active_ui("keyboard_escape")
+	if str(esc_result.get("closed", "")) != "skill_targeting":
+		errors.append("Esc should close active skill targeting before other UI")
+	if bool(game_root.has_active_skill_targeting()):
+		errors.append("skill targeting should be inactive after Esc")
+	_press_key(game_root, KEY_4)
+	await game_root.get_tree().process_frame
+	if hostile_id > 0:
+		var ap_before: float = _player_ap(game_root)
+		var result: Dictionary = game_root.confirm_active_skill_target({"target_type": "actor", "actor_id": hostile_id})
+		if not bool(result.get("success", false)):
+			errors.append("confirming targeted hotbar skill should use skill: %s" % result.get("reason", "unknown"))
+		if bool(game_root.has_active_skill_targeting()):
+			errors.append("successful targeted skill should leave target selection mode")
+		if abs(_player_ap(game_root) - (ap_before - 2.0)) > 0.001:
+			errors.append("targeted hotbar skill confirmation should spend activation AP cost")
+		var event: Dictionary = _last_event(game_root, "skill_used")
+		var event_preview: Dictionary = _dictionary_or_empty(_dictionary_or_empty(event.get("payload", {})).get("target_preview", {}))
+		if int(_array_or_empty(event_preview.get("affected_actor_ids", [])).size()) <= 0:
+			errors.append("targeted skill_used event should include affected actor ids")
+	game_root.registry.libraries["skills"] = original_library
+	if game_root.simulation.actor_registry.get_actor(hostile_id) != null:
+		game_root.simulation.actor_registry.unregister_actor(hostile_id)
+	game_root.refresh_hud()
+	game_root.refresh_skills_panel()
+
+
 func _event_seen(game_root: Node, kind: String) -> bool:
 	for event in game_root.simulation.snapshot().get("events", []):
 		var event_data: Dictionary = event
@@ -457,6 +549,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _press_key(game_root: Node, key: int) -> void:

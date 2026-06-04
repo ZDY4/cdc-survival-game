@@ -51,6 +51,8 @@ var auto_tick_enabled := false
 var auto_tick_elapsed_sec := 0.0
 var focused_actor_id: int = 0
 var observed_map_level: int = 0
+var active_skill_targeting: Dictionary = {}
+var active_skill_target_preview: Dictionary = {}
 
 
 func _ready() -> void:
@@ -325,6 +327,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"map_level": map_level_snapshot(),
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
+		"skill_targeting": _skill_targeting_snapshot(),
 	}
 
 
@@ -440,6 +443,8 @@ func close_active_container(reason: String = "closed") -> Dictionary:
 
 
 func close_active_ui(reason: String = "closed") -> Dictionary:
+	if not active_skill_targeting.is_empty():
+		return cancel_active_skill_targeting(reason)
 	if runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()):
 		runtime_input_controller.clear_selection_state()
 		return {"success": true, "closed": "selection"}
@@ -1000,6 +1005,9 @@ func use_hotbar_slot(slot_id: String) -> Dictionary:
 		refresh_character_panel()
 		refresh_inventory_panel()
 		return result
+	var skill_id := str(slot.get("skill_id", ""))
+	if _skill_requires_runtime_target(skill_id):
+		return begin_skill_targeting(slot_id, skill_id)
 	var result: Dictionary = simulation.submit_player_command({
 		"kind": "use_skill",
 		"actor_id": 1,
@@ -1011,6 +1019,100 @@ func use_hotbar_slot(slot_id: String) -> Dictionary:
 	refresh_character_panel()
 	refresh_skills_panel()
 	return result
+
+
+func begin_skill_targeting(slot_id: String, skill_id: String = "") -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var resolved_skill_id := skill_id
+	if resolved_skill_id.is_empty():
+		var slot: Dictionary = _dictionary_or_empty(_dictionary_or_empty(simulation.snapshot().get("hotbar", {})).get(slot_id, {}))
+		resolved_skill_id = str(slot.get("skill_id", ""))
+	if resolved_skill_id.is_empty():
+		return {"success": false, "reason": "skill_missing", "slot_id": slot_id}
+	var skill: Dictionary = _skill_data(resolved_skill_id)
+	if skill.is_empty():
+		return {"success": false, "reason": "unknown_skill", "skill_id": resolved_skill_id}
+	var targeting: Dictionary = _skill_targeting_definition(_dictionary_or_empty(skill.get("activation", {})))
+	var target_kind := _skill_target_kind(targeting)
+	if target_kind == "self":
+		return simulation.submit_player_command({
+			"kind": "use_skill",
+			"actor_id": 1,
+			"slot_id": slot_id,
+			"skill_library": registry.get_library("skills"),
+			"target": {"target_type": "self"},
+		})
+	active_skill_targeting = {
+		"active": true,
+		"slot_id": slot_id,
+		"skill_id": resolved_skill_id,
+		"skill_name": str(skill.get("name", resolved_skill_id)),
+		"target_kind": target_kind,
+		"target_policy": str(targeting.get("policy", "")),
+	}
+	active_skill_target_preview = {
+		"success": false,
+		"reason": "skill_target_pending",
+		"skill_id": resolved_skill_id,
+		"target_shape": target_kind,
+	}
+	refresh_hud(current_interaction_prompt())
+	return {"success": true, "targeting": active_skill_targeting.duplicate(true), "preview": active_skill_target_preview.duplicate(true)}
+
+
+func preview_active_skill_target(target: Dictionary) -> Dictionary:
+	if active_skill_targeting.is_empty() or simulation == null:
+		return {"success": false, "reason": "skill_targeting_inactive"}
+	var skill_id := str(active_skill_targeting.get("skill_id", ""))
+	var preview: Dictionary = simulation.preview_skill_target(1, skill_id, registry.get_library("skills"), target, _dictionary_or_empty(world_result.get("map", {})))
+	active_skill_target_preview = preview.duplicate(true)
+	refresh_hud(current_interaction_prompt())
+	return preview
+
+
+func confirm_active_skill_target(target: Dictionary = {}) -> Dictionary:
+	if active_skill_targeting.is_empty() or simulation == null:
+		return {"success": false, "reason": "skill_targeting_inactive"}
+	var command_target: Dictionary = _dictionary_or_empty(target).duplicate(true)
+	if command_target.is_empty():
+		command_target = _dictionary_or_empty(active_skill_target_preview.get("target", {})).duplicate(true)
+	var slot_id := str(active_skill_targeting.get("slot_id", ""))
+	var skill_id := str(active_skill_targeting.get("skill_id", ""))
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "use_skill",
+		"actor_id": 1,
+		"slot_id": slot_id,
+		"skill_id": skill_id,
+		"skill_library": registry.get_library("skills"),
+		"target": command_target,
+		"topology": _dictionary_or_empty(world_result.get("map", {})),
+	})
+	if bool(result.get("success", false)):
+		active_skill_targeting = {}
+		active_skill_target_preview = {}
+	refresh_hud(current_interaction_prompt())
+	refresh_character_panel()
+	refresh_skills_panel()
+	return result
+
+
+func cancel_active_skill_targeting(reason: String = "cancelled") -> Dictionary:
+	if active_skill_targeting.is_empty():
+		return {"success": false, "reason": "skill_targeting_inactive"}
+	var cancelled := active_skill_targeting.duplicate(true)
+	active_skill_targeting = {}
+	active_skill_target_preview = {}
+	refresh_hud(current_interaction_prompt())
+	return {"success": true, "closed": "skill_targeting", "reason": reason, "targeting": cancelled}
+
+
+func has_active_skill_targeting() -> bool:
+	return not active_skill_targeting.is_empty()
+
+
+func active_skill_targeting_snapshot() -> Dictionary:
+	return _skill_targeting_snapshot()
 
 
 func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
@@ -1437,6 +1539,60 @@ func _available_map_levels() -> Array[int]:
 		levels.append(int(key))
 	levels.sort()
 	return levels
+
+
+func _skill_requires_runtime_target(skill_id: String) -> bool:
+	if skill_id.is_empty():
+		return false
+	var skill: Dictionary = _skill_data(skill_id)
+	if skill.is_empty():
+		return false
+	var targeting: Dictionary = _skill_targeting_definition(_dictionary_or_empty(skill.get("activation", {})))
+	return _skill_target_kind(targeting) != "self"
+
+
+func _skill_data(skill_id: String) -> Dictionary:
+	if registry == null or skill_id.is_empty():
+		return {}
+	var record: Dictionary = _dictionary_or_empty(registry.get_library("skills").get(skill_id, {}))
+	return _dictionary_or_empty(record.get("data", record)).duplicate(true)
+
+
+func _skill_targeting_definition(activation: Dictionary) -> Dictionary:
+	var targeting: Dictionary = _dictionary_or_empty(activation.get("targeting", {})).duplicate(true)
+	if targeting.is_empty():
+		targeting = _dictionary_or_empty(activation.get("target", {})).duplicate(true)
+	if targeting.is_empty():
+		targeting = {
+			"kind": "self",
+			"policy": "self",
+		}
+	if not targeting.has("policy"):
+		targeting["policy"] = _default_skill_target_policy(_skill_target_kind(targeting))
+	return targeting
+
+
+func _skill_target_kind(targeting: Dictionary) -> String:
+	return str(targeting.get("kind", targeting.get("target_kind", targeting.get("shape", "self"))))
+
+
+func _default_skill_target_policy(target_kind: String) -> String:
+	match target_kind:
+		"self":
+			return "self"
+		"single", "actor", "single_actor":
+			return "any_actor"
+		"grid", "point", "radius", "circle", "line", "cone":
+			return "any_grid"
+	return "any"
+
+
+func _skill_targeting_snapshot() -> Dictionary:
+	if active_skill_targeting.is_empty():
+		return {"active": false}
+	var snapshot: Dictionary = active_skill_targeting.duplicate(true)
+	snapshot["preview"] = active_skill_target_preview.duplicate(true)
+	return snapshot
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

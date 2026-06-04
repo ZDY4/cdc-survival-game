@@ -11,6 +11,7 @@ var _event_feedback_label: Label
 var _debug_overlay_label: Label
 var _info_panel_label: Label
 var _runtime_control_label: Label
+var _skill_targeting_label: Label
 var _controls_hint_box: VBoxContainer
 var _interaction_menu: PanelContainer
 var _menu_title_label: Label
@@ -55,6 +56,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
 	_info_panel_label.text = _info_panel_text(snapshot.get("info_panel", {}))
 	_runtime_control_label.text = _runtime_control_text(snapshot.get("runtime_control", {}))
+	_skill_targeting_label.text = _skill_targeting_text(_dictionary_or_empty(snapshot.get("runtime_control", {})).get("skill_targeting", {}))
+	_skill_targeting_label.visible = not _skill_targeting_label.text.is_empty()
 	_apply_controls_hint()
 	_apply_interaction_menu(interaction)
 
@@ -91,6 +94,7 @@ func _build_layout() -> void:
 	_debug_overlay_label = _line("DebugOverlayLine")
 	_info_panel_label = _line("InfoPanelLine")
 	_runtime_control_label = _line("RuntimeControlLine")
+	_skill_targeting_label = _line("SkillTargetingLine")
 	box.add_child(_world_label)
 	box.add_child(_status_badge_label)
 	box.add_child(_player_label)
@@ -102,6 +106,7 @@ func _build_layout() -> void:
 	box.add_child(_debug_overlay_label)
 	box.add_child(_info_panel_label)
 	box.add_child(_runtime_control_label)
+	box.add_child(_skill_targeting_label)
 	_controls_hint_box = VBoxContainer.new()
 	_controls_hint_box.name = "ControlsHint"
 	_controls_hint_box.add_theme_constant_override("separation", 3)
@@ -451,7 +456,36 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	return " | ".join(parts)
 
 
+func _skill_targeting_text(value: Variant) -> String:
+	var targeting: Dictionary = _dictionary_or_empty(value)
+	if not bool(targeting.get("active", false)):
+		return ""
+	var preview: Dictionary = _dictionary_or_empty(targeting.get("preview", {}))
+	var skill_name := str(targeting.get("skill_name", targeting.get("skill_id", "")))
+	var shape := str(targeting.get("target_kind", preview.get("target_shape", "")))
+	if not bool(preview.get("success", false)):
+		var reason := str(preview.get("reason", "选择目标"))
+		return "Skill Target %s | %s | %s" % [skill_name, shape, reason]
+	var affected_cells: Array = _array_or_empty(preview.get("affected_cells", []))
+	var affected_actor_ids: Array = _array_or_empty(preview.get("affected_actor_ids", []))
+	var parts: Array[String] = [
+		"Skill Target %s" % skill_name,
+		shape,
+		"%d格" % affected_cells.size(),
+		"%d目标" % affected_actor_ids.size(),
+	]
+	if bool(preview.get("friendly_fire", false)):
+		parts.append("友军风险")
+	return " | ".join(parts)
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

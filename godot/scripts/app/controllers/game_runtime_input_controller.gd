@@ -131,6 +131,11 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 		return true
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 		var hover_result: Dictionary = update_hover_at_screen_position(mouse_event.position)
+		if _skill_targeting_active() and game_root.has_method("confirm_active_skill_target"):
+			var skill_target: Dictionary = _skill_target_from_hover(hover_result)
+			if not skill_target.is_empty():
+				game_root.confirm_active_skill_target(skill_target)
+				return true
 		if selected_node != null and game_root.has_method("execute_primary_interaction"):
 			game_root.execute_primary_interaction()
 			return true
@@ -192,12 +197,15 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	var target_node := _interaction_node(collider as Node)
 	if target_node == null:
 		_clear_selection_only()
+		_preview_skill_target_from_hover({"success": true, "kind": "ground", "position": hit_position})
 		return {"success": true, "kind": "ground", "position": hit_position}
 
 	if selected_node != target_node and game_root.has_method("select_interaction_node"):
 		selected_node = target_node
 		game_root.select_interaction_node(target_node)
-	return {"success": true, "kind": "interaction", "node": target_node}
+	var interaction_hover := {"success": true, "kind": "interaction", "node": target_node}
+	_preview_skill_target_from_hover(interaction_hover)
+	return interaction_hover
 
 
 func _handle_camera_key(event: InputEventKey) -> bool:
@@ -575,6 +583,45 @@ func _interaction_node(node: Node) -> Node:
 			return current
 		current = current.get_parent()
 	return null
+
+
+func _preview_skill_target_from_hover(hover_result: Dictionary) -> void:
+	if not _skill_targeting_active() or not game_root.has_method("preview_active_skill_target"):
+		return
+	var target: Dictionary = _skill_target_from_hover(hover_result)
+	if target.is_empty():
+		return
+	game_root.preview_active_skill_target(target)
+
+
+func _skill_target_from_hover(hover_result: Dictionary) -> Dictionary:
+	match str(hover_result.get("kind", "")):
+		"ground":
+			var position: Vector3 = hover_result.get("position", Vector3.ZERO)
+			return {
+				"target_type": "grid",
+				"grid": _grid_from_world_position(position),
+			}
+		"interaction":
+			var node: Node = hover_result.get("node", null)
+			if node == null or not node.has_meta("interaction_target"):
+				return {}
+			var metadata: Variant = node.get_meta("interaction_target")
+			if typeof(metadata) != TYPE_DICTIONARY:
+				return {}
+			var target: Dictionary = metadata
+			if str(target.get("target_type", "")) == "actor":
+				return {
+					"target_type": "actor",
+					"actor_id": int(target.get("actor_id", 0)),
+				}
+			if str(target.get("target_type", "")) == "map_object":
+				return target.duplicate(true)
+	return {}
+
+
+func _skill_targeting_active() -> bool:
+	return game_root.has_method("has_active_skill_targeting") and bool(game_root.has_active_skill_targeting())
 
 
 func _find_world_camera() -> Camera3D:

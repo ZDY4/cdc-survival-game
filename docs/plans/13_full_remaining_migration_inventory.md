@@ -156,10 +156,10 @@
 
 ### 6.4 技能目标和 AOE
 
-- 技能目标解析第一版已迁移：`Simulation.preview_skill_target()` 和 `use_skill` 共用 target preview，默认兼容旧 self buff / toggle；已支持 self、single actor、grid、radius AOE、line 和 cone 的目标解析、range / level 校验、affected cells / actor ids、friendly fire 标记，并在目标非法时不消耗 AP；line 会按施法者到目标格的直线收集命中格，cone 会按目标方向、length 和 width 收集扇形命中格，两者都支持 affected_policy / LOS 过滤；已由 `Combat` smoke 覆盖。待补目标形状视觉预览。
+- 技能目标解析第一版已迁移：`Simulation.preview_skill_target()` 和 `use_skill` 共用 target preview，默认兼容旧 self buff / toggle；已支持 self、single actor、grid、radius AOE、line 和 cone 的目标解析、range / level 校验、affected cells / actor ids、friendly fire 标记，并在目标非法时不消耗 AP；line 会按施法者到目标格的直线收集命中格，cone 会按目标方向、length 和 width 收集扇形命中格，两者都支持 affected_policy / LOS 过滤；已由 `Combat` smoke 覆盖。目标型技能选择 UI 第一版已迁移：非 self 热栏技能会进入目标选择态，hover 时刷新 core preview，HUD 展示形状、命中格、命中 actor 和友军风险，Esc 可取消，左键/确认会用同一 `use_skill` 命令释放；已由 `SkillsUI` smoke 覆盖。待补目标形状世界高亮视觉。
 - AOE / 技能目标 LOS 第一版已迁移：single、grid、radius 目标默认要求施法者到目标中心 LOS，遮挡返回 `skill_target_blocked_by_los` 且不消耗 AP；radius AOE 默认从中心到每个命中格检查 LOS，遮挡格会从 `affected_cells` / `affected_actor_ids` 排除，并支持 `requires_los=false` / `respect_los=false` 作为特殊技能例外；已由 `Combat` smoke 覆盖。待补更完整友军伤害策略、门开闭语义、中心到命中格的旧版边缘细节。
 - typed targeting policy 第一版已迁移：支持 self、hostile_only、ally_only、any_actor、any_grid、empty_grid，以及 radius 的 affected_policy 过滤；已由 `Combat` smoke 覆盖。待补 object target、容器/门/机关目标和脚本化目标类型。
-- 待补目标预览 UI：范围格、命中 actor 列表、友军警告、AP / cooldown / resource cost。
+- 待补目标预览 UI polish：范围格世界高亮、命中 actor outline、AP / cooldown / resource cost、失败 reason 文案、鼠标/键盘确认提示和目标选择音效。
 
 ## 7. NPC、AI、阵营和生活模拟
 
