@@ -13,11 +13,12 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
 	var progression: Dictionary = _dictionary_or_empty(player.get("progression", {}))
 	var crafted_recipes: Dictionary = _flag_dictionary(runtime_snapshot.get("crafted_recipes", []))
+	var completed_quests: Dictionary = _flag_dictionary(runtime_snapshot.get("completed_quests", []))
 	var recipes: Array[Dictionary] = []
 	var recipe_ids: Array = registry.get_library("recipes").keys()
 	recipe_ids.sort()
 	for recipe_id in recipe_ids:
-		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), player, inventory, equipment, progression, crafted_recipes, crafting_context)
+		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), player, inventory, equipment, progression, crafted_recipes, completed_quests, crafting_context)
 		if not recipe_view.is_empty():
 			recipes.append(recipe_view)
 	return {
@@ -28,7 +29,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	}
 
 
-func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, crafting_context: Dictionary) -> Dictionary:
+func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary, crafting_context: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("recipes").get(recipe_id, {}))
 	var recipe: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if recipe.is_empty():
@@ -50,7 +51,7 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), inventory, equipment)
 	var required_station := str(recipe.get("required_station", "none"))
 	var station_check: Dictionary = _station_check(player, required_station, crafting_context)
-	var unlock_check: Dictionary = _unlock_check(recipe, crafted_recipes)
+	var unlock_check: Dictionary = _unlock_check(recipe, progression, crafted_recipes, completed_quests)
 	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check, unlock_check)
 	var max_craft_count: int = _max_craft_count(materials, bool(availability.get("can_craft", false)))
 	var output_count: int = max(1, int(output.get("count", 1)))
@@ -133,10 +134,11 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 	return {"can_craft": true, "reason": "available"}
 
 
-func _unlock_check(recipe: Dictionary, crafted_recipes: Dictionary) -> Dictionary:
+func _unlock_check(recipe: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary) -> Dictionary:
 	if bool(recipe.get("is_default_unlocked", false)):
 		return {"success": true}
 	var missing: Array[Dictionary] = []
+	var learned: Dictionary = _dictionary_or_empty(progression.get("learned_skills", {}))
 	for condition in _array_or_empty(recipe.get("unlock_conditions", [])):
 		var data: Dictionary = _dictionary_or_empty(condition)
 		var condition_type := str(data.get("type", ""))
@@ -144,6 +146,19 @@ func _unlock_check(recipe: Dictionary, crafted_recipes: Dictionary) -> Dictionar
 			"recipe":
 				var recipe_id := str(data.get("id", ""))
 				if recipe_id.is_empty() or not crafted_recipes.has(recipe_id):
+					missing.append(_unlock_condition_view(data))
+			"skill":
+				var skill_id := str(data.get("id", ""))
+				var required_level: int = max(1, int(data.get("level", data.get("required_level", 1))))
+				var current_level: int = int(learned.get(skill_id, 0))
+				if skill_id.is_empty() or current_level < required_level:
+					var skill_condition := _unlock_condition_view(data)
+					skill_condition["required_level"] = required_level
+					skill_condition["current_level"] = current_level
+					missing.append(skill_condition)
+			"quest":
+				var quest_id := str(data.get("id", ""))
+				if quest_id.is_empty() or not completed_quests.has(quest_id):
 					missing.append(_unlock_condition_view(data))
 			_:
 				var unsupported := _unlock_condition_view(data)
@@ -170,15 +185,29 @@ func _unlock_condition_view(condition: Dictionary) -> Dictionary:
 	var condition_type := str(condition.get("type", ""))
 	var condition_id := str(condition.get("id", ""))
 	var display_name := condition_id
-	if condition_type == "recipe":
-		var recipe_record: Dictionary = _dictionary_or_empty(registry.get_library("recipes").get(condition_id, {}))
-		var recipe_data: Dictionary = _dictionary_or_empty(recipe_record.get("data", recipe_record))
-		display_name = str(recipe_data.get("name", condition_id))
-	return {
+	match condition_type:
+		"recipe":
+			var recipe_record: Dictionary = _dictionary_or_empty(registry.get_library("recipes").get(condition_id, {}))
+			var recipe_data: Dictionary = _dictionary_or_empty(recipe_record.get("data", recipe_record))
+			display_name = str(recipe_data.get("name", condition_id))
+		"skill":
+			var skill_record: Dictionary = _dictionary_or_empty(registry.get_library("skills").get(condition_id, {}))
+			var skill_data: Dictionary = _dictionary_or_empty(skill_record.get("data", skill_record))
+			display_name = str(skill_data.get("name", condition_id))
+		"quest":
+			var quest_record: Dictionary = _dictionary_or_empty(registry.get_library("quests").get(condition_id, {}))
+			var quest_data: Dictionary = _dictionary_or_empty(quest_record.get("data", quest_record))
+			display_name = str(quest_data.get("title", condition_id))
+	var view := {
 		"type": condition_type,
 		"id": condition_id,
 		"display_name": display_name,
 	}
+	if condition.has("level"):
+		view["level"] = max(1, int(condition.get("level", 1)))
+	if condition.has("required_level"):
+		view["required_level"] = max(1, int(condition.get("required_level", 1)))
+	return view
 
 
 func _station_check(player: Dictionary, required_station: String, crafting_context: Dictionary) -> Dictionary:

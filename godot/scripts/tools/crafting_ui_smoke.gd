@@ -52,6 +52,56 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("weapon category filter should hide medical recipes")
 	if not _recipe_text(game_root).contains("小刀"):
 		errors.append("weapon category filter should show weapon recipes")
+	_install_unlock_source_smoke_recipes(game_root)
+	game_root.refresh_crafting_panel()
+	await process_frame
+	if not _press_recipe_line(game_root, "smoke_skill_unlock_recipe"):
+		errors.append("should select skill unlock smoke recipe")
+	await process_frame
+	if not _recipe_line(game_root, "smoke_skill_unlock_recipe").contains("未解锁 生存本能 0/2"):
+		errors.append("skill unlock recipe row should show missing skill level")
+	if not _detail_text(game_root).contains("解锁 技能 生存本能 Lv2"):
+		errors.append("skill unlock recipe detail should show skill unlock requirement")
+	var skill_unlock_locator: Button = _missing_reason_button(game_root, "MissingReasonUnlock_survival")
+	if skill_unlock_locator == null:
+		errors.append("crafting detail should expose missing skill unlock locator")
+	else:
+		skill_unlock_locator.pressed.emit()
+		await process_frame
+		if _search_box(game_root) == null or _search_box(game_root).text != "生存本能":
+			errors.append("missing skill unlock locator should search by skill name")
+		_search_box(game_root).text = ""
+		_search_box(game_root).text_changed.emit("")
+		await process_frame
+	var player_for_unlock_sources: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	player_for_unlock_sources.progression["learned_skills"]["survival"] = 2
+	game_root.refresh_crafting_panel()
+	await process_frame
+	if _recipe_line(game_root, "smoke_skill_unlock_recipe").contains("未解锁 生存本能"):
+		errors.append("skill unlock recipe row should stop showing lock after required skill")
+	if not _press_recipe_line(game_root, "smoke_quest_unlock_recipe"):
+		errors.append("should select quest unlock smoke recipe")
+	await process_frame
+	if not _recipe_line(game_root, "smoke_quest_unlock_recipe").contains("未解锁 补给试跑"):
+		errors.append("quest unlock recipe row should show missing quest title")
+	if not _detail_text(game_root).contains("解锁 任务 补给试跑"):
+		errors.append("quest unlock recipe detail should show quest unlock requirement")
+	var quest_unlock_locator: Button = _missing_reason_button(game_root, "MissingReasonUnlock_tutorial_survive")
+	if quest_unlock_locator == null:
+		errors.append("crafting detail should expose missing quest unlock locator")
+	else:
+		quest_unlock_locator.pressed.emit()
+		await process_frame
+		if _search_box(game_root) == null or _search_box(game_root).text != "补给试跑":
+			errors.append("missing quest unlock locator should search by quest title")
+		_search_box(game_root).text = ""
+		_search_box(game_root).text_changed.emit("")
+		await process_frame
+	game_root.simulation.completed_quests["tutorial_survive"] = true
+	game_root.refresh_crafting_panel()
+	await process_frame
+	if _recipe_line(game_root, "smoke_quest_unlock_recipe").contains("未解锁 补给试跑"):
+		errors.append("quest unlock recipe row should stop showing lock after required quest")
 	if not _recipe_line(game_root, "recipe_advanced_knife").contains("未解锁 基础小刀"):
 		errors.append("recipe-chain gated recipe row should show missing source recipe")
 	if not _press_recipe_line(game_root, "recipe_advanced_knife"):
@@ -405,3 +455,43 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _install_unlock_source_smoke_recipes(game_root: Node) -> void:
+	var recipes: Dictionary = game_root.registry.get_library("recipes")
+	recipes["smoke_skill_unlock_recipe"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_skill_unlock_recipe",
+			"name": "技能解锁测试配方",
+			"description": "需要生存技能等级的测试配方",
+			"category": "weapon",
+			"output": {"item_id": "1006", "count": 1},
+			"materials": [{"item_id": 1144, "count": 99}],
+			"required_tools": [],
+			"required_station": "none",
+			"skill_requirements": {},
+			"craft_time": 0.0,
+			"experience_reward": 0,
+			"unlock_conditions": [{"type": "skill", "id": "survival", "level": 2}],
+			"is_default_unlocked": false,
+		},
+	}
+	recipes["smoke_quest_unlock_recipe"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_quest_unlock_recipe",
+			"name": "任务解锁测试配方",
+			"description": "需要完成任务的测试配方",
+			"category": "weapon",
+			"output": {"item_id": "1006", "count": 1},
+			"materials": [{"item_id": 1144, "count": 99}],
+			"required_tools": [],
+			"required_station": "none",
+			"skill_requirements": {},
+			"craft_time": 0.0,
+			"experience_reward": 0,
+			"unlock_conditions": [{"type": "quest", "id": "tutorial_survive"}],
+			"is_default_unlocked": false,
+		},
+	}

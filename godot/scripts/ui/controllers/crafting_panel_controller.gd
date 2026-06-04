@@ -368,6 +368,13 @@ func _unlock_conditions_text(conditions: Array) -> String:
 		match condition_type:
 			"recipe":
 				parts.append("配方 %s" % display_name)
+			"skill":
+				parts.append("技能 %s Lv%d" % [
+					display_name,
+					max(1, int(data.get("level", data.get("required_level", 1)))),
+				])
+			"quest":
+				parts.append("任务 %s" % display_name)
 			_:
 				parts.append("%s %s" % [condition_type, display_name])
 	return "无" if parts.is_empty() else ", ".join(parts)
@@ -604,7 +611,14 @@ func _reason_text(recipe: Dictionary) -> String:
 			var parts: Array[String] = []
 			for condition in recipe.get("missing_unlock_conditions", []):
 				var data: Dictionary = _dictionary_or_empty(condition)
-				parts.append(str(data.get("display_name", data.get("id", ""))))
+				var label := str(data.get("display_name", data.get("id", "")))
+				if str(data.get("type", "")) == "skill":
+					label = "%s %d/%d" % [
+						label,
+						int(data.get("current_level", 0)),
+						int(data.get("required_level", 1)),
+					]
+				parts.append(label)
 			return "未解锁 %s" % ", ".join(parts) if not parts.is_empty() else "未解锁"
 		"required_tools_unsupported":
 			return "缺工具流程"

@@ -88,6 +88,27 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var missing_unlocks: Array = recipe_locked.get("missing_unlock_conditions", [])
 	if missing_unlocks.is_empty() or str(_dictionary_or_empty(missing_unlocks[0]).get("id", "")) != "recipe_knife_basic":
 		errors.append("recipe-chain gated recipe should identify missing source recipe")
+	var unlock_recipes: Dictionary = _unlock_smoke_recipes()
+	var skill_locked: Dictionary = simulation.craft_recipe(1, "smoke_skill_unlock_recipe", unlock_recipes)
+	if skill_locked.get("reason", "") != "recipe_locked":
+		errors.append("skill unlock recipe should report recipe_locked before required skill")
+	var skill_unlocks: Array = skill_locked.get("missing_unlock_conditions", [])
+	if skill_unlocks.is_empty() or str(_dictionary_or_empty(skill_unlocks[0]).get("type", "")) != "skill":
+		errors.append("skill unlock recipe should identify missing skill condition")
+	player.progression["learned_skills"]["survival"] = 2
+	var skill_unlocked: Dictionary = simulation.craft_recipe(1, "smoke_skill_unlock_recipe", unlock_recipes)
+	if not bool(skill_unlocked.get("success", false)):
+		errors.append("skill unlock recipe should craft after required skill: %s" % skill_unlocked.get("reason", "unknown"))
+	var quest_locked: Dictionary = simulation.craft_recipe(1, "smoke_quest_unlock_recipe", unlock_recipes)
+	if quest_locked.get("reason", "") != "recipe_locked":
+		errors.append("quest unlock recipe should report recipe_locked before required quest")
+	var quest_unlocks: Array = quest_locked.get("missing_unlock_conditions", [])
+	if quest_unlocks.is_empty() or str(_dictionary_or_empty(quest_unlocks[0]).get("type", "")) != "quest":
+		errors.append("quest unlock recipe should identify missing quest condition")
+	simulation.completed_quests["tutorial_survive"] = true
+	var quest_unlocked: Dictionary = simulation.craft_recipe(1, "smoke_quest_unlock_recipe", unlock_recipes)
+	if not bool(quest_unlocked.get("success", false)):
+		errors.append("quest unlock recipe should craft after required quest: %s" % quest_unlocked.get("reason", "unknown"))
 
 	var tool_missing: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes)
 	if tool_missing.get("reason", "") != "missing_tools":
@@ -141,6 +162,41 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if advanced_after_unlock.get("reason", "") == "recipe_locked":
 		errors.append("advanced knife should pass recipe-chain unlock after basic knife is crafted")
 	return errors
+
+
+func _unlock_smoke_recipes() -> Dictionary:
+	return {
+		"smoke_skill_unlock_recipe": {
+			"data": {
+				"id": "smoke_skill_unlock_recipe",
+				"name": "技能解锁测试配方",
+				"is_default_unlocked": false,
+				"unlock_conditions": [{"type": "skill", "id": "survival", "level": 2}],
+				"required_tools": [],
+				"required_station": "none",
+				"skill_requirements": {},
+				"materials": [],
+				"output": {"item_id": "1006", "count": 1},
+				"craft_time": 0.0,
+				"experience_reward": 0,
+			},
+		},
+		"smoke_quest_unlock_recipe": {
+			"data": {
+				"id": "smoke_quest_unlock_recipe",
+				"name": "任务解锁测试配方",
+				"is_default_unlocked": false,
+				"unlock_conditions": [{"type": "quest", "id": "tutorial_survive"}],
+				"required_tools": [],
+				"required_station": "none",
+				"skill_requirements": {},
+				"materials": [],
+				"output": {"item_id": "1006", "count": 1},
+				"craft_time": 0.0,
+				"experience_reward": 0,
+			},
+		},
+	}
 
 
 func _event_count(snapshot: Dictionary, kind: String) -> int:

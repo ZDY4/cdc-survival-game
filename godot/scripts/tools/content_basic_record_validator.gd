@@ -269,6 +269,14 @@ func _validate_unlock_conditions(values: Variant, field: String, registry: Conte
 				var skill_id := str(condition.get("id", ""))
 				if not registry.has_id("skills", skill_id):
 					issues.append(_issue("error", condition_field.path_join("id"), "unknown_skill", "unknown skill id %s" % skill_id))
+				if condition.has("level") and int(condition.get("level", 0)) < 1:
+					issues.append(_issue("error", condition_field.path_join("level"), "invalid_skill_level", "skill unlock level must be at least 1"))
+				if condition.has("required_level") and int(condition.get("required_level", 0)) < 1:
+					issues.append(_issue("error", condition_field.path_join("required_level"), "invalid_skill_level", "skill unlock level must be at least 1"))
+			"quest":
+				var quest_id := str(condition.get("id", ""))
+				if not registry.has_id("quests", quest_id):
+					issues.append(_issue("error", condition_field.path_join("id"), "unknown_quest", "unknown quest id %s" % quest_id))
 			"":
 				issues.append(_issue("error", condition_field.path_join("type"), "missing_condition_type", "unlock condition type is required"))
 

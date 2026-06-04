@@ -13,7 +13,7 @@ func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_i
 	if record.is_empty():
 		return {"success": false, "reason": "unknown_recipe"}
 	var recipe: Dictionary = _dictionary_or_empty(record.get("data", {}))
-	var unlock_check: Dictionary = _unlock_check(simulation, recipe)
+	var unlock_check: Dictionary = _unlock_check(simulation, actor, recipe)
 	if not bool(unlock_check.get("success", false)):
 		return unlock_check
 	var missing_tools: Array[Dictionary] = _missing_required_tools(actor, _array_or_empty(recipe.get("required_tools", [])), simulation.item_library)
@@ -121,7 +121,7 @@ func _item_name(item_id: String, item_library: Dictionary) -> String:
 	return str(data.get("name", item_id))
 
 
-func _unlock_check(simulation: RefCounted, recipe: Dictionary) -> Dictionary:
+func _unlock_check(simulation: RefCounted, actor: RefCounted, recipe: Dictionary) -> Dictionary:
 	if bool(recipe.get("is_default_unlocked", false)):
 		return {"success": true, "unlock_source": "default"}
 	var missing: Array[Dictionary] = []
@@ -135,6 +135,25 @@ func _unlock_check(simulation: RefCounted, recipe: Dictionary) -> Dictionary:
 					missing.append({
 						"type": "recipe",
 						"id": required_recipe_id,
+					})
+			"skill":
+				var required_skill_id := str(condition_data.get("id", ""))
+				var required_level: int = max(1, int(condition_data.get("level", condition_data.get("required_level", 1))))
+				var learned: Dictionary = _dictionary_or_empty(actor.progression.get("learned_skills", {})) if actor != null else {}
+				var current_level: int = int(learned.get(required_skill_id, 0))
+				if required_skill_id.is_empty() or current_level < required_level:
+					missing.append({
+						"type": "skill",
+						"id": required_skill_id,
+						"required_level": required_level,
+						"current_level": current_level,
+					})
+			"quest":
+				var required_quest_id := str(condition_data.get("id", ""))
+				if required_quest_id.is_empty() or not simulation.completed_quests.has(required_quest_id):
+					missing.append({
+						"type": "quest",
+						"id": required_quest_id,
 					})
 			_:
 				missing.append({

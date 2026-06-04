@@ -152,6 +152,14 @@ func _quest_references(quest_id: String, registry: ContentRegistry) -> Array[Dic
 				if str(action.get("quest_id", action.get("questId", ""))) == quest_id:
 					hits.append(_reference_hit("dialogue", dialogue_id, record["path"], "nodes[%d].actions[%d].quest_id type=%s" % [node_index, action_index, action.get("type", "")]))
 
+	for recipe_id in registry.get_library("recipes").keys():
+		var recipe_record: Dictionary = registry.get_library("recipes")[recipe_id]
+		var conditions: Array = recipe_record["data"].get("unlock_conditions", [])
+		for i in range(conditions.size()):
+			var condition: Dictionary = _dictionary_or_empty(conditions[i])
+			if str(condition.get("type", "")) == "quest" and str(condition.get("id", "")) == quest_id:
+				hits.append(_reference_hit("recipe", recipe_id, recipe_record["path"], "unlock_conditions[%d].id" % i))
+
 	var dialogue_rules := _sources.dialogue_rule_records()
 	for rule_id in dialogue_rules.keys():
 		var record: Dictionary = _dictionary_or_empty(dialogue_rules[rule_id])
@@ -186,6 +194,11 @@ func _skill_references(skill_id: String, registry: ContentRegistry) -> Array[Dic
 		var record: Dictionary = registry.get_library("recipes")[recipe_id]
 		if _dictionary_or_empty(record["data"].get("skill_requirements", {})).has(skill_id):
 			hits.append(_reference_hit("recipe", recipe_id, record["path"], "skill_requirements.%s" % skill_id))
+		var conditions: Array = record["data"].get("unlock_conditions", [])
+		for i in range(conditions.size()):
+			var condition: Dictionary = _dictionary_or_empty(conditions[i])
+			if str(condition.get("type", "")) == "skill" and str(condition.get("id", "")) == skill_id:
+				hits.append(_reference_hit("recipe", recipe_id, record["path"], "unlock_conditions[%d].id" % i))
 	return hits
 
 
