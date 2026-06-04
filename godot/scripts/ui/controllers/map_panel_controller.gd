@@ -88,6 +88,8 @@ func _build_layout() -> void:
 	_tracked_quest_label = _label("TrackedQuestLine")
 	_tracked_markers_label = _label("TrackedMarkersLine")
 	_canvas = MapCanvasControl.new()
+	if _canvas.has_signal("view_changed"):
+		_canvas.connect("view_changed", _on_canvas_view_changed)
 	_canvas_state_label = _label("CanvasStateLine")
 	_kinds_box = VBoxContainer.new()
 	_kinds_box.name = "KindLines"
@@ -176,6 +178,10 @@ func _canvas_toolbar() -> HBoxContainer:
 		_canvas.call("reset_view")
 		_canvas_state_label.text = _canvas_state_text()
 	))
+	row.add_child(_canvas_button("PanResetButton", "Pan", func() -> void:
+		_canvas.call("reset_pan")
+		_canvas_state_label.text = _canvas_state_text()
+	))
 	row.add_child(_canvas_button("ZoomInButton", "+", func() -> void:
 		_canvas.call("zoom_in")
 		_canvas_state_label.text = _canvas_state_text()
@@ -205,6 +211,11 @@ func _canvas_state_text() -> String:
 		int(state.get("marker_count", 0)),
 		int(state.get("entry_count", 0)),
 	]
+
+
+func _on_canvas_view_changed(_state: Dictionary) -> void:
+	if _canvas_state_label != null:
+		_canvas_state_label.text = _canvas_state_text()
 
 
 func _array_or_empty(value: Variant) -> Array:

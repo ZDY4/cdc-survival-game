@@ -312,7 +312,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var map_locations_line := _map_locations_line(game_root)
 	if not map_locations_line.contains("当前地点: 幸存者据点01") or not map_locations_line.contains("废弃医院 (hospital)"):
 		errors.append("map panel should show current and unlocked location names, got %s" % map_locations_line)
-	if game_root.map_panel.find_child("MapCanvas", true, false) == null:
+	var map_canvas: Control = game_root.map_panel.find_child("MapCanvas", true, false) as Control
+	if map_canvas == null:
 		errors.append("map panel should expose MapCanvas")
 	if not _map_canvas_state_line(game_root).contains("entry 3"):
 		errors.append("map canvas should summarize entry points, got %s" % _map_canvas_state_line(game_root))
@@ -324,6 +325,19 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		if not _map_canvas_state_line(game_root).contains("zoom 1.15"):
 			errors.append("map canvas zoom button should update state line, got %s" % _map_canvas_state_line(game_root))
+	if map_canvas != null:
+		_drag_control(map_canvas, Vector2(40, 40), Vector2(72, 58))
+		await process_frame
+		if not _map_canvas_state_line(game_root).contains("pan 32,18"):
+			errors.append("map canvas drag should update pan state line, got %s" % _map_canvas_state_line(game_root))
+		var pan_reset_button: Button = game_root.map_panel.find_child("PanResetButton", true, false) as Button
+		if pan_reset_button == null:
+			errors.append("map canvas should expose pan reset button")
+		else:
+			pan_reset_button.pressed.emit()
+			await process_frame
+			if not _map_canvas_state_line(game_root).contains("pan 0,0"):
+				errors.append("map canvas pan reset should clear pan state line, got %s" % _map_canvas_state_line(game_root))
 
 	_press_key(game_root, KEY_J)
 	_expect_stage_open(errors, game_root, "journal", "J should open journal")
@@ -698,6 +712,23 @@ func _press_button(game_root: Node, node_name: String) -> void:
 	var button: Button = game_root.settings_panel.find_child(node_name, true, false) as Button
 	if button != null:
 		button.pressed.emit()
+
+
+func _drag_control(control: Control, from: Vector2, to: Vector2) -> void:
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = from
+	control._gui_input(press)
+	var motion := InputEventMouseMotion.new()
+	motion.position = to
+	motion.relative = to - from
+	control._gui_input(motion)
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	release.position = to
+	control._gui_input(release)
 
 
 func _settings_line(game_root: Node, node_name: String) -> String:

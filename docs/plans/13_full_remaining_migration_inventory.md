@@ -72,7 +72,7 @@
 - hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、target id/name 与格子，并由 `PlayerInteraction` smoke 覆盖；待补 actor/object 细分、当前 prompt、可走/不可走原因和路径预览颜色。
 - 部分迁移左键/右键差异：左键主交互或移动、右键打开 interaction menu、菜单外点击关闭并阻止本次世界输入已恢复；待补完整上下文菜单项、禁用态和点击外部关闭的所有 modal 分支。
 - 待补目标切换规则：点击新目标时取消旧 pending 的 turn policy、清空旧 prompt、更新 focused target。
-- 待补鼠标拖拽：地图面板拖拽、技能树拖拽、背包/容器/交易物品拖拽、滚动条拖拽。
+- 部分迁移鼠标拖拽：地图面板画布左键拖拽平移、滚轮/按钮缩放、pan 复位和状态行诊断已有第一版，并由 `UIToggle` smoke 覆盖；待补技能树拖拽、背包/容器/交易物品跨面板拖拽、滚动条拖拽和拖拽视觉 polish。
 
 ### 3.3 UI 状态机
 
@@ -317,7 +317,7 @@
 
 - 背包面板已有筛选、搜索、详情、滚动列表、选中物品操作栏、右键检查/使用/装备/丢弃/全部丢弃/加入热栏菜单、顺序视图拖拽重排、拖到装备/丢弃按钮和丢弃数量弹窗第一版；可使用物品热栏绑定/触发和存档 roundtrip 已纳入 `InventoryUI` / `Save` smoke；待补实际装备槽集成、完整上下文项、跨面板拖拽、拆分 polish。
 - 角色面板已有属性、资源、装备、属性点分配、派生数值摘要和状态效果第一版；派生数值会展示生命/速度、攻击/防御/暴击、基础属性合计、装备修饰和状态修饰，状态效果会显示 actor active effects 的名称、分类、来源、等级、剩余回合和 modifier，悬停说明来源、技能 ID、持续时间、修饰和 effect id，并纳入 `UIToggle` smoke。待补负面状态视觉和更完整排版。
-- 地图面板已有当前地图、当前地点名称、入口、已解锁地点名称、对象统计、追踪任务行、追踪目标 marker 行、地图 canvas、入口点绘制、目标 marker 绘制和 zoom 按钮第一版；待补 pan polish、overworld 路线和更完整图形化地图目标 marker。
+- 地图面板已有当前地图、当前地点名称、入口、已解锁地点名称、对象统计、追踪任务行、追踪目标 marker 行、地图 canvas、入口点绘制、目标 marker 绘制、zoom 按钮、左键拖拽平移、pan 复位和画布状态诊断第一版；待补 overworld 路线和更完整图形化地图目标 marker。
 - Journal 面板已有任务详情、可交付状态、奖励详情、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；待补更完整失败反馈。
 - Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏和多树切换第一版；待补图形技能树、pan、节点连线、前置链路高亮和目标预览。
 - Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、批量执行和完成反馈第一版；待补制作队列和取消。

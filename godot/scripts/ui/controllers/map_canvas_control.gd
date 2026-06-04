@@ -1,5 +1,7 @@
 extends Control
 
+signal view_changed(state: Dictionary)
+
 const MIN_ZOOM := 0.55
 const MAX_ZOOM := 2.5
 
@@ -34,11 +36,19 @@ func reset_view() -> void:
 	zoom = 1.0
 	pan = Vector2.ZERO
 	queue_redraw()
+	view_changed.emit(view_state())
+
+
+func reset_pan() -> void:
+	pan = Vector2.ZERO
+	queue_redraw()
+	view_changed.emit(view_state())
 
 
 func set_zoom(value: float) -> void:
 	zoom = clampf(value, MIN_ZOOM, MAX_ZOOM)
 	queue_redraw()
+	view_changed.emit(view_state())
 
 
 func view_state() -> Dictionary:
@@ -55,8 +65,9 @@ func _gui_input(event: InputEvent) -> void:
 		var button := event as InputEventMouseButton
 		if button.button_index == MOUSE_BUTTON_LEFT:
 			_dragging = button.pressed
-			_drag_start = button.position
-			_pan_start = pan
+			if button.pressed:
+				_drag_start = button.position
+				_pan_start = pan
 			accept_event()
 		elif button.pressed and button.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom_in()
@@ -67,6 +78,7 @@ func _gui_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _dragging:
 		pan = _pan_start + (event as InputEventMouseMotion).position - _drag_start
 		queue_redraw()
+		view_changed.emit(view_state())
 		accept_event()
 
 
