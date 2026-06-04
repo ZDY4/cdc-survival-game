@@ -289,7 +289,7 @@
 - 已恢复 Bevy 风格相机角度、焦点 actor 跟随、手动拖拽后暂停跟随、`F` 恢复跟随和观察楼层相机平面第一版；待补 occlusion、视觉显隐和多层地图表现细节。
 - 待补 zoom factor、视口可见范围、边界 clamp、多楼层聚焦、分辨率变化处理。
 - 待补 occlusion：建筑/墙体遮挡目标时的淡出、轮廓、选择目标 actor 的遮挡处理。
-- 待补 hover outline：actor、object、door、container、trigger 的不同轮廓颜色和优先级。
+- hover outline 第一版已迁移：非攻击悬停会显示 `HoverTargetOutline`，按 actor / pickup / container / trigger 等 `target_category` 使用不同颜色并记录 target meta；攻击悬停仍使用专门的 `AttackTargetOutline`、`AttackTargetMarker` 和 `AttackRangeMarkers`；已由 `PlayerInteraction` smoke 覆盖 pickup 与 hostile actor。待补门专属 outline、object/door/container/trigger 更精细优先级、遮挡处理和视觉 polish。
 
 ### 12.4 雾战和 overlay
 

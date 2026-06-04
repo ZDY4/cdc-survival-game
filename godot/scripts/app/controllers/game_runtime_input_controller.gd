@@ -21,12 +21,17 @@ const HOVER_COLOR_MOVE_REACHABLE := Color(0.24, 0.95, 0.48, 0.72)
 const HOVER_COLOR_MOVE_BLOCKED := Color(1.0, 0.22, 0.18, 0.72)
 const HOVER_COLOR_ATTACK_REACHABLE := Color(1.0, 0.45, 0.16, 0.78)
 const HOVER_COLOR_ATTACK_BLOCKED := Color(0.95, 0.12, 0.28, 0.78)
+const HOVER_COLOR_PICKUP := Color(0.35, 0.82, 1.0, 0.50)
+const HOVER_COLOR_CONTAINER := Color(0.36, 0.95, 0.62, 0.50)
+const HOVER_COLOR_TRIGGER := Color(0.70, 0.55, 1.0, 0.50)
+const HOVER_COLOR_ACTOR := Color(1.0, 0.88, 0.22, 0.50)
 
 var game_root: Node
 var world_container: Node3D
 var world_result: Dictionary = {}
 var camera: Camera3D
 var hover_cursor: MeshInstance3D
+var hover_target_outline: MeshInstance3D
 var attack_target_marker: MeshInstance3D
 var attack_target_outline: MeshInstance3D
 var attack_range_markers: Node3D
@@ -62,6 +67,8 @@ func _init(p_game_root: Node) -> void:
 	game_root = p_game_root
 	hover_cursor = _build_hover_cursor()
 	game_root.add_child(hover_cursor)
+	hover_target_outline = _build_hover_target_outline()
+	game_root.add_child(hover_target_outline)
 	attack_target_marker = _build_attack_target_marker()
 	game_root.add_child(attack_target_marker)
 	attack_target_outline = _build_attack_target_outline()
@@ -87,6 +94,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	_sync_camera_focus_meta()
 	_apply_camera_transform()
 	hover_cursor.visible = false
+	hover_target_outline.visible = false
 	attack_target_marker.visible = false
 	attack_target_outline.visible = false
 	_clear_attack_range_markers()
@@ -621,6 +629,7 @@ func _set_hover_ground(world_position: Vector3) -> bool:
 	var grid: Dictionary = _grid_from_world_position(world_position)
 	var move_preview: Dictionary = _move_preview_for_grid(grid)
 	_apply_hover_cursor_state(move_preview)
+	_hide_hover_target_outline()
 	return _replace_hover_state({
 		"active": true,
 		"kind": "ground",
@@ -652,14 +661,16 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 		target_name = str(target_node.name)
 	var prompt: Dictionary = _hover_prompt_for_target(metadata)
 	var attack_preview: Dictionary = _attack_preview_for_target(metadata)
+	var target_category: String = _hover_target_category(metadata, prompt)
 	_apply_hover_cursor_state({}, attack_preview)
+	_update_hover_target_outline(metadata, _grid_from_world_position(world_position), target_category, attack_preview)
 	return _replace_hover_state({
 		"active": true,
 		"kind": "interaction",
 		"grid": _grid_from_world_position(world_position),
 		"target_name": target_name,
 		"target_type": str(metadata.get("target_type", "")),
-		"target_category": _hover_target_category(metadata, prompt),
+		"target_category": target_category,
 		"target_id": target_id,
 		"actor_id": int(metadata.get("actor_id", 0)),
 		"ui_blocker": _hover_ui_blocker_name(),
@@ -672,6 +683,7 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 
 func _set_hover_failure(reason: String = "") -> bool:
 	_apply_hover_cursor_state({}, {})
+	_hide_hover_target_outline()
 	return _replace_hover_state({
 		"active": false,
 		"kind": "",
@@ -833,6 +845,61 @@ func _apply_hover_cursor_state(move_preview: Dictionary, attack_preview: Diction
 	_update_attack_target_marker(attack_preview, color)
 	_update_attack_target_outline(attack_preview, color)
 	_update_attack_range_markers(attack_preview, color)
+
+
+func _update_hover_target_outline(target: Dictionary, grid: Dictionary, target_category: String, attack_preview: Dictionary) -> void:
+	if hover_target_outline == null:
+		return
+	if not attack_preview.is_empty():
+		_hide_hover_target_outline()
+		return
+	if target.is_empty() or grid.is_empty():
+		_hide_hover_target_outline()
+		return
+	var color := _hover_outline_color(target_category)
+	hover_target_outline.global_position = Vector3(
+		float(grid.get("x", 0)),
+		float(grid.get("y", _observed_level())) + _hover_outline_height(target_category),
+		float(grid.get("z", 0))
+	)
+	var material := hover_target_outline.material_override as StandardMaterial3D
+	if material != null:
+		material.albedo_color = color
+	hover_target_outline.visible = true
+	hover_target_outline.set_meta("target_type", str(target.get("target_type", "")))
+	hover_target_outline.set_meta("target_id", str(target.get("target_id", "")))
+	hover_target_outline.set_meta("actor_id", int(target.get("actor_id", 0)))
+	hover_target_outline.set_meta("target_category", target_category)
+	hover_target_outline.set_meta("hover_color", color)
+
+
+func _hide_hover_target_outline() -> void:
+	if hover_target_outline == null:
+		return
+	hover_target_outline.visible = false
+	hover_target_outline.set_meta("target_type", "")
+	hover_target_outline.set_meta("target_id", "")
+	hover_target_outline.set_meta("actor_id", 0)
+	hover_target_outline.set_meta("target_category", "")
+
+
+func _hover_outline_color(target_category: String) -> Color:
+	if target_category.begins_with("actor"):
+		return HOVER_COLOR_ACTOR
+	match target_category:
+		"pickup":
+			return HOVER_COLOR_PICKUP
+		"container":
+			return HOVER_COLOR_CONTAINER
+		"trigger":
+			return HOVER_COLOR_TRIGGER
+	return HOVER_COLOR_INTERACTION
+
+
+func _hover_outline_height(target_category: String) -> float:
+	if target_category.begins_with("actor"):
+		return 0.82
+	return 0.38
 
 
 func _update_attack_target_marker(attack_preview: Dictionary, color: Color) -> void:
@@ -1102,6 +1169,25 @@ func _build_hover_cursor() -> MeshInstance3D:
 	material.no_depth_test = true
 	var node := MeshInstance3D.new()
 	node.name = "HoverGridCursor"
+	node.mesh = mesh
+	node.material_override = material
+	node.visible = false
+	return node
+
+
+func _build_hover_target_outline() -> MeshInstance3D:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.50
+	mesh.bottom_radius = 0.50
+	mesh.height = 0.72
+	mesh.radial_segments = 20
+	var material := StandardMaterial3D.new()
+	material.albedo_color = HOVER_COLOR_INTERACTION
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var node := MeshInstance3D.new()
+	node.name = "HoverTargetOutline"
 	node.mesh = mesh
 	node.material_override = material
 	node.visible = false

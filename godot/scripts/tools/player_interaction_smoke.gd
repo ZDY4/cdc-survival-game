@@ -46,6 +46,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["game root did not initialize runtime input controller"]
 	if game_root.find_child("HoverGridCursor", true, false) == null:
 		return ["missing hover grid cursor"]
+	if game_root.find_child("HoverTargetOutline", true, false) == null:
+		return ["missing hover target outline"]
 	if game_root.find_child("AttackTargetMarker", true, false) == null:
 		return ["missing attack target marker"]
 	if game_root.find_child("AttackTargetOutline", true, false) == null:
@@ -96,6 +98,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		elif str(hover_result.get("kind", "")) != "interaction":
 			errors.append("hover raycast should select interaction target")
 		_expect_hover_cursor_at_node(errors, game_root, pickup_node)
+		_expect_hover_target_outline(errors, game_root, "pickup", "survivor_outpost_01_pickup_medkit")
 		_expect_attack_marker_hidden(errors, game_root)
 		_expect_attack_outline_hidden(errors, game_root)
 		_expect_attack_range_markers_hidden(errors, game_root)
@@ -329,6 +332,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		if not runtime_line.contains("可攻击") or not runtime_line.contains("命中率") or not runtime_line.contains("伤害"):
 			errors.append("HUD runtime control line should show attack hover preview, got %s" % runtime_line)
 		_expect_attack_hover_cursor_preview(errors, game_root, target_id)
+		_expect_hover_target_outline_hidden(errors, game_root)
 		_expect_attack_target_marker(errors, game_root, target_id)
 		_expect_attack_target_outline(errors, game_root, target_id)
 		_expect_attack_range_markers(errors, game_root, target_id)
@@ -351,6 +355,30 @@ func _expect_attack_hover_cursor_preview(errors: Array[String], game_root: Node,
 		errors.append("attack hover cursor should expose material")
 	elif material.albedo_color.r <= material.albedo_color.g:
 		errors.append("attack hover cursor should use orange/red-tinted preview color")
+
+
+func _expect_hover_target_outline(errors: Array[String], game_root: Node, expected_category: String, expected_target_id: String) -> void:
+	var outline: MeshInstance3D = game_root.find_child("HoverTargetOutline", true, false) as MeshInstance3D
+	if outline == null:
+		errors.append("hover target outline should exist")
+		return
+	if not outline.visible:
+		errors.append("hover target outline should be visible for non-attack hover")
+	if str(outline.get_meta("target_category", "")) != expected_category:
+		errors.append("hover target outline category expected %s, got %s" % [expected_category, outline.get_meta("target_category", "")])
+	if str(outline.get_meta("target_id", "")) != expected_target_id:
+		errors.append("hover target outline target id expected %s, got %s" % [expected_target_id, outline.get_meta("target_id", "")])
+	var material := outline.material_override as StandardMaterial3D
+	if material == null or not material.no_depth_test:
+		errors.append("hover target outline should render above map meshes")
+
+
+func _expect_hover_target_outline_hidden(errors: Array[String], game_root: Node) -> void:
+	var outline: MeshInstance3D = game_root.find_child("HoverTargetOutline", true, false) as MeshInstance3D
+	if outline == null:
+		errors.append("hover target outline should exist")
+	elif outline.visible:
+		errors.append("hover target outline should hide while attack outline is active")
 
 
 func _expect_attack_target_marker(errors: Array[String], game_root: Node, target_id: int) -> void:
