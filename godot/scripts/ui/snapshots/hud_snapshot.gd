@@ -647,6 +647,9 @@ func _quest_reward_text(payload: Dictionary) -> String:
 	var flag_count: int = _array_or_empty(payload.get("world_flags", [])).size()
 	if flag_count > 0:
 		parts.append("世界状态 %d" % flag_count)
+	var relationship_count: int = _array_or_empty(payload.get("relationship_changes", [])).size()
+	if relationship_count > 0:
+		parts.append("关系 %d" % relationship_count)
 	return " | ".join(parts)
 
 

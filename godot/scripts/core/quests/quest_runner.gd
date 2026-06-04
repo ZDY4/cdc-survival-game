@@ -205,13 +205,14 @@ func _grant_rewards(simulation: RefCounted, actor_id: int, quest_id: String, que
 		var flag_result: Dictionary = simulation.set_world_flag(flag_id, true, "quest:%s" % quest_id, actor_id)
 		if bool(flag_result.get("success", false)):
 			world_flags.append(flag_id)
+	var relationship_changes: Array[Dictionary] = _grant_relationship_rewards(simulation, actor_id, quest_id, rewards)
 	var experience: int = max(0, int(rewards.get("experience", rewards.get("xp", 0))))
 	var skill_points: int = max(0, int(rewards.get("skill_points", rewards.get("skillPoints", 0))))
 	if experience > 0:
 		simulation.grant_experience(actor_id, experience, "quest:%s" % quest_id)
 	if skill_points > 0:
 		simulation.grant_skill_points(actor_id, skill_points, "quest:%s" % quest_id)
-	if not granted_items.is_empty() or money > 0 or not unlocked_locations.is_empty() or not world_flags.is_empty() or experience > 0 or skill_points > 0:
+	if not granted_items.is_empty() or money > 0 or not unlocked_locations.is_empty() or not world_flags.is_empty() or not relationship_changes.is_empty() or experience > 0 or skill_points > 0:
 		simulation.emit_event("quest_reward_granted", {
 			"actor_id": actor_id,
 			"quest_id": quest_id,
@@ -221,6 +222,7 @@ func _grant_rewards(simulation: RefCounted, actor_id: int, quest_id: String, que
 			"money_after": actor.money if actor != null else money_before,
 			"unlocked_locations": unlocked_locations.duplicate(),
 			"world_flags": world_flags.duplicate(),
+			"relationship_changes": relationship_changes.duplicate(true),
 			"experience": experience,
 			"skill_points": skill_points,
 		})
@@ -287,3 +289,43 @@ func _reward_string_array(rewards: Dictionary, array_key: String, alias_array_ke
 			continue
 		output.append(id)
 	return output
+
+
+func _grant_relationship_rewards(simulation: RefCounted, actor_id: int, quest_id: String, rewards: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var entries: Array = _array_or_empty(rewards.get("relationships", rewards.get("relationship_changes", [])))
+	for entry in entries:
+		var change: Dictionary = _dictionary_or_empty(entry)
+		var source_actor_id: int = int(change.get("actor_id", change.get("source_actor_id", actor_id)))
+		var target_actor_id: int = _relationship_target_actor_id(simulation, source_actor_id, change)
+		if source_actor_id <= 0 or target_actor_id <= 0:
+			continue
+		var current_score := 0.0
+		if simulation.has_method("relationship_score"):
+			current_score = float(simulation.call("relationship_score", source_actor_id, target_actor_id))
+		var next_score := current_score
+		if change.has("score"):
+			next_score = float(change.get("score", current_score))
+		elif change.has("value"):
+			next_score = float(change.get("value", current_score))
+		else:
+			next_score = current_score + float(change.get("delta", change.get("amount", 0.0)))
+		var result: Dictionary = simulation.set_relationship_score(source_actor_id, target_actor_id, next_score, "quest:%s" % quest_id)
+		if bool(result.get("success", false)):
+			output.append(result)
+	return output
+
+
+func _relationship_target_actor_id(simulation: RefCounted, source_actor_id: int, change: Dictionary) -> int:
+	var explicit_id: int = int(change.get("target_actor_id", change.get("targetActorId", 0)))
+	if explicit_id > 0:
+		return explicit_id
+	var definition_id := str(change.get("target_definition_id", change.get("targetDefinitionId", ""))).strip_edges()
+	if definition_id.is_empty():
+		return 0
+	for actor in simulation.actor_registry.actors():
+		if actor.actor_id == source_actor_id:
+			continue
+		if actor.definition_id == definition_id:
+			return actor.actor_id
+	return 0

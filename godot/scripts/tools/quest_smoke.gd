@@ -141,6 +141,12 @@ func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) ->
 							"money": 13,
 							"unlock_locations": ["quest_reward_smoke_location"],
 							"world_flags": ["quest_reward_smoke_flag"],
+							"relationships": [
+								{
+									"target_definition_id": "trader_lao_wang",
+									"delta": 9,
+								},
+							],
 						},
 					},
 				},
@@ -148,6 +154,7 @@ func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) ->
 		},
 	}
 	var money_before: int = player.money
+	var relationship_before := float(simulation.relationship_score(1, 2))
 	if not simulation.start_quest(1, "quest_reward_state_smoke"):
 		errors.append("state reward quest should start")
 	player.inventory["1007"] = int(player.inventory.get("1007", 0)) + 1
@@ -163,6 +170,8 @@ func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) ->
 		errors.append("state reward quest should unlock location")
 	if not simulation.world_flags.has("quest_reward_smoke_flag"):
 		errors.append("state reward quest should set world flag")
+	if absf(float(simulation.relationship_score(1, 2)) - (relationship_before + 9.0)) > 0.001:
+		errors.append("state reward quest should adjust trader relationship")
 	var reward_payload: Dictionary = _last_event_payload(snapshot, "quest_reward_granted")
 	if int(reward_payload.get("money", 0)) != 13:
 		errors.append("quest_reward_granted should include money")
@@ -170,6 +179,8 @@ func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) ->
 		errors.append("quest_reward_granted should include unlocked location")
 	if not _array_or_empty(reward_payload.get("world_flags", [])).has("quest_reward_smoke_flag"):
 		errors.append("quest_reward_granted should include world flag")
+	if _array_or_empty(reward_payload.get("relationship_changes", [])).is_empty():
+		errors.append("quest_reward_granted should include relationship changes")
 	var feedback_text := _hud_feedback_text(simulation, registry)
 	if not feedback_text.contains("金钱 13"):
 		errors.append("HUD reward feedback should include money, got %s" % feedback_text)
@@ -177,6 +188,8 @@ func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) ->
 		errors.append("HUD reward feedback should include unlocked location count, got %s" % feedback_text)
 	if not feedback_text.contains("世界状态 1"):
 		errors.append("HUD reward feedback should include world flag count, got %s" % feedback_text)
+	if not feedback_text.contains("关系 1"):
+		errors.append("HUD reward feedback should include relationship count, got %s" % feedback_text)
 	return errors
 
 
