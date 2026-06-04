@@ -65,6 +65,30 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should select player bandage in trade panel")
 	if _trade_button_text(game_root) != "出售":
 		errors.append("selecting player item should set trade action to sell")
+	var player_money_before_context_sell: int = _player_money(game_root)
+	var shop_sessions_before_context_sell: Dictionary = game_root.simulation.shop_sessions.duplicate(true)
+	_add_player_inventory_item(game_root, "1010", 1)
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
+	if not _open_inventory_context_menu(game_root, "废金属"):
+		errors.append("should open inventory context menu for scrap while trade is active")
+	elif _context_action_disabled(game_root, 10):
+		errors.append("inventory context menu should enable sell when trade is active")
+	else:
+		var trade_confirmed_before_context_sell: int = _event_count(game_root, "trade_confirmed")
+		var money_before_context_sell: int = _player_money(game_root)
+		_execute_inventory_context_action(game_root, 10)
+		if _event_count(game_root, "trade_confirmed") <= trade_confirmed_before_context_sell:
+			errors.append("inventory context sell should emit trade_confirmed")
+		if _player_inventory_count(game_root, "1010") != 0:
+			errors.append("inventory context sell should remove sold scrap")
+		if _player_money(game_root) <= money_before_context_sell:
+			errors.append("inventory context sell should pay player money")
+	_set_player_money(game_root, player_money_before_context_sell)
+	_remove_player_inventory_item(game_root, "1010")
+	game_root.simulation.shop_sessions = shop_sessions_before_context_sell.duplicate(true)
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
 	_set_item_sellable(game_root, "1006", false)
 	game_root.refresh_trade_panel()
 	if not _player_item_text(game_root).contains("绷带 x1") or not _player_item_text(game_root).contains("不可出售"):
@@ -530,6 +554,36 @@ func _trade_item_button_with_text(game_root: Node, source: String, text: String)
 	return null
 
 
+func _open_inventory_context_menu(game_root: Node, item_needle: String) -> bool:
+	var source: Button = _inventory_item_button(game_root, item_needle)
+	if source == null or not source.has_meta("inventory_item"):
+		return false
+	game_root.inventory_panel.call("_open_context_menu_for_item", source.get_meta("inventory_item"), Vector2.ZERO)
+	return true
+
+
+func _inventory_item_button(game_root: Node, text: String) -> Button:
+	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
+	for child in item_box.get_children():
+		if child is Button and str((child as Button).text).contains(text):
+			return child as Button
+	return null
+
+
+func _context_action_disabled(game_root: Node, action_id: int) -> bool:
+	var menu: PopupMenu = game_root.inventory_panel.find_child("InventoryContextMenu", true, false) as PopupMenu
+	if menu == null:
+		return true
+	var index: int = menu.get_item_index(action_id)
+	if index < 0:
+		return true
+	return menu.is_item_disabled(index)
+
+
+func _execute_inventory_context_action(game_root: Node, action_id: int) -> void:
+	game_root.inventory_panel.call("_execute_context_action", action_id)
+
+
 func _set_trade_quantity(game_root: Node, count: int) -> void:
 	var spin: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeControls/QuantitySpin")
 	if spin is SpinBox:
@@ -687,6 +741,23 @@ func _set_player_money(game_root: Node, money: int) -> void:
 	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if actor != null:
 		actor.money = money
+
+
+func _add_player_inventory_item(game_root: Node, item_id: String, count: int) -> void:
+	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if actor == null:
+		return
+	actor.inventory[item_id] = int(actor.inventory.get(item_id, 0)) + count
+	if not actor.inventory_order.has(item_id):
+		actor.inventory_order.append(item_id)
+
+
+func _remove_player_inventory_item(game_root: Node, item_id: String) -> void:
+	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if actor == null:
+		return
+	actor.inventory.erase(item_id)
+	actor.inventory_order.erase(item_id)
 
 
 func _set_active_shop_money(game_root: Node, money: int) -> void:

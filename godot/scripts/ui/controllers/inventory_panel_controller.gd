@@ -8,6 +8,8 @@ const CONTEXT_HOTBAR := 5
 const CONTEXT_DECONSTRUCT := 6
 const CONTEXT_DROP_ALL := 7
 const CONTEXT_SPLIT := 8
+const CONTEXT_STORE_CONTAINER := 9
+const CONTEXT_SELL_TRADE := 10
 
 var _panel: PanelContainer
 var _title_label: Label
@@ -331,16 +333,26 @@ func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> 
 	_context_menu.add_item("丢弃", CONTEXT_DROP)
 	_context_menu.add_item("全部丢弃", CONTEXT_DROP_ALL)
 	_context_menu.add_item("拆分", CONTEXT_SPLIT)
+	_context_menu.add_item("存入容器", CONTEXT_STORE_CONTAINER)
+	_context_menu.add_item("出售", CONTEXT_SELL_TRADE)
 	_context_menu.add_item("拆解", CONTEXT_DECONSTRUCT)
 	_context_menu.add_item("加入热栏", CONTEXT_HOTBAR)
+	var root := get_parent()
+	var has_container := root != null and root.has_method("has_active_container_session") and bool(root.has_active_container_session())
+	var has_trade := root != null and root.has_method("has_active_trade_session") and bool(root.has_active_trade_session())
+	var can_transfer := int(item.get("count", 0)) > 0
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_USE), not bool(item.get("usable", false)))
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_EQUIP), _array_or_empty(item.get("equip_slots", [])).is_empty())
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DROP), not bool(item.get("droppable", true)) or int(item.get("count", 0)) <= 0)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DROP_ALL), not bool(item.get("droppable", true)) or int(item.get("count", 0)) <= 0)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_SPLIT), true)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_STORE_CONTAINER), not has_container or not can_transfer)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_SELL_TRADE), not has_trade or not can_transfer)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DECONSTRUCT), not bool(item.get("deconstructable", false)) or int(item.get("count", 0)) <= 0)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_HOTBAR), not bool(item.get("usable", false)))
 	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_SPLIT), _split_context_tooltip(item))
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_STORE_CONTAINER), "存入当前打开的容器" if has_container else "需要先打开一个容器")
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_SELL_TRADE), "出售给当前交易对象" if has_trade else "需要先打开交易")
 	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
 	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
 
@@ -374,6 +386,12 @@ func _execute_context_action(action_id: int) -> void:
 		CONTEXT_SPLIT:
 			if root.has_method("split_player_inventory_stack"):
 				root.split_player_inventory_stack(item_id, _drag_drop_count(_context_item))
+		CONTEXT_STORE_CONTAINER:
+			if root.has_method("store_active_container_item"):
+				root.store_active_container_item(item_id, _drag_drop_count(_context_item))
+		CONTEXT_SELL_TRADE:
+			if root.has_method("sell_active_trade_item"):
+				root.sell_active_trade_item(item_id, _drag_drop_count(_context_item))
 		CONTEXT_DECONSTRUCT:
 			if bool(_context_item.get("deconstructable", false)) and root.has_method("deconstruct_player_item"):
 				root.deconstruct_player_item(item_id, _drag_drop_count(_context_item))

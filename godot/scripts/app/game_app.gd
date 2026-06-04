@@ -748,6 +748,10 @@ func transfer_active_container_item(source: String, item_id: String, count: int 
 			return {"success": false, "reason": "unknown_container_transfer_source", "source": source}
 
 
+func has_active_container_session() -> bool:
+	return not _active_container_id().is_empty()
+
+
 func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
@@ -880,6 +884,10 @@ func transfer_active_trade_item(source: String, item_id: String, count: int = 1)
 	if source.begins_with("equipment:"):
 		return sell_active_trade_equipment(source.trim_prefix("equipment:"), item_id)
 	return {"success": false, "reason": "unknown_trade_transfer_source", "source": source}
+
+
+func has_active_trade_session() -> bool:
+	return not _active_shop_id().is_empty()
 
 
 func confirm_active_trade_cart(entries: Array) -> Dictionary:

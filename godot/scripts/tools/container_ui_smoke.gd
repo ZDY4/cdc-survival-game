@@ -161,6 +161,19 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("container player column should remove stored water bottle")
 	if _inventory_text(game_root).contains("水瓶 x1"):
 		errors.append("inventory panel should remove stored water bottle")
+	player_refill_water(game_root)
+	if not _open_inventory_context_menu(game_root, "水瓶"):
+		errors.append("should open inventory context menu for water bottle while container is active")
+	elif _context_action_disabled(game_root, 9):
+		errors.append("inventory context menu should enable store-in-container when a container is active")
+	else:
+		_execute_inventory_context_action(game_root, 9)
+		if not _event_seen(game_root, "container_item_stored"):
+			errors.append("inventory context store should emit container_item_stored")
+		if not _container_text(game_root).contains("水瓶 x2"):
+			errors.append("inventory context store should move water bottle into container")
+		if _inventory_text(game_root).contains("水瓶 x1"):
+			errors.append("inventory context store should remove water bottle from inventory panel")
 
 	var missing_store: Dictionary = game_root.store_active_container_item("1008", 1)
 	if missing_store.get("reason", "") != "not_enough_items":
@@ -372,6 +385,47 @@ func _inventory_text(game_root: Node) -> String:
 		if not text.is_empty():
 			output.append(text)
 	return "\n".join(output)
+
+
+func player_refill_water(game_root: Node) -> void:
+	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if actor == null:
+		return
+	actor.inventory["1008"] = 1
+	if not actor.inventory_order.has("1008"):
+		actor.inventory_order.append("1008")
+	game_root.refresh_inventory_panel()
+	game_root.refresh_container_panel()
+
+
+func _open_inventory_context_menu(game_root: Node, item_needle: String) -> bool:
+	var source: Button = _inventory_item_button(game_root, item_needle)
+	if source == null or not source.has_meta("inventory_item"):
+		return false
+	game_root.inventory_panel.call("_open_context_menu_for_item", source.get_meta("inventory_item"), Vector2.ZERO)
+	return true
+
+
+func _inventory_item_button(game_root: Node, text: String) -> Button:
+	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
+	for child in item_box.get_children():
+		if child is Button and str((child as Button).text).contains(text):
+			return child as Button
+	return null
+
+
+func _context_action_disabled(game_root: Node, action_id: int) -> bool:
+	var menu: PopupMenu = game_root.inventory_panel.find_child("InventoryContextMenu", true, false) as PopupMenu
+	if menu == null:
+		return true
+	var index: int = menu.get_item_index(action_id)
+	if index < 0:
+		return true
+	return menu.is_item_disabled(index)
+
+
+func _execute_inventory_context_action(game_root: Node, action_id: int) -> void:
+	game_root.inventory_panel.call("_execute_context_action", action_id)
 
 
 func _container_item_lines(game_root: Node) -> Array[String]:
