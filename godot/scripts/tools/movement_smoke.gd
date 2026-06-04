@@ -51,6 +51,13 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	var movement_step_to: Dictionary = _dictionary_or_empty(movement_step_payload.get("to", {}))
 	if int(movement_step_to.get("x", -1)) != int(goal.get("x", -2)) or int(movement_step_to.get("z", -1)) != int(goal.get("z", -2)):
 		errors.append("movement_step should include destination grid")
+	var ap_spent_payload: Dictionary = _last_event_payload(simulation.snapshot(), "ap_spent")
+	if int(ap_spent_payload.get("actor_id", 0)) != 1:
+		errors.append("ap_spent should include actor_id")
+	if not ap_spent_payload.has("cost") or not ap_spent_payload.has("before") or not ap_spent_payload.has("after"):
+		errors.append("ap_spent should include cost, before, and after")
+	if str(ap_spent_payload.get("reason", "")) != "move":
+		errors.append("ap_spent should include move reason")
 
 	_expect_ap_depletion_auto_advances_turn(errors, simulation, topology)
 
