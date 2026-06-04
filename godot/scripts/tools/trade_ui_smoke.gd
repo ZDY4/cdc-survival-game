@@ -280,19 +280,31 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_trade_button(game_root)
 	if not _trade_feedback(game_root).contains("店铺资金不足"):
 		errors.append("trade sell failure should show shop money feedback")
+	var trade_closed_before_button: int = _event_count(game_root, "trade_closed")
 	_press_close_button(game_root)
 	if game_root.trade_panel.visible:
 		errors.append("close button should close trade panel")
 	if not game_root.active_trade_target.is_empty():
 		errors.append("close button should clear active trade target")
+	if _event_count(game_root, "trade_closed") <= trade_closed_before_button:
+		errors.append("close button should emit trade_closed")
+	_assert_trade_closed_payload(errors, game_root, "button", "close button")
 	_reopen_trade(game_root, errors)
+	var trade_closed_before_escape: int = _event_count(game_root, "trade_closed")
 	_press_key(game_root, KEY_ESCAPE)
 	if game_root.trade_panel.visible:
 		errors.append("Esc should close trade panel")
 	if not game_root.active_trade_target.is_empty():
 		errors.append("Esc should clear active trade target")
+	if _event_count(game_root, "trade_closed") <= trade_closed_before_escape:
+		errors.append("Esc should emit trade_closed")
+	_assert_trade_closed_payload(errors, game_root, "dialogue_closed:keyboard_escape", "Esc close")
 	_reopen_trade(game_root, errors)
+	var trade_closed_before_dialogue_leave: int = _event_count(game_root, "trade_closed")
 	_close_trade_via_dialogue_leave(game_root, errors)
+	if _event_count(game_root, "trade_closed") <= trade_closed_before_dialogue_leave:
+		errors.append("dialogue leave should emit trade_closed")
+	_assert_trade_closed_payload(errors, game_root, "dialogue_finished:leave", "dialogue leave")
 	_reopen_trade(game_root, errors)
 	game_root.active_trade_target = {"target_type": "actor", "actor_id": 9999}
 	game_root.refresh_trade_panel()
@@ -302,6 +314,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("missing trade target should clear active trade target")
 	_reopen_trade(game_root, errors)
 	game_root.simulation.unlock_location("forest")
+	var trade_closed_before_map_switch: int = _event_count(game_root, "trade_closed")
 	var enter_result: Dictionary = game_root.simulation.enter_location(1, "forest", game_root.registry.get_library("overworld"))
 	if not bool(enter_result.get("success", false)):
 		errors.append("forest enter for trade close check failed: %s" % enter_result.get("reason", "unknown"))
@@ -310,6 +323,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("map switch should close trade panel")
 	if not game_root.active_trade_target.is_empty():
 		errors.append("map switch should clear active trade target")
+	if _event_count(game_root, "trade_closed") <= trade_closed_before_map_switch:
+		errors.append("map switch should emit trade_closed")
+	_assert_trade_closed_payload(errors, game_root, "target_unavailable", "map switch")
 	return errors
 
 
@@ -337,6 +353,35 @@ func _event_count(game_root: Node, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _last_event_payload(game_root: Node, kind: String) -> Dictionary:
+	var events: Array = game_root.simulation.snapshot().get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = events[index]
+		if event_data.get("kind", "") == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
+
+
+func _assert_trade_closed_payload(errors: Array[String], game_root: Node, expected_reason: String, context: String) -> void:
+	var payload: Dictionary = _last_event_payload(game_root, "trade_closed")
+	if int(payload.get("actor_id", 0)) != 1:
+		errors.append("%s trade_closed should include actor_id" % context)
+	if str(payload.get("reason", "")) != expected_reason:
+		errors.append("%s trade_closed reason expected %s, got %s" % [context, expected_reason, payload.get("reason", "")])
+	if str(payload.get("target_type", "")) != "actor":
+		errors.append("%s trade_closed should include target_type" % context)
+	if int(payload.get("target_actor_id", 0)) != 2:
+		errors.append("%s trade_closed should include target_actor_id" % context)
+	if str(payload.get("shop_id", "")) != "trader_lao_wang_shop":
+		errors.append("%s trade_closed should include shop_id" % context)
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
 
 
 func _press_close_button(game_root: Node) -> void:

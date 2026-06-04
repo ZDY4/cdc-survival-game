@@ -121,8 +121,8 @@ func refresh_trade_panel() -> void:
 	if panel_controller == null:
 		return
 	if not _active_trade_target_available():
-		active_trade_target = {}
-		active_trade_feedback = {}
+		close_trade_panel("target_unavailable")
+		return
 	panel_controller.active_trade_target = active_trade_target
 	panel_controller.active_trade_feedback = active_trade_feedback
 	panel_controller.refresh_trade_panel()
@@ -391,9 +391,8 @@ func close_active_dialogue(reason: String = "closed") -> Dictionary:
 		return {"success": false, "reason": "simulation_missing"}
 	var result: Dictionary = simulation.close_dialogue(1, reason)
 	if bool(result.get("success", false)):
-		active_trade_target = {}
+		close_trade_panel("dialogue_closed:%s" % reason)
 		refresh_dialogue_panel()
-		refresh_trade_panel()
 		refresh_hud()
 	return result
 
@@ -422,7 +421,7 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 	if bool(dialogue_result.get("success", false)):
 		return {"success": true, "closed": "dialogue", "result": dialogue_result}
 	if not active_trade_target.is_empty():
-		close_trade_panel()
+		close_trade_panel(reason)
 		return {"success": true, "closed": "trade"}
 	var container_result := close_active_container(reason)
 	if bool(container_result.get("success", false)):
@@ -517,9 +516,12 @@ func current_interaction_prompt() -> Dictionary:
 	return interaction_controller.current_prompt()
 
 
-func close_trade_panel() -> void:
+func close_trade_panel(reason: String = "closed") -> void:
+	var closed_target: Dictionary = active_trade_target.duplicate(true)
 	active_trade_target = {}
 	active_trade_feedback = {}
+	if not closed_target.is_empty() and simulation != null:
+		simulation.emit_event("trade_closed", _trade_closed_payload(closed_target, reason))
 	refresh_trade_panel()
 
 
@@ -572,8 +574,7 @@ func _apply_dialogue_trade_result(result: Dictionary) -> void:
 		active_trade_target = _dialogue_trade_target()
 		active_trade_feedback = {}
 	elif bool(result.get("finished", false)) or result.has("end_type"):
-		active_trade_target = {}
-		active_trade_feedback = {}
+		close_trade_panel("dialogue_finished:%s" % str(result.get("end_type", "")))
 
 
 func has_active_dialogue() -> bool:
@@ -1139,6 +1140,21 @@ func _active_shop_id() -> String:
 	var TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
 	var session: Dictionary = TradeSnapshot.new(registry).resolve_trade_session(simulation.snapshot(), active_trade_target)
 	return str(session.get("shop_id", ""))
+
+
+func _trade_closed_payload(target: Dictionary, reason: String) -> Dictionary:
+	var payload := {
+		"actor_id": 1,
+		"reason": reason,
+		"target_type": str(target.get("target_type", "")),
+		"target_actor_id": int(target.get("actor_id", 0)),
+	}
+	if registry != null and simulation != null:
+		var TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
+		var session: Dictionary = TradeSnapshot.new(registry).resolve_trade_session(simulation.snapshot(), target)
+		payload["shop_id"] = str(session.get("shop_id", ""))
+		payload["target_name"] = str(session.get("target_name", ""))
+	return payload
 
 
 func _active_container_id() -> String:
