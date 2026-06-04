@@ -27,6 +27,8 @@ var actor_health_material := _unshaded_material(Color(0.24, 0.86, 0.34, 0.88))
 var actor_health_missing_material := _unshaded_material(Color(0.22, 0.07, 0.06, 0.72))
 var actor_ap_material := _unshaded_material(Color(0.24, 0.58, 1.0, 0.86))
 var actor_ap_missing_material := _unshaded_material(Color(0.07, 0.12, 0.22, 0.62))
+var quest_turn_in_ready_material := _unshaded_material(Color(1.0, 0.84, 0.18, 0.94))
+var quest_turn_in_pending_material := _unshaded_material(Color(0.34, 0.82, 1.0, 0.86))
 
 
 func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionary = {}) -> Dictionary:
@@ -234,6 +236,7 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 		if actor_data.get("kind", "") == "player":
 			_add_player_runtime_marker(node)
 		_add_actor_status_markers(node, actor_data)
+		_add_actor_quest_markers(node, actor_data)
 		_add_pickable_capsule(node, 0.36, 1.25)
 		root.add_child(node)
 	return actors.size()
@@ -582,6 +585,50 @@ func _actor_side_color(side: String) -> Color:
 		"neutral":
 			return Color(1.0, 0.88, 0.32, 0.95)
 	return Color(0.82, 0.82, 0.76, 0.95)
+
+
+func _add_actor_quest_markers(parent: Node3D, actor_data: Dictionary) -> void:
+	var quest_markers: Array = _array_or_empty(actor_data.get("quest_markers", []))
+	if quest_markers.is_empty():
+		return
+	var primary: Dictionary = _dictionary_or_empty(quest_markers[0])
+	var ready := bool(primary.get("ready", false))
+	var color := Color(1.0, 0.84, 0.18, 0.96) if ready else Color(0.34, 0.82, 1.0, 0.92)
+	var label := Label3D.new()
+	label.name = "ActorQuestMarkerLabel"
+	label.text = "!" if ready else "?"
+	label.position = Vector3(0.34, 1.38, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 26
+	label.modulate = color
+	label.outline_size = 5
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.82)
+	_apply_quest_marker_meta(label, actor_data, primary)
+	parent.add_child(label)
+
+	var mesh := PrismMesh.new()
+	mesh.size = Vector3(0.18, 0.24, 0.18)
+	var icon := MeshInstance3D.new()
+	icon.name = "ActorQuestMarker"
+	icon.mesh = mesh
+	icon.material_override = quest_turn_in_ready_material if ready else quest_turn_in_pending_material
+	icon.position = Vector3(0.34, 1.20, 0.0)
+	icon.rotation_degrees = Vector3(0.0, 45.0, 0.0)
+	_apply_quest_marker_meta(icon, actor_data, primary)
+	icon.set_meta("marker_count", quest_markers.size())
+	parent.add_child(icon)
+
+
+func _apply_quest_marker_meta(node: Node, actor_data: Dictionary, marker: Dictionary) -> void:
+	node.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
+	node.set_meta("marker_kind", str(marker.get("kind", "")))
+	node.set_meta("quest_id", str(marker.get("quest_id", "")))
+	node.set_meta("quest_title", str(marker.get("quest_title", "")))
+	node.set_meta("status", str(marker.get("status", "")))
+	node.set_meta("ready", bool(marker.get("ready", false)))
+	node.set_meta("objective_id", str(marker.get("objective_id", "")))
+	node.set_meta("source_dialogue_id", str(marker.get("source_dialogue_id", "")))
 
 
 func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:

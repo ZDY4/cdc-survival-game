@@ -282,7 +282,7 @@
 - 待补装备视觉挂点：body、feet、legs、head、hands、back、accessory、main_hand、off_hand。
 - 待补武器模型方向、缩放、手持位置、开火/挥击反馈。
 - 待补尸体模型或标记，不只是容器数据；尸体应可 hover、选中、打开、被雾战影响。
-- actor label、血条、AP 条、敌友阵营颜色和 side badge 第一版已迁移：world snapshot 会转发 actor `ap`、`turn_open`、`in_combat` 和 `combat` 数据，`WorldSceneRenderer` 会为 actor 生成 `ActorNameLabel`、`ActorHealthBar`、`ActorApBar`、`ActorSideBadge`，并由 `Scene` smoke 覆盖真实启动 actor 与合成 hostile actor 的 metadata / ratio。待补任务 NPC 标记、状态效果图标、遮挡处理和视觉 polish。
+- actor label、血条、AP 条、敌友阵营颜色、side badge 和任务交付 NPC 标记第一版已迁移：world snapshot 会转发 actor `ap`、`turn_open`、`in_combat` 和 `combat` 数据，并从 active quest / dialogue rule / dialogue action 派生手动交付任务 NPC 的 `quest_markers`；`WorldSceneRenderer` 会为 actor 生成 `ActorNameLabel`、`ActorHealthBar`、`ActorApBar`、`ActorSideBadge`、`ActorQuestMarker` 和 `ActorQuestMarkerLabel`，并由 `Scene` smoke 覆盖真实启动 actor、合成 hostile actor，以及 `doctor_chen` 可交付任务 marker 的 metadata / ratio。待补可接任务标记、状态效果图标、遮挡处理和视觉 polish。
 
 ### 12.3 相机和遮挡
 

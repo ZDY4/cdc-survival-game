@@ -28,10 +28,12 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	_apply_consumed_interaction_targets(map_snapshot, runtime_snapshot.get("consumed_interaction_targets", []))
 	var corpses: Array[Dictionary] = _corpses_on_map(runtime_snapshot.get("corpse_containers", []), map_id)
 	_apply_corpse_interaction_targets(map_snapshot, corpses)
+	var actors: Array[Dictionary] = _actors_on_map(runtime_snapshot.get("actors", []), map_id)
+	_apply_actor_quest_markers(actors, runtime_snapshot)
 	return {
 		"ok": true,
 		"map": map_snapshot,
-		"actors": _actors_on_map(runtime_snapshot.get("actors", []), map_id),
+		"actors": actors,
 		"corpses": corpses,
 	}
 
@@ -130,6 +132,112 @@ func _model_asset_for_equipment_visual(visual_asset: String) -> String:
 	if normalized.begins_with("builtin:item:"):
 		return "preview_placeholders/placeholders/equipment_%s.gltf" % normalized.trim_prefix("builtin:item:")
 	return ""
+
+
+func _apply_actor_quest_markers(actors: Array[Dictionary], runtime_snapshot: Dictionary) -> void:
+	if registry == null or actors.is_empty():
+		return
+	var markers_by_definition := _turn_in_quest_markers_by_definition(runtime_snapshot)
+	if markers_by_definition.is_empty():
+		return
+	for index in range(actors.size()):
+		var actor_data: Dictionary = actors[index]
+		var definition_id := str(actor_data.get("definition_id", ""))
+		if definition_id.is_empty() or not markers_by_definition.has(definition_id):
+			continue
+		actor_data["quest_markers"] = _array_or_empty(markers_by_definition.get(definition_id, [])).duplicate(true)
+		actors[index] = actor_data
+
+
+func _turn_in_quest_markers_by_definition(runtime_snapshot: Dictionary) -> Dictionary:
+	var markers_by_quest: Dictionary = _manual_turn_in_markers_by_quest(runtime_snapshot)
+	if markers_by_quest.is_empty():
+		return {}
+	var result: Dictionary = {}
+	var dialogue_rules: Dictionary = registry.get_library("dialogue_rules")
+	var dialogues: Dictionary = registry.get_library("dialogues")
+	for definition_id in dialogue_rules.keys():
+		var rule_record: Dictionary = _dictionary_or_empty(dialogue_rules.get(definition_id, {}))
+		var rule_data: Dictionary = _dictionary_or_empty(rule_record.get("data", {}))
+		var dialogue_ids: Array[String] = []
+		_append_unique_string(dialogue_ids, rule_data.get("default_dialogue_id", ""))
+		for variant in _array_or_empty(rule_data.get("variants", [])):
+			_append_unique_string(dialogue_ids, _dictionary_or_empty(variant).get("dialogue_id", ""))
+		for dialogue_id in dialogue_ids:
+			var dialogue_record: Dictionary = _dictionary_or_empty(dialogues.get(dialogue_id, {}))
+			var dialogue_data: Dictionary = _dictionary_or_empty(dialogue_record.get("data", {}))
+			for quest_id in _dialogue_turn_in_quest_ids(dialogue_data):
+				if not markers_by_quest.has(quest_id):
+					continue
+				if not result.has(str(definition_id)):
+					result[str(definition_id)] = []
+				var marker: Dictionary = _dictionary_or_empty(markers_by_quest.get(quest_id, {})).duplicate(true)
+				marker["source_dialogue_id"] = dialogue_id
+				result[str(definition_id)].append(marker)
+	return result
+
+
+func _manual_turn_in_markers_by_quest(runtime_snapshot: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for quest_state in _array_or_empty(runtime_snapshot.get("active_quests", [])):
+		var state: Dictionary = _dictionary_or_empty(quest_state)
+		var quest_id := str(state.get("quest_id", ""))
+		if quest_id.is_empty():
+			continue
+		var quest_record: Dictionary = _dictionary_or_empty(registry.get_library("quests").get(quest_id, {}))
+		var quest_data: Dictionary = _dictionary_or_empty(quest_record.get("data", {}))
+		var objective: Dictionary = _current_objective(quest_data, str(state.get("current_node_id", "")))
+		if objective.is_empty() or not bool(objective.get("manual_turn_in", false)):
+			continue
+		var objective_id := str(objective.get("id", ""))
+		var target_count: int = max(1, int(objective.get("count", 1)))
+		var completed: Dictionary = _dictionary_or_empty(state.get("completed_objectives", {}))
+		var current_count: int = int(completed.get(objective_id, 0)) if not objective_id.is_empty() else 0
+		result[quest_id] = {
+			"kind": "quest_turn_in",
+			"quest_id": quest_id,
+			"quest_title": str(quest_data.get("title", quest_id)),
+			"objective_id": objective_id,
+			"objective_type": str(objective.get("objective_type", "")),
+			"requirement_text": str(objective.get("description", "")),
+			"current": current_count,
+			"target": target_count,
+			"ready": current_count >= target_count,
+			"status": "ready" if current_count >= target_count else "pending",
+		}
+	return result
+
+
+func _current_objective(quest_data: Dictionary, current_node_id: String) -> Dictionary:
+	var flow: Dictionary = _dictionary_or_empty(quest_data.get("flow", {}))
+	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
+	var current_node: Dictionary = _dictionary_or_empty(nodes.get(current_node_id, {}))
+	if str(current_node.get("type", "")) == "objective":
+		return current_node
+	for node_id in nodes.keys():
+		var node: Dictionary = _dictionary_or_empty(nodes.get(node_id, {}))
+		if str(node.get("type", "")) == "objective":
+			return node
+	return {}
+
+
+func _dialogue_turn_in_quest_ids(dialogue_data: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for node in _array_or_empty(dialogue_data.get("nodes", [])):
+		var node_data: Dictionary = _dictionary_or_empty(node)
+		for action in _array_or_empty(node_data.get("actions", [])):
+			var action_data: Dictionary = _dictionary_or_empty(action)
+			if str(action_data.get("type", "")) != "turn_in_quest":
+				continue
+			_append_unique_string(result, action_data.get("quest_id", action_data.get("questId", "")))
+	return result
+
+
+func _append_unique_string(output: Array[String], value: Variant) -> void:
+	var text := str(value).strip_edges()
+	if text.is_empty() or output.has(text):
+		return
+	output.append(text)
 
 
 func _apply_consumed_interaction_targets(map_snapshot: Dictionary, consumed_values: Array) -> void:

@@ -36,7 +36,7 @@ func _run() -> void:
 
 	var counts: Dictionary = WorldSceneRenderer.new().render_world(root, world_result)
 	await process_frame
-	var errors := _validate_scene(root, world_result, counts)
+	var errors := _validate_scene(root, world_result, counts, registry)
 	errors.append_array(_validate_door_state_visuals())
 	if not errors.is_empty():
 		for error in errors:
@@ -49,7 +49,7 @@ func _run() -> void:
 	quit(0)
 
 
-func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary) -> Array[String]:
+func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	if root.get_node_or_null("GeneratedWorld") == null:
 		errors.append("missing GeneratedWorld root")
@@ -76,6 +76,7 @@ func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary)
 		_validate_player_camera_focus(root, errors)
 	_validate_runtime_map_object_fallbacks(root, errors)
 	_validate_synthetic_actor_side_badges(errors)
+	_validate_quest_actor_markers(registry, errors)
 	return errors
 
 
@@ -335,6 +336,97 @@ func _validate_synthetic_actor_side_badges(errors: Array[String]) -> void:
 		if ap_bar == null or absf(float(ap_bar.get_meta("ratio", -1.0)) - 0.5) > 0.001:
 			errors.append("synthetic hostile actor AP bar should expose half ap ratio")
 	synthetic_root.queue_free()
+
+
+func _validate_quest_actor_markers(registry: RefCounted, errors: Array[String]) -> void:
+	var runtime_snapshot := _quest_marker_runtime_snapshot()
+	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
+	if not bool(world_result.get("ok", false)):
+		errors.append("quest actor marker smoke failed to build world snapshot: %s" % world_result.get("error", "unknown"))
+		return
+	var doctor_actor := _actor_by_definition(_array_or_empty(world_result.get("actors", [])), "doctor_chen")
+	if doctor_actor.is_empty():
+		errors.append("quest actor marker smoke should include doctor_chen actor")
+		return
+	var quest_markers: Array = _array_or_empty(doctor_actor.get("quest_markers", []))
+	if quest_markers.is_empty():
+		errors.append("doctor_chen should expose quest turn-in marker from dialogue rules")
+		return
+	var marker: Dictionary = _dictionary_or_empty(quest_markers[0])
+	if str(marker.get("quest_id", "")) != "find_medicine":
+		errors.append("doctor_chen quest marker should target find_medicine")
+	if not bool(marker.get("ready", false)) or str(marker.get("status", "")) != "ready":
+		errors.append("doctor_chen quest marker should be ready when objective progress is complete")
+	if str(marker.get("source_dialogue_id", "")) != "doctor_chen_find_medicine_turn_in":
+		errors.append("doctor_chen quest marker should expose turn-in dialogue source")
+
+	var root := Node3D.new()
+	root.name = "SceneSmokeQuestMarkerRoot"
+	get_root().add_child(root)
+	WorldSceneRenderer.new().render_world(root, world_result, {"load_map_visuals": false})
+	var actor_node: Node = root.find_child("Actor_doctor_chen_9102", true, false)
+	if actor_node == null:
+		errors.append("doctor_chen quest marker actor should render")
+	else:
+		var icon: MeshInstance3D = actor_node.find_child("ActorQuestMarker", true, false) as MeshInstance3D
+		if icon == null:
+			errors.append("doctor_chen should render ActorQuestMarker")
+		else:
+			if str(icon.get_meta("quest_id", "")) != "find_medicine":
+				errors.append("ActorQuestMarker should expose quest_id metadata")
+			if not bool(icon.get_meta("ready", false)):
+				errors.append("ActorQuestMarker should expose ready metadata")
+			if str(icon.get_meta("source_dialogue_id", "")) != "doctor_chen_find_medicine_turn_in":
+				errors.append("ActorQuestMarker should expose source dialogue metadata")
+		var label: Label3D = actor_node.find_child("ActorQuestMarkerLabel", true, false) as Label3D
+		if label == null:
+			errors.append("doctor_chen should render ActorQuestMarkerLabel")
+		elif label.text != "!":
+			errors.append("ready quest marker label should use !")
+	root.queue_free()
+
+
+func _quest_marker_runtime_snapshot() -> Dictionary:
+	return {
+		"active_map_id": "survivor_outpost_01",
+		"door_states": [],
+		"consumed_interaction_targets": [],
+		"corpse_containers": [],
+		"active_quests": [{
+			"quest_id": "find_medicine",
+			"current_node_id": "step_1",
+			"completed_objectives": {"step_1": 1},
+		}],
+		"actors": [{
+			"actor_id": 9101,
+			"definition_id": "player",
+			"display_name": "Player",
+			"kind": "player",
+			"side": "player",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 1, "y": 0, "z": 1},
+			"ap": 6.0,
+			"combat": {"hp": 10.0, "max_hp": 10.0, "attributes": {"turn_ap_max": 6.0}},
+		}, {
+			"actor_id": 9102,
+			"definition_id": "doctor_chen",
+			"display_name": "陈医生",
+			"kind": "npc",
+			"side": "friendly",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 2, "y": 0, "z": 1},
+			"ap": 3.0,
+			"combat": {"hp": 8.0, "max_hp": 8.0, "attributes": {"turn_ap_max": 6.0}},
+		}],
+	}
+
+
+func _actor_by_definition(actors: Array, definition_id: String) -> Dictionary:
+	for actor in actors:
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if str(actor_data.get("definition_id", "")) == definition_id:
+			return actor_data
+	return {}
 
 
 func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, errors: Array[String]) -> void:
