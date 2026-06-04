@@ -63,12 +63,15 @@
 
 - 处理内容编辑、定位、摘要、引用、格式化、校验时，先看 `tools/agent/README.md`；涉及具体流程时再看 `docs/agent-workflows/*.md`。
 - 内容 CLI 默认使用 `tools/agent/godot-content.ps1`。
+- 需要 Godot import/cache 预热或 GDScript 静态解析时，使用 `tools/agent/test-godot-static.ps1`。
+- 需要给 agent 汇总 Godot 脚本或 scene 结构时，使用 `tools/agent/godot-agent-report.ps1`，报告输出到 `.local/agent-reports/godot`。
 - 需要打开或复用 Godot editor 并定位目标时，优先使用 `tools/agent/open-godot-editor.ps1`。
 - 地图改动后的空间复核优先使用 `tools/agent/review-godot-map-visual.ps1`；需要人工查看或精修时打开对应 Godot map scene，并用 `CDC Map Review` dock 查看复核信息。
 - 游戏运行时 smoke 默认使用 `tools/agent/test-godot-game.ps1`。
 - Editor 插件和编辑服务 smoke 默认使用 `tools/agent/test-godot-editor.ps1`。
 - 若脚本提供 PowerShell comment-based help，先用 `Get-Help tools/agent/<script>.ps1` 确认参数、示例和副作用。
 - 新增 `tools/agent/` 脚本时，同时更新脚本自身 help、`tools/agent/README.md` 和相关 workflow 文档。
+- `CODEXVault_GODOT` 仅作为 headless 验证和 agent 汇总思路参考；不要迁入 Linux setup、Godot Mono / .NET、pre-commit、GitHub Pages 或大体积静态工具资产。
 
 ## Bug / Crash 排查
 

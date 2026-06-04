@@ -13,9 +13,11 @@
 - `edit-recipe.md`
 - `edit-character.md`
 - `edit-map.md`
+- `godot-agent-report.md`
 - `review-godot-map-visual.md`
 - `test-godot-editor.md`
 - `test-godot-game.md`
+- `test-godot-static.md`
 
 ## General Rules
 
@@ -36,6 +38,11 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id <file>`
+- `pwsh -NoProfile -File tools/agent/test-godot-static.ps1`
+- `pwsh -NoProfile -File tools/agent/test-godot-static.ps1 -Scenario Import`
+- `pwsh -NoProfile -File tools/agent/test-godot-static.ps1 -Scenario CheckOnly`
+- `pwsh -NoProfile -File tools/agent/godot-agent-report.ps1 -Kind Scripts`
+- `pwsh -NoProfile -File tools/agent/godot-agent-report.ps1 -Kind Scenes`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Item <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Recipe <id>`
 - `pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Dialogue <id>`
@@ -79,6 +86,12 @@
 Godot editor 复核优先跑 `test-godot-editor.ps1`。
 
 内容定位、摘要、引用、格式化、diff 摘要和全量校验优先跑 `godot-content.ps1`。
+
+Godot import/cache 预热和 GDScript 静态解析优先跑 `test-godot-static.ps1`。
+
+需要 agent 快速理解 Godot 脚本和 scene 结构时，优先跑 `godot-agent-report.ps1`；报告只写入 `.local/agent-reports/godot`。
+
+`test-godot-static.ps1` 和 `godot-agent-report.ps1` 只迁移 `CODEXVault_GODOT` 中适合本项目的精简工作流，不迁入 Linux setup、Godot Mono / .NET、pre-commit、GitHub Pages 或大体积静态工具资产。
 
 当前 handoff 行为：
 
