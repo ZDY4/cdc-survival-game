@@ -35,7 +35,13 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		", ".join(_array_of_strings(snapshot.get("entry_points", []))),
 		snapshot.get("active_entry_point_id", ""),
 	]
-	_locations_label.text = "已解锁地点: %s" % ", ".join(_array_of_strings(snapshot.get("unlocked_locations", [])))
+	var active_location_id := str(snapshot.get("active_location_id", ""))
+	var active_location_name := str(snapshot.get("active_location_name", active_location_id))
+	_locations_label.text = "当前地点: %s (%s) | 已解锁: %s" % [
+		active_location_name,
+		active_location_id,
+		", ".join(_array_of_strings(snapshot.get("unlocked_locations", []))),
+	]
 	_tracked_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
 	_clear_kinds()
 	var kinds: Dictionary = _dictionary_or_empty(snapshot.get("objects_by_kind", {}))
