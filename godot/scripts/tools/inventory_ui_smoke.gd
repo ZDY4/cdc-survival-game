@@ -89,6 +89,35 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("inspect context action should not spend AP")
 			if _player_inventory_count(game_root, "1006") != count_before_inspect:
 				errors.append("inspect context action should not mutate inventory")
+		if _context_action_disabled(game_root, 5):
+			errors.append("usable item context menu should enable add-to-hotbar")
+		else:
+			var hotbar_hp_before: float = player_ref.hp
+			var hotbar_ap_before: float = player_ref.ap
+			var hotbar_count_before: int = _player_inventory_count(game_root, "1006")
+			_execute_inventory_context_action(game_root, 5)
+			await process_frame
+			if not _hud_hotbar_slot_text(game_root, "slot_1").contains("绷带"):
+				errors.append("adding bandage to hotbar should show item in HUD slot 1")
+			if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("物品"):
+				errors.append("item hotbar slot should expose item tooltip")
+			var hotbar_use: Dictionary = game_root.use_hotbar_slot("slot_1")
+			await process_frame
+			if not bool(hotbar_use.get("success", false)):
+				errors.append("using bandage hotbar item should succeed: %s" % hotbar_use.get("reason", "unknown"))
+			if absf(player_ref.hp - minf(player_ref.max_hp, hotbar_hp_before + 25.0)) > 0.01:
+				errors.append("using bandage hotbar item should restore hp")
+			if absf(player_ref.ap - (hotbar_ap_before - 2.0)) > 0.01:
+				errors.append("using bandage hotbar item should spend item AP cost")
+			if _player_inventory_count(game_root, "1006") != hotbar_count_before - 1:
+				errors.append("using bandage hotbar item should consume one item")
+			player_ref.hp = 50.0
+			player_ref.ap = 6.0
+			player_ref.inventory["1006"] = 2
+			game_root.refresh_inventory_panel()
+			game_root.refresh_hud()
+			if not _open_inventory_context_menu(game_root, "绷带"):
+				errors.append("should reopen context menu for bandage after hotbar use")
 		_execute_inventory_context_action(game_root, 1)
 		await process_frame
 		if absf(player_ref.hp - 75.0) > 0.01:
@@ -126,6 +155,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("quest item context menu should disable use")
 		if not _context_action_disabled(game_root, 3):
 			errors.append("quest item context menu should disable drop")
+		if not _context_action_disabled(game_root, 5):
+			errors.append("quest item context menu should disable add-to-hotbar")
 	var quest_ap_before: float = player_ref.ap
 	var quest_use: Dictionary = game_root.use_player_item("1007")
 	if str(quest_use.get("reason", "")) != "item_use_forbidden":
@@ -574,6 +605,16 @@ func _context_action_disabled(game_root: Node, action_id: int) -> bool:
 
 func _execute_inventory_context_action(game_root: Node, action_id: int) -> void:
 	game_root.inventory_panel.call("_execute_context_action", action_id)
+
+
+func _hud_hotbar_slot_text(game_root: Node, slot_id: String) -> String:
+	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
+	return "" if button == null else str(button.text)
+
+
+func _hud_hotbar_slot_tooltip(game_root: Node, slot_id: String) -> String:
+	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
+	return "" if button == null else str(button.tooltip_text)
 
 
 func _reorder_inventory_item_before(game_root: Node, item_needle: String, target_needle: String) -> bool:

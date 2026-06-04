@@ -99,6 +99,16 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"skill_id": "adrenaline_rush",
 		"skill_library": registry.get_library("skills"),
 	})
+	player_for_reload.inventory["1006"] = max(1, int(player_for_reload.inventory.get("1006", 0)))
+	simulation.submit_player_command({
+		"kind": "bind_hotbar",
+		"actor_id": 1,
+		"slot_id": "slot_2",
+		"hotbar_kind": "item",
+		"item_id": "1006",
+		"item_library": registry.get_library("items"),
+		"effect_library": registry.get_library("json"),
+	})
 	simulation.submit_player_command({
 		"kind": "use_skill",
 		"actor_id": 1,

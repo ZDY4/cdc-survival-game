@@ -924,9 +924,38 @@ func bind_player_skill_to_hotbar(slot_id: String, skill_id: String) -> Dictionar
 	return result
 
 
+func bind_player_item_to_hotbar(slot_id: String, item_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "bind_hotbar",
+		"actor_id": 1,
+		"slot_id": slot_id,
+		"hotbar_kind": "item",
+		"item_id": item_id,
+		"item_library": registry.get_library("items"),
+		"effect_library": registry.get_library("json"),
+	})
+	refresh_hud()
+	refresh_inventory_panel()
+	return result
+
+
 func use_hotbar_slot(slot_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	var slot: Dictionary = _dictionary_or_empty(_dictionary_or_empty(simulation.snapshot().get("hotbar", {})).get(slot_id, {}))
+	if str(slot.get("kind", "")) == "item":
+		var result: Dictionary = _submit_inventory_action({
+			"action": "use_item",
+			"item_id": str(slot.get("item_id", "")),
+			"item_library": registry.get_library("items"),
+			"effect_library": registry.get_library("json"),
+		})
+		refresh_hud()
+		refresh_character_panel()
+		refresh_inventory_panel()
+		return result
 	var result: Dictionary = simulation.submit_player_command({
 		"kind": "use_skill",
 		"actor_id": 1,

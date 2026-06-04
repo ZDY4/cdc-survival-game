@@ -845,8 +845,12 @@ func _submit_learn_skill_command(actor: RefCounted, command: Dictionary) -> Dict
 
 func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	var slot_id: String = str(command.get("slot_id", ""))
+	var kind: String = str(command.get("hotbar_kind", command.get("bind_kind", "")))
 	var skill_id: String = str(command.get("skill_id", ""))
-	if skill_id.is_empty():
+	var item_id: String = _inventory_entries.normalize_content_id(command.get("item_id", ""))
+	if kind.is_empty():
+		kind = "item" if not item_id.is_empty() else "skill"
+	if skill_id.is_empty() and item_id.is_empty():
 		if slot_id.is_empty():
 			return {"success": false, "reason": "hotbar_slot_missing"}
 		hotbar.erase(slot_id)
@@ -855,6 +859,10 @@ func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dict
 			"slot_id": slot_id,
 		})
 		return {"success": true, "slot_id": slot_id, "cleared": true}
+	if kind == "item":
+		return _bind_item_to_hotbar(actor, slot_id, item_id, command)
+	if kind != "skill":
+		return {"success": false, "reason": "unknown_hotbar_kind", "hotbar_kind": kind}
 	var skill: Dictionary = _skill_data(skill_id, _dictionary_or_empty(command.get("skill_library", {})))
 	if skill.is_empty():
 		return {"success": false, "reason": "unknown_skill", "skill_id": skill_id}
@@ -883,12 +891,46 @@ func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dict
 	return {"success": true, "slot_id": slot_id, "skill_id": skill_id, "auto_slot": auto_slot}
 
 
+func _bind_item_to_hotbar(actor: RefCounted, slot_id: String, item_id: String, command: Dictionary) -> Dictionary:
+	if item_id.is_empty():
+		return {"success": false, "reason": "item_id_missing"}
+	var items: Dictionary = _dictionary_or_empty(command.get("item_library", item_library))
+	var effects: Dictionary = _dictionary_or_empty(command.get("effect_library", effect_library))
+	var validation: Dictionary = _item_use_runner.validate_use_item(self, actor.actor_id, item_id, items, effects)
+	if not bool(validation.get("success", false)):
+		validation["hotbar_kind"] = "item"
+		return validation
+	var resolved_slot_id: String = _resolve_hotbar_bind_slot_for_entry("item", item_id, slot_id)
+	if resolved_slot_id.is_empty():
+		return {"success": false, "reason": "hotbar_full", "item_id": item_id, "hotbar_kind": "item"}
+	var auto_slot: bool = slot_id.is_empty()
+	slot_id = resolved_slot_id
+	hotbar[slot_id] = {
+		"slot_id": slot_id,
+		"kind": "item",
+		"item_id": item_id,
+		"cooldown_remaining": 0.0,
+	}
+	_emit("hotbar_bound", {
+		"actor_id": actor.actor_id,
+		"slot_id": slot_id,
+		"kind": "item",
+		"item_id": item_id,
+	})
+	return {"success": true, "slot_id": slot_id, "item_id": item_id, "hotbar_kind": "item", "auto_slot": auto_slot}
+
+
 func _resolve_hotbar_bind_slot(skill_id: String, requested_slot_id: String) -> String:
+	return _resolve_hotbar_bind_slot_for_entry("skill", skill_id, requested_slot_id)
+
+
+func _resolve_hotbar_bind_slot_for_entry(kind: String, entry_id: String, requested_slot_id: String) -> String:
 	if not requested_slot_id.is_empty():
 		return requested_slot_id
 	for slot_id in hotbar.keys():
 		var slot: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {}))
-		if str(slot.get("kind", "")) == "skill" and str(slot.get("skill_id", "")) == skill_id:
+		var id_key := "skill_id" if kind == "skill" else "item_id"
+		if str(slot.get("kind", "")) == kind and str(slot.get(id_key, "")) == entry_id:
 			return str(slot_id)
 	for index in range(1, HOTBAR_SLOT_COUNT + 1):
 		var candidate := "slot_%d" % index

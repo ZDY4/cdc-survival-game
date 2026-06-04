@@ -1,5 +1,11 @@
 extends RefCounted
 
+var registry: RefCounted
+
+
+func _init(p_registry: RefCounted = null) -> void:
+	registry = p_registry
+
 
 func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_target: Dictionary = {}) -> Dictionary:
 	var player := _player_actor(runtime_snapshot)
@@ -71,17 +77,27 @@ func _hotbar_summary(runtime_snapshot: Dictionary) -> Array[Dictionary]:
 	for slot_index in range(1, 11):
 		var slot_id := "slot_%d" % slot_index
 		var slot_data: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {}))
+		var kind := str(slot_data.get("kind", ""))
 		var skill_id := str(slot_data.get("skill_id", ""))
+		var item_id := str(slot_data.get("item_id", ""))
+		var entry_id := item_id if kind == "item" else skill_id
 		output.append({
 			"slot_id": slot_id,
 			"key": "0" if slot_index == 10 else str(slot_index),
-			"kind": str(slot_data.get("kind", "")),
+			"kind": kind,
 			"skill_id": skill_id,
-			"label": _skill_label(skill_id),
+			"item_id": item_id,
+			"label": _hotbar_label(kind, entry_id),
 			"cooldown_remaining": float(slot_data.get("cooldown_remaining", 0.0)),
-			"empty": slot_data.is_empty() or skill_id.is_empty(),
+			"empty": slot_data.is_empty() or entry_id.is_empty(),
 		})
 	return output
+
+
+func _hotbar_label(kind: String, entry_id: String) -> String:
+	if kind == "item":
+		return _item_label(entry_id)
+	return _skill_label(entry_id)
 
 
 func _skill_label(skill_id: String) -> String:
@@ -91,6 +107,18 @@ func _skill_label(skill_id: String) -> String:
 	for index in range(parts.size()):
 		parts[index] = str(parts[index]).capitalize()
 	return " ".join(parts)
+
+
+func _item_label(item_id: String) -> String:
+	if item_id.is_empty():
+		return ""
+	if registry != null:
+		var record: Dictionary = _dictionary_or_empty(registry.get_library("items").get(item_id, {}))
+		var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+		var name := str(data.get("name", ""))
+		if not name.is_empty():
+			return name
+	return item_id
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

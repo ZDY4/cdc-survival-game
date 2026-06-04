@@ -230,8 +230,11 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	var button := Button.new()
 	var slot_id := str(slot.get("slot_id", ""))
 	var key_label := str(slot.get("key", ""))
+	var kind := str(slot.get("kind", ""))
 	var skill_id := str(slot.get("skill_id", ""))
-	var skill_label := str(slot.get("label", skill_id))
+	var item_id := str(slot.get("item_id", ""))
+	var entry_id := item_id if kind == "item" else skill_id
+	var entry_label := str(slot.get("label", entry_id))
 	var cooldown := float(slot.get("cooldown_remaining", 0.0))
 	button.name = "HotbarSlot_%s" % slot_id
 	button.custom_minimum_size = Vector2(48, 28)
@@ -249,10 +252,11 @@ func _hotbar_button(slot: Dictionary) -> Button:
 		button.tooltip_text = "热栏 %s：空 | 可拖入主动技能" % key_label
 		return button
 	var suffix := " cd%.0f" % cooldown if cooldown > 0.0 else ""
-	button.text = "%s:%s%s" % [key_label, _short_hotbar_label(skill_label), suffix]
-	button.tooltip_text = "热栏 %s | %s | %s" % [
+	button.text = "%s:%s%s" % [key_label, _short_hotbar_label(entry_label), suffix]
+	button.tooltip_text = "热栏 %s | %s | %s | %s" % [
 		key_label,
-		skill_label,
+		"物品" if kind == "item" else "技能",
+		entry_label,
 		"冷却 %.0fs" % cooldown if cooldown > 0.0 else "可用",
 	]
 	button.disabled = cooldown > 0.0

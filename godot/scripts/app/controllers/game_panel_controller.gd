@@ -89,7 +89,7 @@ func refresh_all(selected_prompt: Dictionary = {}) -> void:
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 	if hud == null or simulation == null:
 		return
-	var snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, selected_prompt)
+	var snapshot: Dictionary = HudSnapshot.new(registry).build(simulation.snapshot(), world_result, selected_prompt)
 	if parent != null and parent.has_method("current_debug_overlay_mode"):
 		snapshot["debug_overlay_mode"] = parent.current_debug_overlay_mode()
 	if parent != null and parent.has_method("info_panel_snapshot"):
