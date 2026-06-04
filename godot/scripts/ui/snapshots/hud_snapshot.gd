@@ -431,7 +431,7 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 		"attack_resolved":
 			return {
 				"kind": kind,
-				"text": "攻击: %d -> %d" % [int(payload.get("attacker_id", 0)), int(payload.get("target_id", 0))],
+				"text": _attack_feedback_text(payload),
 			}
 		"actor_defeated":
 			return {
@@ -541,6 +541,32 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 			}
 		_:
 			return {}
+
+
+func _attack_feedback_text(payload: Dictionary) -> String:
+	var actor_id: int = int(payload.get("actor_id", payload.get("attacker_id", 0)))
+	var target_actor_id: int = int(payload.get("target_actor_id", payload.get("target_id", 0)))
+	var hit_kind: String = str(payload.get("hit_kind", "crit" if bool(payload.get("critical", false)) else "hit"))
+	var result_text := "命中"
+	match hit_kind:
+		"miss":
+			result_text = "闪避"
+		"blocked":
+			result_text = "格挡"
+		"crit":
+			result_text = "暴击"
+	var detail_parts: Array[String] = [result_text]
+	if payload.has("damage"):
+		detail_parts.append("%s伤害" % _number_text(float(payload.get("damage", 0.0))))
+	if payload.has("hit_chance"):
+		detail_parts.append("命中率%s" % _percent_text(float(payload.get("hit_chance", 0.0))))
+	if bool(payload.get("defeated", false)):
+		detail_parts.append("击倒")
+	return "攻击: %d -> %d %s" % [
+		actor_id,
+		target_actor_id,
+		" ".join(detail_parts),
+	]
 
 
 func _command_kind_label(kind: String) -> String:
@@ -737,3 +763,7 @@ func _number_text(value: float) -> String:
 	if is_equal_approx(value, roundf(value)):
 		return str(int(roundf(value)))
 	return "%.1f" % value
+
+
+func _percent_text(value: float) -> String:
+	return "%d%%" % int(round(value * 100.0))

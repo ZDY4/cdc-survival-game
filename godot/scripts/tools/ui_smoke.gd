@@ -39,6 +39,7 @@ func _init() -> void:
 
 	var errors := _validate_hud(hud, snapshot)
 	errors.append_array(_validate_hud_failure_feedback(hud, simulation, world_result, registry))
+	errors.append_array(_validate_hud_combat_feedback(hud, simulation, world_result))
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -174,6 +175,24 @@ func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_
 	var craft_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
 	if not craft_feedback_line.contains("失败 制作: 材料不足"):
 		errors.append("event feedback line should localize crafting rejection, got %s" % craft_feedback_line)
+	return errors
+
+
+func _validate_hud_combat_feedback(hud: Control, simulation: RefCounted, world_result: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	simulation.emit_event("attack_resolved", {
+		"actor_id": 1,
+		"target_actor_id": 42,
+		"damage": 7.0,
+		"hit_kind": "crit",
+		"hit_chance": 0.85,
+		"defeated": true,
+	})
+	var snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, {})
+	hud.apply_snapshot(snapshot)
+	var feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
+	if not feedback_line.contains("攻击: 1 -> 42 暴击 7伤害 命中率85% 击倒"):
+		errors.append("event feedback line should show detailed attack result, got %s" % feedback_line)
 	return errors
 
 
