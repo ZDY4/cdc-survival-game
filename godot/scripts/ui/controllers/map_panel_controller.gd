@@ -7,6 +7,7 @@ var _summary_label: Label
 var _counts_label: Label
 var _entry_label: Label
 var _locations_label: Label
+var _overworld_label: Label
 var _tracked_quest_label: Label
 var _tracked_markers_label: Label
 var _canvas: Control
@@ -47,6 +48,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		active_location_id,
 		", ".join(_array_of_strings(snapshot.get("unlocked_locations", []))),
 	]
+	_overworld_label.text = _overworld_text(snapshot.get("overworld_overview", {}))
 	_tracked_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
 	_tracked_markers_label.text = _tracked_markers_text(snapshot.get("tracked_markers", []))
 	if _canvas != null and _canvas.has_method("apply_snapshot"):
@@ -85,6 +87,7 @@ func _build_layout() -> void:
 	_counts_label = _label("CountsLine")
 	_entry_label = _label("EntryLine")
 	_locations_label = _label("LocationsLine")
+	_overworld_label = _label("OverworldLine")
 	_tracked_quest_label = _label("TrackedQuestLine")
 	_tracked_markers_label = _label("TrackedMarkersLine")
 	_canvas = MapCanvasControl.new()
@@ -98,6 +101,7 @@ func _build_layout() -> void:
 	box.add_child(_counts_label)
 	box.add_child(_entry_label)
 	box.add_child(_locations_label)
+	box.add_child(_overworld_label)
 	box.add_child(_tracked_quest_label)
 	box.add_child(_tracked_markers_label)
 	box.add_child(_canvas_toolbar())
@@ -139,6 +143,37 @@ func _tracked_quest_text(value: Variant) -> String:
 		int(tracked.get("progress_current", 0)),
 		int(tracked.get("progress_target", 0)),
 		str(tracked.get("status_text", "")),
+	]
+
+
+func _overworld_text(value: Variant) -> String:
+	var overview: Dictionary = _dictionary_or_empty(value)
+	var locations := _array_or_empty(overview.get("locations", []))
+	if locations.is_empty():
+		return "世界地图: 无"
+	var size: Dictionary = _dictionary_or_empty(overview.get("size", {}))
+	var active_location_id := str(overview.get("active_location_id", ""))
+	var active_location: Dictionary = {}
+	for location in locations:
+		var location_data: Dictionary = _dictionary_or_empty(location)
+		if str(location_data.get("id", "")) == active_location_id:
+			active_location = location_data
+			break
+	var grid: Dictionary = _dictionary_or_empty(active_location.get("grid", {}))
+	var active_text := active_location_id
+	if not grid.is_empty():
+		active_text = "%s@%d,%d" % [
+			str(active_location.get("name", active_location_id)),
+			int(grid.get("x", 0)),
+			int(grid.get("z", 0)),
+		]
+	return "世界地图: %sx%s | 可见地点 %d/%d | 道路 %d | 当前 %s" % [
+		str(size.get("width", "?")),
+		str(size.get("height", "?")),
+		int(overview.get("unlocked_count", 0)),
+		locations.size(),
+		_array_or_empty(overview.get("route_cells", [])).size(),
+		active_text,
 	]
 
 
@@ -204,12 +239,13 @@ func _canvas_state_text() -> String:
 	if _canvas == null or not _canvas.has_method("view_state"):
 		return "地图画布: 未就绪"
 	var state: Dictionary = _dictionary_or_empty(_canvas.call("view_state"))
-	return "地图画布: zoom %.2f | pan %.0f,%.0f | marker %d | entry %d" % [
+	return "地图画布: zoom %.2f | pan %.0f,%.0f | marker %d | entry %d | world %d" % [
 		float(state.get("zoom", 1.0)),
 		float(_dictionary_or_empty(state.get("pan", {})).get("x", 0.0)),
 		float(_dictionary_or_empty(state.get("pan", {})).get("y", 0.0)),
 		int(state.get("marker_count", 0)),
 		int(state.get("entry_count", 0)),
+		int(state.get("overworld_location_count", 0)),
 	]
 
 

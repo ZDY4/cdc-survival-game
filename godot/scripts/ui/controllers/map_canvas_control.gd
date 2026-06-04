@@ -57,6 +57,7 @@ func view_state() -> Dictionary:
 		"pan": {"x": pan.x, "y": pan.y},
 		"marker_count": _array_or_empty(snapshot.get("tracked_markers", [])).size(),
 		"entry_count": _entry_points().size(),
+		"overworld_location_count": _overworld_locations().size(),
 	}
 
 
@@ -92,6 +93,7 @@ func _draw() -> void:
 	_draw_grid(map_rect)
 	_draw_entries(map_rect)
 	_draw_markers(map_rect)
+	_draw_overworld_overview(rect)
 
 
 func _draw_grid(map_rect: Rect2) -> void:
@@ -128,6 +130,32 @@ func _draw_markers(map_rect: Rect2) -> void:
 		draw_line(point + Vector2(0, -9), point + Vector2(0, 9), color, 2.0)
 
 
+func _draw_overworld_overview(canvas_rect: Rect2) -> void:
+	var overview: Dictionary = _dictionary_or_empty(snapshot.get("overworld_overview", {}))
+	var locations := _overworld_locations()
+	if locations.is_empty():
+		return
+	var inset_size := Vector2(126, 94)
+	var inset := Rect2(canvas_rect.end - inset_size - Vector2(12, 12), inset_size)
+	draw_rect(inset, Color(0.05, 0.07, 0.08, 0.9), true)
+	draw_rect(inset, Color(0.37, 0.46, 0.48, 1.0), false, 1.0)
+	for route in _array_or_empty(overview.get("route_cells", [])):
+		var route_data: Dictionary = _dictionary_or_empty(route)
+		var point := _overworld_grid_to_canvas(_dictionary_or_empty(route_data.get("grid", {})), inset, overview)
+		draw_rect(Rect2(point - Vector2(1.5, 1.5), Vector2(3, 3)), Color(0.42, 0.43, 0.36, 0.72), true)
+	for location in locations:
+		var location_data: Dictionary = _dictionary_or_empty(location)
+		var point := _overworld_grid_to_canvas(_dictionary_or_empty(location_data.get("grid", {})), inset, overview)
+		var color := Color(0.42, 0.53, 0.56, 1.0)
+		if bool(location_data.get("unlocked", false)):
+			color = Color(0.52, 0.78, 0.58, 1.0)
+		if bool(location_data.get("active", false)):
+			color = Color(1.0, 0.78, 0.26, 1.0)
+		draw_circle(point, 3.5 if not bool(location_data.get("active", false)) else 5.5, color)
+		if bool(location_data.get("active", false)):
+			draw_circle(point, 8.0, Color(1.0, 0.78, 0.26, 0.28))
+
+
 func _map_rect() -> Rect2:
 	var margin := 10.0
 	var base := Rect2(Vector2(margin, margin), size - Vector2(margin * 2.0, margin * 2.0))
@@ -150,6 +178,24 @@ func _grid_to_canvas(grid: Dictionary, map_rect: Rect2) -> Vector2:
 
 func _entry_points() -> Dictionary:
 	return _dictionary_or_empty(snapshot.get("entry_point_grids", {}))
+
+
+func _overworld_locations() -> Array:
+	return _array_or_empty(_dictionary_or_empty(snapshot.get("overworld_overview", {})).get("locations", []))
+
+
+func _overworld_grid_to_canvas(grid: Dictionary, rect: Rect2, overview: Dictionary) -> Vector2:
+	var size_data: Dictionary = _dictionary_or_empty(overview.get("size", {}))
+	var width: float = max(1.0, float(size_data.get("width", 1)))
+	var height: float = max(1.0, float(size_data.get("height", 1)))
+	var x: float = clampf(float(grid.get("x", 0)), 0.0, width - 1.0)
+	var z: float = clampf(float(grid.get("z", 0)), 0.0, height - 1.0)
+	var pad := 8.0
+	var inner := Rect2(rect.position + Vector2(pad, pad), rect.size - Vector2(pad * 2.0, pad * 2.0))
+	return Vector2(
+		inner.position.x + (x / max(1.0, width - 1.0)) * inner.size.x,
+		inner.position.y + (z / max(1.0, height - 1.0)) * inner.size.y
+	)
 
 
 func _array_or_empty(value: Variant) -> Array:

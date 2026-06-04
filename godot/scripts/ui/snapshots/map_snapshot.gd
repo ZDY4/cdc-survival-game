@@ -26,6 +26,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, tracked_que
 		"entry_point_grids": _entry_point_grids(map),
 		"objects_by_kind": _dictionary_or_empty(map.get("objects_by_kind", {})),
 		"unlocked_locations": _unlocked_location_summaries(unlocked_locations),
+		"overworld_overview": _overworld_overview(active_location_id, unlocked_locations),
 		"tracked_markers": _tracked_markers(tracked_quest, runtime_snapshot, world_snapshot),
 	}
 
@@ -50,6 +51,65 @@ func _unlocked_location_summaries(value: Variant) -> Array[String]:
 		var name := _location_name(location_id)
 		result.append("%s (%s)" % [name, location_id] if name != location_id else location_id)
 	return result
+
+
+func _overworld_overview(active_location_id: String, unlocked_locations: Variant) -> Dictionary:
+	var result: Dictionary = {
+		"size": {},
+		"active_location_id": active_location_id,
+		"locations": [],
+		"route_cells": [],
+		"unlocked_count": 0,
+	}
+	if registry == null:
+		return result
+	var unlocked_ids := _string_lookup(unlocked_locations)
+	var records: Dictionary = registry.get_library("overworld")
+	for overworld_id in records.keys():
+		var record: Dictionary = _dictionary_or_empty(records.get(overworld_id, {}))
+		var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+		result["overworld_id"] = str(data.get("id", overworld_id))
+		result["size"] = _dictionary_or_empty(data.get("size", {})).duplicate(true)
+		var locations: Array[Dictionary] = []
+		var unlocked_count := 0
+		for location in _array_or_empty(data.get("locations", [])):
+			var location_data: Dictionary = _dictionary_or_empty(location)
+			var location_id := str(location_data.get("id", ""))
+			if location_id.is_empty() or not bool(location_data.get("visible", true)):
+				continue
+			var unlocked := unlocked_ids.has(location_id) or bool(location_data.get("default_unlocked", false))
+			if unlocked:
+				unlocked_count += 1
+			locations.append({
+				"id": location_id,
+				"name": str(location_data.get("name", location_id)),
+				"kind": str(location_data.get("kind", "")),
+				"map_id": str(location_data.get("map_id", "")),
+				"danger_level": int(location_data.get("danger_level", 0)),
+				"grid": _dictionary_or_empty(location_data.get("overworld_cell", {})).duplicate(true),
+				"unlocked": unlocked,
+				"active": location_id == active_location_id,
+				"parent_outdoor_location_id": str(location_data.get("parent_outdoor_location_id", "")),
+			})
+		result["locations"] = locations
+		result["unlocked_count"] = unlocked_count
+		result["route_cells"] = _overworld_route_cells(data)
+		return result
+	return result
+
+
+func _overworld_route_cells(data: Dictionary) -> Array[Dictionary]:
+	var route_cells: Array[Dictionary] = []
+	for cell in _array_or_empty(data.get("cells", [])):
+		var cell_data: Dictionary = _dictionary_or_empty(cell)
+		var terrain := str(cell_data.get("terrain", ""))
+		if terrain != "road":
+			continue
+		route_cells.append({
+			"terrain": terrain,
+			"grid": _dictionary_or_empty(cell_data.get("grid", {})).duplicate(true),
+		})
+	return route_cells
 
 
 func _location_data(location_id: String) -> Dictionary:
@@ -236,6 +296,13 @@ func _array_of_strings(value: Variant) -> Array[String]:
 	for item in value:
 		result.append(str(item))
 	result.sort()
+	return result
+
+
+func _string_lookup(value: Variant) -> Dictionary:
+	var result: Dictionary = {}
+	for item in _array_or_empty(value):
+		result[str(item)] = true
 	return result
 
 

@@ -104,7 +104,7 @@
 ### 4.3 地图切换和 overworld
 
 - 待补 scene transition 触发器完整逻辑：目标 map、entry point、目标名称、不可进入原因、进入后 facing、返回点记录。
-- 待补 overworld 位置进入、返回、解锁地点、最近到达地点、地图面板定位和 prompt。
+- 部分迁移 overworld 位置进入、返回和解锁地点；地图面板定位第一版已从 `data/overworld` 展示世界地图尺寸、当前地点坐标、地点解锁数量、道路格摘要和画布 inset，并由 `UIToggle` smoke 覆盖。待补最近到达地点、显式路线规划、进入/返回 prompt 和无法进入原因 UI。
 - 部分迁移地图切换后的运行时清理：pending、active dialogue、active container 和 active trade 会在位置进入或刷新时关闭并发出带 reason 的事件，已由 `Overworld` / `TradeUI` smoke 覆盖；待补相机重新定位和雾战重建。
 - 待补所有 `godot/scenes/maps/*.tscn` 与旧 JSON 备份的字段等价复核：size、levels、entry points、objects、footprints、rotations、props、triggers。
 
@@ -253,7 +253,7 @@
 - 待补 dialogue turn-in 条件、对话中交付提示、物品扣除失败、奖励失败回滚。
 - 待补任务链：完成后启动后续任务、互斥任务、解锁地点、世界状态 flags。
 - Journal 详情第一版已迁移：目标节点、任务描述、目标类型/需求、进度、可交付状态、奖励详情、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付后的完成/奖励反馈和手动交付失败历史第一版已纳入 `JournalUI` / `UI` smoke；待补更完整进度列表。
-- 地图目标 marker 第一版已迁移：追踪 collect 目标会在当前地图标出匹配 pickup 或含目标物品的容器，追踪 kill 目标会标出当前地图匹配 enemy_type 的 actor；找不到目标时保留 unresolved marker 和 reason；地图面板 canvas 第一版会绘制地图边界、网格、入口点和可定位任务 marker，并支持缩放按钮，已纳入 `JournalUI` / `UIToggle` smoke。待补跨地图/overworld 路线、目标优先级、完成/失败反馈和更完整图形 polish。
+- 地图目标 marker 第一版已迁移：追踪 collect 目标会在当前地图标出匹配 pickup 或含目标物品的容器，追踪 kill 目标会标出当前地图匹配 enemy_type 的 actor；找不到目标时保留 unresolved marker 和 reason；地图面板 canvas 第一版会绘制地图边界、网格、入口点、可定位任务 marker 和 overworld inset，并支持缩放/平移按钮，已纳入 `JournalUI` / `UIToggle` smoke。待补跨地图显式路线、目标优先级、完成/失败反馈和更完整图形 polish。
 - 待补任务反馈：toast、事件日志、HUD 提醒、奖励动画占位和更完整失败反馈。
 
 ## 11. 制作和配方
@@ -317,7 +317,7 @@
 
 - 背包面板已有筛选、搜索、详情、滚动列表、选中物品操作栏、右键检查/使用/装备/丢弃/全部丢弃/加入热栏菜单、顺序视图拖拽重排、拖到装备/丢弃按钮和丢弃数量弹窗第一版；可使用物品热栏绑定/触发和存档 roundtrip 已纳入 `InventoryUI` / `Save` smoke；待补实际装备槽集成、完整上下文项、跨面板拖拽、拆分 polish。
 - 角色面板已有属性、资源、装备、属性点分配、派生数值摘要和状态效果第一版；派生数值会展示生命/速度、攻击/防御/暴击、基础属性合计、装备修饰和状态修饰，状态效果会显示 actor active effects 的名称、分类、来源、等级、剩余回合和 modifier，悬停说明来源、技能 ID、持续时间、修饰和 effect id，并纳入 `UIToggle` smoke。待补负面状态视觉和更完整排版。
-- 地图面板已有当前地图、当前地点名称、入口、已解锁地点名称、对象统计、追踪任务行、追踪目标 marker 行、地图 canvas、入口点绘制、目标 marker 绘制、zoom 按钮、左键拖拽平移、pan 复位和画布状态诊断第一版；待补 overworld 路线和更完整图形化地图目标 marker。
+- 地图面板已有当前地图、当前地点名称、入口、已解锁地点名称、对象统计、追踪任务行、追踪目标 marker 行、地图 canvas、入口点绘制、目标 marker 绘制、zoom 按钮、左键拖拽平移、pan 复位、画布状态诊断和 overworld 地点/道路 inset 第一版；待补显式 overworld 路线规划和更完整图形化地图目标 marker。
 - Journal 面板已有任务详情、可交付状态、奖励详情、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；待补更完整失败反馈。
 - Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏和多树切换第一版；待补图形技能树、pan、节点连线、前置链路高亮和目标预览。
 - Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、批量执行和完成反馈第一版；待补制作队列和取消。
