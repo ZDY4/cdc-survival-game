@@ -211,11 +211,23 @@ func _expect_right_click_menu_buttons(errors: Array[String], game_root: Node) ->
 		return
 	if not menu.visible:
 		errors.append("right-click interaction menu should be visible for selected target")
+	var summary_label: Label = menu.find_child("MenuSummary", true, false) as Label
+	if summary_label == null:
+		errors.append("right-click interaction menu should expose summary line")
+	elif not summary_label.text.contains("主动作") or not summary_label.text.contains("可用"):
+		errors.append("right-click interaction menu summary should expose primary and option counts")
 	var option_button: Button = menu.find_child("Option_pickup", true, false) as Button
 	if option_button == null:
 		errors.append("right-click interaction menu should expose pickup option button")
 	elif option_button.text != "拾取":
 		errors.append("right-click interaction menu pickup option should use localized display name")
+	else:
+		option_button.mouse_entered.emit()
+		var hover_label: Label = menu.find_child("MenuHoverHint", true, false) as Label
+		if hover_label == null:
+			errors.append("right-click interaction menu should expose hover detail line")
+		elif not hover_label.text.contains("kind=pickup"):
+			errors.append("right-click interaction menu hover detail should expose option kind")
 	var before_grid: Dictionary = _player_grid(game_root)
 	var outside_click := InputEventMouseButton.new()
 	outside_click.button_index = MOUSE_BUTTON_LEFT

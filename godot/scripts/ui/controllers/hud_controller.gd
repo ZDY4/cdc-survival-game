@@ -15,6 +15,8 @@ var _skill_targeting_label: Label
 var _controls_hint_box: VBoxContainer
 var _interaction_menu: PanelContainer
 var _menu_title_label: Label
+var _menu_summary_label: Label
+var _menu_hover_label: Label
 var _menu_options_box: VBoxContainer
 var controls_hint_visible := false
 
@@ -177,11 +179,15 @@ func _build_interaction_menu() -> void:
 	_interaction_menu.add_child(box)
 
 	_menu_title_label = _line("MenuTitle")
+	_menu_summary_label = _line("MenuSummary")
+	_menu_hover_label = _line("MenuHoverHint")
 	_menu_options_box = VBoxContainer.new()
 	_menu_options_box.name = "MenuOptions"
 	_menu_options_box.add_theme_constant_override("separation", 3)
 	box.add_child(_menu_title_label)
+	box.add_child(_menu_summary_label)
 	box.add_child(_menu_options_box)
+	box.add_child(_menu_hover_label)
 
 
 func _apply_interaction_menu(interaction: Dictionary) -> void:
@@ -190,8 +196,12 @@ func _apply_interaction_menu(interaction: Dictionary) -> void:
 	var has_target: bool = bool(interaction.get("has_target", false))
 	if not has_target:
 		_clear_menu_options()
+		_menu_summary_label.text = ""
+		_menu_hover_label.text = ""
 		return
 	_menu_title_label.text = str(interaction.get("target_name", "目标"))
+	_menu_summary_label.text = _interaction_menu_summary(interaction)
+	_menu_hover_label.text = "悬停查看动作详情"
 	_clear_menu_options()
 	for option in interaction.get("options", []):
 		var option_data: Dictionary = option
@@ -214,6 +224,11 @@ func _option_button(option: Dictionary) -> Button:
 	button.tooltip_text = _option_tooltip(option)
 	button.custom_minimum_size = Vector2(160, 28)
 	button.focus_mode = Control.FOCUS_NONE
+	button.set_meta("option_kind", str(option.get("kind", "")))
+	button.set_meta("ap_cost", float(option.get("ap_cost", 0.0)))
+	button.mouse_entered.connect(func() -> void:
+		_menu_hover_label.text = _option_hover_text(option)
+	)
 	var option_id := str(option.get("id", ""))
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
@@ -241,6 +256,9 @@ func _disabled_option_button(option: Dictionary) -> Button:
 	button.set_meta("option_kind", str(option.get("kind", "")))
 	button.set_meta("disabled_reason", reason)
 	button.set_meta("ap_cost", float(option.get("ap_cost", 0.0)))
+	button.mouse_entered.connect(func() -> void:
+		_menu_hover_label.text = _option_hover_text(option)
+	)
 	return button
 
 
@@ -253,6 +271,31 @@ func _option_tooltip(option: Dictionary) -> String:
 		parts.append("AP %.0f" % ap_cost)
 	if bool(option.get("disabled", false)):
 		parts.append(_disabled_reason_text(str(option.get("disabled_reason", ""))))
+	return " | ".join(parts)
+
+
+func _interaction_menu_summary(interaction: Dictionary) -> String:
+	var enabled_count: int = _array_or_empty(interaction.get("options", [])).size()
+	var disabled_count: int = _array_or_empty(interaction.get("disabled_options", [])).size()
+	var primary := str(interaction.get("primary_option_id", ""))
+	return "主动作 %s | 可用 %d | 禁用 %d" % [
+		primary if not primary.is_empty() else "-",
+		enabled_count,
+		disabled_count,
+	]
+
+
+func _option_hover_text(option: Dictionary) -> String:
+	var parts: Array[String] = [
+		str(option.get("display_name", option.get("id", ""))),
+		"kind=%s" % str(option.get("kind", "")),
+	]
+	var ap_cost := float(option.get("ap_cost", 0.0))
+	if ap_cost > 0.0:
+		parts.append("AP %.0f" % ap_cost)
+	var reason := str(option.get("disabled_reason", ""))
+	if bool(option.get("disabled", false)) or not reason.is_empty():
+		parts.append("禁用: %s" % _disabled_reason_text(reason))
 	return " | ".join(parts)
 
 
