@@ -188,7 +188,7 @@
 ### 8.1 背包
 
 - 已有物品列表、基础操作、分类筛选、名称/重量/价值排序、搜索、滚动列表、选中物品详情和分类/价值/堆叠/槽位摘要第一版，并纳入 `InventoryUI` smoke；inventory order 持久化第一版已接入 actor snapshot、核心物品增删和 Inventory 默认“顺序”排序，并纳入 `InventoryUI` / `Save` smoke；背包内拖拽重排第一版已接入 `reorder_inventory` core 命令并纳入 `InventoryUI` smoke，当前仅在“顺序 + 全部 + 无搜索”视图启用。
-- 选中物品操作栏和右键上下文菜单第一版已迁移：数量 SpinBox、使用、装备、丢弃、全部丢弃、检查、加入热栏按钮；任务/关键物品会禁用使用、丢弃、全部丢弃和加入热栏，装备/丢弃按钮、拖到装备/丢弃按钮和右键菜单动作都通过 `InventoryUI` smoke 走 UI 触发；检查只刷新详情，不消耗 AP 或修改背包；可使用物品加入热栏后可通过 HUD 热栏触发同一 `inventory_action/use_item` 规则并随存档 roundtrip；背包丢弃确认弹窗已覆盖按钮打开、右键打开、右键全部丢弃、拖拽打开、Esc 取消、确认后执行和 gameplay blocker；拆分入口和 core 拒绝语义第一版已迁移，当前合并计数背包模型下右键“拆分”禁用并说明需要多堆叠库存模型，直接命令返回 `inventory_split_requires_stack_model` 且不改库存；当前打开容器时右键“存入容器”会走 `store_active_container_item`，当前打开交易时右键“出售”会走 `sell_active_trade_item`，分别由 `ContainerUI` / `TradeUI` smoke 覆盖。待补真正多 stack 拆分数据模型和更完整上下文菜单 polish。
+- 选中物品操作栏和右键上下文菜单第一版已迁移：数量 SpinBox、使用、装备、丢弃、全部丢弃、检查、加入热栏按钮；任务/关键物品会禁用使用、丢弃、全部丢弃和加入热栏，装备/丢弃按钮、拖到装备/丢弃按钮和右键菜单动作都通过 `InventoryUI` smoke 走 UI 触发；检查只刷新详情，不消耗 AP 或修改背包；可使用物品加入热栏后可通过 HUD 热栏触发同一 `inventory_action/use_item` 规则并随存档 roundtrip；背包反馈行会展示使用成功的资源变化、剩余数量、剩余 AP 和常见失败原因，并由 `InventoryUI` smoke 覆盖；背包丢弃确认弹窗已覆盖按钮打开、右键打开、右键全部丢弃、拖拽打开、Esc 取消、确认后执行和 gameplay blocker；拆分入口和 core 拒绝语义第一版已迁移，当前合并计数背包模型下右键“拆分”禁用并说明需要多堆叠库存模型，直接命令返回 `inventory_split_requires_stack_model` 且不改库存；当前打开容器时右键“存入容器”会走 `store_active_container_item`，当前打开交易时右键“出售”会走 `sell_active_trade_item`，分别由 `ContainerUI` / `TradeUI` smoke 覆盖。待补真正多 stack 拆分数据模型和更完整上下文菜单 polish。
 - 数量控制第一版已迁移：背包选中物品可用 SpinBox 指定丢弃数量，背包丢弃数量弹窗已覆盖确认/取消、增减、最大值、非法数量提示、右键全部丢弃预填满堆叠和 gameplay blocker/Esc；拆分请求在当前合并计数模型下已有稳定禁用/拒绝原因；待补真正多 stack 拆分以及容器/交易等其他数量弹窗。
 - 物品使用第一版已接入：`inventory_action/use_item`、消耗品 `gameplay_effect.resource_deltas`、HP/基础资源恢复、AP 消耗、物品消耗、失败 reason 和 Inventory “使用”按钮已纳入 `InventoryUI` / `Save` smoke；任务/关键物品不可使用、不可丢弃第一版已纳入 `InventoryUI` smoke；待补 buff/debuff、持续效果、任务交付限制和更完整反馈。
 - 拖拽第一版：背包内排序、拖到装备按钮、拖到丢弃按钮或独立 DropZone 打开丢弃确认弹窗已迁移；背包物品可拖到角色装备槽并走 `equip_player_item`，可拖到当前容器列存入容器，可拖到交易购物车或 sell drop zone 排入出售队列；右键菜单已支持存入当前容器和出售给当前交易对象，并由 `InventoryUI` / `UIToggle` / `ContainerUI` / `TradeUI` smoke 覆盖。待补筛选/搜索视图下的拖拽提示、drag preview 和 hover 高亮 polish。
@@ -315,7 +315,7 @@
 
 ### 13.3 面板
 
-- 背包面板已有筛选、搜索、详情、滚动列表、选中物品操作栏、右键检查/使用/装备/丢弃/全部丢弃/加入热栏菜单、顺序视图拖拽重排、拖到装备按钮、拖到实际装备槽、拖到丢弃按钮、拖到独立 DropZone、拖到当前容器存入、拖到交易购物车出售和丢弃数量弹窗第一版；可使用物品热栏绑定/触发和存档 roundtrip 已纳入 `InventoryUI` / `Save` smoke，跨面板拖拽已纳入 `UIToggle` / `ContainerUI` / `TradeUI` smoke。待补完整上下文项、拆分 polish 和跨面板拖拽视觉 polish。
+- 背包面板已有筛选、搜索、详情、反馈行、滚动列表、选中物品操作栏、右键检查/使用/装备/丢弃/全部丢弃/加入热栏菜单、顺序视图拖拽重排、拖到装备按钮、拖到实际装备槽、拖到丢弃按钮、拖到独立 DropZone、拖到当前容器存入、拖到交易购物车出售和丢弃数量弹窗第一版；可使用物品热栏绑定/触发和存档 roundtrip 已纳入 `InventoryUI` / `Save` smoke，背包使用成功/失败反馈和跨面板拖拽已纳入 `InventoryUI` / `UIToggle` / `ContainerUI` / `TradeUI` smoke。待补完整上下文项、拆分 polish 和跨面板拖拽视觉 polish。
 - 角色面板已有属性、资源、装备、属性点分配、派生数值摘要和状态效果第一版；派生数值会展示生命/速度、攻击/防御/暴击、基础属性合计、装备修饰和状态修饰，状态效果会显示 actor active effects 的名称、分类、来源、等级、剩余回合和 modifier，悬停说明来源、技能 ID、持续时间、修饰和 effect id，并纳入 `UIToggle` smoke。待补负面状态视觉和更完整排版。
 - 地图面板已有当前地图、当前地点名称、入口、已解锁地点名称、对象统计、追踪任务行、追踪目标 marker 行、地图 canvas、入口点绘制、目标 marker 绘制、zoom 按钮、左键拖拽平移、pan 复位、画布状态诊断和 overworld 地点/道路 inset 第一版；待补显式 overworld 路线规划和更完整图形化地图目标 marker。
 - Journal 面板已有任务详情、可交付状态、奖励详情、目标进度列表、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；待补更完整失败反馈。
@@ -369,7 +369,7 @@
 - `PlayerInteraction`：补 UI blocker、右键菜单关闭、hover prompt、actor/object/grid 优先级、不可见目标。
 - `Combat`：补 LOS、跨层、AOE、友军伤害、战斗退出 decay、远程弹药/reload、暴击 seed。
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。
-- `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；拆分入口禁用说明和 core 稳定拒绝 reason 已有 smoke；待补真正多 stack 拆分、装备详情和更完整使用反馈。
+- `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、背包使用成功/失败反馈、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；拆分入口禁用说明和 core 稳定拒绝 reason 已有 smoke；待补真正多 stack 拆分、装备属性变化对比和更完整上下文菜单 polish。
 - `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、双向拖拽、背包面板拖入存放与基础失败提示已有 smoke；待补背包限制/权限等高级错误和跨面板拖拽视觉 polish。
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售、拖拽入队、buy/sell drop zone 和 drop zone 来源/拒绝提示已有 smoke；待补 drop zone hover 高亮、drag preview 和更细禁用说明 polish。
 - `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、世界目标高亮、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补多组 hotbar、技能树 pan 和更完整状态 UI。

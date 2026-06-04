@@ -34,6 +34,7 @@ var active_trade_target: Dictionary = {}
 var active_trade_feedback: Dictionary = {}
 var active_container_feedback: Dictionary = {}
 var active_character_feedback: Dictionary = {}
+var active_inventory_feedback: Dictionary = {}
 var debug_overlay_mode: String = "off"
 var info_panel_pages: Array[Dictionary] = [
 	{"id": "overview", "title": "Overview", "tab_label": "Overview"},
@@ -142,6 +143,7 @@ func refresh_dialogue_panel() -> void:
 func refresh_inventory_panel() -> void:
 	if panel_controller == null:
 		return
+	panel_controller.active_inventory_feedback = active_inventory_feedback
 	panel_controller.refresh_inventory_panel()
 
 
@@ -754,12 +756,16 @@ func has_active_container_session() -> bool:
 
 func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
 	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
+		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "count": count}
+		_record_inventory_feedback(missing_result, "drop", item_id, count)
+		refresh_inventory_panel()
+		return missing_result
 	var result: Dictionary = _submit_inventory_action({
 		"action": "drop",
 		"item_id": item_id,
 		"count": count,
 	})
+	_record_inventory_feedback(result, "drop", item_id, count)
 	if bool(result.get("success", false)):
 		_rebuild_world_after_runtime_change()
 	else:
@@ -769,12 +775,16 @@ func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
 
 func deconstruct_player_item(item_id: String, count: int = 1) -> Dictionary:
 	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
+		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "count": count}
+		_record_inventory_feedback(missing_result, "deconstruct", item_id, count)
+		refresh_inventory_panel()
+		return missing_result
 	var result: Dictionary = _submit_inventory_action({
 		"action": "deconstruct",
 		"item_id": item_id,
 		"count": count,
 	})
+	_record_inventory_feedback(result, "deconstruct", item_id, count)
 	refresh_inventory_panel()
 	refresh_crafting_panel()
 	return result
@@ -782,35 +792,47 @@ func deconstruct_player_item(item_id: String, count: int = 1) -> Dictionary:
 
 func split_player_inventory_stack(item_id: String, count: int = 1) -> Dictionary:
 	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
+		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "count": count}
+		_record_inventory_feedback(missing_result, "split_stack", item_id, count)
+		refresh_inventory_panel()
+		return missing_result
 	var result: Dictionary = _submit_inventory_action({
 		"action": "split_stack",
 		"item_id": item_id,
 		"count": count,
 	})
+	_record_inventory_feedback(result, "split_stack", item_id, count)
 	refresh_inventory_panel()
 	return result
 
 
 func reorder_player_inventory_item(item_id: String, target_index: int) -> Dictionary:
 	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
+		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "target_index": target_index}
+		_record_inventory_feedback(missing_result, "reorder_inventory", item_id, 1)
+		refresh_inventory_panel()
+		return missing_result
 	var result: Dictionary = _submit_inventory_action({
 		"action": "reorder_inventory",
 		"item_id": item_id,
 		"target_index": target_index,
 	})
+	_record_inventory_feedback(result, "reorder_inventory", item_id, 1)
 	refresh_inventory_panel()
 	return result
 
 
 func use_player_item(item_id: String) -> Dictionary:
 	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
+		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id}
+		_record_inventory_feedback(missing_result, "use_item", item_id, 1)
+		refresh_inventory_panel()
+		return missing_result
 	var result: Dictionary = _submit_inventory_action({
 		"action": "use_item",
 		"item_id": item_id,
 	})
+	_record_inventory_feedback(result, "use_item", item_id, 1)
 	refresh_hud()
 	refresh_inventory_panel()
 	refresh_character_panel()
@@ -1273,6 +1295,7 @@ func _setup_panels() -> void:
 	panel_controller.active_trade_feedback = active_trade_feedback
 	panel_controller.active_container_feedback = active_container_feedback
 	panel_controller.active_character_feedback = active_character_feedback
+	panel_controller.active_inventory_feedback = active_inventory_feedback
 	panel_controller.setup_panels()
 	# 对外保留面板引用，方便既有 smoke 和编辑器入口继续做状态复核。
 	hud = panel_controller.hud
@@ -1351,6 +1374,14 @@ func _record_trade_feedback(result: Dictionary, action: String, shop_id: String,
 	active_trade_feedback["shop_id"] = str(result.get("shop_id", shop_id))
 	active_trade_feedback["item_id"] = str(result.get("item_id", item_id))
 	active_trade_feedback["count"] = count
+
+
+func _record_inventory_feedback(result: Dictionary, action: String, item_id: String, count: int) -> void:
+	active_inventory_feedback = result.duplicate(true)
+	active_inventory_feedback["type"] = "success" if bool(result.get("success", false)) else "error"
+	active_inventory_feedback["action"] = action
+	active_inventory_feedback["item_id"] = str(result.get("item_id", item_id))
+	active_inventory_feedback["count"] = int(result.get("count", count))
 
 
 func _record_character_feedback(result: Dictionary, action: String, slot_id: String, item_id: String) -> void:

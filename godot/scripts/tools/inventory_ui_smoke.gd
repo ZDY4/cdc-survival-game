@@ -149,12 +149,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("using bandage should consume one inventory item")
 		if not _event_seen(game_root, "item_used"):
 			errors.append("using bandage should emit item_used")
+		if not _inventory_feedback_line(game_root).contains("已使用 绷带") or not _inventory_feedback_line(game_root).contains("HP +25") or not _inventory_feedback_line(game_root).contains("AP 剩余 4"):
+			errors.append("using bandage should show inventory feedback with effect and AP")
 	var ap_before_invalid_use: float = player_ref.ap
 	var invalid_use: Dictionary = game_root.use_player_item("1003")
 	if str(invalid_use.get("reason", "")) != "item_not_usable":
 		errors.append("using a non-usable weapon should report item_not_usable")
 	if absf(player_ref.ap - ap_before_invalid_use) > 0.01:
 		errors.append("failed item use should not spend AP")
+	if not _inventory_feedback_line(game_root).contains("不能使用"):
+		errors.append("failed item use should show inventory feedback")
 	_mark_item_as_quest(game_root, "1007")
 	player_ref.inventory["1007"] = 1
 	if not player_ref.inventory_order.has("1007"):
@@ -594,6 +598,11 @@ func _item_data(game_root: Node, item_id: String) -> Dictionary:
 
 func _summary_line(game_root: Node) -> String:
 	return game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/SummaryLine").text
+
+
+func _inventory_feedback_line(game_root: Node) -> String:
+	var label: Label = game_root.inventory_panel.find_child("InventoryFeedbackLine", true, false) as Label
+	return "" if label == null else str(label.text)
 
 
 func _item_lines(game_root: Node) -> Array[String]:

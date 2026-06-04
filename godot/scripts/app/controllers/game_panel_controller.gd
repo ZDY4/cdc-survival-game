@@ -30,6 +30,7 @@ var active_trade_target: Dictionary = {}
 var active_trade_feedback: Dictionary = {}
 var active_container_feedback: Dictionary = {}
 var active_character_feedback: Dictionary = {}
+var active_inventory_feedback: Dictionary = {}
 var active_stage_panel: String = ""
 var settings_open := false
 var tracked_quest_id := ""
@@ -112,7 +113,7 @@ func refresh_dialogue_panel() -> void:
 func refresh_inventory_panel() -> void:
 	if inventory_panel == null or simulation == null:
 		return
-	inventory_panel.apply_snapshot(InventorySnapshot.new(registry).build(simulation.snapshot()))
+	inventory_panel.apply_snapshot(InventorySnapshot.new(registry).build(simulation.snapshot(), active_inventory_feedback))
 	_apply_stage_panel_visibility()
 
 

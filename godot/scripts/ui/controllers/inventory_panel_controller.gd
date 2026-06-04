@@ -14,6 +14,7 @@ const CONTEXT_SELL_TRADE := 10
 var _panel: PanelContainer
 var _title_label: Label
 var _summary_label: Label
+var _feedback_label: Label
 var _search_box: LineEdit
 var _filter_box: HBoxContainer
 var _sort_box: HBoxContainer
@@ -59,6 +60,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		int(snapshot.get("item_count", 0)),
 		float(snapshot.get("total_weight", 0.0)),
 	]
+	_apply_feedback(_dictionary_or_empty(snapshot.get("feedback", {})))
 	_refresh_filter_buttons()
 	_refresh_sort_buttons()
 	_clear_items()
@@ -96,6 +98,7 @@ func _build_layout() -> void:
 
 	_title_label = _label("TitleLine")
 	_summary_label = _label("SummaryLine")
+	_feedback_label = _label("InventoryFeedbackLine")
 	_search_box = LineEdit.new()
 	_search_box.name = "SearchBox"
 	_search_box.placeholder_text = "搜索物品"
@@ -212,6 +215,7 @@ func _build_layout() -> void:
 	)
 	box.add_child(_title_label)
 	box.add_child(_summary_label)
+	box.add_child(_feedback_label)
 	box.add_child(_search_box)
 	box.add_child(_filter_box)
 	box.add_child(_sort_box)
@@ -432,6 +436,15 @@ func _split_context_tooltip(item: Dictionary) -> String:
 	if not bool(item.get("stackable", false)) or int(item.get("count", 0)) <= 1:
 		return "只有数量大于 1 的堆叠物品才能拆分"
 	return "当前背包模型按物品 ID 合并计数；拆分需要后续多堆叠库存模型"
+
+
+func _apply_feedback(feedback: Dictionary) -> void:
+	if _feedback_label == null:
+		return
+	var text := str(feedback.get("text", ""))
+	_feedback_label.visible = not text.is_empty()
+	_feedback_label.text = text
+	_feedback_label.tooltip_text = str(feedback.get("reason", ""))
 
 
 func has_blocking_modal() -> bool:

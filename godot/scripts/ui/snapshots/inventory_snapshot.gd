@@ -7,7 +7,7 @@ func _init(p_registry: RefCounted) -> void:
 	registry = p_registry
 
 
-func build(runtime_snapshot: Dictionary) -> Dictionary:
+func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionary:
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	var inventory_order: Array[String] = _inventory_order(player.get("inventory_order", []), inventory)
@@ -29,6 +29,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"inventory_order": inventory_order,
 		"item_count": items.size(),
 		"total_weight": total_weight,
+		"feedback": _feedback_snapshot(feedback),
 	}
 
 
@@ -219,6 +220,97 @@ func _player_actor(runtime_snapshot: Dictionary) -> Dictionary:
 		if actor_data.get("kind", "") == "player":
 			return actor_data
 	return {}
+
+
+func _feedback_snapshot(feedback: Dictionary) -> Dictionary:
+	if feedback.is_empty():
+		return {}
+	var reason := str(feedback.get("reason", ""))
+	var text := _feedback_text(feedback)
+	if reason.is_empty() and text.is_empty():
+		return {}
+	return {
+		"type": str(feedback.get("type", "success" if bool(feedback.get("success", false)) else "error")),
+		"action": str(feedback.get("action", "")),
+		"reason": reason,
+		"item_id": str(feedback.get("item_id", "")),
+		"text": text,
+	}
+
+
+func _feedback_text(feedback: Dictionary) -> String:
+	var explicit_text := str(feedback.get("text", ""))
+	if not explicit_text.is_empty():
+		return explicit_text
+	var item_name := _feedback_item_name(feedback)
+	var action := str(feedback.get("action", ""))
+	var count := maxi(1, int(feedback.get("count", 1)))
+	if bool(feedback.get("success", false)):
+		match action:
+			"use_item":
+				return _use_item_success_text(item_name, feedback)
+			"drop":
+				return "已丢弃 %s x%d。" % [item_name, int(feedback.get("dropped_count", count))]
+			"deconstruct":
+				return "已拆解 %s x%d。" % [item_name, count]
+			"reorder_inventory":
+				return "已调整 %s 的背包顺序。" % item_name
+			_:
+				return "背包操作完成：%s。" % item_name
+	match str(feedback.get("reason", "")):
+		"ap_insufficient_use_item":
+			return "AP 不足，使用 %s 需要 %.0f，当前 %.0f。" % [item_name, float(feedback.get("required_ap", 0.0)), float(feedback.get("available_ap", 0.0))]
+		"not_enough_items":
+			return "背包中没有足够的 %s，需要 %d，当前 %d。" % [item_name, int(feedback.get("required", count)), int(feedback.get("current", 0))]
+		"item_not_usable":
+			return "%s 不能使用。" % item_name
+		"item_use_forbidden":
+			return "%s 当前禁止使用。" % item_name
+		"unknown_item":
+			return "物品数据不可用：%s。" % str(feedback.get("item_id", ""))
+		"unknown_effect":
+			return "物品效果不可用：%s。" % str(feedback.get("effect_id", ""))
+		"inventory_split_requires_stack_model":
+			return "当前背包按物品合并计数，%s 暂不能拆分。" % item_name
+		"invalid_quantity":
+			return "数量无效，请输入大于 0 的数量。"
+		"item_not_in_inventory":
+			return "背包中没有 %s。" % item_name
+		"simulation_missing":
+			return "运行时不可用，无法操作背包。"
+		_:
+			var reason := str(feedback.get("reason", ""))
+			return reason if not reason.is_empty() else ""
+
+
+func _use_item_success_text(item_name: String, feedback: Dictionary) -> String:
+	var parts: Array[String] = []
+	for effect in _array_or_empty(feedback.get("effects", [])):
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		for delta in _array_or_empty(effect_data.get("resource_deltas", [])):
+			var delta_data: Dictionary = _dictionary_or_empty(delta)
+			var resource := str(delta_data.get("resource", ""))
+			var amount := float(delta_data.get("delta", 0.0))
+			if resource == "hp" and absf(amount) > 0.01:
+				parts.append("HP %+d" % int(round(amount)))
+			elif not resource.is_empty() and absf(amount) > 0.01:
+				parts.append("%s %+d" % [resource, int(round(amount))])
+	var effect_text := "，%s" % " / ".join(parts) if not parts.is_empty() else ""
+	return "已使用 %s%s，剩余 %d，AP 剩余 %.0f。" % [
+		item_name,
+		effect_text,
+		int(feedback.get("remaining", 0)),
+		float(feedback.get("ap_remaining", 0.0)),
+	]
+
+
+func _feedback_item_name(feedback: Dictionary) -> String:
+	var item_id := str(feedback.get("item_id", ""))
+	if item_id.is_empty():
+		return "物品"
+	var record: Dictionary = registry.get_library("items").get(item_id, {})
+	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+	return str(data.get("name", item_id))
 
 
 func _inventory_order(value: Variant, inventory: Dictionary) -> Array[String]:
