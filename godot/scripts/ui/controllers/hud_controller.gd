@@ -303,6 +303,9 @@ func _hotbar_tooltip(key_label: String, kind: String, entry_label: String, slot:
 	var cost_text := _hotbar_cost_text(slot)
 	if not cost_text.is_empty():
 		parts.append(cost_text)
+	var effect_text := _hotbar_effect_text(slot)
+	if not effect_text.is_empty():
+		parts.append(effect_text)
 	parts.append(_hotbar_use_state_text(slot))
 	return " | ".join(parts)
 
@@ -323,6 +326,17 @@ func _hotbar_cost_text(slot: Dictionary) -> String:
 	if not resource_parts.is_empty():
 		parts.append("资源 %s" % " / ".join(resource_parts))
 	return " / ".join(parts)
+
+
+func _hotbar_effect_text(slot: Dictionary) -> String:
+	var effects: Array[String] = []
+	for effect in _array_or_empty(slot.get("effect_summary", [])):
+		var effect_text := str(effect)
+		if not effect_text.is_empty():
+			effects.append(effect_text)
+	if effects.is_empty():
+		return ""
+	return "效果 %s" % " / ".join(effects)
 
 
 func _hotbar_use_state_text(slot: Dictionary) -> String:

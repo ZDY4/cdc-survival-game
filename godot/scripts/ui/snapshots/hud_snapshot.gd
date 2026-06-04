@@ -145,6 +145,7 @@ func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[
 			"cooldown_remaining": float(slot_data.get("cooldown_remaining", 0.0)),
 			"ap_cost": float(use_state.get("ap_cost", 0.0)),
 			"resource_costs": _array_or_empty(use_state.get("resource_costs", [])).duplicate(true),
+			"effect_summary": _array_or_empty(use_state.get("effect_summary", [])).duplicate(true),
 			"item_count": int(use_state.get("item_count", 0)),
 			"can_use": bool(use_state.get("can_use", not (slot_data.is_empty() or entry_id.is_empty()))),
 			"use_reason": str(use_state.get("reason", "")),
@@ -220,6 +221,7 @@ func _hotbar_item_state(item_id: String, player_ap: float, inventory: Dictionary
 	if not _is_item_use_allowed(item):
 		return {"can_use": false, "reason": "item_use_forbidden", "item_count": count}
 	var ap_cost: float = max(1.0, ceil(float(usable.get("use_time", 1.0))))
+	var effect_summary: Array[String] = _item_effect_summary(usable)
 	if player_ap + 0.0001 < ap_cost:
 		return {
 			"can_use": false,
@@ -227,12 +229,14 @@ func _hotbar_item_state(item_id: String, player_ap: float, inventory: Dictionary
 			"ap_cost": ap_cost,
 			"item_count": count,
 			"available_ap": player_ap,
+			"effect_summary": effect_summary.duplicate(),
 		}
 	return {
 		"can_use": true,
 		"reason": "available",
 		"ap_cost": ap_cost,
 		"item_count": count,
+		"effect_summary": effect_summary.duplicate(),
 	}
 
 
@@ -248,6 +252,33 @@ func _item_data(item_id: String) -> Dictionary:
 		return {}
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("items").get(item_id, {}))
 	return _dictionary_or_empty(record.get("data", record))
+
+
+func _effect_data(effect_id: String) -> Dictionary:
+	if registry == null or effect_id.is_empty():
+		return {}
+	var record: Dictionary = _dictionary_or_empty(registry.get_library("json").get(effect_id, {}))
+	return _dictionary_or_empty(record.get("data", record))
+
+
+func _item_effect_summary(usable: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	for effect_id in _array_or_empty(usable.get("effect_ids", [])):
+		var effect: Dictionary = _effect_data(str(effect_id))
+		var deltas: Dictionary = _dictionary_or_empty(_dictionary_or_empty(effect.get("gameplay_effect", {})).get("resource_deltas", {}))
+		var keys: Array = deltas.keys()
+		keys.sort()
+		for key in keys:
+			var resource_id := _normalized_resource_id(str(key))
+			var delta := float(deltas.get(key, 0.0))
+			if is_zero_approx(delta):
+				continue
+			output.append("%s %s%s" % [
+				_resource_label(resource_id),
+				"+" if delta > 0.0 else "",
+				_number_text(delta),
+			])
+	return output
 
 
 func _fragment_by_kind(item: Dictionary, kind: String) -> Dictionary:
@@ -317,6 +348,21 @@ func _resource_cost_check(costs: Array[Dictionary], resources: Dictionary) -> Di
 func _normalized_resource_id(resource_id: String) -> String:
 	if resource_id == "health":
 		return "hp"
+	return resource_id
+
+
+func _resource_label(resource_id: String) -> String:
+	match resource_id:
+		"hp":
+			return "HP"
+		"stamina":
+			return "stamina"
+		"hunger":
+			return "hunger"
+		"thirst":
+			return "thirst"
+		"immunity":
+			return "immunity"
 	return resource_id
 
 

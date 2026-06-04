@@ -105,6 +105,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("item hotbar slot should expose item tooltip")
 			if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("AP 2"):
 				errors.append("item hotbar slot tooltip should show item AP cost")
+			if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("HP +25"):
+				errors.append("item hotbar slot tooltip should show item resource effect")
 			player_ref.ap = 1.0
 			game_root.refresh_hud()
 			if not _hud_hotbar_slot_disabled(game_root, "slot_1"):
