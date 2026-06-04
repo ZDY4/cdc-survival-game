@@ -108,10 +108,10 @@ pwsh -NoProfile -File tools/agent/open-godot-editor.ps1 -Map survivor_outpost_01
 行为：
 
 - 写入 `tmp/editor_handoff/godot_editor.navigation.json`。
-- `CDC Agent Handoff` dock 会读取目标内容摘要和引用预览。
-- `CDC Content Browser` dock 会在 Godot editor 内浏览 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map`，并显示记录级校验状态、详情和可编辑字段清单。
-- 内容保存边界已收口到 `godot/scripts/data/content_edit_service.gd`；当前表单保存覆盖非地图内容的安全元数据字段、`settlement` 的 service rule 字段，以及 `overworld` 的 travel rule 字段。地图布局编辑应使用 Godot 场景编辑器。
-- 若 `CDC Agent Handoff` dock 已有最近 session，会复用现有 Godot editor。
+- `CDC Agent Handoff` 窗口会读取目标内容摘要和引用预览。
+- CDC 数据编辑器从 Godot `Tools` 菜单以独立窗口打开，覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld`，并显示记录级校验状态、详情和可编辑字段清单。
+- 内容保存边界已收口到 `godot/scripts/data/content_edit_service.gd`；当前表单保存覆盖非地图内容的安全元数据字段、`settlement` 的 service rule 字段，以及 `overworld` 的 travel rule 字段。地图布局编辑应使用 Godot 场景编辑器，插件内只保留 `CDC Map Review` 复核和打开 scene 的入口。
+- 若 `CDC Agent Handoff` 已有最近 session，会复用现有 Godot editor。
 - 若没有最近 session，则启动 `D:\godot\godot.cmd --editor --path godot`。
 
 ### `review-godot-map-visual.ps1`
@@ -186,7 +186,7 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 
 何时使用：
 
-- 修改 Godot editor plugin、handoff、content browser、map review 或内容保存服务后。
+- 修改 Godot editor plugin、handoff、独立内容编辑窗口、map review 或内容保存服务后。
 - 需要一条命令复核 Godot editor 工具面是否仍能读取、展示、编辑和复核内容。
 
 示例：
@@ -194,7 +194,7 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 ```powershell
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario EditorHandoff
-pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario ContentBrowser
+pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario ContentEditors
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario MapReview
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario ContentEdit
 ```
@@ -227,7 +227,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MainMenu
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentCLI
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentEdit
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorHandoff
-pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorBrowser
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentEditors
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MapReview
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario FogShader
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Overworld

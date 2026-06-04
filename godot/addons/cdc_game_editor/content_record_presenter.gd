@@ -6,12 +6,12 @@ const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const EditorContentPresenter = preload("res://addons/cdc_game_editor/editor_content_presenter.gd")
 
-const BROWSER_KINDS := ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map"]
+const RECORD_KINDS := ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map"]
 
 
 func supported_kinds() -> Array[String]:
 	var kinds: Array[String] = []
-	for kind in BROWSER_KINDS:
+	for kind in RECORD_KINDS:
 		kinds.append(str(kind))
 	return kinds
 
@@ -23,7 +23,7 @@ func domain_for_kind(kind: String) -> String:
 func rows_for_kind(kind: String, registry: ContentRegistry, filter_text: String = "") -> Array[Dictionary]:
 	var presenter := EditorContentPresenter.new()
 	var domain := domain_for_kind(kind)
-	if domain.is_empty() or not BROWSER_KINDS.has(kind):
+	if domain.is_empty() or not RECORD_KINDS.has(kind):
 		return []
 
 	var rows: Array[Dictionary] = []
@@ -57,7 +57,7 @@ func build_overview(registry: ContentRegistry) -> Dictionary:
 		"total_records": 0,
 		"invalid_records": 0,
 	}
-	for kind in BROWSER_KINDS:
+	for kind in RECORD_KINDS:
 		var rows := rows_for_kind(kind, registry)
 		var invalid_count := 0
 		for row in rows:
@@ -74,11 +74,11 @@ func build_overview(registry: ContentRegistry) -> Dictionary:
 
 
 func build_detail(kind: String, id_value: String, registry: ContentRegistry, repo_root: String) -> Dictionary:
-	if not BROWSER_KINDS.has(kind):
+	if not RECORD_KINDS.has(kind):
 		return {
 			"ok": false,
-			"message": "Unsupported browser kind %s." % kind,
-			"text": "Supported browser kinds: %s." % ", ".join(BROWSER_KINDS),
+			"message": "Unsupported record kind %s." % kind,
+			"text": "Supported record kinds: %s." % ", ".join(RECORD_KINDS),
 		}
 
 	var presenter := EditorContentPresenter.new()

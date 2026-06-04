@@ -38,7 +38,7 @@
 - `godot/scenes/maps`: Godot 地图场景，承载 map id、尺寸、入口点、地图对象、footprint 和对象 props，是后续地图开发主入口。
 - `godot/scripts/ui`: HUD、背包、任务、对话、交易、容器等 UI snapshot、controller 和面板。
 - `godot/scripts/tools`: Godot headless 校验、内容 CLI、smoke 和复核脚本。
-- `godot/addons/cdc_game_editor`: 当前 Godot editor 插件，包括 handoff、content browser、map review 和编辑 dock。
+- `godot/addons/cdc_game_editor`: 当前 Godot editor 插件，包括 handoff、独立内容编辑窗口、map review 和编辑表单。
 - `data`: 非地图内容权威输入源；`data/maps` 是迁移期兼容备份，不再作为新地图开发主入口。
 - `tools/agent`: repo-local agent workflow 标准入口，默认调用 Godot 工具链。
 - 根目录 `addons/` 若只包含旧备份或残留文件，不作为当前 Godot 插件来源。

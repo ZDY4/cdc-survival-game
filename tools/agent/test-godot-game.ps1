@@ -39,7 +39,7 @@ param(
         "ContentCLI",
         "ContentEdit",
         "EditorHandoff",
-        "EditorBrowser",
+        "ContentEditors",
         "MapReview",
         "FogShader",
         "World",
@@ -100,7 +100,7 @@ $scenarioScripts = [ordered]@{
     ContentCLI        = "res://scripts/tools/content_cli_smoke.gd"
     ContentEdit       = "res://scripts/tools/content_edit_service_smoke.gd"
     EditorHandoff     = "res://scripts/tools/editor_handoff_smoke.gd"
-    EditorBrowser     = "res://scripts/tools/editor_content_browser_smoke.gd"
+    ContentEditors    = "res://scripts/tools/content_record_editor_smoke.gd"
     MapReview         = "res://scripts/tools/map_preview_smoke.gd"
     FogShader         = "res://scripts/tools/fog_shader_smoke.gd"
     World             = "res://scripts/tools/world_smoke.gd"

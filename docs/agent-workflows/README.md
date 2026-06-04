@@ -95,13 +95,13 @@ Godot import/cache 预热和 GDScript 静态解析优先跑 `test-godot-static.p
 
 当前 handoff 行为：
 
-- Godot `CDC Agent Handoff` dock 会写 `tmp/editor_handoff/godot_editor.session.json`
+- Godot `CDC Agent Handoff` 窗口会写 `tmp/editor_handoff/godot_editor.session.json`
 - `open-godot-editor.ps1` 会写 `tmp/editor_handoff/godot_editor.navigation.json`
-- Godot `CDC Content Browser` dock 会浏览 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map`，显示过滤列表、记录级校验状态、详情摘要和可编辑字段清单
+- Godot `Tools` 菜单提供独立 CDC 数据编辑窗口，覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld`，显示过滤列表、记录级校验状态、详情摘要和可编辑字段清单
 - `godot/scripts/data/content_edit_service.gd` 是迁移期内容保存边界；后续 Godot 表单 UI 必须通过该服务写回 JSON
-- 当前表单保存覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` 的安全元数据字段、`settlement` 的 service rule 字段，以及 `overworld` 的 travel rule 字段
-- `item` / `recipe` / `character` / `map` 目标会显示只读 `edit_plan`，列出可编辑字段组、引用影响和保存后复核 checklist
-- `map` 目标额外显示 `map_review` 和 `map_review_checks`，用于基础空间复核摘要
+- 当前表单保存覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` 的安全元数据字段、`settlement` 的 service rule 字段，以及 `overworld` 的 travel rule 字段
+- `item` / `recipe` / `character` 目标会显示只读 `edit_plan`，列出可编辑字段组、引用影响和保存后复核 checklist
+- `map` 目标通过 `CDC Map Review` 复核窗口查看 `map_review` 和 `map_review_checks`，并从窗口打开对应 Godot map scene
 - 若对应 editor 最近处于活跃状态，会优先复用现有实例
 - 脚本会把目标 id 写入 `tmp/editor_handoff/*.navigation.json`
 - editor 会读取 handoff 请求并切换到目标记录

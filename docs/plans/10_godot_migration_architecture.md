@@ -106,7 +106,7 @@
 - `godot/scripts/world/`: 地图定义加载、拓扑构建、场景渲染、雾战和空间表现。
 - `godot/scripts/ui/`: UI snapshot、controller 和面板逻辑。
 - `godot/scripts/tools/`: Godot headless 校验、内容 CLI、smoke 和复核脚本。
-- `godot/addons/cdc_game_editor/`: editor 插件、handoff、content browser、map review 和编辑 dock。
+- `godot/addons/cdc_game_editor/`: editor 插件、handoff、独立内容编辑窗口、map review 和编辑表单。
 - `data/`: 非地图内容权威输入源；`data/maps` 为兼容备份。
 - `tools/agent/`: repo-local agent workflow 标准入口。
 
@@ -276,7 +276,7 @@ D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/validate
 
 验收：
 
-- Godot editor handoff、content browser、map review、content edit smoke 通过。
+- Godot editor handoff、content editors、map review、content edit smoke 通过。
 - agent 内容定位、摘要、引用、校验、格式化和 diff-summary 全部走 Godot。
 - 新增 agent 脚本必须同步补 help、`tools/agent/README.md` 和对应 workflow 文档。
 
@@ -303,7 +303,7 @@ D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/validate
 - 地图主来源为 `godot/scenes/maps/*.tscn`。
 - 非地图内容主来源为 `data/` JSON。
 - 内容加载、校验、摘要、引用、格式化和安全写回由 Godot 数据层与工具链提供。
-- editor handoff、content browser、map review、content edit 均有 Godot headless smoke。
+- editor handoff、content editors、map review、content edit 均有 Godot headless smoke。
 - game runtime 的新游戏、世界生成、交互、UI、任务、战斗、制作、存档均有 Godot headless smoke。
 
 ## 当前完成状态

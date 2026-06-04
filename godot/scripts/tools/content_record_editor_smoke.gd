@@ -1,10 +1,13 @@
 extends SceneTree
 
-const ContentBrowserPresenter = preload("res://addons/cdc_game_editor/content_browser_presenter.gd")
-const ContentBrowserDock = preload("res://addons/cdc_game_editor/content_browser_dock.gd")
+const ContentRecordEditorWindow = preload("res://addons/cdc_game_editor/content_record_editor_window.gd")
+const ContentRecordPresenter = preload("res://addons/cdc_game_editor/content_record_presenter.gd")
 const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const TypedFieldForm = preload("res://addons/cdc_game_editor/typed_field_form.gd")
+
+const EDITOR_KINDS := ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld"]
+const REVIEW_KINDS := ["map"]
 
 
 func _init() -> void:
@@ -15,9 +18,10 @@ func _init() -> void:
 		quit(1)
 		return
 
-	print("editor_content_browser_smoke passed:")
+	print("content_record_editor_smoke passed:")
 	print({
-		"covered_kinds": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map"],
+		"editor_kinds": EDITOR_KINDS,
+		"review_kinds": REVIEW_KINDS,
 	})
 	quit(0)
 
@@ -31,12 +35,12 @@ func _run() -> Array[String]:
 			errors.append(str(error))
 		return errors
 
-	var presenter: ContentBrowserPresenter = ContentBrowserPresenter.new()
+	var presenter: ContentRecordPresenter = ContentRecordPresenter.new()
 	var overview := presenter.build_overview(registry)
 	if int(overview.get("total_records", 0)) < 100:
-		errors.append("content browser overview expected broad migrated content coverage")
+		errors.append("record editor overview expected broad migrated content coverage")
 	if int(overview.get("invalid_records", 0)) != 0:
-		errors.append("content browser overview found invalid migrated records")
+		errors.append("record editor overview found invalid migrated records")
 
 	_expect_rows(errors, presenter, registry, "item", "绷带", "1006")
 	_expect_rows(errors, presenter, registry, "recipe", "急救包", "recipe_first_aid_kit")
@@ -65,79 +69,68 @@ func _run() -> Array[String]:
 	_expect_detail(errors, presenter, registry, "skill_tree", "survival", "description")
 	_expect_detail(errors, presenter, registry, "settlement", "survivor_outpost_01_settlement", "service_rules.min_guard_on_duty")
 	_expect_detail(errors, presenter, registry, "overworld", "main_overworld", "travel_rules.risk_multiplier")
-	_expect_dock_patch(errors, registry)
-	_expect_dock_patch_for_domain(errors, registry, "dialogue", "dialogues", "trader_lao_wang_intro", {"_comment": "老王开局 dock smoke"})
-	_expect_dock_patch_for_domain(errors, registry, "quest", "quests", "tutorial_survive", {"title": "补给试跑 dock smoke"})
-	_expect_dock_patch_for_domain(errors, registry, "skill", "skills", "survival", {"max_level": 6})
-	_expect_dock_patch_for_domain(errors, registry, "skill_tree", "skill_trees", "survival", {"name": "生存系 dock smoke"})
-	_expect_dock_patch_for_domain(errors, registry, "settlement", "settlements", "survivor_outpost_01_settlement", {"service_rules.min_guard_on_duty": 3})
-	_expect_dock_patch_for_domain(errors, registry, "overworld", "overworld", "main_overworld", {"travel_rules.risk_multiplier": 1.25})
-	_expect_dock_typed_inputs(errors)
+	_expect_window_patch(errors, registry)
+	_expect_window_patch_for_domain(errors, registry, "dialogue", "dialogues", "trader_lao_wang_intro", {"_comment": "老王开局 window smoke"})
+	_expect_window_patch_for_domain(errors, registry, "quest", "quests", "tutorial_survive", {"title": "补给试跑 window smoke"})
+	_expect_window_patch_for_domain(errors, registry, "skill", "skills", "survival", {"max_level": 6})
+	_expect_window_patch_for_domain(errors, registry, "skill_tree", "skill_trees", "survival", {"name": "生存系 window smoke"})
+	_expect_window_patch_for_domain(errors, registry, "settlement", "settlements", "survivor_outpost_01_settlement", {"service_rules.min_guard_on_duty": 3})
+	_expect_window_patch_for_domain(errors, registry, "overworld", "overworld", "main_overworld", {"travel_rules.risk_multiplier": 1.25})
+	_expect_typed_inputs(errors)
 	return errors
 
 
-func _expect_rows(errors: Array[String], presenter: ContentBrowserPresenter, registry: ContentRegistry, kind: String, filter_text: String, expected_id: String) -> void:
+func _expect_rows(errors: Array[String], presenter: ContentRecordPresenter, registry: ContentRegistry, kind: String, filter_text: String, expected_id: String) -> void:
 	var rows := presenter.rows_for_kind(kind, registry, filter_text)
 	for row in rows:
 		var row_data: Dictionary = row
 		if str(row_data.get("id", "")) == expected_id:
 			if str(row_data.get("status", "")) != "ok":
-				errors.append("browser row %s %s should be ok" % [kind, expected_id])
+				errors.append("record editor row %s %s should be ok" % [kind, expected_id])
 			return
-	errors.append("browser rows for %s filter '%s' missing %s" % [kind, filter_text, expected_id])
+	errors.append("record editor rows for %s filter '%s' missing %s" % [kind, filter_text, expected_id])
 
 
-func _expect_detail(errors: Array[String], presenter: ContentBrowserPresenter, registry: ContentRegistry, kind: String, id_value: String, required: String) -> void:
+func _expect_detail(errors: Array[String], presenter: ContentRecordPresenter, registry: ContentRegistry, kind: String, id_value: String, required: String) -> void:
 	var repo_root := ProjectSettings.globalize_path("res://..").simplify_path()
 	var detail := presenter.build_detail(kind, id_value, registry, repo_root)
 	if not bool(detail.get("ok", false)):
-		errors.append("browser detail failed for %s %s: %s" % [kind, id_value, detail.get("message", "")])
+		errors.append("record editor detail failed for %s %s: %s" % [kind, id_value, detail.get("message", "")])
 		return
 	var text := str(detail.get("text", ""))
 	if not text.contains(required):
-		errors.append("browser detail for %s %s missing '%s'" % [kind, id_value, required])
+		errors.append("record editor detail for %s %s missing '%s'" % [kind, id_value, required])
 
 
-func _expect_dock_patch(errors: Array[String], registry: ContentRegistry) -> void:
-	var dock: ContentBrowserDock = ContentBrowserDock.new()
-	dock.repo_root = ProjectSettings.globalize_path("res://..").simplify_path()
-	dock.registry = _registry_with_temp_record(registry, "items", "1006")
-	dock.presenter = ContentBrowserPresenter.new()
-	dock.edit_service = ContentEditService.new()
-	dock.selected_kind = "item"
-	dock.selected_id = "1006"
-	var report := dock.apply_patch_for_current_selection({"name": "绷带 dock smoke"}, false, {"allow_external_path": true})
+func _expect_window_patch(errors: Array[String], registry: ContentRegistry) -> void:
+	var window := _make_window("item", "CDC Item Editor", registry, "items", "1006")
+	var report := window.apply_patch_for_current_selection({"name": "绷带 window smoke"}, false, {"allow_external_path": true})
 	if not bool(report.get("ok", false)):
-		errors.append("browser dock patch failed: %s" % report)
+		errors.append("record editor window patch failed: %s" % report)
+		window.free()
 		return
 	var raw := FileAccess.get_file_as_string(str(report.get("path", "")))
-	if not raw.contains("绷带 dock smoke"):
-		errors.append("browser dock patch did not write expected value")
-	dock.free()
+	if not raw.contains("绷带 window smoke"):
+		errors.append("record editor window patch did not write expected value")
+	window.free()
 
 
-func _expect_dock_patch_for_domain(errors: Array[String], registry: ContentRegistry, kind: String, domain: String, id_value: String, patch: Dictionary) -> void:
-	var dock: ContentBrowserDock = ContentBrowserDock.new()
-	dock.repo_root = ProjectSettings.globalize_path("res://..").simplify_path()
-	dock.registry = _registry_with_temp_record(registry, domain, id_value)
-	dock.presenter = ContentBrowserPresenter.new()
-	dock.edit_service = ContentEditService.new()
-	dock.selected_kind = kind
-	dock.selected_id = id_value
-	var report := dock.apply_patch_for_current_selection(patch, false, {"allow_external_path": true})
+func _expect_window_patch_for_domain(errors: Array[String], registry: ContentRegistry, kind: String, domain: String, id_value: String, patch: Dictionary) -> void:
+	var window := _make_window(kind, "CDC %s Editor" % kind.capitalize(), registry, domain, id_value)
+	var report := window.apply_patch_for_current_selection(patch, false, {"allow_external_path": true})
 	if not bool(report.get("ok", false)):
-		errors.append("browser dock patch failed for %s %s: %s" % [kind, id_value, report])
-		dock.free()
+		errors.append("record editor window patch failed for %s %s: %s" % [kind, id_value, report])
+		window.free()
 		return
 	var raw := FileAccess.get_file_as_string(str(report.get("path", "")))
 	for field in patch.keys():
 		if not raw.contains(str(patch[field])):
-			errors.append("browser dock patch for %s %s did not write %s" % [kind, id_value, field])
-	dock.free()
+			errors.append("record editor window patch for %s %s did not write %s" % [kind, id_value, field])
+	window.free()
 
 
-func _expect_dock_typed_inputs(errors: Array[String]) -> void:
-	var dock: ContentBrowserDock = ContentBrowserDock.new()
+func _expect_typed_inputs(errors: Array[String]) -> void:
+	var window := ContentRecordEditorWindow.new()
 	var text_editor := TypedFieldForm.create_field_editor("string", "绷带")
 	var int_editor := TypedFieldForm.create_field_editor("int", 7)
 	var float_editor := TypedFieldForm.create_field_editor("float", 0.5)
@@ -155,27 +148,37 @@ func _expect_dock_typed_inputs(errors: Array[String]) -> void:
 	(int_editor as SpinBox).value = 13.0
 	(float_editor as SpinBox).value = 0.75
 	(bool_editor as CheckBox).button_pressed = true
-	dock.edit_inputs = {
+	window.edit_inputs = {
 		"name": text_editor,
 		"value": int_editor,
 		"weight": float_editor,
 		"is_default_unlocked": bool_editor,
 	}
-	var patch := dock.build_patch_from_inputs()
+	var patch := window.build_patch_from_inputs()
 	if typeof(patch.get("name")) != TYPE_STRING:
-		errors.append("typed browser patch should preserve string values")
+		errors.append("typed record editor patch should preserve string values")
 	if typeof(patch.get("value")) != TYPE_INT:
-		errors.append("typed browser patch should preserve int values")
+		errors.append("typed record editor patch should preserve int values")
 	if typeof(patch.get("weight")) != TYPE_FLOAT:
-		errors.append("typed browser patch should preserve float values")
+		errors.append("typed record editor patch should preserve float values")
 	if typeof(patch.get("is_default_unlocked")) != TYPE_BOOL:
-		errors.append("typed browser patch should preserve bool values")
-	dock.edit_inputs.clear()
+		errors.append("typed record editor patch should preserve bool values")
+	window.edit_inputs.clear()
 	text_editor.free()
 	int_editor.free()
 	float_editor.free()
 	bool_editor.free()
-	dock.free()
+	window.free()
+
+
+func _make_window(kind: String, title: String, registry: ContentRegistry, domain: String, id_value: String) -> ContentRecordEditorWindow:
+	var window: ContentRecordEditorWindow = ContentRecordEditorWindow.new()
+	window.setup(kind, title)
+	window.registry = _registry_with_temp_record(registry, domain, id_value)
+	window.presenter = ContentRecordPresenter.new()
+	window.edit_service = ContentEditService.new()
+	window.selected_id = id_value
+	return window
 
 
 func _registry_with_temp_record(registry: ContentRegistry, domain: String, id_value: String) -> ContentRegistry:
@@ -186,7 +189,7 @@ func _registry_with_temp_record(registry: ContentRegistry, domain: String, id_va
 	copy.data_root = registry.data_root
 	var record: Dictionary = registry.get_library(domain).get(id_value, {}).duplicate(true)
 	var data: Dictionary = record.get("data", {}).duplicate(true)
-	var temp_dir := ProjectSettings.globalize_path("user://content_browser_dock_smoke").simplify_path()
+	var temp_dir := ProjectSettings.globalize_path("user://content_record_editor_smoke").simplify_path()
 	DirAccess.make_dir_recursive_absolute(temp_dir)
 	var temp_path := temp_dir.path_join("%s_%s.json" % [domain, id_value])
 	var file := FileAccess.open(temp_path, FileAccess.WRITE)
