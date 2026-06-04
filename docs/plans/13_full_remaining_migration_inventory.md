@@ -135,7 +135,7 @@
 - 攻击空间校验第一版已迁移：跨层、超出武器范围和 LOS 遮挡会返回稳定 reason，并暴露 attacker grid、target grid、distance、range 等诊断字段；`submit_player_command(attack)` 和 core `perform_attack` 都复用同一校验；已由 `Combat` smoke 覆盖。待补门开闭状态的遮挡语义、楼梯/高低差/特殊武器例外、最小射程和技能共用射程策略。
 - 待补 line-of-sight 扩展：技能共用空间失败原因，墙体、门、楼层、中心点遮挡的完整旧版细节。
 - 待补范围扩展：近战、远程、cell distance、武器射程、技能射程、最小射程的全部数据化。
-- 攻击前目标预览第一版已迁移：`Simulation.preview_attack()` 会只读返回 actor / target、射程、距离、AP 成本、弹药可用性、命中率、暴击率、预估伤害、可攻击状态和不可攻击 reason，并复用攻击合法性 / 空间 / 可见性校验，不扣 AP、不耗弹药、不推进 RNG、不进入战斗；runtime hover snapshot 和 HUD runtime 行已在悬停 actor 时展示可攻击 / 不可攻击、距离 / 射程、AP、命中率和伤害摘要，已由 `Combat` / `PlayerInteraction` smoke 覆盖。待补可攻击格、目标高亮和命中对象世界视觉标记。
+- 攻击前目标预览第一版已迁移：`Simulation.preview_attack()` 会只读返回 actor / target、射程、距离、AP 成本、弹药可用性、命中率、暴击率、预估伤害、可攻击状态和不可攻击 reason，并复用攻击合法性 / 空间 / 可见性校验，不扣 AP、不耗弹药、不推进 RNG、不进入战斗；runtime hover snapshot 和 HUD runtime 行已在悬停 actor 时展示可攻击 / 不可攻击、距离 / 射程、AP、命中率和伤害摘要，hover cursor 会用橙红色显示攻击预览并暴露 attack meta，已由 `Combat` / `PlayerInteraction` smoke 覆盖。待补可攻击格、目标 outline 和命中对象世界视觉标记。
 
 ### 6.2 武器、弹药和伤害
 

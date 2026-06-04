@@ -319,7 +319,26 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		var runtime_line := _hud_runtime_control_line(game_root)
 		if not runtime_line.contains("可攻击") or not runtime_line.contains("命中率") or not runtime_line.contains("伤害"):
 			errors.append("HUD runtime control line should show attack hover preview, got %s" % runtime_line)
+		_expect_attack_hover_cursor_preview(errors, game_root, target_id)
 	_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
+
+
+func _expect_attack_hover_cursor_preview(errors: Array[String], game_root: Node, target_id: int) -> void:
+	var cursor: MeshInstance3D = game_root.find_child("HoverGridCursor", true, false) as MeshInstance3D
+	if cursor == null:
+		errors.append("attack hover preview should expose hover cursor")
+		return
+	if not bool(cursor.get_meta("attack_can_attack", false)):
+		errors.append("attack hover cursor should expose attackable state")
+	if int(cursor.get_meta("attack_target_actor_id", 0)) != target_id:
+		errors.append("attack hover cursor should expose target actor id")
+	if float(cursor.get_meta("attack_hit_chance", -1.0)) < 0.99:
+		errors.append("attack hover cursor should expose hit chance")
+	var material := cursor.material_override as StandardMaterial3D
+	if material == null:
+		errors.append("attack hover cursor should expose material")
+	elif material.albedo_color.r <= material.albedo_color.g:
+		errors.append("attack hover cursor should use orange/red-tinted preview color")
 
 
 func _cleanup_attack_hover_preview_smoke(game_root: Node, player: RefCounted, target_id: int, original_equipment: Dictionary, original_attributes: Dictionary, original_ap: float) -> void:

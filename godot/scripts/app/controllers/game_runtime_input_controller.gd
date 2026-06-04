@@ -17,6 +17,8 @@ const ZOOM_MAX := 4.0
 const HOVER_COLOR_INTERACTION := Color(1.0, 0.82, 0.18, 0.72)
 const HOVER_COLOR_MOVE_REACHABLE := Color(0.24, 0.95, 0.48, 0.72)
 const HOVER_COLOR_MOVE_BLOCKED := Color(1.0, 0.22, 0.18, 0.72)
+const HOVER_COLOR_ATTACK_REACHABLE := Color(1.0, 0.45, 0.16, 0.78)
+const HOVER_COLOR_ATTACK_BLOCKED := Color(0.95, 0.12, 0.28, 0.78)
 
 var game_root: Node
 var world_container: Node3D
@@ -634,7 +636,7 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 		target_name = str(target_node.name)
 	var prompt: Dictionary = _hover_prompt_for_target(metadata)
 	var attack_preview: Dictionary = _attack_preview_for_target(metadata)
-	_apply_hover_cursor_state({})
+	_apply_hover_cursor_state({}, attack_preview)
 	return _replace_hover_state({
 		"active": true,
 		"kind": "interaction",
@@ -653,7 +655,7 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 
 
 func _set_hover_failure(reason: String = "") -> bool:
-	_apply_hover_cursor_state({})
+	_apply_hover_cursor_state({}, {})
 	return _replace_hover_state({
 		"active": false,
 		"kind": "",
@@ -783,7 +785,7 @@ func _attack_preview_for_target(target: Dictionary) -> Dictionary:
 	}
 
 
-func _apply_hover_cursor_state(move_preview: Dictionary) -> void:
+func _apply_hover_cursor_state(move_preview: Dictionary, attack_preview: Dictionary = {}) -> void:
 	if hover_cursor == null:
 		return
 	var color := HOVER_COLOR_INTERACTION
@@ -796,6 +798,17 @@ func _apply_hover_cursor_state(move_preview: Dictionary) -> void:
 		hover_cursor.set_meta("move_reachable", false)
 		hover_cursor.set_meta("move_steps", 0)
 		hover_cursor.set_meta("move_reason", "")
+	if not attack_preview.is_empty():
+		color = HOVER_COLOR_ATTACK_REACHABLE if bool(attack_preview.get("can_attack", false)) else HOVER_COLOR_ATTACK_BLOCKED
+		hover_cursor.set_meta("attack_can_attack", bool(attack_preview.get("can_attack", false)))
+		hover_cursor.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
+		hover_cursor.set_meta("attack_reason", str(attack_preview.get("reason", "")))
+		hover_cursor.set_meta("attack_hit_chance", float(attack_preview.get("hit_chance", -1.0)))
+	else:
+		hover_cursor.set_meta("attack_can_attack", false)
+		hover_cursor.set_meta("attack_target_actor_id", 0)
+		hover_cursor.set_meta("attack_reason", "")
+		hover_cursor.set_meta("attack_hit_chance", -1.0)
 	var material := hover_cursor.material_override as StandardMaterial3D
 	if material != null:
 		material.albedo_color = color
