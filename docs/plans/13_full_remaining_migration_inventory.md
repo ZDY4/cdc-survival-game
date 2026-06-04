@@ -97,7 +97,7 @@
 
 - generated door runtime 第一版已迁移：地图对象可通过 `props.door` 生成 `door_objects`、默认关闭、未锁、阻挡 movement / sight，`Simulation.toggle_door()` 会写入 `door_states`，world snapshot 会按 door state 更新 movement / sight blocking，并由 `World` / `Interaction` / `Save` smoke 覆盖。待补将现有地图建筑门洞批量标注为真实 `props.door`。
 - 锁门权限第一版已迁移：纯 `locked` 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；门 `props.door` / runtime `door_states` 支持 `required_item_ids` / `required_items` 和 `required_tool_ids` / `required_tools`，玩家背包或装备满足钥匙/工具后可打开锁门，缺失时返回 `door_key_missing` / `door_tool_missing`，HUD 有中文失败提示，权限字段随存档 roundtrip，并由 `Interaction` / `World` / `Door` / `Save` smoke 覆盖。待补钥匙/撬锁消耗、工具耐久、失败概率和更完整开锁表现。
-- 自动开门第一版已迁移：玩家移动路径和 hostile AI 追击路径遇到未锁关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`，已由 `Movement` / `AI` smoke 覆盖；待补 settlement / GOAP 路径自动开门、开合模型状态更新和声音占位。
+- 自动开门第一版已迁移：玩家移动路径和 hostile AI 追击路径遇到可开启关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`；玩家路径已复用锁门钥匙/工具权限，缺钥匙/工具仍保持不可达，满足要求会自动开门通过；已由 `Movement` / `AI` / `Door` smoke 覆盖。待补 settlement / GOAP 路径自动开门、开合模型状态更新和声音占位。
 - 待补建筑 footprint 阻挡：复杂 footprint、多层 story、door opening、wall visual、floor visual 和路径阻挡一致。
 - 门 hover / fallback 开合表现第一版已迁移：world renderer 会把 `target_kind=door` 和 door 状态 metadata 写入 pickable map object，runtime hover 会合并 world interaction target、把 `door_toggle` 归类为 `door`，并用门专属 outline 颜色和 `door_is_open` / `door_locked` meta 表现；无真实门模型时会生成 `DoorStateVisual` fallback，关闭/打开/锁定状态有稳定 meta、颜色和打开旋转；已由 `PlayerInteraction` / `Scene` smoke 覆盖。待补真实门模型、碰撞体、交互提示 polish 和声音占位。
 

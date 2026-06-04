@@ -879,7 +879,7 @@ func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 		return {"success": false, "reason": "move_topology_missing"}
 	var target_position: Dictionary = _dictionary_or_empty(command.get("target_position", command.get("grid", {})))
 	var goal: RefCounted = GridCoord.from_dictionary(target_position)
-	var movement_topology: Dictionary = _topology_with_auto_open_doors(topology)
+	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
 	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
 	if not bool(plan.get("success", false)):
 		return plan
@@ -2483,7 +2483,7 @@ func _npc_approach(actor: RefCounted, target_actor_id: int, topology: Dictionary
 	var goals: Array[RefCounted] = _adjacent_goals(target.grid_position)
 	var best_plan: Dictionary = {}
 	var best_goal: RefCounted = null
-	var movement_topology: Dictionary = _topology_with_auto_open_doors(topology)
+	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
 	for goal in goals:
 		var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
 		if not bool(plan.get("success", false)):
@@ -2915,7 +2915,7 @@ func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dicti
 	if topology.is_empty():
 		return {"success": false, "reason": "pending_move_topology_missing"}
 	var goal: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(pending_movement.get("target_position", {})))
-	var movement_topology: Dictionary = _topology_with_auto_open_doors(topology)
+	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
 	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
 	if not bool(plan.get("success", false)):
 		return {
@@ -2977,7 +2977,7 @@ func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dicti
 	}
 
 
-func _topology_with_auto_open_doors(topology: Dictionary) -> Dictionary:
+func _topology_with_auto_open_doors(actor_id: int, topology: Dictionary) -> Dictionary:
 	if topology.is_empty():
 		return {}
 	var output: Dictionary = topology.duplicate(true)
@@ -2985,7 +2985,7 @@ func _topology_with_auto_open_doors(topology: Dictionary) -> Dictionary:
 	var sight_blocking_cells: Dictionary = _dictionary_or_empty(output.get("sight_blocking_cells", {})).duplicate(true)
 	for door in _array_or_empty(output.get("door_objects", [])):
 		var door_data: Dictionary = _dictionary_or_empty(door)
-		if not _door_can_auto_open(door_data):
+		if not _door_can_auto_open(actor_id, door_data):
 			continue
 		var object_id := str(door_data.get("object_id", door_data.get("door_id", "")))
 		if object_id.is_empty():
@@ -3007,7 +3007,7 @@ func _topology_with_auto_open_doors(topology: Dictionary) -> Dictionary:
 
 func _auto_open_door_for_step(actor_id: int, step: Dictionary, topology: Dictionary) -> Dictionary:
 	var door: Dictionary = _door_for_grid(step, topology)
-	if door.is_empty() or not _door_can_auto_open(door):
+	if door.is_empty() or not _door_can_auto_open(actor_id, door):
 		return {}
 	var door_id := str(door.get("door_id", door.get("object_id", "")))
 	if door_id.is_empty():
@@ -3034,12 +3034,18 @@ func _door_for_grid(grid: Dictionary, topology: Dictionary) -> Dictionary:
 	return {}
 
 
-func _door_can_auto_open(door: Dictionary) -> bool:
+func _door_can_auto_open(actor_id: int, door: Dictionary) -> bool:
 	if door.is_empty():
 		return false
 	var door_id := str(door.get("door_id", door.get("object_id", "")))
 	var state: Dictionary = _dictionary_or_empty(door_states.get(door_id, door))
-	if bool(state.get("locked", door.get("locked", false))):
+	var permission_source: Dictionary = door.duplicate(true)
+	for key in ["locked", "required_item_ids", "required_items", "required_tool_ids", "required_tools"]:
+		if state.has(key):
+			permission_source[key] = state.get(key)
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	var permission: Dictionary = _door_permission(actor, actor_id, door_id, permission_source)
+	if not bool(permission.get("success", false)):
 		return false
 	return not bool(state.get("is_open", door.get("is_open", false)))
 
