@@ -218,6 +218,11 @@ func _build_layout() -> void:
 	cart_controls.add_child(_queue_button)
 	cart_controls.add_child(_clear_cart_button)
 	cart_controls.add_child(_confirm_cart_button)
+	var cart_drop_zones := HBoxContainer.new()
+	cart_drop_zones.name = "CartDropZones"
+	cart_drop_zones.add_theme_constant_override("separation", 8)
+	cart_drop_zones.add_child(_cart_drop_zone("BuyDropZone", "拖到这里购买", "buy"))
+	cart_drop_zones.add_child(_cart_drop_zone("SellDropZone", "拖到这里出售", "sell"))
 	var cart_scroll := ScrollContainer.new()
 	cart_scroll.name = "CartScroll"
 	cart_scroll.custom_minimum_size = Vector2(580, 72)
@@ -248,6 +253,7 @@ func _build_layout() -> void:
 	add_child(_equipment_sell_dialog)
 	box.add_child(_cart_label)
 	box.add_child(cart_controls)
+	box.add_child(cart_drop_zones)
 	box.add_child(cart_scroll)
 	box.add_child(columns)
 
@@ -427,10 +433,10 @@ func _can_drop_cart_data(_position: Vector2, data: Variant, _from_control: Contr
 		"trade_item":
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 			var source: String = str(drag_data.get("source", ""))
-			return not item.is_empty() and _item_can_trade(item, source)
+			return not item.is_empty() and _item_can_trade(item, source) and _drag_source_matches_drop_zone(source, _from_control)
 		"inventory_item":
 			var item: Dictionary = _trade_item_from_inventory_drag(drag_data)
-			return not item.is_empty() and _item_can_trade(item, "player")
+			return not item.is_empty() and _item_can_trade(item, "player") and _drag_source_matches_drop_zone("player", _from_control)
 		"trade_cart_entry":
 			var from_index: int = int(drag_data.get("index", -1))
 			return from_index >= 0 and from_index < _cart_entries.size()
@@ -669,6 +675,39 @@ func _remove_cart_entry(index: int) -> void:
 		return
 	_cart_entries.remove_at(index)
 	_update_cart_line()
+
+
+func _cart_drop_zone(node_name: String, text: String, zone: String) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.name = node_name
+	panel.custom_minimum_size = Vector2(286, 34)
+	panel.tooltip_text = text
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.set_meta("trade_drop_zone", zone)
+	panel.set_drag_forwarding(
+		Callable(self, "_empty_trade_drag_data"),
+		Callable(self, "_can_drop_cart_data"),
+		Callable(self, "_drop_cart_data")
+	)
+	var label := _label("%sLabel" % node_name)
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.tooltip_text = text
+	panel.add_child(label)
+	return panel
+
+
+func _drag_source_matches_drop_zone(source: String, from_control: Control) -> bool:
+	if from_control == null or not from_control.has_meta("trade_drop_zone"):
+		return true
+	match str(from_control.get_meta("trade_drop_zone", "")):
+		"buy":
+			return source == "shop"
+		"sell":
+			return _is_sell_source(source)
+		_:
+			return true
 
 
 func _default_detail_item(shop_items: Array, player_items: Array) -> Dictionary:

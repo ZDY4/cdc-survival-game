@@ -154,6 +154,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should drag shop bandage to trade cart")
 	if not _cart_line(game_root).contains("购买 绷带 x1"):
 		errors.append("dragged shop item should queue cart buy")
+	_press_cart_entry_button(game_root, 0, "RemoveButton")
+	if not _drop_trade_item_to_zone(game_root, "shop", "绷带", "BuyDropZone"):
+		errors.append("should drag shop bandage to buy drop zone")
+	if not _cart_line(game_root).contains("购买 绷带 x1"):
+		errors.append("buy drop zone should queue cart buy")
+	_press_cart_entry_button(game_root, 0, "RemoveButton")
+	if not _drop_trade_item_to_zone(game_root, "shop", "绷带", "SellDropZone"):
+		errors.append("should attempt dragging shop bandage to sell drop zone")
+	if not _cart_line(game_root).contains("购物车为空"):
+		errors.append("sell drop zone should reject shop buy item")
+	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
+		errors.append("should drag shop bandage back to cart after zone rejection")
 	if not _drop_trade_item_with_text_on_cart_entry(game_root, "shop", "绷带", 0):
 		errors.append("should drag shop bandage onto existing cart entry")
 	if not _cart_line(game_root).contains("购买 绷带 x2"):
@@ -167,10 +179,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
 		errors.append("dragged player item should queue cart sell")
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
+	if not _drop_trade_item_to_zone(game_root, "player", "绷带", "SellDropZone"):
+		errors.append("should drag player bandage to sell drop zone")
+	if not _cart_line(game_root).contains("出售 绷带 x1"):
+		errors.append("sell drop zone should queue cart sell")
+	_press_cart_entry_button(game_root, 0, "RemoveButton")
+	if not _drop_trade_item_to_zone(game_root, "player", "绷带", "BuyDropZone"):
+		errors.append("should attempt dragging player bandage to buy drop zone")
+	if not _cart_line(game_root).contains("购物车为空"):
+		errors.append("buy drop zone should reject player sell item")
 	if not _drop_inventory_item_to_trade_cart(game_root, "绷带"):
 		errors.append("should drag inventory bandage to trade cart")
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
 		errors.append("dragged inventory item should queue cart sell")
+	_press_cart_entry_button(game_root, 0, "RemoveButton")
+	if not _drop_inventory_item_to_trade_zone(game_root, "绷带", "SellDropZone"):
+		errors.append("should drag inventory bandage to sell drop zone")
+	if not _cart_line(game_root).contains("出售 绷带 x1"):
+		errors.append("sell drop zone should queue inventory sell")
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
 	if not _drop_trade_item_with_text(game_root, "shop", "急救包"):
 		errors.append("should drag shop medkit to trade cart for reorder")
@@ -549,6 +575,13 @@ func _drop_trade_item_with_text_on_target(game_root: Node, source: String, text:
 	return true
 
 
+func _drop_trade_item_to_zone(game_root: Node, source: String, text: String, zone_name: String, count: int = 1) -> bool:
+	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
+	if not target is Control:
+		return false
+	return _drop_trade_item_with_text_on_target(game_root, source, text, target, count)
+
+
 func _drop_inventory_item_to_trade_cart(game_root: Node, text: String, count: int = 1) -> bool:
 	var button: Button = _inventory_item_button(game_root, text)
 	if button == null or not button.has_meta("inventory_item"):
@@ -562,6 +595,23 @@ func _drop_inventory_item_to_trade_cart(game_root: Node, text: String, count: in
 		"item_id": str(item.get("item_id", "")),
 		"count": count,
 	}, null)
+	return true
+
+
+func _drop_inventory_item_to_trade_zone(game_root: Node, text: String, zone_name: String, count: int = 1) -> bool:
+	var button: Button = _inventory_item_button(game_root, text)
+	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
+	if button == null or not button.has_meta("inventory_item") or not target is Control:
+		return false
+	var item: Dictionary = button.get_meta("inventory_item", {})
+	if item.is_empty():
+		return false
+	game_root.trade_panel.call("_drop_cart_data", Vector2.ZERO, {
+		"kind": "inventory_item",
+		"item": item.duplicate(true),
+		"item_id": str(item.get("item_id", "")),
+		"count": count,
+	}, target)
 	return true
 
 

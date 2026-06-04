@@ -213,7 +213,7 @@
 - 已有买卖命令、店铺/玩家双栏、数量直买直卖、价格预览和交易购物车第一版；店铺栏价格、购物车预览和核心成交规则已统一按物品 `value * price_modifier` 计算；`queue buy`、`queue sell`、`adjust`、`remove`、`clear`、`confirm` 已纳入 `TradeUI` smoke。
 - 购物车净额预览、确认前库存/资金预校验、确认后玩家/店铺资金变化明细和无部分成交已纳入 `TradeUI` smoke。
 - 交易资金/库存失败提示已覆盖并纳入 `TradeUI` smoke：玩家资金不足、店铺资金不足、店铺库存不足、玩家库存不足；装备栏物品可作为 `equipment:<slot_id>` 来源出售，出售前会弹出确认，取消不成交，确认后自动卸下、入店铺库存并刷新 UI；显式 `sellable=false` / `tradeable=false` 和任务类 fragment 的不可出售规则已覆盖直卖、装备出售、购物车校验、UI 禁用态和反馈，已纳入 `TradeUI` smoke。
-- 交易拖拽第一版已纳入 `TradeUI` smoke：shop item -> cart 生成购买项，inventory/equipment -> cart 生成出售项，不可出售物品拖拽不会入队，queued item 可拖拽重排且金额预览保持一致，同源同物品拖到已有 queued item 会合并增加数量并受上限约束；待补跨栏 sell/buy zone 视觉 polish。
+- 交易拖拽第一版已纳入 `TradeUI` smoke：shop item -> cart / buy drop zone 生成购买项，inventory/equipment -> cart / sell drop zone 生成出售项，buy zone 会拒绝玩家出售源，sell zone 会拒绝店铺购买源，不可出售物品拖拽不会入队，queued item 可拖拽重排且金额预览保持一致，同源同物品拖到已有 queued item 会合并增加数量并受上限约束；待补跨栏 drop zone 视觉状态、禁用原因和 drag preview polish。
 - 交易关闭已覆盖 Esc、关闭按钮、目标不可用关闭、地图切换关闭和对话结束关闭；`trade_closed` payload 第一版已记录 actor、reason、target actor 和 shop id，并纳入 `TradeUI` smoke。
 
 ## 9. 技能、热栏和进度
@@ -321,7 +321,7 @@
 - Journal 面板已有任务详情、可交付状态、奖励详情、目标进度列表、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；待补更完整失败反馈。
 - Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏、多树切换、前置链路、下游解锁高亮和目标选择 HUD 预览第一版；待补图形技能树、pan、节点连线和世界目标高亮。
 - Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、批量执行和完成反馈第一版；待补制作队列和取消。
-- Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、不可出售禁用态、装备出售确认和清空；待补跨栏 sell/buy zone 视觉 polish。
+- Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、buy/sell drop zone、不可出售禁用态、装备出售确认和清空；待补跨栏 drop zone 视觉状态、禁用原因和 drag preview polish。
 - Container 面板已有空容器提示、容器/背包双栏、滚动、基础详情、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip、双向拖拽转移和背包面板拖入存放；待补背包限制、权限不足和跨面板拖拽视觉 polish。
 
 ## 14. 资产和导入
@@ -371,7 +371,7 @@
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；拆分入口禁用说明和 core 稳定拒绝 reason 已有 smoke；待补真正多 stack 拆分、装备详情和更完整使用反馈。
 - `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、双向拖拽、背包面板拖入存放与基础失败提示已有 smoke；待补背包限制/权限等高级错误和跨面板拖拽视觉 polish。
-- `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售和拖拽已有 smoke；待补跨栏 sell/buy zone 视觉 polish。
+- `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售、拖拽入队和 buy/sell drop zone 已有 smoke；待补跨栏 drop zone 视觉状态、禁用原因和 drag preview polish。
 - `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、世界目标高亮、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补多组 hotbar、技能树 pan 和更完整状态 UI。
 - `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版已有 smoke；待补对话交付条件和更完整失败反馈。
 - `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、批量执行和完成反馈第一版已有 smoke；待补工具耐久/消耗、更多地图 station 标注、制作队列和取消。
