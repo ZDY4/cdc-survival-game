@@ -1720,6 +1720,18 @@ func _normalize_player_command_result(result: Dictionary, command: Dictionary, c
 			"kind": resolved_kind,
 			"reason": reason,
 		}
+	var feedback: Dictionary = _dictionary_or_empty(output.get("ui_feedback", {})).duplicate(true)
+	feedback["actor_id"] = actor_id
+	feedback["kind"] = str(feedback.get("kind", resolved_kind))
+	feedback["success"] = bool(feedback.get("success", success))
+	feedback["reason"] = str(feedback.get("reason", reason))
+	output["ui_feedback"] = feedback.duplicate(true)
+	_emit("ui_feedback", feedback)
+	var updated_events := _events_since(event_start_index)
+	output["events"] = updated_events
+	var runtime_delta: Dictionary = _dictionary_or_empty(output.get("runtime_snapshot_delta", {})).duplicate(true)
+	runtime_delta["events"] = updated_events
+	output["runtime_snapshot_delta"] = runtime_delta
 	return output
 
 

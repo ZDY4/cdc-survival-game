@@ -183,6 +183,8 @@ func _expect_command_result_contract(errors: Array[String], result: Dictionary, 
 	var expected_terminal_event := "player_command_completed" if bool(result.get("success", false)) else "player_command_rejected"
 	if _event_count_in_result(result, expected_terminal_event) <= 0:
 		errors.append("command result should include %s" % expected_terminal_event)
+	if _event_count_in_result(result, "ui_feedback") <= 0:
+		errors.append("command result should include ui_feedback event")
 
 
 func _event_count_in_result(result: Dictionary, kind: String) -> int:
