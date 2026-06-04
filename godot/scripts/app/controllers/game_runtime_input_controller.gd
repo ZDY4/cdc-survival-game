@@ -25,6 +25,7 @@ var world_container: Node3D
 var world_result: Dictionary = {}
 var camera: Camera3D
 var hover_cursor: MeshInstance3D
+var attack_target_marker: MeshInstance3D
 var selected_node: Node
 var camera_target: Vector3 = Vector3.ZERO
 var is_middle_mouse_dragging := false
@@ -56,6 +57,8 @@ func _init(p_game_root: Node) -> void:
 	game_root = p_game_root
 	hover_cursor = _build_hover_cursor()
 	game_root.add_child(hover_cursor)
+	attack_target_marker = _build_attack_target_marker()
+	game_root.add_child(attack_target_marker)
 
 
 func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void:
@@ -74,6 +77,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	_sync_camera_focus_meta()
 	_apply_camera_transform()
 	hover_cursor.visible = false
+	attack_target_marker.visible = false
 	selected_node = null
 
 
@@ -773,6 +777,7 @@ func _attack_preview_for_target(target: Dictionary) -> Dictionary:
 		"reason": str(preview.get("reason", "")),
 		"actor_id": int(preview.get("actor_id", player_id)),
 		"target_actor_id": int(preview.get("target_actor_id", target_actor_id)),
+		"target_grid": _dictionary_or_empty(preview.get("target_grid", {})).duplicate(true),
 		"distance": int(preview.get("distance", -1)),
 		"range": int(preview.get("range", -1)),
 		"ap_cost": float(preview.get("ap_cost", 0.0)),
@@ -813,6 +818,39 @@ func _apply_hover_cursor_state(move_preview: Dictionary, attack_preview: Diction
 	if material != null:
 		material.albedo_color = color
 	hover_cursor.set_meta("hover_color", color)
+	_update_attack_target_marker(attack_preview, color)
+
+
+func _update_attack_target_marker(attack_preview: Dictionary, color: Color) -> void:
+	if attack_target_marker == null:
+		return
+	if attack_preview.is_empty():
+		attack_target_marker.visible = false
+		attack_target_marker.set_meta("attack_target_actor_id", 0)
+		attack_target_marker.set_meta("attack_can_attack", false)
+		return
+	var target_grid: Dictionary = _dictionary_or_empty(attack_preview.get("target_grid", {}))
+	if target_grid.is_empty():
+		for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
+			var actor_data: Dictionary = _dictionary_or_empty(actor)
+			if int(actor_data.get("actor_id", 0)) == int(attack_preview.get("target_actor_id", 0)):
+				target_grid = _dictionary_or_empty(actor_data.get("grid_position", {}))
+				break
+	if target_grid.is_empty():
+		attack_target_marker.visible = false
+		return
+	attack_target_marker.global_position = Vector3(
+		float(target_grid.get("x", 0)),
+		float(target_grid.get("y", _observed_level())) + 1.42,
+		float(target_grid.get("z", 0))
+	)
+	var material := attack_target_marker.material_override as StandardMaterial3D
+	if material != null:
+		material.albedo_color = color
+	attack_target_marker.visible = true
+	attack_target_marker.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
+	attack_target_marker.set_meta("attack_can_attack", bool(attack_preview.get("can_attack", false)))
+	attack_target_marker.set_meta("hover_color", color)
 
 
 func _player_actor_id() -> int:
@@ -948,6 +986,24 @@ func _build_hover_cursor() -> MeshInstance3D:
 	node.mesh = mesh
 	node.material_override = material
 	node.visible = false
+	return node
+
+
+func _build_attack_target_marker() -> MeshInstance3D:
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = 0.38
+	mesh.outer_radius = 0.48
+	var material := StandardMaterial3D.new()
+	material.albedo_color = HOVER_COLOR_ATTACK_REACHABLE
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var node := MeshInstance3D.new()
+	node.name = "AttackTargetMarker"
+	node.mesh = mesh
+	node.material_override = material
+	node.visible = false
+	node.rotation_degrees.x = 90.0
 	return node
 
 
