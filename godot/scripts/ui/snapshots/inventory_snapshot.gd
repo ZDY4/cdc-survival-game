@@ -51,6 +51,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 			"usable": false,
 			"use_ap_cost": 0.0,
 			"use_effect_ids": [],
+			"droppable": true,
 			"stackable": false,
 			"max_stack": 1,
 		}
@@ -77,6 +78,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"usable": use_allowed,
 		"use_ap_cost": max(1.0, ceil(float(usable.get("use_time", 1.0)))) if not usable.is_empty() else 0.0,
 		"use_effect_ids": _string_array(usable.get("effect_ids", [])) if not usable.is_empty() else [],
+		"droppable": _is_item_droppable(data),
 		"stackable": _stackable(data),
 		"max_stack": _max_stack(data),
 	}
@@ -166,6 +168,21 @@ func _is_item_use_allowed(item_data: Dictionary) -> bool:
 		if kind in ["quest", "task", "key_item"]:
 			return false
 		for key in ["usable", "can_use"]:
+			if fragment_data.has(key) and not bool(fragment_data.get(key)):
+				return false
+	return true
+
+
+func _is_item_droppable(item_data: Dictionary) -> bool:
+	for key in ["droppable", "can_drop", "discardable"]:
+		if item_data.has(key) and not bool(item_data.get(key)):
+			return false
+	for fragment in _array_or_empty(item_data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		var kind: String = str(fragment_data.get("kind", ""))
+		if kind in ["quest", "task", "key_item"]:
+			return false
+		for key in ["droppable", "can_drop", "discardable"]:
 			if fragment_data.has(key) and not bool(fragment_data.get(key)):
 				return false
 	return true

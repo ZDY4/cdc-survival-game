@@ -564,12 +564,12 @@ Godot 落点：`godot/scripts/core/ai/**`、`godot/scripts/core/interactions/**`
 
 ### 11.1 背包
 
-- [~] 背包列表、数量移动、丢弃第一版。
+- [~] 背包列表、数量移动、丢弃第一版；选中物品操作栏已提供数量 SpinBox、使用、装备和丢弃按钮，并纳入 `InventoryUI` smoke。
 - [~] inventory order 持久化第一版：actor snapshot / save roundtrip、核心物品增删顺序维护、Inventory 默认“顺序”排序已纳入 `InventoryUI` / `Save` smoke；待补拖拽重排。
 - [~] 排序、筛选、搜索、分类第一版；顺序、名称、重量、价值排序已覆盖，待补更完整 UI polish。
 - [x] 选中物品详情，已纳入 `ContainerUI` smoke。
-- [ ] 上下文菜单：使用、装备、丢弃、拆分、检查、加入热栏、出售、存入容器。
-- [ ] 数量弹窗：增减、最大、确认、取消、非法提示。
+- [~] 上下文入口：选中物品操作栏已覆盖使用、装备、丢弃；待补完整右键上下文菜单：拆分、检查、加入热栏、出售、存入容器。
+- [~] 数量控制：背包丢弃数量 SpinBox 第一版已迁移；待补完整数量弹窗：增减、最大、确认、取消、非法提示。
 - [~] 物品使用：`use_item` 命令、消耗品资源恢复、AP 消耗、消耗物品、失败 reason、任务/关键物品不可使用和 Inventory 使用按钮第一版已纳入 `InventoryUI` / `Save` smoke；待补 buff/debuff、持续效果、任务交付限制。
 - [ ] 拖拽排序、拖到装备、拖到容器、拖到交易、拖到丢弃区。
 - [ ] 容量、重量、格子限制，如旧规则保留则迁入 economy。
@@ -939,7 +939,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [ ] `Movement`：对角、禁止穿角、楼梯、自动开门、取消 pending、跨回合长路径。
 - [ ] `Combat`：LOS、跨层、AOE、友军伤害、reload、miss/evasion、armor、seed。
 - [ ] `AI`：开门、重规划、感知丢失、技能、治疗、settlement life。
-- [~] `InventoryUI`：顺序/名称/重量/价值排序、筛选、搜索、详情、消耗品使用和任务/关键物品禁用第一版已覆盖；待补上下文、数量、拖拽重排、装备详情和更完整使用反馈。
+- [~] `InventoryUI`：顺序/名称/重量/价值排序、筛选、搜索、详情、消耗品使用、选中物品装备/丢弃、丢弃数量和任务/关键物品禁用第一版已覆盖；待补完整上下文菜单、数量弹窗、拖拽重排、装备详情和更完整使用反馈。
 - [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择和基础失败提示已覆盖；待补双向拖拽、背包限制/权限等高级错误。
 - [~] `TradeUI`：店铺/玩家双栏、数量直买直卖、价格预览、资金/库存失败提示、购物车、批量确认和无部分成交已覆盖；待补装备出售、不可出售和拖拽。
 - [ ] `SkillsUI`：技能树、hotbar、多槽、目标预览、cooldown。

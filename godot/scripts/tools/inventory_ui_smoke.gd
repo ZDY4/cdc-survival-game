@@ -82,6 +82,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var quest_use_button: Button = _use_button(game_root)
 	if quest_use_button == null or not quest_use_button.disabled:
 		errors.append("quest consumable should disable use button")
+	var quest_drop_button: Button = _drop_button(game_root)
+	if quest_drop_button == null or not quest_drop_button.disabled:
+		errors.append("quest item should disable drop button")
 	var quest_ap_before: float = player_ref.ap
 	var quest_use: Dictionary = game_root.use_player_item("1007")
 	if str(quest_use.get("reason", "")) != "item_use_forbidden":
@@ -155,9 +158,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_dagger.gltf")
 
-	var equip_result: Dictionary = game_root.equip_player_item("1003", "main_hand")
-	if not bool(equip_result.get("success", false)):
-		errors.append("equipping baseball bat through game app failed: %s" % equip_result.get("reason", "unknown"))
+	if not _press_inventory_item_with_text(game_root, "棒球棒"):
+		errors.append("should select baseball bat before equipping through inventory panel")
+	var equip_button: Button = _equip_button(game_root)
+	if equip_button == null or equip_button.disabled:
+		errors.append("selected equippable item should enable equip button")
+	else:
+		equip_button.pressed.emit()
+		await process_frame
 	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_blunt.gltf")
 	if "\n".join(_item_lines(game_root)).contains("棒球棒"):
 		errors.append("equipped baseball bat should leave inventory panel")
@@ -189,12 +197,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory summary did not update item count")
 	if not _summary_line(game_root).contains("2.1 kg"):
 		errors.append("inventory summary did not update total weight")
-	var drop_result: Dictionary = game_root.drop_player_item("1006", 2)
-	if not bool(drop_result.get("success", false)):
-		errors.append("dropping picked bandages failed: %s" % drop_result.get("reason", "unknown"))
+	if not _press_inventory_item_with_text(game_root, "绷带"):
+		errors.append("should select bandages before dropping through inventory panel")
+	var quantity_spin: SpinBox = _quantity_spin(game_root)
+	var drop_button: Button = _drop_button(game_root)
+	if quantity_spin == null:
+		errors.append("inventory panel should expose quantity spin")
+	else:
+		quantity_spin.value = 2
+	if drop_button == null or drop_button.disabled:
+		errors.append("selected droppable item should enable drop button")
+	else:
+		drop_button.pressed.emit()
+		await process_frame
 	if _player_inventory_count(game_root, "1006") != 1:
 		errors.append("dropping bandages should remove the requested count from inventory")
-	if game_root.find_child("Corpse_%s" % drop_result.get("container_id", ""), true, false) == null:
+	var drop_payload: Dictionary = _last_event_payload(game_root, "inventory_item_dropped")
+	if game_root.find_child("Corpse_%s" % drop_payload.get("container_id", ""), true, false) == null:
 		errors.append("dropping inventory item should create a world drop container marker")
 	if not _event_seen(game_root, "inventory_item_dropped"):
 		errors.append("dropping inventory item should emit inventory_item_dropped")
@@ -276,6 +295,15 @@ func _event_seen(game_root: Node, kind: String) -> bool:
 	return false
 
 
+func _last_event_payload(game_root: Node, kind: String) -> Dictionary:
+	var events: Array = game_root.simulation.snapshot().get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = events[index]
+		if event_data.get("kind", "") == kind:
+			return event_data.get("payload", {})
+	return {}
+
+
 func _mark_item_as_quest(game_root: Node, item_id: String) -> void:
 	var data: Dictionary = _item_data(game_root, item_id)
 	var fragments: Array = data.get("fragments", [])
@@ -327,6 +355,18 @@ func _search_box(game_root: Node) -> LineEdit:
 
 func _use_button(game_root: Node) -> Button:
 	return game_root.inventory_panel.find_child("UseSelectedButton", true, false) as Button
+
+
+func _equip_button(game_root: Node) -> Button:
+	return game_root.inventory_panel.find_child("EquipSelectedButton", true, false) as Button
+
+
+func _drop_button(game_root: Node) -> Button:
+	return game_root.inventory_panel.find_child("DropSelectedButton", true, false) as Button
+
+
+func _quantity_spin(game_root: Node) -> SpinBox:
+	return game_root.inventory_panel.find_child("QuantitySpin", true, false) as SpinBox
 
 
 func _press_inventory_item_with_text(game_root: Node, needle: String) -> bool:

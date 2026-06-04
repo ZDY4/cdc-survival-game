@@ -7,7 +7,10 @@ var _search_box: LineEdit
 var _filter_box: HBoxContainer
 var _sort_box: HBoxContainer
 var _detail_label: Label
+var _quantity_spin: SpinBox
 var _use_button: Button
+var _equip_button: Button
+var _drop_button: Button
 var _items_box: VBoxContainer
 var _category_filter: String = "all"
 var _sort_mode: String = "order"
@@ -86,7 +89,15 @@ func _build_layout() -> void:
 	_sort_box.name = "SortBar"
 	_sort_box.add_theme_constant_override("separation", 4)
 	_detail_label = _label("DetailLine")
-	_use_button = _toolbar_button("UseSelectedButton", "使用", "使用选中的物品")
+	_quantity_spin = SpinBox.new()
+	_quantity_spin.name = "QuantitySpin"
+	_quantity_spin.min_value = 1
+	_quantity_spin.max_value = 1
+	_quantity_spin.step = 1
+	_quantity_spin.value = 1
+	_quantity_spin.custom_minimum_size = Vector2(72, 28)
+	_quantity_spin.focus_mode = Control.FOCUS_NONE
+	_use_button = _action_button("UseSelectedButton", "使用", "使用选中的物品")
 	_use_button.disabled = true
 	_use_button.pressed.connect(func() -> void:
 		if _selected_item.is_empty():
@@ -95,6 +106,34 @@ func _build_layout() -> void:
 		if root != null and root.has_method("use_player_item"):
 			root.use_player_item(str(_selected_item.get("item_id", "")))
 	, CONNECT_DEFERRED)
+	_equip_button = _action_button("EquipSelectedButton", "装备", "装备选中的物品")
+	_equip_button.disabled = true
+	_equip_button.pressed.connect(func() -> void:
+		if _selected_item.is_empty():
+			return
+		var slots: Array = _array_or_empty(_selected_item.get("equip_slots", []))
+		if slots.is_empty():
+			return
+		var root := get_parent()
+		if root != null and root.has_method("equip_player_item"):
+			root.equip_player_item(str(_selected_item.get("item_id", "")), str(slots[0]))
+	, CONNECT_DEFERRED)
+	_drop_button = _action_button("DropSelectedButton", "丢弃", "丢弃选中的数量")
+	_drop_button.disabled = true
+	_drop_button.pressed.connect(func() -> void:
+		if _selected_item.is_empty():
+			return
+		var root := get_parent()
+		if root != null and root.has_method("drop_player_item"):
+			root.drop_player_item(str(_selected_item.get("item_id", "")), int(_quantity_spin.value if _quantity_spin != null else 1))
+	, CONNECT_DEFERRED)
+	var action_row := HBoxContainer.new()
+	action_row.name = "ActionBar"
+	action_row.add_theme_constant_override("separation", 4)
+	action_row.add_child(_quantity_spin)
+	action_row.add_child(_use_button)
+	action_row.add_child(_equip_button)
+	action_row.add_child(_drop_button)
 	var item_scroll := ScrollContainer.new()
 	item_scroll.name = "ItemScroll"
 	item_scroll.custom_minimum_size = Vector2(320, 96)
@@ -108,7 +147,7 @@ func _build_layout() -> void:
 	box.add_child(_filter_box)
 	box.add_child(_sort_box)
 	box.add_child(_detail_label)
-	box.add_child(_use_button)
+	box.add_child(action_row)
 	item_scroll.add_child(_items_box)
 	box.add_child(item_scroll)
 	_add_filter_button("FilterAllButton", "全部", "all")
@@ -194,7 +233,7 @@ func _apply_detail(item: Dictionary) -> void:
 	_selected_item = item.duplicate(true)
 	if item.is_empty():
 		_detail_label.text = "选择物品查看详情"
-		_update_use_button({})
+		_update_action_buttons({})
 		return
 	var rarity := str(item.get("rarity", ""))
 	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
@@ -214,17 +253,27 @@ func _apply_detail(item: Dictionary) -> void:
 		stack_suffix,
 		"\n%s" % description if not description.is_empty() else "",
 	]
-	_update_use_button(item)
+	_update_action_buttons(item)
 
 
-func _update_use_button(item: Dictionary) -> void:
-	if _use_button == null:
+func _update_action_buttons(item: Dictionary) -> void:
+	if _use_button == null or _equip_button == null or _drop_button == null or _quantity_spin == null:
 		return
 	var usable: bool = bool(item.get("usable", false))
+	var equippable: bool = not _array_or_empty(item.get("equip_slots", [])).is_empty()
+	var droppable: bool = bool(item.get("droppable", true)) and int(item.get("count", 0)) > 0
 	var item_name: String = str(item.get("name", item.get("item_id", "")))
 	var ap_cost: float = float(item.get("use_ap_cost", 0.0))
+	var count: int = max(1, int(item.get("count", 1)))
+	_quantity_spin.max_value = count
+	_quantity_spin.value = clampi(int(_quantity_spin.value), 1, count)
+	_quantity_spin.editable = count > 1
 	_use_button.disabled = not usable
 	_use_button.tooltip_text = "使用 %s | AP %.0f" % [item_name, ap_cost] if usable else "选中的物品不能使用"
+	_equip_button.disabled = not equippable
+	_equip_button.tooltip_text = "装备 %s" % item_name if equippable else "选中的物品不能装备"
+	_drop_button.disabled = not droppable
+	_drop_button.tooltip_text = "丢弃 %s x%d" % [item_name, int(_quantity_spin.value)] if droppable else "选中的物品不能丢弃"
 
 
 func _selected_visible_item(items: Array[Dictionary]) -> Dictionary:
@@ -263,6 +312,16 @@ func _toolbar_button(node_name: String, text: String, tooltip: String) -> Button
 	button.text = text
 	button.tooltip_text = tooltip
 	button.toggle_mode = true
+	button.custom_minimum_size = Vector2(54, 28)
+	button.focus_mode = Control.FOCUS_NONE
+	return button
+
+
+func _action_button(node_name: String, text: String, tooltip: String) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	button.tooltip_text = tooltip
 	button.custom_minimum_size = Vector2(54, 28)
 	button.focus_mode = Control.FOCUS_NONE
 	return button
@@ -316,3 +375,9 @@ func _clear_items() -> void:
 	for child in _items_box.get_children():
 		_items_box.remove_child(child)
 		child.free()
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
