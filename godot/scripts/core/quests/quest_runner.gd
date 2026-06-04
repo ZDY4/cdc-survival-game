@@ -175,24 +175,54 @@ func _grant_rewards(simulation: RefCounted, actor_id: int, quest_id: String, que
 	if reward_node.is_empty():
 		return
 	var rewards: Dictionary = _dictionary_or_empty(reward_node.get("rewards", {}))
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	var granted_items: Array[Dictionary] = []
 	for item in _array_or_empty(rewards.get("items", [])):
 		var item_data: Dictionary = _dictionary_or_empty(item)
 		var item_id: String = _inventory_entries.normalize_content_id(item_data.get("id", item_data.get("item_id", "")))
 		var count: int = max(1, int(item_data.get("count", 1)))
-		if not item_id.is_empty():
-			var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
-			if actor != null:
-				_inventory_entries.add_actor_item(actor, item_id, count)
-	if int(rewards.get("experience", 0)) > 0 or int(rewards.get("skill_points", 0)) > 0:
-		if int(rewards.get("experience", 0)) > 0:
-			simulation.grant_experience(actor_id, int(rewards.get("experience", 0)), "quest:%s" % quest_id)
-		if int(rewards.get("skill_points", 0)) > 0:
-			simulation.grant_skill_points(actor_id, int(rewards.get("skill_points", 0)), "quest:%s" % quest_id)
+		if item_id.is_empty() or actor == null:
+			continue
+		var before_count: int = int(actor.inventory.get(item_id, 0))
+		_inventory_entries.add_actor_item(actor, item_id, count)
+		granted_items.append({
+			"item_id": item_id,
+			"count": count,
+			"inventory_before": before_count,
+			"inventory_after": int(actor.inventory.get(item_id, 0)),
+		})
+	var money: int = max(0, int(rewards.get("money", 0)))
+	var money_before := 0
+	if actor != null:
+		money_before = actor.money
+		actor.money += money
+	var unlocked_locations: Array[String] = []
+	for location_id in _reward_string_array(rewards, "unlock_locations", "locations", "unlock_location"):
+		if simulation.unlock_location(location_id) or simulation.unlocked_locations.has(location_id):
+			unlocked_locations.append(location_id)
+	var world_flags: Array[String] = []
+	for flag_id in _reward_string_array(rewards, "world_flags", "flags", "world_flag"):
+		var flag_result: Dictionary = simulation.set_world_flag(flag_id, true, "quest:%s" % quest_id, actor_id)
+		if bool(flag_result.get("success", false)):
+			world_flags.append(flag_id)
+	var experience: int = max(0, int(rewards.get("experience", rewards.get("xp", 0))))
+	var skill_points: int = max(0, int(rewards.get("skill_points", rewards.get("skillPoints", 0))))
+	if experience > 0:
+		simulation.grant_experience(actor_id, experience, "quest:%s" % quest_id)
+	if skill_points > 0:
+		simulation.grant_skill_points(actor_id, skill_points, "quest:%s" % quest_id)
+	if not granted_items.is_empty() or money > 0 or not unlocked_locations.is_empty() or not world_flags.is_empty() or experience > 0 or skill_points > 0:
 		simulation.emit_event("quest_reward_granted", {
 			"actor_id": actor_id,
 			"quest_id": quest_id,
-			"experience": int(rewards.get("experience", 0)),
-			"skill_points": int(rewards.get("skill_points", 0)),
+			"items": granted_items.duplicate(true),
+			"money": money,
+			"money_before": money_before,
+			"money_after": actor.money if actor != null else money_before,
+			"unlocked_locations": unlocked_locations.duplicate(),
+			"world_flags": world_flags.duplicate(),
+			"experience": experience,
+			"skill_points": skill_points,
 		})
 
 
@@ -244,3 +274,16 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _reward_string_array(rewards: Dictionary, array_key: String, alias_array_key: String, single_key: String) -> Array[String]:
+	var values: Array = _array_or_empty(rewards.get(array_key, rewards.get(alias_array_key, [])))
+	if values.is_empty() and rewards.has(single_key):
+		values = [rewards.get(single_key)]
+	var output: Array[String] = []
+	for value in values:
+		var id := str(value).strip_edges()
+		if id.is_empty() or output.has(id):
+			continue
+		output.append(id)
+	return output

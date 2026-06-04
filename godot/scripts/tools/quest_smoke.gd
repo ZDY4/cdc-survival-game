@@ -72,6 +72,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("HUD feedback should show quest reward, got %s" % completed_feedback)
 	if not completed_feedback.contains("任务开始: 警戒区清剿"):
 		errors.append("HUD feedback should show follow-up quest start, got %s" % completed_feedback)
+	errors.append_array(_expect_state_reward_quest(simulation))
 	return errors
 
 
@@ -114,10 +115,83 @@ func _hud_feedback_text(simulation: RefCounted, registry: RefCounted) -> String:
 	return " | ".join(parts)
 
 
+func _expect_state_reward_quest(simulation: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		return ["state reward quest setup missing player"]
+	simulation.quest_library["quest_reward_state_smoke"] = {
+		"data": {
+			"quest_id": "quest_reward_state_smoke",
+			"title": "状态奖励测试",
+			"description": "smoke-only state reward quest",
+			"flow": {
+				"nodes": {
+					"step_1": {
+						"id": "step_1",
+						"type": "objective",
+						"objective_type": "collect",
+						"item_id": 1007,
+						"count": 1,
+					},
+					"reward_1": {
+						"id": "reward_1",
+						"type": "reward",
+						"rewards": {
+							"money": 13,
+							"unlock_locations": ["quest_reward_smoke_location"],
+							"world_flags": ["quest_reward_smoke_flag"],
+						},
+					},
+				},
+			},
+		},
+	}
+	var money_before: int = player.money
+	if not simulation.start_quest(1, "quest_reward_state_smoke"):
+		errors.append("state reward quest should start")
+	player.inventory["1007"] = int(player.inventory.get("1007", 0)) + 1
+	simulation.record_item_collected(1, "1007", 1)
+	var snapshot: Dictionary = simulation.snapshot()
+	if _active_quest_ids(snapshot).has("quest_reward_state_smoke"):
+		errors.append("state reward quest should complete after collect")
+	if not snapshot.get("completed_quests", []).has("quest_reward_state_smoke"):
+		errors.append("state reward quest should enter completed quests")
+	if player.money != money_before + 13:
+		errors.append("state reward quest should grant money")
+	if not simulation.unlocked_locations.has("quest_reward_smoke_location"):
+		errors.append("state reward quest should unlock location")
+	if not simulation.world_flags.has("quest_reward_smoke_flag"):
+		errors.append("state reward quest should set world flag")
+	var reward_payload: Dictionary = _last_event_payload(snapshot, "quest_reward_granted")
+	if int(reward_payload.get("money", 0)) != 13:
+		errors.append("quest_reward_granted should include money")
+	if not _array_or_empty(reward_payload.get("unlocked_locations", [])).has("quest_reward_smoke_location"):
+		errors.append("quest_reward_granted should include unlocked location")
+	if not _array_or_empty(reward_payload.get("world_flags", [])).has("quest_reward_smoke_flag"):
+		errors.append("quest_reward_granted should include world flag")
+	return errors
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
+	var events: Array = snapshot.get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _digest(snapshot: Dictionary) -> Dictionary:
