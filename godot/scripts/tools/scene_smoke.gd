@@ -36,7 +36,7 @@ func _run() -> void:
 
 	var counts: Dictionary = WorldSceneRenderer.new().render_world(root, world_result)
 	await process_frame
-	var errors := _validate_scene(root, counts)
+	var errors := _validate_scene(root, world_result, counts)
 	errors.append_array(_validate_door_state_visuals())
 	if not errors.is_empty():
 		for error in errors:
@@ -49,7 +49,7 @@ func _run() -> void:
 	quit(0)
 
 
-func _validate_scene(root: Node3D, counts: Dictionary) -> Array[String]:
+func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary) -> Array[String]:
 	var errors: Array[String] = []
 	if root.get_node_or_null("GeneratedWorld") == null:
 		errors.append("missing GeneratedWorld root")
@@ -60,6 +60,7 @@ func _validate_scene(root: Node3D, counts: Dictionary) -> Array[String]:
 	if int(counts.get("actors", 0)) != 3:
 		errors.append("expected 3 actor markers")
 	_validate_actor_model_assets(root, errors)
+	_validate_actor_status_markers(root, world_result, errors)
 	if int(counts.get("colliders", 0)) <= int(counts.get("actors", 0)):
 		errors.append("expected pickable colliders for ground, actors and objects")
 	if _interaction_target_node_count(root) <= 0:
@@ -74,6 +75,7 @@ func _validate_scene(root: Node3D, counts: Dictionary) -> Array[String]:
 	else:
 		_validate_player_camera_focus(root, errors)
 	_validate_runtime_map_object_fallbacks(root, errors)
+	_validate_synthetic_actor_side_badges(errors)
 	return errors
 
 
@@ -225,6 +227,114 @@ func _validate_player_equipment_models(player: Node, errors: Array[String]) -> v
 	var main_hand: Node = player.find_child("EquipmentModel_main_hand", true, false)
 	if main_hand != null and str(main_hand.get_meta("model_asset", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("main_hand equipment model should use dagger glTF")
+
+
+func _validate_actor_status_markers(root: Node3D, world_result: Dictionary, errors: Array[String]) -> void:
+	var actors: Array = _array_or_empty(world_result.get("actors", []))
+	for actor in actors:
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		var actor_id := int(actor_data.get("actor_id", 0))
+		var definition_id := str(actor_data.get("definition_id", ""))
+		var actor_node: Node = root.find_child("Actor_%s_%d" % [definition_id, actor_id], true, false)
+		if actor_node == null:
+			errors.append("actor %s/%d should render status marker parent" % [definition_id, actor_id])
+			continue
+		var label: Label3D = actor_node.find_child("ActorNameLabel", true, false) as Label3D
+		if label == null:
+			errors.append("actor %d should render ActorNameLabel" % actor_id)
+		else:
+			if int(label.get_meta("actor_id", 0)) != actor_id:
+				errors.append("actor %d label should expose actor_id metadata" % actor_id)
+			if label.text.strip_edges().is_empty():
+				errors.append("actor %d label should show a display name" % actor_id)
+		_validate_actor_resource_bar(actor_node, actor_data, "health", _expected_health_ratio(actor_data), errors)
+		_validate_actor_resource_bar(actor_node, actor_data, "ap", _expected_ap_ratio(actor_data), errors)
+		var badge: MeshInstance3D = actor_node.find_child("ActorSideBadge", true, false) as MeshInstance3D
+		if badge == null:
+			errors.append("actor %d should render ActorSideBadge" % actor_id)
+		else:
+			var side := str(actor_data.get("side", ""))
+			if int(badge.get_meta("actor_id", 0)) != actor_id:
+				errors.append("actor %d side badge should expose actor_id metadata" % actor_id)
+			if str(badge.get_meta("side", "")) != side:
+				errors.append("actor %d side badge should expose side metadata" % actor_id)
+
+
+func _validate_actor_resource_bar(actor_node: Node, actor_data: Dictionary, resource_id: String, expected_ratio: float, errors: Array[String]) -> void:
+	var actor_id := int(actor_data.get("actor_id", 0))
+	var bar: Node = actor_node.find_child("Actor%sBar" % resource_id.capitalize(), true, false)
+	if bar == null:
+		errors.append("actor %d should render %s resource bar" % [actor_id, resource_id])
+		return
+	if int(bar.get_meta("actor_id", 0)) != actor_id:
+		errors.append("actor %d %s bar should expose actor_id metadata" % [actor_id, resource_id])
+	if str(bar.get_meta("resource_id", "")) != resource_id:
+		errors.append("actor %d %s bar should expose resource_id metadata" % [actor_id, resource_id])
+	var ratio := float(bar.get_meta("ratio", -1.0))
+	if absf(ratio - expected_ratio) > 0.001:
+		errors.append("actor %d %s bar ratio %.3f should match snapshot %.3f" % [actor_id, resource_id, ratio, expected_ratio])
+	if bar.find_child("ActorBarFill", true, false) == null:
+		errors.append("actor %d %s bar should render fill segment" % [actor_id, resource_id])
+	if bar.find_child("ActorBarMissing", true, false) == null:
+		errors.append("actor %d %s bar should render missing segment" % [actor_id, resource_id])
+
+
+func _expected_health_ratio(actor_data: Dictionary) -> float:
+	var combat: Dictionary = _dictionary_or_empty(actor_data.get("combat", {}))
+	var max_hp: float = max(1.0, float(combat.get("max_hp", actor_data.get("max_hp", 1.0))))
+	var hp: float = clampf(float(combat.get("hp", actor_data.get("hp", max_hp))), 0.0, max_hp)
+	return hp / max_hp
+
+
+func _expected_ap_ratio(actor_data: Dictionary) -> float:
+	var combat: Dictionary = _dictionary_or_empty(actor_data.get("combat", {}))
+	var attributes: Dictionary = _dictionary_or_empty(combat.get("attributes", {}))
+	var max_ap: float = max(1.0, float(attributes.get("turn_ap_max", attributes.get("ap_max", 6.0))))
+	return clampf(float(actor_data.get("ap", 0.0)) / max_ap, 0.0, 1.0)
+
+
+func _validate_synthetic_actor_side_badges(errors: Array[String]) -> void:
+	var synthetic_root := Node3D.new()
+	synthetic_root.name = "SceneSmokeActorSideRoot"
+	get_root().add_child(synthetic_root)
+	WorldSceneRenderer.new().render_world(synthetic_root, {
+		"map": {
+			"map_id": "scene_smoke_actor_side_map",
+			"size": {"width": 2, "height": 2},
+			"entry_points": {"default_entry": {"x": 0, "y": 0, "z": 0}},
+			"interactive_objects": [],
+			"trigger_objects": [],
+			"pickup_objects": [],
+			"interaction_targets": {},
+		},
+		"actors": [{
+			"actor_id": 9101,
+			"definition_id": "scene_smoke_hostile",
+			"display_name": "Scene Smoke Hostile",
+			"kind": "npc",
+			"side": "hostile",
+			"grid_position": {"x": 1, "y": 0, "z": 1},
+			"ap": 3.0,
+			"combat": {"hp": 4.0, "max_hp": 8.0, "attributes": {"turn_ap_max": 6.0}},
+		}],
+		"corpses": [],
+	}, {"load_map_visuals": false})
+	var actor_node: Node = synthetic_root.find_child("Actor_scene_smoke_hostile_9101", true, false)
+	if actor_node == null:
+		errors.append("synthetic hostile actor should render")
+	else:
+		var badge: MeshInstance3D = actor_node.find_child("ActorSideBadge", true, false) as MeshInstance3D
+		if badge == null:
+			errors.append("synthetic hostile actor should render side badge")
+		elif str(badge.get_meta("side", "")) != "hostile":
+			errors.append("synthetic hostile actor side badge should expose hostile side")
+		var health_bar: Node = actor_node.find_child("ActorHealthBar", true, false)
+		if health_bar == null or absf(float(health_bar.get_meta("ratio", -1.0)) - 0.5) > 0.001:
+			errors.append("synthetic hostile actor health bar should expose half hp ratio")
+		var ap_bar: Node = actor_node.find_child("ActorApBar", true, false)
+		if ap_bar == null or absf(float(ap_bar.get_meta("ratio", -1.0)) - 0.5) > 0.001:
+			errors.append("synthetic hostile actor AP bar should expose half ap ratio")
+	synthetic_root.queue_free()
 
 
 func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, errors: Array[String]) -> void:
@@ -513,3 +623,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

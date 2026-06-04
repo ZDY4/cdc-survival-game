@@ -23,6 +23,10 @@ var trigger_fallback_material := _material(Color(0.58, 0.42, 0.92, 0.72))
 var door_closed_material := _material(Color(0.50, 0.34, 0.18))
 var door_open_material := _material(Color(0.64, 0.47, 0.25))
 var door_locked_material := _material(Color(0.55, 0.16, 0.12))
+var actor_health_material := _unshaded_material(Color(0.24, 0.86, 0.34, 0.88))
+var actor_health_missing_material := _unshaded_material(Color(0.22, 0.07, 0.06, 0.72))
+var actor_ap_material := _unshaded_material(Color(0.24, 0.58, 1.0, 0.86))
+var actor_ap_missing_material := _unshaded_material(Color(0.07, 0.12, 0.22, 0.62))
 
 
 func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionary = {}) -> Dictionary:
@@ -229,6 +233,7 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 		_add_equipment_models(node, _array_or_empty(actor_data.get("equipment_visuals", [])))
 		if actor_data.get("kind", "") == "player":
 			_add_player_runtime_marker(node)
+		_add_actor_status_markers(node, actor_data)
 		_add_pickable_capsule(node, 0.36, 1.25)
 		root.add_child(node)
 	return actors.size()
@@ -488,6 +493,97 @@ func _add_player_runtime_marker(parent: Node3D) -> void:
 	parent.add_child(marker)
 
 
+func _add_actor_status_markers(parent: Node3D, actor_data: Dictionary) -> void:
+	_add_actor_name_label(parent, actor_data)
+	_add_actor_side_badge(parent, actor_data)
+	_add_actor_resource_bar(parent, actor_data, "health", 0.98, _actor_health_ratio(actor_data), actor_health_material, actor_health_missing_material)
+	_add_actor_resource_bar(parent, actor_data, "ap", 0.86, _actor_ap_ratio(actor_data), actor_ap_material, actor_ap_missing_material)
+
+
+func _add_actor_name_label(parent: Node3D, actor_data: Dictionary) -> void:
+	var label := Label3D.new()
+	label.name = "ActorNameLabel"
+	label.text = str(actor_data.get("display_name", actor_data.get("definition_id", "actor")))
+	label.position = Vector3(0.0, 1.14, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 16
+	label.modulate = _actor_side_color(str(actor_data.get("side", "")))
+	label.outline_size = 4
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.72)
+	label.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
+	label.set_meta("display_name", label.text)
+	parent.add_child(label)
+
+
+func _add_actor_side_badge(parent: Node3D, actor_data: Dictionary) -> void:
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.09
+	mesh.height = 0.18
+	mesh.radial_segments = 12
+	mesh.rings = 6
+	var badge := MeshInstance3D.new()
+	badge.name = "ActorSideBadge"
+	badge.mesh = mesh
+	badge.material_override = _unshaded_material(_actor_side_color(str(actor_data.get("side", ""))))
+	badge.position = Vector3(-0.34, 1.02, 0.0)
+	badge.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
+	badge.set_meta("side", str(actor_data.get("side", "")))
+	parent.add_child(badge)
+
+
+func _add_actor_resource_bar(parent: Node3D, actor_data: Dictionary, resource_id: String, y: float, ratio: float, fill_material: StandardMaterial3D, missing_material: StandardMaterial3D) -> void:
+	var container := Node3D.new()
+	container.name = "Actor%sBar" % resource_id.capitalize()
+	container.position = Vector3(0.0, y, 0.0)
+	container.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
+	container.set_meta("resource_id", resource_id)
+	container.set_meta("ratio", ratio)
+	_add_actor_bar_segment(container, "Missing", 1.0, missing_material, 0.0)
+	_add_actor_bar_segment(container, "Fill", ratio, fill_material, -0.5 + ratio * 0.5)
+	parent.add_child(container)
+
+
+func _add_actor_bar_segment(parent: Node3D, suffix: String, ratio: float, material: StandardMaterial3D, x_offset: float) -> void:
+	var width: float = max(0.001, clampf(ratio, 0.0, 1.0)) * 0.68
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(width, 0.045, 0.035)
+	var node := MeshInstance3D.new()
+	node.name = "ActorBar%s" % suffix
+	node.mesh = mesh
+	node.material_override = material
+	node.position = Vector3(x_offset * 0.68, 0.0, 0.0)
+	parent.add_child(node)
+
+
+func _actor_health_ratio(actor_data: Dictionary) -> float:
+	var combat: Dictionary = _dictionary_or_empty(actor_data.get("combat", {}))
+	var max_hp: float = max(1.0, float(combat.get("max_hp", actor_data.get("max_hp", 1.0))))
+	var hp: float = clampf(float(combat.get("hp", actor_data.get("hp", max_hp))), 0.0, max_hp)
+	return hp / max_hp
+
+
+func _actor_ap_ratio(actor_data: Dictionary) -> float:
+	var combat: Dictionary = _dictionary_or_empty(actor_data.get("combat", {}))
+	var attributes: Dictionary = _dictionary_or_empty(combat.get("attributes", {}))
+	var max_ap := float(attributes.get("turn_ap_max", attributes.get("ap_max", 6.0)))
+	max_ap = max(1.0, max_ap)
+	return clampf(float(actor_data.get("ap", 0.0)) / max_ap, 0.0, 1.0)
+
+
+func _actor_side_color(side: String) -> Color:
+	match side:
+		"player":
+			return Color(0.33, 0.68, 1.0, 0.95)
+		"hostile":
+			return Color(1.0, 0.25, 0.18, 0.95)
+		"friendly":
+			return Color(0.35, 0.95, 0.48, 0.95)
+		"neutral":
+			return Color(1.0, 0.88, 0.32, 0.95)
+	return Color(0.82, 0.82, 0.76, 0.95)
+
+
 func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
 	for visual in equipment_visuals:
 		var visual_data: Dictionary = _dictionary_or_empty(visual)
@@ -666,6 +762,14 @@ static func _material(color: Color) -> StandardMaterial3D:
 	var material: StandardMaterial3D = StandardMaterial3D.new()
 	material.albedo_color = color
 	material.roughness = 0.85
+	return material
+
+
+static func _unshaded_material(color: Color) -> StandardMaterial3D:
+	var material := _material(color)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
 	return material
 
 
