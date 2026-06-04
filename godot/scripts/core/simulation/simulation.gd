@@ -421,7 +421,7 @@ func _submit_wait_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 func _finalize_player_ap_action(actor: RefCounted, result: Dictionary, command: Dictionary, reason: String) -> Dictionary:
 	if actor == null or not bool(result.get("success", false)):
 		return result
-	if not actor.turn_open or actor.ap >= AFFORDABLE_AP_THRESHOLD:
+	if not actor.turn_open or actor.ap >= _affordable_ap_threshold(actor):
 		return result
 	if _result_changes_active_map(result):
 		result["auto_turn_skipped"] = "map_changed"
@@ -449,7 +449,7 @@ func _auto_advance_player_turn(actor: RefCounted, topology: Dictionary, reason: 
 		guard += 1
 		if actor == null or not actor.turn_open:
 			break
-		if actor.ap >= AFFORDABLE_AP_THRESHOLD:
+		if actor.ap >= _affordable_ap_threshold(actor):
 			break
 		if not str(actor.active_dialogue_id).is_empty():
 			break
@@ -1324,13 +1324,18 @@ func _open_turn(actor_id: int, reason: String) -> void:
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	if actor == null:
 		return
-	actor.ap = clampf(actor.ap + DEFAULT_TURN_AP_GAIN, 0.0, DEFAULT_TURN_AP)
+	var turn_ap_gain: float = _turn_ap_gain(actor)
+	var turn_ap_max: float = _turn_ap_max(actor)
+	actor.ap = clampf(actor.ap + turn_ap_gain, 0.0, turn_ap_max)
 	actor.turn_open = true
 	turn_state["active_actor_id"] = actor_id
 	turn_state["phase"] = "player" if actor.kind == "player" else "npc"
 	_emit("turn_started", {
 		"actor_id": actor_id,
 		"ap": actor.ap,
+		"ap_gain": turn_ap_gain,
+		"ap_max": turn_ap_max,
+		"affordable_ap_threshold": _affordable_ap_threshold(actor),
 		"round": int(turn_state.get("round", 1)),
 		"reason": reason,
 	})
@@ -1361,6 +1366,33 @@ func _spend_ap(actor: RefCounted, cost: float, reason: String) -> void:
 		"after": actor.ap,
 		"reason": reason,
 	})
+
+
+func _turn_ap_gain(actor: RefCounted) -> float:
+	var attributes: Dictionary = _dictionary_or_empty(actor.combat_attributes)
+	if attributes.has("turn_ap_gain"):
+		return max(0.0, float(attributes.get("turn_ap_gain", DEFAULT_TURN_AP_GAIN)))
+	if attributes.has("speed"):
+		return max(1.0, float(attributes.get("speed", DEFAULT_TURN_AP_GAIN)) + 1.0)
+	return DEFAULT_TURN_AP_GAIN
+
+
+func _turn_ap_max(actor: RefCounted) -> float:
+	var attributes: Dictionary = _dictionary_or_empty(actor.combat_attributes)
+	if attributes.has("turn_ap_max"):
+		return max(1.0, float(attributes.get("turn_ap_max", DEFAULT_TURN_AP)))
+	if attributes.has("ap_max"):
+		return max(1.0, float(attributes.get("ap_max", DEFAULT_TURN_AP)))
+	return max(DEFAULT_TURN_AP, _turn_ap_gain(actor))
+
+
+func _affordable_ap_threshold(actor: RefCounted) -> float:
+	var attributes: Dictionary = _dictionary_or_empty(actor.combat_attributes)
+	if attributes.has("affordable_ap_threshold"):
+		return max(0.0, float(attributes.get("affordable_ap_threshold", AFFORDABLE_AP_THRESHOLD)))
+	if attributes.has("ap_affordable_threshold"):
+		return max(0.0, float(attributes.get("ap_affordable_threshold", AFFORDABLE_AP_THRESHOLD)))
+	return AFFORDABLE_AP_THRESHOLD
 
 
 func _result_changes_active_map(result: Dictionary) -> bool:

@@ -39,7 +39,7 @@
 ### 2.1 探索回合
 
 - 已迁移玩家行动后 AP 低于阈值自动推进回合；仍需补齐 Rust `PendingProgressionStep` 式分帧推进，而不是所有恢复逻辑都同步挤在单次 command 中。
-- 待补 AP carry / cap 的完整参数来源：`turn_ap_gain`、`turn_ap_max`、`action_cost`、`affordable_threshold` 应从可配置规则或 actor 属性派生，而不是长期写死。
+- AP carry / cap 参数来源第一版已迁移：`turn_ap_gain`、`turn_ap_max`、`affordable_ap_threshold` 会优先读取 actor `combat_attributes` 的显式字段，缺省时从 `speed + 1` 派生回合 AP，并在 `turn_started` payload 和 runtime snapshot `current_control_actor` 中暴露；已由 `Movement` smoke 覆盖。待补更完整 action cost 配置表和不同状态/装备/技能对 AP 参数的叠加规则。
 - 待补玩家行动后“是否自动结束回合”的策略表：移动、攻击、交互、制作、技能、取消 pending、空地取消、目标点击取消、战斗内取消要分别等价。
 - 待补长按 Space 连续等待 / 连续结束回合，按下、松开、重复间隔、pending 中禁用连等。
 - 待补自动推进保护：循环上限触发后的状态恢复、错误事件、UI 提示和 pending 清理策略。

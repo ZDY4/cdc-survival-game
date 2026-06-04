@@ -60,6 +60,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 		errors.append("ap_spent should include move reason")
 
 	_expect_ap_depletion_auto_advances_turn(errors, simulation, topology)
+	errors.append_array(_expect_configured_ap_rules(registry))
 
 	var blocked_goal: Dictionary = _first_blocking_cell(topology)
 	var blocked_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": blocked_goal, "topology": topology})
@@ -128,6 +129,49 @@ func _expect_ap_depletion_auto_advances_turn(errors: Array[String], simulation: 
 		errors.append("turn_ended should include actor_id, AP, round, and reason")
 	if not _has_turn_payload_for_actor(simulation.snapshot(), "turn_started", 1):
 		errors.append("turn_started should include actor_id, AP, round, and reason")
+
+
+func _expect_configured_ap_rules(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.combat_attributes["turn_ap_gain"] = 3.0
+	player.combat_attributes["turn_ap_max"] = 4.0
+	player.combat_attributes["affordable_ap_threshold"] = 2.0
+	player.ap = 0.0
+	var wait_result: Dictionary = simulation.submit_player_command({
+		"kind": "wait",
+		"topology": topology,
+	})
+	if not bool(wait_result.get("success", false)):
+		errors.append("configured AP wait should succeed: %s" % wait_result.get("reason", "unknown"))
+	if absf(player.ap - 3.0) > 0.001:
+		errors.append("configured turn AP gain/max should reopen player at 3 AP, got %.2f" % player.ap)
+	var turn_payload: Dictionary = _last_event_payload(simulation.snapshot(), "turn_started")
+	if absf(float(turn_payload.get("ap_gain", -1.0)) - 3.0) > 0.001:
+		errors.append("turn_started should include configured ap_gain")
+	if absf(float(turn_payload.get("ap_max", -1.0)) - 4.0) > 0.001:
+		errors.append("turn_started should include configured ap_max")
+	if absf(float(turn_payload.get("affordable_ap_threshold", -1.0)) - 2.0) > 0.001:
+		errors.append("turn_started should include configured affordable threshold")
+	var control_actor: Dictionary = _dictionary_or_empty(simulation.snapshot().get("current_control_actor", {}))
+	if absf(float(control_actor.get("turn_ap_gain", -1.0)) - 3.0) > 0.001 or absf(float(control_actor.get("turn_ap_max", -1.0)) - 4.0) > 0.001:
+		errors.append("runtime snapshot should expose configured AP turn parameters")
+	player.ap = 2.0
+	var goal: Dictionary = _first_open_neighbor(player.grid_position, topology, _occupied_actor_cells(simulation, 1))
+	var move_result: Dictionary = simulation.submit_player_command({
+		"kind": "move",
+		"target_position": goal,
+		"topology": topology,
+	})
+	if not bool(move_result.get("success", false)):
+		errors.append("configured AP threshold move should succeed: %s" % move_result.get("reason", "unknown"))
+	if not bool(move_result.get("auto_turn_advanced", false)):
+		errors.append("configured affordable threshold should auto advance when AP drops below 2")
+	if absf(player.ap - 4.0) > 0.001:
+		errors.append("configured AP max should cap auto-opened player AP at 4, got %.2f" % player.ap)
+	return errors
 
 
 func _first_blocking_cell(topology: Dictionary) -> Dictionary:

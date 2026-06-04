@@ -139,6 +139,9 @@ func _current_control_actor_snapshot(simulation: RefCounted) -> Dictionary:
 				break
 	if actor == null:
 		return {}
+	var attributes: Dictionary = _dictionary_or_empty(actor.combat_attributes)
+	var turn_ap_gain: float = _turn_ap_gain(attributes)
+	var turn_ap_max: float = _turn_ap_max(attributes, turn_ap_gain)
 	return {
 		"actor_id": actor_id,
 		"definition_id": actor.definition_id,
@@ -147,6 +150,9 @@ func _current_control_actor_snapshot(simulation: RefCounted) -> Dictionary:
 		"side": actor.side,
 		"grid_position": actor.grid_position.to_dictionary(),
 		"ap": actor.ap,
+		"turn_ap_gain": turn_ap_gain,
+		"turn_ap_max": turn_ap_max,
+		"affordable_ap_threshold": _affordable_ap_threshold(attributes),
 		"turn_open": actor.turn_open,
 		"in_combat": actor.in_combat,
 		"active_dialogue_id": actor.active_dialogue_id,
@@ -325,6 +331,30 @@ func _feedback_event_kind(kind: String) -> bool:
 		"player_command_rejected",
 		"ui_feedback",
 	].has(kind)
+
+
+func _turn_ap_gain(attributes: Dictionary) -> float:
+	if attributes.has("turn_ap_gain"):
+		return max(0.0, float(attributes.get("turn_ap_gain", 6.0)))
+	if attributes.has("speed"):
+		return max(1.0, float(attributes.get("speed", 6.0)) + 1.0)
+	return 6.0
+
+
+func _turn_ap_max(attributes: Dictionary, turn_ap_gain: float) -> float:
+	if attributes.has("turn_ap_max"):
+		return max(1.0, float(attributes.get("turn_ap_max", 6.0)))
+	if attributes.has("ap_max"):
+		return max(1.0, float(attributes.get("ap_max", 6.0)))
+	return max(6.0, turn_ap_gain)
+
+
+func _affordable_ap_threshold(attributes: Dictionary) -> float:
+	if attributes.has("affordable_ap_threshold"):
+		return max(0.0, float(attributes.get("affordable_ap_threshold", 1.0)))
+	if attributes.has("ap_affordable_threshold"):
+		return max(0.0, float(attributes.get("ap_affordable_threshold", 1.0)))
+	return 1.0
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
