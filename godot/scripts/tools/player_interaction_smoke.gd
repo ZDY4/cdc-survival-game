@@ -107,6 +107,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("HUD did not show pickup prompt after hover selection")
 		await _expect_door_hover_outline(errors, game_root, camera)
 		_expect_ground_hover_move_preview(errors, game_root, camera, player_node)
+		_expect_pending_movement_path_markers(errors, game_root)
 
 	var pickup_selection: Dictionary = game_root.select_interaction_node(pickup_node)
 	if not bool(pickup_selection.get("success", false)):
@@ -810,6 +811,48 @@ func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, m
 			break
 	if pending_marker == null:
 		errors.append("move path preview should mark cells beyond current AP as pending")
+
+
+func _expect_pending_movement_path_markers(errors: Array[String], game_root: Node) -> void:
+	var before_pending: Dictionary = _dictionary_or_empty(game_root.simulation.pending_movement).duplicate(true)
+	var before: Dictionary = _player_grid(game_root)
+	var target: Dictionary = _near_open_grid_from(before, game_root.world_result.get("map", {}))
+	game_root.simulation.pending_movement = {
+		"actor_id": 1,
+		"target_position": target.duplicate(true),
+		"path": [before.duplicate(true), target.duplicate(true)],
+		"required_ap": 1.0,
+		"available_ap": 0.0,
+	}
+	game_root.runtime_input_controller.process(0.0)
+	var container: Node3D = game_root.find_child("PendingMovementPathMarkers", true, false) as Node3D
+	if container == null:
+		errors.append("pending movement should expose PendingMovementPathMarkers")
+		game_root.simulation.pending_movement = before_pending
+		return
+	if int(container.get_meta("marker_count", 0)) <= 0:
+		errors.append("pending movement path marker count should be positive")
+	if int(container.get_meta("path_length", 0)) <= 0:
+		errors.append("pending movement path should expose path length")
+	if int(container.get_meta("actor_id", 0)) != 1:
+		errors.append("pending movement path should expose player actor id")
+	if float(container.get_meta("required_ap", 0.0)) <= 0.0:
+		errors.append("pending movement path should expose required AP")
+	if _dictionary_or_empty(container.get_meta("target_position", {})).is_empty():
+		errors.append("pending movement path should expose target position")
+	var marker: Node = container.find_child("PendingMovementPathMarker", true, false)
+	if marker == null:
+		errors.append("pending movement should create path marker nodes")
+	else:
+		if int(marker.get_meta("actor_id", 0)) != 1:
+			errors.append("pending movement marker should expose actor id")
+		if _dictionary_or_empty(marker.get_meta("grid", {})).is_empty():
+			errors.append("pending movement marker should expose grid metadata")
+	game_root.simulation.pending_movement.clear()
+	game_root.runtime_input_controller.process(0.0)
+	if int(container.get_meta("marker_count", 0)) != 0:
+		errors.append("pending movement path markers should clear after pending cancellation")
+	game_root.simulation.pending_movement = before_pending
 
 
 func _near_open_grid_from(before: Dictionary, topology: Dictionary) -> Dictionary:

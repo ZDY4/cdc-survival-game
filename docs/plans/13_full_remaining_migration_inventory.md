@@ -69,7 +69,7 @@
 
 - 待补完整 picking 优先级：UI blocker -> hotbar -> actor -> generated door -> map object -> trigger -> grid fallback。
 - 待补 ray 命中排序：actor hit fraction、object hit fraction、trigger hit fraction、door 近似 AABB、对象锚点噪声、场景切换触发器优先级。
-- hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、actor / pickup / container / trigger / door 等目标类别、target id/name、格子、当前 prompt 摘要、地面移动可达/不可达原因和预计步数，hover cursor 会按移动可达/不可达显示绿色/红色预览；地面 hover 已新增 `MovePathPreviewMarkers` 路径格预览，暴露 marker count、path length、reachable、reason、steps、AP cost / available / affordability、affordable_steps、pending_steps 和每格 grid / path_index / step_cost / within_current_ap / requires_pending，并由 `PlayerInteraction` smoke 覆盖；待补路径线 polish 和跨回合路径表现。
+- hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、actor / pickup / container / trigger / door 等目标类别、target id/name、格子、当前 prompt 摘要、地面移动可达/不可达原因和预计步数，hover cursor 会按移动可达/不可达显示绿色/红色预览；地面 hover 已新增 `MovePathPreviewMarkers` 路径格预览，暴露 marker count、path length、reachable、reason、steps、AP cost / available / affordability、affordable_steps、pending_steps 和每格 grid / path_index / step_cost / within_current_ap / requires_pending；pending movement 已新增 `PendingMovementPathMarkers` 持续显示剩余路线，暴露 actor、target、required/available AP、remaining_steps 和每格 grid / path_index；已由 `PlayerInteraction` smoke 覆盖。待补路径线 polish 和跨回合动画表现。
 - 部分迁移左键/右键差异：左键主交互或移动、右键打开 interaction menu、菜单外点击关闭并阻止本次世界输入已恢复；待补完整上下文菜单项、禁用态和点击外部关闭的所有 modal 分支。
 - 待补目标切换规则：点击新目标时取消旧 pending 的 turn policy、清空旧 prompt、更新 focused target。
 - 部分迁移鼠标拖拽：地图面板画布左键拖拽平移、滚轮/按钮缩放、pan 复位和状态行诊断已有第一版，并由 `UIToggle` smoke 覆盖；待补技能树拖拽、背包/容器/交易物品跨面板拖拽、滚动条拖拽和拖拽视觉 polish。
@@ -91,7 +91,7 @@
 - 待补 generated building stairs 跨层 pathfinding，楼梯端点、楼层切换、目标楼层显示。
 - 动态阻挡第一版：`door_states` 会随 world snapshot 应用到 topology，打开/关闭门会更新 movement / sight blocking；玩家移动路径和 hostile AI 追击路径遇到未锁关闭门会自动打开并发出 `door_auto_opened` / `door_toggled`；actor 占用阻挡其他 actor 但不阻挡自己、尸体/掉落/拾取物非阻挡已有基础路径。仍需补更完整门权限和跨系统诊断。
 - 路径失败 reason 第一版已迁移：目标静态阻挡返回 `goal_blocked` 并带 `blocker.kind=map_object`，目标被 actor 占据返回 `goal_occupied` 并带阻挡 actor id，越界返回 `goal_out_of_bounds` 并带 bounds，跨层返回 `level_mismatch` 并带起止楼层，不可达返回 `path_unreachable` 并带 visited cell count；已由 `Movement` smoke 覆盖。待补门权限、动态门阻挡、楼梯跨层和更完整 UI 文案映射。
-- 路径预览颜色、格子 marker 和 AP 分格第一版已迁移：hover 地面时会用同一 pathfinder 预览可达性、预计步数、AP cost / available / affordability、affordable_steps、pending_steps 和失败 reason，HUD 显示摘要，hover cursor 用绿色/红色区分可达/不可达，`MovePathPreviewMarkers` 会按 `preview_move.path` 生成每格 marker，当前 AP 内格子使用移动预览色，超出 AP 的格子使用 pending 色，并记录 reachable / reason / steps / grid / path_index / step_cost / within_current_ap / requires_pending；已由 `PlayerInteraction` / `Movement` smoke 覆盖。待补跨回合 pending 路径状态、路径线 polish 和更丰富多格路径着色。
+- 路径预览颜色、格子 marker、AP 分格和 pending 剩余路径第一版已迁移：hover 地面时会用同一 pathfinder 预览可达性、预计步数、AP cost / available / affordability、affordable_steps、pending_steps 和失败 reason，HUD 显示摘要，hover cursor 用绿色/红色区分可达/不可达，`MovePathPreviewMarkers` 会按 `preview_move.path` 生成每格 marker，当前 AP 内格子使用移动预览色，超出 AP 的格子使用 pending 色，并记录 reachable / reason / steps / grid / path_index / step_cost / within_current_ap / requires_pending；当 runtime snapshot 存在 `pending_movement` 时，`PendingMovementPathMarkers` 会持续显示剩余路线并在 pending 清除后自动清空；已由 `PlayerInteraction` / `Movement` smoke 覆盖。待补路径线 polish、更丰富多格路径着色和跨回合动画表现。
 
 ### 4.2 门和建筑
 

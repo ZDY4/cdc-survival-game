@@ -41,6 +41,7 @@ var attack_target_outline: MeshInstance3D
 var attack_range_markers: Node3D
 var skill_target_preview_markers: Node3D
 var move_path_preview_markers: Node3D
+var pending_movement_path_markers: Node3D
 var selected_node: Node
 var camera_target: Vector3 = Vector3.ZERO
 var is_middle_mouse_dragging := false
@@ -88,6 +89,9 @@ func _init(p_game_root: Node) -> void:
 	move_path_preview_markers = Node3D.new()
 	move_path_preview_markers.name = "MovePathPreviewMarkers"
 	game_root.add_child(move_path_preview_markers)
+	pending_movement_path_markers = Node3D.new()
+	pending_movement_path_markers.name = "PendingMovementPathMarkers"
+	game_root.add_child(pending_movement_path_markers)
 
 
 func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void:
@@ -112,6 +116,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	_clear_attack_range_markers()
 	_clear_skill_target_preview_markers()
 	_clear_move_path_preview_markers()
+	_update_pending_movement_path_markers()
 	selected_node = null
 
 
@@ -124,6 +129,7 @@ func process(delta: float) -> void:
 		_apply_camera_transform()
 	if _mouse_inside_viewport():
 		update_hover_at_screen_position(game_root.get_viewport().get_mouse_position())
+	_update_pending_movement_path_markers()
 
 
 func input(event: InputEvent) -> void:
@@ -455,6 +461,7 @@ func clear_selection_state() -> void:
 	_clear_selection_only()
 	_clear_skill_target_preview_markers()
 	_clear_move_path_preview_markers()
+	_update_pending_movement_path_markers()
 
 
 func update_skill_target_preview_markers(preview: Dictionary) -> void:
@@ -1221,6 +1228,72 @@ func _clear_move_path_preview_markers() -> void:
 	move_path_preview_markers.set_meta("pending_steps", 0)
 
 
+func _update_pending_movement_path_markers() -> void:
+	if pending_movement_path_markers == null:
+		return
+	var pending: Dictionary = _dictionary_or_empty(_runtime_snapshot().get("pending_movement", {}))
+	if pending.is_empty():
+		_clear_pending_movement_path_markers()
+		return
+	var path: Array = _array_or_empty(pending.get("path", []))
+	if path.is_empty():
+		_clear_pending_movement_path_markers()
+		return
+	var signature := "%s|%s|%d|%.2f|%.2f" % [
+		str(pending.get("actor_id", 0)),
+		JSON.stringify(pending.get("target_position", {})),
+		path.size(),
+		float(pending.get("required_ap", 0.0)),
+		float(pending.get("available_ap", 0.0)),
+	]
+	if str(pending_movement_path_markers.get_meta("signature", "")) == signature:
+		return
+	_clear_pending_movement_path_markers()
+	var index := 0
+	for cell in path:
+		var grid: Dictionary = _dictionary_or_empty(cell)
+		if grid.is_empty():
+			continue
+		var marker := _build_pending_movement_path_marker(index, path.size())
+		marker.position = Vector3(
+			float(grid.get("x", 0)),
+			float(grid.get("y", _observed_level())) + 0.18,
+			float(grid.get("z", 0))
+		)
+		marker.set_meta("grid", grid.duplicate(true))
+		marker.set_meta("path_index", index)
+		marker.set_meta("step_cost", max(0, index))
+		marker.set_meta("actor_id", int(pending.get("actor_id", 0)))
+		marker.set_meta("target_position", _dictionary_or_empty(pending.get("target_position", {})).duplicate(true))
+		marker.set_meta("required_ap", float(pending.get("required_ap", 0.0)))
+		marker.set_meta("available_ap", float(pending.get("available_ap", 0.0)))
+		pending_movement_path_markers.add_child(marker)
+		index += 1
+	pending_movement_path_markers.set_meta("signature", signature)
+	pending_movement_path_markers.set_meta("marker_count", index)
+	pending_movement_path_markers.set_meta("path_length", path.size())
+	pending_movement_path_markers.set_meta("actor_id", int(pending.get("actor_id", 0)))
+	pending_movement_path_markers.set_meta("target_position", _dictionary_or_empty(pending.get("target_position", {})).duplicate(true))
+	pending_movement_path_markers.set_meta("required_ap", float(pending.get("required_ap", 0.0)))
+	pending_movement_path_markers.set_meta("available_ap", float(pending.get("available_ap", 0.0)))
+	pending_movement_path_markers.set_meta("remaining_steps", max(0, path.size() - 1))
+
+
+func _clear_pending_movement_path_markers() -> void:
+	if pending_movement_path_markers == null:
+		return
+	for child in pending_movement_path_markers.get_children():
+		child.queue_free()
+	pending_movement_path_markers.set_meta("signature", "")
+	pending_movement_path_markers.set_meta("marker_count", 0)
+	pending_movement_path_markers.set_meta("path_length", 0)
+	pending_movement_path_markers.set_meta("actor_id", 0)
+	pending_movement_path_markers.set_meta("target_position", {})
+	pending_movement_path_markers.set_meta("required_ap", 0.0)
+	pending_movement_path_markers.set_meta("available_ap", 0.0)
+	pending_movement_path_markers.set_meta("remaining_steps", 0)
+
+
 func _player_actor_id() -> int:
 	for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
@@ -1441,6 +1514,22 @@ func _build_move_path_preview_marker(color: Color, index: int, path_length: int)
 	material.no_depth_test = true
 	var node := MeshInstance3D.new()
 	node.name = "MovePathPreviewMarker"
+	node.mesh = mesh
+	node.material_override = material
+	return node
+
+
+func _build_pending_movement_path_marker(index: int, path_length: int) -> MeshInstance3D:
+	var mesh := BoxMesh.new()
+	var width := 0.50 if index == path_length - 1 else 0.38
+	mesh.size = Vector3(width, 0.036, width)
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(HOVER_COLOR_MOVE_PENDING.r, HOVER_COLOR_MOVE_PENDING.g, HOVER_COLOR_MOVE_PENDING.b, 0.34)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var node := MeshInstance3D.new()
+	node.name = "PendingMovementPathMarker"
 	node.mesh = mesh
 	node.material_override = material
 	return node
