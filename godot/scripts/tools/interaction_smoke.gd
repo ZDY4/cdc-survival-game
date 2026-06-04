@@ -31,9 +31,10 @@ func _init() -> void:
 func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var first_snapshot: Dictionary = simulation.snapshot()
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "corpse_containers", "interaction_menu", "hotbar"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "corpse_containers", "interaction_menu", "hotbar"]:
 		if not first_snapshot.has(key):
 			errors.append("runtime snapshot missing %s" % key)
+	_expect_initial_runtime_snapshot_fields(errors, first_snapshot)
 	var topology: Dictionary = _topology(simulation, registry)
 	var prompt_probe: Dictionary = simulation.query_interaction_options(1, {
 		"target_type": "map_object",
@@ -70,6 +71,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	if int(player.inventory.get("1006", 0)) <= 0:
 		errors.append("pickup did not add item 1006 to player inventory")
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "pickup", "pickup", "survivor_outpost_01_pickup_medkit")
+	_expect_runtime_snapshot_after_pickup(errors, simulation.snapshot())
 	var second_pickup: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
@@ -81,6 +83,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	if bool(second_pickup.get("success", false)):
 		errors.append("pickup target was not consumed")
 	_expect_rejected_command(errors, second_pickup, "interaction_target_unavailable", "consumed pickup")
+	_expect_runtime_snapshot_after_reject(errors, simulation.snapshot(), "interaction_target_unavailable")
 
 	var talk_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
@@ -225,6 +228,62 @@ func _expect_command_result_contract(errors: Array[String], result: Dictionary, 
 		errors.append("command result should include %s" % expected_terminal_event)
 	if _event_count_in_result(result, "ui_feedback") <= 0:
 		errors.append("command result should include ui_feedback event")
+
+
+func _expect_initial_runtime_snapshot_fields(errors: Array[String], snapshot: Dictionary) -> void:
+	var control_actor: Dictionary = _dictionary_or_empty(snapshot.get("current_control_actor", {}))
+	if int(control_actor.get("actor_id", 0)) != 1:
+		errors.append("runtime snapshot should expose current player control actor")
+	if str(control_actor.get("display_name", "")).is_empty():
+		errors.append("runtime snapshot current control actor should include display_name")
+	if typeof(snapshot.get("runtime_command_queue", [])) != TYPE_ARRAY:
+		errors.append("runtime snapshot command queue should be an array")
+	if typeof(snapshot.get("pending_progression_step", {})) != TYPE_DICTIONARY:
+		errors.append("runtime snapshot pending progression step should be a dictionary")
+	if typeof(snapshot.get("recent_event_feedback", [])) != TYPE_ARRAY:
+		errors.append("runtime snapshot recent event feedback should be an array")
+	if typeof(snapshot.get("target_selection_state", {})) != TYPE_DICTIONARY:
+		errors.append("runtime snapshot target selection state should be a dictionary")
+	if typeof(snapshot.get("ui_menu_state_refs", {})) != TYPE_DICTIONARY:
+		errors.append("runtime snapshot ui menu state refs should be a dictionary")
+
+
+func _expect_runtime_snapshot_after_pickup(errors: Array[String], snapshot: Dictionary) -> void:
+	var recent_target: Dictionary = _dictionary_or_empty(snapshot.get("recent_interaction_target", {}))
+	if str(recent_target.get("target_name", "")).find("survivor_outpost_01_pickup_medkit") == -1:
+		errors.append("runtime snapshot should expose recent pickup target")
+	if str(recent_target.get("option_kind", "")) != "pickup":
+		errors.append("runtime snapshot recent target should include pickup option kind")
+	var target_preview: Dictionary = _dictionary_or_empty(snapshot.get("target_preview", {}))
+	if str(target_preview.get("source", "")) != "interaction_menu":
+		errors.append("runtime snapshot target preview should use interaction_menu after interaction prompt")
+	if str(target_preview.get("primary_option_kind", "")) != "pickup":
+		errors.append("runtime snapshot target preview should include primary option kind")
+	var selection_state: Dictionary = _dictionary_or_empty(snapshot.get("target_selection_state", {}))
+	if not bool(selection_state.get("has_selection", false)) or not bool(selection_state.get("has_prompt", false)):
+		errors.append("runtime snapshot target selection state should show active prompt")
+	var ui_refs: Dictionary = _dictionary_or_empty(snapshot.get("ui_menu_state_refs", {}))
+	if not bool(ui_refs.get("interaction_menu_open", false)):
+		errors.append("runtime snapshot ui menu refs should expose interaction menu open")
+	var feedback: Array = snapshot.get("recent_event_feedback", [])
+	if feedback.is_empty():
+		errors.append("runtime snapshot should expose recent event feedback entries")
+
+
+func _expect_runtime_snapshot_after_reject(errors: Array[String], snapshot: Dictionary, expected_reason: String) -> void:
+	var recent_failure: Dictionary = _dictionary_or_empty(snapshot.get("recent_failure", {}))
+	if str(recent_failure.get("reason", "")) != expected_reason:
+		errors.append("runtime snapshot should expose recent failure reason")
+	if int(recent_failure.get("actor_id", 0)) != 1:
+		errors.append("runtime snapshot recent failure should include actor_id")
+	var feedback: Array = snapshot.get("recent_event_feedback", [])
+	var found_reject_feedback := false
+	for entry in feedback:
+		var data: Dictionary = _dictionary_or_empty(entry)
+		if str(data.get("kind", "")) == "player_command_rejected":
+			found_reject_feedback = true
+	if not found_reject_feedback:
+		errors.append("runtime snapshot feedback should include recent command rejection")
 
 
 func _expect_rejected_command(errors: Array[String], result: Dictionary, expected_reason: String, context: String) -> void:

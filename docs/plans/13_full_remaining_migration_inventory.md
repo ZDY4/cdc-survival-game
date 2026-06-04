@@ -21,7 +21,7 @@
 
 ### 1.1 Simulation 状态
 
-- 待补齐 snapshot 的完整旧字段：运行时命令队列、pending progression step、当前控制 actor、最近交互目标、最近失败原因、最近事件反馈、当前目标预览、目标选择状态、UI 菜单状态引用。
+- runtime snapshot 派生状态字段第一版已补：`runtime_command_queue`、`pending_progression_step`、`current_control_actor`、`recent_interaction_target`、`recent_failure`、`recent_event_feedback`、`target_preview`、`target_selection_state`、`ui_menu_state_refs` 会从 turn/pending/interaction/events 等当前权威状态生成，并由 `Interaction` / `Save` smoke 覆盖；待补旧版更完整命令历史、目标预览视觉参数、跨 UI modal stack 引用和 debug-only 诊断字段。
 - 已迁移基础 turn / movement / interaction 事件 payload：`turn_started`、`turn_ended`、`movement_queued`、`movement_step`、`interaction_queued` 已带 actor、AP、round、目标或 path 等基础字段，并由 `Movement` / `Interaction` smoke 覆盖。
 - 部分迁移运行时日志：玩家命令提交、完成、拒绝和 UI 反馈已新增 `player_command_submitted`、`player_command_completed`、`player_command_rejected`、`ui_feedback` 事件，payload 带 actor id、action kind、目标/物品/技能等精简命令信息和 reason，并由 `Interaction` smoke 覆盖；AP 消耗和 pending 写入/取消/恢复已新增 `ap_spent`、`movement_queued`、`interaction_queued`、`movement_cancelled`、`interaction_resumed` 第一版，并由 `Movement` / `Interaction` smoke 覆盖；容器转移、交易确认、交易关闭和任务推进已新增 `container_transferred`、`trade_confirmed`、`trade_closed`、`quest_advanced` 第一版，并由 `ContainerUI` / `TradeUI` / `Quest` smoke 覆盖；战斗、制作和技能已由 `attack_resolved`、`actor_defeated`、`corpse_created`、`combat_started`、`combat_ended`、`recipe_crafted`、`skill_used` 覆盖，并由 `Combat` / `Crafting` / `SkillsUI` smoke 断言；地图切换和进入、对话开始/位置切换关闭、容器打开/位置切换关闭、交互成功目标显示名与 option kind 已带基础 payload，并由 `Interaction` / `Overworld` smoke 覆盖。后续仍需补齐完整失败反馈、禁用原因和 UI 刷新 payload。
 - 待补 deterministic seed 策略：战斗暴击、掉落数量、AI 选择、技能随机效果、任务随机奖励需要可复现种子和存档 roundtrip。
