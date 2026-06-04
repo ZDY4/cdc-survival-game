@@ -125,14 +125,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("adrenaline_rush learn failed: %s" % active_result.get("reason", "unknown"))
 	if _bind_button(game_root, "adrenaline_rush") == null or _bind_button(game_root, "adrenaline_rush").disabled:
 		errors.append("learned active skill should allow hotbar binding")
-	_bind_button(game_root, "adrenaline_rush").pressed.emit()
+	if not _drag_skill_to_hud_hotbar(game_root, "adrenaline_rush", "slot_3"):
+		errors.append("dragging learned active skill to HUD hotbar should be accepted")
 	await process_frame
-	if not _hotbar_line(game_root).contains("slot_1:adrenaline_rush"):
-		errors.append("skills panel should show bound hotbar skill")
+	if not _hotbar_line(game_root).contains("slot_3:adrenaline_rush"):
+		errors.append("skills panel should show dragged hotbar skill")
 	game_root.refresh_hud()
-	if not _hud_hotbar_slot_text(game_root, "slot_1").contains("Adre"):
-		errors.append("HUD hotbar should show bound adrenaline rush in slot 1")
-	if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("Adrenaline Rush"):
+	if not _hud_hotbar_slot_text(game_root, "slot_3").contains("Adre"):
+		errors.append("HUD hotbar should show dragged adrenaline rush in slot 3")
+	if not _hud_hotbar_slot_tooltip(game_root, "slot_3").contains("Adrenaline Rush"):
 		errors.append("HUD hotbar slot should expose skill tooltip")
 	if _use_button(game_root, "adrenaline_rush") == null or _use_button(game_root, "adrenaline_rush").disabled:
 		errors.append("bound active skill should be usable before cooldown")
@@ -147,7 +148,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills detail should show active skill level")
 	if not _detail_text(game_root).contains("类型: 主动"):
 		errors.append("skills detail should show active skill type")
-	if not _detail_text(game_root).contains("激活: AP 2 | 冷却 20s | 绑定 slot_1 | 使用 可用"):
+	if not _detail_text(game_root).contains("激活: AP 2 | 冷却 20s | 绑定 slot_3 | 使用 可用"):
 		errors.append("skills detail should show active skill activation state")
 	var toggle_result: Dictionary = game_root.learn_player_skill("low_profile")
 	if not bool(toggle_result.get("success", false)):
@@ -156,23 +157,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("learned toggle skill should allow hotbar binding")
 	_bind_button(game_root, "low_profile").pressed.emit()
 	await process_frame
-	if not _hotbar_line(game_root).contains("slot_1:adrenaline_rush"):
-		errors.append("binding a second skill should keep first hotbar slot")
-	if not _hotbar_line(game_root).contains("slot_2:low_profile"):
+	if not _hotbar_line(game_root).contains("slot_3:adrenaline_rush"):
+		errors.append("binding a second skill should keep dragged hotbar slot")
+	if not _hotbar_line(game_root).contains("slot_1:low_profile"):
 		errors.append("second auto-bound skill should use the first empty hotbar slot")
 	if _clear_button(game_root, "low_profile") == null or _clear_button(game_root, "low_profile").disabled:
 		errors.append("bound toggle skill should expose enabled clear button")
 	_clear_button(game_root, "low_profile").pressed.emit()
 	await process_frame
-	if not _hotbar_line(game_root).contains("slot_1:adrenaline_rush"):
-		errors.append("clearing second hotbar slot should keep first slot")
-	if _hotbar_line(game_root).contains("slot_2:low_profile"):
+	if not _hotbar_line(game_root).contains("slot_3:adrenaline_rush"):
+		errors.append("clearing second hotbar slot should keep dragged slot")
+	if _hotbar_line(game_root).contains("slot_1:low_profile"):
 		errors.append("cleared hotbar slot should disappear from skills panel")
 	if not _event_seen(game_root, "hotbar_unbound"):
 		errors.append("clearing hotbar slot from skills panel should emit hotbar_unbound")
 	game_root.panel_controller.close_stage_panels()
 	var ap_before_skill: float = _player_ap(game_root)
-	_press_key(game_root, KEY_1)
+	_press_key(game_root, KEY_3)
 	await process_frame
 	game_root.refresh_skills_panel()
 	var skill_event: Dictionary = _last_event(game_root, "skill_used")
@@ -180,17 +181,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if abs(_player_ap(game_root) - (ap_before_skill - 2.0)) > 0.001:
 		errors.append("hotbar skill activation should spend activation AP cost")
 	if not _hotbar_line(game_root).contains("cd20"):
-		errors.append("digit 1 hotbar activation should write cooldown to hotbar")
+		errors.append("digit 3 hotbar activation should write cooldown to hotbar")
 	if active_effect.is_empty():
 		errors.append("hotbar skill activation should add adrenaline_rush active effect to player snapshot")
 	elif absf(float(_dictionary_or_empty(active_effect.get("modifiers", {})).get("damage_bonus", 0.0)) - 0.25) > 0.001:
 		errors.append("adrenaline_rush active effect should expose level 1 damage_bonus")
 	game_root.refresh_hud()
-	if not _hud_hotbar_slot_text(game_root, "slot_1").contains("cd20"):
+	if not _hud_hotbar_slot_text(game_root, "slot_3").contains("cd20"):
 		errors.append("HUD hotbar should show cooldown after hotbar activation")
-	if not _hud_hotbar_slot_disabled(game_root, "slot_1"):
+	if not _hud_hotbar_slot_disabled(game_root, "slot_3"):
 		errors.append("HUD hotbar slot should be disabled while cooldown remains")
-	if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("冷却 20s"):
+	if not _hud_hotbar_slot_tooltip(game_root, "slot_3").contains("冷却 20s"):
 		errors.append("HUD hotbar slot tooltip should show cooldown")
 	if not _skill_line(game_root, "adrenaline_rush").contains("冷却 20s"):
 		errors.append("used active skill should show cooldown use state")
@@ -199,7 +200,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _use_button(game_root, "adrenaline_rush") == null or not _use_button(game_root, "adrenaline_rush").disabled:
 		errors.append("active skill use button should be disabled while on cooldown")
 	if not _event_seen(game_root, "skill_used"):
-		errors.append("digit 1 hotbar activation should emit skill_used")
+		errors.append("digit 3 hotbar activation should emit skill_used")
 	if abs(float(_dictionary_or_empty(skill_event.get("payload", {})).get("ap_cost", 0.0)) - 2.0) > 0.001:
 		errors.append("skill_used event should include activation AP cost")
 	var event_effect: Dictionary = _dictionary_or_empty(_dictionary_or_empty(skill_event.get("payload", {})).get("effect", {}))
@@ -323,6 +324,23 @@ func _clear_button(game_root: Node, skill_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node("ClearButton") as Button
+
+
+func _drag_skill_to_hud_hotbar(game_root: Node, skill_id: String, slot_id: String) -> bool:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	var hotbar_slot: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
+	if row == null or hotbar_slot == null:
+		return false
+	var line: Control = row.get_node("Line") as Control
+	if line == null:
+		return false
+	var drag_data: Variant = game_root.skills_panel._get_skill_drag_data(Vector2.ZERO, line)
+	if typeof(drag_data) != TYPE_DICTIONARY:
+		return false
+	if not game_root.hud._can_drop_hotbar_skill(Vector2.ZERO, drag_data, hotbar_slot):
+		return false
+	game_root.hud._drop_hotbar_skill(Vector2.ZERO, drag_data, hotbar_slot)
+	return true
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:

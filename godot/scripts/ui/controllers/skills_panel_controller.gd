@@ -159,6 +159,12 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	line.button_pressed = _selected_skill_id == str(skill.get("skill_id", ""))
 	line.focus_mode = Control.FOCUS_NONE
 	var skill_id := str(skill.get("skill_id", ""))
+	line.set_meta("skill_drag_data", skill.duplicate(true))
+	line.set_drag_forwarding(
+		Callable(self, "_get_skill_drag_data"),
+		Callable(self, "_empty_skill_drop_check"),
+		Callable(self, "_empty_skill_drop")
+	)
 	line.pressed.connect(func() -> void:
 		_selected_skill_id = skill_id
 		apply_snapshot(_last_snapshot)
@@ -194,6 +200,34 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	row.add_child(use_button)
 	row.add_child(clear_button)
 	return row
+
+
+func _get_skill_drag_data(_position: Vector2, from_control: Control) -> Variant:
+	if from_control == null or not from_control.has_meta("skill_drag_data"):
+		return null
+	var skill: Dictionary = _dictionary_or_empty(from_control.get_meta("skill_drag_data"))
+	var skill_id := str(skill.get("skill_id", ""))
+	if skill_id.is_empty() or not bool(skill.get("can_bind", false)):
+		return null
+	_selected_skill_id = skill_id
+	_apply_detail(skill)
+	if get_viewport() != null and get_viewport().gui_is_dragging():
+		var preview := Label.new()
+		preview.text = "%s -> 热栏" % skill.get("name", skill_id)
+		set_drag_preview(preview)
+	return {
+		"kind": "skill_hotbar",
+		"skill_id": skill_id,
+		"skill": skill.duplicate(true),
+	}
+
+
+func _empty_skill_drop_check(_position: Vector2, _data: Variant, _from_control: Control) -> bool:
+	return false
+
+
+func _empty_skill_drop(_position: Vector2, _data: Variant, _from_control: Control) -> void:
+	pass
 
 
 func _apply_detail(skill: Dictionary) -> void:
@@ -470,4 +504,10 @@ func _skill_by_id(skills: Array[Dictionary], skill_id: String) -> Dictionary:
 		var skill_data: Dictionary = skill
 		if str(skill_data.get("skill_id", "")) == skill_id:
 			return skill_data
+	return {}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
 	return {}

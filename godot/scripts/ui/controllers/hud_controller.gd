@@ -232,10 +232,15 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	button.name = "HotbarSlot_%s" % slot_id
 	button.custom_minimum_size = Vector2(48, 28)
 	button.focus_mode = Control.FOCUS_NONE
+	button.set_meta("hotbar_slot_id", slot_id)
+	button.set_drag_forwarding(
+		Callable(self, "_empty_hotbar_drag_data"),
+		Callable(self, "_can_drop_hotbar_skill"),
+		Callable(self, "_drop_hotbar_skill")
+	)
 	if bool(slot.get("empty", true)):
 		button.text = "%s:-" % key_label
-		button.tooltip_text = "热栏 %s：空" % key_label
-		button.disabled = true
+		button.tooltip_text = "热栏 %s：空 | 可拖入主动技能" % key_label
 		return button
 	var suffix := " cd%.0f" % cooldown if cooldown > 0.0 else ""
 	button.text = "%s:%s%s" % [key_label, _short_hotbar_label(skill_label), suffix]
@@ -251,6 +256,32 @@ func _hotbar_button(slot: Dictionary) -> Button:
 			root.use_hotbar_slot(slot_id)
 	)
 	return button
+
+
+func _empty_hotbar_drag_data(_position: Vector2, _from_control: Control) -> Variant:
+	return null
+
+
+func _can_drop_hotbar_skill(_position: Vector2, data: Variant, from_control: Control) -> bool:
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	if str(drag_data.get("kind", "")) != "skill_hotbar":
+		return false
+	if str(drag_data.get("skill_id", "")).is_empty():
+		return false
+	return from_control != null and from_control.has_meta("hotbar_slot_id")
+
+
+func _drop_hotbar_skill(position: Vector2, data: Variant, from_control: Control) -> void:
+	if not _can_drop_hotbar_skill(position, data, from_control):
+		return
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	var slot_id := str(from_control.get_meta("hotbar_slot_id", ""))
+	var skill_id := str(drag_data.get("skill_id", ""))
+	if slot_id.is_empty() or skill_id.is_empty():
+		return
+	var root := get_parent()
+	if root != null and root.has_method("bind_player_skill_to_hotbar"):
+		root.bind_player_skill_to_hotbar(slot_id, skill_id)
 
 
 func _short_hotbar_label(label: String) -> String:
@@ -348,3 +379,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	if not ui_blocker.is_empty():
 		parts.append("Blocker %s" % ui_blocker)
 	return " | ".join(parts)
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
