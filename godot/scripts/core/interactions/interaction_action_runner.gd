@@ -240,6 +240,10 @@ func _copy_optional_container_fields(session: Dictionary, target: Dictionary) ->
 		"locked",
 		"allow_take",
 		"allow_store",
+		"required_item_ids",
+		"required_items",
+		"required_tool_ids",
+		"required_tools",
 		"required_world_flags",
 		"blocked_world_flags",
 	]:

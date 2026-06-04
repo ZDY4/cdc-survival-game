@@ -180,6 +180,10 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "缺少容器操作许可，当前无法操作。"
 		"container_world_flag_blocked":
 			return "容器操作许可已失效，当前无法操作。"
+		"container_key_missing":
+			return "缺少打开该容器所需的%s。" % item_name
+		"container_tool_missing":
+			return "缺少操作该容器所需的%s。" % item_name
 		_:
 			return str(feedback.get("reason", ""))
 

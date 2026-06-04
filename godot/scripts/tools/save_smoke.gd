@@ -61,6 +61,8 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	var clinic_container: Dictionary = simulation.container_sessions.get("survivor_outpost_01_clinic_supply_cabinet", {}).duplicate(true)
 	clinic_container["allow_take"] = true
 	clinic_container["allow_store"] = false
+	clinic_container["required_item_ids"] = ["1138"]
+	clinic_container["required_tool_ids"] = ["1150"]
 	clinic_container["required_world_flags"] = ["outpost_workshop_restored"]
 	clinic_container["blocked_world_flags"] = ["clinic_locked_down"]
 	simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = clinic_container
@@ -217,6 +219,10 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("container allow_take permission did not roundtrip")
 	if bool(restored_clinic_container.get("allow_store", true)):
 		errors.append("container allow_store permission did not roundtrip")
+	if not _array_or_empty(restored_clinic_container.get("required_item_ids", [])).has("1138"):
+		errors.append("container required item ids did not roundtrip")
+	if not _array_or_empty(restored_clinic_container.get("required_tool_ids", [])).has("1150"):
+		errors.append("container required tool ids did not roundtrip")
 	if not _array_or_empty(restored_clinic_container.get("required_world_flags", [])).has("outpost_workshop_restored"):
 		errors.append("container required world flags did not roundtrip")
 	if not _array_or_empty(restored_clinic_container.get("blocked_world_flags", [])).has("clinic_locked_down"):

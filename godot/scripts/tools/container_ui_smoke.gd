@@ -242,6 +242,45 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var locked_money: Dictionary = game_root.take_active_container_money(1)
 	if str(locked_money.get("reason", "")) != "container_locked":
 		errors.append("locked container money take should report container_locked")
+	game_root.simulation.container_sessions["key_required_container"] = {
+		"container_id": "key_required_container",
+		"display_name": "钥匙权限容器",
+		"inventory": [{"item_id": "1006", "count": 1}],
+		"money": 0,
+		"locked": true,
+		"required_item_ids": ["1138"],
+	}
+	_set_active_container_id(game_root, "key_required_container")
+	game_root.refresh_container_panel()
+	var missing_key_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if str(missing_key_take.get("reason", "")) != "container_key_missing":
+		errors.append("key-required container should report container_key_missing")
+	if not _container_feedback(game_root).contains("钥匙"):
+		errors.append("key-required container should show missing key feedback")
+	var permission_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	permission_player.inventory["1138"] = 1
+	var key_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if not bool(key_take.get("success", false)):
+		errors.append("key-required locked container should allow take with key: %s" % key_take.get("reason", "unknown"))
+	game_root.simulation.container_sessions["tool_required_container"] = {
+		"container_id": "tool_required_container",
+		"display_name": "工具权限容器",
+		"inventory": [],
+		"money": 0,
+		"required_tool_ids": ["1150"],
+	}
+	_set_active_container_id(game_root, "tool_required_container")
+	game_root.refresh_container_panel()
+	player_refill_water(game_root)
+	var missing_tool_store: Dictionary = game_root.store_active_container_item("1008", 1)
+	if str(missing_tool_store.get("reason", "")) != "container_tool_missing":
+		errors.append("tool-required container should report container_tool_missing")
+	if not _container_feedback(game_root).contains("撬锁器"):
+		errors.append("tool-required container should show missing tool feedback")
+	permission_player.inventory["1150"] = 1
+	var tool_store: Dictionary = game_root.store_active_container_item("1008", 1)
+	if not bool(tool_store.get("success", false)):
+		errors.append("tool-required container should allow store with tool: %s" % tool_store.get("reason", "unknown"))
 	game_root.simulation.container_sessions["store_forbidden_container"] = {
 		"container_id": "store_forbidden_container",
 		"display_name": "禁止存放容器",
