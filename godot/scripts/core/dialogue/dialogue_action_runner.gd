@@ -1,5 +1,9 @@
 extends RefCounted
 
+const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
+
+var _inventory_entries := InventoryEntries.new()
+
 
 func apply_action(simulation: RefCounted, actor_id: int, action: Dictionary) -> Dictionary:
 	var action_type: String = str(action.get("type", action.get("action_type", "")))
@@ -22,6 +26,10 @@ func apply_action(simulation: RefCounted, actor_id: int, action: Dictionary) -> 
 			return _set_world_flag(simulation, actor_id, action, action_type)
 		"change_relationship", "adjust_relationship", "set_relationship":
 			return _change_relationship(simulation, actor_id, action, action_type)
+		"give_item", "grant_item":
+			return _give_item(simulation, actor_id, action, action_type)
+		"give_reward", "grant_reward":
+			return _give_reward(simulation, actor_id, action, action_type)
 		"open_trade":
 			simulation.emit_event("dialogue_trade_requested", {
 				"actor_id": actor_id,
@@ -83,3 +91,96 @@ func _relationship_target_actor_id(simulation: RefCounted, source_actor_id: int,
 		if actor.definition_id == definition_id:
 			return actor.actor_id
 	return 0
+
+
+func _give_item(simulation: RefCounted, actor_id: int, action: Dictionary, action_type: String) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"type": action_type, "success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	var item_id := _inventory_entries.normalize_content_id(action.get("item_id", action.get("itemId", action.get("id", ""))))
+	var count: int = max(1, int(action.get("count", 1)))
+	if item_id.is_empty():
+		return {"type": action_type, "success": false, "reason": "item_id_missing", "actor_id": actor_id}
+	var before_count: int = int(actor.inventory.get(item_id, 0))
+	_inventory_entries.add_actor_item(actor, item_id, count)
+	var after_count: int = int(actor.inventory.get(item_id, 0))
+	simulation.emit_event("dialogue_item_granted", {
+		"actor_id": actor_id,
+		"item_id": item_id,
+		"count": count,
+		"inventory_before": before_count,
+		"inventory_after": after_count,
+	})
+	return {
+		"type": action_type,
+		"success": true,
+		"actor_id": actor_id,
+		"item_id": item_id,
+		"count": count,
+		"inventory_before": before_count,
+		"inventory_after": after_count,
+	}
+
+
+func _give_reward(simulation: RefCounted, actor_id: int, action: Dictionary, action_type: String) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"type": action_type, "success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	var rewards: Dictionary = _dictionary_or_empty(action.get("rewards", action))
+	var granted_items: Array[Dictionary] = []
+	for item in _array_or_empty(rewards.get("items", [])):
+		var item_data: Dictionary = _dictionary_or_empty(item)
+		var item_id := _inventory_entries.normalize_content_id(item_data.get("item_id", item_data.get("itemId", item_data.get("id", ""))))
+		var count: int = max(1, int(item_data.get("count", 1)))
+		if item_id.is_empty():
+			continue
+		var before_count: int = int(actor.inventory.get(item_id, 0))
+		_inventory_entries.add_actor_item(actor, item_id, count)
+		granted_items.append({
+			"item_id": item_id,
+			"count": count,
+			"inventory_before": before_count,
+			"inventory_after": int(actor.inventory.get(item_id, 0)),
+		})
+	var money: int = max(0, int(rewards.get("money", 0)))
+	var money_before: int = actor.money
+	if money > 0:
+		actor.money += money
+	var experience: int = max(0, int(rewards.get("experience", rewards.get("xp", 0))))
+	var skill_points: int = max(0, int(rewards.get("skill_points", rewards.get("skillPoints", 0))))
+	if experience > 0:
+		simulation.grant_experience(actor_id, experience, "dialogue_action")
+	if skill_points > 0:
+		simulation.grant_skill_points(actor_id, skill_points, "dialogue_action")
+	simulation.emit_event("dialogue_reward_granted", {
+		"actor_id": actor_id,
+		"items": granted_items.duplicate(true),
+		"money": money,
+		"money_before": money_before,
+		"money_after": actor.money,
+		"experience": experience,
+		"skill_points": skill_points,
+	})
+	return {
+		"type": action_type,
+		"success": true,
+		"actor_id": actor_id,
+		"items": granted_items,
+		"money": money,
+		"money_before": money_before,
+		"money_after": actor.money,
+		"experience": experience,
+		"skill_points": skill_points,
+	}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

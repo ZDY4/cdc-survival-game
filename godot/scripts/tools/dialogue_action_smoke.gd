@@ -168,6 +168,10 @@ func _expect_scripted_state_actions(game_root: Node) -> Array[String]:
 	player.active_dialogue_id = "dialogue_action_smoke_scripted"
 	player.active_dialogue_node_id = ""
 	var score_before := float(simulation.relationship_score(1, 2))
+	var bandage_before: int = int(player.inventory.get("1006", 0))
+	var ammo_before: int = int(player.inventory.get("1007", 0))
+	var money_before: int = player.money
+	var progression_before: Dictionary = _dictionary_or_empty(player.progression).duplicate(true)
 	game_root.refresh_dialogue_panel()
 	var result: Dictionary = game_root.choose_dialogue_option("apply_scripted")
 	if not bool(result.get("success", false)):
@@ -176,11 +180,25 @@ func _expect_scripted_state_actions(game_root: Node) -> Array[String]:
 		errors.append("set_world_flag dialogue action should set runtime world flag")
 	if absf(float(simulation.relationship_score(1, 2)) - (score_before + 12.0)) > 0.001:
 		errors.append("change_relationship dialogue action should adjust player/trader relationship")
+	if int(player.inventory.get("1006", 0)) != bandage_before + 1:
+		errors.append("give_item dialogue action should add one bandage")
+	if int(player.inventory.get("1007", 0)) != ammo_before + 2:
+		errors.append("give_reward dialogue action should add reward items")
+	if player.money != money_before + 7:
+		errors.append("give_reward dialogue action should add reward money")
+	if int(_dictionary_or_empty(player.progression).get("total_xp_earned", 0)) < int(progression_before.get("total_xp_earned", 0)) + 10:
+		errors.append("give_reward dialogue action should grant experience")
+	if int(_dictionary_or_empty(player.progression).get("available_skill_points", 0)) < int(progression_before.get("available_skill_points", 0)) + 1:
+		errors.append("give_reward dialogue action should grant skill points")
 	if _event_count(game_root, "world_flag_changed") <= 0:
 		errors.append("set_world_flag dialogue action should emit world_flag_changed")
 	if _event_count(game_root, "relationship_changed") <= 0:
 		errors.append("change_relationship dialogue action should emit relationship_changed")
-	if _array_or_empty(result.get("emitted_actions", [])).size() != 2:
+	if _event_count(game_root, "dialogue_item_granted") <= 0:
+		errors.append("give_item dialogue action should emit dialogue_item_granted")
+	if _event_count(game_root, "dialogue_reward_granted") <= 0:
+		errors.append("give_reward dialogue action should emit dialogue_reward_granted")
+	if _array_or_empty(result.get("emitted_actions", [])).size() != 4:
 		errors.append("scripted dialogue action result should expose emitted action results")
 	if not _dialogue_text(game_root).contains("状态已经记录"):
 		errors.append("scripted dialogue actions should advance to confirmation dialog")
@@ -226,6 +244,25 @@ func _install_scripted_dialogue(game_root: Node) -> void:
 							"target_definition_id": "trader_lao_wang",
 							"delta": 12,
 						},
+						{
+							"type": "give_item",
+							"item_id": "1006",
+							"count": 1,
+						},
+						{
+							"type": "give_reward",
+							"rewards": {
+								"items": [
+									{
+										"id": "1007",
+										"count": 2,
+									},
+								],
+								"money": 7,
+								"experience": 10,
+								"skill_points": 1,
+							},
+						},
 					],
 					"next": "confirm",
 				},
@@ -260,3 +297,9 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

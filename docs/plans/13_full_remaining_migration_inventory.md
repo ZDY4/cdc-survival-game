@@ -244,7 +244,7 @@
 - 已有对话推进和交易入口；待迁移 dialogue rules 选择 variant、preview 与 actual resolution 一致性。
 - 待补 fallback 对话、缺文件回退、目标名解析、NPC action key、对话资源目录规则。
 - 待补对话选项键盘 `1-9`、Enter/Space 推进、选项节点必须显式选择、无选项节点自动下一步。
-- 对话动作第一版已迁移：action node 可启动任务、手动交付任务并发放奖励/扣交付物品、打开交易、解锁地点、设置 world flags、调整或设置 relationship score；动作结果会回传到 `emitted_actions`，world flag / relationship 变更走 `Simulation` 统一事件并由 `DialogueAction` smoke 覆盖。待补单独 give item / give reward 动作、失败回滚、条件化动作、动作诊断日志和 UI 反馈 polish。
+- 对话动作第一版已迁移：action node 可启动任务、手动交付任务并发放奖励/扣交付物品、打开交易、解锁地点、设置 world flags、调整或设置 relationship score、单独给物品和给奖励包；动作结果会回传到 `emitted_actions`，world flag / relationship / item / reward 变更走 `Simulation` 统一事件并由 `DialogueAction` smoke 覆盖。待补失败回滚、条件化动作、动作诊断日志和 UI 反馈 polish。
 - 对话 UI 第一版已迁移：底部面板显示 speaker、target name、可滚动正文、显式选择提示、`Space / Enter` 继续提示、1-9 对话选项按钮、关闭按钮和基础诊断 meta；按钮会调用同一 `choose_dialogue_option` / `close_active_dialogue` 入口并由 `DialogueUI` smoke 覆盖。待补更完整诊断日志。
 
 ### 10.2 任务
