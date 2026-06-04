@@ -34,6 +34,7 @@ var utility_windows: Dictionary = {}
 var cdc_menu: PopupMenu
 var editor_menu_bar: MenuBar
 var using_tool_menu_fallback := false
+var opened_window_count := 0
 
 
 func _enter_tree() -> void:
@@ -210,7 +211,8 @@ func _open_content_editor(kind: String) -> void:
 	if window == null or not is_instance_valid(window):
 		window = ContentRecordEditorWindow.new()
 		window.setup(kind, str(CONTENT_EDITOR_DEFS[kind]))
-		add_child(window)
+		_configure_editor_window(window)
+		_attach_editor_window(window)
 		content_editor_windows[kind] = window
 	_show_window(window)
 
@@ -232,18 +234,38 @@ func _open_utility_window(key: String, title: String, content_script: GDScript, 
 		window.min_size = Vector2i(720, 480)
 		window.size = default_size
 		window.close_requested.connect(window.hide)
+		_configure_editor_window(window)
 		var content: Control = content_script.new()
 		content.set_anchors_preset(Control.PRESET_FULL_RECT)
 		content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		window.add_child(content)
-		add_child(window)
+		_attach_editor_window(window)
 		utility_windows[key] = window
 	_show_window(window)
+
+
+func _configure_editor_window(window: Window) -> void:
+	window.borderless = false
+	window.unresizable = false
+	window.exclusive = false
+	window.transient = false
+	window.initial_position = Window.WINDOW_INITIAL_POSITION_CENTER_MAIN_WINDOW_SCREEN
+
+
+func _attach_editor_window(window: Window) -> void:
+	var base_control := get_editor_interface().get_base_control()
+	if base_control != null:
+		base_control.add_child(window)
+		return
+	add_child(window)
 
 
 func _show_window(window: Window) -> void:
 	if window.visible:
 		window.grab_focus()
 		return
+	opened_window_count += 1
+	var cascade_offset := Vector2i(32, 32) * ((opened_window_count - 1) % 6)
 	window.popup_centered(window.size)
+	window.position += cascade_offset
