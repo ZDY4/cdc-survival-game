@@ -86,6 +86,53 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("crafting detail should show missing material detail")
 	if not _detail_text(game_root).contains("最大 0"):
 		errors.append("crafting detail should show zero max craft count when unavailable")
+	var material_locator: Button = _missing_reason_button(game_root, "MissingReasonMaterial_1011")
+	if material_locator == null:
+		errors.append("crafting detail should expose missing material locator")
+	else:
+		material_locator.pressed.emit()
+		await process_frame
+		if _search_box(game_root) == null or _search_box(game_root).text != "布料":
+			errors.append("missing material locator should populate crafting search")
+		if not _summary_line(game_root).contains("全部"):
+			errors.append("missing material locator should reset category filter to all")
+		if not _recipe_text(game_root).contains("基础绷带"):
+			errors.append("missing material locator should keep recipes that use the material")
+		_search_box(game_root).text = ""
+		_search_box(game_root).text_changed.emit("")
+		await process_frame
+	if not _press_recipe_line(game_root, "recipe_antibody_serum"):
+		errors.append("should select locked antibody serum for locator smoke")
+	await process_frame
+	var skill_locator: Button = _missing_reason_button(game_root, "MissingReasonSkill_medical")
+	if skill_locator == null:
+		errors.append("crafting detail should expose missing skill locator")
+	else:
+		skill_locator.pressed.emit()
+		await process_frame
+		if _search_box(game_root) == null or _search_box(game_root).text != "medical":
+			errors.append("missing skill locator should populate crafting search")
+		if not _recipe_text(game_root).contains("抗体血清"):
+			errors.append("missing skill locator should keep recipes that require the skill")
+		_search_box(game_root).text = ""
+		_search_box(game_root).text_changed.emit("")
+		await process_frame
+	if not _press_recipe_line(game_root, "recipe_generator"):
+		errors.append("should select generator recipe for station locator smoke")
+	await process_frame
+	var station_locator: Button = _missing_reason_button(game_root, "MissingReasonStation_workbench")
+	if station_locator == null:
+		errors.append("crafting detail should expose missing station locator")
+	else:
+		station_locator.pressed.emit()
+		await process_frame
+		if _search_box(game_root) == null or _search_box(game_root).text != "workbench":
+			errors.append("missing station locator should populate crafting search")
+		if not _recipe_text(game_root).contains("发电机"):
+			errors.append("missing station locator should keep recipes that require the station")
+		_search_box(game_root).text = ""
+		_search_box(game_root).text_changed.emit("")
+		await process_frame
 
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	player.inventory["1011"] = 4
@@ -222,6 +269,10 @@ func _feedback_text(game_root: Node) -> String:
 	if label is Label:
 		return (label as Label).text
 	return ""
+
+
+func _missing_reason_button(game_root: Node, node_name: String) -> Button:
+	return game_root.crafting_panel.find_child(node_name, true, false) as Button
 
 
 func _recipe_snapshot(game_root: Node, recipe_id: String) -> Dictionary:

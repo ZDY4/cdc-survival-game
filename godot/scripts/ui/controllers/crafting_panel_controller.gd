@@ -8,6 +8,7 @@ var _sort_box: HBoxContainer
 var _recipe_box: VBoxContainer
 var _detail_title_label: Label
 var _detail_body_label: Label
+var _missing_reason_box: VBoxContainer
 var _quantity_spin: SpinBox
 var _feedback_label: Label
 var _category_filter := "all"
@@ -96,6 +97,9 @@ func _build_layout() -> void:
 	_recipe_box.add_theme_constant_override("separation", 4)
 	_detail_title_label = _label("DetailTitleLine")
 	_detail_body_label = _label("DetailBodyLine")
+	_missing_reason_box = VBoxContainer.new()
+	_missing_reason_box.name = "MissingReasonLines"
+	_missing_reason_box.add_theme_constant_override("separation", 3)
 	_feedback_label = _label("FeedbackLine")
 	_quantity_spin = SpinBox.new()
 	_quantity_spin.name = "CraftQuantitySpin"
@@ -123,6 +127,7 @@ func _build_layout() -> void:
 	box.add_child(recipe_scroll)
 	box.add_child(_detail_title_label)
 	box.add_child(_detail_body_label)
+	box.add_child(_missing_reason_box)
 	box.add_child(_quantity_spin)
 	box.add_child(_feedback_label)
 
@@ -176,6 +181,7 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 func _apply_detail(recipe: Dictionary) -> void:
 	if _detail_title_label == null or _detail_body_label == null or _quantity_spin == null:
 		return
+	_clear_box(_missing_reason_box)
 	if recipe.is_empty():
 		_detail_title_label.text = "配方详情"
 		_detail_body_label.text = "选择配方查看详情"
@@ -206,6 +212,100 @@ func _apply_detail(recipe: Dictionary) -> void:
 		_reason_text(recipe),
 	])
 	_detail_body_label.text = "\n".join(lines)
+	for row in _missing_reason_rows(recipe):
+		_missing_reason_box.add_child(row)
+
+
+func _missing_reason_rows(recipe: Dictionary) -> Array[Control]:
+	var rows: Array[Control] = []
+	for material in _array_or_empty(recipe.get("missing_materials", [])):
+		var data: Dictionary = _dictionary_or_empty(material)
+		var query := str(data.get("name", data.get("item_id", "")))
+		if query.is_empty():
+			continue
+		rows.append(_missing_reason_button(
+			"MissingReasonMaterial_%s" % str(data.get("item_id", query)),
+			"定位材料: %s %d/%d" % [
+				query,
+				int(data.get("available", 0)),
+				int(data.get("required", 0)),
+			],
+			query
+		))
+	var skill_rows_added := false
+	for skill in _array_or_empty(recipe.get("missing_skills", [])):
+		var data: Dictionary = _dictionary_or_empty(skill)
+		var skill_id := str(data.get("skill_id", ""))
+		if skill_id.is_empty():
+			continue
+		skill_rows_added = true
+		rows.append(_missing_reason_button(
+			"MissingReasonSkill_%s" % skill_id,
+			"定位技能: %s %d/%d" % [
+				skill_id,
+				int(data.get("current_level", 0)),
+				int(data.get("required_level", 0)),
+			],
+			skill_id
+		))
+	if not skill_rows_added:
+		var skills: Dictionary = _dictionary_or_empty(recipe.get("skill_requirements", {}))
+		for skill_id in skills.keys():
+			var normalized_skill_id := str(skill_id)
+			if normalized_skill_id.is_empty():
+				continue
+			rows.append(_missing_reason_button(
+				"MissingReasonSkill_%s" % normalized_skill_id,
+				"定位技能: %s Lv%d" % [
+					normalized_skill_id,
+					int(skills.get(skill_id, 0)),
+				],
+				normalized_skill_id
+			))
+	var station := str(recipe.get("required_station", "none"))
+	if station not in ["", "none"]:
+		rows.append(_missing_reason_button(
+			"MissingReasonStation_%s" % station,
+			"定位工作台: %s" % station,
+			station
+		))
+	for tool in _array_or_empty(recipe.get("required_tools", [])):
+		var tool_id := str(tool)
+		if tool_id.is_empty():
+			continue
+		rows.append(_missing_reason_button(
+			"MissingReasonTool_%s" % tool_id,
+			"定位工具: %s" % tool_id,
+			tool_id
+		))
+	return rows
+
+
+func _missing_reason_button(node_name: String, text: String, query: String) -> Button:
+	var button := Button.new()
+	button.name = node_name.replace(" ", "_").replace(":", "_")
+	button.text = text
+	button.tooltip_text = "搜索 %s 相关配方" % query
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.custom_minimum_size = Vector2(320, 24)
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(func() -> void:
+		_locate_missing_reason(query)
+	, CONNECT_DEFERRED)
+	return button
+
+
+func _locate_missing_reason(query: String) -> void:
+	var normalized_query := query.strip_edges()
+	if normalized_query.is_empty():
+		return
+	_category_filter = "all"
+	_search_text = normalized_query.to_lower()
+	if _search_box != null:
+		_search_box.text = normalized_query
+		_search_box.grab_focus()
+	if not _last_snapshot.is_empty():
+		apply_snapshot(_last_snapshot)
 
 
 func _materials_text(materials: Array, multiplier: int = 1) -> String:
@@ -290,6 +390,14 @@ func _search_matches(recipe: Dictionary) -> bool:
 		recipe.get("output_item_id", ""),
 		recipe.get("output_name", ""),
 	]
+	var requirements: Array[String] = []
+	requirements.append(str(recipe.get("required_station", "")))
+	for tool in _array_or_empty(recipe.get("required_tools", [])):
+		requirements.append(str(tool))
+	for skill_id in _dictionary_or_empty(recipe.get("skill_requirements", {})).keys():
+		requirements.append(str(skill_id))
+	if not requirements.is_empty():
+		haystack = "%s %s" % [haystack, " ".join(requirements)]
 	if not material_names.is_empty():
 		haystack = "%s %s" % [haystack, " ".join(material_names)]
 	return haystack.to_lower().contains(_search_text)
@@ -490,6 +598,14 @@ func _label(node_name: String) -> Label:
 func _clear_recipes() -> void:
 	for child in _recipe_box.get_children():
 		_recipe_box.remove_child(child)
+		child.free()
+
+
+func _clear_box(box: Node) -> void:
+	if box == null:
+		return
+	for child in box.get_children():
+		box.remove_child(child)
 		child.free()
 
 
