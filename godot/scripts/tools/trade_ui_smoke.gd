@@ -342,6 +342,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 	permission_shop["target_actor_definition_id"] = "trader_lao_wang"
 	game_root.simulation.shop_sessions["trader_lao_wang_shop"] = permission_shop
 	game_root.simulation.set_relationship_score(1, 2, -25.0, "trade_ui_permission_low")
+	game_root.refresh_trade_panel()
+	if not _trade_feedback(game_root).contains("关系不足"):
+		errors.append("low relationship trade panel should preview relationship feedback")
+	if not _trade_item_disabled(game_root, "shop", "绷带"):
+		errors.append("low relationship should disable shop item buttons")
+	if _press_trade_item_with_text(game_root, "shop", "绷带") and not _trade_button_disabled(game_root):
+		errors.append("low relationship should disable direct trade button")
+	if not _queue_button_disabled(game_root):
+		errors.append("low relationship should disable queue button")
+	_drop_trade_item_with_text(game_root, "shop", "绷带")
+	if not _cart_line(game_root).contains("购物车为空"):
+		errors.append("low relationship should block dragging items into trade cart")
 	var denied_buy_result: Dictionary = game_root.buy_active_trade_item("1006", 1)
 	if str(denied_buy_result.get("reason", "")) != "trade_relationship_too_low":
 		errors.append("low relationship trade buy should report trade_relationship_too_low")
@@ -684,6 +696,13 @@ func _trade_item_button_with_text(game_root: Node, source: String, text: String)
 		if child is Button and str((child as Button).text).contains(text):
 			return child as Button
 	return null
+
+
+func _trade_item_disabled(game_root: Node, source: String, text: String) -> bool:
+	var button: Button = _trade_item_button_with_text(game_root, source, text)
+	if button == null:
+		return true
+	return bool(button.disabled)
 
 
 func _trade_zone_tooltip(game_root: Node, zone_name: String) -> String:

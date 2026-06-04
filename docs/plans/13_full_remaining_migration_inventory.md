@@ -214,7 +214,7 @@
 - 购物车净额预览、确认前库存/资金预校验、确认后玩家/店铺资金变化明细和无部分成交已纳入 `TradeUI` smoke。
 - 交易资金/库存失败提示已覆盖并纳入 `TradeUI` smoke：玩家资金不足、店铺资金不足、店铺库存不足、玩家库存不足；装备栏物品可作为 `equipment:<slot_id>` 来源出售，出售前会弹出确认，取消不成交，确认后自动卸下、入店铺库存并刷新 UI；显式 `sellable=false` / `tradeable=false` 和任务类 fragment 的不可出售规则已覆盖直卖、装备出售、购物车校验、UI 禁用态和反馈，已纳入 `TradeUI` smoke。
 - 交易拖拽第一版已纳入 `TradeUI` smoke：shop item -> cart / buy drop zone 生成购买项，inventory/equipment -> cart / sell drop zone 生成出售项，buy zone 会拒绝玩家出售源，sell zone 会拒绝店铺购买源，drop zone 已显示接受/拒绝来源并暴露稳定拒绝 reason，不可出售物品拖拽不会入队，queued item 可拖拽重排且金额预览保持一致，同源同物品拖到已有 queued item 会合并增加数量并受上限约束；待补 drop zone hover 高亮、drag preview 和更细禁用说明 polish。
-- 交易权限第一版已迁移：shop session 可配置 `target_actor_id` / `target_actor_definition_id`、`required_relationship_min/max`、`required_world_flags` 和 `blocked_world_flags`，直买、直卖、装备出售和购物车确认统一由 core 拒绝，反馈 reason 覆盖 `trade_relationship_too_low/high`、`trade_world_flag_missing/blocked` 并随 shop session 存档 roundtrip；已纳入 `TradeUI` / `Save` smoke。待补交易面板禁用态预览、对话分支中权限原因展示和更细致的商店权限 UI polish。
+- 交易权限第一版已迁移：shop session 可配置 `target_actor_id` / `target_actor_definition_id`、`required_relationship_min/max`、`required_world_flags` 和 `blocked_world_flags`，直买、直卖、装备出售和购物车确认统一由 core 拒绝，反馈 reason 覆盖 `trade_relationship_too_low/high`、`trade_world_flag_missing/blocked` 并随 shop session 存档 roundtrip；Trade snapshot / Trade 面板会提前显示权限失败原因、禁用店铺/玩家条目、禁用直交易/加入购物车/确认购物车和拖拽入队；已纳入 `TradeUI` / `Save` smoke。待补对话分支中权限原因展示和更细致的商店权限 UI polish。
 - 交易关闭已覆盖 Esc、关闭按钮、目标不可用关闭、地图切换关闭和对话结束关闭；`trade_closed` payload 第一版已记录 actor、reason、target actor 和 shop id，并纳入 `TradeUI` smoke。
 
 ## 9. 技能、热栏和进度
@@ -322,7 +322,7 @@
 - Journal 面板已有任务详情、可交付状态、奖励详情、目标进度列表、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；待补更完整失败反馈。
 - Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏、多树切换、前置链路、下游解锁高亮和目标选择 HUD 预览第一版；待补图形技能树、pan、节点连线和世界目标高亮。
 - Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、批量执行和完成反馈第一版；待补制作队列和取消。
-- Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、buy/sell drop zone 来源提示、稳定拒绝 reason、不可出售禁用态、装备出售确认和清空；待补 drop zone hover 高亮、drag preview 和更细禁用说明 polish。
+- Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、buy/sell drop zone 来源提示、稳定拒绝 reason、不可出售禁用态、交易权限禁用预览、装备出售确认和清空；待补 drop zone hover 高亮、drag preview 和更细禁用说明 polish。
 - Container 面板已有空容器提示、容器/背包双栏、滚动、基础详情、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip、双向拖拽转移和背包面板拖入存放；待补背包限制、权限不足和跨面板拖拽视觉 polish。
 
 ## 14. 资产和导入

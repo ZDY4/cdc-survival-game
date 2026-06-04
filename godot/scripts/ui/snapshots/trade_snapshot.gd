@@ -25,6 +25,12 @@ func build(runtime_snapshot: Dictionary, target: Dictionary = {}, feedback: Dict
 
 	var shop_data: Dictionary = _shop_session_or_definition(runtime_snapshot, shop_id, shop_record)
 	var player: Dictionary = _player_actor(runtime_snapshot)
+	var permission: Dictionary = _trade_permission(runtime_snapshot, player, shop_id, shop_data, session)
+	var shop_items: Array[Dictionary] = _shop_items(shop_data.get("inventory", []), float(shop_data.get("buy_price_modifier", 1.0)))
+	var player_items: Array[Dictionary] = _player_trade_items(player, float(shop_data.get("sell_price_modifier", 1.0)))
+	if not bool(permission.get("allowed", true)):
+		_apply_trade_disabled_reason(shop_items, str(permission.get("text", "")))
+		_apply_trade_disabled_reason(player_items, str(permission.get("text", "")))
 	var snapshot := {
 		"active": true,
 		"shop_id": shop_id,
@@ -34,12 +40,19 @@ func build(runtime_snapshot: Dictionary, target: Dictionary = {}, feedback: Dict
 		"money": int(shop_data.get("money", 0)),
 		"buy_price_modifier": float(shop_data.get("buy_price_modifier", 1.0)),
 		"sell_price_modifier": float(shop_data.get("sell_price_modifier", 1.0)),
-		"items": _shop_items(shop_data.get("inventory", []), float(shop_data.get("buy_price_modifier", 1.0))),
-		"player_items": _player_trade_items(player, float(shop_data.get("sell_price_modifier", 1.0))),
+		"items": shop_items,
+		"player_items": player_items,
+		"permission": permission,
 	}
 	var scoped_feedback := _feedback_snapshot(feedback, shop_id)
 	if not scoped_feedback.is_empty():
 		snapshot["feedback"] = scoped_feedback
+	elif not bool(permission.get("allowed", true)):
+		snapshot["feedback"] = {
+			"type": "error",
+			"reason": str(permission.get("reason", "")),
+			"text": str(permission.get("text", "")),
+		}
 	return snapshot
 
 
@@ -220,6 +233,113 @@ func _trade_price(base_price: int, modifier: float) -> int:
 	return max(1, int(round(float(max(0, base_price)) * max(0.0, modifier))))
 
 
+func _trade_permission(runtime_snapshot: Dictionary, player: Dictionary, shop_id: String, shop_data: Dictionary, session: Dictionary) -> Dictionary:
+	var target_actor_id: int = _trade_target_actor_id(runtime_snapshot, shop_id, shop_data, session)
+	var result := {
+		"allowed": true,
+		"reason": "",
+		"text": "",
+		"target_actor_id": target_actor_id,
+	}
+	var world_flags: Dictionary = _flag_dictionary(runtime_snapshot.get("world_flags", []))
+	for flag_id in _normalized_string_array(shop_data.get("required_world_flags", [])):
+		if not world_flags.has(flag_id):
+			return _permission_failure(result, "trade_world_flag_missing", {"flag_id": flag_id})
+	for flag_id in _normalized_string_array(shop_data.get("blocked_world_flags", [])):
+		if world_flags.has(flag_id):
+			return _permission_failure(result, "trade_world_flag_blocked", {"flag_id": flag_id})
+	if target_actor_id > 0 and (shop_data.has("required_relationship_min") or shop_data.has("required_relationship_max")):
+		var player_actor_id: int = int(player.get("actor_id", 1))
+		var score: float = _relationship_score(runtime_snapshot, player_actor_id, target_actor_id)
+		result["relationship_score"] = score
+		if shop_data.has("required_relationship_min"):
+			var min_score: float = float(shop_data.get("required_relationship_min", -100.0))
+			result["required_relationship_min"] = min_score
+			if score < min_score:
+				return _permission_failure(result, "trade_relationship_too_low", {
+					"relationship_score": score,
+					"required_relationship_min": min_score,
+				})
+		if shop_data.has("required_relationship_max"):
+			var max_score: float = float(shop_data.get("required_relationship_max", 100.0))
+			result["required_relationship_max"] = max_score
+			if score > max_score:
+				return _permission_failure(result, "trade_relationship_too_high", {
+					"relationship_score": score,
+					"required_relationship_max": max_score,
+				})
+	return result
+
+
+func _permission_failure(base: Dictionary, reason: String, extra: Dictionary) -> Dictionary:
+	var output: Dictionary = base.duplicate(true)
+	output["allowed"] = false
+	output["reason"] = reason
+	for key in extra.keys():
+		output[key] = extra[key]
+	output["text"] = _feedback_text(output)
+	return output
+
+
+func _trade_target_actor_id(runtime_snapshot: Dictionary, shop_id: String, shop_data: Dictionary, session: Dictionary) -> int:
+	var session_actor_id: int = int(session.get("target_actor_id", 0))
+	if session_actor_id > 0:
+		return session_actor_id
+	var explicit_actor_id: int = int(shop_data.get("target_actor_id", 0))
+	if explicit_actor_id > 0:
+		return explicit_actor_id
+	var definition_id: String = str(shop_data.get("target_actor_definition_id", "")).strip_edges()
+	if definition_id.is_empty() and shop_id.ends_with("_shop"):
+		definition_id = shop_id.trim_suffix("_shop")
+	if definition_id.is_empty():
+		return 0
+	for actor in runtime_snapshot.get("actors", []):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if str(actor_data.get("definition_id", "")) == definition_id:
+			return int(actor_data.get("actor_id", 0))
+	return 0
+
+
+func _relationship_score(runtime_snapshot: Dictionary, actor_id: int, target_actor_id: int) -> float:
+	var left: int = min(actor_id, target_actor_id)
+	var right: int = max(actor_id, target_actor_id)
+	for entry in runtime_snapshot.get("relationships", []):
+		var relationship: Dictionary = _dictionary_or_empty(entry)
+		if int(relationship.get("actor_id", 0)) == left and int(relationship.get("target_actor_id", 0)) == right:
+			return float(relationship.get("score", 0.0))
+	return 0.0
+
+
+func _flag_dictionary(entries: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	for entry in _array_or_empty(entries):
+		output[str(entry)] = true
+	return output
+
+
+func _normalized_string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	if typeof(value) == TYPE_STRING:
+		var normalized_value: String = str(value).strip_edges()
+		if not normalized_value.is_empty():
+			output.append(normalized_value)
+		return output
+	for entry in _array_or_empty(value):
+		var normalized_entry: String = str(entry).strip_edges()
+		if not normalized_entry.is_empty():
+			output.append(normalized_entry)
+	return output
+
+
+func _apply_trade_disabled_reason(items: Array[Dictionary], reason: String) -> void:
+	for index in range(items.size()):
+		var item: Dictionary = items[index]
+		var existing: String = str(item.get("disabled_reason", ""))
+		item["trade_disabled"] = true
+		item["disabled_reason"] = reason if existing.is_empty() else "%s；%s" % [existing, reason]
+		items[index] = item
+
+
 func _feedback_snapshot(feedback: Dictionary, shop_id: String) -> Dictionary:
 	if feedback.is_empty():
 		return {}
@@ -309,6 +429,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _normalize_content_id(value: Variant) -> String:

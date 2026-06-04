@@ -26,6 +26,8 @@ var _selected_item_snapshot: Dictionary = {}
 var _cart_entries: Array[Dictionary] = []
 var _player_money: int = 0
 var _shop_money: int = 0
+var _trade_allowed: bool = true
+var _trade_block_reason: String = ""
 
 
 func _ready() -> void:
@@ -47,6 +49,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if not active:
 		if _equipment_sell_dialog != null:
 			_equipment_sell_dialog.hide()
+		_trade_allowed = true
+		_trade_block_reason = ""
 		_clear_cart()
 		return
 
@@ -61,6 +65,9 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	var target_name: String = str(snapshot.get("target_name", ""))
 	_player_money = int(snapshot.get("player_money", 0))
 	_shop_money = int(snapshot.get("money", 0))
+	var permission: Dictionary = _dictionary_or_empty(snapshot.get("permission", {}))
+	_trade_allowed = bool(permission.get("allowed", true))
+	_trade_block_reason = str(permission.get("text", ""))
 	_title_label.text = "%s 的交易" % target_name if not target_name.is_empty() else "交易"
 	_summary_label.text = "玩家资金 %d | 店铺资金 %d | 买价 x%.1f | 卖价 x%.1f" % [
 		_player_money,
@@ -86,6 +93,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	var default_item: Dictionary = _default_detail_item(shop_items, player_items)
 	var default_source: String = "shop" if not shop_items.is_empty() else str(default_item.get("source", "player"))
 	_apply_detail(default_item, default_source)
+	_update_cart_line()
 
 
 func _build_layout() -> void:
@@ -346,7 +354,7 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 	_quantity_spin.max_value = available
 	_quantity_spin.value = clampi(int(_quantity_spin.value), 1, available)
 	var item_id := str(item.get("item_id", ""))
-	_trade_button.disabled = item.is_empty() or item_id.is_empty() or source.is_empty() or not _item_can_trade(item, source)
+	_trade_button.disabled = not _trade_allowed or item.is_empty() or item_id.is_empty() or source.is_empty() or not _item_can_trade(item, source)
 	_queue_button.disabled = _trade_button.disabled
 	match source:
 		"shop":
@@ -527,18 +535,19 @@ func _update_cart_line() -> void:
 			sell_total += unit_price * count
 	var net_payment := buy_total - sell_total
 	var net_text := "净付 %d" % net_payment if net_payment >= 0 else "净收 %d" % -net_payment
-	_cart_label.text = "购物车：%s | 应付 %d | 应收 %d | %s | 确认后玩家资金 %d | 店铺资金 %d" % [
+	_cart_label.text = "购物车：%s | 应付 %d | 应收 %d | %s | 确认后玩家资金 %d | 店铺资金 %d%s" % [
 		"；".join(parts),
 		buy_total,
 		sell_total,
 		net_text,
 		_player_money - net_payment,
 		_shop_money + net_payment,
+		" | %s" % _trade_block_reason if not _trade_allowed and not _trade_block_reason.is_empty() else "",
 	]
 	if _clear_cart_button != null:
 		_clear_cart_button.disabled = false
 	if _confirm_cart_button != null:
-		_confirm_cart_button.disabled = false
+		_confirm_cart_button.disabled = not _trade_allowed
 
 
 func _cart_entry_row(entry: Dictionary, index: int) -> HBoxContainer:
@@ -750,6 +759,8 @@ func _requires_equipment_sell_confirmation(source: String) -> bool:
 
 
 func _item_can_trade(item: Dictionary, source: String) -> bool:
+	if not _trade_allowed or bool(item.get("trade_disabled", false)):
+		return false
 	if source == "shop":
 		return true
 	if _is_sell_source(source):
