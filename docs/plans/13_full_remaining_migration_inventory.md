@@ -245,7 +245,7 @@
 - 待补 fallback 对话、缺文件回退、目标名解析、NPC action key、对话资源目录规则。
 - 待补对话选项键盘 `1-9`、Enter/Space 推进、选项节点必须显式选择、无选项节点自动下一步。
 - 待补对话动作：启动任务、完成任务、交付物品、给奖励、开交易、解锁地点、改关系、设置 flags。
-- 对话 UI 第一版已迁移：底部面板显示 speaker、正文、显式选择提示、`Space / Enter` 继续提示和 1-9 对话选项按钮；按钮会调用同一 `choose_dialogue_option` 入口并由 `DialogueUI` smoke 覆盖。待补滚动正文、target name、关闭按钮和诊断日志。
+- 对话 UI 第一版已迁移：底部面板显示 speaker、target name、正文、显式选择提示、`Space / Enter` 继续提示、1-9 对话选项按钮、关闭按钮和基础诊断 meta；按钮会调用同一 `choose_dialogue_option` / `close_active_dialogue` 入口并由 `DialogueUI` smoke 覆盖。待补滚动正文和更完整诊断日志。
 
 ### 10.2 任务
 

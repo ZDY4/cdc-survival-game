@@ -35,6 +35,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"dialogue_id": dialogue_id,
 		"node_id": current_node.get("id", ""),
 		"speaker": current_node.get("speaker", ""),
+		"target": _dialogue_target(runtime_snapshot, dialogue_id),
 		"text": current_node.get("text", ""),
 		"portrait": current_node.get("portrait", ""),
 		"options": _options_from_node(choice_node),
@@ -87,6 +88,32 @@ func _options_from_node(node: Dictionary) -> Array[Dictionary]:
 			"next": str(option_data.get("next", "")),
 		})
 	return output
+
+
+func _dialogue_target(runtime_snapshot: Dictionary, dialogue_id: String) -> Dictionary:
+	var target_actor_id := 0
+	for index in range(runtime_snapshot.get("events", []).size() - 1, -1, -1):
+		var event: Dictionary = _dictionary_or_empty(runtime_snapshot.get("events", [])[index])
+		if str(event.get("kind", "")) != "dialogue_started":
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		if str(payload.get("dialogue_id", "")) != dialogue_id:
+			continue
+		target_actor_id = int(payload.get("target_actor_id", 0))
+		break
+	if target_actor_id <= 0:
+		return {}
+	for actor in runtime_snapshot.get("actors", []):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if int(actor_data.get("actor_id", 0)) == target_actor_id:
+			return {
+				"actor_id": target_actor_id,
+				"definition_id": str(actor_data.get("definition_id", "")),
+				"display_name": str(actor_data.get("display_name", "")),
+				"kind": str(actor_data.get("kind", "")),
+				"side": str(actor_data.get("side", "")),
+			}
+	return {"actor_id": target_actor_id}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

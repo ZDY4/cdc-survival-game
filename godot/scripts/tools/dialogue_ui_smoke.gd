@@ -53,10 +53,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("talk should use dialogue rule variant for tutorial-active trader")
 	if not _text_line(game_root).contains("警戒区"):
 		errors.append("dialogue text missing start node")
+	if not _target_line(game_root).contains("老王"):
+		errors.append("dialogue target line should show target actor display name")
+	if str(game_root.dialogue_panel.get_meta("dialogue_id", "")) != "trader_lao_wang_tutorial_active":
+		errors.append("dialogue panel diagnostic meta should expose dialogue id")
+	if int(game_root.dialogue_panel.get_meta("target_actor_id", 0)) <= 0:
+		errors.append("dialogue panel diagnostic meta should expose target actor id")
 	if not _options_line(game_root).contains("看看货") or not _options_line(game_root).contains("明白"):
 		errors.append("dialogue options missing expected choices")
 	if not _options_line(game_root).contains("选择:"):
 		errors.append("dialogue options line should show explicit choice hint")
+	var close_button: Button = _close_button(game_root)
+	if close_button == null:
+		errors.append("dialogue panel should expose close button")
+	elif not str(close_button.tooltip_text).contains("关闭对话"):
+		errors.append("dialogue close button should expose tooltip")
 	var trade_button: Button = _option_button(game_root, 2)
 	if trade_button == null:
 		errors.append("dialogue panel should expose option button 2")
@@ -77,6 +88,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue option button should choose trade dialogue option and open trade")
 	if not _player(game_root).get("active_dialogue_id", "") == "":
 		errors.append("dialogue option button should close active dialogue after trade action")
+	await _expect_close_button_closes_dialogue(errors, game_root)
 	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_SPACE, "Space")
 	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_ENTER, "Enter")
 	return errors
@@ -136,7 +148,11 @@ func _has_context_snapshot(result: Dictionary) -> bool:
 
 
 func _speaker_line(game_root: Node) -> String:
-	return game_root.dialogue_panel.get_node("DialoguePanel/DialogueLines/SpeakerLine").text
+	return game_root.dialogue_panel.get_node("DialoguePanel/DialogueLines/DialogueHeader/SpeakerLine").text
+
+
+func _target_line(game_root: Node) -> String:
+	return game_root.dialogue_panel.get_node("DialoguePanel/DialogueLines/TargetLine").text
 
 
 func _text_line(game_root: Node) -> String:
@@ -149,6 +165,10 @@ func _options_line(game_root: Node) -> String:
 
 func _option_button(game_root: Node, index: int) -> Button:
 	return game_root.dialogue_panel.find_child("DialogueOption_%d" % index, true, false) as Button
+
+
+func _close_button(game_root: Node) -> Button:
+	return game_root.dialogue_panel.find_child("CloseButton", true, false) as Button
 
 
 func _option_button_count(game_root: Node) -> int:
@@ -190,6 +210,31 @@ func _expect_key_advances_dialogue_without_options(errors: Array[String], game_r
 		errors.append("%s should hide dialogue panel after finishing no-option node" % label)
 	if game_root.simulation.snapshot().get("events", []).size() <= before_events:
 		errors.append("%s should emit dialogue advancement or finish event" % label)
+
+
+func _expect_close_button_closes_dialogue(errors: Array[String], game_root: Node) -> void:
+	game_root.close_trade_panel()
+	game_root.simulation.close_dialogue(1, "smoke_reset")
+	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if actor == null:
+		errors.append("close button setup missing player actor")
+		return
+	actor.active_dialogue_id = "trader_lao_wang_intro"
+	actor.active_dialogue_node_id = ""
+	game_root.refresh_dialogue_panel()
+	var close_button: Button = _close_button(game_root)
+	if close_button == null:
+		errors.append("close button setup should find close button")
+		return
+	var before_events: int = game_root.simulation.snapshot().get("events", []).size()
+	close_button.pressed.emit()
+	await process_frame
+	if not str(_player(game_root).get("active_dialogue_id", "")).is_empty():
+		errors.append("dialogue close button should clear active dialogue runtime state")
+	if game_root.dialogue_panel.visible:
+		errors.append("dialogue close button should hide dialogue panel")
+	if game_root.simulation.snapshot().get("events", []).size() <= before_events:
+		errors.append("dialogue close button should emit dialogue_closed event")
 
 
 func _player(game_root: Node) -> Dictionary:
