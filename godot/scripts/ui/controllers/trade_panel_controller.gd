@@ -428,6 +428,9 @@ func _can_drop_cart_data(_position: Vector2, data: Variant, _from_control: Contr
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 			var source: String = str(drag_data.get("source", ""))
 			return not item.is_empty() and _item_can_trade(item, source)
+		"inventory_item":
+			var item: Dictionary = _trade_item_from_inventory_drag(drag_data)
+			return not item.is_empty() and _item_can_trade(item, "player")
 		"trade_cart_entry":
 			var from_index: int = int(drag_data.get("index", -1))
 			return from_index >= 0 and from_index < _cart_entries.size()
@@ -447,6 +450,12 @@ func _drop_cart_data(position: Vector2, data: Variant, from_control: Control) ->
 			if _merge_trade_item_into_cart_entry(item, source, count, _cart_drop_index(from_control)):
 				return
 			_queue_trade_entry(item, source, count)
+		"inventory_item":
+			var item: Dictionary = _trade_item_from_inventory_drag(drag_data)
+			var count: int = int(drag_data.get("count", 1))
+			if _merge_trade_item_into_cart_entry(item, "player", count, _cart_drop_index(from_control)):
+				return
+			_queue_trade_entry(item, "player", count)
 		"trade_cart_entry":
 			_reorder_cart_entry(int(drag_data.get("index", -1)), _cart_drop_index(from_control))
 
@@ -627,6 +636,22 @@ func _merge_trade_item_into_cart_entry(item: Dictionary, source: String, count: 
 	_cart_entries[target_index] = entry
 	_update_cart_line()
 	return true
+
+
+func _trade_item_from_inventory_drag(drag_data: Dictionary) -> Dictionary:
+	var drag_item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var item_id: String = str(drag_data.get("item_id", drag_item.get("item_id", "")))
+	if item_id.is_empty() or _player_items_box == null:
+		return {}
+	for child in _player_items_box.get_children():
+		if not child.has_meta("trade_item") or not child.has_meta("trade_source"):
+			continue
+		if str(child.get_meta("trade_source", "")) != "player":
+			continue
+		var trade_item: Dictionary = _dictionary_or_empty(child.get_meta("trade_item"))
+		if str(trade_item.get("item_id", "")) == item_id:
+			return trade_item.duplicate(true)
+	return {}
 
 
 func _adjust_cart_entry(index: int, delta: int) -> void:

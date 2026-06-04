@@ -265,13 +265,19 @@ func _ignore_container_item_drop(_position: Vector2, _data: Variant, _from_contr
 
 func _can_drop_container_data(_position: Vector2, data: Variant, from_control: Control) -> bool:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
-	if str(drag_data.get("kind", "")) != "container_item":
-		return false
-	var source: String = str(drag_data.get("source", ""))
-	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
-	var item_id: String = str(item.get("item_id", ""))
 	var target_source: String = _drop_target_source(from_control)
-	return not item_id.is_empty() and not source.is_empty() and not target_source.is_empty() and source != target_source
+	match str(drag_data.get("kind", "")):
+		"container_item":
+			var source: String = str(drag_data.get("source", ""))
+			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+			var item_id: String = str(item.get("item_id", ""))
+			return not item_id.is_empty() and not source.is_empty() and not target_source.is_empty() and source != target_source
+		"inventory_item":
+			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+			var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
+			return target_source == "container" and not item_id.is_empty()
+		_:
+			return false
 
 
 func _drop_container_data(position: Vector2, data: Variant, from_control: Control) -> void:
@@ -279,12 +285,21 @@ func _drop_container_data(position: Vector2, data: Variant, from_control: Contro
 		return
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
-	var source: String = str(drag_data.get("source", ""))
-	var item_id: String = str(item.get("item_id", ""))
-	var available: int = maxi(1, int(item.get("count", 1)))
-	var requested: int = int(drag_data.get("count", _quantity_spin.value if _quantity_spin != null else 1))
-	var count: int = clampi(requested, 1, available)
-	transfer_requested.emit(source, item_id, count)
+	match str(drag_data.get("kind", "")):
+		"container_item":
+			var source: String = str(drag_data.get("source", ""))
+			var item_id: String = str(item.get("item_id", ""))
+			var available: int = maxi(1, int(item.get("count", 1)))
+			var requested: int = int(drag_data.get("count", _quantity_spin.value if _quantity_spin != null else 1))
+			var count: int = clampi(requested, 1, available)
+			transfer_requested.emit(source, item_id, count)
+		"inventory_item":
+			var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
+			var available: int = maxi(1, int(item.get("count", 1)))
+			var count: int = clampi(int(drag_data.get("count", 1)), 1, available)
+			var root := get_parent()
+			if root != null and root.has_method("store_active_container_item"):
+				root.store_active_container_item(item_id, count)
 
 
 func _drop_target_source(from_control: Control) -> String:

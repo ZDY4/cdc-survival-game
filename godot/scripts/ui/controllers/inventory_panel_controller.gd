@@ -263,6 +263,7 @@ func _get_inventory_item_drag_data(_position: Vector2, from_control: Control) ->
 		"kind": "inventory_item",
 		"item": item.duplicate(true),
 		"item_id": item_id,
+		"count": _drag_drop_count(item),
 		"from_index": int(from_control.get_meta("inventory_index", item.get("order_index", 0))),
 	}
 

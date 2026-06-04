@@ -167,6 +167,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
 		errors.append("dragged player item should queue cart sell")
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
+	if not _drop_inventory_item_to_trade_cart(game_root, "绷带"):
+		errors.append("should drag inventory bandage to trade cart")
+	if not _cart_line(game_root).contains("出售 绷带 x1"):
+		errors.append("dragged inventory item should queue cart sell")
+	_press_cart_entry_button(game_root, 0, "RemoveButton")
 	if not _drop_trade_item_with_text(game_root, "shop", "急救包"):
 		errors.append("should drag shop medkit to trade cart for reorder")
 	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
@@ -541,6 +546,22 @@ func _drop_trade_item_with_text_on_target(game_root: Node, source: String, text:
 		"item": item.duplicate(true),
 		"count": count,
 	}, target)
+	return true
+
+
+func _drop_inventory_item_to_trade_cart(game_root: Node, text: String, count: int = 1) -> bool:
+	var button: Button = _inventory_item_button(game_root, text)
+	if button == null or not button.has_meta("inventory_item"):
+		return false
+	var item: Dictionary = button.get_meta("inventory_item", {})
+	if item.is_empty():
+		return false
+	game_root.trade_panel.call("_drop_cart_data", Vector2.ZERO, {
+		"kind": "inventory_item",
+		"item": item.duplicate(true),
+		"item_id": str(item.get("item_id", "")),
+		"count": count,
+	}, null)
 	return true
 
 

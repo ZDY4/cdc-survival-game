@@ -162,6 +162,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _inventory_text(game_root).contains("水瓶 x1"):
 		errors.append("inventory panel should remove stored water bottle")
 	player_refill_water(game_root)
+	if not _drop_inventory_item_to_container(game_root, "水瓶"):
+		errors.append("should drag inventory water bottle into active container")
+	if not _event_seen(game_root, "container_item_stored"):
+		errors.append("dragging from inventory panel to container should emit container_item_stored")
+	if not _container_text(game_root).contains("水瓶 x2"):
+		errors.append("inventory drag should store water bottle into container column")
+	if _inventory_text(game_root).contains("水瓶 x1"):
+		errors.append("inventory drag should remove stored water bottle from inventory panel")
+	player_refill_water(game_root)
 	if not _open_inventory_context_menu(game_root, "水瓶"):
 		errors.append("should open inventory context menu for water bottle while container is active")
 	elif _context_action_disabled(game_root, 9):
@@ -170,7 +179,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_execute_inventory_context_action(game_root, 9)
 		if not _event_seen(game_root, "container_item_stored"):
 			errors.append("inventory context store should emit container_item_stored")
-		if not _container_text(game_root).contains("水瓶 x2"):
+		if not _container_text(game_root).contains("水瓶 x3"):
 			errors.append("inventory context store should move water bottle into container")
 		if _inventory_text(game_root).contains("水瓶 x1"):
 			errors.append("inventory context store should remove water bottle from inventory panel")
@@ -467,6 +476,23 @@ func _drop_container_item_with_text(game_root: Node, source: String, text: Strin
 		"kind": "container_item",
 		"source": drag_source,
 		"item": item.duplicate(true),
+		"count": count,
+	}, target)
+	return true
+
+
+func _drop_inventory_item_to_container(game_root: Node, text: String, count: int = 1) -> bool:
+	var button: Button = _inventory_item_button(game_root, text)
+	var target: Node = _container_item_box(game_root, "container")
+	if button == null or not target is Control or not button.has_meta("inventory_item"):
+		return false
+	var item: Dictionary = button.get_meta("inventory_item", {})
+	if item.is_empty():
+		return false
+	game_root.container_panel.call("_drop_container_data", Vector2.ZERO, {
+		"kind": "inventory_item",
+		"item": item.duplicate(true),
+		"item_id": str(item.get("item_id", "")),
 		"count": count,
 	}, target)
 	return true
