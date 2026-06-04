@@ -1,5 +1,7 @@
 extends Control
 
+const MapCanvasControl = preload("res://scripts/ui/controllers/map_canvas_control.gd")
+
 var _panel: PanelContainer
 var _summary_label: Label
 var _counts_label: Label
@@ -7,6 +9,8 @@ var _entry_label: Label
 var _locations_label: Label
 var _tracked_quest_label: Label
 var _tracked_markers_label: Label
+var _canvas: Control
+var _canvas_state_label: Label
 var _kinds_box: VBoxContainer
 
 
@@ -45,6 +49,9 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	]
 	_tracked_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
 	_tracked_markers_label.text = _tracked_markers_text(snapshot.get("tracked_markers", []))
+	if _canvas != null and _canvas.has_method("apply_snapshot"):
+		_canvas.call("apply_snapshot", snapshot)
+	_canvas_state_label.text = _canvas_state_text()
 	_clear_kinds()
 	var kinds: Dictionary = _dictionary_or_empty(snapshot.get("objects_by_kind", {}))
 	var keys: Array = kinds.keys()
@@ -80,6 +87,8 @@ func _build_layout() -> void:
 	_locations_label = _label("LocationsLine")
 	_tracked_quest_label = _label("TrackedQuestLine")
 	_tracked_markers_label = _label("TrackedMarkersLine")
+	_canvas = MapCanvasControl.new()
+	_canvas_state_label = _label("CanvasStateLine")
 	_kinds_box = VBoxContainer.new()
 	_kinds_box.name = "KindLines"
 	_kinds_box.add_theme_constant_override("separation", 3)
@@ -89,6 +98,9 @@ func _build_layout() -> void:
 	box.add_child(_locations_label)
 	box.add_child(_tracked_quest_label)
 	box.add_child(_tracked_markers_label)
+	box.add_child(_canvas_toolbar())
+	box.add_child(_canvas)
+	box.add_child(_canvas_state_label)
 	box.add_child(_kinds_box)
 
 
@@ -150,6 +162,49 @@ func _tracked_markers_text(value: Variant) -> String:
 		else:
 			parts.append(name)
 	return "任务目标: %d | %s" % [markers.size(), "；".join(parts)]
+
+
+func _canvas_toolbar() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "MapCanvasToolbar"
+	row.add_theme_constant_override("separation", 4)
+	row.add_child(_canvas_button("ZoomOutButton", "-", func() -> void:
+		_canvas.call("zoom_out")
+		_canvas_state_label.text = _canvas_state_text()
+	))
+	row.add_child(_canvas_button("ZoomResetButton", "1:1", func() -> void:
+		_canvas.call("reset_view")
+		_canvas_state_label.text = _canvas_state_text()
+	))
+	row.add_child(_canvas_button("ZoomInButton", "+", func() -> void:
+		_canvas.call("zoom_in")
+		_canvas_state_label.text = _canvas_state_text()
+	))
+	return row
+
+
+func _canvas_button(node_name: String, text: String, callback: Callable) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	button.custom_minimum_size = Vector2(40, 26)
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.pressed.connect(callback, CONNECT_DEFERRED)
+	return button
+
+
+func _canvas_state_text() -> String:
+	if _canvas == null or not _canvas.has_method("view_state"):
+		return "地图画布: 未就绪"
+	var state: Dictionary = _dictionary_or_empty(_canvas.call("view_state"))
+	return "地图画布: zoom %.2f | pan %.0f,%.0f | marker %d | entry %d" % [
+		float(state.get("zoom", 1.0)),
+		float(_dictionary_or_empty(state.get("pan", {})).get("x", 0.0)),
+		float(_dictionary_or_empty(state.get("pan", {})).get("y", 0.0)),
+		int(state.get("marker_count", 0)),
+		int(state.get("entry_count", 0)),
+	]
 
 
 func _array_or_empty(value: Variant) -> Array:

@@ -23,6 +23,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, tracked_que
 		"occupied_cell_count": int(map.get("occupied_cell_count", 0)),
 		"blocking_cell_count": int(map.get("blocking_cell_count", 0)),
 		"entry_points": _entry_point_ids(map),
+		"entry_point_grids": _entry_point_grids(map),
 		"objects_by_kind": _dictionary_or_empty(map.get("objects_by_kind", {})),
 		"unlocked_locations": _unlocked_location_summaries(unlocked_locations),
 		"tracked_markers": _tracked_markers(tracked_quest, runtime_snapshot, world_snapshot),
@@ -75,6 +76,22 @@ func _entry_point_ids(map: Dictionary) -> Array[String]:
 			ids.append(str(data.get("id", "")))
 	ids.sort()
 	return ids
+
+
+func _entry_point_grids(map: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	var entry_points: Variant = map.get("entry_points", {})
+	if typeof(entry_points) == TYPE_DICTIONARY:
+		for key in (entry_points as Dictionary).keys():
+			result[str(key)] = _dictionary_or_empty((entry_points as Dictionary).get(key, {})).duplicate(true)
+	elif typeof(entry_points) == TYPE_ARRAY:
+		for item in entry_points:
+			var data: Dictionary = _dictionary_or_empty(item)
+			var entry_id := str(data.get("id", ""))
+			if entry_id.is_empty():
+				continue
+			result[entry_id] = _dictionary_or_empty(data.get("grid", {})).duplicate(true)
+	return result
 
 
 func _tracked_markers(tracked_quest: Dictionary, runtime_snapshot: Dictionary, world_snapshot: Dictionary) -> Array[Dictionary]:

@@ -312,6 +312,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var map_locations_line := _map_locations_line(game_root)
 	if not map_locations_line.contains("当前地点: 幸存者据点01") or not map_locations_line.contains("废弃医院 (hospital)"):
 		errors.append("map panel should show current and unlocked location names, got %s" % map_locations_line)
+	if game_root.map_panel.find_child("MapCanvas", true, false) == null:
+		errors.append("map panel should expose MapCanvas")
+	if not _map_canvas_state_line(game_root).contains("entry 3"):
+		errors.append("map canvas should summarize entry points, got %s" % _map_canvas_state_line(game_root))
+	var zoom_in_button: Button = game_root.map_panel.find_child("ZoomInButton", true, false) as Button
+	if zoom_in_button == null:
+		errors.append("map canvas should expose zoom in button")
+	else:
+		zoom_in_button.pressed.emit()
+		await process_frame
+		if not _map_canvas_state_line(game_root).contains("zoom 1.15"):
+			errors.append("map canvas zoom button should update state line, got %s" % _map_canvas_state_line(game_root))
 
 	_press_key(game_root, KEY_J)
 	_expect_stage_open(errors, game_root, "journal", "J should open journal")
@@ -802,6 +814,13 @@ func _character_feedback_line(game_root: Node) -> String:
 
 func _map_locations_line(game_root: Node) -> String:
 	var label: Node = game_root.map_panel.find_child("LocationsLine", true, false)
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _map_canvas_state_line(game_root: Node) -> String:
+	var label: Node = game_root.map_panel.find_child("CanvasStateLine", true, false)
 	if label is Label:
 		return str((label as Label).text)
 	return ""
