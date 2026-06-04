@@ -221,6 +221,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("tool-gated recipe should advance to station reason when tool exists")
 	if _crafting_station_count(game_root) <= 0:
 		errors.append("crafting UI should receive map crafting stations")
+	for station_id in ["workbench", "medical_station", "forge"]:
+		if not _has_crafting_station(game_root, station_id):
+			errors.append("crafting UI should receive %s station" % station_id)
 	var station_locator: Button = _missing_reason_button(game_root, "MissingReasonStation_workbench")
 	if station_locator == null:
 		errors.append("crafting detail should expose missing station locator")
@@ -241,6 +244,29 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not _detail_text(game_root).contains("工作坊工作台 距离"):
 		errors.append("crafting detail should show nearby workbench availability")
+	player_for_tool.grid_position = GridCoord.new(32, 0, 10)
+	player_for_tool.inventory["1006"] = 2
+	player_for_tool.inventory["1031"] = 1
+	player_for_tool.progression["learned_skills"]["medical"] = 1
+	game_root.refresh_crafting_panel()
+	if not _press_recipe_line(game_root, "recipe_antibody_serum"):
+		errors.append("should select antibody serum recipe near medical station")
+	await process_frame
+	if not _detail_text(game_root).contains("诊所医疗台 距离"):
+		errors.append("crafting detail should show nearby medical station availability")
+	player_for_tool.inventory.erase("1031")
+	player_for_tool.inventory["1006"] = 1
+	player_for_tool.grid_position = GridCoord.new(34, 0, 31)
+	game_root.simulation.crafted_recipes["recipe_knife_basic"] = true
+	player_for_tool.inventory["1166"] = 1
+	player_for_tool.progression["learned_skills"]["crafting"] = 3
+	player_for_tool.progression["learned_skills"]["engineering"] = 2
+	game_root.refresh_crafting_panel()
+	if not _press_recipe_line(game_root, "recipe_advanced_knife"):
+		errors.append("should select advanced knife recipe near forge")
+	await process_frame
+	if not _detail_text(game_root).contains("工坊熔炉 距离"):
+		errors.append("crafting detail should show nearby forge availability")
 	player_for_tool.inventory["1010"] = 3
 	player_for_tool.inventory["1012"] = 1
 	player_for_tool.progression["learned_skills"]["crafting"] = 1
@@ -443,6 +469,16 @@ func _crafting_station_count(game_root: Node) -> int:
 	var world_result: Dictionary = _dictionary_or_empty(game_root.world_result)
 	var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
 	return _array_or_empty(map.get("crafting_stations", [])).size()
+
+
+func _has_crafting_station(game_root: Node, station_id: String) -> bool:
+	var world_result: Dictionary = _dictionary_or_empty(game_root.world_result)
+	var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	for station in _array_or_empty(map.get("crafting_stations", [])):
+		var data: Dictionary = _dictionary_or_empty(station)
+		if str(data.get("station_id", "")) == station_id:
+			return true
+	return false
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

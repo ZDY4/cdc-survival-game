@@ -130,6 +130,9 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	}
 	if _array_or_empty(crafting_context.get("crafting_stations", [])).is_empty():
 		errors.append("map topology should expose crafting station definitions")
+	for station_id in ["workbench", "medical_station", "forge"]:
+		if not _has_station(crafting_context, station_id):
+			errors.append("map topology should expose %s crafting station" % station_id)
 	player.grid_position = GridCoord.new(33, 0, 31)
 	player.inventory["1105"] = 1
 	player.inventory["1010"] = 1
@@ -146,6 +149,27 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("station-gated craft should consume materials")
 	if int(player.inventory.get("1009", 0)) != 20:
 		errors.append("station-gated craft should add pistol ammo output")
+	player.grid_position = GridCoord.new(32, 0, 10)
+	player.inventory["1006"] = 2
+	player.inventory["1031"] = 1
+	player.progression["learned_skills"]["medical"] = 1
+	var medical_station_result: Dictionary = simulation.craft_recipe(1, "recipe_antibody_serum", recipes, crafting_context)
+	if medical_station_result.get("reason", "") == "missing_station":
+		errors.append("medical station recipe should find nearby medical_station")
+	player.grid_position = GridCoord.new(34, 0, 31)
+	player.inventory["1106"] = 2
+	player.inventory["1012"] = 2
+	player.inventory["1144"] = 1
+	player.inventory["1166"] = 1
+	player.progression["learned_skills"]["crafting"] = 3
+	player.progression["learned_skills"]["engineering"] = 2
+	var had_basic_knife_unlock: bool = simulation.crafted_recipes.has("recipe_knife_basic")
+	simulation.crafted_recipes["recipe_knife_basic"] = true
+	var forge_station_result: Dictionary = simulation.craft_recipe(1, "recipe_advanced_knife", recipes, crafting_context)
+	if not had_basic_knife_unlock:
+		simulation.crafted_recipes.erase("recipe_knife_basic")
+	if forge_station_result.get("reason", "") == "missing_station":
+		errors.append("forge recipe should find nearby forge station")
 	player.inventory["1010"] = 3
 	player.inventory["1012"] = 1
 	player.progression["learned_skills"]["crafting"] = 1
@@ -218,6 +242,14 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _has_station(crafting_context: Dictionary, station_id: String) -> bool:
+	for station in _array_or_empty(crafting_context.get("crafting_stations", [])):
+		var data: Dictionary = _dictionary_or_empty(station)
+		if str(data.get("station_id", "")) == station_id:
+			return true
+	return false
 
 
 func _digest(snapshot: Dictionary) -> Dictionary:

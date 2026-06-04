@@ -3406,6 +3406,11 @@ props_json = "{
 		],
 		\"visual_id\": \"cabinet_medical\"
 	},
+	\"crafting_station\": {
+		\"display_name\": \"诊所医疗台\",
+		\"range\": 2.0,
+		\"station_id\": \"medical_station\"
+	},
 	\"interactive\": {
 		\"display_name\": \"诊所补给柜\",
 		\"interaction_distance\": 1.4,
@@ -3529,6 +3534,11 @@ props_json = "{
 			}
 		],
 		\"visual_id\": \"locker_metal\"
+	},
+	\"crafting_station\": {
+		\"display_name\": \"工坊熔炉\",
+		\"range\": 2.0,
+		\"station_id\": \"forge\"
 	},
 	\"interactive\": {
 		\"display_name\": \"工坊工具柜\",
