@@ -30,7 +30,7 @@
 ### 1.2 命令入口
 
 - 已迁移统一命令返回结构第一版：`success`、`kind`、`reason`、`events`、`turn_state`、`combat_state`、`runtime_snapshot_delta`、`ui_feedback`、`prompt`、`context_snapshot` 已稳定出现在 `Simulation.submit_player_command()` 的所有返回结果中，并由 `Interaction` smoke 覆盖。
-- 部分迁移命令 reject 语义：无 actor、非玩家 actor、玩家回合关闭、未知交互目标、未知攻击目标和 AP 不足移动排队已有稳定 reason，并通过 `player_command_rejected` / `ui_feedback` payload 由 `Interaction` / `Movement` smoke 覆盖；移动阻挡、跨层/LOS 攻击、材料/技能/资金/数量等领域失败已有分散 smoke 覆盖。待补统一覆盖目标不可见、UI modal 阻塞、缺工具、完整禁用 reason 和跨系统 reason 文档。
+- 部分迁移命令 reject 语义：无 actor、非玩家 actor、玩家回合关闭、未知交互目标、未知攻击目标和 AP 不足移动排队已有稳定 reason，并通过 `player_command_rejected` / `ui_feedback` payload 由 `Interaction` / `Movement` smoke 覆盖；移动阻挡、跨层/LOS 攻击、材料/技能/资金/数量等领域失败已有分散 smoke 覆盖；常见移动/交互/战斗/技能/制作/容器/交易失败码已有 HUD 中文反馈映射，并由 `UI` smoke 覆盖典型攻击和制作拒绝。待补统一覆盖目标不可见、UI modal 阻塞、缺工具、完整禁用 reason 和跨系统 reason 文档。
 - 待补可取消命令分类：pending movement、pending interaction、targeting、dialogue、trade、container、quantity modal、menu panel 应按旧 Rust 的关闭优先级处理。
 - 待补命令审计：smoke 中应能断言每个玩家动作只通过 `Simulation.submit_player_command()` 或 core service 修改业务状态。
 
@@ -307,7 +307,7 @@
 
 ### 13.2 HUD 和 overlay
 
-- 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能、progression、任务推进和命令拒绝失败反馈，已纳入 `UI` / `Progression` / `Quest` smoke。待补更完整状态行和反馈 toast/过渡表现。
+- 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能、progression、任务推进和命令拒绝失败反馈，常见失败 reason 已映射为中文提示，已纳入 `UI` / `Progression` / `Quest` smoke。待补更完整状态行和反馈 toast/过渡表现。
 - 部分迁移 interaction menu：右键位置、目标名称、可用选项、禁用选项、禁用原因 tooltip/meta 和 Esc / 外部点击关闭第一版已有；待补更完整视觉布局、按钮 hover 表现和上下文菜单 polish。
 - 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、物品数量、slot tooltip、物品使用效果摘要、AP / resource cost、AP / resource / item count insufficient、cooldown 文本/禁用态和冷却遮罩；待迁移观察模式 dock 和更完整 slot tooltip。
 - 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；待迁移 tooltip layer、context menu layer、drag preview layer、overworld prompt layer，以及更统一的 modal layer 表现。

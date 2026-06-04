@@ -618,8 +618,36 @@ func _failure_reason_text(reason: String) -> String:
 			return "回合未开启"
 		"interaction_target_unavailable":
 			return "目标不可用"
+		"target_self":
+			return "不能以自己为目标"
+		"self_target":
+			return "不能以自己为目标"
+		"target_not_actor":
+			return "目标不是角色"
+		"target_not_container":
+			return "目标不是容器"
+		"target_empty":
+			return "目标为空"
+		"target_hostile":
+			return "敌对目标不能交谈"
+		"target_not_hostile":
+			return "不能攻击友方或中立目标"
+		"attacker_defeated":
+			return "攻击者已倒下"
+		"target_defeated":
+			return "目标已倒下"
+		"unknown_attacker":
+			return "未知攻击者"
+		"unknown_target":
+			return "未知目标"
 		"target_not_visible":
 			return "目标不可见"
+		"target_invalid_level":
+			return "目标楼层无效"
+		"target_out_of_range":
+			return "目标超出射程"
+		"target_blocked_by_los":
+			return "视线被遮挡"
 		"goal_blocked":
 			return "目标被阻挡"
 		"goal_occupied":
@@ -636,6 +664,58 @@ func _failure_reason_text(reason: String) -> String:
 			return "AP不足，移动已排队"
 		"ap_insufficient_interaction_queued":
 			return "AP不足，交互已排队"
+		"materials_insufficient":
+			return "材料不足"
+		"missing_tools":
+			return "缺少工具"
+		"missing_skills":
+			return "技能不足"
+		"missing_station":
+			return "缺少工作台"
+		"recipe_locked":
+			return "配方未解锁"
+		"recipe_output_invalid":
+			return "配方产物无效"
+		"unknown_recipe":
+			return "未知配方"
+		"not_enough_items":
+			return "物品不足"
+		"invalid_quantity":
+			return "数量无效"
+		"container_inventory_insufficient":
+			return "容器物品不足"
+		"container_session_missing":
+			return "容器未打开"
+		"unknown_container":
+			return "未知容器"
+		"item_not_sellable":
+			return "物品不可出售"
+		"shop_stock_insufficient":
+			return "商店库存不足"
+		"player_stock_insufficient":
+			return "玩家库存不足"
+		"player_money_insufficient":
+			return "玩家资金不足"
+		"shop_money_insufficient":
+			return "商店资金不足"
+		"skill_not_learned":
+			return "技能未学习"
+		"skill_not_active":
+			return "技能不是主动技能"
+		"skill_on_cooldown":
+			return "技能冷却中"
+		"resource_insufficient":
+			return "资源不足"
+		"skill_target_out_of_range":
+			return "技能目标超出范围"
+		"skill_target_blocked_by_los":
+			return "技能视线被遮挡"
+		"skill_target_not_hostile":
+			return "技能需要敌对目标"
+		"skill_target_not_ally":
+			return "技能需要友方目标"
+		"skill_target_grid_occupied":
+			return "技能目标格被占用"
 	if reason.is_empty():
 		return "未知原因"
 	return reason

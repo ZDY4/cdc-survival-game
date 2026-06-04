@@ -38,7 +38,7 @@ func _init() -> void:
 	hud.apply_snapshot(snapshot)
 
 	var errors := _validate_hud(hud, snapshot)
-	errors.append_array(_validate_hud_failure_feedback(hud, simulation, world_result))
+	errors.append_array(_validate_hud_failure_feedback(hud, simulation, world_result, registry))
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -127,7 +127,7 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 	return errors
 
 
-func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_result: Dictionary) -> Array[String]:
+func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_result: Dictionary, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var rejected: Dictionary = simulation.submit_player_command({
 		"kind": "unknown",
@@ -148,6 +148,32 @@ func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_
 			found_failure = true
 	if not found_failure:
 		errors.append("HUD snapshot event_feedback should include command rejection")
+	var friendly_attack: Dictionary = simulation.submit_player_command({
+		"kind": "attack",
+		"target_actor_id": 2,
+	})
+	if bool(friendly_attack.get("success", false)) or str(friendly_attack.get("reason", "")) != "target_not_hostile":
+		errors.append("HUD failure feedback setup should reject friendly attack")
+	var attack_failure_snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, {})
+	hud.apply_snapshot(attack_failure_snapshot)
+	var attack_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
+	if not attack_feedback_line.contains("失败 攻击: 不能攻击友方或中立目标"):
+		errors.append("event feedback line should localize friendly attack rejection, got %s" % attack_feedback_line)
+	var craft_failure: Dictionary = simulation.submit_player_command({
+		"kind": "craft",
+		"actor_id": 1,
+		"recipe_id": "recipe_bandage_basic",
+		"recipe_library": registry.get_library("recipes"),
+	})
+	if bool(craft_failure.get("success", false)):
+		errors.append("HUD failure feedback setup should reject unavailable crafting")
+	if str(craft_failure.get("reason", "")) != "materials_insufficient":
+		errors.append("HUD failure feedback setup should report materials_insufficient for unavailable bandage crafting, got %s" % craft_failure.get("reason", ""))
+	var craft_failure_snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, {})
+	hud.apply_snapshot(craft_failure_snapshot)
+	var craft_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
+	if not craft_feedback_line.contains("失败 制作: 材料不足"):
+		errors.append("event feedback line should localize crafting rejection, got %s" % craft_feedback_line)
 	return errors
 
 
