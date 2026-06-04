@@ -1,5 +1,7 @@
 extends Control
 
+const DEFAULT_SETTINGS_PATH := "user://settings.json"
+
 var settings_state: Dictionary = {
 	"master_volume": 100,
 	"music_volume": 100,
@@ -10,16 +12,26 @@ var settings_state: Dictionary = {
 	"ui_scale": 100,
 	"keybinding_profile": "default",
 }
+var last_persistence_result: Dictionary = {}
+var last_apply_result: Dictionary = {}
+var settings_path := DEFAULT_SETTINGS_PATH
 
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	settings_path = str(ProjectSettings.get_setting("cdc/settings_path", DEFAULT_SETTINGS_PATH))
+	_load_settings()
+	_apply_settings()
 	_build_layout()
 
 
 func settings_snapshot() -> Dictionary:
-	return settings_state.duplicate(true)
+	var snapshot := settings_state.duplicate(true)
+	snapshot["settings_path"] = settings_path
+	snapshot["persistence"] = last_persistence_result.duplicate(true)
+	snapshot["applied"] = last_apply_result.duplicate(true)
+	return snapshot
 
 
 func _build_layout() -> void:
@@ -45,32 +57,32 @@ func _build_layout() -> void:
 	box.add_child(_settings_label("AudioLine", ""))
 	box.add_child(_settings_slider_row("MasterVolume", "主音量", int(settings_state.get("master_volume", 100)), func(value: float) -> void:
 		settings_state["master_volume"] = int(roundf(value))
-		_refresh_settings_panel_texts()
+		_commit_settings_update()
 	))
 	box.add_child(_settings_slider_row("MusicVolume", "音乐", int(settings_state.get("music_volume", 100)), func(value: float) -> void:
 		settings_state["music_volume"] = int(roundf(value))
-		_refresh_settings_panel_texts()
+		_commit_settings_update()
 	))
 	box.add_child(_settings_slider_row("SfxVolume", "音效", int(settings_state.get("sfx_volume", 100)), func(value: float) -> void:
 		settings_state["sfx_volume"] = int(roundf(value))
-		_refresh_settings_panel_texts()
+		_commit_settings_update()
 	))
 	box.add_child(_settings_label("DisplayLine", ""))
 	box.add_child(_settings_option_row("WindowMode", "窗口", _settings_window_modes(), str(settings_state.get("window_mode", "windowed")), func(option_id: String) -> void:
 		settings_state["window_mode"] = option_id
-		_refresh_settings_panel_texts()
+		_commit_settings_update()
 	))
 	box.add_child(_settings_option_row("Resolution", "分辨率", _settings_resolutions(), str(settings_state.get("resolution", "1280x720")), func(option_id: String) -> void:
 		settings_state["resolution"] = option_id
-		_refresh_settings_panel_texts()
+		_commit_settings_update()
 	))
 	box.add_child(_settings_checkbox_row("VSync", "VSync", bool(settings_state.get("vsync", true)), func(enabled: bool) -> void:
 		settings_state["vsync"] = enabled
-		_refresh_settings_panel_texts()
+		_commit_settings_update()
 	))
 	box.add_child(_settings_slider_row("UIScale", "UI", int(settings_state.get("ui_scale", 100)), func(value: float) -> void:
 		settings_state["ui_scale"] = int(roundf(value))
-		_refresh_settings_panel_texts()
+		_commit_settings_update()
 	, 75, 150, 5))
 	box.add_child(_settings_keybinding_row())
 	box.add_child(_settings_label("ControlsLine", ""))
@@ -153,7 +165,7 @@ func _settings_keybinding_row() -> HBoxContainer:
 	button.tooltip_text = "切换按键方案"
 	button.pressed.connect(func() -> void:
 		settings_state["keybinding_profile"] = _next_keybinding_profile(str(settings_state.get("keybinding_profile", "default")))
-		_refresh_settings_panel_texts()
+		_commit_settings_update()
 	, CONNECT_DEFERRED)
 	row.add_child(label)
 	row.add_child(button)
@@ -181,7 +193,7 @@ func _refresh_settings_panel_texts() -> void:
 		controls.text = "按键方案: %s | Esc 关闭 | I/C/M/J/K/L 面板 | Space 等待" % _settings_option_label(_settings_keybinding_profiles(), str(settings_state.get("keybinding_profile", "default")))
 	var feedback := find_child("SettingsFeedbackLine", true, false) as Label
 	if feedback != null:
-		feedback.text = "设置已更新（当前会话）"
+		feedback.text = _settings_feedback_text()
 	var key_button := find_child("KeybindingCycleButton", true, false) as Button
 	if key_button != null:
 		key_button.text = _settings_option_label(_settings_keybinding_profiles(), str(settings_state.get("keybinding_profile", "default")))
@@ -189,6 +201,147 @@ func _refresh_settings_panel_texts() -> void:
 	_sync_slider_tooltip("MusicVolume", "音乐")
 	_sync_slider_tooltip("SfxVolume", "音效")
 	_sync_slider_tooltip("UIScale", "UI")
+
+
+func _commit_settings_update() -> void:
+	_normalize_settings_state()
+	_save_settings()
+	_apply_settings()
+	_refresh_settings_panel_texts()
+
+
+func _load_settings() -> void:
+	last_persistence_result = {"loaded": false, "saved": false, "path": settings_path}
+	if not FileAccess.file_exists(settings_path):
+		_normalize_settings_state()
+		return
+	var raw := FileAccess.get_file_as_string(settings_path)
+	var parsed: Variant = JSON.parse_string(raw)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		last_persistence_result["error"] = "invalid_json"
+		_normalize_settings_state()
+		return
+	for key in settings_state.keys():
+		if (parsed as Dictionary).has(key):
+			settings_state[key] = (parsed as Dictionary)[key]
+	_normalize_settings_state()
+	last_persistence_result["loaded"] = true
+
+
+func _save_settings() -> void:
+	var file := FileAccess.open(settings_path, FileAccess.WRITE)
+	if file == null:
+		last_persistence_result = {
+			"loaded": bool(last_persistence_result.get("loaded", false)),
+			"saved": false,
+			"path": settings_path,
+			"error": error_string(FileAccess.get_open_error()),
+		}
+		return
+	file.store_string(JSON.stringify(settings_state, "\t"))
+	file.close()
+	last_persistence_result = {
+		"loaded": bool(last_persistence_result.get("loaded", false)),
+		"saved": true,
+		"path": settings_path,
+	}
+
+
+func _apply_settings() -> void:
+	var audio: Dictionary = _apply_audio_settings()
+	var display: Dictionary = _apply_display_settings()
+	last_apply_result = {
+		"audio": audio,
+		"display": display,
+		"ui_scale": {"requested": int(settings_state.get("ui_scale", 100)), "applied": false, "reason": "ui_theme_runtime_pending"},
+		"keybinding": {"profile": str(settings_state.get("keybinding_profile", "default")), "applied": false, "reason": "keybinding_remap_pending"},
+	}
+
+
+func _apply_audio_settings() -> Dictionary:
+	var result: Dictionary = {}
+	_apply_bus_volume(result, "Master", int(settings_state.get("master_volume", 100)))
+	_apply_bus_volume(result, "Music", int(settings_state.get("music_volume", 100)))
+	_apply_bus_volume(result, "SFX", int(settings_state.get("sfx_volume", 100)))
+	return result
+
+
+func _apply_bus_volume(result: Dictionary, bus_name: String, percent: int) -> void:
+	var bus_index := AudioServer.get_bus_index(bus_name)
+	if bus_index < 0:
+		result[bus_name] = {"applied": false, "reason": "bus_missing", "percent": percent}
+		return
+	var clamped := clampi(percent, 0, 100)
+	AudioServer.set_bus_volume_db(bus_index, -80.0 if clamped <= 0 else linear_to_db(float(clamped) / 100.0))
+	result[bus_name] = {"applied": true, "percent": clamped}
+
+
+func _apply_display_settings() -> Dictionary:
+	if DisplayServer.get_name() == "headless":
+		return {
+			"applied": false,
+			"reason": "headless",
+			"window_mode": str(settings_state.get("window_mode", "windowed")),
+			"resolution": str(settings_state.get("resolution", "1280x720")),
+			"vsync": bool(settings_state.get("vsync", true)),
+		}
+	var resolution := _resolution_vector(str(settings_state.get("resolution", "1280x720")))
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if bool(settings_state.get("vsync", true)) else DisplayServer.VSYNC_DISABLED)
+	match str(settings_state.get("window_mode", "windowed")):
+		"fullscreen":
+			DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, false)
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		"borderless":
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			DisplayServer.window_set_size(resolution)
+			DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, true)
+		_:
+			DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, false)
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			DisplayServer.window_set_size(resolution)
+	return {
+		"applied": true,
+		"window_mode": str(settings_state.get("window_mode", "windowed")),
+		"resolution": str(settings_state.get("resolution", "1280x720")),
+		"vsync": bool(settings_state.get("vsync", true)),
+	}
+
+
+func _resolution_vector(value: String) -> Vector2i:
+	var parts := value.split("x", false)
+	if parts.size() != 2:
+		return Vector2i(1280, 720)
+	return Vector2i(max(1, int(parts[0])), max(1, int(parts[1])))
+
+
+func _normalize_settings_state() -> void:
+	settings_state["master_volume"] = clampi(int(settings_state.get("master_volume", 100)), 0, 100)
+	settings_state["music_volume"] = clampi(int(settings_state.get("music_volume", 100)), 0, 100)
+	settings_state["sfx_volume"] = clampi(int(settings_state.get("sfx_volume", 100)), 0, 100)
+	settings_state["ui_scale"] = clampi(int(settings_state.get("ui_scale", 100)), 75, 150)
+	settings_state["window_mode"] = _known_option_id(_settings_window_modes(), str(settings_state.get("window_mode", "windowed")), "windowed")
+	settings_state["resolution"] = _known_option_id(_settings_resolutions(), str(settings_state.get("resolution", "1280x720")), "1280x720")
+	settings_state["keybinding_profile"] = _known_option_id(_settings_keybinding_profiles(), str(settings_state.get("keybinding_profile", "default")), "default")
+	settings_state["vsync"] = bool(settings_state.get("vsync", true))
+
+
+func _known_option_id(options: Array[Dictionary], option_id: String, fallback: String) -> String:
+	for option in options:
+		if str(_dictionary_or_empty(option).get("id", "")) == option_id:
+			return option_id
+	return fallback
+
+
+func _settings_feedback_text() -> String:
+	var saved := bool(last_persistence_result.get("saved", false))
+	var display: Dictionary = _dictionary_or_empty(last_apply_result.get("display", {}))
+	if saved and bool(display.get("applied", false)):
+		return "设置已保存并应用"
+	if saved:
+		return "设置已保存（%s）" % str(display.get("reason", "部分应用待完成"))
+	if last_persistence_result.has("error"):
+		return "设置保存失败: %s" % last_persistence_result.get("error", "")
+	return "设置已加载（当前会话）"
 
 
 func _sync_slider_tooltip(node_prefix: String, label_text: String) -> void:

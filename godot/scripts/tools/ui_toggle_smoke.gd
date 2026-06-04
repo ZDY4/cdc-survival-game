@@ -1,6 +1,8 @@
 extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
+const SETTINGS_PANEL_CONTROLLER = preload("res://scripts/ui/controllers/settings_panel_controller.gd")
+const SETTINGS_SMOKE_PATH := "user://settings_ui_smoke.json"
 
 
 func _init() -> void:
@@ -8,6 +10,8 @@ func _init() -> void:
 
 
 func _run() -> void:
+	ProjectSettings.set_setting("cdc/settings_path", SETTINGS_SMOKE_PATH)
+	_remove_settings_smoke_file()
 	var game_root: Node = GAME_ROOT_SCENE.instantiate()
 	get_root().add_child(game_root)
 	await process_frame
@@ -31,6 +35,11 @@ func _run() -> void:
 		"settings_visible": game_root.settings_panel.visible,
 	}, "\t"))
 	quit(0)
+
+
+func _remove_settings_smoke_file() -> void:
+	if FileAccess.file_exists(SETTINGS_SMOKE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SETTINGS_SMOKE_PATH))
 
 
 func _run_checks(game_root: Node) -> Array[String]:
@@ -579,14 +588,25 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 		errors.append("settings display controls should update runtime display state: %s" % snapshot)
 	if int(snapshot.get("ui_scale", 0)) != 125 or str(snapshot.get("keybinding_profile", "")) != "left_handed":
 		errors.append("settings UI scale and keybinding profile should update runtime state: %s" % snapshot)
+	var persistence: Dictionary = _dictionary_or_empty(snapshot.get("persistence", {}))
+	if not bool(persistence.get("saved", false)) or not FileAccess.file_exists(str(snapshot.get("settings_path", ""))):
+		errors.append("settings changes should be saved to user settings file: %s" % snapshot)
+	var applied: Dictionary = _dictionary_or_empty(snapshot.get("applied", {}))
+	var audio: Dictionary = _dictionary_or_empty(applied.get("audio", {}))
+	if not bool(_dictionary_or_empty(audio.get("Master", {})).get("applied", false)):
+		errors.append("settings master volume should apply to audio bus: %s" % applied)
+	var display: Dictionary = _dictionary_or_empty(applied.get("display", {}))
+	if not bool(display.get("applied", false)) and str(display.get("reason", "")) != "headless":
+		errors.append("settings display changes should apply or be explicitly skipped in headless: %s" % applied)
 	if not _settings_line(game_root, "AudioLine").contains("主音量 65%") or not _settings_line(game_root, "AudioLine").contains("音乐 40%") or not _settings_line(game_root, "AudioLine").contains("音效 55%"):
 		errors.append("settings audio summary should reflect control changes")
 	if not _settings_line(game_root, "DisplayLine").contains("全屏") or not _settings_line(game_root, "DisplayLine").contains("1920x1080") or not _settings_line(game_root, "DisplayLine").contains("VSync 关闭") or not _settings_line(game_root, "DisplayLine").contains("UI 125%"):
 		errors.append("settings display summary should reflect control changes")
 	if not _settings_line(game_root, "ControlsLine").contains("左手"):
 		errors.append("settings keybinding summary should reflect profile cycle")
-	if not _settings_line(game_root, "SettingsFeedbackLine").contains("当前会话"):
-		errors.append("settings feedback should explain runtime-only update")
+	if not _settings_line(game_root, "SettingsFeedbackLine").contains("设置已保存"):
+		errors.append("settings feedback should show save result")
+	await _assert_settings_reload(errors, game_root)
 
 
 func _set_slider(game_root: Node, node_name: String, value: int) -> void:
@@ -625,6 +645,18 @@ func _press_button(game_root: Node, node_name: String) -> void:
 func _settings_line(game_root: Node, node_name: String) -> String:
 	var label: Label = game_root.settings_panel.find_child(node_name, true, false) as Label
 	return "" if label == null else str(label.text)
+
+
+func _assert_settings_reload(errors: Array[String], game_root: Node) -> void:
+	var reloaded: Control = SETTINGS_PANEL_CONTROLLER.new()
+	reloaded.name = "SettingsPanelReloadSmoke"
+	game_root.add_child(reloaded)
+	await game_root.get_tree().process_frame
+	var snapshot: Dictionary = _dictionary_or_empty(reloaded.call("settings_snapshot"))
+	if int(snapshot.get("master_volume", 0)) != 65 or str(snapshot.get("window_mode", "")) != "fullscreen" or str(snapshot.get("keybinding_profile", "")) != "left_handed":
+		errors.append("settings controller should reload persisted settings: %s" % snapshot)
+	game_root.remove_child(reloaded)
+	reloaded.queue_free()
 
 
 func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: String, expected_title: String, expected_line: String, context: String) -> void:

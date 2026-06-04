@@ -299,8 +299,8 @@
 ### 13.1 主菜单和设置
 
 - 待迁移 main menu runtime：空 runtime、不加载 map/actors、新游戏、继续、退出。
-- settings panel 控件第一版已迁移：主音量、音乐、音效、窗口模式、分辨率、VSync、UI scale 和按键绑定方案循环会更新当前会话设置状态、摘要文本和 blocker 状态，并纳入 `UIToggle` smoke；待补真实音频/窗口/UI scale 应用和 keybinding remap。
-- 待补设置保存/加载、默认值复核和设置变更即时应用到 Godot project/window/audio bus。
+- settings panel 控件第一版已迁移：主音量、音乐、音效、窗口模式、分辨率、VSync、UI scale 和按键绑定方案循环会更新设置状态、摘要文本和 blocker 状态；设置会保存到 `user://settings.json` 并在新设置面板实例加载，主音量会应用到 `Master` audio bus，窗口模式/分辨率/VSync 会在非 headless 运行时应用到 `DisplayServer`，已纳入 `UIToggle` smoke；待补 Music/SFX bus 项目配置、真实 UI scale 应用和 keybinding remap。
+- 待补设置默认值复核、设置文件版本/迁移、恢复默认和 Godot project/window/audio bus 的完整平台差异处理。
 
 ### 13.2 HUD 和 overlay
 
