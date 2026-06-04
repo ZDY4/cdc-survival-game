@@ -147,7 +147,9 @@ func refresh_journal_panel() -> void:
 func refresh_map_panel() -> void:
 	if map_panel == null or simulation == null:
 		return
-	map_panel.apply_snapshot(MapSnapshot.new(registry).build(simulation.snapshot(), world_result))
+	var snapshot: Dictionary = MapSnapshot.new(registry).build(simulation.snapshot(), world_result)
+	snapshot["tracked_quest"] = _tracked_quest_snapshot()
+	map_panel.apply_snapshot(snapshot)
 	_apply_stage_panel_visibility()
 
 
@@ -303,6 +305,7 @@ func _connect_journal_tracking() -> void:
 func _on_tracked_quest_changed(quest_id: String) -> void:
 	tracked_quest_id = quest_id
 	refresh_hud()
+	refresh_map_panel()
 
 
 func _ensure_panel(current: Control, scene: PackedScene, node_name: String) -> Control:
