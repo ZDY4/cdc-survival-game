@@ -117,6 +117,7 @@ func _container_session_snapshots(container_sessions: Dictionary) -> Array[Dicti
 		output.append({
 			"container_id": str(session.get("container_id", container_id)),
 			"display_name": str(session.get("display_name", container_id)),
+			"money": max(0, int(session.get("money", 0))),
 			"inventory": _array_or_empty(session.get("inventory", [])).duplicate(true),
 		})
 	return output

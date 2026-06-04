@@ -469,6 +469,7 @@ func _normalized_container_sessions(snapshot: Dictionary) -> Array[Dictionary]:
 		output.append({
 			"container_id": str(container_data.get("container_id", "")),
 			"display_name": str(container_data.get("display_name", "")),
+			"money": max(0, int(container_data.get("money", 0))),
 			"inventory": _normalized_inventory_entries(container_data.get("inventory", [])),
 		})
 	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:

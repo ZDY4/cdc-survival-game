@@ -24,13 +24,31 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"active": true,
 		"container_id": container_id,
 		"display_name": str(session.get("display_name", container_id)),
-		"items": _item_snapshots(session.get("inventory", [])),
+		"money": max(0, int(session.get("money", 0))),
+		"items": _container_item_snapshots(session),
 		"player_items": _inventory_item_snapshots(_dictionary_or_empty(player.get("inventory", {}))),
 	}
 	var scoped_feedback := _feedback_snapshot(feedback, container_id)
 	if not scoped_feedback.is_empty():
 		snapshot["feedback"] = scoped_feedback
 	return snapshot
+
+
+func _container_item_snapshots(session: Dictionary) -> Array[Dictionary]:
+	var items: Array[Dictionary] = _item_snapshots(session.get("inventory", []))
+	var money: int = max(0, int(session.get("money", 0)))
+	if money > 0:
+		items.append({
+			"item_id": "money",
+			"kind": "money",
+			"name": "金钱",
+			"description": "可从容器中拿取的货币。",
+			"count": money,
+			"unit_weight": 0.0,
+			"total_weight": 0.0,
+			"rarity": "",
+		})
+	return items
 
 
 func _item_snapshots(entries: Array) -> Array[Dictionary]:
@@ -138,6 +156,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 	match str(feedback.get("reason", "")):
 		"container_inventory_insufficient":
 			return "容器中没有足够的%s，需要 %d，当前 %d。" % [item_name, required, current]
+		"container_money_insufficient":
+			return "容器中没有足够的金钱，需要 %d，当前 %d。" % [required, current]
 		"not_enough_items":
 			return "背包中没有足够的%s，需要 %d，当前 %d。" % [item_name, required, current]
 		"unknown_container":

@@ -170,6 +170,40 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory drag should store water bottle into container column")
 	if _inventory_text(game_root).contains("水瓶 x1"):
 		errors.append("inventory drag should remove stored water bottle from inventory panel")
+	var money_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if money_player == null:
+		errors.append("missing player for container money check")
+		return errors
+	game_root.simulation.container_sessions["temporary_money_container"] = {
+		"container_id": "temporary_money_container",
+		"display_name": "临时金钱容器",
+		"inventory": [],
+		"money": 23,
+	}
+	money_player.active_container_id = "temporary_money_container"
+	game_root.refresh_container_panel()
+	if not _container_text(game_root).contains("金钱 x23"):
+		errors.append("container money should appear as a takeable row")
+	if not _press_container_item_with_text(game_root, "container", "金钱"):
+		errors.append("should select container money row")
+	else:
+		if not _container_detail(game_root).contains("容器：金钱 x23"):
+			errors.append("money detail should not use item weight copy")
+		if _container_transfer_button_text(game_root) != "拿取":
+			errors.append("selecting container money should use take action")
+		_press_container_quantity_all(game_root)
+		_press_container_transfer(game_root)
+		if not _event_seen(game_root, "container_money_taken"):
+			errors.append("taking container money should emit container_money_taken")
+		if not _event_seen(game_root, "container_transferred"):
+			errors.append("taking container money should emit container_transferred")
+		if _container_text(game_root).contains("金钱 x23"):
+			errors.append("taken container money should disappear from container column")
+		var money_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("temporary_money_container", {}))
+		if int(money_session.get("money", -1)) != 0:
+			errors.append("taking container money should clear session money")
+	money_player.active_container_id = str(open_result.get("container", {}).get("container_id", "survivor_outpost_01_clinic_supply_cabinet"))
+	game_root.refresh_container_panel()
 	player_refill_water(game_root)
 	if not _open_inventory_context_menu(game_root, "水瓶"):
 		errors.append("should open inventory context menu for water bottle while container is active")
@@ -585,6 +619,12 @@ func _item_control_text(node: Node) -> String:
 	if node is Button:
 		return str((node as Button).text)
 	return ""
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
 
 
 func _container_has_scroll_columns(game_root: Node) -> bool:

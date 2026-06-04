@@ -76,6 +76,7 @@ func _load_container_sessions(entries: Variant) -> Dictionary:
 		output[container_id] = {
 			"container_id": container_id,
 			"display_name": str(session_data.get("display_name", container_id)),
+			"money": max(0, int(session_data.get("money", 0))),
 			"inventory": _array_or_empty(session_data.get("inventory", [])).duplicate(true),
 		}
 	return output

@@ -33,6 +33,10 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 	return _container_transactions.take_item_from_container(simulation, actor_id, container_id, item_id, count, item_library)
 
 
+func take_money_from_container(simulation: RefCounted, actor_id: int, container_id: String, count: int = -1) -> Dictionary:
+	return _container_transactions.take_money_from_container(simulation, actor_id, container_id, count)
+
+
 func store_item_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
 	return _container_transactions.store_item_in_container(simulation, actor_id, container_id, item_id, count, item_library)
 
@@ -68,6 +72,7 @@ func drop_actor_item(simulation: RefCounted, actor_id: int, item_id: String, cou
 		"container_id": container_id,
 		"display_name": container.get("display_name", container_id),
 		"inventory": _array_or_empty(container.get("inventory", [])).duplicate(true),
+		"money": max(0, int(container.get("money", 0))),
 	}
 	simulation.map_interaction_targets[container_id] = {
 		"target_id": container_id,

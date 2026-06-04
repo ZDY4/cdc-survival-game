@@ -448,6 +448,7 @@ func _create_corpse_container(simulation: RefCounted, target: RefCounted, defeat
 		"container_id": corpse_id,
 		"display_name": corpse.get("display_name", corpse_id),
 		"inventory": inventory.duplicate(true),
+		"money": max(0, int(corpse.get("money", 0))),
 	}
 	simulation.map_interaction_targets[corpse_id] = {
 		"target_id": corpse_id,

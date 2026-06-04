@@ -365,6 +365,10 @@ func take_item_from_container(actor_id: int, container_id: String, item_id: Stri
 	return _economy_transactions.take_item_from_container(self, actor_id, container_id, item_id, count, item_library)
 
 
+func take_money_from_container(actor_id: int, container_id: String, count: int = -1) -> Dictionary:
+	return _economy_transactions.take_money_from_container(self, actor_id, container_id, count)
+
+
 func store_item_in_container(actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
 	return _economy_transactions.store_item_in_container(self, actor_id, container_id, item_id, count, item_library)
 
@@ -925,6 +929,8 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 	match str(command.get("action", "")):
 		"take_container":
 			return take_item_from_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
+		"take_container_money":
+			return take_money_from_container(actor.actor_id, str(command.get("container_id", "")), int(command.get("count", -1)))
 		"store_container":
 			return store_item_in_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"drop":

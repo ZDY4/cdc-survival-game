@@ -63,6 +63,73 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 	}
 
 
+func take_money_from_container(simulation: RefCounted, actor_id: int, container_id: String, count: int = -1) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var normalized_container_id: String = str(container_id)
+	var container: Dictionary = _dictionary_or_empty(simulation.container_sessions.get(normalized_container_id, {}))
+	if container.is_empty():
+		return {"success": false, "reason": "unknown_container", "container_id": normalized_container_id}
+	var available: int = max(0, int(container.get("money", 0)))
+	var transfer_count: int = available if count < 0 else count
+	if transfer_count <= 0:
+		return {
+			"success": false,
+			"reason": "invalid_quantity",
+			"container_id": normalized_container_id,
+			"item_id": "money",
+			"count": count,
+		}
+	if available < transfer_count:
+		return {
+			"success": false,
+			"reason": "container_money_insufficient",
+			"container_id": normalized_container_id,
+			"item_id": "money",
+			"required": transfer_count,
+			"current": available,
+		}
+
+	var actor_money_before: int = max(0, int(actor.money))
+	var container_money_after: int = available - transfer_count
+	actor.money = actor_money_before + transfer_count
+	container["money"] = container_money_after
+	simulation.container_sessions[normalized_container_id] = container
+	if simulation.corpse_containers.has(normalized_container_id):
+		var corpse: Dictionary = _dictionary_or_empty(simulation.corpse_containers[normalized_container_id])
+		corpse["money"] = container_money_after
+		simulation.corpse_containers[normalized_container_id] = corpse
+	simulation.emit_event("container_money_taken", {
+		"actor_id": actor_id,
+		"container_id": normalized_container_id,
+		"count": transfer_count,
+		"player_money_before": actor_money_before,
+		"player_money_after": actor.money,
+		"container_money_before": available,
+		"container_money_after": container_money_after,
+	})
+	simulation.emit_event("container_transferred", {
+		"actor_id": actor_id,
+		"container_id": normalized_container_id,
+		"item_id": "money",
+		"count": transfer_count,
+		"direction": "take",
+		"from": "container_money",
+		"to": "actor_money",
+	})
+	return {
+		"success": true,
+		"container_id": normalized_container_id,
+		"item_id": "money",
+		"count": transfer_count,
+		"player_money_before": actor_money_before,
+		"player_money_after": actor.money,
+		"container_money_before": available,
+		"container_money_after": container_money_after,
+	}
+
+
 func store_item_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:

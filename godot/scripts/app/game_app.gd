@@ -722,6 +722,24 @@ func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func take_active_container_money(count: int = -1) -> Dictionary:
+	var container_id: String = _active_container_id()
+	if container_id.is_empty():
+		var missing_result := {"success": false, "reason": "active_container_missing"}
+		_record_container_feedback(missing_result, "take_container_money", "", "money", count)
+		return missing_result
+	var result: Dictionary = _submit_inventory_action({
+		"action": "take_container_money",
+		"container_id": container_id,
+		"count": count,
+	})
+	_record_container_feedback(result, "take_container_money", container_id, "money", count)
+	refresh_inventory_panel()
+	refresh_container_panel()
+	refresh_hud()
+	return result
+
+
 func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
@@ -743,6 +761,8 @@ func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 func transfer_active_container_item(source: String, item_id: String, count: int = 1) -> Dictionary:
 	match source:
 		"container":
+			if str(item_id) == "money":
+				return take_active_container_money(count)
 			return take_active_container_item(item_id, count)
 		"player":
 			return store_active_container_item(item_id, count)

@@ -1001,6 +1001,7 @@ func _expect_corpse_inventory_and_metadata(errors: Array[String], simulation: Re
 	player.grid_position = GridCoord.from_dictionary(player_grid)
 	var original_equipment: Dictionary = player.equipment.duplicate(true)
 	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
+	var original_money: int = int(player.money)
 	player.equipment["main_hand"] = "1003"
 	player.combat_attributes["accuracy"] = 100.0
 	player.ap = 20.0
@@ -1062,10 +1063,30 @@ func _expect_corpse_inventory_and_metadata(errors: Array[String], simulation: Re
 		var container: Dictionary = _container_by_id(simulation.snapshot(), str(corpse.get("container_id", "")))
 		if _entry_count(_array_or_empty(container.get("inventory", [])), "1009") != 9:
 			errors.append("corpse container session should mirror merged ammo")
+		if int(container.get("money", 0)) != 17:
+			errors.append("corpse container session should mirror corpse money")
+		var player_money_before: int = int(player.money)
+		var money_result: Dictionary = simulation.take_money_from_container(player.actor_id, str(corpse.get("container_id", "")), -1)
+		if not bool(money_result.get("success", false)):
+			errors.append("taking corpse money should succeed: %s" % money_result.get("reason", "unknown"))
+		elif int(player.money) != player_money_before + 17:
+			errors.append("taking corpse money should increase player money")
+		var updated_corpse: Dictionary = _corpse_by_source_actor(simulation.snapshot(), target_id)
+		var updated_container: Dictionary = _container_by_id(simulation.snapshot(), str(corpse.get("container_id", "")))
+		if int(updated_corpse.get("money", -1)) != 0:
+			errors.append("taking corpse money should clear corpse money")
+		if int(updated_container.get("money", -1)) != 0:
+			errors.append("taking corpse money should clear container session money")
+		if _event_count(simulation.snapshot(), "container_money_taken") <= 0:
+			errors.append("taking corpse money should emit container_money_taken")
+		var second_money_result: Dictionary = simulation.take_money_from_container(player.actor_id, str(corpse.get("container_id", "")), 1)
+		if second_money_result.get("reason", "") != "container_money_insufficient":
+			errors.append("taking exhausted corpse money should report container_money_insufficient")
 	if simulation.actor_registry.get_actor(target_id) != null:
 		simulation.actor_registry.unregister_actor(target_id)
 	player.equipment = original_equipment
 	player.combat_attributes = original_attributes
+	player.money = original_money
 	simulation.exit_combat_if_clear("corpse_metadata_smoke_cleanup")
 
 

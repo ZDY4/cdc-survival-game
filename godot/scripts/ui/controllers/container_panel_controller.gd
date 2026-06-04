@@ -208,14 +208,7 @@ func _build_layout() -> void:
 func _item_line(item: Dictionary, source: String) -> Button:
 	var button := Button.new()
 	button.name = "Item_%s" % item.get("item_id", "unknown")
-	var rarity := str(item.get("rarity", ""))
-	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
-	button.text = "%s x%d | %.1f kg%s" % [
-		item.get("name", item.get("item_id", "")),
-		int(item.get("count", 0)),
-		float(item.get("total_weight", 0.0)),
-		rarity_suffix,
-	]
+	button.text = _item_line_text(item)
 	button.tooltip_text = str(item.get("description", ""))
 	button.set_meta("container_item", item.duplicate(true))
 	button.set_meta("container_source", source)
@@ -337,18 +330,7 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 		_selected_item_id = ""
 		_update_transfer_controls({}, "")
 		return
-	var rarity := str(item.get("rarity", ""))
-	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
-	var description := str(item.get("description", ""))
-	_detail_label.text = "%s：%s x%d | 单重 %.1f kg | 总重 %.1f kg%s%s" % [
-		_source_display(source),
-		item.get("name", item.get("item_id", "")),
-		int(item.get("count", 0)),
-		float(item.get("unit_weight", 0.0)),
-		float(item.get("total_weight", 0.0)),
-		rarity_suffix,
-		"\n%s" % description if not description.is_empty() else "",
-	]
+	_detail_label.text = _detail_text(item, source)
 	_selected_source = source
 	_selected_item_id = str(item.get("item_id", ""))
 	_update_transfer_controls(item, source)
@@ -446,6 +428,44 @@ func _source_display(source: String) -> String:
 			return "背包"
 		_:
 			return source
+
+
+func _item_line_text(item: Dictionary) -> String:
+	if str(item.get("kind", "")) == "money" or str(item.get("item_id", "")) == "money":
+		return "%s x%d" % [
+			item.get("name", "金钱"),
+			int(item.get("count", 0)),
+		]
+	var rarity := str(item.get("rarity", ""))
+	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
+	return "%s x%d | %.1f kg%s" % [
+		item.get("name", item.get("item_id", "")),
+		int(item.get("count", 0)),
+		float(item.get("total_weight", 0.0)),
+		rarity_suffix,
+	]
+
+
+func _detail_text(item: Dictionary, source: String) -> String:
+	var description := str(item.get("description", ""))
+	if str(item.get("kind", "")) == "money" or str(item.get("item_id", "")) == "money":
+		return "%s：%s x%d%s" % [
+			_source_display(source),
+			item.get("name", "金钱"),
+			int(item.get("count", 0)),
+			"\n%s" % description if not description.is_empty() else "",
+		]
+	var rarity := str(item.get("rarity", ""))
+	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
+	return "%s：%s x%d | 单重 %.1f kg | 总重 %.1f kg%s%s" % [
+		_source_display(source),
+		item.get("name", item.get("item_id", "")),
+		int(item.get("count", 0)),
+		float(item.get("unit_weight", 0.0)),
+		float(item.get("total_weight", 0.0)),
+		rarity_suffix,
+		"\n%s" % description if not description.is_empty() else "",
+	]
 
 
 func _label(node_name: String) -> Label:
