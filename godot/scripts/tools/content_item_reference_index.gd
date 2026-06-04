@@ -34,6 +34,11 @@ func _collect_recipe_refs(hits: Array[Dictionary], item_id: String, registry: Co
 				hits.append(_reference_hit("recipe", recipe_id, record["path"], "materials[%d].item_id" % i))
 		_collect_tool_refs(hits, item_id, "recipe", recipe_id, record["path"], "required_tools", data.get("required_tools", []))
 		_collect_tool_refs(hits, item_id, "recipe", recipe_id, record["path"], "optional_tools", data.get("optional_tools", []))
+		var conditions: Array = data.get("unlock_conditions", [])
+		for i in range(conditions.size()):
+			var condition: Dictionary = _dictionary_or_empty(conditions[i])
+			if str(condition.get("type", "")) in ["item", "book"] and _normalize_id(condition.get("id", condition.get("item_id", ""))) == item_id:
+				hits.append(_reference_hit("recipe", recipe_id, record["path"], "unlock_conditions[%d].id" % i))
 
 
 func _collect_item_fragment_refs(hits: Array[Dictionary], item_id: String, registry: ContentRegistry) -> void:

@@ -118,6 +118,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	})
 	var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
 	simulation.crafted_recipes["recipe_knife_basic"] = true
+	simulation.world_flags["outpost_workshop_restored"] = true
 	simulation.set_actor_vision_radius(1, 4)
 	simulation.refresh_actor_vision(1, topology)
 	simulation.record_item_collected(1, "1007", 2)
@@ -157,7 +158,7 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	if not bool(loaded.get("ok", false)):
 		return ["load_snapshot failed: %s" % loaded.get("reason", "unknown")]
 
-	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes"]:
+	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes", "world_flags"]:
 		if JSON.stringify(restored.get(key)) != JSON.stringify(original.get(key)):
 			errors.append("snapshot field mismatch: %s" % key)
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
@@ -188,6 +189,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("hotbar did not roundtrip")
 	if not _array_or_empty(restored.get("crafted_recipes", [])).has("recipe_knife_basic"):
 		errors.append("crafted_recipes should roundtrip non-empty recipe unlock state")
+	if not _array_or_empty(restored.get("world_flags", [])).has("outpost_workshop_restored"):
+		errors.append("world_flags should roundtrip non-empty unlock state")
 	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang":
 		errors.append("player active dialogue did not roundtrip")
 	if player_restored.get("active_container_id", "") != "survivor_outpost_01_clinic_supply_cabinet":

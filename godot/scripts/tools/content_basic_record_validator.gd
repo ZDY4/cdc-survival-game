@@ -277,6 +277,11 @@ func _validate_unlock_conditions(values: Variant, field: String, registry: Conte
 				var quest_id := str(condition.get("id", ""))
 				if not registry.has_id("quests", quest_id):
 					issues.append(_issue("error", condition_field.path_join("id"), "unknown_quest", "unknown quest id %s" % quest_id))
+			"item", "book":
+				_validate_item_ref(condition.get("id", condition.get("item_id", "")), condition_field.path_join("id"), registry, issues)
+			"world_flag", "flag":
+				if str(condition.get("id", "")).strip_edges().is_empty():
+					issues.append(_issue("error", condition_field.path_join("id"), "missing_world_flag", "world flag id is required"))
 			"":
 				issues.append(_issue("error", condition_field.path_join("type"), "missing_condition_type", "unlock condition type is required"))
 

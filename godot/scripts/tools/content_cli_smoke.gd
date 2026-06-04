@@ -55,6 +55,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "appearance", "default_humanoid")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
+	_expect_recipe_unlock_source_refs(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
 	_expect_invalid_settlement_anchor(errors, registry)
 	_expect_invalid_overworld_entry(errors, registry)
@@ -115,6 +116,32 @@ func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry
 			found_unknown_item = true
 	if not found_unknown_item:
 		errors.append("invalid recipe reference smoke did not report unknown_item: %s" % validation.get("issues", []))
+
+
+func _expect_recipe_unlock_source_refs(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("recipes").get("recipe_first_aid_kit", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing recipe_first_aid_kit fixture for unlock source smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	data["id"] = "smoke_unlock_source_recipe"
+	data["unlock_conditions"] = [
+		{"type": "item", "id": "1104", "count": 1},
+		{"type": "book", "id": "1031"},
+		{"type": "world_flag", "id": "outpost_workshop_restored"},
+	]
+	data["is_default_unlocked"] = false
+	source["data"] = data
+	source["path"] = "<smoke>"
+	var smoke_registry := _registry_with_override(registry, "recipes", "smoke_unlock_source_recipe", source)
+	var validation := ContentRecordValidator.new().validate_record("recipes", "smoke_unlock_source_recipe", smoke_registry)
+	if not bool(validation.get("ok", false)):
+		errors.append("unlock source recipe should validate item/book/world_flag conditions: %s" % validation.get("issues", []))
+	var index := ContentReferenceIndex.new()
+	if not _has_reference_detail(index.references_for("items", "1104", smoke_registry), "unlock_conditions[0].id"):
+		errors.append("item unlock condition should appear in item reference index")
+	if not _has_reference_detail(index.references_for("items", "1031", smoke_registry), "unlock_conditions[1].id"):
+		errors.append("book unlock condition should appear in item reference index")
 
 
 func _expect_invalid_dialogue_ref(errors: Array[String], registry: ContentRegistry) -> void:
@@ -200,6 +227,14 @@ func _has_issue_code(issues: Array, code: String) -> bool:
 	for issue in issues:
 		var issue_data: Dictionary = issue
 		if str(issue_data.get("code", "")) == code:
+			return true
+	return false
+
+
+func _has_reference_detail(hits: Array[Dictionary], detail: String) -> bool:
+	for hit in hits:
+		var hit_data: Dictionary = hit
+		if str(hit_data.get("detail", "")) == detail:
 			return true
 	return false
 

@@ -53,6 +53,7 @@ var effect_library: Dictionary = {}
 var quest_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
+var world_flags: Dictionary = {}
 var ai_intents: Dictionary = {}
 var turn_state: Dictionary = {
 	"round": 1,

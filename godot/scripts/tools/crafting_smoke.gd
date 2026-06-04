@@ -109,6 +109,39 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var quest_unlocked: Dictionary = simulation.craft_recipe(1, "smoke_quest_unlock_recipe", unlock_recipes)
 	if not bool(quest_unlocked.get("success", false)):
 		errors.append("quest unlock recipe should craft after required quest: %s" % quest_unlocked.get("reason", "unknown"))
+	var item_locked: Dictionary = simulation.craft_recipe(1, "smoke_item_unlock_recipe", unlock_recipes)
+	if item_locked.get("reason", "") != "recipe_locked":
+		errors.append("item unlock recipe should report recipe_locked before required item")
+	var item_unlocks: Array = item_locked.get("missing_unlock_conditions", [])
+	if item_unlocks.is_empty() or str(_dictionary_or_empty(item_unlocks[0]).get("type", "")) != "item":
+		errors.append("item unlock recipe should identify missing item condition")
+	player.inventory["1104"] = 1
+	var item_unlocked: Dictionary = simulation.craft_recipe(1, "smoke_item_unlock_recipe", unlock_recipes)
+	if not bool(item_unlocked.get("success", false)):
+		errors.append("item unlock recipe should craft after required item: %s" % item_unlocked.get("reason", "unknown"))
+	player.inventory.erase("1104")
+	var book_locked: Dictionary = simulation.craft_recipe(1, "smoke_book_unlock_recipe", unlock_recipes)
+	if book_locked.get("reason", "") != "recipe_locked":
+		errors.append("book unlock recipe should report recipe_locked before required book item")
+	var book_unlocks: Array = book_locked.get("missing_unlock_conditions", [])
+	if book_unlocks.is_empty() or str(_dictionary_or_empty(book_unlocks[0]).get("type", "")) != "book":
+		errors.append("book unlock recipe should identify missing book condition")
+	player.inventory["1031"] = 1
+	var book_unlocked: Dictionary = simulation.craft_recipe(1, "smoke_book_unlock_recipe", unlock_recipes)
+	if not bool(book_unlocked.get("success", false)):
+		errors.append("book unlock recipe should craft after required book item: %s" % book_unlocked.get("reason", "unknown"))
+	player.inventory.erase("1031")
+	var flag_locked: Dictionary = simulation.craft_recipe(1, "smoke_world_flag_unlock_recipe", unlock_recipes)
+	if flag_locked.get("reason", "") != "recipe_locked":
+		errors.append("world flag unlock recipe should report recipe_locked before flag")
+	var flag_unlocks: Array = flag_locked.get("missing_unlock_conditions", [])
+	if flag_unlocks.is_empty() or str(_dictionary_or_empty(flag_unlocks[0]).get("type", "")) != "world_flag":
+		errors.append("world flag unlock recipe should identify missing world_flag condition")
+	simulation.world_flags["outpost_workshop_restored"] = true
+	var flag_unlocked: Dictionary = simulation.craft_recipe(1, "smoke_world_flag_unlock_recipe", unlock_recipes)
+	if not bool(flag_unlocked.get("success", false)):
+		errors.append("world flag unlock recipe should craft after flag: %s" % flag_unlocked.get("reason", "unknown"))
+	simulation.world_flags.erase("outpost_workshop_restored")
 
 	var tool_missing: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes)
 	if tool_missing.get("reason", "") != "missing_tools":
@@ -240,6 +273,51 @@ func _unlock_smoke_recipes() -> Dictionary:
 				"name": "任务解锁测试配方",
 				"is_default_unlocked": false,
 				"unlock_conditions": [{"type": "quest", "id": "tutorial_survive"}],
+				"required_tools": [],
+				"required_station": "none",
+				"skill_requirements": {},
+				"materials": [],
+				"output": {"item_id": "1006", "count": 1},
+				"craft_time": 0.0,
+				"experience_reward": 0,
+			},
+		},
+		"smoke_item_unlock_recipe": {
+			"data": {
+				"id": "smoke_item_unlock_recipe",
+				"name": "物品解锁测试配方",
+				"is_default_unlocked": false,
+				"unlock_conditions": [{"type": "item", "id": "1104", "count": 1}],
+				"required_tools": [],
+				"required_station": "none",
+				"skill_requirements": {},
+				"materials": [],
+				"output": {"item_id": "1006", "count": 1},
+				"craft_time": 0.0,
+				"experience_reward": 0,
+			},
+		},
+		"smoke_book_unlock_recipe": {
+			"data": {
+				"id": "smoke_book_unlock_recipe",
+				"name": "书籍解锁测试配方",
+				"is_default_unlocked": false,
+				"unlock_conditions": [{"type": "book", "id": "1031"}],
+				"required_tools": [],
+				"required_station": "none",
+				"skill_requirements": {},
+				"materials": [],
+				"output": {"item_id": "1006", "count": 1},
+				"craft_time": 0.0,
+				"experience_reward": 0,
+			},
+		},
+		"smoke_world_flag_unlock_recipe": {
+			"data": {
+				"id": "smoke_world_flag_unlock_recipe",
+				"name": "世界状态解锁测试配方",
+				"is_default_unlocked": false,
+				"unlock_conditions": [{"type": "world_flag", "id": "outpost_workshop_restored"}],
 				"required_tools": [],
 				"required_station": "none",
 				"skill_requirements": {},

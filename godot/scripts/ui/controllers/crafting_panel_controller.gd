@@ -375,6 +375,15 @@ func _unlock_conditions_text(conditions: Array) -> String:
 				])
 			"quest":
 				parts.append("任务 %s" % display_name)
+			"item":
+				parts.append("物品 %s x%d" % [
+					display_name,
+					max(1, int(data.get("count", data.get("required", 1)))),
+				])
+			"book":
+				parts.append("书籍 %s" % display_name)
+			"world_flag", "flag":
+				parts.append("世界状态 %s" % display_name)
 			_:
 				parts.append("%s %s" % [condition_type, display_name])
 	return "无" if parts.is_empty() else ", ".join(parts)

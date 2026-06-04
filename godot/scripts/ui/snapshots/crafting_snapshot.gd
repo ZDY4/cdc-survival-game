@@ -14,11 +14,12 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	var progression: Dictionary = _dictionary_or_empty(player.get("progression", {}))
 	var crafted_recipes: Dictionary = _flag_dictionary(runtime_snapshot.get("crafted_recipes", []))
 	var completed_quests: Dictionary = _flag_dictionary(runtime_snapshot.get("completed_quests", []))
+	var world_flags: Dictionary = _flag_dictionary(runtime_snapshot.get("world_flags", []))
 	var recipes: Array[Dictionary] = []
 	var recipe_ids: Array = registry.get_library("recipes").keys()
 	recipe_ids.sort()
 	for recipe_id in recipe_ids:
-		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), player, inventory, equipment, progression, crafted_recipes, completed_quests, crafting_context)
+		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), player, inventory, equipment, progression, crafted_recipes, completed_quests, world_flags, crafting_context)
 		if not recipe_view.is_empty():
 			recipes.append(recipe_view)
 	return {
@@ -29,7 +30,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	}
 
 
-func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary, crafting_context: Dictionary) -> Dictionary:
+func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary, world_flags: Dictionary, crafting_context: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("recipes").get(recipe_id, {}))
 	var recipe: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if recipe.is_empty():
@@ -51,7 +52,7 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), inventory, equipment)
 	var required_station := str(recipe.get("required_station", "none"))
 	var station_check: Dictionary = _station_check(player, required_station, crafting_context)
-	var unlock_check: Dictionary = _unlock_check(recipe, progression, crafted_recipes, completed_quests)
+	var unlock_check: Dictionary = _unlock_check(recipe, inventory, progression, crafted_recipes, completed_quests, world_flags)
 	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check, unlock_check)
 	var max_craft_count: int = _max_craft_count(materials, bool(availability.get("can_craft", false)))
 	var output_count: int = max(1, int(output.get("count", 1)))
@@ -134,7 +135,7 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 	return {"can_craft": true, "reason": "available"}
 
 
-func _unlock_check(recipe: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary) -> Dictionary:
+func _unlock_check(recipe: Dictionary, inventory: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary, world_flags: Dictionary) -> Dictionary:
 	if bool(recipe.get("is_default_unlocked", false)):
 		return {"success": true}
 	var missing: Array[Dictionary] = []
@@ -159,6 +160,20 @@ func _unlock_check(recipe: Dictionary, progression: Dictionary, crafted_recipes:
 			"quest":
 				var quest_id := str(data.get("id", ""))
 				if quest_id.is_empty() or not completed_quests.has(quest_id):
+					missing.append(_unlock_condition_view(data))
+			"item", "book":
+				var item_id := _normalize_content_id(data.get("id", data.get("item_id", "")))
+				var required_count: int = max(1, int(data.get("count", 1)))
+				var current_count: int = int(inventory.get(item_id, 0))
+				if item_id.is_empty() or current_count < required_count:
+					var item_condition := _unlock_condition_view(data)
+					item_condition["id"] = item_id
+					item_condition["required"] = required_count
+					item_condition["available"] = current_count
+					missing.append(item_condition)
+			"world_flag", "flag":
+				var flag_id := str(data.get("id", "")).strip_edges()
+				if flag_id.is_empty() or not world_flags.has(flag_id):
 					missing.append(_unlock_condition_view(data))
 			_:
 				var unsupported := _unlock_condition_view(data)
@@ -198,6 +213,11 @@ func _unlock_condition_view(condition: Dictionary) -> Dictionary:
 			var quest_record: Dictionary = _dictionary_or_empty(registry.get_library("quests").get(condition_id, {}))
 			var quest_data: Dictionary = _dictionary_or_empty(quest_record.get("data", quest_record))
 			display_name = str(quest_data.get("title", condition_id))
+		"item", "book":
+			var item_id := _normalize_content_id(condition.get("id", condition.get("item_id", "")))
+			condition_id = item_id
+			var item_data: Dictionary = _item_data(item_id)
+			display_name = str(item_data.get("name", item_id))
 	var view := {
 		"type": condition_type,
 		"id": condition_id,

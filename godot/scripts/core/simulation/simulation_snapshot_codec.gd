@@ -28,6 +28,7 @@ func build(simulation: RefCounted) -> Dictionary:
 		"shop_sessions": _shop_session_snapshots(simulation.shop_sessions),
 		"active_quests": _active_quest_snapshots(simulation.active_quests),
 		"completed_quests": simulation.completed_quests.keys(),
+		"world_flags": simulation.world_flags.keys(),
 		"ai_intents": _ai_intent_snapshots(simulation.ai_intents),
 		"vision": simulation._vision_rules.snapshot(),
 		"turn_state": simulation.turn_state.duplicate(true),

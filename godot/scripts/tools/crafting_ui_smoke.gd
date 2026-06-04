@@ -102,6 +102,45 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if _recipe_line(game_root, "smoke_quest_unlock_recipe").contains("未解锁 补给试跑"):
 		errors.append("quest unlock recipe row should stop showing lock after required quest")
+	if not _press_recipe_line(game_root, "smoke_item_unlock_recipe"):
+		errors.append("should select item unlock smoke recipe")
+	await process_frame
+	if not _recipe_line(game_root, "smoke_item_unlock_recipe").contains("未解锁 塑料"):
+		errors.append("item unlock recipe row should show missing item name")
+	if not _detail_text(game_root).contains("解锁 物品 塑料 x1"):
+		errors.append("item unlock recipe detail should show item unlock requirement")
+	player_for_unlock_sources.inventory["1104"] = 1
+	game_root.refresh_crafting_panel()
+	await process_frame
+	if _recipe_line(game_root, "smoke_item_unlock_recipe").contains("未解锁 塑料"):
+		errors.append("item unlock recipe row should stop showing lock after required item")
+	player_for_unlock_sources.inventory.erase("1104")
+	if not _press_recipe_line(game_root, "smoke_book_unlock_recipe"):
+		errors.append("should select book unlock smoke recipe")
+	await process_frame
+	if not _recipe_line(game_root, "smoke_book_unlock_recipe").contains("未解锁 抗生素"):
+		errors.append("book unlock recipe row should show missing book item name")
+	if not _detail_text(game_root).contains("解锁 书籍 抗生素"):
+		errors.append("book unlock recipe detail should show book unlock requirement")
+	player_for_unlock_sources.inventory["1031"] = 1
+	game_root.refresh_crafting_panel()
+	await process_frame
+	if _recipe_line(game_root, "smoke_book_unlock_recipe").contains("未解锁 抗生素"):
+		errors.append("book unlock recipe row should stop showing lock after required book item")
+	player_for_unlock_sources.inventory.erase("1031")
+	if not _press_recipe_line(game_root, "smoke_world_flag_unlock_recipe"):
+		errors.append("should select world flag unlock smoke recipe")
+	await process_frame
+	if not _recipe_line(game_root, "smoke_world_flag_unlock_recipe").contains("未解锁 outpost_workshop_restored"):
+		errors.append("world flag unlock recipe row should show missing flag id")
+	if not _detail_text(game_root).contains("解锁 世界状态 outpost_workshop_restored"):
+		errors.append("world flag unlock recipe detail should show world flag requirement")
+	game_root.simulation.world_flags["outpost_workshop_restored"] = true
+	game_root.refresh_crafting_panel()
+	await process_frame
+	if _recipe_line(game_root, "smoke_world_flag_unlock_recipe").contains("未解锁 outpost_workshop_restored"):
+		errors.append("world flag unlock recipe row should stop showing lock after required flag")
+	game_root.simulation.world_flags.erase("outpost_workshop_restored")
 	if not _recipe_line(game_root, "recipe_advanced_knife").contains("未解锁 基础小刀"):
 		errors.append("recipe-chain gated recipe row should show missing source recipe")
 	if not _press_recipe_line(game_root, "recipe_advanced_knife"):
@@ -528,6 +567,60 @@ func _install_unlock_source_smoke_recipes(game_root: Node) -> void:
 			"craft_time": 0.0,
 			"experience_reward": 0,
 			"unlock_conditions": [{"type": "quest", "id": "tutorial_survive"}],
+			"is_default_unlocked": false,
+		},
+	}
+	recipes["smoke_item_unlock_recipe"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_item_unlock_recipe",
+			"name": "物品解锁测试配方",
+			"description": "需要持有物品的测试配方",
+			"category": "weapon",
+			"output": {"item_id": "1006", "count": 1},
+			"materials": [{"item_id": 1144, "count": 99}],
+			"required_tools": [],
+			"required_station": "none",
+			"skill_requirements": {},
+			"craft_time": 0.0,
+			"experience_reward": 0,
+			"unlock_conditions": [{"type": "item", "id": "1104", "count": 1}],
+			"is_default_unlocked": false,
+		},
+	}
+	recipes["smoke_book_unlock_recipe"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_book_unlock_recipe",
+			"name": "书籍解锁测试配方",
+			"description": "需要读物或蓝图物品的测试配方",
+			"category": "weapon",
+			"output": {"item_id": "1006", "count": 1},
+			"materials": [{"item_id": 1144, "count": 99}],
+			"required_tools": [],
+			"required_station": "none",
+			"skill_requirements": {},
+			"craft_time": 0.0,
+			"experience_reward": 0,
+			"unlock_conditions": [{"type": "book", "id": "1031"}],
+			"is_default_unlocked": false,
+		},
+	}
+	recipes["smoke_world_flag_unlock_recipe"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_world_flag_unlock_recipe",
+			"name": "世界状态解锁测试配方",
+			"description": "需要世界状态 flag 的测试配方",
+			"category": "weapon",
+			"output": {"item_id": "1006", "count": 1},
+			"materials": [{"item_id": 1144, "count": 99}],
+			"required_tools": [],
+			"required_station": "none",
+			"skill_requirements": {},
+			"craft_time": 0.0,
+			"experience_reward": 0,
+			"unlock_conditions": [{"type": "world_flag", "id": "outpost_workshop_restored"}],
 			"is_default_unlocked": false,
 		},
 	}

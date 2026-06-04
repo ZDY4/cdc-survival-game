@@ -155,6 +155,24 @@ func _unlock_check(simulation: RefCounted, actor: RefCounted, recipe: Dictionary
 						"type": "quest",
 						"id": required_quest_id,
 					})
+			"item", "book":
+				var required_item_id: String = _inventory_entries.normalize_content_id(condition_data.get("id", condition_data.get("item_id", "")))
+				var required_count: int = max(1, int(condition_data.get("count", 1)))
+				var current_count: int = int(actor.inventory.get(required_item_id, 0)) if actor != null else 0
+				if required_item_id.is_empty() or current_count < required_count:
+					missing.append({
+						"type": condition_type,
+						"id": required_item_id,
+						"required": required_count,
+						"available": current_count,
+					})
+			"world_flag", "flag":
+				var required_flag_id := str(condition_data.get("id", "")).strip_edges()
+				if required_flag_id.is_empty() or not simulation.world_flags.has(required_flag_id):
+					missing.append({
+						"type": condition_type,
+						"id": required_flag_id,
+					})
 			_:
 				missing.append({
 					"type": condition_type,

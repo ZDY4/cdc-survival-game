@@ -24,6 +24,7 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.shop_sessions = _load_shop_sessions(snapshot_data.get("shop_sessions", []))
 	simulation.active_quests = _load_active_quests(snapshot_data.get("active_quests", []))
 	simulation.completed_quests = _load_completed_quests(snapshot_data.get("completed_quests", []))
+	simulation.world_flags = _load_flag_dictionary(snapshot_data.get("world_flags", []))
 	simulation.ai_intents = _load_ai_intents(snapshot_data.get("ai_intents", []))
 	simulation._vision_rules.load_snapshot(_dictionary_or_empty(snapshot_data.get("vision", {})))
 	simulation.turn_state = _dictionary_or_empty(snapshot_data.get("turn_state", simulation.turn_state)).duplicate(true)
