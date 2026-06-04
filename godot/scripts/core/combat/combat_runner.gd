@@ -436,7 +436,7 @@ func _defeat_actor(simulation: RefCounted, actor_id: int, target_actor_id: int, 
 func _create_corpse_container(simulation: RefCounted, target: RefCounted, defeated_by_actor_id: int) -> Dictionary:
 	var corpse_id: String = "corpse_%s_%d" % [target.definition_id, target.actor_id]
 	var equipped_slots: Dictionary = _equipped_slots_snapshot(target)
-	var inventory: Array[Dictionary] = _actor_inventory_entries(target, simulation.item_library)
+	var inventory: Array[Dictionary] = _actor_inventory_entries(simulation, target, simulation.item_library)
 	var corpse := {
 		"container_id": corpse_id,
 		"map_id": target.map_id,
@@ -486,7 +486,7 @@ func _equipped_slots_snapshot(actor: RefCounted) -> Dictionary:
 	return output
 
 
-func _actor_inventory_entries(actor: RefCounted, item_library: Dictionary) -> Array[Dictionary]:
+func _actor_inventory_entries(simulation: RefCounted, actor: RefCounted, item_library: Dictionary) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var ids: Array = actor.inventory.keys()
 	ids.sort()
@@ -508,10 +508,11 @@ func _actor_inventory_entries(actor: RefCounted, item_library: Dictionary) -> Ar
 		if ammo_type.is_empty():
 			continue
 		_inventory_entries.add(entries, ammo_type, loaded)
-	for loot_entry in actor.loot_table:
+	for loot_index in range(actor.loot_table.size()):
+		var loot_entry: Variant = actor.loot_table[loot_index]
 		var loot_data: Dictionary = _dictionary_or_empty(loot_entry)
 		var item_id: String = _normalize_item_id(loot_data.get("item_id", loot_data.get("itemId", "")))
-		var count: int = _resolve_loot_drop_count(actor.actor_id, item_id, loot_data)
+		var count: int = _resolve_loot_drop_count(simulation, actor.actor_id, item_id, loot_data, loot_index)
 		if count > 0:
 			_inventory_entries.add(entries, item_id, count)
 	return entries
@@ -536,7 +537,7 @@ func _weapon_fragment(item_id: String, item_library: Dictionary) -> Dictionary:
 	return {}
 
 
-func _resolve_loot_drop_count(actor_id: int, item_id: String, entry: Dictionary) -> int:
+func _resolve_loot_drop_count(simulation: RefCounted, actor_id: int, item_id: String, entry: Dictionary, loot_index: int) -> int:
 	if item_id.is_empty():
 		return 0
 	var min_count: int = int(entry.get("min", 0))
@@ -544,13 +545,17 @@ func _resolve_loot_drop_count(actor_id: int, item_id: String, entry: Dictionary)
 	var chance: float = clampf(float(entry.get("chance", 0.0)), 0.0, 1.0)
 	if max_count < min_count or max_count <= 0 or chance <= 0.0:
 		return 0
-	var item_number: int = abs(hash(item_id))
-	var roll_seed: int = abs(actor_id ^ (item_number * 1103515245))
-	var chance_roll: float = float(roll_seed % 10000) / 10000.0
+	if chance >= 1.0 and min_count == max_count:
+		return max(0, min_count)
+	var salt_base: int = abs(actor_id * 65537 + abs(hash(item_id)) + loot_index * 4099)
+	var chance_roll: float = float(_next_combat_random_unit(simulation, salt_base).get("roll", 1.0))
 	if chance_roll > chance:
 		return 0
 	var span: int = max_count - min_count
-	var count_roll: int = int((roll_seed / 97) % (span + 1)) if span > 0 else 0
+	var count_roll: int = 0
+	if span > 0:
+		var count_unit: float = float(_next_combat_random_unit(simulation, salt_base + 97).get("roll", 0.0))
+		count_roll = clampi(int(floor(count_unit * float(span + 1))), 0, span)
 	return max(0, min_count + count_roll)
 
 

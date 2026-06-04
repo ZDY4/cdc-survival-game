@@ -24,7 +24,7 @@
 - runtime snapshot 派生状态字段第一版已补：`runtime_command_queue`、`pending_progression_step`、`current_control_actor`、`recent_interaction_target`、`recent_failure`、`recent_event_feedback`、`target_preview`、`target_selection_state`、`ui_menu_state_refs` 会从 turn/pending/interaction/events 等当前权威状态生成，并由 `Interaction` / `Save` smoke 覆盖；待补旧版更完整命令历史、目标预览视觉参数、跨 UI modal stack 引用和 debug-only 诊断字段。
 - 已迁移基础 turn / movement / interaction 事件 payload：`turn_started`、`turn_ended`、`movement_queued`、`movement_step`、`interaction_queued` 已带 actor、AP、round、目标或 path 等基础字段，并由 `Movement` / `Interaction` smoke 覆盖。
 - 部分迁移运行时日志：玩家命令提交、完成、拒绝和 UI 反馈已新增 `player_command_submitted`、`player_command_completed`、`player_command_rejected`、`ui_feedback` 事件，payload 带 actor id、action kind、目标/物品/技能等精简命令信息和 reason，并由 `Interaction` smoke 覆盖；AP 消耗和 pending 写入/取消/恢复已新增 `ap_spent`、`movement_queued`、`interaction_queued`、`movement_cancelled`、`interaction_resumed` 第一版，并由 `Movement` / `Interaction` smoke 覆盖；容器转移、交易确认、交易关闭和任务推进已新增 `container_transferred`、`trade_confirmed`、`trade_closed`、`quest_advanced` 第一版，并由 `ContainerUI` / `TradeUI` / `Quest` smoke 覆盖；战斗、制作和技能已由 `attack_resolved`、`actor_defeated`、`corpse_created`、`combat_started`、`combat_ended`、`recipe_crafted`、`skill_used` 覆盖，并由 `Combat` / `Crafting` / `SkillsUI` smoke 断言；地图切换和进入、对话开始/位置切换关闭、容器打开/位置切换关闭、交互成功目标显示名与 option kind 已带基础 payload，并由 `Interaction` / `Overworld` smoke 覆盖。后续仍需补齐完整失败反馈、禁用原因和 UI 刷新 payload。
-- 待补 deterministic seed 策略：战斗暴击、掉落数量、AI 选择、技能随机效果、任务随机奖励需要可复现种子和存档 roundtrip。
+- deterministic seed 策略第一版已迁移：命中、暴击和随机尸体 loot 掉落共用 `combat_rng_seed` / `combat_rng_counter`，snapshot / save 后继续可复现；固定必掉 loot 不额外消耗 RNG，避免改变静态掉落表现；已由 `Combat` / `Save` smoke 覆盖。待补 AI 随机选择、技能随机效果、任务随机奖励和跨系统 seed 命名策略。
 - 已迁移 snapshot schema version 和旧快照迁移第一版：snapshot 统一输出 `schema_version`，loader 对缺版本旧快照补齐 active location / entry、combat、pending、corpse、interaction menu 和 hotbar 默认字段，并发出 `snapshot_migrated` 事件；`Save` smoke 已覆盖当前版本 roundtrip 和缺字段旧快照兼容。
 
 ### 1.2 命令入口
@@ -150,7 +150,7 @@
 ### 6.3 击杀和尸体
 
 - 击杀和尸体容器第一版已迁移：击杀会移除 actor、发放 XP、推进 kill 任务、创建可打开尸体容器，并把尸体同步到 `corpse_containers`、`container_sessions` 和 map interaction target；已由 `Combat` smoke 覆盖。
-- 尸体掉落合并和元数据第一版已迁移：尸体会合并目标背包、装备、已装填弹匣余弹和 character `combat.loot` 掉落；尸体 snapshot / container 会保留 display name、source actor id / definition id / kind、defeated by actor id、map id、grid、appearance / model asset、equipped slots 和 money；尸体 / 容器金钱已作为可拿取经济条目接入 `Simulation.take_money_from_container()`、`take_container_money` 命令、container snapshot / UI 行、存档 roundtrip 和事件反馈；已由 `Combat` / `ContainerUI` / `Save` smoke 覆盖。待补单件耐久状态、掉落随机公式与 Rust 完整复核、尸体容器 UI 展示装备来源。
+- 尸体掉落合并和元数据第一版已迁移：尸体会合并目标背包、装备、已装填弹匣余弹和 character `combat.loot` 掉落；随机 loot chance / count 会使用可存档的 combat RNG，固定必掉 loot 保持静态结果；尸体 snapshot / container 会保留 display name、source actor id / definition id / kind、defeated by actor id、map id、grid、appearance / model asset、equipped slots 和 money；尸体 / 容器金钱已作为可拿取经济条目接入 `Simulation.take_money_from_container()`、`take_container_money` 命令、container snapshot / UI 行、存档 roundtrip 和事件反馈；已由 `Combat` / `ContainerUI` / `Save` smoke 覆盖。待补单件耐久状态、掉落随机公式与 Rust 完整复核、尸体容器 UI 展示装备来源。
 - 尸体模型和 hover / open container 表现第一版已迁移：击杀后世界快照会把当前地图尸体注入动态 `Corpse_*` 节点，优先复用被击败 actor 的 glTF 模型并保留 pickable body；鼠标悬浮会显示 hover 光标，选择尸体会展示“打开...”主交互并能打开容器面板；已由 `PlayerInteraction` smoke 覆盖。待补专用尸体姿态/动画、美术模型、装备来源 UI 标记和尸体清理表现。
 - 待补击杀后 AI / combat state / quest / relationship / event feedback 的顺序一致性。
 

@@ -40,6 +40,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_combat_visibility_decay(errors, simulation, registry, player, player_grid)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
 	_expect_deterministic_combat_rng(errors, simulation, registry, player, player_grid)
+	_expect_deterministic_loot_rng(errors, registry, player_grid)
 	_expect_combat_attribute_damage_modifiers(errors, simulation, registry, player, player_grid)
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
 	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
@@ -266,6 +267,89 @@ func _single_seeded_crit_roll(registry: RefCounted, player_grid: Dictionary, see
 	target.combat_attributes["evasion"] = 0.0
 	var result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": target_id, "topology": _topology(simulation, registry)})
 	return float(result.get("crit_roll", -1.0))
+
+
+func _expect_deterministic_loot_rng(errors: Array[String], registry: RefCounted, player_grid: Dictionary) -> void:
+	var first: Dictionary = _single_seeded_loot_drop(registry, player_grid, 191)
+	var repeated: Dictionary = _single_seeded_loot_drop(registry, player_grid, 191)
+	if int(first.get("loot_count", -1)) != int(repeated.get("loot_count", -2)):
+		errors.append("same combat RNG seed should reproduce random loot count")
+	if int(first.get("counter", -1)) != int(repeated.get("counter", -2)):
+		errors.append("same combat RNG seed should reproduce loot RNG counter")
+	var different: Dictionary = _single_seeded_loot_drop(registry, player_grid, 192)
+	if int(first.get("loot_count", -1)) == int(different.get("loot_count", -1)) and float(first.get("roll", -1.0)) == float(different.get("roll", -1.0)):
+		errors.append("different combat RNG seed should alter random loot roll or count")
+
+	var saved_snapshot: Dictionary = _loot_snapshot_after_kill(registry, player_grid, 233, "loot_rng_saved_target")
+	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	restored.load_snapshot(saved_snapshot)
+	var restored_counter_before: int = int(restored.snapshot().get("combat_state", {}).get("combat_rng_counter", -1))
+	_kill_random_loot_actor(restored, registry, player_grid, "loot_rng_after_restore_target")
+	var restored_counter_after: int = int(restored.snapshot().get("combat_state", {}).get("combat_rng_counter", -1))
+	if restored_counter_after <= restored_counter_before:
+		errors.append("random loot should advance combat RNG counter after snapshot load")
+
+
+func _single_seeded_loot_drop(registry: RefCounted, player_grid: Dictionary, seed: int) -> Dictionary:
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	simulation.set_combat_rng_seed(seed)
+	var target_id: int = _kill_random_loot_actor(simulation, registry, player_grid, "loot_rng_target")
+	var corpse: Dictionary = _corpse_by_source_actor(simulation.snapshot(), target_id)
+	return {
+		"loot_count": _entry_count(_array_or_empty(corpse.get("inventory", [])), "1009"),
+		"counter": int(simulation.snapshot().get("combat_state", {}).get("combat_rng_counter", -1)),
+		"roll": _loot_roll_probe(seed, target_id, "1009", 0),
+	}
+
+
+func _loot_snapshot_after_kill(registry: RefCounted, player_grid: Dictionary, seed: int, definition_id: String) -> Dictionary:
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	simulation.set_combat_rng_seed(seed)
+	_kill_random_loot_actor(simulation, registry, player_grid, definition_id)
+	return simulation.snapshot()
+
+
+func _kill_random_loot_actor(simulation: RefCounted, registry: RefCounted, player_grid: Dictionary, definition_id: String) -> int:
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.equipment["main_hand"] = "1003"
+	player.combat_attributes["accuracy"] = 100.0
+	player.ap = 20.0
+	var target_id: int = _register_test_actor(simulation, definition_id, "hostile", {
+		"x": int(player_grid.get("x", 0)) + 3,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 5.0)
+	var target: RefCounted = simulation.actor_registry.get_actor(target_id)
+	target.map_id = str(simulation.active_map_id)
+	target.inventory = {}
+	target.equipment = {}
+	target.weapon_ammo = {}
+	var random_loot_table: Array[Dictionary] = [{
+		"item_id": "1009",
+		"chance": 1.0,
+		"min": 1,
+		"max": 3,
+	}]
+	target.loot_table = random_loot_table
+	target.combat_attributes["evasion"] = 0.0
+	target.defense = 0.0
+	var result: Dictionary = simulation.perform_attack(player.actor_id, target_id, _topology(simulation, registry), {
+		"range": 4,
+		"weapon_profile": {"damage": 99.0, "crit_chance": 0.0, "accuracy": 100.0},
+	})
+	if not bool(result.get("defeated", false)):
+		push_error("random loot smoke kill failed: %s" % result.get("reason", "unknown"))
+	return target_id
+
+
+func _loot_roll_probe(seed: int, actor_id: int, item_id: String, loot_index: int) -> float:
+	var salt_base: int = abs(actor_id * 65537 + abs(hash(item_id)) + loot_index * 4099)
+	var mixed: int = max(1, abs(seed)) % 2147483647
+	mixed = (mixed + 1103515245) % 2147483647
+	mixed = (mixed + (abs(salt_base) % 2147483647) * 1664525) % 2147483647
+	mixed = (mixed + 1013904223) % 2147483647
+	return float(mixed % 1000000) / 1000000.0
 
 
 func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
