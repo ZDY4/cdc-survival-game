@@ -39,6 +39,7 @@ func _run() -> void:
 	await process_frame
 	_assert_continue_enabled_with_save(errors, continue_menu)
 	_assert_slot_metadata(errors, continue_menu)
+	_assert_new_game_overwrite_confirmation(errors, continue_menu)
 	await _select_slot(errors, continue_menu, SECOND_SAVE_SLOT)
 	_assert_continue_request(errors, continue_menu)
 	continue_menu.queue_free()
@@ -148,6 +149,24 @@ func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
 	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
 	if line == null or not line.text.contains("地图 survivor_outpost_01") or not line.text.contains("Lv"):
 		errors.append("slot summary line should expose map and level metadata")
+
+
+func _assert_new_game_overwrite_confirmation(errors: Array[String], menu: Control) -> void:
+	ProjectSettings.set_setting("cdc/startup_request", {})
+	var result: Dictionary = _dictionary_or_empty(menu.call("new_game"))
+	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
+	if str(result.get("reason", "")) != "overwrite_confirmation_required":
+		errors.append("new game should require overwrite confirmation when slot exists: %s" % result)
+	if not bool(snapshot.get("overwrite_confirm_visible", false)):
+		errors.append("overwrite confirmation should be visible after new game on occupied slot: %s" % snapshot)
+	var request_before_confirm: Dictionary = _dictionary_or_empty(ProjectSettings.get_setting("cdc/startup_request", {}))
+	if not request_before_confirm.is_empty():
+		errors.append("new game overwrite confirmation should not set startup request before confirm: %s" % request_before_confirm)
+	menu.call("confirm_new_game_overwrite")
+	var request_after_confirm: Dictionary = _dictionary_or_empty(ProjectSettings.get_setting("cdc/startup_request", {}))
+	if str(request_after_confirm.get("mode", "")) != "new_game" or not bool(request_after_confirm.get("overwrite_slot", false)):
+		errors.append("confirming overwrite should set new game startup request: %s" % request_after_confirm)
+	ProjectSettings.set_setting("cdc/startup_request", {})
 
 
 func _select_slot(errors: Array[String], menu: Control, slot_id: String) -> void:

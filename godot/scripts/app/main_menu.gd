@@ -10,6 +10,7 @@ var save_root := DEFAULT_SAVE_ROOT
 var last_action: Dictionary = {}
 
 var _slot_option: OptionButton
+var _overwrite_dialog: ConfirmationDialog
 var _delete_button: Button
 var _continue_button: Button
 var _slot_summary_label: Label
@@ -27,7 +28,15 @@ func _ready() -> void:
 
 
 func new_game() -> Dictionary:
+	if _selected_slot_exists():
+		return _open_overwrite_confirm()
 	return _start_game({"mode": "new_game", "save_slot": save_slot})
+
+
+func confirm_new_game_overwrite() -> Dictionary:
+	if _overwrite_dialog != null:
+		_overwrite_dialog.hide()
+	return _start_game({"mode": "new_game", "save_slot": save_slot, "overwrite_slot": true})
 
 
 func continue_game() -> Dictionary:
@@ -77,6 +86,7 @@ func main_menu_snapshot() -> Dictionary:
 		"continue_available": bool(load_result.get("ok", false)),
 		"continue_reason": "" if bool(load_result.get("ok", false)) else str(load_result.get("reason", "")),
 		"selected_slot_summary": _selected_slot_summary(),
+		"overwrite_confirm_visible": _overwrite_dialog != null and _overwrite_dialog.visible,
 		"last_action": last_action.duplicate(true),
 	}
 
@@ -143,6 +153,13 @@ func _build_layout() -> void:
 	_delete_button = _menu_button("DeleteSlotButton", "删除存档", delete_selected_slot)
 	box.add_child(_delete_button)
 	box.add_child(_menu_button("QuitButton", "退出", quit_game))
+
+	_overwrite_dialog = ConfirmationDialog.new()
+	_overwrite_dialog.name = "OverwriteConfirmDialog"
+	_overwrite_dialog.title = "覆盖存档"
+	_overwrite_dialog.dialog_text = "当前槽位已有存档。开始新游戏会覆盖该槽位。"
+	_overwrite_dialog.confirmed.connect(confirm_new_game_overwrite)
+	add_child(_overwrite_dialog)
 
 	_feedback_label = Label.new()
 	_feedback_label.name = "FeedbackLine"
@@ -246,6 +263,24 @@ func _selected_slot_summary() -> Dictionary:
 		if str(summary.get("slot_id", "")) == save_slot:
 			return summary.duplicate(true)
 	return {}
+
+
+func _selected_slot_exists() -> bool:
+	return not _selected_slot_summary().is_empty()
+
+
+func _open_overwrite_confirm() -> Dictionary:
+	last_action = {
+		"ok": false,
+		"action": "new_game",
+		"reason": "overwrite_confirmation_required",
+		"save_slot": save_slot,
+	}
+	if _overwrite_dialog != null:
+		_overwrite_dialog.dialog_text = "槽位 %s 已有存档。开始新游戏会覆盖该槽位。" % save_slot
+		_overwrite_dialog.popup_centered()
+	_set_feedback("请确认是否覆盖当前存档")
+	return last_action.duplicate(true)
 
 
 func _set_feedback(text: String) -> void:
