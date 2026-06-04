@@ -369,6 +369,21 @@ func execute_interaction(actor_id: int, target: Dictionary, option_id: String = 
 	return _interaction_executor.execute(self, actor_id, target, option_id)
 
 
+func preview_skill_target(actor_id: int, skill_id: String, skill_library: Dictionary, target: Dictionary = {}, topology: Dictionary = {}) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	var skill: Dictionary = _skill_data(skill_id, skill_library)
+	if skill.is_empty():
+		return {"success": false, "reason": "unknown_skill", "skill_id": skill_id}
+	var activation: Dictionary = _dictionary_or_empty(skill.get("activation", {}))
+	var command := {
+		"target": target.duplicate(true),
+		"topology": topology.duplicate(true),
+	}
+	return _skill_target_preview(actor, skill_id, activation, command)
+
+
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, topology: Dictionary = {}) -> Dictionary:
 	var actor_id: int = _player_actor_id()
 	var had_pending: bool = not pending_movement.is_empty() or not pending_interaction.is_empty()
@@ -1018,6 +1033,9 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 	var mode: String = str(activation.get("mode", "passive"))
 	if mode == "passive":
 		return {"success": false, "reason": "skill_not_active", "skill_id": skill_id}
+	var target_preview: Dictionary = _skill_target_preview(actor, skill_id, activation, command)
+	if not bool(target_preview.get("success", false)):
+		return target_preview
 	if float(slot.get("cooldown_remaining", 0.0)) > 0.0:
 		return {
 			"success": false,
@@ -1049,7 +1067,10 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		"cooldown": cooldown,
 		"effect": _dictionary_or_empty(effect_result.get("effect", {})).duplicate(true),
 		"effect_removed": bool(effect_result.get("removed", false)),
-		"target": _dictionary_or_empty(command.get("target", {})).duplicate(true),
+		"target_preview": target_preview.duplicate(true),
+		"target": _dictionary_or_empty(target_preview.get("target", {})).duplicate(true),
+		"affected_actor_ids": _array_or_empty(target_preview.get("affected_actor_ids", [])).duplicate(true),
+		"affected_cells": _array_or_empty(target_preview.get("affected_cells", [])).duplicate(true),
 	})
 	return {
 		"success": true,
@@ -1062,6 +1083,10 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		"effect": _dictionary_or_empty(effect_result.get("effect", {})).duplicate(true),
 		"effect_removed": bool(effect_result.get("removed", false)),
 		"removed_effects": _array_or_empty(effect_result.get("removed_effects", [])).duplicate(true),
+		"target_preview": target_preview.duplicate(true),
+		"target": _dictionary_or_empty(target_preview.get("target", {})).duplicate(true),
+		"affected_actor_ids": _array_or_empty(target_preview.get("affected_actor_ids", [])).duplicate(true),
+		"affected_cells": _array_or_empty(target_preview.get("affected_cells", [])).duplicate(true),
 		"ap_remaining": actor.ap,
 	}
 
@@ -1110,6 +1135,324 @@ func _apply_skill_activation_effect(actor: RefCounted, skill_id: String, learned
 		"removed": false,
 		"removed_effects": removed_effects.duplicate(true),
 	}
+
+
+func _skill_target_preview(actor: RefCounted, skill_id: String, activation: Dictionary, command: Dictionary) -> Dictionary:
+	var targeting: Dictionary = _skill_targeting_definition(activation)
+	var target_kind: String = str(targeting.get("kind", targeting.get("target_kind", targeting.get("shape", "self"))))
+	match target_kind:
+		"self":
+			return _skill_self_target_preview(actor, skill_id, targeting)
+		"single", "actor", "single_actor":
+			return _skill_actor_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})))
+		"grid", "point":
+			return _skill_grid_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})))
+		"radius", "circle":
+			return _skill_radius_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), _dictionary_or_empty(command.get("topology", {})))
+		"line", "cone":
+			return {
+				"success": false,
+				"reason": "skill_target_shape_not_implemented",
+				"skill_id": skill_id,
+				"target_shape": target_kind,
+			}
+	return {
+		"success": false,
+		"reason": "skill_target_shape_unknown",
+		"skill_id": skill_id,
+		"target_shape": target_kind,
+	}
+
+
+func _skill_targeting_definition(activation: Dictionary) -> Dictionary:
+	var targeting: Dictionary = _dictionary_or_empty(activation.get("targeting", {})).duplicate(true)
+	if targeting.is_empty():
+		targeting = _dictionary_or_empty(activation.get("target", {})).duplicate(true)
+	if targeting.is_empty():
+		targeting = {
+			"kind": "self",
+			"policy": "self",
+		}
+	if not targeting.has("policy"):
+		targeting["policy"] = _default_skill_target_policy(str(targeting.get("kind", targeting.get("shape", "self"))))
+	return targeting
+
+
+func _default_skill_target_policy(target_kind: String) -> String:
+	match target_kind:
+		"self":
+			return "self"
+		"single", "actor", "single_actor":
+			return "any_actor"
+		"grid", "point", "radius", "circle", "line", "cone":
+			return "any_grid"
+	return "any"
+
+
+func _skill_self_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary) -> Dictionary:
+	return {
+		"success": true,
+		"skill_id": skill_id,
+		"target_shape": "self",
+		"target_policy": "self",
+		"target": {
+			"target_type": "actor",
+			"actor_id": actor.actor_id,
+			"grid_position": actor.grid_position.to_dictionary(),
+		},
+		"center": actor.grid_position.to_dictionary(),
+		"affected_actor_ids": [actor.actor_id],
+		"affected_cells": [actor.grid_position.to_dictionary()],
+		"friendly_fire": false,
+	}
+
+
+func _skill_actor_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary, target: Dictionary) -> Dictionary:
+	var target_actor_id: int = int(target.get("actor_id", target.get("target_actor_id", 0)))
+	var target_actor: RefCounted = actor_registry.get_actor(target_actor_id)
+	if target_actor == null:
+		return {"success": false, "reason": "skill_target_actor_missing", "skill_id": skill_id, "target_actor_id": target_actor_id}
+	var policy_result: Dictionary = _skill_actor_policy_check(actor, target_actor, str(targeting.get("policy", "any_actor")))
+	if not bool(policy_result.get("success", false)):
+		policy_result["skill_id"] = skill_id
+		policy_result["target_actor_id"] = target_actor_id
+		return policy_result
+	var range_result: Dictionary = _skill_range_check(actor, target_actor.grid_position.to_dictionary(), targeting)
+	if not bool(range_result.get("success", false)):
+		range_result["skill_id"] = skill_id
+		range_result["target_actor_id"] = target_actor_id
+		return range_result
+	return {
+		"success": true,
+		"skill_id": skill_id,
+		"target_shape": "single",
+		"target_policy": str(targeting.get("policy", "any_actor")),
+		"target": {
+			"target_type": "actor",
+			"actor_id": target_actor_id,
+			"grid_position": target_actor.grid_position.to_dictionary(),
+		},
+		"center": target_actor.grid_position.to_dictionary(),
+		"affected_actor_ids": [target_actor_id],
+		"affected_cells": [target_actor.grid_position.to_dictionary()],
+		"friendly_fire": not _can_attack(actor, target_actor) and actor.actor_id != target_actor.actor_id,
+		"range": int(range_result.get("range", 0)),
+		"distance": int(range_result.get("distance", 0)),
+	}
+
+
+func _skill_grid_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary, target: Dictionary) -> Dictionary:
+	var grid: Dictionary = _skill_target_grid_from(target)
+	if grid.is_empty():
+		return {"success": false, "reason": "skill_target_grid_missing", "skill_id": skill_id}
+	var policy_result: Dictionary = _skill_grid_policy_check(grid, str(targeting.get("policy", "any_grid")))
+	if not bool(policy_result.get("success", false)):
+		policy_result["skill_id"] = skill_id
+		return policy_result
+	var range_result: Dictionary = _skill_range_check(actor, grid, targeting)
+	if not bool(range_result.get("success", false)):
+		range_result["skill_id"] = skill_id
+		return range_result
+	return {
+		"success": true,
+		"skill_id": skill_id,
+		"target_shape": "grid",
+		"target_policy": str(targeting.get("policy", "any_grid")),
+		"target": {
+			"target_type": "grid",
+			"grid": grid.duplicate(true),
+		},
+		"center": grid.duplicate(true),
+		"affected_actor_ids": _actor_ids_at_cells([grid]),
+		"affected_cells": [grid.duplicate(true)],
+		"friendly_fire": _cells_include_non_hostile(actor, [grid]),
+		"range": int(range_result.get("range", 0)),
+		"distance": int(range_result.get("distance", 0)),
+	}
+
+
+func _skill_radius_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary, target: Dictionary, topology: Dictionary) -> Dictionary:
+	var center: Dictionary = _skill_target_grid_from(target)
+	if center.is_empty():
+		center = actor.grid_position.to_dictionary()
+	var policy_result: Dictionary = _skill_grid_policy_check(center, str(targeting.get("policy", "any_grid")))
+	if not bool(policy_result.get("success", false)):
+		policy_result["skill_id"] = skill_id
+		return policy_result
+	var range_result: Dictionary = _skill_range_check(actor, center, targeting)
+	if not bool(range_result.get("success", false)):
+		range_result["skill_id"] = skill_id
+		return range_result
+	var radius: int = max(0, int(targeting.get("radius", targeting.get("aoe_radius", 0))))
+	var cells: Array[Dictionary] = _skill_radius_cells(center, radius, topology)
+	var affected_actor_ids: Array[int] = _actor_ids_at_cells(cells)
+	var filtered_actor_ids: Array[int] = _filter_actor_ids_by_policy(actor, affected_actor_ids, str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))))
+	return {
+		"success": true,
+		"skill_id": skill_id,
+		"target_shape": "radius",
+		"target_policy": str(targeting.get("policy", "any_grid")),
+		"affected_policy": str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))),
+		"target": {
+			"target_type": "grid",
+			"grid": center.duplicate(true),
+		},
+		"center": center.duplicate(true),
+		"radius": radius,
+		"affected_actor_ids": filtered_actor_ids,
+		"affected_cells": cells,
+		"friendly_fire": _actor_ids_include_non_hostile(actor, filtered_actor_ids),
+		"range": int(range_result.get("range", 0)),
+		"distance": int(range_result.get("distance", 0)),
+	}
+
+
+func _skill_range_check(actor: RefCounted, target_grid: Dictionary, targeting: Dictionary) -> Dictionary:
+	if actor.grid_position.y != int(target_grid.get("y", actor.grid_position.y)):
+		return {"success": false, "reason": "skill_target_invalid_level", "target_grid": target_grid.duplicate(true)}
+	var distance: int = _grid_distance(actor.grid_position, GridCoord.from_dictionary(target_grid))
+	var max_range: int = int(targeting.get("range", targeting.get("max_range", -1)))
+	if max_range >= 0 and distance > max_range:
+		return {
+			"success": false,
+			"reason": "skill_target_out_of_range",
+			"range": max_range,
+			"distance": distance,
+			"target_grid": target_grid.duplicate(true),
+		}
+	return {"success": true, "range": max_range, "distance": distance}
+
+
+func _skill_actor_policy_check(actor: RefCounted, target_actor: RefCounted, policy: String) -> Dictionary:
+	match policy:
+		"self":
+			if actor.actor_id != target_actor.actor_id:
+				return {"success": false, "reason": "skill_target_not_self", "target_policy": policy}
+		"hostile_only", "hostile":
+			if not _can_attack(actor, target_actor):
+				return {"success": false, "reason": "skill_target_not_hostile", "target_policy": policy}
+		"ally_only", "ally":
+			if actor.actor_id != target_actor.actor_id and _can_attack(actor, target_actor):
+				return {"success": false, "reason": "skill_target_not_ally", "target_policy": policy}
+		"any_actor", "any":
+			pass
+		_:
+			return {"success": false, "reason": "skill_target_policy_unknown", "target_policy": policy}
+	return {"success": true}
+
+
+func _can_attack(actor: RefCounted, target_actor: RefCounted) -> bool:
+	if actor == null or target_actor == null:
+		return false
+	if actor.actor_id == target_actor.actor_id:
+		return false
+	if actor.side == "hostile":
+		return target_actor.side != "hostile"
+	if target_actor.side == "hostile":
+		return actor.side != "hostile"
+	return false
+
+
+func _skill_grid_policy_check(grid: Dictionary, policy: String) -> Dictionary:
+	match policy:
+		"empty_grid":
+			if not _actor_ids_at_cells([grid]).is_empty():
+				return {"success": false, "reason": "skill_target_grid_occupied", "target_policy": policy, "target_grid": grid.duplicate(true)}
+		"any_grid", "any", "any_actor", "hostile_only", "ally_only":
+			pass
+		_:
+			return {"success": false, "reason": "skill_target_policy_unknown", "target_policy": policy}
+	return {"success": true}
+
+
+func _skill_target_grid_from(target: Dictionary) -> Dictionary:
+	var grid: Dictionary = _dictionary_or_empty(target.get("grid", target.get("target_position", target.get("grid_position", {}))))
+	if not grid.is_empty():
+		return {
+			"x": int(grid.get("x", 0)),
+			"y": int(grid.get("y", 0)),
+			"z": int(grid.get("z", 0)),
+		}
+	var actor_id: int = int(target.get("actor_id", target.get("target_actor_id", 0)))
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor != null:
+		return actor.grid_position.to_dictionary()
+	return {}
+
+
+func _skill_radius_cells(center: Dictionary, radius: int, topology: Dictionary) -> Array[Dictionary]:
+	var center_coord: RefCounted = GridCoord.from_dictionary(center)
+	if radius <= 0:
+		return [center_coord.to_dictionary()]
+	var bounds: Dictionary = _dictionary_or_empty(topology.get("bounds", {}))
+	var min_x: int = max(int(bounds.get("min_x", center_coord.x - radius)), center_coord.x - radius)
+	var max_x: int = min(int(bounds.get("max_x", center_coord.x + radius)), center_coord.x + radius)
+	var min_z: int = max(int(bounds.get("min_z", center_coord.z - radius)), center_coord.z - radius)
+	var max_z: int = min(int(bounds.get("max_z", center_coord.z + radius)), center_coord.z + radius)
+	var cells: Array[Dictionary] = []
+	for x in range(min_x, max_x + 1):
+		for z in range(min_z, max_z + 1):
+			var distance: int = abs(x - center_coord.x) + abs(z - center_coord.z)
+			if distance <= radius:
+				cells.append({"x": x, "y": center_coord.y, "z": z})
+	return _sorted_grid_cells(cells)
+
+
+func _actor_ids_at_cells(cells: Array) -> Array[int]:
+	var wanted: Dictionary = {}
+	for cell in cells:
+		wanted[GridCoord.from_dictionary(_dictionary_or_empty(cell)).key()] = true
+	var output: Array[int] = []
+	for actor in actor_registry.actors():
+		if actor.hp <= 0.0:
+			continue
+		if wanted.has(actor.grid_position.key()):
+			output.append(actor.actor_id)
+	output.sort()
+	return output
+
+
+func _filter_actor_ids_by_policy(actor: RefCounted, actor_ids: Array[int], policy: String) -> Array[int]:
+	var output: Array[int] = []
+	for actor_id in actor_ids:
+		var target_actor: RefCounted = actor_registry.get_actor(actor_id)
+		if target_actor == null:
+			continue
+		if bool(_skill_actor_policy_check(actor, target_actor, policy).get("success", false)):
+			output.append(actor_id)
+	output.sort()
+	return output
+
+
+func _cells_include_non_hostile(actor: RefCounted, cells: Array) -> bool:
+	return _actor_ids_include_non_hostile(actor, _actor_ids_at_cells(cells))
+
+
+func _actor_ids_include_non_hostile(actor: RefCounted, actor_ids: Array[int]) -> bool:
+	for actor_id in actor_ids:
+		var target_actor: RefCounted = actor_registry.get_actor(actor_id)
+		if target_actor != null and actor.actor_id != target_actor.actor_id and not _can_attack(actor, target_actor):
+			return true
+	return false
+
+
+func _sorted_grid_cells(cells: Array) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for cell in cells:
+		var cell_data: Dictionary = _dictionary_or_empty(cell)
+		output.append({
+			"x": int(cell_data.get("x", 0)),
+			"y": int(cell_data.get("y", 0)),
+			"z": int(cell_data.get("z", 0)),
+		})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a.get("y", 0)) != int(b.get("y", 0)):
+			return int(a.get("y", 0)) < int(b.get("y", 0))
+		if int(a.get("x", 0)) != int(b.get("x", 0)):
+			return int(a.get("x", 0)) < int(b.get("x", 0))
+		return int(a.get("z", 0)) < int(b.get("z", 0))
+	)
+	return output
 
 
 func _refresh_passive_skill_effect(actor: RefCounted, skill_id: String, learned_level: int, skill: Dictionary) -> Dictionary:

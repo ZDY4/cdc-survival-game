@@ -156,9 +156,9 @@
 
 ### 6.4 技能目标和 AOE
 
-- 待补 single target、grid target、self target、cone、radius AOE、line AOE 等目标策略。
+- 技能目标解析第一版已迁移：`Simulation.preview_skill_target()` 和 `use_skill` 共用 target preview，默认兼容旧 self buff / toggle；已支持 self、single actor、grid、radius AOE 的目标解析、range / level 校验、affected cells / actor ids、friendly fire 标记，并在目标非法时不消耗 AP；已由 `Combat` smoke 覆盖。待补 cone、line 等形状。
 - 待补 AOE 中心点 LOS、中心到命中格遮挡、遮挡格排除、友军伤害策略。
-- 待补 typed targeting policy：hostile only、ally only、any actor、empty grid、object target。
+- typed targeting policy 第一版已迁移：支持 self、hostile_only、ally_only、any_actor、any_grid、empty_grid，以及 radius 的 affected_policy 过滤；已由 `Combat` smoke 覆盖。待补 object target、容器/门/机关目标和脚本化目标类型。
 - 待补目标预览 UI：范围格、命中 actor 列表、友军警告、AP / cooldown / resource cost。
 
 ## 7. NPC、AI、阵营和生活模拟

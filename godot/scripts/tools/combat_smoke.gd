@@ -85,6 +85,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("clearing hostiles should emit combat_ended")
 	if bool(snapshot.get("combat_state", {}).get("active", true)):
 		errors.append("combat should exit after hostiles are gone")
+	_expect_skill_targeting_preview(errors, simulation, registry, player, player_grid)
 	return errors
 
 
@@ -586,6 +587,108 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 	simulation.exit_combat_if_clear("spatial_failure_smoke_cleanup")
 
 
+func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	var original_progression: Dictionary = player.progression.duplicate(true)
+	var original_active_effects: Array[Dictionary] = player.active_effects.duplicate(true)
+	var original_ap: float = player.ap
+	player.progression["learned_skills"] = {"adrenaline_rush": 1}
+	var empty_effects: Array[Dictionary] = []
+	player.active_effects = empty_effects
+	player.ap = 20.0
+	var topology: Dictionary = _topology(simulation, registry)
+	var hostile_id: int = _register_test_actor(simulation, "skill_target_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 10.0)
+	var friendly_id: int = _register_test_actor(simulation, "skill_target_friendly", "friendly", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 10.0)
+	var single_skill: Dictionary = _targeted_skill_library(registry, {
+		"kind": "single",
+		"policy": "hostile_only",
+		"range": 4,
+	})
+	var single_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", single_skill, {"actor_id": hostile_id}, topology)
+	if not bool(single_preview.get("success", false)):
+		errors.append("single hostile skill target preview should succeed: %s" % single_preview.get("reason", "unknown"))
+	elif _array_or_empty(single_preview.get("affected_actor_ids", [])).size() != 1 or int(_array_or_empty(single_preview.get("affected_actor_ids", []))[0]) != hostile_id:
+		errors.append("single hostile skill target preview should include hostile actor")
+	var friendly_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", single_skill, {"actor_id": friendly_id}, topology)
+	if friendly_preview.get("reason", "") != "skill_target_not_hostile":
+		errors.append("hostile-only skill should reject friendly target, got %s" % friendly_preview.get("reason", ""))
+	var ap_before_invalid: float = player.ap
+	var invalid_use: Dictionary = simulation.submit_player_command({
+		"kind": "use_skill",
+		"skill_id": "adrenaline_rush",
+		"skill_library": single_skill,
+		"target": {"actor_id": friendly_id},
+		"topology": topology,
+	})
+	if bool(invalid_use.get("success", false)) or invalid_use.get("reason", "") != "skill_target_not_hostile":
+		errors.append("invalid targeted skill use should fail before spending AP")
+	if absf(player.ap - ap_before_invalid) > 0.001:
+		errors.append("invalid targeted skill use should not spend AP")
+	var use_result: Dictionary = simulation.submit_player_command({
+		"kind": "use_skill",
+		"skill_id": "adrenaline_rush",
+		"skill_library": single_skill,
+		"target": {"actor_id": hostile_id},
+		"topology": topology,
+	})
+	if not bool(use_result.get("success", false)):
+		errors.append("valid targeted skill use should succeed: %s" % use_result.get("reason", "unknown"))
+	elif int(_array_or_empty(use_result.get("affected_actor_ids", []))[0]) != hostile_id:
+		errors.append("valid targeted skill use should expose affected actor id")
+	var skill_event_payload: Dictionary = _last_event_payload(simulation.snapshot(), "skill_used")
+	if int(_array_or_empty(skill_event_payload.get("affected_actor_ids", []))[0]) != hostile_id:
+		errors.append("skill_used event should include affected_actor_ids from target preview")
+	var reset_effects: Array[Dictionary] = []
+	player.active_effects = reset_effects
+	player.ap = 20.0
+	var radius_skill: Dictionary = _targeted_skill_library(registry, {
+		"kind": "radius",
+		"policy": "any_grid",
+		"affected_policy": "hostile_only",
+		"range": 4,
+		"radius": 1,
+	})
+	var radius_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", radius_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 1,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, topology)
+	if not bool(radius_preview.get("success", false)):
+		errors.append("radius skill target preview should succeed: %s" % radius_preview.get("reason", "unknown"))
+	elif not _array_or_empty(radius_preview.get("affected_actor_ids", [])).has(hostile_id):
+		errors.append("radius hostile-only preview should include nearby hostile")
+	elif _array_or_empty(radius_preview.get("affected_actor_ids", [])).has(friendly_id):
+		errors.append("radius hostile-only preview should filter friendly actors")
+	if _array_or_empty(radius_preview.get("affected_cells", [])).size() != 5:
+		errors.append("radius 1 preview should include center plus four cardinal cells")
+	var out_of_range: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", radius_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 20,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, topology)
+	if out_of_range.get("reason", "") != "skill_target_out_of_range":
+		errors.append("out-of-range skill preview should report skill_target_out_of_range, got %s" % out_of_range.get("reason", ""))
+	for actor_id in [hostile_id, friendly_id]:
+		if simulation.actor_registry.get_actor(actor_id) != null:
+			simulation.actor_registry.unregister_actor(actor_id)
+	player.progression = original_progression
+	player.active_effects = original_active_effects
+	player.ap = original_ap
+	_restore_player_turn(simulation, player)
+
+
 func _expect_corpse_inventory_and_metadata(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
 	player.grid_position = GridCoord.from_dictionary(player_grid)
 	var original_equipment: Dictionary = player.equipment.duplicate(true)
@@ -808,6 +911,18 @@ func _register_test_actor(simulation: RefCounted, definition_id: String, side: S
 	})
 
 
+func _targeted_skill_library(registry: RefCounted, targeting: Dictionary) -> Dictionary:
+	var library: Dictionary = registry.get_library("skills").duplicate(true)
+	var record: Dictionary = _dictionary_or_empty(library.get("adrenaline_rush", {})).duplicate(true)
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {})).duplicate(true)
+	var activation: Dictionary = _dictionary_or_empty(data.get("activation", {})).duplicate(true)
+	activation["targeting"] = targeting.duplicate(true)
+	data["activation"] = activation
+	record["data"] = data
+	library["adrenaline_rush"] = record
+	return library
+
+
 func _force_combat_values(simulation: RefCounted, actor_id: int) -> void:
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	var target: RefCounted = simulation.actor_registry.get_actor(actor_id)
@@ -907,6 +1022,15 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
+	var events: Array = snapshot.get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
