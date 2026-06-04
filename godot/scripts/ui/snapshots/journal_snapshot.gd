@@ -38,13 +38,19 @@ func _quest_view(state: Dictionary) -> Dictionary:
 	var current: int = int(completed.get(objective_id, 0)) if not objective_id.is_empty() else 0
 	var manual_turn_in: bool = bool(objective.get("manual_turn_in", false))
 	var turn_in_ready: bool = manual_turn_in and current >= target
+	var objective_snapshot: Dictionary = _objective_snapshot(objective, current, target)
 	return {
 		"quest_id": quest_id,
 		"title": str(quest_data.get("title", quest_id)),
 		"description": str(quest_data.get("description", "")),
 		"objective_text": str(objective.get("description", quest_data.get("description", ""))),
+		"current_node_id": str(state.get("current_node_id", objective_id)),
+		"objective": objective_snapshot,
+		"objective_id": objective_id,
+		"objective_type": str(objective_snapshot.get("type", "")),
 		"progress_current": current,
 		"progress_target": target,
+		"progress_percent": float(current) / float(max(1, target)),
 		"manual_turn_in": manual_turn_in,
 		"turn_in_ready": turn_in_ready,
 		"status_text": _status_text(manual_turn_in, turn_in_ready, current, target),
@@ -81,6 +87,32 @@ func _reward_snapshot(quest_data: Dictionary) -> Dictionary:
 		"items": items,
 		"experience": int(rewards.get("experience", 0)),
 		"skill_points": int(rewards.get("skill_points", 0)),
+	}
+
+
+func _objective_snapshot(objective: Dictionary, current: int, target: int) -> Dictionary:
+	var objective_type := str(objective.get("objective_type", ""))
+	var item_id: String = _normalize_content_id(objective.get("item_id", ""))
+	var enemy_type := str(objective.get("enemy_type", ""))
+	var requirement := ""
+	match objective_type:
+		"collect":
+			requirement = "%s x%d" % [_item_name(item_id), target] if not item_id.is_empty() else "收集 %d 件物品" % target
+		"kill":
+			requirement = "%s x%d" % [enemy_type if not enemy_type.is_empty() else "敌人", target]
+		_:
+			requirement = "完成目标 x%d" % target
+	return {
+		"id": str(objective.get("id", "")),
+		"type": objective_type,
+		"description": str(objective.get("description", "")),
+		"item_id": item_id,
+		"item_name": _item_name(item_id) if not item_id.is_empty() else "",
+		"enemy_type": enemy_type,
+		"current": current,
+		"target": target,
+		"manual_turn_in": bool(objective.get("manual_turn_in", false)),
+		"requirement_text": requirement,
 	}
 
 

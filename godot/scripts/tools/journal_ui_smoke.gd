@@ -37,6 +37,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("journal missing tutorial quest title")
 	if not _quest_text(game_root).contains("进度: 0/2"):
 		errors.append("journal missing initial objective progress")
+	if not _detail_text(game_root).contains("老王让你去据点外警戒区"):
+		errors.append("journal detail should show selected quest description")
+	if not _detail_text(game_root).contains("需求: 罐头食品 x2"):
+		errors.append("journal detail should show objective requirement")
+	var track_button: Button = _track_button(game_root)
+	if track_button == null or track_button.disabled:
+		errors.append("journal should expose enabled track button for selected quest")
+	else:
+		track_button.pressed.emit()
+		await process_frame
+		if not _quest_title_text(game_root, "tutorial_survive").begins_with("* "):
+			errors.append("tracking quest should mark quest title")
+		if _track_button(game_root) == null or str(_track_button(game_root).text) != "取消追踪":
+			errors.append("tracking selected quest should switch track button text")
+		_track_button(game_root).pressed.emit()
+		await process_frame
+		if _quest_title_text(game_root, "tutorial_survive").begins_with("* "):
+			errors.append("pressing track again should clear tracked marker")
 
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	player.inventory["1007"] = 1
@@ -55,6 +73,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_setup_manual_turn_in_quest(game_root)
 	if not _quest_text(game_root).contains("医院取药"):
 		errors.append("journal missing manual turn-in quest")
+	if not _press_quest_title(game_root, "find_medicine"):
+		errors.append("should select manual turn-in quest title")
+	if not _detail_text(game_root).contains("需要完成目标后手动交付"):
+		errors.append("manual quest detail should explain turn-in requirement")
 	if not _quest_text(game_root).contains("技能点 1"):
 		errors.append("journal missing manual quest skill point reward preview")
 	if _turn_in_button(game_root, "find_medicine") == null or not _turn_in_button(game_root, "find_medicine").disabled:
@@ -65,6 +87,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_journal_panel()
 	if not _quest_text(game_root).contains("可交付"):
 		errors.append("manual quest should show ready status after objective completion")
+	if not _detail_text(game_root).contains("交付: 可交付"):
+		errors.append("manual quest detail should show ready turn-in state")
 	if _turn_in_button(game_root, "find_medicine") == null or _turn_in_button(game_root, "find_medicine").disabled:
 		errors.append("manual turn-in button should be enabled after objective completion")
 	_turn_in_button(game_root, "find_medicine").pressed.emit()
@@ -100,7 +124,9 @@ func _quest_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
 	var quest_box: Node = game_root.journal_panel.get_node("JournalPanel/JournalLines/QuestLines")
 	for child in quest_box.get_children():
-		if child is Label:
+		if child is Button:
+			output.append((child as Button).text)
+		elif child is Label:
 			output.append((child as Label).text)
 		elif child is HBoxContainer:
 			var line: Label = child.get_node("Line")
@@ -117,6 +143,38 @@ func _turn_in_button(game_root: Node, quest_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node("TurnInButton") as Button
+
+
+func _track_button(game_root: Node) -> Button:
+	return game_root.journal_panel.find_child("TrackQuestButton", true, false) as Button
+
+
+func _detail_text(game_root: Node) -> String:
+	var title: Node = game_root.journal_panel.find_child("DetailTitleLine", true, false)
+	var body: Node = game_root.journal_panel.find_child("DetailBodyLine", true, false)
+	var parts: Array[String] = []
+	if title is Label:
+		parts.append((title as Label).text)
+	if body is Label:
+		parts.append((body as Label).text)
+	return "\n".join(parts)
+
+
+func _quest_title_text(game_root: Node, quest_id: String) -> String:
+	var button: Button = _quest_title_button(game_root, quest_id)
+	return "" if button == null else str(button.text)
+
+
+func _press_quest_title(game_root: Node, quest_id: String) -> bool:
+	var button: Button = _quest_title_button(game_root, quest_id)
+	if button == null:
+		return false
+	button.pressed.emit()
+	return true
+
+
+func _quest_title_button(game_root: Node, quest_id: String) -> Button:
+	return game_root.journal_panel.find_child("Quest_%s" % quest_id, true, false) as Button
 
 
 func _player_inventory_count(game_root: Node, item_id: String) -> int:
