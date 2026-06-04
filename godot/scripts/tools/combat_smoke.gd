@@ -730,6 +730,70 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 	}, aoe_los_topology)
 	if not _array_or_empty(ignore_los_radius_preview.get("affected_actor_ids", [])).has(blocked_aoe_actor_id):
 		errors.append("radius AOE with respect_los=false should include blocked actor")
+	var line_hostile_id: int = _register_test_actor(simulation, "skill_line_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 3,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 10.0)
+	var line_friendly_id: int = _register_test_actor(simulation, "skill_line_friendly", "friendly", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 10.0)
+	var line_skill: Dictionary = _targeted_skill_library(registry, {
+		"kind": "line",
+		"policy": "any_grid",
+		"affected_policy": "hostile_only",
+		"range": 4,
+		"length": 4,
+	})
+	var line_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", line_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 4,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, topology)
+	if not bool(line_preview.get("success", false)):
+		errors.append("line skill target preview should succeed: %s" % line_preview.get("reason", "unknown"))
+	elif not _array_or_empty(line_preview.get("affected_actor_ids", [])).has(line_hostile_id):
+		errors.append("line hostile-only preview should include hostile on line")
+	elif _array_or_empty(line_preview.get("affected_actor_ids", [])).has(line_friendly_id):
+		errors.append("line hostile-only preview should filter friendly on line")
+	if _array_or_empty(line_preview.get("affected_cells", [])).size() != 4:
+		errors.append("line preview should include four cells after origin")
+	var line_blocked_topology: Dictionary = _spatial_test_topology(player_grid, {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	var blocked_line: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", line_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 4,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, line_blocked_topology)
+	if blocked_line.get("reason", "") != "skill_target_blocked_by_los":
+		errors.append("line skill blocked center LOS should report skill_target_blocked_by_los, got %s" % blocked_line.get("reason", ""))
+	var line_ignore_los_skill: Dictionary = _targeted_skill_library(registry, {
+		"kind": "line",
+		"policy": "any_grid",
+		"affected_policy": "hostile_only",
+		"range": 4,
+		"length": 4,
+		"requires_los": false,
+		"respect_los": false,
+	})
+	var line_ignore_los_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", line_ignore_los_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 4,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, line_blocked_topology)
+	if not _array_or_empty(line_ignore_los_preview.get("affected_actor_ids", [])).has(line_hostile_id):
+		errors.append("line skill with LOS disabled should include hostile behind blocker")
 	var out_of_range: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", radius_skill, {
 		"grid": {
 			"x": int(player_grid.get("x", 0)) + 20,
@@ -739,7 +803,7 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 	}, topology)
 	if out_of_range.get("reason", "") != "skill_target_out_of_range":
 		errors.append("out-of-range skill preview should report skill_target_out_of_range, got %s" % out_of_range.get("reason", ""))
-	for actor_id in [hostile_id, friendly_id, blocked_aoe_actor_id]:
+	for actor_id in [hostile_id, friendly_id, blocked_aoe_actor_id, line_hostile_id, line_friendly_id]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.progression = original_progression

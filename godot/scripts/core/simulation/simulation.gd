@@ -1159,7 +1159,9 @@ func _skill_target_preview(actor: RefCounted, skill_id: String, activation: Dict
 			return _skill_grid_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), _dictionary_or_empty(command.get("topology", {})))
 		"radius", "circle":
 			return _skill_radius_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), _dictionary_or_empty(command.get("topology", {})))
-		"line", "cone":
+		"line":
+			return _skill_line_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), _dictionary_or_empty(command.get("topology", {})))
+		"cone":
 			return {
 				"success": false,
 				"reason": "skill_target_shape_not_implemented",
@@ -1334,6 +1336,51 @@ func _skill_radius_target_preview(actor: RefCounted, skill_id: String, targeting
 	}
 
 
+func _skill_line_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary, target: Dictionary, topology: Dictionary) -> Dictionary:
+	var target_grid: Dictionary = _skill_target_grid_from(target)
+	if target_grid.is_empty():
+		return {"success": false, "reason": "skill_target_grid_missing", "skill_id": skill_id}
+	var policy_result: Dictionary = _skill_grid_policy_check(target_grid, str(targeting.get("policy", "any_grid")))
+	if not bool(policy_result.get("success", false)):
+		policy_result["skill_id"] = skill_id
+		return policy_result
+	var range_result: Dictionary = _skill_range_check(actor, target_grid, targeting)
+	if not bool(range_result.get("success", false)):
+		range_result["skill_id"] = skill_id
+		return range_result
+	var los_result: Dictionary = _skill_los_check(actor, target_grid, targeting, topology)
+	if not bool(los_result.get("success", false)):
+		los_result["skill_id"] = skill_id
+		return los_result
+	var max_length: int = int(targeting.get("length", targeting.get("max_length", range_result.get("range", -1))))
+	if max_length < 0:
+		max_length = int(range_result.get("distance", 0))
+	var cells: Array[Dictionary] = _skill_line_cells(actor.grid_position.to_dictionary(), target_grid, max_length, topology, targeting)
+	var affected_actor_ids: Array[int] = _actor_ids_at_cells(cells)
+	var filtered_actor_ids: Array[int] = _filter_actor_ids_by_policy(actor, affected_actor_ids, str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))))
+	return {
+		"success": true,
+		"skill_id": skill_id,
+		"target_shape": "line",
+		"target_policy": str(targeting.get("policy", "any_grid")),
+		"affected_policy": str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))),
+		"target": {
+			"target_type": "grid",
+			"grid": target_grid.duplicate(true),
+		},
+		"origin": actor.grid_position.to_dictionary(),
+		"center": target_grid.duplicate(true),
+		"length": max_length,
+		"affected_actor_ids": filtered_actor_ids,
+		"affected_cells": cells,
+		"friendly_fire": _actor_ids_include_non_hostile(actor, filtered_actor_ids),
+		"range": int(range_result.get("range", 0)),
+		"distance": int(range_result.get("distance", 0)),
+		"line_of_sight": bool(los_result.get("line_of_sight", true)),
+		"respect_los": _skill_respects_los(targeting),
+	}
+
+
 func _skill_range_check(actor: RefCounted, target_grid: Dictionary, targeting: Dictionary) -> Dictionary:
 	if actor.grid_position.y != int(target_grid.get("y", actor.grid_position.y)):
 		return {"success": false, "reason": "skill_target_invalid_level", "target_grid": target_grid.duplicate(true)}
@@ -1475,6 +1522,46 @@ func _skill_radius_cell_visible_from_center(center_coord: RefCounted, cell: Dict
 	if center_coord.y != cell_coord.y:
 		return false
 	return _vision_rules.has_line_of_sight(center_coord.to_dictionary(), cell_coord.to_dictionary(), topology)
+
+
+func _skill_line_cells(origin: Dictionary, target: Dictionary, max_length: int, topology: Dictionary, targeting: Dictionary) -> Array[Dictionary]:
+	var origin_coord: RefCounted = GridCoord.from_dictionary(origin)
+	var target_coord: RefCounted = GridCoord.from_dictionary(target)
+	if origin_coord.y != target_coord.y:
+		return []
+	var output: Array[Dictionary] = []
+	var x: int = origin_coord.x
+	var z: int = origin_coord.z
+	var dx: int = abs(target_coord.x - x)
+	var dz: int = abs(target_coord.z - z)
+	var sx: int = 1 if x < target_coord.x else -1
+	var sz: int = 1 if z < target_coord.z else -1
+	var err: int = dx - dz
+	while not (x == target_coord.x and z == target_coord.z):
+		var e2: int = err * 2
+		if e2 > -dz:
+			err -= dz
+			x += sx
+		if e2 < dx:
+			err += dx
+			z += sz
+		var cell := {"x": x, "y": origin_coord.y, "z": z}
+		var distance: int = _grid_distance(origin_coord, GridCoord.from_dictionary(cell))
+		if max_length >= 0 and distance > max_length:
+			break
+		if _skill_respects_los(targeting) and not _skill_line_cell_visible_from_origin(origin_coord, cell, topology):
+			break
+		output.append(cell)
+	return _sorted_grid_cells(output)
+
+
+func _skill_line_cell_visible_from_origin(origin_coord: RefCounted, cell: Dictionary, topology: Dictionary) -> bool:
+	if topology.is_empty():
+		return true
+	var cell_coord: RefCounted = GridCoord.from_dictionary(cell)
+	if origin_coord.y != cell_coord.y:
+		return false
+	return _vision_rules.has_line_of_sight(origin_coord.to_dictionary(), cell_coord.to_dictionary(), topology)
 
 
 func _actor_ids_at_cells(cells: Array) -> Array[int]:
