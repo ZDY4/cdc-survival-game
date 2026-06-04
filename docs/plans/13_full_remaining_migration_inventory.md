@@ -298,7 +298,7 @@
 
 ### 13.1 主菜单和设置
 
-- main menu runtime 第一版已迁移：`run/main_scene` 进入 `boot.tscn` / `main_menu.tscn`，菜单态不实例化 `GameRoot`、不加载 map/actors；新游戏会写入启动请求并进入 `game_root.tscn`；继续游戏会读取默认存档 slot 的 runtime snapshot 并交给 `GameRoot` 恢复；退出按钮调用 Godot quit；已纳入 `MainMenu` smoke。待补存档槽列表、删除、覆盖确认、存档元信息和更完整视觉表现。
+- main menu runtime 第一版已迁移：`run/main_scene` 进入 `boot.tscn` / `main_menu.tscn`，菜单态不实例化 `GameRoot`、不加载 map/actors；新游戏会写入启动请求并进入 `game_root.tscn`；继续游戏会从存档槽列表中读取所选 runtime snapshot 并交给 `GameRoot` 恢复；存档 envelope 会写入 active map/location、round、actor/event count、player level 和 updated_at 元信息；菜单可显示、选择和删除存档槽；退出按钮调用 Godot quit；已纳入 `MainMenu` smoke。待补覆盖确认、存档详细元信息和更完整视觉表现。
 - settings panel 控件第一版已迁移：主音量、音乐、音效、窗口模式、分辨率、VSync、UI scale 和按键绑定方案循环会更新设置状态、摘要文本和 blocker 状态；设置会保存到 `user://settings.json` 并在新设置面板实例加载，主音量会应用到 `Master` audio bus，窗口模式/分辨率/VSync 会在非 headless 运行时应用到 `DisplayServer`，已纳入 `UIToggle` smoke；待补 Music/SFX bus 项目配置、真实 UI scale 应用和 keybinding remap。
 - 待补设置默认值复核、设置文件版本/迁移、恢复默认和 Godot project/window/audio bus 的完整平台差异处理。
 
@@ -353,7 +353,7 @@
 
 ## 16. 存档、加载和运行入口
 
-- 待补主菜单继续游戏、存档槽列表、删除、覆盖确认、存档元信息。
+- 主菜单继续游戏、存档槽列表、删除和基础存档元信息第一版已迁移；待补覆盖确认、存档详细元信息、存档槽命名和坏档恢复策略。
 - 待补保存所有新增状态：UI 相关不一定持久，但 runtime 的 active map、actors、combat、turn、pending、corpse、containers、shops、quests、skills、hotbar、vision、world flags 已有 roundtrip；actor active skill effects 已纳入 `Save` smoke roundtrip；relationships 仍待补。
 - 待补地图切换后的保存/读取一致性，特别是 active container、consumed targets、corpse containers、unlocked locations。
 - 待补运行入口错误提示：内容加载失败、地图缺失、资产缺失、Godot 版本不对、存档 schema 不兼容。

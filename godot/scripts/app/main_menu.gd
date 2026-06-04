@@ -9,8 +9,12 @@ var save_slot := DEFAULT_SAVE_SLOT
 var save_root := DEFAULT_SAVE_ROOT
 var last_action: Dictionary = {}
 
+var _slot_option: OptionButton
+var _delete_button: Button
 var _continue_button: Button
+var _slot_summary_label: Label
 var _feedback_label: Label
+var _slot_summaries: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -19,7 +23,7 @@ func _ready() -> void:
 	save_slot = str(ProjectSettings.get_setting("cdc/main_menu_save_slot", DEFAULT_SAVE_SLOT))
 	save_root = str(ProjectSettings.get_setting("cdc/save_root", DEFAULT_SAVE_ROOT))
 	_build_layout()
-	_refresh_continue_state()
+	_refresh_save_slots()
 
 
 func new_game() -> Dictionary:
@@ -36,7 +40,7 @@ func continue_game() -> Dictionary:
 			"save_slot": save_slot,
 		}
 		_set_feedback("没有可继续的存档")
-		_refresh_continue_state()
+		_refresh_save_slots()
 		return last_action.duplicate(true)
 	return _start_game({
 		"mode": "continue",
@@ -51,14 +55,28 @@ func quit_game() -> Dictionary:
 	return last_action.duplicate(true)
 
 
+func delete_selected_slot() -> Dictionary:
+	var deleted := SaveService.new(save_root).delete_snapshot(save_slot)
+	last_action = {
+		"ok": deleted,
+		"action": "delete_slot",
+		"save_slot": save_slot,
+	}
+	_set_feedback("已删除存档 %s" % save_slot if deleted else "删除存档失败")
+	_refresh_save_slots()
+	return last_action.duplicate(true)
+
+
 func main_menu_snapshot() -> Dictionary:
 	var service := SaveService.new(save_root)
 	var load_result: Dictionary = service.load_snapshot(save_slot)
 	return {
 		"save_slot": save_slot,
 		"save_root": save_root,
+		"slots": _slot_summaries.duplicate(true),
 		"continue_available": bool(load_result.get("ok", false)),
 		"continue_reason": "" if bool(load_result.get("ok", false)) else str(load_result.get("reason", "")),
+		"selected_slot_summary": _selected_slot_summary(),
 		"last_action": last_action.duplicate(true),
 	}
 
@@ -113,6 +131,17 @@ func _build_layout() -> void:
 	box.add_child(_menu_button("NewGameButton", "新游戏", new_game))
 	_continue_button = _menu_button("ContinueButton", "继续游戏", continue_game)
 	box.add_child(_continue_button)
+	_slot_option = OptionButton.new()
+	_slot_option.name = "SaveSlotOption"
+	_slot_option.focus_mode = Control.FOCUS_NONE
+	_slot_option.item_selected.connect(_select_save_slot)
+	box.add_child(_slot_option)
+	_slot_summary_label = Label.new()
+	_slot_summary_label.name = "SaveSlotSummaryLine"
+	_slot_summary_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_slot_summary_label)
+	_delete_button = _menu_button("DeleteSlotButton", "删除存档", delete_selected_slot)
+	box.add_child(_delete_button)
 	box.add_child(_menu_button("QuitButton", "退出", quit_game))
 
 	_feedback_label = Label.new()
@@ -132,6 +161,25 @@ func _menu_button(node_name: String, label: String, callback: Callable) -> Butto
 	return button
 
 
+func _refresh_save_slots() -> void:
+	var service := SaveService.new(save_root)
+	_slot_summaries = service.list_slots()
+	if _slot_summaries.is_empty():
+		save_slot = str(ProjectSettings.get_setting("cdc/main_menu_save_slot", DEFAULT_SAVE_SLOT))
+	else:
+		var has_current := false
+		for summary in _slot_summaries:
+			if str(summary.get("slot_id", "")) == save_slot:
+				has_current = true
+				break
+		if not has_current:
+			save_slot = str(_slot_summaries[0].get("slot_id", DEFAULT_SAVE_SLOT))
+	ProjectSettings.set_setting("cdc/main_menu_save_slot", save_slot)
+	_refresh_slot_option()
+	_refresh_continue_state()
+	_refresh_slot_summary()
+
+
 func _refresh_continue_state() -> void:
 	if _continue_button == null:
 		return
@@ -139,6 +187,65 @@ func _refresh_continue_state() -> void:
 	var available := bool(snapshot.get("continue_available", false))
 	_continue_button.disabled = not available
 	_continue_button.tooltip_text = "加载 %s" % save_slot if available else "未找到可继续的存档"
+	if _delete_button != null:
+		_delete_button.disabled = not available
+		_delete_button.tooltip_text = "删除 %s" % save_slot if available else "没有可删除的存档"
+
+
+func _refresh_slot_option() -> void:
+	if _slot_option == null:
+		return
+	_slot_option.clear()
+	if _slot_summaries.is_empty():
+		_slot_option.add_item("无存档")
+		_slot_option.set_item_metadata(0, "")
+		_slot_option.disabled = true
+		return
+	_slot_option.disabled = false
+	var selected_index := 0
+	for i in range(_slot_summaries.size()):
+		var summary := _slot_summaries[i]
+		var slot_id := str(summary.get("slot_id", ""))
+		_slot_option.add_item("%s | %s" % [slot_id, str(summary.get("active_map_id", ""))])
+		_slot_option.set_item_metadata(i, slot_id)
+		if slot_id == save_slot:
+			selected_index = i
+	_slot_option.select(selected_index)
+
+
+func _refresh_slot_summary() -> void:
+	if _slot_summary_label == null:
+		return
+	var summary := _selected_slot_summary()
+	if summary.is_empty():
+		_slot_summary_label.text = "没有可继续的存档"
+		return
+	_slot_summary_label.text = "地图 %s | 地点 %s | 回合 %d | Lv%d | %s" % [
+		str(summary.get("active_map_id", "")),
+		str(summary.get("active_location_id", "")),
+		int(summary.get("round", 0)),
+		int(summary.get("player_level", 1)),
+		str(summary.get("updated_at", "")),
+	]
+
+
+func _select_save_slot(index: int) -> void:
+	if _slot_option == null or index < 0 or index >= _slot_option.get_item_count():
+		return
+	var selected := str(_slot_option.get_item_metadata(index))
+	if selected.is_empty():
+		return
+	save_slot = selected
+	ProjectSettings.set_setting("cdc/main_menu_save_slot", save_slot)
+	_refresh_continue_state()
+	_refresh_slot_summary()
+
+
+func _selected_slot_summary() -> Dictionary:
+	for summary in _slot_summaries:
+		if str(summary.get("slot_id", "")) == save_slot:
+			return summary.duplicate(true)
+	return {}
 
 
 func _set_feedback(text: String) -> void:

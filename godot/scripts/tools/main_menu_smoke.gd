@@ -8,6 +8,7 @@ const SaveService = preload("res://scripts/app/save_service.gd")
 
 const SAVE_ROOT := "user://main_menu_smoke_saves"
 const SAVE_SLOT := "continue_slot"
+const SECOND_SAVE_SLOT := "older_slot"
 
 
 func _init() -> void:
@@ -31,11 +32,14 @@ func _run() -> void:
 	menu.queue_free()
 	await process_frame
 
-	_write_continue_save(errors)
+	_write_continue_save(errors, SECOND_SAVE_SLOT, 2)
+	_write_continue_save(errors, SAVE_SLOT, 1)
 	var continue_menu: Control = MAIN_MENU_SCENE.instantiate()
 	get_root().add_child(continue_menu)
 	await process_frame
 	_assert_continue_enabled_with_save(errors, continue_menu)
+	_assert_slot_metadata(errors, continue_menu)
+	await _select_slot(errors, continue_menu, SECOND_SAVE_SLOT)
 	_assert_continue_request(errors, continue_menu)
 	continue_menu.queue_free()
 	await process_frame
@@ -43,7 +47,17 @@ func _run() -> void:
 	var game_root: Node = GAME_ROOT_SCENE.instantiate()
 	get_root().add_child(game_root)
 	await process_frame
-	_assert_game_root_loaded_continue_snapshot(errors, game_root)
+	_assert_game_root_loaded_continue_snapshot(errors, game_root, 26)
+	game_root.queue_free()
+	await process_frame
+
+	var delete_menu: Control = MAIN_MENU_SCENE.instantiate()
+	get_root().add_child(delete_menu)
+	await process_frame
+	await _select_slot(errors, delete_menu, SAVE_SLOT)
+	_assert_delete_slot(errors, delete_menu, SAVE_SLOT)
+	delete_menu.queue_free()
+	await process_frame
 
 	_clear_smoke_save()
 	if not errors.is_empty():
@@ -55,7 +69,7 @@ func _run() -> void:
 	print(JSON.stringify({
 		"save_root": SAVE_ROOT,
 		"save_slot": SAVE_SLOT,
-		"active_map_id": game_root.simulation.snapshot().get("active_map_id", ""),
+		"active_map_id": "survivor_outpost_01",
 		"loaded_from_continue": true,
 	}, "\t"))
 	quit(0)
@@ -87,7 +101,7 @@ func _assert_new_game_request(errors: Array[String], menu: Control) -> void:
 	ProjectSettings.set_setting("cdc/startup_request", {})
 
 
-func _write_continue_save(errors: Array[String]) -> void:
+func _write_continue_save(errors: Array[String], slot_id: String, player_x_offset: int) -> void:
 	var registry: ContentRegistry = ContentRegistry.new()
 	var load_result: RefCounted = registry.load_all()
 	if load_result.has_errors():
@@ -97,10 +111,10 @@ func _write_continue_save(errors: Array[String]) -> void:
 	var simulation: RefCounted = runtime_result.get("simulation")
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	if player != null:
-		player.grid_position.x += 1
-	var saved := SaveService.new(SAVE_ROOT).save_snapshot(SAVE_SLOT, simulation.snapshot())
+		player.grid_position.x += player_x_offset
+	var saved := SaveService.new(SAVE_ROOT).save_snapshot(slot_id, simulation.snapshot())
 	if not saved:
-		errors.append("failed to write continue save for main menu smoke")
+		errors.append("failed to write %s save for main menu smoke" % slot_id)
 
 
 func _assert_continue_enabled_with_save(errors: Array[String], menu: Control) -> void:
@@ -110,6 +124,44 @@ func _assert_continue_enabled_with_save(errors: Array[String], menu: Control) ->
 	var button: Button = menu.find_child("ContinueButton", true, false) as Button
 	if button == null or button.disabled:
 		errors.append("continue button should be enabled when save exists")
+	var slot_option: OptionButton = menu.find_child("SaveSlotOption", true, false) as OptionButton
+	if slot_option == null or slot_option.disabled:
+		errors.append("save slot option should be enabled when saves exist")
+	var delete_button: Button = menu.find_child("DeleteSlotButton", true, false) as Button
+	if delete_button == null or delete_button.disabled:
+		errors.append("delete button should be enabled when save exists")
+
+
+func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
+	var slots: Array = _array_or_empty(snapshot.get("slots", []))
+	if slots.size() != 2:
+		errors.append("main menu should list two smoke save slots: %s" % snapshot)
+	for slot in slots:
+		var summary: Dictionary = _dictionary_or_empty(slot)
+		if str(summary.get("active_map_id", "")) != "survivor_outpost_01":
+			errors.append("slot summary should include active map: %s" % summary)
+		if int(summary.get("actor_count", 0)) <= 0 or int(summary.get("event_count", 0)) <= 0:
+			errors.append("slot summary should include actor/event counts: %s" % summary)
+		if str(summary.get("updated_at", "")).is_empty():
+			errors.append("slot summary should include updated_at: %s" % summary)
+	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
+	if line == null or not line.text.contains("地图 survivor_outpost_01") or not line.text.contains("Lv"):
+		errors.append("slot summary line should expose map and level metadata")
+
+
+func _select_slot(errors: Array[String], menu: Control, slot_id: String) -> void:
+	var slot_option: OptionButton = menu.find_child("SaveSlotOption", true, false) as OptionButton
+	if slot_option == null:
+		errors.append("save slot option missing")
+		return
+	for i in range(slot_option.get_item_count()):
+		if str(slot_option.get_item_metadata(i)) == slot_id:
+			slot_option.select(i)
+			slot_option.item_selected.emit(i)
+			await menu.get_tree().process_frame
+			return
+	errors.append("save slot option did not contain %s" % slot_id)
 
 
 func _assert_continue_request(errors: Array[String], menu: Control) -> void:
@@ -123,7 +175,7 @@ func _assert_continue_request(errors: Array[String], menu: Control) -> void:
 		errors.append("continue should pass a runtime snapshot to game root")
 
 
-func _assert_game_root_loaded_continue_snapshot(errors: Array[String], game_root: Node) -> void:
+func _assert_game_root_loaded_continue_snapshot(errors: Array[String], game_root: Node, expected_player_x: int) -> void:
 	if game_root.simulation == null:
 		errors.append("game root should create simulation from continue request")
 		return
@@ -131,18 +183,39 @@ func _assert_game_root_loaded_continue_snapshot(errors: Array[String], game_root
 	if player == null:
 		errors.append("continued simulation should contain player actor")
 		return
-	if int(player.grid_position.x) != 25:
-		errors.append("continued game should load saved player grid x=25, got %s" % player.grid_position.to_dictionary())
+	if int(player.grid_position.x) != expected_player_x:
+		errors.append("continued game should load saved player grid x=%d, got %s" % [expected_player_x, player.grid_position.to_dictionary()])
 	var request: Dictionary = _dictionary_or_empty(ProjectSettings.get_setting("cdc/startup_request", {}))
 	if not request.is_empty():
 		errors.append("game root should consume startup request after loading: %s" % request)
 
 
+func _assert_delete_slot(errors: Array[String], menu: Control, slot_id: String) -> void:
+	var result: Dictionary = _dictionary_or_empty(menu.call("delete_selected_slot"))
+	if not bool(result.get("ok", false)):
+		errors.append("delete selected slot should succeed: %s" % result)
+	var service := SaveService.new(SAVE_ROOT)
+	var load_result: Dictionary = service.load_snapshot(slot_id)
+	if bool(load_result.get("ok", false)):
+		errors.append("deleted slot should not remain loadable: %s" % load_result)
+	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
+	for slot in _array_or_empty(snapshot.get("slots", [])):
+		if str(_dictionary_or_empty(slot).get("slot_id", "")) == slot_id:
+			errors.append("deleted slot should not remain in menu slot list: %s" % snapshot)
+
+
 func _clear_smoke_save() -> void:
 	SaveService.new(SAVE_ROOT).delete_snapshot(SAVE_SLOT)
+	SaveService.new(SAVE_ROOT).delete_snapshot(SECOND_SAVE_SLOT)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
