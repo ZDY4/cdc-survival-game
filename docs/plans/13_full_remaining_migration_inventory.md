@@ -89,14 +89,14 @@
 
 - 待确认 Godot 网格数学与 Rust 完全等价：cell distance、对角移动、禁止穿角、同层限制、bounds、levels。
 - 待补 generated building stairs 跨层 pathfinding，楼梯端点、楼层切换、目标楼层显示。
-- 动态阻挡第一版：`door_states` 会随 world snapshot 应用到 topology，打开/关闭门会更新 movement / sight blocking；玩家移动路径和 hostile AI 追击路径遇到未锁关闭门会自动打开并发出 `door_auto_opened` / `door_toggled`；actor 占用阻挡其他 actor 但不阻挡自己、尸体/掉落/拾取物非阻挡已有基础路径。仍需补更完整门权限和跨系统诊断。
-- 路径失败 reason 第一版已迁移：目标静态阻挡返回 `goal_blocked` 并带 `blocker.kind=map_object`，目标被 actor 占据返回 `goal_occupied` 并带阻挡 actor id，越界返回 `goal_out_of_bounds` 并带 bounds，跨层返回 `level_mismatch` 并带起止楼层，不可达返回 `path_unreachable` 并带 visited cell count；已由 `Movement` smoke 覆盖。待补门权限、动态门阻挡、楼梯跨层和更完整 UI 文案映射。
+- 动态阻挡第一版：`door_states` 会随 world snapshot 应用到 topology，打开/关闭门会更新 movement / sight blocking；玩家移动路径和 hostile AI 追击路径遇到未锁关闭门会自动打开并发出 `door_auto_opened` / `door_toggled`；actor 占用阻挡其他 actor 但不阻挡自己、尸体/掉落/拾取物非阻挡已有基础路径。门权限已支持钥匙/工具第一版；仍需补更完整跨系统诊断。
+- 路径失败 reason 第一版已迁移：目标静态阻挡返回 `goal_blocked` 并带 `blocker.kind=map_object`，目标被 actor 占据返回 `goal_occupied` 并带阻挡 actor id，越界返回 `goal_out_of_bounds` 并带 bounds，跨层返回 `level_mismatch` 并带起止楼层，不可达返回 `path_unreachable` 并带 visited cell count；已由 `Movement` smoke 覆盖。待补动态门阻挡诊断、楼梯跨层和更完整 UI 文案映射。
 - 路径预览颜色、格子 marker、AP 分格和 pending 剩余路径第一版已迁移：hover 地面时会用同一 pathfinder 预览可达性、预计步数、AP cost / available / affordability、affordable_steps、pending_steps 和失败 reason，HUD 显示摘要，hover cursor 用绿色/红色区分可达/不可达，`MovePathPreviewMarkers` 会按 `preview_move.path` 生成每格 marker，当前 AP 内格子使用移动预览色，超出 AP 的格子使用 pending 色，并记录 reachable / reason / steps / grid / path_index / step_cost / within_current_ap / requires_pending；当 runtime snapshot 存在 `pending_movement` 时，`PendingMovementPathMarkers` 会持续显示剩余路线并在 pending 清除后自动清空；已由 `PlayerInteraction` / `Movement` smoke 覆盖。待补路径线 polish、更丰富多格路径着色和跨回合动画表现。
 
 ### 4.2 门和建筑
 
 - generated door runtime 第一版已迁移：地图对象可通过 `props.door` 生成 `door_objects`、默认关闭、未锁、阻挡 movement / sight，`Simulation.toggle_door()` 会写入 `door_states`，world snapshot 会按 door state 更新 movement / sight blocking，并由 `World` / `Interaction` / `Save` smoke 覆盖。待补将现有地图建筑门洞批量标注为真实 `props.door`。
-- 锁门占位第一版已迁移：locked 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；后续补钥匙、撬锁、开锁失败提示。
+- 锁门权限第一版已迁移：纯 `locked` 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；门 `props.door` / runtime `door_states` 支持 `required_item_ids` / `required_items` 和 `required_tool_ids` / `required_tools`，玩家背包或装备满足钥匙/工具后可打开锁门，缺失时返回 `door_key_missing` / `door_tool_missing`，HUD 有中文失败提示，权限字段随存档 roundtrip，并由 `Interaction` / `World` / `Door` / `Save` smoke 覆盖。待补钥匙/撬锁消耗、工具耐久、失败概率和更完整开锁表现。
 - 自动开门第一版已迁移：玩家移动路径和 hostile AI 追击路径遇到未锁关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`，已由 `Movement` / `AI` smoke 覆盖；待补 settlement / GOAP 路径自动开门、开合模型状态更新和声音占位。
 - 待补建筑 footprint 阻挡：复杂 footprint、多层 story、door opening、wall visual、floor visual 和路径阻挡一致。
 - 门 hover / fallback 开合表现第一版已迁移：world renderer 会把 `target_kind=door` 和 door 状态 metadata 写入 pickable map object，runtime hover 会合并 world interaction target、把 `door_toggle` 归类为 `door`，并用门专属 outline 颜色和 `door_is_open` / `door_locked` meta 表现；无真实门模型时会生成 `DoorStateVisual` fallback，关闭/打开/锁定状态有稳定 meta、颜色和打开旋转；已由 `PlayerInteraction` / `Scene` smoke 覆盖。待补真实门模型、碰撞体、交互提示 polish 和声音占位。

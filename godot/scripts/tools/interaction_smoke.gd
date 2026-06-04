@@ -664,6 +664,12 @@ func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
 	simulation.configure_map_interactions({
 		"door_interaction_smoke": _door_target("door_interaction_smoke", false, false, door_grid),
 		"locked_door_interaction_smoke": _door_target("locked_door_interaction_smoke", false, true, door_grid),
+		"keyed_door_interaction_smoke": _door_target("keyed_door_interaction_smoke", false, true, door_grid, {
+			"required_item_ids": ["1138"],
+		}),
+		"tool_door_interaction_smoke": _door_target("tool_door_interaction_smoke", false, true, door_grid, {
+			"required_tool_ids": ["1150"],
+		}),
 	})
 	var prompt: Dictionary = simulation.query_interaction_options(1, {
 		"target_type": "map_object",
@@ -701,6 +707,42 @@ func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
 	}, "door_toggle")
 	if bool(locked_result.get("success", false)) or str(locked_result.get("reason", "")) != "door_locked":
 		errors.append("locked door toggle should return door_locked")
+	var keyed_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "map_object",
+		"target_id": "keyed_door_interaction_smoke",
+	})
+	_expect_disabled_option(errors, keyed_prompt, "door_toggle", "door_key_missing", "keyed door prompt without key")
+	var keyed_result_missing: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "keyed_door_interaction_smoke",
+	}, "door_toggle")
+	if bool(keyed_result_missing.get("success", false)) or str(keyed_result_missing.get("reason", "")) != "door_key_missing":
+		errors.append("keyed locked door should require key")
+	player.inventory["1138"] = 1
+	var keyed_prompt_with_key: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "map_object",
+		"target_id": "keyed_door_interaction_smoke",
+	})
+	_expect_prompt_snapshot(errors, keyed_prompt_with_key, "door_toggle", "door_toggle", 1.0)
+	var keyed_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "keyed_door_interaction_smoke",
+	}, "door_toggle")
+	if not bool(keyed_result.get("success", false)) or not bool(keyed_result.get("is_open", false)):
+		errors.append("keyed locked door should open with key: %s" % keyed_result.get("reason", "unknown"))
+	var tool_result_missing: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "tool_door_interaction_smoke",
+	}, "door_toggle")
+	if bool(tool_result_missing.get("success", false)) or str(tool_result_missing.get("reason", "")) != "door_tool_missing":
+		errors.append("tool locked door should require tool")
+	player.inventory["1150"] = 1
+	var tool_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "tool_door_interaction_smoke",
+	}, "door_toggle")
+	if not bool(tool_result.get("success", false)) or not bool(tool_result.get("is_open", false)):
+		errors.append("tool locked door should open with tool: %s" % tool_result.get("reason", "unknown"))
 	return errors
 
 
@@ -751,7 +793,19 @@ func _expect_relationship_dialogue_rules(simulation: RefCounted, registry: RefCo
 	return errors
 
 
-func _door_target(target_id: String, is_open: bool, locked: bool, grid: Dictionary) -> Dictionary:
+func _door_target(target_id: String, is_open: bool, locked: bool, grid: Dictionary, extra_door: Dictionary = {}) -> Dictionary:
+	var door := {
+		"door_id": target_id,
+		"object_id": target_id,
+		"display_name": "测试门",
+		"is_open": is_open,
+		"locked": locked,
+		"blocks_movement": not is_open,
+		"blocks_sight": not is_open,
+		"blocks_sight_when_closed": true,
+	}
+	for key in extra_door.keys():
+		door[key] = extra_door[key]
 	return {
 		"target_id": target_id,
 		"target_type": "map_object",
@@ -759,16 +813,7 @@ func _door_target(target_id: String, is_open: bool, locked: bool, grid: Dictiona
 		"kind": "door",
 		"anchor": grid.duplicate(true),
 		"cells": [grid.duplicate(true)],
-		"door": {
-			"door_id": target_id,
-			"object_id": target_id,
-			"display_name": "测试门",
-			"is_open": is_open,
-			"locked": locked,
-			"blocks_movement": not is_open,
-			"blocks_sight": not is_open,
-			"blocks_sight_when_closed": true,
-		},
+		"door": door,
 	}
 
 

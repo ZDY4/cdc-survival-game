@@ -141,7 +141,7 @@ func _door_state_snapshots(door_states: Dictionary) -> Array[Dictionary]:
 	ids.sort()
 	for door_id in ids:
 		var state: Dictionary = _dictionary_or_empty(door_states[door_id])
-		output.append({
+		var snapshot := {
 			"door_id": str(state.get("door_id", door_id)),
 			"object_id": str(state.get("object_id", door_id)),
 			"display_name": str(state.get("display_name", door_id)),
@@ -150,7 +150,14 @@ func _door_state_snapshots(door_states: Dictionary) -> Array[Dictionary]:
 			"blocks_movement": bool(state.get("blocks_movement", not bool(state.get("is_open", false)))),
 			"blocks_sight": bool(state.get("blocks_sight", not bool(state.get("is_open", false)))),
 			"blocks_sight_when_closed": bool(state.get("blocks_sight_when_closed", true)),
-		})
+		}
+		_copy_optional_keys(snapshot, state, [
+			"required_item_ids",
+			"required_items",
+			"required_tool_ids",
+			"required_tools",
+		])
+		output.append(snapshot)
 	return output
 
 

@@ -125,7 +125,9 @@ func _validate_door_topology_and_runtime() -> Array[String]:
 			"props": {
 				"door": {
 					"display_name": "测试门",
-					"blocks_sight_when_closed": true
+					"blocks_sight_when_closed": true,
+					"required_item_ids": ["1138"],
+					"required_tool_ids": ["1150"]
 				}
 			}
 		}],
@@ -137,6 +139,11 @@ func _validate_door_topology_and_runtime() -> Array[String]:
 	var door_target: Dictionary = _dictionary_or_empty(_dictionary_or_empty(map_snapshot.get("interaction_targets", {})).get("door_smoke_closed", {}))
 	if str(door_target.get("kind", "")) != "door":
 		errors.append("door interaction target should use door kind")
+	var door_data: Dictionary = _dictionary_or_empty(door_target.get("door", {}))
+	if not _array_or_empty(door_data.get("required_item_ids", [])).has("1138"):
+		errors.append("door interaction target should preserve required item ids")
+	if not _array_or_empty(door_data.get("required_tool_ids", [])).has("1150"):
+		errors.append("door interaction target should preserve required tool ids")
 	if not _dictionary_or_empty(map_snapshot.get("blocking_cells", {})).has("1:0:1"):
 		errors.append("closed door should block movement by default")
 	if not _dictionary_or_empty(map_snapshot.get("sight_blocking_cells", {})).has("1:0:1"):
@@ -149,6 +156,9 @@ func _validate_door_topology_and_runtime() -> Array[String]:
 		"display_name": "玩家",
 		"grid_position": GridCoord.new(0, 0, 0),
 	})
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.inventory["1138"] = 1
+	player.inventory["1150"] = 1
 	simulation.configure_map_interactions(_dictionary_or_empty(map_snapshot.get("interaction_targets", {})))
 	var toggle_result: Dictionary = simulation.toggle_door(1, "door_smoke_closed")
 	if not bool(toggle_result.get("success", false)):

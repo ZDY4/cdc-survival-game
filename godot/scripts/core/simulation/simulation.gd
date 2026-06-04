@@ -170,12 +170,16 @@ func toggle_door(actor_id: int, door_id: String) -> Dictionary:
 	var door: Dictionary = _dictionary_or_empty(target.get("door", {}))
 	if door.is_empty():
 		return {"success": false, "reason": "target_not_door", "door_id": door_id}
-	if bool(door.get("locked", false)):
-		return {"success": false, "reason": "door_locked", "door_id": door_id}
+	var permission: Dictionary = _door_permission(actor, actor_id, door_id, door)
+	if not bool(permission.get("success", false)):
+		return permission
 
 	var current_state: Dictionary = _dictionary_or_empty(door_states.get(door_id, door))
 	var is_open := bool(current_state.get("is_open", door.get("is_open", false)))
 	var next_state: Dictionary = door.duplicate(true)
+	for key in ["required_item_ids", "required_items", "required_tool_ids", "required_tools"]:
+		if current_state.has(key):
+			next_state[key] = current_state.get(key)
 	next_state["is_open"] = not is_open
 	next_state["locked"] = bool(current_state.get("locked", door.get("locked", false)))
 	next_state["blocks_movement"] = not bool(next_state.get("is_open", false))
@@ -196,6 +200,109 @@ func toggle_door(actor_id: int, door_id: String) -> Dictionary:
 		"is_open": bool(next_state.get("is_open", false)),
 		"door": next_state.duplicate(true),
 	}
+
+
+func _door_permission(actor: RefCounted, actor_id: int, door_id: String, door: Dictionary) -> Dictionary:
+	var base := {
+		"success": true,
+		"actor_id": actor_id,
+		"door_id": door_id,
+	}
+	var required_item_ids: Array[String] = _required_item_ids(door)
+	var missing_item_ids: Array[String] = _missing_actor_items(actor, required_item_ids)
+	if not missing_item_ids.is_empty():
+		return _permission_failure(base, "door_key_missing", {
+			"item_id": missing_item_ids[0],
+			"missing_item_ids": missing_item_ids,
+			"required_item_ids": required_item_ids,
+		})
+	var required_tool_ids: Array[String] = _required_tool_ids(door)
+	var missing_tool_ids: Array[String] = _missing_actor_items(actor, required_tool_ids)
+	if not missing_tool_ids.is_empty():
+		return _permission_failure(base, "door_tool_missing", {
+			"item_id": missing_tool_ids[0],
+			"missing_tool_ids": missing_tool_ids,
+			"required_tool_ids": required_tool_ids,
+		})
+	var has_unlock_requirements: bool = not required_item_ids.is_empty() or not required_tool_ids.is_empty()
+	if bool(door.get("locked", false)) and not has_unlock_requirements:
+		return _permission_failure(base, "door_locked", {})
+	return base
+
+
+func _required_item_ids(value: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	_append_unique_normalized_item_id(output, value.get("required_item_ids", []))
+	_append_unique_normalized_item_id(output, value.get("required_items", []))
+	return output
+
+
+func _required_tool_ids(value: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	_append_unique_normalized_item_id(output, value.get("required_tool_ids", []))
+	_append_unique_normalized_item_id(output, value.get("required_tools", []))
+	return output
+
+
+func _missing_actor_items(actor: RefCounted, item_ids: Array[String]) -> Array[String]:
+	var missing: Array[String] = []
+	for item_id in item_ids:
+		if _actor_has_item(actor, item_id):
+			continue
+		missing.append(item_id)
+	return missing
+
+
+func _actor_has_item(actor: RefCounted, item_id: String) -> bool:
+	if actor == null or item_id.is_empty():
+		return false
+	if int(actor.inventory.get(item_id, 0)) > 0:
+		return true
+	for slot_id in actor.equipment.keys():
+		if _door_normalize_content_id(actor.equipment.get(slot_id, "")) == item_id:
+			return true
+	return false
+
+
+func _append_unique_normalized_item_id(output: Array[String], value: Variant) -> void:
+	if typeof(value) == TYPE_DICTIONARY:
+		_append_one_normalized_item_id(output, value)
+		return
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_one_normalized_item_id(output, entry)
+		return
+	_append_one_normalized_item_id(output, value)
+
+
+func _append_one_normalized_item_id(output: Array[String], value: Variant) -> void:
+	var raw_value: Variant = value
+	if typeof(value) == TYPE_DICTIONARY:
+		var data: Dictionary = _dictionary_or_empty(value)
+		raw_value = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var normalized_entry: String = _door_normalize_content_id(raw_value)
+	if normalized_entry.is_empty() or output.has(normalized_entry):
+		return
+	output.append(normalized_entry)
+
+
+func _door_normalize_content_id(value: Variant) -> String:
+	if typeof(value) == TYPE_FLOAT:
+		var float_value: float = value
+		if is_equal_approx(float_value, roundf(float_value)):
+			return str(int(float_value))
+	if typeof(value) == TYPE_INT:
+		return str(value)
+	return str(value).strip_edges()
+
+
+func _permission_failure(base: Dictionary, reason: String, extra: Dictionary) -> Dictionary:
+	var output: Dictionary = base.duplicate(true)
+	output["success"] = false
+	output["reason"] = reason
+	for key in extra.keys():
+		output[key] = extra[key]
+	return output
 
 
 func configure_quests(quests: Dictionary) -> void:

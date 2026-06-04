@@ -142,6 +142,8 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"blocks_movement": false,
 		"blocks_sight": false,
 		"blocks_sight_when_closed": true,
+		"required_item_ids": ["1138"],
+		"required_tool_ids": ["1150"],
 	}
 	simulation.set_actor_vision_radius(1, 4)
 	simulation.refresh_actor_vision(1, topology)
@@ -240,6 +242,11 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("shop blocked world flags did not roundtrip")
 	if int(restored.get("schema_version", 0)) != int(original.get("schema_version", 0)):
 		errors.append("snapshot schema_version did not restore")
+	var restored_door: Dictionary = _door_state(restored, "save_smoke_door")
+	if not _array_or_empty(restored_door.get("required_item_ids", [])).has("1138"):
+		errors.append("door required item ids did not roundtrip")
+	if not _array_or_empty(restored_door.get("required_tool_ids", [])).has("1150"):
+		errors.append("door required tool ids did not roundtrip")
 	var player_original: Dictionary = _player_actor(original)
 	var player_restored: Dictionary = _player_actor(restored)
 	if _inventory_count(player_restored, "1006") != _inventory_count(player_original, "1006"):
@@ -375,6 +382,14 @@ func _container_session(snapshot: Dictionary, container_id: String) -> Dictionar
 		var session: Dictionary = _dictionary_or_empty(entry)
 		if str(session.get("container_id", "")) == container_id:
 			return session
+	return {}
+
+
+func _door_state(snapshot: Dictionary, door_id: String) -> Dictionary:
+	for entry in snapshot.get("door_states", []):
+		var state: Dictionary = _dictionary_or_empty(entry)
+		if str(state.get("door_id", state.get("object_id", ""))) == door_id:
+			return state
 	return {}
 
 

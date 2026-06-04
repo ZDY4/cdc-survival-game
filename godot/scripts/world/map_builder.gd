@@ -231,7 +231,7 @@ func _door_summary(object_summary: Dictionary) -> Dictionary:
 	var is_open: bool = bool(door_props.get("is_open", door_props.get("open", false)))
 	var locked: bool = bool(door_props.get("locked", false))
 	var blocks_sight_when_closed: bool = bool(door_props.get("blocks_sight_when_closed", true))
-	return {
+	var door := {
 		"door_id": str(door_props.get("door_id", object_summary.get("object_id", ""))),
 		"object_id": str(object_summary.get("object_id", "")),
 		"display_name": str(door_props.get("display_name", object_summary.get("object_id", ""))),
@@ -243,6 +243,8 @@ func _door_summary(object_summary: Dictionary) -> Dictionary:
 		"blocks_sight": not is_open and blocks_sight_when_closed,
 		"blocks_sight_when_closed": blocks_sight_when_closed,
 	}
+	_copy_optional_door_fields(door, door_props)
+	return door
 
 
 func _copy_optional_container_fields(target: Dictionary, container_props: Dictionary) -> void:
@@ -259,6 +261,17 @@ func _copy_optional_container_fields(target: Dictionary, container_props: Dictio
 	]:
 		if container_props.has(key):
 			target[key] = container_props.get(key)
+
+
+func _copy_optional_door_fields(target: Dictionary, door_props: Dictionary) -> void:
+	for key in [
+		"required_item_ids",
+		"required_items",
+		"required_tool_ids",
+		"required_tools",
+	]:
+		if door_props.has(key):
+			target[key] = door_props.get(key)
 
 
 func _crafting_station_summary(object_summary: Dictionary) -> Dictionary:

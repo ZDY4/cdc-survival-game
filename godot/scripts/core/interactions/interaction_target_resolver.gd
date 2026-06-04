@@ -19,7 +19,7 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 		failed["target_grid"] = _dictionary_or_empty(visibility.get("target_grid", {}))
 		return failed
 
-	var candidate_options: Array = _candidate_options_for_target(target_data)
+	var candidate_options: Array = _candidate_options_for_target(actor, target_data)
 	var enabled_options: Array = []
 	var disabled_options: Array = []
 	for candidate in candidate_options:
@@ -152,54 +152,54 @@ func _target_grid(target_data: Dictionary) -> Dictionary:
 	return grid
 
 
-func _candidate_options_for_target(target_data: Dictionary) -> Array:
+func _candidate_options_for_target(actor: RefCounted, target_data: Dictionary) -> Array:
 	var kind: String = str(target_data.get("kind", ""))
 	match kind:
 		"pickup":
 			return [
-				_option_for_target(target_data),
+				_option_for_target(actor, target_data),
 				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
 				_disabled_option("talk", "talk", "对话", "target_not_actor"),
 				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
 			]
 		"talk":
 			return [
-				_option_for_target(target_data),
+				_option_for_target(actor, target_data),
 				_disabled_option("attack", "attack", "攻击", "target_not_hostile"),
 			]
 		"attack":
 			return [
-				_option_for_target(target_data),
+				_option_for_target(actor, target_data),
 				_disabled_option("talk", "talk", "对话", "target_hostile"),
 			]
 		"wait":
 			return [
-				_option_for_target(target_data),
+				_option_for_target(actor, target_data),
 				_disabled_option("talk", "talk", "对话", "self_target"),
 				_disabled_option("attack", "attack", "攻击", "self_target"),
 			]
 		"move":
 			return [
-				_option_for_target(target_data),
+				_option_for_target(actor, target_data),
 				_disabled_option("pickup", "pickup", "拾取", "target_empty"),
 				_disabled_option("open_container", "open_container", "打开容器", "target_empty"),
 			]
 		"enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor":
 			return [
-				_option_for_target(target_data),
+				_option_for_target(actor, target_data),
 				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
 				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
 			]
 		"container":
 			return [
-				_option_for_target(target_data),
+				_option_for_target(actor, target_data),
 				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
 				_disabled_option("talk", "talk", "对话", "target_not_actor"),
 				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
 			]
 		"door":
 			return [
-				_option_for_target(target_data),
+				_option_for_target(actor, target_data),
 				{
 					"id": "inspect",
 					"kind": "inspect",
@@ -213,7 +213,7 @@ func _candidate_options_for_target(target_data: Dictionary) -> Array:
 	]
 
 
-func _option_for_target(target_data: Dictionary) -> Dictionary:
+func _option_for_target(actor: RefCounted, target_data: Dictionary) -> Dictionary:
 	var kind: String = str(target_data.get("kind", ""))
 	match kind:
 		"pickup":
@@ -281,16 +281,33 @@ func _option_for_target(target_data: Dictionary) -> Dictionary:
 			if door_name.is_empty():
 				door_name = "门"
 			var is_open := bool(door.get("is_open", false))
+			var permission: Dictionary = _door_prompt_permission(actor, door)
+			var disabled_reason := str(permission.get("reason", ""))
 			return {
 				"id": "door_toggle",
 				"kind": "door_toggle",
 				"display_name": "关闭%s" % door_name if is_open else "打开%s" % door_name,
 				"target_id": target_data.get("target_id", ""),
 				"door_id": str(door.get("door_id", target_data.get("target_id", ""))),
-				"disabled": bool(door.get("locked", false)),
-				"disabled_reason": "door_locked" if bool(door.get("locked", false)) else "",
+				"disabled": not disabled_reason.is_empty(),
+				"disabled_reason": disabled_reason,
 			}
 	return {}
+
+
+func _door_prompt_permission(actor: RefCounted, door: Dictionary) -> Dictionary:
+	var required_item_ids: Array[String] = _required_item_ids(door)
+	var missing_item_ids: Array[String] = _missing_actor_items(actor, required_item_ids)
+	if not missing_item_ids.is_empty():
+		return {"success": false, "reason": "door_key_missing", "item_id": missing_item_ids[0]}
+	var required_tool_ids: Array[String] = _required_tool_ids(door)
+	var missing_tool_ids: Array[String] = _missing_actor_items(actor, required_tool_ids)
+	if not missing_tool_ids.is_empty():
+		return {"success": false, "reason": "door_tool_missing", "item_id": missing_tool_ids[0]}
+	var has_unlock_requirements: bool = not required_item_ids.is_empty() or not required_tool_ids.is_empty()
+	if bool(door.get("locked", false)) and not has_unlock_requirements:
+		return {"success": false, "reason": "door_locked"}
+	return {"success": true}
 
 
 func _enriched_option(option: Dictionary) -> Dictionary:
@@ -359,6 +376,72 @@ func _target_distance(actor: RefCounted, target_grid: Dictionary) -> int:
 	if actor.grid_position.y != int(target_grid.get("y", actor.grid_position.y)):
 		return 999999
 	return abs(actor.grid_position.x - int(target_grid.get("x", actor.grid_position.x))) + abs(actor.grid_position.z - int(target_grid.get("z", actor.grid_position.z)))
+
+
+func _required_item_ids(value: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	_append_unique_normalized_item_id(output, value.get("required_item_ids", []))
+	_append_unique_normalized_item_id(output, value.get("required_items", []))
+	return output
+
+
+func _required_tool_ids(value: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	_append_unique_normalized_item_id(output, value.get("required_tool_ids", []))
+	_append_unique_normalized_item_id(output, value.get("required_tools", []))
+	return output
+
+
+func _missing_actor_items(actor: RefCounted, item_ids: Array[String]) -> Array[String]:
+	var missing: Array[String] = []
+	for item_id in item_ids:
+		if _actor_has_item(actor, item_id):
+			continue
+		missing.append(item_id)
+	return missing
+
+
+func _actor_has_item(actor: RefCounted, item_id: String) -> bool:
+	if actor == null or item_id.is_empty():
+		return false
+	if int(actor.inventory.get(item_id, 0)) > 0:
+		return true
+	for slot_id in actor.equipment.keys():
+		if _normalize_content_id(actor.equipment.get(slot_id, "")) == item_id:
+			return true
+	return false
+
+
+func _append_unique_normalized_item_id(output: Array[String], value: Variant) -> void:
+	if typeof(value) == TYPE_DICTIONARY:
+		_append_one_normalized_item_id(output, value)
+		return
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_one_normalized_item_id(output, entry)
+		return
+	_append_one_normalized_item_id(output, value)
+
+
+func _append_one_normalized_item_id(output: Array[String], value: Variant) -> void:
+	var raw_value: Variant = value
+	if typeof(value) == TYPE_DICTIONARY:
+		var data: Dictionary = _dictionary_or_empty(value)
+		raw_value = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var normalized_entry: String = _normalize_content_id(raw_value)
+	if normalized_entry.is_empty() or output.has(normalized_entry):
+		return
+	output.append(normalized_entry)
+
+
+func _normalize_content_id(value: Variant) -> String:
+	if typeof(value) == TYPE_FLOAT:
+		var float_value: float = value
+		if is_equal_approx(float_value, roundf(float_value)):
+			return str(int(float_value))
+	if typeof(value) == TYPE_INT:
+		return str(value)
+	return str(value).strip_edges()
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

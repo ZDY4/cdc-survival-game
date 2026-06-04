@@ -101,7 +101,7 @@ func _load_door_states(entries: Variant) -> Dictionary:
 		var door_id: String = str(state.get("door_id", state.get("object_id", "")))
 		if door_id.is_empty():
 			continue
-		output[door_id] = {
+		var loaded_state := {
 			"door_id": door_id,
 			"object_id": str(state.get("object_id", door_id)),
 			"display_name": str(state.get("display_name", door_id)),
@@ -111,6 +111,13 @@ func _load_door_states(entries: Variant) -> Dictionary:
 			"blocks_sight": bool(state.get("blocks_sight", not bool(state.get("is_open", false)))),
 			"blocks_sight_when_closed": bool(state.get("blocks_sight_when_closed", true)),
 		}
+		_copy_optional_keys(loaded_state, state, [
+			"required_item_ids",
+			"required_items",
+			"required_tool_ids",
+			"required_tools",
+		])
+		output[door_id] = loaded_state
 	return output
 
 

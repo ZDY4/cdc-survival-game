@@ -792,6 +792,12 @@ func _failure_reason_text(reason: String) -> String:
 			return "容器未打开"
 		"unknown_container":
 			return "未知容器"
+		"door_locked":
+			return "门已锁定"
+		"door_key_missing":
+			return "缺少钥匙"
+		"door_tool_missing":
+			return "缺少开锁工具"
 		"item_not_sellable":
 			return "物品不可出售"
 		"shop_stock_insufficient":
