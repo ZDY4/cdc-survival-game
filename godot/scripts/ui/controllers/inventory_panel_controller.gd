@@ -141,6 +141,11 @@ func _build_layout() -> void:
 	_items_box = VBoxContainer.new()
 	_items_box.name = "ItemLines"
 	_items_box.add_theme_constant_override("separation", 4)
+	_items_box.set_drag_forwarding(
+		Callable(self, "_empty_inventory_drag_data"),
+		Callable(self, "_can_drop_inventory_data"),
+		Callable(self, "_drop_inventory_data")
+	)
 	box.add_child(_title_label)
 	box.add_child(_summary_label)
 	box.add_child(_search_box)
@@ -171,12 +176,72 @@ func _item_line(item: Dictionary) -> Button:
 		item.get("category_label", "杂项"),
 	]
 	button.tooltip_text = str(item.get("description", ""))
+	button.set_meta("inventory_item", item.duplicate(true))
+	button.set_meta("inventory_index", int(item.get("order_index", 0)))
+	button.set_drag_forwarding(
+		Callable(self, "_get_inventory_item_drag_data"),
+		Callable(self, "_can_drop_inventory_data"),
+		Callable(self, "_drop_inventory_data")
+	)
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
 		_apply_detail(item.duplicate(true))
 	)
 	return button
+
+
+func _empty_inventory_drag_data(_position: Vector2, _from_control: Control) -> Variant:
+	return null
+
+
+func _get_inventory_item_drag_data(_position: Vector2, from_control: Control) -> Variant:
+	if not _can_reorder_inventory() or from_control == null or not from_control.has_meta("inventory_item"):
+		return null
+	var item: Dictionary = _dictionary_or_empty(from_control.get_meta("inventory_item"))
+	var item_id: String = str(item.get("item_id", ""))
+	if item.is_empty() or item_id.is_empty():
+		return null
+	var preview := Label.new()
+	preview.text = "%s x%d" % [item.get("name", item_id), int(item.get("count", 0))]
+	set_drag_preview(preview)
+	return {
+		"kind": "inventory_item",
+		"item": item.duplicate(true),
+		"item_id": item_id,
+		"from_index": int(from_control.get_meta("inventory_index", item.get("order_index", 0))),
+	}
+
+
+func _can_drop_inventory_data(_position: Vector2, data: Variant, from_control: Control) -> bool:
+	if not _can_reorder_inventory():
+		return false
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	if str(drag_data.get("kind", "")) != "inventory_item":
+		return false
+	var item_id: String = str(drag_data.get("item_id", ""))
+	return not item_id.is_empty() and _drop_target_index(from_control) >= 0
+
+
+func _drop_inventory_data(position: Vector2, data: Variant, from_control: Control) -> void:
+	if not _can_drop_inventory_data(position, data, from_control):
+		return
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	var root := get_parent()
+	if root != null and root.has_method("reorder_player_inventory_item"):
+		root.reorder_player_inventory_item(str(drag_data.get("item_id", "")), _drop_target_index(from_control))
+
+
+func _can_reorder_inventory() -> bool:
+	return _sort_mode == "order" and _category_filter == "all" and _search_text.is_empty()
+
+
+func _drop_target_index(from_control: Control) -> int:
+	if from_control != null and from_control.has_meta("inventory_index"):
+		return int(from_control.get_meta("inventory_index"))
+	if not _last_snapshot.is_empty():
+		return _array_or_empty(_last_snapshot.get("inventory_order", [])).size()
+	return 0
 
 
 func _visible_items(items: Array) -> Array[Dictionary]:
@@ -381,3 +446,9 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

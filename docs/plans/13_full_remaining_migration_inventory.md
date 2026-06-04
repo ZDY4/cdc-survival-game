@@ -184,11 +184,11 @@
 
 ### 8.1 背包
 
-- 已有物品列表、基础操作、分类筛选、名称/重量/价值排序、搜索、滚动列表、选中物品详情和分类/价值/堆叠/槽位摘要第一版，并纳入 `InventoryUI` smoke；inventory order 持久化第一版已接入 actor snapshot、核心物品增删和 Inventory 默认“顺序”排序，并纳入 `InventoryUI` / `Save` smoke；待补拖拽重排。
+- 已有物品列表、基础操作、分类筛选、名称/重量/价值排序、搜索、滚动列表、选中物品详情和分类/价值/堆叠/槽位摘要第一版，并纳入 `InventoryUI` smoke；inventory order 持久化第一版已接入 actor snapshot、核心物品增删和 Inventory 默认“顺序”排序，并纳入 `InventoryUI` / `Save` smoke；背包内拖拽重排第一版已接入 `reorder_inventory` core 命令并纳入 `InventoryUI` smoke，当前仅在“顺序 + 全部 + 无搜索”视图启用。
 - 选中物品操作栏第一版已迁移：数量 SpinBox、使用、装备、丢弃按钮；任务/关键物品会禁用使用和丢弃，装备和丢弃按钮通过 `InventoryUI` smoke 走 UI 触发；待补完整右键上下文菜单：拆分、检查、加入热栏、交易、存入容器。
 - 数量控制第一版已迁移：背包选中物品可用 SpinBox 指定丢弃数量；待补完整数量弹窗：增减、最大值、确认、取消、非法数量提示，以及拆分/全部丢弃。
 - 物品使用第一版已接入：`inventory_action/use_item`、消耗品 `gameplay_effect.resource_deltas`、HP/基础资源恢复、AP 消耗、物品消耗、失败 reason 和 Inventory “使用”按钮已纳入 `InventoryUI` / `Save` smoke；任务/关键物品不可使用、不可丢弃第一版已纳入 `InventoryUI` smoke；待补 buff/debuff、持续效果、任务交付限制和更完整反馈。
-- 待迁移拖拽：背包内排序、拖到装备槽、拖到容器、拖到交易 sell zone、拖到丢弃区域。
+- 拖拽第一版：背包内排序已迁移；待补拖到装备槽、拖到容器、拖到交易 sell zone、拖到丢弃区域，以及筛选/搜索视图下的拖拽提示 polish。
 - 待补容量/重量/格子限制，如果旧规则或数据仍需要保留，应进入 core/economy。
 
 ### 8.2 装备
@@ -312,7 +312,7 @@
 
 ### 13.3 面板
 
-- 背包面板已有筛选、搜索、详情、滚动列表和选中物品操作栏第一版；待补装备槽集成、上下文菜单、拖拽、数量弹窗 polish。
+- 背包面板已有筛选、搜索、详情、滚动列表、选中物品操作栏和顺序视图拖拽重排第一版；待补装备槽集成、上下文菜单、跨面板拖拽、数量弹窗 polish。
 - 角色面板待补：属性、资源、装备、派生数值、属性点分配、状态效果。
 - 地图面板待补：canvas、pan、zoom、地点、当前地图、overworld 路线、追踪目标。
 - Journal 面板待补：任务详情、追踪、完成/失败、奖励领取反馈。
@@ -388,7 +388,7 @@
 - `PlayerInteraction`：补 UI blocker、右键菜单关闭、hover prompt、actor/object/grid 优先级、不可见目标。
 - `Combat`：补 LOS、跨层、AOE、友军伤害、战斗退出 decay、远程弹药/reload、暴击 seed。
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。
-- `InventoryUI`：inventory order 持久化、默认顺序排序、消耗品使用按钮、选中物品装备/丢弃按钮、丢弃数量 SpinBox 和任务/关键物品禁用第一版已有 smoke；待补上下文菜单、完整数量弹窗、拖拽重排、装备详情和更完整使用反馈。
+- `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、丢弃数量 SpinBox 和任务/关键物品禁用第一版已有 smoke；待补上下文菜单、完整数量弹窗、跨面板拖拽、装备详情和更完整使用反馈。
 - `ContainerUI`：补双向拖拽、背包限制/权限等高级错误；关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择与基础失败提示已有 smoke。
 - `TradeUI`：购物车、批量确认和无部分成交已有 smoke；待补装备出售、不可出售和拖拽。
 - `SkillsUI`：补多槽 hotbar、技能树 pan、目标预览、cooldown、主动效果。

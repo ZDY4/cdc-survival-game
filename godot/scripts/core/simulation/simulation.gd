@@ -648,6 +648,8 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 			return store_item_in_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"drop":
 			return drop_actor_item(actor.actor_id, str(command.get("item_id", "")), int(command.get("count", 1)), items)
+		"reorder_inventory":
+			return _reorder_actor_inventory(actor, str(command.get("item_id", "")), int(command.get("target_index", 0)))
 		"equip":
 			return equip_item(actor.actor_id, str(command.get("item_id", "")), str(command.get("slot_id", "")), items)
 		"unequip":
@@ -663,6 +665,51 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"sell_equipped_shop":
 			return sell_equipped_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("slot_id", "")), str(command.get("item_id", "")), items)
 	return {"success": false, "reason": "unknown_inventory_action"}
+
+
+func _reorder_actor_inventory(actor: RefCounted, item_id: String, target_index: int) -> Dictionary:
+	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
+	if normalized_item_id.is_empty():
+		return {"success": false, "reason": "invalid_item_id"}
+	if int(actor.inventory.get(normalized_item_id, 0)) <= 0:
+		return {
+			"success": false,
+			"reason": "item_not_in_inventory",
+			"item_id": normalized_item_id,
+		}
+	_inventory_entries.sync_actor_inventory_order(actor)
+	var order: Array[String] = []
+	for order_item_id in actor.inventory_order:
+		order.append(str(order_item_id))
+	var from_index: int = order.find(normalized_item_id)
+	if from_index < 0:
+		return {
+			"success": false,
+			"reason": "item_not_in_inventory_order",
+			"item_id": normalized_item_id,
+		}
+	var original_order: Array[String] = order.duplicate()
+	order.remove_at(from_index)
+	var insertion_index: int = clampi(target_index, 0, order.size())
+	if target_index > from_index:
+		insertion_index = clampi(target_index - 1, 0, order.size())
+	order.insert(insertion_index, normalized_item_id)
+	actor.inventory_order = order
+	emit_event("inventory_reordered", {
+		"actor_id": actor.actor_id,
+		"item_id": normalized_item_id,
+		"from_index": from_index,
+		"to_index": insertion_index,
+		"previous_order": original_order,
+		"inventory_order": order.duplicate(),
+	})
+	return {
+		"success": true,
+		"item_id": normalized_item_id,
+		"from_index": from_index,
+		"to_index": insertion_index,
+		"inventory_order": order.duplicate(),
+	}
 
 
 func _submit_use_item_action(actor: RefCounted, command: Dictionary, items: Dictionary) -> Dictionary:

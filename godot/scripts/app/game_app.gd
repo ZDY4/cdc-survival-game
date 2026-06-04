@@ -715,6 +715,18 @@ func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func reorder_player_inventory_item(item_id: String, target_index: int) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = _submit_inventory_action({
+		"action": "reorder_inventory",
+		"item_id": item_id,
+		"target_index": target_index,
+	})
+	refresh_inventory_panel()
+	return result
+
+
 func use_player_item(item_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}

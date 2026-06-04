@@ -44,6 +44,20 @@ func _run_checks(game_root: Node) -> Array[String]:
 		or not _text_ordered(initial_text, "绷带 x1", "棒球棒 x1") \
 		or not _text_ordered(initial_text, "棒球棒 x1", "手枪弹药 x10"):
 		errors.append("initial inventory should follow persisted inventory order")
+	if not _reorder_inventory_item_before(game_root, "手枪弹药", "水瓶"):
+		errors.append("should drag ammo before water in inventory order view")
+	await process_frame
+	var reordered_text: String = "\n".join(_item_lines(game_root))
+	if not _text_ordered(reordered_text, "手枪弹药 x10", "水瓶 x1"):
+		errors.append("inventory drag reorder should move ammo before water")
+	if not _append_inventory_item_by_drag(game_root, "手枪弹药"):
+		errors.append("should drag ammo to the end of inventory order view")
+	await process_frame
+	var restored_order_text: String = "\n".join(_item_lines(game_root))
+	if not _text_ordered(restored_order_text, "棒球棒 x1", "手枪弹药 x10"):
+		errors.append("inventory drag append should restore ammo after baseball bat")
+	if not _event_seen(game_root, "inventory_reordered"):
+		errors.append("inventory drag reorder should emit inventory_reordered")
 	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	player_ref.hp = 50.0
 	player_ref.ap = 6.0
@@ -369,13 +383,48 @@ func _quantity_spin(game_root: Node) -> SpinBox:
 	return game_root.inventory_panel.find_child("QuantitySpin", true, false) as SpinBox
 
 
-func _press_inventory_item_with_text(game_root: Node, needle: String) -> bool:
+func _reorder_inventory_item_before(game_root: Node, item_needle: String, target_needle: String) -> bool:
+	var source: Button = _inventory_item_button(game_root, item_needle)
+	var target: Button = _inventory_item_button(game_root, target_needle)
+	if source == null or target == null or not source.has_meta("inventory_item"):
+		return false
+	game_root.inventory_panel.call("_drop_inventory_data", Vector2.ZERO, {
+		"kind": "inventory_item",
+		"item": source.get_meta("inventory_item"),
+		"item_id": str(source.get_meta("inventory_item").get("item_id", "")),
+		"from_index": int(source.get_meta("inventory_index", 0)),
+	}, target)
+	return true
+
+
+func _append_inventory_item_by_drag(game_root: Node, item_needle: String) -> bool:
+	var source: Button = _inventory_item_button(game_root, item_needle)
+	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
+	if source == null or item_box == null or not source.has_meta("inventory_item"):
+		return false
+	game_root.inventory_panel.call("_drop_inventory_data", Vector2.ZERO, {
+		"kind": "inventory_item",
+		"item": source.get_meta("inventory_item"),
+		"item_id": str(source.get_meta("inventory_item").get("item_id", "")),
+		"from_index": int(source.get_meta("inventory_index", 0)),
+	}, item_box)
+	return true
+
+
+func _inventory_item_button(game_root: Node, needle: String) -> Button:
 	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
 	for child in item_box.get_children():
 		if child is Button and str((child as Button).text).contains(needle):
-			(child as Button).pressed.emit()
-			return true
-	return false
+			return child as Button
+	return null
+
+
+func _press_inventory_item_with_text(game_root: Node, needle: String) -> bool:
+	var button: Button = _inventory_item_button(game_root, needle)
+	if button == null:
+		return false
+	button.pressed.emit()
+	return true
 
 
 func _detail_line(game_root: Node) -> String:
