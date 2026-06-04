@@ -5,6 +5,7 @@ signal close_requested
 var _panel: PanelContainer
 var _speaker_label: Label
 var _target_label: Label
+var _text_scroll: ScrollContainer
 var _text_label: Label
 var _options_label: Label
 var _options_box: VBoxContainer
@@ -81,7 +82,16 @@ func _build_layout() -> void:
 		close_requested.emit()
 	)
 	_target_label = _label("TargetLine")
+	_text_scroll = ScrollContainer.new()
+	_text_scroll.name = "TextScroll"
+	_text_scroll.custom_minimum_size = Vector2(0, 58)
+	_text_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_text_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_text_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_text_label = _label("TextLine")
+	_text_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_text_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_text_label.clip_text = false
 	_options_label = _label("OptionsLine")
 	_options_box = VBoxContainer.new()
 	_options_box.name = "OptionButtons"
@@ -93,7 +103,8 @@ func _build_layout() -> void:
 	header.add_child(_close_button)
 	box.add_child(header)
 	box.add_child(_target_label)
-	box.add_child(_text_label)
+	_text_scroll.add_child(_text_label)
+	box.add_child(_text_scroll)
 	box.add_child(_options_label)
 	box.add_child(_options_box)
 

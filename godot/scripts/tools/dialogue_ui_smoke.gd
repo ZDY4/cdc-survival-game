@@ -55,6 +55,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue text missing start node")
 	if not _target_line(game_root).contains("老王"):
 		errors.append("dialogue target line should show target actor display name")
+	var text_scroll: ScrollContainer = _text_scroll(game_root)
+	if text_scroll == null:
+		errors.append("dialogue text should be wrapped in a scroll container")
+	elif text_scroll.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
+		errors.append("dialogue text scroll should disable horizontal scrolling")
 	if str(game_root.dialogue_panel.get_meta("dialogue_id", "")) != "trader_lao_wang_tutorial_active":
 		errors.append("dialogue panel diagnostic meta should expose dialogue id")
 	if int(game_root.dialogue_panel.get_meta("target_actor_id", 0)) <= 0:
@@ -156,7 +161,12 @@ func _target_line(game_root: Node) -> String:
 
 
 func _text_line(game_root: Node) -> String:
-	return game_root.dialogue_panel.get_node("DialoguePanel/DialogueLines/TextLine").text
+	var label: Label = game_root.dialogue_panel.find_child("TextLine", true, false) as Label
+	return "" if label == null else label.text
+
+
+func _text_scroll(game_root: Node) -> ScrollContainer:
+	return game_root.dialogue_panel.find_child("TextScroll", true, false) as ScrollContainer
 
 
 func _options_line(game_root: Node) -> String:
