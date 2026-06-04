@@ -20,6 +20,7 @@ const JOURNAL_PANEL_SCENE = preload("res://scenes/ui/journal_panel.tscn")
 const MAP_PANEL_SCENE = preload("res://scenes/ui/map_panel.tscn")
 const SKILLS_PANEL_SCENE = preload("res://scenes/ui/skills_panel.tscn")
 const CRAFTING_PANEL_SCENE = preload("res://scenes/ui/crafting_panel.tscn")
+const SettingsPanelController = preload("res://scripts/ui/controllers/settings_panel_controller.gd")
 
 var parent: Node
 var registry: RefCounted
@@ -320,37 +321,20 @@ func _ensure_panel(current: Control, scene: PackedScene, node_name: String) -> C
 func _ensure_settings_panel() -> Control:
 	if settings_panel != null:
 		return settings_panel
-	var root := Control.new()
+	var root: Control = SettingsPanelController.new()
 	root.name = "SettingsPanelRoot"
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.visible = false
 	parent.add_child(root)
-
-	var panel := PanelContainer.new()
-	panel.name = "SettingsPanel"
-	panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	panel.offset_left = -360
-	panel.offset_right = -16
-	panel.offset_top = 284
-	panel.offset_bottom = 508
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(panel)
-
-	var box := VBoxContainer.new()
-	box.name = "SettingsLines"
-	box.add_theme_constant_override("separation", 6)
-	panel.add_child(box)
-
-	var title := _settings_label("TitleLine", "设置")
-	var audio := _settings_label("AudioLine", "音量: 主音量 100% | 音乐 100% | 音效 100%")
-	var display := _settings_label("DisplayLine", "显示: 窗口模式 | VSync 开启 | UI 100%")
-	var controls := _settings_label("ControlsLine", "按键: Esc 关闭 | I/C/M/J/K/L 面板 | Space 等待")
-	box.add_child(title)
-	box.add_child(audio)
-	box.add_child(display)
-	box.add_child(controls)
+	settings_panel = root
 	return root
+
+
+func settings_snapshot() -> Dictionary:
+	if settings_panel != null and settings_panel.has_method("settings_snapshot"):
+		return _dictionary_or_empty(settings_panel.call("settings_snapshot")).duplicate(true)
+	return {}
 
 
 func _apply_stage_panel_visibility() -> void:
@@ -417,15 +401,6 @@ func _blocking_modal_name() -> String:
 		if not skills_modal.is_empty():
 			return skills_modal
 	return ""
-
-
-func _settings_label(node_name: String, text: String) -> Label:
-	var label := Label.new()
-	label.name = node_name
-	label.text = text
-	label.clip_text = true
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	return label
 
 
 func _tracked_quest_snapshot() -> Dictionary:

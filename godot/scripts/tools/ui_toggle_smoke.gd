@@ -105,6 +105,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(game_root.gameplay_input_blocked_by_ui()):
 		errors.append("open settings should block gameplay input")
 	_expect_blocker(errors, game_root, "settings", "open settings blocker")
+	await _exercise_settings_panel(errors, game_root)
 	_press_key(game_root, KEY_ESCAPE)
 	if bool(game_root.is_settings_open()) or game_root.settings_panel.visible:
 		errors.append("Esc should close settings panel")
@@ -559,6 +560,71 @@ func _expect_blocker(errors: Array[String], game_root: Node, expected: String, c
 	var actual := str(game_root.gameplay_input_blocker_name())
 	if actual != expected:
 		errors.append("%s: blocker expected %s, got %s" % [context, expected, actual])
+
+
+func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
+	_set_slider(game_root, "MasterVolumeSlider", 65)
+	_set_slider(game_root, "MusicVolumeSlider", 40)
+	_set_slider(game_root, "SfxVolumeSlider", 55)
+	_select_option(game_root, "WindowModeOption", "fullscreen")
+	_select_option(game_root, "ResolutionOption", "1920x1080")
+	_toggle_checkbox(game_root, "VSyncCheckBox", false)
+	_set_slider(game_root, "UIScaleSlider", 125)
+	_press_button(game_root, "KeybindingCycleButton")
+	await game_root.get_tree().process_frame
+	var snapshot: Dictionary = game_root.panel_controller.settings_snapshot()
+	if int(snapshot.get("master_volume", 0)) != 65 or int(snapshot.get("music_volume", 0)) != 40 or int(snapshot.get("sfx_volume", 0)) != 55:
+		errors.append("settings sliders should update runtime audio state: %s" % snapshot)
+	if str(snapshot.get("window_mode", "")) != "fullscreen" or str(snapshot.get("resolution", "")) != "1920x1080" or bool(snapshot.get("vsync", true)):
+		errors.append("settings display controls should update runtime display state: %s" % snapshot)
+	if int(snapshot.get("ui_scale", 0)) != 125 or str(snapshot.get("keybinding_profile", "")) != "left_handed":
+		errors.append("settings UI scale and keybinding profile should update runtime state: %s" % snapshot)
+	if not _settings_line(game_root, "AudioLine").contains("主音量 65%") or not _settings_line(game_root, "AudioLine").contains("音乐 40%") or not _settings_line(game_root, "AudioLine").contains("音效 55%"):
+		errors.append("settings audio summary should reflect control changes")
+	if not _settings_line(game_root, "DisplayLine").contains("全屏") or not _settings_line(game_root, "DisplayLine").contains("1920x1080") or not _settings_line(game_root, "DisplayLine").contains("VSync 关闭") or not _settings_line(game_root, "DisplayLine").contains("UI 125%"):
+		errors.append("settings display summary should reflect control changes")
+	if not _settings_line(game_root, "ControlsLine").contains("左手"):
+		errors.append("settings keybinding summary should reflect profile cycle")
+	if not _settings_line(game_root, "SettingsFeedbackLine").contains("当前会话"):
+		errors.append("settings feedback should explain runtime-only update")
+
+
+func _set_slider(game_root: Node, node_name: String, value: int) -> void:
+	var slider: HSlider = game_root.settings_panel.find_child(node_name, true, false) as HSlider
+	if slider == null:
+		return
+	slider.value = value
+	slider.value_changed.emit(float(value))
+
+
+func _select_option(game_root: Node, node_name: String, option_id: String) -> void:
+	var option: OptionButton = game_root.settings_panel.find_child(node_name, true, false) as OptionButton
+	if option == null:
+		return
+	for i in range(option.get_item_count()):
+		if str(option.get_item_metadata(i)) == option_id:
+			option.select(i)
+			option.item_selected.emit(i)
+			return
+
+
+func _toggle_checkbox(game_root: Node, node_name: String, enabled: bool) -> void:
+	var checkbox: CheckBox = game_root.settings_panel.find_child(node_name, true, false) as CheckBox
+	if checkbox == null:
+		return
+	checkbox.button_pressed = enabled
+	checkbox.toggled.emit(enabled)
+
+
+func _press_button(game_root: Node, node_name: String) -> void:
+	var button: Button = game_root.settings_panel.find_child(node_name, true, false) as Button
+	if button != null:
+		button.pressed.emit()
+
+
+func _settings_line(game_root: Node, node_name: String) -> String:
+	var label: Label = game_root.settings_panel.find_child(node_name, true, false) as Label
+	return "" if label == null else str(label.text)
 
 
 func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: String, expected_title: String, expected_line: String, context: String) -> void:
