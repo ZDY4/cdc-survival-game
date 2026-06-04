@@ -130,6 +130,24 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 					var action_data: Dictionary = _dictionary_or_empty(action)
 					var action_result: Dictionary = _action_runner.apply_action(simulation, actor_id, action_data)
 					emitted_actions.append(action_result)
+					if not bool(action_result.get("success", false)):
+						var action_type := str(action_result.get("type", action_data.get("type", "")))
+						simulation.emit_event("dialogue_action_failed", {
+							"actor_id": actor_id,
+							"dialogue_id": dialogue_id,
+							"node_id": current_node_id,
+							"action_type": action_type,
+							"reason": str(action_result.get("reason", "dialogue_action_failed")),
+							"action_result": action_result.duplicate(true),
+						})
+						return {
+							"success": false,
+							"reason": "dialogue_action_failed",
+							"dialogue_id": dialogue_id,
+							"node_id": current_node_id,
+							"action_type": action_type,
+							"action_result": action_result,
+						}
 				current_node_id = str(node.get("next", ""))
 			"dialog", "choice":
 				actor.active_dialogue_node_id = current_node_id

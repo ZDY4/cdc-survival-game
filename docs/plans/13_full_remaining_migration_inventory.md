@@ -250,7 +250,7 @@
 ### 10.2 任务
 
 - 已有 collect / kill / manual turn-in 第一版；待补完整 objective 类型、失败/替代分支、可追踪目标。
-- 待补 dialogue turn-in 条件、对话中交付提示、物品扣除失败、奖励失败回滚。
+- dialogue turn-in 失败语义第一版已迁移：对话 action 失败会停止推进，不进入成功确认台词，返回 `dialogue_action_failed` 并发出诊断事件；手动交付物品不足会保留任务 active、不扣物品、不完成任务，已由 `DialogueAction` smoke 覆盖。待补对话中交付提示、奖励失败回滚和更完整失败 UI。
 - 待补任务链：完成后启动后续任务、互斥任务、解锁地点、世界状态 flags。
 - Journal 详情第一版已迁移：目标节点、任务描述、目标类型/需求、当前进度、可交付状态、奖励详情、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付后的完成/奖励反馈和手动交付失败历史第一版已纳入 `JournalUI` / `UI` smoke；目标进度列表第一版已从 quest flow 中所有 objective 节点派生并在列表/详情展示，已纳入 `JournalUI` smoke。待补多分支/替代目标状态和更完整失败反馈。
 - 地图目标 marker 第一版已迁移：追踪 collect 目标会在当前地图标出匹配 pickup 或含目标物品的容器，追踪 kill 目标会标出当前地图匹配 enemy_type 的 actor；找不到目标时保留 unresolved marker 和 reason；地图面板 canvas 第一版会绘制地图边界、网格、入口点、可定位任务 marker 和 overworld inset，并支持缩放/平移按钮，已纳入 `JournalUI` / `UIToggle` smoke。待补跨地图显式路线、目标优先级、完成/失败反馈和更完整图形 polish。

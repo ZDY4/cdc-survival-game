@@ -74,10 +74,33 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _dialogue_text(game_root).contains("废弃医院带回 1 份急救包"):
 		errors.append("doctor accept should advance to confirmation dialog")
 
-	player.inventory["1005"] = 1
-	simulation.record_item_collected(1, "1005", 1)
+	var find_state: Dictionary = _dictionary_or_empty(simulation.active_quests.get("find_medicine", {})).duplicate(true)
+	find_state["completed_objectives"] = {"step_1": 1}
+	simulation.active_quests["find_medicine"] = find_state
+	player.inventory.erase("1005")
 	player.active_dialogue_id = "doctor_chen_find_medicine_turn_in"
 	player.active_dialogue_node_id = ""
+	game_root.refresh_dialogue_panel()
+	var failed_turn_in_result: Dictionary = game_root.choose_dialogue_option("turn_in_action")
+	if bool(failed_turn_in_result.get("success", false)):
+		errors.append("doctor turn-in without item should fail")
+	if str(failed_turn_in_result.get("reason", "")) != "dialogue_action_failed":
+		errors.append("doctor turn-in without item should report dialogue_action_failed")
+	var failed_action: Dictionary = _dictionary_or_empty(failed_turn_in_result.get("action_result", {}))
+	if str(failed_action.get("reason", "")) != "not_enough_items":
+		errors.append("doctor turn-in without item should preserve not_enough_items action reason")
+	if not _active_quest_ids(game_root).has("find_medicine"):
+		errors.append("failed turn-in should keep find_medicine active")
+	if simulation.completed_quests.has("find_medicine"):
+		errors.append("failed turn-in should not complete find_medicine")
+	if _dialogue_text(game_root).contains("这一趟救了诊所"):
+		errors.append("failed turn-in should not advance to confirmation dialog")
+	if _event_count(game_root, "dialogue_action_failed") <= 0:
+		errors.append("failed turn-in should emit dialogue_action_failed")
+
+	player.inventory["1005"] = 1
+	player.active_dialogue_id = "doctor_chen_find_medicine_turn_in"
+	player.active_dialogue_node_id = "choice_1"
 	game_root.refresh_dialogue_panel()
 	var turn_in_result: Dictionary = game_root.choose_dialogue_option("turn_in_action")
 	if not bool(turn_in_result.get("success", false)):

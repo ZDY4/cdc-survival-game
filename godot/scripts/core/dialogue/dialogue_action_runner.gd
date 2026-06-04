@@ -11,7 +11,13 @@ func apply_action(simulation: RefCounted, actor_id: int, action: Dictionary) -> 
 		"start_quest":
 			var quest_id: String = str(action.get("quest_id", action.get("questId", "")))
 			var started: bool = simulation.start_quest(actor_id, quest_id)
-			return {"type": action_type, "success": started, "quest_id": quest_id}
+			if started:
+				return {"type": action_type, "success": true, "quest_id": quest_id, "status": "started"}
+			if simulation.active_quests.has(quest_id):
+				return {"type": action_type, "success": true, "quest_id": quest_id, "status": "already_active"}
+			if simulation.completed_quests.has(quest_id):
+				return {"type": action_type, "success": true, "quest_id": quest_id, "status": "already_completed"}
+			return {"type": action_type, "success": false, "reason": "quest_start_failed", "quest_id": quest_id}
 		"turn_in_quest":
 			var quest_id: String = str(action.get("quest_id", action.get("questId", "")))
 			var result: Dictionary = simulation.turn_in_quest(actor_id, quest_id)
@@ -21,7 +27,11 @@ func apply_action(simulation: RefCounted, actor_id: int, action: Dictionary) -> 
 		"unlock_location":
 			var location_id: String = str(action.get("location_id", action.get("locationId", "")))
 			var unlocked: bool = simulation.unlock_location(location_id)
-			return {"type": action_type, "success": unlocked, "location_id": location_id}
+			if unlocked:
+				return {"type": action_type, "success": true, "location_id": location_id, "status": "unlocked"}
+			if simulation.unlocked_locations.has(location_id):
+				return {"type": action_type, "success": true, "location_id": location_id, "status": "already_unlocked"}
+			return {"type": action_type, "success": false, "reason": "location_unlock_failed", "location_id": location_id}
 		"set_world_flag", "set_flag", "world_flag":
 			return _set_world_flag(simulation, actor_id, action, action_type)
 		"change_relationship", "adjust_relationship", "set_relationship":
