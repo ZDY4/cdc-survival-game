@@ -30,6 +30,7 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	_apply_corpse_interaction_targets(map_snapshot, corpses)
 	var actors: Array[Dictionary] = _actors_on_map(runtime_snapshot.get("actors", []), map_id)
 	_apply_actor_quest_markers(actors, runtime_snapshot)
+	_apply_actor_combat_feedback(actors, runtime_snapshot)
 	return {
 		"ok": true,
 		"map": map_snapshot,
@@ -147,6 +148,51 @@ func _apply_actor_quest_markers(actors: Array[Dictionary], runtime_snapshot: Dic
 			continue
 		actor_data["quest_markers"] = _array_or_empty(markers_by_definition.get(definition_id, [])).duplicate(true)
 		actors[index] = actor_data
+
+
+func _apply_actor_combat_feedback(actors: Array[Dictionary], runtime_snapshot: Dictionary) -> void:
+	if actors.is_empty():
+		return
+	var feedback_by_actor := _recent_combat_feedback_by_target(_array_or_empty(runtime_snapshot.get("events", [])))
+	if feedback_by_actor.is_empty():
+		return
+	for index in range(actors.size()):
+		var actor_data: Dictionary = actors[index]
+		var actor_id := int(actor_data.get("actor_id", 0))
+		if not feedback_by_actor.has(actor_id):
+			continue
+		actor_data["combat_feedback"] = _dictionary_or_empty(feedback_by_actor.get(actor_id, {})).duplicate(true)
+		actors[index] = actor_data
+
+
+func _recent_combat_feedback_by_target(events: Array) -> Dictionary:
+	var output: Dictionary = {}
+	var sequence := 0
+	for event_value in events:
+		sequence += 1
+		var event: Dictionary = _dictionary_or_empty(event_value)
+		if str(event.get("kind", "")) != "attack_resolved":
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		var target_actor_id := int(payload.get("target_actor_id", 0))
+		if target_actor_id <= 0:
+			continue
+		var feedback := payload.duplicate(true)
+		feedback["feedback_kind"] = _combat_feedback_kind(feedback)
+		feedback["event_sequence"] = sequence
+		output[target_actor_id] = feedback
+	return output
+
+
+func _combat_feedback_kind(feedback: Dictionary) -> String:
+	if bool(feedback.get("defeated", false)):
+		return "defeated"
+	var hit_kind := str(feedback.get("hit_kind", "hit"))
+	if hit_kind == "miss" or hit_kind == "blocked":
+		return hit_kind
+	if bool(feedback.get("critical", false)):
+		return "critical"
+	return "hit"
 
 
 func _quest_markers_by_definition(runtime_snapshot: Dictionary) -> Dictionary:

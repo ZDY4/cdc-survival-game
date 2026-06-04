@@ -79,6 +79,7 @@ func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary,
 	_validate_quest_actor_markers(registry, errors)
 	_validate_corpse_world_markers(errors)
 	_validate_equipment_attach_points(errors)
+	_validate_combat_feedback_markers(registry, errors)
 	return errors
 
 
@@ -672,6 +673,151 @@ func _equipment_attach_world() -> Dictionary:
 			"combat": {"hp": 8.0, "max_hp": 8.0, "attributes": {"turn_ap_max": 6.0}},
 		}],
 		"corpses": [],
+	}
+
+
+func _validate_combat_feedback_markers(registry: RefCounted, errors: Array[String]) -> void:
+	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(_combat_feedback_runtime_snapshot())
+	if not bool(world_result.get("ok", false)):
+		errors.append("combat feedback smoke failed to build world snapshot: %s" % world_result.get("error", "unknown"))
+		return
+	var actors: Array = _array_or_empty(world_result.get("actors", []))
+	var by_id: Dictionary = {}
+	for actor in actors:
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		by_id[int(actor_data.get("actor_id", 0))] = actor_data
+	if str(_dictionary_or_empty(by_id.get(9402, {})).get("combat_feedback", {}).get("feedback_kind", "")) != "critical":
+		errors.append("world snapshot should derive latest critical feedback for target actor")
+	if str(_dictionary_or_empty(by_id.get(9403, {})).get("combat_feedback", {}).get("feedback_kind", "")) != "miss":
+		errors.append("world snapshot should derive miss feedback for target actor")
+	if str(_dictionary_or_empty(by_id.get(9404, {})).get("combat_feedback", {}).get("feedback_kind", "")) != "blocked":
+		errors.append("world snapshot should derive blocked feedback for target actor")
+	if str(_dictionary_or_empty(by_id.get(9405, {})).get("combat_feedback", {}).get("feedback_kind", "")) != "defeated":
+		errors.append("world snapshot should derive defeated feedback for target actor")
+
+	var root := Node3D.new()
+	root.name = "SceneSmokeCombatFeedbackRoot"
+	get_root().add_child(root)
+	WorldSceneRenderer.new().render_world(root, world_result, {"load_map_visuals": false})
+	_validate_combat_feedback_actor(root, 9402, "critical", "CRIT -7", 7.0, errors)
+	_validate_combat_feedback_actor(root, 9403, "miss", "MISS", 0.0, errors)
+	_validate_combat_feedback_actor(root, 9404, "blocked", "BLOCK", 0.0, errors)
+	_validate_combat_feedback_actor(root, 9405, "defeated", "-12 KO", 12.0, errors)
+	root.queue_free()
+
+
+func _validate_combat_feedback_actor(root: Node, actor_id: int, expected_kind: String, expected_text: String, expected_damage: float, errors: Array[String]) -> void:
+	var actor_node: Node = root.find_child("Actor_scene_smoke_feedback_%d" % actor_id, true, false)
+	if actor_node == null:
+		errors.append("combat feedback actor %d should render" % actor_id)
+		return
+	var label: Label3D = actor_node.find_child("ActorCombatFeedback", true, false) as Label3D
+	if label == null:
+		errors.append("combat feedback actor %d should render ActorCombatFeedback" % actor_id)
+	else:
+		if str(label.get_meta("feedback_kind", "")) != expected_kind:
+			errors.append("combat feedback actor %d should expose %s feedback kind" % [actor_id, expected_kind])
+		if label.text != expected_text:
+			errors.append("combat feedback actor %d label should show %s, got %s" % [actor_id, expected_text, label.text])
+		if absf(float(label.get_meta("damage", -1.0)) - expected_damage) > 0.001:
+			errors.append("combat feedback actor %d should expose damage metadata" % actor_id)
+		if int(label.get_meta("target_actor_id", 0)) != actor_id:
+			errors.append("combat feedback actor %d should expose target actor id" % actor_id)
+	var marker: MeshInstance3D = actor_node.find_child("ActorCombatFeedbackMarker", true, false) as MeshInstance3D
+	if marker == null:
+		errors.append("combat feedback actor %d should render ActorCombatFeedbackMarker" % actor_id)
+	elif str(marker.get_meta("feedback_kind", "")) != expected_kind:
+		errors.append("combat feedback marker actor %d should expose %s feedback kind" % [actor_id, expected_kind])
+
+
+func _combat_feedback_runtime_snapshot() -> Dictionary:
+	var actors: Array[Dictionary] = []
+	for actor_id in [9401, 9402, 9403, 9404, 9405]:
+		actors.append({
+			"actor_id": actor_id,
+			"definition_id": "scene_smoke_feedback",
+			"display_name": "Combat Feedback %d" % actor_id,
+			"kind": "player" if actor_id == 9401 else "npc",
+			"side": "player" if actor_id == 9401 else "hostile",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 2 + actor_id - 9401, "y": 0, "z": 2},
+			"ap": 3.0,
+			"combat": {"hp": 10.0, "max_hp": 12.0, "attributes": {"turn_ap_max": 6.0}},
+		})
+	return {
+		"active_map_id": "survivor_outpost_01",
+		"actors": actors,
+		"events": [{
+			"kind": "attack_resolved",
+			"payload": {
+				"actor_id": 9401,
+				"target_actor_id": 9402,
+				"damage": 3.0,
+				"target_hp": 9.0,
+				"critical": false,
+				"hit_kind": "hit",
+				"defeated": false,
+				"hit_chance": 0.85,
+				"weapon_item_id": "1003",
+			},
+		}, {
+			"kind": "attack_resolved",
+			"payload": {
+				"actor_id": 9401,
+				"target_actor_id": 9402,
+				"damage": 7.0,
+				"target_hp": 2.0,
+				"critical": true,
+				"hit_kind": "hit",
+				"defeated": false,
+				"hit_chance": 0.85,
+				"weapon_item_id": "1003",
+			},
+		}, {
+			"kind": "attack_resolved",
+			"payload": {
+				"actor_id": 9401,
+				"target_actor_id": 9403,
+				"damage": 0.0,
+				"target_hp": 10.0,
+				"critical": false,
+				"hit_kind": "miss",
+				"defeated": false,
+				"hit_chance": 0.25,
+				"weapon_item_id": "1004",
+			},
+		}, {
+			"kind": "attack_resolved",
+			"payload": {
+				"actor_id": 9401,
+				"target_actor_id": 9404,
+				"damage": 0.0,
+				"target_hp": 10.0,
+				"critical": false,
+				"hit_kind": "blocked",
+				"defeated": false,
+				"hit_chance": 0.9,
+				"weapon_item_id": "1003",
+			},
+		}, {
+			"kind": "attack_resolved",
+			"payload": {
+				"actor_id": 9401,
+				"target_actor_id": 9405,
+				"damage": 12.0,
+				"target_hp": 0.0,
+				"critical": false,
+				"hit_kind": "hit",
+				"defeated": true,
+				"hit_chance": 0.9,
+				"weapon_item_id": "1003",
+			},
+		}],
+		"corpse_containers": [],
+		"consumed_interaction_targets": [],
+		"door_states": [],
+		"active_quests": [],
+		"completed_quests": [],
 	}
 
 

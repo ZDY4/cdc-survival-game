@@ -35,6 +35,11 @@ var status_generic_material := _unshaded_material(Color(0.86, 0.78, 0.36, 0.9))
 var quest_offer_material := _unshaded_material(Color(1.0, 0.72, 0.20, 0.94))
 var quest_turn_in_ready_material := _unshaded_material(Color(1.0, 0.84, 0.18, 0.94))
 var quest_turn_in_pending_material := _unshaded_material(Color(0.34, 0.82, 1.0, 0.86))
+var combat_hit_material := _unshaded_material(Color(1.0, 0.42, 0.20, 0.92))
+var combat_critical_material := _unshaded_material(Color(1.0, 0.92, 0.24, 0.96))
+var combat_miss_material := _unshaded_material(Color(0.72, 0.82, 0.92, 0.88))
+var combat_blocked_material := _unshaded_material(Color(0.60, 0.62, 0.70, 0.88))
+var combat_defeated_material := _unshaded_material(Color(0.92, 0.16, 0.14, 0.96))
 
 
 func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionary = {}) -> Dictionary:
@@ -243,6 +248,7 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 			_add_player_runtime_marker(node)
 		_add_actor_status_markers(node, actor_data)
 		_add_actor_quest_markers(node, actor_data)
+		_add_actor_combat_feedback(node, actor_data)
 		_add_pickable_capsule(node, 0.36, 1.25)
 		root.add_child(node)
 	return actors.size()
@@ -779,6 +785,108 @@ func _apply_quest_marker_meta(node: Node, actor_data: Dictionary, marker: Dictio
 	node.set_meta("ready", bool(marker.get("ready", false)))
 	node.set_meta("objective_id", str(marker.get("objective_id", "")))
 	node.set_meta("source_dialogue_id", str(marker.get("source_dialogue_id", "")))
+
+
+func _add_actor_combat_feedback(parent: Node3D, actor_data: Dictionary) -> void:
+	var feedback: Dictionary = _dictionary_or_empty(actor_data.get("combat_feedback", {}))
+	if feedback.is_empty():
+		return
+	var feedback_kind := str(feedback.get("feedback_kind", _combat_feedback_kind(feedback)))
+	var label := Label3D.new()
+	label.name = "ActorCombatFeedback"
+	label.text = _combat_feedback_text(feedback_kind, feedback)
+	label.position = Vector3(0.0, 1.46, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 22
+	label.modulate = _combat_feedback_color(feedback_kind)
+	label.outline_size = 5
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.82)
+	_apply_combat_feedback_meta(label, actor_data, feedback_kind, feedback)
+	parent.add_child(label)
+
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.22
+	mesh.bottom_radius = 0.22
+	mesh.height = 0.035
+	mesh.radial_segments = 24
+	var marker := MeshInstance3D.new()
+	marker.name = "ActorCombatFeedbackMarker"
+	marker.mesh = mesh
+	marker.material_override = _combat_feedback_material(feedback_kind)
+	marker.position = Vector3(0.0, 1.27, 0.0)
+	_apply_combat_feedback_meta(marker, actor_data, feedback_kind, feedback)
+	parent.add_child(marker)
+
+
+func _combat_feedback_kind(feedback: Dictionary) -> String:
+	if bool(feedback.get("defeated", false)):
+		return "defeated"
+	var hit_kind := str(feedback.get("hit_kind", "hit"))
+	if hit_kind == "miss" or hit_kind == "blocked":
+		return hit_kind
+	if bool(feedback.get("critical", false)):
+		return "critical"
+	return "hit"
+
+
+func _combat_feedback_text(feedback_kind: String, feedback: Dictionary) -> String:
+	match feedback_kind:
+		"miss":
+			return "MISS"
+		"blocked":
+			return "BLOCK"
+		"defeated":
+			return "-%s KO" % _format_damage_value(float(feedback.get("damage", 0.0)))
+		"critical":
+			return "CRIT -%s" % _format_damage_value(float(feedback.get("damage", 0.0)))
+	return "-%s" % _format_damage_value(float(feedback.get("damage", 0.0)))
+
+
+func _format_damage_value(value: float) -> String:
+	if absf(value - roundf(value)) < 0.01:
+		return str(int(roundf(value)))
+	return "%.1f" % value
+
+
+func _combat_feedback_color(feedback_kind: String) -> Color:
+	match feedback_kind:
+		"miss":
+			return Color(0.72, 0.82, 0.92, 0.94)
+		"blocked":
+			return Color(0.72, 0.72, 0.78, 0.94)
+		"critical":
+			return Color(1.0, 0.92, 0.24, 0.98)
+		"defeated":
+			return Color(1.0, 0.20, 0.16, 0.98)
+	return Color(1.0, 0.48, 0.22, 0.96)
+
+
+func _combat_feedback_material(feedback_kind: String) -> StandardMaterial3D:
+	match feedback_kind:
+		"miss":
+			return combat_miss_material
+		"blocked":
+			return combat_blocked_material
+		"critical":
+			return combat_critical_material
+		"defeated":
+			return combat_defeated_material
+	return combat_hit_material
+
+
+func _apply_combat_feedback_meta(node: Node, actor_data: Dictionary, feedback_kind: String, feedback: Dictionary) -> void:
+	node.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
+	node.set_meta("feedback_kind", feedback_kind)
+	node.set_meta("attacker_actor_id", int(feedback.get("actor_id", 0)))
+	node.set_meta("target_actor_id", int(feedback.get("target_actor_id", actor_data.get("actor_id", 0))))
+	node.set_meta("damage", float(feedback.get("damage", 0.0)))
+	node.set_meta("hit_kind", str(feedback.get("hit_kind", "")))
+	node.set_meta("critical", bool(feedback.get("critical", false)))
+	node.set_meta("defeated", bool(feedback.get("defeated", false)))
+	node.set_meta("hit_chance", float(feedback.get("hit_chance", 0.0)))
+	node.set_meta("weapon_item_id", str(feedback.get("weapon_item_id", "")))
+	node.set_meta("event_sequence", int(feedback.get("event_sequence", 0)))
 
 
 func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
