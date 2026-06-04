@@ -89,7 +89,7 @@
 
 - 待确认 Godot 网格数学与 Rust 完全等价：cell distance、对角移动、禁止穿角、同层限制、bounds、levels。
 - 待补 generated building stairs 跨层 pathfinding，楼梯端点、楼层切换、目标楼层显示。
-- 动态阻挡第一版：`door_states` 会随 world snapshot 应用到 topology，打开/关闭门会更新 movement / sight blocking；actor 占用阻挡其他 actor 但不阻挡自己、尸体/掉落/拾取物非阻挡已有基础路径，仍需补更完整门权限、自动开门和跨系统诊断。
+- 动态阻挡第一版：`door_states` 会随 world snapshot 应用到 topology，打开/关闭门会更新 movement / sight blocking；玩家移动路径遇到未锁关闭门会自动打开并发出 `door_auto_opened` / `door_toggled`；actor 占用阻挡其他 actor 但不阻挡自己、尸体/掉落/拾取物非阻挡已有基础路径。仍需补更完整门权限、AI 自动开门和跨系统诊断。
 - 路径失败 reason 第一版已迁移：目标静态阻挡返回 `goal_blocked` 并带 `blocker.kind=map_object`，目标被 actor 占据返回 `goal_occupied` 并带阻挡 actor id，越界返回 `goal_out_of_bounds` 并带 bounds，跨层返回 `level_mismatch` 并带起止楼层，不可达返回 `path_unreachable` 并带 visited cell count；已由 `Movement` smoke 覆盖。待补门权限、动态门阻挡、楼梯跨层和更完整 UI 文案映射。
 - 路径预览颜色第一版已迁移：hover 地面时会用同一 pathfinder 预览可达性、预计步数和失败 reason，HUD 显示摘要，hover cursor 用绿色/红色区分可达/不可达，并由 `PlayerInteraction` smoke 覆盖；待补完整路径线、AP 消耗、跨回合路径状态和多格路径着色。
 
@@ -97,7 +97,7 @@
 
 - generated door runtime 第一版已迁移：地图对象可通过 `props.door` 生成 `door_objects`、默认关闭、未锁、阻挡 movement / sight，`Simulation.toggle_door()` 会写入 `door_states`，world snapshot 会按 door state 更新 movement / sight blocking，并由 `World` / `Interaction` / `Save` smoke 覆盖。待补将现有地图建筑门洞批量标注为真实 `props.door`。
 - 锁门占位第一版已迁移：locked 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；后续补钥匙、撬锁、开锁失败提示。
-- 待补自动开门：玩家移动和 AI follow path 碰到未锁门时自动打开，发事件和视觉更新。
+- 自动开门第一版已迁移：玩家移动路径遇到未锁关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`，已由 `Movement` smoke 覆盖；待补 AI follow path 自动开门、视觉更新和声音占位。
 - 待补建筑 footprint 阻挡：复杂 footprint、多层 story、door opening、wall visual、floor visual 和路径阻挡一致。
 - 待补门的视觉表现：门模型、开合状态、碰撞体、hover outline、交互提示和声音占位。
 

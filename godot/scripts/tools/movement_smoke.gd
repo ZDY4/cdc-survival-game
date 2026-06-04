@@ -78,6 +78,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 		errors.append("occupied movement feedback should expose blocking actor id")
 	_expect_rejected_command(errors, occupied_result, "goal_occupied", "occupied movement")
 	_expect_path_failure_reasons(errors, simulation, topology)
+	errors.append_array(_expect_auto_open_door_movement(registry))
 
 	player.ap = 0.0
 	var queued_goal: Dictionary = _first_open_neighbor(player.grid_position, topology, _occupied_actor_cells(simulation, 1))
@@ -223,6 +224,114 @@ func _expect_configured_ap_rules(registry: RefCounted) -> Array[String]:
 	if absf(player.ap - 4.0) > 0.001:
 		errors.append("configured AP max should cap auto-opened player AP at 4, got %.2f" % player.ap)
 	return errors
+
+
+func _expect_auto_open_door_movement(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position.x = 0
+	player.grid_position.y = 0
+	player.grid_position.z = 0
+	player.ap = 5.0
+	_move_non_player_actors_out_of_test_lane(simulation)
+	var topology: Dictionary = _door_test_topology(false)
+	simulation.configure_map_interactions({
+		"movement_smoke_door": _door_target("movement_smoke_door", false, false),
+	})
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "move",
+		"target_position": {"x": 2, "y": 0, "z": 0},
+		"topology": topology,
+	})
+	if not bool(result.get("success", false)):
+		errors.append("movement through unlocked closed door should auto-open: %s" % result.get("reason", "unknown"))
+	if player.grid_position.x != 2 or player.grid_position.z != 0:
+		errors.append("movement through auto-opened door should reach goal")
+	var door_state: Dictionary = _dictionary_or_empty(simulation.door_states.get("movement_smoke_door", {}))
+	if not bool(door_state.get("is_open", false)):
+		errors.append("auto-open movement should persist door open state")
+	if _event_count(simulation.snapshot(), "door_toggled") <= 0:
+		errors.append("auto-open movement should emit door_toggled")
+	if _event_count(simulation.snapshot(), "door_auto_opened") <= 0:
+		errors.append("auto-open movement should emit door_auto_opened")
+	var auto_payload: Dictionary = _last_event_payload(simulation.snapshot(), "door_auto_opened")
+	if str(auto_payload.get("door_id", "")) != "movement_smoke_door":
+		errors.append("door_auto_opened should include door_id")
+
+	var locked_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var locked_player: RefCounted = locked_simulation.actor_registry.get_actor(1)
+	locked_player.grid_position.x = 0
+	locked_player.grid_position.y = 0
+	locked_player.grid_position.z = 0
+	locked_player.ap = 5.0
+	_move_non_player_actors_out_of_test_lane(locked_simulation)
+	locked_simulation.configure_map_interactions({
+		"movement_smoke_door": _door_target("movement_smoke_door", false, true),
+	})
+	var locked_result: Dictionary = locked_simulation.submit_player_command({
+		"kind": "move",
+		"target_position": {"x": 2, "y": 0, "z": 0},
+		"topology": _door_test_topology(true),
+	})
+	if str(locked_result.get("reason", "")) != "path_unreachable":
+		errors.append("movement through locked door should remain blocked")
+	return errors
+
+
+func _move_non_player_actors_out_of_test_lane(simulation: RefCounted) -> void:
+	for actor in simulation.actor_registry.actors():
+		if actor.actor_id == 1:
+			continue
+		actor.grid_position.x = 0
+		actor.grid_position.y = 0
+		actor.grid_position.z = 9 + actor.actor_id
+
+
+func _door_test_topology(locked: bool) -> Dictionary:
+	return {
+		"bounds": {
+			"min_x": 0,
+			"max_x": 2,
+			"min_z": 0,
+			"max_z": 0,
+		},
+		"blocking_cells": {
+			"1:0:0": "movement_smoke_door",
+		},
+		"sight_blocking_cells": {
+			"1:0:0": "movement_smoke_door",
+		},
+		"door_objects": [_door_summary("movement_smoke_door", false, locked)],
+	}
+
+
+func _door_target(target_id: String, is_open: bool, locked: bool) -> Dictionary:
+	var door: Dictionary = _door_summary(target_id, is_open, locked)
+	return {
+		"target_id": target_id,
+		"target_type": "map_object",
+		"display_name": "移动测试门",
+		"kind": "door",
+		"anchor": {"x": 1, "y": 0, "z": 0},
+		"cells": [{"x": 1, "y": 0, "z": 0}],
+		"door": door,
+	}
+
+
+func _door_summary(target_id: String, is_open: bool, locked: bool) -> Dictionary:
+	return {
+		"door_id": target_id,
+		"object_id": target_id,
+		"display_name": "移动测试门",
+		"anchor": {"x": 1, "y": 0, "z": 0},
+		"cells": [{"x": 1, "y": 0, "z": 0}],
+		"is_open": is_open,
+		"locked": locked,
+		"blocks_movement": not is_open,
+		"blocks_sight": not is_open,
+		"blocks_sight_when_closed": true,
+	}
 
 
 func _minimal_unreachable_topology(coord: RefCounted) -> Dictionary:

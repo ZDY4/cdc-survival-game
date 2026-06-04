@@ -629,7 +629,8 @@ func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 		return {"success": false, "reason": "move_topology_missing"}
 	var target_position: Dictionary = _dictionary_or_empty(command.get("target_position", command.get("grid", {})))
 	var goal: RefCounted = GridCoord.from_dictionary(target_position)
-	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, _occupied_actor_cells(actor.actor_id))
+	var movement_topology: Dictionary = _topology_with_auto_open_doors(topology)
+	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
 	if not bool(plan.get("success", false)):
 		return plan
 	var steps: int = int(plan.get("steps", 0))
@@ -660,6 +661,7 @@ func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	_spend_ap(actor, cost, "move")
 	actor.grid_position = goal
 	for step in _array_or_empty(plan.get("path", [])).slice(1):
+		_auto_open_door_for_step(actor.actor_id, _dictionary_or_empty(step), topology)
 		_emit("movement_step", {
 			"actor_id": actor.actor_id,
 			"to": _dictionary_or_empty(step),
@@ -2621,7 +2623,8 @@ func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dicti
 	if topology.is_empty():
 		return {"success": false, "reason": "pending_move_topology_missing"}
 	var goal: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(pending_movement.get("target_position", {})))
-	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, _occupied_actor_cells(actor.actor_id))
+	var movement_topology: Dictionary = _topology_with_auto_open_doors(topology)
+	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
 	if not bool(plan.get("success", false)):
 		return {
 			"success": false,
@@ -2648,6 +2651,7 @@ func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dicti
 	_spend_ap(actor, float(affordable_steps), "pending_move")
 	actor.grid_position = GridCoord.from_dictionary(destination)
 	for step in path.slice(1, affordable_steps + 1):
+		_auto_open_door_for_step(actor.actor_id, _dictionary_or_empty(step), topology)
 		_emit("movement_step", {
 			"actor_id": actor.actor_id,
 			"to": _dictionary_or_empty(step),
@@ -2679,6 +2683,79 @@ func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dicti
 		"remaining_steps": max(0, total_steps - affordable_steps),
 		"ap_remaining": actor.ap,
 	}
+
+
+func _topology_with_auto_open_doors(topology: Dictionary) -> Dictionary:
+	if topology.is_empty():
+		return {}
+	var output: Dictionary = topology.duplicate(true)
+	var blocking_cells: Dictionary = _dictionary_or_empty(output.get("blocking_cells", {})).duplicate(true)
+	var sight_blocking_cells: Dictionary = _dictionary_or_empty(output.get("sight_blocking_cells", {})).duplicate(true)
+	for door in _array_or_empty(output.get("door_objects", [])):
+		var door_data: Dictionary = _dictionary_or_empty(door)
+		if not _door_can_auto_open(door_data):
+			continue
+		var object_id := str(door_data.get("object_id", door_data.get("door_id", "")))
+		if object_id.is_empty():
+			continue
+		for cell in _array_or_empty(door_data.get("cells", [])):
+			var key := _grid_key(_dictionary_or_empty(cell))
+			if key.is_empty():
+				continue
+			if str(blocking_cells.get(key, "")) == object_id:
+				blocking_cells.erase(key)
+			if str(sight_blocking_cells.get(key, "")) == object_id:
+				sight_blocking_cells.erase(key)
+	output["blocking_cells"] = blocking_cells
+	output["sight_blocking_cells"] = sight_blocking_cells
+	output["blocking_cell_count"] = blocking_cells.size()
+	output["sight_blocking_cell_count"] = sight_blocking_cells.size()
+	return output
+
+
+func _auto_open_door_for_step(actor_id: int, step: Dictionary, topology: Dictionary) -> Dictionary:
+	var door: Dictionary = _door_for_grid(step, topology)
+	if door.is_empty() or not _door_can_auto_open(door):
+		return {}
+	var door_id := str(door.get("door_id", door.get("object_id", "")))
+	if door_id.is_empty():
+		return {}
+	var result: Dictionary = toggle_door(actor_id, door_id)
+	if bool(result.get("success", false)):
+		_emit("door_auto_opened", {
+			"actor_id": actor_id,
+			"door_id": door_id,
+			"grid": step.duplicate(true),
+		})
+	return result
+
+
+func _door_for_grid(grid: Dictionary, topology: Dictionary) -> Dictionary:
+	if grid.is_empty():
+		return {}
+	var key := _grid_key(grid)
+	for door in _array_or_empty(topology.get("door_objects", [])):
+		var door_data: Dictionary = _dictionary_or_empty(door)
+		for cell in _array_or_empty(door_data.get("cells", [])):
+			if _grid_key(_dictionary_or_empty(cell)) == key:
+				return door_data
+	return {}
+
+
+func _door_can_auto_open(door: Dictionary) -> bool:
+	if door.is_empty():
+		return false
+	var door_id := str(door.get("door_id", door.get("object_id", "")))
+	var state: Dictionary = _dictionary_or_empty(door_states.get(door_id, door))
+	if bool(state.get("locked", door.get("locked", false))):
+		return false
+	return not bool(state.get("is_open", door.get("is_open", false)))
+
+
+func _grid_key(grid: Dictionary) -> String:
+	if grid.is_empty():
+		return ""
+	return "%d:%d:%d" % [int(grid.get("x", 0)), int(grid.get("y", 0)), int(grid.get("z", 0))]
 
 
 func _resume_pending_interaction(actor: RefCounted, topology: Dictionary, movement_result: Dictionary = {}) -> Dictionary:
