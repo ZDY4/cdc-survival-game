@@ -31,7 +31,7 @@
 
 - 已迁移统一命令返回结构第一版：`success`、`kind`、`reason`、`events`、`turn_state`、`combat_state`、`runtime_snapshot_delta`、`ui_feedback`、`prompt`、`context_snapshot` 已稳定出现在 `Simulation.submit_player_command()` 的所有返回结果中，并由 `Interaction` smoke 覆盖。
 - 部分迁移命令 reject 语义：无 actor、非玩家 actor、玩家回合关闭、未知交互目标、未知攻击目标和 AP 不足移动排队已有稳定 reason，并通过 `player_command_rejected` / `ui_feedback` payload 由 `Interaction` / `Movement` smoke 覆盖；移动阻挡、跨层/LOS 攻击、材料/技能/资金/数量等领域失败已有分散 smoke 覆盖；常见移动/交互/战斗/技能/制作/容器/交易失败码已有 HUD 中文反馈映射，并由 `UI` smoke 覆盖典型攻击和制作拒绝。待补统一覆盖目标不可见、UI modal 阻塞、缺工具、完整禁用 reason 和跨系统 reason 文档。
-- 待补可取消命令分类：pending movement、pending interaction、targeting、dialogue、trade、container、quantity modal、menu panel 应按旧 Rust 的关闭优先级处理。
+- 可取消命令分类第一版已迁移：`wait` 保留为推进 pending 的命令，新的 `move` / `interact` / `attack` 目标命令会统一取消旧 pending movement / pending interaction，清空旧 interaction prompt，发出 `movement_cancelled` / `interaction_cancelled` / `pending_cancelled` 并在命令结果中暴露 `cancelled_pending`；已由 `Movement` / `PlayerInteraction` / `Interaction` smoke 覆盖。待补 targeting、dialogue、trade、container、quantity modal、menu panel 的完整关闭优先级。
 - 待补命令审计：smoke 中应能断言每个玩家动作只通过 `Simulation.submit_player_command()` 或 core service 修改业务状态。
 
 ## 2. 回合、AP 与时间推进
@@ -71,7 +71,7 @@
 - 待补 ray 命中排序：actor hit fraction、object hit fraction、trigger hit fraction、door 近似 AABB、对象锚点噪声、场景切换触发器优先级。
 - hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、actor / pickup / container / trigger / door 等目标类别、target id/name、格子、当前 prompt 摘要、地面移动可达/不可达原因和预计步数，hover cursor 会按移动可达/不可达显示绿色/红色预览；地面 hover 已新增 `MovePathPreviewMarkers` 路径格预览，暴露 marker count、path length、reachable、reason、steps、AP cost / available / affordability、affordable_steps、pending_steps 和每格 grid / path_index / step_cost / within_current_ap / requires_pending；pending movement 已新增 `PendingMovementPathMarkers` 持续显示剩余路线，暴露 actor、target、required/available AP、remaining_steps 和每格 grid / path_index；已由 `PlayerInteraction` smoke 覆盖。待补路径线 polish 和跨回合动画表现。
 - 部分迁移左键/右键差异：左键主交互或移动、右键打开 interaction menu、菜单外点击关闭并阻止本次世界输入已恢复；待补完整上下文菜单项、禁用态和点击外部关闭的所有 modal 分支。
-- 待补目标切换规则：点击新目标时取消旧 pending 的 turn policy、清空旧 prompt、更新 focused target。
+- 目标切换规则第一版已迁移：点击或提交新的移动、交互、攻击目标会在 `Simulation` 入口统一取消旧 pending、清空旧 prompt、记录 replacement command 和取消 payload，取消事件会进入 recent feedback；已由 `Movement` / `PlayerInteraction` smoke 覆盖。待补 focused target 的完整 UI 状态、空地取消策略和战斗内取消 turn policy。
 - 部分迁移鼠标拖拽：地图面板画布左键拖拽平移、滚轮/按钮缩放、pan 复位和状态行诊断已有第一版，并由 `UIToggle` smoke 覆盖；背包物品拖到当前容器列会走 `store_active_container_item`，拖到交易购物车会按当前 TradeSnapshot 价格/可出售状态排入出售队列，并由 `ContainerUI` / `TradeUI` smoke 覆盖。待补技能树拖拽、滚动条拖拽和跨面板拖拽视觉 polish。
 
 ### 3.3 UI 状态机

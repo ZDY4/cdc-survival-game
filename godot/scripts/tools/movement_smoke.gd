@@ -98,6 +98,28 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	if _array_or_empty(queued_payload.get("path", [])).is_empty():
 		errors.append("movement_queued should include planned path")
 
+	var replacement_goal: Dictionary = _different_open_neighbor(player.grid_position, topology, _occupied_actor_cells(simulation, 1), queued_goal)
+	var replacement_cancelled_before: int = _event_count(simulation.snapshot(), "movement_cancelled")
+	var replacement_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": replacement_goal, "topology": topology})
+	if replacement_result.get("reason", "") != "ap_insufficient_movement_queued":
+		errors.append("new target move should queue replacement pending movement")
+	var cancelled_pending: Dictionary = _dictionary_or_empty(replacement_result.get("cancelled_pending", {}))
+	if str(cancelled_pending.get("reason", "")) != "new_target_command":
+		errors.append("new target command should report cancelled pending reason")
+	if _dictionary_or_empty(cancelled_pending.get("movement", {})).is_empty():
+		errors.append("new target command should include cancelled movement payload")
+	var replacement_pending: Dictionary = _dictionary_or_empty(simulation.snapshot().get("pending_movement", {}))
+	var replacement_target: Dictionary = _dictionary_or_empty(replacement_pending.get("target_position", {}))
+	if int(replacement_target.get("x", -999)) != int(replacement_goal.get("x", -998)) or int(replacement_target.get("z", -999)) != int(replacement_goal.get("z", -998)):
+		errors.append("new target command should replace pending movement target")
+	if _event_count(simulation.snapshot(), "movement_cancelled") <= replacement_cancelled_before:
+		errors.append("new target command should emit movement_cancelled")
+	var pending_cancelled_payload: Dictionary = _last_event_payload(simulation.snapshot(), "pending_cancelled")
+	if str(pending_cancelled_payload.get("reason", "")) != "new_target_command":
+		errors.append("new target command should emit pending_cancelled with replacement reason")
+	if not _recent_feedback_has(simulation.snapshot(), "pending_cancelled"):
+		errors.append("new target command should expose pending_cancelled in recent feedback")
+
 	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
 	var player_snapshot: Dictionary = _actor_snapshot(world_result, 1)
 	var grid: Dictionary = player_snapshot.get("grid_position", {})
@@ -434,6 +456,29 @@ func _first_open_neighbor(coord: RefCounted, topology: Dictionary, occupied: Dic
 	return coord.to_dictionary()
 
 
+func _different_open_neighbor(coord: RefCounted, topology: Dictionary, occupied: Dictionary, excluded: Dictionary) -> Dictionary:
+	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var candidate := {
+			"x": coord.x + offset.x,
+			"y": coord.y,
+			"z": coord.z + offset.y,
+		}
+		if int(candidate.get("x", 0)) == int(excluded.get("x", 0)) and int(candidate.get("z", 0)) == int(excluded.get("z", 0)):
+			continue
+		var key := "%d:%d:%d" % [candidate["x"], candidate["y"], candidate["z"]]
+		if occupied.has(key):
+			continue
+		if topology.get("blocking_cells", {}).has(key):
+			continue
+		var bounds: Dictionary = topology.get("bounds", {})
+		if int(candidate["x"]) < int(bounds.get("min_x", 0)) or int(candidate["x"]) > int(bounds.get("max_x", 0)):
+			continue
+		if int(candidate["z"]) < int(bounds.get("min_z", 0)) or int(candidate["z"]) > int(bounds.get("max_z", 0)):
+			continue
+		return candidate
+	return excluded.duplicate(true)
+
+
 func _occupied_actor_cells(simulation: RefCounted, excluded_actor_id: int) -> Dictionary:
 	var output: Dictionary = {}
 	for actor in simulation.actor_registry.actors():
@@ -466,6 +511,14 @@ func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
 		if event_data.get("kind", "") == kind:
 			return _dictionary_or_empty(event_data.get("payload", {}))
 	return {}
+
+
+func _recent_feedback_has(snapshot: Dictionary, kind: String) -> bool:
+	for entry in snapshot.get("recent_event_feedback", []):
+		var data: Dictionary = _dictionary_or_empty(entry)
+		if str(data.get("kind", "")) == kind:
+			return true
+	return false
 
 
 func _expect_rejected_command(errors: Array[String], result: Dictionary, expected_reason: String, context: String) -> void:

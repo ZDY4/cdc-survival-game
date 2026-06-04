@@ -132,6 +132,7 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 		return _normalize_player_command_result({"success": false, "reason": "turn_closed", "turn_state": turn_state.duplicate(true)}, command, kind, actor_id, event_start_index)
 
 	var result: Dictionary = {}
+	var cancelled_pending: Dictionary = _cancel_pending_for_new_target_command(actor_id, kind, command)
 	match kind:
 		"wait":
 			result = _submit_wait_command(actor, command)
@@ -153,6 +154,8 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 			result = _finalize_player_ap_action(actor, _submit_use_skill_command(actor, command), command, "use_skill")
 		_:
 			result = _unsupported_player_command(command, "unknown_player_command")
+	if not cancelled_pending.is_empty():
+		result["cancelled_pending"] = cancelled_pending
 	return _normalize_player_command_result(result, command, kind, actor_id, event_start_index)
 
 
@@ -3468,6 +3471,54 @@ func _player_command_log_payload(command: Dictionary, actor_id: int, command_kin
 		if command.has(key):
 			payload[key] = command.get(key)
 	return payload
+
+
+func _cancel_pending_for_new_target_command(actor_id: int, command_kind: String, command: Dictionary) -> Dictionary:
+	if pending_movement.is_empty() and pending_interaction.is_empty():
+		return {}
+	if not _command_replaces_pending_target(command_kind, command):
+		return {}
+	var movement: Dictionary = pending_movement.duplicate(true)
+	var interaction: Dictionary = pending_interaction.duplicate(true)
+	pending_movement.clear()
+	pending_interaction.clear()
+	interaction_menu.clear()
+	var payload := {
+		"actor_id": actor_id,
+		"reason": "new_target_command",
+		"replacement_kind": command_kind,
+		"replacement": _player_command_log_payload(command, actor_id, command_kind),
+		"movement": movement,
+		"interaction": interaction,
+	}
+	if not movement.is_empty():
+		_emit("movement_cancelled", {
+			"actor_id": int(movement.get("actor_id", actor_id)),
+			"reason": "new_target_command",
+			"pending_movement": movement.duplicate(true),
+			"replacement_kind": command_kind,
+		})
+	if not interaction.is_empty():
+		_emit("interaction_cancelled", {
+			"actor_id": int(interaction.get("actor_id", actor_id)),
+			"reason": "new_target_command",
+			"pending_interaction": interaction.duplicate(true),
+			"replacement_kind": command_kind,
+		})
+	_emit("pending_cancelled", payload.duplicate(true))
+	return payload
+
+
+func _command_replaces_pending_target(command_kind: String, command: Dictionary) -> bool:
+	match command_kind:
+		"move":
+			return command.has("target_position") or command.has("grid")
+		"interact":
+			return not _dictionary_or_empty(command.get("target", {})).is_empty()
+		"attack":
+			return int(command.get("target_actor_id", 0)) > 0
+		_:
+			return false
 
 
 func _events_since(start_index: int) -> Array[Dictionary]:

@@ -520,6 +520,21 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 				"kind": kind,
 				"text": _relationship_changed_text(payload),
 			}
+		"movement_cancelled":
+			return {
+				"kind": kind,
+				"text": "已取消移动: %s" % _pending_cancel_reason_text(str(payload.get("reason", ""))),
+			}
+		"interaction_cancelled":
+			return {
+				"kind": kind,
+				"text": "已取消交互: %s" % _pending_cancel_reason_text(str(payload.get("reason", ""))),
+			}
+		"pending_cancelled":
+			return {
+				"kind": kind,
+				"text": "已取消待执行动作: %s" % _pending_cancel_reason_text(str(payload.get("reason", ""))),
+			}
 		"player_command_rejected":
 			return {
 				"kind": kind,
@@ -589,6 +604,21 @@ func _command_kind_label(kind: String) -> String:
 	if kind.is_empty():
 		return "命令"
 	return kind
+
+
+func _pending_cancel_reason_text(reason: String) -> String:
+	match reason:
+		"new_target_command":
+			return "选择了新目标"
+		"keyboard":
+			return "键盘取消"
+		"smoke_cancel", "movement_smoke_cancelled":
+			return "测试取消"
+	if reason.begins_with("pending_cancelled:"):
+		return _pending_cancel_reason_text(reason.trim_prefix("pending_cancelled:"))
+	if reason.is_empty():
+		return "已取消"
+	return reason
 
 
 func _progression_source_text(source: String) -> String:
