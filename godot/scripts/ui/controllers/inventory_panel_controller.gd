@@ -16,6 +16,7 @@ var _use_button: Button
 var _equip_button: Button
 var _drop_button: Button
 var _context_menu: PopupMenu
+var _discard_dialog: ConfirmationDialog
 var _items_box: VBoxContainer
 var _category_filter: String = "all"
 var _sort_mode: String = "order"
@@ -23,6 +24,8 @@ var _search_text: String = ""
 var _last_snapshot: Dictionary = {}
 var _selected_item: Dictionary = {}
 var _context_item: Dictionary = {}
+var _pending_discard_item: Dictionary = {}
+var _pending_discard_count := 0
 
 
 func _ready() -> void:
@@ -141,14 +144,20 @@ func _build_layout() -> void:
 	_drop_button.pressed.connect(func() -> void:
 		if _selected_item.is_empty():
 			return
-		var root := get_parent()
-		if root != null and root.has_method("drop_player_item"):
-			root.drop_player_item(str(_selected_item.get("item_id", "")), int(_quantity_spin.value if _quantity_spin != null else 1))
+		_open_discard_dialog_for_item(_selected_item, int(_quantity_spin.value if _quantity_spin != null else 1))
 	, CONNECT_DEFERRED)
 	_context_menu = PopupMenu.new()
 	_context_menu.name = "InventoryContextMenu"
 	_context_menu.id_pressed.connect(_execute_context_action)
 	add_child(_context_menu)
+	_discard_dialog = ConfirmationDialog.new()
+	_discard_dialog.name = "DiscardConfirmDialog"
+	_discard_dialog.title = "确认丢弃"
+	_discard_dialog.dialog_text = "确定要丢弃选中的物品吗？"
+	_discard_dialog.confirmed.connect(_confirm_pending_discard)
+	_discard_dialog.get_ok_button().text = "丢弃"
+	_discard_dialog.get_cancel_button().text = "取消"
+	add_child(_discard_dialog)
 	var action_row := HBoxContainer.new()
 	action_row.name = "ActionBar"
 	action_row.add_theme_constant_override("separation", 4)
@@ -294,8 +303,7 @@ func _drop_inventory_action_data(position: Vector2, data: Variant, from_control:
 			if not slots.is_empty() and root.has_method("equip_player_item"):
 				root.equip_player_item(item_id, str(slots[0]))
 		"drop":
-			if root.has_method("drop_player_item"):
-				root.drop_player_item(item_id, _drag_drop_count(item))
+			_open_discard_dialog_for_item(item, _drag_drop_count(item))
 
 
 func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> void:
@@ -332,8 +340,61 @@ func _execute_context_action(action_id: int) -> void:
 			if not slots.is_empty() and root.has_method("equip_player_item"):
 				root.equip_player_item(item_id, str(slots[0]))
 		CONTEXT_DROP:
-			if bool(_context_item.get("droppable", true)) and root.has_method("drop_player_item"):
-				root.drop_player_item(item_id, _drag_drop_count(_context_item))
+			if bool(_context_item.get("droppable", true)):
+				_open_discard_dialog_for_item(_context_item, _drag_drop_count(_context_item))
+
+
+func has_blocking_modal() -> bool:
+	return _discard_dialog != null and _discard_dialog.visible
+
+
+func blocking_modal_name() -> String:
+	if has_blocking_modal():
+		return "inventory_discard_confirm"
+	return ""
+
+
+func close_blocking_modal() -> Dictionary:
+	if not has_blocking_modal():
+		return {"success": false, "reason": "modal_inactive"}
+	_discard_dialog.hide()
+	_pending_discard_item = {}
+	_pending_discard_count = 0
+	return {
+		"success": true,
+		"closed": "modal:inventory_discard_confirm",
+	}
+
+
+func _open_discard_dialog_for_item(item: Dictionary, count: int) -> void:
+	if _discard_dialog == null or item.is_empty():
+		return
+	var item_id := str(item.get("item_id", ""))
+	if item_id.is_empty() or not bool(item.get("droppable", true)):
+		return
+	var available := maxi(1, int(item.get("count", 1)))
+	var normalized_count := clampi(count, 1, available)
+	_pending_discard_item = item.duplicate(true)
+	_pending_discard_count = normalized_count
+	_discard_dialog.dialog_text = "丢弃 %s x%d 会在当前位置生成掉落容器。确定丢弃吗？" % [
+		item.get("name", item_id),
+		normalized_count,
+	]
+	_discard_dialog.popup_centered()
+
+
+func _confirm_pending_discard() -> void:
+	if _pending_discard_item.is_empty() or _pending_discard_count <= 0:
+		return
+	var item_id := str(_pending_discard_item.get("item_id", ""))
+	var count := _pending_discard_count
+	_pending_discard_item = {}
+	_pending_discard_count = 0
+	if _discard_dialog != null:
+		_discard_dialog.hide()
+	var root := get_parent()
+	if root != null and root.has_method("drop_player_item"):
+		root.drop_player_item(item_id, count)
 
 
 func _inventory_action_target(from_control: Control) -> String:

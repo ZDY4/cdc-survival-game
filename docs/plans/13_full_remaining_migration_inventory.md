@@ -58,12 +58,12 @@
 
 - 已迁移菜单面板快捷键：`I` 背包、`C` 角色、`M` 地图、`J` 任务、`K` 技能、`L` 制作，已纳入 `UIToggle` smoke。
 - 已迁移同键 toggle / stage panel 替换：打开对应面板、同键关闭、切换到另一个 stage panel 时替换当前 active panel，已纳入 `UIToggle` smoke。
-- 部分迁移 `Esc` 关闭链路：已覆盖 selection、active dialogue、interaction menu、trade equipment sell confirm modal、trade panel、container panel、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；待补 quantity modal、discard modal、overworld prompt 和更完整 blocker 诊断。
+- 部分迁移 `Esc` 关闭链路：已覆盖 selection、active dialogue、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；待补 quantity modal、overworld prompt 和更完整 blocker 诊断。
 - 部分迁移数字键：已恢复对话选项 `1-9` 和 hotbar `1-0` 基础入口并纳入 smoke；待补菜单内数量输入与快捷动作冲突处理。
 - 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、pending 取消和长按重复等待第一版；待补自由观察播放切换、长按节奏配置和 modal 冲突策略。
 - 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环、相机跟随、actor busy 时阻止切换和选中/提示状态清理；待补 free observe。
 - 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
-- 部分迁移输入阻塞：stage/settings、interaction menu、trade equipment sell confirm modal、trade panel、container panel 已阻止 gameplay 输入，`gameplay_input_blocker_name` 和 HUD blocker 诊断有第一版，interaction menu 支持点击外部关闭；待补 console、debug panel、quantity/discard/overworld modal、tooltip/drag 层 blocker 细分。
+- 部分迁移输入阻塞：stage/settings、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel 已阻止 gameplay 输入，`gameplay_input_blocker_name` 和 HUD blocker 诊断有第一版，interaction menu 支持点击外部关闭；待补 console、debug panel、quantity/overworld modal、tooltip/drag 层 blocker 细分。
 
 ### 3.2 鼠标和拾取
 
@@ -77,11 +77,11 @@
 ### 3.3 UI 状态机
 
 - 待迁移 `UiMenuState` 等价物：active stage panel、settings panel、blocking gameplay input、close stage panels、toggle panel。
-- 部分迁移 `UiModalState` 等价物：trade equipment sell confirm modal 已接入 gameplay blocker 与 Esc 优先关闭；待补 item quantity、discard modal、container modal、overworld prompt 和统一 modal stack/状态快照。
+- 部分迁移 `UiModalState` 等价物：trade equipment sell confirm modal 和 inventory discard confirm modal 已接入 gameplay blocker 与 Esc 优先关闭；待补 item quantity、container modal、overworld prompt 和统一 modal stack/状态快照。
 - 待迁移 `UiContextMenuState`：库存物品、容器物品、装备槽、技能条目的上下文菜单目标和动作。
 - 待迁移 `UiHoverTooltipState`：库存、技能、场景切换、装备槽、热栏、按钮的 tooltip。
 - 待迁移 `UiInventoryDragState`：拖拽源、悬停目标、拖拽阈值、拖拽预览、装备槽可用性、一次性压制 click。
-- 部分迁移 UI mouse blocker：stage/settings、interaction menu 与 trade equipment sell confirm modal 已阻止 gameplay 输入；待补 debug selection panel 显示、quantity/discard/overworld modal、tooltip 和 drag preview。
+- 部分迁移 UI mouse blocker：stage/settings、interaction menu、trade equipment sell confirm modal 与 inventory discard confirm modal 已阻止 gameplay 输入；待补 debug selection panel 显示、quantity/overworld modal、tooltip 和 drag preview。
 
 ## 4. 移动、路径、空间与地图规则
 
@@ -185,10 +185,10 @@
 ### 8.1 背包
 
 - 已有物品列表、基础操作、分类筛选、名称/重量/价值排序、搜索、滚动列表、选中物品详情和分类/价值/堆叠/槽位摘要第一版，并纳入 `InventoryUI` smoke；inventory order 持久化第一版已接入 actor snapshot、核心物品增删和 Inventory 默认“顺序”排序，并纳入 `InventoryUI` / `Save` smoke；背包内拖拽重排第一版已接入 `reorder_inventory` core 命令并纳入 `InventoryUI` smoke，当前仅在“顺序 + 全部 + 无搜索”视图启用。
-- 选中物品操作栏和右键上下文菜单第一版已迁移：数量 SpinBox、使用、装备、丢弃按钮；任务/关键物品会禁用使用和丢弃，装备/丢弃按钮、拖到装备/丢弃按钮和右键菜单动作都通过 `InventoryUI` smoke 走 UI 触发；待补完整右键菜单项：拆分、检查、加入热栏、交易、存入容器。
-- 数量控制第一版已迁移：背包选中物品可用 SpinBox 指定丢弃数量；待补完整数量弹窗：增减、最大值、确认、取消、非法数量提示，以及拆分/全部丢弃。
+- 选中物品操作栏和右键上下文菜单第一版已迁移：数量 SpinBox、使用、装备、丢弃按钮；任务/关键物品会禁用使用和丢弃，装备/丢弃按钮、拖到装备/丢弃按钮和右键菜单动作都通过 `InventoryUI` smoke 走 UI 触发；背包丢弃确认弹窗已覆盖按钮打开、右键打开、拖拽打开、Esc 取消、确认后执行和 gameplay blocker。待补完整右键菜单项：拆分、检查、加入热栏、交易、存入容器。
+- 数量控制第一版已迁移：背包选中物品可用 SpinBox 指定丢弃数量，丢弃确认弹窗已覆盖确认/取消；待补完整数量弹窗：增减、最大值、非法数量提示，以及拆分/全部丢弃。
 - 物品使用第一版已接入：`inventory_action/use_item`、消耗品 `gameplay_effect.resource_deltas`、HP/基础资源恢复、AP 消耗、物品消耗、失败 reason 和 Inventory “使用”按钮已纳入 `InventoryUI` / `Save` smoke；任务/关键物品不可使用、不可丢弃第一版已纳入 `InventoryUI` smoke；待补 buff/debuff、持续效果、任务交付限制和更完整反馈。
-- 拖拽第一版：背包内排序、拖到装备按钮、拖到丢弃按钮已迁移；待补拖到实际装备槽、拖到容器、拖到交易 sell zone、独立丢弃区域，以及筛选/搜索视图下的拖拽提示 polish。
+- 拖拽第一版：背包内排序、拖到装备按钮、拖到丢弃按钮打开丢弃确认弹窗已迁移；待补拖到实际装备槽、拖到容器、拖到交易 sell zone、独立丢弃区域，以及筛选/搜索视图下的拖拽提示 polish。
 - 待补容量/重量/格子限制，如果旧规则或数据仍需要保留，应进入 core/economy。
 
 ### 8.2 装备
@@ -307,12 +307,12 @@
 - 待迁移 top badges、状态行、事件反馈队列、控制提示展开/折叠。
 - 待迁移 interaction menu 视觉布局、按钮 hover/disabled、关闭、右键位置、目标名称。
 - 待迁移 hotbar dock、观察模式 dock、cooldown 表现、slot tooltip。
-- 待迁移 tooltip layer、context menu layer、drag preview layer、discard modal layer、overworld prompt layer。
+- 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；待迁移 tooltip layer、context menu layer、drag preview layer、overworld prompt layer，以及更统一的 modal layer 表现。
 - 待补所有 UI 的 mouse_filter / blocker，使面板不会把点击穿透到世界。
 
 ### 13.3 面板
 
-- 背包面板已有筛选、搜索、详情、滚动列表、选中物品操作栏、右键上下文菜单、顺序视图拖拽重排和拖到装备/丢弃按钮第一版；待补实际装备槽集成、完整上下文项、跨面板拖拽、数量弹窗 polish。
+- 背包面板已有筛选、搜索、详情、滚动列表、选中物品操作栏、右键上下文菜单、顺序视图拖拽重排、拖到装备/丢弃按钮和丢弃确认弹窗第一版；待补实际装备槽集成、完整上下文项、跨面板拖拽、数量弹窗 polish。
 - 角色面板待补：属性、资源、装备、派生数值、属性点分配、状态效果。
 - 地图面板待补：canvas、pan、zoom、地点、当前地图、overworld 路线、追踪目标。
 - Journal 面板待补：任务详情、追踪、完成/失败、奖励领取反馈。
@@ -374,7 +374,7 @@
 - `PlayerInteraction`：补 UI blocker、右键菜单关闭、hover prompt、actor/object/grid 优先级、不可见目标。
 - `Combat`：补 LOS、跨层、AOE、友军伤害、战斗退出 decay、远程弹药/reload、暴击 seed。
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。
-- `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、右键使用/装备/丢弃菜单、丢弃数量 SpinBox 和任务/关键物品禁用第一版已有 smoke；待补完整上下文菜单项、完整数量弹窗、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
+- `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、右键使用/装备/丢弃菜单、丢弃数量 SpinBox、丢弃确认弹窗 blocker/Esc/确认和任务/关键物品禁用第一版已有 smoke；待补完整上下文菜单项、完整数量弹窗、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
 - `ContainerUI`：补双向拖拽、背包限制/权限等高级错误；关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择与基础失败提示已有 smoke。
 - `TradeUI`：购物车、批量确认和无部分成交已有 smoke；待补装备出售、不可出售和拖拽。
 - `SkillsUI`：补多槽 hotbar、技能树 pan、目标预览、cooldown、主动效果。

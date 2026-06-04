@@ -238,6 +238,10 @@ func close_trade_panel() -> void:
 
 
 func close_blocking_modal() -> Dictionary:
+	if inventory_panel != null and inventory_panel.has_method("close_blocking_modal"):
+		var inventory_result: Dictionary = inventory_panel.call("close_blocking_modal")
+		if bool(inventory_result.get("success", false)):
+			return inventory_result
 	if trade_panel != null and trade_panel.has_method("close_blocking_modal"):
 		var result: Dictionary = trade_panel.call("close_blocking_modal")
 		if bool(result.get("success", false)):
@@ -364,6 +368,10 @@ func _blocking_modal_open() -> bool:
 
 
 func _blocking_modal_name() -> String:
+	if inventory_panel != null and inventory_panel.has_method("blocking_modal_name"):
+		var inventory_modal := str(inventory_panel.call("blocking_modal_name"))
+		if not inventory_modal.is_empty():
+			return inventory_modal
 	if trade_panel != null and trade_panel.has_method("blocking_modal_name"):
 		var trade_modal := str(trade_panel.call("blocking_modal_name"))
 		if not trade_modal.is_empty():

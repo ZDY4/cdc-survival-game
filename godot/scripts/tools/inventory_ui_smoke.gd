@@ -249,13 +249,37 @@ func _run_checks(game_root: Node) -> Array[String]:
 		quantity_spin.value = 2
 	if drop_button == null or drop_button.disabled:
 		errors.append("selected droppable item should enable drop button")
-	elif not _open_inventory_context_menu(game_root, "绷带"):
+	else:
+		drop_button.pressed.emit()
+		await process_frame
+		if not _discard_dialog_visible(game_root):
+			errors.append("drop button should open discard confirmation dialog")
+		if _player_inventory_count(game_root, "1006") != 3:
+			errors.append("opening discard confirmation should not mutate inventory")
+		if not bool(game_root.gameplay_input_blocked_by_ui()):
+			errors.append("discard confirmation should block gameplay input")
+		if str(game_root.gameplay_input_blocker_name()) != "modal:inventory_discard_confirm":
+			errors.append("discard confirmation blocker should be modal:inventory_discard_confirm")
+		var esc_discard_result: Dictionary = game_root.close_active_ui("keyboard_escape")
+		if str(esc_discard_result.get("closed", "")) != "modal:inventory_discard_confirm":
+			errors.append("Esc should close inventory discard modal before other UI")
+		if _discard_dialog_visible(game_root):
+			errors.append("Esc should hide inventory discard modal")
+		if _player_inventory_count(game_root, "1006") != 3:
+			errors.append("Esc closing discard confirmation should keep inventory")
+	if not _open_inventory_context_menu(game_root, "绷带"):
 		errors.append("should open context menu for picked bandages")
 	elif _context_action_disabled(game_root, 3):
 		errors.append("context menu should enable drop for picked bandages")
 	else:
 		quantity_spin.value = 1
 		_execute_inventory_context_action(game_root, 3)
+		await process_frame
+		if not _discard_dialog_visible(game_root):
+			errors.append("context drop should open discard confirmation dialog")
+		if _player_inventory_count(game_root, "1006") != 3:
+			errors.append("context drop confirmation should not mutate inventory before confirm")
+		_confirm_discard_dialog(game_root)
 		await process_frame
 	if _player_inventory_count(game_root, "1006") != 2:
 		errors.append("context dropping one bandage should leave two bandages")
@@ -270,6 +294,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	elif not _drag_inventory_item_to_action(game_root, "绷带", "DropSelectedButton"):
 		errors.append("should drag bandages onto drop button")
 	else:
+		await process_frame
+		if not _discard_dialog_visible(game_root):
+			errors.append("drag drop should open discard confirmation dialog")
+		if _player_inventory_count(game_root, "1006") != 2:
+			errors.append("drag drop confirmation should not mutate inventory before confirm")
+		_confirm_discard_dialog(game_root)
 		await process_frame
 	if _player_inventory_count(game_root, "1006") != 1:
 		errors.append("dropping bandages should remove the requested count from inventory")
@@ -436,6 +466,20 @@ func _drop_button(game_root: Node) -> Button:
 
 func _quantity_spin(game_root: Node) -> SpinBox:
 	return game_root.inventory_panel.find_child("QuantitySpin", true, false) as SpinBox
+
+
+func _discard_dialog_visible(game_root: Node) -> bool:
+	var dialog: Node = game_root.inventory_panel.get_node_or_null("DiscardConfirmDialog")
+	if dialog is ConfirmationDialog:
+		return bool((dialog as ConfirmationDialog).visible)
+	return false
+
+
+func _confirm_discard_dialog(game_root: Node) -> void:
+	var dialog: Node = game_root.inventory_panel.get_node_or_null("DiscardConfirmDialog")
+	if dialog is ConfirmationDialog:
+		(dialog as ConfirmationDialog).confirmed.emit()
+		(dialog as ConfirmationDialog).hide()
 
 
 func _open_inventory_context_menu(game_root: Node, item_needle: String) -> bool:
