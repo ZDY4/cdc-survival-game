@@ -61,8 +61,21 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("world line missing map id")
 	if not hud.get_node("HudPanel/HudLines/InventoryLine").text.contains("1006"):
 		errors.append("inventory line missing picked item")
+	if hud.get_node_or_null("HudPanel/HudLines/HotbarDock") == null:
+		errors.append("missing hotbar dock")
+	else:
+		var hotbar_dock: Node = hud.get_node("HudPanel/HudLines/HotbarDock")
+		if hotbar_dock.get_child_count() != 10:
+			errors.append("hotbar dock should expose ten slots")
+		var first_slot: Node = hotbar_dock.get_node_or_null("HotbarSlot_slot_1")
+		if not (first_slot is Button) or not str((first_slot as Button).text).contains("1:-"):
+			errors.append("empty hotbar slot should show key and empty marker")
+		if first_slot is Button and not str((first_slot as Button).tooltip_text).contains("空"):
+			errors.append("empty hotbar slot should expose empty tooltip")
 	if not hud.get_node("HudPanel/HudLines/InteractionLine").text.contains("拾取"):
 		errors.append("interaction line missing pickup option")
+	if typeof(snapshot.get("hotbar", [])) != TYPE_ARRAY or snapshot.get("hotbar", []).size() != 10:
+		errors.append("HUD snapshot should expose ten hotbar slots")
 	var interaction: Dictionary = snapshot.get("interaction", {})
 	if str(interaction.get("target_kind", "")) != "pickup":
 		errors.append("HUD snapshot should expose interaction target_kind")

@@ -230,8 +230,8 @@
 
 ### 9.3 Hotbar
 
-- 已有单组 hotbar、数字键激活、Skills 面板自动绑定到第一个空槽和清空槽按钮，已纳入 `SkillsUI` smoke；待迁移多组 hotbar、拖拽技能到槽。
-- 已有 Skills 面板 hotbar 可用/冷却不可用原因文本、按钮禁用和技能 `activation.ap_cost` 展示/扣除第一版，已纳入 `SkillsUI` smoke；待补 cooldown 遮罩、resource cost、目标选择进入。
+- 已有单组 hotbar、数字键激活、HUD hotbar dock、Skills 面板自动绑定到第一个空槽和清空槽按钮，已纳入 `SkillsUI` / `UI` smoke；待迁移多组 hotbar、拖拽技能到槽。
+- 已有 Skills 面板 hotbar 可用/冷却不可用原因文本、按钮禁用和技能 `activation.ap_cost` 展示/扣除第一版；HUD hotbar 槽位已显示 key、技能短名、cooldown 文本、slot tooltip 和冷却禁用态，并纳入 `SkillsUI` / `UI` smoke。待补 cooldown 遮罩、resource cost、目标选择进入。
 - 待补观察模式 hotbar 表现：observe playback、speed、自动播放状态。
 
 ## 10. 任务、对话和剧情动作
@@ -306,7 +306,7 @@
 
 - 待迁移 top badges、状态行、事件反馈队列、控制提示展开/折叠。
 - 待迁移 interaction menu 视觉布局、按钮 hover/disabled、关闭、右键位置、目标名称。
-- 待迁移 hotbar dock、观察模式 dock、cooldown 表现、slot tooltip。
+- 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能、slot tooltip 和 cooldown 文本/禁用态；待迁移观察模式 dock、cooldown 遮罩和更完整 slot tooltip。
 - 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；待迁移 tooltip layer、context menu layer、drag preview layer、overworld prompt layer，以及更统一的 modal layer 表现。
 - 待补所有 UI 的 mouse_filter / blocker，使面板不会把点击穿透到世界。
 
@@ -377,7 +377,7 @@
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、右键使用/装备/丢弃菜单、丢弃数量 SpinBox、丢弃确认弹窗 blocker/Esc/确认和任务/关键物品禁用第一版已有 smoke；待补完整上下文菜单项、完整数量弹窗、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
 - `ContainerUI`：补双向拖拽、背包限制/权限等高级错误；关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择与基础失败提示已有 smoke。
 - `TradeUI`：购物车、批量确认和无部分成交已有 smoke；待补装备出售、不可出售和拖拽。
-- `SkillsUI`：补多槽 hotbar、技能树 pan、目标预览、cooldown、主动效果。
+- `SkillsUI`：HUD/Skills 热栏绑定、数字键激活、slot tooltip 和 cooldown 文本/禁用态已有 smoke；待补多组 hotbar、技能树 pan、目标预览、cooldown 遮罩、resource cost 和主动效果。
 - `JournalUI`：补任务详情、追踪、对话交付条件、完成反馈。
 - `CraftingUI`：补解锁、工作台、工具、批量、队列、完成反馈。
 - `Save`：补新增 runtime 字段和旧存档迁移。

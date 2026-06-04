@@ -3,6 +3,7 @@ extends Control
 var _world_label: Label
 var _player_label: Label
 var _inventory_label: Label
+var _hotbar_box: HBoxContainer
 var _interaction_label: Label
 var _debug_overlay_label: Label
 var _info_panel_label: Label
@@ -43,6 +44,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		_inventory_text(player.get("inventory", {})),
 		player.get("active_dialogue_id", ""),
 	]
+	_apply_hotbar(snapshot.get("hotbar", []))
 	_interaction_label.text = _interaction_text(interaction)
 	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
 	_info_panel_label.text = _info_panel_text(snapshot.get("info_panel", {}))
@@ -61,7 +63,7 @@ func _build_layout() -> void:
 	panel.offset_left = 16
 	panel.offset_top = 16
 	panel.offset_right = 560
-	panel.offset_bottom = 148
+	panel.offset_bottom = 184
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(panel)
 
@@ -73,6 +75,9 @@ func _build_layout() -> void:
 	_world_label = _line("WorldLine")
 	_player_label = _line("PlayerLine")
 	_inventory_label = _line("InventoryLine")
+	_hotbar_box = HBoxContainer.new()
+	_hotbar_box.name = "HotbarDock"
+	_hotbar_box.add_theme_constant_override("separation", 4)
 	_interaction_label = _line("InteractionLine")
 	_debug_overlay_label = _line("DebugOverlayLine")
 	_info_panel_label = _line("InfoPanelLine")
@@ -80,6 +85,7 @@ func _build_layout() -> void:
 	box.add_child(_world_label)
 	box.add_child(_player_label)
 	box.add_child(_inventory_label)
+	box.add_child(_hotbar_box)
 	box.add_child(_interaction_label)
 	box.add_child(_debug_overlay_label)
 	box.add_child(_info_panel_label)
@@ -195,6 +201,62 @@ func _option_button(option: Dictionary) -> Button:
 		hide_interaction_menu()
 	)
 	return button
+
+
+func _apply_hotbar(slots_value: Variant) -> void:
+	if _hotbar_box == null:
+		return
+	for child in _hotbar_box.get_children():
+		_hotbar_box.remove_child(child)
+		child.free()
+	var slots: Array = slots_value if typeof(slots_value) == TYPE_ARRAY else []
+	if slots.is_empty():
+		for slot_index in range(1, 11):
+			slots.append({
+				"slot_id": "slot_%d" % slot_index,
+				"key": "0" if slot_index == 10 else str(slot_index),
+				"empty": true,
+			})
+	for slot in slots:
+		var slot_data: Dictionary = slot
+		_hotbar_box.add_child(_hotbar_button(slot_data))
+
+
+func _hotbar_button(slot: Dictionary) -> Button:
+	var button := Button.new()
+	var slot_id := str(slot.get("slot_id", ""))
+	var key_label := str(slot.get("key", ""))
+	var skill_id := str(slot.get("skill_id", ""))
+	var skill_label := str(slot.get("label", skill_id))
+	var cooldown := float(slot.get("cooldown_remaining", 0.0))
+	button.name = "HotbarSlot_%s" % slot_id
+	button.custom_minimum_size = Vector2(48, 28)
+	button.focus_mode = Control.FOCUS_NONE
+	if bool(slot.get("empty", true)):
+		button.text = "%s:-" % key_label
+		button.tooltip_text = "热栏 %s：空" % key_label
+		button.disabled = true
+		return button
+	var suffix := " cd%.0f" % cooldown if cooldown > 0.0 else ""
+	button.text = "%s:%s%s" % [key_label, _short_hotbar_label(skill_label), suffix]
+	button.tooltip_text = "热栏 %s | %s | %s" % [
+		key_label,
+		skill_label,
+		"冷却 %.0fs" % cooldown if cooldown > 0.0 else "可用",
+	]
+	button.disabled = cooldown > 0.0
+	button.pressed.connect(func() -> void:
+		var root := get_parent()
+		if root != null and root.has_method("use_hotbar_slot"):
+			root.use_hotbar_slot(slot_id)
+	)
+	return button
+
+
+func _short_hotbar_label(label: String) -> String:
+	if label.length() <= 4:
+		return label
+	return label.substr(0, 4)
 
 
 func _clear_menu_options() -> void:

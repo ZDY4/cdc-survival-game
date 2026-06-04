@@ -24,6 +24,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_ta
 			"interactive_count": world_snapshot.get("map", {}).get("interactive_objects", []).size(),
 		},
 		"interaction": prompt,
+		"hotbar": _hotbar_summary(runtime_snapshot),
 	}
 
 
@@ -61,3 +62,37 @@ func _prompt_summary(selected_target: Dictionary) -> Dictionary:
 		"options": selected_target.get("options", []),
 		"disabled_options": selected_target.get("disabled_options", []),
 	}
+
+
+func _hotbar_summary(runtime_snapshot: Dictionary) -> Array[Dictionary]:
+	var hotbar: Dictionary = _dictionary_or_empty(runtime_snapshot.get("hotbar", {}))
+	var output: Array[Dictionary] = []
+	for slot_index in range(1, 11):
+		var slot_id := "slot_%d" % slot_index
+		var slot_data: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {}))
+		var skill_id := str(slot_data.get("skill_id", ""))
+		output.append({
+			"slot_id": slot_id,
+			"key": "0" if slot_index == 10 else str(slot_index),
+			"kind": str(slot_data.get("kind", "")),
+			"skill_id": skill_id,
+			"label": _skill_label(skill_id),
+			"cooldown_remaining": float(slot_data.get("cooldown_remaining", 0.0)),
+			"empty": slot_data.is_empty() or skill_id.is_empty(),
+		})
+	return output
+
+
+func _skill_label(skill_id: String) -> String:
+	if skill_id.is_empty():
+		return ""
+	var parts := skill_id.split("_")
+	for index in range(parts.size()):
+		parts[index] = str(parts[index]).capitalize()
+	return " ".join(parts)
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

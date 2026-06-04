@@ -109,6 +109,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not _hotbar_line(game_root).contains("slot_1:adrenaline_rush"):
 		errors.append("skills panel should show bound hotbar skill")
+	game_root.refresh_hud()
+	if not _hud_hotbar_slot_text(game_root, "slot_1").contains("Adre"):
+		errors.append("HUD hotbar should show bound adrenaline rush in slot 1")
+	if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("Adrenaline Rush"):
+		errors.append("HUD hotbar slot should expose skill tooltip")
 	if _use_button(game_root, "adrenaline_rush") == null or _use_button(game_root, "adrenaline_rush").disabled:
 		errors.append("bound active skill should be usable before cooldown")
 	if not _skill_line(game_root, "adrenaline_rush").contains("可用"):
@@ -146,6 +151,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("hotbar skill activation should spend activation AP cost")
 	if not _hotbar_line(game_root).contains("cd20"):
 		errors.append("digit 1 hotbar activation should write cooldown to hotbar")
+	game_root.refresh_hud()
+	if not _hud_hotbar_slot_text(game_root, "slot_1").contains("cd20"):
+		errors.append("HUD hotbar should show cooldown after hotbar activation")
+	if not _hud_hotbar_slot_disabled(game_root, "slot_1"):
+		errors.append("HUD hotbar slot should be disabled while cooldown remains")
+	if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("冷却 20s"):
+		errors.append("HUD hotbar slot tooltip should show cooldown")
 	if not _skill_line(game_root, "adrenaline_rush").contains("冷却 20s"):
 		errors.append("used active skill should show cooldown use state")
 	if _use_button(game_root, "adrenaline_rush") == null or not _use_button(game_root, "adrenaline_rush").disabled:
@@ -163,6 +175,25 @@ func _summary_line(game_root: Node) -> String:
 
 func _hotbar_line(game_root: Node) -> String:
 	return game_root.skills_panel.get_node("SkillsPanel/SkillsLines/HotbarLine").text
+
+
+func _hud_hotbar_slot_text(game_root: Node, slot_id: String) -> String:
+	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
+	if button == null:
+		return ""
+	return str(button.text)
+
+
+func _hud_hotbar_slot_tooltip(game_root: Node, slot_id: String) -> String:
+	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
+	if button == null:
+		return ""
+	return str(button.tooltip_text)
+
+
+func _hud_hotbar_slot_disabled(game_root: Node, slot_id: String) -> bool:
+	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
+	return button == null or button.disabled
 
 
 func _skill_lines(game_root: Node) -> Array[String]:
