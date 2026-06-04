@@ -6,6 +6,7 @@ var _counts_label: Label
 var _entry_label: Label
 var _locations_label: Label
 var _tracked_quest_label: Label
+var _tracked_markers_label: Label
 var _kinds_box: VBoxContainer
 
 
@@ -43,6 +44,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		", ".join(_array_of_strings(snapshot.get("unlocked_locations", []))),
 	]
 	_tracked_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
+	_tracked_markers_label.text = _tracked_markers_text(snapshot.get("tracked_markers", []))
 	_clear_kinds()
 	var kinds: Dictionary = _dictionary_or_empty(snapshot.get("objects_by_kind", {}))
 	var keys: Array = kinds.keys()
@@ -77,6 +79,7 @@ func _build_layout() -> void:
 	_entry_label = _label("EntryLine")
 	_locations_label = _label("LocationsLine")
 	_tracked_quest_label = _label("TrackedQuestLine")
+	_tracked_markers_label = _label("TrackedMarkersLine")
 	_kinds_box = VBoxContainer.new()
 	_kinds_box.name = "KindLines"
 	_kinds_box.add_theme_constant_override("separation", 3)
@@ -85,6 +88,7 @@ func _build_layout() -> void:
 	box.add_child(_entry_label)
 	box.add_child(_locations_label)
 	box.add_child(_tracked_quest_label)
+	box.add_child(_tracked_markers_label)
 	box.add_child(_kinds_box)
 
 
@@ -122,6 +126,36 @@ func _tracked_quest_text(value: Variant) -> String:
 		int(tracked.get("progress_target", 0)),
 		str(tracked.get("status_text", "")),
 	]
+
+
+func _tracked_markers_text(value: Variant) -> String:
+	var markers := _array_or_empty(value)
+	if markers.is_empty():
+		return "任务目标: 无"
+	var parts: Array[String] = []
+	for marker in markers:
+		var marker_data: Dictionary = _dictionary_or_empty(marker)
+		var name := str(marker_data.get("display_name", marker_data.get("target_id", "")))
+		var grid: Dictionary = _dictionary_or_empty(marker_data.get("grid", {}))
+		var status := str(marker_data.get("status", ""))
+		if not grid.is_empty():
+			parts.append("%s@%d,%d,%d" % [
+				name,
+				int(grid.get("x", 0)),
+				int(grid.get("y", 0)),
+				int(grid.get("z", 0)),
+			])
+		elif status == "unresolved":
+			parts.append("%s(%s)" % [name, str(marker_data.get("reason", "unresolved"))])
+		else:
+			parts.append(name)
+	return "任务目标: %d | %s" % [markers.size(), "；".join(parts)]
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

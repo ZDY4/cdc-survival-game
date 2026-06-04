@@ -150,8 +150,9 @@ func refresh_journal_panel() -> void:
 func refresh_map_panel() -> void:
 	if map_panel == null or simulation == null:
 		return
-	var snapshot: Dictionary = MapSnapshot.new(registry).build(simulation.snapshot(), world_result)
-	snapshot["tracked_quest"] = _tracked_quest_snapshot()
+	var tracked_quest: Dictionary = _tracked_quest_snapshot()
+	var snapshot: Dictionary = MapSnapshot.new(registry).build(simulation.snapshot(), world_result, tracked_quest)
+	snapshot["tracked_quest"] = tracked_quest
 	map_panel.apply_snapshot(snapshot)
 	_apply_stage_panel_visibility()
 
@@ -445,6 +446,9 @@ func _tracked_quest_snapshot() -> Dictionary:
 		"quest_id": tracked_quest_id,
 		"title": str(quest.get("title", tracked_quest_id)),
 		"objective_text": str(quest.get("objective_text", "")),
+		"objective": _dictionary_or_empty(quest.get("objective", {})).duplicate(true),
+		"objective_id": str(quest.get("objective_id", "")),
+		"objective_type": str(quest.get("objective_type", "")),
 		"progress_current": int(quest.get("progress_current", 0)),
 		"progress_target": int(quest.get("progress_target", 0)),
 		"status_text": str(quest.get("status_text", "")),

@@ -55,6 +55,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("tracking selected quest should update HUD quest line")
 		if not _map_tracked_quest_line(game_root).contains("补给试跑") or not _map_tracked_quest_line(game_root).contains("0/2"):
 			errors.append("tracking selected quest should update map tracked quest line")
+		if not _map_tracked_markers_line(game_root).contains("任务目标:") or not _map_tracked_markers_line(game_root).contains("食堂食品箱@14,0,23"):
+			errors.append("tracking selected collect quest should expose map target marker")
 		_track_button(game_root).pressed.emit()
 		await process_frame
 		if _quest_title_text(game_root, "tutorial_survive").begins_with("* "):
@@ -63,6 +65,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("clearing tracked quest should clear HUD quest line")
 		if not _map_tracked_quest_line(game_root).contains("追踪任务: 无"):
 			errors.append("clearing tracked quest should clear map tracked quest line")
+		if not _map_tracked_markers_line(game_root).contains("任务目标: 无"):
+			errors.append("clearing tracked quest should clear map target markers")
 
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	player.inventory["1007"] = 1
@@ -205,6 +209,11 @@ func _hud_quest_line(game_root: Node) -> String:
 
 func _map_tracked_quest_line(game_root: Node) -> String:
 	var label: Label = game_root.map_panel.find_child("TrackedQuestLine", true, false) as Label
+	return "" if label == null else label.text
+
+
+func _map_tracked_markers_line(game_root: Node) -> String:
+	var label: Label = game_root.map_panel.find_child("TrackedMarkersLine", true, false) as Label
 	return "" if label == null else label.text
 
 
