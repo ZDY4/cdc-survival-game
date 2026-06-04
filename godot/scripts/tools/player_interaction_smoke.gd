@@ -105,6 +105,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_expect_hover_runtime_state(errors, game_root, "interaction", "survivor_outpost_01_pickup_medkit", "pickup")
 		if not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after hover selection")
+		await _expect_door_hover_outline(errors, game_root, camera)
 		_expect_ground_hover_move_preview(errors, game_root, camera, player_node)
 
 	var pickup_selection: Dictionary = game_root.select_interaction_node(pickup_node)
@@ -379,6 +380,89 @@ func _expect_hover_target_outline_hidden(errors: Array[String], game_root: Node)
 		errors.append("hover target outline should exist")
 	elif outline.visible:
 		errors.append("hover target outline should hide while attack outline is active")
+
+
+func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	var map: Dictionary = _dictionary_or_empty(game_root.world_result.get("map", {})).duplicate(true)
+	var door_id := "player_interaction_smoke_door"
+	var door_grid := {"x": 27, "y": 0, "z": 39}
+	var door_summary := {
+		"door_id": door_id,
+		"object_id": door_id,
+		"display_name": "悬停测试门",
+		"anchor": door_grid.duplicate(true),
+		"cells": [door_grid.duplicate(true)],
+		"is_open": false,
+		"locked": false,
+		"blocks_movement": true,
+		"blocks_sight": true,
+		"blocks_sight_when_closed": true,
+	}
+	var interaction_targets: Dictionary = _dictionary_or_empty(map.get("interaction_targets", {})).duplicate(true)
+	interaction_targets[door_id] = {
+		"target_id": door_id,
+		"target_type": "map_object",
+		"display_name": "悬停测试门",
+		"kind": "door",
+		"anchor": door_grid.duplicate(true),
+		"cells": [door_grid.duplicate(true)],
+		"door": door_summary.duplicate(true),
+	}
+	map["interaction_targets"] = interaction_targets
+	var door_objects: Array = _array_or_empty(map.get("door_objects", [])).duplicate(true)
+	door_objects.append(door_summary.duplicate(true))
+	map["door_objects"] = door_objects
+	game_root.world_result["map"] = map
+	game_root.simulation.configure_map_interactions(interaction_targets)
+	var door_node := Node3D.new()
+	door_node.name = "MapObject_%s" % door_id
+	door_node.position = Vector3(float(door_grid["x"]), 0.18, float(door_grid["z"]))
+	var metadata := {
+		"target_type": "map_object",
+		"target_id": door_id,
+		"target_kind": "door",
+		"door": door_summary.duplicate(true),
+	}
+	door_node.set_meta("interaction_target", metadata)
+	_add_pickable_smoke_box(door_node, metadata)
+	game_root.world_container.add_child(door_node)
+	await game_root.get_tree().physics_frame
+	var pickable_body: Node = door_node.find_child("PickableBody", true, false)
+	if pickable_body == null or not pickable_body.has_meta("interaction_target"):
+		errors.append("door hover smoke should expose pickable door body")
+		return
+	var body_metadata: Dictionary = _dictionary_or_empty(pickable_body.get_meta("interaction_target"))
+	if str(body_metadata.get("target_kind", "")) != "door":
+		errors.append("door pickable metadata should expose target_kind door")
+	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(door_node.global_position))
+	if not bool(hover_result.get("success", false)):
+		errors.append("door hover raycast failed: %s" % hover_result.get("reason", "unknown"))
+		return
+	_expect_hover_target_outline(errors, game_root, "door", door_id)
+	var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
+	if str(hover.get("target_id", "")) != door_id:
+		errors.append("door hover snapshot should expose target id")
+	if str(hover.get("target_category", "")) != "door":
+		errors.append("door hover snapshot should expose door category")
+	var outline: MeshInstance3D = game_root.find_child("HoverTargetOutline", true, false) as MeshInstance3D
+	if outline != null:
+		if bool(outline.get_meta("door_is_open", true)):
+			errors.append("door hover outline should expose closed door state")
+		if bool(outline.get_meta("door_locked", true)):
+			errors.append("door hover outline should expose unlocked door state")
+
+
+func _add_pickable_smoke_box(parent: Node3D, metadata: Dictionary) -> void:
+	var body := StaticBody3D.new()
+	body.name = "PickableBody"
+	body.set_meta("interaction_target", metadata.duplicate(true))
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.0, 0.7, 1.0)
+	shape.shape = box
+	shape.position = Vector3(0.0, 0.35, 0.0)
+	body.add_child(shape)
+	parent.add_child(body)
 
 
 func _expect_attack_target_marker(errors: Array[String], game_root: Node, target_id: int) -> void:
@@ -1090,8 +1174,13 @@ func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expecte
 	if _dictionary_or_empty(hover.get("grid", {})).is_empty():
 		errors.append("runtime hover snapshot should expose hovered grid")
 	var expected_hud_kind := expected_category if not expected_category.is_empty() else "interaction"
-	if not _hud_runtime_control_line(game_root).contains("Hover %s" % expected_hud_kind) or not _hud_runtime_control_line(game_root).contains(expected_target_id):
-		errors.append("HUD runtime control line should show hover interaction target")
+	var hud_line := _hud_runtime_control_line(game_root)
+	var expected_hud_target := str(hover.get("target_name", expected_target_id))
+	var has_target_text := hud_line.contains(expected_target_id)
+	if not expected_hud_target.is_empty():
+		has_target_text = has_target_text or hud_line.contains(expected_hud_target)
+	if not hud_line.contains("Hover %s" % expected_hud_kind) or not has_target_text:
+		errors.append("HUD runtime control line should show hover interaction target %s/%s, got %s" % [expected_hud_kind, expected_target_id, hud_line])
 
 
 func _expect_player_runtime_marker(errors: Array[String], player_node: Node3D) -> void:

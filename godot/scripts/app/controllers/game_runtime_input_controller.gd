@@ -24,6 +24,7 @@ const HOVER_COLOR_ATTACK_BLOCKED := Color(0.95, 0.12, 0.28, 0.78)
 const HOVER_COLOR_PICKUP := Color(0.35, 0.82, 1.0, 0.50)
 const HOVER_COLOR_CONTAINER := Color(0.36, 0.95, 0.62, 0.50)
 const HOVER_COLOR_TRIGGER := Color(0.70, 0.55, 1.0, 0.50)
+const HOVER_COLOR_DOOR := Color(0.95, 0.72, 0.28, 0.56)
 const HOVER_COLOR_ACTOR := Color(1.0, 0.88, 0.22, 0.50)
 
 var game_root: Node
@@ -653,6 +654,7 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 		var raw: Variant = target_node.get_meta("interaction_target")
 		if typeof(raw) == TYPE_DICTIONARY:
 			metadata = raw
+	metadata = _merge_world_interaction_target(metadata)
 	var target_id := str(metadata.get("target_id", ""))
 	var target_name := str(metadata.get("target_name", metadata.get("display_name", "")))
 	if target_name.is_empty():
@@ -679,6 +681,24 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 		"move_preview": {},
 		"attack_preview": attack_preview,
 	})
+
+
+func _merge_world_interaction_target(metadata: Dictionary) -> Dictionary:
+	var target_id := str(metadata.get("target_id", ""))
+	if target_id.is_empty():
+		return metadata
+	var targets: Dictionary = _dictionary_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("interaction_targets", {}))
+	var world_target: Dictionary = _dictionary_or_empty(targets.get(target_id, {}))
+	if world_target.is_empty():
+		return metadata
+	var merged: Dictionary = world_target.duplicate(true)
+	for key in metadata.keys():
+		if key == "door" and world_target.has("door"):
+			continue
+		merged[key] = metadata[key]
+	if not world_target.has("target_kind") and world_target.has("kind"):
+		merged["target_kind"] = str(world_target.get("kind", ""))
+	return merged
 
 
 func _set_hover_failure(reason: String = "") -> bool:
@@ -755,7 +775,12 @@ func _hover_target_category(target: Dictionary, prompt: Dictionary) -> String:
 				return "actor"
 		return "actor"
 	if target_type == "map_object":
+		var target_kind := str(target.get("target_kind", target.get("kind", "")))
+		if target_kind == "door":
+			return "door"
 		var prompt_kind := str(prompt.get("primary_option_kind", ""))
+		if prompt_kind == "door_toggle":
+			return "door"
 		if prompt_kind == "open_container":
 			return "container"
 		if prompt_kind in ["enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor"]:
@@ -871,6 +896,9 @@ func _update_hover_target_outline(target: Dictionary, grid: Dictionary, target_c
 	hover_target_outline.set_meta("actor_id", int(target.get("actor_id", 0)))
 	hover_target_outline.set_meta("target_category", target_category)
 	hover_target_outline.set_meta("hover_color", color)
+	var door: Dictionary = _dictionary_or_empty(target.get("door", {}))
+	hover_target_outline.set_meta("door_is_open", bool(door.get("is_open", false)))
+	hover_target_outline.set_meta("door_locked", bool(door.get("locked", false)))
 
 
 func _hide_hover_target_outline() -> void:
@@ -881,6 +909,8 @@ func _hide_hover_target_outline() -> void:
 	hover_target_outline.set_meta("target_id", "")
 	hover_target_outline.set_meta("actor_id", 0)
 	hover_target_outline.set_meta("target_category", "")
+	hover_target_outline.set_meta("door_is_open", false)
+	hover_target_outline.set_meta("door_locked", false)
 
 
 func _hover_outline_color(target_category: String) -> Color:
@@ -893,6 +923,8 @@ func _hover_outline_color(target_category: String) -> Color:
 			return HOVER_COLOR_CONTAINER
 		"trigger":
 			return HOVER_COLOR_TRIGGER
+		"door":
+			return HOVER_COLOR_DOOR
 	return HOVER_COLOR_INTERACTION
 
 

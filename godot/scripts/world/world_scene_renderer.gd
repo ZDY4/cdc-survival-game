@@ -132,6 +132,8 @@ func _prepare_visual_interaction_targets(root: Node, map: Dictionary) -> void:
 		node.set_meta("interaction_target", {
 			"target_type": "map_object",
 			"target_id": object_id,
+			"target_kind": str(_dictionary_or_empty(active_targets.get(object_id, {})).get("kind", "")),
+			"door": _dictionary_or_empty(_dictionary_or_empty(active_targets.get(object_id, {})).get("door", {})).duplicate(true),
 		})
 		_add_visual_pickable_body(node, active_targets.get(object_id, {}))
 
@@ -171,12 +173,12 @@ func _spawn_interaction_target_markers(root: Node3D, map: Dictionary) -> int:
 	var count: int = 0
 	for group_name in ["interactive_objects", "trigger_objects", "pickup_objects"]:
 		for object in _array_or_empty(map.get(group_name, [])):
-			_spawn_interaction_target_marker(root, _dictionary_or_empty(object))
+			_spawn_interaction_target_marker(root, _dictionary_or_empty(object), map)
 			count += 1
 	return count
 
 
-func _spawn_interaction_target_marker(root: Node3D, object: Dictionary) -> void:
+func _spawn_interaction_target_marker(root: Node3D, object: Dictionary, map: Dictionary) -> void:
 	var anchor: Dictionary = _dictionary_or_empty(object.get("anchor", {}))
 	var footprint: Dictionary = _dictionary_or_empty(object.get("footprint", {}))
 	var width: float = max(1.0, float(footprint.get("width", 1)))
@@ -184,9 +186,12 @@ func _spawn_interaction_target_marker(root: Node3D, object: Dictionary) -> void:
 
 	var node: Node3D = Node3D.new()
 	node.name = "MapObject_%s" % object.get("object_id", "")
+	var target_data: Dictionary = _dictionary_or_empty(_dictionary_or_empty(map.get("interaction_targets", {})).get(str(object.get("object_id", "")), {}))
 	node.set_meta("interaction_target", {
 		"target_type": "map_object",
 		"target_id": str(object.get("object_id", "")),
+		"target_kind": str(target_data.get("kind", "")),
+		"door": _dictionary_or_empty(target_data.get("door", {})).duplicate(true),
 	})
 	node.position = Vector3(
 		(float(anchor.get("x", 0)) + (width - 1.0) * 0.5) * GRID_SIZE,

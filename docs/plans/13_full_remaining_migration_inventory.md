@@ -69,7 +69,7 @@
 
 - 待补完整 picking 优先级：UI blocker -> hotbar -> actor -> generated door -> map object -> trigger -> grid fallback。
 - 待补 ray 命中排序：actor hit fraction、object hit fraction、trigger hit fraction、door 近似 AABB、对象锚点噪声、场景切换触发器优先级。
-- hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、actor / pickup / container / trigger 等目标类别、target id/name、格子、当前 prompt 摘要、地面移动可达/不可达原因和预计步数，hover cursor 会按移动可达/不可达显示绿色/红色预览，并由 `PlayerInteraction` smoke 覆盖；待补更完整路径线/格子预览。
+- hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、actor / pickup / container / trigger / door 等目标类别、target id/name、格子、当前 prompt 摘要、地面移动可达/不可达原因和预计步数，hover cursor 会按移动可达/不可达显示绿色/红色预览，并由 `PlayerInteraction` smoke 覆盖；待补更完整路径线/格子预览。
 - 部分迁移左键/右键差异：左键主交互或移动、右键打开 interaction menu、菜单外点击关闭并阻止本次世界输入已恢复；待补完整上下文菜单项、禁用态和点击外部关闭的所有 modal 分支。
 - 待补目标切换规则：点击新目标时取消旧 pending 的 turn policy、清空旧 prompt、更新 focused target。
 - 部分迁移鼠标拖拽：地图面板画布左键拖拽平移、滚轮/按钮缩放、pan 复位和状态行诊断已有第一版，并由 `UIToggle` smoke 覆盖；待补技能树拖拽、背包/容器/交易物品跨面板拖拽、滚动条拖拽和拖拽视觉 polish。
@@ -97,9 +97,9 @@
 
 - generated door runtime 第一版已迁移：地图对象可通过 `props.door` 生成 `door_objects`、默认关闭、未锁、阻挡 movement / sight，`Simulation.toggle_door()` 会写入 `door_states`，world snapshot 会按 door state 更新 movement / sight blocking，并由 `World` / `Interaction` / `Save` smoke 覆盖。待补将现有地图建筑门洞批量标注为真实 `props.door`。
 - 锁门占位第一版已迁移：locked 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；后续补钥匙、撬锁、开锁失败提示。
-- 自动开门第一版已迁移：玩家移动路径和 hostile AI 追击路径遇到未锁关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`，已由 `Movement` / `AI` smoke 覆盖；待补 settlement / GOAP 路径自动开门、视觉更新和声音占位。
+- 自动开门第一版已迁移：玩家移动路径和 hostile AI 追击路径遇到未锁关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`，已由 `Movement` / `AI` smoke 覆盖；待补 settlement / GOAP 路径自动开门、开合模型状态更新和声音占位。
 - 待补建筑 footprint 阻挡：复杂 footprint、多层 story、door opening、wall visual、floor visual 和路径阻挡一致。
-- 待补门的视觉表现：门模型、开合状态、碰撞体、hover outline、交互提示和声音占位。
+- 门 hover 表现第一版已迁移：world renderer 会把 `target_kind=door` 和 door 状态 metadata 写入 pickable map object，runtime hover 会合并 world interaction target、把 `door_toggle` 归类为 `door`，并用门专属 outline 颜色和 `door_is_open` / `door_locked` meta 表现；已由 `PlayerInteraction` smoke 覆盖。待补门模型、开合状态可视化、碰撞体、交互提示 polish 和声音占位。
 
 ### 4.3 地图切换和 overworld
 
@@ -289,7 +289,7 @@
 - 已恢复 Bevy 风格相机角度、焦点 actor 跟随、手动拖拽后暂停跟随、`F` 恢复跟随和观察楼层相机平面第一版；待补 occlusion、视觉显隐和多层地图表现细节。
 - 待补 zoom factor、视口可见范围、边界 clamp、多楼层聚焦、分辨率变化处理。
 - 待补 occlusion：建筑/墙体遮挡目标时的淡出、轮廓、选择目标 actor 的遮挡处理。
-- hover outline 第一版已迁移：非攻击悬停会显示 `HoverTargetOutline`，按 actor / pickup / container / trigger 等 `target_category` 使用不同颜色并记录 target meta；攻击悬停仍使用专门的 `AttackTargetOutline`、`AttackTargetMarker` 和 `AttackRangeMarkers`；已由 `PlayerInteraction` smoke 覆盖 pickup 与 hostile actor。待补门专属 outline、object/door/container/trigger 更精细优先级、遮挡处理和视觉 polish。
+- hover outline 第一版已迁移：非攻击悬停会显示 `HoverTargetOutline`，按 actor / pickup / container / trigger / door 等 `target_category` 使用不同颜色并记录 target meta；门悬停会保留 `door_is_open` / `door_locked` 状态；攻击悬停仍使用专门的 `AttackTargetOutline`、`AttackTargetMarker` 和 `AttackRangeMarkers`；已由 `PlayerInteraction` smoke 覆盖 pickup、door 与 hostile actor。待补 object/door/container/trigger 更精细优先级、遮挡处理和视觉 polish。
 
 ### 12.4 雾战和 overlay
 
@@ -381,7 +381,7 @@
 
 - UI toggle smoke：键盘打开/关闭面板、Esc 关闭优先级、菜单阻塞 gameplay 输入。
 - Targeting smoke：进入技能/攻击目标选择、取消、预览、确认。
-- Door smoke：锁门、开门、自动开门、视觉和阻挡同步。
+- Door smoke：锁门、开门、自动开门、hover 视觉和阻挡同步已有分散覆盖；待补独立 Door smoke 汇总更多模型/碰撞/声音表现。
 - Map visual smoke：每个地图 scene 的对象模型路径、实例数量、fallback 统计、重叠检查。
 - Asset import smoke：glTF scale/origin/material/collision 导入复核。
 
