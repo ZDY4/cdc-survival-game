@@ -33,6 +33,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	var critical: bool = bool(critical_roll.get("critical", false))
 	var damage_result: Dictionary = _resolve_damage(simulation, attacker, target, profile, critical) if bool(hit_roll.get("hit", true)) else _miss_damage_result(simulation, target, hit_roll)
 	var damage: float = float(damage_result.get("damage", 0.0))
+	var triggered_on_hit_effect_ids: Array[String] = _triggered_on_hit_effect_ids(profile, damage_result)
 	target.hp = max(0.0, target.hp - damage)
 	simulation.emit_event("attack_performed", {
 		"actor_id": actor_id,
@@ -49,6 +50,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"hit_chance": float(hit_roll.get("chance", 1.0)),
 		"accuracy": float(hit_roll.get("accuracy", 0.0)),
 		"evasion": float(hit_roll.get("evasion", 0.0)),
+		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
 	})
 	simulation.emit_event("attack_resolved", {
 		"actor_id": actor_id,
@@ -71,6 +73,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"hit_chance": float(hit_roll.get("chance", 1.0)),
 		"accuracy": float(hit_roll.get("accuracy", 0.0)),
 		"evasion": float(hit_roll.get("evasion", 0.0)),
+		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
 		"combat_rng_seed": int(simulation.combat_state.get("combat_rng_seed", 0)),
 		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
 		"combat_rng_salt": int(critical_roll.get("salt", 0)),
@@ -95,6 +98,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"accuracy": float(hit_roll.get("accuracy", 0.0)),
 		"evasion": float(hit_roll.get("evasion", 0.0)),
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
+		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
 		"weapon_profile": profile,
 	}
 
@@ -180,6 +184,13 @@ func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictiona
 			"range": resolved_range,
 		}
 	return {"success": true}
+
+
+func _triggered_on_hit_effect_ids(profile: Dictionary, damage_result: Dictionary) -> Array[String]:
+	var hit_kind: String = str(damage_result.get("hit_kind", "hit"))
+	if not ["hit", "crit"].has(hit_kind):
+		return []
+	return _string_array(profile.get("on_hit_effect_ids", []))
 
 
 func _hit_check(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:
@@ -385,3 +396,12 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	for entry in _array_or_empty(value):
+		var text: String = str(entry).strip_edges()
+		if not text.is_empty():
+			output.append(text)
+	return output

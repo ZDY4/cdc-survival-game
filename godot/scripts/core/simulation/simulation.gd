@@ -1857,6 +1857,7 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 			"crit_chance": 0.0,
 			"crit_multiplier": 1.0,
 			"ammo_type": "",
+			"on_hit_effect_ids": [],
 			"equipment_slot": "main_hand",
 			"max_ammo": 0,
 		}
@@ -1873,6 +1874,7 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 		"crit_multiplier": max(1.0, float(weapon.get("crit_multiplier", 1.0))),
 		"ammo_type": _normalize_item_id(weapon.get("ammo_type", "")),
 		"ammo_per_attack": 1,
+		"on_hit_effect_ids": _string_array(weapon.get("on_hit_effect_ids", [])),
 		"equipment_slot": "main_hand",
 		"max_ammo": max_ammo,
 	}
@@ -2002,6 +2004,17 @@ func _optional_float(value: Variant, fallback: float) -> float:
 	if typeof(value) == TYPE_STRING and str(value).strip_edges().is_empty():
 		return fallback
 	return float(value)
+
+
+func _string_array(values: Variant) -> Array[String]:
+	var output: Array[String] = []
+	if typeof(values) != TYPE_ARRAY:
+		return output
+	for value in values:
+		var text: String = str(value).strip_edges()
+		if not text.is_empty():
+			output.append(text)
+	return output
 
 
 func _grid_distance(left: RefCounted, right: RefCounted) -> int:

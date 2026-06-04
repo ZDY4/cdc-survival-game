@@ -298,6 +298,8 @@ func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation
 		errors.append("missed attack should not change target hp")
 	if bool(missed.get("critical", false)):
 		errors.append("missed attack should not crit")
+	if not _array_or_empty(missed.get("triggered_on_hit_effect_ids", [])).is_empty():
+		errors.append("missed attack should not trigger on-hit effects")
 	if absf(float(missed.get("hit_chance", -1.0))) > 0.001:
 		errors.append("missed attack should expose zero hit_chance")
 	if int(simulation.snapshot().get("combat_state", {}).get("combat_rng_counter", 0)) != miss_counter_before + 1:
@@ -607,6 +609,10 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	var blunt_attack_event: Dictionary = _last_attack_resolved_for_weapon(simulation.snapshot(), "1003")
 	if absf(float(blunt_attack_event.get("base_damage", 0.0)) - 15.0) > 0.01:
 		errors.append("baseball bat attack should use weapon base_damage 15")
+	if not _array_or_empty(blunt_result.get("triggered_on_hit_effect_ids", [])).has("stun"):
+		errors.append("baseball bat hit should expose stun on-hit effect")
+	if not _array_or_empty(blunt_attack_event.get("triggered_on_hit_effect_ids", [])).has("stun"):
+		errors.append("attack_resolved should expose triggered stun on-hit effect")
 	if not bool(blunt_result.get("critical", false)) and absf(float(blunt_result.get("damage", 0.0)) - 15.0) > 0.01:
 		errors.append("non-critical baseball bat attack should deal weapon damage 15")
 	if absf((before_ap - player.ap) - 3.0) > 0.01:
@@ -634,6 +640,8 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 		errors.append("pistol attack should consume one pistol ammo")
 	if absf(float(pistol_result.get("damage", 0.0)) - 25.0) > 0.01:
 		errors.append("pistol attack should use weapon damage 25")
+	if not _array_or_empty(pistol_result.get("triggered_on_hit_effect_ids", [])).has("headshot_bonus"):
+		errors.append("pistol hit should expose headshot_bonus on-hit effect")
 	player.inventory["1009"] = 2
 	player.weapon_ammo["main_hand"] = 1
 	var magazine_target: int = _register_character(simulation, registry, "zombie_walker", {
@@ -806,6 +814,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _spatial_test_topology(player_grid: Dictionary, blocker_grid: Dictionary) -> Dictionary:
