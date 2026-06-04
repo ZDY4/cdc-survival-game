@@ -20,7 +20,7 @@ func start(simulation: RefCounted, actor_id: int, quest_id: String) -> bool:
 	if quest_id.is_empty() or simulation.active_quests.has(quest_id) or simulation.completed_quests.has(quest_id):
 		return false
 	var quest_data: Dictionary = _quest_data(simulation.quest_library, quest_id)
-	if quest_data.is_empty() or not _quest_index.prerequisites_completed(simulation.completed_quests, quest_data):
+	if quest_data.is_empty() or not _prerequisites_completed(simulation, actor_id, quest_data):
 		return false
 	_start(simulation, quest_id, quest_data, actor_id)
 	_advance_active(simulation, actor_id, quest_id)
@@ -72,7 +72,7 @@ func _start_available(simulation: RefCounted) -> void:
 			if simulation.active_quests.has(quest_key) or simulation.completed_quests.has(quest_key):
 				continue
 			var quest_data: Dictionary = _quest_data(simulation.quest_library, quest_key)
-			if _quest_index.prerequisites_completed(simulation.completed_quests, quest_data):
+			if _prerequisites_completed(simulation, 1, quest_data):
 				_start(simulation, quest_key, quest_data)
 				_advance_active(simulation, 1, quest_key)
 				started = true
@@ -329,3 +329,47 @@ func _relationship_target_actor_id(simulation: RefCounted, source_actor_id: int,
 		if actor.definition_id == definition_id:
 			return actor.actor_id
 	return 0
+
+
+func _prerequisites_completed(simulation: RefCounted, actor_id: int, quest_data: Dictionary) -> bool:
+	for prerequisite in _array_or_empty(quest_data.get("prerequisites", [])):
+		if not _prerequisite_completed(simulation, actor_id, prerequisite):
+			return false
+	return true
+
+
+func _prerequisite_completed(simulation: RefCounted, actor_id: int, prerequisite: Variant) -> bool:
+	if typeof(prerequisite) != TYPE_DICTIONARY:
+		return simulation.completed_quests.has(str(prerequisite))
+	var condition: Dictionary = _dictionary_or_empty(prerequisite)
+	var condition_type: String = str(condition.get("type", condition.get("kind", "quest"))).strip_edges()
+	match condition_type:
+		"quest", "completed_quest", "quest_completed":
+			var quest_id: String = str(condition.get("quest_id", condition.get("id", ""))).strip_edges()
+			return not quest_id.is_empty() and simulation.completed_quests.has(quest_id)
+		"world_flag", "flag":
+			var flag_id: String = str(condition.get("flag_id", condition.get("id", ""))).strip_edges()
+			var expected: bool = bool(condition.get("value", true))
+			return not flag_id.is_empty() and simulation.world_flags.has(flag_id) == expected
+		"item", "inventory_item":
+			var item_id: String = _inventory_entries.normalize_content_id(condition.get("item_id", condition.get("id", "")))
+			var count: int = max(1, int(condition.get("count", 1)))
+			var actor: RefCounted = simulation.actor_registry.get_actor(int(condition.get("actor_id", actor_id)))
+			return not item_id.is_empty() and actor != null and int(actor.inventory.get(item_id, 0)) >= count
+		"relationship", "relation":
+			var source_actor_id: int = int(condition.get("actor_id", condition.get("source_actor_id", actor_id)))
+			var target_actor_id: int = _relationship_target_actor_id(simulation, source_actor_id, condition)
+			if source_actor_id <= 0 or target_actor_id <= 0 or not simulation.has_method("relationship_score"):
+				return false
+			var score: float = float(simulation.call("relationship_score", source_actor_id, target_actor_id))
+			if condition.has("min"):
+				return score >= float(condition.get("min", 0.0))
+			if condition.has("min_score"):
+				return score >= float(condition.get("min_score", 0.0))
+			if condition.has("max"):
+				return score <= float(condition.get("max", 0.0))
+			if condition.has("max_score"):
+				return score <= float(condition.get("max_score", 0.0))
+			return true
+		_:
+			return false

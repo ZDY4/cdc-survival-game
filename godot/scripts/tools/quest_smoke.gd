@@ -72,6 +72,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("HUD feedback should show quest reward, got %s" % completed_feedback)
 	if not completed_feedback.contains("任务开始: 警戒区清剿"):
 		errors.append("HUD feedback should show follow-up quest start, got %s" % completed_feedback)
+	errors.append_array(_expect_structured_prerequisites(registry))
 	errors.append_array(_expect_state_reward_quest(simulation, registry))
 	return errors
 
@@ -197,6 +198,56 @@ func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) ->
 		errors.append("HUD reward feedback should include world flag count, got %s" % feedback_text)
 	if not feedback_text.contains("关系") or not feedback_text.contains("+9"):
 		errors.append("HUD reward feedback should include relationship delta details, got %s" % feedback_text)
+	return errors
+
+
+func _expect_structured_prerequisites(registry: RefCounted) -> Array[String]:
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var errors: Array[String] = []
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		return ["structured prerequisite smoke missing player"]
+	simulation.quest_library["quest_structured_prerequisite_smoke"] = {
+		"data": {
+			"quest_id": "quest_structured_prerequisite_smoke",
+			"title": "结构化前置测试",
+			"description": "smoke-only structured prerequisite quest",
+			"prerequisites": [
+				"tutorial_survive",
+				{"type": "world_flag", "id": "quest_prereq_flag"},
+				{"type": "item", "item_id": "1007", "count": 2},
+				{"type": "relationship", "target_definition_id": "trader_lao_wang", "min": 80},
+			],
+			"flow": {
+				"nodes": {
+					"step_1": {
+						"id": "step_1",
+						"type": "objective",
+						"objective_type": "collect",
+						"item_id": 1008,
+						"count": 1,
+					},
+				},
+			},
+		},
+	}
+	if simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
+		errors.append("structured prerequisite quest should not start before prerequisites")
+	simulation.completed_quests["tutorial_survive"] = true
+	if simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
+		errors.append("structured prerequisite quest should wait for world flag")
+	simulation.world_flags["quest_prereq_flag"] = true
+	if simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
+		errors.append("structured prerequisite quest should wait for required item")
+	player.inventory["1007"] = 2
+	if simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
+		errors.append("structured prerequisite quest should wait for relationship score")
+	simulation.set_relationship_score(1, 2, 85.0, "quest_prerequisite_smoke")
+	if not simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
+		errors.append("structured prerequisite quest should start after all prerequisites")
+	var snapshot: Dictionary = simulation.snapshot()
+	if not _active_quest_ids(snapshot).has("quest_structured_prerequisite_smoke"):
+		errors.append("structured prerequisite quest should be active after successful start")
 	return errors
 
 
