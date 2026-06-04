@@ -73,6 +73,7 @@ func _validate_scene(root: Node3D, counts: Dictionary) -> Array[String]:
 		errors.append("expected camera")
 	else:
 		_validate_player_camera_focus(root, errors)
+	_validate_runtime_map_object_fallbacks(root, errors)
 	return errors
 
 
@@ -281,6 +282,102 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 		errors.append("scene smoke expected declared visual props across map scenes")
 	if instantiated_total != declared_total:
 		errors.append("all map scene visual instancing mismatch %d/%d" % [instantiated_total, declared_total])
+
+
+func _validate_runtime_map_object_fallbacks(root: Node3D, errors: Array[String]) -> void:
+	var visual_backed_marker: Node = root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
+	if visual_backed_marker != null and _map_object_fallback_count(visual_backed_marker) != 0:
+		errors.append("runtime map object with real scene visual should not add duplicate fallback visual")
+	if _map_object_fallback_count(root) <= 0:
+		errors.append("runtime map objects without real scene visuals should expose fallback visuals")
+	var fallback_root := Node3D.new()
+	fallback_root.name = "SceneSmokeMapObjectFallbackRoot"
+	get_root().add_child(fallback_root)
+	WorldSceneRenderer.new().render_world(fallback_root, _fallback_visual_world(), {"load_map_visuals": false})
+	var categories := {}
+	var pending: Array[Node] = [fallback_root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			pending.append(child)
+		if node.name != "MapObjectFallbackVisual":
+			continue
+		categories[str(node.get_meta("fallback_category", ""))] = true
+	for category in ["pickup", "container", "trigger"]:
+		if not bool(categories.get(category, false)):
+			errors.append("generated map object fallback should include %s visual" % category)
+	fallback_root.queue_free()
+
+
+func _map_object_fallback_count(root: Node) -> int:
+	var count := 0
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node.name == "MapObjectFallbackVisual":
+			count += 1
+		for child in node.get_children():
+			pending.append(child)
+	return count
+
+
+func _fallback_visual_world() -> Dictionary:
+	var pickup_grid := {"x": 1, "y": 0, "z": 1}
+	var container_grid := {"x": 2, "y": 0, "z": 1}
+	var trigger_grid := {"x": 3, "y": 0, "z": 1}
+	return {
+		"map": {
+			"map_id": "scene_smoke_fallback_map",
+			"size": {"width": 5, "height": 4},
+			"entry_points": {"default_entry": {"x": 0, "y": 0, "z": 0}},
+			"interactive_objects": [{
+				"object_id": "scene_smoke_container",
+				"kind": "interactive",
+				"anchor": container_grid,
+				"footprint": {"width": 1, "height": 1},
+			}],
+			"trigger_objects": [{
+				"object_id": "scene_smoke_trigger",
+				"kind": "trigger",
+				"anchor": trigger_grid,
+				"footprint": {"width": 1, "height": 1},
+			}],
+			"pickup_objects": [{
+				"object_id": "scene_smoke_pickup",
+				"kind": "pickup",
+				"anchor": pickup_grid,
+				"footprint": {"width": 1, "height": 1},
+			}],
+			"interaction_targets": {
+				"scene_smoke_container": {
+					"target_id": "scene_smoke_container",
+					"target_type": "map_object",
+					"display_name": "Fallback Container",
+					"kind": "container",
+					"anchor": container_grid,
+					"cells": [container_grid],
+				},
+				"scene_smoke_trigger": {
+					"target_id": "scene_smoke_trigger",
+					"target_type": "map_object",
+					"display_name": "Fallback Trigger",
+					"kind": "enter_subscene",
+					"anchor": trigger_grid,
+					"cells": [trigger_grid],
+				},
+				"scene_smoke_pickup": {
+					"target_id": "scene_smoke_pickup",
+					"target_type": "map_object",
+					"display_name": "Fallback Pickup",
+					"kind": "pickup",
+					"anchor": pickup_grid,
+					"cells": [pickup_grid],
+				},
+			},
+		},
+		"actors": [],
+		"corpses": [],
+	}
 
 
 func _declared_visual_stats(root: Node, label: String, errors: Array[String]) -> Dictionary:

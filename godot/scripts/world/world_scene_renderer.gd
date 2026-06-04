@@ -17,6 +17,9 @@ var ground_material := _material(Color(0.22, 0.26, 0.23))
 var actor_material := _material(Color(0.78, 0.78, 0.68))
 var player_material := _material(Color(0.28, 0.55, 0.88))
 var corpse_material := _material(Color(0.32, 0.26, 0.22))
+var pickup_fallback_material := _material(Color(0.22, 0.68, 0.95))
+var container_fallback_material := _material(Color(0.28, 0.74, 0.38))
+var trigger_fallback_material := _material(Color(0.58, 0.42, 0.92, 0.72))
 var door_closed_material := _material(Color(0.50, 0.34, 0.18))
 var door_open_material := _material(Color(0.64, 0.47, 0.25))
 var door_locked_material := _material(Color(0.55, 0.16, 0.12))
@@ -43,9 +46,11 @@ func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionar
 
 	_spawn_ground(root, map)
 	counts["ground"] = 1
+	var visual_object_ids: Dictionary = {}
 	if bool(options.get("load_map_visuals", _should_load_map_visuals())):
 		counts["map_visuals"] = _spawn_map_scene_visuals(root, map)
-	counts["objects"] = _spawn_interaction_target_markers(root, map)
+		visual_object_ids = _map_visual_object_ids(root)
+	counts["objects"] = _spawn_interaction_target_markers(root, map, visual_object_ids)
 	counts["actors"] = _spawn_actor_markers(root, _array_or_empty(world_snapshot.get("actors", [])))
 	counts["corpses"] = _spawn_corpse_markers(root, _array_or_empty(world_snapshot.get("corpses", [])))
 	counts["colliders"] = _pickable_body_count(root)
@@ -173,16 +178,16 @@ func _add_visual_pickable_body(node: Node, target_data: Variant) -> void:
 	_add_pickable_box(node_3d, size, center)
 
 
-func _spawn_interaction_target_markers(root: Node3D, map: Dictionary) -> int:
+func _spawn_interaction_target_markers(root: Node3D, map: Dictionary, visual_object_ids: Dictionary = {}) -> int:
 	var count: int = 0
 	for group_name in ["interactive_objects", "trigger_objects", "pickup_objects"]:
 		for object in _array_or_empty(map.get(group_name, [])):
-			_spawn_interaction_target_marker(root, _dictionary_or_empty(object), map)
+			_spawn_interaction_target_marker(root, _dictionary_or_empty(object), map, visual_object_ids)
 			count += 1
 	return count
 
 
-func _spawn_interaction_target_marker(root: Node3D, object: Dictionary, map: Dictionary) -> void:
+func _spawn_interaction_target_marker(root: Node3D, object: Dictionary, map: Dictionary, visual_object_ids: Dictionary = {}) -> void:
 	var anchor: Dictionary = _dictionary_or_empty(object.get("anchor", {}))
 	var footprint: Dictionary = _dictionary_or_empty(object.get("footprint", {}))
 	var width: float = max(1.0, float(footprint.get("width", 1)))
@@ -203,6 +208,8 @@ func _spawn_interaction_target_marker(root: Node3D, object: Dictionary, map: Dic
 		(float(anchor.get("z", 0)) + (height - 1.0) * 0.5) * GRID_SIZE
 	)
 	_apply_door_state_visual(node, target_data)
+	if not bool(visual_object_ids.get(str(object.get("object_id", "")), false)):
+		_add_map_object_fallback_visual(node, target_data, object, width, height)
 	_add_pickable_box(node, Vector3(width * GRID_SIZE, 0.6, height * GRID_SIZE), Vector3(0.0, 0.25, 0.0))
 	root.add_child(node)
 
@@ -277,6 +284,94 @@ func _add_corpse_fallback_mesh(parent: Node3D) -> void:
 	visual.mesh = mesh
 	visual.material_override = corpse_material
 	parent.add_child(visual)
+
+
+func _add_map_object_fallback_visual(parent: Node3D, target_data: Dictionary, object: Dictionary, width: float, height: float) -> void:
+	var category := _map_object_fallback_category(target_data, object)
+	if category.is_empty() or category == "door":
+		return
+	var visual := MeshInstance3D.new()
+	visual.name = "MapObjectFallbackVisual"
+	visual.mesh = _map_object_fallback_mesh(category, width, height)
+	visual.material_override = _map_object_fallback_material(category)
+	visual.position = _map_object_fallback_position(category)
+	visual.set_meta("fallback_category", category)
+	visual.set_meta("target_id", str(target_data.get("target_id", object.get("object_id", ""))))
+	parent.add_child(visual)
+
+
+func _map_object_fallback_category(target_data: Dictionary, object: Dictionary) -> String:
+	var target_kind := str(target_data.get("kind", target_data.get("target_kind", "")))
+	var object_kind := str(object.get("kind", ""))
+	if target_kind == "pickup" or object_kind == "pickup":
+		return "pickup"
+	if target_kind == "door":
+		return "door"
+	if target_kind in ["enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor", "scene_transition"] or object_kind == "trigger":
+		return "trigger"
+	if target_kind == "container" or object_kind == "interactive":
+		return "container"
+	return ""
+
+
+func _map_object_fallback_mesh(category: String, width: float, height: float) -> Mesh:
+	match category:
+		"pickup":
+			var sphere := SphereMesh.new()
+			sphere.radius = 0.22
+			sphere.height = 0.44
+			sphere.radial_segments = 16
+			sphere.rings = 8
+			return sphere
+		"trigger":
+			var cylinder := CylinderMesh.new()
+			cylinder.top_radius = max(0.28, min(width, height) * 0.35)
+			cylinder.bottom_radius = cylinder.top_radius
+			cylinder.height = 0.04
+			cylinder.radial_segments = 32
+			return cylinder
+	var box := BoxMesh.new()
+	box.size = Vector3(max(0.55, width * 0.58), 0.46, max(0.55, height * 0.58))
+	return box
+
+
+func _map_object_fallback_material(category: String) -> StandardMaterial3D:
+	match category:
+		"pickup":
+			return pickup_fallback_material
+		"trigger":
+			return trigger_fallback_material
+	return container_fallback_material
+
+
+func _map_object_fallback_position(category: String) -> Vector3:
+	match category:
+		"pickup":
+			return Vector3(0.0, 0.28, 0.0)
+		"trigger":
+			return Vector3(0.0, 0.035, 0.0)
+	return Vector3(0.0, 0.23, 0.0)
+
+
+func _map_visual_object_ids(root: Node) -> Dictionary:
+	var ids := {}
+	var visual_root: Node = root.find_child("MapSceneVisuals", true, false)
+	if visual_root == null:
+		return ids
+	var pending: Array[Node] = [visual_root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			pending.append(child)
+		if not node.has_method("to_object_definition"):
+			continue
+		var object_id := str(node.get("object_id"))
+		if object_id.is_empty():
+			continue
+		var visuals_container: Node = node.get_node_or_null("Visuals")
+		if visuals_container != null and visuals_container.get_child_count() > 0:
+			ids[object_id] = true
+	return ids
 
 
 func _apply_door_state_visual(parent: Node, target_data: Dictionary) -> void:
