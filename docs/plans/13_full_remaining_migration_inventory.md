@@ -131,10 +131,10 @@
 
 ### 6.1 攻击校验
 
-- 待补 line-of-sight：攻击和技能共用空间失败原因，墙体、门、楼层、中心点遮挡。
-- 待补同层校验：跨层不可攻击，楼梯或特殊武器例外规则以后明确。
-- 待补范围校验：近战、远程、cell distance、武器射程、技能射程、最小射程。
-- 待补目标阵营：hostile only、friendly fire、self、neutral、dead actor、corpse 不可攻击。
+- 攻击目标合法性第一版已迁移：unknown attacker / target、self、attacker defeated、target defeated、friendly / neutral 非敌对目标、active vision 下不可见目标都会被拒绝；失败结果会暴露 actor id、target actor id、阵营或格子等诊断字段；已由 `Combat` smoke 覆盖。待补 corpse 作为单独 target type 的攻击拒绝、friendly fire 规则开关、关系分数影响和 UI 文案 polish。
+- 攻击空间校验第一版已迁移：跨层、超出武器范围和 LOS 遮挡会返回稳定 reason，并暴露 attacker grid、target grid、distance、range 等诊断字段；`submit_player_command(attack)` 和 core `perform_attack` 都复用同一校验；已由 `Combat` smoke 覆盖。待补门开闭状态的遮挡语义、楼梯/高低差/特殊武器例外、最小射程和技能共用射程策略。
+- 待补 line-of-sight 扩展：技能共用空间失败原因，墙体、门、楼层、中心点遮挡的完整旧版细节。
+- 待补范围扩展：近战、远程、cell distance、武器射程、技能射程、最小射程的全部数据化。
 - 待补攻击前目标预览：可攻击格、目标高亮、命中对象、不可攻击 reason。
 
 ### 6.2 武器、弹药和伤害

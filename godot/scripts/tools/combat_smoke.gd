@@ -410,6 +410,10 @@ func _expect_attack_target_rejections(errors: Array[String], simulation: RefCoun
 	var friendly_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": friendly_id})
 	if friendly_result.get("reason", "") != "target_not_hostile":
 		errors.append("friendly attack should report target_not_hostile, got %s" % friendly_result.get("reason", ""))
+	if int(friendly_result.get("actor_id", 0)) != player.actor_id or int(friendly_result.get("target_actor_id", 0)) != friendly_id:
+		errors.append("friendly attack rejection should expose actor ids")
+	if str(friendly_result.get("attacker_side", "")) != "player" or str(friendly_result.get("target_side", "")) != "friendly":
+		errors.append("friendly attack rejection should expose attacker and target sides")
 	if absf(player.ap - before_ap) > 0.01:
 		errors.append("friendly attack rejection should not spend AP")
 	if bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
@@ -452,6 +456,12 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 	var level_result: Dictionary = simulation.perform_attack(1, level_target, {}, {"range": 10})
 	if level_result.get("reason", "") != "target_invalid_level":
 		errors.append("cross-level attack should report target_invalid_level, got %s" % level_result.get("reason", ""))
+	if int(level_result.get("actor_id", 0)) != 1 or int(level_result.get("target_actor_id", 0)) != level_target:
+		errors.append("cross-level attack should expose actor ids")
+	if _dictionary_or_empty(level_result.get("attacker_grid", {})).is_empty() or _dictionary_or_empty(level_result.get("target_grid", {})).is_empty():
+		errors.append("cross-level attack should expose attacker and target grids")
+	if int(level_result.get("range", 0)) != 10:
+		errors.append("cross-level attack should expose resolved range")
 
 	var far_target: int = _register_character(simulation, registry, "zombie_walker", {
 		"x": int(player_grid.get("x", 0)) + 4,
@@ -463,6 +473,10 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 		errors.append("out-of-range attack should report target_out_of_range, got %s" % far_result.get("reason", ""))
 	if int(far_result.get("distance", 0)) != 4 or int(far_result.get("range", 0)) != 2:
 		errors.append("out-of-range attack should report distance and range")
+	if int(far_result.get("actor_id", 0)) != 1 or int(far_result.get("target_actor_id", 0)) != far_target:
+		errors.append("out-of-range attack should expose actor ids")
+	if _dictionary_or_empty(far_result.get("attacker_grid", {})).is_empty() or _dictionary_or_empty(far_result.get("target_grid", {})).is_empty():
+		errors.append("out-of-range attack should expose attacker and target grids")
 
 	simulation.set_actor_vision_radius(1, 0)
 	simulation.refresh_actor_vision(1, _topology(simulation, registry))
@@ -474,6 +488,10 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 	var hidden_result: Dictionary = simulation.perform_attack(1, hidden_target, {}, {"range": 2})
 	if hidden_result.get("reason", "") != "target_not_visible":
 		errors.append("hidden target attack should report target_not_visible, got %s" % hidden_result.get("reason", ""))
+	if int(hidden_result.get("actor_id", 0)) != 1 or int(hidden_result.get("target_actor_id", 0)) != hidden_target:
+		errors.append("hidden target attack should expose actor ids")
+	if _dictionary_or_empty(hidden_result.get("attacker_grid", {})).is_empty():
+		errors.append("hidden target attack should expose attacker_grid")
 	if _dictionary_or_empty(hidden_result.get("target_grid", {})).is_empty():
 		errors.append("hidden target attack should expose target_grid")
 	simulation.clear_actor_vision(1)
@@ -491,6 +509,12 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 	var los_result: Dictionary = simulation.perform_attack(1, los_target, los_topology, {"range": 8})
 	if los_result.get("reason", "") != "target_blocked_by_los":
 		errors.append("blocked diagonal LOS attack should report target_blocked_by_los, got %s" % los_result.get("reason", ""))
+	if int(los_result.get("actor_id", 0)) != 1 or int(los_result.get("target_actor_id", 0)) != los_target:
+		errors.append("blocked diagonal LOS attack should expose actor ids")
+	if _dictionary_or_empty(los_result.get("attacker_grid", {})).is_empty() or _dictionary_or_empty(los_result.get("target_grid", {})).is_empty():
+		errors.append("blocked diagonal LOS attack should expose attacker and target grids")
+	if int(los_result.get("distance", 0)) != 4 or int(los_result.get("range", 0)) != 8:
+		errors.append("blocked diagonal LOS attack should expose distance and range")
 
 	var command_los_target: int = _register_character(simulation, registry, "zombie_walker", {
 		"x": int(player_grid.get("x", 0)) + 2,
@@ -511,6 +535,10 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 	})
 	if command_los_result.get("reason", "") != "target_blocked_by_los":
 		errors.append("submit attack with blocked LOS should report target_blocked_by_los, got %s" % command_los_result.get("reason", ""))
+	if int(command_los_result.get("actor_id", 0)) != 1 or int(command_los_result.get("target_actor_id", 0)) != command_los_target:
+		errors.append("submit attack with blocked LOS should expose actor ids")
+	if _dictionary_or_empty(command_los_result.get("attacker_grid", {})).is_empty() or _dictionary_or_empty(command_los_result.get("target_grid", {})).is_empty():
+		errors.append("submit attack with blocked LOS should expose attacker and target grids")
 
 	for actor_id in [level_target, far_target, hidden_target, los_target, command_los_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:

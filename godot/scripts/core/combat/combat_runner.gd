@@ -95,6 +95,7 @@ func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_
 		return {
 			"success": false,
 			"reason": "target_not_hostile",
+			"actor_id": actor_id,
 			"attacker_side": attacker.side,
 			"target_side": target.side,
 			"target_actor_id": target_actor_id,
@@ -105,6 +106,7 @@ func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_
 			"reason": "target_not_visible",
 			"actor_id": actor_id,
 			"target_actor_id": target_actor_id,
+			"attacker_grid": attacker.grid_position.to_dictionary(),
 			"target_grid": target.grid_position.to_dictionary(),
 		}
 	return {"success": true}
@@ -121,19 +123,27 @@ func _can_attack(attacker: RefCounted, target: RefCounted) -> bool:
 
 
 func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int) -> Dictionary:
+	var distance: int = abs(attacker.grid_position.x - target.grid_position.x) + abs(attacker.grid_position.z - target.grid_position.z)
+	var resolved_range: int = max(1, attack_range)
 	if attacker.grid_position.y != target.grid_position.y:
 		return {
 			"success": false,
 			"reason": "target_invalid_level",
+			"actor_id": attacker.actor_id,
+			"target_actor_id": target.actor_id,
 			"attacker_grid": attacker.grid_position.to_dictionary(),
 			"target_grid": target.grid_position.to_dictionary(),
+			"distance": distance,
+			"range": resolved_range,
 		}
-	var distance: int = abs(attacker.grid_position.x - target.grid_position.x) + abs(attacker.grid_position.z - target.grid_position.z)
-	var resolved_range: int = max(1, attack_range)
 	if distance > resolved_range:
 		return {
 			"success": false,
 			"reason": "target_out_of_range",
+			"actor_id": attacker.actor_id,
+			"target_actor_id": target.actor_id,
+			"attacker_grid": attacker.grid_position.to_dictionary(),
+			"target_grid": target.grid_position.to_dictionary(),
 			"distance": distance,
 			"range": resolved_range,
 		}
@@ -141,8 +151,12 @@ func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictiona
 		return {
 			"success": false,
 			"reason": "target_blocked_by_los",
+			"actor_id": attacker.actor_id,
+			"target_actor_id": target.actor_id,
 			"attacker_grid": attacker.grid_position.to_dictionary(),
 			"target_grid": target.grid_position.to_dictionary(),
+			"distance": distance,
+			"range": resolved_range,
 		}
 	return {"success": true}
 
