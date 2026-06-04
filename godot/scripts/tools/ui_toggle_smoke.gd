@@ -12,6 +12,7 @@ func _init() -> void:
 func _run() -> void:
 	ProjectSettings.set_setting("cdc/settings_path", SETTINGS_SMOKE_PATH)
 	_remove_settings_smoke_file()
+	_write_legacy_settings_smoke_file()
 	var game_root: Node = GAME_ROOT_SCENE.instantiate()
 	get_root().add_child(game_root)
 	await process_frame
@@ -40,6 +41,23 @@ func _run() -> void:
 func _remove_settings_smoke_file() -> void:
 	if FileAccess.file_exists(SETTINGS_SMOKE_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SETTINGS_SMOKE_PATH))
+
+
+func _write_legacy_settings_smoke_file() -> void:
+	var file := FileAccess.open(SETTINGS_SMOKE_PATH, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify({
+		"master_volume": 35,
+		"music_volume": 45,
+		"sfx_volume": 55,
+		"window_mode": "borderless",
+		"resolution": "1600x900",
+		"vsync": false,
+		"ui_scale": 125,
+		"keybinding_profile": "default",
+	}, "\t"))
+	file.close()
 
 
 func _run_checks(game_root: Node) -> Array[String]:
@@ -572,6 +590,7 @@ func _expect_blocker(errors: Array[String], game_root: Node, expected: String, c
 
 
 func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
+	_assert_legacy_settings_migrated(errors, game_root)
 	_set_slider(game_root, "MasterVolumeSlider", 65)
 	_set_slider(game_root, "MusicVolumeSlider", 40)
 	_set_slider(game_root, "SfxVolumeSlider", 55)
@@ -607,6 +626,8 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 	if not _settings_line(game_root, "SettingsFeedbackLine").contains("设置已保存"):
 		errors.append("settings feedback should show save result")
 	await _assert_settings_reload(errors, game_root)
+	_assert_settings_file_envelope(errors, 65, "fullscreen", "left_handed")
+	await _assert_settings_reset_defaults(errors, game_root)
 
 
 func _set_slider(game_root: Node, node_name: String, value: int) -> void:
@@ -647,6 +668,18 @@ func _settings_line(game_root: Node, node_name: String) -> String:
 	return "" if label == null else str(label.text)
 
 
+func _assert_legacy_settings_migrated(errors: Array[String], game_root: Node) -> void:
+	var snapshot: Dictionary = game_root.panel_controller.settings_snapshot()
+	var persistence: Dictionary = _dictionary_or_empty(snapshot.get("persistence", {}))
+	if int(snapshot.get("schema_version", 0)) != 1:
+		errors.append("settings snapshot should expose schema version: %s" % snapshot)
+	if not bool(persistence.get("migrated", false)) or int(persistence.get("loaded_schema_version", -1)) != 0:
+		errors.append("legacy settings file should be migrated on load: %s" % snapshot)
+	if int(snapshot.get("master_volume", 0)) != 35 or str(snapshot.get("window_mode", "")) != "borderless" or str(snapshot.get("keybinding_profile", "")) != "default":
+		errors.append("legacy settings values should be preserved during migration: %s" % snapshot)
+	_assert_settings_file_envelope(errors, 35, "borderless", "default")
+
+
 func _assert_settings_reload(errors: Array[String], game_root: Node) -> void:
 	var reloaded: Control = SETTINGS_PANEL_CONTROLLER.new()
 	reloaded.name = "SettingsPanelReloadSmoke"
@@ -657,6 +690,34 @@ func _assert_settings_reload(errors: Array[String], game_root: Node) -> void:
 		errors.append("settings controller should reload persisted settings: %s" % snapshot)
 	game_root.remove_child(reloaded)
 	reloaded.queue_free()
+
+
+func _assert_settings_file_envelope(errors: Array[String], expected_master: int, expected_window: String, expected_profile: String) -> void:
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(SETTINGS_SMOKE_PATH))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		errors.append("settings file should contain a JSON envelope")
+		return
+	var envelope: Dictionary = parsed
+	if int(envelope.get("schema_version", 0)) != 1:
+		errors.append("settings file should store schema version: %s" % envelope)
+	var settings: Dictionary = _dictionary_or_empty(envelope.get("settings", {}))
+	if int(settings.get("master_volume", 0)) != expected_master or str(settings.get("window_mode", "")) != expected_window or str(settings.get("keybinding_profile", "")) != expected_profile:
+		errors.append("settings file envelope should store current settings: %s" % envelope)
+
+
+func _assert_settings_reset_defaults(errors: Array[String], game_root: Node) -> void:
+	_press_button(game_root, "ResetSettingsButton")
+	await game_root.get_tree().process_frame
+	var snapshot: Dictionary = game_root.panel_controller.settings_snapshot()
+	if int(snapshot.get("master_volume", 0)) != 100 or int(snapshot.get("music_volume", 0)) != 100 or int(snapshot.get("sfx_volume", 0)) != 100:
+		errors.append("reset settings should restore default audio: %s" % snapshot)
+	if str(snapshot.get("window_mode", "")) != "windowed" or str(snapshot.get("resolution", "")) != "1280x720" or not bool(snapshot.get("vsync", false)):
+		errors.append("reset settings should restore default display: %s" % snapshot)
+	if int(snapshot.get("ui_scale", 0)) != 100 or str(snapshot.get("keybinding_profile", "")) != "default":
+		errors.append("reset settings should restore default UI/control state: %s" % snapshot)
+	if not _settings_line(game_root, "AudioLine").contains("主音量 100%") or not _settings_line(game_root, "DisplayLine").contains("窗口模式") or not _settings_line(game_root, "ControlsLine").contains("默认"):
+		errors.append("reset settings should refresh visible summary lines")
+	_assert_settings_file_envelope(errors, 100, "windowed", "default")
 
 
 func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: String, expected_title: String, expected_line: String, context: String) -> void:
