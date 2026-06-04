@@ -617,6 +617,14 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 		errors.append("single hostile skill target preview should succeed: %s" % single_preview.get("reason", "unknown"))
 	elif _array_or_empty(single_preview.get("affected_actor_ids", [])).size() != 1 or int(_array_or_empty(single_preview.get("affected_actor_ids", []))[0]) != hostile_id:
 		errors.append("single hostile skill target preview should include hostile actor")
+	var los_blocked_topology: Dictionary = _spatial_test_topology(player_grid, {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	var blocked_single: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", single_skill, {"actor_id": hostile_id}, los_blocked_topology)
+	if blocked_single.get("reason", "") != "skill_target_blocked_by_los":
+		errors.append("single skill target blocked by LOS should report skill_target_blocked_by_los, got %s" % blocked_single.get("reason", ""))
 	var friendly_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", single_skill, {"actor_id": friendly_id}, topology)
 	if friendly_preview.get("reason", "") != "skill_target_not_hostile":
 		errors.append("hostile-only skill should reject friendly target, got %s" % friendly_preview.get("reason", ""))
@@ -671,6 +679,57 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 		errors.append("radius hostile-only preview should filter friendly actors")
 	if _array_or_empty(radius_preview.get("affected_cells", [])).size() != 5:
 		errors.append("radius 1 preview should include center plus four cardinal cells")
+	var blocked_aoe_actor_id: int = _register_test_actor(simulation, "skill_aoe_blocked_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 2,
+	}, 10.0)
+	var aoe_los_topology: Dictionary = _spatial_test_topology(player_grid, {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 1,
+	})
+	var los_radius_skill: Dictionary = _targeted_skill_library(registry, {
+		"kind": "radius",
+		"policy": "any_grid",
+		"affected_policy": "hostile_only",
+		"range": 4,
+		"radius": 2,
+	})
+	var los_radius_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", los_radius_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 2,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, aoe_los_topology)
+	if not bool(los_radius_preview.get("success", false)):
+		errors.append("radius skill target with clear center LOS should succeed: %s" % los_radius_preview.get("reason", "unknown"))
+	elif _array_or_empty(los_radius_preview.get("affected_actor_ids", [])).has(blocked_aoe_actor_id):
+		errors.append("radius AOE should exclude actors in cells blocked from center LOS")
+	elif _cells_include_grid(_array_or_empty(los_radius_preview.get("affected_cells", [])), {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 2,
+	}):
+		errors.append("radius AOE respecting LOS should exclude blocked target cell")
+	var ignore_los_radius_skill: Dictionary = _targeted_skill_library(registry, {
+		"kind": "radius",
+		"policy": "any_grid",
+		"affected_policy": "hostile_only",
+		"range": 4,
+		"radius": 2,
+		"respect_los": false,
+	})
+	var ignore_los_radius_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", ignore_los_radius_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 2,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, aoe_los_topology)
+	if not _array_or_empty(ignore_los_radius_preview.get("affected_actor_ids", [])).has(blocked_aoe_actor_id):
+		errors.append("radius AOE with respect_los=false should include blocked actor")
 	var out_of_range: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", radius_skill, {
 		"grid": {
 			"x": int(player_grid.get("x", 0)) + 20,
@@ -680,7 +739,7 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 	}, topology)
 	if out_of_range.get("reason", "") != "skill_target_out_of_range":
 		errors.append("out-of-range skill preview should report skill_target_out_of_range, got %s" % out_of_range.get("reason", ""))
-	for actor_id in [hostile_id, friendly_id]:
+	for actor_id in [hostile_id, friendly_id, blocked_aoe_actor_id]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.progression = original_progression
@@ -1043,6 +1102,17 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _cells_include_grid(cells: Array, grid: Dictionary) -> bool:
+	var gx: int = int(grid.get("x", 0))
+	var gy: int = int(grid.get("y", 0))
+	var gz: int = int(grid.get("z", 0))
+	for cell in cells:
+		var cell_data: Dictionary = _dictionary_or_empty(cell)
+		if int(cell_data.get("x", 0)) == gx and int(cell_data.get("y", 0)) == gy and int(cell_data.get("z", 0)) == gz:
+			return true
+	return false
 
 
 func _spatial_test_topology(player_grid: Dictionary, blocker_grid: Dictionary) -> Dictionary:
