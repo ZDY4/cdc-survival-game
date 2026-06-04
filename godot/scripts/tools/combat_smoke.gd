@@ -794,6 +794,72 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 	}, line_blocked_topology)
 	if not _array_or_empty(line_ignore_los_preview.get("affected_actor_ids", [])).has(line_hostile_id):
 		errors.append("line skill with LOS disabled should include hostile behind blocker")
+	var cone_hostile_id: int = _register_test_actor(simulation, "skill_cone_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 3,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 1,
+	}, 10.0)
+	var cone_friendly_id: int = _register_test_actor(simulation, "skill_cone_friendly", "friendly", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) - 1,
+	}, 10.0)
+	var cone_back_id: int = _register_test_actor(simulation, "skill_cone_back_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) - 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 10.0)
+	var cone_skill: Dictionary = _targeted_skill_library(registry, {
+		"kind": "cone",
+		"policy": "any_grid",
+		"affected_policy": "hostile_only",
+		"range": 4,
+		"length": 4,
+		"width": 2,
+	})
+	var cone_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", cone_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 4,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, topology)
+	if not bool(cone_preview.get("success", false)):
+		errors.append("cone skill target preview should succeed: %s" % cone_preview.get("reason", "unknown"))
+	elif not _array_or_empty(cone_preview.get("affected_actor_ids", [])).has(cone_hostile_id):
+		errors.append("cone hostile-only preview should include hostile in cone")
+	elif _array_or_empty(cone_preview.get("affected_actor_ids", [])).has(cone_friendly_id):
+		errors.append("cone hostile-only preview should filter friendly in cone")
+	elif _array_or_empty(cone_preview.get("affected_actor_ids", [])).has(cone_back_id):
+		errors.append("cone preview should not include hostile behind origin")
+	var blocked_cone: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", cone_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 4,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, line_blocked_topology)
+	if blocked_cone.get("reason", "") != "skill_target_blocked_by_los":
+		errors.append("cone skill blocked center LOS should report skill_target_blocked_by_los, got %s" % blocked_cone.get("reason", ""))
+	var cone_ignore_los_skill: Dictionary = _targeted_skill_library(registry, {
+		"kind": "cone",
+		"policy": "any_grid",
+		"affected_policy": "hostile_only",
+		"range": 4,
+		"length": 4,
+		"width": 2,
+		"requires_los": false,
+		"respect_los": false,
+	})
+	var cone_ignore_los_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", cone_ignore_los_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 4,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, line_blocked_topology)
+	if not _array_or_empty(cone_ignore_los_preview.get("affected_actor_ids", [])).has(cone_hostile_id):
+		errors.append("cone skill with LOS disabled should include hostile behind blocker")
 	var out_of_range: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", radius_skill, {
 		"grid": {
 			"x": int(player_grid.get("x", 0)) + 20,
@@ -803,7 +869,7 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 	}, topology)
 	if out_of_range.get("reason", "") != "skill_target_out_of_range":
 		errors.append("out-of-range skill preview should report skill_target_out_of_range, got %s" % out_of_range.get("reason", ""))
-	for actor_id in [hostile_id, friendly_id, blocked_aoe_actor_id, line_hostile_id, line_friendly_id]:
+	for actor_id in [hostile_id, friendly_id, blocked_aoe_actor_id, line_hostile_id, line_friendly_id, cone_hostile_id, cone_friendly_id, cone_back_id]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.progression = original_progression
