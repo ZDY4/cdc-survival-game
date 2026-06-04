@@ -1,6 +1,6 @@
 # Godot 全量迁移待办主清单
 
-本文是 `G:\Projects\cdc_survival_game` 从旧 Rust / Bevy 参考工程迁入 `Godot 4.6.3 + GDScript` 的总账式待迁移清单。目标是防止遗漏逻辑、功能、资产、表现、编辑器能力、工具链和验证口径。本文只描述迁移目标和验收边界，不允许把 Rust、Cargo、Bevy 或旧 app 复制回当前主线。
+本文是 `G:\Projects\cdc_survival_game` 从旧 Rust / Bevy 参考工程迁入 `Godot 4.6.3 + GDScript` 的总账式待迁移清单。目标是防止遗漏逻辑、功能、资产、表现、工具链和验证口径。本文只描述迁移目标和验收边界，不允许把 Rust、Cargo、Bevy 或旧 app 复制回当前主线。
 
 当前边界：
 
@@ -15,7 +15,6 @@
 - 启动、输入、存档和编排：`godot/scripts/app`
 - 场景表现：`godot/scripts/world`
 - UI 展示：`godot/scripts/ui`
-- Godot 编辑器扩展：`godot/addons/cdc_game_editor`
 - Agent 工具入口：`tools/agent`
 
 ## 状态标记
@@ -33,31 +32,22 @@
 ### 0.1 旧 Rust / Bevy App
 
 - [ ] `bevy_debug_viewer`：游戏运行时、相机、picking、输入、HUD、菜单、面板、debug panel、info panel、console、world render、fog、NPC runtime、自动测试语义。
-- [ ] `bevy_map_editor`：地图编辑、对象选择、地图相机、selection info、handoff、review、保存、预览和校验。
-- [ ] `bevy_character_editor`：角色基础字段、外观预览、AI profile、装备 loadout、属性、camera mode、handoff、窗口状态。
-- [ ] `bevy_item_editor`：物品 fragment、装备/武器/消耗品字段、模型预览、引用选择、校验、保存、删除。
-- [ ] `bevy_recipe_editor`：配方材料、产物、技能/工具/工作台要求、导航、引用校验、handoff。
-- [ ] `bevy_skill_editor`：技能树 graph、节点布局、前置、效果、目标策略、布局保存、handoff。
-- [ ] `bevy_quest_editor`：任务 graph、objective、奖励、对话绑定、世界状态、导航、handoff。
-- [ ] `bevy_dialogue_editor`：对话 graph、节点、选项、条件、动作、规则预览、连线布局、handoff。
-- [ ] `bevy_gltf_viewer`：glTF 预览、模型层级、bounds、socket/挂点、灯光、相机、资源诊断、`.bbmodel` 关联。
 - [ ] `content_tools`：内容摘要、引用、格式化、diff、changed、校验和 CLI 行为。
 - [D] `bevy_server`：不迁旧 Bevy server 入口；若需要 headless simulation 或远程调试，另以 Godot/tool 方案设计。
 
-参考：`G:\Projects\cdc_survival_game_bevy_reference\rust\apps\**`  
-落点：`godot/scripts/**`、`godot/addons/cdc_game_editor/**`、`tools/agent/**`  
-验收：game/editor/tool smoke 加 `run_godot_validate.bat`
+参考：`G:\Projects\cdc_survival_game_bevy_reference\rust\apps\**`
+落点：`godot/scripts/**`、`tools/agent/**`
+验收：game/tool smoke 加 `run_godot_validate.bat`
 
 ### 0.2 旧 Rust Crate
 
 - [ ] `game_core`：Simulation、runtime facade、移动、交互、战斗、经济、任务、技能、制作、AI、GOAP、overworld、vision、building、survival 规则。
 - [ ] `game_data`：内容 schema、加载、校验、引用、预览、编辑服务、原子写回、map schema、appearance、AI、dialogue、quest、recipe、skill。
 - [ ] `game_bevy`：相机、tile/world render、门表现、fog、UI snapshot、picking、输入、asset path、debug 视觉、NPC life sync。
-- [ ] `game_editor`：editor shell、preview stage、flow graph、model hierarchy、handoff、window persistence、字体和 preview camera。
 - [ ] `game_protocol`：request/response、snapshot、event payload、server message 语义，仅作为 Godot headless/tool 接口参考。
 
-参考：`G:\Projects\cdc_survival_game_bevy_reference\rust\crates\**`  
-落点：`godot/scripts/core`、`godot/scripts/data`、`godot/scripts/world`、`godot/scripts/ui`、`godot/addons/cdc_game_editor`  
+参考：`G:\Projects\cdc_survival_game_bevy_reference\rust\crates\**`
+落点：`godot/scripts/core`、`godot/scripts/data`、`godot/scripts/world`、`godot/scripts/ui`
 验收：按本文各系统分组逐项覆盖
 
 ## 1. 工程边界和迁移门禁
@@ -69,9 +59,8 @@
 - [x] 旧参考工程只作为行为、参数、资源组织方式参考。
 - [~] `mainline_migration_guard` 已有基础，需要持续覆盖旧 Rust / Cargo / Bevy 入口回流。
 - [ ] 根目录旧 `run_bevy_*.bat` 的废弃状态、保留理由或清理计划需要文档化。
-- [ ] 根目录旧 `addons/` 若只含备份或残留，不能作为当前 Godot 插件来源。
-- [ ] 每个新增迁移功能必须标注权威层：`data`、`core`、`app`、`world`、`ui`、`editor` 或 `tools`。
-- [ ] 禁止 UI、world、editor、smoke 私自决定移动、战斗、任务、交易、背包等玩法结果。
+- [ ] 每个新增迁移功能必须标注权威层：`data`、`core`、`app`、`world`、`ui` 或 `tools`。
+- [ ] 禁止 UI、world、smoke 私自决定移动、战斗、任务、交易、背包等玩法结果。
 - [ ] 禁止新增长期 JSON -> `.tscn` 地图转换工作流；地图后续直接按 Godot scene 维护。
 - [ ] 每个阶段只提交相关文件，不能混入用户正在修改的 map scene。
 - [ ] 旧功能若决定不迁，必须在本文标为 `[D]` 并写清 Godot 替代方案。
@@ -100,8 +89,8 @@
 - [~] `data/skills`：13 个文件，技能定义。
 - [~] `data/world_tiles`：4 个文件，tile / prop / building 资源映射。
 
-落点：`godot/scripts/data/**`、`godot/scripts/tools/content_*.gd`  
-验收：ContentCLI、ContentEdit、EditorBrowser、`run_godot_validate.bat`
+落点：`godot/scripts/data/**`、`godot/scripts/tools/content_*.gd`
+验收：ContentCLI、ContentEdit、`run_godot_validate.bat`
 
 ### 2.2 内容注册、路径、引用和写回
 
@@ -116,11 +105,11 @@
 - [ ] schema version：新增字段默认值、废弃字段、旧字段升级、迁移日志。
 - [ ] 重复 id、非法 id、大小写、数字/字符串 id 混用规则。
 - [ ] 跨 domain 循环引用检测。
-- [ ] 内容编辑必须统一走 data edit service，不能在 UI、editor dock 或 smoke 中手写第二套 JSON 规则。
+- [ ] 内容编辑必须统一走 data edit service，不能在 UI 或 smoke 中手写第二套 JSON 规则。
 
-参考：`game_data/src/content_registry.rs`、`file_backed.rs`、`rust/apps/content_tools/src/**`  
-落点：`godot/scripts/data`、`tools/agent/godot-content.ps1`  
-验收：`ContentCLI`、`ContentEdit`、`EditorBrowser`
+参考：`game_data/src/content_registry.rs`、`file_backed.rs`、`rust/apps/content_tools/src/**`
+落点：`godot/scripts/data`、`tools/agent/godot-content.ps1`
+验收：`ContentCLI`、`ContentEdit`
 
 ### 2.3 角色数据
 
@@ -136,11 +125,9 @@
 - [ ] AI profile：life profile、behavior profile、schedule、smart object access、personality、needs。
 - [ ] interaction profile：talk、trade、heal、container、attack、inspect、special。
 - [ ] presentation：placeholder color、appearance id、model asset、scale、offset、bounds。
-- [ ] 角色编辑器：字段表单、校验、预览、AI tab、装备 tab、外观 tab、handoff。
-
-参考：`game_data/src/character.rs`、`ai_preview.rs`、`appearance.rs`、`bevy_character_editor/src/**`  
-落点：`data/characters`、`data/appearance`、`godot/scripts/core/actor`、`godot/addons/cdc_game_editor`  
-验收：RuntimeBootstrap、AI、Combat、EditorForms
+参考：`game_data/src/character.rs`、`ai_preview.rs`、`appearance.rs`
+落点：`data/characters`、`data/appearance`、`godot/scripts/core/actor`
+验收：RuntimeBootstrap、AI、Combat
 
 ### 2.4 物品、装备、武器和效果数据
 
@@ -156,11 +143,9 @@
 - [ ] 效果库：accuracy_bonus、armor_break、bleeding、poison、stun、slow、night_vision、inventory_bonus 等效果运行时语义。
 - [ ] effect stacking：叠加、刷新、互斥、持续时间、tick、移除条件。
 - [ ] item validator：缺 fragment、非法数值、缺 effect、缺 model、slot 冲突。
-- [ ] 物品编辑器：fragment 表单、模型预览、引用选择、保存、删除。
-
-参考：`game_data/src/content.rs`、`item_edit.rs`、`models.rs`、`bevy_item_editor/src/**`  
-落点：`data/items`、`data/json/effects`、`godot/scripts/core/economy`、`godot/scripts/ui`  
-验收：InventoryUI、Equipment、Combat、Crafting、EditorForms
+参考：`game_data/src/content.rs`、`item_edit.rs`、`models.rs`
+落点：`data/items`、`data/json/effects`、`godot/scripts/core/economy`、`godot/scripts/ui`
+验收：InventoryUI、Equipment、Combat、Crafting
 
 ### 2.5 配方数据
 
@@ -175,10 +160,8 @@
 - [ ] 批量制作：数量、最大可制作、材料预览、产物合并。
 - [ ] 失败提示：缺材料、缺工具、缺技能、缺工作台、背包满。
 - [ ] XP 奖励、任务推进、world flag 修改。
-- [ ] 配方编辑器：材料/产物引用选择、校验、preview、handoff。
-
-参考：`game_data/src/recipe.rs`、`recipe_edit.rs`、`bevy_recipe_editor/src/**`  
-落点：`data/recipes`、`godot/scripts/core/crafting`、`godot/scripts/ui/controllers/crafting_panel_controller.gd`  
+参考：`game_data/src/recipe.rs`、`recipe_edit.rs`
+落点：`data/recipes`、`godot/scripts/core/crafting`、`godot/scripts/ui/controllers/crafting_panel_controller.gd`
 验收：Crafting、CraftingUI、Progression
 
 ### 2.6 技能和技能树数据
@@ -192,10 +175,8 @@
 - [ ] 技能树布局：node position、分支、连线、锁定/可学/已学状态。
 - [ ] 技能重置、升级、多级技能、技能点返还策略。
 - [ ] 与任务/制作/对话/交易/战斗的条件联动。
-- [ ] 技能编辑器：graph、节点、前置、效果、目标策略、保存。
-
-参考：`game_data/src/skill.rs`、`bevy_skill_editor/src/**`  
-落点：`data/skills`、`data/skill_trees`、`godot/scripts/core/progression`、`godot/scripts/ui`  
+参考：`game_data/src/skill.rs`
+落点：`data/skills`、`data/skill_trees`、`godot/scripts/core/progression`、`godot/scripts/ui`
 验收：Progression、SkillsUI、Combat、Crafting
 
 ### 2.7 任务、对话和剧情数据
@@ -211,11 +192,9 @@
 - [ ] 对话规则：按任务状态、关系、时间、NPC 状态选择 variant。
 - [ ] 对话条件：物品、任务、skill、relationship、world flag。
 - [ ] 对话动作：给/扣物品、给/扣钱、修改关系、治疗、开容器、切场景。
-- [ ] graph editor：节点布局、连线、断链校验、孤立节点、入口节点。
-
-参考：`game_data/src/quest.rs`、`dialogue_runtime.rs`、`dialogue_rules.rs`、`bevy_quest_editor/src/**`、`bevy_dialogue_editor/src/**`  
-落点：`data/quests`、`data/dialogues`、`data/dialogue_rules`、`godot/scripts/core/quests`、`godot/scripts/core/dialogue`  
-验收：Quest、JournalUI、DialogueAction、EditorForms
+参考：`game_data/src/quest.rs`、`dialogue_runtime.rs`、`dialogue_rules.rs`
+落点：`data/quests`、`data/dialogues`、`data/dialogue_rules`、`godot/scripts/core/quests`、`godot/scripts/core/dialogue`
+验收：Quest、JournalUI、DialogueAction
 
 ### 2.8 AI、Settlement 和 Overworld 数据
 
@@ -231,8 +210,8 @@
 - [ ] 遭遇、搜刮地点、天气、时间、危险度和 travel cost。
 - [ ] AI / settlement 编辑预览：当前 goal、action、blackboard、blocker、schedule。
 
-参考：`game_data/src/ai.rs`、`ai_preview.rs`、`settlement.rs`、`overworld.rs`、`game_core/src/goap/**`、`game_bevy/src/npc_life/**`  
-落点：`data/ai/**`、`data/settlements`、`data/overworld`、`godot/scripts/core/ai`、`godot/scripts/core/overworld`  
+参考：`game_data/src/ai.rs`、`ai_preview.rs`、`settlement.rs`、`overworld.rs`、`game_core/src/goap/**`、`game_bevy/src/npc_life/**`
+落点：`data/ai/**`、`data/settlements`、`data/overworld`、`godot/scripts/core/ai`、`godot/scripts/core/overworld`
 验收：AI、Overworld、Save、NpcLife
 
 ## 3. 地图、空间和 Godot Scene
@@ -258,9 +237,9 @@
 - [ ] 地图对象按 Godot scene 原生编辑，不依赖长期转换。
 - [ ] scene 保存后 smoke 能从 `.tscn` 读取同等定义。
 
-参考：旧 `data/maps/*.json`、`game_data/src/map*.rs`、`bevy_map_editor/src/**`  
-落点：`godot/scenes/maps`、`godot/scripts/world/map_scene_*.gd`  
-验收：MapReview、Scene、World、MapVisual
+参考：旧 `data/maps/*.json`、`game_data/src/map*.rs`
+落点：`godot/scenes/maps`、`godot/scripts/world/map_scene_*.gd`
+验收：Scene、World、MapVisual
 
 ### 3.2 网格、拓扑、楼层和路径
 
@@ -278,8 +257,8 @@
 - [ ] 路径失败原因：无路、AP 不足、目标被占、锁门、跨层不可达。
 - [ ] path preview：hover 目标、预计路径、AP 消耗、不可达颜色、跨回合标记。
 
-参考：`game_core/src/grid/**`、`movement.rs`、`building.rs`、`vision.rs`  
-落点：`godot/scripts/core/movement`、`godot/scripts/world/map_builder.gd`、`godot/scripts/core/vision`  
+参考：`game_core/src/grid/**`、`movement.rs`、`building.rs`、`vision.rs`
+落点：`godot/scripts/core/movement`、`godot/scripts/world/map_builder.gd`、`godot/scripts/core/vision`
 验收：Movement、Interaction、Combat、AI、Door
 
 ### 3.3 建筑、门、触发器和场景切换
@@ -293,10 +272,10 @@
 - [ ] 自动开门：移动、追击、交互接近时自动处理。
 - [ ] 触发器：地图入口、剧情触发、任务触发、遭遇触发。
 - [ ] interior/exterior 切换后的返回点、相机、UI 状态、fog 状态。
-- [ ] 门和触发器在编辑器中的可视化和校验。
+- [ ] 门和触发器在运行时、headless 校验和地图视觉复核中的可视化一致。
 
-参考：`game_bevy/src/world_render/doors.rs`、`building.rs`、`runtime/overworld.rs`  
-落点：`godot/scripts/core/interactions`、`godot/scripts/world`、`godot/scenes/maps`  
+参考：`game_bevy/src/world_render/doors.rs`、`building.rs`、`runtime/overworld.rs`
+落点：`godot/scripts/core/interactions`、`godot/scripts/world`、`godot/scenes/maps`
 验收：Interaction、PlayerInteraction、Door、Scene、Save
 
 ## 4. 运行时、快照、事件和存档
@@ -315,8 +294,8 @@
 - [ ] deterministic random seed、event sequence、last command result。
 - [ ] runtime snapshot 版本和存档迁移。
 
-参考：`game_core/src/simulation.rs`、`runtime/runtime_snapshots.rs`、`runtime/runtime_facade.rs`  
-落点：`godot/scripts/core/simulation/**`、相关 `core/**` runner  
+参考：`game_core/src/simulation.rs`、`runtime/runtime_snapshots.rs`、`runtime/runtime_facade.rs`
+落点：`godot/scripts/core/simulation/**`、相关 `core/**` runner
 验收：Runtime、Save、All
 
 ### 4.2 命令入口和事件
@@ -330,8 +309,8 @@
 - [ ] UI 和 world 只订阅事件/快照刷新，不能直接改 core state。
 - [ ] 事件日志和 debug panel 能按 sequence 展示。
 
-参考：`runtime/runtime_actions.rs`、`runtime/runtime_queries.rs`、`game_protocol/src/messages.rs`  
-落点：`godot/scripts/core`、`godot/scripts/app/game_app.gd`  
+参考：`runtime/runtime_actions.rs`、`runtime/runtime_queries.rs`、`game_protocol/src/messages.rs`
+落点：`godot/scripts/core`、`godot/scripts/app/game_app.gd`
 验收：Runtime、PlayerInteraction、ConsoleDebug
 
 ### 4.3 存档和加载
@@ -345,8 +324,8 @@
 - [ ] 旧存档 schema 缺字段自动补默认值。
 - [ ] 存档损坏错误提示和恢复策略。
 
-参考：`simulation/state_persistence.rs`、`runtime/runtime_snapshots.rs`  
-落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulation/*snapshot*`  
+参考：`simulation/state_persistence.rs`、`runtime/runtime_snapshots.rs`
+落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulation/*snapshot*`
 验收：Save、All
 
 ## 5. 回合、AP、时间和自动推进
@@ -363,8 +342,8 @@
 - [ ] 战斗退出：敌对清空、连续无视线、敌人死亡、跨地图、强制剧情。
 - [ ] 回合 HUD、事件反馈和 debug turn panel。
 
-参考：`game_core/src/turn/**`、`simulation/types.rs`、`runtime/runtime_actions.rs`  
-落点：`godot/scripts/core/simulation`、`godot/scripts/core/ai`、`godot/scripts/ui/controllers/hud_controller.gd`  
+参考：`game_core/src/turn/**`、`simulation/types.rs`、`runtime/runtime_actions.rs`
+落点：`godot/scripts/core/simulation`、`godot/scripts/core/ai`、`godot/scripts/ui/controllers/hud_controller.gd`
 验收：Movement、Combat、AI、UIToggle、Save
 
 ## 6. 输入、选择、相机和 UI 状态机
@@ -381,8 +360,8 @@
 - [ ] 快捷键冲突：数字键在对话、hotbar、数量输入、debug console 中的优先级。
 - [ ] 可配置键位和 settings 保存。
 
-参考：`bevy_debug_viewer/src/controls/keyboard.rs`、`game_ui/input/**`  
-落点：`godot/scripts/app/controllers/game_runtime_input_controller.gd`、`game_panel_controller.gd`  
+参考：`bevy_debug_viewer/src/controls/keyboard.rs`、`game_ui/input/**`
+落点：`godot/scripts/app/controllers/game_runtime_input_controller.gd`、`game_panel_controller.gd`
 验收：UIToggle、PlayerInteraction
 
 ### 6.2 鼠标、Picking 和目标选择
@@ -397,8 +376,8 @@
 - [ ] 技能/攻击目标选择：进入、预览、确认、取消、友军警告。
 - [ ] 拖拽输入：地图 pan、技能树 pan、背包/容器/交易物品拖拽、滚动条拖拽。
 
-参考：`controls/mouse.rs`、`controls/targeting.rs`、`geometry/picking.rs`、`game_bevy/src/mesh_picking.rs`  
-落点：`godot/scripts/app/controllers/player_interaction_controller.gd`、`world_scene_renderer.gd`、`ui/input`  
+参考：`controls/mouse.rs`、`controls/targeting.rs`、`geometry/picking.rs`、`game_bevy/src/mesh_picking.rs`
+落点：`godot/scripts/app/controllers/player_interaction_controller.gd`、`world_scene_renderer.gd`、`ui/input`
 验收：PlayerInteraction、Targeting、MapVisual
 
 ### 6.3 相机
@@ -412,8 +391,8 @@
 - [ ] 建筑/墙遮挡玩家或目标时淡出、outline 或 nameplate 保留。
 - [ ] observe / free camera 模式和 debug camera 状态。
 
-参考：`controls/camera.rs`、`geometry/camera.rs`、`render/camera.rs`、`render/occlusion.rs`  
-落点：`godot/scripts/app/controllers/game_runtime_input_controller.gd`、`godot/scripts/world`  
+参考：`controls/camera.rs`、`geometry/camera.rs`、`render/camera.rs`、`render/occlusion.rs`
+落点：`godot/scripts/app/controllers/game_runtime_input_controller.gd`、`godot/scripts/world`
 验收：World、PlayerInteraction、manual camera smoke
 
 ## 7. 交互系统
@@ -431,8 +410,8 @@
 - [ ] scene transition：目标地点、entry、确认 prompt、无法进入原因、overworld 解锁。
 - [ ] wait self interaction：菜单项、AP 消耗、回合推进、事件反馈。
 
-参考：`simulation/interaction_*`、`game_data/src/interaction/**`、`runtime/interaction.rs`  
-落点：`godot/scripts/core/interactions`、`godot/scripts/app/controllers/player_interaction_controller.gd`、`godot/scripts/ui`  
+参考：`simulation/interaction_*`、`game_data/src/interaction/**`、`runtime/interaction.rs`
+落点：`godot/scripts/core/interactions`、`godot/scripts/app/controllers/player_interaction_controller.gd`、`godot/scripts/ui`
 验收：Interaction、PlayerInteraction、DialogueUI、ContainerUI
 
 ## 8. 移动、路径、门和空间规则
@@ -449,8 +428,8 @@
 - [ ] path failure reason 稳定并进入 UI/HUD。
 - [ ] path preview 和可达性 overlay。
 
-参考：`grid/pathfinding.rs`、`movement.rs`、`building.rs`、`world_render/doors.rs`  
-落点：`godot/scripts/core/movement`、`godot/scripts/core/interactions`、`godot/scripts/world`  
+参考：`grid/pathfinding.rs`、`movement.rs`、`building.rs`、`world_render/doors.rs`
+落点：`godot/scripts/core/movement`、`godot/scripts/core/interactions`、`godot/scripts/world`
 验收：Movement、Door、Interaction、AI、Vision
 
 ## 9. 战斗、伤害、尸体和掉落
@@ -468,8 +447,8 @@
 - [ ] 击杀后 AI、combat state、quest、relationship、event feedback 顺序一致。
 - [ ] 战斗 HUD：目标预览、伤害预估、敌人数量、当前回合、退出状态。
 
-参考：`simulation/combat.rs`、`simulation/combat_ai/**`、`economy.rs`、`render/world/corpses.rs`  
-落点：`godot/scripts/core/combat`、`godot/scripts/core/ai`、`godot/scripts/world`、`godot/scripts/ui`  
+参考：`simulation/combat.rs`、`simulation/combat_ai/**`、`economy.rs`、`render/world/corpses.rs`
+落点：`godot/scripts/core/combat`、`godot/scripts/core/ai`、`godot/scripts/world`、`godot/scripts/ui`
 验收：Combat、AI、Quest、InventoryUI、Save
 
 ## 10. NPC、AI、关系和生活模拟
@@ -486,8 +465,8 @@
 - [ ] 治疗、雇佣、跟随、队友、护送、敌对转中立等脚本化 NPC 互动。
 - [ ] life debug spawns、AI info panel、计划和 blocker 可视化。
 
-参考：`game_core/src/goap/**`、`game_bevy/src/npc_life/**`、`simulation/relationships.rs`  
-落点：`godot/scripts/core/ai`、`godot/scripts/core/settlement`、`godot/scripts/ui/debug`  
+参考：`game_core/src/goap/**`、`game_bevy/src/npc_life/**`、`simulation/relationships.rs`
+落点：`godot/scripts/core/ai`、`godot/scripts/core/settlement`、`godot/scripts/ui/debug`
 验收：AI、NpcLife、Combat、DialogueAction、Save
 
 ## 11. 背包、装备、容器和交易
@@ -543,8 +522,8 @@
 - [ ] trade panel 与 dialogue/open trade 生命周期。
 - [ ] 拖拽交易、快捷键、装备出售确认。
 
-参考：`game_core/src/economy.rs`、`survival.rs`、`game_ui/trade_ui/**`、`game_ui/container_ui/**`  
-落点：`godot/scripts/core/economy`、`godot/scripts/ui/controllers/*inventory*/*container*/*trade*`  
+参考：`game_core/src/economy.rs`、`survival.rs`、`game_ui/trade_ui/**`、`game_ui/container_ui/**`
+落点：`godot/scripts/core/economy`、`godot/scripts/ui/controllers/*inventory*/*container*/*trade*`
 验收：InventoryUI、Equipment、ContainerUI、TradeUI、Save
 
 ## 12. 制作、维修、工作台和生产反馈
@@ -562,8 +541,8 @@
 - [ ] 制作 XP、技能解锁、任务推进。
 - [ ] 制作 UI：分类、搜索、缺失原因、材料预览、产物预览、工作台提示。
 
-参考：`game_data/src/recipe.rs`、`game_core/src/survival.rs`、`bevy_recipe_editor/src/**`  
-落点：`godot/scripts/core/crafting`、`godot/scripts/ui/controllers/crafting_panel_controller.gd`  
+参考：`game_data/src/recipe.rs`、`game_core/src/survival.rs`
+落点：`godot/scripts/core/crafting`、`godot/scripts/ui/controllers/crafting_panel_controller.gd`
 验收：Crafting、CraftingUI、Progression、Quest
 
 ## 13. 角色进度、属性、技能和 Hotbar
@@ -580,8 +559,8 @@
 - [ ] cooldown tick、冷却遮罩、不可用原因。
 - [ ] progression 保存加载。
 
-参考：`game_core/src/progression*`、`game_data/src/skill.rs`、`game_ui/hotbar/**`、`game_ui/panels/skills*`  
-落点：`godot/scripts/core/progression`、`godot/scripts/ui/snapshots/skills_snapshot.gd`、`godot/scripts/ui/controllers/skills_panel_controller.gd`  
+参考：`game_core/src/progression*`、`game_data/src/skill.rs`、`game_ui/hotbar/**`、`game_ui/panels/skills*`
+落点：`godot/scripts/core/progression`、`godot/scripts/ui/snapshots/skills_snapshot.gd`、`godot/scripts/ui/controllers/skills_panel_controller.gd`
 验收：Progression、SkillsUI、Combat、Crafting、Save
 
 ## 14. 任务、对话、剧情动作和 Overworld
@@ -612,8 +591,8 @@
 - [ ] 任务和对话解锁地点。
 - [ ] overworld 保存加载、地图面板 pan/zoom/marker。
 
-参考：`simulation/dialogue.rs`、`quest_progression.rs`、`level_transition.rs`、`overworld.rs`、`runtime/overworld.rs`  
-落点：`godot/scripts/core/dialogue`、`godot/scripts/core/quests`、`godot/scripts/core/overworld`、`godot/scripts/ui`  
+参考：`simulation/dialogue.rs`、`quest_progression.rs`、`level_transition.rs`、`overworld.rs`、`runtime/overworld.rs`
+落点：`godot/scripts/core/dialogue`、`godot/scripts/core/quests`、`godot/scripts/core/overworld`、`godot/scripts/ui`
 验收：DialogueUI、DialogueAction、Quest、JournalUI、Overworld、Save
 
 ## 15. 视觉资产和资源导入
@@ -652,8 +631,8 @@
 - [ ] pick proxy、collision、visual mesh 分离。
 - [ ] fallback mesh 需要可读、可区分、带标签或调试颜色。
 
-参考：`game_bevy/src/tile_world.rs`、`world_render/tile_assets.rs`、`world_render/spawn.rs`  
-落点：`godot/assets`、`godot/scripts/world/world_scene_renderer.gd`、`data/world_tiles`  
+参考：`game_bevy/src/tile_world.rs`、`world_render/tile_assets.rs`、`world_render/spawn.rs`
+落点：`godot/assets`、`godot/scripts/world/world_scene_renderer.gd`、`data/world_tiles`
 验收：MapVisual、Scene、World、人工逐图检查
 
 ### 15.3 角色、装备和物品表现资产
@@ -670,8 +649,8 @@
 - [ ] 动画：idle、walk、attack、hit、death、interact。
 - [ ] 无动画资产时的最小 Godot 原生占位表现。
 
-参考：`game_data/src/appearance.rs`、`game_editor/src/character_preview.rs`、`bevy_gltf_viewer/src/**`  
-落点：`godot/scripts/world/world_snapshot_builder.gd`、`world_scene_renderer.gd`、`data/appearance`  
+参考：`game_data/src/appearance.rs`
+落点：`godot/scripts/world/world_snapshot_builder.gd`、`world_scene_renderer.gd`、`data/appearance`
 验收：MapVisual、Combat、InventoryUI、manual survivor outpost
 
 ### 15.4 字体、Shader、材质、音频和反馈
@@ -686,8 +665,8 @@
 - [ ] 音频：UI click、footstep、attack、hit、death、door、pickup、trade、craft、quest。
 - [ ] 音量设置、静音、音频资源路径。
 
-参考：`game_bevy/src/world_render/**`、`bevy_debug_viewer/src/render/**`、`assets/shaders/**`  
-落点：`godot/scripts/world`、`godot/scripts/ui`、`godot/assets`  
+参考：`game_bevy/src/world_render/**`、`bevy_debug_viewer/src/render/**`、`assets/shaders/**`
+落点：`godot/scripts/world`、`godot/scripts/ui`、`godot/assets`
 验收：MapVisual、Combat、FogShader、manual smoke
 
 ## 16. 世界渲染和表现
@@ -709,8 +688,8 @@
 - [ ] fog visible/explored/unseen 三态、边缘柔化、相机/地图坐标同步。
 - [ ] hover outline：actor、object、door、container、trigger 不同颜色和优先级。
 
-参考：`game_bevy/src/world_render/**`、`bevy_debug_viewer/src/render/**`、`render/fog_of_war/**`  
-落点：`godot/scripts/world/**`、`godot/assets/**`、`godot/scripts/ui`  
+参考：`game_bevy/src/world_render/**`、`bevy_debug_viewer/src/render/**`、`render/fog_of_war/**`
+落点：`godot/scripts/world/**`、`godot/assets/**`、`godot/scripts/ui`
 验收：World、Vision、MapVisual、FogShader、manual scene review
 
 ## 17. 游戏 UI、HUD、菜单和面板
@@ -760,53 +739,22 @@
 - [ ] context menu：库存物品、容器物品、装备槽、技能条目、地图对象。
 - [ ] tooltip layer、drag preview layer、UI blocker name。
 
-参考：`bevy_debug_viewer/src/game_ui/**`、`game_bevy/src/ui.rs`  
-落点：`godot/scenes/ui`、`godot/scripts/ui`、`godot/scripts/app/game_app.gd`  
+参考：`bevy_debug_viewer/src/game_ui/**`、`game_bevy/src/ui.rs`
+落点：`godot/scenes/ui`、`godot/scripts/ui`、`godot/scripts/app/game_app.gd`
 验收：UIToggle、InventoryUI、ContainerUI、TradeUI、JournalUI、DialogueAction、SkillsUI、CraftingUI
 
-## 18. Godot Editor 插件和开发工具
-
-### 18.1 当前 Editor 插件能力
-
-- [~] `content_browser_dock`。
-- [~] `editor_handoff_dock`。
-- [~] `map_preview_dock`。
-- [~] `map_review_presenter`。
-- [~] `typed_field_form`。
-- [~] `edit_plan_presenter`。
-- [ ] 全 domain 表单：items、recipes、characters、dialogues、quests、skills、skill_trees、settlements、overworld、appearance、ai。
-- [ ] 字段类型：string、number、bool、enum、array、dictionary、reference、localized text、color、asset path。
-- [ ] 引用选择、反向引用预览、缺失引用警告。
-- [ ] dry-run 保存、diff、校验、原子写回。
-- [ ] graph 编辑：dialogue、quest、skill tree。
-- [ ] map scene 编辑辅助：entry point、object footprint、rotation、props、visual review。
-- [ ] 窗口状态、选中状态、handoff target 持久化。
-
-### 18.2 模型和资产工具
-
-- [ ] glTF preview dock。
-- [ ] 模型 hierarchy、mesh count、material list、bounds。
-- [ ] socket editor：创建、移动、旋转、保存。
-- [ ] appearance/equipment preview。
-- [ ] scale/origin/rotation 校验。
-- [ ] asset import diagnostics：missing bin、bad path、bad material、oversized bounds。
-- [ ] map asset review：实例数量、fallback 数量、重叠对象、不可点击对象。
-
-### 18.3 Agent 工具
+## 18. Agent 工具和验证脚本
 
 - [~] `tools/agent/godot-content.ps1`。
 - [~] `tools/agent/test-godot-game.ps1`。
-- [~] `tools/agent/test-godot-editor.ps1`。
-- [~] `tools/agent/open-godot-editor.ps1`。
 - [~] `tools/agent/review-godot-map-visual.ps1`。
 - [ ] 每个脚本 help、README、workflow 文档同步。
 - [ ] 失败日志路径和重跑命令输出。
 - [ ] map visual 复核能报告错误模型、重叠方块、fallback、缺碰撞。
-- [ ] editor smoke 覆盖所有 domain。
 
-参考：`game_editor/src/**`、各 `bevy_*_editor/src/**`、`bevy_gltf_viewer/src/**`、`tools/agent/README.md`  
-落点：`godot/addons/cdc_game_editor`、`tools/agent`、`docs/agent-workflows`  
-验收：EditorHandoff、ContentBrowser、MapReview、ContentEdit、EditorForms、AssetImport
+参考：`tools/agent/README.md`、旧 `content_tools`
+落点：`tools/agent`、`docs/agent-workflows`
+验收：ContentEdit、AssetImport、MapVisual
 
 ## 19. Debug、Console、Info Panels 和开发观察
 
@@ -825,8 +773,8 @@
 - [ ] performance：frame time、render count、actor count、object count、pathfinding time。
 - [ ] smoke 失败时输出可读 snapshot 摘要。
 
-参考：`bevy_debug_viewer/src/console.rs`、`debug_panel/**`、`info_panels/**`、`profiling.rs`  
-落点：`godot/scripts/ui/debug` 或明确的新 debug 模块、`godot/scripts/tools`  
+参考：`bevy_debug_viewer/src/console.rs`、`debug_panel/**`、`info_panels/**`、`profiling.rs`
+落点：`godot/scripts/ui/debug` 或明确的新 debug 模块、`godot/scripts/tools`
 验收：ConsoleDebug、UIToggle、AI、Combat
 
 ## 20. Server / Protocol 参考边界
@@ -838,8 +786,8 @@
 - [ ] headless tool 不应绕过 core command 入口。
 - [ ] progression / vision reports 若仍有价值，迁为 Godot tool。
 
-参考：`rust/apps/bevy_server/src/**`、`rust/crates/game_protocol/src/messages.rs`  
-落点：待架构决策，优先 `godot/scripts/tools` 或 `tools/agent`  
+参考：`rust/apps/bevy_server/src/**`、`rust/crates/game_protocol/src/messages.rs`
+落点：待架构决策，优先 `godot/scripts/tools` 或 `tools/agent`
 验收：架构文档或 Protocol smoke
 
 ## 21. 验证总清单
@@ -851,9 +799,6 @@
 - [ ] `HeadlessWorld`：world snapshot、actor、map objects、assets。
 - [ ] `ContentCLI`：summary、references、format、diff、changed。
 - [ ] `ContentEdit`：dry-run、save、validator、失败不落盘。
-- [ ] `EditorHandoff`：各 domain target。
-- [ ] `EditorBrowser`：内容浏览和引用。
-- [ ] `MapReview`：地图 scene、entry、object、footprint。
 - [ ] `FogShader`：visible/explored/mask。
 - [ ] `Overworld`：地点、切换、保存。
 - [ ] `Movement`：点击地面、长路径、AP、跨层、门。
@@ -881,7 +826,6 @@
 - [ ] `Targeting`：攻击/技能目标选择、AOE、取消。
 - [ ] `MapVisual`：每张地图模型、fallback、重叠、pick proxy、collision。
 - [ ] `AssetImport`：glTF scale、origin、material、uid、bin 缺失。
-- [ ] `EditorForms`：所有 domain 表单、引用、保存。
 - [ ] `ConsoleDebug`：console、info panels、runtime dump。
 - [ ] `NpcLife`：schedule、GOAP、background tick、presence sync。
 - [ ] `Protocol`：若决定迁工具协议，则覆盖 request/response。
@@ -896,8 +840,7 @@
 6. 技能树、hotbar、主动技能和状态效果。
 7. 对话规则、任务链、world flags 和 overworld。
 8. NPC settlement life、GOAP、后台日程和诊断面板。
-9. Editor 全域表单、graph editor、glTF/socket preview。
-10. Console、info panels、协议/自动化接口和开发观察工具。
+9. Console、info panels、协议/自动化接口和开发观察工具。
 
 ## 23. 交付和防遗漏规则
 
@@ -905,7 +848,6 @@
 - 每个阶段结束后，更新本文、`docs/pending_migration_feature_checklist.md` 和相关计划文档。
 - 功能变更至少运行对应 `tools/agent/test-godot-game.ps1 -Scenario <Scenario>`。
 - 地图、资产、工程边界变更必须运行 `cmd /c run_godot_validate.bat`。
-- Editor 插件变更必须运行 `tools/agent/test-godot-editor.ps1`。
 - 资产表现变更必须人工或自动截图检查，不只依赖 headless。
 - 提交时只 stage 当前阶段相关文件，不能混入用户正在编辑的 map scene。
 - 若某个旧功能决定不迁，必须用 `[D]` 标记并写清 Godot 替代方案或废弃原因。

@@ -7,7 +7,7 @@
 - 当前主线仍以 `godot/` 为 Godot 工程目录，命令行入口固定为 `D:\godot\godot.cmd`。
 - 地图权威是 `godot/scenes/maps/*.tscn`；`data/maps/*.json` 只作为迁移期兼容备份，不再作为新地图开发入口。
 - 非地图内容权威仍是 `data/` JSON，Godot 侧统一通过 `godot/scripts/data` 读取、校验、查询、格式化和安全写回。
-- 玩法结果必须落在 `godot/scripts/core` 或明确的 core service；UI、world、editor 只能提交输入、展示 snapshot 或调用数据服务。
+- 玩法结果必须落在 `godot/scripts/core` 或明确的 core service；UI 和 world 只能提交输入、展示 snapshot 或调用数据服务。
 - 参考工程只作为行为和资产组织的只读来源；不得把 Rust、Cargo、Bevy、WGSL 运行时代码重新放回当前主线。
 
 ## 当前已恢复但需继续等价的范围
@@ -345,24 +345,10 @@
 - 待补音频资产策略：UI 点击、拾取、开门、交易、制作、攻击、受击、死亡、任务完成目前缺声音或占位。
 - 待补字体和中文渲染策略：所有 UI scene 应统一使用 `NotoSansCJKsc-Regular.otf` 或主题资源，避免中文 fallback 不一致。
 
-## 15. Editor、内容工具和 agent workflow
-
-### 15.1 Godot editor 插件
-
-- 已有 `godot/addons/cdc_game_editor` 的 content browser、handoff、map review；待迁移旧 item / recipe / character / dialogue / quest / skill editor 的完整表单能力。
-- 待补 typed field form 的复杂字段：fragment 列表、嵌套字典、数组 reorder、引用选择、枚举、默认值、校验错误定位。
-- 待补角色 editor：appearance tab、AI tab、预览、装备 loadout、派生属性、handoff。
-- 待补技能 editor：技能树图、节点布局、前置关系、技能详情、handoff。
-- 待补任务 editor：任务图、节点、目标、奖励、对话交付、handoff。
-- 待补对话 editor：graph、规则预览、选项、动作、fallback、handoff。
-- 待补配方 editor：材料、产物、工具、工作台、解锁、预览。
-- 待补地图 editor：scene workflow 下的对象选择、footprint 编辑、entry point、trigger、container、door、review dock 精修。
-
-### 15.2 CLI 和脚本
+## 15. 内容工具和 agent workflow
 
 - 已有 Godot content CLI 第一版；待对齐旧 `content_tools` 的 summarize、references、format、diff-summary、changed、content 操作细节。
 - 待补 CLI 的批量修复、安全写回、dry-run、JSON path 定位、引用反查、跨 domain 校验。
-- 待补 glTF viewer / socket editor 的 Godot 等价工具，用于预览模型、装备挂点、角色外观。
 - 待补 agent workflow 文档：每个新脚本需要 comment-based help、`tools/agent/README.md`、`docs/agent-workflows/*.md` 同步更新。
 
 ## 16. 存档、加载和运行入口
@@ -403,7 +389,6 @@
 - Door smoke：锁门、开门、自动开门、视觉和阻挡同步。
 - Map visual smoke：每个地图 scene 的对象模型路径、实例数量、fallback 统计、重叠检查。
 - Asset import smoke：glTF scale/origin/material/collision 导入复核。
-- Editor form smoke：每个 domain 的加载、编辑、校验、dry-run、保存、引用反查。
 - Console/debug smoke：console commands、info panels、overlay flags。
 
 ## 19. 建议迁移顺序
@@ -414,14 +399,13 @@
 4. 技能和 hotbar：多槽、快捷键、目标选择、真实效果、cooldown。
 5. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
 6. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick、调试面板。
-7. Editor 和工具：按 domain 补完整表单、graph、preview、handoff 和 CLI parity。
+7. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。
 8. Debug / console / info panels：作为后续开发复核工具恢复。
 
 ## 20. 阶段提交与验收规则
 
 - 每个阶段只提交本阶段相关文件；不要混入本地地图调整，除非阶段目标明确包含该地图。
-- 每个功能必须明确权威层：内容读写进 `godot/scripts/data`，玩法结果进 `godot/scripts/core`，输入编排进 `godot/scripts/app`，表现进 `godot/scripts/world`，UI 展示进 `godot/scripts/ui`，编辑体验进 `godot/addons/cdc_game_editor`。
+- 每个功能必须明确权威层：内容读写进 `godot/scripts/data`，玩法结果进 `godot/scripts/core`，输入编排进 `godot/scripts/app`，表现进 `godot/scripts/world`，UI 展示进 `godot/scripts/ui`。
 - 每个阶段至少跑对应 `tools/agent/test-godot-game.ps1 -Scenario <Scenario>`；大阶段跑 `-Scenario All`。
 - 涉及 Godot 工程、地图、数据或旧栈边界时跑 `cmd /c run_godot_validate.bat`。
-- 涉及 editor 插件时跑 `tools/agent/test-godot-editor.ps1`。
 - 文档阶段无需跑全量游戏 smoke，但需要检查 markdown 和 git diff，确认未误改功能文件。
