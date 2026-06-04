@@ -51,6 +51,7 @@ var shop_sessions: Dictionary = {}
 var item_library: Dictionary = {}
 var effect_library: Dictionary = {}
 var quest_library: Dictionary = {}
+var dialogue_rule_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
 var world_flags: Dictionary = {}
@@ -156,6 +157,10 @@ func configure_map_interactions(targets: Dictionary) -> void:
 
 func configure_quests(quests: Dictionary) -> void:
 	_quest_runner.configure(self, quests)
+
+
+func configure_dialogue_rules(dialogue_rules: Dictionary) -> void:
+	dialogue_rule_library = dialogue_rules.duplicate(true)
 
 
 func configure_items(items: Dictionary) -> void:
@@ -498,7 +503,7 @@ func _merge_auto_turn_final_result(result: Dictionary, auto_turn: Dictionary) ->
 		var pending_result: Dictionary = _dictionary_or_empty(cycle.get("pending_result", {}))
 		if pending_result.is_empty() or not bool(pending_result.get("success", false)):
 			continue
-		for key in ["dialogue_id", "dialogue_state", "container", "context_snapshot", "consumed_target", "item_id", "count", "inventory_before", "inventory_after", "defeated", "attack_result", "auto_resumed_interaction", "resumed_pending_interaction", "approach_result"]:
+		for key in ["dialogue_id", "requested_dialogue_id", "dialogue_rule_key", "dialogue_rule_source", "dialogue_state", "container", "context_snapshot", "consumed_target", "item_id", "count", "inventory_before", "inventory_after", "defeated", "attack_result", "auto_resumed_interaction", "resumed_pending_interaction", "approach_result"]:
 			if pending_result.has(key) and not result.has(key):
 				result[key] = pending_result.get(key)
 		if pending_result.has("kind") and str(result.get("kind", "")) == "pending_movement_completed":

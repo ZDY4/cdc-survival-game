@@ -49,19 +49,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue panel is not visible after talk")
 	if _speaker_line(game_root) != "老王":
 		errors.append("dialogue speaker mismatch: %s" % _speaker_line(game_root))
-	if not _text_line(game_root).contains("要看看货吗"):
+	if result.get("dialogue_id", "") != "trader_lao_wang_tutorial_active":
+		errors.append("talk should use dialogue rule variant for tutorial-active trader")
+	if not _text_line(game_root).contains("警戒区"):
 		errors.append("dialogue text missing start node")
-	if not _options_line(game_root).contains("交易") or not _options_line(game_root).contains("离开"):
+	if not _options_line(game_root).contains("看看货") or not _options_line(game_root).contains("明白"):
 		errors.append("dialogue options missing expected choices")
 	var before_events: int = game_root.simulation.snapshot().get("events", []).size()
 	_press_key(game_root, KEY_SPACE)
-	if not _player(game_root).get("active_dialogue_id", "") == "trader_lao_wang":
+	if not _player(game_root).get("active_dialogue_id", "") == "trader_lao_wang_tutorial_active":
 		errors.append("Space should not close dialogue when choices are available")
 	if game_root.simulation.snapshot().get("events", []).size() != before_events:
 		errors.append("Space on choice dialogue should not advance world turn or emit events")
-	_press_key(game_root, KEY_1)
+	_press_key(game_root, KEY_2)
 	if not game_root.trade_panel.visible:
-		errors.append("digit 1 should choose first dialogue option and open trade")
+		errors.append("digit 2 should choose trade dialogue option and open trade")
 	if not _player(game_root).get("active_dialogue_id", "") == "":
 		errors.append("digit dialogue choice should close active dialogue after trade action")
 	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_SPACE, "Space")

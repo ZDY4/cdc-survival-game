@@ -80,19 +80,36 @@ func _execute_talk(simulation: RefCounted, actor_id: int, prompt: Dictionary, op
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor", "prompt": prompt}
 
-	var dialogue_id: String = str(option.get("dialogue_id", ""))
+	var requested_dialogue_id: String = str(option.get("dialogue_id", ""))
+	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	var target_actor: RefCounted = simulation.actor_registry.get_actor(int(target.get("actor_id", 0)))
+	var dialogue_resolution: Dictionary = _resolve_dialogue_id(simulation, actor, target_actor, requested_dialogue_id)
+	var dialogue_id: String = str(dialogue_resolution.get("dialogue_id", requested_dialogue_id))
+	if dialogue_id.is_empty():
+		return {"success": false, "reason": "dialogue_missing", "prompt": prompt}
 	actor.active_dialogue_id = dialogue_id
 	actor.active_dialogue_node_id = ""
 	simulation.emit_event("dialogue_started", {
 		"actor_id": actor_id,
+		"target_actor_id": int(target.get("actor_id", 0)),
 		"dialogue_id": dialogue_id,
+		"requested_dialogue_id": requested_dialogue_id,
+		"dialogue_rule_key": str(dialogue_resolution.get("rule_key", "")),
+		"dialogue_rule_source": str(dialogue_resolution.get("source", "direct")),
 	})
-	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
-	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, target.get("actor_id", 0)))
+	var success_payload: Dictionary = _interaction_success_payload(actor_id, prompt, option, target.get("actor_id", 0))
+	success_payload["dialogue_id"] = dialogue_id
+	success_payload["requested_dialogue_id"] = requested_dialogue_id
+	success_payload["dialogue_rule_key"] = str(dialogue_resolution.get("rule_key", ""))
+	success_payload["dialogue_rule_source"] = str(dialogue_resolution.get("source", "direct"))
+	simulation.emit_event("interaction_succeeded", success_payload)
 	return {
 		"success": true,
 		"prompt": prompt,
 		"dialogue_id": dialogue_id,
+		"requested_dialogue_id": requested_dialogue_id,
+		"dialogue_rule_key": str(dialogue_resolution.get("rule_key", "")),
+		"dialogue_rule_source": str(dialogue_resolution.get("source", "direct")),
 	}
 
 
@@ -174,6 +191,90 @@ func _container_session_for_target(simulation: RefCounted, target_id: String, ta
 	}
 	simulation.container_sessions[target_id] = session
 	return session
+
+
+func _resolve_dialogue_id(simulation: RefCounted, actor: RefCounted, target_actor: RefCounted, requested_dialogue_id: String) -> Dictionary:
+	var rule_key: String = str(target_actor.definition_id if target_actor != null else requested_dialogue_id)
+	var rule_record: Dictionary = _dictionary_or_empty(simulation.dialogue_rule_library.get(rule_key, {}))
+	var rule_data: Dictionary = _dictionary_or_empty(rule_record.get("data", rule_record))
+	if rule_data.is_empty():
+		return {
+			"dialogue_id": requested_dialogue_id,
+			"rule_key": rule_key,
+			"source": "direct",
+		}
+	for variant in _array_or_empty(rule_data.get("variants", [])):
+		var variant_data: Dictionary = _dictionary_or_empty(variant)
+		if _dialogue_conditions_match(simulation, actor, target_actor, _dictionary_or_empty(variant_data.get("when", {}))):
+			return {
+				"dialogue_id": str(variant_data.get("dialogue_id", rule_data.get("default_dialogue_id", requested_dialogue_id))),
+				"rule_key": rule_key,
+				"source": "variant",
+			}
+	return {
+		"dialogue_id": str(rule_data.get("default_dialogue_id", requested_dialogue_id)),
+		"rule_key": rule_key,
+		"source": "default",
+	}
+
+
+func _dialogue_conditions_match(simulation: RefCounted, actor: RefCounted, target_actor: RefCounted, conditions: Dictionary) -> bool:
+	if conditions.is_empty():
+		return true
+	if conditions.has("player_active_quests_any") and not _dictionary_has_any_key(simulation.active_quests, _array_or_empty(conditions.get("player_active_quests_any", []))):
+		return false
+	if conditions.has("player_completed_quests_any") and not _dictionary_has_any_key(simulation.completed_quests, _array_or_empty(conditions.get("player_completed_quests_any", []))):
+		return false
+	if conditions.has("player_item_count_min") and not _player_item_count_min_met(actor, _dictionary_or_empty(conditions.get("player_item_count_min", {}))):
+		return false
+	if conditions.has("relation_score_min") and _relation_score(simulation, actor, target_actor) < float(conditions.get("relation_score_min", 0.0)):
+		return false
+	if conditions.has("relation_score_max") and _relation_score(simulation, actor, target_actor) > float(conditions.get("relation_score_max", 0.0)):
+		return false
+	if conditions.has("npc_role_in") and not _array_or_empty(conditions.get("npc_role_in", [])).has(str(_dictionary_or_empty(target_actor.life if target_actor != null else {}).get("role", ""))):
+		return false
+	if conditions.has("npc_on_shift") and bool(conditions.get("npc_on_shift", false)) != _npc_on_shift(target_actor):
+		return false
+	if conditions.has("player_hp_ratio_max") and _hp_ratio(actor) > float(conditions.get("player_hp_ratio_max", 1.0)):
+		return false
+	return true
+
+
+func _dictionary_has_any_key(dictionary: Dictionary, keys: Array) -> bool:
+	for key in keys:
+		if dictionary.has(str(key)):
+			return true
+	return false
+
+
+func _player_item_count_min_met(actor: RefCounted, requirements: Dictionary) -> bool:
+	if actor == null:
+		return false
+	for item_id in requirements.keys():
+		if int(actor.inventory.get(str(item_id), 0)) < int(requirements[item_id]):
+			return false
+	return true
+
+
+func _relation_score(_simulation: RefCounted, _actor: RefCounted, _target_actor: RefCounted) -> float:
+	return 0.0
+
+
+func _npc_on_shift(target_actor: RefCounted) -> bool:
+	if target_actor == null:
+		return false
+	var life: Dictionary = _dictionary_or_empty(target_actor.life)
+	if life.has("on_shift"):
+		return bool(life.get("on_shift", false))
+	if not str(life.get("duty_route_id", "")).is_empty():
+		return true
+	return false
+
+
+func _hp_ratio(actor: RefCounted) -> float:
+	if actor == null or actor.max_hp <= 0.0:
+		return 1.0
+	return clampf(actor.hp / actor.max_hp, 0.0, 1.0)
 
 
 func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:

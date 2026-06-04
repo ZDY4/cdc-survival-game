@@ -11,6 +11,7 @@ const DOMAIN_SPECS := [
 	{"domain": "recipes", "dir": "recipes", "id_field": "id", "required": ["id", "name", "output", "materials"], "recursive": false},
 	{"domain": "quests", "dir": "quests", "id_field": "quest_id", "required": ["quest_id", "title", "flow"], "recursive": false},
 	{"domain": "dialogues", "dir": "dialogues", "id_field": "dialog_id", "required": ["dialog_id", "nodes"], "recursive": false},
+	{"domain": "dialogue_rules", "dir": "dialogue_rules", "id_field": "dialogue_key", "required": ["dialogue_key", "default_dialogue_id"], "recursive": false},
 	{"domain": "skills", "dir": "skills", "id_field": "id", "required": ["id", "name"], "recursive": false},
 	{"domain": "skill_trees", "dir": "skill_trees", "id_field": "id", "required": ["id"], "recursive": false},
 	{"domain": "world_tiles", "dir": "world_tiles", "id_field": "", "required": ["prototypes"], "recursive": false},

@@ -149,11 +149,15 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	})
 	if not bool(talk_result.get("success", false)):
 		errors.append("talk failed: %s" % talk_result.get("reason", "unknown"))
-	if talk_result.get("dialogue_id", "") != "trader_lao_wang":
-		errors.append("talk did not resolve trader_lao_wang dialogue")
+	if talk_result.get("dialogue_id", "") != "trader_lao_wang_tutorial_active":
+		errors.append("talk did not resolve tutorial-active trader dialogue")
+	if talk_result.get("requested_dialogue_id", "") != "trader_lao_wang" or talk_result.get("dialogue_rule_source", "") != "variant":
+		errors.append("talk should expose dialogue rule resolution")
 	var dialogue_started_payload: Dictionary = _last_event_payload(simulation.snapshot(), "dialogue_started")
-	if int(dialogue_started_payload.get("actor_id", 0)) != 1 or str(dialogue_started_payload.get("dialogue_id", "")) != "trader_lao_wang":
+	if int(dialogue_started_payload.get("actor_id", 0)) != 1 or str(dialogue_started_payload.get("dialogue_id", "")) != "trader_lao_wang_tutorial_active":
 		errors.append("dialogue_started should include actor_id and dialogue_id")
+	if str(dialogue_started_payload.get("dialogue_rule_key", "")) != "trader_lao_wang" or str(dialogue_started_payload.get("dialogue_rule_source", "")) != "variant":
+		errors.append("dialogue_started should include rule key and source")
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "talk", "talk", "老王")
 
 	var container_result: Dictionary = _submit_and_complete(simulation, registry, {
@@ -521,7 +525,7 @@ func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCoun
 		errors.append("far talk should auto approach then execute: %s" % result.get("reason", "unknown"))
 	if not bool(result.get("auto_resumed_interaction", false)):
 		errors.append("far talk should report auto_resumed_interaction")
-	if player.active_dialogue_id != "trader_lao_wang":
+	if player.active_dialogue_id != "trader_lao_wang_tutorial_active":
 		errors.append("far talk should start trader dialogue after approach")
 	if _grid_distance(player.grid_position, trader.grid_position) > 2:
 		errors.append("far talk should stop within talk interaction range")
@@ -561,7 +565,7 @@ func _expect_talk_range_direct_interaction(simulation: RefCounted, registry: Ref
 	})
 	if not bool(result.get("success", false)):
 		errors.append("range-2 talk should execute without approach: %s" % result.get("reason", "unknown"))
-	if player.active_dialogue_id != "trader_lao_wang":
+	if player.active_dialogue_id != "trader_lao_wang_tutorial_active":
 		errors.append("range-2 talk should start trader dialogue")
 	if _event_count(simulation.snapshot(), "movement_queued") != movement_before:
 		errors.append("range-2 talk should not queue movement")

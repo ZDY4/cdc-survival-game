@@ -34,6 +34,7 @@ func build_new_game_runtime() -> Dictionary:
 	simulation.configure_effects(registry.get_library("json"))
 	simulation.configure_shops(registry.get_library("shops"))
 	simulation.configure_quests(registry.get_library("quests"))
+	simulation.configure_dialogue_rules(registry.get_library("dialogue_rules"))
 	_configure_startup_map_interactions(simulation)
 	return {
 		"ok": true,

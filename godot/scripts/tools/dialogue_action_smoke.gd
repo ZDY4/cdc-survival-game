@@ -41,6 +41,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var talk_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(talk_result.get("success", false)):
 		errors.append("trader talk failed: %s" % talk_result.get("reason", "unknown"))
+	if str(talk_result.get("dialogue_id", "")) != "trader_lao_wang_tutorial_active":
+		errors.append("trader talk should resolve tutorial-active dialogue rule")
 	var trade_result: Dictionary = game_root.choose_dialogue_option("trade_action")
 	if not bool(trade_result.get("success", false)):
 		errors.append("trade dialogue option failed: %s" % trade_result.get("reason", "unknown"))

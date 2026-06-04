@@ -224,7 +224,7 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("crafted_recipes should roundtrip non-empty recipe unlock state")
 	if not _array_or_empty(restored.get("world_flags", [])).has("outpost_workshop_restored"):
 		errors.append("world_flags should roundtrip non-empty unlock state")
-	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang":
+	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang_tutorial_active":
 		errors.append("player active dialogue did not roundtrip")
 	if player_restored.get("active_container_id", "") != "survivor_outpost_01_clinic_supply_cabinet":
 		errors.append("player active container did not roundtrip")

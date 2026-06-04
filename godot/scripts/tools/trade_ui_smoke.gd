@@ -422,13 +422,24 @@ func _close_trade_via_dialogue_leave(game_root: Node, errors: Array[String]) -> 
 	if not bool(talk_result.get("success", false)):
 		errors.append("trade dialogue close setup failed: %s" % talk_result.get("reason", "unknown"))
 		return
-	var leave_result: Dictionary = game_root.choose_dialogue_option(2)
+	var leave_option_index := _dialogue_option_index(game_root, "leave_end")
+	var leave_result: Dictionary = game_root.choose_dialogue_option(leave_option_index)
 	if not bool(leave_result.get("success", false)) or str(leave_result.get("end_type", "")) != "leave":
 		errors.append("dialogue leave option should finish with leave end_type")
 	if game_root.trade_panel.visible:
 		errors.append("dialogue leave should close trade panel")
 	if not game_root.active_trade_target.is_empty():
 		errors.append("dialogue leave should clear active trade target")
+
+
+func _dialogue_option_index(game_root: Node, next_id: String) -> int:
+	var snapshot: Dictionary = game_root._current_dialogue_snapshot()
+	var options: Array = snapshot.get("options", [])
+	for index in range(options.size()):
+		var option: Dictionary = _dictionary_or_empty(options[index])
+		if str(option.get("next", "")) == next_id:
+			return index
+	return 0
 
 
 func _title_line(game_root: Node) -> String:
