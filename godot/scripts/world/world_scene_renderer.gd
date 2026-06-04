@@ -17,6 +17,7 @@ var ground_material := _material(Color(0.22, 0.26, 0.23))
 var actor_material := _material(Color(0.78, 0.78, 0.68))
 var player_material := _material(Color(0.28, 0.55, 0.88))
 var corpse_material := _material(Color(0.32, 0.26, 0.22))
+var corpse_badge_material := _unshaded_material(Color(0.76, 0.62, 0.38, 0.88))
 var pickup_fallback_material := _material(Color(0.22, 0.68, 0.95))
 var container_fallback_material := _material(Color(0.28, 0.74, 0.38))
 var trigger_fallback_material := _material(Color(0.58, 0.42, 0.92, 0.72))
@@ -256,12 +257,25 @@ func _spawn_corpse_markers(root: Node3D, corpses: Array) -> int:
 			"target_type": "map_object",
 			"target_id": str(corpse_data.get("container_id", "")),
 		})
+		_apply_corpse_meta(node, corpse_data)
 		node.position = _grid_to_world(_dictionary_or_empty(corpse_data.get("grid_position", {})), 0.18)
 		if not _add_corpse_model(node, corpse_data):
 			_add_corpse_fallback_mesh(node)
+		_add_corpse_world_markers(node, corpse_data)
 		_add_pickable_box(node, Vector3(0.9, 0.5, 0.75), Vector3(0.0, 0.15, 0.0))
 		root.add_child(node)
 	return corpses.size()
+
+
+func _apply_corpse_meta(node: Node, corpse_data: Dictionary) -> void:
+	node.set_meta("corpse_container_id", str(corpse_data.get("container_id", "")))
+	node.set_meta("display_name", str(corpse_data.get("display_name", "")))
+	node.set_meta("source_actor_id", int(corpse_data.get("source_actor_id", 0)))
+	node.set_meta("source_actor_definition_id", str(corpse_data.get("source_actor_definition_id", "")))
+	node.set_meta("source_actor_kind", str(corpse_data.get("source_actor_kind", "")))
+	node.set_meta("defeated_by_actor_id", int(corpse_data.get("defeated_by_actor_id", 0)))
+	node.set_meta("loot_count", _array_or_empty(corpse_data.get("inventory", [])).size())
+	node.set_meta("money", int(corpse_data.get("money", 0)))
 
 
 func _add_corpse_model(parent: Node3D, corpse_data: Dictionary) -> bool:
@@ -297,6 +311,35 @@ func _add_corpse_fallback_mesh(parent: Node3D) -> void:
 	visual.mesh = mesh
 	visual.material_override = corpse_material
 	parent.add_child(visual)
+
+
+func _add_corpse_world_markers(parent: Node3D, corpse_data: Dictionary) -> void:
+	var label := Label3D.new()
+	label.name = "CorpseNameLabel"
+	label.text = str(corpse_data.get("display_name", corpse_data.get("container_id", "corpse")))
+	label.position = Vector3(0.0, 0.42, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 13
+	label.modulate = Color(0.82, 0.76, 0.62, 0.9)
+	label.outline_size = 4
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
+	_apply_corpse_meta(label, corpse_data)
+	parent.add_child(label)
+
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.11
+	mesh.bottom_radius = 0.11
+	mesh.height = 0.035
+	mesh.radial_segments = 20
+	var badge := MeshInstance3D.new()
+	badge.name = "CorpseContainerBadge"
+	badge.mesh = mesh
+	badge.material_override = corpse_badge_material
+	badge.position = Vector3(0.0, 0.27, 0.0)
+	_apply_corpse_meta(badge, corpse_data)
+	badge.set_meta("target_kind", "container")
+	parent.add_child(badge)
 
 
 func _add_map_object_fallback_visual(parent: Node3D, target_data: Dictionary, object: Dictionary, width: float, height: float) -> void:

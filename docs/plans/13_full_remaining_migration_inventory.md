@@ -281,7 +281,7 @@
 - 待补 actor 模型姿态、朝向、移动插值、攻击/受击/死亡占位动画。
 - 待补装备视觉挂点：body、feet、legs、head、hands、back、accessory、main_hand、off_hand。
 - 待补武器模型方向、缩放、手持位置、开火/挥击反馈。
-- 待补尸体模型或标记，不只是容器数据；尸体应可 hover、选中、打开、被雾战影响。
+- 尸体模型 / 标记第一版已迁移：世界快照会生成 `Corpse_*` 节点，优先复用被击败 actor glTF，否则使用 corpse fallback；节点带 `CorpseNameLabel`、`CorpseContainerBadge`、pickable body、container/source actor/loot/money metadata，可 hover、选中并打开容器；已由 `Scene` 合成尸体 smoke 和 `PlayerInteraction` 击杀后尸体 hover/open smoke 覆盖。待补雾战显隐细节、专用尸体姿态 / 动画和视觉 polish。
 - actor label、血条、AP 条、敌友阵营颜色、side badge、可接任务 / 任务交付 NPC 标记和状态效果图标第一版已迁移：world snapshot 会转发 actor `ap`、`turn_open`、`in_combat` 和 `combat` 数据，并从 active/completed quest、dialogue rule 和 dialogue action 派生 `quest_offer` / `quest_turn_in` 的 `quest_markers`；`WorldSceneRenderer` 会为 actor 生成 `ActorNameLabel`、`ActorHealthBar`、`ActorApBar`、`ActorSideBadge`、`ActorQuestMarker`、`ActorQuestMarkerLabel` 和 `ActorStatusEffectIcons`，并由 `Scene` smoke 覆盖真实启动 actor、合成 hostile actor、`trader_lao_wang` 可接任务 marker、`doctor_chen` 可交付任务 marker，以及 passive / buff 状态效果图标 metadata。待补遮挡处理和视觉 polish。
 
 ### 12.3 相机和遮挡
@@ -343,7 +343,7 @@
 - glTF Godot 导入复核第一版已迁移：`Scene` smoke 会递归扫描 `godot/assets/**/*.gltf` / `.glb`，逐个通过 Godot `ResourceLoader` 加载为 `PackedScene`、实例化、统计 MeshInstance3D / 材质并检查非零可视 bounds；当前覆盖 52 个 glTF、65 个 mesh、65 个材质。待补 scale、rotation、origin、collision、shadow、visibility 和 resource uid 稳定性。
 - 建立 asset id -> Godot resource path 映射表，避免数据里 `builtin:*`、`preview_placeholders/*`、`world_tiles/*` 混用时找不到模型。
 - 地图 scene visual asset 实例化复核第一版已迁移：`Scene` smoke 会扫描 `godot/scenes/maps/*.tscn`，对每个声明 `props.visual` 的对象断言 `Visuals` 容器存在且已实例化子节点，当前覆盖 12 张地图 / 65 个 visual 对象；待补具体模型路径、fallback 类型、重叠检查和资产导入细节。
-- container / pickup / trigger / door fallback 表现第一版已迁移：door fallback 已有开合/锁定状态；生成层 map object 在缺少真实 map scene visual 时会按 pickup / container / trigger 生成不同形状、材质和 `fallback_category` meta，且有真实 visual 的对象不会重复叠加 fallback；已由 `Scene` / `PlayerInteraction` smoke 覆盖。待补 corpse 专用 fallback polish、真实美术资源替换、重叠检查和声音占位。
+- container / pickup / trigger / door / corpse fallback 表现第一版已迁移：door fallback 已有开合/锁定状态；生成层 map object 在缺少真实 map scene visual 时会按 pickup / container / trigger 生成不同形状、材质和 `fallback_category` meta，且有真实 visual 的对象不会重复叠加 fallback；corpse fallback 已有名称、容器徽标和 loot metadata；已由 `Scene` / `PlayerInteraction` smoke 覆盖。待补真实美术资源替换、重叠检查和声音占位。
 - WGSL 旧 shader 不迁代码，只迁视觉目标：grid ground、tile instancing、building wall、fog post-process 的效果要用 Godot shader / material 实现。
 - 待补音频资产策略：UI 点击、拾取、开门、交易、制作、攻击、受击、死亡、任务完成目前缺声音或占位。
 - 待补字体和中文渲染策略：所有 UI scene 应统一使用 `NotoSansCJKsc-Regular.otf` 或主题资源，避免中文 fallback 不一致。

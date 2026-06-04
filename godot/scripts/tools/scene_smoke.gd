@@ -77,6 +77,7 @@ func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary,
 	_validate_runtime_map_object_fallbacks(root, errors)
 	_validate_synthetic_actor_side_badges(errors)
 	_validate_quest_actor_markers(registry, errors)
+	_validate_corpse_world_markers(errors)
 	return errors
 
 
@@ -529,6 +530,71 @@ func _actor_by_definition(actors: Array, definition_id: String) -> Dictionary:
 		if str(actor_data.get("definition_id", "")) == definition_id:
 			return actor_data
 	return {}
+
+
+func _validate_corpse_world_markers(errors: Array[String]) -> void:
+	var root := Node3D.new()
+	root.name = "SceneSmokeCorpseRoot"
+	get_root().add_child(root)
+	WorldSceneRenderer.new().render_world(root, _corpse_world(), {"load_map_visuals": false})
+	var corpse_node: Node = root.find_child("Corpse_scene_smoke_corpse", true, false)
+	if corpse_node == null:
+		errors.append("synthetic corpse should render Corpse_* world node")
+	else:
+		if str(corpse_node.get_meta("corpse_container_id", "")) != "scene_smoke_corpse":
+			errors.append("corpse node should expose corpse_container_id metadata")
+		if int(corpse_node.get_meta("source_actor_id", 0)) != 9201:
+			errors.append("corpse node should expose source_actor_id metadata")
+		if int(corpse_node.get_meta("loot_count", 0)) != 2:
+			errors.append("corpse node should expose loot_count metadata")
+		if int(corpse_node.get_meta("money", 0)) != 17:
+			errors.append("corpse node should expose money metadata")
+		var label: Label3D = corpse_node.find_child("CorpseNameLabel", true, false) as Label3D
+		if label == null:
+			errors.append("corpse node should render CorpseNameLabel")
+		elif not label.text.contains("Scene Smoke Corpse"):
+			errors.append("corpse label should show display name")
+		var badge: MeshInstance3D = corpse_node.find_child("CorpseContainerBadge", true, false) as MeshInstance3D
+		if badge == null:
+			errors.append("corpse node should render CorpseContainerBadge")
+		else:
+			if str(badge.get_meta("target_kind", "")) != "container":
+				errors.append("corpse badge should expose container target kind")
+			if int(badge.get_meta("loot_count", 0)) != 2:
+				errors.append("corpse badge should mirror loot_count metadata")
+		if corpse_node.find_child("PickableBody", true, false) == null:
+			errors.append("corpse node should remain pickable after visual markers")
+	root.queue_free()
+
+
+func _corpse_world() -> Dictionary:
+	return {
+		"map": {
+			"map_id": "scene_smoke_corpse_map",
+			"size": {"width": 3, "height": 3},
+			"entry_points": {"default_entry": {"x": 0, "y": 0, "z": 0}},
+			"interactive_objects": [],
+			"trigger_objects": [],
+			"pickup_objects": [],
+			"interaction_targets": {},
+		},
+		"actors": [],
+		"corpses": [{
+			"container_id": "scene_smoke_corpse",
+			"display_name": "Scene Smoke Corpse",
+			"source_actor_id": 9201,
+			"source_actor_definition_id": "scene_smoke_zombie",
+			"source_actor_kind": "enemy",
+			"defeated_by_actor_id": 1,
+			"map_id": "scene_smoke_corpse_map",
+			"grid_position": {"x": 1, "y": 0, "z": 1},
+			"inventory": [
+				{"item_id": "1006", "count": 2},
+				{"item_id": "1009", "count": 9},
+			],
+			"money": 17,
+		}],
+	}
 
 
 func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, errors: Array[String]) -> void:
