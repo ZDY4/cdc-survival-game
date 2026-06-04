@@ -412,12 +412,29 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 		errors.append("ground hover should include move preview")
 	elif not bool(move_preview.get("reachable", false)):
 		errors.append("ground hover preview should be reachable: %s" % move_preview.get("reason", "unknown"))
+	_expect_ground_hover_cursor_preview(errors, game_root)
 	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
 	if str(prompt.get("primary_option_id", "")) != "move":
 		errors.append("ground hover prompt should expose move primary option")
 	var runtime_line := _hud_runtime_control_line(game_root)
 	if not runtime_line.contains("Hover ground") or not runtime_line.contains("可达"):
 		errors.append("HUD runtime control line should show ground move preview, got %s" % runtime_line)
+
+
+func _expect_ground_hover_cursor_preview(errors: Array[String], game_root: Node) -> void:
+	var cursor: MeshInstance3D = game_root.find_child("HoverGridCursor", true, false) as MeshInstance3D
+	if cursor == null:
+		errors.append("ground hover preview should expose hover cursor")
+		return
+	if not bool(cursor.get_meta("move_reachable", false)):
+		errors.append("ground hover cursor should expose reachable move state")
+	if int(cursor.get_meta("move_steps", 0)) < 0:
+		errors.append("ground hover cursor should expose non-negative move steps")
+	var material := cursor.material_override as StandardMaterial3D
+	if material == null:
+		errors.append("ground hover cursor should expose material")
+	elif material.albedo_color.g <= material.albedo_color.r:
+		errors.append("reachable ground hover cursor should use green-tinted preview color")
 
 
 func _near_open_grid_from(before: Dictionary, topology: Dictionary) -> Dictionary:
@@ -809,6 +826,8 @@ func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target
 	if not cursor.visible:
 		errors.append("hover grid cursor should be visible after a successful hover")
 		return
+	if bool(cursor.get_meta("move_reachable", false)):
+		errors.append("interaction hover cursor should not keep ground move preview state")
 	var target_3d := target_node as Node3D
 	if target_3d == null:
 		return

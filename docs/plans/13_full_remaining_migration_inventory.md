@@ -69,7 +69,7 @@
 
 - 待补完整 picking 优先级：UI blocker -> hotbar -> actor -> generated door -> map object -> trigger -> grid fallback。
 - 待补 ray 命中排序：actor hit fraction、object hit fraction、trigger hit fraction、door 近似 AABB、对象锚点噪声、场景切换触发器优先级。
-- hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、actor / pickup / container / trigger 等目标类别、target id/name、格子、当前 prompt 摘要、地面移动可达/不可达原因和预计步数，并由 `PlayerInteraction` smoke 覆盖；待补路径预览颜色。
+- hover 状态诊断第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、actor / pickup / container / trigger 等目标类别、target id/name、格子、当前 prompt 摘要、地面移动可达/不可达原因和预计步数，hover cursor 会按移动可达/不可达显示绿色/红色预览，并由 `PlayerInteraction` smoke 覆盖；待补更完整路径线/格子预览。
 - 部分迁移左键/右键差异：左键主交互或移动、右键打开 interaction menu、菜单外点击关闭并阻止本次世界输入已恢复；待补完整上下文菜单项、禁用态和点击外部关闭的所有 modal 分支。
 - 待补目标切换规则：点击新目标时取消旧 pending 的 turn policy、清空旧 prompt、更新 focused target。
 - 部分迁移鼠标拖拽：地图面板画布左键拖拽平移、滚轮/按钮缩放、pan 复位和状态行诊断已有第一版，并由 `UIToggle` smoke 覆盖；待补技能树拖拽、背包/容器/交易物品跨面板拖拽、滚动条拖拽和拖拽视觉 polish。
@@ -91,7 +91,7 @@
 - 待补 generated building stairs 跨层 pathfinding，楼梯端点、楼层切换、目标楼层显示。
 - 待补动态阻挡：actor 占用阻挡其他 actor 但不阻挡自己，尸体/掉落/拾取物非阻挡，打开门改变阻挡。
 - 路径失败 reason 第一版已迁移：目标静态阻挡返回 `goal_blocked` 并带 `blocker.kind=map_object`，目标被 actor 占据返回 `goal_occupied` 并带阻挡 actor id，越界返回 `goal_out_of_bounds` 并带 bounds，跨层返回 `level_mismatch` 并带起止楼层，不可达返回 `path_unreachable` 并带 visited cell count；已由 `Movement` smoke 覆盖。待补门权限、动态门阻挡、楼梯跨层和更完整 UI 文案映射。
-- 待补路径预览：hover 目标时显示预计路径、AP 消耗、可达/不可达颜色、跨回合路径状态。
+- 路径预览颜色第一版已迁移：hover 地面时会用同一 pathfinder 预览可达性、预计步数和失败 reason，HUD 显示摘要，hover cursor 用绿色/红色区分可达/不可达，并由 `PlayerInteraction` smoke 覆盖；待补完整路径线、AP 消耗、跨回合路径状态和多格路径着色。
 
 ### 4.2 门和建筑
 

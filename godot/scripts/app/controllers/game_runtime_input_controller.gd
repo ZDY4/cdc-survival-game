@@ -14,6 +14,9 @@ const SPACE_HOLD_INITIAL_DELAY_SEC := 0.45
 const SPACE_HOLD_REPEAT_INTERVAL_SEC := 0.30
 const ZOOM_MIN := 0.5
 const ZOOM_MAX := 4.0
+const HOVER_COLOR_INTERACTION := Color(1.0, 0.82, 0.18, 0.72)
+const HOVER_COLOR_MOVE_REACHABLE := Color(0.24, 0.95, 0.48, 0.72)
+const HOVER_COLOR_MOVE_BLOCKED := Color(1.0, 0.22, 0.18, 0.72)
 
 var game_root: Node
 var world_container: Node3D
@@ -597,6 +600,8 @@ func _clear_selection_only() -> void:
 
 func _set_hover_ground(world_position: Vector3) -> bool:
 	var grid: Dictionary = _grid_from_world_position(world_position)
+	var move_preview: Dictionary = _move_preview_for_grid(grid)
+	_apply_hover_cursor_state(move_preview)
 	return _replace_hover_state({
 		"active": true,
 		"kind": "ground",
@@ -609,7 +614,7 @@ func _set_hover_ground(world_position: Vector3) -> bool:
 		"ui_blocker": _hover_ui_blocker_name(),
 		"reason": "",
 		"prompt": _hover_prompt_for_target({"target_type": "grid", "grid": grid}),
-		"move_preview": _move_preview_for_grid(grid),
+		"move_preview": move_preview,
 	})
 
 
@@ -626,6 +631,7 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 	if target_name.is_empty() and target_node != null:
 		target_name = str(target_node.name)
 	var prompt: Dictionary = _hover_prompt_for_target(metadata)
+	_apply_hover_cursor_state({})
 	return _replace_hover_state({
 		"active": true,
 		"kind": "interaction",
@@ -643,6 +649,7 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 
 
 func _set_hover_failure(reason: String = "") -> bool:
+	_apply_hover_cursor_state({})
 	return _replace_hover_state({
 		"active": false,
 		"kind": "",
@@ -740,6 +747,25 @@ func _move_preview_for_grid(grid: Dictionary) -> Dictionary:
 		"blocker": _dictionary_or_empty(preview.get("blocker", {})).duplicate(true),
 		"visited_cell_count": int(preview.get("visited_cell_count", 0)),
 	}
+
+
+func _apply_hover_cursor_state(move_preview: Dictionary) -> void:
+	if hover_cursor == null:
+		return
+	var color := HOVER_COLOR_INTERACTION
+	if not move_preview.is_empty():
+		color = HOVER_COLOR_MOVE_REACHABLE if bool(move_preview.get("reachable", false)) else HOVER_COLOR_MOVE_BLOCKED
+		hover_cursor.set_meta("move_reachable", bool(move_preview.get("reachable", false)))
+		hover_cursor.set_meta("move_steps", int(move_preview.get("steps", 0)))
+		hover_cursor.set_meta("move_reason", str(move_preview.get("reason", "")))
+	else:
+		hover_cursor.set_meta("move_reachable", false)
+		hover_cursor.set_meta("move_steps", 0)
+		hover_cursor.set_meta("move_reason", "")
+	var material := hover_cursor.material_override as StandardMaterial3D
+	if material != null:
+		material.albedo_color = color
+	hover_cursor.set_meta("hover_color", color)
 
 
 func _player_actor_id() -> int:
@@ -866,7 +892,7 @@ func _build_hover_cursor() -> MeshInstance3D:
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(0.92, 0.045, 0.92)
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(1.0, 0.82, 0.18, 0.72)
+	material.albedo_color = HOVER_COLOR_INTERACTION
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.no_depth_test = true
