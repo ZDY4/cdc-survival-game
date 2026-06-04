@@ -69,6 +69,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("adjacent hostile attack should emit attack_resolved even when armor blocks damage")
 
 	_expect_hostile_weapon_and_reload_intents(errors, simulation, registry, player_grid)
+	errors.append_array(_expect_hostile_auto_open_door(registry))
 
 	zombie.grid_position = GridCoord.new(player_grid.x + 20, player_grid.y, player_grid.z)
 	var idle: Dictionary = simulation.decide_actor_intent(zombie_id)
@@ -193,6 +194,104 @@ func _expect_hostile_weapon_and_reload_intents(errors: Array[String], simulation
 		errors.append("hostile with empty magazine and no ammo should idle with weapon_ammo_unavailable, got %s/%s" % [dry_intent.get("intent", ""), dry_intent.get("reason", "")])
 
 
+func _expect_hostile_auto_open_door(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		return ["AI door smoke missing player"]
+	player.grid_position = GridCoord.new(3, 0, 0)
+	player.ap = 0.0
+	_move_non_player_actors_out_of_test_lane(simulation)
+	var zombie_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(0, 0, 0), {
+		"ai": {"aggro_range": 10.0, "attack_range": 1.0},
+	})
+	simulation.configure_map_interactions({
+		"ai_smoke_door": _door_target("ai_smoke_door", false, false),
+	})
+	var result: Array = simulation.advance_world_turn(_door_test_topology(false))
+	if not _npc_results_include_intent(result, zombie_id, "approach"):
+		errors.append("hostile should approach through auto-opened door")
+	var zombie: RefCounted = simulation.actor_registry.get_actor(zombie_id)
+	if zombie == null or zombie.grid_position.x != 1:
+		errors.append("hostile approach should step onto the door cell")
+	var door_state: Dictionary = _dictionary_or_empty(simulation.door_states.get("ai_smoke_door", {}))
+	if not bool(door_state.get("is_open", false)):
+		errors.append("hostile approach should persist opened door state")
+	if _event_count(simulation.snapshot(), "door_auto_opened") <= 0:
+		errors.append("hostile approach should emit door_auto_opened")
+	var auto_payload: Dictionary = _last_event_payload(simulation.snapshot(), "door_auto_opened")
+	if int(auto_payload.get("actor_id", 0)) != zombie_id:
+		errors.append("door_auto_opened should include hostile actor id")
+
+	var locked_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var locked_player: RefCounted = locked_simulation.actor_registry.get_actor(1)
+	locked_player.grid_position = GridCoord.new(3, 0, 0)
+	_move_non_player_actors_out_of_test_lane(locked_simulation)
+	var locked_zombie_id: int = _register_character(locked_simulation, registry, "zombie_walker", GridCoord.new(0, 0, 0), {
+		"ai": {"aggro_range": 10.0, "attack_range": 1.0},
+	})
+	locked_simulation.configure_map_interactions({
+		"ai_smoke_door": _door_target("ai_smoke_door", false, true),
+	})
+	var locked_result: Array = locked_simulation.advance_world_turn(_door_test_topology(true))
+	var locked_npc_result: Dictionary = _npc_result_for_actor(locked_result, locked_zombie_id)
+	if str(locked_npc_result.get("reason", "")) != "npc_no_adjacent_path":
+		errors.append("hostile should not approach through locked door")
+	return errors
+
+
+func _move_non_player_actors_out_of_test_lane(simulation: RefCounted) -> void:
+	for actor in simulation.actor_registry.actors():
+		if actor.actor_id == 1:
+			continue
+		actor.grid_position = GridCoord.new(0, 0, 10 + actor.actor_id)
+
+
+func _door_test_topology(locked: bool) -> Dictionary:
+	return {
+		"bounds": {
+			"min_x": 0,
+			"max_x": 3,
+			"min_z": 0,
+			"max_z": 0,
+		},
+		"blocking_cells": {
+			"1:0:0": "ai_smoke_door",
+		},
+		"sight_blocking_cells": {},
+		"door_objects": [_door_summary("ai_smoke_door", false, locked)],
+	}
+
+
+func _door_target(target_id: String, is_open: bool, locked: bool) -> Dictionary:
+	var door: Dictionary = _door_summary(target_id, is_open, locked)
+	return {
+		"target_id": target_id,
+		"target_type": "map_object",
+		"display_name": "AI 测试门",
+		"kind": "door",
+		"anchor": {"x": 1, "y": 0, "z": 0},
+		"cells": [{"x": 1, "y": 0, "z": 0}],
+		"door": door,
+	}
+
+
+func _door_summary(target_id: String, is_open: bool, locked: bool) -> Dictionary:
+	return {
+		"door_id": target_id,
+		"object_id": target_id,
+		"display_name": "AI 测试门",
+		"anchor": {"x": 1, "y": 0, "z": 0},
+		"cells": [{"x": 1, "y": 0, "z": 0}],
+		"is_open": is_open,
+		"locked": locked,
+		"blocks_movement": not is_open,
+		"blocks_sight": false,
+		"blocks_sight_when_closed": false,
+	}
+
+
 func _register_character(simulation: RefCounted, registry: RefCounted, definition_id: String, grid: RefCounted, overrides: Dictionary = {}) -> int:
 	var record: Dictionary = registry.get_library("characters").get(definition_id, {})
 	var data: Dictionary = record.get("data", {})
@@ -263,6 +362,23 @@ func _npc_results_include_intent(results: Array, actor_id: int, intent: String) 
 		if int(result_data.get("actor_id", 0)) == actor_id and str(result_data.get("intent", "")) == intent:
 			return true
 	return false
+
+
+func _npc_result_for_actor(results: Array, actor_id: int) -> Dictionary:
+	for result in results:
+		var result_data: Dictionary = _dictionary_or_empty(result)
+		if int(result_data.get("actor_id", 0)) == actor_id:
+			return result_data
+	return {}
+
+
+func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
+	var events: Array = snapshot.get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
 
 
 func _digest(snapshot: Dictionary) -> Dictionary:

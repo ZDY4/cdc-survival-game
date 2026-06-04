@@ -2193,8 +2193,9 @@ func _npc_approach(actor: RefCounted, target_actor_id: int, topology: Dictionary
 	var goals: Array[RefCounted] = _adjacent_goals(target.grid_position)
 	var best_plan: Dictionary = {}
 	var best_goal: RefCounted = null
+	var movement_topology: Dictionary = _topology_with_auto_open_doors(topology)
 	for goal in goals:
-		var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, topology, _occupied_actor_cells(actor.actor_id))
+		var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
 		if not bool(plan.get("success", false)):
 			continue
 		if best_plan.is_empty() or int(plan.get("steps", 999999)) < int(best_plan.get("steps", 999999)):
@@ -2207,6 +2208,7 @@ func _npc_approach(actor: RefCounted, target_actor_id: int, topology: Dictionary
 		return {"success": true, "actor_id": actor.actor_id, "reason": "already_adjacent"}
 	var next_step: Dictionary = _dictionary_or_empty(path[1])
 	var from: Dictionary = actor.grid_position.to_dictionary()
+	_auto_open_door_for_step(actor.actor_id, next_step, topology)
 	actor.grid_position = GridCoord.from_dictionary(next_step)
 	_spend_ap(actor, min(actor.ap, 1.0), "npc_approach")
 	_emit("movement_step", {
