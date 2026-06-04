@@ -50,6 +50,7 @@ func _init() -> void:
 		"inventory_line": hud.get_node("HudPanel/HudLines/InventoryLine").text,
 		"quest_line": hud.get_node("HudPanel/HudLines/QuestLine").text,
 		"interaction_line": hud.get_node("HudPanel/HudLines/InteractionLine").text,
+		"event_feedback_line": hud.get_node("HudPanel/HudLines/EventFeedbackLine").text,
 	}, "\t"))
 	quit(0)
 
@@ -79,8 +80,14 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 			errors.append("empty hotbar slot should expose empty tooltip")
 	if not hud.get_node("HudPanel/HudLines/InteractionLine").text.contains("拾取"):
 		errors.append("interaction line missing pickup option")
+	if hud.get_node_or_null("HudPanel/HudLines/EventFeedbackLine") == null:
+		errors.append("missing event feedback line")
+	elif not hud.get_node("HudPanel/HudLines/EventFeedbackLine").text.contains("交互 pickup") or not hud.get_node("HudPanel/HudLines/EventFeedbackLine").text.contains("survivor_outpost_01_pickup_medkit"):
+		errors.append("event feedback line should show recent pickup interaction")
 	if typeof(snapshot.get("hotbar", [])) != TYPE_ARRAY or snapshot.get("hotbar", []).size() != 10:
 		errors.append("HUD snapshot should expose ten hotbar slots")
+	if typeof(snapshot.get("event_feedback", [])) != TYPE_ARRAY or snapshot.get("event_feedback", []).is_empty():
+		errors.append("HUD snapshot should expose recent event feedback")
 	if not snapshot.has("tracked_quest") or bool(snapshot.get("tracked_quest", {}).get("active", true)):
 		errors.append("HUD snapshot should expose inactive tracked quest by default")
 	var interaction: Dictionary = snapshot.get("interaction", {})

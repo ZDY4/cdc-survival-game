@@ -31,6 +31,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_ta
 		},
 		"interaction": prompt,
 		"hotbar": _hotbar_summary(runtime_snapshot),
+		"event_feedback": _event_feedback(runtime_snapshot),
 		"tracked_quest": {"active": false, "quest_id": ""},
 	}
 
@@ -119,6 +120,65 @@ func _item_label(item_id: String) -> String:
 		if not name.is_empty():
 			return name
 	return item_id
+
+
+func _event_feedback(runtime_snapshot: Dictionary) -> Array[Dictionary]:
+	var events: Array = runtime_snapshot.get("events", [])
+	var output: Array[Dictionary] = []
+	for index in range(events.size() - 1, -1, -1):
+		var event: Dictionary = _dictionary_or_empty(events[index])
+		var summary := _event_feedback_entry(event)
+		if summary.is_empty():
+			continue
+		output.push_front(summary)
+		if output.size() >= 3:
+			break
+	return output
+
+
+func _event_feedback_entry(event: Dictionary) -> Dictionary:
+	var kind := str(event.get("kind", ""))
+	var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+	match kind:
+		"interaction_succeeded":
+			var target_name := str(payload.get("target_name", payload.get("target_id", "目标")))
+			var option_kind := str(payload.get("option_kind", payload.get("option_id", "interact")))
+			return {
+				"kind": kind,
+				"text": "交互 %s: %s" % [option_kind, target_name],
+			}
+		"actor_waited":
+			return {
+				"kind": kind,
+				"text": "等待: actor#%d" % int(payload.get("actor_id", 0)),
+			}
+		"movement_step":
+			return {
+				"kind": kind,
+				"text": "移动: actor#%d" % int(payload.get("actor_id", 0)),
+			}
+		"attack_resolved":
+			return {
+				"kind": kind,
+				"text": "攻击: %d -> %d" % [int(payload.get("attacker_id", 0)), int(payload.get("target_id", 0))],
+			}
+		"actor_defeated":
+			return {
+				"kind": kind,
+				"text": "击败: actor#%d" % int(payload.get("actor_id", payload.get("target_id", 0))),
+			}
+		"recipe_crafted":
+			return {
+				"kind": kind,
+				"text": "制作: %s" % str(payload.get("recipe_id", "")),
+			}
+		"skill_used":
+			return {
+				"kind": kind,
+				"text": "技能: %s" % str(payload.get("skill_id", "")),
+			}
+		_:
+			return {}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

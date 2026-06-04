@@ -6,6 +6,7 @@ var _inventory_label: Label
 var _quest_label: Label
 var _hotbar_box: HBoxContainer
 var _interaction_label: Label
+var _event_feedback_label: Label
 var _debug_overlay_label: Label
 var _info_panel_label: Label
 var _runtime_control_label: Label
@@ -48,6 +49,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
 	_apply_hotbar(snapshot.get("hotbar", []))
 	_interaction_label.text = _interaction_text(interaction)
+	_event_feedback_label.text = _event_feedback_text(snapshot.get("event_feedback", []))
 	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
 	_info_panel_label.text = _info_panel_text(snapshot.get("info_panel", {}))
 	_runtime_control_label.text = _runtime_control_text(snapshot.get("runtime_control", {}))
@@ -82,6 +84,7 @@ func _build_layout() -> void:
 	_hotbar_box.name = "HotbarDock"
 	_hotbar_box.add_theme_constant_override("separation", 4)
 	_interaction_label = _line("InteractionLine")
+	_event_feedback_label = _line("EventFeedbackLine")
 	_debug_overlay_label = _line("DebugOverlayLine")
 	_info_panel_label = _line("InfoPanelLine")
 	_runtime_control_label = _line("RuntimeControlLine")
@@ -91,6 +94,7 @@ func _build_layout() -> void:
 	box.add_child(_quest_label)
 	box.add_child(_hotbar_box)
 	box.add_child(_interaction_label)
+	box.add_child(_event_feedback_label)
 	box.add_child(_debug_overlay_label)
 	box.add_child(_info_panel_label)
 	box.add_child(_runtime_control_label)
@@ -365,6 +369,19 @@ func _interaction_text(interaction: Dictionary) -> String:
 		interaction.get("target_name", ""),
 		primary_label,
 	]
+
+
+func _event_feedback_text(value: Variant) -> String:
+	var entries: Array = value if typeof(value) == TYPE_ARRAY else []
+	if entries.is_empty():
+		return "Events none"
+	var parts: Array[String] = []
+	for entry in entries:
+		var data: Dictionary = _dictionary_or_empty(entry)
+		var text := str(data.get("text", ""))
+		if not text.is_empty():
+			parts.append(text)
+	return "Events %s" % " | ".join(parts) if not parts.is_empty() else "Events none"
 
 
 func _tracked_quest_text(value: Variant) -> String:
