@@ -38,6 +38,7 @@ func _init() -> void:
 	hud.apply_snapshot(snapshot)
 
 	var errors := _validate_hud(hud, snapshot)
+	errors.append_array(_validate_hud_failure_feedback(hud, simulation, world_result))
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -123,6 +124,30 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("HUD snapshot should expose disabled_options")
 	elif not _has_disabled_option(interaction.get("disabled_options", []), "open_container", "target_not_container"):
 		errors.append("HUD snapshot should expose disabled interaction reason")
+	return errors
+
+
+func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_result: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var rejected: Dictionary = simulation.submit_player_command({
+		"kind": "unknown",
+		"actor_id": 1,
+	})
+	if bool(rejected.get("success", false)) or str(rejected.get("reason", "")) != "unknown_player_command":
+		errors.append("HUD failure feedback setup should reject unknown command")
+	var failure_snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, {})
+	hud.apply_snapshot(failure_snapshot)
+	var feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
+	if not feedback_line.contains("失败 unknown: 未知命令"):
+		errors.append("event feedback line should show recent command rejection, got %s" % feedback_line)
+	var feedback: Array = failure_snapshot.get("event_feedback", [])
+	var found_failure := false
+	for entry in feedback:
+		var data: Dictionary = _dictionary_or_empty(entry)
+		if str(data.get("kind", "")) == "player_command_rejected" and str(data.get("text", "")).contains("未知命令"):
+			found_failure = true
+	if not found_failure:
+		errors.append("HUD snapshot event_feedback should include command rejection")
 	return errors
 
 

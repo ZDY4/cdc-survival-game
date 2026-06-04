@@ -448,8 +448,88 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 				"kind": kind,
 				"text": "技能: %s" % str(payload.get("skill_id", "")),
 			}
+		"player_command_rejected":
+			return {
+				"kind": kind,
+				"text": "失败 %s: %s" % [
+					_command_kind_label(str(payload.get("kind", payload.get("result_kind", "")))),
+					_failure_reason_text(str(payload.get("reason", "unknown"))),
+				],
+			}
+		"ui_feedback":
+			if bool(payload.get("success", true)):
+				return {}
+			if _is_player_command_kind(str(payload.get("kind", ""))):
+				return {}
+			return {
+				"kind": kind,
+				"text": "提示 %s: %s" % [
+					_command_kind_label(str(payload.get("kind", ""))),
+					_failure_reason_text(str(payload.get("reason", "unknown"))),
+				],
+			}
 		_:
 			return {}
+
+
+func _command_kind_label(kind: String) -> String:
+	match kind:
+		"move":
+			return "移动"
+		"interact":
+			return "交互"
+		"attack":
+			return "攻击"
+		"wait":
+			return "等待"
+		"use_skill":
+			return "技能"
+		"craft":
+			return "制作"
+		"inventory_action":
+			return "背包"
+	if kind.is_empty():
+		return "命令"
+	return kind
+
+
+func _is_player_command_kind(kind: String) -> bool:
+	return kind in ["move", "wait", "interact", "attack", "use_skill", "craft", "inventory_action", "unknown"]
+
+
+func _failure_reason_text(reason: String) -> String:
+	match reason:
+		"unknown_player_command":
+			return "未知命令"
+		"unknown_actor":
+			return "未知角色"
+		"command_actor_not_player":
+			return "非玩家角色"
+		"turn_closed":
+			return "回合未开启"
+		"interaction_target_unavailable":
+			return "目标不可用"
+		"target_not_visible":
+			return "目标不可见"
+		"goal_blocked":
+			return "目标被阻挡"
+		"goal_occupied":
+			return "目标被占用"
+		"goal_out_of_bounds":
+			return "目标越界"
+		"level_mismatch":
+			return "楼层不匹配"
+		"path_unreachable":
+			return "无法到达"
+		"ap_insufficient":
+			return "AP不足"
+		"ap_insufficient_movement_queued":
+			return "AP不足，移动已排队"
+		"ap_insufficient_interaction_queued":
+			return "AP不足，交互已排队"
+	if reason.is_empty():
+		return "未知原因"
+	return reason
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

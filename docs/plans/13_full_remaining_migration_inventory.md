@@ -306,7 +306,7 @@
 
 ### 13.2 HUD 和 overlay
 
-- 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能反馈，已纳入 `UI` smoke。待补更完整状态行和反馈 toast/过渡表现。
+- 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能反馈和命令拒绝失败反馈，已纳入 `UI` smoke。待补更完整状态行和反馈 toast/过渡表现。
 - 部分迁移 interaction menu：右键位置、目标名称、可用选项、禁用选项、禁用原因 tooltip/meta 和 Esc / 外部点击关闭第一版已有；待补更完整视觉布局、按钮 hover 表现和上下文菜单 polish。
 - 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、物品数量、slot tooltip、物品使用效果摘要、AP / resource cost、AP / resource / item count insufficient、cooldown 文本/禁用态和冷却遮罩；待迁移观察模式 dock 和更完整 slot tooltip。
 - 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；待迁移 tooltip layer、context menu layer、drag preview layer、overworld prompt layer，以及更统一的 modal layer 表现。
