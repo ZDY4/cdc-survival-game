@@ -672,7 +672,13 @@ func _hover_control_text(value: Variant) -> String:
 	if kind == "interaction":
 		var target_name := str(hover.get("target_name", hover.get("target_id", "")))
 		var category := str(hover.get("target_category", "interaction"))
-		return "Hover %s %s%s%s" % [category, target_name, grid_text, _hover_prompt_text(hover)]
+		return "Hover %s %s%s%s%s" % [
+			category,
+			target_name,
+			grid_text,
+			_hover_prompt_text(hover),
+			_hover_attack_preview_text(hover),
+		]
 	return "Hover %s%s%s%s" % [
 		kind,
 		grid_text,
@@ -706,6 +712,27 @@ func _hover_move_preview_text(hover: Dictionary) -> String:
 	if reason.is_empty():
 		return " 不可达"
 	return " 不可达:%s" % _disabled_reason_text(reason)
+
+
+func _hover_attack_preview_text(hover: Dictionary) -> String:
+	var preview: Dictionary = _dictionary_or_empty(hover.get("attack_preview", {}))
+	if preview.is_empty():
+		return ""
+	var distance := int(preview.get("distance", -1))
+	var range := int(preview.get("range", -1))
+	var range_text := "" if distance < 0 or range < 0 else " 距离%d/射程%d" % [distance, range]
+	var ap_text := " AP%s/%s" % [
+		_number_text(float(preview.get("ap_cost", 0.0))),
+		_number_text(float(preview.get("ap_available", 0.0))),
+	]
+	if bool(preview.get("can_attack", false)):
+		var hit_chance := float(preview.get("hit_chance", -1.0))
+		var hit_text := "" if hit_chance < 0.0 else " 命中率%s" % _percent_text(hit_chance)
+		var damage := float(preview.get("estimated_damage", 0.0))
+		var damage_text := "" if damage <= 0.0 else " 伤害%s" % _number_text(damage)
+		return " | 可攻击%s%s%s%s" % [range_text, ap_text, hit_text, damage_text]
+	var reason := str(preview.get("reason", ""))
+	return " | 不可攻击%s%s:%s" % [range_text, ap_text, _disabled_reason_text(reason)]
 
 
 func _skill_targeting_text(value: Variant) -> String:
@@ -847,3 +874,13 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _number_text(value: float) -> String:
+	if is_equal_approx(value, roundf(value)):
+		return str(int(roundf(value)))
+	return "%.1f" % value
+
+
+func _percent_text(value: float) -> String:
+	return "%d%%" % int(round(value * 100.0))

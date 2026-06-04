@@ -46,6 +46,7 @@ var last_hover_state: Dictionary = {
 	"reason": "",
 	"prompt": {},
 	"move_preview": {},
+	"attack_preview": {},
 }
 
 
@@ -615,6 +616,7 @@ func _set_hover_ground(world_position: Vector3) -> bool:
 		"reason": "",
 		"prompt": _hover_prompt_for_target({"target_type": "grid", "grid": grid}),
 		"move_preview": move_preview,
+		"attack_preview": {},
 	})
 
 
@@ -631,6 +633,7 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 	if target_name.is_empty() and target_node != null:
 		target_name = str(target_node.name)
 	var prompt: Dictionary = _hover_prompt_for_target(metadata)
+	var attack_preview: Dictionary = _attack_preview_for_target(metadata)
 	_apply_hover_cursor_state({})
 	return _replace_hover_state({
 		"active": true,
@@ -645,6 +648,7 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 		"reason": "",
 		"prompt": prompt,
 		"move_preview": {},
+		"attack_preview": attack_preview,
 	})
 
 
@@ -663,6 +667,7 @@ func _set_hover_failure(reason: String = "") -> bool:
 		"reason": reason,
 		"prompt": {},
 		"move_preview": {},
+		"attack_preview": {},
 	})
 
 
@@ -746,6 +751,35 @@ func _move_preview_for_grid(grid: Dictionary) -> Dictionary:
 		"target_position": _dictionary_or_empty(preview.get("target_position", grid)).duplicate(true),
 		"blocker": _dictionary_or_empty(preview.get("blocker", {})).duplicate(true),
 		"visited_cell_count": int(preview.get("visited_cell_count", 0)),
+	}
+
+
+func _attack_preview_for_target(target: Dictionary) -> Dictionary:
+	if str(target.get("target_type", "")) != "actor":
+		return {}
+	var simulation: Variant = game_root.get("simulation") if game_root != null else null
+	if simulation == null or not simulation.has_method("preview_attack"):
+		return {}
+	var player_id := _player_actor_id()
+	var target_actor_id := int(target.get("actor_id", 0))
+	if player_id <= 0 or target_actor_id <= 0 or player_id == target_actor_id:
+		return {}
+	var preview: Dictionary = simulation.preview_attack(player_id, target_actor_id, _dictionary_or_empty(world_result.get("map", {})))
+	return {
+		"can_attack": bool(preview.get("can_attack", preview.get("success", false))),
+		"success": bool(preview.get("success", false)),
+		"reason": str(preview.get("reason", "")),
+		"actor_id": int(preview.get("actor_id", player_id)),
+		"target_actor_id": int(preview.get("target_actor_id", target_actor_id)),
+		"distance": int(preview.get("distance", -1)),
+		"range": int(preview.get("range", -1)),
+		"ap_cost": float(preview.get("ap_cost", 0.0)),
+		"ap_available": float(preview.get("ap_available", 0.0)),
+		"ap_affordable": bool(preview.get("ap_affordable", true)),
+		"ammo_available": bool(preview.get("ammo_available", true)),
+		"hit_chance": float(preview.get("hit_chance", -1.0)),
+		"crit_chance": float(preview.get("crit_chance", 0.0)),
+		"estimated_damage": float(preview.get("estimated_damage", 0.0)),
 	}
 
 

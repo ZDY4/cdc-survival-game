@@ -110,6 +110,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false) != null:
 		errors.append("consumed pickup node was not removed from generated scene")
 	_expect_ground_grid_move(errors, game_root)
+	_expect_hostile_attack_hover_preview(errors, game_root)
 	await _expect_corpse_world_interaction(errors, game_root)
 	var move_camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if move_camera == null:
@@ -261,6 +262,73 @@ func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
 		errors.append("ground grid fallback move should update player grid")
 	if not _hud_interaction_line(game_root).contains("移动"):
 		errors.append("ground grid fallback selection should show move prompt")
+
+
+func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node) -> void:
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("attack hover preview smoke missing player actor")
+		return
+	var original_equipment: Dictionary = player.equipment.duplicate(true)
+	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
+	var original_ap: float = player.ap
+	var player_grid: Dictionary = _player_grid(game_root)
+	var target_grid := _near_open_grid_from(player_grid, game_root.world_result.get("map", {}))
+	player.equipment = {}
+	player.combat_attributes["accuracy"] = 100.0
+	player.ap = 6.0
+	var target_id: int = game_root.simulation.register_actor({
+		"definition_id": "attack_hover_preview_smoke",
+		"display_name": "Attack Hover Preview",
+		"kind": "npc",
+		"side": "hostile",
+		"group_id": "hostile",
+		"map_id": game_root.simulation.active_map_id,
+		"appearance_profile_id": "default_humanoid",
+		"model_asset": "preview_placeholders/characters/humanoid_mannequin.gltf",
+		"grid_position": GridCoord.from_dictionary(target_grid),
+		"ap": 0.0,
+		"turn_open": false,
+		"max_hp": 12.0,
+		"hp": 12.0,
+		"combat_attributes": {"evasion": 0.0, "damage_reduction": 0.0},
+	})
+	game_root._rebuild_world_after_runtime_change()
+	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if camera == null:
+		errors.append("attack hover preview smoke missing camera")
+		_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
+		return
+	var target_node: Node3D = game_root.find_child("Actor_attack_hover_preview_smoke_%d" % target_id, true, false) as Node3D
+	if target_node == null:
+		errors.append("attack hover preview should render hostile actor node")
+	else:
+		var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(target_node.global_position))
+		if not bool(hover_result.get("success", false)):
+			errors.append("hostile actor hover raycast failed: %s" % hover_result.get("reason", "unknown"))
+		var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
+		var attack_preview: Dictionary = _dictionary_or_empty(hover.get("attack_preview", {}))
+		if attack_preview.is_empty():
+			errors.append("hostile actor hover should expose attack preview")
+		elif not bool(attack_preview.get("can_attack", false)):
+			errors.append("hostile actor hover attack preview should be attackable: %s" % attack_preview.get("reason", "unknown"))
+		elif int(attack_preview.get("target_actor_id", 0)) != target_id:
+			errors.append("hostile actor hover attack preview should expose target actor id")
+		if str(hover.get("target_category", "")) != "actor:hostile":
+			errors.append("hostile actor hover should expose actor:hostile category")
+		var runtime_line := _hud_runtime_control_line(game_root)
+		if not runtime_line.contains("可攻击") or not runtime_line.contains("命中率") or not runtime_line.contains("伤害"):
+			errors.append("HUD runtime control line should show attack hover preview, got %s" % runtime_line)
+	_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
+
+
+func _cleanup_attack_hover_preview_smoke(game_root: Node, player: RefCounted, target_id: int, original_equipment: Dictionary, original_attributes: Dictionary, original_ap: float) -> void:
+	if game_root.simulation.actor_registry.get_actor(target_id) != null:
+		game_root.simulation.actor_registry.unregister_actor(target_id)
+	player.equipment = original_equipment
+	player.combat_attributes = original_attributes
+	player.ap = original_ap
+	game_root._rebuild_world_after_runtime_change()
 
 
 func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) -> void:
