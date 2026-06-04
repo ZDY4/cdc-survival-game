@@ -62,7 +62,8 @@ func _ready() -> void:
 			push_error(error)
 		return
 
-	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var startup_request := _consume_startup_request()
+	var runtime_result: Dictionary = _build_runtime_from_startup_request(startup_request)
 	simulation = runtime_result.get("simulation")
 	var runtime_snapshot: Dictionary = runtime_result.get("snapshot", {})
 	world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
@@ -79,6 +80,31 @@ func _ready() -> void:
 	_setup_panels()
 	refresh_all_panels()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
+
+
+func _consume_startup_request() -> Dictionary:
+	var request: Dictionary = _dictionary_or_empty(ProjectSettings.get_setting("cdc/startup_request", {})).duplicate(true)
+	if not request.is_empty():
+		ProjectSettings.set_setting("cdc/startup_request", {})
+	return request
+
+
+func _build_runtime_from_startup_request(request: Dictionary) -> Dictionary:
+	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var mode := str(request.get("mode", "new_game"))
+	if mode != "continue":
+		return runtime_result
+	var snapshot: Dictionary = _dictionary_or_empty(request.get("runtime_snapshot", {}))
+	var loaded_simulation: RefCounted = runtime_result.get("simulation")
+	if loaded_simulation == null or snapshot.is_empty():
+		push_warning("继续游戏请求缺少有效快照，回退到新游戏")
+		return runtime_result
+	loaded_simulation.load_snapshot(snapshot)
+	return {
+		"ok": true,
+		"simulation": loaded_simulation,
+		"snapshot": loaded_simulation.snapshot(),
+	}
 
 
 func _process(delta: float) -> void:

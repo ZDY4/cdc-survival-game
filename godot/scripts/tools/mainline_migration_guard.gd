@@ -1,7 +1,7 @@
 extends SceneTree
 
 const REQUIRED_GODOT_VERSION := "4.6.3"
-const REQUIRED_MAIN_SCENE := "res://scenes/game/game_root.tscn"
+const REQUIRED_MAIN_SCENE := "res://scenes/boot/boot.tscn"
 const REQUIRED_GODOT_CMD := "D:\\godot\\godot.cmd"
 const ROOT_SCRIPT_EXPECTATIONS := {
 	"run_godot_game.bat": ["call \"%GODOT_EXE%\" --path \"%ROOT_DIR%godot\""],

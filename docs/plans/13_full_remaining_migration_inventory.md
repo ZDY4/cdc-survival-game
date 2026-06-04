@@ -298,7 +298,7 @@
 
 ### 13.1 主菜单和设置
 
-- 待迁移 main menu runtime：空 runtime、不加载 map/actors、新游戏、继续、退出。
+- main menu runtime 第一版已迁移：`run/main_scene` 进入 `boot.tscn` / `main_menu.tscn`，菜单态不实例化 `GameRoot`、不加载 map/actors；新游戏会写入启动请求并进入 `game_root.tscn`；继续游戏会读取默认存档 slot 的 runtime snapshot 并交给 `GameRoot` 恢复；退出按钮调用 Godot quit；已纳入 `MainMenu` smoke。待补存档槽列表、删除、覆盖确认、存档元信息和更完整视觉表现。
 - settings panel 控件第一版已迁移：主音量、音乐、音效、窗口模式、分辨率、VSync、UI scale 和按键绑定方案循环会更新设置状态、摘要文本和 blocker 状态；设置会保存到 `user://settings.json` 并在新设置面板实例加载，主音量会应用到 `Master` audio bus，窗口模式/分辨率/VSync 会在非 headless 运行时应用到 `DisplayServer`，已纳入 `UIToggle` smoke；待补 Music/SFX bus 项目配置、真实 UI scale 应用和 keybinding remap。
 - 待补设置默认值复核、设置文件版本/迁移、恢复默认和 Godot project/window/audio bus 的完整平台差异处理。
 

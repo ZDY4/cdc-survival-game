@@ -34,6 +34,7 @@ param(
         "MigrationGuard",
         "HeadlessNewGame",
         "HeadlessWorld",
+        "MainMenu",
         "Runtime",
         "ContentCLI",
         "ContentEdit",
@@ -94,6 +95,7 @@ $scenarioScripts = [ordered]@{
         Script = "res://scripts/app/headless_runner.gd"
         Args = @("--scenario", "world_smoke")
     }
+    MainMenu         = "res://scripts/tools/main_menu_smoke.gd"
     Runtime           = "res://scripts/tools/runtime_smoke.gd"
     ContentCLI        = "res://scripts/tools/content_cli_smoke.gd"
     ContentEdit       = "res://scripts/tools/content_edit_service_smoke.gd"

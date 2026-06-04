@@ -1,6 +1,11 @@
 extends Control
 
+const MAIN_MENU_SCENE = preload("res://scenes/boot/main_menu.tscn")
+
 
 func _ready() -> void:
-	# 迁移期入口先保持极简，避免 UI 先行绑定尚未端口完成的运行时。
-	print("CDC Survival Game Godot migration boot scene ready")
+	if get_node_or_null("MainMenu") != null:
+		return
+	var main_menu := MAIN_MENU_SCENE.instantiate()
+	add_child(main_menu)
+	print("CDC Survival Game Godot main menu ready")

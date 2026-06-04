@@ -167,6 +167,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MigrationGuard
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario HeadlessNewGame
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario HeadlessWorld
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario MainMenu
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentCLI
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario ContentEdit
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario EditorHandoff
