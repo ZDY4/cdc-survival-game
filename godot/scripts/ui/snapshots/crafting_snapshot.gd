@@ -7,7 +7,7 @@ func _init(p_registry: RefCounted) -> void:
 	registry = p_registry
 
 
-func build(runtime_snapshot: Dictionary) -> Dictionary:
+func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
@@ -16,7 +16,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	var recipe_ids: Array = registry.get_library("recipes").keys()
 	recipe_ids.sort()
 	for recipe_id in recipe_ids:
-		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), inventory, equipment, progression)
+		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), player, inventory, equipment, progression, crafting_context)
 		if not recipe_view.is_empty():
 			recipes.append(recipe_view)
 	return {
@@ -27,7 +27,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	}
 
 
-func _recipe_snapshot(recipe_id: String, inventory: Dictionary, equipment: Dictionary, progression: Dictionary) -> Dictionary:
+func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, crafting_context: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("recipes").get(recipe_id, {}))
 	var recipe: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if recipe.is_empty():
@@ -47,7 +47,9 @@ func _recipe_snapshot(recipe_id: String, inventory: Dictionary, equipment: Dicti
 			"available": int(inventory.get(item_id, 0)),
 		})
 	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), inventory, equipment)
-	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools)
+	var required_station := str(recipe.get("required_station", "none"))
+	var station_check: Dictionary = _station_check(player, required_station, crafting_context)
+	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check)
 	var max_craft_count: int = _max_craft_count(materials, bool(availability.get("can_craft", false)))
 	var output_count: int = max(1, int(output.get("count", 1)))
 	return {
@@ -61,7 +63,8 @@ func _recipe_snapshot(recipe_id: String, inventory: Dictionary, equipment: Dicti
 		"preview_output_count": output_count * max(1, max_craft_count),
 		"materials": materials,
 		"required_tools": required_tools,
-		"required_station": str(recipe.get("required_station", "none")),
+		"required_station": required_station,
+		"available_station": _dictionary_or_empty(station_check.get("station", {})).duplicate(true),
 		"skill_requirements": _dictionary_or_empty(recipe.get("skill_requirements", {})).duplicate(true),
 		"craft_time": float(recipe.get("craft_time", 0.0)),
 		"experience_reward": int(recipe.get("experience_reward", 0)),
@@ -75,7 +78,7 @@ func _recipe_snapshot(recipe_id: String, inventory: Dictionary, equipment: Dicti
 	}
 
 
-func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, materials: Array[Dictionary], required_tools: Array[Dictionary]) -> Dictionary:
+func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, materials: Array[Dictionary], required_tools: Array[Dictionary], station_check: Dictionary) -> Dictionary:
 	if not bool(recipe.get("is_default_unlocked", false)):
 		return {"can_craft": false, "reason": "recipe_locked"}
 	var missing_tools: Array[Dictionary] = []
@@ -94,8 +97,8 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 		})
 	if not missing_tools.is_empty():
 		return {"can_craft": false, "reason": "missing_tools", "missing_tools": missing_tools}
-	if str(recipe.get("required_station", "none")) not in ["", "none"]:
-		return {"can_craft": false, "reason": "required_station_unsupported"}
+	if not bool(station_check.get("success", false)):
+		return station_check
 	var missing_skills: Array[Dictionary] = []
 	var learned: Dictionary = _dictionary_or_empty(progression.get("learned_skills", {}))
 	for skill_id in _dictionary_or_empty(recipe.get("skill_requirements", {})).keys():
@@ -124,6 +127,60 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 	if not missing_materials.is_empty():
 		return {"can_craft": false, "reason": "materials_insufficient", "missing_materials": missing_materials}
 	return {"can_craft": true, "reason": "available"}
+
+
+func _station_check(player: Dictionary, required_station: String, crafting_context: Dictionary) -> Dictionary:
+	var station_id := required_station.strip_edges()
+	if station_id in ["", "none"]:
+		return {"success": true}
+	var station: Dictionary = _nearest_station(player, station_id, _array_or_empty(crafting_context.get("crafting_stations", [])))
+	if station.is_empty():
+		return {
+			"can_craft": false,
+			"success": false,
+			"reason": "missing_station",
+			"required_station": station_id,
+		}
+	return {
+		"success": true,
+		"station": station,
+	}
+
+
+func _nearest_station(player: Dictionary, station_id: String, stations: Array) -> Dictionary:
+	var best_station: Dictionary = {}
+	var best_distance := 2147483647
+	for station in stations:
+		var station_data: Dictionary = _dictionary_or_empty(station)
+		if str(station_data.get("station_id", "")) != station_id:
+			continue
+		var distance: int = _distance_to_station(player, station_data)
+		var station_range: int = max(0, int(station_data.get("range", 1)))
+		if distance > station_range:
+			continue
+		if distance < best_distance:
+			best_distance = distance
+			best_station = station_data.duplicate(true)
+			best_station["distance"] = distance
+	return best_station
+
+
+func _distance_to_station(player: Dictionary, station: Dictionary) -> int:
+	var player_grid: Dictionary = _dictionary_or_empty(player.get("grid_position", {}))
+	var best_distance := 2147483647
+	for cell in _array_or_empty(station.get("cells", [])):
+		var cell_data: Dictionary = _dictionary_or_empty(cell)
+		if int(cell_data.get("y", 0)) != int(player_grid.get("y", 0)):
+			continue
+		var dx: int = abs(int(cell_data.get("x", 0)) - int(player_grid.get("x", 0)))
+		var dz: int = abs(int(cell_data.get("z", 0)) - int(player_grid.get("z", 0)))
+		best_distance = mini(best_distance, dx + dz)
+	if best_distance != 2147483647:
+		return best_distance
+	var anchor: Dictionary = _dictionary_or_empty(station.get("anchor", {}))
+	if int(anchor.get("y", 0)) != int(player_grid.get("y", 0)):
+		return best_distance
+	return abs(int(anchor.get("x", 0)) - int(player_grid.get("x", 0))) + abs(int(anchor.get("z", 0)) - int(player_grid.get("z", 0)))
 
 
 func _required_tools_snapshot(required_tools: Array, inventory: Dictionary, equipment: Dictionary) -> Array[Dictionary]:

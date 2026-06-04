@@ -3090,6 +3090,11 @@ object_id = "survivor_outpost_01_workshop_cabinet_a"
 kind = "prop"
 grid_rotation = "south"
 props_json = "{
+	\"crafting_station\": {
+		\"display_name\": \"工作坊工作台\",
+		\"range\": 3.0,
+		\"station_id\": \"workbench\"
+	},
 	\"visual\": {
 		\"prototype_id\": \"props/cabinet_wood\"
 	}

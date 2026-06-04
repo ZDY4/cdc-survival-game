@@ -2,6 +2,8 @@ extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
 func _init() -> void:
@@ -88,12 +90,34 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("tool-gated recipe should identify missing screwdriver")
 	player.inventory["1151"] = 1
 	var tool_available: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes)
-	if tool_available.get("reason", "") != "required_station_unsupported":
+	if tool_available.get("reason", "") != "missing_station":
 		errors.append("tool-gated recipe should advance to station check when tool is available")
 
 	var station_result: Dictionary = simulation.craft_recipe(1, "recipe_first_aid_kit", recipes)
-	if station_result.get("reason", "") != "required_station_unsupported":
-		errors.append("station-gated recipe should report required_station_unsupported")
+	if station_result.get("reason", "") != "missing_station":
+		errors.append("station-gated recipe should report missing_station without station context")
+	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+	var crafting_context := {
+		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])),
+	}
+	if _array_or_empty(crafting_context.get("crafting_stations", [])).is_empty():
+		errors.append("map topology should expose crafting station definitions")
+	player.grid_position = GridCoord.new(33, 0, 31)
+	player.inventory["1105"] = 1
+	player.inventory["1010"] = 1
+	var station_craft: Dictionary = simulation.submit_player_command({
+		"kind": "craft",
+		"actor_id": 1,
+		"recipe_id": "recipe_ammo_pistol",
+		"recipe_library": recipes,
+		"crafting_context": crafting_context,
+	})
+	if not bool(station_craft.get("success", false)):
+		errors.append("station-gated recipe should craft near workbench: %s" % station_craft.get("reason", "unknown"))
+	if int(player.inventory.get("1105", 0)) != 0 or int(player.inventory.get("1010", 0)) != 0:
+		errors.append("station-gated craft should consume materials")
+	if int(player.inventory.get("1009", 0)) != 20:
+		errors.append("station-gated craft should add pistol ammo output")
 	return errors
 
 
@@ -110,6 +134,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _digest(snapshot: Dictionary) -> Dictionary:

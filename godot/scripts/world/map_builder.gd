@@ -77,6 +77,9 @@ func _collect_objects(topology: MapTopology, objects: Array) -> void:
 				topology.sight_blocking_cells[cell_key] = object_id
 
 		var summary: Dictionary = _object_summary(object_data, cells)
+		var station_summary: Dictionary = _crafting_station_summary(summary)
+		if not station_summary.is_empty():
+			topology.crafting_stations.append(station_summary)
 		match kind:
 			"interactive":
 				topology.interactive_objects.append(summary)
@@ -193,6 +196,22 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		"target_entry_point_id": str(primary_trigger_option.get("target_entry_point_id", trigger_props.get("target_entry_point_id", ""))),
 		"entry_point_id": str(primary_trigger_option.get("entry_point_id", trigger_props.get("entry_point_id", ""))),
 		"container_inventory": _array_or_empty(container_props.get("initial_inventory", [])),
+	}
+
+
+func _crafting_station_summary(object_summary: Dictionary) -> Dictionary:
+	var props: Dictionary = _dictionary_or_empty(object_summary.get("props", {}))
+	var station_props: Dictionary = _dictionary_or_empty(props.get("crafting_station", {}))
+	var station_id := str(station_props.get("station_id", station_props.get("id", "")))
+	if station_id.is_empty():
+		return {}
+	return {
+		"station_id": station_id,
+		"object_id": str(object_summary.get("object_id", "")),
+		"display_name": str(station_props.get("display_name", station_id)),
+		"anchor": _dictionary_or_empty(object_summary.get("anchor", {})).duplicate(true),
+		"cells": _array_or_empty(object_summary.get("cells", [])).duplicate(true),
+		"range": max(0, int(station_props.get("range", 1))),
 	}
 
 

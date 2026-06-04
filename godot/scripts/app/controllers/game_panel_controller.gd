@@ -161,12 +161,18 @@ func refresh_skills_panel() -> void:
 func refresh_crafting_panel() -> void:
 	if crafting_panel == null or simulation == null:
 		return
-	crafting_panel.apply_snapshot(CraftingSnapshot.new(registry).build(simulation.snapshot()))
+	crafting_panel.apply_snapshot(CraftingSnapshot.new(registry).build(simulation.snapshot(), _crafting_context()))
 	_apply_stage_panel_visibility()
 
 
 func update_world_result(value: Dictionary) -> void:
 	world_result = value
+
+
+func _crafting_context() -> Dictionary:
+	return {
+		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),
+	}
 
 
 func toggle_stage_panel(panel_id: String) -> Dictionary:
@@ -440,3 +446,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

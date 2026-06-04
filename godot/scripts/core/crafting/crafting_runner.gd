@@ -5,7 +5,7 @@ const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.g
 var _inventory_entries := InventoryEntries.new()
 
 
-func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_id: int, recipe_id: String, recipe_library: Dictionary) -> Dictionary:
+func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_id: int, recipe_id: String, recipe_library: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor"}
@@ -22,8 +22,9 @@ func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_i
 			"reason": "missing_tools",
 			"missing_tools": missing_tools,
 		}
-	if str(recipe.get("required_station", "none")) not in ["", "none"]:
-		return {"success": false, "reason": "required_station_unsupported"}
+	var station_check: Dictionary = _station_check(actor, str(recipe.get("required_station", "none")), crafting_context)
+	if not bool(station_check.get("success", false)):
+		return station_check
 	var skill_check: Dictionary = progression_rules.meets_skill_requirements(actor.progression, _dictionary_or_empty(recipe.get("skill_requirements", {})))
 	if not bool(skill_check.get("success", false)):
 		return {
@@ -116,3 +117,58 @@ func _item_name(item_id: String, item_library: Dictionary) -> String:
 	var record: Dictionary = _dictionary_or_empty(item_library.get(item_id, {}))
 	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
 	return str(data.get("name", item_id))
+
+
+func _station_check(actor: RefCounted, required_station: String, crafting_context: Dictionary) -> Dictionary:
+	var station_id := required_station.strip_edges()
+	if station_id in ["", "none"]:
+		return {"success": true}
+	var station: Dictionary = _nearest_station(actor, station_id, _array_or_empty(crafting_context.get("crafting_stations", [])))
+	if station.is_empty():
+		return {
+			"success": false,
+			"reason": "missing_station",
+			"required_station": station_id,
+		}
+	return {
+		"success": true,
+		"station": station,
+	}
+
+
+func _nearest_station(actor: RefCounted, station_id: String, stations: Array) -> Dictionary:
+	var best_station: Dictionary = {}
+	var best_distance := 2147483647
+	for station in stations:
+		var station_data: Dictionary = _dictionary_or_empty(station)
+		if str(station_data.get("station_id", "")) != station_id:
+			continue
+		var distance: int = _distance_to_station(actor, station_data)
+		var station_range: int = max(0, int(station_data.get("range", 1)))
+		if distance > station_range:
+			continue
+		if distance < best_distance:
+			best_distance = distance
+			best_station = station_data.duplicate(true)
+			best_station["distance"] = distance
+	return best_station
+
+
+func _distance_to_station(actor: RefCounted, station: Dictionary) -> int:
+	if actor == null:
+		return 2147483647
+	var actor_grid: Dictionary = actor.grid_position.to_dictionary()
+	var best_distance := 2147483647
+	for cell in _array_or_empty(station.get("cells", [])):
+		var cell_data: Dictionary = _dictionary_or_empty(cell)
+		if int(cell_data.get("y", 0)) != int(actor_grid.get("y", 0)):
+			continue
+		var dx: int = abs(int(cell_data.get("x", 0)) - int(actor_grid.get("x", 0)))
+		var dz: int = abs(int(cell_data.get("z", 0)) - int(actor_grid.get("z", 0)))
+		best_distance = mini(best_distance, dx + dz)
+	if best_distance != 2147483647:
+		return best_distance
+	var anchor: Dictionary = _dictionary_or_empty(station.get("anchor", {}))
+	if int(anchor.get("y", 0)) != int(actor_grid.get("y", 0)):
+		return best_distance
+	return abs(int(anchor.get("x", 0)) - int(actor_grid.get("x", 0))) + abs(int(anchor.get("z", 0)) - int(actor_grid.get("z", 0)))

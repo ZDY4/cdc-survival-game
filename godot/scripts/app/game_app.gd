@@ -978,11 +978,18 @@ func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 		"recipe_id": recipe_id,
 		"count": max(1, count),
 		"recipe_library": registry.get_library("recipes"),
+		"crafting_context": _crafting_context(),
 	})
 	refresh_inventory_panel()
 	refresh_crafting_panel()
 	refresh_skills_panel()
 	return result
+
+
+func _crafting_context() -> Dictionary:
+	return {
+		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),
+	}
 
 
 func turn_in_player_quest(quest_id: String) -> Dictionary:

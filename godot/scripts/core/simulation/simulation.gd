@@ -273,8 +273,8 @@ func drop_actor_item(actor_id: int, item_id: String, count: int, item_library: D
 	return _economy_transactions.drop_actor_item(self, actor_id, item_id, count, item_library)
 
 
-func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary) -> Dictionary:
-	return _crafting_runner.craft_recipe(self, _progression_rules, actor_id, recipe_id, recipe_library)
+func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
+	return _crafting_runner.craft_recipe(self, _progression_rules, actor_id, recipe_id, recipe_library, crafting_context)
 
 
 func perform_attack(actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
@@ -660,18 +660,19 @@ func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary
 		return {"success": false, "reason": "ap_insufficient"}
 	_spend_ap(actor, cost, "craft")
 	var count: int = max(1, int(command.get("count", 1)))
+	var crafting_context: Dictionary = _dictionary_or_empty(command.get("crafting_context", {}))
 	if count == 1:
-		return craft_recipe(actor.actor_id, str(command.get("recipe_id", "")), _dictionary_or_empty(command.get("recipe_library", {})))
-	return _craft_recipe_batch(actor.actor_id, str(command.get("recipe_id", "")), count, _dictionary_or_empty(command.get("recipe_library", {})))
+		return craft_recipe(actor.actor_id, str(command.get("recipe_id", "")), _dictionary_or_empty(command.get("recipe_library", {})), crafting_context)
+	return _craft_recipe_batch(actor.actor_id, str(command.get("recipe_id", "")), count, _dictionary_or_empty(command.get("recipe_library", {})), crafting_context)
 
 
-func _craft_recipe_batch(actor_id: int, recipe_id: String, count: int, recipes: Dictionary) -> Dictionary:
+func _craft_recipe_batch(actor_id: int, recipe_id: String, count: int, recipes: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
 	var completed := 0
 	var output_item_id := ""
 	var output_count := 0
 	var last_result: Dictionary = {}
 	for _index in range(count):
-		last_result = craft_recipe(actor_id, recipe_id, recipes)
+		last_result = craft_recipe(actor_id, recipe_id, recipes, crafting_context)
 		if not bool(last_result.get("success", false)):
 			if completed > 0:
 				last_result["partial_success"] = true

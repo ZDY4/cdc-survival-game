@@ -264,10 +264,14 @@ func _missing_reason_rows(recipe: Dictionary) -> Array[Control]:
 				normalized_skill_id
 			))
 	var station := str(recipe.get("required_station", "none"))
-	if station not in ["", "none"]:
+	if station not in ["", "none"] and str(recipe.get("craft_reason", "")) in ["missing_station", "required_station_unsupported"]:
+		var available_station: Dictionary = _dictionary_or_empty(recipe.get("available_station", {}))
+		var station_label := str(available_station.get("display_name", station))
+		if available_station.is_empty():
+			station_label = station
 		rows.append(_missing_reason_button(
 			"MissingReasonStation_%s" % station,
-			"定位工作台: %s" % station,
+			"定位工作台: %s" % station_label,
 			station
 		))
 	for tool in _array_or_empty(recipe.get("missing_tools", recipe.get("required_tools", []))):
@@ -358,7 +362,14 @@ func _requirements_text(recipe: Dictionary) -> String:
 	var parts: Array[String] = []
 	var station := str(recipe.get("required_station", "none"))
 	if station not in ["", "none"]:
-		parts.append("工作台 %s" % station)
+		var available_station: Dictionary = _dictionary_or_empty(recipe.get("available_station", {}))
+		if available_station.is_empty():
+			parts.append("工作台 %s" % station)
+		else:
+			parts.append("工作台 %s 距离 %d" % [
+				available_station.get("display_name", station),
+				int(available_station.get("distance", 0)),
+			])
 	var tools: Array = recipe.get("required_tools", [])
 	if not tools.is_empty():
 		parts.append("工具 %s" % _tools_text(tools))
@@ -568,6 +579,8 @@ func _reason_text(recipe: Dictionary) -> String:
 			return "缺工具 %s" % ", ".join(parts)
 		"required_station_unsupported":
 			return "需工作台 %s" % recipe.get("required_station", "")
+		"missing_station":
+			return "需工作台 %s" % recipe.get("required_station", "")
 		"missing_skills":
 			var parts: Array[String] = []
 			for item in recipe.get("missing_skills", []):
@@ -628,6 +641,8 @@ func _craft_failure_text(reason: String) -> String:
 		"missing_tools":
 			return "缺少工具"
 		"required_station_unsupported":
+			return "缺少工作台"
+		"missing_station":
 			return "缺少工作台"
 		"missing_skill_requirements":
 			return "技能不足"

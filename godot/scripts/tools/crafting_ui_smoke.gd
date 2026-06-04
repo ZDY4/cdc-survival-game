@@ -1,6 +1,7 @@
 extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 
 
 func _init() -> void:
@@ -148,9 +149,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("crafting detail should show available required tool")
 	if not _recipe_line(game_root, "recipe_knife_basic").contains("需工作台 workbench"):
 		errors.append("tool-gated recipe should advance to station reason when tool exists")
-	if not _press_recipe_line(game_root, "recipe_generator"):
-		errors.append("should select generator recipe for station locator smoke")
-	await process_frame
+	if _crafting_station_count(game_root) <= 0:
+		errors.append("crafting UI should receive map crafting stations")
 	var station_locator: Button = _missing_reason_button(game_root, "MissingReasonStation_workbench")
 	if station_locator == null:
 		errors.append("crafting detail should expose missing station locator")
@@ -159,11 +159,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		if _search_box(game_root) == null or _search_box(game_root).text != "workbench":
 			errors.append("missing station locator should populate crafting search")
-		if not _recipe_text(game_root).contains("发电机"):
+		if not _recipe_text(game_root).contains("基础小刀"):
 			errors.append("missing station locator should keep recipes that require the station")
 		_search_box(game_root).text = ""
 		_search_box(game_root).text_changed.emit("")
 		await process_frame
+	player_for_tool.grid_position = GridCoord.new(33, 0, 31)
+	game_root.refresh_crafting_panel()
+	if not _press_recipe_line(game_root, "recipe_knife_basic"):
+		errors.append("should reselect basic knife recipe near workbench")
+	await process_frame
+	if not _detail_text(game_root).contains("工作坊工作台 距离"):
+		errors.append("crafting detail should show nearby workbench availability")
 
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	player.inventory["1011"] = 4
@@ -345,3 +352,21 @@ func _event_count(game_root: Node, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _crafting_station_count(game_root: Node) -> int:
+	var world_result: Dictionary = _dictionary_or_empty(game_root.world_result)
+	var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	return _array_or_empty(map.get("crafting_stations", [])).size()
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
