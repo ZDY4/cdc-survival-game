@@ -179,7 +179,7 @@
 
 ### 7.3 关系和阵营
 
-- relationship scores 第一版已迁移：运行时会按 actor side / group 初始化 pair 分数，`set_relationship_score` 会 clamp 到 `[-100, 100]` 并发出 `relationship_changed`，snapshot / save 已 roundtrip，对话规则的 `relation_score_min/max` 已读取真实分数；任务 reward 可调整关系分数，奖励 HUD 会显示关系变化数量；已由 `Interaction` / `Quest` / `Save` smoke 覆盖。待补关系变化的完整 UI 文案、敌对状态动态切换和关系历史。
+- relationship scores 第一版已迁移：运行时会按 actor side / group 初始化 pair 分数，`set_relationship_score` 会 clamp 到 `[-100, 100]` 并发出 `relationship_changed`，payload 带 actor/target 显示名、score_before、score 和 score_delta，snapshot / save 已 roundtrip，对话规则的 `relation_score_min/max` 已读取真实分数；任务 reward 可调整关系分数，奖励 HUD 会显示关系变化对象和增量，独立关系变化事件也会进入 HUD 中文反馈；已由 `Interaction` / `Quest` / `Save` smoke 覆盖。待补敌对状态动态切换和关系历史。
 - 待补阵营敌对/友好/中立对交互菜单、战斗进入、任务条件、交易权限和更多对话分支的影响；当前战斗/AI 的敌对判定仍主要沿用 side。
 - 待补治疗、雇佣、跟随、队友、护送、敌对转中立等脚本化 NPC 互动。
 

@@ -2,6 +2,7 @@ extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
+const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
@@ -241,7 +242,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	var door_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	errors.append_array(_expect_door_interaction(door_simulation))
 	var relationship_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
-	errors.append_array(_expect_relationship_dialogue_rules(relationship_simulation))
+	errors.append_array(_expect_relationship_dialogue_rules(relationship_simulation, registry))
 	return errors
 
 
@@ -692,7 +693,7 @@ func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
 	return errors
 
 
-func _expect_relationship_dialogue_rules(simulation: RefCounted) -> Array[String]:
+func _expect_relationship_dialogue_rules(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var initial_score := float(simulation.relationship_score(1, 2))
 	if initial_score < 49.9:
@@ -723,15 +724,16 @@ func _expect_relationship_dialogue_rules(simulation: RefCounted) -> Array[String
 		errors.append("cold relationship talk should succeed: %s" % cold_talk.get("reason", "unknown"))
 	if str(cold_talk.get("dialogue_id", "")) != "trader_lao_wang_cold":
 		errors.append("cold relationship should select cold dialogue")
-	var feedback: Array = simulation.snapshot().get("recent_event_feedback", [])
+	var feedback: Array = HudSnapshot.new(registry).build(simulation.snapshot(), {}, {}).get("event_feedback", [])
 	var has_relationship_feedback := false
 	for event in feedback:
 		var event_data: Dictionary = _dictionary_or_empty(event)
-		if str(event_data.get("kind", "")) == "relationship_changed":
+		var feedback_text := str(event_data.get("text", ""))
+		if str(event_data.get("kind", "")) == "relationship_changed" and feedback_text.contains("关系:") and feedback_text.contains("75") and feedback_text.contains("-100") and feedback_text.contains("-175"):
 			has_relationship_feedback = true
 			break
 	if not has_relationship_feedback:
-		errors.append("recent event feedback should include relationship_changed")
+		errors.append("recent event feedback should include localized relationship_changed details")
 	return errors
 
 

@@ -515,6 +515,11 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 				"kind": kind,
 				"text": _quest_reward_text(payload),
 			}
+		"relationship_changed":
+			return {
+				"kind": kind,
+				"text": _relationship_changed_text(payload),
+			}
 		"player_command_rejected":
 			return {
 				"kind": kind,
@@ -649,8 +654,56 @@ func _quest_reward_text(payload: Dictionary) -> String:
 		parts.append("世界状态 %d" % flag_count)
 	var relationship_count: int = _array_or_empty(payload.get("relationship_changes", [])).size()
 	if relationship_count > 0:
-		parts.append("关系 %d" % relationship_count)
+		parts.append(_relationship_changes_summary(_array_or_empty(payload.get("relationship_changes", []))))
 	return " | ".join(parts)
+
+
+func _relationship_changed_text(payload: Dictionary) -> String:
+	var left_name := _relationship_actor_name(payload, "actor")
+	var right_name := _relationship_actor_name(payload, "target_actor")
+	var delta: float = float(payload.get("score_delta", float(payload.get("score", 0.0)) - float(payload.get("score_before", 0.0))))
+	return "关系: %s / %s %s -> %s (%s)" % [
+		left_name,
+		right_name,
+		_number_text(float(payload.get("score_before", 0.0))),
+		_number_text(float(payload.get("score", 0.0))),
+		_delta_text(delta),
+	]
+
+
+func _relationship_changes_summary(changes: Array) -> String:
+	if changes.is_empty():
+		return "关系 0"
+	var readable: Array[String] = []
+	for change in changes.slice(0, 2):
+		var change_data: Dictionary = _dictionary_or_empty(change)
+		var left_name := _relationship_actor_name(change_data, "actor")
+		var right_name := _relationship_actor_name(change_data, "target_actor")
+		var delta: float = float(change_data.get("score_delta", float(change_data.get("score", 0.0)) - float(change_data.get("score_before", 0.0))))
+		readable.append("%s/%s %s" % [left_name, right_name, _delta_text(delta)])
+	if changes.size() > readable.size():
+		readable.append("+%d" % (changes.size() - readable.size()))
+	return "关系 %s" % "，".join(readable)
+
+
+func _relationship_actor_name(payload: Dictionary, prefix: String) -> String:
+	var name_key := "%s_name" % prefix
+	var id_key := "%s_id" % prefix
+	var name := str(payload.get(name_key, ""))
+	if not name.is_empty():
+		return name
+	var actor_id := int(payload.get(id_key, 0))
+	if actor_id > 0:
+		return "actor#%d" % actor_id
+	return "角色"
+
+
+func _delta_text(delta: float) -> String:
+	if delta > 0.001:
+		return "+%s" % _number_text(delta)
+	if delta < -0.001:
+		return _number_text(delta)
+	return "+0"
 
 
 func _is_player_command_kind(kind: String) -> bool:

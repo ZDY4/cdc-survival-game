@@ -179,8 +179,15 @@ func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) ->
 		errors.append("quest_reward_granted should include unlocked location")
 	if not _array_or_empty(reward_payload.get("world_flags", [])).has("quest_reward_smoke_flag"):
 		errors.append("quest_reward_granted should include world flag")
-	if _array_or_empty(reward_payload.get("relationship_changes", [])).is_empty():
+	var relationship_changes: Array = _array_or_empty(reward_payload.get("relationship_changes", []))
+	if relationship_changes.is_empty():
 		errors.append("quest_reward_granted should include relationship changes")
+	else:
+		var relationship_change: Dictionary = _dictionary_or_empty(relationship_changes[0])
+		if absf(float(relationship_change.get("score_delta", 0.0)) - 9.0) > 0.001:
+			errors.append("quest relationship reward should expose score_delta")
+		if str(relationship_change.get("actor_name", "")).is_empty() or str(relationship_change.get("target_actor_name", "")).is_empty():
+			errors.append("quest relationship reward should expose actor display names")
 	var feedback_text := _hud_feedback_text(simulation, registry)
 	if not feedback_text.contains("金钱 13"):
 		errors.append("HUD reward feedback should include money, got %s" % feedback_text)
@@ -188,8 +195,8 @@ func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) ->
 		errors.append("HUD reward feedback should include unlocked location count, got %s" % feedback_text)
 	if not feedback_text.contains("世界状态 1"):
 		errors.append("HUD reward feedback should include world flag count, got %s" % feedback_text)
-	if not feedback_text.contains("关系 1"):
-		errors.append("HUD reward feedback should include relationship count, got %s" % feedback_text)
+	if not feedback_text.contains("关系") or not feedback_text.contains("+9"):
+		errors.append("HUD reward feedback should include relationship delta details, got %s" % feedback_text)
 	return errors
 
 

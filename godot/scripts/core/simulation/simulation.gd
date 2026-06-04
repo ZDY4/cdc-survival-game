@@ -600,22 +600,30 @@ func set_relationship_score(actor_id: int, target_actor_id: int, score: float, r
 	var key := _relationship_key(actor_id, target_actor_id)
 	relationships[key] = clamped
 	var changed := absf(previous - clamped) > 0.001
+	var left_actor: RefCounted = actor if actor.actor_id <= target_actor.actor_id else target_actor
+	var right_actor: RefCounted = target_actor if actor.actor_id <= target_actor.actor_id else actor
 	if changed:
 		_emit("relationship_changed", {
-			"actor_id": min(actor_id, target_actor_id),
-			"target_actor_id": max(actor_id, target_actor_id),
+			"actor_id": left_actor.actor_id,
+			"target_actor_id": right_actor.actor_id,
+			"actor_name": left_actor.display_name,
+			"target_actor_name": right_actor.display_name,
 			"score_before": previous,
 			"score": clamped,
+			"score_delta": clamped - previous,
 			"reason": reason,
-			"actor_side": actor.side,
-			"target_side": target_actor.side,
+			"actor_side": left_actor.side,
+			"target_side": right_actor.side,
 		})
 	return {
 		"success": true,
-		"actor_id": min(actor_id, target_actor_id),
-		"target_actor_id": max(actor_id, target_actor_id),
+		"actor_id": left_actor.actor_id,
+		"target_actor_id": right_actor.actor_id,
+		"actor_name": left_actor.display_name,
+		"target_actor_name": right_actor.display_name,
 		"score_before": previous,
 		"score": clamped,
+		"score_delta": clamped - previous,
 		"changed": changed,
 		"reason": reason,
 	}
