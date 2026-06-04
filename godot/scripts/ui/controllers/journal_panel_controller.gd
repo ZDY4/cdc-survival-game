@@ -1,5 +1,7 @@
 extends Control
 
+signal tracked_quest_changed(quest_id: String)
+
 var _panel: PanelContainer
 var _summary_label: Label
 var _quest_box: VBoxContainer
@@ -23,6 +25,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		_build_layout()
 
 	_last_snapshot = snapshot.duplicate(true)
+	_tracked_quest_id = str(snapshot.get("tracked_quest_id", _tracked_quest_id))
 	var quests: Array = snapshot.get("quests", [])
 	var completed_quests: Array = snapshot.get("completed_quests", [])
 	_summary_label.text = "任务 %d | 已完成 %d" % [
@@ -225,6 +228,8 @@ func _toggle_tracked_quest() -> void:
 	if _selected_quest_id.is_empty():
 		return
 	_tracked_quest_id = "" if _tracked_quest_id == _selected_quest_id else _selected_quest_id
+	_last_snapshot["tracked_quest_id"] = _tracked_quest_id
+	tracked_quest_changed.emit(_tracked_quest_id)
 	if not _last_snapshot.is_empty():
 		apply_snapshot(_last_snapshot)
 

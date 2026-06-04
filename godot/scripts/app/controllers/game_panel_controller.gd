@@ -31,6 +31,7 @@ var active_container_feedback: Dictionary = {}
 var active_character_feedback: Dictionary = {}
 var active_stage_panel: String = ""
 var settings_open := false
+var tracked_quest_id := ""
 
 var hud: Control
 var dialogue_panel: Control
@@ -61,6 +62,7 @@ func setup_panels() -> void:
 	_connect_modal_close_buttons()
 	character_panel = _ensure_panel(character_panel, CHARACTER_PANEL_SCENE, "CharacterPanelRoot")
 	journal_panel = _ensure_panel(journal_panel, JOURNAL_PANEL_SCENE, "JournalPanelRoot")
+	_connect_journal_tracking()
 	map_panel = _ensure_panel(map_panel, MAP_PANEL_SCENE, "MapPanelRoot")
 	skills_panel = _ensure_panel(skills_panel, SKILLS_PANEL_SCENE, "SkillsPanelRoot")
 	crafting_panel = _ensure_panel(crafting_panel, CRAFTING_PANEL_SCENE, "CraftingPanelRoot")
@@ -94,6 +96,7 @@ func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 		snapshot["info_panel"] = parent.info_panel_snapshot()
 	if parent != null and parent.has_method("runtime_control_snapshot"):
 		snapshot["runtime_control"] = parent.runtime_control_snapshot()
+	snapshot["tracked_quest"] = _tracked_quest_snapshot()
 	hud.apply_snapshot(snapshot)
 
 
@@ -132,7 +135,12 @@ func refresh_character_panel() -> void:
 func refresh_journal_panel() -> void:
 	if journal_panel == null or simulation == null:
 		return
-	journal_panel.apply_snapshot(JournalSnapshot.new(registry).build(simulation.snapshot()))
+	var snapshot: Dictionary = JournalSnapshot.new(registry).build(simulation.snapshot())
+	snapshot["tracked_quest_id"] = tracked_quest_id
+	if not tracked_quest_id.is_empty() and _quest_summary_by_id(snapshot.get("quests", []), tracked_quest_id).is_empty():
+		tracked_quest_id = ""
+		snapshot["tracked_quest_id"] = tracked_quest_id
+	journal_panel.apply_snapshot(snapshot)
 	_apply_stage_panel_visibility()
 
 
@@ -272,6 +280,19 @@ func _connect_modal_close_buttons() -> void:
 			container_panel.connect("transfer_requested", container_transfer)
 
 
+func _connect_journal_tracking() -> void:
+	if journal_panel == null or not journal_panel.has_signal("tracked_quest_changed"):
+		return
+	var callback := Callable(self, "_on_tracked_quest_changed")
+	if not journal_panel.is_connected("tracked_quest_changed", callback):
+		journal_panel.connect("tracked_quest_changed", callback)
+
+
+func _on_tracked_quest_changed(quest_id: String) -> void:
+	tracked_quest_id = quest_id
+	refresh_hud()
+
+
 func _ensure_panel(current: Control, scene: PackedScene, node_name: String) -> Control:
 	if current != null:
 		return current
@@ -386,3 +407,36 @@ func _settings_label(node_name: String, text: String) -> Label:
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _tracked_quest_snapshot() -> Dictionary:
+	if tracked_quest_id.is_empty():
+		return {"active": false, "quest_id": ""}
+	var journal_snapshot: Dictionary = JournalSnapshot.new(registry).build(simulation.snapshot())
+	var quest: Dictionary = _quest_summary_by_id(journal_snapshot.get("quests", []), tracked_quest_id)
+	if quest.is_empty():
+		tracked_quest_id = ""
+		return {"active": false, "quest_id": ""}
+	return {
+		"active": true,
+		"quest_id": tracked_quest_id,
+		"title": str(quest.get("title", tracked_quest_id)),
+		"objective_text": str(quest.get("objective_text", "")),
+		"progress_current": int(quest.get("progress_current", 0)),
+		"progress_target": int(quest.get("progress_target", 0)),
+		"status_text": str(quest.get("status_text", "")),
+	}
+
+
+func _quest_summary_by_id(quests: Array, quest_id: String) -> Dictionary:
+	for quest in quests:
+		var quest_data: Dictionary = _dictionary_or_empty(quest)
+		if str(quest_data.get("quest_id", "")) == quest_id:
+			return quest_data
+	return {}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

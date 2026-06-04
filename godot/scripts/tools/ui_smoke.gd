@@ -48,6 +48,7 @@ func _init() -> void:
 	print(JSON.stringify({
 		"world_line": hud.get_node("HudPanel/HudLines/WorldLine").text,
 		"inventory_line": hud.get_node("HudPanel/HudLines/InventoryLine").text,
+		"quest_line": hud.get_node("HudPanel/HudLines/QuestLine").text,
 		"interaction_line": hud.get_node("HudPanel/HudLines/InteractionLine").text,
 	}, "\t"))
 	quit(0)
@@ -61,6 +62,10 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("world line missing map id")
 	if not hud.get_node("HudPanel/HudLines/InventoryLine").text.contains("1006"):
 		errors.append("inventory line missing picked item")
+	if hud.get_node_or_null("HudPanel/HudLines/QuestLine") == null:
+		errors.append("missing quest line")
+	elif not hud.get_node("HudPanel/HudLines/QuestLine").text.contains("Quest none"):
+		errors.append("quest line should show empty tracked quest state")
 	if hud.get_node_or_null("HudPanel/HudLines/HotbarDock") == null:
 		errors.append("missing hotbar dock")
 	else:
@@ -76,6 +81,8 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("interaction line missing pickup option")
 	if typeof(snapshot.get("hotbar", [])) != TYPE_ARRAY or snapshot.get("hotbar", []).size() != 10:
 		errors.append("HUD snapshot should expose ten hotbar slots")
+	if not snapshot.has("tracked_quest") or bool(snapshot.get("tracked_quest", {}).get("active", true)):
+		errors.append("HUD snapshot should expose inactive tracked quest by default")
 	var interaction: Dictionary = snapshot.get("interaction", {})
 	if str(interaction.get("target_kind", "")) != "pickup":
 		errors.append("HUD snapshot should expose interaction target_kind")

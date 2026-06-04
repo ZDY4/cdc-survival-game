@@ -25,6 +25,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_ta
 		},
 		"interaction": prompt,
 		"hotbar": _hotbar_summary(runtime_snapshot),
+		"tracked_quest": {"active": false, "quest_id": ""},
 	}
 
 

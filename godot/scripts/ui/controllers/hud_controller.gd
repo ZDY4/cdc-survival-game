@@ -3,6 +3,7 @@ extends Control
 var _world_label: Label
 var _player_label: Label
 var _inventory_label: Label
+var _quest_label: Label
 var _hotbar_box: HBoxContainer
 var _interaction_label: Label
 var _debug_overlay_label: Label
@@ -44,6 +45,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		_inventory_text(player.get("inventory", {})),
 		player.get("active_dialogue_id", ""),
 	]
+	_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
 	_apply_hotbar(snapshot.get("hotbar", []))
 	_interaction_label.text = _interaction_text(interaction)
 	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
@@ -75,6 +77,7 @@ func _build_layout() -> void:
 	_world_label = _line("WorldLine")
 	_player_label = _line("PlayerLine")
 	_inventory_label = _line("InventoryLine")
+	_quest_label = _line("QuestLine")
 	_hotbar_box = HBoxContainer.new()
 	_hotbar_box.name = "HotbarDock"
 	_hotbar_box.add_theme_constant_override("separation", 4)
@@ -85,6 +88,7 @@ func _build_layout() -> void:
 	box.add_child(_world_label)
 	box.add_child(_player_label)
 	box.add_child(_inventory_label)
+	box.add_child(_quest_label)
 	box.add_child(_hotbar_box)
 	box.add_child(_interaction_label)
 	box.add_child(_debug_overlay_label)
@@ -356,6 +360,18 @@ func _interaction_text(interaction: Dictionary) -> String:
 	return "Target %s | Primary %s" % [
 		interaction.get("target_name", ""),
 		primary_label,
+	]
+
+
+func _tracked_quest_text(value: Variant) -> String:
+	var quest: Dictionary = _dictionary_or_empty(value)
+	if not bool(quest.get("active", false)):
+		return "Quest none"
+	return "Quest %s | %d/%d | %s" % [
+		str(quest.get("title", quest.get("quest_id", ""))),
+		int(quest.get("progress_current", 0)),
+		int(quest.get("progress_target", 0)),
+		str(quest.get("status_text", "")),
 	]
 
 
