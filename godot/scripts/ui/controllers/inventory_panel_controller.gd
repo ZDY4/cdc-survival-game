@@ -7,11 +7,13 @@ var _search_box: LineEdit
 var _filter_box: HBoxContainer
 var _sort_box: HBoxContainer
 var _detail_label: Label
+var _use_button: Button
 var _items_box: VBoxContainer
 var _category_filter: String = "all"
 var _sort_mode: String = "order"
 var _search_text: String = ""
 var _last_snapshot: Dictionary = {}
+var _selected_item: Dictionary = {}
 
 
 func _ready() -> void:
@@ -43,7 +45,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	for item in visible_items:
 		var item_data: Dictionary = item
 		_items_box.add_child(_item_line(item_data))
-	_apply_detail(visible_items[0])
+	_apply_detail(_selected_visible_item(visible_items))
 
 
 func _build_layout() -> void:
@@ -84,6 +86,15 @@ func _build_layout() -> void:
 	_sort_box.name = "SortBar"
 	_sort_box.add_theme_constant_override("separation", 4)
 	_detail_label = _label("DetailLine")
+	_use_button = _toolbar_button("UseSelectedButton", "使用", "使用选中的物品")
+	_use_button.disabled = true
+	_use_button.pressed.connect(func() -> void:
+		if _selected_item.is_empty():
+			return
+		var root := get_parent()
+		if root != null and root.has_method("use_player_item"):
+			root.use_player_item(str(_selected_item.get("item_id", "")))
+	, CONNECT_DEFERRED)
 	var item_scroll := ScrollContainer.new()
 	item_scroll.name = "ItemScroll"
 	item_scroll.custom_minimum_size = Vector2(320, 96)
@@ -97,6 +108,7 @@ func _build_layout() -> void:
 	box.add_child(_filter_box)
 	box.add_child(_sort_box)
 	box.add_child(_detail_label)
+	box.add_child(_use_button)
 	item_scroll.add_child(_items_box)
 	box.add_child(item_scroll)
 	_add_filter_button("FilterAllButton", "全部", "all")
@@ -179,8 +191,10 @@ func _search_matches(item: Dictionary) -> bool:
 func _apply_detail(item: Dictionary) -> void:
 	if _detail_label == null:
 		return
+	_selected_item = item.duplicate(true)
 	if item.is_empty():
 		_detail_label.text = "选择物品查看详情"
+		_update_use_button({})
 		return
 	var rarity := str(item.get("rarity", ""))
 	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
@@ -200,6 +214,27 @@ func _apply_detail(item: Dictionary) -> void:
 		stack_suffix,
 		"\n%s" % description if not description.is_empty() else "",
 	]
+	_update_use_button(item)
+
+
+func _update_use_button(item: Dictionary) -> void:
+	if _use_button == null:
+		return
+	var usable: bool = bool(item.get("usable", false))
+	var item_name: String = str(item.get("name", item.get("item_id", "")))
+	var ap_cost: float = float(item.get("use_ap_cost", 0.0))
+	_use_button.disabled = not usable
+	_use_button.tooltip_text = "使用 %s | AP %.0f" % [item_name, ap_cost] if usable else "选中的物品不能使用"
+
+
+func _selected_visible_item(items: Array[Dictionary]) -> Dictionary:
+	var selected_id: String = str(_selected_item.get("item_id", ""))
+	if not selected_id.is_empty():
+		for item in items:
+			var item_data: Dictionary = item
+			if str(item_data.get("item_id", "")) == selected_id:
+				return item_data
+	return items[0]
 
 
 func _add_filter_button(node_name: String, text: String, category: String) -> void:

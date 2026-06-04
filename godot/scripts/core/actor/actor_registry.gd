@@ -33,6 +33,7 @@ func register_actor(request: Dictionary) -> ActorRecord:
 	record.money = max(0, int(request.get("money", 0)))
 	record.max_hp = max(1.0, float(request.get("max_hp", 1.0)))
 	record.hp = clampf(float(request.get("hp", record.max_hp)), 0.0, record.max_hp)
+	record.resources = _resource_dictionary(request.get("resources", {}), record.max_hp, record.hp)
 	record.attack_power = max(0.0, float(request.get("attack_power", 1.0)))
 	record.defense = max(0.0, float(request.get("defense", 0.0)))
 	record.combat_attributes = _dictionary_or_empty(request.get("combat_attributes", {})).duplicate(true)
@@ -120,6 +121,7 @@ func load_snapshot(records: Array) -> void:
 		var combat: Dictionary = _dictionary_or_empty(actor_data.get("combat", {}))
 		record.max_hp = max(1.0, float(combat.get("max_hp", 1.0)))
 		record.hp = clampf(float(combat.get("hp", record.max_hp)), 0.0, record.max_hp)
+		record.resources = _resource_dictionary(combat.get("resources", actor_data.get("resources", {})), record.max_hp, record.hp)
 		record.attack_power = max(0.0, float(combat.get("attack_power", 1.0)))
 		record.defense = max(0.0, float(combat.get("defense", 0.0)))
 		record.combat_attributes = _dictionary_or_empty(combat.get("attributes", {})).duplicate(true)
@@ -166,6 +168,30 @@ func _inventory_order(value: Variant, inventory: Dictionary) -> Array[String]:
 			continue
 		if int(inventory.get(normalized_id, 0)) > 0:
 			output.append(normalized_id)
+	return output
+
+
+func _resource_dictionary(value: Variant, max_hp: float, hp: float) -> Dictionary:
+	var output: Dictionary = {}
+	for key in _dictionary_or_empty(value).keys():
+		var resource_id: String = str(key)
+		var resource_value: Variant = _dictionary_or_empty(value).get(key)
+		if typeof(resource_value) == TYPE_DICTIONARY:
+			var resource_data: Dictionary = resource_value
+			var max_value: float = max(1.0, float(resource_data.get("max", resource_data.get("maximum", 100.0))))
+			output[resource_id] = {
+				"current": clampf(float(resource_data.get("current", resource_data.get("value", 0.0))), 0.0, max_value),
+				"max": max_value,
+			}
+		else:
+			output[resource_id] = {
+				"current": clampf(float(resource_value), 0.0, 100.0),
+				"max": 100.0,
+			}
+	output["hp"] = {
+		"current": clampf(hp, 0.0, max_hp),
+		"max": max_hp,
+	}
 	return output
 
 

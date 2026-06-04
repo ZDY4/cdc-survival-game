@@ -31,6 +31,7 @@ func build_new_game_runtime() -> Dictionary:
 
 	_apply_starting_inventory(simulation, bootstrap)
 	simulation.configure_items(registry.get_library("items"))
+	simulation.configure_effects(registry.get_library("json"))
 	simulation.configure_shops(registry.get_library("shops"))
 	simulation.configure_quests(registry.get_library("quests"))
 	_configure_startup_map_interactions(simulation)
@@ -77,6 +78,7 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"grid_position": GridCoord.from_dictionary(grid_data),
 		"max_hp": float(combat_attributes.get("max_hp", 1.0)),
 		"hp": float(hp_resource.get("current", combat_attributes.get("max_hp", 1.0))),
+		"resources": resources,
 		"attack_power": float(combat_attributes.get("attack_power", 1.0)),
 		"defense": float(combat_attributes.get("defense", 0.0)),
 		"combat_attributes": combat_attributes.duplicate(true),

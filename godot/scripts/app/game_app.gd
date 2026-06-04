@@ -715,6 +715,19 @@ func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func use_player_item(item_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = _submit_inventory_action({
+		"action": "use_item",
+		"item_id": item_id,
+	})
+	refresh_hud()
+	refresh_inventory_panel()
+	refresh_character_panel()
+	return result
+
+
 func buy_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
 	var shop_id: String = _active_shop_id()
 	if shop_id.is_empty():
@@ -1030,6 +1043,7 @@ func _submit_inventory_action(action: Dictionary) -> Dictionary:
 	command["kind"] = "inventory_action"
 	command["actor_id"] = 1
 	command["item_library"] = registry.get_library("items")
+	command["effect_library"] = registry.get_library("json")
 	return simulation.submit_player_command(command)
 
 

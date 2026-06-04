@@ -48,6 +48,9 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 			"category": "misc",
 			"category_label": _category_label("misc"),
 			"equip_slots": [],
+			"usable": false,
+			"use_ap_cost": 0.0,
+			"use_effect_ids": [],
 			"stackable": false,
 			"max_stack": 1,
 		}
@@ -56,6 +59,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 	var unit_weight: float = float(data.get("weight", 0.0))
 	var value: int = int(data.get("value", 0))
 	var category: String = _category(data)
+	var usable: Dictionary = _fragment_by_kind(data, "usable")
 	return {
 		"item_id": item_id,
 		"name": str(data.get("name", item_id)),
@@ -69,6 +73,9 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"category": category,
 		"category_label": _category_label(category),
 		"equip_slots": _equip_slots(data),
+		"usable": not usable.is_empty(),
+		"use_ap_cost": max(1.0, ceil(float(usable.get("use_time", 1.0)))) if not usable.is_empty() else 0.0,
+		"use_effect_ids": _string_array(usable.get("effect_ids", [])) if not usable.is_empty() else [],
 		"stackable": _stackable(data),
 		"max_stack": _max_stack(data),
 	}
@@ -137,11 +144,15 @@ func _max_stack(item_data: Dictionary) -> int:
 
 
 func _has_fragment(item_data: Dictionary, kind: String) -> bool:
+	return not _fragment_by_kind(item_data, kind).is_empty()
+
+
+func _fragment_by_kind(item_data: Dictionary, kind: String) -> Dictionary:
 	for fragment in item_data.get("fragments", []):
 		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
 		if str(fragment_data.get("kind", "")) == kind:
-			return true
-	return false
+			return fragment_data
+	return {}
 
 
 func _player_actor(runtime_snapshot: Dictionary) -> Dictionary:
@@ -181,3 +192,10 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _string_array(values: Variant) -> Array[String]:
+	var output: Array[String] = []
+	for value in _array_or_empty(values):
+		output.append(str(value))
+	return output

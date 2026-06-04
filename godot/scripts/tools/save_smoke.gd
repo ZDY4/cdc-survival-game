@@ -164,6 +164,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("taken container item did not roundtrip in player inventory")
 	if JSON.stringify(player_restored.get("equipment", {})) != JSON.stringify(player_original.get("equipment", {})):
 		errors.append("player equipment did not roundtrip")
+	if JSON.stringify(_normalized_resources(player_restored)) != JSON.stringify(_normalized_resources(player_original)):
+		errors.append("player resources did not roundtrip")
 	if JSON.stringify(_normalized_weapon_ammo(player_restored)) != JSON.stringify(_normalized_weapon_ammo(player_original)):
 		errors.append("player weapon ammo did not roundtrip")
 	if JSON.stringify(_normalized_progression(player_restored)) != JSON.stringify(_normalized_progression(player_original)):
@@ -242,6 +244,19 @@ func _normalized_weapon_ammo(actor: Dictionary) -> Dictionary:
 	var weapon_ammo: Dictionary = actor.get("weapon_ammo", {})
 	for slot_id in weapon_ammo.keys():
 		output[str(slot_id)] = int(weapon_ammo.get(slot_id, 0))
+	return output
+
+
+func _normalized_resources(actor: Dictionary) -> Dictionary:
+	var output: Dictionary = {}
+	var combat: Dictionary = actor.get("combat", {})
+	var resources: Dictionary = combat.get("resources", {})
+	for resource_id in resources.keys():
+		var resource: Dictionary = resources.get(resource_id, {})
+		output[str(resource_id)] = {
+			"current": float(resource.get("current", 0.0)),
+			"max": float(resource.get("max", 0.0)),
+		}
 	return output
 
 

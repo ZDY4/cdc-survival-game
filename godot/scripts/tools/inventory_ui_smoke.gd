@@ -44,6 +44,34 @@ func _run_checks(game_root: Node) -> Array[String]:
 		or not _text_ordered(initial_text, "绷带 x1", "棒球棒 x1") \
 		or not _text_ordered(initial_text, "棒球棒 x1", "手枪弹药 x10"):
 		errors.append("initial inventory should follow persisted inventory order")
+	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	player_ref.hp = 50.0
+	player_ref.ap = 6.0
+	player_ref.inventory["1006"] = 2
+	game_root.refresh_inventory_panel()
+	if not _press_inventory_item_with_text(game_root, "绷带"):
+		errors.append("should select bandage row before using item")
+	var use_button: Button = _use_button(game_root)
+	if use_button == null or use_button.disabled:
+		errors.append("selected consumable should enable use button")
+	else:
+		use_button.pressed.emit()
+		await process_frame
+		if absf(player_ref.hp - 75.0) > 0.01:
+			errors.append("using bandage should restore 25 hp")
+		if absf(player_ref.ap - 4.0) > 0.01:
+			errors.append("using bandage should spend ceil(use_time) AP")
+		player_ref.ap = 6.0
+		if _player_inventory_count(game_root, "1006") != 1:
+			errors.append("using bandage should consume one inventory item")
+		if not _event_seen(game_root, "item_used"):
+			errors.append("using bandage should emit item_used")
+	var ap_before_invalid_use: float = player_ref.ap
+	var invalid_use: Dictionary = game_root.use_player_item("1003")
+	if str(invalid_use.get("reason", "")) != "item_not_usable":
+		errors.append("using a non-usable weapon should report item_not_usable")
+	if absf(player_ref.ap - ap_before_invalid_use) > 0.01:
+		errors.append("failed item use should not spend AP")
 	if _filter_button(game_root, "FilterEquipmentButton") == null:
 		errors.append("inventory panel should expose equipment filter")
 	else:
@@ -247,6 +275,10 @@ func _sort_button(game_root: Node, node_name: String) -> Button:
 
 func _search_box(game_root: Node) -> LineEdit:
 	return game_root.inventory_panel.find_child("SearchBox", true, false) as LineEdit
+
+
+func _use_button(game_root: Node) -> Button:
+	return game_root.inventory_panel.find_child("UseSelectedButton", true, false) as Button
 
 
 func _press_inventory_item_with_text(game_root: Node, needle: String) -> bool:

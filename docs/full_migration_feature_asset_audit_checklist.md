@@ -386,7 +386,7 @@
 
 - [~] 基础字段：id、name、description、category、rarity、value、stack limit。
 - [~] 装备 fragment：slot、attribute modifiers、armor、weapon profile。
-- [~] 消耗品 fragment：生命、饥饿、口渴、免疫、耐力、buff/debuff。
+- [~] 消耗品 fragment：生命、饥饿、口渴、免疫、耐力资源恢复第一版已接入 `use_item`；buff/debuff、持续效果和任务物品限制仍待迁移。
 - [~] 武器 fragment：damage、range、AP cost、crit、ammo type。
 - [ ] 弹药 fragment：ammo type、弹匣、装填、消耗、剩余弹药。
 - [ ] 工具 fragment：制作工具、维修工具、耐久、是否消耗。
@@ -769,7 +769,7 @@
 - [~] 分类、排序、筛选、搜索第一版；待补 polish。
 - [ ] 数量拆分、部分丢弃、全部丢弃。
 - [ ] 背包容量：重量、格子、堆叠上限、超重惩罚。
-- [ ] 使用消耗品：效果、AP、任务、反馈。
+- [~] 使用消耗品：资源恢复效果、AP 消耗、消耗物品、失败 reason 和 Inventory 使用按钮第一版已迁移；任务限制、持续效果和完整反馈仍待补。
 - [ ] 不可丢弃/任务物品/锁定物品。
 - [ ] 背包变化事件统一刷新 HUD/UI。
 
@@ -1092,7 +1092,7 @@
 - [ ] `DialogueAction`：对话动作、任务、交易。
 - [ ] `Combat`：LOS、AP、命中、伤害、击杀、尸体、AI。
 - [ ] `AI`：感知、追击、攻击、回合、日程。
-- [ ] `InventoryUI`：使用、装备、丢弃、排序、数量、详情。
+- [~] `InventoryUI`：使用、排序、筛选、搜索、详情第一版已迁移；待补上下文、装备、数量、拖拽重排和反馈 polish。
 - [ ] `ContainerUI`：双栏、数量、拖拽、权限、超距关闭。
 - [ ] `Equipment`：slot、属性、外观、耐久。
 - [~] `TradeUI`：购物车、批量、价格、失败和无部分成交已覆盖；待补装备出售、不可出售和拖拽。

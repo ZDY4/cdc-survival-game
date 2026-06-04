@@ -24,6 +24,7 @@ var active_dialogue_node_id: String = ""
 var active_container_id: String = ""
 var max_hp: float = 1.0
 var hp: float = 1.0
+var resources: Dictionary = {}
 var attack_power: float = 1.0
 var defense: float = 0.0
 var combat_attributes: Dictionary = {}
@@ -60,6 +61,7 @@ func to_dictionary() -> Dictionary:
 		"combat": {
 			"max_hp": max_hp,
 			"hp": hp,
+			"resources": resources.duplicate(true),
 			"attack_power": attack_power,
 			"defense": defense,
 			"attributes": combat_attributes.duplicate(true),

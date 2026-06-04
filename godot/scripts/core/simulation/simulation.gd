@@ -10,6 +10,7 @@ const EconomyTransactions = preload("res://scripts/core/economy/economy_transact
 const EquipmentEffects = preload("res://scripts/core/economy/equipment_effects.gd")
 const EquipmentRunner = preload("res://scripts/core/economy/equipment_runner.gd")
 const EquipmentRules = preload("res://scripts/core/economy/equipment_rules.gd")
+const ItemUseRunner = preload("res://scripts/core/economy/item_use_runner.gd")
 const InteractionExecutor = preload("res://scripts/core/interactions/interaction_executor.gd")
 const MovementRunner = preload("res://scripts/core/movement/movement_runner.gd")
 const OverworldRunner = preload("res://scripts/core/overworld/overworld_runner.gd")
@@ -48,6 +49,7 @@ var consumed_interaction_targets: Dictionary = {}
 var container_sessions: Dictionary = {}
 var shop_sessions: Dictionary = {}
 var item_library: Dictionary = {}
+var effect_library: Dictionary = {}
 var quest_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
@@ -91,6 +93,7 @@ var _snapshot_codec := SimulationSnapshotCodec.new()
 var _vision_runner := VisionRunner.new()
 var _vision_rules := VisionRules.new()
 var _inventory_entries := InventoryEntries.new()
+var _item_use_runner := ItemUseRunner.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -151,6 +154,10 @@ func configure_quests(quests: Dictionary) -> void:
 
 func configure_items(items: Dictionary) -> void:
 	item_library = items.duplicate(true)
+
+
+func configure_effects(effects: Dictionary) -> void:
+	effect_library = effects.duplicate(true)
 
 
 func start_quest(actor_id: int, quest_id: String) -> bool:
@@ -647,6 +654,8 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 			return unequip_item(actor.actor_id, str(command.get("slot_id", "")))
 		"reload_equipped":
 			return _finalize_player_ap_action(actor, _submit_reload_equipped_action(actor, command, items), command, "reload")
+		"use_item":
+			return _finalize_player_ap_action(actor, _submit_use_item_action(actor, command, items), command, "use_item")
 		"buy_shop":
 			return buy_item_from_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"sell_shop":
@@ -654,6 +663,29 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"sell_equipped_shop":
 			return sell_equipped_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("slot_id", "")), str(command.get("item_id", "")), items)
 	return {"success": false, "reason": "unknown_inventory_action"}
+
+
+func _submit_use_item_action(actor: RefCounted, command: Dictionary, items: Dictionary) -> Dictionary:
+	var item_id: String = str(command.get("item_id", ""))
+	var effects: Dictionary = _dictionary_or_empty(command.get("effect_library", effect_library))
+	var validation: Dictionary = _item_use_runner.validate_use_item(self, actor.actor_id, item_id, items, effects)
+	if not bool(validation.get("success", false)):
+		return validation
+	var ap_cost: float = float(command.get("ap_cost", _item_use_runner.use_ap_cost(item_id, items)))
+	if actor.ap < ap_cost:
+		return {
+			"success": false,
+			"reason": "ap_insufficient_use_item",
+			"item_id": item_id,
+			"required_ap": ap_cost,
+			"available_ap": actor.ap,
+		}
+	_spend_ap(actor, ap_cost, "use_item:%s" % item_id)
+	var result: Dictionary = _item_use_runner.use_item(self, actor.actor_id, item_id, items, effects)
+	if bool(result.get("success", false)):
+		result["ap_cost"] = ap_cost
+		result["ap_remaining"] = actor.ap
+	return result
 
 
 func _submit_reload_equipped_action(actor: RefCounted, command: Dictionary, items: Dictionary) -> Dictionary:
