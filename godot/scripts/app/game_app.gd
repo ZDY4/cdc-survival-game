@@ -1057,6 +1057,10 @@ func begin_skill_targeting(slot_id: String, skill_id: String = "") -> Dictionary
 		"skill_name": str(skill.get("name", resolved_skill_id)),
 		"target_kind": target_kind,
 		"target_policy": str(targeting.get("policy", "")),
+		"range": int(targeting.get("range", targeting.get("max_range", -1))),
+		"radius": int(targeting.get("radius", targeting.get("aoe_radius", -1))),
+		"length": int(targeting.get("length", targeting.get("max_length", -1))),
+		"width": int(targeting.get("width", targeting.get("half_width", -1))),
 	}
 	active_skill_target_preview = {
 		"success": false,

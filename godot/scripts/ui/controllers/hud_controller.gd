@@ -639,20 +639,126 @@ func _skill_targeting_text(value: Variant) -> String:
 	var preview: Dictionary = _dictionary_or_empty(targeting.get("preview", {}))
 	var skill_name := str(targeting.get("skill_name", targeting.get("skill_id", "")))
 	var shape := str(targeting.get("target_kind", preview.get("target_shape", "")))
+	var policy := str(targeting.get("target_policy", preview.get("target_policy", "")))
+	var range_value: int = int(preview.get("range", targeting.get("range", -1)))
+	var distance_value: int = int(preview.get("distance", -1))
+	var shape_text := _skill_target_shape_text(shape)
+	var policy_text := _skill_target_policy_text(policy)
+	var range_text := _skill_target_range_text(shape, range_value, targeting, preview)
 	if not bool(preview.get("success", false)):
 		var reason := str(preview.get("reason", "选择目标"))
-		return "Skill Target %s | %s | %s" % [skill_name, shape, reason]
+		var distance_text := "" if distance_value < 0 else " | 距离 %d" % distance_value
+		var failure_text := "Skill Target %s | %s | %s%s | %s" % [
+			skill_name,
+			shape_text,
+			policy_text,
+			range_text,
+			_skill_target_reason_text(reason),
+		]
+		return failure_text + distance_text
 	var affected_cells: Array = _array_or_empty(preview.get("affected_cells", []))
 	var affected_actor_ids: Array = _array_or_empty(preview.get("affected_actor_ids", []))
 	var parts: Array[String] = [
 		"Skill Target %s" % skill_name,
-		shape,
+		shape_text,
+		policy_text,
 		"%d格" % affected_cells.size(),
 		"%d目标" % affected_actor_ids.size(),
 	]
+	if not range_text.is_empty():
+		parts.append(range_text.strip_edges())
+	if distance_value >= 0:
+		parts.append("距离 %d" % distance_value)
 	if bool(preview.get("friendly_fire", false)):
 		parts.append("友军风险")
 	return " | ".join(parts)
+
+
+func _skill_target_shape_text(shape: String) -> String:
+	match shape:
+		"single", "actor", "single_actor":
+			return "单体"
+		"grid", "point":
+			return "格子"
+		"radius", "circle":
+			return "范围"
+		"line":
+			return "直线"
+		"cone":
+			return "锥形"
+		"self":
+			return "自身"
+	if shape.is_empty():
+		return "目标"
+	return shape
+
+
+func _skill_target_policy_text(policy: String) -> String:
+	match policy:
+		"hostile_only", "hostile":
+			return "仅敌对"
+		"ally_only", "ally":
+			return "仅友方"
+		"any_actor":
+			return "任意角色"
+		"any_grid":
+			return "任意格"
+		"empty_grid":
+			return "空格"
+		"self":
+			return "自身"
+		"any", "":
+			return "任意目标"
+	return policy
+
+
+func _skill_target_range_text(shape: String, range_value: int, targeting: Dictionary, preview: Dictionary) -> String:
+	var parts: Array[String] = []
+	if range_value >= 0:
+		parts.append("射程 %d" % range_value)
+	var radius_value: int = int(preview.get("radius", targeting.get("radius", -1)))
+	if radius_value >= 0 and shape in ["radius", "circle"]:
+		parts.append("半径 %d" % radius_value)
+	var length_value: int = int(preview.get("length", targeting.get("length", -1)))
+	if length_value >= 0 and shape in ["line", "cone"]:
+		parts.append("长度 %d" % length_value)
+	var width_value: int = int(preview.get("width", targeting.get("width", -1)))
+	if width_value >= 0 and shape == "cone":
+		parts.append("宽度 %d" % width_value)
+	return "" if parts.is_empty() else " | %s" % " / ".join(parts)
+
+
+func _skill_target_reason_text(reason: String) -> String:
+	match reason:
+		"skill_target_pending":
+			return "选择目标"
+		"skill_target_actor_missing":
+			return "目标角色不存在"
+		"skill_target_grid_missing":
+			return "请选择目标格"
+		"skill_target_not_hostile":
+			return "需要敌对目标"
+		"skill_target_not_ally":
+			return "需要友方目标"
+		"skill_target_not_self":
+			return "需要自身目标"
+		"skill_target_out_of_range":
+			return "目标超出射程"
+		"skill_target_invalid_level":
+			return "目标楼层无效"
+		"skill_target_blocked_by_los":
+			return "视线被遮挡"
+		"skill_target_grid_occupied":
+			return "目标格被占用"
+		"target_not_visible":
+			return "目标不可见"
+		"skill_target_policy_unknown":
+			return "未知目标策略"
+		"skill_target_shape_unknown":
+			return "未知目标形状"
+	if reason.is_empty():
+		return "选择目标"
+	return reason
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

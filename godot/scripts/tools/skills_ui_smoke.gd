@@ -539,8 +539,18 @@ func _expect_targeted_hotbar_skill(errors: Array[String], game_root: Node) -> vo
 		game_root.refresh_hud()
 		if not _skill_targeting_line(game_root).contains("Skill Target"):
 			errors.append("HUD should show active skill targeting preview line")
+		if not _skill_targeting_line(game_root).contains("单体") or not _skill_targeting_line(game_root).contains("仅敌对"):
+			errors.append("HUD skill targeting preview should localize shape and policy")
+		if not _skill_targeting_line(game_root).contains("射程 12") or not _skill_targeting_line(game_root).contains("距离 2"):
+			errors.append("HUD skill targeting preview should show range and distance")
 		if not _skill_targeting_line(game_root).contains("1目标"):
 			errors.append("HUD skill targeting preview should show affected actor count")
+	var friendly_preview: Dictionary = game_root.preview_active_skill_target({"target_type": "actor", "actor_id": 2})
+	if bool(friendly_preview.get("success", false)) or str(friendly_preview.get("reason", "")) != "skill_target_not_hostile":
+		errors.append("targeted hotbar skill preview should reject friendly target")
+	game_root.refresh_hud()
+	if not _skill_targeting_line(game_root).contains("需要敌对目标"):
+		errors.append("HUD skill targeting failure should localize invalid target reason")
 	var esc_result: Dictionary = game_root.close_active_ui("keyboard_escape")
 	if str(esc_result.get("closed", "")) != "skill_targeting":
 		errors.append("Esc should close active skill targeting before other UI")

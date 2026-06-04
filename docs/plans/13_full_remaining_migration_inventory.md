@@ -156,10 +156,10 @@
 
 ### 6.4 技能目标和 AOE
 
-- 技能目标解析第一版已迁移：`Simulation.preview_skill_target()` 和 `use_skill` 共用 target preview，默认兼容旧 self buff / toggle；已支持 self、single actor、grid、radius AOE、line 和 cone 的目标解析、range / level 校验、affected cells / actor ids、friendly fire 标记，并在目标非法时不消耗 AP；line 会按施法者到目标格的直线收集命中格，cone 会按目标方向、length 和 width 收集扇形命中格，两者都支持 affected_policy / LOS 过滤；已由 `Combat` smoke 覆盖。目标型技能选择 UI 第一版已迁移：非 self 热栏技能会进入目标选择态，hover 时刷新 core preview，HUD 展示形状、命中格、命中 actor 和友军风险，Esc 可取消，左键/确认会用同一 `use_skill` 命令释放；已由 `SkillsUI` smoke 覆盖。待补目标形状世界高亮视觉。
+- 技能目标解析第一版已迁移：`Simulation.preview_skill_target()` 和 `use_skill` 共用 target preview，默认兼容旧 self buff / toggle；已支持 self、single actor、grid、radius AOE、line 和 cone 的目标解析、range / level 校验、affected cells / actor ids、friendly fire 标记，并在目标非法时不消耗 AP；line 会按施法者到目标格的直线收集命中格，cone 会按目标方向、length 和 width 收集扇形命中格，两者都支持 affected_policy / LOS 过滤；已由 `Combat` smoke 覆盖。目标型技能选择 UI 第一版已迁移：非 self 热栏技能会进入目标选择态，hover 时刷新 core preview，HUD 展示本地化形状、目标策略、射程、距离、命中格、命中 actor、友军风险和失败原因，Esc 可取消，左键/确认会用同一 `use_skill` 命令释放；已由 `SkillsUI` smoke 覆盖。待补目标形状世界高亮视觉。
 - AOE / 技能目标 LOS 与可见性第一版已迁移：single、grid、radius 目标默认要求施法者到目标中心 LOS，遮挡返回 `skill_target_blocked_by_los` 且不消耗 AP；active vision 已刷新时，技能目标会拒绝不可见 actor target 和不可见 grid / AOE 中心格并返回 `target_not_visible`；radius AOE 默认从中心到每个命中格检查 LOS，遮挡格会从 `affected_cells` / `affected_actor_ids` 排除，并支持 `requires_los=false` / `respect_los=false` 作为特殊技能例外；已由 `Combat` smoke 覆盖。待补更完整友军伤害策略、门开闭语义、中心到命中格的旧版边缘细节。
 - typed targeting policy 第一版已迁移：支持 self、hostile_only、ally_only、any_actor、any_grid、empty_grid，以及 radius 的 affected_policy 过滤；已由 `Combat` smoke 覆盖。待补 object target、容器/门/机关目标和脚本化目标类型。
-- 待补目标预览 UI polish：范围格世界高亮、命中 actor outline、失败 reason 文案、鼠标/键盘确认提示和目标选择音效。
+- 目标预览 UI polish 第一版已迁移：HUD 目标选择行会显示技能名、形状、策略、射程/距离、命中数量、友军风险和失败 reason 文案，并由 `SkillsUI` smoke 覆盖；待补范围格世界高亮、命中 actor outline、鼠标/键盘确认提示和目标选择音效。
 
 ## 7. NPC、AI、阵营和生活模拟
 
@@ -319,7 +319,7 @@
 - 角色面板已有属性、资源、装备、属性点分配、派生数值摘要和状态效果第一版；派生数值会展示生命/速度、攻击/防御/暴击、基础属性合计、装备修饰和状态修饰，状态效果会显示 actor active effects 的名称、分类、来源、等级、剩余回合和 modifier，悬停说明来源、技能 ID、持续时间、修饰和 effect id，并纳入 `UIToggle` smoke。待补负面状态视觉和更完整排版。
 - 地图面板已有当前地图、当前地点名称、入口、已解锁地点名称、对象统计、追踪任务行、追踪目标 marker 行、地图 canvas、入口点绘制、目标 marker 绘制、zoom 按钮、左键拖拽平移、pan 复位、画布状态诊断和 overworld 地点/道路 inset 第一版；待补显式 overworld 路线规划和更完整图形化地图目标 marker。
 - Journal 面板已有任务详情、可交付状态、奖励详情、目标进度列表、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；待补更完整失败反馈。
-- Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏、多树切换、前置链路和下游解锁高亮第一版；待补图形技能树、pan、节点连线和目标预览。
+- Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏、多树切换、前置链路、下游解锁高亮和目标选择 HUD 预览第一版；待补图形技能树、pan、节点连线和世界目标高亮。
 - Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、批量执行和完成反馈第一版；待补制作队列和取消。
 - Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、不可出售禁用态、装备出售确认和清空；待补跨栏 sell/buy zone 视觉 polish。
 - Container 面板已有空容器提示、容器/背包双栏、滚动、基础详情、选中详情、数量选择和双向拖拽转移；待补背包限制、权限不足和跨面板拖拽 polish。
@@ -372,7 +372,7 @@
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、右键检查/使用/装备/丢弃/全部丢弃/加入热栏菜单、物品热栏触发、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；待补完整上下文菜单项、拆分、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
 - `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、双向拖拽与基础失败提示已有 smoke；待补背包限制/权限等高级错误和跨面板拖拽 polish。
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售和拖拽已有 smoke；待补跨栏 sell/buy zone 视觉 polish。
-- `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补多组 hotbar、技能树 pan、目标预览和更完整状态 UI。
+- `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补多组 hotbar、技能树 pan、世界目标高亮和更完整状态 UI。
 - `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版已有 smoke；待补对话交付条件和更完整失败反馈。
 - `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、批量执行和完成反馈第一版已有 smoke；待补工具耐久/消耗、更多地图 station 标注、制作队列和取消。
 - `Save`：passive / active skill effects 已有 roundtrip；继续补新增 runtime 字段和旧存档迁移。
