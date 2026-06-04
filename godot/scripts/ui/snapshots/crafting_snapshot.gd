@@ -46,6 +46,8 @@ func _recipe_snapshot(recipe_id: String, inventory: Dictionary, progression: Dic
 			"available": int(inventory.get(item_id, 0)),
 		})
 	var availability: Dictionary = _availability(recipe, inventory, progression, materials)
+	var max_craft_count: int = _max_craft_count(materials, bool(availability.get("can_craft", false)))
+	var output_count: int = max(1, int(output.get("count", 1)))
 	return {
 		"recipe_id": recipe_id,
 		"name": str(recipe.get("name", recipe_id)),
@@ -53,7 +55,8 @@ func _recipe_snapshot(recipe_id: String, inventory: Dictionary, progression: Dic
 		"category": str(recipe.get("category", "")),
 		"output_item_id": output_item_id,
 		"output_name": str(output_item.get("name", output_item_id)),
-		"output_count": max(1, int(output.get("count", 1))),
+		"output_count": output_count,
+		"preview_output_count": output_count * max(1, max_craft_count),
 		"materials": materials,
 		"required_tools": _array_or_empty(recipe.get("required_tools", [])).duplicate(true),
 		"required_station": str(recipe.get("required_station", "none")),
@@ -62,6 +65,7 @@ func _recipe_snapshot(recipe_id: String, inventory: Dictionary, progression: Dic
 		"experience_reward": int(recipe.get("experience_reward", 0)),
 		"is_default_unlocked": bool(recipe.get("is_default_unlocked", false)),
 		"can_craft": bool(availability.get("can_craft", false)),
+		"max_craft_count": max_craft_count,
 		"craft_reason": str(availability.get("reason", "")),
 		"missing_materials": _array_or_empty(availability.get("missing_materials", [])).duplicate(true),
 		"missing_skills": _array_or_empty(availability.get("missing_skills", [])).duplicate(true),
@@ -111,6 +115,22 @@ func _craftable_count(recipes: Array[Dictionary]) -> int:
 		if bool(recipe.get("can_craft", false)):
 			count += 1
 	return count
+
+
+func _max_craft_count(materials: Array[Dictionary], can_craft: bool) -> int:
+	if not can_craft:
+		return 0
+	if materials.is_empty():
+		return 1
+	var max_count := 2147483647
+	for material in materials:
+		var required := int(material.get("required", 0))
+		if required <= 0:
+			continue
+		max_count = mini(max_count, int(material.get("available", 0)) / required)
+	if max_count == 2147483647:
+		return 1
+	return max(0, max_count)
 
 
 func _item_data(item_id: String) -> Dictionary:
