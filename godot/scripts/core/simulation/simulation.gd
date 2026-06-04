@@ -185,7 +185,16 @@ func allocate_attribute_point(actor_id: int, attribute: String) -> Dictionary:
 
 
 func learn_skill(actor_id: int, skill_id: String, skill_library: Dictionary) -> Dictionary:
-	return _progression_runner.learn_skill(self, _progression_rules, actor_id, skill_id, skill_library)
+	var result: Dictionary = _progression_runner.learn_skill(self, _progression_rules, actor_id, skill_id, skill_library)
+	if not bool(result.get("success", false)):
+		return result
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor != null:
+		var skill: Dictionary = _skill_data(str(result.get("skill_id", skill_id)), skill_library)
+		var passive_effect: Dictionary = _refresh_passive_skill_effect(actor, str(result.get("skill_id", skill_id)), int(result.get("level", 0)), skill)
+		if not passive_effect.is_empty():
+			result["passive_effect"] = passive_effect.duplicate(true)
+	return result
 
 
 func set_actor_vision_radius(actor_id: int, radius: int) -> void:
@@ -1001,6 +1010,66 @@ func _apply_skill_activation_effect(actor: RefCounted, skill_id: String, learned
 	}
 
 
+func _refresh_passive_skill_effect(actor: RefCounted, skill_id: String, learned_level: int, skill: Dictionary) -> Dictionary:
+	var activation_mode: String = str(_dictionary_or_empty(skill.get("activation", {})).get("mode", "passive"))
+	if activation_mode != "passive":
+		return {}
+	var gameplay_effect: Dictionary = _dictionary_or_empty(skill.get("gameplay_effect", {}))
+	var modifiers: Dictionary = _dictionary_or_empty(gameplay_effect.get("modifiers", {}))
+	if modifiers.is_empty():
+		_remove_actor_effect(actor, "passive_skill:%s" % skill_id, "passive_without_modifiers")
+		return {}
+	var effect: Dictionary = _build_skill_effect(skill_id, learned_level, {
+		"category": "passive",
+		"is_infinite": true,
+		"modifiers": modifiers,
+	})
+	effect["effect_id"] = "passive_skill:%s" % skill_id
+	var replaced: Array[Dictionary] = _replace_actor_effect(actor, effect)
+	_emit("skill_passive_effect_refreshed", {
+		"actor_id": actor.actor_id,
+		"effect": effect.duplicate(true),
+		"replaced_effects": replaced.duplicate(true),
+	})
+	return effect
+
+
+func _replace_actor_effect(actor: RefCounted, effect: Dictionary) -> Array[Dictionary]:
+	var effect_id: String = str(effect.get("effect_id", ""))
+	var remaining: Array[Dictionary] = []
+	var replaced: Array[Dictionary] = []
+	for active_effect in actor.active_effects:
+		var active_data: Dictionary = active_effect.duplicate(true)
+		if str(active_data.get("effect_id", "")) == effect_id:
+			replaced.append(active_data)
+			continue
+		remaining.append(active_data)
+	remaining.append(effect.duplicate(true))
+	actor.active_effects = remaining
+	return replaced
+
+
+func _remove_actor_effect(actor: RefCounted, effect_id: String, reason: String) -> Array[Dictionary]:
+	var remaining: Array[Dictionary] = []
+	var removed: Array[Dictionary] = []
+	for active_effect in actor.active_effects:
+		var active_data: Dictionary = active_effect.duplicate(true)
+		if str(active_data.get("effect_id", "")) == effect_id:
+			removed.append(active_data)
+			continue
+		remaining.append(active_data)
+	actor.active_effects = remaining
+	if not removed.is_empty():
+		_emit("skill_effect_removed", {
+			"actor_id": actor.actor_id,
+			"effect_id": effect_id,
+			"skill_id": str(removed[0].get("skill_id", "")),
+			"reason": reason,
+			"removed_effects": removed.duplicate(true),
+		})
+	return removed
+
+
 func _build_skill_effect(skill_id: String, learned_level: int, effect_definition: Dictionary) -> Dictionary:
 	var is_infinite: bool = bool(effect_definition.get("is_infinite", false))
 	var duration: float = 0.0 if is_infinite else max(0.0, float(effect_definition.get("duration", 0.0)))
@@ -1020,10 +1089,15 @@ func _skill_effect_modifiers(modifier_definitions: Dictionary, learned_level: in
 	var output: Dictionary = {}
 	for key in modifier_definitions.keys():
 		var definition: Dictionary = _dictionary_or_empty(modifier_definitions.get(key, {}))
-		var value: float = float(definition.get("base", 0.0))
-		value += float(definition.get("per_level", 0.0)) * max(0, learned_level - 1)
-		if definition.has("max_value"):
-			value = min(value, float(definition.get("max_value", value)))
+		var per_level: float = float(definition.get("per_level", 0.0))
+		var value: float = 0.0
+		if definition.has("base"):
+			value = float(definition.get("base", 0.0)) + per_level * max(0, learned_level - 1)
+		else:
+			value = per_level * max(1, learned_level)
+		var max_value: float = float(definition.get("max_value", 0.0))
+		if max_value > 0.0:
+			value = min(value, max_value)
 		output[str(key)] = value
 	return output
 

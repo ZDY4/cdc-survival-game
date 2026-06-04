@@ -323,10 +323,28 @@ func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation
 	if absf(float(crit.get("damage", 0.0)) - 20.0) > 0.01:
 		errors.append("actor crit_damage should multiply critical damage when weapon has no crit_multiplier")
 
+	simulation.grant_skill_points(player.actor_id, 2, "combat_smoke")
+	var combat_skill_result: Dictionary = simulation.learn_skill(player.actor_id, "combat", registry.get_library("skills"))
+	if not bool(combat_skill_result.get("success", false)):
+		errors.append("combat passive skill learn should succeed before passive damage bonus check: %s" % combat_skill_result.get("reason", "unknown"))
+	var passive_target: int = _register_test_actor(simulation, "passive_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) - 1,
+		"y": y,
+		"z": z + 1,
+	}, 40.0)
+	var passive_actor: RefCounted = simulation.actor_registry.get_actor(passive_target)
+	passive_actor.defense = 0.0
+	passive_actor.combat_attributes = {"damage_reduction": 0.0}
+	var passive: Dictionary = simulation.perform_attack(player.actor_id, passive_target, {}, {"range": 3, "weapon_profile": {"damage": 20.0, "crit_chance": 0.0}})
+	if absf(float(passive.get("damage", 0.0)) - 21.0) > 0.01:
+		errors.append("combat passive damage_bonus should increase 20 damage to 21")
+	if absf(float(passive.get("damage_bonus", 0.0)) - 0.04) > 0.001:
+		errors.append("passive attack result should expose 0.04 damage_bonus")
+
+	var adrenaline_learn_result: Dictionary = simulation.learn_skill(player.actor_id, "adrenaline_rush", registry.get_library("skills"))
+	if not bool(adrenaline_learn_result.get("success", false)):
+		errors.append("adrenaline_rush learn should succeed before active damage bonus check: %s" % adrenaline_learn_result.get("reason", "unknown"))
 	player.ap = 20.0
-	player.progression["learned_skills"] = _dictionary_or_empty(player.progression.get("learned_skills", {})).duplicate(true)
-	player.progression["learned_skills"]["combat"] = 1
-	player.progression["learned_skills"]["adrenaline_rush"] = 1
 	var skill_result: Dictionary = simulation.submit_player_command({
 		"kind": "use_skill",
 		"skill_id": "adrenaline_rush",
@@ -343,12 +361,12 @@ func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation
 	buffed_actor.defense = 0.0
 	buffed_actor.combat_attributes = {"damage_reduction": 0.0}
 	var buffed: Dictionary = simulation.perform_attack(player.actor_id, buffed_target, {}, {"range": 3, "weapon_profile": {"damage": 20.0, "crit_chance": 0.0}})
-	if absf(float(buffed.get("damage", 0.0)) - 25.0) > 0.01:
-		errors.append("adrenaline_rush damage_bonus should increase 20 damage to 25")
-	if absf(float(buffed.get("damage_bonus", 0.0)) - 0.25) > 0.001:
-		errors.append("buffed attack result should expose 0.25 damage_bonus")
+	if absf(float(buffed.get("damage", 0.0)) - 26.0) > 0.01:
+		errors.append("combat passive plus adrenaline_rush damage_bonus should increase 20 damage to 26")
+	if absf(float(buffed.get("damage_bonus", 0.0)) - 0.29) > 0.001:
+		errors.append("buffed attack result should expose stacked 0.29 damage_bonus")
 
-	for actor_id in [blocked_target, reduced_target, armored_target, crit_target, buffed_target]:
+	for actor_id in [blocked_target, reduced_target, armored_target, crit_target, passive_target, buffed_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.combat_attributes = original_attributes
@@ -488,6 +506,9 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 
 func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
 	var topology: Dictionary = _topology(simulation, registry)
+	var original_active_effects: Array[Dictionary] = player.active_effects.duplicate(true)
+	var no_active_effects: Array[Dictionary] = []
+	player.active_effects = no_active_effects
 	player.ap = 20.0
 	player.equipment["main_hand"] = "1003"
 	var blunt_target: int = _register_character(simulation, registry, "zombie_walker", {
@@ -503,8 +524,11 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	var blunt_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": blunt_target, "topology": topology})
 	if not bool(blunt_result.get("success", false)):
 		errors.append("baseball bat range-2 attack failed: %s" % blunt_result.get("reason", "unknown"))
-	if absf(float(blunt_result.get("damage", 0.0)) - 15.0) > 0.01:
-		errors.append("baseball bat attack should use weapon damage 15")
+	var blunt_attack_event: Dictionary = _last_attack_resolved_for_weapon(simulation.snapshot(), "1003")
+	if absf(float(blunt_attack_event.get("base_damage", 0.0)) - 15.0) > 0.01:
+		errors.append("baseball bat attack should use weapon base_damage 15")
+	if not bool(blunt_result.get("critical", false)) and absf(float(blunt_result.get("damage", 0.0)) - 15.0) > 0.01:
+		errors.append("non-critical baseball bat attack should deal weapon damage 15")
 	if absf((before_ap - player.ap) - 3.0) > 0.01:
 		errors.append("baseball bat attack should use attack_speed-derived AP cost 3")
 	if not _has_attack_resolved_for_weapon(simulation.snapshot(), "1003"):
@@ -569,6 +593,7 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	for actor_id in [blunt_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
+	player.active_effects = original_active_effects
 	simulation.exit_combat_if_clear("weapon_profile_smoke_cleanup")
 
 
@@ -634,12 +659,17 @@ func _restore_player_turn(simulation: RefCounted, player: RefCounted) -> void:
 
 
 func _has_attack_resolved_for_weapon(snapshot: Dictionary, weapon_item_id: String) -> bool:
-	for event in snapshot.get("events", []):
-		var event_data: Dictionary = event
+	return not _last_attack_resolved_for_weapon(snapshot, weapon_item_id).is_empty()
+
+
+func _last_attack_resolved_for_weapon(snapshot: Dictionary, weapon_item_id: String) -> Dictionary:
+	var events: Array = snapshot.get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = events[index]
 		var payload: Dictionary = event_data.get("payload", {})
 		if event_data.get("kind", "") == "attack_resolved" and str(payload.get("weapon_item_id", "")) == weapon_item_id:
-			return true
-	return false
+			return payload
+	return {}
 
 
 func _active_quest_ids(snapshot: Dictionary) -> Array[String]:

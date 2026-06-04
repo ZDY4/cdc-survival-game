@@ -100,6 +100,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var combat_result: Dictionary = game_root.learn_player_skill("combat")
 	if not bool(combat_result.get("success", false)):
 		errors.append("combat learn failed: %s" % combat_result.get("reason", "unknown"))
+	var combat_effect: Dictionary = _active_skill_effect(game_root, "combat")
+	if combat_effect.is_empty():
+		errors.append("learning passive combat skill should add active effect snapshot entry")
+	elif absf(float(_dictionary_or_empty(combat_effect.get("modifiers", {})).get("damage_bonus", 0.0)) - 0.04) > 0.001:
+		errors.append("combat passive skill should expose damage_bonus 0.04")
+	if not _event_seen(game_root, "skill_passive_effect_refreshed"):
+		errors.append("learning passive combat skill should emit skill_passive_effect_refreshed")
 	var active_result: Dictionary = game_root.learn_player_skill("adrenaline_rush")
 	if not bool(active_result.get("success", false)):
 		errors.append("adrenaline_rush learn failed: %s" % active_result.get("reason", "unknown"))

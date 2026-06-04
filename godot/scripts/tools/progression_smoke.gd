@@ -52,6 +52,11 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("survival skill level should be 1")
 	if int(player.progression.get("available_skill_points", 0)) != 0:
 		errors.append("learning survival should consume one skill point")
+	var survival_effect: Dictionary = _active_skill_effect(player, "survival")
+	if survival_effect.is_empty():
+		errors.append("learning survival should add passive active effect")
+	elif absf(float(_dictionary_or_empty(survival_effect.get("modifiers", {})).get("consumption_reduction", 0.0)) - 0.05) > 0.001:
+		errors.append("survival level 1 passive effect should expose consumption_reduction 0.05")
 
 	var skill_recipe_library: Dictionary = {
 		"smoke_survival_recipe": {
@@ -75,6 +80,11 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var survival_level_2: Dictionary = simulation.learn_skill(1, "survival", registry.get_library("skills"))
 	if not bool(survival_level_2.get("success", false)):
 		errors.append("survival level 2 learn failed: %s" % survival_level_2.get("reason", "unknown"))
+	var survival_level_2_effect: Dictionary = _active_skill_effect(player, "survival")
+	if absf(float(_dictionary_or_empty(survival_level_2_effect.get("modifiers", {})).get("consumption_reduction", 0.0)) - 0.10) > 0.001:
+		errors.append("survival level 2 passive effect should refresh consumption_reduction to 0.10")
+	if _active_skill_effect_count(player, "survival") != 1:
+		errors.append("survival passive effect should refresh in place instead of duplicating")
 	var crafted: Dictionary = simulation.craft_recipe(1, "smoke_survival_recipe", skill_recipe_library)
 	if not bool(crafted.get("success", false)):
 		errors.append("skill-gated recipe should craft after survival level 2: %s" % crafted.get("reason", "unknown"))
@@ -151,6 +161,29 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _active_skill_effect(actor: RefCounted, skill_id: String) -> Dictionary:
+	for effect in actor.active_effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		if str(effect_data.get("skill_id", "")) == skill_id:
+			return effect_data
+	return {}
+
+
+func _active_skill_effect_count(actor: RefCounted, skill_id: String) -> int:
+	var count := 0
+	for effect in actor.active_effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		if str(effect_data.get("skill_id", "")) == skill_id:
+			count += 1
+	return count
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
 
 
 func _digest(snapshot: Dictionary) -> Dictionary:
