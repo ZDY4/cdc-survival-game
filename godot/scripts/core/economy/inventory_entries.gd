@@ -41,11 +41,25 @@ func add(entries: Array, item_id: String, delta: int) -> void:
 
 
 func add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:
-	var next_count: int = int(actor.inventory.get(item_id, 0)) + delta
+	if actor == null:
+		return
+	var normalized_item_id: String = normalize_content_id(item_id)
+	if normalized_item_id.is_empty():
+		return
+	_sync_actor_inventory_order(actor)
+	var current_count: int = int(actor.inventory.get(normalized_item_id, 0))
+	var next_count: int = current_count + delta
 	if next_count <= 0:
-		actor.inventory.erase(item_id)
+		actor.inventory.erase(normalized_item_id)
+		actor.inventory_order.erase(normalized_item_id)
 	else:
-		actor.inventory[item_id] = next_count
+		actor.inventory[normalized_item_id] = next_count
+		if current_count <= 0 and not actor.inventory_order.has(normalized_item_id):
+			actor.inventory_order.append(normalized_item_id)
+
+
+func sync_actor_inventory_order(actor: RefCounted) -> void:
+	_sync_actor_inventory_order(actor)
 
 
 func normalize_content_id(value: Variant) -> String:
@@ -66,3 +80,24 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _sync_actor_inventory_order(actor: RefCounted) -> void:
+	if actor == null:
+		return
+	var ordered: Array[String] = []
+	for item_id in _array_or_empty(actor.inventory_order):
+		var normalized_id: String = normalize_content_id(item_id)
+		if normalized_id.is_empty() or ordered.has(normalized_id):
+			continue
+		if int(actor.inventory.get(normalized_id, 0)) > 0:
+			ordered.append(normalized_id)
+	var remaining: Array = actor.inventory.keys()
+	remaining.sort()
+	for item_id in remaining:
+		var normalized_id: String = normalize_content_id(item_id)
+		if normalized_id.is_empty() or ordered.has(normalized_id):
+			continue
+		if int(actor.inventory.get(normalized_id, 0)) > 0:
+			ordered.append(normalized_id)
+	actor.inventory_order = ordered

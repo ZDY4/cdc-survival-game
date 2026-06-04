@@ -27,6 +27,7 @@ func register_actor(request: Dictionary) -> ActorRecord:
 	record.in_combat = bool(request.get("in_combat", false))
 	record.grid_position = request.get("grid_position")
 	record.inventory = _dictionary_or_empty(request.get("inventory", {})).duplicate(true)
+	record.inventory_order = _inventory_order(request.get("inventory_order", []), record.inventory)
 	record.equipment = _dictionary_or_empty(request.get("equipment", {})).duplicate(true)
 	record.weapon_ammo = _int_dictionary(request.get("weapon_ammo", {}))
 	record.money = max(0, int(request.get("money", 0)))
@@ -109,6 +110,7 @@ func load_snapshot(records: Array) -> void:
 		record.in_combat = bool(actor_data.get("in_combat", false))
 		record.grid_position = GridCoord.from_dictionary(_dictionary_or_empty(actor_data.get("grid_position", {})))
 		record.inventory = _dictionary_or_empty(actor_data.get("inventory", {})).duplicate(true)
+		record.inventory_order = _inventory_order(actor_data.get("inventory_order", []), record.inventory)
 		record.equipment = _dictionary_or_empty(actor_data.get("equipment", {})).duplicate(true)
 		record.weapon_ammo = _int_dictionary(actor_data.get("weapon_ammo", {}))
 		record.money = max(0, int(actor_data.get("money", 0)))
@@ -146,3 +148,28 @@ func _int_dictionary(value: Variant) -> Dictionary:
 	for key in _dictionary_or_empty(value).keys():
 		output[str(key)] = int(_dictionary_or_empty(value).get(key, 0))
 	return output
+
+
+func _inventory_order(value: Variant, inventory: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	for item_id in _array_or_empty(value):
+		var normalized_id: String = str(item_id)
+		if normalized_id.is_empty() or output.has(normalized_id):
+			continue
+		if int(inventory.get(normalized_id, 0)) > 0:
+			output.append(normalized_id)
+	var remaining: Array = inventory.keys()
+	remaining.sort()
+	for item_id in remaining:
+		var normalized_id: String = str(item_id)
+		if output.has(normalized_id):
+			continue
+		if int(inventory.get(normalized_id, 0)) > 0:
+			output.append(normalized_id)
+	return output
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

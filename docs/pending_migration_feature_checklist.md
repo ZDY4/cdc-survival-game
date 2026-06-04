@@ -565,8 +565,8 @@ Godot 落点：`godot/scripts/core/ai/**`、`godot/scripts/core/interactions/**`
 ### 11.1 背包
 
 - [~] 背包列表、数量移动、丢弃第一版。
-- [ ] inventory order 持久化。
-- [ ] 排序、筛选、搜索、分类。
+- [~] inventory order 持久化第一版：actor snapshot / save roundtrip、核心物品增删顺序维护、Inventory 默认“顺序”排序已纳入 `InventoryUI` / `Save` smoke；待补拖拽重排。
+- [~] 排序、筛选、搜索、分类第一版；顺序、名称、重量、价值排序已覆盖，待补更完整 UI polish。
 - [x] 选中物品详情，已纳入 `ContainerUI` smoke。
 - [ ] 上下文菜单：使用、装备、丢弃、拆分、检查、加入热栏、出售、存入容器。
 - [ ] 数量弹窗：增减、最大、确认、取消、非法提示。
@@ -939,7 +939,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [ ] `Movement`：对角、禁止穿角、楼梯、自动开门、取消 pending、跨回合长路径。
 - [ ] `Combat`：LOS、跨层、AOE、友军伤害、reload、miss/evasion、armor、seed。
 - [ ] `AI`：开门、重规划、感知丢失、技能、治疗、settlement life。
-- [ ] `InventoryUI`：上下文、数量、拖拽、排序、使用、装备详情。
+- [~] `InventoryUI`：顺序/名称/重量/价值排序、筛选、搜索和详情第一版已覆盖；待补上下文、数量、拖拽重排、使用、装备详情。
 - [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择和基础失败提示已覆盖；待补双向拖拽、背包限制/权限等高级错误。
 - [~] `TradeUI`：店铺/玩家双栏、数量直买直卖、价格预览、资金/库存失败提示、购物车、批量确认和无部分成交已覆盖；待补装备出售、不可出售和拖拽。
 - [ ] `SkillsUI`：技能树、hotbar、多槽、目标预览、cooldown。

@@ -22,6 +22,7 @@ const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulatio
 const VisionRunner = preload("res://scripts/core/vision/vision_runner.gd")
 const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 
 const DEFAULT_TURN_AP := 6.0
 const DEFAULT_TURN_AP_GAIN := 6.0
@@ -89,6 +90,7 @@ var _quest_runner := QuestRunner.new()
 var _snapshot_codec := SimulationSnapshotCodec.new()
 var _vision_runner := VisionRunner.new()
 var _vision_rules := VisionRules.new()
+var _inventory_entries := InventoryEntries.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -706,9 +708,7 @@ func _submit_reload_equipped_action(actor: RefCounted, command: Dictionary, item
 		}
 	var loaded_count: int = min(missing, available)
 	_spend_ap(actor, reload_cost, "reload")
-	actor.inventory[ammo_type] = available - loaded_count
-	if int(actor.inventory.get(ammo_type, 0)) <= 0:
-		actor.inventory.erase(ammo_type)
+	_inventory_entries.add_actor_item(actor, ammo_type, -loaded_count)
 	actor.weapon_ammo[slot_id] = loaded_before + loaded_count
 	_emit("weapon_reloaded", {
 		"actor_id": actor.actor_id,
@@ -1503,9 +1503,7 @@ func _consume_attack_ammo(actor: RefCounted, profile: Dictionary) -> Dictionary:
 			"loaded_remaining": int(actor.weapon_ammo.get(slot_id, 0)),
 			"remaining": int(actor.inventory.get(ammo_type, 0)),
 		}
-	actor.inventory[ammo_type] = max(0, int(actor.inventory.get(ammo_type, 0)) - count)
-	if int(actor.inventory.get(ammo_type, 0)) <= 0:
-		actor.inventory.erase(ammo_type)
+	_inventory_entries.add_actor_item(actor, ammo_type, -count)
 	_emit("ammo_consumed", {
 		"actor_id": actor.actor_id,
 		"ammo_type": ammo_type,

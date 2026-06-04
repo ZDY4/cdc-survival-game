@@ -158,6 +158,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	var player_restored: Dictionary = _player_actor(restored)
 	if _inventory_count(player_restored, "1006") != _inventory_count(player_original, "1006"):
 		errors.append("player inventory did not roundtrip")
+	if JSON.stringify(player_restored.get("inventory_order", [])) != JSON.stringify(player_original.get("inventory_order", [])):
+		errors.append("player inventory_order did not roundtrip")
 	if _inventory_count(player_restored, "1031") != 1:
 		errors.append("taken container item did not roundtrip in player inventory")
 	if JSON.stringify(player_restored.get("equipment", {})) != JSON.stringify(player_original.get("equipment", {})):
@@ -329,6 +331,7 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"hotbar": snapshot.get("hotbar", {}),
 		"event_count": snapshot.get("events", []).size(),
 		"player_inventory": _player_actor(snapshot).get("inventory", {}),
+		"player_inventory_order": _player_actor(snapshot).get("inventory_order", []),
 		"player_equipment": _player_actor(snapshot).get("equipment", {}),
 		"player_weapon_ammo": _normalized_weapon_ammo(_player_actor(snapshot)),
 		"player_money": int(_player_actor(snapshot).get("money", 0)),

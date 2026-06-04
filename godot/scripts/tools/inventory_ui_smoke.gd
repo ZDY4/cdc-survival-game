@@ -38,6 +38,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var initial_text: String = "\n".join(_item_lines(game_root))
 	if not initial_text.contains("手枪弹药 x10"):
 		errors.append("initial inventory missing bootstrap ammo")
+	if _sort_button(game_root, "SortOrderButton") == null:
+		errors.append("inventory panel should expose inventory order sort")
+	if not _text_ordered(initial_text, "水瓶 x1", "绷带 x1") \
+		or not _text_ordered(initial_text, "绷带 x1", "棒球棒 x1") \
+		or not _text_ordered(initial_text, "棒球棒 x1", "手枪弹药 x10"):
+		errors.append("initial inventory should follow persisted inventory order")
 	if _filter_button(game_root, "FilterEquipmentButton") == null:
 		errors.append("inventory panel should expose equipment filter")
 	else:

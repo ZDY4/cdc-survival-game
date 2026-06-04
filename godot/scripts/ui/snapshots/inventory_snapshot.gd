@@ -10,23 +10,23 @@ func _init(p_registry: RefCounted) -> void:
 func build(runtime_snapshot: Dictionary) -> Dictionary:
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
+	var inventory_order: Array[String] = _inventory_order(player.get("inventory_order", []), inventory)
 	var items: Array[Dictionary] = []
 	var total_weight := 0.0
-	for item_id in inventory.keys():
-		var count: int = int(inventory[item_id])
+	for order_index in range(inventory_order.size()):
+		var item_id: String = inventory_order[order_index]
+		var count: int = int(inventory.get(item_id, 0))
 		if count <= 0:
 			continue
 		var item_snapshot: Dictionary = _item_snapshot(str(item_id), count)
+		item_snapshot["order_index"] = order_index
 		total_weight += float(item_snapshot.get("total_weight", 0.0))
 		items.append(item_snapshot)
-
-	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
-	)
 	return {
 		"owner_actor_id": int(player.get("actor_id", 0)),
 		"owner_name": str(player.get("display_name", "")),
 		"items": items,
+		"inventory_order": inventory_order,
 		"item_count": items.size(),
 		"total_weight": total_weight,
 	}
@@ -152,7 +152,32 @@ func _player_actor(runtime_snapshot: Dictionary) -> Dictionary:
 	return {}
 
 
+func _inventory_order(value: Variant, inventory: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	for item_id in _array_or_empty(value):
+		var normalized_id: String = str(item_id)
+		if normalized_id.is_empty() or output.has(normalized_id):
+			continue
+		if int(inventory.get(normalized_id, 0)) > 0:
+			output.append(normalized_id)
+	var remaining: Array = inventory.keys()
+	remaining.sort()
+	for item_id in remaining:
+		var normalized_id: String = str(item_id)
+		if output.has(normalized_id):
+			continue
+		if int(inventory.get(normalized_id, 0)) > 0:
+			output.append(normalized_id)
+	return output
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

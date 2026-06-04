@@ -9,7 +9,7 @@ var _sort_box: HBoxContainer
 var _detail_label: Label
 var _items_box: VBoxContainer
 var _category_filter: String = "all"
-var _sort_mode: String = "name"
+var _sort_mode: String = "order"
 var _search_text: String = ""
 var _last_snapshot: Dictionary = {}
 
@@ -104,6 +104,7 @@ func _build_layout() -> void:
 	_add_filter_button("FilterConsumableButton", "消耗", "consumable")
 	_add_filter_button("FilterAmmoButton", "弹药", "ammo")
 	_add_filter_button("FilterMaterialButton", "材料", "material")
+	_add_sort_button("SortOrderButton", "顺序", "order")
 	_add_sort_button("SortNameButton", "名称", "name")
 	_add_sort_button("SortWeightButton", "重量", "weight")
 	_add_sort_button("SortValueButton", "价值", "value")
@@ -138,6 +139,12 @@ func _visible_items(items: Array) -> Array[Dictionary]:
 		output.append(item_data)
 	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		match _sort_mode:
+			"order":
+				var order_a: int = int(a.get("order_index", 0))
+				var order_b: int = int(b.get("order_index", 0))
+				if order_a == order_b:
+					return str(a.get("item_id", "")) < str(b.get("item_id", ""))
+				return order_a < order_b
 			"weight":
 				var weight_a: float = float(a.get("total_weight", 0.0))
 				var weight_b: float = float(b.get("total_weight", 0.0))
@@ -252,6 +259,8 @@ func _refresh_sort_buttons() -> void:
 		if child is Button:
 			var button := child as Button
 			match button.name:
+				"SortOrderButton":
+					button.button_pressed = _sort_mode == "order"
 				"SortNameButton":
 					button.button_pressed = _sort_mode == "name"
 				"SortWeightButton":

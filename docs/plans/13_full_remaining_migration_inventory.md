@@ -184,7 +184,7 @@
 
 ### 8.1 背包
 
-- 已有物品列表、基础操作、分类筛选、名称/重量/价值排序、搜索、滚动列表、选中物品详情和分类/价值/堆叠/槽位摘要第一版，并纳入 `InventoryUI` smoke；待迁移 inventory order。
+- 已有物品列表、基础操作、分类筛选、名称/重量/价值排序、搜索、滚动列表、选中物品详情和分类/价值/堆叠/槽位摘要第一版，并纳入 `InventoryUI` smoke；inventory order 持久化第一版已接入 actor snapshot、核心物品增删和 Inventory 默认“顺序”排序，并纳入 `InventoryUI` / `Save` smoke；待补拖拽重排。
 - 待迁移上下文菜单：使用、装备、丢弃、拆分、检查、加入热栏、交易、存入容器。
 - 待迁移数量弹窗：增减、最大值、确认、取消、非法数量提示。
 - 待迁移物品使用：消耗品效果、恢复、buff/debuff、任务物品不可用、使用失败反馈。
@@ -388,7 +388,7 @@
 - `PlayerInteraction`：补 UI blocker、右键菜单关闭、hover prompt、actor/object/grid 优先级、不可见目标。
 - `Combat`：补 LOS、跨层、AOE、友军伤害、战斗退出 decay、远程弹药/reload、暴击 seed。
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。
-- `InventoryUI`：补上下文菜单、数量弹窗、拖拽、排序、使用、装备详情。
+- `InventoryUI`：inventory order 持久化和默认顺序排序已有 smoke；待补上下文菜单、数量弹窗、拖拽重排、使用、装备详情。
 - `ContainerUI`：补双向拖拽、背包限制/权限等高级错误；关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择与基础失败提示已有 smoke。
 - `TradeUI`：购物车、批量确认和无部分成交已有 smoke；待补装备出售、不可出售和拖拽。
 - `SkillsUI`：补多槽 hotbar、技能树 pan、目标预览、cooldown、主动效果。

@@ -4,9 +4,11 @@ const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const Simulation = preload("res://scripts/core/simulation/simulation.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const MapBuilder = preload("res://scripts/world/map_builder.gd")
+const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
 
 var registry: RefCounted
+var _inventory_entries := InventoryEntries.new()
 var _progression_rules := ProgressionRules.new()
 
 
@@ -130,7 +132,7 @@ func _apply_starting_inventory(simulation: RefCounted, bootstrap: Dictionary) ->
 			var count: int = max(0, int(entry_data.get("count", 0)))
 			if item_id.is_empty() or count <= 0:
 				continue
-			player.inventory[item_id] = int(player.inventory.get(item_id, 0)) + count
+			_inventory_entries.add_actor_item(player, item_id, count)
 	if bool(bootstrap.get("clearActorLoadout", false)):
 		player.equipment.clear()
 	for entry in bootstrap.get("equipment", []):
