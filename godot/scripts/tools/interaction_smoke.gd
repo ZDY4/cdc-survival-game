@@ -240,6 +240,8 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	errors.append_array(_expect_direct_self_wait_interaction(direct_wait_simulation))
 	var door_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	errors.append_array(_expect_door_interaction(door_simulation))
+	var relationship_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	errors.append_array(_expect_relationship_dialogue_rules(relationship_simulation))
 	return errors
 
 
@@ -687,6 +689,49 @@ func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
 	}, "door_toggle")
 	if bool(locked_result.get("success", false)) or str(locked_result.get("reason", "")) != "door_locked":
 		errors.append("locked door toggle should return door_locked")
+	return errors
+
+
+func _expect_relationship_dialogue_rules(simulation: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var initial_score := float(simulation.relationship_score(1, 2))
+	if initial_score < 49.9:
+		errors.append("player/trader relationship should initialize from friendly side")
+	var trusted_result: Dictionary = simulation.set_relationship_score(1, 2, 75.0, "interaction_smoke_trusted")
+	if not bool(trusted_result.get("success", false)) or absf(float(trusted_result.get("score", 0.0)) - 75.0) > 0.001:
+		errors.append("relationship score should be settable for trusted dialogue")
+	if _event_count(simulation.snapshot(), "relationship_changed") <= 0:
+		errors.append("relationship score change should emit relationship_changed")
+	simulation.active_quests.clear()
+	simulation.completed_quests.clear()
+	var trusted_talk: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "actor",
+		"actor_id": 2,
+	}, "talk")
+	if not bool(trusted_talk.get("success", false)):
+		errors.append("trusted relationship talk should succeed: %s" % trusted_talk.get("reason", "unknown"))
+	if str(trusted_talk.get("dialogue_id", "")) != "trader_lao_wang_trusted":
+		errors.append("trusted relationship should select trusted dialogue")
+	var cold_result: Dictionary = simulation.set_relationship_score(1, 2, -150.0, "interaction_smoke_cold")
+	if not bool(cold_result.get("success", false)) or absf(float(cold_result.get("score", 0.0)) + 100.0) > 0.001:
+		errors.append("relationship score should clamp to -100")
+	var cold_talk: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "actor",
+		"actor_id": 2,
+	}, "talk")
+	if not bool(cold_talk.get("success", false)):
+		errors.append("cold relationship talk should succeed: %s" % cold_talk.get("reason", "unknown"))
+	if str(cold_talk.get("dialogue_id", "")) != "trader_lao_wang_cold":
+		errors.append("cold relationship should select cold dialogue")
+	var feedback: Array = simulation.snapshot().get("recent_event_feedback", [])
+	var has_relationship_feedback := false
+	for event in feedback:
+		var event_data: Dictionary = _dictionary_or_empty(event)
+		if str(event_data.get("kind", "")) == "relationship_changed":
+			has_relationship_feedback = true
+			break
+	if not has_relationship_feedback:
+		errors.append("recent event feedback should include relationship_changed")
 	return errors
 
 

@@ -33,6 +33,7 @@ func build(simulation: RefCounted) -> Dictionary:
 		"active_quests": _active_quest_snapshots(simulation.active_quests),
 		"completed_quests": simulation.completed_quests.keys(),
 		"world_flags": simulation.world_flags.keys(),
+		"relationships": _relationship_snapshots(simulation.relationships),
 		"ai_intents": _ai_intent_snapshots(simulation.ai_intents),
 		"vision": simulation._vision_rules.snapshot(),
 		"turn_state": simulation.turn_state.duplicate(true),
@@ -79,6 +80,31 @@ func _ai_intent_snapshots(ai_intents: Dictionary) -> Array[Dictionary]:
 	ids.sort()
 	for actor_id in ids:
 		output.append(_dictionary_or_empty(ai_intents[actor_id]).duplicate(true))
+	return output
+
+
+func _relationship_snapshots(relationships: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for key in relationships.keys():
+		var parts := str(key).split(":", false)
+		if parts.size() != 2:
+			continue
+		var actor_id := int(parts[0])
+		var target_actor_id := int(parts[1])
+		if actor_id <= 0 or target_actor_id <= 0 or actor_id == target_actor_id:
+			continue
+		output.append({
+			"actor_id": min(actor_id, target_actor_id),
+			"target_actor_id": max(actor_id, target_actor_id),
+			"score": clampf(float(relationships.get(key, 0.0)), -100.0, 100.0),
+		})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var left_actor := int(a.get("actor_id", 0))
+		var right_actor := int(b.get("actor_id", 0))
+		if left_actor == right_actor:
+			return int(a.get("target_actor_id", 0)) < int(b.get("target_actor_id", 0))
+		return left_actor < right_actor
+	)
 	return output
 
 
@@ -364,6 +390,7 @@ func _feedback_event_kind(kind: String) -> bool:
 		"combat_ended",
 		"recipe_crafted",
 		"skill_used",
+		"relationship_changed",
 		"player_command_rejected",
 		"ui_feedback",
 	].has(kind)

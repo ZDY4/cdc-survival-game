@@ -132,6 +132,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	simulation.set_actor_vision_radius(1, 4)
 	simulation.refresh_actor_vision(1, topology)
 	simulation.record_item_collected(1, "1007", 2)
+	simulation.set_relationship_score(1, 2, 88.0, "save_smoke")
 	var zombie: int = _register_zombie(simulation, registry)
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	var target: RefCounted = simulation.actor_registry.get_actor(zombie)
@@ -194,7 +195,7 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	if int(metadata_player.get("inventory_stack_count", 0)) <= 0 or int(metadata_player.get("inventory_item_count", 0)) <= 0:
 		errors.append("save metadata player inventory counts should be present")
 
-	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes", "world_flags", "door_states"]:
+	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes", "world_flags", "door_states", "relationships"]:
 		if JSON.stringify(restored.get(key)) != JSON.stringify(original.get(key)):
 			errors.append("snapshot field mismatch: %s" % key)
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
@@ -248,6 +249,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("active quests did not roundtrip")
 	if JSON.stringify(_actor_vision_snapshot(restored, 1)) != JSON.stringify(_actor_vision_snapshot(original, 1)):
 		errors.append("player vision did not roundtrip")
+	if absf(_relationship_score(restored, 1, 2) - 88.0) > 0.001:
+		errors.append("player/trader relationship score did not roundtrip")
 	if JSON.stringify(_normalized_ai_intents(restored)) != JSON.stringify(_normalized_ai_intents(original)):
 		errors.append("ai intents did not roundtrip")
 	if restored.get("events", []).size() != original.get("events", []).size():
@@ -268,6 +271,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 	legacy.erase("corpse_containers")
 	legacy.erase("interaction_menu")
 	legacy.erase("hotbar")
+	legacy.erase("relationships")
 	var restored_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	restored_simulation.load_snapshot(legacy)
 	var restored: Dictionary = restored_simulation.snapshot()
@@ -277,9 +281,11 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 		errors.append("legacy snapshot migration should default active_location_id from start_location_id")
 	if str(restored.get("active_entry_point_id", "")) != str(snapshot.get("start_entry_point_id", "")):
 		errors.append("legacy snapshot migration should default active_entry_point_id from start_entry_point_id")
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar", "relationships"]:
 		if not restored.has(key):
 			errors.append("legacy snapshot migration missing %s" % key)
+	if _relationship_score(restored, 1, 2) < 49.9:
+		errors.append("legacy snapshot migration should initialize player/trader relationship from sides")
 	if not _has_event(restored, "snapshot_migrated"):
 		errors.append("legacy snapshot migration should emit snapshot_migrated")
 	return errors
@@ -308,6 +314,16 @@ func _actor_vision_snapshot(snapshot: Dictionary, actor_id: int) -> Dictionary:
 		if int(actor_data.get("actor_id", 0)) == actor_id:
 			return actor_data
 	return {}
+
+
+func _relationship_score(snapshot: Dictionary, actor_id: int, target_actor_id: int) -> float:
+	var left: int = min(actor_id, target_actor_id)
+	var right: int = max(actor_id, target_actor_id)
+	for entry in snapshot.get("relationships", []):
+		var relationship: Dictionary = _dictionary_or_empty(entry)
+		if int(relationship.get("actor_id", 0)) == left and int(relationship.get("target_actor_id", 0)) == right:
+			return float(relationship.get("score", 0.0))
+	return 0.0
 
 
 func _normalized_ai_intents(snapshot: Dictionary) -> Array[Dictionary]:
@@ -491,6 +507,7 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"container_sessions": snapshot.get("container_sessions", []),
 		"shop_sessions": snapshot.get("shop_sessions", []),
 		"hotbar": snapshot.get("hotbar", {}),
+		"relationships": snapshot.get("relationships", []),
 		"event_count": snapshot.get("events", []).size(),
 		"player_inventory": _player_actor(snapshot).get("inventory", {}),
 		"player_inventory_order": _player_actor(snapshot).get("inventory_order", []),

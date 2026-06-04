@@ -179,8 +179,8 @@
 
 ### 7.3 关系和阵营
 
-- 待补 relationship scores 从 actor sides 初始化、分数变更 clamp、关系事件和 UI 反馈。
-- 待补阵营敌对/友好/中立对交互菜单、战斗进入、任务条件、交易权限和对话分支的影响。
+- relationship scores 第一版已迁移：运行时会按 actor side / group 初始化 pair 分数，`set_relationship_score` 会 clamp 到 `[-100, 100]` 并发出 `relationship_changed`，snapshot / save 已 roundtrip，对话规则的 `relation_score_min/max` 已读取真实分数并由 `Interaction` / `Save` smoke 覆盖。待补关系变化的完整 UI 文案、任务奖励/惩罚接入、敌对状态动态切换和关系历史。
+- 待补阵营敌对/友好/中立对交互菜单、战斗进入、任务条件、交易权限和更多对话分支的影响；当前战斗/AI 的敌对判定仍主要沿用 side。
 - 待补治疗、雇佣、跟随、队友、护送、敌对转中立等脚本化 NPC 互动。
 
 ## 8. 背包、装备、容器和交易
@@ -357,7 +357,7 @@
 ## 16. 存档、加载和运行入口
 
 - 主菜单继续游戏、存档槽列表、重命名、删除、覆盖确认、基础/详细存档元信息、slot_display_name 和坏档提示第一版已迁移：schema 不兼容、JSON 损坏、缺 runtime snapshot 等不可加载槽会显示原因、禁用继续并允许删除；正常存档和带 metadata 的坏档都会显示槽位名；存档摘要已覆盖 active map/location/entry、turn phase、combat state、actor/event count、玩家名称/坐标/等级/XP/HP/AP/资金/背包数量、任务/容器/商店/尸体/已消耗目标/已解锁地点数量。待补更完整坏档恢复策略。
-- 待补保存所有新增状态：UI 相关不一定持久，但 runtime 的 active map、actors、combat、turn、pending、corpse、containers、shops、quests、skills、hotbar、vision、world flags 已有 roundtrip；actor active skill effects 已纳入 `Save` smoke roundtrip；relationships 仍待补。
+- 待补保存所有新增状态：UI 相关不一定持久，但 runtime 的 active map、actors、combat、turn、pending、corpse、containers、shops、quests、skills、hotbar、vision、world flags 和 relationships 已有 roundtrip；actor active skill effects 已纳入 `Save` smoke roundtrip。
 - 待补地图切换后的保存/读取一致性，特别是 active container、consumed targets、corpse containers、unlocked locations。
 - 部分迁移运行入口错误提示：主菜单存档槽会显示 schema 不兼容、JSON 损坏、缺 runtime snapshot 等坏档原因并允许删除；待补内容加载失败、地图缺失、资产缺失、Godot 版本不对和进入游戏后的错误 UI。
 

@@ -26,6 +26,8 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.active_quests = _load_active_quests(snapshot_data.get("active_quests", []))
 	simulation.completed_quests = _load_completed_quests(snapshot_data.get("completed_quests", []))
 	simulation.world_flags = _load_flag_dictionary(snapshot_data.get("world_flags", []))
+	simulation.relationships = _load_relationships(snapshot_data.get("relationships", []))
+	_initialize_missing_relationships(simulation)
 	simulation.ai_intents = _load_ai_intents(snapshot_data.get("ai_intents", []))
 	simulation._vision_rules.load_snapshot(_dictionary_or_empty(snapshot_data.get("vision", {})))
 	simulation.turn_state = _dictionary_or_empty(snapshot_data.get("turn_state", simulation.turn_state)).duplicate(true)
@@ -150,6 +152,46 @@ func _load_ai_intents(entries: Variant) -> Dictionary:
 		if actor_id > 0:
 			output[actor_id] = intent_data.duplicate(true)
 	return output
+
+
+func _load_relationships(entries: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	if typeof(entries) == TYPE_DICTIONARY:
+		for key in _dictionary_or_empty(entries).keys():
+			var normalized_key := _relationship_key_from_string(str(key))
+			if normalized_key.is_empty():
+				continue
+			output[normalized_key] = clampf(float(_dictionary_or_empty(entries).get(key, 0.0)), -100.0, 100.0)
+		return output
+	for entry in _array_or_empty(entries):
+		var relationship: Dictionary = _dictionary_or_empty(entry)
+		var actor_id := int(relationship.get("actor_id", 0))
+		var target_actor_id := int(relationship.get("target_actor_id", 0))
+		var key := _relationship_key(actor_id, target_actor_id)
+		if key.is_empty():
+			continue
+		output[key] = clampf(float(relationship.get("score", 0.0)), -100.0, 100.0)
+	return output
+
+
+func _initialize_missing_relationships(simulation: RefCounted) -> void:
+	if not simulation.has_method("_initialize_relationships_for_actor"):
+		return
+	for actor in simulation.actor_registry.actors():
+		simulation.call("_initialize_relationships_for_actor", actor)
+
+
+func _relationship_key(actor_id: int, target_actor_id: int) -> String:
+	if actor_id <= 0 or target_actor_id <= 0 or actor_id == target_actor_id:
+		return ""
+	return "%d:%d" % [min(actor_id, target_actor_id), max(actor_id, target_actor_id)]
+
+
+func _relationship_key_from_string(key: String) -> String:
+	var parts := key.split(":", false)
+	if parts.size() != 2:
+		return ""
+	return _relationship_key(int(parts[0]), int(parts[1]))
 
 
 func _load_corpse_containers(entries: Variant) -> Dictionary:

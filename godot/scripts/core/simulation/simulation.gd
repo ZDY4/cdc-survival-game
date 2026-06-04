@@ -56,6 +56,7 @@ var dialogue_rule_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
 var world_flags: Dictionary = {}
+var relationships: Dictionary = {}
 var ai_intents: Dictionary = {}
 var turn_state: Dictionary = {
 	"round": 1,
@@ -102,6 +103,7 @@ var _item_use_runner := ItemUseRunner.new()
 
 func register_actor(request: Dictionary) -> int:
 	var record := actor_registry.register_actor(request)
+	_initialize_relationships_for_actor(record)
 	if record.kind == "player" and int(turn_state.get("active_actor_id", 0)) == 0:
 		_open_turn(record.actor_id, "initial_player_turn")
 	_emit("actor_registered", {
@@ -537,6 +539,54 @@ func _emit(kind: String, payload: Dictionary) -> void:
 
 func emit_event(kind: String, payload: Dictionary) -> void:
 	_emit(kind, payload)
+
+
+func relationship_score(actor_id: int, target_actor_id: int) -> float:
+	if actor_id <= 0 or target_actor_id <= 0:
+		return 0.0
+	if actor_id == target_actor_id:
+		return 100.0
+	var key := _relationship_key(actor_id, target_actor_id)
+	if relationships.has(key):
+		return float(relationships.get(key, 0.0))
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	var target_actor: RefCounted = actor_registry.get_actor(target_actor_id)
+	return _default_relationship_score(actor, target_actor)
+
+
+func set_relationship_score(actor_id: int, target_actor_id: int, score: float, reason: String = "manual") -> Dictionary:
+	if actor_id <= 0 or target_actor_id <= 0:
+		return {"success": false, "reason": "invalid_actor_pair", "actor_id": actor_id, "target_actor_id": target_actor_id}
+	if actor_id == target_actor_id:
+		return {"success": false, "reason": "self_relationship_locked", "actor_id": actor_id, "target_actor_id": target_actor_id}
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	var target_actor: RefCounted = actor_registry.get_actor(target_actor_id)
+	if actor == null or target_actor == null:
+		return {"success": false, "reason": "unknown_actor_pair", "actor_id": actor_id, "target_actor_id": target_actor_id}
+	var previous := relationship_score(actor_id, target_actor_id)
+	var clamped := clampf(score, -100.0, 100.0)
+	var key := _relationship_key(actor_id, target_actor_id)
+	relationships[key] = clamped
+	var changed := absf(previous - clamped) > 0.001
+	if changed:
+		_emit("relationship_changed", {
+			"actor_id": min(actor_id, target_actor_id),
+			"target_actor_id": max(actor_id, target_actor_id),
+			"score_before": previous,
+			"score": clamped,
+			"reason": reason,
+			"actor_side": actor.side,
+			"target_side": target_actor.side,
+		})
+	return {
+		"success": true,
+		"actor_id": min(actor_id, target_actor_id),
+		"target_actor_id": max(actor_id, target_actor_id),
+		"score_before": previous,
+		"score": clamped,
+		"changed": changed,
+		"reason": reason,
+	}
 
 
 func _submit_wait_command(actor: RefCounted, command: Dictionary) -> Dictionary:
@@ -3052,6 +3102,44 @@ func _adjacent_goals(center: RefCounted) -> Array[RefCounted]:
 		GridCoord.new(center.x, center.y, center.z + 1),
 		GridCoord.new(center.x, center.y, center.z - 1),
 	]
+
+
+func _initialize_relationships_for_actor(actor: RefCounted) -> void:
+	if actor == null:
+		return
+	for other in actor_registry.actors():
+		if other == null or other.actor_id == actor.actor_id:
+			continue
+		var key := _relationship_key(actor.actor_id, other.actor_id)
+		if relationships.has(key):
+			continue
+		relationships[key] = _default_relationship_score(actor, other)
+
+
+func _relationship_key(actor_id: int, target_actor_id: int) -> String:
+	var left: int = min(actor_id, target_actor_id)
+	var right: int = max(actor_id, target_actor_id)
+	return "%d:%d" % [left, right]
+
+
+func _default_relationship_score(actor: RefCounted, target_actor: RefCounted) -> float:
+	if actor == null or target_actor == null:
+		return 0.0
+	if actor.actor_id == target_actor.actor_id:
+		return 100.0
+	if actor.side == "hostile" or target_actor.side == "hostile":
+		if actor.side == target_actor.side:
+			return 50.0
+		return -100.0
+	if actor.side == target_actor.side and actor.group_id == target_actor.group_id and not actor.group_id.is_empty():
+		return 75.0
+	if actor.side == target_actor.side and actor.side != "neutral":
+		return 50.0
+	if actor.side == "player" and target_actor.side == "friendly":
+		return 50.0
+	if actor.side == "friendly" and target_actor.side == "player":
+		return 50.0
+	return 0.0
 
 
 func _player_actor_id() -> int:

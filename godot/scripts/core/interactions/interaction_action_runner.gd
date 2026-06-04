@@ -272,7 +272,11 @@ func _player_item_count_min_met(actor: RefCounted, requirements: Dictionary) -> 
 	return true
 
 
-func _relation_score(_simulation: RefCounted, _actor: RefCounted, _target_actor: RefCounted) -> float:
+func _relation_score(simulation: RefCounted, actor: RefCounted, target_actor: RefCounted) -> float:
+	if simulation == null or actor == null or target_actor == null:
+		return 0.0
+	if simulation.has_method("relationship_score"):
+		return float(simulation.call("relationship_score", actor.actor_id, target_actor.actor_id))
 	return 0.0
 
 
