@@ -664,6 +664,12 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 				"reason": reason,
 				"pending_movement": movement.duplicate(true),
 			})
+		if not interaction.is_empty():
+			_emit("interaction_cancelled", {
+				"actor_id": int(interaction.get("actor_id", actor_id)),
+				"reason": reason,
+				"pending_interaction": interaction.duplicate(true),
+			})
 		_emit("pending_cancelled", {
 			"actor_id": actor_id,
 			"reason": reason,

@@ -515,11 +515,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		"option_id": "open_container",
 	}
 	var before_pending_interaction_cancelled := _event_count(game_root, "pending_cancelled")
+	var before_interaction_cancelled := _event_count(game_root, "interaction_cancelled")
 	_press_key(game_root, KEY_ESCAPE)
 	if not game_root.simulation.snapshot().get("pending_interaction", {}).is_empty():
 		errors.append("Esc should clear pending interaction")
 	if _event_count(game_root, "pending_cancelled") <= before_pending_interaction_cancelled:
 		errors.append("Esc pending interaction cancellation should emit pending_cancelled")
+	if _event_count(game_root, "interaction_cancelled") <= before_interaction_cancelled:
+		errors.append("Esc pending interaction cancellation should emit interaction_cancelled")
 
 	return errors
 
