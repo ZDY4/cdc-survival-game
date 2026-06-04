@@ -3,6 +3,7 @@ extends Control
 const CONTEXT_USE := 1
 const CONTEXT_EQUIP := 2
 const CONTEXT_DROP := 3
+const CONTEXT_INSPECT := 4
 
 var _panel: PanelContainer
 var _title_label: Label
@@ -320,6 +321,7 @@ func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> 
 	_apply_detail(item.duplicate(true))
 	_context_item = item.duplicate(true)
 	_context_menu.clear()
+	_context_menu.add_item("检查", CONTEXT_INSPECT)
 	_context_menu.add_item("使用", CONTEXT_USE)
 	_context_menu.add_item("装备", CONTEXT_EQUIP)
 	_context_menu.add_item("丢弃", CONTEXT_DROP)
@@ -336,6 +338,9 @@ func _execute_context_action(action_id: int) -> void:
 	var item_id: String = str(_context_item.get("item_id", ""))
 	if item_id.is_empty():
 		return
+	if action_id == CONTEXT_INSPECT:
+		_apply_inspect_detail(_context_item)
+		return
 	var root := get_parent()
 	if root == null:
 		return
@@ -350,6 +355,14 @@ func _execute_context_action(action_id: int) -> void:
 		CONTEXT_DROP:
 			if bool(_context_item.get("droppable", true)):
 				_open_discard_dialog_for_item(_context_item, _drag_drop_count(_context_item))
+
+
+func _apply_inspect_detail(item: Dictionary) -> void:
+	_apply_detail(item.duplicate(true))
+	if _detail_label == null or item.is_empty():
+		return
+	var item_name := str(item.get("name", item.get("item_id", "")))
+	_detail_label.text = "检查：%s\n%s" % [item_name, _detail_label.text]
 
 
 func has_blocking_modal() -> bool:

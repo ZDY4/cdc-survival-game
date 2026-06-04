@@ -73,6 +73,22 @@ func _run_checks(game_root: Node) -> Array[String]:
 	elif _context_action_disabled(game_root, 1):
 		errors.append("context menu should enable use for consumable")
 	else:
+		var hp_before_inspect: float = player_ref.hp
+		var ap_before_inspect: float = player_ref.ap
+		var count_before_inspect: int = _player_inventory_count(game_root, "1006")
+		if _context_action_disabled(game_root, 4):
+			errors.append("context menu should enable inspect for inventory item")
+		else:
+			_execute_inventory_context_action(game_root, 4)
+			await process_frame
+			if not _detail_line(game_root).begins_with("检查：绷带"):
+				errors.append("inspect context action should update item detail")
+			if absf(player_ref.hp - hp_before_inspect) > 0.01:
+				errors.append("inspect context action should not change hp")
+			if absf(player_ref.ap - ap_before_inspect) > 0.01:
+				errors.append("inspect context action should not spend AP")
+			if _player_inventory_count(game_root, "1006") != count_before_inspect:
+				errors.append("inspect context action should not mutate inventory")
 		_execute_inventory_context_action(game_root, 1)
 		await process_frame
 		if absf(player_ref.hp - 75.0) > 0.01:
