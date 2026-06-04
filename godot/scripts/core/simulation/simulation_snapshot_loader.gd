@@ -143,7 +143,12 @@ func _load_corpse_containers(entries: Variant) -> Dictionary:
 			"map_id": str(corpse_data.get("map_id", "")),
 			"grid_position": _dictionary_or_empty(corpse_data.get("grid_position", {})).duplicate(true),
 			"display_name": str(corpse_data.get("display_name", container_id)),
+			"source_actor_id": int(corpse_data.get("source_actor_id", 0)),
 			"source_actor_definition_id": str(corpse_data.get("source_actor_definition_id", "")),
+			"source_actor_kind": str(corpse_data.get("source_actor_kind", "")),
+			"defeated_by_actor_id": int(corpse_data.get("defeated_by_actor_id", 0)),
+			"equipped_slots": _dictionary_or_empty(corpse_data.get("equipped_slots", {})).duplicate(true),
+			"money": max(0, int(corpse_data.get("money", 0))),
 			"inventory": _inventory_entries.normalize(corpse_data.get("inventory", [])),
 		}
 	return output

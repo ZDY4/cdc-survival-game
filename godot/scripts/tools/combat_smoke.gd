@@ -43,6 +43,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_combat_attribute_damage_modifiers(errors, simulation, registry, player, player_grid)
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
 	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
+	_expect_corpse_inventory_and_metadata(errors, simulation, registry, player, player_grid)
 	player.grid_position = GridCoord.from_dictionary(player_grid)
 	player.equipment["main_hand"] = "1002"
 	player.inventory["1009"] = 10
@@ -52,13 +53,14 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_force_combat_values(simulation, zombie_a)
 	_force_combat_values(simulation, zombie_b)
 	var topology: Dictionary = _topology(simulation, registry)
+	var corpse_count_before_zombies: int = _corpse_count(simulation.snapshot())
 
 	var first: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": zombie_a, "topology": topology})
 	if not bool(first.get("success", false)) or not bool(first.get("defeated", false)):
 		errors.append("first zombie attack should defeat target")
 	if _quest_progress(simulation.snapshot(), "zombie_hunter") != 1:
 		errors.append("zombie_hunter progress should be 1 after first kill")
-	if _corpse_count(simulation.snapshot()) != 1:
+	if _corpse_count(simulation.snapshot()) != corpse_count_before_zombies + 1:
 		errors.append("first zombie kill should create a corpse container")
 
 	var second: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": zombie_b, "topology": topology})
@@ -69,7 +71,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("zombie_hunter should complete after two kills")
 	if not snapshot.get("completed_quests", []).has("zombie_hunter"):
 		errors.append("zombie_hunter missing from completed quests")
-	if _corpse_count(snapshot) != 2:
+	if _corpse_count(snapshot) != corpse_count_before_zombies + 2:
 		errors.append("second zombie kill should preserve both corpse containers")
 	if _event_count(snapshot, "attack_resolved") < 2:
 		errors.append("attacks should emit attack_resolved events")
@@ -584,6 +586,78 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 	simulation.exit_combat_if_clear("spatial_failure_smoke_cleanup")
 
 
+func _expect_corpse_inventory_and_metadata(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	var original_equipment: Dictionary = player.equipment.duplicate(true)
+	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
+	player.equipment["main_hand"] = "1003"
+	player.combat_attributes["accuracy"] = 100.0
+	player.ap = 20.0
+	var target_id: int = _register_test_actor(simulation, "corpse_loot_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 1,
+	}, 5.0)
+	var target: RefCounted = simulation.actor_registry.get_actor(target_id)
+	target.display_name = "Corpse Loot Target"
+	target.map_id = str(simulation.active_map_id)
+	target.inventory = {"1006": 2, "1009": 3}
+	var target_inventory_order: Array[String] = ["1006", "1009"]
+	target.inventory_order = target_inventory_order
+	target.equipment = {"main_hand": "1004"}
+	target.weapon_ammo = {"main_hand": 4}
+	target.money = 17
+	var target_loot_table: Array[Dictionary] = [{
+		"item_id": "1009",
+		"chance": 1.0,
+		"min": 2,
+		"max": 2,
+	}]
+	target.loot_table = target_loot_table
+	target.combat_attributes["evasion"] = 0.0
+	target.defense = 0.0
+	var result: Dictionary = simulation.perform_attack(player.actor_id, target_id, _topology(simulation, registry), {
+		"range": 4,
+		"weapon_profile": {"damage": 99.0, "crit_chance": 0.0, "accuracy": 100.0},
+	})
+	if not bool(result.get("success", false)) or not bool(result.get("defeated", false)):
+		errors.append("corpse loot target should be defeated for corpse metadata smoke")
+	var corpse: Dictionary = _corpse_by_source_actor(simulation.snapshot(), target_id)
+	if corpse.is_empty():
+		errors.append("corpse metadata smoke should create corpse for target")
+	else:
+		if str(corpse.get("display_name", "")) != "Corpse Loot Target的尸体":
+			errors.append("corpse display name should use defeated actor name")
+		if int(corpse.get("source_actor_id", 0)) != target_id:
+			errors.append("corpse should expose source_actor_id")
+		if str(corpse.get("source_actor_definition_id", "")) != "corpse_loot_target":
+			errors.append("corpse should expose source actor definition id")
+		if int(corpse.get("defeated_by_actor_id", 0)) != player.actor_id:
+			errors.append("corpse should expose defeated_by_actor_id")
+		if str(corpse.get("map_id", "")) != str(simulation.active_map_id):
+			errors.append("corpse should preserve source actor map id")
+		if int(corpse.get("money", 0)) != 17:
+			errors.append("corpse should expose source actor money")
+		var equipped_slots: Dictionary = _dictionary_or_empty(corpse.get("equipped_slots", {}))
+		if str(equipped_slots.get("main_hand", "")) != "1004":
+			errors.append("corpse should preserve equipped main_hand metadata")
+		var corpse_inventory: Array = _array_or_empty(corpse.get("inventory", []))
+		if _entry_count(corpse_inventory, "1006") != 2:
+			errors.append("corpse should include actor inventory bandages")
+		if _entry_count(corpse_inventory, "1004") != 1:
+			errors.append("corpse should include equipped weapon")
+		if _entry_count(corpse_inventory, "1009") != 9:
+			errors.append("corpse should merge inventory ammo, loaded ammo and loot table ammo")
+		var container: Dictionary = _container_by_id(simulation.snapshot(), str(corpse.get("container_id", "")))
+		if _entry_count(_array_or_empty(container.get("inventory", [])), "1009") != 9:
+			errors.append("corpse container session should mirror merged ammo")
+	if simulation.actor_registry.get_actor(target_id) != null:
+		simulation.actor_registry.unregister_actor(target_id)
+	player.equipment = original_equipment
+	player.combat_attributes = original_attributes
+	simulation.exit_combat_if_clear("corpse_metadata_smoke_cleanup")
+
+
 func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
 	var topology: Dictionary = _topology(simulation, registry)
 	var original_active_effects: Array[Dictionary] = player.active_effects.duplicate(true)
@@ -710,6 +784,7 @@ func _register_character(simulation: RefCounted, registry: RefCounted, definitio
 		"defense": float(combat_attributes.get("defense", 0.0)),
 		"combat_attributes": combat_attributes.duplicate(true),
 		"xp_reward": int(combat.get("xp_reward", 0)),
+		"loot": _array_or_empty(combat.get("loot", [])).duplicate(true),
 	})
 
 
@@ -799,6 +874,30 @@ func _topology(simulation: RefCounted, registry: RefCounted) -> Dictionary:
 
 func _corpse_count(snapshot: Dictionary) -> int:
 	return snapshot.get("corpse_containers", []).size()
+
+
+func _corpse_by_source_actor(snapshot: Dictionary, source_actor_id: int) -> Dictionary:
+	for corpse in _array_or_empty(snapshot.get("corpse_containers", [])):
+		var corpse_data: Dictionary = _dictionary_or_empty(corpse)
+		if int(corpse_data.get("source_actor_id", 0)) == source_actor_id:
+			return corpse_data
+	return {}
+
+
+func _container_by_id(snapshot: Dictionary, container_id: String) -> Dictionary:
+	for container in _array_or_empty(snapshot.get("container_sessions", [])):
+		var container_data: Dictionary = _dictionary_or_empty(container)
+		if str(container_data.get("container_id", "")) == container_id:
+			return container_data
+	return {}
+
+
+func _entry_count(entries: Array, item_id: String) -> int:
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("item_id", "")) == item_id:
+			return int(entry_data.get("count", 0))
+	return 0
 
 
 func _event_count(snapshot: Dictionary, kind: String) -> int:

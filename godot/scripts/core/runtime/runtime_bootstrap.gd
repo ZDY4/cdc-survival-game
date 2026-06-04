@@ -84,6 +84,7 @@ func _register_spawn_entry(simulation: RefCounted, spawn_entry: Dictionary) -> v
 		"defense": float(combat_attributes.get("defense", 0.0)),
 		"combat_attributes": combat_attributes.duplicate(true),
 		"xp_reward": int(combat.get("xp_reward", 0)),
+		"loot": _array_or_empty(combat.get("loot", [])).duplicate(true),
 		"progression": _progression_rules.build_initial_state(int(progression.get("level", 1)), base_attributes),
 		"ai": ai,
 		"life": life,

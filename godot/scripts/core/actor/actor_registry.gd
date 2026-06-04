@@ -41,9 +41,10 @@ func register_actor(request: Dictionary) -> ActorRecord:
 		record.combat_attributes = {
 			"attack_power": record.attack_power,
 			"defense": record.defense,
-		}
+	}
 	record.active_effects = _effect_array(request.get("active_effects", []))
 	record.xp_reward = max(0, int(request.get("xp_reward", 0)))
+	record.loot_table = _entry_array(request.get("loot", []))
 	record.progression = _dictionary_or_empty(request.get("progression", {})).duplicate(true)
 	record.ai = _dictionary_or_empty(request.get("ai", {})).duplicate(true)
 	record.life = _dictionary_or_empty(request.get("life", {})).duplicate(true)
@@ -130,9 +131,10 @@ func load_snapshot(records: Array) -> void:
 			record.combat_attributes = {
 				"attack_power": record.attack_power,
 				"defense": record.defense,
-			}
+		}
 		record.active_effects = _effect_array(combat.get("active_effects", actor_data.get("active_effects", [])))
 		record.xp_reward = max(0, int(combat.get("xp_reward", 0)))
+		record.loot_table = _entry_array(combat.get("loot", []))
 		record.progression = _dictionary_or_empty(actor_data.get("progression", {})).duplicate(true)
 		record.ai = _dictionary_or_empty(actor_data.get("ai", {})).duplicate(true)
 		record.life = _dictionary_or_empty(actor_data.get("life", {})).duplicate(true)
@@ -190,6 +192,15 @@ func _effect_array(value: Variant) -> Array[Dictionary]:
 		normalized["is_infinite"] = bool(normalized.get("is_infinite", false))
 		normalized["modifiers"] = _dictionary_or_empty(normalized.get("modifiers", {})).duplicate(true)
 		output.append(normalized)
+	return output
+
+
+func _entry_array(value: Variant) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for entry in _array_or_empty(value):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if not entry_data.is_empty():
+			output.append(entry_data.duplicate(true))
 	return output
 
 

@@ -122,7 +122,12 @@ func _corpse_container_snapshots(corpse_containers: Dictionary) -> Array[Diction
 			"map_id": str(corpse.get("map_id", "")),
 			"grid_position": _dictionary_or_empty(corpse.get("grid_position", {})).duplicate(true),
 			"display_name": str(corpse.get("display_name", corpse_id)),
+			"source_actor_id": int(corpse.get("source_actor_id", 0)),
 			"source_actor_definition_id": str(corpse.get("source_actor_definition_id", "")),
+			"source_actor_kind": str(corpse.get("source_actor_kind", "")),
+			"defeated_by_actor_id": int(corpse.get("defeated_by_actor_id", 0)),
+			"equipped_slots": _dictionary_or_empty(corpse.get("equipped_slots", {})).duplicate(true),
+			"money": max(0, int(corpse.get("money", 0))),
 			"inventory": _inventory_entries.normalize(corpse.get("inventory", [])),
 		})
 	return output

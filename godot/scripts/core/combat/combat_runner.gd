@@ -327,7 +327,7 @@ func _defeat_actor(simulation: RefCounted, actor_id: int, target_actor_id: int, 
 	var defeated_definition_id: String = target.definition_id
 	var defeated_kind: String = target.kind
 	var defeated_xp_reward: int = target.xp_reward
-	var corpse: Dictionary = _create_corpse_container(simulation, target)
+	var corpse: Dictionary = _create_corpse_container(simulation, target, actor_id)
 	simulation.actor_registry.unregister_actor(target_actor_id)
 	simulation.emit_event("actor_defeated", {
 		"actor_id": target_actor_id,
@@ -341,15 +341,21 @@ func _defeat_actor(simulation: RefCounted, actor_id: int, target_actor_id: int, 
 	simulation.exit_combat_if_clear()
 
 
-func _create_corpse_container(simulation: RefCounted, target: RefCounted) -> Dictionary:
+func _create_corpse_container(simulation: RefCounted, target: RefCounted, defeated_by_actor_id: int) -> Dictionary:
 	var corpse_id: String = "corpse_%s_%d" % [target.definition_id, target.actor_id]
-	var inventory: Array[Dictionary] = _actor_inventory_entries(target)
+	var equipped_slots: Dictionary = _equipped_slots_snapshot(target)
+	var inventory: Array[Dictionary] = _actor_inventory_entries(target, simulation.item_library)
 	var corpse := {
 		"container_id": corpse_id,
 		"map_id": target.map_id,
 		"grid_position": target.grid_position.to_dictionary(),
-		"display_name": "%s的遗留物" % target.display_name,
+		"display_name": "%s的尸体" % target.display_name,
+		"source_actor_id": target.actor_id,
 		"source_actor_definition_id": target.definition_id,
+		"source_actor_kind": target.kind,
+		"defeated_by_actor_id": defeated_by_actor_id,
+		"equipped_slots": equipped_slots,
+		"money": max(0, int(target.money)),
 		"inventory": inventory,
 	}
 	simulation.corpse_containers[corpse_id] = corpse
@@ -366,11 +372,26 @@ func _create_corpse_container(simulation: RefCounted, target: RefCounted) -> Dic
 		"anchor": target.grid_position.to_dictionary(),
 		"cells": [target.grid_position.to_dictionary()],
 		"container_inventory": inventory.duplicate(true),
+		"source_actor_id": target.actor_id,
+		"source_actor_definition_id": target.definition_id,
+		"defeated_by_actor_id": defeated_by_actor_id,
+		"equipped_slots": equipped_slots.duplicate(true),
 	}
 	return corpse
 
 
-func _actor_inventory_entries(actor: RefCounted) -> Array[Dictionary]:
+func _equipped_slots_snapshot(actor: RefCounted) -> Dictionary:
+	var output: Dictionary = {}
+	var slots: Array = actor.equipment.keys()
+	slots.sort()
+	for slot_id in slots:
+		var equipped_item_id: String = str(actor.equipment.get(slot_id, ""))
+		if not equipped_item_id.is_empty():
+			output[str(slot_id)] = equipped_item_id
+	return output
+
+
+func _actor_inventory_entries(actor: RefCounted, item_library: Dictionary) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var ids: Array = actor.inventory.keys()
 	ids.sort()
@@ -383,7 +404,59 @@ func _actor_inventory_entries(actor: RefCounted) -> Array[Dictionary]:
 		if equipped_item_id.is_empty():
 			continue
 		_inventory_entries.add(entries, equipped_item_id, 1)
+	for slot_id in actor.weapon_ammo.keys():
+		var loaded: int = int(actor.weapon_ammo.get(slot_id, 0))
+		if loaded <= 0:
+			continue
+		var equipped_weapon_id: String = str(actor.equipment.get(str(slot_id), ""))
+		var ammo_type: String = _weapon_ammo_type(equipped_weapon_id, item_library)
+		if ammo_type.is_empty():
+			continue
+		_inventory_entries.add(entries, ammo_type, loaded)
+	for loot_entry in actor.loot_table:
+		var loot_data: Dictionary = _dictionary_or_empty(loot_entry)
+		var item_id: String = _normalize_item_id(loot_data.get("item_id", loot_data.get("itemId", "")))
+		var count: int = _resolve_loot_drop_count(actor.actor_id, item_id, loot_data)
+		if count > 0:
+			_inventory_entries.add(entries, item_id, count)
 	return entries
+
+
+func _weapon_ammo_type(item_id: String, item_library: Dictionary) -> String:
+	if item_id.is_empty():
+		return ""
+	var weapon: Dictionary = _weapon_fragment(item_id, item_library)
+	return _normalize_item_id(weapon.get("ammo_type", ""))
+
+
+func _weapon_fragment(item_id: String, item_library: Dictionary) -> Dictionary:
+	if item_id.is_empty():
+		return {}
+	var record: Dictionary = _dictionary_or_empty(item_library.get(item_id, {}))
+	var item: Dictionary = _dictionary_or_empty(record.get("data", record))
+	for fragment in _array_or_empty(item.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) == "weapon":
+			return fragment_data
+	return {}
+
+
+func _resolve_loot_drop_count(actor_id: int, item_id: String, entry: Dictionary) -> int:
+	if item_id.is_empty():
+		return 0
+	var min_count: int = int(entry.get("min", 0))
+	var max_count: int = int(entry.get("max", 0))
+	var chance: float = clampf(float(entry.get("chance", 0.0)), 0.0, 1.0)
+	if max_count < min_count or max_count <= 0 or chance <= 0.0:
+		return 0
+	var item_number: int = abs(hash(item_id))
+	var roll_seed: int = abs(actor_id ^ (item_number * 1103515245))
+	var chance_roll: float = float(roll_seed % 10000) / 10000.0
+	if chance_roll > chance:
+		return 0
+	var span: int = max_count - min_count
+	var count_roll: int = int((roll_seed / 97) % (span + 1)) if span > 0 else 0
+	return max(0, min_count + count_roll)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
@@ -405,3 +478,14 @@ func _string_array(value: Variant) -> Array[String]:
 		if not text.is_empty():
 			output.append(text)
 	return output
+
+
+func _normalize_item_id(value: Variant) -> String:
+	if value == null:
+		return ""
+	if typeof(value) == TYPE_FLOAT and is_equal_approx(float(value), roundf(float(value))):
+		return str(int(value))
+	if typeof(value) == TYPE_INT:
+		return str(value)
+	var text: String = str(value).strip_edges()
+	return "" if text == "<null>" else text

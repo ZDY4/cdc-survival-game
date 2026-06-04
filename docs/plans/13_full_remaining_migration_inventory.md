@@ -149,8 +149,8 @@
 
 ### 6.3 击杀和尸体
 
-- 已有击杀移除 actor、XP、kill 任务、尸体容器第一版；待补尸体掉落合并的完整来源：背包、装备、弹药、loot table、金钱。
-- 待补尸体 display name、source actor id / definition id、map id、grid、equipped slots extra、腐烂/清理策略。
+- 击杀和尸体容器第一版已迁移：击杀会移除 actor、发放 XP、推进 kill 任务、创建可打开尸体容器，并把尸体同步到 `corpse_containers`、`container_sessions` 和 map interaction target；已由 `Combat` smoke 覆盖。
+- 尸体掉落合并和元数据第一版已迁移：尸体会合并目标背包、装备、已装填弹匣余弹和 character `combat.loot` 掉落；尸体 snapshot / container 会保留 display name、source actor id / definition id / kind、defeated by actor id、map id、grid、equipped slots 和 money；已由 `Combat` smoke 覆盖。待补金钱作为可拿取经济条目、单件耐久状态、掉落随机公式与 Rust 完整复核、尸体容器 UI 展示金钱和装备来源。
 - 待补尸体模型和 hover / open container 表现。
 - 待补击杀后 AI / combat state / quest / relationship / event feedback 的顺序一致性。
 
