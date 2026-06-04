@@ -1139,3 +1139,194 @@
 - 资产表现变更必须人工或自动截图检查，不只依赖 headless。
 - 提交时只 stage 当前阶段相关文件，不能混入用户正在编辑的 map scene。
 - 若某个旧功能决定不迁，必须用 `[D]` 标记并写清 Godot 替代方案或废弃原因。
+
+## 23. 逐源文件迁移核对附录
+
+本附录按旧参考工程实际文件和当前 Godot 主线落点补一层逐源核对，避免只迁了显眼玩法，漏掉编辑器、表现、工具或诊断逻辑。每一行代表一组旧文件语义；完成迁移时必须在对应功能章节同步过账。
+
+### 23.1 旧 `bevy_debug_viewer` 运行时来源
+
+- [ ] `src/app.rs`、`src/bootstrap.rs`、`src/main.rs`：旧 viewer 启动、plugin 装配、新游戏默认配置、窗口参数、资源注入；落点为 `godot/scenes/boot`、`godot/scripts/app/boot.gd`、`godot/scripts/app/runtime_bootstrap.gd`。
+- [ ] `src/controls/camera.rs`：旧相机 yaw、pitch、距离、滚轮、拖拽、聚焦、边界限制；落点为 `game_runtime_input_controller.gd` 和 world camera setup。
+- [ ] `src/controls/keyboard.rs`：旧快捷键、wait、panel toggle、debug toggle、selection cancel、targeting cancel；落点为 `game_runtime_input_controller.gd`、`game_panel_controller.gd`、UIToggle smoke。
+- [ ] `src/controls/mouse.rs`、`src/controls/interaction_input.rs`、`src/controls/targeting.rs`：鼠标点击、hover、右键菜单、技能/攻击目标选择、UI blocker；落点为 `player_interaction_controller.gd`、`interaction_target_resolver.gd` 和 UI overlay。
+- [ ] `src/controls/tests.rs`：旧输入行为测试点要转为 `PlayerInteraction`、`Movement`、`UIToggle` scenario。
+- [ ] `src/geometry/camera.rs`、`src/geometry/picking.rs`、`src/geometry/world.rs`、`src/geometry/occlusion.rs`：屏幕到格子、raycast、楼层、遮挡、world coordinate；落点为 `world_scene_renderer.gd`、`map_topology.gd`、picking proxy。
+- [ ] `src/render/camera.rs`、`src/render/constants.rs`、`src/render/debug_draw.rs`：旧渲染常量、debug draw、相机表现；落点为 world render debug mode 和 MapVisual。
+- [ ] `src/render/fog_of_war/**`：fog mask、post-process、visible/explored 更新、shader 参数；落点为 `fog_overlay_controller.gd`、`fog_of_war_canvas.gdshader`、Vision/FogShader smoke。
+- [ ] `src/render/hover_outline.rs`、`src/render/materials.rs`、`src/render/overlay.rs`：hover/selected/blocked/LOS 材质和 overlay；落点为 Godot material override、cursor/tooltip/highlight。
+- [ ] `src/render/world/actors.rs`：玩家、NPC、感染者 actor 表现、朝向、selection、health state；落点为 `world_snapshot_builder.gd`、`world_scene_renderer.gd`。
+- [ ] `src/render/world/corpses.rs`：尸体容器视觉、尸体 id、掉落可点区域；落点为 corpse container marker 和 container open interaction。
+- [ ] `src/render/world/doors.rs`：门开关状态、碰撞/视线同步、视觉旋转；落点为 MapObjectNode door props、Interaction Door scenario。
+- [ ] `src/render/world/static_world.rs`、`src/render/world/interaction_layout.rs`：静态地图对象、tile/prop instancing、交互 proxy；落点为 `godot/scenes/maps/*.tscn`、`MapObjectNode`、asset mapping。
+- [ ] `src/render/world/helpers.rs`、`src/render/resources.rs`、`src/render/types.rs`：资源路径、fallback、render entity bookkeeping；落点为 Godot resource path registry 和 asset diagnostics。
+- [ ] `src/simulation/runtime_basics.rs`、`runtime_bridge.rs`、`progression.rs`：旧 viewer 到 game_core 的桥接、分帧推进、事件反馈；落点为 `Simulation.submit_player_command()`、`game_app.gd` 刷新流程。
+- [ ] `src/simulation/event_feedback.rs`、`interaction_prompt_sync.rs`、`motion.rs`：toast/log、交互 prompt、移动插值；落点为 HUD/message log、interaction menu、world actor motion。
+- [ ] `src/simulation/npc_runtime/**`：NPC background state、combat bridge、life action、presence sync；落点为 `ai_runner.gd`、`settlement_life_rules.gd`、NpcLife scenario。
+- [ ] `src/game_ui/overlay/**`：modal prompt、tooltip context、root update、shell；落点为 Godot UI root、modal/tooltip/interaction menu。
+- [ ] `src/game_ui/input/**`：UI button action、pointer input、tooltip；落点为各 panel controller 和 UI input blocker。
+- [ ] `src/game_ui/panels/inventory.rs`：旧背包列表、排序、筛选、详情、使用/装备/丢弃、数量；落点为 Inventory panel 和 `InventoryUI`。
+- [ ] `src/game_ui/panels/character.rs`：角色属性、装备、状态效果、派生属性；落点为 Character panel、progression snapshots。
+- [ ] `src/game_ui/panels/journal.rs`：任务列表、目标、奖励、交付状态；落点为 Journal panel、Quest scenario。
+- [ ] `src/game_ui/panels/crafting.rs`：配方列表、缺失原因、材料/工具/工作台、制作反馈；落点为 Crafting panel。
+- [ ] `src/game_ui/panels/skills.rs`、`skills_graph.rs`：技能树、节点状态、主动技能绑定；落点为 Skills panel、hotbar。
+- [ ] `src/game_ui/panels/map*.rs`：地图 canvas、缩放、filter、当前地点、marker；落点为 Map panel、overworld snapshot。
+- [ ] `src/game_ui/container_ui/**`：容器双栏、数量、拿取/存放、空状态、关闭；落点为 Container panel。
+- [ ] `src/game_ui/trade_ui/**`：交易双栏、购物车、价格、资金、确认/撤销、失败回滚；落点为 Trade panel。
+- [ ] `src/game_ui/hotbar/**`：快捷栏槽位、观察、激活、渲染、状态；落点为 Godot hotbar 和 `use_skill` / `use_item` 命令。
+- [ ] `src/game_ui/widgets/**`：统一 detail widget、panel widget、inventory detail、skill detail；落点为 Godot UI component/helper，但不得把业务逻辑放进 UI。
+- [ ] `src/dialogue.rs`：对话打开、节点推进、动作结果、关闭和交易/任务联动；落点为 Dialogue panel、DialogueAction smoke。
+- [ ] `src/console.rs`：开发 console、命令执行、错误显示、历史；落点为后续 Godot debug console。
+- [ ] `src/debug_panel/**`、`src/info_panels/**`：actor/event/AI/turn/world/performance/selection 面板；落点为 Godot debug overlay、info panel 和 smoke snapshot dump。
+- [ ] `src/state/**`：viewer 状态、runtime 状态、render 状态、UI 状态、info panel 状态；落点为 app controller 状态拆分，不得塞进单个 root。
+- [ ] `src/test_support.rs`、`src/*/tests.rs`：旧测试夹具和行为点必须映射到 Godot scenario，不复制 Rust 测试代码。
+
+### 23.2 旧编辑器 app 来源
+
+- [ ] `bevy_map_editor/src/camera.rs`、`scene.rs`、`selection*.rs`、`ui/**`：地图编辑相机、对象选择、属性面板、action、保存、handoff；落点为 `cdc_game_editor` map review/edit dock 和 Godot scene workflow。
+- [ ] `bevy_character_editor/src/**`：角色列表、详情表单、AI tab、appearance tab、preview、commands、handoff；落点为 character content form、appearance preview、AI profile editor。
+- [ ] `bevy_item_editor/src/**`：物品分类、fragment 表单、装备/武器/消耗品/任务物品字段、preview、删除/保存；落点为 item content form 和 asset preview。
+- [ ] `bevy_recipe_editor/src/**`：配方材料、产物、工具、工作台、技能要求、导航和校验；落点为 recipe form、reference picker。
+- [ ] `bevy_skill_editor/src/**`：技能树图、节点编辑、前置边、主动/被动配置、handoff；落点为 skill tree graph editor。
+- [ ] `bevy_quest_editor/src/**`：任务图、objective、奖励、对话绑定、world state、graph layout、navigation；落点为 quest graph editor。
+- [ ] `bevy_dialogue_editor/src/**`：对话图、节点/选项/条件/动作、规则预览、连线布局；落点为 dialogue graph editor。
+- [ ] `bevy_gltf_viewer/src/**`：glTF catalog、bbmodel link、preview、socket editor、bounds/material/hierarchy 诊断；落点为 Godot asset preview dock、socket editor 和 asset import diagnostics。
+- [ ] `content_tools/src/app/*.rs`：changed、content、diff-summary、format、references、summarize；落点为 `godot/scripts/tools/content_cli*.gd` 和 `tools/agent/godot-content.ps1`。
+- [D] `bevy_server/src/**`：server 启动、protocol dispatch、subscription、reporting、vision/progression API 不作为运行时迁入；若需要自动化，转译为 Godot headless 工具协议。
+
+### 23.3 旧 crate 来源
+
+- [ ] `game_core/src/simulation/actions.rs`：玩家命令分类、动作执行顺序、失败 reason；落点为 `Simulation.submit_player_command()`。
+- [ ] `game_core/src/simulation/actor_progression.rs`：行动后 AP 判断、自动推进回合、敌方行动、PendingProgressionStep；落点为 Godot 回合系统。
+- [ ] `game_core/src/simulation/combat.rs` 和 `combat_ai/**`：攻击校验、伤害、AI intent/policy/query；落点为 `combat_runner.gd`、`ai_runner.gd`。
+- [ ] `game_core/src/simulation/interaction_behaviors/**`：attack、door、open_container、pickup、scene_transition、talk、wait；落点为 `interaction_executor.gd` 和各 runner。
+- [ ] `game_core/src/simulation/interaction_filters.rs`、`interaction_flow.rs`：交互菜单、目标过滤、自动接近、pending interaction；落点为 `interaction_target_resolver.gd`。
+- [ ] `game_core/src/simulation/quest_progression.rs`、`dialogue.rs`、`skills.rs`、`relationships.rs`：任务、对话、技能、关系联动；落点为对应 core runner。
+- [ ] `game_core/src/simulation/spatial.rs`、`state_queries.rs`、`snapshot.rs`、`state_persistence.rs`：空间查询、snapshot、存档字段；落点为 snapshot codec/loader 和 Save scenario。
+- [ ] `game_core/src/grid/**`、`movement.rs`、`building*.rs`、`vision.rs`：路径、建筑几何、LOS、视野；落点为 `pathfinder.gd`、`map_topology.gd`、vision runner。
+- [ ] `game_core/src/economy.rs`：库存、堆叠、交易、容器、装备相关经济规则；落点为 economy/container/shop/equipment runners。
+- [ ] `game_core/src/goap/**`、`runtime_ai/**`、`turn/**`、`survival.rs`、`overworld.rs`：GOAP、AI controller、回合、资源 tick、overworld；落点为后续 AI/Overworld/Survival 模块。
+- [ ] `game_data/src/character.rs`、`item_edit.rs`、`recipe.rs`、`skill.rs`、`quest.rs`、`dialogue_runtime.rs`：内容 schema、默认值、校验和编辑字段；落点为 `godot/scripts/data` 和 editor forms。
+- [ ] `game_data/src/map/**`、`map_edit.rs`、`world_tiles.rs`、`models.rs`、`interaction/**`：地图 schema、对象、interaction specs、world tile prototype、模型路径；落点为 map scene、MapObjectNode、world tile registry。
+- [ ] `game_data/src/content_registry.rs`、`file_backed.rs`、`content.rs`：路径、加载、保存、引用；落点为 Godot content registry/edit/write service。
+- [ ] `game_data/src/ai*.rs`、`appearance.rs`、`settlement.rs`、`shop.rs`、`overworld.rs`、`outdoor_transition.rs`：AI、appearance、settlement、shop、overworld schema；落点为 data layer 和对应 core/UI。
+- [ ] `game_bevy/src/new_game.rs`、`bootstrap.rs`、`spawn.rs`、`ai_spawn.rs`：初始生成、actor spawn、AI spawn；落点为 Godot runtime bootstrap。
+- [ ] `game_bevy/src/static_world/**`、`tile_world.rs`、`mesh_picking.rs`、`container_visuals.rs`：地图实例、picking、容器视觉；落点为 world scene renderer。
+- [ ] `game_bevy/src/world_render/**`：instancing、tile asset、door、shader、materials；落点为 Godot imported resources、MultiMesh/scene instancing 或原生节点方案。
+- [ ] `game_bevy/src/npc_life/**`、`reservations.rs`：settlement life、reservation、debug sync；落点为 `settlement_life_rules.gd` 和 NpcLife scenario。
+- [ ] `game_editor/src/**`：通用编辑器 shell、preview stage、graph、model hierarchy、window persistence；落点为 Godot editor plugin。
+- [ ] `game_protocol/src/messages.rs`：消息、snapshot、错误 payload；只作为 Godot headless/protocol 决策参考。
+
+## 24. 内容和资产逐项核对附录
+
+### 24.1 `data/` 内容域当前账本
+
+- [~] `data/ai`：8 个文件；待核 GOAP facts、行为模块、profile、settlement NPC group、后台日程和 editor 表单。
+- [~] `data/appearance`：1 个文件；待核 character model、装备覆盖、socket、fallback 模型和运行时绑定。
+- [~] `data/bootstrap`：1 个文件；待核初始地图、entry、玩家 actor、初始背包、任务、world flags、相机。
+- [~] `data/characters`：11 个文件；待核玩家、友方 NPC、中立 NPC、敌人、商人、医生、任务角色、loadout、AI、dialogue/shop 绑定。
+- [~] `data/dialogue_rules`：2 个文件；待核按任务/关系/时间/NPC 状态选择对话 variant。
+- [~] `data/dialogues`：22 个文件；待核节点、选项、条件、动作、任务接取/推进/交付、交易打开、fallback、结束。
+- [~] `data/items`：126 个文件；待核武器、装备、消耗品、材料、工具、任务物品、货币、占位物、模型、效果、价格、重量、堆叠。
+- [~] `data/json`：65 个文件；待核 ammo、attribute、balance、camp relations、clues、effects、encounters、scavenge、structures、tools、weather 等是否仍为权威或需合并。
+- [~] `data/maps`：12 个 JSON 备份；必须逐图和 `godot/scenes/maps/*.tscn` 对照，不再作为新地图权威。
+- [~] `data/overworld`：1 个文件；待核地点解锁、旅行、遭遇、入口、返回。
+- [~] `data/quests`：4 个文件；待核 collect/kill/dialogue/turn-in、奖励、失败、互斥、world flag。
+- [~] `data/recipes`：30 个文件；待核材料、产物、工具、工作台、技能、解锁、XP、队列。
+- [~] `data/settlements`：1 个文件；待核据点成员、角色、锚点、服务、日程。
+- [~] `data/shops`：1 个文件；待核库存、资金、价格倍率、权限、补货。
+- [~] `data/skill_trees`：3 个文件；待核树布局、节点、前置、分类。
+- [~] `data/skills`：13 个文件；待核主动/被动、目标策略、效果、前置、hotbar。
+- [~] `data/world_tiles`：4 个文件；待核 surface、wall、prop、container prototype 与 Godot 资产映射。
+
+### 24.2 Godot 地图 scene 逐图核对
+
+每张地图都要逐项确认：entry point、actor spawn、map object、footprint、blocking、LOS、door、transition、container、pickup、NPC、敌人、模型资源、比例、旋转、重叠、picking、相机初始视角、fog、任务/对话/商店锚点。
+
+- [ ] `factory.tscn`
+- [ ] `forest.tscn`
+- [ ] `hospital.tscn`
+- [ ] `ruins.tscn`
+- [ ] `school.tscn`
+- [ ] `street_a.tscn`
+- [ ] `street_b.tscn`
+- [ ] `subway.tscn`
+- [ ] `supermarket.tscn`
+- [ ] `survivor_outpost_01.tscn`
+- [ ] `survivor_outpost_01_interior.tscn`
+- [ ] `survivor_outpost_01_perimeter.tscn`
+
+### 24.3 旧资产逐文件核对
+
+以下旧资产必须在 Godot 中有明确结论：已导入、以新资源替代、只作源文件保留或废弃。glTF 资产还必须检查 `.import`、依赖 `.bin`、材质、bounds、origin、scale、rotation、collision、picking、运行时引用和编辑器预览。
+
+- [~] `assets/fonts/NotoSansCJKsc-Regular.otf`：中文 UI 字体和 fallback。
+- [~] `assets/shaders/fog_of_war_post_process.wgsl`：只迁视觉语义，不迁 WGSL runtime。
+- [~] `assets/.cdc_bbmodel_links.json`：bbmodel 到 glTF 的来源关系，待迁为 Godot asset metadata 或文档。
+- [~] `assets/bevy_preview/characters/humanoid_mannequin.bbmodel`
+- [~] `assets/bevy_preview/characters/humanoid_mannequin.gltf`
+- [~] `assets/bevy_preview/placeholders/equipment_accessory.gltf`
+- [~] `assets/bevy_preview/placeholders/equipment_back.gltf`
+- [~] `assets/bevy_preview/placeholders/equipment_body.gltf`
+- [~] `assets/bevy_preview/placeholders/equipment_feet.gltf`
+- [~] `assets/bevy_preview/placeholders/equipment_hands.gltf`
+- [~] `assets/bevy_preview/placeholders/equipment_head.gltf`
+- [~] `assets/bevy_preview/placeholders/equipment_legs.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_blunt.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_dagger.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_heavy.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_light.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_pistol.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_pole.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_rifle.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_shotgun.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_sword.gltf`
+- [~] `assets/bevy_preview/placeholders/weapon_unarmed.gltf`
+- [~] `assets/bevy_preview/placeholders/README.txt`
+- [~] `assets/container_placeholders/cabinet_medical.gltf`
+- [~] `assets/container_placeholders/crate_wood.gltf`
+- [~] `assets/container_placeholders/locker_metal.gltf`
+- [~] `assets/world_tiles/building_wall/corner.gltf` + `corner.bin`
+- [~] `assets/world_tiles/building_wall/cross.gltf` + `cross.bin`
+- [~] `assets/world_tiles/building_wall/end.gltf` + `end.bin`
+- [~] `assets/world_tiles/building_wall/floor_flat.gltf` + `floor_flat.bin`
+- [~] `assets/world_tiles/building_wall/isolated.gltf` + `isolated.bin`
+- [~] `assets/world_tiles/building_wall/straight.gltf` + `straight.bin`
+- [~] `assets/world_tiles/building_wall/t_junction.gltf` + `t_junction.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/barrel_rust.gltf` + `barrel_rust.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/barricade_scrap.gltf` + `barricade_scrap.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/bush_dry.gltf` + `bush_dry.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/cabinet_wood.gltf` + `cabinet_wood.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/chair_metal.gltf` + `chair_metal.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/counter_canteen.gltf` + `counter_canteen.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/crate_stack_large.gltf` + `crate_stack_large.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/desk_wood.gltf` + `desk_wood.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/gate_pillar_concrete.gltf` + `gate_pillar_concrete.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/pallet_stack.gltf` + `pallet_stack.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/roadblock_concrete.gltf` + `roadblock_concrete.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/sandbag_barrier.gltf` + `sandbag_barrier.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/shelf_metal.gltf` + `shelf_metal.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/table_metal.gltf` + `table_metal.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/tree_dead.gltf` + `tree_dead.bin`
+- [~] `assets/world_tiles/prop_placeholder_basic/wrecked_car.gltf` + `wrecked_car.bin`
+- [~] `assets/world_tiles/surface_placeholder_basic/cliff_inner_corner.gltf` + `cliff_inner_corner.bin`
+- [~] `assets/world_tiles/surface_placeholder_basic/cliff_outer_corner.gltf` + `cliff_outer_corner.bin`
+- [~] `assets/world_tiles/surface_placeholder_basic/cliff_side.gltf` + `cliff_side.bin`
+- [~] `assets/world_tiles/surface_placeholder_basic/flat.gltf` + `flat.bin`
+- [~] `assets/world_tiles/surface_placeholder_basic/ramp_east.gltf` + `ramp_east.bin`
+- [~] `assets/world_tiles/surface_placeholder_basic/ramp_north.gltf` + `ramp_north.bin`
+- [~] `assets/world_tiles/surface_placeholder_basic/ramp_south.gltf` + `ramp_south.bin`
+- [~] `assets/world_tiles/surface_placeholder_basic/ramp_west.gltf` + `ramp_west.bin`
+
+### 24.4 表现迁移不可遗漏项
+
+- [ ] 模型辨识：地图物体不能退化成重叠方块；fallback 必须能看出类别并报告原资源。
+- [ ] 模型空间：所有可见模型核 scale、origin、rotation、floor、footprint、bounds、collision、pick body。
+- [ ] 角色表现：玩家、友方、中立、敌对、尸体、掉落、容器必须有不同视觉语言。
+- [ ] 交互反馈：hover 光标、outline、tooltip、interaction prompt、右键菜单、禁用 reason。
+- [ ] 移动反馈：路径预览、不可达提示、AP 不足提示、移动插值、移动结束 snap。
+- [ ] 战斗反馈：目标预览、射程/LOS、命中/闪避、伤害、暴击、受击、死亡、尸体、掉落。
+- [ ] UI 反馈：toast/message log、按钮禁用态、失败原因、空状态、刷新后选中保持或清空策略。
+- [ ] 地图反馈：fog、楼层过滤、遮挡淡出、门状态、transition marker、任务 marker。
+- [ ] 声音反馈：按钮、打开/关闭面板、脚步、门、拾取、攻击、受击、死亡、交易、制作、任务完成。
+- [ ] Debug 表现：MapVisual 能指出错误模型、fallback、重叠、缺 collision、缺 pick proxy、异常 bounds。
