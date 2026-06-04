@@ -227,16 +227,46 @@ func _spawn_corpse_markers(root: Node3D, corpses: Array) -> int:
 			"target_id": str(corpse_data.get("container_id", "")),
 		})
 		node.position = _grid_to_world(_dictionary_or_empty(corpse_data.get("grid_position", {})), 0.18)
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.72, 0.18, 0.5)
-		var visual := MeshInstance3D.new()
-		visual.name = "CorpseMarker"
-		visual.mesh = mesh
-		visual.material_override = corpse_material
-		node.add_child(visual)
+		if not _add_corpse_model(node, corpse_data):
+			_add_corpse_fallback_mesh(node)
 		_add_pickable_box(node, Vector3(0.9, 0.5, 0.75), Vector3(0.0, 0.15, 0.0))
 		root.add_child(node)
 	return corpses.size()
+
+
+func _add_corpse_model(parent: Node3D, corpse_data: Dictionary) -> bool:
+	var model_asset := str(corpse_data.get("model_asset", "")).strip_edges()
+	if model_asset.is_empty():
+		return false
+	var scene_path := "%s/%s" % [ASSET_SCENE_DIR, model_asset]
+	if not ResourceLoader.exists(scene_path):
+		push_warning("尸体模型资源不存在，使用 fallback mesh: %s" % scene_path)
+		return false
+	var packed: PackedScene = load(scene_path)
+	if packed == null:
+		push_warning("尸体模型资源加载失败，使用 fallback mesh: %s" % scene_path)
+		return false
+	var model_root := packed.instantiate()
+	if model_root == null:
+		push_warning("尸体模型资源实例化失败，使用 fallback mesh: %s" % scene_path)
+		return false
+	model_root.name = "CorpseModel"
+	model_root.set_meta("model_asset", model_asset)
+	model_root.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	model_root.scale = Vector3(0.92, 0.92, 0.92)
+	model_root.position = Vector3(0.0, -0.08, 0.0)
+	parent.add_child(model_root)
+	return true
+
+
+func _add_corpse_fallback_mesh(parent: Node3D) -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.72, 0.18, 0.5)
+	var visual := MeshInstance3D.new()
+	visual.name = "CorpseMarker"
+	visual.mesh = mesh
+	visual.material_override = corpse_material
+	parent.add_child(visual)
 
 
 func _add_actor_model(parent: Node3D, actor_data: Dictionary) -> bool:

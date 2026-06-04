@@ -108,6 +108,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false) != null:
 		errors.append("consumed pickup node was not removed from generated scene")
 	_expect_ground_grid_move(errors, game_root)
+	await _expect_corpse_world_interaction(errors, game_root)
 	var move_camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if move_camera == null:
 		errors.append("missing runtime camera before mouse ground move")
@@ -246,6 +247,106 @@ func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
 		errors.append("ground grid fallback move should update player grid")
 	if not _hud_interaction_line(game_root).contains("移动"):
 		errors.append("ground grid fallback selection should show move prompt")
+
+
+func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) -> void:
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("corpse interaction smoke missing player actor")
+		return
+	var player_grid: Dictionary = _player_grid(game_root)
+	var original_attack_power: float = player.attack_power
+	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
+	var original_ap: float = player.ap
+	var original_equipment: Dictionary = player.equipment.duplicate(true)
+	player.attack_power = 99.0
+	player.combat_attributes["accuracy"] = 100.0
+	player.ap = 6.0
+	player.equipment = {}
+	var target_grid := {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}
+	var target_id: int = game_root.simulation.register_actor({
+		"definition_id": "corpse_world_smoke",
+		"display_name": "Corpse World Smoke",
+		"kind": "npc",
+		"side": "hostile",
+		"group_id": "hostile",
+		"map_id": game_root.simulation.active_map_id,
+		"appearance_profile_id": "default_humanoid",
+		"model_asset": "preview_placeholders/characters/humanoid_mannequin.gltf",
+		"grid_position": GridCoord.from_dictionary(target_grid),
+		"ap": 0.0,
+		"turn_open": false,
+		"max_hp": 4.0,
+		"hp": 4.0,
+		"inventory": {"1006": 1},
+		"combat_attributes": {"evasion": 0.0},
+	})
+	var target: RefCounted = game_root.simulation.actor_registry.get_actor(target_id)
+	if target != null:
+		target.defense = 0.0
+	var attack_result: Dictionary = game_root.simulation.submit_player_command({
+		"kind": "attack",
+		"actor_id": 1,
+		"target_actor_id": target_id,
+		"topology": game_root.world_result.get("map", {}),
+	})
+	player.attack_power = original_attack_power
+	player.combat_attributes = original_attributes
+	player.ap = original_ap
+	player.equipment = original_equipment
+	if not bool(attack_result.get("success", false)) or not bool(attack_result.get("defeated", false)):
+		errors.append("corpse world smoke attack should defeat target: %s" % attack_result.get("reason", "unknown"))
+		if game_root.simulation.actor_registry.get_actor(target_id) != null:
+			game_root.simulation.actor_registry.unregister_actor(target_id)
+		return
+	game_root._rebuild_world_after_runtime_change()
+	await process_frame
+	var corpse_node: Node3D = _corpse_node_for_source_actor(game_root, target_id)
+	if corpse_node == null:
+		errors.append("defeated target should render a Corpse_* world node")
+		return
+	if corpse_node.find_child("CorpseModel", true, false) == null:
+		errors.append("corpse world node should reuse defeated actor model asset")
+	var pickable_body: Node = corpse_node.find_child("PickableBody", true, false)
+	if pickable_body == null or not pickable_body.has_meta("interaction_target"):
+		errors.append("corpse world node should expose a pickable interaction body")
+	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if camera != null:
+		var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(corpse_node.global_position))
+		if not bool(hover_result.get("success", false)):
+			errors.append("corpse hover raycast failed: %s" % hover_result.get("reason", "unknown"))
+		elif str(hover_result.get("kind", "")) != "interaction":
+			errors.append("corpse hover should select interaction target")
+		_expect_hover_cursor_at_node(errors, game_root, corpse_node)
+	var selection: Dictionary = game_root.select_interaction_node(corpse_node)
+	if not bool(selection.get("success", false)):
+		errors.append("corpse selection failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
+	if not _hud_interaction_line(game_root).contains("打开"):
+		errors.append("HUD should show open container prompt for corpse")
+	var open_result: Dictionary = _execute_primary_and_complete(game_root)
+	if not bool(open_result.get("success", false)):
+		errors.append("corpse open container failed: %s" % open_result.get("reason", "unknown"))
+	if not game_root.container_panel.visible:
+		errors.append("opening corpse should show container panel")
+	if not str(_actor_by_id(game_root.simulation.snapshot(), 1).get("active_container_id", "")).begins_with("corpse_corpse_world_smoke_"):
+		errors.append("opening corpse should set player active_container_id")
+	game_root.close_active_container("corpse_world_smoke_cleanup")
+
+
+func _corpse_node_for_source_actor(game_root: Node, source_actor_id: int) -> Node3D:
+	var corpse_id := ""
+	for corpse in _array_or_empty(game_root.simulation.snapshot().get("corpse_containers", [])):
+		var corpse_data: Dictionary = corpse
+		if int(corpse_data.get("source_actor_id", 0)) == source_actor_id:
+			corpse_id = str(corpse_data.get("container_id", ""))
+			break
+	if corpse_id.is_empty():
+		return null
+	return game_root.find_child("Corpse_%s" % corpse_id, true, false) as Node3D
 
 
 func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
@@ -667,3 +768,9 @@ func _expect_player_runtime_marker(errors: Array[String], player_node: Node3D) -
 	var material := marker.material_override as StandardMaterial3D
 	if material == null or not material.no_depth_test:
 		errors.append("player runtime marker should render above crowded map meshes")
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

@@ -354,6 +354,8 @@ func _create_corpse_container(simulation: RefCounted, target: RefCounted, defeat
 		"source_actor_definition_id": target.definition_id,
 		"source_actor_kind": target.kind,
 		"defeated_by_actor_id": defeated_by_actor_id,
+		"appearance_profile_id": target.appearance_profile_id,
+		"model_asset": target.model_asset,
 		"equipped_slots": equipped_slots,
 		"money": max(0, int(target.money)),
 		"inventory": inventory,

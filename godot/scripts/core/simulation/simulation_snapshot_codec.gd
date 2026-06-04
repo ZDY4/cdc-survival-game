@@ -126,6 +126,8 @@ func _corpse_container_snapshots(corpse_containers: Dictionary) -> Array[Diction
 			"source_actor_definition_id": str(corpse.get("source_actor_definition_id", "")),
 			"source_actor_kind": str(corpse.get("source_actor_kind", "")),
 			"defeated_by_actor_id": int(corpse.get("defeated_by_actor_id", 0)),
+			"appearance_profile_id": str(corpse.get("appearance_profile_id", "")),
+			"model_asset": str(corpse.get("model_asset", "")),
 			"equipped_slots": _dictionary_or_empty(corpse.get("equipped_slots", {})).duplicate(true),
 			"money": max(0, int(corpse.get("money", 0))),
 			"inventory": _inventory_entries.normalize(corpse.get("inventory", [])),

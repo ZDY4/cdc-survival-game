@@ -147,6 +147,8 @@ func _load_corpse_containers(entries: Variant) -> Dictionary:
 			"source_actor_definition_id": str(corpse_data.get("source_actor_definition_id", "")),
 			"source_actor_kind": str(corpse_data.get("source_actor_kind", "")),
 			"defeated_by_actor_id": int(corpse_data.get("defeated_by_actor_id", 0)),
+			"appearance_profile_id": str(corpse_data.get("appearance_profile_id", "")),
+			"model_asset": str(corpse_data.get("model_asset", "")),
 			"equipped_slots": _dictionary_or_empty(corpse_data.get("equipped_slots", {})).duplicate(true),
 			"money": max(0, int(corpse_data.get("money", 0))),
 			"inventory": _inventory_entries.normalize(corpse_data.get("inventory", [])),

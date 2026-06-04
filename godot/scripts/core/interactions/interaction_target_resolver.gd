@@ -244,10 +244,13 @@ func _option_for_target(target_data: Dictionary) -> Dictionary:
 				"entry_point_id": target_data.get("entry_point_id", ""),
 			}
 		"container":
+			var target_name := str(target_data.get("display_name", "容器")).strip_edges()
+			if target_name.is_empty():
+				target_name = "容器"
 			return {
 				"id": "open_container",
 				"kind": "open_container",
-				"display_name": target_data.get("display_name", "打开容器"),
+				"display_name": "打开%s" % target_name,
 				"target_id": target_data.get("target_id", ""),
 			}
 	return {}

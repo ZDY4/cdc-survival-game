@@ -151,8 +151,20 @@ func _corpses_on_map(corpses: Array, active_map_id: String) -> Array[Dictionary]
 		var corpse_data: Dictionary = _dictionary_or_empty(corpse)
 		if str(corpse_data.get("map_id", "")) != active_map_id:
 			continue
-		output.append(corpse_data.duplicate(true))
+		var snapshot: Dictionary = corpse_data.duplicate(true)
+		var model_asset := str(snapshot.get("model_asset", ""))
+		if model_asset.is_empty():
+			model_asset = _model_asset_for_appearance(str(snapshot.get("appearance_profile_id", "")))
+		if model_asset.is_empty():
+			model_asset = _model_asset_for_actor_definition(str(snapshot.get("source_actor_definition_id", "")))
+		snapshot["model_asset"] = model_asset
+		output.append(snapshot)
 	return output
+
+
+func _model_asset_for_actor_definition(definition_id: String) -> String:
+	var appearance_profile_id := _appearance_profile_id_for_actor(definition_id)
+	return _model_asset_for_appearance(appearance_profile_id)
 
 
 func _apply_corpse_interaction_targets(map_snapshot: Dictionary, corpses: Array[Dictionary]) -> void:
