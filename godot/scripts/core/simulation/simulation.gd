@@ -232,11 +232,21 @@ func is_actor_visible_to_actor(observer_actor_id: int, target_actor_id: int) -> 
 
 
 func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
-	return _ai_runner.decide_actor_intent(self, _ai_rules, actor_id, context)
+	var resolved_context: Dictionary = context.duplicate(true)
+	if not resolved_context.has("weapon_profile"):
+		var actor: RefCounted = actor_registry.get_actor(actor_id)
+		if actor != null:
+			resolved_context["weapon_profile"] = _npc_weapon_context(actor, _attack_profile(actor, item_library))
+	return _ai_runner.decide_actor_intent(self, _ai_rules, actor_id, resolved_context)
 
 
 func decide_all_ai_intents(context: Dictionary = {}) -> Array[Dictionary]:
-	return _ai_runner.decide_all_ai_intents(self, _ai_rules, context)
+	var output: Array[Dictionary] = []
+	for actor in actor_registry.actors():
+		if actor == null or actor.kind == "player":
+			continue
+		output.append(decide_actor_intent(actor.actor_id, context))
+	return output
 
 
 func unlock_location(location_id: String) -> bool:
@@ -1616,21 +1626,52 @@ func _tick_actor_active_effects() -> void:
 
 
 func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
+	var weapon_profile: Dictionary = _attack_profile(actor, item_library)
 	var intent: Dictionary = decide_actor_intent(actor.actor_id, {
 		"topology": topology,
 		"active_map_id": active_map_id,
+		"weapon_profile": _npc_weapon_context(actor, weapon_profile),
 	})
 	var target_actor_id: int = int(intent.get("target_actor_id", _player_actor_id()))
 	match str(intent.get("intent", "")):
 		"attack":
+			var attack_cost: float = float(weapon_profile.get("ap_cost", DEFAULT_ATTACK_AP))
+			if actor.ap < attack_cost:
+				return {
+					"success": false,
+					"actor_id": actor.actor_id,
+					"target_actor_id": target_actor_id,
+					"intent": "attack",
+					"reason": "ap_insufficient_npc_attack",
+					"required_ap": attack_cost,
+					"available_ap": actor.ap,
+				}
+			var ammo_check: Dictionary = _attack_ammo_check(actor, weapon_profile)
+			if not bool(ammo_check.get("success", true)):
+				ammo_check["actor_id"] = actor.actor_id
+				ammo_check["target_actor_id"] = target_actor_id
+				ammo_check["intent"] = "attack"
+				return ammo_check
+			_spend_ap(actor, attack_cost, "npc_attack")
 			_enter_combat([actor.actor_id, target_actor_id], "npc_attack")
-			var profile: Dictionary = _attack_profile(actor, item_library)
 			var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, topology, {
-				"range": int(profile.get("range", DEFAULT_ATTACK_RANGE)),
-				"weapon_profile": profile,
+				"range": int(weapon_profile.get("range", DEFAULT_ATTACK_RANGE)),
+				"weapon_profile": weapon_profile,
 			})
+			if bool(result.get("success", false)):
+				var ammo_result: Dictionary = _consume_attack_ammo(actor, weapon_profile)
+				if bool(ammo_result.get("consumed", false)):
+					result["ammo_consumed"] = ammo_result
 			result["intent"] = "attack"
 			return result
+		"reload":
+			var reload_result: Dictionary = _submit_reload_equipped_action(actor, {
+				"slot_id": str(weapon_profile.get("equipment_slot", "main_hand")),
+			}, item_library)
+			reload_result["actor_id"] = actor.actor_id
+			reload_result["intent"] = "reload"
+			reload_result["target_actor_id"] = target_actor_id
+			return reload_result
 		"approach":
 			var move_result: Dictionary = _npc_approach(actor, target_actor_id, topology)
 			move_result["intent"] = "approach"
@@ -1640,6 +1681,33 @@ func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
 		"actor_id": actor.actor_id,
 		"intent": "idle",
 		"reason": intent.get("reason", "idle"),
+	}
+
+
+func _npc_weapon_context(actor: RefCounted, profile: Dictionary) -> Dictionary:
+	var slot_id: String = str(profile.get("equipment_slot", "main_hand"))
+	var ammo_type: String = str(profile.get("ammo_type", ""))
+	var ammo_required: int = max(1, int(profile.get("ammo_per_attack", 1)))
+	var loaded: int = int(actor.weapon_ammo.get(slot_id, 0))
+	var uses_magazine: bool = actor.weapon_ammo.has(slot_id) and not ammo_type.is_empty() and ammo_type != "<null>"
+	var inventory_ammo: int = int(actor.inventory.get(ammo_type, 0)) if not ammo_type.is_empty() and ammo_type != "<null>" else 0
+	var ammo_ready: bool = true
+	if not ammo_type.is_empty() and ammo_type != "<null>":
+		ammo_ready = loaded >= ammo_required if uses_magazine else inventory_ammo >= ammo_required
+	return {
+		"item_id": str(profile.get("item_id", "")),
+		"range": int(profile.get("range", DEFAULT_ATTACK_RANGE)),
+		"attack_range": int(profile.get("range", DEFAULT_ATTACK_RANGE)),
+		"ap_cost": float(profile.get("ap_cost", DEFAULT_ATTACK_AP)),
+		"slot_id": slot_id,
+		"ammo_type": ammo_type,
+		"ammo_per_attack": ammo_required,
+		"uses_magazine": uses_magazine,
+		"loaded": loaded,
+		"capacity": int(profile.get("max_ammo", 0)),
+		"inventory": inventory_ammo,
+		"ammo_ready": ammo_ready,
+		"can_reload": uses_magazine and loaded < ammo_required and inventory_ammo > 0,
 	}
 
 

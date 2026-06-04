@@ -19,6 +19,14 @@ func decide_actor_intent(simulation: RefCounted, ai_rules: RefCounted, actor_id:
 			"ap": float(intent.get("ap", 0.0)),
 			"target_grid": _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true),
 			"path": _array_or_empty(intent.get("path", [])).duplicate(true),
+			"weapon_item_id": str(intent.get("weapon_item_id", "")),
+			"weapon_slot_id": str(intent.get("weapon_slot_id", "")),
+			"ammo_type": str(intent.get("ammo_type", "")),
+			"ammo_ready": bool(intent.get("ammo_ready", true)),
+			"can_reload": bool(intent.get("can_reload", false)),
+			"loaded": int(intent.get("loaded", 0)),
+			"capacity": int(intent.get("capacity", 0)),
+			"inventory_ammo": int(intent.get("inventory_ammo", 0)),
 		}
 		simulation.emit_event("ai_intent_decided", payload)
 	return intent

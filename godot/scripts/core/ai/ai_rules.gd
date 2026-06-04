@@ -21,7 +21,8 @@ func decide_actor_intent(actor: RefCounted, actors: Array, context: Dictionary =
 func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> Dictionary:
 	var ai: Dictionary = _dictionary_or_empty(actor.ai)
 	var aggro_range: float = max(0.0, float(ai.get("aggro_range", 8.0)))
-	var attack_range: float = max(0.0, float(ai.get("attack_range", 1.0)))
+	var weapon: Dictionary = _dictionary_or_empty(context.get("weapon_profile", {}))
+	var attack_range: float = _hostile_attack_range(ai, weapon)
 	var target_result: Dictionary = _nearest_target(actor, actors, aggro_range, context)
 	var target: RefCounted = target_result.get("actor")
 	if target == null:
@@ -29,12 +30,25 @@ func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> D
 		idle["aggro_range"] = aggro_range
 		idle["attack_range"] = attack_range
 		idle["ap"] = float(actor.ap)
+		idle.merge(_weapon_debug_payload(weapon), true)
 		idle["candidate_count"] = int(target_result.get("candidate_count", 0))
 		idle["blocked_by_los_count"] = int(target_result.get("blocked_by_los_count", 0))
 		return idle
 
 	var distance: float = _grid_distance(actor.grid_position, target.grid_position)
 	if distance <= attack_range:
+		if bool(weapon.get("can_reload", false)):
+			return _reload_intent(actor, target, distance, aggro_range, attack_range, weapon)
+		if not bool(weapon.get("ammo_ready", true)):
+			var no_ammo: Dictionary = _idle_intent(actor, "weapon_ammo_unavailable")
+			no_ammo["target_actor_id"] = target.actor_id
+			no_ammo["target_grid"] = target.grid_position.to_dictionary()
+			no_ammo["distance"] = distance
+			no_ammo["aggro_range"] = aggro_range
+			no_ammo["attack_range"] = attack_range
+			no_ammo["ap"] = float(actor.ap)
+			no_ammo.merge(_weapon_debug_payload(weapon), true)
+			return no_ammo
 		return {
 			"success": true,
 			"actor_id": actor.actor_id,
@@ -46,7 +60,17 @@ func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> D
 			"attack_range": attack_range,
 			"ap": float(actor.ap),
 			"reason": "target_in_attack_range",
-		}
+		}.merged(_weapon_debug_payload(weapon), true)
+	if _weapon_needs_ammo(weapon) and not bool(weapon.get("ammo_ready", true)) and not bool(weapon.get("can_reload", false)):
+		var blocked: Dictionary = _idle_intent(actor, "weapon_ammo_unavailable")
+		blocked["target_actor_id"] = target.actor_id
+		blocked["target_grid"] = target.grid_position.to_dictionary()
+		blocked["distance"] = distance
+		blocked["aggro_range"] = aggro_range
+		blocked["attack_range"] = attack_range
+		blocked["ap"] = float(actor.ap)
+		blocked.merge(_weapon_debug_payload(weapon), true)
+		return blocked
 	return {
 		"success": true,
 		"actor_id": actor.actor_id,
@@ -58,7 +82,53 @@ func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> D
 		"attack_range": attack_range,
 		"ap": float(actor.ap),
 		"reason": "target_in_aggro_range",
+	}.merged(_weapon_debug_payload(weapon), true)
+
+
+func _reload_intent(actor: RefCounted, target: RefCounted, distance: float, aggro_range: float, attack_range: float, weapon: Dictionary) -> Dictionary:
+	var intent := {
+		"success": true,
+		"actor_id": actor.actor_id,
+		"intent": "reload",
+		"target_actor_id": target.actor_id,
+		"target_grid": target.grid_position.to_dictionary(),
+		"distance": distance,
+		"aggro_range": aggro_range,
+		"attack_range": attack_range,
+		"ap": float(actor.ap),
+		"reason": "weapon_magazine_empty",
 	}
+	intent.merge(_weapon_debug_payload(weapon), true)
+	return intent
+
+
+func _hostile_attack_range(ai: Dictionary, weapon: Dictionary) -> float:
+	if weapon.has("attack_range"):
+		return max(0.0, float(weapon.get("attack_range", 1.0)))
+	if weapon.has("range"):
+		return max(0.0, float(weapon.get("range", 1.0)))
+	return max(0.0, float(ai.get("attack_range", 1.0)))
+
+
+func _weapon_debug_payload(weapon: Dictionary) -> Dictionary:
+	if weapon.is_empty():
+		return {}
+	return {
+		"weapon_item_id": str(weapon.get("item_id", "")),
+		"weapon_slot_id": str(weapon.get("slot_id", "")),
+		"ammo_type": str(weapon.get("ammo_type", "")),
+		"ammo_ready": bool(weapon.get("ammo_ready", true)),
+		"can_reload": bool(weapon.get("can_reload", false)),
+		"loaded": int(weapon.get("loaded", 0)),
+		"capacity": int(weapon.get("capacity", 0)),
+		"inventory_ammo": int(weapon.get("inventory", 0)),
+		"ap_cost": float(weapon.get("ap_cost", 0.0)),
+	}
+
+
+func _weapon_needs_ammo(weapon: Dictionary) -> bool:
+	var ammo_type: String = str(weapon.get("ammo_type", ""))
+	return not ammo_type.is_empty() and ammo_type != "<null>"
 
 
 func _nearest_target(actor: RefCounted, actors: Array, aggro_range: float, context: Dictionary) -> Dictionary:

@@ -68,6 +68,8 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if _event_count(simulation.snapshot(), "attack_resolved") <= 0:
 		errors.append("adjacent hostile attack should emit attack_resolved even when armor blocks damage")
 
+	_expect_hostile_weapon_and_reload_intents(errors, simulation, registry, player_grid)
+
 	zombie.grid_position = GridCoord.new(player_grid.x + 20, player_grid.y, player_grid.z)
 	var idle: Dictionary = simulation.decide_actor_intent(zombie_id)
 	if idle.get("intent", "") != "idle" or idle.get("reason", "") != "no_target_in_aggro_range":
@@ -131,7 +133,67 @@ func _expect_hostile_los_blocked_intent(errors: Array[String], simulation: RefCo
 	zombie.grid_position = original_grid
 
 
-func _register_character(simulation: RefCounted, registry: RefCounted, definition_id: String, grid: RefCounted) -> int:
+func _expect_hostile_weapon_and_reload_intents(errors: Array[String], simulation: RefCounted, registry: RefCounted, player_grid: RefCounted) -> void:
+	var topology: Dictionary = _topology(simulation, registry)
+	var ranged_ai := {"aggro_range": 20.0, "attack_range": 1.2}
+	var pistol_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 4, player_grid.y, player_grid.z + 1), {
+		"ai": ranged_ai,
+		"equipment": {"main_hand": "1004"},
+		"weapon_ammo": {"main_hand": 1},
+		"inventory": {"1009": 2},
+	})
+	var pistol_intent: Dictionary = simulation.decide_actor_intent(pistol_id, {
+		"topology": topology,
+		"active_map_id": simulation.active_map_id,
+	})
+	if pistol_intent.get("intent", "") != "attack":
+		errors.append("armed hostile should attack inside weapon range, got %s/%s" % [pistol_intent.get("intent", ""), pistol_intent.get("reason", "")])
+	if int(pistol_intent.get("attack_range", 0)) < 8 or str(pistol_intent.get("weapon_item_id", "")) != "1004":
+		errors.append("armed hostile intent should use equipped weapon range and expose weapon item id")
+	var attack_events_before: int = _event_count(simulation.snapshot(), "attack_resolved")
+	var attack_result: Dictionary = simulation.submit_player_command({"kind": "wait", "topology": topology})
+	if not _npc_results_include_attack(_array_or_empty(attack_result.get("npc_results", [])), pistol_id):
+		errors.append("armed hostile should attack during world turn from weapon range")
+	var pistol: RefCounted = simulation.actor_registry.get_actor(pistol_id)
+	if pistol == null or int(pistol.weapon_ammo.get("main_hand", 0)) != 0:
+		errors.append("armed hostile attack should consume loaded magazine ammo")
+	if _event_count(simulation.snapshot(), "attack_resolved") <= attack_events_before:
+		errors.append("armed hostile attack should emit attack_resolved")
+
+	var reload_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 4, player_grid.y, player_grid.z + 2), {
+		"ai": ranged_ai,
+		"equipment": {"main_hand": "1004"},
+		"weapon_ammo": {"main_hand": 0},
+		"inventory": {"1009": 2},
+	})
+	var reload_intent: Dictionary = simulation.decide_actor_intent(reload_id, {
+		"topology": topology,
+		"active_map_id": simulation.active_map_id,
+	})
+	if reload_intent.get("intent", "") != "reload" or reload_intent.get("reason", "") != "weapon_magazine_empty":
+		errors.append("empty magazine hostile should reload before attacking")
+	var reload_result: Dictionary = simulation.submit_player_command({"kind": "wait", "topology": topology})
+	if not _npc_results_include_intent(_array_or_empty(reload_result.get("npc_results", [])), reload_id, "reload"):
+		errors.append("empty magazine hostile should reload during world turn")
+	var reloader: RefCounted = simulation.actor_registry.get_actor(reload_id)
+	if reloader == null or int(reloader.weapon_ammo.get("main_hand", 0)) <= 0 or int(reloader.inventory.get("1009", 0)) >= 2:
+		errors.append("hostile reload should move ammo from inventory into magazine")
+
+	var dry_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 4, player_grid.y, player_grid.z + 3), {
+		"ai": ranged_ai,
+		"equipment": {"main_hand": "1004"},
+		"weapon_ammo": {"main_hand": 0},
+		"inventory": {},
+	})
+	var dry_intent: Dictionary = simulation.decide_actor_intent(dry_id, {
+		"topology": topology,
+		"active_map_id": simulation.active_map_id,
+	})
+	if dry_intent.get("intent", "") != "idle" or dry_intent.get("reason", "") != "weapon_ammo_unavailable":
+		errors.append("hostile with empty magazine and no ammo should idle with weapon_ammo_unavailable, got %s/%s" % [dry_intent.get("intent", ""), dry_intent.get("reason", "")])
+
+
+func _register_character(simulation: RefCounted, registry: RefCounted, definition_id: String, grid: RefCounted, overrides: Dictionary = {}) -> int:
 	var record: Dictionary = registry.get_library("characters").get(definition_id, {})
 	var data: Dictionary = record.get("data", {})
 	var identity: Dictionary = data.get("identity", {})
@@ -140,7 +202,7 @@ func _register_character(simulation: RefCounted, registry: RefCounted, definitio
 	var attributes: Dictionary = data.get("attributes", {})
 	var sets: Dictionary = attributes.get("sets", {})
 	var combat_attributes: Dictionary = sets.get("combat", {})
-	return simulation.register_actor({
+	var request := {
 		"definition_id": definition_id,
 		"display_name": str(identity.get("display_name", definition_id)),
 		"kind": _actor_kind(str(data.get("archetype", "npc"))),
@@ -154,7 +216,10 @@ func _register_character(simulation: RefCounted, registry: RefCounted, definitio
 		"xp_reward": int(combat.get("xp_reward", 0)),
 		"ai": data.get("ai", {}),
 		"life": data.get("life", {}),
-	})
+	}
+	for key in overrides.keys():
+		request[key] = overrides[key]
+	return simulation.register_actor(request)
 
 
 func _actor_kind(archetype: String) -> String:
@@ -189,9 +254,13 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 
 
 func _npc_results_include_attack(results: Array, actor_id: int) -> bool:
+	return _npc_results_include_intent(results, actor_id, "attack")
+
+
+func _npc_results_include_intent(results: Array, actor_id: int, intent: String) -> bool:
 	for result in results:
 		var result_data: Dictionary = _dictionary_or_empty(result)
-		if int(result_data.get("actor_id", 0)) == actor_id and str(result_data.get("intent", "")) == "attack":
+		if int(result_data.get("actor_id", 0)) == actor_id and str(result_data.get("intent", "")) == intent:
 			return true
 	return false
 
