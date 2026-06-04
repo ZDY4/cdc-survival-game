@@ -112,6 +112,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("manual turn-in button should be enabled after objective completion")
 	_turn_in_button(game_root, "find_medicine").pressed.emit()
 	await process_frame
+	if not _journal_feedback_text(game_root).contains("已完成 医院取药"):
+		errors.append("journal turn-in should show completion feedback")
+	if not _journal_feedback_text(game_root).contains("技能点 1"):
+		errors.append("journal turn-in should show reward feedback")
 	if _quest_text(game_root).contains("医院取药"):
 		errors.append("manual quest should leave active journal after turn-in")
 	if not _completed_quest_text(game_root).contains("医院取药 | 已完成"):
@@ -183,6 +187,11 @@ func _detail_text(game_root: Node) -> String:
 	if body is Label:
 		parts.append((body as Label).text)
 	return "\n".join(parts)
+
+
+func _journal_feedback_text(game_root: Node) -> String:
+	var label: Label = game_root.journal_panel.find_child("JournalFeedbackLine", true, false) as Label
+	return "" if label == null else label.text
 
 
 func _hud_quest_line(game_root: Node) -> String:

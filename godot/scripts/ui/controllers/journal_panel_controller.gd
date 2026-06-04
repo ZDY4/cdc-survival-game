@@ -9,9 +9,11 @@ var _completed_box: VBoxContainer
 var _detail_title_label: Label
 var _detail_body_label: Label
 var _track_button: Button
+var _feedback_label: Label
 var _last_snapshot: Dictionary = {}
 var _selected_quest_id := ""
 var _tracked_quest_id := ""
+var _journal_feedback_text := ""
 
 
 func _ready() -> void:
@@ -32,6 +34,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		quests.size(),
 		int(snapshot.get("completed_count", 0)),
 	]
+	_feedback_label.text = _journal_feedback_text
 	_clear_quests()
 	_clear_completed_quests()
 	if quests.is_empty():
@@ -102,12 +105,14 @@ func _build_layout() -> void:
 	_track_button.custom_minimum_size = Vector2(64, 28)
 	_track_button.focus_mode = Control.FOCUS_NONE
 	_track_button.pressed.connect(_toggle_tracked_quest, CONNECT_DEFERRED)
+	_feedback_label = _label("JournalFeedbackLine")
 	box.add_child(_summary_label)
 	box.add_child(_quest_box)
 	box.add_child(_completed_box)
 	box.add_child(_detail_title_label)
 	box.add_child(_detail_body_label)
 	box.add_child(_track_button)
+	box.add_child(_feedback_label)
 
 
 func _quest_title(quest: Dictionary) -> Button:
@@ -174,10 +179,17 @@ func _quest_reward(quest: Dictionary) -> HBoxContainer:
 	button.disabled = not bool(quest.get("turn_in_ready", false))
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	var quest_id := str(quest.get("quest_id", ""))
+	var quest_title := str(quest.get("title", quest_id))
+	var reward_text := _reward_text(quest.get("rewards", {}))
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("turn_in_player_quest"):
-			root.turn_in_player_quest(quest_id)
+			var result: Dictionary = root.turn_in_player_quest(quest_id)
+			if bool(result.get("success", false)):
+				_journal_feedback_text = "已完成 %s，获得奖励: %s" % [quest_title, reward_text]
+			else:
+				_journal_feedback_text = "交付 %s 失败: %s" % [quest_title, _turn_in_failure_text(str(result.get("reason", "unknown")))]
+			_feedback_label.text = _journal_feedback_text
 	, CONNECT_DEFERRED)
 	row.add_child(label)
 	row.add_child(button)
@@ -247,6 +259,20 @@ func _reward_text(rewards: Dictionary) -> String:
 	if int(rewards.get("skill_points", 0)) > 0:
 		parts.append("技能点 %d" % int(rewards.get("skill_points", 0)))
 	return "无" if parts.is_empty() else " / ".join(parts)
+
+
+func _turn_in_failure_text(reason: String) -> String:
+	match reason:
+		"simulation_missing":
+			return "运行时未就绪"
+		"quest_not_active":
+			return "任务未激活"
+		"quest_not_waiting_for_turn_in":
+			return "任务不需要手动交付"
+		"quest_objective_incomplete":
+			return "目标尚未完成"
+		_:
+			return reason
 
 
 func _label(node_name: String) -> Label:
