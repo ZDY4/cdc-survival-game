@@ -180,6 +180,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("main hand equipment row should show durability detail")
 	if not _equipment_line(game_root, "main_hand").contains("外观: builtin:weapon:dagger"):
 		errors.append("main hand equipment row should show appearance asset detail")
+	if not _equipment_tooltip(game_root, "main_hand").contains("锋利的匕首") or not _equipment_tooltip(game_root, "main_hand").contains("耐久: 50/50"):
+		errors.append("main hand equipment tooltip should show description and durability detail")
+	if not _equipment_tooltip(game_root, "main_hand").contains("外观: builtin:weapon:dagger"):
+		errors.append("main hand equipment tooltip should show appearance detail")
 	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player_ref == null:
 		errors.append("player actor should exist for equipped ammo display test")
@@ -191,6 +195,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("equipping pistol for ammo display failed: %s" % equip_pistol_result.get("reason", "unknown"))
 		elif not _equipment_line(game_root, "main_hand").contains("弹药 1009 10/12"):
 			errors.append("equipped pistol row should show available ammo and magazine capacity")
+		elif not _equipment_tooltip(game_root, "main_hand").contains("装填:") or not _equipment_tooltip(game_root, "main_hand").contains("备用"):
+			errors.append("equipped pistol tooltip should show reload status")
 		var reload_button: Button = _equipment_reload_button(game_root, "main_hand")
 		if reload_button == null or reload_button.disabled:
 			errors.append("equipped pistol should expose enabled reload button when spare ammo exists")
@@ -218,6 +224,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("body equipment row should show attribute modifier details")
 	if not _equipment_line(game_root, "off_hand").contains("副手: 空"):
 		errors.append("character panel should show empty off hand equipment slot")
+	if not _equipment_tooltip(game_root, "off_hand").contains("可将适用装备拖到此槽位"):
+		errors.append("empty equipment slot tooltip should explain drag equip")
 	if _equipment_model_asset(game_root, "main_hand") != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("main hand equipment model should start as dagger before character panel unequip")
 	game_root.refresh_inventory_panel()
@@ -986,6 +994,15 @@ func _equipment_line(game_root: Node, slot_id: String) -> String:
 	var label: Node = row.get_node_or_null("Line")
 	if label is Label:
 		return str((label as Label).text)
+	return ""
+
+
+func _equipment_tooltip(game_root: Node, slot_id: String) -> String:
+	var row: Node = game_root.character_panel.find_child("Equipment_%s" % slot_id, true, false)
+	if row == null:
+		return ""
+	if row is Control:
+		return str((row as Control).tooltip_text)
 	return ""
 
 

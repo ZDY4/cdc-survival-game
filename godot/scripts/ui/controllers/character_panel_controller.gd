@@ -212,9 +212,11 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 		Callable(self, "_can_drop_equipment_data"),
 		Callable(self, "_drop_equipment_data")
 	)
+	row.tooltip_text = _equipment_tooltip(data)
 	var label := _label("Line")
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.text = _equipment_text(data)
+	label.tooltip_text = row.tooltip_text
 	row.add_child(label)
 	var reload: Dictionary = _dictionary_or_empty(data.get("reload", {}))
 	if bool(reload.get("reloadable", false)):
@@ -298,6 +300,43 @@ func _equipment_detail_suffix(data: Dictionary) -> String:
 		if not text.is_empty():
 			details.append(text)
 	return "" if details.is_empty() else " | %s" % " | ".join(details)
+
+
+func _equipment_tooltip(data: Dictionary) -> String:
+	var label: String = str(data.get("label", data.get("slot_id", "")))
+	if not bool(data.get("equipped", false)):
+		return "%s: 空\n可将适用装备拖到此槽位。" % label
+	var lines: Array[String] = [
+		"%s: %s" % [label, str(data.get("name", data.get("item_id", "")))],
+		"重量 %.1f kg | 价值 %d" % [float(data.get("weight", 0.0)), int(data.get("value", 0))],
+	]
+	var rarity := str(data.get("rarity", ""))
+	if not rarity.is_empty():
+		lines.append("稀有度: %s" % rarity)
+	var description := str(data.get("description", ""))
+	if not description.is_empty():
+		lines.append(description)
+	for detail in _array_or_empty(data.get("details", [])):
+		var text := str(detail)
+		if not text.is_empty():
+			lines.append(text)
+	var effects: Array[String] = []
+	for effect in _array_or_empty(data.get("effects", [])):
+		var effect_text := str(effect)
+		if not effect_text.is_empty():
+			effects.append(effect_text)
+	if not effects.is_empty():
+		lines.append("装备效果: %s" % " / ".join(effects))
+	var reload: Dictionary = _dictionary_or_empty(data.get("reload", {}))
+	if bool(reload.get("reloadable", false)):
+		lines.append("装填: %d/%d，备用 %d，AP %.1f%s" % [
+			int(reload.get("loaded", 0)),
+			int(reload.get("capacity", 0)),
+			int(reload.get("inventory_ammo", 0)),
+			float(reload.get("ap_cost", 0.0)),
+			"，可装填" if bool(reload.get("can_reload", false)) else "，暂不可装填",
+		])
+	return "\n".join(lines)
 
 
 func _apply_feedback(feedback: Dictionary) -> void:
