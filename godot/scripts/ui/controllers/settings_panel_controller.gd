@@ -308,11 +308,12 @@ func _save_settings() -> void:
 func _apply_settings() -> void:
 	var audio: Dictionary = _apply_audio_settings()
 	var display: Dictionary = _apply_display_settings()
+	var keybinding: Dictionary = _apply_keybinding_settings()
 	last_apply_result = {
 		"audio": audio,
 		"display": display,
 		"ui_scale": {"requested": int(settings_state.get("ui_scale", 100)), "applied": false, "reason": "ui_theme_runtime_pending"},
-		"keybinding": {"profile": str(settings_state.get("keybinding_profile", "default")), "applied": false, "reason": "keybinding_remap_pending"},
+		"keybinding": keybinding,
 	}
 
 
@@ -363,6 +364,47 @@ func _apply_display_settings() -> Dictionary:
 		"resolution": str(settings_state.get("resolution", "1280x720")),
 		"vsync": bool(settings_state.get("vsync", true)),
 	}
+
+
+func _apply_keybinding_settings() -> Dictionary:
+	var profile := str(settings_state.get("keybinding_profile", "default"))
+	ProjectSettings.set_setting("cdc/keybinding_profile", profile)
+	return {
+		"applied": true,
+		"profile": profile,
+		"panel_keys": _panel_key_labels_for_profile(profile),
+	}
+
+
+func _panel_key_labels_for_profile(profile: String) -> Dictionary:
+	match profile:
+		"left_handed":
+			return {
+				"inventory": "Q",
+				"character": "E",
+				"journal": "R",
+				"map": "T",
+				"skills": "Y",
+				"crafting": "U",
+			}
+		"controller":
+			return {
+				"inventory": "I",
+				"character": "C",
+				"journal": "J",
+				"map": "M",
+				"skills": "K",
+				"crafting": "L",
+			}
+		_:
+			return {
+				"inventory": "I",
+				"character": "C",
+				"journal": "J",
+				"map": "M",
+				"skills": "K",
+				"crafting": "L",
+			}
 
 
 func _resolution_vector(value: String) -> Vector2i:

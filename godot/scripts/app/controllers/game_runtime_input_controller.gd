@@ -389,21 +389,33 @@ func has_selection_state() -> bool:
 
 
 func _stage_panel_for_key(key: int) -> String:
-	match key:
-		KEY_I:
-			return "inventory"
-		KEY_C:
-			return "character"
-		KEY_J:
-			return "journal"
-		KEY_M:
-			return "map"
-		KEY_K:
-			return "skills"
-		KEY_L:
-			return "crafting"
+	var bindings := _stage_panel_keybindings()
+	for panel_id in bindings.keys():
+		if int(bindings[panel_id]) == key:
+			return str(panel_id)
+	return ""
+
+
+func _stage_panel_keybindings() -> Dictionary:
+	match str(ProjectSettings.get_setting("cdc/keybinding_profile", "default")):
+		"left_handed":
+			return {
+				"inventory": KEY_Q,
+				"character": KEY_E,
+				"journal": KEY_R,
+				"map": KEY_T,
+				"skills": KEY_Y,
+				"crafting": KEY_U,
+			}
 		_:
-			return ""
+			return {
+				"inventory": KEY_I,
+				"character": KEY_C,
+				"journal": KEY_J,
+				"map": KEY_M,
+				"skills": KEY_K,
+				"crafting": KEY_L,
+			}
 
 
 func _begin_camera_drag(screen_position: Vector2) -> void:

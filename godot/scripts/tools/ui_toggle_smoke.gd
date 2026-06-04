@@ -618,6 +618,12 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 		errors.append("settings music volume should apply to audio bus: %s" % applied)
 	if not bool(_dictionary_or_empty(audio.get("SFX", {})).get("applied", false)):
 		errors.append("settings SFX volume should apply to audio bus: %s" % applied)
+	var keybinding: Dictionary = _dictionary_or_empty(applied.get("keybinding", {}))
+	if not bool(keybinding.get("applied", false)) or str(keybinding.get("profile", "")) != "left_handed":
+		errors.append("settings keybinding profile should apply to runtime input: %s" % applied)
+	var panel_keys: Dictionary = _dictionary_or_empty(keybinding.get("panel_keys", {}))
+	if str(panel_keys.get("inventory", "")) != "Q":
+		errors.append("left handed keybinding should expose remapped panel keys: %s" % applied)
 	var display: Dictionary = _dictionary_or_empty(applied.get("display", {}))
 	if not bool(display.get("applied", false)) and str(display.get("reason", "")) != "headless":
 		errors.append("settings display changes should apply or be explicitly skipped in headless: %s" % applied)
@@ -631,6 +637,7 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 		errors.append("settings feedback should show save result")
 	await _assert_settings_reload(errors, game_root)
 	_assert_settings_file_envelope(errors, 65, "fullscreen", "left_handed")
+	await _assert_left_handed_keybinding(errors, game_root)
 	await _assert_settings_reset_defaults(errors, game_root)
 
 
@@ -707,6 +714,20 @@ func _assert_settings_file_envelope(errors: Array[String], expected_master: int,
 	var settings: Dictionary = _dictionary_or_empty(envelope.get("settings", {}))
 	if int(settings.get("master_volume", 0)) != expected_master or str(settings.get("window_mode", "")) != expected_window or str(settings.get("keybinding_profile", "")) != expected_profile:
 		errors.append("settings file envelope should store current settings: %s" % envelope)
+
+
+func _assert_left_handed_keybinding(errors: Array[String], game_root: Node) -> void:
+	_press_key(game_root, KEY_ESCAPE)
+	if bool(game_root.is_settings_open()):
+		errors.append("closing settings before left handed keybinding check failed")
+		return
+	_press_key(game_root, KEY_Q)
+	_expect_stage_open(errors, game_root, "inventory", "left handed Q should open inventory")
+	_press_key(game_root, KEY_Q)
+	_expect_stage_closed(errors, game_root, "left handed Q should close inventory")
+	_press_key(game_root, KEY_ESCAPE)
+	if not bool(game_root.is_settings_open()):
+		errors.append("Esc should reopen settings after left handed keybinding check")
 
 
 func _assert_settings_reset_defaults(errors: Array[String], game_root: Node) -> void:

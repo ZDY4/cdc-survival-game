@@ -299,7 +299,7 @@
 ### 13.1 主菜单和设置
 
 - main menu runtime 第一版已迁移：`run/main_scene` 进入 `boot.tscn` / `main_menu.tscn`，菜单态不实例化 `GameRoot`、不加载 map/actors；新游戏会写入启动请求并进入 `game_root.tscn`，若当前槽位已有存档会先弹覆盖确认；继续游戏会从存档槽列表中读取所选 runtime snapshot 并交给 `GameRoot` 恢复；存档 envelope 会写入 active map/location、round、actor/event count、player level 和 updated_at 元信息；菜单可显示、选择和删除存档槽；退出按钮调用 Godot quit；已纳入 `MainMenu` smoke。待补存档详细元信息和更完整视觉表现。
-- settings panel 控件第一版已迁移：主音量、音乐、音效、窗口模式、分辨率、VSync、UI scale 和按键绑定方案循环会更新设置状态、摘要文本和 blocker 状态；设置会以 `schema_version + settings` envelope 保存到 `user://settings.json`，旧裸设置字典会自动迁移并保留诊断，恢复默认按钮会重置、保存、应用并刷新 UI；新设置面板实例加载、旧文件迁移、恢复默认和持久化 envelope 已纳入 `UIToggle` smoke；项目已配置 `Master` / `Music` / `SFX` audio bus，三条音量设置都会应用到对应 bus，窗口模式/分辨率/VSync 会在非 headless 运行时应用到 `DisplayServer`。待补真实 UI scale 应用、keybinding remap 和 Godot project/window/audio bus 的完整平台差异处理。
+- settings panel 控件第一版已迁移：主音量、音乐、音效、窗口模式、分辨率、VSync、UI scale 和按键绑定方案循环会更新设置状态、摘要文本和 blocker 状态；设置会以 `schema_version + settings` envelope 保存到 `user://settings.json`，旧裸设置字典会自动迁移并保留诊断，恢复默认按钮会重置、保存、应用并刷新 UI；新设置面板实例加载、旧文件迁移、恢复默认和持久化 envelope 已纳入 `UIToggle` smoke；项目已配置 `Master` / `Music` / `SFX` audio bus，三条音量设置都会应用到对应 bus；按键绑定 profile 第一版会应用到运行时面板快捷键，默认方案保留 `I/C/M/J/K/L`，左手方案提供 `Q/E/R/T/Y/U` 并由 smoke 验证；窗口模式/分辨率/VSync 会在非 headless 运行时应用到 `DisplayServer`。待补真实 UI scale 应用和 Godot project/window/audio bus 的完整平台差异处理。
 
 ### 13.2 HUD 和 overlay
 
