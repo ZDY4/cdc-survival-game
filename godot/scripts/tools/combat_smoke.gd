@@ -617,6 +617,29 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 		errors.append("single hostile skill target preview should succeed: %s" % single_preview.get("reason", "unknown"))
 	elif _array_or_empty(single_preview.get("affected_actor_ids", [])).size() != 1 or int(_array_or_empty(single_preview.get("affected_actor_ids", []))[0]) != hostile_id:
 		errors.append("single hostile skill target preview should include hostile actor")
+	var hidden_skill_target_id: int = _register_test_actor(simulation, "skill_hidden_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 1,
+	}, 10.0)
+	simulation.set_actor_vision_radius(player.actor_id, 0)
+	simulation.refresh_actor_vision(player.actor_id, topology)
+	var hidden_skill_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", single_skill, {"actor_id": hidden_skill_target_id}, topology)
+	if hidden_skill_preview.get("reason", "") != "target_not_visible":
+		errors.append("active vision should reject hidden skill actor target, got %s" % hidden_skill_preview.get("reason", ""))
+	var ap_before_hidden_skill: float = player.ap
+	var hidden_skill_use: Dictionary = simulation.submit_player_command({
+		"kind": "use_skill",
+		"skill_id": "adrenaline_rush",
+		"skill_library": single_skill,
+		"target": {"actor_id": hidden_skill_target_id},
+		"topology": topology,
+	})
+	if bool(hidden_skill_use.get("success", false)) or hidden_skill_use.get("reason", "") != "target_not_visible":
+		errors.append("active vision should reject hidden skill use before spending AP")
+	if absf(player.ap - ap_before_hidden_skill) > 0.001:
+		errors.append("hidden skill target should not spend AP")
+	simulation.clear_actor_vision(player.actor_id)
 	var los_blocked_topology: Dictionary = _spatial_test_topology(player_grid, {
 		"x": int(player_grid.get("x", 0)) + 1,
 		"y": int(player_grid.get("y", 0)),
@@ -679,6 +702,18 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 		errors.append("radius hostile-only preview should filter friendly actors")
 	if _array_or_empty(radius_preview.get("affected_cells", [])).size() != 5:
 		errors.append("radius 1 preview should include center plus four cardinal cells")
+	simulation.set_actor_vision_radius(player.actor_id, 0)
+	simulation.refresh_actor_vision(player.actor_id, topology)
+	var hidden_radius_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", radius_skill, {
+		"grid": {
+			"x": int(player_grid.get("x", 0)) + 1,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+	}, topology)
+	if hidden_radius_preview.get("reason", "") != "target_not_visible":
+		errors.append("active vision should reject hidden skill grid center, got %s" % hidden_radius_preview.get("reason", ""))
+	simulation.clear_actor_vision(player.actor_id)
 	var blocked_aoe_actor_id: int = _register_test_actor(simulation, "skill_aoe_blocked_hostile", "hostile", {
 		"x": int(player_grid.get("x", 0)) + 2,
 		"y": int(player_grid.get("y", 0)),
@@ -869,7 +904,7 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 	}, topology)
 	if out_of_range.get("reason", "") != "skill_target_out_of_range":
 		errors.append("out-of-range skill preview should report skill_target_out_of_range, got %s" % out_of_range.get("reason", ""))
-	for actor_id in [hostile_id, friendly_id, blocked_aoe_actor_id, line_hostile_id, line_friendly_id, cone_hostile_id, cone_friendly_id, cone_back_id]:
+	for actor_id in [hostile_id, friendly_id, hidden_skill_target_id, blocked_aoe_actor_id, line_hostile_id, line_friendly_id, cone_hostile_id, cone_friendly_id, cone_back_id]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.progression = original_progression

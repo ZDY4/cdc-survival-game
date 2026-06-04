@@ -114,7 +114,7 @@
 
 - 待补 actor / object / self / grid fallback 的完整优先级和失败 reason。
 - friendly / neutral / hostile 选项差异第一版已迁移：友好/中立 actor 主交互为 `talk` 且 `attack` 进入 `disabled_options` / `target_not_hostile`，hostile actor 主交互为 `attack` 且 `talk` 进入 `disabled_options` / `target_hostile`，self target 主交互为 `wait` 且 self talk / attack 禁用；已由 `Interaction` smoke 覆盖。待补 trade、heal、inspect、关系分数和脚本化 NPC 权限。
-- target visibility 第一版已迁移：当 actor 已有 active vision 时，交互 prompt 会拒绝不可见 actor / map object 并返回 `target_not_visible` 与目标格；攻击校验会拒绝不可见 actor 并返回 `target_not_visible` 与目标格；未刷新 vision 的运行时保持兼容不强制拦截。已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补雾中探索态、遮挡 target preview、UI 文案和技能共用可见性规则。
+- target visibility 第一版已迁移：当 actor 已有 active vision 时，交互 prompt 会拒绝不可见 actor / map object 并返回 `target_not_visible` 与目标格；攻击校验会拒绝不可见 actor 并返回 `target_not_visible` 与目标格；技能目标 preview / use_skill 会拒绝不可见 actor target 和不可见 grid / AOE 中心格，失败不消耗 AP；未刷新 vision 的运行时保持兼容不强制拦截。已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补雾中探索态、遮挡 target preview 和 UI 文案。
 - interaction range 第一版已迁移：prompt 会暴露 `interaction_range`、`target_distance`、`requires_approach`，pickup / container / transition / attack 默认 1 格，talk 为 2 格，wait / move 为 0 格；自动接近会按交互距离选择目标格，目标不可达返回 range / distance 诊断，并由 `Interaction` smoke 覆盖。待补动态 AP / 距离配置、特殊对象权限、路径预览和 UI 文案映射。
 - prompt snapshot 真实禁用项第一版已迁移：pickup、container、grid、self、friendly/neutral actor、hostile actor 会输出启用 `options` 和带 `disabled_reason` / `ap_cost` 的 `disabled_options`，执行禁用 option 会返回对应 reason；HUD snapshot 已能暴露禁用项，由 `Interaction` / `UI` smoke 覆盖。待补完整 target display、动态 AP cost 来源、可见性禁用、权限禁用和 UI 文案映射。
 
@@ -157,7 +157,7 @@
 ### 6.4 技能目标和 AOE
 
 - 技能目标解析第一版已迁移：`Simulation.preview_skill_target()` 和 `use_skill` 共用 target preview，默认兼容旧 self buff / toggle；已支持 self、single actor、grid、radius AOE、line 和 cone 的目标解析、range / level 校验、affected cells / actor ids、friendly fire 标记，并在目标非法时不消耗 AP；line 会按施法者到目标格的直线收集命中格，cone 会按目标方向、length 和 width 收集扇形命中格，两者都支持 affected_policy / LOS 过滤；已由 `Combat` smoke 覆盖。目标型技能选择 UI 第一版已迁移：非 self 热栏技能会进入目标选择态，hover 时刷新 core preview，HUD 展示形状、命中格、命中 actor 和友军风险，Esc 可取消，左键/确认会用同一 `use_skill` 命令释放；已由 `SkillsUI` smoke 覆盖。待补目标形状世界高亮视觉。
-- AOE / 技能目标 LOS 第一版已迁移：single、grid、radius 目标默认要求施法者到目标中心 LOS，遮挡返回 `skill_target_blocked_by_los` 且不消耗 AP；radius AOE 默认从中心到每个命中格检查 LOS，遮挡格会从 `affected_cells` / `affected_actor_ids` 排除，并支持 `requires_los=false` / `respect_los=false` 作为特殊技能例外；已由 `Combat` smoke 覆盖。待补更完整友军伤害策略、门开闭语义、中心到命中格的旧版边缘细节。
+- AOE / 技能目标 LOS 与可见性第一版已迁移：single、grid、radius 目标默认要求施法者到目标中心 LOS，遮挡返回 `skill_target_blocked_by_los` 且不消耗 AP；active vision 已刷新时，技能目标会拒绝不可见 actor target 和不可见 grid / AOE 中心格并返回 `target_not_visible`；radius AOE 默认从中心到每个命中格检查 LOS，遮挡格会从 `affected_cells` / `affected_actor_ids` 排除，并支持 `requires_los=false` / `respect_los=false` 作为特殊技能例外；已由 `Combat` smoke 覆盖。待补更完整友军伤害策略、门开闭语义、中心到命中格的旧版边缘细节。
 - typed targeting policy 第一版已迁移：支持 self、hostile_only、ally_only、any_actor、any_grid、empty_grid，以及 radius 的 affected_policy 过滤；已由 `Combat` smoke 覆盖。待补 object target、容器/门/机关目标和脚本化目标类型。
 - 待补目标预览 UI polish：范围格世界高亮、命中 actor outline、AP / cooldown / resource cost、失败 reason 文案、鼠标/键盘确认提示和目标选择音效。
 
@@ -295,7 +295,7 @@
 - 已有 Godot canvas fog shader 第一版；待补与旧 post-process fog 的视觉等价：探索区透明度、未探索区遮罩、边缘柔化、mask blend。
 - 待补 fog mask 与相机/地图坐标同步、地图切换重建、可见格变化平滑、性能优化。
 - 待补 `show vision` / debug overlay：可见格、已探索格、阻挡视线格、actor vision radius。
-- 雾战对交互和攻击的规则影响第一版已迁移：active vision 下不可见目标禁止 interaction prompt 和 attack；已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补 skill target、hover prompt、雾中物体轮廓和已探索但不可见目标的显示策略。
+- 雾战对交互、攻击和技能目标的规则影响第一版已迁移：active vision 下不可见目标禁止 interaction prompt、attack、skill preview 和 use_skill；已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补 hover prompt、雾中物体轮廓和已探索但不可见目标的显示策略。
 
 ## 13. 游戏 UI、菜单和反馈表现
 

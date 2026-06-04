@@ -1229,6 +1229,11 @@ func _skill_actor_target_preview(actor: RefCounted, skill_id: String, targeting:
 		range_result["skill_id"] = skill_id
 		range_result["target_actor_id"] = target_actor_id
 		return range_result
+	var visibility_result: Dictionary = _skill_visibility_check(actor, target_actor.grid_position.to_dictionary())
+	if not bool(visibility_result.get("success", false)):
+		visibility_result["skill_id"] = skill_id
+		visibility_result["target_actor_id"] = target_actor_id
+		return visibility_result
 	var los_result: Dictionary = _skill_los_check(actor, target_actor.grid_position.to_dictionary(), targeting, topology)
 	if not bool(los_result.get("success", false)):
 		los_result["skill_id"] = skill_id
@@ -1266,6 +1271,10 @@ func _skill_grid_target_preview(actor: RefCounted, skill_id: String, targeting: 
 	if not bool(range_result.get("success", false)):
 		range_result["skill_id"] = skill_id
 		return range_result
+	var visibility_result: Dictionary = _skill_visibility_check(actor, grid)
+	if not bool(visibility_result.get("success", false)):
+		visibility_result["skill_id"] = skill_id
+		return visibility_result
 	var los_result: Dictionary = _skill_los_check(actor, grid, targeting, topology)
 	if not bool(los_result.get("success", false)):
 		los_result["skill_id"] = skill_id
@@ -1301,6 +1310,10 @@ func _skill_radius_target_preview(actor: RefCounted, skill_id: String, targeting
 	if not bool(range_result.get("success", false)):
 		range_result["skill_id"] = skill_id
 		return range_result
+	var visibility_result: Dictionary = _skill_visibility_check(actor, center)
+	if not bool(visibility_result.get("success", false)):
+		visibility_result["skill_id"] = skill_id
+		return visibility_result
 	var los_result: Dictionary = _skill_los_check(actor, center, targeting, topology)
 	if not bool(los_result.get("success", false)):
 		los_result["skill_id"] = skill_id
@@ -1343,6 +1356,10 @@ func _skill_line_target_preview(actor: RefCounted, skill_id: String, targeting: 
 	if not bool(range_result.get("success", false)):
 		range_result["skill_id"] = skill_id
 		return range_result
+	var visibility_result: Dictionary = _skill_visibility_check(actor, target_grid)
+	if not bool(visibility_result.get("success", false)):
+		visibility_result["skill_id"] = skill_id
+		return visibility_result
 	var los_result: Dictionary = _skill_los_check(actor, target_grid, targeting, topology)
 	if not bool(los_result.get("success", false)):
 		los_result["skill_id"] = skill_id
@@ -1388,6 +1405,10 @@ func _skill_cone_target_preview(actor: RefCounted, skill_id: String, targeting: 
 	if not bool(range_result.get("success", false)):
 		range_result["skill_id"] = skill_id
 		return range_result
+	var visibility_result: Dictionary = _skill_visibility_check(actor, target_grid)
+	if not bool(visibility_result.get("success", false)):
+		visibility_result["skill_id"] = skill_id
+		return visibility_result
 	var los_result: Dictionary = _skill_los_check(actor, target_grid, targeting, topology)
 	if not bool(los_result.get("success", false)):
 		los_result["skill_id"] = skill_id
@@ -1437,6 +1458,28 @@ func _skill_range_check(actor: RefCounted, target_grid: Dictionary, targeting: D
 			"target_grid": target_grid.duplicate(true),
 		}
 	return {"success": true, "range": max_range, "distance": distance}
+
+
+func _skill_visibility_check(actor: RefCounted, target_grid: Dictionary) -> Dictionary:
+	if actor == null:
+		return {"success": false, "reason": "actor_missing"}
+	if not has_active_actor_vision(actor.actor_id):
+		return {"success": true, "visibility_checked": false}
+	var normalized_grid: Dictionary = {
+		"x": int(target_grid.get("x", 0)),
+		"y": int(target_grid.get("y", actor.grid_position.y)),
+		"z": int(target_grid.get("z", 0)),
+	}
+	if is_cell_visible_to_actor(actor.actor_id, normalized_grid):
+		return {"success": true, "visibility_checked": true}
+	return {
+		"success": false,
+		"reason": "target_not_visible",
+		"skill_target_not_visible": true,
+		"actor_id": actor.actor_id,
+		"target_grid": normalized_grid,
+		"actor_grid": actor.grid_position.to_dictionary(),
+	}
 
 
 func _skill_los_check(actor: RefCounted, target_grid: Dictionary, targeting: Dictionary, topology: Dictionary) -> Dictionary:
