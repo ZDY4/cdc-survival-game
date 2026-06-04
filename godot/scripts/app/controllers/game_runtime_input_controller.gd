@@ -1,5 +1,7 @@
 extends RefCounted
 
+const VisionGeometry = preload("res://scripts/core/vision/vision_geometry.gd")
+
 const GRID_SIZE := 1.0
 const RAY_DISTANCE := 500.0
 const BEVY_CAMERA_YAW_DEGREES := 0.0
@@ -39,6 +41,7 @@ var is_camera_following_player := true
 var is_space_wait_held := false
 var space_wait_elapsed_sec := 0.0
 var space_wait_repeated := false
+var _vision_geometry := VisionGeometry.new()
 var last_hover_state: Dictionary = {
 	"active": false,
 	"kind": "",
@@ -895,7 +898,8 @@ func _update_attack_range_markers(attack_preview: Dictionary, color: Color) -> v
 	if target_grid.is_empty() or attack_range < 0:
 		return
 	var markers := 0
-	for grid in _attack_range_candidate_grids(target_grid, attack_range):
+	var candidates: Array[Dictionary] = _attack_range_candidate_grids(target_grid, attack_range)
+	for grid in candidates:
 		var marker := _build_attack_range_marker(color)
 		marker.position = Vector3(
 			float(grid.get("x", 0)),
@@ -907,6 +911,7 @@ func _update_attack_range_markers(attack_preview: Dictionary, color: Color) -> v
 		attack_range_markers.add_child(marker)
 		markers += 1
 	attack_range_markers.set_meta("marker_count", markers)
+	attack_range_markers.set_meta("candidate_count", candidates.size())
 	attack_range_markers.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
 
 
@@ -928,6 +933,7 @@ func _attack_range_candidate_grids(target_grid: Dictionary, attack_range: int) -
 	var target_z := int(target_grid.get("z", 0))
 	var bounds: Dictionary = _dictionary_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("bounds", {}))
 	var blocking: Dictionary = _dictionary_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("blocking_cells", {}))
+	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
 	for x in range(target_x - attack_range, target_x + attack_range + 1):
 		for z in range(target_z - attack_range, target_z + attack_range + 1):
 			var distance: int = abs(x - target_x) + abs(z - target_z)
@@ -938,6 +944,8 @@ func _attack_range_candidate_grids(target_grid: Dictionary, attack_range: int) -
 				continue
 			var key := "%d:%d:%d" % [x, target_y, z]
 			if blocking.has(key):
+				continue
+			if not _vision_geometry.has_line_of_sight(candidate, target_grid, topology):
 				continue
 			output.append(candidate)
 	return output
@@ -960,6 +968,7 @@ func _clear_attack_range_markers() -> void:
 	for child in attack_range_markers.get_children():
 		child.queue_free()
 	attack_range_markers.set_meta("marker_count", 0)
+	attack_range_markers.set_meta("candidate_count", 0)
 	attack_range_markers.set_meta("attack_target_actor_id", 0)
 
 

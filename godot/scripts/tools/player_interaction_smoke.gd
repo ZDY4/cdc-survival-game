@@ -406,6 +406,35 @@ func _expect_attack_range_markers(errors: Array[String], game_root: Node, target
 			break
 	if not found_marker:
 		errors.append("attack range markers should create marker nodes")
+	_expect_attack_range_los_filter(errors, game_root)
+
+
+func _expect_attack_range_los_filter(errors: Array[String], game_root: Node) -> void:
+	var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
+	var attack_preview: Dictionary = _dictionary_or_empty(hover.get("attack_preview", {}))
+	var target_grid: Dictionary = _dictionary_or_empty(attack_preview.get("target_grid", {}))
+	if target_grid.is_empty():
+		errors.append("attack range LOS filter needs target grid")
+		return
+	var target_x := int(target_grid.get("x", 0))
+	var target_y := int(target_grid.get("y", 0))
+	var target_z := int(target_grid.get("z", 0))
+	var original_map: Dictionary = _dictionary_or_empty(game_root.runtime_input_controller.world_result.get("map", {})).duplicate(true)
+	var los_map: Dictionary = original_map.duplicate(true)
+	var blockers: Dictionary = _dictionary_or_empty(los_map.get("sight_blocking_cells", {})).duplicate(true)
+	blockers["%d:%d:%d" % [target_x - 1, target_y, target_z]] = {"kind": "smoke_los_blocker"}
+	los_map["sight_blocking_cells"] = blockers
+	game_root.runtime_input_controller.world_result["map"] = los_map
+	var candidates: Array = game_root.runtime_input_controller._attack_range_candidate_grids(target_grid, 2)
+	game_root.runtime_input_controller.world_result["map"] = original_map
+	var blocked_candidate := {"x": target_x - 2, "y": target_y, "z": target_z}
+	for candidate in candidates:
+		var grid: Dictionary = _dictionary_or_empty(candidate)
+		if int(grid.get("x", 0)) == int(blocked_candidate.get("x", 0)) \
+				and int(grid.get("y", 0)) == int(blocked_candidate.get("y", 0)) \
+				and int(grid.get("z", 0)) == int(blocked_candidate.get("z", 0)):
+			errors.append("attack range marker candidates should filter LOS-blocked cells")
+			return
 
 
 func _expect_attack_marker_hidden(errors: Array[String], game_root: Node) -> void:
