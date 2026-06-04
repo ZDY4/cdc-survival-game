@@ -113,10 +113,10 @@
 ### 5.1 目标解析
 
 - 待补 actor / object / self / grid fallback 的完整优先级和失败 reason。
-- 待补 friendly / neutral / hostile 的选项差异：talk、trade、heal、container、attack、inspect、wait。
+- friendly / neutral / hostile 选项差异第一版已迁移：友好/中立 actor 主交互为 `talk` 且 `attack` 进入 `disabled_options` / `target_not_hostile`，hostile actor 主交互为 `attack` 且 `talk` 进入 `disabled_options` / `target_hostile`，self target 主交互为 `wait` 且 self talk / attack 禁用；已由 `Interaction` smoke 覆盖。待补 trade、heal、inspect、关系分数和脚本化 NPC 权限。
 - 待补 target visibility：不可见目标、雾中目标、跨层目标、遮挡目标的 prompt 和禁止逻辑。
 - 待补 interaction range：不同交互类型的距离、自动接近目标格、目标不可达时提示。
-- 部分迁移 prompt snapshot：primary option、all options、display name、target kind、action label、AP cost 和空 disabled options 已进入 core prompt 与 HUD snapshot，并由 `Interaction` / `UI` smoke 覆盖；待补真实 disabled option、禁用 reason、完整 target display 和动态 AP cost 来源。
+- prompt snapshot 真实禁用项第一版已迁移：pickup、container、grid、self、friendly/neutral actor、hostile actor 会输出启用 `options` 和带 `disabled_reason` / `ap_cost` 的 `disabled_options`，执行禁用 option 会返回对应 reason；HUD snapshot 已能暴露禁用项，由 `Interaction` / `UI` smoke 覆盖。待补完整 target display、动态 AP cost 来源、可见性禁用、权限禁用和 UI 文案映射。
 
 ### 5.2 交互行为
 

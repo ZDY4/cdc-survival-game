@@ -111,4 +111,20 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("HUD snapshot should expose ap_cost")
 	if typeof(interaction.get("disabled_options", [])) != TYPE_ARRAY:
 		errors.append("HUD snapshot should expose disabled_options")
+	elif not _has_disabled_option(interaction.get("disabled_options", []), "open_container", "target_not_container"):
+		errors.append("HUD snapshot should expose disabled interaction reason")
 	return errors
+
+
+func _has_disabled_option(options: Array, option_id: String, reason: String) -> bool:
+	for candidate in options:
+		var option: Dictionary = _dictionary_or_empty(candidate)
+		if str(option.get("id", "")) == option_id and str(option.get("disabled_reason", "")) == reason:
+			return true
+	return false
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

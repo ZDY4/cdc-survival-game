@@ -2,21 +2,27 @@ extends RefCounted
 
 
 func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Dictionary:
-	if simulation.actor_registry.get_actor(actor_id) == null:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
 		return _failed_prompt("unknown_actor")
 
 	var target_data: Dictionary = _resolve_target(simulation, target)
 	if target_data.is_empty():
 		return _failed_prompt("interaction_target_unavailable")
 
-	var option: Dictionary = _option_for_target(target_data)
-	if option.is_empty():
+	var candidate_options: Array = _candidate_options_for_target(target_data)
+	var enabled_options: Array = []
+	var disabled_options: Array = []
+	for candidate in candidate_options:
+		var option: Dictionary = _enriched_option(_dictionary_or_empty(candidate))
+		if bool(option.get("disabled", false)):
+			disabled_options.append(option)
+		else:
+			enabled_options.append(option)
+	if enabled_options.is_empty():
 		return _failed_prompt("interaction_option_unavailable")
 
-	var enriched_option: Dictionary = option.duplicate(true)
-	enriched_option["ap_cost"] = _ap_cost_for_option(enriched_option)
-	enriched_option["disabled"] = false
-	enriched_option["disabled_reason"] = ""
+	var primary_option: Dictionary = _dictionary_or_empty(enabled_options[0])
 	return {
 		"ok": true,
 		"actor_id": actor_id,
@@ -24,12 +30,12 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 		"target_name": target_data.get("display_name", ""),
 		"target_kind": target_data.get("kind", target_data.get("target_type", "")),
 		"target_type": target_data.get("target_type", ""),
-		"options": [enriched_option],
-		"disabled_options": [],
-		"primary_option_id": enriched_option.get("id", ""),
-		"primary_option_kind": enriched_option.get("kind", ""),
-		"action_label": enriched_option.get("display_name", enriched_option.get("id", "")),
-		"ap_cost": enriched_option.get("ap_cost", 0.0),
+		"options": enabled_options,
+		"disabled_options": disabled_options,
+		"primary_option_id": primary_option.get("id", ""),
+		"primary_option_kind": primary_option.get("kind", ""),
+		"action_label": primary_option.get("display_name", primary_option.get("id", "")),
+		"ap_cost": primary_option.get("ap_cost", 0.0),
 	}
 
 
@@ -94,6 +100,56 @@ func _resolve_target(simulation: RefCounted, target: Dictionary) -> Dictionary:
 			return simulation.map_interaction_targets.get(target_id, {})
 
 
+func _candidate_options_for_target(target_data: Dictionary) -> Array:
+	var kind: String = str(target_data.get("kind", ""))
+	match kind:
+		"pickup":
+			return [
+				_option_for_target(target_data),
+				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
+				_disabled_option("talk", "talk", "对话", "target_not_actor"),
+				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
+			]
+		"talk":
+			return [
+				_option_for_target(target_data),
+				_disabled_option("attack", "attack", "攻击", "target_not_hostile"),
+			]
+		"attack":
+			return [
+				_option_for_target(target_data),
+				_disabled_option("talk", "talk", "对话", "target_hostile"),
+			]
+		"wait":
+			return [
+				_option_for_target(target_data),
+				_disabled_option("talk", "talk", "对话", "self_target"),
+				_disabled_option("attack", "attack", "攻击", "self_target"),
+			]
+		"move":
+			return [
+				_option_for_target(target_data),
+				_disabled_option("pickup", "pickup", "拾取", "target_empty"),
+				_disabled_option("open_container", "open_container", "打开容器", "target_empty"),
+			]
+		"enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor":
+			return [
+				_option_for_target(target_data),
+				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
+				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
+			]
+		"container":
+			return [
+				_option_for_target(target_data),
+				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
+				_disabled_option("talk", "talk", "对话", "target_not_actor"),
+				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
+			]
+	return [
+		_disabled_option("inspect", "inspect", "检查", "unsupported_target_kind"),
+	]
+
+
 func _option_for_target(target_data: Dictionary) -> Dictionary:
 	var kind: String = str(target_data.get("kind", ""))
 	match kind:
@@ -154,6 +210,25 @@ func _option_for_target(target_data: Dictionary) -> Dictionary:
 				"target_id": target_data.get("target_id", ""),
 			}
 	return {}
+
+
+func _enriched_option(option: Dictionary) -> Dictionary:
+	var enriched_option: Dictionary = option.duplicate(true)
+	enriched_option["ap_cost"] = _ap_cost_for_option(enriched_option)
+	enriched_option["disabled"] = bool(enriched_option.get("disabled", false))
+	if not enriched_option.has("disabled_reason"):
+		enriched_option["disabled_reason"] = ""
+	return enriched_option
+
+
+func _disabled_option(id: String, kind: String, display_name: String, reason: String) -> Dictionary:
+	return {
+		"id": id,
+		"kind": kind,
+		"display_name": display_name,
+		"disabled": true,
+		"disabled_reason": reason,
+	}
 
 
 func _player_actor_id(simulation: RefCounted) -> int:

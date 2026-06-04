@@ -41,15 +41,49 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		"target_id": "survivor_outpost_01_pickup_medkit",
 	})
 	_expect_prompt_snapshot(errors, prompt_probe, "pickup", "pickup", 1.0)
+	_expect_disabled_option(errors, prompt_probe, "open_container", "target_not_container", "pickup prompt")
+	_expect_disabled_option(errors, prompt_probe, "talk", "target_not_actor", "pickup prompt")
 	var self_prompt_probe: Dictionary = simulation.query_interaction_options(1, {
 		"target_type": "self",
 		"actor_id": 1,
 	})
 	_expect_prompt_snapshot(errors, self_prompt_probe, "wait", "wait", 1.0)
+	_expect_disabled_option(errors, self_prompt_probe, "attack", "self_target", "self prompt")
 	if str(self_prompt_probe.get("action_label", "")) != "等待":
 		errors.append("self interaction prompt should expose wait action label")
 	if str(self_prompt_probe.get("target_name", "")).find("幸存者") == -1:
 		errors.append("self interaction prompt should expose player target name")
+	var friendly_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "actor",
+		"actor_id": 2,
+	})
+	_expect_prompt_snapshot(errors, friendly_prompt, "talk", "talk", 1.0)
+	_expect_disabled_option(errors, friendly_prompt, "attack", "target_not_hostile", "friendly prompt")
+	var disabled_execute: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "actor",
+		"actor_id": 2,
+	}, "attack")
+	if bool(disabled_execute.get("success", false)) or str(disabled_execute.get("reason", "")) != "target_not_hostile":
+		errors.append("executing a disabled friendly attack option should return target_not_hostile")
+	var hostile_prompt_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var hostile_actor: RefCounted = hostile_prompt_simulation.actor_registry.get_actor(2)
+	hostile_actor.side = "hostile"
+	var hostile_prompt: Dictionary = hostile_prompt_simulation.query_interaction_options(1, {
+		"target_type": "actor",
+		"actor_id": hostile_actor.actor_id,
+	})
+	_expect_prompt_snapshot(errors, hostile_prompt, "attack", "attack", 2.0)
+	_expect_disabled_option(errors, hostile_prompt, "talk", "target_hostile", "hostile prompt")
+	var grid_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "grid",
+		"grid": {
+			"x": 25,
+			"y": 0,
+			"z": 39,
+		},
+	})
+	_expect_prompt_snapshot(errors, grid_prompt, "move", "move", 0.0)
+	_expect_disabled_option(errors, grid_prompt, "pickup", "target_empty", "grid prompt")
 	var unsupported_result: Dictionary = simulation.submit_player_command({"kind": "unsupported_contract_probe"})
 	_expect_command_result_contract(errors, unsupported_result, "unsupported_contract_probe")
 	if bool(unsupported_result.get("success", false)):
@@ -395,6 +429,21 @@ func _expect_prompt_snapshot(errors: Array[String], prompt: Dictionary, expected
 			errors.append("prompt option should include kind")
 		if not option.has("ap_cost") or not option.has("disabled") or not option.has("disabled_reason"):
 			errors.append("prompt option should include ap_cost and disabled metadata")
+
+
+func _expect_disabled_option(errors: Array[String], prompt: Dictionary, option_id: String, reason: String, context: String) -> void:
+	for candidate in prompt.get("disabled_options", []):
+		var option: Dictionary = _dictionary_or_empty(candidate)
+		if str(option.get("id", "")) != option_id:
+			continue
+		if not bool(option.get("disabled", false)):
+			errors.append("%s disabled option %s should be marked disabled" % [context, option_id])
+		if str(option.get("disabled_reason", "")) != reason:
+			errors.append("%s disabled option %s reason expected %s got %s" % [context, option_id, reason, option.get("disabled_reason", "")])
+		if not option.has("ap_cost"):
+			errors.append("%s disabled option %s should include ap_cost" % [context, option_id])
+		return
+	errors.append("%s should expose disabled option %s" % [context, option_id])
 
 
 func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCounted) -> Array[String]:
