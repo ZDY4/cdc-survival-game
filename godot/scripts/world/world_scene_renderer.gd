@@ -27,6 +27,7 @@ var actor_health_material := _unshaded_material(Color(0.24, 0.86, 0.34, 0.88))
 var actor_health_missing_material := _unshaded_material(Color(0.22, 0.07, 0.06, 0.72))
 var actor_ap_material := _unshaded_material(Color(0.24, 0.58, 1.0, 0.86))
 var actor_ap_missing_material := _unshaded_material(Color(0.07, 0.12, 0.22, 0.62))
+var quest_offer_material := _unshaded_material(Color(1.0, 0.72, 0.20, 0.94))
 var quest_turn_in_ready_material := _unshaded_material(Color(1.0, 0.84, 0.18, 0.94))
 var quest_turn_in_pending_material := _unshaded_material(Color(0.34, 0.82, 1.0, 0.86))
 
@@ -592,11 +593,12 @@ func _add_actor_quest_markers(parent: Node3D, actor_data: Dictionary) -> void:
 	if quest_markers.is_empty():
 		return
 	var primary: Dictionary = _dictionary_or_empty(quest_markers[0])
+	var marker_kind := str(primary.get("kind", ""))
 	var ready := bool(primary.get("ready", false))
-	var color := Color(1.0, 0.84, 0.18, 0.96) if ready else Color(0.34, 0.82, 1.0, 0.92)
+	var color := _quest_marker_color(marker_kind, ready)
 	var label := Label3D.new()
 	label.name = "ActorQuestMarkerLabel"
-	label.text = "!" if ready else "?"
+	label.text = _quest_marker_label_text(marker_kind, ready)
 	label.position = Vector3(0.34, 1.38, 0.0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
@@ -612,7 +614,7 @@ func _add_actor_quest_markers(parent: Node3D, actor_data: Dictionary) -> void:
 	var icon := MeshInstance3D.new()
 	icon.name = "ActorQuestMarker"
 	icon.mesh = mesh
-	icon.material_override = quest_turn_in_ready_material if ready else quest_turn_in_pending_material
+	icon.material_override = _quest_marker_material(marker_kind, ready)
 	icon.position = Vector3(0.34, 1.20, 0.0)
 	icon.rotation_degrees = Vector3(0.0, 45.0, 0.0)
 	_apply_quest_marker_meta(icon, actor_data, primary)
@@ -620,9 +622,28 @@ func _add_actor_quest_markers(parent: Node3D, actor_data: Dictionary) -> void:
 	parent.add_child(icon)
 
 
+func _quest_marker_label_text(marker_kind: String, ready: bool) -> String:
+	if marker_kind == "quest_offer":
+		return "!"
+	return "!" if ready else "?"
+
+
+func _quest_marker_color(marker_kind: String, ready: bool) -> Color:
+	if marker_kind == "quest_offer":
+		return Color(1.0, 0.72, 0.20, 0.96)
+	return Color(1.0, 0.84, 0.18, 0.96) if ready else Color(0.34, 0.82, 1.0, 0.92)
+
+
+func _quest_marker_material(marker_kind: String, ready: bool) -> StandardMaterial3D:
+	if marker_kind == "quest_offer":
+		return quest_offer_material
+	return quest_turn_in_ready_material if ready else quest_turn_in_pending_material
+
+
 func _apply_quest_marker_meta(node: Node, actor_data: Dictionary, marker: Dictionary) -> void:
 	node.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
 	node.set_meta("marker_kind", str(marker.get("kind", "")))
+	node.set_meta("marker_status", str(marker.get("status", "")))
 	node.set_meta("quest_id", str(marker.get("quest_id", "")))
 	node.set_meta("quest_title", str(marker.get("quest_title", "")))
 	node.set_meta("status", str(marker.get("status", "")))

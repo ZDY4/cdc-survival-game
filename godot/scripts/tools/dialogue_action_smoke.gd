@@ -153,4 +153,7 @@ func _active_quest_ids(game_root: Node) -> Array[String]:
 
 
 func _dialogue_text(game_root: Node) -> String:
-	return game_root.dialogue_panel.get_node("DialoguePanel/DialogueLines/TextLine").text
+	var label: Label = game_root.dialogue_panel.find_child("TextLine", true, false) as Label
+	if label == null:
+		return ""
+	return label.text

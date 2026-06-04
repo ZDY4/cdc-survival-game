@@ -137,7 +137,7 @@ func _model_asset_for_equipment_visual(visual_asset: String) -> String:
 func _apply_actor_quest_markers(actors: Array[Dictionary], runtime_snapshot: Dictionary) -> void:
 	if registry == null or actors.is_empty():
 		return
-	var markers_by_definition := _turn_in_quest_markers_by_definition(runtime_snapshot)
+	var markers_by_definition := _quest_markers_by_definition(runtime_snapshot)
 	if markers_by_definition.is_empty():
 		return
 	for index in range(actors.size()):
@@ -149,9 +149,10 @@ func _apply_actor_quest_markers(actors: Array[Dictionary], runtime_snapshot: Dic
 		actors[index] = actor_data
 
 
-func _turn_in_quest_markers_by_definition(runtime_snapshot: Dictionary) -> Dictionary:
+func _quest_markers_by_definition(runtime_snapshot: Dictionary) -> Dictionary:
 	var markers_by_quest: Dictionary = _manual_turn_in_markers_by_quest(runtime_snapshot)
-	if markers_by_quest.is_empty():
+	var offer_markers_by_quest: Dictionary = _offer_markers_by_quest(runtime_snapshot)
+	if markers_by_quest.is_empty() and offer_markers_by_quest.is_empty():
 		return {}
 	var result: Dictionary = {}
 	var dialogue_rules: Dictionary = registry.get_library("dialogue_rules")
@@ -169,12 +170,32 @@ func _turn_in_quest_markers_by_definition(runtime_snapshot: Dictionary) -> Dicti
 			for quest_id in _dialogue_turn_in_quest_ids(dialogue_data):
 				if not markers_by_quest.has(quest_id):
 					continue
-				if not result.has(str(definition_id)):
-					result[str(definition_id)] = []
 				var marker: Dictionary = _dictionary_or_empty(markers_by_quest.get(quest_id, {})).duplicate(true)
 				marker["source_dialogue_id"] = dialogue_id
-				result[str(definition_id)].append(marker)
+				_append_quest_marker(result, str(definition_id), marker)
+			for quest_id in _dialogue_start_quest_ids(dialogue_data):
+				if not offer_markers_by_quest.has(quest_id):
+					continue
+				var marker: Dictionary = _dictionary_or_empty(offer_markers_by_quest.get(quest_id, {})).duplicate(true)
+				marker["source_dialogue_id"] = dialogue_id
+				_append_quest_marker(result, str(definition_id), marker)
 	return result
+
+
+func _append_quest_marker(result: Dictionary, definition_id: String, marker: Dictionary) -> void:
+	if definition_id.is_empty() or marker.is_empty():
+		return
+	if not result.has(definition_id):
+		result[definition_id] = []
+	var markers: Array = _array_or_empty(result.get(definition_id, []))
+	var key := "%s:%s:%s" % [marker.get("kind", ""), marker.get("quest_id", ""), marker.get("source_dialogue_id", "")]
+	for existing in markers:
+		var existing_marker: Dictionary = _dictionary_or_empty(existing)
+		var existing_key := "%s:%s:%s" % [existing_marker.get("kind", ""), existing_marker.get("quest_id", ""), existing_marker.get("source_dialogue_id", "")]
+		if existing_key == key:
+			return
+	markers.append(marker)
+	result[definition_id] = markers
 
 
 func _manual_turn_in_markers_by_quest(runtime_snapshot: Dictionary) -> Dictionary:
@@ -208,6 +229,59 @@ func _manual_turn_in_markers_by_quest(runtime_snapshot: Dictionary) -> Dictionar
 	return result
 
 
+func _offer_markers_by_quest(runtime_snapshot: Dictionary) -> Dictionary:
+	var active: Dictionary = _quest_id_set(runtime_snapshot.get("active_quests", []))
+	var completed: Dictionary = _quest_id_set(runtime_snapshot.get("completed_quests", []))
+	var result: Dictionary = {}
+	for quest_id_value in registry.get_library("quests").keys():
+		var quest_id := str(quest_id_value)
+		if quest_id.is_empty() or active.has(quest_id) or completed.has(quest_id):
+			continue
+		var quest_record: Dictionary = _dictionary_or_empty(registry.get_library("quests").get(quest_id, {}))
+		var quest_data: Dictionary = _dictionary_or_empty(quest_record.get("data", {}))
+		if not _quest_prerequisites_met(quest_data, completed):
+			continue
+		var objective: Dictionary = _current_objective(quest_data, "")
+		result[quest_id] = {
+			"kind": "quest_offer",
+			"quest_id": quest_id,
+			"quest_title": str(quest_data.get("title", quest_id)),
+			"objective_id": str(objective.get("id", "")),
+			"objective_type": str(objective.get("objective_type", "")),
+			"requirement_text": str(objective.get("description", quest_data.get("description", ""))),
+			"current": 0,
+			"target": max(1, int(objective.get("count", 1))),
+			"ready": true,
+			"status": "available",
+		}
+	return result
+
+
+func _quest_id_set(value: Variant) -> Dictionary:
+	var result: Dictionary = {}
+	if typeof(value) == TYPE_DICTIONARY:
+		for key in (value as Dictionary).keys():
+			if bool((value as Dictionary).get(key, false)):
+				result[str(key)] = true
+		return result
+	for entry in _array_or_empty(value):
+		var quest_id := ""
+		if typeof(entry) == TYPE_DICTIONARY:
+			quest_id = str(_dictionary_or_empty(entry).get("quest_id", ""))
+		else:
+			quest_id = str(entry)
+		if not quest_id.is_empty():
+			result[quest_id] = true
+	return result
+
+
+func _quest_prerequisites_met(quest_data: Dictionary, completed: Dictionary) -> bool:
+	for prerequisite in _array_or_empty(quest_data.get("prerequisites", [])):
+		if not completed.has(str(prerequisite)):
+			return false
+	return true
+
+
 func _current_objective(quest_data: Dictionary, current_node_id: String) -> Dictionary:
 	var flow: Dictionary = _dictionary_or_empty(quest_data.get("flow", {}))
 	var nodes: Dictionary = _dictionary_or_empty(flow.get("nodes", {}))
@@ -222,12 +296,20 @@ func _current_objective(quest_data: Dictionary, current_node_id: String) -> Dict
 
 
 func _dialogue_turn_in_quest_ids(dialogue_data: Dictionary) -> Array[String]:
+	return _dialogue_action_quest_ids(dialogue_data, "turn_in_quest")
+
+
+func _dialogue_start_quest_ids(dialogue_data: Dictionary) -> Array[String]:
+	return _dialogue_action_quest_ids(dialogue_data, "start_quest")
+
+
+func _dialogue_action_quest_ids(dialogue_data: Dictionary, action_type: String) -> Array[String]:
 	var result: Array[String] = []
 	for node in _array_or_empty(dialogue_data.get("nodes", [])):
 		var node_data: Dictionary = _dictionary_or_empty(node)
 		for action in _array_or_empty(node_data.get("actions", [])):
 			var action_data: Dictionary = _dictionary_or_empty(action)
-			if str(action_data.get("type", "")) != "turn_in_quest":
+			if str(action_data.get("type", "")) != action_type:
 				continue
 			_append_unique_string(result, action_data.get("quest_id", action_data.get("questId", "")))
 	return result

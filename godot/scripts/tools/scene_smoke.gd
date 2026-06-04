@@ -348,42 +348,60 @@ func _validate_quest_actor_markers(registry: RefCounted, errors: Array[String]) 
 	if doctor_actor.is_empty():
 		errors.append("quest actor marker smoke should include doctor_chen actor")
 		return
-	var quest_markers: Array = _array_or_empty(doctor_actor.get("quest_markers", []))
-	if quest_markers.is_empty():
-		errors.append("doctor_chen should expose quest turn-in marker from dialogue rules")
+	var doctor_marker: Dictionary = _quest_marker_by_kind(_array_or_empty(doctor_actor.get("quest_markers", [])), "quest_turn_in")
+	_validate_quest_marker_data(doctor_marker, "doctor_chen", "quest_turn_in", "find_medicine", "ready", "doctor_chen_find_medicine_turn_in", errors)
+	var trader_actor := _actor_by_definition(_array_or_empty(world_result.get("actors", [])), "trader_lao_wang")
+	if trader_actor.is_empty():
+		errors.append("quest actor marker smoke should include trader_lao_wang actor")
 		return
-	var marker: Dictionary = _dictionary_or_empty(quest_markers[0])
-	if str(marker.get("quest_id", "")) != "find_medicine":
-		errors.append("doctor_chen quest marker should target find_medicine")
-	if not bool(marker.get("ready", false)) or str(marker.get("status", "")) != "ready":
-		errors.append("doctor_chen quest marker should be ready when objective progress is complete")
-	if str(marker.get("source_dialogue_id", "")) != "doctor_chen_find_medicine_turn_in":
-		errors.append("doctor_chen quest marker should expose turn-in dialogue source")
+	var trader_marker: Dictionary = _quest_marker_by_kind(_array_or_empty(trader_actor.get("quest_markers", [])), "quest_offer")
+	_validate_quest_marker_data(trader_marker, "trader_lao_wang", "quest_offer", "tutorial_survive", "available", "trader_lao_wang_intro", errors)
 
 	var root := Node3D.new()
 	root.name = "SceneSmokeQuestMarkerRoot"
 	get_root().add_child(root)
 	WorldSceneRenderer.new().render_world(root, world_result, {"load_map_visuals": false})
-	var actor_node: Node = root.find_child("Actor_doctor_chen_9102", true, false)
+	_validate_rendered_quest_marker(root, "Actor_doctor_chen_9102", "doctor_chen", "quest_turn_in", "find_medicine", "ready", "doctor_chen_find_medicine_turn_in", "!", errors)
+	_validate_rendered_quest_marker(root, "Actor_trader_lao_wang_9103", "trader_lao_wang", "quest_offer", "tutorial_survive", "available", "trader_lao_wang_intro", "!", errors)
+	root.queue_free()
+
+
+func _validate_quest_marker_data(marker: Dictionary, actor_label: String, expected_kind: String, expected_quest_id: String, expected_status: String, expected_dialogue_id: String, errors: Array[String]) -> void:
+	if marker.is_empty():
+		errors.append("%s should expose %s marker from dialogue rules" % [actor_label, expected_kind])
+		return
+	if str(marker.get("kind", "")) != expected_kind:
+		errors.append("%s quest marker should expose kind %s" % [actor_label, expected_kind])
+	if str(marker.get("quest_id", "")) != expected_quest_id:
+		errors.append("%s quest marker should target %s" % [actor_label, expected_quest_id])
+	if str(marker.get("status", "")) != expected_status:
+		errors.append("%s quest marker should expose status %s" % [actor_label, expected_status])
+	if str(marker.get("source_dialogue_id", "")) != expected_dialogue_id:
+		errors.append("%s quest marker should expose dialogue source %s" % [actor_label, expected_dialogue_id])
+
+
+func _validate_rendered_quest_marker(root: Node, node_name: String, actor_label: String, expected_kind: String, expected_quest_id: String, expected_status: String, expected_dialogue_id: String, expected_label: String, errors: Array[String]) -> void:
+	var actor_node: Node = root.find_child(node_name, true, false)
 	if actor_node == null:
-		errors.append("doctor_chen quest marker actor should render")
+		errors.append("%s quest marker actor should render" % actor_label)
 	else:
 		var icon: MeshInstance3D = actor_node.find_child("ActorQuestMarker", true, false) as MeshInstance3D
 		if icon == null:
-			errors.append("doctor_chen should render ActorQuestMarker")
+			errors.append("%s should render ActorQuestMarker" % actor_label)
 		else:
-			if str(icon.get_meta("quest_id", "")) != "find_medicine":
-				errors.append("ActorQuestMarker should expose quest_id metadata")
-			if not bool(icon.get_meta("ready", false)):
-				errors.append("ActorQuestMarker should expose ready metadata")
-			if str(icon.get_meta("source_dialogue_id", "")) != "doctor_chen_find_medicine_turn_in":
-				errors.append("ActorQuestMarker should expose source dialogue metadata")
+			if str(icon.get_meta("marker_kind", "")) != expected_kind:
+				errors.append("%s ActorQuestMarker should expose marker kind" % actor_label)
+			if str(icon.get_meta("quest_id", "")) != expected_quest_id:
+				errors.append("%s ActorQuestMarker should expose quest_id metadata" % actor_label)
+			if str(icon.get_meta("marker_status", "")) != expected_status:
+				errors.append("%s ActorQuestMarker should expose marker status metadata" % actor_label)
+			if str(icon.get_meta("source_dialogue_id", "")) != expected_dialogue_id:
+				errors.append("%s ActorQuestMarker should expose source dialogue metadata" % actor_label)
 		var label: Label3D = actor_node.find_child("ActorQuestMarkerLabel", true, false) as Label3D
 		if label == null:
-			errors.append("doctor_chen should render ActorQuestMarkerLabel")
-		elif label.text != "!":
-			errors.append("ready quest marker label should use !")
-	root.queue_free()
+			errors.append("%s should render ActorQuestMarkerLabel" % actor_label)
+		elif label.text != expected_label:
+			errors.append("%s quest marker label should use %s" % [actor_label, expected_label])
 
 
 func _quest_marker_runtime_snapshot() -> Dictionary:
@@ -397,6 +415,7 @@ func _quest_marker_runtime_snapshot() -> Dictionary:
 			"current_node_id": "step_1",
 			"completed_objectives": {"step_1": 1},
 		}],
+		"completed_quests": ["zombie_hunter"],
 		"actors": [{
 			"actor_id": 9101,
 			"definition_id": "player",
@@ -417,8 +436,26 @@ func _quest_marker_runtime_snapshot() -> Dictionary:
 			"grid_position": {"x": 2, "y": 0, "z": 1},
 			"ap": 3.0,
 			"combat": {"hp": 8.0, "max_hp": 8.0, "attributes": {"turn_ap_max": 6.0}},
+		}, {
+			"actor_id": 9103,
+			"definition_id": "trader_lao_wang",
+			"display_name": "老王",
+			"kind": "npc",
+			"side": "friendly",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 3, "y": 0, "z": 1},
+			"ap": 3.0,
+			"combat": {"hp": 8.0, "max_hp": 8.0, "attributes": {"turn_ap_max": 6.0}},
 		}],
 	}
+
+
+func _quest_marker_by_kind(markers: Array, marker_kind: String) -> Dictionary:
+	for marker in markers:
+		var marker_data: Dictionary = _dictionary_or_empty(marker)
+		if str(marker_data.get("kind", "")) == marker_kind:
+			return marker_data
+	return {}
 
 
 func _actor_by_definition(actors: Array, definition_id: String) -> Dictionary:
