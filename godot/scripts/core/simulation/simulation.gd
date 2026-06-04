@@ -1574,19 +1574,20 @@ func _interaction_success_payload(actor_id: int, prompt: Dictionary, option: Dic
 
 func _actor_can_reach_interaction(actor: RefCounted, prompt: Dictionary) -> bool:
 	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	var interaction_range: int = max(0, int(prompt.get("interaction_range", 1)))
 	match str(target.get("target_type", "")):
 		"actor":
 			var target_actor: RefCounted = actor_registry.get_actor(int(target.get("actor_id", 0)))
 			if target_actor == null:
 				return false
-			return _grid_distance(actor.grid_position, target_actor.grid_position) <= 1
+			return _grid_distance(actor.grid_position, target_actor.grid_position) <= interaction_range
 		"map_object":
 			for cell in _array_or_empty(target.get("cells", [])):
 				var cell_coord: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(cell))
-				if _grid_distance(actor.grid_position, cell_coord) <= 1:
+				if _grid_distance(actor.grid_position, cell_coord) <= interaction_range:
 					return true
 			var anchor: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(target.get("anchor", {})))
-			return _grid_distance(actor.grid_position, anchor) <= 1
+			return _grid_distance(actor.grid_position, anchor) <= interaction_range
 		_:
 			return true
 
@@ -1596,7 +1597,13 @@ func _approach_then_execute_interaction(actor: RefCounted, target: Dictionary, o
 		return {"success": false, "reason": "approach_topology_missing", "prompt": prompt}
 	var approach_goal: Variant = _approach_goal_for_prompt(actor, prompt, topology)
 	if typeof(approach_goal) != TYPE_DICTIONARY:
-		return {"success": false, "reason": "approach_target_unreachable", "prompt": prompt}
+		return {
+			"success": false,
+			"reason": "approach_target_unreachable",
+			"prompt": prompt,
+			"interaction_range": int(prompt.get("interaction_range", 1)),
+			"target_distance": int(prompt.get("target_distance", -1)),
+		}
 	var approach_plan: Dictionary = _pathfinder.find_path(actor.grid_position, GridCoord.from_dictionary(approach_goal), topology, _occupied_actor_cells(actor.actor_id))
 	if not bool(approach_plan.get("success", false)):
 		return {
@@ -1648,18 +1655,19 @@ func _approach_then_execute_interaction(actor: RefCounted, target: Dictionary, o
 
 func _approach_goal_for_prompt(actor: RefCounted, prompt: Dictionary, topology: Dictionary) -> Variant:
 	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	var interaction_range: int = max(0, int(prompt.get("interaction_range", 1)))
 	var candidates: Array[RefCounted] = []
 	match str(target.get("target_type", "")):
 		"actor":
 			var target_actor: RefCounted = actor_registry.get_actor(int(target.get("actor_id", 0)))
 			if target_actor != null:
-				candidates = _adjacent_goals(target_actor.grid_position)
+				candidates = _interaction_goals(target_actor.grid_position, interaction_range)
 		"map_object":
 			for cell in _array_or_empty(target.get("cells", [])):
 				var cell_coord: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(cell))
-				candidates.append_array(_adjacent_goals(cell_coord))
+				candidates.append_array(_interaction_goals(cell_coord, interaction_range))
 			if candidates.is_empty():
-				candidates = _adjacent_goals(GridCoord.from_dictionary(_dictionary_or_empty(target.get("anchor", {}))))
+				candidates = _interaction_goals(GridCoord.from_dictionary(_dictionary_or_empty(target.get("anchor", {}))), interaction_range)
 	var best_plan: Dictionary = {}
 	var best_goal: RefCounted = null
 	for goal in candidates:
@@ -1672,6 +1680,18 @@ func _approach_goal_for_prompt(actor: RefCounted, prompt: Dictionary, topology: 
 	if best_goal == null:
 		return null
 	return best_goal.to_dictionary()
+
+
+func _interaction_goals(center: RefCounted, interaction_range: int) -> Array[RefCounted]:
+	var output: Array[RefCounted] = []
+	var resolved_range: int = max(1, interaction_range)
+	for dx in range(-resolved_range, resolved_range + 1):
+		for dz in range(-resolved_range, resolved_range + 1):
+			var distance: int = abs(dx) + abs(dz)
+			if distance <= 0 or distance > resolved_range:
+				continue
+			output.append(GridCoord.new(center.x + dx, center.y, center.z + dz))
+	return output
 
 
 func _resume_pending_for_actor(actor: RefCounted, topology: Dictionary) -> Dictionary:

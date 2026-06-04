@@ -41,6 +41,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		"target_id": "survivor_outpost_01_pickup_medkit",
 	})
 	_expect_prompt_snapshot(errors, prompt_probe, "pickup", "pickup", 1.0)
+	_expect_prompt_range(errors, prompt_probe, 1, "pickup prompt")
 	_expect_disabled_option(errors, prompt_probe, "open_container", "target_not_container", "pickup prompt")
 	_expect_disabled_option(errors, prompt_probe, "talk", "target_not_actor", "pickup prompt")
 	var self_prompt_probe: Dictionary = simulation.query_interaction_options(1, {
@@ -48,6 +49,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		"actor_id": 1,
 	})
 	_expect_prompt_snapshot(errors, self_prompt_probe, "wait", "wait", 1.0)
+	_expect_prompt_range(errors, self_prompt_probe, 0, "self prompt")
 	_expect_disabled_option(errors, self_prompt_probe, "attack", "self_target", "self prompt")
 	if str(self_prompt_probe.get("action_label", "")) != "等待":
 		errors.append("self interaction prompt should expose wait action label")
@@ -58,6 +60,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		"actor_id": 2,
 	})
 	_expect_prompt_snapshot(errors, friendly_prompt, "talk", "talk", 1.0)
+	_expect_prompt_range(errors, friendly_prompt, 2, "friendly prompt")
 	_expect_disabled_option(errors, friendly_prompt, "attack", "target_not_hostile", "friendly prompt")
 	var disabled_execute: Dictionary = simulation.execute_interaction(1, {
 		"target_type": "actor",
@@ -83,6 +86,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		},
 	})
 	_expect_prompt_snapshot(errors, grid_prompt, "move", "move", 0.0)
+	_expect_prompt_range(errors, grid_prompt, 0, "grid prompt")
 	_expect_disabled_option(errors, grid_prompt, "pickup", "target_empty", "grid prompt")
 	var hidden_prompt_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	hidden_prompt_simulation.set_actor_vision_radius(1, 0)
@@ -209,6 +213,8 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	var approach_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var approach_errors: Array[String] = _expect_auto_approach_interaction(approach_simulation, registry)
 	errors.append_array(approach_errors)
+	var range_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	errors.append_array(_expect_talk_range_direct_interaction(range_simulation, registry))
 	var direct_wait_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	errors.append_array(_expect_direct_self_wait_interaction(direct_wait_simulation))
 	return errors
@@ -457,6 +463,18 @@ func _expect_disabled_option(errors: Array[String], prompt: Dictionary, option_i
 	errors.append("%s should expose disabled option %s" % [context, option_id])
 
 
+func _expect_prompt_range(errors: Array[String], prompt: Dictionary, expected_range: int, context: String) -> void:
+	if int(prompt.get("interaction_range", -1)) != expected_range:
+		errors.append("%s should expose interaction_range %d" % [context, expected_range])
+	if not prompt.has("target_distance"):
+		errors.append("%s should expose target_distance" % context)
+	if not prompt.has("requires_approach"):
+		errors.append("%s should expose requires_approach" % context)
+	var options: Array = prompt.get("options", [])
+	if not options.is_empty() and int(_dictionary_or_empty(options[0]).get("interaction_range", -1)) != expected_range:
+		errors.append("%s primary option should expose interaction_range %d" % [context, expected_range])
+
+
 func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var topology: Dictionary = _topology(simulation, registry)
@@ -479,6 +497,8 @@ func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCoun
 		errors.append("far talk should report auto_resumed_interaction")
 	if player.active_dialogue_id != "trader_lao_wang":
 		errors.append("far talk should start trader dialogue after approach")
+	if _grid_distance(player.grid_position, trader.grid_position) > 2:
+		errors.append("far talk should stop within talk interaction range")
 	if _event_count(simulation.snapshot(), "movement_queued") <= 0:
 		errors.append("far talk should emit movement_queued before auto resume")
 	if _event_count(simulation.snapshot(), "interaction_queued") <= 0:
@@ -493,6 +513,35 @@ func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCoun
 		errors.append("interaction_queued should include option_id")
 	if _event_count(simulation.snapshot(), "interaction_resumed") <= 0:
 		errors.append("far talk should emit interaction_resumed after auto approach")
+	return errors
+
+
+func _expect_talk_range_direct_interaction(simulation: RefCounted, registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var topology: Dictionary = _topology(simulation, registry)
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	var trader: RefCounted = simulation.actor_registry.get_actor(2)
+	trader.grid_position.x = player.grid_position.x + 2
+	trader.grid_position.z = player.grid_position.z
+	player.ap = 6.0
+	var movement_before: int = _event_count(simulation.snapshot(), "movement_queued")
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "actor",
+			"actor_id": trader.actor_id,
+		},
+		"topology": topology,
+	})
+	if not bool(result.get("success", false)):
+		errors.append("range-2 talk should execute without approach: %s" % result.get("reason", "unknown"))
+	if player.active_dialogue_id != "trader_lao_wang":
+		errors.append("range-2 talk should start trader dialogue")
+	if _event_count(simulation.snapshot(), "movement_queued") != movement_before:
+		errors.append("range-2 talk should not queue movement")
+	var prompt: Dictionary = _dictionary_or_empty(result.get("prompt", {}))
+	if int(prompt.get("interaction_range", -1)) != 2 or bool(prompt.get("requires_approach", true)):
+		errors.append("range-2 talk prompt should expose no approach required")
 	return errors
 
 
@@ -515,6 +564,14 @@ func _expect_direct_self_wait_interaction(simulation: RefCounted) -> Array[Strin
 		errors.append("direct self wait interaction should emit turn_ended")
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "wait", "wait", "幸存者")
 	return errors
+
+
+func _grid_distance(left: RefCounted, right: RefCounted) -> int:
+	if left == null or right == null:
+		return 999999
+	if left.y != right.y:
+		return 999999
+	return abs(left.x - right.x) + abs(left.z - right.z)
 
 
 func _topology(simulation: RefCounted, registry: RefCounted) -> Dictionary:

@@ -115,7 +115,7 @@
 - 待补 actor / object / self / grid fallback 的完整优先级和失败 reason。
 - friendly / neutral / hostile 选项差异第一版已迁移：友好/中立 actor 主交互为 `talk` 且 `attack` 进入 `disabled_options` / `target_not_hostile`，hostile actor 主交互为 `attack` 且 `talk` 进入 `disabled_options` / `target_hostile`，self target 主交互为 `wait` 且 self talk / attack 禁用；已由 `Interaction` smoke 覆盖。待补 trade、heal、inspect、关系分数和脚本化 NPC 权限。
 - target visibility 第一版已迁移：当 actor 已有 active vision 时，交互 prompt 会拒绝不可见 actor / map object 并返回 `target_not_visible` 与目标格；攻击校验会拒绝不可见 actor 并返回 `target_not_visible` 与目标格；未刷新 vision 的运行时保持兼容不强制拦截。已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补雾中探索态、遮挡 target preview、UI 文案和技能共用可见性规则。
-- 待补 interaction range：不同交互类型的距离、自动接近目标格、目标不可达时提示。
+- interaction range 第一版已迁移：prompt 会暴露 `interaction_range`、`target_distance`、`requires_approach`，pickup / container / transition / attack 默认 1 格，talk 为 2 格，wait / move 为 0 格；自动接近会按交互距离选择目标格，目标不可达返回 range / distance 诊断，并由 `Interaction` smoke 覆盖。待补动态 AP / 距离配置、特殊对象权限、路径预览和 UI 文案映射。
 - prompt snapshot 真实禁用项第一版已迁移：pickup、container、grid、self、friendly/neutral actor、hostile actor 会输出启用 `options` 和带 `disabled_reason` / `ap_cost` 的 `disabled_options`，执行禁用 option 会返回对应 reason；HUD snapshot 已能暴露禁用项，由 `Interaction` / `UI` smoke 覆盖。待补完整 target display、动态 AP cost 来源、可见性禁用、权限禁用和 UI 文案映射。
 
 ### 5.2 交互行为

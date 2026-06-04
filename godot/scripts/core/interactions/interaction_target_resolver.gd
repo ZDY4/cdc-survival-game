@@ -32,6 +32,9 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 		return _failed_prompt("interaction_option_unavailable")
 
 	var primary_option: Dictionary = _dictionary_or_empty(enabled_options[0])
+	var target_grid: Dictionary = _target_grid(target_data)
+	var target_distance: int = _target_distance(actor, target_grid)
+	var interaction_range: int = int(primary_option.get("interaction_range", 1))
 	return {
 		"ok": true,
 		"actor_id": actor_id,
@@ -45,6 +48,9 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 		"primary_option_kind": primary_option.get("kind", ""),
 		"action_label": primary_option.get("display_name", primary_option.get("id", "")),
 		"ap_cost": primary_option.get("ap_cost", 0.0),
+		"interaction_range": interaction_range,
+		"target_distance": target_distance,
+		"requires_approach": target_distance > interaction_range if target_distance >= 0 else false,
 	}
 
 
@@ -250,6 +256,7 @@ func _option_for_target(target_data: Dictionary) -> Dictionary:
 func _enriched_option(option: Dictionary) -> Dictionary:
 	var enriched_option: Dictionary = option.duplicate(true)
 	enriched_option["ap_cost"] = _ap_cost_for_option(enriched_option)
+	enriched_option["interaction_range"] = _interaction_range_for_option(enriched_option)
 	enriched_option["disabled"] = bool(enriched_option.get("disabled", false))
 	if not enriched_option.has("disabled_reason"):
 		enriched_option["disabled_reason"] = ""
@@ -290,6 +297,28 @@ func _ap_cost_for_option(option: Dictionary) -> float:
 			return 2.0
 		_:
 			return 1.0
+
+
+func _interaction_range_for_option(option: Dictionary) -> int:
+	match str(option.get("kind", "")):
+		"wait":
+			return 0
+		"talk":
+			return 2
+		"move":
+			return 0
+		"attack":
+			return 1
+		_:
+			return 1
+
+
+func _target_distance(actor: RefCounted, target_grid: Dictionary) -> int:
+	if actor == null or target_grid.is_empty():
+		return -1
+	if actor.grid_position.y != int(target_grid.get("y", actor.grid_position.y)):
+		return 999999
+	return abs(actor.grid_position.x - int(target_grid.get("x", actor.grid_position.x))) + abs(actor.grid_position.z - int(target_grid.get("z", actor.grid_position.z)))
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

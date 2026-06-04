@@ -109,6 +109,12 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("HUD snapshot should expose action_label")
 	if absf(float(interaction.get("ap_cost", -1.0)) - 1.0) > 0.001:
 		errors.append("HUD snapshot should expose ap_cost")
+	if int(interaction.get("interaction_range", -1)) != 1:
+		errors.append("HUD snapshot should expose interaction_range")
+	if not interaction.has("target_distance"):
+		errors.append("HUD snapshot should expose target_distance")
+	if not interaction.has("requires_approach"):
+		errors.append("HUD snapshot should expose requires_approach")
 	if typeof(interaction.get("disabled_options", [])) != TYPE_ARRAY:
 		errors.append("HUD snapshot should expose disabled_options")
 	elif not _has_disabled_option(interaction.get("disabled_options", []), "open_container", "target_not_container"):

@@ -56,6 +56,9 @@ func _prompt_summary(selected_target: Dictionary) -> Dictionary:
 			"primary_option_kind": "",
 			"action_label": "",
 			"ap_cost": 0.0,
+			"interaction_range": 0,
+			"target_distance": -1,
+			"requires_approach": false,
 			"options": [],
 			"disabled_options": [],
 		}
@@ -68,6 +71,9 @@ func _prompt_summary(selected_target: Dictionary) -> Dictionary:
 		"primary_option_kind": selected_target.get("primary_option_kind", ""),
 		"action_label": selected_target.get("action_label", ""),
 		"ap_cost": float(selected_target.get("ap_cost", 0.0)),
+		"interaction_range": int(selected_target.get("interaction_range", 1)),
+		"target_distance": int(selected_target.get("target_distance", -1)),
+		"requires_approach": bool(selected_target.get("requires_approach", false)),
 		"options": selected_target.get("options", []),
 		"disabled_options": selected_target.get("disabled_options", []),
 	}
