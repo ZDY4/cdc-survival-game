@@ -278,7 +278,7 @@
 
 ### 12.2 角色、装备和尸体表现
 
-- 待补 actor 模型姿态、朝向、移动插值、攻击/受击/死亡占位动画。
+- actor 朝向第一版已迁移：`WorldSnapshotBuilder` 会从最近 `actor_moved` 和 `attack_resolved` 事件派生 actor `facing` / `facing_direction` / `facing_yaw_degrees`，`WorldSceneRenderer` 会旋转 actor 根节点并暴露 facing metadata，模型、装备和标记随 actor 朝向变化；已由 `Scene` / `Movement` / `Combat` smoke 覆盖。待补模型姿态、移动插值、攻击/受击/死亡占位动画和更精细朝向来源。
 - 装备视觉挂点第一版已迁移：装备视觉数据会按 `attach_target` 驱动 body、feet、legs、head、hands、back、accessory、main_hand、off_hand 的偏移、旋转和缩放，世界节点暴露 `attach_target`、`attach_offset`、`attach_rotation_degrees`、`attach_scale` metadata，`Scene` smoke 覆盖真实玩家主手装备和合成 head/hands/back/accessory/off_hand 挂点。待补真实骨骼 socket、动画绑定、精确美术校准和装备遮挡处理。
 - 待补武器开火/挥击反馈、命中特效、换弹/攻击动画和手持模型 polish。
 - 尸体模型 / 标记第一版已迁移：世界快照会生成 `Corpse_*` 节点，优先复用被击败 actor glTF，否则使用 corpse fallback；节点带 `CorpseNameLabel`、`CorpseContainerBadge`、pickable body、container/source actor/loot/money metadata，可 hover、选中并打开容器；已由 `Scene` 合成尸体 smoke 和 `PlayerInteraction` 击杀后尸体 hover/open smoke 覆盖。待补雾战显隐细节、专用尸体姿态 / 动画和视觉 polish。

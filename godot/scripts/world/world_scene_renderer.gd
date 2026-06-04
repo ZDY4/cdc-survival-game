@@ -241,6 +241,7 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 			"actor_id": int(actor_data.get("actor_id", 0)),
 		})
 		node.position = _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), 0.58)
+		_apply_actor_facing(node, actor_data)
 		if not _add_actor_model(node, actor_data):
 			_add_actor_fallback_mesh(node, actor_data)
 		_add_equipment_models(node, _array_or_empty(actor_data.get("equipment_visuals", [])))
@@ -252,6 +253,17 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 		_add_pickable_capsule(node, 0.36, 1.25)
 		root.add_child(node)
 	return actors.size()
+
+
+func _apply_actor_facing(node: Node3D, actor_data: Dictionary) -> void:
+	var facing: Dictionary = _dictionary_or_empty(actor_data.get("facing", {}))
+	var direction := str(actor_data.get("facing_direction", facing.get("direction", "")))
+	var yaw := float(actor_data.get("facing_yaw_degrees", facing.get("yaw_degrees", 0.0)))
+	node.rotation_degrees = Vector3(0.0, yaw, 0.0)
+	node.set_meta("facing_direction", direction)
+	node.set_meta("facing_yaw_degrees", yaw)
+	node.set_meta("facing_source", str(facing.get("source", "")))
+	node.set_meta("facing_event_sequence", int(facing.get("event_sequence", 0)))
 
 
 func _spawn_corpse_markers(root: Node3D, corpses: Array) -> int:

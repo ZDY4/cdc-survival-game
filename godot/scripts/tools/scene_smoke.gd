@@ -80,6 +80,7 @@ func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary,
 	_validate_corpse_world_markers(errors)
 	_validate_equipment_attach_points(errors)
 	_validate_combat_feedback_markers(registry, errors)
+	_validate_actor_facing_markers(registry, errors)
 	return errors
 
 
@@ -819,6 +820,111 @@ func _combat_feedback_runtime_snapshot() -> Dictionary:
 		"active_quests": [],
 		"completed_quests": [],
 	}
+
+
+func _validate_actor_facing_markers(registry: RefCounted, errors: Array[String]) -> void:
+	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(_actor_facing_runtime_snapshot())
+	if not bool(world_result.get("ok", false)):
+		errors.append("actor facing smoke failed to build world snapshot: %s" % world_result.get("error", "unknown"))
+		return
+	var moved_actor: Dictionary = _actor_by_id(_array_or_empty(world_result.get("actors", [])), 9501)
+	if str(moved_actor.get("facing_direction", "")) != "east" or absf(float(moved_actor.get("facing_yaw_degrees", -1.0)) - 90.0) > 0.001:
+		errors.append("moved actor should face east from actor_moved event")
+	var attacker_actor: Dictionary = _actor_by_id(_array_or_empty(world_result.get("actors", [])), 9502)
+	if str(attacker_actor.get("facing_direction", "")) != "north" or absf(float(attacker_actor.get("facing_yaw_degrees", -1.0))) > 0.001:
+		errors.append("attacking actor should face north from attack_resolved event")
+	var root := Node3D.new()
+	root.name = "SceneSmokeActorFacingRoot"
+	get_root().add_child(root)
+	WorldSceneRenderer.new().render_world(root, world_result, {"load_map_visuals": false})
+	_validate_actor_facing_node(root, 9501, "east", 90.0, "movement", errors)
+	_validate_actor_facing_node(root, 9502, "north", 0.0, "attack", errors)
+	root.queue_free()
+
+
+func _validate_actor_facing_node(root: Node, actor_id: int, expected_direction: String, expected_yaw: float, expected_source: String, errors: Array[String]) -> void:
+	var actor_node: Node3D = root.find_child("Actor_scene_smoke_facing_%d" % actor_id, true, false) as Node3D
+	if actor_node == null:
+		errors.append("actor facing smoke actor %d should render" % actor_id)
+		return
+	if str(actor_node.get_meta("facing_direction", "")) != expected_direction:
+		errors.append("actor %d should expose facing direction %s" % [actor_id, expected_direction])
+	if str(actor_node.get_meta("facing_source", "")) != expected_source:
+		errors.append("actor %d should expose facing source %s" % [actor_id, expected_source])
+	if absf(float(actor_node.get_meta("facing_yaw_degrees", -1.0)) - expected_yaw) > 0.001:
+		errors.append("actor %d should expose facing yaw %.1f" % [actor_id, expected_yaw])
+	if absf(actor_node.rotation_degrees.y - expected_yaw) > 0.001:
+		errors.append("actor %d node should rotate to facing yaw %.1f" % [actor_id, expected_yaw])
+
+
+func _actor_facing_runtime_snapshot() -> Dictionary:
+	return {
+		"active_map_id": "survivor_outpost_01",
+		"actors": [{
+			"actor_id": 9501,
+			"definition_id": "scene_smoke_facing",
+			"display_name": "Facing Move Smoke",
+			"kind": "npc",
+			"side": "friendly",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 5, "y": 0, "z": 5},
+			"ap": 3.0,
+			"combat": {"hp": 10.0, "max_hp": 10.0, "attributes": {"turn_ap_max": 6.0}},
+		}, {
+			"actor_id": 9502,
+			"definition_id": "scene_smoke_facing",
+			"display_name": "Facing Attack Smoke",
+			"kind": "npc",
+			"side": "friendly",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 8, "y": 0, "z": 8},
+			"ap": 3.0,
+			"combat": {"hp": 10.0, "max_hp": 10.0, "attributes": {"turn_ap_max": 6.0}},
+		}, {
+			"actor_id": 9503,
+			"definition_id": "scene_smoke_facing",
+			"display_name": "Facing Target Smoke",
+			"kind": "npc",
+			"side": "hostile",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 8, "y": 0, "z": 6},
+			"ap": 3.0,
+			"combat": {"hp": 10.0, "max_hp": 10.0, "attributes": {"turn_ap_max": 6.0}},
+		}],
+		"events": [{
+			"kind": "actor_moved",
+			"payload": {
+				"actor_id": 9501,
+				"from": {"x": 4, "y": 0, "z": 5},
+				"to": {"x": 5, "y": 0, "z": 5},
+				"steps": 1,
+			},
+		}, {
+			"kind": "attack_resolved",
+			"payload": {
+				"actor_id": 9502,
+				"target_actor_id": 9503,
+				"damage": 1.0,
+				"target_hp": 9.0,
+				"critical": false,
+				"hit_kind": "hit",
+				"defeated": false,
+			},
+		}],
+		"corpse_containers": [],
+		"consumed_interaction_targets": [],
+		"door_states": [],
+		"active_quests": [],
+		"completed_quests": [],
+	}
+
+
+func _actor_by_id(actors: Array, actor_id: int) -> Dictionary:
+	for actor in actors:
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if int(actor_data.get("actor_id", 0)) == actor_id:
+			return actor_data
+	return {}
 
 
 func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, errors: Array[String]) -> void:

@@ -31,6 +31,7 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	var actors: Array[Dictionary] = _actors_on_map(runtime_snapshot.get("actors", []), map_id)
 	_apply_actor_quest_markers(actors, runtime_snapshot)
 	_apply_actor_combat_feedback(actors, runtime_snapshot)
+	_apply_actor_facing(actors, runtime_snapshot)
 	return {
 		"ok": true,
 		"map": map_snapshot,
@@ -163,6 +164,86 @@ func _apply_actor_combat_feedback(actors: Array[Dictionary], runtime_snapshot: D
 			continue
 		actor_data["combat_feedback"] = _dictionary_or_empty(feedback_by_actor.get(actor_id, {})).duplicate(true)
 		actors[index] = actor_data
+
+
+func _apply_actor_facing(actors: Array[Dictionary], runtime_snapshot: Dictionary) -> void:
+	if actors.is_empty():
+		return
+	var by_id: Dictionary = {}
+	for actor in actors:
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		by_id[int(actor_data.get("actor_id", 0))] = actor_data
+	var facing_by_actor := _recent_facing_by_actor(_array_or_empty(runtime_snapshot.get("events", [])), by_id)
+	if facing_by_actor.is_empty():
+		return
+	for index in range(actors.size()):
+		var actor_data: Dictionary = actors[index]
+		var actor_id := int(actor_data.get("actor_id", 0))
+		if not facing_by_actor.has(actor_id):
+			continue
+		var facing: Dictionary = _dictionary_or_empty(facing_by_actor.get(actor_id, {})).duplicate(true)
+		actor_data["facing"] = facing
+		actor_data["facing_direction"] = str(facing.get("direction", ""))
+		actor_data["facing_yaw_degrees"] = float(facing.get("yaw_degrees", 0.0))
+		actors[index] = actor_data
+
+
+func _recent_facing_by_actor(events: Array, actors_by_id: Dictionary) -> Dictionary:
+	var output: Dictionary = {}
+	var sequence := 0
+	for event_value in events:
+		sequence += 1
+		var event: Dictionary = _dictionary_or_empty(event_value)
+		var kind := str(event.get("kind", ""))
+		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		if kind == "actor_moved":
+			var movement_facing := _facing_from_grids(_dictionary_or_empty(payload.get("from", {})), _dictionary_or_empty(payload.get("to", {})), sequence, "movement")
+			if not movement_facing.is_empty():
+				output[int(payload.get("actor_id", 0))] = movement_facing
+		elif kind == "attack_resolved":
+			var attacker_id := int(payload.get("actor_id", 0))
+			var target_id := int(payload.get("target_actor_id", 0))
+			var attacker: Dictionary = _dictionary_or_empty(actors_by_id.get(attacker_id, {}))
+			var target: Dictionary = _dictionary_or_empty(actors_by_id.get(target_id, {}))
+			var attack_facing := _facing_from_grids(_dictionary_or_empty(attacker.get("grid_position", {})), _dictionary_or_empty(target.get("grid_position", {})), sequence, "attack")
+			if not attack_facing.is_empty():
+				output[attacker_id] = attack_facing
+	return output
+
+
+func _facing_from_grids(from_grid: Dictionary, to_grid: Dictionary, sequence: int, source: String) -> Dictionary:
+	if from_grid.is_empty() or to_grid.is_empty():
+		return {}
+	var dx := int(to_grid.get("x", 0)) - int(from_grid.get("x", 0))
+	var dz := int(to_grid.get("z", 0)) - int(from_grid.get("z", 0))
+	if dx == 0 and dz == 0:
+		return {}
+	var direction := _cardinal_direction(dx, dz)
+	return {
+		"direction": direction,
+		"yaw_degrees": _direction_yaw_degrees(direction),
+		"source": source,
+		"from": from_grid.duplicate(true),
+		"to": to_grid.duplicate(true),
+		"event_sequence": sequence,
+	}
+
+
+func _cardinal_direction(dx: int, dz: int) -> String:
+	if abs(dx) >= abs(dz):
+		return "east" if dx > 0 else "west"
+	return "south" if dz > 0 else "north"
+
+
+func _direction_yaw_degrees(direction: String) -> float:
+	match direction:
+		"east":
+			return 90.0
+		"south":
+			return 180.0
+		"west":
+			return 270.0
+	return 0.0
 
 
 func _recent_combat_feedback_by_target(events: Array) -> Dictionary:
