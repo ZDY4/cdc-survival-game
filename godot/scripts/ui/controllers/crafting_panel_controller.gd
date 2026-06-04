@@ -170,7 +170,8 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("craft_player_recipe"):
-			var result: Dictionary = root.craft_player_recipe(recipe_id)
+			var count := int(_quantity_spin.value) if _quantity_spin != null and _selected_recipe_id == recipe_id else 1
+			var result: Dictionary = root.craft_player_recipe(recipe_id, max(1, count))
 			_set_feedback_from_result(result, recipe)
 	, CONNECT_DEFERRED)
 	row.add_child(line)
@@ -552,7 +553,10 @@ func _set_feedback_from_result(result: Dictionary, recipe: Dictionary) -> void:
 		var output: Dictionary = _dictionary_or_empty(result.get("output", {}))
 		var output_item_id := str(result.get("output_item_id", output.get("item_id", recipe.get("output_item_id", ""))))
 		var output_count := int(result.get("output_count", output.get("count", recipe.get("output_count", 1))))
-		_feedback_label.text = "已制作: %s -> %s x%d" % [
+		var crafted_count := int(result.get("count", result.get("completed_count", 1)))
+		var count_suffix := " x%d" % crafted_count if crafted_count > 1 else ""
+		_feedback_label.text = "已制作%s: %s -> %s x%d" % [
+			count_suffix,
 			recipe_name,
 			recipe.get("output_name", output_item_id),
 			output_count,

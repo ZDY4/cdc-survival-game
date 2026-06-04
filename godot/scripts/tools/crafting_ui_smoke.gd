@@ -164,18 +164,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _detail_text(game_root).contains("最大 2"):
 		errors.append("crafting detail should show max craft count")
 
+	var crafted_events_before := _event_count(game_root, "recipe_crafted")
 	_craft_button(game_root, "recipe_bandage_basic").pressed.emit()
 	await process_frame
-	if not _feedback_text(game_root).contains("已制作: 基础绷带 -> 绷带 x1"):
-		errors.append("crafting panel should show successful craft feedback")
-	if _player_inventory_count(game_root, "1011") != 2:
-		errors.append("crafting from panel should consume cloth")
-	if _player_inventory_count(game_root, "1006") != 2:
-		errors.append("crafting from panel should add crafted bandage")
+	if not _feedback_text(game_root).contains("已制作 x2: 基础绷带 -> 绷带 x2"):
+		errors.append("crafting panel should show batch craft feedback")
+	if _player_inventory_count(game_root, "1011") != 0:
+		errors.append("batch crafting from panel should consume selected cloth quantity")
+	if _player_inventory_count(game_root, "1006") != 3:
+		errors.append("batch crafting from panel should add crafted bandages")
 	if not _event_seen(game_root, "recipe_crafted"):
 		errors.append("crafting from panel should emit recipe_crafted")
-	if not _detail_text(game_root).contains("最大 1"):
-		errors.append("crafting panel should refresh max craft count after crafting")
+	if _event_count(game_root, "recipe_crafted") < crafted_events_before + 2:
+		errors.append("batch crafting should emit recipe_crafted for each crafted item")
+	if not _detail_text(game_root).contains("最大 0"):
+		errors.append("crafting panel should refresh max craft count after batch crafting")
 	return errors
 
 
@@ -293,8 +296,13 @@ func _player_inventory_count(game_root: Node, item_id: String) -> int:
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:
+	return _event_count(game_root, kind) > 0
+
+
+func _event_count(game_root: Node, kind: String) -> int:
+	var count := 0
 	for event in game_root.simulation.snapshot().get("events", []):
 		var event_data: Dictionary = event
 		if event_data.get("kind", "") == kind:
-			return true
-	return false
+			count += 1
+	return count

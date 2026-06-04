@@ -53,6 +53,33 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if _event_count(simulation.snapshot(), "experience_granted") != 1:
 		errors.append("crafting experience reward should emit experience_granted")
 
+	player.inventory["1011"] = 4
+	var batch_events_before := _event_count(simulation.snapshot(), "recipe_crafted")
+	var batch_xp_events_before := _event_count(simulation.snapshot(), "experience_granted")
+	var batch: Dictionary = simulation.submit_player_command({
+		"kind": "craft",
+		"actor_id": 1,
+		"recipe_id": "recipe_bandage_basic",
+		"count": 2,
+		"recipe_library": recipes,
+	})
+	if not bool(batch.get("success", false)):
+		errors.append("batch bandage crafting failed: %s" % batch.get("reason", "unknown"))
+	if int(batch.get("count", 0)) != 2:
+		errors.append("batch crafting should report completed count")
+	if int(batch.get("output_count", 0)) != 2:
+		errors.append("batch crafting should aggregate output count")
+	if int(player.inventory.get("1011", 0)) != 0:
+		errors.append("batch crafting did not consume all selected cloth")
+	if int(player.inventory.get("1006", 0)) != 4:
+		errors.append("batch crafting did not add crafted bandages")
+	if _event_count(simulation.snapshot(), "recipe_crafted") != batch_events_before + 2:
+		errors.append("batch crafting should emit recipe_crafted for each craft")
+	if int(player.progression.get("total_xp_earned", 0)) != 15:
+		errors.append("batch crafting should apply experience for each craft")
+	if _event_count(simulation.snapshot(), "experience_granted") != batch_xp_events_before + 2:
+		errors.append("batch crafting experience should emit per craft")
+
 	var station_result: Dictionary = simulation.craft_recipe(1, "recipe_first_aid_kit", recipes)
 	if station_result.get("reason", "") != "required_station_unsupported":
 		errors.append("station-gated recipe should report required_station_unsupported")

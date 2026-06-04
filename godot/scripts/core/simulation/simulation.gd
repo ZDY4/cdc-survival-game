@@ -659,7 +659,38 @@ func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary
 	if actor.ap < cost:
 		return {"success": false, "reason": "ap_insufficient"}
 	_spend_ap(actor, cost, "craft")
-	return craft_recipe(actor.actor_id, str(command.get("recipe_id", "")), _dictionary_or_empty(command.get("recipe_library", {})))
+	var count: int = max(1, int(command.get("count", 1)))
+	if count == 1:
+		return craft_recipe(actor.actor_id, str(command.get("recipe_id", "")), _dictionary_or_empty(command.get("recipe_library", {})))
+	return _craft_recipe_batch(actor.actor_id, str(command.get("recipe_id", "")), count, _dictionary_or_empty(command.get("recipe_library", {})))
+
+
+func _craft_recipe_batch(actor_id: int, recipe_id: String, count: int, recipes: Dictionary) -> Dictionary:
+	var completed := 0
+	var output_item_id := ""
+	var output_count := 0
+	var last_result: Dictionary = {}
+	for _index in range(count):
+		last_result = craft_recipe(actor_id, recipe_id, recipes)
+		if not bool(last_result.get("success", false)):
+			if completed > 0:
+				last_result["partial_success"] = true
+				last_result["completed_count"] = completed
+				last_result["requested_count"] = count
+				last_result["output_item_id"] = output_item_id
+				last_result["output_count"] = output_count
+			return last_result
+		completed += 1
+		output_item_id = str(last_result.get("output_item_id", output_item_id))
+		output_count += int(last_result.get("output_count", 0))
+	return {
+		"success": true,
+		"recipe_id": recipe_id,
+		"count": completed,
+		"requested_count": count,
+		"output_item_id": output_item_id,
+		"output_count": output_count,
+	}
 
 
 func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) -> Dictionary:

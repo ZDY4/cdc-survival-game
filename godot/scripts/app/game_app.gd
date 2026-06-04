@@ -969,13 +969,14 @@ func use_hotbar_slot(slot_id: String) -> Dictionary:
 	return result
 
 
-func craft_player_recipe(recipe_id: String) -> Dictionary:
+func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
 	var result: Dictionary = simulation.submit_player_command({
 		"kind": "craft",
 		"actor_id": 1,
 		"recipe_id": recipe_id,
+		"count": max(1, count),
 		"recipe_library": registry.get_library("recipes"),
 	})
 	refresh_inventory_panel()
