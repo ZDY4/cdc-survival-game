@@ -16,7 +16,7 @@ func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_i
 	var unlock_check: Dictionary = _unlock_check(simulation, actor, recipe)
 	if not bool(unlock_check.get("success", false)):
 		return unlock_check
-	var missing_tools: Array[Dictionary] = _missing_required_tools(actor, _array_or_empty(recipe.get("required_tools", [])), simulation.item_library)
+	var missing_tools: Array[Dictionary] = _missing_required_tools(actor, _array_or_empty(recipe.get("required_tools", [])), simulation.item_library, crafting_context)
 	if not missing_tools.is_empty():
 		return {
 			"success": false,
@@ -87,13 +87,13 @@ func _array_or_empty(value: Variant) -> Array:
 	return []
 
 
-func _missing_required_tools(actor: RefCounted, required_tools: Array, item_library: Dictionary) -> Array[Dictionary]:
+func _missing_required_tools(actor: RefCounted, required_tools: Array, item_library: Dictionary, crafting_context: Dictionary = {}) -> Array[Dictionary]:
 	var missing: Array[Dictionary] = []
 	for tool in required_tools:
 		var tool_id: String = _inventory_entries.normalize_content_id(tool)
 		if tool_id.is_empty():
 			continue
-		if _actor_has_tool(actor, tool_id):
+		if _actor_has_tool(actor, tool_id, crafting_context):
 			continue
 		missing.append({
 			"item_id": tool_id,
@@ -104,13 +104,17 @@ func _missing_required_tools(actor: RefCounted, required_tools: Array, item_libr
 	return missing
 
 
-func _actor_has_tool(actor: RefCounted, tool_id: String) -> bool:
+func _actor_has_tool(actor: RefCounted, tool_id: String, crafting_context: Dictionary = {}) -> bool:
 	if actor == null:
 		return false
 	if int(actor.inventory.get(tool_id, 0)) > 0:
 		return true
 	for slot_id in actor.equipment.keys():
 		if _inventory_entries.normalize_content_id(actor.equipment.get(slot_id, "")) == tool_id:
+			return true
+	for container in _array_or_empty(crafting_context.get("nearby_tool_containers", [])):
+		var container_data: Dictionary = _dictionary_or_empty(container)
+		if _inventory_entries.count(_array_or_empty(container_data.get("inventory", [])), tool_id) > 0:
 			return true
 	return false
 

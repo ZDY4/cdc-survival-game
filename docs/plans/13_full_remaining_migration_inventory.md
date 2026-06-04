@@ -255,7 +255,7 @@
 ## 11. 制作和配方
 
 - 已有材料/技能校验和制作命令；配方解锁来源第一版已迁移：运行时记录 `crafted_recipes` 和 `world_flags`，`unlock_conditions` 的 `type=recipe` 会按已制作配方校验，`type=skill` 会按玩家已学技能等级校验，`type=quest` 会按已完成任务校验，`type=item` / `type=book` 会按玩家背包物品校验，`type=world_flag` / `type=flag` 会按运行时世界状态校验，Crafting 面板展示缺失来源、可定位源配方/技能/任务/物品并显示世界状态要求，内容校验和引用反查已识别新来源，纳入 `Crafting` / `CraftingUI` / `Save` / `ContentCLI` smoke；待补工作台解锁源、阅读后永久解锁、消耗书籍/蓝图和更完整 world flag 产生点。
-- 工具要求运行时第一版已迁移：`required_tools` 会检查玩家背包和已装备物品，缺工具时返回 `missing_tools` 并在 Crafting 面板显示具体工具名/可用状态/定位按钮，已纳入 `Crafting` / `CraftingUI` smoke；待补附近容器工具、工具耐久或消耗策略。
+- 工具要求运行时第一版已迁移：`required_tools` 会检查玩家背包、已装备物品和玩家附近容器工具，缺工具时返回 `missing_tools` 并在 Crafting 面板显示具体工具名/可用状态/定位按钮；GameApp 会把 1 格范围内地图容器、已打开持久容器、尸体/掉落容器的库存传入 `crafting_context.nearby_tool_containers`，已纳入 `Crafting` / `CraftingUI` smoke；待补工具耐久或消耗策略。
 - 工作台要求运行时第一版已迁移：地图对象 `props.crafting_station` 会进入 map topology / world result，制作命令和 Crafting snapshot 会按玩家与 station cells 的距离检查 `required_station`，`survivor_outpost_01` 已标注工作坊 workbench、诊所 medical_station 和工坊 forge，并纳入 `Crafting` / `CraftingUI` smoke；待补更多地图 station 标注、交互打开制作台、站点权限和 UI polish。
 - 待补制作时间：即时、排队、跨回合完成、取消制作、AP / 时间消耗。
 - 批量制作预览与执行第一版已迁移：Crafting 面板可选择数量、预览材料消耗、输出数量和最大可制作次数，并可按选择数量一次提交制作；批量 XP 和逐次 `recipe_crafted` 事件已纳入 `CraftingUI` / `Crafting` smoke；待补制作队列和取消。
@@ -379,7 +379,7 @@
 - `TradeUI`：购物车、批量确认和无部分成交已有 smoke；待补装备出售、不可出售和拖拽。
 - `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot 和 `skill_used` effect payload 已有 smoke；待补多组 hotbar、技能树 pan、目标预览、resource cost 和更完整状态 UI。
 - `JournalUI`：任务详情、目标需求、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行和已完成任务历史第一版已有 smoke；待补对话交付条件、失败历史、地图追踪和完成反馈。
-- `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/工作台/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、批量执行和完成反馈第一版已有 smoke；待补附近容器工具、工具耐久/消耗、更多地图 station 标注、制作队列和取消。
+- `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、批量执行和完成反馈第一版已有 smoke；待补工具耐久/消耗、更多地图 station 标注、制作队列和取消。
 - `Save`：passive / active skill effects 已有 roundtrip；继续补新增 runtime 字段和旧存档迁移。
 
 ### 18.2 需要新增或恢复的验证入口

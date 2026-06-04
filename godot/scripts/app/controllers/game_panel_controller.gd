@@ -170,6 +170,8 @@ func update_world_result(value: Dictionary) -> void:
 
 
 func _crafting_context() -> Dictionary:
+	if parent != null and parent.has_method("_crafting_context"):
+		return _dictionary_or_empty(parent.call("_crafting_context")).duplicate(true)
 	return {
 		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),
 	}

@@ -149,6 +149,17 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var missing_tools: Array = tool_missing.get("missing_tools", [])
 	if missing_tools.is_empty() or str(_dictionary_or_empty(missing_tools[0]).get("item_id", "")) != "1151":
 		errors.append("tool-gated recipe should identify missing screwdriver")
+	var nearby_tool_available: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes, {
+		"nearby_tool_containers": [{
+			"container_id": "smoke_tool_crate",
+			"display_name": "工具箱",
+			"inventory": [{"item_id": "1151", "count": 1}],
+		}],
+	})
+	if nearby_tool_available.get("reason", "") != "missing_station":
+		errors.append("tool-gated recipe should use nearby container tool before station check")
+	if int(player.inventory.get("1151", 0)) > 0:
+		errors.append("nearby container tool check should not move tool into player inventory")
 	player.inventory["1151"] = 1
 	var tool_available: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes)
 	if tool_available.get("reason", "") != "missing_station":

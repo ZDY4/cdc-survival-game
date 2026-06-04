@@ -49,11 +49,11 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 			"required": required_count,
 			"available": int(inventory.get(item_id, 0)),
 		})
-	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), inventory, equipment)
+	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), inventory, equipment, crafting_context)
 	var required_station := str(recipe.get("required_station", "none"))
 	var station_check: Dictionary = _station_check(player, required_station, crafting_context)
 	var unlock_check: Dictionary = _unlock_check(recipe, inventory, progression, crafted_recipes, completed_quests, world_flags)
-	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check, unlock_check)
+	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check, unlock_check, crafting_context)
 	var max_craft_count: int = _max_craft_count(materials, bool(availability.get("can_craft", false)))
 	var output_count: int = max(1, int(output.get("count", 1)))
 	return {
@@ -84,7 +84,7 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 	}
 
 
-func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, materials: Array[Dictionary], required_tools: Array[Dictionary], station_check: Dictionary, unlock_check: Dictionary) -> Dictionary:
+func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, materials: Array[Dictionary], required_tools: Array[Dictionary], station_check: Dictionary, unlock_check: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
 	if not bool(unlock_check.get("success", false)):
 		return unlock_check
 	var missing_tools: Array[Dictionary] = []
@@ -93,7 +93,7 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 		var tool_id := str(tool_data.get("item_id", ""))
 		if tool_id.is_empty():
 			continue
-		if _has_tool(tool_id, inventory, equipment):
+		if _has_tool(tool_id, inventory, equipment, crafting_context):
 			continue
 		missing_tools.append({
 			"item_id": tool_id,
@@ -284,29 +284,46 @@ func _distance_to_station(player: Dictionary, station: Dictionary) -> int:
 	return abs(int(anchor.get("x", 0)) - int(player_grid.get("x", 0))) + abs(int(anchor.get("z", 0)) - int(player_grid.get("z", 0)))
 
 
-func _required_tools_snapshot(required_tools: Array, inventory: Dictionary, equipment: Dictionary) -> Array[Dictionary]:
+func _required_tools_snapshot(required_tools: Array, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	for tool in required_tools:
 		var tool_id: String = _normalize_content_id(tool)
 		if tool_id.is_empty():
 			continue
-		var has_tool := _has_tool(tool_id, inventory, equipment)
+		var available_count := _tool_available_count(tool_id, inventory, equipment, crafting_context)
 		output.append({
 			"item_id": tool_id,
 			"name": str(_item_data(tool_id).get("name", tool_id)),
-			"available": 1 if has_tool else 0,
+			"available": available_count,
 			"required": 1,
 		})
 	return output
 
 
-func _has_tool(tool_id: String, inventory: Dictionary, equipment: Dictionary) -> bool:
+func _has_tool(tool_id: String, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> bool:
+	return _tool_available_count(tool_id, inventory, equipment, crafting_context) > 0
+
+
+func _tool_available_count(tool_id: String, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> int:
+	var count := 0
 	if int(inventory.get(tool_id, 0)) > 0:
-		return true
+		count += int(inventory.get(tool_id, 0))
 	for slot_id in equipment.keys():
 		if _normalize_content_id(equipment.get(slot_id, "")) == tool_id:
-			return true
-	return false
+			count += 1
+	for container in _array_or_empty(crafting_context.get("nearby_tool_containers", [])):
+		var container_data: Dictionary = _dictionary_or_empty(container)
+		count += _inventory_entry_count(_array_or_empty(container_data.get("inventory", [])), tool_id)
+	return count
+
+
+func _inventory_entry_count(entries: Array, item_id: String) -> int:
+	var count := 0
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if _normalize_content_id(entry_data.get("item_id", "")) == item_id:
+			count += int(entry_data.get("count", 0))
+	return count
 
 
 func _craftable_count(recipes: Array[Dictionary]) -> int:

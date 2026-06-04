@@ -248,6 +248,25 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_search_box(game_root).text_changed.emit("")
 		await process_frame
 	var player_for_tool: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	var tool_container_grid: Dictionary = player_for_tool.grid_position.to_dictionary()
+	game_root.simulation.map_interaction_targets["smoke_nearby_tool_crate"] = {
+		"target_id": "smoke_nearby_tool_crate",
+		"target_type": "map_object",
+		"display_name": "临时工具箱",
+		"kind": "container",
+		"anchor": tool_container_grid,
+		"cells": [tool_container_grid],
+		"container_inventory": [{"item_id": "1151", "count": 1}],
+	}
+	game_root.refresh_crafting_panel()
+	if not _press_recipe_line(game_root, "recipe_knife_basic"):
+		errors.append("should reselect basic knife recipe near tool container")
+	await process_frame
+	if not _detail_text(game_root).contains("工具 螺丝刀 1/1"):
+		errors.append("crafting detail should count nearby container tool as available")
+	if not _recipe_line(game_root, "recipe_knife_basic").contains("需工作台 workbench"):
+		errors.append("tool-gated recipe should advance to station reason when nearby container has tool")
+	game_root.simulation.map_interaction_targets.erase("smoke_nearby_tool_crate")
 	player_for_tool.inventory["1151"] = 1
 	game_root.refresh_inventory_panel()
 	game_root.refresh_crafting_panel()
