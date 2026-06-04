@@ -114,6 +114,7 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 	var kind := str(command.get("kind", ""))
 	var actor_id: int = int(command.get("actor_id", _player_actor_id()))
 	var event_start_index: int = events.size()
+	_emit("player_command_submitted", _player_command_log_payload(command, actor_id, kind))
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	if actor == null:
 		return _normalize_player_command_result({"success": false, "reason": "unknown_actor"}, command, kind, actor_id, event_start_index)
@@ -1681,6 +1682,11 @@ func _normalize_player_command_result(result: Dictionary, command: Dictionary, c
 		output["prompt"] = {}
 	if not output.has("context_snapshot"):
 		output["context_snapshot"] = {}
+	var completion_payload := _player_command_log_payload(command, actor_id, command_kind)
+	completion_payload["result_kind"] = resolved_kind
+	completion_payload["success"] = success
+	completion_payload["reason"] = reason
+	_emit("player_command_completed" if success else "player_command_rejected", completion_payload)
 	var emitted_events := _events_since(event_start_index)
 	if not output.has("events"):
 		output["events"] = emitted_events
@@ -1700,6 +1706,17 @@ func _normalize_player_command_result(result: Dictionary, command: Dictionary, c
 			"reason": reason,
 		}
 	return output
+
+
+func _player_command_log_payload(command: Dictionary, actor_id: int, command_kind: String) -> Dictionary:
+	var payload: Dictionary = {
+		"actor_id": actor_id,
+		"kind": command_kind,
+	}
+	for key in ["action", "target", "target_actor_id", "target_position", "grid", "option_id", "item_id", "recipe_id", "skill_id", "slot_id", "container_id", "shop_id", "count"]:
+		if command.has(key):
+			payload[key] = command.get(key)
+	return payload
 
 
 func _events_since(start_index: int) -> Array[Dictionary]:

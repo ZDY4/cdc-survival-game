@@ -23,7 +23,7 @@
 
 - 待补齐 snapshot 的完整旧字段：运行时命令队列、pending progression step、当前控制 actor、最近交互目标、最近失败原因、最近事件反馈、当前目标预览、目标选择状态、UI 菜单状态引用。
 - 待统一事件命名和 payload：`turn_started`、`turn_ended`、`movement_queued`、`movement_step`、`movement_cancelled`、`interaction_queued`、`interaction_resumed`、`attack_resolved`、`actor_defeated`、`corpse_created`、`combat_started`、`combat_ended`、`recipe_crafted`、`skill_used`、`quest_advanced`、`trade_confirmed`、`container_transferred`、`ui_feedback`。
-- 待补运行时日志：每次命令提交、拒绝、AP 消耗、pending 写入/恢复/取消、地图切换、对话开始/结束、容器打开、交易确认、任务推进、制作完成都应带 actor id、target id、action kind、reason。
+- 部分迁移运行时日志：玩家命令提交、完成和拒绝已新增 `player_command_submitted`、`player_command_completed`、`player_command_rejected` 事件，payload 带 actor id、action kind、目标/物品/技能等精简命令信息和 reason，并由 `Interaction` smoke 覆盖；AP 消耗、pending 写入/恢复/取消、地图切换、对话开始/结束、容器打开、交易确认、任务推进、制作完成仍需继续补齐统一 payload。
 - 待补 deterministic seed 策略：战斗暴击、掉落数量、AI 选择、技能随机效果、任务随机奖励需要可复现种子和存档 roundtrip。
 - 待补 snapshot schema version 和迁移：当前 save schema 简化，后续新增字段需要版本迁移、缺省填充和旧存档兼容测试。
 

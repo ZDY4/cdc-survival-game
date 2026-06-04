@@ -178,6 +178,20 @@ func _expect_command_result_contract(errors: Array[String], result: Dictionary, 
 		errors.append("command result runtime_snapshot_delta should be a dictionary")
 	if typeof(result.get("ui_feedback", {})) != TYPE_DICTIONARY:
 		errors.append("command result ui_feedback should be a dictionary")
+	if _event_count_in_result(result, "player_command_submitted") <= 0:
+		errors.append("command result should include player_command_submitted")
+	var expected_terminal_event := "player_command_completed" if bool(result.get("success", false)) else "player_command_rejected"
+	if _event_count_in_result(result, expected_terminal_event) <= 0:
+		errors.append("command result should include %s" % expected_terminal_event)
+
+
+func _event_count_in_result(result: Dictionary, kind: String) -> int:
+	var count := 0
+	for event in result.get("events", []):
+		var event_data: Dictionary = event
+		if event_data.get("kind", "") == kind:
+			count += 1
+	return count
 
 
 func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCounted) -> Array[String]:
