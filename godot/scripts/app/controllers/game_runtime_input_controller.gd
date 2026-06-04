@@ -603,6 +603,7 @@ func _set_hover_ground(world_position: Vector3) -> bool:
 		"grid": grid,
 		"target_name": "",
 		"target_type": "grid",
+		"target_category": "grid",
 		"target_id": "",
 		"actor_id": 0,
 		"ui_blocker": _hover_ui_blocker_name(),
@@ -624,17 +625,19 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 		target_name = target_id
 	if target_name.is_empty() and target_node != null:
 		target_name = str(target_node.name)
+	var prompt: Dictionary = _hover_prompt_for_target(metadata)
 	return _replace_hover_state({
 		"active": true,
 		"kind": "interaction",
 		"grid": _grid_from_world_position(world_position),
 		"target_name": target_name,
 		"target_type": str(metadata.get("target_type", "")),
+		"target_category": _hover_target_category(metadata, prompt),
 		"target_id": target_id,
 		"actor_id": int(metadata.get("actor_id", 0)),
 		"ui_blocker": _hover_ui_blocker_name(),
 		"reason": "",
-		"prompt": _hover_prompt_for_target(metadata),
+		"prompt": prompt,
 		"move_preview": {},
 	})
 
@@ -646,6 +649,7 @@ func _set_hover_failure(reason: String = "") -> bool:
 		"grid": {},
 		"target_name": "",
 		"target_type": "",
+		"target_category": "",
 		"target_id": "",
 		"actor_id": 0,
 		"ui_blocker": _hover_ui_blocker_name(),
@@ -696,6 +700,30 @@ func _hover_prompt_for_target(target: Dictionary) -> Dictionary:
 	}
 
 
+func _hover_target_category(target: Dictionary, prompt: Dictionary) -> String:
+	var target_type := str(target.get("target_type", ""))
+	if target_type == "actor":
+		var actor_id := int(target.get("actor_id", 0))
+		for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
+			var actor_data: Dictionary = _dictionary_or_empty(actor)
+			if int(actor_data.get("actor_id", 0)) == actor_id:
+				var side := str(actor_data.get("side", ""))
+				if not side.is_empty():
+					return "actor:%s" % side
+				return "actor"
+		return "actor"
+	if target_type == "map_object":
+		var prompt_kind := str(prompt.get("primary_option_kind", ""))
+		if prompt_kind == "open_container":
+			return "container"
+		if prompt_kind in ["enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor"]:
+			return "trigger"
+		if not prompt_kind.is_empty():
+			return prompt_kind
+		return "map_object"
+	return target_type if not target_type.is_empty() else "interaction"
+
+
 func _move_preview_for_grid(grid: Dictionary) -> Dictionary:
 	var simulation: Variant = game_root.get("simulation") if game_root != null else null
 	if simulation == null or not simulation.has_method("preview_move"):
@@ -715,14 +743,18 @@ func _move_preview_for_grid(grid: Dictionary) -> Dictionary:
 
 
 func _player_actor_id() -> int:
-	var simulation: Variant = game_root.get("simulation") if game_root != null else null
-	if simulation == null or not simulation.has_method("snapshot"):
-		return 0
-	for actor in _array_or_empty(simulation.snapshot().get("actors", [])):
+	for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
 		if str(actor_data.get("kind", "")) == "player":
 			return int(actor_data.get("actor_id", 0))
 	return 0
+
+
+func _runtime_snapshot() -> Dictionary:
+	var simulation: Variant = game_root.get("simulation") if game_root != null else null
+	if simulation == null or not simulation.has_method("snapshot"):
+		return {}
+	return _dictionary_or_empty(simulation.snapshot())
 
 
 func _grid_from_world_position(world_position: Vector3) -> Dictionary:

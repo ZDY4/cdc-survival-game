@@ -90,7 +90,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		elif str(hover_result.get("kind", "")) != "interaction":
 			errors.append("hover raycast should select interaction target")
 		_expect_hover_cursor_at_node(errors, game_root, pickup_node)
-		_expect_hover_runtime_state(errors, game_root, "interaction", "survivor_outpost_01_pickup_medkit")
+		_expect_hover_runtime_state(errors, game_root, "interaction", "survivor_outpost_01_pickup_medkit", "pickup")
 		if not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after hover selection")
 		_expect_ground_hover_move_preview(errors, game_root, camera, player_node)
@@ -335,6 +335,8 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 			errors.append("corpse hover raycast failed: %s" % hover_result.get("reason", "unknown"))
 		elif str(hover_result.get("kind", "")) != "interaction":
 			errors.append("corpse hover should select interaction target")
+		var corpse_target: Dictionary = _dictionary_or_empty(corpse_node.get_meta("interaction_target"))
+		_expect_hover_runtime_state(errors, game_root, "interaction", str(corpse_target.get("target_id", "")), "container")
 		_expect_hover_cursor_at_node(errors, game_root, corpse_node)
 	var selection: Dictionary = game_root.select_interaction_node(corpse_node)
 	if not bool(selection.get("success", false)):
@@ -818,7 +820,7 @@ func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target
 		errors.append("hover grid cursor should render above map meshes")
 
 
-func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expected_kind: String, expected_target_id: String) -> void:
+func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expected_kind: String, expected_target_id: String, expected_category: String = "") -> void:
 	if not game_root.has_method("runtime_hover_snapshot"):
 		errors.append("game root should expose runtime hover snapshot")
 		return
@@ -829,9 +831,12 @@ func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expecte
 		errors.append("runtime hover snapshot kind expected %s, got %s" % [expected_kind, hover.get("kind", "")])
 	if str(hover.get("target_id", "")) != expected_target_id:
 		errors.append("runtime hover snapshot should expose target id %s, got %s" % [expected_target_id, hover.get("target_id", "")])
+	if not expected_category.is_empty() and str(hover.get("target_category", "")) != expected_category:
+		errors.append("runtime hover snapshot category expected %s, got %s" % [expected_category, hover.get("target_category", "")])
 	if _dictionary_or_empty(hover.get("grid", {})).is_empty():
 		errors.append("runtime hover snapshot should expose hovered grid")
-	if not _hud_runtime_control_line(game_root).contains("Hover interaction") or not _hud_runtime_control_line(game_root).contains(expected_target_id):
+	var expected_hud_kind := expected_category if not expected_category.is_empty() else "interaction"
+	if not _hud_runtime_control_line(game_root).contains("Hover %s" % expected_hud_kind) or not _hud_runtime_control_line(game_root).contains(expected_target_id):
 		errors.append("HUD runtime control line should show hover interaction target")
 
 

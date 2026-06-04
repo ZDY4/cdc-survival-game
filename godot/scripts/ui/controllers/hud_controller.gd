@@ -671,7 +671,8 @@ func _hover_control_text(value: Variant) -> String:
 		]
 	if kind == "interaction":
 		var target_name := str(hover.get("target_name", hover.get("target_id", "")))
-		return "Hover %s %s%s%s" % [kind, target_name, grid_text, _hover_prompt_text(hover)]
+		var category := str(hover.get("target_category", "interaction"))
+		return "Hover %s %s%s%s" % [category, target_name, grid_text, _hover_prompt_text(hover)]
 	return "Hover %s%s%s%s" % [
 		kind,
 		grid_text,
