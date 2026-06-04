@@ -224,6 +224,7 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		"door": _door_summary(object_summary),
 	}
 	_copy_optional_container_fields(target, container_props)
+	_copy_optional_transition_fields(target, interaction_props, trigger_props, primary_trigger_option)
 	return target
 
 
@@ -276,6 +277,21 @@ func _copy_optional_door_fields(target: Dictionary, door_props: Dictionary) -> v
 	]:
 		if door_props.has(key):
 			target[key] = door_props.get(key)
+
+
+func _copy_optional_transition_fields(target: Dictionary, interaction_props: Dictionary, trigger_props: Dictionary, trigger_option: Dictionary) -> void:
+	for key in [
+		"required_world_flags",
+		"blocked_world_flags",
+		"required_unlocked_locations",
+		"blocked_unlocked_locations",
+	]:
+		if trigger_option.has(key):
+			target[key] = trigger_option.get(key)
+		elif trigger_props.has(key):
+			target[key] = trigger_props.get(key)
+		elif interaction_props.has(key):
+			target[key] = interaction_props.get(key)
 
 
 func _crafting_station_summary(object_summary: Dictionary) -> Dictionary:

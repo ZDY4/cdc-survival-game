@@ -262,6 +262,8 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	errors.append_array(_expect_direct_self_wait_interaction(direct_wait_simulation))
 	var door_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	errors.append_array(_expect_door_interaction(door_simulation))
+	var transition_permission_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	errors.append_array(_expect_scene_transition_permissions(transition_permission_simulation, registry))
 	var relationship_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	errors.append_array(_expect_relationship_dialogue_rules(relationship_simulation, registry))
 	return errors
@@ -756,6 +758,74 @@ func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
 	return errors
 
 
+func _expect_scene_transition_permissions(simulation: RefCounted, registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	_configure_transition_permission_targets(simulation)
+	var flagged_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "map_object",
+		"target_id": "flagged_transition_smoke",
+	})
+	_expect_disabled_option(errors, flagged_prompt, "enter_subscene", "scene_transition_world_flag_missing", "flag-gated transition prompt")
+	var flagged_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "flagged_transition_smoke",
+	}, "enter_subscene")
+	if bool(flagged_result.get("success", false)) or str(flagged_result.get("reason", "")) != "scene_transition_world_flag_missing":
+		errors.append("flag-gated transition should reject without world flag")
+	simulation.world_flags["transition_permission_smoke_flag"] = true
+	var flagged_allowed: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "flagged_transition_smoke",
+	}, "enter_subscene")
+	if not bool(flagged_allowed.get("success", false)):
+		errors.append("flag-gated transition should allow after world flag: %s" % flagged_allowed.get("reason", "unknown"))
+	_configure_transition_permission_targets(simulation)
+	var location_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "map_object",
+		"target_id": "location_transition_smoke",
+	})
+	_expect_disabled_option(errors, location_prompt, "enter_subscene", "scene_transition_location_locked", "location-gated transition prompt")
+	var location_result: Dictionary = simulation.submit_player_command({
+		"kind": "interact",
+		"target": {
+			"target_type": "map_object",
+			"target_id": "location_transition_smoke",
+		},
+		"option_id": "enter_subscene",
+	})
+	if bool(location_result.get("success", false)) or str(location_result.get("reason", "")) != "scene_transition_location_locked":
+		errors.append("location-gated transition should reject without unlocked location")
+	var feedback: Array = HudSnapshot.new(registry).build(simulation.snapshot(), {}, {}).get("event_feedback", [])
+	var has_localized_feedback := false
+	for event in feedback:
+		var event_data: Dictionary = _dictionary_or_empty(event)
+		if str(event_data.get("text", "")).contains("地点未解锁"):
+			has_localized_feedback = true
+			break
+	if not has_localized_feedback:
+		errors.append("HUD feedback should localize scene transition locked location")
+	simulation.unlocked_locations.append("transition_permission_smoke_location")
+	_configure_transition_permission_targets(simulation)
+	var location_allowed: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "location_transition_smoke",
+	}, "enter_subscene")
+	if not bool(location_allowed.get("success", false)):
+		errors.append("location-gated transition should allow after unlock: %s" % location_allowed.get("reason", "unknown"))
+	return errors
+
+
+func _configure_transition_permission_targets(simulation: RefCounted) -> void:
+	simulation.configure_map_interactions({
+		"flagged_transition_smoke": _transition_target("flagged_transition_smoke", {
+			"required_world_flags": ["transition_permission_smoke_flag"],
+		}),
+		"location_transition_smoke": _transition_target("location_transition_smoke", {
+			"required_unlocked_locations": ["transition_permission_smoke_location"],
+		}),
+	})
+
+
 func _expect_relationship_dialogue_rules(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var initial_score := float(simulation.relationship_score(1, 2))
@@ -825,6 +895,22 @@ func _door_target(target_id: String, is_open: bool, locked: bool, grid: Dictiona
 		"cells": [grid.duplicate(true)],
 		"door": door,
 	}
+
+
+func _transition_target(target_id: String, extra: Dictionary = {}) -> Dictionary:
+	var target := {
+		"target_id": target_id,
+		"target_type": "map_object",
+		"display_name": "权限切换测试",
+		"kind": "enter_subscene",
+		"anchor": {"x": 0, "y": 0, "z": 0},
+		"cells": [{"x": 0, "y": 0, "z": 0}],
+		"target_map_id": "survivor_outpost_01_interior",
+		"target_entry_point_id": "default_entry",
+	}
+	for key in extra.keys():
+		target[key] = extra[key]
+	return target
 
 
 func _grid_distance(left: RefCounted, right: RefCounted) -> int:

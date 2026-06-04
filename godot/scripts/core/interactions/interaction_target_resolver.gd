@@ -19,7 +19,7 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 		failed["target_grid"] = _dictionary_or_empty(visibility.get("target_grid", {}))
 		return failed
 
-	var candidate_options: Array = _candidate_options_for_target(actor, target_data)
+	var candidate_options: Array = _candidate_options_for_target(simulation, actor, target_data)
 	var enabled_options: Array = []
 	var disabled_options: Array = []
 	for candidate in candidate_options:
@@ -152,54 +152,59 @@ func _target_grid(target_data: Dictionary) -> Dictionary:
 	return grid
 
 
-func _candidate_options_for_target(actor: RefCounted, target_data: Dictionary) -> Array:
+func _candidate_options_for_target(simulation: RefCounted, actor: RefCounted, target_data: Dictionary) -> Array:
 	var kind: String = str(target_data.get("kind", ""))
 	match kind:
 		"pickup":
 			return [
-				_option_for_target(actor, target_data),
+				_option_for_target(simulation, actor, target_data),
 				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
 				_disabled_option("talk", "talk", "对话", "target_not_actor"),
 				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
 			]
 		"talk":
 			return [
-				_option_for_target(actor, target_data),
+				_option_for_target(simulation, actor, target_data),
 				_disabled_option("attack", "attack", "攻击", "target_not_hostile"),
 			]
 		"attack":
 			return [
-				_option_for_target(actor, target_data),
+				_option_for_target(simulation, actor, target_data),
 				_disabled_option("talk", "talk", "对话", "target_hostile"),
 			]
 		"wait":
 			return [
-				_option_for_target(actor, target_data),
+				_option_for_target(simulation, actor, target_data),
 				_disabled_option("talk", "talk", "对话", "self_target"),
 				_disabled_option("attack", "attack", "攻击", "self_target"),
 			]
 		"move":
 			return [
-				_option_for_target(actor, target_data),
+				_option_for_target(simulation, actor, target_data),
 				_disabled_option("pickup", "pickup", "拾取", "target_empty"),
 				_disabled_option("open_container", "open_container", "打开容器", "target_empty"),
 			]
 		"enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor":
 			return [
-				_option_for_target(actor, target_data),
+				_option_for_target(simulation, actor, target_data),
+				{
+					"id": "inspect",
+					"kind": "inspect",
+					"display_name": "检查",
+				},
 				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
 				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
 			]
 		"container":
 			return [
-				_option_for_target(actor, target_data),
+				_option_for_target(simulation, actor, target_data),
 				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
 				_disabled_option("talk", "talk", "对话", "target_not_actor"),
 				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
 			]
 		"door":
 			return [
-				_option_for_target(actor, target_data),
+				_option_for_target(simulation, actor, target_data),
 				{
 					"id": "inspect",
 					"kind": "inspect",
@@ -213,7 +218,7 @@ func _candidate_options_for_target(actor: RefCounted, target_data: Dictionary) -
 	]
 
 
-func _option_for_target(actor: RefCounted, target_data: Dictionary) -> Dictionary:
+func _option_for_target(simulation: RefCounted, actor: RefCounted, target_data: Dictionary) -> Dictionary:
 	var kind: String = str(target_data.get("kind", ""))
 	match kind:
 		"pickup":
@@ -255,6 +260,8 @@ func _option_for_target(actor: RefCounted, target_data: Dictionary) -> Dictionar
 				"grid": target_data.get("grid", {}),
 			}
 		"enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor":
+			var permission: Dictionary = _transition_prompt_permission(simulation, target_data)
+			var disabled_reason := str(permission.get("reason", ""))
 			return {
 				"id": kind,
 				"kind": kind,
@@ -264,6 +271,12 @@ func _option_for_target(actor: RefCounted, target_data: Dictionary) -> Dictionar
 				"return_spawn_id": target_data.get("return_spawn_id", ""),
 				"target_entry_point_id": target_data.get("target_entry_point_id", ""),
 				"entry_point_id": target_data.get("entry_point_id", ""),
+				"required_world_flags": _array_or_empty(target_data.get("required_world_flags", [])).duplicate(true),
+				"blocked_world_flags": _array_or_empty(target_data.get("blocked_world_flags", [])).duplicate(true),
+				"required_unlocked_locations": _array_or_empty(target_data.get("required_unlocked_locations", [])).duplicate(true),
+				"blocked_unlocked_locations": _array_or_empty(target_data.get("blocked_unlocked_locations", [])).duplicate(true),
+				"disabled": not disabled_reason.is_empty(),
+				"disabled_reason": disabled_reason,
 			}
 		"container":
 			var target_name := str(target_data.get("display_name", "容器")).strip_edges()
@@ -307,6 +320,23 @@ func _door_prompt_permission(actor: RefCounted, door: Dictionary) -> Dictionary:
 	var has_unlock_requirements: bool = not required_item_ids.is_empty() or not required_tool_ids.is_empty()
 	if bool(door.get("locked", false)) and not has_unlock_requirements:
 		return {"success": false, "reason": "door_locked"}
+	return {"success": true}
+
+
+func _transition_prompt_permission(simulation: RefCounted, target_data: Dictionary) -> Dictionary:
+	for flag_id in _string_array(target_data.get("required_world_flags", [])):
+		if not _dictionary_or_empty(simulation.get("world_flags")).has(flag_id):
+			return {"success": false, "reason": "scene_transition_world_flag_missing", "flag_id": flag_id}
+	for flag_id in _string_array(target_data.get("blocked_world_flags", [])):
+		if _dictionary_or_empty(simulation.get("world_flags")).has(flag_id):
+			return {"success": false, "reason": "scene_transition_world_flag_blocked", "flag_id": flag_id}
+	var unlocked_lookup: Dictionary = _string_lookup(simulation.get("unlocked_locations"))
+	for location_id in _string_array(target_data.get("required_unlocked_locations", [])):
+		if not unlocked_lookup.has(location_id):
+			return {"success": false, "reason": "scene_transition_location_locked", "location_id": location_id}
+	for location_id in _string_array(target_data.get("blocked_unlocked_locations", [])):
+		if unlocked_lookup.has(location_id):
+			return {"success": false, "reason": "scene_transition_location_blocked", "location_id": location_id}
 	return {"success": true}
 
 
@@ -442,6 +472,27 @@ func _normalize_content_id(value: Variant) -> String:
 	if typeof(value) == TYPE_INT:
 		return str(value)
 	return str(value).strip_edges()
+
+
+func _string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	if typeof(value) == TYPE_STRING:
+		var normalized_value := str(value).strip_edges()
+		if not normalized_value.is_empty():
+			output.append(normalized_value)
+		return output
+	for entry in _array_or_empty(value):
+		var normalized_entry := str(entry).strip_edges()
+		if not normalized_entry.is_empty():
+			output.append(normalized_entry)
+	return output
+
+
+func _string_lookup(value: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	for entry in _string_array(value):
+		output[entry] = true
+	return output
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

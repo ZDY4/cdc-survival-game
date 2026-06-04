@@ -318,6 +318,11 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 	var target_map_id: String = str(option.get("target_map_id", ""))
 	if target_map_id.is_empty():
 		return {"success": false, "reason": "scene_transition_target_missing", "prompt": prompt, "target_map_id": target_map_id}
+	var permission: Dictionary = _scene_transition_permission(simulation, option)
+	if not bool(permission.get("success", false)):
+		permission["prompt"] = prompt
+		permission["target_map_id"] = target_map_id
+		return permission
 
 	var previous_map_id: String = simulation.active_map_id
 	var target_entry_id := _target_entry_id(option)
@@ -389,6 +394,43 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 	}
 
 
+func _scene_transition_permission(simulation: RefCounted, option: Dictionary) -> Dictionary:
+	for flag_id in _string_array(option.get("required_world_flags", [])):
+		if not _dictionary_or_empty(simulation.get("world_flags")).has(flag_id):
+			return {
+				"success": false,
+				"reason": "scene_transition_world_flag_missing",
+				"flag_id": flag_id,
+				"required_world_flags": _string_array(option.get("required_world_flags", [])),
+			}
+	for flag_id in _string_array(option.get("blocked_world_flags", [])):
+		if _dictionary_or_empty(simulation.get("world_flags")).has(flag_id):
+			return {
+				"success": false,
+				"reason": "scene_transition_world_flag_blocked",
+				"flag_id": flag_id,
+				"blocked_world_flags": _string_array(option.get("blocked_world_flags", [])),
+			}
+	var unlocked_lookup: Dictionary = _string_lookup(simulation.get("unlocked_locations"))
+	for location_id in _string_array(option.get("required_unlocked_locations", [])):
+		if not unlocked_lookup.has(location_id):
+			return {
+				"success": false,
+				"reason": "scene_transition_location_locked",
+				"location_id": location_id,
+				"required_unlocked_locations": _string_array(option.get("required_unlocked_locations", [])),
+			}
+	for location_id in _string_array(option.get("blocked_unlocked_locations", [])):
+		if unlocked_lookup.has(location_id):
+			return {
+				"success": false,
+				"reason": "scene_transition_location_blocked",
+				"location_id": location_id,
+				"blocked_unlocked_locations": _string_array(option.get("blocked_unlocked_locations", [])),
+			}
+	return {"success": true}
+
+
 func _target_entry_id(option: Dictionary) -> String:
 	for key in ["return_spawn_id", "target_entry_point_id", "entry_point_id"]:
 		var value := str(option.get(key, "")).strip_edges()
@@ -447,3 +489,24 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	if typeof(value) == TYPE_STRING:
+		var normalized_value := str(value).strip_edges()
+		if not normalized_value.is_empty():
+			output.append(normalized_value)
+		return output
+	for entry in _array_or_empty(value):
+		var normalized_entry := str(entry).strip_edges()
+		if not normalized_entry.is_empty():
+			output.append(normalized_entry)
+	return output
+
+
+func _string_lookup(value: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	for entry in _string_array(value):
+		output[entry] = true
+	return output

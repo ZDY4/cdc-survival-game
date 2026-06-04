@@ -942,6 +942,15 @@ func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Diction
 		return {"success": false, "reason": prompt.get("reason", "interaction_unavailable"), "prompt": prompt}
 	var option_id: String = str(command.get("option_id", prompt.get("primary_option_id", "")))
 	var option: Dictionary = _interaction_option(prompt, option_id)
+	if option.is_empty():
+		var disabled_option: Dictionary = _disabled_interaction_option(prompt, option_id)
+		if not disabled_option.is_empty():
+			return {
+				"success": false,
+				"reason": str(disabled_option.get("disabled_reason", "interaction_option_unavailable")),
+				"prompt": prompt,
+			}
+		return {"success": false, "reason": "interaction_option_unavailable", "prompt": prompt}
 	match str(option.get("kind", "")):
 		"wait":
 			var wait_result: Dictionary = _submit_wait_command(actor, command)
@@ -2737,7 +2746,20 @@ func _interaction_option(prompt: Dictionary, option_id: String) -> Dictionary:
 		var option_data: Dictionary = _dictionary_or_empty(option)
 		if str(option_data.get("id", "")) == option_id:
 			return option_data
-	return _dictionary_or_empty(_array_or_empty(prompt.get("options", [])).front() if not _array_or_empty(prompt.get("options", [])).is_empty() else {})
+	if option_id.is_empty():
+		var options: Array = _array_or_empty(prompt.get("options", []))
+		return _dictionary_or_empty(options.front() if not options.is_empty() else {})
+	return {}
+
+
+func _disabled_interaction_option(prompt: Dictionary, option_id: String) -> Dictionary:
+	if option_id.is_empty():
+		return {}
+	for option in _array_or_empty(prompt.get("disabled_options", [])):
+		var option_data: Dictionary = _dictionary_or_empty(option)
+		if str(option_data.get("id", "")) == option_id:
+			return option_data
+	return {}
 
 
 func _interaction_success_payload(actor_id: int, prompt: Dictionary, option: Dictionary, target_id: Variant) -> Dictionary:
