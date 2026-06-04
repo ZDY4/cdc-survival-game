@@ -335,6 +335,35 @@ func perform_attack(actor_id: int, target_actor_id: int, topology: Dictionary = 
 	return _combat_runner.perform_attack(self, actor_id, target_actor_id, topology, options)
 
 
+func preview_attack(actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return _combat_runner.preview_attack(self, actor_id, target_actor_id, topology, options)
+	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
+	if profile.is_empty():
+		profile = _attack_profile(actor, _dictionary_or_empty(options.get("item_library", item_library)))
+	var attack_range: int = int(options.get("range", int(profile.get("range", DEFAULT_ATTACK_RANGE))))
+	var preview: Dictionary = _combat_runner.preview_attack(self, actor_id, target_actor_id, topology, {
+		"range": attack_range,
+		"weapon_profile": profile,
+	})
+	var attack_cost: float = float(options.get("ap_cost", profile.get("ap_cost", DEFAULT_ATTACK_AP)))
+	preview["ap_cost"] = attack_cost
+	preview["ap_available"] = actor.ap
+	preview["ap_affordable"] = actor.ap >= attack_cost
+	var ammo_check: Dictionary = _attack_ammo_check(actor, profile)
+	preview["ammo_check"] = ammo_check.duplicate(true)
+	preview["ammo_available"] = bool(ammo_check.get("success", true))
+	if bool(preview.get("can_attack", false)) and (not bool(preview.get("ap_affordable", false)) or not bool(preview.get("ammo_available", true))):
+		preview["success"] = false
+		preview["can_attack"] = false
+		if not bool(preview.get("ap_affordable", false)):
+			preview["reason"] = "ap_insufficient"
+		else:
+			preview["reason"] = str(ammo_check.get("reason", "ammo_unavailable"))
+	return preview
+
+
 func set_combat_rng_seed(seed: int) -> void:
 	combat_state["combat_rng_seed"] = max(1, abs(seed))
 	combat_state["combat_rng_counter"] = 0

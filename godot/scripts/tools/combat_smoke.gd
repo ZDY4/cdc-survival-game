@@ -43,6 +43,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_combat_attribute_damage_modifiers(errors, simulation, registry, player, player_grid)
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
 	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
+	_expect_attack_target_preview(errors, simulation, registry, player, player_grid)
 	_expect_corpse_inventory_and_metadata(errors, simulation, registry, player, player_grid)
 	player.grid_position = GridCoord.from_dictionary(player_grid)
 	player.equipment["main_hand"] = "1002"
@@ -585,6 +586,89 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	simulation.exit_combat_if_clear("spatial_failure_smoke_cleanup")
+
+
+func _expect_attack_target_preview(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.equipment["main_hand"] = "1003"
+	player.ap = 20.0
+	player.combat_attributes["accuracy"] = 100.0
+	var topology: Dictionary = _topology(simulation, registry)
+	var y: int = int(player_grid.get("y", 0))
+	var z: int = int(player_grid.get("z", 0))
+	var target_id: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": z,
+	})
+	var target: RefCounted = simulation.actor_registry.get_actor(target_id)
+	target.combat_attributes["evasion"] = 0.0
+	target.combat_attributes["damage_reduction"] = 0.0
+	var ap_before: float = player.ap
+	var rng_before: int = int(simulation.snapshot().get("combat_state", {}).get("combat_rng_counter", -1))
+	var event_count_before: int = _array_or_empty(simulation.snapshot().get("events", [])).size()
+	var preview: Dictionary = simulation.preview_attack(player.actor_id, target_id, topology)
+	if not bool(preview.get("success", false)) or not bool(preview.get("can_attack", false)):
+		errors.append("attack preview should succeed for reachable hostile target: %s" % preview.get("reason", "unknown"))
+	if str(preview.get("preview_kind", "")) != "attack":
+		errors.append("attack preview should expose preview_kind=attack")
+	if int(preview.get("target_actor_id", 0)) != target_id or int(preview.get("actor_id", 0)) != player.actor_id:
+		errors.append("attack preview should expose actor and target ids")
+	if _dictionary_or_empty(preview.get("attacker_grid", {})).is_empty() or _dictionary_or_empty(preview.get("target_grid", {})).is_empty():
+		errors.append("attack preview should expose attacker and target grids")
+	if int(preview.get("distance", -1)) != 1:
+		errors.append("attack preview should expose target distance")
+	if float(preview.get("ap_cost", 0.0)) <= 0.0 or not bool(preview.get("ap_affordable", false)):
+		errors.append("attack preview should expose affordable AP cost")
+	if not bool(preview.get("ammo_available", true)):
+		errors.append("attack preview should expose ammo availability for equipped weapon")
+	if float(preview.get("hit_chance", -1.0)) < 0.99:
+		errors.append("attack preview should expose hit chance without consuming RNG")
+	if float(preview.get("estimated_damage", 0.0)) <= 0.0:
+		errors.append("attack preview should expose estimated damage")
+	if absf(player.ap - ap_before) > 0.001:
+		errors.append("attack preview should not spend AP")
+	if int(simulation.snapshot().get("combat_state", {}).get("combat_rng_counter", -1)) != rng_before:
+		errors.append("attack preview should not advance combat RNG")
+	if _array_or_empty(simulation.snapshot().get("events", [])).size() != event_count_before:
+		errors.append("attack preview should not emit simulation events")
+	if bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
+		errors.append("attack preview should not enter combat")
+
+	var far_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 5,
+		"y": y,
+		"z": z,
+	})
+	var far_preview: Dictionary = simulation.preview_attack(player.actor_id, far_target, topology, {"range": 2})
+	if bool(far_preview.get("can_attack", true)) or far_preview.get("reason", "") != "target_out_of_range":
+		errors.append("out-of-range attack preview should report target_out_of_range, got %s" % far_preview.get("reason", ""))
+	if int(far_preview.get("distance", 0)) != 5 or int(far_preview.get("range", 0)) != 2:
+		errors.append("out-of-range attack preview should expose distance and range")
+
+	var los_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": z,
+	})
+	var los_topology := _spatial_test_topology(player_grid, {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": z,
+	})
+	var los_preview: Dictionary = simulation.preview_attack(player.actor_id, los_target, los_topology, {"range": 8})
+	if bool(los_preview.get("can_attack", true)) or los_preview.get("reason", "") != "target_blocked_by_los":
+		errors.append("blocked LOS attack preview should report target_blocked_by_los, got %s" % los_preview.get("reason", ""))
+
+	player.ap = 0.0
+	var ap_preview: Dictionary = simulation.preview_attack(player.actor_id, target_id, topology)
+	if bool(ap_preview.get("can_attack", true)) or ap_preview.get("reason", "") != "ap_insufficient":
+		errors.append("AP-short attack preview should report ap_insufficient, got %s" % ap_preview.get("reason", ""))
+
+	for actor_id in [target_id, far_target, los_target]:
+		if simulation.actor_registry.get_actor(actor_id) != null:
+			simulation.actor_registry.unregister_actor(actor_id)
+	_restore_player_turn(simulation, player)
 
 
 func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:

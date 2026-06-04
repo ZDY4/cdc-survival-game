@@ -103,6 +103,52 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	}
 
 
+func preview_attack(simulation: RefCounted, actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
+	var attacker: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)
+	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
+	var attack_range: int = int(options.get("range", int(profile.get("range", 1))))
+	var preview: Dictionary = {
+		"success": false,
+		"can_attack": false,
+		"preview_kind": "attack",
+		"actor_id": actor_id,
+		"target_actor_id": target_actor_id,
+		"range": max(1, attack_range),
+		"weapon_profile": profile.duplicate(true),
+	}
+	var target_check: Dictionary = validate_attack_target(simulation, actor_id, target_actor_id)
+	if not bool(target_check.get("success", false)):
+		preview.merge(target_check, true)
+		_add_attack_preview_actor_fields(preview, attacker, target)
+		return preview
+	var spatial_check: Dictionary = _spatial_check(attacker, target, topology, attack_range)
+	if not bool(spatial_check.get("success", false)):
+		preview.merge(spatial_check, true)
+		_add_attack_preview_actor_fields(preview, attacker, target)
+		return preview
+
+	var hit_preview: Dictionary = _hit_preview(simulation, attacker, target, profile)
+	var damage_preview: Dictionary = _damage_preview(simulation, attacker, target, profile)
+	preview["success"] = true
+	preview["can_attack"] = true
+	preview["reason"] = "ok"
+	preview["attacker_grid"] = attacker.grid_position.to_dictionary()
+	preview["target_grid"] = target.grid_position.to_dictionary()
+	preview["distance"] = abs(attacker.grid_position.x - target.grid_position.x) + abs(attacker.grid_position.z - target.grid_position.z)
+	preview["hit_chance"] = float(hit_preview.get("hit_chance", 1.0))
+	preview["accuracy"] = float(hit_preview.get("accuracy", 0.0))
+	preview["evasion"] = float(hit_preview.get("evasion", 0.0))
+	preview["crit_chance"] = _critical_chance(simulation, attacker, profile)
+	preview["estimated_damage"] = float(damage_preview.get("estimated_damage", 0.0))
+	preview["minimum_damage"] = float(damage_preview.get("minimum_damage", 0.0))
+	preview["maximum_damage"] = float(damage_preview.get("maximum_damage", 0.0))
+	preview["hit_kind"] = str(damage_preview.get("hit_kind", "hit"))
+	preview["target_hp"] = target.hp
+	preview["target_defeated_if_max_damage"] = target.hp <= float(damage_preview.get("maximum_damage", 0.0))
+	return preview
+
+
 func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_id: int) -> Dictionary:
 	var attacker: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)
@@ -219,6 +265,19 @@ func _hit_check(simulation: RefCounted, attacker: RefCounted, target: RefCounted
 	return roll_data
 
 
+func _hit_preview(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:
+	var actor_accuracy: float = _combat_attribute(simulation, attacker, "accuracy", 0.0)
+	var weapon_accuracy: float = float(profile.get("accuracy", 0.0)) if profile.has("accuracy") else 0.0
+	var evasion: float = clampf(_combat_attribute(simulation, target, "evasion", 0.0), 0.0, 0.95)
+	var has_explicit_accuracy: bool = actor_accuracy != 0.0 or profile.has("accuracy")
+	var chance: float = clampf(((actor_accuracy + weapon_accuracy) / 100.0) - evasion, 0.0, 1.0) if has_explicit_accuracy else 1.0
+	return {
+		"hit_chance": chance,
+		"accuracy": actor_accuracy + weapon_accuracy,
+		"evasion": evasion,
+	}
+
+
 func _miss_damage_result(simulation: RefCounted, target: RefCounted, hit_roll: Dictionary) -> Dictionary:
 	return {
 		"damage": 0.0,
@@ -227,6 +286,17 @@ func _miss_damage_result(simulation: RefCounted, target: RefCounted, hit_roll: D
 		"damage_reduction": clampf(_combat_attribute(simulation, target, "damage_reduction", 0.0), 0.0, 0.95),
 		"damage_bonus": 0.0,
 		"hit_chance": float(hit_roll.get("chance", 0.0)),
+	}
+
+
+func _damage_preview(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:
+	var normal: Dictionary = _resolve_damage(simulation, attacker, target, profile, false)
+	var critical: Dictionary = _resolve_damage(simulation, attacker, target, profile, true)
+	return {
+		"estimated_damage": float(normal.get("damage", 0.0)),
+		"minimum_damage": 0.0,
+		"maximum_damage": max(float(normal.get("damage", 0.0)), float(critical.get("damage", 0.0))),
+		"hit_kind": str(normal.get("hit_kind", "hit")),
 	}
 
 
@@ -321,6 +391,19 @@ func _next_combat_random_unit(simulation: RefCounted, salt: int) -> Dictionary:
 		"counter": counter_before,
 		"salt": salt,
 	}
+
+
+func _add_attack_preview_actor_fields(preview: Dictionary, attacker: RefCounted, target: RefCounted) -> void:
+	if attacker != null:
+		preview["actor_id"] = attacker.actor_id
+		preview["attacker_grid"] = attacker.grid_position.to_dictionary()
+		preview["attacker_side"] = attacker.side
+	if target != null:
+		preview["target_actor_id"] = target.actor_id
+		preview["target_grid"] = target.grid_position.to_dictionary()
+		preview["target_side"] = target.side
+	if attacker != null and target != null:
+		preview["distance"] = abs(attacker.grid_position.x - target.grid_position.x) + abs(attacker.grid_position.z - target.grid_position.z)
 
 
 func _defeat_actor(simulation: RefCounted, actor_id: int, target_actor_id: int, target: RefCounted) -> void:
