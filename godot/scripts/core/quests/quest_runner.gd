@@ -90,6 +90,13 @@ func _start(simulation: RefCounted, quest_id: String, quest_data: Dictionary, ac
 		"quest_id": quest_id,
 		"title": quest_data.get("title", quest_id),
 	})
+	simulation.emit_event("quest_advanced", {
+		"actor_id": actor_id,
+		"quest_id": quest_id,
+		"phase": "started",
+		"title": quest_data.get("title", quest_id),
+		"current_node_id": str(objective.get("id", "")),
+	})
 
 
 func _advance_collect(simulation: RefCounted, actor_id: int, item_id: String, count: int) -> void:
@@ -107,6 +114,18 @@ func _advance_collect(simulation: RefCounted, actor_id: int, item_id: String, co
 			"current": int(progress.get("current", 0)),
 			"target": int(progress.get("target", 1)),
 		})
+		simulation.emit_event("quest_advanced", {
+			"actor_id": actor_id,
+			"quest_id": quest_id,
+			"phase": "progressed",
+			"source": "collect",
+			"item_id": item_id,
+			"count": count,
+			"objective_id": str(progress.get("objective_id", "")),
+			"current": int(progress.get("current", 0)),
+			"target": int(progress.get("target", 1)),
+			"completed": bool(progress.get("completed", false)),
+		})
 		if bool(progress.get("completed", false)):
 			completed_now.append(str(quest_id))
 
@@ -122,6 +141,11 @@ func _complete(simulation: RefCounted, actor_id: int, quest_id: String) -> void:
 	simulation.emit_event("quest_completed", {
 		"actor_id": actor_id,
 		"quest_id": quest_id,
+	})
+	simulation.emit_event("quest_advanced", {
+		"actor_id": actor_id,
+		"quest_id": quest_id,
+		"phase": "completed",
 	})
 	_start_available(simulation)
 
@@ -186,6 +210,18 @@ func _advance_kill(simulation: RefCounted, actor_id: int, enemy_definition_id: S
 			"objective_id": str(progress.get("objective_id", "")),
 			"current": int(progress.get("current", 0)),
 			"target": int(progress.get("target", 1)),
+		})
+		simulation.emit_event("quest_advanced", {
+			"actor_id": actor_id,
+			"quest_id": quest_id,
+			"phase": "progressed",
+			"source": "kill",
+			"enemy_definition_id": enemy_definition_id,
+			"enemy_kind": enemy_kind,
+			"objective_id": str(progress.get("objective_id", "")),
+			"current": int(progress.get("current", 0)),
+			"target": int(progress.get("target", 1)),
+			"completed": bool(progress.get("completed", false)),
 		})
 		if bool(progress.get("completed", false)):
 			completed_now.append(str(quest_id))

@@ -45,6 +45,15 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"item_id": normalized_item_id,
 		"count": transfer_count,
 	})
+	simulation.emit_event("container_transferred", {
+		"actor_id": actor_id,
+		"container_id": normalized_container_id,
+		"item_id": normalized_item_id,
+		"count": transfer_count,
+		"direction": "take",
+		"from": "container",
+		"to": "actor_inventory",
+	})
 	simulation.record_item_collected(actor_id, normalized_item_id, transfer_count)
 	return {
 		"success": true,
@@ -92,6 +101,15 @@ func store_item_in_container(simulation: RefCounted, actor_id: int, container_id
 		"container_id": normalized_container_id,
 		"item_id": normalized_item_id,
 		"count": transfer_count,
+	})
+	simulation.emit_event("container_transferred", {
+		"actor_id": actor_id,
+		"container_id": normalized_container_id,
+		"item_id": normalized_item_id,
+		"count": transfer_count,
+		"direction": "store",
+		"from": "actor_inventory",
+		"to": "container",
 	})
 	return {
 		"success": true,

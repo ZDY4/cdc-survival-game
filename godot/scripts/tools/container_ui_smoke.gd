@@ -66,6 +66,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should drag antibiotics from container to player column")
 	if not _event_seen(game_root, "container_item_taken"):
 		errors.append("dragging container item to player column should emit container_item_taken")
+	if not _event_seen(game_root, "container_transferred"):
+		errors.append("dragging container item to player column should emit container_transferred")
 	if not _inventory_text(game_root).contains("抗生素 x1"):
 		errors.append("dragged antibiotics should appear in inventory panel")
 	if not _container_player_text(game_root).contains("抗生素 x1"):
@@ -76,6 +78,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should drag antibiotics from player column back to container")
 	if not _event_seen(game_root, "container_item_stored"):
 		errors.append("dragging player item to container column should emit container_item_stored")
+	if not _event_seen(game_root, "container_transferred"):
+		errors.append("dragging player item to container column should emit container_transferred")
 	if not _container_text(game_root).contains("抗生素 x1"):
 		errors.append("dragged antibiotics should return to container column")
 	if _container_player_text(game_root).contains("抗生素 x1"):
@@ -104,6 +108,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_container_transfer(game_root)
 	if not _event_seen(game_root, "container_item_taken"):
 		errors.append("taking container item should emit container_item_taken")
+	if not _event_seen(game_root, "container_transferred"):
+		errors.append("taking container item should emit container_transferred")
 	if not _inventory_text(game_root).contains("抗生素 x1"):
 		errors.append("inventory panel missing taken antibiotics")
 	if not _container_player_text(game_root).contains("抗生素 x1"):
@@ -127,6 +133,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("successful container store should clear previous failure feedback")
 	if not _event_seen(game_root, "container_item_stored"):
 		errors.append("storing container item should emit container_item_stored")
+	if not _event_seen(game_root, "container_transferred"):
+		errors.append("storing container item should emit container_transferred")
 	if not _container_text(game_root).contains("水瓶 x1"):
 		errors.append("container panel missing stored water bottle")
 	if _container_player_text(game_root).contains("水瓶 x1"):

@@ -186,6 +186,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_confirm_cart_button(game_root)
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
+	if not _event_seen(game_root, "trade_confirmed"):
+		errors.append("successful trade cart buy should emit trade_confirmed")
 	if _player_inventory_count(game_root, "1006") != 2:
 		errors.append("trade buy did not add bandage to player")
 	if _player_money(game_root) != 76:
@@ -200,9 +202,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _trade_button_text(game_root) != "出售":
 		errors.append("selecting player item after buy should set trade action to sell")
 	_set_trade_quantity(game_root, 1)
+	var trade_confirmed_before_sell: int = _event_count(game_root, "trade_confirmed")
 	_press_trade_button(game_root)
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
+	if _event_count(game_root, "trade_confirmed") <= trade_confirmed_before_sell:
+		errors.append("successful direct trade sell should emit trade_confirmed")
 	if _player_inventory_count(game_root, "1006") != 1:
 		errors.append("trade sell did not remove bandage from player")
 	if _player_money(game_root) != 92:
@@ -239,9 +244,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_trade_button(game_root)
 	if not _equipment_sell_dialog_visible(game_root):
 		errors.append("equipped item sell should reopen confirmation dialog")
+	var trade_confirmed_before_equipment_sell: int = _event_count(game_root, "trade_confirmed")
 	_confirm_equipment_sell_dialog(game_root)
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
+	if _event_count(game_root, "trade_confirmed") <= trade_confirmed_before_equipment_sell:
+		errors.append("successful equipped trade sell should emit trade_confirmed")
 	if not _player_equipped_item(game_root, "main_hand").is_empty():
 		errors.append("trade equipped sell did not clear main hand equipment")
 	if _player_money(game_root) != 132:
@@ -316,6 +324,19 @@ func _press_key(game_root: Node, key: int) -> void:
 	event.physical_keycode = key
 	event.pressed = false
 	game_root.runtime_input_controller.input(event)
+
+
+func _event_seen(game_root: Node, kind: String) -> bool:
+	return _event_count(game_root, kind) > 0
+
+
+func _event_count(game_root: Node, kind: String) -> int:
+	var count := 0
+	for event in game_root.simulation.snapshot().get("events", []):
+		var event_data: Dictionary = event
+		if event_data.get("kind", "") == kind:
+			count += 1
+	return count
 
 
 func _press_close_button(game_root: Node) -> void:

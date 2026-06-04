@@ -51,6 +51,17 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 		"unit_price": unit_price,
 		"total_price": total_price,
 	})
+	simulation.emit_event("trade_confirmed", {
+		"actor_id": actor_id,
+		"shop_id": shop_id,
+		"mode": "buy",
+		"item_id": normalized_item_id,
+		"count": buy_count,
+		"unit_price": unit_price,
+		"total_price": total_price,
+		"player_money_after": actor.money,
+		"shop_money_after": int(shop.get("money", 0)),
+	})
 	return {
 		"success": true,
 		"shop_id": shop_id,
@@ -92,6 +103,17 @@ func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, i
 		"count": sell_count,
 		"unit_price": unit_price,
 		"total_price": total_price,
+	})
+	simulation.emit_event("trade_confirmed", {
+		"actor_id": actor_id,
+		"shop_id": shop_id,
+		"mode": "sell",
+		"item_id": normalized_item_id,
+		"count": sell_count,
+		"unit_price": unit_price,
+		"total_price": total_price,
+		"player_money_after": actor.money,
+		"shop_money_after": int(shop.get("money", 0)),
 	})
 	return {
 		"success": true,
@@ -161,6 +183,18 @@ func sell_equipped_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: 
 		"unit_price": unit_price,
 		"total_price": total_price,
 	})
+	simulation.emit_event("trade_confirmed", {
+		"actor_id": actor_id,
+		"shop_id": shop_id,
+		"mode": "sell_equipped",
+		"slot_id": normalized_slot_id,
+		"item_id": equipped_item_id,
+		"count": 1,
+		"unit_price": unit_price,
+		"total_price": total_price,
+		"player_money_after": actor.money,
+		"shop_money_after": int(shop.get("money", 0)),
+	})
 	return {
 		"success": true,
 		"shop_id": shop_id,
@@ -205,6 +239,20 @@ func confirm_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, 
 		"buy_total": int(quote.get("buy_total", 0)),
 		"sell_total": int(quote.get("sell_total", 0)),
 		"net_payment": int(quote.get("net_payment", 0)),
+	})
+	simulation.emit_event("trade_confirmed", {
+		"actor_id": actor_id,
+		"shop_id": shop_id,
+		"mode": "cart",
+		"entries": normalized_entries.duplicate(true),
+		"entry_count": normalized_entries.size(),
+		"buy_total": int(quote.get("buy_total", 0)),
+		"sell_total": int(quote.get("sell_total", 0)),
+		"net_payment": int(quote.get("net_payment", 0)),
+		"player_money_before": int(quote.get("player_money_before", actor.money)),
+		"player_money_after": actor.money,
+		"shop_money_before": int(quote.get("shop_money_before", shop.get("money", 0))),
+		"shop_money_after": int(shop.get("money", 0)),
 	})
 	return quote
 
