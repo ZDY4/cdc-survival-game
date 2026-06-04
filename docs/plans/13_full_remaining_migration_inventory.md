@@ -99,7 +99,7 @@
 - 锁门占位第一版已迁移：locked 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；后续补钥匙、撬锁、开锁失败提示。
 - 自动开门第一版已迁移：玩家移动路径和 hostile AI 追击路径遇到未锁关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`，已由 `Movement` / `AI` smoke 覆盖；待补 settlement / GOAP 路径自动开门、开合模型状态更新和声音占位。
 - 待补建筑 footprint 阻挡：复杂 footprint、多层 story、door opening、wall visual、floor visual 和路径阻挡一致。
-- 门 hover 表现第一版已迁移：world renderer 会把 `target_kind=door` 和 door 状态 metadata 写入 pickable map object，runtime hover 会合并 world interaction target、把 `door_toggle` 归类为 `door`，并用门专属 outline 颜色和 `door_is_open` / `door_locked` meta 表现；已由 `PlayerInteraction` smoke 覆盖。待补门模型、开合状态可视化、碰撞体、交互提示 polish 和声音占位。
+- 门 hover / fallback 开合表现第一版已迁移：world renderer 会把 `target_kind=door` 和 door 状态 metadata 写入 pickable map object，runtime hover 会合并 world interaction target、把 `door_toggle` 归类为 `door`，并用门专属 outline 颜色和 `door_is_open` / `door_locked` meta 表现；无真实门模型时会生成 `DoorStateVisual` fallback，关闭/打开/锁定状态有稳定 meta、颜色和打开旋转；已由 `PlayerInteraction` / `Scene` smoke 覆盖。待补真实门模型、碰撞体、交互提示 polish 和声音占位。
 
 ### 4.3 地图切换和 overworld
 
@@ -343,7 +343,7 @@
 - 为所有 glTF 建立 Godot 导入复核：scale、rotation、origin、materials、collision、shadow、visibility、resource uid 稳定性。
 - 建立 asset id -> Godot resource path 映射表，避免数据里 `builtin:*`、`preview_placeholders/*`、`world_tiles/*` 混用时找不到模型。
 - 为地图 scene 中每个 object 的 visual asset 做实例化复核，确保不再显示错误模型或重叠方块。
-- 为 container / pickup / trigger / door / corpse 设计明确的视觉资源和 fallback，不同 kind 不共用不可辨认方块。
+- 为 container / pickup / trigger / door / corpse 设计明确的视觉资源和 fallback，不同 kind 不共用不可辨认方块；door fallback 开合状态第一版已有，待补真实美术资源替换。
 - WGSL 旧 shader 不迁代码，只迁视觉目标：grid ground、tile instancing、building wall、fog post-process 的效果要用 Godot shader / material 实现。
 - 待补音频资产策略：UI 点击、拾取、开门、交易、制作、攻击、受击、死亡、任务完成目前缺声音或占位。
 - 待补字体和中文渲染策略：所有 UI scene 应统一使用 `NotoSansCJKsc-Regular.otf` 或主题资源，避免中文 fallback 不一致。

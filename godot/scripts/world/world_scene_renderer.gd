@@ -17,6 +17,9 @@ var ground_material := _material(Color(0.22, 0.26, 0.23))
 var actor_material := _material(Color(0.78, 0.78, 0.68))
 var player_material := _material(Color(0.28, 0.55, 0.88))
 var corpse_material := _material(Color(0.32, 0.26, 0.22))
+var door_closed_material := _material(Color(0.50, 0.34, 0.18))
+var door_open_material := _material(Color(0.64, 0.47, 0.25))
+var door_locked_material := _material(Color(0.55, 0.16, 0.12))
 
 
 func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionary = {}) -> Dictionary:
@@ -135,6 +138,7 @@ func _prepare_visual_interaction_targets(root: Node, map: Dictionary) -> void:
 			"target_kind": str(_dictionary_or_empty(active_targets.get(object_id, {})).get("kind", "")),
 			"door": _dictionary_or_empty(_dictionary_or_empty(active_targets.get(object_id, {})).get("door", {})).duplicate(true),
 		})
+		_apply_door_state_visual(node, _dictionary_or_empty(active_targets.get(object_id, {})))
 		_add_visual_pickable_body(node, active_targets.get(object_id, {}))
 
 	for node in stale_targets:
@@ -198,6 +202,7 @@ func _spawn_interaction_target_marker(root: Node3D, object: Dictionary, map: Dic
 		0.18,
 		(float(anchor.get("z", 0)) + (height - 1.0) * 0.5) * GRID_SIZE
 	)
+	_apply_door_state_visual(node, target_data)
 	_add_pickable_box(node, Vector3(width * GRID_SIZE, 0.6, height * GRID_SIZE), Vector3(0.0, 0.25, 0.0))
 	root.add_child(node)
 
@@ -272,6 +277,69 @@ func _add_corpse_fallback_mesh(parent: Node3D) -> void:
 	visual.mesh = mesh
 	visual.material_override = corpse_material
 	parent.add_child(visual)
+
+
+func _apply_door_state_visual(parent: Node, target_data: Dictionary) -> void:
+	var door: Dictionary = _dictionary_or_empty(target_data.get("door", {}))
+	if door.is_empty():
+		return
+	var parent_3d := parent as Node3D
+	if parent_3d == null:
+		return
+	var visual: MeshInstance3D = parent_3d.find_child("DoorStateVisual", false, false) as MeshInstance3D
+	if visual == null:
+		visual = MeshInstance3D.new()
+		visual.name = "DoorStateVisual"
+		parent_3d.add_child(visual)
+	var cells: Array = _array_or_empty(door.get("cells", []))
+	var footprint := _door_visual_size_from_cells(cells)
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(max(0.72, footprint.x * 0.78), 0.82, 0.12)
+	visual.mesh = mesh
+	var is_open := bool(door.get("is_open", false))
+	var locked := bool(door.get("locked", false))
+	visual.material_override = door_locked_material if locked else (door_open_material if is_open else door_closed_material)
+	visual.position = _door_visual_local_position(parent_3d, door, footprint)
+	visual.rotation_degrees = Vector3(0.0, _door_visual_yaw_degrees(door, is_open), 0.0)
+	visual.set_meta("door_id", str(door.get("door_id", door.get("object_id", ""))))
+	visual.set_meta("door_is_open", is_open)
+	visual.set_meta("door_locked", locked)
+	visual.set_meta("door_visual_state", "locked" if locked else ("open" if is_open else "closed"))
+
+
+func _door_visual_size_from_cells(cells: Array) -> Vector2:
+	if cells.is_empty():
+		return Vector2.ONE
+	var min_x := INF
+	var max_x := -INF
+	var min_z := INF
+	var max_z := -INF
+	for cell in cells:
+		var cell_data: Dictionary = _dictionary_or_empty(cell)
+		var x := float(cell_data.get("x", 0.0))
+		var z := float(cell_data.get("z", 0.0))
+		min_x = minf(min_x, x)
+		max_x = maxf(max_x, x)
+		min_z = minf(min_z, z)
+		max_z = maxf(max_z, z)
+	return Vector2(max(1.0, max_x - min_x + 1.0), max(1.0, max_z - min_z + 1.0))
+
+
+func _door_visual_local_position(parent: Node3D, door: Dictionary, footprint: Vector2) -> Vector3:
+	var anchor: Dictionary = _dictionary_or_empty(door.get("anchor", {}))
+	var world_x := (float(anchor.get("x", 0.0)) + (footprint.x - 1.0) * 0.5) * GRID_SIZE
+	var world_z := (float(anchor.get("z", 0.0)) + (footprint.y - 1.0) * 0.5) * GRID_SIZE
+	return Vector3(world_x - parent.position.x, 0.42, world_z - parent.position.z)
+
+
+func _door_visual_yaw_degrees(door: Dictionary, is_open: bool) -> float:
+	var base_yaw := 0.0
+	match str(door.get("rotation", "")).to_lower():
+		"east", "west":
+			base_yaw = 90.0
+		_:
+			base_yaw = 0.0
+	return base_yaw + (82.0 if is_open else 0.0)
 
 
 func _add_actor_model(parent: Node3D, actor_data: Dictionary) -> bool:

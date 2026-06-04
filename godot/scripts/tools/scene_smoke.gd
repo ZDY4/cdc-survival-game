@@ -37,6 +37,7 @@ func _run() -> void:
 	var counts: Dictionary = WorldSceneRenderer.new().render_world(root, world_result)
 	await process_frame
 	var errors := _validate_scene(root, counts)
+	errors.append_array(_validate_door_state_visuals())
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -97,6 +98,100 @@ func _validate_player_camera_focus(root: Node3D, errors: Array[String]) -> void:
 	var projected := camera.unproject_position(player.global_position)
 	if projected.x < 0.0 or projected.y < 0.0 or projected.x > 1440.0 or projected.y > 900.0:
 		errors.append("startup player marker should be inside the default camera viewport")
+
+
+func _validate_door_state_visuals() -> Array[String]:
+	var errors: Array[String] = []
+	var closed_root := Node3D.new()
+	closed_root.name = "SceneSmokeDoorClosedRoot"
+	get_root().add_child(closed_root)
+	WorldSceneRenderer.new().render_world(closed_root, _door_visual_world(false, false), {"load_map_visuals": false})
+	var closed_visual: MeshInstance3D = closed_root.find_child("DoorStateVisual", true, false) as MeshInstance3D
+	if closed_visual == null:
+		errors.append("closed door should render DoorStateVisual")
+	else:
+		if str(closed_visual.get_meta("door_visual_state", "")) != "closed":
+			errors.append("closed door visual should expose closed state")
+		if bool(closed_visual.get_meta("door_is_open", true)):
+			errors.append("closed door visual should expose door_is_open false")
+		if absf(closed_visual.rotation_degrees.y) > 0.01:
+			errors.append("closed door visual should keep closed yaw")
+	closed_root.queue_free()
+
+	var open_root := Node3D.new()
+	open_root.name = "SceneSmokeDoorOpenRoot"
+	get_root().add_child(open_root)
+	WorldSceneRenderer.new().render_world(open_root, _door_visual_world(true, false), {"load_map_visuals": false})
+	var open_visual: MeshInstance3D = open_root.find_child("DoorStateVisual", true, false) as MeshInstance3D
+	if open_visual == null:
+		errors.append("open door should render DoorStateVisual")
+	else:
+		if str(open_visual.get_meta("door_visual_state", "")) != "open":
+			errors.append("open door visual should expose open state")
+		if not bool(open_visual.get_meta("door_is_open", false)):
+			errors.append("open door visual should expose door_is_open true")
+		if absf(open_visual.rotation_degrees.y) < 45.0:
+			errors.append("open door visual should rotate away from closed pose")
+	open_root.queue_free()
+
+	var locked_root := Node3D.new()
+	locked_root.name = "SceneSmokeDoorLockedRoot"
+	get_root().add_child(locked_root)
+	WorldSceneRenderer.new().render_world(locked_root, _door_visual_world(false, true), {"load_map_visuals": false})
+	var locked_visual: MeshInstance3D = locked_root.find_child("DoorStateVisual", true, false) as MeshInstance3D
+	if locked_visual == null:
+		errors.append("locked door should render DoorStateVisual")
+	else:
+		if str(locked_visual.get_meta("door_visual_state", "")) != "locked":
+			errors.append("locked door visual should expose locked state")
+		if not bool(locked_visual.get_meta("door_locked", false)):
+			errors.append("locked door visual should expose door_locked true")
+	locked_root.queue_free()
+	return errors
+
+
+func _door_visual_world(is_open: bool, locked: bool) -> Dictionary:
+	var grid := {"x": 1, "y": 0, "z": 1}
+	var door := {
+		"door_id": "scene_smoke_door",
+		"object_id": "scene_smoke_door",
+		"display_name": "Scene Smoke Door",
+		"anchor": grid,
+		"cells": [grid],
+		"is_open": is_open,
+		"locked": locked,
+		"blocks_movement": not is_open,
+		"blocks_sight": not is_open,
+		"blocks_sight_when_closed": true,
+	}
+	var target := {
+		"target_id": "scene_smoke_door",
+		"target_type": "map_object",
+		"display_name": "Scene Smoke Door",
+		"kind": "door",
+		"anchor": grid,
+		"cells": [grid],
+		"door": door,
+	}
+	return {
+		"map": {
+			"map_id": "scene_smoke_door_map",
+			"size": {"width": 3, "height": 3},
+			"entry_points": {"default_entry": {"x": 0, "y": 0, "z": 0}},
+			"interactive_objects": [{
+				"object_id": "scene_smoke_door",
+				"kind": "interactive",
+				"anchor": grid,
+				"footprint": {"width": 1, "height": 1},
+			}],
+			"trigger_objects": [],
+			"pickup_objects": [],
+			"interaction_targets": {"scene_smoke_door": target},
+			"door_objects": [door],
+		},
+		"actors": [],
+		"corpses": [],
+	}
 
 
 func _validate_actor_model_assets(root: Node3D, errors: Array[String]) -> void:
