@@ -39,12 +39,14 @@ func _execute_pickup(simulation: RefCounted, actor_id: int, prompt: Dictionary, 
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor", "prompt": prompt}
 
-	var item_id: String = str(option.get("item_id", ""))
+	var item_id: String = _inventory_entries.normalize_content_id(option.get("item_id", ""))
 	var count: int = max(1, int(option.get("count", 1)))
 	if item_id.is_empty():
 		return {"success": false, "reason": "pickup_item_invalid", "prompt": prompt}
 
+	var before_count: int = int(actor.inventory.get(item_id, 0))
 	_inventory_entries.add_actor_item(actor, item_id, count)
+	var after_count: int = int(actor.inventory.get(item_id, 0))
 	simulation.record_item_collected(actor_id, item_id, count)
 	var target_id: String = str(option.get("target_id", ""))
 	simulation.consumed_interaction_targets[target_id] = true
@@ -53,14 +55,23 @@ func _execute_pickup(simulation: RefCounted, actor_id: int, prompt: Dictionary, 
 		"target_id": target_id,
 		"item_id": item_id,
 		"count": count,
+		"inventory_before": before_count,
+		"inventory_after": after_count,
 	})
-	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, target_id))
+	var success_payload: Dictionary = _interaction_success_payload(actor_id, prompt, option, target_id)
+	success_payload["item_id"] = item_id
+	success_payload["count"] = count
+	success_payload["inventory_before"] = before_count
+	success_payload["inventory_after"] = after_count
+	simulation.emit_event("interaction_succeeded", success_payload)
 	return {
 		"success": true,
 		"prompt": prompt,
 		"consumed_target": true,
 		"item_id": item_id,
 		"count": count,
+		"inventory_before": before_count,
+		"inventory_after": after_count,
 	}
 
 

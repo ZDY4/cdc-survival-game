@@ -117,8 +117,13 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	if not bool(pickup_result.get("success", false)):
 		errors.append("pickup failed: %s" % pickup_result.get("reason", "unknown"))
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
-	if int(player.inventory.get("1006", 0)) <= 0:
-		errors.append("pickup did not add item 1006 to player inventory")
+	if int(pickup_result.get("count", 0)) != 2:
+		errors.append("pickup should grant deterministic max_count 2")
+	if int(pickup_result.get("inventory_before", -1)) != 1 or int(pickup_result.get("inventory_after", -1)) != 3:
+		errors.append("pickup result should expose merged inventory before/after")
+	if int(player.inventory.get("1006", 0)) != 3:
+		errors.append("pickup did not merge item 1006 into player inventory")
+	_expect_pickup_granted_payload(errors, simulation.snapshot(), "survivor_outpost_01_pickup_medkit", "1006", 2, 1, 3)
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "pickup", "pickup", "survivor_outpost_01_pickup_medkit")
 	_expect_runtime_snapshot_after_pickup(errors, simulation.snapshot())
 	var second_pickup: Dictionary = _submit_and_complete(simulation, registry, {
@@ -420,6 +425,25 @@ func _expect_interaction_succeeded_payload(errors: Array[String], snapshot: Dict
 		errors.append("%s interaction_succeeded should include option_kind" % expected_option_id)
 	if str(payload.get("target_name", "")).find(expected_name_fragment) == -1:
 		errors.append("%s interaction_succeeded should include target_name" % expected_option_id)
+	if expected_option_id == "pickup":
+		if str(payload.get("item_id", "")) != "1006":
+			errors.append("pickup interaction_succeeded should include item_id")
+		if int(payload.get("count", 0)) != 2:
+			errors.append("pickup interaction_succeeded should include count")
+		if int(payload.get("inventory_before", -1)) != 1 or int(payload.get("inventory_after", -1)) != 3:
+			errors.append("pickup interaction_succeeded should include inventory before/after")
+
+
+func _expect_pickup_granted_payload(errors: Array[String], snapshot: Dictionary, expected_target_id: String, expected_item_id: String, expected_count: int, expected_before: int, expected_after: int) -> void:
+	var payload: Dictionary = _last_event_payload(snapshot, "pickup_granted")
+	if str(payload.get("target_id", "")) != expected_target_id:
+		errors.append("pickup_granted should include target_id")
+	if str(payload.get("item_id", "")) != expected_item_id:
+		errors.append("pickup_granted should include item_id")
+	if int(payload.get("count", 0)) != expected_count:
+		errors.append("pickup_granted should include count")
+	if int(payload.get("inventory_before", -1)) != expected_before or int(payload.get("inventory_after", -1)) != expected_after:
+		errors.append("pickup_granted should include inventory before/after")
 
 
 func _expect_prompt_snapshot(errors: Array[String], prompt: Dictionary, expected_option_id: String, expected_option_kind: String, expected_ap_cost: float) -> void:

@@ -498,7 +498,7 @@ func _merge_auto_turn_final_result(result: Dictionary, auto_turn: Dictionary) ->
 		var pending_result: Dictionary = _dictionary_or_empty(cycle.get("pending_result", {}))
 		if pending_result.is_empty() or not bool(pending_result.get("success", false)):
 			continue
-		for key in ["dialogue_id", "dialogue_state", "container", "context_snapshot", "consumed_target", "defeated", "attack_result", "auto_resumed_interaction", "resumed_pending_interaction", "approach_result"]:
+		for key in ["dialogue_id", "dialogue_state", "container", "context_snapshot", "consumed_target", "item_id", "count", "inventory_before", "inventory_after", "defeated", "attack_result", "auto_resumed_interaction", "resumed_pending_interaction", "approach_result"]:
 			if pending_result.has(key) and not result.has(key):
 				result[key] = pending_result.get(key)
 		if pending_result.has("kind") and str(result.get("kind", "")) == "pending_movement_completed":

@@ -121,7 +121,7 @@
 ### 5.2 交互行为
 
 - 已有拾取、容器、对话、交易、场景切换、等待、攻击的第一版；self target 会生成“等待”交互菜单项，`submit_player_command(interact)` 与 direct `execute_interaction(..., "wait")` 都会推进回合并发出 `interaction_succeeded`；对话开始、容器打开、场景切换和 `interaction_succeeded` 的目标显示名 / option kind 已覆盖基础 payload；待补每种行为的完整失败反馈、禁用原因和 UI 刷新点。
-- 待补 pickup 数量和合并：拾取多物品、部分拾取、拾取失败、任务进度、地图对象消耗、拾取音效/提示。
+- pickup 数量和合并第一版已迁移：地图 pickup 按 scene 中 `max_count` 确定性发放，物品会合并进 actor inventory，result、`pickup_granted` 与 `interaction_succeeded` payload 会暴露 `item_id`、`count`、`inventory_before`、`inventory_after`，地图目标会进入 consumed 集合，并由 `Interaction` smoke 覆盖；任务收集进度已接入 `record_item_collected`。待补部分拾取、数量弹窗、拾取失败细分、拾取音效和 UI 提示 polish。
 - 待补 open_container：持久容器、尸体容器、掉落容器、地图容器的 id 规范和关闭逻辑。
 - 待补 talk：对话规则选择、fallback 台词、目标名解析、对话事件跟随当前控制玩家。
 - 待补 scene_transition：交互菜单显示目标地点、确认 prompt、无法进入原因、overworld 解锁条件。
