@@ -123,7 +123,7 @@
 - 已有拾取、容器、对话、交易、场景切换、等待、攻击的第一版；self target 会生成“等待”交互菜单项，`submit_player_command(interact)` 与 direct `execute_interaction(..., "wait")` 都会推进回合并发出 `interaction_succeeded`；对话开始、容器打开、场景切换和 `interaction_succeeded` 的目标显示名 / option kind 已覆盖基础 payload；待补每种行为的完整失败反馈、禁用原因和 UI 刷新点。
 - pickup 数量和合并第一版已迁移：地图 pickup 按 scene 中 `max_count` 确定性发放，物品会合并进 actor inventory，result、`pickup_granted` 与 `interaction_succeeded` payload 会暴露 `item_id`、`count`、`inventory_before`、`inventory_after`，地图目标会进入 consumed 集合，并由 `Interaction` smoke 覆盖；任务收集进度已接入 `record_item_collected`。待补部分拾取、数量弹窗、拾取失败细分、拾取音效和 UI 提示 polish。
 - open_container 第一版已迁移：地图容器、尸体容器和掉落容器都统一进入 `container_sessions`，打开容器会设置 actor `active_container_id` 并发出 `container_opened`，拿取/存放会持久化 session；关闭按钮、Esc、距离过远、目标消失、切换地图和打开另一个容器都会清理 active container 并发出关闭事件，已由 `Interaction` / `ContainerUI` / `Combat` / `InventoryUI` / `Save` smoke 覆盖。待补容器 id 规范的完整文档、锁定/权限、部分拿取数量弹窗 polish、容器音效和 hover/open 表现。
-- talk 规则选择第一版已迁移：`data/dialogue_rules` 进入 Godot data registry，启动时配置到 `Simulation`，talk 会按 NPC `definition_id` 解析 dialogue rule，按 active/completed quests、玩家物品数量、NPC role/on_shift 和玩家 HP 比例选择变体；找不到规则时回退到直接 dialogue id，找不到变体时回退 default dialogue。`dialogue_started` 和 `interaction_succeeded` 会暴露 requested / resolved dialogue、rule key 和 source，并由 `Interaction` / `DialogueUI` / `DialogueAction` / `Save` smoke 覆盖。待补真实 relation score 来源、高低关系分支、schedule/on_shift 真实时间判定、fallback 台词生成和对话 UI 文案 polish。
+- talk 规则选择第一版已迁移：`data/dialogue_rules` 进入 Godot data registry，启动时配置到 `Simulation`，talk 会按 NPC `definition_id` 解析 dialogue rule，按 active/completed quests、玩家物品数量、relation score、NPC role/on_shift 和玩家 HP 比例选择变体；找不到规则时回退到直接 dialogue id，找不到变体时回退 default dialogue。`dialogue_started` 和 `interaction_succeeded` 会暴露 requested / resolved dialogue、rule key 和 source，并由 `Interaction` / `DialogueUI` / `DialogueAction` / `Save` smoke 覆盖。待补 schedule/on_shift 真实时间判定、fallback 台词生成和对话 UI 文案 polish。
 - scene_transition 目标反馈第一版已迁移：场景切换 result、`scene_transition` 事件和 `interaction_succeeded` payload 会暴露 target id/name、from/to map、target entry point 和落点 grid，失败时返回 target map / entry 诊断；已由 `Interaction` smoke 覆盖。待补确认 prompt、无法进入原因 UI 文案、overworld 解锁条件、返回点记录和进入后 facing。
 - wait self interaction 第一版已恢复：self target 会暴露“等待”菜单项，等待会进入现有回合推进逻辑并产出事件反馈；待补更完整的 modal 冲突策略和视觉 polish。
 
@@ -244,7 +244,7 @@
 - 已有对话推进和交易入口；待迁移 dialogue rules 选择 variant、preview 与 actual resolution 一致性。
 - 待补 fallback 对话、缺文件回退、目标名解析、NPC action key、对话资源目录规则。
 - 待补对话选项键盘 `1-9`、Enter/Space 推进、选项节点必须显式选择、无选项节点自动下一步。
-- 待补对话动作：启动任务、完成任务、交付物品、给奖励、开交易、解锁地点、改关系、设置 flags。
+- 对话动作第一版已迁移：action node 可启动任务、手动交付任务并发放奖励/扣交付物品、打开交易、解锁地点、设置 world flags、调整或设置 relationship score；动作结果会回传到 `emitted_actions`，world flag / relationship 变更走 `Simulation` 统一事件并由 `DialogueAction` smoke 覆盖。待补单独 give item / give reward 动作、失败回滚、条件化动作、动作诊断日志和 UI 反馈 polish。
 - 对话 UI 第一版已迁移：底部面板显示 speaker、target name、可滚动正文、显式选择提示、`Space / Enter` 继续提示、1-9 对话选项按钮、关闭按钮和基础诊断 meta；按钮会调用同一 `choose_dialogue_option` / `close_active_dialogue` 入口并由 `DialogueUI` smoke 覆盖。待补更完整诊断日志。
 
 ### 10.2 任务

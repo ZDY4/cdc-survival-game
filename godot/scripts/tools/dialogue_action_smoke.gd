@@ -88,6 +88,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("find_medicine missing from completed quests")
 	if not _dialogue_text(game_root).contains("这一趟救了诊所"):
 		errors.append("turn-in should advance to confirmation dialog")
+	errors.append_array(_expect_scripted_state_actions(game_root))
 	return errors
 
 
@@ -157,3 +158,105 @@ func _dialogue_text(game_root: Node) -> String:
 	if label == null:
 		return ""
 	return label.text
+
+
+func _expect_scripted_state_actions(game_root: Node) -> Array[String]:
+	var errors: Array[String] = []
+	_install_scripted_dialogue(game_root)
+	var simulation: RefCounted = game_root.simulation
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.active_dialogue_id = "dialogue_action_smoke_scripted"
+	player.active_dialogue_node_id = ""
+	var score_before := float(simulation.relationship_score(1, 2))
+	game_root.refresh_dialogue_panel()
+	var result: Dictionary = game_root.choose_dialogue_option("apply_scripted")
+	if not bool(result.get("success", false)):
+		errors.append("scripted dialogue action option failed: %s" % result.get("reason", "unknown"))
+	if not simulation.world_flags.has("dialogue_action_smoke_flag"):
+		errors.append("set_world_flag dialogue action should set runtime world flag")
+	if absf(float(simulation.relationship_score(1, 2)) - (score_before + 12.0)) > 0.001:
+		errors.append("change_relationship dialogue action should adjust player/trader relationship")
+	if _event_count(game_root, "world_flag_changed") <= 0:
+		errors.append("set_world_flag dialogue action should emit world_flag_changed")
+	if _event_count(game_root, "relationship_changed") <= 0:
+		errors.append("change_relationship dialogue action should emit relationship_changed")
+	if _array_or_empty(result.get("emitted_actions", [])).size() != 2:
+		errors.append("scripted dialogue action result should expose emitted action results")
+	if not _dialogue_text(game_root).contains("状态已经记录"):
+		errors.append("scripted dialogue actions should advance to confirmation dialog")
+	return errors
+
+
+func _install_scripted_dialogue(game_root: Node) -> void:
+	var dialogue_library: Dictionary = game_root.registry.libraries.get("dialogues", {})
+	dialogue_library["dialogue_action_smoke_scripted"] = {
+		"path": "res://scripts/tools/dialogue_action_smoke.gd",
+		"data": {
+			"dialog_id": "dialogue_action_smoke_scripted",
+			"nodes": [
+				{
+					"id": "start",
+					"type": "dialog",
+					"speaker": "Smoke",
+					"text": "准备执行脚本化动作。",
+					"is_start": true,
+					"next": "choice_1",
+				},
+				{
+					"id": "choice_1",
+					"type": "choice",
+					"options": [
+						{
+							"id": "apply_scripted",
+							"text": "记录状态",
+							"next": "scripted_actions",
+						},
+					],
+				},
+				{
+					"id": "scripted_actions",
+					"type": "action",
+					"actions": [
+						{
+							"type": "set_world_flag",
+							"flag_id": "dialogue_action_smoke_flag",
+						},
+						{
+							"type": "change_relationship",
+							"target_definition_id": "trader_lao_wang",
+							"delta": 12,
+						},
+					],
+					"next": "confirm",
+				},
+				{
+					"id": "confirm",
+					"type": "dialog",
+					"speaker": "Smoke",
+					"text": "状态已经记录。",
+					"next": "done",
+				},
+				{
+					"id": "done",
+					"type": "end",
+					"end_type": "leave",
+				},
+			],
+		},
+	}
+	game_root.registry.libraries["dialogues"] = dialogue_library
+
+
+func _event_count(game_root: Node, kind: String) -> int:
+	var count := 0
+	for event in game_root.simulation.snapshot().get("events", []):
+		var event_data: Dictionary = event
+		if str(event_data.get("kind", "")) == kind:
+			count += 1
+	return count
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

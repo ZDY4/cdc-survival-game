@@ -541,6 +541,34 @@ func emit_event(kind: String, payload: Dictionary) -> void:
 	_emit(kind, payload)
 
 
+func set_world_flag(flag_id: String, value: bool = true, reason: String = "manual", actor_id: int = 0) -> Dictionary:
+	var normalized_flag_id := flag_id.strip_edges()
+	if normalized_flag_id.is_empty():
+		return {"success": false, "reason": "world_flag_missing"}
+	var previous := world_flags.has(normalized_flag_id)
+	if value:
+		world_flags[normalized_flag_id] = true
+	else:
+		world_flags.erase(normalized_flag_id)
+	var changed := previous != value
+	if changed:
+		_emit("world_flag_changed", {
+			"actor_id": actor_id,
+			"flag_id": normalized_flag_id,
+			"value": value,
+			"previous": previous,
+			"reason": reason,
+		})
+	return {
+		"success": true,
+		"flag_id": normalized_flag_id,
+		"value": value,
+		"previous": previous,
+		"changed": changed,
+		"reason": reason,
+	}
+
+
 func relationship_score(actor_id: int, target_actor_id: int) -> float:
 	if actor_id <= 0 or target_actor_id <= 0:
 		return 0.0

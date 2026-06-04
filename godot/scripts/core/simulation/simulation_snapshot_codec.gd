@@ -391,6 +391,7 @@ func _feedback_event_kind(kind: String) -> bool:
 		"recipe_crafted",
 		"skill_used",
 		"relationship_changed",
+		"world_flag_changed",
 		"player_command_rejected",
 		"ui_feedback",
 	].has(kind)
