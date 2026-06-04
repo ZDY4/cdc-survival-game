@@ -58,6 +58,12 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	})
 	simulation.take_item_from_container(1, "survivor_outpost_01_clinic_supply_cabinet", "1031", 1, registry.get_library("items"))
 	simulation.store_item_in_container(1, "survivor_outpost_01_clinic_supply_cabinet", "1008", 1, registry.get_library("items"))
+	var clinic_container: Dictionary = simulation.container_sessions.get("survivor_outpost_01_clinic_supply_cabinet", {}).duplicate(true)
+	clinic_container["allow_take"] = true
+	clinic_container["allow_store"] = false
+	clinic_container["required_world_flags"] = ["outpost_workshop_restored"]
+	clinic_container["blocked_world_flags"] = ["clinic_locked_down"]
+	simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = clinic_container
 	simulation.execute_interaction(1, {
 		"target_type": "map_object",
 		"target_id": "survivor_outpost_01_interior_door",
@@ -206,6 +212,15 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 			errors.append("snapshot field mismatch: %s" % key)
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
 		errors.append("container sessions did not roundtrip")
+	var restored_clinic_container: Dictionary = _container_session(restored, "survivor_outpost_01_clinic_supply_cabinet")
+	if not bool(restored_clinic_container.get("allow_take", false)):
+		errors.append("container allow_take permission did not roundtrip")
+	if bool(restored_clinic_container.get("allow_store", true)):
+		errors.append("container allow_store permission did not roundtrip")
+	if not _array_or_empty(restored_clinic_container.get("required_world_flags", [])).has("outpost_workshop_restored"):
+		errors.append("container required world flags did not roundtrip")
+	if not _array_or_empty(restored_clinic_container.get("blocked_world_flags", [])).has("clinic_locked_down"):
+		errors.append("container blocked world flags did not roundtrip")
 	if JSON.stringify(restored.get("shop_sessions")) != JSON.stringify(original.get("shop_sessions")):
 		errors.append("shop sessions did not roundtrip")
 	var restored_trader_shop: Dictionary = _shop_session(restored, "trader_lao_wang_shop")
@@ -345,6 +360,14 @@ func _shop_session(snapshot: Dictionary, shop_id: String) -> Dictionary:
 	for entry in snapshot.get("shop_sessions", []):
 		var session: Dictionary = _dictionary_or_empty(entry)
 		if str(session.get("shop_id", "")) == shop_id:
+			return session
+	return {}
+
+
+func _container_session(snapshot: Dictionary, container_id: String) -> Dictionary:
+	for entry in snapshot.get("container_sessions", []):
+		var session: Dictionary = _dictionary_or_empty(entry)
+		if str(session.get("container_id", "")) == container_id:
 			return session
 	return {}
 

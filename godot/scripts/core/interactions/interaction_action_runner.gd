@@ -205,6 +205,7 @@ func _container_session_for_target(simulation: RefCounted, target_id: String, ta
 		"display_name": str(target.get("display_name", target_id)),
 		"inventory": _array_or_empty(target.get("container_inventory", [])).duplicate(true),
 	}
+	_copy_optional_container_fields(session, target)
 	simulation.container_sessions[target_id] = session
 	return session
 
@@ -232,6 +233,18 @@ func _resolve_dialogue_id(simulation: RefCounted, actor: RefCounted, target_acto
 		"rule_key": rule_key,
 		"source": "default",
 	}
+
+
+func _copy_optional_container_fields(session: Dictionary, target: Dictionary) -> void:
+	for key in [
+		"locked",
+		"allow_take",
+		"allow_store",
+		"required_world_flags",
+		"blocked_world_flags",
+	]:
+		if target.has(key):
+			session[key] = target.get(key)
 
 
 func _dialogue_conditions_match(simulation: RefCounted, actor: RefCounted, target_actor: RefCounted, conditions: Dictionary) -> bool:

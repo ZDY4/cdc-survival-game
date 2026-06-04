@@ -170,6 +170,16 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "没有打开的容器。"
 		"invalid_quantity":
 			return "数量无效，请输入大于 0 的数量。"
+		"container_locked":
+			return "容器已锁定，无法操作。"
+		"container_take_forbidden":
+			return "没有权限从该容器拿取物品。"
+		"container_store_forbidden":
+			return "没有权限向该容器存放物品。"
+		"container_world_flag_missing":
+			return "缺少容器操作许可，当前无法操作。"
+		"container_world_flag_blocked":
+			return "容器操作许可已失效，当前无法操作。"
 		_:
 			return str(feedback.get("reason", ""))
 

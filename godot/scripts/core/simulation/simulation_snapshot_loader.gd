@@ -73,12 +73,20 @@ func _load_container_sessions(entries: Variant) -> Dictionary:
 		var container_id: String = str(session_data.get("container_id", ""))
 		if container_id.is_empty():
 			continue
-		output[container_id] = {
+		var loaded_session := {
 			"container_id": container_id,
 			"display_name": str(session_data.get("display_name", container_id)),
 			"money": max(0, int(session_data.get("money", 0))),
 			"inventory": _array_or_empty(session_data.get("inventory", [])).duplicate(true),
 		}
+		_copy_optional_keys(loaded_session, session_data, [
+			"locked",
+			"allow_take",
+			"allow_store",
+			"required_world_flags",
+			"blocked_world_flags",
+		])
+		output[container_id] = loaded_session
 	return output
 
 

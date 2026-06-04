@@ -202,7 +202,7 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 	if display_name.is_empty():
 		display_name = str(object_summary.get("object_id", ""))
 
-	return {
+	var target := {
 		"target_id": object_summary.get("object_id", ""),
 		"target_type": "map_object",
 		"display_name": display_name,
@@ -219,6 +219,8 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		"container_inventory": _array_or_empty(container_props.get("initial_inventory", [])),
 		"door": _door_summary(object_summary),
 	}
+	_copy_optional_container_fields(target, container_props)
+	return target
 
 
 func _door_summary(object_summary: Dictionary) -> Dictionary:
@@ -241,6 +243,18 @@ func _door_summary(object_summary: Dictionary) -> Dictionary:
 		"blocks_sight": not is_open and blocks_sight_when_closed,
 		"blocks_sight_when_closed": blocks_sight_when_closed,
 	}
+
+
+func _copy_optional_container_fields(target: Dictionary, container_props: Dictionary) -> void:
+	for key in [
+		"locked",
+		"allow_take",
+		"allow_store",
+		"required_world_flags",
+		"blocked_world_flags",
+	]:
+		if container_props.has(key):
+			target[key] = container_props.get(key)
 
 
 func _crafting_station_summary(object_summary: Dictionary) -> Dictionary:

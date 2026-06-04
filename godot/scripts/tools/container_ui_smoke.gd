@@ -223,6 +223,60 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("storing unavailable item should report not_enough_items")
 	if not _container_feedback(game_root).contains("背包中没有足够的水瓶"):
 		errors.append("storing unavailable item should show inventory failure feedback")
+	var permission_snapshot: Dictionary = game_root.simulation.container_sessions.duplicate(true)
+	var active_container_before_permission: String = _active_container_id(game_root)
+	game_root.simulation.container_sessions["locked_permission_container"] = {
+		"container_id": "locked_permission_container",
+		"display_name": "锁定权限容器",
+		"inventory": [{"item_id": "1006", "count": 2}],
+		"money": 11,
+		"locked": true,
+	}
+	_set_active_container_id(game_root, "locked_permission_container")
+	game_root.refresh_container_panel()
+	var locked_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if str(locked_take.get("reason", "")) != "container_locked":
+		errors.append("locked container take should report container_locked")
+	if not _container_feedback(game_root).contains("已锁定"):
+		errors.append("locked container take should show locked feedback")
+	var locked_money: Dictionary = game_root.take_active_container_money(1)
+	if str(locked_money.get("reason", "")) != "container_locked":
+		errors.append("locked container money take should report container_locked")
+	game_root.simulation.container_sessions["store_forbidden_container"] = {
+		"container_id": "store_forbidden_container",
+		"display_name": "禁止存放容器",
+		"inventory": [],
+		"money": 0,
+		"allow_store": false,
+	}
+	_set_active_container_id(game_root, "store_forbidden_container")
+	game_root.refresh_container_panel()
+	player_refill_water(game_root)
+	var forbidden_store: Dictionary = game_root.store_active_container_item("1008", 1)
+	if str(forbidden_store.get("reason", "")) != "container_store_forbidden":
+		errors.append("store-forbidden container should report container_store_forbidden")
+	if not _container_feedback(game_root).contains("没有权限"):
+		errors.append("store-forbidden container should show permission feedback")
+	game_root.simulation.container_sessions["flagged_permission_container"] = {
+		"container_id": "flagged_permission_container",
+		"display_name": "旗标权限容器",
+		"inventory": [{"item_id": "1006", "count": 1}],
+		"money": 0,
+		"required_world_flags": ["container_permission_smoke_flag"],
+	}
+	_set_active_container_id(game_root, "flagged_permission_container")
+	game_root.refresh_container_panel()
+	var flagged_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if str(flagged_take.get("reason", "")) != "container_world_flag_missing":
+		errors.append("flag-gated container should report container_world_flag_missing")
+	game_root.simulation.world_flags["container_permission_smoke_flag"] = true
+	var allowed_flagged_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if not bool(allowed_flagged_take.get("success", false)):
+		errors.append("flag-gated container should allow take after flag: %s" % allowed_flagged_take.get("reason", "unknown"))
+	game_root.simulation.world_flags.erase("container_permission_smoke_flag")
+	game_root.simulation.container_sessions = permission_snapshot.duplicate(true)
+	_set_active_container_id(game_root, active_container_before_permission)
+	game_root.refresh_container_panel()
 	_press_close_button(game_root)
 	if game_root.container_panel.visible:
 		errors.append("close button should close container panel")
@@ -639,3 +693,9 @@ func _active_container_id(game_root: Node) -> String:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return str(actor_data.get("active_container_id", ""))
 	return ""
+
+
+func _set_active_container_id(game_root: Node, container_id: String) -> void:
+	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if actor != null:
+		actor.active_container_id = container_id

@@ -114,12 +114,20 @@ func _container_session_snapshots(container_sessions: Dictionary) -> Array[Dicti
 	ids.sort()
 	for container_id in ids:
 		var session: Dictionary = _dictionary_or_empty(container_sessions[container_id])
-		output.append({
+		var snapshot := {
 			"container_id": str(session.get("container_id", container_id)),
 			"display_name": str(session.get("display_name", container_id)),
 			"money": max(0, int(session.get("money", 0))),
 			"inventory": _array_or_empty(session.get("inventory", [])).duplicate(true),
-		})
+		}
+		_copy_optional_keys(snapshot, session, [
+			"locked",
+			"allow_take",
+			"allow_store",
+			"required_world_flags",
+			"blocked_world_flags",
+		])
+		output.append(snapshot)
 	return output
 
 
