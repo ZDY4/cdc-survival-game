@@ -49,6 +49,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade title did not use trader display name")
 	if not _summary_line(game_root).contains("资金 500"):
 		errors.append("trade summary missing shop money")
+	if not _trade_zone_tooltip(game_root, "BuyDropZone").contains("接受店铺栏物品") or not _trade_zone_tooltip(game_root, "BuyDropZone").contains("拒绝背包/装备"):
+		errors.append("buy drop zone tooltip should explain accepted and rejected sources")
+	if not _trade_zone_tooltip(game_root, "SellDropZone").contains("接受背包或装备栏物品") or not _trade_zone_tooltip(game_root, "SellDropZone").contains("拒绝店铺"):
+		errors.append("sell drop zone tooltip should explain accepted and rejected sources")
+	if _trade_zone_reject_reason(game_root, "BuyDropZone") != "buy_zone_requires_shop_source":
+		errors.append("buy drop zone should expose stable reject reason metadata")
+	if _trade_zone_reject_reason(game_root, "SellDropZone") != "sell_zone_requires_player_or_equipment_source":
+		errors.append("sell drop zone should expose stable reject reason metadata")
 
 	var item_text: String = "\n".join(_item_lines(game_root))
 	if not item_text.contains("急救包 x1"):
@@ -164,6 +172,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should attempt dragging shop bandage to sell drop zone")
 	if not _cart_line(game_root).contains("购物车为空"):
 		errors.append("sell drop zone should reject shop buy item")
+	if _can_drop_trade_item_to_zone(game_root, "shop", "绷带", "SellDropZone"):
+		errors.append("sell drop zone can_drop should reject shop buy item")
 	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
 		errors.append("should drag shop bandage back to cart after zone rejection")
 	if not _drop_trade_item_with_text_on_cart_entry(game_root, "shop", "绷带", 0):
@@ -188,6 +198,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should attempt dragging player bandage to buy drop zone")
 	if not _cart_line(game_root).contains("购物车为空"):
 		errors.append("buy drop zone should reject player sell item")
+	if _can_drop_trade_item_to_zone(game_root, "player", "绷带", "BuyDropZone"):
+		errors.append("buy drop zone can_drop should reject player sell item")
 	if not _drop_inventory_item_to_trade_cart(game_root, "绷带"):
 		errors.append("should drag inventory bandage to trade cart")
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
@@ -582,6 +594,20 @@ func _drop_trade_item_to_zone(game_root: Node, source: String, text: String, zon
 	return _drop_trade_item_with_text_on_target(game_root, source, text, target, count)
 
 
+func _can_drop_trade_item_to_zone(game_root: Node, source: String, text: String, zone_name: String, count: int = 1) -> bool:
+	var button: Button = _trade_item_button_with_text(game_root, source, text)
+	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
+	if button == null or not button.has_meta("trade_item") or not button.has_meta("trade_source") or not target is Control:
+		return false
+	var item: Dictionary = button.get_meta("trade_item", {})
+	return bool(game_root.trade_panel.call("_can_drop_cart_data", Vector2.ZERO, {
+		"kind": "trade_item",
+		"source": str(button.get_meta("trade_source", "")),
+		"item": item.duplicate(true),
+		"count": count,
+	}, target))
+
+
 func _drop_inventory_item_to_trade_cart(game_root: Node, text: String, count: int = 1) -> bool:
 	var button: Button = _inventory_item_button(game_root, text)
 	if button == null or not button.has_meta("inventory_item"):
@@ -623,6 +649,18 @@ func _trade_item_button_with_text(game_root: Node, source: String, text: String)
 		if child is Button and str((child as Button).text).contains(text):
 			return child as Button
 	return null
+
+
+func _trade_zone_tooltip(game_root: Node, zone_name: String) -> String:
+	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
+	return "" if not target is Control else str((target as Control).tooltip_text)
+
+
+func _trade_zone_reject_reason(game_root: Node, zone_name: String) -> String:
+	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
+	if target == null or not target.has_meta("trade_drop_reject_reason"):
+		return ""
+	return str(target.get_meta("trade_drop_reject_reason"))
 
 
 func _open_inventory_context_menu(game_root: Node, item_needle: String) -> bool:

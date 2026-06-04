@@ -221,8 +221,18 @@ func _build_layout() -> void:
 	var cart_drop_zones := HBoxContainer.new()
 	cart_drop_zones.name = "CartDropZones"
 	cart_drop_zones.add_theme_constant_override("separation", 8)
-	cart_drop_zones.add_child(_cart_drop_zone("BuyDropZone", "拖到这里购买", "buy"))
-	cart_drop_zones.add_child(_cart_drop_zone("SellDropZone", "拖到这里出售", "sell"))
+	cart_drop_zones.add_child(_cart_drop_zone(
+		"BuyDropZone",
+		"购买区\n店铺物品",
+		"buy",
+		"拖到这里购买\n接受店铺栏物品；拒绝背包/装备出售源"
+	))
+	cart_drop_zones.add_child(_cart_drop_zone(
+		"SellDropZone",
+		"出售区\n背包/装备",
+		"sell",
+		"拖到这里出售\n接受背包或装备栏物品；拒绝店铺购买源"
+	))
 	var cart_scroll := ScrollContainer.new()
 	cart_scroll.name = "CartScroll"
 	cart_scroll.custom_minimum_size = Vector2(580, 72)
@@ -677,13 +687,15 @@ func _remove_cart_entry(index: int) -> void:
 	_update_cart_line()
 
 
-func _cart_drop_zone(node_name: String, text: String, zone: String) -> PanelContainer:
+func _cart_drop_zone(node_name: String, text: String, zone: String, tooltip: String) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.name = node_name
-	panel.custom_minimum_size = Vector2(286, 34)
-	panel.tooltip_text = text
+	panel.custom_minimum_size = Vector2(286, 42)
+	panel.tooltip_text = tooltip
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.set_meta("trade_drop_zone", zone)
+	panel.set_meta("trade_drop_accepts", "shop" if zone == "buy" else "player,equipment")
+	panel.set_meta("trade_drop_reject_reason", "buy_zone_requires_shop_source" if zone == "buy" else "sell_zone_requires_player_or_equipment_source")
 	panel.set_drag_forwarding(
 		Callable(self, "_empty_trade_drag_data"),
 		Callable(self, "_can_drop_cart_data"),
@@ -693,7 +705,8 @@ func _cart_drop_zone(node_name: String, text: String, zone: String) -> PanelCont
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.tooltip_text = text
+	label.tooltip_text = tooltip
+	label.custom_minimum_size = Vector2(0, 38)
 	panel.add_child(label)
 	return panel
 
