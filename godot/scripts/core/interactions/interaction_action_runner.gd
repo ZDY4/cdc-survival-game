@@ -121,16 +121,28 @@ func _execute_attack(simulation: RefCounted, actor_id: int, prompt: Dictionary, 
 
 
 func _execute_wait(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:
-	simulation.emit_event("actor_waited", {
-		"actor_id": actor_id,
-		"source": "interaction",
-	})
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "prompt": prompt}
+	var result: Dictionary = {}
+	if actor.kind == "player" and actor.turn_open and simulation.has_method("_submit_wait_command"):
+		result = simulation.call("_submit_wait_command", actor, {
+			"kind": "wait",
+			"actor_id": actor_id,
+		})
+	else:
+		simulation.emit_event("actor_waited", {
+			"actor_id": actor_id,
+			"source": "interaction",
+		})
+		result = {
+			"success": true,
+			"waited": true,
+		}
 	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, actor_id))
-	return {
-		"success": true,
-		"prompt": prompt,
-		"waited": true,
-	}
+	result["prompt"] = prompt
+	result["waited"] = true
+	return result
 
 
 func _container_session_for_target(simulation: RefCounted, target_id: String, target: Dictionary) -> Dictionary:

@@ -60,7 +60,7 @@
 - 已迁移同键 toggle / stage panel 替换：打开对应面板、同键关闭、切换到另一个 stage panel 时替换当前 active panel，已纳入 `UIToggle` smoke。
 - 部分迁移 `Esc` 关闭链路：已覆盖 selection、active dialogue、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；待补 quantity modal、overworld prompt 和更完整 blocker 诊断。
 - 部分迁移数字键：已恢复对话选项 `1-9` 和 hotbar `1-0` 基础入口并纳入 smoke；待补菜单内数量输入与快捷动作冲突处理。
-- 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、pending 取消和长按重复等待第一版；待补自由观察播放切换、长按节奏配置和 modal 冲突策略。
+- 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、self wait interaction、pending 取消和长按重复等待第一版；待补自由观察播放切换、长按节奏配置和 modal 冲突策略。
 - 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环、相机跟随、actor busy 时阻止切换和选中/提示状态清理；待补 free observe。
 - 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
 - 部分迁移输入阻塞：stage/settings、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel 已阻止 gameplay 输入，`gameplay_input_blocker_name` 和 HUD blocker 诊断有第一版，interaction menu 支持点击外部关闭；待补 console、debug panel、quantity/overworld modal、tooltip/drag 层 blocker 细分。
@@ -120,12 +120,12 @@
 
 ### 5.2 交互行为
 
-- 已有拾取、容器、对话、交易、场景切换、等待、攻击的第一版；对话开始、容器打开、场景切换和 `interaction_succeeded` 的目标显示名 / option kind 已覆盖基础 payload；待补每种行为的完整失败反馈、禁用原因和 UI 刷新点。
+- 已有拾取、容器、对话、交易、场景切换、等待、攻击的第一版；self target 会生成“等待”交互菜单项，`submit_player_command(interact)` 与 direct `execute_interaction(..., "wait")` 都会推进回合并发出 `interaction_succeeded`；对话开始、容器打开、场景切换和 `interaction_succeeded` 的目标显示名 / option kind 已覆盖基础 payload；待补每种行为的完整失败反馈、禁用原因和 UI 刷新点。
 - 待补 pickup 数量和合并：拾取多物品、部分拾取、拾取失败、任务进度、地图对象消耗、拾取音效/提示。
 - 待补 open_container：持久容器、尸体容器、掉落容器、地图容器的 id 规范和关闭逻辑。
 - 待补 talk：对话规则选择、fallback 台词、目标名解析、对话事件跟随当前控制玩家。
 - 待补 scene_transition：交互菜单显示目标地点、确认 prompt、无法进入原因、overworld 解锁条件。
-- 待补 wait self interaction：菜单项、AP 消耗、回合推进、事件反馈。
+- wait self interaction 第一版已恢复：self target 会暴露“等待”菜单项，等待会进入现有回合推进逻辑并产出事件反馈；待补更完整的 modal 冲突策略和视觉 polish。
 
 ## 6. 战斗、目标和伤害
 

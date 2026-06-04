@@ -40,6 +40,15 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		"target_id": "survivor_outpost_01_pickup_medkit",
 	})
 	_expect_prompt_snapshot(errors, prompt_probe, "pickup", "pickup", 1.0)
+	var self_prompt_probe: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "self",
+		"actor_id": 1,
+	})
+	_expect_prompt_snapshot(errors, self_prompt_probe, "wait", "wait", 1.0)
+	if str(self_prompt_probe.get("action_label", "")) != "等待":
+		errors.append("self interaction prompt should expose wait action label")
+	if str(self_prompt_probe.get("target_name", "")).find("幸存者") == -1:
+		errors.append("self interaction prompt should expose player target name")
 	var unsupported_result: Dictionary = simulation.submit_player_command({"kind": "unsupported_contract_probe"})
 	_expect_command_result_contract(errors, unsupported_result, "unsupported_contract_probe")
 	if bool(unsupported_result.get("success", false)):
@@ -152,6 +161,8 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	var approach_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var approach_errors: Array[String] = _expect_auto_approach_interaction(approach_simulation, registry)
 	errors.append_array(approach_errors)
+	var direct_wait_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	errors.append_array(_expect_direct_self_wait_interaction(direct_wait_simulation))
 	return errors
 
 
@@ -363,6 +374,27 @@ func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCoun
 		errors.append("interaction_queued should include option_id")
 	if _event_count(simulation.snapshot(), "interaction_resumed") <= 0:
 		errors.append("far talk should emit interaction_resumed after auto approach")
+	return errors
+
+
+func _expect_direct_self_wait_interaction(simulation: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var round_before: int = int(simulation.snapshot().get("turn_state", {}).get("round", 0))
+	var result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "self",
+		"actor_id": 1,
+	}, "wait")
+	if not bool(result.get("success", false)):
+		errors.append("direct self wait interaction should succeed: %s" % result.get("reason", "unknown"))
+	if not bool(result.get("waited", false)):
+		errors.append("direct self wait interaction should report waited")
+	if str(result.get("kind", "")) != "wait":
+		errors.append("direct self wait interaction should preserve wait result kind")
+	if int(simulation.snapshot().get("turn_state", {}).get("round", 0)) <= round_before:
+		errors.append("direct self wait interaction should advance the turn round")
+	if _event_count(simulation.snapshot(), "turn_ended") <= 0:
+		errors.append("direct self wait interaction should emit turn_ended")
+	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "wait", "wait", "幸存者")
 	return errors
 
 
