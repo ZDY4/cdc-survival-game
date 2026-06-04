@@ -269,6 +269,8 @@ func _hotbar_button(slot: Dictionary) -> Button:
 		button.tooltip_text = "热栏 %s：空 | 可拖入主动技能" % key_label
 		return button
 	var suffix := " cd%.0f" % cooldown if cooldown > 0.0 else ""
+	if kind == "item" and int(slot.get("item_count", 0)) > 0:
+		suffix = " x%d%s" % [int(slot.get("item_count", 0)), suffix]
 	button.text = "%s:%s%s" % [key_label, _short_hotbar_label(entry_label), suffix]
 	button.tooltip_text = _hotbar_tooltip(key_label, kind, entry_label, slot)
 	button.disabled = cooldown > 0.0 or not can_use
@@ -327,11 +329,19 @@ func _hotbar_use_state_text(slot: Dictionary) -> String:
 	match str(slot.get("use_reason", "")):
 		"cooldown":
 			return "冷却 %.0fs" % float(slot.get("cooldown_remaining", 0.0))
-		"ap_insufficient":
+		"ap_insufficient", "ap_insufficient_use_item":
 			return "AP不足"
+		"not_enough_items":
+			return "数量不足"
+		"item_not_usable":
+			return "不可使用"
+		"item_use_forbidden":
+			return "禁止使用"
+		"unknown_item":
+			return "未知物品"
 		"resource_insufficient":
 			return _missing_resource_text(slot)
-		"unknown_skill":
+		"unknown_skill", "skill_missing":
 			return "未知技能"
 		"", "available":
 			return "可用"

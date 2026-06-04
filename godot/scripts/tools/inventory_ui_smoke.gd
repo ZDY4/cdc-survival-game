@@ -99,8 +99,20 @@ func _run_checks(game_root: Node) -> Array[String]:
 			await process_frame
 			if not _hud_hotbar_slot_text(game_root, "slot_1").contains("绷带"):
 				errors.append("adding bandage to hotbar should show item in HUD slot 1")
+			if not _hud_hotbar_slot_text(game_root, "slot_1").contains("x2"):
+				errors.append("item hotbar slot should show available item count")
 			if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("物品"):
 				errors.append("item hotbar slot should expose item tooltip")
+			if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("AP 2"):
+				errors.append("item hotbar slot tooltip should show item AP cost")
+			player_ref.ap = 1.0
+			game_root.refresh_hud()
+			if not _hud_hotbar_slot_disabled(game_root, "slot_1"):
+				errors.append("item hotbar slot should disable when AP is insufficient")
+			if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("AP不足"):
+				errors.append("item hotbar slot tooltip should show AP-insufficient state")
+			player_ref.ap = hotbar_ap_before
+			game_root.refresh_hud()
 			var hotbar_use: Dictionary = game_root.use_hotbar_slot("slot_1")
 			await process_frame
 			if not bool(hotbar_use.get("success", false)):
@@ -111,6 +123,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("using bandage hotbar item should spend item AP cost")
 			if _player_inventory_count(game_root, "1006") != hotbar_count_before - 1:
 				errors.append("using bandage hotbar item should consume one item")
+			player_ref.inventory["1006"] = 0
+			game_root.refresh_hud()
+			if not _hud_hotbar_slot_disabled(game_root, "slot_1"):
+				errors.append("item hotbar slot should disable when no items remain")
+			if not _hud_hotbar_slot_tooltip(game_root, "slot_1").contains("数量不足"):
+				errors.append("item hotbar slot tooltip should show not-enough-items state")
 			player_ref.hp = 50.0
 			player_ref.ap = 6.0
 			player_ref.inventory["1006"] = 2
@@ -654,6 +672,11 @@ func _hud_hotbar_slot_text(game_root: Node, slot_id: String) -> String:
 func _hud_hotbar_slot_tooltip(game_root: Node, slot_id: String) -> String:
 	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
 	return "" if button == null else str(button.tooltip_text)
+
+
+func _hud_hotbar_slot_disabled(game_root: Node, slot_id: String) -> bool:
+	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
+	return button == null or button.disabled
 
 
 func _reorder_inventory_item_before(game_root: Node, item_needle: String, target_needle: String) -> bool:

@@ -125,6 +125,7 @@ func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[
 	var hotbar: Dictionary = _dictionary_or_empty(runtime_snapshot.get("hotbar", {}))
 	var player_ap: float = float(player.get("ap", 0.0))
 	var player_resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(player.get("combat", {})).get("resources", {}))
+	var player_inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	var output: Array[Dictionary] = []
 	for slot_index in range(1, 11):
 		var slot_id := "slot_%d" % slot_index
@@ -133,7 +134,7 @@ func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[
 		var skill_id := str(slot_data.get("skill_id", ""))
 		var item_id := str(slot_data.get("item_id", ""))
 		var entry_id := item_id if kind == "item" else skill_id
-		var skill_state: Dictionary = _hotbar_skill_state(kind, skill_id, slot_data, player_ap, player_resources)
+		var use_state: Dictionary = _hotbar_use_state(kind, skill_id, item_id, slot_data, player_ap, player_resources, player_inventory)
 		output.append({
 			"slot_id": slot_id,
 			"key": "0" if slot_index == 10 else str(slot_index),
@@ -142,19 +143,28 @@ func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[
 			"item_id": item_id,
 			"label": _hotbar_label(kind, entry_id),
 			"cooldown_remaining": float(slot_data.get("cooldown_remaining", 0.0)),
-			"ap_cost": float(skill_state.get("ap_cost", 0.0)),
-			"resource_costs": _array_or_empty(skill_state.get("resource_costs", [])).duplicate(true),
-			"can_use": bool(skill_state.get("can_use", not (slot_data.is_empty() or entry_id.is_empty()))),
-			"use_reason": str(skill_state.get("reason", "")),
-			"missing_resource": _dictionary_or_empty(skill_state.get("missing_resource", {})).duplicate(true),
+			"ap_cost": float(use_state.get("ap_cost", 0.0)),
+			"resource_costs": _array_or_empty(use_state.get("resource_costs", [])).duplicate(true),
+			"item_count": int(use_state.get("item_count", 0)),
+			"can_use": bool(use_state.get("can_use", not (slot_data.is_empty() or entry_id.is_empty()))),
+			"use_reason": str(use_state.get("reason", "")),
+			"missing_resource": _dictionary_or_empty(use_state.get("missing_resource", {})).duplicate(true),
 			"empty": slot_data.is_empty() or entry_id.is_empty(),
 		})
 	return output
 
 
-func _hotbar_skill_state(kind: String, skill_id: String, slot_data: Dictionary, player_ap: float, resources: Dictionary) -> Dictionary:
-	if kind != "skill" or skill_id.is_empty():
-		return {"can_use": true, "reason": "available"}
+func _hotbar_use_state(kind: String, skill_id: String, item_id: String, slot_data: Dictionary, player_ap: float, resources: Dictionary, inventory: Dictionary) -> Dictionary:
+	if kind == "skill":
+		return _hotbar_skill_state(skill_id, slot_data, player_ap, resources)
+	if kind == "item":
+		return _hotbar_item_state(item_id, player_ap, inventory)
+	return {"can_use": true, "reason": "available"}
+
+
+func _hotbar_skill_state(skill_id: String, slot_data: Dictionary, player_ap: float, resources: Dictionary) -> Dictionary:
+	if skill_id.is_empty():
+		return {"can_use": false, "reason": "skill_missing"}
 	var skill: Dictionary = _skill_data(skill_id)
 	if skill.is_empty():
 		return {"can_use": false, "reason": "unknown_skill"}
@@ -195,11 +205,72 @@ func _hotbar_skill_state(kind: String, skill_id: String, slot_data: Dictionary, 
 	}
 
 
+func _hotbar_item_state(item_id: String, player_ap: float, inventory: Dictionary) -> Dictionary:
+	if item_id.is_empty():
+		return {"can_use": false, "reason": "item_missing"}
+	var item: Dictionary = _item_data(item_id)
+	if item.is_empty():
+		return {"can_use": false, "reason": "unknown_item", "item_count": 0}
+	var count: int = int(inventory.get(item_id, 0))
+	if count <= 0:
+		return {"can_use": false, "reason": "not_enough_items", "item_count": count}
+	var usable: Dictionary = _fragment_by_kind(item, "usable")
+	if usable.is_empty():
+		return {"can_use": false, "reason": "item_not_usable", "item_count": count}
+	if not _is_item_use_allowed(item):
+		return {"can_use": false, "reason": "item_use_forbidden", "item_count": count}
+	var ap_cost: float = max(1.0, ceil(float(usable.get("use_time", 1.0))))
+	if player_ap + 0.0001 < ap_cost:
+		return {
+			"can_use": false,
+			"reason": "ap_insufficient_use_item",
+			"ap_cost": ap_cost,
+			"item_count": count,
+			"available_ap": player_ap,
+		}
+	return {
+		"can_use": true,
+		"reason": "available",
+		"ap_cost": ap_cost,
+		"item_count": count,
+	}
+
+
 func _skill_data(skill_id: String) -> Dictionary:
 	if registry == null or skill_id.is_empty():
 		return {}
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("skills").get(skill_id, {}))
 	return _dictionary_or_empty(record.get("data", record))
+
+
+func _item_data(item_id: String) -> Dictionary:
+	if registry == null or item_id.is_empty():
+		return {}
+	var record: Dictionary = _dictionary_or_empty(registry.get_library("items").get(item_id, {}))
+	return _dictionary_or_empty(record.get("data", record))
+
+
+func _fragment_by_kind(item: Dictionary, kind: String) -> Dictionary:
+	for fragment in _array_or_empty(item.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) == kind:
+			return fragment_data
+	return {}
+
+
+func _is_item_use_allowed(item: Dictionary) -> bool:
+	for key in ["usable", "can_use"]:
+		if item.has(key) and not bool(item.get(key)):
+			return false
+	for fragment in _array_or_empty(item.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		var kind: String = str(fragment_data.get("kind", ""))
+		if kind in ["quest", "task", "key_item"]:
+			return false
+		for key in ["usable", "can_use"]:
+			if fragment_data.has(key) and not bool(fragment_data.get(key)):
+				return false
+	return true
 
 
 func _resource_costs(activation: Dictionary) -> Array[Dictionary]:
