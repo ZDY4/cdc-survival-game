@@ -22,6 +22,7 @@ var _quantity_spin: SpinBox
 var _use_button: Button
 var _equip_button: Button
 var _drop_button: Button
+var _drop_zone: PanelContainer
 var _context_menu: PopupMenu
 var _discard_dialog: ConfirmationDialog
 var _discard_quantity_input: LineEdit
@@ -160,6 +161,23 @@ func _build_layout() -> void:
 			return
 		_open_discard_dialog_for_item(_selected_item, int(_quantity_spin.value if _quantity_spin != null else 1))
 	, CONNECT_DEFERRED)
+	_drop_zone = PanelContainer.new()
+	_drop_zone.name = "DropZone"
+	_drop_zone.tooltip_text = "将物品拖到这里打开丢弃确认"
+	_drop_zone.custom_minimum_size = Vector2(0, 34)
+	_drop_zone.mouse_filter = Control.MOUSE_FILTER_STOP
+	_drop_zone.set_meta("inventory_action_target", "drop")
+	_drop_zone.set_drag_forwarding(
+		Callable(self, "_empty_inventory_drag_data"),
+		Callable(self, "_can_drop_inventory_action_data"),
+		Callable(self, "_drop_inventory_action_data")
+	)
+	var drop_zone_label := _label("DropZoneLabel")
+	drop_zone_label.text = "拖到这里丢弃"
+	drop_zone_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	drop_zone_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	drop_zone_label.tooltip_text = _drop_zone.tooltip_text
+	_drop_zone.add_child(drop_zone_label)
 	_context_menu = PopupMenu.new()
 	_context_menu.name = "InventoryContextMenu"
 	_context_menu.id_pressed.connect(_execute_context_action)
@@ -199,6 +217,7 @@ func _build_layout() -> void:
 	box.add_child(_sort_box)
 	box.add_child(_detail_label)
 	box.add_child(action_row)
+	box.add_child(_drop_zone)
 	item_scroll.add_child(_items_box)
 	box.add_child(item_scroll)
 	_add_filter_button("FilterAllButton", "全部", "all")

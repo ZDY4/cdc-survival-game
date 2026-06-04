@@ -434,6 +434,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("context dropping one bandage should leave two bandages")
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should reselect bandages before drag dropping")
+	elif not _drag_inventory_item_to_drop_zone(game_root, "绷带"):
+		errors.append("should drag bandages onto drop zone")
+	else:
+		await process_frame
+		if not _discard_dialog_visible(game_root):
+			errors.append("drop zone should open discard confirmation dialog")
+		if _player_inventory_count(game_root, "1006") != 2:
+			errors.append("drop zone confirmation should not mutate inventory before confirm")
+		var drop_zone_close_result: Dictionary = game_root.close_active_ui("keyboard_escape")
+		if str(drop_zone_close_result.get("closed", "")) != "modal:inventory_discard_confirm":
+			errors.append("Esc should close drop zone discard modal")
+		if _discard_dialog_visible(game_root):
+			errors.append("drop zone Esc should hide discard modal")
+		if _player_inventory_count(game_root, "1006") != 2:
+			errors.append("drop zone Esc should keep inventory unchanged")
+	if not _press_inventory_item_with_text(game_root, "绷带"):
+		errors.append("should reselect bandages before drag dropping to button")
 	quantity_spin = _quantity_spin(game_root)
 	drop_button = _drop_button(game_root)
 	if quantity_spin != null:
@@ -732,6 +749,20 @@ func _append_inventory_item_by_drag(game_root: Node, item_needle: String) -> boo
 func _drag_inventory_item_to_action(game_root: Node, item_needle: String, target_button_name: String) -> bool:
 	var source: Button = _inventory_item_button(game_root, item_needle)
 	var target: Button = game_root.inventory_panel.find_child(target_button_name, true, false) as Button
+	if source == null or target == null or not source.has_meta("inventory_item"):
+		return false
+	game_root.inventory_panel.call("_drop_inventory_action_data", Vector2.ZERO, {
+		"kind": "inventory_item",
+		"item": source.get_meta("inventory_item"),
+		"item_id": str(source.get_meta("inventory_item").get("item_id", "")),
+		"from_index": int(source.get_meta("inventory_index", 0)),
+	}, target)
+	return true
+
+
+func _drag_inventory_item_to_drop_zone(game_root: Node, item_needle: String) -> bool:
+	var source: Button = _inventory_item_button(game_root, item_needle)
+	var target: Control = game_root.inventory_panel.find_child("DropZone", true, false) as Control
 	if source == null or target == null or not source.has_meta("inventory_item"):
 		return false
 	game_root.inventory_panel.call("_drop_inventory_action_data", Vector2.ZERO, {
