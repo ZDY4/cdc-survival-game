@@ -513,11 +513,7 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 		"quest_reward_granted":
 			return {
 				"kind": kind,
-				"text": "任务奖励: %s | XP %d | 技能点 %d" % [
-					_quest_title_from_payload(payload),
-					int(payload.get("experience", 0)),
-					int(payload.get("skill_points", 0)),
-				],
+				"text": _quest_reward_text(payload),
 			}
 		"player_command_rejected":
 			return {
@@ -626,6 +622,32 @@ func _quest_title_from_payload(payload: Dictionary) -> String:
 		var data: Dictionary = _dictionary_or_empty(record.get("data", record))
 		return str(data.get("title", quest_id))
 	return quest_id if not quest_id.is_empty() else "任务"
+
+
+func _quest_reward_text(payload: Dictionary) -> String:
+	var parts: Array[String] = ["任务奖励: %s" % _quest_title_from_payload(payload)]
+	var experience: int = int(payload.get("experience", 0))
+	if experience > 0:
+		parts.append("XP %d" % experience)
+	var skill_points: int = int(payload.get("skill_points", 0))
+	if skill_points > 0:
+		parts.append("技能点 %d" % skill_points)
+	var money: int = int(payload.get("money", 0))
+	if money > 0:
+		parts.append("金钱 %d" % money)
+	var item_count := 0
+	for item in _array_or_empty(payload.get("items", [])):
+		var item_data: Dictionary = _dictionary_or_empty(item)
+		item_count += max(0, int(item_data.get("count", 0)))
+	if item_count > 0:
+		parts.append("物品 %d" % item_count)
+	var unlocked_count: int = _array_or_empty(payload.get("unlocked_locations", [])).size()
+	if unlocked_count > 0:
+		parts.append("解锁地点 %d" % unlocked_count)
+	var flag_count: int = _array_or_empty(payload.get("world_flags", [])).size()
+	if flag_count > 0:
+		parts.append("世界状态 %d" % flag_count)
+	return " | ".join(parts)
 
 
 func _is_player_command_kind(kind: String) -> bool:

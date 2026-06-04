@@ -72,7 +72,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("HUD feedback should show quest reward, got %s" % completed_feedback)
 	if not completed_feedback.contains("任务开始: 警戒区清剿"):
 		errors.append("HUD feedback should show follow-up quest start, got %s" % completed_feedback)
-	errors.append_array(_expect_state_reward_quest(simulation))
+	errors.append_array(_expect_state_reward_quest(simulation, registry))
 	return errors
 
 
@@ -115,7 +115,7 @@ func _hud_feedback_text(simulation: RefCounted, registry: RefCounted) -> String:
 	return " | ".join(parts)
 
 
-func _expect_state_reward_quest(simulation: RefCounted) -> Array[String]:
+func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	if player == null:
@@ -170,6 +170,13 @@ func _expect_state_reward_quest(simulation: RefCounted) -> Array[String]:
 		errors.append("quest_reward_granted should include unlocked location")
 	if not _array_or_empty(reward_payload.get("world_flags", [])).has("quest_reward_smoke_flag"):
 		errors.append("quest_reward_granted should include world flag")
+	var feedback_text := _hud_feedback_text(simulation, registry)
+	if not feedback_text.contains("金钱 13"):
+		errors.append("HUD reward feedback should include money, got %s" % feedback_text)
+	if not feedback_text.contains("解锁地点 1"):
+		errors.append("HUD reward feedback should include unlocked location count, got %s" % feedback_text)
+	if not feedback_text.contains("世界状态 1"):
+		errors.append("HUD reward feedback should include world flag count, got %s" % feedback_text)
 	return errors
 
 

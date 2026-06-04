@@ -254,7 +254,7 @@
 - 任务链奖励状态第一版已迁移：完成任务后可通过 reward 解锁地点、设置 world flags 和发放金钱；后续任务仍按 prerequisites 自动启动，奖励 payload 会暴露 money / unlocked_locations / world_flags，并由 `Quest` smoke 覆盖。待补互斥任务、替代分支和更复杂任务链条件。
 - Journal 详情第一版已迁移：目标节点、任务描述、目标类型/需求、当前进度、可交付状态、奖励详情、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付后的完成/奖励反馈和手动交付失败历史第一版已纳入 `JournalUI` / `UI` smoke；目标进度列表第一版已从 quest flow 中所有 objective 节点派生并在列表/详情展示，已纳入 `JournalUI` smoke。待补多分支/替代目标状态和更完整失败反馈。
 - 地图目标 marker 第一版已迁移：追踪 collect 目标会在当前地图标出匹配 pickup 或含目标物品的容器，追踪 kill 目标会标出当前地图匹配 enemy_type 的 actor；找不到目标时保留 unresolved marker 和 reason；地图面板 canvas 第一版会绘制地图边界、网格、入口点、可定位任务 marker 和 overworld inset，并支持缩放/平移按钮，已纳入 `JournalUI` / `UIToggle` smoke。待补跨地图显式路线、目标优先级、完成/失败反馈和更完整图形 polish。
-- 任务反馈 HUD 第一版已迁移：`quest_started`、`quest_progressed`、`quest_completed`、`quest_reward_granted` 会进入 HUD event feedback，并由 `Quest` smoke 覆盖；待补 toast、事件日志、HUD 提醒过渡、奖励动画占位和更完整失败反馈。
+- 任务反馈 HUD 第一版已迁移：`quest_started`、`quest_progressed`、`quest_completed`、`quest_reward_granted` 会进入 HUD event feedback；奖励反馈会展示 XP、技能点、金钱、物品数量、解锁地点数量和 world flag 数量，并由 `Quest` smoke 覆盖。待补 toast、事件日志、HUD 提醒过渡、奖励动画占位和更完整失败反馈。
 
 ## 11. 制作和配方
 
