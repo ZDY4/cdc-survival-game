@@ -242,7 +242,7 @@
 ### 10.1 对话
 
 - 已有对话推进、交易入口和 dialogue rules variant 选择；待补 preview 与 actual resolution 一致性。
-- fallback 对话和缺文件回退第一版已迁移：缺失 dialogue 资源会显示可继续的 fallback 文案，保留 dialogue id 诊断，Space / Enter 可结束并发出 `missing_dialogue` end type；已由 `DialogueUI` smoke 覆盖。待补更完整目标名解析、NPC action key 和对话资源目录规则。
+- fallback 对话和缺文件回退第一版已迁移：缺失 dialogue 资源会显示可继续的 fallback 文案，保留 dialogue id 诊断，Space / Enter 可结束并发出 `missing_dialogue` end type；open_trade 的 NPC action key / 显式 `shop_id` 第一版已迁移，脚本化对话可不依赖当前选中 NPC 直接打开指定商店，并由 `DialogueAction` smoke 覆盖。待补更完整目标名解析和对话资源目录规则。
 - 对话选项键盘 `1-9`、Enter/Space 推进、选项节点必须显式选择、无选项节点自动下一步第一版已迁移并由 `DialogueUI` smoke 覆盖；待补菜单内快捷键冲突和更完整诊断日志。
 - 对话动作第一版已迁移：action node 可启动任务、手动交付任务并发放奖励/扣交付物品、打开交易、解锁地点、设置 world flags、调整或设置 relationship score、单独给物品和给奖励包；动作结果会回传到 `emitted_actions`，world flag / relationship / item / reward 变更走 `Simulation` 统一事件并由 `DialogueAction` smoke 覆盖。待补失败回滚、条件化动作、动作诊断日志和 UI 反馈 polish。
 - 对话 UI 第一版已迁移：底部面板显示 speaker、target name、可滚动正文、显式选择提示、`Space / Enter` 继续提示、1-9 对话选项按钮、关闭按钮和基础诊断 meta；按钮会调用同一 `choose_dialogue_option` / `close_active_dialogue` 入口并由 `DialogueUI` smoke 覆盖。待补更完整诊断日志。

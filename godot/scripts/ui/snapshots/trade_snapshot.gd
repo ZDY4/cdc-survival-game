@@ -48,6 +48,14 @@ func resolve_trade_session(runtime_snapshot: Dictionary, target: Dictionary = {}
 	if shops.is_empty():
 		return {}
 
+	var explicit_shop_id := str(target.get("shop_id", target.get("shopId", ""))).strip_edges()
+	if str(target.get("target_type", "")) == "shop" and not explicit_shop_id.is_empty():
+		return {
+			"shop_id": explicit_shop_id,
+			"target_actor_id": 0,
+			"target_name": str(target.get("target_name", "")),
+		}
+
 	var target_actor_id: int = int(target.get("actor_id", 0))
 	if str(target.get("target_type", "")) == "actor" and target_actor_id > 0:
 		var actor: Dictionary = _actor_by_id(runtime_snapshot, target_actor_id)

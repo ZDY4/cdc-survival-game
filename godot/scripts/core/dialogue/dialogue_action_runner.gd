@@ -31,10 +31,12 @@ func apply_action(simulation: RefCounted, actor_id: int, action: Dictionary) -> 
 		"give_reward", "grant_reward":
 			return _give_reward(simulation, actor_id, action, action_type)
 		"open_trade":
+			var shop_id: String = _trade_shop_id(action)
 			simulation.emit_event("dialogue_trade_requested", {
 				"actor_id": actor_id,
+				"shop_id": shop_id,
 			})
-			return {"type": action_type, "success": true}
+			return {"type": action_type, "success": true, "shop_id": shop_id}
 		_:
 			simulation.emit_event("dialogue_action_unsupported", {
 				"actor_id": actor_id,
@@ -91,6 +93,10 @@ func _relationship_target_actor_id(simulation: RefCounted, source_actor_id: int,
 		if actor.definition_id == definition_id:
 			return actor.actor_id
 	return 0
+
+
+func _trade_shop_id(action: Dictionary) -> String:
+	return str(action.get("shop_id", action.get("shopId", action.get("action_key", action.get("actionKey", ""))))).strip_edges()
 
 
 func _give_item(simulation: RefCounted, actor_id: int, action: Dictionary, action_type: String) -> Dictionary:

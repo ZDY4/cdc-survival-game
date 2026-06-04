@@ -620,7 +620,7 @@ func _apply_dialogue_trade_result(result: Dictionary) -> void:
 	if not bool(result.get("success", false)):
 		return
 	if str(result.get("end_type", "")) == "trade":
-		active_trade_target = _dialogue_trade_target()
+		active_trade_target = _dialogue_trade_target(result)
 		active_trade_feedback = {}
 	elif bool(result.get("finished", false)) or result.has("end_type"):
 		close_trade_panel("dialogue_finished:%s" % str(result.get("end_type", "")))
@@ -1402,7 +1402,13 @@ func _interaction_result_opens_container(result: Dictionary) -> bool:
 	return nested_result.has("container")
 
 
-func _dialogue_trade_target() -> Dictionary:
+func _dialogue_trade_target(result: Dictionary = {}) -> Dictionary:
+	var shop_id := _dialogue_trade_shop_id(result)
+	if not shop_id.is_empty():
+		return {
+			"target_type": "shop",
+			"shop_id": shop_id,
+		}
 	if active_trade_target.get("target_type", "") == "actor":
 		return active_trade_target.duplicate(true)
 	return {
@@ -1413,6 +1419,8 @@ func _dialogue_trade_target() -> Dictionary:
 func _active_trade_target_available() -> bool:
 	if active_trade_target.is_empty() or simulation == null:
 		return true
+	if str(active_trade_target.get("target_type", "")) == "shop" and not str(active_trade_target.get("shop_id", "")).is_empty():
+		return registry != null and registry.get_library("shops").has(str(active_trade_target.get("shop_id", "")))
 	if str(active_trade_target.get("target_type", "")) != "actor":
 		return true
 	var actor_id := int(active_trade_target.get("actor_id", 0))
@@ -1425,6 +1433,17 @@ func _active_trade_target_available() -> bool:
 		return false
 	var shop_id := "%s_shop" % actor.definition_id
 	return registry != null and registry.get_library("shops").has(shop_id)
+
+
+func _dialogue_trade_shop_id(result: Dictionary) -> String:
+	for action in _array_or_empty(result.get("emitted_actions", [])):
+		var action_data: Dictionary = _dictionary_or_empty(action)
+		if str(action_data.get("type", "")) != "open_trade":
+			continue
+		var shop_id := str(action_data.get("shop_id", "")).strip_edges()
+		if not shop_id.is_empty():
+			return shop_id
+	return ""
 
 
 func _current_dialogue_snapshot() -> Dictionary:

@@ -1,6 +1,7 @@
 extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
+const TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
@@ -51,6 +52,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not game_root.trade_panel.visible:
 		errors.append("trade panel should be visible after open_trade dialogue action")
 	game_root.close_trade_panel()
+	errors.append_array(_expect_explicit_shop_trade_action(game_root))
 
 	var simulation: RefCounted = game_root.simulation
 	simulation.completed_quests["tutorial_survive"] = true
@@ -205,6 +207,33 @@ func _expect_scripted_state_actions(game_root: Node) -> Array[String]:
 	return errors
 
 
+func _expect_explicit_shop_trade_action(game_root: Node) -> Array[String]:
+	var errors: Array[String] = []
+	_install_explicit_shop_trade_dialogue(game_root)
+	game_root.active_trade_target = {}
+	game_root.close_trade_panel()
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	player.active_dialogue_id = "dialogue_action_smoke_explicit_shop_trade"
+	player.active_dialogue_node_id = ""
+	game_root.refresh_dialogue_panel()
+	var result: Dictionary = game_root.choose_dialogue_option("open_explicit_shop")
+	if not bool(result.get("success", false)):
+		errors.append("explicit shop trade dialogue action failed: %s" % result.get("reason", "unknown"))
+	if str(result.get("end_type", "")) != "trade":
+		errors.append("explicit shop trade action should finish as trade")
+	if str(game_root.active_trade_target.get("target_type", "")) != "shop":
+		errors.append("explicit shop trade should use shop target")
+	if str(game_root.active_trade_target.get("shop_id", "")) != "trader_lao_wang_shop":
+		errors.append("explicit shop trade should preserve shop id target")
+	var session: Dictionary = TradeSnapshot.new(game_root.registry).resolve_trade_session(game_root.simulation.snapshot(), game_root.active_trade_target)
+	if str(session.get("shop_id", "")) != "trader_lao_wang_shop":
+		errors.append("trade snapshot should resolve explicit shop id")
+	if not game_root.trade_panel.visible:
+		errors.append("explicit shop trade should open trade panel")
+	game_root.close_trade_panel()
+	return errors
+
+
 func _install_scripted_dialogue(game_root: Node) -> void:
 	var dialogue_library: Dictionary = game_root.registry.libraries.get("dialogues", {})
 	dialogue_library["dialogue_action_smoke_scripted"] = {
@@ -277,6 +306,54 @@ func _install_scripted_dialogue(game_root: Node) -> void:
 					"id": "done",
 					"type": "end",
 					"end_type": "leave",
+				},
+			],
+		},
+	}
+	game_root.registry.libraries["dialogues"] = dialogue_library
+
+
+func _install_explicit_shop_trade_dialogue(game_root: Node) -> void:
+	var dialogue_library: Dictionary = game_root.registry.libraries.get("dialogues", {})
+	dialogue_library["dialogue_action_smoke_explicit_shop_trade"] = {
+		"path": "res://scripts/tools/dialogue_action_smoke.gd",
+		"data": {
+			"dialog_id": "dialogue_action_smoke_explicit_shop_trade",
+			"nodes": [
+				{
+					"id": "start",
+					"type": "dialog",
+					"speaker": "Smoke",
+					"text": "准备打开指定商店。",
+					"is_start": true,
+					"next": "choice_1",
+				},
+				{
+					"id": "choice_1",
+					"type": "choice",
+					"options": [
+						{
+							"id": "open_explicit_shop",
+							"text": "打开老王商店",
+							"next": "trade_action",
+						},
+					],
+				},
+				{
+					"id": "trade_action",
+					"type": "action",
+					"actions": [
+						{
+							"type": "open_trade",
+							"shop_id": "trader_lao_wang_shop",
+						},
+					],
+					"next": "trade_end",
+				},
+				{
+					"id": "trade_end",
+					"type": "end",
+					"end_type": "trade",
 				},
 			],
 		},
