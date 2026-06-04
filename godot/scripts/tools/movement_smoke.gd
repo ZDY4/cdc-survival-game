@@ -75,6 +75,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	var queued_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": queued_goal, "topology": topology})
 	if queued_result.get("reason", "") != "ap_insufficient_movement_queued":
 		errors.append("AP shortage should queue pending movement")
+	_expect_rejected_command(errors, queued_result, "ap_insufficient_movement_queued", "AP shortage movement")
 	if simulation.snapshot().get("pending_movement", {}).is_empty():
 		errors.append("pending movement should be exposed in snapshot")
 	var queued_payload: Dictionary = _last_event_payload(simulation.snapshot(), "movement_queued")
@@ -198,6 +199,33 @@ func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
 	var events: Array = snapshot.get("events", [])
 	for index in range(events.size() - 1, -1, -1):
 		var event_data: Dictionary = events[index]
+		if event_data.get("kind", "") == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
+
+
+func _expect_rejected_command(errors: Array[String], result: Dictionary, expected_reason: String, context: String) -> void:
+	if bool(result.get("success", false)):
+		errors.append("%s should be rejected" % context)
+	if str(result.get("reason", "")) != expected_reason:
+		errors.append("%s reason expected %s, got %s" % [context, expected_reason, result.get("reason", "")])
+	var feedback: Dictionary = _dictionary_or_empty(result.get("ui_feedback", {}))
+	if bool(feedback.get("success", true)):
+		errors.append("%s ui_feedback should report failure" % context)
+	if str(feedback.get("reason", "")) != expected_reason:
+		errors.append("%s ui_feedback reason expected %s, got %s" % [context, expected_reason, feedback.get("reason", "")])
+	var rejected_payload: Dictionary = _last_result_event_payload(result, "player_command_rejected")
+	if str(rejected_payload.get("reason", "")) != expected_reason:
+		errors.append("%s player_command_rejected should include reason" % context)
+	var ui_payload: Dictionary = _last_result_event_payload(result, "ui_feedback")
+	if str(ui_payload.get("reason", "")) != expected_reason:
+		errors.append("%s ui_feedback event should include reason" % context)
+
+
+func _last_result_event_payload(result: Dictionary, kind: String) -> Dictionary:
+	var events: Array = result.get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
 		if event_data.get("kind", "") == kind:
 			return _dictionary_or_empty(event_data.get("payload", {}))
 	return {}

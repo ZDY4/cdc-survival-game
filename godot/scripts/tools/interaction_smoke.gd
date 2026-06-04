@@ -44,6 +44,9 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	_expect_command_result_contract(errors, unsupported_result, "unsupported_contract_probe")
 	if bool(unsupported_result.get("success", false)):
 		errors.append("unsupported command should fail")
+	_expect_rejected_command(errors, unsupported_result, "unknown_player_command", "unsupported command")
+	var reject_errors: Array[String] = _expect_basic_reject_semantics(registry)
+	errors.append_array(reject_errors)
 	var pickup_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
@@ -68,6 +71,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	})
 	if bool(second_pickup.get("success", false)):
 		errors.append("pickup target was not consumed")
+	_expect_rejected_command(errors, second_pickup, "interaction_target_unavailable", "consumed pickup")
 
 	var talk_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
@@ -212,6 +216,61 @@ func _expect_command_result_contract(errors: Array[String], result: Dictionary, 
 		errors.append("command result should include ui_feedback event")
 
 
+func _expect_rejected_command(errors: Array[String], result: Dictionary, expected_reason: String, context: String) -> void:
+	if bool(result.get("success", false)):
+		errors.append("%s should be rejected" % context)
+	if str(result.get("reason", "")) != expected_reason:
+		errors.append("%s reason expected %s, got %s" % [context, expected_reason, result.get("reason", "")])
+	var feedback: Dictionary = _dictionary_or_empty(result.get("ui_feedback", {}))
+	if bool(feedback.get("success", true)):
+		errors.append("%s ui_feedback should report failure" % context)
+	if str(feedback.get("reason", "")) != expected_reason:
+		errors.append("%s ui_feedback reason expected %s, got %s" % [context, expected_reason, feedback.get("reason", "")])
+	var rejected_payload: Dictionary = _last_result_event_payload(result, "player_command_rejected")
+	if str(rejected_payload.get("reason", "")) != expected_reason:
+		errors.append("%s player_command_rejected should include reason" % context)
+	var ui_payload: Dictionary = _last_result_event_payload(result, "ui_feedback")
+	if str(ui_payload.get("reason", "")) != expected_reason:
+		errors.append("%s ui_feedback event should include reason" % context)
+
+
+func _expect_basic_reject_semantics(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var unknown_actor: Dictionary = simulation.submit_player_command({
+		"kind": "wait",
+		"actor_id": 99999,
+	})
+	_expect_command_result_contract(errors, unknown_actor, "wait")
+	_expect_rejected_command(errors, unknown_actor, "unknown_actor", "unknown actor command")
+
+	var non_player_actor: Dictionary = simulation.submit_player_command({
+		"kind": "wait",
+		"actor_id": 2,
+	})
+	_expect_command_result_contract(errors, non_player_actor, "wait")
+	_expect_rejected_command(errors, non_player_actor, "command_actor_not_player", "non-player actor command")
+
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.turn_open = false
+	var closed_turn: Dictionary = simulation.submit_player_command({
+		"kind": "wait",
+		"actor_id": 1,
+	})
+	_expect_command_result_contract(errors, closed_turn, "wait")
+	_expect_rejected_command(errors, closed_turn, "turn_closed", "closed turn command")
+
+	player.turn_open = true
+	var unknown_attack_target: Dictionary = simulation.submit_player_command({
+		"kind": "attack",
+		"actor_id": 1,
+		"target_actor_id": 99999,
+	})
+	_expect_command_result_contract(errors, unknown_attack_target, "attack")
+	_expect_rejected_command(errors, unknown_attack_target, "unknown_target", "unknown attack target")
+	return errors
+
+
 func _event_count_in_result(result: Dictionary, kind: String) -> int:
 	var count := 0
 	for event in result.get("events", []):
@@ -219,6 +278,15 @@ func _event_count_in_result(result: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _last_result_event_payload(result: Dictionary, kind: String) -> Dictionary:
+	var events: Array = result.get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if event_data.get("kind", "") == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
 
 
 func _expect_interaction_succeeded_payload(errors: Array[String], snapshot: Dictionary, expected_option_id: String, expected_option_kind: String, expected_name_fragment: String) -> void:
