@@ -18,6 +18,13 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		return {
 			"active": true,
 			"dialogue_id": dialogue_id,
+			"node_id": "missing_dialogue",
+			"speaker": "对话",
+			"target": _dialogue_target(runtime_snapshot, dialogue_id),
+			"text": "对话资源缺失：%s" % dialogue_id,
+			"portrait": "",
+			"options": [],
+			"fallback": true,
 			"error": "unknown_dialogue",
 		}
 

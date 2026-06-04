@@ -31,7 +31,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if not active:
 		return
 
-	if snapshot.has("error"):
+	if snapshot.has("error") and not bool(snapshot.get("fallback", false)):
 		_speaker_label.text = "Dialogue %s" % snapshot.get("dialogue_id", "")
 		_target_label.text = ""
 		_text_label.text = "对话资源不可用: %s" % snapshot.get("error", "unknown")

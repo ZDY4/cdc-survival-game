@@ -96,6 +96,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await _expect_close_button_closes_dialogue(errors, game_root)
 	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_SPACE, "Space")
 	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_ENTER, "Enter")
+	_expect_missing_dialogue_fallback(errors, game_root)
 	return errors
 
 
@@ -247,9 +248,54 @@ func _expect_close_button_closes_dialogue(errors: Array[String], game_root: Node
 		errors.append("dialogue close button should emit dialogue_closed event")
 
 
+func _expect_missing_dialogue_fallback(errors: Array[String], game_root: Node) -> void:
+	game_root.close_trade_panel()
+	game_root.simulation.close_dialogue(1, "smoke_reset")
+	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if actor == null:
+		errors.append("missing dialogue fallback setup missing player actor")
+		return
+	actor.active_dialogue_id = "missing_dialogue_smoke"
+	actor.active_dialogue_node_id = ""
+	game_root.refresh_dialogue_panel()
+	if not game_root.dialogue_panel.visible:
+		errors.append("missing dialogue fallback should keep dialogue panel visible")
+	if _speaker_line(game_root) != "对话":
+		errors.append("missing dialogue fallback should show generic speaker")
+	if not _text_line(game_root).contains("missing_dialogue_smoke"):
+		errors.append("missing dialogue fallback should show missing dialogue id")
+	if not _options_line(game_root).contains("Space / Enter 继续"):
+		errors.append("missing dialogue fallback should expose no-choice continue hint")
+	if bool(game_root.dialogue_panel.get_meta("dialogue_id", "") != "missing_dialogue_smoke"):
+		errors.append("missing dialogue fallback should preserve dialogue id meta")
+	_press_key(game_root, KEY_SPACE)
+	if not str(_player(game_root).get("active_dialogue_id", "")).is_empty():
+		errors.append("Space should close missing dialogue fallback")
+	if game_root.dialogue_panel.visible:
+		errors.append("missing dialogue fallback should hide after Space")
+	var payload: Dictionary = _last_event_payload(game_root, "dialogue_finished")
+	if str(payload.get("end_type", "")) != "missing_dialogue":
+		errors.append("missing dialogue fallback should emit missing_dialogue end type")
+
+
 func _player(game_root: Node) -> Dictionary:
 	for actor in game_root.simulation.snapshot().get("actors", []):
 		var actor_data: Dictionary = actor
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return actor_data
+	return {}
+
+
+func _last_event_payload(game_root: Node, kind: String) -> Dictionary:
+	var events: Array = game_root.simulation.snapshot().get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
 	return {}

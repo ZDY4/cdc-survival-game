@@ -16,7 +16,7 @@ func advance(simulation: RefCounted, actor_id: int, option_ref: Variant, dialogu
 		return {"success": false, "reason": "dialogue_session_missing"}
 	var dialogue: Dictionary = _dialogue_index.dialogue_data(dialogue_id, dialogue_library)
 	if dialogue.is_empty():
-		return {"success": false, "reason": "unknown_dialogue", "dialogue_id": dialogue_id}
+		return _finish_missing_dialogue(simulation, actor_id, actor, dialogue_id)
 	var nodes: Dictionary = _dialogue_index.nodes_by_id(_array_or_empty(dialogue.get("nodes", [])))
 	var current_node_id: String = _active_node_id(actor, dialogue)
 	var current_node: Dictionary = _dictionary_or_empty(nodes.get(current_node_id, {}))
@@ -50,7 +50,7 @@ func advance_without_choice(simulation: RefCounted, actor_id: int, dialogue_libr
 		return {"success": false, "reason": "dialogue_session_missing"}
 	var dialogue: Dictionary = _dialogue_index.dialogue_data(dialogue_id, dialogue_library)
 	if dialogue.is_empty():
-		return {"success": false, "reason": "unknown_dialogue", "dialogue_id": dialogue_id}
+		return _finish_missing_dialogue(simulation, actor_id, actor, dialogue_id)
 	var nodes: Dictionary = _dialogue_index.nodes_by_id(_array_or_empty(dialogue.get("nodes", [])))
 	var current_node_id: String = _active_node_id(actor, dialogue)
 	var current_node: Dictionary = _dictionary_or_empty(nodes.get(current_node_id, {}))
@@ -95,6 +95,26 @@ func _active_node_id(actor: RefCounted, dialogue: Dictionary) -> String:
 		return str(start_node.get("id", ""))
 	actor.active_dialogue_node_id = next_node_id
 	return next_node_id
+
+
+func _finish_missing_dialogue(simulation: RefCounted, actor_id: int, actor: RefCounted, dialogue_id: String) -> Dictionary:
+	actor.active_dialogue_id = ""
+	actor.active_dialogue_node_id = ""
+	simulation.emit_event("dialogue_finished", {
+		"actor_id": actor_id,
+		"dialogue_id": dialogue_id,
+		"node_id": "missing_dialogue",
+		"end_type": "missing_dialogue",
+		"reason": "unknown_dialogue",
+	})
+	return {
+		"success": true,
+		"dialogue_id": dialogue_id,
+		"node_id": "missing_dialogue",
+		"finished": true,
+		"end_type": "missing_dialogue",
+		"reason": "unknown_dialogue",
+	}
 
 
 func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, dialogue_id: String, node_id: String, nodes: Dictionary, emitted_actions: Array[Dictionary]) -> Dictionary:
