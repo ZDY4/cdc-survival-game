@@ -4,6 +4,7 @@ var _panel: PanelContainer
 var _summary_label: Label
 var _resource_label: Label
 var _feedback_label: Label
+var _derived_box: VBoxContainer
 var _attributes_box: VBoxContainer
 var _status_box: VBoxContainer
 var _equipment_box: VBoxContainer
@@ -33,9 +34,12 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		float(snapshot.get("ap", 0.0)),
 	]
 	_apply_feedback(_dictionary_or_empty(snapshot.get("feedback", {})))
+	_clear_box(_derived_box)
 	_clear_box(_attributes_box)
 	_clear_box(_status_box)
 	_clear_box(_equipment_box)
+	for row in _derived_rows(_array_or_empty(snapshot.get("derived_stats", []))):
+		_derived_box.add_child(row)
 	for row in _attribute_rows(_dictionary_or_empty(snapshot.get("attributes", {})), available_stat_points):
 		_attributes_box.add_child(row)
 	for row in _status_rows(_array_or_empty(snapshot.get("status_effects", []))):
@@ -66,6 +70,9 @@ func _build_layout() -> void:
 	_summary_label = _label("SummaryLine")
 	_resource_label = _label("ResourceLine")
 	_feedback_label = _label("FeedbackLine")
+	_derived_box = VBoxContainer.new()
+	_derived_box.name = "DerivedStatLines"
+	_derived_box.add_theme_constant_override("separation", 3)
 	_attributes_box = VBoxContainer.new()
 	_attributes_box.name = "AttributeLines"
 	_attributes_box.add_theme_constant_override("separation", 3)
@@ -78,12 +85,34 @@ func _build_layout() -> void:
 	box.add_child(_summary_label)
 	box.add_child(_resource_label)
 	box.add_child(_feedback_label)
+	box.add_child(_section_label("DerivedStatsTitle", "派生"))
+	box.add_child(_derived_box)
 	box.add_child(_section_label("AttributesTitle", "属性"))
 	box.add_child(_attributes_box)
 	box.add_child(_section_label("StatusEffectsTitle", "状态"))
 	box.add_child(_status_box)
 	box.add_child(_section_label("EquipmentTitle", "装备"))
 	box.add_child(_equipment_box)
+
+
+func _derived_rows(derived_stats: Array) -> Array[Control]:
+	var rows: Array[Control] = []
+	if derived_stats.is_empty():
+		var empty := _label("DerivedStatEmpty")
+		empty.text = "暂无派生数值"
+		rows.append(empty)
+		return rows
+	for stat in derived_stats:
+		var data: Dictionary = _dictionary_or_empty(stat)
+		var stat_id: String = str(data.get("id", "unknown"))
+		var label := _label("DerivedStat_%s" % stat_id)
+		label.text = "%s: %s" % [
+			str(data.get("label", stat_id)),
+			str(data.get("value", "")),
+		]
+		label.tooltip_text = str(data.get("tooltip", ""))
+		rows.append(label)
+	return rows
 
 
 func _attribute_rows(attributes: Dictionary, available_stat_points: int) -> Array[Control]:

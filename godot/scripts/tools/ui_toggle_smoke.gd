@@ -136,6 +136,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_stage_open(errors, game_root, "character", "C should open character")
 	if not game_root.character_panel.find_child("SummaryLine", true, false) is Label:
 		errors.append("character panel should expose SummaryLine")
+	if not _derived_line(game_root, "combat").contains("攻击 6") or not _derived_line(game_root, "combat").contains("防御 6"):
+		errors.append("character panel should show combat derived attack and equipment-adjusted defense")
+	if not _derived_line(game_root, "equipment").contains("4 件") or not _derived_line(game_root, "equipment").contains("defense +3.00"):
+		errors.append("character panel should show derived equipment count and modifier summary")
 	if not _status_effect_line(game_root, "StatusEffectEmpty").contains("无状态效果"):
 		errors.append("character panel should show empty status effect row before skills are learned")
 	if not _equipment_line(game_root, "main_hand").contains("主手: 小刀"):
@@ -242,6 +246,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("character panel should refresh allocated constitution value")
 		if _player_max_hp(game_root) <= hp_before_attribute:
 			errors.append("allocating constitution from character panel should refresh max hp")
+		if not _derived_line(game_root, "survivability").contains("HP 85/85"):
+			errors.append("character derived survivability should refresh after constitution allocation")
 		if _event_count(game_root, "attribute_allocated") <= 0:
 			errors.append("allocating from character panel should emit attribute_allocated")
 
@@ -251,6 +257,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("learning combat for character status effects failed: %s" % combat_skill_result.get("reason", "unknown"))
 	if not _status_effect_line(game_root, "StatusEffect_passive_skill_combat").contains("战斗训练 | passive | Lv1 | damage_bonus +0.04"):
 		errors.append("character panel should show passive combat status effect")
+	if not _derived_line(game_root, "effects").contains("damage_bonus +0.04"):
+		errors.append("character panel should include passive skill modifier in derived effect summary")
 	var adrenaline_result: Dictionary = game_root.learn_player_skill("adrenaline_rush")
 	if not bool(adrenaline_result.get("success", false)):
 		errors.append("learning adrenaline rush for character status effects failed: %s" % adrenaline_result.get("reason", "unknown"))
@@ -260,6 +268,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("using adrenaline rush for character status effects failed: %s" % hotbar_result.get("reason", "unknown"))
 	if not _status_effect_line(game_root, "StatusEffect_skill_adrenaline_rush").contains("肾上腺激发 | buff | Lv1 | 8回合 | damage_bonus +0.25"):
 		errors.append("character panel should show timed adrenaline rush status effect")
+	if not _derived_line(game_root, "effects").contains("damage_bonus +0.29"):
+		errors.append("character panel should sum passive and active status modifiers in derived effect summary")
 
 	_press_key(game_root, KEY_M)
 	_expect_stage_open(errors, game_root, "map", "M should replace character with map")
@@ -584,6 +594,13 @@ func _attribute_line(game_root: Node, attribute: String) -> String:
 	if row == null:
 		return ""
 	var label: Node = row.get_node_or_null("Line")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _derived_line(game_root: Node, stat_id: String) -> String:
+	var label: Node = game_root.character_panel.find_child("DerivedStat_%s" % stat_id, true, false)
 	if label is Label:
 		return str((label as Label).text)
 	return ""

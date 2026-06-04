@@ -31,6 +31,8 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	var weapon_ammo: Dictionary = _dictionary_or_empty(player.get("weapon_ammo", {}))
 	var combat: Dictionary = _dictionary_or_empty(player.get("combat", {}))
+	var equipment_rows: Array[Dictionary] = _equipment_snapshot(equipment, inventory, weapon_ammo, float(player.get("ap", 0.0)))
+	var status_effects: Array[Dictionary] = _status_effects_snapshot(_array_or_empty(combat.get("active_effects", [])))
 	return {
 		"owner_actor_id": int(player.get("actor_id", 0)),
 		"owner_name": str(player.get("display_name", "")),
@@ -42,8 +44,9 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"max_hp": float(combat.get("max_hp", 0.0)),
 		"ap": float(player.get("ap", 0.0)),
 		"attributes": attributes.duplicate(true),
-		"equipment": _equipment_snapshot(equipment, inventory, weapon_ammo, float(player.get("ap", 0.0))),
-		"status_effects": _status_effects_snapshot(_array_or_empty(combat.get("active_effects", []))),
+		"derived_stats": _derived_stats_snapshot(attributes, combat, equipment_rows, status_effects),
+		"equipment": equipment_rows,
+		"status_effects": status_effects,
 		"feedback": _feedback_snapshot(feedback),
 	}
 
@@ -232,6 +235,117 @@ func _status_effects_snapshot(active_effects: Array) -> Array[Dictionary]:
 		return str(a.get("effect_id", "")) < str(b.get("effect_id", ""))
 	)
 	return rows
+
+
+func _derived_stats_snapshot(attributes: Dictionary, combat: Dictionary, equipment_rows: Array, status_effects: Array) -> Array[Dictionary]:
+	var combat_attributes: Dictionary = _dictionary_or_empty(combat.get("attributes", {}))
+	var equipment_modifiers: Dictionary = _summed_equipment_modifiers(equipment_rows)
+	var status_modifiers: Dictionary = _summed_status_modifiers(status_effects)
+	return [
+		{
+			"id": "survivability",
+			"label": "生存",
+			"value": "HP %.0f/%.0f | 速度 %.1f" % [
+				float(combat.get("hp", 0.0)),
+				float(combat.get("max_hp", 0.0)),
+				float(combat_attributes.get("speed", 0.0)),
+			],
+			"tooltip": "当前生命 / 最大生命 / 速度派生",
+		},
+		{
+			"id": "combat",
+			"label": "战斗",
+			"value": "攻击 %.0f | 防御 %.0f | 暴击 %.0f%%" % [
+				float(combat_attributes.get("attack_power", 0.0)) + float(equipment_modifiers.get("attack_power", 0.0)),
+				float(combat_attributes.get("defense", 0.0)) + float(equipment_modifiers.get("defense", 0.0)),
+				float(combat_attributes.get("crit_chance", 0.0)) * 100.0,
+			],
+			"tooltip": "基础战斗属性加装备修饰",
+		},
+		{
+			"id": "progression",
+			"label": "属性",
+			"value": "力 %d | 敏 %d | 体 %d | 合计 %d" % [
+				int(attributes.get("strength", 0)),
+				int(attributes.get("agility", 0)),
+				int(attributes.get("constitution", 0)),
+				_attribute_total(attributes),
+			],
+			"tooltip": "当前基础属性合计",
+		},
+		{
+			"id": "equipment",
+			"label": "装备",
+			"value": "%d 件 | 修饰 %s" % [
+				_equipped_count(equipment_rows),
+				_modifier_summary(equipment_modifiers),
+			],
+			"tooltip": "已装备物品数量与装备属性修饰",
+		},
+		{
+			"id": "effects",
+			"label": "状态",
+			"value": "%d 个 | 修饰 %s" % [
+				status_effects.size(),
+				_modifier_summary(status_modifiers),
+			],
+			"tooltip": "主动和被动状态效果修饰",
+		},
+	]
+
+
+func _summed_equipment_modifiers(equipment_rows: Array) -> Dictionary:
+	var output: Dictionary = {}
+	for row in equipment_rows:
+		var row_data: Dictionary = _dictionary_or_empty(row)
+		if not bool(row_data.get("equipped", false)):
+			continue
+		var item_data: Dictionary = _item_data(str(row_data.get("item_id", "")))
+		var modifiers: Dictionary = _dictionary_or_empty(_fragment_by_kind(item_data, "attribute_modifiers").get("attributes", {}))
+		_add_modifiers(output, modifiers)
+	return output
+
+
+func _summed_status_modifiers(status_effects: Array) -> Dictionary:
+	var output: Dictionary = {}
+	for effect in status_effects:
+		_add_modifiers(output, _dictionary_or_empty(_dictionary_or_empty(effect).get("modifiers", {})))
+	return output
+
+
+func _add_modifiers(target: Dictionary, modifiers: Dictionary) -> void:
+	for key in modifiers.keys():
+		var modifier_id := str(key)
+		target[modifier_id] = float(target.get(modifier_id, 0.0)) + float(modifiers.get(key, 0.0))
+
+
+func _attribute_total(attributes: Dictionary) -> int:
+	var total := 0
+	for key in attributes.keys():
+		total += int(attributes.get(key, 0))
+	return total
+
+
+func _equipped_count(equipment_rows: Array) -> int:
+	var count := 0
+	for row in equipment_rows:
+		if bool(_dictionary_or_empty(row).get("equipped", false)):
+			count += 1
+	return count
+
+
+func _modifier_summary(modifiers: Dictionary) -> String:
+	if modifiers.is_empty():
+		return "无"
+	var parts: Array[String] = []
+	var keys: Array = modifiers.keys()
+	keys.sort()
+	for key in keys:
+		var value: float = float(modifiers.get(key, 0.0))
+		if is_zero_approx(value):
+			continue
+		parts.append("%s %s" % [str(key), _signed_modifier(value)])
+	return "无" if parts.is_empty() else " / ".join(parts)
 
 
 func _status_effect_name(effect: Dictionary) -> String:
