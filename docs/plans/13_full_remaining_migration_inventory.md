@@ -29,7 +29,7 @@
 
 ### 1.2 命令入口
 
-- 待补统一命令返回结构：`success`、`kind`、`reason`、`events`、`turn_state`、`runtime_snapshot_delta`、`ui_feedback`、`prompt`、`context_snapshot` 应稳定出现在所有命令结果中。
+- 已迁移统一命令返回结构第一版：`success`、`kind`、`reason`、`events`、`turn_state`、`combat_state`、`runtime_snapshot_delta`、`ui_feedback`、`prompt`、`context_snapshot` 已稳定出现在 `Simulation.submit_player_command()` 的所有返回结果中，并由 `Interaction` smoke 覆盖。
 - 待补命令 reject 语义：无 actor、非玩家回合、AP 不足、目标不存在、目标不可见、跨层、阻挡、缺材料、缺技能、缺工具、资金不足、数量非法、UI modal 阻塞等要有稳定 reason。
 - 待补可取消命令分类：pending movement、pending interaction、targeting、dialogue、trade、container、quantity modal、menu panel 应按旧 Rust 的关闭优先级处理。
 - 待补命令审计：smoke 中应能断言每个玩家动作只通过 `Simulation.submit_player_command()` 或 core service 修改业务状态。

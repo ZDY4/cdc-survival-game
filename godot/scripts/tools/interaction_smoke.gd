@@ -35,6 +35,10 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		if not first_snapshot.has(key):
 			errors.append("runtime snapshot missing %s" % key)
 	var topology: Dictionary = _topology(simulation, registry)
+	var unsupported_result: Dictionary = simulation.submit_player_command({"kind": "unsupported_contract_probe"})
+	_expect_command_result_contract(errors, unsupported_result, "unsupported_contract_probe")
+	if bool(unsupported_result.get("success", false)):
+		errors.append("unsupported command should fail")
 	var pickup_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
@@ -100,6 +104,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	})
 	if not bool(wait_result.get("success", false)):
 		errors.append("self wait interaction failed: %s" % wait_result.get("reason", "unknown"))
+	_expect_command_result_contract(errors, wait_result, "wait")
 	if _event_count(simulation.snapshot(), "turn_ended") <= 0:
 		errors.append("self wait should end the current turn")
 
@@ -146,9 +151,33 @@ func _final_interaction_result(result: Dictionary) -> bool:
 	return bool(result.get("consumed_target", false)) \
 		or result.has("dialogue_id") \
 		or result.has("container") \
-		or result.has("context_snapshot") \
+		or _has_context_snapshot(result) \
 		or bool(result.get("waited", false)) \
 		or bool(result.get("defeated", false))
+
+
+func _has_context_snapshot(result: Dictionary) -> bool:
+	var context: Variant = result.get("context_snapshot", {})
+	if typeof(context) != TYPE_DICTIONARY:
+		return false
+	var context_dictionary: Dictionary = context
+	return not context_dictionary.is_empty()
+
+
+func _expect_command_result_contract(errors: Array[String], result: Dictionary, expected_kind: String) -> void:
+	for key in ["success", "kind", "reason", "events", "turn_state", "combat_state", "runtime_snapshot_delta", "ui_feedback", "prompt", "context_snapshot"]:
+		if not result.has(key):
+			errors.append("command result missing %s" % key)
+	if str(result.get("kind", "")) != expected_kind:
+		errors.append("command result kind expected %s got %s" % [expected_kind, result.get("kind", "")])
+	if typeof(result.get("events", [])) != TYPE_ARRAY:
+		errors.append("command result events should be an array")
+	if typeof(result.get("turn_state", {})) != TYPE_DICTIONARY:
+		errors.append("command result turn_state should be a dictionary")
+	if typeof(result.get("runtime_snapshot_delta", {})) != TYPE_DICTIONARY:
+		errors.append("command result runtime_snapshot_delta should be a dictionary")
+	if typeof(result.get("ui_feedback", {})) != TYPE_DICTIONARY:
+		errors.append("command result ui_feedback should be a dictionary")
 
 
 func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCounted) -> Array[String]:

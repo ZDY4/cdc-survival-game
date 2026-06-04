@@ -129,9 +129,17 @@ func _final_interaction_result(result: Dictionary) -> bool:
 	return bool(result.get("consumed_target", false)) \
 		or result.has("dialogue_id") \
 		or result.has("container") \
-		or result.has("context_snapshot") \
+		or _has_context_snapshot(result) \
 		or bool(result.get("waited", false)) \
 		or bool(result.get("defeated", false))
+
+
+func _has_context_snapshot(result: Dictionary) -> bool:
+	var context: Variant = result.get("context_snapshot", {})
+	if typeof(context) != TYPE_DICTIONARY:
+		return false
+	var context_dictionary: Dictionary = context
+	return not context_dictionary.is_empty()
 
 
 func _active_quest_ids(game_root: Node) -> Array[String]:

@@ -111,37 +111,40 @@ func register_actor(request: Dictionary) -> int:
 
 
 func submit_player_command(command: Dictionary) -> Dictionary:
+	var kind := str(command.get("kind", ""))
 	var actor_id: int = int(command.get("actor_id", _player_actor_id()))
+	var event_start_index: int = events.size()
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
+		return _normalize_player_command_result({"success": false, "reason": "unknown_actor"}, command, kind, actor_id, event_start_index)
 	if actor.kind != "player":
-		return {"success": false, "reason": "command_actor_not_player"}
+		return _normalize_player_command_result({"success": false, "reason": "command_actor_not_player"}, command, kind, actor_id, event_start_index)
 	if not actor.turn_open:
-		return {"success": false, "reason": "turn_closed", "turn_state": turn_state.duplicate(true)}
+		return _normalize_player_command_result({"success": false, "reason": "turn_closed", "turn_state": turn_state.duplicate(true)}, command, kind, actor_id, event_start_index)
 
-	var kind := str(command.get("kind", ""))
+	var result: Dictionary = {}
 	match kind:
 		"wait":
-			return _submit_wait_command(actor, command)
+			result = _submit_wait_command(actor, command)
 		"move":
-			return _finalize_player_ap_action(actor, _submit_move_command(actor, command), command, "move")
+			result = _finalize_player_ap_action(actor, _submit_move_command(actor, command), command, "move")
 		"interact":
-			return _finalize_player_ap_action(actor, _submit_interact_command(actor, command), command, "interact")
+			result = _finalize_player_ap_action(actor, _submit_interact_command(actor, command), command, "interact")
 		"attack":
-			return _finalize_player_ap_action(actor, _submit_attack_command(actor, command), command, "attack")
+			result = _finalize_player_ap_action(actor, _submit_attack_command(actor, command), command, "attack")
 		"craft":
-			return _finalize_player_ap_action(actor, _submit_craft_command(actor, command), command, "craft")
+			result = _finalize_player_ap_action(actor, _submit_craft_command(actor, command), command, "craft")
 		"inventory_action":
-			return _submit_inventory_action_command(actor, command)
+			result = _submit_inventory_action_command(actor, command)
 		"learn_skill":
-			return _submit_learn_skill_command(actor, command)
+			result = _submit_learn_skill_command(actor, command)
 		"bind_hotbar":
-			return _submit_bind_hotbar_command(actor, command)
+			result = _submit_bind_hotbar_command(actor, command)
 		"use_skill":
-			return _finalize_player_ap_action(actor, _submit_use_skill_command(actor, command), command, "use_skill")
+			result = _finalize_player_ap_action(actor, _submit_use_skill_command(actor, command), command, "use_skill")
 		_:
-			return _unsupported_player_command(command, "unknown_player_command")
+			result = _unsupported_player_command(command, "unknown_player_command")
+	return _normalize_player_command_result(result, command, kind, actor_id, event_start_index)
 
 
 func configure_map_interactions(targets: Dictionary) -> void:
@@ -1656,6 +1659,55 @@ func _unsupported_player_command(command: Dictionary, reason: String) -> Diction
 		"reason": reason,
 		"command": command.duplicate(true),
 	}
+
+
+func _normalize_player_command_result(result: Dictionary, command: Dictionary, command_kind: String, actor_id: int, event_start_index: int) -> Dictionary:
+	var output: Dictionary = result.duplicate(true)
+	var success: bool = bool(output.get("success", false))
+	var resolved_kind := str(output.get("kind", command_kind))
+	if resolved_kind.is_empty():
+		resolved_kind = "unknown"
+	output["success"] = success
+	output["kind"] = resolved_kind
+	if not output.has("actor_id") and actor_id > 0:
+		output["actor_id"] = actor_id
+	var reason := str(output.get("reason", ""))
+	if reason.is_empty():
+		reason = "ok" if success else "unknown"
+	output["reason"] = reason
+	output["turn_state"] = turn_state.duplicate(true)
+	output["combat_state"] = combat_state.duplicate(true)
+	if not output.has("prompt"):
+		output["prompt"] = {}
+	if not output.has("context_snapshot"):
+		output["context_snapshot"] = {}
+	var emitted_events := _events_since(event_start_index)
+	if not output.has("events"):
+		output["events"] = emitted_events
+	if not output.has("runtime_snapshot_delta"):
+		output["runtime_snapshot_delta"] = {
+			"active_map_id": active_map_id,
+			"combat_active": bool(combat_state.get("active", false)),
+			"events": emitted_events,
+			"pending_movement": pending_movement.duplicate(true),
+			"pending_interaction": pending_interaction.duplicate(true),
+			"turn_state": turn_state.duplicate(true),
+		}
+	if not output.has("ui_feedback"):
+		output["ui_feedback"] = {
+			"success": success,
+			"kind": resolved_kind,
+			"reason": reason,
+		}
+	return output
+
+
+func _events_since(start_index: int) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var first_index: int = clampi(start_index, 0, events.size())
+	for index in range(first_index, events.size()):
+		output.append(events[index].to_dictionary())
+	return output
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
