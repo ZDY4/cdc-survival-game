@@ -233,6 +233,8 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	button.custom_minimum_size = Vector2(48, 28)
 	button.focus_mode = Control.FOCUS_NONE
 	button.set_meta("hotbar_slot_id", slot_id)
+	button.set_meta("cooldown_remaining", cooldown)
+	button.set_meta("cooldown_mask_visible", cooldown > 0.0)
 	button.set_drag_forwarding(
 		Callable(self, "_empty_hotbar_drag_data"),
 		Callable(self, "_can_drop_hotbar_skill"),
@@ -255,7 +257,19 @@ func _hotbar_button(slot: Dictionary) -> Button:
 		if root != null and root.has_method("use_hotbar_slot"):
 			root.use_hotbar_slot(slot_id)
 	)
+	_add_hotbar_cooldown_mask(button, slot_id, cooldown)
 	return button
+
+
+func _add_hotbar_cooldown_mask(button: Button, slot_id: String, cooldown: float) -> void:
+	var mask := ColorRect.new()
+	mask.name = "HotbarCooldownMask_%s" % slot_id
+	mask.visible = cooldown > 0.0
+	mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mask.color = Color(0.08, 0.12, 0.16, 0.58)
+	mask.set_anchors_preset(Control.PRESET_FULL_RECT)
+	mask.set_meta("cooldown_remaining", cooldown)
+	button.add_child(mask)
 
 
 func _empty_hotbar_drag_data(_position: Vector2, _from_control: Control) -> Variant:

@@ -135,6 +135,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("HUD hotbar should show dragged adrenaline rush in slot 3")
 	if not _hud_hotbar_slot_tooltip(game_root, "slot_3").contains("Adrenaline Rush"):
 		errors.append("HUD hotbar slot should expose skill tooltip")
+	if _hud_hotbar_cooldown_mask_visible(game_root, "slot_3"):
+		errors.append("HUD hotbar cooldown mask should stay hidden before skill cooldown")
 	if _use_button(game_root, "adrenaline_rush") == null or _use_button(game_root, "adrenaline_rush").disabled:
 		errors.append("bound active skill should be usable before cooldown")
 	if not _skill_line(game_root, "adrenaline_rush").contains("可用"):
@@ -193,6 +195,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("HUD hotbar slot should be disabled while cooldown remains")
 	if not _hud_hotbar_slot_tooltip(game_root, "slot_3").contains("冷却 20s"):
 		errors.append("HUD hotbar slot tooltip should show cooldown")
+	if not _hud_hotbar_cooldown_mask_visible(game_root, "slot_3"):
+		errors.append("HUD hotbar should show cooldown mask while cooldown remains")
+	if absf(_hud_hotbar_cooldown_mask_value(game_root, "slot_3") - 20.0) > 0.001:
+		errors.append("HUD hotbar cooldown mask should expose remaining cooldown value")
 	if not _skill_line(game_root, "adrenaline_rush").contains("冷却 20s"):
 		errors.append("used active skill should show cooldown use state")
 	if not _detail_text(game_root).contains("使用 冷却 20s"):
@@ -234,6 +240,18 @@ func _hud_hotbar_slot_tooltip(game_root: Node, slot_id: String) -> String:
 func _hud_hotbar_slot_disabled(game_root: Node, slot_id: String) -> bool:
 	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
 	return button == null or button.disabled
+
+
+func _hud_hotbar_cooldown_mask_visible(game_root: Node, slot_id: String) -> bool:
+	var mask: ColorRect = game_root.hud.find_child("HotbarCooldownMask_%s" % slot_id, true, false) as ColorRect
+	return mask != null and mask.visible
+
+
+func _hud_hotbar_cooldown_mask_value(game_root: Node, slot_id: String) -> float:
+	var mask: ColorRect = game_root.hud.find_child("HotbarCooldownMask_%s" % slot_id, true, false) as ColorRect
+	if mask == null:
+		return 0.0
+	return float(mask.get_meta("cooldown_remaining", 0.0))
 
 
 func _skill_lines(game_root: Node) -> Array[String]:
