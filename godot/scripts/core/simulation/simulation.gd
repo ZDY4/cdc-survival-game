@@ -546,7 +546,11 @@ func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Diction
 	var option: Dictionary = _interaction_option(prompt, option_id)
 	match str(option.get("kind", "")):
 		"wait":
-			return _submit_wait_command(actor, command)
+			var wait_result: Dictionary = _submit_wait_command(actor, command)
+			if bool(wait_result.get("success", false)):
+				_emit("interaction_succeeded", _interaction_success_payload(actor.actor_id, prompt, option, actor.actor_id))
+				wait_result["prompt"] = prompt
+			return wait_result
 		"move":
 			return _submit_move_command(actor, {
 				"kind": "move",
@@ -1238,6 +1242,22 @@ func _interaction_option(prompt: Dictionary, option_id: String) -> Dictionary:
 		if str(option_data.get("id", "")) == option_id:
 			return option_data
 	return _dictionary_or_empty(_array_or_empty(prompt.get("options", [])).front() if not _array_or_empty(prompt.get("options", [])).is_empty() else {})
+
+
+func _interaction_success_payload(actor_id: int, prompt: Dictionary, option: Dictionary, target_id: Variant) -> Dictionary:
+	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	var target_name: String = str(prompt.get("target_name", target.get("display_name", ""))).strip_edges()
+	if target_name.is_empty():
+		target_name = str(target_id).strip_edges()
+	return {
+		"actor_id": actor_id,
+		"target_id": target_id,
+		"target_type": str(target.get("target_type", "")),
+		"target_name": target_name,
+		"option_id": str(option.get("id", "")),
+		"option_kind": str(option.get("kind", "")),
+		"option_name": str(option.get("display_name", "")),
+	}
 
 
 func _actor_can_reach_interaction(actor: RefCounted, prompt: Dictionary) -> bool:

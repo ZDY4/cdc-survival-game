@@ -23,7 +23,7 @@
 
 - 待补齐 snapshot 的完整旧字段：运行时命令队列、pending progression step、当前控制 actor、最近交互目标、最近失败原因、最近事件反馈、当前目标预览、目标选择状态、UI 菜单状态引用。
 - 已迁移基础 turn / movement / interaction 事件 payload：`turn_started`、`turn_ended`、`movement_queued`、`movement_step`、`interaction_queued` 已带 actor、AP、round、目标或 path 等基础字段，并由 `Movement` / `Interaction` smoke 覆盖。
-- 部分迁移运行时日志：玩家命令提交、完成、拒绝和 UI 反馈已新增 `player_command_submitted`、`player_command_completed`、`player_command_rejected`、`ui_feedback` 事件，payload 带 actor id、action kind、目标/物品/技能等精简命令信息和 reason，并由 `Interaction` smoke 覆盖；AP 消耗和 pending 写入/取消/恢复已新增 `ap_spent`、`movement_queued`、`interaction_queued`、`movement_cancelled`、`interaction_resumed` 第一版，并由 `Movement` / `Interaction` smoke 覆盖；容器转移、交易确认、交易关闭和任务推进已新增 `container_transferred`、`trade_confirmed`、`trade_closed`、`quest_advanced` 第一版，并由 `ContainerUI` / `TradeUI` / `Quest` smoke 覆盖；战斗、制作和技能已由 `attack_resolved`、`actor_defeated`、`corpse_created`、`combat_started`、`combat_ended`、`recipe_crafted`、`skill_used` 覆盖，并由 `Combat` / `Crafting` / `SkillsUI` smoke 断言；地图切换和进入、对话开始/位置切换关闭、容器打开/位置切换关闭已带基础 payload，并由 `Interaction` / `Overworld` smoke 覆盖。后续仍需补齐完整失败反馈、目标显示名和 UI 刷新 payload。
+- 部分迁移运行时日志：玩家命令提交、完成、拒绝和 UI 反馈已新增 `player_command_submitted`、`player_command_completed`、`player_command_rejected`、`ui_feedback` 事件，payload 带 actor id、action kind、目标/物品/技能等精简命令信息和 reason，并由 `Interaction` smoke 覆盖；AP 消耗和 pending 写入/取消/恢复已新增 `ap_spent`、`movement_queued`、`interaction_queued`、`movement_cancelled`、`interaction_resumed` 第一版，并由 `Movement` / `Interaction` smoke 覆盖；容器转移、交易确认、交易关闭和任务推进已新增 `container_transferred`、`trade_confirmed`、`trade_closed`、`quest_advanced` 第一版，并由 `ContainerUI` / `TradeUI` / `Quest` smoke 覆盖；战斗、制作和技能已由 `attack_resolved`、`actor_defeated`、`corpse_created`、`combat_started`、`combat_ended`、`recipe_crafted`、`skill_used` 覆盖，并由 `Combat` / `Crafting` / `SkillsUI` smoke 断言；地图切换和进入、对话开始/位置切换关闭、容器打开/位置切换关闭、交互成功目标显示名与 option kind 已带基础 payload，并由 `Interaction` / `Overworld` smoke 覆盖。后续仍需补齐完整失败反馈、禁用原因和 UI 刷新 payload。
 - 待补 deterministic seed 策略：战斗暴击、掉落数量、AI 选择、技能随机效果、任务随机奖励需要可复现种子和存档 roundtrip。
 - 已迁移 snapshot schema version 和旧快照迁移第一版：snapshot 统一输出 `schema_version`，loader 对缺版本旧快照补齐 active location / entry、combat、pending、corpse、interaction menu 和 hotbar 默认字段，并发出 `snapshot_migrated` 事件；`Save` smoke 已覆盖当前版本 roundtrip 和缺字段旧快照兼容。
 
@@ -120,7 +120,7 @@
 
 ### 5.2 交互行为
 
-- 已有拾取、容器、对话、交易、场景切换、等待、攻击的第一版；对话开始、容器打开和场景切换已覆盖基础 payload；待补每种行为的完整失败反馈、目标显示名、禁用原因和 UI 刷新点。
+- 已有拾取、容器、对话、交易、场景切换、等待、攻击的第一版；对话开始、容器打开、场景切换和 `interaction_succeeded` 的目标显示名 / option kind 已覆盖基础 payload；待补每种行为的完整失败反馈、禁用原因和 UI 刷新点。
 - 待补 pickup 数量和合并：拾取多物品、部分拾取、拾取失败、任务进度、地图对象消耗、拾取音效/提示。
 - 待补 open_container：持久容器、尸体容器、掉落容器、地图容器的 id 规范和关闭逻辑。
 - 待补 talk：对话规则选择、fallback 台词、目标名解析、对话事件跟随当前控制玩家。

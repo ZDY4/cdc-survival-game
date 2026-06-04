@@ -52,6 +52,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	if int(player.inventory.get("1006", 0)) <= 0:
 		errors.append("pickup did not add item 1006 to player inventory")
+	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "pickup", "pickup", "survivor_outpost_01_pickup_medkit")
 	var second_pickup: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
@@ -78,6 +79,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	var dialogue_started_payload: Dictionary = _last_event_payload(simulation.snapshot(), "dialogue_started")
 	if int(dialogue_started_payload.get("actor_id", 0)) != 1 or str(dialogue_started_payload.get("dialogue_id", "")) != "trader_lao_wang":
 		errors.append("dialogue_started should include actor_id and dialogue_id")
+	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "talk", "talk", "老王")
 
 	var container_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
@@ -101,6 +103,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("container_opened should include actor_id and target_id")
 	if int(container_opened_payload.get("item_count", -1)) != 2:
 		errors.append("container_opened should include item_count")
+	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "open_container", "open_container", "补给柜")
 
 	var wait_result: Dictionary = simulation.submit_player_command({
 		"kind": "interact",
@@ -115,6 +118,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	_expect_command_result_contract(errors, wait_result, "wait")
 	if _event_count(simulation.snapshot(), "turn_ended") <= 0:
 		errors.append("self wait should end the current turn")
+	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "wait", "wait", "幸存者")
 
 	var transition_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
@@ -135,6 +139,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("scene_transition should include from/to map ids")
 	if str(scene_transition_payload.get("entry_point_id", "")).is_empty():
 		errors.append("scene_transition should include entry_point_id")
+	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "enter_subscene", "enter_subscene", "进入据点室内")
 	var approach_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var approach_errors: Array[String] = _expect_auto_approach_interaction(approach_simulation, registry)
 	errors.append_array(approach_errors)
@@ -209,6 +214,18 @@ func _event_count_in_result(result: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _expect_interaction_succeeded_payload(errors: Array[String], snapshot: Dictionary, expected_option_id: String, expected_option_kind: String, expected_name_fragment: String) -> void:
+	var payload: Dictionary = _last_event_payload(snapshot, "interaction_succeeded")
+	if int(payload.get("actor_id", 0)) != 1:
+		errors.append("%s interaction_succeeded should include actor_id" % expected_option_id)
+	if str(payload.get("option_id", "")) != expected_option_id:
+		errors.append("%s interaction_succeeded should include option_id" % expected_option_id)
+	if str(payload.get("option_kind", "")) != expected_option_kind:
+		errors.append("%s interaction_succeeded should include option_kind" % expected_option_id)
+	if str(payload.get("target_name", "")).find(expected_name_fragment) == -1:
+		errors.append("%s interaction_succeeded should include target_name" % expected_option_id)
 
 
 func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCounted) -> Array[String]:

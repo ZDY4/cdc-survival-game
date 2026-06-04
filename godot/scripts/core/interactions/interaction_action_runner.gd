@@ -54,11 +54,7 @@ func _execute_pickup(simulation: RefCounted, actor_id: int, prompt: Dictionary, 
 		"item_id": item_id,
 		"count": count,
 	})
-	simulation.emit_event("interaction_succeeded", {
-		"actor_id": actor_id,
-		"target_id": target_id,
-		"option_id": "pickup",
-	})
+	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, target_id))
 	return {
 		"success": true,
 		"prompt": prompt,
@@ -80,11 +76,8 @@ func _execute_talk(simulation: RefCounted, actor_id: int, prompt: Dictionary, op
 		"actor_id": actor_id,
 		"dialogue_id": dialogue_id,
 	})
-	simulation.emit_event("interaction_succeeded", {
-		"actor_id": actor_id,
-		"target_id": prompt.get("target", {}).get("actor_id", 0),
-		"option_id": "talk",
-	})
+	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, target.get("actor_id", 0)))
 	return {
 		"success": true,
 		"prompt": prompt,
@@ -110,11 +103,7 @@ func _execute_open_container(simulation: RefCounted, actor_id: int, prompt: Dict
 		"display_name": session.get("display_name", target_id),
 		"item_count": _array_or_empty(session.get("inventory", [])).size(),
 	})
-	simulation.emit_event("interaction_succeeded", {
-		"actor_id": actor_id,
-		"target_id": target_id,
-		"option_id": "open_container",
-	})
+	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, target_id))
 	return {
 		"success": true,
 		"prompt": prompt,
@@ -126,11 +115,7 @@ func _execute_attack(simulation: RefCounted, actor_id: int, prompt: Dictionary, 
 	var target_actor_id: int = int(option.get("target_actor_id", prompt.get("target", {}).get("actor_id", 0)))
 	var result: Dictionary = simulation.perform_attack(actor_id, target_actor_id)
 	if bool(result.get("success", false)):
-		simulation.emit_event("interaction_succeeded", {
-			"actor_id": actor_id,
-			"target_id": target_actor_id,
-			"option_id": "attack",
-		})
+		simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, target_actor_id))
 	result["prompt"] = prompt
 	return result
 
@@ -140,11 +125,7 @@ func _execute_wait(simulation: RefCounted, actor_id: int, prompt: Dictionary, op
 		"actor_id": actor_id,
 		"source": "interaction",
 	})
-	simulation.emit_event("interaction_succeeded", {
-		"actor_id": actor_id,
-		"target_id": actor_id,
-		"option_id": "wait",
-	})
+	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, actor_id))
 	return {
 		"success": true,
 		"prompt": prompt,
@@ -191,11 +172,7 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 		"entry_point_id": target_entry_id,
 		"kind": option.get("kind", ""),
 	})
-	simulation.emit_event("interaction_succeeded", {
-		"actor_id": actor_id,
-		"target_id": option.get("target_id", ""),
-		"option_id": option.get("id", ""),
-	})
+	simulation.emit_event("interaction_succeeded", _interaction_success_payload(actor_id, prompt, option, option.get("target_id", "")))
 	return {
 		"success": true,
 		"prompt": prompt,
@@ -235,6 +212,22 @@ func _configure_map_interactions(simulation: RefCounted, map_data: Dictionary) -
 		return
 	var topology: RefCounted = _map_builder.build_from_definition(map_data)
 	simulation.configure_map_interactions(topology.interaction_targets)
+
+
+func _interaction_success_payload(actor_id: int, prompt: Dictionary, option: Dictionary, target_id: Variant) -> Dictionary:
+	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	var target_name: String = str(prompt.get("target_name", target.get("display_name", ""))).strip_edges()
+	if target_name.is_empty():
+		target_name = str(target_id).strip_edges()
+	return {
+		"actor_id": actor_id,
+		"target_id": target_id,
+		"target_type": str(target.get("target_type", "")),
+		"target_name": target_name,
+		"option_id": str(option.get("id", "")),
+		"option_kind": str(option.get("kind", "")),
+		"option_name": str(option.get("display_name", "")),
+	}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
