@@ -448,6 +448,49 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 				"kind": kind,
 				"text": "技能: %s" % str(payload.get("skill_id", "")),
 			}
+		"experience_granted":
+			return {
+				"kind": kind,
+				"text": "经验 +%d: %s" % [
+					int(payload.get("amount", 0)),
+					_progression_source_text(str(payload.get("source", ""))),
+				],
+			}
+		"actor_leveled_up":
+			return {
+				"kind": kind,
+				"text": "升级: Lv%d | 属性点 %d | 技能点 %d" % [
+					int(payload.get("new_level", 0)),
+					int(payload.get("available_stat_points", 0)),
+					int(payload.get("available_skill_points", 0)),
+				],
+			}
+		"skill_points_granted":
+			return {
+				"kind": kind,
+				"text": "技能点 +%d | 可用 %d" % [
+					int(payload.get("amount", 0)),
+					int(payload.get("available_skill_points", 0)),
+				],
+			}
+		"attribute_allocated":
+			return {
+				"kind": kind,
+				"text": "属性: %s %d | 剩余 %d" % [
+					_attribute_label(str(payload.get("attribute", ""))),
+					int(payload.get("value", 0)),
+					int(payload.get("available_stat_points", 0)),
+				],
+			}
+		"skill_learned":
+			return {
+				"kind": kind,
+				"text": "学习技能: %s Lv%d | 技能点 %d" % [
+					_skill_label(str(payload.get("skill_id", ""))),
+					int(payload.get("level", 0)),
+					int(payload.get("available_skill_points", 0)),
+				],
+			}
 		"player_command_rejected":
 			return {
 				"kind": kind,
@@ -491,6 +534,32 @@ func _command_kind_label(kind: String) -> String:
 	if kind.is_empty():
 		return "命令"
 	return kind
+
+
+func _progression_source_text(source: String) -> String:
+	if source.is_empty():
+		return "progression"
+	match source:
+		"quest":
+			return "任务"
+		"combat":
+			return "战斗"
+		"crafting":
+			return "制作"
+	return source
+
+
+func _attribute_label(attribute: String) -> String:
+	match attribute:
+		"constitution":
+			return "体质"
+		"strength":
+			return "力量"
+		"agility":
+			return "敏捷"
+	if attribute.is_empty():
+		return "属性"
+	return attribute
 
 
 func _is_player_command_kind(kind: String) -> bool:

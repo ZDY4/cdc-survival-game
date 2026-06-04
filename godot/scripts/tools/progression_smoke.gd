@@ -3,6 +3,8 @@ extends SceneTree
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
+const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
+const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
 
 
 func _init() -> void:
@@ -41,6 +43,8 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var skill_points_result: Dictionary = simulation.grant_skill_points(1, 1, "smoke")
 	if not bool(skill_points_result.get("success", false)):
 		errors.append("grant_skill_points failed: %s" % skill_points_result.get("reason", "unknown"))
+	if not _hud_feedback_text(simulation, registry).contains("技能点 +1"):
+		errors.append("HUD feedback should show granted skill points")
 	var prerequisite_result: Dictionary = simulation.learn_skill(1, "medicine", registry.get_library("skills"))
 	if prerequisite_result.get("reason", "") != "skill_prerequisite_missing":
 		errors.append("medicine should require survival prerequisite")
@@ -52,6 +56,8 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("survival skill level should be 1")
 	if int(player.progression.get("available_skill_points", 0)) != 0:
 		errors.append("learning survival should consume one skill point")
+	if not _hud_feedback_text(simulation, registry).contains("学习技能: Survival Lv1"):
+		errors.append("HUD feedback should show learned skill")
 	var survival_effect: Dictionary = _active_skill_effect(player, "survival")
 	if survival_effect.is_empty():
 		errors.append("learning survival should add passive active effect")
@@ -98,6 +104,9 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("100 xp should level player from 1 to 2")
 	if _event_count(simulation.snapshot(), "actor_leveled_up") <= 0:
 		errors.append("level up event missing")
+	var level_feedback := _hud_feedback_text(simulation, registry)
+	if not level_feedback.contains("经验 +100") or not level_feedback.contains("升级: Lv2"):
+		errors.append("HUD feedback should show experience and level up, got %s" % level_feedback)
 	if int(player.progression.get("available_stat_points", 0)) != 3:
 		errors.append("level up should grant 3 stat points")
 	var max_hp_before_attribute: float = player.max_hp
@@ -112,6 +121,8 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("allocating constitution should refresh max hp derived value")
 	if _event_count(simulation.snapshot(), "attribute_allocated") <= 0:
 		errors.append("attribute_allocated event missing")
+	if not _hud_feedback_text(simulation, registry).contains("属性: 体质 7"):
+		errors.append("HUD feedback should show allocated attribute")
 
 	var zombie: int = _register_zombie(simulation, registry)
 	var target: RefCounted = simulation.actor_registry.get_actor(zombie)
@@ -161,6 +172,19 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _hud_feedback_text(simulation: RefCounted, registry: RefCounted) -> String:
+	var runtime_snapshot: Dictionary = simulation.snapshot()
+	var world_snapshot: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
+	var hud_snapshot: Dictionary = HudSnapshot.new(registry).build(runtime_snapshot, world_snapshot, {})
+	var parts: Array[String] = []
+	for entry in hud_snapshot.get("event_feedback", []):
+		var data: Dictionary = _dictionary_or_empty(entry)
+		var text := str(data.get("text", ""))
+		if not text.is_empty():
+			parts.append(text)
+	return " | ".join(parts)
 
 
 func _active_skill_effect(actor: RefCounted, skill_id: String) -> Dictionary:
