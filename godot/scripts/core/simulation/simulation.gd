@@ -1616,7 +1616,10 @@ func _tick_actor_active_effects() -> void:
 
 
 func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
-	var intent: Dictionary = decide_actor_intent(actor.actor_id)
+	var intent: Dictionary = decide_actor_intent(actor.actor_id, {
+		"topology": topology,
+		"active_map_id": active_map_id,
+	})
 	var target_actor_id: int = int(intent.get("target_actor_id", _player_actor_id()))
 	match str(intent.get("intent", "")):
 		"attack":

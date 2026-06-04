@@ -63,7 +63,7 @@
 - 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、self wait interaction、pending 取消和长按重复等待第一版；待补自由观察播放切换、长按节奏配置和 modal 冲突策略。
 - 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环、相机跟随、actor busy 时阻止切换和选中/提示状态清理；待补 free observe。
 - 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
-- 部分迁移输入阻塞：stage/settings、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel 已阻止 gameplay 输入，`gameplay_input_blocker_name` 和 HUD blocker 诊断有第一版，interaction menu 支持点击外部关闭；待补 console、debug panel、quantity/overworld modal、tooltip/drag 层 blocker 细分。
+- 部分迁移输入阻塞：stage/settings、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel 已阻止 gameplay 输入，`gameplay_input_blocker_name` 和 HUD blocker 诊断有第一版，interaction menu 支持点击外部关闭；待补 quantity modal、overworld prompt、tooltip 和 drag 层 blocker 细分。
 
 ### 3.2 鼠标和拾取
 
@@ -165,16 +165,16 @@
 
 ### 7.1 战斗 AI
 
-- 已有 hostile attack / approach 第一版；待补 aggro range、LOS 感知、丢失目标、重规划、绕障、开门、AP 分配和失败结束回合。
+- hostile attack / approach、aggro range 和 LOS 感知第一版已迁移：敌对 NPC 会按 active map、阵营、存活状态、感知距离和 topology LOS 选择目标，LOS 被阻挡时保持 idle 并返回 `target_blocked_by_los`；玩家等待推进 NPC 回合时会传入当前地图 topology，避免隔墙攻击；已由 `AI` smoke 覆盖。待补丢失目标、重规划、绕障、开门、AP 分配和失败结束回合。
 - 待补 NPC 武器选择、弹药、reload、技能使用、逃跑、治疗、保护友军、呼叫增援。
-- 待补 AI 行为事件和 debug snapshot：intent、reason、target、path、AP、失败原因。
+- AI 行为事件和诊断 payload 第一版已迁移：`ai_intent_decided` 会暴露 intent、reason、target、target_grid、distance、aggro_range、attack_range、AP 和 path，占位空值保持稳定；已由 `AI` smoke 覆盖。待补路径失败细分、连续追踪目标、目标丢失原因和 UI 展示。
 
 ### 7.2 Settlement life / GOAP
 
 - 待迁移 settlement life：工作、休息、巡逻、返回 home anchor、使用 smart object、schedule、背景状态。
 - 待迁移 GOAP / planner：world state、datum assignment、score rules、conditional requirements、builtin executor、失败重规划。
 - 待迁移在线/后台状态同步：玩家所在地图实体存在时同步 presence，不在地图时后台 tick。
-- 待迁移 life debug spawns 和 AI info panel 数据，便于复核 NPC 当前目标和计划。
+- 待迁移 NPC 当前目标、计划和后台状态的运行时 snapshot 字段，便于 smoke 与 HUD 复核。
 
 ### 7.3 关系和阵营
 
@@ -359,14 +359,6 @@
 - 待补地图切换后的保存/读取一致性，特别是 active container、consumed targets、corpse containers、unlocked locations。
 - 部分迁移运行入口错误提示：主菜单存档槽会显示 schema 不兼容、JSON 损坏、缺 runtime snapshot 等坏档原因并允许删除；待补内容加载失败、地图缺失、资产缺失、Godot 版本不对和进入游戏后的错误 UI。
 
-## 17. Debug、Console、Info Panels 和开发表现
-
-- 待迁移 debug console：反引号开关、命令输入、suggestions、autocomplete、selected suggestion、restart、show fps、show overlays、observe mode。
-- 待迁移 info panels：overview、selection、actor、world、interaction、turn system、events、AI、performance。
-- 待迁移 debug panel：开关、按钮、鼠标滚轮、动作、状态。
-- 待迁移 overlay flags：walkable tiles、vision、fps、latency、level、auto tick、help。
-- 待补 profiling / performance panel，至少显示 frame time、render counts、actor/object counts、smoke diagnostics。
-
 ## 18. 验证缺口
 
 ### 18.1 现有 smoke 需扩展
@@ -390,7 +382,6 @@
 - Door smoke：锁门、开门、自动开门、视觉和阻挡同步。
 - Map visual smoke：每个地图 scene 的对象模型路径、实例数量、fallback 统计、重叠检查。
 - Asset import smoke：glTF scale/origin/material/collision 导入复核。
-- Console/debug smoke：console commands、info panels、overlay flags。
 
 ## 19. 建议迁移顺序
 
@@ -399,9 +390,8 @@
 3. 背包/容器/交易高级 UI：数量弹窗、上下文菜单、拖拽、购物车、详情和失败提示。
 4. 技能和 hotbar：多槽、快捷键、目标选择、状态堆叠、非战斗 modifier 消费点、cooldown。
 5. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
-6. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick、调试面板。
+6. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick 和运行时状态 snapshot。
 7. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。
-8. Debug / console / info panels：作为后续开发复核工具恢复。
 
 ## 20. 阶段提交与验收规则
 

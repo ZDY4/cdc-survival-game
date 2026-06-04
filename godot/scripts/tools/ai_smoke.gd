@@ -37,17 +37,28 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 
 	var player_grid: RefCounted = player.grid_position
 	var zombie_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 4, player_grid.y, player_grid.z))
-	var approach: Dictionary = simulation.decide_actor_intent(zombie_id)
+	var approach: Dictionary = simulation.decide_actor_intent(zombie_id, {
+		"topology": _topology(simulation, registry),
+		"active_map_id": simulation.active_map_id,
+	})
 	if approach.get("intent", "") != "approach":
 		errors.append("zombie should approach player inside aggro range")
 	if int(approach.get("target_actor_id", 0)) <= 0:
 		errors.append("zombie approach should select a hostile target")
+	if str(approach.get("reason", "")) != "target_in_aggro_range" or float(approach.get("aggro_range", 0.0)) <= 0.0:
+		errors.append("zombie approach intent should expose debug reason and aggro range")
+	_expect_hostile_los_blocked_intent(errors, simulation, registry, zombie_id, player_grid)
 
 	var zombie: RefCounted = simulation.actor_registry.get_actor(zombie_id)
 	zombie.grid_position = GridCoord.new(player_grid.x + 1, player_grid.y, player_grid.z)
-	var attack: Dictionary = simulation.decide_actor_intent(zombie_id)
+	var attack: Dictionary = simulation.decide_actor_intent(zombie_id, {
+		"topology": _topology(simulation, registry),
+		"active_map_id": simulation.active_map_id,
+	})
 	if attack.get("intent", "") != "attack":
 		errors.append("zombie should attack inside attack range")
+	if str(attack.get("reason", "")) != "target_in_attack_range" or _dictionary_or_empty(attack.get("target_grid", {})).is_empty():
+		errors.append("zombie attack intent should expose debug reason and target grid")
 
 	var wait_result: Dictionary = simulation.submit_player_command({"kind": "wait", "topology": _topology(simulation, registry)})
 	if not bool(wait_result.get("success", false)):
@@ -91,6 +102,33 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if _event_count(simulation.snapshot(), "ai_intent_decided") < 5:
 		errors.append("AI intent decisions should emit events")
 	return errors
+
+
+func _expect_hostile_los_blocked_intent(errors: Array[String], simulation: RefCounted, registry: RefCounted, zombie_id: int, player_grid: RefCounted) -> void:
+	var zombie: RefCounted = simulation.actor_registry.get_actor(zombie_id)
+	if zombie == null:
+		errors.append("LOS blocked AI smoke missing zombie")
+		return
+	var original_grid: RefCounted = zombie.grid_position
+	zombie.grid_position = GridCoord.new(player_grid.x + 2, player_grid.y, player_grid.z + 2)
+	var blocked_topology := _los_blocked_topology(player_grid, GridCoord.new(player_grid.x + 1, player_grid.y, player_grid.z + 1))
+	var blocked: Dictionary = simulation.decide_actor_intent(zombie_id, {
+		"topology": blocked_topology,
+		"active_map_id": simulation.active_map_id,
+	})
+	if blocked.get("intent", "") != "idle" or blocked.get("reason", "") != "target_blocked_by_los":
+		errors.append("hostile AI should idle when only target is blocked by LOS, got %s/%s" % [blocked.get("intent", ""), blocked.get("reason", "")])
+	if int(blocked.get("blocked_by_los_count", 0)) <= 0:
+		errors.append("blocked LOS intent should expose blocked_by_los_count")
+	var before_events: int = _event_count(simulation.snapshot(), "attack_resolved")
+	var wait_result: Dictionary = simulation.submit_player_command({"kind": "wait", "topology": blocked_topology})
+	if not bool(wait_result.get("success", false)):
+		errors.append("blocked LOS wait command should still succeed")
+	if _npc_results_include_attack(_array_or_empty(wait_result.get("npc_results", [])), zombie_id):
+		errors.append("blocked LOS hostile should not attack during world turn")
+	if _event_count(simulation.snapshot(), "attack_resolved") != before_events:
+		errors.append("blocked LOS hostile should not emit attack_resolved")
+	zombie.grid_position = original_grid
 
 
 func _register_character(simulation: RefCounted, registry: RefCounted, definition_id: String, grid: RefCounted) -> int:
@@ -168,6 +206,21 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 func _topology(simulation: RefCounted, registry: RefCounted) -> Dictionary:
 	var world: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
 	return world.get("map", {})
+
+
+func _los_blocked_topology(player_grid: RefCounted, blocker_grid: RefCounted) -> Dictionary:
+	return {
+		"bounds": {
+			"min_x": min(player_grid.x, blocker_grid.x) - 4,
+			"max_x": max(player_grid.x, blocker_grid.x) + 6,
+			"min_z": min(player_grid.z, blocker_grid.z) - 4,
+			"max_z": max(player_grid.z, blocker_grid.z) + 6,
+		},
+		"sight_blocking_cells": {
+			blocker_grid.key(): true,
+		},
+		"blocking_cells": {},
+	}
 
 
 func _array_or_empty(value: Variant) -> Array:
