@@ -222,6 +222,14 @@ func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCoun
 		errors.append("far talk should emit movement_queued before auto resume")
 	if _event_count(simulation.snapshot(), "interaction_queued") <= 0:
 		errors.append("far talk should emit interaction_queued before auto resume")
+	var interaction_queued_payload: Dictionary = _last_event_payload(simulation.snapshot(), "interaction_queued")
+	if int(interaction_queued_payload.get("actor_id", 0)) != 1:
+		errors.append("interaction_queued should include actor_id")
+	var queued_target: Dictionary = _dictionary_or_empty(interaction_queued_payload.get("target", {}))
+	if str(queued_target.get("target_type", "")) != "actor" or int(queued_target.get("actor_id", 0)) != trader.actor_id:
+		errors.append("interaction_queued should include queued actor target")
+	if str(interaction_queued_payload.get("option_id", "")).is_empty():
+		errors.append("interaction_queued should include option_id")
 	if _event_count(simulation.snapshot(), "interaction_resumed") <= 0:
 		errors.append("far talk should emit interaction_resumed after auto approach")
 	return errors
@@ -257,3 +265,18 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
+	var events: Array = snapshot.get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = events[index]
+		if event_data.get("kind", "") == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

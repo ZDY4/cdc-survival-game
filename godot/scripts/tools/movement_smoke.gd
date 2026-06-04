@@ -45,6 +45,12 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 		errors.append("move did not emit actor_moved")
 	if _event_count(simulation.snapshot(), "movement_step") != 1:
 		errors.append("command move did not emit movement_step")
+	var movement_step_payload: Dictionary = _last_event_payload(simulation.snapshot(), "movement_step")
+	if int(movement_step_payload.get("actor_id", 0)) != 1:
+		errors.append("movement_step should include actor_id")
+	var movement_step_to: Dictionary = _dictionary_or_empty(movement_step_payload.get("to", {}))
+	if int(movement_step_to.get("x", -1)) != int(goal.get("x", -2)) or int(movement_step_to.get("z", -1)) != int(goal.get("z", -2)):
+		errors.append("movement_step should include destination grid")
 
 	_expect_ap_depletion_auto_advances_turn(errors, simulation, topology)
 
@@ -64,6 +70,15 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 		errors.append("AP shortage should queue pending movement")
 	if simulation.snapshot().get("pending_movement", {}).is_empty():
 		errors.append("pending movement should be exposed in snapshot")
+	var queued_payload: Dictionary = _last_event_payload(simulation.snapshot(), "movement_queued")
+	if int(queued_payload.get("actor_id", 0)) != 1:
+		errors.append("movement_queued should include actor_id")
+	if _dictionary_or_empty(queued_payload.get("target_position", {})).is_empty():
+		errors.append("movement_queued should include target_position")
+	if not queued_payload.has("required_ap") or not queued_payload.has("available_ap"):
+		errors.append("movement_queued should include required and available AP")
+	if _array_or_empty(queued_payload.get("path", [])).is_empty():
+		errors.append("movement_queued should include planned path")
 
 	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
 	var player_snapshot: Dictionary = _actor_snapshot(world_result, 1)
@@ -101,6 +116,10 @@ func _expect_ap_depletion_auto_advances_turn(errors: Array[String], simulation: 
 		errors.append("auto advanced turn should emit turn_ended")
 	if _event_count(simulation.snapshot(), "turn_started") <= turn_started_before:
 		errors.append("auto advanced turn should emit turn_started")
+	if not _has_turn_payload_for_actor(simulation.snapshot(), "turn_ended", 1):
+		errors.append("turn_ended should include actor_id, AP, round, and reason")
+	if not _has_turn_payload_for_actor(simulation.snapshot(), "turn_started", 1):
+		errors.append("turn_started should include actor_id, AP, round, and reason")
 
 
 func _first_blocking_cell(topology: Dictionary) -> Dictionary:
@@ -166,6 +185,41 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
+	var events: Array = snapshot.get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = events[index]
+		if event_data.get("kind", "") == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
+
+
+func _has_turn_payload_for_actor(snapshot: Dictionary, kind: String, actor_id: int) -> bool:
+	for event in snapshot.get("events", []):
+		var event_data: Dictionary = event
+		if event_data.get("kind", "") != kind:
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event_data.get("payload", {}))
+		if int(payload.get("actor_id", 0)) != actor_id:
+			continue
+		if not payload.has("ap") or not payload.has("round"):
+			return false
+		return not str(payload.get("reason", "")).is_empty()
+	return false
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _digest(simulation: RefCounted, registry: RefCounted) -> Dictionary:
