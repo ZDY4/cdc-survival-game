@@ -226,12 +226,12 @@
 - 已有 Skills 面板简版；待迁移技能树图形布局、pan、节点连线、选中技能详情、前置链路高亮。
 - 已有 Skills 面板筛选条（全部 / 已学 / 可学 / 锁定 / 主动）和技能树切换第一版并纳入 `SkillsUI` smoke；待补已学/可学/锁定/属性不足/点数不足状态视觉 polish。
 - 待补技能学习确认、失败 reason、学习后热栏建议。
-- 待补主动、被动、切换技能的真实效果，不再只发 `skill_used` 占位事件。
+- 主动/切换技能效果第一版已迁移：`use_skill` 会把 `activation.effect` 转成 actor `combat.active_effects`，发出 `skill_effect_applied` / `skill_effect_removed` / `skill_effect_expired`，有限时效果随 world turn 衰减，`adrenaline_rush` 的 `damage_bonus` 已参与战斗伤害并纳入 `SkillsUI` / `Combat` / `Save` smoke；待补被动技能派生、技能效果堆叠策略、负面状态、状态 UI 和更完整 toggle polish。
 
 ### 9.3 Hotbar
 
 - 已有单组 hotbar、数字键激活、HUD hotbar dock、Skills 面板自动绑定到第一个空槽和清空槽按钮，已纳入 `SkillsUI` / `UI` smoke；待迁移多组 hotbar、拖拽技能到槽。
-- 已有 Skills 面板 hotbar 可用/冷却不可用原因文本、按钮禁用和技能 `activation.ap_cost` 展示/扣除第一版；HUD hotbar 槽位已显示 key、技能短名、cooldown 文本、slot tooltip 和冷却禁用态，并纳入 `SkillsUI` / `UI` smoke。待补 cooldown 遮罩、resource cost、目标选择进入。
+- 已有 Skills 面板 hotbar 可用/冷却不可用原因文本、按钮禁用和技能 `activation.ap_cost` 展示/扣除第一版；HUD hotbar 槽位已显示 key、技能短名、cooldown 文本、slot tooltip 和冷却禁用态，主动技能激活后会落到 actor active effects，并纳入 `SkillsUI` / `UI` smoke。待补 cooldown 遮罩、resource cost、目标选择进入。
 - 待补观察模式 hotbar 表现：observe playback、speed、自动播放状态。
 
 ## 10. 任务、对话和剧情动作
@@ -354,7 +354,7 @@
 ## 16. 存档、加载和运行入口
 
 - 待补主菜单继续游戏、存档槽列表、删除、覆盖确认、存档元信息。
-- 待补保存所有新增状态：UI 相关不一定持久，但 runtime 的 active map、actors、combat、turn、pending、corpse、containers、shops、quests、skills、hotbar、vision、relationships、world flags 必须 roundtrip。
+- 待补保存所有新增状态：UI 相关不一定持久，但 runtime 的 active map、actors、combat、turn、pending、corpse、containers、shops、quests、skills、hotbar、vision、relationships、world flags 必须 roundtrip；actor active skill effects 已纳入 `Save` smoke roundtrip。
 - 待补地图切换后的保存/读取一致性，特别是 active container、consumed targets、corpse containers、unlocked locations。
 - 待补运行入口错误提示：内容加载失败、地图缺失、资产缺失、Godot 版本不对、存档 schema 不兼容。
 
@@ -377,10 +377,10 @@
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、右键使用/装备/丢弃菜单、丢弃数量 SpinBox、丢弃确认弹窗 blocker/Esc/确认和任务/关键物品禁用第一版已有 smoke；待补完整上下文菜单项、完整数量弹窗、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
 - `ContainerUI`：补双向拖拽、背包限制/权限等高级错误；关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择与基础失败提示已有 smoke。
 - `TradeUI`：购物车、批量确认和无部分成交已有 smoke；待补装备出售、不可出售和拖拽。
-- `SkillsUI`：HUD/Skills 热栏绑定、数字键激活、slot tooltip 和 cooldown 文本/禁用态已有 smoke；待补多组 hotbar、技能树 pan、目标预览、cooldown 遮罩、resource cost 和主动效果。
+- `SkillsUI`：HUD/Skills 热栏绑定、数字键激活、slot tooltip、cooldown 文本/禁用态、主动技能效果写入 actor snapshot 和 `skill_used` effect payload 已有 smoke；待补多组 hotbar、技能树 pan、目标预览、cooldown 遮罩、resource cost 和更完整状态 UI。
 - `JournalUI`：补任务详情、追踪、对话交付条件、完成反馈。
 - `CraftingUI`：补解锁、工作台、工具、批量、队列、完成反馈。
-- `Save`：补新增 runtime 字段和旧存档迁移。
+- `Save`：active skill effects 已有 roundtrip；继续补新增 runtime 字段和旧存档迁移。
 
 ### 18.2 需要新增或恢复的验证入口
 
@@ -396,7 +396,7 @@
 1. UI 开关状态机：先迁 `UiMenuState` / `UiModalState` / Esc 关闭链路 / gameplay 输入阻塞。
 2. 战斗空间等价：LOS、跨层、AOE、友军伤害、战斗退出和目标预览。
 3. 背包/容器/交易高级 UI：数量弹窗、上下文菜单、拖拽、购物车、详情和失败提示。
-4. 技能和 hotbar：多槽、快捷键、目标选择、真实效果、cooldown。
+4. 技能和 hotbar：多槽、快捷键、目标选择、被动/状态堆叠、cooldown。
 5. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
 6. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick、调试面板。
 7. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。

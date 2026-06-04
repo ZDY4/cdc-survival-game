@@ -40,7 +40,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_combat_visibility_decay(errors, simulation, registry, player, player_grid)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
 	_expect_deterministic_combat_rng(errors, simulation, registry, player, player_grid)
-	_expect_combat_attribute_damage_modifiers(errors, simulation, player, player_grid)
+	_expect_combat_attribute_damage_modifiers(errors, simulation, registry, player, player_grid)
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
 	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
 	player.grid_position = GridCoord.from_dictionary(player_grid)
@@ -254,9 +254,11 @@ func _single_seeded_crit_roll(registry: RefCounted, player_grid: Dictionary, see
 	return float(result.get("crit_roll", -1.0))
 
 
-func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
 	player.grid_position = GridCoord.from_dictionary(player_grid)
 	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
+	var original_progression: Dictionary = player.progression.duplicate(true)
+	var original_active_effects: Array[Dictionary] = player.active_effects.duplicate(true)
 	player.combat_attributes = {
 		"attack_power": 10.0,
 		"defense": 0.0,
@@ -321,10 +323,37 @@ func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation
 	if absf(float(crit.get("damage", 0.0)) - 20.0) > 0.01:
 		errors.append("actor crit_damage should multiply critical damage when weapon has no crit_multiplier")
 
-	for actor_id in [blocked_target, reduced_target, armored_target, crit_target]:
+	player.ap = 20.0
+	player.progression["learned_skills"] = _dictionary_or_empty(player.progression.get("learned_skills", {})).duplicate(true)
+	player.progression["learned_skills"]["combat"] = 1
+	player.progression["learned_skills"]["adrenaline_rush"] = 1
+	var skill_result: Dictionary = simulation.submit_player_command({
+		"kind": "use_skill",
+		"skill_id": "adrenaline_rush",
+		"skill_library": registry.get_library("skills"),
+	})
+	if not bool(skill_result.get("success", false)):
+		errors.append("adrenaline_rush activation should succeed before combat damage bonus check: %s" % skill_result.get("reason", "unknown"))
+	var buffed_target: int = _register_test_actor(simulation, "buffed_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": z + 1,
+	}, 40.0)
+	var buffed_actor: RefCounted = simulation.actor_registry.get_actor(buffed_target)
+	buffed_actor.defense = 0.0
+	buffed_actor.combat_attributes = {"damage_reduction": 0.0}
+	var buffed: Dictionary = simulation.perform_attack(player.actor_id, buffed_target, {}, {"range": 3, "weapon_profile": {"damage": 20.0, "crit_chance": 0.0}})
+	if absf(float(buffed.get("damage", 0.0)) - 25.0) > 0.01:
+		errors.append("adrenaline_rush damage_bonus should increase 20 damage to 25")
+	if absf(float(buffed.get("damage_bonus", 0.0)) - 0.25) > 0.001:
+		errors.append("buffed attack result should expose 0.25 damage_bonus")
+
+	for actor_id in [blocked_target, reduced_target, armored_target, crit_target, buffed_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.combat_attributes = original_attributes
+	player.progression = original_progression
+	player.active_effects = original_active_effects
 	_restore_player_turn(simulation, player)
 
 
@@ -657,6 +686,12 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
 
 
 func _spatial_test_topology(player_grid: Dictionary, blocker_grid: Dictionary) -> Dictionary:

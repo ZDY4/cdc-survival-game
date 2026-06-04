@@ -927,6 +927,7 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		updated_slot["skill_id"] = skill_id
 		updated_slot["cooldown_remaining"] = cooldown
 		hotbar[slot_id] = updated_slot
+	var effect_result: Dictionary = _apply_skill_activation_effect(actor, skill_id, learned_level, activation, mode)
 	_emit("skill_used", {
 		"actor_id": actor.actor_id,
 		"skill_id": skill_id,
@@ -935,6 +936,8 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		"activation_mode": mode,
 		"ap_cost": cost,
 		"cooldown": cooldown,
+		"effect": _dictionary_or_empty(effect_result.get("effect", {})).duplicate(true),
+		"effect_removed": bool(effect_result.get("removed", false)),
 		"target": _dictionary_or_empty(command.get("target", {})).duplicate(true),
 	})
 	return {
@@ -945,14 +948,91 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		"activation_mode": mode,
 		"ap_cost": cost,
 		"cooldown": cooldown,
+		"effect": _dictionary_or_empty(effect_result.get("effect", {})).duplicate(true),
+		"effect_removed": bool(effect_result.get("removed", false)),
+		"removed_effects": _array_or_empty(effect_result.get("removed_effects", [])).duplicate(true),
 		"ap_remaining": actor.ap,
 	}
+
+
+func _apply_skill_activation_effect(actor: RefCounted, skill_id: String, learned_level: int, activation: Dictionary, mode: String) -> Dictionary:
+	var effect_definition: Dictionary = _dictionary_or_empty(activation.get("effect", {}))
+	if effect_definition.is_empty():
+		return {"success": true, "effect": {}, "removed": false, "removed_effects": []}
+	var effect_id := "skill:%s" % skill_id
+	var active_effects: Array[Dictionary] = []
+	var removed_effects: Array[Dictionary] = []
+	for effect in actor.active_effects:
+		var effect_data: Dictionary = effect.duplicate(true)
+		if str(effect_data.get("effect_id", "")) == effect_id:
+			removed_effects.append(effect_data)
+			continue
+		active_effects.append(effect_data)
+	var toggled_off: bool = mode == "toggle" and not removed_effects.is_empty()
+	if toggled_off:
+		actor.active_effects = active_effects
+		_emit("skill_effect_removed", {
+			"actor_id": actor.actor_id,
+			"effect_id": effect_id,
+			"skill_id": skill_id,
+			"reason": "toggle_off",
+			"removed_effects": removed_effects.duplicate(true),
+		})
+		return {
+			"success": true,
+			"effect": {},
+			"removed": true,
+			"removed_effects": removed_effects.duplicate(true),
+		}
+
+	var effect: Dictionary = _build_skill_effect(skill_id, learned_level, effect_definition)
+	active_effects.append(effect)
+	actor.active_effects = active_effects
+	_emit("skill_effect_applied", {
+		"actor_id": actor.actor_id,
+		"effect": effect.duplicate(true),
+		"replaced_effects": removed_effects.duplicate(true),
+	})
+	return {
+		"success": true,
+		"effect": effect.duplicate(true),
+		"removed": false,
+		"removed_effects": removed_effects.duplicate(true),
+	}
+
+
+func _build_skill_effect(skill_id: String, learned_level: int, effect_definition: Dictionary) -> Dictionary:
+	var is_infinite: bool = bool(effect_definition.get("is_infinite", false))
+	var duration: float = 0.0 if is_infinite else max(0.0, float(effect_definition.get("duration", 0.0)))
+	return {
+		"effect_id": "skill:%s" % skill_id,
+		"source": "skill",
+		"skill_id": skill_id,
+		"level": max(1, learned_level),
+		"category": str(effect_definition.get("category", "buff")),
+		"duration_remaining": duration,
+		"is_infinite": is_infinite,
+		"modifiers": _skill_effect_modifiers(_dictionary_or_empty(effect_definition.get("modifiers", {})), learned_level),
+	}
+
+
+func _skill_effect_modifiers(modifier_definitions: Dictionary, learned_level: int) -> Dictionary:
+	var output: Dictionary = {}
+	for key in modifier_definitions.keys():
+		var definition: Dictionary = _dictionary_or_empty(modifier_definitions.get(key, {}))
+		var value: float = float(definition.get("base", 0.0))
+		value += float(definition.get("per_level", 0.0)) * max(0, learned_level - 1)
+		if definition.has("max_value"):
+			value = min(value, float(definition.get("max_value", value)))
+		output[str(key)] = value
+	return output
 
 
 func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 	turn_state["phase"] = "world"
 	_tick_hotbar_cooldowns()
+	_tick_actor_active_effects()
 	for actor in actor_registry.actors():
 		if actor.kind == "player":
 			continue
@@ -985,6 +1065,35 @@ func _tick_hotbar_cooldowns() -> void:
 			"before": before,
 			"after": float(slot.get("cooldown_remaining", 0.0)),
 		})
+
+
+func _tick_actor_active_effects() -> void:
+	for actor in actor_registry.actors():
+		var remaining: Array[Dictionary] = []
+		for effect in actor.active_effects:
+			var effect_data: Dictionary = effect.duplicate(true)
+			if bool(effect_data.get("is_infinite", false)):
+				remaining.append(effect_data)
+				continue
+			var before: float = float(effect_data.get("duration_remaining", 0.0))
+			var after: float = max(0.0, before - 1.0)
+			effect_data["duration_remaining"] = after
+			if after > 0.0:
+				remaining.append(effect_data)
+				_emit("skill_effect_ticked", {
+					"actor_id": actor.actor_id,
+					"effect_id": str(effect_data.get("effect_id", "")),
+					"skill_id": str(effect_data.get("skill_id", "")),
+					"before": before,
+					"after": after,
+				})
+			else:
+				_emit("skill_effect_expired", {
+					"actor_id": actor.actor_id,
+					"effect_id": str(effect_data.get("effect_id", "")),
+					"skill_id": str(effect_data.get("skill_id", "")),
+				})
+		actor.active_effects = remaining
 
 
 func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:

@@ -28,6 +28,7 @@ var resources: Dictionary = {}
 var attack_power: float = 1.0
 var defense: float = 0.0
 var combat_attributes: Dictionary = {}
+var active_effects: Array[Dictionary] = []
 var xp_reward: int = 0
 var progression: Dictionary = {}
 var ai: Dictionary = {}
@@ -65,6 +66,7 @@ func to_dictionary() -> Dictionary:
 			"attack_power": attack_power,
 			"defense": defense,
 			"attributes": combat_attributes.duplicate(true),
+			"active_effects": active_effects.duplicate(true),
 			"xp_reward": xp_reward,
 		},
 		"progression": progression.duplicate(true),

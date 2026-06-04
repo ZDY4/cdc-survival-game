@@ -147,10 +147,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	game_root.refresh_skills_panel()
 	var skill_event: Dictionary = _last_event(game_root, "skill_used")
+	var active_effect: Dictionary = _active_skill_effect(game_root, "adrenaline_rush")
 	if abs(_player_ap(game_root) - (ap_before_skill - 2.0)) > 0.001:
 		errors.append("hotbar skill activation should spend activation AP cost")
 	if not _hotbar_line(game_root).contains("cd20"):
 		errors.append("digit 1 hotbar activation should write cooldown to hotbar")
+	if active_effect.is_empty():
+		errors.append("hotbar skill activation should add adrenaline_rush active effect to player snapshot")
+	elif absf(float(_dictionary_or_empty(active_effect.get("modifiers", {})).get("damage_bonus", 0.0)) - 0.25) > 0.001:
+		errors.append("adrenaline_rush active effect should expose level 1 damage_bonus")
 	game_root.refresh_hud()
 	if not _hud_hotbar_slot_text(game_root, "slot_1").contains("cd20"):
 		errors.append("HUD hotbar should show cooldown after hotbar activation")
@@ -166,6 +171,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("digit 1 hotbar activation should emit skill_used")
 	if abs(float(_dictionary_or_empty(skill_event.get("payload", {})).get("ap_cost", 0.0)) - 2.0) > 0.001:
 		errors.append("skill_used event should include activation AP cost")
+	var event_effect: Dictionary = _dictionary_or_empty(_dictionary_or_empty(skill_event.get("payload", {})).get("effect", {}))
+	if absf(float(_dictionary_or_empty(event_effect.get("modifiers", {})).get("damage_bonus", 0.0)) - 0.25) > 0.001:
+		errors.append("skill_used event should include resolved damage_bonus effect modifier")
 	return errors
 
 
@@ -282,6 +290,22 @@ func _player_ap(game_root: Node) -> float:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return float(actor_data.get("ap", 0.0))
 	return 0.0
+
+
+func _active_skill_effect(game_root: Node, skill_id: String) -> Dictionary:
+	for effect in _dictionary_or_empty(_player_actor_snapshot(game_root).get("combat", {})).get("active_effects", []):
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		if str(effect_data.get("skill_id", "")) == skill_id:
+			return effect_data
+	return {}
+
+
+func _player_actor_snapshot(game_root: Node) -> Dictionary:
+	for actor in game_root.simulation.snapshot().get("actors", []):
+		var actor_data: Dictionary = actor
+		if int(actor_data.get("actor_id", 0)) == 1:
+			return actor_data
+	return {}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

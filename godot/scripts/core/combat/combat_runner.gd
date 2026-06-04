@@ -52,6 +52,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
 		"defense": float(damage_result.get("defense", 0.0)),
 		"damage_reduction": float(damage_result.get("damage_reduction", 0.0)),
+		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
 		"hit_kind": str(damage_result.get("hit_kind", "hit")),
 		"combat_rng_seed": int(simulation.combat_state.get("combat_rng_seed", 0)),
 		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
@@ -72,6 +73,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"crit_roll": float(critical_roll.get("roll", 1.0)),
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
 		"hit_kind": str(damage_result.get("hit_kind", "hit")),
+		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
 		"weapon_profile": profile,
 	}
 
@@ -147,15 +149,18 @@ func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCo
 			"hit_kind": "blocked",
 			"defense": defense,
 			"damage_reduction": 0.0,
+			"damage_bonus": 0.0,
 		}
 	var damage_reduction: float = clampf(_combat_attribute(simulation, target, "damage_reduction", 0.0), 0.0, 0.95)
+	var damage_bonus: float = max(0.0, _active_effect_modifier(attacker, "damage_bonus"))
 	var multiplier: float = _critical_multiplier(simulation, attacker, profile) if critical else 1.0
-	var damage: float = max(1.0, round(base_damage * (1.0 - damage_reduction) * multiplier))
+	var damage: float = max(1.0, round(base_damage * (1.0 + damage_bonus) * (1.0 - damage_reduction) * multiplier))
 	return {
 		"damage": damage,
 		"hit_kind": "crit" if critical else "hit",
 		"defense": defense,
 		"damage_reduction": damage_reduction,
+		"damage_bonus": damage_bonus,
 	}
 
 
@@ -192,6 +197,15 @@ func _combat_attribute(simulation: RefCounted, actor: RefCounted, key: String, f
 	else:
 		value = float(_dictionary_or_empty(actor.combat_attributes).get(key, fallback))
 	value += _equipment_effects.attribute_modifier(actor, simulation.item_library, key)
+	return value
+
+
+func _active_effect_modifier(actor: RefCounted, key: String) -> float:
+	var value := 0.0
+	for effect in actor.active_effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		var modifiers: Dictionary = _dictionary_or_empty(effect_data.get("modifiers", {}))
+		value += float(modifiers.get(key, 0.0))
 	return value
 
 

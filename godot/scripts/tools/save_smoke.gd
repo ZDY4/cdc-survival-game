@@ -171,6 +171,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("player weapon ammo did not roundtrip")
 	if JSON.stringify(_normalized_progression(player_restored)) != JSON.stringify(_normalized_progression(player_original)):
 		errors.append("player progression did not roundtrip")
+	if JSON.stringify(_normalized_active_effects(player_restored)) != JSON.stringify(_normalized_active_effects(player_original)):
+		errors.append("player active skill effects did not roundtrip")
 	if JSON.stringify(restored.get("hotbar", {})) != JSON.stringify(original.get("hotbar", {})):
 		errors.append("hotbar did not roundtrip")
 	if player_restored.get("active_dialogue_id", "") != "trader_lao_wang":
@@ -305,6 +307,27 @@ func _normalized_progression(actor: Dictionary) -> Dictionary:
 	}
 
 
+func _normalized_active_effects(actor: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var combat: Dictionary = actor.get("combat", {})
+	for effect in combat.get("active_effects", []):
+		var effect_data: Dictionary = effect
+		output.append({
+			"effect_id": str(effect_data.get("effect_id", "")),
+			"source": str(effect_data.get("source", "")),
+			"skill_id": str(effect_data.get("skill_id", "")),
+			"level": int(effect_data.get("level", 0)),
+			"category": str(effect_data.get("category", "")),
+			"duration_remaining": float(effect_data.get("duration_remaining", 0.0)),
+			"is_infinite": bool(effect_data.get("is_infinite", false)),
+			"modifiers": _sorted_float_key_values(effect_data.get("modifiers", {})),
+		})
+	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("effect_id", "")) < str(b.get("effect_id", ""))
+	)
+	return output
+
+
 func _sorted_key_values(value: Variant) -> Array[Dictionary]:
 	var data: Dictionary = value if typeof(value) == TYPE_DICTIONARY else {}
 	var keys: Array = data.keys()
@@ -314,6 +337,19 @@ func _sorted_key_values(value: Variant) -> Array[Dictionary]:
 		output.append({
 			"id": str(key),
 			"value": int(data.get(key, 0)),
+		})
+	return output
+
+
+func _sorted_float_key_values(value: Variant) -> Array[Dictionary]:
+	var data: Dictionary = value if typeof(value) == TYPE_DICTIONARY else {}
+	var keys: Array = data.keys()
+	keys.sort()
+	var output: Array[Dictionary] = []
+	for key in keys:
+		output.append({
+			"id": str(key),
+			"value": float(data.get(key, 0.0)),
 		})
 	return output
 
@@ -387,5 +423,6 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"player_inventory_order": _player_actor(snapshot).get("inventory_order", []),
 		"player_equipment": _player_actor(snapshot).get("equipment", {}),
 		"player_weapon_ammo": _normalized_weapon_ammo(_player_actor(snapshot)),
+		"player_active_effects": _normalized_active_effects(_player_actor(snapshot)),
 		"player_money": int(_player_actor(snapshot).get("money", 0)),
 	}
