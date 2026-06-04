@@ -118,6 +118,20 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("manual quest detail should show ready turn-in state")
 	if _turn_in_button(game_root, "find_medicine") == null or _turn_in_button(game_root, "find_medicine").disabled:
 		errors.append("manual turn-in button should be enabled after objective completion")
+	player.inventory["1005"] = 0
+	game_root.refresh_journal_panel()
+	if not _press_quest_title(game_root, "find_medicine"):
+		errors.append("should reselect manual turn-in quest before failure check")
+	await process_frame
+	_turn_in_button(game_root, "find_medicine").pressed.emit()
+	await process_frame
+	if not _journal_failure_history_text(game_root).contains("医院取药: 物品不足"):
+		errors.append("journal should record manual turn-in failure history")
+	player.inventory["1005"] = 1
+	game_root.refresh_journal_panel()
+	if not _press_quest_title(game_root, "find_medicine"):
+		errors.append("should reselect manual turn-in quest before success check")
+	await process_frame
 	_turn_in_button(game_root, "find_medicine").pressed.emit()
 	await process_frame
 	if not _journal_feedback_text(game_root).contains("已完成 医院取药"):
@@ -199,6 +213,11 @@ func _detail_text(game_root: Node) -> String:
 
 func _journal_feedback_text(game_root: Node) -> String:
 	var label: Label = game_root.journal_panel.find_child("JournalFeedbackLine", true, false) as Label
+	return "" if label == null else label.text
+
+
+func _journal_failure_history_text(game_root: Node) -> String:
+	var label: Label = game_root.journal_panel.find_child("JournalFailureHistoryLine", true, false) as Label
 	return "" if label == null else label.text
 
 

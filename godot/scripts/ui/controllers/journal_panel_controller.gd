@@ -10,10 +10,12 @@ var _detail_title_label: Label
 var _detail_body_label: Label
 var _track_button: Button
 var _feedback_label: Label
+var _failure_history_label: Label
 var _last_snapshot: Dictionary = {}
 var _selected_quest_id := ""
 var _tracked_quest_id := ""
 var _journal_feedback_text := ""
+var _failure_history: Array[String] = []
 
 
 func _ready() -> void:
@@ -35,6 +37,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		int(snapshot.get("completed_count", 0)),
 	]
 	_feedback_label.text = _journal_feedback_text
+	_failure_history_label.text = _failure_history_text()
 	_clear_quests()
 	_clear_completed_quests()
 	if quests.is_empty():
@@ -106,6 +109,7 @@ func _build_layout() -> void:
 	_track_button.focus_mode = Control.FOCUS_NONE
 	_track_button.pressed.connect(_toggle_tracked_quest, CONNECT_DEFERRED)
 	_feedback_label = _label("JournalFeedbackLine")
+	_failure_history_label = _label("JournalFailureHistoryLine")
 	box.add_child(_summary_label)
 	box.add_child(_quest_box)
 	box.add_child(_completed_box)
@@ -113,6 +117,7 @@ func _build_layout() -> void:
 	box.add_child(_detail_body_label)
 	box.add_child(_track_button)
 	box.add_child(_feedback_label)
+	box.add_child(_failure_history_label)
 
 
 func _quest_title(quest: Dictionary) -> Button:
@@ -189,7 +194,9 @@ func _quest_reward(quest: Dictionary) -> HBoxContainer:
 				_journal_feedback_text = "已完成 %s，获得奖励: %s" % [quest_title, reward_text]
 			else:
 				_journal_feedback_text = "交付 %s 失败: %s" % [quest_title, _turn_in_failure_text(str(result.get("reason", "unknown")))]
+				_record_failure(quest_title, str(result.get("reason", "unknown")))
 			_feedback_label.text = _journal_feedback_text
+			_failure_history_label.text = _failure_history_text()
 	, CONNECT_DEFERRED)
 	row.add_child(label)
 	row.add_child(button)
@@ -271,8 +278,23 @@ func _turn_in_failure_text(reason: String) -> String:
 			return "任务不需要手动交付"
 		"quest_objective_incomplete":
 			return "目标尚未完成"
+		"not_enough_items":
+			return "物品不足"
 		_:
 			return reason
+
+
+func _record_failure(quest_title: String, reason: String) -> void:
+	var text := "%s: %s" % [quest_title, _turn_in_failure_text(reason)]
+	_failure_history.append(text)
+	while _failure_history.size() > 5:
+		_failure_history.pop_front()
+
+
+func _failure_history_text() -> String:
+	if _failure_history.is_empty():
+		return "失败历史: 无"
+	return "失败历史: %s" % "；".join(_failure_history)
 
 
 func _label(node_name: String) -> Label:
