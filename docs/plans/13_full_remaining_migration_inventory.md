@@ -116,7 +116,7 @@
 - 待补 friendly / neutral / hostile 的选项差异：talk、trade、heal、container、attack、inspect、wait。
 - 待补 target visibility：不可见目标、雾中目标、跨层目标、遮挡目标的 prompt 和禁止逻辑。
 - 待补 interaction range：不同交互类型的距离、自动接近目标格、目标不可达时提示。
-- 待补 prompt snapshot：primary option、all options、disabled options、display name、target kind、action label、AP cost。
+- 部分迁移 prompt snapshot：primary option、all options、display name、target kind、action label、AP cost 和空 disabled options 已进入 core prompt 与 HUD snapshot，并由 `Interaction` / `UI` smoke 覆盖；待补真实 disabled option、禁用 reason、完整 target display 和动态 AP cost 来源。
 
 ### 5.2 交互行为
 

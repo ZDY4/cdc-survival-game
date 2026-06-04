@@ -40,11 +40,24 @@ func _prompt_summary(selected_target: Dictionary) -> Dictionary:
 		return {
 			"has_target": false,
 			"target_name": "",
+			"target_kind": "",
+			"target_type": "",
 			"primary_option_id": "",
+			"primary_option_kind": "",
+			"action_label": "",
+			"ap_cost": 0.0,
+			"options": [],
+			"disabled_options": [],
 		}
 	return {
 		"has_target": true,
 		"target_name": selected_target.get("target_name", selected_target.get("display_name", "")),
+		"target_kind": selected_target.get("target_kind", ""),
+		"target_type": selected_target.get("target_type", ""),
 		"primary_option_id": selected_target.get("primary_option_id", ""),
+		"primary_option_kind": selected_target.get("primary_option_kind", ""),
+		"action_label": selected_target.get("action_label", ""),
+		"ap_cost": float(selected_target.get("ap_cost", 0.0)),
 		"options": selected_target.get("options", []),
+		"disabled_options": selected_target.get("disabled_options", []),
 	}

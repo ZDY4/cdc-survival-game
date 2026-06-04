@@ -63,4 +63,15 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("inventory line missing picked item")
 	if not hud.get_node("HudPanel/HudLines/InteractionLine").text.contains("拾取"):
 		errors.append("interaction line missing pickup option")
+	var interaction: Dictionary = snapshot.get("interaction", {})
+	if str(interaction.get("target_kind", "")) != "pickup":
+		errors.append("HUD snapshot should expose interaction target_kind")
+	if str(interaction.get("primary_option_kind", "")) != "pickup":
+		errors.append("HUD snapshot should expose primary_option_kind")
+	if str(interaction.get("action_label", "")) != "拾取":
+		errors.append("HUD snapshot should expose action_label")
+	if absf(float(interaction.get("ap_cost", -1.0)) - 1.0) > 0.001:
+		errors.append("HUD snapshot should expose ap_cost")
+	if typeof(interaction.get("disabled_options", [])) != TYPE_ARRAY:
+		errors.append("HUD snapshot should expose disabled_options")
 	return errors

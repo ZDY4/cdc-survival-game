@@ -13,13 +13,23 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 	if option.is_empty():
 		return _failed_prompt("interaction_option_unavailable")
 
+	var enriched_option: Dictionary = option.duplicate(true)
+	enriched_option["ap_cost"] = _ap_cost_for_option(enriched_option)
+	enriched_option["disabled"] = false
+	enriched_option["disabled_reason"] = ""
 	return {
 		"ok": true,
 		"actor_id": actor_id,
 		"target": target_data,
 		"target_name": target_data.get("display_name", ""),
-		"options": [option],
-		"primary_option_id": option.get("id", ""),
+		"target_kind": target_data.get("kind", target_data.get("target_type", "")),
+		"target_type": target_data.get("target_type", ""),
+		"options": [enriched_option],
+		"disabled_options": [],
+		"primary_option_id": enriched_option.get("id", ""),
+		"primary_option_kind": enriched_option.get("kind", ""),
+		"action_label": enriched_option.get("display_name", enriched_option.get("id", "")),
+		"ap_cost": enriched_option.get("ap_cost", 0.0),
 	}
 
 
@@ -157,7 +167,19 @@ func _failed_prompt(reason: String) -> Dictionary:
 	return {
 		"ok": false,
 		"reason": reason,
+		"options": [],
+		"disabled_options": [],
 	}
+
+
+func _ap_cost_for_option(option: Dictionary) -> float:
+	match str(option.get("kind", "")):
+		"move":
+			return 0.0
+		"attack":
+			return 2.0
+		_:
+			return 1.0
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

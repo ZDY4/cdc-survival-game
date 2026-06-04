@@ -35,6 +35,11 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		if not first_snapshot.has(key):
 			errors.append("runtime snapshot missing %s" % key)
 	var topology: Dictionary = _topology(simulation, registry)
+	var prompt_probe: Dictionary = simulation.query_interaction_options(1, {
+		"target_type": "map_object",
+		"target_id": "survivor_outpost_01_pickup_medkit",
+	})
+	_expect_prompt_snapshot(errors, prompt_probe, "pickup", "pickup", 1.0)
 	var unsupported_result: Dictionary = simulation.submit_player_command({"kind": "unsupported_contract_probe"})
 	_expect_command_result_contract(errors, unsupported_result, "unsupported_contract_probe")
 	if bool(unsupported_result.get("success", false)):
@@ -226,6 +231,32 @@ func _expect_interaction_succeeded_payload(errors: Array[String], snapshot: Dict
 		errors.append("%s interaction_succeeded should include option_kind" % expected_option_id)
 	if str(payload.get("target_name", "")).find(expected_name_fragment) == -1:
 		errors.append("%s interaction_succeeded should include target_name" % expected_option_id)
+
+
+func _expect_prompt_snapshot(errors: Array[String], prompt: Dictionary, expected_option_id: String, expected_option_kind: String, expected_ap_cost: float) -> void:
+	if not bool(prompt.get("ok", false)):
+		errors.append("prompt snapshot probe should succeed")
+	if str(prompt.get("primary_option_id", "")) != expected_option_id:
+		errors.append("prompt snapshot should include primary_option_id")
+	if str(prompt.get("primary_option_kind", "")) != expected_option_kind:
+		errors.append("prompt snapshot should include primary_option_kind")
+	if str(prompt.get("action_label", "")).is_empty():
+		errors.append("prompt snapshot should include action_label")
+	if absf(float(prompt.get("ap_cost", -1.0)) - expected_ap_cost) > 0.001:
+		errors.append("prompt snapshot should include ap_cost")
+	if str(prompt.get("target_kind", "")).is_empty():
+		errors.append("prompt snapshot should include target_kind")
+	if typeof(prompt.get("disabled_options", [])) != TYPE_ARRAY:
+		errors.append("prompt snapshot should include disabled_options")
+	var options: Array = prompt.get("options", [])
+	if options.is_empty():
+		errors.append("prompt snapshot should include options")
+	else:
+		var option: Dictionary = _dictionary_or_empty(options[0])
+		if str(option.get("kind", "")) != expected_option_kind:
+			errors.append("prompt option should include kind")
+		if not option.has("ap_cost") or not option.has("disabled") or not option.has("disabled_reason"):
+			errors.append("prompt option should include ap_cost and disabled metadata")
 
 
 func _expect_auto_approach_interaction(simulation: RefCounted, registry: RefCounted) -> Array[String]:
