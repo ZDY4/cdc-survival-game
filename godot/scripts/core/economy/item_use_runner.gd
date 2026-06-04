@@ -55,6 +55,8 @@ func validate_use_item(simulation: RefCounted, actor_id: int, item_id: String, i
 	var usable: Dictionary = _fragment_by_kind(item, "usable")
 	if usable.is_empty():
 		return {"success": false, "reason": "item_not_usable", "item_id": normalized_item_id}
+	if not _is_item_use_allowed(item):
+		return {"success": false, "reason": "item_use_forbidden", "item_id": normalized_item_id}
 	for effect_id in _string_array(usable.get("effect_ids", [])):
 		if _effect_data(effect_id, effect_library).is_empty():
 			return {
@@ -140,6 +142,21 @@ func _fragment_by_kind(item: Dictionary, kind: String) -> Dictionary:
 		if str(fragment_data.get("kind", "")) == kind:
 			return fragment_data
 	return {}
+
+
+func _is_item_use_allowed(item: Dictionary) -> bool:
+	for key in ["usable", "can_use"]:
+		if item.has(key) and not bool(item.get(key)):
+			return false
+	for fragment in _array_or_empty(item.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		var kind: String = str(fragment_data.get("kind", ""))
+		if kind in ["quest", "task", "key_item"]:
+			return false
+		for key in ["usable", "can_use"]:
+			if fragment_data.has(key) and not bool(fragment_data.get(key)):
+				return false
+	return true
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

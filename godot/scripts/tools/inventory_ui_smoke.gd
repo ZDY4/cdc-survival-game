@@ -72,6 +72,31 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("using a non-usable weapon should report item_not_usable")
 	if absf(player_ref.ap - ap_before_invalid_use) > 0.01:
 		errors.append("failed item use should not spend AP")
+	_mark_item_as_quest(game_root, "1007")
+	player_ref.inventory["1007"] = 1
+	if not player_ref.inventory_order.has("1007"):
+		player_ref.inventory_order.append("1007")
+	game_root.refresh_inventory_panel()
+	if not _press_inventory_item_with_text(game_root, "罐头食品"):
+		errors.append("should select temporary quest food item")
+	var quest_use_button: Button = _use_button(game_root)
+	if quest_use_button == null or not quest_use_button.disabled:
+		errors.append("quest consumable should disable use button")
+	var quest_ap_before: float = player_ref.ap
+	var quest_use: Dictionary = game_root.use_player_item("1007")
+	if str(quest_use.get("reason", "")) != "item_use_forbidden":
+		errors.append("using quest item should report item_use_forbidden")
+	if absf(player_ref.ap - quest_ap_before) > 0.01:
+		errors.append("forbidden quest item use should not spend AP")
+	var quest_drop: Dictionary = game_root.drop_player_item("1007", 1)
+	if str(quest_drop.get("reason", "")) != "item_not_droppable":
+		errors.append("dropping quest item should report item_not_droppable")
+	if _player_inventory_count(game_root, "1007") != 1:
+		errors.append("forbidden quest item drop should keep inventory")
+	_unmark_item_as_quest(game_root, "1007")
+	player_ref.inventory.erase("1007")
+	player_ref.inventory_order.erase("1007")
+	game_root.refresh_inventory_panel()
 	if _filter_button(game_root, "FilterEquipmentButton") == null:
 		errors.append("inventory panel should expose equipment filter")
 	else:
@@ -249,6 +274,29 @@ func _event_seen(game_root: Node, kind: String) -> bool:
 		if event_data.get("kind", "") == kind:
 			return true
 	return false
+
+
+func _mark_item_as_quest(game_root: Node, item_id: String) -> void:
+	var data: Dictionary = _item_data(game_root, item_id)
+	var fragments: Array = data.get("fragments", [])
+	fragments.append({"kind": "quest"})
+	data["fragments"] = fragments
+
+
+func _unmark_item_as_quest(game_root: Node, item_id: String) -> void:
+	var data: Dictionary = _item_data(game_root, item_id)
+	var output: Array = []
+	for fragment in data.get("fragments", []):
+		var fragment_data: Dictionary = fragment
+		if str(fragment_data.get("kind", "")) == "quest":
+			continue
+		output.append(fragment_data)
+	data["fragments"] = output
+
+
+func _item_data(game_root: Node, item_id: String) -> Dictionary:
+	var record: Dictionary = game_root.registry.get_library("items").get(item_id, {})
+	return record.get("data", {})
 
 
 func _summary_line(game_root: Node) -> String:

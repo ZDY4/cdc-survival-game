@@ -46,6 +46,8 @@ func drop_actor_item(simulation: RefCounted, actor_id: int, item_id: String, cou
 		return {"success": false, "reason": "item_id_missing"}
 	if not item_library.is_empty() and _dictionary_or_empty(item_library.get(normalized_item_id, {})).is_empty():
 		return {"success": false, "reason": "unknown_item", "item_id": normalized_item_id}
+	if not _is_item_droppable(normalized_item_id, item_library):
+		return {"success": false, "reason": "item_not_droppable", "item_id": normalized_item_id, "count": max(1, count)}
 	var drop_count: int = max(1, count)
 	var available: int = int(actor.inventory.get(normalized_item_id, 0))
 	if available < drop_count:
@@ -102,6 +104,25 @@ func _drop_container(simulation: RefCounted, container_id: String, grid_position
 		"source_actor_definition_id": "",
 		"inventory": [],
 	}
+
+
+func _is_item_droppable(item_id: String, item_library: Dictionary) -> bool:
+	var record: Dictionary = _dictionary_or_empty(item_library.get(item_id, {}))
+	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+	if data.is_empty():
+		return true
+	for key in ["droppable", "can_drop", "discardable"]:
+		if data.has(key) and not bool(data.get(key)):
+			return false
+	for fragment in _array_or_empty(data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		var kind: String = str(fragment_data.get("kind", ""))
+		if kind in ["quest", "task", "key_item"]:
+			return false
+		for key in ["droppable", "can_drop", "discardable"]:
+			if fragment_data.has(key) and not bool(fragment_data.get(key)):
+				return false
+	return true
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

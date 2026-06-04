@@ -60,6 +60,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 	var value: int = int(data.get("value", 0))
 	var category: String = _category(data)
 	var usable: Dictionary = _fragment_by_kind(data, "usable")
+	var use_allowed: bool = not usable.is_empty() and _is_item_use_allowed(data)
 	return {
 		"item_id": item_id,
 		"name": str(data.get("name", item_id)),
@@ -73,7 +74,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"category": category,
 		"category_label": _category_label(category),
 		"equip_slots": _equip_slots(data),
-		"usable": not usable.is_empty(),
+		"usable": use_allowed,
 		"use_ap_cost": max(1.0, ceil(float(usable.get("use_time", 1.0)))) if not usable.is_empty() else 0.0,
 		"use_effect_ids": _string_array(usable.get("effect_ids", [])) if not usable.is_empty() else [],
 		"stackable": _stackable(data),
@@ -153,6 +154,21 @@ func _fragment_by_kind(item_data: Dictionary, kind: String) -> Dictionary:
 		if str(fragment_data.get("kind", "")) == kind:
 			return fragment_data
 	return {}
+
+
+func _is_item_use_allowed(item_data: Dictionary) -> bool:
+	for key in ["usable", "can_use"]:
+		if item_data.has(key) and not bool(item_data.get(key)):
+			return false
+	for fragment in _array_or_empty(item_data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		var kind: String = str(fragment_data.get("kind", ""))
+		if kind in ["quest", "task", "key_item"]:
+			return false
+		for key in ["usable", "can_use"]:
+			if fragment_data.has(key) and not bool(fragment_data.get(key)):
+				return false
+	return true
 
 
 func _player_actor(runtime_snapshot: Dictionary) -> Dictionary:

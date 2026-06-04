@@ -212,7 +212,7 @@
 - [x] 交易中出售已装备物品。
 - [~] inventory order、分类、排序、筛选、搜索：inventory order 持久化和默认顺序排序第一版已迁移；分类、名称/重量/价值排序、筛选、搜索已有 UI smoke；待补拖拽重排和 polish。
 - [ ] 背包容量：重量、格子、堆叠上限、超重惩罚。
-- [ ] 任务物品：不可卖、不可丢、不可拆、不可转移。
+- [~] 任务物品：不可卖、不可丢、不可使用第一版已迁移；待补不可拆、不可转移和交付条件。
 - [ ] 装备槽冲突：双手、盾牌、多饰品、多槽装备。
 - [ ] 装备属性派生、装备外观挂点、耐久、损坏。
 - [ ] 容器权限：锁、阵营、偷窃、任务状态、容量。
@@ -386,11 +386,11 @@
 
 - [~] 基础字段：id、name、description、category、rarity、value、stack limit。
 - [~] 装备 fragment：slot、attribute modifiers、armor、weapon profile。
-- [~] 消耗品 fragment：生命、饥饿、口渴、免疫、耐力资源恢复第一版已接入 `use_item`；buff/debuff、持续效果和任务物品限制仍待迁移。
+- [~] 消耗品 fragment：生命、饥饿、口渴、免疫、耐力资源恢复第一版已接入 `use_item`；任务/关键物品不可使用第一版已迁移；buff/debuff、持续效果和任务交付限制仍待迁移。
 - [~] 武器 fragment：damage、range、AP cost、crit、ammo type。
 - [ ] 弹药 fragment：ammo type、弹匣、装填、消耗、剩余弹药。
 - [ ] 工具 fragment：制作工具、维修工具、耐久、是否消耗。
-- [ ] 任务物品 fragment：不可卖、不可丢、不可拆、任务交付条件。
+- [~] 任务物品 fragment：不可卖、不可丢、不可使用第一版已迁移；待补不可拆、不可转移和任务交付条件。
 - [ ] 可拆解/修理 fragment：材料、工具、成功率、产物、耐久恢复。
 - [ ] 外观 fragment：preview model、socket、attach target、scale、offset、rotation。
 - [~] 效果库：装备 `equip_effect_ids` 快照展示、`ammo_capacity` 和 `reload_speed` 装备期规则第一版已迁移；accuracy_bonus、armor_break、bleeding、poison、stun、slow、night_vision、inventory_bonus 等完整运行时语义仍待迁移。
@@ -769,8 +769,8 @@
 - [~] 分类、排序、筛选、搜索第一版；待补 polish。
 - [ ] 数量拆分、部分丢弃、全部丢弃。
 - [ ] 背包容量：重量、格子、堆叠上限、超重惩罚。
-- [~] 使用消耗品：资源恢复效果、AP 消耗、消耗物品、失败 reason 和 Inventory 使用按钮第一版已迁移；任务限制、持续效果和完整反馈仍待补。
-- [ ] 不可丢弃/任务物品/锁定物品。
+- [~] 使用消耗品：资源恢复效果、AP 消耗、消耗物品、失败 reason、任务/关键物品禁止使用和 Inventory 使用按钮第一版已迁移；持续效果和完整反馈仍待补。
+- [~] 不可丢弃/任务物品/锁定物品：任务/关键物品不可丢弃第一版已迁移；待补锁定物品细分。
 - [ ] 背包变化事件统一刷新 HUD/UI。
 
 ### 11.2 装备
