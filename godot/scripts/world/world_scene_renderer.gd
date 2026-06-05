@@ -20,6 +20,8 @@ var corpse_material := _material(Color(0.32, 0.26, 0.22))
 var corpse_badge_material := _unshaded_material(Color(0.76, 0.62, 0.38, 0.88))
 var pickup_fallback_material := _material(Color(0.22, 0.68, 0.95))
 var container_fallback_material := _material(Color(0.28, 0.74, 0.38))
+var container_state_filled_material := _unshaded_material(Color(0.30, 0.92, 0.45, 0.9))
+var container_state_empty_material := _unshaded_material(Color(0.70, 0.72, 0.66, 0.78))
 var trigger_fallback_material := _material(Color(0.58, 0.42, 0.92, 0.72))
 var door_closed_material := _material(Color(0.50, 0.34, 0.18))
 var door_open_material := _material(Color(0.64, 0.47, 0.25))
@@ -154,14 +156,11 @@ func _prepare_visual_interaction_targets(root: Node, map: Dictionary) -> void:
 			continue
 
 		# 视觉对象本身也携带交互元数据，后续接鼠标拾取时不用再依赖调试方块。
-		node.set_meta("interaction_target", {
-			"target_type": "map_object",
-			"target_id": object_id,
-			"target_kind": str(_dictionary_or_empty(active_targets.get(object_id, {})).get("kind", "")),
-			"door": _dictionary_or_empty(_dictionary_or_empty(active_targets.get(object_id, {})).get("door", {})).duplicate(true),
-		})
-		_apply_door_state_visual(node, _dictionary_or_empty(active_targets.get(object_id, {})))
-		_add_visual_pickable_body(node, active_targets.get(object_id, {}))
+		var target_data: Dictionary = _dictionary_or_empty(active_targets.get(object_id, {}))
+		node.set_meta("interaction_target", _interaction_target_meta(object_id, target_data))
+		_apply_door_state_visual(node, target_data)
+		_apply_container_state_visual(node, target_data)
+		_add_visual_pickable_body(node, target_data)
 
 	for node in stale_targets:
 		node.free()
@@ -213,22 +212,33 @@ func _spawn_interaction_target_marker(root: Node3D, object: Dictionary, map: Dic
 	var node: Node3D = Node3D.new()
 	node.name = "MapObject_%s" % object.get("object_id", "")
 	var target_data: Dictionary = _dictionary_or_empty(_dictionary_or_empty(map.get("interaction_targets", {})).get(str(object.get("object_id", "")), {}))
-	node.set_meta("interaction_target", {
-		"target_type": "map_object",
-		"target_id": str(object.get("object_id", "")),
-		"target_kind": str(target_data.get("kind", "")),
-		"door": _dictionary_or_empty(target_data.get("door", {})).duplicate(true),
-	})
+	node.set_meta("interaction_target", _interaction_target_meta(str(object.get("object_id", "")), target_data))
 	node.position = Vector3(
 		(float(anchor.get("x", 0)) + (width - 1.0) * 0.5) * GRID_SIZE,
 		0.18,
 		(float(anchor.get("z", 0)) + (height - 1.0) * 0.5) * GRID_SIZE
 	)
 	_apply_door_state_visual(node, target_data)
+	_apply_container_state_visual(node, target_data)
 	if not bool(visual_object_ids.get(str(object.get("object_id", "")), false)):
 		_add_map_object_fallback_visual(node, target_data, object, width, height)
 	_add_pickable_box(node, Vector3(width * GRID_SIZE, 0.6, height * GRID_SIZE), Vector3(0.0, 0.25, 0.0))
 	root.add_child(node)
+
+
+func _interaction_target_meta(object_id: String, target_data: Dictionary) -> Dictionary:
+	var meta := {
+		"target_type": "map_object",
+		"target_id": object_id,
+		"target_kind": str(target_data.get("kind", "")),
+		"door": _dictionary_or_empty(target_data.get("door", {})).duplicate(true),
+	}
+	if str(target_data.get("kind", "")) == "container":
+		meta["container_empty"] = bool(target_data.get("container_empty", false))
+		meta["container_item_count"] = int(target_data.get("container_item_count", 0))
+		meta["container_stack_count"] = int(target_data.get("container_stack_count", 0))
+		meta["container_money"] = int(target_data.get("container_money", 0))
+	return meta
 
 
 func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
@@ -474,6 +484,35 @@ func _apply_door_state_visual(parent: Node, target_data: Dictionary) -> void:
 	visual.set_meta("door_is_open", is_open)
 	visual.set_meta("door_locked", locked)
 	visual.set_meta("door_visual_state", "locked" if locked else ("open" if is_open else "closed"))
+
+
+func _apply_container_state_visual(parent: Node, target_data: Dictionary) -> void:
+	if str(target_data.get("kind", "")) != "container":
+		return
+	var parent_3d := parent as Node3D
+	if parent_3d == null:
+		return
+	var badge: MeshInstance3D = parent_3d.find_child("ContainerStateBadge", false, false) as MeshInstance3D
+	if badge == null:
+		badge = MeshInstance3D.new()
+		badge.name = "ContainerStateBadge"
+		parent_3d.add_child(badge)
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.11
+	mesh.bottom_radius = 0.11
+	mesh.height = 0.035
+	mesh.radial_segments = 20
+	badge.mesh = mesh
+	var is_empty := bool(target_data.get("container_empty", false))
+	badge.material_override = container_state_empty_material if is_empty else container_state_filled_material
+	badge.position = Vector3(0.0, 0.62, 0.0)
+	badge.set_meta("target_kind", "container")
+	badge.set_meta("target_id", str(target_data.get("target_id", "")))
+	badge.set_meta("container_empty", is_empty)
+	badge.set_meta("container_item_count", int(target_data.get("container_item_count", 0)))
+	badge.set_meta("container_stack_count", int(target_data.get("container_stack_count", 0)))
+	badge.set_meta("container_money", int(target_data.get("container_money", 0)))
+	badge.set_meta("container_visual_state", "empty" if is_empty else "filled")
 
 
 func _door_visual_size_from_cells(cells: Array) -> Vector2:

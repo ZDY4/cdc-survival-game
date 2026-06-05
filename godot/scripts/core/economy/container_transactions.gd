@@ -50,6 +50,7 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 	_inventory_entries.add(container["inventory"], normalized_item_id, -transfer_count)
 	_inventory_entries.add_actor_item(actor, normalized_item_id, transfer_count)
 	simulation.container_sessions[normalized_container_id] = container
+	_sync_corpse_container_session(simulation, normalized_container_id, container)
 	simulation.emit_event("container_item_taken", {
 		"actor_id": actor_id,
 		"container_id": normalized_container_id,
@@ -216,6 +217,7 @@ func store_item_in_container(simulation: RefCounted, actor_id: int, container_id
 	_inventory_entries.add_actor_item(actor, normalized_item_id, -transfer_count)
 	_inventory_entries.add(container["inventory"], normalized_item_id, transfer_count)
 	simulation.container_sessions[normalized_container_id] = container
+	_sync_corpse_container_session(simulation, normalized_container_id, container)
 	simulation.emit_event("container_item_stored", {
 		"actor_id": actor_id,
 		"container_id": normalized_container_id,
@@ -304,6 +306,15 @@ func _bulk_transfer_item_count(transfers: Array[Dictionary]) -> int:
 	for transfer in transfers:
 		total += max(0, int(_dictionary_or_empty(transfer).get("count", 0)))
 	return total
+
+
+func _sync_corpse_container_session(simulation: RefCounted, container_id: String, container: Dictionary) -> void:
+	if simulation == null or not simulation.corpse_containers.has(container_id):
+		return
+	var corpse: Dictionary = _dictionary_or_empty(simulation.corpse_containers[container_id])
+	corpse["inventory"] = _array_or_empty(container.get("inventory", [])).duplicate(true)
+	corpse["money"] = max(0, int(container.get("money", corpse.get("money", 0))))
+	simulation.corpse_containers[container_id] = corpse
 
 
 func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: int, container_id: String, container: Dictionary, action: String) -> Dictionary:

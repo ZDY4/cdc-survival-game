@@ -488,6 +488,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("missing container target should close container panel")
 	if not _active_container_id(game_root).is_empty():
 		errors.append("missing container target should clear active container runtime state")
+	_validate_empty_container_world_state(game_root, errors)
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player == null:
 		errors.append("missing player for map switch container close check")
@@ -561,6 +562,59 @@ func _refresh_runtime_world(game_root: Node, result: Dictionary) -> void:
 	game_root._refresh_fog_overlay()
 	game_root._setup_panels()
 	game_root.refresh_all_panels(result.get("prompt", {}))
+
+
+func _validate_empty_container_world_state(game_root: Node, errors: Array[String]) -> void:
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("missing player for empty container world state check")
+		return
+	var container_id := "survivor_outpost_01_clinic_supply_cabinet"
+	var target: Dictionary = _dictionary_or_empty(_dictionary_or_empty(_dictionary_or_empty(game_root.world_result.get("map", {})).get("interaction_targets", {})).get(container_id, {}))
+	var anchor: Dictionary = _dictionary_or_empty(target.get("anchor", {}))
+	player.grid_position.x = int(anchor.get("x", player.grid_position.x))
+	player.grid_position.z = int(anchor.get("z", player.grid_position.z))
+	game_root.simulation.container_sessions[container_id] = {
+		"container_id": container_id,
+		"display_name": "诊所补给柜",
+		"inventory": [{"item_id": "1031", "count": 1}],
+		"money": 0,
+	}
+	player.active_container_id = container_id
+	var take_all: Dictionary = game_root.take_all_active_container_items()
+	if not bool(take_all.get("success", false)):
+		errors.append("empty state setup take all failed: %s" % take_all.get("reason", "unknown"))
+	var session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get(container_id, {}))
+	if not _array_or_empty(session.get("inventory", [])).is_empty() or int(session.get("money", 0)) != 0:
+		errors.append("empty state setup should clear container session")
+	_refresh_runtime_world(game_root, {"prompt": {}})
+	var container_node: Node = game_root.find_child("MapObject_%s" % container_id, true, false)
+	if container_node == null:
+		errors.append("empty container should remain as a map object")
+		return
+	var badge: Node = container_node.find_child("ContainerStateBadge", true, false)
+	if badge == null:
+		errors.append("empty container should expose ContainerStateBadge")
+	else:
+		if not bool(badge.get_meta("container_empty", false)):
+			errors.append("empty container badge should expose container_empty")
+		if str(badge.get_meta("container_visual_state", "")) != "empty":
+			errors.append("empty container badge should expose empty visual state")
+	var node_target: Dictionary = _dictionary_or_empty(container_node.get_meta("interaction_target", {}))
+	if not bool(node_target.get("container_empty", false)):
+		errors.append("empty container interaction metadata should expose container_empty")
+	if int(node_target.get("container_item_count", -1)) != 0:
+		errors.append("empty container interaction metadata should expose zero item count")
+	var pickable_body: Node = container_node.find_child("PickableBody", true, false)
+	var pickable_target: Dictionary = _dictionary_or_empty(pickable_body.get_meta("interaction_target", {}) if pickable_body != null else {})
+	if pickable_body == null or not bool(pickable_target.get("container_empty", false)):
+		errors.append("empty container pickable body should mirror container_empty metadata")
+	game_root.select_interaction_node(container_node)
+	var open_result: Dictionary = _execute_primary_and_complete(game_root)
+	if not bool(open_result.get("success", false)):
+		errors.append("empty container should still open: %s" % open_result.get("reason", "unknown"))
+	if not _container_text(game_root).contains("容器为空"):
+		errors.append("empty container panel should show empty prompt after world rebuild")
 
 
 func _has_pending(game_root: Node) -> bool:

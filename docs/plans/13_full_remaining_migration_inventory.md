@@ -205,7 +205,7 @@
 
 - 已有拿取/存放、全部拿取/全部存放、容器/背包双栏、滚动列表、基础详情文本、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip 和容器/背包双向拖拽转移第一版，并纳入 `ContainerUI` smoke；批量转移复用单项容器事务，成功项保留、失败项返回 `failures` 并可显示部分成功反馈。
 - 待补容器类型：地图容器、尸体容器、掉落容器、商店容器、任务容器的 id、权限和持久化差异。
-- 容器关闭已覆盖 Esc、关闭按钮、目标消失关闭、切换地图关闭和超出距离关闭；空容器提示已覆盖。
+- 容器关闭已覆盖 Esc、关闭按钮、目标消失关闭、切换地图关闭和超出距离关闭；空容器提示已覆盖。清空后地图对象状态第一版已迁移：`container_sessions` 会覆盖 world snapshot 中的容器库存、金钱和 empty/item count metadata，容器仍保留可交互对象和 pickable body，世界节点显示 `ContainerStateBadge`，已由 `ContainerUI` / `Scene` smoke 覆盖。
 - 基础失败提示已覆盖并纳入 `ContainerUI` smoke：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器、数量非法、拿取后背包负重不足；容器权限第一版已支持 session / map props 的 `locked`、`allow_take`、`allow_store`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`、`required_world_flags` 和 `blocked_world_flags`，拿取、拿钱和存放会统一拒绝并显示中文反馈，钥匙/工具满足时可操作锁定容器，权限字段随存档 roundtrip；容器自身容量第一版支持重量、总件数、stack/slot 数限制，容量字段随地图对象、交互 session 和存档 roundtrip，超限显示中文反馈；已纳入 `ContainerUI` / `Save` smoke。待补钥匙/工具消耗或耐久策略和更完整权限 UI 预览。
 
 ### 8.4 交易
@@ -344,7 +344,7 @@
 - glTF Godot 导入复核第一版已迁移：`Scene` smoke 会递归扫描 `godot/assets/**/*.gltf` / `.glb`，逐个通过 Godot `ResourceLoader` 加载为 `PackedScene`、实例化、统计 MeshInstance3D / 材质并检查非零可视 bounds；当前覆盖 52 个 glTF、65 个 mesh、65 个材质。待补 scale、rotation、origin、collision、shadow、visibility 和 resource uid 稳定性。
 - 建立 asset id -> Godot resource path 映射表，避免数据里 `builtin:*`、`preview_placeholders/*`、`world_tiles/*` 混用时找不到模型。
 - 地图 scene visual asset 实例化复核第一版已迁移：`Scene` smoke 会扫描 `godot/scenes/maps/*.tscn`，对每个声明 `props.visual` 的对象断言 `Visuals` 容器存在且已实例化子节点，当前覆盖 12 张地图 / 65 个 visual 对象；待补具体模型路径、fallback 类型、重叠检查和资产导入细节。
-- container / pickup / trigger / door / corpse fallback 表现第一版已迁移：door fallback 已有开合/锁定状态；生成层 map object 在缺少真实 map scene visual 时会按 pickup / container / trigger 生成不同形状、材质和 `fallback_category` meta，且有真实 visual 的对象不会重复叠加 fallback；corpse fallback 已有名称、容器徽标和 loot metadata；已由 `Scene` / `PlayerInteraction` smoke 覆盖。待补真实美术资源替换、重叠检查和声音占位。
+- container / pickup / trigger / door / corpse fallback 表现第一版已迁移：door fallback 已有开合/锁定状态；生成层 map object 在缺少真实 map scene visual 时会按 pickup / container / trigger 生成不同形状、材质和 `fallback_category` meta，容器会显示 `ContainerStateBadge` 并暴露 empty/item/money metadata，且有真实 visual 的对象不会重复叠加 fallback；corpse fallback 已有名称、容器徽标和 loot metadata；已由 `Scene` / `PlayerInteraction` / `ContainerUI` smoke 覆盖。待补真实美术资源替换、重叠检查和声音占位。
 - WGSL 旧 shader 不迁代码，只迁视觉目标：grid ground、tile instancing、building wall、fog post-process 的效果要用 Godot shader / material 实现。
 - 待补音频资产策略：UI 点击、拾取、开门、交易、制作、攻击、受击、死亡、任务完成目前缺声音或占位。
 - 待补字体和中文渲染策略：所有 UI scene 应统一使用 `NotoSansCJKsc-Regular.otf` 或主题资源，避免中文 fallback 不一致。

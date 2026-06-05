@@ -1018,17 +1018,27 @@ func _validate_runtime_map_object_fallbacks(root: Node3D, errors: Array[String])
 	get_root().add_child(fallback_root)
 	WorldSceneRenderer.new().render_world(fallback_root, _fallback_visual_world(), {"load_map_visuals": false})
 	var categories := {}
+	var container_badge: Node = null
 	var pending: Array[Node] = [fallback_root]
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
 		for child in node.get_children():
 			pending.append(child)
+		if node.name == "ContainerStateBadge":
+			container_badge = node
 		if node.name != "MapObjectFallbackVisual":
 			continue
 		categories[str(node.get_meta("fallback_category", ""))] = true
 	for category in ["pickup", "container", "trigger"]:
 		if not bool(categories.get(category, false)):
 			errors.append("generated map object fallback should include %s visual" % category)
+	if container_badge == null:
+		errors.append("generated container fallback should expose container state badge")
+	else:
+		if bool(container_badge.get_meta("container_empty", true)):
+			errors.append("generated container fallback badge should expose filled state")
+		if int(container_badge.get_meta("container_item_count", 0)) != 2:
+			errors.append("generated container fallback badge should expose item count")
 	fallback_root.queue_free()
 
 
@@ -1079,6 +1089,10 @@ func _fallback_visual_world() -> Dictionary:
 					"kind": "container",
 					"anchor": container_grid,
 					"cells": [container_grid],
+					"container_empty": false,
+					"container_item_count": 2,
+					"container_stack_count": 1,
+					"container_money": 5,
 				},
 				"scene_smoke_trigger": {
 					"target_id": "scene_smoke_trigger",

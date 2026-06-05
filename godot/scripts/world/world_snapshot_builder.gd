@@ -26,6 +26,7 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	var map_snapshot: Dictionary = topology.to_dictionary()
 	_apply_door_states(map_snapshot, runtime_snapshot.get("door_states", []))
 	_apply_consumed_interaction_targets(map_snapshot, runtime_snapshot.get("consumed_interaction_targets", []))
+	_apply_container_session_states(map_snapshot, runtime_snapshot.get("container_sessions", []))
 	var corpses: Array[Dictionary] = _corpses_on_map(runtime_snapshot.get("corpse_containers", []), map_id)
 	_apply_corpse_interaction_targets(map_snapshot, corpses)
 	var actors: Array[Dictionary] = _actors_on_map(runtime_snapshot.get("actors", []), map_id)
@@ -520,6 +521,65 @@ func _apply_door_states(map_snapshot: Dictionary, state_values: Array) -> void:
 	map_snapshot["blocking_cell_count"] = blocking_cells.size()
 	map_snapshot["sight_blocking_cell_count"] = sight_blocking_cells.size()
 	map_snapshot["interaction_targets"] = interaction_targets
+
+
+func _apply_container_session_states(map_snapshot: Dictionary, session_values: Array) -> void:
+	var states: Dictionary = {}
+	for value in _array_or_empty(session_values):
+		var session: Dictionary = _dictionary_or_empty(value)
+		var container_id := str(session.get("container_id", ""))
+		if container_id.is_empty():
+			continue
+		var inventory: Array = _array_or_empty(session.get("inventory", []))
+		var money: int = max(0, int(session.get("money", 0)))
+		states[container_id] = {
+			"container_id": container_id,
+			"container_inventory": inventory.duplicate(true),
+			"container_item_count": _container_item_count(inventory),
+			"container_stack_count": _container_stack_count(inventory),
+			"container_money": money,
+			"container_empty": _container_item_count(inventory) <= 0 and money <= 0,
+		}
+	if states.is_empty():
+		return
+	var interaction_targets: Dictionary = _dictionary_or_empty(map_snapshot.get("interaction_targets", {})).duplicate(true)
+	for target_id in interaction_targets.keys():
+		var target: Dictionary = _dictionary_or_empty(interaction_targets[target_id]).duplicate(true)
+		if str(target.get("kind", "")) != "container" or not states.has(str(target_id)):
+			continue
+		for key in _dictionary_or_empty(states[target_id]).keys():
+			target[key] = _dictionary_or_empty(states[target_id]).get(key)
+		interaction_targets[target_id] = target
+	map_snapshot["interaction_targets"] = interaction_targets
+	for group_name in ["interactive_objects", "trigger_objects", "pickup_objects"]:
+		map_snapshot[group_name] = _objects_with_container_state(_array_or_empty(map_snapshot.get(group_name, [])), states)
+
+
+func _objects_with_container_state(objects: Array, states: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for object in objects:
+		var object_data: Dictionary = _dictionary_or_empty(object).duplicate(true)
+		var object_id := str(object_data.get("object_id", ""))
+		if states.has(object_id):
+			object_data["container_state"] = _dictionary_or_empty(states[object_id]).duplicate(true)
+		output.append(object_data)
+	return output
+
+
+func _container_item_count(inventory: Array) -> int:
+	var total := 0
+	for entry in inventory:
+		total += max(0, int(_dictionary_or_empty(entry).get("count", 0)))
+	return total
+
+
+func _container_stack_count(inventory: Array) -> int:
+	var total := 0
+	for entry in inventory:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if not str(entry_data.get("item_id", "")).is_empty() and int(entry_data.get("count", 0)) > 0:
+			total += 1
+	return total
 
 
 func _apply_door_blocking_cells(door: Dictionary, blocking_cells: Dictionary, sight_blocking_cells: Dictionary) -> void:
