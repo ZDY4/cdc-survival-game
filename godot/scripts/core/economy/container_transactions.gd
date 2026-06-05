@@ -176,6 +176,9 @@ func store_item_in_container(simulation: RefCounted, actor_id: int, container_id
 			"required": transfer_count,
 			"current": available,
 		}
+	var capacity: Dictionary = _container_capacity_check(normalized_container_id, container, normalized_item_id, transfer_count, item_library)
+	if not bool(capacity.get("success", false)):
+		return capacity
 
 	_inventory_entries.add_actor_item(actor, normalized_item_id, -transfer_count)
 	_inventory_entries.add(container["inventory"], normalized_item_id, transfer_count)
@@ -246,6 +249,131 @@ func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: 
 				"blocked_world_flags": _normalized_string_array(container.get("blocked_world_flags", [])),
 			})
 	return base
+
+
+func _container_capacity_check(container_id: String, container: Dictionary, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
+	var inventory: Array = _array_or_empty(container.get("inventory", []))
+	var additions: Array = [{"item_id": item_id, "count": count}]
+	var current_weight: float = _inventory_entries_weight(inventory, item_library)
+	var added_weight: float = _inventory_capacity.entries_weight(additions, item_library)
+	var projected_weight: float = current_weight + added_weight
+	var max_weight: float = _container_max_weight(container)
+	if max_weight >= 0.0 and projected_weight > max_weight + 0.001:
+		return {
+			"success": false,
+			"reason": "container_over_capacity",
+			"limit_kind": "weight",
+			"container_id": container_id,
+			"item_id": item_id,
+			"count": count,
+			"current_weight": current_weight,
+			"added_weight": added_weight,
+			"projected_weight": projected_weight,
+			"max_weight": max_weight,
+			"remaining_weight": max_weight - current_weight,
+			"over_by": projected_weight - max_weight,
+		}
+
+	var current_item_count: int = _container_item_count(inventory)
+	var projected_item_count: int = current_item_count + max(0, count)
+	var max_items: int = _container_max_int(container, ["max_items", "max_item_count", "item_capacity"])
+	if max_items >= 0 and projected_item_count > max_items:
+		return {
+			"success": false,
+			"reason": "container_over_capacity",
+			"limit_kind": "items",
+			"container_id": container_id,
+			"item_id": item_id,
+			"count": count,
+			"current_item_count": current_item_count,
+			"projected_item_count": projected_item_count,
+			"max_items": max_items,
+			"over_by": projected_item_count - max_items,
+		}
+
+	var current_stack_count: int = _container_stack_count(inventory)
+	var projected_stack_count: int = current_stack_count + (0 if _container_has_item(inventory, item_id) else 1)
+	var max_stacks: int = _container_max_int(container, ["max_stacks", "max_stack_count", "slot_capacity", "max_slots"])
+	if max_stacks >= 0 and projected_stack_count > max_stacks:
+		return {
+			"success": false,
+			"reason": "container_over_capacity",
+			"limit_kind": "stacks",
+			"container_id": container_id,
+			"item_id": item_id,
+			"count": count,
+			"current_stack_count": current_stack_count,
+			"projected_stack_count": projected_stack_count,
+			"max_stacks": max_stacks,
+			"over_by": projected_stack_count - max_stacks,
+		}
+	return {
+		"success": true,
+		"current_weight": current_weight,
+		"added_weight": added_weight,
+		"projected_weight": projected_weight,
+		"max_weight": max_weight,
+		"current_item_count": current_item_count,
+		"projected_item_count": projected_item_count,
+		"current_stack_count": current_stack_count,
+		"projected_stack_count": projected_stack_count,
+	}
+
+
+func _inventory_entries_weight(entries: Array, item_library: Dictionary) -> float:
+	var normalized_entries: Array[Dictionary] = []
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var normalized_item_id: String = _inventory_entries.normalize_content_id(entry_data.get("item_id", ""))
+		var entry_count: int = max(0, int(entry_data.get("count", 0)))
+		if normalized_item_id.is_empty() or entry_count <= 0:
+			continue
+		normalized_entries.append({
+			"item_id": normalized_item_id,
+			"count": entry_count,
+		})
+	return _inventory_capacity.entries_weight(normalized_entries, item_library)
+
+
+func _container_item_count(entries: Array) -> int:
+	var total := 0
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		total += max(0, int(entry_data.get("count", 0)))
+	return total
+
+
+func _container_stack_count(entries: Array) -> int:
+	var seen: Array[String] = []
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var normalized_item_id: String = _inventory_entries.normalize_content_id(entry_data.get("item_id", ""))
+		if normalized_item_id.is_empty() or int(entry_data.get("count", 0)) <= 0 or seen.has(normalized_item_id):
+			continue
+		seen.append(normalized_item_id)
+	return seen.size()
+
+
+func _container_has_item(entries: Array, item_id: String) -> bool:
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if _inventory_entries.normalize_content_id(entry_data.get("item_id", "")) == item_id and int(entry_data.get("count", 0)) > 0:
+			return true
+	return false
+
+
+func _container_max_weight(container: Dictionary) -> float:
+	for key in ["max_weight", "max_container_weight", "weight_capacity"]:
+		if container.has(key):
+			return max(0.0, float(container.get(key, 0.0)))
+	return -1.0
+
+
+func _container_max_int(container: Dictionary, keys: Array[String]) -> int:
+	for key in keys:
+		if container.has(key):
+			return max(0, int(container.get(key, 0)))
+	return -1
 
 
 func _required_item_ids(container: Dictionary) -> Array[String]:

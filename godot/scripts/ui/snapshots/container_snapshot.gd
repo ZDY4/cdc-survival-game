@@ -167,6 +167,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 				float(feedback.get("max_weight", 0.0)),
 				float(feedback.get("over_by", 0.0)),
 			]
+		"container_over_capacity":
+			return _container_capacity_text(item_name, feedback)
 		"unknown_container":
 			return "容器不存在或已经失效。"
 		"unknown_item":
@@ -193,6 +195,30 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "缺少操作该容器所需的%s。" % item_name
 		_:
 			return str(feedback.get("reason", ""))
+
+
+func _container_capacity_text(item_name: String, feedback: Dictionary) -> String:
+	match str(feedback.get("limit_kind", "")):
+		"weight":
+			return "容器容量不足，存放%s后为 %.1f/%.1f kg，超出 %.1f kg。" % [
+				item_name,
+				float(feedback.get("projected_weight", 0.0)),
+				float(feedback.get("max_weight", 0.0)),
+				float(feedback.get("over_by", 0.0)),
+			]
+		"items":
+			return "容器容量不足，存放%s后为 %d/%d 件。" % [
+				item_name,
+				int(feedback.get("projected_item_count", 0)),
+				int(feedback.get("max_items", 0)),
+			]
+		"stacks":
+			return "容器容量不足，存放%s后为 %d/%d 类。" % [
+				item_name,
+				int(feedback.get("projected_stack_count", 0)),
+				int(feedback.get("max_stacks", 0)),
+			]
+	return "容器容量不足，无法存放%s。" % item_name
 
 
 func _feedback_item_name(feedback: Dictionary) -> String:

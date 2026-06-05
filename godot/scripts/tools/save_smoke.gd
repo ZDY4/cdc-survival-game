@@ -65,6 +65,9 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	clinic_container["required_tool_ids"] = ["1150"]
 	clinic_container["required_world_flags"] = ["outpost_workshop_restored"]
 	clinic_container["blocked_world_flags"] = ["clinic_locked_down"]
+	clinic_container["max_weight"] = 3.5
+	clinic_container["max_items"] = 9
+	clinic_container["max_stacks"] = 4
 	simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = clinic_container
 	simulation.execute_interaction(1, {
 		"target_type": "map_object",
@@ -229,6 +232,12 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("container required world flags did not roundtrip")
 	if not _array_or_empty(restored_clinic_container.get("blocked_world_flags", [])).has("clinic_locked_down"):
 		errors.append("container blocked world flags did not roundtrip")
+	if not is_equal_approx(float(restored_clinic_container.get("max_weight", 0.0)), 3.5):
+		errors.append("container max_weight did not roundtrip")
+	if int(restored_clinic_container.get("max_items", 0)) != 9:
+		errors.append("container max_items did not roundtrip")
+	if int(restored_clinic_container.get("max_stacks", 0)) != 4:
+		errors.append("container max_stacks did not roundtrip")
 	if JSON.stringify(restored.get("shop_sessions")) != JSON.stringify(original.get("shop_sessions")):
 		errors.append("shop sessions did not roundtrip")
 	var restored_trader_shop: Dictionary = _shop_session(restored, "trader_lao_wang_shop")

@@ -192,7 +192,7 @@
 - 数量控制第一版已迁移：背包选中物品可用 SpinBox 指定丢弃数量，背包丢弃数量弹窗已覆盖确认/取消、增减、最大值、非法数量提示、右键全部丢弃预填满堆叠和 gameplay blocker/Esc；拆分请求在当前合并计数模型下已有稳定禁用/拒绝原因；待补真正多 stack 拆分以及容器/交易等其他数量弹窗。
 - 物品使用第一版已接入：`inventory_action/use_item`、消耗品 `gameplay_effect.resource_deltas`、HP/基础资源恢复、AP 消耗、物品消耗、失败 reason 和 Inventory “使用”按钮已纳入 `InventoryUI` / `Save` smoke；任务/关键物品不可使用、不可丢弃第一版已纳入 `InventoryUI` smoke；待补 buff/debuff、持续效果、任务交付限制和更完整反馈。
 - 拖拽第一版：背包内排序、拖到装备按钮、拖到丢弃按钮或独立 DropZone 打开丢弃确认弹窗已迁移；背包物品可拖到角色装备槽并走 `equip_player_item`，可拖到当前容器列存入容器，可拖到交易购物车或 sell drop zone 排入出售队列；右键菜单已支持存入当前容器和出售给当前交易对象，并由 `InventoryUI` / `UIToggle` / `ContainerUI` / `TradeUI` smoke 覆盖。待补筛选/搜索视图下的拖拽提示、drag preview 和 hover 高亮 polish。
-- 背包负重限制第一版已迁移：`core/economy/inventory_capacity.gd` 统一计算当前重量、最大负重、剩余负重和超重诊断；最大负重优先读 actor `combat_attributes.carry_weight`，缺省时按 `50 + (strength - 5) * 10` 派生，并叠加装备 `carry_bonus` / `carry_weight`。拾取、容器拿取、商店直买、交易购物车、制作产物、拆解产物、装备替换和卸下装备都会在状态变更前预检，失败返回 `inventory_over_capacity` 且不扣钱、不挪库存、不消耗材料；背包摘要显示 `当前/上限 kg`，背包、容器、交易和制作面板已有中文负重不足反馈，并由 `InventoryUI` / `ContainerUI` / `TradeUI` / `Crafting` / `Equipment` smoke 覆盖。待补格子限制、多 stack 堆叠上限、超重惩罚、容器自身容量和更完整 UI 预览。
+- 背包负重限制第一版已迁移：`core/economy/inventory_capacity.gd` 统一计算当前重量、最大负重、剩余负重和超重诊断；最大负重优先读 actor `combat_attributes.carry_weight`，缺省时按 `50 + (strength - 5) * 10` 派生，并叠加装备 `carry_bonus` / `carry_weight`。拾取、容器拿取、商店直买、交易购物车、制作产物、拆解产物、装备替换和卸下装备都会在状态变更前预检，失败返回 `inventory_over_capacity` 且不扣钱、不挪库存、不消耗材料；背包摘要显示 `当前/上限 kg`，背包、容器、交易和制作面板已有中文负重不足反馈，并由 `InventoryUI` / `ContainerUI` / `TradeUI` / `Crafting` / `Equipment` smoke 覆盖。容器自身容量第一版已迁移：存放前统一预检 `max_weight` / `max_items` / `max_stacks` 及同义字段，失败返回 `container_over_capacity` 且不修改双方库存。待补背包格子限制、多 stack 堆叠上限、超重惩罚和更完整 UI 预览。
 
 ### 8.2 装备
 
@@ -206,7 +206,7 @@
 - 已有拿取/存放、容器/背包双栏、滚动列表、基础详情文本、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip 和容器/背包双向拖拽转移第一版，并纳入 `ContainerUI` smoke。
 - 待补容器类型：地图容器、尸体容器、掉落容器、商店容器、任务容器的 id、权限和持久化差异。
 - 容器关闭已覆盖 Esc、关闭按钮、目标消失关闭、切换地图关闭和超出距离关闭；空容器提示已覆盖。
-- 基础失败提示已覆盖并纳入 `ContainerUI` smoke：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器、数量非法、拿取后背包负重不足；容器权限第一版已支持 session / map props 的 `locked`、`allow_take`、`allow_store`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`、`required_world_flags` 和 `blocked_world_flags`，拿取、拿钱和存放会统一拒绝并显示中文反馈，钥匙/工具满足时可操作锁定容器，权限字段随存档 roundtrip；已纳入 `ContainerUI` / `Save` smoke。待补钥匙/工具消耗或耐久策略、容器自身容量和更完整权限 UI 预览。
+- 基础失败提示已覆盖并纳入 `ContainerUI` smoke：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器、数量非法、拿取后背包负重不足；容器权限第一版已支持 session / map props 的 `locked`、`allow_take`、`allow_store`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`、`required_world_flags` 和 `blocked_world_flags`，拿取、拿钱和存放会统一拒绝并显示中文反馈，钥匙/工具满足时可操作锁定容器，权限字段随存档 roundtrip；容器自身容量第一版支持重量、总件数、stack/slot 数限制，容量字段随地图对象、交互 session 和存档 roundtrip，超限显示中文反馈；已纳入 `ContainerUI` / `Save` smoke。待补钥匙/工具消耗或耐久策略和更完整权限 UI 预览。
 
 ### 8.4 交易
 
@@ -323,7 +323,7 @@
 - Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏、多树切换、前置链路、下游解锁高亮和目标选择 HUD 预览第一版；待补图形技能树、pan、节点连线和世界目标高亮。
 - Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、批量执行、AP 不足反馈和完成反馈第一版；待补制作队列和取消。
 - Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、buy/sell drop zone 来源提示、稳定拒绝 reason、不可出售禁用态、交易权限禁用预览、装备出售确认和清空；待补 drop zone hover 高亮、drag preview 和更细禁用说明 polish。
-- Container 面板已有空容器提示、容器/背包双栏、滚动、基础详情、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip、双向拖拽转移、背包面板拖入存放、容器锁定/权限失败反馈、钥匙/工具缺失反馈和背包负重不足反馈；待补钥匙/工具消耗或耐久策略、容器自身容量和跨面板拖拽视觉 polish。
+- Container 面板已有空容器提示、容器/背包双栏、滚动、基础详情、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip、双向拖拽转移、背包面板拖入存放、容器锁定/权限失败反馈、钥匙/工具缺失反馈、背包负重不足反馈和容器自身容量超限反馈；待补钥匙/工具消耗或耐久策略和跨面板拖拽视觉 polish。
 
 ## 14. 资产和导入
 
@@ -371,7 +371,7 @@
 - `Combat`：补 LOS、跨层、AOE、友军伤害、战斗退出 decay、远程弹药/reload、暴击 seed。
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、背包使用成功/失败反馈、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；拆分入口禁用说明和 core 稳定拒绝 reason 已有 smoke；待补真正多 stack 拆分、装备属性变化对比和更完整上下文菜单 polish。
-- `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、双向拖拽、背包面板拖入存放、基础失败提示、背包负重限制、容器锁定/权限拒绝和钥匙/工具解锁已有 smoke；待补钥匙/工具消耗或耐久策略、容器自身容量和跨面板拖拽视觉 polish。
+- `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、双向拖拽、背包面板拖入存放、基础失败提示、背包负重限制、容器自身容量限制、容器锁定/权限拒绝和钥匙/工具解锁已有 smoke；待补钥匙/工具消耗或耐久策略和跨面板拖拽视觉 polish。
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售、背包负重限制、拖拽入队、buy/sell drop zone 和 drop zone 来源/拒绝提示已有 smoke；待补 drop zone hover 高亮、drag preview 和更细禁用说明 polish。
 - `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、世界目标高亮、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补多组 hotbar、技能树 pan 和更完整状态 UI。
 - `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版已有 smoke；待补对话交付条件和更完整失败反馈。

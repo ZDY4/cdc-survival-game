@@ -256,6 +256,16 @@ func _copy_optional_container_fields(session: Dictionary, target: Dictionary) ->
 		"required_tools",
 		"required_world_flags",
 		"blocked_world_flags",
+		"max_weight",
+		"max_container_weight",
+		"weight_capacity",
+		"max_items",
+		"max_item_count",
+		"item_capacity",
+		"max_stacks",
+		"max_stack_count",
+		"slot_capacity",
+		"max_slots",
 	]:
 		if target.has(key):
 			session[key] = target.get(key)

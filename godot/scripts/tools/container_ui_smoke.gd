@@ -248,6 +248,38 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("storing unavailable item should report not_enough_items")
 	if not _container_feedback(game_root).contains("背包中没有足够的水瓶"):
 		errors.append("storing unavailable item should show inventory failure feedback")
+	var capacity_store_snapshot: Dictionary = game_root.simulation.container_sessions.duplicate(true)
+	var active_container_before_capacity: String = _active_container_id(game_root)
+	var capacity_store_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	var capacity_store_inventory_before: Dictionary = capacity_store_player.inventory.duplicate(true)
+	var capacity_store_order_before: Array = capacity_store_player.inventory_order.duplicate()
+	game_root.simulation.container_sessions["limited_capacity_container"] = {
+		"container_id": "limited_capacity_container",
+		"display_name": "容量测试容器",
+		"inventory": [{"item_id": "1031", "count": 1}],
+		"money": 0,
+		"max_weight": 0.3,
+	}
+	_set_active_container_id(game_root, "limited_capacity_container")
+	capacity_store_player.inventory["1008"] = 1
+	if not capacity_store_player.inventory_order.has("1008"):
+		capacity_store_player.inventory_order.append("1008")
+	game_root.refresh_container_panel()
+	var container_over_capacity: Dictionary = game_root.store_active_container_item("1008", 1)
+	if str(container_over_capacity.get("reason", "")) != "container_over_capacity" or str(container_over_capacity.get("limit_kind", "")) != "weight":
+		errors.append("storing into overweight container should report container_over_capacity/weight")
+	if not _container_feedback(game_root).contains("容器容量不足"):
+		errors.append("overweight container store should show container capacity feedback")
+	if int(capacity_store_player.inventory.get("1008", 0)) != 1:
+		errors.append("failed container capacity store should keep player item")
+	var limited_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("limited_capacity_container", {}))
+	if _container_entry_count(_array_or_empty(limited_session.get("inventory", [])), "1008") != 0:
+		errors.append("failed container capacity store should not add item to container")
+	game_root.simulation.container_sessions = capacity_store_snapshot.duplicate(true)
+	capacity_store_player.inventory = capacity_store_inventory_before
+	capacity_store_player.inventory_order = capacity_store_order_before
+	_set_active_container_id(game_root, active_container_before_capacity)
+	game_root.refresh_container_panel()
 	var permission_snapshot: Dictionary = game_root.simulation.container_sessions.duplicate(true)
 	var active_container_before_permission: String = _active_container_id(game_root)
 	game_root.simulation.container_sessions["locked_permission_container"] = {
@@ -743,6 +775,20 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
+
+
+func _container_entry_count(entries: Array, item_id: String) -> int:
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("item_id", "")) == item_id:
+			return int(entry_data.get("count", 0))
+	return 0
 
 
 func _container_has_scroll_columns(game_root: Node) -> bool:

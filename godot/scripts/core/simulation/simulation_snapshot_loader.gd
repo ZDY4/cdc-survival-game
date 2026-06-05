@@ -89,6 +89,16 @@ func _load_container_sessions(entries: Variant) -> Dictionary:
 			"required_tools",
 			"required_world_flags",
 			"blocked_world_flags",
+			"max_weight",
+			"max_container_weight",
+			"weight_capacity",
+			"max_items",
+			"max_item_count",
+			"item_capacity",
+			"max_stacks",
+			"max_stack_count",
+			"slot_capacity",
+			"max_slots",
 		])
 		output[container_id] = loaded_session
 	return output
