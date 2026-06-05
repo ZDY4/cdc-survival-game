@@ -8,6 +8,37 @@ var _inventory_capacity := InventoryCapacity.new()
 
 
 func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_id: int, recipe_id: String, recipe_library: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
+	var validation: Dictionary = validate_craft_recipe(simulation, progression_rules, actor_id, recipe_id, recipe_library, crafting_context)
+	if not bool(validation.get("success", false)):
+		return validation
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	var materials: Array[Dictionary] = _array_or_empty(validation.get("materials", []))
+	var output_item_id: String = str(validation.get("output_item_id", ""))
+	var output_count: int = int(validation.get("output_count", 0))
+	for material in materials:
+		_inventory_entries.add_actor_item(actor, str(material.get("item_id", "")), -int(material.get("count", 0)))
+	_inventory_entries.add_actor_item(actor, output_item_id, output_count)
+	simulation.emit_event("recipe_crafted", {
+		"actor_id": actor_id,
+		"recipe_id": recipe_id,
+		"output_item_id": output_item_id,
+		"output_count": output_count,
+		"craft_time": float(validation.get("craft_time", 0.0)),
+		"experience_reward": int(validation.get("experience_reward", 0)),
+	})
+	if int(validation.get("experience_reward", 0)) > 0:
+		simulation.grant_experience(actor_id, int(validation.get("experience_reward", 0)), "recipe:%s" % recipe_id)
+	_mark_recipe_crafted(simulation, actor_id, recipe_id)
+	return {
+		"success": true,
+		"recipe_id": recipe_id,
+		"output_item_id": output_item_id,
+		"output_count": output_count,
+		"craft_time": float(validation.get("craft_time", 0.0)),
+	}
+
+
+func validate_craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_id: int, recipe_id: String, recipe_library: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor"}
@@ -63,25 +94,14 @@ func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_i
 		capacity["output_count"] = output_count
 		return capacity
 
-	for material in materials:
-		_inventory_entries.add_actor_item(actor, str(material.get("item_id", "")), -int(material.get("count", 0)))
-	_inventory_entries.add_actor_item(actor, output_item_id, output_count)
-	simulation.emit_event("recipe_crafted", {
-		"actor_id": actor_id,
+	return {
+		"success": true,
 		"recipe_id": recipe_id,
+		"materials": materials,
 		"output_item_id": output_item_id,
 		"output_count": output_count,
 		"craft_time": float(recipe.get("craft_time", 0.0)),
 		"experience_reward": int(recipe.get("experience_reward", 0)),
-	})
-	if int(recipe.get("experience_reward", 0)) > 0:
-		simulation.grant_experience(actor_id, int(recipe.get("experience_reward", 0)), "recipe:%s" % recipe_id)
-	_mark_recipe_crafted(simulation, actor_id, recipe_id)
-	return {
-		"success": true,
-		"recipe_id": recipe_id,
-		"output_item_id": output_item_id,
-		"output_count": output_count,
 	}
 
 

@@ -95,7 +95,7 @@ Godot 落点：`data/items/*.json`、`godot/scripts/core/economy/**`、`godot/sc
 - [~] 工具要求和工作台要求在 UI 中有初版展示。
 - [ ] 解锁条件：技能、任务、书籍、world flag、地点、工作台。
 - [ ] 运行时工具满足：背包、装备、附近容器、工作台对象。
-- [ ] 制作时间：即时、排队、跨回合、取消、完成事件。
+- [~] 制作时间 / AP：即时制作 AP 成本第一版已按 `craft_time` 接入玩家命令，AP 不足不消耗材料；待补排队、跨回合、取消、完成事件和时间表现。
 - [ ] 批量制作：数量、最大可制作、材料预览、产物合并。
 - [ ] XP 奖励、任务推进、世界 flag。
 参考：`game_data/src/recipe.rs`、`recipe_edit.rs`。

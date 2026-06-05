@@ -31,6 +31,7 @@ const AFFORDABLE_AP_THRESHOLD := 1.0
 const AUTO_TURN_ADVANCE_LIMIT := 8
 const DEFAULT_ATTACK_AP := 2.0
 const DEFAULT_INTERACTION_AP := 1.0
+const CRAFTING_SECONDS_PER_AP := 10.0
 const DEFAULT_ATTACK_RANGE := 1
 const NPC_AGGRO_RANGE := 8
 const COMBAT_EXIT_NO_SIGHT_TURNS := 3
@@ -1062,15 +1063,36 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 
 
 func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary:
-	var cost: float = float(command.get("ap_cost", DEFAULT_INTERACTION_AP))
-	if actor.ap < cost:
-		return {"success": false, "reason": "ap_insufficient"}
-	_spend_ap(actor, cost, "craft")
 	var count: int = max(1, int(command.get("count", 1)))
+	var recipes: Dictionary = _dictionary_or_empty(command.get("recipe_library", {}))
+	var recipe_id := str(command.get("recipe_id", ""))
 	var crafting_context: Dictionary = _dictionary_or_empty(command.get("crafting_context", {}))
+	var validation: Dictionary = _crafting_runner.validate_craft_recipe(self, _progression_rules, actor.actor_id, recipe_id, recipes, crafting_context)
+	if not bool(validation.get("success", false)):
+		return validation
+	var total_cost: float = _craft_command_ap_cost(recipe_id, recipes, count, command)
+	if actor.ap < total_cost:
+		return {
+			"success": false,
+			"reason": "ap_insufficient_craft",
+			"recipe_id": recipe_id,
+			"count": count,
+			"required_ap": total_cost,
+			"available_ap": actor.ap,
+		}
+	var result: Dictionary = {}
 	if count == 1:
-		return craft_recipe(actor.actor_id, str(command.get("recipe_id", "")), _dictionary_or_empty(command.get("recipe_library", {})), crafting_context)
-	return _craft_recipe_batch(actor.actor_id, str(command.get("recipe_id", "")), count, _dictionary_or_empty(command.get("recipe_library", {})), crafting_context)
+		result = craft_recipe(actor.actor_id, recipe_id, recipes, crafting_context)
+	else:
+		result = _craft_recipe_batch(actor.actor_id, recipe_id, count, recipes, crafting_context)
+	if bool(result.get("success", false)) or bool(result.get("partial_success", false)):
+		var completed_count: int = max(1, int(result.get("count", result.get("completed_count", 1))))
+		var spent_cost: float = total_cost if bool(result.get("success", false)) else _craft_command_ap_cost(recipe_id, recipes, completed_count, command)
+		_spend_ap(actor, spent_cost, "craft:%s" % recipe_id)
+		result["ap_cost"] = spent_cost
+		result["ap_remaining"] = actor.ap
+		result["craft_time"] = _recipe_craft_time(recipe_id, recipes) * float(completed_count)
+	return result
 
 
 func _craft_recipe_batch(actor_id: int, recipe_id: String, count: int, recipes: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
@@ -1113,7 +1135,7 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"drop":
 			return drop_actor_item(actor.actor_id, str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"deconstruct":
-			return deconstruct_actor_item(actor.actor_id, str(command.get("item_id", "")), int(command.get("count", 1)), items)
+			return _finalize_player_ap_action(actor, _submit_deconstruct_action(actor, command, items), command, "deconstruct")
 		"split_stack":
 			return _split_actor_inventory_stack(actor, str(command.get("item_id", "")), int(command.get("count", 1)))
 		"reorder_inventory":
@@ -1133,6 +1155,69 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"sell_equipped_shop":
 			return sell_equipped_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("slot_id", "")), str(command.get("item_id", "")), items)
 	return {"success": false, "reason": "unknown_inventory_action"}
+
+
+func _submit_deconstruct_action(actor: RefCounted, command: Dictionary, items: Dictionary) -> Dictionary:
+	var item_id: String = str(command.get("item_id", ""))
+	var count: int = max(1, int(command.get("count", 1)))
+	var cost: float = _deconstruct_command_ap_cost(item_id, items, count, command)
+	if actor.ap < cost:
+		return {
+			"success": false,
+			"reason": "ap_insufficient_deconstruct",
+			"item_id": _inventory_entries.normalize_content_id(item_id),
+			"count": count,
+			"required_ap": cost,
+			"available_ap": actor.ap,
+		}
+	var result: Dictionary = deconstruct_actor_item(actor.actor_id, item_id, count, items)
+	if bool(result.get("success", false)):
+		_spend_ap(actor, cost, "deconstruct:%s" % _inventory_entries.normalize_content_id(item_id))
+		result["ap_cost"] = cost
+		result["ap_remaining"] = actor.ap
+	return result
+
+
+func _craft_command_ap_cost(recipe_id: String, recipes: Dictionary, count: int, command: Dictionary = {}) -> float:
+	if command.has("ap_cost"):
+		return max(0.0, float(command.get("ap_cost", DEFAULT_INTERACTION_AP))) * float(max(1, count))
+	var per_craft_cost: float = _ap_cost_from_seconds(_recipe_craft_time(recipe_id, recipes))
+	return per_craft_cost * float(max(1, count))
+
+
+func _recipe_craft_time(recipe_id: String, recipes: Dictionary) -> float:
+	var record: Dictionary = _dictionary_or_empty(recipes.get(recipe_id, {}))
+	var recipe: Dictionary = _dictionary_or_empty(record.get("data", record))
+	return max(0.0, float(recipe.get("craft_time", 0.0)))
+
+
+func _deconstruct_command_ap_cost(item_id: String, items: Dictionary, count: int, command: Dictionary = {}) -> float:
+	if command.has("ap_cost"):
+		return max(0.0, float(command.get("ap_cost", DEFAULT_INTERACTION_AP))) * float(max(1, count))
+	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
+	var item_record: Dictionary = _dictionary_or_empty(items.get(normalized_item_id, {}))
+	var item_data: Dictionary = _dictionary_or_empty(item_record.get("data", item_record))
+	var crafting_fragment: Dictionary = _item_crafting_fragment(item_data)
+	var per_item_cost: float = DEFAULT_INTERACTION_AP
+	if crafting_fragment.has("deconstruct_ap_cost"):
+		per_item_cost = max(0.0, float(crafting_fragment.get("deconstruct_ap_cost", DEFAULT_INTERACTION_AP)))
+	elif crafting_fragment.has("deconstruct_time"):
+		per_item_cost = _ap_cost_from_seconds(float(crafting_fragment.get("deconstruct_time", 0.0)))
+	return per_item_cost * float(max(1, count))
+
+
+func _item_crafting_fragment(item_data: Dictionary) -> Dictionary:
+	for fragment in _array_or_empty(item_data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) == "crafting":
+			return fragment_data
+	return {}
+
+
+func _ap_cost_from_seconds(seconds: float) -> float:
+	if seconds <= 0.0:
+		return DEFAULT_INTERACTION_AP
+	return max(DEFAULT_INTERACTION_AP, ceil(seconds / CRAFTING_SECONDS_PER_AP))
 
 
 func _split_actor_inventory_stack(actor: RefCounted, item_id: String, count: int) -> Dictionary:

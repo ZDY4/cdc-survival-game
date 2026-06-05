@@ -1204,6 +1204,7 @@ func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 		"count": max(1, count),
 		"recipe_library": registry.get_library("recipes"),
 		"crafting_context": _crafting_context(),
+		"topology": _dictionary_or_empty(world_result.get("map", {})),
 	})
 	refresh_inventory_panel()
 	refresh_crafting_panel()
@@ -1369,6 +1370,7 @@ func _submit_inventory_action(action: Dictionary) -> Dictionary:
 	command["actor_id"] = 1
 	command["item_library"] = registry.get_library("items")
 	command["effect_library"] = registry.get_library("json")
+	command["topology"] = _dictionary_or_empty(world_result.get("map", {}))
 	return simulation.submit_player_command(command)
 
 

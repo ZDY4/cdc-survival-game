@@ -58,6 +58,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	player.inventory["1011"] = 4
 	var batch_events_before := _event_count(simulation.snapshot(), "recipe_crafted")
 	var batch_xp_events_before := _event_count(simulation.snapshot(), "experience_granted")
+	var batch_ap_before: float = player.ap
 	var batch: Dictionary = simulation.submit_player_command({
 		"kind": "craft",
 		"actor_id": 1,
@@ -81,6 +82,24 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("batch crafting should apply experience for each craft")
 	if _event_count(simulation.snapshot(), "experience_granted") != batch_xp_events_before + 2:
 		errors.append("batch crafting experience should emit per craft")
+	if float(batch.get("ap_cost", 0.0)) != 2.0 or not is_equal_approx(player.ap, batch_ap_before - 2.0):
+		errors.append("batch crafting should spend AP based on craft_time")
+	player.inventory["1011"] = 2
+	player.ap = 0.0
+	var insufficient_ap_craft: Dictionary = simulation.submit_player_command({
+		"kind": "craft",
+		"actor_id": 1,
+		"recipe_id": "recipe_bandage_basic",
+		"count": 1,
+		"recipe_library": recipes,
+	})
+	if str(insufficient_ap_craft.get("reason", "")) != "ap_insufficient_craft":
+		errors.append("crafting command should reject when AP is insufficient")
+	if int(player.inventory.get("1011", 0)) != 2:
+		errors.append("AP rejected crafting should not consume materials")
+	if int(player.inventory.get("1006", 0)) != 4:
+		errors.append("AP rejected crafting should not add output")
+	player.ap = 6.0
 
 	var recipe_locked: Dictionary = simulation.craft_recipe(1, "recipe_advanced_knife", recipes)
 	if recipe_locked.get("reason", "") != "recipe_locked":
@@ -232,6 +251,23 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	player.inventory["1008"] = 2
 	player.inventory["1104"] = 0
 	var deconstruct_events_before := _event_count(simulation.snapshot(), "item_deconstructed")
+	player.ap = 0.0
+	var insufficient_ap_deconstruct: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "1008",
+		"count": 2,
+		"item_library": registry.get_library("items"),
+	})
+	if str(insufficient_ap_deconstruct.get("reason", "")) != "ap_insufficient_deconstruct":
+		errors.append("deconstruct command should reject when AP is insufficient")
+	if int(player.inventory.get("1008", 0)) != 2 or int(player.inventory.get("1104", 0)) != 0:
+		errors.append("AP rejected deconstruct should not mutate inventory")
+	if _event_count(simulation.snapshot(), "item_deconstructed") != deconstruct_events_before:
+		errors.append("AP rejected deconstruct should not emit item_deconstructed")
+	player.ap = 6.0
+	var deconstruct_ap_before: float = player.ap
 	var deconstructed: Dictionary = simulation.submit_player_command({
 		"kind": "inventory_action",
 		"actor_id": 1,
@@ -248,6 +284,8 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("deconstructing should add scaled yield items")
 	if _event_count(simulation.snapshot(), "item_deconstructed") != deconstruct_events_before + 1:
 		errors.append("deconstructing should emit item_deconstructed")
+	if float(deconstructed.get("ap_cost", 0.0)) != 2.0 or not is_equal_approx(player.ap, deconstruct_ap_before - 2.0):
+		errors.append("deconstructing should spend AP")
 	var not_deconstructable: Dictionary = simulation.submit_player_command({
 		"kind": "inventory_action",
 		"actor_id": 1,

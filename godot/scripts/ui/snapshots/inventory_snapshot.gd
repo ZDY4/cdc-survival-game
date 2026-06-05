@@ -267,6 +267,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 	match str(feedback.get("reason", "")):
 		"ap_insufficient_use_item":
 			return "AP 不足，使用 %s 需要 %.0f，当前 %.0f。" % [item_name, float(feedback.get("required_ap", 0.0)), float(feedback.get("available_ap", 0.0))]
+		"ap_insufficient_deconstruct":
+			return "AP 不足，拆解 %s 需要 %.0f，当前 %.0f。" % [item_name, float(feedback.get("required_ap", 0.0)), float(feedback.get("available_ap", 0.0))]
 		"not_enough_items":
 			return "背包中没有足够的 %s，需要 %d，当前 %d。" % [item_name, int(feedback.get("required", count)), int(feedback.get("current", 0))]
 		"inventory_over_capacity":

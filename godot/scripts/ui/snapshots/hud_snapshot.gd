@@ -794,6 +794,10 @@ func _failure_reason_text(reason: String) -> String:
 			return "无法到达"
 		"ap_insufficient":
 			return "AP不足"
+		"ap_insufficient_craft":
+			return "AP不足，无法制作"
+		"ap_insufficient_deconstruct":
+			return "AP不足，无法拆解"
 		"ap_insufficient_movement_queued":
 			return "AP不足，移动已排队"
 		"ap_insufficient_interaction_queued":
