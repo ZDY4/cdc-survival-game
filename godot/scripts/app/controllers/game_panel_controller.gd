@@ -297,6 +297,10 @@ func _connect_modal_close_buttons() -> void:
 		var container_transfer := Callable(parent, "transfer_active_container_item")
 		if not container_panel.is_connected("transfer_requested", container_transfer):
 			container_panel.connect("transfer_requested", container_transfer)
+	if container_panel != null and container_panel.has_signal("transfer_all_requested"):
+		var container_transfer_all := Callable(parent, "transfer_all_active_container_items")
+		if not container_panel.is_connected("transfer_all_requested", container_transfer_all):
+			container_panel.connect("transfer_all_requested", container_transfer_all)
 	if dialogue_panel != null and dialogue_panel.has_signal("close_requested"):
 		var dialogue_close := Callable(parent, "close_active_dialogue").bind("button")
 		if not dialogue_panel.is_connected("close_requested", dialogue_close):

@@ -524,8 +524,16 @@ func take_money_from_container(actor_id: int, container_id: String, count: int =
 	return _economy_transactions.take_money_from_container(self, actor_id, container_id, count)
 
 
+func take_all_from_container(actor_id: int, container_id: String, item_library: Dictionary = {}, include_money: bool = true) -> Dictionary:
+	return _economy_transactions.take_all_from_container(self, actor_id, container_id, item_library, include_money)
+
+
 func store_item_in_container(actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
 	return _economy_transactions.store_item_in_container(self, actor_id, container_id, item_id, count, item_library)
+
+
+func store_all_in_container(actor_id: int, container_id: String, item_library: Dictionary = {}) -> Dictionary:
+	return _economy_transactions.store_all_in_container(self, actor_id, container_id, item_library)
 
 
 func drop_actor_item(actor_id: int, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
@@ -1130,8 +1138,12 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 			return take_item_from_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"take_container_money":
 			return take_money_from_container(actor.actor_id, str(command.get("container_id", "")), int(command.get("count", -1)))
+		"take_all_container":
+			return take_all_from_container(actor.actor_id, str(command.get("container_id", "")), items, bool(command.get("include_money", true)))
 		"store_container":
 			return store_item_in_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
+		"store_all_container":
+			return store_all_in_container(actor.actor_id, str(command.get("container_id", "")), items)
 		"drop":
 			return drop_actor_item(actor.actor_id, str(command.get("item_id", "")), int(command.get("count", 1)), items)
 		"deconstruct":

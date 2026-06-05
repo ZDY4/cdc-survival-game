@@ -126,7 +126,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("failed overweight container take should not add item")
 	game_root.simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = capacity_session_before.duplicate(true)
 	capacity_player.inventory = capacity_inventory_before
-	capacity_player.inventory_order = capacity_order_before
+	_restore_inventory_order(capacity_player, capacity_order_before)
 	capacity_player.equipment = capacity_equipment_before
 	game_root.refresh_container_panel()
 
@@ -144,6 +144,67 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("storing zero items should show invalid quantity feedback")
 	if not _container_player_text(game_root).contains("水瓶 x1"):
 		errors.append("invalid store quantity should not mutate player inventory")
+
+	var bulk_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	var bulk_sessions_before: Dictionary = game_root.simulation.container_sessions.duplicate(true)
+	var bulk_active_before: String = _active_container_id(game_root)
+	var bulk_inventory_before: Dictionary = bulk_player.inventory.duplicate(true)
+	var bulk_order_before: Array = bulk_player.inventory_order.duplicate()
+	var bulk_money_before: int = int(bulk_player.money)
+	game_root.simulation.container_sessions["bulk_take_container"] = {
+		"container_id": "bulk_take_container",
+		"display_name": "批量拿取测试容器",
+		"inventory": [
+			{"item_id": "1006", "count": 2},
+			{"item_id": "1031", "count": 1},
+		],
+		"money": 7,
+	}
+	bulk_player.inventory = {}
+	bulk_player.inventory_order.clear()
+	bulk_player.money = 0
+	_set_active_container_id(game_root, "bulk_take_container")
+	game_root.refresh_inventory_panel()
+	game_root.refresh_container_panel()
+	if _container_bulk_button_disabled(game_root, "TakeAllButton"):
+		errors.append("take all button should be enabled for non-empty container")
+	_press_container_bulk_button(game_root, "TakeAllButton")
+	var bulk_take_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("bulk_take_container", {}))
+	if _container_entry_count(_array_or_empty(bulk_take_session.get("inventory", [])), "1006") != 0 or _container_entry_count(_array_or_empty(bulk_take_session.get("inventory", [])), "1031") != 0:
+		errors.append("take all should clear container item inventory")
+	if int(bulk_take_session.get("money", -1)) != 0:
+		errors.append("take all should clear container money")
+	if int(bulk_player.inventory.get("1006", 0)) != 2 or int(bulk_player.inventory.get("1031", 0)) != 1 or int(bulk_player.money) != 7:
+		errors.append("take all should move all container items and money to player")
+	if not _event_seen(game_root, "container_bulk_transferred"):
+		errors.append("take all should emit container_bulk_transferred")
+
+	game_root.simulation.container_sessions["bulk_store_container"] = {
+		"container_id": "bulk_store_container",
+		"display_name": "批量存放测试容器",
+		"inventory": [],
+		"money": 0,
+	}
+	bulk_player.inventory = {"1008": 2, "1006": 1}
+	_restore_inventory_order(bulk_player, ["1008", "1006"])
+	_set_active_container_id(game_root, "bulk_store_container")
+	game_root.refresh_inventory_panel()
+	game_root.refresh_container_panel()
+	if _container_bulk_button_disabled(game_root, "StoreAllButton"):
+		errors.append("store all button should be enabled for non-empty player inventory")
+	_press_container_bulk_button(game_root, "StoreAllButton")
+	var bulk_store_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("bulk_store_container", {}))
+	if _container_entry_count(_array_or_empty(bulk_store_session.get("inventory", [])), "1008") != 2 or _container_entry_count(_array_or_empty(bulk_store_session.get("inventory", [])), "1006") != 1:
+		errors.append("store all should move all player items to container")
+	if int(bulk_player.inventory.get("1008", 0)) != 0 or int(bulk_player.inventory.get("1006", 0)) != 0:
+		errors.append("store all should remove moved items from player inventory")
+	game_root.simulation.container_sessions = bulk_sessions_before.duplicate(true)
+	bulk_player.inventory = bulk_inventory_before
+	_restore_inventory_order(bulk_player, bulk_order_before)
+	bulk_player.money = bulk_money_before
+	_set_active_container_id(game_root, bulk_active_before)
+	game_root.refresh_inventory_panel()
+	game_root.refresh_container_panel()
 
 	if not _press_container_item_with_text(game_root, "container", "抗生素"):
 		errors.append("should select antibiotics in container column")
@@ -277,7 +338,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("failed container capacity store should not add item to container")
 	game_root.simulation.container_sessions = capacity_store_snapshot.duplicate(true)
 	capacity_store_player.inventory = capacity_store_inventory_before
-	capacity_store_player.inventory_order = capacity_store_order_before
+	_restore_inventory_order(capacity_store_player, capacity_store_order_before)
 	_set_active_container_id(game_root, active_container_before_capacity)
 	game_root.refresh_container_panel()
 	var permission_snapshot: Dictionary = game_root.simulation.container_sessions.duplicate(true)
@@ -739,6 +800,19 @@ func _press_container_transfer(game_root: Node) -> void:
 		(button as Button).pressed.emit()
 
 
+func _press_container_bulk_button(game_root: Node, node_name: String) -> void:
+	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/%s" % node_name)
+	if button is Button:
+		(button as Button).pressed.emit()
+
+
+func _container_bulk_button_disabled(game_root: Node, node_name: String) -> bool:
+	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/%s" % node_name)
+	if button is Button:
+		return bool((button as Button).disabled)
+	return true
+
+
 func _container_transfer_button_text(game_root: Node) -> String:
 	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/TransferButton")
 	if button is Button:
@@ -789,6 +863,16 @@ func _container_entry_count(entries: Array, item_id: String) -> int:
 		if str(entry_data.get("item_id", "")) == item_id:
 			return int(entry_data.get("count", 0))
 	return 0
+
+
+func _restore_inventory_order(actor: RefCounted, order: Array) -> void:
+	if actor == null:
+		return
+	actor.inventory_order.clear()
+	for item_id in order:
+		var normalized_item_id := str(item_id)
+		if not normalized_item_id.is_empty():
+			actor.inventory_order.append(normalized_item_id)
 
 
 func _container_has_scroll_columns(game_root: Node) -> bool:

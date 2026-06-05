@@ -144,6 +144,39 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 	}
 
 
+func take_all_from_container(simulation: RefCounted, actor_id: int, container_id: String, item_library: Dictionary = {}, include_money: bool = true) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var normalized_container_id: String = str(container_id)
+	var container: Dictionary = _dictionary_or_empty(simulation.container_sessions.get(normalized_container_id, {}))
+	if container.is_empty():
+		return {"success": false, "reason": "unknown_container", "container_id": normalized_container_id}
+
+	var transfers: Array[Dictionary] = []
+	var failures: Array[Dictionary] = []
+	for entry in _array_or_empty(container.get("inventory", [])).duplicate(true):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var item_id: String = _inventory_entries.normalize_content_id(entry_data.get("item_id", ""))
+		var count: int = max(0, int(entry_data.get("count", 0)))
+		if item_id.is_empty() or count <= 0:
+			continue
+		var result: Dictionary = take_item_from_container(simulation, actor_id, normalized_container_id, item_id, count, item_library)
+		if bool(result.get("success", false)):
+			transfers.append(result)
+		else:
+			failures.append(result)
+	if include_money:
+		var money_available: int = max(0, int(_dictionary_or_empty(simulation.container_sessions.get(normalized_container_id, {})).get("money", 0)))
+		if money_available > 0:
+			var money_result: Dictionary = take_money_from_container(simulation, actor_id, normalized_container_id, -1)
+			if bool(money_result.get("success", false)):
+				transfers.append(money_result)
+			else:
+				failures.append(money_result)
+	return _bulk_container_result(simulation, actor_id, normalized_container_id, "take_all", transfers, failures)
+
+
 func store_item_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:
@@ -204,6 +237,73 @@ func store_item_in_container(simulation: RefCounted, actor_id: int, container_id
 		"item_id": normalized_item_id,
 		"count": transfer_count,
 	}
+
+
+func store_all_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_library: Dictionary = {}) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	var normalized_container_id: String = str(container_id)
+	var container: Dictionary = _dictionary_or_empty(simulation.container_sessions.get(normalized_container_id, {}))
+	if container.is_empty():
+		return {"success": false, "reason": "unknown_container", "container_id": normalized_container_id}
+
+	var transfers: Array[Dictionary] = []
+	var failures: Array[Dictionary] = []
+	for item_id_key in actor.inventory.keys().duplicate():
+		var item_id: String = _inventory_entries.normalize_content_id(item_id_key)
+		var count: int = max(0, int(actor.inventory.get(item_id_key, 0)))
+		if item_id.is_empty() or count <= 0:
+			continue
+		var result: Dictionary = store_item_in_container(simulation, actor_id, normalized_container_id, item_id, count, item_library)
+		if bool(result.get("success", false)):
+			transfers.append(result)
+		else:
+			failures.append(result)
+	return _bulk_container_result(simulation, actor_id, normalized_container_id, "store_all", transfers, failures)
+
+
+func _bulk_container_result(simulation: RefCounted, actor_id: int, container_id: String, action: String, transfers: Array[Dictionary], failures: Array[Dictionary]) -> Dictionary:
+	var transferred_count: int = _bulk_transfer_item_count(transfers)
+	var result := {
+		"success": not transfers.is_empty(),
+		"partial_success": not transfers.is_empty() and not failures.is_empty(),
+		"reason": "" if failures.is_empty() else str(_dictionary_or_empty(failures[0]).get("reason", "")),
+		"action": action,
+		"actor_id": actor_id,
+		"container_id": container_id,
+		"transfers": transfers,
+		"failures": failures,
+		"transfer_count": transfers.size(),
+		"failed_count": failures.size(),
+		"item_count": transferred_count,
+	}
+	if transfers.is_empty() and failures.is_empty():
+		result["success"] = false
+		result["reason"] = "container_empty" if action == "take_all" else "inventory_empty"
+	if not failures.is_empty():
+		var first_failure: Dictionary = _dictionary_or_empty(failures[0])
+		for key in first_failure.keys():
+			if not result.has(key):
+				result[key] = first_failure[key]
+	if not transfers.is_empty():
+		simulation.emit_event("container_bulk_transferred", {
+			"actor_id": actor_id,
+			"container_id": container_id,
+			"action": action,
+			"transfer_count": transfers.size(),
+			"failed_count": failures.size(),
+			"item_count": transferred_count,
+			"partial_success": not failures.is_empty(),
+		})
+	return result
+
+
+func _bulk_transfer_item_count(transfers: Array[Dictionary]) -> int:
+	var total := 0
+	for transfer in transfers:
+		total += max(0, int(_dictionary_or_empty(transfer).get("count", 0)))
+	return total
 
 
 func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: int, container_id: String, container: Dictionary, action: String) -> Dictionary:

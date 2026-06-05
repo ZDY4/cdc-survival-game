@@ -584,6 +584,7 @@ Godot 落点：`godot/scripts/core/economy/equipment_*.gd`、`godot/scripts/worl
 - [x] 容器关闭：Esc、关闭按钮、目标消失、地图切换和超出距离已纳入 `ContainerUI` / `UIToggle` smoke。
 - [x] 空容器提示，已纳入 `ContainerUI` smoke。
 - [x] 基础失败提示：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器，已纳入 `ContainerUI` smoke。
+- [~] take/store all：容器面板“全部拿取 / 全部存放”第一版已迁入，复用单项容器事务，批量成功、部分成功和事件已纳入 `ContainerUI` smoke；待补批量操作视觉 polish。
 - [~] 高级失败提示：非法数量、背包负重限制、容器自身容量和权限不足已有第一版中文反馈；待补格子限制、多 stack 和更完整权限预览。
 
 参考：`game_ui/container_ui/**`、`interaction_behaviors/open_container.rs`。
@@ -885,7 +886,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [ ] `Combat`：LOS、跨层、AOE、友军伤害、reload、miss/evasion、armor、seed。
 - [ ] `AI`：开门、重规划、感知丢失、技能、治疗、settlement life。
 - [~] `InventoryUI`：顺序/名称/重量/价值排序、顺序视图拖拽重排、拖到装备/丢弃按钮、右键使用/装备/丢弃菜单、筛选、搜索、详情、消耗品使用、选中物品装备/丢弃、丢弃数量和任务/关键物品禁用第一版已覆盖；待补完整上下文菜单项、数量弹窗、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
-- [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、双向拖拽、背包负重限制、容器自身容量和权限等高级错误已覆盖；待补钥匙/工具消耗或耐久策略和跨面板拖拽视觉 polish。
+- [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、全部拿取/全部存放、双向拖拽、背包负重限制、容器自身容量和权限等高级错误已覆盖；待补钥匙/工具消耗或耐久策略和跨面板拖拽视觉 polish。
 - [~] `TradeUI`：店铺/玩家双栏、数量直买直卖、价格预览、资金/库存失败提示、购物车、批量确认和无部分成交已覆盖；待补装备出售、不可出售和拖拽。
 - [ ] `SkillsUI`：技能树、hotbar、多槽、目标预览、cooldown。
 - [ ] `JournalUI`：任务详情、追踪、对话交付、完成反馈。

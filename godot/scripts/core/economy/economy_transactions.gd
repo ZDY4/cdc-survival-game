@@ -39,8 +39,16 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 	return _container_transactions.take_money_from_container(simulation, actor_id, container_id, count)
 
 
+func take_all_from_container(simulation: RefCounted, actor_id: int, container_id: String, item_library: Dictionary = {}, include_money: bool = true) -> Dictionary:
+	return _container_transactions.take_all_from_container(simulation, actor_id, container_id, item_library, include_money)
+
+
 func store_item_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
 	return _container_transactions.store_item_in_container(simulation, actor_id, container_id, item_id, count, item_library)
+
+
+func store_all_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_library: Dictionary = {}) -> Dictionary:
+	return _container_transactions.store_all_in_container(simulation, actor_id, container_id, item_library)
 
 
 func drop_actor_item(simulation: RefCounted, actor_id: int, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:

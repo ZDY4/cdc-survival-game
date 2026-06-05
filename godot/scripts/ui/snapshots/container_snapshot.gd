@@ -153,6 +153,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 	var item_name := _feedback_item_name(feedback)
 	var required := int(feedback.get("required", feedback.get("count", 1)))
 	var current := int(feedback.get("current", 0))
+	if bool(feedback.get("partial_success", false)):
+		return _bulk_partial_text(feedback)
 	match str(feedback.get("reason", "")):
 		"container_inventory_insufficient":
 			return "容器中没有足够的%s，需要 %d，当前 %d。" % [item_name, required, current]
@@ -177,6 +179,10 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "当前角色不可用，无法操作容器。"
 		"active_container_missing":
 			return "没有打开的容器。"
+		"container_empty":
+			return "容器中没有可拿取的物品。"
+		"inventory_empty":
+			return "背包中没有可存放的物品。"
 		"invalid_quantity":
 			return "数量无效，请输入大于 0 的数量。"
 		"container_locked":
@@ -221,6 +227,17 @@ func _container_capacity_text(item_name: String, feedback: Dictionary) -> String
 	return "容器容量不足，无法存放%s。" % item_name
 
 
+func _bulk_partial_text(feedback: Dictionary) -> String:
+	var failures: Array = _array_or_empty(feedback.get("failures", []))
+	var failed_text := str(feedback.get("reason", ""))
+	if not failures.is_empty():
+		failed_text = _feedback_text(_dictionary_or_empty(failures[0]))
+	return "已完成部分转移（%d 项），但后续失败：%s" % [
+		int(feedback.get("transfer_count", 0)),
+		failed_text,
+	]
+
+
 func _feedback_item_name(feedback: Dictionary) -> String:
 	var item_id := _normalize_content_id(feedback.get("item_id", ""))
 	if item_id.is_empty():
@@ -233,6 +250,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _normalize_content_id(value: Variant) -> String:

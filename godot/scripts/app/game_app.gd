@@ -740,6 +740,25 @@ func take_active_container_money(count: int = -1) -> Dictionary:
 	return result
 
 
+func take_all_active_container_items() -> Dictionary:
+	var container_id: String = _active_container_id()
+	if container_id.is_empty():
+		var missing_result := {"success": false, "reason": "active_container_missing"}
+		_record_container_feedback(missing_result, "take_all_container", "", "", 0)
+		return missing_result
+	var result: Dictionary = _submit_inventory_action({
+		"action": "take_all_container",
+		"container_id": container_id,
+		"include_money": true,
+	})
+	_record_container_feedback(result, "take_all_container", container_id, str(result.get("item_id", "")), int(result.get("count", 0)))
+	refresh_inventory_panel()
+	refresh_container_panel()
+	refresh_journal_panel()
+	refresh_hud()
+	return result
+
+
 func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
@@ -758,6 +777,22 @@ func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func store_all_active_container_items() -> Dictionary:
+	var container_id: String = _active_container_id()
+	if container_id.is_empty():
+		var missing_result := {"success": false, "reason": "active_container_missing"}
+		_record_container_feedback(missing_result, "store_all_container", "", "", 0)
+		return missing_result
+	var result: Dictionary = _submit_inventory_action({
+		"action": "store_all_container",
+		"container_id": container_id,
+	})
+	_record_container_feedback(result, "store_all_container", container_id, str(result.get("item_id", "")), int(result.get("count", 0)))
+	refresh_inventory_panel()
+	refresh_container_panel()
+	return result
+
+
 func transfer_active_container_item(source: String, item_id: String, count: int = 1) -> Dictionary:
 	match source:
 		"container":
@@ -766,6 +801,16 @@ func transfer_active_container_item(source: String, item_id: String, count: int 
 			return take_active_container_item(item_id, count)
 		"player":
 			return store_active_container_item(item_id, count)
+		_:
+			return {"success": false, "reason": "unknown_container_transfer_source", "source": source}
+
+
+func transfer_all_active_container_items(source: String) -> Dictionary:
+	match source:
+		"container":
+			return take_all_active_container_items()
+		"player":
+			return store_all_active_container_items()
 		_:
 			return {"success": false, "reason": "unknown_container_transfer_source", "source": source}
 
@@ -1375,7 +1420,7 @@ func _submit_inventory_action(action: Dictionary) -> Dictionary:
 
 
 func _record_container_feedback(result: Dictionary, action: String, container_id: String, item_id: String, count: int) -> void:
-	if bool(result.get("success", false)):
+	if bool(result.get("success", false)) and not bool(result.get("partial_success", false)):
 		active_container_feedback = {}
 		return
 	active_container_feedback = result.duplicate(true)

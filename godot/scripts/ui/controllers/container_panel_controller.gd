@@ -2,6 +2,7 @@ extends Control
 
 signal close_requested
 signal transfer_requested(source: String, item_id: String, count: int)
+signal transfer_all_requested(source: String)
 
 var _panel: PanelContainer
 var _title_label: Label
@@ -15,10 +16,14 @@ var _quantity_minus_button: Button
 var _quantity_plus_button: Button
 var _quantity_all_button: Button
 var _transfer_button: Button
+var _take_all_button: Button
+var _store_all_button: Button
 var _items_box: VBoxContainer
 var _player_items_box: VBoxContainer
 var _selected_source: String = ""
 var _selected_item_id: String = ""
+var _container_transferable_count := 0
+var _player_transferable_count := 0
 
 
 func _ready() -> void:
@@ -43,6 +48,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.has("error"):
 		_title_label.text = "Container %s" % snapshot.get("container_id", "")
 		_summary_label.text = "容器资源不可用: %s" % snapshot.get("error", "unknown")
+		_container_transferable_count = 0
+		_player_transferable_count = 0
 		_apply_feedback({})
 		_apply_detail({}, "")
 		_clear_items()
@@ -57,6 +64,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_clear_box(_items_box)
 	_clear_box(_player_items_box)
 	var items: Array = snapshot.get("items", [])
+	_container_transferable_count = items.size()
 	if items.is_empty():
 		_items_box.add_child(_empty_line())
 	else:
@@ -64,6 +72,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 			var item_data: Dictionary = item
 			_items_box.add_child(_item_line(item_data, "container"))
 	var player_items: Array = snapshot.get("player_items", [])
+	_player_transferable_count = player_items.size()
 	if player_items.is_empty():
 		_player_items_box.add_child(_empty_inventory_line())
 	else:
@@ -143,12 +152,32 @@ func _build_layout() -> void:
 			return
 		transfer_requested.emit(_selected_source, _selected_item_id, int(_quantity_spin.value))
 	)
+	_take_all_button = Button.new()
+	_take_all_button.name = "TakeAllButton"
+	_take_all_button.text = "全部拿取"
+	_take_all_button.tooltip_text = "拿取容器中的全部物品和金钱"
+	_take_all_button.focus_mode = Control.FOCUS_NONE
+	_take_all_button.disabled = true
+	_take_all_button.pressed.connect(func() -> void:
+		transfer_all_requested.emit("container")
+	)
+	_store_all_button = Button.new()
+	_store_all_button.name = "StoreAllButton"
+	_store_all_button.text = "全部存放"
+	_store_all_button.tooltip_text = "存放背包中的全部物品"
+	_store_all_button.focus_mode = Control.FOCUS_NONE
+	_store_all_button.disabled = true
+	_store_all_button.pressed.connect(func() -> void:
+		transfer_all_requested.emit("player")
+	)
 	transfer_controls.add_child(_quantity_spin)
 	transfer_controls.add_child(_quantity_minus_button)
 	transfer_controls.add_child(_quantity_plus_button)
 	transfer_controls.add_child(_quantity_all_button)
 	transfer_controls.add_child(_quantity_label)
 	transfer_controls.add_child(_transfer_button)
+	transfer_controls.add_child(_take_all_button)
+	transfer_controls.add_child(_store_all_button)
 	var columns := HBoxContainer.new()
 	columns.name = "ItemColumns"
 	columns.add_theme_constant_override("separation", 12)
@@ -378,6 +407,12 @@ func _sync_quantity_controls() -> void:
 		_quantity_spin.tooltip_text = "转移数量：%d / %d" % [count, available] if has_selection else "先选择容器或背包中的物品"
 	var action := _transfer_button.text
 	_transfer_button.tooltip_text = "%s %s x%d" % [action, _selected_item_id, count] if has_selection else "先选择要转移的物品"
+	if _take_all_button != null:
+		_take_all_button.disabled = _container_transferable_count <= 0
+		_take_all_button.tooltip_text = "拿取容器中的全部物品和金钱" if _container_transferable_count > 0 else "容器中没有可拿取的物品"
+	if _store_all_button != null:
+		_store_all_button.disabled = _player_transferable_count <= 0
+		_store_all_button.tooltip_text = "存放背包中的全部物品" if _player_transferable_count > 0 else "背包中没有可存放的物品"
 
 
 func _adjust_transfer_quantity(delta: int) -> void:
