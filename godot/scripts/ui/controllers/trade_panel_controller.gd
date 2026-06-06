@@ -231,15 +231,19 @@ func _build_layout() -> void:
 	cart_drop_zones.add_theme_constant_override("separation", 8)
 	cart_drop_zones.add_child(_cart_drop_zone(
 		"BuyDropZone",
-		"购买区\n店铺物品",
+		"购买区",
 		"buy",
-		"拖到这里购买\n接受店铺栏物品；拒绝背包/装备出售源"
+		"接受店铺栏物品",
+		"拒绝背包/装备出售源",
+		"buy_zone_requires_shop_source"
 	))
 	cart_drop_zones.add_child(_cart_drop_zone(
 		"SellDropZone",
-		"出售区\n背包/装备",
+		"出售区",
 		"sell",
-		"拖到这里出售\n接受背包或装备栏物品；拒绝店铺购买源"
+		"接受背包或装备栏物品",
+		"拒绝店铺购买源",
+		"sell_zone_requires_player_or_equipment_source"
 	))
 	var cart_scroll := ScrollContainer.new()
 	cart_scroll.name = "CartScroll"
@@ -428,12 +432,15 @@ func _get_trade_item_drag_data(_position: Vector2, from_control: Control) -> Var
 		return null
 	var preview := Label.new()
 	preview.text = "%s x%d" % [item.get("name", item.get("item_id", "")), int(item.get("count", 0))]
+	preview.name = "TradeDragPreview"
+	preview.set_meta("trade_drag_preview_text", preview.text)
 	set_drag_preview(preview)
 	return {
 		"kind": "trade_item",
 		"source": source,
 		"item": item.duplicate(true),
 		"count": int(_quantity_spin.value if _quantity_spin != null else 1),
+		"drag_preview_text": preview.text,
 	}
 
 
@@ -451,14 +458,21 @@ func _can_drop_cart_data(_position: Vector2, data: Variant, _from_control: Contr
 		"trade_item":
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 			var source: String = str(drag_data.get("source", ""))
-			return not item.is_empty() and _item_can_trade(item, source) and _drag_source_matches_drop_zone(source, _from_control)
+			var accepted := not item.is_empty() and _item_can_trade(item, source) and _drag_source_matches_drop_zone(source, _from_control)
+			_update_drop_zone_drag_state(_from_control, source, accepted)
+			return accepted
 		"inventory_item":
 			var item: Dictionary = _trade_item_from_inventory_drag(drag_data)
-			return not item.is_empty() and _item_can_trade(item, "player") and _drag_source_matches_drop_zone("player", _from_control)
+			var accepted := not item.is_empty() and _item_can_trade(item, "player") and _drag_source_matches_drop_zone("player", _from_control)
+			_update_drop_zone_drag_state(_from_control, "player", accepted)
+			return accepted
 		"trade_cart_entry":
 			var from_index: int = int(drag_data.get("index", -1))
-			return from_index >= 0 and from_index < _cart_entries.size()
+			var accepted := from_index >= 0 and from_index < _cart_entries.size() and not _is_trade_drop_zone(_from_control)
+			_update_drop_zone_drag_state(_from_control, "cart", accepted)
+			return accepted
 		_:
+			_update_drop_zone_drag_state(_from_control, "", false)
 			return false
 
 
@@ -615,10 +629,13 @@ func _get_cart_entry_drag_data(_position: Vector2, from_control: Control) -> Var
 		entry.get("name", entry.get("item_id", "")),
 		int(entry.get("count", 0)),
 	]
+	preview.name = "TradeCartDragPreview"
+	preview.set_meta("trade_drag_preview_text", preview.text)
 	set_drag_preview(preview)
 	return {
 		"kind": "trade_cart_entry",
 		"index": index,
+		"drag_preview_text": preview.text,
 	}
 
 
@@ -696,28 +713,87 @@ func _remove_cart_entry(index: int) -> void:
 	_update_cart_line()
 
 
-func _cart_drop_zone(node_name: String, text: String, zone: String, tooltip: String) -> PanelContainer:
+func _cart_drop_zone(node_name: String, title: String, zone: String, accept_text: String, reject_text: String, reject_reason: String) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.name = node_name
 	panel.custom_minimum_size = Vector2(286, 42)
+	var tooltip := "拖到这里%s\n%s；%s" % [
+		"购买" if zone == "buy" else "出售",
+		accept_text,
+		reject_text,
+	]
 	panel.tooltip_text = tooltip
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.set_meta("trade_drop_zone", zone)
 	panel.set_meta("trade_drop_accepts", "shop" if zone == "buy" else "player,equipment")
-	panel.set_meta("trade_drop_reject_reason", "buy_zone_requires_shop_source" if zone == "buy" else "sell_zone_requires_player_or_equipment_source")
+	panel.set_meta("trade_drop_accept_text", accept_text)
+	panel.set_meta("trade_drop_reject_text", reject_text)
+	panel.set_meta("trade_drop_reject_reason", reject_reason)
+	panel.set_meta("trade_drop_idle_text", "%s\n%s" % [title, accept_text])
+	panel.set_meta("trade_drop_hover_text", "%s\n%s；%s" % [title, accept_text, reject_text])
+	panel.set_meta("trade_drop_last_preview_text", "")
+	panel.set_meta("trade_drop_last_accept", false)
+	panel.set_meta("trade_drop_last_source", "")
 	panel.set_drag_forwarding(
 		Callable(self, "_empty_trade_drag_data"),
 		Callable(self, "_can_drop_cart_data"),
 		Callable(self, "_drop_cart_data")
 	)
+	panel.mouse_entered.connect(func() -> void:
+		_set_drop_zone_hovered(panel, true)
+	)
+	panel.mouse_exited.connect(func() -> void:
+		_set_drop_zone_hovered(panel, false)
+	)
+	panel.add_theme_stylebox_override("panel", _drop_zone_style(Color(0.12, 0.16, 0.18, 0.92), Color(0.32, 0.47, 0.43, 1.0)))
 	var label := _label("%sLabel" % node_name)
-	label.text = text
+	label.text = str(panel.get_meta("trade_drop_idle_text", ""))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.tooltip_text = tooltip
 	label.custom_minimum_size = Vector2(0, 38)
 	panel.add_child(label)
 	return panel
+
+
+func _set_drop_zone_hovered(panel: PanelContainer, hovered: bool) -> void:
+	if panel == null:
+		return
+	panel.set_meta("trade_drop_hovered", hovered)
+	var label: Label = panel.get_child(0) as Label if panel.get_child_count() > 0 else null
+	if label != null:
+		label.text = str(panel.get_meta("trade_drop_hover_text" if hovered else "trade_drop_idle_text", ""))
+	var background := Color(0.15, 0.20, 0.22, 0.96) if hovered else Color(0.12, 0.16, 0.18, 0.92)
+	var border := Color(0.63, 0.80, 0.67, 1.0) if hovered else Color(0.32, 0.47, 0.43, 1.0)
+	panel.add_theme_stylebox_override("panel", _drop_zone_style(background, border))
+
+
+func _update_drop_zone_drag_state(from_control: Control, source: String, accepted: bool) -> void:
+	if not _is_trade_drop_zone(from_control):
+		return
+	var reason := "" if accepted else str(from_control.get_meta("trade_drop_reject_reason", ""))
+	var source_text := _source_display(source) if not source.is_empty() else "未知来源"
+	var preview_text := "可放入：%s" % source_text if accepted else "不可放入：%s | %s" % [source_text, reason]
+	from_control.set_meta("trade_drop_last_source", source)
+	from_control.set_meta("trade_drop_last_accept", accepted)
+	from_control.set_meta("trade_drop_last_preview_text", preview_text)
+
+
+func _is_trade_drop_zone(control: Control) -> bool:
+	return control != null and control.has_meta("trade_drop_zone")
+
+
+func _drop_zone_style(background: Color, border: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	style.content_margin_left = 8
+	style.content_margin_right = 8
+	style.content_margin_top = 4
+	style.content_margin_bottom = 4
+	return style
 
 
 func _drag_source_matches_drop_zone(source: String, from_control: Control) -> bool:

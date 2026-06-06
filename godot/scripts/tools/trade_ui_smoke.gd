@@ -53,6 +53,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("buy drop zone tooltip should explain accepted and rejected sources")
 	if not _trade_zone_tooltip(game_root, "SellDropZone").contains("接受背包或装备栏物品") or not _trade_zone_tooltip(game_root, "SellDropZone").contains("拒绝店铺"):
 		errors.append("sell drop zone tooltip should explain accepted and rejected sources")
+	if not _trade_zone_label_text(game_root, "BuyDropZone").contains("接受店铺栏物品"):
+		errors.append("buy drop zone should show accepted source in visible label")
+	if not _trade_zone_label_text(game_root, "SellDropZone").contains("接受背包或装备栏物品"):
+		errors.append("sell drop zone should show accepted source in visible label")
+	if _trade_zone_meta_text(game_root, "BuyDropZone", "trade_drop_accept_text") != "接受店铺栏物品":
+		errors.append("buy drop zone should expose stable accept text metadata")
+	if _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_reject_text") != "拒绝店铺购买源":
+		errors.append("sell drop zone should expose stable reject text metadata")
 	if _trade_zone_reject_reason(game_root, "BuyDropZone") != "buy_zone_requires_shop_source":
 		errors.append("buy drop zone should expose stable reject reason metadata")
 	if _trade_zone_reject_reason(game_root, "SellDropZone") != "sell_zone_requires_player_or_equipment_source":
@@ -174,6 +182,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("sell drop zone should reject shop buy item")
 	if _can_drop_trade_item_to_zone(game_root, "shop", "绷带", "SellDropZone"):
 		errors.append("sell drop zone can_drop should reject shop buy item")
+	if _trade_zone_last_accept(game_root, "SellDropZone"):
+		errors.append("sell drop zone should record rejected shop drag")
+	if _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_source") != "shop":
+		errors.append("sell drop zone should remember rejected drag source")
+	if not _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_preview_text").contains("sell_zone_requires_player_or_equipment_source"):
+		errors.append("sell drop zone should expose last reject preview text")
 	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
 		errors.append("should drag shop bandage back to cart after zone rejection")
 	if not _drop_trade_item_with_text_on_cart_entry(game_root, "shop", "绷带", 0):
@@ -193,6 +207,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should drag player bandage to sell drop zone")
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
 		errors.append("sell drop zone should queue cart sell")
+	if not _can_drop_trade_item_to_zone(game_root, "player", "绷带", "SellDropZone"):
+		errors.append("sell drop zone can_drop should accept player sell item")
+	if not _trade_zone_last_accept(game_root, "SellDropZone"):
+		errors.append("sell drop zone should record accepted player drag")
+	if not _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_preview_text").contains("可放入：背包"):
+		errors.append("sell drop zone should expose accepted player preview text")
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
 	if not _drop_trade_item_to_zone(game_root, "player", "绷带", "BuyDropZone"):
 		errors.append("should attempt dragging player bandage to buy drop zone")
@@ -200,6 +220,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("buy drop zone should reject player sell item")
 	if _can_drop_trade_item_to_zone(game_root, "player", "绷带", "BuyDropZone"):
 		errors.append("buy drop zone can_drop should reject player sell item")
+	if _trade_zone_last_accept(game_root, "BuyDropZone"):
+		errors.append("buy drop zone should record rejected player drag")
+	if not _trade_zone_meta_text(game_root, "BuyDropZone", "trade_drop_last_preview_text").contains("buy_zone_requires_shop_source"):
+		errors.append("buy drop zone should expose last reject preview text")
 	if not _drop_inventory_item_to_trade_cart(game_root, "绷带"):
 		errors.append("should drag inventory bandage to trade cart")
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
@@ -745,6 +769,30 @@ func _trade_item_disabled(game_root: Node, source: String, text: String) -> bool
 func _trade_zone_tooltip(game_root: Node, zone_name: String) -> String:
 	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
 	return "" if not target is Control else str((target as Control).tooltip_text)
+
+
+func _trade_zone_label_text(game_root: Node, zone_name: String) -> String:
+	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
+	if target == null:
+		return ""
+	var label: Node = target.get_child(0) if target.get_child_count() > 0 else null
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _trade_zone_meta_text(game_root: Node, zone_name: String, key: String) -> String:
+	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
+	if target == null or not target.has_meta(key):
+		return ""
+	return str(target.get_meta(key))
+
+
+func _trade_zone_last_accept(game_root: Node, zone_name: String) -> bool:
+	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
+	if target == null or not target.has_meta("trade_drop_last_accept"):
+		return false
+	return bool(target.get_meta("trade_drop_last_accept"))
 
 
 func _trade_zone_reject_reason(game_root: Node, zone_name: String) -> String:
