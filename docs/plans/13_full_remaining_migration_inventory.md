@@ -270,7 +270,17 @@
 
 ## 12. 世界表现、渲染和相机
 
-### 12.1 地图和 tile 表现
+### 12.1 动作表现队列 / WorldActionPresenter
+
+- 待新增 Godot 原生动作表现层，建议落点为 `godot/scripts/world/world_action_presenter.gd` 或同职责模块，由 `godot/scripts/app` 在玩家命令成功后调用；它只消费 `Simulation.submit_player_command()` 返回的 `events`、`path`、`runtime_snapshot_delta` 和当前 world 节点，不决定移动、攻击、交互、任务、背包或战斗结果。
+- 待补移动逐格表现：当前 `Simulation` 会立即把 actor `grid_position` 结算到最终格，并发出 `movement_step` / `actor_moved`；`WorldSceneRenderer` 重建时只读取最终 snapshot，导致视觉瞬移。表现层应在最终刷新前按 `result.path` 或 `movement_step` 队列逐格 tween actor node，包含转向、当前格到下一格插值、AP 内/跨回合 pending 段落、自动开门步骤和移动取消后的表现清理。
+- 待补攻击表现队列：消费 `attack_resolved`、`on_hit_effect_applied`、`actor_defeated`、`corpse_created`、`combat_started` / `combat_ended`，按顺序播放转向、近战挥击或远程开火、命中/未命中/格挡/暴击反馈、状态效果图标更新、伤害飘字、死亡/尸体出现和战斗 HUD 刷新；最终血量、死亡和掉落仍以 core snapshot 为准。
+- 待补交互表现队列：消费 `interaction_succeeded`、`pickup_granted`、`container_opened`、`door_toggled`、`door_auto_opened`、`scene_transition`、`dialogue_started`、`trade_started` 等事件；播放靠近/使用/拾取/开门/打开容器/开始对话/切图过渡，再触发对应 UI 面板或地图刷新，避免先显示最终结果再补动画。
+- 待补表现期间输入和 UI blocker：动作表现播放中应短暂阻止新的世界点击、hotbar 和面板快捷动作，或按旧 Rust 规则允许排队/取消；blocker 状态需进入 `runtime_control` / HUD debug，Esc 是否取消表现、是否取消 pending、是否自动结束回合要按动作类型明确。
+- 待补刷新时机：动作表现开始前可局部更新 hover / selection，但不要立刻全量重建 actor 到最终位置；表现结束后再调用现有 world refresh、面板刷新和 target selection 清理。跨地图、击杀移除 actor、打开容器/对话等必须有“动画完成 -> 刷新最终 snapshot -> 打开 UI”的稳定顺序。
+- 待补 smoke / 验收：扩展 `PlayerInteraction` / `Movement` / `Combat` / `Interaction` / `Scene` smoke，断言命令 result 中可生成 action presentation queue，移动队列包含每格 from/to 和持续时间，攻击队列包含 windup/impact/feedback/death 阶段，交互队列包含 door/pickup/container/dialogue 阶段；必要时增加 headless fast-forward 模式，不依赖真实帧率但能验证顺序和最终 snapshot 一致。
+
+### 12.2 地图和 tile 表现
 
 - glTF 资产已迁入 `godot/assets`，但待确认所有地图对象都按 asset id 正确实例化，不再退化成重叠方块。
 - 待补 world tile instancing 等价：地面、坡道、悬崖、建筑墙、建筑地板、prop、container、door、trigger 的资源选择。
@@ -278,7 +288,7 @@
 - 待补碰撞体和 picking 体分离：视觉模型、阻挡碰撞、鼠标命中、交互命中不应互相污染。
 - 待补地图对象 LOD / batch / instance 性能策略，以 Godot 原生 MultiMesh 或场景实例实现。
 
-### 12.2 角色、装备和尸体表现
+### 12.3 角色、装备和尸体表现
 
 - actor 朝向第一版已迁移：`WorldSnapshotBuilder` 会从最近 `actor_moved` 和 `attack_resolved` 事件派生 actor `facing` / `facing_direction` / `facing_yaw_degrees`，`WorldSceneRenderer` 会旋转 actor 根节点并暴露 facing metadata，模型、装备和标记随 actor 朝向变化；已由 `Scene` / `Movement` / `Combat` smoke 覆盖。待补模型姿态、移动插值、攻击/受击/死亡占位动画和更精细朝向来源。
 - 装备视觉挂点第一版已迁移：装备视觉数据会按 `attach_target` 驱动 body、feet、legs、head、hands、back、accessory、main_hand、off_hand 的偏移、旋转和缩放，世界节点暴露 `attach_target`、`attach_offset`、`attach_rotation_degrees`、`attach_scale` metadata，`Scene` smoke 覆盖真实玩家主手装备和合成 head/hands/back/accessory/off_hand 挂点。待补真实骨骼 socket、动画绑定、精确美术校准和装备遮挡处理。
@@ -286,14 +296,14 @@
 - 尸体模型 / 标记第一版已迁移：世界快照会生成 `Corpse_*` 节点，优先复用被击败 actor glTF，否则使用 corpse fallback；节点带 `CorpseNameLabel`、`CorpseContainerBadge`、pickable body、container/source actor/loot/money metadata，可 hover、选中并打开容器；已由 `Scene` 合成尸体 smoke 和 `PlayerInteraction` 击杀后尸体 hover/open smoke 覆盖。待补雾战显隐细节、专用尸体姿态 / 动画和视觉 polish。
 - actor label、血条、AP 条、敌友阵营颜色、side badge、可接任务 / 任务交付 NPC 标记和状态效果图标第一版已迁移：world snapshot 会转发 actor `ap`、`turn_open`、`in_combat` 和 `combat` 数据，并从 active/completed quest、dialogue rule 和 dialogue action 派生 `quest_offer` / `quest_turn_in` 的 `quest_markers`；`WorldSceneRenderer` 会为 actor 生成 `ActorNameLabel`、`ActorHealthBar`、`ActorApBar`、`ActorSideBadge`、`ActorQuestMarker`、`ActorQuestMarkerLabel` 和 `ActorStatusEffectIcons`，并由 `Scene` smoke 覆盖真实启动 actor、合成 hostile actor、`trader_lao_wang` 可接任务 marker、`doctor_chen` 可交付任务 marker，以及 passive / buff 状态效果图标 metadata。待补遮挡处理和视觉 polish。
 
-### 12.3 相机和遮挡
+### 12.4 相机和遮挡
 
 - 已恢复 Bevy 风格相机角度、焦点 actor 跟随、手动拖拽后暂停跟随、`F` 恢复跟随和观察楼层相机平面第一版；待补 occlusion、视觉显隐和多层地图表现细节。
 - zoom factor、键盘 `+` / `-` / `Ctrl+0`、滚轮缩放和 `0.5..4.0` clamp 第一版已迁移，并由 `PlayerInteraction` smoke 覆盖；待补视口可见范围诊断、边界 clamp 视觉验证、多楼层聚焦细节和分辨率变化处理。
 - 待补 occlusion：建筑/墙体遮挡目标时的淡出、轮廓、选择目标 actor 的遮挡处理。
 - hover outline 第一版已迁移：非攻击悬停会显示 `HoverTargetOutline`，按 actor / pickup / container / trigger / door 等 `target_category` 使用不同颜色并记录 target meta；门悬停会保留 `door_is_open` / `door_locked` 状态；攻击悬停仍使用专门的 `AttackTargetOutline`、`AttackTargetMarker` 和 `AttackRangeMarkers`；已由 `PlayerInteraction` smoke 覆盖 pickup、door 与 hostile actor。待补 object/door/container/trigger 更精细优先级、遮挡处理和视觉 polish。
 
-### 12.4 雾战和 overlay
+### 12.5 雾战和 overlay
 
 - 已有 Godot canvas fog shader 第一版；待补与旧 post-process fog 的视觉等价：探索区透明度、未探索区遮罩、边缘柔化、mask blend。
 - 待补 fog mask 与相机/地图坐标同步、地图切换重建、可见格变化平滑、性能优化。
@@ -394,9 +404,10 @@
 2. 战斗空间等价：LOS、跨层、AOE、友军伤害、战斗退出和目标预览。
 3. 背包/容器/交易高级 UI：数量弹窗、上下文菜单、拖拽、购物车、详情和失败提示。
 4. 技能和 hotbar：多槽、快捷键、目标选择、状态堆叠、非战斗 modifier 消费点、cooldown。
-5. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
-6. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick 和运行时状态 snapshot。
-7. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。
+5. 动作表现队列：补 `WorldActionPresenter`，先解决移动逐格 tween、攻击/交互阶段表现和表现期间 input blocker，再统一最终 snapshot refresh 时机。
+6. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
+7. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick 和运行时状态 snapshot。
+8. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。
 
 ## 20. 阶段提交与验收规则
 
