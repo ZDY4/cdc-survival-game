@@ -144,7 +144,7 @@
 - 命中、闪避、格挡和护甲第一版已迁移：显式 actor / weapon `accuracy` 会进行命中判定，目标 `evasion` 会降低命中率；miss 不造成伤害、不触发暴击但保留 AP / 弹药消耗和 `attack_resolved` 反馈；防御过高会返回 `blocked`；装备 defense 和 `damage_reduction` 已参与伤害结算；HUD 事件反馈已显示攻击双方、命中 / 闪避 / 格挡 / 暴击、伤害、命中率和击倒状态，并由 `Combat` / `UI` smoke 覆盖。待补 NPC 命中体验调参、更多装备效果、详细战斗日志面板和旧版完整公式复核。
 - 待补伤害类型/抗性/弱点等旧数据如果存在的完整应用。
 - 远程弹药已有玩家已装备武器 reload 第一版：`reload_equipped` 命令、弹匣状态、背包弹药转入弹匣、换弹 AP、弹匣攻击消耗、无弹/空弹匣提示和存档 roundtrip 已纳入 `Equipment` / `Combat` / `Save` smoke；装备 `ammo_capacity` / `reload_speed` 第一版已通过 core 装备效果服务影响换弹容量和 AP 成本；待补装填动画、弹匣 UI polish、更多武器/弹药类型和 NPC reload。
-- on-hit 效果触发反馈第一版已迁移：武器 `on_hit_effect_ids` 会进入 attack profile，命中/暴击时 `attack_performed`、`attack_resolved` 和 attack result 暴露 `triggered_on_hit_effect_ids`；miss / blocked 不触发；已由 `Combat` smoke 覆盖。待补实际效果 runtime、效果数据应用、UI 日志和特效表现。
+- on-hit 效果 runtime 第一版已迁移：武器 `on_hit_effect_ids` 会进入 attack profile，命中/暴击时 `attack_performed`、`attack_resolved` 和 attack result 暴露 `triggered_on_hit_effect_ids`；miss / blocked 不触发；有持续时间或属性 modifier 的 effect 会按 `refresh` / `extend` / `intensity` 基础堆叠规则写入目标 actor `active_effects`，并发出 `on_hit_effect_applied`、返回 `applied_on_hit_effects`；0 持续占位 effect 仅保留触发反馈，不污染状态栏；已由 `Combat` smoke 覆盖。待补流血 / 中毒 DoT tick、stun 跳过回合、armor_pierce / armor_break 等即时战斗公式应用、UI 日志和特效表现。
 - 待补攻击装备成本：武器耐久、消耗品、弹药特殊效果消耗。
 - 伤害反馈第一版已迁移：`WorldSnapshotBuilder` 会从最近 `attack_resolved` 事件为目标 actor 派生 `combat_feedback`，`WorldSceneRenderer` 会显示命中伤害、暴击、miss、blocked 和击倒的 `ActorCombatFeedback` 标签与 `ActorCombatFeedbackMarker`，并暴露 attacker/target/damage/hit/critical/weapon 元数据；已由 `Scene` smoke 覆盖。待补动画飘字生命周期、详细战斗日志面板、受击/攻击动画占位、命中特效和音效占位。
 

@@ -36,6 +36,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	var damage: float = float(damage_result.get("damage", 0.0))
 	var triggered_on_hit_effect_ids: Array[String] = _triggered_on_hit_effect_ids(profile, damage_result)
 	target.hp = max(0.0, target.hp - damage)
+	var applied_on_hit_effects: Array[Dictionary] = _apply_on_hit_effects(simulation, attacker, target, profile, triggered_on_hit_effect_ids)
 	simulation.emit_event("attack_performed", {
 		"actor_id": actor_id,
 		"target_actor_id": target_actor_id,
@@ -52,6 +53,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"accuracy": float(hit_roll.get("accuracy", 0.0)),
 		"evasion": float(hit_roll.get("evasion", 0.0)),
 		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
+		"applied_on_hit_effects": applied_on_hit_effects.duplicate(true),
 		"friendly_fire": bool(target_check.get("friendly_fire", false)),
 		"relationship_consequence": relationship_consequence.duplicate(true),
 	})
@@ -77,6 +79,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"accuracy": float(hit_roll.get("accuracy", 0.0)),
 		"evasion": float(hit_roll.get("evasion", 0.0)),
 		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
+		"applied_on_hit_effects": applied_on_hit_effects.duplicate(true),
 		"combat_rng_seed": int(simulation.combat_state.get("combat_rng_seed", 0)),
 		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
 		"combat_rng_salt": int(critical_roll.get("salt", 0)),
@@ -117,6 +120,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"evasion": float(hit_roll.get("evasion", 0.0)),
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
 		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
+		"applied_on_hit_effects": applied_on_hit_effects.duplicate(true),
 		"weapon_profile": profile,
 		"friendly_fire": bool(target_check.get("friendly_fire", false)),
 		"relationship_consequence": relationship_consequence.duplicate(true),
@@ -386,6 +390,136 @@ func _triggered_on_hit_effect_ids(profile: Dictionary, damage_result: Dictionary
 	if not ["hit", "crit"].has(hit_kind):
 		return []
 	return _string_array(profile.get("on_hit_effect_ids", []))
+
+
+func _apply_on_hit_effects(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary, effect_ids: Array[String]) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	if target.hp <= 0.0 or effect_ids.is_empty():
+		return output
+	var effect_library: Dictionary = _dictionary_or_empty(simulation.effect_library if simulation != null else {})
+	if effect_library.is_empty():
+		return output
+	for effect_id in effect_ids:
+		var effect_data: Dictionary = _effect_data(effect_id, effect_library)
+		if effect_data.is_empty():
+			output.append({
+				"success": false,
+				"reason": "unknown_effect",
+				"effect_id": effect_id,
+			})
+			continue
+		var active_effect: Dictionary = _build_on_hit_active_effect(effect_id, effect_data, attacker, target, profile)
+		if active_effect.is_empty():
+			output.append({
+				"success": true,
+				"effect_id": effect_id,
+				"applied": false,
+				"reason": "instant_or_placeholder_effect",
+			})
+			continue
+		var stack_result: Dictionary = _apply_actor_effect_stack(target, active_effect, effect_data)
+		stack_result["effect_id"] = effect_id
+		stack_result["source_actor_id"] = attacker.actor_id
+		stack_result["target_actor_id"] = target.actor_id
+		stack_result["weapon_item_id"] = str(profile.get("item_id", ""))
+		output.append(stack_result.duplicate(true))
+		if simulation != null and simulation.has_method("emit_event"):
+			simulation.emit_event("on_hit_effect_applied", stack_result.duplicate(true))
+	return output
+
+
+func _effect_data(effect_id: String, effect_library: Dictionary) -> Dictionary:
+	var record: Dictionary = _dictionary_or_empty(effect_library.get(effect_id, {}))
+	return _dictionary_or_empty(record.get("data", record))
+
+
+func _build_on_hit_active_effect(effect_id: String, effect_data: Dictionary, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:
+	var is_infinite: bool = bool(effect_data.get("is_infinite", false))
+	var duration: float = 0.0 if is_infinite else max(0.0, float(effect_data.get("duration", 0.0)))
+	var modifiers: Dictionary = _dictionary_or_empty(effect_data.get("stat_modifiers", effect_data.get("modifiers", {}))).duplicate(true)
+	var special_effects: Array[String] = _string_array(effect_data.get("special_effects", []))
+	if duration <= 0.0 and not is_infinite and modifiers.is_empty():
+		return {}
+	return {
+		"effect_id": "effect:%s" % effect_id,
+		"base_effect_id": effect_id,
+		"source": "on_hit",
+		"source_actor_id": attacker.actor_id,
+		"target_actor_id": target.actor_id,
+		"weapon_item_id": str(profile.get("item_id", "")),
+		"name": str(effect_data.get("name", effect_id)),
+		"category": str(effect_data.get("category", "debuff")),
+		"duration_remaining": duration,
+		"is_infinite": is_infinite,
+		"modifiers": modifiers,
+		"special_effects": special_effects,
+		"stack_count": 1,
+		"max_stacks": max(1, int(effect_data.get("max_stacks", 1))),
+		"stack_mode": str(effect_data.get("stack_mode", "refresh")),
+	}
+
+
+func _apply_actor_effect_stack(actor: RefCounted, new_effect: Dictionary, effect_data: Dictionary) -> Dictionary:
+	var effect_id: String = str(new_effect.get("effect_id", ""))
+	var stack_mode: String = str(effect_data.get("stack_mode", new_effect.get("stack_mode", "refresh")))
+	var is_stackable: bool = bool(effect_data.get("is_stackable", false))
+	var max_stacks: int = max(1, int(effect_data.get("max_stacks", new_effect.get("max_stacks", 1))))
+	var remaining: Array[Dictionary] = []
+	var replaced: Array[Dictionary] = []
+	var applied: Dictionary = new_effect.duplicate(true)
+	var found_existing := false
+	for active_effect in actor.active_effects:
+		var active_data: Dictionary = _dictionary_or_empty(active_effect).duplicate(true)
+		if str(active_data.get("effect_id", "")) != effect_id:
+			remaining.append(active_data)
+			continue
+		found_existing = true
+		replaced.append(active_data.duplicate(true))
+		applied = _merged_effect_stack(active_data, new_effect, is_stackable, max_stacks, stack_mode)
+	remaining.append(applied.duplicate(true))
+	actor.active_effects = remaining
+	return {
+		"success": true,
+		"applied": true,
+		"stack_mode": stack_mode,
+		"stack_count": int(applied.get("stack_count", 1)),
+		"max_stacks": max_stacks,
+		"duration_remaining": float(applied.get("duration_remaining", 0.0)),
+		"effect": applied.duplicate(true),
+		"replaced_effects": replaced.duplicate(true),
+		"refreshed": found_existing,
+	}
+
+
+func _merged_effect_stack(active_effect: Dictionary, new_effect: Dictionary, is_stackable: bool, max_stacks: int, stack_mode: String) -> Dictionary:
+	var merged: Dictionary = active_effect.duplicate(true)
+	var current_duration: float = float(active_effect.get("duration_remaining", 0.0))
+	var incoming_duration: float = float(new_effect.get("duration_remaining", 0.0))
+	merged["source_actor_id"] = int(new_effect.get("source_actor_id", merged.get("source_actor_id", 0)))
+	merged["weapon_item_id"] = str(new_effect.get("weapon_item_id", merged.get("weapon_item_id", "")))
+	merged["is_infinite"] = bool(active_effect.get("is_infinite", false)) or bool(new_effect.get("is_infinite", false))
+	merged["max_stacks"] = max_stacks
+	merged["stack_mode"] = stack_mode
+	if is_stackable:
+		merged["stack_count"] = min(max_stacks, max(1, int(active_effect.get("stack_count", 1))) + 1)
+	else:
+		merged["stack_count"] = 1
+	match stack_mode:
+		"extend":
+			merged["duration_remaining"] = current_duration + incoming_duration
+		"intensity":
+			merged["duration_remaining"] = max(current_duration, incoming_duration)
+			merged["modifiers"] = _scaled_modifiers(_dictionary_or_empty(new_effect.get("modifiers", {})), int(merged.get("stack_count", 1)))
+		_:
+			merged["duration_remaining"] = max(current_duration, incoming_duration)
+	return merged
+
+
+func _scaled_modifiers(modifiers: Dictionary, stack_count: int) -> Dictionary:
+	var output: Dictionary = {}
+	for key in modifiers.keys():
+		output[str(key)] = float(modifiers.get(key, 0.0)) * max(1, stack_count)
+	return output
 
 
 func _hit_check(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:

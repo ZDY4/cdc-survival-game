@@ -1369,14 +1369,14 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	player.combat_attributes["accuracy"] = 100.0
 	player.ap = 20.0
 	player.equipment["main_hand"] = "1003"
-	var blunt_target: int = _register_character(simulation, registry, "zombie_walker", {
+	var blunt_target: int = _register_test_actor(simulation, "on_hit_stun_target", "hostile", {
 		"x": int(player_grid.get("x", 0)) + 2,
 		"y": int(player_grid.get("y", 0)),
 		"z": int(player_grid.get("z", 0)),
-	})
+	}, 60.0)
 	var blunt: RefCounted = simulation.actor_registry.get_actor(blunt_target)
-	blunt.hp = 30.0
-	blunt.max_hp = 30.0
+	blunt.hp = 60.0
+	blunt.max_hp = 60.0
 	blunt.defense = 0.0
 	var before_ap: float = player.ap
 	var blunt_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": blunt_target, "topology": topology})
@@ -1389,22 +1389,63 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 		errors.append("baseball bat hit should expose stun on-hit effect")
 	if not _array_or_empty(blunt_attack_event.get("triggered_on_hit_effect_ids", [])).has("stun"):
 		errors.append("attack_resolved should expose triggered stun on-hit effect")
+	if _array_or_empty(blunt_result.get("applied_on_hit_effects", [])).is_empty():
+		errors.append("baseball bat hit should apply stun on-hit effect runtime")
+	var stun_effect: Dictionary = _active_effect_by_id(blunt, "effect:stun")
+	if stun_effect.is_empty():
+		errors.append("baseball bat hit should add effect:stun to target active_effects")
+	elif absf(float(stun_effect.get("duration_remaining", 0.0)) - 3.0) > 0.001:
+		errors.append("stun on-hit effect should use effect duration 3")
 	if not bool(blunt_result.get("critical", false)) and absf(float(blunt_result.get("damage", 0.0)) - 15.0) > 0.01:
 		errors.append("non-critical baseball bat attack should deal weapon damage 15")
 	if absf((before_ap - player.ap) - 3.0) > 0.01:
 		errors.append("baseball bat attack should use attack_speed-derived AP cost 3")
 	if not _has_attack_resolved_for_weapon(simulation.snapshot(), "1003"):
 		errors.append("attack_resolved should include weapon item id")
+	var second_blunt: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": blunt_target, "topology": topology})
+	if not bool(second_blunt.get("success", false)):
+		errors.append("second baseball bat hit should succeed for stun extend smoke: %s" % second_blunt.get("reason", "unknown"))
+	stun_effect = _active_effect_by_id(blunt, "effect:stun")
+	if not stun_effect.is_empty() and absf(float(stun_effect.get("duration_remaining", 0.0)) - 6.0) > 0.001:
+		errors.append("stun on-hit effect should extend duration to 6 after second hit")
+
+	player.equipment["main_hand"] = "1002"
+	player.ap = 20.0
+	var bleeding_target: int = _register_test_actor(simulation, "on_hit_bleeding_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 80.0)
+	var bleeding_enemy: RefCounted = simulation.actor_registry.get_actor(bleeding_target)
+	bleeding_enemy.hp = 80.0
+	bleeding_enemy.max_hp = 80.0
+	bleeding_enemy.defense = 0.0
+	var bleeding_first: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": bleeding_target, "topology": topology})
+	if not bool(bleeding_first.get("success", false)):
+		errors.append("knife bleeding hit should succeed: %s" % bleeding_first.get("reason", "unknown"))
+	var bleeding_effect: Dictionary = _active_effect_by_id(bleeding_enemy, "effect:bleeding")
+	if bleeding_effect.is_empty():
+		errors.append("knife hit should add effect:bleeding to target active_effects")
+	elif int(bleeding_effect.get("stack_count", 0)) != 1 or absf(float(bleeding_effect.get("duration_remaining", 0.0)) - 15.0) > 0.001:
+		errors.append("first bleeding on-hit effect should have stack 1 and duration 15")
+	var bleeding_second: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": bleeding_target, "topology": topology})
+	if not bool(bleeding_second.get("success", false)):
+		errors.append("second knife bleeding hit should succeed: %s" % bleeding_second.get("reason", "unknown"))
+	bleeding_effect = _active_effect_by_id(bleeding_enemy, "effect:bleeding")
+	if int(bleeding_effect.get("stack_count", 0)) != 2:
+		errors.append("bleeding intensity stack should increase to 2 after second hit")
+	if _event_count(simulation.snapshot(), "on_hit_effect_applied") < 4:
+		errors.append("on-hit effect runtime should emit on_hit_effect_applied events")
 
 	player.equipment["main_hand"] = "1004"
 	player.inventory["1009"] = 2
 	player.weapon_ammo.erase("main_hand")
 	player.ap = 20.0
-	var pistol_target: int = _register_character(simulation, registry, "zombie_walker", {
+	var pistol_target: int = _register_test_actor(simulation, "weapon_profile_pistol_target", "hostile", {
 		"x": int(player_grid.get("x", 0)) + 8,
 		"y": int(player_grid.get("y", 0)),
 		"z": int(player_grid.get("z", 0)),
-	})
+	}, 40.0)
 	var pistol_enemy: RefCounted = simulation.actor_registry.get_actor(pistol_target)
 	pistol_enemy.hp = 40.0
 	pistol_enemy.max_hp = 40.0
@@ -1414,17 +1455,20 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 		errors.append("pistol range attack failed: %s" % pistol_result.get("reason", "unknown"))
 	if int(player.inventory.get("1009", 0)) != 1:
 		errors.append("pistol attack should consume one pistol ammo")
-	if absf(float(pistol_result.get("damage", 0.0)) - 25.0) > 0.01:
-		errors.append("pistol attack should use weapon damage 25")
+	var pistol_attack_event: Dictionary = _last_attack_resolved_for_weapon(simulation.snapshot(), "1004")
+	if absf(float(pistol_attack_event.get("base_damage", 0.0)) - 25.0) > 0.01:
+		errors.append("pistol attack should expose weapon base_damage 25")
 	if not _array_or_empty(pistol_result.get("triggered_on_hit_effect_ids", [])).has("headshot_bonus"):
 		errors.append("pistol hit should expose headshot_bonus on-hit effect")
+	if not _array_or_empty(pistol_result.get("applied_on_hit_effects", [])).is_empty():
+		errors.append("placeholder headshot_bonus should not create active on-hit effect runtime")
 	player.inventory["1009"] = 2
 	player.weapon_ammo["main_hand"] = 1
-	var magazine_target: int = _register_character(simulation, registry, "zombie_walker", {
+	var magazine_target: int = _register_test_actor(simulation, "weapon_profile_magazine_target", "hostile", {
 		"x": int(player_grid.get("x", 0)) + 7,
 		"y": int(player_grid.get("y", 0)),
 		"z": int(player_grid.get("z", 0)),
-	})
+	}, 40.0)
 	var magazine_enemy: RefCounted = simulation.actor_registry.get_actor(magazine_target)
 	magazine_enemy.hp = 40.0
 	magazine_enemy.max_hp = 40.0
@@ -1436,25 +1480,25 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 		errors.append("loaded pistol attack should consume one magazine round")
 	if int(player.inventory.get("1009", 0)) != 2:
 		errors.append("loaded pistol attack should not consume spare inventory ammo")
-	var no_ammo_target: int = _register_character(simulation, registry, "zombie_walker", {
+	var no_ammo_target: int = _register_test_actor(simulation, "weapon_profile_no_ammo_target", "hostile", {
 		"x": int(player_grid.get("x", 0)) + 9,
 		"y": int(player_grid.get("y", 0)),
 		"z": int(player_grid.get("z", 0)),
-	})
+	}, 40.0)
 	var no_ammo: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": no_ammo_target, "topology": topology})
 	if no_ammo.get("reason", "") != "magazine_empty":
 		errors.append("ranged weapon with empty tracked magazine should report magazine_empty")
 	player.weapon_ammo.erase("main_hand")
 	player.inventory.erase("1009")
-	var inventory_no_ammo_target: int = _register_character(simulation, registry, "zombie_walker", {
+	var inventory_no_ammo_target: int = _register_test_actor(simulation, "weapon_profile_inventory_no_ammo_target", "hostile", {
 		"x": int(player_grid.get("x", 0)) + 10,
 		"y": int(player_grid.get("y", 0)),
 		"z": int(player_grid.get("z", 0)),
-	})
+	}, 40.0)
 	var inventory_no_ammo: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": inventory_no_ammo_target, "topology": topology})
 	if inventory_no_ammo.get("reason", "") != "ammo_insufficient":
 		errors.append("ranged weapon without tracked magazine or inventory ammo should report ammo_insufficient")
-	for actor_id in [blunt_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
+	for actor_id in [blunt_target, bleeding_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.active_effects = original_active_effects
@@ -1550,6 +1594,14 @@ func _last_attack_resolved_for_weapon(snapshot: Dictionary, weapon_item_id: Stri
 		var payload: Dictionary = event_data.get("payload", {})
 		if event_data.get("kind", "") == "attack_resolved" and str(payload.get("weapon_item_id", "")) == weapon_item_id:
 			return payload
+	return {}
+
+
+func _active_effect_by_id(actor: RefCounted, effect_id: String) -> Dictionary:
+	for effect in actor.active_effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		if str(effect_data.get("effect_id", "")) == effect_id:
+			return effect_data
 	return {}
 
 
