@@ -33,6 +33,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_ta
 		"combat_hud": _combat_hud_summary(runtime_snapshot, player),
 		"interaction": prompt,
 		"hotbar": _hotbar_summary(runtime_snapshot, player),
+		"hotbar_group_labels": _dictionary_or_empty(runtime_snapshot.get("hotbar_group_labels", {})).duplicate(true),
 		"event_feedback": _event_feedback(runtime_snapshot),
 		"tracked_quest": {"active": false, "quest_id": ""},
 	}
@@ -211,6 +212,7 @@ func _actor_defeated(actor: Dictionary) -> bool:
 func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[Dictionary]:
 	var hotbar: Dictionary = _dictionary_or_empty(runtime_snapshot.get("hotbar", {}))
 	var group_id := str(runtime_snapshot.get("active_hotbar_group", "group_1"))
+	var group_labels: Dictionary = _dictionary_or_empty(runtime_snapshot.get("hotbar_group_labels", {}))
 	var player_ap: float = float(player.get("ap", 0.0))
 	var player_resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(player.get("combat", {})).get("resources", {}))
 	var player_inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
@@ -226,7 +228,7 @@ func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[
 		output.append({
 			"slot_id": slot_id,
 			"group_id": group_id,
-			"group_label": _hotbar_group_label(group_id),
+			"group_label": _hotbar_group_label(group_id, group_labels),
 			"key": "0" if slot_index == 10 else str(slot_index),
 			"kind": kind,
 			"skill_id": skill_id,
@@ -245,7 +247,10 @@ func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[
 	return output
 
 
-func _hotbar_group_label(group_id: String) -> String:
+func _hotbar_group_label(group_id: String, group_labels: Dictionary = {}) -> String:
+	var configured_label := str(group_labels.get(group_id, "")).strip_edges()
+	if not configured_label.is_empty():
+		return configured_label
 	var value := group_id.strip_edges().to_lower()
 	if value.begins_with("group_"):
 		value = value.trim_prefix("group_")

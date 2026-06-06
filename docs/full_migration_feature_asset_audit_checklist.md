@@ -807,7 +807,7 @@
 - [ ] 属性点分配和属性派生。
 - [ ] 等级曲线、XP 来源、溢出、多级升级。
 - [ ] 技能前置、属性要求、互斥、等级上限。
-- [~] 主动技能绑定 hotbar、多组/多槽、替换、清除第一版：三组快捷栏、HUD 组按钮、当前组绑定/使用、独立持久化和 HUD/Skills 当前组提示已迁移；待补组命名、观察模式 hotbar 和完整冲突处理。
+- [~] 主动技能绑定 hotbar、多组/多槽、替换、清除第一版：三组快捷栏、HUD 组按钮、组命名、当前组绑定/使用、独立持久化和 HUD/Skills 当前组提示已迁移；待补观察模式 hotbar 和完整冲突处理。
 - [~] 使用主动技能：目标选择、AP、cooldown、效果、失败提示第一版。
 - [ ] 被动技能自动影响 combat/crafting/dialogue/trade/movement。
 - [ ] 技能目标预览、范围高亮、取消。
@@ -1101,7 +1101,7 @@
 - [ ] `src/game_ui/panels/map*.rs`：地图 canvas、缩放、filter、当前地点、marker；落点为 Map panel、overworld snapshot。
 - [ ] `src/game_ui/container_ui/**`：容器双栏、数量、拿取/存放、空状态、关闭；落点为 Container panel。
 - [ ] `src/game_ui/trade_ui/**`：交易双栏、购物车、价格、资金、确认/撤销、失败回滚；落点为 Trade panel。
-- [~] `src/game_ui/hotbar/**`：快捷栏槽位、多组、HUD 组按钮、激活、渲染、状态第一版；观察模式 hotbar、组命名、组级状态 polish 和完整快捷键冲突仍待迁移；落点为 Godot hotbar 和 `use_skill` / `use_item` 命令。
+- [~] `src/game_ui/hotbar/**`：快捷栏槽位、多组、HUD 组按钮、组命名、激活、渲染、状态第一版；观察模式 hotbar、组级状态 polish 和完整快捷键冲突仍待迁移；落点为 Godot hotbar 和 `use_skill` / `use_item` 命令。
 - [ ] `src/game_ui/widgets/**`：统一 detail widget、panel widget、inventory detail、skill detail；落点为 Godot UI component/helper，但不得把业务逻辑放进 UI。
 - [ ] `src/dialogue.rs`：对话打开、节点推进、动作结果、关闭和交易/任务联动；落点为 Dialogue panel、DialogueAction smoke。
 - [ ] `src/console.rs`：开发 console、命令执行、错误显示、历史；落点为后续 Godot debug console。

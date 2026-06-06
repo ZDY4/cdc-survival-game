@@ -187,9 +187,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not _hotbar_line(game_root).contains("快捷栏 G2 空"):
 		errors.append("HUD hotbar group button should switch skills panel to empty group 2")
+	var label_result: Dictionary = game_root.set_hotbar_group_label("group_2", "Tools")
+	if not bool(label_result.get("success", false)):
+		errors.append("renaming hotbar group 2 should succeed: %s" % label_result.get("reason", "unknown"))
+	await process_frame
+	if not _hotbar_line(game_root).contains("快捷栏 Tools 空"):
+		errors.append("Skills panel should show renamed hotbar group label")
 	game_root.refresh_hud()
 	if not _hud_hotbar_group_active(game_root, "group_2"):
 		errors.append("HUD hotbar group 2 button should expose active state")
+	var renamed_group2_button := _hud_hotbar_group_button(game_root, "group_2")
+	if renamed_group2_button == null or renamed_group2_button.text != "Tools":
+		errors.append("HUD hotbar group 2 button should show renamed label")
 	if not _hud_hotbar_slot_text(game_root, "slot_3").contains("3:-"):
 		errors.append("HUD hotbar group 2 slot 3 should be empty")
 	var group1_button := _hud_hotbar_group_button(game_root, "group_1")

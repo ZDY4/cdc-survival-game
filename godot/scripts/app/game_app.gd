@@ -1122,6 +1122,17 @@ func set_hotbar_group(group_id: String) -> Dictionary:
 	return result
 
 
+func set_hotbar_group_label(group_id: String, label: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	if not simulation.has_method("set_hotbar_group_label"):
+		return {"success": false, "reason": "hotbar_group_label_unsupported"}
+	var result: Dictionary = simulation.set_hotbar_group_label(group_id, label)
+	refresh_hud()
+	refresh_skills_panel()
+	return result
+
+
 func cycle_hotbar_group(direction: int) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}

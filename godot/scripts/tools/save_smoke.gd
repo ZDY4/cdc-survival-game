@@ -142,6 +142,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"target": {"target_type": "self"},
 	})
 	simulation.set_active_hotbar_group("group_2")
+	simulation.set_hotbar_group_label("group_2", "Tools")
 	simulation.submit_player_command({
 		"kind": "bind_hotbar",
 		"actor_id": 1,
@@ -382,6 +383,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("active_hotbar_group did not roundtrip")
 	if JSON.stringify(restored.get("hotbar_groups", {})) != JSON.stringify(original.get("hotbar_groups", {})):
 		errors.append("hotbar_groups did not roundtrip")
+	if JSON.stringify(restored.get("hotbar_group_labels", {})) != JSON.stringify(original.get("hotbar_group_labels", {})):
+		errors.append("hotbar_group_labels did not roundtrip")
 	for derived_key in ["runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs"]:
 		if not restored.has(derived_key):
 			errors.append("restored snapshot missing derived runtime field %s" % derived_key)
@@ -431,6 +434,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 	legacy.erase("hotbar")
 	legacy.erase("active_hotbar_group")
 	legacy.erase("hotbar_groups")
+	legacy.erase("hotbar_group_labels")
 	legacy.erase("relationships")
 	var restored_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	restored_simulation.load_snapshot(legacy)
@@ -441,7 +445,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 		errors.append("legacy snapshot migration should default active_location_id from start_location_id")
 	if str(restored.get("active_entry_point_id", "")) != str(snapshot.get("start_entry_point_id", "")):
 		errors.append("legacy snapshot migration should default active_entry_point_id from start_entry_point_id")
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "relationships"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "hotbar_group_labels", "relationships"]:
 		if not restored.has(key):
 			errors.append("legacy snapshot migration missing %s" % key)
 	if _relationship_score(restored, 1, 2) < 49.9:

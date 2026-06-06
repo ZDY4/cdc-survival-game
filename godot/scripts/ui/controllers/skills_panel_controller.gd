@@ -413,7 +413,7 @@ func _unlocks_text(skill: Dictionary) -> String:
 
 func _hotbar_text(snapshot: Dictionary) -> String:
 	var hotbar: Dictionary = _dictionary_or_empty(snapshot.get("hotbar", {}))
-	var group_label := _hotbar_group_label(str(snapshot.get("active_hotbar_group", "group_1")))
+	var group_label := _hotbar_group_label(str(snapshot.get("active_hotbar_group", "group_1")), _dictionary_or_empty(snapshot.get("hotbar_group_labels", {})))
 	if hotbar.is_empty():
 		return "快捷栏 %s 空" % group_label
 	var parts: Array[String] = []
@@ -429,7 +429,10 @@ func _hotbar_text(snapshot: Dictionary) -> String:
 	return "快捷栏 %s %s" % [group_label, " | ".join(parts)]
 
 
-func _hotbar_group_label(group_id: String) -> String:
+func _hotbar_group_label(group_id: String, group_labels: Dictionary = {}) -> String:
+	var configured_label := str(group_labels.get(group_id, "")).strip_edges()
+	if not configured_label.is_empty():
+		return configured_label
 	var value := group_id.strip_edges().to_lower()
 	if value.begins_with("group_"):
 		value = value.trim_prefix("group_")

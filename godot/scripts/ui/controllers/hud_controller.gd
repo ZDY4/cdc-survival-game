@@ -55,7 +55,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	]
 	_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
 	_combat_hud_label.text = _combat_hud_text(snapshot.get("combat_hud", {}))
-	_apply_hotbar(snapshot.get("hotbar", []))
+	_apply_hotbar(snapshot.get("hotbar", []), snapshot.get("hotbar_group_labels", {}))
 	_interaction_label.text = _interaction_text(interaction)
 	_event_feedback_label.text = _event_feedback_text(snapshot.get("event_feedback", []))
 	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
@@ -327,7 +327,7 @@ func _disabled_reason_text(reason: String) -> String:
 	return reason
 
 
-func _apply_hotbar(slots_value: Variant) -> void:
+func _apply_hotbar(slots_value: Variant, group_labels_value: Variant = {}) -> void:
 	if _hotbar_box == null:
 		return
 	for child in _hotbar_box.get_children():
@@ -343,13 +343,14 @@ func _apply_hotbar(slots_value: Variant) -> void:
 				"key": "0" if slot_index == 10 else str(slot_index),
 				"empty": true,
 			})
-	_apply_hotbar_group_buttons(slots)
+	var group_labels: Dictionary = _dictionary_or_empty(group_labels_value)
+	_apply_hotbar_group_buttons(slots, group_labels)
 	for slot in slots:
 		var slot_data: Dictionary = slot
 		_hotbar_box.add_child(_hotbar_button(slot_data))
 
 
-func _apply_hotbar_group_buttons(slots: Array) -> void:
+func _apply_hotbar_group_buttons(slots: Array, group_labels: Dictionary = {}) -> void:
 	if _hotbar_group_box == null:
 		return
 	for child in _hotbar_group_box.get_children():
@@ -358,7 +359,7 @@ func _apply_hotbar_group_buttons(slots: Array) -> void:
 	var active_group_id := _active_hotbar_group_id(slots)
 	for index in range(1, 4):
 		var group_id := "group_%d" % index
-		_hotbar_group_box.add_child(_hotbar_group_button(group_id, active_group_id))
+		_hotbar_group_box.add_child(_hotbar_group_button(group_id, active_group_id, group_labels))
 
 
 func _active_hotbar_group_id(slots: Array) -> String:
@@ -370,15 +371,15 @@ func _active_hotbar_group_id(slots: Array) -> String:
 	return "group_1"
 
 
-func _hotbar_group_button(group_id: String, active_group_id: String) -> Button:
+func _hotbar_group_button(group_id: String, active_group_id: String, group_labels: Dictionary = {}) -> Button:
 	var button := Button.new()
-	var group_label := _hotbar_group_label(group_id)
+	var group_label := _hotbar_group_label(group_id, group_labels)
 	button.name = "HotbarGroup_%s" % group_id
 	button.text = group_label
-	button.tooltip_text = "%s 热栏组 | Alt+%s" % [group_label, group_label.trim_prefix("G")]
+	button.tooltip_text = "%s 热栏组 | Alt+%d" % [group_label, max(1, _hotbar_group_index(group_id) + 1)]
 	button.toggle_mode = true
 	button.button_pressed = group_id == active_group_id
-	button.custom_minimum_size = Vector2(38, 26)
+	button.custom_minimum_size = Vector2(max(38, group_label.length() * 10 + 18), 26)
 	button.focus_mode = Control.FOCUS_NONE
 	button.set_meta("hotbar_group_id", group_id)
 	button.set_meta("active", group_id == active_group_id)
@@ -390,13 +391,25 @@ func _hotbar_group_button(group_id: String, active_group_id: String) -> Button:
 	return button
 
 
-func _hotbar_group_label(group_id: String) -> String:
+func _hotbar_group_label(group_id: String, group_labels: Dictionary = {}) -> String:
+	var configured_label := str(group_labels.get(group_id, "")).strip_edges()
+	if not configured_label.is_empty():
+		return configured_label
 	var value := group_id.strip_edges().to_lower()
 	if value.begins_with("group_"):
 		value = value.trim_prefix("group_")
 	if value.is_valid_int():
 		return "G%d" % int(value)
 	return group_id
+
+
+func _hotbar_group_index(group_id: String) -> int:
+	var value := group_id.strip_edges().to_lower()
+	if value.begins_with("group_"):
+		value = value.trim_prefix("group_")
+	if not value.is_valid_int():
+		return -1
+	return int(value) - 1
 
 
 func _hotbar_button(slot: Dictionary) -> Button:

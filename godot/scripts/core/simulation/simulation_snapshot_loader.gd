@@ -72,6 +72,7 @@ func _load_hotbar_state(simulation: RefCounted, snapshot_data: Dictionary) -> vo
 		groups[active_group_id] = legacy_hotbar
 	simulation.active_hotbar_group = active_group_id
 	simulation.hotbar_groups = groups
+	simulation.hotbar_group_labels = _dictionary_or_empty(snapshot_data.get("hotbar_group_labels", {})).duplicate(true)
 	if simulation.has_method("set_active_hotbar_group"):
 		simulation.set_active_hotbar_group(active_group_id)
 	else:

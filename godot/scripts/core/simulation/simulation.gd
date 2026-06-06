@@ -83,6 +83,7 @@ var corpse_containers: Dictionary = {}
 var interaction_menu: Dictionary = {}
 var hotbar: Dictionary = {}
 var hotbar_groups: Dictionary = {}
+var hotbar_group_labels: Dictionary = {}
 var active_hotbar_group: String = DEFAULT_HOTBAR_GROUP_ID
 var crafted_recipes: Dictionary = {}
 var _ai_runner := AiRunner.new()
@@ -881,6 +882,31 @@ func cycle_hotbar_group(direction: int) -> Dictionary:
 	return set_active_hotbar_group("group_%d" % (next_index + 1))
 
 
+func set_hotbar_group_label(group_id: String, label: String) -> Dictionary:
+	_ensure_hotbar_groups()
+	var normalized_group_id := _normalized_hotbar_group_id(group_id)
+	if normalized_group_id.is_empty():
+		return {"success": false, "reason": "hotbar_group_missing"}
+	var normalized_label := label.strip_edges()
+	if normalized_label.is_empty():
+		normalized_label = _default_hotbar_group_label(normalized_group_id)
+	var previous_label := str(hotbar_group_labels.get(normalized_group_id, _default_hotbar_group_label(normalized_group_id)))
+	hotbar_group_labels[normalized_group_id] = normalized_label
+	if previous_label != normalized_label:
+		_emit("hotbar_group_label_changed", {
+			"group_id": normalized_group_id,
+			"previous_label": previous_label,
+			"label": normalized_label,
+		})
+	return {
+		"success": true,
+		"group_id": normalized_group_id,
+		"label": normalized_label,
+		"previous_label": previous_label,
+		"changed": previous_label != normalized_label,
+	}
+
+
 func _emit(kind: String, payload: Dictionary) -> void:
 	events.append(SimulationEvent.new(kind, payload))
 
@@ -1608,6 +1634,8 @@ func _ensure_hotbar_groups() -> void:
 		var group_id := "group_%d" % index
 		if not hotbar_groups.has(group_id):
 			hotbar_groups[group_id] = {}
+		if not hotbar_group_labels.has(group_id) or str(hotbar_group_labels.get(group_id, "")).strip_edges().is_empty():
+			hotbar_group_labels[group_id] = _default_hotbar_group_label(group_id)
 	hotbar = _dictionary_or_empty(hotbar_groups.get(active_hotbar_group, {})).duplicate(true)
 
 
@@ -1644,6 +1672,13 @@ func _hotbar_group_index(group_id: String) -> int:
 	if index < 0 or index >= HOTBAR_GROUP_COUNT:
 		return -1
 	return index
+
+
+func _default_hotbar_group_label(group_id: String) -> String:
+	var index := _hotbar_group_index(group_id)
+	if index < 0:
+		return group_id
+	return "G%d" % (index + 1)
 
 
 func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dictionary:

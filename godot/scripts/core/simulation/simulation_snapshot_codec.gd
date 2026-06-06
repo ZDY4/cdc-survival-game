@@ -54,6 +54,7 @@ func build(simulation: RefCounted) -> Dictionary:
 		"hotbar": simulation.hotbar.duplicate(true),
 		"active_hotbar_group": str(simulation.active_hotbar_group),
 		"hotbar_groups": _hotbar_group_snapshots(simulation.hotbar_groups),
+		"hotbar_group_labels": _hotbar_group_label_snapshots(simulation.hotbar_group_labels),
 		"crafted_recipes": simulation.crafted_recipes.keys(),
 	}
 
@@ -322,6 +323,18 @@ func _hotbar_group_snapshots(hotbar_groups: Dictionary) -> Dictionary:
 	group_ids.sort()
 	for group_id in group_ids:
 		output[str(group_id)] = _dictionary_or_empty(hotbar_groups.get(group_id, {})).duplicate(true)
+	return output
+
+
+func _hotbar_group_label_snapshots(hotbar_group_labels: Dictionary) -> Dictionary:
+	var output: Dictionary = {}
+	var group_ids: Array = hotbar_group_labels.keys()
+	group_ids.sort()
+	for group_id in group_ids:
+		var label := str(hotbar_group_labels.get(group_id, "")).strip_edges()
+		if label.is_empty():
+			continue
+		output[str(group_id)] = label
 	return output
 
 

@@ -31,6 +31,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"hotbar": hotbar.duplicate(true),
 		"active_hotbar_group": active_hotbar_group,
 		"hotbar_groups": _dictionary_or_empty(runtime_snapshot.get("hotbar_groups", {})).duplicate(true),
+		"hotbar_group_labels": _dictionary_or_empty(runtime_snapshot.get("hotbar_group_labels", {})).duplicate(true),
 		"trees": trees,
 	}
 
