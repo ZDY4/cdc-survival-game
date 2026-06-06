@@ -38,6 +38,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"money": max(0, int(session.get("money", 0))),
 		"items": _container_item_snapshots(session),
 		"player_items": _inventory_item_snapshots(_dictionary_or_empty(player.get("inventory", {}))),
+		"permission_preview": _permission_preview(session),
 	}
 	var scoped_feedback := _feedback_snapshot(feedback, container_id)
 	if not scoped_feedback.is_empty():
@@ -256,6 +257,126 @@ func _container_capacity_text(item_name: String, feedback: Dictionary) -> String
 				int(feedback.get("max_stacks", 0)),
 			]
 	return "容器容量不足，无法存放%s。" % item_name
+
+
+func _permission_preview(session: Dictionary) -> Dictionary:
+	var lines: Array[String] = []
+	if bool(session.get("locked", false)):
+		lines.append("锁定")
+	elif bool(session.get("unlock_requirements_consumed", false)):
+		lines.append("已解锁")
+	var required_items: Array[String] = _normalized_item_ids(session.get("required_item_ids", session.get("required_items", [])))
+	if not required_items.is_empty():
+		lines.append("钥匙: %s" % _item_names(required_items))
+	var required_tools: Array[String] = _normalized_item_ids(session.get("required_tool_ids", session.get("required_tools", [])))
+	if not required_tools.is_empty():
+		lines.append("工具: %s" % _item_names(required_tools))
+	if bool(session.get("consume_required_items_on_unlock", session.get("consume_required_items", session.get("consume_keys_on_unlock", false)))):
+		lines.append("解锁消耗钥匙")
+	if bool(session.get("consume_required_tools_on_unlock", session.get("consume_required_tools", session.get("consume_tools_on_unlock", false)))):
+		lines.append("解锁消耗工具")
+	if not bool(session.get("allow_take", true)):
+		lines.append("禁止拿取")
+	if not bool(session.get("allow_store", true)):
+		lines.append("禁止存放")
+	if bool(session.get("owned", false)) or int(session.get("owner_actor_id", 0)) > 0 or not str(session.get("owner_actor_definition_id", "")).is_empty():
+		lines.append("归属: %s" % _owner_label(session))
+	if session.has("owner_relationship_min") or session.has("required_owner_relationship_min"):
+		lines.append("关系 >= %.0f" % float(session.get("owner_relationship_min", session.get("required_owner_relationship_min", 0.0))))
+	if session.has("owner_relationship_max") or session.has("required_owner_relationship_max"):
+		lines.append("关系 <= %.0f" % float(session.get("owner_relationship_max", session.get("required_owner_relationship_max", 0.0))))
+	if bool(session.get("allow_steal", session.get("allow_theft", false))):
+		var steal_text := "允许偷取"
+		if session.has("steal_relationship_delta") or session.has("theft_relationship_delta"):
+			steal_text += "，关系 %.0f" % float(session.get("steal_relationship_delta", session.get("theft_relationship_delta", 0.0)))
+		lines.append(steal_text)
+	_add_counted_requirement_line(lines, "世界条件", _array_or_empty(session.get("required_world_flags", [])).size())
+	_add_counted_requirement_line(lines, "任务条件", _quest_condition_count(session))
+	_add_capacity_line(lines, session)
+	var text := "权限：无特殊限制" if lines.is_empty() else "权限：" + " | ".join(lines)
+	return {
+		"text": text,
+		"lines": lines,
+	}
+
+
+func _item_names(item_ids: Array[String]) -> String:
+	var names: Array[String] = []
+	for item_id in item_ids:
+		var item_data := _item_data(item_id)
+		names.append(str(item_data.get("name", item_id)))
+	return "、".join(names)
+
+
+func _normalized_item_ids(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_normalized_item_id(output, entry)
+	else:
+		_append_normalized_item_id(output, value)
+	return output
+
+
+func _append_normalized_item_id(output: Array[String], value: Variant) -> void:
+	var raw_value: Variant = value
+	if typeof(value) == TYPE_DICTIONARY:
+		var data: Dictionary = _dictionary_or_empty(value)
+		raw_value = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var item_id := _normalize_content_id(raw_value)
+	if not item_id.is_empty() and not output.has(item_id):
+		output.append(item_id)
+
+
+func _owner_label(session: Dictionary) -> String:
+	var definition_id := str(session.get("owner_actor_definition_id", "")).strip_edges()
+	var actor_id := int(session.get("owner_actor_id", 0))
+	if not definition_id.is_empty() and actor_id > 0:
+		return "%s #%d" % [definition_id, actor_id]
+	if not definition_id.is_empty():
+		return definition_id
+	if actor_id > 0:
+		return "#%d" % actor_id
+	return "其他角色"
+
+
+func _add_counted_requirement_line(lines: Array[String], label: String, count: int) -> void:
+	if count > 0:
+		lines.append("%s x%d" % [label, count])
+
+
+func _quest_condition_count(session: Dictionary) -> int:
+	var count := 0
+	for key in [
+		"required_active_quest_ids",
+		"required_active_quests",
+		"required_completed_quest_ids",
+		"required_completed_quests",
+		"blocked_active_quest_ids",
+		"blocked_active_quests",
+		"blocked_completed_quest_ids",
+		"blocked_completed_quests",
+	]:
+		count += _array_or_empty(session.get(key, [])).size()
+	return count
+
+
+func _add_capacity_line(lines: Array[String], session: Dictionary) -> void:
+	var parts: Array[String] = []
+	for key in ["max_weight", "max_container_weight", "weight_capacity"]:
+		if session.has(key):
+			parts.append("%.1fkg" % float(session.get(key, 0.0)))
+			break
+	for key in ["max_items", "max_item_count", "item_capacity"]:
+		if session.has(key):
+			parts.append("%d件" % int(session.get(key, 0)))
+			break
+	for key in ["max_stacks", "max_stack_count", "slot_capacity", "max_slots"]:
+		if session.has(key):
+			parts.append("%d类" % int(session.get(key, 0)))
+			break
+	if not parts.is_empty():
+		lines.append("容量: %s" % " / ".join(parts))
 
 
 func _bulk_partial_text(feedback: Dictionary) -> String:

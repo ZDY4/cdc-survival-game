@@ -378,6 +378,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	}
 	_set_active_container_id(game_root, "key_required_container")
 	game_root.refresh_container_panel()
+	var key_permission_text := _container_permission_text(game_root)
+	if not key_permission_text.contains("锁定") or not key_permission_text.contains("钥匙"):
+		errors.append("key-required container should preview locked key permission")
 	var missing_key_take: Dictionary = game_root.take_active_container_item("1006", 1)
 	if str(missing_key_take.get("reason", "")) != "container_key_missing":
 		errors.append("key-required container should report container_key_missing")
@@ -399,6 +402,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	}
 	_set_active_container_id(game_root, "consuming_key_container")
 	permission_player.inventory["1138"] = 1
+	game_root.refresh_container_panel()
+	var consuming_key_permission_text := _container_permission_text(game_root)
+	if not consuming_key_permission_text.contains("解锁消耗钥匙"):
+		errors.append("consuming key container should preview key consumption")
 	var consuming_key_take: Dictionary = game_root.take_active_container_item("1006", 1)
 	if not bool(consuming_key_take.get("success", false)):
 		errors.append("consuming key container should allow take with key: %s" % consuming_key_take.get("reason", "unknown"))
@@ -420,6 +427,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	}
 	_set_active_container_id(game_root, "tool_required_container")
 	game_root.refresh_container_panel()
+	if not _container_permission_text(game_root).contains("工具"):
+		errors.append("tool-required container should preview required tool")
 	player_refill_water(game_root)
 	var missing_tool_store: Dictionary = game_root.store_active_container_item("1008", 1)
 	if str(missing_tool_store.get("reason", "")) != "container_tool_missing":
@@ -442,6 +451,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_set_active_container_id(game_root, "consuming_tool_container")
 	player_refill_water(game_root)
 	permission_player.inventory["1150"] = 1
+	game_root.refresh_container_panel()
+	if not _container_permission_text(game_root).contains("解锁消耗工具"):
+		errors.append("consuming tool container should preview tool consumption")
 	var consuming_tool_store: Dictionary = game_root.store_active_container_item("1008", 1)
 	if not bool(consuming_tool_store.get("success", false)):
 		errors.append("consuming tool container should allow store with tool: %s" % consuming_tool_store.get("reason", "unknown"))
@@ -550,6 +562,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	}
 	_set_active_container_id(game_root, "owned_forbidden_container")
 	game_root.refresh_container_panel()
+	if not _container_permission_text(game_root).contains("归属"):
+		errors.append("owned container should preview owner permission")
 	var owned_take: Dictionary = game_root.take_active_container_item("1006", 1)
 	if str(owned_take.get("reason", "")) != "container_owner_forbidden":
 		errors.append("owned container should reject take without steal or relationship permission")
@@ -831,6 +845,13 @@ func _container_feedback(game_root: Node) -> String:
 
 func _container_detail(game_root: Node) -> String:
 	var label: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/DetailLine")
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
+func _container_permission_text(game_root: Node) -> String:
+	var label: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/PermissionsLine")
 	if label is Label:
 		return str((label as Label).text)
 	return ""

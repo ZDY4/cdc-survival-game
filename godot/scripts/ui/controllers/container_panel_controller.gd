@@ -8,6 +8,7 @@ var _panel: PanelContainer
 var _title_label: Label
 var _close_button: Button
 var _summary_label: Label
+var _permission_label: Label
 var _feedback_label: Label
 var _detail_label: Label
 var _quantity_label: Label
@@ -50,6 +51,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		_summary_label.text = "容器资源不可用: %s" % snapshot.get("error", "unknown")
 		_container_transferable_count = 0
 		_player_transferable_count = 0
+		_apply_permission_preview({})
 		_apply_feedback({})
 		_apply_detail({}, "")
 		_clear_items()
@@ -64,6 +66,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		snapshot.get("items", []).size(),
 		snapshot.get("player_items", []).size(),
 	]
+	_apply_permission_preview(_dictionary_or_empty(snapshot.get("permission_preview", {})))
 	_apply_feedback(_dictionary_or_empty(snapshot.get("feedback", {})))
 	_clear_box(_items_box)
 	_clear_box(_player_items_box)
@@ -115,6 +118,7 @@ func _build_layout() -> void:
 		close_requested.emit()
 	)
 	_summary_label = _label("SummaryLine")
+	_permission_label = _label("PermissionsLine")
 	_feedback_label = _label("FeedbackLine")
 	_detail_label = _label("DetailLine")
 	var transfer_controls := HBoxContainer.new()
@@ -232,6 +236,7 @@ func _build_layout() -> void:
 	box.add_child(_title_label)
 	box.add_child(_close_button)
 	box.add_child(_summary_label)
+	box.add_child(_permission_label)
 	box.add_child(_feedback_label)
 	box.add_child(_detail_label)
 	box.add_child(transfer_controls)
@@ -367,6 +372,15 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 	_selected_source = source
 	_selected_item_id = str(item.get("item_id", ""))
 	_update_transfer_controls(item, source)
+
+
+func _apply_permission_preview(preview: Dictionary) -> void:
+	if _permission_label == null:
+		return
+	var text := str(preview.get("text", "权限：无特殊限制"))
+	_permission_label.text = text
+	var lines: Array = preview.get("lines", [])
+	_permission_label.tooltip_text = "\n".join(lines) if not lines.is_empty() else text
 
 
 func _update_transfer_controls(item: Dictionary, source: String) -> void:

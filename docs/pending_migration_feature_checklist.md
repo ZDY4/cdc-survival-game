@@ -586,7 +586,7 @@ Godot 落点：`godot/scripts/core/economy/equipment_*.gd`、`godot/scripts/worl
 - [x] 基础失败提示：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器，已纳入 `ContainerUI` smoke。
 - [~] take/store all：容器面板“全部拿取 / 全部存放”第一版已迁入，复用单项容器事务，批量成功、部分成功和事件已纳入 `ContainerUI` smoke；待补批量操作视觉 polish。
 - [~] 空容器 world 状态：容器清空后仍保留地图对象和 pickable body，world snapshot / renderer 暴露 empty/item/money metadata 与 `ContainerStateBadge`；待补更完整美术 polish。
-- [~] 高级失败提示：非法数量、背包负重限制、容器自身容量和权限不足已有第一版中文反馈；待补格子限制、多 stack 和更完整权限预览。
+- [~] 高级失败提示：非法数量、背包负重限制、容器自身容量、权限预览和权限不足已有第一版中文反馈；待补格子限制、多 stack 和权限预览 polish。
 
 参考：`game_ui/container_ui/**`、`interaction_behaviors/open_container.rs`。
 Godot 落点：`godot/scripts/core/economy/container_transactions.gd`、`godot/scripts/ui/controllers/container_panel_controller.gd`。
