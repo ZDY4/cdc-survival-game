@@ -80,10 +80,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if bool(game_root.is_auto_tick_enabled()):
 		errors.append("auto tick should start disabled")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
+	_assert_observe_auto_button(errors, game_root, false, "initial observe auto hotbar")
 	_press_key(game_root, KEY_A)
 	if not bool(game_root.is_auto_tick_enabled()):
 		errors.append("A should enable auto tick")
 	_assert_runtime_control_line(errors, game_root, "AutoTick on", "auto tick on HUD")
+	_assert_observe_auto_button(errors, game_root, true, "auto tick on observe hotbar")
 	var before_auto_events: int = game_root.simulation.snapshot().get("events", []).size()
 	await _wait_process_frames(40)
 	if game_root.simulation.snapshot().get("events", []).size() <= before_auto_events:
@@ -102,6 +104,27 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if bool(game_root.is_auto_tick_enabled()):
 		errors.append("second A should disable auto tick")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "auto tick off HUD")
+	_assert_observe_auto_button(errors, game_root, false, "auto tick off observe hotbar")
+	var observe_auto_button: Button = _observe_auto_button(game_root)
+	if observe_auto_button == null:
+		errors.append("observe hotbar should expose auto tick button for direct toggle")
+	else:
+		observe_auto_button.pressed.emit()
+		await _wait_process_frames(2)
+		if not bool(game_root.is_auto_tick_enabled()):
+			errors.append("observe hotbar auto button should enable auto tick")
+		_assert_runtime_control_line(errors, game_root, "AutoTick on", "observe auto button on HUD")
+		_assert_observe_auto_button(errors, game_root, true, "observe auto button on state")
+		observe_auto_button = _observe_auto_button(game_root)
+		if observe_auto_button == null:
+			errors.append("observe hotbar should refresh auto button after enabling")
+		else:
+			observe_auto_button.pressed.emit()
+			await _wait_process_frames(2)
+			if bool(game_root.is_auto_tick_enabled()):
+				errors.append("observe hotbar auto button should disable auto tick")
+			_assert_runtime_control_line(errors, game_root, "AutoTick off", "observe auto button off HUD")
+			_assert_observe_auto_button(errors, game_root, false, "observe auto button off state")
 	_press_key(game_root, KEY_V)
 	if str(game_root.current_debug_overlay_mode()) != "walkable":
 		errors.append("V should switch debug overlay mode to walkable")
@@ -647,6 +670,26 @@ func _assert_runtime_control_line(errors: Array[String], game_root: Node, expect
 		return
 	if not str((label as Label).text).contains(expected):
 		errors.append("%s: RuntimeControlLine expected to contain %s, got %s" % [context, expected, str((label as Label).text)])
+
+
+func _assert_observe_auto_button(errors: Array[String], game_root: Node, expected_enabled: bool, context: String) -> void:
+	var button := _observe_auto_button(game_root)
+	if button == null:
+		errors.append("%s: HUD should expose ObserveAutoButton" % context)
+		return
+	var expected_text := "Auto on" if expected_enabled else "Auto off"
+	if str(button.text) != expected_text:
+		errors.append("%s: ObserveAutoButton expected %s, got %s" % [context, expected_text, str(button.text)])
+	if bool(button.get_meta("auto_tick", not expected_enabled)) != expected_enabled:
+		errors.append("%s: ObserveAutoButton should expose auto_tick metadata %s" % [context, str(expected_enabled)])
+	if button.disabled:
+		errors.append("%s: ObserveAutoButton should stay enabled" % context)
+
+
+func _observe_auto_button(game_root: Node) -> Button:
+	if game_root.hud == null:
+		return null
+	return game_root.hud.find_child("ObserveAutoButton", true, false) as Button
 
 
 func _expect_blocker(errors: Array[String], game_root: Node, expected: String, context: String) -> void:

@@ -8,6 +8,7 @@ var _quest_label: Label
 var _combat_hud_label: Label
 var _hotbar_group_box: HBoxContainer
 var _hotbar_box: HBoxContainer
+var _observe_hotbar_box: HBoxContainer
 var _interaction_label: Label
 var _event_feedback_label: Label
 var _debug_overlay_label: Label
@@ -56,6 +57,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
 	_combat_hud_label.text = _combat_hud_text(snapshot.get("combat_hud", {}))
 	_apply_hotbar(snapshot.get("hotbar", []), snapshot.get("hotbar_group_labels", {}))
+	_apply_observe_hotbar(snapshot.get("runtime_control", {}))
 	_interaction_label.text = _interaction_text(interaction)
 	_event_feedback_label.text = _event_feedback_text(snapshot.get("event_feedback", []))
 	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
@@ -98,6 +100,9 @@ func _build_layout() -> void:
 	_hotbar_box = HBoxContainer.new()
 	_hotbar_box.name = "HotbarDock"
 	_hotbar_box.add_theme_constant_override("separation", 4)
+	_observe_hotbar_box = HBoxContainer.new()
+	_observe_hotbar_box.name = "ObserveHotbarDock"
+	_observe_hotbar_box.add_theme_constant_override("separation", 4)
 	_interaction_label = _line("InteractionLine")
 	_event_feedback_label = _line("EventFeedbackLine")
 	_debug_overlay_label = _line("DebugOverlayLine")
@@ -112,6 +117,7 @@ func _build_layout() -> void:
 	box.add_child(_combat_hud_label)
 	box.add_child(_hotbar_group_box)
 	box.add_child(_hotbar_box)
+	box.add_child(_observe_hotbar_box)
 	box.add_child(_interaction_label)
 	box.add_child(_event_feedback_label)
 	box.add_child(_debug_overlay_label)
@@ -457,6 +463,63 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	)
 	_add_hotbar_cooldown_mask(button, slot_id, cooldown)
 	return button
+
+
+func _apply_observe_hotbar(runtime_control_value: Variant) -> void:
+	if _observe_hotbar_box == null:
+		return
+	for child in _observe_hotbar_box.get_children():
+		_observe_hotbar_box.remove_child(child)
+		child.free()
+	var runtime_control: Dictionary = _dictionary_or_empty(runtime_control_value)
+	var observe_mode := bool(runtime_control.get("observe_mode", false))
+	var playback := bool(runtime_control.get("observe_playback", false))
+	var speed := str(runtime_control.get("observe_speed", "x1"))
+	var auto_tick := bool(runtime_control.get("auto_tick", false))
+	var map_level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
+	_observe_hotbar_box.add_child(_observe_button("ObservePlayButton", "Pause" if playback else "Play", "observe_playback", playback, not observe_mode))
+	_observe_hotbar_box.add_child(_observe_button("ObserveSpeedButton", speed, "observe_speed", speed, true))
+	_observe_hotbar_box.add_child(_observe_auto_button(auto_tick))
+	_observe_hotbar_box.add_child(_observe_button("ObserveLevelButton", "L%d" % int(map_level.get("current", 0)), "observe_level", int(map_level.get("current", 0)), true))
+
+
+func _observe_button(node_name: String, text: String, meta_key: String, meta_value: Variant, disabled: bool) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	button.tooltip_text = _observe_tooltip(meta_key, meta_value, disabled)
+	button.custom_minimum_size = Vector2(max(42, text.length() * 10 + 18), 26)
+	button.focus_mode = Control.FOCUS_NONE
+	button.disabled = disabled
+	button.set_meta(meta_key, meta_value)
+	button.set_meta("disabled_reason", "observe_control_unavailable" if disabled else "")
+	return button
+
+
+func _observe_auto_button(auto_tick: bool) -> Button:
+	var button := _observe_button("ObserveAutoButton", "Auto on" if auto_tick else "Auto off", "auto_tick", auto_tick, false)
+	button.pressed.connect(func() -> void:
+		var root := get_parent()
+		if root != null and root.has_method("toggle_auto_tick"):
+			root.call_deferred("toggle_auto_tick")
+	)
+	return button
+
+
+func _observe_tooltip(meta_key: String, meta_value: Variant, disabled: bool) -> String:
+	var state := str(meta_value)
+	match meta_key:
+		"observe_playback":
+			state = "播放" if bool(meta_value) else "暂停"
+		"observe_speed":
+			state = "速度 %s" % str(meta_value)
+		"observe_level":
+			state = "观察楼层 %d" % int(meta_value)
+		"auto_tick":
+			state = "自动推进 %s" % ("开启" if bool(meta_value) else "关闭")
+	if disabled:
+		state = "%s | 暂不可切换" % state
+	return state
 
 
 func _add_hotbar_cooldown_mask(button: Button, slot_id: String, cooldown: float) -> void:

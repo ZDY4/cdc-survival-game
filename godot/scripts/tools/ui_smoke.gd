@@ -95,6 +95,10 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		var group_button: Button = hud.find_child("HotbarGroup_group_1", true, false) as Button
 		if group_button == null or not bool(group_button.get_meta("active", false)):
 			errors.append("hotbar group bar should expose active group 1 button")
+	if hud.get_node_or_null("HudPanel/HudLines/ObserveHotbarDock") == null:
+		errors.append("missing observe hotbar dock")
+	else:
+		_validate_observe_hotbar(errors, hud)
 	if not hud.get_node("HudPanel/HudLines/InteractionLine").text.contains("拾取"):
 		errors.append("interaction line missing pickup option")
 	if hud.get_node_or_null("HudPanel/HudLines/EventFeedbackLine") == null:
@@ -142,6 +146,32 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 	elif not _has_disabled_option(interaction.get("disabled_options", []), "open_container", "target_not_container"):
 		errors.append("HUD snapshot should expose disabled interaction reason")
 	return errors
+
+
+func _validate_observe_hotbar(errors: Array[String], hud: Control) -> void:
+	var observe_dock: Node = hud.get_node("HudPanel/HudLines/ObserveHotbarDock")
+	if observe_dock.get_child_count() != 4:
+		errors.append("observe hotbar dock should expose playback, speed, auto and level buttons")
+	var play_button: Button = observe_dock.get_node_or_null("ObservePlayButton") as Button
+	if play_button == null or str(play_button.text) != "Play" or not play_button.disabled:
+		errors.append("observe hotbar should expose disabled Play button outside observe mode")
+	elif not play_button.has_meta("observe_playback") or not str(play_button.tooltip_text).contains("暂停"):
+		errors.append("observe play button should expose playback metadata and tooltip")
+	var speed_button: Button = observe_dock.get_node_or_null("ObserveSpeedButton") as Button
+	if speed_button == null or str(speed_button.text) != "x1" or not speed_button.disabled:
+		errors.append("observe hotbar should expose disabled speed button")
+	elif str(speed_button.get_meta("observe_speed", "")) != "x1" or not str(speed_button.tooltip_text).contains("速度 x1"):
+		errors.append("observe speed button should expose speed metadata and tooltip")
+	var auto_button: Button = observe_dock.get_node_or_null("ObserveAutoButton") as Button
+	if auto_button == null or str(auto_button.text) != "Auto off" or auto_button.disabled:
+		errors.append("observe hotbar should expose enabled Auto off button")
+	elif bool(auto_button.get_meta("auto_tick", true)) or not str(auto_button.tooltip_text).contains("自动推进 关闭"):
+		errors.append("observe auto button should expose auto tick metadata and tooltip")
+	var level_button: Button = observe_dock.get_node_or_null("ObserveLevelButton") as Button
+	if level_button == null or str(level_button.text) != "L0" or not level_button.disabled:
+		errors.append("observe hotbar should expose disabled current level button")
+	elif int(level_button.get_meta("observe_level", -1)) != 0 or not str(level_button.tooltip_text).contains("观察楼层 0"):
+		errors.append("observe level button should expose level metadata and tooltip")
 
 
 func _validate_hud_combat_hud(hud: Control, simulation: RefCounted, world_result: Dictionary) -> Array[String]:

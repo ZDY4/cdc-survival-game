@@ -621,7 +621,7 @@ Godot 落点：`godot/scripts/core/economy/shop_transactions.gd`、`godot/script
 - [ ] 技能学习确认和失败 reason。
 - [~] 多组/多槽 hotbar、拖拽绑定、清空、替换：三组快捷栏、HUD 组按钮、组命名、当前组绑定/使用、独立保存和 `Alt+1/2/3` 切组第一版已迁移；待补完整快捷键冲突矩阵。
 - [~] 数字键激活、cooldown 遮罩、不可用 reason。
-- [ ] observe mode hotbar：播放、速度、自动状态。
+- [~] observe mode hotbar：播放、速度、自动状态和观察楼层展示第一版已迁移，Auto 按钮可切换自动推进；待补 observe playback / speed 的真实控制和冲突策略。
 
 参考：`simulation/actor_progression.rs`、`simulation/skills.rs`、`game_ui/hotbar/**`、`panels/skills*.rs`。
 Godot 落点：`godot/scripts/core/progression/**`、`godot/scripts/ui/controllers/skills_panel_controller.gd`、`hud_controller.gd`。
@@ -797,7 +797,7 @@ Godot 落点：`godot/scenes/boot/**`、`godot/scripts/app/boot.gd`。
 - [ ] interaction prompt 和 primary action。
 - [ ] interaction menu 布局、disabled、dangerous、hover。
 - [ ] hotbar dock、cooldown、tooltip。
-- [ ] observe mode dock。
+- [~] observe mode dock：播放、速度、自动推进和观察楼层显示第一版。
 - [ ] controls hint 展开/折叠。
 - [ ] blocker / modal / context menu 层级。
 
