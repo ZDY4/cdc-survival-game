@@ -931,7 +931,7 @@
 - [~] HP/AP/inventory/quest/interaction prompt 基础。
 - [~] interaction menu 基础。
 - [~] debug overlay mode 基础。
-- [ ] combat HUD：当前回合、敌人数量、目标预览、伤害预估。
+- [~] combat HUD：当前回合、行动方、敌人数量、参与者数量、目标预览、命中/暴击/伤害预估第一版已迁移；待补更完整战斗布局、目标选择联动和视觉 polish。
 - [ ] hotbar：技能、物品、冷却、快捷键。
 - [ ] hover tooltip：actor/object/item/cell。
 - [ ] quest tracker。

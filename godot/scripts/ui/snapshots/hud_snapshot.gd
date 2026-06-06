@@ -30,6 +30,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_ta
 			"interactive_count": world_snapshot.get("map", {}).get("interactive_objects", []).size(),
 		},
 		"status_badges": _status_badges(runtime_snapshot, player),
+		"combat_hud": _combat_hud_summary(runtime_snapshot, player),
 		"interaction": prompt,
 		"hotbar": _hotbar_summary(runtime_snapshot, player),
 		"event_feedback": _event_feedback(runtime_snapshot),
@@ -119,6 +120,92 @@ func _status_badges(runtime_snapshot: Dictionary, player: Dictionary) -> Array[D
 			"value": "on" if bool(combat_state.get("active", false)) else "off",
 		},
 	]
+
+
+func _combat_hud_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Dictionary:
+	var turn_state: Dictionary = _dictionary_or_empty(runtime_snapshot.get("turn_state", {}))
+	var combat_state: Dictionary = _dictionary_or_empty(runtime_snapshot.get("combat_state", {}))
+	var active_actor_id := int(turn_state.get("active_actor_id", 0))
+	var active_actor := _actor_by_id(runtime_snapshot, active_actor_id)
+	var player_actor_id := int(player.get("actor_id", 0))
+	var target_preview := _combat_target_preview(runtime_snapshot)
+	return {
+		"active": bool(combat_state.get("active", false)),
+		"round": int(turn_state.get("round", 0)),
+		"combat_round": int(combat_state.get("round", 0)),
+		"phase": str(turn_state.get("phase", "")),
+		"active_actor_id": active_actor_id,
+		"active_actor_name": str(active_actor.get("display_name", "")),
+		"active_actor_kind": str(active_actor.get("kind", "")),
+		"player_turn": active_actor_id == player_actor_id and str(turn_state.get("phase", "")) == "player",
+		"enemy_count": _hostile_actor_count(runtime_snapshot),
+		"participant_count": _array_or_empty(combat_state.get("participants", [])).size(),
+		"turns_without_hostile_player_sight": int(combat_state.get("turns_without_hostile_player_sight", 0)),
+		"target_preview": target_preview,
+	}
+
+
+func _combat_target_preview(runtime_snapshot: Dictionary) -> Dictionary:
+	var preview: Dictionary = _dictionary_or_empty(runtime_snapshot.get("target_preview", {}))
+	var target: Dictionary = _dictionary_or_empty(preview.get("target", {}))
+	var target_actor_id := int(preview.get("target_actor_id", target.get("actor_id", 0)))
+	if target_actor_id <= 0:
+		return {}
+	var target_actor := _actor_by_id(runtime_snapshot, target_actor_id)
+	var target_name := str(preview.get("target_name", target.get("target_name", ""))).strip_edges()
+	if target_name.is_empty():
+		target_name = str(target_actor.get("display_name", ""))
+	var output := {
+		"target_actor_id": target_actor_id,
+		"target_name": target_name,
+		"target_side": str(target_actor.get("side", preview.get("target_side", ""))),
+		"can_attack": bool(preview.get("can_attack", preview.get("success", false))),
+		"reason": str(preview.get("reason", "")),
+		"distance": int(preview.get("distance", -1)),
+		"range": int(preview.get("range", preview.get("attack_range", -1))),
+		"ap_cost": float(preview.get("ap_cost", 0.0)),
+		"ap_available": float(preview.get("ap_available", 0.0)),
+		"hit_chance": float(preview.get("hit_chance", -1.0)),
+		"crit_chance": float(preview.get("crit_chance", -1.0)),
+		"estimated_damage": float(preview.get("estimated_damage", preview.get("damage", -1.0))),
+		"minimum_damage": float(preview.get("minimum_damage", -1.0)),
+		"maximum_damage": float(preview.get("maximum_damage", -1.0)),
+	}
+	var combat: Dictionary = _dictionary_or_empty(target_actor.get("combat", {}))
+	if not combat.is_empty():
+		output["target_hp"] = float(combat.get("hp", 0.0))
+		output["target_max_hp"] = float(combat.get("max_hp", 0.0))
+	return output
+
+
+func _hostile_actor_count(runtime_snapshot: Dictionary) -> int:
+	var count := 0
+	for actor in _array_or_empty(runtime_snapshot.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if _actor_defeated(actor_data):
+			continue
+		var side := str(actor_data.get("side", ""))
+		var kind := str(actor_data.get("kind", ""))
+		if side == "hostile" or kind == "enemy":
+			count += 1
+	return count
+
+
+func _actor_by_id(runtime_snapshot: Dictionary, actor_id: int) -> Dictionary:
+	if actor_id <= 0:
+		return {}
+	for actor in _array_or_empty(runtime_snapshot.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if int(actor_data.get("actor_id", 0)) == actor_id:
+			return actor_data
+	return {}
+
+
+func _actor_defeated(actor: Dictionary) -> bool:
+	var combat: Dictionary = _dictionary_or_empty(actor.get("combat", {}))
+	if combat.is_empty():
+		return false
+	return float(combat.get("hp", 1.0)) <= 0.0
 
 
 func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[Dictionary]:

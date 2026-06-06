@@ -39,6 +39,7 @@ func _init() -> void:
 
 	var errors := _validate_hud(hud, snapshot)
 	errors.append_array(_validate_hud_failure_feedback(hud, simulation, world_result, registry))
+	errors.append_array(_validate_hud_combat_hud(hud, simulation, world_result))
 	errors.append_array(_validate_hud_combat_feedback(hud, simulation, world_result))
 	if not errors.is_empty():
 		for error in errors:
@@ -112,6 +113,15 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("HUD snapshot should expose status badges")
 	if not snapshot.has("tracked_quest") or bool(snapshot.get("tracked_quest", {}).get("active", true)):
 		errors.append("HUD snapshot should expose inactive tracked quest by default")
+	if hud.get_node_or_null("HudPanel/HudLines/CombatHudLine") == null:
+		errors.append("missing combat HUD line")
+	if typeof(snapshot.get("combat_hud", {})) != TYPE_DICTIONARY:
+		errors.append("HUD snapshot should expose combat_hud")
+	else:
+		var combat_hud: Dictionary = _dictionary_or_empty(snapshot.get("combat_hud", {}))
+		for key in ["active", "round", "phase", "active_actor_id", "enemy_count", "target_preview"]:
+			if not combat_hud.has(key):
+				errors.append("HUD combat_hud should expose %s" % key)
 	var interaction: Dictionary = snapshot.get("interaction", {})
 	if str(interaction.get("target_kind", "")) != "pickup":
 		errors.append("HUD snapshot should expose interaction target_kind")
@@ -131,6 +141,72 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("HUD snapshot should expose disabled_options")
 	elif not _has_disabled_option(interaction.get("disabled_options", []), "open_container", "target_not_container"):
 		errors.append("HUD snapshot should expose disabled interaction reason")
+	return errors
+
+
+func _validate_hud_combat_hud(hud: Control, simulation: RefCounted, world_result: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var runtime_snapshot: Dictionary = simulation.snapshot().duplicate(true)
+	var actors: Array = _array_or_empty(runtime_snapshot.get("actors", [])).duplicate(true)
+	actors.append({
+		"actor_id": 42,
+		"definition_id": "zombie_walker",
+		"display_name": "Zombie Smoke",
+		"kind": "enemy",
+		"side": "hostile",
+		"ap": 3.0,
+		"turn_open": false,
+		"in_combat": true,
+		"grid_position": {"x": 4, "y": 0, "z": 2},
+		"inventory": {},
+		"combat": {
+			"hp": 12.0,
+			"max_hp": 20.0,
+		},
+	})
+	runtime_snapshot["actors"] = actors
+	runtime_snapshot["turn_state"] = {
+		"round": 4,
+		"phase": "player",
+		"active_actor_id": 1,
+	}
+	runtime_snapshot["combat_state"] = {
+		"active": true,
+		"round": 3,
+		"participants": [1, 42],
+		"turns_without_hostile_player_sight": 0,
+	}
+	runtime_snapshot["target_preview"] = {
+		"target_actor_id": 42,
+		"target_name": "Zombie Smoke",
+		"can_attack": true,
+		"reason": "ok",
+		"distance": 2,
+		"range": 3,
+		"ap_cost": 2.0,
+		"ap_available": 6.0,
+		"hit_chance": 0.75,
+		"crit_chance": 0.10,
+		"estimated_damage": 5.0,
+		"minimum_damage": 0.0,
+		"maximum_damage": 10.0,
+	}
+	var snapshot: Dictionary = HudSnapshot.new().build(runtime_snapshot, world_result, {})
+	var combat_hud: Dictionary = _dictionary_or_empty(snapshot.get("combat_hud", {}))
+	if not bool(combat_hud.get("active", false)):
+		errors.append("combat HUD should expose active combat state")
+	if int(combat_hud.get("enemy_count", 0)) != 1:
+		errors.append("combat HUD should count active hostile enemies")
+	if int(combat_hud.get("participant_count", 0)) != 2:
+		errors.append("combat HUD should expose participant count")
+	var preview: Dictionary = _dictionary_or_empty(combat_hud.get("target_preview", {}))
+	if int(preview.get("target_actor_id", 0)) != 42 or absf(float(preview.get("estimated_damage", -1.0)) - 5.0) > 0.001:
+		errors.append("combat HUD should expose target preview and damage estimate")
+	hud.apply_snapshot(snapshot)
+	var combat_line := str(hud.get_node("HudPanel/HudLines/CombatHudLine").text)
+	for token in ["Combat on", "Round 4", "Enemies 1", "Participants 2", "Target Zombie Smoke#42", "Hit 75%", "Crit 10%", "Dmg 5 (0-10)"]:
+		if not combat_line.contains(token):
+			errors.append("combat HUD line missing %s, got %s" % [token, combat_line])
 	return errors
 
 
@@ -214,3 +290,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

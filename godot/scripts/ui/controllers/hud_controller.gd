@@ -5,6 +5,7 @@ var _status_badge_label: Label
 var _player_label: Label
 var _inventory_label: Label
 var _quest_label: Label
+var _combat_hud_label: Label
 var _hotbar_group_box: HBoxContainer
 var _hotbar_box: HBoxContainer
 var _interaction_label: Label
@@ -53,6 +54,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		player.get("active_dialogue_id", ""),
 	]
 	_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
+	_combat_hud_label.text = _combat_hud_text(snapshot.get("combat_hud", {}))
 	_apply_hotbar(snapshot.get("hotbar", []))
 	_interaction_label.text = _interaction_text(interaction)
 	_event_feedback_label.text = _event_feedback_text(snapshot.get("event_feedback", []))
@@ -89,6 +91,7 @@ func _build_layout() -> void:
 	_player_label = _line("PlayerLine")
 	_inventory_label = _line("InventoryLine")
 	_quest_label = _line("QuestLine")
+	_combat_hud_label = _line("CombatHudLine")
 	_hotbar_group_box = HBoxContainer.new()
 	_hotbar_group_box.name = "HotbarGroupBar"
 	_hotbar_group_box.add_theme_constant_override("separation", 4)
@@ -106,6 +109,7 @@ func _build_layout() -> void:
 	box.add_child(_player_label)
 	box.add_child(_inventory_label)
 	box.add_child(_quest_label)
+	box.add_child(_combat_hud_label)
 	box.add_child(_hotbar_group_box)
 	box.add_child(_hotbar_box)
 	box.add_child(_interaction_label)
@@ -672,6 +676,76 @@ func _tracked_quest_text(value: Variant) -> String:
 		int(quest.get("progress_target", 0)),
 		str(quest.get("status_text", "")),
 	]
+
+
+func _combat_hud_text(value: Variant) -> String:
+	var combat_hud: Dictionary = _dictionary_or_empty(value)
+	if combat_hud.is_empty():
+		return "Combat HUD none"
+	var state_text := "on" if bool(combat_hud.get("active", false)) else "off"
+	var active_actor_name := str(combat_hud.get("active_actor_name", "")).strip_edges()
+	if active_actor_name.is_empty():
+		active_actor_name = "actor#%d" % int(combat_hud.get("active_actor_id", 0))
+	var turn_text := "player" if bool(combat_hud.get("player_turn", false)) else str(combat_hud.get("phase", ""))
+	var parts: Array[String] = [
+		"Combat %s" % state_text,
+		"Round %d" % int(combat_hud.get("round", 0)),
+		"Turn %s %s#%d" % [
+			turn_text,
+			active_actor_name,
+			int(combat_hud.get("active_actor_id", 0)),
+		],
+		"Enemies %d" % int(combat_hud.get("enemy_count", 0)),
+	]
+	var participant_count := int(combat_hud.get("participant_count", 0))
+	if participant_count > 0:
+		parts.append("Participants %d" % participant_count)
+	var target_text := _combat_target_preview_text(combat_hud.get("target_preview", {}))
+	if not target_text.is_empty():
+		parts.append(target_text)
+	return " | ".join(parts)
+
+
+func _combat_target_preview_text(value: Variant) -> String:
+	var preview: Dictionary = _dictionary_or_empty(value)
+	if preview.is_empty():
+		return "Target -"
+	var target_name := str(preview.get("target_name", "")).strip_edges()
+	if target_name.is_empty():
+		target_name = "actor#%d" % int(preview.get("target_actor_id", 0))
+	var parts: Array[String] = ["Target %s#%d" % [target_name, int(preview.get("target_actor_id", 0))]]
+	var hp := float(preview.get("target_hp", -1.0))
+	var max_hp := float(preview.get("target_max_hp", -1.0))
+	if hp >= 0.0 and max_hp > 0.0:
+		parts.append("HP %s/%s" % [_number_text(hp), _number_text(max_hp)])
+	var distance := int(preview.get("distance", -1))
+	var range := int(preview.get("range", -1))
+	if distance >= 0 or range >= 0:
+		parts.append("Dist %s/%s" % [
+			"-" if distance < 0 else str(distance),
+			"-" if range < 0 else str(range),
+		])
+	var hit_chance := float(preview.get("hit_chance", -1.0))
+	if hit_chance >= 0.0:
+		parts.append("Hit %s" % _percent_text(hit_chance))
+	var crit_chance := float(preview.get("crit_chance", -1.0))
+	if crit_chance >= 0.0:
+		parts.append("Crit %s" % _percent_text(crit_chance))
+	var estimated := float(preview.get("estimated_damage", -1.0))
+	var minimum := float(preview.get("minimum_damage", -1.0))
+	var maximum := float(preview.get("maximum_damage", -1.0))
+	if estimated >= 0.0:
+		var range_text := ""
+		if minimum >= 0.0 and maximum >= 0.0 and not is_equal_approx(minimum, maximum):
+			range_text = " (%s-%s)" % [_number_text(minimum), _number_text(maximum)]
+		parts.append("Dmg %s%s" % [_number_text(estimated), range_text])
+	else:
+		parts.append("Dmg -")
+	if not bool(preview.get("can_attack", false)):
+		var reason := str(preview.get("reason", ""))
+		if not reason.is_empty():
+			parts.append("Blocked %s" % _disabled_reason_text(reason))
+	return " | ".join(parts)
 
 
 func _info_panel_text(info_panel: Variant) -> String:
