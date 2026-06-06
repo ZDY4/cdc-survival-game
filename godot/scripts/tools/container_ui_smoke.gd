@@ -44,6 +44,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("container open failed: %s" % open_result.get("reason", "unknown"))
 	if not game_root.container_panel.visible:
 		errors.append("container panel should be visible after opening container")
+	var opened_session: Dictionary = _container_session(game_root.simulation.snapshot(), "survivor_outpost_01_clinic_supply_cabinet")
+	if str(opened_session.get("container_type", "")) != "map":
+		errors.append("opened map container session should expose container_type=map")
+	if str(opened_session.get("container_origin", "")) != "map_scene":
+		errors.append("opened map container session should expose container_origin=map_scene")
+	var panel: Node = game_root.container_panel.get_node_or_null("ContainerPanel")
+	if panel == null or str(panel.get_meta("container_type", "")) != "map":
+		errors.append("container panel should preserve active container type metadata")
 	if not _container_summary(game_root).contains("2 类物品"):
 		errors.append("container summary should expose initial entries")
 	if not _container_text(game_root).contains("抗生素"):
@@ -601,6 +609,8 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 		if str(badge.get_meta("container_visual_state", "")) != "empty":
 			errors.append("empty container badge should expose empty visual state")
 	var node_target: Dictionary = _dictionary_or_empty(container_node.get_meta("interaction_target", {}))
+	if str(node_target.get("container_type", "")) != "map":
+		errors.append("empty container interaction metadata should expose container_type")
 	if not bool(node_target.get("container_empty", false)):
 		errors.append("empty container interaction metadata should expose container_empty")
 	if int(node_target.get("container_item_count", -1)) != 0:
@@ -609,6 +619,8 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 	var pickable_target: Dictionary = _dictionary_or_empty(pickable_body.get_meta("interaction_target", {}) if pickable_body != null else {})
 	if pickable_body == null or not bool(pickable_target.get("container_empty", false)):
 		errors.append("empty container pickable body should mirror container_empty metadata")
+	if pickable_body == null or str(pickable_target.get("container_type", "")) != "map":
+		errors.append("empty container pickable body should mirror container_type metadata")
 	game_root.select_interaction_node(container_node)
 	var open_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(open_result.get("success", false)):
@@ -657,6 +669,14 @@ func _container_detail(game_root: Node) -> String:
 	if label is Label:
 		return str((label as Label).text)
 	return ""
+
+
+func _container_session(snapshot: Dictionary, container_id: String) -> Dictionary:
+	for entry in _array_or_empty(snapshot.get("container_sessions", [])):
+		var session: Dictionary = _dictionary_or_empty(entry)
+		if str(session.get("container_id", "")) == container_id:
+			return session
+	return {}
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:

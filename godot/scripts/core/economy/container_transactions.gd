@@ -314,6 +314,9 @@ func _sync_corpse_container_session(simulation: RefCounted, container_id: String
 	var corpse: Dictionary = _dictionary_or_empty(simulation.corpse_containers[container_id])
 	corpse["inventory"] = _array_or_empty(container.get("inventory", [])).duplicate(true)
 	corpse["money"] = max(0, int(container.get("money", corpse.get("money", 0))))
+	for key in ["container_type", "container_origin", "map_id", "grid_position", "source_actor_id", "source_actor_definition_id", "source_actor_kind", "defeated_by_actor_id", "drop_item_id"]:
+		if container.has(key):
+			corpse[key] = container.get(key)
 	simulation.corpse_containers[container_id] = corpse
 
 

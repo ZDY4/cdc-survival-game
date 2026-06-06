@@ -26,9 +26,9 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	var map_snapshot: Dictionary = topology.to_dictionary()
 	_apply_door_states(map_snapshot, runtime_snapshot.get("door_states", []))
 	_apply_consumed_interaction_targets(map_snapshot, runtime_snapshot.get("consumed_interaction_targets", []))
-	_apply_container_session_states(map_snapshot, runtime_snapshot.get("container_sessions", []))
 	var corpses: Array[Dictionary] = _corpses_on_map(runtime_snapshot.get("corpse_containers", []), map_id)
 	_apply_corpse_interaction_targets(map_snapshot, corpses)
+	_apply_container_session_states(map_snapshot, runtime_snapshot.get("container_sessions", []))
 	var actors: Array[Dictionary] = _actors_on_map(runtime_snapshot.get("actors", []), map_id)
 	_apply_actor_quest_markers(actors, runtime_snapshot)
 	_apply_actor_combat_feedback(actors, runtime_snapshot)
@@ -534,6 +534,14 @@ func _apply_container_session_states(map_snapshot: Dictionary, session_values: A
 		var money: int = max(0, int(session.get("money", 0)))
 		states[container_id] = {
 			"container_id": container_id,
+			"container_type": str(session.get("container_type", "map")),
+			"container_origin": str(session.get("container_origin", "")),
+			"container_map_id": str(session.get("map_id", "")),
+			"container_source_actor_id": int(session.get("source_actor_id", 0)),
+			"container_source_actor_definition_id": str(session.get("source_actor_definition_id", "")),
+			"container_source_actor_kind": str(session.get("source_actor_kind", "")),
+			"container_defeated_by_actor_id": int(session.get("defeated_by_actor_id", 0)),
+			"container_drop_item_id": str(session.get("drop_item_id", "")),
 			"container_inventory": inventory.duplicate(true),
 			"container_item_count": _container_item_count(inventory),
 			"container_stack_count": _container_stack_count(inventory),
@@ -642,6 +650,15 @@ func _apply_corpse_interaction_targets(map_snapshot: Dictionary, corpses: Array[
 			"target_type": "map_object",
 			"display_name": str(corpse.get("display_name", container_id)),
 			"kind": "container",
+			"container_type": str(corpse.get("container_type", "corpse")),
+			"container_origin": str(corpse.get("container_origin", "combat_defeat")),
+			"map_id": str(corpse.get("map_id", "")),
+			"grid_position": _dictionary_or_empty(corpse.get("grid_position", {})).duplicate(true),
+			"source_actor_id": int(corpse.get("source_actor_id", 0)),
+			"source_actor_definition_id": str(corpse.get("source_actor_definition_id", "")),
+			"source_actor_kind": str(corpse.get("source_actor_kind", "")),
+			"defeated_by_actor_id": int(corpse.get("defeated_by_actor_id", 0)),
+			"drop_item_id": str(corpse.get("drop_item_id", "")),
 			"anchor": grid,
 			"cells": [grid],
 			"container_inventory": _array_or_empty(corpse.get("inventory", [])).duplicate(true),

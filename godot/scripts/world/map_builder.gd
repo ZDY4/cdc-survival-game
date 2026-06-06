@@ -223,6 +223,9 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		"container_inventory": _array_or_empty(container_props.get("initial_inventory", [])),
 		"door": _door_summary(object_summary),
 	}
+	if interaction_kind == "container":
+		target["container_type"] = str(container_props.get("container_type", "map"))
+		target["container_origin"] = str(container_props.get("container_origin", "map_scene"))
 	_copy_optional_container_fields(target, container_props)
 	_copy_optional_transition_fields(target, interaction_props, trigger_props, primary_trigger_option)
 	return target
@@ -273,6 +276,12 @@ func _copy_optional_container_fields(target: Dictionary, container_props: Dictio
 		"max_stack_count",
 		"slot_capacity",
 		"max_slots",
+		"container_type",
+		"container_origin",
+		"owner_actor_id",
+		"owner_actor_definition_id",
+		"quest_id",
+		"shop_id",
 	]:
 		if container_props.has(key):
 			target[key] = container_props.get(key)

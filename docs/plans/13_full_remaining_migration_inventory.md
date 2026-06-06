@@ -122,7 +122,7 @@
 
 - 已有拾取、容器、对话、交易、场景切换、等待、攻击的第一版；self target 会生成“等待”交互菜单项，`submit_player_command(interact)` 与 direct `execute_interaction(..., "wait")` 都会推进回合并发出 `interaction_succeeded`；对话开始、容器打开、场景切换和 `interaction_succeeded` 的目标显示名 / option kind 已覆盖基础 payload；待补每种行为的完整失败反馈、禁用原因和 UI 刷新点。
 - pickup 数量和合并第一版已迁移：地图 pickup 按 scene 中 `max_count` 确定性发放，物品会合并进 actor inventory，result、`pickup_granted` 与 `interaction_succeeded` payload 会暴露 `item_id`、`count`、`inventory_before`、`inventory_after`，地图目标会进入 consumed 集合，并由 `Interaction` smoke 覆盖；任务收集进度已接入 `record_item_collected`。待补部分拾取、数量弹窗、拾取失败细分、拾取音效和 UI 提示 polish。
-- open_container 第一版已迁移：地图容器、尸体容器和掉落容器都统一进入 `container_sessions`，打开容器会设置 actor `active_container_id` 并发出 `container_opened`，拿取/存放会持久化 session；关闭按钮、Esc、距离过远、目标消失、切换地图和打开另一个容器都会清理 active container 并发出关闭事件，已由 `Interaction` / `ContainerUI` / `Combat` / `InventoryUI` / `Save` smoke 覆盖。待补容器 id 规范的完整文档、锁定/权限、部分拿取数量弹窗 polish、容器音效和 hover/open 表现。
+- open_container 第一版已迁移：地图容器、尸体容器和掉落容器都统一进入 `container_sessions`，打开容器会设置 actor `active_container_id` 并发出 `container_opened`，拿取/存放会持久化 session；容器 session / snapshot / save 会保留 `container_type` 与 `container_origin`，地图容器默认为 `map/map_scene`，尸体容器默认为 `corpse/combat_defeat`，掉落容器默认为 `drop/inventory_drop`，旧存档缺字段时会按 id 兜底推断；关闭按钮、Esc、距离过远、目标消失、切换地图和打开另一个容器都会清理 active container 并发出关闭事件，已由 `Interaction` / `ContainerUI` / `Combat` / `InventoryUI` / `Save` smoke 覆盖。待补容器 id 规范的完整文档、商店/任务容器与普通容器的深度权限差异、部分拿取数量弹窗 polish、容器音效和 hover/open 表现。
 - talk 规则选择第一版已迁移：`data/dialogue_rules` 进入 Godot data registry，启动时配置到 `Simulation`，talk 会按 NPC `definition_id` 解析 dialogue rule，按 active/completed quests、玩家物品数量、relation score、NPC role/on_shift 和玩家 HP 比例选择变体；找不到规则时回退到直接 dialogue id，找不到变体时回退 default dialogue。`dialogue_started` 和 `interaction_succeeded` 会暴露 requested / resolved dialogue、rule key 和 source，并由 `Interaction` / `DialogueUI` / `DialogueAction` / `Save` smoke 覆盖。待补 schedule/on_shift 真实时间判定、fallback 台词生成和对话 UI 文案 polish。
 - scene_transition 目标反馈第一版已迁移：场景切换 result、`scene_transition` 事件和 `interaction_succeeded` payload 会暴露 target id/name、from/to map、target entry point、entry facing、返回 map / entry 和落点 grid，失败时返回 target map / entry 诊断；进入权限已支持 world flag 与 unlocked location 的 required / blocked 条件，并在 prompt 禁用项、直接执行、玩家命令拒绝和 HUD 反馈中保持一致；已由 `Interaction` / `Scene` smoke 覆盖。待补确认 prompt 视觉、overworld 进入/返回 prompt 和更完整地图切换 UI polish。
 - wait self interaction 第一版已恢复：self target 会暴露“等待”菜单项，等待会进入现有回合推进逻辑并产出事件反馈；待补更完整的 modal 冲突策略和视觉 polish。
@@ -150,7 +150,7 @@
 ### 6.3 击杀和尸体
 
 - 击杀和尸体容器第一版已迁移：击杀会移除 actor、发放 XP、推进 kill 任务、创建可打开尸体容器，并把尸体同步到 `corpse_containers`、`container_sessions` 和 map interaction target；已由 `Combat` smoke 覆盖。
-- 尸体掉落合并和元数据第一版已迁移：尸体会合并目标背包、装备、已装填弹匣余弹和 character `combat.loot` 掉落；随机 loot chance / count 会使用可存档的 combat RNG，固定必掉 loot 保持静态结果；尸体 snapshot / container 会保留 display name、source actor id / definition id / kind、defeated by actor id、map id、grid、appearance / model asset、equipped slots 和 money；尸体 / 容器金钱已作为可拿取经济条目接入 `Simulation.take_money_from_container()`、`take_container_money` 命令、container snapshot / UI 行、存档 roundtrip 和事件反馈；已由 `Combat` / `ContainerUI` / `Save` smoke 覆盖。待补单件耐久状态、掉落随机公式与 Rust 完整复核、尸体容器 UI 展示装备来源。
+- 尸体掉落合并和元数据第一版已迁移：尸体会合并目标背包、装备、已装填弹匣余弹和 character `combat.loot` 掉落；随机 loot chance / count 会使用可存档的 combat RNG，固定必掉 loot 保持静态结果；尸体 snapshot / container 会保留 display name、container type / origin、source actor id / definition id / kind、defeated by actor id、map id、grid、appearance / model asset、equipped slots 和 money；尸体 / 容器金钱已作为可拿取经济条目接入 `Simulation.take_money_from_container()`、`take_container_money` 命令、container snapshot / UI 行、存档 roundtrip 和事件反馈；已由 `Combat` / `ContainerUI` / `Save` smoke 覆盖。待补单件耐久状态、掉落随机公式与 Rust 完整复核、尸体容器 UI 展示装备来源。
 - 尸体模型和 hover / open container 表现第一版已迁移：击杀后世界快照会把当前地图尸体注入动态 `Corpse_*` 节点，优先复用被击败 actor 的 glTF 模型并保留 pickable body；鼠标悬浮会显示 hover 光标，选择尸体会展示“打开...”主交互并能打开容器面板；已由 `PlayerInteraction` smoke 覆盖。待补专用尸体姿态/动画、美术模型、装备来源 UI 标记和尸体清理表现。
 - 待补击杀后 AI / combat state / quest / relationship / event feedback 的顺序一致性。
 
@@ -204,7 +204,7 @@
 ### 8.3 容器
 
 - 已有拿取/存放、全部拿取/全部存放、容器/背包双栏、滚动列表、基础详情文本、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip 和容器/背包双向拖拽转移第一版，并纳入 `ContainerUI` smoke；批量转移复用单项容器事务，成功项保留、失败项返回 `failures` 并可显示部分成功反馈。
-- 待补容器类型：地图容器、尸体容器、掉落容器、商店容器、任务容器的 id、权限和持久化差异。
+- 容器类型元数据第一版已迁移：地图容器、尸体容器和掉落容器会在 scene target、运行时 session、corpse/drop 记录、world snapshot、pickable metadata、ContainerSnapshot 和 save/load 中保留 `container_type` / `container_origin`；尸体/掉落容器在 load 后会兜底同步回普通 `container_sessions`，继续复用拿取、存放、权限和容量规则；已由 `ContainerUI` / `Combat` / `InventoryUI` / `Save` smoke 覆盖。待补商店容器、任务容器、NPC owner/偷窃、任务状态权限和完整 id 规范文档。
 - 容器关闭已覆盖 Esc、关闭按钮、目标消失关闭、切换地图关闭和超出距离关闭；空容器提示已覆盖。清空后地图对象状态第一版已迁移：`container_sessions` 会覆盖 world snapshot 中的容器库存、金钱和 empty/item count metadata，容器仍保留可交互对象和 pickable body，世界节点显示 `ContainerStateBadge`，已由 `ContainerUI` / `Scene` smoke 覆盖。
 - 基础失败提示已覆盖并纳入 `ContainerUI` smoke：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器、数量非法、拿取后背包负重不足；容器权限第一版已支持 session / map props 的 `locked`、`allow_take`、`allow_store`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`、`required_world_flags` 和 `blocked_world_flags`，拿取、拿钱和存放会统一拒绝并显示中文反馈，钥匙/工具满足时可操作锁定容器，权限字段随存档 roundtrip；容器自身容量第一版支持重量、总件数、stack/slot 数限制，容量字段随地图对象、交互 session 和存档 roundtrip，超限显示中文反馈；已纳入 `ContainerUI` / `Save` smoke。待补钥匙/工具消耗或耐久策略和更完整权限 UI 预览。
 

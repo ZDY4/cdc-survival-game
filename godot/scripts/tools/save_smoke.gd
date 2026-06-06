@@ -160,6 +160,34 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	target.hp = 5.0
 	target.defense = 0.0
 	simulation.perform_attack(1, zombie)
+	simulation.corpse_containers["save_smoke_corpse_container"] = {
+		"container_id": "save_smoke_corpse_container",
+		"container_type": "corpse",
+		"container_origin": "combat_defeat",
+		"map_id": simulation.active_map_id,
+		"grid_position": {"x": 2, "y": 0, "z": 0},
+		"display_name": "存档测试尸体",
+		"source_actor_id": zombie,
+		"source_actor_definition_id": "zombie_walker",
+		"source_actor_kind": "enemy",
+		"defeated_by_actor_id": 1,
+		"money": 2,
+		"inventory": [{"item_id": "1006", "count": 1}],
+	}
+	simulation.container_sessions["save_smoke_corpse_container"] = {
+		"container_id": "save_smoke_corpse_container",
+		"container_type": "corpse",
+		"container_origin": "combat_defeat",
+		"map_id": simulation.active_map_id,
+		"grid_position": {"x": 2, "y": 0, "z": 0},
+		"source_actor_id": zombie,
+		"source_actor_definition_id": "zombie_walker",
+		"source_actor_kind": "enemy",
+		"defeated_by_actor_id": 1,
+		"display_name": "存档测试尸体",
+		"money": 2,
+		"inventory": [{"item_id": "1006", "count": 1}],
+	}
 
 
 func _register_zombie(simulation: RefCounted, registry: RefCounted) -> int:
@@ -220,6 +248,10 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
 		errors.append("container sessions did not roundtrip")
 	var restored_clinic_container: Dictionary = _container_session(restored, "survivor_outpost_01_clinic_supply_cabinet")
+	if str(restored_clinic_container.get("container_type", "")) != "map":
+		errors.append("map container type metadata did not roundtrip")
+	if str(restored_clinic_container.get("container_origin", "")) != "map_scene":
+		errors.append("map container origin metadata did not roundtrip")
 	if not bool(restored_clinic_container.get("allow_take", false)):
 		errors.append("container allow_take permission did not roundtrip")
 	if bool(restored_clinic_container.get("allow_store", true)):
@@ -238,6 +270,11 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("container max_items did not roundtrip")
 	if int(restored_clinic_container.get("max_stacks", 0)) != 4:
 		errors.append("container max_stacks did not roundtrip")
+	var restored_corpse_container: Dictionary = _first_container_with_type(restored, "corpse")
+	if restored_corpse_container.is_empty():
+		errors.append("corpse container type metadata did not roundtrip")
+	elif str(restored_corpse_container.get("container_origin", "")) != "combat_defeat":
+		errors.append("corpse container origin metadata did not roundtrip")
 	if JSON.stringify(restored.get("shop_sessions")) != JSON.stringify(original.get("shop_sessions")):
 		errors.append("shop sessions did not roundtrip")
 	var restored_trader_shop: Dictionary = _shop_session(restored, "trader_lao_wang_shop")
@@ -390,6 +427,14 @@ func _container_session(snapshot: Dictionary, container_id: String) -> Dictionar
 	for entry in snapshot.get("container_sessions", []):
 		var session: Dictionary = _dictionary_or_empty(entry)
 		if str(session.get("container_id", "")) == container_id:
+			return session
+	return {}
+
+
+func _first_container_with_type(snapshot: Dictionary, container_type: String) -> Dictionary:
+	for entry in snapshot.get("container_sessions", []):
+		var session: Dictionary = _dictionary_or_empty(entry)
+		if str(session.get("container_type", "")) == container_type:
 			return session
 	return {}
 

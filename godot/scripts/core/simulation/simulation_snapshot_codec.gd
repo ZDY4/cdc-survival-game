@@ -116,11 +116,24 @@ func _container_session_snapshots(container_sessions: Dictionary) -> Array[Dicti
 		var session: Dictionary = _dictionary_or_empty(container_sessions[container_id])
 		var snapshot := {
 			"container_id": str(session.get("container_id", container_id)),
+			"container_type": _container_type_for_session(session, str(container_id)),
+			"container_origin": _container_origin_for_session(session, str(container_id)),
 			"display_name": str(session.get("display_name", container_id)),
 			"money": max(0, int(session.get("money", 0))),
 			"inventory": _array_or_empty(session.get("inventory", [])).duplicate(true),
 		}
 		_copy_optional_keys(snapshot, session, [
+			"map_id",
+			"grid_position",
+			"source_actor_id",
+			"source_actor_definition_id",
+			"source_actor_kind",
+			"defeated_by_actor_id",
+			"owner_actor_id",
+			"owner_actor_definition_id",
+			"quest_id",
+			"shop_id",
+			"drop_item_id",
 			"locked",
 			"allow_take",
 			"allow_store",
@@ -143,6 +156,29 @@ func _container_session_snapshots(container_sessions: Dictionary) -> Array[Dicti
 		])
 		output.append(snapshot)
 	return output
+
+
+func _container_type_for_session(session: Dictionary, container_id: String) -> String:
+	var explicit := str(session.get("container_type", "")).strip_edges()
+	if not explicit.is_empty():
+		return explicit
+	if container_id.begins_with("corpse_"):
+		return "corpse"
+	if container_id.begins_with("drop_"):
+		return "drop"
+	return "map"
+
+
+func _container_origin_for_session(session: Dictionary, container_id: String) -> String:
+	var explicit := str(session.get("container_origin", "")).strip_edges()
+	if not explicit.is_empty():
+		return explicit
+	match _container_type_for_session(session, container_id):
+		"corpse":
+			return "combat_defeat"
+		"drop":
+			return "inventory_drop"
+	return "map_scene"
 
 
 func _door_state_snapshots(door_states: Dictionary) -> Array[Dictionary]:
@@ -210,6 +246,8 @@ func _corpse_container_snapshots(corpse_containers: Dictionary) -> Array[Diction
 		var corpse: Dictionary = _dictionary_or_empty(corpse_containers[corpse_id])
 		output.append({
 			"container_id": str(corpse.get("container_id", corpse_id)),
+			"container_type": str(corpse.get("container_type", "corpse")),
+			"container_origin": str(corpse.get("container_origin", "combat_defeat")),
 			"map_id": str(corpse.get("map_id", "")),
 			"grid_position": _dictionary_or_empty(corpse.get("grid_position", {})).duplicate(true),
 			"display_name": str(corpse.get("display_name", corpse_id)),

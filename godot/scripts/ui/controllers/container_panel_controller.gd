@@ -56,6 +56,10 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		return
 
 	_title_label.text = str(snapshot.get("display_name", snapshot.get("container_id", "")))
+	_panel.set_meta("container_type", str(snapshot.get("container_type", "")))
+	_panel.set_meta("container_origin", str(snapshot.get("container_origin", "")))
+	_panel.set_meta("container_map_id", str(snapshot.get("map_id", "")))
+	_panel.set_meta("container_source_actor_id", int(snapshot.get("source_actor_id", 0)))
 	_summary_label.text = "容器 %d 类物品 | 背包 %d 类物品" % [
 		snapshot.get("items", []).size(),
 		snapshot.get("player_items", []).size(),

@@ -405,7 +405,7 @@
 - [ ] interaction range：不同交互类型距离、自动接近目标格、目标不可达提示。
 - [ ] prompt snapshot：primary option、all options、disabled options、display name、target kind、action label、AP cost。
 - [ ] pickup 数量和合并：多物品、部分拾取、拾取失败、任务进度、地图对象消耗。
-- [ ] container：地图容器、尸体容器、掉落容器、任务容器 id 和关闭逻辑。
+- [~] container：地图容器、尸体容器、掉落容器类型元数据、普通 session 同步和关闭逻辑第一版已迁移；待补任务容器、商店容器、NPC owner / 偷窃权限和完整 id 规范。
 - [ ] talk：对话规则选择、fallback 台词、目标名解析、action key。
 - [ ] scene transition：目标地点、entry、确认 prompt、无法进入原因、overworld 解锁。
 - [ ] wait self interaction：菜单项、AP 消耗、回合推进、事件反馈。
@@ -504,8 +504,8 @@
 - [ ] 容器权限：锁、阵营、偷窃、任务状态。
 - [~] 容器容量和失败提示：拿取后背包负重不足、容器/背包物品不足、数量非法、容器自身容量超限和权限类失败已有中文反馈。待补格子限制和更完整权限预览。
 - [~] 空容器表现、清空后地图对象状态：容器清空后仍保留地图对象和 pickable body，world snapshot / renderer 暴露 empty/item/money metadata 与 `ContainerStateBadge`；待补更完整美术 polish。
-- [ ] 容器持久化和跨地图保存。
-- [ ] 尸体容器与普通容器共用规则。
+- [~] 容器持久化和跨地图保存：地图/尸体/掉落容器 session、类型元数据和空容器状态已有保存 roundtrip；待补跨地图切换后的更完整一致性矩阵。
+- [~] 尸体容器与普通容器共用规则：尸体/掉落容器会同步回 `container_sessions` 并复用拿取、存放、权限和容量规则；待补装备来源 UI、清理策略和任务容器特例。
 
 ### 11.4 交易
 

@@ -391,7 +391,7 @@
 - [ ] interaction range：不同交互类型的距离、自动接近目标格、不可达提示。
 - [ ] prompt snapshot：primary option、all options、disabled options、display name、target kind、action label、AP cost。
 - [ ] pickup 数量、部分拾取、任务推进、地图对象消耗、失败反馈。
-- [ ] 容器 id 规范：地图容器、尸体容器、掉落容器、任务容器。
+- [~] 容器 id / 类型规范：地图、尸体、掉落容器已有 `container_type` / `container_origin` 元数据和保存 roundtrip；待补任务容器、商店容器、NPC owner / 偷窃特例和完整规范文档。
 - [ ] talk 的对话规则选择、fallback 台词、目标名解析。
 - [ ] scene transition 目标地点显示、确认 prompt、不可进入原因。
 - [ ] wait self interaction 的菜单项、AP 消耗、回合推进。

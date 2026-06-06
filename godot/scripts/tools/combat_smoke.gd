@@ -1141,6 +1141,10 @@ func _expect_corpse_inventory_and_metadata(errors: Array[String], simulation: Re
 	else:
 		if str(corpse.get("display_name", "")) != "Corpse Loot Target的尸体":
 			errors.append("corpse display name should use defeated actor name")
+		if str(corpse.get("container_type", "")) != "corpse":
+			errors.append("corpse should expose container_type=corpse")
+		if str(corpse.get("container_origin", "")) != "combat_defeat":
+			errors.append("corpse should expose container_origin=combat_defeat")
 		if int(corpse.get("source_actor_id", 0)) != target_id:
 			errors.append("corpse should expose source_actor_id")
 		if str(corpse.get("source_actor_definition_id", "")) != "corpse_loot_target":
@@ -1162,6 +1166,10 @@ func _expect_corpse_inventory_and_metadata(errors: Array[String], simulation: Re
 		if _entry_count(corpse_inventory, "1009") != 9:
 			errors.append("corpse should merge inventory ammo, loaded ammo and loot table ammo")
 		var container: Dictionary = _container_by_id(simulation.snapshot(), str(corpse.get("container_id", "")))
+		if str(container.get("container_type", "")) != "corpse":
+			errors.append("corpse container session should expose container_type=corpse")
+		if str(container.get("container_origin", "")) != "combat_defeat":
+			errors.append("corpse container session should expose container_origin=combat_defeat")
 		if _entry_count(_array_or_empty(container.get("inventory", [])), "1009") != 9:
 			errors.append("corpse container session should mirror merged ammo")
 		if int(container.get("money", 0)) != 17:

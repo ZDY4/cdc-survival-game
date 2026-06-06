@@ -480,6 +480,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var drop_payload: Dictionary = _last_event_payload(game_root, "inventory_item_dropped")
 	if game_root.find_child("Corpse_%s" % drop_payload.get("container_id", ""), true, false) == null:
 		errors.append("dropping inventory item should create a world drop container marker")
+	var drop_container: Dictionary = _container_session(game_root.simulation.snapshot(), str(drop_payload.get("container_id", "")))
+	if str(drop_container.get("container_type", "")) != "drop":
+		errors.append("dropping inventory item should create container_type=drop session")
+	if str(drop_container.get("container_origin", "")) != "inventory_drop":
+		errors.append("dropping inventory item should create container_origin=inventory_drop session")
+	var drop_node: Node = game_root.find_child("Corpse_%s" % drop_payload.get("container_id", ""), true, false)
+	var drop_target: Dictionary = _dictionary_or_empty(drop_node.get_meta("interaction_target", {}) if drop_node != null else {})
+	if str(drop_target.get("container_type", "")) != "drop":
+		errors.append("world drop marker should expose drop container_type metadata")
 	if not _event_seen(game_root, "inventory_item_dropped"):
 		errors.append("dropping inventory item should emit inventory_item_dropped")
 	return errors
@@ -512,6 +521,14 @@ func _refresh_runtime_world(game_root: Node, result: Dictionary) -> void:
 	game_root._refresh_fog_overlay()
 	game_root._setup_panels()
 	game_root.refresh_all_panels(result.get("prompt", {}))
+
+
+func _container_session(snapshot: Dictionary, container_id: String) -> Dictionary:
+	for entry in _array_or_empty(snapshot.get("container_sessions", [])):
+		var session: Dictionary = _dictionary_or_empty(entry)
+		if str(session.get("container_id", "")) == container_id:
+			return session
+	return {}
 
 
 func _has_pending(game_root: Node) -> bool:
@@ -822,3 +839,15 @@ func _control_text(control: Node) -> String:
 	if control is Label:
 		return str((control as Label).text)
 	return ""
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

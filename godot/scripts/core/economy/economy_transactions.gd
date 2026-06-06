@@ -76,10 +76,24 @@ func drop_actor_item(simulation: RefCounted, actor_id: int, item_id: String, cou
 	_inventory_entries.add_actor_item(actor, normalized_item_id, -drop_count)
 	var container_id: String = "drop_%s_%d_%d_%d" % [normalized_item_id, actor.grid_position.x, actor.grid_position.y, actor.grid_position.z]
 	var container: Dictionary = _drop_container(simulation, container_id, actor.grid_position.to_dictionary())
+	container["container_type"] = "drop"
+	container["container_origin"] = "inventory_drop"
+	container["source_actor_id"] = actor.actor_id
+	container["source_actor_definition_id"] = actor.definition_id
+	container["source_actor_kind"] = actor.kind
+	container["drop_item_id"] = normalized_item_id
 	_inventory_entries.add(container["inventory"], normalized_item_id, drop_count)
 	simulation.corpse_containers[container_id] = container
 	simulation.container_sessions[container_id] = {
 		"container_id": container_id,
+		"container_type": "drop",
+		"container_origin": "inventory_drop",
+		"map_id": simulation.active_map_id,
+		"grid_position": actor.grid_position.to_dictionary(),
+		"source_actor_id": actor.actor_id,
+		"source_actor_definition_id": actor.definition_id,
+		"source_actor_kind": actor.kind,
+		"drop_item_id": normalized_item_id,
 		"display_name": container.get("display_name", container_id),
 		"inventory": _array_or_empty(container.get("inventory", [])).duplicate(true),
 		"money": max(0, int(container.get("money", 0))),
@@ -89,6 +103,8 @@ func drop_actor_item(simulation: RefCounted, actor_id: int, item_id: String, cou
 		"target_type": "map_object",
 		"display_name": container.get("display_name", container_id),
 		"kind": "container",
+		"container_type": "drop",
+		"container_origin": "inventory_drop",
 		"anchor": container.get("grid_position", {}),
 		"cells": [container.get("grid_position", {})],
 		"container_inventory": _array_or_empty(container.get("inventory", [])).duplicate(true),

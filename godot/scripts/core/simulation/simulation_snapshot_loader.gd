@@ -41,6 +41,7 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.pending_movement = _dictionary_or_empty(snapshot_data.get("pending_movement", {})).duplicate(true)
 	simulation.pending_interaction = _dictionary_or_empty(snapshot_data.get("pending_interaction", {})).duplicate(true)
 	simulation.corpse_containers = _load_corpse_containers(snapshot_data.get("corpse_containers", []))
+	_sync_corpse_container_sessions(simulation)
 	simulation.interaction_menu = _dictionary_or_empty(snapshot_data.get("interaction_menu", {})).duplicate(true)
 	simulation.hotbar = _dictionary_or_empty(snapshot_data.get("hotbar", {})).duplicate(true)
 	simulation.crafted_recipes = _load_flag_dictionary(snapshot_data.get("crafted_recipes", []))
@@ -75,11 +76,24 @@ func _load_container_sessions(entries: Variant) -> Dictionary:
 			continue
 		var loaded_session := {
 			"container_id": container_id,
+			"container_type": _container_type_for_session(session_data, container_id),
+			"container_origin": _container_origin_for_session(session_data, container_id),
 			"display_name": str(session_data.get("display_name", container_id)),
 			"money": max(0, int(session_data.get("money", 0))),
 			"inventory": _array_or_empty(session_data.get("inventory", [])).duplicate(true),
 		}
 		_copy_optional_keys(loaded_session, session_data, [
+			"map_id",
+			"grid_position",
+			"source_actor_id",
+			"source_actor_definition_id",
+			"source_actor_kind",
+			"defeated_by_actor_id",
+			"owner_actor_id",
+			"owner_actor_definition_id",
+			"quest_id",
+			"shop_id",
+			"drop_item_id",
 			"locked",
 			"allow_take",
 			"allow_store",
@@ -102,6 +116,29 @@ func _load_container_sessions(entries: Variant) -> Dictionary:
 		])
 		output[container_id] = loaded_session
 	return output
+
+
+func _container_type_for_session(session: Dictionary, container_id: String) -> String:
+	var explicit := str(session.get("container_type", "")).strip_edges()
+	if not explicit.is_empty():
+		return explicit
+	if container_id.begins_with("corpse_"):
+		return "corpse"
+	if container_id.begins_with("drop_"):
+		return "drop"
+	return "map"
+
+
+func _container_origin_for_session(session: Dictionary, container_id: String) -> String:
+	var explicit := str(session.get("container_origin", "")).strip_edges()
+	if not explicit.is_empty():
+		return explicit
+	match _container_type_for_session(session, container_id):
+		"corpse":
+			return "combat_defeat"
+		"drop":
+			return "inventory_drop"
+	return "map_scene"
 
 
 func _load_door_states(entries: Variant) -> Dictionary:
@@ -248,6 +285,8 @@ func _load_corpse_containers(entries: Variant) -> Dictionary:
 			continue
 		output[container_id] = {
 			"container_id": container_id,
+			"container_type": str(corpse_data.get("container_type", "corpse")),
+			"container_origin": str(corpse_data.get("container_origin", "combat_defeat")),
 			"map_id": str(corpse_data.get("map_id", "")),
 			"grid_position": _dictionary_or_empty(corpse_data.get("grid_position", {})).duplicate(true),
 			"display_name": str(corpse_data.get("display_name", container_id)),
@@ -262,6 +301,62 @@ func _load_corpse_containers(entries: Variant) -> Dictionary:
 			"inventory": _inventory_entries.normalize(corpse_data.get("inventory", [])),
 		}
 	return output
+
+
+func _sync_corpse_container_sessions(simulation: RefCounted) -> void:
+	for container_id_value in simulation.corpse_containers.keys():
+		var container_id := str(container_id_value)
+		var corpse: Dictionary = _dictionary_or_empty(simulation.corpse_containers.get(container_id, {})).duplicate(true)
+		var session: Dictionary = _dictionary_or_empty(simulation.container_sessions.get(container_id, {})).duplicate(true)
+		if session.is_empty():
+			session = {
+				"container_id": container_id,
+				"container_type": _container_type_for_session(corpse, container_id),
+				"container_origin": _container_origin_for_session(corpse, container_id),
+				"display_name": str(corpse.get("display_name", container_id)),
+				"money": max(0, int(corpse.get("money", 0))),
+				"inventory": _inventory_entries.normalize(corpse.get("inventory", [])),
+			}
+		_copy_missing_container_metadata(session, corpse, container_id)
+		corpse["inventory"] = _array_or_empty(session.get("inventory", corpse.get("inventory", []))).duplicate(true)
+		corpse["money"] = max(0, int(session.get("money", corpse.get("money", 0))))
+		_copy_missing_container_metadata(corpse, session, container_id)
+		simulation.container_sessions[container_id] = session
+		simulation.corpse_containers[container_id] = corpse
+
+
+func _copy_missing_container_metadata(target: Dictionary, source: Dictionary, container_id: String) -> void:
+	if not target.has("container_type") or str(target.get("container_type", "")).strip_edges().is_empty():
+		target["container_type"] = _container_type_for_session(source, container_id)
+	if not target.has("container_origin") or str(target.get("container_origin", "")).strip_edges().is_empty():
+		target["container_origin"] = _container_origin_for_session(source, container_id)
+	for key in [
+		"map_id",
+		"grid_position",
+		"source_actor_id",
+		"source_actor_definition_id",
+		"source_actor_kind",
+		"defeated_by_actor_id",
+		"appearance_profile_id",
+		"model_asset",
+		"equipped_slots",
+		"drop_item_id",
+	]:
+		if (not target.has(key) or _metadata_value_empty(target.get(key))) and source.has(key):
+			target[key] = source.get(key)
+
+
+func _metadata_value_empty(value: Variant) -> bool:
+	match typeof(value):
+		TYPE_NIL:
+			return true
+		TYPE_STRING:
+			return str(value).strip_edges().is_empty()
+		TYPE_ARRAY:
+			return (value as Array).is_empty()
+		TYPE_DICTIONARY:
+			return (value as Dictionary).is_empty()
+	return false
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

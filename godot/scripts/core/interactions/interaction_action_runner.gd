@@ -214,6 +214,9 @@ func _container_session_for_target(simulation: RefCounted, target_id: String, ta
 		"container_id": target_id,
 		"display_name": str(target.get("display_name", target_id)),
 		"inventory": _array_or_empty(target.get("container_inventory", [])).duplicate(true),
+		"container_type": str(target.get("container_type", "map")),
+		"container_origin": str(target.get("container_origin", "map_scene")),
+		"map_id": str(target.get("map_id", simulation.active_map_id)),
 	}
 	_copy_optional_container_fields(session, target)
 	simulation.container_sessions[target_id] = session
@@ -247,6 +250,19 @@ func _resolve_dialogue_id(simulation: RefCounted, actor: RefCounted, target_acto
 
 func _copy_optional_container_fields(session: Dictionary, target: Dictionary) -> void:
 	for key in [
+		"container_type",
+		"container_origin",
+		"map_id",
+		"grid_position",
+		"source_actor_id",
+		"source_actor_definition_id",
+		"source_actor_kind",
+		"defeated_by_actor_id",
+		"owner_actor_id",
+		"owner_actor_definition_id",
+		"quest_id",
+		"shop_id",
+		"drop_item_id",
 		"locked",
 		"allow_take",
 		"allow_store",

@@ -439,6 +439,8 @@ func _create_corpse_container(simulation: RefCounted, target: RefCounted, defeat
 	var inventory: Array[Dictionary] = _actor_inventory_entries(simulation, target, simulation.item_library)
 	var corpse := {
 		"container_id": corpse_id,
+		"container_type": "corpse",
+		"container_origin": "combat_defeat",
 		"map_id": target.map_id,
 		"grid_position": target.grid_position.to_dictionary(),
 		"display_name": "%s的尸体" % target.display_name,
@@ -455,6 +457,14 @@ func _create_corpse_container(simulation: RefCounted, target: RefCounted, defeat
 	simulation.corpse_containers[corpse_id] = corpse
 	simulation.container_sessions[corpse_id] = {
 		"container_id": corpse_id,
+		"container_type": "corpse",
+		"container_origin": "combat_defeat",
+		"map_id": target.map_id,
+		"grid_position": target.grid_position.to_dictionary(),
+		"source_actor_id": target.actor_id,
+		"source_actor_definition_id": target.definition_id,
+		"source_actor_kind": target.kind,
+		"defeated_by_actor_id": defeated_by_actor_id,
 		"display_name": corpse.get("display_name", corpse_id),
 		"inventory": inventory.duplicate(true),
 		"money": max(0, int(corpse.get("money", 0))),
@@ -464,6 +474,8 @@ func _create_corpse_container(simulation: RefCounted, target: RefCounted, defeat
 		"target_type": "map_object",
 		"display_name": corpse.get("display_name", corpse_id),
 		"kind": "container",
+		"container_type": "corpse",
+		"container_origin": "combat_defeat",
 		"anchor": target.grid_position.to_dictionary(),
 		"cells": [target.grid_position.to_dictionary()],
 		"container_inventory": inventory.duplicate(true),

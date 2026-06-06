@@ -234,6 +234,8 @@ func _interaction_target_meta(object_id: String, target_data: Dictionary) -> Dic
 		"door": _dictionary_or_empty(target_data.get("door", {})).duplicate(true),
 	}
 	if str(target_data.get("kind", "")) == "container":
+		meta["container_type"] = str(target_data.get("container_type", ""))
+		meta["container_origin"] = str(target_data.get("container_origin", ""))
 		meta["container_empty"] = bool(target_data.get("container_empty", false))
 		meta["container_item_count"] = int(target_data.get("container_item_count", 0))
 		meta["container_stack_count"] = int(target_data.get("container_stack_count", 0))
@@ -284,6 +286,13 @@ func _spawn_corpse_markers(root: Node3D, corpses: Array) -> int:
 		node.set_meta("interaction_target", {
 			"target_type": "map_object",
 			"target_id": str(corpse_data.get("container_id", "")),
+			"target_kind": "container",
+			"container_type": str(corpse_data.get("container_type", "corpse")),
+			"container_origin": str(corpse_data.get("container_origin", "combat_defeat")),
+			"container_empty": _array_or_empty(corpse_data.get("inventory", [])).is_empty() and int(corpse_data.get("money", 0)) <= 0,
+			"container_item_count": _container_item_count(_array_or_empty(corpse_data.get("inventory", []))),
+			"container_stack_count": _array_or_empty(corpse_data.get("inventory", [])).size(),
+			"container_money": int(corpse_data.get("money", 0)),
 		})
 		_apply_corpse_meta(node, corpse_data)
 		node.position = _grid_to_world(_dictionary_or_empty(corpse_data.get("grid_position", {})), 0.18)
@@ -508,11 +517,20 @@ func _apply_container_state_visual(parent: Node, target_data: Dictionary) -> voi
 	badge.position = Vector3(0.0, 0.62, 0.0)
 	badge.set_meta("target_kind", "container")
 	badge.set_meta("target_id", str(target_data.get("target_id", "")))
+	badge.set_meta("container_type", str(target_data.get("container_type", "")))
+	badge.set_meta("container_origin", str(target_data.get("container_origin", "")))
 	badge.set_meta("container_empty", is_empty)
 	badge.set_meta("container_item_count", int(target_data.get("container_item_count", 0)))
 	badge.set_meta("container_stack_count", int(target_data.get("container_stack_count", 0)))
 	badge.set_meta("container_money", int(target_data.get("container_money", 0)))
 	badge.set_meta("container_visual_state", "empty" if is_empty else "filled")
+
+
+func _container_item_count(inventory: Array) -> int:
+	var total := 0
+	for entry in inventory:
+		total += max(0, int(_dictionary_or_empty(entry).get("count", 0)))
+	return total
 
 
 func _door_visual_size_from_cells(cells: Array) -> Vector2:
