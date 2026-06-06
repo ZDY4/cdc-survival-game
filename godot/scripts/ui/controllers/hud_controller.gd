@@ -28,6 +28,8 @@ var _console_input: LineEdit
 var controls_hint_visible := false
 var console_visible := false
 var console_history: Array[String] = []
+var console_command_history: Array[String] = []
+var console_history_index := -1
 var console_suggestions: Array[String] = [
 	"help",
 	"show fps",
@@ -199,6 +201,9 @@ func debug_console_snapshot() -> Dictionary:
 		"visible": console_visible,
 		"history": console_history.duplicate(),
 		"history_count": console_history.size(),
+		"command_history": console_command_history.duplicate(),
+		"command_history_count": console_command_history.size(),
+		"history_index": console_history_index,
 		"suggestions": console_suggestions.duplicate(),
 		"suggestion_count": console_suggestions.size(),
 		"input_text": _console_input.text if _console_input != null else "",
@@ -214,6 +219,7 @@ func set_debug_console_result(command_text: String, result: Dictionary) -> void:
 	var message := str(result.get("message", result.get("reason", "")))
 	console_history.append("> %s" % command_text)
 	console_history.append("%s: %s" % [status, message])
+	_record_console_command(command_text)
 	while console_history.size() > 8:
 		console_history.pop_front()
 	if _console_input != null:
@@ -224,6 +230,18 @@ func set_debug_console_result(command_text: String, result: Dictionary) -> void:
 func clear_debug_console_history() -> void:
 	console_history.clear()
 	_apply_debug_console()
+
+
+func _record_console_command(command_text: String) -> void:
+	var normalized := command_text.strip_edges()
+	if normalized.is_empty():
+		console_history_index = -1
+		return
+	if console_command_history.is_empty() or console_command_history[console_command_history.size() - 1] != normalized:
+		console_command_history.append(normalized)
+	while console_command_history.size() > 16:
+		console_command_history.pop_front()
+	console_history_index = -1
 
 
 func show_interaction_menu(screen_position: Vector2, prompt: Dictionary) -> void:
@@ -311,9 +329,72 @@ func _build_debug_console() -> void:
 		if root != null and root.has_method("submit_debug_console_command"):
 			root.submit_debug_console_command(text)
 	)
+	_console_input.gui_input.connect(func(event: InputEvent) -> void:
+		_handle_console_input_event(event)
+	)
 	box.add_child(_console_history_label)
 	box.add_child(_console_suggestions_label)
 	box.add_child(_console_input)
+
+
+func _handle_console_input_event(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
+	var key_event := event as InputEventKey
+	if not key_event.pressed or key_event.echo:
+		return
+	var key := key_event.keycode
+	if key == 0:
+		key = key_event.physical_keycode
+	if key == KEY_UP:
+		_recall_console_history(-1)
+		accept_event()
+	elif key == KEY_DOWN:
+		_recall_console_history(1)
+		accept_event()
+	elif key == KEY_TAB:
+		_autocomplete_console_input()
+		accept_event()
+
+
+func _recall_console_history(direction: int) -> void:
+	if _console_input == null or console_command_history.is_empty():
+		return
+	if console_history_index < 0:
+		console_history_index = console_command_history.size()
+	console_history_index = clampi(console_history_index + direction, 0, console_command_history.size())
+	if console_history_index >= console_command_history.size():
+		_console_input.text = ""
+	else:
+		_console_input.text = console_command_history[console_history_index]
+	_console_input.caret_column = _console_input.text.length()
+
+
+func _autocomplete_console_input() -> void:
+	if _console_input == null:
+		return
+	var prefix := _console_input.text.strip_edges().to_lower()
+	var matches: Array[String] = []
+	for suggestion in console_suggestions:
+		if str(suggestion).begins_with(prefix):
+			matches.append(str(suggestion))
+	if matches.is_empty():
+		return
+	var replacement := matches[0] if matches.size() == 1 else _shared_prefix(matches)
+	if replacement.length() <= prefix.length():
+		replacement = matches[0]
+	_console_input.text = replacement
+	_console_input.caret_column = _console_input.text.length()
+
+
+func _shared_prefix(values: Array[String]) -> String:
+	if values.is_empty():
+		return ""
+	var prefix := values[0]
+	for value in values:
+		while not str(value).begins_with(prefix) and not prefix.is_empty():
+			prefix = prefix.substr(0, prefix.length() - 1)
+	return prefix
 
 
 func _apply_debug_console() -> void:

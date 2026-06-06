@@ -845,6 +845,9 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 	var snapshot: Dictionary = _dictionary_or_empty(game_root.debug_console_snapshot())
 	if int(snapshot.get("history_count", 0)) < 4:
 		errors.append("debug console should keep command history: %s" % snapshot)
+	if int(snapshot.get("command_history_count", 0)) < 2:
+		errors.append("debug console should keep command history entries: %s" % snapshot)
+	_exercise_debug_console_keyboard_features(errors, game_root)
 	_assert_runtime_control_line(errors, game_root, "Console on", "opened console HUD token")
 	_press_key(game_root, KEY_ESCAPE)
 	_assert_debug_console_snapshot(errors, game_root, false, "closed console")
@@ -854,6 +857,40 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 		game_root.cycle_debug_overlay_mode()
 	if str(game_root.current_debug_overlay_mode()) != "off":
 		errors.append("debug console smoke should restore overlay mode to off")
+
+
+func _exercise_debug_console_keyboard_features(errors: Array[String], game_root: Node) -> void:
+	var input := game_root.hud.find_child("ConsoleInput", true, false) as LineEdit
+	if input == null:
+		errors.append("debug console keyboard feature smoke missing ConsoleInput")
+		return
+	_emit_console_key(input, KEY_UP)
+	if input.text != "show overlays":
+		errors.append("debug console Up should recall latest command, got %s" % input.text)
+	_emit_console_key(input, KEY_UP)
+	if input.text != "show fps":
+		errors.append("debug console second Up should recall previous command, got %s" % input.text)
+	_emit_console_key(input, KEY_DOWN)
+	if input.text != "show overlays":
+		errors.append("debug console Down should move forward in command history, got %s" % input.text)
+	input.text = "obs"
+	input.caret_column = input.text.length()
+	_emit_console_key(input, KEY_TAB)
+	if input.text != "observe mode":
+		errors.append("debug console Tab should autocomplete observe mode, got %s" % input.text)
+	input.text = "show "
+	input.caret_column = input.text.length()
+	_emit_console_key(input, KEY_TAB)
+	if not input.text.begins_with("show "):
+		errors.append("debug console Tab should keep shared show prefix, got %s" % input.text)
+
+
+func _emit_console_key(input: LineEdit, key: int) -> void:
+	var event := InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = true
+	input.gui_input.emit(event)
 
 
 func _assert_debug_console_snapshot(errors: Array[String], game_root: Node, expected_visible: bool, context: String) -> void:
