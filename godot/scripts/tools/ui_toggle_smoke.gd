@@ -815,6 +815,10 @@ func _assert_runtime_performance(errors: Array[String], game_root: Node, context
 		errors.append("%s: performance frame time should be non-negative: %s" % [context, performance])
 	if int(performance.get("hud_latency_ms", -1)) < 0:
 		errors.append("%s: performance HUD latency should be non-negative: %s" % [context, performance])
+	if float(performance.get("pathfinding_time_ms", -1.0)) < 0.0:
+		errors.append("%s: performance pathfinding time should be non-negative: %s" % [context, performance])
+	if int(performance.get("pathfinding_visited_cell_count", -1)) < 0:
+		errors.append("%s: performance pathfinding visited count should be non-negative: %s" % [context, performance])
 	if int(performance.get("render_sequence", 0)) <= 0:
 		errors.append("%s: performance render sequence should be positive: %s" % [context, performance])
 	if int(performance.get("render_count", 0)) <= 0:
@@ -824,6 +828,7 @@ func _assert_runtime_performance(errors: Array[String], game_root: Node, context
 	if int(performance.get("object_count", 0)) <= 0:
 		errors.append("%s: performance object count should be positive: %s" % [context, performance])
 	_assert_runtime_control_line(errors, game_root, "Perf", "%s HUD perf token" % context)
+	_assert_runtime_control_line(errors, game_root, "Path", "%s HUD path token" % context)
 	_assert_runtime_control_line(errors, game_root, "Lat", "%s HUD latency token" % context)
 	_assert_runtime_control_line(errors, game_root, "R", "%s HUD render token" % context)
 

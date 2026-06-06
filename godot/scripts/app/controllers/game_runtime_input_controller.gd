@@ -934,6 +934,7 @@ func _move_preview_for_grid(grid: Dictionary) -> Dictionary:
 		"target_position": _dictionary_or_empty(preview.get("target_position", grid)).duplicate(true),
 		"blocker": _dictionary_or_empty(preview.get("blocker", {})).duplicate(true),
 		"visited_cell_count": int(preview.get("visited_cell_count", 0)),
+		"pathfinding_time_ms": float(preview.get("pathfinding_time_ms", 0.0)),
 	}
 
 

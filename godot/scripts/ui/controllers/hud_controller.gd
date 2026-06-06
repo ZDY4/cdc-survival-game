@@ -924,9 +924,10 @@ func _performance_control_text(value: Variant) -> String:
 	var performance: Dictionary = _dictionary_or_empty(value)
 	if performance.is_empty():
 		return ""
-	return "Perf %dFPS %.1fms Lat %dms R%d A%d O%d" % [
+	return "Perf %dFPS %.1fms Path %.2fms Lat %dms R%d A%d O%d" % [
 		int(round(float(performance.get("fps", 0.0)))),
 		float(performance.get("frame_time_ms", 0.0)),
+		float(performance.get("pathfinding_time_ms", 0.0)),
 		int(performance.get("hud_latency_ms", 0)),
 		int(performance.get("render_count", 0)),
 		int(performance.get("actor_count", 0)),
@@ -989,7 +990,7 @@ func _hover_move_preview_text(hover: Dictionary) -> String:
 	if preview.is_empty():
 		return ""
 	if bool(preview.get("reachable", false)):
-		return " 可达%d步" % int(preview.get("steps", 0))
+		return " 可达%d步 Path%.2fms" % [int(preview.get("steps", 0)), float(preview.get("pathfinding_time_ms", 0.0))]
 	var reason := str(preview.get("reason", ""))
 	if reason.is_empty():
 		return " 不可达"

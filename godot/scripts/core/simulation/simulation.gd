@@ -623,6 +623,8 @@ func preview_move(actor_id: int, target_position: Dictionary, topology: Dictiona
 		"reachable": bool(plan.get("success", false)),
 		"steps": steps,
 		"path": _array_or_empty(plan.get("path", [])).duplicate(true),
+		"pathfinding_time_ms": float(plan.get("pathfinding_time_ms", 0.0)),
+		"visited_cell_count": int(plan.get("visited_cell_count", 0)),
 		"ap_cost": cost,
 		"ap_available": actor.ap,
 		"ap_affordable": actor.ap >= cost,

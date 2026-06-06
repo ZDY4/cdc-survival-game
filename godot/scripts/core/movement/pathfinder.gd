@@ -11,42 +11,44 @@ const CARDINAL_OFFSETS := [
 
 
 func find_path(start: RefCounted, goal: RefCounted, topology: Dictionary, occupied_actor_cells: Dictionary = {}) -> Dictionary:
+	var started_usec: int = Time.get_ticks_usec()
 	if start == null or goal == null:
-		return {
+		return _finish({
 			"success": false,
 			"reason": "invalid_endpoint",
-		}
+		}, started_usec)
 	if start.y != goal.y:
-		return {
+		return _finish({
 			"success": false,
 			"reason": "level_mismatch",
 			"start": start.to_dictionary(),
 			"goal": goal.to_dictionary(),
 			"start_level": start.y,
 			"goal_level": goal.y,
-		}
+		}, started_usec)
 	if not _within_bounds(goal, topology):
-		return {
+		return _finish({
 			"success": false,
 			"reason": "goal_out_of_bounds",
 			"goal": goal.to_dictionary(),
 			"bounds": _dictionary_or_empty(topology.get("bounds", {})).duplicate(true),
-		}
+		}, started_usec)
 	var goal_blocking: Dictionary = _blocking_info(goal, topology, occupied_actor_cells, start.key())
 	if not goal_blocking.is_empty():
 		var blocked_reason: String = "goal_occupied" if str(goal_blocking.get("kind", "")) == "actor" else "goal_blocked"
-		return {
+		return _finish({
 			"success": false,
 			"reason": blocked_reason,
 			"goal": goal.to_dictionary(),
 			"blocker": goal_blocking,
-		}
+		}, started_usec)
 	if start.key() == goal.key():
-		return {
+		return _finish({
 			"success": true,
 			"path": [start.to_dictionary()],
 			"steps": 0,
-		}
+			"visited_cell_count": 1,
+		}, started_usec)
 
 	var frontier: Array[RefCounted] = [start]
 	var came_from: Dictionary = {start.key(): ""}
@@ -63,20 +65,28 @@ func find_path(start: RefCounted, goal: RefCounted, topology: Dictionary, occupi
 			came_from[next_key] = current.key()
 			coords[next_key] = next_coord
 			if next_key == goal.key():
-				return {
+				return _finish({
 					"success": true,
 					"path": _reconstruct_path(start.key(), goal.key(), came_from, coords),
 					"steps": _path_length(start.key(), goal.key(), came_from),
-				}
+					"visited_cell_count": came_from.size(),
+				}, started_usec)
 			frontier.append(next_coord)
 
-	return {
+	return _finish({
 		"success": false,
 		"reason": "path_unreachable",
 		"start": start.to_dictionary(),
 		"goal": goal.to_dictionary(),
 		"visited_cell_count": came_from.size(),
-	}
+	}, started_usec)
+
+
+func _finish(result: Dictionary, started_usec: int) -> Dictionary:
+	result["pathfinding_time_ms"] = max(0.0, float(Time.get_ticks_usec() - started_usec) / 1000.0)
+	if not result.has("visited_cell_count"):
+		result["visited_cell_count"] = 0
+	return result
 
 
 func _neighbors(coord: RefCounted, topology: Dictionary, occupied_actor_cells: Dictionary, start_key: String) -> Array[RefCounted]:

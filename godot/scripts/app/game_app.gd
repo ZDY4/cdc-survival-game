@@ -450,6 +450,8 @@ func runtime_performance_snapshot() -> Dictionary:
 	return {
 		"fps": fps,
 		"frame_time_ms": performance_frame_time_ms,
+		"pathfinding_time_ms": _last_pathfinding_time_ms(),
+		"pathfinding_visited_cell_count": _last_pathfinding_visited_cell_count(),
 		"last_process_tick_msec": performance_last_process_tick_msec,
 		"last_hud_refresh_tick_msec": performance_last_hud_refresh_tick_msec,
 		"hud_latency_ms": max(0, now_msec - performance_last_hud_refresh_tick_msec) if performance_last_hud_refresh_tick_msec > 0 else 0,
@@ -477,6 +479,18 @@ func _update_runtime_performance(delta: float) -> void:
 	if current_fps <= 0.0 and delta > 0.0:
 		current_fps = 1.0 / delta
 	performance_fps = max(0.0, current_fps)
+
+
+func _last_pathfinding_time_ms() -> float:
+	var hover: Dictionary = runtime_hover_snapshot()
+	var move_preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
+	return float(move_preview.get("pathfinding_time_ms", 0.0))
+
+
+func _last_pathfinding_visited_cell_count() -> int:
+	var hover: Dictionary = runtime_hover_snapshot()
+	var move_preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
+	return int(move_preview.get("visited_cell_count", 0))
 
 
 func settings_applied(_snapshot: Dictionary = {}) -> void:
