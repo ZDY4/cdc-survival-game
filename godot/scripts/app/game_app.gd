@@ -290,6 +290,8 @@ func current_debug_overlay_mode() -> String:
 
 
 func toggle_auto_tick() -> Dictionary:
+	if observe_mode_enabled:
+		return toggle_observe_playback()
 	if has_active_dialogue() or gameplay_input_blocked_by_ui():
 		return {"success": false, "reason": "ui_blocked", "enabled": auto_tick_enabled}
 	auto_tick_enabled = not auto_tick_enabled
@@ -302,11 +304,20 @@ func is_auto_tick_enabled() -> bool:
 	return auto_tick_enabled
 
 
+func is_observe_mode_enabled() -> bool:
+	return observe_mode_enabled
+
+
+func toggle_observe_mode() -> Dictionary:
+	return set_observe_mode(not observe_mode_enabled)
+
+
 func set_observe_mode(enabled: bool) -> Dictionary:
 	if gameplay_input_blocked_by_ui():
 		return {"success": false, "reason": "ui_blocked", "observe_mode": observe_mode_enabled}
 	observe_mode_enabled = enabled
 	if not observe_mode_enabled:
+		auto_tick_enabled = false
 		auto_tick_elapsed_sec = 0.0
 	refresh_hud(current_interaction_prompt())
 	return {
@@ -458,7 +469,7 @@ func cycle_focused_actor() -> Dictionary:
 		return {"success": false, "reason": "ui_blocked", "actor_id": focused_actor_id}
 	var focused_actor: Dictionary = _focused_actor_data()
 	var busy_state: Dictionary = _focused_actor_busy_state(focused_actor)
-	if not busy_state.is_empty():
+	if not observe_mode_enabled and not busy_state.is_empty():
 		return {
 			"success": false,
 			"reason": "actor_busy",
@@ -710,6 +721,8 @@ func has_active_dialogue() -> bool:
 func press_space_action() -> Dictionary:
 	if has_active_dialogue():
 		return advance_dialogue_without_choice()
+	if observe_mode_enabled:
+		return toggle_observe_playback()
 	var pending_result: Dictionary = cancel_pending("keyboard", true)
 	if bool(pending_result.get("had_pending", false)):
 		return pending_result
@@ -1782,7 +1795,7 @@ func _focus_actor_candidates() -> Array[Dictionary]:
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
 		if actor_data.is_empty():
 			continue
-		if not _is_player_side_actor(actor_data):
+		if not observe_mode_enabled and not _is_player_side_actor(actor_data):
 			continue
 		var grid: Dictionary = _dictionary_or_empty(actor_data.get("grid_position", {}))
 		if int(grid.get("y", 0)) != focused_level:

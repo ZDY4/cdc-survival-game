@@ -80,7 +80,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if bool(game_root.is_auto_tick_enabled()):
 		errors.append("auto tick should start disabled")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
+	_assert_observe_mode_button(errors, game_root, false, "initial observe mode button")
 	_assert_observe_auto_button(errors, game_root, false, "initial observe auto hotbar")
+	_press_key_with_modifiers(game_root, KEY_P, true)
+	if bool(game_root.is_observe_mode_enabled()):
+		errors.append("Ctrl+P should not toggle observe mode")
 	_press_key(game_root, KEY_A)
 	if not bool(game_root.is_auto_tick_enabled()):
 		errors.append("A should enable auto tick")
@@ -125,22 +129,27 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("observe hotbar auto button should disable auto tick")
 			_assert_runtime_control_line(errors, game_root, "AutoTick off", "observe auto button off HUD")
 			_assert_observe_auto_button(errors, game_root, false, "observe auto button off state")
-	var observe_mode_result: Dictionary = game_root.set_observe_mode(true)
-	if not bool(observe_mode_result.get("success", false)):
-		errors.append("set_observe_mode(true) should enable observe controls: %s" % observe_mode_result.get("reason", "unknown"))
+	var observe_mode_button: Button = _observe_mode_button(game_root)
+	if observe_mode_button == null:
+		errors.append("observe hotbar should expose mode toggle button")
+	else:
+		observe_mode_button.pressed.emit()
+		await _wait_process_frames(2)
+	if not bool(game_root.is_observe_mode_enabled()):
+		errors.append("ObserveModeButton should enable observe mode")
 	_assert_runtime_control_line(errors, game_root, "Observe on pause x1", "observe mode enabled HUD")
+	_assert_observe_mode_button(errors, game_root, true, "observe mode enabled button")
 	_assert_observe_play_button(errors, game_root, false, false, "observe mode initial play button")
 	_assert_observe_speed_button(errors, game_root, "x1", false, "observe mode initial speed button")
-	var observe_play_button: Button = _observe_play_button(game_root)
-	if observe_play_button == null:
-		errors.append("observe mode should expose playback button")
-	else:
-		observe_play_button.pressed.emit()
-		await _wait_process_frames(2)
-		if not bool(game_root.is_auto_tick_enabled()):
-			errors.append("observe play button should enable observe playback auto tick")
-		_assert_runtime_control_line(errors, game_root, "Observe on play x1", "observe playback on HUD")
-		_assert_observe_play_button(errors, game_root, true, false, "observe playback on button")
+	_press_key(game_root, KEY_TAB)
+	var observe_focus: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot().get("focused_actor", {}))
+	if observe_focus.is_empty() or str(observe_focus.get("side", "")) == "player":
+		errors.append("Tab in observe mode should cycle focus to non-player actors on the observed level: %s" % observe_focus)
+	_press_key(game_root, KEY_SPACE)
+	if not bool(game_root.is_auto_tick_enabled()):
+		errors.append("Space in observe mode should enable observe playback auto tick")
+	_assert_runtime_control_line(errors, game_root, "Observe on play x1", "observe playback on HUD")
+	_assert_observe_play_button(errors, game_root, true, false, "observe playback on button")
 	var observe_speed_button: Button = _observe_speed_button(game_root)
 	if observe_speed_button == null:
 		errors.append("observe mode should expose speed button")
@@ -162,16 +171,19 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var bad_speed_result: Dictionary = game_root.set_observe_speed("warp")
 	if bool(bad_speed_result.get("success", false)) or str(bad_speed_result.get("reason", "")) != "unknown_observe_speed":
 		errors.append("unknown observe speed should be rejected")
-	observe_play_button = _observe_play_button(game_root)
-	if observe_play_button != null:
-		observe_play_button.pressed.emit()
-		await _wait_process_frames(2)
+	_press_key(game_root, KEY_SPACE)
 	if bool(game_root.is_auto_tick_enabled()):
-		errors.append("second observe play button press should pause observe playback")
-	var observe_off_result: Dictionary = game_root.set_observe_mode(false)
-	if not bool(observe_off_result.get("success", false)):
-		errors.append("set_observe_mode(false) should leave observe controls")
+		errors.append("second Space in observe mode should pause observe playback")
+	observe_mode_button = _observe_mode_button(game_root)
+	if observe_mode_button == null:
+		errors.append("observe hotbar should keep mode button after observe playback checks")
+	else:
+		observe_mode_button.pressed.emit()
+		await _wait_process_frames(2)
+	if bool(game_root.is_observe_mode_enabled()):
+		errors.append("ObserveModeButton should disable observe mode")
 	_assert_runtime_control_line(errors, game_root, "Observe off pause x10", "observe mode disabled HUD")
+	_assert_observe_mode_button(errors, game_root, false, "observe mode disabled button")
 	_assert_observe_play_button(errors, game_root, false, true, "observe mode disabled play button")
 	_assert_observe_speed_button(errors, game_root, "x10", true, "observe mode disabled speed button")
 	_press_key(game_root, KEY_V)
@@ -604,6 +616,25 @@ func _press_key(game_root: Node, key: int) -> void:
 	_release_key(game_root, key)
 
 
+func _press_key_with_modifiers(game_root: Node, key: int, ctrl: bool = false, alt: bool = false, shift: bool = false) -> void:
+	var event := InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = true
+	event.ctrl_pressed = ctrl
+	event.alt_pressed = alt
+	event.shift_pressed = shift
+	game_root.runtime_input_controller.input(event)
+	event = InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.pressed = false
+	event.ctrl_pressed = ctrl
+	event.alt_pressed = alt
+	event.shift_pressed = shift
+	game_root.runtime_input_controller.input(event)
+
+
 func _press_key_down(game_root: Node, key: int) -> void:
 	var event := InputEventKey.new()
 	event.keycode = key
@@ -735,6 +766,20 @@ func _assert_observe_auto_button(errors: Array[String], game_root: Node, expecte
 		errors.append("%s: ObserveAutoButton should stay enabled" % context)
 
 
+func _assert_observe_mode_button(errors: Array[String], game_root: Node, expected_enabled: bool, context: String) -> void:
+	var button := _observe_mode_button(game_root)
+	if button == null:
+		errors.append("%s: HUD should expose ObserveModeButton" % context)
+		return
+	var expected_text := "Player" if expected_enabled else "Observe"
+	if str(button.text) != expected_text:
+		errors.append("%s: ObserveModeButton expected %s, got %s" % [context, expected_text, str(button.text)])
+	if bool(button.get_meta("observe_mode", not expected_enabled)) != expected_enabled:
+		errors.append("%s: ObserveModeButton should expose observe_mode metadata %s" % [context, str(expected_enabled)])
+	if button.disabled:
+		errors.append("%s: ObserveModeButton should stay enabled" % context)
+
+
 func _assert_observe_play_button(errors: Array[String], game_root: Node, expected_playing: bool, expected_disabled: bool, context: String) -> void:
 	var button := _observe_play_button(game_root)
 	if button == null:
@@ -766,6 +811,12 @@ func _observe_auto_button(game_root: Node) -> Button:
 	if game_root.hud == null:
 		return null
 	return game_root.hud.find_child("ObserveAutoButton", true, false) as Button
+
+
+func _observe_mode_button(game_root: Node) -> Button:
+	if game_root.hud == null:
+		return null
+	return game_root.hud.find_child("ObserveModeButton", true, false) as Button
 
 
 func _observe_play_button(game_root: Node) -> Button:

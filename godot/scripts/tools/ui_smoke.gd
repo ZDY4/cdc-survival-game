@@ -150,8 +150,13 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 
 func _validate_observe_hotbar(errors: Array[String], hud: Control) -> void:
 	var observe_dock: Node = hud.get_node("HudPanel/HudLines/ObserveHotbarDock")
-	if observe_dock.get_child_count() != 4:
-		errors.append("observe hotbar dock should expose playback, speed, auto and level buttons")
+	if observe_dock.get_child_count() != 5:
+		errors.append("observe hotbar dock should expose mode, playback, speed, auto and level buttons")
+	var mode_button: Button = observe_dock.get_node_or_null("ObserveModeButton") as Button
+	if mode_button == null or str(mode_button.text) != "Observe" or mode_button.disabled:
+		errors.append("observe hotbar should expose enabled Observe mode button")
+	elif bool(mode_button.get_meta("observe_mode", true)) or not str(mode_button.tooltip_text).contains("观察模式 关闭"):
+		errors.append("observe mode button should expose mode metadata and tooltip")
 	var play_button: Button = observe_dock.get_node_or_null("ObservePlayButton") as Button
 	if play_button == null or str(play_button.text) != "Play" or not play_button.disabled:
 		errors.append("observe hotbar should expose disabled Play button outside observe mode")
