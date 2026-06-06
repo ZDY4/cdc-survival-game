@@ -843,7 +843,7 @@ Godot 落点：`tools/agent/**`、`docs/agent-workflows/**`。
 - [ ] debug panel：开关、按钮、动作、状态。
 - [~] info panels：overview、selection、actor、world、interaction、turn system、events、AI、performance 已有页面状态、HUD 行和 `[` / `]` 切换 smoke；待补旧 debug viewer 各页完整内容。
 - [~] overlay flags：walkable、vision、blocked sight、level 已有世界 overlay；auto tick/observe、fps、frame time 和 HUD latency 已有 HUD/runtime control 诊断；待补 help 与统一 debug panel 展示。
-- [ ] profiling：frame time、render count、actor count、object count、pathfinding time。
+- [~] profiling：frame time、render count、actor count、object count 已进入 `runtime_control.performance` 与 HUD runtime 行；待补 pathfinding time 和更完整 profiling 面板。
 - [ ] selection debug：hovered grid、actor、object、blocker name、prompt。
 - [ ] AI debug：intent、goal、action、blackboard、path、failure。
 

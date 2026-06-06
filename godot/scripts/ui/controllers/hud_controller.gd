@@ -924,10 +924,13 @@ func _performance_control_text(value: Variant) -> String:
 	var performance: Dictionary = _dictionary_or_empty(value)
 	if performance.is_empty():
 		return ""
-	return "Perf %dFPS %.1fms Lat %dms" % [
+	return "Perf %dFPS %.1fms Lat %dms R%d A%d O%d" % [
 		int(round(float(performance.get("fps", 0.0)))),
 		float(performance.get("frame_time_ms", 0.0)),
 		int(performance.get("hud_latency_ms", 0)),
+		int(performance.get("render_count", 0)),
+		int(performance.get("actor_count", 0)),
+		int(performance.get("object_count", 0)),
 	]
 
 

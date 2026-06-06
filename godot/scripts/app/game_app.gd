@@ -68,6 +68,8 @@ var performance_frame_time_ms: float = 0.0
 var performance_fps: float = 0.0
 var performance_last_process_tick_msec: int = 0
 var performance_last_hud_refresh_tick_msec: int = 0
+var performance_last_render_counts: Dictionary = {}
+var performance_render_sequence: int = 0
 
 
 func _ready() -> void:
@@ -91,7 +93,7 @@ func _ready() -> void:
 
 	interaction_controller = PlayerInteractionController.new(registry, simulation, world_result)
 	_setup_world_container()
-	var counts: Dictionary = WorldSceneRenderer.new().render_world(world_container, world_result)
+	var counts: Dictionary = _render_world()
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
@@ -451,6 +453,14 @@ func runtime_performance_snapshot() -> Dictionary:
 		"last_process_tick_msec": performance_last_process_tick_msec,
 		"last_hud_refresh_tick_msec": performance_last_hud_refresh_tick_msec,
 		"hud_latency_ms": max(0, now_msec - performance_last_hud_refresh_tick_msec) if performance_last_hud_refresh_tick_msec > 0 else 0,
+		"render_sequence": performance_render_sequence,
+		"render_counts": performance_last_render_counts.duplicate(true),
+		"render_count": int(performance_last_render_counts.get("total", 0)),
+		"actor_count": int(performance_last_render_counts.get("actors", 0)),
+		"object_count": int(performance_last_render_counts.get("objects", 0)),
+		"collider_count": int(performance_last_render_counts.get("colliders", 0)),
+		"light_count": int(performance_last_render_counts.get("lights", 0)),
+		"camera_count": int(performance_last_render_counts.get("cameras", 0)),
 	}
 
 
@@ -815,7 +825,7 @@ func press_space_action() -> Dictionary:
 		if interaction_controller != null:
 			interaction_controller.world_result = world_result
 		_setup_world_container()
-		WorldSceneRenderer.new().render_world(world_container, world_result)
+		_render_world()
 		_setup_runtime_input_controller()
 		_refresh_fog_overlay()
 		_refresh_debug_overlay()
@@ -876,7 +886,7 @@ func _submit_auto_tick_wait() -> Dictionary:
 		if interaction_controller != null:
 			interaction_controller.world_result = world_result
 		_setup_world_container()
-		WorldSceneRenderer.new().render_world(world_container, world_result)
+		_render_world()
 		_setup_runtime_input_controller()
 		_refresh_fog_overlay()
 		_refresh_debug_overlay()
@@ -1596,7 +1606,7 @@ func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}) -> vo
 	if interaction_controller != null:
 		interaction_controller.world_result = world_result
 	_setup_world_container()
-	WorldSceneRenderer.new().render_world(world_container, world_result)
+	_render_world()
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
@@ -1616,6 +1626,25 @@ func _setup_runtime_input_controller() -> void:
 	if runtime_input_controller == null:
 		runtime_input_controller = GameRuntimeInputController.new(self)
 	runtime_input_controller.attach_world(world_container, world_result)
+
+
+func _render_world() -> Dictionary:
+	if world_container == null:
+		return {}
+	var counts: Dictionary = WorldSceneRenderer.new().render_world(world_container, world_result)
+	performance_last_render_counts = _render_count_summary(counts)
+	performance_render_sequence += 1
+	return counts
+
+
+func _render_count_summary(counts: Dictionary) -> Dictionary:
+	var summary: Dictionary = counts.duplicate(true)
+	var total: int = 0
+	for value in counts.values():
+		if typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT:
+			total += int(value)
+	summary["total"] = total
+	return summary
 
 
 func _refresh_fog_overlay() -> void:
@@ -1678,7 +1707,7 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	_sync_observed_level_to_map()
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
 	_setup_world_container()
-	WorldSceneRenderer.new().render_world(world_container, world_result)
+	_render_world()
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
