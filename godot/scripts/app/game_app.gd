@@ -135,6 +135,9 @@ func _process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and _handle_debug_console_key(event as InputEventKey):
+		get_viewport().set_input_as_handled()
+		return
 	if runtime_input_controller != null:
 		runtime_input_controller.input(event)
 
@@ -142,6 +145,23 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if runtime_input_controller != null:
 		runtime_input_controller.unhandled_input(event)
+
+
+func _handle_debug_console_key(event: InputEventKey) -> bool:
+	if not event.pressed or event.echo:
+		return false
+	var key := event.keycode
+	if key == 0:
+		key = event.physical_keycode
+	if key == KEY_QUOTELEFT:
+		toggle_debug_console()
+		return true
+	if is_debug_console_open() and key == KEY_ESCAPE:
+		if hud != null and hud.has_method("hide_debug_console"):
+			hud.hide_debug_console()
+		refresh_hud(current_interaction_prompt())
+		return true
+	return false
 
 
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
@@ -257,12 +277,16 @@ func is_settings_open() -> bool:
 
 
 func gameplay_input_blocked_by_ui() -> bool:
+	if is_debug_console_open():
+		return true
 	if panel_controller != null and panel_controller.gameplay_input_blocked():
 		return true
 	return hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open())
 
 
 func gameplay_input_blocker_name() -> String:
+	if is_debug_console_open():
+		return "debug_console"
 	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
 		return "interaction_menu"
 	if panel_controller != null and panel_controller.has_method("gameplay_input_blocker_name"):
@@ -286,6 +310,60 @@ func toggle_controls_hint() -> Dictionary:
 
 func controls_hint_visible() -> bool:
 	return hud != null and hud.has_method("is_controls_hint_visible") and bool(hud.is_controls_hint_visible())
+
+
+func toggle_debug_console() -> Dictionary:
+	if hud == null or not hud.has_method("toggle_debug_console"):
+		return {"success": false, "reason": "hud_missing"}
+	var result: Dictionary = hud.toggle_debug_console()
+	refresh_hud(current_interaction_prompt())
+	return result
+
+
+func is_debug_console_open() -> bool:
+	return hud != null and hud.has_method("is_debug_console_open") and bool(hud.is_debug_console_open())
+
+
+func debug_console_snapshot() -> Dictionary:
+	if hud != null and hud.has_method("debug_console_snapshot"):
+		return hud.debug_console_snapshot()
+	return {"visible": false, "history": [], "history_count": 0, "suggestions": [], "suggestion_count": 0, "input_text": ""}
+
+
+func submit_debug_console_command(command_text: String) -> Dictionary:
+	var command := command_text.strip_edges()
+	var result: Dictionary = _execute_debug_console_command(command)
+	if hud != null and hud.has_method("set_debug_console_result"):
+		hud.set_debug_console_result(command, result)
+	refresh_all_panels(current_interaction_prompt())
+	return result
+
+
+func _execute_debug_console_command(command: String) -> Dictionary:
+	var normalized := command.to_lower().strip_edges()
+	match normalized:
+		"":
+			return {"success": false, "reason": "empty_command", "message": "empty command"}
+		"help":
+			return {"success": true, "message": "commands: help, show fps, show overlays, observe mode, clear"}
+		"show fps":
+			var perf: Dictionary = runtime_performance_snapshot()
+			return {"success": true, "message": "fps=%d frame=%.1fms path=%.2fms" % [
+				int(round(float(perf.get("fps", 0.0)))),
+				float(perf.get("frame_time_ms", 0.0)),
+				float(perf.get("pathfinding_time_ms", 0.0)),
+			]}
+		"show overlays":
+			var overlay_result: Dictionary = cycle_debug_overlay_mode()
+			return {"success": bool(overlay_result.get("success", false)), "message": "overlay=%s" % str(overlay_result.get("mode", debug_overlay_mode))}
+		"observe mode":
+			var observe_result: Dictionary = toggle_observe_mode()
+			return {"success": bool(observe_result.get("success", false)), "message": "observe=%s" % ("on" if bool(observe_result.get("observe_mode", observe_mode_enabled)) else "off")}
+		"clear":
+			if hud != null and hud.has_method("clear_debug_console_history"):
+				hud.clear_debug_console_history()
+			return {"success": true, "message": "console cleared"}
+	return {"success": false, "reason": "unknown_command", "message": "unknown command: %s" % command}
 
 
 func controls_hint_snapshot() -> Dictionary:
@@ -442,6 +520,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
 		"controls_hint": controls_hint_snapshot(),
+		"debug_console": debug_console_snapshot(),
 		"hover": runtime_hover_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),
@@ -645,6 +724,11 @@ func close_active_container(reason: String = "closed") -> Dictionary:
 
 
 func close_active_ui(reason: String = "closed") -> Dictionary:
+	if is_debug_console_open():
+		if hud != null and hud.has_method("hide_debug_console"):
+			hud.hide_debug_console()
+		refresh_hud(current_interaction_prompt())
+		return {"success": true, "closed": "debug_console"}
 	if not active_skill_targeting.is_empty():
 		return cancel_active_skill_targeting(reason)
 	if runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()):

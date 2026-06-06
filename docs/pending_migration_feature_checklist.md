@@ -838,8 +838,8 @@ Godot 落点：`tools/agent/**`、`docs/agent-workflows/**`。
 
 ## 18. Debug、Console、Info Panels 和开发观察
 
-- [ ] debug console：反引号开关、输入、history、autocomplete、suggestions。
-- [ ] console commands：restart、show fps、show overlays、observe mode、spawn、give item、teleport、unlock location。
+- [~] debug console：反引号开关、输入框、history、suggestions、Esc 关闭和 gameplay blocker 第一版已迁移，并由 `UIToggle` smoke 覆盖；待补 autocomplete、键盘历史浏览和完整视觉。
+- [~] console commands：`help`、`show fps`、`show overlays`、`observe mode`、`clear` 第一版已迁移；待补 restart、spawn、give item、teleport、unlock location 以及命令权限/参数校验。
 - [ ] debug panel：开关、按钮、动作、状态。
 - [~] info panels：overview、selection、actor、world、interaction、turn system、events、AI、performance 已有页面状态、HUD 行和 `[` / `]` 切换 smoke；待补旧 debug viewer 各页完整内容。
 - [~] overlay flags：walkable、vision、blocked sight、level 已有世界 overlay；auto tick/observe、fps、frame time 和 HUD latency 已有 HUD/runtime control 诊断；待补 help 与统一 debug panel 展示。

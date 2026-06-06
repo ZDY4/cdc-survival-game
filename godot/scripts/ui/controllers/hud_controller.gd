@@ -21,7 +21,20 @@ var _menu_title_label: Label
 var _menu_summary_label: Label
 var _menu_hover_label: Label
 var _menu_options_box: VBoxContainer
+var _debug_console: PanelContainer
+var _console_history_label: Label
+var _console_suggestions_label: Label
+var _console_input: LineEdit
 var controls_hint_visible := false
+var console_visible := false
+var console_history: Array[String] = []
+var console_suggestions: Array[String] = [
+	"help",
+	"show fps",
+	"show overlays",
+	"observe mode",
+	"clear",
+]
 
 
 func _ready() -> void:
@@ -138,6 +151,7 @@ func _build_layout() -> void:
 		label.text = line
 		_controls_hint_box.add_child(label)
 	_build_interaction_menu()
+	_build_debug_console()
 
 
 func toggle_controls_hint() -> Dictionary:
@@ -161,6 +175,55 @@ func controls_hint_snapshot() -> Dictionary:
 		"line_count": lines.size(),
 		"lines": lines,
 	}
+
+
+func toggle_debug_console() -> Dictionary:
+	console_visible = not console_visible
+	_apply_debug_console()
+	if console_visible and _console_input != null:
+		_console_input.grab_focus()
+	return {"success": true, "visible": console_visible}
+
+
+func hide_debug_console() -> void:
+	console_visible = false
+	_apply_debug_console()
+
+
+func is_debug_console_open() -> bool:
+	return console_visible
+
+
+func debug_console_snapshot() -> Dictionary:
+	return {
+		"visible": console_visible,
+		"history": console_history.duplicate(),
+		"history_count": console_history.size(),
+		"suggestions": console_suggestions.duplicate(),
+		"suggestion_count": console_suggestions.size(),
+		"input_text": _console_input.text if _console_input != null else "",
+	}
+
+
+func console_input_node() -> LineEdit:
+	return _console_input
+
+
+func set_debug_console_result(command_text: String, result: Dictionary) -> void:
+	var status := "ok" if bool(result.get("success", false)) else "err"
+	var message := str(result.get("message", result.get("reason", "")))
+	console_history.append("> %s" % command_text)
+	console_history.append("%s: %s" % [status, message])
+	while console_history.size() > 8:
+		console_history.pop_front()
+	if _console_input != null:
+		_console_input.text = ""
+	_apply_debug_console()
+
+
+func clear_debug_console_history() -> void:
+	console_history.clear()
+	_apply_debug_console()
 
 
 func show_interaction_menu(screen_position: Vector2, prompt: Dictionary) -> void:
@@ -216,6 +279,54 @@ func _build_interaction_menu() -> void:
 	box.add_child(_menu_summary_label)
 	box.add_child(_menu_options_box)
 	box.add_child(_menu_hover_label)
+
+
+func _build_debug_console() -> void:
+	if _debug_console != null:
+		return
+	_debug_console = PanelContainer.new()
+	_debug_console.name = "DebugConsole"
+	_debug_console.visible = false
+	_debug_console.mouse_filter = Control.MOUSE_FILTER_STOP
+	_debug_console.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_debug_console.offset_left = 16
+	_debug_console.offset_right = -16
+	_debug_console.offset_top = -142
+	_debug_console.offset_bottom = -16
+	add_child(_debug_console)
+
+	var box := VBoxContainer.new()
+	box.name = "ConsoleLines"
+	box.add_theme_constant_override("separation", 4)
+	_debug_console.add_child(box)
+
+	_console_history_label = _line("ConsoleHistory")
+	_console_suggestions_label = _line("ConsoleSuggestions")
+	_console_input = LineEdit.new()
+	_console_input.name = "ConsoleInput"
+	_console_input.placeholder_text = "debug command"
+	_console_input.focus_mode = Control.FOCUS_ALL
+	_console_input.text_submitted.connect(func(text: String) -> void:
+		var root := get_tree().current_scene
+		if root != null and root.has_method("submit_debug_console_command"):
+			root.submit_debug_console_command(text)
+	)
+	box.add_child(_console_history_label)
+	box.add_child(_console_suggestions_label)
+	box.add_child(_console_input)
+
+
+func _apply_debug_console() -> void:
+	if _debug_console == null:
+		return
+	_debug_console.visible = console_visible
+	_debug_console.mouse_filter = Control.MOUSE_FILTER_STOP if console_visible else Control.MOUSE_FILTER_IGNORE
+	if _console_history_label != null:
+		_console_history_label.text = "\n".join(console_history)
+	if _console_suggestions_label != null:
+		_console_suggestions_label.text = "suggestions: %s" % ", ".join(console_suggestions)
+	if not console_visible and _console_input != null:
+		_console_input.release_focus()
 
 
 func _apply_interaction_menu(interaction: Dictionary) -> void:
@@ -927,6 +1038,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var controls_hint: Dictionary = _dictionary_or_empty(control_data.get("controls_hint", {}))
 	if not controls_hint.is_empty():
 		parts.append("Help %s" % ("on" if bool(controls_hint.get("visible", false)) else "off"))
+	var debug_console: Dictionary = _dictionary_or_empty(control_data.get("debug_console", {}))
+	if not debug_console.is_empty():
+		parts.append("Console %s" % ("on" if bool(debug_console.get("visible", false)) else "off"))
 	var hover_text := _hover_control_text(control_data.get("hover", {}))
 	if not hover_text.is_empty():
 		parts.append(hover_text)

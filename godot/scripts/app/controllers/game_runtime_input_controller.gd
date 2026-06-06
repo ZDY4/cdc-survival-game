@@ -329,6 +329,15 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		return false
 	if event.echo:
 		return false
+	if key == KEY_QUOTELEFT:
+		if game_root.has_method("toggle_debug_console"):
+			game_root.toggle_debug_console()
+		return true
+	if game_root.has_method("is_debug_console_open") and bool(game_root.is_debug_console_open()):
+		if key == KEY_ESCAPE and game_root.has_method("close_active_ui"):
+			game_root.close_active_ui("keyboard_escape")
+			return true
+		return true
 	if game_root.has_method("handle_trade_shortcut") and bool(game_root.handle_trade_shortcut(event)):
 		return true
 	var digit := _digit_for_key(key)

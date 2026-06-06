@@ -111,6 +111,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("second A should disable auto tick")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "auto tick off HUD")
 	_assert_observe_auto_button(errors, game_root, false, "auto tick off observe hotbar")
+	_exercise_debug_console(errors, game_root)
 	var observe_auto_button: Button = _observe_auto_button(game_root)
 	if observe_auto_button == null:
 		errors.append("observe hotbar should expose auto tick button for direct toggle")
@@ -816,6 +817,51 @@ func _assert_controls_hint_snapshot(errors: Array[String], game_root: Node, expe
 	if int(snapshot.get("line_count", 0)) < 3:
 		errors.append("%s: controls hint should expose help lines: %s" % [context, snapshot])
 	_assert_runtime_control_line(errors, game_root, "Help %s" % ("on" if expected_visible else "off"), "%s HUD help token" % context)
+
+
+func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
+	if not game_root.has_method("debug_console_snapshot"):
+		errors.append("game root should expose debug_console_snapshot")
+		return
+	_assert_debug_console_snapshot(errors, game_root, false, "initial console")
+	_press_key(game_root, KEY_QUOTELEFT)
+	_assert_debug_console_snapshot(errors, game_root, true, "opened console")
+	_expect_blocker(errors, game_root, "debug_console", "debug console blocker")
+	var console: Node = game_root.hud.find_child("DebugConsole", true, false)
+	if console == null or not console.visible:
+		errors.append("debug console panel should be visible after quote key")
+	if game_root.hud.find_child("ConsoleInput", true, false) == null:
+		errors.append("debug console should expose ConsoleInput")
+	var fps_result: Dictionary = game_root.submit_debug_console_command("show fps")
+	if not bool(fps_result.get("success", false)):
+		errors.append("debug console show fps should succeed: %s" % fps_result)
+	var overlay_before := str(game_root.current_debug_overlay_mode())
+	var overlay_result: Dictionary = game_root.submit_debug_console_command("show overlays")
+	if not bool(overlay_result.get("success", false)):
+		errors.append("debug console show overlays should succeed: %s" % overlay_result)
+	if str(game_root.current_debug_overlay_mode()) == overlay_before:
+		errors.append("debug console show overlays should cycle overlay mode")
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.debug_console_snapshot())
+	if int(snapshot.get("history_count", 0)) < 4:
+		errors.append("debug console should keep command history: %s" % snapshot)
+	_assert_runtime_control_line(errors, game_root, "Console on", "opened console HUD token")
+	_press_key(game_root, KEY_ESCAPE)
+	_assert_debug_console_snapshot(errors, game_root, false, "closed console")
+	var reset_guard := 0
+	while str(game_root.current_debug_overlay_mode()) != "off" and reset_guard < 6:
+		reset_guard += 1
+		game_root.cycle_debug_overlay_mode()
+	if str(game_root.current_debug_overlay_mode()) != "off":
+		errors.append("debug console smoke should restore overlay mode to off")
+
+
+func _assert_debug_console_snapshot(errors: Array[String], game_root: Node, expected_visible: bool, context: String) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.debug_console_snapshot())
+	if bool(snapshot.get("visible", not expected_visible)) != expected_visible:
+		errors.append("%s: debug console visible expected %s, got %s" % [context, str(expected_visible), snapshot])
+	if int(snapshot.get("suggestion_count", 0)) < 5:
+		errors.append("%s: debug console should expose command suggestions: %s" % [context, snapshot])
+	_assert_runtime_control_line(errors, game_root, "Console %s" % ("on" if expected_visible else "off"), "%s HUD console token" % context)
 
 
 func _assert_runtime_performance(errors: Array[String], game_root: Node, context: String) -> void:

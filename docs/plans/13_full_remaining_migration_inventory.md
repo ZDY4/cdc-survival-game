@@ -297,6 +297,7 @@
 - 已有 Godot canvas fog shader 第一版；待补与旧 post-process fog 的视觉等价：探索区透明度、未探索区遮罩、边缘柔化、mask blend。
 - 待补 fog mask 与相机/地图坐标同步、地图切换重建、可见格变化平滑、性能优化。
 - 部分迁移 `show vision` / debug overlay：`V` 会在运行时循环 `off`、`walkable`、`vision`、`blocked_sight`、`level`，并由 `DebugOverlayController` 在世界层绘制可走/阻挡、可见/已探索、actor vision radius、遮挡视线和楼层诊断格；`runtime_control.debug_overlay` 暴露模式、格子数量、当前楼层、actor vision radius 和 radius marker 数；FPS、frame time、HUD latency、render count、actor count、object count、pathfinding time 和 visited cell count 第一版已进入 `runtime_control.performance` 与 HUD runtime 行；`/` controls hint 已暴露 `controls_hint_snapshot()` 和 HUD `Help on/off`。`UIToggle` / `Movement` / `PlayerInteraction` smoke 已覆盖 HUD、世界节点、帮助提示和路径预览。待补统一 debug panel 等非网格诊断。
+- debug console 第一版已迁移：反引号开关 HUD `DebugConsole`，带输入框、history、suggestions、Esc 关闭和 `debug_console` gameplay blocker；`help`、`show fps`、`show overlays`、`observe mode`、`clear` 已接入 app 层命令执行，并由 `UIToggle` smoke 覆盖。待补 autocomplete、键盘历史浏览、restart、spawn、give item、teleport、unlock location 和统一 debug panel。
 - 雾战对交互、攻击和技能目标的规则影响第一版已迁移：active vision 下不可见目标禁止 interaction prompt、attack、skill preview 和 use_skill；已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补 hover prompt、雾中物体轮廓和已探索但不可见目标的显示策略。
 
 ## 13. 游戏 UI、菜单和反馈表现
