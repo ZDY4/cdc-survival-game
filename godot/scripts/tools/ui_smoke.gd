@@ -88,6 +88,12 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 			errors.append("empty hotbar slot should show key and empty marker")
 		if first_slot is Button and not str((first_slot as Button).tooltip_text).contains("空"):
 			errors.append("empty hotbar slot should expose empty tooltip")
+	if hud.get_node_or_null("HudPanel/HudLines/HotbarGroupBar") == null:
+		errors.append("missing hotbar group bar")
+	else:
+		var group_button: Button = hud.find_child("HotbarGroup_group_1", true, false) as Button
+		if group_button == null or not bool(group_button.get_meta("active", false)):
+			errors.append("hotbar group bar should expose active group 1 button")
 	if not hud.get_node("HudPanel/HudLines/InteractionLine").text.contains("拾取"):
 		errors.append("interaction line missing pickup option")
 	if hud.get_node_or_null("HudPanel/HudLines/EventFeedbackLine") == null:

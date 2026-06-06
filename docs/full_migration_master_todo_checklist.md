@@ -710,7 +710,7 @@
 - [~] interaction menu 基础。
 - [~] debug overlay mode 基础。
 - [ ] combat HUD：当前回合、敌人数量、目标预览、伤害预估。
-- [~] hotbar：技能、物品、冷却、快捷键和三组快捷栏第一版；待补组按钮/命名、观察模式和完整冲突处理。
+- [~] hotbar：技能、物品、冷却、快捷键、HUD 组按钮和三组快捷栏第一版；待补组命名、观察模式和完整冲突处理。
 - [ ] hover tooltip：actor/object/item/cell。
 - [ ] quest tracker。
 - [ ] message log / event log。

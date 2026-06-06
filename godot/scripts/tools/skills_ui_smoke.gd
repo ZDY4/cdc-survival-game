@@ -179,22 +179,30 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("HUD hotbar slot should expose skill tooltip")
 	if _hud_hotbar_cooldown_mask_visible(game_root, "slot_3"):
 		errors.append("HUD hotbar cooldown mask should stay hidden before skill cooldown")
-	var group2_result: Dictionary = game_root.set_hotbar_group("group_2")
-	if not bool(group2_result.get("success", false)):
-		errors.append("switching to hotbar group 2 should succeed: %s" % group2_result.get("reason", "unknown"))
+	var group2_button := _hud_hotbar_group_button(game_root, "group_2")
+	if group2_button == null:
+		errors.append("HUD should expose hotbar group 2 button")
+	else:
+		group2_button.pressed.emit()
 	await process_frame
 	if not _hotbar_line(game_root).contains("快捷栏 G2 空"):
-		errors.append("skills panel should show empty hotbar group 2")
+		errors.append("HUD hotbar group button should switch skills panel to empty group 2")
 	game_root.refresh_hud()
+	if not _hud_hotbar_group_active(game_root, "group_2"):
+		errors.append("HUD hotbar group 2 button should expose active state")
 	if not _hud_hotbar_slot_text(game_root, "slot_3").contains("3:-"):
 		errors.append("HUD hotbar group 2 slot 3 should be empty")
-	var group1_result: Dictionary = game_root.set_hotbar_group("group_1")
-	if not bool(group1_result.get("success", false)):
-		errors.append("switching back to hotbar group 1 should succeed: %s" % group1_result.get("reason", "unknown"))
+	var group1_button := _hud_hotbar_group_button(game_root, "group_1")
+	if group1_button == null:
+		errors.append("HUD should expose hotbar group 1 button")
+	else:
+		group1_button.pressed.emit()
 	await process_frame
 	if not _hotbar_line(game_root).contains("快捷栏 G1") or not _hotbar_line(game_root).contains("slot_3:adrenaline_rush"):
-		errors.append("switching back to hotbar group 1 should restore dragged hotbar skill")
+		errors.append("HUD hotbar group button should restore dragged hotbar skill in group 1")
 	game_root.refresh_hud()
+	if not _hud_hotbar_group_active(game_root, "group_1"):
+		errors.append("HUD hotbar group 1 button should expose active state")
 	if not _hud_hotbar_slot_text(game_root, "slot_3").contains("Adre"):
 		errors.append("HUD hotbar group 1 slot 3 should restore adrenaline rush")
 	if _use_button(game_root, "adrenaline_rush") == null or _use_button(game_root, "adrenaline_rush").disabled:
@@ -243,6 +251,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _event_seen(game_root, "hotbar_unbound"):
 		errors.append("clearing hotbar slot from skills panel should emit hotbar_unbound")
 	game_root.panel_controller.close_stage_panels()
+	_press_key(game_root, KEY_2, true)
+	await process_frame
+	game_root.refresh_hud()
+	if not _hud_hotbar_group_active(game_root, "group_2") or not _hud_hotbar_slot_text(game_root, "slot_3").contains("3:-"):
+		errors.append("Alt+2 should switch active hotbar group through runtime input")
+	_press_key(game_root, KEY_1, true)
+	await process_frame
+	game_root.refresh_hud()
+	if not _hud_hotbar_group_active(game_root, "group_1") or not _hud_hotbar_slot_text(game_root, "slot_3").contains("Adre"):
+		errors.append("Alt+1 should switch back to hotbar group 1 through runtime input")
 	var ap_before_skill: float = _player_ap(game_root)
 	var stamina_before_skill: float = _player_resource_current(game_root, "stamina")
 	_press_key(game_root, KEY_3)
@@ -351,6 +369,15 @@ func _hud_hotbar_slot_tooltip(game_root: Node, slot_id: String) -> String:
 func _hud_hotbar_slot_disabled(game_root: Node, slot_id: String) -> bool:
 	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
 	return button == null or button.disabled
+
+
+func _hud_hotbar_group_button(game_root: Node, group_id: String) -> Button:
+	return game_root.hud.find_child("HotbarGroup_%s" % group_id, true, false) as Button
+
+
+func _hud_hotbar_group_active(game_root: Node, group_id: String) -> bool:
+	var button := _hud_hotbar_group_button(game_root, group_id)
+	return button != null and bool(button.get_meta("active", false)) and button.button_pressed
 
 
 func _hud_hotbar_cooldown_mask_visible(game_root: Node, slot_id: String) -> bool:
@@ -716,9 +743,10 @@ func _array_or_empty(value: Variant) -> Array:
 	return []
 
 
-func _press_key(game_root: Node, key: int) -> void:
+func _press_key(game_root: Node, key: int, alt_pressed: bool = false) -> void:
 	var event := InputEventKey.new()
 	event.keycode = key
 	event.physical_keycode = key
 	event.pressed = true
+	event.alt_pressed = alt_pressed
 	game_root.runtime_input_controller.input(event)
