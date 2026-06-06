@@ -38,6 +38,10 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	var player_grid: Dictionary = player.grid_position.to_dictionary()
 	_expect_combat_visibility_decay(errors, simulation, registry, player, player_grid)
+	var force_end_runtime: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var force_end_simulation: RefCounted = force_end_runtime.get("simulation")
+	var force_end_player: RefCounted = force_end_simulation.actor_registry.get_actor(1)
+	_expect_force_end_combat(errors, force_end_simulation, registry, force_end_player, force_end_player.grid_position.to_dictionary())
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
 	_expect_deterministic_combat_rng(errors, simulation, registry, player, player_grid)
 	_expect_deterministic_loot_rng(errors, registry, player_grid)
@@ -169,6 +173,56 @@ func _expect_combat_visibility_decay(errors: Array[String], simulation: RefCount
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	_restore_player_turn(simulation, player)
+
+
+func _expect_force_end_combat(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.hp = max(1.0, player.hp)
+	var force_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	simulation._enter_combat([player.actor_id, force_target], "force_end_smoke")
+	var force_result: Dictionary = simulation.force_end_combat("smoke_forced", {
+		"source": "combat_smoke",
+		"target_actor_id": force_target,
+	})
+	if not bool(force_result.get("success", false)):
+		errors.append("force_end_combat should end active combat")
+	var force_snapshot: Dictionary = simulation.snapshot()
+	if bool(force_snapshot.get("combat_state", {}).get("active", true)):
+		errors.append("force_end_combat should clear combat active state")
+	if player.in_combat or player.turn_open:
+		errors.append("force_end_combat should clear actor combat and turn state")
+	var forced_payload: Dictionary = _last_event_payload(force_snapshot, "combat_ended")
+	if str(forced_payload.get("reason", "")) != "smoke_forced" or str(forced_payload.get("source", "")) != "combat_smoke":
+		errors.append("force_end_combat should emit combat_ended with reason and metadata")
+	if _array_or_empty(forced_payload.get("participants", [])).is_empty():
+		errors.append("force_end_combat should expose previous participants")
+	var inactive_result: Dictionary = simulation.force_end_combat("smoke_inactive")
+	if bool(inactive_result.get("success", false)) or str(inactive_result.get("reason", "")) != "combat_inactive":
+		errors.append("force_end_combat should reject inactive combat with combat_inactive")
+	if simulation.actor_registry.get_actor(force_target) != null:
+		simulation.actor_registry.unregister_actor(force_target)
+	_restore_player_turn(simulation, player)
+
+	var defeat_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 1,
+	})
+	player.hp = 0.0
+	simulation._enter_combat([player.actor_id, defeat_target], "player_defeat_smoke")
+	if not simulation.exit_combat_if_player_defeated("player_defeated_smoke"):
+		errors.append("exit_combat_if_player_defeated should end combat when no living player remains")
+	var defeat_payload: Dictionary = _last_event_payload(simulation.snapshot(), "combat_ended")
+	if str(defeat_payload.get("reason", "")) != "player_defeated_smoke":
+		errors.append("player defeated combat exit should emit combat_ended with reason")
+	player.hp = player.max_hp
+	_restore_player_turn(simulation, player)
+	if simulation.actor_registry.get_actor(defeat_target) != null:
+		simulation.actor_registry.unregister_actor(defeat_target)
 
 
 func _expect_deterministic_combat_rng(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:

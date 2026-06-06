@@ -82,6 +82,8 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	var defeated: bool = target.hp <= 0.0
 	if defeated:
 		_defeat_actor(simulation, actor_id, target_actor_id, target)
+		if target.side == "player" and simulation.has_method("exit_combat_if_player_defeated"):
+			simulation.call("exit_combat_if_player_defeated", "player_defeated")
 
 	return {
 		"success": true,

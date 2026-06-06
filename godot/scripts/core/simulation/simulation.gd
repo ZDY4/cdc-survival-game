@@ -3041,12 +3041,36 @@ func exit_combat_if_clear(reason: String = "hostiles_cleared") -> bool:
 			break
 	if has_hostile:
 		return false
+	_finish_combat_state(reason, {}, false)
+	return true
+
+
+func force_end_combat(reason: String = "forced", metadata: Dictionary = {}) -> Dictionary:
+	if not bool(combat_state.get("active", false)):
+		return {
+			"success": false,
+			"reason": "combat_inactive",
+			"end_reason": reason,
+		}
+	_finish_combat_state(reason, metadata, true)
+	return {
+		"success": true,
+		"reason": reason,
+		"metadata": metadata.duplicate(true),
+	}
+
+
+func exit_combat_if_player_defeated(reason: String = "player_defeated") -> bool:
+	if not bool(combat_state.get("active", false)):
+		return false
+	var has_living_player := false
 	for actor in actor_registry.actors():
-		actor.in_combat = false
-	combat_state["active"] = false
-	combat_state["participants"] = []
-	combat_state["turns_without_hostile_player_sight"] = 0
-	_emit("combat_ended", {"reason": reason})
+		if actor.side == "player" and actor.hp > 0.0 and (actor.map_id.is_empty() or actor.map_id == active_map_id):
+			has_living_player = true
+			break
+	if has_living_player:
+		return false
+	force_end_combat(reason)
 	return true
 
 
@@ -3086,7 +3110,7 @@ func update_combat_visibility_decay(topology: Dictionary = {}) -> Dictionary:
 			"turns_without_hostile_player_sight": no_sight_turns,
 		}
 
-	_finish_combat_state("visibility_decay")
+	_finish_combat_state("visibility_decay", {}, true)
 	return {
 		"success": true,
 		"visible": false,
@@ -3126,16 +3150,21 @@ func _hostile_can_see_player(hostile: RefCounted, player: RefCounted, topology: 
 	return _vision_rules.has_line_of_sight(hostile.grid_position.to_dictionary(), player.grid_position.to_dictionary(), topology)
 
 
-func _finish_combat_state(reason: String) -> void:
+func _finish_combat_state(reason: String, metadata: Dictionary = {}, close_turns: bool = true) -> void:
+	var participants: Array = _array_or_empty(combat_state.get("participants", [])).duplicate(true)
 	for actor in actor_registry.actors():
 		actor.in_combat = false
-		actor.turn_open = false
+		if close_turns:
+			actor.turn_open = false
 	combat_state["active"] = false
 	combat_state["participants"] = []
 	combat_state["turns_without_hostile_player_sight"] = 0
 	turn_state["phase"] = "player"
 	turn_state["active_actor_id"] = _player_actor_id()
-	_emit("combat_ended", {"reason": reason})
+	var payload: Dictionary = metadata.duplicate(true)
+	payload["reason"] = reason
+	payload["participants"] = participants
+	_emit("combat_ended", payload)
 
 
 func _interaction_option(prompt: Dictionary, option_id: String) -> Dictionary:

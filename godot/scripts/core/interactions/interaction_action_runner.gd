@@ -414,6 +414,13 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 	var previous_entry_point_id: String = str(simulation.active_entry_point_id)
 	simulation.active_map_id = target_map_id
 	simulation.active_entry_point_id = target_entry_id
+	var combat_end: Dictionary = {}
+	if previous_map_id != target_map_id and simulation.has_method("force_end_combat"):
+		combat_end = simulation.call("force_end_combat", "map_changed", {
+			"from_map_id": previous_map_id,
+			"to_map_id": target_map_id,
+			"source": "scene_transition",
+		})
 	_configure_map_interactions(simulation, _dictionary_or_empty(entry_result.get("map_data", {})))
 	actor.map_id = target_map_id
 	actor.grid_position = GridCoord.from_dictionary(target_grid)
@@ -437,6 +444,9 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 	success_payload["entry_facing"] = entry_facing
 	success_payload["return_map_id"] = previous_map_id
 	success_payload["return_entry_point_id"] = previous_entry_point_id
+	if bool(combat_end.get("success", false)):
+		success_payload["combat_ended"] = true
+		success_payload["combat_end_reason"] = str(combat_end.get("reason", "map_changed"))
 	simulation.emit_event("interaction_succeeded", success_payload)
 	return {
 		"success": true,
@@ -451,6 +461,8 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 		"grid_position": target_grid.duplicate(true),
 		"return_map_id": previous_map_id,
 		"return_entry_point_id": previous_entry_point_id,
+		"combat_ended": bool(combat_end.get("success", false)),
+		"combat_end_reason": str(combat_end.get("reason", "")),
 		"context_snapshot": {
 			"active_map_id": simulation.active_map_id,
 			"active_entry_point_id": simulation.active_entry_point_id,

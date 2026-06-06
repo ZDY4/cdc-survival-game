@@ -49,7 +49,7 @@
 - combat HUD 当前回合、行动方、敌人数量、参与者数量、目标预览和命中 / 暴击 / 伤害预估第一版已迁移：`HudSnapshot.combat_hud` 从 runtime snapshot 派生，不在 UI 复制战斗规则；HUD `CombatHudLine` 已显示 active/off、round、turn、enemy count、participants 和 target preview，实际 hostile hover 的 attack preview 会经 `runtime_control.hover.attack_preview` 联动到 combat HUD，并由 `UI` / `PlayerInteraction` smoke 覆盖。待补战斗内 actor initiative / next combat actor 选择逻辑，包含玩家、敌人、中立/友军参与者的顺序，以及更完整战斗 UI 布局。
 - 待补战斗内 AP gain / max 与探索 AP 的差异，NPC 回合打开/关闭、AP 溢出、行动耗尽后的自动结束。
 - 待补战斗开始时的参与者收集、重复进入保护、战斗 round 递增、最后看到敌人的回合计数。
-- 待补战斗退出：敌对清空、连续若干 actor turn 无敌对视线、敌人死亡、跨地图、对话或任务强制退出等。
+- 战斗退出第一版已迁移：敌对清空 / 敌人死亡会保持当前玩家回合并结束 combat；连续若干 actor turn 无敌对视线会强制结束 combat 并关闭战斗回合；新增 `force_end_combat()` 统一清理 actor combat 标记、participants 和 visibility decay，并在 scene transition / overworld enter_location 跨地图时以 `map_changed` 结束战斗，玩家阵营无存活 actor 时以 `player_defeated` 结束战斗；`combat_ended` payload 会带 reason、participants 和跨地图 metadata，已由 `Combat` / `Interaction` / `Overworld` smoke 覆盖。待补对话或任务强制退出、战后 AP / targeting / HUD 的完整恢复策略。
 - 待补战斗后恢复探索回合：玩家 AP、turn_open、pending、目标选择和 HUD 状态应稳定重置。
 
 ## 3. 输入、选择和界面开关
@@ -370,7 +370,7 @@
 
 - `Movement`：补对角、禁止穿角、跨层楼梯、自动开门、取消策略、长路径跨回合。
 - `PlayerInteraction`：补 UI blocker、右键菜单关闭、hover prompt、actor/object/grid 优先级、不可见目标。
-- `Combat`：补 LOS、跨层、AOE、友军伤害、战斗退出 decay、远程弹药/reload、暴击 seed。
+- `Combat`：补 LOS、跨层、AOE、友军伤害、战斗退出 decay / 强制退出 / 跨地图退出 / 玩家死亡退出、远程弹药/reload、暴击 seed。
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、背包使用成功/失败反馈、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；拆分入口禁用说明和 core 稳定拒绝 reason 已有 smoke；待补真正多 stack 拆分、装备属性变化对比和更完整上下文菜单 polish。
 - `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、全部拿取/全部存放、双向拖拽、背包面板拖入存放、基础失败提示、权限预览、背包负重限制、容器自身容量限制、容器锁定/权限拒绝、钥匙/工具解锁和显式消耗已有 smoke；待补逐件工具耐久和跨面板拖拽视觉 polish。

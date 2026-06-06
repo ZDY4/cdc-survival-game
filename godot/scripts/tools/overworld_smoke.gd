@@ -2,6 +2,7 @@ extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const SaveService = preload("res://scripts/app/save_service.gd")
 
 
@@ -46,9 +47,23 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if not unlocked:
 		errors.append("forest unlock should report changed state")
 	_prepare_runtime_ui_state_for_location_change(simulation)
+	var map_change_hostile: int = simulation.register_actor({
+		"definition_id": "overworld_combat_hostile",
+		"kind": "enemy",
+		"side": "hostile",
+		"display_name": "Overworld Combat Hostile",
+		"grid_position": GridCoord.new(25, 0, 39),
+		"hp": 10.0,
+		"max_hp": 10.0,
+		"ap": 0.0,
+		"map_id": simulation.active_map_id,
+	})
+	simulation._enter_combat([1, map_change_hostile], "overworld_map_change_smoke")
 	var entered: Dictionary = simulation.enter_location(1, "forest", overworld)
 	if not bool(entered.get("success", false)):
 		errors.append("unlocked forest enter failed: %s" % entered.get("reason", "unknown"))
+	if not bool(entered.get("combat_ended", false)):
+		errors.append("enter_location should report combat_ended when changing maps")
 	if simulation.active_map_id != "forest":
 		errors.append("forest enter should update active map")
 	if simulation.active_location_id != "forest":
@@ -66,6 +81,13 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("location_entered should include from/to map ids")
 	if str(location_payload.get("entry_point_id", "")) != "default_entry":
 		errors.append("location_entered should include entry_point_id")
+	if not bool(location_payload.get("combat_ended", false)):
+		errors.append("location_entered should expose combat_ended")
+	var combat_end_payload: Dictionary = _last_event_payload(simulation.snapshot(), "combat_ended")
+	if str(combat_end_payload.get("reason", "")) != "map_changed" or str(combat_end_payload.get("source", "")) != "enter_location":
+		errors.append("enter_location should force end combat with map_changed reason")
+	if str(combat_end_payload.get("from_map_id", "")) != "survivor_outpost_01" or str(combat_end_payload.get("to_map_id", "")) != "forest":
+		errors.append("enter_location combat_ended should include from/to map ids")
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	if player != null:
 		if not str(player.active_dialogue_id).is_empty():

@@ -2,6 +2,7 @@ extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
@@ -251,6 +252,8 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	if _dictionary_or_empty(scene_transition_payload.get("grid_position", {})).is_empty():
 		errors.append("scene_transition should include grid_position")
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "enter_subscene", "enter_subscene", "进入据点室内")
+	var transition_combat_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	errors.append_array(_expect_scene_transition_ends_combat(transition_combat_simulation, registry))
 	var approach_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var approach_errors: Array[String] = _expect_auto_approach_interaction(approach_simulation, registry)
 	errors.append_array(approach_errors)
@@ -286,6 +289,47 @@ func _submit_and_complete(simulation: RefCounted, registry: RefCounted, command:
 func _has_pending(simulation: RefCounted) -> bool:
 	var snapshot: Dictionary = simulation.snapshot()
 	return not snapshot.get("pending_movement", {}).is_empty() or not snapshot.get("pending_interaction", {}).is_empty()
+
+
+func _expect_scene_transition_ends_combat(simulation: RefCounted, registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		return ["scene transition combat smoke missing player"]
+	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	var hostile_id: int = simulation.register_actor({
+		"definition_id": "transition_combat_hostile",
+		"kind": "enemy",
+		"side": "hostile",
+		"display_name": "Transition Combat Hostile",
+		"grid_position": GridCoord.from_dictionary({
+			"x": int(player_grid.get("x", 0)) + 1,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		}),
+		"hp": 10.0,
+		"max_hp": 10.0,
+		"ap": 0.0,
+		"map_id": simulation.active_map_id,
+	})
+	simulation._enter_combat([1, hostile_id], "scene_transition_combat_smoke")
+	var result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "survivor_outpost_01_interior_door",
+	}, "enter_subscene")
+	if not bool(result.get("success", false)):
+		errors.append("scene transition during combat should succeed: %s" % result.get("reason", "unknown"))
+	if not bool(result.get("combat_ended", false)):
+		errors.append("scene transition should report combat_ended when changing maps")
+	var combat_state: Dictionary = _dictionary_or_empty(simulation.snapshot().get("combat_state", {}))
+	if bool(combat_state.get("active", false)):
+		errors.append("scene transition should clear active combat state")
+	var combat_end: Dictionary = _last_event_payload(simulation.snapshot(), "combat_ended")
+	if str(combat_end.get("reason", "")) != "map_changed" or str(combat_end.get("source", "")) != "scene_transition":
+		errors.append("scene transition should force end combat with map_changed reason")
+	if str(combat_end.get("from_map_id", "")) != "survivor_outpost_01" or str(combat_end.get("to_map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("scene transition combat_ended should include from/to map ids")
+	return errors
 
 
 func _final_interaction_result(result: Dictionary) -> bool:

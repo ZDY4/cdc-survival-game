@@ -296,9 +296,9 @@ Godot 落点：`godot/scripts/core/simulation/simulation.gd`、`movement_runner.
 - [ ] 战斗 round、current_actor、current_group、turn_index。
 - [ ] NPC AP gain / AP max、行动耗尽结束回合。
 - [ ] 战斗参与者收集、重复进入保护。
-- [~] 连续无敌对视线若干回合退出战斗。
+- [~] 连续无敌对视线若干回合退出战斗，且强制退出会清理 combat actor 标记、participants 和 visibility decay。
 - [ ] 战斗结束恢复探索 AP、pending、targeting、HUD。
-- [ ] ForceEndCombat、跨地图强制退出、死亡退出。
+- [~] ForceEndCombat、跨地图强制退出、死亡退出第一版：`force_end_combat()`、scene transition / overworld map_changed 和 player_defeated 已覆盖；待补对话/任务强制退出与更完整战后恢复。
 
 参考：`simulation/combat.rs`、`combat_ai/**`、`types.rs::CombatDebugState`。
 Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、`ai_runner.gd`。
@@ -885,7 +885,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [ ] `Interaction`：门、锁门、pickup 数量、scene transition、disabled options。
 - [ ] `PlayerInteraction`：UI blocker、右键菜单、hover prompt、actor/object/grid priority。
 - [ ] `Movement`：对角、禁止穿角、楼梯、自动开门、取消 pending、跨回合长路径。
-- [~] `Combat`：LOS、跨层、最大/最小射程、攻击预览/实际攻击空间诊断、AOE、reload、miss/evasion、armor、seed 第一版已有覆盖；待补友军伤害和门/楼层例外。
+- [~] `Combat`：LOS、跨层、最大/最小射程、攻击预览/实际攻击空间诊断、战斗退出、AOE、reload、miss/evasion、armor、seed 第一版已有覆盖；待补友军伤害和门/楼层例外。
 - [ ] `AI`：开门、重规划、感知丢失、技能、治疗、settlement life。
 - [~] `InventoryUI`：顺序/名称/重量/价值排序、顺序视图拖拽重排、拖到装备/丢弃按钮、右键使用/装备/丢弃菜单、筛选、搜索、详情、消耗品使用、选中物品装备/丢弃、丢弃数量和任务/关键物品禁用第一版已覆盖；待补完整上下文菜单项、数量弹窗、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
 - [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、全部拿取/全部存放、双向拖拽、背包负重限制、容器自身容量、权限高级错误和显式钥匙/工具消耗解锁已覆盖；待补逐件工具耐久和跨面板拖拽视觉 polish。

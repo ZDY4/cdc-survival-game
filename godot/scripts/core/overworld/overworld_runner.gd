@@ -35,6 +35,14 @@ func enter_location(simulation: RefCounted, actor_id: int, location_id: String, 
 	simulation.active_location_id = normalized_location_id
 	simulation.active_entry_point_id = entry_point_id
 	simulation.start_entry_point_id = entry_point_id
+	var combat_end: Dictionary = {}
+	if previous_map_id != map_id and simulation.has_method("force_end_combat"):
+		combat_end = simulation.call("force_end_combat", "map_changed", {
+			"from_map_id": previous_map_id,
+			"to_map_id": map_id,
+			"location_id": normalized_location_id,
+			"source": "enter_location",
+		})
 	_clear_runtime_ui_state(simulation, actor, actor_id, normalized_location_id)
 	simulation.emit_event("location_entered", {
 		"actor_id": actor_id,
@@ -42,12 +50,15 @@ func enter_location(simulation: RefCounted, actor_id: int, location_id: String, 
 		"from_map_id": previous_map_id,
 		"to_map_id": map_id,
 		"entry_point_id": entry_point_id,
+		"combat_ended": bool(combat_end.get("success", false)),
 	})
 	return {
 		"success": true,
 		"location_id": normalized_location_id,
 		"map_id": map_id,
 		"entry_point_id": entry_point_id,
+		"combat_ended": bool(combat_end.get("success", false)),
+		"combat_end_reason": str(combat_end.get("reason", "")),
 	}
 
 
