@@ -294,6 +294,31 @@ func hover_state_snapshot() -> Dictionary:
 	return snapshot
 
 
+func selection_debug_snapshot() -> Dictionary:
+	var hover: Dictionary = hover_state_snapshot()
+	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
+	var move_preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
+	var attack_preview: Dictionary = _dictionary_or_empty(hover.get("attack_preview", {}))
+	var target_id := str(hover.get("target_id", ""))
+	var actor_id := int(hover.get("actor_id", 0))
+	return {
+		"active": bool(hover.get("active", false)),
+		"kind": str(hover.get("kind", "")),
+		"hovered_grid": _dictionary_or_empty(hover.get("grid", {})).duplicate(true),
+		"hovered_actor_id": actor_id,
+		"hovered_object_id": target_id if actor_id <= 0 else "",
+		"target_type": str(hover.get("target_type", "")),
+		"target_category": str(hover.get("target_category", "")),
+		"target_id": target_id,
+		"target_name": str(hover.get("target_name", "")),
+		"blocker_name": str(hover.get("ui_blocker", "")),
+		"reason": str(hover.get("reason", "")),
+		"prompt": _selection_debug_prompt(prompt),
+		"move_preview": _selection_debug_move_preview(move_preview),
+		"attack_preview": _selection_debug_attack_preview(attack_preview),
+	}
+
+
 func _handle_camera_key(event: InputEventKey) -> bool:
 	var key := event.keycode
 	if key == 0:
@@ -847,6 +872,67 @@ func _replace_hover_state(next_state: Dictionary) -> bool:
 		return false
 	last_hover_state = next_state
 	return true
+
+
+func _selection_debug_prompt(prompt: Dictionary) -> Dictionary:
+	if prompt.is_empty():
+		return {
+			"has_prompt": false,
+			"ok": false,
+			"primary_option_id": "",
+			"action_label": "",
+			"option_count": 0,
+			"disabled_option_count": 0,
+			"disabled_reason": "",
+			"target_distance": -1,
+			"interaction_range": -1,
+			"requires_approach": false,
+		}
+	return {
+		"has_prompt": true,
+		"ok": bool(prompt.get("ok", false)),
+		"primary_option_id": str(prompt.get("primary_option_id", "")),
+		"action_label": str(prompt.get("action_label", "")),
+		"option_count": _array_or_empty(prompt.get("options", [])).size(),
+		"disabled_option_count": _array_or_empty(prompt.get("disabled_options", [])).size(),
+		"disabled_reason": str(prompt.get("reason", "")),
+		"target_distance": int(prompt.get("target_distance", -1)),
+		"interaction_range": int(prompt.get("interaction_range", -1)),
+		"requires_approach": bool(prompt.get("requires_approach", false)),
+	}
+
+
+func _selection_debug_move_preview(move_preview: Dictionary) -> Dictionary:
+	if move_preview.is_empty():
+		return {"has_preview": false}
+	return {
+		"has_preview": true,
+		"reachable": bool(move_preview.get("reachable", false)),
+		"reason": str(move_preview.get("reason", "")),
+		"steps": int(move_preview.get("steps", 0)),
+		"ap_cost": float(move_preview.get("ap_cost", 0.0)),
+		"ap_available": float(move_preview.get("ap_available", 0.0)),
+		"ap_affordable": bool(move_preview.get("ap_affordable", true)),
+		"requires_pending": bool(move_preview.get("requires_pending", false)),
+		"pathfinding_time_ms": float(move_preview.get("pathfinding_time_ms", 0.0)),
+		"visited_cell_count": int(move_preview.get("visited_cell_count", 0)),
+	}
+
+
+func _selection_debug_attack_preview(attack_preview: Dictionary) -> Dictionary:
+	if attack_preview.is_empty():
+		return {"has_preview": false}
+	return {
+		"has_preview": true,
+		"can_attack": bool(attack_preview.get("can_attack", false)),
+		"reason": str(attack_preview.get("reason", "")),
+		"target_actor_id": int(attack_preview.get("target_actor_id", 0)),
+		"distance": int(attack_preview.get("distance", -1)),
+		"range": int(attack_preview.get("range", -1)),
+		"ap_cost": float(attack_preview.get("ap_cost", 0.0)),
+		"ap_available": float(attack_preview.get("ap_available", 0.0)),
+		"hit_chance": float(attack_preview.get("hit_chance", -1.0)),
+	}
 
 
 func _hover_ui_blocker_name() -> String:

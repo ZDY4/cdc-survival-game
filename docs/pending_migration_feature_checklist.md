@@ -844,7 +844,7 @@ Godot 落点：`tools/agent/**`、`docs/agent-workflows/**`。
 - [~] info panels：overview、selection、actor、world、interaction、turn system、events、AI、performance 已有页面状态、HUD 行和 `[` / `]` 切换 smoke；待补旧 debug viewer 各页完整内容。
 - [~] overlay flags：walkable、vision、blocked sight、level 已有世界 overlay；auto tick/observe、fps、frame time 和 HUD latency 已有 HUD/runtime control 诊断；待补 help 与统一 debug panel 展示。
 - [~] profiling：frame time、render count、actor count、object count、pathfinding time 和 visited cell count 已进入 `runtime_control.performance` 与 HUD runtime 行；待补更完整 profiling 面板。
-- [ ] selection debug：hovered grid、actor、object、blocker name、prompt。
+- [~] selection debug：hovered grid、actor、object、blocker name 和 prompt summary 已进入 `runtime_control.selection_debug`，HUD runtime 行显示 `Sel ...` 摘要，并由 `PlayerInteraction` smoke 覆盖；待补统一 debug panel 页面和更完整 blocker / prompt 细节。
 - [ ] AI debug：intent、goal、action、blackboard、path、failure。
 
 参考：`bevy_debug_viewer/src/console.rs`、`debug_panel/**`、`info_panels/**`、`profiling.rs`。

@@ -434,6 +434,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
 		"hover": runtime_hover_snapshot(),
+		"selection_debug": runtime_selection_debug_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),
 		"performance": runtime_performance_snapshot(),
 		"skill_targeting": _skill_targeting_snapshot(),
@@ -470,6 +471,12 @@ func runtime_hover_snapshot() -> Dictionary:
 	if runtime_input_controller != null and runtime_input_controller.has_method("hover_state_snapshot"):
 		return runtime_input_controller.hover_state_snapshot()
 	return {"active": false}
+
+
+func runtime_selection_debug_snapshot() -> Dictionary:
+	if runtime_input_controller != null and runtime_input_controller.has_method("selection_debug_snapshot"):
+		return runtime_input_controller.selection_debug_snapshot()
+	return {"active": false, "kind": "", "hovered_grid": {}, "blocker_name": "", "prompt": {"has_prompt": false}}
 
 
 func _update_runtime_performance(delta: float) -> void:

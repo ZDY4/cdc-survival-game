@@ -914,6 +914,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var hover_text := _hover_control_text(control_data.get("hover", {}))
 	if not hover_text.is_empty():
 		parts.append(hover_text)
+	var selection_debug_text := _selection_debug_control_text(control_data.get("selection_debug", {}))
+	if not selection_debug_text.is_empty():
+		parts.append(selection_debug_text)
 	var performance_text := _performance_control_text(control_data.get("performance", {}))
 	if not performance_text.is_empty():
 		parts.append(performance_text)
@@ -933,6 +936,27 @@ func _performance_control_text(value: Variant) -> String:
 		int(performance.get("actor_count", 0)),
 		int(performance.get("object_count", 0)),
 	]
+
+
+func _selection_debug_control_text(value: Variant) -> String:
+	var selection_debug: Dictionary = _dictionary_or_empty(value)
+	if selection_debug.is_empty():
+		return ""
+	var blocker := str(selection_debug.get("blocker_name", ""))
+	if not blocker.is_empty():
+		return "Sel blocked:%s" % blocker
+	if not bool(selection_debug.get("active", false)):
+		var reason := str(selection_debug.get("reason", ""))
+		return "" if reason.is_empty() else "Sel none:%s" % reason
+	var prompt: Dictionary = _dictionary_or_empty(selection_debug.get("prompt", {}))
+	var action := str(prompt.get("action_label", prompt.get("primary_option_id", "")))
+	if action.is_empty() and bool(prompt.get("has_prompt", false)):
+		action = "prompt"
+	var target := str(selection_debug.get("target_name", selection_debug.get("target_id", "")))
+	if target.is_empty():
+		target = str(selection_debug.get("kind", ""))
+	var category := str(selection_debug.get("target_category", selection_debug.get("target_type", "")))
+	return "Sel %s %s %s" % [category, target, action]
 
 
 func _hover_control_text(value: Variant) -> String:

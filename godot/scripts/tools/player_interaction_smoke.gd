@@ -1379,6 +1379,24 @@ func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expecte
 		errors.append("runtime hover snapshot category expected %s, got %s" % [expected_category, hover.get("target_category", "")])
 	if _dictionary_or_empty(hover.get("grid", {})).is_empty():
 		errors.append("runtime hover snapshot should expose hovered grid")
+	var control_snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var selection_debug: Dictionary = _dictionary_or_empty(control_snapshot.get("selection_debug", {}))
+	if selection_debug.is_empty():
+		errors.append("runtime control should expose selection_debug snapshot")
+	else:
+		if not bool(selection_debug.get("active", false)):
+			errors.append("selection_debug should be active after hover raycast")
+		if str(selection_debug.get("kind", "")) != expected_kind:
+			errors.append("selection_debug kind expected %s, got %s" % [expected_kind, selection_debug.get("kind", "")])
+		if str(selection_debug.get("target_id", "")) != expected_target_id:
+			errors.append("selection_debug should expose target id %s, got %s" % [expected_target_id, selection_debug.get("target_id", "")])
+		if not expected_category.is_empty() and str(selection_debug.get("target_category", "")) != expected_category:
+			errors.append("selection_debug category expected %s, got %s" % [expected_category, selection_debug.get("target_category", "")])
+		if _dictionary_or_empty(selection_debug.get("hovered_grid", {})).is_empty():
+			errors.append("selection_debug should expose hovered grid")
+		var prompt_debug: Dictionary = _dictionary_or_empty(selection_debug.get("prompt", {}))
+		if not bool(prompt_debug.get("has_prompt", false)):
+			errors.append("selection_debug should expose prompt summary")
 	var expected_hud_kind := expected_category if not expected_category.is_empty() else "interaction"
 	var hud_line := _hud_runtime_control_line(game_root)
 	var expected_hud_target := str(hover.get("target_name", expected_target_id))
@@ -1387,6 +1405,8 @@ func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expecte
 		has_target_text = has_target_text or hud_line.contains(expected_hud_target)
 	if not hud_line.contains("Hover %s" % expected_hud_kind) or not has_target_text:
 		errors.append("HUD runtime control line should show hover interaction target %s/%s, got %s" % [expected_hud_kind, expected_target_id, hud_line])
+	if not hud_line.contains("Sel %s" % expected_hud_kind):
+		errors.append("HUD runtime control line should show selection debug target %s, got %s" % [expected_hud_kind, hud_line])
 
 
 func _expect_player_runtime_marker(errors: Array[String], player_node: Node3D) -> void:
