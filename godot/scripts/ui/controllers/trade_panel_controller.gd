@@ -506,17 +506,19 @@ func _get_trade_item_drag_data(_position: Vector2, from_control: Control) -> Var
 	var source: String = str(from_control.get_meta("trade_source"))
 	if item.is_empty() or source.is_empty() or not _item_can_trade(item, source):
 		return null
-	var preview := Label.new()
-	preview.text = "%s x%d" % [item.get("name", item.get("item_id", "")), int(item.get("count", 0))]
-	preview.name = "TradeDragPreview"
-	preview.set_meta("trade_drag_preview_text", preview.text)
-	set_drag_preview(preview)
+	var preview_text := "%s x%d" % [item.get("name", item.get("item_id", "")), int(item.get("count", 0))]
+	if get_viewport() != null and get_viewport().gui_is_dragging():
+		var preview := Label.new()
+		preview.text = preview_text
+		preview.name = "TradeDragPreview"
+		preview.set_meta("trade_drag_preview_text", preview_text)
+		set_drag_preview(preview)
 	return {
 		"kind": "trade_item",
 		"source": source,
 		"item": item.duplicate(true),
 		"count": int(_quantity_spin.value if _quantity_spin != null else 1),
-		"drag_preview_text": preview.text,
+		"drag_preview_text": preview_text,
 	}
 
 
@@ -697,21 +699,23 @@ func _get_cart_entry_drag_data(_position: Vector2, from_control: Control) -> Var
 	if index < 0 or index >= _cart_entries.size():
 		return null
 	var entry: Dictionary = _cart_entries[index]
-	var preview := Label.new()
 	var source: String = str(entry.get("source", ""))
 	var verb: String = "购买" if source == "shop" else "出售" if _is_sell_source(source) else "交易"
-	preview.text = "%s %s x%d" % [
+	var preview_text := "%s %s x%d" % [
 		verb,
 		entry.get("name", entry.get("item_id", "")),
 		int(entry.get("count", 0)),
 	]
-	preview.name = "TradeCartDragPreview"
-	preview.set_meta("trade_drag_preview_text", preview.text)
-	set_drag_preview(preview)
+	if get_viewport() != null and get_viewport().gui_is_dragging():
+		var preview := Label.new()
+		preview.text = preview_text
+		preview.name = "TradeCartDragPreview"
+		preview.set_meta("trade_drag_preview_text", preview_text)
+		set_drag_preview(preview)
 	return {
 		"kind": "trade_cart_entry",
 		"index": index,
-		"drag_preview_text": preview.text,
+		"drag_preview_text": preview_text,
 	}
 
 

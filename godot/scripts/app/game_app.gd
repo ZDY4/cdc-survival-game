@@ -398,6 +398,22 @@ func hover_tooltip_snapshot(control: Control = null) -> Dictionary:
 	}
 
 
+func drag_state_snapshot(data: Variant = {}, hover_target: Control = null) -> Dictionary:
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	if drag_data.is_empty():
+		return {"active": false, "kind": "", "source": {}, "target": _drag_hover_target_snapshot(hover_target), "preview": {}, "payload": {}}
+	var kind := str(drag_data.get("kind", ""))
+	var payload := _drag_payload_snapshot(drag_data)
+	return {
+		"active": true,
+		"kind": kind,
+		"source": _drag_source_snapshot(drag_data, kind),
+		"target": _drag_hover_target_snapshot(hover_target),
+		"preview": _drag_preview_snapshot(drag_data, payload),
+		"payload": payload,
+	}
+
+
 func handle_trade_shortcut(event: InputEventKey) -> bool:
 	if panel_controller == null:
 		return false
@@ -663,6 +679,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"debug_panel": debug_panel_snapshot(),
 		"hover": runtime_hover_snapshot(),
 		"tooltip": hover_tooltip_snapshot(),
+		"drag": drag_state_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
 		"ai_debug": ai_debug_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),
@@ -817,6 +834,114 @@ func _owner_panel_for_control(control: Control) -> String:
 				return "settings"
 		current = current.get_parent()
 	return ""
+
+
+func _drag_source_snapshot(drag_data: Dictionary, kind: String) -> Dictionary:
+	var output := {
+		"kind": kind,
+		"owner_panel": _drag_source_owner(kind, drag_data),
+		"source": str(drag_data.get("source", "")),
+		"from_index": int(drag_data.get("from_index", drag_data.get("index", -1))),
+	}
+	if kind == "skill_hotbar":
+		output["source"] = "skills"
+	elif kind == "inventory_item" and str(output.get("source", "")).is_empty():
+		output["source"] = "inventory"
+	return output
+
+
+func _drag_source_owner(kind: String, drag_data: Dictionary) -> String:
+	match kind:
+		"inventory_item":
+			return "inventory"
+		"skill_hotbar":
+			return "skills"
+		"trade_item", "trade_cart_entry":
+			return "trade"
+		"container_item":
+			return "container"
+	var source := str(drag_data.get("source", ""))
+	return source if source in ["inventory", "skills", "trade", "container", "hud", "character"] else ""
+
+
+func _drag_payload_snapshot(drag_data: Dictionary) -> Dictionary:
+	var kind := str(drag_data.get("kind", ""))
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var skill: Dictionary = _dictionary_or_empty(drag_data.get("skill", {}))
+	match kind:
+		"inventory_item", "trade_item", "container_item":
+			return {
+				"item_id": str(drag_data.get("item_id", item.get("item_id", ""))),
+				"name": str(item.get("name", drag_data.get("item_id", ""))),
+				"count": int(drag_data.get("count", item.get("count", 1))),
+				"item_count": int(item.get("count", drag_data.get("count", 1))),
+			}
+		"skill_hotbar":
+			return {
+				"skill_id": str(drag_data.get("skill_id", skill.get("skill_id", ""))),
+				"name": str(skill.get("name", drag_data.get("skill_id", ""))),
+				"count": 1,
+			}
+		"trade_cart_entry":
+			return {
+				"index": int(drag_data.get("index", -1)),
+				"name": str(drag_data.get("name", "")),
+				"count": int(drag_data.get("count", 1)),
+			}
+	return {"count": int(drag_data.get("count", 0))}
+
+
+func _drag_preview_snapshot(drag_data: Dictionary, payload: Dictionary) -> Dictionary:
+	var text := str(drag_data.get("drag_preview_text", ""))
+	if text.is_empty():
+		match str(drag_data.get("kind", "")):
+			"skill_hotbar":
+				text = "%s -> 热栏" % str(payload.get("name", payload.get("skill_id", "")))
+			_:
+				var name := str(payload.get("name", payload.get("item_id", "")))
+				var count := int(payload.get("count", 0))
+				text = "%s x%d" % [name, count] if not name.is_empty() and count > 0 else name
+	return {
+		"text": text,
+		"has_preview": not text.is_empty(),
+	}
+
+
+func _drag_hover_target_snapshot(control: Control) -> Dictionary:
+	if control == null:
+		return {"active": false, "owner_panel": "", "target_kind": "", "target_id": "", "source_path": "", "accepts": "", "last_accept": false, "reject_reason": ""}
+	var target := {
+		"active": true,
+		"owner_panel": _owner_panel_for_control(control),
+		"target_kind": "control",
+		"target_id": str(control.name),
+		"source_path": str(control.get_path()),
+		"accepts": "",
+		"last_accept": false,
+		"reject_reason": "",
+	}
+	if control.has_meta("equipment_slot"):
+		target["target_kind"] = "equipment_slot"
+		target["target_id"] = str(control.get_meta("equipment_slot"))
+	elif control.has_meta("hotbar_slot_id"):
+		target["target_kind"] = "hotbar_slot"
+		target["target_id"] = str(control.get_meta("hotbar_slot_id"))
+	elif control.has_meta("inventory_action_target"):
+		target["target_kind"] = "inventory_action"
+		target["target_id"] = str(control.get_meta("inventory_action_target"))
+	elif control.has_meta("container_source"):
+		target["target_kind"] = "container_column"
+		target["target_id"] = str(control.get_meta("container_source"))
+	elif control.has_meta("trade_drop_zone"):
+		target["target_kind"] = "trade_drop_zone"
+		target["target_id"] = str(control.get_meta("trade_drop_zone"))
+		target["accepts"] = str(control.get_meta("trade_drop_accepts", ""))
+		target["last_accept"] = bool(control.get_meta("trade_drop_last_accept", false))
+		target["reject_reason"] = str(control.get_meta("trade_drop_last_reject_reason", control.get_meta("trade_drop_reject_reason", "")))
+	elif control.has_meta("cart_index"):
+		target["target_kind"] = "trade_cart_entry"
+		target["target_id"] = str(control.get_meta("cart_index"))
+	return target
 
 
 func settings_applied(_snapshot: Dictionary = {}) -> void:

@@ -189,6 +189,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
 	if not _drop_trade_item_to_zone(game_root, "shop", "绷带", "BuyDropZone"):
 		errors.append("should drag shop bandage to buy drop zone")
+	else:
+		_assert_drag_state_snapshot(errors, game_root, _trade_drag_data(game_root, "shop", "绷带"), _trade_zone_control(game_root, "BuyDropZone"), "trade_item", "trade", "trade_drop_zone", "shop bandage to buy drop zone")
 	if not _cart_line(game_root).contains("购买 绷带 x1"):
 		errors.append("buy drop zone should queue cart buy")
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
@@ -221,6 +223,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
 	if not _drop_trade_item_to_zone(game_root, "player", "绷带", "SellDropZone"):
 		errors.append("should drag player bandage to sell drop zone")
+	else:
+		_assert_drag_state_snapshot(errors, game_root, _trade_drag_data(game_root, "player", "绷带"), _trade_zone_control(game_root, "SellDropZone"), "trade_item", "trade", "trade_drop_zone", "player bandage to sell drop zone")
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
 		errors.append("sell drop zone should queue cart sell")
 	if not _can_drop_trade_item_to_zone(game_root, "player", "绷带", "SellDropZone"):
@@ -826,6 +830,43 @@ func _trade_item_disabled(game_root: Node, source: String, text: String) -> bool
 func _trade_zone_tooltip(game_root: Node, zone_name: String) -> String:
 	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
 	return "" if not target is Control else str((target as Control).tooltip_text)
+
+
+func _trade_zone_control(game_root: Node, zone_name: String) -> Control:
+	return game_root.trade_panel.find_child(zone_name, true, false) as Control
+
+
+func _trade_drag_data(game_root: Node, source: String, text: String) -> Dictionary:
+	var button: Button = _trade_item_button_with_text(game_root, source, text)
+	if button == null:
+		return {}
+	return _dictionary_or_empty(game_root.trade_panel.call("_get_trade_item_drag_data", Vector2.ZERO, button))
+
+
+func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_kind: String, expected_source_owner: String, expected_target_kind: String, context: String) -> void:
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	if not game_root.has_method("drag_state_snapshot"):
+		errors.append("%s: game root should expose drag_state_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: drag snapshot should be active: %s" % [context, snapshot])
+	if str(snapshot.get("kind", "")) != expected_kind:
+		errors.append("%s: drag kind expected %s, got %s" % [context, expected_kind, snapshot])
+	var source: Dictionary = _dictionary_or_empty(snapshot.get("source", {}))
+	if str(source.get("owner_panel", "")) != expected_source_owner:
+		errors.append("%s: source owner expected %s, got %s" % [context, expected_source_owner, snapshot])
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != expected_target_kind:
+		errors.append("%s: target kind expected %s, got %s" % [context, expected_target_kind, snapshot])
+	var preview: Dictionary = _dictionary_or_empty(snapshot.get("preview", {}))
+	if not bool(preview.get("has_preview", false)) or str(preview.get("text", "")).is_empty():
+		errors.append("%s: drag snapshot should expose preview text: %s" % [context, snapshot])
+	var runtime_drag: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("drag", {}))
+	if not runtime_drag.has("active") or not runtime_drag.has("target"):
+		errors.append("%s: runtime control should expose drag state shape: %s" % [context, runtime_drag])
 
 
 func _trade_last_shortcut(game_root: Node) -> String:

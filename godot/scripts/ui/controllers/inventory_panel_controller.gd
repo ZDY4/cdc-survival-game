@@ -282,15 +282,18 @@ func _get_inventory_item_drag_data(_position: Vector2, from_control: Control) ->
 	if item.is_empty() or item_id.is_empty():
 		return null
 	_apply_detail(item.duplicate(true))
-	var preview := Label.new()
-	preview.text = "%s x%d" % [item.get("name", item_id), int(item.get("count", 0))]
-	set_drag_preview(preview)
+	var preview_text := "%s x%d" % [item.get("name", item_id), int(item.get("count", 0))]
+	if get_viewport() != null and get_viewport().gui_is_dragging():
+		var preview := Label.new()
+		preview.text = preview_text
+		set_drag_preview(preview)
 	return {
 		"kind": "inventory_item",
 		"item": item.duplicate(true),
 		"item_id": item_id,
 		"count": _drag_drop_count(item),
 		"from_index": int(from_control.get_meta("inventory_index", item.get("order_index", 0))),
+		"drag_preview_text": preview_text,
 	}
 
 

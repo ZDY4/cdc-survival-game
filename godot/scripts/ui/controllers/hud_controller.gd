@@ -623,6 +623,10 @@ func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
 	var tooltip: Dictionary = _dictionary_or_empty(runtime_control.get("tooltip", {}))
 	if bool(tooltip.get("active", false)):
 		parts.append("Tip %s/%s" % [str(tooltip.get("owner_panel", "")), str(tooltip.get("source_name", ""))])
+	var drag: Dictionary = _dictionary_or_empty(runtime_control.get("drag", {}))
+	if bool(drag.get("active", false)):
+		var target: Dictionary = _dictionary_or_empty(drag.get("target", {}))
+		parts.append("Drag %s->%s/%s" % [str(drag.get("kind", "")), str(target.get("owner_panel", "")), str(target.get("target_kind", ""))])
 	var level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
 	if not level.is_empty():
 		parts.append("Level %d" % int(level.get("current", 0)))
@@ -1408,6 +1412,10 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var tooltip: Dictionary = _dictionary_or_empty(control_data.get("tooltip", {}))
 	if bool(tooltip.get("active", false)):
 		parts.append("Tip %s/%s" % [str(tooltip.get("owner_panel", "")), str(tooltip.get("source_name", ""))])
+	var drag: Dictionary = _dictionary_or_empty(control_data.get("drag", {}))
+	if bool(drag.get("active", false)):
+		var target: Dictionary = _dictionary_or_empty(drag.get("target", {}))
+		parts.append("Drag %s->%s/%s" % [str(drag.get("kind", "")), str(target.get("owner_panel", "")), str(target.get("target_kind", ""))])
 	var controls_hint: Dictionary = _dictionary_or_empty(control_data.get("controls_hint", {}))
 	if not controls_hint.is_empty():
 		parts.append("Help %s" % ("on" if bool(controls_hint.get("visible", false)) else "off"))

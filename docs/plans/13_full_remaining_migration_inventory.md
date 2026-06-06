@@ -80,7 +80,7 @@
 - 部分迁移 `UiModalState` 等价物：trade equipment sell confirm modal、inventory discard confirm modal 和 skill learn confirm modal 已接入 gameplay blocker 与 Esc 优先关闭；`modal_stack_snapshot()` / `runtime_control.modal_stack` 第一版会暴露 active/count/top/stack、owner panel、业务目标和 mouse/gameplay blocker 诊断，并由 `InventoryUI` / `TradeUI` / `SkillsUI` / `UIToggle` smoke 覆盖；待补 item quantity、container modal 和 overworld prompt。
 - 部分迁移 `UiContextMenuState`：HUD interaction menu 和库存物品右键菜单已暴露 `context_menu_snapshot()` / `runtime_control.context_menu`，包含 top/menu 列表、目标、位置、动作、禁用态和 tooltip 摘要，并由 `UIToggle` / `InventoryUI` smoke 覆盖；待补容器物品、装备槽、技能条目和交易行的上下文菜单目标、动作与关闭优先级矩阵。
 - 部分迁移 `UiHoverTooltipState`：GUI 控件 tooltip 已通过 `hover_tooltip_snapshot()` / `runtime_control.tooltip` 暴露 source path/name/class、owner panel 和文本；Character 装备槽与 HUD hotbar tooltip 已由 `UIToggle` / `SkillsUI` smoke 覆盖，HUD runtime/debug 行会显示当前 tooltip 摘要；待补 tooltip 屏幕位置、延迟、显隐生命周期、场景切换/库存/容器/交易/制作按钮全量覆盖和 tooltip layer 阻塞/关闭优先级。
-- 待迁移 `UiInventoryDragState`：拖拽源、悬停目标、拖拽阈值、拖拽预览、装备槽可用性、一次性压制 click。
+- 部分迁移 `UiInventoryDragState`：`drag_state_snapshot()` / `runtime_control.drag` 已统一暴露 inventory item、skill hotbar、trade item、container item 和 trade cart entry 的 drag source、payload、preview 文本与 hover target 摘要，HUD runtime/debug 行会显示 drag token，并由 `InventoryUI` / `SkillsUI` / `TradeUI` smoke 覆盖；拖拽数据生成函数可被诊断调用且不会在非拖拽帧触发 Godot `set_drag_preview` 错误。待补真实 drag preview layer、屏幕位置、拖拽阈值、hover 高亮全量覆盖、装备槽可用性细节和一次性 suppress click。
 - 部分迁移 UI mouse blocker：stage/settings、interaction menu、trade equipment sell confirm modal 与 inventory discard confirm modal 已阻止 gameplay 输入；待补 debug selection panel 显示、quantity/overworld modal、tooltip 和 drag preview。
 
 ## 4. 移动、路径、空间与地图规则

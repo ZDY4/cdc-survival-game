@@ -275,14 +275,17 @@ func _get_container_item_drag_data(_position: Vector2, from_control: Control) ->
 	var item_id: String = str(item.get("item_id", ""))
 	if item.is_empty() or source.is_empty() or item_id.is_empty():
 		return null
-	var preview := Label.new()
-	preview.text = "%s x%d" % [item.get("name", item_id), int(item.get("count", 0))]
-	set_drag_preview(preview)
+	var preview_text := "%s x%d" % [item.get("name", item_id), int(item.get("count", 0))]
+	if get_viewport() != null and get_viewport().gui_is_dragging():
+		var preview := Label.new()
+		preview.text = preview_text
+		set_drag_preview(preview)
 	return {
 		"kind": "container_item",
 		"source": source,
 		"item": item.duplicate(true),
 		"count": int(_quantity_spin.value if _quantity_spin != null else 1),
+		"drag_preview_text": preview_text,
 	}
 
 

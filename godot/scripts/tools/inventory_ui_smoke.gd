@@ -330,6 +330,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	equip_button = _equip_button(game_root)
 	if equip_button == null or equip_button.disabled:
 		errors.append("selected equippable item should enable equip button after context unequip")
+	else:
+		_assert_drag_state_snapshot(errors, game_root, _inventory_drag_data(game_root, "棒球棒"), equip_button, "inventory_item", "inventory", "inventory_action", "drop baseball bat on equip button")
+	if equip_button == null or equip_button.disabled:
+		pass
 	elif not _drag_inventory_item_to_action(game_root, "棒球棒", "EquipSelectedButton"):
 		errors.append("should drag baseball bat onto equip button")
 	else:
@@ -807,6 +811,40 @@ func _drag_inventory_item_to_drop_zone(game_root: Node, item_needle: String) -> 
 		"from_index": int(source.get_meta("inventory_index", 0)),
 	}, target)
 	return true
+
+
+func _inventory_drag_data(game_root: Node, item_needle: String) -> Dictionary:
+	var source: Button = _inventory_item_button(game_root, item_needle)
+	if source == null or not source.has_meta("inventory_item"):
+		return {}
+	var data: Variant = game_root.inventory_panel.call("_get_inventory_item_drag_data", Vector2.ZERO, source)
+	return _dictionary_or_empty(data)
+
+
+func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_kind: String, expected_source_owner: String, expected_target_kind: String, context: String) -> void:
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	if not game_root.has_method("drag_state_snapshot"):
+		errors.append("%s: game root should expose drag_state_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: drag snapshot should be active: %s" % [context, snapshot])
+	if str(snapshot.get("kind", "")) != expected_kind:
+		errors.append("%s: drag kind expected %s, got %s" % [context, expected_kind, snapshot])
+	var source: Dictionary = _dictionary_or_empty(snapshot.get("source", {}))
+	if str(source.get("owner_panel", "")) != expected_source_owner:
+		errors.append("%s: source owner expected %s, got %s" % [context, expected_source_owner, snapshot])
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != expected_target_kind:
+		errors.append("%s: target kind expected %s, got %s" % [context, expected_target_kind, snapshot])
+	var preview: Dictionary = _dictionary_or_empty(snapshot.get("preview", {}))
+	if not bool(preview.get("has_preview", false)) or str(preview.get("text", "")).is_empty():
+		errors.append("%s: drag snapshot should expose preview text: %s" % [context, snapshot])
+	var runtime_drag: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("drag", {}))
+	if not runtime_drag.has("active") or not runtime_drag.has("target"):
+		errors.append("%s: runtime control should expose drag state shape: %s" % [context, runtime_drag])
 
 
 func _inventory_item_button(game_root: Node, needle: String) -> Button:

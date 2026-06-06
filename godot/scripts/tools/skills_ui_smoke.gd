@@ -168,6 +168,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("learning active skill should suggest hotbar binding")
 	if _bind_button(game_root, "adrenaline_rush") == null or _bind_button(game_root, "adrenaline_rush").disabled:
 		errors.append("learned active skill should allow hotbar binding")
+	else:
+		_assert_drag_state_snapshot(errors, game_root, _skill_drag_data(game_root, "adrenaline_rush"), _hud_hotbar_slot_control(game_root, "slot_3"), "skill_hotbar", "skills", "hotbar_slot", "adrenaline skill to HUD hotbar")
 	if not _drag_skill_to_hud_hotbar(game_root, "adrenaline_rush", "slot_3"):
 		errors.append("dragging learned active skill to HUD hotbar should be accepted")
 	await process_frame
@@ -565,6 +567,42 @@ func _drag_skill_to_hud_hotbar(game_root: Node, skill_id: String, slot_id: Strin
 		return false
 	game_root.hud._drop_hotbar_skill(Vector2.ZERO, drag_data, hotbar_slot)
 	return true
+
+
+func _skill_drag_data(game_root: Node, skill_id: String) -> Dictionary:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return {}
+	var line: Control = row.get_node("Line") as Control
+	if line == null:
+		return {}
+	return _dictionary_or_empty(game_root.skills_panel._get_skill_drag_data(Vector2.ZERO, line))
+
+
+func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_kind: String, expected_source_owner: String, expected_target_kind: String, context: String) -> void:
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	if not game_root.has_method("drag_state_snapshot"):
+		errors.append("%s: game root should expose drag_state_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: drag snapshot should be active: %s" % [context, snapshot])
+	if str(snapshot.get("kind", "")) != expected_kind:
+		errors.append("%s: drag kind expected %s, got %s" % [context, expected_kind, snapshot])
+	var source: Dictionary = _dictionary_or_empty(snapshot.get("source", {}))
+	if str(source.get("owner_panel", "")) != expected_source_owner:
+		errors.append("%s: source owner expected %s, got %s" % [context, expected_source_owner, snapshot])
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != expected_target_kind:
+		errors.append("%s: target kind expected %s, got %s" % [context, expected_target_kind, snapshot])
+	var preview: Dictionary = _dictionary_or_empty(snapshot.get("preview", {}))
+	if not bool(preview.get("has_preview", false)) or str(preview.get("text", "")).is_empty():
+		errors.append("%s: drag snapshot should expose preview text: %s" % [context, snapshot])
+	var runtime_drag: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("drag", {}))
+	if not runtime_drag.has("active") or not runtime_drag.has("target"):
+		errors.append("%s: runtime control should expose drag state shape: %s" % [context, runtime_drag])
 
 
 func _expect_targeted_hotbar_skill(errors: Array[String], game_root: Node) -> void:
