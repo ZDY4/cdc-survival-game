@@ -439,6 +439,62 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(allowed_flagged_take.get("success", false)):
 		errors.append("flag-gated container should allow take after flag: %s" % allowed_flagged_take.get("reason", "unknown"))
 	game_root.simulation.world_flags.erase("container_permission_smoke_flag")
+	var active_quests_before: Dictionary = game_root.simulation.active_quests.duplicate(true)
+	var completed_quests_before: Dictionary = game_root.simulation.completed_quests.duplicate(true)
+	game_root.simulation.container_sessions["active_quest_container"] = {
+		"container_id": "active_quest_container",
+		"display_name": "进行中任务容器",
+		"inventory": [{"item_id": "1006", "count": 1}],
+		"required_active_quest_ids": ["container_permission_active_quest"],
+	}
+	_set_active_container_id(game_root, "active_quest_container")
+	game_root.refresh_container_panel()
+	var active_missing_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if str(active_missing_take.get("reason", "")) != "container_active_quest_missing":
+		errors.append("active quest gated container should report container_active_quest_missing")
+	if not _container_feedback(game_root).contains("任务"):
+		errors.append("active quest gated container should show quest feedback")
+	game_root.simulation.active_quests["container_permission_active_quest"] = {
+		"quest_id": "container_permission_active_quest",
+		"current_node_id": "smoke",
+		"completed_objectives": {},
+	}
+	var active_allowed_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if not bool(active_allowed_take.get("success", false)):
+		errors.append("active quest gated container should allow take when quest is active: %s" % active_allowed_take.get("reason", "unknown"))
+	game_root.simulation.container_sessions["completed_quest_container"] = {
+		"container_id": "completed_quest_container",
+		"display_name": "完成任务容器",
+		"inventory": [{"item_id": "1006", "count": 1}],
+		"required_completed_quest_ids": ["container_permission_completed_quest"],
+	}
+	_set_active_container_id(game_root, "completed_quest_container")
+	game_root.refresh_container_panel()
+	var completed_missing_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if str(completed_missing_take.get("reason", "")) != "container_completed_quest_missing":
+		errors.append("completed quest gated container should report container_completed_quest_missing")
+	game_root.simulation.completed_quests["container_permission_completed_quest"] = true
+	var completed_allowed_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if not bool(completed_allowed_take.get("success", false)):
+		errors.append("completed quest gated container should allow take when quest is completed: %s" % completed_allowed_take.get("reason", "unknown"))
+	game_root.simulation.container_sessions["blocked_quest_container"] = {
+		"container_id": "blocked_quest_container",
+		"display_name": "阻止任务容器",
+		"inventory": [{"item_id": "1006", "count": 1}],
+		"blocked_active_quest_ids": ["container_permission_active_quest"],
+		"blocked_completed_quest_ids": ["container_permission_completed_quest"],
+	}
+	_set_active_container_id(game_root, "blocked_quest_container")
+	game_root.refresh_container_panel()
+	var active_blocked_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if str(active_blocked_take.get("reason", "")) != "container_active_quest_blocked":
+		errors.append("blocked active quest container should report container_active_quest_blocked")
+	game_root.simulation.active_quests.erase("container_permission_active_quest")
+	var completed_blocked_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if str(completed_blocked_take.get("reason", "")) != "container_completed_quest_blocked":
+		errors.append("blocked completed quest container should report container_completed_quest_blocked")
+	game_root.simulation.active_quests = active_quests_before.duplicate(true)
+	game_root.simulation.completed_quests = completed_quests_before.duplicate(true)
 	var owner_relationship_before: float = float(game_root.simulation.relationship_score(1, 2))
 	game_root.simulation.container_sessions["owned_forbidden_container"] = {
 		"container_id": "owned_forbidden_container",

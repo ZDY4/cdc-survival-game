@@ -579,7 +579,7 @@ Godot 落点：`godot/scripts/core/economy/equipment_*.gd`、`godot/scripts/worl
 - [ ] 选中物品详情。
 - [ ] 双向拖拽、数量选择。
 - [~] 容器类型：地图、尸体、掉落的 `container_type` / `container_origin` 元数据和保存 roundtrip 第一版已迁移；待补商店和任务容器特例。
-- [~] 权限：锁定、钥匙/工具、world flag、NPC owner、关系门槛和允许偷窃第一版已迁移；待补任务限制、偷窃后果和阵营反应。
+- [~] 权限：锁定、钥匙/工具、world flag、任务限制、NPC owner、关系门槛和允许偷窃第一版已迁移；待补偷窃后果和阵营反应。
 - [x] 数量选择和 UI 触发拿取/存放，已纳入 `ContainerUI` smoke。
 - [x] 容器关闭：Esc、关闭按钮、目标消失、地图切换和超出距离已纳入 `ContainerUI` / `UIToggle` smoke。
 - [x] 空容器提示，已纳入 `ContainerUI` smoke。

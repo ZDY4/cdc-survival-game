@@ -366,6 +366,9 @@ func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: 
 		return _permission_failure(base, "container_take_forbidden", {})
 	if action == "store" and not bool(container.get("allow_store", true)):
 		return _permission_failure(base, "container_store_forbidden", {})
+	var quest_permission: Dictionary = _container_quest_permission(simulation, base, container)
+	if not bool(quest_permission.get("success", false)):
+		return quest_permission
 	var owner_permission: Dictionary = _container_owner_permission(simulation, actor, actor_id, container_id, container, action)
 	if not bool(owner_permission.get("success", false)):
 		return owner_permission
@@ -385,6 +388,49 @@ func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: 
 				"blocked_world_flags": _normalized_string_array(container.get("blocked_world_flags", [])),
 			})
 	return base
+
+
+func _container_quest_permission(simulation: RefCounted, base: Dictionary, container: Dictionary) -> Dictionary:
+	var active_quests: Dictionary = _simulation_active_quests(simulation)
+	var completed_quests: Dictionary = _simulation_completed_quests(simulation)
+	var required_active: Array[String] = _container_quest_ids(container, ["required_active_quest_ids", "required_active_quests"])
+	for quest_id in required_active:
+		if not active_quests.has(quest_id):
+			return _permission_failure(base, "container_active_quest_missing", {
+				"quest_id": quest_id,
+				"required_active_quest_ids": required_active,
+			})
+	var required_completed: Array[String] = _container_quest_ids(container, ["required_completed_quest_ids", "required_completed_quests"])
+	for quest_id in required_completed:
+		if not completed_quests.has(quest_id):
+			return _permission_failure(base, "container_completed_quest_missing", {
+				"quest_id": quest_id,
+				"required_completed_quest_ids": required_completed,
+			})
+	var blocked_active: Array[String] = _container_quest_ids(container, ["blocked_active_quest_ids", "blocked_active_quests"])
+	for quest_id in blocked_active:
+		if active_quests.has(quest_id):
+			return _permission_failure(base, "container_active_quest_blocked", {
+				"quest_id": quest_id,
+				"blocked_active_quest_ids": blocked_active,
+			})
+	var blocked_completed: Array[String] = _container_quest_ids(container, ["blocked_completed_quest_ids", "blocked_completed_quests"])
+	for quest_id in blocked_completed:
+		if completed_quests.has(quest_id):
+			return _permission_failure(base, "container_completed_quest_blocked", {
+				"quest_id": quest_id,
+				"blocked_completed_quest_ids": blocked_completed,
+			})
+	return base
+
+
+func _container_quest_ids(container: Dictionary, keys: Array[String]) -> Array[String]:
+	var output: Array[String] = []
+	for key in keys:
+		for quest_id in _normalized_string_array(container.get(key, [])):
+			if not output.has(quest_id):
+				output.append(quest_id)
+	return output
 
 
 func _container_owner_permission(simulation: RefCounted, actor: RefCounted, actor_id: int, container_id: String, container: Dictionary, action: String) -> Dictionary:
@@ -674,6 +720,18 @@ func _permission_failure(base: Dictionary, reason: String, extra: Dictionary) ->
 func _simulation_world_flags(simulation: RefCounted) -> Dictionary:
 	if simulation != null:
 		return _dictionary_or_empty(simulation.get("world_flags"))
+	return {}
+
+
+func _simulation_active_quests(simulation: RefCounted) -> Dictionary:
+	if simulation != null:
+		return _dictionary_or_empty(simulation.get("active_quests"))
+	return {}
+
+
+func _simulation_completed_quests(simulation: RefCounted) -> Dictionary:
+	if simulation != null:
+		return _dictionary_or_empty(simulation.get("completed_quests"))
 	return {}
 
 

@@ -73,6 +73,10 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	clinic_container["owner_actor_definition_id"] = "trader_lao_wang"
 	clinic_container["allow_steal"] = false
 	clinic_container["owner_relationship_min"] = 40.0
+	clinic_container["required_active_quest_ids"] = ["find_medicine"]
+	clinic_container["required_completed_quest_ids"] = ["tutorial_survive"]
+	clinic_container["blocked_active_quest_ids"] = ["save_smoke_blocked_active"]
+	clinic_container["blocked_completed_quest_ids"] = ["save_smoke_blocked_completed"]
 	simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = clinic_container
 	simulation.execute_interaction(1, {
 		"target_type": "map_object",
@@ -285,6 +289,14 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("container allow_steal did not roundtrip")
 	if absf(float(restored_clinic_container.get("owner_relationship_min", 0.0)) - 40.0) > 0.001:
 		errors.append("container owner_relationship_min did not roundtrip")
+	if not _array_or_empty(restored_clinic_container.get("required_active_quest_ids", [])).has("find_medicine"):
+		errors.append("container required active quest ids did not roundtrip")
+	if not _array_or_empty(restored_clinic_container.get("required_completed_quest_ids", [])).has("tutorial_survive"):
+		errors.append("container required completed quest ids did not roundtrip")
+	if not _array_or_empty(restored_clinic_container.get("blocked_active_quest_ids", [])).has("save_smoke_blocked_active"):
+		errors.append("container blocked active quest ids did not roundtrip")
+	if not _array_or_empty(restored_clinic_container.get("blocked_completed_quest_ids", [])).has("save_smoke_blocked_completed"):
+		errors.append("container blocked completed quest ids did not roundtrip")
 	var restored_corpse_container: Dictionary = _first_container_with_type(restored, "corpse")
 	if restored_corpse_container.is_empty():
 		errors.append("corpse container type metadata did not roundtrip")

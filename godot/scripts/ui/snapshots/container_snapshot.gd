@@ -206,6 +206,14 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "缺少容器操作许可，当前无法操作。"
 		"container_world_flag_blocked":
 			return "容器操作许可已失效，当前无法操作。"
+		"container_active_quest_missing":
+			return "需要正在进行的任务才能操作该容器。"
+		"container_completed_quest_missing":
+			return "需要先完成指定任务才能操作该容器。"
+		"container_active_quest_blocked":
+			return "当前任务状态会阻止操作该容器。"
+		"container_completed_quest_blocked":
+			return "已完成的任务状态会阻止操作该容器。"
 		"container_owner_forbidden":
 			return "该容器属于其他角色，当前不能拿取。"
 		"container_owner_relationship_too_low":

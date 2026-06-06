@@ -405,7 +405,7 @@
 - [ ] interaction range：不同交互类型距离、自动接近目标格、目标不可达提示。
 - [ ] prompt snapshot：primary option、all options、disabled options、display name、target kind、action label、AP cost。
 - [ ] pickup 数量和合并：多物品、部分拾取、拾取失败、任务进度、地图对象消耗。
-- [~] container：地图容器、尸体容器、掉落容器类型元数据、普通 session 同步、关闭逻辑、NPC owner / 允许偷窃权限第一版已迁移；待补任务容器、商店容器、偷窃后果/阵营反应和完整 id 规范。
+- [~] container：地图容器、尸体容器、掉落容器类型元数据、普通 session 同步、关闭逻辑、任务状态权限、NPC owner / 允许偷窃权限第一版已迁移；待补任务容器/商店容器特化表现、偷窃后果/阵营反应和完整 id 规范。
 - [ ] talk：对话规则选择、fallback 台词、目标名解析、action key。
 - [ ] scene transition：目标地点、entry、确认 prompt、无法进入原因、overworld 解锁。
 - [ ] wait self interaction：菜单项、AP 消耗、回合推进、事件反馈。
@@ -501,7 +501,7 @@
 - [~] 双栏、滚动、详情、选中详情、数量选择、失败提示。
 - [ ] 双向拖拽。
 - [~] take/store all：容器面板已有“全部拿取 / 全部存放”按钮，批量命令复用单项容器事务并纳入 `ContainerUI` smoke；待补批量操作视觉 polish。
-- [~] 容器权限：锁、钥匙/工具、world flag、NPC owner、关系门槛和允许偷窃第一版已迁移；待补阵营反应、偷窃后果、任务状态和更完整权限预览。
+- [~] 容器权限：锁、钥匙/工具、world flag、任务状态、NPC owner、关系门槛和允许偷窃第一版已迁移；待补阵营反应、偷窃后果和更完整权限预览。
 - [~] 容器容量和失败提示：拿取后背包负重不足、容器/背包物品不足、数量非法、容器自身容量超限和权限类失败已有中文反馈。待补格子限制和更完整权限预览。
 - [~] 空容器表现、清空后地图对象状态：容器清空后仍保留地图对象和 pickable body，world snapshot / renderer 暴露 empty/item/money metadata 与 `ContainerStateBadge`；待补更完整美术 polish。
 - [~] 容器持久化和跨地图保存：地图/尸体/掉落容器 session、类型元数据和空容器状态已有保存 roundtrip；待补跨地图切换后的更完整一致性矩阵。
