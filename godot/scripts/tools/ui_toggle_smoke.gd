@@ -80,6 +80,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if bool(game_root.is_auto_tick_enabled()):
 		errors.append("auto tick should start disabled")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
+	_assert_hotbar_visibility(errors, game_root, true, "initial hotbar visibility")
 	_assert_observe_mode_button(errors, game_root, false, "initial observe mode button")
 	_assert_observe_auto_button(errors, game_root, false, "initial observe auto hotbar")
 	_press_key_with_modifiers(game_root, KEY_P, true)
@@ -138,9 +139,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(game_root.is_observe_mode_enabled()):
 		errors.append("ObserveModeButton should enable observe mode")
 	_assert_runtime_control_line(errors, game_root, "Observe on pause x1", "observe mode enabled HUD")
+	_assert_hotbar_visibility(errors, game_root, false, "observe mode should hide normal hotbar")
 	_assert_observe_mode_button(errors, game_root, true, "observe mode enabled button")
 	_assert_observe_play_button(errors, game_root, false, false, "observe mode initial play button")
 	_assert_observe_speed_button(errors, game_root, "x1", false, "observe mode initial speed button")
+	_assert_observe_blocks_player_commands(errors, game_root)
 	_press_key(game_root, KEY_TAB)
 	var observe_focus: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot().get("focused_actor", {}))
 	if observe_focus.is_empty() or str(observe_focus.get("side", "")) == "player":
@@ -183,6 +186,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if bool(game_root.is_observe_mode_enabled()):
 		errors.append("ObserveModeButton should disable observe mode")
 	_assert_runtime_control_line(errors, game_root, "Observe off pause x10", "observe mode disabled HUD")
+	_assert_hotbar_visibility(errors, game_root, true, "observe mode disabled should restore normal hotbar")
 	_assert_observe_mode_button(errors, game_root, false, "observe mode disabled button")
 	_assert_observe_play_button(errors, game_root, false, true, "observe mode disabled play button")
 	_assert_observe_speed_button(errors, game_root, "x10", true, "observe mode disabled speed button")
@@ -764,6 +768,30 @@ func _assert_observe_auto_button(errors: Array[String], game_root: Node, expecte
 		errors.append("%s: ObserveAutoButton should expose auto_tick metadata %s" % [context, str(expected_enabled)])
 	if button.disabled:
 		errors.append("%s: ObserveAutoButton should stay enabled" % context)
+
+
+func _assert_hotbar_visibility(errors: Array[String], game_root: Node, expected_visible: bool, context: String) -> void:
+	var hotbar: Control = game_root.hud.find_child("HotbarDock", true, false) as Control
+	var group_bar: Control = game_root.hud.find_child("HotbarGroupBar", true, false) as Control
+	if hotbar == null or group_bar == null:
+		errors.append("%s: HUD should expose normal hotbar and group bar" % context)
+		return
+	if hotbar.visible != expected_visible:
+		errors.append("%s: HotbarDock visible expected %s" % [context, str(expected_visible)])
+	if group_bar.visible != expected_visible:
+		errors.append("%s: HotbarGroupBar visible expected %s" % [context, str(expected_visible)])
+
+
+func _assert_observe_blocks_player_commands(errors: Array[String], game_root: Node) -> void:
+	var move_result: Dictionary = game_root.execute_move_to_grid({"x": 2, "y": 0, "z": 2})
+	if bool(move_result.get("success", false)) or str(move_result.get("reason", "")) != "observe_mode_blocks_player_commands":
+		errors.append("observe mode should reject move commands: %s" % move_result)
+	var hotbar_result: Dictionary = game_root.use_hotbar_slot("slot_1")
+	if bool(hotbar_result.get("success", false)) or str(hotbar_result.get("reason", "")) != "observe_mode_blocks_player_commands":
+		errors.append("observe mode should reject hotbar commands: %s" % hotbar_result)
+	var item_result: Dictionary = game_root.use_player_item("1006")
+	if bool(item_result.get("success", false)) or str(item_result.get("reason", "")) != "observe_mode_blocks_player_commands":
+		errors.append("observe mode should reject inventory item commands: %s" % item_result)
 
 
 func _assert_observe_mode_button(errors: Array[String], game_root: Node, expected_enabled: bool, context: String) -> void:

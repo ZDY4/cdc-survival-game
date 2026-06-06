@@ -316,10 +316,10 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [x] `L` 制作面板 toggle，已纳入 `UIToggle` smoke。
 - [~] `Esc` 关闭链路：已覆盖 selection、dialogue、interaction menu、trade modal、container modal、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；待补 quantity modal、discard modal、overworld prompt 和 blocker 诊断。
 - [~] `1-9` 对话选项，已覆盖基础数字选择 smoke；待补禁用选项、越界选项和 modal 冲突。
-- [~] `1-0` hotbar 激活，已覆盖基础 hotbar 使用 smoke；待补 cooldown 禁用提示、空槽提示和 modal 冲突。
+- [~] `1-0` hotbar 激活，已覆盖基础 hotbar 使用 smoke；observe mode 下数字 hotbar / `Alt+1/2/3` 会被输入层消费且不发玩家命令。待补 modal / 数量输入冲突。
 - [ ] `Enter` / `Space` 对话推进。
 - [~] `Space` 等待、结束回合、长按重复、pending 取消。已恢复单次等待、pending 取消、长按重复等待和 observe mode 播放/暂停第一版；待补更细的长按节奏配置和 modal 冲突策略。
-- [~] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。已恢复玩家侧 focus actor 循环、observe mode 下当前楼层所有 actor focus 循环、相机跟随、busy actor 拒绝玩家控制切换和旧 selection/menu/prompt 清理；待补更多 free observe 选择/命令禁用诊断。
+- [~] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。已恢复玩家侧 focus actor 循环、observe mode 下当前楼层所有 actor focus 循环、相机跟随、busy actor 拒绝玩家控制切换和旧 selection/menu/prompt 清理；observe mode 下 player command 会统一拒绝。待补鼠标选择 polish 和更完整诊断。
 - [x] `V` overlay mode。
 - [x] `/` 控制提示展开折叠。
 - [ ] `[` / `]` info panel tab 切换。
@@ -621,7 +621,7 @@ Godot 落点：`godot/scripts/core/economy/shop_transactions.gd`、`godot/script
 - [ ] 技能学习确认和失败 reason。
 - [~] 多组/多槽 hotbar、拖拽绑定、清空、替换：三组快捷栏、HUD 组按钮、组命名、当前组绑定/使用、独立保存和 `Alt+1/2/3` 切组第一版已迁移；待补完整快捷键冲突矩阵。
 - [~] 数字键激活、cooldown 遮罩、不可用 reason。
-- [~] observe mode hotbar：模式切换、播放、速度、自动状态和观察楼层展示第一版已迁移，Observe / Player、Play、Speed、Auto 按钮可操作，速度会影响自动推进间隔，Space 可切换播放；待补完整冲突策略。
+- [~] observe mode hotbar：模式切换、播放、速度、自动状态和观察楼层展示第一版已迁移，Observe / Player、Play、Speed、Auto 按钮可操作，速度会影响自动推进间隔，Space 可切换播放；普通 hotbar 会在 observe mode 下隐藏，player command 统一拒绝。待补完整冲突策略。
 
 参考：`simulation/actor_progression.rs`、`simulation/skills.rs`、`game_ui/hotbar/**`、`panels/skills*.rs`。
 Godot 落点：`godot/scripts/core/progression/**`、`godot/scripts/ui/controllers/skills_panel_controller.gd`、`hud_controller.gd`。
@@ -797,7 +797,7 @@ Godot 落点：`godot/scenes/boot/**`、`godot/scripts/app/boot.gd`。
 - [ ] interaction prompt 和 primary action。
 - [ ] interaction menu 布局、disabled、dangerous、hover。
 - [ ] hotbar dock、cooldown、tooltip。
-- [~] observe mode dock：模式、播放、速度、自动推进和观察楼层显示及按钮控制第一版。
+- [~] observe mode dock：模式、播放、速度、自动推进、观察楼层显示、普通 hotbar 隐藏和按钮控制第一版。
 - [ ] controls hint 展开/折叠。
 - [ ] blocker / modal / context menu 层级。
 

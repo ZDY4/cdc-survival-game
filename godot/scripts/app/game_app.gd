@@ -308,6 +308,10 @@ func is_observe_mode_enabled() -> bool:
 	return observe_mode_enabled
 
 
+func can_issue_player_commands() -> bool:
+	return not observe_mode_enabled
+
+
 func toggle_observe_mode() -> Dictionary:
 	return set_observe_mode(not observe_mode_enabled)
 
@@ -601,6 +605,8 @@ func clear_interaction_selection() -> Dictionary:
 func execute_primary_interaction() -> Dictionary:
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}
+	if not can_issue_player_commands():
+		return _observe_command_rejected("interact")
 	var executed_target: Dictionary = interaction_controller.selected_target.duplicate(true)
 	var result: Dictionary = interaction_controller.execute_primary_interaction()
 	_apply_interaction_execution_result(result, executed_target)
@@ -610,6 +616,8 @@ func execute_primary_interaction() -> Dictionary:
 func execute_interaction_option(option_id: String) -> Dictionary:
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}
+	if not can_issue_player_commands():
+		return _observe_command_rejected("interact")
 	var executed_target: Dictionary = interaction_controller.selected_target.duplicate(true)
 	var result: Dictionary = interaction_controller.execute_selected_option(option_id)
 	_apply_interaction_execution_result(result, executed_target)
@@ -627,6 +635,8 @@ func select_grid_target(grid: Dictionary) -> Dictionary:
 func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}
+	if not can_issue_player_commands():
+		return _observe_command_rejected("move")
 	var result: Dictionary = interaction_controller.execute_move_to_grid(grid)
 	world_result = interaction_controller.world_result
 	_rebuild_world_after_runtime_change(_dictionary_or_empty(result.get("prompt", {})))
@@ -1250,6 +1260,8 @@ func cycle_hotbar_group(direction: int) -> Dictionary:
 func use_hotbar_slot(slot_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	if not can_issue_player_commands():
+		return _observe_command_rejected("hotbar")
 	var slot: Dictionary = _dictionary_or_empty(_dictionary_or_empty(simulation.snapshot().get("hotbar", {})).get(slot_id, {}))
 	if str(slot.get("kind", "")) == "item":
 		var result: Dictionary = _submit_inventory_action({
@@ -1281,6 +1293,8 @@ func use_hotbar_slot(slot_id: String) -> Dictionary:
 func begin_skill_targeting(slot_id: String, skill_id: String = "") -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	if not can_issue_player_commands():
+		return _observe_command_rejected("use_skill")
 	var resolved_skill_id := skill_id
 	if resolved_skill_id.is_empty():
 		var slot: Dictionary = _dictionary_or_empty(_dictionary_or_empty(simulation.snapshot().get("hotbar", {})).get(slot_id, {}))
@@ -1597,6 +1611,8 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 func _submit_inventory_action(action: Dictionary) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	if not can_issue_player_commands():
+		return _observe_command_rejected(str(action.get("action", "inventory_action")))
 	var command: Dictionary = action.duplicate(true)
 	command["kind"] = "inventory_action"
 	command["actor_id"] = 1
@@ -1604,6 +1620,16 @@ func _submit_inventory_action(action: Dictionary) -> Dictionary:
 	command["effect_library"] = registry.get_library("json")
 	command["topology"] = _dictionary_or_empty(world_result.get("map", {}))
 	return simulation.submit_player_command(command)
+
+
+func _observe_command_rejected(action: String) -> Dictionary:
+	refresh_hud(current_interaction_prompt())
+	return {
+		"success": false,
+		"reason": "observe_mode_blocks_player_commands",
+		"action": action,
+		"observe_mode": observe_mode_enabled,
+	}
 
 
 func _record_container_feedback(result: Dictionary, action: String, container_id: String, item_id: String, count: int) -> void:

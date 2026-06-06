@@ -194,6 +194,8 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 		return true
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 		var hover_result: Dictionary = update_hover_at_screen_position(mouse_event.position)
+		if _observe_mode_active():
+			return true
 		if _skill_targeting_active() and game_root.has_method("confirm_active_skill_target"):
 			var skill_target: Dictionary = _skill_target_from_hover(hover_result)
 			if not skill_target.is_empty():
@@ -210,6 +212,8 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 			return true
 	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed:
 		var right_hover: Dictionary = update_hover_at_screen_position(mouse_event.position)
+		if _observe_mode_active():
+			return true
 		if str(right_hover.get("kind", "")) == "ground" and game_root.has_method("select_grid_target"):
 			var right_ground_position: Vector3 = right_hover.get("position", Vector3.ZERO)
 			game_root.select_grid_target(_grid_from_world_position(right_ground_position))
@@ -424,6 +428,8 @@ func _handle_digit_key(digit: int) -> bool:
 			game_root.choose_dialogue_option_by_index(digit - 1)
 			return true
 		return false
+	if _observe_mode_active():
+		return true
 	if _gameplay_input_blocked_by_ui():
 		return false
 	if game_root.has_method("use_hotbar_slot"):
@@ -433,11 +439,17 @@ func _handle_digit_key(digit: int) -> bool:
 	return false
 
 
+func _observe_mode_active() -> bool:
+	return game_root.has_method("is_observe_mode_enabled") and bool(game_root.is_observe_mode_enabled())
+
+
 func _handle_hotbar_group_key(digit: int) -> bool:
 	if digit < 1 or digit > 3:
 		return false
 	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()):
 		return false
+	if _observe_mode_active():
+		return true
 	if _gameplay_input_blocked_by_ui():
 		return false
 	if game_root.has_method("set_hotbar_group"):

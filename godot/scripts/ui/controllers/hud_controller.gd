@@ -477,6 +477,10 @@ func _apply_observe_hotbar(runtime_control_value: Variant) -> void:
 	var speed := str(runtime_control.get("observe_speed", "x1"))
 	var auto_tick := bool(runtime_control.get("auto_tick", false))
 	var map_level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
+	if _hotbar_group_box != null:
+		_hotbar_group_box.visible = not observe_mode
+	if _hotbar_box != null:
+		_hotbar_box.visible = not observe_mode
 	_observe_hotbar_box.add_child(_observe_mode_button(observe_mode))
 	_observe_hotbar_box.add_child(_observe_play_button(playback, observe_mode))
 	_observe_hotbar_box.add_child(_observe_speed_button(speed, observe_mode))
