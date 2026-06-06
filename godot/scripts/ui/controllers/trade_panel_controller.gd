@@ -291,9 +291,12 @@ func _item_line(item: Dictionary, source: String) -> Button:
 		" | %s" % disabled_reason if not disabled_reason.is_empty() else "",
 	]
 	button.tooltip_text = str(item.get("description", ""))
+	var trade_disabled_reason := _trade_disabled_reason(item, source)
 	if not disabled_reason.is_empty():
 		button.tooltip_text = "%s\n%s" % [button.tooltip_text, disabled_reason] if not button.tooltip_text.is_empty() else disabled_reason
-	button.disabled = not _item_can_trade(item, source)
+	if not trade_disabled_reason.is_empty() and trade_disabled_reason != disabled_reason:
+		button.tooltip_text = "%s\n%s" % [button.tooltip_text, trade_disabled_reason] if not button.tooltip_text.is_empty() else trade_disabled_reason
+	button.disabled = not trade_disabled_reason.is_empty()
 	button.set_meta("trade_item", item.duplicate(true))
 	button.set_meta("trade_source", source)
 	button.set_drag_forwarding(
@@ -358,8 +361,12 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 	_quantity_spin.max_value = available
 	_quantity_spin.value = clampi(int(_quantity_spin.value), 1, available)
 	var item_id := str(item.get("item_id", ""))
-	_trade_button.disabled = not _trade_allowed or item.is_empty() or item_id.is_empty() or source.is_empty() or not _item_can_trade(item, source)
+	var disabled_reason := _selected_trade_disabled_reason(item, source)
+	_trade_button.disabled = not disabled_reason.is_empty()
+	_trade_button.tooltip_text = disabled_reason if _trade_button.disabled else "执行当前选择的交易"
 	_queue_button.disabled = _trade_button.disabled
+	_queue_button.tooltip_text = disabled_reason if _queue_button.disabled else "把当前选择加入购物车"
+	_quantity_spin.tooltip_text = "交易数量：%d / %d" % [int(_quantity_spin.value), available] if disabled_reason.is_empty() else disabled_reason
 	match source:
 		"shop":
 			_trade_button.text = "购买"
@@ -459,20 +466,20 @@ func _can_drop_cart_data(_position: Vector2, data: Variant, _from_control: Contr
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 			var source: String = str(drag_data.get("source", ""))
 			var accepted := not item.is_empty() and _item_can_trade(item, source) and _drag_source_matches_drop_zone(source, _from_control)
-			_update_drop_zone_drag_state(_from_control, source, accepted)
+			_update_drop_zone_drag_state(_from_control, source, accepted, _drop_reject_reason(item, source, _from_control))
 			return accepted
 		"inventory_item":
 			var item: Dictionary = _trade_item_from_inventory_drag(drag_data)
 			var accepted := not item.is_empty() and _item_can_trade(item, "player") and _drag_source_matches_drop_zone("player", _from_control)
-			_update_drop_zone_drag_state(_from_control, "player", accepted)
+			_update_drop_zone_drag_state(_from_control, "player", accepted, _drop_reject_reason(item, "player", _from_control))
 			return accepted
 		"trade_cart_entry":
 			var from_index: int = int(drag_data.get("index", -1))
 			var accepted := from_index >= 0 and from_index < _cart_entries.size() and not _is_trade_drop_zone(_from_control)
-			_update_drop_zone_drag_state(_from_control, "cart", accepted)
+			_update_drop_zone_drag_state(_from_control, "cart", accepted, str(_from_control.get_meta("trade_drop_reject_reason", "cart_entry_requires_cart_target")) if _is_trade_drop_zone(_from_control) else "")
 			return accepted
 		_:
-			_update_drop_zone_drag_state(_from_control, "", false)
+			_update_drop_zone_drag_state(_from_control, "", false, "unsupported_drag_data")
 			return false
 
 
@@ -768,14 +775,17 @@ func _set_drop_zone_hovered(panel: PanelContainer, hovered: bool) -> void:
 	panel.add_theme_stylebox_override("panel", _drop_zone_style(background, border))
 
 
-func _update_drop_zone_drag_state(from_control: Control, source: String, accepted: bool) -> void:
+func _update_drop_zone_drag_state(from_control: Control, source: String, accepted: bool, reject_reason: String = "") -> void:
 	if not _is_trade_drop_zone(from_control):
 		return
-	var reason := "" if accepted else str(from_control.get_meta("trade_drop_reject_reason", ""))
+	var reason := "" if accepted else reject_reason
+	if reason.is_empty() and not accepted:
+		reason = str(from_control.get_meta("trade_drop_reject_reason", ""))
 	var source_text := _source_display(source) if not source.is_empty() else "未知来源"
 	var preview_text := "可放入：%s" % source_text if accepted else "不可放入：%s | %s" % [source_text, reason]
 	from_control.set_meta("trade_drop_last_source", source)
 	from_control.set_meta("trade_drop_last_accept", accepted)
+	from_control.set_meta("trade_drop_last_reject_reason", reason)
 	from_control.set_meta("trade_drop_last_preview_text", preview_text)
 
 
@@ -835,13 +845,40 @@ func _requires_equipment_sell_confirmation(source: String) -> bool:
 
 
 func _item_can_trade(item: Dictionary, source: String) -> bool:
-	if not _trade_allowed or bool(item.get("trade_disabled", false)):
-		return false
+	return _trade_disabled_reason(item, source).is_empty()
+
+
+func _selected_trade_disabled_reason(item: Dictionary, source: String) -> String:
+	var item_id := str(item.get("item_id", ""))
+	if item.is_empty() or item_id.is_empty() or source.is_empty():
+		return "先选择可交易的物品"
+	return _trade_disabled_reason(item, source)
+
+
+func _trade_disabled_reason(item: Dictionary, source: String) -> String:
+	if not _trade_allowed:
+		return _trade_block_reason if not _trade_block_reason.is_empty() else "当前交易不可用"
+	var disabled_reason := str(item.get("disabled_reason", ""))
+	if bool(item.get("trade_disabled", false)):
+		return disabled_reason if not disabled_reason.is_empty() else "该物品当前不能交易"
 	if source == "shop":
-		return true
+		return ""
 	if _is_sell_source(source):
-		return bool(item.get("sellable", true))
-	return true
+		if not bool(item.get("sellable", true)):
+			return disabled_reason if not disabled_reason.is_empty() else "该物品不可出售"
+		return ""
+	return "未知交易来源：%s" % source
+
+
+func _drop_reject_reason(item: Dictionary, source: String, from_control: Control) -> String:
+	if item.is_empty():
+		return "unknown_trade_item"
+	if _is_trade_drop_zone(from_control) and not _drag_source_matches_drop_zone(source, from_control):
+		return str(from_control.get_meta("trade_drop_reject_reason", "drop_zone_source_mismatch"))
+	var disabled_reason := _trade_disabled_reason(item, source)
+	if not disabled_reason.is_empty():
+		return disabled_reason
+	return "trade_item_rejected"
 
 
 func _label(node_name: String) -> Label:

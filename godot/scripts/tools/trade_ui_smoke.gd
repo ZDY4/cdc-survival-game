@@ -113,8 +113,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should select non-sellable player bandage in trade panel")
 	if not _trade_button_disabled(game_root):
 		errors.append("non-sellable player item should disable direct sell")
+	if not _trade_button_tooltip(game_root).contains("不可出售"):
+		errors.append("non-sellable direct sell button should explain disabled reason")
 	if not _queue_button_disabled(game_root):
 		errors.append("non-sellable player item should disable trade cart queue")
+	if not _queue_button_tooltip(game_root).contains("不可出售"):
+		errors.append("non-sellable queue button should explain disabled reason")
 	_press_queue_button(game_root)
 	if not _cart_line(game_root).contains("购物车为空"):
 		errors.append("non-sellable player item should not enter trade cart")
@@ -122,6 +126,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should attempt dragging non-sellable player bandage")
 	if not _cart_line(game_root).contains("购物车为空"):
 		errors.append("dragged non-sellable player item should not enter trade cart")
+	if _can_drop_trade_item_to_zone(game_root, "player", "绷带", "SellDropZone"):
+		errors.append("sell drop zone can_drop should reject non-sellable player item")
+	if _trade_zone_last_accept(game_root, "SellDropZone"):
+		errors.append("sell drop zone should record rejected non-sellable drag")
+	if not _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_reject_reason").contains("不可出售"):
+		errors.append("sell drop zone should expose non-sellable reject reason")
+	if not _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_preview_text").contains("不可出售"):
+		errors.append("sell drop zone preview should explain non-sellable drag")
 	var not_sellable_result: Dictionary = game_root.sell_active_trade_item("1006", 1)
 	if str(not_sellable_result.get("reason", "")) != "item_not_sellable":
 		errors.append("non-sellable direct sell should report item_not_sellable")
@@ -918,11 +930,25 @@ func _trade_button_disabled(game_root: Node) -> bool:
 	return true
 
 
+func _trade_button_tooltip(game_root: Node) -> String:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/TradeControls/TradeButton")
+	if button is Button:
+		return str((button as Button).tooltip_text)
+	return ""
+
+
 func _queue_button_disabled(game_root: Node) -> bool:
 	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartControls/QueueButton")
 	if button is Button:
 		return bool((button as Button).disabled)
 	return true
+
+
+func _queue_button_tooltip(game_root: Node) -> String:
+	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartControls/QueueButton")
+	if button is Button:
+		return str((button as Button).tooltip_text)
+	return ""
 
 
 func _trade_item_box(game_root: Node, source: String) -> Node:
