@@ -328,8 +328,18 @@ func is_debug_console_open() -> bool:
 
 func debug_console_snapshot() -> Dictionary:
 	if hud != null and hud.has_method("debug_console_snapshot"):
-		return hud.debug_console_snapshot()
-	return {"visible": false, "history": [], "history_count": 0, "suggestions": [], "suggestion_count": 0, "input_text": ""}
+		var snapshot: Dictionary = hud.debug_console_snapshot()
+		snapshot["permission"] = _debug_console_command_runner.permission_snapshot(self)
+		return snapshot
+	return {
+		"visible": false,
+		"history": [],
+		"history_count": 0,
+		"suggestions": [],
+		"suggestion_count": 0,
+		"input_text": "",
+		"permission": _debug_console_command_runner.permission_snapshot(self),
+	}
 
 
 func submit_debug_console_command(command_text: String) -> Dictionary:
@@ -1879,7 +1889,11 @@ func _sync_debug_console_schema() -> void:
 	if hud == null:
 		return
 	if hud.has_method("set_debug_console_schema"):
-		hud.set_debug_console_schema(_debug_console_command_runner.command_schema(), _debug_console_command_runner.command_suggestions())
+		hud.set_debug_console_schema(
+			_debug_console_command_runner.command_schema(),
+			_debug_console_command_runner.command_suggestions(),
+			_debug_console_command_runner.permission_snapshot(self)
+		)
 
 
 func _update_trade_target_after_interaction(result: Dictionary, executed_target: Dictionary) -> void:

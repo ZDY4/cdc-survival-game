@@ -36,6 +36,7 @@ var console_history: Array[String] = []
 var console_command_history: Array[String] = []
 var console_history_index := -1
 var console_command_schema: Array[Dictionary] = []
+var console_permission: Dictionary = {}
 var console_suggestions: Array[String] = [
 	"help",
 	"show fps",
@@ -243,6 +244,7 @@ func debug_console_snapshot() -> Dictionary:
 		"command_schema": console_command_schema.duplicate(true),
 		"command_schema_count": console_command_schema.size(),
 		"command_details": _console_command_detail_lines(),
+		"permission": console_permission.duplicate(true),
 		"suggestions": console_suggestions.duplicate(),
 		"suggestion_count": console_suggestions.size(),
 		"input_text": _console_input.text if _console_input != null else "",
@@ -253,12 +255,13 @@ func console_input_node() -> LineEdit:
 	return _console_input
 
 
-func set_debug_console_schema(schema: Array, suggestions: Array) -> void:
+func set_debug_console_schema(schema: Array, suggestions: Array, permission: Dictionary = {}) -> void:
 	console_command_schema.clear()
 	for command in schema:
 		var command_data: Dictionary = _dictionary_or_empty(command)
 		if not command_data.is_empty():
 			console_command_schema.append(command_data.duplicate(true))
+	console_permission = permission.duplicate(true)
 	var normalized_suggestions: Array[String] = []
 	for suggestion in suggestions:
 		var suggestion_text := str(suggestion).strip_edges()
@@ -557,11 +560,13 @@ func _debug_panel_entries(snapshot: Dictionary) -> Array[Dictionary]:
 
 
 func _debug_panel_console_text(console: Dictionary) -> String:
-	return "Console %s | history %d | suggestions %d | schema %d" % [
+	var permission: Dictionary = _dictionary_or_empty(console.get("permission", {}))
+	return "Console %s | history %d | suggestions %d | schema %d | mutate %s" % [
 		"on" if bool(console.get("visible", false)) else "off",
 		int(console.get("history_count", 0)),
 		int(console.get("suggestion_count", 0)),
 		int(console.get("command_schema_count", 0)),
+		"on" if bool(permission.get("allow_runtime_mutation", true)) else "off",
 	]
 
 

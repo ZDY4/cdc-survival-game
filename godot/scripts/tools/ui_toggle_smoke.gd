@@ -888,6 +888,11 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 	var details: Array = _array_or_empty(snapshot.get("command_details", []))
 	if details.is_empty() or not str(details[0]).contains("help"):
 		errors.append("debug console should expose command detail lines: %s" % snapshot)
+	var permission: Dictionary = _dictionary_or_empty(snapshot.get("permission", {}))
+	if not bool(permission.get("allow_runtime_mutation", false)) or int(permission.get("mutating_command_count", 0)) < 5:
+		errors.append("debug console should expose runtime mutation permission: %s" % snapshot)
+	if not _debug_console_schema_has_mutating_command(snapshot, "give item"):
+		errors.append("debug console schema should mark give item as mutating: %s" % snapshot)
 	var help_result: Dictionary = game_root.submit_debug_console_command("help")
 	if not bool(help_result.get("success", false)) or not str(help_result.get("message", "")).contains("give item <item_id> [count]"):
 		errors.append("debug console help should include command usage: %s" % help_result)
@@ -913,6 +918,9 @@ func _exercise_debug_console_runtime_commands(errors: Array[String], game_root: 
 	var unknown_item: Dictionary = game_root.submit_debug_console_command("give item missing_item 1")
 	if bool(unknown_item.get("success", false)) or str(unknown_item.get("reason", "")) != "unknown_item":
 		errors.append("debug console give item should reject unknown item: %s" % unknown_item)
+	var invalid_count: Dictionary = game_root.submit_debug_console_command("give item 1006 abc")
+	if bool(invalid_count.get("success", false)) or str(invalid_count.get("reason", "")) != "invalid_debug_command_args" or str(invalid_count.get("field", "")) != "count":
+		errors.append("debug console give item should reject non-integer count: %s" % invalid_count)
 	var give_result: Dictionary = game_root.submit_debug_console_command("give item 1006 2")
 	if not bool(give_result.get("success", false)):
 		errors.append("debug console give item should succeed: %s" % give_result)
@@ -924,7 +932,13 @@ func _exercise_debug_console_runtime_commands(errors: Array[String], game_root: 
 	var player_after_tp: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player_after_tp == null or player_after_tp.grid_position == null or player_after_tp.grid_position.x != 3 or player_after_tp.grid_position.z != 4:
 		errors.append("debug console teleport should update player grid")
+	var invalid_teleport: Dictionary = game_root.submit_debug_console_command("teleport nope 4")
+	if bool(invalid_teleport.get("success", false)) or str(invalid_teleport.get("reason", "")) != "invalid_debug_command_args" or str(invalid_teleport.get("field", "")) != "x":
+		errors.append("debug console teleport should reject non-integer x: %s" % invalid_teleport)
 	var actor_count_before: int = game_root.simulation.actor_registry.actors().size()
+	var invalid_spawn: Dictionary = game_root.submit_debug_console_command("spawn zombie_walker 4")
+	if bool(invalid_spawn.get("success", false)) or str(invalid_spawn.get("reason", "")) != "usage":
+		errors.append("debug console spawn should reject partial grid args: %s" % invalid_spawn)
 	var spawn_result: Dictionary = game_root.submit_debug_console_command("spawn zombie_walker 4 4 0")
 	if not bool(spawn_result.get("success", false)):
 		errors.append("debug console spawn should succeed: %s" % spawn_result)
@@ -936,6 +950,17 @@ func _exercise_debug_console_runtime_commands(errors: Array[String], game_root: 
 	var unlock_result: Dictionary = game_root.submit_debug_console_command("unlock location forest")
 	if not bool(unlock_result.get("success", false)) or not game_root.simulation.unlocked_locations.has("forest"):
 		errors.append("debug console unlock location should unlock forest: %s" % unlock_result)
+	var mutation_setting := "cdc/debug_console/allow_runtime_mutation"
+	var had_setting := ProjectSettings.has_setting(mutation_setting)
+	var original_mutation_setting: Variant = ProjectSettings.get_setting(mutation_setting) if had_setting else null
+	ProjectSettings.set_setting(mutation_setting, false)
+	var denied_result: Dictionary = game_root.submit_debug_console_command("give item 1006 1")
+	if bool(denied_result.get("success", false)) or str(denied_result.get("reason", "")) != "debug_command_permission_denied":
+		errors.append("debug console mutating command should respect permission: %s" % denied_result)
+	if had_setting:
+		ProjectSettings.set_setting(mutation_setting, original_mutation_setting)
+	else:
+		ProjectSettings.clear(mutation_setting)
 	var restart_result: Dictionary = game_root.submit_debug_console_command("restart")
 	if not bool(restart_result.get("success", false)):
 		errors.append("debug console restart should succeed: %s" % restart_result)
@@ -987,6 +1012,14 @@ func _assert_debug_console_snapshot(errors: Array[String], game_root: Node, expe
 	if int(snapshot.get("suggestion_count", 0)) < 5:
 		errors.append("%s: debug console should expose command suggestions: %s" % [context, snapshot])
 	_assert_runtime_control_line(errors, game_root, "Console %s" % ("on" if expected_visible else "off"), "%s HUD console token" % context)
+
+
+func _debug_console_schema_has_mutating_command(snapshot: Dictionary, command_id: String) -> bool:
+	for command in _array_or_empty(snapshot.get("command_schema", [])):
+		var command_data: Dictionary = _dictionary_or_empty(command)
+		if str(command_data.get("id", "")) == command_id:
+			return bool(command_data.get("mutates_runtime", false)) and str(command_data.get("permission", "")) == "debug_runtime_mutation"
+	return false
 
 
 func _assert_runtime_performance(errors: Array[String], game_root: Node, context: String) -> void:

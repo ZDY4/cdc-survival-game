@@ -6,6 +6,7 @@ const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.g
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const ProgressionRules = preload("res://scripts/core/progression/progression_rules.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
+const DEBUG_RUNTIME_MUTATION_SETTING := "cdc/debug_console/allow_runtime_mutation"
 
 var _inventory_entries := InventoryEntries.new()
 
@@ -16,42 +17,51 @@ func command_schema() -> Array[Dictionary]:
 			"id": "help",
 			"usage": "help",
 			"description": "显示调试控制台命令摘要。",
+			"mutates_runtime": false,
 			"examples": ["help"],
 		},
 		{
 			"id": "show fps",
 			"usage": "show fps",
 			"description": "显示 FPS、帧耗时和最近一次寻路耗时。",
+			"mutates_runtime": false,
 			"examples": ["show fps"],
 		},
 		{
 			"id": "show overlays",
 			"usage": "show overlays",
 			"description": "循环世界调试覆盖层。",
+			"mutates_runtime": false,
 			"examples": ["show overlays"],
 		},
 		{
 			"id": "observe mode",
 			"usage": "observe mode",
 			"description": "切换玩家控制和观察模式。",
+			"mutates_runtime": false,
 			"examples": ["observe mode"],
 		},
 		{
 			"id": "clear",
 			"usage": "clear",
 			"description": "清空控制台输出历史。",
+			"mutates_runtime": false,
 			"examples": ["clear"],
 		},
 		{
 			"id": "restart",
 			"usage": "restart",
 			"description": "重建新游戏运行时并刷新世界、面板和输入 controller。",
+			"permission": "debug_runtime_mutation",
+			"mutates_runtime": true,
 			"examples": ["restart"],
 		},
 		{
 			"id": "give item",
 			"usage": "give item <item_id> [count]",
 			"description": "把指定物品加入玩家背包；count 必须大于 0。",
+			"permission": "debug_runtime_mutation",
+			"mutates_runtime": true,
 			"examples": ["give item 1006 1"],
 		},
 		{
@@ -59,18 +69,24 @@ func command_schema() -> Array[Dictionary]:
 			"usage": "teleport <x> <z> [y]",
 			"description": "把玩家传送到当前地图格子，省略 y 时保留当前楼层。",
 			"aliases": ["tp"],
+			"permission": "debug_runtime_mutation",
+			"mutates_runtime": true,
 			"examples": ["teleport 0 0 0", "tp 3 4"],
 		},
 		{
 			"id": "spawn",
 			"usage": "spawn <character_id> [x z y]",
 			"description": "按角色定义在当前地图生成 actor；省略坐标时生成在玩家旁边。",
+			"permission": "debug_runtime_mutation",
+			"mutates_runtime": true,
 			"examples": ["spawn zombie_walker", "spawn zombie_walker 4 4 0"],
 		},
 		{
 			"id": "unlock location",
 			"usage": "unlock location <location_id>",
 			"description": "解锁 overworld location。",
+			"permission": "debug_runtime_mutation",
+			"mutates_runtime": true,
 			"examples": ["unlock location forest"],
 		},
 	]
@@ -99,10 +115,21 @@ func help_text() -> String:
 	return "commands: %s" % "; ".join(usages)
 
 
+func permission_snapshot(_game_root: Node) -> Dictionary:
+	return {
+		"allow_runtime_mutation": _runtime_mutation_allowed(),
+		"runtime_mutation_setting": DEBUG_RUNTIME_MUTATION_SETTING,
+		"mutating_command_count": _mutating_command_count(),
+	}
+
+
 func execute(game_root: Node, command: String) -> Dictionary:
 	var parts := command.split(" ", false)
 	if parts.is_empty():
 		return {}
+	var permission_denial := _permission_denial_for_parts(parts)
+	if not permission_denial.is_empty():
+		return permission_denial
 	match parts[0].to_lower():
 		"restart":
 			return _restart_game(game_root)
@@ -136,14 +163,17 @@ func _restart_game(game_root: Node) -> Dictionary:
 func _give_item(game_root: Node, parts: PackedStringArray) -> Dictionary:
 	if game_root.simulation == null:
 		return {"success": false, "reason": "simulation_missing", "message": "simulation missing"}
-	if parts.size() < 3 or parts[1].to_lower() != "item":
+	if parts.size() < 3 or parts.size() > 4 or parts[1].to_lower() != "item":
 		return {"success": false, "reason": "usage", "message": "usage: give item <item_id> [count]"}
 	var item_id := _normalize_content_id(parts[2])
 	var count := 1
 	if parts.size() >= 4:
-		count = int(parts[3])
-	if item_id.is_empty() or count <= 0:
-		return {"success": false, "reason": "invalid_give_item_args", "message": "usage: give item <item_id> [count]"}
+		var count_result := _parse_positive_int(parts[3], "count", "give item <item_id> [count]")
+		if not bool(count_result.get("success", false)):
+			return count_result
+		count = int(count_result.get("value", 1))
+	if item_id.is_empty():
+		return {"success": false, "reason": "invalid_debug_command_args", "field": "item_id", "usage": "give item <item_id> [count]", "message": "usage: give item <item_id> [count]"}
 	var item_record: Dictionary = _dictionary_or_empty(game_root.registry.get_library("items").get(item_id, {}))
 	if item_record.is_empty():
 		return {"success": false, "reason": "unknown_item", "item_id": item_id, "message": "unknown item: %s" % item_id}
@@ -167,15 +197,18 @@ func _give_item(game_root: Node, parts: PackedStringArray) -> Dictionary:
 func _teleport_player(game_root: Node, parts: PackedStringArray) -> Dictionary:
 	if game_root.simulation == null:
 		return {"success": false, "reason": "simulation_missing", "message": "simulation missing"}
-	if parts.size() < 3:
+	if parts.size() < 3 or parts.size() > 4:
 		return {"success": false, "reason": "usage", "message": "usage: teleport <x> <z> [y]"}
 	var actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor", "message": "player actor missing"}
+	var grid_result := _parse_grid_args(parts, 1, "teleport <x> <z> [y]", actor.grid_position.y if actor.grid_position != null else game_root.current_map_level())
+	if not bool(grid_result.get("success", false)):
+		return grid_result
 	var target_grid := {
-		"x": int(parts[1]),
-		"z": int(parts[2]),
-		"y": int(parts[3]) if parts.size() >= 4 else (actor.grid_position.y if actor.grid_position != null else game_root.current_map_level()),
+		"x": int(grid_result.get("x", 0)),
+		"z": int(grid_result.get("z", 0)),
+		"y": int(grid_result.get("y", 0)),
 	}
 	var from_grid: Dictionary = actor.grid_position.to_dictionary() if actor.grid_position != null else {}
 	actor.grid_position = GridCoord.from_dictionary(target_grid)
@@ -194,14 +227,17 @@ func _teleport_player(game_root: Node, parts: PackedStringArray) -> Dictionary:
 func _spawn_actor(game_root: Node, parts: PackedStringArray) -> Dictionary:
 	if game_root.simulation == null:
 		return {"success": false, "reason": "simulation_missing", "message": "simulation missing"}
-	if parts.size() < 2:
+	if parts.size() < 2 or parts.size() > 5 or parts.size() == 3:
 		return {"success": false, "reason": "usage", "message": "usage: spawn <character_id> [x z y]"}
 	var character_id := _normalize_content_id(parts[1])
 	var definition_record: Dictionary = _dictionary_or_empty(game_root.registry.get_library("characters").get(character_id, {}))
 	if definition_record.is_empty():
 		return {"success": false, "reason": "unknown_character", "character_id": character_id, "message": "unknown character: %s" % character_id}
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
-	var spawn_grid := _spawn_grid(game_root, parts, player)
+	var spawn_grid_result := _spawn_grid(game_root, parts, player)
+	if not bool(spawn_grid_result.get("success", false)):
+		return spawn_grid_result
+	var spawn_grid: Dictionary = _dictionary_or_empty(spawn_grid_result.get("grid", {}))
 	var actor_id := _register_actor_from_definition(game_root, character_id, _dictionary_or_empty(definition_record.get("data", {})), spawn_grid)
 	if actor_id <= 0:
 		return {"success": false, "reason": "spawn_failed", "character_id": character_id, "message": "spawn failed: %s" % character_id}
@@ -218,7 +254,7 @@ func _spawn_actor(game_root: Node, parts: PackedStringArray) -> Dictionary:
 func _unlock_location(game_root: Node, parts: PackedStringArray) -> Dictionary:
 	if game_root.simulation == null:
 		return {"success": false, "reason": "simulation_missing", "message": "simulation missing"}
-	if parts.size() < 3 or parts[1].to_lower() != "location":
+	if parts.size() != 3 or parts[1].to_lower() != "location":
 		return {"success": false, "reason": "usage", "message": "usage: unlock location <location_id>"}
 	var location_id := _normalize_content_id(parts[2])
 	if location_id.is_empty():
@@ -236,18 +272,18 @@ func _unlock_location(game_root: Node, parts: PackedStringArray) -> Dictionary:
 
 func _spawn_grid(game_root: Node, parts: PackedStringArray, player: RefCounted) -> Dictionary:
 	if parts.size() >= 4:
-		return {
-			"x": int(parts[2]),
-			"z": int(parts[3]),
-			"y": int(parts[4]) if parts.size() >= 5 else (player.grid_position.y if player != null and player.grid_position != null else game_root.current_map_level()),
-		}
+		var fallback_y: int = player.grid_position.y if player != null and player.grid_position != null else game_root.current_map_level()
+		var grid_result := _parse_grid_args(parts, 2, "spawn <character_id> [x z y]", fallback_y)
+		if not bool(grid_result.get("success", false)):
+			return grid_result
+		return {"success": true, "grid": {"x": int(grid_result.get("x", 0)), "y": int(grid_result.get("y", 0)), "z": int(grid_result.get("z", 0))}}
 	if player != null and player.grid_position != null:
-		return {
+		return {"success": true, "grid": {
 			"x": player.grid_position.x + 1,
 			"y": player.grid_position.y,
 			"z": player.grid_position.z,
-		}
-	return {"x": 0, "y": game_root.current_map_level(), "z": 0}
+		}}
+	return {"success": true, "grid": {"x": 0, "y": game_root.current_map_level(), "z": 0}}
 
 
 func _register_actor_from_definition(game_root: Node, character_id: String, definition: Dictionary, spawn_grid: Dictionary) -> int:
@@ -353,6 +389,106 @@ func _location_exists(registry: RefCounted, location_id: String) -> bool:
 			if _normalize_content_id(_dictionary_or_empty(location).get("id", "")) == location_id:
 				return true
 	return false
+
+
+func _permission_denial_for_parts(parts: PackedStringArray) -> Dictionary:
+	var command: Dictionary = _command_schema_for_parts(parts)
+	if command.is_empty() or not bool(command.get("mutates_runtime", false)):
+		return {}
+	if _runtime_mutation_allowed():
+		return {}
+	return {
+		"success": false,
+		"reason": "debug_command_permission_denied",
+		"permission": str(command.get("permission", "debug_runtime_mutation")),
+		"command_id": str(command.get("id", "")),
+		"message": "debug command disabled by %s" % DEBUG_RUNTIME_MUTATION_SETTING,
+	}
+
+
+func _command_schema_for_parts(parts: PackedStringArray) -> Dictionary:
+	if parts.is_empty():
+		return {}
+	var first := parts[0].to_lower()
+	var command_id := first
+	if first == "give" and parts.size() >= 2 and parts[1].to_lower() == "item":
+		command_id = "give item"
+	elif first == "unlock" and parts.size() >= 2 and parts[1].to_lower() == "location":
+		command_id = "unlock location"
+	elif first == "tp":
+		command_id = "teleport"
+	for command in command_schema():
+		var data: Dictionary = _dictionary_or_empty(command)
+		if str(data.get("id", "")) == command_id:
+			return data
+	return {}
+
+
+func _runtime_mutation_allowed() -> bool:
+	if not ProjectSettings.has_setting(DEBUG_RUNTIME_MUTATION_SETTING):
+		return true
+	return bool(ProjectSettings.get_setting(DEBUG_RUNTIME_MUTATION_SETTING))
+
+
+func _mutating_command_count() -> int:
+	var count := 0
+	for command in command_schema():
+		if bool(_dictionary_or_empty(command).get("mutates_runtime", false)):
+			count += 1
+	return count
+
+
+func _parse_grid_args(parts: PackedStringArray, start_index: int, usage: String, fallback_y: int) -> Dictionary:
+	if parts.size() <= start_index + 1:
+		return {"success": false, "reason": "usage", "usage": usage, "message": "usage: %s" % usage}
+	var x_result := _parse_int_arg(parts[start_index], "x", usage)
+	if not bool(x_result.get("success", false)):
+		return x_result
+	var z_result := _parse_int_arg(parts[start_index + 1], "z", usage)
+	if not bool(z_result.get("success", false)):
+		return z_result
+	var y := fallback_y
+	if parts.size() > start_index + 2:
+		var y_result := _parse_int_arg(parts[start_index + 2], "y", usage)
+		if not bool(y_result.get("success", false)):
+			return y_result
+		y = int(y_result.get("value", fallback_y))
+	return {
+		"success": true,
+		"x": int(x_result.get("value", 0)),
+		"z": int(z_result.get("value", 0)),
+		"y": y,
+	}
+
+
+func _parse_positive_int(value: String, field: String, usage: String) -> Dictionary:
+	var result := _parse_int_arg(value, field, usage)
+	if not bool(result.get("success", false)):
+		return result
+	if int(result.get("value", 0)) <= 0:
+		return {
+			"success": false,
+			"reason": "invalid_debug_command_args",
+			"field": field,
+			"value": value,
+			"usage": usage,
+			"message": "%s must be positive; usage: %s" % [field, usage],
+		}
+	return result
+
+
+func _parse_int_arg(value: String, field: String, usage: String) -> Dictionary:
+	var normalized := value.strip_edges()
+	if normalized.is_empty() or not normalized.is_valid_int():
+		return {
+			"success": false,
+			"reason": "invalid_debug_command_args",
+			"field": field,
+			"value": value,
+			"usage": usage,
+			"message": "%s must be an integer; usage: %s" % [field, usage],
+		}
+	return {"success": true, "value": int(normalized)}
 
 
 func _normalize_content_id(value: Variant) -> String:
