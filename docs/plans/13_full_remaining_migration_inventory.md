@@ -204,9 +204,9 @@
 ### 8.3 容器
 
 - 已有拿取/存放、全部拿取/全部存放、容器/背包双栏、滚动列表、基础详情文本、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip 和容器/背包双向拖拽转移第一版，并纳入 `ContainerUI` smoke；批量转移复用单项容器事务，成功项保留、失败项返回 `failures` 并可显示部分成功反馈。
-- 容器类型元数据第一版已迁移：地图容器、尸体容器和掉落容器会在 scene target、运行时 session、corpse/drop 记录、world snapshot、pickable metadata、ContainerSnapshot 和 save/load 中保留 `container_type` / `container_origin`；尸体/掉落容器在 load 后会兜底同步回普通 `container_sessions`，继续复用拿取、存放、权限和容量规则；已由 `ContainerUI` / `Combat` / `InventoryUI` / `Save` smoke 覆盖。待补商店容器、任务容器、NPC owner/偷窃、任务状态权限和完整 id 规范文档。
+- 容器类型元数据第一版已迁移：地图容器、尸体容器和掉落容器会在 scene target、运行时 session、corpse/drop 记录、world snapshot、pickable metadata、ContainerSnapshot 和 save/load 中保留 `container_type` / `container_origin`；尸体/掉落容器在 load 后会兜底同步回普通 `container_sessions`，继续复用拿取、存放、权限和容量规则；已由 `ContainerUI` / `Combat` / `InventoryUI` / `Save` smoke 覆盖。待补商店容器、任务容器、任务状态权限和完整 id 规范文档。
 - 容器关闭已覆盖 Esc、关闭按钮、目标消失关闭、切换地图关闭和超出距离关闭；空容器提示已覆盖。清空后地图对象状态第一版已迁移：`container_sessions` 会覆盖 world snapshot 中的容器库存、金钱和 empty/item count metadata，容器仍保留可交互对象和 pickable body，世界节点显示 `ContainerStateBadge`，已由 `ContainerUI` / `Scene` smoke 覆盖。
-- 基础失败提示已覆盖并纳入 `ContainerUI` smoke：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器、数量非法、拿取后背包负重不足；容器权限第一版已支持 session / map props 的 `locked`、`allow_take`、`allow_store`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`、`required_world_flags` 和 `blocked_world_flags`，拿取、拿钱和存放会统一拒绝并显示中文反馈，钥匙/工具满足时可操作锁定容器，权限字段随存档 roundtrip；容器自身容量第一版支持重量、总件数、stack/slot 数限制，容量字段随地图对象、交互 session 和存档 roundtrip，超限显示中文反馈；已纳入 `ContainerUI` / `Save` smoke。待补钥匙/工具消耗或耐久策略和更完整权限 UI 预览。
+- 基础失败提示已覆盖并纳入 `ContainerUI` smoke：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器、数量非法、拿取后背包负重不足；容器权限第一版已支持 session / map props 的 `locked`、`allow_take`、`allow_store`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`、`required_world_flags`、`blocked_world_flags`、`owned`、`owner_actor_id` / `owner_actor_definition_id`、`owner_relationship_min/max` 和 `allow_steal`，拿取、拿钱和存放会统一拒绝并显示中文反馈，钥匙/工具满足时可操作锁定容器，关系满足时可访问 owner 容器，允许偷取时结果和事件会标记 `stealing` / `owner_actor_id`，权限字段随存档 roundtrip；容器自身容量第一版支持重量、总件数、stack/slot 数限制，容量字段随地图对象、交互 session 和存档 roundtrip，超限显示中文反馈；已纳入 `ContainerUI` / `Save` smoke。待补钥匙/工具消耗或耐久策略、偷窃后果/阵营反应、任务状态权限和更完整权限 UI 预览。
 
 ### 8.4 交易
 

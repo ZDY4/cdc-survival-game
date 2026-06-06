@@ -391,7 +391,7 @@
 - [ ] interaction range：不同交互类型的距离、自动接近目标格、不可达提示。
 - [ ] prompt snapshot：primary option、all options、disabled options、display name、target kind、action label、AP cost。
 - [ ] pickup 数量、部分拾取、任务推进、地图对象消耗、失败反馈。
-- [~] 容器 id / 类型规范：地图、尸体、掉落容器已有 `container_type` / `container_origin` 元数据和保存 roundtrip；待补任务容器、商店容器、NPC owner / 偷窃特例和完整规范文档。
+- [~] 容器 id / 类型规范：地图、尸体、掉落容器已有 `container_type` / `container_origin` 元数据和保存 roundtrip，NPC owner / 允许偷窃权限已有第一版；待补任务容器、商店容器、偷窃后果/阵营反应和完整规范文档。
 - [ ] talk 的对话规则选择、fallback 台词、目标名解析。
 - [ ] scene transition 目标地点显示、确认 prompt、不可进入原因。
 - [ ] wait self interaction 的菜单项、AP 消耗、回合推进。
@@ -490,7 +490,7 @@
 - [x] 选中物品详情已纳入 `ContainerUI` smoke。
 - [ ] 双向拖拽、数量选择。
 - [ ] 容器类型：地图、尸体、掉落、商店、任务。
-- [ ] 权限：锁定、任务限制、NPC 拥有者。
+- [~] 权限：锁定、钥匙/工具、world flag、NPC owner、关系门槛和允许偷窃第一版已迁移；待补任务限制、偷窃后果和阵营反应。
 - [x] 数量选择和 UI 触发拿取/存放已纳入 `ContainerUI` smoke。
 - [x] 容器关闭：Esc、关闭按钮、目标消失、地图切换和超出距离已纳入 `ContainerUI` / `UIToggle` smoke。
 - [x] 空容器提示和基础失败提示已纳入 `ContainerUI` smoke，覆盖容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器。

@@ -280,6 +280,13 @@ func _copy_optional_container_fields(target: Dictionary, container_props: Dictio
 		"container_origin",
 		"owner_actor_id",
 		"owner_actor_definition_id",
+		"owned",
+		"allow_steal",
+		"allow_theft",
+		"owner_relationship_min",
+		"owner_relationship_max",
+		"required_owner_relationship_min",
+		"required_owner_relationship_max",
 		"quest_id",
 		"shop_id",
 	]:

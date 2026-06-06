@@ -31,6 +31,9 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"source_actor_definition_id": str(session.get("source_actor_definition_id", "")),
 		"source_actor_kind": str(session.get("source_actor_kind", "")),
 		"defeated_by_actor_id": int(session.get("defeated_by_actor_id", 0)),
+		"owned": bool(session.get("owned", false)),
+		"owner_actor_id": int(session.get("owner_actor_id", 0)),
+		"owner_actor_definition_id": str(session.get("owner_actor_definition_id", "")),
 		"drop_item_id": str(session.get("drop_item_id", "")),
 		"money": max(0, int(session.get("money", 0))),
 		"items": _container_item_snapshots(session),
@@ -203,6 +206,18 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "缺少容器操作许可，当前无法操作。"
 		"container_world_flag_blocked":
 			return "容器操作许可已失效，当前无法操作。"
+		"container_owner_forbidden":
+			return "该容器属于其他角色，当前不能拿取。"
+		"container_owner_relationship_too_low":
+			return "与容器拥有者关系不足，需要 %.0f，当前 %.0f。" % [
+				float(feedback.get("owner_relationship_min", 0.0)),
+				float(feedback.get("relationship_score", 0.0)),
+			]
+		"container_owner_relationship_too_high":
+			return "与容器拥有者关系状态不符合要求，需要不高于 %.0f，当前 %.0f。" % [
+				float(feedback.get("owner_relationship_max", 0.0)),
+				float(feedback.get("relationship_score", 0.0)),
+			]
 		"container_key_missing":
 			return "缺少打开该容器所需的%s。" % item_name
 		"container_tool_missing":

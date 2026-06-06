@@ -68,6 +68,11 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	clinic_container["max_weight"] = 3.5
 	clinic_container["max_items"] = 9
 	clinic_container["max_stacks"] = 4
+	clinic_container["owned"] = true
+	clinic_container["owner_actor_id"] = 2
+	clinic_container["owner_actor_definition_id"] = "trader_lao_wang"
+	clinic_container["allow_steal"] = false
+	clinic_container["owner_relationship_min"] = 40.0
 	simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = clinic_container
 	simulation.execute_interaction(1, {
 		"target_type": "map_object",
@@ -270,6 +275,16 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("container max_items did not roundtrip")
 	if int(restored_clinic_container.get("max_stacks", 0)) != 4:
 		errors.append("container max_stacks did not roundtrip")
+	if not bool(restored_clinic_container.get("owned", false)):
+		errors.append("container owned flag did not roundtrip")
+	if int(restored_clinic_container.get("owner_actor_id", 0)) != 2:
+		errors.append("container owner_actor_id did not roundtrip")
+	if str(restored_clinic_container.get("owner_actor_definition_id", "")) != "trader_lao_wang":
+		errors.append("container owner_actor_definition_id did not roundtrip")
+	if bool(restored_clinic_container.get("allow_steal", true)):
+		errors.append("container allow_steal did not roundtrip")
+	if absf(float(restored_clinic_container.get("owner_relationship_min", 0.0)) - 40.0) > 0.001:
+		errors.append("container owner_relationship_min did not roundtrip")
 	var restored_corpse_container: Dictionary = _first_container_with_type(restored, "corpse")
 	if restored_corpse_container.is_empty():
 		errors.append("corpse container type metadata did not roundtrip")

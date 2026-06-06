@@ -439,6 +439,58 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(allowed_flagged_take.get("success", false)):
 		errors.append("flag-gated container should allow take after flag: %s" % allowed_flagged_take.get("reason", "unknown"))
 	game_root.simulation.world_flags.erase("container_permission_smoke_flag")
+	var owner_relationship_before: float = float(game_root.simulation.relationship_score(1, 2))
+	game_root.simulation.container_sessions["owned_forbidden_container"] = {
+		"container_id": "owned_forbidden_container",
+		"display_name": "私人储物箱",
+		"inventory": [{"item_id": "1006", "count": 1}],
+		"owned": true,
+		"owner_actor_id": 2,
+	}
+	_set_active_container_id(game_root, "owned_forbidden_container")
+	game_root.refresh_container_panel()
+	var owned_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if str(owned_take.get("reason", "")) != "container_owner_forbidden":
+		errors.append("owned container should reject take without steal or relationship permission")
+	if not _container_feedback(game_root).contains("属于其他角色"):
+		errors.append("owned container should show owner feedback")
+	game_root.simulation.container_sessions["owned_relationship_container"] = {
+		"container_id": "owned_relationship_container",
+		"display_name": "信任储物箱",
+		"inventory": [{"item_id": "1006", "count": 1}],
+		"owned": true,
+		"owner_actor_id": 2,
+		"owner_relationship_min": 60.0,
+	}
+	_set_active_container_id(game_root, "owned_relationship_container")
+	game_root.simulation.set_relationship_score(1, 2, 20.0, "container_owner_smoke_low")
+	game_root.refresh_container_panel()
+	var low_relationship_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if str(low_relationship_take.get("reason", "")) != "container_owner_relationship_too_low":
+		errors.append("owned relationship container should reject low relationship")
+	if not _container_feedback(game_root).contains("关系不足"):
+		errors.append("owned relationship container should show relationship feedback")
+	game_root.simulation.set_relationship_score(1, 2, 80.0, "container_owner_smoke_trusted")
+	var trusted_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if not bool(trusted_take.get("success", false)):
+		errors.append("owned relationship container should allow trusted take: %s" % trusted_take.get("reason", "unknown"))
+	game_root.simulation.container_sessions["stealable_container"] = {
+		"container_id": "stealable_container",
+		"display_name": "可偷取储物箱",
+		"inventory": [{"item_id": "1006", "count": 1}],
+		"owned": true,
+		"owner_actor_id": 2,
+		"allow_steal": true,
+	}
+	_set_active_container_id(game_root, "stealable_container")
+	game_root.simulation.set_relationship_score(1, 2, 10.0, "container_owner_smoke_steal")
+	game_root.refresh_container_panel()
+	var steal_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if not bool(steal_take.get("success", false)) or not bool(steal_take.get("stealing", false)):
+		errors.append("stealable owned container should allow take and mark stealing")
+	if int(steal_take.get("owner_actor_id", 0)) != 2:
+		errors.append("stealable owned container should expose owner_actor_id")
+	game_root.simulation.set_relationship_score(1, 2, owner_relationship_before, "container_owner_smoke_restore")
 	game_root.simulation.container_sessions = permission_snapshot.duplicate(true)
 	_set_active_container_id(game_root, active_container_before_permission)
 	game_root.refresh_container_panel()

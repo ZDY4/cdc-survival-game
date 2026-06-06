@@ -18,6 +18,8 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 	var permission: Dictionary = _container_permission(simulation, actor, actor_id, normalized_container_id, container, "take")
 	if not bool(permission.get("success", false)):
 		return permission
+	var stealing: bool = bool(permission.get("stealing", false))
+	var owner_actor_id: int = int(permission.get("owner_actor_id", 0))
 	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
 	if not item_library.is_empty() and _dictionary_or_empty(item_library.get(normalized_item_id, {})).is_empty():
 		return {"success": false, "reason": "unknown_item", "item_id": normalized_item_id}
@@ -56,6 +58,8 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"container_id": normalized_container_id,
 		"item_id": normalized_item_id,
 		"count": transfer_count,
+		"stealing": stealing,
+		"owner_actor_id": owner_actor_id,
 	})
 	simulation.emit_event("container_transferred", {
 		"actor_id": actor_id,
@@ -65,6 +69,8 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"direction": "take",
 		"from": "container",
 		"to": "actor_inventory",
+		"stealing": stealing,
+		"owner_actor_id": owner_actor_id,
 	})
 	simulation.record_item_collected(actor_id, normalized_item_id, transfer_count)
 	return {
@@ -72,6 +78,8 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"container_id": normalized_container_id,
 		"item_id": normalized_item_id,
 		"count": transfer_count,
+		"stealing": stealing,
+		"owner_actor_id": owner_actor_id,
 	}
 
 
@@ -86,6 +94,8 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 	var permission: Dictionary = _container_permission(simulation, actor, actor_id, normalized_container_id, container, "take")
 	if not bool(permission.get("success", false)):
 		return permission
+	var stealing: bool = bool(permission.get("stealing", false))
+	var owner_actor_id: int = int(permission.get("owner_actor_id", 0))
 	var available: int = max(0, int(container.get("money", 0)))
 	var transfer_count: int = available if count < 0 else count
 	if transfer_count <= 0:
@@ -123,6 +133,8 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 		"player_money_after": actor.money,
 		"container_money_before": available,
 		"container_money_after": container_money_after,
+		"stealing": stealing,
+		"owner_actor_id": owner_actor_id,
 	})
 	simulation.emit_event("container_transferred", {
 		"actor_id": actor_id,
@@ -132,6 +144,8 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 		"direction": "take",
 		"from": "container_money",
 		"to": "actor_money",
+		"stealing": stealing,
+		"owner_actor_id": owner_actor_id,
 	})
 	return {
 		"success": true,
@@ -142,6 +156,8 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 		"player_money_after": actor.money,
 		"container_money_before": available,
 		"container_money_after": container_money_after,
+		"stealing": stealing,
+		"owner_actor_id": owner_actor_id,
 	}
 
 
@@ -350,6 +366,12 @@ func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: 
 		return _permission_failure(base, "container_take_forbidden", {})
 	if action == "store" and not bool(container.get("allow_store", true)):
 		return _permission_failure(base, "container_store_forbidden", {})
+	var owner_permission: Dictionary = _container_owner_permission(simulation, actor, actor_id, container_id, container, action)
+	if not bool(owner_permission.get("success", false)):
+		return owner_permission
+	for key in owner_permission.keys():
+		if key != "success":
+			base[key] = owner_permission.get(key)
 	for flag_id in _normalized_string_array(container.get("required_world_flags", [])):
 		if not _simulation_world_flags(simulation).has(flag_id):
 			return _permission_failure(base, "container_world_flag_missing", {
@@ -363,6 +385,100 @@ func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: 
 				"blocked_world_flags": _normalized_string_array(container.get("blocked_world_flags", [])),
 			})
 	return base
+
+
+func _container_owner_permission(simulation: RefCounted, actor: RefCounted, actor_id: int, container_id: String, container: Dictionary, action: String) -> Dictionary:
+	var owner_actor_id: int = _container_owner_actor_id(simulation, container)
+	var has_owner: bool = owner_actor_id > 0 or not str(container.get("owner_actor_definition_id", "")).strip_edges().is_empty()
+	var is_owned: bool = bool(container.get("owned", false)) or bool(container.get("owner_restricted", false)) or has_owner and (container.has("owner_relationship_min") or container.has("owner_relationship_max") or container.has("required_owner_relationship_min") or container.has("required_owner_relationship_max"))
+	var result := {
+		"success": true,
+		"container_id": container_id,
+		"actor_id": actor_id,
+		"action": action,
+		"owned": is_owned,
+		"owner_actor_id": owner_actor_id,
+		"owner_actor_definition_id": str(container.get("owner_actor_definition_id", "")),
+		"stealing": false,
+	}
+	if not is_owned:
+		return result
+	if _actor_is_container_owner(actor, owner_actor_id, str(container.get("owner_actor_definition_id", ""))):
+		return result
+
+	var score: float = _relationship_score(simulation, actor_id, owner_actor_id)
+	result["relationship_score"] = score
+	if _has_owner_relationship_min(container):
+		var min_score: float = _owner_relationship_min(container)
+		result["owner_relationship_min"] = min_score
+		if score < min_score:
+			return _permission_failure(result, "container_owner_relationship_too_low", {
+				"relationship_score": score,
+				"owner_relationship_min": min_score,
+			})
+	if _has_owner_relationship_max(container):
+		var max_score: float = _owner_relationship_max(container)
+		result["owner_relationship_max"] = max_score
+		if score > max_score:
+			return _permission_failure(result, "container_owner_relationship_too_high", {
+				"relationship_score": score,
+				"owner_relationship_max": max_score,
+			})
+	if action == "take":
+		var relationship_gate: bool = _has_owner_relationship_min(container) or _has_owner_relationship_max(container)
+		if not relationship_gate and not bool(container.get("allow_steal", container.get("allow_theft", false))):
+			return _permission_failure(result, "container_owner_forbidden", {})
+		result["stealing"] = bool(container.get("allow_steal", container.get("allow_theft", false))) and not relationship_gate
+	return result
+
+
+func _container_owner_actor_id(simulation: RefCounted, container: Dictionary) -> int:
+	var explicit_id: int = int(container.get("owner_actor_id", 0))
+	if explicit_id > 0:
+		return explicit_id
+	var definition_id := str(container.get("owner_actor_definition_id", "")).strip_edges()
+	if definition_id.is_empty() or simulation == null or simulation.actor_registry == null:
+		return 0
+	for actor in simulation.actor_registry.actors():
+		if actor != null and str(actor.definition_id) == definition_id:
+			return int(actor.actor_id)
+	return 0
+
+
+func _actor_is_container_owner(actor: RefCounted, owner_actor_id: int, owner_definition_id: String) -> bool:
+	if actor == null:
+		return false
+	if owner_actor_id > 0 and int(actor.actor_id) == owner_actor_id:
+		return true
+	return not owner_definition_id.strip_edges().is_empty() and str(actor.definition_id) == owner_definition_id
+
+
+func _relationship_score(simulation: RefCounted, actor_id: int, target_actor_id: int) -> float:
+	if target_actor_id <= 0:
+		return 0.0
+	if simulation != null and simulation.has_method("relationship_score"):
+		return float(simulation.relationship_score(actor_id, target_actor_id))
+	return 0.0
+
+
+func _has_owner_relationship_min(container: Dictionary) -> bool:
+	return container.has("owner_relationship_min") or container.has("required_owner_relationship_min")
+
+
+func _has_owner_relationship_max(container: Dictionary) -> bool:
+	return container.has("owner_relationship_max") or container.has("required_owner_relationship_max")
+
+
+func _owner_relationship_min(container: Dictionary) -> float:
+	if container.has("owner_relationship_min"):
+		return float(container.get("owner_relationship_min", -100.0))
+	return float(container.get("required_owner_relationship_min", -100.0))
+
+
+func _owner_relationship_max(container: Dictionary) -> float:
+	if container.has("owner_relationship_max"):
+		return float(container.get("owner_relationship_max", 100.0))
+	return float(container.get("required_owner_relationship_max", 100.0))
 
 
 func _container_capacity_check(container_id: String, container: Dictionary, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
