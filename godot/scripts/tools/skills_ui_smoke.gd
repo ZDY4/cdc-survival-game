@@ -178,6 +178,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("HUD hotbar should show dragged adrenaline rush in slot 3")
 	if not _hud_hotbar_slot_tooltip(game_root, "slot_3").contains("Adrenaline Rush"):
 		errors.append("HUD hotbar slot should expose skill tooltip")
+	_assert_hover_tooltip_snapshot(errors, game_root, _hud_hotbar_slot_control(game_root, "slot_3"), "hud", "Adrenaline Rush", "HUD skill hotbar tooltip snapshot")
 	if _hud_hotbar_cooldown_mask_visible(game_root, "slot_3"):
 		errors.append("HUD hotbar cooldown mask should stay hidden before skill cooldown")
 	var group2_button := _hud_hotbar_group_button(game_root, "group_2")
@@ -374,6 +375,32 @@ func _hud_hotbar_slot_tooltip(game_root: Node, slot_id: String) -> String:
 	if button == null:
 		return ""
 	return str(button.tooltip_text)
+
+
+func _hud_hotbar_slot_control(game_root: Node, slot_id: String) -> Control:
+	return game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Control
+
+
+func _assert_hover_tooltip_snapshot(errors: Array[String], game_root: Node, control: Control, expected_owner: String, expected_text: String, context: String) -> void:
+	if control == null:
+		errors.append("%s: tooltip source control should exist" % context)
+		return
+	if not game_root.has_method("hover_tooltip_snapshot"):
+		errors.append("%s: game root should expose hover_tooltip_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.hover_tooltip_snapshot(control))
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: tooltip snapshot should be active: %s" % [context, snapshot])
+	if str(snapshot.get("owner_panel", "")) != expected_owner:
+		errors.append("%s: tooltip owner expected %s, got %s" % [context, expected_owner, snapshot])
+	if not str(snapshot.get("text", "")).contains(expected_text):
+		errors.append("%s: tooltip text should include %s, got %s" % [context, expected_text, snapshot])
+	if str(snapshot.get("source_name", "")).is_empty() or str(snapshot.get("source_path", "")).is_empty():
+		errors.append("%s: tooltip snapshot should expose source identity: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_tooltip: Dictionary = _dictionary_or_empty(runtime.get("tooltip", {}))
+	if not runtime_tooltip.has("active") or not runtime_tooltip.has("text"):
+		errors.append("%s: runtime control should expose tooltip state shape: %s" % [context, runtime_tooltip])
 
 
 func _hud_hotbar_slot_disabled(game_root: Node, slot_id: String) -> bool:

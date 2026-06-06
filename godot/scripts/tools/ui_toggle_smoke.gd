@@ -298,6 +298,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("main hand equipment tooltip should show description and durability detail")
 	if not _equipment_tooltip(game_root, "main_hand").contains("外观: builtin:weapon:dagger"):
 		errors.append("main hand equipment tooltip should show appearance detail")
+	_assert_hover_tooltip_snapshot(errors, game_root, _equipment_slot_control(game_root, "main_hand"), "character", "锋利的匕首", "main hand equipment tooltip snapshot")
 	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player_ref == null:
 		errors.append("player actor should exist for equipped ammo display test")
@@ -340,6 +341,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("character panel should show empty off hand equipment slot")
 	if not _equipment_tooltip(game_root, "off_hand").contains("可将适用装备拖到此槽位"):
 		errors.append("empty equipment slot tooltip should explain drag equip")
+	_assert_hover_tooltip_snapshot(errors, game_root, _equipment_slot_control(game_root, "off_hand"), "character", "可将适用装备拖到此槽位", "empty equipment tooltip snapshot")
 	if _equipment_model_asset(game_root, "main_hand") != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("main hand equipment model should start as dagger before character panel unequip")
 	game_root.refresh_inventory_panel()
@@ -1641,6 +1643,32 @@ func _equipment_tooltip(game_root: Node, slot_id: String) -> String:
 	if row is Control:
 		return str((row as Control).tooltip_text)
 	return ""
+
+
+func _equipment_slot_control(game_root: Node, slot_id: String) -> Control:
+	return game_root.character_panel.find_child("Equipment_%s" % slot_id, true, false) as Control
+
+
+func _assert_hover_tooltip_snapshot(errors: Array[String], game_root: Node, control: Control, expected_owner: String, expected_text: String, context: String) -> void:
+	if control == null:
+		errors.append("%s: tooltip source control should exist" % context)
+		return
+	if not game_root.has_method("hover_tooltip_snapshot"):
+		errors.append("%s: game root should expose hover_tooltip_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.hover_tooltip_snapshot(control))
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: tooltip snapshot should be active: %s" % [context, snapshot])
+	if str(snapshot.get("owner_panel", "")) != expected_owner:
+		errors.append("%s: tooltip owner expected %s, got %s" % [context, expected_owner, snapshot])
+	if not str(snapshot.get("text", "")).contains(expected_text):
+		errors.append("%s: tooltip text should include %s, got %s" % [context, expected_text, snapshot])
+	if str(snapshot.get("source_name", "")).is_empty() or str(snapshot.get("source_path", "")).is_empty():
+		errors.append("%s: tooltip snapshot should expose source identity: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_tooltip: Dictionary = _dictionary_or_empty(runtime.get("tooltip", {}))
+	if not runtime_tooltip.has("active") or not runtime_tooltip.has("text"):
+		errors.append("%s: runtime control should expose tooltip state shape: %s" % [context, runtime_tooltip])
 
 
 func _equipment_model_asset(game_root: Node, slot_id: String) -> String:

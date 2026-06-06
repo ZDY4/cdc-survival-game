@@ -620,6 +620,9 @@ func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
 	if bool(context_menu.get("active", false)):
 		var top_context: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
 		parts.append("Context %s/%d" % [str(top_context.get("id", "")), int(context_menu.get("count", 0))])
+	var tooltip: Dictionary = _dictionary_or_empty(runtime_control.get("tooltip", {}))
+	if bool(tooltip.get("active", false)):
+		parts.append("Tip %s/%s" % [str(tooltip.get("owner_panel", "")), str(tooltip.get("source_name", ""))])
 	var level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
 	if not level.is_empty():
 		parts.append("Level %d" % int(level.get("current", 0)))
@@ -1402,6 +1405,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	if bool(context_menu.get("active", false)):
 		var top_context: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
 		parts.append("Context %s/%d" % [str(top_context.get("id", "")), int(context_menu.get("count", 0))])
+	var tooltip: Dictionary = _dictionary_or_empty(control_data.get("tooltip", {}))
+	if bool(tooltip.get("active", false)):
+		parts.append("Tip %s/%s" % [str(tooltip.get("owner_panel", "")), str(tooltip.get("source_name", ""))])
 	var controls_hint: Dictionary = _dictionary_or_empty(control_data.get("controls_hint", {}))
 	if not controls_hint.is_empty():
 		parts.append("Help %s" % ("on" if bool(controls_hint.get("visible", false)) else "off"))

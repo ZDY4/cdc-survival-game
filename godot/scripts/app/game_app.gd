@@ -371,6 +371,33 @@ func context_menu_snapshot() -> Dictionary:
 	}
 
 
+func hover_tooltip_snapshot(control: Control = null) -> Dictionary:
+	var source := control
+	if source == null:
+		var viewport := get_viewport()
+		source = viewport.gui_get_hovered_control() if viewport != null else null
+	if source == null:
+		return {"active": false, "source_path": "", "source_name": "", "source_class": "", "owner_panel": "", "text": ""}
+	var tooltip_source := _tooltip_source_for_control(source)
+	if tooltip_source == null:
+		return {
+			"active": false,
+			"source_path": str(source.get_path()),
+			"source_name": str(source.name),
+			"source_class": source.get_class(),
+			"owner_panel": _owner_panel_for_control(source),
+			"text": "",
+		}
+	return {
+		"active": true,
+		"source_path": str(tooltip_source.get_path()),
+		"source_name": str(tooltip_source.name),
+		"source_class": tooltip_source.get_class(),
+		"owner_panel": _owner_panel_for_control(tooltip_source),
+		"text": str(tooltip_source.tooltip_text),
+	}
+
+
 func handle_trade_shortcut(event: InputEventKey) -> bool:
 	if panel_controller == null:
 		return false
@@ -635,6 +662,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"debug_console": debug_console_snapshot(),
 		"debug_panel": debug_panel_snapshot(),
 		"hover": runtime_hover_snapshot(),
+		"tooltip": hover_tooltip_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
 		"ai_debug": ai_debug_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),
@@ -748,6 +776,47 @@ func _last_pathfinding_visited_cell_count() -> int:
 	var hover: Dictionary = runtime_hover_snapshot()
 	var move_preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
 	return int(move_preview.get("visited_cell_count", 0))
+
+
+func _tooltip_source_for_control(control: Control) -> Control:
+	var current: Node = control
+	while current != null:
+		if current is Control:
+			var control_node := current as Control
+			if not str(control_node.tooltip_text).is_empty():
+				return control_node
+		current = current.get_parent()
+	return null
+
+
+func _owner_panel_for_control(control: Control) -> String:
+	var current: Node = control
+	while current != null:
+		match str(current.name):
+			"Hud":
+				return "hud"
+			"HUD":
+				return "hud"
+			"InventoryPanel":
+				return "inventory"
+			"CharacterPanel":
+				return "character"
+			"SkillsPanel":
+				return "skills"
+			"JournalPanel":
+				return "journal"
+			"CraftingPanel":
+				return "crafting"
+			"TradePanel":
+				return "trade"
+			"ContainerPanel":
+				return "container"
+			"DialoguePanel":
+				return "dialogue"
+			"SettingsPanel":
+				return "settings"
+		current = current.get_parent()
+	return ""
 
 
 func settings_applied(_snapshot: Dictionary = {}) -> void:
