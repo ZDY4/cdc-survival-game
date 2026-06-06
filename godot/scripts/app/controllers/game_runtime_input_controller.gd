@@ -116,6 +116,8 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	_clear_attack_range_markers()
 	_clear_skill_target_preview_markers()
 	_clear_move_path_preview_markers()
+	_clear_selection_only()
+	_set_hover_failure("world_changed")
 	_update_pending_movement_path_markers()
 	selected_node = null
 

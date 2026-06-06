@@ -154,6 +154,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("fog overlay did not survive map transition redraw")
 	await process_frame
 	_expect_transition_world_redraw(errors, game_root)
+	_expect_transition_runtime_visual_state_reset(errors, game_root)
 	await _expect_transition_return_to_outpost(errors, game_root)
 	return errors
 
@@ -966,6 +967,46 @@ func _expect_transition_world_redraw(errors: Array[String], game_root: Node) -> 
 	_press_camera_zoom_key(game_root, KEY_EQUAL)
 	if camera.global_position.distance_to(before_position) < 0.1:
 		errors.append("transition runtime camera should still respond to keyboard zoom input")
+
+
+func _expect_transition_runtime_visual_state_reset(errors: Array[String], game_root: Node) -> void:
+	var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
+	if bool(hover.get("active", true)):
+		errors.append("transition should clear runtime hover snapshot")
+	if not str(hover.get("target_id", "")).is_empty() or not str(hover.get("target_type", "")).is_empty():
+		errors.append("transition hover snapshot should not keep stale target metadata")
+	if not _dictionary_or_empty(hover.get("prompt", {})).is_empty():
+		errors.append("transition hover snapshot should not keep stale prompt")
+	if game_root.runtime_input_controller.has_selection_state():
+		errors.append("transition should clear selected interaction node state")
+	var move_path_markers: Node3D = game_root.find_child("MovePathPreviewMarkers", true, false) as Node3D
+	if move_path_markers == null:
+		errors.append("transition should keep move path preview marker container")
+	elif int(move_path_markers.get_meta("marker_count", 0)) != 0 or move_path_markers.get_child_count() != 0:
+		errors.append("transition should clear stale move path preview markers")
+	var attack_range_markers: Node3D = game_root.find_child("AttackRangeMarkers", true, false) as Node3D
+	if attack_range_markers == null:
+		errors.append("transition should keep attack range marker container")
+	elif attack_range_markers.get_child_count() != 0:
+		errors.append("transition should clear stale attack range markers")
+	var skill_markers: Node3D = game_root.find_child("SkillTargetPreviewMarkers", true, false) as Node3D
+	if skill_markers == null:
+		errors.append("transition should keep skill preview marker container")
+	elif skill_markers.get_child_count() != 0:
+		errors.append("transition should clear stale skill preview markers")
+	if game_root.fog_overlay == null:
+		errors.append("transition should keep fog overlay")
+		return
+	if str(game_root.fog_overlay.get_meta("active_map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("transition fog overlay should rebuild for interior map")
+	var mask_size: Variant = game_root.fog_overlay.get_meta("mask_size", Vector2i.ZERO)
+	if typeof(mask_size) != TYPE_VECTOR2I or mask_size == Vector2i.ZERO:
+		errors.append("transition fog overlay should expose non-empty mask size")
+	var interior_size: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.world_result.get("map", {})).get("size", {}))
+	if int(game_root.fog_overlay.get_meta("mask_width", 0)) != int(interior_size.get("width", 0)):
+		errors.append("transition fog overlay width should match active map")
+	if int(game_root.fog_overlay.get_meta("mask_height", 0)) != int(interior_size.get("height", 0)):
+		errors.append("transition fog overlay height should match active map")
 
 
 func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node) -> void:

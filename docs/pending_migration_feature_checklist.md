@@ -375,7 +375,7 @@ Godot 落点：`godot/scripts/app/controllers/game_panel_controller.gd`、`godot
 - [ ] 长路径预览：路径线、可达颜色、跨回合状态。
 - [ ] actor facing / 朝向更新。
 - [ ] 移动插值和完成事件。
-- [ ] 地图切换后相机、hover、pending、path preview 清理。
+- [~] 地图切换后相机、hover、pending、path preview 清理：scene transition 会重定位相机、清理 hover / selection / move / attack / skill preview，并重建 fog mask；待补过渡动画和 overworld prompt polish。
 - [ ] AI follow path 与玩家 pathfinding 共用规则。
 
 参考：`game_core/src/grid/pathfinding.rs`、`runtime/runtime_movement.rs`、`simulation/spatial.rs`。

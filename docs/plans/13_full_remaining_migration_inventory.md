@@ -105,7 +105,7 @@
 
 - scene transition 触发器第一版已迁移：目标 map、entry point、目标名称、缺地图/缺入口失败原因、返回 map / entry 记录和进入后 entry facing 已进入 result、`scene_transition` 事件、`interaction_succeeded` payload 与 context snapshot；`MapEntryPointNode.facing` 会经 `MapBuilder` 保留到 topology，`WorldSnapshotBuilder` 会从 `scene_transition.entry_facing` 派生 actor 朝向；transition trigger / option 的 `required_world_flags`、`blocked_world_flags`、`required_unlocked_locations` 和 `blocked_unlocked_locations` 会进入 prompt 与执行校验，缺少或被封锁时返回稳定 reason 并显示 HUD 中文反馈，由 `Interaction` / `Scene` / `World` smoke 覆盖。待补确认 prompt 视觉 polish 和更完整 overworld 进入/返回提示。
 - 部分迁移 overworld 位置进入、返回和解锁地点；地图面板定位第一版已从 `data/overworld` 展示世界地图尺寸、当前地点坐标、地点解锁数量、道路格摘要和画布 inset，并由 `UIToggle` smoke 覆盖。待补最近到达地点、显式路线规划、进入/返回 prompt 和无法进入原因 UI。
-- 部分迁移地图切换后的运行时清理：pending、active dialogue、active container 和 active trade 会在位置进入或刷新时关闭并发出带 reason 的事件，已由 `Overworld` / `TradeUI` smoke 覆盖；待补相机重新定位和雾战重建。
+- 地图切换后的运行时清理第一版已迁移：pending、active dialogue、active container 和 active trade 会在位置进入或刷新时关闭并发出带 reason 的事件；scene transition 重绘会清理 hover snapshot、interaction selection、move / attack / skill preview markers，并按 entry / player spawn 重新定位相机；fog overlay 会按新 active map 重建 mask 并暴露 map / size metadata；已由 `Overworld` / `TradeUI` / `PlayerInteraction` smoke 覆盖。待补更细的过渡动画、已探索/可见格平滑混合和 overworld 进入/返回 prompt polish。
 - 待补所有 `godot/scenes/maps/*.tscn` 与旧 JSON 备份的字段等价复核：size、levels、entry points、objects、footprints、rotations、props、triggers。
 
 ## 5. 交互系统

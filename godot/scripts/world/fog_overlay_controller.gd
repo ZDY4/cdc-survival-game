@@ -47,10 +47,15 @@ func update_overlay(map_snapshot: Dictionary, runtime_snapshot: Dictionary) -> D
 	material.set_shader_parameter("edge_softness", 0.85)
 	material.set_shader_parameter("mask_texel_size", Vector2(1.0 / float(size.x), 1.0 / float(size.y)))
 	material.set_shader_parameter("fog_color", Color(0.015, 0.018, 0.022, 1.0))
+	overlay.set_meta("active_map_id", str(runtime_snapshot.get("active_map_id", "")))
+	overlay.set_meta("mask_size", size)
+	overlay.set_meta("mask_width", size.x)
+	overlay.set_meta("mask_height", size.y)
 	return {
 		"ok": true,
 		"width": size.x,
 		"height": size.y,
+		"active_map_id": str(runtime_snapshot.get("active_map_id", "")),
 	}
 
 
