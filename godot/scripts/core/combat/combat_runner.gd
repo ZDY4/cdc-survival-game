@@ -89,6 +89,15 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"damage": damage,
 		"defeated": defeated,
 		"target_actor_id": target_actor_id,
+		"attacker_grid": attacker.grid_position.to_dictionary(),
+		"target_grid": target.grid_position.to_dictionary(),
+		"distance": int(spatial_check.get("distance", 0)),
+		"range": int(spatial_check.get("range", int(options.get("range", 1)))),
+		"same_level": bool(spatial_check.get("same_level", true)),
+		"range_ok": bool(spatial_check.get("range_ok", true)),
+		"line_of_sight": bool(spatial_check.get("line_of_sight", true)),
+		"line_of_sight_required": bool(spatial_check.get("line_of_sight_required", false)),
+		"spatial_failure": str(spatial_check.get("spatial_failure", "")),
 		"critical": critical,
 		"crit_roll": float(critical_roll.get("roll", 1.0)),
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
@@ -127,6 +136,7 @@ func preview_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		preview.merge(spatial_check, true)
 		_add_attack_preview_actor_fields(preview, attacker, target)
 		return preview
+	preview.merge(spatial_check, true)
 
 	var hit_preview: Dictionary = _hit_preview(simulation, attacker, target, profile)
 	var damage_preview: Dictionary = _damage_preview(simulation, attacker, target, profile)
@@ -203,42 +213,48 @@ func _actor_hostility(simulation: RefCounted, attacker: RefCounted, target: RefC
 
 
 func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int) -> Dictionary:
+	var diagnostics: Dictionary = _attack_spatial_diagnostics(attacker, target, topology, attack_range)
+	var failure: String = str(diagnostics.get("spatial_failure", ""))
+	if not failure.is_empty():
+		diagnostics["success"] = false
+		diagnostics["reason"] = failure
+		return diagnostics
+	diagnostics["success"] = true
+	diagnostics["reason"] = "ok"
+	return diagnostics
+
+
+func _attack_spatial_diagnostics(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int) -> Dictionary:
+	var attacker_grid: Dictionary = attacker.grid_position.to_dictionary()
+	var target_grid: Dictionary = target.grid_position.to_dictionary()
 	var distance: int = abs(attacker.grid_position.x - target.grid_position.x) + abs(attacker.grid_position.z - target.grid_position.z)
 	var resolved_range: int = max(1, attack_range)
-	if attacker.grid_position.y != target.grid_position.y:
-		return {
-			"success": false,
-			"reason": "target_invalid_level",
-			"actor_id": attacker.actor_id,
-			"target_actor_id": target.actor_id,
-			"attacker_grid": attacker.grid_position.to_dictionary(),
-			"target_grid": target.grid_position.to_dictionary(),
-			"distance": distance,
-			"range": resolved_range,
-		}
-	if distance > resolved_range:
-		return {
-			"success": false,
-			"reason": "target_out_of_range",
-			"actor_id": attacker.actor_id,
-			"target_actor_id": target.actor_id,
-			"attacker_grid": attacker.grid_position.to_dictionary(),
-			"target_grid": target.grid_position.to_dictionary(),
-			"distance": distance,
-			"range": resolved_range,
-		}
-	if not topology.is_empty() and not _vision_geometry.has_line_of_sight(attacker.grid_position.to_dictionary(), target.grid_position.to_dictionary(), topology):
-		return {
-			"success": false,
-			"reason": "target_blocked_by_los",
-			"actor_id": attacker.actor_id,
-			"target_actor_id": target.actor_id,
-			"attacker_grid": attacker.grid_position.to_dictionary(),
-			"target_grid": target.grid_position.to_dictionary(),
-			"distance": distance,
-			"range": resolved_range,
-		}
-	return {"success": true}
+	var same_level: bool = attacker.grid_position.y == target.grid_position.y
+	var range_ok: bool = distance <= resolved_range
+	var los_required: bool = not topology.is_empty()
+	var los_ok: bool = same_level
+	if same_level and los_required:
+		los_ok = _vision_geometry.has_line_of_sight(attacker_grid, target_grid, topology)
+	var failure: String = ""
+	if not same_level:
+		failure = "target_invalid_level"
+	elif not range_ok:
+		failure = "target_out_of_range"
+	elif los_required and not los_ok:
+		failure = "target_blocked_by_los"
+	return {
+		"actor_id": attacker.actor_id,
+		"target_actor_id": target.actor_id,
+		"attacker_grid": attacker_grid,
+		"target_grid": target_grid,
+		"distance": distance,
+		"range": resolved_range,
+		"same_level": same_level,
+		"range_ok": range_ok,
+		"line_of_sight": los_ok,
+		"line_of_sight_required": los_required,
+		"spatial_failure": failure,
+	}
 
 
 func _triggered_on_hit_effect_ids(profile: Dictionary, damage_result: Dictionary) -> Array[String]:

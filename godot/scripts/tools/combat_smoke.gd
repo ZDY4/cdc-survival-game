@@ -605,6 +605,7 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 		errors.append("cross-level attack should expose attacker and target grids")
 	if int(level_result.get("range", 0)) != 10:
 		errors.append("cross-level attack should expose resolved range")
+	_expect_spatial_diagnostics(errors, level_result, "cross-level attack", false, true, false, false, "target_invalid_level")
 
 	var far_target: int = _register_character(simulation, registry, "zombie_walker", {
 		"x": int(player_grid.get("x", 0)) + 4,
@@ -620,6 +621,7 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 		errors.append("out-of-range attack should expose actor ids")
 	if _dictionary_or_empty(far_result.get("attacker_grid", {})).is_empty() or _dictionary_or_empty(far_result.get("target_grid", {})).is_empty():
 		errors.append("out-of-range attack should expose attacker and target grids")
+	_expect_spatial_diagnostics(errors, far_result, "out-of-range attack", true, false, true, false, "target_out_of_range")
 
 	simulation.set_actor_vision_radius(1, 0)
 	simulation.refresh_actor_vision(1, _topology(simulation, registry))
@@ -658,6 +660,7 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 		errors.append("blocked diagonal LOS attack should expose attacker and target grids")
 	if int(los_result.get("distance", 0)) != 4 or int(los_result.get("range", 0)) != 8:
 		errors.append("blocked diagonal LOS attack should expose distance and range")
+	_expect_spatial_diagnostics(errors, los_result, "blocked diagonal LOS attack", true, true, false, true, "target_blocked_by_los")
 
 	var command_los_target: int = _register_character(simulation, registry, "zombie_walker", {
 		"x": int(player_grid.get("x", 0)) + 2,
@@ -682,6 +685,7 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 		errors.append("submit attack with blocked LOS should expose actor ids")
 	if _dictionary_or_empty(command_los_result.get("attacker_grid", {})).is_empty() or _dictionary_or_empty(command_los_result.get("target_grid", {})).is_empty():
 		errors.append("submit attack with blocked LOS should expose attacker and target grids")
+	_expect_spatial_diagnostics(errors, command_los_result, "submit blocked LOS attack", true, true, false, true, "target_blocked_by_los")
 
 	for actor_id in [level_target, far_target, hidden_target, los_target, command_los_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
@@ -719,6 +723,7 @@ func _expect_attack_target_preview(errors: Array[String], simulation: RefCounted
 		errors.append("attack preview should expose attacker and target grids")
 	if int(preview.get("distance", -1)) != 1:
 		errors.append("attack preview should expose target distance")
+	_expect_spatial_diagnostics(errors, preview, "attack preview", true, true, true, true, "")
 	if float(preview.get("ap_cost", 0.0)) <= 0.0 or not bool(preview.get("ap_affordable", false)):
 		errors.append("attack preview should expose affordable AP cost")
 	if not bool(preview.get("ammo_available", true)):
@@ -746,6 +751,7 @@ func _expect_attack_target_preview(errors: Array[String], simulation: RefCounted
 		errors.append("out-of-range attack preview should report target_out_of_range, got %s" % far_preview.get("reason", ""))
 	if int(far_preview.get("distance", 0)) != 5 or int(far_preview.get("range", 0)) != 2:
 		errors.append("out-of-range attack preview should expose distance and range")
+	_expect_spatial_diagnostics(errors, far_preview, "out-of-range attack preview", true, false, true, true, "target_out_of_range")
 
 	var los_target: int = _register_character(simulation, registry, "zombie_walker", {
 		"x": int(player_grid.get("x", 0)) + 2,
@@ -760,6 +766,7 @@ func _expect_attack_target_preview(errors: Array[String], simulation: RefCounted
 	var los_preview: Dictionary = simulation.preview_attack(player.actor_id, los_target, los_topology, {"range": 8})
 	if bool(los_preview.get("can_attack", true)) or los_preview.get("reason", "") != "target_blocked_by_los":
 		errors.append("blocked LOS attack preview should report target_blocked_by_los, got %s" % los_preview.get("reason", ""))
+	_expect_spatial_diagnostics(errors, los_preview, "blocked LOS attack preview", true, true, false, true, "target_blocked_by_los")
 
 	player.ap = 0.0
 	var ap_preview: Dictionary = simulation.preview_attack(player.actor_id, target_id, topology)
@@ -1469,6 +1476,19 @@ func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
 		if str(event_data.get("kind", "")) == kind:
 			return _dictionary_or_empty(event_data.get("payload", {}))
 	return {}
+
+
+func _expect_spatial_diagnostics(errors: Array[String], result: Dictionary, label: String, same_level: bool, range_ok: bool, line_of_sight: bool, line_of_sight_required: bool, spatial_failure: String) -> void:
+	if not result.has("same_level") or bool(result.get("same_level", false)) != same_level:
+		errors.append("%s should expose same_level=%s" % [label, str(same_level)])
+	if not result.has("range_ok") or bool(result.get("range_ok", false)) != range_ok:
+		errors.append("%s should expose range_ok=%s" % [label, str(range_ok)])
+	if not result.has("line_of_sight") or bool(result.get("line_of_sight", false)) != line_of_sight:
+		errors.append("%s should expose line_of_sight=%s" % [label, str(line_of_sight)])
+	if not result.has("line_of_sight_required") or bool(result.get("line_of_sight_required", false)) != line_of_sight_required:
+		errors.append("%s should expose line_of_sight_required=%s" % [label, str(line_of_sight_required)])
+	if str(result.get("spatial_failure", "")) != spatial_failure:
+		errors.append("%s should expose spatial_failure=%s, got %s" % [label, spatial_failure, str(result.get("spatial_failure", ""))])
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

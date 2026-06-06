@@ -427,13 +427,13 @@ Godot 落点：`godot/scripts/core/interactions/interaction_action_runner.gd`、
 
 ### 9.1 攻击校验
 
-- [~] 敌对、同层、距离校验。
+- [~] 敌对、同层、距离校验；攻击执行和预览已暴露 same_level、range_ok、line_of_sight 与 spatial_failure 诊断字段。
 - [~] self、dead actor、non-hostile 拒绝。
 - [~] 视线和连续无视线退出战斗第一版。
 - [ ] 攻击 LOS 与技能 LOS 共用规则。
 - [ ] 墙、门、楼层、建筑遮挡。
 - [ ] 近战/远程/最小射程/最大射程。
-- [ ] 攻击目标预览：valid grids、valid actor ids、invalid reason。
+- [~] 攻击目标预览：actor ids、invalid reason 和空间诊断第一版已覆盖；待补完整 valid grids 与门/楼层例外下的可攻击格。
 - [ ] friendly fire 策略。
 - [ ] neutral 被攻击后的关系变化和进入战斗。
 
@@ -885,7 +885,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [ ] `Interaction`：门、锁门、pickup 数量、scene transition、disabled options。
 - [ ] `PlayerInteraction`：UI blocker、右键菜单、hover prompt、actor/object/grid priority。
 - [ ] `Movement`：对角、禁止穿角、楼梯、自动开门、取消 pending、跨回合长路径。
-- [ ] `Combat`：LOS、跨层、AOE、友军伤害、reload、miss/evasion、armor、seed。
+- [~] `Combat`：LOS、跨层、攻击预览/实际攻击空间诊断、AOE、reload、miss/evasion、armor、seed 第一版已有覆盖；待补友军伤害和门/楼层例外。
 - [ ] `AI`：开门、重规划、感知丢失、技能、治疗、settlement life。
 - [~] `InventoryUI`：顺序/名称/重量/价值排序、顺序视图拖拽重排、拖到装备/丢弃按钮、右键使用/装备/丢弃菜单、筛选、搜索、详情、消耗品使用、选中物品装备/丢弃、丢弃数量和任务/关键物品禁用第一版已覆盖；待补完整上下文菜单项、数量弹窗、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
 - [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、全部拿取/全部存放、双向拖拽、背包负重限制、容器自身容量、权限高级错误和显式钥匙/工具消耗解锁已覆盖；待补逐件工具耐久和跨面板拖拽视觉 polish。
