@@ -1016,6 +1016,11 @@ func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node
 	_expect_camera_frames_player_at(errors, camera, player_node, return_grid, "return")
 	_expect_camera_keyboard_zoom_and_follow(errors, game_root, camera)
 	_expect_focus_actor_tab_cycle(errors, game_root)
+	var observe_camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if observe_camera == null:
+		errors.append("observe left click focus smoke should keep runtime camera")
+	else:
+		await _expect_observe_left_click_actor_focus(errors, game_root, observe_camera)
 
 
 func _expect_camera_frames_player_at(errors: Array[String], camera: Camera3D, player_node: Node3D, expected_focus: Vector3, label: String) -> void:
@@ -1182,6 +1187,43 @@ func _expect_page_level_switch(errors: Array[String], game_root: Node, player_gr
 	_press_camera_zoom_key(game_root, KEY_PAGEDOWN)
 	if int(game_root.current_map_level()) != int(player_grid.get("y", 0)):
 		errors.append("PageDown should return to the previous map level")
+
+
+func _expect_observe_left_click_actor_focus(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	var trader_node: Node3D = game_root.find_child("Actor_trader_lao_wang_2", true, false) as Node3D
+	if trader_node == null:
+		errors.append("observe left click focus smoke should find trader actor node")
+		return
+	game_root.focus_actor(1)
+	game_root.set_observe_mode(true)
+	await process_frame
+
+	var before_snapshot: Dictionary = game_root.simulation.snapshot()
+	var projected_trader := camera.unproject_position(trader_node.global_position)
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = projected_trader
+	game_root.runtime_input_controller.input(click)
+	await process_frame
+
+	var focus_snapshot: Dictionary = game_root.focused_actor_snapshot()
+	if int(focus_snapshot.get("actor_id", 0)) != 2:
+		errors.append("observe mode left click should focus the clicked actor")
+	var display_name := str(focus_snapshot.get("display_name", ""))
+	if not display_name.is_empty() and not _hud_runtime_control_line(game_root).contains(display_name):
+		errors.append("HUD runtime control line should show observe left-click focused actor")
+	var after_snapshot: Dictionary = game_root.simulation.snapshot()
+	if not _dictionary_or_empty(after_snapshot.get("pending_movement", {})).is_empty():
+		errors.append("observe mode left click actor focus should not queue movement")
+	if not _dictionary_or_empty(after_snapshot.get("pending_interaction", {})).is_empty():
+		errors.append("observe mode left click actor focus should not queue interaction")
+	if int(_dictionary_or_empty(after_snapshot.get("turn_state", {})).get("round", 0)) != int(_dictionary_or_empty(before_snapshot.get("turn_state", {})).get("round", 0)):
+		errors.append("observe mode left click actor focus should not advance turns")
+
+	game_root.set_observe_mode(false)
+	game_root.focus_actor(1)
+	await process_frame
 
 
 func _expect_camera_middle_drag(errors: Array[String], game_root: Node, camera: Camera3D) -> void:

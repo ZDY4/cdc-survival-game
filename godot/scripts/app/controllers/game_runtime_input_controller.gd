@@ -195,6 +195,7 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 		var hover_result: Dictionary = update_hover_at_screen_position(mouse_event.position)
 		if _observe_mode_active():
+			_focus_observe_hover(hover_result)
 			return true
 		if _skill_targeting_active() and game_root.has_method("confirm_active_skill_target"):
 			var skill_target: Dictionary = _skill_target_from_hover(hover_result)
@@ -277,7 +278,10 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	var hover_changed := _set_hover_interaction(target_node, hit_position)
 	if hover_changed and game_root.has_method("refresh_hud"):
 		game_root.refresh_hud(game_root.current_interaction_prompt() if game_root.has_method("current_interaction_prompt") else {})
-	var interaction_hover := {"success": true, "kind": "interaction", "node": target_node}
+	var interaction_hover := last_hover_state.duplicate(true)
+	interaction_hover["success"] = true
+	interaction_hover["node"] = target_node
+	interaction_hover["position"] = hit_position
 	_preview_skill_target_from_hover(interaction_hover)
 	return interaction_hover
 
@@ -441,6 +445,16 @@ func _handle_digit_key(digit: int) -> bool:
 
 func _observe_mode_active() -> bool:
 	return game_root.has_method("is_observe_mode_enabled") and bool(game_root.is_observe_mode_enabled())
+
+
+func _focus_observe_hover(hover_result: Dictionary) -> void:
+	if str(hover_result.get("kind", "")) != "interaction":
+		return
+	var actor_id := int(hover_result.get("actor_id", 0))
+	if actor_id <= 0:
+		return
+	if game_root.has_method("focus_actor"):
+		game_root.focus_actor(actor_id)
 
 
 func _handle_hotbar_group_key(digit: int) -> bool:

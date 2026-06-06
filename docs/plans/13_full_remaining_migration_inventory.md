@@ -61,7 +61,7 @@
 - 部分迁移 `Esc` 关闭链路：已覆盖 selection、active dialogue、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；待补 quantity modal、overworld prompt 和更完整 blocker 诊断。
 - 部分迁移数字键：已恢复对话选项 `1-9` 和 hotbar `1-0` 基础入口；observe mode 下数字 hotbar 和 `Alt+1/2/3` 热栏组切换会被输入层消费但不发玩家命令，已纳入 smoke。待补菜单内数量输入与快捷动作冲突处理。
 - 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、self wait interaction、pending 取消、长按重复等待和 observe mode 下播放/暂停第一版；待补更细的长按节奏配置和 modal 冲突策略。
-- 部分迁移 `Tab`：已恢复玩家侧关注 actor 循环、observe mode 下当前楼层所有 actor focus 循环、相机跟随、actor busy 时阻止玩家控制切换和选中/提示状态清理；observe mode 下 move、interaction、hotbar、inventory item action 会统一返回 `observe_mode_blocks_player_commands`，普通 hotbar 隐藏，已由 `UIToggle` smoke 覆盖。待补 free observe 下鼠标选择 polish 和更完整诊断。
+- 部分迁移 `Tab` / free observe 选择：已恢复玩家侧关注 actor 循环、observe mode 下当前楼层所有 actor focus 循环、observe mode 左键点击 actor 只聚焦不执行玩家命令、相机跟随、actor busy 时阻止玩家控制切换和选中/提示状态清理；observe mode 下 move、interaction、hotbar、inventory item action 会统一返回 `observe_mode_blocks_player_commands`，普通 hotbar 隐藏，已由 `PlayerInteraction` / `UIToggle` smoke 覆盖。待补 free observe 鼠标选择视觉 polish 和更完整诊断。
 - 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
 - 部分迁移输入阻塞：stage/settings、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel 已阻止 gameplay 输入，`gameplay_input_blocker_name` 和 HUD blocker 诊断有第一版，interaction menu 支持点击外部关闭；待补 quantity modal、overworld prompt、tooltip 和 drag 层 blocker 细分。
 

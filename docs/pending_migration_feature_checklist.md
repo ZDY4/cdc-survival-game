@@ -319,7 +319,7 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [~] `1-0` hotbar 激活，已覆盖基础 hotbar 使用 smoke；observe mode 下数字 hotbar / `Alt+1/2/3` 会被输入层消费且不发玩家命令。待补 modal / 数量输入冲突。
 - [ ] `Enter` / `Space` 对话推进。
 - [~] `Space` 等待、结束回合、长按重复、pending 取消。已恢复单次等待、pending 取消、长按重复等待和 observe mode 播放/暂停第一版；待补更细的长按节奏配置和 modal 冲突策略。
-- [~] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。已恢复玩家侧 focus actor 循环、observe mode 下当前楼层所有 actor focus 循环、相机跟随、busy actor 拒绝玩家控制切换和旧 selection/menu/prompt 清理；observe mode 下 player command 会统一拒绝。待补鼠标选择 polish 和更完整诊断。
+- [~] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。已恢复玩家侧 focus actor 循环、observe mode 下当前楼层所有 actor focus 循环、observe mode 左键点击 actor 只聚焦不执行玩家命令、相机跟随、busy actor 拒绝玩家控制切换和旧 selection/menu/prompt 清理；observe mode 下 player command 会统一拒绝。待补鼠标选择视觉 polish 和更完整诊断。
 - [x] `V` overlay mode。
 - [x] `/` 控制提示展开折叠。
 - [ ] `[` / `]` info panel tab 切换。

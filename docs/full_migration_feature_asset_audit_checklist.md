@@ -136,7 +136,7 @@
 - [~] 等待/结束回合：Space、self wait、AP 消耗、敌方回合、自动回到玩家回合。
 - [~] 右键菜单：目标菜单、地面菜单、自身菜单、禁用原因、点击外部关闭。
 - [~] 面板快捷键：背包、角色、地图、任务、技能、制作、设置、Esc 关闭链。
-- [ ] 长按等待、连续推进、自动 tick、free observe 的冲突处理。
+- [~] 长按等待、连续推进、自动 tick、free observe 的冲突处理：长按等待、自动 tick、observe 播放/速度、玩家命令隔离和左键 actor 聚焦已有第一版；待补完整 modal / debug / tooltip / drag 冲突矩阵。
 - [ ] 输入 blocker 完整矩阵：dialogue、trade、container、quantity、discard、context menu、tooltip、drag、console、debug。
 - [ ] 鼠标 hover 光标：可走、不可走、可攻击、可对话、可拾取、可打开、可切图、不可见。
 - [ ] 多层地图操作：观察楼层、当前 actor 楼层、picking 楼层、跨层路径、楼层显隐。

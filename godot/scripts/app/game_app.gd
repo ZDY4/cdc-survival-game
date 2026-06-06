@@ -497,6 +497,30 @@ func cycle_focused_actor() -> Dictionary:
 	return {"success": true, "actor": next_actor.duplicate(true), "actor_id": focused_actor_id}
 
 
+func focus_actor(actor_id: int) -> Dictionary:
+	if panel_controller != null and panel_controller.gameplay_input_blocked():
+		return {"success": false, "reason": "ui_blocked", "actor_id": focused_actor_id}
+	var candidates: Array[Dictionary] = _focus_actor_candidates()
+	for candidate in candidates:
+		if int(candidate.get("actor_id", 0)) != actor_id:
+			continue
+		var busy_state: Dictionary = _focused_actor_busy_state(candidate)
+		if not observe_mode_enabled and not busy_state.is_empty():
+			return {
+				"success": false,
+				"reason": "actor_busy",
+				"actor_id": actor_id,
+				"busy": busy_state,
+			}
+		focused_actor_id = actor_id
+		_clear_focus_switch_ui_state()
+		if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
+			runtime_input_controller.focus_current_actor()
+		refresh_hud(current_interaction_prompt())
+		return {"success": true, "actor": candidate.duplicate(true), "actor_id": focused_actor_id}
+	return {"success": false, "reason": "focus_actor_missing", "actor_id": actor_id}
+
+
 func focused_actor_snapshot() -> Dictionary:
 	var actor: Dictionary = _focused_actor_data()
 	if actor.is_empty():

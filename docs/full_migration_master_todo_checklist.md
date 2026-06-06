@@ -389,7 +389,7 @@
 - [ ] 多楼层聚焦和楼层切换。
 - [ ] 鼠标 hover 光标和地面投影随相机角度、zoom、楼层正确对齐。
 - [ ] 建筑/墙遮挡玩家或目标时淡出、outline 或 nameplate 保留。
-- [ ] observe / free camera 模式和 debug camera 状态。
+- [~] observe / free camera 模式和 debug camera 状态：observe mode 入口、HUD dock、播放/速度、玩家命令隔离、Tab/左键 actor 聚焦已有第一版；待补 debug camera 状态、完整冲突矩阵和视觉 polish。
 
 参考：`controls/camera.rs`、`geometry/camera.rs`、`render/camera.rs`、`render/occlusion.rs`
 落点：`godot/scripts/app/controllers/game_runtime_input_controller.gd`、`godot/scripts/world`
