@@ -54,7 +54,6 @@ func _write_legacy_settings_smoke_file() -> void:
 		"window_mode": "borderless",
 		"resolution": "1600x900",
 		"vsync": false,
-		"ui_scale": 125,
 		"keybinding_profile": "default",
 	}, "\t"))
 	file.close()
@@ -1314,7 +1313,6 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 	_select_option(game_root, "WindowModeOption", "fullscreen")
 	_select_option(game_root, "ResolutionOption", "1920x1080")
 	_toggle_checkbox(game_root, "VSyncCheckBox", false)
-	_set_slider(game_root, "UIScaleSlider", 125)
 	_press_button(game_root, "KeybindingCycleButton")
 	await game_root.get_tree().process_frame
 	var snapshot: Dictionary = game_root.panel_controller.settings_snapshot()
@@ -1322,8 +1320,10 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 		errors.append("settings sliders should update runtime audio state: %s" % snapshot)
 	if str(snapshot.get("window_mode", "")) != "fullscreen" or str(snapshot.get("resolution", "")) != "1920x1080" or bool(snapshot.get("vsync", true)):
 		errors.append("settings display controls should update runtime display state: %s" % snapshot)
-	if int(snapshot.get("ui_scale", 0)) != 125 or str(snapshot.get("keybinding_profile", "")) != "left_handed":
-		errors.append("settings UI scale and keybinding profile should update runtime state: %s" % snapshot)
+	if snapshot.has("ui_scale") or game_root.settings_panel.find_child("UIScaleSlider", true, false) != null:
+		errors.append("settings should not expose removed UI scale state or control: %s" % snapshot)
+	if str(snapshot.get("keybinding_profile", "")) != "left_handed":
+		errors.append("settings keybinding profile should update runtime state: %s" % snapshot)
 	var persistence: Dictionary = _dictionary_or_empty(snapshot.get("persistence", {}))
 	if not bool(persistence.get("saved", false)) or not FileAccess.file_exists(str(snapshot.get("settings_path", ""))):
 		errors.append("settings changes should be saved to user settings file: %s" % snapshot)
@@ -1341,17 +1341,17 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 	var panel_keys: Dictionary = _dictionary_or_empty(keybinding.get("panel_keys", {}))
 	if str(panel_keys.get("inventory", "")) != "Q":
 		errors.append("left handed keybinding should expose remapped panel keys: %s" % applied)
-	var ui_scale: Dictionary = _dictionary_or_empty(applied.get("ui_scale", {}))
-	if not bool(ui_scale.get("applied", false)) or not is_equal_approx(float(ui_scale.get("factor", 0.0)), 1.25):
-		errors.append("settings UI scale should apply to runtime UI roots: %s" % applied)
-	_assert_ui_scale_factor(errors, game_root, 1.25, "changed settings")
+	if applied.has("ui_scale"):
+		errors.append("settings applied payload should not expose removed UI scale: %s" % applied)
 	var display: Dictionary = _dictionary_or_empty(applied.get("display", {}))
 	if not bool(display.get("applied", false)) and str(display.get("reason", "")) != "headless":
 		errors.append("settings display changes should apply or be explicitly skipped in headless: %s" % applied)
 	if not _settings_line(game_root, "AudioLine").contains("主音量 65%") or not _settings_line(game_root, "AudioLine").contains("音乐 40%") or not _settings_line(game_root, "AudioLine").contains("音效 55%"):
 		errors.append("settings audio summary should reflect control changes")
-	if not _settings_line(game_root, "DisplayLine").contains("全屏") or not _settings_line(game_root, "DisplayLine").contains("1920x1080") or not _settings_line(game_root, "DisplayLine").contains("VSync 关闭") or not _settings_line(game_root, "DisplayLine").contains("UI 125%"):
+	if not _settings_line(game_root, "DisplayLine").contains("全屏") or not _settings_line(game_root, "DisplayLine").contains("1920x1080") or not _settings_line(game_root, "DisplayLine").contains("VSync 关闭"):
 		errors.append("settings display summary should reflect control changes")
+	if _settings_line(game_root, "DisplayLine").contains("UI "):
+		errors.append("settings display summary should not include removed UI scale")
 	if not _settings_line(game_root, "ControlsLine").contains("左手"):
 		errors.append("settings keybinding summary should reflect profile cycle")
 	if not _settings_line(game_root, "SettingsFeedbackLine").contains("设置已保存"):
@@ -1452,6 +1452,8 @@ func _assert_settings_file_envelope(errors: Array[String], expected_master: int,
 	var settings: Dictionary = _dictionary_or_empty(envelope.get("settings", {}))
 	if int(settings.get("master_volume", 0)) != expected_master or str(settings.get("window_mode", "")) != expected_window or str(settings.get("keybinding_profile", "")) != expected_profile:
 		errors.append("settings file envelope should store current settings: %s" % envelope)
+	if settings.has("ui_scale"):
+		errors.append("settings file envelope should not store removed UI scale: %s" % envelope)
 
 
 func _assert_left_handed_keybinding(errors: Array[String], game_root: Node) -> void:
@@ -1476,24 +1478,11 @@ func _assert_settings_reset_defaults(errors: Array[String], game_root: Node) -> 
 		errors.append("reset settings should restore default audio: %s" % snapshot)
 	if str(snapshot.get("window_mode", "")) != "windowed" or str(snapshot.get("resolution", "")) != "1280x720" or not bool(snapshot.get("vsync", false)):
 		errors.append("reset settings should restore default display: %s" % snapshot)
-	if int(snapshot.get("ui_scale", 0)) != 100 or str(snapshot.get("keybinding_profile", "")) != "default":
-		errors.append("reset settings should restore default UI/control state: %s" % snapshot)
-	_assert_ui_scale_factor(errors, game_root, 1.0, "reset settings")
+	if snapshot.has("ui_scale") or str(snapshot.get("keybinding_profile", "")) != "default":
+		errors.append("reset settings should restore default control state without UI scale: %s" % snapshot)
 	if not _settings_line(game_root, "AudioLine").contains("主音量 100%") or not _settings_line(game_root, "DisplayLine").contains("窗口模式") or not _settings_line(game_root, "ControlsLine").contains("默认"):
 		errors.append("reset settings should refresh visible summary lines")
 	_assert_settings_file_envelope(errors, 100, "windowed", "default")
-
-
-func _assert_ui_scale_factor(errors: Array[String], game_root: Node, expected: float, context: String) -> void:
-	for root in [game_root.hud, game_root.inventory_panel, game_root.settings_panel]:
-		var control := root as Control
-		if control == null:
-			errors.append("%s: missing UI root for scale assertion" % context)
-			continue
-		if not is_equal_approx(control.scale.x, expected) or not is_equal_approx(control.scale.y, expected):
-			errors.append("%s: UI root %s should have scale %.2f, got %s" % [context, control.name, expected, control.scale])
-		if not is_equal_approx(float(control.get_meta("cdc_ui_scale_factor", 0.0)), expected):
-			errors.append("%s: UI root %s should expose scale metadata %.2f" % [context, control.name, expected])
 
 
 func _assert_info_panel(errors: Array[String], game_root: Node, expected_id: String, expected_title: String, expected_line: String, context: String) -> void:

@@ -781,7 +781,7 @@ Godot 落点：`godot/assets/**`、`godot/scripts/data/**`、`godot/scripts/worl
 - [~] main menu scene。
 - [ ] 新游戏、继续、存档槽、删除、覆盖确认。
 - [ ] 主菜单不加载 map / actors runtime。
-- [ ] settings panel：音量、窗口模式、分辨率、VSync、UI scale、按键绑定。
+- [ ] settings panel：音量、窗口模式、分辨率、VSync、按键绑定。
 - [ ] 设置保存和加载。
 - [ ] 运行时错误提示：内容加载失败、地图缺失、资产缺失、Godot 版本错误、存档 schema 不兼容。
 

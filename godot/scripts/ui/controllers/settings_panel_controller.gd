@@ -10,7 +10,6 @@ var settings_state: Dictionary = {
 	"window_mode": "windowed",
 	"resolution": "1280x720",
 	"vsync": true,
-	"ui_scale": 100,
 	"keybinding_profile": "default",
 }
 var last_persistence_result: Dictionary = {}
@@ -82,10 +81,6 @@ func _build_layout() -> void:
 		settings_state["vsync"] = enabled
 		_commit_settings_update()
 	))
-	box.add_child(_settings_slider_row("UIScale", "UI", int(settings_state.get("ui_scale", 100)), func(value: float) -> void:
-		settings_state["ui_scale"] = int(roundf(value))
-		_commit_settings_update()
-	, 75, 150, 5))
 	box.add_child(_settings_keybinding_row())
 	box.add_child(_settings_label("ControlsLine", ""))
 	box.add_child(_settings_reset_row())
@@ -206,11 +201,10 @@ func _refresh_settings_panel_texts() -> void:
 		]
 	var display := find_child("DisplayLine", true, false) as Label
 	if display != null:
-		display.text = "显示: %s | %s | VSync %s | UI %d%%" % [
+		display.text = "显示: %s | %s | VSync %s" % [
 			_settings_option_label(_settings_window_modes(), str(settings_state.get("window_mode", "windowed"))),
 			str(settings_state.get("resolution", "1280x720")),
 			"开启" if bool(settings_state.get("vsync", true)) else "关闭",
-			int(settings_state.get("ui_scale", 100)),
 		]
 	var controls := find_child("ControlsLine", true, false) as Label
 	if controls != null:
@@ -225,7 +219,6 @@ func _refresh_settings_panel_texts() -> void:
 	_sync_slider_tooltip("MasterVolume", "主音量")
 	_sync_slider_tooltip("MusicVolume", "音乐")
 	_sync_slider_tooltip("SfxVolume", "音效")
-	_sync_slider_tooltip("UIScale", "UI")
 
 
 func _commit_settings_update() -> void:
@@ -308,12 +301,10 @@ func _save_settings() -> void:
 func _apply_settings() -> void:
 	var audio: Dictionary = _apply_audio_settings()
 	var display: Dictionary = _apply_display_settings()
-	var ui_scale: Dictionary = _apply_ui_scale_settings()
 	var keybinding: Dictionary = _apply_keybinding_settings()
 	last_apply_result = {
 		"audio": audio,
 		"display": display,
-		"ui_scale": ui_scale,
 		"keybinding": keybinding,
 	}
 	_notify_settings_applied()
@@ -378,17 +369,6 @@ func _apply_keybinding_settings() -> Dictionary:
 	}
 
 
-func _apply_ui_scale_settings() -> Dictionary:
-	var percent := clampi(int(settings_state.get("ui_scale", 100)), 75, 150)
-	var factor := float(percent) / 100.0
-	ProjectSettings.set_setting("cdc/ui_scale_factor", factor)
-	return {
-		"applied": true,
-		"percent": percent,
-		"factor": factor,
-	}
-
-
 func _notify_settings_applied() -> void:
 	var target := get_parent()
 	if target != null and target.has_method("settings_applied"):
@@ -437,7 +417,6 @@ func _normalize_settings_state() -> void:
 	settings_state["master_volume"] = clampi(int(settings_state.get("master_volume", 100)), 0, 100)
 	settings_state["music_volume"] = clampi(int(settings_state.get("music_volume", 100)), 0, 100)
 	settings_state["sfx_volume"] = clampi(int(settings_state.get("sfx_volume", 100)), 0, 100)
-	settings_state["ui_scale"] = clampi(int(settings_state.get("ui_scale", 100)), 75, 150)
 	settings_state["window_mode"] = _known_option_id(_settings_window_modes(), str(settings_state.get("window_mode", "windowed")), "windowed")
 	settings_state["resolution"] = _known_option_id(_settings_resolutions(), str(settings_state.get("resolution", "1280x720")), "1280x720")
 	settings_state["keybinding_profile"] = _known_option_id(_settings_keybinding_profiles(), str(settings_state.get("keybinding_profile", "default")), "default")
@@ -452,7 +431,6 @@ func _default_settings_state() -> Dictionary:
 		"window_mode": "windowed",
 		"resolution": "1280x720",
 		"vsync": true,
-		"ui_scale": 100,
 		"keybinding_profile": "default",
 	}
 
@@ -486,7 +464,6 @@ func _sync_settings_controls() -> void:
 	_sync_slider_value("MasterVolumeSlider", int(settings_state.get("master_volume", 100)))
 	_sync_slider_value("MusicVolumeSlider", int(settings_state.get("music_volume", 100)))
 	_sync_slider_value("SfxVolumeSlider", int(settings_state.get("sfx_volume", 100)))
-	_sync_slider_value("UIScaleSlider", int(settings_state.get("ui_scale", 100)))
 	_sync_option_value("WindowModeOption", str(settings_state.get("window_mode", "windowed")))
 	_sync_option_value("ResolutionOption", str(settings_state.get("resolution", "1280x720")))
 	var checkbox := find_child("VSyncCheckBox", true, false) as CheckBox

@@ -945,8 +945,7 @@ func _drag_hover_target_snapshot(control: Control) -> Dictionary:
 
 
 func settings_applied(_snapshot: Dictionary = {}) -> void:
-	if panel_controller != null and panel_controller.has_method("apply_ui_scale"):
-		panel_controller.apply_ui_scale()
+	pass
 
 
 func current_map_level() -> int:

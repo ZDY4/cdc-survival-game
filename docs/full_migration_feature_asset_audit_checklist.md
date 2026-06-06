@@ -246,7 +246,7 @@
 - [~] 游戏面板：HUD、Inventory、Container、Trade、Journal、Dialogue、Skills、Crafting、Character、Map。
 - [~] Agent 脚本：content、game smoke、map visual review。
 - [ ] 主菜单：新游戏、继续、存档槽、设置、退出、错误提示。
-- [ ] Settings：音量、窗口、分辨率、VSync、UI scale、键位、保存加载。
+- [ ] Settings：音量、窗口、分辨率、VSync、键位、保存加载。
 - [ ] Tooltip/context menu/drag preview/quantity/discard/trade confirm/overworld prompt。
 - [ ] Debug console：开关、history、autocomplete、commands、结果、错误。
 - [ ] Info panels：overview、selection、actor、world、interaction、turn、events、AI、performance。
