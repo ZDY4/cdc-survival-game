@@ -255,6 +255,23 @@ func blocking_modal_name() -> String:
 	return ""
 
 
+func blocking_modal_snapshot() -> Dictionary:
+	if not has_blocking_modal():
+		return {}
+	var skill_id := str(_pending_learn_skill.get("skill_id", ""))
+	return {
+		"id": "skill_learn_confirm",
+		"name": "modal:skill_learn_confirm",
+		"kind": "confirm",
+		"owner_panel": "skills",
+		"blocks_gameplay": true,
+		"mouse_blocks_world": true,
+		"skill_id": skill_id,
+		"skill_name": str(_pending_learn_skill.get("name", skill_id)),
+		"next_level": int(_pending_learn_skill.get("level", 0)) + 1,
+	}
+
+
 func close_blocking_modal() -> Dictionary:
 	if not has_blocking_modal():
 		return {"success": false, "reason": "modal_inactive"}

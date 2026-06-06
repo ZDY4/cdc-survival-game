@@ -584,6 +584,10 @@ func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
 	if not blocker.is_empty():
 		var kind := str(blocker_snapshot.get("kind", ""))
 		parts.append("Blocker %s%s" % [blocker, " (%s)" % kind if not kind.is_empty() else ""])
+	var modal_stack: Dictionary = _dictionary_or_empty(runtime_control.get("modal_stack", {}))
+	if bool(modal_stack.get("active", false)):
+		var top_modal: Dictionary = _dictionary_or_empty(modal_stack.get("top", {}))
+		parts.append("Modal %s/%d" % [str(top_modal.get("id", "")), int(modal_stack.get("count", 0))])
 	var level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
 	if not level.is_empty():
 		parts.append("Level %d" % int(level.get("current", 0)))
@@ -1311,6 +1315,10 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	if not ui_blocker.is_empty():
 		var kind := str(blocker_snapshot.get("kind", ""))
 		parts.append("Blocker %s%s" % [ui_blocker, " (%s)" % kind if not kind.is_empty() else ""])
+	var modal_stack: Dictionary = _dictionary_or_empty(control_data.get("modal_stack", {}))
+	if bool(modal_stack.get("active", false)):
+		var top_modal: Dictionary = _dictionary_or_empty(modal_stack.get("top", {}))
+		parts.append("Modal %s/%d" % [str(top_modal.get("id", "")), int(modal_stack.get("count", 0))])
 	var controls_hint: Dictionary = _dictionary_or_empty(control_data.get("controls_hint", {}))
 	if not controls_hint.is_empty():
 		parts.append("Help %s" % ("on" if bool(controls_hint.get("visible", false)) else "off"))

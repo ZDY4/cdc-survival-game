@@ -1219,6 +1219,9 @@ func _expect_no_blocker(errors: Array[String], game_root: Node, context: String)
 	var runtime_blocker: Dictionary = _dictionary_or_empty(runtime.get("ui_blocker_snapshot", {}))
 	if bool(runtime_blocker.get("blocked", true)) or not str(runtime_blocker.get("name", "")).is_empty():
 		errors.append("%s: runtime no blocker snapshot should be inactive: %s" % [context, runtime_blocker])
+	var modal_stack: Dictionary = _dictionary_or_empty(runtime.get("modal_stack", {}))
+	if bool(modal_stack.get("active", true)) or int(modal_stack.get("count", 1)) != 0:
+		errors.append("%s: runtime modal stack should be inactive: %s" % [context, modal_stack])
 
 
 func _expected_blocker_kind(blocker_name: String) -> String:

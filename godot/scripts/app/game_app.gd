@@ -330,6 +330,12 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 	}
 
 
+func modal_stack_snapshot() -> Dictionary:
+	if panel_controller != null and panel_controller.has_method("modal_stack_snapshot"):
+		return _dictionary_or_empty(panel_controller.call("modal_stack_snapshot"))
+	return {"active": false, "count": 0, "top": {}, "stack": []}
+
+
 func handle_trade_shortcut(event: InputEventKey) -> bool:
 	if panel_controller == null:
 		return false
@@ -587,6 +593,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
 		"ui_blocker_snapshot": gameplay_input_blocker_snapshot(),
+		"modal_stack": modal_stack_snapshot(),
 		"controls_hint": controls_hint_snapshot(),
 		"debug_console": debug_console_snapshot(),
 		"debug_panel": debug_panel_snapshot(),

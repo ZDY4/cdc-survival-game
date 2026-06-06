@@ -460,6 +460,23 @@ func blocking_modal_name() -> String:
 	return ""
 
 
+func blocking_modal_snapshot() -> Dictionary:
+	if not has_blocking_modal():
+		return {}
+	return {
+		"id": "inventory_discard_confirm",
+		"name": "modal:inventory_discard_confirm",
+		"kind": "confirm",
+		"owner_panel": "inventory",
+		"blocks_gameplay": true,
+		"mouse_blocks_world": true,
+		"item_id": str(_pending_discard_item.get("item_id", "")),
+		"item_name": str(_pending_discard_item.get("name", _pending_discard_item.get("item_id", ""))),
+		"count": _discard_quantity_value(),
+		"available": _pending_discard_available,
+	}
+
+
 func close_blocking_modal() -> Dictionary:
 	if not has_blocking_modal():
 		return {"success": false, "reason": "modal_inactive"}

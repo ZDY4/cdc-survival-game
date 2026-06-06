@@ -386,6 +386,22 @@ func blocking_modal_name() -> String:
 	return ""
 
 
+func blocking_modal_snapshot() -> Dictionary:
+	if not has_blocking_modal():
+		return {}
+	return {
+		"id": "equipment_sell_confirm",
+		"name": "modal:equipment_sell_confirm",
+		"kind": "confirm",
+		"owner_panel": "trade",
+		"blocks_gameplay": true,
+		"mouse_blocks_world": true,
+		"source": _selected_source,
+		"item_id": _selected_item_id,
+		"count": int(_quantity_spin.value if _quantity_spin != null else 1),
+	}
+
+
 func close_blocking_modal() -> Dictionary:
 	if not has_blocking_modal():
 		return {"success": false, "reason": "modal_inactive"}

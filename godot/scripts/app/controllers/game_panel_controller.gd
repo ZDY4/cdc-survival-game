@@ -268,13 +268,15 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 		}
 	var modal_name := _blocking_modal_name()
 	if not modal_name.is_empty():
+		var modal: Dictionary = _blocking_modal_snapshot()
 		return {
 			"blocked": true,
 			"name": "modal:%s" % modal_name,
 			"kind": "modal",
 			"modal_id": modal_name,
-			"panel_id": _modal_owner_panel_id(modal_name),
-			"mouse_blocks_world": true,
+			"panel_id": str(modal.get("owner_panel", _modal_owner_panel_id(modal_name))),
+			"mouse_blocks_world": bool(modal.get("mouse_blocks_world", true)),
+			"modal": modal,
 		}
 	if any_stage_panel_open():
 		return _panel_blocker_snapshot("stage:%s" % active_stage_panel, "stage", active_stage_panel, _stage_panel(active_stage_panel))
@@ -293,6 +295,19 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 		"modal_id": "",
 		"panel_id": "",
 		"mouse_blocks_world": false,
+	}
+
+
+func modal_stack_snapshot() -> Dictionary:
+	var stack: Array[Dictionary] = []
+	var modal := _blocking_modal_snapshot()
+	if not modal.is_empty():
+		stack.append(modal)
+	return {
+		"active": not stack.is_empty(),
+		"count": stack.size(),
+		"top": stack[stack.size() - 1].duplicate(true) if not stack.is_empty() else {},
+		"stack": stack,
 	}
 
 
@@ -525,6 +540,25 @@ func _blocking_modal_name() -> String:
 		if not skills_modal.is_empty():
 			return skills_modal
 	return ""
+
+
+func _blocking_modal_snapshot() -> Dictionary:
+	for panel in [inventory_panel, trade_panel, skills_panel]:
+		if panel != null and panel.has_method("blocking_modal_snapshot"):
+			var snapshot: Dictionary = _dictionary_or_empty(panel.call("blocking_modal_snapshot"))
+			if not snapshot.is_empty():
+				return snapshot
+	var modal_name := _blocking_modal_name()
+	if modal_name.is_empty():
+		return {}
+	return {
+		"id": modal_name,
+		"name": "modal:%s" % modal_name,
+		"kind": "modal",
+		"owner_panel": _modal_owner_panel_id(modal_name),
+		"blocks_gameplay": true,
+		"mouse_blocks_world": true,
+	}
 
 
 func _panel_blocker_snapshot(name: String, kind: String, panel_id: String, panel: Control) -> Dictionary:

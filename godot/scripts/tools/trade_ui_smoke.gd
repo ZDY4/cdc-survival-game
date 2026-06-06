@@ -386,6 +386,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("equipment sell confirm should block gameplay input")
 	if str(game_root.gameplay_input_blocker_name()) != "modal:equipment_sell_confirm":
 		errors.append("equipment sell confirm blocker should be modal:equipment_sell_confirm")
+	_assert_modal_stack(errors, game_root, "equipment_sell_confirm", "trade", "equipment sell confirmation")
 	var esc_equipment_sell_result: Dictionary = game_root.close_active_ui("keyboard_escape")
 	if str(esc_equipment_sell_result.get("closed", "")) != "modal:equipment_sell_confirm":
 		errors.append("Esc should close equipment sell modal before trade panel")
@@ -602,6 +603,27 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _assert_modal_stack(errors: Array[String], game_root: Node, expected_id: String, expected_owner: String, context: String) -> void:
+	if not game_root.has_method("modal_stack_snapshot"):
+		errors.append("%s: game root should expose modal_stack_snapshot" % context)
+		return
+	var stack_snapshot: Dictionary = _dictionary_or_empty(game_root.modal_stack_snapshot())
+	if not bool(stack_snapshot.get("active", false)) or int(stack_snapshot.get("count", 0)) <= 0:
+		errors.append("%s: modal stack should be active: %s" % [context, stack_snapshot])
+		return
+	var top: Dictionary = _dictionary_or_empty(stack_snapshot.get("top", {}))
+	if str(top.get("id", "")) != expected_id:
+		errors.append("%s: modal stack top expected %s, got %s" % [context, expected_id, top])
+	if str(top.get("owner_panel", "")) != expected_owner:
+		errors.append("%s: modal stack owner expected %s, got %s" % [context, expected_owner, top])
+	if not bool(top.get("blocks_gameplay", false)) or not bool(top.get("mouse_blocks_world", false)):
+		errors.append("%s: modal stack top should block gameplay and mouse world input: %s" % [context, top])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_stack: Dictionary = _dictionary_or_empty(runtime.get("modal_stack", {}))
+	if str(_dictionary_or_empty(runtime_stack.get("top", {})).get("id", "")) != expected_id:
+		errors.append("%s: runtime modal stack should expose top %s: %s" % [context, expected_id, runtime_stack])
 
 
 func _press_close_button(game_root: Node) -> void:
