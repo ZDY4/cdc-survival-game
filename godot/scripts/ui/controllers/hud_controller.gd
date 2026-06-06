@@ -588,6 +588,12 @@ func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
 	if bool(modal_stack.get("active", false)):
 		var top_modal: Dictionary = _dictionary_or_empty(modal_stack.get("top", {}))
 		parts.append("Modal %s/%d" % [str(top_modal.get("id", "")), int(modal_stack.get("count", 0))])
+	var menu_state: Dictionary = _dictionary_or_empty(runtime_control.get("menu_state", {}))
+	if not menu_state.is_empty():
+		parts.append("Menu %s S:%s" % [
+			"settings" if bool(menu_state.get("settings_open", false)) else "stage",
+			str(menu_state.get("active_stage_panel", "-")) if not str(menu_state.get("active_stage_panel", "")).is_empty() else "-",
+		])
 	var level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
 	if not level.is_empty():
 		parts.append("Level %d" % int(level.get("current", 0)))
@@ -1319,6 +1325,13 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	if bool(modal_stack.get("active", false)):
 		var top_modal: Dictionary = _dictionary_or_empty(modal_stack.get("top", {}))
 		parts.append("Modal %s/%d" % [str(top_modal.get("id", "")), int(modal_stack.get("count", 0))])
+	var menu_state: Dictionary = _dictionary_or_empty(control_data.get("menu_state", {}))
+	if not menu_state.is_empty():
+		var stage_id := str(menu_state.get("active_stage_panel", ""))
+		parts.append("Menu %s S:%s" % [
+			"settings" if bool(menu_state.get("settings_open", false)) else "stage",
+			stage_id if not stage_id.is_empty() else "-",
+		])
 	var controls_hint: Dictionary = _dictionary_or_empty(control_data.get("controls_hint", {}))
 	if not controls_hint.is_empty():
 		parts.append("Help %s" % ("on" if bool(controls_hint.get("visible", false)) else "off"))

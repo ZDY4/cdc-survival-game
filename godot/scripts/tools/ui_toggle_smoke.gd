@@ -101,6 +101,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("enabled auto tick should advance runtime events")
 	_press_key(game_root, KEY_I)
 	_expect_stage_open(errors, game_root, "inventory", "inventory should open before auto tick blocker check")
+	_assert_menu_state(errors, game_root, "inventory", false, true, "inventory menu state")
 	_expect_blocker(errors, game_root, "stage:inventory", "open inventory blocker")
 	_assert_runtime_control_line(errors, game_root, "Blocker stage:inventory", "inventory blocker HUD")
 	var blocked_events: int = game_root.simulation.snapshot().get("events", []).size()
@@ -109,6 +110,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("open stage panel should block auto tick runtime events")
 	_press_key(game_root, KEY_ESCAPE)
 	_expect_stage_closed(errors, game_root, "Esc should close inventory after auto tick blocker check")
+	_assert_menu_state(errors, game_root, "", false, false, "inventory closed menu state")
 	_expect_no_blocker(errors, game_root, "inventory closed blocker")
 	_press_key(game_root, KEY_A)
 	if bool(game_root.is_auto_tick_enabled()):
@@ -243,6 +245,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(game_root.gameplay_input_blocked_by_ui()):
 		errors.append("open settings should block gameplay input")
 	_expect_blocker(errors, game_root, "settings", "open settings blocker")
+	_assert_menu_state(errors, game_root, "", true, true, "settings menu state")
 	await _exercise_settings_panel(errors, game_root)
 	_press_key(game_root, KEY_ESCAPE)
 	if bool(game_root.is_settings_open()) or game_root.settings_panel.visible:
@@ -759,6 +762,28 @@ func _expect_stage_closed(errors: Array[String], game_root: Node, context: Strin
 		var panel: Control = _panel(game_root, id)
 		if panel != null and panel.visible:
 			errors.append("%s: panel %s should be hidden" % [context, id])
+
+
+func _assert_menu_state(errors: Array[String], game_root: Node, expected_stage: String, expected_settings: bool, expected_blocked: bool, context: String) -> void:
+	if not game_root.has_method("menu_state_snapshot"):
+		errors.append("%s: game root should expose menu_state_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot())
+	if str(snapshot.get("active_stage_panel", "")) != expected_stage:
+		errors.append("%s: menu active stage expected %s, got %s" % [context, expected_stage, snapshot])
+	if bool(snapshot.get("settings_open", false)) != expected_settings:
+		errors.append("%s: menu settings expected %s, got %s" % [context, str(expected_settings), snapshot])
+	if bool(snapshot.get("gameplay_blocked", false)) != expected_blocked:
+		errors.append("%s: menu gameplay_blocked expected %s, got %s" % [context, str(expected_blocked), snapshot])
+	var stage_panels: Array = _array_or_empty(snapshot.get("stage_panels", []))
+	if stage_panels.size() != _stage_panel_ids().size():
+		errors.append("%s: menu snapshot should expose all stage panels: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
+	if str(runtime_menu.get("active_stage_panel", "")) != expected_stage or bool(runtime_menu.get("settings_open", false)) != expected_settings:
+		errors.append("%s: runtime menu state should match app menu state: %s" % [context, runtime_menu])
+	if expected_blocked and _array_or_empty(snapshot.get("close_priority", [])).is_empty():
+		errors.append("%s: blocked menu state should expose close priority: %s" % [context, snapshot])
 
 
 func _assert_debug_overlay_line(errors: Array[String], game_root: Node, expected: String, context: String) -> void:

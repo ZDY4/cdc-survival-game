@@ -76,7 +76,7 @@
 
 ### 3.3 UI 状态机
 
-- 待迁移 `UiMenuState` 等价物：active stage panel、settings panel、blocking gameplay input、close stage panels、toggle panel。
+- 部分迁移 `UiMenuState` 等价物：active stage panel、settings panel、blocking gameplay input、close stage panels 和 toggle panel 已有运行逻辑；`menu_state_snapshot()` / `runtime_control.menu_state` 第一版会暴露 active stage、settings、stage panel 列表、open panels、gameplay blocker 和 close priority，并由 `UIToggle` smoke 覆盖。待补 context menu 与 modal/stage/settings 的完整优先级矩阵。
 - 部分迁移 `UiModalState` 等价物：trade equipment sell confirm modal、inventory discard confirm modal 和 skill learn confirm modal 已接入 gameplay blocker 与 Esc 优先关闭；`modal_stack_snapshot()` / `runtime_control.modal_stack` 第一版会暴露 active/count/top/stack、owner panel、业务目标和 mouse/gameplay blocker 诊断，并由 `InventoryUI` / `TradeUI` / `SkillsUI` / `UIToggle` smoke 覆盖；待补 item quantity、container modal 和 overworld prompt。
 - 待迁移 `UiContextMenuState`：库存物品、容器物品、装备槽、技能条目的上下文菜单目标和动作。
 - 待迁移 `UiHoverTooltipState`：库存、技能、场景切换、装备槽、热栏、按钮的 tooltip。

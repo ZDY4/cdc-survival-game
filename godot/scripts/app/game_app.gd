@@ -336,6 +336,23 @@ func modal_stack_snapshot() -> Dictionary:
 	return {"active": false, "count": 0, "top": {}, "stack": []}
 
 
+func menu_state_snapshot() -> Dictionary:
+	if panel_controller != null and panel_controller.has_method("menu_state_snapshot"):
+		return _dictionary_or_empty(panel_controller.call("menu_state_snapshot"))
+	return {
+		"active_stage_panel": "",
+		"stage_panel_open": false,
+		"stage_panels": [],
+		"stage_panel_ids": [],
+		"settings_open": false,
+		"open_panels": [],
+		"open_panel_count": 0,
+		"gameplay_blocked": false,
+		"blocker": {},
+		"close_priority": ["settings"],
+	}
+
+
 func handle_trade_shortcut(event: InputEventKey) -> bool:
 	if panel_controller == null:
 		return false
@@ -594,6 +611,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"ui_blocker": gameplay_input_blocker_name(),
 		"ui_blocker_snapshot": gameplay_input_blocker_snapshot(),
 		"modal_stack": modal_stack_snapshot(),
+		"menu_state": menu_state_snapshot(),
 		"controls_hint": controls_hint_snapshot(),
 		"debug_console": debug_console_snapshot(),
 		"debug_panel": debug_panel_snapshot(),

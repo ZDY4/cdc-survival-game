@@ -255,6 +255,43 @@ func gameplay_input_blocked() -> bool:
 	return _blocking_modal_open() or any_stage_panel_open() or settings_open or _panel_visible(trade_panel) or _panel_visible(container_panel) or _panel_visible(dialogue_panel)
 
 
+func menu_state_snapshot() -> Dictionary:
+	var stage_ids := _stage_panel_ids()
+	var stage_states: Array[Dictionary] = []
+	for panel_id in stage_ids:
+		var panel := _stage_panel(panel_id)
+		stage_states.append({
+			"id": panel_id,
+			"visible": panel != null and panel.visible,
+			"active": panel_id == active_stage_panel,
+			"mouse_blocks_world": panel != null and panel.mouse_filter == Control.MOUSE_FILTER_STOP,
+		})
+	var open_panels: Array[String] = []
+	if not active_stage_panel.is_empty():
+		open_panels.append("stage:%s" % active_stage_panel)
+	if settings_open:
+		open_panels.append("settings")
+	if _panel_visible(dialogue_panel):
+		open_panels.append("dialogue")
+	if _panel_visible(trade_panel):
+		open_panels.append("trade")
+	if _panel_visible(container_panel):
+		open_panels.append("container")
+	var blocker := gameplay_input_blocker_snapshot()
+	return {
+		"active_stage_panel": active_stage_panel,
+		"stage_panel_open": any_stage_panel_open(),
+		"stage_panels": stage_states,
+		"stage_panel_ids": stage_ids,
+		"settings_open": settings_open,
+		"open_panels": open_panels,
+		"open_panel_count": open_panels.size(),
+		"gameplay_blocked": gameplay_input_blocked(),
+		"blocker": blocker,
+		"close_priority": _menu_close_priority(),
+	}
+
+
 func gameplay_input_blocker_snapshot() -> Dictionary:
 	var name := gameplay_input_blocker_name()
 	if name.is_empty():
@@ -559,6 +596,25 @@ func _blocking_modal_snapshot() -> Dictionary:
 		"blocks_gameplay": true,
 		"mouse_blocks_world": true,
 	}
+
+
+func _menu_close_priority() -> Array[String]:
+	var priority: Array[String] = []
+	if _blocking_modal_open():
+		priority.append("modal:%s" % _blocking_modal_name())
+	if any_stage_panel_open():
+		priority.append("stage:%s" % active_stage_panel)
+	if settings_open:
+		priority.append("settings")
+	if _panel_visible(trade_panel):
+		priority.append("trade")
+	if _panel_visible(container_panel):
+		priority.append("container")
+	if _panel_visible(dialogue_panel):
+		priority.append("dialogue")
+	if priority.is_empty():
+		priority.append("settings")
+	return priority
 
 
 func _panel_blocker_snapshot(name: String, kind: String, panel_id: String, panel: Control) -> Dictionary:
