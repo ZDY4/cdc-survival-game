@@ -72,6 +72,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("selected consumable should enable use button")
 	if not _open_inventory_context_menu(game_root, "绷带"):
 		errors.append("should open context menu for bandage")
+	else:
+		_assert_inventory_context_menu(errors, game_root, "1006", "bandage context menu")
+	if not _open_inventory_context_menu(game_root, "绷带"):
+		errors.append("should reopen context menu for bandage")
 	elif _context_action_disabled(game_root, 1):
 		errors.append("context menu should enable use for consumable")
 	else:
@@ -852,6 +856,37 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _assert_inventory_context_menu(errors: Array[String], game_root: Node, expected_item_id: String, context: String) -> void:
+	if not game_root.has_method("context_menu_snapshot"):
+		errors.append("%s: game root should expose context_menu_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.context_menu_snapshot())
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: context menu snapshot should be active: %s" % [context, snapshot])
+		return
+	var top: Dictionary = _dictionary_or_empty(snapshot.get("top", {}))
+	if str(top.get("id", "")) != "inventory_context_menu" or str(top.get("kind", "")) != "inventory_item":
+		errors.append("%s: expected inventory context top, got %s" % [context, top])
+	if str(top.get("item_id", "")) != expected_item_id:
+		errors.append("%s: context menu item expected %s, got %s" % [context, expected_item_id, top])
+	if int(top.get("option_count", 0)) < 8:
+		errors.append("%s: inventory context menu should expose action options: %s" % [context, top])
+	var options: Array = _array_or_empty(top.get("options", []))
+	var split_seen := false
+	for option in options:
+		var option_data: Dictionary = _dictionary_or_empty(option)
+		if int(option_data.get("id", -1)) == 8:
+			split_seen = true
+			if not bool(option_data.get("disabled", false)):
+				errors.append("%s: split action should remain disabled until stack model migration: %s" % [context, option_data])
+	if not split_seen:
+		errors.append("%s: inventory context snapshot should include split action: %s" % [context, top])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_context: Dictionary = _dictionary_or_empty(runtime.get("context_menu", {}))
+	if str(_dictionary_or_empty(runtime_context.get("top", {})).get("item_id", "")) != expected_item_id:
+		errors.append("%s: runtime context menu should expose inventory item %s: %s" % [context, expected_item_id, runtime_context])
 
 
 func _assert_modal_stack(errors: Array[String], game_root: Node, expected_id: String, expected_owner: String, context: String) -> void:

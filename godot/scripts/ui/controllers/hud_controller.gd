@@ -32,6 +32,7 @@ var controls_hint_visible := false
 var console_visible := false
 var debug_panel_visible := false
 var debug_panel_latest_snapshot: Dictionary = {}
+var interaction_menu_snapshot_data: Dictionary = {}
 var console_history: Array[String] = []
 var console_command_history: Array[String] = []
 var console_history_index := -1
@@ -305,10 +306,12 @@ func _record_console_command(command_text: String) -> void:
 func show_interaction_menu(screen_position: Vector2, prompt: Dictionary) -> void:
 	if _interaction_menu == null:
 		_build_interaction_menu()
-	_apply_interaction_menu(_prompt_summary_for_menu(prompt))
+	var menu_prompt := _prompt_summary_for_menu(prompt)
+	_apply_interaction_menu(menu_prompt)
 	_interaction_menu.visible = bool(prompt.get("ok", prompt.get("has_target", false)))
 	_interaction_menu.mouse_filter = Control.MOUSE_FILTER_STOP if _interaction_menu.visible else Control.MOUSE_FILTER_IGNORE
 	_interaction_menu.position = _menu_position(screen_position)
+	interaction_menu_snapshot_data = _interaction_menu_snapshot_from_prompt(menu_prompt, _interaction_menu.visible, _interaction_menu.position)
 
 
 func hide_interaction_menu() -> void:
@@ -316,10 +319,29 @@ func hide_interaction_menu() -> void:
 		return
 	_interaction_menu.visible = false
 	_interaction_menu.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	interaction_menu_snapshot_data = {}
 
 
 func is_interaction_menu_open() -> bool:
 	return _interaction_menu != null and _interaction_menu.visible
+
+
+func interaction_menu_snapshot() -> Dictionary:
+	if _interaction_menu == null or not _interaction_menu.visible:
+		return {}
+	var snapshot := interaction_menu_snapshot_data.duplicate(true)
+	if snapshot.is_empty():
+		snapshot = {
+			"id": "interaction_menu",
+			"name": "interaction_menu",
+			"kind": "interaction",
+			"owner_panel": "hud",
+		}
+	snapshot["active"] = true
+	snapshot["visible"] = true
+	snapshot["mouse_blocks_world"] = _interaction_menu.mouse_filter == Control.MOUSE_FILTER_STOP
+	snapshot["position"] = {"x": _interaction_menu.position.x, "y": _interaction_menu.position.y}
+	return snapshot
 
 
 func _line(node_name: String) -> Label:
@@ -594,6 +616,10 @@ func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
 			"settings" if bool(menu_state.get("settings_open", false)) else "stage",
 			str(menu_state.get("active_stage_panel", "-")) if not str(menu_state.get("active_stage_panel", "")).is_empty() else "-",
 		])
+	var context_menu: Dictionary = _dictionary_or_empty(runtime_control.get("context_menu", {}))
+	if bool(context_menu.get("active", false)):
+		var top_context: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
+		parts.append("Context %s/%d" % [str(top_context.get("id", "")), int(context_menu.get("count", 0))])
 	var level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
 	if not level.is_empty():
 		parts.append("Level %d" % int(level.get("current", 0)))
@@ -706,6 +732,46 @@ func _interaction_menu_summary(interaction: Dictionary) -> String:
 		enabled_count,
 		disabled_count,
 	]
+
+
+func _interaction_menu_snapshot_from_prompt(interaction: Dictionary, visible: bool, position: Vector2) -> Dictionary:
+	var options: Array = _array_or_empty(interaction.get("options", []))
+	var disabled_options: Array = _array_or_empty(interaction.get("disabled_options", []))
+	return {
+		"id": "interaction_menu",
+		"name": "interaction_menu",
+		"kind": "interaction",
+		"owner_panel": "hud",
+		"active": visible,
+		"visible": visible,
+		"mouse_blocks_world": visible,
+		"position": {"x": position.x, "y": position.y},
+		"target_id": str(interaction.get("target_id", "")),
+		"target_name": str(interaction.get("target_name", "")),
+		"target_type": str(interaction.get("target_type", "")),
+		"primary_option_id": str(interaction.get("primary_option_id", "")),
+		"option_count": options.size(),
+		"disabled_option_count": disabled_options.size(),
+		"options": _context_option_summaries(options),
+		"disabled_options": _context_option_summaries(disabled_options),
+	}
+
+
+func _context_option_summaries(options: Array) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for option in options:
+		var data: Dictionary = _dictionary_or_empty(option)
+		if data.is_empty():
+			continue
+		output.append({
+			"id": str(data.get("id", "")),
+			"kind": str(data.get("kind", "")),
+			"display_name": str(data.get("display_name", data.get("id", ""))),
+			"disabled": bool(data.get("disabled", false)),
+			"disabled_reason": str(data.get("disabled_reason", "")),
+			"ap_cost": float(data.get("ap_cost", 0.0)),
+		})
+	return output
 
 
 func _option_hover_text(option: Dictionary) -> String:
@@ -1332,6 +1398,10 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 			"settings" if bool(menu_state.get("settings_open", false)) else "stage",
 			stage_id if not stage_id.is_empty() else "-",
 		])
+	var context_menu: Dictionary = _dictionary_or_empty(control_data.get("context_menu", {}))
+	if bool(context_menu.get("active", false)):
+		var top_context: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
+		parts.append("Context %s/%d" % [str(top_context.get("id", "")), int(context_menu.get("count", 0))])
 	var controls_hint: Dictionary = _dictionary_or_empty(control_data.get("controls_hint", {}))
 	if not controls_hint.is_empty():
 		parts.append("Help %s" % ("on" if bool(controls_hint.get("visible", false)) else "off"))

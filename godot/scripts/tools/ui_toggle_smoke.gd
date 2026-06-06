@@ -505,6 +505,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		game_root.hud.show_interaction_menu(Vector2(64, 64), game_root.current_interaction_prompt())
 		if not bool(game_root.hud.is_interaction_menu_open()):
 			errors.append("interaction menu should open for selected pickup")
+		_assert_context_menu_state(errors, game_root, "interaction_menu", "interaction", "interaction menu context state")
 		var disabled_container_option := _interaction_menu_disabled_option(game_root, "open_container")
 		if disabled_container_option == null:
 			errors.append("interaction menu should show disabled container option for pickup target")
@@ -1247,6 +1248,30 @@ func _expect_no_blocker(errors: Array[String], game_root: Node, context: String)
 	var modal_stack: Dictionary = _dictionary_or_empty(runtime.get("modal_stack", {}))
 	if bool(modal_stack.get("active", true)) or int(modal_stack.get("count", 1)) != 0:
 		errors.append("%s: runtime modal stack should be inactive: %s" % [context, modal_stack])
+	var context_menu: Dictionary = _dictionary_or_empty(runtime.get("context_menu", {}))
+	if bool(context_menu.get("active", true)) or int(context_menu.get("count", 1)) != 0:
+		errors.append("%s: runtime context menu should be inactive: %s" % [context, context_menu])
+
+
+func _assert_context_menu_state(errors: Array[String], game_root: Node, expected_id: String, expected_kind: String, context: String) -> void:
+	if not game_root.has_method("context_menu_snapshot"):
+		errors.append("%s: game root should expose context_menu_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.context_menu_snapshot())
+	if not bool(snapshot.get("active", false)) or int(snapshot.get("count", 0)) <= 0:
+		errors.append("%s: context menu snapshot should be active: %s" % [context, snapshot])
+		return
+	var top: Dictionary = _dictionary_or_empty(snapshot.get("top", {}))
+	if str(top.get("id", "")) != expected_id:
+		errors.append("%s: context menu top expected %s, got %s" % [context, expected_id, top])
+	if str(top.get("kind", "")) != expected_kind:
+		errors.append("%s: context menu kind expected %s, got %s" % [context, expected_kind, top])
+	if int(top.get("option_count", 0)) <= 0:
+		errors.append("%s: context menu should expose options: %s" % [context, top])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_context: Dictionary = _dictionary_or_empty(runtime.get("context_menu", {}))
+	if str(_dictionary_or_empty(runtime_context.get("top", {})).get("id", "")) != expected_id:
+		errors.append("%s: runtime context menu should expose top %s: %s" % [context, expected_id, runtime_context])
 
 
 func _expected_blocker_kind(blocker_name: String) -> String:

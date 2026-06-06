@@ -353,6 +353,24 @@ func menu_state_snapshot() -> Dictionary:
 	}
 
 
+func context_menu_snapshot() -> Dictionary:
+	var menus: Array[Dictionary] = []
+	if hud != null and hud.has_method("interaction_menu_snapshot"):
+		var interaction_menu: Dictionary = _dictionary_or_empty(hud.call("interaction_menu_snapshot"))
+		if not interaction_menu.is_empty():
+			menus.append(interaction_menu)
+	if inventory_panel != null and inventory_panel.has_method("context_menu_snapshot"):
+		var inventory_menu: Dictionary = _dictionary_or_empty(inventory_panel.call("context_menu_snapshot"))
+		if not inventory_menu.is_empty():
+			menus.append(inventory_menu)
+	return {
+		"active": not menus.is_empty(),
+		"count": menus.size(),
+		"top": menus[menus.size() - 1].duplicate(true) if not menus.is_empty() else {},
+		"menus": menus,
+	}
+
+
 func handle_trade_shortcut(event: InputEventKey) -> bool:
 	if panel_controller == null:
 		return false
@@ -612,6 +630,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"ui_blocker_snapshot": gameplay_input_blocker_snapshot(),
 		"modal_stack": modal_stack_snapshot(),
 		"menu_state": menu_state_snapshot(),
+		"context_menu": context_menu_snapshot(),
 		"controls_hint": controls_hint_snapshot(),
 		"debug_console": debug_console_snapshot(),
 		"debug_panel": debug_panel_snapshot(),

@@ -384,6 +384,39 @@ func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> 
 	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
 
 
+func context_menu_snapshot() -> Dictionary:
+	if _context_menu == null or not _context_menu.visible:
+		return {}
+	return {
+		"id": "inventory_context_menu",
+		"name": "inventory_context_menu",
+		"kind": "inventory_item",
+		"owner_panel": "inventory",
+		"active": true,
+		"visible": true,
+		"mouse_blocks_world": true,
+		"item_id": str(_context_item.get("item_id", "")),
+		"item_name": str(_context_item.get("name", _context_item.get("item_id", ""))),
+		"item_count": int(_context_item.get("count", 0)),
+		"option_count": _context_menu.item_count,
+		"options": _inventory_context_option_summaries(),
+	}
+
+
+func _inventory_context_option_summaries() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	if _context_menu == null:
+		return output
+	for index in range(_context_menu.item_count):
+		output.append({
+			"id": _context_menu.get_item_id(index),
+			"label": _context_menu.get_item_text(index),
+			"disabled": _context_menu.is_item_disabled(index),
+			"tooltip": _context_menu.get_item_tooltip(index),
+		})
+	return output
+
+
 func _execute_context_action(action_id: int) -> void:
 	if _context_item.is_empty():
 		return
