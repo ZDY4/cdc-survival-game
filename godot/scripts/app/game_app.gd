@@ -6,6 +6,7 @@ const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const FogOverlayController = preload("res://scripts/world/fog_overlay_controller.gd")
 const DebugOverlayController = preload("res://scripts/world/debug_overlay_controller.gd")
+const DebugConsoleCommandRunner = preload("res://scripts/app/debug_console_command_runner.gd")
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
@@ -70,6 +71,7 @@ var performance_last_process_tick_msec: int = 0
 var performance_last_hud_refresh_tick_msec: int = 0
 var performance_last_render_counts: Dictionary = {}
 var performance_render_sequence: int = 0
+var _debug_console_command_runner := DebugConsoleCommandRunner.new()
 
 
 func _ready() -> void:
@@ -341,11 +343,14 @@ func submit_debug_console_command(command_text: String) -> Dictionary:
 
 func _execute_debug_console_command(command: String) -> Dictionary:
 	var normalized := command.to_lower().strip_edges()
+	var debug_result: Dictionary = _debug_console_command_runner.execute(self, command)
+	if not debug_result.is_empty():
+		return debug_result
 	match normalized:
 		"":
 			return {"success": false, "reason": "empty_command", "message": "empty command"}
 		"help":
-			return {"success": true, "message": "commands: help, show fps, show overlays, observe mode, clear"}
+			return {"success": true, "message": "commands: help, show fps, show overlays, observe mode, clear, restart, give item <id> [count], teleport <x> <z> [y], spawn <character_id> [x z y], unlock location <id>"}
 		"show fps":
 			var perf: Dictionary = runtime_performance_snapshot()
 			return {"success": true, "message": "fps=%d frame=%.1fms path=%.2fms" % [
@@ -1766,6 +1771,9 @@ func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}) -> vo
 		push_error(str(world_result.get("error", "world rebuild failed")))
 		return
 	_sync_observed_level_to_map()
+	if simulation != null:
+		var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+		simulation.configure_map_interactions(_dictionary_or_empty(map.get("interaction_targets", {})))
 	if interaction_controller != null:
 		interaction_controller.world_result = world_result
 	_setup_world_container()

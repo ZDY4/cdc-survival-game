@@ -207,6 +207,11 @@ func update_world_result(value: Dictionary) -> void:
 	world_result = value
 
 
+func update_runtime(p_simulation: RefCounted, p_world_result: Dictionary) -> void:
+	simulation = p_simulation
+	world_result = p_world_result
+
+
 func _crafting_context() -> Dictionary:
 	if parent != null and parent.has_method("_crafting_context"):
 		return _dictionary_or_empty(parent.call("_crafting_context")).duplicate(true)

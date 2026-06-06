@@ -36,6 +36,11 @@ var console_suggestions: Array[String] = [
 	"show overlays",
 	"observe mode",
 	"clear",
+	"restart",
+	"give item 1006 1",
+	"teleport 0 0 0",
+	"spawn zombie_walker",
+	"unlock location forest",
 ]
 
 

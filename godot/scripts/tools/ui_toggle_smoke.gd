@@ -848,6 +848,7 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 	if int(snapshot.get("command_history_count", 0)) < 2:
 		errors.append("debug console should keep command history entries: %s" % snapshot)
 	_exercise_debug_console_keyboard_features(errors, game_root)
+	_exercise_debug_console_runtime_commands(errors, game_root)
 	_assert_runtime_control_line(errors, game_root, "Console on", "opened console HUD token")
 	_press_key(game_root, KEY_ESCAPE)
 	_assert_debug_console_snapshot(errors, game_root, false, "closed console")
@@ -857,6 +858,48 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 		game_root.cycle_debug_overlay_mode()
 	if str(game_root.current_debug_overlay_mode()) != "off":
 		errors.append("debug console smoke should restore overlay mode to off")
+
+
+func _exercise_debug_console_runtime_commands(errors: Array[String], game_root: Node) -> void:
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("debug console runtime command smoke missing player")
+		return
+	var bandage_before: int = int(player.inventory.get("1006", 0))
+	var unknown_item: Dictionary = game_root.submit_debug_console_command("give item missing_item 1")
+	if bool(unknown_item.get("success", false)) or str(unknown_item.get("reason", "")) != "unknown_item":
+		errors.append("debug console give item should reject unknown item: %s" % unknown_item)
+	var give_result: Dictionary = game_root.submit_debug_console_command("give item 1006 2")
+	if not bool(give_result.get("success", false)):
+		errors.append("debug console give item should succeed: %s" % give_result)
+	if int(player.inventory.get("1006", 0)) != bandage_before + 2:
+		errors.append("debug console give item should mutate player inventory")
+	var teleport_result: Dictionary = game_root.submit_debug_console_command("teleport 3 4 0")
+	if not bool(teleport_result.get("success", false)):
+		errors.append("debug console teleport should succeed: %s" % teleport_result)
+	var player_after_tp: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player_after_tp == null or player_after_tp.grid_position == null or player_after_tp.grid_position.x != 3 or player_after_tp.grid_position.z != 4:
+		errors.append("debug console teleport should update player grid")
+	var actor_count_before: int = game_root.simulation.actor_registry.actors().size()
+	var spawn_result: Dictionary = game_root.submit_debug_console_command("spawn zombie_walker 4 4 0")
+	if not bool(spawn_result.get("success", false)):
+		errors.append("debug console spawn should succeed: %s" % spawn_result)
+	if game_root.simulation.actor_registry.actors().size() != actor_count_before + 1:
+		errors.append("debug console spawn should register one actor")
+	var unknown_location: Dictionary = game_root.submit_debug_console_command("unlock location missing_location")
+	if bool(unknown_location.get("success", false)) or str(unknown_location.get("reason", "")) != "unknown_location":
+		errors.append("debug console unlock location should reject unknown location: %s" % unknown_location)
+	var unlock_result: Dictionary = game_root.submit_debug_console_command("unlock location forest")
+	if not bool(unlock_result.get("success", false)) or not game_root.simulation.unlocked_locations.has("forest"):
+		errors.append("debug console unlock location should unlock forest: %s" % unlock_result)
+	var restart_result: Dictionary = game_root.submit_debug_console_command("restart")
+	if not bool(restart_result.get("success", false)):
+		errors.append("debug console restart should succeed: %s" % restart_result)
+	var restarted_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if restarted_player == null:
+		errors.append("debug console restart should keep player actor")
+	elif int(restarted_player.inventory.get("1006", 0)) == bandage_before + 2:
+		errors.append("debug console restart should rebuild runtime inventory")
 
 
 func _exercise_debug_console_keyboard_features(errors: Array[String], game_root: Node) -> void:
