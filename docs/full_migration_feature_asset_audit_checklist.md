@@ -977,7 +977,7 @@
 ## 18. Debug、console、info panels 和开发观察
 
 - [~] debug overlay mode：off/walkable/vision。
-- [~] info panel page 基础。
+- [~] info panel page 基础：9 个页面、HUD 行、`[` / `]` 前进后退和首尾 wrap 已由 `UIToggle` smoke 覆盖；待补旧 debug viewer 各页完整内容。
 - [~] auto tick 基础。
 - [ ] 旧 debug viewer 面板逐项对照：runtime、actors、inventory、quests、vision、AI、combat、events。
 - [ ] console command：spawn、teleport、give item、start quest、set flag、damage、heal、open map。

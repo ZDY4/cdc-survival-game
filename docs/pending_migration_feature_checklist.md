@@ -322,7 +322,7 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [~] `Tab` 控制 actor / focus actor 切换，busy 时拒绝。已恢复玩家侧 focus actor 循环、observe mode 下当前楼层所有 actor focus 循环、observe mode 左键点击 actor 只聚焦不执行玩家命令、相机跟随、busy actor 拒绝玩家控制切换和旧 selection/menu/prompt 清理；observe mode 下 player command 会统一拒绝。待补鼠标选择视觉 polish 和更完整诊断。
 - [x] `V` overlay mode。
 - [x] `/` 控制提示展开折叠。
-- [ ] `[` / `]` info panel tab 切换。
+- [x] `[` / `]` info panel tab 切换，已覆盖前进、后退和首尾 wrap。
 - [~] `A` auto tick / observe playback：`A` 已切换自动推进，observe mode 下等价切换播放状态，观察 hotbar 的 Play / Auto 可切换播放状态；待补完整快捷键冲突策略。
 - [x] `F` 相机恢复跟随。
 - [x] `+` / `-` / `Ctrl+0` zoom，已覆盖 zoom factor 和 `0.5..4.0` clamp。
@@ -841,7 +841,7 @@ Godot 落点：`tools/agent/**`、`docs/agent-workflows/**`。
 - [ ] debug console：反引号开关、输入、history、autocomplete、suggestions。
 - [ ] console commands：restart、show fps、show overlays、observe mode、spawn、give item、teleport、unlock location。
 - [ ] debug panel：开关、按钮、动作、状态。
-- [ ] info panels：overview、selection、actor、world、interaction、turn system、events、AI、performance。
+- [~] info panels：overview、selection、actor、world、interaction、turn system、events、AI、performance 已有页面状态、HUD 行和 `[` / `]` 切换 smoke；待补旧 debug viewer 各页完整内容。
 - [ ] overlay flags：walkable、vision、blocked sight、fps、latency、level、auto tick、help。
 - [ ] profiling：frame time、render count、actor count、object count、pathfinding time。
 - [ ] selection debug：hovered grid、actor、object、blocker name、prompt。
