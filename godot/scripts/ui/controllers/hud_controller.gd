@@ -150,6 +150,19 @@ func is_controls_hint_visible() -> bool:
 	return controls_hint_visible
 
 
+func controls_hint_snapshot() -> Dictionary:
+	var lines: Array[String] = []
+	if _controls_hint_box != null:
+		for child in _controls_hint_box.get_children():
+			if child is Label:
+				lines.append(str((child as Label).text))
+	return {
+		"visible": controls_hint_visible,
+		"line_count": lines.size(),
+		"lines": lines,
+	}
+
+
 func show_interaction_menu(screen_position: Vector2, prompt: Dictionary) -> void:
 	if _interaction_menu == null:
 		_build_interaction_menu()
@@ -911,6 +924,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var ui_blocker := str(control_data.get("ui_blocker", ""))
 	if not ui_blocker.is_empty():
 		parts.append("Blocker %s" % ui_blocker)
+	var controls_hint: Dictionary = _dictionary_or_empty(control_data.get("controls_hint", {}))
+	if not controls_hint.is_empty():
+		parts.append("Help %s" % ("on" if bool(controls_hint.get("visible", false)) else "off"))
 	var hover_text := _hover_control_text(control_data.get("hover", {}))
 	if not hover_text.is_empty():
 		parts.append(hover_text)

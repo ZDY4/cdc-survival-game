@@ -279,11 +279,19 @@ func handle_trade_shortcut(event: InputEventKey) -> bool:
 func toggle_controls_hint() -> Dictionary:
 	if hud == null or not hud.has_method("toggle_controls_hint"):
 		return {"success": false, "reason": "hud_missing"}
-	return hud.toggle_controls_hint()
+	var result: Dictionary = hud.toggle_controls_hint()
+	refresh_hud(current_interaction_prompt())
+	return result
 
 
 func controls_hint_visible() -> bool:
 	return hud != null and hud.has_method("is_controls_hint_visible") and bool(hud.is_controls_hint_visible())
+
+
+func controls_hint_snapshot() -> Dictionary:
+	if hud != null and hud.has_method("controls_hint_snapshot"):
+		return hud.controls_hint_snapshot()
+	return {"visible": false, "line_count": 0, "lines": []}
 
 
 func cycle_debug_overlay_mode() -> Dictionary:
@@ -433,6 +441,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"map_level": map_level_snapshot(),
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
+		"controls_hint": controls_hint_snapshot(),
 		"hover": runtime_hover_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),

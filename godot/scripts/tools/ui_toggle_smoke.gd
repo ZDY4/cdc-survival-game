@@ -219,14 +219,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_debug_overlay_snapshot(errors, game_root, "off", false, "off overlay world")
 	if bool(game_root.controls_hint_visible()):
 		errors.append("controls hint should be hidden initially")
+	_assert_controls_hint_snapshot(errors, game_root, false, "initial controls hint")
 	_press_key(game_root, KEY_SLASH)
 	if not bool(game_root.controls_hint_visible()):
 		errors.append("/ should show controls hint")
 	if not game_root.hud.find_child("ControlsHint", true, false).visible:
 		errors.append("controls hint node should be visible after /")
+	_assert_controls_hint_snapshot(errors, game_root, true, "visible controls hint")
 	_press_key(game_root, KEY_SLASH)
 	if bool(game_root.controls_hint_visible()):
 		errors.append("/ should hide controls hint")
+	_assert_controls_hint_snapshot(errors, game_root, false, "hidden controls hint")
 	if game_root.settings_panel == null:
 		errors.append("settings panel was not created")
 	_press_key(game_root, KEY_ESCAPE)
@@ -801,6 +804,18 @@ func _assert_runtime_control_line(errors: Array[String], game_root: Node, expect
 		return
 	if not str((label as Label).text).contains(expected):
 		errors.append("%s: RuntimeControlLine expected to contain %s, got %s" % [context, expected, str((label as Label).text)])
+
+
+func _assert_controls_hint_snapshot(errors: Array[String], game_root: Node, expected_visible: bool, context: String) -> void:
+	if not game_root.has_method("controls_hint_snapshot"):
+		errors.append("%s: game root should expose controls_hint_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.controls_hint_snapshot())
+	if bool(snapshot.get("visible", not expected_visible)) != expected_visible:
+		errors.append("%s: controls hint visible expected %s, got %s" % [context, str(expected_visible), snapshot])
+	if int(snapshot.get("line_count", 0)) < 3:
+		errors.append("%s: controls hint should expose help lines: %s" % [context, snapshot])
+	_assert_runtime_control_line(errors, game_root, "Help %s" % ("on" if expected_visible else "off"), "%s HUD help token" % context)
 
 
 func _assert_runtime_performance(errors: Array[String], game_root: Node, context: String) -> void:

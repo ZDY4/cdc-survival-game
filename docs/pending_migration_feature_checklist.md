@@ -798,7 +798,7 @@ Godot 落点：`godot/scenes/boot/**`、`godot/scripts/app/boot.gd`。
 - [ ] interaction menu 布局、disabled、dangerous、hover。
 - [ ] hotbar dock、cooldown、tooltip。
 - [~] observe mode dock：模式、播放、速度、自动推进、观察楼层显示、普通 hotbar 隐藏和按钮控制第一版。
-- [ ] controls hint 展开/折叠。
+- [~] controls hint 展开/折叠：`/` 切换 HUD `ControlsHint`，`controls_hint_snapshot()` 暴露 visible、line_count 和帮助行，runtime control 行显示 `Help on/off`，已由 `UIToggle` smoke 覆盖；待补统一 help/debug panel 视觉。
 - [ ] blocker / modal / context menu 层级。
 
 参考：`game_ui/mod.rs`、`hotbar/**`、`overlay/**`。
