@@ -294,6 +294,8 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		return false
 	if event.echo:
 		return false
+	if game_root.has_method("handle_trade_shortcut") and bool(game_root.handle_trade_shortcut(event)):
+		return true
 	var digit := _digit_for_key(key)
 	if digit >= 0 and not (key == KEY_0 and event.ctrl_pressed) and _handle_digit_key(digit):
 		return true

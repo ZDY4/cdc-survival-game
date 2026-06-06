@@ -396,6 +396,29 @@ func close_blocking_modal() -> Dictionary:
 	}
 
 
+func handle_shortcut_key(event: InputEventKey) -> bool:
+	if not visible or event == null or not event.pressed or event.echo or has_blocking_modal():
+		return false
+	var key := event.keycode
+	if key == 0:
+		key = event.physical_keycode
+	match key:
+		KEY_ENTER, KEY_KP_ENTER:
+			if event.shift_pressed:
+				_confirm_cart_from_shortcut()
+			else:
+				_trade_selected_from_shortcut()
+			return true
+		KEY_Q:
+			_queue_selected_from_shortcut()
+			return true
+		KEY_DELETE, KEY_BACKSPACE:
+			_clear_cart_from_shortcut()
+			return true
+		_:
+			return false
+
+
 func _queue_selected_item() -> void:
 	if _selected_source.is_empty() or _selected_item_id.is_empty() or _selected_item_snapshot.is_empty():
 		return
@@ -405,6 +428,36 @@ func _queue_selected_item() -> void:
 	if count <= 0:
 		return
 	_queue_trade_entry(_selected_item_snapshot, _selected_source, count)
+
+
+func _queue_selected_from_shortcut() -> void:
+	set_meta("trade_last_shortcut", "queue")
+	_queue_selected_item()
+
+
+func _trade_selected_from_shortcut() -> void:
+	set_meta("trade_last_shortcut", "trade")
+	if _trade_button == null or _trade_button.disabled:
+		return
+	if _requires_equipment_sell_confirmation(_selected_source):
+		_open_equipment_sell_dialog()
+		return
+	_emit_selected_trade()
+
+
+func _confirm_cart_from_shortcut() -> void:
+	set_meta("trade_last_shortcut", "confirm_cart")
+	if _confirm_cart_button == null or _confirm_cart_button.disabled or _cart_entries.is_empty():
+		return
+	trade_cart_confirmed.emit(_cart_entries.duplicate(true))
+	_clear_cart()
+
+
+func _clear_cart_from_shortcut() -> void:
+	set_meta("trade_last_shortcut", "clear_cart")
+	if _cart_entries.is_empty():
+		return
+	_clear_cart()
 
 
 func _queue_trade_entry(item: Dictionary, source: String, count: int) -> bool:

@@ -158,9 +158,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_set_trade_quantity(game_root, 1)
 	var money_before_cart := _player_money(game_root)
 	var bandage_before_cart := _player_inventory_count(game_root, "1006")
-	_press_queue_button(game_root)
+	_press_trade_shortcut(game_root, KEY_Q)
+	if _trade_last_shortcut(game_root) != "queue":
+		errors.append("Q should route to trade queue shortcut")
 	if not _cart_line(game_root).contains("购买 绷带 x1"):
-		errors.append("trade cart should show queued bandage buy")
+		errors.append("trade cart should show shortcut queued bandage buy")
 	if not _cart_line(game_root).contains("确认后玩家资金 76") or not _cart_line(game_root).contains("店铺资金 524"):
 		errors.append("trade cart should preview post-confirm player and shop money")
 	_press_cart_entry_button(game_root, 0, "IncreaseButton")
@@ -175,9 +177,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _cart_line(game_root).contains("购物车为空"):
 		errors.append("trade cart remove should empty queued item")
 	_press_queue_button(game_root)
-	_press_clear_cart_button(game_root)
+	_press_trade_shortcut(game_root, KEY_DELETE)
+	if _trade_last_shortcut(game_root) != "clear_cart":
+		errors.append("Delete should route to trade clear cart shortcut")
 	if not _cart_line(game_root).contains("购物车为空"):
-		errors.append("trade cart clear should empty queued items")
+		errors.append("trade cart clear shortcut should empty queued items")
 	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
 		errors.append("should drag shop bandage to trade cart")
 	if not _cart_line(game_root).contains("购买 绷带 x1"):
@@ -323,7 +327,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _press_trade_item_with_text(game_root, "shop", "绷带"):
 		errors.append("should select shop bandage again after failed cart")
 	_press_queue_button(game_root)
-	_press_confirm_cart_button(game_root)
+	_press_trade_shortcut(game_root, KEY_ENTER, true)
+	if _trade_last_shortcut(game_root) != "confirm_cart":
+		errors.append("Shift+Enter should route to trade cart confirm shortcut")
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
 	if not _event_seen(game_root, "trade_confirmed"):
@@ -343,7 +349,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("selecting player item after buy should set trade action to sell")
 	_set_trade_quantity(game_root, 1)
 	var trade_confirmed_before_sell: int = _event_count(game_root, "trade_confirmed")
-	_press_trade_button(game_root)
+	_press_trade_shortcut(game_root, KEY_ENTER)
+	if _trade_last_shortcut(game_root) != "trade":
+		errors.append("Enter should route to direct trade shortcut")
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
 	if _event_count(game_root, "trade_confirmed") <= trade_confirmed_before_sell:
@@ -535,6 +543,21 @@ func _press_key(game_root: Node, key: int) -> void:
 	event = InputEventKey.new()
 	event.keycode = key
 	event.physical_keycode = key
+	event.pressed = false
+	game_root.runtime_input_controller.input(event)
+
+
+func _press_trade_shortcut(game_root: Node, key: int, shift_pressed: bool = false) -> void:
+	var event := InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.shift_pressed = shift_pressed
+	event.pressed = true
+	game_root.runtime_input_controller.input(event)
+	event = InputEventKey.new()
+	event.keycode = key
+	event.physical_keycode = key
+	event.shift_pressed = shift_pressed
 	event.pressed = false
 	game_root.runtime_input_controller.input(event)
 
@@ -781,6 +804,10 @@ func _trade_item_disabled(game_root: Node, source: String, text: String) -> bool
 func _trade_zone_tooltip(game_root: Node, zone_name: String) -> String:
 	var target: Node = game_root.trade_panel.find_child(zone_name, true, false)
 	return "" if not target is Control else str((target as Control).tooltip_text)
+
+
+func _trade_last_shortcut(game_root: Node) -> String:
+	return str(game_root.trade_panel.get_meta("trade_last_shortcut", ""))
 
 
 func _trade_zone_label_text(game_root: Node, zone_name: String) -> String:

@@ -236,6 +236,14 @@ func gameplay_input_blocker_name() -> String:
 	return ""
 
 
+func handle_trade_shortcut(event: InputEventKey) -> bool:
+	if trade_panel == null or not _panel_visible(trade_panel):
+		return false
+	if trade_panel.has_method("handle_shortcut_key"):
+		return bool(trade_panel.call("handle_shortcut_key", event))
+	return false
+
+
 func open_settings_panel() -> Dictionary:
 	active_stage_panel = ""
 	settings_open = true

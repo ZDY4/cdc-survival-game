@@ -251,6 +251,12 @@ func gameplay_input_blocker_name() -> String:
 	return ""
 
 
+func handle_trade_shortcut(event: InputEventKey) -> bool:
+	if panel_controller == null:
+		return false
+	return panel_controller.handle_trade_shortcut(event)
+
+
 func toggle_controls_hint() -> Dictionary:
 	if hud == null or not hud.has_method("toggle_controls_hint"):
 		return {"success": false, "reason": "hud_missing"}

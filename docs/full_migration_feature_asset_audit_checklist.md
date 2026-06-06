@@ -775,7 +775,7 @@
 - [ ] 不可出售、任务物品、装备中物品、损坏物品。
 - [ ] 商店库存持久化、补货、时间推进。
 - [ ] trade panel 与 dialogue/open trade 的生命周期。
-- [~] 拖拽交易第一版已迁移：shop / inventory / equipment 可拖入购物车或 buy/sell drop zone，drop zone 来源提示、hover 高亮、drag preview 文案、接受/拒绝诊断和业务禁用说明已纳入 `TradeUI` smoke；待补快捷键和统一 drag preview layer polish。
+- [~] 拖拽交易第一版已迁移：shop / inventory / equipment 可拖入购物车或 buy/sell drop zone，drop zone 来源提示、hover 高亮、drag preview 文案、接受/拒绝诊断、业务禁用说明和交易快捷键已纳入 `TradeUI` smoke；待补统一 drag preview layer polish。
 
 参考：`game_core/src/economy.rs`、`survival.rs`、`game_bevy/src/ui.rs`。
 落点：`godot/scripts/core/economy`、`godot/scripts/ui/controllers/*inventory*/*container*/*trade*`。
@@ -1026,7 +1026,7 @@
 - [~] `InventoryUI`：使用、装备、丢弃、右键使用/装备/丢弃菜单、丢弃数量、拖到装备/丢弃按钮、排序、筛选、搜索、详情、顺序视图拖拽重排第一版已迁移；待补完整上下文菜单项、数量弹窗、实际装备槽/容器/交易跨面板拖拽和反馈 polish。
 - [ ] `ContainerUI`：双栏、数量、拖拽、权限、超距关闭。
 - [ ] `Equipment`：slot、属性、外观、耐久。
-- [~] `TradeUI`：购物车、批量、价格、失败、无部分成交、装备出售、不可出售、拖拽交易和业务禁用说明已覆盖；待补快捷键和统一 drag preview layer polish。
+- [~] `TradeUI`：购物车、批量、价格、失败、无部分成交、装备出售、不可出售、拖拽交易、业务禁用说明和交易快捷键已覆盖；待补统一 drag preview layer polish。
 - [ ] `Quest`：collect、kill、dialogue、turn-in、奖励。
 - [ ] `Progression`：XP、level、skill、hotbar、属性。
 - [ ] `JournalUI`：任务详情、追踪、交付。
