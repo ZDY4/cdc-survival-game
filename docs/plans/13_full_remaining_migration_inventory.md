@@ -10,12 +10,115 @@
 - 玩法结果必须落在 `godot/scripts/core` 或明确的 core service；UI 和 world 只能提交输入、展示 snapshot 或调用数据服务。
 - 参考工程只作为行为和资产组织的只读来源；不得把 Rust、Cargo、Bevy、WGSL 运行时代码重新放回当前主线。
 
+## 文档权威
+
+本文件是迁移剩余工作的唯一总账。旧的重复清单、阶段交接和审计文档已经合并到本文件，不再单独维护。后续更新迁移范围、状态和验收口径时，优先更新本文。
+
+仍保留并配合本文使用的文档：
+
+- `docs/plans/10_godot_migration_architecture.md`：Godot 迁移架构、目录职责和阶段边界。
+- `docs/3d_asset_format_policy.md`：正式 3D 资产格式和导入规则。
+- `docs/agent-workflows/*.md`：agent 工具、内容编辑、地图复核和 smoke / validate 工作流。
+- `docs/narrative/**`：剧情、角色、地点、物品和世界观内容来源，不作为迁移计划清单。
+- `docs/plans/09_mainline_followup_polish.md`：主线剧情打磨待办，属于内容制作参考，不是运行时迁移总账。
+
+已被本文吸收的旧文档类型：
+
+- 旧 first milestone / parity 交接清单。
+- 旧 full migration master todo / backlog。
+- 旧 feature、asset、presentation 审计清单。
+- 旧 pending migration feature checklist。
+
 ## 当前已恢复但需继续等价的范围
 
 - 运行时已有 `Simulation.submit_player_command()`，覆盖 `move`、`wait`、`interact`、`attack`、`use_skill`、`craft`、`inventory_action`，但旧 Rust 的目标策略、反馈文本、失败原因和复杂 UI 状态还未全部等价。
 - AP / 回合已有玩家行动后自动推进回合、pending movement / pending interaction 跨回合恢复，但战斗内行动顺序、取消策略、自动等待和长按结束回合仍需细化。
 - 玩家可移动、点击地面、点击目标自动接近、拾取、开容器、对话、交易、攻击、学习技能、绑定热栏第一槽、制作和交付任务，但许多细节仍是第一版。
 - 地图已经迁到 Godot `.tscn`，旧 glTF 资产也已进入 `godot/assets`，但地图对象和资产实例化、遮挡、门、楼层、材质、碰撞和视觉反馈仍未完全等价。
+
+## 0. 内容、schema 和来源覆盖
+
+### 0.1 旧来源覆盖
+
+每个迁移项都要明确旧来源、Godot 落点和验收方式。不能只迁显眼玩法，漏掉工具、表现、诊断或数据默认值。
+
+- `bevy_debug_viewer`：启动、新游戏、相机、输入、picking、交互、移动、战斗、NPC runtime、HUD、hotbar、container、trade、debug panel、info panel、console、fog、world render 和测试辅助。
+- `content_tools`：summary、references、format、diff-summary、changed、validate、content edit CLI 行为。
+- `bevy_server`：旧 server 入口不迁；若后续需要自动化协议，只转译 snapshot、request / response、错误 payload 和 reporting 语义到 Godot headless / tool。
+- `game_core`：Simulation、turn / AP、movement、interaction、combat、economy、quest、dialogue、skills、crafting、AI、GOAP、overworld、vision、building、survival 规则。
+- `game_data`：内容 schema、默认值、校验、引用、预览、编辑服务、原子写回、map schema、appearance、AI、dialogue、quest、recipe、skill。
+- `game_bevy`：相机、tile / world render、门表现、fog、UI snapshot、picking、asset path、debug 视觉、NPC life sync。
+- `game_protocol`：只作为 Godot headless / tool 接口参考，不恢复 Rust protocol runtime。
+
+参考：`G:\Projects\cdc_survival_game_bevy_reference\rust\apps\**`、`G:\Projects\cdc_survival_game_bevy_reference\rust\crates\**`。
+落点：`godot/scripts/**`、`godot/scenes/**`、`godot/assets/**`、`tools/agent/**`。
+验收：对应 `tools/agent/test-godot-game.ps1 -Scenario <Scenario>`、content / editor smoke、`cmd /c run_godot_validate.bat`。
+
+### 0.2 内容数据和 schema
+
+- [~] 内容 registry：加载 `characters`、`items`、`recipes`、`quests`、`skills`、`skill_trees`、`dialogues`、`dialogue_rules`、`shops`、`settlements`、`ai`、`overworld`、`world_tiles`、`appearance`。
+- [~] 内容摘要：每个 domain 输出 id、display name、路径、引用摘要和校验状态。
+- [~] 引用反查：物品被配方、任务、容器、商店、角色 loadout、地图拾取引用；角色被对话、商店、任务、地图、AI profile 引用；地图对象引用 asset、world tile、container、transition 和 NPC。
+- [~] 安全写回：格式化、dry-run、diff summary、失败不落盘、原子替换。
+- [ ] JSON path 定位：校验错误能定位到文件、字段路径和数组索引。
+- [ ] `changed` / `diff-summary` 等旧 content_tools 行为完整迁移。
+- [ ] 跨 domain 引用校验：缺 item、recipe、quest、dialogue、skill、world tile、character、shop、settlement、appearance、asset path 都要进入 validator。
+- [ ] 内容版本和 schema migration：旧字段、缺省字段、废弃字段、迁移日志和 snapshot roundtrip。
+
+参考：`content_tools/src/app/**`、`game_data/src/content_registry.rs`、`game_data/src/file_backed.rs`、`game_data/src/content.rs`。
+落点：`data/**`、`godot/scripts/data/**`、`godot/scripts/tools/content_*.gd`、`tools/agent/godot-content.ps1`。
+验收：content CLI smoke、data validator、`cmd /c run_godot_validate.bat`。
+
+### 0.3 内容域账本
+
+- [~] `data/ai`：GOAP facts、行为模块、profile、settlement NPC group、后台日程。
+- [~] `data/appearance`：character model、装备覆盖、socket、fallback 模型、运行时绑定。
+- [~] `data/bootstrap`：初始地图、entry、玩家 actor、初始背包、任务、world flags、相机。
+- [~] `data/characters`：玩家、友方 NPC、中立 NPC、敌人、商人、医生、任务角色、loadout、AI、dialogue / shop 绑定。
+- [~] `data/dialogue_rules` 和 `data/dialogues`：节点、选项、条件、动作、任务接取 / 推进 / 交付、交易打开、fallback、结束。
+- [~] `data/items`：武器、装备、消耗品、材料、工具、任务物品、货币、占位物、模型、效果、价格、重量、堆叠。
+- [~] `data/json`：ammo、attribute、balance、camp relations、clues、effects、encounters、scavenge、structures、tools、weather 等是否仍为权威或需合并。
+- [~] `data/maps`：迁移期 JSON 备份；每张图必须和 `godot/scenes/maps/*.tscn` 对照，不再作为新地图权威。
+- [~] `data/overworld`：地点解锁、旅行、遭遇、入口、返回。
+- [~] `data/quests`：collect / kill / dialogue / turn-in、奖励、失败、互斥、world flag。
+- [~] `data/recipes`：材料、产物、工具、工作台、技能、解锁、XP、队列。
+- [~] `data/settlements`：据点成员、角色、锚点、服务、日程。
+- [~] `data/shops`：库存、资金、价格倍率、权限、补货。
+- [~] `data/skill_trees` 和 `data/skills`：树布局、节点、前置、主动 / 被动、目标策略、效果、hotbar。
+- [~] `data/world_tiles`：surface、wall、prop、container prototype 与 Godot 资产映射。
+
+### 0.4 地图 scene 逐图核对
+
+每张地图都要确认 entry point、actor spawn、map object、footprint、blocking、LOS、door、transition、container、pickup、NPC、敌人、模型资源、比例、旋转、重叠、picking、相机初始视角、fog、任务 / 对话 / 商店锚点。
+
+- [ ] `factory.tscn`
+- [ ] `forest.tscn`
+- [ ] `hospital.tscn`
+- [ ] `ruins.tscn`
+- [ ] `school.tscn`
+- [ ] `street_a.tscn`
+- [ ] `street_b.tscn`
+- [ ] `subway.tscn`
+- [ ] `supermarket.tscn`
+- [ ] `survivor_outpost_01.tscn`
+- [ ] `survivor_outpost_01_interior.tscn`
+- [ ] `survivor_outpost_01_perimeter.tscn`
+
+### 0.5 资产和表现不可遗漏项
+
+- [~] 字体：`NotoSansCJKsc-Regular.otf`，守护中文 UI fallback 和缺字。
+- [~] Fog shader：旧 WGSL 只迁视觉语义，Godot 侧以 `fog_of_war_canvas.gdshader` 为准。
+- [~] 容器模型：`cabinet_medical.gltf`、`crate_wood.gltf`、`locker_metal.gltf`，待补 collision、picking、hover outline、打开 / 关闭状态和 container type 映射。
+- [~] 角色、装备、武器占位模型：待补 appearance profile、socket、body region override、scale、offset、手部挂点、远程 muzzle、reload 状态和 hotbar 图标。
+- [~] 地表、建筑墙、prop tile 模型：待补 asset id 映射、旋转 footprint、local offset、scale、阻挡、LOS、材质、遮挡和 hover。
+- [ ] 音频资产：占位音效、音量设置、事件触发点和缺音频 fallback。
+- [ ] UI 图标资产：inventory、skill、quest、crafting、trade、container、settings、hotbar 所需图标和 fallback。
+- [ ] 缩略图资产：物品、配方、技能、任务、地图地点和存档槽缩略图。
+- [ ] 地图专属资产：每张 `.tscn` 的 asset path、fallback 次数、重复 / 重叠实例、缺 collision、缺 picking 需要在 MapVisual 报告中输出。
+- [ ] `.bin`、`.import`、`.uid` 守护：glTF 外部 buffer、Godot 导入产物和 resource uid 变化不能破坏 scene 引用。
+- [ ] 根目录 `assets/` 与 `godot/assets/` 职责：若 `godot/assets/` 是运行权威，根目录 `assets/` 只能作为源资产或迁移备份，并需文档化同步规则。
+- [ ] 模型辨识：地图物体不能退化成重叠方块；fallback 必须能看出类别并报告原资源。
+- [ ] 交互、移动、战斗、UI 反馈：hover 光标、outline、tooltip、interaction prompt、路径预览、AP 不足提示、命中 / 闪避 / 伤害 / 死亡、toast / message log、按钮禁用态和失败原因都要进入验收。
 
 ## 1. 运行时总线与快照
 
@@ -284,9 +387,12 @@
 
 - glTF 资产已迁入 `godot/assets`，但待确认所有地图对象都按 asset id 正确实例化，不再退化成重叠方块。
 - 待补 world tile instancing 等价：地面、坡道、悬崖、建筑墙、建筑地板、prop、container、door、trigger 的资源选择。
+- 待补 prototype / tile set schema：canonical orientation、pivot、pick proxy、occluder policy、interaction / upgrade class、wall set、surface set 和加载期校验。
+- 待补 static instance -> dynamic entity 升格：门、柜子 / 箱子、可破坏 prop 等对象需要统一实例句柄、生命周期、状态同步、隐藏 / 替换和回收策略。
+- 待清理 box / fallback 主渲染路径：fallback 只用于缺资源诊断、proxy 或过渡几何，不能重新成为地图主表现。
 - 待补材质和颜色：terrain color、wall material、prop tint、容器 tint、角色阵营颜色、选中/hover 高亮。
 - 待补碰撞体和 picking 体分离：视觉模型、阻挡碰撞、鼠标命中、交互命中不应互相污染。
-- 待补地图对象 LOD / batch / instance 性能策略，以 Godot 原生 MultiMesh 或场景实例实现。
+- 待补地图对象 LOD / batch / instance 性能策略，以 Godot 原生 MultiMesh 或场景实例实现；同时输出 batch / instance / fallback 统计，进入 MapVisual 报告和 smoke 诊断。
 
 ### 12.3 角色、装备和尸体表现
 
