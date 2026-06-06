@@ -333,6 +333,9 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		var runtime_line := _hud_runtime_control_line(game_root)
 		if not runtime_line.contains("可攻击") or not runtime_line.contains("命中率") or not runtime_line.contains("伤害"):
 			errors.append("HUD runtime control line should show attack hover preview, got %s" % runtime_line)
+		var combat_line := _hud_combat_line(game_root)
+		if not combat_line.contains("#%d" % target_id) or not combat_line.contains("Hit") or not combat_line.contains("Dmg"):
+			errors.append("HUD combat line should show hover attack target preview, got %s" % combat_line)
 		_expect_attack_hover_cursor_preview(errors, game_root, target_id)
 		_expect_hover_target_outline_hidden(errors, game_root)
 		_expect_attack_target_marker(errors, game_root, target_id)
@@ -928,6 +931,10 @@ func _hud_interaction_line(game_root: Node) -> String:
 
 func _hud_runtime_control_line(game_root: Node) -> String:
 	return game_root.hud.get_node("HudPanel/HudLines/RuntimeControlLine").text
+
+
+func _hud_combat_line(game_root: Node) -> String:
+	return game_root.hud.get_node("HudPanel/HudLines/CombatHudLine").text
 
 
 func _expect_startup_camera_frames_player(errors: Array[String], camera: Camera3D, player_node: Node3D) -> void:

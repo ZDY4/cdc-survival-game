@@ -46,7 +46,7 @@
 
 ### 2.2 战斗回合
 
-- combat HUD 当前回合、行动方、敌人数量、参与者数量、目标预览和命中 / 暴击 / 伤害预估第一版已迁移：`HudSnapshot.combat_hud` 从 runtime snapshot 派生，不在 UI 复制战斗规则；HUD `CombatHudLine` 已显示 active/off、round、turn、enemy count、participants 和 target preview，并由 `UI` smoke 覆盖。待补战斗内 actor initiative / next combat actor 选择逻辑，包含玩家、敌人、中立/友军参与者的顺序，以及更完整战斗 UI 布局。
+- combat HUD 当前回合、行动方、敌人数量、参与者数量、目标预览和命中 / 暴击 / 伤害预估第一版已迁移：`HudSnapshot.combat_hud` 从 runtime snapshot 派生，不在 UI 复制战斗规则；HUD `CombatHudLine` 已显示 active/off、round、turn、enemy count、participants 和 target preview，实际 hostile hover 的 attack preview 会经 `runtime_control.hover.attack_preview` 联动到 combat HUD，并由 `UI` / `PlayerInteraction` smoke 覆盖。待补战斗内 actor initiative / next combat actor 选择逻辑，包含玩家、敌人、中立/友军参与者的顺序，以及更完整战斗 UI 布局。
 - 待补战斗内 AP gain / max 与探索 AP 的差异，NPC 回合打开/关闭、AP 溢出、行动耗尽后的自动结束。
 - 待补战斗开始时的参与者收集、重复进入保护、战斗 round 递增、最后看到敌人的回合计数。
 - 待补战斗退出：敌对清空、连续若干 actor turn 无敌对视线、敌人死亡、跨地图、对话或任务强制退出等。
@@ -308,7 +308,7 @@
 
 ### 13.2 HUD 和 overlay
 
-- 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；combat HUD 当前回合、行动方、敌人数量、参与者数量、目标预览和命中 / 暴击 / 伤害预估第一版已纳入 `UI` smoke；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能、progression、任务推进和命令拒绝失败反馈，常见失败 reason 已映射为中文提示，已纳入 `UI` / `Progression` / `Quest` smoke。待补更完整状态行、战斗布局和反馈 toast/过渡表现。
+- 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；combat HUD 当前回合、行动方、敌人数量、参与者数量、目标预览和命中 / 暴击 / 伤害预估第一版已纳入 `UI` / `PlayerInteraction` smoke；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能、progression、任务推进和命令拒绝失败反馈，常见失败 reason 已映射为中文提示，已纳入 `UI` / `Progression` / `Quest` smoke。待补更完整状态行、战斗布局和反馈 toast/过渡表现。
 - 部分迁移 interaction menu：右键位置、目标名称、主动作/可用/禁用摘要、可用选项、禁用选项、禁用原因 tooltip/meta、按钮 hover 详情和 Esc / 外部点击关闭第一版已有；待补更完整视觉布局和上下文菜单 polish。
 - 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、物品数量、slot tooltip、物品使用效果摘要、AP / resource cost、AP / resource / item count insufficient、cooldown 文本/禁用态和冷却遮罩；待迁移观察模式 dock 和更完整 slot tooltip。
 - 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；待迁移 tooltip layer、context menu layer、drag preview layer、overworld prompt layer，以及更统一的 modal layer 表现。

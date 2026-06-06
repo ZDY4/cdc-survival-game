@@ -100,6 +100,7 @@ func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 		snapshot["info_panel"] = parent.info_panel_snapshot()
 	if parent != null and parent.has_method("runtime_control_snapshot"):
 		snapshot["runtime_control"] = parent.runtime_control_snapshot()
+		_apply_runtime_attack_preview(snapshot)
 	snapshot["tracked_quest"] = _tracked_quest_snapshot()
 	hud.apply_snapshot(snapshot)
 
@@ -108,6 +109,36 @@ func refresh_dialogue_panel() -> void:
 	if dialogue_panel == null or simulation == null:
 		return
 	dialogue_panel.apply_snapshot(DialogueSnapshot.new(registry).build(simulation.snapshot()))
+
+
+func _apply_runtime_attack_preview(snapshot: Dictionary) -> void:
+	var runtime_control: Dictionary = _dictionary_or_empty(snapshot.get("runtime_control", {}))
+	var hover: Dictionary = _dictionary_or_empty(runtime_control.get("hover", {}))
+	var attack_preview: Dictionary = _dictionary_or_empty(hover.get("attack_preview", {}))
+	if attack_preview.is_empty():
+		return
+	var enriched_preview: Dictionary = attack_preview.duplicate(true)
+	if int(enriched_preview.get("target_actor_id", 0)) <= 0 and int(hover.get("actor_id", 0)) > 0:
+		enriched_preview["target_actor_id"] = int(hover.get("actor_id", 0))
+	var target_actor_id := int(enriched_preview.get("target_actor_id", 0))
+	var actor_name := _actor_display_name(target_actor_id)
+	if not actor_name.is_empty():
+		enriched_preview["target_name"] = actor_name
+	elif not enriched_preview.has("target_name") or str(enriched_preview.get("target_name", "")).is_empty():
+		enriched_preview["target_name"] = str(hover.get("target_name", ""))
+	var combat_hud: Dictionary = _dictionary_or_empty(snapshot.get("combat_hud", {})).duplicate(true)
+	combat_hud["target_preview"] = enriched_preview
+	snapshot["combat_hud"] = combat_hud
+
+
+func _actor_display_name(actor_id: int) -> String:
+	if actor_id <= 0 or simulation == null:
+		return ""
+	for actor in _array_or_empty(simulation.snapshot().get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if int(actor_data.get("actor_id", 0)) == actor_id:
+			return str(actor_data.get("display_name", ""))
+	return ""
 
 
 func refresh_inventory_panel() -> void:
