@@ -12,13 +12,14 @@ var _vision_geometry := VisionGeometry.new()
 func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
 	var attacker: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)
-	var target_check: Dictionary = validate_attack_target(simulation, actor_id, target_actor_id)
+	var target_check: Dictionary = validate_attack_target(simulation, actor_id, target_actor_id, options)
 	if not bool(target_check.get("success", false)):
 		return target_check
 	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
 	var spatial_check: Dictionary = _spatial_check(attacker, target, topology, int(options.get("range", int(profile.get("range", 1)))), _minimum_attack_range(options, profile))
 	if not bool(spatial_check.get("success", false)):
 		return spatial_check
+	var relationship_consequence: Dictionary = _apply_non_hostile_attack_consequence(simulation, attacker, target, target_check, options)
 
 	var hit_roll: Dictionary = _hit_check(simulation, attacker, target, profile)
 	var critical_roll: Dictionary = {
@@ -51,6 +52,8 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"accuracy": float(hit_roll.get("accuracy", 0.0)),
 		"evasion": float(hit_roll.get("evasion", 0.0)),
 		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
+		"friendly_fire": bool(target_check.get("friendly_fire", false)),
+		"relationship_consequence": relationship_consequence.duplicate(true),
 	})
 	simulation.emit_event("attack_resolved", {
 		"actor_id": actor_id,
@@ -77,6 +80,8 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"combat_rng_seed": int(simulation.combat_state.get("combat_rng_seed", 0)),
 		"combat_rng_counter": int(critical_roll.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0)))),
 		"combat_rng_salt": int(critical_roll.get("salt", 0)),
+		"friendly_fire": bool(target_check.get("friendly_fire", false)),
+		"relationship_consequence": relationship_consequence.duplicate(true),
 	})
 
 	var defeated: bool = target.hp <= 0.0
@@ -113,6 +118,8 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
 		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
 		"weapon_profile": profile,
+		"friendly_fire": bool(target_check.get("friendly_fire", false)),
+		"relationship_consequence": relationship_consequence.duplicate(true),
 	}
 
 
@@ -132,11 +139,12 @@ func preview_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"min_range": min_range,
 		"weapon_profile": profile.duplicate(true),
 	}
-	var target_check: Dictionary = validate_attack_target(simulation, actor_id, target_actor_id)
+	var target_check: Dictionary = validate_attack_target(simulation, actor_id, target_actor_id, options)
 	if not bool(target_check.get("success", false)):
 		preview.merge(target_check, true)
 		_add_attack_preview_actor_fields(preview, attacker, target)
 		return preview
+	preview.merge(_friendly_fire_preview_fields(target_check, options), true)
 	var spatial_check: Dictionary = _spatial_check(attacker, target, topology, attack_range, min_range)
 	if not bool(spatial_check.get("success", false)):
 		preview.merge(spatial_check, true)
@@ -165,7 +173,7 @@ func preview_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	return preview
 
 
-func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_id: int) -> Dictionary:
+func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_id: int, options: Dictionary = {}) -> Dictionary:
 	var attacker: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)
 	if attacker == null:
@@ -180,9 +188,31 @@ func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_
 		return {"success": false, "reason": "target_defeated", "target_actor_id": target_actor_id}
 	var hostility: Dictionary = _actor_hostility(simulation, attacker, target)
 	if not bool(hostility.get("hostile", _can_attack(attacker, target))):
+		var friendly_fire: bool = attacker.actor_id != target.actor_id
+		if _allows_non_hostile_attack(options):
+			var allowed_non_hostile := {
+				"success": true,
+				"friendly_fire": friendly_fire,
+				"non_hostile_attack": true,
+				"confirmation_required": bool(options.get("confirmation_required", false)),
+				"actor_id": actor_id,
+				"attacker_side": attacker.side,
+				"target_side": target.side,
+				"relationship_score": float(hostility.get("score", 0.0)),
+				"hostility_reason": str(hostility.get("reason", "")),
+				"target_actor_id": target_actor_id,
+				"relationship_consequence_preview": _non_hostile_attack_consequence_preview(float(hostility.get("score", 0.0)), options),
+			}
+			var visibility_check: Dictionary = _visibility_check(simulation, attacker, target)
+			if not bool(visibility_check.get("success", true)):
+				return visibility_check
+			return allowed_non_hostile
 		return {
 			"success": false,
 			"reason": "target_not_hostile",
+			"friendly_fire": friendly_fire,
+			"non_hostile_attack": true,
+			"confirmation_required": true,
 			"actor_id": actor_id,
 			"attacker_side": attacker.side,
 			"target_side": target.side,
@@ -190,16 +220,82 @@ func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_
 			"hostility_reason": str(hostility.get("reason", "")),
 			"target_actor_id": target_actor_id,
 		}
-	if simulation.has_method("is_actor_visible_to_actor") and not bool(simulation.call("is_actor_visible_to_actor", actor_id, target_actor_id)):
+	var visibility_check: Dictionary = _visibility_check(simulation, attacker, target)
+	if not bool(visibility_check.get("success", true)):
+		return visibility_check
+	return {"success": true}
+
+
+func _visibility_check(simulation: RefCounted, attacker: RefCounted, target: RefCounted) -> Dictionary:
+	if simulation != null and simulation.has_method("is_actor_visible_to_actor") and not bool(simulation.call("is_actor_visible_to_actor", attacker.actor_id, target.actor_id)):
 		return {
 			"success": false,
 			"reason": "target_not_visible",
-			"actor_id": actor_id,
-			"target_actor_id": target_actor_id,
+			"actor_id": attacker.actor_id,
+			"target_actor_id": target.actor_id,
 			"attacker_grid": attacker.grid_position.to_dictionary(),
 			"target_grid": target.grid_position.to_dictionary(),
 		}
 	return {"success": true}
+
+
+func _allows_non_hostile_attack(options: Dictionary) -> bool:
+	return bool(options.get("allow_non_hostile_attack", false)) \
+		or bool(options.get("allow_friendly_fire", false)) \
+		or bool(options.get("allow_friendly_attack", false))
+
+
+func _friendly_fire_preview_fields(target_check: Dictionary, options: Dictionary) -> Dictionary:
+	if not bool(target_check.get("friendly_fire", false)):
+		return {}
+	return {
+		"friendly_fire": true,
+		"non_hostile_attack": true,
+		"confirmation_required": bool(options.get("confirmation_required", false)),
+		"relationship_score": float(target_check.get("relationship_score", 0.0)),
+		"hostility_reason": str(target_check.get("hostility_reason", "")),
+		"relationship_consequence_preview": _dictionary_or_empty(target_check.get("relationship_consequence_preview", {})).duplicate(true),
+	}
+
+
+func _apply_non_hostile_attack_consequence(simulation: RefCounted, attacker: RefCounted, target: RefCounted, target_check: Dictionary, options: Dictionary) -> Dictionary:
+	if not bool(target_check.get("friendly_fire", false)):
+		return {}
+	if simulation == null or not simulation.has_method("set_relationship_score"):
+		return {}
+	var before: float = float(target_check.get("relationship_score", 0.0))
+	if simulation.has_method("relationship_score"):
+		before = float(simulation.call("relationship_score", attacker.actor_id, target.actor_id))
+	var next_score: float = _non_hostile_attack_next_relationship_score(before, options)
+	var result: Dictionary = _dictionary_or_empty(simulation.call("set_relationship_score", attacker.actor_id, target.actor_id, next_score, "friendly_fire_attack"))
+	result["friendly_fire"] = true
+	result["relationship_before"] = before
+	result["relationship_after"] = next_score
+	result["hostility_threshold"] = _hostility_threshold(simulation)
+	return result
+
+
+func _non_hostile_attack_consequence_preview(current_score: float, options: Dictionary) -> Dictionary:
+	var next_score: float = _non_hostile_attack_next_relationship_score(current_score, options)
+	return {
+		"score_before": current_score,
+		"score_after": next_score,
+		"score_delta": next_score - current_score,
+		"reason": "friendly_fire_attack",
+	}
+
+
+func _non_hostile_attack_next_relationship_score(current_score: float, options: Dictionary) -> float:
+	if options.has("friendly_fire_relationship_score"):
+		return clampf(float(options.get("friendly_fire_relationship_score", -75.0)), -100.0, 100.0)
+	if options.has("non_hostile_attack_relationship_score"):
+		return clampf(float(options.get("non_hostile_attack_relationship_score", -75.0)), -100.0, 100.0)
+	var delta: float = float(options.get("friendly_fire_relationship_delta", options.get("non_hostile_attack_relationship_delta", -75.0)))
+	return clampf(min(current_score + delta, -75.0), -100.0, 100.0)
+
+
+func _hostility_threshold(simulation: RefCounted) -> float:
+	return -50.0
 
 
 func _can_attack(attacker: RefCounted, target: RefCounted) -> bool:

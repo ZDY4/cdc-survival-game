@@ -598,6 +598,52 @@ func _expect_attack_target_rejections(errors: Array[String], simulation: RefCoun
 		errors.append("friendly attack rejection should not spend AP")
 	if bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
 		errors.append("friendly attack rejection should not enter combat")
+	var friendly_preview: Dictionary = simulation.preview_attack(player.actor_id, friendly_id, {}, {"range": 2})
+	if bool(friendly_preview.get("can_attack", false)) or str(friendly_preview.get("reason", "")) != "target_not_hostile":
+		errors.append("friendly attack preview should require explicit friendly fire confirmation")
+	if not bool(friendly_preview.get("friendly_fire", false)) or not bool(friendly_preview.get("confirmation_required", false)):
+		errors.append("friendly attack rejection preview should expose friendly fire confirmation requirement")
+	var confirmed_preview: Dictionary = simulation.preview_attack(player.actor_id, friendly_id, {}, {
+		"range": 2,
+		"allow_non_hostile_attack": true,
+		"confirmation_required": true,
+	})
+	if not bool(confirmed_preview.get("can_attack", false)) or not bool(confirmed_preview.get("friendly_fire", false)):
+		errors.append("confirmed friendly fire preview should be attackable")
+	var consequence_preview: Dictionary = _dictionary_or_empty(confirmed_preview.get("relationship_consequence_preview", {}))
+	if float(consequence_preview.get("score_after", 0.0)) > -50.0:
+		errors.append("confirmed friendly fire preview should show hostile relationship consequence")
+	player.ap = 12.0
+	var friendly_actor: RefCounted = simulation.actor_registry.get_actor(friendly_id)
+	friendly_actor.hp = 40.0
+	friendly_actor.max_hp = 40.0
+	var friendly_hp_before: float = friendly_actor.hp
+	var confirmed_friendly: Dictionary = simulation.submit_player_command({
+		"kind": "attack",
+		"target_actor_id": friendly_id,
+		"range": 2,
+		"allow_non_hostile_attack": true,
+		"confirmation_required": true,
+	})
+	if not bool(confirmed_friendly.get("success", false)) or not bool(confirmed_friendly.get("friendly_fire", false)):
+		errors.append("confirmed friendly fire attack should succeed and expose friendly_fire")
+	if friendly_actor.hp >= friendly_hp_before:
+		errors.append("confirmed friendly fire attack should damage friendly target")
+	if simulation.relationship_score(player.actor_id, friendly_id) > -50.0:
+		errors.append("confirmed friendly fire attack should make target relationship-hostile")
+	if not bool(simulation.actor_hostility(player.actor_id, friendly_id).get("hostile", false)):
+		errors.append("confirmed friendly fire attack should make target hostile to player")
+	if not bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
+		errors.append("confirmed friendly fire attack should enter combat")
+	var friendly_payload: Dictionary = _last_event_payload(simulation.snapshot(), "attack_resolved")
+	if not bool(friendly_payload.get("friendly_fire", false)):
+		errors.append("friendly fire attack_resolved event should expose friendly_fire")
+	if _dictionary_or_empty(friendly_payload.get("relationship_consequence", {})).is_empty():
+		errors.append("friendly fire attack_resolved event should expose relationship consequence")
+	simulation.force_end_combat("combat_smoke_friendly_fire_cleanup")
+	friendly_actor.hp = friendly_hp_before
+	player.ap = before_ap
+	_restore_player_turn(simulation, player)
 	var relation_hostile_result: Dictionary = simulation.set_relationship_score(player.actor_id, friendly_id, -75.0, "combat_smoke_relation_hostile")
 	if not bool(relation_hostile_result.get("success", false)):
 		errors.append("combat smoke should make friendly target relationship-hostile")

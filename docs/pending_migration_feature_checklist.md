@@ -433,9 +433,9 @@ Godot 落点：`godot/scripts/core/interactions/interaction_action_runner.gd`、
 - [ ] 攻击 LOS 与技能 LOS 共用规则。
 - [ ] 墙、门、楼层、建筑遮挡。
 - [~] 近战/远程/最小射程/最大射程；武器 profile 兼容 `min_range` / `minimum_range` / `minRange`，低于最小射程返回 `target_too_close`。待补特殊武器例外和更多内容标注。
-- [~] 攻击目标预览：actor ids、invalid reason 和空间诊断第一版已覆盖；待补完整 valid grids 与门/楼层例外下的可攻击格。
-- [ ] friendly fire 策略。
-- [ ] neutral 被攻击后的关系变化和进入战斗。
+- [~] 攻击目标预览：actor ids、invalid reason、空间诊断和 friendly fire 关系后果预览第一版已覆盖；待补完整 valid grids 与门/楼层例外下的可攻击格。
+- [~] friendly fire 策略 core 第一版：默认拒绝非敌对目标，显式 `allow_non_hostile_attack` / `allow_friendly_fire` 后才允许攻击。
+- [~] neutral / friendly 被确认攻击后的关系变化和进入战斗第一版：攻击前会应用关系惩罚，关系降到敌对阈值以下并进入 combat；待补 UI 二次确认弹窗、阵营/犯罪联动和 NPC 目击后果。
 
 参考：`simulation/combat.rs`、`simulation/types.rs::AttackTargetingQueryResult`、`simulation/spatial.rs`。
 Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`vision_runner.gd`。
@@ -483,7 +483,7 @@ Godot 落点：`godot/scripts/core/combat/**`、`godot/scripts/core/economy/cont
 - [ ] cone / radius / line / AOE。
 - [ ] 中心点 LOS、格子遮挡、楼层限制。
 - [ ] hostile only、ally only、any actor、empty grid、object target。
-- [ ] 友军伤害警告和确认。
+- [~] 友军伤害预览警告第一版；攻击命令需要显式确认标志，待补 UI 二次确认弹窗和 AOE 逐目标后果展示。
 - [ ] UI 目标选择状态、取消、确认、高亮。
 
 参考：`simulation/skills.rs`、`simulation/types.rs`、`controls/targeting.rs`。
@@ -885,7 +885,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [ ] `Interaction`：门、锁门、pickup 数量、scene transition、disabled options。
 - [ ] `PlayerInteraction`：UI blocker、右键菜单、hover prompt、actor/object/grid priority。
 - [ ] `Movement`：对角、禁止穿角、楼梯、自动开门、取消 pending、跨回合长路径。
-- [~] `Combat`：LOS、跨层、最大/最小射程、攻击预览/实际攻击空间诊断、战斗退出、AOE、reload、miss/evasion、armor、seed 第一版已有覆盖；待补友军伤害和门/楼层例外。
+- [~] `Combat`：LOS、跨层、最大/最小射程、攻击预览/实际攻击空间诊断、战斗退出、AOE、reload、miss/evasion、armor、seed、友军伤害确认后果第一版已有覆盖；待补门/楼层例外和 UI 确认弹窗。
 - [ ] `AI`：开门、重规划、感知丢失、技能、治疗、settlement life。
 - [~] `InventoryUI`：顺序/名称/重量/价值排序、顺序视图拖拽重排、拖到装备/丢弃按钮、右键使用/装备/丢弃菜单、筛选、搜索、详情、消耗品使用、选中物品装备/丢弃、丢弃数量和任务/关键物品禁用第一版已覆盖；待补完整上下文菜单项、数量弹窗、实际装备槽/容器/交易跨面板拖拽、装备详情和更完整使用反馈。
 - [~] `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、全部拿取/全部存放、双向拖拽、背包负重限制、容器自身容量、权限高级错误和显式钥匙/工具消耗解锁已覆盖；待补逐件工具耐久和跨面板拖拽视觉 polish。

@@ -708,6 +708,9 @@ func preview_attack(actor_id: int, target_actor_id: int, topology: Dictionary = 
 		"range": attack_range,
 		"min_range": _attack_min_range_from_options(options, profile),
 		"weapon_profile": profile,
+		"allow_non_hostile_attack": _allows_non_hostile_attack_option(options),
+		"confirmation_required": bool(options.get("confirmation_required", _allows_non_hostile_attack_option(options))),
+		"friendly_fire_relationship_delta": float(options.get("friendly_fire_relationship_delta", options.get("non_hostile_attack_relationship_delta", -75.0))),
 	})
 	var attack_cost: float = float(options.get("ap_cost", profile.get("ap_cost", DEFAULT_ATTACK_AP)))
 	preview["ap_cost"] = attack_cost
@@ -731,8 +734,8 @@ func set_combat_rng_seed(seed: int) -> void:
 	combat_state["combat_rng_counter"] = 0
 
 
-func validate_attack_target(actor_id: int, target_actor_id: int) -> Dictionary:
-	return _combat_runner.validate_attack_target(self, actor_id, target_actor_id)
+func validate_attack_target(actor_id: int, target_actor_id: int, options: Dictionary = {}) -> Dictionary:
+	return _combat_runner.validate_attack_target(self, actor_id, target_actor_id, options)
 
 
 func record_enemy_defeated(actor_id: int, enemy_definition_id: String, enemy_kind: String = "enemy") -> void:
@@ -1229,12 +1232,14 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 	var target: RefCounted = actor_registry.get_actor(target_actor_id)
 	if target == null:
 		return {"success": false, "reason": "unknown_target"}
-	var target_check: Dictionary = validate_attack_target(actor.actor_id, target_actor_id)
+	var attack_options: Dictionary = _attack_command_options(command, {})
+	var target_check: Dictionary = validate_attack_target(actor.actor_id, target_actor_id, attack_options)
 	if not bool(target_check.get("success", false)):
 		return target_check
 	var profile: Dictionary = _attack_profile(actor, _dictionary_or_empty(command.get("item_library", item_library)))
 	var attack_range: int = int(command.get("range", int(profile.get("range", DEFAULT_ATTACK_RANGE))))
 	var min_range: int = _attack_min_range_from_options(command, profile)
+	attack_options = _attack_command_options(command, profile)
 	var attack_distance: int = _grid_distance(actor.grid_position, target.grid_position)
 	if attack_distance > attack_range:
 		var source_target: Dictionary = _dictionary_or_empty(command.get("source_target", {
@@ -1249,6 +1254,9 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 			"range": attack_range,
 			"min_range": min_range,
 			"weapon_profile": profile,
+			"allow_non_hostile_attack": bool(attack_options.get("allow_non_hostile_attack", false)),
+			"confirmation_required": bool(attack_options.get("confirmation_required", false)),
+			"friendly_fire_relationship_delta": float(attack_options.get("friendly_fire_relationship_delta", -75.0)),
 		})
 	var attack_cost: float = float(command.get("ap_cost", profile.get("ap_cost", DEFAULT_ATTACK_AP)))
 	if actor.ap < attack_cost:
@@ -1274,6 +1282,9 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 		"range": attack_range,
 		"min_range": min_range,
 		"weapon_profile": profile,
+		"allow_non_hostile_attack": bool(attack_options.get("allow_non_hostile_attack", false)),
+		"confirmation_required": bool(attack_options.get("confirmation_required", false)),
+		"friendly_fire_relationship_delta": float(attack_options.get("friendly_fire_relationship_delta", -75.0)),
 	})
 	if bool(result.get("success", false)):
 		var ammo_result: Dictionary = _consume_attack_ammo(actor, profile)
@@ -3602,6 +3613,21 @@ func _attack_min_range_from_options(options: Dictionary, profile: Dictionary) ->
 	if options.has("minRange"):
 		return max(0, int(options.get("minRange", 0)))
 	return max(0, int(profile.get("min_range", 0)))
+
+
+func _attack_command_options(command: Dictionary, profile: Dictionary) -> Dictionary:
+	return {
+		"weapon_profile": profile.duplicate(true),
+		"allow_non_hostile_attack": _allows_non_hostile_attack_option(command),
+		"confirmation_required": bool(command.get("confirmation_required", _allows_non_hostile_attack_option(command))),
+		"friendly_fire_relationship_delta": float(command.get("friendly_fire_relationship_delta", command.get("non_hostile_attack_relationship_delta", -75.0))),
+	}
+
+
+func _allows_non_hostile_attack_option(options: Dictionary) -> bool:
+	return bool(options.get("allow_non_hostile_attack", false)) \
+		or bool(options.get("allow_friendly_fire", false)) \
+		or bool(options.get("allow_friendly_attack", false))
 
 
 func _weapon_min_range(weapon: Dictionary) -> int:

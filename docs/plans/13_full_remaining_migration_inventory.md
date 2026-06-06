@@ -132,7 +132,7 @@
 
 ### 6.1 攻击校验
 
-- 攻击目标合法性第一版已迁移：unknown attacker / target、self、attacker defeated、target defeated、friendly / neutral 非敌对目标、active vision 下不可见目标都会被拒绝；失败结果会暴露 actor id、target actor id、阵营或格子等诊断字段；已由 `Combat` smoke 覆盖。待补 corpse 作为单独 target type 的攻击拒绝、friendly fire 规则开关、关系分数影响和 UI 文案 polish。
+- 攻击目标合法性第一版已迁移：unknown attacker / target、self、attacker defeated、target defeated、friendly / neutral 非敌对目标、active vision 下不可见目标都会被拒绝；失败结果会暴露 actor id、target actor id、阵营或格子等诊断字段；已由 `Combat` smoke 覆盖。friendly fire core 第一版已迁移：普通攻击仍拒绝非敌对目标并暴露 confirmation_required，显式 `allow_non_hostile_attack` / `allow_friendly_fire` 后预览会显示关系后果，执行会先应用关系惩罚、把目标转为敌对并进入 combat，`attack_resolved` 会带 `friendly_fire` 和 `relationship_consequence`；已由 `Combat` / `Interaction` / `AI` smoke 覆盖。待补 corpse 作为单独 target type 的攻击拒绝、UI 二次确认弹窗、犯罪/目击/阵营联动和 UI 文案 polish。
 - 攻击空间校验第一版已迁移：跨层、超出武器范围、低于最小射程和 LOS 遮挡会返回稳定 reason，并暴露 attacker grid、target grid、distance、range、min_range、same_level、range_ok、min_range_ok、line_of_sight、line_of_sight_required 和 spatial_failure 等诊断字段；`submit_player_command(attack)`、core `perform_attack` 和 `preview_attack` 都复用同一空间诊断，已由 `Combat` smoke 覆盖预览与实际攻击的一致性。待补门开闭状态的遮挡语义、楼梯/高低差、特殊武器例外和技能共用射程策略。
 - 待补 line-of-sight 扩展：技能共用空间失败原因，墙体、门、楼层、中心点遮挡的完整旧版细节。
 - 范围扩展第一版已迁移：近战/远程最大射程、cell distance、武器 `range` 和兼容 `min_range` / `minimum_range` / `minRange` 最小射程会进入攻击 profile、预览、执行和 NPC intent；低于最小射程返回 `target_too_close`，不扣 AP、不消耗弹药、不进入战斗，并由 `Combat` / `AI` smoke 覆盖。待补特殊武器例外、更多数据内容标注和技能射程共用策略。
@@ -158,7 +158,7 @@
 ### 6.4 技能目标和 AOE
 
 - 技能目标解析第一版已迁移：`Simulation.preview_skill_target()` 和 `use_skill` 共用 target preview，默认兼容旧 self buff / toggle；已支持 self、single actor、grid、radius AOE、line 和 cone 的目标解析、range / level 校验、affected cells / actor ids、friendly fire 标记，并在目标非法时不消耗 AP；line 会按施法者到目标格的直线收集命中格，cone 会按目标方向、length 和 width 收集扇形命中格，两者都支持 affected_policy / LOS 过滤；已由 `Combat` smoke 覆盖。目标型技能选择 UI 第一版已迁移：非 self 热栏技能会进入目标选择态，hover 时刷新 core preview，HUD 展示本地化形状、目标策略、射程、距离、命中格、命中 actor、友军风险和失败原因，世界层会用 `SkillTargetPreviewMarkers` 显示 affected cell 和 affected actor 高亮并暴露 skill/shape/reason metadata，Esc 可取消，左键/确认会用同一 `use_skill` 命令释放并清理高亮；已由 `SkillsUI` smoke 覆盖。待补鼠标/键盘确认提示和目标选择音效。
-- AOE / 技能目标 LOS 与可见性第一版已迁移：single、grid、radius 目标默认要求施法者到目标中心 LOS，遮挡返回 `skill_target_blocked_by_los` 且不消耗 AP；active vision 已刷新时，技能目标会拒绝不可见 actor target 和不可见 grid / AOE 中心格并返回 `target_not_visible`；radius AOE 默认从中心到每个命中格检查 LOS，遮挡格会从 `affected_cells` / `affected_actor_ids` 排除，并支持 `requires_los=false` / `respect_los=false` 作为特殊技能例外；已由 `Combat` smoke 覆盖。待补更完整友军伤害策略、门开闭语义、中心到命中格的旧版边缘细节。
+- AOE / 技能目标 LOS 与可见性第一版已迁移：single、grid、radius 目标默认要求施法者到目标中心 LOS，遮挡返回 `skill_target_blocked_by_los` 且不消耗 AP；active vision 已刷新时，技能目标会拒绝不可见 actor target 和不可见 grid / AOE 中心格并返回 `target_not_visible`；radius AOE 默认从中心到每个命中格检查 LOS，遮挡格会从 `affected_cells` / `affected_actor_ids` 排除，并支持 `requires_los=false` / `respect_los=false` 作为特殊技能例外；已由 `Combat` smoke 覆盖。待补技能 / AOE 友军伤害实际后果、门开闭语义、中心到命中格的旧版边缘细节。
 - typed targeting policy 第一版已迁移：支持 self、hostile_only、ally_only、any_actor、any_grid、empty_grid，以及 radius 的 affected_policy 过滤；已由 `Combat` smoke 覆盖。待补 object target、容器/门/机关目标和脚本化目标类型。
 - 目标预览 UI polish 第一版已迁移：HUD 目标选择行会显示技能名、形状、策略、射程/距离、命中数量、友军风险和失败 reason 文案，世界层会显示范围格和命中 actor outline，并由 `SkillsUI` smoke 覆盖；待补鼠标/键盘确认提示和目标选择音效。
 
