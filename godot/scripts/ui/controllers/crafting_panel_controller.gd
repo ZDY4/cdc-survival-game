@@ -10,11 +10,16 @@ var _detail_title_label: Label
 var _detail_body_label: Label
 var _missing_reason_box: VBoxContainer
 var _quantity_spin: SpinBox
+var _queue_label: Label
+var _queue_box: VBoxContainer
+var _confirm_queue_button: Button
+var _clear_queue_button: Button
 var _feedback_label: Label
 var _category_filter := "all"
 var _sort_mode := "name"
 var _search_text := ""
 var _selected_recipe_id := ""
+var _craft_queue: Array[Dictionary] = []
 var _last_snapshot: Dictionary = {}
 
 
@@ -47,6 +52,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		empty.text = "没有符合筛选的配方"
 		_recipe_box.add_child(empty)
 		_apply_detail({})
+		_refresh_queue_view()
 		return
 	if _selected_recipe_id.is_empty() or _recipe_by_id(visible_recipes, _selected_recipe_id).is_empty():
 		_selected_recipe_id = str(_dictionary_or_empty(visible_recipes[0]).get("recipe_id", ""))
@@ -54,6 +60,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		var recipe_data: Dictionary = recipe
 		_recipe_box.add_child(_recipe_row(recipe_data))
 	_apply_detail(_recipe_by_id(visible_recipes, _selected_recipe_id))
+	_refresh_queue_view()
 
 
 func _build_layout() -> void:
@@ -65,7 +72,7 @@ func _build_layout() -> void:
 	_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_panel.offset_left = 455
 	_panel.offset_right = 850
-	_panel.offset_top = -245
+	_panel.offset_top = -310
 	_panel.offset_bottom = -24
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_panel)
@@ -111,6 +118,16 @@ func _build_layout() -> void:
 	_quantity_spin.value_changed.connect(func(_value: float) -> void:
 		_apply_detail(_recipe_by_id(_last_snapshot.get("recipes", []), _selected_recipe_id))
 	, CONNECT_DEFERRED)
+	_queue_label = _label("CraftQueueLine")
+	_queue_box = VBoxContainer.new()
+	_queue_box.name = "CraftQueueEntries"
+	_queue_box.add_theme_constant_override("separation", 3)
+	_confirm_queue_button = _toolbar_button("ConfirmCraftQueueButton", "执行队列", "按顺序制作队列中的配方")
+	_confirm_queue_button.toggle_mode = false
+	_confirm_queue_button.pressed.connect(_confirm_craft_queue, CONNECT_DEFERRED)
+	_clear_queue_button = _toolbar_button("ClearCraftQueueButton", "清空", "取消全部队列")
+	_clear_queue_button.toggle_mode = false
+	_clear_queue_button.pressed.connect(_clear_craft_queue, CONNECT_DEFERRED)
 	box.add_child(_summary_label)
 	box.add_child(_search_box)
 	box.add_child(_category_box)
@@ -129,7 +146,16 @@ func _build_layout() -> void:
 	box.add_child(_detail_body_label)
 	box.add_child(_missing_reason_box)
 	box.add_child(_quantity_spin)
+	box.add_child(_queue_label)
+	box.add_child(_queue_box)
+	var queue_buttons := HBoxContainer.new()
+	queue_buttons.name = "CraftQueueButtons"
+	queue_buttons.add_theme_constant_override("separation", 4)
+	queue_buttons.add_child(_confirm_queue_button)
+	queue_buttons.add_child(_clear_queue_button)
+	box.add_child(queue_buttons)
 	box.add_child(_feedback_label)
+	_refresh_queue_view()
 
 
 func _recipe_row(recipe: Dictionary) -> HBoxContainer:
@@ -174,7 +200,20 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 			var result: Dictionary = root.craft_player_recipe(recipe_id, max(1, count))
 			_set_feedback_from_result(result, recipe)
 	, CONNECT_DEFERRED)
+	var queue_button := Button.new()
+	queue_button.name = "QueueButton"
+	queue_button.text = "Q"
+	queue_button.tooltip_text = "加入制作队列"
+	queue_button.custom_minimum_size = Vector2(34, 28)
+	queue_button.disabled = not bool(recipe.get("can_craft", false))
+	queue_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	queue_button.focus_mode = Control.FOCUS_NONE
+	queue_button.pressed.connect(func() -> void:
+		var count := int(_quantity_spin.value) if _quantity_spin != null and _selected_recipe_id == recipe_id else 1
+		_queue_recipe(recipe, max(1, count))
+	, CONNECT_DEFERRED)
 	row.add_child(line)
+	row.add_child(queue_button)
 	row.add_child(button)
 	return row
 
@@ -666,6 +705,132 @@ func _reason_text(recipe: Dictionary) -> String:
 				])
 			return "材料不足 %s" % ", ".join(parts)
 	return str(recipe.get("craft_reason", ""))
+
+
+func _queue_recipe(recipe: Dictionary, count: int) -> void:
+	var recipe_id := str(recipe.get("recipe_id", ""))
+	if recipe_id.is_empty():
+		return
+	for index in range(_craft_queue.size()):
+		var entry: Dictionary = _dictionary_or_empty(_craft_queue[index]).duplicate(true)
+		if str(entry.get("recipe_id", "")) != recipe_id:
+			continue
+		entry["count"] = max(1, int(entry.get("count", 1))) + max(1, count)
+		_craft_queue[index] = entry
+		_feedback_label.text = "已加入队列: %s x%d" % [recipe.get("name", recipe_id), int(entry.get("count", 1))]
+		_refresh_queue_view()
+		return
+	_craft_queue.append({
+		"recipe_id": recipe_id,
+		"name": str(recipe.get("name", recipe_id)),
+		"count": max(1, count),
+		"output_item_id": str(recipe.get("output_item_id", "")),
+		"output_name": str(recipe.get("output_name", recipe.get("output_item_id", ""))),
+		"output_count": max(1, int(recipe.get("output_count", 1))),
+	})
+	_feedback_label.text = "已加入队列: %s x%d" % [recipe.get("name", recipe_id), max(1, count)]
+	_refresh_queue_view()
+
+
+func _refresh_queue_view() -> void:
+	if _queue_label == null or _queue_box == null:
+		return
+	_clear_box(_queue_box)
+	if _craft_queue.is_empty():
+		_queue_label.text = "制作队列 空"
+		if _confirm_queue_button != null:
+			_confirm_queue_button.disabled = true
+		if _clear_queue_button != null:
+			_clear_queue_button.disabled = true
+		return
+	var total_count := 0
+	var summary_parts: Array[String] = []
+	for index in range(_craft_queue.size()):
+		var entry: Dictionary = _dictionary_or_empty(_craft_queue[index])
+		total_count += max(1, int(entry.get("count", 1)))
+		summary_parts.append("%s x%d" % [entry.get("name", entry.get("recipe_id", "")), int(entry.get("count", 1))])
+		_queue_box.add_child(_queue_entry_row(index, entry))
+	_queue_label.text = "制作队列 %d项/%d次 | %s" % [
+		_craft_queue.size(),
+		total_count,
+		" | ".join(summary_parts.slice(0, 3)),
+	]
+	if _confirm_queue_button != null:
+		_confirm_queue_button.disabled = false
+	if _clear_queue_button != null:
+		_clear_queue_button.disabled = false
+
+
+func _queue_entry_row(index: int, entry: Dictionary) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "CraftQueueEntry_%d" % index
+	row.add_theme_constant_override("separation", 4)
+	var label := _label("CraftQueueEntryLabel_%d" % index)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.text = "%s x%d -> %s x%d" % [
+		entry.get("name", entry.get("recipe_id", "")),
+		int(entry.get("count", 1)),
+		entry.get("output_name", entry.get("output_item_id", "")),
+		max(1, int(entry.get("output_count", 1))) * max(1, int(entry.get("count", 1))),
+	]
+	var cancel_button := Button.new()
+	cancel_button.name = "CancelCraftQueueEntry_%d" % index
+	cancel_button.text = "X"
+	cancel_button.tooltip_text = "取消此队列项"
+	cancel_button.custom_minimum_size = Vector2(32, 24)
+	cancel_button.focus_mode = Control.FOCUS_NONE
+	cancel_button.pressed.connect(func() -> void:
+		_cancel_queue_entry(index)
+	, CONNECT_DEFERRED)
+	row.add_child(label)
+	row.add_child(cancel_button)
+	return row
+
+
+func _cancel_queue_entry(index: int) -> void:
+	if index < 0 or index >= _craft_queue.size():
+		return
+	var entry: Dictionary = _dictionary_or_empty(_craft_queue[index])
+	_craft_queue.remove_at(index)
+	_feedback_label.text = "已取消队列项: %s" % entry.get("name", entry.get("recipe_id", ""))
+	_refresh_queue_view()
+
+
+func _clear_craft_queue() -> void:
+	if _craft_queue.is_empty():
+		return
+	_craft_queue.clear()
+	_feedback_label.text = "已清空制作队列"
+	_refresh_queue_view()
+
+
+func _confirm_craft_queue() -> void:
+	if _craft_queue.is_empty():
+		return
+	var root := get_parent()
+	if root == null or not root.has_method("confirm_crafting_queue"):
+		_feedback_label.text = "制作失败: 队列 | 运行时未就绪"
+		return
+	var queued_entries := _craft_queue.duplicate(true)
+	var result: Dictionary = root.confirm_crafting_queue(queued_entries)
+	if bool(result.get("success", false)):
+		_craft_queue.clear()
+		_feedback_label.text = "已执行制作队列: %d次" % int(result.get("completed_count", 0))
+	elif bool(result.get("partial_success", false)):
+		_craft_queue.clear()
+		_feedback_label.text = "制作队列部分完成: %d次 | 失败 %d项" % [
+			int(result.get("completed_count", 0)),
+			int(result.get("failed_count", 0)),
+		]
+	else:
+		var failed: Array = _array_or_empty(result.get("failed", []))
+		var reason := "unknown"
+		if not failed.is_empty():
+			reason = str(_dictionary_or_empty(failed[0]).get("reason", "unknown"))
+		_feedback_label.text = "制作队列失败: %s" % _craft_failure_text(reason)
+	_refresh_queue_view()
+	if not _last_snapshot.is_empty():
+		apply_snapshot(_last_snapshot)
 
 
 func _set_feedback_from_result(result: Dictionary, recipe: Dictionary) -> void:

@@ -95,8 +95,8 @@ Godot 落点：`data/items/*.json`、`godot/scripts/core/economy/**`、`godot/sc
 - [~] 工具要求和工作台要求在 UI 中有初版展示。
 - [ ] 解锁条件：技能、任务、书籍、world flag、地点、工作台。
 - [ ] 运行时工具满足：背包、装备、附近容器、工作台对象。
-- [~] 制作时间 / AP：即时制作 AP 成本第一版已按 `craft_time` 接入玩家命令，AP 不足不消耗材料；待补排队、跨回合、取消、完成事件和时间表现。
-- [ ] 批量制作：数量、最大可制作、材料预览、产物合并。
+- [~] 制作时间 / AP：即时制作 AP 成本第一版已按 `craft_time` 接入玩家命令，AP 不足不消耗材料；UI 制作队列确认时会顺序提交即时制作；待补跨回合、制作中取消、完成事件和时间表现。
+- [~] 批量制作：数量、最大可制作、材料预览、产物合并、UI 队列和队列取消第一版。
 - [ ] XP 奖励、任务推进、世界 flag。
 参考：`game_data/src/recipe.rs`、`recipe_edit.rs`。
 Godot 落点：`data/recipes/*.json`、`godot/scripts/core/crafting/**`、`godot/scripts/ui/controllers/crafting_panel_controller.gd`。
@@ -813,7 +813,7 @@ Godot 落点：`godot/scenes/ui/hud.tscn`、`godot/scripts/ui/controllers/hud_co
 - [ ] Inventory 面板：筛选、详情、装备槽、上下文、拖拽、数量。
 - [ ] Journal 面板：任务详情、节点、奖励、追踪、可交付。
 - [ ] Skills 面板：图形树、详情、hotbar 绑定、多树切换。
-- [ ] Crafting 面板：分类、详情、数量、工作台、队列。
+- [~] Crafting 面板：分类、详情、数量、工作台、队列和取消第一版；待补跨回合制作进度和队列 polish。
 - [~] Trade 面板：店铺/玩家双栏、数量直买直卖、价格预览、购物车和确认已覆盖；待补拖拽。
 - [~] Container 面板：空状态、双栏、滚动、基础详情、选中详情和数量选择已覆盖；待补拖拽。
 - [ ] Dialogue 面板：滚动文本、选项、键盘、关闭。
@@ -892,7 +892,7 @@ Godot 落点：`godot/scripts/app/save_service.gd`、`godot/scripts/core/simulat
 - [~] `TradeUI`：店铺/玩家双栏、数量直买直卖、价格预览、资金/库存失败提示、购物车、批量确认、无部分成交、装备出售、不可出售、拖拽交易、业务禁用说明和交易快捷键第一版已覆盖；待补统一 drag preview layer polish。
 - [~] `SkillsUI`：技能树、hotbar、多组/多槽、目标预览、cooldown 第一版；待补图形树 pan、组命名/按钮和更完整状态 UI。
 - [ ] `JournalUI`：任务详情、追踪、对话交付、完成反馈。
-- [ ] `CraftingUI`：解锁、工作台、工具、批量、队列。
+- [~] `CraftingUI`：解锁、工作台、工具、批量、队列和取消第一版；待补跨回合制作进度、工具耐久/消耗和更完整反馈。
 - [ ] `Save`：新增字段、旧存档迁移、跨地图状态。
 
 ### 21.2 需要新增 scenario

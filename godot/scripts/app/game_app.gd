@@ -1287,6 +1287,50 @@ func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
+func confirm_crafting_queue(entries: Array) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var results: Array[Dictionary] = []
+	var completed_count: int = 0
+	for entry in _array_or_empty(entries):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var recipe_id := str(entry_data.get("recipe_id", ""))
+		var count: int = max(1, int(entry_data.get("count", 1)))
+		if recipe_id.is_empty():
+			results.append({"success": false, "reason": "recipe_id_missing", "entry": entry_data.duplicate(true)})
+			continue
+		var result: Dictionary = simulation.submit_player_command({
+			"kind": "craft",
+			"actor_id": 1,
+			"recipe_id": recipe_id,
+			"count": count,
+			"recipe_library": registry.get_library("recipes"),
+			"crafting_context": _crafting_context(),
+			"topology": _dictionary_or_empty(world_result.get("map", {})),
+		})
+		result["queued_recipe_id"] = recipe_id
+		result["queued_count"] = count
+		results.append(result)
+		if bool(result.get("success", false)):
+			completed_count += count
+	var failed: Array[Dictionary] = []
+	for result in results:
+		var result_data: Dictionary = _dictionary_or_empty(result)
+		if not bool(result_data.get("success", false)):
+			failed.append(result_data.duplicate(true))
+	refresh_inventory_panel()
+	refresh_crafting_panel()
+	refresh_skills_panel()
+	return {
+		"success": failed.is_empty(),
+		"partial_success": completed_count > 0 and not failed.is_empty(),
+		"completed_count": completed_count,
+		"failed_count": failed.size(),
+		"results": results,
+		"failed": failed,
+	}
+
+
 func _crafting_context() -> Dictionary:
 	return {
 		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),

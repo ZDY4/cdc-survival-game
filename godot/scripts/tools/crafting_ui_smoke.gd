@@ -372,18 +372,44 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("crafting detail should show max craft count")
 
 	var crafted_events_before := _event_count(game_root, "recipe_crafted")
-	_craft_button(game_root, "recipe_bandage_basic").pressed.emit()
+	if _queue_button(game_root, "recipe_bandage_basic") == null or _queue_button(game_root, "recipe_bandage_basic").disabled:
+		errors.append("basic bandage queue button should be enabled after cloth is available")
+	else:
+		_queue_button(game_root, "recipe_bandage_basic").pressed.emit()
+		await process_frame
+		if not _queue_line(game_root).contains("制作队列 1项/2次") or not _queue_line(game_root).contains("基础绷带 x2"):
+			errors.append("crafting queue should show queued batch bandage")
+		if _player_inventory_count(game_root, "1011") != 4:
+			errors.append("queueing craft should not consume materials")
+		var cancel_button := _cancel_queue_entry_button(game_root, 0)
+		if cancel_button == null:
+			errors.append("crafting queue entry should expose cancel button")
+		else:
+			cancel_button.pressed.emit()
+			await process_frame
+			if not _queue_line(game_root).contains("制作队列 空"):
+				errors.append("cancelling queued craft should empty queue")
+			if _player_inventory_count(game_root, "1011") != 4:
+				errors.append("cancelling queued craft should not consume materials")
+		_queue_button(game_root, "recipe_bandage_basic").pressed.emit()
+		await process_frame
+		if _confirm_queue_button(game_root) == null or _confirm_queue_button(game_root).disabled:
+			errors.append("crafting queue confirm button should enable with queued entries")
+		else:
+			_confirm_queue_button(game_root).pressed.emit()
 	await process_frame
-	if not _feedback_text(game_root).contains("已制作 x2: 基础绷带 -> 绷带 x2"):
-		errors.append("crafting panel should show batch craft feedback")
+	if not _feedback_text(game_root).contains("已执行制作队列: 2次"):
+		errors.append("crafting panel should show queue execution feedback")
+	if not _queue_line(game_root).contains("制作队列 空"):
+		errors.append("crafting queue should clear after successful execution")
 	if _player_inventory_count(game_root, "1011") != 0:
-		errors.append("batch crafting from panel should consume selected cloth quantity")
+		errors.append("queue crafting from panel should consume selected cloth quantity")
 	if _player_inventory_count(game_root, "1006") != 3:
-		errors.append("batch crafting from panel should add crafted bandages")
+		errors.append("queue crafting from panel should add crafted bandages")
 	if not _event_seen(game_root, "recipe_crafted"):
-		errors.append("crafting from panel should emit recipe_crafted")
+		errors.append("crafting queue from panel should emit recipe_crafted")
 	if _event_count(game_root, "recipe_crafted") < crafted_events_before + 2:
-		errors.append("batch crafting should emit recipe_crafted for each crafted item")
+		errors.append("queue batch crafting should emit recipe_crafted for each crafted item")
 	if not _detail_text(game_root).contains("最大 0"):
 		errors.append("crafting panel should refresh max craft count after batch crafting")
 	return errors
@@ -425,6 +451,32 @@ func _craft_button(game_root: Node, recipe_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node("CraftButton") as Button
+
+
+func _queue_button(game_root: Node, recipe_id: String) -> Button:
+	var row: Node = game_root.crafting_panel.find_child("Recipe_%s" % recipe_id, true, false)
+	if row == null:
+		return null
+	return row.get_node("QueueButton") as Button
+
+
+func _queue_line(game_root: Node) -> String:
+	var label: Label = game_root.crafting_panel.find_child("CraftQueueLine", true, false) as Label
+	if label == null:
+		return ""
+	return str(label.text)
+
+
+func _confirm_queue_button(game_root: Node) -> Button:
+	return game_root.crafting_panel.find_child("ConfirmCraftQueueButton", true, false) as Button
+
+
+func _clear_queue_button(game_root: Node) -> Button:
+	return game_root.crafting_panel.find_child("ClearCraftQueueButton", true, false) as Button
+
+
+func _cancel_queue_entry_button(game_root: Node, index: int) -> Button:
+	return game_root.crafting_panel.find_child("CancelCraftQueueEntry_%d" % index, true, false) as Button
 
 
 func _search_box(game_root: Node) -> LineEdit:
