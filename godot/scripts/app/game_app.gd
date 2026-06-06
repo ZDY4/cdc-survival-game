@@ -377,6 +377,24 @@ func controls_hint_snapshot() -> Dictionary:
 	return {"visible": false, "line_count": 0, "lines": []}
 
 
+func toggle_debug_panel() -> Dictionary:
+	if hud == null or not hud.has_method("toggle_debug_panel"):
+		return {"success": false, "reason": "hud_missing"}
+	var result: Dictionary = hud.toggle_debug_panel()
+	refresh_hud(current_interaction_prompt())
+	return result
+
+
+func is_debug_panel_open() -> bool:
+	return hud != null and hud.has_method("is_debug_panel_open") and bool(hud.is_debug_panel_open())
+
+
+func debug_panel_snapshot() -> Dictionary:
+	if hud != null and hud.has_method("debug_panel_snapshot"):
+		return hud.debug_panel_snapshot()
+	return {"visible": false, "line_count": 0, "lines": []}
+
+
 func cycle_debug_overlay_mode() -> Dictionary:
 	var modes := ["off", "walkable", "vision", "blocked_sight", "level"]
 	var index := modes.find(debug_overlay_mode)
@@ -526,6 +544,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"ui_blocker": gameplay_input_blocker_name(),
 		"controls_hint": controls_hint_snapshot(),
 		"debug_console": debug_console_snapshot(),
+		"debug_panel": debug_panel_snapshot(),
 		"hover": runtime_hover_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
 		"ai_debug": ai_debug_snapshot(),

@@ -82,6 +82,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
 	_assert_runtime_performance(errors, game_root, "initial runtime performance")
 	_assert_ai_debug_snapshot(errors, game_root, "initial AI debug")
+	_exercise_debug_panel(errors, game_root)
 	_assert_hotbar_visibility(errors, game_root, true, "initial hotbar visibility")
 	_assert_observe_mode_button(errors, game_root, false, "initial observe mode button")
 	_assert_observe_auto_button(errors, game_root, false, "initial observe auto hotbar")
@@ -806,6 +807,41 @@ func _assert_runtime_control_line(errors: Array[String], game_root: Node, expect
 		return
 	if not str((label as Label).text).contains(expected):
 		errors.append("%s: RuntimeControlLine expected to contain %s, got %s" % [context, expected, str((label as Label).text)])
+
+
+func _exercise_debug_panel(errors: Array[String], game_root: Node) -> void:
+	if not game_root.has_method("debug_panel_snapshot"):
+		errors.append("game root should expose debug_panel_snapshot")
+		return
+	_assert_debug_panel_snapshot(errors, game_root, false, "initial debug panel")
+	_press_key(game_root, KEY_F3)
+	_assert_debug_panel_snapshot(errors, game_root, true, "F3 opened debug panel")
+	var panel: Control = game_root.hud.find_child("DebugPanel", true, false) as Control
+	if panel == null or not panel.visible:
+		errors.append("debug panel should be visible after F3")
+	for kind in ["overlay", "runtime", "performance", "ai", "console"]:
+		var line: Node = game_root.hud.find_child("DebugPanelLine_%s" % kind, true, false)
+		if line == null:
+			errors.append("debug panel should expose %s line" % kind)
+		elif not line is Label or str((line as Label).text).is_empty():
+			errors.append("debug panel %s line should contain text" % kind)
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var debug_panel: Dictionary = _dictionary_or_empty(runtime.get("debug_panel", {}))
+	if not bool(debug_panel.get("visible", false)):
+		errors.append("runtime_control should expose debug panel visible state: %s" % runtime)
+	if int(debug_panel.get("line_count", 0)) < 6:
+		errors.append("debug panel should expose diagnostic lines in runtime snapshot: %s" % debug_panel)
+	_assert_runtime_control_line(errors, game_root, "Perf", "debug panel should keep runtime HUD diagnostics")
+	_press_key(game_root, KEY_F3)
+	_assert_debug_panel_snapshot(errors, game_root, false, "F3 closed debug panel")
+
+
+func _assert_debug_panel_snapshot(errors: Array[String], game_root: Node, expected_visible: bool, context: String) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.debug_panel_snapshot())
+	if bool(snapshot.get("visible", not expected_visible)) != expected_visible:
+		errors.append("%s: debug panel visible expected %s, got %s" % [context, str(expected_visible), snapshot])
+	if expected_visible and int(snapshot.get("line_count", 0)) < 6:
+		errors.append("%s: debug panel should expose diagnostic lines: %s" % [context, snapshot])
 
 
 func _assert_controls_hint_snapshot(errors: Array[String], game_root: Node, expected_visible: bool, context: String) -> void:

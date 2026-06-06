@@ -840,7 +840,7 @@ Godot 落点：`tools/agent/**`、`docs/agent-workflows/**`。
 
 - [~] debug console：反引号开关、输入框、history、suggestions、Tab autocomplete、上下箭头历史浏览、Esc 关闭和 gameplay blocker 第一版已迁移，并由 `UIToggle` smoke 覆盖；待补完整视觉、命令参数提示和复制/过滤。
 - [~] console commands：`help`、`show fps`、`show overlays`、`observe mode`、`clear`、`restart`、`spawn`、`give item`、`teleport`、`unlock location` 第一版已迁移，并由 `UIToggle` smoke 覆盖成功和常见拒绝路径；待补命令参数提示、复制/过滤、权限策略、更多参数校验和旧 debug viewer 的完整命令集。
-- [ ] debug panel：开关、按钮、动作、状态。
+- [~] debug panel：F3 开关、HUD `DebugPanel`、runtime snapshot `debug_panel` 和 overlay/info/runtime/hover/selection/AI/performance/console 汇总第一版已迁移，并由 `UIToggle` smoke 覆盖；待补旧 debug viewer 完整按钮、动作、布局和过滤。
 - [~] info panels：overview、selection、actor、world、interaction、turn system、events、AI、performance 已有页面状态、HUD 行和 `[` / `]` 切换 smoke；待补旧 debug viewer 各页完整内容。
 - [~] overlay flags：walkable、vision、blocked sight、level 已有世界 overlay；auto tick/observe、fps、frame time 和 HUD latency 已有 HUD/runtime control 诊断；待补 help 与统一 debug panel 展示。
 - [~] profiling：frame time、render count、actor count、object count、pathfinding time 和 visited cell count 已进入 `runtime_control.performance` 与 HUD runtime 行；待补更完整 profiling 面板。

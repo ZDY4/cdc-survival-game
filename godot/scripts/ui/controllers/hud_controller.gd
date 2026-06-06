@@ -25,8 +25,13 @@ var _debug_console: PanelContainer
 var _console_history_label: Label
 var _console_suggestions_label: Label
 var _console_input: LineEdit
+var _debug_panel: PanelContainer
+var _debug_panel_title_label: Label
+var _debug_panel_lines_box: VBoxContainer
 var controls_hint_visible := false
 var console_visible := false
+var debug_panel_visible := false
+var debug_panel_latest_snapshot: Dictionary = {}
 var console_history: Array[String] = []
 var console_command_history: Array[String] = []
 var console_history_index := -1
@@ -87,6 +92,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_skill_targeting_label.visible = not _skill_targeting_label.text.is_empty()
 	_apply_controls_hint()
 	_apply_interaction_menu(interaction)
+	_apply_debug_panel(snapshot)
 
 
 func _build_layout() -> void:
@@ -152,13 +158,14 @@ func _build_layout() -> void:
 	for line in [
 		"I/C/M/J/K/L 面板 | Esc 关闭/设置 | Space 等待",
 		"1-9 对话选项 | 1-0 热栏 | Alt+1/2/3 热栏组 | 鼠标左键移动/交互",
-		"右键菜单 | 中键拖拽相机 | F 跟随 | V 覆盖层 | [/] 信息页 | A 自动推进 | +/- 缩放",
+		"右键菜单 | 中键拖拽相机 | F 跟随 | V 覆盖层 | F3 调试面板 | [/] 信息页 | A 自动推进 | +/- 缩放",
 	]:
 		var label := _line("ControlsHintLine")
 		label.text = line
 		_controls_hint_box.add_child(label)
 	_build_interaction_menu()
 	_build_debug_console()
+	_build_debug_panel()
 
 
 func toggle_controls_hint() -> Dictionary:
@@ -181,6 +188,29 @@ func controls_hint_snapshot() -> Dictionary:
 		"visible": controls_hint_visible,
 		"line_count": lines.size(),
 		"lines": lines,
+	}
+
+
+func toggle_debug_panel() -> Dictionary:
+	debug_panel_visible = not debug_panel_visible
+	_apply_debug_panel(debug_panel_latest_snapshot)
+	return {"success": true, "visible": debug_panel_visible}
+
+
+func hide_debug_panel() -> void:
+	debug_panel_visible = false
+	_apply_debug_panel(debug_panel_latest_snapshot)
+
+
+func is_debug_panel_open() -> bool:
+	return debug_panel_visible
+
+
+func debug_panel_snapshot() -> Dictionary:
+	return {
+		"visible": debug_panel_visible,
+		"line_count": _debug_panel_line_texts().size(),
+		"lines": _debug_panel_line_texts(),
 	}
 
 
@@ -342,6 +372,34 @@ func _build_debug_console() -> void:
 	box.add_child(_console_input)
 
 
+func _build_debug_panel() -> void:
+	if _debug_panel != null:
+		return
+	_debug_panel = PanelContainer.new()
+	_debug_panel.name = "DebugPanel"
+	_debug_panel.visible = false
+	_debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_debug_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_debug_panel.offset_left = -444
+	_debug_panel.offset_right = -16
+	_debug_panel.offset_top = 16
+	_debug_panel.offset_bottom = 300
+	add_child(_debug_panel)
+
+	var box := VBoxContainer.new()
+	box.name = "DebugPanelLines"
+	box.add_theme_constant_override("separation", 4)
+	_debug_panel.add_child(box)
+
+	_debug_panel_title_label = _line("DebugPanelTitle")
+	_debug_panel_title_label.text = "Debug Panel"
+	box.add_child(_debug_panel_title_label)
+	_debug_panel_lines_box = VBoxContainer.new()
+	_debug_panel_lines_box.name = "DebugPanelContent"
+	_debug_panel_lines_box.add_theme_constant_override("separation", 3)
+	box.add_child(_debug_panel_lines_box)
+
+
 func _handle_console_input_event(event: InputEvent) -> void:
 	if not event is InputEventKey:
 		return
@@ -413,6 +471,84 @@ func _apply_debug_console() -> void:
 		_console_suggestions_label.text = "suggestions: %s" % ", ".join(console_suggestions)
 	if not console_visible and _console_input != null:
 		_console_input.release_focus()
+
+
+func _apply_debug_panel(snapshot: Dictionary) -> void:
+	debug_panel_latest_snapshot = snapshot.duplicate(true)
+	if _debug_panel == null:
+		return
+	_debug_panel.visible = debug_panel_visible
+	_debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _debug_panel_title_label != null:
+		_debug_panel_title_label.text = "Debug Panel | F3 | %s" % ("on" if debug_panel_visible else "off")
+	if _debug_panel_lines_box == null:
+		return
+	for child in _debug_panel_lines_box.get_children():
+		child.queue_free()
+	for entry in _debug_panel_entries(snapshot):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var label := _line("DebugPanelLine_%s" % str(entry_data.get("kind", "entry")))
+		label.text = str(entry_data.get("text", ""))
+		label.tooltip_text = str(entry_data.get("tooltip", label.text))
+		label.set_meta("debug_panel_kind", str(entry_data.get("kind", "")))
+		label.set_meta("debug_panel_text", label.text)
+		_debug_panel_lines_box.add_child(label)
+
+
+func _debug_panel_entries(snapshot: Dictionary) -> Array[Dictionary]:
+	var runtime_control: Dictionary = _dictionary_or_empty(snapshot.get("runtime_control", {}))
+	var info_panel: Dictionary = _dictionary_or_empty(snapshot.get("info_panel", {}))
+	var debug_overlay: Dictionary = _dictionary_or_empty(runtime_control.get("debug_overlay", {}))
+	var console: Dictionary = _dictionary_or_empty(runtime_control.get("debug_console", {}))
+	return [
+		{"kind": "overlay", "text": "Overlay: %s | active %s | cells %d" % [
+			str(debug_overlay.get("mode", snapshot.get("debug_overlay_mode", "off"))),
+			"yes" if bool(debug_overlay.get("active", false)) else "no",
+			int(debug_overlay.get("cell_count", 0)),
+		]},
+		{"kind": "info", "text": _info_panel_text(info_panel)},
+		{"kind": "runtime", "text": _debug_panel_runtime_text(runtime_control)},
+		{"kind": "hover", "text": _hover_control_text(runtime_control.get("hover", {})) if not _hover_control_text(runtime_control.get("hover", {})).is_empty() else "Hover none"},
+		{"kind": "selection", "text": _selection_debug_control_text(runtime_control.get("selection_debug", {})) if not _selection_debug_control_text(runtime_control.get("selection_debug", {})).is_empty() else "Sel none"},
+		{"kind": "ai", "text": _ai_debug_control_text(runtime_control.get("ai_debug", {})) if not _ai_debug_control_text(runtime_control.get("ai_debug", {})).is_empty() else "AI none"},
+		{"kind": "performance", "text": _performance_control_text(runtime_control.get("performance", {})) if not _performance_control_text(runtime_control.get("performance", {})).is_empty() else "Perf none"},
+		{"kind": "console", "text": "Console %s | history %d | suggestions %d" % [
+			"on" if bool(console.get("visible", false)) else "off",
+			int(console.get("history_count", 0)),
+			int(console.get("suggestion_count", 0)),
+		]},
+	]
+
+
+func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
+	var parts: Array[String] = [
+		"Auto %s" % ("on" if bool(runtime_control.get("auto_tick", false)) else "off"),
+		"Observe %s %s %s" % [
+			"on" if bool(runtime_control.get("observe_mode", false)) else "off",
+			"play" if bool(runtime_control.get("observe_playback", false)) else "pause",
+			str(runtime_control.get("observe_speed", "x1")),
+		],
+	]
+	var blocker := str(runtime_control.get("ui_blocker", ""))
+	if not blocker.is_empty():
+		parts.append("Blocker %s" % blocker)
+	var level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
+	if not level.is_empty():
+		parts.append("Level %d" % int(level.get("current", 0)))
+	var focus: Dictionary = _dictionary_or_empty(runtime_control.get("focused_actor", {}))
+	if not focus.is_empty():
+		parts.append("Focus #%d" % int(focus.get("actor_id", 0)))
+	return "Runtime: %s" % " | ".join(parts)
+
+
+func _debug_panel_line_texts() -> Array[String]:
+	var lines: Array[String] = []
+	if _debug_panel_lines_box == null:
+		return lines
+	for child in _debug_panel_lines_box.get_children():
+		if child is Label:
+			lines.append(str((child as Label).text))
+	return lines
 
 
 func _apply_interaction_menu(interaction: Dictionary) -> void:

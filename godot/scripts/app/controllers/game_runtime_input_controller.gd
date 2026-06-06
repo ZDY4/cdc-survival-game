@@ -379,6 +379,10 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		if game_root.has_method("cycle_debug_overlay_mode"):
 			game_root.cycle_debug_overlay_mode()
 		return true
+	elif key == KEY_F3:
+		if game_root.has_method("toggle_debug_panel"):
+			game_root.toggle_debug_panel()
+		return true
 	elif key == KEY_BRACKETLEFT:
 		if game_root.has_method("cycle_info_panel"):
 			game_root.cycle_info_panel(-1)
