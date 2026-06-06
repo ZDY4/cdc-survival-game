@@ -883,6 +883,14 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 		errors.append("debug console should keep command history: %s" % snapshot)
 	if int(snapshot.get("command_history_count", 0)) < 2:
 		errors.append("debug console should keep command history entries: %s" % snapshot)
+	if int(snapshot.get("command_schema_count", 0)) < 10:
+		errors.append("debug console should expose command schema: %s" % snapshot)
+	var details: Array = _array_or_empty(snapshot.get("command_details", []))
+	if details.is_empty() or not str(details[0]).contains("help"):
+		errors.append("debug console should expose command detail lines: %s" % snapshot)
+	var help_result: Dictionary = game_root.submit_debug_console_command("help")
+	if not bool(help_result.get("success", false)) or not str(help_result.get("message", "")).contains("give item <item_id> [count]"):
+		errors.append("debug console help should include command usage: %s" % help_result)
 	_exercise_debug_console_keyboard_features(errors, game_root)
 	_exercise_debug_console_runtime_commands(errors, game_root)
 	_assert_runtime_control_line(errors, game_root, "Console on", "opened console HUD token")
@@ -944,13 +952,13 @@ func _exercise_debug_console_keyboard_features(errors: Array[String], game_root:
 		errors.append("debug console keyboard feature smoke missing ConsoleInput")
 		return
 	_emit_console_key(input, KEY_UP)
-	if input.text != "show overlays":
+	if input.text != "help":
 		errors.append("debug console Up should recall latest command, got %s" % input.text)
 	_emit_console_key(input, KEY_UP)
-	if input.text != "show fps":
+	if input.text != "show overlays":
 		errors.append("debug console second Up should recall previous command, got %s" % input.text)
 	_emit_console_key(input, KEY_DOWN)
-	if input.text != "show overlays":
+	if input.text != "help":
 		errors.append("debug console Down should move forward in command history, got %s" % input.text)
 	input.text = "obs"
 	input.caret_column = input.text.length()
@@ -1551,6 +1559,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _event_count(game_root: Node, kind: String) -> int:

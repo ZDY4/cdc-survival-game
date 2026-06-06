@@ -10,6 +10,95 @@ const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder
 var _inventory_entries := InventoryEntries.new()
 
 
+func command_schema() -> Array[Dictionary]:
+	return [
+		{
+			"id": "help",
+			"usage": "help",
+			"description": "显示调试控制台命令摘要。",
+			"examples": ["help"],
+		},
+		{
+			"id": "show fps",
+			"usage": "show fps",
+			"description": "显示 FPS、帧耗时和最近一次寻路耗时。",
+			"examples": ["show fps"],
+		},
+		{
+			"id": "show overlays",
+			"usage": "show overlays",
+			"description": "循环世界调试覆盖层。",
+			"examples": ["show overlays"],
+		},
+		{
+			"id": "observe mode",
+			"usage": "observe mode",
+			"description": "切换玩家控制和观察模式。",
+			"examples": ["observe mode"],
+		},
+		{
+			"id": "clear",
+			"usage": "clear",
+			"description": "清空控制台输出历史。",
+			"examples": ["clear"],
+		},
+		{
+			"id": "restart",
+			"usage": "restart",
+			"description": "重建新游戏运行时并刷新世界、面板和输入 controller。",
+			"examples": ["restart"],
+		},
+		{
+			"id": "give item",
+			"usage": "give item <item_id> [count]",
+			"description": "把指定物品加入玩家背包；count 必须大于 0。",
+			"examples": ["give item 1006 1"],
+		},
+		{
+			"id": "teleport",
+			"usage": "teleport <x> <z> [y]",
+			"description": "把玩家传送到当前地图格子，省略 y 时保留当前楼层。",
+			"aliases": ["tp"],
+			"examples": ["teleport 0 0 0", "tp 3 4"],
+		},
+		{
+			"id": "spawn",
+			"usage": "spawn <character_id> [x z y]",
+			"description": "按角色定义在当前地图生成 actor；省略坐标时生成在玩家旁边。",
+			"examples": ["spawn zombie_walker", "spawn zombie_walker 4 4 0"],
+		},
+		{
+			"id": "unlock location",
+			"usage": "unlock location <location_id>",
+			"description": "解锁 overworld location。",
+			"examples": ["unlock location forest"],
+		},
+	]
+
+
+func command_suggestions() -> Array[String]:
+	var output: Array[String] = []
+	for command in command_schema():
+		var command_data: Dictionary = _dictionary_or_empty(command)
+		var usage := str(command_data.get("usage", "")).strip_edges()
+		if not usage.is_empty():
+			output.append(usage)
+		for example in _array_or_empty(command_data.get("examples", [])):
+			var example_text := str(example).strip_edges()
+			if not example_text.is_empty() and not output.has(example_text):
+				output.append(example_text)
+	return output
+
+
+func help_text() -> String:
+	var usages: Array[String] = []
+	for command in command_schema():
+		var usage := str(_dictionary_or_empty(command).get("usage", "")).strip_edges()
+		if not usage.is_empty():
+			usages.append(usage)
+	return "commands: %s" % "; ".join(usages)
+
+
 func execute(game_root: Node, command: String) -> Dictionary:
 	var parts := command.split(" ", false)
 	if parts.is_empty():

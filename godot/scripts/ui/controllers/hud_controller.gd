@@ -35,6 +35,7 @@ var debug_panel_latest_snapshot: Dictionary = {}
 var console_history: Array[String] = []
 var console_command_history: Array[String] = []
 var console_history_index := -1
+var console_command_schema: Array[Dictionary] = []
 var console_suggestions: Array[String] = [
 	"help",
 	"show fps",
@@ -239,6 +240,9 @@ func debug_console_snapshot() -> Dictionary:
 		"command_history": console_command_history.duplicate(),
 		"command_history_count": console_command_history.size(),
 		"history_index": console_history_index,
+		"command_schema": console_command_schema.duplicate(true),
+		"command_schema_count": console_command_schema.size(),
+		"command_details": _console_command_detail_lines(),
 		"suggestions": console_suggestions.duplicate(),
 		"suggestion_count": console_suggestions.size(),
 		"input_text": _console_input.text if _console_input != null else "",
@@ -247,6 +251,22 @@ func debug_console_snapshot() -> Dictionary:
 
 func console_input_node() -> LineEdit:
 	return _console_input
+
+
+func set_debug_console_schema(schema: Array, suggestions: Array) -> void:
+	console_command_schema.clear()
+	for command in schema:
+		var command_data: Dictionary = _dictionary_or_empty(command)
+		if not command_data.is_empty():
+			console_command_schema.append(command_data.duplicate(true))
+	var normalized_suggestions: Array[String] = []
+	for suggestion in suggestions:
+		var suggestion_text := str(suggestion).strip_edges()
+		if not suggestion_text.is_empty() and not normalized_suggestions.has(suggestion_text):
+			normalized_suggestions.append(suggestion_text)
+	if not normalized_suggestions.is_empty():
+		console_suggestions = normalized_suggestions
+	_apply_debug_console()
 
 
 func set_debug_console_result(command_text: String, result: Dictionary) -> void:
@@ -468,9 +488,29 @@ func _apply_debug_console() -> void:
 	if _console_history_label != null:
 		_console_history_label.text = "\n".join(console_history)
 	if _console_suggestions_label != null:
-		_console_suggestions_label.text = "suggestions: %s" % ", ".join(console_suggestions)
+		_console_suggestions_label.text = _debug_console_help_text()
 	if not console_visible and _console_input != null:
 		_console_input.release_focus()
+
+
+func _debug_console_help_text() -> String:
+	var details := _console_command_detail_lines()
+	if not details.is_empty():
+		var shown := details.slice(0, mini(details.size(), 5))
+		var suffix := " | ..." if details.size() > shown.size() else ""
+		return "commands: %s%s" % [" | ".join(shown), suffix]
+	return "suggestions: %s" % ", ".join(console_suggestions)
+
+
+func _console_command_detail_lines() -> Array[String]:
+	var lines: Array[String] = []
+	for command in console_command_schema:
+		var usage := str(command.get("usage", "")).strip_edges()
+		if usage.is_empty():
+			continue
+		var description := str(command.get("description", "")).strip_edges()
+		lines.append("%s - %s" % [usage, description] if not description.is_empty() else usage)
+	return lines
 
 
 func _apply_debug_panel(snapshot: Dictionary) -> void:
@@ -512,11 +552,16 @@ func _debug_panel_entries(snapshot: Dictionary) -> Array[Dictionary]:
 		{"kind": "selection", "text": _selection_debug_control_text(runtime_control.get("selection_debug", {})) if not _selection_debug_control_text(runtime_control.get("selection_debug", {})).is_empty() else "Sel none"},
 		{"kind": "ai", "text": _ai_debug_control_text(runtime_control.get("ai_debug", {})) if not _ai_debug_control_text(runtime_control.get("ai_debug", {})).is_empty() else "AI none"},
 		{"kind": "performance", "text": _performance_control_text(runtime_control.get("performance", {})) if not _performance_control_text(runtime_control.get("performance", {})).is_empty() else "Perf none"},
-		{"kind": "console", "text": "Console %s | history %d | suggestions %d" % [
-			"on" if bool(console.get("visible", false)) else "off",
-			int(console.get("history_count", 0)),
-			int(console.get("suggestion_count", 0)),
-		]},
+		{"kind": "console", "text": _debug_panel_console_text(console)},
+	]
+
+
+func _debug_panel_console_text(console: Dictionary) -> String:
+	return "Console %s | history %d | suggestions %d | schema %d" % [
+		"on" if bool(console.get("visible", false)) else "off",
+		int(console.get("history_count", 0)),
+		int(console.get("suggestion_count", 0)),
+		int(console.get("command_schema_count", 0)),
 	]
 
 

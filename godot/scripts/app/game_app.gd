@@ -350,7 +350,7 @@ func _execute_debug_console_command(command: String) -> Dictionary:
 		"":
 			return {"success": false, "reason": "empty_command", "message": "empty command"}
 		"help":
-			return {"success": true, "message": "commands: help, show fps, show overlays, observe mode, clear, restart, give item <id> [count], teleport <x> <z> [y], spawn <character_id> [x z y], unlock location <id>"}
+			return {"success": true, "message": _debug_console_command_runner.help_text()}
 		"show fps":
 			var perf: Dictionary = runtime_performance_snapshot()
 			return {"success": true, "message": "fps=%d frame=%.1fms path=%.2fms" % [
@@ -1862,6 +1862,7 @@ func _setup_panels() -> void:
 	panel_controller.setup_panels()
 	# 对外保留面板引用，方便既有 smoke 和编辑器入口继续做状态复核。
 	hud = panel_controller.hud
+	_sync_debug_console_schema()
 	dialogue_panel = panel_controller.dialogue_panel
 	inventory_panel = panel_controller.inventory_panel
 	trade_panel = panel_controller.trade_panel
@@ -1872,6 +1873,13 @@ func _setup_panels() -> void:
 	skills_panel = panel_controller.skills_panel
 	crafting_panel = panel_controller.crafting_panel
 	settings_panel = panel_controller.settings_panel
+
+
+func _sync_debug_console_schema() -> void:
+	if hud == null:
+		return
+	if hud.has_method("set_debug_console_schema"):
+		hud.set_debug_console_schema(_debug_console_command_runner.command_schema(), _debug_console_command_runner.command_suggestions())
 
 
 func _update_trade_target_after_interaction(result: Dictionary, executed_target: Dictionary) -> void:
