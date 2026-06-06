@@ -1084,6 +1084,22 @@ func _expect_camera_keyboard_zoom_and_follow(errors: Array[String], game_root: N
 	var after_zoom := camera.global_position.distance_to(camera.get_meta("focus_position", Vector3.ZERO))
 	if after_zoom >= before_zoom:
 		errors.append("legacy plus key should zoom camera toward focus")
+	if absf(float(camera.get_meta("zoom_factor", 0.0)) - 1.2) > 0.01:
+		errors.append("legacy plus key should scale camera zoom factor to 1.2")
+	_press_camera_zoom_key(game_root, KEY_MINUS)
+	if absf(float(camera.get_meta("zoom_factor", 0.0)) - 1.0) > 0.01:
+		errors.append("legacy minus key should scale camera zoom factor back toward 1.0")
+	for _index in range(12):
+		_press_camera_zoom_key(game_root, KEY_EQUAL)
+	if absf(float(camera.get_meta("zoom_factor", 0.0)) - 4.0) > 0.01:
+		errors.append("legacy plus key should clamp camera zoom factor at 4.0")
+	for _index in range(18):
+		_press_camera_zoom_key(game_root, KEY_MINUS)
+	if absf(float(camera.get_meta("zoom_factor", 0.0)) - 0.5) > 0.01:
+		errors.append("legacy minus key should clamp camera zoom factor at 0.5")
+	_press_camera_zoom_key(game_root, KEY_0, true)
+	if absf(float(camera.get_meta("zoom_factor", 0.0)) - 1.0) > 0.01:
+		errors.append("legacy Ctrl+0 should reset camera zoom factor")
 	_press_camera_zoom_key(game_root, KEY_F)
 	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO)
 	if typeof(focus) != TYPE_VECTOR3 or (focus as Vector3).distance_to(game_root.runtime_input_controller._player_focus_position()) > 0.1:
@@ -1277,11 +1293,12 @@ func _expect_camera_wheel_zoom(errors: Array[String], game_root: Node, camera: C
 		errors.append("legacy mouse wheel down should zoom camera away from focus")
 
 
-func _press_camera_zoom_key(game_root: Node, key: Key) -> void:
+func _press_camera_zoom_key(game_root: Node, key: Key, ctrl_pressed: bool = false) -> void:
 	var press := InputEventKey.new()
 	press.keycode = key
 	press.physical_keycode = key
 	press.pressed = true
+	press.ctrl_pressed = ctrl_pressed
 	game_root._input(press)
 
 

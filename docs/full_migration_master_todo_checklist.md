@@ -385,7 +385,7 @@
 - [~] Bevy 风格相机角度和移动第一版。
 - [~] actor 跟随、手动拖拽暂停跟随、`F` 恢复第一版。
 - [ ] 相机初始位置按 map entry / player spawn 定位。
-- [ ] zoom factor、clamp、分辨率变化。
+- [~] zoom factor、clamp、分辨率变化：`+` / `-` / `Ctrl+0`、滚轮缩放和 `0.5..4.0` clamp 已有 smoke 守护；待补分辨率变化和可见范围诊断。
 - [ ] 多楼层聚焦和楼层切换。
 - [ ] 鼠标 hover 光标和地面投影随相机角度、zoom、楼层正确对齐。
 - [ ] 建筑/墙遮挡玩家或目标时淡出、outline 或 nameplate 保留。

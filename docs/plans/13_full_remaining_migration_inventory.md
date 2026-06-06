@@ -288,7 +288,7 @@
 ### 12.3 相机和遮挡
 
 - 已恢复 Bevy 风格相机角度、焦点 actor 跟随、手动拖拽后暂停跟随、`F` 恢复跟随和观察楼层相机平面第一版；待补 occlusion、视觉显隐和多层地图表现细节。
-- 待补 zoom factor、视口可见范围、边界 clamp、多楼层聚焦、分辨率变化处理。
+- zoom factor、键盘 `+` / `-` / `Ctrl+0`、滚轮缩放和 `0.5..4.0` clamp 第一版已迁移，并由 `PlayerInteraction` smoke 覆盖；待补视口可见范围诊断、边界 clamp 视觉验证、多楼层聚焦细节和分辨率变化处理。
 - 待补 occlusion：建筑/墙体遮挡目标时的淡出、轮廓、选择目标 actor 的遮挡处理。
 - hover outline 第一版已迁移：非攻击悬停会显示 `HoverTargetOutline`，按 actor / pickup / container / trigger / door 等 `target_category` 使用不同颜色并记录 target meta；门悬停会保留 `door_is_open` / `door_locked` 状态；攻击悬停仍使用专门的 `AttackTargetOutline`、`AttackTargetMarker` 和 `AttackRangeMarkers`；已由 `PlayerInteraction` smoke 覆盖 pickup、door 与 hostile actor。待补 object/door/container/trigger 更精细优先级、遮挡处理和视觉 polish。
 

@@ -325,7 +325,7 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [ ] `[` / `]` info panel tab 切换。
 - [~] `A` auto tick / observe playback：`A` 已切换自动推进，observe mode 下等价切换播放状态，观察 hotbar 的 Play / Auto 可切换播放状态；待补完整快捷键冲突策略。
 - [x] `F` 相机恢复跟随。
-- [ ] `+` / `-` / `Ctrl+0` zoom。
+- [x] `+` / `-` / `Ctrl+0` zoom，已覆盖 zoom factor 和 `0.5..4.0` clamp。
 - [~] `PageUp` / `PageDown` 观察楼层切换。已恢复输入、HUD 当前楼层、相机平面和 focus actor 候选切换；待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
 - [~] console / debug panel / modal / stage panel / context menu 打开时阻止 gameplay 输入。已恢复 stage/settings、interaction menu、trade panel、container panel 和 blocker name 第一版；待补 console、debug panel、quantity/discard/overworld modal、tooltip/drag 层 blocker 细分。
 
