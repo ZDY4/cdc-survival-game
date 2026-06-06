@@ -64,6 +64,10 @@ var focused_actor_id: int = 0
 var observed_map_level: int = 0
 var active_skill_targeting: Dictionary = {}
 var active_skill_target_preview: Dictionary = {}
+var performance_frame_time_ms: float = 0.0
+var performance_fps: float = 0.0
+var performance_last_process_tick_msec: int = 0
+var performance_last_hud_refresh_tick_msec: int = 0
 
 
 func _ready() -> void:
@@ -122,6 +126,7 @@ func _build_runtime_from_startup_request(request: Dictionary) -> Dictionary:
 
 
 func _process(delta: float) -> void:
+	_update_runtime_performance(delta)
 	if runtime_input_controller != null:
 		runtime_input_controller.process(delta)
 	_process_auto_tick(delta)
@@ -140,6 +145,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 	if panel_controller == null:
 		return
+	performance_last_hud_refresh_tick_msec = Time.get_ticks_msec()
 	if selected_prompt.is_empty():
 		selected_prompt = current_interaction_prompt()
 	panel_controller.refresh_hud(selected_prompt)
@@ -427,7 +433,24 @@ func runtime_control_snapshot() -> Dictionary:
 		"ui_blocker": gameplay_input_blocker_name(),
 		"hover": runtime_hover_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),
+		"performance": runtime_performance_snapshot(),
 		"skill_targeting": _skill_targeting_snapshot(),
+	}
+
+
+func runtime_performance_snapshot() -> Dictionary:
+	var now_msec: int = Time.get_ticks_msec()
+	var fps: float = performance_fps
+	if fps <= 0.0:
+		fps = float(Engine.get_frames_per_second())
+	if fps <= 0.0:
+		fps = 60.0
+	return {
+		"fps": fps,
+		"frame_time_ms": performance_frame_time_ms,
+		"last_process_tick_msec": performance_last_process_tick_msec,
+		"last_hud_refresh_tick_msec": performance_last_hud_refresh_tick_msec,
+		"hud_latency_ms": max(0, now_msec - performance_last_hud_refresh_tick_msec) if performance_last_hud_refresh_tick_msec > 0 else 0,
 	}
 
 
@@ -435,6 +458,15 @@ func runtime_hover_snapshot() -> Dictionary:
 	if runtime_input_controller != null and runtime_input_controller.has_method("hover_state_snapshot"):
 		return runtime_input_controller.hover_state_snapshot()
 	return {"active": false}
+
+
+func _update_runtime_performance(delta: float) -> void:
+	performance_last_process_tick_msec = Time.get_ticks_msec()
+	performance_frame_time_ms = max(0.0, delta * 1000.0)
+	var current_fps: float = Performance.get_monitor(Performance.TIME_FPS)
+	if current_fps <= 0.0 and delta > 0.0:
+		current_fps = 1.0 / delta
+	performance_fps = max(0.0, current_fps)
 
 
 func settings_applied(_snapshot: Dictionary = {}) -> void:

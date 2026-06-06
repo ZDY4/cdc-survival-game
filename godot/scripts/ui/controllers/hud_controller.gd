@@ -914,7 +914,21 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var hover_text := _hover_control_text(control_data.get("hover", {}))
 	if not hover_text.is_empty():
 		parts.append(hover_text)
+	var performance_text := _performance_control_text(control_data.get("performance", {}))
+	if not performance_text.is_empty():
+		parts.append(performance_text)
 	return " | ".join(parts)
+
+
+func _performance_control_text(value: Variant) -> String:
+	var performance: Dictionary = _dictionary_or_empty(value)
+	if performance.is_empty():
+		return ""
+	return "Perf %dFPS %.1fms Lat %dms" % [
+		int(round(float(performance.get("fps", 0.0)))),
+		float(performance.get("frame_time_ms", 0.0)),
+		int(performance.get("hud_latency_ms", 0)),
+	]
 
 
 func _hover_control_text(value: Variant) -> String:

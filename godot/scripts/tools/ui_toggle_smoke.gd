@@ -80,6 +80,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if bool(game_root.is_auto_tick_enabled()):
 		errors.append("auto tick should start disabled")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
+	_assert_runtime_performance(errors, game_root, "initial runtime performance")
 	_assert_hotbar_visibility(errors, game_root, true, "initial hotbar visibility")
 	_assert_observe_mode_button(errors, game_root, false, "initial observe mode button")
 	_assert_observe_auto_button(errors, game_root, false, "initial observe auto hotbar")
@@ -800,6 +801,22 @@ func _assert_runtime_control_line(errors: Array[String], game_root: Node, expect
 		return
 	if not str((label as Label).text).contains(expected):
 		errors.append("%s: RuntimeControlLine expected to contain %s, got %s" % [context, expected, str((label as Label).text)])
+
+
+func _assert_runtime_performance(errors: Array[String], game_root: Node, context: String) -> void:
+	var snapshot: Dictionary = game_root.runtime_control_snapshot()
+	var performance: Dictionary = _dictionary_or_empty(snapshot.get("performance", {}))
+	if performance.is_empty():
+		errors.append("%s: runtime_control should expose performance snapshot" % context)
+		return
+	if float(performance.get("fps", 0.0)) <= 0.0:
+		errors.append("%s: performance fps should be positive: %s" % [context, performance])
+	if float(performance.get("frame_time_ms", -1.0)) < 0.0:
+		errors.append("%s: performance frame time should be non-negative: %s" % [context, performance])
+	if int(performance.get("hud_latency_ms", -1)) < 0:
+		errors.append("%s: performance HUD latency should be non-negative: %s" % [context, performance])
+	_assert_runtime_control_line(errors, game_root, "Perf", "%s HUD perf token" % context)
+	_assert_runtime_control_line(errors, game_root, "Lat", "%s HUD latency token" % context)
 
 
 func _assert_observe_auto_button(errors: Array[String], game_root: Node, expected_enabled: bool, context: String) -> void:
