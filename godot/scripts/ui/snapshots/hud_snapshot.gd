@@ -884,6 +884,8 @@ func _failure_reason_text(reason: String) -> String:
 			return "目标楼层无效"
 		"target_out_of_range":
 			return "目标超出射程"
+		"target_too_close":
+			return "目标过近"
 		"target_blocked_by_los":
 			return "视线被遮挡"
 		"goal_blocked":

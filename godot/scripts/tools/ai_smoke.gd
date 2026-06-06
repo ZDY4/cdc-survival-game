@@ -169,6 +169,25 @@ func _expect_hostile_weapon_and_reload_intents(errors: Array[String], simulation
 	if _event_count(simulation.snapshot(), "attack_resolved") <= attack_events_before:
 		errors.append("armed hostile attack should emit attack_resolved")
 
+	var min_range_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 1, player_grid.y, player_grid.z + 1), {
+		"ai": ranged_ai,
+	})
+	var min_range_intent: Dictionary = simulation.decide_actor_intent(min_range_id, {
+		"topology": topology,
+		"active_map_id": simulation.active_map_id,
+		"weapon_profile": {
+			"item_id": "synthetic_min_range_weapon",
+			"range": 6,
+			"attack_range": 6,
+			"min_range": 2,
+			"ammo_ready": true,
+		},
+	})
+	if min_range_intent.get("intent", "") == "attack" or min_range_intent.get("reason", "") != "target_inside_min_range":
+		errors.append("hostile inside weapon minimum range should avoid attack, got %s/%s" % [min_range_intent.get("intent", ""), min_range_intent.get("reason", "")])
+	if int(min_range_intent.get("min_range", 0)) != 2:
+		errors.append("minimum-range hostile intent should expose min_range")
+
 	var reload_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 4, player_grid.y, player_grid.z + 2), {
 		"ai": ranged_ai,
 		"equipment": {"main_hand": "1004"},

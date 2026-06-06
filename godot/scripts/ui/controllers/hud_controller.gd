@@ -810,6 +810,8 @@ func _disabled_reason_text(reason: String) -> String:
 			return "目标为空"
 		"target_not_visible":
 			return "目标不可见"
+		"target_too_close":
+			return "目标过近"
 		"interaction_option_unavailable":
 			return "不可用"
 	if reason.is_empty():

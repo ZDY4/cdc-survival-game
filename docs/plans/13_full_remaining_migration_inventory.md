@@ -133,9 +133,9 @@
 ### 6.1 攻击校验
 
 - 攻击目标合法性第一版已迁移：unknown attacker / target、self、attacker defeated、target defeated、friendly / neutral 非敌对目标、active vision 下不可见目标都会被拒绝；失败结果会暴露 actor id、target actor id、阵营或格子等诊断字段；已由 `Combat` smoke 覆盖。待补 corpse 作为单独 target type 的攻击拒绝、friendly fire 规则开关、关系分数影响和 UI 文案 polish。
-- 攻击空间校验第一版已迁移：跨层、超出武器范围和 LOS 遮挡会返回稳定 reason，并暴露 attacker grid、target grid、distance、range、same_level、range_ok、line_of_sight、line_of_sight_required 和 spatial_failure 等诊断字段；`submit_player_command(attack)`、core `perform_attack` 和 `preview_attack` 都复用同一空间诊断，已由 `Combat` smoke 覆盖预览与实际攻击的一致性。待补门开闭状态的遮挡语义、楼梯/高低差/特殊武器例外、最小射程和技能共用射程策略。
+- 攻击空间校验第一版已迁移：跨层、超出武器范围、低于最小射程和 LOS 遮挡会返回稳定 reason，并暴露 attacker grid、target grid、distance、range、min_range、same_level、range_ok、min_range_ok、line_of_sight、line_of_sight_required 和 spatial_failure 等诊断字段；`submit_player_command(attack)`、core `perform_attack` 和 `preview_attack` 都复用同一空间诊断，已由 `Combat` smoke 覆盖预览与实际攻击的一致性。待补门开闭状态的遮挡语义、楼梯/高低差、特殊武器例外和技能共用射程策略。
 - 待补 line-of-sight 扩展：技能共用空间失败原因，墙体、门、楼层、中心点遮挡的完整旧版细节。
-- 待补范围扩展：近战、远程、cell distance、武器射程、技能射程、最小射程的全部数据化。
+- 范围扩展第一版已迁移：近战/远程最大射程、cell distance、武器 `range` 和兼容 `min_range` / `minimum_range` / `minRange` 最小射程会进入攻击 profile、预览、执行和 NPC intent；低于最小射程返回 `target_too_close`，不扣 AP、不消耗弹药、不进入战斗，并由 `Combat` / `AI` smoke 覆盖。待补特殊武器例外、更多数据内容标注和技能射程共用策略。
 - 攻击前目标预览第一版已迁移：`Simulation.preview_attack()` 会只读返回 actor / target、射程、距离、AP 成本、弹药可用性、命中率、暴击率、预估伤害、可攻击状态和不可攻击 reason，并复用攻击合法性 / 空间 / 可见性校验，不扣 AP、不耗弹药、不推进 RNG、不进入战斗；runtime hover snapshot 和 HUD runtime 行已在悬停 actor 时展示可攻击 / 不可攻击、距离 / 射程、AP、命中率和伤害摘要，hover cursor 会用橙红色显示攻击预览并暴露 attack meta，`AttackTargetMarker` 会在命中 actor 上方显示第一版世界视觉标记，`AttackRangeMarkers` 会按当前射程显示第一版候选可攻击格并过滤地图 bounds / blocking cells / LOS，`AttackTargetOutline` 会给目标 actor 显示第一版半透明 outline，已由 `Combat` / `PlayerInteraction` smoke 覆盖。待补门/楼层例外下的可攻击格精确过滤和视觉 polish。
 
 ### 6.2 武器、弹药和伤害
@@ -167,7 +167,7 @@
 ### 7.1 战斗 AI
 
 - hostile attack / approach、aggro range 和 LOS 感知第一版已迁移：敌对 NPC 会按 active map、阵营、存活状态、感知距离和 topology LOS 选择目标，LOS 被阻挡时保持 idle 并返回 `target_blocked_by_los`；玩家等待推进 NPC 回合时会传入当前地图 topology，避免隔墙攻击；已由 `AI` smoke 覆盖。待补丢失目标、重规划、绕障、开门、AP 分配和失败结束回合。
-- NPC 武器射程、弹药和 reload 第一版已迁移：敌对 NPC intent 会读取已装备主手武器 profile，按武器 range 判断远程攻击，攻击前校验 AP / 弹药，攻击后消耗弹匣或背包弹药；弹匣为空且背包有弹药时优先 `reload`，无弹药时 idle 并返回 `weapon_ammo_unavailable`；已由 `AI` / `Combat` smoke 覆盖。待补多武器选择、换武器、NPC 特殊弹药策略、reload 动画/反馈和 AP 不足后的等待策略。
+- NPC 武器射程、弹药和 reload 第一版已迁移：敌对 NPC intent 会读取已装备主手武器 profile，按武器 range / min_range 判断远程攻击，低于最小射程时不发起非法攻击并返回 `target_inside_min_range`；攻击前校验 AP / 弹药，攻击后消耗弹匣或背包弹药；弹匣为空且背包有弹药时优先 `reload`，无弹药时 idle 并返回 `weapon_ammo_unavailable`；已由 `AI` / `Combat` smoke 覆盖。待补低于最小射程时的后退/换位战术、多武器选择、换武器、NPC 特殊弹药策略、reload 动画/反馈和 AP 不足后的等待策略。
 - 待补 NPC 技能使用、逃跑、治疗、保护友军、呼叫增援。
 - AI 行为事件和诊断 payload 第一版已迁移：`ai_intent_decided` 会暴露 intent、reason、target、target_grid、distance、aggro_range、attack_range、AP、path、weapon、ammo 和 reload 状态，占位空值保持稳定；`runtime_control.ai_debug` 会汇总 intent、reason、target、path_length、AP、weapon/ammo 和 failure reason，HUD runtime 行显示 `AI #...` 摘要；已由 `AI` / `UIToggle` smoke 覆盖。待补路径失败细分、连续追踪目标、目标丢失原因、goal/action/blackboard 和统一 debug panel 展示。
 

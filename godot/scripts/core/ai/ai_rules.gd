@@ -23,12 +23,14 @@ func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> D
 	var aggro_range: float = max(0.0, float(ai.get("aggro_range", 8.0)))
 	var weapon: Dictionary = _dictionary_or_empty(context.get("weapon_profile", {}))
 	var attack_range: float = _hostile_attack_range(ai, weapon)
+	var min_range: float = _hostile_min_attack_range(weapon)
 	var target_result: Dictionary = _nearest_target(actor, actors, aggro_range, context)
 	var target: RefCounted = target_result.get("actor")
 	if target == null:
 		var idle: Dictionary = _idle_intent(actor, str(target_result.get("reason", "no_target_in_aggro_range")))
 		idle["aggro_range"] = aggro_range
 		idle["attack_range"] = attack_range
+		idle["min_range"] = min_range
 		idle["ap"] = float(actor.ap)
 		idle.merge(_weapon_debug_payload(weapon), true)
 		idle["candidate_count"] = int(target_result.get("candidate_count", 0))
@@ -36,9 +38,9 @@ func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> D
 		return idle
 
 	var distance: float = _grid_distance(actor.grid_position, target.grid_position)
-	if distance <= attack_range:
+	if distance <= attack_range and distance >= min_range:
 		if bool(weapon.get("can_reload", false)):
-			return _reload_intent(actor, target, distance, aggro_range, attack_range, weapon)
+			return _reload_intent(actor, target, distance, aggro_range, attack_range, min_range, weapon)
 		if not bool(weapon.get("ammo_ready", true)):
 			var no_ammo: Dictionary = _idle_intent(actor, "weapon_ammo_unavailable")
 			no_ammo["target_actor_id"] = target.actor_id
@@ -46,6 +48,7 @@ func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> D
 			no_ammo["distance"] = distance
 			no_ammo["aggro_range"] = aggro_range
 			no_ammo["attack_range"] = attack_range
+			no_ammo["min_range"] = min_range
 			no_ammo["ap"] = float(actor.ap)
 			no_ammo.merge(_weapon_debug_payload(weapon), true)
 			return no_ammo
@@ -58,8 +61,23 @@ func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> D
 			"distance": distance,
 			"aggro_range": aggro_range,
 			"attack_range": attack_range,
+			"min_range": min_range,
 			"ap": float(actor.ap),
 			"reason": "target_in_attack_range",
+		}.merged(_weapon_debug_payload(weapon), true)
+	if distance < min_range:
+		return {
+			"success": true,
+			"actor_id": actor.actor_id,
+			"intent": "approach",
+			"target_actor_id": target.actor_id,
+			"target_grid": target.grid_position.to_dictionary(),
+			"distance": distance,
+			"aggro_range": aggro_range,
+			"attack_range": attack_range,
+			"min_range": min_range,
+			"ap": float(actor.ap),
+			"reason": "target_inside_min_range",
 		}.merged(_weapon_debug_payload(weapon), true)
 	if _weapon_needs_ammo(weapon) and not bool(weapon.get("ammo_ready", true)) and not bool(weapon.get("can_reload", false)):
 		var blocked: Dictionary = _idle_intent(actor, "weapon_ammo_unavailable")
@@ -68,6 +86,7 @@ func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> D
 		blocked["distance"] = distance
 		blocked["aggro_range"] = aggro_range
 		blocked["attack_range"] = attack_range
+		blocked["min_range"] = min_range
 		blocked["ap"] = float(actor.ap)
 		blocked.merge(_weapon_debug_payload(weapon), true)
 		return blocked
@@ -80,12 +99,13 @@ func _hostile_intent(actor: RefCounted, actors: Array, context: Dictionary) -> D
 		"distance": distance,
 		"aggro_range": aggro_range,
 		"attack_range": attack_range,
+		"min_range": min_range,
 		"ap": float(actor.ap),
 		"reason": "target_in_aggro_range",
 	}.merged(_weapon_debug_payload(weapon), true)
 
 
-func _reload_intent(actor: RefCounted, target: RefCounted, distance: float, aggro_range: float, attack_range: float, weapon: Dictionary) -> Dictionary:
+func _reload_intent(actor: RefCounted, target: RefCounted, distance: float, aggro_range: float, attack_range: float, min_range: float, weapon: Dictionary) -> Dictionary:
 	var intent := {
 		"success": true,
 		"actor_id": actor.actor_id,
@@ -95,6 +115,7 @@ func _reload_intent(actor: RefCounted, target: RefCounted, distance: float, aggr
 		"distance": distance,
 		"aggro_range": aggro_range,
 		"attack_range": attack_range,
+		"min_range": min_range,
 		"ap": float(actor.ap),
 		"reason": "weapon_magazine_empty",
 	}
@@ -110,12 +131,23 @@ func _hostile_attack_range(ai: Dictionary, weapon: Dictionary) -> float:
 	return max(0.0, float(ai.get("attack_range", 1.0)))
 
 
+func _hostile_min_attack_range(weapon: Dictionary) -> float:
+	if weapon.has("min_range"):
+		return max(0.0, float(weapon.get("min_range", 0.0)))
+	if weapon.has("minimum_range"):
+		return max(0.0, float(weapon.get("minimum_range", 0.0)))
+	if weapon.has("minRange"):
+		return max(0.0, float(weapon.get("minRange", 0.0)))
+	return 0.0
+
+
 func _weapon_debug_payload(weapon: Dictionary) -> Dictionary:
 	if weapon.is_empty():
 		return {}
 	return {
 		"weapon_item_id": str(weapon.get("item_id", "")),
 		"weapon_slot_id": str(weapon.get("slot_id", "")),
+		"min_range": float(weapon.get("min_range", 0.0)),
 		"ammo_type": str(weapon.get("ammo_type", "")),
 		"ammo_ready": bool(weapon.get("ammo_ready", true)),
 		"can_reload": bool(weapon.get("can_reload", false)),

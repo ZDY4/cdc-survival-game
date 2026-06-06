@@ -706,6 +706,7 @@ func preview_attack(actor_id: int, target_actor_id: int, topology: Dictionary = 
 	var attack_range: int = int(options.get("range", int(profile.get("range", DEFAULT_ATTACK_RANGE))))
 	var preview: Dictionary = _combat_runner.preview_attack(self, actor_id, target_actor_id, topology, {
 		"range": attack_range,
+		"min_range": _attack_min_range_from_options(options, profile),
 		"weapon_profile": profile,
 	})
 	var attack_cost: float = float(options.get("ap_cost", profile.get("ap_cost", DEFAULT_ATTACK_AP)))
@@ -1233,7 +1234,9 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 		return target_check
 	var profile: Dictionary = _attack_profile(actor, _dictionary_or_empty(command.get("item_library", item_library)))
 	var attack_range: int = int(command.get("range", int(profile.get("range", DEFAULT_ATTACK_RANGE))))
-	if _grid_distance(actor.grid_position, target.grid_position) > attack_range:
+	var min_range: int = _attack_min_range_from_options(command, profile)
+	var attack_distance: int = _grid_distance(actor.grid_position, target.grid_position)
+	if attack_distance > attack_range:
 		var source_target: Dictionary = _dictionary_or_empty(command.get("source_target", {
 			"target_type": "actor",
 			"actor_id": target_actor_id,
@@ -1241,6 +1244,12 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 		var source_option_id: String = str(command.get("source_option_id", "attack"))
 		var prompt: Dictionary = query_interaction_options(actor.actor_id, source_target)
 		return _approach_then_execute_interaction(actor, source_target, source_option_id, prompt, _dictionary_or_empty(command.get("topology", {})))
+	if attack_distance < min_range:
+		return perform_attack(actor.actor_id, target_actor_id, _dictionary_or_empty(command.get("topology", {})), {
+			"range": attack_range,
+			"min_range": min_range,
+			"weapon_profile": profile,
+		})
 	var attack_cost: float = float(command.get("ap_cost", profile.get("ap_cost", DEFAULT_ATTACK_AP)))
 	if actor.ap < attack_cost:
 		pending_interaction = {
@@ -1263,6 +1272,7 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 	_enter_combat([actor.actor_id, target_actor_id], "player_attack")
 	var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, _dictionary_or_empty(command.get("topology", {})), {
 		"range": attack_range,
+		"min_range": min_range,
 		"weapon_profile": profile,
 	})
 	if bool(result.get("success", false)):
@@ -2813,6 +2823,7 @@ func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
 			_enter_combat([actor.actor_id, target_actor_id], "npc_attack")
 			var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, topology, {
 				"range": int(weapon_profile.get("range", DEFAULT_ATTACK_RANGE)),
+				"min_range": int(weapon_profile.get("min_range", 0)),
 				"weapon_profile": weapon_profile,
 			})
 			if bool(result.get("success", false)):
@@ -2855,6 +2866,7 @@ func _npc_weapon_context(actor: RefCounted, profile: Dictionary) -> Dictionary:
 		"item_id": str(profile.get("item_id", "")),
 		"range": int(profile.get("range", DEFAULT_ATTACK_RANGE)),
 		"attack_range": int(profile.get("range", DEFAULT_ATTACK_RANGE)),
+		"min_range": int(profile.get("min_range", 0)),
 		"ap_cost": float(profile.get("ap_cost", DEFAULT_ATTACK_AP)),
 		"slot_id": slot_id,
 		"ammo_type": ammo_type,
@@ -3520,6 +3532,7 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 			"item_id": equipped_item_id,
 			"damage": actor.attack_power,
 			"range": DEFAULT_ATTACK_RANGE,
+			"min_range": 0,
 			"ap_cost": DEFAULT_ATTACK_AP,
 			"crit_chance": 0.0,
 			"crit_multiplier": 1.0,
@@ -3530,11 +3543,13 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 		}
 	var attack_speed: float = max(0.1, float(weapon.get("attack_speed", 1.0)))
 	var weapon_range: int = max(1, _optional_int(weapon.get("range", DEFAULT_ATTACK_RANGE), DEFAULT_ATTACK_RANGE))
+	var weapon_min_range: int = clampi(_weapon_min_range(weapon), 0, weapon_range)
 	var max_ammo: int = _equipment_effects.weapon_magazine_capacity(actor, weapon, items)
 	var profile := {
 		"item_id": equipped_item_id,
 		"damage": float(weapon.get("damage", actor.attack_power)),
 		"range": weapon_range,
+		"min_range": weapon_min_range,
 		"ap_cost": max(1.0, ceil(DEFAULT_ATTACK_AP / attack_speed)),
 		"attack_speed": attack_speed,
 		"crit_chance": clampf(float(weapon.get("crit_chance", 0.0)), 0.0, 1.0),
@@ -3548,6 +3563,26 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 	if weapon.get("accuracy", null) != null:
 		profile["accuracy"] = _optional_float(weapon.get("accuracy", 0.0), 0.0)
 	return profile
+
+
+func _attack_min_range_from_options(options: Dictionary, profile: Dictionary) -> int:
+	if options.has("min_range"):
+		return max(0, int(options.get("min_range", 0)))
+	if options.has("minimum_range"):
+		return max(0, int(options.get("minimum_range", 0)))
+	if options.has("minRange"):
+		return max(0, int(options.get("minRange", 0)))
+	return max(0, int(profile.get("min_range", 0)))
+
+
+func _weapon_min_range(weapon: Dictionary) -> int:
+	if weapon.has("min_range"):
+		return max(0, _optional_int(weapon.get("min_range", 0), 0))
+	if weapon.has("minimum_range"):
+		return max(0, _optional_int(weapon.get("minimum_range", 0), 0))
+	if weapon.has("minRange"):
+		return max(0, _optional_int(weapon.get("minRange", 0), 0))
+	return 0
 
 
 func _weapon_fragment(item_id: String, items: Dictionary) -> Dictionary:

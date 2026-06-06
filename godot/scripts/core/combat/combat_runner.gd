@@ -15,11 +15,11 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	var target_check: Dictionary = validate_attack_target(simulation, actor_id, target_actor_id)
 	if not bool(target_check.get("success", false)):
 		return target_check
-	var spatial_check: Dictionary = _spatial_check(attacker, target, topology, int(options.get("range", 1)))
+	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
+	var spatial_check: Dictionary = _spatial_check(attacker, target, topology, int(options.get("range", int(profile.get("range", 1)))), _minimum_attack_range(options, profile))
 	if not bool(spatial_check.get("success", false)):
 		return spatial_check
 
-	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
 	var hit_roll: Dictionary = _hit_check(simulation, attacker, target, profile)
 	var critical_roll: Dictionary = {
 		"critical": false,
@@ -93,8 +93,10 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"target_grid": target.grid_position.to_dictionary(),
 		"distance": int(spatial_check.get("distance", 0)),
 		"range": int(spatial_check.get("range", int(options.get("range", 1)))),
+		"min_range": int(spatial_check.get("min_range", 0)),
 		"same_level": bool(spatial_check.get("same_level", true)),
 		"range_ok": bool(spatial_check.get("range_ok", true)),
+		"min_range_ok": bool(spatial_check.get("min_range_ok", true)),
 		"line_of_sight": bool(spatial_check.get("line_of_sight", true)),
 		"line_of_sight_required": bool(spatial_check.get("line_of_sight_required", false)),
 		"spatial_failure": str(spatial_check.get("spatial_failure", "")),
@@ -117,6 +119,7 @@ func preview_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)
 	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
 	var attack_range: int = int(options.get("range", int(profile.get("range", 1))))
+	var min_range: int = _minimum_attack_range(options, profile)
 	var preview: Dictionary = {
 		"success": false,
 		"can_attack": false,
@@ -124,6 +127,7 @@ func preview_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"actor_id": actor_id,
 		"target_actor_id": target_actor_id,
 		"range": max(1, attack_range),
+		"min_range": min_range,
 		"weapon_profile": profile.duplicate(true),
 	}
 	var target_check: Dictionary = validate_attack_target(simulation, actor_id, target_actor_id)
@@ -131,7 +135,7 @@ func preview_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		preview.merge(target_check, true)
 		_add_attack_preview_actor_fields(preview, attacker, target)
 		return preview
-	var spatial_check: Dictionary = _spatial_check(attacker, target, topology, attack_range)
+	var spatial_check: Dictionary = _spatial_check(attacker, target, topology, attack_range, min_range)
 	if not bool(spatial_check.get("success", false)):
 		preview.merge(spatial_check, true)
 		_add_attack_preview_actor_fields(preview, attacker, target)
@@ -212,8 +216,8 @@ func _actor_hostility(simulation: RefCounted, attacker: RefCounted, target: RefC
 	return {"hostile": _can_attack(attacker, target), "reason": "legacy_side", "score": 0.0}
 
 
-func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int) -> Dictionary:
-	var diagnostics: Dictionary = _attack_spatial_diagnostics(attacker, target, topology, attack_range)
+func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int, min_range: int = 0) -> Dictionary:
+	var diagnostics: Dictionary = _attack_spatial_diagnostics(attacker, target, topology, attack_range, min_range)
 	var failure: String = str(diagnostics.get("spatial_failure", ""))
 	if not failure.is_empty():
 		diagnostics["success"] = false
@@ -224,13 +228,15 @@ func _spatial_check(attacker: RefCounted, target: RefCounted, topology: Dictiona
 	return diagnostics
 
 
-func _attack_spatial_diagnostics(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int) -> Dictionary:
+func _attack_spatial_diagnostics(attacker: RefCounted, target: RefCounted, topology: Dictionary, attack_range: int, min_range: int = 0) -> Dictionary:
 	var attacker_grid: Dictionary = attacker.grid_position.to_dictionary()
 	var target_grid: Dictionary = target.grid_position.to_dictionary()
 	var distance: int = abs(attacker.grid_position.x - target.grid_position.x) + abs(attacker.grid_position.z - target.grid_position.z)
 	var resolved_range: int = max(1, attack_range)
+	var resolved_min_range: int = clampi(min_range, 0, resolved_range)
 	var same_level: bool = attacker.grid_position.y == target.grid_position.y
 	var range_ok: bool = distance <= resolved_range
+	var min_range_ok: bool = distance >= resolved_min_range
 	var los_required: bool = not topology.is_empty()
 	var los_ok: bool = same_level
 	if same_level and los_required:
@@ -240,6 +246,8 @@ func _attack_spatial_diagnostics(attacker: RefCounted, target: RefCounted, topol
 		failure = "target_invalid_level"
 	elif not range_ok:
 		failure = "target_out_of_range"
+	elif not min_range_ok:
+		failure = "target_too_close"
 	elif los_required and not los_ok:
 		failure = "target_blocked_by_los"
 	return {
@@ -249,12 +257,30 @@ func _attack_spatial_diagnostics(attacker: RefCounted, target: RefCounted, topol
 		"target_grid": target_grid,
 		"distance": distance,
 		"range": resolved_range,
+		"min_range": resolved_min_range,
 		"same_level": same_level,
 		"range_ok": range_ok,
+		"min_range_ok": min_range_ok,
 		"line_of_sight": los_ok,
 		"line_of_sight_required": los_required,
 		"spatial_failure": failure,
 	}
+
+
+func _minimum_attack_range(options: Dictionary, profile: Dictionary) -> int:
+	if options.has("min_range"):
+		return max(0, int(options.get("min_range", 0)))
+	if options.has("minimum_range"):
+		return max(0, int(options.get("minimum_range", 0)))
+	if options.has("minRange"):
+		return max(0, int(options.get("minRange", 0)))
+	if profile.has("min_range"):
+		return max(0, int(profile.get("min_range", 0)))
+	if profile.has("minimum_range"):
+		return max(0, int(profile.get("minimum_range", 0)))
+	if profile.has("minRange"):
+		return max(0, int(profile.get("minRange", 0)))
+	return 0
 
 
 func _triggered_on_hit_effect_ids(profile: Dictionary, damage_result: Dictionary) -> Array[String]:
