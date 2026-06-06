@@ -537,6 +537,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		"owned": true,
 		"owner_actor_id": 2,
 		"allow_steal": true,
+		"steal_relationship_delta": -15.0,
 	}
 	_set_active_container_id(game_root, "stealable_container")
 	game_root.simulation.set_relationship_score(1, 2, 10.0, "container_owner_smoke_steal")
@@ -546,6 +547,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("stealable owned container should allow take and mark stealing")
 	if int(steal_take.get("owner_actor_id", 0)) != 2:
 		errors.append("stealable owned container should expose owner_actor_id")
+	if not _event_seen(game_root, "container_stolen"):
+		errors.append("stealable owned container should emit container_stolen")
+	var stolen_payload: Dictionary = _last_event_payload(game_root, "container_stolen")
+	if str(stolen_payload.get("container_id", "")) != "stealable_container":
+		errors.append("container_stolen should include container id")
+	if not is_equal_approx(float(stolen_payload.get("relationship_before", 0.0)), 10.0):
+		errors.append("container_stolen should include relationship_before")
+	if not is_equal_approx(float(stolen_payload.get("relationship_after", 0.0)), -5.0):
+		errors.append("container_stolen should include relationship_after")
+	if not is_equal_approx(game_root.simulation.relationship_score(1, 2), -5.0):
+		errors.append("stealable owned container should apply relationship penalty")
 	game_root.simulation.set_relationship_score(1, 2, owner_relationship_before, "container_owner_smoke_restore")
 	game_root.simulation.container_sessions = permission_snapshot.duplicate(true)
 	_set_active_container_id(game_root, active_container_before_permission)
@@ -793,6 +805,15 @@ func _event_seen(game_root: Node, kind: String) -> bool:
 		if event_data.get("kind", "") == kind:
 			return true
 	return false
+
+
+func _last_event_payload(game_root: Node, kind: String) -> Dictionary:
+	var events: Array = game_root.simulation.snapshot().get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
 
 
 func _inventory_summary(game_root: Node) -> String:

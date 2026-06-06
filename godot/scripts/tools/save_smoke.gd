@@ -72,6 +72,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	clinic_container["owner_actor_id"] = 2
 	clinic_container["owner_actor_definition_id"] = "trader_lao_wang"
 	clinic_container["allow_steal"] = false
+	clinic_container["steal_relationship_delta"] = -15.0
 	clinic_container["owner_relationship_min"] = 40.0
 	clinic_container["required_active_quest_ids"] = ["find_medicine"]
 	clinic_container["required_completed_quest_ids"] = ["tutorial_survive"]
@@ -287,6 +288,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("container owner_actor_definition_id did not roundtrip")
 	if bool(restored_clinic_container.get("allow_steal", true)):
 		errors.append("container allow_steal did not roundtrip")
+	if absf(float(restored_clinic_container.get("steal_relationship_delta", 0.0)) + 15.0) > 0.001:
+		errors.append("container steal_relationship_delta did not roundtrip")
 	if absf(float(restored_clinic_container.get("owner_relationship_min", 0.0)) - 40.0) > 0.001:
 		errors.append("container owner_relationship_min did not roundtrip")
 	if not _array_or_empty(restored_clinic_container.get("required_active_quest_ids", [])).has("find_medicine"):

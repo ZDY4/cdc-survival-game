@@ -263,6 +263,8 @@ func _copy_optional_container_fields(session: Dictionary, target: Dictionary) ->
 		"owned",
 		"allow_steal",
 		"allow_theft",
+		"steal_relationship_delta",
+		"theft_relationship_delta",
 		"owner_relationship_min",
 		"owner_relationship_max",
 		"required_owner_relationship_min",

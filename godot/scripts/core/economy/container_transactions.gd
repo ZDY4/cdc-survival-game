@@ -53,6 +53,9 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 	_inventory_entries.add_actor_item(actor, normalized_item_id, transfer_count)
 	simulation.container_sessions[normalized_container_id] = container
 	_sync_corpse_container_session(simulation, normalized_container_id, container)
+	var steal_consequence: Dictionary = {}
+	if stealing:
+		steal_consequence = _apply_container_steal_consequences(simulation, actor_id, owner_actor_id, normalized_container_id, container, normalized_item_id, transfer_count)
 	simulation.emit_event("container_item_taken", {
 		"actor_id": actor_id,
 		"container_id": normalized_container_id,
@@ -73,7 +76,7 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"owner_actor_id": owner_actor_id,
 	})
 	simulation.record_item_collected(actor_id, normalized_item_id, transfer_count)
-	return {
+	var result := {
 		"success": true,
 		"container_id": normalized_container_id,
 		"item_id": normalized_item_id,
@@ -81,6 +84,8 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
 	}
+	_copy_steal_consequence(result, steal_consequence)
+	return result
 
 
 func take_money_from_container(simulation: RefCounted, actor_id: int, container_id: String, count: int = -1) -> Dictionary:
@@ -125,6 +130,9 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 		var corpse: Dictionary = _dictionary_or_empty(simulation.corpse_containers[normalized_container_id])
 		corpse["money"] = container_money_after
 		simulation.corpse_containers[normalized_container_id] = corpse
+	var steal_consequence: Dictionary = {}
+	if stealing:
+		steal_consequence = _apply_container_steal_consequences(simulation, actor_id, owner_actor_id, normalized_container_id, container, "money", transfer_count)
 	simulation.emit_event("container_money_taken", {
 		"actor_id": actor_id,
 		"container_id": normalized_container_id,
@@ -147,7 +155,7 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
 	})
-	return {
+	var result := {
 		"success": true,
 		"container_id": normalized_container_id,
 		"item_id": "money",
@@ -159,6 +167,8 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
 	}
+	_copy_steal_consequence(result, steal_consequence)
+	return result
 
 
 func take_all_from_container(simulation: RefCounted, actor_id: int, container_id: String, item_library: Dictionary = {}, include_money: bool = true) -> Dictionary:
@@ -505,6 +515,56 @@ func _relationship_score(simulation: RefCounted, actor_id: int, target_actor_id:
 	if simulation != null and simulation.has_method("relationship_score"):
 		return float(simulation.relationship_score(actor_id, target_actor_id))
 	return 0.0
+
+
+func _apply_container_steal_consequences(simulation: RefCounted, actor_id: int, owner_actor_id: int, container_id: String, container: Dictionary, item_id: String, count: int) -> Dictionary:
+	var relationship_before: float = _relationship_score(simulation, actor_id, owner_actor_id)
+	var relationship_after: float = relationship_before
+	var configured_delta: float = _container_steal_relationship_delta(container)
+	var relationship_result: Dictionary = {}
+	if owner_actor_id > 0 and absf(configured_delta) > 0.001 and simulation != null and simulation.has_method("set_relationship_score"):
+		relationship_result = simulation.set_relationship_score(actor_id, owner_actor_id, relationship_before + configured_delta, "container_steal:%s" % container_id)
+		if bool(relationship_result.get("success", false)):
+			relationship_after = float(relationship_result.get("score", relationship_before))
+	var applied_delta: float = relationship_after - relationship_before
+	var payload := {
+		"actor_id": actor_id,
+		"container_id": container_id,
+		"owner_actor_id": owner_actor_id,
+		"item_id": item_id,
+		"count": count,
+		"configured_relationship_delta": configured_delta,
+		"relationship_delta": applied_delta,
+		"relationship_before": relationship_before,
+		"relationship_after": relationship_after,
+		"relationship_changed": absf(applied_delta) > 0.001,
+	}
+	if not relationship_result.is_empty():
+		payload["relationship_result"] = relationship_result.duplicate(true)
+	if simulation != null and simulation.has_method("emit_event"):
+		simulation.emit_event("container_stolen", payload.duplicate(true))
+	return payload
+
+
+func _container_steal_relationship_delta(container: Dictionary) -> float:
+	if container.has("steal_relationship_delta"):
+		return float(container.get("steal_relationship_delta", 0.0))
+	if container.has("theft_relationship_delta"):
+		return float(container.get("theft_relationship_delta", 0.0))
+	return 0.0
+
+
+func _copy_steal_consequence(target: Dictionary, consequence: Dictionary) -> void:
+	if consequence.is_empty():
+		return
+	for key in [
+		"configured_relationship_delta",
+		"relationship_delta",
+		"relationship_before",
+		"relationship_after",
+		"relationship_changed",
+	]:
+		target[key] = consequence.get(key)
 
 
 func _has_owner_relationship_min(container: Dictionary) -> bool:
