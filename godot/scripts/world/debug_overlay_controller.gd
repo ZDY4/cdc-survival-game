@@ -2,6 +2,7 @@ extends RefCounted
 
 const GRID_SIZE := 1.0
 const OVERLAY_ROOT_NAME := "DebugOverlayRoot"
+const DEFAULT_VISION_RADIUS := 10
 
 var overlay_root: Node3D
 var walkable_material := _debug_material(Color(0.18, 0.86, 0.36, 0.26))
@@ -10,6 +11,7 @@ var visible_material := _debug_material(Color(0.18, 0.66, 1.0, 0.32))
 var explored_material := _debug_material(Color(0.95, 0.72, 0.22, 0.22))
 var blocked_sight_material := _debug_material(Color(1.0, 0.18, 0.72, 0.42))
 var level_material := _debug_material(Color(0.78, 0.48, 1.0, 0.28))
+var vision_radius_material := _debug_material(Color(0.10, 0.92, 1.0, 0.58))
 
 
 func apply_overlay(parent: Node3D, mode: String, map_snapshot: Dictionary, runtime_snapshot: Dictionary = {}) -> Dictionary:
@@ -29,6 +31,8 @@ func apply_overlay(parent: Node3D, mode: String, map_snapshot: Dictionary, runti
 	overlay_root.set_meta("explored_cell_count", int(result.get("explored_cell_count", 0)))
 	overlay_root.set_meta("blocked_cell_count", int(result.get("blocked_cell_count", 0)))
 	overlay_root.set_meta("blocked_sight_cell_count", int(result.get("blocked_sight_cell_count", 0)))
+	overlay_root.set_meta("vision_radius_marker_count", int(result.get("vision_radius_marker_count", 0)))
+	overlay_root.set_meta("actor_vision_radius", int(result.get("actor_vision_radius", 0)))
 	overlay_root.set_meta("level", int(result.get("level", _default_level(map_snapshot))))
 	return result
 
@@ -48,6 +52,8 @@ func snapshot() -> Dictionary:
 		"explored_cell_count": int(overlay_root.get_meta("explored_cell_count", 0)),
 		"blocked_cell_count": int(overlay_root.get_meta("blocked_cell_count", 0)),
 		"blocked_sight_cell_count": int(overlay_root.get_meta("blocked_sight_cell_count", 0)),
+		"vision_radius_marker_count": int(overlay_root.get_meta("vision_radius_marker_count", 0)),
+		"actor_vision_radius": int(overlay_root.get_meta("actor_vision_radius", 0)),
 		"level": int(overlay_root.get_meta("level", 0)),
 	}
 
@@ -95,12 +101,16 @@ func _build_vision_overlay(map_snapshot: Dictionary, runtime_snapshot: Dictionar
 	for key in visible_cells.keys():
 		_add_cell_quad(_dictionary_or_empty(visible_cells.get(key, {})), visible_material, "visible")
 		count += 1
+	var radius_vision: Dictionary = _actor_vision_with_runtime_position(actor_vision, runtime_snapshot)
+	var radius_marker_count: int = _add_vision_radius_markers(radius_vision, map_snapshot)
 	return {
 		"ok": true,
 		"mode": "vision",
 		"cell_count": count,
 		"visible_cell_count": visible_cells.size(),
 		"explored_cell_count": explored_cells.size(),
+		"vision_radius_marker_count": radius_marker_count,
+		"actor_vision_radius": int(radius_vision.get("radius", 0)),
 		"level": _default_level(map_snapshot),
 	}
 
@@ -160,6 +170,36 @@ func _add_cell_quad(cell: Dictionary, material: Material, kind: String) -> void:
 	overlay_root.add_child(node)
 
 
+func _add_vision_radius_markers(actor_vision: Dictionary, map_snapshot: Dictionary) -> int:
+	var radius: int = int(actor_vision.get("radius", 0))
+	var center: Dictionary = _dictionary_or_empty(actor_vision.get("grid_position", actor_vision.get("position", {})))
+	if center.is_empty() or radius <= 0:
+		return 0
+	var level: int = int(center.get("y", _default_level(map_snapshot)))
+	var marker_count: int = 0
+	var bounds: Dictionary = _dictionary_or_empty(map_snapshot.get("bounds", {}))
+	var min_x: int = max(int(bounds.get("min_x", int(center.get("x", 0)) - radius)), int(center.get("x", 0)) - radius)
+	var max_x: int = min(int(bounds.get("max_x", int(center.get("x", 0)) + radius)), int(center.get("x", 0)) + radius)
+	var min_z: int = max(int(bounds.get("min_z", int(center.get("z", 0)) - radius)), int(center.get("z", 0)) - radius)
+	var max_z: int = min(int(bounds.get("max_z", int(center.get("z", 0)) + radius)), int(center.get("z", 0)) + radius)
+	for x in range(min_x, max_x + 1):
+		for z in range(min_z, max_z + 1):
+			var dx: int = x - int(center.get("x", 0))
+			var dz: int = z - int(center.get("z", 0))
+			if not _cell_on_radius_edge(dx, dz, float(radius)):
+				continue
+			_add_cell_quad({"x": x, "y": level, "z": z}, vision_radius_material, "vision_radius")
+			marker_count += 1
+	return marker_count
+
+
+func _cell_on_radius_edge(dx: int, dz: int, radius: float) -> bool:
+	if radius <= 0.0:
+		return dx == 0 and dz == 0
+	var distance: float = sqrt(float(dx * dx + dz * dz))
+	return absf(distance - radius) <= 0.75
+
+
 func _actor_vision(runtime_snapshot: Dictionary) -> Dictionary:
 	var vision: Dictionary = _dictionary_or_empty(runtime_snapshot.get("vision", {}))
 	for actor in _array_or_empty(vision.get("actors", [])):
@@ -167,6 +207,23 @@ func _actor_vision(runtime_snapshot: Dictionary) -> Dictionary:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return actor_data
 	return {}
+
+
+func _actor_vision_with_runtime_position(actor_vision: Dictionary, runtime_snapshot: Dictionary) -> Dictionary:
+	var output: Dictionary = actor_vision.duplicate(true)
+	if int(output.get("radius", 0)) <= 0:
+		output["radius"] = DEFAULT_VISION_RADIUS
+	if not _dictionary_or_empty(output.get("grid_position", output.get("position", {}))).is_empty():
+		return output
+	for actor in _array_or_empty(runtime_snapshot.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if int(actor_data.get("actor_id", 0)) != 1:
+			continue
+		var grid: Dictionary = _dictionary_or_empty(actor_data.get("grid_position", {}))
+		if not grid.is_empty():
+			output["grid_position"] = grid.duplicate(true)
+		return output
+	return output
 
 
 func _explored_cells(actor_vision: Dictionary, active_map_id: String) -> Array:

@@ -729,7 +729,7 @@ Godot 落点：`godot/scripts/world/world_scene_renderer.gd`、`godot/assets/pre
 - [ ] hover outline：actor、object、door、container、trigger。
 - [ ] fog mask 与相机和地图坐标同步。
 - [ ] explored / visible / unseen 三态表现。
-- [~] debug overlay：`V` 循环的 walkable、vision、blocked sight、level 世界诊断层已迁移，并暴露 runtime snapshot；待补 actor vision radius 标记和更完整的性能/帮助诊断。
+- [~] debug overlay：`V` 循环的 walkable、vision、actor vision radius、blocked sight、level 世界诊断层已迁移，并暴露 runtime snapshot；待补更完整的性能/帮助诊断。
 
 参考：`controls/camera.rs`、`geometry/camera.rs`、`render/occlusion.rs`、`render/hover_outline.rs`、`render/fog_of_war/**`。
 Godot 落点：`godot/scripts/world/fog_overlay_controller.gd`、`world_scene_renderer.gd`、input controller。

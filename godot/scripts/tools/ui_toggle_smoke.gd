@@ -200,6 +200,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("second V should switch debug overlay mode to vision")
 	_assert_debug_overlay_line(errors, game_root, "Overlay vision", "vision overlay HUD")
 	_assert_debug_overlay_snapshot(errors, game_root, "vision", true, "vision overlay world")
+	_assert_vision_radius_overlay(errors, game_root, "vision radius overlay")
 	_press_key(game_root, KEY_V)
 	if str(game_root.current_debug_overlay_mode()) != "blocked_sight":
 		errors.append("third V should switch debug overlay mode to blocked_sight")
@@ -776,6 +777,20 @@ func _assert_debug_overlay_snapshot(errors: Array[String], game_root: Node, expe
 		errors.append("%s: active debug overlay should create DebugOverlayRoot" % context)
 	if not expected_active and root != null:
 		errors.append("%s: off debug overlay should remove DebugOverlayRoot" % context)
+
+
+func _assert_vision_radius_overlay(errors: Array[String], game_root: Node, context: String) -> void:
+	var snapshot: Dictionary = game_root.debug_overlay_snapshot()
+	if int(snapshot.get("actor_vision_radius", 0)) <= 0:
+		errors.append("%s: vision overlay should expose actor vision radius: %s" % [context, snapshot])
+	if int(snapshot.get("vision_radius_marker_count", 0)) <= 0:
+		errors.append("%s: vision overlay should render radius markers: %s" % [context, snapshot])
+	var root: Node = game_root.find_child("DebugOverlayRoot", true, false)
+	if root == null:
+		errors.append("%s: missing DebugOverlayRoot" % context)
+		return
+	if root.find_child("DebugCell_vision_radius*", true, false) == null:
+		errors.append("%s: radius marker nodes should use DebugCell_vision_radius prefix" % context)
 
 
 func _assert_runtime_control_line(errors: Array[String], game_root: Node, expected: String, context: String) -> void:
