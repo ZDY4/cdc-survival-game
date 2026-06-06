@@ -96,7 +96,7 @@
 ### 4.2 门和建筑
 
 - generated door runtime 第一版已迁移：地图对象可通过 `props.door` 生成 `door_objects`、默认关闭、未锁、阻挡 movement / sight，`Simulation.toggle_door()` 会写入 `door_states`，world snapshot 会按 door state 更新 movement / sight blocking，并由 `World` / `Interaction` / `Save` smoke 覆盖。待补将现有地图建筑门洞批量标注为真实 `props.door`。
-- 锁门权限第一版已迁移：纯 `locked` 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；门 `props.door` / runtime `door_states` 支持 `required_item_ids` / `required_items` 和 `required_tool_ids` / `required_tools`，玩家背包或装备满足钥匙/工具后可打开锁门，缺失时返回 `door_key_missing` / `door_tool_missing`，HUD 有中文失败提示，权限字段随存档 roundtrip，并由 `Interaction` / `World` / `Door` / `Save` smoke 覆盖。待补钥匙/撬锁消耗、工具耐久、失败概率和更完整开锁表现。
+- 锁门权限第一版已迁移：纯 `locked` 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；门 `props.door` / runtime `door_states` 支持 `required_item_ids` / `required_items` 和 `required_tool_ids` / `required_tools`，玩家背包或装备满足钥匙/工具后可打开锁门，缺失时返回 `door_key_missing` / `door_tool_missing`，HUD 有中文失败提示；显式配置 `consume_required_items_on_unlock` / `consume_required_tools_on_unlock` 时会在开锁成功后消耗背包钥匙/工具、记录 `unlock_requirements_consumed` 并解除 locked，配置和解锁状态随存档 roundtrip；已由 `Interaction` / `World` / `Door` / `Save` smoke 覆盖。待补逐件工具耐久、失败概率和更完整开锁表现。
 - 自动开门第一版已迁移：玩家移动路径和 hostile AI 追击路径遇到可开启关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`；玩家路径已复用锁门钥匙/工具权限，缺钥匙/工具仍保持不可达，满足要求会自动开门通过；已由 `Movement` / `AI` / `Door` smoke 覆盖。待补 settlement / GOAP 路径自动开门、开合模型状态更新和声音占位。
 - 待补建筑 footprint 阻挡：复杂 footprint、多层 story、door opening、wall visual、floor visual 和路径阻挡一致。
 - 门 hover / fallback 开合表现第一版已迁移：world renderer 会把 `target_kind=door` 和 door 状态 metadata 写入 pickable map object，runtime hover 会合并 world interaction target、把 `door_toggle` 归类为 `door`，并用门专属 outline 颜色和 `door_is_open` / `door_locked` meta 表现；无真实门模型时会生成 `DoorStateVisual` fallback，关闭/打开/锁定状态有稳定 meta、颜色和打开旋转；已由 `PlayerInteraction` / `Scene` smoke 覆盖。待补真实门模型、碰撞体、交互提示 polish 和声音占位。
@@ -206,7 +206,7 @@
 - 已有拿取/存放、全部拿取/全部存放、容器/背包双栏、滚动列表、基础详情文本、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip 和容器/背包双向拖拽转移第一版，并纳入 `ContainerUI` smoke；批量转移复用单项容器事务，成功项保留、失败项返回 `failures` 并可显示部分成功反馈。
 - 容器类型元数据第一版已迁移：地图容器、尸体容器和掉落容器会在 scene target、运行时 session、corpse/drop 记录、world snapshot、pickable metadata、ContainerSnapshot 和 save/load 中保留 `container_type` / `container_origin`；尸体/掉落容器在 load 后会兜底同步回普通 `container_sessions`，继续复用拿取、存放、权限和容量规则；已由 `ContainerUI` / `Combat` / `InventoryUI` / `Save` smoke 覆盖。待补商店容器、任务容器特化表现和完整 id 规范文档。
 - 容器关闭已覆盖 Esc、关闭按钮、目标消失关闭、切换地图关闭和超出距离关闭；空容器提示已覆盖。清空后地图对象状态第一版已迁移：`container_sessions` 会覆盖 world snapshot 中的容器库存、金钱和 empty/item count metadata，容器仍保留可交互对象和 pickable body，世界节点显示 `ContainerStateBadge`，已由 `ContainerUI` / `Scene` smoke 覆盖。
-- 基础失败提示已覆盖并纳入 `ContainerUI` smoke：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器、数量非法、拿取后背包负重不足；容器权限第一版已支持 session / map props 的 `locked`、`allow_take`、`allow_store`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`、`required_world_flags`、`blocked_world_flags`、`required_active_quest_ids`、`required_completed_quest_ids`、`blocked_active_quest_ids`、`blocked_completed_quest_ids`、`owned`、`owner_actor_id` / `owner_actor_definition_id`、`owner_relationship_min/max` 和 `allow_steal`，拿取、拿钱和存放会统一拒绝并显示中文反馈，钥匙/工具满足时可操作锁定容器，任务状态满足时可操作任务限制容器，关系满足时可访问 owner 容器，允许偷取时结果和事件会标记 `stealing` / `owner_actor_id` 并发出 `container_stolen`；`steal_relationship_delta` / `theft_relationship_delta` 可配置与 owner 的关系变化并随存档 roundtrip；容器自身容量第一版支持重量、总件数、stack/slot 数限制，容量字段随地图对象、交互 session 和存档 roundtrip，超限显示中文反馈；已纳入 `ContainerUI` / `Save` smoke。待补钥匙/工具消耗或耐久策略、NPC 目击 / crime system / 阵营敌对联动和更完整权限 UI 预览。
+- 基础失败提示已覆盖并纳入 `ContainerUI` smoke：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器、数量非法、拿取后背包负重不足；容器权限第一版已支持 session / map props 的 `locked`、`allow_take`、`allow_store`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`、`required_world_flags`、`blocked_world_flags`、`required_active_quest_ids`、`required_completed_quest_ids`、`blocked_active_quest_ids`、`blocked_completed_quest_ids`、`owned`、`owner_actor_id` / `owner_actor_definition_id`、`owner_relationship_min/max` 和 `allow_steal`，拿取、拿钱和存放会统一拒绝并显示中文反馈，钥匙/工具满足时可操作锁定容器，显式配置 `consume_required_items_on_unlock` / `consume_required_tools_on_unlock` 时会在首次成功操作后消耗背包钥匙/工具、记录 `unlock_requirements_consumed` 并解除 locked；任务状态满足时可操作任务限制容器，关系满足时可访问 owner 容器，允许偷取时结果和事件会标记 `stealing` / `owner_actor_id` 并发出 `container_stolen`；`steal_relationship_delta` / `theft_relationship_delta` 可配置与 owner 的关系变化并随存档 roundtrip；容器自身容量第一版支持重量、总件数、stack/slot 数限制，容量字段随地图对象、交互 session 和存档 roundtrip，超限显示中文反馈；已纳入 `ContainerUI` / `Save` smoke。待补逐件工具耐久、NPC 目击 / crime system / 阵营敌对联动和更完整权限 UI 预览。
 
 ### 8.4 交易
 
@@ -323,7 +323,7 @@
 - Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏、多树切换、前置链路、下游解锁高亮和目标选择 HUD 预览第一版；待补图形技能树、pan、节点连线和世界目标高亮。
 - Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、批量执行、AP 不足反馈和完成反馈第一版；待补制作队列和取消。
 - Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、buy/sell drop zone 来源提示、稳定拒绝 reason、不可出售禁用态、交易权限禁用预览、装备出售确认和清空；待补 drop zone hover 高亮、drag preview 和更细禁用说明 polish。
-- Container 面板已有空容器提示、容器/背包双栏、滚动、基础详情、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip、全部拿取/全部存放、双向拖拽转移、背包面板拖入存放、容器锁定/权限失败反馈、钥匙/工具缺失反馈、背包负重不足反馈和容器自身容量超限反馈；待补钥匙/工具消耗或耐久策略和跨面板拖拽视觉 polish。
+- Container 面板已有空容器提示、容器/背包双栏、滚动、基础详情、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip、全部拿取/全部存放、双向拖拽转移、背包面板拖入存放、容器锁定/权限失败反馈、钥匙/工具缺失反馈、显式钥匙/工具消耗解锁、背包负重不足反馈和容器自身容量超限反馈；待补逐件工具耐久和跨面板拖拽视觉 polish。
 
 ## 14. 资产和导入
 
@@ -371,7 +371,7 @@
 - `Combat`：补 LOS、跨层、AOE、友军伤害、战斗退出 decay、远程弹药/reload、暴击 seed。
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、背包使用成功/失败反馈、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；拆分入口禁用说明和 core 稳定拒绝 reason 已有 smoke；待补真正多 stack 拆分、装备属性变化对比和更完整上下文菜单 polish。
-- `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、全部拿取/全部存放、双向拖拽、背包面板拖入存放、基础失败提示、背包负重限制、容器自身容量限制、容器锁定/权限拒绝和钥匙/工具解锁已有 smoke；待补钥匙/工具消耗或耐久策略和跨面板拖拽视觉 polish。
+- `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、全部拿取/全部存放、双向拖拽、背包面板拖入存放、基础失败提示、背包负重限制、容器自身容量限制、容器锁定/权限拒绝、钥匙/工具解锁和显式消耗已有 smoke；待补逐件工具耐久和跨面板拖拽视觉 polish。
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售、背包负重限制、拖拽入队、buy/sell drop zone 和 drop zone 来源/拒绝提示已有 smoke；待补 drop zone hover 高亮、drag preview 和更细禁用说明 polish。
 - `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、世界目标高亮、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补多组 hotbar、技能树 pan 和更完整状态 UI。
 - `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版已有 smoke；待补对话交付条件和更完整失败反馈。

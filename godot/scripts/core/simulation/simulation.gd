@@ -180,12 +180,22 @@ func toggle_door(actor_id: int, door_id: String) -> Dictionary:
 
 	var current_state: Dictionary = _dictionary_or_empty(door_states.get(door_id, door))
 	var is_open := bool(current_state.get("is_open", door.get("is_open", false)))
+	var unlock_consumption: Dictionary = {}
+	if not is_open:
+		unlock_consumption = _consume_door_unlock_requirements(actor, actor_id, door_id, current_state, door)
+		if not bool(unlock_consumption.get("success", false)):
+			return unlock_consumption
+	var consumed_unlock_requirements: Array = _array_or_empty(unlock_consumption.get("consumed_unlock_requirements", []))
 	var next_state: Dictionary = door.duplicate(true)
-	for key in ["required_item_ids", "required_items", "required_tool_ids", "required_tools"]:
+	for key in _door_runtime_field_keys():
 		if current_state.has(key):
 			next_state[key] = current_state.get(key)
 	next_state["is_open"] = not is_open
 	next_state["locked"] = bool(current_state.get("locked", door.get("locked", false)))
+	if not consumed_unlock_requirements.is_empty():
+		next_state["locked"] = false
+		next_state["unlock_requirements_consumed"] = true
+		next_state["unlock_consumed_actor_id"] = actor_id
 	next_state["blocks_movement"] = not bool(next_state.get("is_open", false))
 	next_state["blocks_sight"] = not bool(next_state.get("is_open", false)) and bool(next_state.get("blocks_sight_when_closed", true))
 	door_states[door_id] = next_state
@@ -197,12 +207,16 @@ func toggle_door(actor_id: int, door_id: String) -> Dictionary:
 		"locked": bool(next_state.get("locked", false)),
 		"blocks_movement": bool(next_state.get("blocks_movement", false)),
 		"blocks_sight": bool(next_state.get("blocks_sight", false)),
+		"unlock_requirements_consumed": not consumed_unlock_requirements.is_empty(),
+		"consumed_unlock_requirements": consumed_unlock_requirements.duplicate(true),
 	})
 	return {
 		"success": true,
 		"door_id": door_id,
 		"is_open": bool(next_state.get("is_open", false)),
 		"door": next_state.duplicate(true),
+		"unlock_requirements_consumed": not consumed_unlock_requirements.is_empty(),
+		"consumed_unlock_requirements": consumed_unlock_requirements.duplicate(true),
 	}
 
 
@@ -212,7 +226,8 @@ func _door_permission(actor: RefCounted, actor_id: int, door_id: String, door: D
 		"actor_id": actor_id,
 		"door_id": door_id,
 	}
-	var required_item_ids: Array[String] = _required_item_ids(door)
+	var unlock_consumed: bool = bool(door.get("unlock_requirements_consumed", false))
+	var required_item_ids: Array[String] = [] if unlock_consumed else _required_item_ids(door)
 	var missing_item_ids: Array[String] = _missing_actor_items(actor, required_item_ids)
 	if not missing_item_ids.is_empty():
 		return _permission_failure(base, "door_key_missing", {
@@ -220,7 +235,7 @@ func _door_permission(actor: RefCounted, actor_id: int, door_id: String, door: D
 			"missing_item_ids": missing_item_ids,
 			"required_item_ids": required_item_ids,
 		})
-	var required_tool_ids: Array[String] = _required_tool_ids(door)
+	var required_tool_ids: Array[String] = [] if unlock_consumed else _required_tool_ids(door)
 	var missing_tool_ids: Array[String] = _missing_actor_items(actor, required_tool_ids)
 	if not missing_tool_ids.is_empty():
 		return _permission_failure(base, "door_tool_missing", {
@@ -232,6 +247,128 @@ func _door_permission(actor: RefCounted, actor_id: int, door_id: String, door: D
 	if bool(door.get("locked", false)) and not has_unlock_requirements:
 		return _permission_failure(base, "door_locked", {})
 	return base
+
+
+func _door_runtime_field_keys() -> Array[String]:
+	return [
+		"required_item_ids",
+		"required_items",
+		"required_tool_ids",
+		"required_tools",
+		"consume_required_items_on_unlock",
+		"consume_required_tools_on_unlock",
+		"consume_required_items",
+		"consume_required_tools",
+		"consume_keys_on_unlock",
+		"consume_tools_on_unlock",
+		"required_item_consume_count",
+		"required_tool_consume_count",
+		"unlock_item_consume_count",
+		"unlock_tool_consume_count",
+		"key_consume_count",
+		"tool_consume_count",
+		"unlock_requirements_consumed",
+		"unlock_consumed_actor_id",
+	]
+
+
+func _consume_door_unlock_requirements(actor: RefCounted, actor_id: int, door_id: String, current_state: Dictionary, door: Dictionary) -> Dictionary:
+	var source: Dictionary = door.duplicate(true)
+	for key in _door_runtime_field_keys():
+		if current_state.has(key):
+			source[key] = current_state.get(key)
+	if not bool(source.get("locked", false)) or bool(source.get("unlock_requirements_consumed", false)):
+		return {"success": true, "consumed_unlock_requirements": []}
+	var consumed: Array[Dictionary] = []
+	if _door_consumes_required_items(source):
+		var item_count: int = _door_required_item_consume_count(source)
+		for item_id in _required_item_ids(source):
+			var consume_result: Dictionary = _consume_actor_inventory_requirement(actor, item_id, item_count, "item")
+			if not bool(consume_result.get("success", false)):
+				return _permission_failure({
+					"success": true,
+					"actor_id": actor_id,
+					"door_id": door_id,
+				}, "door_key_missing", {
+					"item_id": item_id,
+					"required_item_ids": _required_item_ids(source),
+					"consume_count": item_count,
+				})
+			consumed.append(consume_result)
+	if _door_consumes_required_tools(source):
+		var tool_count: int = _door_required_tool_consume_count(source)
+		for tool_id in _required_tool_ids(source):
+			var consume_result: Dictionary = _consume_actor_inventory_requirement(actor, tool_id, tool_count, "tool")
+			if not bool(consume_result.get("success", false)):
+				return _permission_failure({
+					"success": true,
+					"actor_id": actor_id,
+					"door_id": door_id,
+				}, "door_tool_missing", {
+					"item_id": tool_id,
+					"required_tool_ids": _required_tool_ids(source),
+					"consume_count": tool_count,
+				})
+			consumed.append(consume_result)
+	if consumed.is_empty():
+		return {"success": true, "consumed_unlock_requirements": []}
+	for entry in consumed:
+		var event_payload: Dictionary = _dictionary_or_empty(entry).duplicate(true)
+		event_payload["actor_id"] = actor_id
+		event_payload["target_kind"] = "door"
+		event_payload["door_id"] = door_id
+		event_payload["target_id"] = door_id
+		emit_event("unlock_requirement_consumed", event_payload)
+	emit_event("door_unlocked", {
+		"actor_id": actor_id,
+		"door_id": door_id,
+		"target_id": door_id,
+		"consumed_unlock_requirements": consumed.duplicate(true),
+	})
+	return {
+		"success": true,
+		"unlock_requirements_consumed": true,
+		"consumed_unlock_requirements": consumed,
+	}
+
+
+func _consume_actor_inventory_requirement(actor: RefCounted, item_id: String, count: int, requirement_kind: String) -> Dictionary:
+	var normalized_item_id: String = _door_normalize_content_id(item_id)
+	var consume_count: int = max(1, count)
+	var before_count: int = int(actor.inventory.get(normalized_item_id, 0)) if actor != null else 0
+	if actor == null or normalized_item_id.is_empty() or before_count < consume_count:
+		return {
+			"success": false,
+			"item_id": normalized_item_id,
+			"count": consume_count,
+			"inventory_before": before_count,
+			"requirement_kind": requirement_kind,
+		}
+	_inventory_entries.add_actor_item(actor, normalized_item_id, -consume_count)
+	return {
+		"success": true,
+		"item_id": normalized_item_id,
+		"count": consume_count,
+		"inventory_before": before_count,
+		"inventory_after": int(actor.inventory.get(normalized_item_id, 0)),
+		"requirement_kind": requirement_kind,
+	}
+
+
+func _door_consumes_required_items(door: Dictionary) -> bool:
+	return bool(door.get("consume_required_items_on_unlock", door.get("consume_required_items", door.get("consume_keys_on_unlock", false))))
+
+
+func _door_consumes_required_tools(door: Dictionary) -> bool:
+	return bool(door.get("consume_required_tools_on_unlock", door.get("consume_required_tools", door.get("consume_tools_on_unlock", false))))
+
+
+func _door_required_item_consume_count(door: Dictionary) -> int:
+	return max(1, int(door.get("required_item_consume_count", door.get("unlock_item_consume_count", door.get("key_consume_count", 1)))))
+
+
+func _door_required_tool_consume_count(door: Dictionary) -> int:
+	return max(1, int(door.get("required_tool_consume_count", door.get("unlock_tool_consume_count", door.get("tool_consume_count", 1)))))
 
 
 func _required_item_ids(value: Dictionary) -> Array[String]:

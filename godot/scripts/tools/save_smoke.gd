@@ -63,6 +63,10 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	clinic_container["allow_store"] = false
 	clinic_container["required_item_ids"] = ["1138"]
 	clinic_container["required_tool_ids"] = ["1150"]
+	clinic_container["consume_required_items_on_unlock"] = true
+	clinic_container["consume_required_tools_on_unlock"] = true
+	clinic_container["unlock_requirements_consumed"] = true
+	clinic_container["unlock_consumed_actor_id"] = 1
 	clinic_container["required_world_flags"] = ["outpost_workshop_restored"]
 	clinic_container["blocked_world_flags"] = ["clinic_locked_down"]
 	clinic_container["max_weight"] = 3.5
@@ -157,6 +161,10 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"blocks_sight_when_closed": true,
 		"required_item_ids": ["1138"],
 		"required_tool_ids": ["1150"],
+		"consume_required_items_on_unlock": true,
+		"consume_required_tools_on_unlock": true,
+		"unlock_requirements_consumed": true,
+		"unlock_consumed_actor_id": 1,
 	}
 	simulation.set_actor_vision_radius(1, 4)
 	simulation.refresh_actor_vision(1, topology)
@@ -270,6 +278,14 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("container required item ids did not roundtrip")
 	if not _array_or_empty(restored_clinic_container.get("required_tool_ids", [])).has("1150"):
 		errors.append("container required tool ids did not roundtrip")
+	if not bool(restored_clinic_container.get("consume_required_items_on_unlock", false)):
+		errors.append("container consume_required_items_on_unlock did not roundtrip")
+	if not bool(restored_clinic_container.get("consume_required_tools_on_unlock", false)):
+		errors.append("container consume_required_tools_on_unlock did not roundtrip")
+	if not bool(restored_clinic_container.get("unlock_requirements_consumed", false)):
+		errors.append("container unlock_requirements_consumed did not roundtrip")
+	if int(restored_clinic_container.get("unlock_consumed_actor_id", 0)) != 1:
+		errors.append("container unlock_consumed_actor_id did not roundtrip")
 	if not _array_or_empty(restored_clinic_container.get("required_world_flags", [])).has("outpost_workshop_restored"):
 		errors.append("container required world flags did not roundtrip")
 	if not _array_or_empty(restored_clinic_container.get("blocked_world_flags", [])).has("clinic_locked_down"):
@@ -323,6 +339,14 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("door required item ids did not roundtrip")
 	if not _array_or_empty(restored_door.get("required_tool_ids", [])).has("1150"):
 		errors.append("door required tool ids did not roundtrip")
+	if not bool(restored_door.get("consume_required_items_on_unlock", false)):
+		errors.append("door consume_required_items_on_unlock did not roundtrip")
+	if not bool(restored_door.get("consume_required_tools_on_unlock", false)):
+		errors.append("door consume_required_tools_on_unlock did not roundtrip")
+	if not bool(restored_door.get("unlock_requirements_consumed", false)):
+		errors.append("door unlock_requirements_consumed did not roundtrip")
+	if int(restored_door.get("unlock_consumed_actor_id", 0)) != 1:
+		errors.append("door unlock_consumed_actor_id did not roundtrip")
 	var player_original: Dictionary = _player_actor(original)
 	var player_restored: Dictionary = _player_actor(restored)
 	if _inventory_count(player_restored, "1006") != _inventory_count(player_original, "1006"):

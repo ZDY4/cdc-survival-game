@@ -309,11 +309,12 @@ func _option_for_target(simulation: RefCounted, actor: RefCounted, target_data: 
 
 
 func _door_prompt_permission(actor: RefCounted, door: Dictionary) -> Dictionary:
-	var required_item_ids: Array[String] = _required_item_ids(door)
+	var unlock_consumed: bool = bool(door.get("unlock_requirements_consumed", false))
+	var required_item_ids: Array[String] = [] if unlock_consumed else _required_item_ids(door)
 	var missing_item_ids: Array[String] = _missing_actor_items(actor, required_item_ids)
 	if not missing_item_ids.is_empty():
 		return {"success": false, "reason": "door_key_missing", "item_id": missing_item_ids[0]}
-	var required_tool_ids: Array[String] = _required_tool_ids(door)
+	var required_tool_ids: Array[String] = [] if unlock_consumed else _required_tool_ids(door)
 	var missing_tool_ids: Array[String] = _missing_actor_items(actor, required_tool_ids)
 	if not missing_tool_ids.is_empty():
 		return {"success": false, "reason": "door_tool_missing", "item_id": missing_tool_ids[0]}

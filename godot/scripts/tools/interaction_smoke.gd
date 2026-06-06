@@ -682,6 +682,14 @@ func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
 		"tool_door_interaction_smoke": _door_target("tool_door_interaction_smoke", false, true, door_grid, {
 			"required_tool_ids": ["1150"],
 		}),
+		"consume_key_door_interaction_smoke": _door_target("consume_key_door_interaction_smoke", false, true, door_grid, {
+			"required_item_ids": ["1138"],
+			"consume_required_items_on_unlock": true,
+		}),
+		"consume_tool_door_interaction_smoke": _door_target("consume_tool_door_interaction_smoke", false, true, door_grid, {
+			"required_tool_ids": ["1150"],
+			"consume_required_tools_on_unlock": true,
+		}),
 	})
 	var prompt: Dictionary = simulation.query_interaction_options(1, {
 		"target_type": "map_object",
@@ -755,6 +763,31 @@ func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
 	}, "door_toggle")
 	if not bool(tool_result.get("success", false)) or not bool(tool_result.get("is_open", false)):
 		errors.append("tool locked door should open with tool: %s" % tool_result.get("reason", "unknown"))
+	player.inventory["1138"] = 1
+	var consume_key_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "consume_key_door_interaction_smoke",
+	}, "door_toggle")
+	if not bool(consume_key_result.get("success", false)) or not bool(consume_key_result.get("is_open", false)):
+		errors.append("consuming key locked door should open with key: %s" % consume_key_result.get("reason", "unknown"))
+	if int(player.inventory.get("1138", 0)) != 0:
+		errors.append("consuming key locked door should consume one key")
+	if not bool(consume_key_result.get("unlock_requirements_consumed", false)):
+		errors.append("consuming key locked door should report unlock requirement consumption")
+	var consume_key_state: Dictionary = _dictionary_or_empty(simulation.door_states.get("consume_key_door_interaction_smoke", {}))
+	if bool(consume_key_state.get("locked", true)) or not bool(consume_key_state.get("unlock_requirements_consumed", false)):
+		errors.append("consuming key locked door should persist unlocked state")
+	player.inventory["1150"] = 1
+	var consume_tool_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "consume_tool_door_interaction_smoke",
+	}, "door_toggle")
+	if not bool(consume_tool_result.get("success", false)) or not bool(consume_tool_result.get("is_open", false)):
+		errors.append("consuming tool locked door should open with tool: %s" % consume_tool_result.get("reason", "unknown"))
+	if int(player.inventory.get("1150", 0)) != 0:
+		errors.append("consuming tool locked door should consume one tool")
+	if _event_count(simulation.snapshot(), "door_unlocked") <= 0 or _event_count(simulation.snapshot(), "unlock_requirement_consumed") <= 0:
+		errors.append("consuming locked doors should emit unlock consumption events")
 	return errors
 
 

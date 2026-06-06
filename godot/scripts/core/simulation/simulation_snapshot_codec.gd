@@ -158,6 +158,21 @@ func _container_session_snapshots(container_sessions: Dictionary) -> Array[Dicti
 			"required_items",
 			"required_tool_ids",
 			"required_tools",
+			"consume_required_items_on_unlock",
+			"consume_required_tools_on_unlock",
+			"consume_required_items",
+			"consume_required_tools",
+			"consume_keys_on_unlock",
+			"consume_tools_on_unlock",
+			"required_item_consume_count",
+			"required_tool_consume_count",
+			"unlock_item_consume_count",
+			"unlock_tool_consume_count",
+			"key_consume_count",
+			"tool_consume_count",
+			"unlock_requirements_consumed",
+			"unlock_consumed_actor_id",
+			"unlock_consumed_action",
 			"required_world_flags",
 			"blocked_world_flags",
 			"max_weight",
@@ -171,6 +186,8 @@ func _container_session_snapshots(container_sessions: Dictionary) -> Array[Dicti
 			"slot_capacity",
 			"max_slots",
 		])
+		if snapshot.has("unlock_consumed_actor_id"):
+			snapshot["unlock_consumed_actor_id"] = int(snapshot.get("unlock_consumed_actor_id", 0))
 		output.append(snapshot)
 	return output
 
@@ -219,7 +236,23 @@ func _door_state_snapshots(door_states: Dictionary) -> Array[Dictionary]:
 			"required_items",
 			"required_tool_ids",
 			"required_tools",
+			"consume_required_items_on_unlock",
+			"consume_required_tools_on_unlock",
+			"consume_required_items",
+			"consume_required_tools",
+			"consume_keys_on_unlock",
+			"consume_tools_on_unlock",
+			"required_item_consume_count",
+			"required_tool_consume_count",
+			"unlock_item_consume_count",
+			"unlock_tool_consume_count",
+			"key_consume_count",
+			"tool_consume_count",
+			"unlock_requirements_consumed",
+			"unlock_consumed_actor_id",
 		])
+		if snapshot.has("unlock_consumed_actor_id"):
+			snapshot["unlock_consumed_actor_id"] = int(snapshot.get("unlock_consumed_actor_id", 0))
 		output.append(snapshot)
 	return output
 

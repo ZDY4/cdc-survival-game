@@ -49,6 +49,10 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		capacity["container_id"] = normalized_container_id
 		return capacity
 
+	var unlock_consumption: Dictionary = _consume_container_unlock_requirements(simulation, actor, actor_id, normalized_container_id, container, "take")
+	if not bool(unlock_consumption.get("success", false)):
+		return unlock_consumption
+	var consumed_unlock_requirements: Array = _array_or_empty(unlock_consumption.get("consumed_unlock_requirements", []))
 	_inventory_entries.add(container["inventory"], normalized_item_id, -transfer_count)
 	_inventory_entries.add_actor_item(actor, normalized_item_id, transfer_count)
 	simulation.container_sessions[normalized_container_id] = container
@@ -63,6 +67,8 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"count": transfer_count,
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
+		"unlock_requirements_consumed": not consumed_unlock_requirements.is_empty(),
+		"consumed_unlock_requirements": consumed_unlock_requirements.duplicate(true),
 	})
 	simulation.emit_event("container_transferred", {
 		"actor_id": actor_id,
@@ -74,6 +80,8 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"to": "actor_inventory",
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
+		"unlock_requirements_consumed": not consumed_unlock_requirements.is_empty(),
+		"consumed_unlock_requirements": consumed_unlock_requirements.duplicate(true),
 	})
 	simulation.record_item_collected(actor_id, normalized_item_id, transfer_count)
 	var result := {
@@ -84,6 +92,7 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
 	}
+	_copy_unlock_consumption(result, unlock_consumption)
 	_copy_steal_consequence(result, steal_consequence)
 	return result
 
@@ -121,6 +130,10 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 			"current": available,
 		}
 
+	var unlock_consumption: Dictionary = _consume_container_unlock_requirements(simulation, actor, actor_id, normalized_container_id, container, "take_money")
+	if not bool(unlock_consumption.get("success", false)):
+		return unlock_consumption
+	var consumed_unlock_requirements: Array = _array_or_empty(unlock_consumption.get("consumed_unlock_requirements", []))
 	var actor_money_before: int = max(0, int(actor.money))
 	var container_money_after: int = available - transfer_count
 	actor.money = actor_money_before + transfer_count
@@ -143,6 +156,8 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 		"container_money_after": container_money_after,
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
+		"unlock_requirements_consumed": not consumed_unlock_requirements.is_empty(),
+		"consumed_unlock_requirements": consumed_unlock_requirements.duplicate(true),
 	})
 	simulation.emit_event("container_transferred", {
 		"actor_id": actor_id,
@@ -154,6 +169,8 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 		"to": "actor_money",
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
+		"unlock_requirements_consumed": not consumed_unlock_requirements.is_empty(),
+		"consumed_unlock_requirements": consumed_unlock_requirements.duplicate(true),
 	})
 	var result := {
 		"success": true,
@@ -167,6 +184,7 @@ func take_money_from_container(simulation: RefCounted, actor_id: int, container_
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
 	}
+	_copy_unlock_consumption(result, unlock_consumption)
 	_copy_steal_consequence(result, steal_consequence)
 	return result
 
@@ -240,6 +258,10 @@ func store_item_in_container(simulation: RefCounted, actor_id: int, container_id
 	if not bool(capacity.get("success", false)):
 		return capacity
 
+	var unlock_consumption: Dictionary = _consume_container_unlock_requirements(simulation, actor, actor_id, normalized_container_id, container, "store")
+	if not bool(unlock_consumption.get("success", false)):
+		return unlock_consumption
+	var consumed_unlock_requirements: Array = _array_or_empty(unlock_consumption.get("consumed_unlock_requirements", []))
 	_inventory_entries.add_actor_item(actor, normalized_item_id, -transfer_count)
 	_inventory_entries.add(container["inventory"], normalized_item_id, transfer_count)
 	simulation.container_sessions[normalized_container_id] = container
@@ -249,6 +271,8 @@ func store_item_in_container(simulation: RefCounted, actor_id: int, container_id
 		"container_id": normalized_container_id,
 		"item_id": normalized_item_id,
 		"count": transfer_count,
+		"unlock_requirements_consumed": not consumed_unlock_requirements.is_empty(),
+		"consumed_unlock_requirements": consumed_unlock_requirements.duplicate(true),
 	})
 	simulation.emit_event("container_transferred", {
 		"actor_id": actor_id,
@@ -258,13 +282,17 @@ func store_item_in_container(simulation: RefCounted, actor_id: int, container_id
 		"direction": "store",
 		"from": "actor_inventory",
 		"to": "container",
+		"unlock_requirements_consumed": not consumed_unlock_requirements.is_empty(),
+		"consumed_unlock_requirements": consumed_unlock_requirements.duplicate(true),
 	})
-	return {
+	var result := {
 		"success": true,
 		"container_id": normalized_container_id,
 		"item_id": normalized_item_id,
 		"count": transfer_count,
 	}
+	_copy_unlock_consumption(result, unlock_consumption)
+	return result
 
 
 func store_all_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_library: Dictionary = {}) -> Dictionary:
@@ -353,7 +381,8 @@ func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: 
 		"container_id": container_id,
 		"action": action,
 	}
-	var required_item_ids: Array[String] = _required_item_ids(container)
+	var unlock_consumed: bool = bool(container.get("unlock_requirements_consumed", false))
+	var required_item_ids: Array[String] = [] if unlock_consumed else _required_item_ids(container)
 	var missing_item_ids: Array[String] = _missing_actor_items(actor, required_item_ids)
 	if not missing_item_ids.is_empty():
 		return _permission_failure(base, "container_key_missing", {
@@ -361,7 +390,7 @@ func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: 
 			"missing_item_ids": missing_item_ids,
 			"required_item_ids": required_item_ids,
 		})
-	var required_tool_ids: Array[String] = _required_tool_ids(container)
+	var required_tool_ids: Array[String] = [] if unlock_consumed else _required_tool_ids(container)
 	var missing_tool_ids: Array[String] = _missing_actor_items(actor, required_tool_ids)
 	if not missing_tool_ids.is_empty():
 		return _permission_failure(base, "container_tool_missing", {
@@ -565,6 +594,119 @@ func _copy_steal_consequence(target: Dictionary, consequence: Dictionary) -> voi
 		"relationship_changed",
 	]:
 		target[key] = consequence.get(key)
+
+
+func _consume_container_unlock_requirements(simulation: RefCounted, actor: RefCounted, actor_id: int, container_id: String, container: Dictionary, action: String) -> Dictionary:
+	if not bool(container.get("locked", false)) or bool(container.get("unlock_requirements_consumed", false)):
+		return {"success": true, "consumed_unlock_requirements": []}
+	var consumed: Array[Dictionary] = []
+	if _container_consumes_required_items(container):
+		var item_count: int = _container_required_item_consume_count(container)
+		for item_id in _required_item_ids(container):
+			var consume_result: Dictionary = _consume_actor_inventory_requirement(actor, item_id, item_count, "item")
+			if not bool(consume_result.get("success", false)):
+				return _permission_failure({
+					"success": true,
+					"actor_id": actor_id,
+					"container_id": container_id,
+					"action": action,
+				}, "container_key_missing", {
+					"item_id": item_id,
+					"required_item_ids": _required_item_ids(container),
+					"consume_count": item_count,
+				})
+			consumed.append(consume_result)
+	if _container_consumes_required_tools(container):
+		var tool_count: int = _container_required_tool_consume_count(container)
+		for tool_id in _required_tool_ids(container):
+			var consume_result: Dictionary = _consume_actor_inventory_requirement(actor, tool_id, tool_count, "tool")
+			if not bool(consume_result.get("success", false)):
+				return _permission_failure({
+					"success": true,
+					"actor_id": actor_id,
+					"container_id": container_id,
+					"action": action,
+				}, "container_tool_missing", {
+					"item_id": tool_id,
+					"required_tool_ids": _required_tool_ids(container),
+					"consume_count": tool_count,
+				})
+			consumed.append(consume_result)
+	if consumed.is_empty():
+		return {"success": true, "consumed_unlock_requirements": []}
+	container["locked"] = false
+	container["unlock_requirements_consumed"] = true
+	container["unlock_consumed_actor_id"] = actor_id
+	container["unlock_consumed_action"] = action
+	for entry in consumed:
+		var event_payload: Dictionary = _dictionary_or_empty(entry).duplicate(true)
+		event_payload["actor_id"] = actor_id
+		event_payload["target_kind"] = "container"
+		event_payload["container_id"] = container_id
+		event_payload["target_id"] = container_id
+		event_payload["action"] = action
+		if simulation != null and simulation.has_method("emit_event"):
+			simulation.emit_event("unlock_requirement_consumed", event_payload)
+	if simulation != null and simulation.has_method("emit_event"):
+		simulation.emit_event("container_unlocked", {
+			"actor_id": actor_id,
+			"container_id": container_id,
+			"target_id": container_id,
+			"action": action,
+			"consumed_unlock_requirements": consumed.duplicate(true),
+		})
+	return {
+		"success": true,
+		"unlock_requirements_consumed": true,
+		"consumed_unlock_requirements": consumed,
+	}
+
+
+func _consume_actor_inventory_requirement(actor: RefCounted, item_id: String, count: int, requirement_kind: String) -> Dictionary:
+	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
+	var consume_count: int = max(1, count)
+	var before_count: int = int(actor.inventory.get(normalized_item_id, 0)) if actor != null else 0
+	if actor == null or normalized_item_id.is_empty() or before_count < consume_count:
+		return {
+			"success": false,
+			"item_id": normalized_item_id,
+			"count": consume_count,
+			"inventory_before": before_count,
+			"requirement_kind": requirement_kind,
+		}
+	_inventory_entries.add_actor_item(actor, normalized_item_id, -consume_count)
+	return {
+		"success": true,
+		"item_id": normalized_item_id,
+		"count": consume_count,
+		"inventory_before": before_count,
+		"inventory_after": int(actor.inventory.get(normalized_item_id, 0)),
+		"requirement_kind": requirement_kind,
+	}
+
+
+func _container_consumes_required_items(container: Dictionary) -> bool:
+	return bool(container.get("consume_required_items_on_unlock", container.get("consume_required_items", container.get("consume_keys_on_unlock", false))))
+
+
+func _container_consumes_required_tools(container: Dictionary) -> bool:
+	return bool(container.get("consume_required_tools_on_unlock", container.get("consume_required_tools", container.get("consume_tools_on_unlock", false))))
+
+
+func _container_required_item_consume_count(container: Dictionary) -> int:
+	return max(1, int(container.get("required_item_consume_count", container.get("unlock_item_consume_count", container.get("key_consume_count", 1)))))
+
+
+func _container_required_tool_consume_count(container: Dictionary) -> int:
+	return max(1, int(container.get("required_tool_consume_count", container.get("unlock_tool_consume_count", container.get("tool_consume_count", 1)))))
+
+
+func _copy_unlock_consumption(target: Dictionary, unlock_consumption: Dictionary) -> void:
+	if unlock_consumption.is_empty():
+		return
+	var consumed: Array = _array_or_empty(unlock_consumption.get("consumed_unlock_requirements", []))
+	target["unlock_requirements_consumed"] = not consumed.is_empty()
+	target["consumed_unlock_requirements"] = consumed.duplicate(true)
 
 
 func _has_owner_relationship_min(container: Dictionary) -> bool:

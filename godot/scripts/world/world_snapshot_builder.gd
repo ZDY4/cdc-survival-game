@@ -506,7 +506,27 @@ func _apply_door_states(map_snapshot: Dictionary, state_values: Array) -> void:
 			continue
 		var merged: Dictionary = door.duplicate(true)
 		var state: Dictionary = _dictionary_or_empty(states[door_id])
-		for key in ["is_open", "locked", "blocks_movement", "blocks_sight", "blocks_sight_when_closed"]:
+		for key in [
+			"is_open",
+			"locked",
+			"blocks_movement",
+			"blocks_sight",
+			"blocks_sight_when_closed",
+			"consume_required_items_on_unlock",
+			"consume_required_tools_on_unlock",
+			"consume_required_items",
+			"consume_required_tools",
+			"consume_keys_on_unlock",
+			"consume_tools_on_unlock",
+			"required_item_consume_count",
+			"required_tool_consume_count",
+			"unlock_item_consume_count",
+			"unlock_tool_consume_count",
+			"key_consume_count",
+			"tool_consume_count",
+			"unlock_requirements_consumed",
+			"unlock_consumed_actor_id",
+		]:
 			if state.has(key):
 				merged[key] = state[key]
 		door_objects[index] = merged

@@ -388,6 +388,29 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var key_take: Dictionary = game_root.take_active_container_item("1006", 1)
 	if not bool(key_take.get("success", false)):
 		errors.append("key-required locked container should allow take with key: %s" % key_take.get("reason", "unknown"))
+	game_root.simulation.container_sessions["consuming_key_container"] = {
+		"container_id": "consuming_key_container",
+		"display_name": "消耗钥匙容器",
+		"inventory": [{"item_id": "1006", "count": 1}],
+		"money": 0,
+		"locked": true,
+		"required_item_ids": ["1138"],
+		"consume_required_items_on_unlock": true,
+	}
+	_set_active_container_id(game_root, "consuming_key_container")
+	permission_player.inventory["1138"] = 1
+	var consuming_key_take: Dictionary = game_root.take_active_container_item("1006", 1)
+	if not bool(consuming_key_take.get("success", false)):
+		errors.append("consuming key container should allow take with key: %s" % consuming_key_take.get("reason", "unknown"))
+	if int(permission_player.inventory.get("1138", 0)) != 0:
+		errors.append("consuming key container should consume one key")
+	if not bool(consuming_key_take.get("unlock_requirements_consumed", false)):
+		errors.append("consuming key container should report consumed unlock requirements")
+	var consuming_key_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("consuming_key_container", {}))
+	if bool(consuming_key_session.get("locked", true)) or not bool(consuming_key_session.get("unlock_requirements_consumed", false)):
+		errors.append("consuming key container should persist unlocked state")
+	if not _event_seen(game_root, "container_unlocked") or not _event_seen(game_root, "unlock_requirement_consumed"):
+		errors.append("consuming key container should emit unlock consumption events")
 	game_root.simulation.container_sessions["tool_required_container"] = {
 		"container_id": "tool_required_container",
 		"display_name": "工具权限容器",
@@ -407,6 +430,28 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var tool_store: Dictionary = game_root.store_active_container_item("1008", 1)
 	if not bool(tool_store.get("success", false)):
 		errors.append("tool-required container should allow store with tool: %s" % tool_store.get("reason", "unknown"))
+	game_root.simulation.container_sessions["consuming_tool_container"] = {
+		"container_id": "consuming_tool_container",
+		"display_name": "消耗工具容器",
+		"inventory": [],
+		"money": 0,
+		"locked": true,
+		"required_tool_ids": ["1150"],
+		"consume_required_tools_on_unlock": true,
+	}
+	_set_active_container_id(game_root, "consuming_tool_container")
+	player_refill_water(game_root)
+	permission_player.inventory["1150"] = 1
+	var consuming_tool_store: Dictionary = game_root.store_active_container_item("1008", 1)
+	if not bool(consuming_tool_store.get("success", false)):
+		errors.append("consuming tool container should allow store with tool: %s" % consuming_tool_store.get("reason", "unknown"))
+	if int(permission_player.inventory.get("1150", 0)) != 0:
+		errors.append("consuming tool container should consume one tool")
+	if not bool(consuming_tool_store.get("unlock_requirements_consumed", false)):
+		errors.append("consuming tool container should report consumed unlock requirements")
+	var consuming_tool_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("consuming_tool_container", {}))
+	if bool(consuming_tool_session.get("locked", true)) or not bool(consuming_tool_session.get("unlock_requirements_consumed", false)):
+		errors.append("consuming tool container should persist unlocked state")
 	game_root.simulation.container_sessions["store_forbidden_container"] = {
 		"container_id": "store_forbidden_container",
 		"display_name": "禁止存放容器",
