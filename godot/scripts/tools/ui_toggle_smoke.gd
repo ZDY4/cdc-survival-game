@@ -194,14 +194,27 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if str(game_root.current_debug_overlay_mode()) != "walkable":
 		errors.append("V should switch debug overlay mode to walkable")
 	_assert_debug_overlay_line(errors, game_root, "Overlay walkable", "walkable overlay HUD")
+	_assert_debug_overlay_snapshot(errors, game_root, "walkable", true, "walkable overlay world")
 	_press_key(game_root, KEY_V)
 	if str(game_root.current_debug_overlay_mode()) != "vision":
 		errors.append("second V should switch debug overlay mode to vision")
 	_assert_debug_overlay_line(errors, game_root, "Overlay vision", "vision overlay HUD")
+	_assert_debug_overlay_snapshot(errors, game_root, "vision", true, "vision overlay world")
+	_press_key(game_root, KEY_V)
+	if str(game_root.current_debug_overlay_mode()) != "blocked_sight":
+		errors.append("third V should switch debug overlay mode to blocked_sight")
+	_assert_debug_overlay_line(errors, game_root, "Overlay blocked_sight", "blocked sight overlay HUD")
+	_assert_debug_overlay_snapshot(errors, game_root, "blocked_sight", true, "blocked sight overlay world")
+	_press_key(game_root, KEY_V)
+	if str(game_root.current_debug_overlay_mode()) != "level":
+		errors.append("fourth V should switch debug overlay mode to level")
+	_assert_debug_overlay_line(errors, game_root, "Overlay level", "level overlay HUD")
+	_assert_debug_overlay_snapshot(errors, game_root, "level", true, "level overlay world")
 	_press_key(game_root, KEY_V)
 	if str(game_root.current_debug_overlay_mode()) != "off":
-		errors.append("third V should switch debug overlay mode back to off")
+		errors.append("fifth V should switch debug overlay mode back to off")
 	_assert_debug_overlay_line(errors, game_root, "Overlay off", "off overlay HUD")
+	_assert_debug_overlay_snapshot(errors, game_root, "off", false, "off overlay world")
 	if bool(game_root.controls_hint_visible()):
 		errors.append("controls hint should be hidden initially")
 	_press_key(game_root, KEY_SLASH)
@@ -745,6 +758,24 @@ func _assert_debug_overlay_line(errors: Array[String], game_root: Node, expected
 		return
 	if str((label as Label).text) != expected:
 		errors.append("%s: DebugOverlayLine expected %s, got %s" % [context, expected, str((label as Label).text)])
+
+
+func _assert_debug_overlay_snapshot(errors: Array[String], game_root: Node, expected_mode: String, expected_active: bool, context: String) -> void:
+	if not game_root.has_method("debug_overlay_snapshot"):
+		errors.append("%s: game root should expose debug_overlay_snapshot" % context)
+		return
+	var snapshot: Dictionary = game_root.debug_overlay_snapshot()
+	if str(snapshot.get("mode", "")) != expected_mode:
+		errors.append("%s: debug overlay mode expected %s, got %s" % [context, expected_mode, str(snapshot.get("mode", ""))])
+	if bool(snapshot.get("active", false)) != expected_active:
+		errors.append("%s: debug overlay active expected %s, got %s" % [context, str(expected_active), str(snapshot.get("active", false))])
+	if expected_active and not ["vision", "blocked_sight"].has(expected_mode) and int(snapshot.get("cell_count", 0)) <= 0:
+		errors.append("%s: active debug overlay should expose rendered cells: %s" % [context, snapshot])
+	var root: Node = game_root.find_child("DebugOverlayRoot", true, false)
+	if expected_active and root == null:
+		errors.append("%s: active debug overlay should create DebugOverlayRoot" % context)
+	if not expected_active and root != null:
+		errors.append("%s: off debug overlay should remove DebugOverlayRoot" % context)
 
 
 func _assert_runtime_control_line(errors: Array[String], game_root: Node, expected: String, context: String) -> void:

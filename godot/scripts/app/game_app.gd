@@ -5,6 +5,7 @@ const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstr
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const FogOverlayController = preload("res://scripts/world/fog_overlay_controller.gd")
+const DebugOverlayController = preload("res://scripts/world/debug_overlay_controller.gd")
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
@@ -23,6 +24,7 @@ var interaction_controller: RefCounted
 var runtime_input_controller: RefCounted
 var panel_controller: RefCounted
 var fog_overlay_controller: RefCounted = FogOverlayController.new()
+var debug_overlay_controller: RefCounted = DebugOverlayController.new()
 var world_container: Node3D
 var fog_overlay: ColorRect
 var hud: Control
@@ -88,6 +90,7 @@ func _ready() -> void:
 	var counts: Dictionary = WorldSceneRenderer.new().render_world(world_container, world_result)
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
+	_refresh_debug_overlay()
 	_setup_panels()
 	refresh_all_panels()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
@@ -276,17 +279,24 @@ func controls_hint_visible() -> bool:
 
 
 func cycle_debug_overlay_mode() -> Dictionary:
-	var modes := ["off", "walkable", "vision"]
+	var modes := ["off", "walkable", "vision", "blocked_sight", "level"]
 	var index := modes.find(debug_overlay_mode)
 	if index < 0:
 		index = 0
 	debug_overlay_mode = modes[(index + 1) % modes.size()]
+	_refresh_debug_overlay()
 	refresh_hud(current_interaction_prompt())
 	return {"success": true, "mode": debug_overlay_mode}
 
 
 func current_debug_overlay_mode() -> String:
 	return debug_overlay_mode
+
+
+func debug_overlay_snapshot() -> Dictionary:
+	if debug_overlay_controller != null and debug_overlay_controller.has_method("snapshot"):
+		return debug_overlay_controller.snapshot()
+	return {"active": false, "mode": "off", "cell_count": 0}
 
 
 func toggle_auto_tick() -> Dictionary:
@@ -416,6 +426,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
 		"hover": runtime_hover_snapshot(),
+		"debug_overlay": debug_overlay_snapshot(),
 		"skill_targeting": _skill_targeting_snapshot(),
 	}
 
@@ -775,6 +786,7 @@ func press_space_action() -> Dictionary:
 		WorldSceneRenderer.new().render_world(world_container, world_result)
 		_setup_runtime_input_controller()
 		_refresh_fog_overlay()
+		_refresh_debug_overlay()
 	refresh_all_panels(current_interaction_prompt())
 	return result
 
@@ -835,6 +847,7 @@ func _submit_auto_tick_wait() -> Dictionary:
 		WorldSceneRenderer.new().render_world(world_container, world_result)
 		_setup_runtime_input_controller()
 		_refresh_fog_overlay()
+		_refresh_debug_overlay()
 		refresh_all_panels(current_interaction_prompt())
 	return result
 
@@ -1554,6 +1567,7 @@ func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}) -> vo
 	WorldSceneRenderer.new().render_world(world_container, world_result)
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
+	_refresh_debug_overlay()
 	_setup_panels()
 	refresh_all_panels(selected_prompt)
 
@@ -1576,6 +1590,13 @@ func _refresh_fog_overlay() -> void:
 	if simulation == null or world_result.is_empty():
 		return
 	fog_overlay = fog_overlay_controller.ensure_overlay(self, _dictionary_or_empty(world_result.get("map", {})), simulation.snapshot())
+
+
+func _refresh_debug_overlay() -> void:
+	if debug_overlay_controller == null or world_container == null:
+		return
+	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
+	debug_overlay_controller.apply_overlay(world_container, debug_overlay_mode, _dictionary_or_empty(world_result.get("map", {})), runtime_snapshot)
 
 
 func _setup_panels() -> void:
@@ -1628,6 +1649,7 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	WorldSceneRenderer.new().render_world(world_container, world_result)
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
+	_refresh_debug_overlay()
 	_setup_panels()
 	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
 

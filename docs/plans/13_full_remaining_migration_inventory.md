@@ -296,7 +296,7 @@
 
 - 已有 Godot canvas fog shader 第一版；待补与旧 post-process fog 的视觉等价：探索区透明度、未探索区遮罩、边缘柔化、mask blend。
 - 待补 fog mask 与相机/地图坐标同步、地图切换重建、可见格变化平滑、性能优化。
-- 待补 `show vision` / debug overlay：可见格、已探索格、阻挡视线格、actor vision radius。
+- 部分迁移 `show vision` / debug overlay：`V` 会在运行时循环 `off`、`walkable`、`vision`、`blocked_sight`、`level`，并由 `DebugOverlayController` 在世界层绘制可走/阻挡、可见/已探索、遮挡视线和楼层诊断格；`runtime_control.debug_overlay` 暴露模式、格子数量和当前楼层，`UIToggle` smoke 已覆盖 HUD 与世界节点。待补 actor vision radius 标记、FPS/latency/auto tick/help 等非网格诊断。
 - 雾战对交互、攻击和技能目标的规则影响第一版已迁移：active vision 下不可见目标禁止 interaction prompt、attack、skill preview 和 use_skill；已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补 hover prompt、雾中物体轮廓和已探索但不可见目标的显示策略。
 
 ## 13. 游戏 UI、菜单和反馈表现

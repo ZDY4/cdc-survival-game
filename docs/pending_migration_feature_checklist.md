@@ -729,7 +729,7 @@ Godot 落点：`godot/scripts/world/world_scene_renderer.gd`、`godot/assets/pre
 - [ ] hover outline：actor、object、door、container、trigger。
 - [ ] fog mask 与相机和地图坐标同步。
 - [ ] explored / visible / unseen 三态表现。
-- [ ] debug overlay：vision、walkable、blocked sight、level。
+- [~] debug overlay：`V` 循环的 walkable、vision、blocked sight、level 世界诊断层已迁移，并暴露 runtime snapshot；待补 actor vision radius 标记和更完整的性能/帮助诊断。
 
 参考：`controls/camera.rs`、`geometry/camera.rs`、`render/occlusion.rs`、`render/hover_outline.rs`、`render/fog_of_war/**`。
 Godot 落点：`godot/scripts/world/fog_overlay_controller.gd`、`world_scene_renderer.gd`、input controller。
@@ -842,7 +842,7 @@ Godot 落点：`tools/agent/**`、`docs/agent-workflows/**`。
 - [ ] console commands：restart、show fps、show overlays、observe mode、spawn、give item、teleport、unlock location。
 - [ ] debug panel：开关、按钮、动作、状态。
 - [~] info panels：overview、selection、actor、world、interaction、turn system、events、AI、performance 已有页面状态、HUD 行和 `[` / `]` 切换 smoke；待补旧 debug viewer 各页完整内容。
-- [ ] overlay flags：walkable、vision、blocked sight、fps、latency、level、auto tick、help。
+- [~] overlay flags：walkable、vision、blocked sight、level 已有世界 overlay；auto tick/observe 状态已有 HUD/runtime control 诊断；待补 fps、latency、help 与统一 debug panel 展示。
 - [ ] profiling：frame time、render count、actor count、object count、pathfinding time。
 - [ ] selection debug：hovered grid、actor、object、blocker name、prompt。
 - [ ] AI debug：intent、goal、action、blackboard、path、failure。
