@@ -81,6 +81,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("auto tick should start disabled")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
 	_assert_runtime_performance(errors, game_root, "initial runtime performance")
+	_assert_ai_debug_snapshot(errors, game_root, "initial AI debug")
 	_assert_hotbar_visibility(errors, game_root, true, "initial hotbar visibility")
 	_assert_observe_mode_button(errors, game_root, false, "initial observe mode button")
 	_assert_observe_auto_button(errors, game_root, false, "initial observe auto hotbar")
@@ -892,6 +893,31 @@ func _assert_runtime_performance(errors: Array[String], game_root: Node, context
 	_assert_runtime_control_line(errors, game_root, "Path", "%s HUD path token" % context)
 	_assert_runtime_control_line(errors, game_root, "Lat", "%s HUD latency token" % context)
 	_assert_runtime_control_line(errors, game_root, "R", "%s HUD render token" % context)
+
+
+func _assert_ai_debug_snapshot(errors: Array[String], game_root: Node, context: String) -> void:
+	var intent: Dictionary = game_root.simulation.decide_actor_intent(2, {
+		"topology": game_root.world_result.get("map", {}),
+		"active_map_id": game_root.simulation.active_map_id,
+	})
+	if not bool(intent.get("success", false)):
+		errors.append("%s: deciding actor intent should succeed: %s" % [context, intent])
+	game_root.refresh_hud(game_root.current_interaction_prompt())
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var ai_debug: Dictionary = _dictionary_or_empty(snapshot.get("ai_debug", {}))
+	if ai_debug.is_empty():
+		errors.append("%s: runtime_control should expose ai_debug snapshot" % context)
+		return
+	if int(ai_debug.get("intent_count", 0)) <= 0:
+		errors.append("%s: ai_debug should expose at least one intent: %s" % [context, ai_debug])
+	var latest: Dictionary = _dictionary_or_empty(ai_debug.get("latest_intent", {}))
+	if int(latest.get("actor_id", 0)) != 2:
+		errors.append("%s: ai_debug latest intent should expose actor 2: %s" % [context, ai_debug])
+	if str(latest.get("intent", "")).is_empty() or str(latest.get("reason", "")).is_empty():
+		errors.append("%s: ai_debug latest intent should expose intent and reason: %s" % [context, latest])
+	if int(latest.get("path_length", -1)) < 0:
+		errors.append("%s: ai_debug path length should be non-negative: %s" % [context, latest])
+	_assert_runtime_control_line(errors, game_root, "AI #2", "%s HUD AI token" % context)
 
 
 func _assert_observe_auto_button(errors: Array[String], game_root: Node, expected_enabled: bool, context: String) -> void:

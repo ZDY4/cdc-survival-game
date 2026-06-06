@@ -523,9 +523,58 @@ func runtime_control_snapshot() -> Dictionary:
 		"debug_console": debug_console_snapshot(),
 		"hover": runtime_hover_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
+		"ai_debug": ai_debug_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),
 		"performance": runtime_performance_snapshot(),
 		"skill_targeting": _skill_targeting_snapshot(),
+	}
+
+
+func ai_debug_snapshot() -> Dictionary:
+	if simulation == null:
+		return {"intent_count": 0, "intents": [], "focused_intent": {}}
+	var runtime_snapshot: Dictionary = simulation.snapshot()
+	var focused_actor: Dictionary = focused_actor_snapshot()
+	var focused_actor_id := int(focused_actor.get("actor_id", 0))
+	var intents: Array[Dictionary] = []
+	var focused_intent: Dictionary = {}
+	for entry in _array_or_empty(runtime_snapshot.get("ai_intents", [])):
+		var intent: Dictionary = _ai_debug_intent_summary(_dictionary_or_empty(entry))
+		if intent.is_empty():
+			continue
+		if focused_actor_id > 0 and int(intent.get("actor_id", 0)) == focused_actor_id:
+			focused_intent = intent.duplicate(true)
+		intents.append(intent)
+	var latest: Dictionary = intents[intents.size() - 1].duplicate(true) if not intents.is_empty() else {}
+	return {
+		"intent_count": intents.size(),
+		"intents": intents,
+		"focused_actor_id": focused_actor_id,
+		"focused_intent": focused_intent,
+		"latest_intent": latest,
+	}
+
+
+func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
+	var actor_id := int(intent.get("actor_id", 0))
+	if actor_id <= 0:
+		return {}
+	return {
+		"actor_id": actor_id,
+		"intent": str(intent.get("intent", "")),
+		"reason": str(intent.get("reason", "")),
+		"target_actor_id": int(intent.get("target_actor_id", 0)),
+		"target_grid": _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true),
+		"path_length": _array_or_empty(intent.get("path", [])).size(),
+		"ap": float(intent.get("ap", 0.0)),
+		"distance": float(intent.get("distance", -1.0)),
+		"aggro_range": float(intent.get("aggro_range", 0.0)),
+		"attack_range": float(intent.get("attack_range", 0.0)),
+		"weapon_item_id": str(intent.get("weapon_item_id", "")),
+		"ammo_type": str(intent.get("ammo_type", "")),
+		"ammo_ready": bool(intent.get("ammo_ready", true)),
+		"can_reload": bool(intent.get("can_reload", false)),
+		"failure_reason": str(intent.get("failure_reason", intent.get("reason", ""))),
 	}
 
 

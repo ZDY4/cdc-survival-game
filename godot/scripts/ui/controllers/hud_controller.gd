@@ -1047,6 +1047,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var selection_debug_text := _selection_debug_control_text(control_data.get("selection_debug", {}))
 	if not selection_debug_text.is_empty():
 		parts.append(selection_debug_text)
+	var ai_debug_text := _ai_debug_control_text(control_data.get("ai_debug", {}))
+	if not ai_debug_text.is_empty():
+		parts.append(ai_debug_text)
 	var performance_text := _performance_control_text(control_data.get("performance", {}))
 	if not performance_text.is_empty():
 		parts.append(performance_text)
@@ -1087,6 +1090,33 @@ func _selection_debug_control_text(value: Variant) -> String:
 		target = str(selection_debug.get("kind", ""))
 	var category := str(selection_debug.get("target_category", selection_debug.get("target_type", "")))
 	return "Sel %s %s %s" % [category, target, action]
+
+
+func _ai_debug_control_text(value: Variant) -> String:
+	var ai_debug: Dictionary = _dictionary_or_empty(value)
+	if ai_debug.is_empty():
+		return ""
+	var intent: Dictionary = _dictionary_or_empty(ai_debug.get("focused_intent", {}))
+	if intent.is_empty():
+		intent = _dictionary_or_empty(ai_debug.get("latest_intent", {}))
+	if intent.is_empty():
+		var count := int(ai_debug.get("intent_count", 0))
+		return "" if count <= 0 else "AI intents %d" % count
+	var target_text := ""
+	var target_actor_id := int(intent.get("target_actor_id", 0))
+	if target_actor_id > 0:
+		target_text = " ->#%d" % target_actor_id
+	var path_length := int(intent.get("path_length", 0))
+	var path_text := "" if path_length <= 0 else " path%d" % path_length
+	var reason := str(intent.get("reason", ""))
+	var reason_text := "" if reason.is_empty() else " %s" % reason
+	return "AI #%d %s%s%s%s" % [
+		int(intent.get("actor_id", 0)),
+		str(intent.get("intent", "")),
+		target_text,
+		path_text,
+		reason_text,
+	]
 
 
 func _hover_control_text(value: Variant) -> String:

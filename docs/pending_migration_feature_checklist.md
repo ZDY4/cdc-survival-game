@@ -501,7 +501,7 @@ Godot 落点：`godot/scripts/core/progression/**`、`godot/scripts/app/controll
 - [ ] AP 分配：移动后攻击、攻击后移动、AP 不足结束。
 - [ ] 武器选择、弹药、reload。
 - [ ] 使用技能、治疗、逃跑、保护友军、呼叫增援。
-- [ ] AI intent snapshot：intent、reason、target、path、AP、failure reason。
+- [~] AI intent snapshot：intent、reason、target、path、AP、weapon/ammo 和 failure reason 已进入 `runtime_control.ai_debug`，HUD runtime 行显示 `AI #...` 摘要，并由 `UIToggle` smoke 覆盖；待补完整 goal/action/blackboard 和可视化路径。
 
 参考：`simulation/combat_ai/**`、`runtime_ai/controllers/**`。
 Godot 落点：`godot/scripts/core/ai/**`。
@@ -845,7 +845,7 @@ Godot 落点：`tools/agent/**`、`docs/agent-workflows/**`。
 - [~] overlay flags：walkable、vision、blocked sight、level 已有世界 overlay；auto tick/observe、fps、frame time 和 HUD latency 已有 HUD/runtime control 诊断；待补 help 与统一 debug panel 展示。
 - [~] profiling：frame time、render count、actor count、object count、pathfinding time 和 visited cell count 已进入 `runtime_control.performance` 与 HUD runtime 行；待补更完整 profiling 面板。
 - [~] selection debug：hovered grid、actor、object、blocker name 和 prompt summary 已进入 `runtime_control.selection_debug`，HUD runtime 行显示 `Sel ...` 摘要，并由 `PlayerInteraction` smoke 覆盖；待补统一 debug panel 页面和更完整 blocker / prompt 细节。
-- [ ] AI debug：intent、goal、action、blackboard、path、failure。
+- [~] AI debug：intent、reason、target、path、AP、weapon/ammo 和 failure reason 第一版已进入 `runtime_control.ai_debug` 与 HUD runtime 行；待补 goal、action、blackboard、路径失败细分和统一 debug panel 页面。
 
 参考：`bevy_debug_viewer/src/console.rs`、`debug_panel/**`、`info_panels/**`、`profiling.rs`。
 Godot 落点：`godot/scripts/ui/debug/**` 或明确的新 debug 模块。
