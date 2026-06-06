@@ -125,6 +125,55 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("observe hotbar auto button should disable auto tick")
 			_assert_runtime_control_line(errors, game_root, "AutoTick off", "observe auto button off HUD")
 			_assert_observe_auto_button(errors, game_root, false, "observe auto button off state")
+	var observe_mode_result: Dictionary = game_root.set_observe_mode(true)
+	if not bool(observe_mode_result.get("success", false)):
+		errors.append("set_observe_mode(true) should enable observe controls: %s" % observe_mode_result.get("reason", "unknown"))
+	_assert_runtime_control_line(errors, game_root, "Observe on pause x1", "observe mode enabled HUD")
+	_assert_observe_play_button(errors, game_root, false, false, "observe mode initial play button")
+	_assert_observe_speed_button(errors, game_root, "x1", false, "observe mode initial speed button")
+	var observe_play_button: Button = _observe_play_button(game_root)
+	if observe_play_button == null:
+		errors.append("observe mode should expose playback button")
+	else:
+		observe_play_button.pressed.emit()
+		await _wait_process_frames(2)
+		if not bool(game_root.is_auto_tick_enabled()):
+			errors.append("observe play button should enable observe playback auto tick")
+		_assert_runtime_control_line(errors, game_root, "Observe on play x1", "observe playback on HUD")
+		_assert_observe_play_button(errors, game_root, true, false, "observe playback on button")
+	var observe_speed_button: Button = _observe_speed_button(game_root)
+	if observe_speed_button == null:
+		errors.append("observe mode should expose speed button")
+	else:
+		observe_speed_button.pressed.emit()
+		await _wait_process_frames(2)
+		var control_snapshot: Dictionary = game_root.runtime_control_snapshot()
+		if str(control_snapshot.get("observe_speed", "")) != "x2":
+			errors.append("observe speed button should cycle x1 to x2: %s" % control_snapshot)
+		if float(control_snapshot.get("observe_interval_sec", 1.0)) >= 0.45:
+			errors.append("observe speed x2 should shorten auto tick interval: %s" % control_snapshot)
+		_assert_runtime_control_line(errors, game_root, "Observe on play x2", "observe speed x2 HUD")
+		_assert_observe_speed_button(errors, game_root, "x2", false, "observe speed x2 button")
+	var set_x10_result: Dictionary = game_root.set_observe_speed("x10")
+	if not bool(set_x10_result.get("success", false)):
+		errors.append("set_observe_speed(x10) should succeed in observe mode: %s" % set_x10_result.get("reason", "unknown"))
+	elif float(set_x10_result.get("interval_sec", 1.0)) >= 0.1:
+		errors.append("observe speed x10 should expose a fast interval: %s" % set_x10_result)
+	var bad_speed_result: Dictionary = game_root.set_observe_speed("warp")
+	if bool(bad_speed_result.get("success", false)) or str(bad_speed_result.get("reason", "")) != "unknown_observe_speed":
+		errors.append("unknown observe speed should be rejected")
+	observe_play_button = _observe_play_button(game_root)
+	if observe_play_button != null:
+		observe_play_button.pressed.emit()
+		await _wait_process_frames(2)
+	if bool(game_root.is_auto_tick_enabled()):
+		errors.append("second observe play button press should pause observe playback")
+	var observe_off_result: Dictionary = game_root.set_observe_mode(false)
+	if not bool(observe_off_result.get("success", false)):
+		errors.append("set_observe_mode(false) should leave observe controls")
+	_assert_runtime_control_line(errors, game_root, "Observe off pause x10", "observe mode disabled HUD")
+	_assert_observe_play_button(errors, game_root, false, true, "observe mode disabled play button")
+	_assert_observe_speed_button(errors, game_root, "x10", true, "observe mode disabled speed button")
 	_press_key(game_root, KEY_V)
 	if str(game_root.current_debug_overlay_mode()) != "walkable":
 		errors.append("V should switch debug overlay mode to walkable")
@@ -686,10 +735,49 @@ func _assert_observe_auto_button(errors: Array[String], game_root: Node, expecte
 		errors.append("%s: ObserveAutoButton should stay enabled" % context)
 
 
+func _assert_observe_play_button(errors: Array[String], game_root: Node, expected_playing: bool, expected_disabled: bool, context: String) -> void:
+	var button := _observe_play_button(game_root)
+	if button == null:
+		errors.append("%s: HUD should expose ObservePlayButton" % context)
+		return
+	var expected_text := "Pause" if expected_playing else "Play"
+	if str(button.text) != expected_text:
+		errors.append("%s: ObservePlayButton expected %s, got %s" % [context, expected_text, str(button.text)])
+	if button.disabled != expected_disabled:
+		errors.append("%s: ObservePlayButton disabled expected %s" % [context, str(expected_disabled)])
+	if bool(button.get_meta("observe_playback", not expected_playing)) != expected_playing:
+		errors.append("%s: ObservePlayButton should expose playback metadata %s" % [context, str(expected_playing)])
+
+
+func _assert_observe_speed_button(errors: Array[String], game_root: Node, expected_speed: String, expected_disabled: bool, context: String) -> void:
+	var button := _observe_speed_button(game_root)
+	if button == null:
+		errors.append("%s: HUD should expose ObserveSpeedButton" % context)
+		return
+	if str(button.text) != expected_speed:
+		errors.append("%s: ObserveSpeedButton expected %s, got %s" % [context, expected_speed, str(button.text)])
+	if button.disabled != expected_disabled:
+		errors.append("%s: ObserveSpeedButton disabled expected %s" % [context, str(expected_disabled)])
+	if str(button.get_meta("observe_speed", "")) != expected_speed:
+		errors.append("%s: ObserveSpeedButton should expose speed metadata %s" % [context, expected_speed])
+
+
 func _observe_auto_button(game_root: Node) -> Button:
 	if game_root.hud == null:
 		return null
 	return game_root.hud.find_child("ObserveAutoButton", true, false) as Button
+
+
+func _observe_play_button(game_root: Node) -> Button:
+	if game_root.hud == null:
+		return null
+	return game_root.hud.find_child("ObservePlayButton", true, false) as Button
+
+
+func _observe_speed_button(game_root: Node) -> Button:
+	if game_root.hud == null:
+		return null
+	return game_root.hud.find_child("ObserveSpeedButton", true, false) as Button
 
 
 func _expect_blocker(errors: Array[String], game_root: Node, expected: String, context: String) -> void:

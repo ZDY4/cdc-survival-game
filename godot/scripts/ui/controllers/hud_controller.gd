@@ -477,8 +477,8 @@ func _apply_observe_hotbar(runtime_control_value: Variant) -> void:
 	var speed := str(runtime_control.get("observe_speed", "x1"))
 	var auto_tick := bool(runtime_control.get("auto_tick", false))
 	var map_level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
-	_observe_hotbar_box.add_child(_observe_button("ObservePlayButton", "Pause" if playback else "Play", "observe_playback", playback, not observe_mode))
-	_observe_hotbar_box.add_child(_observe_button("ObserveSpeedButton", speed, "observe_speed", speed, true))
+	_observe_hotbar_box.add_child(_observe_play_button(playback, observe_mode))
+	_observe_hotbar_box.add_child(_observe_speed_button(speed, observe_mode))
 	_observe_hotbar_box.add_child(_observe_auto_button(auto_tick))
 	_observe_hotbar_box.add_child(_observe_button("ObserveLevelButton", "L%d" % int(map_level.get("current", 0)), "observe_level", int(map_level.get("current", 0)), true))
 
@@ -493,6 +493,30 @@ func _observe_button(node_name: String, text: String, meta_key: String, meta_val
 	button.disabled = disabled
 	button.set_meta(meta_key, meta_value)
 	button.set_meta("disabled_reason", "observe_control_unavailable" if disabled else "")
+	return button
+
+
+func _observe_play_button(playback: bool, observe_mode: bool) -> Button:
+	var button := _observe_button("ObservePlayButton", "Pause" if playback else "Play", "observe_playback", playback, not observe_mode)
+	button.set_meta("observe_mode", observe_mode)
+	if observe_mode:
+		button.pressed.connect(func() -> void:
+			var root := get_parent()
+			if root != null and root.has_method("toggle_observe_playback"):
+				root.call_deferred("toggle_observe_playback")
+		)
+	return button
+
+
+func _observe_speed_button(speed: String, observe_mode: bool) -> Button:
+	var button := _observe_button("ObserveSpeedButton", speed, "observe_speed", speed, not observe_mode)
+	button.set_meta("observe_mode", observe_mode)
+	if observe_mode:
+		button.pressed.connect(func() -> void:
+			var root := get_parent()
+			if root != null and root.has_method("cycle_observe_speed"):
+				root.call_deferred("cycle_observe_speed")
+		)
 	return button
 
 
@@ -519,6 +543,12 @@ func _observe_tooltip(meta_key: String, meta_value: Variant, disabled: bool) -> 
 			state = "自动推进 %s" % ("开启" if bool(meta_value) else "关闭")
 	if disabled:
 		state = "%s | 暂不可切换" % state
+	else:
+		match meta_key:
+			"observe_playback":
+				state = "%s | 点击切换观察播放" % state
+			"observe_speed":
+				state = "%s | 点击切换观察速度" % state
 	return state
 
 
@@ -845,6 +875,11 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var parts: Array[String] = [
 		"AutoTick %s" % ("on" if bool(control_data.get("auto_tick", false)) else "off"),
 	]
+	parts.append("Observe %s %s %s" % [
+		"on" if bool(control_data.get("observe_mode", false)) else "off",
+		"play" if bool(control_data.get("observe_playback", false)) else "pause",
+		str(control_data.get("observe_speed", "x1")),
+	])
 	var map_level: Dictionary = control_data.get("map_level", {})
 	if not map_level.is_empty():
 		parts.append("Level %d" % int(map_level.get("current", 0)))

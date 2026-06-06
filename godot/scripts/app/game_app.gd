@@ -9,6 +9,12 @@ const GamePanelController = preload("res://scripts/app/controllers/game_panel_co
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AUTO_TICK_INTERVAL_SEC := 0.45
+const OBSERVE_SPEEDS: Array[Dictionary] = [
+	{"id": "x1", "multiplier": 1.0},
+	{"id": "x2", "multiplier": 2.0},
+	{"id": "x5", "multiplier": 5.0},
+	{"id": "x10", "multiplier": 10.0},
+]
 
 var registry: ContentRegistry
 var simulation: RefCounted
@@ -50,6 +56,8 @@ var info_panel_pages: Array[Dictionary] = [
 var active_info_panel_index: int = 0
 var auto_tick_enabled := false
 var auto_tick_elapsed_sec := 0.0
+var observe_mode_enabled := false
+var observe_speed_id := "x1"
 var focused_actor_id: int = 0
 var observed_map_level: int = 0
 var active_skill_targeting: Dictionary = {}
@@ -294,6 +302,61 @@ func is_auto_tick_enabled() -> bool:
 	return auto_tick_enabled
 
 
+func set_observe_mode(enabled: bool) -> Dictionary:
+	if gameplay_input_blocked_by_ui():
+		return {"success": false, "reason": "ui_blocked", "observe_mode": observe_mode_enabled}
+	observe_mode_enabled = enabled
+	if not observe_mode_enabled:
+		auto_tick_elapsed_sec = 0.0
+	refresh_hud(current_interaction_prompt())
+	return {
+		"success": true,
+		"observe_mode": observe_mode_enabled,
+		"observe_playback": _observe_playback_enabled(),
+		"observe_speed": observe_speed_id,
+	}
+
+
+func toggle_observe_playback() -> Dictionary:
+	if not observe_mode_enabled:
+		return {"success": false, "reason": "observe_mode_disabled", "observe_playback": false}
+	if has_active_dialogue() or gameplay_input_blocked_by_ui():
+		return {"success": false, "reason": "ui_blocked", "observe_playback": _observe_playback_enabled()}
+	auto_tick_enabled = not auto_tick_enabled
+	auto_tick_elapsed_sec = 0.0
+	refresh_hud(current_interaction_prompt())
+	return {
+		"success": true,
+		"observe_playback": _observe_playback_enabled(),
+		"auto_tick": auto_tick_enabled,
+		"observe_speed": observe_speed_id,
+	}
+
+
+func cycle_observe_speed() -> Dictionary:
+	if not observe_mode_enabled:
+		return {"success": false, "reason": "observe_mode_disabled", "observe_speed": observe_speed_id}
+	var current_index := _observe_speed_index(observe_speed_id)
+	var next_index := (current_index + 1) % OBSERVE_SPEEDS.size()
+	return set_observe_speed(str(OBSERVE_SPEEDS[next_index].get("id", "x1")))
+
+
+func set_observe_speed(speed_id: String) -> Dictionary:
+	if not observe_mode_enabled:
+		return {"success": false, "reason": "observe_mode_disabled", "observe_speed": observe_speed_id}
+	var normalized := speed_id.strip_edges().to_lower()
+	if _observe_speed_index(normalized) < 0:
+		return {"success": false, "reason": "unknown_observe_speed", "observe_speed": observe_speed_id}
+	observe_speed_id = normalized
+	auto_tick_elapsed_sec = 0.0
+	refresh_hud(current_interaction_prompt())
+	return {
+		"success": true,
+		"observe_speed": observe_speed_id,
+		"interval_sec": _auto_tick_interval_sec(),
+	}
+
+
 func cycle_info_panel(direction: int) -> Dictionary:
 	if info_panel_pages.size() <= 1:
 		return {"success": false, "reason": "not_enough_info_pages"}
@@ -329,9 +392,11 @@ func info_panel_snapshot() -> Dictionary:
 func runtime_control_snapshot() -> Dictionary:
 	return {
 		"auto_tick": auto_tick_enabled,
-		"observe_mode": false,
-		"observe_playback": false,
-		"observe_speed": "x1",
+		"observe_mode": observe_mode_enabled,
+		"observe_playback": _observe_playback_enabled(),
+		"observe_speed": observe_speed_id,
+		"observe_speed_multiplier": _observe_speed_multiplier(),
+		"observe_interval_sec": _auto_tick_interval_sec(),
 		"map_level": map_level_snapshot(),
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
@@ -672,10 +737,34 @@ func _process_auto_tick(delta: float) -> void:
 		auto_tick_elapsed_sec = 0.0
 		return
 	auto_tick_elapsed_sec += delta
-	if auto_tick_elapsed_sec < AUTO_TICK_INTERVAL_SEC:
+	if auto_tick_elapsed_sec < _auto_tick_interval_sec():
 		return
 	auto_tick_elapsed_sec = 0.0
 	_submit_auto_tick_wait()
+
+
+func _observe_playback_enabled() -> bool:
+	return observe_mode_enabled and auto_tick_enabled
+
+
+func _observe_speed_index(speed_id: String) -> int:
+	for index in range(OBSERVE_SPEEDS.size()):
+		if str(OBSERVE_SPEEDS[index].get("id", "")) == speed_id:
+			return index
+	return -1
+
+
+func _observe_speed_multiplier() -> float:
+	var index := _observe_speed_index(observe_speed_id)
+	if index < 0:
+		return 1.0
+	return maxf(1.0, float(OBSERVE_SPEEDS[index].get("multiplier", 1.0)))
+
+
+func _auto_tick_interval_sec() -> float:
+	if not observe_mode_enabled:
+		return AUTO_TICK_INTERVAL_SEC
+	return maxf(0.01, AUTO_TICK_INTERVAL_SEC / _observe_speed_multiplier())
 
 
 func _submit_auto_tick_wait() -> Dictionary:

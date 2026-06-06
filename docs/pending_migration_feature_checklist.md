@@ -323,7 +323,7 @@ Godot 落点：`godot/scripts/core/combat/combat_runner.gd`、`simulation.gd`、
 - [x] `V` overlay mode。
 - [x] `/` 控制提示展开折叠。
 - [ ] `[` / `]` info panel tab 切换。
-- [ ] `A` auto tick / observe playback。
+- [~] `A` auto tick / observe playback：`A` 已切换自动推进，观察 hotbar 的 Play / Auto 可切换播放状态；待补 free observe 入口和 Space 播放快捷键冲突策略。
 - [x] `F` 相机恢复跟随。
 - [ ] `+` / `-` / `Ctrl+0` zoom。
 - [~] `PageUp` / `PageDown` 观察楼层切换。已恢复输入、HUD 当前楼层、相机平面和 focus actor 候选切换；待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
@@ -621,7 +621,7 @@ Godot 落点：`godot/scripts/core/economy/shop_transactions.gd`、`godot/script
 - [ ] 技能学习确认和失败 reason。
 - [~] 多组/多槽 hotbar、拖拽绑定、清空、替换：三组快捷栏、HUD 组按钮、组命名、当前组绑定/使用、独立保存和 `Alt+1/2/3` 切组第一版已迁移；待补完整快捷键冲突矩阵。
 - [~] 数字键激活、cooldown 遮罩、不可用 reason。
-- [~] observe mode hotbar：播放、速度、自动状态和观察楼层展示第一版已迁移，Auto 按钮可切换自动推进；待补 observe playback / speed 的真实控制和冲突策略。
+- [~] observe mode hotbar：播放、速度、自动状态和观察楼层展示第一版已迁移，Play / Speed / Auto 按钮可操作，速度会影响自动推进间隔；待补 free observe 入口和 Space 播放冲突策略。
 
 参考：`simulation/actor_progression.rs`、`simulation/skills.rs`、`game_ui/hotbar/**`、`panels/skills*.rs`。
 Godot 落点：`godot/scripts/core/progression/**`、`godot/scripts/ui/controllers/skills_panel_controller.gd`、`hud_controller.gd`。
@@ -797,7 +797,7 @@ Godot 落点：`godot/scenes/boot/**`、`godot/scripts/app/boot.gd`。
 - [ ] interaction prompt 和 primary action。
 - [ ] interaction menu 布局、disabled、dangerous、hover。
 - [ ] hotbar dock、cooldown、tooltip。
-- [~] observe mode dock：播放、速度、自动推进和观察楼层显示第一版。
+- [~] observe mode dock：播放、速度、自动推进和观察楼层显示及按钮控制第一版。
 - [ ] controls hint 展开/折叠。
 - [ ] blocker / modal / context menu 层级。
 
