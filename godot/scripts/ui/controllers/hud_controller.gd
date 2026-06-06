@@ -616,6 +616,9 @@ func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
 			"settings" if bool(menu_state.get("settings_open", false)) else "stage",
 			str(menu_state.get("active_stage_panel", "-")) if not str(menu_state.get("active_stage_panel", "")).is_empty() else "-",
 		])
+		var latest_panel_event: Dictionary = _dictionary_or_empty(menu_state.get("latest_event", {}))
+		if not latest_panel_event.is_empty():
+			parts.append("Panel %s:%s" % [str(latest_panel_event.get("event", "")), str(latest_panel_event.get("panel_id", ""))])
 	var context_menu: Dictionary = _dictionary_or_empty(runtime_control.get("context_menu", {}))
 	if bool(context_menu.get("active", false)):
 		var top_context: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
@@ -1405,6 +1408,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 			"settings" if bool(menu_state.get("settings_open", false)) else "stage",
 			stage_id if not stage_id.is_empty() else "-",
 		])
+		var latest_panel_event: Dictionary = _dictionary_or_empty(menu_state.get("latest_event", {}))
+		if not latest_panel_event.is_empty():
+			parts.append("Panel %s:%s" % [str(latest_panel_event.get("event", "")), str(latest_panel_event.get("panel_id", ""))])
 	var context_menu: Dictionary = _dictionary_or_empty(control_data.get("context_menu", {}))
 	if bool(context_menu.get("active", false)):
 		var top_context: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))

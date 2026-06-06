@@ -34,6 +34,9 @@ var active_inventory_feedback: Dictionary = {}
 var active_stage_panel: String = ""
 var settings_open := false
 var tracked_quest_id := ""
+var panel_event_sequence := 0
+var recent_panel_events: Array[Dictionary] = []
+var _last_panel_visibility: Dictionary = {}
 
 var hud: Control
 var dialogue_panel: Control
@@ -109,6 +112,7 @@ func refresh_dialogue_panel() -> void:
 	if dialogue_panel == null or simulation == null:
 		return
 	dialogue_panel.apply_snapshot(DialogueSnapshot.new(registry).build(simulation.snapshot()))
+	_record_panel_visibility_changes("refresh_dialogue")
 
 
 func _apply_runtime_attack_preview(snapshot: Dictionary) -> void:
@@ -152,12 +156,14 @@ func refresh_trade_panel() -> void:
 	if trade_panel == null or simulation == null:
 		return
 	trade_panel.apply_snapshot(TradeSnapshot.new(registry).build(simulation.snapshot(), active_trade_target, active_trade_feedback))
+	_record_panel_visibility_changes("refresh_trade")
 
 
 func refresh_container_panel() -> void:
 	if container_panel == null or simulation == null:
 		return
 	container_panel.apply_snapshot(ContainerSnapshot.new(registry).build(simulation.snapshot(), active_container_feedback))
+	_record_panel_visibility_changes("refresh_container")
 
 
 func refresh_character_panel() -> void:
@@ -289,6 +295,9 @@ func menu_state_snapshot() -> Dictionary:
 		"gameplay_blocked": gameplay_input_blocked(),
 		"blocker": blocker,
 		"close_priority": _menu_close_priority(),
+		"recent_events": recent_panel_events.duplicate(true),
+		"recent_event_count": recent_panel_events.size(),
+		"latest_event": recent_panel_events[recent_panel_events.size() - 1].duplicate(true) if not recent_panel_events.is_empty() else {},
 	}
 
 
@@ -494,6 +503,7 @@ func _apply_stage_panel_visibility() -> void:
 		var open := panel_id == active_stage_panel
 		panel.visible = open
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP if open else Control.MOUSE_FILTER_IGNORE
+	_record_panel_visibility_changes("stage_visibility")
 
 
 func _apply_settings_panel_visibility() -> void:
@@ -505,6 +515,7 @@ func _apply_settings_panel_visibility() -> void:
 	var panel := settings_panel.get_node_or_null("SettingsPanel")
 	if panel is Control:
 		(panel as Control).mouse_filter = Control.MOUSE_FILTER_STOP if settings_open else Control.MOUSE_FILTER_IGNORE
+	_record_panel_visibility_changes("settings_visibility")
 
 
 func apply_ui_scale() -> void:
@@ -557,6 +568,50 @@ func _stage_panel(panel_id: String) -> Control:
 
 func _panel_visible(panel: Control) -> bool:
 	return panel != null and panel.visible
+
+
+func _record_panel_visibility_changes(reason: String = "") -> void:
+	for panel in _panel_event_controls():
+		var panel_id := str(panel.get("id", ""))
+		if panel_id.is_empty():
+			continue
+		var control: Control = panel.get("control", null)
+		var visible := _panel_visible(control)
+		var previous: Variant = _last_panel_visibility.get(panel_id, null)
+		_last_panel_visibility[panel_id] = visible
+		if previous == null or bool(previous) == visible:
+			continue
+		_record_panel_event("opened" if visible else "closed", panel_id, str(panel.get("kind", "")), visible, reason)
+
+
+func _record_panel_event(event: String, panel_id: String, kind: String, visible: bool, reason: String = "") -> void:
+	panel_event_sequence += 1
+	var entry := {
+		"sequence": panel_event_sequence,
+		"event": event,
+		"panel_id": panel_id,
+		"kind": kind,
+		"visible": visible,
+		"reason": reason,
+	}
+	recent_panel_events.append(entry)
+	while recent_panel_events.size() > 8:
+		recent_panel_events.pop_front()
+
+
+func _panel_event_controls() -> Array[Dictionary]:
+	return [
+		{"id": "inventory", "kind": "stage", "control": inventory_panel},
+		{"id": "character", "kind": "stage", "control": character_panel},
+		{"id": "journal", "kind": "stage", "control": journal_panel},
+		{"id": "map", "kind": "stage", "control": map_panel},
+		{"id": "skills", "kind": "stage", "control": skills_panel},
+		{"id": "crafting", "kind": "stage", "control": crafting_panel},
+		{"id": "settings", "kind": "settings", "control": settings_panel},
+		{"id": "dialogue", "kind": "panel", "control": dialogue_panel},
+		{"id": "trade", "kind": "panel", "control": trade_panel},
+		{"id": "container", "kind": "panel", "control": container_panel},
+	]
 
 
 func _blocking_modal_open() -> bool:
