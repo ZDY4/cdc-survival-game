@@ -123,6 +123,7 @@ func _status_badges(runtime_snapshot: Dictionary, player: Dictionary) -> Array[D
 
 func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[Dictionary]:
 	var hotbar: Dictionary = _dictionary_or_empty(runtime_snapshot.get("hotbar", {}))
+	var group_id := str(runtime_snapshot.get("active_hotbar_group", "group_1"))
 	var player_ap: float = float(player.get("ap", 0.0))
 	var player_resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(player.get("combat", {})).get("resources", {}))
 	var player_inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
@@ -137,6 +138,8 @@ func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[
 		var use_state: Dictionary = _hotbar_use_state(kind, skill_id, item_id, slot_data, player_ap, player_resources, player_inventory)
 		output.append({
 			"slot_id": slot_id,
+			"group_id": group_id,
+			"group_label": _hotbar_group_label(group_id),
 			"key": "0" if slot_index == 10 else str(slot_index),
 			"kind": kind,
 			"skill_id": skill_id,
@@ -153,6 +156,15 @@ func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[
 			"empty": slot_data.is_empty() or entry_id.is_empty(),
 		})
 	return output
+
+
+func _hotbar_group_label(group_id: String) -> String:
+	var value := group_id.strip_edges().to_lower()
+	if value.begins_with("group_"):
+		value = value.trim_prefix("group_")
+	if value.is_valid_int():
+		return "G%d" % int(value)
+	return group_id
 
 
 func _hotbar_use_state(kind: String, skill_id: String, item_id: String, slot_data: Dictionary, player_ap: float, resources: Dictionary, inventory: Dictionary) -> Dictionary:

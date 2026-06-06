@@ -52,6 +52,8 @@ func build(simulation: RefCounted) -> Dictionary:
 		"corpse_containers": _corpse_container_snapshots(simulation.corpse_containers),
 		"interaction_menu": simulation.interaction_menu.duplicate(true),
 		"hotbar": simulation.hotbar.duplicate(true),
+		"active_hotbar_group": str(simulation.active_hotbar_group),
+		"hotbar_groups": _hotbar_group_snapshots(simulation.hotbar_groups),
 		"crafted_recipes": simulation.crafted_recipes.keys(),
 	}
 
@@ -311,6 +313,15 @@ func _corpse_container_snapshots(corpse_containers: Dictionary) -> Array[Diction
 			"money": max(0, int(corpse.get("money", 0))),
 			"inventory": _inventory_entries.normalize(corpse.get("inventory", [])),
 		})
+	return output
+
+
+func _hotbar_group_snapshots(hotbar_groups: Dictionary) -> Dictionary:
+	var output: Dictionary = {}
+	var group_ids: Array = hotbar_groups.keys()
+	group_ids.sort()
+	for group_id in group_ids:
+		output[str(group_id)] = _dictionary_or_empty(hotbar_groups.get(group_id, {})).duplicate(true)
 	return output
 
 

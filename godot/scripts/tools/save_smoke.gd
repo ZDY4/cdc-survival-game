@@ -141,6 +141,17 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"skill_library": registry.get_library("skills"),
 		"target": {"target_type": "self"},
 	})
+	simulation.set_active_hotbar_group("group_2")
+	simulation.submit_player_command({
+		"kind": "bind_hotbar",
+		"actor_id": 1,
+		"slot_id": "slot_1",
+		"hotbar_kind": "item",
+		"item_id": "1006",
+		"item_library": registry.get_library("items"),
+		"effect_library": registry.get_library("json"),
+	})
+	simulation.set_active_hotbar_group("group_1")
 	var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
 	simulation.crafted_recipes["recipe_knife_basic"] = true
 	simulation.world_flags["outpost_workshop_restored"] = true
@@ -367,6 +378,10 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("player active skill effects did not roundtrip")
 	if JSON.stringify(restored.get("hotbar", {})) != JSON.stringify(original.get("hotbar", {})):
 		errors.append("hotbar did not roundtrip")
+	if str(restored.get("active_hotbar_group", "")) != str(original.get("active_hotbar_group", "")):
+		errors.append("active_hotbar_group did not roundtrip")
+	if JSON.stringify(restored.get("hotbar_groups", {})) != JSON.stringify(original.get("hotbar_groups", {})):
+		errors.append("hotbar_groups did not roundtrip")
 	for derived_key in ["runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs"]:
 		if not restored.has(derived_key):
 			errors.append("restored snapshot missing derived runtime field %s" % derived_key)
@@ -414,6 +429,8 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 	legacy.erase("corpse_containers")
 	legacy.erase("interaction_menu")
 	legacy.erase("hotbar")
+	legacy.erase("active_hotbar_group")
+	legacy.erase("hotbar_groups")
 	legacy.erase("relationships")
 	var restored_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	restored_simulation.load_snapshot(legacy)
@@ -424,7 +441,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 		errors.append("legacy snapshot migration should default active_location_id from start_location_id")
 	if str(restored.get("active_entry_point_id", "")) != str(snapshot.get("start_entry_point_id", "")):
 		errors.append("legacy snapshot migration should default active_entry_point_id from start_entry_point_id")
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar", "relationships"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "relationships"]:
 		if not restored.has(key):
 			errors.append("legacy snapshot migration missing %s" % key)
 	if _relationship_score(restored, 1, 2) < 49.9:
@@ -683,6 +700,8 @@ func _digest(snapshot: Dictionary) -> Dictionary:
 		"container_sessions": snapshot.get("container_sessions", []),
 		"shop_sessions": snapshot.get("shop_sessions", []),
 		"hotbar": snapshot.get("hotbar", {}),
+		"active_hotbar_group": snapshot.get("active_hotbar_group", ""),
+		"hotbar_groups": snapshot.get("hotbar_groups", {}),
 		"relationships": snapshot.get("relationships", []),
 		"event_count": snapshot.get("events", []).size(),
 		"player_inventory": _player_actor(snapshot).get("inventory", {}),

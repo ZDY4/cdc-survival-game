@@ -43,7 +43,7 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.corpse_containers = _load_corpse_containers(snapshot_data.get("corpse_containers", []))
 	_sync_corpse_container_sessions(simulation)
 	simulation.interaction_menu = _dictionary_or_empty(snapshot_data.get("interaction_menu", {})).duplicate(true)
-	simulation.hotbar = _dictionary_or_empty(snapshot_data.get("hotbar", {})).duplicate(true)
+	_load_hotbar_state(simulation, snapshot_data)
 	simulation.crafted_recipes = _load_flag_dictionary(snapshot_data.get("crafted_recipes", []))
 	if source_schema_version < CURRENT_SCHEMA_VERSION:
 		simulation.emit_event("snapshot_migrated", {
@@ -58,6 +58,24 @@ func _load_events(entries: Variant) -> Array[SimulationEvent]:
 		var event: Dictionary = _dictionary_or_empty(event_data)
 		output.append(SimulationEvent.new(str(event.get("kind", "")), _dictionary_or_empty(event.get("payload", {}))))
 	return output
+
+
+func _load_hotbar_state(simulation: RefCounted, snapshot_data: Dictionary) -> void:
+	var active_group_id := str(snapshot_data.get("active_hotbar_group", "group_1"))
+	if active_group_id.is_empty():
+		active_group_id = "group_1"
+	var groups: Dictionary = _dictionary_or_empty(snapshot_data.get("hotbar_groups", {})).duplicate(true)
+	var legacy_hotbar: Dictionary = _dictionary_or_empty(snapshot_data.get("hotbar", {})).duplicate(true)
+	if groups.is_empty():
+		groups[active_group_id] = legacy_hotbar
+	if not groups.has(active_group_id):
+		groups[active_group_id] = legacy_hotbar
+	simulation.active_hotbar_group = active_group_id
+	simulation.hotbar_groups = groups
+	if simulation.has_method("set_active_hotbar_group"):
+		simulation.set_active_hotbar_group(active_group_id)
+	else:
+		simulation.hotbar = _dictionary_or_empty(groups.get(active_group_id, {})).duplicate(true)
 
 
 func _load_consumed_targets(entries: Variant) -> Dictionary:

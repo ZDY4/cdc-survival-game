@@ -234,8 +234,8 @@
 
 ### 9.3 Hotbar
 
-- 已有单组 hotbar、数字键激活、HUD hotbar dock、Skills 面板自动绑定到第一个空槽、拖拽主动/切换技能到指定 HUD 热栏槽和清空槽按钮，已纳入 `SkillsUI` / `UI` smoke；待迁移多组 hotbar。
-- 已有 Skills 面板 hotbar 可用/冷却/资源不足不可用原因文本、按钮禁用和技能 `activation.ap_cost` / `activation.resource_costs` 展示与扣除第一版；HUD hotbar 槽位已显示 key、技能短名、cooldown 文本、slot tooltip、冷却禁用态和冷却遮罩，主动技能激活后会落到 actor active effects，并纳入 `SkillsUI` / `UI` smoke。待补多组 hotbar 的资源消耗汇总展示。
+- 已有 hotbar 多组第一版：`Simulation` 持有 `hotbar_groups` / `active_hotbar_group`，旧 `hotbar` 字段继续代表当前组；`group_1` 到 `group_3` 可切换，当前组绑定/使用技能或物品，非当前组会独立保存；`Alt+1/2/3` 切换快捷栏组，HUD tooltip 和 Skills 摘要显示当前组，已纳入 `SkillsUI` / `Save` smoke。待补更多组数配置、组命名、组切换按钮和更完整快捷键冲突矩阵。
+- 已有 Skills 面板 hotbar 可用/冷却/资源不足不可用原因文本、按钮禁用和技能 `activation.ap_cost` / `activation.resource_costs` 展示与扣除第一版；HUD hotbar 槽位已显示 key、技能短名、cooldown 文本、slot tooltip、冷却禁用态和冷却遮罩，主动技能激活后会落到 actor active effects，并纳入 `SkillsUI` / `UI` smoke。待补多组 hotbar 的资源消耗汇总展示和组级状态 UI polish。
 - 待补观察模式 hotbar 表现：observe playback、speed、自动播放状态。
 
 ## 10. 任务、对话和剧情动作
@@ -373,7 +373,7 @@
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、背包使用成功/失败反馈、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示和任务/关键物品禁用第一版已有 smoke；拆分入口禁用说明和 core 稳定拒绝 reason 已有 smoke；待补真正多 stack 拆分、装备属性变化对比和更完整上下文菜单 polish。
 - `ContainerUI`：关闭、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、全部拿取/全部存放、双向拖拽、背包面板拖入存放、基础失败提示、权限预览、背包负重限制、容器自身容量限制、容器锁定/权限拒绝、钥匙/工具解锁和显式消耗已有 smoke；待补逐件工具耐久和跨面板拖拽视觉 polish。
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售、背包负重限制、拖拽入队、buy/sell drop zone、drop zone 来源/拒绝提示、hover 高亮、稳定 accept/reject 文案、最近一次拖拽接受/拒绝预览、业务拒绝原因、drag preview 文案和交易面板快捷键已有 smoke；待补统一 drag preview layer polish。
-- `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、世界目标高亮、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补多组 hotbar、技能树 pan 和更完整状态 UI。
+- `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、多组 hotbar 第一版、slot tooltip、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、世界目标高亮、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补组命名/组按钮、技能树 pan 和更完整状态 UI。
 - `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版已有 smoke；待补对话交付条件和更完整失败反馈。
 - `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、批量执行、AP 不足反馈和完成反馈第一版已有 smoke；待补工具耐久/消耗、更多地图 station 标注、制作队列和取消。
 - `Save`：passive / active skill effects 已有 roundtrip；继续补新增 runtime 字段和旧存档迁移。

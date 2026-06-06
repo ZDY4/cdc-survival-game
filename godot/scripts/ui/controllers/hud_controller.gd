@@ -116,7 +116,7 @@ func _build_layout() -> void:
 	box.add_child(_controls_hint_box)
 	for line in [
 		"I/C/M/J/K/L 面板 | Esc 关闭/设置 | Space 等待",
-		"1-9 对话选项 | 1-0 热栏 | 鼠标左键移动/交互",
+		"1-9 对话选项 | 1-0 热栏 | Alt+1/2/3 热栏组 | 鼠标左键移动/交互",
 		"右键菜单 | 中键拖拽相机 | F 跟随 | V 覆盖层 | [/] 信息页 | A 自动推进 | +/- 缩放",
 	]:
 		var label := _line("ControlsHintLine")
@@ -340,6 +340,8 @@ func _apply_hotbar(slots_value: Variant) -> void:
 func _hotbar_button(slot: Dictionary) -> Button:
 	var button := Button.new()
 	var slot_id := str(slot.get("slot_id", ""))
+	var group_id := str(slot.get("group_id", "group_1"))
+	var group_label := str(slot.get("group_label", group_id))
 	var key_label := str(slot.get("key", ""))
 	var kind := str(slot.get("kind", ""))
 	var skill_id := str(slot.get("skill_id", ""))
@@ -353,6 +355,7 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	button.custom_minimum_size = Vector2(48, 28)
 	button.focus_mode = Control.FOCUS_NONE
 	button.set_meta("hotbar_slot_id", slot_id)
+	button.set_meta("hotbar_group_id", group_id)
 	button.set_meta("cooldown_remaining", cooldown)
 	button.set_meta("cooldown_mask_visible", cooldown > 0.0)
 	button.set_meta("use_reason", use_reason)
@@ -364,13 +367,13 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	)
 	if bool(slot.get("empty", true)):
 		button.text = "%s:-" % key_label
-		button.tooltip_text = "热栏 %s：空 | 可拖入主动技能" % key_label
+		button.tooltip_text = "%s 热栏 %s：空 | 可拖入主动技能" % [group_label, key_label]
 		return button
 	var suffix := " cd%.0f" % cooldown if cooldown > 0.0 else ""
 	if kind == "item" and int(slot.get("item_count", 0)) > 0:
 		suffix = " x%d%s" % [int(slot.get("item_count", 0)), suffix]
 	button.text = "%s:%s%s" % [key_label, _short_hotbar_label(entry_label), suffix]
-	button.tooltip_text = _hotbar_tooltip(key_label, kind, entry_label, slot)
+	button.tooltip_text = _hotbar_tooltip(key_label, group_label, kind, entry_label, slot)
 	button.disabled = cooldown > 0.0 or not can_use
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
@@ -392,9 +395,9 @@ func _add_hotbar_cooldown_mask(button: Button, slot_id: String, cooldown: float)
 	button.add_child(mask)
 
 
-func _hotbar_tooltip(key_label: String, kind: String, entry_label: String, slot: Dictionary) -> String:
+func _hotbar_tooltip(key_label: String, group_label: String, kind: String, entry_label: String, slot: Dictionary) -> String:
 	var parts: Array[String] = [
-		"热栏 %s" % key_label,
+		"%s 热栏 %s" % [group_label, key_label],
 		"物品" if kind == "item" else "技能",
 		entry_label,
 	]

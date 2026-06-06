@@ -34,7 +34,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		int(snapshot.get("level", 1)),
 		int(snapshot.get("available_skill_points", 0)),
 	]
-	_hotbar_label.text = _hotbar_text(snapshot.get("hotbar", {}))
+	_hotbar_label.text = _hotbar_text(snapshot)
 	_feedback_label.visible = not _learn_feedback_text.is_empty()
 	_feedback_label.text = _learn_feedback_text
 	_rebuild_tree_filter_buttons(snapshot)
@@ -411,9 +411,11 @@ func _unlocks_text(skill: Dictionary) -> String:
 	return " / ".join(parts)
 
 
-func _hotbar_text(hotbar: Dictionary) -> String:
+func _hotbar_text(snapshot: Dictionary) -> String:
+	var hotbar: Dictionary = _dictionary_or_empty(snapshot.get("hotbar", {}))
+	var group_label := _hotbar_group_label(str(snapshot.get("active_hotbar_group", "group_1")))
 	if hotbar.is_empty():
-		return "快捷栏 空"
+		return "快捷栏 %s 空" % group_label
 	var parts: Array[String] = []
 	var slots: Array = hotbar.keys()
 	slots.sort()
@@ -424,7 +426,16 @@ func _hotbar_text(hotbar: Dictionary) -> String:
 			slot_data.get("skill_id", slot_data),
 			float(slot_data.get("cooldown_remaining", 0.0)),
 		])
-	return "快捷栏 %s" % " | ".join(parts)
+	return "快捷栏 %s %s" % [group_label, " | ".join(parts)]
+
+
+func _hotbar_group_label(group_id: String) -> String:
+	var value := group_id.strip_edges().to_lower()
+	if value.begins_with("group_"):
+		value = value.trim_prefix("group_")
+	if value.is_valid_int():
+		return "G%d" % int(value)
+	return group_id
 
 
 func _binding_text(skill: Dictionary) -> String:

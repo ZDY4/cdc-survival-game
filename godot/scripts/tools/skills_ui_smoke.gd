@@ -179,6 +179,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("HUD hotbar slot should expose skill tooltip")
 	if _hud_hotbar_cooldown_mask_visible(game_root, "slot_3"):
 		errors.append("HUD hotbar cooldown mask should stay hidden before skill cooldown")
+	var group2_result: Dictionary = game_root.set_hotbar_group("group_2")
+	if not bool(group2_result.get("success", false)):
+		errors.append("switching to hotbar group 2 should succeed: %s" % group2_result.get("reason", "unknown"))
+	await process_frame
+	if not _hotbar_line(game_root).contains("快捷栏 G2 空"):
+		errors.append("skills panel should show empty hotbar group 2")
+	game_root.refresh_hud()
+	if not _hud_hotbar_slot_text(game_root, "slot_3").contains("3:-"):
+		errors.append("HUD hotbar group 2 slot 3 should be empty")
+	var group1_result: Dictionary = game_root.set_hotbar_group("group_1")
+	if not bool(group1_result.get("success", false)):
+		errors.append("switching back to hotbar group 1 should succeed: %s" % group1_result.get("reason", "unknown"))
+	await process_frame
+	if not _hotbar_line(game_root).contains("快捷栏 G1") or not _hotbar_line(game_root).contains("slot_3:adrenaline_rush"):
+		errors.append("switching back to hotbar group 1 should restore dragged hotbar skill")
+	game_root.refresh_hud()
+	if not _hud_hotbar_slot_text(game_root, "slot_3").contains("Adre"):
+		errors.append("HUD hotbar group 1 slot 3 should restore adrenaline rush")
 	if _use_button(game_root, "adrenaline_rush") == null or _use_button(game_root, "adrenaline_rush").disabled:
 		errors.append("bound active skill should be usable before cooldown")
 	if not _skill_line(game_root, "adrenaline_rush").contains("可用"):

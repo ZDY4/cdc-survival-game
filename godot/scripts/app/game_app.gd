@@ -1110,6 +1110,30 @@ func bind_player_item_to_hotbar(slot_id: String, item_id: String) -> Dictionary:
 	return result
 
 
+func set_hotbar_group(group_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	if not simulation.has_method("set_active_hotbar_group"):
+		return {"success": false, "reason": "hotbar_group_unsupported"}
+	var result: Dictionary = simulation.set_active_hotbar_group(group_id)
+	refresh_hud()
+	refresh_skills_panel()
+	refresh_inventory_panel()
+	return result
+
+
+func cycle_hotbar_group(direction: int) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	if not simulation.has_method("cycle_hotbar_group"):
+		return {"success": false, "reason": "hotbar_group_unsupported"}
+	var result: Dictionary = simulation.cycle_hotbar_group(direction)
+	refresh_hud()
+	refresh_skills_panel()
+	refresh_inventory_panel()
+	return result
+
+
 func use_hotbar_slot(slot_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}

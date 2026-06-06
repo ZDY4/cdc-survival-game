@@ -552,8 +552,8 @@
 - [ ] 属性点分配和属性派生。
 - [ ] 等级曲线、XP 来源、溢出、多级升级。
 - [ ] 技能前置、属性要求、互斥、等级上限。
-- [ ] 主动技能绑定 hotbar、多槽、替换、清除。
-- [ ] 使用主动技能：目标选择、AP、cooldown、效果、失败提示。
+- [~] 主动技能绑定 hotbar、多组/多槽、替换、清除第一版。
+- [~] 使用主动技能：目标选择、AP、cooldown、效果、失败提示第一版。
 - [ ] 被动技能自动影响 combat、crafting、dialogue、trade、movement。
 - [ ] 技能目标预览、范围高亮、取消。
 - [ ] cooldown tick、冷却遮罩、不可用原因。
@@ -710,7 +710,7 @@
 - [~] interaction menu 基础。
 - [~] debug overlay mode 基础。
 - [ ] combat HUD：当前回合、敌人数量、目标预览、伤害预估。
-- [ ] hotbar：技能、物品、冷却、快捷键。
+- [~] hotbar：技能、物品、冷却、快捷键和三组快捷栏第一版；待补组按钮/命名、观察模式和完整冲突处理。
 - [ ] hover tooltip：actor/object/item/cell。
 - [ ] quest tracker。
 - [ ] message log / event log。

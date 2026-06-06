@@ -13,6 +13,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 	var learned: Dictionary = _dictionary_or_empty(progression.get("learned_skills", {}))
 	var attributes: Dictionary = _dictionary_or_empty(progression.get("attributes", {}))
 	var hotbar: Dictionary = _dictionary_or_empty(runtime_snapshot.get("hotbar", {}))
+	var active_hotbar_group := str(runtime_snapshot.get("active_hotbar_group", "group_1"))
 	var resources: Dictionary = _dictionary_or_empty(_dictionary_or_empty(player.get("combat", {})).get("resources", {}))
 	var trees: Array[Dictionary] = []
 	var tree_ids: Array = registry.get_library("skill_trees").keys()
@@ -28,6 +29,8 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"available_skill_points": int(progression.get("available_skill_points", 0)),
 		"learned_skills": learned.duplicate(true),
 		"hotbar": hotbar.duplicate(true),
+		"active_hotbar_group": active_hotbar_group,
+		"hotbar_groups": _dictionary_or_empty(runtime_snapshot.get("hotbar_groups", {})).duplicate(true),
 		"trees": trees,
 	}
 

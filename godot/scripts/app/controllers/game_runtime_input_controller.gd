@@ -297,6 +297,8 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 	if game_root.has_method("handle_trade_shortcut") and bool(game_root.handle_trade_shortcut(event)):
 		return true
 	var digit := _digit_for_key(key)
+	if digit >= 1 and event.alt_pressed and _handle_hotbar_group_key(digit):
+		return true
 	if digit >= 0 and not (key == KEY_0 and event.ctrl_pressed) and _handle_digit_key(digit):
 		return true
 	var stage_panel := _stage_panel_for_key(key)
@@ -427,6 +429,19 @@ func _handle_digit_key(digit: int) -> bool:
 	if game_root.has_method("use_hotbar_slot"):
 		var slot_id := "slot_%d" % (10 if digit == 10 else digit)
 		game_root.use_hotbar_slot(slot_id)
+		return true
+	return false
+
+
+func _handle_hotbar_group_key(digit: int) -> bool:
+	if digit < 1 or digit > 3:
+		return false
+	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()):
+		return false
+	if _gameplay_input_blocked_by_ui():
+		return false
+	if game_root.has_method("set_hotbar_group"):
+		game_root.set_hotbar_group("group_%d" % digit)
 		return true
 	return false
 

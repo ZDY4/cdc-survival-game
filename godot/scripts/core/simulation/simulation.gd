@@ -36,6 +36,8 @@ const DEFAULT_ATTACK_RANGE := 1
 const NPC_AGGRO_RANGE := 8
 const COMBAT_EXIT_NO_SIGHT_TURNS := 3
 const HOTBAR_SLOT_COUNT := 10
+const DEFAULT_HOTBAR_GROUP_ID := "group_1"
+const HOTBAR_GROUP_COUNT := 3
 const RELATIONSHIP_HOSTILE_THRESHOLD := -50.0
 const RELATIONSHIP_FRIENDLY_THRESHOLD := 0.0
 
@@ -80,6 +82,8 @@ var pending_interaction: Dictionary = {}
 var corpse_containers: Dictionary = {}
 var interaction_menu: Dictionary = {}
 var hotbar: Dictionary = {}
+var hotbar_groups: Dictionary = {}
+var active_hotbar_group: String = DEFAULT_HOTBAR_GROUP_ID
 var crafted_recipes: Dictionary = {}
 var _ai_runner := AiRunner.new()
 var _ai_rules := AiRules.new()
@@ -836,11 +840,45 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 
 
 func snapshot() -> Dictionary:
+	_sync_active_hotbar_group()
+	_ensure_hotbar_groups()
 	return _snapshot_codec.build(self)
 
 
 func load_snapshot(snapshot_data: Dictionary) -> void:
 	_snapshot_codec.load(self, snapshot_data)
+
+
+func set_active_hotbar_group(group_id: String) -> Dictionary:
+	_ensure_hotbar_groups()
+	var normalized_group_id := _normalized_hotbar_group_id(group_id)
+	if normalized_group_id.is_empty():
+		return {"success": false, "reason": "hotbar_group_missing"}
+	var previous_group_id := active_hotbar_group
+	_sync_active_hotbar_group()
+	active_hotbar_group = normalized_group_id
+	if not hotbar_groups.has(active_hotbar_group):
+		hotbar_groups[active_hotbar_group] = {}
+	hotbar = _dictionary_or_empty(hotbar_groups.get(active_hotbar_group, {})).duplicate(true)
+	if active_hotbar_group != previous_group_id:
+		_emit("hotbar_group_changed", {
+			"previous_group_id": previous_group_id,
+			"group_id": active_hotbar_group,
+		})
+	return {
+		"success": true,
+		"group_id": active_hotbar_group,
+		"previous_group_id": previous_group_id,
+		"changed": active_hotbar_group != previous_group_id,
+	}
+
+
+func cycle_hotbar_group(direction: int) -> Dictionary:
+	_ensure_hotbar_groups()
+	var step := 1 if direction >= 0 else -1
+	var current_index := _hotbar_group_index(active_hotbar_group)
+	var next_index := posmod(current_index + step, HOTBAR_GROUP_COUNT)
+	return set_active_hotbar_group("group_%d" % (next_index + 1))
 
 
 func _emit(kind: String, payload: Dictionary) -> void:
@@ -1558,7 +1596,58 @@ func _submit_learn_skill_command(actor: RefCounted, command: Dictionary) -> Dict
 	return learn_skill(actor.actor_id, str(command.get("skill_id", "")), _dictionary_or_empty(command.get("skill_library", {})))
 
 
+func _ensure_hotbar_groups() -> void:
+	active_hotbar_group = _normalized_hotbar_group_id(active_hotbar_group)
+	if active_hotbar_group.is_empty():
+		active_hotbar_group = DEFAULT_HOTBAR_GROUP_ID
+	if hotbar_groups.is_empty():
+		hotbar_groups[active_hotbar_group] = hotbar.duplicate(true)
+	if not hotbar_groups.has(active_hotbar_group):
+		hotbar_groups[active_hotbar_group] = hotbar.duplicate(true)
+	for index in range(1, HOTBAR_GROUP_COUNT + 1):
+		var group_id := "group_%d" % index
+		if not hotbar_groups.has(group_id):
+			hotbar_groups[group_id] = {}
+	hotbar = _dictionary_or_empty(hotbar_groups.get(active_hotbar_group, {})).duplicate(true)
+
+
+func _sync_active_hotbar_group() -> void:
+	active_hotbar_group = _normalized_hotbar_group_id(active_hotbar_group)
+	if active_hotbar_group.is_empty():
+		active_hotbar_group = DEFAULT_HOTBAR_GROUP_ID
+	hotbar_groups[active_hotbar_group] = hotbar.duplicate(true)
+
+
+func _normalized_hotbar_group_id(group_id: String) -> String:
+	var value := group_id.strip_edges().to_lower()
+	if value.is_empty():
+		return DEFAULT_HOTBAR_GROUP_ID
+	if value.is_valid_int():
+		value = "group_%d" % int(value)
+	if value.begins_with("hotbar_"):
+		value = "group_%s" % value.trim_prefix("hotbar_")
+	if not value.begins_with("group_"):
+		value = "group_%s" % value
+	var index := _hotbar_group_index(value)
+	if index < 0:
+		return DEFAULT_HOTBAR_GROUP_ID
+	return "group_%d" % (index + 1)
+
+
+func _hotbar_group_index(group_id: String) -> int:
+	var value := group_id.strip_edges().to_lower()
+	if value.begins_with("group_"):
+		value = value.trim_prefix("group_")
+	if not value.is_valid_int():
+		return -1
+	var index := int(value) - 1
+	if index < 0 or index >= HOTBAR_GROUP_COUNT:
+		return -1
+	return index
+
+
 func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dictionary:
+	_ensure_hotbar_groups()
 	var slot_id: String = str(command.get("slot_id", ""))
 	var kind: String = str(command.get("hotbar_kind", command.get("bind_kind", "")))
 	var skill_id: String = str(command.get("skill_id", ""))
@@ -1569,11 +1658,13 @@ func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dict
 		if slot_id.is_empty():
 			return {"success": false, "reason": "hotbar_slot_missing"}
 		hotbar.erase(slot_id)
+		_sync_active_hotbar_group()
 		_emit("hotbar_unbound", {
 			"actor_id": actor.actor_id,
 			"slot_id": slot_id,
+			"group_id": active_hotbar_group,
 		})
-		return {"success": true, "slot_id": slot_id, "cleared": true}
+		return {"success": true, "slot_id": slot_id, "cleared": true, "group_id": active_hotbar_group}
 	if kind == "item":
 		return _bind_item_to_hotbar(actor, slot_id, item_id, command)
 	if kind != "skill":
@@ -1597,13 +1688,15 @@ func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dict
 		"skill_id": skill_id,
 		"cooldown_remaining": 0.0,
 	}
+	_sync_active_hotbar_group()
 	_emit("hotbar_bound", {
 		"actor_id": actor.actor_id,
 		"slot_id": slot_id,
+		"group_id": active_hotbar_group,
 		"kind": "skill",
 		"skill_id": skill_id,
 	})
-	return {"success": true, "slot_id": slot_id, "skill_id": skill_id, "auto_slot": auto_slot}
+	return {"success": true, "slot_id": slot_id, "skill_id": skill_id, "auto_slot": auto_slot, "group_id": active_hotbar_group}
 
 
 func _bind_item_to_hotbar(actor: RefCounted, slot_id: String, item_id: String, command: Dictionary) -> Dictionary:
@@ -1626,13 +1719,15 @@ func _bind_item_to_hotbar(actor: RefCounted, slot_id: String, item_id: String, c
 		"item_id": item_id,
 		"cooldown_remaining": 0.0,
 	}
+	_sync_active_hotbar_group()
 	_emit("hotbar_bound", {
 		"actor_id": actor.actor_id,
 		"slot_id": slot_id,
+		"group_id": active_hotbar_group,
 		"kind": "item",
 		"item_id": item_id,
 	})
-	return {"success": true, "slot_id": slot_id, "item_id": item_id, "hotbar_kind": "item", "auto_slot": auto_slot}
+	return {"success": true, "slot_id": slot_id, "item_id": item_id, "hotbar_kind": "item", "auto_slot": auto_slot, "group_id": active_hotbar_group}
 
 
 func _resolve_hotbar_bind_slot(skill_id: String, requested_slot_id: String) -> String:
@@ -1655,6 +1750,7 @@ func _resolve_hotbar_bind_slot_for_entry(kind: String, entry_id: String, request
 
 
 func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictionary:
+	_ensure_hotbar_groups()
 	var slot_id: String = str(command.get("slot_id", ""))
 	var skill_id: String = str(command.get("skill_id", ""))
 	var slot: Dictionary = {}
@@ -1702,11 +1798,13 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 		updated_slot["skill_id"] = skill_id
 		updated_slot["cooldown_remaining"] = cooldown
 		hotbar[slot_id] = updated_slot
+		_sync_active_hotbar_group()
 	var effect_result: Dictionary = _apply_skill_activation_effect(actor, skill_id, learned_level, activation, mode)
 	_emit("skill_used", {
 		"actor_id": actor.actor_id,
 		"skill_id": skill_id,
 		"slot_id": slot_id,
+		"group_id": active_hotbar_group,
 		"level": learned_level,
 		"activation_mode": mode,
 		"ap_cost": cost,
@@ -2597,18 +2695,25 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 
 
 func _tick_hotbar_cooldowns() -> void:
-	for slot_id in hotbar.keys():
-		var slot: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {})).duplicate(true)
-		var before: float = float(slot.get("cooldown_remaining", 0.0))
-		if before <= 0.0:
-			continue
-		slot["cooldown_remaining"] = max(0.0, before - 1.0)
-		hotbar[slot_id] = slot
-		_emit("hotbar_cooldown_ticked", {
-			"slot_id": str(slot_id),
-			"before": before,
-			"after": float(slot.get("cooldown_remaining", 0.0)),
-		})
+	_ensure_hotbar_groups()
+	for group_id_value in hotbar_groups.keys():
+		var group_id := str(group_id_value)
+		var group_hotbar: Dictionary = _dictionary_or_empty(hotbar_groups.get(group_id, {})).duplicate(true)
+		for slot_id in group_hotbar.keys():
+			var slot: Dictionary = _dictionary_or_empty(group_hotbar.get(slot_id, {})).duplicate(true)
+			var before: float = float(slot.get("cooldown_remaining", 0.0))
+			if before <= 0.0:
+				continue
+			slot["cooldown_remaining"] = max(0.0, before - 1.0)
+			group_hotbar[slot_id] = slot
+			_emit("hotbar_cooldown_ticked", {
+				"group_id": group_id,
+				"slot_id": str(slot_id),
+				"before": before,
+				"after": float(slot.get("cooldown_remaining", 0.0)),
+			})
+		hotbar_groups[group_id] = group_hotbar
+	hotbar = _dictionary_or_empty(hotbar_groups.get(active_hotbar_group, {})).duplicate(true)
 
 
 func _tick_actor_active_effects() -> void:
