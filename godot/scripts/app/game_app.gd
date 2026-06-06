@@ -296,6 +296,40 @@ func gameplay_input_blocker_name() -> String:
 	return ""
 
 
+func gameplay_input_blocker_snapshot() -> Dictionary:
+	if is_debug_console_open():
+		return {
+			"blocked": true,
+			"name": "debug_console",
+			"kind": "debug_console",
+			"modal_id": "",
+			"panel_id": "hud",
+			"mouse_blocks_world": true,
+		}
+	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
+		return {
+			"blocked": true,
+			"name": "interaction_menu",
+			"kind": "context_menu",
+			"modal_id": "",
+			"panel_id": "hud",
+			"mouse_blocks_world": true,
+		}
+	if panel_controller != null and panel_controller.has_method("gameplay_input_blocker_snapshot"):
+		var snapshot: Dictionary = _dictionary_or_empty(panel_controller.call("gameplay_input_blocker_snapshot"))
+		if not snapshot.is_empty():
+			return snapshot
+	var name := gameplay_input_blocker_name()
+	return {
+		"blocked": not name.is_empty(),
+		"name": name,
+		"kind": "",
+		"modal_id": "",
+		"panel_id": "",
+		"mouse_blocks_world": not name.is_empty(),
+	}
+
+
 func handle_trade_shortcut(event: InputEventKey) -> bool:
 	if panel_controller == null:
 		return false
@@ -552,6 +586,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"map_level": map_level_snapshot(),
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
+		"ui_blocker_snapshot": gameplay_input_blocker_snapshot(),
 		"controls_hint": controls_hint_snapshot(),
 		"debug_console": debug_console_snapshot(),
 		"debug_panel": debug_panel_snapshot(),

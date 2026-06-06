@@ -65,6 +65,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.panel_controller == null:
 		return ["panel controller was not created"]
 	_expect_stage_closed(errors, game_root, "initial")
+	_expect_no_blocker(errors, game_root, "initial")
 	_assert_info_panel(errors, game_root, "overview", "Overview", "Info Overview 1/9", "initial info panel")
 	_press_key(game_root, KEY_BRACKETRIGHT)
 	_assert_info_panel(errors, game_root, "selection", "Selection", "Info Selection 2/9", "] should advance info panel")
@@ -108,6 +109,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("open stage panel should block auto tick runtime events")
 	_press_key(game_root, KEY_ESCAPE)
 	_expect_stage_closed(errors, game_root, "Esc should close inventory after auto tick blocker check")
+	_expect_no_blocker(errors, game_root, "inventory closed blocker")
 	_press_key(game_root, KEY_A)
 	if bool(game_root.is_auto_tick_enabled()):
 		errors.append("second A should disable auto tick")
@@ -1187,6 +1189,54 @@ func _expect_blocker(errors: Array[String], game_root: Node, expected: String, c
 	var actual := str(game_root.gameplay_input_blocker_name())
 	if actual != expected:
 		errors.append("%s: blocker expected %s, got %s" % [context, expected, actual])
+	if not game_root.has_method("gameplay_input_blocker_snapshot"):
+		errors.append("%s: game root should expose gameplay_input_blocker_snapshot" % context)
+		return
+	var blocker_snapshot: Dictionary = _dictionary_or_empty(game_root.gameplay_input_blocker_snapshot())
+	if not bool(blocker_snapshot.get("blocked", false)):
+		errors.append("%s: blocker snapshot should be blocked: %s" % [context, blocker_snapshot])
+	if str(blocker_snapshot.get("name", "")) != expected:
+		errors.append("%s: blocker snapshot name expected %s, got %s" % [context, expected, blocker_snapshot])
+	var expected_kind := _expected_blocker_kind(expected)
+	if not expected_kind.is_empty() and str(blocker_snapshot.get("kind", "")) != expected_kind:
+		errors.append("%s: blocker snapshot kind expected %s, got %s" % [context, expected_kind, blocker_snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_blocker: Dictionary = _dictionary_or_empty(runtime.get("ui_blocker_snapshot", {}))
+	if str(runtime_blocker.get("name", "")) != expected:
+		errors.append("%s: runtime_control blocker snapshot expected %s, got %s" % [context, expected, runtime_blocker])
+
+
+func _expect_no_blocker(errors: Array[String], game_root: Node, context: String) -> void:
+	if str(game_root.gameplay_input_blocker_name()) != "":
+		errors.append("%s: expected no blocker, got %s" % [context, str(game_root.gameplay_input_blocker_name())])
+	if not game_root.has_method("gameplay_input_blocker_snapshot"):
+		errors.append("%s: game root should expose gameplay_input_blocker_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.gameplay_input_blocker_snapshot())
+	if bool(snapshot.get("blocked", true)) or not str(snapshot.get("name", "")).is_empty():
+		errors.append("%s: no blocker snapshot should be inactive: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_blocker: Dictionary = _dictionary_or_empty(runtime.get("ui_blocker_snapshot", {}))
+	if bool(runtime_blocker.get("blocked", true)) or not str(runtime_blocker.get("name", "")).is_empty():
+		errors.append("%s: runtime no blocker snapshot should be inactive: %s" % [context, runtime_blocker])
+
+
+func _expected_blocker_kind(blocker_name: String) -> String:
+	if blocker_name.begins_with("stage:"):
+		return "stage"
+	if blocker_name.begins_with("modal:"):
+		return "modal"
+	match blocker_name:
+		"debug_console":
+			return "debug_console"
+		"interaction_menu":
+			return "context_menu"
+		"settings":
+			return "settings"
+		"trade", "container", "dialogue":
+			return "panel"
+		_:
+			return ""
 
 
 func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:

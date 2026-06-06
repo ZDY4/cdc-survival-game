@@ -579,9 +579,11 @@ func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
 			str(runtime_control.get("observe_speed", "x1")),
 		],
 	]
-	var blocker := str(runtime_control.get("ui_blocker", ""))
+	var blocker_snapshot: Dictionary = _dictionary_or_empty(runtime_control.get("ui_blocker_snapshot", {}))
+	var blocker := str(blocker_snapshot.get("name", runtime_control.get("ui_blocker", "")))
 	if not blocker.is_empty():
-		parts.append("Blocker %s" % blocker)
+		var kind := str(blocker_snapshot.get("kind", ""))
+		parts.append("Blocker %s%s" % [blocker, " (%s)" % kind if not kind.is_empty() else ""])
 	var level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
 	if not level.is_empty():
 		parts.append("Level %d" % int(level.get("current", 0)))
@@ -1304,9 +1306,11 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 		if focus_label.is_empty():
 			focus_label = str(focused_actor.get("definition_id", "actor"))
 		parts.append("Focus %s#%d" % [focus_label, int(focused_actor.get("actor_id", 0))])
-	var ui_blocker := str(control_data.get("ui_blocker", ""))
+	var blocker_snapshot: Dictionary = _dictionary_or_empty(control_data.get("ui_blocker_snapshot", {}))
+	var ui_blocker := str(blocker_snapshot.get("name", control_data.get("ui_blocker", "")))
 	if not ui_blocker.is_empty():
-		parts.append("Blocker %s" % ui_blocker)
+		var kind := str(blocker_snapshot.get("kind", ""))
+		parts.append("Blocker %s%s" % [ui_blocker, " (%s)" % kind if not kind.is_empty() else ""])
 	var controls_hint: Dictionary = _dictionary_or_empty(control_data.get("controls_hint", {}))
 	if not controls_hint.is_empty():
 		parts.append("Help %s" % ("on" if bool(controls_hint.get("visible", false)) else "off"))

@@ -255,6 +255,47 @@ func gameplay_input_blocked() -> bool:
 	return _blocking_modal_open() or any_stage_panel_open() or settings_open or _panel_visible(trade_panel) or _panel_visible(container_panel) or _panel_visible(dialogue_panel)
 
 
+func gameplay_input_blocker_snapshot() -> Dictionary:
+	var name := gameplay_input_blocker_name()
+	if name.is_empty():
+		return {
+			"blocked": false,
+			"name": "",
+			"kind": "",
+			"modal_id": "",
+			"panel_id": "",
+			"mouse_blocks_world": false,
+		}
+	var modal_name := _blocking_modal_name()
+	if not modal_name.is_empty():
+		return {
+			"blocked": true,
+			"name": "modal:%s" % modal_name,
+			"kind": "modal",
+			"modal_id": modal_name,
+			"panel_id": _modal_owner_panel_id(modal_name),
+			"mouse_blocks_world": true,
+		}
+	if any_stage_panel_open():
+		return _panel_blocker_snapshot("stage:%s" % active_stage_panel, "stage", active_stage_panel, _stage_panel(active_stage_panel))
+	if settings_open:
+		return _panel_blocker_snapshot("settings", "settings", "settings", settings_panel)
+	if _panel_visible(trade_panel):
+		return _panel_blocker_snapshot("trade", "panel", "trade", trade_panel)
+	if _panel_visible(container_panel):
+		return _panel_blocker_snapshot("container", "panel", "container", container_panel)
+	if _panel_visible(dialogue_panel):
+		return _panel_blocker_snapshot("dialogue", "panel", "dialogue", dialogue_panel)
+	return {
+		"blocked": false,
+		"name": "",
+		"kind": "",
+		"modal_id": "",
+		"panel_id": "",
+		"mouse_blocks_world": false,
+	}
+
+
 func gameplay_input_blocker_name() -> String:
 	var modal_name := _blocking_modal_name()
 	if not modal_name.is_empty():
@@ -483,6 +524,28 @@ func _blocking_modal_name() -> String:
 		var skills_modal := str(skills_panel.call("blocking_modal_name"))
 		if not skills_modal.is_empty():
 			return skills_modal
+	return ""
+
+
+func _panel_blocker_snapshot(name: String, kind: String, panel_id: String, panel: Control) -> Dictionary:
+	return {
+		"blocked": true,
+		"name": name,
+		"kind": kind,
+		"modal_id": "",
+		"panel_id": panel_id,
+		"mouse_blocks_world": panel != null and panel.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"visible": panel != null and panel.visible,
+	}
+
+
+func _modal_owner_panel_id(modal_name: String) -> String:
+	if modal_name.begins_with("inventory_"):
+		return "inventory"
+	if modal_name.begins_with("equipment_") or modal_name.begins_with("trade_"):
+		return "trade"
+	if modal_name.begins_with("skill_"):
+		return "skills"
 	return ""
 
 
