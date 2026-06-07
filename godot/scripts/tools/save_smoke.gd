@@ -84,10 +84,17 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	clinic_container["blocked_active_quest_ids"] = ["save_smoke_blocked_active"]
 	clinic_container["blocked_completed_quest_ids"] = ["save_smoke_blocked_completed"]
 	simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = clinic_container
-	simulation.execute_interaction(1, {
-		"target_type": "map_object",
-		"target_id": "survivor_outpost_01_interior_door",
+	var transition_topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
+	var transition_result: Dictionary = _submit_and_complete(simulation, registry, {
+		"kind": "interact",
+		"target": {
+			"target_type": "map_object",
+			"target_id": "survivor_outpost_01_interior_door",
+		},
+		"topology": transition_topology,
 	})
+	if not bool(transition_result.get("success", false)):
+		push_error("save smoke scene transition failed: %s" % transition_result.get("reason", "unknown"))
 	simulation.buy_item_from_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.sell_item_to_shop(1, "trader_lao_wang_shop", "1006", 1, registry.get_library("items"))
 	simulation.equip_item(1, "1003", "main_hand", registry.get_library("items"))
@@ -256,6 +263,36 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	simulation.combat_state["next_combat_actor_id"] = active_combat_zombie
 
 
+func _submit_and_complete(simulation: RefCounted, registry: RefCounted, command: Dictionary, max_waits: int = 8) -> Dictionary:
+	var result: Dictionary = simulation.submit_player_command(command)
+	var waits := 0
+	while waits < max_waits and _has_pending(simulation) and not _final_interaction_result(result):
+		waits += 1
+		var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
+		var wait_result: Dictionary = simulation.submit_player_command({
+			"kind": "wait",
+			"topology": topology,
+		})
+		var pending_result: Dictionary = _dictionary_or_empty(wait_result.get("pending_result", {}))
+		result = pending_result if not pending_result.is_empty() else wait_result
+	return result
+
+
+func _has_pending(simulation: RefCounted) -> bool:
+	var snapshot: Dictionary = simulation.snapshot()
+	return not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty()
+
+
+func _final_interaction_result(result: Dictionary) -> bool:
+	if not bool(result.get("success", false)):
+		return true
+	if str(result.get("kind", "")) in ["approach_queued", "move", "wait"]:
+		return false
+	if result.has("target_map_id") or result.has("dialogue_id") or result.has("container") or result.has("item_id") or result.has("defeated"):
+		return true
+	return str(result.get("reason", "")) == "ok"
+
+
 func _register_zombie(simulation: RefCounted, registry: RefCounted) -> int:
 	var record: Dictionary = registry.get_library("characters").get("zombie_walker", {})
 	var data: Dictionary = record.get("data", {})
@@ -313,6 +350,23 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 			errors.append("snapshot field mismatch: %s" % key)
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
 		errors.append("container sessions did not roundtrip")
+	if str(original.get("active_map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("save fixture should snapshot after scene transition to interior")
+	if str(restored.get("active_map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("scene-transition active_map_id did not roundtrip")
+	if str(restored.get("active_entry_point_id", "")) != str(original.get("active_entry_point_id", "")):
+		errors.append("scene-transition active_entry_point_id did not roundtrip")
+	if not _array_or_empty(restored.get("unlocked_locations", [])).has(str(original.get("active_location_id", ""))):
+		errors.append("unlocked_locations should survive scene-transition save roundtrip")
+	if str(_player_actor(restored).get("map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("player actor map_id should roundtrip after scene transition")
+	if JSON.stringify(_dictionary_or_empty(_player_actor(restored).get("grid_position", {}))) != JSON.stringify(_dictionary_or_empty(_player_actor(original).get("grid_position", {}))):
+		errors.append("player scene-transition grid_position did not roundtrip")
+	var transition_payload: Dictionary = _last_event_payload(restored, "scene_transition")
+	if str(transition_payload.get("to_map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("scene_transition event payload should roundtrip target map")
+	if _dictionary_or_empty(transition_payload.get("grid_position", {})).is_empty():
+		errors.append("scene_transition event payload should roundtrip entry grid")
 	var original_combat_state: Dictionary = _dictionary_or_empty(original.get("combat_state", {}))
 	var restored_combat_state: Dictionary = _dictionary_or_empty(restored.get("combat_state", {}))
 	if JSON.stringify(_normalized_combat_state(restored_combat_state)) != JSON.stringify(_normalized_combat_state(original_combat_state)):
@@ -721,6 +775,15 @@ func _has_event(snapshot: Dictionary, kind: String) -> bool:
 		if str(event_data.get("kind", "")) == kind:
 			return true
 	return false
+
+
+func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
+	var events: Array = _array_or_empty(snapshot.get("events", []))
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
 
 
 func _array_or_empty(value: Variant) -> Array:
