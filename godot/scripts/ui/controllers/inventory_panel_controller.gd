@@ -435,6 +435,12 @@ func _inventory_context_option_summaries() -> Array[Dictionary]:
 	return output
 
 
+func close_context_menu() -> void:
+	if _context_menu != null:
+		_context_menu.hide()
+	_context_item = {}
+
+
 func _execute_context_action(action_id: int) -> void:
 	if _context_item.is_empty():
 		return

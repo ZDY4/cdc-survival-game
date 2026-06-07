@@ -339,8 +339,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_ui_layer_stack(errors, game_root, {}, null, _equipment_slot_control(game_root, "main_hand"), "stage:character", true, "character tooltip layer stack")
 	_open_equipment_context_menu(game_root, "main_hand")
 	_assert_equipment_context_menu(errors, game_root, "main_hand", "1002", true, false, false, "main hand equipment context menu")
-	if game_root.character_panel.has_method("close_context_menu"):
-		game_root.character_panel.close_context_menu()
+	_expect_blocker(errors, game_root, "equipment_context_menu", "equipment context menu blocker")
+	_assert_close_priority(errors, game_root, ["equipment_context_menu"], "equipment context menu close priority")
+	_press_key(game_root, KEY_ESCAPE)
+	if bool(_dictionary_or_empty(game_root.context_menu_snapshot()).get("active", false)):
+		errors.append("Esc should close equipment context menu")
+	if not game_root.character_panel.visible:
+		errors.append("closing equipment context menu should keep character panel open")
 	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player_ref == null:
 		errors.append("player actor should exist for equipped ammo display test")
@@ -1602,6 +1607,8 @@ func _expected_blocker_kind(blocker_name: String) -> String:
 		return "stage"
 	if blocker_name.begins_with("modal:"):
 		return "modal"
+	if blocker_name.ends_with("_context_menu"):
+		return "context_menu"
 	match blocker_name:
 		"debug_console":
 			return "debug_console"

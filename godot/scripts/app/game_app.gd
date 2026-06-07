@@ -345,6 +345,9 @@ func gameplay_input_blocker_name() -> String:
 		return panel_modal_name
 	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
 		return "interaction_menu"
+	var context_menu: Dictionary = context_menu_snapshot()
+	if bool(context_menu.get("active", false)):
+		return str(_dictionary_or_empty(context_menu.get("top", {})).get("id", "context_menu"))
 	if _world_action_presenter_blocks_input():
 		return "world_action_presenter"
 	if panel_controller != null and panel_controller.has_method("gameplay_input_blocker_name"):
@@ -373,6 +376,18 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 			"modal_id": "",
 			"panel_id": "hud",
 			"mouse_blocks_world": true,
+		}
+	var context_menu: Dictionary = context_menu_snapshot()
+	if bool(context_menu.get("active", false)):
+		var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
+		return {
+			"blocked": true,
+			"name": str(top_menu.get("id", "context_menu")),
+			"kind": "context_menu",
+			"modal_id": "",
+			"panel_id": str(top_menu.get("owner_panel", "")),
+			"mouse_blocks_world": bool(top_menu.get("mouse_blocks_world", true)),
+			"option_count": int(top_menu.get("option_count", 0)),
 		}
 	if _world_action_presenter_blocks_input():
 		var presenter: Dictionary = world_action_presenter_snapshot()
@@ -461,6 +476,12 @@ func _root_close_priority(panel_priority: Array = []) -> Array[String]:
 		priority.append(modal_name)
 	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
 		priority.append("interaction_menu")
+	var context_menu: Dictionary = context_menu_snapshot()
+	if bool(context_menu.get("active", false)):
+		var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
+		var context_menu_id := str(top_menu.get("id", "context_menu"))
+		if not context_menu_id.is_empty() and not priority.has(context_menu_id):
+			priority.append(context_menu_id)
 	if _world_action_presenter_blocks_input():
 		priority.append("world_action_presenter")
 	if not active_skill_targeting.is_empty():
@@ -1570,6 +1591,9 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
 		hud.hide_interaction_menu()
 		return {"success": true, "closed": "interaction_menu"}
+	var context_menu_close_result: Dictionary = close_active_context_menu()
+	if bool(context_menu_close_result.get("success", false)):
+		return context_menu_close_result
 	if runtime_input_controller != null:
 		runtime_input_controller.clear_selection_state(reason)
 	var dialogue_result := close_active_dialogue(reason)
@@ -1596,6 +1620,44 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 		refresh_all_panels(current_interaction_prompt())
 		return {"success": true, "closed": "", "opened": "settings"}
 	return {"success": false, "reason": "panel_controller_missing"}
+
+
+func close_active_context_menu() -> Dictionary:
+	var snapshot: Dictionary = context_menu_snapshot()
+	if not bool(snapshot.get("active", false)):
+		return {"success": false, "reason": "context_menu_inactive"}
+	var top_menu: Dictionary = _dictionary_or_empty(snapshot.get("top", {}))
+	var owner_panel := str(top_menu.get("owner_panel", ""))
+	var menu_id := str(top_menu.get("id", "context_menu"))
+	var panel := _context_menu_owner_panel(owner_panel)
+	if panel == null or not panel.has_method("close_context_menu"):
+		return {
+			"success": false,
+			"reason": "context_menu_owner_missing",
+			"closed": menu_id,
+			"owner_panel": owner_panel,
+		}
+	panel.call("close_context_menu")
+	return {
+		"success": true,
+		"closed": menu_id,
+		"owner_panel": owner_panel,
+	}
+
+
+func _context_menu_owner_panel(owner_panel: String) -> Node:
+	match owner_panel:
+		"inventory":
+			return inventory_panel
+		"container":
+			return container_panel
+		"trade":
+			return trade_panel
+		"skills":
+			return skills_panel
+		"character":
+			return character_panel
+	return null
 
 
 func _runtime_pending_state_snapshot() -> Dictionary:
