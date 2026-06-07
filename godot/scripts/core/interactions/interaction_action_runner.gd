@@ -101,9 +101,12 @@ func _execute_talk(simulation: RefCounted, actor_id: int, prompt: Dictionary, op
 		return {"success": false, "reason": "dialogue_missing", "prompt": prompt}
 	actor.active_dialogue_id = dialogue_id
 	actor.active_dialogue_node_id = ""
+	actor.active_dialogue_target_actor_id = int(target.get("actor_id", 0))
+	actor.active_dialogue_target_definition_id = str(target_actor.definition_id) if target_actor != null else str(target.get("definition_id", ""))
 	simulation.emit_event("dialogue_started", {
 		"actor_id": actor_id,
 		"target_actor_id": int(target.get("actor_id", 0)),
+		"target_definition_id": actor.active_dialogue_target_definition_id,
 		"dialogue_id": dialogue_id,
 		"requested_dialogue_id": requested_dialogue_id,
 		"dialogue_rule_key": str(dialogue_resolution.get("rule_key", "")),

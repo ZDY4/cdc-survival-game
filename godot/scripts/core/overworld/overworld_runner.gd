@@ -67,6 +67,8 @@ func _clear_runtime_ui_state(simulation: RefCounted, actor: RefCounted, actor_id
 	if not dialogue_id.is_empty():
 		actor.active_dialogue_id = ""
 		actor.active_dialogue_node_id = ""
+		actor.active_dialogue_target_actor_id = 0
+		actor.active_dialogue_target_definition_id = ""
 		simulation.emit_event("dialogue_closed", {
 			"actor_id": actor_id,
 			"dialogue_id": dialogue_id,

@@ -361,6 +361,12 @@ func _turn_in_failure_text(result: Dictionary) -> String:
 			return "目标尚未完成（%d/%d）" % [int(result.get("current", 0)), int(result.get("target", 0))]
 		"not_enough_items":
 			return "物品不足（需要 %d，当前 %d）" % [int(result.get("required", 0)), int(result.get("current", 0))]
+		"turn_in_requires_dialogue":
+			return "需要通过指定对话交付"
+		"turn_in_dialogue_mismatch":
+			return "当前对话不符合交付条件"
+		"turn_in_target_mismatch":
+			return "当前交付对象不符合条件"
 		_:
 			return reason
 

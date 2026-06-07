@@ -366,6 +366,8 @@ func _current_control_actor_snapshot(simulation: RefCounted) -> Dictionary:
 		"turn_open": actor.turn_open,
 		"in_combat": actor.in_combat,
 		"active_dialogue_id": actor.active_dialogue_id,
+		"active_dialogue_target_actor_id": actor.active_dialogue_target_actor_id,
+		"active_dialogue_target_definition_id": actor.active_dialogue_target_definition_id,
 		"active_container_id": actor.active_container_id,
 	}
 

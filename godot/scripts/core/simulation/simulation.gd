@@ -471,8 +471,8 @@ func start_quest(actor_id: int, quest_id: String) -> bool:
 	return _quest_runner.start(self, actor_id, quest_id)
 
 
-func turn_in_quest(actor_id: int, quest_id: String) -> Dictionary:
-	return _quest_runner.turn_in(self, actor_id, quest_id)
+func turn_in_quest(actor_id: int, quest_id: String, context: Dictionary = {}) -> Dictionary:
+	return _quest_runner.turn_in(self, actor_id, quest_id, context)
 
 
 func grant_experience(actor_id: int, amount: int, source: String = "") -> Dictionary:
@@ -759,6 +759,8 @@ func close_dialogue(actor_id: int, reason: String = "closed") -> Dictionary:
 		return {"success": false, "reason": "dialogue_inactive"}
 	actor.active_dialogue_id = ""
 	actor.active_dialogue_node_id = ""
+	actor.active_dialogue_target_actor_id = 0
+	actor.active_dialogue_target_definition_id = ""
 	_emit("dialogue_closed", {
 		"actor_id": actor_id,
 		"dialogue_id": dialogue_id,

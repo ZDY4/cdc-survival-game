@@ -27,7 +27,7 @@ func start(simulation: RefCounted, actor_id: int, quest_id: String) -> bool:
 	return true
 
 
-func turn_in(simulation: RefCounted, actor_id: int, quest_id: String) -> Dictionary:
+func turn_in(simulation: RefCounted, actor_id: int, quest_id: String, context: Dictionary = {}) -> Dictionary:
 	if simulation.actor_registry.get_actor(actor_id) == null:
 		return {"success": false, "reason": "unknown_actor"}
 	if not simulation.active_quests.has(quest_id):
@@ -45,6 +45,11 @@ func turn_in(simulation: RefCounted, actor_id: int, quest_id: String) -> Diction
 		return {"success": false, "reason": "quest_objective_incomplete", "current": current, "target": target_count}
 
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	var turn_in_requirements: Dictionary = _turn_in_requirements(quest_data, objective)
+	var context_check: Dictionary = _validate_turn_in_context(simulation, actor, turn_in_requirements, context)
+	if not bool(context_check.get("success", true)):
+		context_check["quest_id"] = quest_id
+		return context_check
 	var item_id: String = _inventory_entries.normalize_content_id(objective.get("item_id", ""))
 	if not item_id.is_empty():
 		if int(actor.inventory.get(item_id, 0)) < target_count:
@@ -264,6 +269,101 @@ func _advance_kill(simulation: RefCounted, actor_id: int, enemy_definition_id: S
 
 func _quest_data(quest_library: Dictionary, quest_id: String) -> Dictionary:
 	return _quest_index.quest_data(quest_library, quest_id)
+
+
+func _turn_in_requirements(quest_data: Dictionary, objective: Dictionary) -> Dictionary:
+	var source: Dictionary = quest_data.duplicate(true)
+	for key in _dictionary_or_empty(quest_data.get("turn_in", {})).keys():
+		source[key] = _dictionary_or_empty(quest_data.get("turn_in", {})).get(key)
+	for key in objective.keys():
+		var key_text := str(key)
+		if key_text.begins_with("turn_in") or key_text.begins_with("turnIn") or key_text.contains("dialogue") or key_text.contains("target") or key_text == "npc":
+			source[key] = objective.get(key)
+	for key in _dictionary_or_empty(objective.get("turn_in", {})).keys():
+		source[key] = _dictionary_or_empty(objective.get("turn_in", {})).get(key)
+	var target_definition_id := _first_string(source, [
+		"turn_in_target_definition_id",
+		"turn_in_actor_definition_id",
+		"target_definition_id",
+		"targetDefinitionId",
+		"npc_definition_id",
+		"npc",
+	])
+	var target_actor_id := int(source.get("turn_in_actor_id", source.get("target_actor_id", source.get("actor_id", 0))))
+	var dialogue_id := _first_string(source, [
+		"turn_in_dialogue_id",
+		"dialogue_id",
+		"dialogue",
+	])
+	var dialogue_rule_id := _first_string(source, [
+		"turn_in_dialogue_rule_id",
+		"dialogue_rule_id",
+	])
+	var requires_dialogue := bool(source.get("requires_dialogue_turn_in", source.get("turn_in_requires_dialogue", false)))
+	if not target_definition_id.is_empty() or target_actor_id > 0 or not dialogue_id.is_empty() or not dialogue_rule_id.is_empty():
+		requires_dialogue = true
+	return {
+		"requires_dialogue": requires_dialogue,
+		"target_definition_id": target_definition_id,
+		"target_actor_id": target_actor_id,
+		"dialogue_id": dialogue_id,
+		"dialogue_rule_id": dialogue_rule_id,
+	}
+
+
+func _validate_turn_in_context(simulation: RefCounted, actor: RefCounted, requirements: Dictionary, context: Dictionary) -> Dictionary:
+	if not bool(requirements.get("requires_dialogue", false)):
+		return {"success": true}
+	if str(context.get("source", "")) != "dialogue":
+		return _turn_in_context_failure("turn_in_requires_dialogue", requirements, context)
+	var required_dialogue_id := str(requirements.get("dialogue_id", ""))
+	var context_dialogue_id := str(context.get("dialogue_id", ""))
+	if not required_dialogue_id.is_empty() and context_dialogue_id != required_dialogue_id:
+		return _turn_in_context_failure("turn_in_dialogue_mismatch", requirements, context)
+	var required_actor_id := int(requirements.get("target_actor_id", 0))
+	var context_actor_id := int(context.get("target_actor_id", 0))
+	if required_actor_id > 0 and context_actor_id != required_actor_id:
+		return _turn_in_context_failure("turn_in_target_mismatch", requirements, context)
+	var required_definition_id := str(requirements.get("target_definition_id", ""))
+	var context_definition_id := str(context.get("target_definition_id", ""))
+	if required_definition_id.is_empty():
+		return {"success": true}
+	if context_definition_id == required_definition_id:
+		return {"success": true}
+	if context_actor_id > 0:
+		var target_actor: RefCounted = simulation.actor_registry.get_actor(context_actor_id)
+		if target_actor != null and target_actor.definition_id == required_definition_id:
+			return {"success": true}
+	if context_actor_id <= 0 and context_definition_id.is_empty() and actor != null and actor.active_dialogue_target_actor_id > 0:
+		var active_target: RefCounted = simulation.actor_registry.get_actor(actor.active_dialogue_target_actor_id)
+		if active_target != null and active_target.definition_id == required_definition_id:
+			return {"success": true}
+	return _turn_in_context_failure("turn_in_target_mismatch", requirements, context)
+
+
+func _turn_in_context_failure(reason: String, requirements: Dictionary, context: Dictionary) -> Dictionary:
+	return {
+		"success": false,
+		"reason": reason,
+		"required_target_definition_id": str(requirements.get("target_definition_id", "")),
+		"required_target_actor_id": int(requirements.get("target_actor_id", 0)),
+		"required_dialogue_id": str(requirements.get("dialogue_id", "")),
+		"required_dialogue_rule_id": str(requirements.get("dialogue_rule_id", "")),
+		"context_source": str(context.get("source", "")),
+		"context_target_definition_id": str(context.get("target_definition_id", "")),
+		"context_target_actor_id": int(context.get("target_actor_id", 0)),
+		"context_dialogue_id": str(context.get("dialogue_id", "")),
+	}
+
+
+func _first_string(source: Dictionary, keys: Array[String]) -> String:
+	for key in keys:
+		var value := str(source.get(key, "")).strip_edges()
+		if value.ends_with(".0") and value.is_valid_float():
+			value = str(int(float(value)))
+		if not value.is_empty():
+			return value
+	return ""
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

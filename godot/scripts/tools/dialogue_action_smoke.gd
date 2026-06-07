@@ -61,8 +61,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	simulation.active_quests.erase("zombie_hunter")
 
 	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	var doctor: RefCounted = _actor_by_definition(simulation, "doctor_chen")
 	player.active_dialogue_id = "doctor_chen_find_medicine_offer"
 	player.active_dialogue_node_id = ""
+	_set_dialogue_target(player, doctor)
 	game_root.refresh_dialogue_panel()
 	var accept_result: Dictionary = game_root.choose_dialogue_option("accept_job")
 	if not bool(accept_result.get("success", false)):
@@ -77,9 +79,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var find_state: Dictionary = _dictionary_or_empty(simulation.active_quests.get("find_medicine", {})).duplicate(true)
 	find_state["completed_objectives"] = {"step_1": 1}
 	simulation.active_quests["find_medicine"] = find_state
+	var direct_turn_in: Dictionary = simulation.turn_in_quest(1, "find_medicine")
+	if bool(direct_turn_in.get("success", false)) or str(direct_turn_in.get("reason", "")) != "turn_in_requires_dialogue":
+		errors.append("direct dialogue-gated quest turn-in should be rejected: %s" % direct_turn_in)
+	var wrong_dialogue_turn_in: Dictionary = simulation.turn_in_quest(1, "find_medicine", {
+		"source": "dialogue",
+		"dialogue_id": "doctor_chen_find_medicine_active",
+		"target_actor_id": doctor.actor_id if doctor != null else 0,
+		"target_definition_id": "doctor_chen",
+	})
+	if bool(wrong_dialogue_turn_in.get("success", false)) or str(wrong_dialogue_turn_in.get("reason", "")) != "turn_in_dialogue_mismatch":
+		errors.append("wrong dialogue id should reject quest turn-in: %s" % wrong_dialogue_turn_in)
 	player.inventory.erase("1005")
 	player.active_dialogue_id = "doctor_chen_find_medicine_turn_in"
 	player.active_dialogue_node_id = ""
+	_set_dialogue_target(player, doctor)
 	game_root.refresh_dialogue_panel()
 	var failed_turn_in_result: Dictionary = game_root.choose_dialogue_option("turn_in_action")
 	if bool(failed_turn_in_result.get("success", false)):
@@ -99,8 +113,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("failed turn-in should emit dialogue_action_failed")
 
 	player.inventory["1005"] = 1
+	var wrong_target_turn_in: Dictionary = simulation.turn_in_quest(1, "find_medicine", {
+		"source": "dialogue",
+		"dialogue_id": "doctor_chen_find_medicine_turn_in",
+		"target_actor_id": 2,
+		"target_definition_id": "trader_lao_wang",
+	})
+	if bool(wrong_target_turn_in.get("success", false)) or str(wrong_target_turn_in.get("reason", "")) != "turn_in_target_mismatch":
+		errors.append("wrong dialogue target should reject quest turn-in: %s" % wrong_target_turn_in)
 	player.active_dialogue_id = "doctor_chen_find_medicine_turn_in"
 	player.active_dialogue_node_id = "choice_1"
+	_set_dialogue_target(player, doctor)
 	game_root.refresh_dialogue_panel()
 	var turn_in_result: Dictionary = game_root.choose_dialogue_option("turn_in_action")
 	if not bool(turn_in_result.get("success", false)):
@@ -403,3 +426,17 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _actor_by_definition(simulation: RefCounted, definition_id: String) -> RefCounted:
+	for actor in simulation.actor_registry.actors():
+		if actor.definition_id == definition_id:
+			return actor
+	return null
+
+
+func _set_dialogue_target(player: RefCounted, target: RefCounted) -> void:
+	if player == null:
+		return
+	player.active_dialogue_target_actor_id = target.actor_id if target != null else 0
+	player.active_dialogue_target_definition_id = target.definition_id if target != null else ""

@@ -119,6 +119,8 @@ func load_snapshot(records: Array) -> void:
 		record.money = max(0, int(actor_data.get("money", 0)))
 		record.active_dialogue_id = str(actor_data.get("active_dialogue_id", ""))
 		record.active_dialogue_node_id = str(actor_data.get("active_dialogue_node_id", ""))
+		record.active_dialogue_target_actor_id = int(actor_data.get("active_dialogue_target_actor_id", 0))
+		record.active_dialogue_target_definition_id = str(actor_data.get("active_dialogue_target_definition_id", ""))
 		record.active_container_id = str(actor_data.get("active_container_id", ""))
 		var combat: Dictionary = _dictionary_or_empty(actor_data.get("combat", {}))
 		record.max_hp = max(1.0, float(combat.get("max_hp", 1.0)))

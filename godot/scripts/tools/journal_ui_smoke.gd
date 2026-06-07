@@ -121,14 +121,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not _detail_text(game_root).contains("需要完成目标后手动交付"):
 		errors.append("manual quest detail should explain turn-in requirement")
-	if not _detail_text(game_root).contains("交付条件: 手动交付"):
-		errors.append("manual quest detail should expose manual turn-in condition")
-	if not _quest_text(game_root).contains("手动交付"):
-		errors.append("manual quest objective row should expose turn-in condition")
+	if not _detail_text(game_root).contains("对话交付") or not _detail_text(game_root).contains("陈"):
+		errors.append("manual quest detail should expose dialogue turn-in condition")
+	if not _quest_text(game_root).contains("对话交付"):
+		errors.append("manual quest objective row should expose dialogue turn-in condition")
 	var find_medicine_snapshot := _quest_snapshot(game_root, "find_medicine")
 	var turn_in_requirements: Dictionary = _dictionary_or_empty(find_medicine_snapshot.get("turn_in_requirements", {}))
-	if not bool(turn_in_requirements.get("manual_turn_in", false)) or bool(turn_in_requirements.get("requires_dialogue", true)):
-		errors.append("manual quest snapshot should expose plain manual turn-in requirements: %s" % turn_in_requirements)
+	if not bool(turn_in_requirements.get("manual_turn_in", false)) or not bool(turn_in_requirements.get("requires_dialogue", false)):
+		errors.append("manual quest snapshot should expose dialogue turn-in requirements: %s" % turn_in_requirements)
+	if str(turn_in_requirements.get("target_definition_id", "")) != "doctor_chen" or str(turn_in_requirements.get("dialogue_id", "")) != "doctor_chen_find_medicine_turn_in":
+		errors.append("manual quest snapshot should expose real dialogue turn-in target: %s" % turn_in_requirements)
 	await _expect_dialogue_turn_in_snapshot(errors, game_root)
 	if not _quest_text(game_root).contains("技能点 1"):
 		errors.append("journal missing manual quest skill point reward preview")
@@ -154,8 +156,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	_turn_in_button(game_root, "find_medicine").pressed.emit()
 	await process_frame
-	if not _journal_failure_history_text(game_root).contains("医院取药: 物品不足（需要 1，当前 0）"):
-		errors.append("journal should record manual turn-in failure history")
+	if not _journal_failure_history_text(game_root).contains("医院取药: 需要通过指定对话交付"):
+		errors.append("journal should record dialogue-gated direct turn-in failure history")
 	player.inventory["1005"] = 1
 	game_root.refresh_journal_panel()
 	if not _press_quest_title(game_root, "find_medicine"):
@@ -163,22 +165,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	_turn_in_button(game_root, "find_medicine").pressed.emit()
 	await process_frame
-	if not _journal_feedback_text(game_root).contains("已完成 医院取药"):
-		errors.append("journal turn-in should show completion feedback")
-	if not _journal_feedback_text(game_root).contains("技能点 1"):
-		errors.append("journal turn-in should show reward feedback")
-	if _quest_text(game_root).contains("医院取药"):
-		errors.append("manual quest should leave active journal after turn-in")
-	if not _completed_quest_text(game_root).contains("医院取药 | 已完成"):
-		errors.append("manual quest should appear in completed history after turn-in")
-	if not game_root.simulation.snapshot().get("completed_quests", []).has("find_medicine"):
-		errors.append("manual quest should be completed after journal turn-in")
-	if _player_inventory_count(game_root, "1005") != 0:
-		errors.append("journal turn-in should consume quest item")
-	if _player_skill_points(game_root) <= 0:
-		errors.append("journal turn-in should grant skill point reward")
-	if not _event_seen(game_root, "quest_completed"):
-		errors.append("journal turn-in should emit quest_completed")
+	if not _journal_failure_history_text(game_root).contains("医院取药: 需要通过指定对话交付"):
+		errors.append("journal direct turn-in should record dialogue requirement failure")
+	if not _quest_text(game_root).contains("医院取药"):
+		errors.append("dialogue turn-in quest should remain active after direct journal attempt")
+	if game_root.simulation.snapshot().get("completed_quests", []).has("find_medicine"):
+		errors.append("dialogue turn-in quest should not complete from journal button")
+	if _player_inventory_count(game_root, "1005") != 1:
+		errors.append("journal direct turn-in should not consume dialogue turn-in item")
 	return errors
 
 
@@ -202,7 +196,7 @@ func _expect_dialogue_turn_in_snapshot(errors: Array[String], game_root: Node) -
 	var step: Dictionary = _dictionary_or_empty(nodes.get("step_1", {})).duplicate(true)
 	step["requires_dialogue_turn_in"] = true
 	step["target_definition_id"] = "doctor_chen"
-	step["turn_in_dialogue_id"] = "doctor_chen_default"
+	step["turn_in_dialogue_id"] = "doctor_chen_snapshot_probe"
 	nodes["step_1"] = step
 	flow["nodes"] = nodes
 	data["flow"] = flow
@@ -219,12 +213,12 @@ func _expect_dialogue_turn_in_snapshot(errors: Array[String], game_root: Node) -
 		errors.append("dialogue turn-in quest should expose requires_dialogue: %s" % requirements)
 	if str(requirements.get("target_definition_id", "")) != "doctor_chen" or not str(requirements.get("target_name", "")).contains("陈"):
 		errors.append("dialogue turn-in quest should resolve target NPC name: %s" % requirements)
-	if str(requirements.get("dialogue_id", "")) != "doctor_chen_default":
+	if str(requirements.get("dialogue_id", "")) != "doctor_chen_snapshot_probe":
 		errors.append("dialogue turn-in quest should expose dialogue id: %s" % requirements)
 	if not _detail_text(game_root).contains("对话交付") or not _detail_text(game_root).contains("陈"):
 		errors.append("journal detail should display dialogue turn-in target, got %s" % _detail_text(game_root))
 	var button := _turn_in_button(game_root, "find_medicine")
-	if button == null or not button.tooltip_text.contains("对话交付") or not button.tooltip_text.contains("doctor_chen_default"):
+	if button == null or not button.tooltip_text.contains("对话交付") or not button.tooltip_text.contains("doctor_chen_snapshot_probe"):
 		errors.append("turn-in button tooltip should display dialogue turn-in details")
 	quest_library["find_medicine"] = original_record
 	game_root.simulation.quest_library["find_medicine"] = original_record

@@ -21,6 +21,8 @@ var weapon_ammo: Dictionary = {}
 var money: int = 0
 var active_dialogue_id: String = ""
 var active_dialogue_node_id: String = ""
+var active_dialogue_target_actor_id: int = 0
+var active_dialogue_target_definition_id: String = ""
 var active_container_id: String = ""
 var max_hp: float = 1.0
 var hp: float = 1.0
@@ -59,6 +61,8 @@ func to_dictionary() -> Dictionary:
 		"money": money,
 		"active_dialogue_id": active_dialogue_id,
 		"active_dialogue_node_id": active_dialogue_node_id,
+		"active_dialogue_target_actor_id": active_dialogue_target_actor_id,
+		"active_dialogue_target_definition_id": active_dialogue_target_definition_id,
 		"active_container_id": active_container_id,
 		"combat": {
 			"max_hp": max_hp,

@@ -65,6 +65,7 @@ func advance_without_choice(simulation: RefCounted, actor_id: int, dialogue_libr
 	if next_node_id.is_empty():
 		actor.active_dialogue_id = ""
 		actor.active_dialogue_node_id = ""
+		_clear_dialogue_target(actor)
 		simulation.emit_event("dialogue_finished", {
 			"actor_id": actor_id,
 			"dialogue_id": dialogue_id,
@@ -100,6 +101,7 @@ func _active_node_id(actor: RefCounted, dialogue: Dictionary) -> String:
 func _finish_missing_dialogue(simulation: RefCounted, actor_id: int, actor: RefCounted, dialogue_id: String) -> Dictionary:
 	actor.active_dialogue_id = ""
 	actor.active_dialogue_node_id = ""
+	_clear_dialogue_target(actor)
 	simulation.emit_event("dialogue_finished", {
 		"actor_id": actor_id,
 		"dialogue_id": dialogue_id,
@@ -128,7 +130,7 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 			"action":
 				for action in _array_or_empty(node.get("actions", [])):
 					var action_data: Dictionary = _dictionary_or_empty(action)
-					var action_result: Dictionary = _action_runner.apply_action(simulation, actor_id, action_data)
+					var action_result: Dictionary = _action_runner.apply_action(simulation, actor_id, action_data, _dialogue_action_context(dialogue_id, current_node_id, actor))
 					emitted_actions.append(action_result)
 					if not bool(action_result.get("success", false)):
 						var action_type := str(action_result.get("type", action_data.get("type", "")))
@@ -166,6 +168,7 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 				var end_type: String = str(node.get("end_type", "leave"))
 				actor.active_dialogue_id = ""
 				actor.active_dialogue_node_id = ""
+				_clear_dialogue_target(actor)
 				simulation.emit_event("dialogue_finished", {
 					"actor_id": actor_id,
 					"dialogue_id": dialogue_id,
@@ -185,6 +188,7 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 	var actor_dialogue_id: String = str(actor.active_dialogue_id)
 	actor.active_dialogue_id = ""
 	actor.active_dialogue_node_id = ""
+	_clear_dialogue_target(actor)
 	return {
 		"success": true,
 		"dialogue_id": actor_dialogue_id,
@@ -203,3 +207,20 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _dialogue_action_context(dialogue_id: String, node_id: String, actor: RefCounted) -> Dictionary:
+	return {
+		"source": "dialogue",
+		"dialogue_id": dialogue_id,
+		"dialogue_node_id": node_id,
+		"target_actor_id": int(actor.active_dialogue_target_actor_id) if actor != null else 0,
+		"target_definition_id": str(actor.active_dialogue_target_definition_id) if actor != null else "",
+	}
+
+
+func _clear_dialogue_target(actor: RefCounted) -> void:
+	if actor == null:
+		return
+	actor.active_dialogue_target_actor_id = 0
+	actor.active_dialogue_target_definition_id = ""

@@ -29,7 +29,10 @@
 				"description": "从废弃医院带回 1 份急救包",
 				"item_id": 1005,
 				"count": 1,
-				"manual_turn_in": true
+				"manual_turn_in": true,
+				"requires_dialogue_turn_in": true,
+				"target_definition_id": "doctor_chen",
+				"turn_in_dialogue_id": "doctor_chen_find_medicine_turn_in"
 			},
 			"reward_1": {
 				"id": "reward_1",

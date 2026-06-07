@@ -5,7 +5,7 @@ const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.g
 var _inventory_entries := InventoryEntries.new()
 
 
-func apply_action(simulation: RefCounted, actor_id: int, action: Dictionary) -> Dictionary:
+func apply_action(simulation: RefCounted, actor_id: int, action: Dictionary, context: Dictionary = {}) -> Dictionary:
 	var action_type: String = str(action.get("type", action.get("action_type", "")))
 	match action_type:
 		"start_quest":
@@ -20,7 +20,7 @@ func apply_action(simulation: RefCounted, actor_id: int, action: Dictionary) -> 
 			return {"type": action_type, "success": false, "reason": "quest_start_failed", "quest_id": quest_id}
 		"turn_in_quest":
 			var quest_id: String = str(action.get("quest_id", action.get("questId", "")))
-			var result: Dictionary = simulation.turn_in_quest(actor_id, quest_id)
+			var result: Dictionary = simulation.turn_in_quest(actor_id, quest_id, context)
 			result["type"] = action_type
 			result["quest_id"] = quest_id
 			return result

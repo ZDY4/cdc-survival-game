@@ -29,7 +29,10 @@
 				"description": "从废弃工厂控制间带回 1 块稳压器模块",
 				"item_id": 1042,
 				"count": 1,
-				"manual_turn_in": true
+				"manual_turn_in": true,
+				"requires_dialogue_turn_in": true,
+				"target_definition_id": "trader_lao_wang",
+				"turn_in_dialogue_id": "trader_lao_wang_factory_turn_in"
 			},
 			"reward_1": {
 				"id": "reward_1",
