@@ -114,7 +114,7 @@
 - [ ] 音频资产：占位音效、音量设置、事件触发点和缺音频 fallback。
 - [ ] UI 图标资产：inventory、skill、quest、crafting、trade、container、settings、hotbar 所需图标和 fallback。
 - [ ] 缩略图资产：物品、配方、技能、任务、地图地点和存档槽缩略图。
-- [ ] 地图专属资产：每张 `.tscn` 的 asset path、fallback 次数、重复 / 重叠实例、缺 collision、缺 picking 需要在 MapVisual 报告中输出。
+- [~] 地图专属资产：`Scene` smoke 第一版已输出每张 `.tscn` / 默认运行地图的 asset path、fallback 次数、重复 ID、重叠实例和 pickable body 统计；待补缺 collision、scale / origin、shadow、visibility 和更细粒度 MapVisual 报告。
 - [ ] `.bin`、`.import`、`.uid` 守护：glTF 外部 buffer、Godot 导入产物和 resource uid 变化不能破坏 scene 引用。
 - [ ] 根目录 `assets/` 与 `godot/assets/` 职责：若 `godot/assets/` 是运行权威，根目录 `assets/` 只能作为源资产或迁移备份，并需文档化同步规则。
 - [ ] 模型辨识：地图物体不能退化成重叠方块；fallback 必须能看出类别并报告原资源。
@@ -461,7 +461,7 @@
 
 - glTF Godot 导入复核第一版已迁移：`Scene` smoke 会递归扫描 `godot/assets/**/*.gltf` / `.glb`，逐个通过 Godot `ResourceLoader` 加载为 `PackedScene`、实例化、统计 MeshInstance3D / 材质并检查非零可视 bounds；当前覆盖 52 个 glTF、65 个 mesh、65 个材质。待补 scale、rotation、origin、collision、shadow、visibility 和 resource uid 稳定性。
 - 建立 asset id -> Godot resource path 映射表，避免数据里 `builtin:*`、`preview_placeholders/*`、`world_tiles/*` 混用时找不到模型。
-- 地图 scene visual asset 实例化复核第一版已迁移：`Scene` smoke 会扫描 `godot/scenes/maps/*.tscn`，对每个声明 `props.visual` 的对象断言 `Visuals` 容器存在且已实例化子节点，当前覆盖 12 张地图 / 65 个 visual 对象；待补具体模型路径、fallback 类型、重叠检查和资产导入细节。
+- 地图 scene visual asset 实例化复核第二版已迁移：`Scene` smoke 会扫描 `godot/scenes/maps/*.tscn`，对声明或包含地图视觉的对象断言 `Visuals` 容器存在且已实例化子节点，当前覆盖 12 张地图 / 78 个 visual 对象 / 669 个 visual 子节点 / 22 条 Godot 资源路径；同时输出默认运行地图的 asset path、fallback 次数、pickable body、重复 ID 和重叠统计，并对重复 ID、缺视觉子节点和运行时交互视觉缺 `PickableBody` 失败。待补 scale、rotation、origin、collision、shadow、visibility 和 resource uid 细节复核。
 - container / pickup / trigger / door / corpse fallback 表现第一版已迁移：door fallback 已有开合/锁定状态；生成层 map object 在缺少真实 map scene visual 时会按 pickup / container / trigger 生成不同形状、材质和 `fallback_category` meta，容器会显示 `ContainerStateBadge` 并暴露 empty/item/money metadata，且有真实 visual 的对象不会重复叠加 fallback；corpse fallback 已有名称、容器徽标和 loot metadata；已由 `Scene` / `PlayerInteraction` / `ContainerUI` smoke 覆盖。待补真实美术资源替换、重叠检查和声音占位。
 - WGSL 旧 shader 不迁代码，只迁视觉目标：grid ground、tile instancing、building wall、fog post-process 的效果要用 Godot shader / material 实现。
 - 待补音频资产策略：UI 点击、拾取、开门、交易、制作、攻击、受击、死亡、任务完成目前缺声音或占位。
@@ -501,7 +501,7 @@
 - UI toggle smoke：键盘打开/关闭面板、Esc 关闭优先级、菜单阻塞 gameplay 输入。
 - Targeting smoke：进入技能/攻击目标选择、取消、预览、确认。
 - Door 聚合 smoke 第一版已迁移：`tools/agent/test-godot-game.ps1 -Scenario Door` 会顺序运行 `World`、`Scene`、`Movement`、`AI`、`Interaction`、`PlayerInteraction` 和 `Save`，汇总覆盖锁门、开门、自动开门、hover 视觉、fallback 开合表现、阻挡和存档同步；待补更多真实门模型/碰撞/声音表现断言。
-- Map visual smoke 第一版已迁移：`Scene` smoke 会统计默认地图和所有 `godot/scenes/maps/*.tscn` 中声明 `props.visual` 的对象数量，并断言对应 `Visuals` 容器已实例化子节点，输出 `declared_map_visuals` / `instantiated_map_visuals`、`map_scene_count`、`all_map_declared_visuals` / `all_map_instantiated_visuals`；待补对象模型路径、fallback 统计、重叠检查和资产导入细节。
+- Map visual smoke 第二版已迁移：`Scene` smoke 会统计默认地图和所有 `godot/scenes/maps/*.tscn` 中声明或包含地图视觉的对象数量，并断言对应 `Visuals` 容器已实例化子节点；输出 `declared_map_visuals` / `instantiated_map_visuals`、`map_visual_asset_paths`、`map_visual_child_nodes`、`map_visual_fallbacks`、`map_visual_pickable_bodies`、`map_visual_duplicate_ids`、`map_visual_overlaps`、`map_scene_count`、`all_map_declared_visuals` / `all_map_instantiated_visuals`、`all_map_visual_asset_paths` 等诊断；待补 collision、scale / origin、shadow / visibility、UID 稳定性和更细粒度 MapVisual 报告。
 - Asset import smoke 第一版已迁移：`Scene` smoke 已覆盖 glTF 加载、实例化、mesh / material 统计和非零 bounds；待补 scale / origin / collision / shadow / visibility / UID 细节复核。
 
 ## 19. 建议迁移顺序

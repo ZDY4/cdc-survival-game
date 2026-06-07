@@ -28,7 +28,6 @@ func _run() -> void:
 
 	var root := Node3D.new()
 	root.name = "SceneSmokeRoot"
-	root.name = "SceneSmokeRoot"
 	root.add_to_group("scene_smoke_root")
 	root.set_meta("world_result", world_result)
 	get_root().add_child(root)
@@ -74,7 +73,7 @@ func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary,
 		errors.append("expected camera")
 	else:
 		_validate_player_camera_focus(root, errors)
-	_validate_runtime_map_object_fallbacks(root, errors)
+	_validate_runtime_map_object_fallbacks(root, counts, errors)
 	_validate_synthetic_actor_side_badges(errors)
 	_validate_quest_actor_markers(registry, errors)
 	_validate_corpse_world_markers(errors)
@@ -955,11 +954,19 @@ func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, erro
 	if visual_root == null:
 		errors.append("scene smoke should instantiate MapSceneVisuals")
 		return
-	var stats := _declared_visual_stats(visual_root, "runtime MapSceneVisuals", errors)
+	var stats := _declared_visual_stats(visual_root, "runtime MapSceneVisuals", errors, true)
 	var declared_count := int(stats.get("declared", 0))
 	var instantiated_count := int(stats.get("instantiated", 0))
 	counts["declared_map_visuals"] = declared_count
 	counts["instantiated_map_visuals"] = instantiated_count
+	counts["map_visual_child_nodes"] = int(stats.get("visual_children", 0))
+	counts["map_visual_asset_paths"] = _array_or_empty(stats.get("asset_paths", []))
+	counts["map_visual_asset_path_count"] = int(counts["map_visual_asset_paths"].size())
+	counts["map_visual_fallbacks"] = int(stats.get("fallback_visuals", 0))
+	counts["map_visual_pickable_bodies"] = int(stats.get("pickable_bodies", 0))
+	counts["map_visual_missing_pickable_bodies"] = int(stats.get("missing_pickable_bodies", 0))
+	counts["map_visual_duplicate_ids"] = int(stats.get("duplicate_ids", 0))
+	counts["map_visual_overlaps"] = int(stats.get("overlaps", 0))
 	if declared_count <= 0:
 		errors.append("scene smoke expected at least one map object with declared visual props")
 	if instantiated_count != declared_count:
@@ -974,6 +981,12 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 	var map_count := 0
 	var declared_total := 0
 	var instantiated_total := 0
+	var child_total := 0
+	var fallback_total := 0
+	var pickable_total := 0
+	var duplicate_total := 0
+	var overlap_total := 0
+	var asset_paths := {}
 	dir.list_dir_begin()
 	while true:
 		var file_name := dir.get_next()
@@ -994,24 +1007,42 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 		var stats := _declared_visual_stats(scene_root, file_name, errors)
 		declared_total += int(stats.get("declared", 0))
 		instantiated_total += int(stats.get("instantiated", 0))
+		child_total += int(stats.get("visual_children", 0))
+		fallback_total += int(stats.get("fallback_visuals", 0))
+		pickable_total += int(stats.get("pickable_bodies", 0))
+		duplicate_total += int(stats.get("duplicate_ids", 0))
+		overlap_total += int(stats.get("overlaps", 0))
+		for asset_path in _array_or_empty(stats.get("asset_paths", [])):
+			asset_paths[str(asset_path)] = true
 		scene_root.free()
 	dir.list_dir_end()
 	counts["map_scene_count"] = map_count
 	counts["all_map_declared_visuals"] = declared_total
 	counts["all_map_instantiated_visuals"] = instantiated_total
+	counts["all_map_visual_child_nodes"] = child_total
+	counts["all_map_visual_asset_paths"] = _sorted_dictionary_keys(asset_paths)
+	counts["all_map_visual_asset_path_count"] = int(counts["all_map_visual_asset_paths"].size())
+	counts["all_map_visual_fallbacks"] = fallback_total
+	counts["all_map_visual_pickable_bodies"] = pickable_total
+	counts["all_map_visual_duplicate_ids"] = duplicate_total
+	counts["all_map_visual_overlaps"] = overlap_total
 	if map_count <= 0:
 		errors.append("scene smoke expected at least one map scene")
 	if declared_total <= 0:
 		errors.append("scene smoke expected declared visual props across map scenes")
 	if instantiated_total != declared_total:
 		errors.append("all map scene visual instancing mismatch %d/%d" % [instantiated_total, declared_total])
+	if duplicate_total > 0:
+		errors.append("all map scene visual object ids should be unique")
 
 
-func _validate_runtime_map_object_fallbacks(root: Node3D, errors: Array[String]) -> void:
+func _validate_runtime_map_object_fallbacks(root: Node3D, counts: Dictionary, errors: Array[String]) -> void:
 	var visual_backed_marker: Node = root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
 	if visual_backed_marker != null and _map_object_fallback_count(visual_backed_marker) != 0:
 		errors.append("runtime map object with real scene visual should not add duplicate fallback visual")
-	if _map_object_fallback_count(root) <= 0:
+	var runtime_fallback_count := _map_object_fallback_count(root)
+	counts["runtime_map_object_fallbacks"] = runtime_fallback_count
+	if runtime_fallback_count <= 0:
 		errors.append("runtime map objects without real scene visuals should expose fallback visuals")
 	var fallback_root := Node3D.new()
 	fallback_root.name = "SceneSmokeMapObjectFallbackRoot"
@@ -1117,9 +1148,18 @@ func _fallback_visual_world() -> Dictionary:
 	}
 
 
-func _declared_visual_stats(root: Node, label: String, errors: Array[String]) -> Dictionary:
+func _declared_visual_stats(root: Node, label: String, errors: Array[String], require_pickable: bool = false) -> Dictionary:
 	var declared_count := 0
 	var instantiated_count := 0
+	var visual_child_count := 0
+	var fallback_visual_count := 0
+	var pickable_body_count := 0
+	var missing_pickable_body_count := 0
+	var duplicate_id_count := 0
+	var overlap_count := 0
+	var object_ids := {}
+	var anchor_objects := {}
+	var asset_paths := {}
 	var pending: Array[Node] = [root]
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
@@ -1130,22 +1170,100 @@ func _declared_visual_stats(root: Node, label: String, errors: Array[String]) ->
 		var definition: Dictionary = node.call("to_object_definition")
 		var props: Dictionary = _dictionary_or_empty(definition.get("props", {}))
 		var visual_props: Dictionary = _dictionary_or_empty(props.get("visual", {}))
-		if visual_props.is_empty():
+		var visuals_container: Node = node.get_node_or_null("Visuals")
+		var has_visual_children := visuals_container != null and visuals_container.get_child_count() > 0
+		if visual_props.is_empty() and not _props_has_visual_marker(props) and not has_visual_children:
 			continue
 		declared_count += 1
 		var object_id := str(definition.get("object_id", ""))
-		var visuals_container: Node = node.get_node_or_null("Visuals")
+		if object_id.is_empty():
+			errors.append("%s object with map visual has empty object_id" % label)
+		elif bool(object_ids.get(object_id, false)):
+			duplicate_id_count += 1
+			errors.append("%s duplicate map visual object_id %s" % [label, object_id])
+		else:
+			object_ids[object_id] = true
+		var anchor_key := _visual_anchor_key(definition)
+		if not anchor_key.is_empty():
+			if anchor_objects.has(anchor_key):
+				overlap_count += 1
+			else:
+				anchor_objects[anchor_key] = object_id
+		_collect_visual_prop_asset_paths(visual_props, asset_paths)
 		if visuals_container == null:
-			errors.append("%s object %s declares visual props but has no Visuals node" % [label, object_id])
+			errors.append("%s object %s declares or contains map visual but has no Visuals node" % [label, object_id])
 			continue
 		if visuals_container.get_child_count() <= 0:
-			errors.append("%s object %s declares visual props but instantiated no visual children" % [label, object_id])
+			errors.append("%s object %s declares or contains map visual but instantiated no visual children" % [label, object_id])
 			continue
+		visual_child_count += visuals_container.get_child_count()
+		_collect_visual_instance_asset_paths(visuals_container, asset_paths)
+		fallback_visual_count += _map_object_fallback_count(visuals_container)
+		var pickable_body: Node = node.find_child("PickableBody", false, false)
+		if pickable_body != null:
+			pickable_body_count += 1
+		elif require_pickable and node.has_meta("interaction_target"):
+			missing_pickable_body_count += 1
+			errors.append("%s object %s is an active interaction visual but has no PickableBody" % [label, object_id])
 		instantiated_count += 1
 	return {
 		"declared": declared_count,
 		"instantiated": instantiated_count,
+		"visual_children": visual_child_count,
+		"asset_paths": _sorted_dictionary_keys(asset_paths),
+		"fallback_visuals": fallback_visual_count,
+		"pickable_bodies": pickable_body_count,
+		"missing_pickable_bodies": missing_pickable_body_count,
+		"duplicate_ids": duplicate_id_count,
+		"overlaps": overlap_count,
 	}
+
+
+func _props_has_visual_marker(props: Dictionary) -> bool:
+	for key in props.keys():
+		var key_text := str(key)
+		if key_text.ends_with("_visual") or key_text == "visual_asset" or key_text == "model_asset":
+			return true
+		var value: Variant = props.get(key)
+		if typeof(value) == TYPE_DICTIONARY and _props_has_visual_marker(value):
+			return true
+	return false
+
+
+func _visual_anchor_key(definition: Dictionary) -> String:
+	var anchor: Dictionary = _dictionary_or_empty(definition.get("anchor", {}))
+	if anchor.is_empty():
+		return ""
+	var x := int(anchor.get("x", 0))
+	var y := int(anchor.get("y", 0))
+	var z := int(anchor.get("z", 0))
+	return "%d:%d:%d" % [x, y, z]
+
+
+func _collect_visual_prop_asset_paths(visual_props: Dictionary, output: Dictionary) -> void:
+	for key in ["asset_path", "model_path", "model_asset", "scene_path", "path"]:
+		var value := str(visual_props.get(key, "")).strip_edges()
+		if not value.is_empty():
+			output[value] = true
+
+
+func _collect_visual_instance_asset_paths(root: Node, output: Dictionary) -> void:
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		var scene_path := node.scene_file_path.strip_edges()
+		if scene_path.ends_with(".gltf") or scene_path.ends_with(".glb") or scene_path.ends_with(".tscn"):
+			output[scene_path] = true
+		for child in node.get_children():
+			pending.append(child)
+
+
+func _sorted_dictionary_keys(values: Dictionary) -> Array[String]:
+	var keys: Array[String] = []
+	for key in values.keys():
+		keys.append(str(key))
+	keys.sort()
+	return keys
 
 
 func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -> void:
