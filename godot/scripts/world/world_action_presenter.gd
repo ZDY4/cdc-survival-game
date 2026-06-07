@@ -6,6 +6,8 @@ const STEP_DURATION_SEC := 0.07
 
 var sequence: int = 0
 var active_count: int = 0
+var active_refs: Array[WeakRef] = []
+var active_tweens: Array = []
 var latest: Dictionary = {}
 
 
@@ -35,11 +37,37 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 
 
 func snapshot() -> Dictionary:
+	_prune_active_refs()
 	var output := latest.duplicate(true)
 	output["active"] = active_count > 0
 	output["active_count"] = active_count
 	output["sequence"] = sequence
 	return output
+
+
+func finish_active_presentations() -> Dictionary:
+	for tween_value in active_tweens:
+		var tween := tween_value as Tween
+		if tween != null and tween.is_valid():
+			tween.kill()
+	active_tweens.clear()
+	for node_ref in active_refs:
+		var node := node_ref.get_ref() as Node
+		if node == null or node.is_queued_for_deletion():
+			continue
+		if node is Node3D and node.has_meta("action_presenter_final_position"):
+			var final_position: Variant = node.get_meta("action_presenter_final_position")
+			if typeof(final_position) == TYPE_VECTOR3:
+				(node as Node3D).position = final_position
+		node.set_meta("action_presenter_active", false)
+		if str(node.name).begins_with("WorldAction"):
+			node.queue_free()
+	active_refs.clear()
+	active_count = 0
+	latest["active"] = false
+	latest["active_count"] = 0
+	latest["fast_forwarded"] = true
+	return snapshot()
 
 
 func _events_from_result(command_result: Dictionary) -> Array:
@@ -126,7 +154,6 @@ func _start_movement_tween(host: Node, movement: Dictionary) -> void:
 		_record_latest(_presentation_public_snapshot(movement, false))
 		return
 	sequence += 1
-	active_count += 1
 	var run_sequence := sequence
 	var y := actor_node.position.y
 	actor_node.position = _grid_to_world(_dictionary_or_empty(path[0]), y)
@@ -134,7 +161,10 @@ func _start_movement_tween(host: Node, movement: Dictionary) -> void:
 	actor_node.set_meta("action_presenter_kind", "movement")
 	actor_node.set_meta("action_presenter_sequence", run_sequence)
 	actor_node.set_meta("action_presenter_step_count", max(0, path.size() - 1))
+	actor_node.set_meta("action_presenter_final_position", _grid_to_world(_dictionary_or_empty(path[path.size() - 1]), y))
+	_track_active_node(actor_node)
 	var tween := host.create_tween()
+	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_IN_OUT)
 	for index in range(1, path.size()):
@@ -144,10 +174,10 @@ func _start_movement_tween(host: Node, movement: Dictionary) -> void:
 
 
 func _on_movement_tween_finished(run_sequence: int, actor_ref: WeakRef) -> void:
-	active_count = max(0, active_count - 1)
 	var actor_node := actor_ref.get_ref() as Node3D
 	if actor_node != null and not actor_node.is_queued_for_deletion() and int(actor_node.get_meta("action_presenter_sequence", 0)) == run_sequence:
 		actor_node.set_meta("action_presenter_active", false)
+	_prune_active_refs()
 	latest["active"] = active_count > 0
 	latest["active_count"] = active_count
 
@@ -195,7 +225,6 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		_record_latest(_attack_public_snapshot(attack, false, "target_node_missing"))
 		return
 	sequence += 1
-	active_count += 1
 	var marker := MeshInstance3D.new()
 	marker.name = "WorldActionAttackImpact"
 	var mesh := SphereMesh.new()
@@ -215,8 +244,10 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	marker.set_meta("hit_kind", str(attack.get("hit_kind", "")))
 	marker.set_meta("critical", bool(attack.get("critical", false)))
 	marker.set_meta("defeated", bool(attack.get("defeated", false)))
+	_track_active_node(marker)
 	_presentation_layer(world_root).add_child(marker)
 	var tween := host.create_tween()
+	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(marker, "scale", Vector3(1.45, 1.45, 1.45), 0.08)
@@ -228,10 +259,11 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 
 
 func _on_attack_feedback_finished(marker_ref: WeakRef) -> void:
-	active_count = max(0, active_count - 1)
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
+		marker.set_meta("action_presenter_active", false)
 		marker.queue_free()
+	_prune_active_refs()
 	latest["active"] = active_count > 0
 	latest["active_count"] = active_count
 
@@ -283,7 +315,6 @@ func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dict
 		_record_latest(_interaction_public_snapshot(interaction, false, "target_missing"))
 		return
 	sequence += 1
-	active_count += 1
 	var marker := MeshInstance3D.new()
 	marker.name = "WorldActionInteractionPulse"
 	var mesh := CylinderMesh.new()
@@ -307,8 +338,10 @@ func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dict
 	marker.set_meta("target_name", str(interaction.get("target_name", "")))
 	marker.set_meta("target_grid", target_grid.duplicate(true))
 	marker.set_meta("option_kind", str(interaction.get("option_kind", "")))
+	_track_active_node(marker)
 	_presentation_layer(world_root).add_child(marker)
 	var tween := host.create_tween()
+	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(marker, "scale", Vector3(1.35, 1.0, 1.35), 0.08)
@@ -320,10 +353,11 @@ func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dict
 
 
 func _on_interaction_feedback_finished(marker_ref: WeakRef) -> void:
-	active_count = max(0, active_count - 1)
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
+		marker.set_meta("action_presenter_active", false)
 		marker.queue_free()
+	_prune_active_refs()
 	latest["active"] = active_count > 0
 	latest["active_count"] = active_count
 
@@ -422,7 +456,48 @@ func _presentation_public_snapshot(presentation: Dictionary, active: bool) -> Di
 	}
 
 
+func _track_active_node(node: Node) -> void:
+	if node == null:
+		return
+	_prune_active_refs()
+	active_refs.append(weakref(node))
+	active_count = active_refs.size()
+
+
+func _track_active_tween(tween: Tween) -> void:
+	if tween == null:
+		return
+	_prune_active_tweens()
+	active_tweens.append(tween)
+
+
+func _prune_active_refs() -> void:
+	var retained: Array[WeakRef] = []
+	for node_ref in active_refs:
+		var node := node_ref.get_ref() as Node
+		if node == null:
+			continue
+		if node.is_queued_for_deletion():
+			continue
+		if not bool(node.get_meta("action_presenter_active", false)):
+			continue
+		retained.append(node_ref)
+	active_refs = retained
+	active_count = active_refs.size()
+	_prune_active_tweens()
+
+
+func _prune_active_tweens() -> void:
+	var retained: Array = []
+	for tween_value in active_tweens:
+		var tween := tween_value as Tween
+		if tween != null and tween.is_valid() and tween.is_running():
+			retained.append(tween)
+	active_tweens = retained
+
+
 func _record_latest(snapshot_data: Dictionary) -> Dictionary:
+	_prune_active_refs()
 	latest = snapshot_data.duplicate(true)
 	latest["active_count"] = active_count
 	latest["sequence"] = sequence

@@ -260,6 +260,8 @@ func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
 func toggle_stage_panel(panel_id: String) -> Dictionary:
 	if panel_controller == null:
 		return {"success": false, "reason": "panel_controller_missing"}
+	if _world_action_presenter_blocks_input():
+		return _action_presenter_command_rejected("toggle_stage_panel:%s" % panel_id)
 	var result: Dictionary = panel_controller.toggle_stage_panel(panel_id)
 	if bool(result.get("success", false)):
 		refresh_all_panels(current_interaction_prompt())
@@ -590,7 +592,7 @@ func is_observe_mode_enabled() -> bool:
 
 
 func can_issue_player_commands() -> bool:
-	return not observe_mode_enabled
+	return not observe_mode_enabled and not _world_action_presenter_blocks_input()
 
 
 func toggle_observe_mode() -> Dictionary:
@@ -744,6 +746,14 @@ func world_action_presenter_snapshot() -> Dictionary:
 	if world_action_presenter == null:
 		return {"active": false, "kind": "missing"}
 	return _dictionary_or_empty(world_action_presenter.call("snapshot"))
+
+
+func finish_world_action_presentations() -> Dictionary:
+	if world_action_presenter == null or not world_action_presenter.has_method("finish_active_presentations"):
+		return world_action_presenter_snapshot()
+	var result: Dictionary = _dictionary_or_empty(world_action_presenter.call("finish_active_presentations"))
+	refresh_hud(current_interaction_prompt())
+	return result
 
 
 func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
@@ -1184,8 +1194,9 @@ func clear_interaction_selection() -> Dictionary:
 func execute_primary_interaction() -> Dictionary:
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}
-	if not can_issue_player_commands():
-		return _observe_command_rejected("interact")
+	var blocked: Dictionary = _player_command_rejection("interact")
+	if not blocked.is_empty():
+		return blocked
 	var executed_target: Dictionary = interaction_controller.selected_target.duplicate(true)
 	var result: Dictionary = interaction_controller.execute_primary_interaction()
 	_apply_interaction_execution_result(result, executed_target)
@@ -1195,8 +1206,9 @@ func execute_primary_interaction() -> Dictionary:
 func execute_interaction_option(option_id: String) -> Dictionary:
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}
-	if not can_issue_player_commands():
-		return _observe_command_rejected("interact")
+	var blocked: Dictionary = _player_command_rejection("interact")
+	if not blocked.is_empty():
+		return blocked
 	var executed_target: Dictionary = interaction_controller.selected_target.duplicate(true)
 	var result: Dictionary = interaction_controller.execute_selected_option(option_id)
 	_apply_interaction_execution_result(result, executed_target)
@@ -1214,8 +1226,9 @@ func select_grid_target(grid: Dictionary) -> Dictionary:
 func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}
-	if not can_issue_player_commands():
-		return _observe_command_rejected("move")
+	var blocked: Dictionary = _player_command_rejection("move")
+	if not blocked.is_empty():
+		return blocked
 	var result: Dictionary = interaction_controller.execute_move_to_grid(grid)
 	world_result = interaction_controller.world_result
 	_rebuild_world_after_runtime_change(_dictionary_or_empty(result.get("prompt", {})), result)
@@ -1806,6 +1819,8 @@ func bind_player_item_to_hotbar(slot_id: String, item_id: String) -> Dictionary:
 func set_hotbar_group(group_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	if _world_action_presenter_blocks_input():
+		return _action_presenter_command_rejected("set_hotbar_group")
 	if not simulation.has_method("set_active_hotbar_group"):
 		return {"success": false, "reason": "hotbar_group_unsupported"}
 	var result: Dictionary = simulation.set_active_hotbar_group(group_id)
@@ -1829,6 +1844,8 @@ func set_hotbar_group_label(group_id: String, label: String) -> Dictionary:
 func cycle_hotbar_group(direction: int) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	if _world_action_presenter_blocks_input():
+		return _action_presenter_command_rejected("cycle_hotbar_group")
 	if not simulation.has_method("cycle_hotbar_group"):
 		return {"success": false, "reason": "hotbar_group_unsupported"}
 	var result: Dictionary = simulation.cycle_hotbar_group(direction)
@@ -1841,8 +1858,9 @@ func cycle_hotbar_group(direction: int) -> Dictionary:
 func use_hotbar_slot(slot_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	if not can_issue_player_commands():
-		return _observe_command_rejected("hotbar")
+	var blocked: Dictionary = _player_command_rejection("hotbar")
+	if not blocked.is_empty():
+		return blocked
 	var slot: Dictionary = _dictionary_or_empty(_dictionary_or_empty(simulation.snapshot().get("hotbar", {})).get(slot_id, {}))
 	if str(slot.get("kind", "")) == "item":
 		var result: Dictionary = _submit_inventory_action({
@@ -1874,8 +1892,9 @@ func use_hotbar_slot(slot_id: String) -> Dictionary:
 func begin_skill_targeting(slot_id: String, skill_id: String = "") -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	if not can_issue_player_commands():
-		return _observe_command_rejected("use_skill")
+	var blocked: Dictionary = _player_command_rejection("use_skill")
+	if not blocked.is_empty():
+		return blocked
 	var resolved_skill_id := skill_id
 	if resolved_skill_id.is_empty():
 		var slot: Dictionary = _dictionary_or_empty(_dictionary_or_empty(simulation.snapshot().get("hotbar", {})).get(slot_id, {}))
@@ -2243,8 +2262,9 @@ func _present_world_action(command_result: Dictionary) -> void:
 func _submit_inventory_action(action: Dictionary) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	if not can_issue_player_commands():
-		return _observe_command_rejected(str(action.get("action", "inventory_action")))
+	var blocked: Dictionary = _player_command_rejection(str(action.get("action", "inventory_action")))
+	if not blocked.is_empty():
+		return blocked
 	var command: Dictionary = action.duplicate(true)
 	command["kind"] = "inventory_action"
 	command["actor_id"] = 1
@@ -2254,6 +2274,14 @@ func _submit_inventory_action(action: Dictionary) -> Dictionary:
 	return simulation.submit_player_command(command)
 
 
+func _player_command_rejection(action: String) -> Dictionary:
+	if observe_mode_enabled:
+		return _observe_command_rejected(action)
+	if _world_action_presenter_blocks_input():
+		return _action_presenter_command_rejected(action)
+	return {}
+
+
 func _observe_command_rejected(action: String) -> Dictionary:
 	refresh_hud(current_interaction_prompt())
 	return {
@@ -2261,6 +2289,18 @@ func _observe_command_rejected(action: String) -> Dictionary:
 		"reason": "observe_mode_blocks_player_commands",
 		"action": action,
 		"observe_mode": observe_mode_enabled,
+	}
+
+
+func _action_presenter_command_rejected(action: String) -> Dictionary:
+	var blocker: Dictionary = gameplay_input_blocker_snapshot()
+	refresh_hud(current_interaction_prompt())
+	return {
+		"success": false,
+		"reason": "world_action_presenter_blocks_player_commands",
+		"action": action,
+		"blocker": blocker,
+		"action_kind": str(blocker.get("action_kind", "")),
 	}
 
 

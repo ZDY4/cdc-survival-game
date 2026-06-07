@@ -134,7 +134,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("missing runtime camera before mouse ground move")
 	else:
 		await _expect_mouse_left_click_far_ground_starts_moving(errors, game_root, move_camera)
-	_expect_cancel_pending(errors, game_root)
+	await _expect_cancel_pending(errors, game_root)
 
 	var door_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
 	if door_node == null:
@@ -633,14 +633,39 @@ func _expect_world_action_input_blocker(errors: Array[String], game_root: Node, 
 	var control_blocker: Dictionary = _dictionary_or_empty(control_snapshot.get("ui_blocker_snapshot", {}))
 	if str(control_blocker.get("name", "")) != "world_action_presenter":
 		errors.append("runtime control should expose world action presenter blocker snapshot")
+	if game_root.has_method("can_issue_player_commands") and bool(game_root.can_issue_player_commands()):
+		errors.append("world action presenter should make can_issue_player_commands false while active")
+	var hotbar_result: Dictionary = _dictionary_or_empty(game_root.use_hotbar_slot("slot_1") if game_root.has_method("use_hotbar_slot") else {})
+	_expect_world_action_command_rejected(errors, hotbar_result, "hotbar")
+	var group_result: Dictionary = _dictionary_or_empty(game_root.set_hotbar_group("group_2") if game_root.has_method("set_hotbar_group") else {})
+	_expect_world_action_command_rejected(errors, group_result, "set_hotbar_group")
+	var panel_result: Dictionary = _dictionary_or_empty(game_root.toggle_stage_panel("inventory") if game_root.has_method("toggle_stage_panel") else {})
+	_expect_world_action_command_rejected(errors, panel_result, "toggle_stage_panel:inventory")
+	if game_root.has_method("any_stage_panel_open") and bool(game_root.any_stage_panel_open()):
+		errors.append("world action presenter should prevent stage panel shortcut toggles while active")
 
 
-func _wait_for_world_action_presenter_idle(game_root: Node, max_frames: int = 90) -> void:
+func _wait_for_world_action_presenter_idle(game_root: Node, max_frames: int = 720) -> void:
+	if game_root.has_method("finish_world_action_presentations"):
+		game_root.finish_world_action_presentations()
+		await process_frame
 	for _index in range(max_frames):
 		var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
 		if not bool(presenter.get("active", false)):
 			return
 		await process_frame
+
+
+func _expect_world_action_command_rejected(errors: Array[String], result: Dictionary, expected_action: String) -> void:
+	if bool(result.get("success", false)):
+		errors.append("world action presenter should reject %s command while active" % expected_action)
+	if str(result.get("reason", "")) != "world_action_presenter_blocks_player_commands":
+		errors.append("world action presenter command reject reason expected for %s, got %s" % [expected_action, result.get("reason", "")])
+	if str(result.get("action", "")) != expected_action:
+		errors.append("world action presenter command reject action expected %s, got %s" % [expected_action, result.get("action", "")])
+	var blocker: Dictionary = _dictionary_or_empty(result.get("blocker", {}))
+	if str(blocker.get("name", "")) != "world_action_presenter":
+		errors.append("world action presenter command reject should include blocker snapshot for %s" % expected_action)
 
 
 func _expect_attack_marker_hidden(errors: Array[String], game_root: Node) -> void:
@@ -986,6 +1011,7 @@ func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:
 	if not bool(move_result.get("success", false)):
 		errors.append("far grid move should start partial movement before queueing: %s" % move_result.get("reason", "unknown"))
 	var cancel_result: Dictionary = game_root.cancel_pending("smoke_cancel", false)
+	await _wait_for_world_action_presenter_idle(game_root)
 	var snapshot: Dictionary = game_root.simulation.snapshot()
 	if not snapshot.get("pending_movement", {}).is_empty() or not snapshot.get("pending_interaction", {}).is_empty():
 		errors.append("cancel_pending should clear pending movement and interaction")
