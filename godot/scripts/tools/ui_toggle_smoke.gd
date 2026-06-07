@@ -527,6 +527,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var map_overworld_line := _map_overworld_line(game_root)
 	if not map_overworld_line.contains("世界地图: 12.0x11.0") or not map_overworld_line.contains("可见地点 7/11") or not map_overworld_line.contains("当前 幸存者据点01@7,4"):
 		errors.append("map panel should show overworld location overview, got %s" % map_overworld_line)
+	var map_route_line := _map_route_plan_line(game_root)
+	if not map_route_line.contains("路线规划:") or not map_route_line.contains("据点外警戒区: 1步") or not map_route_line.contains("废弃街道B: 2步"):
+		errors.append("map panel should show overworld route plans, got %s" % map_route_line)
 	var map_canvas: Control = game_root.map_panel.find_child("MapCanvas", true, false) as Control
 	if map_canvas == null:
 		errors.append("map panel should expose MapCanvas")
@@ -534,9 +537,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("map canvas should summarize entry points, got %s" % _map_canvas_state_line(game_root))
 	if not _map_canvas_state_line(game_root).contains("world 11"):
 		errors.append("map canvas should summarize overworld locations, got %s" % _map_canvas_state_line(game_root))
+	if not _map_canvas_state_line(game_root).contains("route 10"):
+		errors.append("map canvas should summarize overworld route plans, got %s" % _map_canvas_state_line(game_root))
 	if not _map_canvas_state_line(game_root).contains("icon 11"):
 		errors.append("map canvas should summarize migrated overworld location icons, got %s" % _map_canvas_state_line(game_root))
 	var map_snapshot: Dictionary = MapSnapshot.new(game_root.registry).build(game_root.simulation.snapshot(), game_root.world_result)
+	var hospital_route := _route_plan_for_location(map_snapshot, "hospital")
+	if hospital_route.is_empty() or not bool(hospital_route.get("reachable", false)) or int(hospital_route.get("step_count", 0)) <= 0:
+		errors.append("map snapshot should expose reachable hospital route plan: %s" % hospital_route)
 	var safehouse_icon := _location_icon_asset(map_snapshot, "survivor_outpost_01")
 	if not bool(safehouse_icon.get("ok", false)) or not bool(safehouse_icon.get("exists", false)):
 		errors.append("map snapshot should expose existing Godot location icon asset: %s" % safehouse_icon)
@@ -549,6 +557,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if hospital_button == null:
 		errors.append("map panel should expose unlocked overworld location button for hospital")
 	else:
+		if not hospital_button.tooltip_text.contains("路线:") or not hospital_button.tooltip_text.contains("路径:"):
+			errors.append("hospital overworld button should expose route tooltip, got %s" % hospital_button.tooltip_text)
 		hospital_button.pressed.emit()
 		await process_frame
 		_assert_overworld_prompt_modal(errors, game_root, "hospital", "hospital overworld prompt")
@@ -1976,6 +1986,13 @@ func _map_overworld_line(game_root: Node) -> String:
 	return ""
 
 
+func _map_route_plan_line(game_root: Node) -> String:
+	var label: Node = game_root.map_panel.find_child("RoutePlanLine", true, false)
+	if label is Label:
+		return str((label as Label).text)
+	return ""
+
+
 func _map_canvas_state_line(game_root: Node) -> String:
 	var label: Node = game_root.map_panel.find_child("CanvasStateLine", true, false)
 	if label is Label:
@@ -2274,6 +2291,14 @@ func _location_thumbnail_asset(map_snapshot: Dictionary, location_id: String) ->
 		var location_data: Dictionary = _dictionary_or_empty(location)
 		if str(location_data.get("id", "")) == location_id:
 			return _dictionary_or_empty(location_data.get("thumbnail_asset", {}))
+	return {}
+
+
+func _route_plan_for_location(map_snapshot: Dictionary, location_id: String) -> Dictionary:
+	for plan in _array_or_empty(_dictionary_or_empty(map_snapshot.get("overworld_overview", {})).get("route_plans", [])):
+		var plan_data: Dictionary = _dictionary_or_empty(plan)
+		if str(plan_data.get("to_location_id", "")) == location_id:
+			return plan_data
 	return {}
 
 

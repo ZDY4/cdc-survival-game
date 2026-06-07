@@ -61,6 +61,7 @@ func view_state() -> Dictionary:
 		"entry_count": _entry_points().size(),
 		"overworld_location_count": _overworld_locations().size(),
 		"overworld_icon_count": _overworld_icon_count(),
+		"overworld_route_plan_count": _overworld_route_plans().size(),
 	}
 
 
@@ -146,6 +147,7 @@ func _draw_overworld_overview(canvas_rect: Rect2) -> void:
 		var route_data: Dictionary = _dictionary_or_empty(route)
 		var point := _overworld_grid_to_canvas(_dictionary_or_empty(route_data.get("grid", {})), inset, overview)
 		draw_rect(Rect2(point - Vector2(1.5, 1.5), Vector2(3, 3)), Color(0.42, 0.43, 0.36, 0.72), true)
+	_draw_active_route_plan(inset, overview)
 	for location in locations:
 		var location_data: Dictionary = _dictionary_or_empty(location)
 		var point := _overworld_grid_to_canvas(_dictionary_or_empty(location_data.get("grid", {})), inset, overview)
@@ -162,6 +164,24 @@ func _draw_overworld_overview(canvas_rect: Rect2) -> void:
 			draw_texture_rect(texture, Rect2(point - Vector2(icon_size * 0.5, icon_size * 0.5), Vector2(icon_size, icon_size)), false, Color(1.0, 1.0, 1.0, alpha))
 		if bool(location_data.get("active", false)):
 			draw_circle(point, 8.0, Color(1.0, 0.78, 0.26, 0.28))
+
+
+func _draw_active_route_plan(inset: Rect2, overview: Dictionary) -> void:
+	var plan := _primary_route_plan()
+	if plan.is_empty():
+		return
+	var path := _array_or_empty(plan.get("path", []))
+	if path.size() < 2:
+		return
+	var previous := Vector2.ZERO
+	var has_previous := false
+	for cell in path:
+		var point := _overworld_grid_to_canvas(_dictionary_or_empty(cell), inset, overview)
+		draw_circle(point, 2.6, Color(1.0, 0.68, 0.22, 0.88))
+		if has_previous:
+			draw_line(previous, point, Color(1.0, 0.68, 0.22, 0.9), 2.2)
+		previous = point
+		has_previous = true
 
 
 func _map_rect() -> Rect2:
@@ -190,6 +210,18 @@ func _entry_points() -> Dictionary:
 
 func _overworld_locations() -> Array:
 	return _array_or_empty(_dictionary_or_empty(snapshot.get("overworld_overview", {})).get("locations", []))
+
+
+func _overworld_route_plans() -> Array:
+	return _array_or_empty(_dictionary_or_empty(snapshot.get("overworld_overview", {})).get("route_plans", []))
+
+
+func _primary_route_plan() -> Dictionary:
+	for plan in _overworld_route_plans():
+		var plan_data: Dictionary = _dictionary_or_empty(plan)
+		if bool(plan_data.get("unlocked", false)) and bool(plan_data.get("reachable", false)):
+			return plan_data
+	return {}
 
 
 func _overworld_icon_count() -> int:

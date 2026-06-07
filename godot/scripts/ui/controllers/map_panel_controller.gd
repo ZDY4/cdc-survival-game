@@ -10,6 +10,7 @@ var _counts_label: Label
 var _entry_label: Label
 var _locations_label: Label
 var _overworld_label: Label
+var _route_plan_label: Label
 var _overworld_actions_box: HBoxContainer
 var _tracked_quest_label: Label
 var _tracked_markers_label: Label
@@ -54,6 +55,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		", ".join(_array_of_strings(snapshot.get("unlocked_locations", []))),
 	]
 	_overworld_label.text = _overworld_text(snapshot.get("overworld_overview", {}))
+	_route_plan_label.text = _route_plan_text(snapshot.get("overworld_overview", {}))
 	_refresh_overworld_actions(snapshot.get("overworld_overview", {}))
 	_tracked_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
 	_tracked_markers_label.text = _tracked_markers_text(snapshot.get("tracked_markers", []))
@@ -94,6 +96,7 @@ func _build_layout() -> void:
 	_entry_label = _label("EntryLine")
 	_locations_label = _label("LocationsLine")
 	_overworld_label = _label("OverworldLine")
+	_route_plan_label = _label("RoutePlanLine")
 	_overworld_actions_box = HBoxContainer.new()
 	_overworld_actions_box.name = "OverworldActions"
 	_overworld_actions_box.add_theme_constant_override("separation", 4)
@@ -111,6 +114,7 @@ func _build_layout() -> void:
 	box.add_child(_entry_label)
 	box.add_child(_locations_label)
 	box.add_child(_overworld_label)
+	box.add_child(_route_plan_label)
 	box.add_child(_overworld_actions_box)
 	box.add_child(_tracked_quest_label)
 	box.add_child(_tracked_markers_label)
@@ -196,7 +200,7 @@ func _refresh_overworld_actions(value: Variant) -> void:
 		var button := Button.new()
 		button.name = "OverworldLocation_%s" % str(location_data.get("id", ""))
 		button.text = str(location_data.get("name", location_data.get("id", "")))
-		button.tooltip_text = "前往 %s (%s)" % [str(location_data.get("name", location_data.get("id", ""))), str(location_data.get("id", ""))]
+		button.tooltip_text = _overworld_button_tooltip(location_data, overview)
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
 		button.set_meta("overworld_location_id", str(location_data.get("id", "")))
 		button.set_meta("overworld_location", location_data.duplicate(true))
@@ -282,6 +286,61 @@ func _overworld_text(value: Variant) -> String:
 	]
 
 
+func _route_plan_text(value: Variant) -> String:
+	var overview: Dictionary = _dictionary_or_empty(value)
+	var plans := _array_or_empty(overview.get("route_plans", []))
+	if plans.is_empty():
+		return "路线规划: 无"
+	var parts: Array[String] = []
+	for plan in plans:
+		var plan_data: Dictionary = _dictionary_or_empty(plan)
+		if not bool(plan_data.get("unlocked", false)):
+			continue
+		var summary := str(plan_data.get("summary", ""))
+		if not summary.is_empty():
+			parts.append(summary)
+		if parts.size() >= 3:
+			break
+	if parts.is_empty():
+		return "路线规划: 已解锁目标暂无路线"
+	return "路线规划: %s" % "；".join(parts)
+
+
+func _overworld_button_tooltip(location: Dictionary, overview: Dictionary) -> String:
+	var location_id := str(location.get("id", ""))
+	var base := "前往 %s (%s)" % [str(location.get("name", location_id)), location_id]
+	var plan := _route_plan_for_location(overview, location_id)
+	if plan.is_empty():
+		return base
+	var path: Array = _array_or_empty(plan.get("path", []))
+	if not bool(plan.get("reachable", false)):
+		return "%s\n路线: 无可达道路" % base
+	return "%s\n路线: %d步\n%s" % [
+		base,
+		int(plan.get("step_count", max(0, path.size() - 1))),
+		_route_path_preview(path),
+	]
+
+
+func _route_plan_for_location(overview: Dictionary, location_id: String) -> Dictionary:
+	for plan in _array_or_empty(overview.get("route_plans", [])):
+		var plan_data: Dictionary = _dictionary_or_empty(plan)
+		if str(plan_data.get("to_location_id", "")) == location_id:
+			return plan_data
+	return {}
+
+
+func _route_path_preview(path: Array) -> String:
+	var cells: Array[String] = []
+	for cell in path:
+		var grid: Dictionary = _dictionary_or_empty(cell)
+		cells.append("%d,%d" % [int(grid.get("x", 0)), int(grid.get("z", 0))])
+		if cells.size() >= 6:
+			break
+	var suffix := "..." if path.size() > cells.size() else ""
+	return "路径: %s%s" % [" -> ".join(cells), suffix]
+
+
 func _tracked_markers_text(value: Variant) -> String:
 	var markers := _array_or_empty(value)
 	if markers.is_empty():
@@ -344,13 +403,14 @@ func _canvas_state_text() -> String:
 	if _canvas == null or not _canvas.has_method("view_state"):
 		return "地图画布: 未就绪"
 	var state: Dictionary = _dictionary_or_empty(_canvas.call("view_state"))
-	return "地图画布: zoom %.2f | pan %.0f,%.0f | marker %d | entry %d | world %d | icon %d" % [
+	return "地图画布: zoom %.2f | pan %.0f,%.0f | marker %d | entry %d | world %d | route %d | icon %d" % [
 		float(state.get("zoom", 1.0)),
 		float(_dictionary_or_empty(state.get("pan", {})).get("x", 0.0)),
 		float(_dictionary_or_empty(state.get("pan", {})).get("y", 0.0)),
 		int(state.get("marker_count", 0)),
 		int(state.get("entry_count", 0)),
 		int(state.get("overworld_location_count", 0)),
+		int(state.get("overworld_route_plan_count", 0)),
 		int(state.get("overworld_icon_count", 0)),
 	]
 
