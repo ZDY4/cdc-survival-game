@@ -161,12 +161,12 @@
 
 - 已迁移菜单面板快捷键：`I` 背包、`C` 角色、`M` 地图、`J` 任务、`K` 技能、`L` 制作，已纳入 `UIToggle` smoke。
 - 已迁移同键 toggle / stage panel 替换：打开对应面板、同键关闭、切换到另一个 stage panel 时替换当前 active panel，已纳入 `UIToggle` smoke。
-- 部分迁移 `Esc` 关闭链路：已覆盖 selection、active dialogue、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；panel modal 现在优先于 `WorldActionPresenter` 成为 close / blocker 目标，inventory discard modal 打开前会先完成旧表现队列，避免 stale presenter 抢占 Esc；`WorldActionPresenter` active 时 Esc 会先 `finish_world_action_presentations()`，释放表现 blocker 且保留 pending，下一次 Esc 再按原规则取消 pending；blocker 诊断已新增 `gameplay_input_blocker_snapshot()` 与 `runtime_control.ui_blocker_snapshot`，会暴露 blocked/name/kind/modal_id/panel_id/mouse_blocks_world，并由 `UIToggle` smoke 覆盖；待补 quantity modal 和 overworld prompt。
+- 部分迁移 `Esc` 关闭链路：已覆盖 selection、active dialogue、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；panel modal 现在优先于 `WorldActionPresenter` 成为 close / blocker 目标，inventory discard modal 打开前会先完成旧表现队列，避免 stale presenter 抢占 Esc；`WorldActionPresenter` active 时 Esc 会先 `finish_world_action_presentations()`，释放表现 blocker 且保留 pending，下一次 Esc 再按原规则取消 pending；blocker 诊断已新增 `gameplay_input_blocker_snapshot()`、`runtime_control.ui_blocker_snapshot` 和 `runtime_control.ui_layer_stack`，会暴露 blocker、modal stack、context menu、drag preview、tooltip 的层级、优先级、owner、mouse_blocks_world 和 blocks_gameplay，并由 `UIToggle` smoke 覆盖；待补 quantity modal 和 overworld prompt。
 - 部分迁移数字键：已恢复对话选项 `1-9` 和 hotbar `1-0` 基础入口；observe mode 下数字 hotbar 和 `Alt+1/2/3` 热栏组切换会被输入层消费但不发玩家命令，已纳入 smoke。待补菜单内数量输入与快捷动作冲突处理。
 - 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、self wait interaction、pending 取消、长按重复等待和 observe mode 下播放/暂停第一版；待补更细的长按节奏配置和 modal 冲突策略。
 - 部分迁移 `Tab` / free observe 选择：已恢复玩家侧关注 actor 循环、observe mode 下当前楼层所有 actor focus 循环、observe mode 左键点击 actor 只聚焦不执行玩家命令、相机跟随、actor busy 时阻止玩家控制切换和选中/提示状态清理；observe mode 下 move、interaction、hotbar、inventory item action 会统一返回 `observe_mode_blocks_player_commands`，普通 hotbar 隐藏，已由 `PlayerInteraction` / `UIToggle` smoke 覆盖。待补 free observe 鼠标选择视觉 polish 和更完整诊断。
 - 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
-- 部分迁移输入阻塞：stage/settings、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel 已阻止 gameplay 输入；panel modal blocker 优先级已高于动作表现队列，`close_active_ui()` 会先关闭当前 modal；`WorldActionPresenter` active 时会阻止新的世界点击、hotbar / hotbar group 命令、stage panel 快捷 toggle、背包/交易/装备 inventory action、技能学习/绑定/使用确认和制作命令，并返回 `world_action_presenter_blocks_player_commands`；`gameplay_input_blocker_name`、`gameplay_input_blocker_snapshot()`、`runtime_control.ui_blocker_snapshot`、HUD runtime 行和 F3 debug panel 均有 blocker 诊断第一版，interaction menu 支持点击外部关闭；待补 quantity modal、overworld prompt、tooltip 和 drag 层 blocker 细分。
+- 部分迁移输入阻塞：stage/settings、interaction menu、trade equipment sell confirm modal、inventory discard confirm modal、trade panel、container panel 已阻止 gameplay 输入；panel modal blocker 优先级已高于动作表现队列，`close_active_ui()` 会先关闭当前 modal；`WorldActionPresenter` active 时会阻止新的世界点击、hotbar / hotbar group 命令、stage panel 快捷 toggle、背包/交易/装备 inventory action、技能学习/绑定/使用确认和制作命令，并返回 `world_action_presenter_blocks_player_commands`；`gameplay_input_blocker_name`、`gameplay_input_blocker_snapshot()`、`runtime_control.ui_blocker_snapshot`、`runtime_control.ui_layer_stack`、HUD runtime 行和 F3 debug panel 均有 blocker 诊断第一版；`ui_layer_stack_snapshot()` 已把 interaction menu、drag preview 和 tooltip 纳入统一层级，tooltip 明确为非阻塞层，drag preview 在拖拽期间阻塞世界点击，interaction menu 支持点击外部关闭；待补 quantity modal、overworld prompt 和真实拖拽视觉 polish。
 
 ### 3.2 鼠标和拾取
 
@@ -427,10 +427,10 @@
 ### 13.2 HUD 和 overlay
 
 - 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；combat HUD 当前回合、行动方、敌人数量、参与者数量、目标预览和命中 / 暴击 / 伤害预估第一版已纳入 `UI` / `PlayerInteraction` smoke；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能、progression、任务推进和命令拒绝失败反馈，常见失败 reason 已映射为中文提示，已纳入 `UI` / `Progression` / `Quest` smoke。待补更完整状态行、战斗布局和反馈 toast/过渡表现。
-- 部分迁移 interaction menu：右键位置、目标名称、主动作/可用/禁用摘要、可用选项、禁用选项、禁用原因 tooltip/meta、按钮 hover 详情和 Esc / 外部点击关闭第一版已有；待补更完整视觉布局和上下文菜单 polish。
+- 部分迁移 interaction menu：右键位置、目标名称、主动作/可用/禁用摘要、可用选项、禁用选项、禁用原因 tooltip/meta、按钮 hover 详情、Esc / 外部点击关闭和 `ui_layer_stack_snapshot()` context menu 层级诊断第一版已有；待补更完整视觉布局和上下文菜单 polish。
 - 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、物品数量、slot tooltip、物品使用效果摘要、AP / resource cost、AP / resource / item count insufficient、cooldown 文本/禁用态和冷却遮罩；观察模式 dock 已显示模式、播放、速度、自动推进和楼层状态，Observe / Player、Play、Speed、Auto 按钮已有第一版控制，observe mode 下普通 hotbar 会隐藏。待补更完整 slot tooltip、完整冲突策略和视觉 polish。
-- 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；待迁移 tooltip layer、context menu layer、drag preview layer、overworld prompt layer，以及更统一的 modal layer 表现。
-- 待补 modal / tooltip / context menu / drag preview / overworld prompt 的更细 mouse_filter / blocker 策略；stage/settings/dialogue/trade/container 基础面板根节点与主容器防点击穿透已有第一版。
+- 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；tooltip、context menu 和 drag preview 已接入统一 `ui_layer_stack_snapshot()` 诊断，tooltip 为非阻塞提示层，drag preview 在拖拽期间作为阻塞世界点击的表现层；待迁移 overworld prompt layer，以及更统一的 modal layer 表现。
+- 待补 quantity modal / overworld prompt 的更细 mouse_filter / blocker 策略，以及 tooltip / context menu / drag preview 的视觉 polish；stage/settings/dialogue/trade/container 基础面板根节点与主容器防点击穿透已有第一版。
 
 ### 13.3 面板
 

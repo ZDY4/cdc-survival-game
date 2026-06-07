@@ -303,6 +303,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _equipment_tooltip(game_root, "main_hand").contains("外观: builtin:weapon:dagger"):
 		errors.append("main hand equipment tooltip should show appearance detail")
 	_assert_hover_tooltip_snapshot(errors, game_root, _equipment_slot_control(game_root, "main_hand"), "character", "锋利的匕首", "main hand equipment tooltip snapshot")
+	_assert_ui_layer_stack(errors, game_root, {}, null, _equipment_slot_control(game_root, "main_hand"), "stage:character", true, "character tooltip layer stack")
 	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player_ref == null:
 		errors.append("player actor should exist for equipped ammo display test")
@@ -349,6 +350,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _equipment_model_asset(game_root, "main_hand") != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("main hand equipment model should start as dagger before character panel unequip")
 	game_root.refresh_inventory_panel()
+	var baseball_drag_data := _inventory_drag_data(game_root, "棒球棒")
+	_assert_ui_layer_stack(errors, game_root, baseball_drag_data, _equipment_slot_control(game_root, "main_hand"), null, "drag_preview", true, "inventory drag preview layer stack")
 	var before_drag_equipped := _event_count(game_root, "item_equipped")
 	if not _drop_inventory_item_to_equipment_slot(game_root, "棒球棒", "main_hand"):
 		errors.append("should drag inventory baseball bat to main hand equipment slot")
@@ -534,6 +537,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			if not str(disabled_container_option.tooltip_text).contains("target_not_container"):
 				errors.append("disabled interaction menu option tooltip should include reason")
 		_expect_blocker(errors, game_root, "interaction_menu", "open interaction menu blocker")
+		_assert_ui_layer_stack(errors, game_root, {}, null, null, "interaction_menu", true, "interaction menu layer stack")
 		_press_key(game_root, KEY_ESCAPE)
 		if bool(game_root.hud.is_interaction_menu_open()):
 			errors.append("first Esc should close interaction menu")
@@ -1406,6 +1410,50 @@ func _assert_context_menu_state(errors: Array[String], game_root: Node, expected
 		errors.append("%s: runtime context menu should expose top %s: %s" % [context, expected_id, runtime_context])
 
 
+func _assert_ui_layer_stack(errors: Array[String], game_root: Node, drag_data: Dictionary, drag_target: Control, tooltip_control: Control, expected_top_id: String, expected_blocks_world: bool, context: String) -> void:
+	if not game_root.has_method("ui_layer_stack_snapshot"):
+		errors.append("%s: game root should expose ui_layer_stack_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.ui_layer_stack_snapshot(drag_data, drag_target, tooltip_control))
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: UI layer stack should be active: %s" % [context, snapshot])
+		return
+	if bool(snapshot.get("blocks_world", false)) != expected_blocks_world:
+		errors.append("%s: UI layer blocks_world expected %s, got %s" % [context, expected_blocks_world, snapshot])
+	var top: Dictionary = _dictionary_or_empty(snapshot.get("top", {}))
+	if str(top.get("id", "")) != expected_top_id:
+		errors.append("%s: top UI layer expected %s, got %s" % [context, expected_top_id, snapshot])
+	var top_blocking: Dictionary = _dictionary_or_empty(snapshot.get("top_blocking", {}))
+	if expected_blocks_world and top_blocking.is_empty():
+		errors.append("%s: blocking UI layer should expose top_blocking: %s" % [context, snapshot])
+	if not expected_blocks_world and not top_blocking.is_empty():
+		errors.append("%s: non-blocking UI layer should not expose top_blocking: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_layers: Dictionary = _dictionary_or_empty(runtime.get("ui_layer_stack", {}))
+	if not runtime_layers.has("active") or not runtime_layers.has("layers"):
+		errors.append("%s: runtime control should expose UI layer stack shape: %s" % [context, runtime_layers])
+	if tooltip_control != null:
+		var tooltip_layer: Dictionary = _layer_by_id(_array_or_empty(snapshot.get("layers", [])), "tooltip")
+		if tooltip_layer.is_empty():
+			errors.append("%s: UI layer stack should include tooltip layer: %s" % [context, snapshot])
+		elif bool(tooltip_layer.get("blocks_gameplay", true)) or bool(tooltip_layer.get("mouse_blocks_world", true)):
+			errors.append("%s: tooltip layer should be non-blocking: %s" % [context, tooltip_layer])
+	if not drag_data.is_empty():
+		var drag_layer: Dictionary = _layer_by_id(_array_or_empty(snapshot.get("layers", [])), "drag_preview")
+		if drag_layer.is_empty():
+			errors.append("%s: UI layer stack should include drag preview layer: %s" % [context, snapshot])
+		elif not bool(drag_layer.get("blocks_gameplay", false)) or not bool(drag_layer.get("mouse_blocks_world", false)):
+			errors.append("%s: drag preview layer should block gameplay while dragging: %s" % [context, drag_layer])
+
+
+func _layer_by_id(layers: Array, layer_id: String) -> Dictionary:
+	for layer in layers:
+		var layer_data: Dictionary = _dictionary_or_empty(layer)
+		if str(layer_data.get("id", "")) == layer_id:
+			return layer_data
+	return {}
+
+
 func _expected_blocker_kind(blocker_name: String) -> String:
 	if blocker_name.begins_with("stage:"):
 		return "stage"
@@ -1778,6 +1826,14 @@ func _equipment_tooltip(game_root: Node, slot_id: String) -> String:
 
 func _equipment_slot_control(game_root: Node, slot_id: String) -> Control:
 	return game_root.character_panel.find_child("Equipment_%s" % slot_id, true, false) as Control
+
+
+func _inventory_drag_data(game_root: Node, item_needle: String) -> Dictionary:
+	var source: Button = _inventory_item_button(game_root, item_needle)
+	if source == null or not source.has_meta("inventory_item"):
+		return {}
+	var data: Variant = game_root.inventory_panel.call("_get_inventory_item_drag_data", Vector2.ZERO, source)
+	return _dictionary_or_empty(data)
 
 
 func _assert_hover_tooltip_snapshot(errors: Array[String], game_root: Node, control: Control, expected_owner: String, expected_text: String, context: String) -> void:

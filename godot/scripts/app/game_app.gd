@@ -472,6 +472,87 @@ func drag_state_snapshot(data: Variant = {}, hover_target: Control = null) -> Di
 	}
 
 
+func ui_layer_stack_snapshot(drag_data: Variant = {}, drag_hover_target: Control = null, tooltip_control: Control = null) -> Dictionary:
+	var blocker: Dictionary = gameplay_input_blocker_snapshot()
+	var modal_stack: Dictionary = modal_stack_snapshot()
+	var context_menu: Dictionary = context_menu_snapshot()
+	var drag: Dictionary = drag_state_snapshot(drag_data, drag_hover_target)
+	var tooltip: Dictionary = hover_tooltip_snapshot(tooltip_control)
+	var layers: Array[Dictionary] = []
+	if bool(blocker.get("blocked", false)) and (str(blocker.get("kind", "")) != "context_menu" or not bool(context_menu.get("active", false))):
+		var blocker_kind := str(blocker.get("kind", ""))
+		layers.append({
+			"id": str(blocker.get("name", "")),
+			"kind": blocker_kind,
+			"owner_panel": str(blocker.get("panel_id", "")),
+			"priority": _ui_layer_priority(blocker_kind, str(blocker.get("name", ""))),
+			"mouse_blocks_world": bool(blocker.get("mouse_blocks_world", true)),
+			"blocks_gameplay": true,
+			"source": "blocker",
+		})
+	if bool(drag.get("active", false)):
+		layers.append({
+			"id": "drag_preview",
+			"kind": "drag_preview",
+			"owner_panel": str(_dictionary_or_empty(drag.get("source", {})).get("owner_panel", "")),
+			"priority": _ui_layer_priority("drag_preview", "drag_preview"),
+			"mouse_blocks_world": true,
+			"blocks_gameplay": true,
+			"source": "drag",
+			"preview": _dictionary_or_empty(drag.get("preview", {})).duplicate(true),
+			"target": _dictionary_or_empty(drag.get("target", {})).duplicate(true),
+		})
+	if bool(context_menu.get("active", false)):
+		var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
+		layers.append({
+			"id": str(top_menu.get("id", "context_menu")),
+			"kind": str(top_menu.get("kind", "context_menu")),
+			"owner_panel": str(top_menu.get("owner_panel", "hud")),
+			"priority": _ui_layer_priority("context_menu", str(top_menu.get("id", ""))),
+			"mouse_blocks_world": true,
+			"blocks_gameplay": true,
+			"source": "context_menu",
+			"option_count": int(top_menu.get("option_count", 0)),
+		})
+	if bool(tooltip.get("active", false)):
+		layers.append({
+			"id": "tooltip",
+			"kind": "tooltip",
+			"owner_panel": str(tooltip.get("owner_panel", "")),
+			"priority": _ui_layer_priority("tooltip", "tooltip"),
+			"mouse_blocks_world": false,
+			"blocks_gameplay": false,
+			"source": "tooltip",
+			"text": str(tooltip.get("text", "")),
+		})
+	layers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ap := int(a.get("priority", 0))
+		var bp := int(b.get("priority", 0))
+		if ap == bp:
+			return str(a.get("id", "")) < str(b.get("id", ""))
+		return ap > bp
+	)
+	var top_blocking: Dictionary = {}
+	for layer in layers:
+		var layer_data: Dictionary = _dictionary_or_empty(layer)
+		if bool(layer_data.get("blocks_gameplay", false)) or bool(layer_data.get("mouse_blocks_world", false)):
+			top_blocking = layer_data.duplicate(true)
+			break
+	return {
+		"active": not layers.is_empty(),
+		"count": layers.size(),
+		"blocks_world": not top_blocking.is_empty(),
+		"top": layers[0].duplicate(true) if not layers.is_empty() else {},
+		"top_blocking": top_blocking,
+		"layers": layers,
+		"blocker": blocker,
+		"modal_stack": modal_stack,
+		"context_menu": context_menu,
+		"drag": drag,
+		"tooltip": tooltip,
+	}
+
+
 func handle_trade_shortcut(event: InputEventKey) -> bool:
 	if panel_controller == null:
 		return false
@@ -732,6 +813,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"modal_stack": modal_stack_snapshot(),
 		"menu_state": menu_state_snapshot(),
 		"ui_theme": ui_theme_snapshot(),
+		"ui_layer_stack": ui_layer_stack_snapshot(),
 		"context_menu": context_menu_snapshot(),
 		"controls_hint": controls_hint_snapshot(),
 		"debug_console": debug_console_snapshot(),
@@ -915,6 +997,22 @@ func _owner_panel_for_control(control: Control) -> String:
 				return "settings"
 		current = current.get_parent()
 	return ""
+
+
+func _ui_layer_priority(kind: String, layer_id: String) -> int:
+	if layer_id == "debug_console" or kind == "debug_console":
+		return 1000
+	if kind == "modal" or layer_id.begins_with("modal:"):
+		return 900
+	if kind == "drag_preview":
+		return 800
+	if kind == "context_menu" or layer_id == "interaction_menu":
+		return 700
+	if kind in ["stage", "settings", "panel", "world_action_presenter"]:
+		return 600
+	if kind == "tooltip":
+		return 100
+	return 0
 
 
 func _drag_source_snapshot(drag_data: Dictionary, kind: String) -> Dictionary:
