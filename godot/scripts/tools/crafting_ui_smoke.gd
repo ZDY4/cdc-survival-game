@@ -486,6 +486,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		if not _queue_line(game_root).contains("制作队列 1项/2次") or not _queue_line(game_root).contains("基础绷带 x2"):
 			errors.append("crafting queue should show queued batch bandage")
+		_assert_craft_queue_snapshot(errors, game_root, 1, 2, 2, true, "queued batch bandage")
 		if _player_inventory_count(game_root, "1011") != 4:
 			errors.append("queueing craft should not consume materials")
 		var cancel_button := _cancel_queue_entry_button(game_root, 0)
@@ -496,6 +497,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			await process_frame
 			if not _queue_line(game_root).contains("制作队列 空"):
 				errors.append("cancelling queued craft should empty queue")
+			_assert_craft_queue_snapshot(errors, game_root, 0, 0, 0, false, "cancelled queue item")
 			if _player_inventory_count(game_root, "1011") != 4:
 				errors.append("cancelling queued craft should not consume materials")
 		_queue_button(game_root, "recipe_bandage_basic").pressed.emit()
@@ -509,6 +511,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("crafting panel should show queue execution feedback")
 	if not _queue_line(game_root).contains("制作队列 空"):
 		errors.append("crafting queue should clear after successful execution")
+	_assert_craft_queue_snapshot(errors, game_root, 0, 0, 0, false, "executed queue cleared")
 	if _player_inventory_count(game_root, "1011") != 0:
 		errors.append("queue crafting from panel should consume selected cloth quantity")
 	if _player_inventory_count(game_root, "1006") != 3:
@@ -528,6 +531,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("AP-short craft from UI should create pending crafting: %s" % pending_result)
 	if not _pending_crafting_line(game_root).contains("正在制作 基础绷带 x50"):
 		errors.append("crafting panel should show active pending craft: %s" % _pending_crafting_line(game_root))
+	if not _pending_crafting_line(game_root).contains("%"):
+		errors.append("crafting pending line should show progress percent")
+	_assert_pending_crafting_snapshot(errors, game_root, "recipe_bandage_basic", 50, true, "active pending craft")
 	var cancel_pending_button := _cancel_pending_crafting_button(game_root)
 	if cancel_pending_button == null or cancel_pending_button.disabled:
 		errors.append("crafting panel should expose enabled cancel pending crafting button")
@@ -536,6 +542,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		if not _pending_crafting_line(game_root).contains("正在制作 无"):
 			errors.append("cancelled pending crafting should clear pending line")
+		_assert_pending_crafting_snapshot(errors, game_root, "", 0, false, "cancelled pending craft")
 		if _player_inventory_count(game_root, "1011") != 100:
 			errors.append("cancelling pending crafting should not consume queued materials")
 		if not _event_seen(game_root, "crafting_cancelled"):
@@ -603,6 +610,60 @@ func _queue_line(game_root: Node) -> String:
 	if label == null:
 		return ""
 	return str(label.text)
+
+
+func _assert_craft_queue_snapshot(errors: Array[String], game_root: Node, expected_entries: int, expected_total_count: int, expected_total_output: int, expected_confirm_enabled: bool, context: String) -> void:
+	if not game_root.crafting_panel.has_method("craft_queue_snapshot"):
+		errors.append("%s: crafting panel should expose craft_queue_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.crafting_panel.craft_queue_snapshot())
+	if int(snapshot.get("entry_count", -1)) != expected_entries:
+		errors.append("%s: queue entry count expected %d got %s" % [context, expected_entries, snapshot])
+	if int(snapshot.get("total_count", -1)) != expected_total_count:
+		errors.append("%s: queue total count expected %d got %s" % [context, expected_total_count, snapshot])
+	if int(snapshot.get("total_output_count", -1)) != expected_total_output:
+		errors.append("%s: queue total output expected %d got %s" % [context, expected_total_output, snapshot])
+	if bool(snapshot.get("confirm_enabled", false)) != expected_confirm_enabled:
+		errors.append("%s: queue confirm enabled expected %s got %s" % [context, str(expected_confirm_enabled), snapshot])
+	if expected_entries > 0:
+		var entries: Array = _array_or_empty(snapshot.get("entries", []))
+		var first: Dictionary = _dictionary_or_empty(entries[0] if not entries.is_empty() else {})
+		if str(first.get("recipe_id", "")) != "recipe_bandage_basic":
+			errors.append("%s: queue first recipe should be bandage: %s" % [context, first])
+		if str(first.get("cancel_button_name", "")) != "CancelCraftQueueEntry_0" or not bool(first.get("cancellable", false)):
+			errors.append("%s: queue entry should expose cancel metadata: %s" % [context, first])
+		var outputs: Array = _array_or_empty(snapshot.get("outputs", []))
+		var output_seen := false
+		for output in outputs:
+			var output_data: Dictionary = _dictionary_or_empty(output)
+			if str(output_data.get("item_id", "")) == "1006" and int(output_data.get("count", 0)) == expected_total_output:
+				output_seen = true
+		if not output_seen:
+			errors.append("%s: queue should aggregate bandage output: %s" % [context, outputs])
+
+
+func _assert_pending_crafting_snapshot(errors: Array[String], game_root: Node, expected_recipe_id: String, expected_count: int, expected_active: bool, context: String) -> void:
+	if not game_root.crafting_panel.has_method("craft_queue_snapshot"):
+		errors.append("%s: crafting panel should expose craft_queue_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.crafting_panel.craft_queue_snapshot())
+	var pending: Dictionary = _dictionary_or_empty(snapshot.get("pending", {}))
+	if bool(pending.get("active", false)) != expected_active:
+		errors.append("%s: pending active expected %s got %s" % [context, str(expected_active), pending])
+	if not expected_active:
+		if bool(pending.get("cancel_enabled", false)):
+			errors.append("%s: inactive pending should not expose enabled cancel: %s" % [context, pending])
+		return
+	if str(pending.get("recipe_id", "")) != expected_recipe_id:
+		errors.append("%s: pending recipe expected %s got %s" % [context, expected_recipe_id, pending])
+	if int(pending.get("count", 0)) != expected_count:
+		errors.append("%s: pending count expected %d got %s" % [context, expected_count, pending])
+	if float(pending.get("required_ap", 0.0)) <= 0.0:
+		errors.append("%s: pending should expose required AP: %s" % [context, pending])
+	if float(pending.get("progress_ratio", -1.0)) < 0.0 or float(pending.get("progress_ratio", 2.0)) > 1.0:
+		errors.append("%s: pending progress ratio should be clamped: %s" % [context, pending])
+	if not bool(pending.get("cancel_enabled", false)):
+		errors.append("%s: active pending should expose enabled cancel: %s" % [context, pending])
 
 
 func _confirm_queue_button(game_root: Node) -> Button:

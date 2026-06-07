@@ -887,6 +887,111 @@ func _refresh_queue_view() -> void:
 		_clear_queue_button.disabled = false
 
 
+func craft_queue_snapshot() -> Dictionary:
+	var queued_entries := _craft_queue_summaries()
+	var pending := _pending_crafting_snapshot()
+	return {
+		"active": not queued_entries.is_empty() or bool(pending.get("active", false)),
+		"entry_count": queued_entries.size(),
+		"total_count": _craft_queue_total_count(),
+		"total_output_count": _craft_queue_total_output_count(),
+		"outputs": _craft_queue_output_summaries(),
+		"entries": queued_entries,
+		"pending": pending,
+		"confirm_enabled": _confirm_queue_button != null and not _confirm_queue_button.disabled,
+		"clear_enabled": _clear_queue_button != null and not _clear_queue_button.disabled,
+		"summary": str(_queue_label.text) if _queue_label != null else "",
+		"pending_summary": str(_pending_label.text) if _pending_label != null else "",
+		"feedback": str(_feedback_label.text) if _feedback_label != null else "",
+	}
+
+
+func _craft_queue_summaries() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for index in range(_craft_queue.size()):
+		var entry: Dictionary = _dictionary_or_empty(_craft_queue[index])
+		var count: int = max(1, int(entry.get("count", 1)))
+		var output_count: int = max(1, int(entry.get("output_count", 1)))
+		output.append({
+			"index": index,
+			"recipe_id": str(entry.get("recipe_id", "")),
+			"name": str(entry.get("name", entry.get("recipe_id", ""))),
+			"count": count,
+			"output_item_id": str(entry.get("output_item_id", "")),
+			"output_name": str(entry.get("output_name", entry.get("output_item_id", ""))),
+			"output_count": output_count,
+			"total_output_count": output_count * count,
+			"cancel_button_name": "CancelCraftQueueEntry_%d" % index,
+			"cancellable": true,
+		})
+	return output
+
+
+func _craft_queue_total_count() -> int:
+	var total := 0
+	for entry in _craft_queue:
+		total += max(1, int(_dictionary_or_empty(entry).get("count", 1)))
+	return total
+
+
+func _craft_queue_total_output_count() -> int:
+	var total := 0
+	for entry in _craft_queue:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		total += max(1, int(entry_data.get("count", 1))) * max(1, int(entry_data.get("output_count", 1)))
+	return total
+
+
+func _craft_queue_output_summaries() -> Array[Dictionary]:
+	var by_item: Dictionary = {}
+	for entry in _craft_queue:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var item_id: String = str(entry_data.get("output_item_id", ""))
+		if item_id.is_empty():
+			continue
+		var count: int = max(1, int(entry_data.get("count", 1))) * max(1, int(entry_data.get("output_count", 1)))
+		var existing: Dictionary = _dictionary_or_empty(by_item.get(item_id, {}))
+		if existing.is_empty():
+			existing = {
+				"item_id": item_id,
+				"name": str(entry_data.get("output_name", item_id)),
+				"count": 0,
+			}
+		existing["count"] = int(existing.get("count", 0)) + count
+		by_item[item_id] = existing
+	var output: Array[Dictionary] = []
+	var item_ids: Array = by_item.keys()
+	item_ids.sort()
+	for item_id in item_ids:
+		output.append(_dictionary_or_empty(by_item.get(item_id, {})).duplicate(true))
+	return output
+
+
+func _pending_crafting_snapshot() -> Dictionary:
+	var pending: Dictionary = _dictionary_or_empty(_last_snapshot.get("pending_crafting", {}))
+	if pending.is_empty():
+		return {
+			"active": false,
+			"cancel_enabled": _cancel_pending_button != null and not _cancel_pending_button.disabled,
+		}
+	var recipe_id: String = str(pending.get("recipe_id", ""))
+	var recipe: Dictionary = _recipe_by_id(_last_snapshot.get("recipes", []), recipe_id)
+	var required_ap: float = max(0.0, float(pending.get("required_ap", 0.0)))
+	var progress_ap: float = clampf(float(pending.get("progress_ap", 0.0)), 0.0, required_ap)
+	var remaining_ap: float = max(0.0, float(pending.get("remaining_ap", required_ap - progress_ap)))
+	return {
+		"active": true,
+		"recipe_id": recipe_id,
+		"name": str(recipe.get("name", recipe_id)),
+		"count": max(1, int(pending.get("count", 1))),
+		"progress_ap": progress_ap,
+		"required_ap": required_ap,
+		"remaining_ap": remaining_ap,
+		"progress_ratio": 0.0 if required_ap <= 0.0 else progress_ap / required_ap,
+		"cancel_enabled": _cancel_pending_button != null and not _cancel_pending_button.disabled,
+	}
+
+
 func _refresh_pending_crafting_view() -> void:
 	if _pending_label == null or _cancel_pending_button == null:
 		return
@@ -895,14 +1000,18 @@ func _refresh_pending_crafting_view() -> void:
 		_pending_label.text = "正在制作 无"
 		_cancel_pending_button.disabled = true
 		return
-	var recipe_id := str(pending.get("recipe_id", ""))
+	var recipe_id: String = str(pending.get("recipe_id", ""))
 	var recipe: Dictionary = _recipe_by_id(_last_snapshot.get("recipes", []), recipe_id)
-	var recipe_name := str(recipe.get("name", recipe_id))
-	_pending_label.text = "正在制作 %s x%d | 进度 %.1f/%.1f AP | 剩余 %.1f AP" % [
+	var recipe_name: String = str(recipe.get("name", recipe_id))
+	var required_ap: float = max(0.0, float(pending.get("required_ap", 0.0)))
+	var progress_ap: float = clampf(float(pending.get("progress_ap", 0.0)), 0.0, required_ap)
+	var progress_percent: int = 0 if required_ap <= 0.0 else int(roundf((progress_ap / required_ap) * 100.0))
+	_pending_label.text = "正在制作 %s x%d | 进度 %.1f/%.1f AP (%d%%) | 剩余 %.1f AP" % [
 		recipe_name,
 		max(1, int(pending.get("count", 1))),
-		float(pending.get("progress_ap", 0.0)),
-		float(pending.get("required_ap", 0.0)),
+		progress_ap,
+		required_ap,
+		progress_percent,
 		float(pending.get("remaining_ap", 0.0)),
 	]
 	_cancel_pending_button.disabled = false
