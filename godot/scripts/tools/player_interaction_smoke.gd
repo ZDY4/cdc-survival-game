@@ -44,6 +44,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["fog overlay should use shader material"]
 	if game_root.runtime_input_controller == null:
 		return ["game root did not initialize runtime input controller"]
+	_expect_player_command_authority_audit(errors, game_root)
 	if game_root.find_child("HoverGridCursor", true, false) == null:
 		return ["missing hover grid cursor"]
 	if game_root.find_child("HoverTargetOutline", true, false) == null:
@@ -1638,6 +1639,151 @@ func _expect_player_runtime_marker(errors: Array[String], player_node: Node3D) -
 	var material := marker.material_override as StandardMaterial3D
 	if material == null or not material.no_depth_test:
 		errors.append("player runtime marker should render above crowded map meshes")
+
+
+func _expect_player_command_authority_audit(errors: Array[String], game_root: Node) -> void:
+	if not game_root.has_method("runtime_control_snapshot"):
+		errors.append("game root should expose runtime control snapshot for command audit")
+		return
+	var control_snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var audit: Dictionary = _dictionary_or_empty(control_snapshot.get("player_command_authority_audit", {}))
+	if audit.is_empty():
+		errors.append("runtime control snapshot should expose player_command_authority_audit")
+		return
+	if not bool(audit.get("requires_simulation_authority", false)):
+		errors.append("player command audit should require Simulation authority")
+	if int(audit.get("business_entry_count", 0)) < 30:
+		errors.append("player command audit should cover app-level business entries")
+	if int(audit.get("unknown_authority_count", 0)) != 0:
+		errors.append("player command audit has unknown authority kinds")
+	if int(audit.get("missing_command_kind_count", 0)) != 0:
+		errors.append("player command audit has command entries without command_kind")
+	if int(audit.get("missing_core_service_count", 0)) != 0:
+		errors.append("player command audit has core entries without core_service")
+	var entries: Array = _array_or_empty(audit.get("entries", []))
+	var required_methods := [
+		"execute_primary_interaction",
+		"execute_move_to_grid",
+		"press_space_action",
+		"take_active_container_item",
+		"drop_player_item",
+		"use_player_item",
+		"confirm_active_trade_cart",
+		"equip_player_item",
+		"learn_player_skill",
+		"use_hotbar_slot",
+		"confirm_active_skill_target",
+		"craft_player_recipe",
+		"confirm_crafting_queue",
+		"turn_in_player_quest",
+	]
+	var by_method: Dictionary = {}
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var method_name := str(entry_data.get("app_method", ""))
+		if method_name.is_empty():
+			errors.append("player command audit entry missing app_method")
+			continue
+		if by_method.has(method_name):
+			errors.append("player command audit has duplicate app method %s" % method_name)
+		by_method[method_name] = entry_data
+	for method_name in required_methods:
+		if not by_method.has(method_name):
+			errors.append("player command audit missing required app method %s" % method_name)
+	var submit_count := int(audit.get("submit_player_command_entry_count", 0))
+	var core_count := int(audit.get("core_service_entry_count", 0))
+	var mixed_count := int(audit.get("mixed_entry_count", 0))
+	if submit_count < 20:
+		errors.append("player command audit should classify most gameplay entries as submit_player_command")
+	if core_count < 5:
+		errors.append("player command audit should document allowed Simulation core service entries")
+	if mixed_count < 1:
+		errors.append("player command audit should document mixed wait/dialogue flow")
+	_expect_player_command_authority_source(errors, entries)
+
+
+func _expect_player_command_authority_source(errors: Array[String], entries: Array) -> void:
+	var game_app_source := _read_text_file("res://scripts/app/game_app.gd")
+	var interaction_source := _read_text_file("res://scripts/app/controllers/player_interaction_controller.gd")
+	if game_app_source.is_empty():
+		errors.append("player command audit could not read game_app.gd")
+		return
+	if interaction_source.is_empty():
+		errors.append("player command audit could not read player_interaction_controller.gd")
+		return
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var method_name := str(entry_data.get("app_method", ""))
+		if method_name.is_empty():
+			continue
+		var owner := str(entry_data.get("owner", "GameApp"))
+		var source := interaction_source if owner == "PlayerInteractionController" else game_app_source
+		var body := _method_body(source, method_name)
+		if body.is_empty():
+			errors.append("player command audit source is missing method body for %s.%s" % [owner, method_name])
+			continue
+		var authority_kind := str(entry_data.get("authority_kind", ""))
+		var command_kind := str(entry_data.get("command_kind", ""))
+		var core_service := str(entry_data.get("core_service", ""))
+		match authority_kind:
+			"submit_player_command":
+				if not _body_uses_submit_authority(body, owner):
+					errors.append("player command audit method %s should use submit_player_command authority" % method_name)
+			"submit_player_command_or_ui_state":
+				if not _body_uses_submit_authority(body, owner) and not body.contains("active_skill_targeting"):
+					errors.append("player command audit method %s should use submit authority or only stage UI targeting state" % method_name)
+			"core_service":
+				if not body.contains(_core_service_call_token(core_service)):
+					errors.append("player command audit method %s should call %s" % [method_name, core_service])
+			"mixed":
+				if not _body_uses_submit_authority(body, owner):
+					errors.append("player command audit mixed method %s should include submit_player_command path" % method_name)
+				if not core_service.is_empty() and not body.contains(_core_service_call_token(core_service)):
+					errors.append("player command audit mixed method %s should include %s path" % [method_name, core_service])
+		if (authority_kind == "submit_player_command" or authority_kind == "mixed" or authority_kind == "submit_player_command_or_ui_state") and command_kind.is_empty():
+			errors.append("player command audit submit entry %s should declare command_kind" % method_name)
+
+
+func _body_uses_submit_authority(body: String, owner: String) -> bool:
+	if body.contains("simulation.submit_player_command"):
+		return true
+	if body.contains("_submit_inventory_action"):
+		return true
+	if owner == "PlayerInteractionController" and body.contains("execute_selected_option("):
+		return true
+	if owner == "GameApp" and (body.contains("interaction_controller.execute_primary_interaction") or body.contains("interaction_controller.execute_selected_option") or body.contains("interaction_controller.execute_move_to_grid")):
+		return true
+	return false
+
+
+func _core_service_call_token(core_service: String) -> String:
+	if core_service.begins_with("Simulation."):
+		return "simulation.%s" % core_service.trim_prefix("Simulation.")
+	return core_service
+
+
+func _method_body(source: String, method_name: String) -> String:
+	var marker := "\nfunc %s" % method_name
+	var start := source.find(marker)
+	if start < 0 and source.begins_with("func %s" % method_name):
+		start = 0
+	if start < 0:
+		return ""
+	var next := source.find("\nfunc ", start + marker.length())
+	if next < 0:
+		next = source.length()
+	return source.substr(start, next - start)
+
+
+func _read_text_file(path: String) -> String:
+	if not FileAccess.file_exists(path):
+		return ""
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return ""
+	var text := file.get_as_text()
+	file.close()
+	return text
 
 
 func _array_or_empty(value: Variant) -> Array:
