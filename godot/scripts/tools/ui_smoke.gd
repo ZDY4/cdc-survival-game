@@ -157,31 +157,42 @@ func _validate_reason_catalog() -> Array[String]:
 	var catalog := ReasonCatalog.new()
 	var snapshot: Dictionary = catalog.catalog_snapshot()
 	var counts: Dictionary = _dictionary_or_empty(snapshot.get("category_counts", {}))
+	var metadata_coverage: Dictionary = _dictionary_or_empty(snapshot.get("metadata_coverage", {}))
 	if int(snapshot.get("reason_count", 0)) < 50:
 		errors.append("reason catalog should cover cross-system failure reasons: %s" % snapshot)
 	for category in ["system", "ui", "movement", "interaction", "combat", "crafting", "container", "trade", "skill", "door", "transition"]:
 		if int(counts.get(category, 0)) <= 0:
 			errors.append("reason catalog should include category %s: %s" % [category, snapshot])
+	for key in ["missing_source_module", "missing_payload_fields", "missing_disabled_text", "missing_remediation"]:
+		if int(metadata_coverage.get(key, -1)) != 0:
+			errors.append("reason catalog should include metadata for every known reason: %s" % metadata_coverage)
 	var expectations := {
-		"unknown_player_command": ["system", "未知命令"],
-		"ui_modal_blocks_player_commands": ["ui", "界面确认中"],
-		"path_unreachable": ["movement", "无法到达"],
-		"target_not_hostile": ["combat", "不能攻击友方"],
-		"materials_insufficient": ["crafting", "材料不足"],
-		"container_inventory_insufficient": ["container", "容器物品不足"],
-		"player_money_insufficient": ["trade", "玩家资金不足"],
-		"skill_on_cooldown": ["skill", "技能冷却中"],
+		"unknown_player_command": ["system", "未知命令", "known_kinds", "未知操作"],
+		"ui_modal_blocks_player_commands": ["ui", "界面确认中", "modal_id", "先处理当前弹窗"],
+		"path_unreachable": ["movement", "无法到达", "visited_cell_count", "没有可达路径"],
+		"target_not_hostile": ["combat", "不能攻击友方", "relationship", "不能攻击友方"],
+		"materials_insufficient": ["crafting", "材料不足", "missing_materials", "材料不足"],
+		"container_inventory_insufficient": ["container", "容器物品不足", "available", "容器数量不足"],
+		"player_money_insufficient": ["trade", "玩家资金不足", "player_money", "资金不足"],
+		"skill_on_cooldown": ["skill", "技能冷却中", "cooldown_remaining", "技能冷却中"],
 	}
 	for reason in expectations.keys():
 		var expected: Array = expectations[reason]
 		var entry: Dictionary = catalog.entry_for(reason)
+		var payload_fields: Array = _array_or_empty(entry.get("payload_fields", []))
 		if not bool(entry.get("known", false)) \
 				or str(entry.get("category", "")) != str(expected[0]) \
-				or not str(entry.get("text", "")).contains(str(expected[1])):
+				or not str(entry.get("text", "")).contains(str(expected[1])) \
+				or not payload_fields.has(str(expected[2])) \
+				or not str(entry.get("disabled_text", "")).contains(str(expected[3])) \
+				or str(entry.get("source_module", "")).is_empty() \
+				or str(entry.get("remediation", "")).is_empty():
 			errors.append("reason catalog entry mismatch for %s: %s" % [reason, entry])
 	var unknown: Dictionary = catalog.entry_for("smoke_unknown_reason")
 	if bool(unknown.get("known", true)) or str(unknown.get("text", "")) != "smoke_unknown_reason":
 		errors.append("reason catalog should preserve unknown reason text: %s" % unknown)
+	if catalog.disabled_text_for("smoke_unknown_reason") != "smoke_unknown_reason":
+		errors.append("reason catalog should preserve unknown disabled text: %s" % catalog.disabled_text_for("smoke_unknown_reason"))
 	return errors
 
 

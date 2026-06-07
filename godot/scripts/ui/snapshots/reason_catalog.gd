@@ -73,6 +73,152 @@ const REASONS := {
 	"skill_target_grid_occupied": {"category": "skill", "text": "技能目标格被占用"},
 }
 
+const CATEGORY_METADATA := {
+	"system": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd::submit_player_command",
+		"payload_fields": ["kind", "reason", "command"],
+		"disabled_text": "命令暂不可用",
+		"remediation": "检查提交的 command kind 和 app 层入口映射。",
+	},
+	"ui": {
+		"source_module": "godot/scripts/app/game_app.gd modal blocker",
+		"payload_fields": ["action", "modal_id", "blocker_snapshot"],
+		"disabled_text": "先关闭当前确认窗口",
+		"remediation": "检查 UI layer stack 和 active modal blocker。",
+	},
+	"actor": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd actor lookup",
+		"payload_fields": ["actor_id", "reason"],
+		"disabled_text": "角色不可用",
+		"remediation": "确认 actor 已注册且玩家命令只由 player actor 发起。",
+	},
+	"turn": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd turn state",
+		"payload_fields": ["actor_id", "turn_state", "round"],
+		"disabled_text": "当前不是可行动回合",
+		"remediation": "检查 turn_state、AP 和 pending action 是否已推进。",
+	},
+	"interaction": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd interaction query",
+		"payload_fields": ["target_type", "target_id", "option_id"],
+		"disabled_text": "无法互动",
+		"remediation": "检查 interaction prompt、目标距离、可见性和目标类型。",
+	},
+	"targeting": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd target validation",
+		"payload_fields": ["target_type", "target_id", "target_actor_id"],
+		"disabled_text": "目标不符合要求",
+		"remediation": "检查 hover / selection 转换出的 InteractionTarget。",
+	},
+	"combat": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd combat runner",
+		"payload_fields": ["actor_id", "target_actor_id", "weapon_id"],
+		"disabled_text": "不能攻击该目标",
+		"remediation": "检查敌对关系、目标状态、武器、射程和弹药。",
+	},
+	"vision": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd visibility check",
+		"payload_fields": ["actor_id", "target_grid", "visible_cells"],
+		"disabled_text": "目标不可见",
+		"remediation": "检查 active vision、雾战刷新和 LOS 阻挡。",
+	},
+	"spatial": {
+		"source_module": "godot/scripts/core/grid and movement topology",
+		"payload_fields": ["grid", "target_grid", "level"],
+		"disabled_text": "位置不符合要求",
+		"remediation": "检查楼层、距离、footprint 和目标坐标。",
+	},
+	"movement": {
+		"source_module": "godot/scripts/core/movement and pathfinder",
+		"payload_fields": ["grid", "goal", "path", "blocker"],
+		"disabled_text": "无法移动到这里",
+		"remediation": "检查目标格阻挡、占用、边界、楼层和路径可达性。",
+	},
+	"ap": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd AP spending",
+		"payload_fields": ["actor_id", "ap_cost", "ap_available", "pending"],
+		"disabled_text": "AP 不足",
+		"remediation": "检查 AP 消耗、pending 行动和自动推进回合策略。",
+	},
+	"crafting": {
+		"source_module": "godot/scripts/core/crafting and recipe runner",
+		"payload_fields": ["recipe_id", "materials", "tools", "station_id"],
+		"disabled_text": "暂不能制作",
+		"remediation": "检查材料、工具、技能、配方解锁和工作台权限。",
+	},
+	"skill": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd skill runner",
+		"payload_fields": ["skill_id", "actor_id", "target", "resource_costs"],
+		"disabled_text": "技能暂不可用",
+		"remediation": "检查学习状态、冷却、资源、目标策略和技能 LOS。",
+	},
+	"inventory": {
+		"source_module": "godot/scripts/core/economy inventory services",
+		"payload_fields": ["item_id", "count", "slot_id", "inventory"],
+		"disabled_text": "背包操作不可用",
+		"remediation": "检查数量、堆叠、负重、关键物品和装备状态。",
+	},
+	"container": {
+		"source_module": "godot/scripts/core/economy container runner",
+		"payload_fields": ["container_id", "item_id", "count", "session"],
+		"disabled_text": "容器操作不可用",
+		"remediation": "检查容器会话、权限、锁、容量和物品数量。",
+	},
+	"door": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd door interaction",
+		"payload_fields": ["target_id", "door_id", "key_item_id", "tool_id"],
+		"disabled_text": "门无法打开",
+		"remediation": "检查锁定状态、钥匙、工具和 world flag 条件。",
+	},
+	"transition": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd scene transition",
+		"payload_fields": ["target_id", "location_id", "entry_id", "world_flags"],
+		"disabled_text": "无法进入",
+		"remediation": "检查地点解锁、入口、world flag 和 active map 状态。",
+	},
+	"trade": {
+		"source_module": "godot/scripts/core/economy trade runner",
+		"payload_fields": ["shop_id", "item_id", "count", "price"],
+		"disabled_text": "交易不可用",
+		"remediation": "检查买卖方向、库存、资金、价格和出售权限。",
+	},
+}
+
+const REASON_METADATA := {
+	"unknown_player_command": {
+		"payload_fields": ["kind", "command", "known_kinds"],
+		"disabled_text": "未知操作",
+	},
+	"ui_modal_blocks_player_commands": {
+		"payload_fields": ["action", "modal_id", "blocker_snapshot"],
+		"disabled_text": "先处理当前弹窗",
+	},
+	"path_unreachable": {
+		"payload_fields": ["grid", "goal", "visited_cell_count"],
+		"disabled_text": "没有可达路径",
+	},
+	"target_not_hostile": {
+		"payload_fields": ["actor_id", "target_actor_id", "relationship"],
+		"disabled_text": "不能攻击友方或中立目标",
+	},
+	"materials_insufficient": {
+		"payload_fields": ["recipe_id", "missing_materials", "inventory"],
+		"disabled_text": "材料不足",
+	},
+	"container_inventory_insufficient": {
+		"payload_fields": ["container_id", "item_id", "count", "available"],
+		"disabled_text": "容器数量不足",
+	},
+	"player_money_insufficient": {
+		"payload_fields": ["shop_id", "price", "player_money"],
+		"disabled_text": "资金不足",
+	},
+	"skill_on_cooldown": {
+		"payload_fields": ["skill_id", "cooldown_remaining", "actor_id"],
+		"disabled_text": "技能冷却中",
+	},
+}
+
 
 func text_for(reason: String) -> String:
 	if reason.is_empty():
@@ -81,17 +227,28 @@ func text_for(reason: String) -> String:
 	return str(entry.get("text", reason))
 
 
+func disabled_text_for(reason: String) -> String:
+	return str(entry_for(reason).get("disabled_text", text_for(reason)))
+
+
 func entry_for(reason: String) -> Dictionary:
 	if REASONS.has(reason):
 		var entry: Dictionary = _dictionary_or_empty(REASONS.get(reason, {})).duplicate(true)
+		_apply_metadata(entry)
 		entry["reason"] = reason
 		entry["known"] = true
+		var reason_metadata: Dictionary = _dictionary_or_empty(REASON_METADATA.get(reason, {}))
+		_merge_metadata(entry, reason_metadata)
 		return entry
 	return {
 		"reason": reason,
 		"known": false,
 		"category": "unknown",
 		"text": text_for(reason),
+		"source_module": "",
+		"payload_fields": [],
+		"disabled_text": text_for(reason),
+		"remediation": "",
 	}
 
 
@@ -111,8 +268,50 @@ func catalog_snapshot() -> Dictionary:
 	return {
 		"reason_count": reasons.size(),
 		"category_counts": category_counts(),
+		"metadata_coverage": metadata_coverage(),
 		"reasons": reasons,
 	}
+
+
+func metadata_coverage() -> Dictionary:
+	var missing_source := 0
+	var missing_payload := 0
+	var missing_disabled_text := 0
+	var missing_remediation := 0
+	for reason in REASONS.keys():
+		var entry := entry_for(str(reason))
+		if str(entry.get("source_module", "")).is_empty():
+			missing_source += 1
+		if _array_or_empty(entry.get("payload_fields", [])).is_empty():
+			missing_payload += 1
+		if str(entry.get("disabled_text", "")).is_empty():
+			missing_disabled_text += 1
+		if str(entry.get("remediation", "")).is_empty():
+			missing_remediation += 1
+	return {
+		"reason_count": REASONS.keys().size(),
+		"missing_source_module": missing_source,
+		"missing_payload_fields": missing_payload,
+		"missing_disabled_text": missing_disabled_text,
+		"missing_remediation": missing_remediation,
+	}
+
+
+func _apply_metadata(entry: Dictionary) -> void:
+	var category := str(entry.get("category", "unknown"))
+	var metadata: Dictionary = _dictionary_or_empty(CATEGORY_METADATA.get(category, {}))
+	_merge_metadata(entry, metadata)
+
+
+func _merge_metadata(entry: Dictionary, metadata: Dictionary) -> void:
+	for key in metadata.keys():
+		entry[key] = metadata[key]
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

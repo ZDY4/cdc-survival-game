@@ -19,13 +19,28 @@
 - `crafting` / `skill`：制作、工作台、技能、资源和技能目标失败。
 - `door` / `transition`：门和地图 / 地点切换失败。
 
+## 元数据字段
+
+每个已知 reason 都会通过分类默认值和单项覆盖合并出以下诊断字段：
+
+- `category`：reason 所属系统分类。
+- `text`：HUD / toast 可直接展示的中文失败文案。
+- `source_module`：当前最主要的 Godot 来源模块或入口，不代表唯一调用点。
+- `payload_fields`：事件、命令返回或 snapshot 中常见的排查字段。
+- `disabled_text`：按钮、菜单项或快捷栏禁用态可使用的短文案。
+- `remediation`：agent / 调试面板阅读时的排查方向。
+
+这些字段只描述已经发生的失败结果；UI 不应通过 catalog 自行决定按钮是否可用。
+
 ## 验收方式
 
 - `UIToggle` / `UI` 等 smoke 继续验证实际 HUD 文案。
 - `UI` smoke 会校验 `ReasonCatalog.catalog_snapshot()` 至少覆盖主要跨系统分类，并抽查代表 reason：
   `unknown_player_command`、`ui_modal_blocks_player_commands`、`path_unreachable`、`target_not_hostile`、`materials_insufficient`、`container_inventory_insufficient`、`player_money_insufficient`、`skill_on_cooldown`。
+- `UI` smoke 会校验所有已知 reason 都具备 `source_module`、`payload_fields`、`disabled_text` 和 `remediation`，并抽查关键 reason 的 payload 字段与禁用态文案。
 
 ## 后续缺口
 
 - 继续把尚未进入 HUD 的容器权限、任务交付、AI、保存 / 加载和地图资源失败 reason 纳入目录。
-- 给每个 reason 补来源模块、典型 payload 字段、UI 禁用态文案和建议修复动作。
+- 将更多面板禁用态 tooltip 统一切到 `disabled_text_for()`。
+- 给任务、AI、保存 / 加载和地图资产失败补更细 reason，而不是继续复用笼统失败码。
