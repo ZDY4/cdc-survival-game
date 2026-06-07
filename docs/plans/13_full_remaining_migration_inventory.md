@@ -483,7 +483,7 @@
 
 ### 18.1 现有 smoke 需扩展
 
-- `Movement`：补对角、禁止穿角、跨层楼梯、自动开门、取消策略、长路径跨回合。
+- `Movement`：对角移动和禁止穿角第一版已迁移：`Pathfinder` 支持八方向邻居但对角步会检查两侧正交格，避免穿过地图阻挡或 actor 占用夹角，并由 `Movement` smoke 覆盖开放对角一步路径与双边阻挡不可达。待补跨层楼梯、取消策略和长路径跨回合更多细节。
 - `PlayerInteraction`：UI blocker、右键菜单关闭、hover prompt、actor/object/grid 优先级和不可见目标已有第一版覆盖；中立 actor hover/category/menu 已补首轮 smoke，攻击预览只在主动作是 `attack` 时出现；待补更多复杂重叠目标和视觉 polish。
 - `Combat`：补 LOS、跨层、AOE、友军伤害、战斗退出 decay / 强制退出 / 跨地图退出 / 玩家死亡退出、远程弹药/reload、暴击 seed。
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。

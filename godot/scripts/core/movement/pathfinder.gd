@@ -9,6 +9,13 @@ const CARDINAL_OFFSETS := [
 	Vector2i(0, -1),
 ]
 
+const DIAGONAL_OFFSETS := [
+	Vector2i(1, 1),
+	Vector2i(1, -1),
+	Vector2i(-1, 1),
+	Vector2i(-1, -1),
+]
+
 
 func find_path(start: RefCounted, goal: RefCounted, topology: Dictionary, occupied_actor_cells: Dictionary = {}) -> Dictionary:
 	var started_usec: int = Time.get_ticks_usec()
@@ -92,13 +99,27 @@ func _finish(result: Dictionary, started_usec: int) -> Dictionary:
 func _neighbors(coord: RefCounted, topology: Dictionary, occupied_actor_cells: Dictionary, start_key: String) -> Array[RefCounted]:
 	var output: Array[RefCounted] = []
 	for offset in CARDINAL_OFFSETS:
-		var next := GridCoord.new(coord.x + offset.x, coord.y, coord.z + offset.y)
-		if not _within_bounds(next, topology):
-			continue
-		if _blocked(next, topology, occupied_actor_cells, start_key):
-			continue
-		output.append(next)
+		_append_neighbor(output, coord, offset, topology, occupied_actor_cells, start_key)
+	for offset in DIAGONAL_OFFSETS:
+		_append_neighbor(output, coord, offset, topology, occupied_actor_cells, start_key)
 	return output
+
+
+func _append_neighbor(output: Array[RefCounted], coord: RefCounted, offset: Vector2i, topology: Dictionary, occupied_actor_cells: Dictionary, start_key: String) -> void:
+	var next := GridCoord.new(coord.x + offset.x, coord.y, coord.z + offset.y)
+	if not _within_bounds(next, topology):
+		return
+	if _blocked(next, topology, occupied_actor_cells, start_key):
+		return
+	if offset.x != 0 and offset.y != 0 and _diagonal_corner_blocked(coord, offset, topology, occupied_actor_cells, start_key):
+		return
+	output.append(next)
+
+
+func _diagonal_corner_blocked(coord: RefCounted, offset: Vector2i, topology: Dictionary, occupied_actor_cells: Dictionary, start_key: String) -> bool:
+	var side_x := GridCoord.new(coord.x + offset.x, coord.y, coord.z)
+	var side_z := GridCoord.new(coord.x, coord.y, coord.z + offset.y)
+	return _blocked(side_x, topology, occupied_actor_cells, start_key) or _blocked(side_z, topology, occupied_actor_cells, start_key)
 
 
 func _within_bounds(coord: RefCounted, topology: Dictionary) -> bool:

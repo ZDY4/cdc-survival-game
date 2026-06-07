@@ -81,6 +81,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 		errors.append("occupied movement feedback should expose blocking actor id")
 	_expect_rejected_command(errors, occupied_result, "goal_occupied", "occupied movement")
 	_expect_path_failure_reasons(errors, simulation, topology)
+	errors.append_array(_expect_diagonal_pathing(registry))
 	errors.append_array(_expect_auto_open_door_movement(registry))
 
 	player.ap = 0.0
@@ -385,6 +386,51 @@ func _expect_configured_ap_rules(registry: RefCounted) -> Array[String]:
 	return errors
 
 
+func _expect_diagonal_pathing(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position.x = 0
+	player.grid_position.y = 0
+	player.grid_position.z = 0
+	player.ap = 5.0
+	_move_non_player_actors_out_of_test_lane(simulation)
+	var diagonal_goal := {"x": 1, "y": 0, "z": 1}
+	var diagonal_result: Dictionary = simulation.submit_player_command({
+		"kind": "move",
+		"target_position": diagonal_goal,
+		"topology": _diagonal_test_topology({}),
+	})
+	if not bool(diagonal_result.get("success", false)):
+		errors.append("open diagonal move should succeed: %s" % diagonal_result.get("reason", "unknown"))
+	if int(diagonal_result.get("steps", 0)) != 1:
+		errors.append("open diagonal move should cost one path step, got %s" % diagonal_result.get("steps", 0))
+	var path: Array = _array_or_empty(diagonal_result.get("path", []))
+	if path.size() != 2:
+		errors.append("open diagonal move should expose start and goal path, got %s" % path)
+
+	var blocked_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var blocked_player: RefCounted = blocked_simulation.actor_registry.get_actor(1)
+	blocked_player.grid_position.x = 0
+	blocked_player.grid_position.y = 0
+	blocked_player.grid_position.z = 0
+	blocked_player.ap = 5.0
+	_move_non_player_actors_out_of_test_lane(blocked_simulation)
+	var blocked_result: Dictionary = blocked_simulation.submit_player_command({
+		"kind": "move",
+		"target_position": diagonal_goal,
+		"topology": _diagonal_test_topology({
+			"1:0:0": "corner_wall_east",
+			"0:0:1": "corner_wall_south",
+		}),
+	})
+	if str(blocked_result.get("reason", "")) != "path_unreachable":
+		errors.append("diagonal corner cutting should be rejected as unreachable, got %s" % blocked_result)
+	if int(blocked_result.get("visited_cell_count", 0)) < 1:
+		errors.append("diagonal corner cutting rejection should expose visited cell count")
+	return errors
+
+
 func _expect_auto_open_door_movement(registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
@@ -502,6 +548,20 @@ func _door_test_topology(locked: bool, extra_door: Dictionary = {}) -> Dictionar
 			"1:0:0": "movement_smoke_door",
 		},
 		"door_objects": [_door_summary("movement_smoke_door", false, locked, extra_door)],
+	}
+
+
+func _diagonal_test_topology(blocking_cells: Dictionary) -> Dictionary:
+	return {
+		"bounds": {
+			"min_x": 0,
+			"max_x": 1,
+			"min_z": 0,
+			"max_z": 1,
+		},
+		"blocking_cells": blocking_cells.duplicate(true),
+		"sight_blocking_cells": blocking_cells.duplicate(true),
+		"door_objects": [],
 	}
 
 
