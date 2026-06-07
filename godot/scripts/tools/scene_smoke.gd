@@ -1042,6 +1042,7 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 	var overlap_total := 0
 	var diagnostic_totals := _empty_visual_diagnostics()
 	var asset_paths := {}
+	var scene_reports: Array[Dictionary] = []
 	dir.list_dir_begin()
 	while true:
 		var file_name := dir.get_next()
@@ -1060,6 +1061,7 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 			errors.append("map scene visual smoke failed to instantiate %s" % scene_path)
 			continue
 		var stats := _declared_visual_stats(scene_root, file_name, errors)
+		scene_reports.append(_map_visual_scene_report(scene_path, stats))
 		declared_total += int(stats.get("declared", 0))
 		instantiated_total += int(stats.get("instantiated", 0))
 		child_total += int(stats.get("visual_children", 0))
@@ -1082,9 +1084,13 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 	counts["all_map_visual_pickable_bodies"] = pickable_total
 	counts["all_map_visual_duplicate_ids"] = duplicate_total
 	counts["all_map_visual_overlaps"] = overlap_total
+	counts["all_map_visual_scene_reports"] = scene_reports
+	counts["all_map_visual_scene_report_count"] = scene_reports.size()
 	_apply_visual_diagnostic_counts(counts, "all_map_visual", diagnostic_totals)
 	if map_count <= 0:
 		errors.append("scene smoke expected at least one map scene")
+	if scene_reports.size() != map_count:
+		errors.append("scene smoke expected one map visual report per map scene")
 	if declared_total <= 0:
 		errors.append("scene smoke expected declared visual props across map scenes")
 	if instantiated_total != declared_total:
@@ -1308,6 +1314,27 @@ func _declared_visual_stats(root: Node, label: String, errors: Array[String], re
 		"non_unit_scale_nodes": int(diagnostic_totals.get("non_unit_scale_nodes", 0)),
 		"zero_scale_nodes": int(diagnostic_totals.get("zero_scale_nodes", 0)),
 		"max_origin_offset": float(diagnostic_totals.get("max_origin_offset", 0.0)),
+	}
+
+
+func _map_visual_scene_report(scene_path: String, stats: Dictionary) -> Dictionary:
+	return {
+		"scene_path": scene_path,
+		"declared": int(stats.get("declared", 0)),
+		"instantiated": int(stats.get("instantiated", 0)),
+		"visual_children": int(stats.get("visual_children", 0)),
+		"asset_paths": _array_or_empty(stats.get("asset_paths", [])),
+		"fallback_visuals": int(stats.get("fallback_visuals", 0)),
+		"pickable_bodies": int(stats.get("pickable_bodies", 0)),
+		"missing_pickable_bodies": int(stats.get("missing_pickable_bodies", 0)),
+		"duplicate_ids": int(stats.get("duplicate_ids", 0)),
+		"overlaps": int(stats.get("overlaps", 0)),
+		"mesh_nodes": int(stats.get("mesh_nodes", 0)),
+		"collision_shapes": int(stats.get("collision_shapes", 0)),
+		"physics_bodies": int(stats.get("physics_bodies", 0)),
+		"non_unit_scale_nodes": int(stats.get("non_unit_scale_nodes", 0)),
+		"zero_scale_nodes": int(stats.get("zero_scale_nodes", 0)),
+		"max_origin_offset": float(stats.get("max_origin_offset", 0.0)),
 	}
 
 
