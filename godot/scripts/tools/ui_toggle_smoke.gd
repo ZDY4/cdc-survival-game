@@ -87,6 +87,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_ai_debug_snapshot(errors, game_root, "initial AI debug")
 	_exercise_debug_panel(errors, game_root)
 	_assert_hotbar_visibility(errors, game_root, true, "initial hotbar visibility")
+	_assert_hotbar_hit_test(errors, game_root, "initial hotbar hit-test")
 	_assert_observe_mode_button(errors, game_root, false, "initial observe mode button")
 	_assert_observe_auto_button(errors, game_root, false, "initial observe auto hotbar")
 	_press_key_with_modifiers(game_root, KEY_P, true)
@@ -151,6 +152,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("ObserveModeButton should enable observe mode")
 	_assert_runtime_control_line(errors, game_root, "Observe on pause x1", "observe mode enabled HUD")
 	_assert_hotbar_visibility(errors, game_root, false, "observe mode should hide normal hotbar")
+	_assert_observe_hotbar_hit_test(errors, game_root, "observe hotbar hit-test")
 	_assert_observe_mode_button(errors, game_root, true, "observe mode enabled button")
 	_assert_observe_play_button(errors, game_root, false, false, "observe mode initial play button")
 	_assert_observe_speed_button(errors, game_root, "x1", false, "observe mode initial speed button")
@@ -1356,6 +1358,52 @@ func _assert_hotbar_visibility(errors: Array[String], game_root: Node, expected_
 		errors.append("%s: HotbarDock visible expected %s" % [context, str(expected_visible)])
 	if group_bar.visible != expected_visible:
 		errors.append("%s: HotbarGroupBar visible expected %s" % [context, str(expected_visible)])
+
+
+func _assert_hotbar_hit_test(errors: Array[String], game_root: Node, context: String) -> void:
+	var slot_button: Button = game_root.hud.find_child("HotbarSlot_slot_1", true, false) as Button
+	var group_button: Button = game_root.hud.find_child("HotbarGroup_group_1", true, false) as Button
+	if slot_button == null:
+		errors.append("%s: HUD should expose slot_1 hotbar button" % context)
+	else:
+		_assert_hotbar_hit(errors, game_root, slot_button, "hotbar_slot", "slot_1", "group_1", context)
+	if group_button == null:
+		errors.append("%s: HUD should expose group_1 hotbar button" % context)
+	else:
+		_assert_hotbar_hit(errors, game_root, group_button, "hotbar_group", "group_1", "group_1", context)
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	if not runtime.has("hotbar_hit_test"):
+		errors.append("%s: runtime control should expose hotbar hit-test snapshot" % context)
+
+
+func _assert_observe_hotbar_hit_test(errors: Array[String], game_root: Node, context: String) -> void:
+	var observe_button: Button = _observe_mode_button(game_root)
+	if observe_button == null:
+		errors.append("%s: observe hotbar should expose mode button" % context)
+		return
+	_assert_hotbar_hit(errors, game_root, observe_button, "observe_hotbar", "observe_mode", "", context)
+
+
+func _assert_hotbar_hit(errors: Array[String], game_root: Node, control: Control, expected_kind: String, expected_id: String, expected_group_id: String, context: String) -> void:
+	if not game_root.has_method("hotbar_hit_test_snapshot"):
+		errors.append("%s: game root should expose hotbar_hit_test_snapshot" % context)
+		return
+	var rect: Rect2 = control.get_global_rect()
+	var center: Vector2 = rect.position + rect.size * 0.5
+	var hit: Dictionary = _dictionary_or_empty(game_root.hotbar_hit_test_snapshot(center))
+	if not bool(hit.get("active", false)):
+		errors.append("%s: hotbar hit-test should be active at %s: %s" % [context, center, hit])
+		return
+	if str(hit.get("target_kind", "")) != expected_kind:
+		errors.append("%s: hotbar hit kind expected %s, got %s" % [context, expected_kind, hit])
+	if str(hit.get("target_id", "")) != expected_id:
+		errors.append("%s: hotbar hit target expected %s, got %s" % [context, expected_id, hit])
+	if not expected_group_id.is_empty() and str(hit.get("group_id", "")) != expected_group_id:
+		errors.append("%s: hotbar hit group expected %s, got %s" % [context, expected_group_id, hit])
+	if not bool(hit.get("mouse_blocks_world", false)):
+		errors.append("%s: hotbar hit should block world mouse picking: %s" % [context, hit])
+	if str(hit.get("source_path", "")).is_empty() or str(hit.get("source_name", "")).is_empty():
+		errors.append("%s: hotbar hit should expose source control: %s" % [context, hit])
 
 
 func _assert_observe_blocks_player_commands(errors: Array[String], game_root: Node) -> void:
