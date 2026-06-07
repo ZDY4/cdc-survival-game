@@ -1,5 +1,7 @@
 extends RefCounted
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+
 var registry: RefCounted
 
 
@@ -53,6 +55,7 @@ func _quest_view(state: Dictionary) -> Dictionary:
 		"quest_id": quest_id,
 		"title": str(quest_data.get("title", quest_id)),
 		"description": str(quest_data.get("description", "")),
+		"icon_asset": _quest_icon_asset(quest_data, objective_snapshot, false),
 		"objective_text": str(objective.get("description", quest_data.get("description", ""))),
 		"current_node_id": str(state.get("current_node_id", objective_id)),
 		"objective": objective_snapshot,
@@ -84,6 +87,7 @@ func _completed_quest_view(quest_id: String) -> Dictionary:
 		"quest_id": quest_id,
 		"title": str(quest_data.get("title", quest_id)),
 		"description": str(quest_data.get("description", "")),
+		"icon_asset": _quest_icon_asset(quest_data, objective_snapshot, true),
 		"objective_text": str(objective.get("description", quest_data.get("description", ""))),
 		"current_node_id": "completed",
 		"objective": objective_snapshot,
@@ -216,6 +220,21 @@ func _reward_node(quest_data: Dictionary) -> Dictionary:
 		if node.get("type", "") == "reward":
 			return node
 	return {}
+
+
+func _quest_icon_asset(quest_data: Dictionary, objective: Dictionary, completed: bool) -> Dictionary:
+	var explicit_path := str(quest_data.get("icon_path", quest_data.get("icon", "")))
+	if not explicit_path.is_empty():
+		return AssetPathResolver.resolve_media_asset(explicit_path, "quest")
+	if completed:
+		return AssetPathResolver.resolve_media_asset("res://assets/icons/quests/quest_completed.svg", "quest")
+	match str(objective.get("type", "")):
+		"kill":
+			return AssetPathResolver.resolve_media_asset("res://assets/icons/quests/quest_kill.svg", "quest")
+		"collect":
+			return AssetPathResolver.resolve_media_asset("res://assets/icons/quests/quest_collect.svg", "quest")
+		_:
+			return AssetPathResolver.resolve_media_asset("res://assets/icons/quests/quest_collect.svg", "quest")
 
 
 func _status_text(manual_turn_in: bool, ready: bool, current: int, target: int) -> String:

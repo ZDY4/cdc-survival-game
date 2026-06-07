@@ -35,6 +35,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("journal summary should show one active quest")
 	if not _quest_text(game_root).contains("补给试跑"):
 		errors.append("journal missing tutorial quest title")
+	if _quest_icon_path(game_root, "tutorial_survive") != "res://assets/icons/quests/quest_collect.svg":
+		errors.append("journal collect quest title should expose and render quest icon")
 	if not _quest_text(game_root).contains("进度: 0/2"):
 		errors.append("journal missing initial objective progress")
 	if not _quest_text(game_root).contains("- 摸一遍警戒区前沿补给点，带回 2 罐罐头: 0/2"):
@@ -88,8 +90,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("journal summary did not count completed quest")
 	if not _quest_text(game_root).contains("警戒区清剿"):
 		errors.append("journal did not show next quest after prerequisite completion")
+	if _quest_icon_path(game_root, "zombie_hunter") != "res://assets/icons/quests/quest_kill.svg":
+		errors.append("journal kill quest title should expose and render quest icon")
 	if not _completed_quest_text(game_root).contains("补给试跑 | 已完成"):
 		errors.append("journal should list completed tutorial quest")
+	if _completed_quest_icon_path(game_root, "tutorial_survive") != "res://assets/icons/quests/quest_completed.svg":
+		errors.append("journal completed quest row should expose and render completed icon")
 	if not _press_completed_quest(game_root, "tutorial_survive"):
 		errors.append("should select completed tutorial quest")
 	await process_frame
@@ -261,6 +267,13 @@ func _quest_title_button(game_root: Node, quest_id: String) -> Button:
 	return game_root.journal_panel.find_child("Quest_%s" % quest_id, true, false) as Button
 
 
+func _quest_icon_path(game_root: Node, quest_id: String) -> String:
+	var button: Button = _quest_title_button(game_root, quest_id)
+	if button == null or button.icon == null or not button.has_meta("icon_resource_path"):
+		return ""
+	return str(button.get_meta("icon_resource_path"))
+
+
 func _completed_quest_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
 	var quest_box: Node = game_root.journal_panel.get_node("JournalPanel/JournalLines/CompletedQuestLines")
@@ -278,6 +291,13 @@ func _press_completed_quest(game_root: Node, quest_id: String) -> bool:
 		return false
 	button.pressed.emit()
 	return true
+
+
+func _completed_quest_icon_path(game_root: Node, quest_id: String) -> String:
+	var button: Button = game_root.journal_panel.find_child("CompletedQuest_%s" % quest_id, true, false) as Button
+	if button == null or button.icon == null or not button.has_meta("icon_resource_path"):
+		return ""
+	return str(button.get_meta("icon_resource_path"))
 
 
 func _player_inventory_count(game_root: Node, item_id: String) -> int:

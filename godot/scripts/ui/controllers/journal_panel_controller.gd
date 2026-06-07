@@ -1,5 +1,7 @@
 extends Control
 
+const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+
 signal tracked_quest_changed(quest_id: String)
 
 var _panel: PanelContainer
@@ -135,6 +137,7 @@ func _quest_title(quest: Dictionary) -> Button:
 	button.toggle_mode = true
 	button.button_pressed = _selected_quest_id == quest_id
 	button.focus_mode = Control.FOCUS_NONE
+	_apply_quest_icon(button, quest)
 	button.pressed.connect(func() -> void:
 		_selected_quest_id = quest_id
 		apply_snapshot(_last_snapshot)
@@ -152,11 +155,24 @@ func _completed_quest_line(quest: Dictionary) -> Button:
 	button.toggle_mode = true
 	button.button_pressed = _selected_quest_id == quest_id
 	button.focus_mode = Control.FOCUS_NONE
+	_apply_quest_icon(button, quest)
 	button.pressed.connect(func() -> void:
 		_selected_quest_id = quest_id
 		apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
 	return button
+
+
+func _apply_quest_icon(button: Button, quest: Dictionary) -> void:
+	var icon_asset := _dictionary_or_empty(quest.get("icon_asset", {}))
+	var texture := MediaTextureLoader.texture_from_asset(icon_asset)
+	if texture == null:
+		button.icon = null
+		return
+	button.icon = texture
+	button.expand_icon = true
+	button.set_meta("icon_resource_path", MediaTextureLoader.resource_path_from_asset(icon_asset))
+	button.set_meta("icon_fallback_key", str(icon_asset.get("fallback_key", "")))
 
 
 func _quest_objective(quest: Dictionary) -> Label:
