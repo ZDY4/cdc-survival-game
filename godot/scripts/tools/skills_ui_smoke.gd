@@ -951,14 +951,15 @@ func _assert_modal_menu_event(errors: Array[String], game_root: Node, expected_i
 		errors.append("%s: modal event owner expected %s, got %s" % [context, expected_owner, event])
 	if not bool(event.get("blocks_gameplay", false)) or not bool(event.get("mouse_blocks_world", false)):
 		errors.append("%s: modal event should expose gameplay and mouse blockers: %s" % [context, event])
-	var latest: Dictionary = _dictionary_or_empty(snapshot.get("latest_event", {}))
-	if str(latest.get("event", "")) != "modal_opened" or str(latest.get("panel_id", "")) != expected_id:
-		errors.append("%s: latest event should mirror modal event: %s" % [context, snapshot])
+	if not _recent_menu_events_contain(snapshot, "modal_opened", expected_id):
+		errors.append("%s: recent events should include modal event %s: %s" % [context, expected_id, snapshot])
 	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
 	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
 	var runtime_event: Dictionary = _dictionary_or_empty(runtime_menu.get("modal_event", {}))
 	if str(runtime_event.get("event", "")) != "modal_opened" or str(runtime_event.get("panel_id", "")) != expected_id:
 		errors.append("%s: runtime menu should expose modal event %s: %s" % [context, expected_id, runtime_menu])
+	if not _recent_menu_events_contain(runtime_menu, "modal_opened", expected_id):
+		errors.append("%s: runtime recent events should include modal event %s: %s" % [context, expected_id, runtime_menu])
 
 
 func _assert_no_modal_menu_event(errors: Array[String], game_root: Node, context: String) -> void:
@@ -969,6 +970,14 @@ func _assert_no_modal_menu_event(errors: Array[String], game_root: Node, context
 	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
 	if not _dictionary_or_empty(runtime_menu.get("modal_event", {})).is_empty():
 		errors.append("%s: runtime modal_event should clear when no modal is active: %s" % [context, runtime_menu])
+
+
+func _recent_menu_events_contain(menu_state: Dictionary, expected_event: String, expected_id: String) -> bool:
+	for value in _array_or_empty(menu_state.get("recent_events", [])):
+		var event: Dictionary = _dictionary_or_empty(value)
+		if str(event.get("event", "")) == expected_event and str(event.get("panel_id", "")) == expected_id:
+			return true
+	return false
 
 
 func _expect_modal_player_commands_blocked(errors: Array[String], game_root: Node, expected_modal_id: String) -> void:

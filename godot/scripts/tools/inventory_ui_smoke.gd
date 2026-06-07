@@ -416,6 +416,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if blocker_name != "modal:inventory_discard_confirm":
 			errors.append("discard confirmation blocker should be modal:inventory_discard_confirm, got %s" % blocker_name)
 		_assert_modal_stack(errors, game_root, "inventory_discard_confirm", "inventory", "discard confirmation")
+		_assert_modal_menu_event(errors, game_root, "inventory_discard_confirm", "inventory", "discard confirmation menu event")
 		if discard_quantity_input != null:
 			discard_quantity_input.text = "0"
 			_emit_discard_confirm(game_root)
@@ -443,6 +444,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("Esc should close inventory discard modal before other UI, got %s" % esc_discard_result)
 		if _discard_dialog_visible(game_root):
 			errors.append("Esc should hide inventory discard modal")
+		_assert_no_modal_menu_event(errors, game_root, "discard confirmation Esc close menu event clear")
 		if _player_inventory_count(game_root, "1006") != 3:
 			errors.append("Esc closing discard confirmation should keep inventory")
 	if not _open_inventory_context_menu(game_root, "绷带"):
@@ -972,3 +974,47 @@ func _assert_modal_stack(errors: Array[String], game_root: Node, expected_id: St
 	var runtime_stack: Dictionary = _dictionary_or_empty(runtime.get("modal_stack", {}))
 	if str(_dictionary_or_empty(runtime_stack.get("top", {})).get("id", "")) != expected_id:
 		errors.append("%s: runtime modal stack should expose top %s: %s" % [context, expected_id, runtime_stack])
+
+
+func _assert_modal_menu_event(errors: Array[String], game_root: Node, expected_id: String, expected_owner: String, context: String) -> void:
+	if not game_root.has_method("menu_state_snapshot"):
+		errors.append("%s: game root should expose menu_state_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot())
+	var event: Dictionary = _dictionary_or_empty(snapshot.get("modal_event", {}))
+	if event.is_empty():
+		errors.append("%s: menu state should expose modal_event: %s" % [context, snapshot])
+		return
+	if str(event.get("event", "")) != "modal_opened" or str(event.get("panel_id", "")) != expected_id:
+		errors.append("%s: modal event expected opened:%s, got %s" % [context, expected_id, event])
+	if str(event.get("owner_panel", "")) != expected_owner:
+		errors.append("%s: modal event owner expected %s, got %s" % [context, expected_owner, event])
+	if not bool(event.get("blocks_gameplay", false)) or not bool(event.get("mouse_blocks_world", false)):
+		errors.append("%s: modal event should expose gameplay and mouse blockers: %s" % [context, event])
+	if not _recent_menu_events_contain(snapshot, "modal_opened", expected_id):
+		errors.append("%s: recent events should include modal event %s: %s" % [context, expected_id, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
+	var runtime_event: Dictionary = _dictionary_or_empty(runtime_menu.get("modal_event", {}))
+	if str(runtime_event.get("event", "")) != "modal_opened" or str(runtime_event.get("panel_id", "")) != expected_id:
+		errors.append("%s: runtime menu should expose modal event %s: %s" % [context, expected_id, runtime_menu])
+	if not _recent_menu_events_contain(runtime_menu, "modal_opened", expected_id):
+		errors.append("%s: runtime recent events should include modal event %s: %s" % [context, expected_id, runtime_menu])
+
+
+func _assert_no_modal_menu_event(errors: Array[String], game_root: Node, context: String) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot() if game_root.has_method("menu_state_snapshot") else {})
+	if not _dictionary_or_empty(snapshot.get("modal_event", {})).is_empty():
+		errors.append("%s: modal_event should clear when no modal is active: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
+	if not _dictionary_or_empty(runtime_menu.get("modal_event", {})).is_empty():
+		errors.append("%s: runtime modal_event should clear when no modal is active: %s" % [context, runtime_menu])
+
+
+func _recent_menu_events_contain(menu_state: Dictionary, expected_event: String, expected_id: String) -> bool:
+	for value in _array_or_empty(menu_state.get("recent_events", [])):
+		var event: Dictionary = _dictionary_or_empty(value)
+		if str(event.get("event", "")) == expected_event and str(event.get("panel_id", "")) == expected_id:
+			return true
+	return false
