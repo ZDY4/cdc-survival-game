@@ -44,6 +44,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_force_end_combat(errors, force_end_simulation, registry, force_end_player, force_end_player.grid_position.to_dictionary())
 	_expect_combat_npc_turn_ap_and_close(errors, registry)
 	_expect_combat_entry_participants_and_round(errors, registry)
+	_expect_combat_exit_exploration_recovery(errors, registry)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
 	_expect_deterministic_combat_rng(errors, simulation, registry, player, player_grid)
 	_expect_deterministic_loot_rng(errors, registry, player_grid)
@@ -384,6 +385,78 @@ func _expect_combat_entry_participants_and_round(errors: Array[String], registry
 			errors.append("combat round should keep pace with turn round while combat is active")
 	if int(simulation.turn_state.get("round", 1)) != turn_round_before + 1:
 		errors.append("world turn should still increment global turn round")
+
+
+func _expect_combat_exit_exploration_recovery(errors: Array[String], registry: RefCounted) -> void:
+	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var simulation: RefCounted = runtime_result.get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("combat exit recovery smoke missing player")
+		return
+	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	var hostile_id: int = _register_test_actor(simulation, "combat_exit_recovery_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 12.0)
+	player.turn_open = false
+	player.ap = 99.0
+	simulation.pending_movement = {
+		"actor_id": player.actor_id,
+		"target_position": {
+			"x": int(player_grid.get("x", 0)) + 3,
+			"y": int(player_grid.get("y", 0)),
+			"z": int(player_grid.get("z", 0)),
+		},
+		"path": [player_grid.duplicate(true)],
+		"required_ap": 1.0,
+		"available_ap": 0.0,
+	}
+	simulation.pending_interaction = {
+		"actor_id": player.actor_id,
+		"target": {"target_type": "actor", "actor_id": hostile_id},
+		"option_id": "attack",
+		"required_ap": 1.0,
+		"available_ap": 0.0,
+	}
+	simulation.interaction_menu = {
+		"target": {"target_type": "actor", "actor_id": hostile_id},
+		"target_type": "actor",
+		"target_kind": "actor",
+		"options": [{"id": "attack"}],
+	}
+	simulation._enter_combat([player.actor_id, hostile_id], "exit_recovery_smoke")
+	var hostile: RefCounted = simulation.actor_registry.get_actor(hostile_id)
+	if hostile != null:
+		hostile.hp = 0.0
+	if not simulation.exit_combat_if_clear("hostiles_cleared_recovery_smoke"):
+		errors.append("hostiles_cleared should exit active combat")
+	var snapshot: Dictionary = simulation.snapshot()
+	if bool(snapshot.get("combat_state", {}).get("active", true)):
+		errors.append("combat exit recovery should clear active combat")
+	if player.in_combat:
+		errors.append("combat exit recovery should clear player in_combat")
+	if not bool(player.turn_open):
+		errors.append("natural combat exit should reopen player exploration turn")
+	if player.ap > 10.0:
+		errors.append("natural combat exit should clamp player AP back to exploration max")
+	if not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty():
+		errors.append("combat exit recovery should clear pending movement")
+	if not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty():
+		errors.append("combat exit recovery should clear pending interaction")
+	if not _dictionary_or_empty(snapshot.get("interaction_menu", {})).is_empty():
+		errors.append("combat exit recovery should clear interaction menu selection")
+	var payload: Dictionary = _last_event_payload(snapshot, "combat_ended")
+	var recovery: Dictionary = _dictionary_or_empty(payload.get("recovery", {}))
+	if not bool(recovery.get("opened_player_turn", false)):
+		errors.append("combat_ended recovery should report reopened player turn")
+	if not bool(recovery.get("pending_movement_cleared", false)) or not bool(recovery.get("pending_interaction_cleared", false)):
+		errors.append("combat_ended recovery should report pending cleanup")
+	if bool(recovery.get("close_turns", true)):
+		errors.append("natural combat exit recovery should report close_turns=false")
+	if simulation.actor_registry.get_actor(hostile_id) != null:
+		simulation.actor_registry.unregister_actor(hostile_id)
 
 
 func _expect_combat_pending_cancel_turn_policy(errors: Array[String], registry: RefCounted) -> void:

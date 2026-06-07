@@ -3368,12 +3368,49 @@ func _finish_combat_state(reason: String, metadata: Dictionary = {}, close_turns
 	combat_state["active"] = false
 	combat_state["participants"] = []
 	combat_state["turns_without_hostile_player_sight"] = 0
+	combat_state["last_hostile_seen_turn"] = 0
 	turn_state["phase"] = "player"
 	turn_state["active_actor_id"] = _player_actor_id()
+	var recovery: Dictionary = _restore_exploration_after_combat(reason, close_turns)
 	var payload: Dictionary = metadata.duplicate(true)
 	payload["reason"] = reason
 	payload["participants"] = participants
+	payload["recovery"] = recovery.duplicate(true)
 	_emit("combat_ended", payload)
+
+
+func _restore_exploration_after_combat(reason: String, close_turns: bool) -> Dictionary:
+	var actor_id: int = _player_actor_id()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	var movement: Dictionary = pending_movement.duplicate(true)
+	var interaction: Dictionary = pending_interaction.duplicate(true)
+	var menu: Dictionary = interaction_menu.duplicate(true)
+	pending_movement.clear()
+	pending_interaction.clear()
+	interaction_menu.clear()
+	var opened_player_turn := false
+	var clamped_ap := false
+	if actor != null and actor.hp > 0.0 and not close_turns:
+		var exploration_max: float = _turn_ap_max(actor)
+		if actor.ap > exploration_max:
+			actor.ap = exploration_max
+			clamped_ap = true
+		if not actor.turn_open:
+			_open_turn(actor_id, "combat_ended:%s" % reason)
+			opened_player_turn = true
+	return {
+		"actor_id": actor_id,
+		"reason": reason,
+		"close_turns": close_turns,
+		"player_alive": actor != null and actor.hp > 0.0,
+		"turn_open": bool(actor.turn_open) if actor != null else false,
+		"opened_player_turn": opened_player_turn,
+		"ap": actor.ap if actor != null else 0.0,
+		"clamped_ap": clamped_ap,
+		"pending_movement_cleared": not movement.is_empty(),
+		"pending_interaction_cleared": not interaction.is_empty(),
+		"interaction_menu_cleared": not menu.is_empty(),
+	}
 
 
 func _interaction_option(prompt: Dictionary, option_id: String) -> Dictionary:
