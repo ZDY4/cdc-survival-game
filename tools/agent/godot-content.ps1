@@ -12,7 +12,7 @@ Content command to run: locate, summarize, references, validate, format, or diff
 
 .PARAMETER Kind
 Content kind such as item, recipe, character, dialogue, quest, skill, skill_tree,
-settlement, overworld, map, shop, appearance, changed for `validate changed` / `format changed`,
+settlement, overworld, map, shop, world_tile, appearance, changed for `validate changed` / `format changed`,
 or path for `diff-summary --path`.
 
 .PARAMETER Id

@@ -114,6 +114,16 @@ func _validate_overworld(id_value: String, record: Dictionary, registry: Content
 		if travel_rules.has("risk_multiplier"):
 			_expect_number_at_least(issues, travel_rules, "risk_multiplier", "$.travel_rules.risk_multiplier", 0.0)
 
+	var world_tile_index := _world_tile_index(registry)
+	for i in range(_array_or_empty(data.get("cells", [])).size()):
+		var cell := _dictionary_or_empty(data["cells"][i])
+		var visual := _dictionary_or_empty(cell.get("visual", {}))
+		if visual.is_empty():
+			continue
+		var surface_set_id := ContentRegistry.normalize_content_id(visual.get("surface_set_id", ""))
+		if not surface_set_id.is_empty() and not _dictionary_or_empty(world_tile_index.get("surface_sets", {})).has(surface_set_id):
+			issues.append(_issue("error", "$.cells[%d].visual.surface_set_id" % i, "unknown_surface_set", "unknown surface set id %s" % surface_set_id))
+
 
 func _validate_location(location: Dictionary, field: String, width: int, height: int, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
 	_expect_non_empty_string(issues, location, "name", field.path_join("name"))
@@ -149,6 +159,19 @@ func _map_bounds(map_data: Dictionary) -> Dictionary:
 		"height": int(size.get("height", 0)),
 		"level_ids": level_ids,
 	}
+
+
+func _world_tile_index(registry: ContentRegistry) -> Dictionary:
+	var output := {
+		"surface_sets": {},
+	}
+	for record in registry.get_library("world_tiles").values():
+		var data := _dictionary_or_empty(_dictionary_or_empty(record).get("data", {}))
+		for surface_set in _array_or_empty(data.get("surface_sets", [])):
+			var surface_set_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(surface_set).get("id", ""))
+			if not surface_set_id.is_empty():
+				output["surface_sets"][surface_set_id] = true
+	return output
 
 
 func _validate_grid(grid: Dictionary, field: String, bounds: Dictionary, issues: Array[Dictionary]) -> void:

@@ -38,6 +38,8 @@ func summary_lines(domain: String, id_value: String, record: Dictionary, relativ
 			lines.append_array(_overworld_lines(data))
 		"shops":
 			lines.append_array(_shop_lines(data))
+		"world_tiles":
+			lines.append_array(_world_tile_lines(data))
 	return lines
 
 
@@ -63,6 +65,8 @@ static func singular_domain(domain: String) -> String:
 			return "settlement"
 		"shops":
 			return "shop"
+		"world_tiles":
+			return "world_tile"
 		_:
 			return domain
 
@@ -199,6 +203,20 @@ func _shop_lines(data: Dictionary) -> Array[String]:
 	]
 
 
+func _world_tile_lines(data: Dictionary) -> Array[String]:
+	var prototypes := _array_or_empty(data.get("prototypes", []))
+	var surface_sets := _array_or_empty(data.get("surface_sets", []))
+	var wall_sets := _array_or_empty(data.get("wall_sets", []))
+	return [
+		"prototype_count: %d" % prototypes.size(),
+		"surface_set_count: %d" % surface_sets.size(),
+		"wall_set_count: %d" % wall_sets.size(),
+		"prototype_ids: %s" % _join_or_dash(_ids_from_records(prototypes)),
+		"surface_set_ids: %s" % _join_or_dash(_ids_from_records(surface_sets)),
+		"wall_set_ids: %s" % _join_or_dash(_ids_from_records(wall_sets)),
+	]
+
+
 func _dialogue_start_node(nodes: Array) -> String:
 	for node in nodes:
 		var data := _dictionary_or_empty(node)
@@ -253,6 +271,16 @@ func _string_array(values: Array) -> Array[String]:
 	var output: Array[String] = []
 	for value in values:
 		output.append(ContentRegistry.normalize_content_id(value))
+	return output
+
+
+func _ids_from_records(values: Array) -> Array[String]:
+	var output: Array[String] = []
+	for value in values:
+		var id_value := ContentRegistry.normalize_content_id(_dictionary_or_empty(value).get("id", ""))
+		if not id_value.is_empty():
+			output.append(id_value)
+	output.sort()
 	return output
 
 

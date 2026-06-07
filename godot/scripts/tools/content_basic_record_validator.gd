@@ -1,12 +1,13 @@
 extends RefCounted
 
+const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 
 const EFFECTS_DOMAIN := "json"
 
 
 func supports_domain(domain: String) -> bool:
-	return ["items", "recipes", "characters", "maps", "shops"].has(domain)
+	return ["items", "recipes", "characters", "maps", "shops", "world_tiles"].has(domain)
 
 
 func validate_record(domain: String, id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
@@ -21,6 +22,8 @@ func validate_record(domain: String, id_value: String, record: Dictionary, regis
 			_validate_map(id_value, record, registry, issues)
 		"shops":
 			_validate_shop(id_value, record, registry, issues)
+		"world_tiles":
+			_validate_world_tiles(id_value, record, registry, issues)
 
 
 func _validate_item(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
@@ -156,6 +159,36 @@ func _validate_map_object(object: Dictionary, index: int, width: int, height: in
 		_expect_number_at_least(issues, footprint, "height", field.path_join("footprint.height"), 1.0)
 
 	var props: Dictionary = _dictionary_or_empty(object.get("props", {}))
+	var world_tile_index := _world_tile_index(registry)
+	var visual: Dictionary = _dictionary_or_empty(props.get("visual", {}))
+	if not visual.is_empty():
+		_validate_world_tile_id(
+			visual.get("prototype_id", ""),
+			field.path_join("props.visual.prototype_id"),
+			"prototypes",
+			"unknown_world_tile_prototype",
+			world_tile_index,
+			issues
+		)
+	var building: Dictionary = _dictionary_or_empty(props.get("building", {}))
+	var tile_set: Dictionary = _dictionary_or_empty(building.get("tile_set", {}))
+	if not tile_set.is_empty():
+		_validate_world_tile_id(
+			tile_set.get("wall_set_id", ""),
+			field.path_join("props.building.tile_set.wall_set_id"),
+			"wall_sets",
+			"unknown_wall_set",
+			world_tile_index,
+			issues
+		)
+		_validate_world_tile_id(
+			tile_set.get("floor_surface_set_id", ""),
+			field.path_join("props.building.tile_set.floor_surface_set_id"),
+			"surface_sets",
+			"unknown_surface_set",
+			world_tile_index,
+			issues
+		)
 	var pickup: Dictionary = _dictionary_or_empty(props.get("pickup", {}))
 	if not pickup.is_empty():
 		_validate_item_ref(pickup.get("item_id", null), field.path_join("props.pickup.item_id"), registry, issues)
@@ -193,6 +226,48 @@ func _validate_shop(id_value: String, record: Dictionary, registry: ContentRegis
 		var maximum := float(data.get("required_relationship_max", 0.0))
 		if minimum > maximum:
 			issues.append(_issue("error", "$.required_relationship_min", "invalid_relationship_range", "required_relationship_min must be <= required_relationship_max"))
+
+
+func _validate_world_tiles(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+	var prototype_ids := {}
+	var prototypes: Array = data.get("prototypes", [])
+	if not _expect_array(issues, data, "prototypes", "$.prototypes"):
+		return
+	if prototypes.is_empty():
+		issues.append(_issue("error", "$.prototypes", "missing_prototypes", "world tile catalog must define at least one prototype"))
+	for i in range(prototypes.size()):
+		var prototype: Dictionary = _dictionary_or_empty(prototypes[i])
+		var field := "$.prototypes[%d]" % i
+		var prototype_id := ContentRegistry.normalize_content_id(prototype.get("id", ""))
+		if prototype_id.is_empty():
+			issues.append(_issue("error", field.path_join("id"), "missing_prototype_id", "world tile prototype id is required"))
+		elif prototype_ids.has(prototype_id):
+			issues.append(_issue("error", field.path_join("id"), "duplicate_prototype_id", "duplicate world tile prototype id %s" % prototype_id))
+		prototype_ids[prototype_id] = true
+		_validate_world_tile_source(_dictionary_or_empty(prototype.get("source", {})), field.path_join("source"), issues)
+		_validate_bounds(_dictionary_or_empty(prototype.get("bounds", {})), field.path_join("bounds"), issues)
+
+	for i in range(data.get("surface_sets", []).size()):
+		var surface_set: Dictionary = _dictionary_or_empty(data["surface_sets"][i])
+		var field := "$.surface_sets[%d]" % i
+		if ContentRegistry.normalize_content_id(surface_set.get("id", "")).is_empty():
+			issues.append(_issue("error", field.path_join("id"), "missing_surface_set_id", "surface set id is required"))
+		_validate_prototype_ref(surface_set.get("flat_top_prototype_id", ""), field.path_join("flat_top_prototype_id"), prototype_ids, issues, true)
+		_validate_prototype_ref(surface_set.get("cliff_inner_corner_prototype_id", ""), field.path_join("cliff_inner_corner_prototype_id"), prototype_ids, issues, true)
+		_validate_prototype_ref(surface_set.get("cliff_outer_corner_prototype_id", ""), field.path_join("cliff_outer_corner_prototype_id"), prototype_ids, issues, true)
+		_validate_prototype_ref(surface_set.get("cliff_side_prototype_id", ""), field.path_join("cliff_side_prototype_id"), prototype_ids, issues, true)
+		var ramp_top_ids: Dictionary = _dictionary_or_empty(surface_set.get("ramp_top_prototype_ids", {}))
+		for direction in ramp_top_ids.keys():
+			_validate_prototype_ref(ramp_top_ids[direction], field.path_join("ramp_top_prototype_ids.%s" % direction), prototype_ids, issues, false)
+
+	for i in range(data.get("wall_sets", []).size()):
+		var wall_set: Dictionary = _dictionary_or_empty(data["wall_sets"][i])
+		var field := "$.wall_sets[%d]" % i
+		if ContentRegistry.normalize_content_id(wall_set.get("id", "")).is_empty():
+			issues.append(_issue("error", field.path_join("id"), "missing_wall_set_id", "wall set id is required"))
+		for key in ["isolated_prototype_id", "end_prototype_id", "straight_prototype_id", "corner_prototype_id", "t_junction_prototype_id", "cross_prototype_id"]:
+			_validate_prototype_ref(wall_set.get(key, ""), field.path_join(key), prototype_ids, issues, false)
 
 
 func _validate_stacking_fragment(fragment: Dictionary, field: String, issues: Array[Dictionary]) -> void:
@@ -346,6 +421,84 @@ func _validate_effect_list(values: Variant, field: String, registry: ContentRegi
 		var effect_id := str(array[i])
 		if not effects.has(effect_id):
 			issues.append(_issue("error", field.path_join("[%d]" % i), "unknown_effect", "unknown effect id %s" % effect_id))
+
+
+func _validate_world_tile_source(source: Dictionary, field: String, issues: Array[Dictionary]) -> void:
+	if source.is_empty():
+		issues.append(_issue("error", field, "missing_source", "world tile prototype source is required"))
+		return
+	if str(source.get("kind", "")) != "gltf_scene":
+		issues.append(_issue("error", field.path_join("kind"), "unsupported_source_kind", "world tile source kind must be gltf_scene"))
+	var path := str(source.get("path", "")).strip_edges()
+	if path.is_empty():
+		issues.append(_issue("error", field.path_join("path"), "missing_asset", "world tile source path is required"))
+	elif not path.ends_with(".gltf"):
+		issues.append(_issue("error", field.path_join("path"), "invalid_asset_format", "world tile source must reference a .gltf file"))
+	else:
+		var full_path := ContentPaths.assets_root().path_join(path).simplify_path()
+		if not FileAccess.file_exists(full_path):
+			issues.append(_issue("error", field.path_join("path"), "missing_asset_file", "asset file does not exist: %s" % full_path))
+	if source.has("scene_index") and int(source.get("scene_index", 0)) < 0:
+		issues.append(_issue("error", field.path_join("scene_index"), "negative_scene_index", "scene_index must be >= 0"))
+
+
+func _validate_bounds(bounds: Dictionary, field: String, issues: Array[Dictionary]) -> void:
+	if bounds.is_empty():
+		issues.append(_issue("error", field, "missing_bounds", "world tile bounds are required"))
+		return
+	_validate_vector3(_dictionary_or_empty(bounds.get("center", {})), field.path_join("center"), issues, false)
+	_validate_vector3(_dictionary_or_empty(bounds.get("size", {})), field.path_join("size"), issues, true)
+
+
+func _validate_vector3(value: Dictionary, field: String, issues: Array[Dictionary], non_negative: bool) -> void:
+	for axis in ["x", "y", "z"]:
+		if not value.has(axis):
+			issues.append(_issue("error", field.path_join(axis), "missing_number", "%s is required" % axis))
+			continue
+		if non_negative and float(value.get(axis, 0.0)) < 0.0:
+			issues.append(_issue("error", field.path_join(axis), "number_too_small", "%s must be >= 0" % axis))
+
+
+func _validate_prototype_ref(prototype_id: Variant, field: String, prototype_ids: Dictionary, issues: Array[Dictionary], allow_empty: bool) -> void:
+	var normalized := ContentRegistry.normalize_content_id(prototype_id)
+	if normalized.is_empty():
+		if not allow_empty:
+			issues.append(_issue("error", field, "missing_prototype_ref", "prototype id is required"))
+		return
+	if not prototype_ids.has(normalized):
+		issues.append(_issue("error", field, "unknown_world_tile_prototype", "unknown world tile prototype id %s" % normalized))
+
+
+func _validate_world_tile_id(id_value: Variant, field: String, bucket: String, code: String, world_tile_index: Dictionary, issues: Array[Dictionary]) -> void:
+	var normalized := ContentRegistry.normalize_content_id(id_value)
+	if normalized.is_empty():
+		return
+	var ids: Dictionary = _dictionary_or_empty(world_tile_index.get(bucket, {}))
+	if not ids.has(normalized):
+		issues.append(_issue("error", field, code, "unknown world tile %s id %s" % [bucket.trim_suffix("s"), normalized]))
+
+
+func _world_tile_index(registry: ContentRegistry) -> Dictionary:
+	var output := {
+		"prototypes": {},
+		"surface_sets": {},
+		"wall_sets": {},
+	}
+	for record in registry.get_library("world_tiles").values():
+		var data: Dictionary = _dictionary_or_empty(_dictionary_or_empty(record).get("data", {}))
+		for prototype in data.get("prototypes", []):
+			var prototype_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(prototype).get("id", ""))
+			if not prototype_id.is_empty():
+				output["prototypes"][prototype_id] = true
+		for surface_set in data.get("surface_sets", []):
+			var surface_set_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(surface_set).get("id", ""))
+			if not surface_set_id.is_empty():
+				output["surface_sets"][surface_set_id] = true
+		for wall_set in data.get("wall_sets", []):
+			var wall_set_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(wall_set).get("id", ""))
+			if not wall_set_id.is_empty():
+				output["wall_sets"][wall_set_id] = true
+	return output
 
 
 func _validate_item_ref(item_id: Variant, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:

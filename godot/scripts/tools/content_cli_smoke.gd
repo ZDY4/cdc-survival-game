@@ -18,7 +18,7 @@ func _init() -> void:
 
 	print("content_cli_smoke passed:")
 	print({
-		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "shop", "appearance"],
+		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "shop", "world_tile", "appearance"],
 	})
 	quit(0)
 
@@ -43,6 +43,7 @@ func _run() -> Array[String]:
 	_expect_min_refs(errors, index, registry, "overworld", "main_overworld", 1)
 	_expect_min_refs(errors, index, registry, "maps", "survivor_outpost_01", 1)
 	_expect_min_refs(errors, index, registry, "shops", "trader_lao_wang_shop", 1)
+	_expect_min_refs(errors, index, registry, "world_tiles", "surface_placeholder_basic", 1)
 	_expect_min_refs(errors, index, registry, "appearance", "default_humanoid", 1)
 	_expect_valid_record(errors, registry, "items", "1006")
 	_expect_valid_record(errors, registry, "recipes", "recipe_first_aid_kit")
@@ -55,11 +56,15 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "settlements", "survivor_outpost_01_settlement")
 	_expect_valid_record(errors, registry, "overworld", "main_overworld")
 	_expect_valid_record(errors, registry, "shops", "trader_lao_wang_shop")
+	_expect_valid_record(errors, registry, "world_tiles", "surface_placeholder_basic")
 	_expect_valid_record(errors, registry, "appearance", "default_humanoid")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_character_appearance_ref(errors, registry)
 	_expect_invalid_shop_item_ref(errors, registry)
+	_expect_invalid_world_tile_asset_ref(errors, registry)
+	_expect_invalid_map_world_tile_ref(errors, registry)
+	_expect_invalid_overworld_surface_set_ref(errors, registry)
 	_expect_recipe_unlock_source_refs(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
 	_expect_invalid_dialogue_shop_ref(errors, registry)
@@ -90,7 +95,7 @@ func _expect_valid_record(errors: Array[String], registry: ContentRegistry, doma
 func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) -> void:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
 	var checked := 0
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld", "appearance"]:
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance"]:
 		for id_value in registry.get_library(domain).keys():
 			var validation := validator.validate_record(domain, str(id_value), registry)
 			checked += 1
@@ -162,6 +167,85 @@ func _expect_invalid_shop_item_ref(errors: Array[String], registry: ContentRegis
 		return
 	if not _has_issue_code(validation.get("issues", []), "unknown_item"):
 		errors.append("invalid shop item smoke did not report unknown_item: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_world_tile_asset_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("world_tiles").get("surface_placeholder_basic", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing surface_placeholder_basic fixture for invalid world tile validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var prototypes: Array = data.get("prototypes", []).duplicate(true)
+	if prototypes.is_empty():
+		errors.append("world tile validation smoke missing prototype fixture")
+		return
+	var prototype: Dictionary = prototypes[0].duplicate(true)
+	var prototype_source: Dictionary = prototype.get("source", {}).duplicate(true)
+	prototype_source["path"] = "world_tiles/missing_for_validator_smoke.gltf"
+	prototype["source"] = prototype_source
+	prototypes[0] = prototype
+	data["prototypes"] = prototypes
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("world_tiles", "surface_placeholder_basic", _registry_with_override(registry, "world_tiles", "surface_placeholder_basic", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid world tile asset smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "missing_asset_file"):
+		errors.append("invalid world tile asset smoke did not report missing_asset_file: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_map_world_tile_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("maps").get("survivor_outpost_01", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing survivor_outpost_01 fixture for map world tile validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var objects: Array = data.get("objects", []).duplicate(true)
+	for i in range(objects.size()):
+		var object: Dictionary = objects[i].duplicate(true)
+		var props: Dictionary = object.get("props", {}).duplicate(true)
+		var visual: Dictionary = props.get("visual", {}).duplicate(true)
+		if visual.is_empty():
+			continue
+		visual["prototype_id"] = "missing_world_tile_prototype_for_validator_smoke"
+		props["visual"] = visual
+		object["props"] = props
+		objects[i] = object
+		data["objects"] = objects
+		source["data"] = data
+		var validation := ContentRecordValidator.new().validate_record("maps", "survivor_outpost_01", _registry_with_override(registry, "maps", "survivor_outpost_01", source))
+		if bool(validation.get("ok", false)):
+			errors.append("expected invalid map world tile reference smoke to fail")
+			return
+		if not _has_issue_code(validation.get("issues", []), "unknown_world_tile_prototype"):
+			errors.append("invalid map world tile smoke did not report unknown_world_tile_prototype: %s" % validation.get("issues", []))
+		return
+	errors.append("map world tile validation smoke could not find visual prototype fixture")
+
+
+func _expect_invalid_overworld_surface_set_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("overworld").get("main_overworld", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing main_overworld fixture for overworld surface set validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var cells: Array = data.get("cells", []).duplicate(true)
+	if cells.is_empty():
+		errors.append("overworld surface set validation smoke missing cell fixture")
+		return
+	var cell: Dictionary = cells[0].duplicate(true)
+	var visual: Dictionary = cell.get("visual", {}).duplicate(true)
+	visual["surface_set_id"] = "missing_surface_set_for_validator_smoke"
+	cell["visual"] = visual
+	cells[0] = cell
+	data["cells"] = cells
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("overworld", "main_overworld", _registry_with_override(registry, "overworld", "main_overworld", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid overworld surface set reference smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_surface_set"):
+		errors.append("invalid overworld surface set smoke did not report unknown_surface_set: %s" % validation.get("issues", []))
 
 
 func _expect_recipe_unlock_source_refs(errors: Array[String], registry: ContentRegistry) -> void:
@@ -329,6 +413,7 @@ func _expect_format_domain_support(errors: Array[String], registry: ContentRegis
 		"settlements": "data/settlements/survivor_outpost_01_settlement.json",
 		"overworld": "data/overworld/main_overworld.json",
 		"shops": "data/shops/trader_lao_wang_shop.json",
+		"world_tiles": "data/world_tiles/surface_placeholder_basic.json",
 	}
 	var domain_helper = load("res://scripts/tools/content_cli_domains.gd")
 	for domain in supported.keys():
@@ -352,6 +437,7 @@ func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -
 		{"domain": "settlements", "id": "survivor_outpost_01_settlement", "expected": "smart_objects: 13"},
 		{"domain": "overworld", "id": "main_overworld", "expected": "locations: 12"},
 		{"domain": "shops", "id": "trader_lao_wang_shop", "expected": "inventory_count: 6"},
+		{"domain": "world_tiles", "id": "surface_placeholder_basic", "expected": "prototype_count: 8"},
 	]
 	for test_case in cases:
 		var domain := str(test_case["domain"])

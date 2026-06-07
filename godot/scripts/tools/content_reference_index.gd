@@ -33,6 +33,8 @@ func references_for(domain: String, id_value: String, registry: ContentRegistry)
 			return _overworld_references(id_value, registry)
 		"shops":
 			return _shop_references(id_value, registry)
+		"world_tiles":
+			return _world_tile_references(id_value, registry)
 		"appearance":
 			return _appearance_references(id_value, registry)
 	return []
@@ -51,6 +53,7 @@ func supports_domain(domain: String) -> bool:
 		"settlements",
 		"overworld",
 		"shops",
+		"world_tiles",
 		"appearance",
 	].has(domain)
 
@@ -317,6 +320,33 @@ func _shop_references(shop_id: String, registry: ContentRegistry) -> Array[Dicti
 	return hits
 
 
+func _world_tile_references(world_tile_id: String, registry: ContentRegistry) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	var target_ids := _world_tile_nested_ids(world_tile_id, registry)
+	if target_ids.is_empty():
+		target_ids[world_tile_id] = true
+	for map_id in registry.get_library("maps").keys():
+		var record: Dictionary = registry.get_library("maps")[map_id]
+		var objects: Array = record["data"].get("objects", [])
+		for object_index in range(objects.size()):
+			var object: Dictionary = _dictionary_or_empty(objects[object_index])
+			var props: Dictionary = _dictionary_or_empty(object.get("props", {}))
+			var visual: Dictionary = _dictionary_or_empty(props.get("visual", {}))
+			_collect_world_tile_ref(hits, target_ids, "map", map_id, record["path"], "objects[%d].props.visual.prototype_id" % object_index, visual.get("prototype_id", ""))
+			var building: Dictionary = _dictionary_or_empty(props.get("building", {}))
+			var tile_set: Dictionary = _dictionary_or_empty(building.get("tile_set", {}))
+			_collect_world_tile_ref(hits, target_ids, "map", map_id, record["path"], "objects[%d].props.building.tile_set.wall_set_id" % object_index, tile_set.get("wall_set_id", ""))
+			_collect_world_tile_ref(hits, target_ids, "map", map_id, record["path"], "objects[%d].props.building.tile_set.floor_surface_set_id" % object_index, tile_set.get("floor_surface_set_id", ""))
+	for overworld_id in registry.get_library("overworld").keys():
+		var record: Dictionary = registry.get_library("overworld")[overworld_id]
+		var cells: Array = record["data"].get("cells", [])
+		for cell_index in range(cells.size()):
+			var cell: Dictionary = _dictionary_or_empty(cells[cell_index])
+			var visual: Dictionary = _dictionary_or_empty(cell.get("visual", {}))
+			_collect_world_tile_ref(hits, target_ids, "overworld", overworld_id, record["path"], "cells[%d].visual.surface_set_id" % cell_index, visual.get("surface_set_id", ""))
+	return hits
+
+
 func _collect_legacy_json_scalar_refs(hits: Array[Dictionary], target_id: String, field_names: Array[String], source_kind: String) -> void:
 	_sources.collect_legacy_json_refs(hits, target_id, source_kind, field_names, [])
 
@@ -342,6 +372,31 @@ func _collect_string_array_refs(hits: Array[Dictionary], target_id: String, sour
 
 func _shop_id_from_action(action: Dictionary) -> String:
 	return ContentRegistry.normalize_content_id(action.get("shop_id", action.get("shopId", action.get("action_key", action.get("actionKey", "")))))
+
+
+func _world_tile_nested_ids(world_tile_id: String, registry: ContentRegistry) -> Dictionary:
+	var output := {}
+	var record: Dictionary = registry.get_library("world_tiles").get(world_tile_id, {})
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+	for prototype in data.get("prototypes", []):
+		var prototype_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(prototype).get("id", ""))
+		if not prototype_id.is_empty():
+			output[prototype_id] = true
+	for surface_set in data.get("surface_sets", []):
+		var surface_set_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(surface_set).get("id", ""))
+		if not surface_set_id.is_empty():
+			output[surface_set_id] = true
+	for wall_set in data.get("wall_sets", []):
+		var wall_set_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(wall_set).get("id", ""))
+		if not wall_set_id.is_empty():
+			output[wall_set_id] = true
+	return output
+
+
+func _collect_world_tile_ref(hits: Array[Dictionary], target_ids: Dictionary, source_kind: String, source_id: String, path: String, detail: String, value: Variant) -> void:
+	var normalized := ContentRegistry.normalize_content_id(value)
+	if not normalized.is_empty() and target_ids.has(normalized):
+		hits.append(_reference_hit(source_kind, source_id, path, detail))
 
 
 func _dialogue_ids_for_character(character_id: String) -> Dictionary:
