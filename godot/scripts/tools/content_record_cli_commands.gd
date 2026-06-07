@@ -7,7 +7,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 
-const USAGE := "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"
+const USAGE := "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"
 
 
 func validate_command(args: Array[String], registry: ContentRegistry) -> int:
@@ -199,6 +199,8 @@ func _normalize_domain(kind: String) -> String:
 			return "characters"
 		"dialogue":
 			return "dialogues"
+		"dialogue_rule":
+			return "dialogue_rules"
 		"map":
 			return "maps"
 		"quest":
@@ -227,6 +229,8 @@ func _singular_domain(domain: String) -> String:
 			return "character"
 		"dialogues":
 			return "dialogue"
+		"dialogue_rules":
+			return "dialogue_rule"
 		"maps":
 			return "map"
 		"quests":
@@ -265,4 +269,4 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 
 
 func _reference_domain_list() -> String:
-	return "item, recipe, character, dialogue, quest, skill, skill_tree, settlement, overworld, map, shop, world_tile, and appearance"
+	return "item, recipe, character, dialogue, dialogue_rule, quest, skill, skill_tree, settlement, overworld, map, shop, world_tile, and appearance"

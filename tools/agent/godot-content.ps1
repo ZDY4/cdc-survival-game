@@ -11,7 +11,7 @@ summarize, references, validate, format, and diff-summary commands.
 Content command to run: locate, summarize, references, validate, format, or diff-summary.
 
 .PARAMETER Kind
-Content kind such as item, recipe, character, dialogue, quest, skill, skill_tree,
+Content kind such as item, recipe, character, dialogue, dialogue_rule, quest, skill, skill_tree,
 settlement, overworld, map, shop, world_tile, appearance, changed for `validate changed` / `format changed`,
 or path for `diff-summary --path`.
 

@@ -199,6 +199,8 @@ func _normalize_domain(kind: String) -> String:
 			return "characters"
 		"dialogue":
 			return "dialogues"
+		"dialogue_rule":
+			return "dialogue_rules"
 		"map":
 			return "maps"
 		"quest":
@@ -227,6 +229,8 @@ func _singular_domain(domain: String) -> String:
 			return "character"
 		"dialogues":
 			return "dialogue"
+		"dialogue_rules":
+			return "dialogue_rule"
 		"maps":
 			return "map"
 		"quests":
@@ -257,4 +261,4 @@ func _repo_relative_path(path: String) -> String:
 
 
 func _usage() -> String:
-	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"
+	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"

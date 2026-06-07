@@ -4,13 +4,15 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 
 
 func supports_domain(domain: String) -> bool:
-	return ["dialogues", "quests", "skills", "skill_trees"].has(domain)
+	return ["dialogues", "dialogue_rules", "quests", "skills", "skill_trees"].has(domain)
 
 
 func validate_record(domain: String, id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
 	match domain:
 		"dialogues":
 			_validate_dialogue(id_value, record, registry, issues)
+		"dialogue_rules":
+			_validate_dialogue_rule(id_value, record, registry, issues)
 		"quests":
 			_validate_quest(id_value, record, registry, issues)
 		"skills":
@@ -73,6 +75,45 @@ func _validate_dialogue_node(node: Dictionary, field: String, node_ids: Dictiona
 			_expect_non_empty_string(issues, node, "end_type", field.path_join("end_type"))
 		_:
 			issues.append(_issue("error", field.path_join("type"), "unknown_dialogue_node_type", "unsupported dialogue node type %s" % node.get("type", "")))
+
+
+func _validate_dialogue_rule(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	var data := _dictionary_or_empty(record.get("data", {}))
+	_expect_id_matches(issues, data.get("dialogue_key", ""), id_value, "$.dialogue_key")
+	_validate_ref(data.get("dialogue_key", null), "$.dialogue_key", "characters", "unknown_character", registry, issues)
+	_validate_ref(data.get("default_dialogue_id", null), "$.default_dialogue_id", "dialogues", "unknown_dialogue", registry, issues)
+	var variants := _array_or_empty(data.get("variants", []))
+	for i in range(variants.size()):
+		var variant := _dictionary_or_empty(variants[i])
+		var field := "$.variants[%d]" % i
+		_validate_ref(variant.get("dialogue_id", null), field.path_join("dialogue_id"), "dialogues", "unknown_dialogue", registry, issues)
+		if not variant.has("when"):
+			issues.append(_issue("error", field.path_join("when"), "missing_condition", "dialogue rule variant must define a when condition"))
+			continue
+		_validate_dialogue_rule_condition(_dictionary_or_empty(variant.get("when", {})), field.path_join("when"), registry, issues)
+
+
+func _validate_dialogue_rule_condition(condition: Dictionary, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	if condition.is_empty():
+		issues.append(_issue("error", field, "missing_condition", "dialogue rule condition must not be empty"))
+		return
+	_validate_ref_array(condition.get("player_active_quests_any", []), field.path_join("player_active_quests_any"), "quests", "unknown_quest", registry, issues)
+	_validate_ref_array(condition.get("player_completed_quests_any", []), field.path_join("player_completed_quests_any"), "quests", "unknown_quest", registry, issues)
+	_validate_item_count_min(condition.get("player_item_count_min", {}), field.path_join("player_item_count_min"), registry, issues)
+	if condition.has("npc_role_in"):
+		var roles := _array_or_empty(condition.get("npc_role_in", []))
+		if roles.is_empty():
+			issues.append(_issue("error", field.path_join("npc_role_in"), "missing_role", "npc_role_in must contain at least one role"))
+		for i in range(roles.size()):
+			if str(roles[i]).strip_edges().is_empty():
+				issues.append(_issue("error", field.path_join("npc_role_in[%d]" % i), "missing_role", "npc role must be a non-empty string"))
+	_validate_optional_ratio(condition, "player_hp_ratio_min", field.path_join("player_hp_ratio_min"), issues)
+	_validate_optional_ratio(condition, "player_hp_ratio_max", field.path_join("player_hp_ratio_max"), issues)
+	if condition.has("relation_score_min") and condition.has("relation_score_max"):
+		if float(condition.get("relation_score_min", 0.0)) > float(condition.get("relation_score_max", 0.0)):
+			issues.append(_issue("error", field.path_join("relation_score_min"), "invalid_score_range", "relation_score_min must be <= relation_score_max"))
+	if condition.has("npc_on_shift") and typeof(condition.get("npc_on_shift")) != TYPE_BOOL:
+		issues.append(_issue("error", field.path_join("npc_on_shift"), "expected_bool", "npc_on_shift must be a boolean"))
 
 
 func _validate_dialogue_action(action: Dictionary, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
@@ -212,6 +253,43 @@ func _validate_item_entries(entries: Variant, field: String, registry: ContentRe
 		var entry_field := field.path_join("[%d]" % i)
 		_validate_ref(entry.get("item_id", entry.get("id", null)), entry_field.path_join("item_id"), "items", "unknown_item", registry, issues)
 		_expect_number_at_least(issues, entry, "count", entry_field.path_join("count"), 1.0)
+
+
+func _validate_ref_array(values: Variant, field: String, domain: String, code: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	if values == null:
+		return
+	if typeof(values) != TYPE_ARRAY:
+		issues.append(_issue("error", field, "expected_array", "expected an array of %s ids" % domain))
+		return
+	var entries: Array = values
+	for i in range(entries.size()):
+		_validate_ref(entries[i], "%s[%d]" % [field, i], domain, code, registry, issues)
+
+
+func _validate_item_count_min(values: Variant, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	if values == null:
+		return
+	if typeof(values) != TYPE_DICTIONARY:
+		issues.append(_issue("error", field, "expected_dictionary", "expected a dictionary of item id to minimum count"))
+		return
+	var counts: Dictionary = values
+	for item_id in counts.keys():
+		var normalized := ContentRegistry.normalize_content_id(item_id)
+		if normalized.is_empty() or not registry.has_id("items", normalized):
+			issues.append(_issue("error", "%s.%s" % [field, normalized], "unknown_item", "unknown items id %s" % normalized))
+		if float(counts[item_id]) < 1.0:
+			issues.append(_issue("error", "%s.%s" % [field, normalized], "number_too_small", "item minimum count must be >= 1"))
+
+
+func _validate_optional_ratio(data: Dictionary, key: String, field: String, issues: Array[Dictionary]) -> void:
+	if not data.has(key):
+		return
+	if typeof(data.get(key)) != TYPE_FLOAT and typeof(data.get(key)) != TYPE_INT:
+		issues.append(_issue("error", field, "expected_number", "%s must be a number" % key))
+		return
+	var value := float(data.get(key, 0.0))
+	if value < 0.0 or value > 1.0:
+		issues.append(_issue("error", field, "invalid_ratio", "%s must be between 0 and 1" % key))
 
 
 func _validate_ref(value: Variant, field: String, domain: String, code: String, registry: ContentRegistry, issues: Array[Dictionary], allow_self: bool = false) -> void:

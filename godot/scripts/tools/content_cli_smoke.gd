@@ -18,7 +18,7 @@ func _init() -> void:
 
 	print("content_cli_smoke passed:")
 	print({
-		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "shop", "world_tile", "appearance"],
+		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "dialogue_rule", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "shop", "world_tile", "appearance"],
 	})
 	quit(0)
 
@@ -36,6 +36,7 @@ func _run() -> Array[String]:
 	_expect_min_refs(errors, index, registry, "items", "1006", 1)
 	_expect_min_refs(errors, index, registry, "characters", "zombie_walker", 1)
 	_expect_min_refs(errors, index, registry, "dialogues", "trader_lao_wang_intro", 1)
+	_expect_min_refs(errors, index, registry, "dialogue_rules", "trader_lao_wang", 1)
 	_expect_min_refs(errors, index, registry, "quests", "tutorial_survive", 1)
 	_expect_min_refs(errors, index, registry, "skills", "survival", 1)
 	_expect_min_refs(errors, index, registry, "skill_trees", "survival", 1)
@@ -50,6 +51,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "characters", "zombie_walker")
 	_expect_valid_record(errors, registry, "maps", "survivor_outpost_01")
 	_expect_valid_record(errors, registry, "dialogues", "trader_lao_wang_intro")
+	_expect_valid_record(errors, registry, "dialogue_rules", "trader_lao_wang")
 	_expect_valid_record(errors, registry, "quests", "tutorial_survive")
 	_expect_valid_record(errors, registry, "skills", "survival")
 	_expect_valid_record(errors, registry, "skill_trees", "survival")
@@ -69,6 +71,9 @@ func _run() -> Array[String]:
 	_expect_recipe_unlock_source_refs(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
 	_expect_invalid_dialogue_shop_ref(errors, registry)
+	_expect_invalid_dialogue_rule_dialogue_ref(errors, registry)
+	_expect_invalid_dialogue_rule_quest_ref(errors, registry)
+	_expect_invalid_dialogue_rule_item_ref(errors, registry)
 	_expect_invalid_settlement_anchor(errors, registry)
 	_expect_invalid_overworld_entry(errors, registry)
 	_expect_format_domain_support(errors, registry)
@@ -96,7 +101,7 @@ func _expect_valid_record(errors: Array[String], registry: ContentRegistry, doma
 func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) -> void:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
 	var checked := 0
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance"]:
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance"]:
 		for id_value in registry.get_library(domain).keys():
 			var validation := validator.validate_record(domain, str(id_value), registry)
 			checked += 1
@@ -364,6 +369,72 @@ func _expect_invalid_dialogue_shop_ref(errors: Array[String], registry: ContentR
 	errors.append("dialogue shop validation smoke could not find open_trade action")
 
 
+func _expect_invalid_dialogue_rule_dialogue_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("dialogue_rules").get("trader_lao_wang", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing trader_lao_wang fixture for dialogue rule validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	data["default_dialogue_id"] = "missing_dialogue_for_validator_smoke"
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("dialogue_rules", "trader_lao_wang", _registry_with_override(registry, "dialogue_rules", "trader_lao_wang", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid dialogue rule dialogue reference smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_dialogue"):
+		errors.append("invalid dialogue rule dialogue smoke did not report unknown_dialogue: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_dialogue_rule_quest_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("dialogue_rules").get("trader_lao_wang", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing trader_lao_wang fixture for dialogue rule quest validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var variants: Array = data.get("variants", []).duplicate(true)
+	if variants.is_empty():
+		errors.append("dialogue rule quest validation smoke missing variant fixture")
+		return
+	var variant: Dictionary = variants[0].duplicate(true)
+	var when: Dictionary = variant.get("when", {}).duplicate(true)
+	when["player_active_quests_any"] = ["missing_quest_for_validator_smoke"]
+	variant["when"] = when
+	variants[0] = variant
+	data["variants"] = variants
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("dialogue_rules", "trader_lao_wang", _registry_with_override(registry, "dialogue_rules", "trader_lao_wang", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid dialogue rule quest reference smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_quest"):
+		errors.append("invalid dialogue rule quest smoke did not report unknown_quest: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_dialogue_rule_item_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("dialogue_rules").get("trader_lao_wang", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing trader_lao_wang fixture for dialogue rule item validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var variants: Array = data.get("variants", []).duplicate(true)
+	if variants.is_empty():
+		errors.append("dialogue rule item validation smoke missing variant fixture")
+		return
+	var variant: Dictionary = variants[0].duplicate(true)
+	var when: Dictionary = variant.get("when", {}).duplicate(true)
+	when["player_item_count_min"] = {"missing_item_for_validator_smoke": 1}
+	variant["when"] = when
+	variants[0] = variant
+	data["variants"] = variants
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("dialogue_rules", "trader_lao_wang", _registry_with_override(registry, "dialogue_rules", "trader_lao_wang", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid dialogue rule item reference smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_item"):
+		errors.append("invalid dialogue rule item smoke did not report unknown_item: %s" % validation.get("issues", []))
+
+
 func _expect_invalid_settlement_anchor(errors: Array[String], registry: ContentRegistry) -> void:
 	var source: Dictionary = registry.get_library("settlements").get("survivor_outpost_01_settlement", {}).duplicate(true)
 	if source.is_empty():
@@ -435,6 +506,7 @@ func _expect_format_domain_support(errors: Array[String], registry: ContentRegis
 		"characters": "data/characters/zombie_walker.json",
 		"maps": "data/maps/survivor_outpost_01.json",
 		"dialogues": "data/dialogues/trader_lao_wang_intro.json",
+		"dialogue_rules": "data/dialogue_rules/trader_lao_wang.json",
 		"quests": "data/quests/tutorial_survive.json",
 		"skills": "data/skills/survival.json",
 		"skill_trees": "data/skill_trees/survival.json",
@@ -459,6 +531,7 @@ func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -
 	var presenter: ContentSummaryPresenter = ContentSummaryPresenter.new()
 	var cases := [
 		{"domain": "dialogues", "id": "trader_lao_wang_intro", "expected": "action_types: open_trade, start_quest"},
+		{"domain": "dialogue_rules", "id": "trader_lao_wang", "expected": "variant_count: 12"},
 		{"domain": "quests", "id": "tutorial_survive", "expected": "node_types: end=1, objective=1, reward=1, start=1"},
 		{"domain": "skills", "id": "survival", "expected": "activation_mode: passive"},
 		{"domain": "skill_trees", "id": "survival", "expected": "skill_count: 4"},

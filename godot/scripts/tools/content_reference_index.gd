@@ -21,6 +21,8 @@ func references_for(domain: String, id_value: String, registry: ContentRegistry)
 			return _map_references(id_value, registry)
 		"dialogues":
 			return _dialogue_references(id_value, registry)
+		"dialogue_rules":
+			return _dialogue_rule_references(id_value, registry)
 		"quests":
 			return _quest_references(id_value, registry)
 		"skills":
@@ -47,6 +49,7 @@ func supports_domain(domain: String) -> bool:
 		"characters",
 		"maps",
 		"dialogues",
+		"dialogue_rules",
 		"quests",
 		"skills",
 		"skill_trees",
@@ -138,6 +141,29 @@ func _dialogue_references(dialogue_id: String, _registry: ContentRegistry) -> Ar
 			var variant: Dictionary = _dictionary_or_empty(variants[i])
 			if str(variant.get("dialogue_id", "")) == dialogue_id:
 				hits.append(_reference_hit("dialogue_rule", rule_id, record.get("path", ""), "variants[%d].dialogue_id" % i))
+	return hits
+
+
+func _dialogue_rule_references(dialogue_rule_id: String, registry: ContentRegistry) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	var record: Dictionary = registry.get_library("dialogue_rules").get(dialogue_rule_id, {})
+	if record.is_empty():
+		return hits
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+	var dialogue_key := ContentRegistry.normalize_content_id(data.get("dialogue_key", ""))
+	if registry.has_id("characters", dialogue_key):
+		var character_record: Dictionary = registry.get_library("characters").get(dialogue_key, {})
+		hits.append(_reference_hit("character", dialogue_key, character_record.get("path", ""), "derived_dialogue_rule"))
+	var default_dialogue_id := ContentRegistry.normalize_content_id(data.get("default_dialogue_id", ""))
+	if registry.has_id("dialogues", default_dialogue_id):
+		var dialogue_record: Dictionary = registry.get_library("dialogues").get(default_dialogue_id, {})
+		hits.append(_reference_hit("dialogue", default_dialogue_id, dialogue_record.get("path", ""), "resolved_by_default_dialogue_id"))
+	var variants: Array = data.get("variants", [])
+	for i in range(variants.size()):
+		var dialogue_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(variants[i]).get("dialogue_id", ""))
+		if registry.has_id("dialogues", dialogue_id):
+			var variant_record: Dictionary = registry.get_library("dialogues").get(dialogue_id, {})
+			hits.append(_reference_hit("dialogue", dialogue_id, variant_record.get("path", ""), "resolved_by_variants[%d].dialogue_id" % i))
 	return hits
 
 

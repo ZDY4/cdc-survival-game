@@ -26,6 +26,8 @@ func summary_lines(domain: String, id_value: String, record: Dictionary, relativ
 			lines.append_array(_map_lines(data))
 		"dialogues":
 			lines.append_array(_dialogue_lines(data))
+		"dialogue_rules":
+			lines.append_array(_dialogue_rule_lines(data))
 		"quests":
 			lines.append_array(_quest_lines(data))
 		"skills":
@@ -51,6 +53,8 @@ static func singular_domain(domain: String) -> String:
 			return "character"
 		"dialogues":
 			return "dialogue"
+		"dialogue_rules":
+			return "dialogue_rule"
 		"maps":
 			return "map"
 		"quests":
@@ -134,6 +138,17 @@ func _dialogue_lines(data: Dictionary) -> Array[String]:
 		"start_node: %s" % _dialogue_start_node(nodes),
 		"action_types: %s" % _dialogue_action_types(nodes),
 		"connection_count: %d" % _array_or_empty(data.get("connections", [])).size(),
+	]
+
+
+func _dialogue_rule_lines(data: Dictionary) -> Array[String]:
+	var variants := _array_or_empty(data.get("variants", []))
+	return [
+		"dialogue_key: %s" % data.get("dialogue_key", ""),
+		"default_dialogue_id: %s" % data.get("default_dialogue_id", ""),
+		"variant_count: %d" % variants.size(),
+		"variant_dialogues: %s" % _join_or_dash(_dialogue_rule_variant_dialogues(variants)),
+		"condition_fields: %s" % _join_or_dash(_dialogue_rule_condition_fields(variants)),
 	]
 
 
@@ -237,6 +252,28 @@ func _dialogue_action_types(nodes: Array) -> String:
 		values.append(str(action_type))
 	values.sort()
 	return _join_or_dash(values)
+
+
+func _dialogue_rule_variant_dialogues(variants: Array) -> Array[String]:
+	var output: Array[String] = []
+	for variant in variants:
+		var dialogue_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(variant).get("dialogue_id", ""))
+		if not dialogue_id.is_empty() and not output.has(dialogue_id):
+			output.append(dialogue_id)
+	output.sort()
+	return output
+
+
+func _dialogue_rule_condition_fields(variants: Array) -> Array[String]:
+	var output: Array[String] = []
+	for variant in variants:
+		var when := _dictionary_or_empty(_dictionary_or_empty(variant).get("when", {}))
+		for key in when.keys():
+			var key_string := str(key)
+			if not key_string.is_empty() and not output.has(key_string):
+				output.append(key_string)
+	output.sort()
+	return output
 
 
 func _quest_node_type_counts(nodes: Dictionary) -> String:
