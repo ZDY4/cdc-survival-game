@@ -1,6 +1,6 @@
 {
   "name": "开锁",
-  "icon": "",
+  "icon": "res://assets/icons/skills/lockpicking.svg",
   "description": "提高开锁检定成功率。",
   "tree_id": "crafting",
   "max_level": 3,

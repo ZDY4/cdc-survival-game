@@ -1,5 +1,7 @@
 extends Control
 
+const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+
 var _world_label: Label
 var _status_badge_label: Label
 var _player_label: Label
@@ -927,6 +929,7 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	button.set_meta("cooldown_mask_visible", cooldown > 0.0)
 	button.set_meta("use_reason", use_reason)
 	button.set_meta("can_use", can_use)
+	_apply_hotbar_icon(button, slot)
 	button.set_drag_forwarding(
 		Callable(self, "_empty_hotbar_drag_data"),
 		Callable(self, "_can_drop_hotbar_skill"),
@@ -949,6 +952,18 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	)
 	_add_hotbar_cooldown_mask(button, slot_id, cooldown)
 	return button
+
+
+func _apply_hotbar_icon(button: Button, slot: Dictionary) -> void:
+	var icon_asset := _dictionary_or_empty(slot.get("icon_asset", {}))
+	var texture := MediaTextureLoader.texture_from_asset(icon_asset)
+	if texture == null:
+		button.icon = null
+		return
+	button.icon = texture
+	button.expand_icon = true
+	button.set_meta("icon_resource_path", MediaTextureLoader.resource_path_from_asset(icon_asset))
+	button.set_meta("icon_fallback_key", str(icon_asset.get("fallback_key", "")))
 
 
 func _apply_observe_hotbar(runtime_control_value: Variant) -> void:

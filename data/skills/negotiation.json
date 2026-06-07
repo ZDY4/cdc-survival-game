@@ -1,6 +1,6 @@
 {
   "name": "谈判",
-  "icon": "",
+  "icon": "res://assets/icons/skills/negotiation.svg",
   "description": "改善交易与谈判结果。",
   "tree_id": "crafting",
   "max_level": 3,

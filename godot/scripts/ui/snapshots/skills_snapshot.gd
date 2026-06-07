@@ -1,5 +1,7 @@
 extends RefCounted
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+
 var registry: RefCounted
 
 
@@ -75,6 +77,8 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 	return {
 		"skill_id": skill_id,
 		"name": str(skill_data.get("name", skill_id)),
+		"icon": str(skill_data.get("icon", "")),
+		"icon_asset": AssetPathResolver.resolve_media_asset(str(skill_data.get("icon", "")), "skill"),
 		"description": str(skill_data.get("description", "")),
 		"tree_id": str(skill_data.get("tree_id", "")),
 		"level": current_level,

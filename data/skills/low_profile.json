@@ -1,6 +1,6 @@
 {
 	"name": "低姿潜行",
-	"icon": "",
+	"icon": "res://assets/icons/skills/low_profile.svg",
 	"description": "切换到低姿潜行状态，降低被发现的概率。",
 	"tree_id": "survival",
 	"max_level": 3,

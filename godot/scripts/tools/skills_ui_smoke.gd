@@ -38,6 +38,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills panel missing survival skill row")
 	if not _skill_text(game_root).contains("医疗知识 0/3"):
 		errors.append("skills panel missing medicine skill row")
+	if not _skill_line_has_icon(game_root, "survival", "res://assets/icons/skills/survival.svg"):
+		errors.append("survival skill row should render migrated skill icon")
 	if not _detail_text(game_root).contains("详情: 战斗训练 0/5"):
 		errors.append("skills detail should select the first visible skill by default")
 	if not _press_skill_line(game_root, "medicine"):
@@ -180,6 +182,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("HUD hotbar should show dragged adrenaline rush in slot 3")
 	if not _hud_hotbar_slot_tooltip(game_root, "slot_3").contains("Adrenaline Rush"):
 		errors.append("HUD hotbar slot should expose skill tooltip")
+	if not _hud_hotbar_slot_has_icon(game_root, "slot_3", "res://assets/icons/skills/adrenaline_rush.svg"):
+		errors.append("HUD hotbar slot should render migrated adrenaline rush icon")
 	_assert_hover_tooltip_snapshot(errors, game_root, _hud_hotbar_slot_control(game_root, "slot_3"), "hud", "Adrenaline Rush", "HUD skill hotbar tooltip snapshot")
 	if _hud_hotbar_cooldown_mask_visible(game_root, "slot_3"):
 		errors.append("HUD hotbar cooldown mask should stay hidden before skill cooldown")
@@ -469,6 +473,18 @@ func _skill_line(game_root: Node, skill_id: String) -> String:
 	return ""
 
 
+func _skill_line_has_icon(game_root: Node, skill_id: String, expected_resource_path: String) -> bool:
+	var button := _skill_line_button(game_root, skill_id)
+	return button != null and button.icon != null and str(button.get_meta("icon_resource_path", "")) == expected_resource_path
+
+
+func _skill_line_button(game_root: Node, skill_id: String) -> Button:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return null
+	return row.get_node_or_null("Line") as Button
+
+
 func _skill_line_tooltip(game_root: Node, skill_id: String) -> String:
 	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
 	if row == null:
@@ -477,6 +493,11 @@ func _skill_line_tooltip(game_root: Node, skill_id: String) -> String:
 	if label is Button:
 		return str((label as Button).tooltip_text)
 	return ""
+
+
+func _hud_hotbar_slot_has_icon(game_root: Node, slot_id: String, expected_resource_path: String) -> bool:
+	var button: Button = game_root.hud.find_child("HotbarSlot_%s" % slot_id, true, false) as Button
+	return button != null and button.icon != null and str(button.get_meta("icon_resource_path", "")) == expected_resource_path
 
 
 func _press_skill_line(game_root: Node, skill_id: String) -> bool:

@@ -145,6 +145,8 @@ static func _fallback_key_for_media_path(path: String) -> String:
 		return "ammo"
 	if normalized.contains("/effects/"):
 		return "effect"
+	if normalized.contains("/skills/"):
+		return "skill"
 	if normalized.contains("/weapons/"):
 		return "weapon"
 	if normalized.contains("/materials/"):

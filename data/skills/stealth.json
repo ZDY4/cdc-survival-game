@@ -1,6 +1,6 @@
 {
   "name": "潜行",
-  "icon": "",
+  "icon": "res://assets/icons/skills/stealth.svg",
   "description": "降低被敌人发现概率，提升潜行路线成功率。",
   "tree_id": "combat",
   "max_level": 4,

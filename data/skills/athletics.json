@@ -1,6 +1,6 @@
 {
   "name": "体能强化",
-  "icon": "",
+  "icon": "res://assets/icons/skills/athletics.svg",
   "description": "提升机动能力与遭遇判定中的体能成功率。",
   "tree_id": "combat",
   "max_level": 3,

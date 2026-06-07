@@ -1,6 +1,6 @@
 {
   "name": "观察力",
-  "icon": "",
+  "icon": "res://assets/icons/skills/perception.svg",
   "description": "提高发现线索和隐藏目标的能力。",
   "tree_id": "survival",
   "max_level": 4,

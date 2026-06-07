@@ -1,5 +1,7 @@
 extends RefCounted
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+
 var registry: RefCounted
 
 
@@ -234,6 +236,7 @@ func _hotbar_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Array[
 			"skill_id": skill_id,
 			"item_id": item_id,
 			"label": _hotbar_label(kind, entry_id),
+			"icon_asset": _hotbar_icon_asset(kind, skill_id, item_id),
 			"cooldown_remaining": float(slot_data.get("cooldown_remaining", 0.0)),
 			"ap_cost": float(use_state.get("ap_cost", 0.0)),
 			"resource_costs": _array_or_empty(use_state.get("resource_costs", [])).duplicate(true),
@@ -342,6 +345,16 @@ func _hotbar_item_state(item_id: String, player_ap: float, inventory: Dictionary
 		"item_count": count,
 		"effect_summary": effect_summary.duplicate(),
 	}
+
+
+func _hotbar_icon_asset(kind: String, skill_id: String, item_id: String) -> Dictionary:
+	if kind == "skill":
+		var skill: Dictionary = _skill_data(skill_id)
+		return AssetPathResolver.resolve_media_asset(str(skill.get("icon", "")), "skill")
+	if kind == "item":
+		var item: Dictionary = _item_data(item_id)
+		return AssetPathResolver.resolve_media_asset(str(item.get("icon_path", "")), "item")
+	return AssetPathResolver.resolve_media_asset("", "generic")
 
 
 func _skill_data(skill_id: String) -> Dictionary:

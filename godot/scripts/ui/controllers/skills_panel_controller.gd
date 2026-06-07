@@ -1,5 +1,7 @@
 extends Control
 
+const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+
 var _panel: PanelContainer
 var _summary_label: Label
 var _hotbar_label: Label
@@ -174,6 +176,7 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	line.toggle_mode = true
 	line.button_pressed = _selected_skill_id == str(skill.get("skill_id", ""))
 	line.focus_mode = Control.FOCUS_NONE
+	_apply_skill_icon(line, skill)
 	var skill_id := str(skill.get("skill_id", ""))
 	line.set_meta("skill_drag_data", skill.duplicate(true))
 	line.set_drag_forwarding(
@@ -215,6 +218,18 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	row.add_child(use_button)
 	row.add_child(clear_button)
 	return row
+
+
+func _apply_skill_icon(button: Button, skill: Dictionary) -> void:
+	var icon_asset := _dictionary_or_empty(skill.get("icon_asset", {}))
+	var texture := MediaTextureLoader.texture_from_asset(icon_asset)
+	if texture == null:
+		button.icon = null
+		return
+	button.icon = texture
+	button.expand_icon = true
+	button.set_meta("icon_resource_path", MediaTextureLoader.resource_path_from_asset(icon_asset))
+	button.set_meta("icon_fallback_key", str(icon_asset.get("fallback_key", "")))
 
 
 func _get_skill_drag_data(_position: Vector2, from_control: Control) -> Variant:

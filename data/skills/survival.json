@@ -1,6 +1,6 @@
 {
   "name": "生存本能",
-  "icon": "",
+  "icon": "res://assets/icons/skills/survival.svg",
   "description": "降低饥饿和口渴等生存消耗。",
   "tree_id": "survival",
   "max_level": 5,

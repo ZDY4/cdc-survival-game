@@ -1,6 +1,6 @@
 {
   "name": "工程基础",
-  "icon": "",
+  "icon": "res://assets/icons/skills/engineering.svg",
   "description": "提升复杂器械与结构制作的稳定性。", 
   "tree_id": "crafting",
   "max_level": 5,

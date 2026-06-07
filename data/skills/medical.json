@@ -1,6 +1,6 @@
 {
   "name": "医疗基础",
-  "icon": "",
+  "icon": "res://assets/icons/skills/medical.svg",
   "description": "提升基础治疗、药剂调配与现场救护能力。",
   "tree_id": "crafting",
   "max_level": 5,

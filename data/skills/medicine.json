@@ -1,6 +1,6 @@
 {
   "name": "医疗知识",
-  "icon": "",
+  "icon": "res://assets/icons/skills/medicine.svg",
   "description": "提升治疗与恢复相关判定。",
   "tree_id": "survival",
   "max_level": 3,

@@ -1,6 +1,6 @@
 {
   "name": "战斗训练",
-  "icon": "",
+  "icon": "res://assets/icons/skills/combat.svg",
   "description": "基础战斗训练，提高造成的伤害。",
   "tree_id": "combat",
   "max_level": 5,
