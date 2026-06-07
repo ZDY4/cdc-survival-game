@@ -60,6 +60,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "appearance", "default_humanoid")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
+	_expect_invalid_item_appearance_asset_ref(errors, registry)
 	_expect_invalid_character_appearance_ref(errors, registry)
 	_expect_invalid_shop_item_ref(errors, registry)
 	_expect_invalid_world_tile_asset_ref(errors, registry)
@@ -127,6 +128,33 @@ func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry
 			found_unknown_item = true
 	if not found_unknown_item:
 		errors.append("invalid recipe reference smoke did not report unknown_item: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_item_appearance_asset_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("items").get("1002", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing item 1002 fixture for invalid appearance asset smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var fragments: Array = data.get("fragments", []).duplicate(true)
+	for i in range(fragments.size()):
+		var fragment: Dictionary = fragments[i].duplicate(true)
+		if str(fragment.get("kind", "")) != "appearance":
+			continue
+		var definition: Dictionary = fragment.get("definition", {}).duplicate(true)
+		definition["visual_asset"] = "builtin:weapon:missing_for_validator_smoke"
+		fragment["definition"] = definition
+		fragments[i] = fragment
+		data["fragments"] = fragments
+		source["data"] = data
+		var validation := ContentRecordValidator.new().validate_record("items", "1002", _registry_with_override(registry, "items", "1002", source))
+		if bool(validation.get("ok", false)):
+			errors.append("expected invalid item appearance asset smoke to fail")
+			return
+		if not _has_issue_code(validation.get("issues", []), "missing_asset_file"):
+			errors.append("invalid item appearance asset smoke did not report missing_asset_file: %s" % validation.get("issues", []))
+		return
+	errors.append("item appearance asset smoke could not find appearance fragment")
 
 
 func _expect_invalid_character_appearance_ref(errors: Array[String], registry: ContentRegistry) -> void:

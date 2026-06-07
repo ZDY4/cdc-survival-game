@@ -54,6 +54,8 @@ func _validate_item(id_value: String, record: Dictionary, registry: ContentRegis
 				_validate_equip_fragment(fragment, field, registry, issues)
 			"weapon":
 				_validate_weapon_fragment(fragment, field, registry, issues)
+			"appearance":
+				_validate_appearance_fragment(fragment, field, issues)
 			"crafting":
 				_validate_item_entries(fragment.get("deconstruct_yield", []), field.path_join("deconstruct_yield"), registry, issues)
 				var crafting_recipe: Dictionary = _dictionary_or_empty(fragment.get("crafting_recipe", {}))
@@ -294,6 +296,30 @@ func _validate_weapon_fragment(fragment: Dictionary, field: String, registry: Co
 	_validate_effect_list(fragment.get("on_hit_effect_ids", []), field.path_join("on_hit_effect_ids"), registry, issues)
 
 
+func _validate_appearance_fragment(fragment: Dictionary, field: String, issues: Array[Dictionary]) -> void:
+	var definition: Dictionary = _dictionary_or_empty(fragment.get("definition", {}))
+	if definition.is_empty():
+		issues.append(_issue("error", field.path_join("definition"), "missing_appearance_definition", "appearance fragment must define a definition object"))
+		return
+	var visual_asset := str(definition.get("visual_asset", "")).strip_edges()
+	if visual_asset.is_empty():
+		issues.append(_issue("error", field.path_join("definition.visual_asset"), "missing_asset", "appearance visual_asset is required"))
+	else:
+		var model_asset := _model_asset_for_equipment_visual(visual_asset)
+		if model_asset.is_empty():
+			issues.append(_issue("error", field.path_join("definition.visual_asset"), "unknown_visual_asset", "unsupported appearance visual_asset %s" % visual_asset))
+		else:
+			var full_path := ContentPaths.assets_root().path_join(model_asset).simplify_path()
+			if not FileAccess.file_exists(full_path):
+				issues.append(_issue("error", field.path_join("definition.visual_asset"), "missing_asset_file", "appearance model asset does not exist: %s" % full_path))
+	var attach_target := str(definition.get("attach_target", "")).strip_edges()
+	if not attach_target.is_empty() and not ["main_hand", "off_hand", "head", "body", "legs", "feet", "hands", "back", "accessory"].has(attach_target):
+		issues.append(_issue("warning", field.path_join("definition.attach_target"), "unknown_attach_target", "unknown appearance attach target %s" % attach_target))
+	var presentation_mode := str(definition.get("presentation_mode", "")).strip_edges()
+	if not presentation_mode.is_empty() and not ["attach", "replace_region"].has(presentation_mode):
+		issues.append(_issue("warning", field.path_join("definition.presentation_mode"), "unknown_presentation_mode", "unknown appearance presentation mode %s" % presentation_mode))
+
+
 func _validate_durability_fragment(fragment: Dictionary, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
 	_expect_number_at_least(issues, fragment, "durability", field.path_join("durability"), 0.0)
 	_expect_number_at_least(issues, fragment, "max_durability", field.path_join("max_durability"), 1.0)
@@ -440,6 +466,17 @@ func _validate_world_tile_source(source: Dictionary, field: String, issues: Arra
 			issues.append(_issue("error", field.path_join("path"), "missing_asset_file", "asset file does not exist: %s" % full_path))
 	if source.has("scene_index") and int(source.get("scene_index", 0)) < 0:
 		issues.append(_issue("error", field.path_join("scene_index"), "negative_scene_index", "scene_index must be >= 0"))
+
+
+func _model_asset_for_equipment_visual(visual_asset: String) -> String:
+	var normalized := visual_asset.strip_edges()
+	if normalized.ends_with(".gltf"):
+		return normalized
+	if normalized.begins_with("builtin:weapon:"):
+		return "preview_placeholders/placeholders/weapon_%s.gltf" % normalized.trim_prefix("builtin:weapon:")
+	if normalized.begins_with("builtin:item:"):
+		return "preview_placeholders/placeholders/equipment_%s.gltf" % normalized.trim_prefix("builtin:item:")
+	return ""
 
 
 func _validate_bounds(bounds: Dictionary, field: String, issues: Array[Dictionary]) -> void:
