@@ -15,6 +15,9 @@ var _hotbar_label: Label
 var _feedback_label: Label
 var _filter_box: HBoxContainer
 var _tree_filter_box: HBoxContainer
+var _graph_header_box: HBoxContainer
+var _graph_canvas: Control
+var _graph_status_label: Label
 var _tree_box: VBoxContainer
 var _detail_title_label: Label
 var _detail_body_label: Label
@@ -24,6 +27,12 @@ var _context_skill: Dictionary = {}
 var _filter_mode: String = "all"
 var _tree_filter_mode: String = "all"
 var _selected_skill_id := ""
+var _skill_graph_nodes: Dictionary = {}
+var _skill_graph_edges: Array[Dictionary] = []
+var _skill_graph_pan := Vector2.ZERO
+var _skill_graph_dragging := false
+var _skill_graph_drag_distance := 0.0
+var _skill_graph_last_mouse := Vector2.ZERO
 var _pending_learn_skill: Dictionary = {}
 var _learn_feedback_text := ""
 var _last_snapshot: Dictionary = {}
@@ -64,6 +73,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 			var skill_data: Dictionary = skill
 			visible_skills.append(skill_data)
 			_tree_box.add_child(_skill_row(skill_data))
+	_rebuild_graph(snapshot, visible_skills)
 	if visible_skills.is_empty():
 		var empty := _label("SkillEmptyLine")
 		empty.text = "没有符合筛选的技能"
@@ -103,6 +113,17 @@ func _build_layout() -> void:
 	_tree_filter_box = HBoxContainer.new()
 	_tree_filter_box.name = "TreeFilterBar"
 	_tree_filter_box.add_theme_constant_override("separation", 4)
+	_graph_header_box = HBoxContainer.new()
+	_graph_header_box.name = "SkillTreeGraphHeader"
+	_graph_header_box.add_theme_constant_override("separation", 4)
+	_graph_canvas = Control.new()
+	_graph_canvas.name = "SkillTreeGraphCanvas"
+	_graph_canvas.custom_minimum_size = Vector2(430, 132)
+	_graph_canvas.mouse_filter = Control.MOUSE_FILTER_STOP
+	_graph_canvas.draw.connect(_draw_skill_graph_canvas)
+	_graph_canvas.gui_input.connect(_handle_skill_graph_input)
+	_graph_status_label = _label("SkillTreeGraphStatusLine")
+	_graph_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_tree_box = VBoxContainer.new()
 	_tree_box.name = "TreeLines"
 	_tree_box.add_theme_constant_override("separation", 4)
@@ -130,9 +151,243 @@ func _build_layout() -> void:
 	_add_filter_button("FilterLockedButton", "锁定", "locked")
 	_add_filter_button("FilterActiveButton", "主动", "active")
 	box.add_child(_tree_filter_box)
+	var reset_pan_button := _button("SkillTreeResetPanButton", "复位", "复位技能树视图", false)
+	reset_pan_button.custom_minimum_size = Vector2(58, 28)
+	reset_pan_button.pressed.connect(Callable(self, "reset_skill_tree_pan"), CONNECT_DEFERRED)
+	_graph_header_box.add_child(_graph_status_label)
+	_graph_header_box.add_child(reset_pan_button)
+	box.add_child(_graph_header_box)
+	box.add_child(_graph_canvas)
 	box.add_child(_tree_box)
 	box.add_child(_detail_title_label)
 	box.add_child(_detail_body_label)
+
+
+func reset_skill_tree_pan() -> void:
+	_skill_graph_pan = Vector2.ZERO
+	_update_graph_diagnostics()
+	if _graph_canvas != null:
+		_graph_canvas.queue_redraw()
+
+
+func skill_tree_graph_snapshot() -> Dictionary:
+	return {
+		"active": _graph_canvas != null,
+		"node_count": _skill_graph_nodes.size(),
+		"edge_count": _skill_graph_edges.size(),
+		"pan": {
+			"x": _skill_graph_pan.x,
+			"y": _skill_graph_pan.y,
+		},
+		"filter_mode": _filter_mode,
+		"tree_filter_mode": _tree_filter_mode,
+		"selected_skill_id": _selected_skill_id,
+		"canvas_min_size": {
+			"x": _graph_canvas.custom_minimum_size.x if _graph_canvas != null else 0.0,
+			"y": _graph_canvas.custom_minimum_size.y if _graph_canvas != null else 0.0,
+		},
+		"nodes": _skill_graph_node_summaries(),
+		"edges": _skill_graph_edges.duplicate(true),
+	}
+
+
+func _rebuild_graph(snapshot: Dictionary, visible_skills: Array[Dictionary]) -> void:
+	_skill_graph_nodes.clear()
+	_skill_graph_edges.clear()
+	var visible_ids: Dictionary = {}
+	var skills_by_tree: Dictionary = {}
+	var tree_order: Array[String] = []
+	for skill in visible_skills:
+		var skill_data: Dictionary = skill
+		var skill_id := str(skill_data.get("skill_id", ""))
+		var tree_id := str(skill_data.get("tree_id", ""))
+		if skill_id.is_empty():
+			continue
+		visible_ids[skill_id] = true
+		if not skills_by_tree.has(tree_id):
+			skills_by_tree[tree_id] = []
+			tree_order.append(tree_id)
+		skills_by_tree[tree_id].append(skill_data)
+	for tree in snapshot.get("trees", []):
+		var tree_data: Dictionary = tree
+		var tree_id := str(tree_data.get("tree_id", ""))
+		if tree_order.has(tree_id):
+			continue
+		if _tree_filter_mode == "all" or _tree_filter_mode == tree_id:
+			tree_order.append(tree_id)
+	tree_order.sort()
+	var node_size := Vector2(112, 34)
+	var x_spacing := 140.0
+	var y_spacing := 46.0
+	for tree_index in range(tree_order.size()):
+		var tree_id: String = tree_order[tree_index]
+		var tree_skills: Array = _array_or_empty(skills_by_tree.get(tree_id, []))
+		for skill_index in range(tree_skills.size()):
+			var skill: Dictionary = _dictionary_or_empty(tree_skills[skill_index])
+			var skill_id := str(skill.get("skill_id", ""))
+			if skill_id.is_empty():
+				continue
+			_skill_graph_nodes[skill_id] = {
+				"skill_id": skill_id,
+				"name": str(skill.get("name", skill_id)),
+				"tree_id": tree_id,
+				"position": Vector2(12.0 + float(tree_index) * x_spacing, 12.0 + float(skill_index) * y_spacing),
+				"size": node_size,
+				"level": int(skill.get("level", 0)),
+				"max_level": int(skill.get("max_level", 1)),
+				"can_learn": bool(skill.get("can_learn", false)),
+				"activation_mode": str(skill.get("activation_mode", "passive")),
+				"learn_reason": str(skill.get("learn_reason", "")),
+			}
+	for skill in visible_skills:
+		var skill_data: Dictionary = skill
+		var to_id := str(skill_data.get("skill_id", ""))
+		for prerequisite in _array_or_empty(skill_data.get("prerequisites", [])):
+			var from_id := str(prerequisite)
+			if visible_ids.has(from_id) and visible_ids.has(to_id):
+				_skill_graph_edges.append({
+					"from": from_id,
+					"to": to_id,
+				})
+	_update_graph_diagnostics()
+	if _graph_canvas != null:
+		_graph_canvas.queue_redraw()
+
+
+func _handle_skill_graph_input(event: InputEvent) -> void:
+	var mouse_button := event as InputEventMouseButton
+	if mouse_button != null:
+		if mouse_button.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_button.pressed:
+				_skill_graph_dragging = true
+				_skill_graph_drag_distance = 0.0
+				_skill_graph_last_mouse = mouse_button.position
+				_graph_canvas.accept_event()
+				return
+			if _skill_graph_dragging:
+				_skill_graph_dragging = false
+				if _skill_graph_drag_distance < 4.0:
+					var skill_id := _skill_id_at_graph_position(mouse_button.position)
+					if not skill_id.is_empty():
+						_selected_skill_id = skill_id
+						_learn_feedback_text = ""
+						_graph_canvas.accept_event()
+						apply_snapshot(_last_snapshot)
+						return
+				_graph_canvas.accept_event()
+				return
+	var mouse_motion := event as InputEventMouseMotion
+	if mouse_motion != null and _skill_graph_dragging:
+		_skill_graph_pan += mouse_motion.position - _skill_graph_last_mouse
+		_skill_graph_drag_distance += (mouse_motion.position - _skill_graph_last_mouse).length()
+		_skill_graph_last_mouse = mouse_motion.position
+		_update_graph_diagnostics()
+		_graph_canvas.queue_redraw()
+		_graph_canvas.accept_event()
+
+
+func _draw_skill_graph_canvas() -> void:
+	if _graph_canvas == null:
+		return
+	var rect := Rect2(Vector2.ZERO, _graph_canvas.size)
+	_graph_canvas.draw_rect(rect, Color(0.055, 0.06, 0.065, 0.94), true)
+	_graph_canvas.draw_rect(rect, Color(0.28, 0.32, 0.34, 0.65), false, 1.0)
+	for edge in _skill_graph_edges:
+		var edge_data: Dictionary = edge
+		var from_node: Dictionary = _dictionary_or_empty(_skill_graph_nodes.get(str(edge_data.get("from", "")), {}))
+		var to_node: Dictionary = _dictionary_or_empty(_skill_graph_nodes.get(str(edge_data.get("to", "")), {}))
+		if from_node.is_empty() or to_node.is_empty():
+			continue
+		var from_rect := _graph_node_rect(from_node)
+		var to_rect := _graph_node_rect(to_node)
+		var from_pos := from_rect.position + Vector2(from_rect.size.x, from_rect.size.y * 0.5)
+		var to_pos := to_rect.position + Vector2(0.0, to_rect.size.y * 0.5)
+		var edge_color := Color(0.55, 0.68, 0.75, 0.8)
+		if str(edge_data.get("from", "")) == _selected_skill_id or str(edge_data.get("to", "")) == _selected_skill_id:
+			edge_color = Color(0.96, 0.78, 0.28, 0.95)
+		_graph_canvas.draw_line(from_pos, to_pos, edge_color, 2.0, true)
+	var node_ids: Array = _skill_graph_nodes.keys()
+	node_ids.sort()
+	for skill_id in node_ids:
+		var node: Dictionary = _dictionary_or_empty(_skill_graph_nodes.get(skill_id, {}))
+		_draw_skill_graph_node(node)
+
+
+func _draw_skill_graph_node(node: Dictionary) -> void:
+	if node.is_empty() or _graph_canvas == null:
+		return
+	var node_rect := _graph_node_rect(node)
+	var state_color := _skill_graph_node_color(node)
+	_graph_canvas.draw_rect(node_rect, state_color, true)
+	var border := Color(0.78, 0.82, 0.86, 0.9)
+	if str(node.get("skill_id", "")) == _selected_skill_id:
+		border = Color(1.0, 0.82, 0.22, 1.0)
+	_graph_canvas.draw_rect(node_rect, border, false, 2.0)
+	var font := _graph_canvas.get_theme_default_font()
+	var font_size := 12
+	var title := str(node.get("name", node.get("skill_id", "")))
+	if title.length() > 8:
+		title = title.substr(0, 8)
+	var level_text := "%d/%d" % [int(node.get("level", 0)), int(node.get("max_level", 1))]
+	_graph_canvas.draw_string(font, node_rect.position + Vector2(6, 14), title, HORIZONTAL_ALIGNMENT_LEFT, node_rect.size.x - 12.0, font_size, Color(0.96, 0.97, 0.94))
+	_graph_canvas.draw_string(font, node_rect.position + Vector2(6, 29), level_text, HORIZONTAL_ALIGNMENT_LEFT, node_rect.size.x - 12.0, font_size, Color(0.82, 0.86, 0.88))
+
+
+func _graph_node_rect(node: Dictionary) -> Rect2:
+	return Rect2(_vector2_or_zero(node.get("position", Vector2.ZERO)) + _skill_graph_pan, _vector2_or_zero(node.get("size", Vector2(112, 34))))
+
+
+func _skill_graph_node_color(node: Dictionary) -> Color:
+	if int(node.get("level", 0)) > 0:
+		return Color(0.12, 0.36, 0.28, 0.95)
+	if bool(node.get("can_learn", false)):
+		return Color(0.28, 0.28, 0.12, 0.95)
+	return Color(0.16, 0.18, 0.20, 0.95)
+
+
+func _skill_id_at_graph_position(position: Vector2) -> String:
+	var node_ids: Array = _skill_graph_nodes.keys()
+	node_ids.sort()
+	for index in range(node_ids.size() - 1, -1, -1):
+		var skill_id := str(node_ids[index])
+		var node: Dictionary = _dictionary_or_empty(_skill_graph_nodes.get(skill_id, {}))
+		if _graph_node_rect(node).has_point(position):
+			return skill_id
+	return ""
+
+
+func _update_graph_diagnostics() -> void:
+	if _graph_status_label == null:
+		return
+	_graph_status_label.text = "技能树 %d 节点 / %d 链路 | pan %.0f,%.0f" % [
+		_skill_graph_nodes.size(),
+		_skill_graph_edges.size(),
+		_skill_graph_pan.x,
+		_skill_graph_pan.y,
+	]
+
+
+func _skill_graph_node_summaries() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var ids: Array = _skill_graph_nodes.keys()
+	ids.sort()
+	for skill_id in ids:
+		var node: Dictionary = _dictionary_or_empty(_skill_graph_nodes.get(str(skill_id), {}))
+		var position := _vector2_or_zero(node.get("position", Vector2.ZERO))
+		var size := _vector2_or_zero(node.get("size", Vector2.ZERO))
+		output.append({
+			"skill_id": str(node.get("skill_id", "")),
+			"name": str(node.get("name", "")),
+			"tree_id": str(node.get("tree_id", "")),
+			"position": {"x": position.x, "y": position.y},
+			"size": {"x": size.x, "y": size.y},
+			"level": int(node.get("level", 0)),
+			"max_level": int(node.get("max_level", 1)),
+			"can_learn": bool(node.get("can_learn", false)),
+			"learn_reason": str(node.get("learn_reason", "")),
+			"selected": str(node.get("skill_id", "")) == _selected_skill_id,
+		})
+	return output
 
 
 func _tree_title(tree: Dictionary, visible_count: int) -> Label:
@@ -876,3 +1131,9 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _vector2_or_zero(value: Variant) -> Vector2:
+	if typeof(value) == TYPE_VECTOR2:
+		return value
+	return Vector2.ZERO

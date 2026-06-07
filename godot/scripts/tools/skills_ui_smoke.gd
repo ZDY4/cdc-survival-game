@@ -69,6 +69,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills detail should show direct unlock chain for survival")
 	if not _skill_line_tooltip(game_root, "survival").contains("解锁 医疗知识 / 观察力 / 低姿潜行"):
 		errors.append("skills row tooltip should expose unlock chain")
+	_assert_skill_tree_graph(errors, game_root, "initial skill tree graph")
 	if not _open_skill_context_menu(game_root, "survival"):
 		errors.append("should open skill context menu for survival")
 	else:
@@ -110,6 +111,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			await process_frame
 			if not _skill_text(game_root).contains("战斗训练 0/5"):
 				errors.append("all tree filter should restore combat skill rows")
+	await _assert_skill_tree_graph_pan(errors, game_root)
 
 	var grant_result: Dictionary = game_root.simulation.grant_skill_points(1, 1, "skills_ui_smoke")
 	if not bool(grant_result.get("success", false)):
@@ -516,6 +518,109 @@ func _skill_snapshot(game_root: Node, skill_id: String) -> Dictionary:
 			var skill_data: Dictionary = _dictionary_or_empty(skill)
 			if str(skill_data.get("skill_id", "")) == skill_id:
 				return skill_data
+	return {}
+
+
+func _assert_skill_tree_graph(errors: Array[String], game_root: Node, context: String) -> void:
+	if not game_root.skills_panel.has_method("skill_tree_graph_snapshot"):
+		errors.append("%s: skills panel should expose skill_tree_graph_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: graph snapshot should be active: %s" % [context, snapshot])
+	if int(snapshot.get("node_count", 0)) < 4:
+		errors.append("%s: graph should expose visible skill nodes: %s" % [context, snapshot])
+	if int(snapshot.get("edge_count", 0)) <= 0:
+		errors.append("%s: graph should expose prerequisite edges: %s" % [context, snapshot])
+	if str(snapshot.get("selected_skill_id", "")) != "survival":
+		errors.append("%s: graph selected skill should follow selected detail: %s" % [context, snapshot])
+	var medicine_edge_seen := false
+	for edge in _array_or_empty(snapshot.get("edges", [])):
+		var edge_data: Dictionary = _dictionary_or_empty(edge)
+		if str(edge_data.get("from", "")) == "survival" and str(edge_data.get("to", "")) == "medicine":
+			medicine_edge_seen = true
+	if not medicine_edge_seen:
+		errors.append("%s: graph should connect survival prerequisite to medicine: %s" % [context, snapshot.get("edges", [])])
+	var selected_node_seen := false
+	for node in _array_or_empty(snapshot.get("nodes", [])):
+		var node_data: Dictionary = _dictionary_or_empty(node)
+		if str(node_data.get("skill_id", "")) == "survival":
+			selected_node_seen = true
+			if not bool(node_data.get("selected", false)):
+				errors.append("%s: selected survival node should be marked selected: %s" % [context, node_data])
+			if str(node_data.get("tree_id", "")) != "survival":
+				errors.append("%s: survival graph node should expose tree id: %s" % [context, node_data])
+	if not selected_node_seen:
+		errors.append("%s: graph should include survival node summary" % context)
+	var canvas: Control = game_root.skills_panel.find_child("SkillTreeGraphCanvas", true, false) as Control
+	var status: Label = game_root.skills_panel.find_child("SkillTreeGraphStatusLine", true, false) as Label
+	if canvas == null:
+		errors.append("%s: missing SkillTreeGraphCanvas" % context)
+	elif canvas.custom_minimum_size.y < 120.0:
+		errors.append("%s: graph canvas should reserve stable height" % context)
+	if status == null or not str(status.text).contains("节点") or not str(status.text).contains("pan"):
+		errors.append("%s: graph status should expose node/link/pan diagnostics" % context)
+
+
+func _assert_skill_tree_graph_pan(errors: Array[String], game_root: Node) -> void:
+	var canvas: Control = game_root.skills_panel.find_child("SkillTreeGraphCanvas", true, false) as Control
+	if canvas == null:
+		errors.append("skill tree graph pan: missing graph canvas")
+		return
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = Vector2(10, 10)
+	game_root.skills_panel.call("_handle_skill_graph_input", press)
+	var drag := InputEventMouseMotion.new()
+	drag.position = Vector2(38, 22)
+	game_root.skills_panel.call("_handle_skill_graph_input", drag)
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	release.position = Vector2(38, 22)
+	game_root.skills_panel.call("_handle_skill_graph_input", release)
+	var moved_snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
+	var moved_pan: Dictionary = _dictionary_or_empty(moved_snapshot.get("pan", {}))
+	if absf(float(moved_pan.get("x", 0.0))) < 0.001 and absf(float(moved_pan.get("y", 0.0))) < 0.001:
+		errors.append("skill tree graph pan should change after drag: %s" % moved_snapshot)
+	var reset_button: Button = game_root.skills_panel.find_child("SkillTreeResetPanButton", true, false) as Button
+	if reset_button == null:
+		errors.append("skill tree graph should expose reset pan button")
+	else:
+		reset_button.pressed.emit()
+		await game_root.get_tree().process_frame
+		var reset_snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
+		var reset_pan: Dictionary = _dictionary_or_empty(reset_snapshot.get("pan", {}))
+		if absf(float(reset_pan.get("x", 0.0))) > 0.001 or absf(float(reset_pan.get("y", 0.0))) > 0.001:
+			errors.append("skill tree graph reset should clear pan: %s" % reset_snapshot)
+	var survival_node := _skill_graph_node_summary(game_root, "survival")
+	if survival_node.is_empty():
+		errors.append("skill tree graph click selection needs survival node")
+		return
+	var position: Dictionary = _dictionary_or_empty(survival_node.get("position", {}))
+	var click_position := Vector2(float(position.get("x", 0.0)) + 8.0, float(position.get("y", 0.0)) + 8.0)
+	press = InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = click_position
+	game_root.skills_panel.call("_handle_skill_graph_input", press)
+	release = InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	release.position = click_position
+	game_root.skills_panel.call("_handle_skill_graph_input", release)
+	await game_root.get_tree().process_frame
+	if not _detail_text(game_root).contains("详情: 生存本能"):
+		errors.append("clicking graph node should select matching skill detail")
+
+
+func _skill_graph_node_summary(game_root: Node, skill_id: String) -> Dictionary:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
+	for node in _array_or_empty(snapshot.get("nodes", [])):
+		var node_data: Dictionary = _dictionary_or_empty(node)
+		if str(node_data.get("skill_id", "")) == skill_id:
+			return node_data
 	return {}
 
 
