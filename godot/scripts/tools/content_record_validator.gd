@@ -3,6 +3,7 @@ extends RefCounted
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const AiRecordValidator = preload("res://scripts/tools/ai_record_validator.gd")
 const ContentBasicRecordValidator = preload("res://scripts/tools/content_basic_record_validator.gd")
+const ContentSchemaMigration = preload("res://scripts/data/content_schema_migration.gd")
 const JsonRecordValidator = preload("res://scripts/tools/json_record_validator.gd")
 const NarrativeRecordValidator = preload("res://scripts/tools/narrative_record_validator.gd")
 const WorldRecordValidator = preload("res://scripts/tools/world_record_validator.gd")
@@ -13,6 +14,7 @@ const EDITOR_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", 
 
 var ai_validator: AiRecordValidator = AiRecordValidator.new()
 var basic_validator: ContentBasicRecordValidator = ContentBasicRecordValidator.new()
+var schema_migration: ContentSchemaMigration = ContentSchemaMigration.new()
 var json_validator: JsonRecordValidator = JsonRecordValidator.new()
 var narrative_validator: NarrativeRecordValidator = NarrativeRecordValidator.new()
 var world_validator: WorldRecordValidator = WorldRecordValidator.new()
@@ -30,6 +32,7 @@ func validate_record(domain: String, id_value: String, registry: ContentRegistry
 		return {
 			"ok": false,
 			"status": "not_found",
+			"schema_migration": {},
 			"issues": _with_location(not_found_issues, domain, id_value, ""),
 		}
 
@@ -63,6 +66,7 @@ func validate_record(domain: String, id_value: String, registry: ContentRegistry
 	return {
 		"ok": _error_count(issues) == 0,
 		"status": "ok" if _error_count(issues) == 0 else "invalid",
+		"schema_migration": schema_migration.diagnose(domain, id_value, record),
 		"issues": _with_location(issues, domain, id_value, str(record.get("path", ""))),
 	}
 

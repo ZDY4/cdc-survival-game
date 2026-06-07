@@ -136,9 +136,11 @@ func _validate_changed_command(registry: ContentRegistry) -> int:
 			print("  - [error] content_file_not_loaded: changed content file is not loaded by registry (%s:$)" % relative_path)
 			continue
 		var validation := validator.validate_record(domain, id_string, registry)
+		var schema: Dictionary = _dictionary_or_empty(validation.get("schema_migration", {}))
 		if not bool(validation.get("ok", false)):
 			invalid_records += 1
 			print("- [%s] %s @ %s" % [_singular_domain(domain), id_string, _repo_relative_path(str(record.get("path", "")))])
+			_print_schema_migration_summary(schema, "  ")
 			for issue in validation.get("issues", []):
 				var data: Dictionary = _dictionary_or_empty(issue)
 				print("  - [%s] %s: %s (%s)" % [
@@ -251,6 +253,7 @@ func _print_validation(kind: String, domain: String, id_value: String, record: D
 	print("id: %s" % id_value)
 	print("relative_path: %s" % _repo_relative_path(str(record.get("path", ""))))
 	print("status: %s" % validation.get("status", "invalid"))
+	_print_schema_migration_summary(_dictionary_or_empty(validation.get("schema_migration", {})), "")
 	if not validator.supports_domain(domain):
 		print("- [warning] shallow_validation: validate currently checks existence only for %s" % kind)
 	for issue in issues:
@@ -350,6 +353,24 @@ func _issue_location(issue: Dictionary) -> String:
 	if not relative_path.is_empty():
 		return "%s:%s" % [relative_path, json_path]
 	return json_path if not json_path.is_empty() else "$"
+
+
+func _print_schema_migration_summary(schema: Dictionary, indent: String = "") -> void:
+	if schema.is_empty():
+		return
+	print("%sschema_status: %s source=%d current=%d needs_migration=%s" % [
+		indent,
+		schema.get("status", "unknown"),
+		int(schema.get("source_schema_version", 0)),
+		int(schema.get("current_schema_version", 0)),
+		str(bool(schema.get("needs_migration", false))).to_lower(),
+	])
+	var defaulted: Array = schema.get("defaulted_fields", [])
+	var deprecated: Array = schema.get("deprecated_fields", [])
+	if not defaulted.is_empty():
+		print("%sschema_defaulted_fields: %s" % [indent, ", ".join(defaulted)])
+	if not deprecated.is_empty():
+		print("%sschema_deprecated_fields: %s" % [indent, ", ".join(deprecated)])
 
 
 func _reference_domain_list() -> String:

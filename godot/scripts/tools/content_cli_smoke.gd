@@ -3,6 +3,7 @@ extends SceneTree
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
 const ContentRecordCliCommands = preload("res://scripts/tools/content_record_cli_commands.gd")
+const ContentSchemaMigration = preload("res://scripts/data/content_schema_migration.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
@@ -65,6 +66,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "ai", "guard_settlement")
 	_expect_valid_record(errors, registry, "json", "stun")
 	_expect_validate_changed(errors, registry)
+	_expect_schema_migration_diagnostics(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_item_appearance_asset_ref(errors, registry)
 	_expect_invalid_character_appearance_ref(errors, registry)
@@ -124,6 +126,29 @@ func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) 
 	var missing_entries := commands.changed_validation_records_for_paths(registry, ["data/items/missing_item_for_changed_smoke.json"])
 	if missing_entries.size() != 1 or bool(_dictionary_or_empty(missing_entries[0]).get("found", true)):
 		errors.append("validate changed should report supported but unloaded changed files: %s" % [missing_entries])
+
+
+func _expect_schema_migration_diagnostics(errors: Array[String], registry: ContentRegistry) -> void:
+	var validation := ContentRecordValidator.new().validate_record("items", "1006", registry)
+	var schema: Dictionary = _dictionary_or_empty(validation.get("schema_migration", {}))
+	if str(schema.get("status", "")) != "legacy_missing_version":
+		errors.append("schema migration should classify missing schema_version as legacy: %s" % [schema])
+	if int(schema.get("current_schema_version", 0)) != ContentSchemaMigration.CURRENT_SCHEMA_VERSION:
+		errors.append("schema migration should expose current schema version: %s" % [schema])
+	if not _array_or_empty(schema.get("defaulted_fields", [])).has("schema_version"):
+		errors.append("schema migration should report defaulted schema_version: %s" % [schema])
+	var roundtrip: Dictionary = _dictionary_or_empty(schema.get("roundtrip", {}))
+	if not bool(roundtrip.get("would_write_schema_version", false)) or not bool(roundtrip.get("safe_to_roundtrip", false)):
+		errors.append("schema migration should expose safe schema_version roundtrip: %s" % [schema])
+	var source: Dictionary = registry.get_library("items").get("1006", {}).duplicate(true)
+	var data: Dictionary = _dictionary_or_empty(source.get("data", {})).duplicate(true)
+	data["schemaVersion"] = 0
+	source["data"] = data
+	var legacy_schema := ContentSchemaMigration.new().diagnose("items", "1006", source)
+	if not _array_or_empty(legacy_schema.get("deprecated_fields", [])).has("schemaVersion"):
+		errors.append("schema migration should report deprecated schemaVersion: %s" % [legacy_schema])
+	if _array_or_empty(legacy_schema.get("migration_log", [])).is_empty():
+		errors.append("schema migration should expose migration log for legacy fields: %s" % [legacy_schema])
 
 
 func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry) -> void:
