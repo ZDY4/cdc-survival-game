@@ -30,6 +30,7 @@ var _selected_skill_id := ""
 var _skill_graph_nodes: Dictionary = {}
 var _skill_graph_edges: Array[Dictionary] = []
 var _skill_graph_pan := Vector2.ZERO
+var _skill_graph_zoom := 1.0
 var _skill_graph_dragging := false
 var _skill_graph_drag_distance := 0.0
 var _skill_graph_last_mouse := Vector2.ZERO
@@ -154,7 +155,19 @@ func _build_layout() -> void:
 	var reset_pan_button := _button("SkillTreeResetPanButton", "复位", "复位技能树视图", false)
 	reset_pan_button.custom_minimum_size = Vector2(58, 28)
 	reset_pan_button.pressed.connect(Callable(self, "reset_skill_tree_pan"), CONNECT_DEFERRED)
+	var zoom_out_button := _button("SkillTreeZoomOutButton", "-", "缩小技能树视图", false)
+	zoom_out_button.custom_minimum_size = Vector2(34, 28)
+	zoom_out_button.pressed.connect(func() -> void:
+		_set_skill_tree_zoom(_skill_graph_zoom - 0.1)
+	, CONNECT_DEFERRED)
+	var zoom_in_button := _button("SkillTreeZoomInButton", "+", "放大技能树视图", false)
+	zoom_in_button.custom_minimum_size = Vector2(34, 28)
+	zoom_in_button.pressed.connect(func() -> void:
+		_set_skill_tree_zoom(_skill_graph_zoom + 0.1)
+	, CONNECT_DEFERRED)
 	_graph_header_box.add_child(_graph_status_label)
+	_graph_header_box.add_child(zoom_out_button)
+	_graph_header_box.add_child(zoom_in_button)
 	_graph_header_box.add_child(reset_pan_button)
 	box.add_child(_graph_header_box)
 	box.add_child(_graph_canvas)
@@ -170,6 +183,16 @@ func reset_skill_tree_pan() -> void:
 		_graph_canvas.queue_redraw()
 
 
+func _set_skill_tree_zoom(zoom: float) -> void:
+	var previous_zoom := _skill_graph_zoom
+	_skill_graph_zoom = clampf(zoom, 0.6, 1.6)
+	if is_equal_approx(previous_zoom, _skill_graph_zoom):
+		return
+	_update_graph_diagnostics()
+	if _graph_canvas != null:
+		_graph_canvas.queue_redraw()
+
+
 func skill_tree_graph_snapshot() -> Dictionary:
 	return {
 		"active": _graph_canvas != null,
@@ -179,15 +202,18 @@ func skill_tree_graph_snapshot() -> Dictionary:
 			"x": _skill_graph_pan.x,
 			"y": _skill_graph_pan.y,
 		},
+		"zoom": _skill_graph_zoom,
 		"filter_mode": _filter_mode,
 		"tree_filter_mode": _tree_filter_mode,
 		"selected_skill_id": _selected_skill_id,
+		"highlighted_edge_count": _highlighted_graph_edge_count(),
+		"selected_related_node_count": _selected_related_graph_node_count(),
 		"canvas_min_size": {
 			"x": _graph_canvas.custom_minimum_size.x if _graph_canvas != null else 0.0,
 			"y": _graph_canvas.custom_minimum_size.y if _graph_canvas != null else 0.0,
 		},
 		"nodes": _skill_graph_node_summaries(),
-		"edges": _skill_graph_edges.duplicate(true),
+		"edges": _skill_graph_edge_summaries(),
 	}
 
 
@@ -257,6 +283,14 @@ func _rebuild_graph(snapshot: Dictionary, visible_skills: Array[Dictionary]) -> 
 func _handle_skill_graph_input(event: InputEvent) -> void:
 	var mouse_button := event as InputEventMouseButton
 	if mouse_button != null:
+		if mouse_button.pressed and mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_set_skill_tree_zoom(_skill_graph_zoom + 0.1)
+			_graph_canvas.accept_event()
+			return
+		if mouse_button.pressed and mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_set_skill_tree_zoom(_skill_graph_zoom - 0.1)
+			_graph_canvas.accept_event()
+			return
 		if mouse_button.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_button.pressed:
 				_skill_graph_dragging = true
@@ -303,9 +337,11 @@ func _draw_skill_graph_canvas() -> void:
 		var from_pos := from_rect.position + Vector2(from_rect.size.x, from_rect.size.y * 0.5)
 		var to_pos := to_rect.position + Vector2(0.0, to_rect.size.y * 0.5)
 		var edge_color := Color(0.55, 0.68, 0.75, 0.8)
-		if str(edge_data.get("from", "")) == _selected_skill_id or str(edge_data.get("to", "")) == _selected_skill_id:
+		var edge_width := 2.0
+		if _is_highlighted_graph_edge(edge_data):
 			edge_color = Color(0.96, 0.78, 0.28, 0.95)
-		_graph_canvas.draw_line(from_pos, to_pos, edge_color, 2.0, true)
+			edge_width = 3.0
+		_graph_canvas.draw_line(from_pos, to_pos, edge_color, edge_width, true)
 	var node_ids: Array = _skill_graph_nodes.keys()
 	node_ids.sort()
 	for skill_id in node_ids:
@@ -322,9 +358,11 @@ func _draw_skill_graph_node(node: Dictionary) -> void:
 	var border := Color(0.78, 0.82, 0.86, 0.9)
 	if str(node.get("skill_id", "")) == _selected_skill_id:
 		border = Color(1.0, 0.82, 0.22, 1.0)
+	elif _is_related_graph_node(str(node.get("skill_id", ""))):
+		border = Color(0.96, 0.68, 0.28, 0.92)
 	_graph_canvas.draw_rect(node_rect, border, false, 2.0)
 	var font := _graph_canvas.get_theme_default_font()
-	var font_size := 12
+	var font_size: int = int(clampf(roundf(12.0 * _skill_graph_zoom), 10.0, 16.0))
 	var title := str(node.get("name", node.get("skill_id", "")))
 	if title.length() > 8:
 		title = title.substr(0, 8)
@@ -334,7 +372,10 @@ func _draw_skill_graph_node(node: Dictionary) -> void:
 
 
 func _graph_node_rect(node: Dictionary) -> Rect2:
-	return Rect2(_vector2_or_zero(node.get("position", Vector2.ZERO)) + _skill_graph_pan, _vector2_or_zero(node.get("size", Vector2(112, 34))))
+	return Rect2(
+		_vector2_or_zero(node.get("position", Vector2.ZERO)) * _skill_graph_zoom + _skill_graph_pan,
+		_vector2_or_zero(node.get("size", Vector2(112, 34))) * _skill_graph_zoom
+	)
 
 
 func _skill_graph_node_color(node: Dictionary) -> Color:
@@ -365,6 +406,7 @@ func _update_graph_diagnostics() -> void:
 		_skill_graph_pan.x,
 		_skill_graph_pan.y,
 	]
+	_graph_status_label.text += " | zoom %.1f | 高亮 %d" % [_skill_graph_zoom, _highlighted_graph_edge_count()]
 
 
 func _skill_graph_node_summaries() -> Array[Dictionary]:
@@ -386,8 +428,69 @@ func _skill_graph_node_summaries() -> Array[Dictionary]:
 			"can_learn": bool(node.get("can_learn", false)),
 			"learn_reason": str(node.get("learn_reason", "")),
 			"selected": str(node.get("skill_id", "")) == _selected_skill_id,
+			"upstream": _is_upstream_graph_node(str(node.get("skill_id", ""))),
+			"downstream": _is_downstream_graph_node(str(node.get("skill_id", ""))),
+			"highlighted": _is_related_graph_node(str(node.get("skill_id", ""))),
 		})
 	return output
+
+
+func _skill_graph_edge_summaries() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for edge in _skill_graph_edges:
+		var edge_data: Dictionary = _dictionary_or_empty(edge)
+		output.append({
+			"from": str(edge_data.get("from", "")),
+			"to": str(edge_data.get("to", "")),
+			"highlighted": _is_highlighted_graph_edge(edge_data),
+		})
+	return output
+
+
+func _is_highlighted_graph_edge(edge: Dictionary) -> bool:
+	if _selected_skill_id.is_empty():
+		return false
+	return str(edge.get("from", "")) == _selected_skill_id or str(edge.get("to", "")) == _selected_skill_id
+
+
+func _is_upstream_graph_node(skill_id: String) -> bool:
+	if skill_id.is_empty() or _selected_skill_id.is_empty() or skill_id == _selected_skill_id:
+		return false
+	for edge in _skill_graph_edges:
+		var edge_data: Dictionary = _dictionary_or_empty(edge)
+		if str(edge_data.get("from", "")) == skill_id and str(edge_data.get("to", "")) == _selected_skill_id:
+			return true
+	return false
+
+
+func _is_downstream_graph_node(skill_id: String) -> bool:
+	if skill_id.is_empty() or _selected_skill_id.is_empty() or skill_id == _selected_skill_id:
+		return false
+	for edge in _skill_graph_edges:
+		var edge_data: Dictionary = _dictionary_or_empty(edge)
+		if str(edge_data.get("from", "")) == _selected_skill_id and str(edge_data.get("to", "")) == skill_id:
+			return true
+	return false
+
+
+func _is_related_graph_node(skill_id: String) -> bool:
+	return skill_id == _selected_skill_id or _is_upstream_graph_node(skill_id) or _is_downstream_graph_node(skill_id)
+
+
+func _highlighted_graph_edge_count() -> int:
+	var count := 0
+	for edge in _skill_graph_edges:
+		if _is_highlighted_graph_edge(_dictionary_or_empty(edge)):
+			count += 1
+	return count
+
+
+func _selected_related_graph_node_count() -> int:
+	var count := 0
+	for skill_id in _skill_graph_nodes.keys():
+		if _is_related_graph_node(str(skill_id)):
+			count += 1
+	return count
 
 
 func _tree_title(tree: Dictionary, visible_count: int) -> Label:

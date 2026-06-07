@@ -534,32 +534,47 @@ func _assert_skill_tree_graph(errors: Array[String], game_root: Node, context: S
 		errors.append("%s: graph should expose prerequisite edges: %s" % [context, snapshot])
 	if str(snapshot.get("selected_skill_id", "")) != "survival":
 		errors.append("%s: graph selected skill should follow selected detail: %s" % [context, snapshot])
+	if float(snapshot.get("zoom", 0.0)) < 0.59 or float(snapshot.get("zoom", 0.0)) > 1.61:
+		errors.append("%s: graph should expose clamped zoom: %s" % [context, snapshot])
+	if int(snapshot.get("highlighted_edge_count", 0)) <= 0:
+		errors.append("%s: selected graph should expose highlighted prerequisite edges: %s" % [context, snapshot])
 	var medicine_edge_seen := false
 	for edge in _array_or_empty(snapshot.get("edges", [])):
 		var edge_data: Dictionary = _dictionary_or_empty(edge)
 		if str(edge_data.get("from", "")) == "survival" and str(edge_data.get("to", "")) == "medicine":
 			medicine_edge_seen = true
+			if not bool(edge_data.get("highlighted", false)):
+				errors.append("%s: survival -> medicine edge should be highlighted while survival is selected: %s" % [context, edge_data])
 	if not medicine_edge_seen:
 		errors.append("%s: graph should connect survival prerequisite to medicine: %s" % [context, snapshot.get("edges", [])])
 	var selected_node_seen := false
+	var downstream_node_seen := false
 	for node in _array_or_empty(snapshot.get("nodes", [])):
 		var node_data: Dictionary = _dictionary_or_empty(node)
 		if str(node_data.get("skill_id", "")) == "survival":
 			selected_node_seen = true
 			if not bool(node_data.get("selected", false)):
 				errors.append("%s: selected survival node should be marked selected: %s" % [context, node_data])
+			if not bool(node_data.get("highlighted", false)):
+				errors.append("%s: selected survival node should be highlighted: %s" % [context, node_data])
 			if str(node_data.get("tree_id", "")) != "survival":
 				errors.append("%s: survival graph node should expose tree id: %s" % [context, node_data])
+		if str(node_data.get("skill_id", "")) == "medicine":
+			downstream_node_seen = true
+			if not bool(node_data.get("downstream", false)) or not bool(node_data.get("highlighted", false)):
+				errors.append("%s: medicine should be marked as downstream/highlighted from survival: %s" % [context, node_data])
 	if not selected_node_seen:
 		errors.append("%s: graph should include survival node summary" % context)
+	if not downstream_node_seen:
+		errors.append("%s: graph should include medicine downstream node summary" % context)
 	var canvas: Control = game_root.skills_panel.find_child("SkillTreeGraphCanvas", true, false) as Control
 	var status: Label = game_root.skills_panel.find_child("SkillTreeGraphStatusLine", true, false) as Label
 	if canvas == null:
 		errors.append("%s: missing SkillTreeGraphCanvas" % context)
 	elif canvas.custom_minimum_size.y < 120.0:
 		errors.append("%s: graph canvas should reserve stable height" % context)
-	if status == null or not str(status.text).contains("节点") or not str(status.text).contains("pan"):
-		errors.append("%s: graph status should expose node/link/pan diagnostics" % context)
+	if status == null or not str(status.text).contains("节点") or not str(status.text).contains("pan") or not str(status.text).contains("zoom") or not str(status.text).contains("高亮"):
+		errors.append("%s: graph status should expose node/link/pan/zoom/highlight diagnostics" % context)
 
 
 func _assert_skill_tree_graph_pan(errors: Array[String], game_root: Node) -> void:
@@ -584,6 +599,23 @@ func _assert_skill_tree_graph_pan(errors: Array[String], game_root: Node) -> voi
 	var moved_pan: Dictionary = _dictionary_or_empty(moved_snapshot.get("pan", {}))
 	if absf(float(moved_pan.get("x", 0.0))) < 0.001 and absf(float(moved_pan.get("y", 0.0))) < 0.001:
 		errors.append("skill tree graph pan should change after drag: %s" % moved_snapshot)
+	var wheel_up := InputEventMouseButton.new()
+	wheel_up.button_index = MOUSE_BUTTON_WHEEL_UP
+	wheel_up.pressed = true
+	wheel_up.position = Vector2(20, 20)
+	game_root.skills_panel.call("_handle_skill_graph_input", wheel_up)
+	var zoomed_snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
+	if float(zoomed_snapshot.get("zoom", 1.0)) <= float(moved_snapshot.get("zoom", 1.0)):
+		errors.append("skill tree graph wheel up should increase zoom: before %s after %s" % [moved_snapshot, zoomed_snapshot])
+	var zoom_out_button: Button = game_root.skills_panel.find_child("SkillTreeZoomOutButton", true, false) as Button
+	if zoom_out_button == null:
+		errors.append("skill tree graph should expose zoom out button")
+	else:
+		zoom_out_button.pressed.emit()
+		await game_root.get_tree().process_frame
+		var zoom_out_snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
+		if float(zoom_out_snapshot.get("zoom", 0.0)) >= float(zoomed_snapshot.get("zoom", 0.0)):
+			errors.append("skill tree graph zoom out button should reduce zoom: before %s after %s" % [zoomed_snapshot, zoom_out_snapshot])
 	var reset_button: Button = game_root.skills_panel.find_child("SkillTreeResetPanButton", true, false) as Button
 	if reset_button == null:
 		errors.append("skill tree graph should expose reset pan button")
@@ -598,8 +630,14 @@ func _assert_skill_tree_graph_pan(errors: Array[String], game_root: Node) -> voi
 	if survival_node.is_empty():
 		errors.append("skill tree graph click selection needs survival node")
 		return
+	var graph_snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
+	var graph_pan: Dictionary = _dictionary_or_empty(graph_snapshot.get("pan", {}))
+	var graph_zoom := float(graph_snapshot.get("zoom", 1.0))
 	var position: Dictionary = _dictionary_or_empty(survival_node.get("position", {}))
-	var click_position := Vector2(float(position.get("x", 0.0)) + 8.0, float(position.get("y", 0.0)) + 8.0)
+	var click_position := Vector2(
+		float(position.get("x", 0.0)) * graph_zoom + float(graph_pan.get("x", 0.0)) + 8.0,
+		float(position.get("y", 0.0)) * graph_zoom + float(graph_pan.get("y", 0.0)) + 8.0
+	)
 	press = InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
 	press.pressed = true
