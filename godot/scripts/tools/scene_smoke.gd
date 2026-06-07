@@ -1119,6 +1119,16 @@ func _validate_runtime_map_object_fallbacks(root: Node3D, counts: Dictionary, er
 		if node.name != "MapObjectFallbackVisual":
 			continue
 		categories[str(node.get_meta("fallback_category", ""))] = true
+		if str(node.get_meta("source_object_id", "")).is_empty():
+			errors.append("generated map object fallback should expose source_object_id")
+		if str(node.get_meta("source_object_kind", "")).is_empty():
+			errors.append("generated map object fallback should expose source_object_kind")
+		if str(node.get_meta("target_kind", "")).is_empty():
+			errors.append("generated map object fallback should expose target_kind")
+		if str(node.get_meta("source_visual_asset", "")).is_empty():
+			errors.append("generated map object fallback should report source visual asset")
+		if typeof(node.get_meta("source_visual", {})) != TYPE_DICTIONARY:
+			errors.append("generated map object fallback should expose source_visual metadata")
 	for category in ["pickup", "container", "trigger"]:
 		if not bool(categories.get(category, false)):
 			errors.append("generated map object fallback should include %s visual" % category)
@@ -1158,18 +1168,21 @@ func _fallback_visual_world() -> Dictionary:
 				"kind": "interactive",
 				"anchor": container_grid,
 				"footprint": {"width": 1, "height": 1},
+				"props": {"visual": {"prototype_id": "props/fallback_container"}},
 			}],
 			"trigger_objects": [{
 				"object_id": "scene_smoke_trigger",
 				"kind": "trigger",
 				"anchor": trigger_grid,
 				"footprint": {"width": 1, "height": 1},
+				"props": {"visual": {"prototype_id": "triggers/fallback_transition"}},
 			}],
 			"pickup_objects": [{
 				"object_id": "scene_smoke_pickup",
 				"kind": "pickup",
 				"anchor": pickup_grid,
 				"footprint": {"width": 1, "height": 1},
+				"props": {"visual": {"prototype_id": "pickups/fallback_item"}},
 			}],
 			"interaction_targets": {
 				"scene_smoke_container": {

@@ -394,7 +394,26 @@ func _add_map_object_fallback_visual(parent: Node3D, target_data: Dictionary, ob
 	visual.position = _map_object_fallback_position(category)
 	visual.set_meta("fallback_category", category)
 	visual.set_meta("target_id", str(target_data.get("target_id", object.get("object_id", ""))))
+	visual.set_meta("source_object_id", str(object.get("object_id", "")))
+	visual.set_meta("source_object_kind", str(object.get("kind", "")))
+	visual.set_meta("target_kind", str(target_data.get("kind", target_data.get("target_kind", ""))))
+	visual.set_meta("source_visual", _map_object_fallback_source_visual(object))
+	visual.set_meta("source_visual_asset", _map_object_fallback_source_asset(object))
 	parent.add_child(visual)
+
+
+func _map_object_fallback_source_visual(object: Dictionary) -> Dictionary:
+	var props: Dictionary = _dictionary_or_empty(object.get("props", {}))
+	return _dictionary_or_empty(props.get("visual", {})).duplicate(true)
+
+
+func _map_object_fallback_source_asset(object: Dictionary) -> String:
+	var visual: Dictionary = _map_object_fallback_source_visual(object)
+	for key in ["asset_path", "model_asset", "scene_path", "model_path", "prototype_id"]:
+		var value := str(visual.get(key, "")).strip_edges()
+		if not value.is_empty():
+			return value
+	return ""
 
 
 func _map_object_fallback_category(target_data: Dictionary, object: Dictionary) -> String:
