@@ -213,6 +213,50 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _container_player_text(game_root).contains("水瓶 x1"):
 		errors.append("invalid store quantity should not mutate player inventory")
 
+	var stack_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	var stack_sessions_before: Dictionary = game_root.simulation.container_sessions.duplicate(true)
+	var stack_active_before: String = _active_container_id(game_root)
+	var stack_inventory_before: Dictionary = stack_player.inventory.duplicate(true)
+	var stack_order_before: Array = stack_player.inventory_order.duplicate()
+	var stack_inventory_stacks_before: Dictionary = stack_player.inventory_stacks.duplicate(true)
+	game_root.simulation.container_sessions["multi_stack_container"] = {
+		"container_id": "multi_stack_container",
+		"display_name": "多堆叠测试容器",
+		"inventory": [
+			{"item_id": "1006", "count": 2},
+			{"item_id": "1006", "count": 3},
+		],
+		"money": 0,
+	}
+	stack_player.inventory = {}
+	stack_player.inventory_order.clear()
+	_set_active_container_id(game_root, "multi_stack_container")
+	game_root.refresh_inventory_panel()
+	game_root.refresh_container_panel()
+	var stacked_take: Dictionary = game_root.take_active_container_item("1006", 4)
+	if not bool(stacked_take.get("success", false)):
+		errors.append("taking across container stacks should succeed: %s" % stacked_take)
+	var stacked_take_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("multi_stack_container", {}))
+	var after_take_stacks: Array = _container_stack_counts(_array_or_empty(stacked_take_session.get("inventory", [])), "1006")
+	if after_take_stacks.size() != 1 or int(after_take_stacks[0]) != 1:
+		errors.append("taking across container stacks should consume newest stacks first: %s" % stacked_take_session)
+	if int(stack_player.inventory.get("1006", 0)) != 4:
+		errors.append("taking across container stacks should add combined count to player")
+	var stacked_store: Dictionary = game_root.store_active_container_item("1006", 2)
+	if not bool(stacked_store.get("success", false)):
+		errors.append("storing into container should append a new stack: %s" % stacked_store)
+	var stacked_store_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("multi_stack_container", {}))
+	var after_store_stacks: Array = _container_stack_counts(_array_or_empty(stacked_store_session.get("inventory", [])), "1006")
+	if after_store_stacks.size() != 2 or int(after_store_stacks[0]) != 1 or int(after_store_stacks[1]) != 2:
+		errors.append("storing into container should preserve old stack and append new stack: %s" % stacked_store_session)
+	game_root.simulation.container_sessions = stack_sessions_before.duplicate(true)
+	stack_player.inventory = stack_inventory_before
+	_restore_inventory_order(stack_player, stack_order_before)
+	stack_player.inventory_stacks = stack_inventory_stacks_before
+	_set_active_container_id(game_root, stack_active_before)
+	game_root.refresh_inventory_panel()
+	game_root.refresh_container_panel()
+
 	var bulk_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	var bulk_sessions_before: Dictionary = game_root.simulation.container_sessions.duplicate(true)
 	var bulk_active_before: String = _active_container_id(game_root)
@@ -320,7 +364,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should drag inventory water bottle into active container")
 	if not _event_seen(game_root, "container_item_stored"):
 		errors.append("dragging from inventory panel to container should emit container_item_stored")
-	if not _container_text(game_root).contains("水瓶 x2"):
+	var drag_store_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get(_active_container_id(game_root), {}))
+	if _container_entry_count(_array_or_empty(drag_store_session.get("inventory", [])), "1008") != 2:
 		errors.append("inventory drag should store water bottle into container column")
 	if _inventory_text(game_root).contains("水瓶 x1"):
 		errors.append("inventory drag should remove stored water bottle from inventory panel")
@@ -371,7 +416,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("inventory context store should close context menu after execution")
 		if not _event_seen(game_root, "container_item_stored"):
 			errors.append("inventory context store should emit container_item_stored")
-		if not _container_text(game_root).contains("水瓶 x3"):
+		var context_store_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get(_active_container_id(game_root), {}))
+		if _container_entry_count(_array_or_empty(context_store_session.get("inventory", [])), "1008") != 3:
 			errors.append("inventory context store should move water bottle into container")
 		if _inventory_text(game_root).contains("水瓶 x1"):
 			errors.append("inventory context store should remove water bottle from inventory panel")
@@ -1389,11 +1435,24 @@ func _array_or_empty(value: Variant) -> Array:
 
 
 func _container_entry_count(entries: Array, item_id: String) -> int:
+	var total := 0
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
 		if str(entry_data.get("item_id", "")) == item_id:
-			return int(entry_data.get("count", 0))
-	return 0
+			total += max(0, int(entry_data.get("count", 0)))
+	return total
+
+
+func _container_stack_counts(entries: Array, item_id: String) -> Array[int]:
+	var stacks: Array[int] = []
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("item_id", "")) != item_id:
+			continue
+		var count: int = max(0, int(entry_data.get("count", 0)))
+		if count > 0:
+			stacks.append(count)
+	return stacks
 
 
 func _restore_inventory_order(actor: RefCounted, order: Array) -> void:

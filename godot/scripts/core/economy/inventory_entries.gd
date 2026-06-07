@@ -18,26 +18,38 @@ func normalize(entries: Variant) -> Array[Dictionary]:
 
 
 func count(entries: Array, item_id: String) -> int:
+	var normalized_item_id: String = normalize_content_id(item_id)
+	var total := 0
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
-		if normalize_content_id(entry_data.get("item_id", "")) == item_id:
-			return int(entry_data.get("count", 0))
-	return 0
+		if normalize_content_id(entry_data.get("item_id", "")) == normalized_item_id:
+			total += max(0, int(entry_data.get("count", 0)))
+	return total
 
 
 func add(entries: Array, item_id: String, delta: int) -> void:
-	for i in range(entries.size()):
-		var entry: Dictionary = _dictionary_or_empty(entries[i])
-		if normalize_content_id(entry.get("item_id", "")) == item_id:
-			var next_count: int = int(entry.get("count", 0)) + delta
-			if next_count <= 0:
-				entries.remove_at(i)
-			else:
-				entry["count"] = next_count
-				entries[i] = entry
-			return
+	var normalized_item_id: String = normalize_content_id(item_id)
+	if normalized_item_id.is_empty() or delta == 0:
+		return
 	if delta > 0:
-		entries.append({"item_id": item_id, "count": delta, "price": 0})
+		entries.append({"item_id": normalized_item_id, "count": delta, "price": 0})
+		return
+	var remaining: int = -delta
+	for index in range(entries.size() - 1, -1, -1):
+		if remaining <= 0:
+			break
+		var entry: Dictionary = _dictionary_or_empty(entries[index])
+		if normalize_content_id(entry.get("item_id", "")) != normalized_item_id:
+			continue
+		var current_count: int = max(0, int(entry.get("count", 0)))
+		var consumed: int = min(current_count, remaining)
+		current_count -= consumed
+		remaining -= consumed
+		if current_count <= 0:
+			entries.remove_at(index)
+		else:
+			entry["count"] = current_count
+			entries[index] = entry
 
 
 func add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:

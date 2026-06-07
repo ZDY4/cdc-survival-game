@@ -847,7 +847,7 @@ func _container_capacity_check(container_id: String, container: Dictionary, item
 		}
 
 	var current_stack_count: int = _container_stack_count(inventory)
-	var projected_stack_count: int = current_stack_count + (0 if _container_has_item(inventory, item_id) else 1)
+	var projected_stack_count: int = current_stack_count + 1
 	var max_stacks: int = _container_max_int(container, ["max_stacks", "max_stack_count", "slot_capacity", "max_slots"])
 	if max_stacks >= 0 and projected_stack_count > max_stacks:
 		return {
@@ -899,22 +899,14 @@ func _container_item_count(entries: Array) -> int:
 
 
 func _container_stack_count(entries: Array) -> int:
-	var seen: Array[String] = []
+	var total := 0
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
 		var normalized_item_id: String = _inventory_entries.normalize_content_id(entry_data.get("item_id", ""))
-		if normalized_item_id.is_empty() or int(entry_data.get("count", 0)) <= 0 or seen.has(normalized_item_id):
+		if normalized_item_id.is_empty() or int(entry_data.get("count", 0)) <= 0:
 			continue
-		seen.append(normalized_item_id)
-	return seen.size()
-
-
-func _container_has_item(entries: Array, item_id: String) -> bool:
-	for entry in entries:
-		var entry_data: Dictionary = _dictionary_or_empty(entry)
-		if _inventory_entries.normalize_content_id(entry_data.get("item_id", "")) == item_id and int(entry_data.get("count", 0)) > 0:
-			return true
-	return false
+		total += 1
+	return total
 
 
 func _container_max_weight(container: Dictionary) -> float:

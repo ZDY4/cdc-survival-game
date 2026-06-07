@@ -410,6 +410,48 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade sell did not pay player money")
 	if not _summary_line(game_root).contains("资金 508"):
 		errors.append("trade summary did not update shop money after sell")
+
+	var stack_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	var stack_shop_sessions_before: Dictionary = game_root.simulation.shop_sessions.duplicate(true)
+	var stack_inventory_before: Dictionary = stack_player.inventory.duplicate(true)
+	var stack_order_before: Array = stack_player.inventory_order.duplicate()
+	var stack_inventory_stacks_before: Dictionary = stack_player.inventory_stacks.duplicate(true)
+	var stack_money_before: int = int(stack_player.money)
+	var stack_shop: Dictionary = _dictionary_or_empty(game_root.simulation.shop_sessions.get("trader_lao_wang_shop", {})).duplicate(true)
+	stack_shop["money"] = 1000
+	stack_shop["inventory"] = [
+		{"item_id": "1006", "count": 2, "price": 10},
+		{"item_id": "1006", "count": 3, "price": 10},
+	]
+	game_root.simulation.shop_sessions["trader_lao_wang_shop"] = stack_shop
+	stack_player.inventory["1006"] = 1
+	if not stack_player.inventory_order.has("1006"):
+		stack_player.inventory_order.append("1006")
+	stack_player.money = 200
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
+	var stacked_buy: Dictionary = game_root.buy_active_trade_item("1006", 4)
+	if not bool(stacked_buy.get("success", false)):
+		errors.append("buying across shop stacks should succeed: %s" % stacked_buy)
+	var after_buy_stacks: Array = _shop_stack_counts(game_root, "1006")
+	if after_buy_stacks.size() != 1 or int(after_buy_stacks[0]) != 1:
+		errors.append("buying across shop stacks should consume newest stacks first: %s" % after_buy_stacks)
+	if _player_inventory_count(game_root, "1006") != 5:
+		errors.append("buying across shop stacks should add combined count to player")
+	var stacked_sell: Dictionary = game_root.sell_active_trade_item("1006", 2)
+	if not bool(stacked_sell.get("success", false)):
+		errors.append("selling to shop should append a new shop stack: %s" % stacked_sell)
+	var after_sell_stacks: Array = _shop_stack_counts(game_root, "1006")
+	if after_sell_stacks.size() != 2 or int(after_sell_stacks[0]) != 1 or int(after_sell_stacks[1]) != 2:
+		errors.append("selling to shop should preserve old stack and append new stack: %s" % after_sell_stacks)
+	game_root.simulation.shop_sessions = stack_shop_sessions_before.duplicate(true)
+	stack_player.inventory = stack_inventory_before
+	stack_player.inventory_order = stack_order_before
+	stack_player.inventory_stacks = stack_inventory_stacks_before
+	stack_player.money = stack_money_before
+	game_root.refresh_inventory_panel()
+	game_root.refresh_trade_panel()
+
 	if not _press_trade_item_with_text(game_root, "player", "主手 小刀"):
 		errors.append("should select equipped dagger for trade sell")
 	if _trade_button_text(game_root) != "出售":
@@ -1303,13 +1345,27 @@ func _player_equipped_item(game_root: Node, slot_id: String) -> String:
 
 
 func _shop_stock_count(game_root: Node, item_id: String) -> int:
+	var total := 0
 	for shop_id in game_root.simulation.shop_sessions.keys():
 		var shop: Dictionary = game_root.simulation.shop_sessions[shop_id]
 		for entry in shop.get("inventory", []):
 			var entry_data: Dictionary = entry
 			if str(entry_data.get("item_id", "")) == item_id:
-				return int(entry_data.get("count", 0))
-	return 0
+				total += max(0, int(entry_data.get("count", 0)))
+	return total
+
+
+func _shop_stack_counts(game_root: Node, item_id: String) -> Array[int]:
+	var stacks: Array[int] = []
+	var shop: Dictionary = _dictionary_or_empty(game_root.simulation.shop_sessions.get("trader_lao_wang_shop", {}))
+	for entry in _array_or_empty(shop.get("inventory", [])):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("item_id", "")) != item_id:
+			continue
+		var count: int = max(0, int(entry_data.get("count", 0)))
+		if count > 0:
+			stacks.append(count)
+	return stacks
 
 
 func _set_player_money(game_root: Node, money: int) -> void:
