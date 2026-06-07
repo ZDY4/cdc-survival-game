@@ -116,7 +116,7 @@
 - [ ] 缩略图资产：物品、配方、技能、任务、地图地点和存档槽缩略图。
 - [~] 地图专属资产：`Scene` smoke 已输出每张 `.tscn` / 默认运行地图的 asset path、fallback 次数、重复 ID、重叠实例、pickable body、mesh、collision shape / physics body、scale、origin offset、shadow 和 visibility 统计；运行时 map visual 的 `PickableBody` / `PickableShape` 已带 pick proxy metadata，并纳入 `map_visual_collision_shapes` / `map_visual_physics_bodies` 统计断言；运行时 glTF scene root 已生成 layer/mask 为 0 的 `GeneratedVisualCollisionProxy` bounds 代理，覆盖 map visual、actor、equipment 和 corpse 模型，不抢世界拾取层；待补真实 glTF collision 资源、scale / origin 校准、shadow / visibility 策略和更细粒度 MapVisual 报告。
 - [~] `.bin`、`.import`、`.uid` 守护：`Scene` smoke 会校验 glTF 外部 buffer 存在且 byteLength 匹配、每个 glTF / glb 有 `.import`、`.import` source_file 指回源资产、remap uid 非空、dest_files 导入产物存在，并扫描 `godot/assets/**/*.uid` 的 uid 格式、资源存在性和重复 uid；当前覆盖 52 个 glTF、31 个外部 buffer、52 个 import uid、1 个 uid sidecar，缺失 / 重复 / 长度不匹配均为 0。待补 resource uid 变更基线快照和 scene 引用变更差异报告。
-- [ ] 根目录 `assets/` 与 `godot/assets/` 职责：若 `godot/assets/` 是运行权威，根目录 `assets/` 只能作为源资产或迁移备份，并需文档化同步规则。
+- [~] 根目录 `assets/` 与 `godot/assets/` 职责：`docs/3d_asset_format_policy.md` 已明确 `godot/assets/` 是 Godot 运行时权威，根目录 `assets/` 只作为源资产池或迁移期备份；从根目录更新资产时必须同步到 `godot/assets/` 相同相对目录并刷新 `.import` / uid；`mainline_migration_guard.gd` 会扫描运行脚本、scene 和工具入口，阻止 `../assets`、绝对根 assets 路径和 `godot/assets/...` 写法进入运行引用，要求统一使用 `res://assets/...`。待补 data 中 UI icon / portrait legacy `assets/...` 路径的正式资源落地与迁移。
 - [ ] 模型辨识：地图物体不能退化成重叠方块；fallback 必须能看出类别并报告原资源。
 - [ ] 交互、移动、战斗、UI 反馈：hover 光标、outline、tooltip、interaction prompt、路径预览、AP 不足提示、命中 / 闪避 / 伤害 / 死亡、toast / message log、按钮禁用态和失败原因都要进入验收。
 

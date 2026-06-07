@@ -50,6 +50,22 @@ const SKIPPED_ROOTS := {
 	"logs": true,
 	"saves": true,
 }
+const ASSET_AUTHORITY_SCAN_ROOTS := [
+	"godot/scripts",
+	"godot/scenes",
+	"tools/agent",
+]
+const ASSET_AUTHORITY_EXTENSIONS := {
+	"bat": true,
+	"cfg": true,
+	"gd": true,
+	"godot": true,
+	"json": true,
+	"ps1": true,
+	"tscn": true,
+	"tres": true,
+}
+const ASSET_AUTHORITY_SELF := "godot/scripts/tools/mainline_migration_guard.gd"
 
 
 func _init() -> void:
@@ -58,6 +74,7 @@ func _init() -> void:
 	errors.append_array(_project_entry_errors(root_path))
 	errors.append_array(_root_script_errors(root_path))
 	errors.append_array(_map_scene_authority_errors(root_path))
+	errors.append_array(_asset_authority_errors(root_path))
 	errors.append_array(_scan_directory(root_path, ""))
 	if not errors.is_empty():
 		for error in errors:
@@ -66,7 +83,7 @@ func _init() -> void:
 		quit(1)
 		return
 
-	print("Godot migration guard passed: Godot %s, Godot root entrypoints, Godot map scenes, and no Rust/Cargo/Bevy source files in active mainline" % _godot_version_string())
+	print("Godot migration guard passed: Godot %s, Godot root entrypoints, Godot map scenes, Godot asset authority, and no Rust/Cargo/Bevy source files in active mainline" % _godot_version_string())
 	quit(0)
 
 
@@ -144,6 +161,84 @@ func _map_scene_authority_errors(root_path: String) -> Array[String]:
 		name = data_dir.get_next()
 	data_dir.list_dir_end()
 	return errors
+
+
+func _asset_authority_errors(root_path: String) -> Array[String]:
+	var errors: Array[String] = []
+	var root_assets_path := root_path.path_join("assets").replace("\\", "/").to_lower()
+	for scan_root in ASSET_AUTHORITY_SCAN_ROOTS:
+		var absolute_path := root_path.path_join(scan_root)
+		if not DirAccess.dir_exists_absolute(absolute_path):
+			errors.append("%s directory is missing for asset authority scan" % scan_root)
+			continue
+		errors.append_array(_scan_asset_authority_directory(absolute_path, scan_root, root_assets_path))
+	return errors
+
+
+func _scan_asset_authority_directory(absolute_path: String, relative_path: String, root_assets_path: String) -> Array[String]:
+	var errors: Array[String] = []
+	var dir := DirAccess.open(absolute_path)
+	if dir == null:
+		errors.append("cannot open directory for asset authority scan: %s" % absolute_path)
+		return errors
+	dir.list_dir_begin()
+	var name := dir.get_next()
+	while not name.is_empty():
+		if name == "." or name == "..":
+			name = dir.get_next()
+			continue
+		var child_relative := "%s/%s" % [relative_path, name]
+		var child_absolute := absolute_path.path_join(name)
+		if dir.current_is_dir():
+			if not _should_skip_directory(name, child_relative):
+				errors.append_array(_scan_asset_authority_directory(child_absolute, child_relative, root_assets_path))
+		elif _should_scan_asset_authority_file(child_relative):
+			errors.append_array(_asset_authority_file_errors(child_absolute, child_relative, root_assets_path))
+		name = dir.get_next()
+	dir.list_dir_end()
+	return errors
+
+
+func _should_scan_asset_authority_file(relative_path: String) -> bool:
+	if relative_path == ASSET_AUTHORITY_SELF:
+		return false
+	var extension := relative_path.get_extension().to_lower()
+	return ASSET_AUTHORITY_EXTENSIONS.has(extension)
+
+
+func _asset_authority_file_errors(absolute_path: String, relative_path: String, root_assets_path: String) -> Array[String]:
+	var errors: Array[String] = []
+	var content := FileAccess.get_file_as_string(absolute_path).replace("\r\n", "\n")
+	var lines := content.split("\n")
+	for index in range(lines.size()):
+		var reason := _asset_authority_line_reason(str(lines[index]), root_assets_path)
+		if not reason.is_empty():
+			errors.append("%s:%d: %s" % [relative_path, index + 1, reason])
+	return errors
+
+
+func _asset_authority_line_reason(line: String, root_assets_path: String) -> String:
+	var normalized := line.replace("\\", "/")
+	var lower_line := normalized.to_lower()
+	if lower_line.contains("res://../assets"):
+		return "runtime asset path must not escape Godot project root with res://../assets"
+	if lower_line.contains("../assets/"):
+		return "runtime asset path must use res://assets/... instead of ../assets/..."
+	if lower_line.contains("godot/assets/"):
+		return "runtime asset path must use res://assets/... instead of godot/assets/..."
+	if not root_assets_path.is_empty() and lower_line.contains(root_assets_path):
+		return "runtime asset path must not reference repository root assets directly"
+	var search_from := 0
+	while true:
+		var found := lower_line.find("assets/", search_from)
+		if found < 0:
+			break
+		var prefix_start := maxi(0, found - 6)
+		var prefix := lower_line.substr(prefix_start, found - prefix_start)
+		if prefix != "res://":
+			return "runtime asset path must use res://assets/...; root assets/ is source-only"
+		search_from = found + 7
+	return ""
 
 
 func _scan_directory(absolute_path: String, relative_path: String) -> Array[String]:

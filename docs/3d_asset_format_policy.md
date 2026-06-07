@@ -2,9 +2,16 @@
 
 本项目仓库内的正式 3D 资产格式固定为 `.gltf + .bin + 外部贴图`。
 
+目录职责：
+
+- `godot/assets/` 是 Godot 运行时权威资产目录；地图 scene、GDScript、Godot smoke 和运行时加载路径必须使用 `res://assets/...`
+- 根目录 `assets/` 只作为源资产池或迁移期备份，不作为 Godot 运行时引用来源
+- 从根目录 `assets/` 更新运行时资产时，必须同步到 `godot/assets/` 下相同相对目录，并让 Godot 生成 / 更新对应 `.import` 和 uid 信息
+- 运行验证以 `godot/assets/` 为准：`Scene` smoke 负责 glTF / `.bin` / `.import` / `.uid` 完整性，`mainline_migration_guard.gd` 负责阻止运行脚本、scene 和工具入口引用根目录 `assets/`
+
 正式内容规则：
 
-- `assets/` 下正式入库的 3D 资产主文件统一使用 `.gltf`
+- `godot/assets/` 下正式入库的 3D 资产主文件统一使用 `.gltf`
 - 几何、骨骼或动画使用外部 buffer 时，配套产物统一为 `.bin`
 - 贴图保持外部文件引用，不内嵌到 `.gltf`
 - `data/` 和 Godot 内容加载层中所有正式 3D 资产路径只允许引用 `.gltf`
