@@ -38,9 +38,10 @@
 - `UI` smoke 会校验 `ReasonCatalog.catalog_snapshot()` 至少覆盖主要跨系统分类，并抽查代表 reason：
   `unknown_player_command`、`ui_modal_blocks_player_commands`、`path_unreachable`、`target_not_hostile`、`materials_insufficient`、`container_inventory_insufficient`、`player_money_insufficient`、`skill_on_cooldown`。
 - `UI` smoke 会校验所有已知 reason 都具备 `source_module`、`payload_fields`、`disabled_text` 和 `remediation`，并抽查关键 reason 的 payload 字段与禁用态文案。
+- HUD 的 interaction menu、hover 移动 / 攻击预览和技能目标提示已接入 `disabled_text_for()` fallback；原有短文案覆盖仍保留，例如 `target_not_hostile` 在菜单中继续显示为“非敌对目标”。
 
 ## 后续缺口
 
 - 继续把尚未进入 HUD 的容器权限、任务交付、AI、保存 / 加载和地图资源失败 reason 纳入目录。
-- 将更多面板禁用态 tooltip 统一切到 `disabled_text_for()`。
+- 将 Inventory / Container / Trade / Crafting / Skills / Journal 等面板禁用态 tooltip 统一切到 `disabled_text_for()`。
 - 给任务、AI、保存 / 加载和地图资产失败补更细 reason，而不是继续复用笼统失败码。

@@ -1,6 +1,7 @@
 extends Control
 
 const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 var _world_label: Label
 var _status_badge_label: Label
@@ -38,6 +39,7 @@ var debug_panel_latest_snapshot: Dictionary = {}
 var interaction_menu_snapshot_data: Dictionary = {}
 var console_history: Array[String] = []
 var console_command_history: Array[String] = []
+var _reason_catalog := ReasonCatalog.new()
 var console_history_index := -1
 var console_command_schema: Array[Dictionary] = []
 var console_permission: Dictionary = {}
@@ -948,7 +950,7 @@ func _disabled_reason_text(reason: String) -> String:
 			return "不可用"
 	if reason.is_empty():
 		return "不可用"
-	return reason
+	return _reason_catalog.disabled_text_for(reason)
 
 
 func _apply_hotbar(slots_value: Variant, group_labels_value: Variant = {}) -> void:
@@ -1880,7 +1882,7 @@ func _skill_target_reason_text(reason: String) -> String:
 			return "未知目标形状"
 	if reason.is_empty():
 		return "选择目标"
-	return reason
+	return _reason_catalog.disabled_text_for(reason)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

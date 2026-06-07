@@ -41,6 +41,7 @@ func _init() -> void:
 
 	var errors := _validate_hud(hud, snapshot)
 	errors.append_array(_validate_reason_catalog())
+	errors.append_array(_validate_hud_reason_catalog_bridge(hud))
 	errors.append_array(_validate_hud_failure_feedback(hud, simulation, world_result, registry))
 	errors.append_array(_validate_hud_combat_hud(hud, simulation, world_result))
 	errors.append_array(_validate_hud_combat_feedback(hud, simulation, world_result))
@@ -193,6 +194,22 @@ func _validate_reason_catalog() -> Array[String]:
 		errors.append("reason catalog should preserve unknown reason text: %s" % unknown)
 	if catalog.disabled_text_for("smoke_unknown_reason") != "smoke_unknown_reason":
 		errors.append("reason catalog should preserve unknown disabled text: %s" % catalog.disabled_text_for("smoke_unknown_reason"))
+	return errors
+
+
+func _validate_hud_reason_catalog_bridge(hud: Control) -> Array[String]:
+	var errors: Array[String] = []
+	if not hud.has_method("_disabled_reason_text") or not hud.has_method("_skill_target_reason_text"):
+		errors.append("HUD should expose reason text helpers for smoke diagnostics")
+		return errors
+	if hud.call("_disabled_reason_text", "path_unreachable") != "没有可达路径":
+		errors.append("HUD should use reason catalog disabled text fallback for movement reasons")
+	if hud.call("_disabled_reason_text", "target_not_hostile") != "非敌对目标":
+		errors.append("HUD should preserve short interaction disabled text overrides")
+	if hud.call("_skill_target_reason_text", "skill_on_cooldown") != "技能冷却中":
+		errors.append("HUD skill target reason text should use reason catalog fallback")
+	if hud.call("_skill_target_reason_text", "smoke_unknown_reason") != "smoke_unknown_reason":
+		errors.append("HUD should preserve unknown skill target reasons")
 	return errors
 
 
