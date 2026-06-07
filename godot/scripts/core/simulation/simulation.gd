@@ -1427,6 +1427,7 @@ func _craft_recipe_batch(actor_id: int, recipe_id: String, count: int, recipes: 
 	var completed := 0
 	var output_item_id := ""
 	var output_count := 0
+	var consumed_tools: Array[Dictionary] = []
 	var last_result: Dictionary = {}
 	for _index in range(count):
 		last_result = craft_recipe(actor_id, recipe_id, recipes, crafting_context)
@@ -1437,10 +1438,13 @@ func _craft_recipe_batch(actor_id: int, recipe_id: String, count: int, recipes: 
 				last_result["requested_count"] = count
 				last_result["output_item_id"] = output_item_id
 				last_result["output_count"] = output_count
+				last_result["consumed_tools"] = consumed_tools.duplicate(true)
 			return last_result
 		completed += 1
 		output_item_id = str(last_result.get("output_item_id", output_item_id))
 		output_count += int(last_result.get("output_count", 0))
+		for consumed_tool in _array_or_empty(last_result.get("consumed_tools", [])):
+			_merge_consumed_tool(consumed_tools, _dictionary_or_empty(consumed_tool))
 	return {
 		"success": true,
 		"recipe_id": recipe_id,
@@ -1448,7 +1452,23 @@ func _craft_recipe_batch(actor_id: int, recipe_id: String, count: int, recipes: 
 		"requested_count": count,
 		"output_item_id": output_item_id,
 		"output_count": output_count,
+		"consumed_tools": consumed_tools,
 	}
+
+
+func _merge_consumed_tool(consumed_tools: Array[Dictionary], consumed_tool: Dictionary) -> void:
+	var item_id := str(consumed_tool.get("item_id", ""))
+	if item_id.is_empty():
+		return
+	for index in range(consumed_tools.size()):
+		var existing: Dictionary = _dictionary_or_empty(consumed_tools[index])
+		if str(existing.get("item_id", "")) != item_id:
+			continue
+		existing["count"] = int(existing.get("count", 0)) + int(consumed_tool.get("count", 0))
+		existing["inventory_after"] = int(consumed_tool.get("inventory_after", existing.get("inventory_after", 0)))
+		consumed_tools[index] = existing
+		return
+	consumed_tools.append(consumed_tool.duplicate(true))
 
 
 func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) -> Dictionary:

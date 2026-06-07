@@ -51,12 +51,12 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 			"required": required_count,
 			"available": int(inventory.get(item_id, 0)),
 		})
-	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), inventory, equipment, crafting_context)
+	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), recipe, inventory, equipment, crafting_context)
 	var required_station := str(recipe.get("required_station", "none"))
 	var station_check: Dictionary = _station_check(player, required_station, crafting_context)
 	var unlock_check: Dictionary = _unlock_check(recipe, inventory, progression, crafted_recipes, completed_quests, world_flags)
 	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check, unlock_check, crafting_context)
-	var max_craft_count: int = _max_craft_count(materials, bool(availability.get("can_craft", false)))
+	var max_craft_count: int = _max_craft_count(materials, required_tools, bool(availability.get("can_craft", false)))
 	var output_count: int = max(1, int(output.get("count", 1)))
 	var output_icon_asset := AssetPathResolver.resolve_media_asset(str(output_item.get("icon_path", "")), "item")
 	return {
@@ -108,6 +108,29 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 		})
 	if not missing_tools.is_empty():
 		return {"can_craft": false, "reason": "missing_tools", "missing_tools": missing_tools}
+	var missing_consumable_tools: Array[Dictionary] = []
+	for tool in required_tools:
+		var tool_data: Dictionary = _dictionary_or_empty(tool)
+		if not bool(tool_data.get("consume_on_craft", false)):
+			continue
+		var tool_id := str(tool_data.get("item_id", ""))
+		var consume_count: int = max(1, int(tool_data.get("consume_count", 1)))
+		var inventory_available: int = int(inventory.get(tool_id, 0))
+		if not tool_id.is_empty() and inventory_available >= consume_count:
+			continue
+		missing_consumable_tools.append({
+			"item_id": tool_id,
+			"name": str(tool_data.get("name", tool_id)),
+			"available": inventory_available,
+			"required": consume_count,
+			"consume_on_craft": true,
+		})
+	if not missing_consumable_tools.is_empty():
+		return {
+			"can_craft": false,
+			"reason": "missing_consumable_tools",
+			"missing_tools": missing_consumable_tools,
+		}
 	if not bool(station_check.get("success", false)):
 		return station_check
 	var missing_skills: Array[Dictionary] = []
@@ -297,20 +320,62 @@ func _distance_to_station(player: Dictionary, station: Dictionary) -> int:
 	return abs(int(anchor.get("x", 0)) - int(player_grid.get("x", 0))) + abs(int(anchor.get("z", 0)) - int(player_grid.get("z", 0)))
 
 
-func _required_tools_snapshot(required_tools: Array, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> Array[Dictionary]:
+func _required_tools_snapshot(required_tools: Array, recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
+	var recipe_consumes_tools: bool = _recipe_consumes_required_tools(recipe)
+	var recipe_consume_count: int = _recipe_required_tool_consume_count(recipe)
 	for tool in required_tools:
-		var tool_id: String = _normalize_content_id(tool)
+		var tool_data: Dictionary = _tool_requirement(tool)
+		var tool_id: String = str(tool_data.get("item_id", ""))
 		if tool_id.is_empty():
 			continue
-		var available_count := _tool_available_count(tool_id, inventory, equipment, crafting_context)
+		var available_count: int = _tool_available_count(tool_id, inventory, equipment, crafting_context)
+		if recipe_consumes_tools:
+			tool_data["consume_on_craft"] = true
+			if not tool_data.has("consume_count"):
+				tool_data["consume_count"] = recipe_consume_count
+		var consume_on_craft: bool = bool(tool_data.get("consume_on_craft", false))
+		var consume_count: int = max(1, int(tool_data.get("consume_count", tool_data.get("required", 1))))
 		output.append({
 			"item_id": tool_id,
 			"name": str(_item_data(tool_id).get("name", tool_id)),
 			"available": available_count,
-			"required": 1,
+			"inventory_available": int(inventory.get(tool_id, 0)),
+			"required": max(1, int(tool_data.get("required", 1))),
+			"consume_on_craft": consume_on_craft,
+			"consume_count": consume_count if consume_on_craft else 0,
+			"can_consume": not consume_on_craft or int(inventory.get(tool_id, 0)) >= consume_count,
+			"durability_cost": float(tool_data.get("durability_cost", 0.0)),
 		})
 	return output
+
+
+func _tool_requirement(tool: Variant) -> Dictionary:
+	var data: Dictionary = _dictionary_or_empty(tool)
+	var raw_id: Variant = tool
+	if not data.is_empty():
+		raw_id = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var required_count: int = max(1, int(data.get("required", data.get("required_count", data.get("count", 1)))))
+	var consume_on_craft: bool = bool(data.get("consume_on_craft", data.get("consume", data.get("consumed", false))))
+	var consume_count: int = max(1, int(data.get("consume_count", data.get("consumed_count", data.get("tool_consume_count", required_count)))))
+	var output := {
+		"item_id": _normalize_content_id(raw_id),
+		"required": required_count,
+		"consume_on_craft": consume_on_craft,
+		"consume_count": consume_count,
+	}
+	var durability_cost: float = float(data.get("durability_cost", data.get("tool_durability_cost", data.get("required_tool_durability_cost", 0.0))))
+	if durability_cost > 0.0:
+		output["durability_cost"] = durability_cost
+	return output
+
+
+func _recipe_consumes_required_tools(recipe: Dictionary) -> bool:
+	return bool(recipe.get("consume_required_tools_on_craft", recipe.get("consume_required_tools", recipe.get("consume_tools_on_craft", false))))
+
+
+func _recipe_required_tool_consume_count(recipe: Dictionary) -> int:
+	return max(1, int(recipe.get("required_tool_consume_count", recipe.get("craft_tool_consume_count", recipe.get("tool_consume_count", 1)))))
 
 
 func _has_tool(tool_id: String, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> bool:
@@ -347,20 +412,35 @@ func _craftable_count(recipes: Array[Dictionary]) -> int:
 	return count
 
 
-func _max_craft_count(materials: Array[Dictionary], can_craft: bool) -> int:
+func _max_craft_count(materials: Array[Dictionary], required_tools: Array[Dictionary], can_craft: bool) -> int:
 	if not can_craft:
 		return 0
 	if materials.is_empty():
-		return 1
+		var tool_only_count := _max_consumable_tool_count(required_tools)
+		return 1 if tool_only_count == 2147483647 else max(0, tool_only_count)
 	var max_count := 2147483647
 	for material in materials:
 		var required := int(material.get("required", 0))
 		if required <= 0:
 			continue
 		max_count = mini(max_count, int(material.get("available", 0)) / required)
+	var max_tool_count := _max_consumable_tool_count(required_tools)
+	if max_tool_count != 2147483647:
+		max_count = mini(max_count, max_tool_count)
 	if max_count == 2147483647:
 		return 1
 	return max(0, max_count)
+
+
+func _max_consumable_tool_count(required_tools: Array[Dictionary]) -> int:
+	var max_count := 2147483647
+	for tool in required_tools:
+		var tool_data: Dictionary = _dictionary_or_empty(tool)
+		if not bool(tool_data.get("consume_on_craft", false)):
+			continue
+		var consume_count: int = max(1, int(tool_data.get("consume_count", 1)))
+		max_count = mini(max_count, int(tool_data.get("inventory_available", 0)) / consume_count)
+	return max_count
 
 
 func _item_data(item_id: String) -> Dictionary:

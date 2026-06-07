@@ -403,11 +403,18 @@ func _tools_text(tools: Array) -> String:
 		var tool_name := str(data.get("name", data.get("item_id", "")))
 		if tool_name.is_empty():
 			continue
-		parts.append("%s %d/%d" % [
+		var text := "%s %d/%d" % [
 			tool_name,
 			int(data.get("available", 0)),
 			int(data.get("required", 1)),
-		])
+		]
+		if bool(data.get("consume_on_craft", false)):
+			text = "%s 消耗x%d" % [text, max(1, int(data.get("consume_count", 1)))]
+			if int(data.get("inventory_available", data.get("available", 0))) < max(1, int(data.get("consume_count", 1))):
+				text = "%s(背包不足)" % text
+		if float(data.get("durability_cost", 0.0)) > 0.0:
+			text = "%s 耐久-%.1f" % [text, float(data.get("durability_cost", 0.0))]
+		parts.append(text)
 	return "无" if parts.is_empty() else ", ".join(parts)
 
 
@@ -695,6 +702,16 @@ func _reason_text(recipe: Dictionary) -> String:
 					int(data.get("required", 1)),
 				])
 			return "缺工具 %s" % ", ".join(parts)
+		"missing_consumable_tools":
+			var parts: Array[String] = []
+			for item in recipe.get("missing_tools", []):
+				var data: Dictionary = _tool_data(item)
+				parts.append("%s %d/%d" % [
+					data.get("name", data.get("item_id", "")),
+					int(data.get("available", 0)),
+					int(data.get("required", 1)),
+				])
+			return "缺可消耗工具 %s" % ", ".join(parts)
 		"required_station_unsupported":
 			return "需工作台 %s" % recipe.get("required_station", "")
 		"missing_station":
@@ -884,6 +901,8 @@ func _craft_failure_text(reason: String) -> String:
 			return "缺少工具流程"
 		"missing_tools":
 			return "缺少工具"
+		"missing_consumable_tools":
+			return "缺少可消耗工具"
 		"required_station_unsupported":
 			return "缺少工作台"
 		"missing_station":

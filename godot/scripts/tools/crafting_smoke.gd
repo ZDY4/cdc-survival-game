@@ -184,6 +184,47 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var tool_available: Dictionary = simulation.craft_recipe(1, "recipe_knife_basic", recipes)
 	if tool_available.get("reason", "") != "missing_station":
 		errors.append("tool-gated recipe should advance to station check when tool is available")
+	var consumable_tool_recipes: Dictionary = _consumable_tool_smoke_recipes()
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.inventory["1011"] = 2
+	var missing_consumable_tool: Dictionary = simulation.craft_recipe(1, "smoke_consumes_tool_recipe", consumable_tool_recipes)
+	if str(missing_consumable_tool.get("reason", "")) != "missing_tools":
+		errors.append("consumable tool recipe should require tool before materials are consumed")
+	if int(player.inventory.get("1011", 0)) != 2:
+		errors.append("missing consumable tool craft should not consume materials")
+	player.inventory["1151"] = 1
+	player.inventory["1011"] = 0
+	var failed_material_consumable_tool: Dictionary = simulation.craft_recipe(1, "smoke_consumes_tool_recipe", consumable_tool_recipes)
+	if str(failed_material_consumable_tool.get("reason", "")) != "materials_insufficient":
+		errors.append("failed consumable tool craft should report material shortage after tool availability")
+	if int(player.inventory.get("1151", 0)) != 1:
+		errors.append("failed consumable tool craft should not consume the tool")
+	player.inventory["1011"] = 2
+	var consumable_tool_event_before := _event_count(simulation.snapshot(), "recipe_crafted")
+	var consumable_tool_craft: Dictionary = simulation.craft_recipe(1, "smoke_consumes_tool_recipe", consumable_tool_recipes)
+	if not bool(consumable_tool_craft.get("success", false)):
+		errors.append("consumable tool craft should succeed: %s" % consumable_tool_craft.get("reason", "unknown"))
+	if int(player.inventory.get("1151", 0)) != 0:
+		errors.append("successful consumable tool craft should consume the tool")
+	if int(player.inventory.get("1011", 0)) != 0:
+		errors.append("successful consumable tool craft should consume materials")
+	if int(player.inventory.get("1006", 0)) != 1:
+		errors.append("successful consumable tool craft should add output")
+	var consumed_tools: Array = _array_or_empty(consumable_tool_craft.get("consumed_tools", []))
+	if consumed_tools.is_empty() or str(_dictionary_or_empty(consumed_tools[0]).get("item_id", "")) != "1151":
+		errors.append("successful consumable tool craft should return consumed tool payload")
+	if _event_count(simulation.snapshot(), "recipe_crafted") != consumable_tool_event_before + 1:
+		errors.append("successful consumable tool craft should emit recipe_crafted")
+	var last_event: Dictionary = _last_event(simulation.snapshot(), "recipe_crafted")
+	if _array_or_empty(_dictionary_or_empty(last_event.get("payload", {})).get("consumed_tools", [])).is_empty():
+		errors.append("recipe_crafted event should expose consumed_tools")
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.inventory["1151"] = 1
+	player.inventory["1009"] = 10
 
 	var station_result: Dictionary = simulation.craft_recipe(1, "recipe_first_aid_kit", recipes)
 	if station_result.get("reason", "") != "missing_station":
@@ -412,6 +453,26 @@ func _unlock_smoke_recipes() -> Dictionary:
 	}
 
 
+func _consumable_tool_smoke_recipes() -> Dictionary:
+	return {
+		"smoke_consumes_tool_recipe": {
+			"data": {
+				"id": "smoke_consumes_tool_recipe",
+				"name": "消耗工具测试配方",
+				"is_default_unlocked": true,
+				"unlock_conditions": [],
+				"required_tools": [{"item_id": "1151", "consume_on_craft": true, "consume_count": 1}],
+				"required_station": "none",
+				"skill_requirements": {},
+				"materials": [{"item_id": "1011", "count": 2}],
+				"output": {"item_id": "1006", "count": 1},
+				"craft_time": 0.0,
+				"experience_reward": 0,
+			},
+		},
+	}
+
+
 func _event_count(snapshot: Dictionary, kind: String) -> int:
 	var count := 0
 	for event in snapshot.get("events", []):
@@ -419,6 +480,15 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _last_event(snapshot: Dictionary, kind: String) -> Dictionary:
+	var events: Array = _array_or_empty(snapshot.get("events", []))
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) == kind:
+			return event_data
+	return {}
 
 
 func _expect_turn_policy(errors: Array[String], result: Dictionary, expected_action: String, expected_auto_advanced: bool, context: String) -> void:

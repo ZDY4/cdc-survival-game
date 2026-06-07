@@ -146,6 +146,29 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _recipe_line(game_root, "smoke_world_flag_unlock_recipe").contains("未解锁 outpost_workshop_restored"):
 		errors.append("world flag unlock recipe row should stop showing lock after required flag")
 	game_root.simulation.world_flags.erase("outpost_workshop_restored")
+	var player_for_consumable_tool: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	player_for_consumable_tool.inventory["1011"] = 1
+	player_for_consumable_tool.inventory["1151"] = 1
+	game_root.refresh_inventory_panel()
+	game_root.refresh_crafting_panel()
+	if not _press_recipe_line(game_root, "smoke_consumes_tool_recipe"):
+		errors.append("should select consumable tool smoke recipe")
+	await process_frame
+	if not _detail_text(game_root).contains("工具 螺丝刀 1/1 消耗x1"):
+		errors.append("crafting detail should preview consumed required tool")
+	var consumable_tool_snapshot: Dictionary = _recipe_snapshot(game_root, "smoke_consumes_tool_recipe")
+	var required_tools: Array = _array_or_empty(consumable_tool_snapshot.get("required_tools", []))
+	if required_tools.is_empty() or not bool(_dictionary_or_empty(required_tools[0]).get("consume_on_craft", false)):
+		errors.append("crafting snapshot should expose consume_on_craft for required tool")
+	var consumable_tool_result: Dictionary = game_root.craft_player_recipe("smoke_consumes_tool_recipe")
+	if not bool(consumable_tool_result.get("success", false)):
+		errors.append("consumable tool UI craft should succeed: %s" % consumable_tool_result.get("reason", "unknown"))
+	if _player_inventory_count(game_root, "1151") != 0:
+		errors.append("consumable tool UI craft should consume player inventory tool")
+	if _array_or_empty(consumable_tool_result.get("consumed_tools", [])).is_empty():
+		errors.append("consumable tool UI craft result should expose consumed_tools")
+	game_root.refresh_inventory_panel()
+	game_root.refresh_crafting_panel()
 	if not _recipe_line(game_root, "recipe_advanced_knife").contains("未解锁 基础小刀"):
 		errors.append("recipe-chain gated recipe row should show missing source recipe")
 	if not _press_recipe_line(game_root, "recipe_advanced_knife"):
@@ -706,5 +729,23 @@ func _install_unlock_source_smoke_recipes(game_root: Node) -> void:
 			"experience_reward": 0,
 			"unlock_conditions": [{"type": "world_flag", "id": "outpost_workshop_restored"}],
 			"is_default_unlocked": false,
+		},
+	}
+	recipes["smoke_consumes_tool_recipe"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_consumes_tool_recipe",
+			"name": "消耗工具测试配方",
+			"description": "制作时会消耗背包中的工具",
+			"category": "tool",
+			"output": {"item_id": "1006", "count": 1},
+			"materials": [{"item_id": "1011", "count": 1}],
+			"required_tools": [{"item_id": "1151", "consume_on_craft": true, "consume_count": 1}],
+			"required_station": "none",
+			"skill_requirements": {},
+			"craft_time": 0.0,
+			"experience_reward": 0,
+			"unlock_conditions": [],
+			"is_default_unlocked": true,
 		},
 	}
