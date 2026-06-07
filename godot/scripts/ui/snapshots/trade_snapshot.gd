@@ -94,9 +94,18 @@ func resolve_trade_session(runtime_snapshot: Dictionary, target: Dictionary = {}
 
 func _shop_items(entries: Array, buy_price_modifier: float) -> Array[Dictionary]:
 	var items: Array[Dictionary] = []
+	var stack_totals: Dictionary = _entry_stack_totals(entries)
+	var stack_indices: Dictionary = {}
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
 		var item_id: String = _normalize_content_id(entry_data.get("item_id", ""))
+		var count: int = int(entry_data.get("count", 0))
+		if item_id.is_empty() or count <= 0:
+			continue
+		var stack_index: int = int(stack_indices.get(item_id, 0)) + 1
+		stack_indices[item_id] = stack_index
+		var stack_count: int = int(_dictionary_or_empty(stack_totals.get(item_id, {})).get("stack_count", 1))
+		var stack_total_count: int = int(_dictionary_or_empty(stack_totals.get(item_id, {})).get("total_count", count))
 		var item_data: Dictionary = _item_data(item_id)
 		var base_price: int = int(item_data.get("value", 0))
 		var price: int = _trade_price(base_price, buy_price_modifier)
@@ -106,10 +115,14 @@ func _shop_items(entries: Array, buy_price_modifier: float) -> Array[Dictionary]
 			"item_id": item_id,
 			"name": str(item_data.get("name", item_id)),
 			"description": str(item_data.get("description", "")),
-			"count": int(entry_data.get("count", 0)),
+			"count": count,
 			"price": price,
 			"base_price": base_price,
 			"rarity": _rarity(item_data),
+			"stack_index": stack_index,
+			"stack_count": stack_count,
+			"stack_total_count": stack_total_count,
+			"multi_stack": stack_count > 1,
 			"icon_asset": icon_asset,
 			"thumbnail_asset": _thumbnail_asset(icon_asset, "item"),
 		})
@@ -118,6 +131,21 @@ func _shop_items(entries: Array, buy_price_modifier: float) -> Array[Dictionary]
 		return int(a.get("price", 0)) > int(b.get("price", 0))
 	)
 	return items
+
+
+func _entry_stack_totals(entries: Array) -> Dictionary:
+	var totals: Dictionary = {}
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var item_id: String = _normalize_content_id(entry_data.get("item_id", ""))
+		var count: int = int(entry_data.get("count", 0))
+		if item_id.is_empty() or count <= 0:
+			continue
+		var data: Dictionary = _dictionary_or_empty(totals.get(item_id, {}))
+		data["stack_count"] = int(data.get("stack_count", 0)) + 1
+		data["total_count"] = int(data.get("total_count", 0)) + count
+		totals[item_id] = data
+	return totals
 
 
 func _inventory_items(inventory: Dictionary, sell_price_modifier: float) -> Array[Dictionary]:

@@ -72,12 +72,18 @@ func _container_item_snapshots(session: Dictionary) -> Array[Dictionary]:
 
 func _item_snapshots(entries: Array) -> Array[Dictionary]:
 	var items: Array[Dictionary] = []
+	var stack_totals: Dictionary = _entry_stack_totals(entries)
+	var stack_indices: Dictionary = {}
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
 		var item_id: String = _normalize_content_id(entry_data.get("item_id", ""))
 		var count: int = int(entry_data.get("count", 0))
 		if item_id.is_empty() or count <= 0:
 			continue
+		var stack_index: int = int(stack_indices.get(item_id, 0)) + 1
+		stack_indices[item_id] = stack_index
+		var stack_count: int = int(_dictionary_or_empty(stack_totals.get(item_id, {})).get("stack_count", 1))
+		var stack_total_count: int = int(_dictionary_or_empty(stack_totals.get(item_id, {})).get("total_count", count))
 		var item_data: Dictionary = _item_data(item_id)
 		var icon_path := str(item_data.get("icon_path", ""))
 		var icon_asset := AssetPathResolver.resolve_media_asset(icon_path, "item")
@@ -89,6 +95,10 @@ func _item_snapshots(entries: Array) -> Array[Dictionary]:
 			"unit_weight": float(item_data.get("weight", 0.0)),
 			"total_weight": float(item_data.get("weight", 0.0)) * float(count),
 			"rarity": _rarity(item_data),
+			"stack_index": stack_index,
+			"stack_count": stack_count,
+			"stack_total_count": stack_total_count,
+			"multi_stack": stack_count > 1,
 			"icon_asset": icon_asset,
 			"thumbnail_asset": _thumbnail_asset(icon_asset, "item"),
 		})
@@ -97,6 +107,21 @@ func _item_snapshots(entries: Array) -> Array[Dictionary]:
 		return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
 	)
 	return items
+
+
+func _entry_stack_totals(entries: Array) -> Dictionary:
+	var totals: Dictionary = {}
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var item_id: String = _normalize_content_id(entry_data.get("item_id", ""))
+		var count: int = int(entry_data.get("count", 0))
+		if item_id.is_empty() or count <= 0:
+			continue
+		var data: Dictionary = _dictionary_or_empty(totals.get(item_id, {}))
+		data["stack_count"] = int(data.get("stack_count", 0)) + 1
+		data["total_count"] = int(data.get("total_count", 0)) + count
+		totals[item_id] = data
+	return totals
 
 
 func _inventory_item_snapshots(inventory: Dictionary) -> Array[Dictionary]:

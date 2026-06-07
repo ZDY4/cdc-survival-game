@@ -430,6 +430,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 	stack_player.money = 200
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
+	var stacked_shop_text := "\n".join(_item_lines(game_root))
+	if not stacked_shop_text.contains("绷带 x2") or not stacked_shop_text.contains("堆 1/2"):
+		errors.append("multi-stack shop should label first stack in item list: %s" % stacked_shop_text)
+	if not stacked_shop_text.contains("绷带 x3") or not stacked_shop_text.contains("堆 2/2"):
+		errors.append("multi-stack shop should label second stack in item list: %s" % stacked_shop_text)
+	var stacked_shop_button: Button = _trade_item_button_with_text(game_root, "shop", "堆 1/2")
+	if stacked_shop_button == null:
+		errors.append("multi-stack shop should expose first stack button")
+	else:
+		var stacked_shop_item: Dictionary = _dictionary_or_empty(stacked_shop_button.get_meta("trade_item", {}))
+		if not bool(stacked_shop_item.get("multi_stack", false)):
+			errors.append("multi-stack shop button metadata should mark multi_stack: %s" % stacked_shop_item)
+		if int(stacked_shop_item.get("stack_index", 0)) != 1 or int(stacked_shop_item.get("stack_count", 0)) != 2 or int(stacked_shop_item.get("stack_total_count", 0)) != 5:
+			errors.append("multi-stack shop button metadata should expose stack position and total: %s" % stacked_shop_item)
+		stacked_shop_button.pressed.emit()
+		if not _detail_line(game_root).contains("同物品合计 5"):
+			errors.append("multi-stack shop detail should expose total count: %s" % _detail_line(game_root))
 	var stacked_buy: Dictionary = game_root.buy_active_trade_item("1006", 4)
 	if not bool(stacked_buy.get("success", false)):
 		errors.append("buying across shop stacks should succeed: %s" % stacked_buy)

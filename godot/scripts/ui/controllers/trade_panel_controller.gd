@@ -309,13 +309,14 @@ func _item_line(item: Dictionary, source: String) -> Button:
 	button.name = "Item_%s" % item.get("item_id", "unknown")
 	var disabled_reason: String = str(item.get("disabled_reason", ""))
 	var disabled_reason_text := _trade_reason_text(disabled_reason)
-	button.text = "%s x%d | %d%s" % [
+	button.text = "%s x%d | %d%s%s" % [
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
 		int(item.get("price", 0)),
+		_stack_suffix(item),
 		" | %s" % disabled_reason_text if not disabled_reason_text.is_empty() else "",
 	]
-	button.tooltip_text = str(item.get("description", ""))
+	button.tooltip_text = _item_tooltip_text(item)
 	var trade_disabled_reason := _trade_disabled_reason(item, source)
 	var trade_disabled_reason_text := _trade_reason_text(trade_disabled_reason)
 	if not disabled_reason_text.is_empty():
@@ -381,12 +382,13 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 	_selected_item_id = str(item.get("item_id", ""))
 	_selected_item_snapshot = item.duplicate(true)
 	_update_trade_controls(item, source)
-	_detail_label.text = "%s：%s x%d | 单价 %d | 小计 %d%s%s" % [
+	_detail_label.text = "%s：%s x%d | 单价 %d | 小计 %d%s%s%s" % [
 		_source_display(source),
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
 		int(item.get("price", 0)),
 		int(item.get("price", 0)) * int(_quantity_spin.value if _quantity_spin != null else 1),
+		_stack_detail_suffix(item),
 		"\n%s" % description if not description.is_empty() else "",
 		"\n%s" % disabled_reason_text if not disabled_reason_text.is_empty() else "",
 	]
@@ -398,6 +400,30 @@ func _apply_feedback(feedback: Dictionary) -> void:
 	var text := str(feedback.get("text", ""))
 	_feedback_label.visible = not text.is_empty()
 	_feedback_label.text = text
+
+
+func _item_tooltip_text(item: Dictionary) -> String:
+	var description := str(item.get("description", ""))
+	var stack_detail := _stack_detail_suffix(item).strip_edges()
+	if stack_detail.is_empty():
+		return description
+	return "%s\n%s" % [description, stack_detail] if not description.is_empty() else stack_detail
+
+
+func _stack_suffix(item: Dictionary) -> String:
+	if not bool(item.get("multi_stack", false)):
+		return ""
+	return " | 堆 %d/%d" % [int(item.get("stack_index", 1)), int(item.get("stack_count", 1))]
+
+
+func _stack_detail_suffix(item: Dictionary) -> String:
+	if not bool(item.get("multi_stack", false)):
+		return ""
+	return " | 堆 %d/%d，同物品合计 %d" % [
+		int(item.get("stack_index", 1)),
+		int(item.get("stack_count", 1)),
+		int(item.get("stack_total_count", item.get("count", 0))),
+	]
 
 
 func _update_trade_controls(item: Dictionary, source: String) -> void:

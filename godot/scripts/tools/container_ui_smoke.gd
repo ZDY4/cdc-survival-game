@@ -233,6 +233,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_set_active_container_id(game_root, "multi_stack_container")
 	game_root.refresh_inventory_panel()
 	game_root.refresh_container_panel()
+	var stacked_container_text := _container_text(game_root)
+	if not stacked_container_text.contains("绷带 x2") or not stacked_container_text.contains("堆 1/2"):
+		errors.append("multi-stack container should label first stack in item list: %s" % stacked_container_text)
+	if not stacked_container_text.contains("绷带 x3") or not stacked_container_text.contains("堆 2/2"):
+		errors.append("multi-stack container should label second stack in item list: %s" % stacked_container_text)
+	var stacked_container_button: Button = _container_item_button_with_text(game_root, "container", "堆 1/2")
+	if stacked_container_button == null:
+		errors.append("multi-stack container should expose first stack button")
+	else:
+		var stacked_container_item: Dictionary = _dictionary_or_empty(stacked_container_button.get_meta("container_item", {}))
+		if not bool(stacked_container_item.get("multi_stack", false)):
+			errors.append("multi-stack container button metadata should mark multi_stack: %s" % stacked_container_item)
+		if int(stacked_container_item.get("stack_index", 0)) != 1 or int(stacked_container_item.get("stack_count", 0)) != 2 or int(stacked_container_item.get("stack_total_count", 0)) != 5:
+			errors.append("multi-stack container button metadata should expose stack position and total: %s" % stacked_container_item)
+		stacked_container_button.pressed.emit()
+		if not _container_detail(game_root).contains("同物品合计 5"):
+			errors.append("multi-stack container detail should expose total count: %s" % _container_detail(game_root))
 	var stacked_take: Dictionary = game_root.take_active_container_item("1006", 4)
 	if not bool(stacked_take.get("success", false)):
 		errors.append("taking across container stacks should succeed: %s" % stacked_take)

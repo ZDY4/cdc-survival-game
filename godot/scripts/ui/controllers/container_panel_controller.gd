@@ -276,7 +276,7 @@ func _item_line(item: Dictionary, source: String) -> Button:
 	var button := Button.new()
 	button.name = "Item_%s" % item.get("item_id", "unknown")
 	button.text = _item_line_text(item)
-	button.tooltip_text = str(item.get("description", ""))
+	button.tooltip_text = _item_tooltip_text(item)
 	button.set_meta("container_item", item.duplicate(true))
 	button.set_meta("container_source", source)
 	_apply_item_icon(button, item)
@@ -765,11 +765,12 @@ func _item_line_text(item: Dictionary) -> String:
 		]
 	var rarity := str(item.get("rarity", ""))
 	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
-	return "%s x%d | %.1f kg%s" % [
+	return "%s x%d | %.1f kg%s%s" % [
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
 		float(item.get("total_weight", 0.0)),
 		rarity_suffix,
+		_stack_suffix(item),
 	]
 
 
@@ -784,14 +785,39 @@ func _detail_text(item: Dictionary, source: String) -> String:
 		]
 	var rarity := str(item.get("rarity", ""))
 	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
-	return "%s：%s x%d | 单重 %.1f kg | 总重 %.1f kg%s%s" % [
+	return "%s：%s x%d | 单重 %.1f kg | 总重 %.1f kg%s%s%s" % [
 		_source_display(source),
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
 		float(item.get("unit_weight", 0.0)),
 		float(item.get("total_weight", 0.0)),
 		rarity_suffix,
+		_stack_detail_suffix(item),
 		"\n%s" % description if not description.is_empty() else "",
+	]
+
+
+func _item_tooltip_text(item: Dictionary) -> String:
+	var description := str(item.get("description", ""))
+	var stack_detail := _stack_detail_suffix(item).strip_edges()
+	if stack_detail.is_empty():
+		return description
+	return "%s\n%s" % [description, stack_detail] if not description.is_empty() else stack_detail
+
+
+func _stack_suffix(item: Dictionary) -> String:
+	if not bool(item.get("multi_stack", false)):
+		return ""
+	return " | 堆 %d/%d" % [int(item.get("stack_index", 1)), int(item.get("stack_count", 1))]
+
+
+func _stack_detail_suffix(item: Dictionary) -> String:
+	if not bool(item.get("multi_stack", false)):
+		return ""
+	return " | 堆 %d/%d，同物品合计 %d" % [
+		int(item.get("stack_index", 1)),
+		int(item.get("stack_count", 1)),
+		int(item.get("stack_total_count", item.get("count", 0))),
 	]
 
 
