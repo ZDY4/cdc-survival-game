@@ -141,6 +141,7 @@ func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry
 			found_unknown_item = true
 	if not found_unknown_item:
 		errors.append("invalid recipe reference smoke did not report unknown_item: %s" % validation.get("issues", []))
+	_expect_issue_location(errors, validation, "unknown_item", "$.output.item_id", "data/recipes/", "recipe issue location")
 
 
 func _expect_invalid_item_appearance_asset_ref(errors: Array[String], registry: ContentRegistry) -> void:
@@ -208,6 +209,7 @@ func _expect_invalid_shop_item_ref(errors: Array[String], registry: ContentRegis
 		return
 	if not _has_issue_code(validation.get("issues", []), "unknown_item"):
 		errors.append("invalid shop item smoke did not report unknown_item: %s" % validation.get("issues", []))
+	_expect_issue_location(errors, validation, "unknown_item", "$.inventory[0].item_id", "data/shops/", "shop array issue location")
 
 
 func _expect_invalid_world_tile_asset_ref(errors: Array[String], registry: ContentRegistry) -> void:
@@ -581,6 +583,24 @@ func _has_issue_code(issues: Array, code: String) -> bool:
 		if str(issue_data.get("code", "")) == code:
 			return true
 	return false
+
+
+func _expect_issue_location(errors: Array[String], validation: Dictionary, code: String, expected_json_path: String, expected_relative_prefix: String, context: String) -> void:
+	for issue in _array_or_empty(validation.get("issues", [])):
+		var issue_data: Dictionary = _dictionary_or_empty(issue)
+		if str(issue_data.get("code", "")) != code:
+			continue
+		var json_path := str(issue_data.get("json_path", ""))
+		var relative_path := str(issue_data.get("relative_path", ""))
+		var location := str(issue_data.get("location", ""))
+		if json_path != expected_json_path:
+			errors.append("%s: json_path expected %s, got %s" % [context, expected_json_path, issue_data])
+		if not relative_path.begins_with(expected_relative_prefix):
+			errors.append("%s: relative_path should start with %s, got %s" % [context, expected_relative_prefix, issue_data])
+		if not location.contains(relative_path) or not location.contains(expected_json_path):
+			errors.append("%s: location should combine file and json path, got %s" % [context, issue_data])
+		return
+	errors.append("%s: missing issue code %s in %s" % [context, code, validation.get("issues", [])])
 
 
 func _has_reference_detail(hits: Array[Dictionary], detail: String) -> bool:

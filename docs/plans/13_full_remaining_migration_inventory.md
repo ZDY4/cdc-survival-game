@@ -60,7 +60,7 @@
 - [~] 内容摘要：每个 domain 输出 id、display name、路径、引用摘要和校验状态。
 - [~] 引用反查：物品被配方、任务、容器、商店、角色 loadout、地图拾取引用；角色被对话、商店、任务、地图、AI profile 引用；地图对象引用 asset、world tile、container、transition 和 NPC。
 - [~] 安全写回：格式化、dry-run、diff summary、失败不落盘、原子替换。
-- [ ] JSON path 定位：校验错误能定位到文件、字段路径和数组索引。
+- [~] JSON path 定位：`ContentRecordValidator` 会为校验 issue 统一补 `json_path`、`relative_path`、`location`、domain 和 id；CLI validation 输出会显示 `data/...json:$.field[0].path` 定位，`ContentCLI` smoke 已覆盖普通字段路径和数组索引路径。待补真实 JSON 行列号、批量 validate changed 的更多坏例 fixture 和 editor dock 定位跳转。
 - [ ] `changed` / `diff-summary` 等旧 content_tools 行为完整迁移。
 - [~] 跨 domain 引用校验：item、recipe、quest、dialogue、dialogue rule、skill、character、settlement、map、overworld、shop、world tile、appearance profile、AI behavior / profile、legacy json effects、appearance asset path 和物品 appearance `visual_asset` -> Godot glTF 已有第一版覆盖，`references shop <id>` 可反查店主和交易对话，`references dialogue_rule <id>` 可反查角色绑定和默认 / 变体对话，`references ai <id>` 可反查角色 life 绑定和 AI 集合内引用，`references json <id>` 可反查物品 effect 使用点，`references world_tile <id>` 可反查地图和 overworld tile 使用点，`references appearance <id>` 可反查角色外观绑定；待补更多 legacy json 字段和地图 asset id 映射校验。
 - [ ] 内容版本和 schema migration：旧字段、缺省字段、废弃字段、迁移日志和 snapshot roundtrip。

@@ -133,7 +133,7 @@ func _validate_changed_command(registry: ContentRegistry) -> int:
 						data.get("severity", "error"),
 						data.get("code", "validation_error"),
 						data.get("message", ""),
-						data.get("field", "$"),
+						_issue_location(data),
 					])
 	print("checked_records: %d" % checked_records)
 	print("invalid_records: %d" % invalid_records)
@@ -209,7 +209,7 @@ func _print_validation(kind: String, domain: String, id_value: String, record: D
 			data.get("severity", "error"),
 			data.get("code", "validation_error"),
 			data.get("message", ""),
-			data.get("field", "$"),
+			_issue_location(data),
 		])
 	return 0 if bool(validation.get("ok", false)) else 2
 
@@ -289,6 +289,17 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _issue_location(issue: Dictionary) -> String:
+	var location := str(issue.get("location", "")).strip_edges()
+	if not location.is_empty():
+		return location
+	var json_path := str(issue.get("json_path", issue.get("field", "$"))).strip_edges()
+	var relative_path := str(issue.get("relative_path", "")).strip_edges()
+	if not relative_path.is_empty():
+		return "%s:%s" % [relative_path, json_path]
+	return json_path if not json_path.is_empty() else "$"
 
 
 func _reference_domain_list() -> String:

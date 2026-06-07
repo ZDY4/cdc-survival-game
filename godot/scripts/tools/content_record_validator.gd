@@ -26,10 +26,11 @@ func validate_record(domain: String, id_value: String, registry: ContentRegistry
 	var issues: Array[Dictionary] = []
 	var record: Dictionary = registry.get_library(domain).get(id_value, {})
 	if record.is_empty():
+		var not_found_issues: Array[Dictionary] = [_issue("error", "$", "not_found", "record not found in domain %s" % domain)]
 		return {
 			"ok": false,
 			"status": "not_found",
-			"issues": [_issue("error", "$", "not_found", "record not found in domain %s" % domain)],
+			"issues": _with_location(not_found_issues, domain, id_value, ""),
 		}
 
 	match domain:
@@ -62,7 +63,7 @@ func validate_record(domain: String, id_value: String, registry: ContentRegistry
 	return {
 		"ok": _error_count(issues) == 0,
 		"status": "ok" if _error_count(issues) == 0 else "invalid",
-		"issues": issues,
+		"issues": _with_location(issues, domain, id_value, str(record.get("path", ""))),
 	}
 
 
@@ -79,9 +80,51 @@ func _issue(severity: String, field: String, code: String, message: String) -> D
 	return {
 		"severity": severity,
 		"field": field,
+		"json_path": _normalize_json_path(field),
 		"code": code,
 		"message": message,
 	}
+
+
+func _with_location(issues: Array[Dictionary], domain: String, id_value: String, path: String) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var relative_path := _repo_relative_path(path)
+	for issue in issues:
+		var data: Dictionary = _dictionary_or_empty(issue).duplicate(true)
+		var field := str(data.get("field", "$"))
+		var json_path := _normalize_json_path(str(data.get("json_path", field)))
+		data["field"] = field
+		data["json_path"] = json_path
+		data["domain"] = domain
+		data["id"] = id_value
+		data["path"] = path
+		data["relative_path"] = relative_path
+		data["location"] = "%s:%s" % [relative_path, json_path] if not relative_path.is_empty() else json_path
+		output.append(data)
+	return output
+
+
+func _normalize_json_path(field: String) -> String:
+	var normalized := field.strip_edges().replace("\\", "/").replace("/", ".")
+	while normalized.contains(".."):
+		normalized = normalized.replace("..", ".")
+	normalized = normalized.replace(".[", "[")
+	if normalized.is_empty():
+		return "$"
+	if normalized.begins_with("$"):
+		return normalized
+	if normalized.begins_with("."):
+		return "$%s" % normalized
+	return "$.%s" % normalized
+
+
+func _repo_relative_path(path: String) -> String:
+	var normalized: String = path.replace("\\", "/")
+	var marker := "/data/"
+	var index := normalized.find(marker)
+	if index >= 0:
+		return normalized.substr(index + 1)
+	return normalized
 
 
 func _validate_appearance(id_value: String, record: Dictionary, issues: Array[Dictionary]) -> void:
