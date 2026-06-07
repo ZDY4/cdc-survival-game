@@ -42,6 +42,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var force_end_simulation: RefCounted = force_end_runtime.get("simulation")
 	var force_end_player: RefCounted = force_end_simulation.actor_registry.get_actor(1)
 	_expect_force_end_combat(errors, force_end_simulation, registry, force_end_player, force_end_player.grid_position.to_dictionary())
+	_expect_combat_npc_turn_ap_and_close(errors, registry)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
 	_expect_deterministic_combat_rng(errors, simulation, registry, player, player_grid)
 	_expect_deterministic_loot_rng(errors, registry, player_grid)
@@ -225,6 +226,66 @@ func _expect_force_end_combat(errors: Array[String], simulation: RefCounted, reg
 	_restore_player_turn(simulation, player)
 	if simulation.actor_registry.get_actor(defeat_target) != null:
 		simulation.actor_registry.unregister_actor(defeat_target)
+
+
+func _expect_combat_npc_turn_ap_and_close(errors: Array[String], registry: RefCounted) -> void:
+	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var simulation: RefCounted = runtime_result.get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("combat NPC turn AP smoke missing player")
+		return
+	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	player.hp = 100.0
+	player.max_hp = 100.0
+	player.defense = 0.0
+	var npc_id: int = _register_test_actor(simulation, "combat_turn_ap_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	var npc: RefCounted = simulation.actor_registry.get_actor(npc_id)
+	if npc == null:
+		errors.append("combat NPC turn AP smoke missing hostile")
+		return
+	npc.ap = 5.0
+	npc.combat_attributes["turn_ap_gain"] = 9.0
+	npc.combat_attributes["turn_ap_max"] = 9.0
+	npc.combat_attributes["combat_turn_ap_gain"] = 2.0
+	npc.combat_attributes["combat_turn_ap_max"] = 2.0
+	npc.combat_attributes["combat_affordable_ap_threshold"] = 2.0
+	simulation._enter_combat([player.actor_id, npc_id], "npc_turn_ap_smoke")
+	var event_count_before: int = simulation.snapshot().get("events", []).size()
+	var results: Array = simulation.advance_world_turn(_topology(simulation, registry))
+	var npc_result: Dictionary = _npc_result_for_actor(results, npc_id)
+	if npc_result.is_empty():
+		errors.append("combat NPC turn AP smoke should return NPC result")
+		return
+	var turn_open: Dictionary = _dictionary_or_empty(npc_result.get("turn_open", {}))
+	if float(turn_open.get("ap_gain", 0.0)) != 2.0 or float(turn_open.get("ap_max", 0.0)) != 2.0:
+		errors.append("combat NPC turn should use combat AP gain/max instead of exploration AP")
+	if float(turn_open.get("affordable_ap_threshold", 0.0)) != 2.0:
+		errors.append("combat NPC turn should expose combat affordable AP threshold")
+	if not bool(turn_open.get("combat_active", false)):
+		errors.append("combat NPC turn open snapshot should mark combat active")
+	if float(turn_open.get("ap", -1.0)) != 2.0:
+		errors.append("combat NPC turn should clamp AP to combat max on open")
+	if str(npc_result.get("intent", "")) != "attack":
+		errors.append("adjacent combat NPC should attack during combat AP smoke")
+	if float(npc_result.get("ap_after_action", -1.0)) != 0.0:
+		errors.append("combat NPC attack should spend AP down to 0")
+	if str(npc_result.get("turn_close_reason", "")) != "npc_turn_exhausted":
+		errors.append("combat NPC exhausted turn should close with npc_turn_exhausted")
+	if bool(npc.turn_open):
+		errors.append("combat NPC turn should be closed after world turn")
+	if float(npc.ap) != 0.0:
+		errors.append("combat NPC AP should stay at 0 after exhausted turn close")
+	var started_payload: Dictionary = _event_payload_after(simulation.snapshot(), "turn_started", npc_id, event_count_before)
+	if float(started_payload.get("ap_gain", 0.0)) != 2.0 or float(started_payload.get("ap_max", 0.0)) != 2.0:
+		errors.append("combat NPC turn_started should expose combat AP gain/max")
+	var ended_payload: Dictionary = _event_payload_after(simulation.snapshot(), "turn_ended", npc_id, event_count_before)
+	if str(ended_payload.get("reason", "")) != "npc_turn_exhausted":
+		errors.append("combat NPC turn_ended should expose npc_turn_exhausted")
 
 
 func _expect_combat_pending_cancel_turn_policy(errors: Array[String], registry: RefCounted) -> void:
@@ -1763,6 +1824,26 @@ func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
 		var event_data: Dictionary = _dictionary_or_empty(events[index])
 		if str(event_data.get("kind", "")) == kind:
 			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
+
+
+func _event_payload_after(snapshot: Dictionary, kind: String, actor_id: int, start_index: int) -> Dictionary:
+	var events: Array = _array_or_empty(snapshot.get("events", []))
+	for index in range(max(0, start_index), events.size()):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) != kind:
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event_data.get("payload", {}))
+		if int(payload.get("actor_id", 0)) == actor_id:
+			return payload
+	return {}
+
+
+func _npc_result_for_actor(results: Array, actor_id: int) -> Dictionary:
+	for result in results:
+		var result_data: Dictionary = _dictionary_or_empty(result)
+		if int(result_data.get("actor_id", 0)) == actor_id:
+			return result_data
 	return {}
 
 
