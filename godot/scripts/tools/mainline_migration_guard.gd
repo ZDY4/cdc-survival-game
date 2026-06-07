@@ -65,7 +65,10 @@ const ASSET_AUTHORITY_EXTENSIONS := {
 	"tscn": true,
 	"tres": true,
 }
-const ASSET_AUTHORITY_SELF := "godot/scripts/tools/mainline_migration_guard.gd"
+const ASSET_AUTHORITY_EXEMPT_FILES := {
+	"godot/scripts/data/asset_path_resolver.gd": true,
+	"godot/scripts/tools/mainline_migration_guard.gd": true,
+}
 
 
 func _init() -> void:
@@ -200,7 +203,7 @@ func _scan_asset_authority_directory(absolute_path: String, relative_path: Strin
 
 
 func _should_scan_asset_authority_file(relative_path: String) -> bool:
-	if relative_path == ASSET_AUTHORITY_SELF:
+	if ASSET_AUTHORITY_EXEMPT_FILES.has(relative_path):
 		return false
 	var extension := relative_path.get_extension().to_lower()
 	return ASSET_AUTHORITY_EXTENSIONS.has(extension)

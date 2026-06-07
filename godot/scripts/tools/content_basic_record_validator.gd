@@ -1,7 +1,7 @@
 extends RefCounted
 
-const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 
 const EFFECTS_DOMAIN := "json"
 
@@ -305,13 +305,11 @@ func _validate_appearance_fragment(fragment: Dictionary, field: String, issues: 
 	if visual_asset.is_empty():
 		issues.append(_issue("error", field.path_join("definition.visual_asset"), "missing_asset", "appearance visual_asset is required"))
 	else:
-		var model_asset := _model_asset_for_equipment_visual(visual_asset)
-		if model_asset.is_empty():
-			issues.append(_issue("error", field.path_join("definition.visual_asset"), "unknown_visual_asset", "unsupported appearance visual_asset %s" % visual_asset))
-		else:
-			var full_path := ContentPaths.assets_root().path_join(model_asset).simplify_path()
-			if not FileAccess.file_exists(full_path):
-				issues.append(_issue("error", field.path_join("definition.visual_asset"), "missing_asset_file", "appearance model asset does not exist: %s" % full_path))
+		var resolved_asset := AssetPathResolver.resolve_equipment_visual_asset(visual_asset)
+		if not bool(resolved_asset.get("ok", false)):
+			issues.append(_issue("error", field.path_join("definition.visual_asset"), str(resolved_asset.get("reason", "unknown_visual_asset")), str(resolved_asset.get("message", "unsupported appearance visual_asset %s" % visual_asset))))
+		elif not bool(resolved_asset.get("exists", false)):
+			issues.append(_issue("error", field.path_join("definition.visual_asset"), "missing_asset_file", "appearance model asset does not exist: %s" % str(resolved_asset.get("absolute_path", ""))))
 	var attach_target := str(definition.get("attach_target", "")).strip_edges()
 	if not attach_target.is_empty() and not ["main_hand", "off_hand", "head", "body", "legs", "feet", "hands", "back", "accessory"].has(attach_target):
 		issues.append(_issue("warning", field.path_join("definition.attach_target"), "unknown_attach_target", "unknown appearance attach target %s" % attach_target))
@@ -461,22 +459,17 @@ func _validate_world_tile_source(source: Dictionary, field: String, issues: Arra
 	elif not path.ends_with(".gltf"):
 		issues.append(_issue("error", field.path_join("path"), "invalid_asset_format", "world tile source must reference a .gltf file"))
 	else:
-		var full_path := ContentPaths.assets_root().path_join(path).simplify_path()
-		if not FileAccess.file_exists(full_path):
-			issues.append(_issue("error", field.path_join("path"), "missing_asset_file", "asset file does not exist: %s" % full_path))
+		var resolved_asset := AssetPathResolver.resolve_gltf_source_path(path)
+		if not bool(resolved_asset.get("ok", false)):
+			issues.append(_issue("error", field.path_join("path"), str(resolved_asset.get("reason", "invalid_asset_path")), str(resolved_asset.get("message", "invalid asset path"))))
+		elif not bool(resolved_asset.get("exists", false)):
+			issues.append(_issue("error", field.path_join("path"), "missing_asset_file", "asset file does not exist: %s" % str(resolved_asset.get("absolute_path", ""))))
 	if source.has("scene_index") and int(source.get("scene_index", 0)) < 0:
 		issues.append(_issue("error", field.path_join("scene_index"), "negative_scene_index", "scene_index must be >= 0"))
 
 
 func _model_asset_for_equipment_visual(visual_asset: String) -> String:
-	var normalized := visual_asset.strip_edges()
-	if normalized.ends_with(".gltf"):
-		return normalized
-	if normalized.begins_with("builtin:weapon:"):
-		return "preview_placeholders/placeholders/weapon_%s.gltf" % normalized.trim_prefix("builtin:weapon:")
-	if normalized.begins_with("builtin:item:"):
-		return "preview_placeholders/placeholders/equipment_%s.gltf" % normalized.trim_prefix("builtin:item:")
-	return ""
+	return AssetPathResolver.relative_path_from_result(AssetPathResolver.resolve_equipment_visual_asset(visual_asset))
 
 
 func _validate_bounds(bounds: Dictionary, field: String, issues: Array[Dictionary]) -> void:

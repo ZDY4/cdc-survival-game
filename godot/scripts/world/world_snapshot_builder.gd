@@ -2,6 +2,7 @@ extends RefCounted
 
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const MapBuilder = preload("res://scripts/world/map_builder.gd")
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 
 var registry: RefCounted
 var map_builder := MapBuilder.new()
@@ -54,6 +55,7 @@ func _actors_on_map(actors: Array, active_map_id: String) -> Array[Dictionary]:
 		var model_asset := str(actor.get("model_asset", ""))
 		if model_asset.is_empty():
 			model_asset = _model_asset_for_appearance(appearance_profile_id)
+		model_asset = _resolved_model_asset(model_asset)
 		output.append({
 			"actor_id": int(actor.get("actor_id", 0)),
 			"definition_id": definition_id,
@@ -86,7 +88,7 @@ func _model_asset_for_appearance(appearance_profile_id: String) -> String:
 		return ""
 	var appearance_record: Dictionary = registry.get_library("appearance").get(appearance_profile_id, {})
 	var appearance_data: Dictionary = _dictionary_or_empty(appearance_record.get("data", {}))
-	return str(appearance_data.get("base_model_asset", ""))
+	return _resolved_model_asset(str(appearance_data.get("base_model_asset", "")))
 
 
 func _equipment_visuals(equipment: Dictionary) -> Array[Dictionary]:
@@ -127,14 +129,11 @@ func _appearance_definition(item_data: Dictionary) -> Dictionary:
 
 
 func _model_asset_for_equipment_visual(visual_asset: String) -> String:
-	var normalized := visual_asset.strip_edges()
-	if normalized.ends_with(".gltf"):
-		return normalized
-	if normalized.begins_with("builtin:weapon:"):
-		return "preview_placeholders/placeholders/weapon_%s.gltf" % normalized.trim_prefix("builtin:weapon:")
-	if normalized.begins_with("builtin:item:"):
-		return "preview_placeholders/placeholders/equipment_%s.gltf" % normalized.trim_prefix("builtin:item:")
-	return ""
+	return _resolved_model_asset(visual_asset)
+
+
+func _resolved_model_asset(asset_id: String) -> String:
+	return AssetPathResolver.relative_path_from_result(AssetPathResolver.resolve_model_asset(asset_id))
 
 
 func _apply_actor_quest_markers(actors: Array[Dictionary], runtime_snapshot: Dictionary) -> void:

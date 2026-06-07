@@ -7,6 +7,7 @@ const ContentSchemaMigration = preload("res://scripts/data/content_schema_migrat
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 
 
 func _init() -> void:
@@ -67,6 +68,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "json", "stun")
 	_expect_validate_changed(errors, registry)
 	_expect_schema_migration_diagnostics(errors, registry)
+	_expect_asset_path_resolver(errors)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_item_appearance_asset_ref(errors, registry)
 	_expect_invalid_character_appearance_ref(errors, registry)
@@ -149,6 +151,23 @@ func _expect_schema_migration_diagnostics(errors: Array[String], registry: Conte
 		errors.append("schema migration should report deprecated schemaVersion: %s" % [legacy_schema])
 	if _array_or_empty(legacy_schema.get("migration_log", [])).is_empty():
 		errors.append("schema migration should expose migration log for legacy fields: %s" % [legacy_schema])
+
+
+func _expect_asset_path_resolver(errors: Array[String]) -> void:
+	var weapon := AssetPathResolver.resolve_equipment_visual_asset("builtin:weapon:dagger")
+	if not bool(weapon.get("ok", false)) or str(weapon.get("relative_path", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
+		errors.append("asset resolver should map builtin weapon visual assets, got %s" % weapon)
+	if not bool(weapon.get("exists", false)):
+		errors.append("asset resolver builtin weapon should resolve to an existing Godot asset: %s" % weapon)
+	var direct := AssetPathResolver.resolve_model_asset("res://assets/preview_placeholders/characters/humanoid_mannequin.gltf")
+	if not bool(direct.get("ok", false)) or str(direct.get("relative_path", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
+		errors.append("asset resolver should normalize res://assets paths, got %s" % direct)
+	var root_assets := AssetPathResolver.resolve_model_asset("assets" + "/preview_placeholders/characters/humanoid_mannequin.gltf")
+	if bool(root_assets.get("ok", false)) or str(root_assets.get("reason", "")) != "root_asset_reference":
+		errors.append("asset resolver should reject root asset references, got %s" % root_assets)
+	var missing := AssetPathResolver.resolve_equipment_visual_asset("builtin:weapon:missing_for_resolver_smoke")
+	if not bool(missing.get("ok", false)) or bool(missing.get("exists", true)):
+		errors.append("asset resolver should return missing existing-state for known builtin patterns, got %s" % missing)
 
 
 func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry) -> void:

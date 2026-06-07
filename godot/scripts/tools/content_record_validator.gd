@@ -8,7 +8,7 @@ const JsonRecordValidator = preload("res://scripts/tools/json_record_validator.g
 const NarrativeRecordValidator = preload("res://scripts/tools/narrative_record_validator.gd")
 const WorldRecordValidator = preload("res://scripts/tools/world_record_validator.gd")
 
-const ContentPaths = preload("res://scripts/data/content_paths.gd")
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 
 const EDITOR_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance", "ai", "json"]
 
@@ -139,12 +139,11 @@ func _validate_appearance(id_value: String, record: Dictionary, issues: Array[Di
 	if base_model_asset.is_empty():
 		issues.append(_issue("error", "$.base_model_asset", "missing_asset", "base model asset path is required"))
 		return
-	if not base_model_asset.ends_with(".gltf"):
-		issues.append(_issue("error", "$.base_model_asset", "invalid_asset_format", "base model asset must reference a .gltf file"))
-		return
-	var full_path := ContentPaths.assets_root().path_join(base_model_asset).simplify_path()
-	if not FileAccess.file_exists(full_path):
-		issues.append(_issue("error", "$.base_model_asset", "missing_asset_file", "asset file does not exist: %s" % full_path))
+	var resolved_asset := AssetPathResolver.resolve_model_asset(base_model_asset)
+	if not bool(resolved_asset.get("ok", false)):
+		issues.append(_issue("error", "$.base_model_asset", str(resolved_asset.get("reason", "invalid_asset_path")), str(resolved_asset.get("message", "invalid asset path"))))
+	elif not bool(resolved_asset.get("exists", false)):
+		issues.append(_issue("error", "$.base_model_asset", "missing_asset_file", "asset file does not exist: %s" % str(resolved_asset.get("absolute_path", ""))))
 
 
 func _validate_character_ai_refs(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
