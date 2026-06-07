@@ -37,19 +37,31 @@ func summarize_path(input_path: String) -> Dictionary:
 
 
 func changed_paths(path_roots: Array[String]) -> Array[String]:
-	var git_args: Array[String] = ["status", "--short", "--untracked-files=all", "--"]
-	git_args.append_array(path_roots)
-	var status := _git_output(git_args)
 	var paths: Array[String] = []
-	if int(status.get("exit_code", 1)) != 0:
-		printerr(status.get("error", "git status failed"))
-		return paths
-	for line in str(status.get("stdout", "")).split("\n", false):
-		var path := _path_from_status_line(line)
+	for entry in changed_path_entries(path_roots):
+		var path := str(_dictionary_or_empty(entry).get("path", ""))
 		if not path.is_empty():
 			paths.append(path)
 	paths.sort()
 	return paths
+
+
+func changed_path_entries(path_roots: Array[String]) -> Array[Dictionary]:
+	var git_args: Array[String] = ["status", "--short", "--untracked-files=all", "--"]
+	git_args.append_array(path_roots)
+	var status := _git_output(git_args)
+	var entries: Array[Dictionary] = []
+	if int(status.get("exit_code", 1)) != 0:
+		printerr(status.get("error", "git status failed"))
+		return entries
+	for line in str(status.get("stdout", "")).split("\n", false):
+		var entry := _entry_from_status_line(line)
+		if not str(entry.get("path", "")).is_empty():
+			entries.append(entry)
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("path", "")) < str(b.get("path", ""))
+	)
+	return entries
 
 
 func _report(relative_path: String, status: String, added_lines: int, removed_lines: int, changed_hunks: int) -> Dictionary:
@@ -87,12 +99,25 @@ func _normalize_repo_path(input_path: String) -> String:
 
 
 func _path_from_status_line(line: String) -> String:
+	return str(_entry_from_status_line(line).get("path", ""))
+
+
+func _entry_from_status_line(line: String) -> Dictionary:
 	if line.length() < 4:
-		return ""
+		return {}
+	var status_code := line.substr(0, min(2, line.length()))
 	var value := line.substr(3).strip_edges()
+	var source_path := ""
 	if value.find(" -> ") >= 0:
-		value = value.split(" -> ", false)[-1]
-	return value.replace("\\", "/")
+		var parts := value.split(" -> ", false)
+		source_path = str(parts[0]).replace("\\", "/")
+		value = str(parts[-1])
+	return {
+		"path": value.replace("\\", "/"),
+		"source_path": source_path,
+		"status": _normalize_status_code(status_code),
+		"status_code": status_code.strip_edges(),
+	}
 
 
 func _first_line(raw: String) -> String:
@@ -126,6 +151,8 @@ func _changed_hunk_count(raw: String) -> int:
 func _normalize_status_code(status_line: String) -> String:
 	var code := status_line.substr(0, min(2, status_line.length()))
 	match code:
+		"??":
+			return "untracked"
 		" M", "M ", "MM":
 			return "modified"
 		"A ", "AM":
@@ -145,3 +172,9 @@ func _failed(code: String, message: String) -> Dictionary:
 		"code": code,
 		"message": message,
 	}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

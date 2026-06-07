@@ -130,6 +130,28 @@ func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) 
 	var missing_entries := commands.changed_validation_records_for_paths(registry, ["data/items/missing_item_for_changed_smoke.json"])
 	if missing_entries.size() != 1 or bool(_dictionary_or_empty(missing_entries[0]).get("found", true)):
 		errors.append("validate changed should report supported but unloaded changed files: %s" % [missing_entries])
+	var status_entries := commands.changed_validation_records_for_paths(registry, [
+		{
+			"path": "data/items/deleted_item_for_changed_smoke.json",
+			"status": "deleted",
+			"status_code": "D",
+		},
+		{
+			"path": "data/items/renamed_item_for_changed_smoke.json",
+			"source_path": "data/items/old_item_for_changed_smoke.json",
+			"status": "renamed",
+			"status_code": "R",
+		},
+	])
+	if status_entries.size() != 2:
+		errors.append("validate changed should keep deleted/renamed content entries: %s" % [status_entries])
+	else:
+		var deleted_entry: Dictionary = _dictionary_or_empty(status_entries[0])
+		var renamed_entry: Dictionary = _dictionary_or_empty(status_entries[1])
+		if str(deleted_entry.get("change_status", "")) != "deleted" or str(deleted_entry.get("id", "")) != "deleted_item_for_changed_smoke":
+			errors.append("validate changed should classify deleted content path: %s" % [status_entries])
+		if str(renamed_entry.get("change_status", "")) != "renamed" or str(renamed_entry.get("source_relative_path", "")) != "data/items/old_item_for_changed_smoke.json":
+			errors.append("validate changed should preserve renamed content source path: %s" % [status_entries])
 
 
 func _expect_schema_migration_diagnostics(errors: Array[String], registry: ContentRegistry) -> void:

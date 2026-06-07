@@ -115,7 +115,7 @@ func _nested_ai_reference_lookup(args: Array[String], registry: ContentRegistry)
 
 func _validate_changed_command(registry: ContentRegistry) -> int:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
-	var entries := changed_validation_records_for_paths(registry, ContentDiffSummary.new().changed_paths(ContentCliDomains.git_status_paths_for_validate()))
+	var entries := changed_validation_records_for_paths(registry, ContentDiffSummary.new().changed_path_entries(ContentCliDomains.git_status_paths_for_validate()))
 	var invalid_records := 0
 	print("mode: validate_changed")
 	print("domains: %s" % ContentCliDomains.validate_domain_names())
@@ -132,8 +132,13 @@ func _validate_changed_command(registry: ContentRegistry) -> int:
 		var relative_path := str(entry.get("relative_path", ""))
 		if not bool(entry.get("found", false)):
 			invalid_records += 1
-			print("- [missing] %s @ %s" % [_singular_domain(domain), relative_path])
-			print("  - [error] content_file_not_loaded: changed content file is not loaded by registry (%s:$)" % relative_path)
+			var change_status := str(entry.get("change_status", "changed"))
+			print("- [%s] %s @ %s" % [_missing_changed_label(change_status), _singular_domain(domain), relative_path])
+			print("  - [error] %s: %s (%s:$)" % [
+				_missing_changed_code(change_status),
+				_missing_changed_message(entry),
+				relative_path,
+			])
 			continue
 		var validation := validator.validate_record(domain, id_string, registry)
 		var schema: Dictionary = _dictionary_or_empty(validation.get("schema_migration", {}))
@@ -155,11 +160,12 @@ func _validate_changed_command(registry: ContentRegistry) -> int:
 	return 0 if invalid_records == 0 else 2
 
 
-func changed_validation_records_for_paths(registry: ContentRegistry, relative_paths: Array[String]) -> Array[Dictionary]:
+func changed_validation_records_for_paths(registry: ContentRegistry, changed_paths: Array) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var seen: Dictionary = {}
-	for path_value in relative_paths:
-		var relative_path := str(path_value).replace("\\", "/").simplify_path()
+	for path_value in changed_paths:
+		var changed_entry := _changed_path_entry(path_value)
+		var relative_path := str(changed_entry.get("path", "")).replace("\\", "/").simplify_path()
 		var domain := ContentCliDomains.validate_domain_for_relative_path(relative_path)
 		if domain.is_empty():
 			continue
@@ -170,8 +176,58 @@ func changed_validation_records_for_paths(registry: ContentRegistry, relative_pa
 		var record_entry := _record_for_relative_path(registry, domain, relative_path)
 		record_entry["domain"] = domain
 		record_entry["relative_path"] = relative_path
+		record_entry["change_status"] = str(changed_entry.get("status", "changed"))
+		record_entry["change_status_code"] = str(changed_entry.get("status_code", ""))
+		record_entry["source_relative_path"] = str(changed_entry.get("source_path", ""))
 		entries.append(record_entry)
 	return entries
+
+
+func _changed_path_entry(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		var entry: Dictionary = value
+		return {
+			"path": str(entry.get("path", "")).replace("\\", "/"),
+			"source_path": str(entry.get("source_path", "")).replace("\\", "/"),
+			"status": str(entry.get("status", "changed")),
+			"status_code": str(entry.get("status_code", "")),
+		}
+	return {
+		"path": str(value).replace("\\", "/"),
+		"source_path": "",
+		"status": "changed",
+		"status_code": "",
+	}
+
+
+func _missing_changed_label(change_status: String) -> String:
+	match change_status:
+		"deleted":
+			return "deleted"
+		"renamed":
+			return "renamed_missing"
+	return "missing"
+
+
+func _missing_changed_code(change_status: String) -> String:
+	match change_status:
+		"deleted":
+			return "content_file_deleted"
+		"renamed":
+			return "renamed_content_file_not_loaded"
+	return "content_file_not_loaded"
+
+
+func _missing_changed_message(entry: Dictionary) -> String:
+	var source_path := str(entry.get("source_relative_path", ""))
+	match str(entry.get("change_status", "")):
+		"deleted":
+			return "changed content file was deleted and is no longer loaded by registry"
+		"renamed":
+			if not source_path.is_empty():
+				return "renamed content file is not loaded by registry; source was %s" % source_path
+			return "renamed content file is not loaded by registry"
+	return "changed content file is not loaded by registry"
 
 
 func _record_for_relative_path(registry: ContentRegistry, domain: String, relative_path: String) -> Dictionary:
