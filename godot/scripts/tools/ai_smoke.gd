@@ -59,6 +59,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("zombie should attack inside attack range")
 	if str(attack.get("reason", "")) != "target_in_attack_range" or _dictionary_or_empty(attack.get("target_grid", {})).is_empty():
 		errors.append("zombie attack intent should expose debug reason and target grid")
+	_expect_target_tracking_and_loss(errors, simulation, registry, zombie_id, player_grid)
 
 	var wait_result: Dictionary = simulation.submit_player_command({"kind": "wait", "topology": _topology(simulation, registry)})
 	if not bool(wait_result.get("success", false)):
@@ -141,6 +142,39 @@ func _expect_hostile_los_blocked_intent(errors: Array[String], simulation: RefCo
 	if _event_count(simulation.snapshot(), "attack_resolved") != before_events:
 		errors.append("blocked LOS hostile should not emit attack_resolved")
 	zombie.grid_position = original_grid
+
+
+func _expect_target_tracking_and_loss(errors: Array[String], simulation: RefCounted, registry: RefCounted, zombie_id: int, player_grid: RefCounted) -> void:
+	var zombie: RefCounted = simulation.actor_registry.get_actor(zombie_id)
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if zombie == null or player == null:
+		errors.append("target tracking smoke missing actor")
+		return
+	var original_player_grid: RefCounted = player.grid_position
+	var original_zombie_grid: RefCounted = zombie.grid_position
+	zombie.grid_position = GridCoord.new(player_grid.x + 3, player_grid.y, player_grid.z)
+	var acquired: Dictionary = simulation.decide_actor_intent(zombie_id, {
+		"topology": _topology(simulation, registry),
+		"active_map_id": simulation.active_map_id,
+	})
+	if str(acquired.get("target_tracking_state", "")) != "acquired" and str(acquired.get("target_tracking_state", "")) != "tracking":
+		errors.append("hostile target memory should acquire target, got %s" % acquired)
+	player.grid_position = GridCoord.new(player_grid.x + 40, player_grid.y, player_grid.z)
+	var lost: Dictionary = simulation.decide_actor_intent(zombie_id, {
+		"topology": _topology(simulation, registry),
+		"active_map_id": simulation.active_map_id,
+	})
+	if not bool(lost.get("target_lost", false)) or str(lost.get("target_tracking_state", "")) != "lost":
+		errors.append("hostile target memory should report target lost, got %s" % lost)
+	if str(lost.get("target_lost_reason", "")) != "no_target_in_aggro_range":
+		errors.append("lost target should expose no_target_in_aggro_range reason")
+	if int(lost.get("previous_target_actor_id", 0)) != player.actor_id:
+		errors.append("lost target should preserve previous target actor id")
+	var event_payload: Dictionary = _last_event_payload(simulation.snapshot(), "ai_intent_decided")
+	if not bool(event_payload.get("target_lost", false)) or str(event_payload.get("target_tracking_state", "")) != "lost":
+		errors.append("ai_intent_decided should expose target lost payload, got %s" % event_payload)
+	player.grid_position = original_player_grid
+	zombie.grid_position = original_zombie_grid
 
 
 func _expect_hostile_weapon_and_reload_intents(errors: Array[String], simulation: RefCounted, registry: RefCounted, player_grid: RefCounted) -> void:
