@@ -16,6 +16,10 @@ func build(simulation: RefCounted) -> Dictionary:
 	var control_actor: Dictionary = _current_control_actor_snapshot(simulation)
 	var recent_failure: Dictionary = _recent_failure(event_output)
 	var recent_interaction: Dictionary = _recent_interaction_target(event_output, simulation.interaction_menu)
+	var runtime_queue: Array[Dictionary] = _runtime_command_queue(simulation)
+	var command_history: Array[Dictionary] = _runtime_command_history(event_output)
+	var target_preview: Dictionary = _target_preview(simulation.interaction_menu, simulation.pending_interaction, recent_interaction)
+	var recent_feedback: Array[Dictionary] = _recent_event_feedback(event_output)
 	return {
 		"schema_version": CURRENT_SCHEMA_VERSION,
 		"active_map_id": simulation.active_map_id,
@@ -40,15 +44,17 @@ func build(simulation: RefCounted) -> Dictionary:
 		"combat_state": simulation.combat_state.duplicate(true),
 		"pending_movement": simulation.pending_movement.duplicate(true),
 		"pending_interaction": simulation.pending_interaction.duplicate(true),
-		"runtime_command_queue": _runtime_command_queue(simulation),
+		"runtime_command_queue": runtime_queue,
+		"runtime_command_history": command_history,
 		"pending_progression_step": _pending_progression_step(control_actor),
 		"current_control_actor": control_actor,
 		"recent_interaction_target": recent_interaction,
 		"recent_failure": recent_failure,
-		"recent_event_feedback": _recent_event_feedback(event_output),
-		"target_preview": _target_preview(simulation.interaction_menu, simulation.pending_interaction, recent_interaction),
+		"recent_event_feedback": recent_feedback,
+		"target_preview": target_preview,
 		"target_selection_state": _target_selection_state(simulation.interaction_menu, simulation.pending_interaction),
 		"ui_menu_state_refs": _ui_menu_state_refs(simulation),
+		"debug_runtime_diagnostics": _debug_runtime_diagnostics(simulation, event_output, runtime_queue, command_history, recent_failure, target_preview, recent_feedback),
 		"corpse_containers": _corpse_container_snapshots(simulation.corpse_containers),
 		"interaction_menu": simulation.interaction_menu.duplicate(true),
 		"hotbar": simulation.hotbar.duplicate(true),
@@ -402,6 +408,73 @@ func _runtime_command_queue(simulation: RefCounted) -> Array[Dictionary]:
 	return output
 
 
+func _runtime_command_history(events: Array[Dictionary]) -> Array[Dictionary]:
+	var by_index: Dictionary = {}
+	var order: Array[int] = []
+	for index in range(events.size()):
+		var event: Dictionary = _dictionary_or_empty(events[index])
+		var kind := str(event.get("kind", ""))
+		if not ["player_command_submitted", "player_command_completed", "player_command_rejected"].has(kind):
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		var command_index := _command_history_index_for_event(kind, index, order)
+		if command_index < 0:
+			continue
+		if not by_index.has(command_index):
+			by_index[command_index] = {
+				"sequence": command_index,
+				"event_index": index,
+				"terminal_event_index": index,
+				"kind": str(payload.get("kind", "")),
+				"actor_id": int(payload.get("actor_id", 0)),
+				"submitted": false,
+				"completed": false,
+				"success": false,
+				"reason": "",
+				"target": {},
+			}
+			order.append(command_index)
+		var entry: Dictionary = _dictionary_or_empty(by_index.get(command_index, {}))
+		if kind == "player_command_submitted":
+			entry["submitted"] = true
+			entry["event_index"] = index
+			_copy_command_payload_summary(entry, payload)
+		else:
+			entry["completed"] = true
+			entry["terminal_event_index"] = index
+			entry["terminal_event_kind"] = kind
+			entry["success"] = kind == "player_command_completed"
+			entry["reason"] = str(payload.get("reason", "ok" if bool(entry.get("success", false)) else "unknown"))
+			entry["result_kind"] = str(payload.get("result_kind", payload.get("kind", "")))
+			_copy_command_payload_summary(entry, payload)
+		by_index[command_index] = entry
+	var output: Array[Dictionary] = []
+	var start: int = max(0, order.size() - 12)
+	for order_index in range(start, order.size()):
+		output.append(_dictionary_or_empty(by_index.get(order[order_index], {})).duplicate(true))
+	return output
+
+
+func _command_history_index_for_event(kind: String, event_index: int, order: Array[int]) -> int:
+	if kind == "player_command_submitted":
+		return event_index
+	for order_index in range(order.size() - 1, -1, -1):
+		var candidate: int = order[order_index]
+		if candidate < event_index:
+			return candidate
+	return event_index
+
+
+func _copy_command_payload_summary(entry: Dictionary, payload: Dictionary) -> void:
+	entry["kind"] = str(payload.get("kind", entry.get("kind", "")))
+	entry["actor_id"] = int(payload.get("actor_id", entry.get("actor_id", 0)))
+	for key in ["action", "target_actor_id", "target_position", "grid", "option_id", "item_id", "recipe_id", "skill_id", "slot_id", "container_id", "shop_id", "count"]:
+		if payload.has(key):
+			entry[key] = payload.get(key)
+	if payload.has("target"):
+		entry["target"] = _dictionary_or_empty(payload.get("target", {})).duplicate(true)
+
+
 func _pending_progression_step(control_actor: Dictionary) -> Dictionary:
 	if control_actor.is_empty():
 		return {}
@@ -520,6 +593,28 @@ func _ui_menu_state_refs(simulation: RefCounted) -> Dictionary:
 		"active_container_actor_id": _active_actor_with_field(simulation, "active_container_id"),
 		"pending_movement": not simulation.pending_movement.is_empty(),
 		"pending_interaction": not simulation.pending_interaction.is_empty(),
+	}
+
+
+func _debug_runtime_diagnostics(simulation: RefCounted, events: Array[Dictionary], runtime_queue: Array[Dictionary], command_history: Array[Dictionary], recent_failure: Dictionary, target_preview: Dictionary, recent_feedback: Array[Dictionary]) -> Dictionary:
+	var latest_command: Dictionary = {}
+	if not command_history.is_empty():
+		latest_command = _dictionary_or_empty(command_history[command_history.size() - 1]).duplicate(true)
+	return {
+		"event_count": events.size(),
+		"command_history_count": command_history.size(),
+		"command_history_limit": 12,
+		"queued_command_count": runtime_queue.size(),
+		"pending_movement": not simulation.pending_movement.is_empty(),
+		"pending_interaction": not simulation.pending_interaction.is_empty(),
+		"interaction_menu_open": not simulation.interaction_menu.is_empty(),
+		"recent_feedback_count": recent_feedback.size(),
+		"latest_command": latest_command,
+		"latest_failure_reason": str(recent_failure.get("reason", "")),
+		"target_preview_source": str(target_preview.get("source", "")),
+		"combat_active": bool(simulation.combat_state.get("active", false)),
+		"turn_phase": str(simulation.turn_state.get("phase", "")),
+		"active_actor_id": int(simulation.turn_state.get("active_actor_id", 0)),
 	}
 
 

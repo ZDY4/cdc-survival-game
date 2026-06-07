@@ -491,13 +491,18 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("hotbar_groups did not roundtrip")
 	if JSON.stringify(restored.get("hotbar_group_labels", {})) != JSON.stringify(original.get("hotbar_group_labels", {})):
 		errors.append("hotbar_group_labels did not roundtrip")
-	for derived_key in ["runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs"]:
+	for derived_key in ["runtime_command_queue", "runtime_command_history", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "debug_runtime_diagnostics"]:
 		if not restored.has(derived_key):
 			errors.append("restored snapshot missing derived runtime field %s" % derived_key)
 	if int(_dictionary_or_empty(restored.get("current_control_actor", {})).get("actor_id", 0)) != 1:
 		errors.append("restored snapshot should rebuild current_control_actor")
 	if typeof(restored.get("recent_event_feedback", [])) != TYPE_ARRAY:
 		errors.append("restored snapshot should rebuild recent_event_feedback")
+	if typeof(restored.get("runtime_command_history", [])) != TYPE_ARRAY:
+		errors.append("restored snapshot should rebuild runtime_command_history")
+	var restored_diagnostics: Dictionary = _dictionary_or_empty(restored.get("debug_runtime_diagnostics", {}))
+	if int(restored_diagnostics.get("command_history_count", -1)) != _array_or_empty(restored.get("runtime_command_history", [])).size():
+		errors.append("restored debug diagnostics should mirror runtime_command_history count")
 	if not _array_or_empty(restored.get("crafted_recipes", [])).has("recipe_knife_basic"):
 		errors.append("crafted_recipes should roundtrip non-empty recipe unlock state")
 	if not _array_or_empty(restored.get("world_flags", [])).has("outpost_workshop_restored"):
@@ -551,7 +556,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 		errors.append("legacy snapshot migration should default active_location_id from start_location_id")
 	if str(restored.get("active_entry_point_id", "")) != str(snapshot.get("start_entry_point_id", "")):
 		errors.append("legacy snapshot migration should default active_entry_point_id from start_entry_point_id")
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "hotbar_group_labels", "relationships"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "runtime_command_history", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "debug_runtime_diagnostics", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "hotbar_group_labels", "relationships"]:
 		if not restored.has(key):
 			errors.append("legacy snapshot migration missing %s" % key)
 	if _relationship_score(restored, 1, 2) < 49.9:

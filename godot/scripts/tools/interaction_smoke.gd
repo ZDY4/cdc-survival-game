@@ -33,7 +33,7 @@ func _init() -> void:
 func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var first_snapshot: Dictionary = simulation.snapshot()
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "door_states", "corpse_containers", "interaction_menu", "hotbar"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "runtime_command_history", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "debug_runtime_diagnostics", "door_states", "corpse_containers", "interaction_menu", "hotbar"]:
 		if not first_snapshot.has(key):
 			errors.append("runtime snapshot missing %s" % key)
 	_expect_initial_runtime_snapshot_fields(errors, first_snapshot)
@@ -404,6 +404,8 @@ func _expect_initial_runtime_snapshot_fields(errors: Array[String], snapshot: Di
 		errors.append("runtime snapshot current control actor should include display_name")
 	if typeof(snapshot.get("runtime_command_queue", [])) != TYPE_ARRAY:
 		errors.append("runtime snapshot command queue should be an array")
+	if typeof(snapshot.get("runtime_command_history", [])) != TYPE_ARRAY:
+		errors.append("runtime snapshot command history should be an array")
 	if typeof(snapshot.get("pending_progression_step", {})) != TYPE_DICTIONARY:
 		errors.append("runtime snapshot pending progression step should be a dictionary")
 	if typeof(snapshot.get("recent_event_feedback", [])) != TYPE_ARRAY:
@@ -412,6 +414,8 @@ func _expect_initial_runtime_snapshot_fields(errors: Array[String], snapshot: Di
 		errors.append("runtime snapshot target selection state should be a dictionary")
 	if typeof(snapshot.get("ui_menu_state_refs", {})) != TYPE_DICTIONARY:
 		errors.append("runtime snapshot ui menu state refs should be a dictionary")
+	if typeof(snapshot.get("debug_runtime_diagnostics", {})) != TYPE_DICTIONARY:
+		errors.append("runtime snapshot debug diagnostics should be a dictionary")
 
 
 func _expect_runtime_snapshot_after_pickup(errors: Array[String], snapshot: Dictionary) -> void:
@@ -434,6 +438,7 @@ func _expect_runtime_snapshot_after_pickup(errors: Array[String], snapshot: Dict
 	var feedback: Array = snapshot.get("recent_event_feedback", [])
 	if feedback.is_empty():
 		errors.append("runtime snapshot should expose recent event feedback entries")
+	_expect_command_history_latest(errors, snapshot, "interact", true, "pickup runtime history")
 
 
 func _expect_runtime_snapshot_after_reject(errors: Array[String], snapshot: Dictionary, expected_reason: String) -> void:
@@ -450,6 +455,27 @@ func _expect_runtime_snapshot_after_reject(errors: Array[String], snapshot: Dict
 			found_reject_feedback = true
 	if not found_reject_feedback:
 		errors.append("runtime snapshot feedback should include recent command rejection")
+	_expect_command_history_latest(errors, snapshot, "interact", false, "reject runtime history")
+
+
+func _expect_command_history_latest(errors: Array[String], snapshot: Dictionary, expected_kind: String, expected_success: bool, context: String) -> void:
+	var history: Array = snapshot.get("runtime_command_history", [])
+	if history.is_empty():
+		errors.append("%s should expose runtime command history" % context)
+		return
+	var latest: Dictionary = _dictionary_or_empty(history[history.size() - 1])
+	if str(latest.get("kind", "")) != expected_kind:
+		errors.append("%s latest command kind expected %s, got %s" % [context, expected_kind, str(latest.get("kind", ""))])
+	if not bool(latest.get("submitted", false)) or not bool(latest.get("completed", false)):
+		errors.append("%s latest command should include submitted and completed phases: %s" % [context, latest])
+	if bool(latest.get("success", false)) != expected_success:
+		errors.append("%s latest command success expected %s, got %s" % [context, str(expected_success), latest])
+	var diagnostics: Dictionary = _dictionary_or_empty(snapshot.get("debug_runtime_diagnostics", {}))
+	if int(diagnostics.get("command_history_count", 0)) != history.size():
+		errors.append("%s debug diagnostics should mirror command history count: %s" % [context, diagnostics])
+	var latest_debug: Dictionary = _dictionary_or_empty(diagnostics.get("latest_command", {}))
+	if str(latest_debug.get("kind", "")) != expected_kind:
+		errors.append("%s debug diagnostics should expose latest command kind: %s" % [context, latest_debug])
 
 
 func _expect_rejected_command(errors: Array[String], result: Dictionary, expected_reason: String, context: String) -> void:
