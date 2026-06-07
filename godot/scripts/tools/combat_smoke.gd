@@ -43,6 +43,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var force_end_player: RefCounted = force_end_simulation.actor_registry.get_actor(1)
 	_expect_force_end_combat(errors, force_end_simulation, registry, force_end_player, force_end_player.grid_position.to_dictionary())
 	_expect_combat_npc_turn_ap_and_close(errors, registry)
+	_expect_combat_world_turn_uses_initiative_order(errors, registry)
 	_expect_combat_entry_participants_and_round(errors, registry)
 	_expect_combat_exit_exploration_recovery(errors, registry)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
@@ -288,6 +289,53 @@ func _expect_combat_npc_turn_ap_and_close(errors: Array[String], registry: RefCo
 	var ended_payload: Dictionary = _event_payload_after(simulation.snapshot(), "turn_ended", npc_id, event_count_before)
 	if str(ended_payload.get("reason", "")) != "npc_turn_exhausted":
 		errors.append("combat NPC turn_ended should expose npc_turn_exhausted")
+
+
+func _expect_combat_world_turn_uses_initiative_order(errors: Array[String], registry: RefCounted) -> void:
+	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var simulation: RefCounted = runtime_result.get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("combat initiative order smoke missing player")
+		return
+	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	player.hp = 100.0
+	player.max_hp = 100.0
+	player.defense = 99.0
+	var y: int = int(player_grid.get("y", 0))
+	var slow_id: int = _register_test_actor(simulation, "initiative_slow_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	var fast_id: int = _register_test_actor(simulation, "initiative_fast_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) - 1,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	var slow: RefCounted = simulation.actor_registry.get_actor(slow_id)
+	var fast: RefCounted = simulation.actor_registry.get_actor(fast_id)
+	slow.combat_attributes["initiative"] = 1.0
+	slow.combat_attributes["combat_turn_ap_gain"] = 2.0
+	slow.combat_attributes["combat_turn_ap_max"] = 2.0
+	fast.combat_attributes["initiative"] = 9.0
+	fast.combat_attributes["combat_turn_ap_gain"] = 2.0
+	fast.combat_attributes["combat_turn_ap_max"] = 2.0
+	simulation._enter_combat([player.actor_id, slow_id, fast_id], "initiative_order_smoke")
+	var turn_order: Array = _array_or_empty(simulation.snapshot().get("combat_state", {}).get("turn_order", []))
+	if turn_order.find(fast_id) < 0 or turn_order.find(slow_id) < 0 or turn_order.find(fast_id) > turn_order.find(slow_id):
+		errors.append("combat turn_order should put faster hostile before slower hostile")
+	var results: Array = simulation.advance_world_turn(_topology(simulation, registry))
+	var ordered_npcs: Array[int] = []
+	for result in results:
+		var result_data: Dictionary = _dictionary_or_empty(result)
+		var actor_id := int(result_data.get("actor_id", 0))
+		if actor_id == fast_id or actor_id == slow_id:
+			ordered_npcs.append(actor_id)
+	if ordered_npcs.size() < 2:
+		errors.append("combat initiative world turn should execute both hostile turns")
+	elif ordered_npcs[0] != fast_id or ordered_npcs[1] != slow_id:
+		errors.append("combat initiative world turn should follow turn_order, got %s" % JSON.stringify(ordered_npcs))
 
 
 func _expect_combat_entry_participants_and_round(errors: Array[String], registry: RefCounted) -> void:

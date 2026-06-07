@@ -3298,7 +3298,9 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 	turn_state["phase"] = "world"
 	_tick_hotbar_cooldowns()
 	_tick_actor_active_effects()
-	for actor in actor_registry.actors():
+	if bool(combat_state.get("active", false)):
+		_refresh_combat_turn_order("world_turn_started")
+	for actor in _world_turn_actor_order():
 		if actor.kind == "player":
 			continue
 		if not actor.map_id.is_empty() and actor.map_id != active_map_id:
@@ -3329,6 +3331,29 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 	if bool(combat_state.get("active", false)):
 		combat_state["round"] = int(combat_state.get("round", 0)) + 1
 	return results
+
+
+func _world_turn_actor_order() -> Array:
+	var registry_order: Array = actor_registry.actors()
+	if not bool(combat_state.get("active", false)):
+		return registry_order
+	var by_id: Dictionary = {}
+	for actor in registry_order:
+		by_id[int(actor.actor_id)] = actor
+	var output: Array = []
+	var seen: Dictionary = {}
+	for value in _array_or_empty(combat_state.get("turn_order", [])):
+		var actor_id := int(value)
+		var actor: RefCounted = by_id.get(actor_id)
+		if actor == null or seen.has(actor_id):
+			continue
+		output.append(actor)
+		seen[actor_id] = true
+	for actor in registry_order:
+		if seen.has(int(actor.actor_id)):
+			continue
+		output.append(actor)
+	return output
 
 
 func _tick_hotbar_cooldowns() -> void:
