@@ -18,7 +18,7 @@ func _init() -> void:
 
 	print("content_cli_smoke passed:")
 	print({
-		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "appearance"],
+		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "shop", "appearance"],
 	})
 	quit(0)
 
@@ -42,6 +42,7 @@ func _run() -> Array[String]:
 	_expect_min_refs(errors, index, registry, "settlements", "survivor_outpost_01_settlement", 1)
 	_expect_min_refs(errors, index, registry, "overworld", "main_overworld", 1)
 	_expect_min_refs(errors, index, registry, "maps", "survivor_outpost_01", 1)
+	_expect_min_refs(errors, index, registry, "shops", "trader_lao_wang_shop", 1)
 	_expect_min_refs(errors, index, registry, "appearance", "default_humanoid", 1)
 	_expect_valid_record(errors, registry, "items", "1006")
 	_expect_valid_record(errors, registry, "recipes", "recipe_first_aid_kit")
@@ -53,12 +54,15 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "skill_trees", "survival")
 	_expect_valid_record(errors, registry, "settlements", "survivor_outpost_01_settlement")
 	_expect_valid_record(errors, registry, "overworld", "main_overworld")
+	_expect_valid_record(errors, registry, "shops", "trader_lao_wang_shop")
 	_expect_valid_record(errors, registry, "appearance", "default_humanoid")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_character_appearance_ref(errors, registry)
+	_expect_invalid_shop_item_ref(errors, registry)
 	_expect_recipe_unlock_source_refs(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
+	_expect_invalid_dialogue_shop_ref(errors, registry)
 	_expect_invalid_settlement_anchor(errors, registry)
 	_expect_invalid_overworld_entry(errors, registry)
 	_expect_format_domain_support(errors, registry)
@@ -137,6 +141,29 @@ func _expect_invalid_character_appearance_ref(errors: Array[String], registry: C
 		errors.append("invalid character appearance smoke did not report unknown_appearance: %s" % validation.get("issues", []))
 
 
+func _expect_invalid_shop_item_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("shops").get("trader_lao_wang_shop", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing trader_lao_wang_shop fixture for invalid shop validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var inventory: Array = data.get("inventory", []).duplicate(true)
+	if inventory.is_empty():
+		errors.append("shop validation smoke missing inventory fixture")
+		return
+	var entry: Dictionary = inventory[0].duplicate(true)
+	entry["item_id"] = "missing_shop_item_for_validator_smoke"
+	inventory[0] = entry
+	data["inventory"] = inventory
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("shops", "trader_lao_wang_shop", _registry_with_override(registry, "shops", "trader_lao_wang_shop", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid shop item reference smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_item"):
+		errors.append("invalid shop item smoke did not report unknown_item: %s" % validation.get("issues", []))
+
+
 func _expect_recipe_unlock_source_refs(errors: Array[String], registry: ContentRegistry) -> void:
 	var source: Dictionary = registry.get_library("recipes").get("recipe_first_aid_kit", {}).duplicate(true)
 	if source.is_empty():
@@ -192,6 +219,37 @@ func _expect_invalid_dialogue_ref(errors: Array[String], registry: ContentRegist
 						errors.append("invalid dialogue reference smoke did not report unknown_quest: %s" % validation.get("issues", []))
 					return
 	errors.append("dialogue validation smoke could not find start_quest action")
+
+
+func _expect_invalid_dialogue_shop_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("dialogues").get("trader_lao_wang_intro", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing trader_lao_wang_intro fixture for dialogue shop validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var nodes: Array = data.get("nodes", []).duplicate(true)
+	for i in range(nodes.size()):
+		var node: Dictionary = nodes[i].duplicate(true)
+		if str(node.get("type", "")) != "action":
+			continue
+		var actions: Array = node.get("actions", []).duplicate(true)
+		for action_index in range(actions.size()):
+			var action: Dictionary = actions[action_index].duplicate(true)
+			if str(action.get("type", "")) == "open_trade":
+				action["shop_id"] = "missing_shop_for_validator_smoke"
+				actions[action_index] = action
+				node["actions"] = actions
+				nodes[i] = node
+				data["nodes"] = nodes
+				source["data"] = data
+				var validation := ContentRecordValidator.new().validate_record("dialogues", "trader_lao_wang_intro", _registry_with_override(registry, "dialogues", "trader_lao_wang_intro", source))
+				if bool(validation.get("ok", false)):
+					errors.append("expected invalid dialogue shop reference smoke to fail")
+					return
+				if not _has_issue_code(validation.get("issues", []), "unknown_shop"):
+					errors.append("invalid dialogue shop smoke did not report unknown_shop: %s" % validation.get("issues", []))
+				return
+	errors.append("dialogue shop validation smoke could not find open_trade action")
 
 
 func _expect_invalid_settlement_anchor(errors: Array[String], registry: ContentRegistry) -> void:
@@ -270,6 +328,7 @@ func _expect_format_domain_support(errors: Array[String], registry: ContentRegis
 		"skill_trees": "data/skill_trees/survival.json",
 		"settlements": "data/settlements/survivor_outpost_01_settlement.json",
 		"overworld": "data/overworld/main_overworld.json",
+		"shops": "data/shops/trader_lao_wang_shop.json",
 	}
 	var domain_helper = load("res://scripts/tools/content_cli_domains.gd")
 	for domain in supported.keys():
@@ -292,6 +351,7 @@ func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -
 		{"domain": "skill_trees", "id": "survival", "expected": "skill_count: 4"},
 		{"domain": "settlements", "id": "survivor_outpost_01_settlement", "expected": "smart_objects: 13"},
 		{"domain": "overworld", "id": "main_overworld", "expected": "locations: 12"},
+		{"domain": "shops", "id": "trader_lao_wang_shop", "expected": "inventory_count: 6"},
 	]
 	for test_case in cases:
 		var domain := str(test_case["domain"])

@@ -31,6 +31,8 @@ func references_for(domain: String, id_value: String, registry: ContentRegistry)
 			return _settlement_references(id_value, registry)
 		"overworld":
 			return _overworld_references(id_value, registry)
+		"shops":
+			return _shop_references(id_value, registry)
 		"appearance":
 			return _appearance_references(id_value, registry)
 	return []
@@ -48,6 +50,7 @@ func supports_domain(domain: String) -> bool:
 		"skill_trees",
 		"settlements",
 		"overworld",
+		"shops",
 		"appearance",
 	].has(domain)
 
@@ -280,6 +283,40 @@ func _appearance_references(appearance_id: String, registry: ContentRegistry) ->
 	return hits
 
 
+func _shop_references(shop_id: String, registry: ContentRegistry) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	var inferred_actor_id := ""
+	var inferred_dialogue_ids := {}
+	if shop_id.ends_with("_shop"):
+		inferred_actor_id = shop_id.trim_suffix("_shop")
+		if registry.has_id("characters", inferred_actor_id):
+			var actor_record: Dictionary = registry.get_library("characters")[inferred_actor_id]
+			hits.append(_reference_hit("character", inferred_actor_id, actor_record.get("path", ""), "derived_shop_id"))
+			inferred_dialogue_ids = _dialogue_ids_for_character(inferred_actor_id)
+	for dialogue_id in registry.get_library("dialogues").keys():
+		var record: Dictionary = registry.get_library("dialogues")[dialogue_id]
+		var nodes: Array = record["data"].get("nodes", [])
+		for node_index in range(nodes.size()):
+			var node: Dictionary = _dictionary_or_empty(nodes[node_index])
+			var actions: Array = node.get("actions", [])
+			for action_index in range(actions.size()):
+				var action: Dictionary = _dictionary_or_empty(actions[action_index])
+				if str(action.get("type", "")) != "open_trade":
+					continue
+				var action_shop_id := _shop_id_from_action(action)
+				if action_shop_id == shop_id:
+					hits.append(_reference_hit("dialogue", dialogue_id, record["path"], "nodes[%d].actions[%d].shop_id" % [node_index, action_index]))
+				elif action_shop_id.is_empty() and inferred_dialogue_ids.has(str(dialogue_id)):
+					hits.append(_reference_hit("dialogue", dialogue_id, record["path"], "nodes[%d].actions[%d].open_trade implicit_actor=%s" % [node_index, action_index, inferred_actor_id]))
+	_collect_legacy_json_scalar_refs(
+		hits,
+		shop_id,
+		["shop_id", "shopId", "target_shop_id", "targetShopId"],
+		"shop"
+	)
+	return hits
+
+
 func _collect_legacy_json_scalar_refs(hits: Array[Dictionary], target_id: String, field_names: Array[String], source_kind: String) -> void:
 	_sources.collect_legacy_json_refs(hits, target_id, source_kind, field_names, [])
 
@@ -301,6 +338,29 @@ func _collect_string_array_refs(hits: Array[Dictionary], target_id: String, sour
 	for i in range(values.size()):
 		if str(values[i]) == target_id:
 			hits.append(_reference_hit(source_kind, source_id, path, "%s[%d]" % [field, i]))
+
+
+func _shop_id_from_action(action: Dictionary) -> String:
+	return ContentRegistry.normalize_content_id(action.get("shop_id", action.get("shopId", action.get("action_key", action.get("actionKey", "")))))
+
+
+func _dialogue_ids_for_character(character_id: String) -> Dictionary:
+	var output := {}
+	var dialogue_rules := _sources.dialogue_rule_records()
+	for rule_id in dialogue_rules.keys():
+		var record: Dictionary = _dictionary_or_empty(dialogue_rules[rule_id])
+		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+		if ContentRegistry.normalize_content_id(data.get("dialogue_key", "")) != character_id:
+			continue
+		var default_dialogue_id := ContentRegistry.normalize_content_id(data.get("default_dialogue_id", ""))
+		if not default_dialogue_id.is_empty():
+			output[default_dialogue_id] = true
+		var variants: Array = data.get("variants", [])
+		for variant in variants:
+			var dialogue_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(variant).get("dialogue_id", ""))
+			if not dialogue_id.is_empty():
+				output[dialogue_id] = true
+	return output
 
 
 func _reference_hit(source_kind: String, source_id: String, path: String, detail: String) -> Dictionary:

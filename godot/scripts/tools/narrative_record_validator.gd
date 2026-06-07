@@ -78,6 +78,9 @@ func _validate_dialogue_node(node: Dictionary, field: String, node_ids: Dictiona
 func _validate_dialogue_action(action: Dictionary, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
 	match str(action.get("type", "")):
 		"open_trade":
+			var shop_id := ContentRegistry.normalize_content_id(action.get("shop_id", action.get("shopId", action.get("action_key", action.get("actionKey", "")))))
+			if not shop_id.is_empty() and not registry.has_id("shops", shop_id):
+				issues.append(_issue("error", field.path_join("shop_id"), "unknown_shop", "unknown shop id %s" % shop_id))
 			return
 		"start_quest", "turn_in_quest":
 			_validate_ref(action.get("quest_id", null), field.path_join("quest_id"), "quests", "unknown_quest", registry, issues)

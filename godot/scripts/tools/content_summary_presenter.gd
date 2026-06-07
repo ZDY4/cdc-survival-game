@@ -36,6 +36,8 @@ func summary_lines(domain: String, id_value: String, record: Dictionary, relativ
 			lines.append_array(_settlement_lines(data))
 		"overworld":
 			lines.append_array(_overworld_lines(data))
+		"shops":
+			lines.append_array(_shop_lines(data))
 	return lines
 
 
@@ -59,6 +61,8 @@ static func singular_domain(domain: String) -> String:
 			return "skill_tree"
 		"settlements":
 			return "settlement"
+		"shops":
+			return "shop"
 		_:
 			return domain
 
@@ -180,6 +184,18 @@ func _overworld_lines(data: Dictionary) -> Array[String]:
 		"location_kinds: %s" % _kind_counts(locations, "kind"),
 		"default_unlocked: %d" % _count_truthy(locations, "default_unlocked"),
 		"tiles: %d" % _array_or_empty(data.get("tiles", [])).size(),
+	]
+
+
+func _shop_lines(data: Dictionary) -> Array[String]:
+	return [
+		"money: %d" % int(data.get("money", 0)),
+		"buy_price_modifier: %.2f" % float(data.get("buy_price_modifier", 1.0)),
+		"sell_price_modifier: %.2f" % float(data.get("sell_price_modifier", 1.0)),
+		"inventory_count: %d" % _array_or_empty(data.get("inventory", [])).size(),
+		"required_world_flags: %s" % _join_or_dash(_string_array(_array_or_empty(data.get("required_world_flags", [])))),
+		"blocked_world_flags: %s" % _join_or_dash(_string_array(_array_or_empty(data.get("blocked_world_flags", [])))),
+		"target_actor_definition_id: %s" % str(data.get("target_actor_definition_id", "-")),
 	]
 
 

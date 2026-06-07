@@ -7,7 +7,7 @@ const WorldRecordValidator = preload("res://scripts/tools/world_record_validator
 
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 
-const EDITOR_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld", "appearance"]
+const EDITOR_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "appearance"]
 
 var basic_validator: ContentBasicRecordValidator = ContentBasicRecordValidator.new()
 var narrative_validator: NarrativeRecordValidator = NarrativeRecordValidator.new()
@@ -36,6 +36,8 @@ func validate_record(domain: String, id_value: String, registry: ContentRegistry
 		"characters":
 			basic_validator.validate_record(domain, id_value, record, registry, issues)
 		"maps":
+			basic_validator.validate_record(domain, id_value, record, registry, issues)
+		"shops":
 			basic_validator.validate_record(domain, id_value, record, registry, issues)
 		"dialogues", "quests", "skills", "skill_trees":
 			narrative_validator.validate_record(domain, id_value, record, registry, issues)

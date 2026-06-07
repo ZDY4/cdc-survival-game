@@ -6,7 +6,7 @@ const EFFECTS_DOMAIN := "json"
 
 
 func supports_domain(domain: String) -> bool:
-	return ["items", "recipes", "characters", "maps"].has(domain)
+	return ["items", "recipes", "characters", "maps", "shops"].has(domain)
 
 
 func validate_record(domain: String, id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
@@ -19,6 +19,8 @@ func validate_record(domain: String, id_value: String, record: Dictionary, regis
 			_validate_character(id_value, record, registry, issues)
 		"maps":
 			_validate_map(id_value, record, registry, issues)
+		"shops":
+			_validate_shop(id_value, record, registry, issues)
 
 
 func _validate_item(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
@@ -174,6 +176,25 @@ func _validate_map_object(object: Dictionary, index: int, width: int, height: in
 			_validate_map_target(option.get("target_id", null), field.path_join("props.trigger.options[%d].target_id" % option_index), registry, issues, false)
 
 
+func _validate_shop(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+	_expect_id_matches(issues, data.get("id", ""), id_value, "$.id")
+	_expect_number_at_least(issues, data, "money", "$.money", 0.0)
+	_expect_number_at_least(issues, data, "buy_price_modifier", "$.buy_price_modifier", 0.0)
+	_expect_number_at_least(issues, data, "sell_price_modifier", "$.sell_price_modifier", 0.0)
+	_validate_shop_inventory(data.get("inventory", []), "$.inventory", registry, issues)
+	var target_actor_definition_id := ContentRegistry.normalize_content_id(data.get("target_actor_definition_id", ""))
+	if not target_actor_definition_id.is_empty() and not registry.has_id("characters", target_actor_definition_id):
+		issues.append(_issue("error", "$.target_actor_definition_id", "unknown_character", "unknown character id %s" % target_actor_definition_id))
+	_validate_string_array(data.get("required_world_flags", []), "$.required_world_flags", "world flag", issues, true)
+	_validate_string_array(data.get("blocked_world_flags", []), "$.blocked_world_flags", "world flag", issues, true)
+	if data.has("required_relationship_min") and data.has("required_relationship_max"):
+		var minimum := float(data.get("required_relationship_min", 0.0))
+		var maximum := float(data.get("required_relationship_max", 0.0))
+		if minimum > maximum:
+			issues.append(_issue("error", "$.required_relationship_min", "invalid_relationship_range", "required_relationship_min must be <= required_relationship_max"))
+
+
 func _validate_stacking_fragment(fragment: Dictionary, field: String, issues: Array[Dictionary]) -> void:
 	if fragment.has("max_stack"):
 		_expect_number_at_least(issues, fragment, "max_stack", field.path_join("max_stack"), 1.0)
@@ -218,6 +239,20 @@ func _validate_item_entries(entries: Variant, field: String, registry: ContentRe
 		_expect_number_at_least(issues, entry, "count", entry_field.path_join("count"), 1.0)
 
 
+func _validate_shop_inventory(entries: Variant, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	if typeof(entries) != TYPE_ARRAY:
+		issues.append(_issue("error", field, "expected_array", "expected an array of shop inventory entries"))
+		return
+	var values: Array = entries
+	for i in range(values.size()):
+		var entry: Dictionary = _dictionary_or_empty(values[i])
+		var entry_field := field.path_join("[%d]" % i)
+		_validate_item_ref(entry.get("item_id", entry.get("id", null)), entry_field.path_join("item_id"), registry, issues)
+		_expect_number_at_least(issues, entry, "count", entry_field.path_join("count"), 1.0)
+		if entry.has("price"):
+			_expect_number_at_least(issues, entry, "price", entry_field.path_join("price"), 0.0)
+
+
 func _validate_loot_entries(entries: Variant, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
 	if typeof(entries) != TYPE_ARRAY:
 		issues.append(_issue("error", field, "expected_array", "expected an array of loot entries"))
@@ -244,6 +279,18 @@ func _validate_tool_refs(values: Variant, field: String, registry: ContentRegist
 			continue
 		if not registry.has_id("items", tool_id):
 			issues.append(_issue("error", field.path_join("[%d]" % i), "unknown_tool_item", "unknown tool item id %s" % tool_id))
+
+
+func _validate_string_array(values: Variant, field: String, label: String, issues: Array[Dictionary], allow_missing: bool = false) -> void:
+	if values == null and allow_missing:
+		return
+	if typeof(values) != TYPE_ARRAY:
+		issues.append(_issue("error", field, "expected_array", "expected an array of %s ids" % label))
+		return
+	var array: Array = values
+	for i in range(array.size()):
+		if str(array[i]).strip_edges().is_empty():
+			issues.append(_issue("error", field.path_join("[%d]" % i), "missing_text", "%s id must be non-empty" % label))
 
 
 func _validate_skill_requirements(requirements: Dictionary, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
