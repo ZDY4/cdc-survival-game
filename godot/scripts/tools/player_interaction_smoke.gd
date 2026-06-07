@@ -922,6 +922,12 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
 	if str(prompt.get("primary_option_id", "")) != "move":
 		errors.append("ground hover prompt should expose move primary option")
+	var selection_debug: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("selection_debug", {}))
+	var picking: Dictionary = _dictionary_or_empty(selection_debug.get("picking", {}))
+	if str(picking.get("selected_category", "")) != "grid":
+		errors.append("ground hover picking should fall back to grid, got %s" % JSON.stringify(picking))
+	if _array_or_empty(picking.get("priority_order", [])).find("grid") < 0:
+		errors.append("ground hover picking should expose grid priority fallback")
 	var runtime_line := _hud_runtime_control_line(game_root)
 	if not runtime_line.contains("Hover ground") or not runtime_line.contains("可达"):
 		errors.append("HUD runtime control line should show ground move preview, got %s" % runtime_line)
@@ -1619,6 +1625,8 @@ func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expecte
 		var prompt_debug: Dictionary = _dictionary_or_empty(selection_debug.get("prompt", {}))
 		if not bool(prompt_debug.get("has_prompt", false)):
 			errors.append("selection_debug should expose prompt summary")
+		var picking: Dictionary = _dictionary_or_empty(selection_debug.get("picking", {}))
+		_expect_picking_priority_snapshot(errors, picking, expected_category)
 	var expected_hud_kind := expected_category if not expected_category.is_empty() else "interaction"
 	var hud_line := _hud_runtime_control_line(game_root)
 	var expected_hud_target := str(hover.get("target_name", expected_target_id))
@@ -1629,6 +1637,38 @@ func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expecte
 		errors.append("HUD runtime control line should show hover interaction target %s/%s, got %s" % [expected_hud_kind, expected_target_id, hud_line])
 	if not hud_line.contains("Sel %s" % expected_hud_kind):
 		errors.append("HUD runtime control line should show selection debug target %s, got %s" % [expected_hud_kind, hud_line])
+
+
+func _expect_picking_priority_snapshot(errors: Array[String], picking: Dictionary, expected_category: String) -> void:
+	if picking.is_empty():
+		errors.append("selection_debug should expose picking priority diagnostics")
+		return
+	var priority_order: Array = _array_or_empty(picking.get("priority_order", []))
+	for expected in ["actor", "door", "map_object", "trigger", "grid"]:
+		if not priority_order.has(expected):
+			errors.append("picking priority order should include %s" % expected)
+	var selected_category := str(picking.get("selected_category", ""))
+	var expected_pick_category := _expected_pick_category(expected_category)
+	if not expected_pick_category.is_empty() and selected_category != expected_pick_category:
+		errors.append("picking selected category expected %s, got %s" % [expected_pick_category, selected_category])
+	if int(picking.get("selected_priority", 99)) != priority_order.find(selected_category):
+		errors.append("picking selected priority should match priority order for %s" % selected_category)
+	if int(picking.get("hit_count", 0)) <= 0:
+		errors.append("picking diagnostics should expose hit count")
+	if int(picking.get("candidate_count", 0)) <= 0:
+		errors.append("picking diagnostics should expose interaction candidate count")
+
+
+func _expected_pick_category(target_category: String) -> String:
+	if target_category.begins_with("actor"):
+		return "actor"
+	match target_category:
+		"door":
+			return "door"
+		"trigger":
+			return "trigger"
+		_:
+			return "map_object" if not target_category.is_empty() else ""
 
 
 func _expect_player_runtime_marker(errors: Array[String], player_node: Node3D) -> void:

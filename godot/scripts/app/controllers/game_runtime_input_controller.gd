@@ -12,6 +12,7 @@ const BEVY_VIEWPORT_PADDING_PX := 72.0
 const BEVY_HUD_RESERVED_WIDTH_PX := 620.0
 const BEVY_LEVEL_PLANE_HEIGHT := GRID_SIZE * 0.5
 const BEVY_DRAG_PLANE_HEIGHT := 0.11
+const PICK_RAY_MAX_HITS := 16
 const SPACE_HOLD_INITIAL_DELAY_SEC := 0.45
 const SPACE_HOLD_REPEAT_INTERVAL_SEC := 0.30
 const ZOOM_MIN := 0.5
@@ -29,6 +30,7 @@ const HOVER_COLOR_CONTAINER := Color(0.36, 0.95, 0.62, 0.50)
 const HOVER_COLOR_TRIGGER := Color(0.70, 0.55, 1.0, 0.50)
 const HOVER_COLOR_DOOR := Color(0.95, 0.72, 0.28, 0.56)
 const HOVER_COLOR_ACTOR := Color(1.0, 0.88, 0.22, 0.50)
+const PICKING_PRIORITY: Array[String] = ["actor", "door", "map_object", "trigger", "grid"]
 
 var game_root: Node
 var world_container: Node3D
@@ -67,6 +69,7 @@ var last_hover_state: Dictionary = {
 	"prompt": {},
 	"move_preview": {},
 	"attack_preview": {},
+	"picking": {},
 }
 var last_selection_clear_result: Dictionary = {}
 
@@ -254,11 +257,7 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 
 	var ray_from := camera.project_ray_origin(screen_position)
 	var ray_to := ray_from + camera.project_ray_normal(screen_position) * RAY_DISTANCE
-	var space_state := camera.get_world_3d().direct_space_state
-	var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
-	query.collide_with_bodies = true
-	query.collide_with_areas = false
-	var hit: Dictionary = space_state.intersect_ray(query)
+	var hit: Dictionary = _pick_world_target(ray_from, ray_to)
 	if hit.is_empty():
 		var no_hit_clear_result := _clear_hover("no_hit")
 		return {"success": false, "reason": "no_hit", "clear_selection_result": no_hit_clear_result}
@@ -269,22 +268,23 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	var target_node := _interaction_node(collider as Node)
 	if target_node == null:
 		var ground_clear_result := _clear_selection_only("ground_hover")
-		var hover_changed := _set_hover_ground(hit_position)
+		var hover_changed := _set_hover_ground(hit_position, _dictionary_or_empty(hit.get("picking", {})))
 		if hover_changed and game_root.has_method("refresh_hud"):
 			game_root.refresh_hud(game_root.current_interaction_prompt() if game_root.has_method("current_interaction_prompt") else {})
 		_preview_skill_target_from_hover({"success": true, "kind": "ground", "position": hit_position})
-		return {"success": true, "kind": "ground", "position": hit_position, "clear_selection_result": ground_clear_result}
+		return {"success": true, "kind": "ground", "position": hit_position, "clear_selection_result": ground_clear_result, "picking": _dictionary_or_empty(hit.get("picking", {}))}
 
 	if selected_node != target_node and game_root.has_method("select_interaction_node"):
 		selected_node = target_node
 		game_root.select_interaction_node(target_node)
-	var hover_changed := _set_hover_interaction(target_node, hit_position)
+	var hover_changed := _set_hover_interaction(target_node, hit_position, _dictionary_or_empty(hit.get("picking", {})))
 	if hover_changed and game_root.has_method("refresh_hud"):
 		game_root.refresh_hud(game_root.current_interaction_prompt() if game_root.has_method("current_interaction_prompt") else {})
 	var interaction_hover := last_hover_state.duplicate(true)
 	interaction_hover["success"] = true
 	interaction_hover["node"] = target_node
 	interaction_hover["position"] = hit_position
+	interaction_hover["picking"] = _dictionary_or_empty(hit.get("picking", {}))
 	_preview_skill_target_from_hover(interaction_hover)
 	return interaction_hover
 
@@ -317,6 +317,7 @@ func selection_debug_snapshot() -> Dictionary:
 		"prompt": _selection_debug_prompt(prompt),
 		"move_preview": _selection_debug_move_preview(move_preview),
 		"attack_preview": _selection_debug_attack_preview(attack_preview),
+		"picking": _dictionary_or_empty(hover.get("picking", {})).duplicate(true),
 	}
 
 
@@ -819,7 +820,7 @@ func _selection_clear_result(had_selected_node: bool, reason: String, source_res
 	}
 
 
-func _set_hover_ground(world_position: Vector3) -> bool:
+func _set_hover_ground(world_position: Vector3, picking: Dictionary = {}) -> bool:
 	var grid: Dictionary = _grid_from_world_position(world_position)
 	var move_preview: Dictionary = _move_preview_for_grid(grid)
 	_apply_hover_cursor_state(move_preview)
@@ -838,10 +839,11 @@ func _set_hover_ground(world_position: Vector3) -> bool:
 		"prompt": _hover_prompt_for_target({"target_type": "grid", "grid": grid}),
 		"move_preview": move_preview,
 		"attack_preview": {},
+		"picking": picking.duplicate(true),
 	})
 
 
-func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
+func _set_hover_interaction(target_node: Node, world_position: Vector3, picking: Dictionary = {}) -> bool:
 	var metadata: Dictionary = {}
 	if target_node != null and target_node.has_meta("interaction_target"):
 		var raw: Variant = target_node.get_meta("interaction_target")
@@ -873,6 +875,7 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3) -> bool:
 		"prompt": prompt,
 		"move_preview": {},
 		"attack_preview": attack_preview,
+		"picking": picking.duplicate(true),
 	})
 
 
@@ -911,7 +914,132 @@ func _set_hover_failure(reason: String = "") -> bool:
 		"prompt": {},
 		"move_preview": {},
 		"attack_preview": {},
+		"picking": {},
 	})
+
+
+func _pick_world_target(ray_from: Vector3, ray_to: Vector3) -> Dictionary:
+	var world := camera.get_world_3d() if camera != null else null
+	if world == null:
+		return {}
+	var space_state := world.direct_space_state
+	var excluded: Array[RID] = []
+	var hits: Array[Dictionary] = []
+	for _i in range(PICK_RAY_MAX_HITS):
+		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
+		query.collide_with_bodies = true
+		query.collide_with_areas = false
+		query.exclude = excluded
+		var hit: Dictionary = space_state.intersect_ray(query)
+		if hit.is_empty():
+			break
+		hits.append(hit)
+		var rid: RID = hit.get("rid", RID())
+		if rid.is_valid():
+			excluded.append(rid)
+		else:
+			break
+	if hits.is_empty():
+		return {}
+	var candidates: Array[Dictionary] = []
+	for index in range(hits.size()):
+		var hit: Dictionary = hits[index]
+		var collider: Object = hit.get("collider", null)
+		var target_node := _interaction_node(collider as Node)
+		if target_node == null:
+			continue
+		var metadata: Dictionary = _metadata_for_interaction_node(target_node)
+		var category := _picking_category(metadata)
+		candidates.append({
+			"hit": hit,
+			"hit_index": index,
+			"node": target_node,
+			"category": category,
+			"priority": _picking_priority_rank(category),
+			"distance": ray_from.distance_to(hit.get("position", ray_from)),
+			"target_id": str(metadata.get("target_id", "")),
+			"target_type": str(metadata.get("target_type", "")),
+		})
+	if candidates.is_empty():
+		var ground_hit: Dictionary = hits.front().duplicate(true)
+		ground_hit["picking"] = _picking_diagnostics("grid", _picking_priority_rank("grid"), hits.size(), 0, [])
+		return ground_hit
+	candidates.sort_custom(_sort_pick_candidates)
+	var selected: Dictionary = _dictionary_or_empty(candidates.front())
+	var selected_hit: Dictionary = _dictionary_or_empty(selected.get("hit", {})).duplicate(true)
+	selected_hit["picking"] = _picking_diagnostics(
+		str(selected.get("category", "")),
+		int(selected.get("priority", 99)),
+		hits.size(),
+		int(selected.get("hit_index", 0)),
+		candidates
+	)
+	return selected_hit
+
+
+func _metadata_for_interaction_node(node: Node) -> Dictionary:
+	if node == null or not node.has_meta("interaction_target"):
+		return {}
+	var raw: Variant = node.get_meta("interaction_target")
+	if typeof(raw) != TYPE_DICTIONARY:
+		return {}
+	return _merge_world_interaction_target(_dictionary_or_empty(raw))
+
+
+func _picking_category(metadata: Dictionary) -> String:
+	var target_type := str(metadata.get("target_type", ""))
+	if target_type == "actor":
+		return "actor"
+	if target_type == "map_object":
+		var target_kind := str(metadata.get("target_kind", metadata.get("kind", "")))
+		if target_kind == "door":
+			return "door"
+		if target_kind in ["scene_transition", "enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor"]:
+			return "trigger"
+		if target_kind == "trigger":
+			return "trigger"
+		return "map_object"
+	return target_type if PICKING_PRIORITY.has(target_type) else "map_object"
+
+
+func _picking_priority_rank(category: String) -> int:
+	var normalized := "actor" if category.begins_with("actor") else category
+	var index := PICKING_PRIORITY.find(normalized)
+	return index if index >= 0 else PICKING_PRIORITY.size()
+
+
+func _sort_pick_candidates(left: Dictionary, right: Dictionary) -> bool:
+	var left_priority := int(left.get("priority", 99))
+	var right_priority := int(right.get("priority", 99))
+	if left_priority != right_priority:
+		return left_priority < right_priority
+	var left_distance := float(left.get("distance", 0.0))
+	var right_distance := float(right.get("distance", 0.0))
+	if absf(left_distance - right_distance) > 0.0001:
+		return left_distance < right_distance
+	return int(left.get("hit_index", 0)) < int(right.get("hit_index", 0))
+
+
+func _picking_diagnostics(category: String, priority: int, hit_count: int, selected_hit_index: int, candidates: Array) -> Dictionary:
+	var candidate_output: Array[Dictionary] = []
+	for candidate in candidates:
+		var item: Dictionary = _dictionary_or_empty(candidate)
+		candidate_output.append({
+			"category": str(item.get("category", "")),
+			"priority": int(item.get("priority", 99)),
+			"hit_index": int(item.get("hit_index", 0)),
+			"target_id": str(item.get("target_id", "")),
+			"target_type": str(item.get("target_type", "")),
+		})
+	return {
+		"priority_order": PICKING_PRIORITY.duplicate(),
+		"selected_category": category,
+		"selected_priority": priority,
+		"selected_hit_index": selected_hit_index,
+		"hit_count": hit_count,
+		"candidate_count": candidate_output.size(),
+		"candidates": candidate_output,
+	}
 
 
 func _replace_hover_state(next_state: Dictionary) -> bool:
