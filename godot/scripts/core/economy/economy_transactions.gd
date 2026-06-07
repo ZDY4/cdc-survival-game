@@ -19,8 +19,8 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 	return _shop_transactions.buy_item_from_shop(simulation, actor_id, shop_id, item_id, count, item_library, stack_index)
 
 
-func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
-	return _shop_transactions.sell_item_to_shop(simulation, actor_id, shop_id, item_id, count, item_library)
+func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary, stack_index: int = 0) -> Dictionary:
+	return _shop_transactions.sell_item_to_shop(simulation, actor_id, shop_id, item_id, count, item_library, stack_index)
 
 
 func sell_equipped_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, slot_id: String, item_id: String, item_library: Dictionary) -> Dictionary:
@@ -43,8 +43,8 @@ func take_all_from_container(simulation: RefCounted, actor_id: int, container_id
 	return _container_transactions.take_all_from_container(simulation, actor_id, container_id, item_library, include_money)
 
 
-func store_item_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
-	return _container_transactions.store_item_in_container(simulation, actor_id, container_id, item_id, count, item_library)
+func store_item_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}, stack_index: int = 0) -> Dictionary:
+	return _container_transactions.store_item_in_container(simulation, actor_id, container_id, item_id, count, item_library, stack_index)
 
 
 func store_all_in_container(simulation: RefCounted, actor_id: int, container_id: String, item_library: Dictionary = {}) -> Dictionary:

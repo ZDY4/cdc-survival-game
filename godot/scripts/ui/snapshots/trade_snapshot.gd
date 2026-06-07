@@ -148,39 +148,66 @@ func _entry_stack_totals(entries: Array) -> Dictionary:
 	return totals
 
 
-func _inventory_items(inventory: Dictionary, sell_price_modifier: float) -> Array[Dictionary]:
+func _inventory_items(inventory: Dictionary, sell_price_modifier: float, inventory_stacks: Dictionary = {}) -> Array[Dictionary]:
 	var items: Array[Dictionary] = []
 	for item_id in inventory.keys():
 		var normalized_item_id := _normalize_content_id(item_id)
 		var count := int(inventory[item_id])
 		if normalized_item_id.is_empty() or count <= 0:
 			continue
-		var item_data: Dictionary = _item_data(normalized_item_id)
-		var base_price := int(item_data.get("value", 0))
-		var sellable: bool = _is_item_sellable(item_data)
-		var icon_path := str(item_data.get("icon_path", ""))
-		var icon_asset := AssetPathResolver.resolve_media_asset(icon_path, "item")
-		items.append({
-			"item_id": normalized_item_id,
-			"name": str(item_data.get("name", normalized_item_id)),
-			"description": str(item_data.get("description", "")),
-			"count": count,
-			"price": _trade_price(base_price, sell_price_modifier),
-			"base_price": base_price,
-			"rarity": _rarity(item_data),
-			"sellable": sellable,
-			"disabled_reason": "" if sellable else "不可出售",
-			"icon_asset": icon_asset,
-			"thumbnail_asset": _thumbnail_asset(icon_asset, "item"),
-		})
+		var stack_counts: Array[int] = _stack_counts_for(normalized_item_id, count, inventory_stacks)
+		if stack_counts.size() > 1:
+			for stack_index in range(stack_counts.size()):
+				items.append(_inventory_item(normalized_item_id, int(stack_counts[stack_index]), sell_price_modifier, stack_index + 1, stack_counts.size(), count))
+			continue
+		items.append(_inventory_item(normalized_item_id, count, sell_price_modifier, 1, 1, count))
 	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
 	)
 	return items
 
 
+func _inventory_item(normalized_item_id: String, count: int, sell_price_modifier: float, stack_index: int, stack_count: int, stack_total_count: int) -> Dictionary:
+	var item_data: Dictionary = _item_data(normalized_item_id)
+	var base_price := int(item_data.get("value", 0))
+	var sellable: bool = _is_item_sellable(item_data)
+	var icon_path := str(item_data.get("icon_path", ""))
+	var icon_asset := AssetPathResolver.resolve_media_asset(icon_path, "item")
+	return {
+		"item_id": normalized_item_id,
+		"name": str(item_data.get("name", normalized_item_id)),
+		"description": str(item_data.get("description", "")),
+		"count": count,
+		"price": _trade_price(base_price, sell_price_modifier),
+		"base_price": base_price,
+		"rarity": _rarity(item_data),
+		"stack_index": stack_index,
+		"stack_count": stack_count,
+		"stack_total_count": stack_total_count,
+		"multi_stack": stack_count > 1,
+		"sellable": sellable,
+		"disabled_reason": "" if sellable else "不可出售",
+		"icon_asset": icon_asset,
+		"thumbnail_asset": _thumbnail_asset(icon_asset, "item"),
+	}
+
+
+func _stack_counts_for(item_id: String, count: int, inventory_stacks: Dictionary) -> Array[int]:
+	var output: Array[int] = []
+	for stack_count in _array_or_empty(inventory_stacks.get(item_id, [])):
+		var normalized_count: int = max(0, int(stack_count))
+		if normalized_count > 0:
+			output.append(normalized_count)
+	var total := 0
+	for stack_count in output:
+		total += int(stack_count)
+	if output.is_empty() or total != count:
+		output = [count]
+	return output
+
+
 func _player_trade_items(player: Dictionary, sell_price_modifier: float) -> Array[Dictionary]:
-	var items: Array[Dictionary] = _inventory_items(_dictionary_or_empty(player.get("inventory", {})), sell_price_modifier)
+	var items: Array[Dictionary] = _inventory_items(_dictionary_or_empty(player.get("inventory", {})), sell_price_modifier, _dictionary_or_empty(player.get("inventory_stacks", {})))
 	for slot_id in _dictionary_or_empty(player.get("equipment", {})).keys():
 		var normalized_slot_id: String = str(slot_id).strip_edges()
 		var normalized_item_id: String = _normalize_content_id(_dictionary_or_empty(player.get("equipment", {})).get(slot_id, ""))

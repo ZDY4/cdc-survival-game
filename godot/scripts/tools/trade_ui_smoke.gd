@@ -485,6 +485,70 @@ func _run_checks(game_root: Node) -> Array[String]:
 			stack_player.money = 200
 			game_root.refresh_inventory_panel()
 			game_root.refresh_trade_panel()
+		stack_player.inventory["1006"] = 5
+		if not stack_player.inventory_order.has("1006"):
+			stack_player.inventory_order.append("1006")
+		stack_player.inventory_stacks = {"1006": [2, 3]}
+		stack_player.money = 200
+		stack_shop["money"] = 1000
+		stack_shop["inventory"] = [
+			{"item_id": "1006", "count": 2, "price": 10},
+			{"item_id": "1006", "count": 3, "price": 10},
+		]
+		game_root.simulation.shop_sessions["trader_lao_wang_shop"] = stack_shop
+		game_root.refresh_inventory_panel()
+		game_root.refresh_trade_panel()
+		var stacked_player_text := _player_item_text(game_root)
+		if not stacked_player_text.contains("绷带 x2") or not stacked_player_text.contains("堆 1/2"):
+			errors.append("multi-stack player trade column should label first stack: %s" % stacked_player_text)
+		if not stacked_player_text.contains("绷带 x3") or not stacked_player_text.contains("堆 2/2"):
+			errors.append("multi-stack player trade column should label second stack: %s" % stacked_player_text)
+		var stacked_player_sell_button: Button = _trade_item_button_with_text(game_root, "player", "堆 1/2")
+		if stacked_player_sell_button == null:
+			errors.append("multi-stack player trade column should expose first stack button")
+		else:
+			var stacked_player_trade_item: Dictionary = _dictionary_or_empty(stacked_player_sell_button.get_meta("trade_item", {}))
+			if int(stacked_player_trade_item.get("stack_index", 0)) != 1 or int(stacked_player_trade_item.get("stack_count", 0)) != 2 or int(stacked_player_trade_item.get("stack_total_count", 0)) != 5:
+				errors.append("multi-stack player trade metadata should expose stack position and total: %s" % stacked_player_trade_item)
+			stacked_player_sell_button.pressed.emit()
+			_set_trade_quantity(game_root, 1)
+			_press_trade_button(game_root)
+			var direct_sell_player_stacks: Array = _array_or_empty(stack_player.inventory_stacks.get("1006", []))
+			if direct_sell_player_stacks.size() != 2 or int(direct_sell_player_stacks[0]) != 1 or int(direct_sell_player_stacks[1]) != 3:
+				errors.append("trade UI direct sell should consume selected first player stack: %s" % direct_sell_player_stacks)
+		stack_player.inventory["1006"] = 5
+		stack_player.inventory_stacks = {"1006": [2, 3]}
+		stack_player.money = 200
+		stack_shop["money"] = 1000
+		stack_shop["inventory"] = [
+			{"item_id": "1006", "count": 2, "price": 10},
+			{"item_id": "1006", "count": 3, "price": 10},
+		]
+		game_root.simulation.shop_sessions["trader_lao_wang_shop"] = stack_shop
+		game_root.refresh_inventory_panel()
+		game_root.refresh_trade_panel()
+		var stacked_player_cart_button: Button = _trade_item_button_with_text(game_root, "player", "堆 1/2")
+		if stacked_player_cart_button == null:
+			errors.append("multi-stack player trade column should expose first stack button after direct-sell reset")
+		else:
+			stacked_player_cart_button.pressed.emit()
+			_set_trade_quantity(game_root, 1)
+			_press_queue_button(game_root)
+			_press_confirm_cart_button(game_root)
+			var cart_sell_player_stacks: Array = _array_or_empty(stack_player.inventory_stacks.get("1006", []))
+			if cart_sell_player_stacks.size() != 2 or int(cart_sell_player_stacks[0]) != 1 or int(cart_sell_player_stacks[1]) != 3:
+				errors.append("trade cart sell should consume selected first player stack: %s" % cart_sell_player_stacks)
+		stack_player.inventory["1006"] = 1
+		stack_player.inventory_stacks = stack_inventory_stacks_before.duplicate(true)
+		stack_player.money = 200
+		stack_shop["money"] = 1000
+		stack_shop["inventory"] = [
+			{"item_id": "1006", "count": 2, "price": 10},
+			{"item_id": "1006", "count": 3, "price": 10},
+		]
+		game_root.simulation.shop_sessions["trader_lao_wang_shop"] = stack_shop
+		game_root.refresh_inventory_panel()
+		game_root.refresh_trade_panel()
 	var stacked_buy: Dictionary = game_root.buy_active_trade_item("1006", 4)
 	if not bool(stacked_buy.get("success", false)):
 		errors.append("buying across shop stacks should succeed: %s" % stacked_buy)

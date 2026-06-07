@@ -791,8 +791,8 @@ func buy_item_from_shop(actor_id: int, shop_id: String, item_id: String, count: 
 	return _economy_transactions.buy_item_from_shop(self, actor_id, shop_id, item_id, count, item_library, stack_index)
 
 
-func sell_item_to_shop(actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
-	return _economy_transactions.sell_item_to_shop(self, actor_id, shop_id, item_id, count, item_library)
+func sell_item_to_shop(actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary, stack_index: int = 0) -> Dictionary:
+	return _economy_transactions.sell_item_to_shop(self, actor_id, shop_id, item_id, count, item_library, stack_index)
 
 
 func sell_equipped_item_to_shop(actor_id: int, shop_id: String, slot_id: String, item_id: String, item_library: Dictionary) -> Dictionary:
@@ -815,8 +815,8 @@ func take_all_from_container(actor_id: int, container_id: String, item_library: 
 	return _economy_transactions.take_all_from_container(self, actor_id, container_id, item_library, include_money)
 
 
-func store_item_in_container(actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
-	return _economy_transactions.store_item_in_container(self, actor_id, container_id, item_id, count, item_library)
+func store_item_in_container(actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}, stack_index: int = 0) -> Dictionary:
+	return _economy_transactions.store_item_in_container(self, actor_id, container_id, item_id, count, item_library, stack_index)
 
 
 func store_all_in_container(actor_id: int, container_id: String, item_library: Dictionary = {}) -> Dictionary:
@@ -1661,7 +1661,7 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"take_all_container":
 			return take_all_from_container(actor.actor_id, str(command.get("container_id", "")), items, bool(command.get("include_money", true)))
 		"store_container":
-			return store_item_in_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
+			return store_item_in_container(actor.actor_id, str(command.get("container_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items, int(command.get("stack_index", 0)))
 		"store_all_container":
 			return store_all_in_container(actor.actor_id, str(command.get("container_id", "")), items)
 		"drop":
@@ -1683,7 +1683,7 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"buy_shop":
 			return buy_item_from_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items, int(command.get("stack_index", 0)))
 		"sell_shop":
-			return sell_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items)
+			return sell_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("item_id", "")), int(command.get("count", 1)), items, int(command.get("stack_index", 0)))
 		"sell_equipped_shop":
 			return sell_equipped_item_to_shop(actor.actor_id, str(command.get("shop_id", "")), str(command.get("slot_id", "")), str(command.get("item_id", "")), items)
 	return {"success": false, "reason": "unknown_inventory_action"}

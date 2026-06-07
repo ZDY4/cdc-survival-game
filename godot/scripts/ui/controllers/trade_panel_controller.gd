@@ -760,7 +760,7 @@ func _emit_selected_trade() -> void:
 
 
 func _stack_index_for_trade(source: String, item: Dictionary) -> int:
-	return int(item.get("stack_index", 0)) if source == "shop" else 0
+	return int(item.get("stack_index", 0)) if source == "shop" or source == "player" else 0
 
 
 func _open_equipment_sell_dialog() -> void:

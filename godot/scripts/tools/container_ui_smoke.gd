@@ -281,6 +281,34 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var after_store_stacks: Array = _container_stack_counts(_array_or_empty(stacked_store_session.get("inventory", [])), "1006")
 	if after_store_stacks.size() != 2 or int(after_store_stacks[0]) != 1 or int(after_store_stacks[1]) != 2:
 		errors.append("storing into container should preserve old stack and append new stack: %s" % stacked_store_session)
+	game_root.simulation.container_sessions["multi_stack_container"]["inventory"] = []
+	stack_player.inventory = {"1006": 5}
+	_restore_inventory_order(stack_player, ["1006"])
+	stack_player.inventory_stacks = {"1006": [2, 3]}
+	game_root.refresh_inventory_panel()
+	game_root.refresh_container_panel()
+	var stacked_player_text := _container_player_text(game_root)
+	if not stacked_player_text.contains("绷带 x2") or not stacked_player_text.contains("堆 1/2"):
+		errors.append("multi-stack player container column should label first stack: %s" % stacked_player_text)
+	if not stacked_player_text.contains("绷带 x3") or not stacked_player_text.contains("堆 2/2"):
+		errors.append("multi-stack player container column should label second stack: %s" % stacked_player_text)
+	var stacked_player_button: Button = _container_item_button_with_text(game_root, "player", "堆 1/2")
+	if stacked_player_button == null:
+		errors.append("multi-stack player container column should expose first stack button")
+	else:
+		var stacked_player_item: Dictionary = _dictionary_or_empty(stacked_player_button.get_meta("container_item", {}))
+		if int(stacked_player_item.get("stack_index", 0)) != 1 or int(stacked_player_item.get("stack_count", 0)) != 2 or int(stacked_player_item.get("stack_total_count", 0)) != 5:
+			errors.append("multi-stack player container metadata should expose stack position and total: %s" % stacked_player_item)
+		stacked_player_button.pressed.emit()
+		_set_container_transfer_quantity(game_root, 1)
+		_press_container_transfer(game_root)
+		var player_store_stacks: Array = _array_or_empty(stack_player.inventory_stacks.get("1006", []))
+		if player_store_stacks.size() != 2 or int(player_store_stacks[0]) != 1 or int(player_store_stacks[1]) != 3:
+			errors.append("container UI store should consume selected first player stack: %s" % player_store_stacks)
+		var player_store_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("multi_stack_container", {}))
+		var player_store_container_stacks: Array = _container_stack_counts(_array_or_empty(player_store_session.get("inventory", [])), "1006")
+		if player_store_container_stacks.size() != 1 or int(player_store_container_stacks[0]) != 1:
+			errors.append("container UI store should append selected player stack count to container: %s" % player_store_container_stacks)
 	game_root.simulation.container_sessions = stack_sessions_before.duplicate(true)
 	stack_player.inventory = stack_inventory_before
 	_restore_inventory_order(stack_player, stack_order_before)

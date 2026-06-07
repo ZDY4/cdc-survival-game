@@ -41,7 +41,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"drop_item_id": str(session.get("drop_item_id", "")),
 		"money": max(0, int(session.get("money", 0))),
 		"items": _container_item_snapshots(session),
-		"player_items": _inventory_item_snapshots(_dictionary_or_empty(player.get("inventory", {}))),
+		"player_items": _inventory_item_snapshots(_dictionary_or_empty(player.get("inventory", {})), _dictionary_or_empty(player.get("inventory_stacks", {}))),
 		"permission_preview": _permission_preview(session),
 	}
 	var scoped_feedback := _feedback_snapshot(feedback, container_id)
@@ -124,7 +124,7 @@ func _entry_stack_totals(entries: Array) -> Dictionary:
 	return totals
 
 
-func _inventory_item_snapshots(inventory: Dictionary) -> Array[Dictionary]:
+func _inventory_item_snapshots(inventory: Dictionary, inventory_stacks: Dictionary = {}) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	for item_id in inventory.keys():
 		var count := int(inventory[item_id])
@@ -133,24 +133,51 @@ func _inventory_item_snapshots(inventory: Dictionary) -> Array[Dictionary]:
 		var normalized_item_id := _normalize_content_id(item_id)
 		if normalized_item_id.is_empty():
 			continue
-		var item_data: Dictionary = _item_data(normalized_item_id)
-		var icon_path := str(item_data.get("icon_path", ""))
-		var icon_asset := AssetPathResolver.resolve_media_asset(icon_path, "item")
-		entries.append({
-			"item_id": normalized_item_id,
-			"name": str(item_data.get("name", normalized_item_id)),
-			"description": str(item_data.get("description", "")),
-			"count": count,
-			"unit_weight": float(item_data.get("weight", 0.0)),
-			"total_weight": float(item_data.get("weight", 0.0)) * float(count),
-			"rarity": _rarity(item_data),
-			"icon_asset": icon_asset,
-			"thumbnail_asset": _thumbnail_asset(icon_asset, "item"),
-		})
+		var stack_counts: Array[int] = _stack_counts_for(normalized_item_id, count, inventory_stacks)
+		if stack_counts.size() > 1:
+			for stack_index in range(stack_counts.size()):
+				entries.append(_inventory_item_snapshot(normalized_item_id, int(stack_counts[stack_index]), stack_index + 1, stack_counts.size(), count))
+			continue
+		entries.append(_inventory_item_snapshot(normalized_item_id, count, 1, 1, count))
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
 	)
 	return entries
+
+
+func _inventory_item_snapshot(normalized_item_id: String, count: int, stack_index: int, stack_count: int, stack_total_count: int) -> Dictionary:
+	var item_data: Dictionary = _item_data(normalized_item_id)
+	var icon_path := str(item_data.get("icon_path", ""))
+	var icon_asset := AssetPathResolver.resolve_media_asset(icon_path, "item")
+	return {
+		"item_id": normalized_item_id,
+		"name": str(item_data.get("name", normalized_item_id)),
+		"description": str(item_data.get("description", "")),
+		"count": count,
+		"unit_weight": float(item_data.get("weight", 0.0)),
+		"total_weight": float(item_data.get("weight", 0.0)) * float(count),
+		"rarity": _rarity(item_data),
+		"stack_index": stack_index,
+		"stack_count": stack_count,
+		"stack_total_count": stack_total_count,
+		"multi_stack": stack_count > 1,
+		"icon_asset": icon_asset,
+		"thumbnail_asset": _thumbnail_asset(icon_asset, "item"),
+	}
+
+
+func _stack_counts_for(item_id: String, count: int, inventory_stacks: Dictionary) -> Array[int]:
+	var output: Array[int] = []
+	for stack_count in _array_or_empty(inventory_stacks.get(item_id, [])):
+		var normalized_count: int = max(0, int(stack_count))
+		if normalized_count > 0:
+			output.append(normalized_count)
+	var total := 0
+	for stack_count in output:
+		total += int(stack_count)
+	if output.is_empty() or total != count:
+		output = [count]
+	return output
 
 
 func _player_actor(runtime_snapshot: Dictionary) -> Dictionary:

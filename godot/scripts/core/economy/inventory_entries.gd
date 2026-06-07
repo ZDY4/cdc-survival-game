@@ -104,6 +104,70 @@ func stack_count_at(entries: Array, item_id: String, stack_index: int) -> int:
 	return 0
 
 
+func actor_stack_count_at(actor: RefCounted, item_id: String, stack_index: int) -> int:
+	if actor == null:
+		return 0
+	var normalized_item_id: String = normalize_content_id(item_id)
+	var total_count: int = max(0, int(actor.inventory.get(normalized_item_id, 0)))
+	if normalized_item_id.is_empty() or stack_index <= 0:
+		return total_count
+	var stacks: Array[int] = _normalized_actor_inventory_stacks(actor, normalized_item_id, total_count)
+	if stack_index > stacks.size():
+		return 0
+	return int(stacks[stack_index - 1])
+
+
+func remove_actor_item_from_stack(actor: RefCounted, item_id: String, count: int, stack_index: int) -> void:
+	if actor == null or count <= 0:
+		return
+	var normalized_item_id: String = normalize_content_id(item_id)
+	if normalized_item_id.is_empty():
+		return
+	if stack_index <= 0:
+		add_actor_item(actor, normalized_item_id, -count)
+		return
+	_sync_actor_inventory_order(actor)
+	var current_count: int = max(0, int(actor.inventory.get(normalized_item_id, 0)))
+	if current_count <= 0:
+		return
+	var remove_count: int = min(count, current_count)
+	var next_count: int = current_count - remove_count
+	if next_count <= 0:
+		actor.inventory.erase(normalized_item_id)
+		actor.inventory_order.erase(normalized_item_id)
+		if "inventory_stacks" in actor:
+			actor.inventory_stacks.erase(normalized_item_id)
+		return
+	actor.inventory[normalized_item_id] = next_count
+	if not "inventory_stacks" in actor:
+		return
+	var stacks: Array[int] = _normalized_actor_inventory_stacks(actor, normalized_item_id, current_count)
+	var remaining: int = remove_count
+	var source_index: int = stack_index - 1
+	if source_index >= 0 and source_index < stacks.size():
+		var source_count: int = int(stacks[source_index])
+		var consumed: int = min(source_count, remaining)
+		source_count -= consumed
+		remaining -= consumed
+		if source_count <= 0:
+			stacks.remove_at(source_index)
+		else:
+			stacks[source_index] = source_count
+	if remaining > 0:
+		for index in range(stacks.size() - 1, -1, -1):
+			if remaining <= 0:
+				break
+			var stack_count: int = int(stacks[index])
+			var consumed: int = min(stack_count, remaining)
+			stack_count -= consumed
+			remaining -= consumed
+			if stack_count <= 0:
+				stacks.remove_at(index)
+			else:
+				stacks[index] = stack_count
+	actor.inventory_stacks[normalized_item_id] = _stacks_or_single_total(stacks, next_count)
+
+
 func add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:
 	if actor == null:
 		return

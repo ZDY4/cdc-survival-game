@@ -2153,7 +2153,7 @@ func take_all_active_container_items() -> Dictionary:
 	return result
 
 
-func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
+func store_active_container_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
 		var missing_result := {"success": false, "reason": "active_container_missing"}
@@ -2164,6 +2164,7 @@ func store_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 		"container_id": container_id,
 		"item_id": item_id,
 		"count": count,
+		"stack_index": stack_index,
 	})
 	_record_container_feedback(result, "store_container", container_id, item_id, count)
 	refresh_inventory_panel()
@@ -2194,7 +2195,7 @@ func transfer_active_container_item(source: String, item_id: String, count: int 
 				return take_active_container_money(count)
 			return take_active_container_item(item_id, count, stack_index)
 		"player":
-			return store_active_container_item(item_id, count)
+			return store_active_container_item(item_id, count, stack_index)
 		_:
 			return {"success": false, "reason": "unknown_container_transfer_source", "source": source}
 
@@ -2318,7 +2319,7 @@ func buy_active_trade_item(item_id: String, count: int = 1, stack_index: int = 0
 	return result
 
 
-func sell_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
+func sell_active_trade_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
 	var shop_id: String = _active_shop_id()
 	if shop_id.is_empty():
 		var missing_result := {"success": false, "reason": "active_trade_missing"}
@@ -2329,6 +2330,7 @@ func sell_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
 		"shop_id": shop_id,
 		"item_id": item_id,
 		"count": count,
+		"stack_index": stack_index,
 	})
 	_record_trade_feedback(result, "sell_shop", shop_id, item_id, count)
 	refresh_inventory_panel()
@@ -2363,7 +2365,7 @@ func transfer_active_trade_item(source: String, item_id: String, count: int = 1,
 		"shop":
 			return buy_active_trade_item(item_id, count, stack_index)
 		"player":
-			return sell_active_trade_item(item_id, count)
+			return sell_active_trade_item(item_id, count, stack_index)
 	if source.begins_with("equipment:"):
 		return sell_active_trade_equipment(source.trim_prefix("equipment:"), item_id)
 	return {"success": false, "reason": "unknown_trade_transfer_source", "source": source}

@@ -101,7 +101,7 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 	}
 
 
-func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
+func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary, stack_index: int = 0) -> Dictionary:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor"}
@@ -113,8 +113,12 @@ func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, i
 		return permission
 	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
 	var sell_count: int = max(1, count)
-	if int(actor.inventory.get(normalized_item_id, 0)) < sell_count:
-		return {"success": false, "reason": "player_stock_insufficient"}
+	var available: int = int(actor.inventory.get(normalized_item_id, 0))
+	var selected_stack_index: int = max(0, stack_index)
+	if selected_stack_index > 0:
+		available = _inventory_entries.actor_stack_count_at(actor, normalized_item_id, selected_stack_index)
+	if available < sell_count:
+		return {"success": false, "reason": "player_stock_insufficient", "item_id": normalized_item_id, "count": sell_count, "available": available, "stack_index": selected_stack_index}
 	if not _is_item_sellable(normalized_item_id, item_library):
 		return {"success": false, "reason": "item_not_sellable", "item_id": normalized_item_id, "count": sell_count}
 	var unit_price: int = _trade_unit_price(normalized_item_id, float(shop.get("sell_price_modifier", 1.0)), item_library)
@@ -122,7 +126,7 @@ func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, i
 	if int(shop.get("money", 0)) < total_price:
 		return {"success": false, "reason": "shop_money_insufficient", "unit_price": unit_price, "total_price": total_price}
 
-	_inventory_entries.add_actor_item(actor, normalized_item_id, -sell_count)
+	_inventory_entries.remove_actor_item_from_stack(actor, normalized_item_id, sell_count, selected_stack_index)
 	actor.money += total_price
 	_inventory_entries.add(shop["inventory"], normalized_item_id, sell_count)
 	shop["money"] = int(shop.get("money", 0)) - total_price
@@ -132,6 +136,7 @@ func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, i
 		"shop_id": shop_id,
 		"item_id": normalized_item_id,
 		"count": sell_count,
+		"stack_index": selected_stack_index,
 		"unit_price": unit_price,
 		"total_price": total_price,
 	})
@@ -141,6 +146,7 @@ func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, i
 		"mode": "sell",
 		"item_id": normalized_item_id,
 		"count": sell_count,
+		"stack_index": selected_stack_index,
 		"unit_price": unit_price,
 		"total_price": total_price,
 		"player_money_after": actor.money,
@@ -151,6 +157,7 @@ func sell_item_to_shop(simulation: RefCounted, actor_id: int, shop_id: String, i
 		"shop_id": shop_id,
 		"item_id": normalized_item_id,
 		"count": sell_count,
+		"stack_index": selected_stack_index,
 		"unit_price": unit_price,
 		"total_price": total_price,
 		"shop_money": shop.get("money", 0),
@@ -256,7 +263,7 @@ func confirm_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, 
 				_inventory_entries.add_actor_item(actor, item_id, count)
 				_inventory_entries.remove_from_stack(shop["inventory"], item_id, count, int(entry.get("stack_index", 0)))
 			"player":
-				_inventory_entries.add_actor_item(actor, item_id, -count)
+				_inventory_entries.remove_actor_item_from_stack(actor, item_id, count, int(entry.get("stack_index", 0)))
 				_inventory_entries.add(shop["inventory"], item_id, count)
 			_:
 				var slot_id: String = _equipment_slot_from_source(str(entry.get("source", "")))
@@ -305,6 +312,7 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 	var buy_counts: Dictionary = {}
 	var buy_stack_counts: Dictionary = {}
 	var sell_counts: Dictionary = {}
+	var sell_stack_counts: Dictionary = {}
 	var equipment_sell_counts: Dictionary = {}
 	var buy_total: int = 0
 	var sell_total: int = 0
@@ -339,15 +347,23 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 				if not _is_item_sellable(item_id, item_library):
 					return {"success": false, "reason": "item_not_sellable", "item_id": item_id, "count": count, "failed_index": index}
 				var sell_unit_price: int = _trade_unit_price(item_id, float(shop.get("sell_price_modifier", 1.0)), item_library)
+				var stack_index: int = max(0, int(entry.get("stack_index", 0)))
 				sell_total += sell_unit_price * count
-				sell_counts[item_id] = int(sell_counts.get(item_id, 0)) + count
-				normalized_entries.append({
+				if stack_index > 0:
+					var stack_key := "%s#%d" % [item_id, stack_index]
+					sell_stack_counts[stack_key] = int(sell_stack_counts.get(stack_key, 0)) + count
+				else:
+					sell_counts[item_id] = int(sell_counts.get(item_id, 0)) + count
+				var normalized_entry := {
 					"source": source,
 					"item_id": item_id,
 					"count": count,
 					"unit_price": sell_unit_price,
 					"total_price": sell_unit_price * count,
-				})
+				}
+				if stack_index > 0:
+					normalized_entry["stack_index"] = stack_index
+				normalized_entries.append(normalized_entry)
 			_:
 				var slot_id: String = _equipment_slot_from_source(source)
 				if slot_id.is_empty():
@@ -385,6 +401,14 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 		var available: int = int(actor.inventory.get(str(item_id), 0))
 		if available < required:
 			return {"success": false, "reason": "player_stock_insufficient", "item_id": str(item_id), "count": required, "available": available}
+	for stack_key in sell_stack_counts.keys():
+		var key_parts: PackedStringArray = str(stack_key).split("#", false, 1)
+		var item_id: String = key_parts[0] if key_parts.size() > 0 else ""
+		var stack_index: int = int(key_parts[1]) if key_parts.size() > 1 else 0
+		var required: int = int(sell_stack_counts[stack_key])
+		var available: int = _inventory_entries.actor_stack_count_at(actor, item_id, stack_index)
+		if available < required:
+			return {"success": false, "reason": "player_stock_insufficient", "item_id": item_id, "count": required, "available": available, "stack_index": stack_index}
 	for slot_id in equipment_sell_counts.keys():
 		var required: int = int(equipment_sell_counts[slot_id])
 		var equipped_item_id: String = _inventory_entries.normalize_content_id(actor.equipment.get(str(slot_id), ""))

@@ -445,7 +445,7 @@ func _request_transfer(source: String, item_id: String, count: int, force_confir
 	if normalized_count > 1 and not force_confirm:
 		_open_quantity_confirm(source, item_id, normalized_count, available, item)
 		return
-	var stack_index := int(item.get("stack_index", 0)) if source == "container" else 0
+	var stack_index := int(item.get("stack_index", 0)) if source == "container" or source == "player" else 0
 	transfer_requested.emit(source, item_id, normalized_count, stack_index)
 
 
