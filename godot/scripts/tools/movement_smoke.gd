@@ -64,6 +64,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	_expect_ap_depletion_auto_advances_turn(errors, simulation, topology)
 	errors.append_array(_expect_auto_advance_limit_guard(registry))
 	errors.append_array(_expect_configured_ap_rules(registry))
+	errors.append_array(_expect_long_path_cross_turn_resume(registry))
 
 	var blocked_goal: Dictionary = _first_blocking_cell(topology)
 	var blocked_result: Dictionary = simulation.submit_player_command({"kind": "move", "target_position": blocked_goal, "topology": topology})
@@ -386,6 +387,49 @@ func _expect_configured_ap_rules(registry: RefCounted) -> Array[String]:
 	return errors
 
 
+func _expect_long_path_cross_turn_resume(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position.x = 0
+	player.grid_position.y = 0
+	player.grid_position.z = 0
+	player.ap = 2.0
+	player.combat_attributes["turn_ap_gain"] = 2.0
+	player.combat_attributes["turn_ap_max"] = 2.0
+	player.combat_attributes["affordable_ap_threshold"] = 1.0
+	_move_non_player_actors_out_of_test_lane(simulation)
+	var topology := _line_test_topology(4)
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "move",
+		"target_position": {"x": 4, "y": 0, "z": 0},
+		"topology": topology,
+	})
+	if not bool(result.get("success", false)):
+		errors.append("long cross-turn move should succeed: %s" % result.get("reason", "unknown"))
+	if int(result.get("steps", 0)) != 2:
+		errors.append("long cross-turn move should spend current AP on first two steps, got %s" % result.get("steps", 0))
+	if player.grid_position.x != 4 or player.grid_position.z != 0:
+		errors.append("long cross-turn move should auto resume pending movement to final goal")
+	if not _dictionary_or_empty(simulation.snapshot().get("pending_movement", {})).is_empty():
+		errors.append("long cross-turn move should clear pending movement after auto resume")
+	if not bool(result.get("auto_turn_advanced", false)):
+		errors.append("long cross-turn move should auto advance turn to resume pending movement")
+	var auto_final: Dictionary = _dictionary_or_empty(result.get("auto_turn_final_result", {}))
+	var final_movement: Dictionary = _dictionary_or_empty(auto_final.get("movement_result", auto_final))
+	if int(final_movement.get("remaining_steps", -1)) != 0 or not bool(final_movement.get("completed", false)):
+		errors.append("long cross-turn final result should report completed with zero remaining steps: %s" % auto_final)
+	var first_queue: Dictionary = _first_event_payload(simulation.snapshot(), "movement_queued")
+	if int(first_queue.get("remaining_steps", 0)) != 4:
+		errors.append("initial long move queue should expose total remaining steps before first segment, got %s" % first_queue)
+	var last_queue: Dictionary = _last_event_payload(simulation.snapshot(), "movement_queued")
+	if int(last_queue.get("remaining_steps", 0)) != 2:
+		errors.append("long move resumed queue should expose remaining steps after first segment, got %s" % last_queue)
+	if _event_count(simulation.snapshot(), "movement_step") < 4:
+		errors.append("long cross-turn move should emit one movement_step per grid step")
+	return errors
+
+
 func _expect_diagonal_pathing(registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
@@ -565,6 +609,20 @@ func _diagonal_test_topology(blocking_cells: Dictionary) -> Dictionary:
 	}
 
 
+func _line_test_topology(max_x: int) -> Dictionary:
+	return {
+		"bounds": {
+			"min_x": 0,
+			"max_x": max_x,
+			"min_z": 0,
+			"max_z": 0,
+		},
+		"blocking_cells": {},
+		"sight_blocking_cells": {},
+		"door_objects": [],
+	}
+
+
 func _door_target(target_id: String, is_open: bool, locked: bool, extra_door: Dictionary = {}) -> Dictionary:
 	var door: Dictionary = _door_summary(target_id, is_open, locked, extra_door)
 	return {
@@ -705,6 +763,14 @@ func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
 	var events: Array = snapshot.get("events", [])
 	for index in range(events.size() - 1, -1, -1):
 		var event_data: Dictionary = events[index]
+		if event_data.get("kind", "") == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
+
+
+func _first_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
+	for event in snapshot.get("events", []):
+		var event_data: Dictionary = event
 		if event_data.get("kind", "") == kind:
 			return _dictionary_or_empty(event_data.get("payload", {}))
 	return {}

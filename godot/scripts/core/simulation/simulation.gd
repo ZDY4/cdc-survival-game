@@ -1213,6 +1213,7 @@ func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 			"path": _array_or_empty(plan.get("path", [])).duplicate(true),
 			"required_ap": cost,
 			"available_ap": actor.ap,
+			"remaining_steps": steps,
 		}
 		_emit("movement_queued", pending_movement.duplicate(true))
 		var partial_move: Dictionary = _advance_pending_movement(actor, topology)
@@ -3906,6 +3907,9 @@ func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dicti
 		return {"success": true, "completed": true, "steps": 0, "to": actor.grid_position.to_dictionary(), "path": path}
 	var affordable_steps: int = min(total_steps, int(floor(actor.ap)))
 	if affordable_steps <= 0:
+		pending_movement["remaining_steps"] = total_steps
+		pending_movement["required_ap"] = float(total_steps)
+		pending_movement["available_ap"] = actor.ap
 		return {
 			"success": true,
 			"completed": false,
@@ -3937,6 +3941,7 @@ func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dicti
 		pending_movement["path"] = path.slice(affordable_steps)
 		pending_movement["required_ap"] = float(total_steps - affordable_steps)
 		pending_movement["available_ap"] = actor.ap
+		pending_movement["remaining_steps"] = max(0, total_steps - affordable_steps)
 		_emit("movement_queued", pending_movement.duplicate(true))
 	return {
 		"success": true,
