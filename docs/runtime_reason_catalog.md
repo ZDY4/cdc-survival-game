@@ -44,9 +44,10 @@
 - Container 面板的反馈 snapshot 兜底已接入 `disabled_text_for()`；已有容量、权限、钥匙、工具、关系等详细中文说明继续优先使用，未特化的容器 reason 显示 catalog 中文短文案。
 - Inventory 面板的反馈 snapshot 兜底已接入 `disabled_text_for()`；已有 AP、数量、负重、使用、拆解等详细中文说明继续优先使用，未特化的背包 reason 显示 catalog 中文短文案。
 - Skills 面板的学习 / 绑定 / 使用按钮禁用 tooltip 和 learn/use reason 兜底已接入 `disabled_text_for()`；已有前置、属性、冷却和资源不足等详细说明继续优先使用。
+- Journal 面板的交付按钮 tooltip、交付条件 tooltip、详情交付限制和交付失败反馈兜底已接入 `disabled_text_for()`；已有物品不足、目标未完成和对话交付等详细说明继续优先使用。
 
 ## 后续缺口
 
-- 继续把尚未进入 HUD 的任务交付、AI、保存 / 加载和地图资源失败 reason 纳入目录。
-- 将 Journal 等面板禁用态 tooltip 统一切到 `disabled_text_for()`。
+- 继续把尚未进入 HUD 的 AI、保存 / 加载和地图资源失败 reason 纳入目录。
+- 将后续新增面板禁用态 tooltip 统一切到 `disabled_text_for()`。
 - 给任务、AI、保存 / 加载和地图资产失败补更细 reason，而不是继续复用笼统失败码。

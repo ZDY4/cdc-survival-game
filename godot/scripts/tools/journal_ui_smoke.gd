@@ -31,6 +31,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var errors: Array[String] = []
 	if game_root.journal_panel == null:
 		return ["journal panel was not created"]
+	if not game_root.journal_panel.has_method("_journal_reason_text") or game_root.journal_panel.call("_journal_reason_text", "turn_in_dialogue_mismatch") != "当前对话不符合交付条件":
+		errors.append("journal panel should use reason catalog fallback for turn-in reasons")
 	if not _summary_line(game_root).contains("任务 1"):
 		errors.append("journal summary should show one active quest")
 	if not _quest_text(game_root).contains("补给试跑"):
@@ -136,6 +138,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("journal missing manual quest skill point reward preview")
 	if _turn_in_button(game_root, "find_medicine") == null or not _turn_in_button(game_root, "find_medicine").disabled:
 		errors.append("manual turn-in button should be disabled before objective completion")
+	if game_root.journal_panel.call("_turn_in_failure_text", {"reason": "turn_in_requires_dialogue"}) != "需要通过指定对话交付":
+		errors.append("journal turn-in failure text should use reason catalog dialogue text")
 
 	player.inventory["1005"] = 1
 	game_root.simulation.record_item_collected(1, "1005", 1)

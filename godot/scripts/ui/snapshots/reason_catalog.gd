@@ -101,6 +101,14 @@ const REASONS := {
 	"drop_zone_source_mismatch": {"category": "trade", "text": "拖拽来源不匹配"},
 	"trade_item_rejected": {"category": "trade", "text": "交易物品被拒绝"},
 	"unknown_trade_item": {"category": "trade", "text": "未知交易物品"},
+	"quest_not_active": {"category": "quest", "text": "任务未激活"},
+	"quest_not_waiting_for_turn_in": {"category": "quest", "text": "任务不需要手动交付"},
+	"quest_objective_incomplete": {"category": "quest", "text": "任务目标尚未完成"},
+	"turn_in_requires_dialogue": {"category": "quest", "text": "需要通过指定对话交付"},
+	"turn_in_dialogue_mismatch": {"category": "quest", "text": "当前对话不符合交付条件"},
+	"turn_in_target_mismatch": {"category": "quest", "text": "当前交付对象不符合条件"},
+	"turn_in_target_missing": {"category": "quest", "text": "交付对象未指定"},
+	"objective_incomplete": {"category": "quest", "text": "目标尚未完成"},
 	"maxed": {"category": "skill", "text": "技能已满级"},
 	"missing_skill_points": {"category": "skill", "text": "缺少技能点"},
 	"missing_prerequisites": {"category": "skill", "text": "缺少前置技能"},
@@ -231,6 +239,12 @@ const CATEGORY_METADATA := {
 		"disabled_text": "交易不可用",
 		"remediation": "检查买卖方向、库存、资金、价格和出售权限。",
 	},
+	"quest": {
+		"source_module": "godot/scripts/core/quests/quest_runner.gd turn-in validation",
+		"payload_fields": ["quest_id", "objective_id", "current", "target"],
+		"disabled_text": "任务交付不可用",
+		"remediation": "检查任务状态、目标进度、交付 NPC、对话上下文和奖励配置。",
+	},
 }
 
 const REASON_METADATA := {
@@ -301,6 +315,26 @@ const REASON_METADATA := {
 	"player_money_insufficient": {
 		"payload_fields": ["shop_id", "price", "player_money"],
 		"disabled_text": "资金不足",
+	},
+	"quest_objective_incomplete": {
+		"payload_fields": ["quest_id", "objective_id", "current", "target"],
+		"disabled_text": "目标尚未完成",
+	},
+	"turn_in_requires_dialogue": {
+		"payload_fields": ["quest_id", "target_definition_id", "dialogue_id", "dialogue_rule_id"],
+		"disabled_text": "需要通过指定对话交付",
+	},
+	"turn_in_dialogue_mismatch": {
+		"payload_fields": ["quest_id", "dialogue_id", "expected_dialogue_id"],
+		"disabled_text": "当前对话不符合交付条件",
+	},
+	"turn_in_target_mismatch": {
+		"payload_fields": ["quest_id", "target_actor_id", "target_definition_id", "expected_target_definition_id"],
+		"disabled_text": "当前交付对象不符合条件",
+	},
+	"turn_in_target_missing": {
+		"payload_fields": ["quest_id", "target_definition_id", "target_actor_id"],
+		"disabled_text": "交付对象未指定",
 	},
 	"buy_zone_requires_shop_source": {
 		"payload_fields": ["source", "drop_zone"],

@@ -1,6 +1,7 @@
 extends Control
 
 const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 signal tracked_quest_changed(quest_id: String)
 
@@ -18,6 +19,7 @@ var _selected_quest_id := ""
 var _tracked_quest_id := ""
 var _journal_feedback_text := ""
 var _failure_history: Array[String] = []
+var _reason_catalog := ReasonCatalog.new()
 
 
 func _ready() -> void:
@@ -368,7 +370,7 @@ func _turn_in_failure_text(result: Dictionary) -> String:
 		"turn_in_target_mismatch":
 			return "当前交付对象不符合条件"
 		_:
-			return reason
+			return _journal_reason_text(reason)
 
 
 func _turn_in_requirement_failure_text(reason: String) -> String:
@@ -378,7 +380,14 @@ func _turn_in_requirement_failure_text(reason: String) -> String:
 		"objective_incomplete":
 			return "目标尚未完成"
 		_:
-			return reason
+			return _journal_reason_text(reason)
+
+
+func _journal_reason_text(reason: String) -> String:
+	var normalized := reason.strip_edges()
+	if normalized.is_empty():
+		return ""
+	return _reason_catalog.disabled_text_for(normalized)
 
 
 func _record_failure(quest_title: String, result: Dictionary) -> void:
