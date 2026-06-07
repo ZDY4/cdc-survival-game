@@ -254,6 +254,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "缺少打开该容器所需的%s。" % item_name
 		"container_tool_missing":
 			return "缺少操作该容器所需的%s。" % item_name
+		"tool_durability_insufficient":
+			return "容器工具耐久不足，无法操作该容器。"
 		_:
 			var fallback_reason := str(feedback.get("reason", ""))
 			return _reason_catalog.disabled_text_for(fallback_reason) if not fallback_reason.is_empty() else ""
@@ -295,6 +297,9 @@ func _permission_preview(session: Dictionary) -> Dictionary:
 	var required_tools: Array[String] = _normalized_item_ids(session.get("required_tool_ids", session.get("required_tools", [])))
 	if not required_tools.is_empty():
 		lines.append("工具: %s" % _item_names(required_tools))
+	var tool_durability_cost: float = _required_tool_durability_cost(session)
+	if tool_durability_cost > 0.0:
+		lines.append("工具耐久: -%.1f" % tool_durability_cost)
 	if bool(session.get("consume_required_items_on_unlock", session.get("consume_required_items", session.get("consume_keys_on_unlock", false)))):
 		lines.append("解锁消耗钥匙")
 	if bool(session.get("consume_required_tools_on_unlock", session.get("consume_required_tools", session.get("consume_tools_on_unlock", false)))):
@@ -330,6 +335,25 @@ func _item_names(item_ids: Array[String]) -> String:
 		var item_data := _item_data(item_id)
 		names.append(str(item_data.get("name", item_id)))
 	return "、".join(names)
+
+
+func _required_tool_durability_cost(session: Dictionary) -> float:
+	var output: float = max(0.0, float(session.get("tool_durability_cost", session.get("unlock_tool_durability_cost", session.get("required_tool_durability_cost", 0.0)))))
+	for key in ["required_tool_ids", "required_tools"]:
+		output = max(output, _tool_durability_cost_from_value(session.get(key, [])))
+	return output
+
+
+func _tool_durability_cost_from_value(value: Variant) -> float:
+	if typeof(value) == TYPE_ARRAY:
+		var output := 0.0
+		for entry in value:
+			output = max(output, _tool_durability_cost_from_value(entry))
+		return output
+	var data: Dictionary = _dictionary_or_empty(value)
+	if data.is_empty():
+		return 0.0
+	return max(0.0, float(data.get("durability_cost", data.get("tool_durability_cost", data.get("unlock_tool_durability_cost", data.get("required_tool_durability_cost", 0.0))))))
 
 
 func _normalized_item_ids(value: Variant) -> Array[String]:

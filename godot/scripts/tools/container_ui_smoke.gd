@@ -528,6 +528,48 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var consuming_tool_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("consuming_tool_container", {}))
 	if bool(consuming_tool_session.get("locked", true)) or not bool(consuming_tool_session.get("unlock_requirements_consumed", false)):
 		errors.append("consuming tool container should persist unlocked state")
+	game_root.simulation.container_sessions["durable_tool_container"] = {
+		"container_id": "durable_tool_container",
+		"display_name": "耐久工具容器",
+		"inventory": [],
+		"money": 0,
+		"locked": true,
+		"required_tools": [{"item_id": "1150", "durability_cost": 3.0}],
+	}
+	_set_active_container_id(game_root, "durable_tool_container")
+	player_refill_water(game_root)
+	permission_player.inventory["1150"] = 1
+	permission_player.tool_durability["1150"] = 5.0
+	game_root.refresh_container_panel()
+	var durable_tool_permission_text := _container_permission_text(game_root)
+	if not durable_tool_permission_text.contains("工具耐久"):
+		errors.append("durable tool container should preview tool durability cost")
+	var durable_tool_store: Dictionary = game_root.store_active_container_item("1008", 1)
+	if not bool(durable_tool_store.get("success", false)):
+		errors.append("durable tool container should allow store with enough durability: %s" % durable_tool_store.get("reason", "unknown"))
+	if int(permission_player.inventory.get("1150", 0)) != 1:
+		errors.append("durable tool container should not consume whole tool")
+	if not is_equal_approx(float(permission_player.tool_durability.get("1150", 0.0)), 2.0):
+		errors.append("durable tool container should reduce tool durability to 2.0")
+	var durable_consumed: Array = _array_or_empty(durable_tool_store.get("consumed_unlock_requirements", []))
+	if durable_consumed.is_empty() or not _dictionary_or_empty(durable_consumed[0]).has("durability_after"):
+		errors.append("durable tool container should expose durability unlock payload")
+	game_root.simulation.container_sessions["low_durability_tool_container"] = {
+		"container_id": "low_durability_tool_container",
+		"display_name": "低耐久工具容器",
+		"inventory": [],
+		"money": 0,
+		"locked": true,
+		"required_tools": [{"item_id": "1150", "durability_cost": 3.0}],
+	}
+	_set_active_container_id(game_root, "low_durability_tool_container")
+	player_refill_water(game_root)
+	game_root.refresh_container_panel()
+	var low_durability_store: Dictionary = game_root.store_active_container_item("1008", 1)
+	if str(low_durability_store.get("reason", "")) != "tool_durability_insufficient":
+		errors.append("low-durability container should reject with tool_durability_insufficient")
+	if not _container_feedback(game_root).contains("工具耐久不足"):
+		errors.append("low-durability container should show durability feedback")
 	game_root.simulation.container_sessions["store_forbidden_container"] = {
 		"container_id": "store_forbidden_container",
 		"display_name": "禁止存放容器",

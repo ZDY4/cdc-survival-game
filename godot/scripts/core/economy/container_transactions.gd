@@ -398,6 +398,14 @@ func _container_permission(simulation: RefCounted, actor: RefCounted, actor_id: 
 			"missing_tool_ids": missing_tool_ids,
 			"required_tool_ids": required_tool_ids,
 		})
+	var missing_durability_tools: Array[Dictionary] = [] if unlock_consumed else _missing_tool_durability(actor, _required_tool_requirements(container))
+	if not missing_durability_tools.is_empty():
+		return _permission_failure(base, "tool_durability_insufficient", {
+			"item_id": str(_dictionary_or_empty(missing_durability_tools[0]).get("item_id", "")),
+			"missing_tools": missing_durability_tools,
+			"missing_durability_tools": missing_durability_tools,
+			"required_tool_ids": required_tool_ids,
+		})
 	var has_unlock_requirements: bool = not required_item_ids.is_empty() or not required_tool_ids.is_empty()
 	if bool(container.get("locked", false)) and not has_unlock_requirements:
 		return _permission_failure(base, "container_locked", {})
@@ -616,9 +624,27 @@ func _consume_container_unlock_requirements(simulation: RefCounted, actor: RefCo
 					"consume_count": item_count,
 				})
 			consumed.append(consume_result)
+	var durable_tools: Array[Dictionary] = _container_durable_tool_consumption_requirements(actor, container)
+	for tool in durable_tools:
+		var durability_result: Dictionary = _consume_actor_tool_durability(actor, str(tool.get("item_id", "")), float(tool.get("durability_cost", 0.0)), "tool")
+		if not bool(durability_result.get("success", false)):
+			return _permission_failure({
+				"success": true,
+				"actor_id": actor_id,
+				"container_id": container_id,
+				"action": action,
+			}, "tool_durability_insufficient", {
+				"item_id": str(tool.get("item_id", "")),
+				"required_tool_ids": _required_tool_ids(container),
+				"durability_cost": float(tool.get("durability_cost", 0.0)),
+				"available_durability": float(durability_result.get("durability_before", 0.0)),
+			})
+		consumed.append(durability_result)
 	if _container_consumes_required_tools(container):
 		var tool_count: int = _container_required_tool_consume_count(container)
 		for tool_id in _required_tool_ids(container):
+			if _tool_requirement_has_durability(container, tool_id):
+				continue
 			var consume_result: Dictionary = _consume_actor_inventory_requirement(actor, tool_id, tool_count, "tool")
 			if not bool(consume_result.get("success", false)):
 				return _permission_failure({
@@ -685,12 +711,63 @@ func _consume_actor_inventory_requirement(actor: RefCounted, item_id: String, co
 	}
 
 
+func _consume_actor_tool_durability(actor: RefCounted, item_id: String, durability_cost: float, requirement_kind: String) -> Dictionary:
+	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
+	var cost: float = max(0.0, durability_cost)
+	var before_durability: float = _actor_tool_durability(actor, normalized_item_id)
+	if actor == null or normalized_item_id.is_empty() or cost <= 0.0 or before_durability < cost:
+		return {
+			"success": false,
+			"item_id": normalized_item_id,
+			"count": 0,
+			"durability_cost": cost,
+			"durability_before": before_durability,
+			"requirement_kind": requirement_kind,
+		}
+	var after_durability: float = max(0.0, before_durability - cost)
+	actor.tool_durability[normalized_item_id] = after_durability
+	return {
+		"success": true,
+		"item_id": normalized_item_id,
+		"count": 0,
+		"durability_cost": cost,
+		"durability_before": before_durability,
+		"durability_after": after_durability,
+		"requirement_kind": requirement_kind,
+	}
+
+
+func _actor_tool_durability(actor: RefCounted, item_id: String) -> float:
+	if actor == null or item_id.is_empty():
+		return 0.0
+	if actor.tool_durability.has(item_id):
+		return max(0.0, float(actor.tool_durability.get(item_id, 0.0)))
+	return 100.0
+
+
 func _container_consumes_required_items(container: Dictionary) -> bool:
 	return bool(container.get("consume_required_items_on_unlock", container.get("consume_required_items", container.get("consume_keys_on_unlock", false))))
 
 
 func _container_consumes_required_tools(container: Dictionary) -> bool:
 	return bool(container.get("consume_required_tools_on_unlock", container.get("consume_required_tools", container.get("consume_tools_on_unlock", false))))
+
+
+func _container_durable_tool_consumption_requirements(actor: RefCounted, container: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for requirement in _required_tool_requirements(container):
+		var tool_id := str(requirement.get("item_id", ""))
+		var durability_cost: float = max(0.0, float(requirement.get("durability_cost", 0.0)))
+		if tool_id.is_empty() or durability_cost <= 0.0:
+			continue
+		output.append({
+			"item_id": tool_id,
+			"count": 0,
+			"durability_cost": durability_cost,
+			"available_durability": _actor_tool_durability(actor, tool_id),
+			"requirement_kind": "tool",
+		})
+	return output
 
 
 func _container_required_item_consume_count(container: Dictionary) -> int:
@@ -866,6 +943,70 @@ func _required_tool_ids(container: Dictionary) -> Array[String]:
 	_append_unique_normalized(output, container.get("required_tool_ids", []))
 	_append_unique_normalized(output, container.get("required_tools", []))
 	return output
+
+
+func _required_tool_requirements(container: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	_append_tool_requirements(output, container.get("required_tool_ids", []), container)
+	_append_tool_requirements(output, container.get("required_tools", []), container)
+	return output
+
+
+func _append_tool_requirements(output: Array[Dictionary], value: Variant, container: Dictionary) -> void:
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_tool_requirements(output, entry, container)
+		return
+	var requirement: Dictionary = _tool_requirement(value, container)
+	var tool_id := str(requirement.get("item_id", ""))
+	if tool_id.is_empty():
+		return
+	for index in range(output.size()):
+		var existing: Dictionary = _dictionary_or_empty(output[index])
+		if str(existing.get("item_id", "")) != tool_id:
+			continue
+		existing["durability_cost"] = max(float(existing.get("durability_cost", 0.0)), float(requirement.get("durability_cost", 0.0)))
+		output[index] = existing
+		return
+	output.append(requirement)
+
+
+func _tool_requirement(value: Variant, container: Dictionary) -> Dictionary:
+	var data: Dictionary = _dictionary_or_empty(value)
+	var raw_id: Variant = value
+	if not data.is_empty():
+		raw_id = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var durability_cost: float = float(data.get("durability_cost", data.get("tool_durability_cost", data.get("unlock_tool_durability_cost", data.get("required_tool_durability_cost", container.get("tool_durability_cost", container.get("unlock_tool_durability_cost", 0.0)))))))
+	return {
+		"item_id": _inventory_entries.normalize_content_id(raw_id),
+		"durability_cost": max(0.0, durability_cost),
+	}
+
+
+func _missing_tool_durability(actor: RefCounted, tool_requirements: Array[Dictionary]) -> Array[Dictionary]:
+	var missing: Array[Dictionary] = []
+	for tool in tool_requirements:
+		var tool_id := str(tool.get("item_id", ""))
+		var durability_cost: float = max(0.0, float(tool.get("durability_cost", 0.0)))
+		if tool_id.is_empty() or durability_cost <= 0.0:
+			continue
+		var available_durability: float = _actor_tool_durability(actor, tool_id)
+		if available_durability >= durability_cost:
+			continue
+		missing.append({
+			"item_id": tool_id,
+			"available_durability": available_durability,
+			"required_durability": durability_cost,
+			"durability_cost": durability_cost,
+		})
+	return missing
+
+
+func _tool_requirement_has_durability(container: Dictionary, tool_id: String) -> bool:
+	for requirement in _required_tool_requirements(container):
+		if str(requirement.get("item_id", "")) == tool_id and float(requirement.get("durability_cost", 0.0)) > 0.0:
+			return true
+	return false
 
 
 func _missing_actor_items(actor: RefCounted, item_ids: Array[String]) -> Array[String]:

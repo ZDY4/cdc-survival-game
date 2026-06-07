@@ -65,6 +65,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	clinic_container["required_tool_ids"] = ["1150"]
 	clinic_container["consume_required_items_on_unlock"] = true
 	clinic_container["consume_required_tools_on_unlock"] = true
+	clinic_container["tool_durability_cost"] = 3.0
 	clinic_container["unlock_requirements_consumed"] = true
 	clinic_container["unlock_consumed_actor_id"] = 1
 	clinic_container["required_world_flags"] = ["outpost_workshop_restored"]
@@ -295,6 +296,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("container consume_required_items_on_unlock did not roundtrip")
 	if not bool(restored_clinic_container.get("consume_required_tools_on_unlock", false)):
 		errors.append("container consume_required_tools_on_unlock did not roundtrip")
+	if not is_equal_approx(float(restored_clinic_container.get("tool_durability_cost", 0.0)), 3.0):
+		errors.append("container tool_durability_cost did not roundtrip")
 	if not bool(restored_clinic_container.get("unlock_requirements_consumed", false)):
 		errors.append("container unlock_requirements_consumed did not roundtrip")
 	if int(restored_clinic_container.get("unlock_consumed_actor_id", 0)) != 1:
