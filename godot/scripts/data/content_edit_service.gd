@@ -83,6 +83,7 @@ func save_patch(domain: String, id_value: String, patch: Dictionary, registry: C
 		"changed": bool(write_result.get("changed", false)),
 		"changed_fields": changed_fields,
 		"dry_run": bool(options.get("dry_run", false)),
+		"write_mode": str(write_result.get("write_mode", "")),
 	}
 
 

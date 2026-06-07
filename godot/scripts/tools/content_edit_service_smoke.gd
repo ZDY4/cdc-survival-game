@@ -32,6 +32,7 @@ func _run() -> Array[String]:
 	_expect_editable_fields(errors, service)
 	_expect_field_types(errors, service)
 	_expect_patch(errors, service, registry, "items", "1006", {"name": "绷带 smoke"})
+	_expect_dry_run_patch(errors, service, registry)
 	_expect_patch(errors, service, registry, "recipes", "recipe_first_aid_kit", {"craft_time": 31.0})
 	_expect_patch(errors, service, registry, "characters", "zombie_walker", {"identity.display_name": "行尸 smoke"})
 	_expect_patch(errors, service, registry, "dialogues", "trader_lao_wang_intro", {"_comment": "老王开局对话 smoke"})
@@ -85,11 +86,31 @@ func _expect_patch(errors: Array[String], service: ContentEditService, registry:
 		return
 	if not bool(report.get("changed", false)):
 		errors.append("patch should report changed for %s %s" % [domain, id_value])
+	if str(report.get("write_mode", "")) != "atomic_replace":
+		errors.append("patch should use atomic replace for %s %s: %s" % [domain, id_value, report])
 	var path := str(report.get("path", ""))
 	var raw := FileAccess.get_file_as_string(path)
 	for field in patch.keys():
 		if not raw.contains(str(patch[field])):
 			errors.append("patched file %s does not contain value for %s" % [path, field])
+	_expect_no_temp_write_files(errors, path)
+
+
+func _expect_dry_run_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry) -> void:
+	var isolated := _registry_with_temp_record(registry, "items", "1006")
+	var path := str(isolated.get_library("items")["1006"].get("path", ""))
+	var before := FileAccess.get_file_as_string(path)
+	var report := service.save_patch("items", "1006", {"name": "绷带 dry-run smoke"}, isolated, {
+		"allow_external_path": true,
+		"dry_run": true,
+	})
+	if not bool(report.get("ok", false)) or not bool(report.get("changed", false)) or not bool(report.get("dry_run", false)):
+		errors.append("dry-run patch should report changed preview: %s" % report)
+	if str(report.get("write_mode", "")) != "dry_run":
+		errors.append("dry-run patch should expose dry_run write mode: %s" % report)
+	if FileAccess.get_file_as_string(path) != before:
+		errors.append("dry-run patch should not write temp record")
+	_expect_no_temp_write_files(errors, path)
 
 
 func _expect_invalid_patch(errors: Array[String], service: ContentEditService, registry: ContentRegistry) -> void:
@@ -159,3 +180,20 @@ func _registry_with_temp_record(registry: ContentRegistry, domain: String, id_va
 	library[id_value] = record
 	copy.libraries[domain] = library
 	return copy
+
+
+func _expect_no_temp_write_files(errors: Array[String], path: String) -> void:
+	var directory := path.get_base_dir()
+	var prefix := path.get_file() + ".tmp-"
+	var dir := DirAccess.open(directory)
+	if dir == null:
+		errors.append("could not inspect temp write directory: %s" % directory)
+		return
+	dir.list_dir_begin()
+	while true:
+		var name := dir.get_next()
+		if name.is_empty():
+			break
+		if name.begins_with(prefix):
+			errors.append("atomic write left temp file behind: %s" % directory.path_join(name))
+	dir.list_dir_end()
