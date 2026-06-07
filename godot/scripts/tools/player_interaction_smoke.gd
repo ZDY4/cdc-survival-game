@@ -291,6 +291,67 @@ func _expect_right_click_menu_buttons(errors: Array[String], game_root: Node) ->
 		errors.append("right-click interaction menu should hide on request")
 
 
+func _expect_interaction_menu_options(
+		errors: Array[String],
+		game_root: Node,
+		context: String,
+		enabled_option_ids: Array[String],
+		disabled_reasons: Dictionary
+) -> void:
+	game_root.hud.show_interaction_menu(Vector2(320, 240), game_root.current_interaction_prompt())
+	var menu: Control = game_root.hud.find_child("InteractionMenu", true, false) as Control
+	if menu == null:
+		errors.append("%s context menu should create InteractionMenu" % context)
+		return
+	if not menu.visible:
+		errors.append("%s context menu should be visible" % context)
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.hud.interaction_menu_snapshot() if game_root.hud.has_method("interaction_menu_snapshot") else {})
+	var option_details: Dictionary = _dictionary_or_empty(snapshot.get("option_details", {}))
+	for option_id in enabled_option_ids:
+		var button: Button = menu.find_child("Option_%s" % option_id, true, false) as Button
+		if button == null:
+			errors.append("%s context menu should expose enabled option button %s" % [context, option_id])
+			continue
+		if bool(button.get_meta("disabled", true)):
+			errors.append("%s context menu option %s should expose enabled metadata" % [context, option_id])
+		if str(button.get_meta("option_id", "")) != option_id:
+			errors.append("%s context menu option %s should expose option_id metadata" % [context, option_id])
+		if str(button.tooltip_text).is_empty():
+			errors.append("%s context menu option %s should expose tooltip text" % [context, option_id])
+		button.mouse_entered.emit()
+		var hover_label: Label = menu.find_child("MenuHoverHint", true, false) as Label
+		if hover_label == null or not hover_label.text.contains("kind="):
+			errors.append("%s context menu option %s should expose hover kind text" % [context, option_id])
+		var detail: Dictionary = _dictionary_or_empty(option_details.get(option_id, {}))
+		if detail.is_empty() or not bool(detail.get("enabled", false)):
+			errors.append("%s context menu snapshot should expose enabled detail for %s" % [context, option_id])
+		elif str(detail.get("tooltip", "")).is_empty() or str(detail.get("hover_text", "")).is_empty():
+			errors.append("%s context menu snapshot should expose tooltip and hover text for %s" % [context, option_id])
+	for option_id in disabled_reasons.keys():
+		var expected_reason := str(disabled_reasons.get(option_id, ""))
+		var button: Button = menu.find_child("DisabledOption_%s" % option_id, true, false) as Button
+		if button == null:
+			errors.append("%s context menu should expose disabled option button %s" % [context, option_id])
+			continue
+		if not button.disabled or not bool(button.get_meta("disabled", false)):
+			errors.append("%s context menu disabled option %s should be disabled" % [context, option_id])
+		if str(button.get_meta("disabled_reason", "")) != expected_reason:
+			errors.append("%s context menu disabled option %s reason expected %s, got %s" % [
+				context,
+				option_id,
+				expected_reason,
+				button.get_meta("disabled_reason", ""),
+			])
+		if not str(button.tooltip_text).contains(expected_reason):
+			errors.append("%s context menu disabled option %s tooltip should include raw reason" % [context, option_id])
+		var detail: Dictionary = _dictionary_or_empty(option_details.get(option_id, {}))
+		if detail.is_empty() or not bool(detail.get("disabled", false)):
+			errors.append("%s context menu snapshot should expose disabled detail for %s" % [context, option_id])
+		elif str(detail.get("disabled_reason", "")) != expected_reason or str(detail.get("disabled_reason_text", "")).is_empty():
+			errors.append("%s context menu snapshot disabled detail %s should expose reason and localized text" % [context, option_id])
+	game_root.hud.hide_interaction_menu()
+
+
 func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
 	var before: Dictionary = _player_grid(game_root)
 	var target := {
@@ -372,6 +433,11 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		_expect_attack_target_marker(errors, game_root, target_id)
 		_expect_attack_target_outline(errors, game_root, target_id)
 		_expect_attack_range_markers(errors, game_root, target_id)
+		var selection: Dictionary = game_root.select_interaction_node(target_node)
+		if not bool(selection.get("success", false)):
+			errors.append("hostile actor selection for context menu failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
+		else:
+			_expect_interaction_menu_options(errors, game_root, "hostile actor", ["attack"], {"talk": "target_hostile"})
 		var attack_result: Dictionary = game_root.simulation.submit_player_command({
 			"kind": "attack",
 			"actor_id": 1,
@@ -497,6 +563,14 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 			errors.append("door hover outline should expose closed door state")
 		if bool(outline.get_meta("door_locked", true)):
 			errors.append("door hover outline should expose unlocked door state")
+	var selection: Dictionary = game_root.select_interaction_node(door_node)
+	if not bool(selection.get("success", false)):
+		errors.append("door selection for context menu failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
+	else:
+		_expect_interaction_menu_options(errors, game_root, "door", ["door_toggle", "inspect"], {
+			"pickup": "target_not_pickup",
+			"open_container": "target_not_container",
+		})
 
 
 func _expect_transition_hover_diagnostics(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
@@ -533,6 +607,14 @@ func _expect_transition_hover_diagnostics(errors: Array[String], game_root: Node
 		errors.append("transition trigger rank should match rank order")
 	if str(matched_candidate.get("transition_target_map_id", "")) != "survivor_outpost_01_interior":
 		errors.append("transition trigger should expose target map id")
+	var selection: Dictionary = game_root.select_interaction_node(transition_node)
+	if not bool(selection.get("success", false)):
+		errors.append("transition selection for context menu failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
+	else:
+		_expect_interaction_menu_options(errors, game_root, "transition", ["enter_subscene", "inspect"], {
+			"pickup": "target_not_pickup",
+			"open_container": "target_not_container",
+		})
 
 
 func _add_pickable_smoke_box(parent: Node3D, metadata: Dictionary) -> void:
@@ -886,6 +968,11 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 		errors.append("corpse selection failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
 	if not _hud_interaction_line(game_root).contains("打开"):
 		errors.append("HUD should show open container prompt for corpse")
+	_expect_interaction_menu_options(errors, game_root, "corpse container", ["open_container"], {
+		"pickup": "target_not_pickup",
+		"talk": "target_not_actor",
+		"attack": "target_not_actor",
+	})
 	var open_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(open_result.get("success", false)):
 		errors.append("corpse open container failed: %s" % open_result.get("reason", "unknown"))
