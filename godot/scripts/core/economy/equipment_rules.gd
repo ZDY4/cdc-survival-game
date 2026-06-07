@@ -47,7 +47,7 @@ func equip_item(actor: RefCounted, item_id: String, requested_slot: String, item
 		return capacity
 	_inventory_entries.add_actor_item(actor, item_id, -1)
 	if not previous_item_id.is_empty():
-		_inventory_entries.add_actor_item(actor, previous_item_id, 1)
+		_inventory_entries.add_actor_item(actor, previous_item_id, 1, item_library)
 	actor.equipment[slot_id] = item_id
 	actor.weapon_ammo.erase(slot_id)
 	return {
@@ -76,7 +76,7 @@ func unequip_item(actor: RefCounted, slot_id: String, item_library: Dictionary =
 		return capacity
 	actor.equipment.erase(normalized_slot)
 	actor.weapon_ammo.erase(normalized_slot)
-	_inventory_entries.add_actor_item(actor, item_id, 1)
+	_inventory_entries.add_actor_item(actor, item_id, 1, item_library)
 	return {
 		"success": true,
 		"item_id": item_id,

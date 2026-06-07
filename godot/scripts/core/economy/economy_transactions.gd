@@ -174,7 +174,7 @@ func deconstruct_actor_item(simulation: RefCounted, actor_id: int, item_id: Stri
 		var produced_count: int = int(entry.get("count", 0))
 		if produced_item_id.is_empty() or produced_count <= 0:
 			continue
-		_inventory_entries.add_actor_item(actor, produced_item_id, produced_count)
+		_inventory_entries.add_actor_item(actor, produced_item_id, produced_count, item_library)
 		produced.append({
 			"item_id": produced_item_id,
 			"count": produced_count,

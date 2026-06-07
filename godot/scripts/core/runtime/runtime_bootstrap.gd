@@ -136,7 +136,7 @@ func _apply_starting_inventory(simulation: RefCounted, bootstrap: Dictionary) ->
 			var count: int = max(0, int(entry_data.get("count", 0)))
 			if item_id.is_empty() or count <= 0:
 				continue
-			_inventory_entries.add_actor_item(player, item_id, count)
+			_inventory_entries.add_actor_item(player, item_id, count, registry.get_library("items"))
 	if bool(bootstrap.get("clearActorLoadout", false)):
 		player.equipment.clear()
 	for entry in bootstrap.get("equipment", []):

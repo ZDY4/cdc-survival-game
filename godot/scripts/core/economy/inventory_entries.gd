@@ -168,7 +168,7 @@ func remove_actor_item_from_stack(actor: RefCounted, item_id: String, count: int
 	actor.inventory_stacks[normalized_item_id] = _stacks_or_single_total(stacks, next_count)
 
 
-func add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:
+func add_actor_item(actor: RefCounted, item_id: String, delta: int, item_library: Dictionary = {}) -> void:
 	if actor == null:
 		return
 	var normalized_item_id: String = normalize_content_id(item_id)
@@ -187,7 +187,7 @@ func add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:
 		if current_count <= 0 and not actor.inventory_order.has(normalized_item_id):
 			actor.inventory_order.append(normalized_item_id)
 		if "inventory_stacks" in actor:
-			_apply_actor_inventory_stack_delta(actor, normalized_item_id, current_count, delta, next_count)
+			_apply_actor_inventory_stack_delta(actor, normalized_item_id, current_count, delta, next_count, item_library)
 
 
 func sync_actor_inventory_order(actor: RefCounted) -> void:
@@ -251,7 +251,7 @@ func _sync_actor_inventory_stacks(actor: RefCounted, item_id: String) -> void:
 	actor.inventory_stacks[item_id] = _normalized_actor_inventory_stacks(actor, item_id, total_count)
 
 
-func _apply_actor_inventory_stack_delta(actor: RefCounted, item_id: String, previous_total: int, delta: int, next_total: int) -> void:
+func _apply_actor_inventory_stack_delta(actor: RefCounted, item_id: String, previous_total: int, delta: int, next_total: int, item_library: Dictionary = {}) -> void:
 	if actor == null or item_id.is_empty():
 		return
 	if next_total <= 0:
@@ -259,7 +259,9 @@ func _apply_actor_inventory_stack_delta(actor: RefCounted, item_id: String, prev
 		return
 	var stacks: Array[int] = _normalized_actor_inventory_stacks(actor, item_id, previous_total)
 	if delta > 0:
-		stacks.append(delta)
+		var max_stack: int = _item_max_stack(item_id, item_library)
+		stacks = _split_stacks_by_max(stacks, max_stack)
+		_append_stack_delta(stacks, delta, max_stack)
 	elif delta < 0:
 		var remaining: int = -delta
 		for index in range(stacks.size() - 1, -1, -1):
@@ -292,3 +294,54 @@ func _stacks_or_single_total(stacks: Array[int], total_count: int) -> Array[int]
 	if stacks.is_empty() or stack_sum != total_count:
 		stacks = [total_count]
 	return stacks
+
+
+func _append_stack_delta(stacks: Array[int], delta: int, max_stack: int) -> void:
+	var remaining: int = max(0, delta)
+	if remaining <= 0:
+		return
+	if max_stack <= 0:
+		stacks.append(remaining)
+		return
+	for index in range(stacks.size()):
+		if remaining <= 0:
+			break
+		var stack_count: int = int(stacks[index])
+		var room: int = max(0, max_stack - stack_count)
+		if room > 0:
+			var filled: int = min(room, remaining)
+			stacks[index] = stack_count + filled
+			remaining -= filled
+	while remaining > 0:
+		var stack_count: int = min(max_stack, remaining)
+		stacks.append(stack_count)
+		remaining -= stack_count
+
+
+func _split_stacks_by_max(stacks: Array[int], max_stack: int) -> Array[int]:
+	if max_stack <= 0:
+		return stacks
+	var output: Array[int] = []
+	for stack in stacks:
+		var remaining: int = max(0, int(stack))
+		while remaining > 0:
+			var stack_count: int = min(max_stack, remaining)
+			output.append(stack_count)
+			remaining -= stack_count
+	return output
+
+
+func _item_max_stack(item_id: String, item_library: Dictionary) -> int:
+	if item_library.is_empty():
+		return 0
+	var record: Dictionary = _dictionary_or_empty(item_library.get(item_id, {}))
+	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+	if data.is_empty():
+		return 0
+	for fragment in _array_or_empty(data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) == "stacking":
+			if not bool(fragment_data.get("stackable", false)):
+				return 1
+			return max(1, int(fragment_data.get("max_stack", 1)))
+	return 0

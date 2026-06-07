@@ -59,7 +59,7 @@ func _execute_pickup(simulation: RefCounted, actor_id: int, prompt: Dictionary, 
 		return capacity
 
 	var before_count: int = int(actor.inventory.get(item_id, 0))
-	_inventory_entries.add_actor_item(actor, item_id, count)
+	_inventory_entries.add_actor_item(actor, item_id, count, _dictionary_or_empty(simulation.get("item_library")))
 	var after_count: int = int(actor.inventory.get(item_id, 0))
 	simulation.record_item_collected(actor_id, item_id, count)
 	var target_id: String = str(option.get("target_id", ""))

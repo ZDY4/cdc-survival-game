@@ -118,7 +118,7 @@ func _give_item(simulation: RefCounted, actor_id: int, action: Dictionary, actio
 	if item_id.is_empty():
 		return {"type": action_type, "success": false, "reason": "item_id_missing", "actor_id": actor_id}
 	var before_count: int = int(actor.inventory.get(item_id, 0))
-	_inventory_entries.add_actor_item(actor, item_id, count)
+	_inventory_entries.add_actor_item(actor, item_id, count, simulation.item_library)
 	var after_count: int = int(actor.inventory.get(item_id, 0))
 	simulation.emit_event("dialogue_item_granted", {
 		"actor_id": actor_id,
@@ -151,7 +151,7 @@ func _give_reward(simulation: RefCounted, actor_id: int, action: Dictionary, act
 		if item_id.is_empty():
 			continue
 		var before_count: int = int(actor.inventory.get(item_id, 0))
-		_inventory_entries.add_actor_item(actor, item_id, count)
+		_inventory_entries.add_actor_item(actor, item_id, count, simulation.item_library)
 		granted_items.append({
 			"item_id": item_id,
 			"count": count,

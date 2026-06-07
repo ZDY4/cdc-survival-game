@@ -58,7 +58,7 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		return unlock_consumption
 	var consumed_unlock_requirements: Array = _array_or_empty(unlock_consumption.get("consumed_unlock_requirements", []))
 	_inventory_entries.remove_from_stack(container["inventory"], normalized_item_id, transfer_count, selected_stack_index)
-	_inventory_entries.add_actor_item(actor, normalized_item_id, transfer_count)
+	_inventory_entries.add_actor_item(actor, normalized_item_id, transfer_count, item_library)
 	simulation.container_sessions[normalized_container_id] = container
 	_sync_corpse_container_session(simulation, normalized_container_id, container)
 	var steal_consequence: Dictionary = {}

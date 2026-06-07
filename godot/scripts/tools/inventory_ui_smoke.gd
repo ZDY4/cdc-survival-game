@@ -274,6 +274,31 @@ func _run_checks(game_root: Node) -> Array[String]:
 		var after_add_stacks: Array = _array_or_empty(after_stack_add.get("stack_counts", []))
 		if after_add_stacks.size() != 2 or int(after_add_stacks[0]) != 2 or int(after_add_stacks[1]) != 2:
 			errors.append("stack-aware add should append a new stack instead of collapsing existing stacks: %s" % after_stack_add)
+		player_ref.inventory.erase("1005")
+		player_ref.inventory_order.erase("1005")
+		player_ref.inventory_stacks.erase("1005")
+		InventoryEntries.new().add_actor_item(player_ref, "1005", 25, game_root.registry.get_library("items"))
+		game_root.refresh_inventory_panel()
+		var max_stack_snapshot: Dictionary = _inventory_snapshot_item(game_root, "1005")
+		var max_stack_counts: Array = _array_or_empty(max_stack_snapshot.get("stack_counts", []))
+		if _player_inventory_count(game_root, "1005") != 25:
+			errors.append("max-stack add should preserve total item count")
+		if int(max_stack_snapshot.get("max_stack", 0)) != 10:
+			errors.append("max-stack snapshot should expose item stack limit: %s" % max_stack_snapshot)
+		if max_stack_counts.size() != 3 or int(max_stack_counts[0]) != 10 or int(max_stack_counts[1]) != 10 or int(max_stack_counts[2]) != 5:
+			errors.append("max-stack add should split gained items by item max_stack: %s" % max_stack_snapshot)
+		player_ref.inventory["1005"] = 9
+		player_ref.inventory_stacks["1005"] = [9]
+		InventoryEntries.new().add_actor_item(player_ref, "1005", 3, game_root.registry.get_library("items"))
+		game_root.refresh_inventory_panel()
+		var after_fill_snapshot: Dictionary = _inventory_snapshot_item(game_root, "1005")
+		var after_fill_stacks: Array = _array_or_empty(after_fill_snapshot.get("stack_counts", []))
+		if after_fill_stacks.size() != 2 or int(after_fill_stacks[0]) != 10 or int(after_fill_stacks[1]) != 2:
+			errors.append("max-stack add should fill existing partial stack before appending: %s" % after_fill_snapshot)
+		player_ref.inventory.erase("1005")
+		player_ref.inventory_order.erase("1005")
+		player_ref.inventory_stacks.erase("1005")
+		game_root.refresh_inventory_panel()
 		player_ref.inventory["1010"] = 5
 		player_ref.inventory_stacks["1010"] = [2, 3]
 		game_root.refresh_inventory_panel()

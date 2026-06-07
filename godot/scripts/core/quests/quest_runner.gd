@@ -189,7 +189,7 @@ func _grant_rewards(simulation: RefCounted, actor_id: int, quest_id: String, que
 		if item_id.is_empty() or actor == null:
 			continue
 		var before_count: int = int(actor.inventory.get(item_id, 0))
-		_inventory_entries.add_actor_item(actor, item_id, count)
+		_inventory_entries.add_actor_item(actor, item_id, count, simulation.item_library)
 		granted_items.append({
 			"item_id": item_id,
 			"count": count,

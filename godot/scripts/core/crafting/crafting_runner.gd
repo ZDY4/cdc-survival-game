@@ -19,7 +19,7 @@ func craft_recipe(simulation: RefCounted, progression_rules: RefCounted, actor_i
 	for material in materials:
 		_inventory_entries.add_actor_item(actor, str(material.get("item_id", "")), -int(material.get("count", 0)))
 	var consumed_tools: Array[Dictionary] = _consume_recipe_tools(actor, tool_consumption)
-	_inventory_entries.add_actor_item(actor, output_item_id, output_count)
+	_inventory_entries.add_actor_item(actor, output_item_id, output_count, simulation.item_library)
 	simulation.emit_event("recipe_crafted", {
 		"actor_id": actor_id,
 		"recipe_id": recipe_id,

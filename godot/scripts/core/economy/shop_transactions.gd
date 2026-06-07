@@ -64,7 +64,7 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 		return capacity
 
 	actor.money -= total_price
-	_inventory_entries.add_actor_item(actor, normalized_item_id, buy_count)
+	_inventory_entries.add_actor_item(actor, normalized_item_id, buy_count, item_library)
 	_inventory_entries.remove_from_stack(shop["inventory"], normalized_item_id, buy_count, selected_stack_index)
 	shop["money"] = int(shop.get("money", 0)) + total_price
 	simulation.shop_sessions[shop_id] = shop
@@ -260,7 +260,7 @@ func confirm_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, 
 		var count := int(entry.get("count", 0))
 		match str(entry.get("source", "")):
 			"shop":
-				_inventory_entries.add_actor_item(actor, item_id, count)
+				_inventory_entries.add_actor_item(actor, item_id, count, item_library)
 				_inventory_entries.remove_from_stack(shop["inventory"], item_id, count, int(entry.get("stack_index", 0)))
 			"player":
 				_inventory_entries.remove_actor_item_from_stack(actor, item_id, count, int(entry.get("stack_index", 0)))
