@@ -1,5 +1,9 @@
 extends Control
 
+const CONTEXT_INSPECT := 1
+const CONTEXT_UNEQUIP := 2
+const CONTEXT_RELOAD := 3
+
 var _panel: PanelContainer
 var _summary_label: Label
 var _resource_label: Label
@@ -8,6 +12,8 @@ var _derived_box: VBoxContainer
 var _attributes_box: VBoxContainer
 var _status_box: VBoxContainer
 var _equipment_box: VBoxContainer
+var _context_menu: PopupMenu
+var _context_equipment: Dictionary = {}
 
 
 func _ready() -> void:
@@ -82,6 +88,10 @@ func _build_layout() -> void:
 	_equipment_box = VBoxContainer.new()
 	_equipment_box.name = "EquipmentLines"
 	_equipment_box.add_theme_constant_override("separation", 3)
+	_context_menu = PopupMenu.new()
+	_context_menu.name = "EquipmentContextMenu"
+	_context_menu.id_pressed.connect(_execute_context_action)
+	add_child(_context_menu)
 	box.add_child(_summary_label)
 	box.add_child(_resource_label)
 	box.add_child(_feedback_label)
@@ -207,16 +217,31 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 	row.add_theme_constant_override("separation", 6)
 	row.set_meta("equipment_slot", actual_slot_id)
 	row.set_meta("equipment_display_slot", slot_id)
+	row.set_meta("equipment_data", data.duplicate(true))
 	row.set_drag_forwarding(
 		Callable(self, "_empty_character_drag_data"),
 		Callable(self, "_can_drop_equipment_data"),
 		Callable(self, "_drop_equipment_data")
 	)
 	row.tooltip_text = _equipment_tooltip(data)
+	row.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event == null or not mouse_event.pressed or mouse_event.button_index != MOUSE_BUTTON_RIGHT:
+			return
+		row.accept_event()
+		_open_context_menu_for_equipment(data.duplicate(true), row.get_global_mouse_position())
+	)
 	var label := _label("Line")
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.text = _equipment_text(data)
 	label.tooltip_text = row.tooltip_text
+	label.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event == null or not mouse_event.pressed or mouse_event.button_index != MOUSE_BUTTON_RIGHT:
+			return
+		label.accept_event()
+		_open_context_menu_for_equipment(data.duplicate(true), label.get_global_mouse_position())
+	)
 	row.add_child(label)
 	var reload: Dictionary = _dictionary_or_empty(data.get("reload", {}))
 	if bool(reload.get("reloadable", false)):
@@ -235,6 +260,120 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 	, CONNECT_DEFERRED)
 	row.add_child(unequip_button)
 	return row
+
+
+func _open_context_menu_for_equipment(data: Dictionary, screen_position: Vector2) -> void:
+	if _context_menu == null:
+		return
+	_context_equipment = data.duplicate(true)
+	_context_menu.clear()
+	_context_menu.add_item("检查", CONTEXT_INSPECT)
+	_context_menu.add_item("卸下", CONTEXT_UNEQUIP)
+	_context_menu.add_item("装填", CONTEXT_RELOAD)
+	var reload: Dictionary = _dictionary_or_empty(data.get("reload", {}))
+	var equipped := bool(data.get("equipped", false))
+	var reloadable := bool(reload.get("reloadable", false))
+	var can_reload := reloadable and bool(reload.get("can_reload", false))
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_UNEQUIP), not equipped)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_RELOAD), not can_reload)
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_INSPECT), "查看装备详情")
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_UNEQUIP), "卸下到背包" if equipped else "该槽位为空")
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_RELOAD), _reload_context_tooltip(reload))
+	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
+	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
+
+
+func context_menu_snapshot() -> Dictionary:
+	if _context_menu == null or not _context_menu.visible:
+		return {}
+	var slot_id := str(_context_equipment.get("actual_slot_id", _context_equipment.get("slot_id", "")))
+	var display_slot := str(_context_equipment.get("slot_id", slot_id))
+	var reload: Dictionary = _dictionary_or_empty(_context_equipment.get("reload", {}))
+	return {
+		"id": "equipment_context_menu",
+		"name": "equipment_context_menu",
+		"kind": "equipment_slot",
+		"owner_panel": "character",
+		"active": true,
+		"visible": true,
+		"mouse_blocks_world": true,
+		"slot_id": slot_id,
+		"display_slot": display_slot,
+		"item_id": str(_context_equipment.get("item_id", "")),
+		"item_name": str(_context_equipment.get("name", _context_equipment.get("item_id", ""))),
+		"equipped": bool(_context_equipment.get("equipped", false)),
+		"reloadable": bool(reload.get("reloadable", false)),
+		"can_reload": bool(reload.get("can_reload", false)),
+		"option_count": _context_menu.item_count,
+		"options": _equipment_context_option_summaries(),
+	}
+
+
+func close_context_menu() -> void:
+	if _context_menu != null:
+		_context_menu.hide()
+	_context_equipment = {}
+
+
+func _equipment_context_option_summaries() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	if _context_menu == null:
+		return output
+	for index in range(_context_menu.item_count):
+		output.append({
+			"id": _context_menu.get_item_id(index),
+			"label": _context_menu.get_item_text(index),
+			"disabled": _context_menu.is_item_disabled(index),
+			"tooltip": _context_menu.get_item_tooltip(index),
+		})
+	return output
+
+
+func _execute_context_action(action_id: int) -> void:
+	if _context_equipment.is_empty():
+		return
+	var slot_id := str(_context_equipment.get("actual_slot_id", _context_equipment.get("slot_id", "")))
+	if action_id == CONTEXT_INSPECT:
+		_apply_equipment_inspect_feedback(_context_equipment)
+		return
+	var root := get_parent()
+	if root == null or slot_id.is_empty():
+		close_context_menu()
+		return
+	match action_id:
+		CONTEXT_UNEQUIP:
+			if bool(_context_equipment.get("equipped", false)) and root.has_method("unequip_player_slot"):
+				root.unequip_player_slot(slot_id)
+		CONTEXT_RELOAD:
+			var reload: Dictionary = _dictionary_or_empty(_context_equipment.get("reload", {}))
+			if bool(reload.get("reloadable", false)) and bool(reload.get("can_reload", false)) and root.has_method("reload_player_equipped_slot"):
+				root.reload_player_equipped_slot(slot_id)
+	close_context_menu()
+
+
+func _apply_equipment_inspect_feedback(data: Dictionary) -> void:
+	if _feedback_label == null:
+		return
+	var slot_label := str(data.get("label", data.get("slot_id", "")))
+	if not bool(data.get("equipped", false)):
+		_feedback_label.text = "检查：%s为空" % slot_label
+	else:
+		_feedback_label.text = "检查：%s - %s" % [
+			slot_label,
+			str(data.get("name", data.get("item_id", ""))),
+		]
+	_feedback_label.tooltip_text = _equipment_tooltip(data)
+	_feedback_label.visible = true
+
+
+func _reload_context_tooltip(reload: Dictionary) -> String:
+	if not bool(reload.get("reloadable", false)):
+		return "该装备无需装填"
+	if bool(reload.get("can_reload", false)):
+		return "消耗备用弹药装填"
+	if int(reload.get("inventory_ammo", 0)) <= 0:
+		return "背包中没有可用弹药"
+	return "弹匣已满或暂不可装填"
 
 
 func _empty_character_drag_data(_position: Vector2, _from_control: Control) -> Variant:

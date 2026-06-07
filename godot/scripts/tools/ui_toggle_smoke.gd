@@ -337,6 +337,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("main hand equipment tooltip should show appearance detail")
 	_assert_hover_tooltip_snapshot(errors, game_root, _equipment_slot_control(game_root, "main_hand"), "character", "锋利的匕首", "main hand equipment tooltip snapshot")
 	_assert_ui_layer_stack(errors, game_root, {}, null, _equipment_slot_control(game_root, "main_hand"), "stage:character", true, "character tooltip layer stack")
+	_open_equipment_context_menu(game_root, "main_hand")
+	_assert_equipment_context_menu(errors, game_root, "main_hand", "1002", true, false, false, "main hand equipment context menu")
+	if game_root.character_panel.has_method("close_context_menu"):
+		game_root.character_panel.close_context_menu()
 	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player_ref == null:
 		errors.append("player actor should exist for equipped ammo display test")
@@ -1917,6 +1921,44 @@ func _equipment_reload_button(game_root: Node, slot_id: String) -> Button:
 	if row == null:
 		return null
 	return row.get_node_or_null("ReloadButton") as Button
+
+
+func _open_equipment_context_menu(game_root: Node, slot_id: String) -> void:
+	var row: Control = _equipment_slot_control(game_root, slot_id)
+	if row == null or not row.has_meta("equipment_data"):
+		return
+	game_root.character_panel.call("_open_context_menu_for_equipment", row.get_meta("equipment_data", {}).duplicate(true), row.global_position)
+
+
+func _assert_equipment_context_menu(errors: Array[String], game_root: Node, slot_id: String, item_id: String, equipped: bool, reloadable: bool, can_reload: bool, context: String) -> void:
+	_assert_context_menu_state(errors, game_root, "equipment_context_menu", "equipment_slot", context)
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.context_menu_snapshot())
+	var top: Dictionary = _dictionary_or_empty(snapshot.get("top", {}))
+	if str(top.get("owner_panel", "")) != "character":
+		errors.append("%s: equipment context owner should be character: %s" % [context, top])
+	if str(top.get("slot_id", "")) != slot_id:
+		errors.append("%s: equipment context slot expected %s, got %s" % [context, slot_id, top])
+	if str(top.get("item_id", "")) != item_id:
+		errors.append("%s: equipment context item expected %s, got %s" % [context, item_id, top])
+	if bool(top.get("equipped", false)) != equipped:
+		errors.append("%s: equipment context equipped expected %s, got %s" % [context, equipped, top])
+	if bool(top.get("reloadable", false)) != reloadable or bool(top.get("can_reload", false)) != can_reload:
+		errors.append("%s: equipment context reload state mismatch: %s" % [context, top])
+	var options: Array = _array_or_empty(top.get("options", []))
+	if not _context_option_present(options, 1, false):
+		errors.append("%s: equipment context should expose inspect option: %s" % [context, options])
+	if not _context_option_present(options, 2, not equipped):
+		errors.append("%s: equipment context unequip disabled state mismatch: %s" % [context, options])
+	if not _context_option_present(options, 3, not can_reload):
+		errors.append("%s: equipment context reload disabled state mismatch: %s" % [context, options])
+
+
+func _context_option_present(options: Array, option_id: int, expected_disabled: bool) -> bool:
+	for option in options:
+		var data: Dictionary = _dictionary_or_empty(option)
+		if int(data.get("id", -1)) == option_id:
+			return bool(data.get("disabled", false)) == expected_disabled and not str(data.get("label", "")).is_empty()
+	return false
 
 
 func _drop_inventory_item_to_equipment_slot(game_root: Node, item_text: String, slot_id: String) -> bool:

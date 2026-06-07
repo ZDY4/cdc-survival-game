@@ -512,6 +512,10 @@ func context_menu_snapshot() -> Dictionary:
 		var skills_menu: Dictionary = _dictionary_or_empty(skills_panel.call("context_menu_snapshot"))
 		if not skills_menu.is_empty():
 			menus.append(skills_menu)
+	if character_panel != null and character_panel.has_method("context_menu_snapshot"):
+		var character_menu: Dictionary = _dictionary_or_empty(character_panel.call("context_menu_snapshot"))
+		if not character_menu.is_empty():
+			menus.append(character_menu)
 	return {
 		"active": not menus.is_empty(),
 		"count": menus.size(),
