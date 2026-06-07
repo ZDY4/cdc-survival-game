@@ -158,6 +158,8 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 			result = _finalize_player_ap_action(actor, _submit_craft_command(actor, command), command, "craft")
 		"inventory_action":
 			result = _submit_inventory_action_command(actor, command)
+		"cancel_pending":
+			result = cancel_pending(str(command.get("reason", "player_command")), bool(command.get("auto_end_turn", false)), _dictionary_or_empty(command.get("topology", {})))
 		"learn_skill":
 			result = _submit_learn_skill_command(actor, command)
 		"bind_hotbar":

@@ -2757,6 +2757,21 @@ func confirm_crafting_queue(entries: Array) -> Dictionary:
 	}
 
 
+func cancel_pending_crafting(reason: String = "crafting_ui") -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "cancel_pending",
+		"actor_id": 1,
+		"reason": reason,
+		"topology": _dictionary_or_empty(world_result.get("map", {})),
+	})
+	refresh_inventory_panel()
+	refresh_crafting_panel()
+	refresh_skills_panel()
+	return result
+
+
 func _crafting_context() -> Dictionary:
 	return {
 		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),

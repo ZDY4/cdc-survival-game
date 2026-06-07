@@ -33,6 +33,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 		"recipes": recipes,
 		"craftable_count": _craftable_count(recipes),
 		"station_snapshot": station_snapshot,
+		"pending_crafting": _dictionary_or_empty(runtime_snapshot.get("pending_crafting", {})).duplicate(true),
 	}
 
 

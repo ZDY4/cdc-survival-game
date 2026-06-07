@@ -519,6 +519,29 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("queue batch crafting should emit recipe_crafted for each crafted item")
 	if not _detail_text(game_root).contains("最大 0"):
 		errors.append("crafting panel should refresh max craft count after batch crafting")
+	player.inventory["1011"] = 100
+	player.ap = 0.5
+	game_root.refresh_crafting_panel()
+	var pending_result: Dictionary = game_root.craft_player_recipe("recipe_bandage_basic", 50)
+	await process_frame
+	if not bool(pending_result.get("success", false)) or str(pending_result.get("kind", "")) != "pending_crafting":
+		errors.append("AP-short craft from UI should create pending crafting: %s" % pending_result)
+	if not _pending_crafting_line(game_root).contains("正在制作 基础绷带 x50"):
+		errors.append("crafting panel should show active pending craft: %s" % _pending_crafting_line(game_root))
+	var cancel_pending_button := _cancel_pending_crafting_button(game_root)
+	if cancel_pending_button == null or cancel_pending_button.disabled:
+		errors.append("crafting panel should expose enabled cancel pending crafting button")
+	else:
+		cancel_pending_button.pressed.emit()
+		await process_frame
+		if not _pending_crafting_line(game_root).contains("正在制作 无"):
+			errors.append("cancelled pending crafting should clear pending line")
+		if _player_inventory_count(game_root, "1011") != 100:
+			errors.append("cancelling pending crafting should not consume queued materials")
+		if not _event_seen(game_root, "crafting_cancelled"):
+			errors.append("cancelling pending crafting should emit crafting_cancelled")
+		if not _feedback_text(game_root).contains("已取消正在制作"):
+			errors.append("crafting panel should show pending cancellation feedback")
 	return errors
 
 
@@ -592,6 +615,15 @@ func _clear_queue_button(game_root: Node) -> Button:
 
 func _cancel_queue_entry_button(game_root: Node, index: int) -> Button:
 	return game_root.crafting_panel.find_child("CancelCraftQueueEntry_%d" % index, true, false) as Button
+
+
+func _pending_crafting_line(game_root: Node) -> String:
+	var label: Label = game_root.crafting_panel.find_child("PendingCraftingLine", true, false) as Label
+	return str(label.text) if label != null else ""
+
+
+func _cancel_pending_crafting_button(game_root: Node) -> Button:
+	return game_root.crafting_panel.find_child("CancelPendingCraftingButton", true, false) as Button
 
 
 func _search_box(game_root: Node) -> LineEdit:
