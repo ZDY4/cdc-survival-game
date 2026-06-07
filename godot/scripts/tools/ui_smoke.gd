@@ -4,6 +4,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
 
 
@@ -277,6 +278,30 @@ func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_
 	var attack_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
 	if not attack_feedback_line.contains("失败 攻击: 不能攻击友方或中立目标"):
 		errors.append("event feedback line should localize friendly attack rejection, got %s" % attack_feedback_line)
+	var player_actor: RefCounted = simulation.actor_registry.get_actor(1)
+	var player_grid: Dictionary = player_actor.grid_position.to_dictionary() if player_actor != null else {"x": 0, "y": 0, "z": 0}
+	var hidden_target_id := _register_smoke_hostile(simulation, {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	simulation.set_actor_vision_radius(1, 0)
+	simulation.refresh_actor_vision(1, world_result.get("map", {}))
+	var hidden_attack: Dictionary = simulation.submit_player_command({
+		"kind": "attack",
+		"target_actor_id": hidden_target_id,
+		"range": 2,
+		"topology": world_result.get("map", {}),
+	})
+	simulation.clear_actor_vision(1)
+	if bool(hidden_attack.get("success", false)) or str(hidden_attack.get("reason", "")) != "target_not_visible":
+		errors.append("HUD failure feedback setup should reject hidden target attack")
+	var hidden_failure_snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, {})
+	hud.apply_snapshot(hidden_failure_snapshot)
+	var hidden_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
+	if not hidden_feedback_line.contains("失败 攻击: 目标不可见"):
+		errors.append("event feedback line should localize hidden target rejection, got %s" % hidden_feedback_line)
+	simulation.actor_registry.unregister_actor(hidden_target_id)
 	var craft_failure: Dictionary = simulation.submit_player_command({
 		"kind": "craft",
 		"actor_id": 1,
@@ -292,6 +317,19 @@ func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_
 	var craft_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
 	if not craft_feedback_line.contains("失败 制作: 材料不足"):
 		errors.append("event feedback line should localize crafting rejection, got %s" % craft_feedback_line)
+	var missing_tool_failure: Dictionary = simulation.submit_player_command({
+		"kind": "craft",
+		"actor_id": 1,
+		"recipe_id": "recipe_knife_basic",
+		"recipe_library": registry.get_library("recipes"),
+	})
+	if bool(missing_tool_failure.get("success", false)) or str(missing_tool_failure.get("reason", "")) != "missing_tools":
+		errors.append("HUD failure feedback setup should reject missing tool crafting")
+	var missing_tool_snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, {})
+	hud.apply_snapshot(missing_tool_snapshot)
+	var missing_tool_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
+	if not missing_tool_feedback_line.contains("失败 制作: 缺少工具"):
+		errors.append("event feedback line should localize missing tool rejection, got %s" % missing_tool_feedback_line)
 	return errors
 
 
@@ -331,3 +369,23 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _register_smoke_hostile(simulation: RefCounted, grid: Dictionary) -> int:
+	return simulation.register_actor({
+		"definition_id": "ui_smoke_hidden_hostile",
+		"display_name": "Hidden Smoke Hostile",
+		"kind": "enemy",
+		"side": "hostile",
+		"group_id": "hostile",
+		"grid_position": GridCoord.from_dictionary(grid),
+		"max_hp": 10.0,
+		"hp": 10.0,
+		"attack_power": 3.0,
+		"defense": 0.0,
+		"combat_attributes": {
+			"attack_power": 3.0,
+			"defense": 0.0,
+		},
+		"xp_reward": 0,
+	})
