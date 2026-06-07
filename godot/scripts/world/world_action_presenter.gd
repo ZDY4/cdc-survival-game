@@ -16,6 +16,11 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 	if _result_changes_map(command_result, events):
 		return _record_latest({"active": false, "kind": "scene_transition", "event_count": events.size()})
 	var movement := _movement_presentation(events, world_root, world_result)
+	var interaction := _interaction_presentation(events, world_root, world_result)
+	if not movement.is_empty() and not interaction.is_empty():
+		_start_movement_tween(host, movement)
+		_start_interaction_feedback(host, world_root, interaction)
+		return latest.duplicate(true)
 	if not movement.is_empty():
 		_start_movement_tween(host, movement)
 		return latest.duplicate(true)
@@ -23,9 +28,9 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 	if not attack.is_empty():
 		_start_attack_feedback(host, world_root, attack)
 		return latest.duplicate(true)
-	var interaction := _interaction_presentation(events)
 	if not interaction.is_empty():
-		return _record_latest(interaction)
+		_start_interaction_feedback(host, world_root, interaction)
+		return latest.duplicate(true)
 	return _record_latest({"active": false, "kind": "none", "event_count": events.size()})
 
 
@@ -246,20 +251,96 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 	}
 
 
-func _interaction_presentation(events: Array) -> Dictionary:
+func _interaction_presentation(events: Array, world_root: Node, world_result: Dictionary) -> Dictionary:
 	for index in range(events.size() - 1, -1, -1):
 		var event: Dictionary = _dictionary_or_empty(events[index])
 		if str(event.get("kind", "")) != "interaction_succeeded":
 			continue
 		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		var target_id := str(payload.get("target_id", ""))
+		var target_type := str(payload.get("target_type", ""))
+		var target_node := _interaction_target_node(world_root, world_result, payload)
+		var target_grid: Dictionary = _dictionary_or_empty(payload.get("target_grid", {}))
 		return {
 			"active": false,
 			"kind": "interaction",
 			"actor_id": int(payload.get("actor_id", 0)),
-			"target_id": str(payload.get("target_id", "")),
+			"target_id": target_id,
+			"target_type": target_type,
+			"target_name": str(payload.get("target_name", "")),
+			"target_grid": target_grid,
 			"option_kind": str(payload.get("option_kind", "")),
+			"target_node": target_node,
+			"node_path": str(target_node.get_path()) if target_node != null else "",
 		}
 	return {}
+
+
+func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dictionary) -> void:
+	var target_node: Node3D = interaction.get("target_node", null)
+	var target_grid: Dictionary = _dictionary_or_empty(interaction.get("target_grid", {}))
+	if target_node == null and target_grid.is_empty():
+		_record_latest(_interaction_public_snapshot(interaction, false, "target_missing"))
+		return
+	sequence += 1
+	active_count += 1
+	var marker := MeshInstance3D.new()
+	marker.name = "WorldActionInteractionPulse"
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.34
+	mesh.bottom_radius = 0.34
+	mesh.height = 0.055
+	mesh.radial_segments = 24
+	marker.mesh = mesh
+	marker.material_override = _interaction_material(str(interaction.get("option_kind", "")))
+	var target_position := Vector3.ZERO
+	if target_node != null:
+		target_position = target_node.global_position if target_node.is_inside_tree() else target_node.position
+	else:
+		target_position = _grid_to_world(target_grid, 0.12)
+	marker.position = target_position + Vector3(0.0, 0.22, 0.0)
+	marker.set_meta("action_presenter_active", true)
+	marker.set_meta("action_presenter_kind", "interaction")
+	marker.set_meta("actor_id", int(interaction.get("actor_id", 0)))
+	marker.set_meta("target_id", str(interaction.get("target_id", "")))
+	marker.set_meta("target_type", str(interaction.get("target_type", "")))
+	marker.set_meta("target_name", str(interaction.get("target_name", "")))
+	marker.set_meta("target_grid", target_grid.duplicate(true))
+	marker.set_meta("option_kind", str(interaction.get("option_kind", "")))
+	_presentation_layer(world_root).add_child(marker)
+	var tween := host.create_tween()
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(marker, "scale", Vector3(1.35, 1.0, 1.35), 0.08)
+	tween.tween_property(marker, "scale", Vector3(0.55, 1.0, 0.55), 0.10)
+	tween.finished.connect(Callable(self, "_on_interaction_feedback_finished").bind(weakref(marker)))
+	var snapshot_data := _interaction_public_snapshot(interaction, true, "")
+	snapshot_data["marker_path"] = str(marker.get_path())
+	_record_latest(snapshot_data)
+
+
+func _on_interaction_feedback_finished(marker_ref: WeakRef) -> void:
+	active_count = max(0, active_count - 1)
+	var marker := marker_ref.get_ref() as Node
+	if marker != null and not marker.is_queued_for_deletion():
+		marker.queue_free()
+	latest["active"] = active_count > 0
+	latest["active_count"] = active_count
+
+
+func _interaction_public_snapshot(interaction: Dictionary, active: bool, reason: String) -> Dictionary:
+	return {
+		"active": active,
+		"kind": "interaction",
+		"reason": reason,
+		"actor_id": int(interaction.get("actor_id", 0)),
+		"target_id": str(interaction.get("target_id", "")),
+		"target_type": str(interaction.get("target_type", "")),
+		"target_name": str(interaction.get("target_name", "")),
+		"target_grid": _dictionary_or_empty(interaction.get("target_grid", {})).duplicate(true),
+		"option_kind": str(interaction.get("option_kind", "")),
+		"node_path": str(interaction.get("node_path", "")),
+	}
 
 
 func _actor_node(world_root: Node, world_result: Dictionary, actor_id: int) -> Node3D:
@@ -271,6 +352,19 @@ func _actor_node(world_root: Node, world_result: Dictionary, actor_id: int) -> N
 			continue
 		var definition_id := str(actor_data.get("definition_id", ""))
 		return world_root.find_child("Actor_%s_%d" % [definition_id, actor_id], true, false) as Node3D
+	return null
+
+
+func _interaction_target_node(world_root: Node, world_result: Dictionary, payload: Dictionary) -> Node3D:
+	if str(payload.get("target_type", "")) == "actor":
+		return _actor_node(world_root, world_result, int(payload.get("target_id", 0)))
+	var target_id := str(payload.get("target_id", ""))
+	if target_id.is_empty():
+		return null
+	for name in ["MapObject_%s" % target_id, target_id]:
+		var node := world_root.find_child(name, true, false) as Node3D
+		if node != null:
+			return node
 	return null
 
 
@@ -296,6 +390,23 @@ func _attack_material(hit_kind: String, critical: bool, defeated: bool) -> Stand
 		material.albedo_color = Color(0.55, 0.57, 0.66, 0.86)
 	else:
 		material.albedo_color = Color(1.0, 0.34, 0.18, 0.9)
+	return material
+
+
+func _interaction_material(option_kind: String) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	match option_kind:
+		"pickup":
+			material.albedo_color = Color(0.22, 0.74, 1.0, 0.82)
+		"open_container":
+			material.albedo_color = Color(0.34, 0.92, 0.42, 0.82)
+		"door_toggle":
+			material.albedo_color = Color(0.98, 0.66, 0.22, 0.86)
+		"talk":
+			material.albedo_color = Color(0.72, 0.54, 1.0, 0.84)
+		_:
+			material.albedo_color = Color(0.9, 0.86, 0.34, 0.8)
 	return material
 
 

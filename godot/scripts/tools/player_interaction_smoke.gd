@@ -118,6 +118,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var pickup_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(pickup_result.get("success", false)):
 		errors.append("pickup execution failed: %s" % pickup_result.get("reason", "unknown"))
+	else:
+		_expect_world_action_interaction_presenter(errors, game_root, "survivor_outpost_01_pickup_medkit", "pickup")
 	if int(_player_inventory(game_root).get("1006", 0)) <= 0:
 		errors.append("pickup execution did not add item 1006")
 	await process_frame
@@ -583,6 +585,30 @@ func _expect_world_action_attack_presenter(errors: Array[String], game_root: Nod
 		errors.append("attack impact marker should expose target actor id")
 	if str(impact.get_meta("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
 		errors.append("attack impact marker should expose hit kind")
+
+
+func _expect_world_action_interaction_presenter(errors: Array[String], game_root: Node, target_id: String, option_kind: String) -> void:
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "interaction":
+		errors.append("interaction command should enqueue world action presenter interaction, got %s" % JSON.stringify(presenter))
+	if str(presenter.get("target_id", "")) != target_id:
+		errors.append("interaction presenter should expose target id %s, got %s" % [target_id, presenter.get("target_id", "")])
+	if str(presenter.get("option_kind", "")) != option_kind:
+		errors.append("interaction presenter should expose option kind %s, got %s" % [option_kind, presenter.get("option_kind", "")])
+	if _dictionary_or_empty(presenter.get("target_grid", {})).is_empty():
+		errors.append("interaction presenter should expose target grid")
+	var pulse: MeshInstance3D = game_root.find_child("WorldActionInteractionPulse", true, false) as MeshInstance3D
+	if pulse == null:
+		errors.append("interaction presenter should render WorldActionInteractionPulse marker")
+		return
+	if str(pulse.get_meta("action_presenter_kind", "")) != "interaction":
+		errors.append("interaction pulse marker should expose interaction presenter kind")
+	if str(pulse.get_meta("target_id", "")) != target_id:
+		errors.append("interaction pulse marker should expose target id")
+	if str(pulse.get_meta("option_kind", "")) != option_kind:
+		errors.append("interaction pulse marker should expose option kind")
+	if _dictionary_or_empty(pulse.get_meta("target_grid", {})).is_empty():
+		errors.append("interaction pulse marker should expose target grid")
 
 
 func _expect_attack_marker_hidden(errors: Array[String], game_root: Node) -> void:

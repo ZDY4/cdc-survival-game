@@ -552,10 +552,22 @@ func _interaction_success_payload(actor_id: int, prompt: Dictionary, option: Dic
 		"target_id": target_id,
 		"target_type": str(target.get("target_type", "")),
 		"target_name": target_name,
+		"target_grid": _interaction_target_grid(target),
 		"option_id": str(option.get("id", "")),
 		"option_kind": str(option.get("kind", "")),
 		"option_name": str(option.get("display_name", "")),
 	}
+
+
+func _interaction_target_grid(target: Dictionary) -> Dictionary:
+	for key in ["grid_position", "anchor", "grid"]:
+		var grid: Dictionary = _dictionary_or_empty(target.get(key, {}))
+		if not grid.is_empty():
+			return grid.duplicate(true)
+	var cells: Array = _array_or_empty(target.get("cells", []))
+	if not cells.is_empty():
+		return _dictionary_or_empty(cells[0]).duplicate(true)
+	return {}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
