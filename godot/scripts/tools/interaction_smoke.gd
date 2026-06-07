@@ -366,6 +366,8 @@ func _expect_command_result_contract(errors: Array[String], result: Dictionary, 
 		errors.append("command result runtime_snapshot_delta should be a dictionary")
 	if typeof(result.get("ui_feedback", {})) != TYPE_DICTIONARY:
 		errors.append("command result ui_feedback should be a dictionary")
+	if bool(result.get("success", false)) and ["move", "interact", "attack", "craft", "use_skill"].has(expected_kind):
+		_expect_turn_policy(errors, result, expected_kind, "command result %s" % expected_kind)
 	if _event_count_in_result(result, "player_command_submitted") <= 0:
 		errors.append("command result should include player_command_submitted")
 	var expected_terminal_event := "player_command_completed" if bool(result.get("success", false)) else "player_command_rejected"
@@ -373,6 +375,25 @@ func _expect_command_result_contract(errors: Array[String], result: Dictionary, 
 		errors.append("command result should include %s" % expected_terminal_event)
 	if _event_count_in_result(result, "ui_feedback") <= 0:
 		errors.append("command result should include ui_feedback event")
+
+
+func _expect_turn_policy(errors: Array[String], result: Dictionary, expected_action: String, context: String) -> void:
+	var policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	if policy.is_empty():
+		errors.append("%s should expose turn_policy" % context)
+		return
+	if str(policy.get("action_kind", "")) != expected_action:
+		errors.append("%s turn_policy should expose action kind %s" % [context, expected_action])
+	if bool(policy.get("success", false)) != bool(result.get("success", false)):
+		errors.append("%s turn_policy success should mirror command result" % context)
+	if not policy.has("ap_after_action") or not policy.has("affordable_ap_threshold"):
+		errors.append("%s turn_policy should expose AP after action and affordable threshold" % context)
+	var runtime_delta: Dictionary = _dictionary_or_empty(result.get("runtime_snapshot_delta", {}))
+	var delta_policy: Dictionary = _dictionary_or_empty(runtime_delta.get("turn_policy", {}))
+	if delta_policy.is_empty():
+		errors.append("%s runtime delta should expose turn_policy" % context)
+	elif str(delta_policy.get("action_kind", "")) != expected_action:
+		errors.append("%s runtime delta turn_policy should mirror action kind" % context)
 
 
 func _expect_initial_runtime_snapshot_fields(errors: Array[String], snapshot: Dictionary) -> void:

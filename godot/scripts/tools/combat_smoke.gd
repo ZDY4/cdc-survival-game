@@ -64,6 +64,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var first: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": zombie_a, "topology": topology})
 	if not bool(first.get("success", false)) or not bool(first.get("defeated", false)):
 		errors.append("first zombie attack should defeat target")
+	_expect_turn_policy(errors, first, "attack", false, "first zombie attack")
 	if _quest_progress(simulation.snapshot(), "zombie_hunter") != 1:
 		errors.append("zombie_hunter progress should be 1 after first kill")
 	if _corpse_count(simulation.snapshot()) != corpse_count_before_zombies + 1:
@@ -532,6 +533,7 @@ func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation
 	})
 	if not bool(skill_result.get("success", false)):
 		errors.append("adrenaline_rush activation should succeed before combat damage bonus check: %s" % skill_result.get("reason", "unknown"))
+	_expect_turn_policy(errors, skill_result, "use_skill", false, "adrenaline_rush activation")
 	var buffed_target: int = _register_test_actor(simulation, "buffed_target", "hostile", {
 		"x": int(player_grid.get("x", 0)) + 1,
 		"y": y,
@@ -1581,6 +1583,27 @@ func _restore_player_turn(simulation: RefCounted, player: RefCounted) -> void:
 	player.turn_open = true
 	simulation.turn_state["phase"] = "player"
 	simulation.turn_state["active_actor_id"] = player.actor_id
+
+
+func _expect_turn_policy(errors: Array[String], result: Dictionary, expected_action: String, expected_auto_advanced: bool, context: String) -> void:
+	var policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	if policy.is_empty():
+		errors.append("%s should expose turn_policy" % context)
+		return
+	if str(policy.get("action_kind", "")) != expected_action:
+		errors.append("%s turn_policy should expose action kind %s" % [context, expected_action])
+	if bool(policy.get("success", false)) != bool(result.get("success", false)):
+		errors.append("%s turn_policy success should mirror command result" % context)
+	if not policy.has("ap_after_action") or not policy.has("affordable_ap_threshold"):
+		errors.append("%s turn_policy should expose AP after action and affordable threshold" % context)
+	if bool(policy.get("auto_advanced", false)) != expected_auto_advanced:
+		errors.append("%s turn_policy auto_advanced should be %s" % [context, str(expected_auto_advanced)])
+	var runtime_delta: Dictionary = _dictionary_or_empty(result.get("runtime_snapshot_delta", {}))
+	var delta_policy: Dictionary = _dictionary_or_empty(runtime_delta.get("turn_policy", {}))
+	if delta_policy.is_empty():
+		errors.append("%s runtime delta should expose turn_policy" % context)
+	elif str(delta_policy.get("action_kind", "")) != expected_action:
+		errors.append("%s runtime delta turn_policy should mirror action kind" % context)
 
 
 func _has_attack_resolved_for_weapon(snapshot: Dictionary, weapon_item_id: String) -> bool:

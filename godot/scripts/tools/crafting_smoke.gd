@@ -68,6 +68,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	})
 	if not bool(batch.get("success", false)):
 		errors.append("batch bandage crafting failed: %s" % batch.get("reason", "unknown"))
+	_expect_turn_policy(errors, batch, "craft", false, "batch bandage crafting")
 	if int(batch.get("count", 0)) != 2:
 		errors.append("batch crafting should report completed count")
 	if int(batch.get("output_count", 0)) != 2:
@@ -418,6 +419,27 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _expect_turn_policy(errors: Array[String], result: Dictionary, expected_action: String, expected_auto_advanced: bool, context: String) -> void:
+	var policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	if policy.is_empty():
+		errors.append("%s should expose turn_policy" % context)
+		return
+	if str(policy.get("action_kind", "")) != expected_action:
+		errors.append("%s turn_policy should expose action kind %s" % [context, expected_action])
+	if bool(policy.get("success", false)) != bool(result.get("success", false)):
+		errors.append("%s turn_policy success should mirror command result" % context)
+	if not policy.has("ap_after_action") or not policy.has("affordable_ap_threshold"):
+		errors.append("%s turn_policy should expose AP after action and affordable threshold" % context)
+	if bool(policy.get("auto_advanced", false)) != expected_auto_advanced:
+		errors.append("%s turn_policy auto_advanced should be %s" % [context, str(expected_auto_advanced)])
+	var runtime_delta: Dictionary = _dictionary_or_empty(result.get("runtime_snapshot_delta", {}))
+	var delta_policy: Dictionary = _dictionary_or_empty(runtime_delta.get("turn_policy", {}))
+	if delta_policy.is_empty():
+		errors.append("%s runtime delta should expose turn_policy" % context)
+	elif str(delta_policy.get("action_kind", "")) != expected_action:
+		errors.append("%s runtime delta turn_policy should mirror action kind" % context)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
