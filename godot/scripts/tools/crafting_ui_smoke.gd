@@ -539,6 +539,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("crafting panel should show active pending craft: %s" % _pending_crafting_line(game_root))
 	if not _pending_crafting_line(game_root).contains("%"):
 		errors.append("crafting pending line should show progress percent")
+	var pending_progress_bar := _pending_crafting_progress_bar(game_root)
+	if pending_progress_bar == null:
+		errors.append("crafting panel should expose pending crafting progress bar")
+	elif not pending_progress_bar.visible or float(pending_progress_bar.value) <= 0.0 or float(pending_progress_bar.max_value) <= 0.0:
+		errors.append("pending crafting progress bar should be visible with progress: value=%s max=%s visible=%s" % [
+			str(pending_progress_bar.value),
+			str(pending_progress_bar.max_value),
+			str(pending_progress_bar.visible),
+		])
 	_assert_pending_crafting_snapshot(errors, game_root, "recipe_bandage_basic", 50, true, "active pending craft")
 	var cancel_pending_button := _cancel_pending_crafting_button(game_root)
 	if cancel_pending_button == null or cancel_pending_button.disabled:
@@ -548,6 +557,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		if not _pending_crafting_line(game_root).contains("正在制作 无"):
 			errors.append("cancelled pending crafting should clear pending line")
+		var cancelled_progress_bar := _pending_crafting_progress_bar(game_root)
+		if cancelled_progress_bar != null and cancelled_progress_bar.visible:
+			errors.append("cancelled pending crafting should hide progress bar")
 		_assert_pending_crafting_snapshot(errors, game_root, "", 0, false, "cancelled pending craft")
 		if _player_inventory_count(game_root, "1011") != 100:
 			errors.append("cancelling pending crafting should not consume queued materials")
@@ -667,9 +679,13 @@ func _assert_pending_crafting_snapshot(errors: Array[String], game_root: Node, e
 	var pending: Dictionary = _dictionary_or_empty(snapshot.get("pending", {}))
 	if bool(pending.get("active", false)) != expected_active:
 		errors.append("%s: pending active expected %s got %s" % [context, str(expected_active), pending])
+	if bool(pending.get("progress_bar_visible", false)) != expected_active:
+		errors.append("%s: pending progress bar visibility expected %s got %s" % [context, str(expected_active), pending])
 	if not expected_active:
 		if bool(pending.get("cancel_enabled", false)):
 			errors.append("%s: inactive pending should not expose enabled cancel: %s" % [context, pending])
+		if float(pending.get("progress_bar_value", 0.0)) != 0.0:
+			errors.append("%s: inactive pending progress should reset: %s" % [context, pending])
 		return
 	if str(pending.get("recipe_id", "")) != expected_recipe_id:
 		errors.append("%s: pending recipe expected %s got %s" % [context, expected_recipe_id, pending])
@@ -681,6 +697,8 @@ func _assert_pending_crafting_snapshot(errors: Array[String], game_root: Node, e
 		errors.append("%s: pending progress ratio should be clamped: %s" % [context, pending])
 	if not bool(pending.get("cancel_enabled", false)):
 		errors.append("%s: active pending should expose enabled cancel: %s" % [context, pending])
+	if float(pending.get("progress_bar_value", 0.0)) <= 0.0 or float(pending.get("progress_bar_max", 0.0)) <= 0.0:
+		errors.append("%s: active pending should expose progress bar values: %s" % [context, pending])
 
 
 func _confirm_queue_button(game_root: Node) -> Button:
@@ -698,6 +716,10 @@ func _cancel_queue_entry_button(game_root: Node, index: int) -> Button:
 func _pending_crafting_line(game_root: Node) -> String:
 	var label: Label = game_root.crafting_panel.find_child("PendingCraftingLine", true, false) as Label
 	return str(label.text) if label != null else ""
+
+
+func _pending_crafting_progress_bar(game_root: Node) -> ProgressBar:
+	return game_root.crafting_panel.find_child("PendingCraftingProgressBar", true, false) as ProgressBar
 
 
 func _cancel_pending_crafting_button(game_root: Node) -> Button:

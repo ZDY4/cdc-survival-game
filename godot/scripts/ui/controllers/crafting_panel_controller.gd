@@ -16,6 +16,7 @@ var _quantity_spin: SpinBox
 var _queue_label: Label
 var _queue_box: VBoxContainer
 var _pending_label: Label
+var _pending_progress_bar: ProgressBar
 var _cancel_pending_button: Button
 var _confirm_queue_button: Button
 var _clear_queue_button: Button
@@ -131,6 +132,15 @@ func _build_layout() -> void:
 	_queue_box.name = "CraftQueueEntries"
 	_queue_box.add_theme_constant_override("separation", 3)
 	_pending_label = _label("PendingCraftingLine")
+	_pending_progress_bar = ProgressBar.new()
+	_pending_progress_bar.name = "PendingCraftingProgressBar"
+	_pending_progress_bar.min_value = 0.0
+	_pending_progress_bar.max_value = 1.0
+	_pending_progress_bar.value = 0.0
+	_pending_progress_bar.show_percentage = true
+	_pending_progress_bar.custom_minimum_size = Vector2(0, 14)
+	_pending_progress_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pending_progress_bar.visible = false
 	_cancel_pending_button = _toolbar_button("CancelPendingCraftingButton", "取消制作", "取消正在跨回合进行的制作")
 	_cancel_pending_button.toggle_mode = false
 	_cancel_pending_button.pressed.connect(_cancel_pending_crafting, CONNECT_DEFERRED)
@@ -159,6 +169,7 @@ func _build_layout() -> void:
 	box.add_child(_missing_reason_box)
 	box.add_child(_quantity_spin)
 	box.add_child(_pending_label)
+	box.add_child(_pending_progress_bar)
 	box.add_child(_cancel_pending_button)
 	box.add_child(_queue_label)
 	box.add_child(_queue_box)
@@ -976,6 +987,9 @@ func _pending_crafting_snapshot() -> Dictionary:
 		return {
 			"active": false,
 			"cancel_enabled": _cancel_pending_button != null and not _cancel_pending_button.disabled,
+			"progress_bar_visible": _pending_progress_bar != null and _pending_progress_bar.visible,
+			"progress_bar_value": float(_pending_progress_bar.value) if _pending_progress_bar != null else 0.0,
+			"progress_bar_max": float(_pending_progress_bar.max_value) if _pending_progress_bar != null else 1.0,
 		}
 	var recipe_id: String = str(pending.get("recipe_id", ""))
 	var recipe: Dictionary = _recipe_by_id(_last_snapshot.get("recipes", []), recipe_id)
@@ -992,15 +1006,23 @@ func _pending_crafting_snapshot() -> Dictionary:
 		"remaining_ap": remaining_ap,
 		"progress_ratio": 0.0 if required_ap <= 0.0 else progress_ap / required_ap,
 		"cancel_enabled": _cancel_pending_button != null and not _cancel_pending_button.disabled,
+		"progress_bar_visible": _pending_progress_bar != null and _pending_progress_bar.visible,
+		"progress_bar_value": float(_pending_progress_bar.value) if _pending_progress_bar != null else progress_ap,
+		"progress_bar_max": float(_pending_progress_bar.max_value) if _pending_progress_bar != null else max(1.0, required_ap),
 	}
 
 
 func _refresh_pending_crafting_view() -> void:
-	if _pending_label == null or _cancel_pending_button == null:
+	if _pending_label == null or _cancel_pending_button == null or _pending_progress_bar == null:
 		return
 	var pending: Dictionary = _dictionary_or_empty(_last_snapshot.get("pending_crafting", {}))
 	if pending.is_empty():
 		_pending_label.text = "正在制作 无"
+		_pending_progress_bar.visible = false
+		_pending_progress_bar.min_value = 0.0
+		_pending_progress_bar.max_value = 1.0
+		_pending_progress_bar.value = 0.0
+		_pending_progress_bar.tooltip_text = "没有正在制作的配方"
 		_cancel_pending_button.disabled = true
 		return
 	var recipe_id: String = str(pending.get("recipe_id", ""))
@@ -1008,6 +1030,7 @@ func _refresh_pending_crafting_view() -> void:
 	var recipe_name: String = str(recipe.get("name", recipe_id))
 	var required_ap: float = max(0.0, float(pending.get("required_ap", 0.0)))
 	var progress_ap: float = clampf(float(pending.get("progress_ap", 0.0)), 0.0, required_ap)
+	var remaining_ap: float = max(0.0, float(pending.get("remaining_ap", required_ap - progress_ap)))
 	var progress_percent: int = 0 if required_ap <= 0.0 else int(roundf((progress_ap / required_ap) * 100.0))
 	_pending_label.text = "正在制作 %s x%d | 进度 %.1f/%.1f AP (%d%%) | 剩余 %.1f AP" % [
 		recipe_name,
@@ -1015,7 +1038,16 @@ func _refresh_pending_crafting_view() -> void:
 		progress_ap,
 		required_ap,
 		progress_percent,
-		float(pending.get("remaining_ap", 0.0)),
+		remaining_ap,
+	]
+	_pending_progress_bar.visible = true
+	_pending_progress_bar.min_value = 0.0
+	_pending_progress_bar.max_value = max(1.0, required_ap)
+	_pending_progress_bar.value = progress_ap
+	_pending_progress_bar.tooltip_text = "制作进度 %.1f/%.1f AP，剩余 %.1f AP" % [
+		progress_ap,
+		required_ap,
+		remaining_ap,
 	]
 	_cancel_pending_button.disabled = false
 
