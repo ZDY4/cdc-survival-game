@@ -1000,6 +1000,14 @@ func _failure_reason_text(reason: String) -> String:
 			return "技能不足"
 		"missing_station":
 			return "缺少工作台"
+		"station_world_flag_missing":
+			return "工作台未启用"
+		"station_world_flag_blocked":
+			return "工作台被封锁"
+		"station_item_missing":
+			return "缺少工作台钥匙"
+		"station_tool_missing":
+			return "缺少工作台工具"
 		"recipe_locked":
 			return "配方未解锁"
 		"recipe_output_invalid":

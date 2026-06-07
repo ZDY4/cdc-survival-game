@@ -241,15 +241,34 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	player.grid_position = GridCoord.new(33, 0, 31)
 	player.inventory["1105"] = 1
 	player.inventory["1010"] = 1
+	var gated_context: Dictionary = crafting_context.duplicate(true)
+	gated_context["crafting_stations"] = _station_context_with_requirement(_array_or_empty(crafting_context.get("crafting_stations", [])), "workbench", {
+		"required_world_flags": ["crafting_station_permission_smoke"],
+	})
+	gated_context["world_flags"] = simulation.world_flags.duplicate(true)
+	var station_permission_result: Dictionary = simulation.submit_player_command({
+		"kind": "craft",
+		"actor_id": 1,
+		"recipe_id": "recipe_ammo_pistol",
+		"recipe_library": recipes,
+		"crafting_context": gated_context,
+	})
+	if str(station_permission_result.get("reason", "")) != "station_world_flag_missing":
+		errors.append("station-gated recipe should report station permission missing world flag")
+	if int(player.inventory.get("1105", 0)) != 1 or int(player.inventory.get("1010", 0)) != 1:
+		errors.append("station permission failure should not consume craft materials")
+	simulation.world_flags["crafting_station_permission_smoke"] = true
+	gated_context["world_flags"] = simulation.world_flags.duplicate(true)
 	var station_craft: Dictionary = simulation.submit_player_command({
 		"kind": "craft",
 		"actor_id": 1,
 		"recipe_id": "recipe_ammo_pistol",
 		"recipe_library": recipes,
-		"crafting_context": crafting_context,
+		"crafting_context": gated_context,
 	})
 	if not bool(station_craft.get("success", false)):
 		errors.append("station-gated recipe should craft near workbench: %s" % station_craft.get("reason", "unknown"))
+	simulation.world_flags.erase("crafting_station_permission_smoke")
 	if int(player.inventory.get("1105", 0)) != 0 or int(player.inventory.get("1010", 0)) != 0:
 		errors.append("station-gated craft should consume materials")
 	if int(player.inventory.get("1009", 0)) != 20:
@@ -659,6 +678,17 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _station_context_with_requirement(stations: Array, station_id: String, requirement: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for station in stations:
+		var station_data: Dictionary = _dictionary_or_empty(station).duplicate(true)
+		if str(station_data.get("station_id", "")) == station_id:
+			for key in requirement.keys():
+				station_data[key] = requirement.get(key)
+		output.append(station_data)
+	return output
 
 
 func _has_station(crafting_context: Dictionary, station_id: String) -> bool:

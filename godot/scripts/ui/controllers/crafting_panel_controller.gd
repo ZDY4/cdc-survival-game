@@ -330,7 +330,7 @@ func _missing_reason_rows(recipe: Dictionary) -> Array[Control]:
 				normalized_skill_id
 			))
 	var station := str(recipe.get("required_station", "none"))
-	if station not in ["", "none"] and str(recipe.get("craft_reason", "")) in ["missing_station", "required_station_unsupported"]:
+	if station not in ["", "none"] and str(recipe.get("craft_reason", "")) in ["missing_station", "required_station_unsupported", "station_world_flag_missing", "station_world_flag_blocked", "station_item_missing", "station_tool_missing"]:
 		var available_station: Dictionary = _dictionary_or_empty(recipe.get("available_station", {}))
 		var station_label := str(available_station.get("display_name", station))
 		if available_station.is_empty():
@@ -743,6 +743,14 @@ func _reason_text(recipe: Dictionary) -> String:
 			return "需工作台 %s" % recipe.get("required_station", "")
 		"missing_station":
 			return "需工作台 %s" % recipe.get("required_station", "")
+		"station_world_flag_missing":
+			return "工作台未启用 %s" % _station_reason_detail(recipe)
+		"station_world_flag_blocked":
+			return "工作台被封锁 %s" % _station_reason_detail(recipe)
+		"station_item_missing":
+			return "工作台缺钥匙 %s" % _station_reason_detail(recipe)
+		"station_tool_missing":
+			return "工作台缺工具 %s" % _station_reason_detail(recipe)
 		"missing_skills":
 			var parts: Array[String] = []
 			for item in recipe.get("missing_skills", []):
@@ -764,6 +772,16 @@ func _reason_text(recipe: Dictionary) -> String:
 				])
 			return "材料不足 %s" % ", ".join(parts)
 	return str(recipe.get("craft_reason", ""))
+
+
+func _station_reason_detail(recipe: Dictionary) -> String:
+	var station: Dictionary = _dictionary_or_empty(recipe.get("available_station", {}))
+	var permission: Dictionary = _dictionary_or_empty(station.get("permission", station))
+	for key in ["flag_id", "item_id"]:
+		var value := str(permission.get(key, "")).strip_edges()
+		if not value.is_empty():
+			return value
+	return str(recipe.get("required_station", "")).strip_edges()
 
 
 func _queue_recipe(recipe: Dictionary, count: int) -> void:
@@ -934,6 +952,14 @@ func _craft_failure_text(reason: String) -> String:
 			return "缺少工作台"
 		"missing_station":
 			return "缺少工作台"
+		"station_world_flag_missing":
+			return "工作台未启用"
+		"station_world_flag_blocked":
+			return "工作台被封锁"
+		"station_item_missing":
+			return "缺少工作台钥匙"
+		"station_tool_missing":
+			return "缺少工作台工具"
 		"missing_skill_requirements":
 			return "技能不足"
 		"materials_insufficient":

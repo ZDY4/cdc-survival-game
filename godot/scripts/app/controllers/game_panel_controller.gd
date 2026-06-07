@@ -250,6 +250,7 @@ func _crafting_context() -> Dictionary:
 		return _dictionary_or_empty(parent.call("_crafting_context")).duplicate(true)
 	return {
 		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),
+		"world_flags": _dictionary_or_empty(simulation.world_flags if simulation != null else {}).duplicate(true),
 	}
 
 

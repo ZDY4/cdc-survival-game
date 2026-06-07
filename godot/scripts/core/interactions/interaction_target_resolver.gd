@@ -28,13 +28,14 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 			disabled_options.append(option)
 		else:
 			enabled_options.append(option)
-	if enabled_options.is_empty():
+	if enabled_options.is_empty() and disabled_options.is_empty():
 		return _failed_prompt("interaction_option_unavailable")
 
-	var primary_option: Dictionary = _dictionary_or_empty(enabled_options[0])
+	var primary_option: Dictionary = _dictionary_or_empty(enabled_options[0] if not enabled_options.is_empty() else {})
+	var display_option: Dictionary = primary_option if not primary_option.is_empty() else _dictionary_or_empty(disabled_options[0] if not disabled_options.is_empty() else {})
 	var target_grid: Dictionary = _target_grid(target_data)
 	var target_distance: int = _target_distance(actor, target_grid)
-	var interaction_range: int = int(primary_option.get("interaction_range", 1))
+	var interaction_range: int = int(display_option.get("interaction_range", 1))
 	return {
 		"ok": true,
 		"actor_id": actor_id,
@@ -46,8 +47,8 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 		"disabled_options": disabled_options,
 		"primary_option_id": primary_option.get("id", ""),
 		"primary_option_kind": primary_option.get("kind", ""),
-		"action_label": primary_option.get("display_name", primary_option.get("id", "")),
-		"ap_cost": primary_option.get("ap_cost", 0.0),
+		"action_label": display_option.get("display_name", display_option.get("id", "")),
+		"ap_cost": display_option.get("ap_cost", 0.0),
 		"interaction_range": interaction_range,
 		"target_distance": target_distance,
 		"requires_approach": target_distance > interaction_range if target_distance >= 0 else false,
@@ -154,7 +155,7 @@ func _target_grid(target_data: Dictionary) -> Dictionary:
 
 func _candidate_options_for_target(simulation: RefCounted, actor: RefCounted, target_data: Dictionary) -> Array:
 	var kind: String = str(target_data.get("kind", ""))
-	var station_option: Dictionary = _crafting_station_option(target_data)
+	var station_option: Dictionary = _crafting_station_option(simulation, actor, target_data)
 	match kind:
 		"pickup":
 			var pickup_options := [
@@ -304,7 +305,7 @@ func _option_for_target(simulation: RefCounted, actor: RefCounted, target_data: 
 				"target_id": target_data.get("target_id", ""),
 			}
 		"open_crafting":
-			return _crafting_station_option(target_data)
+			return _crafting_station_option(simulation, actor, target_data)
 		"door":
 			var door: Dictionary = _dictionary_or_empty(target_data.get("door", {}))
 			var door_name := str(target_data.get("display_name", door.get("display_name", "门"))).strip_edges()
@@ -325,7 +326,7 @@ func _option_for_target(simulation: RefCounted, actor: RefCounted, target_data: 
 	return {}
 
 
-func _crafting_station_option(target_data: Dictionary) -> Dictionary:
+func _crafting_station_option(simulation: RefCounted, actor: RefCounted, target_data: Dictionary) -> Dictionary:
 	var station: Dictionary = _dictionary_or_empty(target_data.get("crafting_station", {}))
 	var station_id := str(station.get("station_id", station.get("id", ""))).strip_edges()
 	if station_id.is_empty():
@@ -333,6 +334,7 @@ func _crafting_station_option(target_data: Dictionary) -> Dictionary:
 	var station_name := str(station.get("display_name", target_data.get("display_name", station_id))).strip_edges()
 	if station_name.is_empty():
 		station_name = station_id
+	var permission: Dictionary = _station_prompt_permission(simulation, actor, station)
 	return {
 		"id": "open_crafting",
 		"kind": "open_crafting",
@@ -340,6 +342,9 @@ func _crafting_station_option(target_data: Dictionary) -> Dictionary:
 		"target_id": target_data.get("target_id", station.get("object_id", "")),
 		"station_id": station_id,
 		"station_name": station_name,
+		"disabled": not str(permission.get("reason", "")).is_empty(),
+		"disabled_reason": str(permission.get("reason", "")),
+		"permission": permission.duplicate(true),
 	}
 
 
@@ -367,6 +372,23 @@ func _door_prompt_permission(actor: RefCounted, door: Dictionary) -> Dictionary:
 	var has_unlock_requirements: bool = not required_item_ids.is_empty() or not required_tool_ids.is_empty()
 	if bool(door.get("locked", false)) and not has_unlock_requirements:
 		return {"success": false, "reason": "door_locked"}
+	return {"success": true}
+
+
+func _station_prompt_permission(simulation: RefCounted, actor: RefCounted, station: Dictionary) -> Dictionary:
+	var world_flags: Dictionary = _dictionary_or_empty(simulation.get("world_flags") if simulation != null else {})
+	for flag_id in _string_array(station.get("required_world_flags", [])):
+		if not world_flags.has(flag_id):
+			return {"success": false, "reason": "station_world_flag_missing", "flag_id": flag_id}
+	for flag_id in _string_array(station.get("blocked_world_flags", [])):
+		if world_flags.has(flag_id):
+			return {"success": false, "reason": "station_world_flag_blocked", "flag_id": flag_id}
+	var missing_items: Array[String] = _missing_actor_items(actor, _required_item_ids(station))
+	if not missing_items.is_empty():
+		return {"success": false, "reason": "station_item_missing", "item_id": missing_items[0]}
+	var missing_tools: Array[String] = _missing_actor_items(actor, _required_tool_ids(station))
+	if not missing_tools.is_empty():
+		return {"success": false, "reason": "station_tool_missing", "item_id": missing_tools[0]}
 	return {"success": true}
 
 

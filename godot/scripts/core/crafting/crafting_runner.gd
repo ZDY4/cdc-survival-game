@@ -371,6 +371,11 @@ func _station_check(actor: RefCounted, required_station: String, crafting_contex
 			"reason": "missing_station",
 			"required_station": station_id,
 		}
+	var permission: Dictionary = _station_permission(actor, station, crafting_context)
+	if not bool(permission.get("success", false)):
+		permission["required_station"] = station_id
+		permission["station"] = station.duplicate(true)
+		return permission
 	return {
 		"success": true,
 		"station": station,
@@ -413,3 +418,108 @@ func _distance_to_station(actor: RefCounted, station: Dictionary) -> int:
 	if int(anchor.get("y", 0)) != int(actor_grid.get("y", 0)):
 		return best_distance
 	return abs(int(anchor.get("x", 0)) - int(actor_grid.get("x", 0))) + abs(int(anchor.get("z", 0)) - int(actor_grid.get("z", 0)))
+
+
+func _station_permission(actor: RefCounted, station: Dictionary, crafting_context: Dictionary) -> Dictionary:
+	var world_flags: Dictionary = _dictionary_or_empty(crafting_context.get("world_flags", {}))
+	for flag_id in _string_array(station.get("required_world_flags", [])):
+		if not world_flags.has(flag_id):
+			return {
+				"success": false,
+				"reason": "station_world_flag_missing",
+				"flag_id": flag_id,
+				"required_world_flags": _string_array(station.get("required_world_flags", [])),
+			}
+	for flag_id in _string_array(station.get("blocked_world_flags", [])):
+		if world_flags.has(flag_id):
+			return {
+				"success": false,
+				"reason": "station_world_flag_blocked",
+				"flag_id": flag_id,
+				"blocked_world_flags": _string_array(station.get("blocked_world_flags", [])),
+			}
+	var missing_items: Array[String] = _missing_actor_items(actor, _required_item_ids(station))
+	if not missing_items.is_empty():
+		return {
+			"success": false,
+			"reason": "station_item_missing",
+			"item_id": missing_items[0],
+			"required_item_ids": _required_item_ids(station),
+		}
+	var missing_tools: Array[String] = _missing_actor_tools(actor, _required_tool_ids(station), crafting_context)
+	if not missing_tools.is_empty():
+		return {
+			"success": false,
+			"reason": "station_tool_missing",
+			"item_id": missing_tools[0],
+			"required_tool_ids": _required_tool_ids(station),
+		}
+	return {"success": true}
+
+
+func _required_item_ids(value: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	_append_unique_normalized_item_id(output, value.get("required_item_ids", []))
+	_append_unique_normalized_item_id(output, value.get("required_items", []))
+	return output
+
+
+func _required_tool_ids(value: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	_append_unique_normalized_item_id(output, value.get("required_tool_ids", []))
+	_append_unique_normalized_item_id(output, value.get("required_tools", []))
+	return output
+
+
+func _missing_actor_items(actor: RefCounted, item_ids: Array[String]) -> Array[String]:
+	var missing: Array[String] = []
+	for item_id in item_ids:
+		if actor != null and int(actor.inventory.get(item_id, 0)) > 0:
+			continue
+		missing.append(item_id)
+	return missing
+
+
+func _missing_actor_tools(actor: RefCounted, tool_ids: Array[String], crafting_context: Dictionary) -> Array[String]:
+	var missing: Array[String] = []
+	for tool_id in tool_ids:
+		if _actor_tool_available_count(actor, tool_id, crafting_context) > 0:
+			continue
+		missing.append(tool_id)
+	return missing
+
+
+func _append_unique_normalized_item_id(output: Array[String], value: Variant) -> void:
+	if typeof(value) == TYPE_DICTIONARY:
+		_append_one_normalized_item_id(output, value)
+		return
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_one_normalized_item_id(output, entry)
+		return
+	_append_one_normalized_item_id(output, value)
+
+
+func _append_one_normalized_item_id(output: Array[String], value: Variant) -> void:
+	var raw_value: Variant = value
+	if typeof(value) == TYPE_DICTIONARY:
+		var data: Dictionary = _dictionary_or_empty(value)
+		raw_value = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var normalized_entry: String = _inventory_entries.normalize_content_id(raw_value)
+	if normalized_entry.is_empty() or output.has(normalized_entry):
+		return
+	output.append(normalized_entry)
+
+
+func _string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	if typeof(value) == TYPE_STRING:
+		var normalized_value := str(value).strip_edges()
+		if not normalized_value.is_empty():
+			output.append(normalized_value)
+		return output
+	for entry in _array_or_empty(value):
+		var normalized_entry := str(entry).strip_edges()
+		if not normalized_entry.is_empty():
+			output.append(normalized_entry)
+	return output

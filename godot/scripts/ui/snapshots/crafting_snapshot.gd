@@ -17,6 +17,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	var crafted_recipes: Dictionary = _flag_dictionary(runtime_snapshot.get("crafted_recipes", []))
 	var completed_quests: Dictionary = _flag_dictionary(runtime_snapshot.get("completed_quests", []))
 	var world_flags: Dictionary = _flag_dictionary(runtime_snapshot.get("world_flags", []))
+	crafting_context["world_flags"] = world_flags.duplicate(true)
 	var station_snapshot: Dictionary = _station_snapshot(player, crafting_context)
 	var recipes: Array[Dictionary] = []
 	var recipe_ids: Array = registry.get_library("recipes").keys()
@@ -280,6 +281,14 @@ func _station_check(player: Dictionary, required_station: String, crafting_conte
 			"reason": "missing_station",
 			"required_station": station_id,
 		}
+	var permission: Dictionary = _station_permission(player, station, crafting_context)
+	if not bool(permission.get("success", false)):
+		permission["can_craft"] = false
+		permission["required_station"] = station_id
+		var station_view := station.duplicate(true)
+		station_view["permission"] = permission.duplicate(true)
+		permission["station"] = station_view
+		return permission
 	return {
 		"success": true,
 		"station": station,
@@ -301,6 +310,10 @@ func _station_snapshot(player: Dictionary, crafting_context: Dictionary) -> Dict
 		entry["distance"] = distance
 		entry["range"] = station_range
 		entry["in_range"] = distance <= station_range
+		var permission: Dictionary = _station_permission(player, entry, crafting_context)
+		entry["permission"] = permission.duplicate(true)
+		entry["available"] = bool(permission.get("success", false))
+		entry["unavailable_reason"] = str(permission.get("reason", ""))
 		stations.append(entry)
 	stations.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var distance_a: int = int(a.get("distance", 2147483647))
@@ -323,6 +336,77 @@ func _station_snapshot(player: Dictionary, crafting_context: Dictionary) -> Dict
 		"count": stations.size(),
 		"in_range_count": in_range.size(),
 	}
+
+
+func _station_permission(player: Dictionary, station: Dictionary, crafting_context: Dictionary) -> Dictionary:
+	var world_flags: Dictionary = _dictionary_or_empty(crafting_context.get("world_flags", {}))
+	for flag_id in _string_array(station.get("required_world_flags", [])):
+		if not world_flags.has(flag_id):
+			return {
+				"success": false,
+				"reason": "station_world_flag_missing",
+				"flag_id": flag_id,
+				"required_world_flags": _string_array(station.get("required_world_flags", [])),
+			}
+	for flag_id in _string_array(station.get("blocked_world_flags", [])):
+		if world_flags.has(flag_id):
+			return {
+				"success": false,
+				"reason": "station_world_flag_blocked",
+				"flag_id": flag_id,
+				"blocked_world_flags": _string_array(station.get("blocked_world_flags", [])),
+			}
+	var missing_items: Array[String] = _missing_inventory_items(_dictionary_or_empty(player.get("inventory", {})), _required_item_ids(station))
+	if not missing_items.is_empty():
+		return {
+			"success": false,
+			"reason": "station_item_missing",
+			"item_id": missing_items[0],
+			"required_item_ids": _required_item_ids(station),
+		}
+	var missing_tools: Array[String] = _missing_tools(player, _required_tool_ids(station), crafting_context)
+	if not missing_tools.is_empty():
+		return {
+			"success": false,
+			"reason": "station_tool_missing",
+			"item_id": missing_tools[0],
+			"required_tool_ids": _required_tool_ids(station),
+		}
+	return {"success": true}
+
+
+func _required_item_ids(value: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	_append_unique_normalized_item_id(output, value.get("required_item_ids", []))
+	_append_unique_normalized_item_id(output, value.get("required_items", []))
+	return output
+
+
+func _required_tool_ids(value: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	_append_unique_normalized_item_id(output, value.get("required_tool_ids", []))
+	_append_unique_normalized_item_id(output, value.get("required_tools", []))
+	return output
+
+
+func _missing_inventory_items(inventory: Dictionary, item_ids: Array[String]) -> Array[String]:
+	var missing: Array[String] = []
+	for item_id in item_ids:
+		if int(inventory.get(item_id, 0)) > 0:
+			continue
+		missing.append(item_id)
+	return missing
+
+
+func _missing_tools(player: Dictionary, tool_ids: Array[String], crafting_context: Dictionary) -> Array[String]:
+	var missing: Array[String] = []
+	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
+	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
+	for tool_id in tool_ids:
+		if _tool_available_count(tool_id, inventory, equipment, crafting_context) > 0:
+			continue
+		missing.append(tool_id)
+	return missing
 
 
 func _nearest_station(player: Dictionary, station_id: String, stations: Array) -> Dictionary:
@@ -506,6 +590,42 @@ func _normalize_content_id(value: Variant) -> String:
 		return str(value)
 	var text := str(value).strip_edges()
 	return "" if text == "<null>" else text
+
+
+func _append_unique_normalized_item_id(output: Array[String], value: Variant) -> void:
+	if typeof(value) == TYPE_DICTIONARY:
+		_append_one_normalized_item_id(output, value)
+		return
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_one_normalized_item_id(output, entry)
+		return
+	_append_one_normalized_item_id(output, value)
+
+
+func _append_one_normalized_item_id(output: Array[String], value: Variant) -> void:
+	var raw_value: Variant = value
+	if typeof(value) == TYPE_DICTIONARY:
+		var data: Dictionary = _dictionary_or_empty(value)
+		raw_value = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var normalized_entry: String = _normalize_content_id(raw_value)
+	if normalized_entry.is_empty() or output.has(normalized_entry):
+		return
+	output.append(normalized_entry)
+
+
+func _string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	if typeof(value) == TYPE_STRING:
+		var normalized_value := str(value).strip_edges()
+		if not normalized_value.is_empty():
+			output.append(normalized_value)
+		return output
+	for entry in _array_or_empty(value):
+		var normalized_entry := str(entry).strip_edges()
+		if not normalized_entry.is_empty():
+			output.append(normalized_entry)
+	return output
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

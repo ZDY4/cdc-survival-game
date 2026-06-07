@@ -338,6 +338,34 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not _detail_text(game_root).contains("工作坊工作台 距离"):
 		errors.append("crafting detail should show nearby workbench availability")
+	var map_data: Dictionary = _dictionary_or_empty(game_root.world_result.get("map", {}))
+	var original_stations: Array = _array_or_empty(map_data.get("crafting_stations", [])).duplicate(true)
+	map_data["crafting_stations"] = _station_context_with_requirement(_array_or_empty(map_data.get("crafting_stations", [])), "workbench", {
+		"required_world_flags": ["crafting_ui_station_permission_smoke"],
+	})
+	game_root.world_result["map"] = map_data
+	game_root.interaction_controller.world_result = game_root.world_result
+	if game_root.panel_controller != null:
+		game_root.panel_controller.update_world_result(game_root.world_result)
+	game_root.refresh_crafting_panel()
+	await process_frame
+	if not _press_recipe_line(game_root, "recipe_knife_basic"):
+		errors.append("should reselect basic knife recipe after station permission gate")
+	await process_frame
+	if not _recipe_line(game_root, "recipe_knife_basic").contains("工作台未启用 crafting_ui_station_permission_smoke"):
+		errors.append("crafting UI should show station permission missing world flag")
+	game_root.simulation.world_flags["crafting_ui_station_permission_smoke"] = true
+	game_root.refresh_crafting_panel()
+	await process_frame
+	if _recipe_line(game_root, "recipe_knife_basic").contains("工作台未启用"):
+		errors.append("crafting UI should clear station permission reason after world flag")
+	game_root.simulation.world_flags.erase("crafting_ui_station_permission_smoke")
+	map_data["crafting_stations"] = original_stations
+	game_root.world_result["map"] = map_data
+	game_root.interaction_controller.world_result = game_root.world_result
+	if game_root.panel_controller != null:
+		game_root.panel_controller.update_world_result(game_root.world_result)
+	game_root.refresh_crafting_panel()
 	player_for_tool.grid_position = GridCoord.new(32, 0, 10)
 	player_for_tool.inventory["1006"] = 2
 	player_for_tool.inventory["1031"] = 1
@@ -633,6 +661,17 @@ func _crafting_station_count(game_root: Node) -> int:
 func _has_crafting_station(game_root: Node, station_id: String) -> bool:
 	var station_snapshot: Dictionary = _dictionary_or_empty(_crafting_snapshot(game_root).get("station_snapshot", {}))
 	return _dictionary_or_empty(station_snapshot.get("by_id", {})).has(station_id)
+
+
+func _station_context_with_requirement(stations: Array, station_id: String, requirement: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for station in stations:
+		var station_data: Dictionary = _dictionary_or_empty(station).duplicate(true)
+		if str(station_data.get("station_id", "")) == station_id:
+			for key in requirement.keys():
+				station_data[key] = requirement.get(key)
+		output.append(station_data)
+	return output
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

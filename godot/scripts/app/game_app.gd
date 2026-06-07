@@ -2716,6 +2716,7 @@ func confirm_crafting_queue(entries: Array) -> Dictionary:
 func _crafting_context() -> Dictionary:
 	return {
 		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),
+		"world_flags": _dictionary_or_empty(simulation.world_flags if simulation != null else {}).duplicate(true),
 		"nearby_tool_containers": _nearby_tool_containers(),
 	}
 

@@ -442,6 +442,34 @@ func _expect_crafting_station_interaction(errors: Array[String], game_root: Node
 		"talk": "target_not_actor",
 		"attack": "target_not_actor",
 	})
+	var original_target: Dictionary = _dictionary_or_empty(game_root.simulation.map_interaction_targets.get("survivor_outpost_01_workshop_cabinet_a", {})).duplicate(true)
+	var gated_target: Dictionary = original_target.duplicate(true)
+	var gated_station: Dictionary = _dictionary_or_empty(gated_target.get("crafting_station", {})).duplicate(true)
+	gated_station["required_world_flags"] = ["player_interaction_station_permission_smoke"]
+	gated_target["crafting_station"] = gated_station
+	game_root.simulation.map_interaction_targets["survivor_outpost_01_workshop_cabinet_a"] = gated_target
+	var gated_selection: Dictionary = game_root.select_interaction_node(station_node)
+	if not bool(gated_selection.get("success", false)):
+		errors.append("crafting station gated selection should still produce disabled prompt")
+	else:
+		_expect_interaction_menu_options(errors, game_root, "gated crafting station", [], {
+			"open_crafting": "station_world_flag_missing",
+			"pickup": "target_not_pickup",
+			"open_container": "target_not_container",
+			"talk": "target_not_actor",
+			"attack": "target_not_actor",
+		})
+	game_root.simulation.world_flags["player_interaction_station_permission_smoke"] = true
+	var ungated_selection: Dictionary = game_root.select_interaction_node(station_node)
+	if not bool(ungated_selection.get("success", false)) or str(_dictionary_or_empty(ungated_selection.get("prompt", {})).get("primary_option_kind", "")) != "open_crafting":
+		errors.append("crafting station should become enabled after world flag")
+	game_root.simulation.world_flags.erase("player_interaction_station_permission_smoke")
+	game_root.simulation.map_interaction_targets["survivor_outpost_01_workshop_cabinet_a"] = original_target
+	selection = game_root.select_interaction_node(station_node)
+	if not bool(selection.get("success", false)):
+		errors.append("crafting station selection should recover after permission smoke cleanup")
+		_restore_player_for_crafting_station_smoke(game_root, original_grid, original_ap)
+		return
 	var result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(result.get("success", false)):
 		errors.append("crafting station interaction failed: %s" % result.get("reason", "unknown"))

@@ -376,7 +376,7 @@ func _crafting_station_summary(object_summary: Dictionary) -> Dictionary:
 	var station_id := str(station_props.get("station_id", station_props.get("id", "")))
 	if station_id.is_empty():
 		return {}
-	return {
+	var summary := {
 		"station_id": station_id,
 		"object_id": str(object_summary.get("object_id", "")),
 		"display_name": str(station_props.get("display_name", station_id)),
@@ -384,6 +384,17 @@ func _crafting_station_summary(object_summary: Dictionary) -> Dictionary:
 		"cells": _array_or_empty(object_summary.get("cells", [])).duplicate(true),
 		"range": max(0, int(station_props.get("range", 1))),
 	}
+	for key in [
+		"required_world_flags",
+		"blocked_world_flags",
+		"required_item_ids",
+		"required_items",
+		"required_tool_ids",
+		"required_tools",
+	]:
+		if station_props.has(key):
+			summary[key] = station_props.get(key)
+	return summary
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
