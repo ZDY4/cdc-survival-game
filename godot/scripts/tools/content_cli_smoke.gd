@@ -9,6 +9,7 @@ const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_pre
 const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd")
 const ContentJsonFormatter = preload("res://scripts/tools/content_json_formatter.gd")
 const ContentSchemaMigrationWriter = preload("res://scripts/tools/content_schema_migration_writer.gd")
+const ContentWriteService = preload("res://scripts/data/content_write_service.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
@@ -96,6 +97,7 @@ func _run() -> Array[String]:
 	_expect_invalid_overworld_entry(errors, registry)
 	_expect_format_domain_support(errors, registry)
 	_expect_json_formatter_dry_run(errors)
+	_expect_content_write_failure_injection(errors)
 	_expect_fix_changed_schema_pending(errors, registry)
 	_expect_schema_migration_writer(errors)
 	_expect_summary_domains(errors, registry)
@@ -778,6 +780,23 @@ func _has_reference_detail(hits: Array[Dictionary], detail: String) -> bool:
 	return false
 
 
+func _expect_no_temp_write_files(errors: Array[String], path: String) -> void:
+	var directory := DirAccess.open(path.get_base_dir())
+	if directory == null:
+		errors.append("could not inspect write smoke directory: %s" % path.get_base_dir())
+		return
+	var base_name := path.get_file()
+	directory.list_dir_begin()
+	var name := directory.get_next()
+	while not name.is_empty():
+		if name.begins_with("%s.tmp-" % base_name):
+			errors.append("atomic write failure left temp file behind: %s" % path.get_base_dir().path_join(name))
+		if name.begins_with("%s.backup-" % base_name):
+			errors.append("atomic write failure left backup file behind: %s" % path.get_base_dir().path_join(name))
+		name = directory.get_next()
+	directory.list_dir_end()
+
+
 func _expect_format_domain_support(errors: Array[String], registry: ContentRegistry) -> void:
 	var supported := {
 		"items": "data/items/1006.json",
@@ -831,6 +850,33 @@ func _expect_json_formatter_dry_run(errors: Array[String]) -> void:
 	var after_write := FileAccess.get_file_as_string(path)
 	if after_write == raw or not after_write.contains("\n  \"values\": ["):
 		errors.append("formatter write should persist formatted JSON, got: %s" % after_write)
+	DirAccess.remove_absolute(path)
+
+
+func _expect_content_write_failure_injection(errors: Array[String]) -> void:
+	var path := ProjectSettings.globalize_path("user://content_write_failure_injection_smoke.json")
+	var original := "{\n  \"id\": \"write_failure_smoke\"\n}\n"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		errors.append("write failure smoke could not create temp file: %s" % error_string(FileAccess.get_open_error()))
+		return
+	file.store_string(original)
+	file.close()
+
+	var writer := ContentWriteService.new()
+	for failure in ["before_replace", "before_remove", "before_rename"]:
+		var result := writer.write_json(path, {
+			"id": "write_failure_smoke",
+			"name": failure,
+		}, {
+			"allow_external_path": true,
+			"inject_failure": failure,
+		})
+		if bool(result.get("ok", false)) or str(result.get("code", "")) != "injected_%s" % failure:
+			errors.append("write failure injection should fail with stable code for %s: %s" % [failure, result])
+		if FileAccess.get_file_as_string(path) != original:
+			errors.append("write failure injection %s should preserve original file" % failure)
+		_expect_no_temp_write_files(errors, path)
 	DirAccess.remove_absolute(path)
 
 
