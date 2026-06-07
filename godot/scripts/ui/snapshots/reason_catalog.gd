@@ -492,7 +492,7 @@ const REASON_METADATA := {
 func text_for(reason: String) -> String:
 	if reason.is_empty():
 		return "未知原因"
-	var entry := _dictionary_or_empty(REASONS.get(reason, {}))
+	var entry := entry_for(reason)
 	return str(entry.get("text", reason))
 
 
@@ -509,16 +509,41 @@ func entry_for(reason: String) -> Dictionary:
 		var reason_metadata: Dictionary = _dictionary_or_empty(REASON_METADATA.get(reason, {}))
 		_merge_metadata(entry, reason_metadata)
 		return entry
+	var normalized: Dictionary = _dynamic_entry_for(reason)
+	if not normalized.is_empty():
+		return normalized
 	return {
 		"reason": reason,
 		"known": false,
 		"category": "unknown",
-		"text": text_for(reason),
+		"text": reason,
 		"source_module": "",
 		"payload_fields": [],
-		"disabled_text": text_for(reason),
+		"disabled_text": reason,
 		"remediation": "",
 	}
+
+
+func _dynamic_entry_for(reason: String) -> Dictionary:
+	var prefix := ""
+	if reason.begins_with("scene_transition:"):
+		prefix = "scene_transition"
+	elif reason.begins_with("location_changed:"):
+		prefix = "location_changed"
+	if prefix.is_empty():
+		return {}
+	var entry := {
+		"reason": reason,
+		"known": true,
+		"category": "pending",
+		"text": "地图切换取消",
+	}
+	_apply_metadata(entry)
+	entry["payload_fields"] = ["actor_id", "reason", "movement", "interaction", "crafting", "crafting_queue"]
+	entry["disabled_text"] = "地图切换取消"
+	entry["remediation"] = "地图切换时清理旧地图上的 pending 行动和制作队列。"
+	entry["dynamic_prefix"] = prefix
+	return entry
 
 
 func category_counts() -> Dictionary:

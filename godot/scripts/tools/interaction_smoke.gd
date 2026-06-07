@@ -212,6 +212,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("self wait should end the current turn")
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "wait", "wait", "幸存者")
 
+	simulation.crafting_queue = [{"recipe_id": "recipe_bandage_basic", "count": 2}]
 	var transition_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
 		"target": {
@@ -236,6 +237,10 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("scene transition result should include previous active entry as return point")
 	if _dictionary_or_empty(transition_result.get("grid_position", {})).is_empty():
 		errors.append("scene transition result should include grid_position")
+	if not _dictionary_or_empty(transition_result.get("cleared_runtime_state", {})).get("crafting_queue_cleared", false):
+		errors.append("scene transition result should report cleared crafting queue")
+	if not simulation.crafting_queue.is_empty():
+		errors.append("scene transition should clear crafting queue")
 	var scene_transition_payload: Dictionary = _last_event_payload(simulation.snapshot(), "scene_transition")
 	if int(scene_transition_payload.get("actor_id", 0)) != 1:
 		errors.append("scene_transition should include actor_id")
@@ -251,6 +256,16 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		errors.append("scene_transition should include return map and entry")
 	if _dictionary_or_empty(scene_transition_payload.get("grid_position", {})).is_empty():
 		errors.append("scene_transition should include grid_position")
+	var transition_pending_payload: Dictionary = _last_event_payload(simulation.snapshot(), "pending_cancelled")
+	if str(transition_pending_payload.get("reason", "")).find("scene_transition:survivor_outpost_01_interior") == -1:
+		errors.append("scene transition should emit pending_cancelled with transition reason")
+	if _array_or_empty(transition_pending_payload.get("crafting_queue", [])).is_empty():
+		errors.append("scene transition pending_cancelled should include crafting queue")
+	var transition_crafting_payload: Dictionary = _last_event_payload(simulation.snapshot(), "crafting_cancelled")
+	if str(transition_crafting_payload.get("reason", "")).find("scene_transition:survivor_outpost_01_interior") == -1:
+		errors.append("scene transition should emit crafting_cancelled with transition reason")
+	if _array_or_empty(transition_crafting_payload.get("crafting_queue", [])).is_empty():
+		errors.append("scene transition crafting_cancelled should include crafting queue")
 	_expect_interaction_succeeded_payload(errors, simulation.snapshot(), "enter_subscene", "enter_subscene", "进入据点室内")
 	var transition_combat_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	errors.append_array(_expect_scene_transition_ends_combat(transition_combat_simulation, registry))

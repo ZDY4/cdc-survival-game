@@ -447,6 +447,7 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 	var target_id: String = str(option.get("target_id", ""))
 	var target_name: String = str(option.get("display_name", prompt.get("target_name", target_id)))
 	var previous_entry_point_id: String = str(simulation.active_entry_point_id)
+	var cleared_runtime_state: Dictionary = _clear_map_change_runtime_state(simulation, actor, actor_id, "scene_transition:%s" % target_map_id)
 	simulation.active_map_id = target_map_id
 	simulation.active_entry_point_id = target_entry_id
 	var combat_end: Dictionary = {}
@@ -482,6 +483,8 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 	if bool(combat_end.get("success", false)):
 		success_payload["combat_ended"] = true
 		success_payload["combat_end_reason"] = str(combat_end.get("reason", "map_changed"))
+	if bool(cleared_runtime_state.get("had_runtime_state", false)):
+		success_payload["cleared_runtime_state"] = cleared_runtime_state.duplicate(true)
 	simulation.emit_event("interaction_succeeded", success_payload)
 	return {
 		"success": true,
@@ -496,6 +499,7 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 		"grid_position": target_grid.duplicate(true),
 		"return_map_id": previous_map_id,
 		"return_entry_point_id": previous_entry_point_id,
+		"cleared_runtime_state": cleared_runtime_state.duplicate(true),
 		"combat_ended": bool(combat_end.get("success", false)),
 		"combat_end_reason": str(combat_end.get("reason", "")),
 		"context_snapshot": {
@@ -505,6 +509,62 @@ func _execute_scene_transition(simulation: RefCounted, actor_id: int, prompt: Di
 			"return_map_id": previous_map_id,
 			"return_entry_point_id": previous_entry_point_id,
 		},
+	}
+
+
+func _clear_map_change_runtime_state(simulation: RefCounted, actor: RefCounted, actor_id: int, reason: String) -> Dictionary:
+	if actor != null:
+		var dialogue_id := str(actor.active_dialogue_id)
+		if not dialogue_id.is_empty():
+			actor.active_dialogue_id = ""
+			actor.active_dialogue_node_id = ""
+			actor.active_dialogue_target_actor_id = 0
+			actor.active_dialogue_target_definition_id = ""
+			simulation.emit_event("dialogue_closed", {
+				"actor_id": actor_id,
+				"dialogue_id": dialogue_id,
+				"reason": reason,
+			})
+		var container_id := str(actor.active_container_id)
+		if not container_id.is_empty():
+			actor.active_container_id = ""
+			simulation.emit_event("container_closed", {
+				"actor_id": actor_id,
+				"container_id": container_id,
+				"reason": reason,
+			})
+	var pending_movement: Dictionary = simulation.pending_movement.duplicate(true)
+	var pending_interaction: Dictionary = simulation.pending_interaction.duplicate(true)
+	var pending_crafting: Dictionary = simulation.pending_crafting.duplicate(true)
+	var crafting_queue: Array = _array_or_empty(simulation.crafting_queue).duplicate(true)
+	var had_runtime_state := not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty() or not crafting_queue.is_empty()
+	simulation.pending_movement.clear()
+	simulation.pending_interaction.clear()
+	simulation.pending_crafting.clear()
+	simulation.crafting_queue.clear()
+	simulation.interaction_menu.clear()
+	if had_runtime_state:
+		if not pending_crafting.is_empty() or not crafting_queue.is_empty():
+			simulation.emit_event("crafting_cancelled", {
+				"actor_id": actor_id,
+				"reason": reason,
+				"pending_crafting": pending_crafting.duplicate(true),
+				"crafting_queue": crafting_queue.duplicate(true),
+			})
+		simulation.emit_event("pending_cancelled", {
+			"actor_id": actor_id,
+			"reason": reason,
+			"movement": pending_movement,
+			"interaction": pending_interaction,
+			"crafting": pending_crafting,
+			"crafting_queue": crafting_queue,
+		})
+	return {
+		"had_runtime_state": had_runtime_state,
+		"pending_movement_cleared": not pending_movement.is_empty(),
+		"pending_interaction_cleared": not pending_interaction.is_empty(),
+		"pending_crafting_cleared": not pending_crafting.is_empty(),
+		"crafting_queue_cleared": not crafting_queue.is_empty(),
 	}
 
 

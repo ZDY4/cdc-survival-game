@@ -286,6 +286,28 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	})
 	if not bool(split_result.get("success", false)):
 		push_error("save smoke split_stack fixture failed: %s" % JSON.stringify(split_result))
+	_restore_runtime_state_for_save_roundtrip(simulation)
+
+
+func _restore_runtime_state_for_save_roundtrip(simulation: RefCounted) -> void:
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		return
+	player.active_dialogue_id = "trader_lao_wang_tutorial_active"
+	player.active_dialogue_node_id = "start"
+	player.active_dialogue_target_actor_id = 2
+	player.active_dialogue_target_definition_id = "trader_lao_wang"
+	player.active_container_id = "survivor_outpost_01_clinic_supply_cabinet"
+	simulation.pending_crafting = {
+		"kind": "pending_crafting",
+		"actor_id": 1,
+		"recipe_id": "recipe_bandage_basic",
+		"count": 1,
+		"required_ap": 1.0,
+		"progress_ap": 0.5,
+		"remaining_ap": 0.5,
+	}
+	simulation.crafting_queue = [{"recipe_id": "recipe_bandage_basic", "count": 2}]
 
 
 func _submit_and_complete(simulation: RefCounted, registry: RefCounted, command: Dictionary, max_waits: int = 8) -> Dictionary:

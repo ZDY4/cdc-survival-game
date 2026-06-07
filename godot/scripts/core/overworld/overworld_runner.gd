@@ -85,17 +85,20 @@ func _clear_runtime_ui_state(simulation: RefCounted, actor: RefCounted, actor_id
 	var pending_movement: Dictionary = simulation.pending_movement.duplicate(true)
 	var pending_interaction: Dictionary = simulation.pending_interaction.duplicate(true)
 	var pending_crafting: Dictionary = simulation.pending_crafting.duplicate(true)
-	var had_pending := not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty()
+	var crafting_queue: Array = _array_or_empty(simulation.crafting_queue).duplicate(true)
+	var had_pending := not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty() or not crafting_queue.is_empty()
 	simulation.pending_movement.clear()
 	simulation.pending_interaction.clear()
 	simulation.pending_crafting.clear()
+	simulation.crafting_queue.clear()
 	simulation.interaction_menu.clear()
 	if had_pending:
-		if not pending_crafting.is_empty():
+		if not pending_crafting.is_empty() or not crafting_queue.is_empty():
 			simulation.emit_event("crafting_cancelled", {
 				"actor_id": actor_id,
 				"reason": "location_changed:%s" % location_id,
 				"pending_crafting": pending_crafting.duplicate(true),
+				"crafting_queue": crafting_queue.duplicate(true),
 			})
 		simulation.emit_event("pending_cancelled", {
 			"actor_id": actor_id,
@@ -103,6 +106,7 @@ func _clear_runtime_ui_state(simulation: RefCounted, actor: RefCounted, actor_id
 			"movement": pending_movement,
 			"interaction": pending_interaction,
 			"crafting": pending_crafting,
+			"crafting_queue": crafting_queue,
 		})
 
 

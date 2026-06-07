@@ -200,6 +200,12 @@ func _validate_reason_catalog() -> Array[String]:
 		errors.append("reason catalog should preserve unknown reason text: %s" % unknown)
 	if catalog.disabled_text_for("smoke_unknown_reason") != "smoke_unknown_reason":
 		errors.append("reason catalog should preserve unknown disabled text: %s" % catalog.disabled_text_for("smoke_unknown_reason"))
+	var transition_cancel: Dictionary = catalog.entry_for("scene_transition:survivor_outpost_01_interior")
+	if not bool(transition_cancel.get("known", false)) \
+			or str(transition_cancel.get("category", "")) != "pending" \
+			or str(transition_cancel.get("text", "")) != "地图切换取消" \
+			or not _array_or_empty(transition_cancel.get("payload_fields", [])).has("crafting_queue"):
+		errors.append("reason catalog should normalize scene transition cancel reasons: %s" % transition_cancel)
 	return errors
 
 
