@@ -3193,15 +3193,7 @@ func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
 		"attack":
 			var attack_cost: float = float(weapon_profile.get("ap_cost", DEFAULT_ATTACK_AP))
 			if actor.ap < attack_cost:
-				return {
-					"success": false,
-					"actor_id": actor.actor_id,
-					"target_actor_id": target_actor_id,
-					"intent": "attack",
-					"reason": "ap_insufficient_npc_attack",
-					"required_ap": attack_cost,
-					"available_ap": actor.ap,
-				}
+				return _npc_wait_for_ap(actor, target_actor_id, "attack", "ap_insufficient_npc_attack", attack_cost)
 			var ammo_check: Dictionary = _attack_ammo_check(actor, weapon_profile)
 			if not bool(ammo_check.get("success", true)):
 				ammo_check["actor_id"] = actor.actor_id
@@ -3225,6 +3217,8 @@ func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
 			var reload_result: Dictionary = _submit_reload_equipped_action(actor, {
 				"slot_id": str(weapon_profile.get("equipment_slot", "main_hand")),
 			}, item_library)
+			if not bool(reload_result.get("success", false)) and str(reload_result.get("reason", "")) == "ap_insufficient_reload":
+				return _npc_wait_for_ap(actor, target_actor_id, "reload", "ap_insufficient_npc_reload", float(reload_result.get("required_ap", 0.0)))
 			reload_result["actor_id"] = actor.actor_id
 			reload_result["intent"] = "reload"
 			reload_result["target_actor_id"] = target_actor_id
@@ -3238,6 +3232,28 @@ func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
 		"actor_id": actor.actor_id,
 		"intent": "idle",
 		"reason": intent.get("reason", "idle"),
+	}
+
+
+func _npc_wait_for_ap(actor: RefCounted, target_actor_id: int, planned_intent: String, reason: String, required_ap: float) -> Dictionary:
+	_emit("actor_waited", {
+		"actor_id": actor.actor_id,
+		"ap_before": actor.ap,
+		"reason": reason,
+		"planned_intent": planned_intent,
+		"target_actor_id": target_actor_id,
+		"required_ap": required_ap,
+		"available_ap": actor.ap,
+	})
+	return {
+		"success": true,
+		"actor_id": actor.actor_id,
+		"target_actor_id": target_actor_id,
+		"intent": "wait",
+		"planned_intent": planned_intent,
+		"reason": reason,
+		"required_ap": required_ap,
+		"available_ap": actor.ap,
 	}
 
 
@@ -3361,6 +3377,8 @@ func _npc_turn_close_reason(actor: RefCounted, result: Dictionary) -> String:
 		return "npc_turn_exhausted"
 	if str(result.get("intent", "")) == "idle":
 		return "npc_turn_idle"
+	if str(result.get("intent", "")) == "wait":
+		return "npc_turn_waiting_for_ap"
 	if not bool(result.get("success", false)):
 		return "npc_turn_failed:%s" % str(result.get("reason", "unknown"))
 	return "npc_turn_complete"

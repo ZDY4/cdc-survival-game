@@ -77,6 +77,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	simulation.set_relationship_score(player.actor_id, zombie_id, -100.0, "ai_smoke_restore_hostile")
 
 	_expect_hostile_weapon_and_reload_intents(errors, simulation, registry, player_grid)
+	errors.append_array(_expect_npc_waits_when_ap_insufficient(registry))
 	errors.append_array(_expect_hostile_auto_open_door(registry))
 
 	zombie.grid_position = GridCoord.new(player_grid.x + 20, player_grid.y, player_grid.z)
@@ -221,6 +222,64 @@ func _expect_hostile_weapon_and_reload_intents(errors: Array[String], simulation
 		errors.append("hostile with empty magazine and no ammo should idle with weapon_ammo_unavailable, got %s/%s" % [dry_intent.get("intent", ""), dry_intent.get("reason", "")])
 
 
+func _expect_npc_waits_when_ap_insufficient(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var attack_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var attack_player: RefCounted = attack_simulation.actor_registry.get_actor(1)
+	attack_player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(attack_simulation)
+	var attack_zombie_id: int = _register_character(attack_simulation, registry, "zombie_walker", GridCoord.new(1, 0, 0), {
+		"ai": {"aggro_range": 10.0, "attack_range": 1.0},
+		"combat_attributes": {
+			"turn_ap_gain": 0.5,
+			"turn_ap_max": 0.5,
+			"affordable_ap_threshold": 1.0,
+		},
+	})
+	var attack_results: Array = attack_simulation.advance_world_turn(_line_test_topology(2))
+	var attack_wait: Dictionary = _npc_result_for_actor(attack_results, attack_zombie_id)
+	if str(attack_wait.get("intent", "")) != "wait" or str(attack_wait.get("planned_intent", "")) != "attack":
+		errors.append("AP-short hostile attack should wait, got %s" % attack_wait)
+	if str(attack_wait.get("reason", "")) != "ap_insufficient_npc_attack":
+		errors.append("AP-short hostile attack wait should expose stable reason")
+	if str(attack_wait.get("turn_close_reason", "")) != "npc_turn_waiting_for_ap":
+		errors.append("AP-short hostile attack wait should close turn as waiting_for_ap")
+	if float(attack_wait.get("required_ap", 0.0)) <= float(attack_wait.get("available_ap", 0.0)):
+		errors.append("AP-short hostile attack wait should expose required/available AP")
+	if _event_count(attack_simulation.snapshot(), "attack_resolved") > 0:
+		errors.append("AP-short hostile attack should not emit attack_resolved")
+	if _event_count(attack_simulation.snapshot(), "actor_waited") <= 0:
+		errors.append("AP-short hostile attack should emit actor_waited")
+
+	var reload_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var reload_player: RefCounted = reload_simulation.actor_registry.get_actor(1)
+	reload_player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(reload_simulation)
+	var reload_zombie_id: int = _register_character(reload_simulation, registry, "zombie_walker", GridCoord.new(4, 0, 0), {
+		"ai": {"aggro_range": 10.0, "attack_range": 1.0},
+		"equipment": {"main_hand": "1004"},
+		"weapon_ammo": {"main_hand": 0},
+		"inventory": {"1009": 2},
+		"combat_attributes": {
+			"turn_ap_gain": 0.5,
+			"turn_ap_max": 0.5,
+			"affordable_ap_threshold": 1.0,
+		},
+	})
+	var reload_results: Array = reload_simulation.advance_world_turn(_line_test_topology(5))
+	var reload_wait: Dictionary = _npc_result_for_actor(reload_results, reload_zombie_id)
+	if str(reload_wait.get("intent", "")) != "wait" or str(reload_wait.get("planned_intent", "")) != "reload":
+		errors.append("AP-short hostile reload should wait, got %s" % reload_wait)
+	if str(reload_wait.get("reason", "")) != "ap_insufficient_npc_reload":
+		errors.append("AP-short hostile reload wait should expose stable reason")
+	if str(reload_wait.get("turn_close_reason", "")) != "npc_turn_waiting_for_ap":
+		errors.append("AP-short hostile reload wait should close turn as waiting_for_ap")
+	var reloader: RefCounted = reload_simulation.actor_registry.get_actor(reload_zombie_id)
+	if reloader == null or int(reloader.weapon_ammo.get("main_hand", 0)) != 0:
+		errors.append("AP-short hostile reload should not change magazine ammo")
+	return errors
+
+
 func _expect_hostile_auto_open_door(registry: RefCounted) -> Array[String]:
 	var errors: Array[String] = []
 	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
@@ -299,6 +358,20 @@ func _door_test_topology(locked: bool) -> Dictionary:
 		},
 		"sight_blocking_cells": {},
 		"door_objects": [_door_summary("ai_smoke_door", false, locked)],
+	}
+
+
+func _line_test_topology(max_x: int) -> Dictionary:
+	return {
+		"bounds": {
+			"min_x": 0,
+			"max_x": max_x,
+			"min_z": 0,
+			"max_z": 0,
+		},
+		"blocking_cells": {},
+		"sight_blocking_cells": {},
+		"door_objects": [],
 	}
 
 
