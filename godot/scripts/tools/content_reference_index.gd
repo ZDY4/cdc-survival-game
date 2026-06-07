@@ -39,6 +39,8 @@ func references_for(domain: String, id_value: String, registry: ContentRegistry)
 			return _world_tile_references(id_value, registry)
 		"appearance":
 			return _appearance_references(id_value, registry)
+		"ai":
+			return _ai_references(id_value, registry)
 	return []
 
 
@@ -58,6 +60,7 @@ func supports_domain(domain: String) -> bool:
 		"shops",
 		"world_tiles",
 		"appearance",
+		"ai",
 	].has(domain)
 
 
@@ -373,6 +376,43 @@ func _world_tile_references(world_tile_id: String, registry: ContentRegistry) ->
 	return hits
 
 
+func _ai_references(ai_id: String, registry: ContentRegistry) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	for character_id in registry.get_library("characters").keys():
+		var record: Dictionary = _dictionary_or_empty(registry.get_library("characters").get(character_id, {}))
+		var life: Dictionary = _dictionary_or_empty(_dictionary_or_empty(record.get("data", {})).get("life", {}))
+		for field in ["ai_behavior_profile_id", "schedule_profile_id", "personality_profile_id", "need_profile_id", "smart_object_access_profile_id"]:
+			if ContentRegistry.normalize_content_id(life.get(field, "")) == ai_id:
+				hits.append(_reference_hit("character", character_id, record.get("path", ""), "life.%s" % field))
+	for record_id in registry.get_library("ai").keys():
+		var record: Dictionary = _dictionary_or_empty(registry.get_library("ai").get(record_id, {}))
+		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+		var path := str(record.get("path", ""))
+		if data.has("id"):
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "included_behavior_ids", _array_or_empty(data.get("included_behavior_ids", [])))
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "fact_group_ids", _array_or_empty(data.get("fact_group_ids", [])))
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "fact_ids", _array_or_empty(data.get("fact_ids", [])))
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "goal_group_ids", _array_or_empty(data.get("goal_group_ids", [])))
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "goal_ids", _array_or_empty(data.get("goal_ids", [])))
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "action_group_ids", _array_or_empty(data.get("action_group_ids", [])))
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "action_ids", _array_or_empty(data.get("action_ids", [])))
+			_collect_scalar_ref(hits, ai_id, "ai", record_id, path, "default_goal_id", data.get("default_goal_id", ""))
+			_collect_scalar_ref(hits, ai_id, "ai", record_id, path, "alert_goal_id", data.get("alert_goal_id", ""))
+		for i in range(_array_or_empty(data.get("fact_groups", [])).size()):
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "fact_groups[%d].fact_ids" % i, _array_or_empty(_dictionary_or_empty(data["fact_groups"][i]).get("fact_ids", [])))
+		for i in range(_array_or_empty(data.get("goal_groups", [])).size()):
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "goal_groups[%d].goal_ids" % i, _array_or_empty(_dictionary_or_empty(data["goal_groups"][i]).get("goal_ids", [])))
+		for i in range(_array_or_empty(data.get("action_groups", [])).size()):
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "action_groups[%d].action_ids" % i, _array_or_empty(_dictionary_or_empty(data["action_groups"][i]).get("action_ids", [])))
+		for i in range(_array_or_empty(data.get("goals", [])).size()):
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "goals[%d].score_rule_ids" % i, _array_or_empty(_dictionary_or_empty(data["goals"][i]).get("score_rule_ids", [])))
+		for i in range(_array_or_empty(data.get("actions", [])).size()):
+			var action: Dictionary = _dictionary_or_empty(data["actions"][i])
+			_collect_scalar_ref(hits, ai_id, "ai", record_id, path, "actions[%d].executor_binding_id" % i, action.get("executor_binding_id", ""))
+			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "actions[%d].expected_fact_ids" % i, _array_or_empty(action.get("expected_fact_ids", [])))
+	return hits
+
+
 func _collect_legacy_json_scalar_refs(hits: Array[Dictionary], target_id: String, field_names: Array[String], source_kind: String) -> void:
 	_sources.collect_legacy_json_refs(hits, target_id, source_kind, field_names, [])
 
@@ -394,6 +434,11 @@ func _collect_string_array_refs(hits: Array[Dictionary], target_id: String, sour
 	for i in range(values.size()):
 		if str(values[i]) == target_id:
 			hits.append(_reference_hit(source_kind, source_id, path, "%s[%d]" % [field, i]))
+
+
+func _collect_scalar_ref(hits: Array[Dictionary], target_id: String, source_kind: String, source_id: String, path: String, field: String, value: Variant) -> void:
+	if ContentRegistry.normalize_content_id(value) == target_id:
+		hits.append(_reference_hit(source_kind, source_id, path, field))
 
 
 func _shop_id_from_action(action: Dictionary) -> String:
@@ -456,3 +501,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

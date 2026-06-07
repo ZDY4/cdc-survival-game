@@ -62,7 +62,7 @@
 - [~] 安全写回：格式化、dry-run、diff summary、失败不落盘、原子替换。
 - [ ] JSON path 定位：校验错误能定位到文件、字段路径和数组索引。
 - [ ] `changed` / `diff-summary` 等旧 content_tools 行为完整迁移。
-- [~] 跨 domain 引用校验：item、recipe、quest、dialogue、dialogue rule、skill、character、settlement、map、overworld、shop、world tile、appearance profile、appearance asset path 和物品 appearance `visual_asset` -> Godot glTF 已有第一版覆盖，`references shop <id>` 可反查店主和交易对话，`references dialogue_rule <id>` 可反查角色绑定和默认 / 变体对话，`references world_tile <id>` 可反查地图和 overworld tile 使用点，`references appearance <id>` 可反查角色外观绑定；待补更多 legacy json 字段和地图 asset id 映射校验。
+- [~] 跨 domain 引用校验：item、recipe、quest、dialogue、dialogue rule、skill、character、settlement、map、overworld、shop、world tile、appearance profile、AI behavior / profile、appearance asset path 和物品 appearance `visual_asset` -> Godot glTF 已有第一版覆盖，`references shop <id>` 可反查店主和交易对话，`references dialogue_rule <id>` 可反查角色绑定和默认 / 变体对话，`references ai <id>` 可反查角色 life 绑定和 AI 集合内引用，`references world_tile <id>` 可反查地图和 overworld tile 使用点，`references appearance <id>` 可反查角色外观绑定；待补更多 legacy json 字段和地图 asset id 映射校验。
 - [ ] 内容版本和 schema migration：旧字段、缺省字段、废弃字段、迁移日志和 snapshot roundtrip。
 
 参考：`content_tools/src/app/**`、`game_data/src/content_registry.rs`、`game_data/src/file_backed.rs`、`game_data/src/content.rs`。

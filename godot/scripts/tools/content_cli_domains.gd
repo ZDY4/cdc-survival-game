@@ -1,7 +1,7 @@
 extends RefCounted
 
-const FORMAT_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles"]
-const VALIDATE_CHANGED_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance"]
+const FORMAT_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "ai"]
+const VALIDATE_CHANGED_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance", "ai"]
 const FORMAT_PATH_ROOTS := {
 	"items": "data/items/",
 	"recipes": "data/recipes/",
@@ -16,15 +16,16 @@ const FORMAT_PATH_ROOTS := {
 	"overworld": "data/overworld/",
 	"shops": "data/shops/",
 	"world_tiles": "data/world_tiles/",
+	"ai": "data/ai/",
 }
 
 
 static func format_domain_names() -> String:
-	return "item, recipe, character, map, dialogue, dialogue_rule, quest, skill, skill_tree, settlement, overworld, shop, world_tile"
+	return "item, recipe, character, map, dialogue, dialogue_rule, quest, skill, skill_tree, settlement, overworld, shop, world_tile, ai"
 
 
 static func validate_domain_names() -> String:
-	return "item, recipe, character, map, dialogue, dialogue_rule, quest, skill, skill_tree, settlement, overworld, shop, world_tile, appearance"
+	return "item, recipe, character, map, dialogue, dialogue_rule, quest, skill, skill_tree, settlement, overworld, shop, world_tile, appearance, ai"
 
 
 static func git_status_paths_for_format() -> Array[String]:

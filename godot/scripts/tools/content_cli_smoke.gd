@@ -18,7 +18,7 @@ func _init() -> void:
 
 	print("content_cli_smoke passed:")
 	print({
-		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "dialogue_rule", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "shop", "world_tile", "appearance"],
+		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "dialogue_rule", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "shop", "world_tile", "appearance", "ai"],
 	})
 	quit(0)
 
@@ -46,6 +46,7 @@ func _run() -> Array[String]:
 	_expect_min_refs(errors, index, registry, "shops", "trader_lao_wang_shop", 1)
 	_expect_min_refs(errors, index, registry, "world_tiles", "surface_placeholder_basic", 1)
 	_expect_min_refs(errors, index, registry, "appearance", "default_humanoid", 1)
+	_expect_min_refs(errors, index, registry, "ai", "guard_settlement", 1)
 	_expect_valid_record(errors, registry, "items", "1006")
 	_expect_valid_record(errors, registry, "recipes", "recipe_first_aid_kit")
 	_expect_valid_record(errors, registry, "characters", "zombie_walker")
@@ -60,6 +61,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "shops", "trader_lao_wang_shop")
 	_expect_valid_record(errors, registry, "world_tiles", "surface_placeholder_basic")
 	_expect_valid_record(errors, registry, "appearance", "default_humanoid")
+	_expect_valid_record(errors, registry, "ai", "guard_settlement")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_item_appearance_asset_ref(errors, registry)
@@ -68,6 +70,9 @@ func _run() -> Array[String]:
 	_expect_invalid_world_tile_asset_ref(errors, registry)
 	_expect_invalid_map_world_tile_ref(errors, registry)
 	_expect_invalid_overworld_surface_set_ref(errors, registry)
+	_expect_invalid_character_ai_ref(errors, registry)
+	_expect_invalid_ai_behavior_group_ref(errors, registry)
+	_expect_invalid_ai_action_executor_ref(errors, registry)
 	_expect_recipe_unlock_source_refs(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
 	_expect_invalid_dialogue_shop_ref(errors, registry)
@@ -101,7 +106,7 @@ func _expect_valid_record(errors: Array[String], registry: ContentRegistry, doma
 func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) -> void:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
 	var checked := 0
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance"]:
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance", "ai"]:
 		for id_value in registry.get_library(domain).keys():
 			var validation := validator.validate_record(domain, str(id_value), registry)
 			checked += 1
@@ -279,6 +284,63 @@ func _expect_invalid_overworld_surface_set_ref(errors: Array[String], registry: 
 		return
 	if not _has_issue_code(validation.get("issues", []), "unknown_surface_set"):
 		errors.append("invalid overworld surface set smoke did not report unknown_surface_set: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_character_ai_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("characters").get("survivor_outpost_01_guard_liu", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing guard fixture for invalid AI profile smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var life: Dictionary = data.get("life", {}).duplicate(true)
+	life["ai_behavior_profile_id"] = "missing_ai_behavior_for_validator_smoke"
+	data["life"] = life
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("characters", "survivor_outpost_01_guard_liu", _registry_with_override(registry, "characters", "survivor_outpost_01_guard_liu", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid character AI profile reference smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_ai_behavior"):
+		errors.append("invalid character AI profile smoke did not report unknown_ai_behavior: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_ai_behavior_group_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("ai").get("guard_settlement", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing guard_settlement fixture for AI behavior validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	data["action_group_ids"] = ["missing_action_group_for_validator_smoke"]
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("ai", "guard_settlement", _registry_with_override(registry, "ai", "guard_settlement", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid AI behavior action group smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_action_group"):
+		errors.append("invalid AI behavior group smoke did not report unknown_action_group: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_ai_action_executor_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("ai").get("settlement_npc_modules", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing settlement_npc_modules fixture for AI action validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var actions: Array = data.get("actions", []).duplicate(true)
+	if actions.is_empty():
+		errors.append("AI action validation smoke missing action fixture")
+		return
+	var action: Dictionary = actions[0].duplicate(true)
+	action["executor_binding_id"] = "missing_executor_for_validator_smoke"
+	actions[0] = action
+	data["actions"] = actions
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("ai", "settlement_npc_modules", _registry_with_override(registry, "ai", "settlement_npc_modules", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid AI action executor smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_executor"):
+		errors.append("invalid AI action executor smoke did not report unknown_executor: %s" % validation.get("issues", []))
 
 
 func _expect_recipe_unlock_source_refs(errors: Array[String], registry: ContentRegistry) -> void:
@@ -514,6 +576,7 @@ func _expect_format_domain_support(errors: Array[String], registry: ContentRegis
 		"overworld": "data/overworld/main_overworld.json",
 		"shops": "data/shops/trader_lao_wang_shop.json",
 		"world_tiles": "data/world_tiles/surface_placeholder_basic.json",
+		"ai": "data/ai/behaviors/guard_settlement.json",
 	}
 	var domain_helper = load("res://scripts/tools/content_cli_domains.gd")
 	for domain in supported.keys():
@@ -539,6 +602,7 @@ func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -
 		{"domain": "overworld", "id": "main_overworld", "expected": "locations: 12"},
 		{"domain": "shops", "id": "trader_lao_wang_shop", "expected": "inventory_count: 6"},
 		{"domain": "world_tiles", "id": "surface_placeholder_basic", "expected": "prototype_count: 8"},
+		{"domain": "ai", "id": "guard_settlement", "expected": "action_groups: duty_travel_actions, guard_actions"},
 	]
 	for test_case in cases:
 		var domain := str(test_case["domain"])

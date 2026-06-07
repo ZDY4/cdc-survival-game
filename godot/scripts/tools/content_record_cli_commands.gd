@@ -7,7 +7,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 
-const USAGE := "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"
+const USAGE := "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance|ai> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"
 
 
 func validate_command(args: Array[String], registry: ContentRegistry) -> int:
@@ -73,6 +73,11 @@ func summarize_command(args: Array[String], registry: ContentRegistry) -> int:
 
 
 func references_command(args: Array[String], registry: ContentRegistry) -> int:
+	var nested_ai_lookup := _nested_ai_reference_lookup(args, registry)
+	if bool(nested_ai_lookup.get("ok", false)):
+		return 0
+	if bool(nested_ai_lookup.get("handled", false)):
+		return int(nested_ai_lookup.get("exit_code", 1))
 	var lookup := _record_lookup(args, registry)
 	if not bool(lookup.get("ok", false)):
 		return int(lookup.get("exit_code", 1))
@@ -87,6 +92,24 @@ func references_command(args: Array[String], registry: ContentRegistry) -> int:
 		return 2
 	_print_references(kind, id_value, record.get("path", ""), reference_index.references_for(domain, id_value, registry))
 	return 0
+
+
+func _nested_ai_reference_lookup(args: Array[String], registry: ContentRegistry) -> Dictionary:
+	if args.size() != 3:
+		return {"handled": false}
+	var kind := str(args[1])
+	var domain := _normalize_domain(kind)
+	if domain != "ai":
+		return {"handled": false}
+	var id_value := ContentRegistry.normalize_content_id(args[2])
+	if registry.get_library("ai").has(id_value):
+		return {"handled": false}
+	var reference_index: ContentReferenceIndex = ContentReferenceIndex.new()
+	var hits := reference_index.references_for("ai", id_value, registry)
+	if hits.is_empty():
+		return {"handled": false}
+	_print_references(kind, id_value, "", hits)
+	return {"handled": true, "ok": true}
 
 
 func _validate_changed_command(registry: ContentRegistry) -> int:
@@ -269,4 +292,4 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 
 
 func _reference_domain_list() -> String:
-	return "item, recipe, character, dialogue, dialogue_rule, quest, skill, skill_tree, settlement, overworld, map, shop, world_tile, and appearance"
+	return "item, recipe, character, dialogue, dialogue_rule, quest, skill, skill_tree, settlement, overworld, map, shop, world_tile, appearance, and ai"

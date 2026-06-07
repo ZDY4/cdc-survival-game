@@ -42,6 +42,8 @@ func summary_lines(domain: String, id_value: String, record: Dictionary, relativ
 			lines.append_array(_shop_lines(data))
 		"world_tiles":
 			lines.append_array(_world_tile_lines(data))
+		"ai":
+			lines.append_array(_ai_lines(data))
 	return lines
 
 
@@ -230,6 +232,42 @@ func _world_tile_lines(data: Dictionary) -> Array[String]:
 		"surface_set_ids: %s" % _join_or_dash(_ids_from_records(surface_sets)),
 		"wall_set_ids: %s" % _join_or_dash(_ids_from_records(wall_sets)),
 	]
+
+
+func _ai_lines(data: Dictionary) -> Array[String]:
+	if data.has("id"):
+		return [
+			"behavior_id: %s" % data.get("id", ""),
+			"display_name: %s" % _dictionary_or_empty(data.get("meta", {})).get("display_name", ""),
+			"included_behaviors: %s" % _join_or_dash(_string_array(_array_or_empty(data.get("included_behavior_ids", [])))),
+			"action_groups: %s" % _join_or_dash(_string_array(_array_or_empty(data.get("action_group_ids", [])))),
+			"default_goal_id: %s" % str(data.get("default_goal_id", "-")),
+			"alert_goal_id: %s" % str(data.get("alert_goal_id", "-")),
+		]
+	var lines: Array[String] = []
+	for collection in [
+		"conditions",
+		"facts",
+		"fact_groups",
+		"score_rules",
+		"goals",
+		"goal_groups",
+		"actions",
+		"action_groups",
+		"executors",
+		"schedule_templates",
+		"need_profiles",
+		"personality_profiles",
+		"smart_object_access_profiles",
+	]:
+		var values := _array_or_empty(data.get(collection, []))
+		if values.is_empty():
+			continue
+		lines.append("%s_count: %d" % [collection, values.size()])
+		lines.append("%s_ids: %s" % [collection, _join_or_dash(_ids_from_records(values))])
+	if lines.is_empty():
+		lines.append("ai_collections: -")
+	return lines
 
 
 func _dialogue_start_node(nodes: Array) -> String:
