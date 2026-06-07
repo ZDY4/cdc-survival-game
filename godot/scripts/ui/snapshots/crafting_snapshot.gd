@@ -1,5 +1,7 @@
 extends RefCounted
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+
 var registry: RefCounted
 
 
@@ -63,6 +65,7 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 		"category": str(recipe.get("category", "")),
 		"output_item_id": output_item_id,
 		"output_name": str(output_item.get("name", output_item_id)),
+		"output_icon_asset": AssetPathResolver.resolve_media_asset(str(output_item.get("icon_path", "")), "item"),
 		"output_count": output_count,
 		"preview_output_count": output_count * max(1, max_craft_count),
 		"materials": materials,

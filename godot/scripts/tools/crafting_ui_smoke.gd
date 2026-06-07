@@ -46,6 +46,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("crafting panel missing basic bandage recipe")
 	if not _recipe_text(game_root).contains("材料不足"):
 		errors.append("basic bandage should initially show missing materials")
+	if not _recipe_line_has_icon(game_root, "recipe_bandage_basic", "res://assets/icons/items/bandage.svg"):
+		errors.append("basic bandage recipe row should render migrated output item icon")
 	_press_category_button(game_root, "weapon")
 	await process_frame
 	if _recipe_text(game_root).contains("基础绷带"):
@@ -444,6 +446,14 @@ func _recipe_line(game_root: Node, recipe_id: String) -> String:
 		return ""
 	var line: Node = row.get_node("Line")
 	return str((line as Button).text) if line is Button else ""
+
+
+func _recipe_line_has_icon(game_root: Node, recipe_id: String, expected_resource_path: String) -> bool:
+	var row: Node = game_root.crafting_panel.find_child("Recipe_%s" % recipe_id, true, false)
+	if row == null:
+		return false
+	var line: Button = row.get_node_or_null("Line") as Button
+	return line != null and line.icon != null and str(line.get_meta("icon_resource_path", "")) == expected_resource_path
 
 
 func _craft_button(game_root: Node, recipe_id: String) -> Button:

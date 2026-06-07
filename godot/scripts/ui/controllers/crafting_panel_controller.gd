@@ -1,5 +1,7 @@
 extends Control
 
+const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+
 var _panel: PanelContainer
 var _summary_label: Label
 var _search_box: LineEdit
@@ -179,6 +181,7 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 	line.toggle_mode = true
 	line.button_pressed = _selected_recipe_id == str(recipe.get("recipe_id", ""))
 	line.focus_mode = Control.FOCUS_NONE
+	_apply_recipe_icon(line, recipe)
 	var recipe_id := str(recipe.get("recipe_id", ""))
 	line.pressed.connect(func() -> void:
 		_selected_recipe_id = recipe_id
@@ -216,6 +219,18 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 	row.add_child(queue_button)
 	row.add_child(button)
 	return row
+
+
+func _apply_recipe_icon(button: Button, recipe: Dictionary) -> void:
+	var icon_asset := _dictionary_or_empty(recipe.get("output_icon_asset", {}))
+	var texture := MediaTextureLoader.texture_from_asset(icon_asset)
+	if texture == null:
+		button.icon = null
+		return
+	button.icon = texture
+	button.expand_icon = true
+	button.set_meta("icon_resource_path", MediaTextureLoader.resource_path_from_asset(icon_asset))
+	button.set_meta("icon_fallback_key", str(icon_asset.get("fallback_key", "")))
 
 
 func _apply_detail(recipe: Dictionary) -> void:
