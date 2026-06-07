@@ -517,9 +517,9 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	player.inventory.clear()
 	player.inventory_order.clear()
 	player.equipment.clear()
-	player.inventory["smoke_deconstruct_consumable_tool_item"] = 1
+	player.inventory["smoke_deconstruct_consumable_tool_item"] = 2
 	player.equipment["tool"] = "1151"
-	var missing_consumable_deconstruct_tool: Dictionary = simulation.submit_player_command({
+	var equipped_consumable_deconstruct_tool: Dictionary = simulation.submit_player_command({
 		"kind": "inventory_action",
 		"actor_id": 1,
 		"action": "deconstruct",
@@ -527,11 +527,17 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		"count": 1,
 		"item_library": consumable_deconstruct_items,
 	})
-	if str(missing_consumable_deconstruct_tool.get("reason", "")) != "missing_consumable_tools":
-		errors.append("deconstruct should require consumable tool from inventory before consuming source")
+	if not bool(equipped_consumable_deconstruct_tool.get("success", false)):
+		errors.append("deconstruct should consume equipped consumable tool: %s" % equipped_consumable_deconstruct_tool.get("reason", "unknown"))
 	if int(player.inventory.get("smoke_deconstruct_consumable_tool_item", 0)) != 1:
-		errors.append("missing consumable deconstruct tool should not consume source item")
+		errors.append("equipped consumable deconstruct should consume one of two source items")
+	if player.equipment.has("tool"):
+		errors.append("equipped consumable deconstruct should remove consumed equipment slot")
+	var equipped_deconstruct_tools: Array = _array_or_empty(equipped_consumable_deconstruct_tool.get("consumed_tools", []))
+	if equipped_deconstruct_tools.is_empty() or str(_dictionary_or_empty(equipped_deconstruct_tools[0]).get("source", "")) != "equipment":
+		errors.append("equipped consumable deconstruct should report equipment source: %s" % equipped_deconstruct_tools)
 	player.equipment.clear()
+	player.inventory["smoke_deconstruct_consumable_tool_item"] = 1
 	player.inventory["1151"] = 1
 	var event_count_before_deconstruct: int = _event_count(simulation.snapshot(), "item_deconstructed")
 	var consumable_deconstruct_result: Dictionary = simulation.submit_player_command({
@@ -553,11 +559,50 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("consumable-tool deconstruct should emit item_deconstructed event")
 	elif _array_or_empty(_dictionary_or_empty(_dictionary_or_empty(deconstruct_events[deconstruct_events.size() - 1]).get("payload", {})).get("consumed_tools", [])).is_empty():
 		errors.append("item_deconstructed event should expose consumed_tools")
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.inventory["smoke_deconstruct_consumable_tool_item"] = 1
+	simulation.container_sessions["smoke_deconstruct_tool_crate"] = {
+		"container_id": "smoke_deconstruct_tool_crate",
+		"display_name": "拆解工具箱",
+		"inventory": [{"item_id": "1151", "count": 1}],
+	}
+	var nearby_consumable_deconstruct_result: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "smoke_deconstruct_consumable_tool_item",
+		"count": 1,
+		"item_library": consumable_deconstruct_items,
+		"crafting_context": {
+			"nearby_tool_containers": [{
+				"container_id": "smoke_deconstruct_tool_crate",
+				"display_name": "拆解工具箱",
+				"inventory": [{"item_id": "1151", "count": 1}],
+			}],
+		},
+	})
+	if not bool(nearby_consumable_deconstruct_result.get("success", false)):
+		errors.append("deconstruct should consume nearby container tool: %s" % nearby_consumable_deconstruct_result.get("reason", "unknown"))
+	var deconstruct_tool_crate: Dictionary = _dictionary_or_empty(simulation.container_sessions.get("smoke_deconstruct_tool_crate", {}))
+	if _inventory_entry_count(_array_or_empty(deconstruct_tool_crate.get("inventory", [])), "1151") != 0:
+		errors.append("nearby consumable deconstruct should consume container tool")
+	var nearby_deconstruct_tools: Array = _array_or_empty(nearby_consumable_deconstruct_result.get("consumed_tools", []))
+	var nearby_deconstruct_source_seen := false
+	for consumed_tool in nearby_deconstruct_tools:
+		var consumed_tool_data: Dictionary = _dictionary_or_empty(consumed_tool)
+		if str(consumed_tool_data.get("source", "")) == "nearby_container" and str(consumed_tool_data.get("container_id", "")) == "smoke_deconstruct_tool_crate":
+			nearby_deconstruct_source_seen = true
+	if not nearby_deconstruct_source_seen:
+		errors.append("nearby consumable deconstruct should report container source: %s" % nearby_deconstruct_tools)
+	simulation.container_sessions.erase("smoke_deconstruct_tool_crate")
 	var durable_deconstruct_items: Dictionary = _durable_deconstruct_tool_smoke_items(registry.get_library("items"))
 	player.inventory.clear()
 	player.inventory_order.clear()
 	player.equipment.clear()
 	player.tool_durability.clear()
+	player.ap = 6.0
 	player.inventory["smoke_deconstruct_durable_tool_item"] = 2
 	player.inventory["1151"] = 1
 	player.tool_durability["1151"] = 5.0

@@ -527,10 +527,56 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 	var missing_consumable_tool_result: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_tool_item", 1)
 	await process_frame
-	if str(missing_consumable_tool_result.get("reason", "")) != "missing_consumable_tools":
-		errors.append("deconstruct should report missing_consumable_tools when consumable tool is only equipped")
-	if not _inventory_feedback_line(game_root).contains("缺少可消耗拆解工具"):
-		errors.append("inventory feedback should localize missing consumable deconstruct tool")
+	if str(missing_consumable_tool_result.get("reason", "")) != "missing_station":
+		errors.append("station-gated deconstruct with equipped consumable tool should still report missing_station")
+	if not player_ref.equipment.has("tool"):
+		errors.append("failed station-gated deconstruct should not consume equipped tool")
+	player_ref.inventory.clear()
+	player_ref.inventory_order.clear()
+	player_ref.equipment.clear()
+	player_ref.inventory["smoke_deconstruct_consumable_tool_ui_item"] = 1
+	player_ref.equipment["tool"] = "1151"
+	game_root.refresh_inventory_panel()
+	var equipped_consumable_tool_result: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_consumable_tool_ui_item", 1)
+	await process_frame
+	if not bool(equipped_consumable_tool_result.get("success", false)):
+		errors.append("deconstruct should consume equipped consumable tool: %s" % equipped_consumable_tool_result.get("reason", "unknown"))
+	if player_ref.equipment.has("tool"):
+		errors.append("successful equipped consumable deconstruct should remove equipment slot")
+	var equipped_consumed_tools: Array = _array_or_empty(equipped_consumable_tool_result.get("consumed_tools", []))
+	if equipped_consumed_tools.is_empty() or str(_dictionary_or_empty(equipped_consumed_tools[0]).get("source", "")) != "equipment":
+		errors.append("equipped consumable deconstruct should report equipment source: %s" % equipped_consumed_tools)
+	player_ref.inventory.clear()
+	player_ref.inventory_order.clear()
+	player_ref.equipment.clear()
+	player_ref.inventory["smoke_deconstruct_consumable_tool_ui_item"] = 1
+	var nearby_tool_grid: Dictionary = player_ref.grid_position.to_dictionary()
+	game_root.simulation.map_interaction_targets["smoke_deconstruct_tool_crate_ui"] = {
+		"target_id": "smoke_deconstruct_tool_crate_ui",
+		"target_type": "map_object",
+		"display_name": "拆解工具箱",
+		"kind": "container",
+		"anchor": nearby_tool_grid,
+		"cells": [nearby_tool_grid],
+		"container_inventory": [{"item_id": "1151", "count": 1}],
+	}
+	game_root.refresh_inventory_panel()
+	var nearby_consumable_tool_result: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_consumable_tool_ui_item", 1)
+	await process_frame
+	if not bool(nearby_consumable_tool_result.get("success", false)):
+		errors.append("deconstruct should consume nearby container tool: %s" % nearby_consumable_tool_result.get("reason", "unknown"))
+	var nearby_tool_target: Dictionary = _dictionary_or_empty(game_root.simulation.map_interaction_targets.get("smoke_deconstruct_tool_crate_ui", {}))
+	if _inventory_entry_count(_array_or_empty(nearby_tool_target.get("container_inventory", [])), "1151") != 0:
+		errors.append("nearby consumable deconstruct should consume map target container tool")
+	var nearby_consumed_tools: Array = _array_or_empty(nearby_consumable_tool_result.get("consumed_tools", []))
+	var nearby_source_seen := false
+	for consumed_tool in nearby_consumed_tools:
+		var consumed_tool_data: Dictionary = _dictionary_or_empty(consumed_tool)
+		if str(consumed_tool_data.get("source", "")) == "nearby_container" and str(consumed_tool_data.get("container_id", "")) == "smoke_deconstruct_tool_crate_ui":
+			nearby_source_seen = true
+	if not nearby_source_seen:
+		errors.append("nearby consumable deconstruct should report container source: %s" % nearby_consumed_tools)
+	game_root.simulation.map_interaction_targets.erase("smoke_deconstruct_tool_crate_ui")
 	player_ref.equipment.clear()
 	player_ref.inventory.clear()
 	player_ref.inventory_order.clear()
@@ -786,6 +832,21 @@ func _install_deconstruct_requirement_smoke_item(game_root: Node) -> void:
 			}],
 		},
 	}
+	items["smoke_deconstruct_consumable_tool_ui_item"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_deconstruct_consumable_tool_ui_item",
+			"name": "消耗拆解工具UI测试物品",
+			"description": "用于验证拆解工具消耗来源",
+			"value": 1,
+			"weight": 0.1,
+			"fragments": [{
+				"kind": "crafting",
+				"deconstruct_required_tools": [{"item_id": "1151", "consume_on_deconstruct": true, "consume_count": 1}],
+				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
+			}],
+		},
+	}
 
 
 func _has_pending(game_root: Node) -> bool:
@@ -832,6 +893,15 @@ func _player_inventory_count(game_root: Node, item_id: String) -> int:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return int(actor_data.get("inventory", {}).get(item_id, 0))
 	return 0
+
+
+func _inventory_entry_count(entries: Array, item_id: String) -> int:
+	var total := 0
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("item_id", "")) == item_id:
+			total += max(0, int(entry_data.get("count", 0)))
+	return total
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:

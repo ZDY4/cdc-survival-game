@@ -1706,6 +1706,9 @@ func _submit_deconstruct_action(actor: RefCounted, command: Dictionary, items: D
 			"required_ap": cost,
 			"available_ap": actor.ap,
 		}
+	var tool_source_check: Dictionary = _deconstruct_tool_consumption_sources_available(actor, _array_or_empty(requirements.get("tool_consumption", [])), items)
+	if not bool(tool_source_check.get("success", false)):
+		return tool_source_check
 	var result: Dictionary = deconstruct_actor_item(actor.actor_id, item_id, count, items)
 	if bool(result.get("success", false)):
 		var consumed_tools: Array[Dictionary] = _consume_deconstruct_tools(actor, _array_or_empty(requirements.get("tool_consumption", [])))
@@ -1753,8 +1756,8 @@ func _deconstruct_requirement_check(actor: RefCounted, item_id: String, items: D
 			"missing_tools": missing_durability_tools,
 			"missing_durability_tools": missing_durability_tools,
 		}
-	var tool_consumption: Array[Dictionary] = _deconstruct_tool_consumption_requirements(actor, required_tools)
-	var missing_consumable_tools: Array[Dictionary] = _missing_deconstruct_consumable_tools(actor, tool_consumption, items)
+	var tool_consumption: Array[Dictionary] = _deconstruct_tool_consumption_requirements(actor, required_tools, crafting_context)
+	var missing_consumable_tools: Array[Dictionary] = _missing_deconstruct_consumable_tools(tool_consumption, items)
 	if not missing_consumable_tools.is_empty():
 		return {
 			"success": false,
@@ -1847,7 +1850,7 @@ func _deconstruct_required_tool_consume_count(crafting_fragment: Dictionary) -> 
 	return max(1, int(crafting_fragment.get("required_tool_consume_count", crafting_fragment.get("deconstruct_tool_consume_count", crafting_fragment.get("tool_consume_count", 1)))))
 
 
-func _deconstruct_tool_consumption_requirements(actor: RefCounted, required_tools: Array[Dictionary]) -> Array[Dictionary]:
+func _deconstruct_tool_consumption_requirements(actor: RefCounted, required_tools: Array[Dictionary], crafting_context: Dictionary = {}) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	for tool in required_tools:
 		var durability_cost: float = max(0.0, float(tool.get("durability_cost", 0.0)))
@@ -1856,12 +1859,18 @@ func _deconstruct_tool_consumption_requirements(actor: RefCounted, required_tool
 		var tool_id := str(tool.get("item_id", ""))
 		if tool_id.is_empty():
 			continue
+		var consume_count: int = max(1, int(tool.get("consume_count", tool.get("required", 1)))) if durability_cost <= 0.0 else 0
+		var sources: Array[Dictionary] = []
+		if durability_cost <= 0.0:
+			sources = _tool_consumption_sources(actor, tool_id, consume_count, crafting_context)
 		var requirement := {
 			"item_id": tool_id,
-			"count": max(1, int(tool.get("consume_count", tool.get("required", 1)))) if durability_cost <= 0.0 else 0,
-			"available": int(actor.inventory.get(tool_id, 0)) if actor != null else 0,
+			"count": consume_count,
+			"available": _consumption_source_total(sources) if durability_cost <= 0.0 else (int(actor.inventory.get(tool_id, 0)) if actor != null else 0),
 			"requirement_kind": "tool",
 		}
+		if not sources.is_empty():
+			requirement["sources"] = sources
 		if durability_cost > 0.0:
 			requirement["durability_cost"] = durability_cost
 			requirement["available_durability"] = _actor_tool_durability(actor, tool_id)
@@ -1869,14 +1878,14 @@ func _deconstruct_tool_consumption_requirements(actor: RefCounted, required_tool
 	return output
 
 
-func _missing_deconstruct_consumable_tools(actor: RefCounted, tool_consumption: Array[Dictionary], items: Dictionary) -> Array[Dictionary]:
+func _missing_deconstruct_consumable_tools(tool_consumption: Array[Dictionary], items: Dictionary) -> Array[Dictionary]:
 	var missing: Array[Dictionary] = []
 	for tool in tool_consumption:
 		var tool_id := str(tool.get("item_id", ""))
 		if float(tool.get("durability_cost", 0.0)) > 0.0:
 			continue
 		var required_count: int = max(1, int(tool.get("count", 1)))
-		var available_count: int = int(actor.inventory.get(tool_id, 0)) if actor != null else 0
+		var available_count: int = max(0, int(tool.get("available", 0)))
 		if not tool_id.is_empty() and available_count >= required_count:
 			continue
 		missing.append({
@@ -1887,6 +1896,35 @@ func _missing_deconstruct_consumable_tools(actor: RefCounted, tool_consumption: 
 			"consume_on_deconstruct": true,
 		})
 	return missing
+
+
+func _deconstruct_tool_consumption_sources_available(actor: RefCounted, tool_consumption: Array, items: Dictionary) -> Dictionary:
+	var missing: Array[Dictionary] = []
+	for tool in tool_consumption:
+		var tool_data: Dictionary = _dictionary_or_empty(tool)
+		if float(tool_data.get("durability_cost", 0.0)) > 0.0:
+			continue
+		var tool_id := str(tool_data.get("item_id", ""))
+		var required_count: int = max(1, int(tool_data.get("count", 1)))
+		var available_count := 0
+		for source in _array_or_empty(tool_data.get("sources", [])):
+			available_count += _tool_source_available_count(actor, tool_id, _dictionary_or_empty(source))
+		if not tool_id.is_empty() and available_count >= required_count:
+			continue
+		missing.append({
+			"item_id": tool_id,
+			"name": _item_name_from_library(tool_id, items),
+			"available": available_count,
+			"required": required_count,
+			"consume_on_deconstruct": true,
+		})
+	if missing.is_empty():
+		return {"success": true}
+	return {
+		"success": false,
+		"reason": "missing_consumable_tools",
+		"missing_consumable_tools": missing,
+	}
 
 
 func _missing_deconstruct_tool_durability(actor: RefCounted, required_tools: Array[Dictionary], items: Dictionary) -> Array[Dictionary]:
@@ -1931,16 +1969,181 @@ func _consume_deconstruct_tools(actor: RefCounted, tool_consumption: Array) -> A
 				"requirement_kind": "tool",
 			})
 			continue
-		var before_count: int = int(actor.inventory.get(tool_id, 0))
-		_inventory_entries.add_actor_item(actor, tool_id, -count)
-		consumed.append({
-			"item_id": tool_id,
-			"count": count,
-			"inventory_before": before_count,
-			"inventory_after": int(actor.inventory.get(tool_id, 0)),
-			"requirement_kind": "tool",
-		})
+		var remaining: int = count
+		for source in _array_or_empty(tool_data.get("sources", [])):
+			if remaining <= 0:
+				break
+			var source_data: Dictionary = _dictionary_or_empty(source)
+			var source_count: int = mini(remaining, max(0, int(source_data.get("count", 0))))
+			if source_count <= 0:
+				continue
+			var consumed_source: Dictionary = _consume_tool_from_source(actor, tool_id, source_count, source_data)
+			if consumed_source.is_empty():
+				continue
+			remaining -= int(consumed_source.get("count", 0))
+			consumed.append(consumed_source)
 	return consumed
+
+
+func _tool_consumption_sources(actor: RefCounted, tool_id: String, count: int, crafting_context: Dictionary = {}) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var remaining: int = max(0, count)
+	if actor != null and remaining > 0:
+		var actor_count: int = max(0, int(actor.inventory.get(tool_id, 0)))
+		if actor_count > 0:
+			var consumed_actor_count: int = mini(actor_count, remaining)
+			output.append({
+				"source": "actor_inventory",
+				"count": consumed_actor_count,
+				"inventory_before": actor_count,
+			})
+			remaining -= consumed_actor_count
+	if actor != null and remaining > 0:
+		var slot_ids: Array = actor.equipment.keys()
+		slot_ids.sort()
+		for slot_id in slot_ids:
+			if remaining <= 0:
+				break
+			if _inventory_entries.normalize_content_id(actor.equipment.get(slot_id, "")) != tool_id:
+				continue
+			output.append({
+				"source": "equipment",
+				"slot_id": str(slot_id),
+				"count": 1,
+			})
+			remaining -= 1
+	if remaining > 0:
+		for container in _array_or_empty(crafting_context.get("nearby_tool_containers", [])):
+			if remaining <= 0:
+				break
+			var container_data: Dictionary = _dictionary_or_empty(container)
+			var inventory: Array = _array_or_empty(container_data.get("inventory", []))
+			var container_count: int = _inventory_entries.count(inventory, tool_id)
+			if container_count <= 0:
+				continue
+			var consumed_container_count: int = mini(container_count, remaining)
+			output.append({
+				"source": "nearby_container",
+				"container_id": str(container_data.get("container_id", "")),
+				"display_name": str(container_data.get("display_name", container_data.get("container_id", ""))),
+				"count": consumed_container_count,
+				"inventory_before": container_count,
+			})
+			remaining -= consumed_container_count
+	return output
+
+
+func _consumption_source_total(sources: Array[Dictionary]) -> int:
+	var total := 0
+	for source in sources:
+		total += max(0, int(_dictionary_or_empty(source).get("count", 0)))
+	return total
+
+
+func _tool_source_available_count(actor: RefCounted, tool_id: String, source: Dictionary) -> int:
+	match str(source.get("source", "")):
+		"actor_inventory":
+			return max(0, int(actor.inventory.get(tool_id, 0))) if actor != null else 0
+		"equipment":
+			var slot_id := str(source.get("slot_id", ""))
+			if actor == null or slot_id.is_empty():
+				return 0
+			return 1 if _inventory_entries.normalize_content_id(actor.equipment.get(slot_id, "")) == tool_id else 0
+		"nearby_container":
+			var container_id := str(source.get("container_id", ""))
+			if container_id.is_empty():
+				return 0
+			if container_sessions.has(container_id):
+				return _inventory_entries.count(_array_or_empty(_dictionary_or_empty(container_sessions[container_id]).get("inventory", [])), tool_id)
+			if corpse_containers.has(container_id):
+				return _inventory_entries.count(_array_or_empty(_dictionary_or_empty(corpse_containers[container_id]).get("inventory", [])), tool_id)
+			if map_interaction_targets.has(container_id):
+				var target: Dictionary = _dictionary_or_empty(map_interaction_targets[container_id])
+				return _inventory_entries.count(_array_or_empty(target.get("inventory", target.get("container_inventory", []))), tool_id)
+	return 0
+
+
+func _consume_tool_from_source(actor: RefCounted, tool_id: String, count: int, source: Dictionary) -> Dictionary:
+	match str(source.get("source", "")):
+		"actor_inventory":
+			var before_count: int = int(actor.inventory.get(tool_id, 0)) if actor != null else 0
+			_inventory_entries.add_actor_item(actor, tool_id, -count)
+			return {
+				"item_id": tool_id,
+				"count": count,
+				"source": "actor_inventory",
+				"inventory_before": before_count,
+				"inventory_after": int(actor.inventory.get(tool_id, 0)) if actor != null else 0,
+				"requirement_kind": "tool",
+			}
+		"equipment":
+			var slot_id := str(source.get("slot_id", ""))
+			if actor == null or slot_id.is_empty() or _inventory_entries.normalize_content_id(actor.equipment.get(slot_id, "")) != tool_id:
+				return {}
+			actor.equipment.erase(slot_id)
+			return {
+				"item_id": tool_id,
+				"count": 1,
+				"source": "equipment",
+				"slot_id": slot_id,
+				"requirement_kind": "tool",
+			}
+		"nearby_container":
+			return _consume_tool_from_nearby_container(tool_id, count, source)
+	return {}
+
+
+func _consume_tool_from_nearby_container(tool_id: String, count: int, source: Dictionary) -> Dictionary:
+	var container_id := str(source.get("container_id", ""))
+	if container_id.is_empty():
+		return {}
+	var inventory: Array = []
+	var persisted_target: Dictionary = {}
+	var persisted_key := ""
+	if container_sessions.has(container_id):
+		persisted_target = _dictionary_or_empty(container_sessions[container_id]).duplicate(true)
+		persisted_key = "container_sessions"
+	elif corpse_containers.has(container_id):
+		persisted_target = _dictionary_or_empty(corpse_containers[container_id]).duplicate(true)
+		persisted_key = "corpse_containers"
+	elif map_interaction_targets.has(container_id):
+		persisted_target = _dictionary_or_empty(map_interaction_targets[container_id]).duplicate(true)
+		persisted_key = "map_interaction_targets"
+	else:
+		return {}
+	inventory = _array_or_empty(persisted_target.get("inventory", persisted_target.get("container_inventory", []))).duplicate(true)
+	var before_count: int = _inventory_entries.count(inventory, tool_id)
+	if before_count <= 0:
+		return {}
+	var consumed_count: int = mini(count, before_count)
+	_inventory_entries.add(inventory, tool_id, -consumed_count)
+	if persisted_key == "map_interaction_targets":
+		persisted_target["container_inventory"] = inventory
+		map_interaction_targets[container_id] = persisted_target
+	else:
+		persisted_target["inventory"] = inventory
+		if persisted_key == "container_sessions":
+			container_sessions[container_id] = persisted_target
+			if corpse_containers.has(container_id):
+				var corpse_from_session: Dictionary = _dictionary_or_empty(corpse_containers[container_id]).duplicate(true)
+				corpse_from_session["inventory"] = inventory.duplicate(true)
+				corpse_containers[container_id] = corpse_from_session
+		else:
+			corpse_containers[container_id] = persisted_target
+			if container_sessions.has(container_id):
+				var session: Dictionary = _dictionary_or_empty(container_sessions[container_id]).duplicate(true)
+				session["inventory"] = inventory.duplicate(true)
+				container_sessions[container_id] = session
+	return {
+		"item_id": tool_id,
+		"count": consumed_count,
+		"source": "nearby_container",
+		"container_id": container_id,
+		"display_name": str(source.get("display_name", container_id)),
+		"inventory_before": before_count,
+		"inventory_after": _inventory_entries.count(inventory, tool_id),
+		"requirement_kind": "tool",
+	}
 
 
 func _actor_tool_durability(actor: RefCounted, tool_id: String) -> float:
