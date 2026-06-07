@@ -741,7 +741,7 @@ func is_observe_mode_enabled() -> bool:
 
 
 func can_issue_player_commands() -> bool:
-	return not observe_mode_enabled and not _world_action_presenter_blocks_input()
+	return not observe_mode_enabled and not _world_action_presenter_blocks_input() and _panel_modal_blocker_name().is_empty()
 
 
 func toggle_observe_mode() -> Dictionary:
@@ -2504,6 +2504,9 @@ func _submit_inventory_action(action: Dictionary) -> Dictionary:
 func _player_command_rejection(action: String) -> Dictionary:
 	if observe_mode_enabled:
 		return _observe_command_rejected(action)
+	var modal_name := _panel_modal_blocker_name()
+	if not modal_name.is_empty():
+		return _ui_modal_command_rejected(action, modal_name)
 	if _world_action_presenter_blocks_input():
 		return _action_presenter_command_rejected(action)
 	return {}
@@ -2528,6 +2531,18 @@ func _action_presenter_command_rejected(action: String) -> Dictionary:
 		"action": action,
 		"blocker": blocker,
 		"action_kind": str(blocker.get("action_kind", "")),
+	}
+
+
+func _ui_modal_command_rejected(action: String, modal_name: String) -> Dictionary:
+	var blocker: Dictionary = gameplay_input_blocker_snapshot()
+	refresh_hud(current_interaction_prompt())
+	return {
+		"success": false,
+		"reason": "ui_modal_blocks_player_commands",
+		"action": action,
+		"modal_id": modal_name.trim_prefix("modal:"),
+		"blocker": blocker,
 	}
 
 

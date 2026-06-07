@@ -124,6 +124,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if str(game_root.gameplay_input_blocker_name()) != "modal:skill_learn_confirm":
 		errors.append("skill learn confirmation blocker should be modal:skill_learn_confirm")
 	_assert_modal_stack(errors, game_root, "skill_learn_confirm", "skills", "skill learn confirmation")
+	_expect_modal_player_commands_blocked(errors, game_root, "skill_learn_confirm")
 	var esc_learn_result: Dictionary = game_root.close_active_ui("keyboard_escape")
 	if str(esc_learn_result.get("closed", "")) != "modal:skill_learn_confirm":
 		errors.append("Esc should close skill learn confirmation before skills stage panel")
@@ -872,6 +873,36 @@ func _assert_modal_stack(errors: Array[String], game_root: Node, expected_id: St
 	var runtime_stack: Dictionary = _dictionary_or_empty(runtime.get("modal_stack", {}))
 	if str(_dictionary_or_empty(runtime_stack.get("top", {})).get("id", "")) != expected_id:
 		errors.append("%s: runtime modal stack should expose top %s: %s" % [context, expected_id, runtime_stack])
+
+
+func _expect_modal_player_commands_blocked(errors: Array[String], game_root: Node, expected_modal_id: String) -> void:
+	if game_root.has_method("can_issue_player_commands") and bool(game_root.can_issue_player_commands()):
+		errors.append("modal should make can_issue_player_commands false")
+	var move_result: Dictionary = _dictionary_or_empty(game_root.execute_move_to_grid({"x": 2, "y": 0, "z": 2}) if game_root.has_method("execute_move_to_grid") else {})
+	_expect_modal_command_rejected(errors, move_result, "move", expected_modal_id)
+	var hotbar_result: Dictionary = _dictionary_or_empty(game_root.use_hotbar_slot("slot_1") if game_root.has_method("use_hotbar_slot") else {})
+	_expect_modal_command_rejected(errors, hotbar_result, "hotbar", expected_modal_id)
+	var craft_result: Dictionary = _dictionary_or_empty(game_root.craft_player_recipe("recipe_bandage_basic", 1) if game_root.has_method("craft_player_recipe") else {})
+	_expect_modal_command_rejected(errors, craft_result, "craft", expected_modal_id)
+	var previous_targeting: Dictionary = _dictionary_or_empty(game_root.get("active_skill_targeting")).duplicate(true)
+	game_root.set("active_skill_targeting", {"active": true, "slot_id": "slot_1", "skill_id": "adrenaline_rush"})
+	var confirm_skill_result: Dictionary = _dictionary_or_empty(game_root.confirm_active_skill_target({"target_type": "self"}) if game_root.has_method("confirm_active_skill_target") else {})
+	_expect_modal_command_rejected(errors, confirm_skill_result, "use_skill", expected_modal_id)
+	game_root.set("active_skill_targeting", previous_targeting)
+
+
+func _expect_modal_command_rejected(errors: Array[String], result: Dictionary, expected_action: String, expected_modal_id: String) -> void:
+	if bool(result.get("success", false)):
+		errors.append("modal should reject %s command while active" % expected_action)
+	if str(result.get("reason", "")) != "ui_modal_blocks_player_commands":
+		errors.append("modal command reject reason expected for %s, got %s" % [expected_action, result.get("reason", "")])
+	if str(result.get("action", "")) != expected_action:
+		errors.append("modal command reject action expected %s, got %s" % [expected_action, result.get("action", "")])
+	if str(result.get("modal_id", "")) != expected_modal_id:
+		errors.append("modal command reject should expose modal id %s, got %s" % [expected_modal_id, result.get("modal_id", "")])
+	var blocker: Dictionary = _dictionary_or_empty(result.get("blocker", {}))
+	if str(blocker.get("name", "")) != "modal:%s" % expected_modal_id:
+		errors.append("modal command reject should include modal blocker snapshot for %s: %s" % [expected_action, blocker])
 
 
 func _press_key(game_root: Node, key: int, alt_pressed: bool = false) -> void:

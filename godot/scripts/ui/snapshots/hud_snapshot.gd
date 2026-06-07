@@ -861,6 +861,8 @@ func _failure_reason_text(reason: String) -> String:
 	match reason:
 		"unknown_player_command":
 			return "未知命令"
+		"ui_modal_blocks_player_commands":
+			return "界面确认中，无法执行"
 		"unknown_actor":
 			return "未知角色"
 		"command_actor_not_player":
