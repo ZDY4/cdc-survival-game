@@ -20,6 +20,8 @@ func execute(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: 
 			return _execute_talk(simulation, actor_id, prompt, option)
 		"open_container":
 			return _execute_open_container(simulation, actor_id, prompt, option)
+		"open_crafting":
+			return _execute_open_crafting(simulation, actor_id, prompt, option)
 		"attack":
 			return _execute_attack(simulation, actor_id, prompt, option)
 		"wait":
@@ -159,6 +161,36 @@ func _execute_open_container(simulation: RefCounted, actor_id: int, prompt: Dict
 		"success": true,
 		"prompt": prompt,
 		"container": session.duplicate(true),
+	}
+
+
+func _execute_open_crafting(simulation: RefCounted, actor_id: int, prompt: Dictionary, option: Dictionary) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "prompt": prompt}
+	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	var target_id := str(option.get("target_id", target.get("target_id", ""))).strip_edges()
+	var station_id := str(option.get("station_id", _dictionary_or_empty(target.get("crafting_station", {})).get("station_id", ""))).strip_edges()
+	if target_id.is_empty() or station_id.is_empty():
+		return {"success": false, "reason": "crafting_station_target_missing", "prompt": prompt}
+	var station_name := str(option.get("station_name", _dictionary_or_empty(target.get("crafting_station", {})).get("display_name", station_id))).strip_edges()
+	var success_payload: Dictionary = _interaction_success_payload(actor_id, prompt, option, target_id)
+	success_payload["station_id"] = station_id
+	success_payload["station_name"] = station_name
+	simulation.emit_event("crafting_station_opened", {
+		"actor_id": actor_id,
+		"target_id": target_id,
+		"station_id": station_id,
+		"station_name": station_name,
+	})
+	simulation.emit_event("interaction_succeeded", success_payload)
+	return {
+		"success": true,
+		"prompt": prompt,
+		"open_panel": "crafting",
+		"target_id": target_id,
+		"station_id": station_id,
+		"station_name": station_name,
 	}
 
 

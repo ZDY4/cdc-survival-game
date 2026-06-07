@@ -84,6 +84,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("HUD did not show pickup prompt after visible pickup selection")
 		_expect_right_click_menu_buttons(errors, game_root)
 	await _expect_friendly_neutral_and_map_container_context_menus(errors, game_root)
+	await _expect_crafting_station_interaction(errors, game_root)
 	player_node = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node == null:
 		return ["missing generated player actor node after neutral context menu smoke"]
@@ -384,7 +385,91 @@ func _expect_friendly_neutral_and_map_container_context_menus(errors: Array[Stri
 				"talk": "target_not_actor",
 				"attack": "target_not_actor",
 			})
+	var station_container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_clinic_supply_cabinet", true, false)
+	if station_container_node == null:
+		errors.append("station container context menu smoke should find clinic supply cabinet")
+	else:
+		var station_container_selection: Dictionary = game_root.select_interaction_node(station_container_node)
+		if not bool(station_container_selection.get("success", false)):
+			errors.append("station container selection for context menu failed: %s" % station_container_selection.get("prompt", {}).get("reason", "unknown"))
+		else:
+			var prompt: Dictionary = _dictionary_or_empty(station_container_selection.get("prompt", {}))
+			if str(prompt.get("primary_option_kind", "")) != "open_container":
+				errors.append("station container should keep open_container as primary option: %s" % prompt)
+			_expect_interaction_menu_options(errors, game_root, "station container", ["open_container", "open_crafting"], {
+				"pickup": "target_not_pickup",
+				"talk": "target_not_actor",
+				"attack": "target_not_actor",
+			})
 	game_root.clear_interaction_selection("context_menu_smoke_cleanup")
+
+
+func _expect_crafting_station_interaction(errors: Array[String], game_root: Node) -> void:
+	var station_node: Node = game_root.find_child("MapObject_survivor_outpost_01_workshop_cabinet_a", true, false)
+	if station_node == null:
+		errors.append("crafting station interaction smoke should render pure prop station marker")
+		return
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("crafting station interaction smoke missing player actor")
+		return
+	var original_grid: Dictionary = player.grid_position.to_dictionary()
+	var original_ap: float = player.ap
+	var station_target: Dictionary = _dictionary_or_empty(_dictionary_or_empty(_dictionary_or_empty(game_root.world_result.get("map", {})).get("interaction_targets", {})).get("survivor_outpost_01_workshop_cabinet_a", {}))
+	var station_anchor: Dictionary = _dictionary_or_empty(station_target.get("anchor", {"x": 11, "y": 0, "z": 24}))
+	player.grid_position = GridCoord.from_dictionary(_near_open_grid_from(station_anchor, game_root.world_result.get("map", {})))
+	player.ap = 6.0
+	game_root._rebuild_world_after_runtime_change()
+	await process_frame
+	station_node = game_root.find_child("MapObject_survivor_outpost_01_workshop_cabinet_a", true, false)
+	if station_node == null:
+		errors.append("crafting station interaction smoke should keep station marker after player reposition")
+		_restore_player_for_crafting_station_smoke(game_root, original_grid, original_ap)
+		return
+	var selection: Dictionary = game_root.select_interaction_node(station_node)
+	if not bool(selection.get("success", false)):
+		errors.append("crafting station selection failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
+		_restore_player_for_crafting_station_smoke(game_root, original_grid, original_ap)
+		return
+	var prompt: Dictionary = _dictionary_or_empty(selection.get("prompt", {}))
+	if str(prompt.get("primary_option_kind", "")) != "open_crafting":
+		errors.append("crafting station prompt should prefer open_crafting, got %s" % prompt)
+	if not _hud_interaction_line(game_root).contains("使用工作坊工作台"):
+		errors.append("HUD should show crafting station use prompt")
+	_expect_interaction_menu_options(errors, game_root, "crafting station", ["open_crafting"], {
+		"pickup": "target_not_pickup",
+		"open_container": "target_not_container",
+		"talk": "target_not_actor",
+		"attack": "target_not_actor",
+	})
+	var result: Dictionary = _execute_primary_and_complete(game_root)
+	if not bool(result.get("success", false)):
+		errors.append("crafting station interaction failed: %s" % result.get("reason", "unknown"))
+		_restore_player_for_crafting_station_smoke(game_root, original_grid, original_ap)
+		return
+	var command_result: Dictionary = _dictionary_or_empty(result.get("result", result))
+	if str(command_result.get("open_panel", "")) != "crafting" or str(command_result.get("station_id", "")) != "workbench":
+		errors.append("crafting station interaction should return crafting panel target and station id: %s" % result)
+	var menu_state: Dictionary = _dictionary_or_empty(game_root.panel_controller.menu_state_snapshot() if game_root.panel_controller != null else {})
+	if not _stage_panel_active(menu_state, "crafting"):
+		errors.append("crafting station interaction should open crafting stage panel")
+	var station_snapshot: Dictionary = _dictionary_or_empty(game_root.crafting_panel.get("_last_snapshot")).get("station_snapshot", {})
+	if not _dictionary_or_empty(_dictionary_or_empty(station_snapshot).get("by_id", {})).has("workbench"):
+		errors.append("crafting panel snapshot should retain workbench station after station interaction")
+	game_root.close_stage_panels()
+	game_root.clear_interaction_selection("crafting_station_smoke_cleanup")
+	_restore_player_for_crafting_station_smoke(game_root, original_grid, original_ap)
+	await _wait_for_world_action_presenter_idle(game_root)
+
+
+func _restore_player_for_crafting_station_smoke(game_root: Node, original_grid: Dictionary, original_ap: float) -> void:
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player != null:
+		player.grid_position = GridCoord.from_dictionary(original_grid)
+		player.ap = original_ap
+	game_root.close_stage_panels()
+	game_root.clear_interaction_selection("crafting_station_smoke_cleanup")
+	game_root._rebuild_world_after_runtime_change()
 
 
 func _expect_neutral_actor_context_menu(errors: Array[String], game_root: Node) -> void:
@@ -1544,6 +1629,14 @@ func _hud_world_line(game_root: Node) -> String:
 
 func _hud_interaction_line(game_root: Node) -> String:
 	return game_root.hud.get_node("HudPanel/HudLines/InteractionLine").text
+
+
+func _stage_panel_active(menu_state: Dictionary, panel_id: String) -> bool:
+	for stage in _array_or_empty(menu_state.get("stage_panels", [])):
+		var stage_data: Dictionary = _dictionary_or_empty(stage)
+		if str(stage_data.get("id", "")) == panel_id:
+			return bool(stage_data.get("active", false))
+	return false
 
 
 func _hud_runtime_control_line(game_root: Node) -> String:

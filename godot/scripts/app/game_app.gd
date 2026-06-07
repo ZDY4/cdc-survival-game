@@ -2922,6 +2922,7 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	_update_trade_target_after_interaction(result, executed_target)
 	if _interaction_result_opens_container(result):
 		active_container_feedback = {}
+	var stage_panel_to_open := _interaction_result_stage_panel(result)
 	world_result = interaction_controller.world_result
 	_sync_observed_level_to_map()
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
@@ -2932,7 +2933,43 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
 	_setup_panels()
+	if not stage_panel_to_open.is_empty():
+		_open_stage_panel_from_interaction(stage_panel_to_open)
 	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
+
+
+func _interaction_result_stage_panel(result: Dictionary) -> String:
+	if not bool(result.get("success", false)):
+		return ""
+	var panel_id := str(result.get("open_panel", "")).strip_edges()
+	if not panel_id.is_empty():
+		return panel_id
+	var prompt: Dictionary = _dictionary_or_empty(result.get("prompt", {}))
+	var option_id := str(prompt.get("primary_option_id", ""))
+	for option in _array_or_empty(prompt.get("options", [])):
+		var option_data: Dictionary = _dictionary_or_empty(option)
+		if option_id.is_empty() or str(option_data.get("id", "")) == option_id:
+			if str(option_data.get("kind", "")) == "open_crafting":
+				return "crafting"
+	return ""
+
+
+func _open_stage_panel_from_interaction(panel_id: String) -> void:
+	if panel_controller == null or not ["crafting"].has(panel_id):
+		return
+	if panel_controller.has_method("open_stage_panel"):
+		panel_controller.call("open_stage_panel", panel_id)
+		return
+	if panel_controller.has_method("toggle_stage_panel"):
+		var menu_state: Dictionary = _dictionary_or_empty(panel_controller.call("menu_state_snapshot"))
+		var already_open := false
+		for stage in _array_or_empty(menu_state.get("stage_panels", [])):
+			var stage_data: Dictionary = _dictionary_or_empty(stage)
+			if str(stage_data.get("id", "")) == panel_id and bool(stage_data.get("active", false)):
+				already_open = true
+				break
+		if not already_open:
+			panel_controller.call("toggle_stage_panel", panel_id)
 
 
 func _present_world_action(command_result: Dictionary) -> void:

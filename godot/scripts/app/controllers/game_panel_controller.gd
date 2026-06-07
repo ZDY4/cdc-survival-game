@@ -269,6 +269,21 @@ func toggle_stage_panel(panel_id: String) -> Dictionary:
 	}
 
 
+func open_stage_panel(panel_id: String) -> Dictionary:
+	if not _stage_panel_ids().has(panel_id):
+		return {"success": false, "reason": "unknown_stage_panel", "panel_id": panel_id}
+	active_stage_panel = panel_id
+	settings_open = false
+	_apply_stage_panel_visibility()
+	_apply_settings_panel_visibility()
+	return {
+		"success": true,
+		"panel_id": panel_id,
+		"active_stage_panel": active_stage_panel,
+		"open": true,
+	}
+
+
 func close_stage_panels() -> Dictionary:
 	var had_panel := not active_stage_panel.is_empty()
 	active_stage_panel = ""

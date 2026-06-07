@@ -154,14 +154,17 @@ func _target_grid(target_data: Dictionary) -> Dictionary:
 
 func _candidate_options_for_target(simulation: RefCounted, actor: RefCounted, target_data: Dictionary) -> Array:
 	var kind: String = str(target_data.get("kind", ""))
+	var station_option: Dictionary = _crafting_station_option(target_data)
 	match kind:
 		"pickup":
-			return [
+			var pickup_options := [
 				_option_for_target(simulation, actor, target_data),
 				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
 				_disabled_option("talk", "talk", "对话", "target_not_actor"),
 				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
 			]
+			_append_optional_enabled_option(pickup_options, station_option)
+			return pickup_options
 		"talk":
 			return [
 				_option_for_target(simulation, actor, target_data),
@@ -196,14 +199,24 @@ func _candidate_options_for_target(simulation: RefCounted, actor: RefCounted, ta
 				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
 			]
 		"container":
-			return [
+			var container_options := [
 				_option_for_target(simulation, actor, target_data),
 				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
 				_disabled_option("talk", "talk", "对话", "target_not_actor"),
 				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
 			]
-		"door":
+			_append_optional_enabled_option(container_options, station_option)
+			return container_options
+		"open_crafting":
 			return [
+				_option_for_target(simulation, actor, target_data),
+				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
+				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
+				_disabled_option("talk", "talk", "对话", "target_not_actor"),
+				_disabled_option("attack", "attack", "攻击", "target_not_actor"),
+			]
+		"door":
+			var door_options := [
 				_option_for_target(simulation, actor, target_data),
 				{
 					"id": "inspect",
@@ -213,6 +226,8 @@ func _candidate_options_for_target(simulation: RefCounted, actor: RefCounted, ta
 				_disabled_option("pickup", "pickup", "拾取", "target_not_pickup"),
 				_disabled_option("open_container", "open_container", "打开容器", "target_not_container"),
 			]
+			_append_optional_enabled_option(door_options, station_option)
+			return door_options
 	return [
 		_disabled_option("inspect", "inspect", "检查", "unsupported_target_kind"),
 	]
@@ -288,6 +303,8 @@ func _option_for_target(simulation: RefCounted, actor: RefCounted, target_data: 
 				"display_name": "打开%s" % target_name,
 				"target_id": target_data.get("target_id", ""),
 			}
+		"open_crafting":
+			return _crafting_station_option(target_data)
 		"door":
 			var door: Dictionary = _dictionary_or_empty(target_data.get("door", {}))
 			var door_name := str(target_data.get("display_name", door.get("display_name", "门"))).strip_edges()
@@ -306,6 +323,35 @@ func _option_for_target(simulation: RefCounted, actor: RefCounted, target_data: 
 				"disabled_reason": disabled_reason,
 			}
 	return {}
+
+
+func _crafting_station_option(target_data: Dictionary) -> Dictionary:
+	var station: Dictionary = _dictionary_or_empty(target_data.get("crafting_station", {}))
+	var station_id := str(station.get("station_id", station.get("id", ""))).strip_edges()
+	if station_id.is_empty():
+		return {}
+	var station_name := str(station.get("display_name", target_data.get("display_name", station_id))).strip_edges()
+	if station_name.is_empty():
+		station_name = station_id
+	return {
+		"id": "open_crafting",
+		"kind": "open_crafting",
+		"display_name": "使用%s" % station_name,
+		"target_id": target_data.get("target_id", station.get("object_id", "")),
+		"station_id": station_id,
+		"station_name": station_name,
+	}
+
+
+func _append_optional_enabled_option(options: Array, option: Dictionary) -> void:
+	if option.is_empty():
+		return
+	var option_id := str(option.get("id", ""))
+	for existing in options:
+		var existing_data: Dictionary = _dictionary_or_empty(existing)
+		if str(existing_data.get("id", "")) == option_id:
+			return
+	options.append(option)
 
 
 func _door_prompt_permission(actor: RefCounted, door: Dictionary) -> Dictionary:

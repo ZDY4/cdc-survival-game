@@ -425,7 +425,7 @@ func _map_object_fallback_category(target_data: Dictionary, object: Dictionary) 
 		return "door"
 	if target_kind in ["enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor", "scene_transition"] or object_kind == "trigger":
 		return "trigger"
-	if target_kind == "container" or object_kind == "interactive":
+	if target_kind in ["container", "open_crafting"] or object_kind == "interactive":
 		return "container"
 	return ""
 

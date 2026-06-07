@@ -99,6 +99,10 @@ func _collect_objects(topology: MapTopology, objects: Array) -> void:
 				topology.interaction_targets[object_id] = _interaction_target(summary, "pickup")
 			"ai_spawn":
 				topology.ai_spawn_objects.append(summary)
+			_:
+				if not station_summary.is_empty():
+					topology.interactive_objects.append(summary)
+					topology.interaction_targets[object_id] = _interaction_target(summary, "open_crafting")
 
 
 func expand_object_footprint(object: Dictionary) -> Array[RefCounted]:
@@ -176,6 +180,7 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 	var interaction_props: Dictionary = _dictionary_or_empty(props.get("interactive", {}))
 	var trigger_props: Dictionary = _dictionary_or_empty(props.get("trigger", {}))
 	var door_props: Dictionary = _dictionary_or_empty(props.get("door", {}))
+	var station_props: Dictionary = _dictionary_or_empty(props.get("crafting_station", {}))
 	var trigger_options: Array = _array_or_empty(trigger_props.get("options", []))
 	var primary_trigger_option: Dictionary = {}
 	if not trigger_options.is_empty():
@@ -191,10 +196,14 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		interaction_kind = str(door_props.get("interaction_kind", ""))
 	if interaction_kind.is_empty() and not door_props.is_empty():
 		interaction_kind = "door"
+	if interaction_kind.is_empty() and not station_props.is_empty() and fallback_kind == "open_crafting":
+		interaction_kind = "open_crafting"
 	if interaction_kind.is_empty():
 		interaction_kind = fallback_kind
 
 	var display_name: String = str(interaction_props.get("display_name", ""))
+	if display_name.is_empty():
+		display_name = str(station_props.get("interaction_display_name", station_props.get("display_name", "")))
 	if display_name.is_empty():
 		display_name = str(trigger_props.get("display_name", ""))
 	if display_name.is_empty():
@@ -223,6 +232,9 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		"container_inventory": _array_or_empty(container_props.get("initial_inventory", [])),
 		"door": _door_summary(object_summary),
 	}
+	var station_summary: Dictionary = _crafting_station_summary(object_summary)
+	if not station_summary.is_empty():
+		target["crafting_station"] = station_summary
 	if interaction_kind == "container":
 		target["container_type"] = str(container_props.get("container_type", "map"))
 		target["container_origin"] = str(container_props.get("container_origin", "map_scene"))
