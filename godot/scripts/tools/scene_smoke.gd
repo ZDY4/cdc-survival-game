@@ -4,6 +4,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
+const WORLD_LABEL_FONT_PATH := "res://assets/fonts/NotoSansCJKsc-Regular.otf"
 
 
 func _init() -> void:
@@ -73,6 +74,7 @@ func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary,
 		errors.append("expected camera")
 	else:
 		_validate_player_camera_focus(root, errors)
+	_validate_label3d_fonts(root, "startup generated world", errors)
 	_validate_runtime_map_object_fallbacks(root, counts, errors)
 	_validate_synthetic_actor_side_badges(errors)
 	_validate_quest_actor_markers(registry, errors)
@@ -81,6 +83,21 @@ func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary,
 	_validate_combat_feedback_markers(registry, errors)
 	_validate_actor_facing_markers(registry, errors)
 	return errors
+
+
+func _validate_label3d_fonts(root: Node, context: String, errors: Array[String]) -> void:
+	var labels := root.find_children("*", "Label3D", true, false)
+	for label_node in labels:
+		var label: Label3D = label_node as Label3D
+		if label == null:
+			continue
+		if label.font == null:
+			errors.append("%s: %s should use world Label3D font" % [context, label.name])
+			continue
+		if label.font.resource_path != WORLD_LABEL_FONT_PATH:
+			errors.append("%s: %s should use %s, got %s" % [context, label.name, WORLD_LABEL_FONT_PATH, label.font.resource_path])
+		if str(label.get_meta("font_resource_path", "")) != WORLD_LABEL_FONT_PATH:
+			errors.append("%s: %s should expose font_resource_path metadata" % [context, label.name])
 
 
 func _validate_player_camera_focus(root: Node3D, errors: Array[String]) -> void:
@@ -391,6 +408,7 @@ func _validate_synthetic_actor_side_badges(errors: Array[String]) -> void:
 		if ap_bar == null or absf(float(ap_bar.get_meta("ratio", -1.0)) - 0.5) > 0.001:
 			errors.append("synthetic hostile actor AP bar should expose half ap ratio")
 		_validate_actor_status_effect_icons(actor_node, errors)
+	_validate_label3d_fonts(synthetic_root, "synthetic actor status", errors)
 	synthetic_root.queue_free()
 
 
@@ -462,6 +480,7 @@ func _validate_quest_actor_markers(registry: RefCounted, errors: Array[String]) 
 	WorldSceneRenderer.new().render_world(root, world_result, {"load_map_visuals": false})
 	_validate_rendered_quest_marker(root, "Actor_doctor_chen_9102", "doctor_chen", "quest_turn_in", "find_medicine", "ready", "doctor_chen_find_medicine_turn_in", "!", errors)
 	_validate_rendered_quest_marker(root, "Actor_trader_lao_wang_9103", "trader_lao_wang", "quest_offer", "tutorial_survive", "available", "trader_lao_wang_intro", "!", errors)
+	_validate_label3d_fonts(root, "quest actor markers", errors)
 	root.queue_free()
 
 
@@ -597,6 +616,7 @@ func _validate_corpse_world_markers(errors: Array[String]) -> void:
 				errors.append("corpse badge should mirror loot_count metadata")
 		if corpse_node.find_child("PickableBody", true, false) == null:
 			errors.append("corpse node should remain pickable after visual markers")
+	_validate_label3d_fonts(root, "corpse world markers", errors)
 	root.queue_free()
 
 
@@ -658,6 +678,7 @@ func _validate_equipment_attach_points(errors: Array[String]) -> void:
 			var back_offset: Vector3 = back.get_meta("attach_offset", Vector3.ZERO)
 			if back_offset.z <= 0.0:
 				errors.append("back equipment should attach behind actor")
+	_validate_label3d_fonts(root, "equipment attach markers", errors)
 	root.queue_free()
 
 
@@ -724,6 +745,7 @@ func _validate_combat_feedback_markers(registry: RefCounted, errors: Array[Strin
 	_validate_combat_feedback_actor(root, 9403, "miss", "MISS", 0.0, errors)
 	_validate_combat_feedback_actor(root, 9404, "blocked", "BLOCK", 0.0, errors)
 	_validate_combat_feedback_actor(root, 9405, "defeated", "-12 KO", 12.0, errors)
+	_validate_label3d_fonts(root, "combat feedback markers", errors)
 	root.queue_free()
 
 
@@ -863,6 +885,7 @@ func _validate_actor_facing_markers(registry: RefCounted, errors: Array[String])
 	_validate_actor_facing_node(root, 9501, "east", 90.0, "movement", errors)
 	_validate_actor_facing_node(root, 9502, "north", 0.0, "attack", errors)
 	_validate_actor_facing_node(root, 9504, "south", 180.0, "scene_transition", errors)
+	_validate_label3d_fonts(root, "actor facing markers", errors)
 	root.queue_free()
 
 

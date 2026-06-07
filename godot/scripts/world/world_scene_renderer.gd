@@ -12,6 +12,7 @@ const BEVY_HUD_RESERVED_WIDTH_PX := 620.0
 const BEVY_DEFAULT_VIEWPORT_SIZE := Vector2(1440.0, 900.0)
 const BEVY_DEFAULT_ZOOM_FACTOR := 1.0
 const BEVY_LEVEL_PLANE_HEIGHT := GRID_SIZE * 0.5
+const UIThemeService = preload("res://scripts/ui/ui_theme_service.gd")
 
 var ground_material := _material(Color(0.22, 0.26, 0.23))
 var actor_material := _material(Color(0.78, 0.78, 0.68))
@@ -363,6 +364,7 @@ func _add_corpse_world_markers(parent: Node3D, corpse_data: Dictionary) -> void:
 	label.modulate = Color(0.82, 0.76, 0.62, 0.9)
 	label.outline_size = 4
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
+	_apply_world_label_font(label)
 	_apply_corpse_meta(label, corpse_data)
 	parent.add_child(label)
 
@@ -641,6 +643,7 @@ func _add_actor_name_label(parent: Node3D, actor_data: Dictionary) -> void:
 	label.modulate = _actor_side_color(str(actor_data.get("side", "")))
 	label.outline_size = 4
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.72)
+	_apply_world_label_font(label)
 	label.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
 	label.set_meta("display_name", label.text)
 	parent.add_child(label)
@@ -757,6 +760,7 @@ func _add_actor_status_effect_icon(parent: Node3D, actor_data: Dictionary, effec
 	label.modulate = Color(0.98, 0.98, 0.92, 0.94)
 	label.outline_size = 2
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.76)
+	_apply_world_label_font(label)
 	_apply_status_effect_meta(label, actor_data, effect, index)
 	parent.add_child(label)
 
@@ -813,6 +817,7 @@ func _add_actor_quest_markers(parent: Node3D, actor_data: Dictionary) -> void:
 	label.modulate = color
 	label.outline_size = 5
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.82)
+	_apply_world_label_font(label)
 	_apply_quest_marker_meta(label, actor_data, primary)
 	parent.add_child(label)
 
@@ -874,6 +879,7 @@ func _add_actor_combat_feedback(parent: Node3D, actor_data: Dictionary) -> void:
 	label.modulate = _combat_feedback_color(feedback_kind)
 	label.outline_size = 5
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.82)
+	_apply_world_label_font(label)
 	_apply_combat_feedback_meta(label, actor_data, feedback_kind, feedback)
 	parent.add_child(label)
 
@@ -945,6 +951,12 @@ func _combat_feedback_material(feedback_kind: String) -> StandardMaterial3D:
 		"defeated":
 			return combat_defeated_material
 	return combat_hit_material
+
+
+func _apply_world_label_font(label: Label3D) -> void:
+	var result := UIThemeService.apply_label3d_font(label)
+	if not bool(result.get("applied", false)):
+		push_warning("世界 Label3D 字体应用失败: %s" % result)
 
 
 func _apply_combat_feedback_meta(node: Node, actor_data: Dictionary, feedback_kind: String, feedback: Dictionary) -> void:
