@@ -7,7 +7,7 @@ var _inventory_entries := InventoryEntries.new()
 var _inventory_capacity := InventoryCapacity.new()
 
 
-func take_item_from_container(simulation: RefCounted, actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
+func take_item_from_container(simulation: RefCounted, actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}, stack_index: int = 0) -> Dictionary:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor"}
@@ -33,6 +33,9 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		}
 	var transfer_count: int = count
 	var available: int = _inventory_entries.count(_array_or_empty(container.get("inventory", [])), normalized_item_id)
+	var selected_stack_index: int = max(0, stack_index)
+	if selected_stack_index > 0:
+		available = _inventory_entries.stack_count_at(_array_or_empty(container.get("inventory", [])), normalized_item_id, selected_stack_index)
 	if available < transfer_count:
 		return {
 			"success": false,
@@ -41,6 +44,7 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 			"item_id": normalized_item_id,
 			"required": transfer_count,
 			"current": available,
+			"stack_index": selected_stack_index,
 		}
 	var capacity: Dictionary = _inventory_capacity.can_add_items(actor, item_library, [
 		{"item_id": normalized_item_id, "count": transfer_count},
@@ -53,7 +57,7 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 	if not bool(unlock_consumption.get("success", false)):
 		return unlock_consumption
 	var consumed_unlock_requirements: Array = _array_or_empty(unlock_consumption.get("consumed_unlock_requirements", []))
-	_inventory_entries.add(container["inventory"], normalized_item_id, -transfer_count)
+	_inventory_entries.remove_from_stack(container["inventory"], normalized_item_id, transfer_count, selected_stack_index)
 	_inventory_entries.add_actor_item(actor, normalized_item_id, transfer_count)
 	simulation.container_sessions[normalized_container_id] = container
 	_sync_corpse_container_session(simulation, normalized_container_id, container)
@@ -65,6 +69,7 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"container_id": normalized_container_id,
 		"item_id": normalized_item_id,
 		"count": transfer_count,
+		"stack_index": selected_stack_index,
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
 		"unlock_requirements_consumed": not consumed_unlock_requirements.is_empty(),
@@ -75,6 +80,7 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"container_id": normalized_container_id,
 		"item_id": normalized_item_id,
 		"count": transfer_count,
+		"stack_index": selected_stack_index,
 		"direction": "take",
 		"from": "container",
 		"to": "actor_inventory",
@@ -89,6 +95,7 @@ func take_item_from_container(simulation: RefCounted, actor_id: int, container_i
 		"container_id": normalized_container_id,
 		"item_id": normalized_item_id,
 		"count": transfer_count,
+		"stack_index": selected_stack_index,
 		"stealing": stealing,
 		"owner_actor_id": owner_actor_id,
 	}

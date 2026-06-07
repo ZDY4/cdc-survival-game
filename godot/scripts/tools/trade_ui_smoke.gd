@@ -447,6 +447,22 @@ func _run_checks(game_root: Node) -> Array[String]:
 		stacked_shop_button.pressed.emit()
 		if not _detail_line(game_root).contains("同物品合计 5"):
 			errors.append("multi-stack shop detail should expose total count: %s" % _detail_line(game_root))
+		_set_trade_quantity(game_root, 1)
+		_press_trade_button(game_root)
+		var selected_shop_stacks: Array = _shop_stack_counts(game_root, "1006")
+		if selected_shop_stacks.size() != 2 or int(selected_shop_stacks[0]) != 1 or int(selected_shop_stacks[1]) != 3:
+			errors.append("trade UI direct buy should consume selected first shop stack: %s" % selected_shop_stacks)
+		stack_shop["money"] = 1000
+		stack_shop["inventory"] = [
+			{"item_id": "1006", "count": 2, "price": 10},
+			{"item_id": "1006", "count": 3, "price": 10},
+		]
+		game_root.simulation.shop_sessions["trader_lao_wang_shop"] = stack_shop
+		stack_player.inventory["1006"] = 1
+		stack_player.inventory_stacks = stack_inventory_stacks_before.duplicate(true)
+		stack_player.money = 200
+		game_root.refresh_inventory_panel()
+		game_root.refresh_trade_panel()
 	var stacked_buy: Dictionary = game_root.buy_active_trade_item("1006", 4)
 	if not bool(stacked_buy.get("success", false)):
 		errors.append("buying across shop stacks should succeed: %s" % stacked_buy)

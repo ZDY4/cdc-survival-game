@@ -4,7 +4,7 @@ const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 signal close_requested
-signal trade_requested(source: String, item_id: String, count: int)
+signal trade_requested(source: String, item_id: String, count: int, stack_index: int)
 signal trade_cart_confirmed(entries: Array)
 
 const CONTEXT_TRADE := 1
@@ -537,7 +537,7 @@ func _execute_context_action(action_id: int) -> void:
 				if _requires_equipment_sell_confirmation(_context_source):
 					_open_equipment_sell_dialog()
 				else:
-					trade_requested.emit(_context_source, str(_context_item.get("item_id", "")), _selected_trade_count(_context_item))
+					trade_requested.emit(_context_source, str(_context_item.get("item_id", "")), _selected_trade_count(_context_item), _stack_index_for_trade(_context_source, _context_item))
 		CONTEXT_QUEUE:
 			_queue_trade_entry(_context_item, _context_source, _selected_trade_count(_context_item))
 	if _context_menu != null:
@@ -753,7 +753,11 @@ func _drop_cart_data(position: Vector2, data: Variant, from_control: Control) ->
 func _emit_selected_trade() -> void:
 	if _selected_source.is_empty() or _selected_item_id.is_empty():
 		return
-	trade_requested.emit(_selected_source, _selected_item_id, int(_quantity_spin.value))
+	trade_requested.emit(_selected_source, _selected_item_id, int(_quantity_spin.value), _stack_index_for_trade(_selected_source, _selected_item_snapshot))
+
+
+func _stack_index_for_trade(source: String, item: Dictionary) -> int:
+	return int(item.get("stack_index", 0)) if source == "shop" else 0
 
 
 func _open_equipment_sell_dialog() -> void:

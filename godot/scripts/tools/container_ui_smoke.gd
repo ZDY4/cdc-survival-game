@@ -250,6 +250,21 @@ func _run_checks(game_root: Node) -> Array[String]:
 		stacked_container_button.pressed.emit()
 		if not _container_detail(game_root).contains("同物品合计 5"):
 			errors.append("multi-stack container detail should expose total count: %s" % _container_detail(game_root))
+		_set_container_transfer_quantity(game_root, 1)
+		_press_container_transfer(game_root)
+		var selected_stack_session: Dictionary = _dictionary_or_empty(game_root.simulation.container_sessions.get("multi_stack_container", {}))
+		var selected_stack_counts: Array = _container_stack_counts(_array_or_empty(selected_stack_session.get("inventory", [])), "1006")
+		if selected_stack_counts.size() != 2 or int(selected_stack_counts[0]) != 1 or int(selected_stack_counts[1]) != 3:
+			errors.append("container UI transfer should consume selected first stack: %s" % selected_stack_counts)
+		game_root.simulation.container_sessions["multi_stack_container"]["inventory"] = [
+			{"item_id": "1006", "count": 2},
+			{"item_id": "1006", "count": 3},
+		]
+		stack_player.inventory = {}
+		stack_player.inventory_order.clear()
+		stack_player.inventory_stacks = {}
+		game_root.refresh_inventory_panel()
+		game_root.refresh_container_panel()
 	var stacked_take: Dictionary = game_root.take_active_container_item("1006", 4)
 	if not bool(stacked_take.get("success", false)):
 		errors.append("taking across container stacks should succeed: %s" % stacked_take)

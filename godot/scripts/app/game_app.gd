@@ -2096,7 +2096,7 @@ func press_enter_action() -> Dictionary:
 	return {"success": false, "reason": "no_enter_action"}
 
 
-func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
+func take_active_container_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
 	var container_id: String = _active_container_id()
 	if container_id.is_empty():
 		var missing_result := {"success": false, "reason": "active_container_missing"}
@@ -2107,6 +2107,7 @@ func take_active_container_item(item_id: String, count: int = 1) -> Dictionary:
 		"container_id": container_id,
 		"item_id": item_id,
 		"count": count,
+		"stack_index": stack_index,
 	})
 	_record_container_feedback(result, "take_container", container_id, item_id, count)
 	refresh_inventory_panel()
@@ -2186,12 +2187,12 @@ func store_all_active_container_items() -> Dictionary:
 	return result
 
 
-func transfer_active_container_item(source: String, item_id: String, count: int = 1) -> Dictionary:
+func transfer_active_container_item(source: String, item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
 	match source:
 		"container":
 			if str(item_id) == "money":
 				return take_active_container_money(count)
-			return take_active_container_item(item_id, count)
+			return take_active_container_item(item_id, count, stack_index)
 		"player":
 			return store_active_container_item(item_id, count)
 		_:
@@ -2298,7 +2299,7 @@ func use_player_item(item_id: String) -> Dictionary:
 	return result
 
 
-func buy_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
+func buy_active_trade_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
 	var shop_id: String = _active_shop_id()
 	if shop_id.is_empty():
 		var missing_result := {"success": false, "reason": "active_trade_missing"}
@@ -2309,6 +2310,7 @@ func buy_active_trade_item(item_id: String, count: int = 1) -> Dictionary:
 		"shop_id": shop_id,
 		"item_id": item_id,
 		"count": count,
+		"stack_index": stack_index,
 	})
 	_record_trade_feedback(result, "buy_shop", shop_id, item_id, count)
 	refresh_inventory_panel()
@@ -2356,10 +2358,10 @@ func sell_active_trade_equipment(slot_id: String, item_id: String) -> Dictionary
 	return result
 
 
-func transfer_active_trade_item(source: String, item_id: String, count: int = 1) -> Dictionary:
+func transfer_active_trade_item(source: String, item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
 	match source:
 		"shop":
-			return buy_active_trade_item(item_id, count)
+			return buy_active_trade_item(item_id, count, stack_index)
 		"player":
 			return sell_active_trade_item(item_id, count)
 	if source.begins_with("equipment:"):

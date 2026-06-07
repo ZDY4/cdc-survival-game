@@ -52,6 +52,58 @@ func add(entries: Array, item_id: String, delta: int) -> void:
 			entries[index] = entry
 
 
+func remove_from_stack(entries: Array, item_id: String, delta: int, stack_index: int) -> void:
+	var normalized_item_id: String = normalize_content_id(item_id)
+	if normalized_item_id.is_empty() or delta <= 0:
+		return
+	if stack_index <= 0:
+		add(entries, normalized_item_id, -delta)
+		return
+	var remaining: int = delta
+	var current_stack_index := 0
+	for index in range(entries.size()):
+		if remaining <= 0:
+			break
+		var entry: Dictionary = _dictionary_or_empty(entries[index])
+		if normalize_content_id(entry.get("item_id", "")) != normalized_item_id:
+			continue
+		var current_count: int = max(0, int(entry.get("count", 0)))
+		if current_count <= 0:
+			continue
+		current_stack_index += 1
+		if current_stack_index != stack_index:
+			continue
+		var consumed: int = min(current_count, remaining)
+		current_count -= consumed
+		remaining -= consumed
+		if current_count <= 0:
+			entries.remove_at(index)
+		else:
+			entry["count"] = current_count
+			entries[index] = entry
+		break
+	if remaining > 0:
+		add(entries, normalized_item_id, -remaining)
+
+
+func stack_count_at(entries: Array, item_id: String, stack_index: int) -> int:
+	var normalized_item_id: String = normalize_content_id(item_id)
+	if normalized_item_id.is_empty() or stack_index <= 0:
+		return count(entries, normalized_item_id)
+	var current_stack_index := 0
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if normalize_content_id(entry_data.get("item_id", "")) != normalized_item_id:
+			continue
+		var current_count: int = max(0, int(entry_data.get("count", 0)))
+		if current_count <= 0:
+			continue
+		current_stack_index += 1
+		if current_stack_index == stack_index:
+			return current_count
+	return 0
+
+
 func add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:
 	if actor == null:
 		return

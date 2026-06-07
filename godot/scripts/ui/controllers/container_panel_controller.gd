@@ -3,7 +3,7 @@ extends Control
 const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
 
 signal close_requested
-signal transfer_requested(source: String, item_id: String, count: int)
+signal transfer_requested(source: String, item_id: String, count: int, stack_index: int)
 signal transfer_all_requested(source: String)
 
 const CONTEXT_TRANSFER := 1
@@ -32,6 +32,7 @@ var _context_item: Dictionary = {}
 var _context_source := ""
 var _selected_source: String = ""
 var _selected_item_id: String = ""
+var _selected_item_snapshot: Dictionary = {}
 var _pending_quantity_transfer: Dictionary = {}
 var _container_transferable_count := 0
 var _player_transferable_count := 0
@@ -175,7 +176,7 @@ func _build_layout() -> void:
 	_transfer_button.pressed.connect(func() -> void:
 		if _selected_item_id.is_empty() or _selected_source.is_empty():
 			return
-		_request_transfer(_selected_source, _selected_item_id, int(_quantity_spin.value))
+		_request_transfer(_selected_source, _selected_item_id, int(_quantity_spin.value), false, _selected_item_snapshot)
 	)
 	_take_all_button = Button.new()
 	_take_all_button.name = "TakeAllButton"
@@ -375,7 +376,7 @@ func _drop_container_data(position: Vector2, data: Variant, from_control: Contro
 			var available: int = maxi(1, int(item.get("count", 1)))
 			var requested: int = int(drag_data.get("count", _quantity_spin.value if _quantity_spin != null else 1))
 			var count: int = clampi(requested, 1, available)
-			_request_transfer(source, item_id, count)
+			_request_transfer(source, item_id, count, false, item)
 		"inventory_item":
 			var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
 			var available: int = maxi(1, int(item.get("count", 1)))
@@ -435,16 +436,17 @@ func close_blocking_modal() -> Dictionary:
 	}
 
 
-func _request_transfer(source: String, item_id: String, count: int, force_confirm: bool = false) -> void:
+func _request_transfer(source: String, item_id: String, count: int, force_confirm: bool = false, selected_item: Dictionary = {}) -> void:
 	if source.is_empty() or item_id.is_empty() or count <= 0:
 		return
-	var item := _item_snapshot_for_transfer(source, item_id)
+	var item := selected_item.duplicate(true) if not selected_item.is_empty() else _item_snapshot_for_transfer(source, item_id)
 	var available := maxi(1, int(item.get("count", count)))
 	var normalized_count := clampi(count, 1, available)
 	if normalized_count > 1 and not force_confirm:
 		_open_quantity_confirm(source, item_id, normalized_count, available, item)
 		return
-	transfer_requested.emit(source, item_id, normalized_count)
+	var stack_index := int(item.get("stack_index", 0)) if source == "container" else 0
+	transfer_requested.emit(source, item_id, normalized_count, stack_index)
 
 
 func _open_quantity_confirm(source: String, item_id: String, count: int, available: int, item: Dictionary) -> void:
@@ -456,6 +458,7 @@ func _open_quantity_confirm(source: String, item_id: String, count: int, availab
 		"item_name": str(item.get("name", item_id)),
 		"count": count,
 		"available": available,
+		"item": item.duplicate(true),
 	}
 	var action := "拿取" if source == "container" else ("存放" if source == "player" else "转移")
 	_quantity_confirm_dialog.dialog_text = "%s %s x%d（当前可用 %d）。确定继续吗？" % [
@@ -476,7 +479,8 @@ func _confirm_pending_quantity_transfer() -> void:
 		str(pending.get("source", "")),
 		str(pending.get("item_id", "")),
 		int(pending.get("count", 0)),
-		true
+		true,
+		_dictionary_or_empty(pending.get("item", {}))
 	)
 
 
@@ -600,9 +604,9 @@ func _execute_context_action(action_id: int) -> void:
 		return
 	match action_id:
 		CONTEXT_TRANSFER:
-			_request_transfer(_context_source, item_id, _selected_transfer_count(_context_item))
+			_request_transfer(_context_source, item_id, _selected_transfer_count(_context_item), false, _context_item)
 		CONTEXT_TRANSFER_ALL:
-			_request_transfer(_context_source, item_id, available)
+			_request_transfer(_context_source, item_id, available, false, _context_item)
 	if _context_menu != null:
 		_context_menu.hide()
 
@@ -640,11 +644,13 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 		_detail_label.text = "选择物品查看详情"
 		_selected_source = ""
 		_selected_item_id = ""
+		_selected_item_snapshot = {}
 		_update_transfer_controls({}, "")
 		return
 	_detail_label.text = _detail_text(item, source)
 	_selected_source = source
 	_selected_item_id = str(item.get("item_id", ""))
+	_selected_item_snapshot = item.duplicate(true)
 	_update_transfer_controls(item, source)
 
 
@@ -721,6 +727,8 @@ func _set_transfer_quantity(count: int) -> void:
 func _selected_available_count() -> int:
 	if _selected_item_id.is_empty() or _selected_source.is_empty():
 		return 0
+	if not _selected_item_snapshot.is_empty():
+		return maxi(0, int(_selected_item_snapshot.get("count", 0)))
 	for item in _items_for_selected_source():
 		var item_data: Dictionary = _dictionary_or_empty(item)
 		if str(item_data.get("item_id", "")) == _selected_item_id:

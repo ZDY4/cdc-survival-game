@@ -25,7 +25,7 @@ func configure_shops(simulation: RefCounted, shops: Dictionary) -> void:
 		simulation.shop_sessions[normalized_id] = session
 
 
-func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary) -> Dictionary:
+func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary, stack_index: int = 0) -> Dictionary:
 	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor"}
@@ -38,8 +38,18 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
 	var buy_count: int = max(1, count)
 	var available: int = _inventory_entries.count(_array_or_empty(shop.get("inventory", [])), normalized_item_id)
+	var selected_stack_index: int = max(0, stack_index)
+	if selected_stack_index > 0:
+		available = _inventory_entries.stack_count_at(_array_or_empty(shop.get("inventory", [])), normalized_item_id, selected_stack_index)
 	if available < buy_count:
-		return {"success": false, "reason": "shop_stock_insufficient"}
+		return {
+			"success": false,
+			"reason": "shop_stock_insufficient",
+			"item_id": normalized_item_id,
+			"count": buy_count,
+			"available": available,
+			"stack_index": selected_stack_index,
+		}
 	var unit_price: int = _trade_unit_price(normalized_item_id, float(shop.get("buy_price_modifier", 1.0)), item_library)
 	var total_price: int = unit_price * buy_count
 	if actor.money < total_price:
@@ -55,7 +65,7 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 
 	actor.money -= total_price
 	_inventory_entries.add_actor_item(actor, normalized_item_id, buy_count)
-	_inventory_entries.add(shop["inventory"], normalized_item_id, -buy_count)
+	_inventory_entries.remove_from_stack(shop["inventory"], normalized_item_id, buy_count, selected_stack_index)
 	shop["money"] = int(shop.get("money", 0)) + total_price
 	simulation.shop_sessions[shop_id] = shop
 	simulation.emit_event("trade_bought", {
@@ -63,6 +73,7 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 		"shop_id": shop_id,
 		"item_id": normalized_item_id,
 		"count": buy_count,
+		"stack_index": selected_stack_index,
 		"unit_price": unit_price,
 		"total_price": total_price,
 	})
@@ -72,6 +83,7 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 		"mode": "buy",
 		"item_id": normalized_item_id,
 		"count": buy_count,
+		"stack_index": selected_stack_index,
 		"unit_price": unit_price,
 		"total_price": total_price,
 		"player_money_after": actor.money,
@@ -82,6 +94,7 @@ func buy_item_from_shop(simulation: RefCounted, actor_id: int, shop_id: String, 
 		"shop_id": shop_id,
 		"item_id": normalized_item_id,
 		"count": buy_count,
+		"stack_index": selected_stack_index,
 		"unit_price": unit_price,
 		"total_price": total_price,
 		"shop_money": shop.get("money", 0),
