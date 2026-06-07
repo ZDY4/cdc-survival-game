@@ -13,6 +13,7 @@ var _hotbar_box: HBoxContainer
 var _observe_hotbar_box: HBoxContainer
 var _interaction_label: Label
 var _event_feedback_label: Label
+var _feedback_toast_layer: VBoxContainer
 var _debug_overlay_label: Label
 var _info_panel_label: Label
 var _runtime_control_label: Label
@@ -90,6 +91,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_apply_observe_hotbar(snapshot.get("runtime_control", {}))
 	_interaction_label.text = _interaction_text(interaction)
 	_event_feedback_label.text = _event_feedback_text(snapshot.get("event_feedback", []))
+	_apply_feedback_toasts(snapshot.get("feedback_toasts", []))
 	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
 	_info_panel_label.text = _info_panel_text(snapshot.get("info_panel", {}))
 	_runtime_control_label.text = _runtime_control_text(snapshot.get("runtime_control", {}))
@@ -169,6 +171,7 @@ func _build_layout() -> void:
 		label.text = line
 		_controls_hint_box.add_child(label)
 	_build_interaction_menu()
+	_build_feedback_toast_layer()
 	_build_debug_console()
 	_build_debug_panel()
 
@@ -352,6 +355,71 @@ func _line(node_name: String) -> Label:
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.clip_text = true
 	return label
+
+
+func _build_feedback_toast_layer() -> void:
+	if _feedback_toast_layer != null:
+		return
+	_feedback_toast_layer = VBoxContainer.new()
+	_feedback_toast_layer.name = "FeedbackToastLayer"
+	_feedback_toast_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_feedback_toast_layer.add_theme_constant_override("separation", 4)
+	_feedback_toast_layer.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_feedback_toast_layer.offset_left = 16
+	_feedback_toast_layer.offset_top = 188
+	_feedback_toast_layer.offset_right = 560
+	_feedback_toast_layer.offset_bottom = 308
+	add_child(_feedback_toast_layer)
+
+
+func _apply_feedback_toasts(value: Variant) -> void:
+	if _feedback_toast_layer == null:
+		_build_feedback_toast_layer()
+	_clear_children(_feedback_toast_layer)
+	var toasts: Array = _array_or_empty(value)
+	_feedback_toast_layer.visible = not toasts.is_empty()
+	for toast_value in toasts:
+		var toast: Dictionary = _dictionary_or_empty(toast_value)
+		if toast.is_empty() or not bool(toast.get("visible", true)):
+			continue
+		_feedback_toast_layer.add_child(_feedback_toast_label(toast))
+
+
+func _feedback_toast_label(toast: Dictionary) -> Label:
+	var label := _line("FeedbackToast_%s" % str(toast.get("id", "toast")))
+	label.text = str(toast.get("text", ""))
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.modulate = _feedback_toast_color(str(toast.get("severity", "info")), float(toast.get("alpha", 1.0)))
+	label.set_meta("toast_id", str(toast.get("id", "")))
+	label.set_meta("toast_kind", str(toast.get("kind", "")))
+	label.set_meta("toast_severity", str(toast.get("severity", "")))
+	label.set_meta("toast_phase", str(toast.get("phase", "")))
+	label.set_meta("toast_slot", int(toast.get("slot", 0)))
+	label.set_meta("toast_alpha", float(toast.get("alpha", 1.0)))
+	label.set_meta("toast_ttl_events", int(toast.get("ttl_events", 0)))
+	label.set_meta("toast_age_events", int(toast.get("age_events", 0)))
+	label.set_meta("toast_transition_style", str(_dictionary_or_empty(toast.get("transition", {})).get("style", "")))
+	return label
+
+
+func _feedback_toast_color(severity: String, alpha: float) -> Color:
+	var color := Color(0.82, 0.90, 1.0, alpha)
+	match severity:
+		"success":
+			color = Color(0.62, 0.95, 0.70, alpha)
+		"warning":
+			color = Color(1.0, 0.86, 0.46, alpha)
+		"error":
+			color = Color(1.0, 0.54, 0.50, alpha)
+	return color
+
+
+func _clear_children(node: Node) -> void:
+	if node == null:
+		return
+	for child in node.get_children():
+		node.remove_child(child)
+		child.free()
 
 
 func _build_interaction_menu() -> void:

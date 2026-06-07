@@ -114,6 +114,7 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 			errors.append("HUD hotbar snapshot should expose use state fields")
 	if typeof(snapshot.get("event_feedback", [])) != TYPE_ARRAY or snapshot.get("event_feedback", []).is_empty():
 		errors.append("HUD snapshot should expose recent event feedback")
+	_validate_feedback_toasts(errors, hud, snapshot, "pickup feedback toast")
 	if typeof(snapshot.get("status_badges", [])) != TYPE_ARRAY or snapshot.get("status_badges", []).size() < 6:
 		errors.append("HUD snapshot should expose status badges")
 	if not snapshot.has("tracked_quest") or bool(snapshot.get("tracked_quest", {}).get("active", true)):
@@ -267,6 +268,7 @@ func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_
 			found_failure = true
 	if not found_failure:
 		errors.append("HUD snapshot event_feedback should include command rejection")
+	_validate_feedback_toasts(errors, hud, failure_snapshot, "command rejection toast", "error", "player_command_rejected")
 	var friendly_attack: Dictionary = simulation.submit_player_command({
 		"kind": "attack",
 		"target_actor_id": 2,
@@ -348,6 +350,7 @@ func _validate_hud_combat_feedback(hud: Control, simulation: RefCounted, world_r
 	var feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
 	if not feedback_line.contains("攻击: 1 -> 42 暴击 7伤害 命中率85% 击倒"):
 		errors.append("event feedback line should show detailed attack result, got %s" % feedback_line)
+	_validate_feedback_toasts(errors, hud, snapshot, "combat feedback toast", "warning", "attack_resolved")
 	return errors
 
 
@@ -357,6 +360,45 @@ func _has_disabled_option(options: Array, option_id: String, reason: String) -> 
 		if str(option.get("id", "")) == option_id and str(option.get("disabled_reason", "")) == reason:
 			return true
 	return false
+
+
+func _validate_feedback_toasts(errors: Array[String], hud: Control, snapshot: Dictionary, context: String, expected_severity: String = "", expected_kind: String = "") -> void:
+	var toasts: Array = _array_or_empty(snapshot.get("feedback_toasts", []))
+	if toasts.is_empty():
+		errors.append("%s: HUD snapshot should expose feedback_toasts" % context)
+		return
+	var toast: Dictionary = _dictionary_or_empty(toasts[toasts.size() - 1])
+	if expected_kind != "" and str(toast.get("kind", "")) != expected_kind:
+		errors.append("%s: latest toast kind expected %s, got %s" % [context, expected_kind, toast])
+	if expected_severity != "" and str(toast.get("severity", "")) != expected_severity:
+		errors.append("%s: latest toast severity expected %s, got %s" % [context, expected_severity, toast])
+	for key in ["id", "text", "severity", "phase", "slot", "alpha", "ttl_events", "age_events", "transition"]:
+		if not toast.has(key):
+			errors.append("%s: feedback toast should expose %s: %s" % [context, key, toast])
+	var transition: Dictionary = _dictionary_or_empty(toast.get("transition", {}))
+	if str(transition.get("style", "")) != "event_age_fade":
+		errors.append("%s: feedback toast should expose transition style: %s" % [context, toast])
+	var layer: Node = hud.get_node_or_null("FeedbackToastLayer")
+	if layer == null:
+		errors.append("%s: HUD should render FeedbackToastLayer" % context)
+		return
+	if not (layer is Control) or (layer as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		errors.append("%s: FeedbackToastLayer should not block mouse input" % context)
+	if layer.get_child_count() <= 0:
+		errors.append("%s: FeedbackToastLayer should render toast labels" % context)
+		return
+	var label := layer.get_child(layer.get_child_count() - 1) as Label
+	if label == null:
+		errors.append("%s: latest toast should render as Label" % context)
+		return
+	if not str(label.text).contains(str(toast.get("text", ""))):
+		errors.append("%s: toast label text should match snapshot: %s vs %s" % [context, label.text, toast])
+	if str(label.get_meta("toast_id", "")) != str(toast.get("id", "")):
+		errors.append("%s: toast label should expose id metadata" % context)
+	if str(label.get_meta("toast_transition_style", "")) != "event_age_fade":
+		errors.append("%s: toast label should expose transition metadata" % context)
+	if absf(float(label.get_meta("toast_alpha", -1.0)) - float(toast.get("alpha", 0.0))) > 0.001:
+		errors.append("%s: toast label should expose alpha metadata" % context)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

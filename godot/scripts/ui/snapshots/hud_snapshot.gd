@@ -37,6 +37,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_ta
 		"hotbar": _hotbar_summary(runtime_snapshot, player),
 		"hotbar_group_labels": _dictionary_or_empty(runtime_snapshot.get("hotbar_group_labels", {})).duplicate(true),
 		"event_feedback": _event_feedback(runtime_snapshot),
+		"feedback_toasts": _feedback_toasts(runtime_snapshot),
 		"tracked_quest": {"active": false, "quest_id": ""},
 	}
 
@@ -522,6 +523,72 @@ func _event_feedback(runtime_snapshot: Dictionary) -> Array[Dictionary]:
 		if output.size() >= 3:
 			break
 	return output
+
+
+func _feedback_toasts(runtime_snapshot: Dictionary) -> Array[Dictionary]:
+	var events: Array = runtime_snapshot.get("events", [])
+	var output: Array[Dictionary] = []
+	var toast_slot := 0
+	for index in range(events.size() - 1, -1, -1):
+		var event: Dictionary = _dictionary_or_empty(events[index])
+		var summary := _event_feedback_entry(event)
+		if summary.is_empty():
+			continue
+		var toast := _feedback_toast_entry(summary, event, index, toast_slot, events.size())
+		if toast.is_empty():
+			continue
+		output.push_front(toast)
+		toast_slot += 1
+		if output.size() >= 3:
+			break
+	for display_slot in range(output.size()):
+		output[display_slot]["slot"] = display_slot
+	return output
+
+
+func _feedback_toast_entry(summary: Dictionary, event: Dictionary, event_index: int, slot: int, event_count: int) -> Dictionary:
+	var kind := str(summary.get("kind", event.get("kind", "")))
+	var text := str(summary.get("text", ""))
+	if text.is_empty():
+		return {}
+	var severity := _feedback_toast_severity(kind, text)
+	var age_events: int = max(0, event_count - event_index - 1)
+	var ttl_events := 6
+	var fade_start := 3
+	var alpha := 1.0
+	if age_events > fade_start:
+		alpha = clamp(1.0 - (float(age_events - fade_start) / float(max(1, ttl_events - fade_start))), 0.25, 1.0)
+	var phase := "enter" if age_events == 0 else ("hold" if age_events <= fade_start else "fade")
+	return {
+		"id": "toast_%d_%s" % [event_index, kind],
+		"kind": kind,
+		"text": text,
+		"severity": severity,
+		"phase": phase,
+		"slot": slot,
+		"event_index": event_index,
+		"age_events": age_events,
+		"ttl_events": ttl_events,
+		"fade_start_event": fade_start,
+		"alpha": alpha,
+		"visible": alpha > 0.0,
+		"transition": {
+			"style": "event_age_fade",
+			"enter_events": 1,
+			"hold_events": fade_start,
+			"fade_events": ttl_events - fade_start,
+		},
+	}
+
+
+func _feedback_toast_severity(kind: String, text: String) -> String:
+	if kind == "player_command_rejected" or kind == "ui_feedback" or text.begins_with("失败"):
+		return "error"
+	if kind in ["actor_defeated", "quest_completed", "quest_reward_granted", "actor_leveled_up", "skill_learned"]:
+		return "success"
+	if kind in ["attack_resolved", "relationship_changed", "movement_cancelled", "interaction_cancelled", "pending_cancelled"]:
+		return "warning"
+	return "info"
 
 
 func _event_feedback_entry(event: Dictionary) -> Dictionary:
