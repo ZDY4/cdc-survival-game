@@ -8,6 +8,7 @@ const ContentRecordValidator = preload("res://scripts/tools/content_record_valid
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
 
 
 func _init() -> void:
@@ -69,6 +70,7 @@ func _run() -> Array[String]:
 	_expect_validate_changed(errors, registry)
 	_expect_schema_migration_diagnostics(errors, registry)
 	_expect_asset_path_resolver(errors)
+	_expect_asset_manifest(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_item_appearance_asset_ref(errors, registry)
 	_expect_invalid_character_appearance_ref(errors, registry)
@@ -173,6 +175,34 @@ func _expect_asset_path_resolver(errors: Array[String]) -> void:
 		errors.append("asset resolver should flag legacy media root references, got %s" % media)
 	if str(media.get("fallback_key", "")) != "weapon" or not bool(media.get("legacy", false)):
 		errors.append("asset resolver should derive media fallback diagnostics, got %s" % media)
+
+
+func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) -> void:
+	var manifest: Dictionary = ContentAssetManifest.new().build(registry)
+	if int(manifest.get("entry_count", 0)) <= 0 or int(manifest.get("unique_asset_count", 0)) <= 0:
+		errors.append("asset manifest should expose referenced assets: %s" % manifest)
+	var by_kind: Dictionary = _dictionary_or_empty(manifest.get("by_kind", {}))
+	if int(by_kind.get("media", 0)) <= 0 or int(by_kind.get("model", 0)) <= 0:
+		errors.append("asset manifest should include media and model assets: %s" % by_kind)
+	if int(manifest.get("invalid_count", -1)) != 0:
+		errors.append("asset manifest should not include invalid current asset refs: %s" % manifest)
+	if _asset_manifest_entry(manifest, "items", "1006", "icon_path").get("resource_path", "") != "res://assets/icons/items/bandage.svg":
+		errors.append("asset manifest should include item icon path")
+	if _asset_manifest_entry(manifest, "items", "1002", "fragments[3].definition.visual_asset").get("resource_path", "") != "res://assets/preview_placeholders/placeholders/weapon_dagger.gltf":
+		errors.append("asset manifest should include item appearance model path")
+	if _asset_manifest_entry(manifest, "overworld", "main_overworld", "locations[0].icon").get("resource_path", "") != "res://assets/icons/location_hospital.svg":
+		errors.append("asset manifest should include overworld location icon path")
+	var world_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "building_wall", "prototypes[building_wall/isolated].source.path")
+	if str(world_tile_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/isolated.gltf":
+		errors.append("asset manifest should include world tile glTF path: %s" % world_tile_entry)
+
+
+func _asset_manifest_entry(manifest: Dictionary, domain: String, record_id: String, field: String) -> Dictionary:
+	for entry in _array_or_empty(manifest.get("entries", [])):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("domain", "")) == domain and str(entry_data.get("record_id", "")) == record_id and str(entry_data.get("field", "")) == field:
+			return entry_data
+	return {}
 
 
 func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry) -> void:

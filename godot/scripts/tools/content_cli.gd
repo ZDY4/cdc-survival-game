@@ -6,6 +6,7 @@ const ContentCliDomains = preload("res://scripts/tools/content_cli_domains.gd")
 const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd")
 const ContentJsonFormatter = preload("res://scripts/tools/content_json_formatter.gd")
 const ContentRecordCliCommands = preload("res://scripts/tools/content_record_cli_commands.gd")
+const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
 
 var _record_commands := ContentRecordCliCommands.new()
 
@@ -52,6 +53,12 @@ func _init() -> void:
 				quit(1)
 				return
 			exit_code = _format_command(args, registry)
+		"asset-manifest":
+			var registry: ContentRegistry = _load_registry_or_null()
+			if registry == null:
+				quit(1)
+				return
+			exit_code = _asset_manifest_command(args, registry)
 		_:
 			printerr(_usage())
 			exit_code = 2
@@ -59,7 +66,7 @@ func _init() -> void:
 
 
 func _content_args() -> Array[String]:
-	var known := ["validate", "locate", "summarize", "references", "format", "diff-summary"]
+	var known := ["validate", "locate", "summarize", "references", "format", "diff-summary", "asset-manifest"]
 	var raw := OS.get_cmdline_user_args()
 	if raw.is_empty():
 		raw = OS.get_cmdline_args()
@@ -150,6 +157,21 @@ func _diff_summary_command(args: Array[String]) -> int:
 	print("added_lines: %d" % int(summary.get("added_lines", 0)))
 	print("removed_lines: %d" % int(summary.get("removed_lines", 0)))
 	print("changed_hunks: %d" % int(summary.get("changed_hunks", 0)))
+	return 0
+
+
+func _asset_manifest_command(args: Array[String], registry: ContentRegistry) -> int:
+	if args.size() != 2 or args[1] != "all":
+		printerr(_usage())
+		return 2
+	var manifest := ContentAssetManifest.new().build(registry)
+	print("mode: asset_manifest")
+	print("status: ok")
+	print("entry_count: %d" % int(manifest.get("entry_count", 0)))
+	print("unique_asset_count: %d" % int(manifest.get("unique_asset_count", 0)))
+	print("missing_count: %d" % int(manifest.get("missing_count", 0)))
+	print("invalid_count: %d" % int(manifest.get("invalid_count", 0)))
+	print("manifest_json: %s" % JSON.stringify(manifest))
 	return 0
 
 
@@ -261,4 +283,4 @@ func _repo_relative_path(path: String) -> String:
 
 
 func _usage() -> String:
-	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance|ai|json> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path>"
+	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance|ai|json> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path> | content_cli asset-manifest all"

@@ -5,15 +5,15 @@ Runs the Godot content CLI for repo-local content inspection and validation.
 .DESCRIPTION
 Wraps `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd -- ...`.
 This is the Godot migration replacement path for common `content_tools` locate,
-summarize, references, validate, format, and diff-summary commands.
+summarize, references, validate, format, diff-summary, and asset-manifest commands.
 
 .PARAMETER Command
-Content command to run: locate, summarize, references, validate, format, or diff-summary.
+Content command to run: locate, summarize, references, validate, format, diff-summary, or asset-manifest.
 
 .PARAMETER Kind
 Content kind such as item, recipe, character, dialogue, dialogue_rule, quest, skill, skill_tree,
 settlement, overworld, map, shop, world_tile, appearance, ai, json, changed for `validate changed` / `format changed`,
-or path for `diff-summary --path`.
+all for `asset-manifest all`, or path for `diff-summary --path`.
 
 .PARAMETER Id
 Content id for locate/summarize/references/validate/format, or the path for diff-summary.
@@ -44,11 +44,14 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind overwo
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id data/items/1006.json
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command asset-manifest -Kind all
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("locate", "summarize", "references", "validate", "format", "diff-summary")]
+    [ValidateSet("locate", "summarize", "references", "validate", "format", "diff-summary", "asset-manifest")]
     [string]$Command,
 
     [Parameter(Mandatory = $true)]
@@ -80,6 +83,11 @@ if ($Command -eq "diff-summary") {
         throw "-Command diff-summary requires -Id <repo-relative-or-absolute-path>"
     }
     $contentArgs = @($Command, "--path", $Id)
+} elseif ($Command -eq "asset-manifest") {
+    if ($Kind -ne "all") {
+        throw "Use -Kind all with -Command asset-manifest"
+    }
+    $contentArgs = @($Command, "all")
 } else {
     $contentArgs = @($Command, $Kind)
     if ($PSBoundParameters.ContainsKey("Id") -and -not [string]::IsNullOrWhiteSpace($Id)) {
