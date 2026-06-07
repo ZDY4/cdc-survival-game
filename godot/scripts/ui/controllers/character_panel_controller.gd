@@ -167,13 +167,19 @@ func _status_rows(status_effects: Array) -> Array[Control]:
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.text = _status_text(data)
 		label.tooltip_text = str(data.get("tooltip", ""))
+		_apply_status_visual(label, data)
 		row.tooltip_text = label.tooltip_text
+		row.set_meta("polarity", str(data.get("polarity", "")))
+		row.set_meta("severity", str(data.get("severity", "")))
+		row.set_meta("visual_tone", str(_dictionary_or_empty(data.get("visual_style", {})).get("tone", "")))
 		row.add_child(label)
 		rows.append(row)
 	return rows
 
 
 func _status_text(data: Dictionary) -> String:
+	var visual_style: Dictionary = _dictionary_or_empty(data.get("visual_style", {}))
+	var prefix := str(visual_style.get("prefix", ""))
 	var parts: Array[String] = [
 		str(data.get("name", data.get("effect_id", ""))),
 		str(data.get("category", "")),
@@ -192,7 +198,19 @@ func _status_text(data: Dictionary) -> String:
 			modifier_labels.append(text)
 	if not modifier_labels.is_empty():
 		parts.append(" / ".join(modifier_labels))
-	return " | ".join(parts)
+	var text := " | ".join(parts)
+	return "%s %s" % [prefix, text] if not prefix.is_empty() else text
+
+
+func _apply_status_visual(label: Label, data: Dictionary) -> void:
+	var visual_style: Dictionary = _dictionary_or_empty(data.get("visual_style", {}))
+	var color_text := str(visual_style.get("font_color", ""))
+	if color_text.is_empty():
+		return
+	var color := Color.html(color_text)
+	label.add_theme_color_override("font_color", color)
+	label.set_meta("status_font_color", color_text)
+	label.set_meta("status_visual_tone", str(visual_style.get("tone", "")))
 
 
 func _equipment_rows(equipment: Array) -> Array[Control]:

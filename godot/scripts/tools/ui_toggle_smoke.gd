@@ -514,6 +514,25 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("character timed status effect should expose duration and skill tooltip")
 	if not _derived_line(game_root, "effects").contains("damage_bonus +0.29"):
 		errors.append("character panel should sum passive and active status modifiers in derived effect summary")
+	var player_for_debuff: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	player_for_debuff.active_effects.append({
+		"effect_id": "bleeding",
+		"source": "combat",
+		"category": "debuff",
+		"duration_remaining": 6,
+		"is_infinite": false,
+		"modifiers": {
+			"healing_received": -0.25,
+		},
+	})
+	game_root.refresh_character_panel()
+	if not _status_effect_line(game_root, "StatusEffect_bleeding").begins_with("! bleeding | debuff"):
+		errors.append("character panel should mark negative status effect with danger prefix")
+	if not _status_effect_tooltip(game_root, "StatusEffect_bleeding").contains("影响: 负面"):
+		errors.append("character negative status tooltip should expose negative polarity")
+	var debuff_meta := _status_effect_meta(game_root, "StatusEffect_bleeding")
+	if str(debuff_meta.get("polarity", "")) != "negative" or str(debuff_meta.get("visual_tone", "")) != "danger" or str(debuff_meta.get("font_color", "")) != "#ff6b6b":
+		errors.append("character negative status row should expose danger visual metadata: %s" % debuff_meta)
 
 	_press_key(game_root, KEY_M)
 	_expect_stage_open(errors, game_root, "map", "M should replace character with map")
@@ -2072,6 +2091,20 @@ func _status_effect_tooltip(game_root: Node, node_name: String) -> String:
 	if row is Control:
 		return str((row as Control).tooltip_text)
 	return ""
+
+
+func _status_effect_meta(game_root: Node, node_name: String) -> Dictionary:
+	var row: Node = game_root.character_panel.find_child(node_name, true, false)
+	if row == null:
+		return {}
+	var label: Node = row.get_node_or_null("Line")
+	return {
+		"polarity": str(row.get_meta("polarity", "")) if row.has_meta("polarity") else "",
+		"severity": str(row.get_meta("severity", "")) if row.has_meta("severity") else "",
+		"visual_tone": str(row.get_meta("visual_tone", "")) if row.has_meta("visual_tone") else "",
+		"font_color": str(label.get_meta("status_font_color", "")) if label != null and label.has_meta("status_font_color") else "",
+		"label_tone": str(label.get_meta("status_visual_tone", "")) if label != null and label.has_meta("status_visual_tone") else "",
+	}
 
 
 func _interaction_menu_disabled_option(game_root: Node, option_id: String) -> Button:

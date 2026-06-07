@@ -367,13 +367,19 @@ func _status_effects_snapshot(active_effects: Array) -> Array[Dictionary]:
 		var effect_id: String = str(effect_data.get("effect_id", ""))
 		if effect_id.is_empty():
 			continue
+		var category := str(effect_data.get("category", ""))
+		var polarity := _status_effect_polarity(effect_data)
+		var visual_style := _status_effect_visual_style(polarity, category)
 		rows.append({
 			"effect_id": effect_id,
 			"source": str(effect_data.get("source", "")),
 			"source_label": _status_effect_source_label(effect_data),
 			"skill_id": str(effect_data.get("skill_id", "")),
 			"name": _status_effect_name(effect_data),
-			"category": str(effect_data.get("category", "")),
+			"category": category,
+			"polarity": polarity,
+			"severity": _status_effect_severity(effect_data, polarity),
+			"visual_style": visual_style,
 			"level": int(effect_data.get("level", 0)),
 			"duration_remaining": float(effect_data.get("duration_remaining", 0.0)),
 			"is_infinite": bool(effect_data.get("is_infinite", false)),
@@ -528,9 +534,11 @@ func _status_effect_source_label(effect: Dictionary) -> String:
 
 
 func _status_effect_tooltip(effect: Dictionary) -> String:
+	var polarity := _status_effect_polarity(effect)
 	var parts: Array[String] = [
 		"来源: %s" % _status_effect_source_label(effect),
 		"类别: %s" % str(effect.get("category", "")),
+		"影响: %s" % _status_effect_polarity_label(polarity),
 	]
 	var skill_id := str(effect.get("skill_id", ""))
 	if not skill_id.is_empty():
@@ -543,6 +551,76 @@ func _status_effect_tooltip(effect: Dictionary) -> String:
 		parts.append("修饰: %s" % " / ".join(modifier_labels))
 	parts.append("效果ID: %s" % str(effect.get("effect_id", "")))
 	return "\n".join(parts)
+
+
+func _status_effect_polarity(effect: Dictionary) -> String:
+	var explicit := str(effect.get("polarity", effect.get("effect_polarity", ""))).strip_edges()
+	if not explicit.is_empty():
+		return explicit
+	var category := str(effect.get("category", "")).strip_edges().to_lower()
+	match category:
+		"debuff", "negative", "harmful", "curse":
+			return "negative"
+		"buff", "positive", "beneficial":
+			return "positive"
+		"passive":
+			return "passive"
+	return "neutral"
+
+
+func _status_effect_severity(effect: Dictionary, polarity: String) -> String:
+	var explicit := str(effect.get("severity", effect.get("effect_severity", ""))).strip_edges()
+	if not explicit.is_empty():
+		return explicit
+	if polarity == "negative":
+		if float(effect.get("duration_remaining", 0.0)) >= 5.0 or bool(effect.get("is_infinite", false)):
+			return "high"
+		return "medium"
+	if polarity == "positive":
+		return "beneficial"
+	return "normal"
+
+
+func _status_effect_visual_style(polarity: String, category: String) -> Dictionary:
+	match polarity:
+		"negative":
+			return {
+				"tone": "danger",
+				"prefix": "!",
+				"font_color": "#ff6b6b",
+				"category": category,
+			}
+		"positive":
+			return {
+				"tone": "success",
+				"prefix": "+",
+				"font_color": "#7bd88f",
+				"category": category,
+			}
+		"passive":
+			return {
+				"tone": "muted",
+				"prefix": "=",
+				"font_color": "#c8d0d8",
+				"category": category,
+			}
+	return {
+		"tone": "neutral",
+		"prefix": "",
+		"font_color": "#e6e6e6",
+		"category": category,
+	}
+
+
+func _status_effect_polarity_label(polarity: String) -> String:
+	match polarity:
+		"negative":
+			return "负面"
+		"positive":
+			return "正面"
+		"passive":
+			return "被动"
+	return "中性"
 
 
 func _skill_name(skill_id: String) -> String:
