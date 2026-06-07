@@ -857,6 +857,16 @@ func _disabled_reason_text(reason: String) -> String:
 			return "目标不可见"
 		"target_too_close":
 			return "目标过近"
+		"target_not_pickup":
+			return "不可拾取"
+		"self_target":
+			return "自身目标"
+		"door_locked":
+			return "门已上锁"
+		"door_key_missing":
+			return "缺少钥匙"
+		"door_tool_missing":
+			return "缺少工具"
 		"interaction_option_unavailable":
 			return "不可用"
 	if reason.is_empty():

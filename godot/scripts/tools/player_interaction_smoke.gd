@@ -525,7 +525,9 @@ func _expect_hover_target_outline_hidden(errors: Array[String], game_root: Node)
 func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
 	var map: Dictionary = _dictionary_or_empty(game_root.world_result.get("map", {})).duplicate(true)
 	var door_id := "player_interaction_smoke_door"
+	var keyed_door_id := "player_interaction_smoke_keyed_door"
 	var door_grid := {"x": 27, "y": 0, "z": 39}
+	var keyed_door_grid := {"x": 28, "y": 0, "z": 39}
 	var door_summary := {
 		"door_id": door_id,
 		"object_id": door_id,
@@ -538,6 +540,14 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 		"blocks_sight": true,
 		"blocks_sight_when_closed": true,
 	}
+	var keyed_door_summary := door_summary.duplicate(true)
+	keyed_door_summary["door_id"] = keyed_door_id
+	keyed_door_summary["object_id"] = keyed_door_id
+	keyed_door_summary["display_name"] = "缺钥匙测试门"
+	keyed_door_summary["anchor"] = keyed_door_grid.duplicate(true)
+	keyed_door_summary["cells"] = [keyed_door_grid.duplicate(true)]
+	keyed_door_summary["locked"] = true
+	keyed_door_summary["required_item_ids"] = ["1138"]
 	var interaction_targets: Dictionary = _dictionary_or_empty(map.get("interaction_targets", {})).duplicate(true)
 	interaction_targets[door_id] = {
 		"target_id": door_id,
@@ -548,9 +558,19 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 		"cells": [door_grid.duplicate(true)],
 		"door": door_summary.duplicate(true),
 	}
+	interaction_targets[keyed_door_id] = {
+		"target_id": keyed_door_id,
+		"target_type": "map_object",
+		"display_name": "缺钥匙测试门",
+		"kind": "door",
+		"anchor": keyed_door_grid.duplicate(true),
+		"cells": [keyed_door_grid.duplicate(true)],
+		"door": keyed_door_summary.duplicate(true),
+	}
 	map["interaction_targets"] = interaction_targets
 	var door_objects: Array = _array_or_empty(map.get("door_objects", [])).duplicate(true)
 	door_objects.append(door_summary.duplicate(true))
+	door_objects.append(keyed_door_summary.duplicate(true))
 	map["door_objects"] = door_objects
 	game_root.world_result["map"] = map
 	game_root.simulation.configure_map_interactions(interaction_targets)
@@ -595,6 +615,27 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 		errors.append("door selection for context menu failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
 	else:
 		_expect_interaction_menu_options(errors, game_root, "door", ["door_toggle", "inspect"], {
+			"pickup": "target_not_pickup",
+			"open_container": "target_not_container",
+		})
+	var keyed_metadata := {
+		"target_type": "map_object",
+		"target_id": keyed_door_id,
+		"target_kind": "door",
+		"door": keyed_door_summary.duplicate(true),
+	}
+	var keyed_door_node := Node3D.new()
+	keyed_door_node.name = "MapObject_%s" % keyed_door_id
+	keyed_door_node.position = Vector3(float(keyed_door_grid["x"]), 0.18, float(keyed_door_grid["z"]))
+	keyed_door_node.set_meta("interaction_target", keyed_metadata)
+	_add_pickable_smoke_box(keyed_door_node, keyed_metadata)
+	game_root.world_container.add_child(keyed_door_node)
+	var keyed_selection: Dictionary = game_root.select_interaction_node(keyed_door_node)
+	if not bool(keyed_selection.get("success", false)):
+		errors.append("keyed locked door selection for context menu failed: %s" % keyed_selection.get("prompt", {}).get("reason", "unknown"))
+	else:
+		_expect_interaction_menu_options(errors, game_root, "keyed locked door", ["inspect"], {
+			"door_toggle": "door_key_missing",
 			"pickup": "target_not_pickup",
 			"open_container": "target_not_container",
 		})
