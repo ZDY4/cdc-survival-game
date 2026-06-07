@@ -28,6 +28,7 @@ func register_actor(request: Dictionary) -> ActorRecord:
 	record.grid_position = request.get("grid_position")
 	record.inventory = _dictionary_or_empty(request.get("inventory", {})).duplicate(true)
 	record.inventory_order = _inventory_order(request.get("inventory_order", []), record.inventory)
+	record.inventory_stacks = _inventory_stacks(request.get("inventory_stacks", {}), record.inventory)
 	record.tool_durability = _float_dictionary(request.get("tool_durability", {}))
 	record.equipment = _dictionary_or_empty(request.get("equipment", {})).duplicate(true)
 	record.weapon_ammo = _int_dictionary(request.get("weapon_ammo", {}))
@@ -115,6 +116,7 @@ func load_snapshot(records: Array) -> void:
 		record.grid_position = GridCoord.from_dictionary(_dictionary_or_empty(actor_data.get("grid_position", {})))
 		record.inventory = _dictionary_or_empty(actor_data.get("inventory", {})).duplicate(true)
 		record.inventory_order = _inventory_order(actor_data.get("inventory_order", []), record.inventory)
+		record.inventory_stacks = _inventory_stacks(actor_data.get("inventory_stacks", {}), record.inventory)
 		record.tool_durability = _float_dictionary(actor_data.get("tool_durability", {}))
 		record.equipment = _dictionary_or_empty(actor_data.get("equipment", {})).duplicate(true)
 		record.weapon_ammo = _int_dictionary(actor_data.get("weapon_ammo", {}))
@@ -183,6 +185,29 @@ func _inventory_order(value: Variant, inventory: Dictionary) -> Array[String]:
 			continue
 		if int(inventory.get(normalized_id, 0)) > 0:
 			output.append(normalized_id)
+	return output
+
+
+func _inventory_stacks(value: Variant, inventory: Dictionary) -> Dictionary:
+	var output: Dictionary = {}
+	var raw: Dictionary = _dictionary_or_empty(value)
+	for item_id in inventory.keys():
+		var normalized_id: String = str(item_id)
+		var total_count: int = max(0, int(inventory.get(item_id, 0)))
+		if normalized_id.is_empty() or total_count <= 0:
+			continue
+		var stacks: Array[int] = []
+		var raw_stacks: Array = _array_or_empty(raw.get(normalized_id, []))
+		for stack_count in raw_stacks:
+			var count: int = max(0, int(stack_count))
+			if count > 0:
+				stacks.append(count)
+		var stack_sum := 0
+		for count in stacks:
+			stack_sum += count
+		if stacks.is_empty() or stack_sum != total_count:
+			stacks = [total_count]
+		output[normalized_id] = stacks
 	return output
 
 

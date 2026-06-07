@@ -390,7 +390,7 @@ func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> 
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_EQUIP), _array_or_empty(item.get("equip_slots", [])).is_empty())
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DROP), not bool(item.get("droppable", true)) or int(item.get("count", 0)) <= 0)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DROP_ALL), not bool(item.get("droppable", true)) or int(item.get("count", 0)) <= 0)
-	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_SPLIT), true)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_SPLIT), not bool(item.get("can_split_stack", false)))
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_STORE_CONTAINER), not has_container or not can_transfer)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_SELL_TRADE), not has_trade or not can_transfer)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_DECONSTRUCT), not bool(item.get("deconstructable", false)) or int(item.get("count", 0)) <= 0)
@@ -497,7 +497,10 @@ func _apply_inspect_detail(item: Dictionary) -> void:
 func _split_context_tooltip(item: Dictionary) -> String:
 	if not bool(item.get("stackable", false)) or int(item.get("count", 0)) <= 1:
 		return "只有数量大于 1 的堆叠物品才能拆分"
-	return "当前背包模型按物品 ID 合并计数；拆分需要后续多堆叠库存模型"
+	if not bool(item.get("can_split_stack", false)):
+		return "当前最大堆叠数量不足，无法继续拆分"
+	var stacks: Array = _array_or_empty(item.get("stack_counts", []))
+	return "拆分当前最大堆叠；当前堆叠 %s" % ", ".join(_string_array(stacks))
 
 
 func _apply_feedback(feedback: Dictionary) -> void:

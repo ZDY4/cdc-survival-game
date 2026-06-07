@@ -16,6 +16,7 @@ func _init(p_registry: RefCounted) -> void:
 func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionary:
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
+	var inventory_stacks: Dictionary = _dictionary_or_empty(player.get("inventory_stacks", {}))
 	var tool_durability: Dictionary = _dictionary_or_empty(player.get("tool_durability", {}))
 	var inventory_order: Array[String] = _inventory_order(player.get("inventory_order", []), inventory)
 	var items: Array[Dictionary] = []
@@ -27,6 +28,9 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 			continue
 		var item_snapshot: Dictionary = _item_snapshot(str(item_id), count, tool_durability)
 		item_snapshot["order_index"] = order_index
+		item_snapshot["stack_counts"] = _stack_counts_for(str(item_id), count, inventory_stacks)
+		item_snapshot["stack_count"] = _array_or_empty(item_snapshot.get("stack_counts", [])).size()
+		item_snapshot["can_split_stack"] = bool(item_snapshot.get("stackable", false)) and _largest_stack_count(_array_or_empty(item_snapshot.get("stack_counts", []))) > 1
 		total_weight += float(item_snapshot.get("total_weight", 0.0))
 		items.append(item_snapshot)
 	var capacity: Dictionary = _inventory_capacity.capacity_snapshot(player, registry.get_library("items"))
@@ -35,6 +39,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"owner_name": str(player.get("display_name", "")),
 		"items": items,
 		"inventory_order": inventory_order,
+		"inventory_stacks": inventory_stacks.duplicate(true),
 		"item_count": items.size(),
 		"total_weight": total_weight,
 		"max_weight": float(capacity.get("max_weight", 0.0)),
@@ -111,6 +116,27 @@ func _item_snapshot(item_id: String, count: int, tool_durability: Dictionary = {
 		"stackable": _stackable(data),
 		"max_stack": _max_stack(data),
 	}
+
+
+func _stack_counts_for(item_id: String, count: int, inventory_stacks: Dictionary) -> Array[int]:
+	var stacks: Array[int] = []
+	for stack_count in _array_or_empty(inventory_stacks.get(item_id, [])):
+		var normalized_count: int = max(0, int(stack_count))
+		if normalized_count > 0:
+			stacks.append(normalized_count)
+	var stack_sum := 0
+	for stack_count in stacks:
+		stack_sum += stack_count
+	if stacks.is_empty() or stack_sum != count:
+		stacks = [count]
+	return stacks
+
+
+func _largest_stack_count(stacks: Array) -> int:
+	var largest := 0
+	for stack_count in stacks:
+		largest = max(largest, int(stack_count))
+	return largest
 
 
 func _rarity(item_data: Dictionary) -> String:

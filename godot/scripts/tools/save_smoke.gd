@@ -134,6 +134,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"skill_library": registry.get_library("skills"),
 	})
 	player_for_reload.inventory["1006"] = max(1, int(player_for_reload.inventory.get("1006", 0)))
+	player_for_reload.inventory["1006"] = max(4, int(player_for_reload.inventory.get("1006", 0)))
 	simulation.submit_player_command({
 		"kind": "bind_hotbar",
 		"actor_id": 1,
@@ -243,6 +244,8 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	active_target.grid_position = GridCoord.new(3, 0, 0)
 	active_target.combat_attributes["speed"] = 3.0
 	player.combat_attributes["speed"] = 5.0
+	player.turn_open = true
+	player.ap = maxf(player.ap, 1.0)
 	simulation.combat_state["active"] = true
 	simulation.combat_state["round"] = 7
 	simulation.combat_state["participants"] = [1, active_combat_zombie]
@@ -271,6 +274,17 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	]
 	simulation.combat_state["current_combat_actor_id"] = 1
 	simulation.combat_state["next_combat_actor_id"] = active_combat_zombie
+	player.inventory["1006"] = max(4, int(player.inventory.get("1006", 0)))
+	player.inventory_stacks.erase("1006")
+	var split_result: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "split_stack",
+		"item_id": "1006",
+		"count": 1,
+	})
+	if not bool(split_result.get("success", false)):
+		push_error("save smoke split_stack fixture failed: %s" % JSON.stringify(split_result))
 
 
 func _submit_and_complete(simulation: RefCounted, registry: RefCounted, command: Dictionary, max_waits: int = 8) -> Dictionary:
@@ -487,6 +501,11 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("player inventory did not roundtrip")
 	if JSON.stringify(player_restored.get("inventory_order", [])) != JSON.stringify(player_original.get("inventory_order", [])):
 		errors.append("player inventory_order did not roundtrip")
+	if JSON.stringify(_dictionary_or_empty(player_restored.get("inventory_stacks", {}))) != JSON.stringify(_dictionary_or_empty(player_original.get("inventory_stacks", {}))):
+		errors.append("player inventory_stacks did not roundtrip")
+	var bandage_stacks: Array = _array_or_empty(_dictionary_or_empty(player_restored.get("inventory_stacks", {})).get("1006", []))
+	if bandage_stacks.size() < 2:
+		errors.append("player split bandage stacks should roundtrip")
 	if _inventory_count(player_restored, "1031") != 1:
 		errors.append("taken container item did not roundtrip in player inventory")
 	if JSON.stringify(_dictionary_or_empty(player_restored.get("tool_durability", {}))) != JSON.stringify(_dictionary_or_empty(player_original.get("tool_durability", {}))):

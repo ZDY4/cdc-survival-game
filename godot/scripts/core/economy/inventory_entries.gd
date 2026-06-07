@@ -52,10 +52,14 @@ func add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:
 	if next_count <= 0:
 		actor.inventory.erase(normalized_item_id)
 		actor.inventory_order.erase(normalized_item_id)
+		if "inventory_stacks" in actor:
+			actor.inventory_stacks.erase(normalized_item_id)
 	else:
 		actor.inventory[normalized_item_id] = next_count
 		if current_count <= 0 and not actor.inventory_order.has(normalized_item_id):
 			actor.inventory_order.append(normalized_item_id)
+		if "inventory_stacks" in actor:
+			_sync_actor_inventory_stacks(actor, normalized_item_id)
 
 
 func sync_actor_inventory_order(actor: RefCounted) -> void:
@@ -101,3 +105,29 @@ func _sync_actor_inventory_order(actor: RefCounted) -> void:
 		if int(actor.inventory.get(normalized_id, 0)) > 0:
 			ordered.append(normalized_id)
 	actor.inventory_order = ordered
+	if "inventory_stacks" in actor:
+		for item_id in actor.inventory.keys():
+			_sync_actor_inventory_stacks(actor, normalize_content_id(item_id))
+		for item_id in actor.inventory_stacks.keys():
+			if int(actor.inventory.get(item_id, 0)) <= 0:
+				actor.inventory_stacks.erase(item_id)
+
+
+func _sync_actor_inventory_stacks(actor: RefCounted, item_id: String) -> void:
+	if actor == null or item_id.is_empty():
+		return
+	var total_count: int = max(0, int(actor.inventory.get(item_id, 0)))
+	if total_count <= 0:
+		actor.inventory_stacks.erase(item_id)
+		return
+	var stacks: Array[int] = []
+	for stack_count in _array_or_empty(actor.inventory_stacks.get(item_id, [])):
+		var count: int = max(0, int(stack_count))
+		if count > 0:
+			stacks.append(count)
+	var stack_sum := 0
+	for count in stacks:
+		stack_sum += count
+	if stacks.is_empty() or stack_sum != total_count:
+		stacks = [total_count]
+	actor.inventory_stacks[item_id] = stacks

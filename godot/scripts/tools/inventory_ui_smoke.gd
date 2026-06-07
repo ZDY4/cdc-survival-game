@@ -241,16 +241,23 @@ func _run_checks(game_root: Node) -> Array[String]:
 	elif _context_action_disabled(game_root, 7):
 		errors.append("droppable item context menu should enable drop all")
 	else:
-		if not _context_action_disabled(game_root, 8):
-			errors.append("split context action should stay disabled until inventory supports multiple stacks")
-		if not _context_action_tooltip(game_root, 8).contains("多堆叠库存模型"):
-			errors.append("split context action should explain merged-count inventory limitation")
+		if _context_action_disabled(game_root, 8):
+			errors.append("split context action should be enabled for stackable multi-count items")
+		if not _context_action_tooltip(game_root, 8).contains("当前堆叠"):
+			errors.append("split context action should explain current stack groups")
 		var scrap_before_split: int = _player_inventory_count(game_root, "1010")
 		var split_result: Dictionary = game_root.split_player_inventory_stack("1010", 1)
-		if str(split_result.get("reason", "")) != "inventory_split_requires_stack_model":
-			errors.append("split stack should report inventory model limitation")
+		if not bool(split_result.get("success", false)) or str(split_result.get("kind", "")) != "inventory_stack_split":
+			errors.append("split stack should create a secondary inventory stack: %s" % split_result)
 		if _player_inventory_count(game_root, "1010") != scrap_before_split:
-			errors.append("failed split stack should not mutate inventory")
+			errors.append("split stack should preserve merged inventory count")
+		game_root.refresh_inventory_panel()
+		var split_snapshot: Dictionary = _inventory_snapshot_item(game_root, "1010")
+		if int(split_snapshot.get("stack_count", 0)) != 2:
+			errors.append("split stack snapshot should expose two stacks: %s" % split_snapshot)
+		var split_stacks: Array = _array_or_empty(split_snapshot.get("stack_counts", []))
+		if split_stacks.size() != 2 or int(split_stacks[0]) != 2 or int(split_stacks[1]) != 1:
+			errors.append("split stack snapshot should expose 2/1 stack counts: %s" % split_snapshot)
 		_execute_inventory_context_action(game_root, 7)
 		await process_frame
 		if not _discard_dialog_visible(game_root):
@@ -1092,12 +1099,14 @@ func _assert_inventory_context_menu(errors: Array[String], game_root: Node, expe
 		errors.append("%s: inventory context menu should expose action options: %s" % [context, top])
 	var options: Array = _array_or_empty(top.get("options", []))
 	var split_seen := false
+	var expected_item: Dictionary = _inventory_snapshot_item(game_root, expected_item_id)
+	var expected_split_enabled := bool(expected_item.get("can_split_stack", false))
 	for option in options:
 		var option_data: Dictionary = _dictionary_or_empty(option)
 		if int(option_data.get("id", -1)) == 8:
 			split_seen = true
-			if not bool(option_data.get("disabled", false)):
-				errors.append("%s: split action should remain disabled until stack model migration: %s" % [context, option_data])
+			if bool(option_data.get("disabled", false)) == expected_split_enabled:
+				errors.append("%s: split action enabled state should follow can_split_stack=%s: %s" % [context, str(expected_split_enabled), option_data])
 	if not split_seen:
 		errors.append("%s: inventory context snapshot should include split action: %s" % [context, top])
 	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())

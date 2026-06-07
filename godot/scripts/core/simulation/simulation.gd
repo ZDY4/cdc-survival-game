@@ -2087,14 +2087,65 @@ func _split_actor_inventory_stack(actor: RefCounted, item_id: String, count: int
 			"count": count,
 			"available": available,
 		}
+	_inventory_entries.sync_actor_inventory_order(actor)
+	var stacks: Array[int] = _actor_inventory_stacks_for(actor, normalized_item_id, available)
+	var source_index := _largest_stack_index(stacks)
+	if source_index < 0 or int(stacks[source_index]) <= count:
+		return {
+			"success": false,
+			"reason": "split_count_must_be_less_than_stack",
+			"item_id": normalized_item_id,
+			"count": count,
+			"available": available,
+			"stacks": stacks.duplicate(),
+		}
+	stacks[source_index] = int(stacks[source_index]) - count
+	stacks.append(count)
+	actor.inventory_stacks[normalized_item_id] = stacks
+	_emit("inventory_stack_split", {
+		"actor_id": actor.actor_id,
+		"item_id": normalized_item_id,
+		"count": count,
+		"source_stack_index": source_index,
+		"new_stack_index": stacks.size() - 1,
+		"stacks": stacks.duplicate(),
+	})
 	return {
-		"success": false,
-		"reason": "inventory_split_requires_stack_model",
+		"success": true,
+		"kind": "inventory_stack_split",
 		"item_id": normalized_item_id,
 		"count": count,
 		"available": available,
-		"current_inventory_model": "merged_item_counts",
+		"source_stack_index": source_index,
+		"new_stack_index": stacks.size() - 1,
+		"stacks": stacks.duplicate(),
 	}
+
+
+func _actor_inventory_stacks_for(actor: RefCounted, item_id: String, available: int) -> Array[int]:
+	var stacks: Array[int] = []
+	for stack_count in _array_or_empty(actor.inventory_stacks.get(item_id, [])):
+		var count: int = max(0, int(stack_count))
+		if count > 0:
+			stacks.append(count)
+	var stack_sum := 0
+	for count in stacks:
+		stack_sum += count
+	if stacks.is_empty() or stack_sum != available:
+		stacks = [available]
+	actor.inventory_stacks[item_id] = stacks
+	return stacks
+
+
+func _largest_stack_index(stacks: Array[int]) -> int:
+	var best_index := -1
+	var best_count := 0
+	for index in range(stacks.size()):
+		var count: int = int(stacks[index])
+		if count > best_count:
+			best_count = count
+			best_index = index
+	return best_index
 
 
 func _reorder_actor_inventory(actor: RefCounted, item_id: String, target_index: int) -> Dictionary:
