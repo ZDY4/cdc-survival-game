@@ -643,6 +643,21 @@ func _expect_world_action_input_blocker(errors: Array[String], game_root: Node, 
 	_expect_world_action_command_rejected(errors, panel_result, "toggle_stage_panel:inventory")
 	if game_root.has_method("any_stage_panel_open") and bool(game_root.any_stage_panel_open()):
 		errors.append("world action presenter should prevent stage panel shortcut toggles while active")
+	var learn_result: Dictionary = _dictionary_or_empty(game_root.learn_player_skill("adrenaline_rush") if game_root.has_method("learn_player_skill") else {})
+	_expect_world_action_command_rejected(errors, learn_result, "learn_skill")
+	var bind_skill_result: Dictionary = _dictionary_or_empty(game_root.bind_player_skill_to_hotbar("slot_1", "adrenaline_rush") if game_root.has_method("bind_player_skill_to_hotbar") else {})
+	_expect_world_action_command_rejected(errors, bind_skill_result, "bind_hotbar")
+	var bind_item_result: Dictionary = _dictionary_or_empty(game_root.bind_player_item_to_hotbar("slot_1", "1006") if game_root.has_method("bind_player_item_to_hotbar") else {})
+	_expect_world_action_command_rejected(errors, bind_item_result, "bind_hotbar")
+	var craft_result: Dictionary = _dictionary_or_empty(game_root.craft_player_recipe("bandage", 1) if game_root.has_method("craft_player_recipe") else {})
+	_expect_world_action_command_rejected(errors, craft_result, "craft")
+	var queue_result: Dictionary = _dictionary_or_empty(game_root.confirm_crafting_queue([{"recipe_id": "bandage", "count": 1}]) if game_root.has_method("confirm_crafting_queue") else {})
+	_expect_world_action_command_rejected(errors, queue_result, "crafting_queue")
+	var previous_targeting: Dictionary = _dictionary_or_empty(game_root.get("active_skill_targeting")).duplicate(true)
+	game_root.set("active_skill_targeting", {"active": true, "slot_id": "slot_1", "skill_id": "adrenaline_rush"})
+	var confirm_skill_result: Dictionary = _dictionary_or_empty(game_root.confirm_active_skill_target({"target_type": "self"}) if game_root.has_method("confirm_active_skill_target") else {})
+	_expect_world_action_command_rejected(errors, confirm_skill_result, "use_skill")
+	game_root.set("active_skill_targeting", previous_targeting)
 
 
 func _wait_for_world_action_presenter_idle(game_root: Node, max_frames: int = 720) -> void:

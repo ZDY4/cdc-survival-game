@@ -1773,6 +1773,9 @@ func allocate_player_attribute_point(attribute: String) -> Dictionary:
 func learn_player_skill(skill_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	var blocked: Dictionary = _player_command_rejection("learn_skill")
+	if not blocked.is_empty():
+		return blocked
 	var result: Dictionary = simulation.submit_player_command({
 		"kind": "learn_skill",
 		"actor_id": 1,
@@ -1787,6 +1790,9 @@ func learn_player_skill(skill_id: String) -> Dictionary:
 func bind_player_skill_to_hotbar(slot_id: String, skill_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	var blocked: Dictionary = _player_command_rejection("bind_hotbar")
+	if not blocked.is_empty():
+		return blocked
 	var result: Dictionary = simulation.submit_player_command({
 		"kind": "bind_hotbar",
 		"actor_id": 1,
@@ -1802,6 +1808,9 @@ func bind_player_skill_to_hotbar(slot_id: String, skill_id: String) -> Dictionar
 func bind_player_item_to_hotbar(slot_id: String, item_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	var blocked: Dictionary = _player_command_rejection("bind_hotbar")
+	if not blocked.is_empty():
+		return blocked
 	var result: Dictionary = simulation.submit_player_command({
 		"kind": "bind_hotbar",
 		"actor_id": 1,
@@ -1951,6 +1960,9 @@ func preview_active_skill_target(target: Dictionary) -> Dictionary:
 func confirm_active_skill_target(target: Dictionary = {}) -> Dictionary:
 	if active_skill_targeting.is_empty() or simulation == null:
 		return {"success": false, "reason": "skill_targeting_inactive"}
+	var blocked: Dictionary = _player_command_rejection("use_skill")
+	if not blocked.is_empty():
+		return blocked
 	var command_target: Dictionary = _dictionary_or_empty(target).duplicate(true)
 	if command_target.is_empty():
 		command_target = _dictionary_or_empty(active_skill_target_preview.get("target", {})).duplicate(true)
@@ -1999,6 +2011,9 @@ func active_skill_targeting_snapshot() -> Dictionary:
 func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	var blocked: Dictionary = _player_command_rejection("craft")
+	if not blocked.is_empty():
+		return blocked
 	var result: Dictionary = simulation.submit_player_command({
 		"kind": "craft",
 		"actor_id": 1,
@@ -2017,6 +2032,9 @@ func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 func confirm_crafting_queue(entries: Array) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
+	var blocked: Dictionary = _player_command_rejection("crafting_queue")
+	if not blocked.is_empty():
+		return blocked
 	var results: Array[Dictionary] = []
 	var completed_count: int = 0
 	for entry in _array_or_empty(entries):
