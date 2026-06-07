@@ -217,6 +217,8 @@ func _validate_actor_model_assets(root: Node3D, errors: Array[String]) -> void:
 		errors.append("player actor should not use fallback capsule mesh when appearance model exists")
 	if player.find_child("PlayerRuntimeMarker", true, false) == null:
 		errors.append("player actor should include a visible runtime marker")
+	if actor_model != null:
+		_validate_visual_collision_proxy(actor_model, errors, "player actor model")
 	_validate_player_equipment_models(player, errors)
 
 
@@ -232,6 +234,7 @@ func _validate_player_equipment_models(player: Node, errors: Array[String]) -> v
 			errors.append("equipment model %s should expose attach_target metadata" % slot_id)
 		if not model.has_meta("attach_offset") or not model.has_meta("attach_rotation_degrees") or not model.has_meta("attach_scale"):
 			errors.append("equipment model %s should expose attachment transform metadata" % slot_id)
+		_validate_visual_collision_proxy(model, errors, "equipment model %s" % slot_id)
 	var main_hand: Node = player.find_child("EquipmentModel_main_hand", true, false)
 	if main_hand != null and str(main_hand.get_meta("model_asset", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("main_hand equipment model should use dagger glTF")
@@ -241,6 +244,24 @@ func _validate_player_equipment_models(player: Node, errors: Array[String]) -> v
 		var rotation: Vector3 = main_hand.get_meta("attach_rotation_degrees", Vector3.ZERO)
 		if absf(rotation.z) < 1.0:
 			errors.append("main_hand weapon should expose hand-held rotation")
+
+
+func _validate_visual_collision_proxy(node: Node, errors: Array[String], label: String) -> void:
+	var proxy: StaticBody3D = node.find_child("GeneratedVisualCollisionProxy", false, false) as StaticBody3D
+	if proxy == null:
+		errors.append("%s should expose GeneratedVisualCollisionProxy" % label)
+		return
+	if proxy.collision_layer != 0 or proxy.collision_mask != 0:
+		errors.append("%s visual collision proxy should not steal runtime picking layers" % label)
+	if not bool(proxy.get_meta("visual_collision_proxy", false)):
+		errors.append("%s visual collision proxy should expose metadata" % label)
+	if typeof(proxy.get_meta("bounds_size", Vector3.ZERO)) != TYPE_VECTOR3:
+		errors.append("%s visual collision proxy should expose bounds_size" % label)
+	var shape: CollisionShape3D = proxy.find_child("GeneratedVisualCollisionShape", false, false) as CollisionShape3D
+	if shape == null:
+		errors.append("%s visual collision proxy should expose GeneratedVisualCollisionShape" % label)
+	elif not bool(shape.get_meta("visual_collision_proxy", false)):
+		errors.append("%s visual collision shape should expose metadata" % label)
 
 
 func _validate_actor_status_markers(root: Node3D, world_result: Dictionary, errors: Array[String]) -> void:
@@ -979,6 +1000,8 @@ func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, erro
 			errors.append("runtime map visual pick proxies should expose collision shapes")
 		if int(stats.get("physics_bodies", 0)) <= 0:
 			errors.append("runtime map visual pick proxies should expose physics bodies")
+	if int(stats.get("mesh_nodes", 0)) > 0 and int(stats.get("collision_shapes", 0)) <= int(stats.get("pickable_bodies", 0)):
+		errors.append("runtime map visual glTF instances should include generated visual collision proxies")
 
 
 func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[String]) -> void:

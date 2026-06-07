@@ -131,8 +131,9 @@ func _spawn_map_scene_visuals(root: Node3D, map: Dictionary) -> int:
 		return 0
 
 	visual_root.name = "MapSceneVisuals"
-	_prepare_visual_interaction_targets(visual_root, map)
 	root.add_child(visual_root)
+	_prepare_visual_interaction_targets(visual_root, map)
+	_add_visual_collision_proxies(visual_root)
 	return 1
 
 
@@ -337,6 +338,7 @@ func _add_corpse_model(parent: Node3D, corpse_data: Dictionary) -> bool:
 	model_root.scale = Vector3(0.92, 0.92, 0.92)
 	model_root.position = Vector3(0.0, -0.08, 0.0)
 	parent.add_child(model_root)
+	_add_visual_collision_proxy(model_root as Node3D, model_asset)
 	return true
 
 
@@ -587,6 +589,7 @@ func _add_actor_model(parent: Node3D, actor_data: Dictionary) -> bool:
 	model_root.name = "ActorModel"
 	model_root.set_meta("model_asset", model_asset)
 	parent.add_child(model_root)
+	_add_visual_collision_proxy(model_root as Node3D, model_asset)
 	return true
 
 
@@ -985,6 +988,7 @@ func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
 		model_root.set_meta("presentation_mode", str(visual_data.get("presentation_mode", "")))
 		_apply_equipment_model_transform(model_root as Node3D, visual_data)
 		parent.add_child(model_root)
+		_add_visual_collision_proxy(model_root as Node3D, model_asset)
 
 
 func _apply_equipment_model_transform(model_root: Node3D, visual_data: Dictionary) -> void:
@@ -1110,6 +1114,75 @@ func _camera_focus(world_snapshot: Dictionary) -> Vector3:
 
 func _grid_to_world(grid: Dictionary, y_offset: float) -> Vector3:
 	return Vector3(float(grid.get("x", 0)) * GRID_SIZE, float(grid.get("y", 0)) + y_offset, float(grid.get("z", 0)) * GRID_SIZE)
+
+
+func _add_visual_collision_proxies(root: Node) -> void:
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			pending.append(child)
+		var node_3d := node as Node3D
+		if node_3d == null:
+			continue
+		var scene_path := node.scene_file_path.strip_edges()
+		if scene_path.ends_with(".gltf") or scene_path.ends_with(".glb"):
+			_add_visual_collision_proxy(node_3d, scene_path)
+
+
+func _add_visual_collision_proxy(model_root: Node3D, model_asset: String = "") -> void:
+	if model_root == null or model_root.find_child("GeneratedVisualCollisionProxy", false, false) != null:
+		return
+	var bounds_result: Dictionary = _visual_bounds_for_root(model_root)
+	if not bool(bounds_result.get("has_bounds", false)):
+		return
+	var bounds: AABB = bounds_result.get("bounds", AABB())
+	if bounds.size.length() <= 0.001:
+		return
+	var body := StaticBody3D.new()
+	body.name = "GeneratedVisualCollisionProxy"
+	body.collision_layer = 0
+	body.collision_mask = 0
+	body.set_meta("visual_collision_proxy", true)
+	body.set_meta("model_asset", model_asset)
+	body.set_meta("bounds_size", bounds.size)
+	body.set_meta("bounds_position", bounds.position)
+	var shape := CollisionShape3D.new()
+	shape.name = "GeneratedVisualCollisionShape"
+	var box := BoxShape3D.new()
+	box.size = Vector3(maxf(bounds.size.x, 0.05), maxf(bounds.size.y, 0.05), maxf(bounds.size.z, 0.05))
+	shape.shape = box
+	shape.set_meta("visual_collision_proxy", true)
+	shape.set_meta("model_asset", model_asset)
+	shape.set_meta("bounds_size", bounds.size)
+	body.position = bounds.position + bounds.size * 0.5
+	body.add_child(shape)
+	model_root.add_child(body)
+
+
+func _visual_bounds_for_root(root: Node3D) -> Dictionary:
+	var state := {"has_bounds": false, "bounds": AABB()}
+	_collect_visual_bounds(root, Transform3D.IDENTITY, state)
+	return state
+
+
+func _collect_visual_bounds(node: Node, parent_transform: Transform3D, state: Dictionary) -> void:
+	var node_3d := node as Node3D
+	var local_transform := parent_transform
+	if node_3d != null:
+		local_transform = parent_transform * node_3d.transform
+	var mesh_node := node as MeshInstance3D
+	if mesh_node != null and mesh_node.mesh != null:
+		var mesh_bounds: AABB = local_transform * mesh_node.get_aabb()
+		if bool(state.get("has_bounds", false)):
+			state["bounds"] = (state["bounds"] as AABB).merge(mesh_bounds)
+		else:
+			state["bounds"] = mesh_bounds
+			state["has_bounds"] = true
+	for child in node.get_children():
+		if str(child.name) == "GeneratedVisualCollisionProxy":
+			continue
+		_collect_visual_bounds(child, local_transform, state)
 
 
 func _add_pickable_box(parent: Node3D, size: Vector3, local_position: Vector3 = Vector3.ZERO) -> void:
