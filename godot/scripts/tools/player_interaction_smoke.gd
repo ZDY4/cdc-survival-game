@@ -2290,6 +2290,7 @@ func _expect_player_command_authority_audit(errors: Array[String], game_root: No
 		"confirm_active_skill_target",
 		"craft_player_recipe",
 		"confirm_crafting_queue",
+		"cancel_pending_crafting",
 		"turn_in_player_quest",
 	]
 	var by_method: Dictionary = {}

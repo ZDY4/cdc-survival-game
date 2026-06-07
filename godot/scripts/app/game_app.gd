@@ -58,6 +58,7 @@ const PLAYER_COMMAND_AUTHORITY_AUDIT: Array[Dictionary] = [
 	{"app_method": "confirm_active_skill_target", "action": "confirm_skill_target", "authority_kind": "submit_player_command", "command_kind": "use_skill", "owner": "GameApp", "blocker": "_player_command_rejection"},
 	{"app_method": "craft_player_recipe", "action": "craft", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "GameApp", "blocker": "_player_command_rejection"},
 	{"app_method": "confirm_crafting_queue", "action": "crafting_queue", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "GameApp", "blocker": "_player_command_rejection"},
+	{"app_method": "cancel_pending_crafting", "action": "cancel_pending_crafting", "authority_kind": "submit_player_command", "command_kind": "cancel_pending", "owner": "GameApp", "blocker": "pending_crafting"},
 	{"app_method": "turn_in_player_quest", "action": "quest_turn_in", "authority_kind": "core_service", "core_service": "Simulation.turn_in_quest", "owner": "GameApp", "blocker": "quest_state"},
 	{"app_method": "enter_overworld_location_from_panel", "action": "enter_overworld_location", "authority_kind": "core_service", "core_service": "Simulation.enter_location", "owner": "GameApp", "blocker": "map_panel_prompt"},
 ]
