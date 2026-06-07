@@ -6,6 +6,8 @@ Runs the Godot content CLI for repo-local content inspection and validation.
 Wraps `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd -- ...`.
 This is the Godot migration replacement path for common `content_tools` locate,
 summarize, references, validate, format, diff-summary, and asset-manifest commands.
+`validate changed` filters Git status to migrated content domains and prints a
+`change_status_summary` line for modified / added / untracked / deleted / renamed records.
 
 .PARAMETER Command
 Content command to run: locate, summarize, references, validate, format, diff-summary, or asset-manifest.
@@ -29,6 +31,8 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind ma
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed
+
+Runs validation for supported changed content files and reports changed file counts by Git status.
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind item -Id 1006

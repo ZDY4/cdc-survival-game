@@ -468,7 +468,7 @@
 
 ## 15. 内容工具和 agent workflow
 
-- 已有 Godot content CLI 第一版；待对齐旧 `content_tools` 的 summarize、references、format、diff-summary、changed、content 操作细节。
+- 已有 Godot content CLI 第一版；待对齐旧 `content_tools` 的 summarize、references、format、diff-summary、changed、content 操作细节；`validate changed` 的批量 status 摘要、deleted / renamed 诊断和 agent workflow 说明已同步到 `godot-content.ps1` help、`tools/agent/README.md` 和 `docs/agent-workflows/README.md`。
 - 待补 CLI 的批量修复、安全写回、dry-run、JSON path 定位、引用反查、跨 domain 校验。
 - 待补 agent workflow 文档：每个新脚本需要 comment-based help、`tools/agent/README.md`、`docs/agent-workflows/*.md` 同步更新。
 

@@ -87,6 +87,8 @@ Godot editor 复核优先跑 `test-godot-editor.ps1`。
 
 内容定位、摘要、引用、格式化、diff 摘要和全量校验优先跑 `godot-content.ps1`。
 
+内容改动复核时，`validate changed` 的 `change_status_summary` 是批量影响面摘要：它按 Git status 汇总 modified / added / untracked / deleted / renamed 的受支持内容文件数量。若输出 `status: no_supported_changes`，说明当前 Git 变更没有落在已迁移内容域；若出现 `content_file_deleted` 或 `renamed_content_file_not_loaded`，需要确认删除 / 重命名是否已经同步到引用、任务、商店、地图或其他内容入口。
+
 Godot import/cache 预热和 GDScript 静态解析优先跑 `test-godot-static.ps1`。
 
 需要 agent 快速理解 Godot 脚本和 scene 结构时，优先跑 `godot-agent-report.ps1`；报告只写入 `.local/agent-reports/godot`。
