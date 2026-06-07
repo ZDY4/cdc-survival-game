@@ -82,6 +82,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("auto tick should start disabled")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
 	_assert_runtime_performance(errors, game_root, "initial runtime performance")
+	_exercise_audio_feedback(errors, game_root)
 	_assert_ai_debug_snapshot(errors, game_root, "initial AI debug")
 	_exercise_debug_panel(errors, game_root)
 	_assert_hotbar_visibility(errors, game_root, true, "initial hotbar visibility")
@@ -1154,6 +1155,42 @@ func _assert_runtime_performance(errors: Array[String], game_root: Node, context
 	_assert_runtime_control_line(errors, game_root, "Path", "%s HUD path token" % context)
 	_assert_runtime_control_line(errors, game_root, "Lat", "%s HUD latency token" % context)
 	_assert_runtime_control_line(errors, game_root, "R", "%s HUD render token" % context)
+
+
+func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("game root should expose audio_feedback_snapshot")
+		return
+	var initial: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(initial.get("bus", "")) != "SFX":
+		errors.append("audio feedback should target SFX bus: %s" % initial)
+	if int(initial.get("bus_index", -1)) < 0:
+		errors.append("audio feedback should resolve SFX bus index: %s" % initial)
+	if int(initial.get("mapped_event_count", 0)) <= 0 or int(initial.get("sound_profile_count", 0)) <= 0:
+		errors.append("audio feedback should expose mapped events and generated profiles: %s" % initial)
+	var before_count := int(initial.get("triggered_count", 0))
+	game_root.simulation.emit_event("pickup_granted", {"target_id": "audio_smoke_pickup"})
+	game_root.refresh_hud()
+	var pickup: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if int(pickup.get("triggered_count", 0)) <= before_count or str(pickup.get("last_sound_id", "")) != "pickup":
+		errors.append("pickup event should trigger pickup audio feedback: %s" % pickup)
+	game_root.simulation.emit_event("attack_resolved", {"damage_dealt": 3.0, "target_actor_id": 2})
+	game_root.refresh_hud()
+	var hit: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(hit.get("last_sound_id", "")) != "hit":
+		errors.append("damaging attack should trigger hit audio feedback: %s" % hit)
+	var fallback_before := int(hit.get("fallback_count", 0))
+	game_root.simulation.emit_event("audio_missing_asset_probe", {"reason": "smoke"})
+	game_root.refresh_hud()
+	var fallback: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(fallback.get("last_sound_id", "")) != str(fallback.get("fallback_sound_id", "")):
+		errors.append("missing audio profile should use fallback placeholder: %s" % fallback)
+	if int(fallback.get("fallback_count", 0)) <= fallback_before:
+		errors.append("missing audio profile should increment fallback count: %s" % fallback)
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_audio: Dictionary = _dictionary_or_empty(runtime.get("audio_feedback", {}))
+	if str(runtime_audio.get("last_sound_id", "")) != str(fallback.get("last_sound_id", "")):
+		errors.append("runtime control should expose latest audio feedback snapshot: %s" % runtime_audio)
 
 
 func _assert_ai_debug_snapshot(errors: Array[String], game_root: Node, context: String) -> void:

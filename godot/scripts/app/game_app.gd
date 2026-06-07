@@ -11,6 +11,7 @@ const DebugConsoleCommandRunner = preload("res://scripts/app/debug_console_comma
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
+const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const AUTO_TICK_INTERVAL_SEC := 0.45
 const OBSERVE_SPEEDS: Array[Dictionary] = [
 	{"id": "x1", "multiplier": 1.0},
@@ -28,6 +29,7 @@ var panel_controller: RefCounted
 var fog_overlay_controller: RefCounted = FogOverlayController.new()
 var debug_overlay_controller: RefCounted = DebugOverlayController.new()
 var world_action_presenter: RefCounted = WorldActionPresenter.new()
+var audio_feedback_controller: Node
 var world_container: Node3D
 var fog_overlay: ColorRect
 var hud: Control
@@ -101,6 +103,7 @@ func _ready() -> void:
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
+	_setup_audio_feedback_controller()
 	_setup_panels()
 	refresh_all_panels()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
@@ -171,6 +174,7 @@ func _handle_debug_console_key(event: InputEventKey) -> bool:
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 	if panel_controller == null:
 		return
+	_process_audio_feedback()
 	performance_last_hud_refresh_tick_msec = Time.get_ticks_msec()
 	if selected_prompt.is_empty():
 		selected_prompt = current_interaction_prompt()
@@ -732,6 +736,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"action_presenter": world_action_presenter_snapshot(),
 		"ai_debug": ai_debug_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),
+		"audio_feedback": audio_feedback_snapshot(),
 		"performance": runtime_performance_snapshot(),
 		"skill_targeting": _skill_targeting_snapshot(),
 	}
@@ -766,6 +771,12 @@ func world_action_presenter_snapshot() -> Dictionary:
 	if world_action_presenter == null:
 		return {"active": false, "kind": "missing"}
 	return _dictionary_or_empty(world_action_presenter.call("snapshot"))
+
+
+func audio_feedback_snapshot() -> Dictionary:
+	if audio_feedback_controller == null or not audio_feedback_controller.has_method("snapshot"):
+		return {"enabled": false, "reason": "audio_feedback_missing"}
+	return _dictionary_or_empty(audio_feedback_controller.call("snapshot"))
 
 
 func finish_world_action_presentations() -> Dictionary:
@@ -2241,6 +2252,21 @@ func _refresh_debug_overlay() -> void:
 		return
 	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
 	debug_overlay_controller.apply_overlay(world_container, debug_overlay_mode, _dictionary_or_empty(world_result.get("map", {})), runtime_snapshot)
+
+
+func _setup_audio_feedback_controller() -> void:
+	if audio_feedback_controller != null:
+		return
+	audio_feedback_controller = AudioFeedbackController.new()
+	audio_feedback_controller.name = "AudioFeedbackController"
+	add_child(audio_feedback_controller)
+
+
+func _process_audio_feedback() -> void:
+	if audio_feedback_controller == null or simulation == null:
+		return
+	if audio_feedback_controller.has_method("process_runtime_snapshot"):
+		audio_feedback_controller.call("process_runtime_snapshot", simulation.snapshot())
 
 
 func _setup_panels() -> void:
