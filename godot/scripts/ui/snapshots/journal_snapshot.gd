@@ -52,6 +52,7 @@ func _quest_view(state: Dictionary) -> Dictionary:
 	var objective_snapshot: Dictionary = _objective_snapshot(objective, current, target)
 	var objective_progress: Array[Dictionary] = _objective_progress_list(quest_data, completed)
 	var icon_asset := _quest_icon_asset(quest_data, objective_snapshot, false)
+	var turn_in_requirements := _turn_in_requirements_snapshot(quest_data, objective, manual_turn_in, turn_in_ready)
 	return {
 		"quest_id": quest_id,
 		"title": str(quest_data.get("title", quest_id)),
@@ -69,6 +70,8 @@ func _quest_view(state: Dictionary) -> Dictionary:
 		"progress_percent": float(current) / float(max(1, target)),
 		"manual_turn_in": manual_turn_in,
 		"turn_in_ready": turn_in_ready,
+		"turn_in_requirements": turn_in_requirements,
+		"turn_in_requirement_text": str(turn_in_requirements.get("summary", "")),
 		"status_text": _status_text(manual_turn_in, turn_in_ready, current, target),
 		"rewards": _reward_snapshot(quest_data),
 		"state": "active",
@@ -222,6 +225,118 @@ func _objective_snapshot(objective: Dictionary, current: int, target: int) -> Di
 		"manual_turn_in": bool(objective.get("manual_turn_in", false)),
 		"requirement_text": requirement,
 	}
+
+
+func _turn_in_requirements_snapshot(quest_data: Dictionary, objective: Dictionary, manual_turn_in: bool, ready: bool) -> Dictionary:
+	if not manual_turn_in:
+		return {
+			"manual_turn_in": false,
+			"requires_dialogue": false,
+			"summary": "自动完成",
+			"ready": ready,
+			"missing_configuration": false,
+			"blocking_reason": "",
+		}
+	var source: Dictionary = _turn_in_source(quest_data, objective)
+	var target_definition_id := _first_string(source, [
+		"turn_in_target_definition_id",
+		"turn_in_actor_definition_id",
+		"target_definition_id",
+		"targetDefinitionId",
+		"npc_definition_id",
+		"npc",
+	])
+	var target_actor_id := _first_string(source, [
+		"turn_in_actor_id",
+		"target_actor_id",
+		"actor_id",
+	])
+	var dialogue_id := _first_string(source, [
+		"turn_in_dialogue_id",
+		"dialogue_id",
+		"dialogue",
+	])
+	var dialogue_rule_id := _first_string(source, [
+		"turn_in_dialogue_rule_id",
+		"dialogue_rule_id",
+	])
+	var requires_dialogue := bool(source.get("requires_dialogue_turn_in", source.get("turn_in_requires_dialogue", false)))
+	if not target_definition_id.is_empty() or not target_actor_id.is_empty() or not dialogue_id.is_empty() or not dialogue_rule_id.is_empty():
+		requires_dialogue = true
+	var target_name := _character_name(target_definition_id)
+	if target_name.is_empty():
+		target_name = target_definition_id
+	if target_name.is_empty() and not target_actor_id.is_empty():
+		target_name = "Actor %s" % target_actor_id
+	var missing_configuration := requires_dialogue and target_name.is_empty() and dialogue_id.is_empty() and dialogue_rule_id.is_empty()
+	var parts: Array[String] = []
+	if requires_dialogue:
+		parts.append("对话交付")
+		if not target_name.is_empty():
+			parts.append("对象: %s" % target_name)
+		if not dialogue_id.is_empty():
+			parts.append("对话: %s" % dialogue_id)
+		if not dialogue_rule_id.is_empty():
+			parts.append("规则: %s" % dialogue_rule_id)
+		if missing_configuration:
+			parts.append("对象未指定")
+	else:
+		parts.append("手动交付")
+	return {
+		"manual_turn_in": true,
+		"requires_dialogue": requires_dialogue,
+		"target_definition_id": target_definition_id,
+		"target_actor_id": target_actor_id,
+		"target_name": target_name,
+		"dialogue_id": dialogue_id,
+		"dialogue_rule_id": dialogue_rule_id,
+		"ready": ready,
+		"missing_configuration": missing_configuration,
+		"blocking_reason": _turn_in_blocking_reason(ready, missing_configuration),
+		"summary": " / ".join(parts),
+	}
+
+
+func _turn_in_source(quest_data: Dictionary, objective: Dictionary) -> Dictionary:
+	var source := quest_data.duplicate(true)
+	for key in _dictionary_or_empty(quest_data.get("turn_in", {})).keys():
+		source[key] = _dictionary_or_empty(quest_data.get("turn_in", {})).get(key)
+	for key in objective.keys():
+		var key_text := str(key)
+		if key_text.begins_with("turn_in") or key_text.begins_with("turnIn") or key_text.contains("dialogue") or key_text.contains("target") or key_text == "npc":
+			source[key] = objective.get(key)
+	for key in _dictionary_or_empty(objective.get("turn_in", {})).keys():
+		source[key] = _dictionary_or_empty(objective.get("turn_in", {})).get(key)
+	return source
+
+
+func _turn_in_blocking_reason(ready: bool, missing_configuration: bool) -> String:
+	if missing_configuration:
+		return "turn_in_target_missing"
+	if not ready:
+		return "objective_incomplete"
+	return ""
+
+
+func _first_string(source: Dictionary, keys: Array[String]) -> String:
+	for key in keys:
+		var value: String = _normalize_content_id(source.get(key, ""))
+		if not value.is_empty():
+			return value
+	return ""
+
+
+func _character_name(definition_id: String) -> String:
+	if definition_id.is_empty() or registry == null:
+		return ""
+	for record in registry.get_library("characters").values():
+		var data: Dictionary = _dictionary_or_empty(_dictionary_or_empty(record).get("data", record))
+		if str(data.get("id", data.get("definition_id", ""))) != definition_id:
+			continue
+		var identity: Dictionary = _dictionary_or_empty(data.get("identity", {}))
+		var display_name := str(identity.get("displayName", identity.get("display_name", data.get("name", ""))))
+		return display_name if not display_name.is_empty() else definition_id
+	return ""
 
 
 func _reward_node(quest_data: Dictionary) -> Dictionary:

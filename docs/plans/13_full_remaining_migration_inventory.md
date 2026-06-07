@@ -436,7 +436,7 @@
 - 背包面板已有筛选、搜索、详情、反馈行、滚动列表、选中物品操作栏、右键检查/使用/装备/丢弃/全部丢弃/加入热栏菜单、顺序视图拖拽重排、拖到装备按钮、拖到实际装备槽、拖到丢弃按钮、拖到独立 DropZone、拖到当前容器存入、拖到交易购物车出售和丢弃数量弹窗第一版；可使用物品热栏绑定/触发和存档 roundtrip 已纳入 `InventoryUI` / `Save` smoke，背包使用成功/失败反馈和跨面板拖拽已纳入 `InventoryUI` / `UIToggle` / `ContainerUI` / `TradeUI` smoke。待补完整上下文项、拆分 polish 和跨面板拖拽视觉 polish。
 - 角色面板已有属性、资源、装备、属性点分配、派生数值摘要、状态效果和装备替换属性变化对比第一版；派生数值会展示生命/速度、攻击/防御/暴击、基础属性合计、装备修饰和状态修饰，装备行会从背包候选装备中显示最佳替换的武器/属性 delta，tooltip 会列出最多 3 个候选对比；状态效果会显示 actor active effects 的名称、分类、来源、等级、剩余回合和 modifier，悬停说明来源、技能 ID、持续时间、修饰和 effect id，并纳入 `UIToggle` smoke。待补负面状态视觉和更完整排版。
 - 地图面板已有当前地图、当前地点名称、入口、已解锁地点名称、已解锁地点前往确认 prompt、对象统计、追踪任务行、追踪目标 marker 行、地图 canvas、入口点绘制、目标 marker 绘制、zoom 按钮、左键拖拽平移、pan 复位、画布状态诊断和 overworld 地点/道路 inset 第一版；显式 overworld 路线规划第一版已迁移，`MapSnapshot.overworld_overview.route_plans` 会基于可通行 terrain 生成当前地点到各地点的路线、步数、可达/解锁状态和路径格，地图面板展示最近可前往路线摘要，地点按钮 tooltip 展示目标路线预览，canvas inset 高亮首条已解锁可达路线并在状态行暴露 route 计数；已由 `UIToggle` smoke 覆盖。据此待补更完整图形化地图目标 marker。
-- Journal 面板已有任务详情、可交付状态、奖励详情、目标进度列表、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；待补更完整失败反馈。
+- Journal 面板已有任务详情、可交付状态、奖励详情、目标进度列表、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；对话/手动交付条件展示第一版已迁移，`JournalSnapshot` 会暴露 `turn_in_requirements`、对话交付目标、对话 id / rule id、缺目标配置和阻塞原因，Journal 目标行、详情和交付按钮 tooltip 会展示这些条件，失败历史会带物品不足 required/current 或目标未完成 current/target 上下文，并由 `JournalUI` smoke 覆盖。待补将对话交付条件接入 `QuestRunner.turn_in()` 的运行时强校验和更完整失败反馈。
 - Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏、多树切换、前置链路、下游解锁高亮和目标选择 HUD 预览第一版；待补图形技能树、pan、节点连线和世界目标高亮。
 - Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、批量执行、制作队列/取消、AP 不足反馈和完成反馈第一版；待补跨回合制作进度和更完整队列 polish。
 - Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、buy/sell drop zone 来源提示、hover 高亮、稳定 accept/reject 文案、最近一次拖拽预览、drag preview 几何/生命周期诊断、稳定拒绝 reason、业务禁用说明、不可出售禁用态、交易权限禁用预览、装备出售确认和清空；待补统一 drag preview 真实视觉 polish。
@@ -491,7 +491,7 @@
 - `ContainerUI`：关闭、Esc 关闭优先级、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、选中数量确认 modal、全部拿取/全部存放、双向拖拽、背包面板拖入存放、基础失败提示、权限预览、背包负重限制、容器自身容量限制、容器锁定/权限拒绝、钥匙/工具解锁、显式消耗和容器/背包双栏物品图标已有 smoke；待补逐件工具耐久和跨面板拖拽视觉 polish。
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售、背包负重限制、拖拽入队、buy/sell drop zone、drop zone 来源/拒绝提示、hover 高亮、稳定 accept/reject 文案、最近一次拖拽接受/拒绝预览、业务拒绝原因、drag preview 文案与几何/生命周期诊断、交易面板快捷键和店铺/玩家/装备物品图标已有 smoke；待补统一 drag preview 真实视觉 polish。
 - `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、多组 hotbar 第一版、HUD 组按钮、组命名、Alt+数字切组、slot tooltip 文本与 tooltip 几何/生命周期诊断、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、世界目标高亮、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补技能树 pan 和更完整状态 UI。
-- `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈、手动交付失败历史和 collect/kill/completed 任务图标第一版已有 smoke；待补对话交付条件和更完整失败反馈。
+- `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈、手动交付失败历史、对话/手动交付条件展示、失败上下文和 collect/kill/completed 任务图标第一版已有 smoke；待补将对话交付条件接入运行时强校验和更完整失败反馈。
 - `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、批量执行、制作队列/取消、AP 不足反馈和完成反馈第一版已有 smoke；待补工具耐久/消耗、更多地图 station 标注、跨回合制作进度和更完整队列 polish。
 - `Save`：passive / active skill effects 已有 roundtrip；继续补新增 runtime 字段和旧存档迁移。
 

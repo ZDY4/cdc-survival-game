@@ -177,12 +177,15 @@ func _apply_quest_icon(button: Button, quest: Dictionary) -> void:
 
 func _quest_objective(quest: Dictionary) -> Label:
 	var label := _label("Objective_%s" % quest.get("quest_id", "unknown"))
-	label.text = "目标: %s | 进度: %d/%d | %s" % [
+	var turn_in_text := str(quest.get("turn_in_requirement_text", ""))
+	label.text = "目标: %s | 进度: %d/%d | %s%s" % [
 		quest.get("objective_text", ""),
 		int(quest.get("progress_current", 0)),
 		int(quest.get("progress_target", 0)),
 		quest.get("status_text", ""),
+		" | %s" % turn_in_text if not turn_in_text.is_empty() and bool(quest.get("manual_turn_in", false)) else "",
 	]
+	label.tooltip_text = _turn_in_tooltip(_dictionary_or_empty(quest.get("turn_in_requirements", {})))
 	return label
 
 
@@ -210,7 +213,7 @@ func _quest_reward(quest: Dictionary) -> HBoxContainer:
 	var button := Button.new()
 	button.name = "TurnInButton"
 	button.text = "交"
-	button.tooltip_text = "交付 %s" % quest.get("title", quest.get("quest_id", ""))
+	button.tooltip_text = _turn_in_button_tooltip(quest)
 	button.custom_minimum_size = Vector2(36, 28)
 	button.disabled = not bool(quest.get("turn_in_ready", false))
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -224,8 +227,8 @@ func _quest_reward(quest: Dictionary) -> HBoxContainer:
 			if bool(result.get("success", false)):
 				_journal_feedback_text = "已完成 %s，获得奖励: %s" % [quest_title, reward_text]
 			else:
-				_journal_feedback_text = "交付 %s 失败: %s" % [quest_title, _turn_in_failure_text(str(result.get("reason", "unknown")))]
-				_record_failure(quest_title, str(result.get("reason", "unknown")))
+				_journal_feedback_text = "交付 %s 失败: %s" % [quest_title, _turn_in_failure_text(result)]
+				_record_failure(quest_title, result)
 			_feedback_label.text = _journal_feedback_text
 			_failure_history_label.text = _failure_history_text()
 	, CONNECT_DEFERRED)
@@ -270,7 +273,12 @@ func _apply_detail(quest: Dictionary) -> void:
 		lines.append("目标进度:")
 		lines.append_array(progress_lines)
 	if bool(quest.get("manual_turn_in", false)):
+		var turn_in_requirements: Dictionary = _dictionary_or_empty(quest.get("turn_in_requirements", {}))
 		lines.append("交付: %s" % ("可交付" if bool(quest.get("turn_in_ready", false)) else "需要完成目标后手动交付"))
+		lines.append("交付条件: %s" % str(turn_in_requirements.get("summary", quest.get("turn_in_requirement_text", ""))))
+		var blocking_reason := str(turn_in_requirements.get("blocking_reason", ""))
+		if not blocking_reason.is_empty():
+			lines.append("交付限制: %s" % _turn_in_requirement_failure_text(blocking_reason))
 	lines.append("奖励: %s" % _reward_text(quest.get("rewards", {})))
 	_detail_body_label.text = "\n".join(lines)
 	_track_button.disabled = is_completed
@@ -316,7 +324,32 @@ func _objective_progress_texts(value: Variant) -> Array[String]:
 	return result
 
 
-func _turn_in_failure_text(reason: String) -> String:
+func _turn_in_button_tooltip(quest: Dictionary) -> String:
+	var title := str(quest.get("title", quest.get("quest_id", "")))
+	var requirements: Dictionary = _dictionary_or_empty(quest.get("turn_in_requirements", {}))
+	var lines: Array[String] = ["交付 %s" % title]
+	var summary := str(requirements.get("summary", ""))
+	if not summary.is_empty():
+		lines.append(summary)
+	var blocking_reason := str(requirements.get("blocking_reason", ""))
+	if not blocking_reason.is_empty():
+		lines.append(_turn_in_requirement_failure_text(blocking_reason))
+	return "\n".join(lines)
+
+
+func _turn_in_tooltip(requirements: Dictionary) -> String:
+	var summary := str(requirements.get("summary", ""))
+	if summary.is_empty():
+		return ""
+	var lines: Array[String] = [summary]
+	var blocking_reason := str(requirements.get("blocking_reason", ""))
+	if not blocking_reason.is_empty():
+		lines.append(_turn_in_requirement_failure_text(blocking_reason))
+	return "\n".join(lines)
+
+
+func _turn_in_failure_text(result: Dictionary) -> String:
+	var reason := str(result.get("reason", "unknown"))
 	match reason:
 		"simulation_missing":
 			return "运行时未就绪"
@@ -325,15 +358,25 @@ func _turn_in_failure_text(reason: String) -> String:
 		"quest_not_waiting_for_turn_in":
 			return "任务不需要手动交付"
 		"quest_objective_incomplete":
-			return "目标尚未完成"
+			return "目标尚未完成（%d/%d）" % [int(result.get("current", 0)), int(result.get("target", 0))]
 		"not_enough_items":
-			return "物品不足"
+			return "物品不足（需要 %d，当前 %d）" % [int(result.get("required", 0)), int(result.get("current", 0))]
 		_:
 			return reason
 
 
-func _record_failure(quest_title: String, reason: String) -> void:
-	var text := "%s: %s" % [quest_title, _turn_in_failure_text(reason)]
+func _turn_in_requirement_failure_text(reason: String) -> String:
+	match reason:
+		"turn_in_target_missing":
+			return "交付对象未指定"
+		"objective_incomplete":
+			return "目标尚未完成"
+		_:
+			return reason
+
+
+func _record_failure(quest_title: String, result: Dictionary) -> void:
+	var text := "%s: %s" % [quest_title, _turn_in_failure_text(result)]
 	_failure_history.append(text)
 	while _failure_history.size() > 5:
 		_failure_history.pop_front()
