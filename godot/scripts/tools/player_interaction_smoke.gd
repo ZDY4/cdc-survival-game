@@ -713,6 +713,16 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	var after: Dictionary = _player_grid(game_root)
 	if int(after.get("x", 0)) == int(before.get("x", 0)) and int(after.get("z", 0)) == int(before.get("z", 0)):
 		errors.append("left mouse click on far projected ground should start moving player from %s toward %s" % [JSON.stringify(before), JSON.stringify(target)])
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "movement":
+		errors.append("left mouse click movement should enqueue world action presenter movement, got %s" % JSON.stringify(presenter))
+	elif int(presenter.get("step_count", 0)) <= 0:
+		errors.append("world action presenter movement should expose positive step_count")
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("world action presenter movement should keep player node visible")
+	elif not bool(player_node.get_meta("action_presenter_active", false)):
+		errors.append("player node should expose active movement presenter metadata after click")
 	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
 		player.ap = 6.0

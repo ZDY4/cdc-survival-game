@@ -375,13 +375,13 @@
 
 ### 12.1 动作表现队列 / WorldActionPresenter
 
-- 待新增 Godot 原生动作表现层，建议落点为 `godot/scripts/world/world_action_presenter.gd` 或同职责模块，由 `godot/scripts/app` 在玩家命令成功后调用；它只消费 `Simulation.submit_player_command()` 返回的 `events`、`path`、`runtime_snapshot_delta` 和当前 world 节点，不决定移动、攻击、交互、任务、背包或战斗结果。
-- 待补移动逐格表现：当前 `Simulation` 会立即把 actor `grid_position` 结算到最终格，并发出 `movement_step` / `actor_moved`；`WorldSceneRenderer` 重建时只读取最终 snapshot，导致视觉瞬移。表现层应在最终刷新前按 `result.path` 或 `movement_step` 队列逐格 tween actor node，包含转向、当前格到下一格插值、AP 内/跨回合 pending 段落、自动开门步骤和移动取消后的表现清理。
-- 待补攻击表现队列：消费 `attack_resolved`、`on_hit_effect_applied`、`actor_defeated`、`corpse_created`、`combat_started` / `combat_ended`，按顺序播放转向、近战挥击或远程开火、命中/未命中/格挡/暴击反馈、状态效果图标更新、伤害飘字、死亡/尸体出现和战斗 HUD 刷新；最终血量、死亡和掉落仍以 core snapshot 为准。
-- 待补交互表现队列：消费 `interaction_succeeded`、`pickup_granted`、`container_opened`、`door_toggled`、`door_auto_opened`、`scene_transition`、`dialogue_started`、`trade_started` 等事件；播放靠近/使用/拾取/开门/打开容器/开始对话/切图过渡，再触发对应 UI 面板或地图刷新，避免先显示最终结果再补动画。
+- Godot 原生动作表现层第一版已新增：落点为 `godot/scripts/world/world_action_presenter.gd`，由 `godot/scripts/app/game_app.gd` 在玩家命令成功并重绘 world 后调用；它只消费 `Simulation.submit_player_command()` 返回的 `events`、当前 world 节点和 world snapshot，不决定移动、攻击、交互、任务、背包或战斗结果，并通过 `runtime_control.action_presenter` 暴露诊断。
+- 移动逐格表现第一版已迁移：`WorldActionPresenter` 会从 `movement_step` / `actor_moved` 事件重建路径，把重绘后的 actor node 临时放回旧格，再按每格短 tween 播放到最终格；节点带 `action_presenter_active`、`action_presenter_kind`、`action_presenter_step_count` metadata，`PlayerInteraction` smoke 已覆盖左键地面移动会生成 movement presenter。待补转向、AP 内/跨回合 pending 段落、自动开门步骤、移动取消后的表现清理和 headless fast-forward。
+- 攻击表现队列第一版仅有 snapshot 诊断：`WorldActionPresenter` 已能从 `attack_resolved` 生成 attack snapshot；待补 `on_hit_effect_applied`、`actor_defeated`、`corpse_created`、`combat_started` / `combat_ended` 阶段，以及转向、近战挥击或远程开火、命中/未命中/格挡/暴击反馈、状态效果图标更新、伤害飘字、死亡/尸体出现和战斗 HUD 刷新；最终血量、死亡和掉落仍以 core snapshot 为准。
+- 交互表现队列第一版仅有 snapshot 诊断：`WorldActionPresenter` 已能从 `interaction_succeeded` 生成 interaction snapshot，跨地图 `scene_transition` 会跳过旧坐标移动 tween；待补 pickup、container、door、dialogue、trade、scene transition 等分阶段表现，以及“表现完成 -> 打开 UI / 刷新地图”的稳定顺序。
 - 待补表现期间输入和 UI blocker：动作表现播放中应短暂阻止新的世界点击、hotbar 和面板快捷动作，或按旧 Rust 规则允许排队/取消；blocker 状态需进入 `runtime_control` / HUD debug，Esc 是否取消表现、是否取消 pending、是否自动结束回合要按动作类型明确。
-- 待补刷新时机：动作表现开始前可局部更新 hover / selection，但不要立刻全量重建 actor 到最终位置；表现结束后再调用现有 world refresh、面板刷新和 target selection 清理。跨地图、击杀移除 actor、打开容器/对话等必须有“动画完成 -> 刷新最终 snapshot -> 打开 UI”的稳定顺序。
-- 待补 smoke / 验收：扩展 `PlayerInteraction` / `Movement` / `Combat` / `Interaction` / `Scene` smoke，断言命令 result 中可生成 action presentation queue，移动队列包含每格 from/to 和持续时间，攻击队列包含 windup/impact/feedback/death 阶段，交互队列包含 door/pickup/container/dialogue 阶段；必要时增加 headless fast-forward 模式，不依赖真实帧率但能验证顺序和最终 snapshot 一致。
+- 待补刷新时机第二版：当前第一版仍在最终 world refresh 后回放 actor tween，解决“视觉瞬移”的主观问题，但不是严格的“表现结束后再刷新最终 snapshot”；后续要把移动、攻击、开门、容器/对话打开和跨地图切换统一到 action queue 驱动的刷新时序。
+- smoke / 验收第一版已补：`PlayerInteraction` smoke 会断言命令 result 生成 movement presenter、step_count 为正、玩家节点有 active presenter metadata；待扩展 `Movement` / `Combat` / `Interaction` / `Scene` smoke，覆盖攻击 windup/impact/feedback/death、交互 door/pickup/container/dialogue 阶段和 headless fast-forward 顺序。
 
 ### 12.2 地图和 tile 表现
 
@@ -510,7 +510,7 @@
 2. 战斗空间等价：LOS、跨层、AOE、友军伤害、战斗退出和目标预览。
 3. 背包/容器/交易高级 UI：数量弹窗、上下文菜单、拖拽、购物车、详情和失败提示。
 4. 技能和 hotbar：多槽、快捷键、目标选择、状态堆叠、非战斗 modifier 消费点、cooldown。
-5. 动作表现队列：补 `WorldActionPresenter`，先解决移动逐格 tween、攻击/交互阶段表现和表现期间 input blocker，再统一最终 snapshot refresh 时机。
+5. 动作表现队列：`WorldActionPresenter` 第一版已接入移动逐格 tween 与 attack/interaction snapshot；继续补攻击/交互阶段表现、表现期间 input blocker 和最终 snapshot refresh 时机。
 6. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
 7. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick 和运行时状态 snapshot。
 8. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。

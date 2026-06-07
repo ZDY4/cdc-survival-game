@@ -4,6 +4,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
+const WorldActionPresenter = preload("res://scripts/world/world_action_presenter.gd")
 const FogOverlayController = preload("res://scripts/world/fog_overlay_controller.gd")
 const DebugOverlayController = preload("res://scripts/world/debug_overlay_controller.gd")
 const DebugConsoleCommandRunner = preload("res://scripts/app/debug_console_command_runner.gd")
@@ -26,6 +27,7 @@ var runtime_input_controller: RefCounted
 var panel_controller: RefCounted
 var fog_overlay_controller: RefCounted = FogOverlayController.new()
 var debug_overlay_controller: RefCounted = DebugOverlayController.new()
+var world_action_presenter: RefCounted = WorldActionPresenter.new()
 var world_container: Node3D
 var fog_overlay: ColorRect
 var hud: Control
@@ -681,6 +683,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"tooltip": hover_tooltip_snapshot(),
 		"drag": drag_state_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
+		"action_presenter": world_action_presenter_snapshot(),
 		"ai_debug": ai_debug_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),
 		"performance": runtime_performance_snapshot(),
@@ -711,6 +714,12 @@ func ai_debug_snapshot() -> Dictionary:
 		"focused_intent": focused_intent,
 		"latest_intent": latest,
 	}
+
+
+func world_action_presenter_snapshot() -> Dictionary:
+	if world_action_presenter == null:
+		return {"active": false, "kind": "missing"}
+	return _dictionary_or_empty(world_action_presenter.call("snapshot"))
 
 
 func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
@@ -1185,7 +1194,7 @@ func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 		return _observe_command_rejected("move")
 	var result: Dictionary = interaction_controller.execute_move_to_grid(grid)
 	world_result = interaction_controller.world_result
-	_rebuild_world_after_runtime_change(_dictionary_or_empty(result.get("prompt", {})))
+	_rebuild_world_after_runtime_change(_dictionary_or_empty(result.get("prompt", {})), result)
 	return result
 
 
@@ -2066,7 +2075,7 @@ func turn_in_player_quest(quest_id: String) -> Dictionary:
 	return result
 
 
-func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}) -> void:
+func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}, command_result: Dictionary = {}) -> void:
 	world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
 	if not bool(world_result.get("ok", false)):
 		push_error(str(world_result.get("error", "world rebuild failed")))
@@ -2079,6 +2088,7 @@ func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}) -> vo
 		interaction_controller.world_result = world_result
 	_setup_world_container()
 	_render_world()
+	_present_world_action(command_result)
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
@@ -2192,11 +2202,18 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
 	_setup_world_container()
 	_render_world()
+	_present_world_action(result)
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
 	_setup_panels()
 	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
+
+
+func _present_world_action(command_result: Dictionary) -> void:
+	if world_action_presenter == null or command_result.is_empty() or world_container == null:
+		return
+	world_action_presenter.call("present_result", self, world_container, command_result, world_result)
 
 
 func _submit_inventory_action(action: Dictionary) -> Dictionary:
