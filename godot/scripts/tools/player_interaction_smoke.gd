@@ -597,7 +597,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
 	var original_ap: float = player.ap
 	var player_grid: Dictionary = _player_grid(game_root)
-	var target_grid := _near_open_grid_from(player_grid, game_root.world_result.get("map", {}))
+	var target_grid := _near_open_grid_from(player_grid, game_root.world_result.get("map", {}), game_root)
 	player.equipment = {}
 	player.combat_attributes["accuracy"] = 100.0
 	player.ap = 6.0
@@ -623,6 +623,8 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		errors.append("attack hover preview smoke missing camera")
 		_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
 		return
+	if game_root.runtime_input_controller != null and game_root.runtime_input_controller.has_method("focus_current_actor"):
+		game_root.runtime_input_controller.focus_current_actor()
 	var target_node: Node3D = game_root.find_child("Actor_attack_hover_preview_smoke_%d" % target_id, true, false) as Node3D
 	if target_node == null:
 		errors.append("attack hover preview should render hostile actor node")
@@ -631,15 +633,16 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		if not bool(hover_result.get("success", false)):
 			errors.append("hostile actor hover raycast failed: %s" % hover_result.get("reason", "unknown"))
 		var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
+		var hover_debug := _hover_debug_payload(game_root, camera, target_node, hover_result, hover)
 		var attack_preview: Dictionary = _dictionary_or_empty(hover.get("attack_preview", {}))
 		if attack_preview.is_empty():
-			errors.append("hostile actor hover should expose attack preview")
+			errors.append("hostile actor hover should expose attack preview: %s" % hover_debug)
 		elif not bool(attack_preview.get("can_attack", false)):
 			errors.append("hostile actor hover attack preview should be attackable: %s" % attack_preview.get("reason", "unknown"))
 		elif int(attack_preview.get("target_actor_id", 0)) != target_id:
 			errors.append("hostile actor hover attack preview should expose target actor id")
 		if str(hover.get("target_category", "")) != "actor:hostile":
-			errors.append("hostile actor hover should expose actor:hostile category")
+			errors.append("hostile actor hover should expose actor:hostile category: %s" % hover_debug)
 		var runtime_line := _hud_runtime_control_line(game_root)
 		if not runtime_line.contains("可攻击") or not runtime_line.contains("命中率") or not runtime_line.contains("伤害"):
 			errors.append("HUD runtime control line should show attack hover preview, got %s" % runtime_line)
@@ -1256,11 +1259,7 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 	player.combat_attributes["accuracy"] = 100.0
 	player.ap = 6.0
 	player.equipment = {}
-	var target_grid := {
-		"x": int(player_grid.get("x", 0)) + 1,
-		"y": int(player_grid.get("y", 0)),
-		"z": int(player_grid.get("z", 0)),
-	}
+	var target_grid := _near_open_grid_from(player_grid, game_root.world_result.get("map", {}), game_root)
 	var target_id: int = game_root.simulation.register_actor({
 		"definition_id": "corpse_world_smoke",
 		"display_name": "Corpse World Smoke",
@@ -1309,13 +1308,15 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 		errors.append("corpse world node should expose a pickable interaction body")
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if camera != null:
+		if game_root.runtime_input_controller != null and game_root.runtime_input_controller.has_method("focus_current_actor"):
+			game_root.runtime_input_controller.focus_current_actor()
 		var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(corpse_node.global_position))
 		if not bool(hover_result.get("success", false)):
 			errors.append("corpse hover raycast failed: %s" % hover_result.get("reason", "unknown"))
 		elif str(hover_result.get("kind", "")) != "interaction":
 			errors.append("corpse hover should select interaction target")
 		var corpse_target: Dictionary = _dictionary_or_empty(corpse_node.get_meta("interaction_target"))
-		_expect_hover_runtime_state(errors, game_root, "interaction", str(corpse_target.get("target_id", "")), "container")
+		_expect_hover_runtime_state(errors, game_root, "interaction", str(corpse_target.get("target_id", "")), "container", _hover_debug_payload(game_root, camera, corpse_node, hover_result, _dictionary_or_empty(game_root.runtime_hover_snapshot())))
 		_expect_hover_cursor_at_node(errors, game_root, corpse_node)
 	var selection: Dictionary = game_root.select_interaction_node(corpse_node)
 	if not bool(selection.get("success", false)):
@@ -1587,7 +1588,7 @@ func _expect_pending_movement_path_markers(errors: Array[String], game_root: Nod
 	game_root.simulation.pending_movement = before_pending
 
 
-func _near_open_grid_from(before: Dictionary, topology: Dictionary) -> Dictionary:
+func _near_open_grid_from(before: Dictionary, topology: Dictionary, game_root: Node = null) -> Dictionary:
 	var y := int(before.get("y", 0))
 	var start_x := int(before.get("x", 0))
 	var start_z := int(before.get("z", 0))
@@ -1598,11 +1599,28 @@ func _near_open_grid_from(before: Dictionary, topology: Dictionary) -> Dictionar
 		{"x": start_x, "y": y, "z": start_z - 1},
 	]
 	var blocking: Dictionary = _dictionary_or_empty(topology.get("blocking_cells", {}))
+	var occupied: Dictionary = _occupied_actor_grid_keys(game_root)
 	for candidate in candidates:
 		var key := "%d:%d:%d" % [int(candidate.get("x", 0)), y, int(candidate.get("z", 0))]
 		if not blocking.has(key):
+			if occupied.has(key):
+				continue
 			return candidate
 	return before.duplicate(true)
+
+
+func _occupied_actor_grid_keys(game_root: Node) -> Dictionary:
+	var occupied: Dictionary = {}
+	if game_root == null or game_root.simulation == null:
+		return occupied
+	for actor in _array_or_empty(game_root.simulation.snapshot().get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		var grid: Dictionary = _dictionary_or_empty(actor_data.get("grid_position", {}))
+		if grid.is_empty():
+			continue
+		var key := "%d:%d:%d" % [int(grid.get("x", 0)), int(grid.get("y", 0)), int(grid.get("z", 0))]
+		occupied[key] = true
+	return occupied
 
 
 func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:
@@ -2101,34 +2119,34 @@ func _expect_hover_cursor_at_node(errors: Array[String], game_root: Node, target
 		errors.append("hover grid cursor should render above map meshes")
 
 
-func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expected_kind: String, expected_target_id: String, expected_category: String = "") -> void:
+func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expected_kind: String, expected_target_id: String, expected_category: String = "", debug_payload: String = "") -> void:
 	if not game_root.has_method("runtime_hover_snapshot"):
 		errors.append("game root should expose runtime hover snapshot")
 		return
 	var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
 	if not bool(hover.get("active", false)):
-		errors.append("runtime hover snapshot should be active after hover raycast")
+		errors.append("runtime hover snapshot should be active after hover raycast%s" % _debug_suffix(debug_payload))
 	if str(hover.get("kind", "")) != expected_kind:
-		errors.append("runtime hover snapshot kind expected %s, got %s" % [expected_kind, hover.get("kind", "")])
+		errors.append("runtime hover snapshot kind expected %s, got %s%s" % [expected_kind, hover.get("kind", ""), _debug_suffix(debug_payload)])
 	if str(hover.get("target_id", "")) != expected_target_id:
-		errors.append("runtime hover snapshot should expose target id %s, got %s" % [expected_target_id, hover.get("target_id", "")])
+		errors.append("runtime hover snapshot should expose target id %s, got %s%s" % [expected_target_id, hover.get("target_id", ""), _debug_suffix(debug_payload)])
 	if not expected_category.is_empty() and str(hover.get("target_category", "")) != expected_category:
-		errors.append("runtime hover snapshot category expected %s, got %s" % [expected_category, hover.get("target_category", "")])
+		errors.append("runtime hover snapshot category expected %s, got %s%s" % [expected_category, hover.get("target_category", ""), _debug_suffix(debug_payload)])
 	if _dictionary_or_empty(hover.get("grid", {})).is_empty():
-		errors.append("runtime hover snapshot should expose hovered grid")
+		errors.append("runtime hover snapshot should expose hovered grid%s" % _debug_suffix(debug_payload))
 	var control_snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
 	var selection_debug: Dictionary = _dictionary_or_empty(control_snapshot.get("selection_debug", {}))
 	if selection_debug.is_empty():
 		errors.append("runtime control should expose selection_debug snapshot")
 	else:
 		if not bool(selection_debug.get("active", false)):
-			errors.append("selection_debug should be active after hover raycast")
+			errors.append("selection_debug should be active after hover raycast%s" % _debug_suffix(debug_payload))
 		if str(selection_debug.get("kind", "")) != expected_kind:
-			errors.append("selection_debug kind expected %s, got %s" % [expected_kind, selection_debug.get("kind", "")])
+			errors.append("selection_debug kind expected %s, got %s%s" % [expected_kind, selection_debug.get("kind", ""), _debug_suffix(debug_payload)])
 		if str(selection_debug.get("target_id", "")) != expected_target_id:
-			errors.append("selection_debug should expose target id %s, got %s" % [expected_target_id, selection_debug.get("target_id", "")])
+			errors.append("selection_debug should expose target id %s, got %s%s" % [expected_target_id, selection_debug.get("target_id", ""), _debug_suffix(debug_payload)])
 		if not expected_category.is_empty() and str(selection_debug.get("target_category", "")) != expected_category:
-			errors.append("selection_debug category expected %s, got %s" % [expected_category, selection_debug.get("target_category", "")])
+			errors.append("selection_debug category expected %s, got %s%s" % [expected_category, selection_debug.get("target_category", ""), _debug_suffix(debug_payload)])
 		if _dictionary_or_empty(selection_debug.get("hovered_grid", {})).is_empty():
 			errors.append("selection_debug should expose hovered grid")
 		var prompt_debug: Dictionary = _dictionary_or_empty(selection_debug.get("prompt", {}))
@@ -2143,9 +2161,29 @@ func _expect_hover_runtime_state(errors: Array[String], game_root: Node, expecte
 	if not expected_hud_target.is_empty():
 		has_target_text = has_target_text or hud_line.contains(expected_hud_target)
 	if not hud_line.contains("Hover %s" % expected_hud_kind) or not has_target_text:
-		errors.append("HUD runtime control line should show hover interaction target %s/%s, got %s" % [expected_hud_kind, expected_target_id, hud_line])
+		errors.append("HUD runtime control line should show hover interaction target %s/%s, got %s%s" % [expected_hud_kind, expected_target_id, hud_line, _debug_suffix(debug_payload)])
 	if not hud_line.contains("Sel %s" % expected_hud_kind):
-		errors.append("HUD runtime control line should show selection debug target %s, got %s" % [expected_hud_kind, hud_line])
+		errors.append("HUD runtime control line should show selection debug target %s, got %s%s" % [expected_hud_kind, hud_line, _debug_suffix(debug_payload)])
+
+
+func _hover_debug_payload(game_root: Node, camera: Camera3D, target_node: Node3D, hover_result: Dictionary, hover: Dictionary) -> String:
+	var projected := camera.unproject_position(target_node.global_position) if camera != null and target_node != null else Vector2.ZERO
+	var focus: Variant = camera.get_meta("focus_position", Vector3.ZERO) if camera != null else Vector3.ZERO
+	return JSON.stringify({
+		"target_node": str(target_node.name) if target_node != null else "",
+		"target_position": target_node.global_position if target_node != null else Vector3.ZERO,
+		"screen": projected,
+		"camera_position": camera.global_position if camera != null else Vector3.ZERO,
+		"camera_focus": focus,
+		"hover_result_kind": str(hover_result.get("kind", "")),
+		"hover_target_id": str(hover.get("target_id", "")),
+		"hover_category": str(hover.get("target_category", "")),
+		"picking": _dictionary_or_empty(hover.get("picking", {})),
+	})
+
+
+func _debug_suffix(debug_payload: String) -> String:
+	return "" if debug_payload.is_empty() else ": %s" % debug_payload
 
 
 func _expect_picking_priority_snapshot(errors: Array[String], picking: Dictionary, expected_category: String) -> void:
@@ -2163,7 +2201,7 @@ func _expect_picking_priority_snapshot(errors: Array[String], picking: Dictionar
 	if int(picking.get("selected_priority", 99)) != priority_order.find(selected_category):
 		errors.append("picking selected priority should match priority order for %s" % selected_category)
 	var sort_keys: Array = _array_or_empty(picking.get("sort_keys", []))
-	for sort_key in ["priority", "subpriority", "door_aabb_distance", "hit_fraction", "anchor_noise", "hit_index"]:
+	for sort_key in ["distance", "priority", "subpriority", "door_aabb_distance", "hit_fraction", "anchor_noise", "hit_index"]:
 		if not sort_keys.has(sort_key):
 			errors.append("picking diagnostics should expose sort key %s" % sort_key)
 	if int(picking.get("hit_count", 0)) <= 0:

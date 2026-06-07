@@ -31,6 +31,7 @@ const HOVER_COLOR_TRIGGER := Color(0.70, 0.55, 1.0, 0.50)
 const HOVER_COLOR_DOOR := Color(0.95, 0.72, 0.28, 0.56)
 const HOVER_COLOR_ACTOR := Color(1.0, 0.88, 0.22, 0.50)
 const PICKING_PRIORITY: Array[String] = ["actor", "door", "map_object", "trigger", "grid"]
+const PICKING_DISTANCE_PRIORITY_EPSILON := 0.2
 const PICKING_TRANSITION_KIND_RANK := {
 	"scene_transition": 0,
 	"exit_to_outdoor": 1,
@@ -1129,6 +1130,10 @@ func _picking_cell_bounds(metadata: Dictionary) -> Dictionary:
 
 
 func _sort_pick_candidates(left: Dictionary, right: Dictionary) -> bool:
+	var left_distance: float = float(left.get("distance", 0.0))
+	var right_distance: float = float(right.get("distance", 0.0))
+	if absf(left_distance - right_distance) > PICKING_DISTANCE_PRIORITY_EPSILON:
+		return left_distance < right_distance
 	var left_priority: int = int(left.get("priority", 99))
 	var right_priority: int = int(right.get("priority", 99))
 	if left_priority != right_priority:
@@ -1179,7 +1184,8 @@ func _picking_diagnostics(category: String, priority: int, hit_count: int, selec
 		"selected_category": category,
 		"selected_priority": priority,
 		"selected_hit_index": selected_hit_index,
-		"sort_keys": ["priority", "subpriority", "door_aabb_distance", "hit_fraction", "anchor_noise", "hit_index"],
+		"distance_priority_epsilon": PICKING_DISTANCE_PRIORITY_EPSILON,
+		"sort_keys": ["distance", "priority", "subpriority", "door_aabb_distance", "hit_fraction", "anchor_noise", "hit_index"],
 		"hit_count": hit_count,
 		"candidate_count": candidate_output.size(),
 		"candidates": candidate_output,
