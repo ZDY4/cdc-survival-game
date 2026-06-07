@@ -1,6 +1,7 @@
 extends Control
 
 const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 var _panel: PanelContainer
 var _summary_label: Label
@@ -23,6 +24,7 @@ var _search_text := ""
 var _selected_recipe_id := ""
 var _craft_queue: Array[Dictionary] = []
 var _last_snapshot: Dictionary = {}
+var _reason_catalog := ReasonCatalog.new()
 
 
 func _ready() -> void:
@@ -775,7 +777,7 @@ func _reason_text(recipe: Dictionary) -> String:
 					int(data.get("required", 0)),
 				])
 			return "材料不足 %s" % ", ".join(parts)
-	return str(recipe.get("craft_reason", ""))
+	return _reason_catalog.disabled_text_for(str(recipe.get("craft_reason", "")))
 
 
 func _station_permission_text(recipe: Dictionary) -> String:
@@ -996,7 +998,7 @@ func _craft_failure_text(reason: String) -> String:
 			return "产物无效"
 		"actor_missing":
 			return "角色不存在"
-	return reason
+	return _reason_catalog.disabled_text_for(reason)
 
 
 func _label(node_name: String) -> Label:

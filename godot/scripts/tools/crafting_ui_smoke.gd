@@ -215,6 +215,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.crafting_panel.call("_set_feedback_from_result", locked_result, _recipe_snapshot(game_root, "recipe_antibody_serum"))
 	if not _feedback_text(game_root).contains("制作失败: 抗体血清 | 配方未解锁"):
 		errors.append("crafting panel should show failed craft feedback")
+	if str(game_root.crafting_panel.call("_craft_failure_text", "inventory_over_capacity")) != "背包负重不足":
+		errors.append("crafting failure text should use reason catalog fallback for inventory reasons")
+	if str(game_root.crafting_panel.call("_craft_failure_text", "smoke_unknown_reason")) != "smoke_unknown_reason":
+		errors.append("crafting failure text should preserve unknown reason fallback")
+	var fallback_recipe := {"craft_reason": "inventory_over_capacity"}
+	if str(game_root.crafting_panel.call("_reason_text", fallback_recipe)) != "背包负重不足":
+		errors.append("crafting recipe reason text should use reason catalog fallback")
 	if not _press_recipe_line(game_root, "recipe_bandage_basic"):
 		errors.append("should select basic bandage recipe for detail")
 	await process_frame

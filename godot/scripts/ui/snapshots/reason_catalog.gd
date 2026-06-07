@@ -37,7 +37,10 @@ const REASONS := {
 	"missing_tools": {"category": "crafting", "text": "缺少工具"},
 	"missing_consumable_tools": {"category": "crafting", "text": "缺少可消耗工具"},
 	"missing_skills": {"category": "skill", "text": "技能不足"},
+	"missing_skill_requirements": {"category": "skill", "text": "技能不足"},
 	"missing_station": {"category": "crafting", "text": "缺少工作台"},
+	"required_tools_unsupported": {"category": "crafting", "text": "缺少工具流程"},
+	"required_station_unsupported": {"category": "crafting", "text": "缺少工作台"},
 	"station_world_flag_missing": {"category": "crafting", "text": "工作台未启用"},
 	"station_world_flag_blocked": {"category": "crafting", "text": "工作台被封锁"},
 	"station_item_missing": {"category": "crafting", "text": "缺少工作台钥匙"},
@@ -47,6 +50,7 @@ const REASONS := {
 	"unknown_recipe": {"category": "crafting", "text": "未知配方"},
 	"not_enough_items": {"category": "inventory", "text": "物品不足"},
 	"invalid_quantity": {"category": "inventory", "text": "数量无效"},
+	"inventory_over_capacity": {"category": "inventory", "text": "背包负重不足"},
 	"container_inventory_insufficient": {"category": "container", "text": "容器物品不足"},
 	"container_session_missing": {"category": "container", "text": "容器未打开"},
 	"unknown_container": {"category": "container", "text": "未知容器"},
@@ -71,6 +75,8 @@ const REASONS := {
 	"skill_target_not_hostile": {"category": "skill", "text": "技能需要敌对目标"},
 	"skill_target_not_ally": {"category": "skill", "text": "技能需要友方目标"},
 	"skill_target_grid_occupied": {"category": "skill", "text": "技能目标格被占用"},
+	"simulation_missing": {"category": "system", "text": "运行时未就绪"},
+	"actor_missing": {"category": "actor", "text": "角色不存在"},
 }
 
 const CATEGORY_METADATA := {
@@ -204,6 +210,10 @@ const REASON_METADATA := {
 	"materials_insufficient": {
 		"payload_fields": ["recipe_id", "missing_materials", "inventory"],
 		"disabled_text": "材料不足",
+	},
+	"inventory_over_capacity": {
+		"payload_fields": ["item_id", "count", "current_weight", "max_weight"],
+		"disabled_text": "背包负重不足",
 	},
 	"container_inventory_insufficient": {
 		"payload_fields": ["container_id", "item_id", "count", "available"],
