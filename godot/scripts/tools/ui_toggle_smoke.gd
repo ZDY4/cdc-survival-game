@@ -269,6 +269,37 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await _wait_process_frames(30)
 	if _event_count(game_root, "actor_waited") != after_held_waits:
 		errors.append("releasing Space should stop repeated wait")
+	game_root.simulation.pending_movement = {
+		"actor_id": 1,
+		"target_position": _far_open_grid_from(_dictionary_or_empty(_player(game_root).get("grid_position", {})), _dictionary_or_empty(game_root.world_result.get("map", {}))),
+		"path": [_dictionary_or_empty(_player(game_root).get("grid_position", {})).duplicate(true)],
+	}
+	var before_pending_hold_waits := _event_count(game_root, "actor_waited")
+	_press_key_down(game_root, KEY_SPACE)
+	await _wait_process_frames(70)
+	if _event_count(game_root, "actor_waited") != before_pending_hold_waits:
+		errors.append("holding Space while pending should not repeat wait")
+	if not game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
+		errors.append("holding Space while pending should cancel pending only once")
+	_release_key(game_root, KEY_SPACE)
+	game_root.cancel_pending("space_hold_pending_smoke_cleanup", false)
+	game_root.simulation.pending_interaction = {
+		"actor_id": 1,
+		"target": {
+			"target_id": "survivor_outpost_01_clinic_supply_cabinet",
+			"target_type": "map_object",
+		},
+		"option_id": "open_container",
+	}
+	var before_pending_interaction_hold_waits := _event_count(game_root, "actor_waited")
+	_press_key_down(game_root, KEY_SPACE)
+	await _wait_process_frames(70)
+	if _event_count(game_root, "actor_waited") != before_pending_interaction_hold_waits:
+		errors.append("holding Space while pending interaction should not repeat wait")
+	if not game_root.simulation.snapshot().get("pending_interaction", {}).is_empty():
+		errors.append("holding Space while pending interaction should cancel pending only once")
+	_release_key(game_root, KEY_SPACE)
+	game_root.cancel_pending("space_hold_pending_interaction_smoke_cleanup", false)
 
 	_press_key(game_root, KEY_I)
 	_expect_stage_open(errors, game_root, "inventory", "I should open inventory")
