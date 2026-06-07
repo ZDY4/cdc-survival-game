@@ -118,7 +118,7 @@
 - [~] `.bin`、`.import`、`.uid` 守护：`Scene` smoke 会校验 glTF 外部 buffer 存在且 byteLength 匹配、每个 glTF / glb 有 `.import`、`.import` source_file 指回源资产、remap uid 非空、dest_files 导入产物存在，并扫描 `godot/assets/**/*.uid` 的 uid 格式、资源存在性和重复 uid；当前覆盖 52 个 glTF、31 个外部 buffer、52 个 import uid、1 个 uid sidecar，缺失 / 重复 / 长度不匹配均为 0；`gltf_import_uid_baseline` 和 `asset_uid_sidecar_baseline` 已输出稳定 asset -> uid 快照并断言覆盖全部 glTF / sidecar，且会进入 `Scene.asset-diagnostics.json` 作为持久审阅报告；`docs/baselines/scene_asset_uid_baseline.json` 已固化当前 glTF import UID 和 asset sidecar UID，`test-godot-game.ps1 -Scenario Scene` 会对比并在 UID 漂移时报错。待补 scene 引用变更差异报告和人工审阅流程。
 - [~] 根目录 `assets/` 与 `godot/assets/` 职责：`docs/3d_asset_format_policy.md` 已明确 `godot/assets/` 是 Godot 运行时权威，根目录 `assets/` 只作为源资产池或迁移期备份；从根目录更新资产时必须同步到 `godot/assets/` 相同相对目录并刷新 `.import` / uid；`mainline_migration_guard.gd` 会扫描运行脚本、scene 和工具入口，阻止 `../assets`、绝对根 assets 路径和 `godot/assets/...` 写法进入运行引用，要求统一使用 `res://assets/...`。待补 data 中 UI icon / portrait legacy `assets/...` 路径的正式资源落地与迁移。
 - [~] 模型辨识：地图物体不能退化成重叠方块；fallback 类别化表现第一版已有，`MapObjectFallbackVisual` 会按 pickup / container / trigger 使用不同形状和材质，并报告 `fallback_category`、source object、target kind、source visual 和 source visual asset；`Scene` smoke 覆盖 fallback 类别和原资源诊断。待补真实美术替换、真实 glTF collision / origin 校准和更细粒度视觉重叠巡检。
-- [ ] 交互、移动、战斗、UI 反馈：hover 光标、outline、tooltip、interaction prompt、路径预览、AP 不足提示、命中 / 闪避 / 伤害 / 死亡、toast / message log、按钮禁用态和失败原因都要进入验收。
+- [~] 交互、移动、战斗、UI 反馈：hover 光标、outline、interaction prompt、路径预览、AP 不足提示、命中 / 闪避 / 伤害 / 死亡、message log / HUD 反馈、按钮禁用态和失败原因已有第一版验收；`WorldActionPresenter` 已对移动逐格 tween、攻击 `windup/impact/fade` 三阶段 impact、交互 `start/pulse/fade` 三阶段 pulse 暴露 phase / duration / marker metadata，并由 `PlayerInteraction` smoke 覆盖。待补 tooltip polish、toast 过渡、更多 UI 按钮禁用态和表现层截图级验收。
 
 ## 1. 运行时总线与快照
 
@@ -510,7 +510,7 @@
 2. 战斗空间等价：LOS、跨层、AOE、友军伤害、战斗退出和目标预览。
 3. 背包/容器/交易高级 UI：数量弹窗、上下文菜单、拖拽、购物车、详情和失败提示。
 4. 技能和 hotbar：多槽、快捷键、目标选择、状态堆叠、非战斗 modifier 消费点、cooldown。
-5. 动作表现队列：`WorldActionPresenter` 第一版已接入移动逐格 tween、attack/interaction snapshot、表现期间 input blocker，以及 hotbar / 面板 / 技能 / 制作等 UI 动作拒绝；继续补攻击/交互阶段表现、quantity / drag / tooltip 等 UI layer 阻塞矩阵和最终 snapshot refresh 时机。
+5. 动作表现队列：`WorldActionPresenter` 第一版已接入移动逐格 tween、攻击 `windup/impact/fade` 三阶段 impact、交互 `start/pulse/fade` 三阶段 pulse、表现期间 input blocker，以及 hotbar / 面板 / 技能 / 制作等 UI 动作拒绝；继续补 quantity / drag / tooltip 等 UI layer 阻塞矩阵、表现截图级验收和最终 snapshot refresh 时机。
 6. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
 7. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick 和运行时状态 snapshot。
 8. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。

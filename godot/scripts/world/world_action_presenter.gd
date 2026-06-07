@@ -3,6 +3,10 @@ extends RefCounted
 const GRID_SIZE := 1.0
 const DEFAULT_ACTOR_Y := 0.58
 const STEP_DURATION_SEC := 0.07
+const ATTACK_PHASES := ["windup", "impact", "fade"]
+const INTERACTION_PHASES := ["start", "pulse", "fade"]
+const ATTACK_PHASE_DURATIONS := [0.06, 0.08, 0.10]
+const INTERACTION_PHASE_DURATIONS := [0.06, 0.08, 0.10]
 
 var sequence: int = 0
 var active_count: int = 0
@@ -238,6 +242,10 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	marker.position = target_position + Vector3(0.0, 1.05, 0.0)
 	marker.set_meta("action_presenter_active", true)
 	marker.set_meta("action_presenter_kind", "attack")
+	marker.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
+	marker.set_meta("action_presenter_phase_count", ATTACK_PHASES.size())
+	marker.set_meta("action_presenter_current_phase", ATTACK_PHASES[0])
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(ATTACK_PHASE_DURATIONS))
 	marker.set_meta("actor_id", int(attack.get("actor_id", 0)))
 	marker.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
 	marker.set_meta("damage", float(attack.get("damage", 0.0)))
@@ -250,8 +258,11 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
-	tween.tween_property(marker, "scale", Vector3(1.45, 1.45, 1.45), 0.08)
-	tween.tween_property(marker, "scale", Vector3(0.35, 0.35, 0.35), 0.10)
+	tween.tween_property(marker, "scale", Vector3(0.72, 0.72, 0.72), float(ATTACK_PHASE_DURATIONS[0]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[1]))
+	tween.tween_property(marker, "scale", Vector3(1.45, 1.45, 1.45), float(ATTACK_PHASE_DURATIONS[1]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[2]))
+	tween.tween_property(marker, "scale", Vector3(0.35, 0.35, 0.35), float(ATTACK_PHASE_DURATIONS[2]))
 	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker)))
 	var snapshot_data := _attack_public_snapshot(attack, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
@@ -280,6 +291,10 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 		"hit_kind": str(attack.get("hit_kind", "")),
 		"critical": bool(attack.get("critical", false)),
 		"defeated": bool(attack.get("defeated", false)),
+		"phases": ATTACK_PHASES.duplicate(),
+		"phase_count": ATTACK_PHASES.size(),
+		"current_phase": ATTACK_PHASES[0] if active else "",
+		"duration_sec": _duration_sum(ATTACK_PHASE_DURATIONS) if active else 0.0,
 	}
 
 
@@ -332,6 +347,10 @@ func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dict
 	marker.position = target_position + Vector3(0.0, 0.22, 0.0)
 	marker.set_meta("action_presenter_active", true)
 	marker.set_meta("action_presenter_kind", "interaction")
+	marker.set_meta("action_presenter_phases", INTERACTION_PHASES.duplicate())
+	marker.set_meta("action_presenter_phase_count", INTERACTION_PHASES.size())
+	marker.set_meta("action_presenter_current_phase", INTERACTION_PHASES[0])
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(INTERACTION_PHASE_DURATIONS))
 	marker.set_meta("actor_id", int(interaction.get("actor_id", 0)))
 	marker.set_meta("target_id", str(interaction.get("target_id", "")))
 	marker.set_meta("target_type", str(interaction.get("target_type", "")))
@@ -344,8 +363,11 @@ func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dict
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
-	tween.tween_property(marker, "scale", Vector3(1.35, 1.0, 1.35), 0.08)
-	tween.tween_property(marker, "scale", Vector3(0.55, 1.0, 0.55), 0.10)
+	tween.tween_property(marker, "scale", Vector3(0.82, 1.0, 0.82), float(INTERACTION_PHASE_DURATIONS[0]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), INTERACTION_PHASES[1]))
+	tween.tween_property(marker, "scale", Vector3(1.35, 1.0, 1.35), float(INTERACTION_PHASE_DURATIONS[1]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), INTERACTION_PHASES[2]))
+	tween.tween_property(marker, "scale", Vector3(0.55, 1.0, 0.55), float(INTERACTION_PHASE_DURATIONS[2]))
 	tween.finished.connect(Callable(self, "_on_interaction_feedback_finished").bind(weakref(marker)))
 	var snapshot_data := _interaction_public_snapshot(interaction, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
@@ -374,6 +396,10 @@ func _interaction_public_snapshot(interaction: Dictionary, active: bool, reason:
 		"target_grid": _dictionary_or_empty(interaction.get("target_grid", {})).duplicate(true),
 		"option_kind": str(interaction.get("option_kind", "")),
 		"node_path": str(interaction.get("node_path", "")),
+		"phases": INTERACTION_PHASES.duplicate(),
+		"phase_count": INTERACTION_PHASES.size(),
+		"current_phase": INTERACTION_PHASES[0] if active else "",
+		"duration_sec": _duration_sum(INTERACTION_PHASE_DURATIONS) if active else 0.0,
 	}
 
 
@@ -454,6 +480,22 @@ func _presentation_public_snapshot(presentation: Dictionary, active: bool) -> Di
 		"step_count": int(presentation.get("step_count", 0)),
 		"duration_sec": float(presentation.get("duration_sec", 0.0)),
 	}
+
+
+func _set_marker_phase(marker_ref: WeakRef, phase: String) -> void:
+	var marker := marker_ref.get_ref() as Node
+	if marker == null or marker.is_queued_for_deletion():
+		return
+	marker.set_meta("action_presenter_current_phase", phase)
+	if str(latest.get("marker_path", "")) == str(marker.get_path()):
+		latest["current_phase"] = phase
+
+
+func _duration_sum(values: Array) -> float:
+	var total := 0.0
+	for value in values:
+		total += float(value)
+	return total
 
 
 func _track_active_node(node: Node) -> void:

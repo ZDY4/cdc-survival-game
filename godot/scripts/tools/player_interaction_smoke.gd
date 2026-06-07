@@ -578,6 +578,7 @@ func _expect_world_action_attack_presenter(errors: Array[String], game_root: Nod
 		errors.append("attack presenter should expose target actor id")
 	if str(presenter.get("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
 		errors.append("attack presenter should expose hit kind")
+	_expect_action_presenter_phases(errors, presenter, ["windup", "impact", "fade"], "attack presenter")
 	var impact: MeshInstance3D = game_root.find_child("WorldActionAttackImpact", true, false) as MeshInstance3D
 	if impact == null:
 		errors.append("attack presenter should render WorldActionAttackImpact marker")
@@ -588,6 +589,7 @@ func _expect_world_action_attack_presenter(errors: Array[String], game_root: Nod
 		errors.append("attack impact marker should expose target actor id")
 	if str(impact.get_meta("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
 		errors.append("attack impact marker should expose hit kind")
+	_expect_action_marker_phases(errors, impact, ["windup", "impact", "fade"], "attack impact marker")
 
 
 func _expect_world_action_interaction_presenter(errors: Array[String], game_root: Node, target_id: String, option_kind: String) -> void:
@@ -600,6 +602,7 @@ func _expect_world_action_interaction_presenter(errors: Array[String], game_root
 		errors.append("interaction presenter should expose option kind %s, got %s" % [option_kind, presenter.get("option_kind", "")])
 	if _dictionary_or_empty(presenter.get("target_grid", {})).is_empty():
 		errors.append("interaction presenter should expose target grid")
+	_expect_action_presenter_phases(errors, presenter, ["start", "pulse", "fade"], "interaction presenter")
 	var pulse: MeshInstance3D = game_root.find_child("WorldActionInteractionPulse", true, false) as MeshInstance3D
 	if pulse == null:
 		errors.append("interaction presenter should render WorldActionInteractionPulse marker")
@@ -612,6 +615,31 @@ func _expect_world_action_interaction_presenter(errors: Array[String], game_root
 		errors.append("interaction pulse marker should expose option kind")
 	if _dictionary_or_empty(pulse.get_meta("target_grid", {})).is_empty():
 		errors.append("interaction pulse marker should expose target grid")
+	_expect_action_marker_phases(errors, pulse, ["start", "pulse", "fade"], "interaction pulse marker")
+
+
+func _expect_action_presenter_phases(errors: Array[String], presenter: Dictionary, expected: Array[String], context: String) -> void:
+	var phases := _string_array(presenter.get("phases", []))
+	if phases != expected:
+		errors.append("%s should expose phases %s, got %s" % [context, JSON.stringify(expected), JSON.stringify(phases)])
+	if int(presenter.get("phase_count", 0)) != expected.size():
+		errors.append("%s should expose phase_count %d" % [context, expected.size()])
+	if str(presenter.get("current_phase", "")) != expected[0]:
+		errors.append("%s should start at phase %s" % [context, expected[0]])
+	if float(presenter.get("duration_sec", 0.0)) <= 0.0:
+		errors.append("%s should expose nonzero duration" % context)
+
+
+func _expect_action_marker_phases(errors: Array[String], marker: Node, expected: Array[String], context: String) -> void:
+	var phases := _string_array(marker.get_meta("action_presenter_phases", []))
+	if phases != expected:
+		errors.append("%s should expose phases %s, got %s" % [context, JSON.stringify(expected), JSON.stringify(phases)])
+	if int(marker.get_meta("action_presenter_phase_count", 0)) != expected.size():
+		errors.append("%s should expose phase count %d" % [context, expected.size()])
+	if str(marker.get_meta("action_presenter_current_phase", "")) != expected[0]:
+		errors.append("%s should start at phase %s" % [context, expected[0]])
+	if float(marker.get_meta("action_presenter_duration_sec", 0.0)) <= 0.0:
+		errors.append("%s should expose nonzero duration" % context)
 
 
 func _expect_world_action_input_blocker(errors: Array[String], game_root: Node, expected_action_kind: String) -> void:
@@ -1566,6 +1594,13 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	for item in _array_or_empty(value):
+		output.append(str(item))
+	return output
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
