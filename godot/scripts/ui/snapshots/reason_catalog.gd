@@ -30,6 +30,7 @@ const REASONS := {
 	"path_unreachable": {"category": "movement", "text": "无法到达"},
 	"ap_insufficient": {"category": "ap", "text": "AP不足"},
 	"ap_insufficient_craft": {"category": "ap", "text": "AP不足，无法制作"},
+	"ap_insufficient_craft_queued": {"category": "ap", "text": "AP不足，制作已排队"},
 	"ap_insufficient_deconstruct": {"category": "ap", "text": "AP不足，无法拆解"},
 	"ap_insufficient_movement_queued": {"category": "ap", "text": "AP不足，移动已排队"},
 	"ap_insufficient_interaction_queued": {"category": "ap", "text": "AP不足，交互已排队"},

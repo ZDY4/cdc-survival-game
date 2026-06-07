@@ -598,7 +598,7 @@ func _feedback_toast_severity(kind: String, text: String) -> String:
 		return "error"
 	if kind in ["actor_defeated", "quest_completed", "quest_reward_granted", "actor_leveled_up", "skill_learned"]:
 		return "success"
-	if kind in ["attack_resolved", "relationship_changed", "movement_cancelled", "interaction_cancelled", "pending_cancelled"]:
+	if kind in ["attack_resolved", "relationship_changed", "movement_cancelled", "interaction_cancelled", "crafting_queued", "crafting_cancelled", "pending_cancelled"]:
 		return "warning"
 	return "info"
 
@@ -638,6 +638,19 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 			return {
 				"kind": kind,
 				"text": "制作: %s" % str(payload.get("recipe_id", "")),
+			}
+		"crafting_queued":
+			return {
+				"kind": kind,
+				"text": "制作排队: %s | 剩余AP %.1f" % [
+					str(payload.get("recipe_id", "")),
+					float(payload.get("remaining_ap", 0.0)),
+				],
+			}
+		"crafting_resumed":
+			return {
+				"kind": kind,
+				"text": "继续制作: %s" % str(payload.get("recipe_id", "")),
 			}
 		"skill_used":
 			return {
@@ -725,6 +738,11 @@ func _event_feedback_entry(event: Dictionary) -> Dictionary:
 			return {
 				"kind": kind,
 				"text": "已取消交互: %s" % _pending_cancel_reason_text(str(payload.get("reason", ""))),
+			}
+		"crafting_cancelled":
+			return {
+				"kind": kind,
+				"text": "已取消制作: %s" % _pending_cancel_reason_text(str(payload.get("reason", ""))),
 			}
 		"pending_cancelled":
 			return {

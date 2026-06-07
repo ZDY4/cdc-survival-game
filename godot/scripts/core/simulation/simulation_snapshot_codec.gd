@@ -44,6 +44,7 @@ func build(simulation: RefCounted) -> Dictionary:
 		"combat_state": simulation.combat_state.duplicate(true),
 		"pending_movement": simulation.pending_movement.duplicate(true),
 		"pending_interaction": simulation.pending_interaction.duplicate(true),
+		"pending_crafting": simulation.pending_crafting.duplicate(true),
 		"runtime_command_queue": runtime_queue,
 		"runtime_command_history": command_history,
 		"pending_progression_step": _pending_progression_step(control_actor),
@@ -405,6 +406,18 @@ func _runtime_command_queue(simulation: RefCounted) -> Array[Dictionary]:
 			"required_ap": float(pending.get("required_ap", 0.0)),
 			"available_ap": float(pending.get("available_ap", 0.0)),
 		})
+	if not simulation.pending_crafting.is_empty():
+		var crafting: Dictionary = simulation.pending_crafting
+		output.append({
+			"kind": str(crafting.get("kind", "pending_crafting")),
+			"actor_id": int(crafting.get("actor_id", 0)),
+			"recipe_id": str(crafting.get("recipe_id", "")),
+			"count": int(crafting.get("count", 1)),
+			"required_ap": float(crafting.get("required_ap", 0.0)),
+			"progress_ap": float(crafting.get("progress_ap", 0.0)),
+			"remaining_ap": float(crafting.get("remaining_ap", 0.0)),
+			"available_ap": float(crafting.get("available_ap", 0.0)),
+		})
 	return output
 
 
@@ -593,6 +606,7 @@ func _ui_menu_state_refs(simulation: RefCounted) -> Dictionary:
 		"active_container_actor_id": _active_actor_with_field(simulation, "active_container_id"),
 		"pending_movement": not simulation.pending_movement.is_empty(),
 		"pending_interaction": not simulation.pending_interaction.is_empty(),
+		"pending_crafting": not simulation.pending_crafting.is_empty(),
 	}
 
 
@@ -607,6 +621,7 @@ func _debug_runtime_diagnostics(simulation: RefCounted, events: Array[Dictionary
 		"queued_command_count": runtime_queue.size(),
 		"pending_movement": not simulation.pending_movement.is_empty(),
 		"pending_interaction": not simulation.pending_interaction.is_empty(),
+		"pending_crafting": not simulation.pending_crafting.is_empty(),
 		"interaction_menu_open": not simulation.interaction_menu.is_empty(),
 		"recent_feedback_count": recent_feedback.size(),
 		"latest_command": latest_command,
@@ -655,6 +670,9 @@ func _feedback_event_kind(kind: String) -> bool:
 		"dialogue_item_granted",
 		"dialogue_reward_granted",
 		"dialogue_action_failed",
+		"crafting_queued",
+		"crafting_resumed",
+		"crafting_cancelled",
 		"movement_cancelled",
 		"interaction_cancelled",
 		"pending_cancelled",

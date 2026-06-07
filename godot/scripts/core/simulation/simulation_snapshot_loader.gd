@@ -48,6 +48,7 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 		simulation.combat_state["combat_rng_counter"] = 0
 	simulation.pending_movement = _dictionary_or_empty(snapshot_data.get("pending_movement", {})).duplicate(true)
 	simulation.pending_interaction = _dictionary_or_empty(snapshot_data.get("pending_interaction", {})).duplicate(true)
+	simulation.pending_crafting = _dictionary_or_empty(snapshot_data.get("pending_crafting", {})).duplicate(true)
 	simulation.corpse_containers = _load_corpse_containers(snapshot_data.get("corpse_containers", []))
 	_sync_corpse_container_sessions(simulation)
 	simulation.interaction_menu = _dictionary_or_empty(snapshot_data.get("interaction_menu", {})).duplicate(true)

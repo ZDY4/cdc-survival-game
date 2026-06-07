@@ -165,6 +165,16 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	var topology: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot()).get("map", {})
 	simulation.crafted_recipes["recipe_knife_basic"] = true
 	simulation.world_flags["outpost_workshop_restored"] = true
+	player_for_reload.inventory["1011"] = 2
+	player_for_reload.ap = 0.5
+	simulation.submit_player_command({
+		"kind": "craft",
+		"actor_id": 1,
+		"recipe_id": "recipe_bandage_basic",
+		"count": 1,
+		"recipe_library": registry.get_library("recipes"),
+		"topology": topology,
+	})
 	var trader_shop: Dictionary = simulation.shop_sessions.get("trader_lao_wang_shop", {}).duplicate(true)
 	trader_shop["target_actor_definition_id"] = "trader_lao_wang"
 	trader_shop["required_relationship_min"] = 10.0
@@ -280,7 +290,7 @@ func _submit_and_complete(simulation: RefCounted, registry: RefCounted, command:
 
 func _has_pending(simulation: RefCounted) -> bool:
 	var snapshot: Dictionary = simulation.snapshot()
-	return not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty()
+	return not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_crafting", {})).is_empty()
 
 
 func _final_interaction_result(result: Dictionary) -> bool:
@@ -377,6 +387,14 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("combat_state turn_order should roundtrip non-empty order")
 	if _array_or_empty(restored_combat_state.get("initiative", [])).size() < 2:
 		errors.append("combat_state initiative should roundtrip non-empty entries")
+	var original_pending_crafting: Dictionary = _dictionary_or_empty(original.get("pending_crafting", {}))
+	var restored_pending_crafting: Dictionary = _dictionary_or_empty(restored.get("pending_crafting", {}))
+	if original_pending_crafting.is_empty():
+		errors.append("save fixture should include pending_crafting")
+	if JSON.stringify(_normalized_pending_crafting(restored_pending_crafting)) != JSON.stringify(_normalized_pending_crafting(original_pending_crafting)):
+		errors.append("pending_crafting did not roundtrip")
+	if not _runtime_queue_has_kind(restored, "pending_crafting"):
+		errors.append("runtime_command_queue should expose restored pending_crafting")
 	var restored_clinic_container: Dictionary = _container_session(restored, "survivor_outpost_01_clinic_supply_cabinet")
 	if str(restored_clinic_container.get("container_type", "")) != "map":
 		errors.append("map container type metadata did not roundtrip")
@@ -539,6 +557,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 	legacy.erase("combat_state")
 	legacy.erase("pending_movement")
 	legacy.erase("pending_interaction")
+	legacy.erase("pending_crafting")
 	legacy.erase("door_states")
 	legacy.erase("corpse_containers")
 	legacy.erase("interaction_menu")
@@ -556,9 +575,11 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 		errors.append("legacy snapshot migration should default active_location_id from start_location_id")
 	if str(restored.get("active_entry_point_id", "")) != str(snapshot.get("start_entry_point_id", "")):
 		errors.append("legacy snapshot migration should default active_entry_point_id from start_entry_point_id")
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "runtime_command_queue", "runtime_command_history", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "debug_runtime_diagnostics", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "hotbar_group_labels", "relationships"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "pending_crafting", "runtime_command_queue", "runtime_command_history", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "debug_runtime_diagnostics", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "hotbar_group_labels", "relationships"]:
 		if not restored.has(key):
 			errors.append("legacy snapshot migration missing %s" % key)
+	if not _dictionary_or_empty(restored.get("pending_crafting", {})).is_empty():
+		errors.append("legacy snapshot migration should default pending_crafting to empty")
 	if _relationship_score(restored, 1, 2) < 49.9:
 		errors.append("legacy snapshot migration should initialize player/trader relationship from sides")
 	if not _has_event(restored, "snapshot_migrated"):
@@ -672,6 +693,29 @@ func _normalized_combat_state(combat_state: Dictionary) -> Dictionary:
 		"current_combat_actor_id": int(combat_state.get("current_combat_actor_id", 0)),
 		"next_combat_actor_id": int(combat_state.get("next_combat_actor_id", 0)),
 	}
+
+
+func _normalized_pending_crafting(pending: Dictionary) -> Dictionary:
+	if pending.is_empty():
+		return {}
+	return {
+		"kind": str(pending.get("kind", "")),
+		"actor_id": int(pending.get("actor_id", 0)),
+		"recipe_id": str(pending.get("recipe_id", "")),
+		"count": int(pending.get("count", 0)),
+		"required_ap": float(pending.get("required_ap", 0.0)),
+		"progress_ap": float(pending.get("progress_ap", 0.0)),
+		"remaining_ap": float(pending.get("remaining_ap", 0.0)),
+		"available_ap": float(pending.get("available_ap", 0.0)),
+	}
+
+
+func _runtime_queue_has_kind(snapshot: Dictionary, kind: String) -> bool:
+	for entry in _array_or_empty(snapshot.get("runtime_command_queue", [])):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("kind", "")) == kind:
+			return true
+	return false
 
 
 func _inventory_count(actor: Dictionary, item_id: String) -> int:

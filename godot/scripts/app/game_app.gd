@@ -555,7 +555,7 @@ func _root_close_priority(panel_priority: Array = []) -> Array[String]:
 		priority.append("selection")
 	var has_pending := false
 	var pending_state: Dictionary = _runtime_pending_state_snapshot()
-	if not _dictionary_or_empty(pending_state.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_interaction", {})).is_empty():
+	if not _dictionary_or_empty(pending_state.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_crafting", {})).is_empty():
 		has_pending = true
 	for item in panel_priority:
 		var id := str(item)
@@ -1838,11 +1838,12 @@ func _context_menu_owner_panel(owner_panel: String) -> Node:
 
 func _runtime_pending_state_snapshot() -> Dictionary:
 	if simulation == null:
-		return {"pending_movement": {}, "pending_interaction": {}}
+		return {"pending_movement": {}, "pending_interaction": {}, "pending_crafting": {}}
 	var snapshot: Dictionary = simulation.snapshot()
 	return {
 		"pending_movement": _dictionary_or_empty(snapshot.get("pending_movement", {})).duplicate(true),
 		"pending_interaction": _dictionary_or_empty(snapshot.get("pending_interaction", {})).duplicate(true),
+		"pending_crafting": _dictionary_or_empty(snapshot.get("pending_crafting", {})).duplicate(true),
 	}
 
 
@@ -3302,6 +3303,9 @@ func _focused_actor_busy_state(focused_actor: Dictionary) -> Dictionary:
 	var pending_interaction: Dictionary = _dictionary_or_empty(snapshot.get("pending_interaction", {}))
 	if not pending_interaction.is_empty() and int(pending_interaction.get("actor_id", 0)) == actor_id:
 		return {"kind": "pending_interaction", "state": pending_interaction.duplicate(true)}
+	var pending_crafting: Dictionary = _dictionary_or_empty(snapshot.get("pending_crafting", {}))
+	if not pending_crafting.is_empty() and int(pending_crafting.get("actor_id", 0)) == actor_id:
+		return {"kind": "pending_crafting", "state": pending_crafting.duplicate(true)}
 	return {}
 
 

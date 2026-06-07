@@ -84,6 +84,7 @@ var combat_state: Dictionary = {
 }
 var pending_movement: Dictionary = {}
 var pending_interaction: Dictionary = {}
+var pending_crafting: Dictionary = {}
 var corpse_containers: Dictionary = {}
 var interaction_menu: Dictionary = {}
 var hotbar: Dictionary = {}
@@ -950,7 +951,7 @@ func preview_skill_target(actor_id: int, skill_id: String, skill_library: Dictio
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, topology: Dictionary = {}) -> Dictionary:
 	var actor_id: int = _player_actor_id()
-	var had_pending: bool = not pending_movement.is_empty() or not pending_interaction.is_empty()
+	var had_pending: bool = not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty()
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	var ap_before: float = actor.ap if actor != null else 0.0
 	var turn_open_before: bool = bool(actor.turn_open) if actor != null else false
@@ -958,8 +959,10 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 	var combat_active_before: bool = bool(combat_state.get("active", false))
 	var movement: Dictionary = pending_movement.duplicate(true)
 	var interaction: Dictionary = pending_interaction.duplicate(true)
+	var crafting: Dictionary = pending_crafting.duplicate(true)
 	pending_movement.clear()
 	pending_interaction.clear()
+	pending_crafting.clear()
 	interaction_menu.clear()
 	if had_pending:
 		if not movement.is_empty():
@@ -974,11 +977,18 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 				"reason": reason,
 				"pending_interaction": interaction.duplicate(true),
 			})
+		if not crafting.is_empty():
+			_emit("crafting_cancelled", {
+				"actor_id": int(crafting.get("actor_id", actor_id)),
+				"reason": reason,
+				"pending_crafting": crafting.duplicate(true),
+			})
 		_emit("pending_cancelled", {
 			"actor_id": actor_id,
 			"reason": reason,
 			"movement": movement,
 			"interaction": interaction,
+			"crafting": crafting,
 		})
 	var turn_auto_ended := false
 	var auto_end_blocked_reason := ""
@@ -1253,6 +1263,7 @@ func _build_turn_policy(actor: RefCounted, action_kind: String, result: Dictiona
 		"below_affordable_threshold": ap_after < threshold,
 		"pending_movement": not pending_movement.is_empty(),
 		"pending_interaction": not pending_interaction.is_empty(),
+		"pending_crafting": not pending_crafting.is_empty(),
 		"auto_advanced": false,
 		"reason": "pending_evaluation",
 	}
@@ -1285,7 +1296,7 @@ func _auto_advance_player_turn(actor: RefCounted, topology: Dictionary, reason: 
 		var npc_results: Array[Dictionary] = advance_world_turn(topology)
 		_open_turn(actor.actor_id, "auto_player_turn")
 		var pending_result: Dictionary = {}
-		if not pending_movement.is_empty() or not pending_interaction.is_empty():
+		if not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty():
 			pending_result = _resume_pending_for_actor(actor, topology)
 		cycles.append({
 			"round": int(turn_state.get("round", 1)),
@@ -1308,6 +1319,7 @@ func _auto_advance_player_turn(actor: RefCounted, topology: Dictionary, reason: 
 			"affordable_ap_threshold": _affordable_ap_threshold(actor),
 			"pending_movement": pending_movement.duplicate(true),
 			"pending_interaction": pending_interaction.duplicate(true),
+			"pending_crafting": pending_crafting.duplicate(true),
 			"round": int(turn_state.get("round", 1)),
 		})
 	return {
@@ -1325,7 +1337,7 @@ func _merge_auto_turn_final_result(result: Dictionary, auto_turn: Dictionary) ->
 		var pending_result: Dictionary = _dictionary_or_empty(cycle.get("pending_result", {}))
 		if pending_result.is_empty() or not bool(pending_result.get("success", false)):
 			continue
-		for key in ["dialogue_id", "requested_dialogue_id", "dialogue_rule_key", "dialogue_rule_source", "dialogue_state", "container", "context_snapshot", "consumed_target", "item_id", "count", "inventory_before", "inventory_after", "defeated", "attack_result", "auto_resumed_interaction", "resumed_pending_interaction", "approach_result"]:
+		for key in ["dialogue_id", "requested_dialogue_id", "dialogue_rule_key", "dialogue_rule_source", "dialogue_state", "container", "context_snapshot", "consumed_target", "item_id", "count", "inventory_before", "inventory_after", "defeated", "attack_result", "auto_resumed_interaction", "resumed_pending_interaction", "approach_result", "recipe_id", "output_item_id", "output_count", "craft_time", "ap_cost", "ap_remaining", "completed_count", "requested_count", "pending_crafting", "resumed_pending_crafting"]:
 			if pending_result.has(key) and not result.has(key):
 				result[key] = pending_result.get(key)
 		if pending_result.has("kind") and str(result.get("kind", "")) == "pending_movement_completed":
@@ -1541,13 +1553,22 @@ func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary
 		return validation
 	var total_cost: float = _craft_command_ap_cost(recipe_id, recipes, count, command)
 	if actor.ap < total_cost:
+		var available_ap: float = max(0.0, actor.ap)
+		if available_ap > 0.0:
+			_spend_ap(actor, available_ap, "craft_progress:%s" % recipe_id)
+		pending_crafting = _pending_crafting_payload(actor, recipe_id, count, recipes, crafting_context, command, total_cost, available_ap, 0.0)
+		_emit("crafting_queued", pending_crafting.duplicate(true))
 		return {
-			"success": false,
-			"reason": "ap_insufficient_craft",
+			"success": true,
+			"kind": "pending_crafting",
+			"reason": "ap_insufficient_craft_queued",
 			"recipe_id": recipe_id,
 			"count": count,
 			"required_ap": total_cost,
-			"available_ap": actor.ap,
+			"available_ap": available_ap,
+			"spent_ap": available_ap,
+			"remaining_ap": float(pending_crafting.get("remaining_ap", total_cost)),
+			"pending_crafting": pending_crafting.duplicate(true),
 		}
 	var result: Dictionary = {}
 	if count == 1:
@@ -1562,6 +1583,22 @@ func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary
 		result["ap_remaining"] = actor.ap
 		result["craft_time"] = _recipe_craft_time(recipe_id, recipes) * float(completed_count)
 	return result
+
+
+func _pending_crafting_payload(actor: RefCounted, recipe_id: String, count: int, recipes: Dictionary, crafting_context: Dictionary, command: Dictionary, required_ap: float, spent_ap: float, previous_progress: float) -> Dictionary:
+	return {
+		"kind": "pending_crafting",
+		"actor_id": actor.actor_id if actor != null else 0,
+		"recipe_id": recipe_id,
+		"count": max(1, count),
+		"recipe_library": recipes.duplicate(true),
+		"crafting_context": crafting_context.duplicate(true),
+		"command": command.duplicate(true),
+		"required_ap": max(0.0, required_ap),
+		"progress_ap": max(0.0, previous_progress + spent_ap),
+		"remaining_ap": max(0.0, required_ap - previous_progress - spent_ap),
+		"available_ap": actor.ap if actor != null else 0.0,
+	}
 
 
 func _craft_recipe_batch(actor_id: int, recipe_id: String, count: int, recipes: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
@@ -4084,9 +4121,11 @@ func _restore_exploration_after_combat(reason: String, close_turns: bool) -> Dic
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	var movement: Dictionary = pending_movement.duplicate(true)
 	var interaction: Dictionary = pending_interaction.duplicate(true)
+	var crafting: Dictionary = pending_crafting.duplicate(true)
 	var menu: Dictionary = interaction_menu.duplicate(true)
 	pending_movement.clear()
 	pending_interaction.clear()
+	pending_crafting.clear()
 	interaction_menu.clear()
 	var opened_player_turn := false
 	var clamped_ap := false
@@ -4109,6 +4148,7 @@ func _restore_exploration_after_combat(reason: String, close_turns: bool) -> Dic
 		"clamped_ap": clamped_ap,
 		"pending_movement_cleared": not movement.is_empty(),
 		"pending_interaction_cleared": not interaction.is_empty(),
+		"pending_crafting_cleared": not crafting.is_empty(),
 		"interaction_menu_cleared": not menu.is_empty(),
 	}
 
@@ -4287,9 +4327,9 @@ func _interaction_goals(center: RefCounted, interaction_range: int) -> Array[Ref
 func _resume_pending_for_actor(actor: RefCounted, topology: Dictionary) -> Dictionary:
 	if actor == null:
 		return {"success": false, "reason": "unknown_actor"}
-	if pending_movement.is_empty() and pending_interaction.is_empty():
+	if pending_movement.is_empty() and pending_interaction.is_empty() and pending_crafting.is_empty():
 		return {"success": true, "resumed": false}
-	if int(pending_movement.get("actor_id", actor.actor_id)) != actor.actor_id and int(pending_interaction.get("actor_id", actor.actor_id)) != actor.actor_id:
+	if int(pending_movement.get("actor_id", actor.actor_id)) != actor.actor_id and int(pending_interaction.get("actor_id", actor.actor_id)) != actor.actor_id and int(pending_crafting.get("actor_id", actor.actor_id)) != actor.actor_id:
 		return {"success": false, "reason": "pending_actor_mismatch"}
 
 	var movement_result: Dictionary = {}
@@ -4305,14 +4345,77 @@ func _resume_pending_for_actor(actor: RefCounted, topology: Dictionary) -> Dicti
 				"pending_movement": pending_movement.duplicate(true),
 				"movement_result": movement_result,
 			}
-	if pending_interaction.is_empty():
+	if not pending_interaction.is_empty():
+		return _resume_pending_interaction(actor, topology, movement_result)
+	if not pending_crafting.is_empty():
+		return _resume_pending_crafting(actor, topology, movement_result)
+	return {
+		"success": true,
+		"resumed": not movement_result.is_empty(),
+		"kind": "pending_movement_completed",
+		"movement_result": movement_result,
+	}
+
+
+func _resume_pending_crafting(actor: RefCounted, topology: Dictionary, movement_result: Dictionary = {}) -> Dictionary:
+	if pending_crafting.is_empty():
 		return {
 			"success": true,
-			"resumed": not movement_result.is_empty(),
-			"kind": "pending_movement_completed",
+			"resumed": false,
 			"movement_result": movement_result,
 		}
-	return _resume_pending_interaction(actor, topology, movement_result)
+	var queued: Dictionary = pending_crafting.duplicate(true)
+	var recipe_id := str(queued.get("recipe_id", ""))
+	var count: int = max(1, int(queued.get("count", 1)))
+	var recipes: Dictionary = _dictionary_or_empty(queued.get("recipe_library", {}))
+	var crafting_context: Dictionary = _dictionary_or_empty(queued.get("crafting_context", {}))
+	var validation: Dictionary = _crafting_runner.validate_craft_recipe(self, _progression_rules, actor.actor_id, recipe_id, recipes, crafting_context)
+	if not bool(validation.get("success", false)):
+		validation["pending_crafting"] = queued.duplicate(true)
+		return validation
+	var required_ap: float = max(0.0, float(queued.get("required_ap", _craft_command_ap_cost(recipe_id, recipes, count, _dictionary_or_empty(queued.get("command", {}))))))
+	var progress_ap: float = clampf(float(queued.get("progress_ap", 0.0)), 0.0, required_ap)
+	var remaining_ap: float = max(0.0, required_ap - progress_ap)
+	if remaining_ap > 0.0 and actor.ap > 0.0:
+		var spent_ap: float = min(actor.ap, remaining_ap)
+		_spend_ap(actor, spent_ap, "pending_craft:%s" % recipe_id)
+		progress_ap += spent_ap
+		remaining_ap = max(0.0, required_ap - progress_ap)
+	if remaining_ap > 0.0:
+		pending_crafting = _pending_crafting_payload(actor, recipe_id, count, recipes, crafting_context, _dictionary_or_empty(queued.get("command", {})), required_ap, 0.0, progress_ap)
+		_emit("crafting_queued", pending_crafting.duplicate(true))
+		return {
+			"success": true,
+			"resumed": true,
+			"completed": false,
+			"kind": "pending_crafting",
+			"reason": "ap_insufficient_craft_queued",
+			"movement_result": movement_result,
+			"pending_crafting": pending_crafting.duplicate(true),
+		}
+	pending_crafting.clear()
+	var result: Dictionary = {}
+	if count == 1:
+		result = craft_recipe(actor.actor_id, recipe_id, recipes, crafting_context)
+	else:
+		result = _craft_recipe_batch(actor.actor_id, recipe_id, count, recipes, crafting_context)
+	result["resumed"] = true
+	result["auto_resumed_crafting"] = true
+	result["resumed_pending_crafting"] = queued
+	result["movement_result"] = movement_result
+	result["ap_cost"] = required_ap
+	result["ap_remaining"] = actor.ap
+	if not result.has("craft_time"):
+		result["craft_time"] = _recipe_craft_time(recipe_id, recipes) * float(max(1, int(result.get("count", count))))
+	_emit("crafting_resumed", {
+		"actor_id": actor.actor_id,
+		"recipe_id": recipe_id,
+		"count": count,
+		"required_ap": required_ap,
+		"progress_ap": progress_ap,
+		"success": bool(result.get("success", false)),
+	})
+	return result
 
 
 func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dictionary:
@@ -4851,6 +4954,7 @@ func _normalize_player_command_result(result: Dictionary, command: Dictionary, c
 			"events": emitted_events,
 			"pending_movement": pending_movement.duplicate(true),
 			"pending_interaction": pending_interaction.duplicate(true),
+			"pending_crafting": pending_crafting.duplicate(true),
 			"turn_state": turn_state.duplicate(true),
 		}
 	if not output.has("ui_feedback"):
@@ -4901,14 +5005,16 @@ func _player_command_log_payload(command: Dictionary, actor_id: int, command_kin
 
 
 func _cancel_pending_for_new_target_command(actor_id: int, command_kind: String, command: Dictionary) -> Dictionary:
-	if pending_movement.is_empty() and pending_interaction.is_empty():
+	if pending_movement.is_empty() and pending_interaction.is_empty() and pending_crafting.is_empty():
 		return {}
 	if not _command_replaces_pending_target(command_kind, command):
 		return {}
 	var movement: Dictionary = pending_movement.duplicate(true)
 	var interaction: Dictionary = pending_interaction.duplicate(true)
+	var crafting: Dictionary = pending_crafting.duplicate(true)
 	pending_movement.clear()
 	pending_interaction.clear()
+	pending_crafting.clear()
 	interaction_menu.clear()
 	var payload := {
 		"actor_id": actor_id,
@@ -4917,6 +5023,7 @@ func _cancel_pending_for_new_target_command(actor_id: int, command_kind: String,
 		"replacement": _player_command_log_payload(command, actor_id, command_kind),
 		"movement": movement,
 		"interaction": interaction,
+		"crafting": crafting,
 	}
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	payload["turn_policy"] = _build_cancel_turn_policy(
@@ -4945,6 +5052,13 @@ func _cancel_pending_for_new_target_command(actor_id: int, command_kind: String,
 			"pending_interaction": interaction.duplicate(true),
 			"replacement_kind": command_kind,
 		})
+	if not crafting.is_empty():
+		_emit("crafting_cancelled", {
+			"actor_id": int(crafting.get("actor_id", actor_id)),
+			"reason": "new_target_command",
+			"pending_crafting": crafting.duplicate(true),
+			"replacement_kind": command_kind,
+		})
 	_emit("pending_cancelled", payload.duplicate(true))
 	return payload
 
@@ -4966,6 +5080,7 @@ func _build_cancel_turn_policy(action_kind: String, reason: String, had_pending:
 		"ap_after_cancel": actor.ap if actor != null else 0.0,
 		"pending_movement": false,
 		"pending_interaction": false,
+		"pending_crafting": false,
 	}
 	for key in extra.keys():
 		policy[key] = extra[key]
@@ -4980,6 +5095,8 @@ func _command_replaces_pending_target(command_kind: String, command: Dictionary)
 			return not _dictionary_or_empty(command.get("target", {})).is_empty()
 		"attack":
 			return int(command.get("target_actor_id", 0)) > 0
+		"craft":
+			return not str(command.get("recipe_id", "")).is_empty()
 		_:
 			return false
 

@@ -94,7 +94,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 			errors.append("location enter should clear active dialogue")
 		if not str(player.active_container_id).is_empty():
 			errors.append("location enter should clear active container")
-	if not simulation.pending_movement.is_empty() or not simulation.pending_interaction.is_empty():
+	if not simulation.pending_movement.is_empty() or not simulation.pending_interaction.is_empty() or not simulation.pending_crafting.is_empty():
 		errors.append("location enter should clear pending runtime state")
 	if not simulation.interaction_menu.is_empty():
 		errors.append("location enter should clear interaction menu")
@@ -123,6 +123,10 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("pending_cancelled should include movement payload")
 	if _dictionary_or_empty(pending_payload.get("interaction", {})).is_empty():
 		errors.append("pending_cancelled should include interaction payload")
+	if _dictionary_or_empty(pending_payload.get("crafting", {})).is_empty():
+		errors.append("pending_cancelled should include crafting payload")
+	if _event_count(simulation.snapshot(), "crafting_cancelled") <= 0:
+		errors.append("location enter should emit crafting_cancelled for pending crafting")
 
 	var restored: Dictionary = _roundtrip_snapshot(simulation.snapshot())
 	if restored.get("active_map_id", "") != "forest":
@@ -150,6 +154,15 @@ func _prepare_runtime_ui_state_for_location_change(simulation: RefCounted) -> vo
 	simulation.pending_interaction = {
 		"actor_id": 1,
 		"target": {"target_type": "self"},
+	}
+	simulation.pending_crafting = {
+		"kind": "pending_crafting",
+		"actor_id": 1,
+		"recipe_id": "recipe_bandage_basic",
+		"count": 1,
+		"required_ap": 2.0,
+		"progress_ap": 0.5,
+		"remaining_ap": 1.5,
 	}
 	simulation.interaction_menu = {
 		"active": true,

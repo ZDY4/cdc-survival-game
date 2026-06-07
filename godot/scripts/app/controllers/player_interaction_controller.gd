@@ -153,15 +153,17 @@ func _build_clear_selection_turn_policy(reason: String, previous_target: Diction
 	var snapshot: Dictionary = simulation.snapshot() if simulation != null and simulation.has_method("snapshot") else {}
 	var pending_movement: Dictionary = _dictionary_or_empty(snapshot.get("pending_movement", {}))
 	var pending_interaction: Dictionary = _dictionary_or_empty(snapshot.get("pending_interaction", {}))
+	var pending_crafting: Dictionary = _dictionary_or_empty(snapshot.get("pending_crafting", {}))
 	var current_actor: Dictionary = _dictionary_or_empty(snapshot.get("current_control_actor", {}))
 	return {
 		"action_kind": "clear_selection",
 		"reason": reason,
 		"had_selection": not previous_target.is_empty(),
 		"had_prompt": not previous_prompt.is_empty(),
-		"had_pending": not pending_movement.is_empty() or not pending_interaction.is_empty(),
+		"had_pending": not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty(),
 		"pending_movement": pending_movement.duplicate(true),
 		"pending_interaction": pending_interaction.duplicate(true),
+		"pending_crafting": pending_crafting.duplicate(true),
 		"ap_after": float(current_actor.get("ap", 0.0)),
 		"affordable_ap_threshold": float(current_actor.get("affordable_ap_threshold", 1.0)),
 		"auto_advanced": false,

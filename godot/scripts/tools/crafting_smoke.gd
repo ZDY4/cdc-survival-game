@@ -86,20 +86,50 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	if float(batch.get("ap_cost", 0.0)) != 2.0 or not is_equal_approx(player.ap, batch_ap_before - 2.0):
 		errors.append("batch crafting should spend AP based on craft_time")
 	player.inventory["1011"] = 2
-	player.ap = 0.0
-	var insufficient_ap_craft: Dictionary = simulation.submit_player_command({
+	player.ap = 0.5
+	var queued_events_before := _event_count(simulation.snapshot(), "crafting_queued")
+	var crafted_events_before := _event_count(simulation.snapshot(), "recipe_crafted")
+	var queued_craft: Dictionary = simulation.submit_player_command({
 		"kind": "craft",
 		"actor_id": 1,
 		"recipe_id": "recipe_bandage_basic",
 		"count": 1,
 		"recipe_library": recipes,
+		"topology": {},
 	})
-	if str(insufficient_ap_craft.get("reason", "")) != "ap_insufficient_craft":
-		errors.append("crafting command should reject when AP is insufficient")
+	if not bool(queued_craft.get("success", false)) or str(queued_craft.get("kind", "")) != "pending_crafting":
+		errors.append("AP-short crafting should queue pending crafting: %s" % queued_craft)
+	_expect_turn_policy(errors, queued_craft, "craft", false, "queued pending crafting")
+	if str(queued_craft.get("reason", "")) != "ap_insufficient_craft_queued":
+		errors.append("AP-short crafting should report queued reason")
 	if int(player.inventory.get("1011", 0)) != 2:
-		errors.append("AP rejected crafting should not consume materials")
+		errors.append("queued crafting should not consume materials before completion")
 	if int(player.inventory.get("1006", 0)) != 4:
-		errors.append("AP rejected crafting should not add output")
+		errors.append("queued crafting should not add output before completion")
+	var pending_crafting: Dictionary = _dictionary_or_empty(simulation.snapshot().get("pending_crafting", {}))
+	if pending_crafting.is_empty():
+		errors.append("queued crafting should persist pending_crafting")
+	if float(pending_crafting.get("progress_ap", 0.0)) <= 0.0 or float(pending_crafting.get("remaining_ap", 0.0)) <= 0.0:
+		errors.append("pending crafting should expose progress and remaining AP: %s" % pending_crafting)
+	if _event_count(simulation.snapshot(), "crafting_queued") <= queued_events_before:
+		errors.append("queued crafting should emit crafting_queued")
+	var resume_result: Dictionary = simulation.submit_player_command({
+		"kind": "wait",
+		"actor_id": 1,
+		"topology": {},
+	})
+	if not bool(resume_result.get("success", false)):
+		errors.append("wait should resume pending crafting: %s" % resume_result)
+	if not simulation.snapshot().get("pending_crafting", {}).is_empty():
+		errors.append("pending crafting should clear after enough AP is restored")
+	if int(player.inventory.get("1011", 0)) != 0:
+		errors.append("resumed crafting should consume queued materials")
+	if int(player.inventory.get("1006", 0)) != 5:
+		errors.append("resumed crafting should add queued output")
+	if _event_count(simulation.snapshot(), "recipe_crafted") != crafted_events_before + 1:
+		errors.append("resumed crafting should emit recipe_crafted once")
+	if _event_count(simulation.snapshot(), "crafting_resumed") <= 0:
+		errors.append("resumed crafting should emit crafting_resumed")
 	player.ap = 6.0
 
 	var recipe_locked: Dictionary = simulation.craft_recipe(1, "recipe_advanced_knife", recipes)

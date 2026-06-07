@@ -2066,7 +2066,7 @@ func _runtime_has_pending() -> bool:
 	if simulation == null:
 		return false
 	var snapshot: Dictionary = simulation.snapshot()
-	return not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty()
+	return not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_crafting", {})).is_empty()
 
 
 func _actor_grid(actor_id: int) -> Dictionary:

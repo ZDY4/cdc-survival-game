@@ -35,6 +35,7 @@ func enter_location(simulation: RefCounted, actor_id: int, location_id: String, 
 	simulation.active_location_id = normalized_location_id
 	simulation.active_entry_point_id = entry_point_id
 	simulation.start_entry_point_id = entry_point_id
+	_clear_runtime_ui_state(simulation, actor, actor_id, normalized_location_id)
 	var combat_end: Dictionary = {}
 	if previous_map_id != map_id and simulation.has_method("force_end_combat"):
 		combat_end = simulation.call("force_end_combat", "map_changed", {
@@ -43,7 +44,6 @@ func enter_location(simulation: RefCounted, actor_id: int, location_id: String, 
 			"location_id": normalized_location_id,
 			"source": "enter_location",
 		})
-	_clear_runtime_ui_state(simulation, actor, actor_id, normalized_location_id)
 	simulation.emit_event("location_entered", {
 		"actor_id": actor_id,
 		"location_id": normalized_location_id,
@@ -84,16 +84,25 @@ func _clear_runtime_ui_state(simulation: RefCounted, actor: RefCounted, actor_id
 		})
 	var pending_movement: Dictionary = simulation.pending_movement.duplicate(true)
 	var pending_interaction: Dictionary = simulation.pending_interaction.duplicate(true)
-	var had_pending := not pending_movement.is_empty() or not pending_interaction.is_empty()
+	var pending_crafting: Dictionary = simulation.pending_crafting.duplicate(true)
+	var had_pending := not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty()
 	simulation.pending_movement.clear()
 	simulation.pending_interaction.clear()
+	simulation.pending_crafting.clear()
 	simulation.interaction_menu.clear()
 	if had_pending:
+		if not pending_crafting.is_empty():
+			simulation.emit_event("crafting_cancelled", {
+				"actor_id": actor_id,
+				"reason": "location_changed:%s" % location_id,
+				"pending_crafting": pending_crafting.duplicate(true),
+			})
 		simulation.emit_event("pending_cancelled", {
 			"actor_id": actor_id,
 			"reason": "location_changed:%s" % location_id,
 			"movement": pending_movement,
 			"interaction": pending_interaction,
+			"crafting": pending_crafting,
 		})
 
 
