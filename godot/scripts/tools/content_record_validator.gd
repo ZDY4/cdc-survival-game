@@ -4,6 +4,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const AiRecordValidator = preload("res://scripts/tools/ai_record_validator.gd")
 const ContentBasicRecordValidator = preload("res://scripts/tools/content_basic_record_validator.gd")
 const ContentSchemaMigration = preload("res://scripts/data/content_schema_migration.gd")
+const JsonSourceLocator = preload("res://scripts/tools/json_source_locator.gd")
 const JsonRecordValidator = preload("res://scripts/tools/json_record_validator.gd")
 const NarrativeRecordValidator = preload("res://scripts/tools/narrative_record_validator.gd")
 const WorldRecordValidator = preload("res://scripts/tools/world_record_validator.gd")
@@ -93,6 +94,8 @@ func _issue(severity: String, field: String, code: String, message: String) -> D
 func _with_location(issues: Array[Dictionary], domain: String, id_value: String, path: String) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	var relative_path := _repo_relative_path(path)
+	var source_text := _read_source_text(path)
+	var source_locator := JsonSourceLocator.new()
 	for issue in issues:
 		var data: Dictionary = _dictionary_or_empty(issue).duplicate(true)
 		var field := str(data.get("field", "$"))
@@ -103,7 +106,12 @@ func _with_location(issues: Array[Dictionary], domain: String, id_value: String,
 		data["id"] = id_value
 		data["path"] = path
 		data["relative_path"] = relative_path
-		data["location"] = "%s:%s" % [relative_path, json_path] if not relative_path.is_empty() else json_path
+		var source_location := source_locator.locate(source_text, json_path) if not source_text.is_empty() else {}
+		if not source_location.is_empty():
+			data["line"] = int(source_location.get("line", 0))
+			data["column"] = int(source_location.get("column", 0))
+			data["line_column"] = "%d:%d" % [int(data["line"]), int(data["column"])]
+		data["location"] = _format_location(relative_path, json_path, data)
 		output.append(data)
 	return output
 
@@ -129,6 +137,22 @@ func _repo_relative_path(path: String) -> String:
 	if index >= 0:
 		return normalized.substr(index + 1)
 	return normalized
+
+
+func _format_location(relative_path: String, json_path: String, issue: Dictionary) -> String:
+	var line_column := str(issue.get("line_column", "")).strip_edges()
+	var path_part := relative_path if not relative_path.is_empty() else "<unknown>"
+	if not line_column.is_empty() and relative_path != "<unknown>":
+		return "%s:%s:%s" % [path_part, line_column, json_path]
+	if not relative_path.is_empty():
+		return "%s:%s" % [relative_path, json_path]
+	return json_path
+
+
+func _read_source_text(path: String) -> String:
+	if path.strip_edges().is_empty() or not FileAccess.file_exists(path):
+		return ""
+	return FileAccess.get_file_as_string(path)
 
 
 func _validate_appearance(id_value: String, record: Dictionary, issues: Array[Dictionary]) -> void:

@@ -732,12 +732,17 @@ func _expect_issue_location(errors: Array[String], validation: Dictionary, code:
 		var json_path := str(issue_data.get("json_path", ""))
 		var relative_path := str(issue_data.get("relative_path", ""))
 		var location := str(issue_data.get("location", ""))
+		var line := int(issue_data.get("line", 0))
+		var column := int(issue_data.get("column", 0))
+		var line_column := str(issue_data.get("line_column", ""))
 		if json_path != expected_json_path:
 			errors.append("%s: json_path expected %s, got %s" % [context, expected_json_path, issue_data])
 		if not relative_path.begins_with(expected_relative_prefix):
 			errors.append("%s: relative_path should start with %s, got %s" % [context, expected_relative_prefix, issue_data])
-		if not location.contains(relative_path) or not location.contains(expected_json_path):
-			errors.append("%s: location should combine file and json path, got %s" % [context, issue_data])
+		if line <= 0 or column <= 0 or line_column != "%d:%d" % [line, column]:
+			errors.append("%s: issue should include JSON source line/column, got %s" % [context, issue_data])
+		if not location.contains(relative_path) or not location.contains(expected_json_path) or not location.contains(line_column):
+			errors.append("%s: location should combine file, line/column and json path, got %s" % [context, issue_data])
 		return
 	errors.append("%s: missing issue code %s in %s" % [context, code, validation.get("issues", [])])
 
