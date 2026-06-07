@@ -40,6 +40,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills panel missing medicine skill row")
 	if not _skill_line_has_icon(game_root, "survival", "res://assets/icons/skills/survival.svg"):
 		errors.append("survival skill row should render migrated skill icon")
+	if _bind_button(game_root, "survival") == null or not str(_bind_button(game_root, "survival").tooltip_text).contains("未学习"):
+		errors.append("unlearned passive bind button should use reason catalog disabled tooltip")
 	var survival_thumbnail := _dictionary_or_empty(_skill_snapshot(game_root, "survival").get("thumbnail_asset", {}))
 	if str(survival_thumbnail.get("resource_path", "")) != "res://assets/icons/skills/survival.svg" or str(survival_thumbnail.get("thumbnail_domain", "")) != "skill":
 		errors.append("survival skill snapshot should expose thumbnail asset: %s" % survival_thumbnail)
@@ -153,6 +155,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("learning from skills panel should emit skill_learned")
 	if not _feedback_line(game_root).contains("已学习 生存本能"):
 		errors.append("learning passive skill should show learned feedback")
+	if _bind_button(game_root, "survival") == null or not str(_bind_button(game_root, "survival").tooltip_text).contains("被动技能"):
+		errors.append("learned passive bind button should use reason catalog disabled tooltip")
 
 	game_root.simulation.grant_skill_points(1, 1, "skills_ui_smoke")
 	game_root.refresh_skills_panel()

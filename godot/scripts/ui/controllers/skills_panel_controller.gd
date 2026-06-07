@@ -1,6 +1,7 @@
 extends Control
 
 const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 const CONTEXT_INSPECT := 1
 const CONTEXT_LEARN := 2
@@ -26,6 +27,7 @@ var _selected_skill_id := ""
 var _pending_learn_skill: Dictionary = {}
 var _learn_feedback_text := ""
 var _last_snapshot: Dictionary = {}
+var _reason_catalog := ReasonCatalog.new()
 
 
 func _ready() -> void:
@@ -208,17 +210,17 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 		line.accept_event()
 		_open_context_menu_for_skill(skill.duplicate(true), line.get_global_mouse_position())
 	)
-	var learn_button := _button("LearnButton", "+", "学习 %s" % skill.get("name", skill_id), not bool(skill.get("can_learn", false)))
+	var learn_button := _button("LearnButton", "+", _learn_button_tooltip(skill), not bool(skill.get("can_learn", false)))
 	learn_button.pressed.connect(func() -> void:
 		_open_learn_confirm(skill.duplicate(true))
 	, CONNECT_DEFERRED)
-	var bind_button := _button("BindButton", "B", "绑定 %s 到第一个空快捷栏" % skill.get("name", skill_id), not bool(skill.get("can_bind", false)))
+	var bind_button := _button("BindButton", "B", _bind_button_tooltip(skill), not bool(skill.get("can_bind", false)))
 	bind_button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("bind_player_skill_to_hotbar"):
 			root.bind_player_skill_to_hotbar("", skill_id)
 	, CONNECT_DEFERRED)
-	var use_button := _button("UseButton", "U", "使用 %s" % skill.get("name", skill_id), not bool(skill.get("can_use", false)))
+	var use_button := _button("UseButton", "U", _use_button_tooltip(skill), not bool(skill.get("can_use", false)))
 	use_button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("use_hotbar_slot"):
@@ -514,7 +516,7 @@ func _reason_text(skill: Dictionary) -> String:
 					int(data.get("required", 0)),
 				])
 			return "属性不足 %s" % ", ".join(parts)
-	return str(skill.get("learn_reason", ""))
+	return _skill_reason_text(str(skill.get("learn_reason", "")))
 
 
 func _skill_tooltip(skill: Dictionary) -> String:
@@ -614,7 +616,7 @@ func _use_reason_text(skill: Dictionary) -> String:
 			return " | 未绑定"
 		"passive", "not_learned", "":
 			return ""
-	return " | %s" % skill.get("use_reason", "")
+	return " | %s" % _skill_reason_text(str(skill.get("use_reason", "")))
 
 
 func _use_state_text(skill: Dictionary) -> String:
@@ -633,7 +635,39 @@ func _use_state_text(skill: Dictionary) -> String:
 			return "被动"
 		"":
 			return "无"
-	return str(skill.get("use_reason", ""))
+	return _skill_reason_text(str(skill.get("use_reason", "")))
+
+
+func _learn_button_tooltip(skill: Dictionary) -> String:
+	var skill_name := str(skill.get("name", skill.get("skill_id", "")))
+	if bool(skill.get("can_learn", false)):
+		return "学习 %s" % skill_name
+	return "暂不能学习 %s：%s" % [skill_name, _reason_text(skill)]
+
+
+func _bind_button_tooltip(skill: Dictionary) -> String:
+	var skill_name := str(skill.get("name", skill.get("skill_id", "")))
+	if bool(skill.get("can_bind", false)):
+		return "绑定 %s 到第一个空快捷栏" % skill_name
+	if int(skill.get("level", 0)) <= 0:
+		return "暂不能绑定 %s：%s" % [skill_name, _skill_reason_text("not_learned")]
+	if str(skill.get("activation_mode", "passive")) == "passive":
+		return "暂不能绑定 %s：%s" % [skill_name, _skill_reason_text("passive")]
+	return "暂不能绑定 %s：%s" % [skill_name, _skill_reason_text("skill_not_active")]
+
+
+func _use_button_tooltip(skill: Dictionary) -> String:
+	var skill_name := str(skill.get("name", skill.get("skill_id", "")))
+	if bool(skill.get("can_use", false)):
+		return "使用 %s" % skill_name
+	return "暂不能使用 %s：%s" % [skill_name, _use_state_text(skill)]
+
+
+func _skill_reason_text(reason: String) -> String:
+	var normalized := reason.strip_edges()
+	if normalized.is_empty():
+		return ""
+	return _reason_catalog.disabled_text_for(normalized)
 
 
 func _resource_cost_suffix(skill: Dictionary) -> String:

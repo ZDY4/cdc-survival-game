@@ -101,6 +101,14 @@ const REASONS := {
 	"drop_zone_source_mismatch": {"category": "trade", "text": "拖拽来源不匹配"},
 	"trade_item_rejected": {"category": "trade", "text": "交易物品被拒绝"},
 	"unknown_trade_item": {"category": "trade", "text": "未知交易物品"},
+	"maxed": {"category": "skill", "text": "技能已满级"},
+	"missing_skill_points": {"category": "skill", "text": "缺少技能点"},
+	"missing_prerequisites": {"category": "skill", "text": "缺少前置技能"},
+	"missing_attributes": {"category": "skill", "text": "属性不足"},
+	"not_learned": {"category": "skill", "text": "技能未学习"},
+	"passive": {"category": "skill", "text": "被动技能不可主动使用"},
+	"unbound": {"category": "skill", "text": "技能未绑定"},
+	"cooldown": {"category": "skill", "text": "技能冷却中"},
 	"skill_not_learned": {"category": "skill", "text": "技能未学习"},
 	"skill_not_active": {"category": "skill", "text": "技能不是主动技能"},
 	"skill_on_cooldown": {"category": "skill", "text": "技能冷却中"},
@@ -304,6 +312,34 @@ const REASON_METADATA := {
 	},
 	"skill_on_cooldown": {
 		"payload_fields": ["skill_id", "cooldown_remaining", "actor_id"],
+		"disabled_text": "技能冷却中",
+	},
+	"missing_skill_points": {
+		"payload_fields": ["skill_id", "available_skill_points"],
+		"disabled_text": "缺技能点",
+	},
+	"missing_prerequisites": {
+		"payload_fields": ["skill_id", "missing_prerequisites"],
+		"disabled_text": "缺少前置技能",
+	},
+	"missing_attributes": {
+		"payload_fields": ["skill_id", "missing_attributes"],
+		"disabled_text": "属性不足",
+	},
+	"not_learned": {
+		"payload_fields": ["skill_id", "level"],
+		"disabled_text": "未学习",
+	},
+	"passive": {
+		"payload_fields": ["skill_id", "activation_mode"],
+		"disabled_text": "被动技能",
+	},
+	"unbound": {
+		"payload_fields": ["skill_id", "bound_slot"],
+		"disabled_text": "未绑定",
+	},
+	"cooldown": {
+		"payload_fields": ["skill_id", "cooldown_remaining"],
 		"disabled_text": "技能冷却中",
 	},
 }
