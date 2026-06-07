@@ -44,6 +44,14 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		"total_weight": total_weight,
 		"max_weight": float(capacity.get("max_weight", 0.0)),
 		"remaining_weight": float(capacity.get("remaining_weight", 0.0)),
+		"current_item_count": int(capacity.get("current_item_count", items.size())),
+		"max_items": int(capacity.get("max_items", -1)),
+		"remaining_items": int(capacity.get("remaining_items", -1)),
+		"over_item_capacity": bool(capacity.get("over_item_capacity", false)),
+		"current_stack_count": int(capacity.get("current_stack_count", 0)),
+		"max_stacks": int(capacity.get("max_stacks", -1)),
+		"remaining_stacks": int(capacity.get("remaining_stacks", -1)),
+		"over_stack_capacity": bool(capacity.get("over_stack_capacity", false)),
 		"over_capacity": bool(capacity.get("over_capacity", false)),
 		"feedback": _feedback_snapshot(feedback),
 	}
@@ -476,13 +484,7 @@ func _feedback_text(feedback: Dictionary) -> String:
 		"not_enough_items":
 			return "背包中没有足够的 %s，需要 %d，当前 %d。" % [item_name, int(feedback.get("required", count)), int(feedback.get("current", 0))]
 		"inventory_over_capacity":
-			return "背包负重不足，加入 %s x%d 后为 %.1f/%.1f kg，超出 %.1f kg。" % [
-				item_name,
-				count,
-				float(feedback.get("projected_weight", 0.0)),
-				float(feedback.get("max_weight", 0.0)),
-				float(feedback.get("over_by", 0.0)),
-			]
+			return _inventory_capacity_text("加入 %s x%d" % [item_name, count], feedback)
 		"item_not_usable":
 			return "%s 不能使用。" % item_name
 		"item_use_forbidden":
@@ -522,6 +524,28 @@ func _use_item_success_text(item_name: String, feedback: Dictionary) -> String:
 		effect_text,
 		int(feedback.get("remaining", 0)),
 		float(feedback.get("ap_remaining", 0.0)),
+	]
+
+
+func _inventory_capacity_text(action_text: String, feedback: Dictionary) -> String:
+	match str(feedback.get("limit_kind", feedback.get("capacity_kind", "weight"))):
+		"items":
+			return "背包物品种类已满，%s 后为 %d/%d 类。" % [
+				action_text,
+				int(feedback.get("projected_item_count", 0)),
+				int(feedback.get("max_items", 0)),
+			]
+		"stacks":
+			return "背包槽位已满，%s 后为 %d/%d 格。" % [
+				action_text,
+				int(feedback.get("projected_stack_count", 0)),
+				int(feedback.get("max_stacks", 0)),
+			]
+	return "背包负重不足，%s 后为 %.1f/%.1f kg，超出 %.1f kg。" % [
+		action_text,
+		float(feedback.get("projected_weight", 0.0)),
+		float(feedback.get("max_weight", 0.0)),
+		float(feedback.get("over_by", 0.0)),
 	]
 
 

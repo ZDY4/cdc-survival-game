@@ -198,6 +198,66 @@ func _run_checks(game_root: Node) -> Array[String]:
 	capacity_player.equipment = capacity_equipment_before
 	game_root.refresh_container_panel()
 
+	capacity_session_before = game_root.simulation.container_sessions.get("survivor_outpost_01_clinic_supply_cabinet", {}).duplicate(true)
+	capacity_session = capacity_session_before.duplicate(true)
+	capacity_inventory_before = capacity_player.inventory.duplicate(true)
+	capacity_order_before = capacity_player.inventory_order.duplicate()
+	var capacity_stacks_before: Dictionary = capacity_player.inventory_stacks.duplicate(true)
+	var capacity_attributes_before: Dictionary = capacity_player.combat_attributes.duplicate(true)
+	capacity_player.inventory.clear()
+	capacity_player.inventory_order.clear()
+	capacity_player.inventory_stacks.clear()
+	capacity_player.combat_attributes["max_inventory_items"] = 1
+	capacity_player.inventory["1006"] = 1
+	capacity_player.inventory_order.append("1006")
+	capacity_player.inventory_stacks["1006"] = [1]
+	capacity_session["inventory"] = [{"item_id": "1005", "count": 1}]
+	game_root.simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = capacity_session
+	game_root.refresh_container_panel()
+	var item_limit_take: Dictionary = game_root.take_active_container_item("1005", 1)
+	if str(item_limit_take.get("reason", "")) != "inventory_over_capacity" or str(item_limit_take.get("limit_kind", "")) != "items":
+		errors.append("item-limited container take should report inventory item capacity: %s" % item_limit_take)
+	if not _container_feedback(game_root).contains("物品种类已满"):
+		errors.append("item-limited container take should show item capacity feedback")
+	if int(capacity_player.inventory.get("1005", 0)) != 0:
+		errors.append("failed item-limited container take should not add item")
+	capacity_player.combat_attributes = capacity_attributes_before.duplicate(true)
+	capacity_player.inventory = capacity_inventory_before
+	capacity_player.inventory_stacks = capacity_stacks_before.duplicate(true)
+	_restore_inventory_order(capacity_player, capacity_order_before)
+	game_root.simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = capacity_session_before.duplicate(true)
+	game_root.refresh_container_panel()
+
+	capacity_session_before = game_root.simulation.container_sessions.get("survivor_outpost_01_clinic_supply_cabinet", {}).duplicate(true)
+	capacity_session = capacity_session_before.duplicate(true)
+	capacity_inventory_before = capacity_player.inventory.duplicate(true)
+	capacity_order_before = capacity_player.inventory_order.duplicate()
+	capacity_stacks_before = capacity_player.inventory_stacks.duplicate(true)
+	capacity_attributes_before = capacity_player.combat_attributes.duplicate(true)
+	capacity_player.inventory.clear()
+	capacity_player.inventory_order.clear()
+	capacity_player.inventory_stacks.clear()
+	capacity_player.combat_attributes["max_inventory_stacks"] = 1
+	capacity_player.inventory["1005"] = 10
+	capacity_player.inventory_order.append("1005")
+	capacity_player.inventory_stacks["1005"] = [10]
+	capacity_session["inventory"] = [{"item_id": "1005", "count": 1}]
+	game_root.simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = capacity_session
+	game_root.refresh_container_panel()
+	var stack_limit_take: Dictionary = game_root.take_active_container_item("1005", 1)
+	if str(stack_limit_take.get("reason", "")) != "inventory_over_capacity" or str(stack_limit_take.get("limit_kind", "")) != "stacks":
+		errors.append("stack-limited container take should report inventory stack capacity: %s" % stack_limit_take)
+	if not _container_feedback(game_root).contains("背包槽位已满"):
+		errors.append("stack-limited container take should show stack capacity feedback")
+	if int(capacity_player.inventory.get("1005", 0)) != 10:
+		errors.append("failed stack-limited container take should not add item")
+	capacity_player.combat_attributes = capacity_attributes_before.duplicate(true)
+	capacity_player.inventory = capacity_inventory_before
+	capacity_player.inventory_stacks = capacity_stacks_before.duplicate(true)
+	_restore_inventory_order(capacity_player, capacity_order_before)
+	game_root.simulation.container_sessions["survivor_outpost_01_clinic_supply_cabinet"] = capacity_session_before.duplicate(true)
+	game_root.refresh_container_panel()
+
 	var invalid_take: Dictionary = game_root.take_active_container_item("1031", 0)
 	if invalid_take.get("reason", "") != "invalid_quantity":
 		errors.append("taking zero items should report invalid_quantity")

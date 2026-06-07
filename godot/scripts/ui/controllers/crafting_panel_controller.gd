@@ -1163,8 +1163,6 @@ func _craft_failure_text(reason: String) -> String:
 			return "AP 不足"
 		"ap_insufficient_craft_queued":
 			return "AP 不足，已排队"
-		"inventory_over_capacity":
-			return "背包负重不足"
 		"recipe_output_invalid":
 			return "产物无效"
 		"actor_missing":

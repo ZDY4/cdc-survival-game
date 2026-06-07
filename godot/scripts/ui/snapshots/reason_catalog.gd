@@ -60,7 +60,7 @@ const REASONS := {
 	"unknown_recipe": {"category": "crafting", "text": "未知配方"},
 	"not_enough_items": {"category": "inventory", "text": "物品不足"},
 	"invalid_quantity": {"category": "inventory", "text": "数量无效"},
-	"inventory_over_capacity": {"category": "inventory", "text": "背包负重不足"},
+	"inventory_over_capacity": {"category": "inventory", "text": "背包容量不足"},
 	"ap_insufficient_use_item": {"category": "ap", "text": "AP不足，无法使用物品"},
 	"item_not_usable": {"category": "inventory", "text": "物品不可使用"},
 	"item_use_forbidden": {"category": "inventory", "text": "物品当前禁止使用"},
@@ -343,8 +343,8 @@ const REASON_METADATA := {
 		"disabled_text": "地点切换取消",
 	},
 	"inventory_over_capacity": {
-		"payload_fields": ["item_id", "count", "current_weight", "max_weight"],
-		"disabled_text": "背包负重不足",
+		"payload_fields": ["item_id", "count", "limit_kind", "capacity_kind", "current_weight", "max_weight", "projected_item_count", "max_items", "projected_stack_count", "max_stacks"],
+		"disabled_text": "背包容量不足",
 	},
 	"ap_insufficient_use_item": {
 		"payload_fields": ["item_id", "required_ap", "available_ap"],

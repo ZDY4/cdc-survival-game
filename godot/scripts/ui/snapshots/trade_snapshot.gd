@@ -451,11 +451,7 @@ func _feedback_text(feedback: Dictionary) -> String:
 		"player_stock_insufficient":
 			return "背包库存不足：%s x%d。" % [item_name, count]
 		"inventory_over_capacity":
-			return "背包负重不足，购买后为 %.1f/%.1f kg，超出 %.1f kg。" % [
-				float(feedback.get("projected_weight", 0.0)),
-				float(feedback.get("max_weight", 0.0)),
-				float(feedback.get("over_by", 0.0)),
-			]
+			return _inventory_capacity_text("购买", feedback)
 		"item_not_sellable":
 			return "该物品不可出售：%s。" % item_name
 		"unknown_shop":
@@ -482,6 +478,28 @@ func _feedback_item_name(feedback: Dictionary) -> String:
 		return "物品"
 	var item_data := _item_data(item_id)
 	return str(item_data.get("name", item_id))
+
+
+func _inventory_capacity_text(action_text: String, feedback: Dictionary) -> String:
+	match str(feedback.get("limit_kind", feedback.get("capacity_kind", "weight"))):
+		"items":
+			return "背包物品种类已满，%s后为 %d/%d 类。" % [
+				action_text,
+				int(feedback.get("projected_item_count", 0)),
+				int(feedback.get("max_items", 0)),
+			]
+		"stacks":
+			return "背包槽位已满，%s后为 %d/%d 格。" % [
+				action_text,
+				int(feedback.get("projected_stack_count", 0)),
+				int(feedback.get("max_stacks", 0)),
+			]
+	return "背包负重不足，%s后为 %.1f/%.1f kg，超出 %.1f kg。" % [
+		action_text,
+		float(feedback.get("projected_weight", 0.0)),
+		float(feedback.get("max_weight", 0.0)),
+		float(feedback.get("over_by", 0.0)),
+	]
 
 
 func _equipment_slot_label(slot_id: String) -> String:
