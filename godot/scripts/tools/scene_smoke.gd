@@ -1403,7 +1403,32 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 	var zero_bounds: Array[String] = []
 	var missing_collision_assets: Array[String] = []
 	var asset_diagnostics: Array[Dictionary] = []
+	var external_buffer_total := 0
+	var missing_external_buffers: Array[String] = []
+	var buffer_length_mismatches: Array[String] = []
+	var missing_import_files: Array[String] = []
+	var import_source_mismatches: Array[String] = []
+	var missing_import_uids: Array[String] = []
+	var missing_import_destinations: Array[String] = []
+	var import_uids: Dictionary = {}
 	for asset_path in asset_paths:
+		var source_status := _gltf_source_file_status(asset_path)
+		external_buffer_total += int(source_status.get("external_buffer_count", 0))
+		missing_external_buffers.append_array(_array_or_empty(source_status.get("missing_external_buffers", [])))
+		buffer_length_mismatches.append_array(_array_or_empty(source_status.get("buffer_length_mismatches", [])))
+		var import_status := _gltf_import_status(asset_path)
+		if not bool(import_status.get("import_file_exists", false)):
+			missing_import_files.append(asset_path)
+		if bool(import_status.get("source_mismatch", false)):
+			import_source_mismatches.append(asset_path)
+		var import_uid := str(import_status.get("uid", "")).strip_edges()
+		if import_uid.is_empty():
+			missing_import_uids.append(asset_path)
+		else:
+			if not import_uids.has(import_uid):
+				import_uids[import_uid] = []
+			(import_uids[import_uid] as Array).append(asset_path)
+		missing_import_destinations.append_array(_array_or_empty(import_status.get("missing_destinations", [])))
 		if not ResourceLoader.exists(asset_path):
 			errors.append("gltf asset missing imported resource: %s" % asset_path)
 			continue
@@ -1434,6 +1459,9 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 			"path": asset_path,
 			"mesh_count": mesh_count,
 			"material_count": material_count,
+			"external_buffer_count": int(source_status.get("external_buffer_count", 0)),
+			"import_uid": import_uid,
+			"import_destinations": _array_or_empty(import_status.get("destinations", [])),
 			"collision_shapes": collision_count,
 			"physics_bodies": physics_count,
 			"bounds_size": _vector3_summary(bounds.size),
@@ -1448,11 +1476,198 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 	counts["gltf_assets_missing_collision"] = missing_collision_assets
 	counts["gltf_assets_missing_collision_count"] = missing_collision_assets.size()
 	counts["gltf_asset_diagnostics"] = asset_diagnostics
+	counts["gltf_external_buffer_count"] = external_buffer_total
+	counts["gltf_missing_external_buffers"] = missing_external_buffers
+	counts["gltf_missing_external_buffer_count"] = missing_external_buffers.size()
+	counts["gltf_buffer_length_mismatches"] = buffer_length_mismatches
+	counts["gltf_buffer_length_mismatch_count"] = buffer_length_mismatches.size()
+	counts["gltf_missing_import_files"] = missing_import_files
+	counts["gltf_missing_import_file_count"] = missing_import_files.size()
+	counts["gltf_import_source_mismatches"] = import_source_mismatches
+	counts["gltf_import_source_mismatch_count"] = import_source_mismatches.size()
+	counts["gltf_missing_import_uids"] = missing_import_uids
+	counts["gltf_missing_import_uid_count"] = missing_import_uids.size()
+	counts["gltf_missing_import_destinations"] = missing_import_destinations
+	counts["gltf_missing_import_destination_count"] = missing_import_destinations.size()
+	counts["gltf_import_uid_count"] = import_uids.size()
+	var duplicate_uids := _duplicate_uid_entries(import_uids)
+	counts["gltf_duplicate_import_uids"] = duplicate_uids
+	counts["gltf_duplicate_import_uid_count"] = duplicate_uids.size()
+	_validate_asset_uid_sidecars(counts, import_uids, errors)
 	_apply_visual_diagnostic_counts(counts, "gltf", diagnostic_totals)
 	if asset_paths.is_empty():
 		errors.append("scene smoke expected glTF assets under res://assets")
+	for missing_path in missing_external_buffers:
+		errors.append("gltf asset missing external buffer: %s" % missing_path)
+	for mismatch in buffer_length_mismatches:
+		errors.append("gltf external buffer byteLength mismatch: %s" % mismatch)
+	for asset_path in missing_import_files:
+		errors.append("gltf asset missing .import file: %s.import" % asset_path)
+	for asset_path in import_source_mismatches:
+		errors.append("gltf .import source_file mismatch: %s.import" % asset_path)
+	for asset_path in missing_import_uids:
+		errors.append("gltf .import missing uid: %s.import" % asset_path)
+	for destination in missing_import_destinations:
+		errors.append("gltf .import missing imported destination: %s" % destination)
+	for duplicate in duplicate_uids:
+		errors.append("resource uid reused by multiple imported assets: %s" % duplicate)
 	if int(diagnostic_totals.get("zero_scale_nodes", 0)) > 0:
 		errors.append("gltf asset nodes should not use zero scale")
+
+
+func _gltf_source_file_status(asset_path: String) -> Dictionary:
+	if asset_path.ends_with(".glb"):
+		return {
+			"external_buffer_count": 0,
+			"missing_external_buffers": [],
+			"buffer_length_mismatches": [],
+		}
+	var json_text := FileAccess.get_file_as_string(asset_path)
+	var parsed: Variant = JSON.parse_string(json_text)
+	var document := _dictionary_or_empty(parsed)
+	var buffers := _array_or_empty(document.get("buffers", []))
+	var missing_external_buffers: Array[String] = []
+	var buffer_length_mismatches: Array[String] = []
+	var external_buffer_count := 0
+	for index in range(buffers.size()):
+		var buffer := _dictionary_or_empty(buffers[index])
+		var uri := str(buffer.get("uri", "")).strip_edges()
+		if uri.is_empty() or uri.begins_with("data:"):
+			continue
+		external_buffer_count += 1
+		var buffer_path := _asset_relative_path(asset_path, uri)
+		if not FileAccess.file_exists(buffer_path):
+			missing_external_buffers.append(buffer_path)
+			continue
+		var expected_length := int(buffer.get("byteLength", -1))
+		if expected_length >= 0:
+			var actual_length := _file_length(buffer_path)
+			if actual_length != expected_length:
+				buffer_length_mismatches.append("%s expected=%d actual=%d" % [buffer_path, expected_length, actual_length])
+	return {
+		"external_buffer_count": external_buffer_count,
+		"missing_external_buffers": missing_external_buffers,
+		"buffer_length_mismatches": buffer_length_mismatches,
+	}
+
+
+func _gltf_import_status(asset_path: String) -> Dictionary:
+	var import_path := "%s.import" % asset_path
+	if not FileAccess.file_exists(import_path):
+		return {
+			"import_file_exists": false,
+			"uid": "",
+			"destinations": [],
+			"missing_destinations": [],
+			"source_mismatch": false,
+		}
+	var config := ConfigFile.new()
+	var load_error := config.load(import_path)
+	if load_error != OK:
+		return {
+			"import_file_exists": true,
+			"uid": "",
+			"destinations": [],
+			"missing_destinations": [],
+			"source_mismatch": true,
+		}
+	var source_file := str(config.get_value("deps", "source_file", "")).strip_edges()
+	var source_mismatch := source_file != asset_path
+	var destinations := _array_or_empty(config.get_value("deps", "dest_files", []))
+	var missing_destinations: Array[String] = []
+	for destination_value in destinations:
+		var destination := str(destination_value).strip_edges()
+		if destination.is_empty():
+			continue
+		if not FileAccess.file_exists(destination):
+			missing_destinations.append(destination)
+	return {
+		"import_file_exists": true,
+		"uid": str(config.get_value("remap", "uid", "")).strip_edges(),
+		"destinations": destinations,
+		"missing_destinations": missing_destinations,
+		"source_mismatch": source_mismatch,
+	}
+
+
+func _validate_asset_uid_sidecars(counts: Dictionary, import_uids: Dictionary, errors: Array[String]) -> void:
+	var sidecar_paths: Array[String] = []
+	_collect_uid_sidecars("res://assets", sidecar_paths, errors)
+	sidecar_paths.sort()
+	var invalid_sidecars: Array[String] = []
+	var missing_resources: Array[String] = []
+	var all_uids := import_uids.duplicate(true)
+	for sidecar_path in sidecar_paths:
+		var uid := FileAccess.get_file_as_string(sidecar_path).strip_edges()
+		if not uid.begins_with("uid://"):
+			invalid_sidecars.append(sidecar_path)
+		var resource_path := sidecar_path.trim_suffix(".uid")
+		if not FileAccess.file_exists(resource_path):
+			missing_resources.append(resource_path)
+		if not uid.is_empty():
+			if not all_uids.has(uid):
+				all_uids[uid] = []
+			(all_uids[uid] as Array).append(sidecar_path)
+	var duplicate_uids := _duplicate_uid_entries(all_uids)
+	counts["asset_uid_sidecar_count"] = sidecar_paths.size()
+	counts["asset_invalid_uid_sidecars"] = invalid_sidecars
+	counts["asset_invalid_uid_sidecar_count"] = invalid_sidecars.size()
+	counts["asset_uid_sidecars_missing_resources"] = missing_resources
+	counts["asset_uid_sidecars_missing_resource_count"] = missing_resources.size()
+	counts["asset_duplicate_resource_uids"] = duplicate_uids
+	counts["asset_duplicate_resource_uid_count"] = duplicate_uids.size()
+	for sidecar_path in invalid_sidecars:
+		errors.append("asset .uid sidecar should contain uid:// value: %s" % sidecar_path)
+	for resource_path in missing_resources:
+		errors.append("asset .uid sidecar points to missing resource: %s" % resource_path)
+	for duplicate in duplicate_uids:
+		errors.append("resource uid reused by multiple assets: %s" % duplicate)
+
+
+func _collect_uid_sidecars(root_path: String, output: Array[String], errors: Array[String]) -> void:
+	var dir := DirAccess.open(root_path)
+	if dir == null:
+		errors.append("cannot open asset directory %s" % root_path)
+		return
+	dir.list_dir_begin()
+	while true:
+		var entry := dir.get_next()
+		if entry.is_empty():
+			break
+		var path := "%s/%s" % [root_path, entry]
+		if dir.current_is_dir():
+			_collect_uid_sidecars(path, output, errors)
+		elif entry.ends_with(".uid"):
+			output.append(path)
+	dir.list_dir_end()
+
+
+func _duplicate_uid_entries(uid_sources: Dictionary) -> Array[String]:
+	var duplicates: Array[String] = []
+	for uid in uid_sources.keys():
+		var sources := _array_or_empty(uid_sources.get(uid, []))
+		if sources.size() > 1:
+			var source_texts: Array[String] = []
+			for source in sources:
+				source_texts.append(str(source))
+			source_texts.sort()
+			duplicates.append("%s -> %s" % [str(uid), ", ".join(source_texts)])
+	duplicates.sort()
+	return duplicates
+
+
+func _asset_relative_path(asset_path: String, relative_path: String) -> String:
+	var separator_index := asset_path.rfind("/")
+	if separator_index < 0:
+		return relative_path
+	return "%s/%s" % [asset_path.substr(0, separator_index), relative_path]
+
+
+func _file_length(path: String) -> int:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return -1
+	return int(file.get_length())
 
 
 func _collect_gltf_assets(root_path: String, output: Array[String], errors: Array[String]) -> void:
