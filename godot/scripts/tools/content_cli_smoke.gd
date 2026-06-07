@@ -8,6 +8,7 @@ const ContentRecordValidator = preload("res://scripts/tools/content_record_valid
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
 const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd")
 const ContentJsonFormatter = preload("res://scripts/tools/content_json_formatter.gd")
+const ContentSchemaMigrationWriter = preload("res://scripts/tools/content_schema_migration_writer.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
@@ -96,6 +97,7 @@ func _run() -> Array[String]:
 	_expect_format_domain_support(errors, registry)
 	_expect_json_formatter_dry_run(errors)
 	_expect_fix_changed_schema_pending(errors, registry)
+	_expect_schema_migration_writer(errors)
 	_expect_summary_domains(errors, registry)
 	_expect_map_scene_summary(errors, registry)
 	return errors
@@ -836,6 +838,42 @@ func _expect_fix_changed_schema_pending(errors: Array[String], registry: Content
 	var schema := _dictionary_or_empty(ContentRecordValidator.new().validate_record("items", "1006", registry).get("schema_migration", {}))
 	if not bool(schema.get("needs_migration", false)):
 		errors.append("fix changed smoke needs legacy schema fixture for item 1006: %s" % schema)
+
+
+func _expect_schema_migration_writer(errors: Array[String]) -> void:
+	var path := ProjectSettings.globalize_path("user://content_schema_migration_writer_smoke.json")
+	var raw := "{\"id\":\"schema_writer_smoke\",\"name\":\"Schema Writer Smoke\"}\n"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		errors.append("schema migration writer smoke could not create temp file: %s" % error_string(FileAccess.get_open_error()))
+		return
+	file.store_string(raw)
+	file.close()
+
+	var record := {
+		"path": path,
+		"data": {
+			"id": "schema_writer_smoke",
+			"name": "Schema Writer Smoke",
+		},
+	}
+	var writer := ContentSchemaMigrationWriter.new()
+	var preview := writer.migrate_record("items", "schema_writer_smoke", record, {"dry_run": true, "allow_external_path": true})
+	if not bool(preview.get("ok", false)) or not bool(preview.get("changed", false)) or not bool(preview.get("dry_run", false)):
+		errors.append("schema migration writer dry-run should report pending rewrite: %s" % preview)
+	if FileAccess.get_file_as_string(path) != raw:
+		errors.append("schema migration writer dry-run should not rewrite file")
+	var preview_diff: Dictionary = _dictionary_or_empty(preview.get("diff_summary", {}))
+	if not _array_or_empty(preview_diff.get("fields_added", [])).has("schema_version"):
+		errors.append("schema migration writer dry-run should expose schema_version diff: %s" % preview)
+
+	var write := writer.migrate_record("items", "schema_writer_smoke", record, {"allow_external_path": true})
+	if not bool(write.get("ok", false)) or not bool(write.get("changed", false)) or bool(write.get("dry_run", false)):
+		errors.append("schema migration writer should persist migration: %s" % write)
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if typeof(parsed) != TYPE_DICTIONARY or int(parsed.get("schema_version", 0)) != ContentSchemaMigration.CURRENT_SCHEMA_VERSION:
+		errors.append("schema migration writer should write current schema_version, got: %s" % [FileAccess.get_file_as_string(path)])
+	DirAccess.remove_absolute(path)
 
 
 func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -> void:

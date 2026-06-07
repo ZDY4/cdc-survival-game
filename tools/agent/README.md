@@ -185,7 +185,7 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command asset-manifest -Kin
 - `diff-summary changed` 会按 Git status 扫描已迁移内容域，输出每个受支持内容文件的 diff 状态、增删行和 hunk 数，并汇总 `total_added_lines` / `total_removed_lines` / `total_changed_hunks`；`diff-summary --path` 仍用于单文件摘要。
 - `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map` / `shop` / `world_tile` / `appearance` / `ai` / `json`，用于替代旧 `content_tools` 的常用引用查询。
 - `format` 覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `ai` / `json`，只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量；加 `-DryRun` 时输出 `dry_run: true`，批量 `changed` 模式还会输出 `would_rewrite_files`，不落盘。
-- `fix changed` 是批量修复编排入口；第一版复用格式化修复，输出 `formatted_files` / `would_format_files`，并报告仍待 schema migration 写回的 changed 内容记录。
+- `fix changed` 是批量修复编排入口；会复用格式化修复并对 changed 内容执行安全 schema migration 写回，输出 `formatted_files` / `would_format_files`、`schema_migrated_files` / `would_schema_migrate_files`；加 `-DryRun` 时只预览格式化和 schema 写回，不落盘。
 - `asset-manifest all` 输出内容数据中显式引用的 Godot media / model 资产清单，包含领域、记录 id、字段路径、资源类型、解析后的 `res://assets/...` 路径、缺失状态和汇总计数。
 
 ### `test-godot-editor.ps1`

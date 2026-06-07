@@ -10,7 +10,7 @@ summarize, references, validate, format, diff-summary, and asset-manifest comman
 `change_status_summary` line for modified / added / untracked / deleted / renamed records.
 `diff-summary changed` prints per-file line/hunk counts plus aggregate totals for the same changed content scope.
 `format -DryRun` reports whether records would be rewritten without touching files.
-`fix changed` batches safe content repairs; the first Godot implementation applies JSON formatting and reports pending schema migrations.
+`fix changed` batches safe content repairs; it applies JSON formatting and safe schema migration writes for changed content files.
 
 .PARAMETER Command
 Content command to run: locate, summarize, references, validate, format, fix, diff-summary, or asset-manifest.

@@ -7,6 +7,7 @@ const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd"
 const ContentJsonFormatter = preload("res://scripts/tools/content_json_formatter.gd")
 const ContentRecordCliCommands = preload("res://scripts/tools/content_record_cli_commands.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
+const ContentSchemaMigrationWriter = preload("res://scripts/tools/content_schema_migration_writer.gd")
 const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
 
 var _record_commands := ContentRecordCliCommands.new()
@@ -185,11 +186,15 @@ func _fix_changed_command(registry: ContentRegistry, dry_run: bool = false) -> i
 		_print_schema_pending(schema_pending)
 		print("formatted_files: 0")
 		print("would_format_files: 0")
+		print("schema_migrated_files: 0")
+		print("would_schema_migrate_files: 0")
 		print("status: %s" % ("ok" if not schema_pending.is_empty() else "no_supported_changes"))
 		return 0
 
 	var formatted_files := 0
 	var would_format_files := 0
+	var schema_migrated_files := 0
+	var would_schema_migrate_files := 0
 	for relative_path in paths:
 		var report: Dictionary = _format_relative_path(relative_path, registry, {"dry_run": dry_run})
 		if report.is_empty():
@@ -208,9 +213,30 @@ func _fix_changed_command(registry: ContentRegistry, dry_run: bool = false) -> i
 			report.get("id", ""),
 			report.get("relative_path", ""),
 		])
+		var schema_report: Dictionary = _schema_migrate_relative_path(relative_path, registry, {"dry_run": dry_run})
+		if schema_report.is_empty():
+			continue
+		if not bool(schema_report.get("ok", false)):
+			printerr(schema_report.get("message", "failed to migrate schema for %s" % relative_path))
+			return 1
+		if bool(schema_report.get("changed", false)):
+			would_schema_migrate_files += 1
+			if not dry_run:
+				schema_migrated_files += 1
+			var schema_label := "would_schema_migrate" if dry_run else "schema_migrated"
+			print("- [%s] %s %s @ %s status:%s diff:%s" % [
+				schema_label,
+				schema_report.get("kind", ""),
+				schema_report.get("id", ""),
+				schema_report.get("relative_path", ""),
+				schema_report.get("schema_status", ""),
+				ContentSchemaMigrationWriter.diff_text(_dictionary_or_empty(schema_report.get("diff_summary", {}))),
+			])
 	_print_schema_pending(schema_pending)
 	print("formatted_files: %d" % formatted_files)
 	print("would_format_files: %d" % would_format_files)
+	print("schema_migrated_files: %d" % schema_migrated_files)
+	print("would_schema_migrate_files: %d" % would_schema_migrate_files)
 	print("status: ok")
 	return 0
 
@@ -351,6 +377,23 @@ func _format_relative_path(relative_path: String, registry: ContentRegistry, opt
 		if str(record.get("path", "")).replace("\\", "/") == full_path.replace("\\", "/"):
 			return _format_record(path_domain, id_value, record, options)
 	return {}
+
+
+func _schema_migrate_relative_path(relative_path: String, registry: ContentRegistry, options: Dictionary = {}) -> Dictionary:
+	var path_domain := _domain_for_relative_path(relative_path)
+	if path_domain.is_empty():
+		return {}
+	var full_path := ContentPaths.repo_root().path_join(relative_path)
+	for id_value in registry.get_library(path_domain).keys():
+		var id_string := str(id_value)
+		var record: Dictionary = registry.get_library(path_domain)[id_value]
+		if str(record.get("path", "")).replace("\\", "/") == full_path.replace("\\", "/"):
+			return _schema_migrate_record(path_domain, id_string, record, options)
+	return {}
+
+
+func _schema_migrate_record(domain: String, id_value: String, record: Dictionary, options: Dictionary = {}) -> Dictionary:
+	return ContentSchemaMigrationWriter.new().migrate_record(domain, id_value, record, options)
 
 
 func _changed_supported_paths() -> Array[String]:
