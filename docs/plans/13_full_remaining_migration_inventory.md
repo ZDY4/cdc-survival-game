@@ -492,7 +492,7 @@
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售、背包负重限制、拖拽入队、buy/sell drop zone、drop zone 来源/拒绝提示、hover 高亮、稳定 accept/reject 文案、最近一次拖拽接受/拒绝预览、业务拒绝原因、drag preview 文案与几何/生命周期诊断、交易面板快捷键和店铺/玩家/装备物品图标已有 smoke；待补统一 drag preview 真实视觉 polish。
 - `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、数字键激活、多组 hotbar 第一版、HUD 组按钮、组命名、Alt+数字切组、slot tooltip 文本与 tooltip 几何/生命周期诊断、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、世界目标高亮、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补技能树 pan 和更完整状态 UI。
 - `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈、手动交付失败历史、对话/手动交付条件展示、对话交付运行时强校验、失败上下文和 collect/kill/completed 任务图标第一版已有 smoke；待补更完整失败反馈和更多任务条件矩阵。
-- `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/工作台权限/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、地图 station 标注、制作台地图交互打开面板、制作台禁用提示、工具消耗预览、缺少可消耗工具 HUD 反馈、批量执行、制作队列/取消、AP 不足反馈和完成反馈第一版已有 smoke；待补工具耐久、跨回合制作进度和更完整队列 polish。
+- `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/工作台权限/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、地图 station 标注、制作台地图交互打开面板、制作台禁用提示、详情中的制作台权限预览、工具消耗预览、缺少可消耗工具 HUD 反馈、批量执行、制作队列/取消、AP 不足反馈和完成反馈第一版已有 smoke；待补工具耐久、跨回合制作进度和更完整队列 polish。
 - `Save`：passive / active skill effects 已有 roundtrip；继续补新增 runtime 字段和旧存档迁移。
 
 ### 18.2 需要新增或恢复的验证入口

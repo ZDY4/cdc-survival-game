@@ -354,11 +354,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not _recipe_line(game_root, "recipe_knife_basic").contains("工作台未启用 crafting_ui_station_permission_smoke"):
 		errors.append("crafting UI should show station permission missing world flag")
+	if not _detail_text(game_root).contains("未启用 crafting_ui_station_permission_smoke"):
+		errors.append("crafting detail should preview station permission missing world flag")
 	game_root.simulation.world_flags["crafting_ui_station_permission_smoke"] = true
 	game_root.refresh_crafting_panel()
 	await process_frame
 	if _recipe_line(game_root, "recipe_knife_basic").contains("工作台未启用"):
 		errors.append("crafting UI should clear station permission reason after world flag")
+	if _detail_text(game_root).contains("未启用 crafting_ui_station_permission_smoke"):
+		errors.append("crafting detail should clear station permission reason after world flag")
 	game_root.simulation.world_flags.erase("crafting_ui_station_permission_smoke")
 	map_data["crafting_stations"] = original_stations
 	game_root.world_result["map"] = map_data

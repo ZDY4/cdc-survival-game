@@ -497,10 +497,14 @@ func _requirements_text(recipe: Dictionary) -> String:
 		if available_station.is_empty():
 			parts.append("工作台 %s" % station)
 		else:
-			parts.append("工作台 %s 距离 %d" % [
+			var station_text := "工作台 %s 距离 %d" % [
 				available_station.get("display_name", station),
 				int(available_station.get("distance", 0)),
-			])
+			]
+			var station_permission := _station_permission_text(recipe)
+			if not station_permission.is_empty():
+				station_text = "%s %s" % [station_text, station_permission]
+			parts.append(station_text)
 	var tools: Array = recipe.get("required_tools", [])
 	if not tools.is_empty():
 		parts.append("工具 %s" % _tools_text(tools))
@@ -772,6 +776,26 @@ func _reason_text(recipe: Dictionary) -> String:
 				])
 			return "材料不足 %s" % ", ".join(parts)
 	return str(recipe.get("craft_reason", ""))
+
+
+func _station_permission_text(recipe: Dictionary) -> String:
+	var station: Dictionary = _dictionary_or_empty(recipe.get("available_station", {}))
+	if station.is_empty():
+		return ""
+	var permission: Dictionary = _dictionary_or_empty(station.get("permission", station))
+	var reason := str(permission.get("reason", "")).strip_edges()
+	if reason.is_empty() or bool(permission.get("success", false)):
+		return "可用"
+	match reason:
+		"station_world_flag_missing":
+			return "未启用 %s" % _station_reason_detail(recipe)
+		"station_world_flag_blocked":
+			return "被封锁 %s" % _station_reason_detail(recipe)
+		"station_item_missing":
+			return "缺钥匙 %s" % _station_reason_detail(recipe)
+		"station_tool_missing":
+			return "缺工具 %s" % _station_reason_detail(recipe)
+	return reason
 
 
 func _station_reason_detail(recipe: Dictionary) -> String:
