@@ -76,6 +76,7 @@ func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item
 	var equipped: bool = not item_id.is_empty()
 	var reload: Dictionary = _reload_snapshot(data, actual_slot_id, equipment, inventory, weapon_ammo, actor_ap)
 	var effect_ids: Array[String] = _equipment_effects.item_equip_effect_ids(item_id, _item_library())
+	var comparison: Dictionary = _equipment_comparison(actual_slot_id, item_id, inventory)
 	return {
 		"slot_id": slot_id,
 		"actual_slot_id": actual_slot_id,
@@ -90,6 +91,7 @@ func _equipment_row(slot_id: String, label: String, actual_slot_id: String, item
 		"effects": _effect_labels(effect_ids),
 		"details": _equipment_details(data, inventory, reload, effect_ids),
 		"reload": reload,
+		"comparison": comparison,
 		"equipped": equipped,
 	}
 
@@ -162,6 +164,152 @@ func _equipment_details(item_data: Dictionary, inventory: Dictionary, reload: Di
 		if not visual_asset.is_empty():
 			details.append("外观: %s" % visual_asset)
 	return details
+
+
+func _equipment_comparison(slot_id: String, equipped_item_id: String, inventory: Dictionary) -> Dictionary:
+	var current_stats: Dictionary = _equipment_stat_snapshot(equipped_item_id)
+	var candidates: Array[Dictionary] = []
+	for key in inventory.keys():
+		var candidate_id: String = str(key)
+		if candidate_id == equipped_item_id or int(inventory.get(key, 0)) <= 0:
+			continue
+		var candidate_data: Dictionary = _item_data(candidate_id)
+		if not _item_can_equip_to_slot(candidate_data, slot_id):
+			continue
+		var candidate_stats: Dictionary = _equipment_stat_snapshot(candidate_id)
+		var deltas: Dictionary = _stat_delta(current_stats, candidate_stats)
+		candidates.append({
+			"item_id": candidate_id,
+			"name": str(candidate_data.get("name", candidate_id)),
+			"score": _comparison_score(deltas),
+			"deltas": deltas,
+			"delta_labels": _stat_delta_labels(deltas),
+			"current_stats": current_stats.duplicate(true),
+			"candidate_stats": candidate_stats.duplicate(true),
+		})
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var a_score := float(a.get("score", 0.0))
+		var b_score := float(b.get("score", 0.0))
+		if not is_equal_approx(a_score, b_score):
+			return a_score > b_score
+		return str(a.get("name", "")) < str(b.get("name", ""))
+	)
+	var best: Dictionary = candidates[0].duplicate(true) if not candidates.is_empty() else {}
+	return {
+		"slot_id": slot_id,
+		"has_candidates": not candidates.is_empty(),
+		"candidate_count": candidates.size(),
+		"current_stats": current_stats,
+		"best_candidate": best,
+		"summary": _comparison_summary(best),
+		"candidates": candidates,
+	}
+
+
+func _equipment_stat_snapshot(item_id: String) -> Dictionary:
+	var item_data: Dictionary = _item_data(item_id)
+	var stats: Dictionary = {}
+	var weapon: Dictionary = _fragment_by_kind(item_data, "weapon")
+	if not weapon.is_empty():
+		stats["damage"] = float(weapon.get("damage", 0.0))
+		stats["range"] = float(weapon.get("range", 0.0))
+		stats["attack_speed"] = float(weapon.get("attack_speed", 0.0))
+		stats["crit_chance"] = float(weapon.get("crit_chance", 0.0))
+		stats["max_ammo"] = float(_optional_int(weapon.get("max_ammo", 0), 0))
+	var modifiers: Dictionary = _dictionary_or_empty(_fragment_by_kind(item_data, "attribute_modifiers").get("attributes", {}))
+	for key in modifiers.keys():
+		stats[str(key)] = float(stats.get(str(key), 0.0)) + float(modifiers.get(key, 0.0))
+	return stats
+
+
+func _item_can_equip_to_slot(item_data: Dictionary, slot_id: String) -> bool:
+	var equip: Dictionary = _fragment_by_kind(item_data, "equip")
+	for candidate in _array_or_empty(equip.get("slots", [])):
+		if str(candidate) == slot_id:
+			return true
+	return false
+
+
+func _stat_delta(current_stats: Dictionary, candidate_stats: Dictionary) -> Dictionary:
+	var keys: Array = current_stats.keys()
+	for key in candidate_stats.keys():
+		if not keys.has(key):
+			keys.append(key)
+	keys.sort()
+	var output: Dictionary = {}
+	for key in keys:
+		var stat_id := str(key)
+		var value: float = float(candidate_stats.get(stat_id, 0.0)) - float(current_stats.get(stat_id, 0.0))
+		if not is_zero_approx(value):
+			output[stat_id] = value
+	return output
+
+
+func _comparison_score(deltas: Dictionary) -> float:
+	var score := 0.0
+	for key in deltas.keys():
+		var stat_id := str(key)
+		var value := float(deltas.get(key, 0.0))
+		match stat_id:
+			"damage":
+				score += value * 2.0
+			"range":
+				score += value * 1.5
+			"attack_speed", "crit_chance", "defense", "insulation", "carry_capacity", "max_hp", "ammo_capacity", "reload_speed":
+				score += value
+			_:
+				score += value
+	return score
+
+
+func _comparison_summary(best_candidate: Dictionary) -> String:
+	if best_candidate.is_empty():
+		return "背包无可替换装备"
+	var labels: Array = _array_or_empty(best_candidate.get("delta_labels", []))
+	if labels.is_empty():
+		return "%s 无属性变化" % str(best_candidate.get("name", "候选装备"))
+	return "%s: %s" % [
+		str(best_candidate.get("name", "候选装备")),
+		" / ".join(labels),
+	]
+
+
+func _stat_delta_labels(deltas: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	var keys: Array = deltas.keys()
+	keys.sort()
+	for key in keys:
+		var stat_id := str(key)
+		output.append("%s %s" % [_stat_label(stat_id), _signed_modifier(float(deltas.get(key, 0.0)))])
+	return output
+
+
+func _stat_label(stat_id: String) -> String:
+	match stat_id:
+		"damage":
+			return "伤害"
+		"range":
+			return "射程"
+		"attack_speed":
+			return "攻速"
+		"crit_chance":
+			return "暴击"
+		"max_ammo":
+			return "弹容"
+		"defense":
+			return "防御"
+		"insulation":
+			return "保温"
+		"carry_capacity":
+			return "负重"
+		"max_hp":
+			return "生命"
+		"ammo_capacity":
+			return "弹容加成"
+		"reload_speed":
+			return "装填"
+		_:
+			return stat_id
 
 
 func _reload_snapshot(item_data: Dictionary, slot_id: String, equipment: Dictionary, inventory: Dictionary, weapon_ammo: Dictionary, actor_ap: float) -> Dictionary:

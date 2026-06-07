@@ -331,10 +331,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("main hand equipment row should show durability detail")
 	if not _equipment_line(game_root, "main_hand").contains("外观: builtin:weapon:dagger"):
 		errors.append("main hand equipment row should show appearance asset detail")
+	if not _equipment_line(game_root, "main_hand").contains("替换: 棒球棒") or not _equipment_line(game_root, "main_hand").contains("伤害 +3.00"):
+		errors.append("main hand equipment row should show best replacement attribute delta")
 	if not _equipment_tooltip(game_root, "main_hand").contains("锋利的匕首") or not _equipment_tooltip(game_root, "main_hand").contains("耐久: 50/50"):
 		errors.append("main hand equipment tooltip should show description and durability detail")
 	if not _equipment_tooltip(game_root, "main_hand").contains("外观: builtin:weapon:dagger"):
 		errors.append("main hand equipment tooltip should show appearance detail")
+	if not _equipment_tooltip(game_root, "main_hand").contains("装备对比: 棒球棒") or not _equipment_tooltip(game_root, "main_hand").contains("射程 +1.00"):
+		errors.append("main hand equipment tooltip should show replacement delta details")
 	_assert_hover_tooltip_snapshot(errors, game_root, _equipment_slot_control(game_root, "main_hand"), "character", "锋利的匕首", "main hand equipment tooltip snapshot")
 	_assert_ui_layer_stack(errors, game_root, {}, null, _equipment_slot_control(game_root, "main_hand"), "stage:character", true, "character tooltip layer stack")
 	_open_equipment_context_menu(game_root, "main_hand")

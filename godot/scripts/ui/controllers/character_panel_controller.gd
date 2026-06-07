@@ -420,7 +420,7 @@ func _item_can_equip_to_slot(item: Dictionary, slot_id: String) -> bool:
 func _equipment_text(data: Dictionary) -> String:
 	var label: String = str(data.get("label", data.get("slot_id", "")))
 	if not bool(data.get("equipped", false)):
-		return "%s: 空" % label
+		return "%s: 空%s" % [label, _equipment_comparison_suffix(data)]
 	var rarity := str(data.get("rarity", ""))
 	var rarity_suffix := " | %s" % rarity if not rarity.is_empty() else ""
 	return "%s: %s | %.1f kg | 价值 %d%s" % [
@@ -429,7 +429,7 @@ func _equipment_text(data: Dictionary) -> String:
 		float(data.get("weight", 0.0)),
 		int(data.get("value", 0)),
 		rarity_suffix,
-	] + _equipment_detail_suffix(data)
+	] + _equipment_detail_suffix(data) + _equipment_comparison_suffix(data)
 
 
 func _equipment_detail_suffix(data: Dictionary) -> String:
@@ -439,6 +439,14 @@ func _equipment_detail_suffix(data: Dictionary) -> String:
 		if not text.is_empty():
 			details.append(text)
 	return "" if details.is_empty() else " | %s" % " | ".join(details)
+
+
+func _equipment_comparison_suffix(data: Dictionary) -> String:
+	var comparison: Dictionary = _dictionary_or_empty(data.get("comparison", {}))
+	if not bool(comparison.get("has_candidates", false)):
+		return ""
+	var summary := str(comparison.get("summary", ""))
+	return "" if summary.is_empty() else " | 替换: %s" % summary
 
 
 func _equipment_tooltip(data: Dictionary) -> String:
@@ -459,6 +467,22 @@ func _equipment_tooltip(data: Dictionary) -> String:
 		var text := str(detail)
 		if not text.is_empty():
 			lines.append(text)
+	var comparison: Dictionary = _dictionary_or_empty(data.get("comparison", {}))
+	if bool(comparison.get("has_candidates", false)):
+		lines.append("装备对比: %s" % str(comparison.get("summary", "")))
+		var candidates: Array = _array_or_empty(comparison.get("candidates", []))
+		var limit: int = mini(candidates.size(), 3)
+		for index in range(limit):
+			var candidate: Dictionary = _dictionary_or_empty(candidates[index])
+			var labels: Array[String] = []
+			for delta_label in _array_or_empty(candidate.get("delta_labels", [])):
+				var delta_text := str(delta_label)
+				if not delta_text.is_empty():
+					labels.append(delta_text)
+			lines.append("- %s: %s" % [
+				str(candidate.get("name", candidate.get("item_id", ""))),
+				"无属性变化" if labels.is_empty() else " / ".join(labels),
+			])
 	var effects: Array[String] = []
 	for effect in _array_or_empty(data.get("effects", [])):
 		var effect_text := str(effect)
