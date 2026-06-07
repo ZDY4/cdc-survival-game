@@ -2,9 +2,11 @@ extends RefCounted
 
 const InventoryCapacity = preload("res://scripts/core/economy/inventory_capacity.gd")
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 var registry: RefCounted
 var _inventory_capacity := InventoryCapacity.new()
+var _reason_catalog := ReasonCatalog.new()
 
 
 func _init(p_registry: RefCounted) -> void:
@@ -456,7 +458,7 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "运行时不可用，无法操作背包。"
 		_:
 			var reason := str(feedback.get("reason", ""))
-			return reason if not reason.is_empty() else ""
+			return _reason_catalog.disabled_text_for(reason) if not reason.is_empty() else ""
 
 
 func _use_item_success_text(item_name: String, feedback: Dictionary) -> String:

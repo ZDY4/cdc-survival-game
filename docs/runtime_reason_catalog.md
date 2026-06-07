@@ -42,9 +42,10 @@
 - Crafting 面板的执行失败反馈和未知 recipe reason fallback 已接入 `disabled_text_for()`；结构化缺材料 / 缺工具 / 缺工作台详情仍由 Crafting snapshot 和 controller 自身生成。
 - Trade 面板的按钮、上下文菜单、物品行详情和 drop-zone 拒绝预览已接入 `disabled_text_for()` fallback；已有中文权限说明原样保留，drop-zone metadata 继续保存稳定 reason code。
 - Container 面板的反馈 snapshot 兜底已接入 `disabled_text_for()`；已有容量、权限、钥匙、工具、关系等详细中文说明继续优先使用，未特化的容器 reason 显示 catalog 中文短文案。
+- Inventory 面板的反馈 snapshot 兜底已接入 `disabled_text_for()`；已有 AP、数量、负重、使用、拆解等详细中文说明继续优先使用，未特化的背包 reason 显示 catalog 中文短文案。
 
 ## 后续缺口
 
 - 继续把尚未进入 HUD 的任务交付、AI、保存 / 加载和地图资源失败 reason 纳入目录。
-- 将 Inventory / Skills / Journal 等面板禁用态 tooltip 统一切到 `disabled_text_for()`。
+- 将 Skills / Journal 等面板禁用态 tooltip 统一切到 `disabled_text_for()`。
 - 给任务、AI、保存 / 加载和地图资产失败补更细 reason，而不是继续复用笼统失败码。

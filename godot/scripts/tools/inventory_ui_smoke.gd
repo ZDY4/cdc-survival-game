@@ -184,6 +184,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("failed item use should not spend AP")
 	if not _inventory_feedback_line(game_root).contains("不能使用"):
 		errors.append("failed item use should show inventory feedback")
+	game_root.active_inventory_feedback = {
+		"type": "error",
+		"reason": "item_not_droppable",
+		"item_id": "1003",
+		"count": 1,
+	}
+	game_root.refresh_inventory_panel()
+	if not _inventory_feedback_line(game_root).contains("物品不可丢弃"):
+		errors.append("inventory feedback should use reason catalog fallback for unhandled reasons")
+	game_root.active_inventory_feedback = {}
+	game_root.refresh_inventory_panel()
 	_mark_item_as_quest(game_root, "1007")
 	player_ref.inventory["1007"] = 1
 	if not player_ref.inventory_order.has("1007"):

@@ -51,6 +51,14 @@ const REASONS := {
 	"not_enough_items": {"category": "inventory", "text": "物品不足"},
 	"invalid_quantity": {"category": "inventory", "text": "数量无效"},
 	"inventory_over_capacity": {"category": "inventory", "text": "背包负重不足"},
+	"ap_insufficient_use_item": {"category": "ap", "text": "AP不足，无法使用物品"},
+	"item_not_usable": {"category": "inventory", "text": "物品不可使用"},
+	"item_use_forbidden": {"category": "inventory", "text": "物品当前禁止使用"},
+	"item_not_droppable": {"category": "inventory", "text": "物品不可丢弃"},
+	"item_not_in_inventory": {"category": "inventory", "text": "物品不在背包中"},
+	"inventory_split_requires_stack_model": {"category": "inventory", "text": "需要多堆叠背包模型"},
+	"unknown_item": {"category": "inventory", "text": "未知物品"},
+	"unknown_effect": {"category": "inventory", "text": "未知物品效果"},
 	"container_inventory_insufficient": {"category": "container", "text": "容器物品不足"},
 	"container_money_insufficient": {"category": "container", "text": "容器金钱不足"},
 	"container_session_missing": {"category": "container", "text": "容器未打开"},
@@ -241,6 +249,22 @@ const REASON_METADATA := {
 	"inventory_over_capacity": {
 		"payload_fields": ["item_id", "count", "current_weight", "max_weight"],
 		"disabled_text": "背包负重不足",
+	},
+	"ap_insufficient_use_item": {
+		"payload_fields": ["item_id", "required_ap", "available_ap"],
+		"disabled_text": "AP 不足",
+	},
+	"item_not_droppable": {
+		"payload_fields": ["item_id", "count"],
+		"disabled_text": "物品不可丢弃",
+	},
+	"inventory_split_requires_stack_model": {
+		"payload_fields": ["item_id", "count"],
+		"disabled_text": "需要多堆叠背包模型",
+	},
+	"unknown_effect": {
+		"payload_fields": ["item_id", "effect_id"],
+		"disabled_text": "物品效果不可用",
 	},
 	"container_inventory_insufficient": {
 		"payload_fields": ["container_id", "item_id", "count", "available"],
