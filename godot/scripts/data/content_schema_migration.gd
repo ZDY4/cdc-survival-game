@@ -8,6 +8,8 @@ func diagnose(domain: String, id_value: String, record: Dictionary) -> Dictionar
 	var explicit_version := data.has("schema_version")
 	var source_version := _read_schema_version(data)
 	var deprecated_fields := _deprecated_fields(data)
+	var migrated_data := migrate_data(data)
+	var diff_summary := _roundtrip_diff_summary(data, migrated_data)
 	var defaulted_fields: Array[String] = []
 	var migration_log: Array[Dictionary] = []
 	var status := "current"
@@ -39,6 +41,7 @@ func diagnose(domain: String, id_value: String, record: Dictionary) -> Dictionar
 			"schema_version_after_migration": CURRENT_SCHEMA_VERSION if source_version <= CURRENT_SCHEMA_VERSION else source_version,
 			"would_write_schema_version": not explicit_version or source_version < CURRENT_SCHEMA_VERSION,
 			"safe_to_roundtrip": source_version <= CURRENT_SCHEMA_VERSION,
+			"diff_summary": diff_summary,
 		},
 	}
 
@@ -74,6 +77,33 @@ func _migration_event(kind: String, json_path: String, message: String) -> Dicti
 		"kind": kind,
 		"json_path": json_path,
 		"message": message,
+	}
+
+
+func _roundtrip_diff_summary(before: Dictionary, after: Dictionary) -> Dictionary:
+	var added: Array[String] = []
+	var removed: Array[String] = []
+	var changed: Array[String] = []
+	for key in after.keys():
+		var key_string := str(key)
+		if not before.has(key):
+			added.append(key_string)
+		elif before.get(key) != after.get(key):
+			changed.append(key_string)
+	for key in before.keys():
+		if not after.has(key):
+			removed.append(str(key))
+	added.sort()
+	removed.sort()
+	changed.sort()
+	return {
+		"field_added_count": added.size(),
+		"field_removed_count": removed.size(),
+		"field_changed_count": changed.size(),
+		"fields_added": added,
+		"fields_removed": removed,
+		"fields_changed": changed,
+		"changed": not added.is_empty() or not removed.is_empty() or not changed.is_empty(),
 	}
 
 

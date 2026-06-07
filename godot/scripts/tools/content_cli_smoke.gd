@@ -200,6 +200,9 @@ func _expect_schema_migration_diagnostics(errors: Array[String], registry: Conte
 	var roundtrip: Dictionary = _dictionary_or_empty(schema.get("roundtrip", {}))
 	if not bool(roundtrip.get("would_write_schema_version", false)) or not bool(roundtrip.get("safe_to_roundtrip", false)):
 		errors.append("schema migration should expose safe schema_version roundtrip: %s" % [schema])
+	var diff_summary: Dictionary = _dictionary_or_empty(roundtrip.get("diff_summary", {}))
+	if int(diff_summary.get("field_added_count", 0)) <= 0 or not _array_or_empty(diff_summary.get("fields_added", [])).has("schema_version"):
+		errors.append("schema migration should expose roundtrip added schema_version diff: %s" % [schema])
 	var source: Dictionary = registry.get_library("items").get("1006", {}).duplicate(true)
 	var data: Dictionary = _dictionary_or_empty(source.get("data", {})).duplicate(true)
 	data["schemaVersion"] = 0

@@ -445,6 +445,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	return {}
 
 
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
+
+
 func _issue_location(issue: Dictionary) -> String:
 	var location := str(issue.get("location", "")).strip_edges()
 	if not location.is_empty():
@@ -472,6 +478,24 @@ func _print_schema_migration_summary(schema: Dictionary, indent: String = "") ->
 		print("%sschema_defaulted_fields: %s" % [indent, ", ".join(defaulted)])
 	if not deprecated.is_empty():
 		print("%sschema_deprecated_fields: %s" % [indent, ", ".join(deprecated)])
+	var roundtrip: Dictionary = _dictionary_or_empty(schema.get("roundtrip", {}))
+	var diff: Dictionary = _dictionary_or_empty(roundtrip.get("diff_summary", {}))
+	if not diff.is_empty():
+		print("%sschema_roundtrip_diff: added=%d removed=%d changed=%d" % [
+			indent,
+			int(diff.get("field_added_count", 0)),
+			int(diff.get("field_removed_count", 0)),
+			int(diff.get("field_changed_count", 0)),
+		])
+		var added: Array = _array_or_empty(diff.get("fields_added", []))
+		var removed: Array = _array_or_empty(diff.get("fields_removed", []))
+		var changed: Array = _array_or_empty(diff.get("fields_changed", []))
+		if not added.is_empty():
+			print("%sschema_roundtrip_added_fields: %s" % [indent, ", ".join(added)])
+		if not removed.is_empty():
+			print("%sschema_roundtrip_removed_fields: %s" % [indent, ", ".join(removed)])
+		if not changed.is_empty():
+			print("%sschema_roundtrip_changed_fields: %s" % [indent, ", ".join(changed)])
 
 
 func _reference_domain_list() -> String:
