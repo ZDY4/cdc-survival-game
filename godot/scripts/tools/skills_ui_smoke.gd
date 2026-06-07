@@ -130,6 +130,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skill learn confirmation blocker should be modal:skill_learn_confirm")
 	_assert_modal_stack(errors, game_root, "skill_learn_confirm", "skills", "skill learn confirmation")
 	_assert_modal_menu_event(errors, game_root, "skill_learn_confirm", "skills", "skill learn confirmation menu event")
+	game_root.refresh_hud()
+	_assert_runtime_control_line(errors, game_root, "ModalEvent modal_opened:skill_learn_confirm", "skill learn confirmation menu event HUD")
 	_expect_modal_player_commands_blocked(errors, game_root, "skill_learn_confirm")
 	var esc_learn_result: Dictionary = game_root.close_active_ui("keyboard_escape")
 	if str(esc_learn_result.get("closed", "")) != "modal:skill_learn_confirm":
@@ -970,6 +972,15 @@ func _assert_no_modal_menu_event(errors: Array[String], game_root: Node, context
 	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
 	if not _dictionary_or_empty(runtime_menu.get("modal_event", {})).is_empty():
 		errors.append("%s: runtime modal_event should clear when no modal is active: %s" % [context, runtime_menu])
+
+
+func _assert_runtime_control_line(errors: Array[String], game_root: Node, expected: String, context: String) -> void:
+	var label: Node = game_root.hud.find_child("RuntimeControlLine", true, false)
+	if not label is Label:
+		errors.append("%s: HUD should expose RuntimeControlLine" % context)
+		return
+	if not str((label as Label).text).contains(expected):
+		errors.append("%s: RuntimeControlLine expected to contain %s, got %s" % [context, expected, str((label as Label).text)])
 
 
 func _recent_menu_events_contain(menu_state: Dictionary, expected_event: String, expected_id: String) -> bool:

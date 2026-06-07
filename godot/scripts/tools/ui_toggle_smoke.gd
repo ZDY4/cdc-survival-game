@@ -342,6 +342,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_blocker(errors, game_root, "equipment_context_menu", "equipment context menu blocker")
 	_assert_close_priority(errors, game_root, ["equipment_context_menu"], "equipment context menu close priority")
 	_assert_context_menu_event(errors, game_root, "equipment_context_menu", "character", "equipment context menu event")
+	game_root.refresh_hud()
+	_assert_runtime_control_line(errors, game_root, "ContextEvent context_menu_opened:equipment_context_menu", "equipment context menu event HUD")
 	_press_key(game_root, KEY_ESCAPE)
 	if bool(_dictionary_or_empty(game_root.context_menu_snapshot()).get("active", false)):
 		errors.append("Esc should close equipment context menu")

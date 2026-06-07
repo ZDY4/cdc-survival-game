@@ -621,6 +621,7 @@ func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
 		var latest_panel_event: Dictionary = _dictionary_or_empty(menu_state.get("latest_event", {}))
 		if not latest_panel_event.is_empty():
 			parts.append("Panel %s:%s" % [str(latest_panel_event.get("event", "")), str(latest_panel_event.get("panel_id", ""))])
+		_append_menu_event_tokens(parts, menu_state)
 	var context_menu: Dictionary = _dictionary_or_empty(runtime_control.get("context_menu", {}))
 	if bool(context_menu.get("active", false)):
 		var top_context: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
@@ -1489,6 +1490,7 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 		var latest_panel_event: Dictionary = _dictionary_or_empty(menu_state.get("latest_event", {}))
 		if not latest_panel_event.is_empty():
 			parts.append("Panel %s:%s" % [str(latest_panel_event.get("event", "")), str(latest_panel_event.get("panel_id", ""))])
+		_append_menu_event_tokens(parts, menu_state)
 	var context_menu: Dictionary = _dictionary_or_empty(control_data.get("context_menu", {}))
 	if bool(context_menu.get("active", false)):
 		var top_context: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
@@ -1534,6 +1536,15 @@ func _performance_control_text(value: Variant) -> String:
 		int(performance.get("actor_count", 0)),
 		int(performance.get("object_count", 0)),
 	]
+
+
+func _append_menu_event_tokens(parts: Array[String], menu_state: Dictionary) -> void:
+	var modal_event: Dictionary = _dictionary_or_empty(menu_state.get("modal_event", {}))
+	if not modal_event.is_empty():
+		parts.append("ModalEvent %s:%s" % [str(modal_event.get("event", "")), str(modal_event.get("panel_id", ""))])
+	var context_menu_event: Dictionary = _dictionary_or_empty(menu_state.get("context_menu_event", {}))
+	if not context_menu_event.is_empty():
+		parts.append("ContextEvent %s:%s" % [str(context_menu_event.get("event", "")), str(context_menu_event.get("panel_id", ""))])
 
 
 func _selection_debug_control_text(value: Variant) -> String:
