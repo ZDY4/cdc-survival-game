@@ -6,6 +6,10 @@ signal close_requested
 signal trade_requested(source: String, item_id: String, count: int)
 signal trade_cart_confirmed(entries: Array)
 
+const CONTEXT_TRADE := 1
+const CONTEXT_QUEUE := 2
+const CONTEXT_INSPECT := 3
+
 var _panel: PanelContainer
 var _title_label: Label
 var _close_button: Button
@@ -20,8 +24,11 @@ var _confirm_cart_button: Button
 var _cart_label: Label
 var _cart_items_box: VBoxContainer
 var _equipment_sell_dialog: ConfirmationDialog
+var _context_menu: PopupMenu
 var _items_box: VBoxContainer
 var _player_items_box: VBoxContainer
+var _context_item: Dictionary = {}
+var _context_source := ""
 var _selected_source: String = ""
 var _selected_item_id: String = ""
 var _selected_item_snapshot: Dictionary = {}
@@ -51,6 +58,10 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if not active:
 		if _equipment_sell_dialog != null:
 			_equipment_sell_dialog.hide()
+		if _context_menu != null:
+			_context_menu.hide()
+		_context_item = {}
+		_context_source = ""
 		_trade_allowed = true
 		_trade_block_reason = ""
 		_clear_cart()
@@ -60,6 +71,10 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		_title_label.text = "Trade %s" % snapshot.get("shop_id", "")
 		_summary_label.text = "交易资源不可用: %s" % snapshot.get("error", "unknown")
 		_apply_feedback({})
+		if _context_menu != null:
+			_context_menu.hide()
+		_context_item = {}
+		_context_source = ""
 		_clear_cart()
 		_clear_items()
 		return
@@ -270,11 +285,16 @@ func _build_layout() -> void:
 	_equipment_sell_dialog.title = "确认出售装备"
 	_equipment_sell_dialog.dialog_text = "确定要出售已装备物品吗？"
 	_equipment_sell_dialog.confirmed.connect(func() -> void:
+		_equipment_sell_dialog.hide()
 		_emit_selected_trade()
 	)
 	_equipment_sell_dialog.get_ok_button().text = "出售"
 	_equipment_sell_dialog.get_cancel_button().text = "取消"
 	add_child(_equipment_sell_dialog)
+	_context_menu = PopupMenu.new()
+	_context_menu.name = "TradeContextMenu"
+	_context_menu.id_pressed.connect(_execute_context_action)
+	add_child(_context_menu)
 	box.add_child(_cart_label)
 	box.add_child(cart_controls)
 	box.add_child(cart_drop_zones)
@@ -311,6 +331,13 @@ func _item_line(item: Dictionary, source: String) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
 		_apply_detail(item.duplicate(true), source)
+	)
+	button.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event == null or not mouse_event.pressed or mouse_event.button_index != MOUSE_BUTTON_RIGHT:
+			return
+		button.accept_event()
+		_open_context_menu_for_item(item.duplicate(true), source, button.get_global_mouse_position())
 	)
 	return button
 
@@ -389,6 +416,105 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 			_trade_button.text = "出售"
 		_:
 			_trade_button.text = "出售" if _is_sell_source(source) else "交易"
+
+
+func _open_context_menu_for_item(item: Dictionary, source: String, screen_position: Vector2) -> void:
+	if _context_menu == null:
+		return
+	_apply_detail(item.duplicate(true), source)
+	_context_item = item.duplicate(true)
+	_context_source = source
+	_context_menu.clear()
+	var action_label := "购买选中数量" if source == "shop" else "出售选中数量" if _is_sell_source(source) else "交易选中数量"
+	_context_menu.add_item("检查", CONTEXT_INSPECT)
+	_context_menu.add_item(action_label, CONTEXT_TRADE)
+	_context_menu.add_item("加入购物车", CONTEXT_QUEUE)
+	var disabled_reason := _selected_trade_disabled_reason(item, source)
+	var disabled := not disabled_reason.is_empty()
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_TRADE), disabled)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_QUEUE), disabled)
+	var selected_count := _selected_trade_count(item)
+	var total_count := maxi(0, int(item.get("count", 0)))
+	var total_price := int(item.get("price", 0)) * selected_count
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_INSPECT), "查看价格、描述和交易限制")
+	_context_menu.set_item_tooltip(
+		_context_menu.get_item_index(CONTEXT_TRADE),
+		"%s x%d | 小计 %d（当前堆叠 %d）" % [action_label, selected_count, total_price, total_count] if not disabled else disabled_reason
+	)
+	_context_menu.set_item_tooltip(
+		_context_menu.get_item_index(CONTEXT_QUEUE),
+		"加入购物车 x%d | 小计 %d（当前堆叠 %d）" % [selected_count, total_price, total_count] if not disabled else disabled_reason
+	)
+	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
+	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
+
+
+func context_menu_snapshot() -> Dictionary:
+	if _context_menu == null or not _context_menu.visible:
+		return {}
+	return {
+		"id": "trade_context_menu",
+		"name": "trade_context_menu",
+		"kind": "trade_item",
+		"owner_panel": "trade",
+		"active": true,
+		"visible": true,
+		"mouse_blocks_world": true,
+		"item_id": str(_context_item.get("item_id", "")),
+		"item_name": str(_context_item.get("name", _context_item.get("item_id", ""))),
+		"item_count": int(_context_item.get("count", 0)),
+		"source": _context_source,
+		"selected_count": _selected_trade_count(_context_item),
+		"unit_price": int(_context_item.get("price", 0)),
+		"total_price": int(_context_item.get("price", 0)) * _selected_trade_count(_context_item),
+		"option_count": _context_menu.item_count,
+		"options": _trade_context_option_summaries(),
+	}
+
+
+func close_context_menu() -> void:
+	if _context_menu != null:
+		_context_menu.hide()
+	_context_item = {}
+	_context_source = ""
+
+
+func _trade_context_option_summaries() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	if _context_menu == null:
+		return output
+	for index in range(_context_menu.item_count):
+		output.append({
+			"id": _context_menu.get_item_id(index),
+			"label": _context_menu.get_item_text(index),
+			"disabled": _context_menu.is_item_disabled(index),
+			"tooltip": _context_menu.get_item_tooltip(index),
+		})
+	return output
+
+
+func _execute_context_action(action_id: int) -> void:
+	if _context_item.is_empty() or _context_source.is_empty():
+		return
+	match action_id:
+		CONTEXT_INSPECT:
+			_apply_detail(_context_item.duplicate(true), _context_source)
+		CONTEXT_TRADE:
+			if _item_can_trade(_context_item, _context_source):
+				if _requires_equipment_sell_confirmation(_context_source):
+					_open_equipment_sell_dialog()
+				else:
+					trade_requested.emit(_context_source, str(_context_item.get("item_id", "")), _selected_trade_count(_context_item))
+		CONTEXT_QUEUE:
+			_queue_trade_entry(_context_item, _context_source, _selected_trade_count(_context_item))
+	if _context_menu != null:
+		_context_menu.hide()
+
+
+func _selected_trade_count(item: Dictionary) -> int:
+	var available := maxi(1, int(item.get("count", 1)))
+	var selected_count := int(_quantity_spin.value if _quantity_spin != null else 1)
+	return clampi(selected_count, 1, available)
 
 
 func has_blocking_modal() -> bool:

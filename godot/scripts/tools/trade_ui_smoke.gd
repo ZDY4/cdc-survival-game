@@ -85,6 +85,28 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade equipment item row should expose and render item icon")
 	if not _detail_line(game_root).contains("店铺：") or not _detail_line(game_root).contains("单价"):
 		errors.append("trade detail should default to selected shop item")
+	if not _open_trade_context_menu(game_root, "shop", "绷带"):
+		errors.append("should open trade context menu for shop bandage")
+	else:
+		_assert_trade_context_menu(errors, game_root, "1006", "shop", "购买选中数量", "shop bandage context")
+		_execute_trade_context_action(game_root, 2)
+		if not _cart_line(game_root).contains("购买 绷带 x1"):
+			errors.append("trade context queue should add shop bandage to cart")
+		_press_cart_entry_button(game_root, 0, "RemoveButton")
+		if not _cart_line(game_root).contains("购物车为空"):
+			_press_clear_cart_button(game_root)
+	_close_trade_context_menu(game_root)
+	if not _open_trade_context_menu(game_root, "player", "绷带"):
+		errors.append("should open trade context menu for player bandage")
+	else:
+		_assert_trade_context_menu(errors, game_root, "1006", "player", "出售选中数量", "player bandage context")
+		_execute_trade_context_action(game_root, 2)
+		if not _cart_line(game_root).contains("出售 绷带 x1"):
+			errors.append("trade context queue should add player bandage sell to cart")
+		_press_cart_entry_button(game_root, 0, "RemoveButton")
+		if not _cart_line(game_root).contains("购物车为空"):
+			_press_clear_cart_button(game_root)
+	_close_trade_context_menu(game_root)
 	if not _press_trade_item_with_text(game_root, "player", "绷带"):
 		errors.append("should select player bandage in trade panel")
 	if _trade_button_text(game_root) != "出售":
@@ -618,6 +640,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	return {}
 
 
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
+
+
 func _assert_modal_stack(errors: Array[String], game_root: Node, expected_id: String, expected_owner: String, context: String) -> void:
 	if not game_root.has_method("modal_stack_snapshot"):
 		errors.append("%s: game root should expose modal_stack_snapshot" % context)
@@ -650,6 +678,52 @@ func _assert_panel_blocker(errors: Array[String], game_root: Node, panel_id: Str
 	var content := game_root.find_child(content_name, true, false) as Control
 	if content == null or content.mouse_filter != Control.MOUSE_FILTER_STOP:
 		errors.append("%s: %s should stop mouse input" % [context, content_name])
+
+
+func _assert_trade_context_menu(errors: Array[String], game_root: Node, expected_item_id: String, expected_source: String, expected_label: String, context: String) -> void:
+	if not game_root.has_method("context_menu_snapshot"):
+		errors.append("%s: game root should expose context_menu_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.context_menu_snapshot())
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: context menu snapshot should be active: %s" % [context, snapshot])
+		return
+	var top: Dictionary = _dictionary_or_empty(snapshot.get("top", {}))
+	if str(top.get("id", "")) != "trade_context_menu" or str(top.get("kind", "")) != "trade_item":
+		errors.append("%s: expected trade context top, got %s" % [context, top])
+	if str(top.get("owner_panel", "")) != "trade":
+		errors.append("%s: trade context owner should be trade: %s" % [context, top])
+	if str(top.get("item_id", "")) != expected_item_id:
+		errors.append("%s: trade context item expected %s, got %s" % [context, expected_item_id, top])
+	if str(top.get("source", "")) != expected_source:
+		errors.append("%s: trade context source expected %s, got %s" % [context, expected_source, top])
+	if int(top.get("selected_count", 0)) <= 0 or int(top.get("unit_price", 0)) <= 0 or int(top.get("total_price", 0)) <= 0:
+		errors.append("%s: trade context should expose counts and prices: %s" % [context, top])
+	if int(top.get("option_count", 0)) != 3:
+		errors.append("%s: trade context menu should expose inspect/trade/queue options: %s" % [context, top])
+	var expected_action_seen := false
+	var queue_seen := false
+	for option in _array_or_empty(top.get("options", [])):
+		var option_data: Dictionary = _dictionary_or_empty(option)
+		if str(option_data.get("label", "")) == expected_label:
+			expected_action_seen = true
+			if bool(option_data.get("disabled", true)):
+				errors.append("%s: trade action should be enabled: %s" % [context, option_data])
+			if not str(option_data.get("tooltip", "")).contains("小计"):
+				errors.append("%s: trade action tooltip should expose subtotal: %s" % [context, option_data])
+		if int(option_data.get("id", -1)) == 2:
+			queue_seen = true
+			if bool(option_data.get("disabled", true)):
+				errors.append("%s: queue action should be enabled: %s" % [context, option_data])
+	if not expected_action_seen:
+		errors.append("%s: context menu should include %s: %s" % [context, expected_label, top])
+	if not queue_seen:
+		errors.append("%s: context menu should include queue option: %s" % [context, top])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_context: Dictionary = _dictionary_or_empty(runtime.get("context_menu", {}))
+	var runtime_top: Dictionary = _dictionary_or_empty(runtime_context.get("top", {}))
+	if str(runtime_top.get("id", "")) != "trade_context_menu" or str(runtime_top.get("item_id", "")) != expected_item_id:
+		errors.append("%s: runtime context menu should expose trade item %s: %s" % [context, expected_item_id, runtime_context])
 
 
 func _finish_presentations(game_root: Node) -> void:
@@ -948,6 +1022,14 @@ func _open_inventory_context_menu(game_root: Node, item_needle: String) -> bool:
 	return true
 
 
+func _open_trade_context_menu(game_root: Node, source: String, item_needle: String) -> bool:
+	var button: Button = _trade_item_button_with_text(game_root, source, item_needle)
+	if button == null or not button.has_meta("trade_item"):
+		return false
+	game_root.trade_panel.call("_open_context_menu_for_item", button.get_meta("trade_item"), str(button.get_meta("trade_source", source)), Vector2.ZERO)
+	return true
+
+
 func _inventory_item_button(game_root: Node, text: String) -> Button:
 	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
 	for child in item_box.get_children():
@@ -968,6 +1050,15 @@ func _context_action_disabled(game_root: Node, action_id: int) -> bool:
 
 func _execute_inventory_context_action(game_root: Node, action_id: int) -> void:
 	game_root.inventory_panel.call("_execute_context_action", action_id)
+
+
+func _execute_trade_context_action(game_root: Node, action_id: int) -> void:
+	game_root.trade_panel.call("_execute_context_action", action_id)
+
+
+func _close_trade_context_menu(game_root: Node) -> void:
+	if game_root.trade_panel != null and game_root.trade_panel.has_method("close_context_menu"):
+		game_root.trade_panel.call("close_context_menu")
 
 
 func _set_trade_quantity(game_root: Node, count: int) -> void:
