@@ -12,6 +12,7 @@ const CONTEXT_DROP_ALL := 7
 const CONTEXT_SPLIT := 8
 const CONTEXT_STORE_CONTAINER := 9
 const CONTEXT_SELL_TRADE := 10
+const CONTEXT_SPLIT_STACK_BASE := 100
 
 var _panel: PanelContainer
 var _title_label: Label
@@ -378,6 +379,7 @@ func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> 
 	_context_menu.add_item("丢弃", CONTEXT_DROP)
 	_context_menu.add_item("全部丢弃", CONTEXT_DROP_ALL)
 	_context_menu.add_item("拆分", CONTEXT_SPLIT)
+	_add_stack_split_context_items(item)
 	_context_menu.add_item("存入容器", CONTEXT_STORE_CONTAINER)
 	_context_menu.add_item("出售", CONTEXT_SELL_TRADE)
 	_context_menu.add_item("拆解", CONTEXT_DECONSTRUCT)
@@ -455,6 +457,11 @@ func _execute_context_action(action_id: int) -> void:
 	var root := get_parent()
 	if root == null:
 		return
+	if action_id >= CONTEXT_SPLIT_STACK_BASE:
+		if root.has_method("split_player_inventory_stack"):
+			var source_stack_index := action_id - CONTEXT_SPLIT_STACK_BASE + 1
+			root.split_player_inventory_stack(item_id, _drag_drop_count(action_item), source_stack_index)
+		return
 	match action_id:
 		CONTEXT_USE:
 			if bool(action_item.get("usable", false)) and root.has_method("use_player_item"):
@@ -501,6 +508,23 @@ func _split_context_tooltip(item: Dictionary) -> String:
 		return "当前最大堆叠数量不足，无法继续拆分"
 	var stacks: Array = _array_or_empty(item.get("stack_counts", []))
 	return "拆分当前最大堆叠；当前堆叠 %s" % ", ".join(_string_array(stacks))
+
+
+func _add_stack_split_context_items(item: Dictionary) -> void:
+	if _context_menu == null:
+		return
+	var stacks: Array = _array_or_empty(item.get("stack_counts", []))
+	if stacks.size() <= 1:
+		return
+	var split_count := _drag_drop_count(item)
+	for index in range(stacks.size()):
+		var stack_count := int(stacks[index])
+		var item_id := CONTEXT_SPLIT_STACK_BASE + index
+		_context_menu.add_item("拆分第 %d 堆" % (index + 1), item_id)
+		var menu_index := _context_menu.get_item_index(item_id)
+		var can_split := bool(item.get("stackable", false)) and stack_count > split_count
+		_context_menu.set_item_disabled(menu_index, not can_split)
+		_context_menu.set_item_tooltip(menu_index, "从第 %d 堆拆出 %d 个；该堆当前 %d 个" % [index + 1, split_count, stack_count])
 
 
 func _apply_feedback(feedback: Dictionary) -> void:

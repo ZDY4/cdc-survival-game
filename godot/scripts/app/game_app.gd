@@ -2251,17 +2251,20 @@ func deconstruct_player_item(item_id: String, count: int = 1) -> Dictionary:
 	return result
 
 
-func split_player_inventory_stack(item_id: String, count: int = 1) -> Dictionary:
+func split_player_inventory_stack(item_id: String, count: int = 1, source_stack_index: int = 0) -> Dictionary:
 	if simulation == null:
 		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "count": count}
 		_record_inventory_feedback(missing_result, "split_stack", item_id, count)
 		refresh_inventory_panel()
 		return missing_result
-	var result: Dictionary = _submit_inventory_action({
+	var command := {
 		"action": "split_stack",
 		"item_id": item_id,
 		"count": count,
-	})
+	}
+	if source_stack_index > 0:
+		command["source_stack_index"] = source_stack_index
+	var result: Dictionary = _submit_inventory_action(command)
 	_record_inventory_feedback(result, "split_stack", item_id, count)
 	refresh_inventory_panel()
 	return result

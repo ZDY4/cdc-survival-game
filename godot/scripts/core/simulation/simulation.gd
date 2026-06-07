@@ -1669,7 +1669,7 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 		"deconstruct":
 			return _finalize_player_ap_action(actor, _submit_deconstruct_action(actor, command, items), command, "deconstruct")
 		"split_stack":
-			return _split_actor_inventory_stack(actor, str(command.get("item_id", "")), int(command.get("count", 1)))
+			return _split_actor_inventory_stack(actor, str(command.get("item_id", "")), int(command.get("count", 1)), int(command.get("source_stack_index", 0)))
 		"reorder_inventory":
 			return _reorder_actor_inventory(actor, str(command.get("item_id", "")), int(command.get("target_index", 0)))
 		"equip":
@@ -2061,7 +2061,7 @@ func _ap_cost_from_seconds(seconds: float) -> float:
 	return max(DEFAULT_INTERACTION_AP, ceil(seconds / CRAFTING_SECONDS_PER_AP))
 
 
-func _split_actor_inventory_stack(actor: RefCounted, item_id: String, count: int) -> Dictionary:
+func _split_actor_inventory_stack(actor: RefCounted, item_id: String, count: int, source_stack_index: int = 0) -> Dictionary:
 	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
 	if normalized_item_id.is_empty():
 		return {"success": false, "reason": "invalid_item_id"}
@@ -2089,7 +2089,17 @@ func _split_actor_inventory_stack(actor: RefCounted, item_id: String, count: int
 		}
 	_inventory_entries.sync_actor_inventory_order(actor)
 	var stacks: Array[int] = _actor_inventory_stacks_for(actor, normalized_item_id, available)
-	var source_index := _largest_stack_index(stacks)
+	var source_index := source_stack_index - 1 if source_stack_index > 0 else _largest_stack_index(stacks)
+	if source_index < 0 or source_index >= stacks.size():
+		return {
+			"success": false,
+			"reason": "split_source_stack_invalid",
+			"item_id": normalized_item_id,
+			"count": count,
+			"available": available,
+			"source_stack_index": source_stack_index,
+			"stacks": stacks.duplicate(),
+		}
 	if source_index < 0 or int(stacks[source_index]) <= count:
 		return {
 			"success": false,
@@ -2097,6 +2107,7 @@ func _split_actor_inventory_stack(actor: RefCounted, item_id: String, count: int
 			"item_id": normalized_item_id,
 			"count": count,
 			"available": available,
+			"source_stack_index": source_stack_index,
 			"stacks": stacks.duplicate(),
 		}
 	stacks[source_index] = int(stacks[source_index]) - count

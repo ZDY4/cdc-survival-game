@@ -274,6 +274,27 @@ func _run_checks(game_root: Node) -> Array[String]:
 		var after_add_stacks: Array = _array_or_empty(after_stack_add.get("stack_counts", []))
 		if after_add_stacks.size() != 2 or int(after_add_stacks[0]) != 2 or int(after_add_stacks[1]) != 2:
 			errors.append("stack-aware add should append a new stack instead of collapsing existing stacks: %s" % after_stack_add)
+		player_ref.inventory["1010"] = 5
+		player_ref.inventory_stacks["1010"] = [2, 3]
+		game_root.refresh_inventory_panel()
+		if not _open_inventory_context_menu(game_root, "废金属"):
+			errors.append("should reopen context menu for stack-source split")
+			return errors
+		if _context_action_disabled(game_root, 100):
+			errors.append("specific stack split should enable first split source")
+		if _context_action_disabled(game_root, 101):
+			errors.append("specific stack split should enable second split source")
+		if not _context_action_label(game_root, 101).contains("拆分第 2 堆"):
+			errors.append("specific stack split should expose second source label")
+		if not _context_action_tooltip(game_root, 101).contains("该堆当前 3 个"):
+			errors.append("specific stack split should explain selected source stack")
+		_execute_inventory_context_action(game_root, 101)
+		await process_frame
+		game_root.refresh_inventory_panel()
+		var after_source_split: Dictionary = _inventory_snapshot_item(game_root, "1010")
+		var source_split_stacks: Array = _array_or_empty(after_source_split.get("stack_counts", []))
+		if source_split_stacks.size() != 3 or int(source_split_stacks[0]) != 2 or int(source_split_stacks[1]) != 2 or int(source_split_stacks[2]) != 1:
+			errors.append("specific stack split should consume selected source stack: %s" % after_source_split)
 		if not _open_inventory_context_menu(game_root, "废金属"):
 			errors.append("should reopen context menu for temporary scrap metal after stack mutations")
 			return errors
@@ -284,7 +305,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		var drop_all_quantity_input: LineEdit = _discard_quantity_input(game_root)
 		if drop_all_quantity_input == null:
 			errors.append("drop all discard modal should expose quantity input")
-		elif drop_all_quantity_input.text != "4":
+		elif drop_all_quantity_input.text != "5":
 			errors.append("drop all discard modal should start from full stack count")
 		_confirm_discard_dialog(game_root)
 		await process_frame
@@ -921,6 +942,16 @@ func _context_action_tooltip(game_root: Node, action_id: int) -> String:
 	if index < 0:
 		return ""
 	return str(menu.get_item_tooltip(index))
+
+
+func _context_action_label(game_root: Node, action_id: int) -> String:
+	var menu: PopupMenu = game_root.inventory_panel.find_child("InventoryContextMenu", true, false) as PopupMenu
+	if menu == null:
+		return ""
+	var index: int = menu.get_item_index(action_id)
+	if index < 0:
+		return ""
+	return str(menu.get_item_text(index))
 
 
 func _execute_inventory_context_action(game_root: Node, action_id: int) -> void:
