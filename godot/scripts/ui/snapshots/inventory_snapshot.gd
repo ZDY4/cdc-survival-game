@@ -248,8 +248,58 @@ func _deconstruct_requirements(crafting_fragment: Dictionary) -> Dictionary:
 	if crafting_fragment.is_empty():
 		return {}
 	return {
-		"required_tools": _normalized_item_ids(crafting_fragment.get("deconstruct_required_tools", crafting_fragment.get("required_deconstruct_tools", crafting_fragment.get("deconstruct_required_tool_ids", crafting_fragment.get("required_deconstruct_tool_ids", []))))),
+		"required_tools": _deconstruct_required_tools(crafting_fragment),
 		"required_station": str(crafting_fragment.get("deconstruct_required_station", crafting_fragment.get("required_deconstruct_station", "none"))),
+	}
+
+
+func _deconstruct_required_tools(crafting_fragment: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for key in ["deconstruct_required_tools", "required_deconstruct_tools", "deconstruct_required_tool_ids", "required_deconstruct_tool_ids"]:
+		if not crafting_fragment.has(key):
+			continue
+		_append_deconstruct_required_tools(output, crafting_fragment.get(key), crafting_fragment)
+	return output
+
+
+func _append_deconstruct_required_tools(output: Array[Dictionary], value: Variant, crafting_fragment: Dictionary) -> void:
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_deconstruct_required_tools(output, entry, crafting_fragment)
+		return
+	var tool: Dictionary = _deconstruct_tool_requirement(value, crafting_fragment)
+	var tool_id := str(tool.get("item_id", ""))
+	if tool_id.is_empty():
+		return
+	for index in range(output.size()):
+		var existing: Dictionary = _dictionary_or_empty(output[index])
+		if str(existing.get("item_id", "")) != tool_id:
+			continue
+		existing["required"] = max(int(existing.get("required", 1)), int(tool.get("required", 1)))
+		if bool(tool.get("consume_on_deconstruct", false)):
+			existing["consume_on_deconstruct"] = true
+			existing["consume_count"] = max(int(existing.get("consume_count", 1)), int(tool.get("consume_count", 1)))
+		output[index] = existing
+		return
+	output.append(tool)
+
+
+func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary) -> Dictionary:
+	var data: Dictionary = _dictionary_or_empty(tool)
+	var raw_id: Variant = tool
+	if not data.is_empty():
+		raw_id = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var tool_id := _normalize_content_id(raw_id)
+	var consume_on_deconstruct: bool = bool(data.get("consume_on_deconstruct", data.get("consume_on_deconstruct_item", data.get("consume_on_craft", data.get("consume", data.get("consumed", false))))))
+	if bool(crafting_fragment.get("consume_required_tools_on_deconstruct", crafting_fragment.get("consume_deconstruct_tools", crafting_fragment.get("consume_required_tools", false)))):
+		consume_on_deconstruct = true
+	var consume_count: int = max(1, int(data.get("consume_count", data.get("consumed_count", data.get("tool_consume_count", data.get("deconstruct_tool_consume_count", crafting_fragment.get("required_tool_consume_count", crafting_fragment.get("deconstruct_tool_consume_count", crafting_fragment.get("tool_consume_count", 1)))))))))
+	return {
+		"item_id": tool_id,
+		"name": str(_item_data(tool_id).get("name", tool_id)),
+		"required": max(1, int(data.get("required", data.get("required_count", data.get("count", 1))))),
+		"consume_on_deconstruct": consume_on_deconstruct,
+		"consume_count": consume_count if consume_on_deconstruct else 0,
 	}
 
 
@@ -371,6 +421,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "AP 不足，拆解 %s 需要 %.0f，当前 %.0f。" % [item_name, float(feedback.get("required_ap", 0.0)), float(feedback.get("available_ap", 0.0))]
 		"missing_tools":
 			return "缺少拆解工具，无法拆解 %s。" % item_name
+		"missing_consumable_tools":
+			return "缺少可消耗拆解工具，无法拆解 %s。" % item_name
 		"missing_station":
 			return "缺少拆解工作台 %s，无法拆解 %s。" % [
 				str(feedback.get("required_station", "")),
@@ -466,6 +518,16 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _normalize_content_id(value: Variant) -> String:
+	if typeof(value) == TYPE_FLOAT:
+		var float_value: float = value
+		if is_equal_approx(float_value, roundf(float_value)):
+			return str(int(float_value))
+	if typeof(value) == TYPE_INT:
+		return str(value)
+	return str(value).strip_edges()
 
 
 func _string_array(values: Variant) -> Array[String]:

@@ -1527,9 +1527,12 @@ func _submit_deconstruct_action(actor: RefCounted, command: Dictionary, items: D
 		}
 	var result: Dictionary = deconstruct_actor_item(actor.actor_id, item_id, count, items)
 	if bool(result.get("success", false)):
+		var consumed_tools: Array[Dictionary] = _consume_deconstruct_tools(actor, _array_or_empty(requirements.get("tool_consumption", [])))
 		_spend_ap(actor, cost, "deconstruct:%s" % _inventory_entries.normalize_content_id(item_id))
 		result["ap_cost"] = cost
 		result["ap_remaining"] = actor.ap
+		result["consumed_tools"] = consumed_tools
+		_attach_consumed_tools_to_last_event("item_deconstructed", consumed_tools)
 	return result
 
 
@@ -1541,13 +1544,16 @@ func _deconstruct_requirement_check(actor: RefCounted, item_id: String, items: D
 	if crafting_fragment.is_empty():
 		return {"success": true}
 	var missing_tools: Array[Dictionary] = []
-	for tool_id in _deconstruct_required_tool_ids(crafting_fragment):
+	var required_tools: Array[Dictionary] = _deconstruct_tool_requirements(crafting_fragment)
+	for tool in required_tools:
+		var tool_id: String = str(tool.get("item_id", ""))
 		var available_count: int = _actor_tool_available_count(actor, tool_id, crafting_context)
-		if available_count > 0:
+		var required_count: int = max(1, int(tool.get("required", 1)))
+		if available_count >= required_count:
 			continue
 		missing_tools.append({
 			"item_id": tool_id,
-			"required": 1,
+			"required": required_count,
 			"available": available_count,
 		})
 	if not missing_tools.is_empty():
@@ -1557,9 +1563,22 @@ func _deconstruct_requirement_check(actor: RefCounted, item_id: String, items: D
 			"item_id": normalized_item_id,
 			"missing_tools": missing_tools,
 		}
+	var tool_consumption: Array[Dictionary] = _deconstruct_tool_consumption_requirements(actor, required_tools)
+	var missing_consumable_tools: Array[Dictionary] = _missing_deconstruct_consumable_tools(actor, tool_consumption, items)
+	if not missing_consumable_tools.is_empty():
+		return {
+			"success": false,
+			"reason": "missing_consumable_tools",
+			"item_id": normalized_item_id,
+			"missing_consumable_tools": missing_consumable_tools,
+		}
 	var required_station := str(crafting_fragment.get("deconstruct_required_station", crafting_fragment.get("required_deconstruct_station", ""))).strip_edges()
 	if required_station in ["", "none"]:
-		return {"success": true}
+		return {
+			"success": true,
+			"required_tools": required_tools,
+			"tool_consumption": tool_consumption,
+		}
 	var station: Dictionary = _nearest_crafting_station(actor, required_station, _array_or_empty(crafting_context.get("crafting_stations", [])))
 	if station.is_empty():
 		return {
@@ -1570,18 +1589,139 @@ func _deconstruct_requirement_check(actor: RefCounted, item_id: String, items: D
 		}
 	return {
 		"success": true,
+		"required_tools": required_tools,
+		"tool_consumption": tool_consumption,
 		"required_station": required_station,
 		"station": station,
 	}
 
 
-func _deconstruct_required_tool_ids(crafting_fragment: Dictionary) -> Array[String]:
-	var output: Array[String] = []
+func _deconstruct_tool_requirements(crafting_fragment: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
 	for key in ["deconstruct_required_tools", "required_deconstruct_tools", "deconstruct_required_tool_ids", "required_deconstruct_tool_ids"]:
 		if not crafting_fragment.has(key):
 			continue
-		_append_unique_normalized_item_id(output, crafting_fragment.get(key))
+		_append_deconstruct_tool_requirements(output, crafting_fragment.get(key), crafting_fragment)
 	return output
+
+
+func _append_deconstruct_tool_requirements(output: Array[Dictionary], value: Variant, crafting_fragment: Dictionary) -> void:
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_deconstruct_tool_requirements(output, entry, crafting_fragment)
+		return
+	var requirement: Dictionary = _deconstruct_tool_requirement(value, crafting_fragment)
+	var tool_id := str(requirement.get("item_id", ""))
+	if tool_id.is_empty():
+		return
+	for index in range(output.size()):
+		var existing: Dictionary = _dictionary_or_empty(output[index])
+		if str(existing.get("item_id", "")) != tool_id:
+			continue
+		existing["required"] = max(int(existing.get("required", 1)), int(requirement.get("required", 1)))
+		if bool(requirement.get("consume_on_deconstruct", false)):
+			existing["consume_on_deconstruct"] = true
+			existing["consume_count"] = max(int(existing.get("consume_count", 1)), int(requirement.get("consume_count", 1)))
+		output[index] = existing
+		return
+	output.append(requirement)
+
+
+func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary) -> Dictionary:
+	var data: Dictionary = _dictionary_or_empty(tool)
+	var raw_id: Variant = tool
+	if not data.is_empty():
+		raw_id = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var required_count: int = max(1, int(data.get("required", data.get("required_count", data.get("count", 1)))))
+	var consume_on_deconstruct: bool = bool(data.get("consume_on_deconstruct", data.get("consume_on_deconstruct_item", data.get("consume_on_craft", data.get("consume", data.get("consumed", false))))))
+	if _deconstruct_consumes_required_tools(crafting_fragment):
+		consume_on_deconstruct = true
+	var consume_count: int = max(1, int(data.get("consume_count", data.get("consumed_count", data.get("tool_consume_count", data.get("deconstruct_tool_consume_count", _deconstruct_required_tool_consume_count(crafting_fragment)))))))
+	return {
+		"item_id": _inventory_entries.normalize_content_id(raw_id),
+		"required": required_count,
+		"consume_on_deconstruct": consume_on_deconstruct,
+		"consume_count": consume_count,
+	}
+
+
+func _deconstruct_consumes_required_tools(crafting_fragment: Dictionary) -> bool:
+	return bool(crafting_fragment.get("consume_required_tools_on_deconstruct", crafting_fragment.get("consume_deconstruct_tools", crafting_fragment.get("consume_required_tools", false))))
+
+
+func _deconstruct_required_tool_consume_count(crafting_fragment: Dictionary) -> int:
+	return max(1, int(crafting_fragment.get("required_tool_consume_count", crafting_fragment.get("deconstruct_tool_consume_count", crafting_fragment.get("tool_consume_count", 1)))))
+
+
+func _deconstruct_tool_consumption_requirements(actor: RefCounted, required_tools: Array[Dictionary]) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for tool in required_tools:
+		if not bool(tool.get("consume_on_deconstruct", false)):
+			continue
+		var tool_id := str(tool.get("item_id", ""))
+		if tool_id.is_empty():
+			continue
+		output.append({
+			"item_id": tool_id,
+			"count": max(1, int(tool.get("consume_count", tool.get("required", 1)))),
+			"available": int(actor.inventory.get(tool_id, 0)) if actor != null else 0,
+			"requirement_kind": "tool",
+		})
+	return output
+
+
+func _missing_deconstruct_consumable_tools(actor: RefCounted, tool_consumption: Array[Dictionary], items: Dictionary) -> Array[Dictionary]:
+	var missing: Array[Dictionary] = []
+	for tool in tool_consumption:
+		var tool_id := str(tool.get("item_id", ""))
+		var required_count: int = max(1, int(tool.get("count", 1)))
+		var available_count: int = int(actor.inventory.get(tool_id, 0)) if actor != null else 0
+		if not tool_id.is_empty() and available_count >= required_count:
+			continue
+		missing.append({
+			"item_id": tool_id,
+			"name": _item_name_from_library(tool_id, items),
+			"available": available_count,
+			"required": required_count,
+			"consume_on_deconstruct": true,
+		})
+	return missing
+
+
+func _consume_deconstruct_tools(actor: RefCounted, tool_consumption: Array) -> Array[Dictionary]:
+	var consumed: Array[Dictionary] = []
+	for tool in tool_consumption:
+		var tool_data: Dictionary = _dictionary_or_empty(tool)
+		var tool_id := str(tool_data.get("item_id", ""))
+		var count: int = max(1, int(tool_data.get("count", 1)))
+		if actor == null or tool_id.is_empty():
+			continue
+		var before_count: int = int(actor.inventory.get(tool_id, 0))
+		_inventory_entries.add_actor_item(actor, tool_id, -count)
+		consumed.append({
+			"item_id": tool_id,
+			"count": count,
+			"inventory_before": before_count,
+			"inventory_after": int(actor.inventory.get(tool_id, 0)),
+			"requirement_kind": "tool",
+		})
+	return consumed
+
+
+func _attach_consumed_tools_to_last_event(kind: String, consumed_tools: Array[Dictionary]) -> void:
+	if consumed_tools.is_empty():
+		return
+	for index in range(events.size() - 1, -1, -1):
+		if events[index].kind != kind:
+			continue
+		events[index].payload["consumed_tools"] = consumed_tools.duplicate(true)
+		return
+
+
+func _item_name_from_library(item_id: String, items: Dictionary) -> String:
+	var record: Dictionary = _dictionary_or_empty(items.get(item_id, {}))
+	var data: Dictionary = _dictionary_or_empty(record.get("data", record))
+	return str(data.get("name", item_id))
 
 
 func _actor_tool_available_count(actor: RefCounted, tool_id: String, crafting_context: Dictionary = {}) -> int:

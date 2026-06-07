@@ -395,11 +395,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_inventory_panel()
 	if not _press_inventory_item_with_text(game_root, "拆解要求测试物品"):
 		errors.append("should select deconstruct requirement smoke item")
-	if not _detail_line(game_root).contains("拆解要求 工具 1151 / 工作台 smoke_station"):
-		errors.append("inventory detail should show deconstruct tool and station requirements")
+	if not _detail_line(game_root).contains("拆解要求 工具 螺丝刀(消耗 1) / 工作台 smoke_station"):
+		errors.append("inventory detail should show deconstruct tool consumption and station requirements")
 	if not _detail_line(game_root).contains("拆解产物 塑料 x1"):
 		errors.append("inventory detail should show deconstruct yield preview")
 	var gated_item_snapshot: Dictionary = _inventory_snapshot_item(game_root, "smoke_deconstruct_tool_item")
+	var gated_requirements: Dictionary = _dictionary_or_empty(gated_item_snapshot.get("deconstruct_requirements", {}))
+	var gated_tools: Array = _array_or_empty(gated_requirements.get("required_tools", []))
+	if gated_tools.is_empty() or not bool(_dictionary_or_empty(gated_tools[0]).get("consume_on_deconstruct", false)):
+		errors.append("inventory snapshot should expose deconstruct consumable tool requirement")
 	var gated_preview: Dictionary = _dictionary_or_empty(gated_item_snapshot.get("deconstruct_preview", {}))
 	var gated_preview_entries: Array = _array_or_empty(gated_preview.get("entries", []))
 	if gated_preview_entries.is_empty():
@@ -419,6 +423,19 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory feedback should localize missing deconstruct station")
 	if _player_inventory_count(game_root, "smoke_deconstruct_tool_item") != 1:
 		errors.append("failed station-gated deconstruct should not consume source item")
+	player_ref.inventory.erase("1151")
+	player_ref.equipment["tool"] = "1151"
+	game_root.refresh_inventory_panel()
+	if game_root.has_method("finish_world_action_presentations"):
+		game_root.finish_world_action_presentations()
+		await process_frame
+	var missing_consumable_tool_result: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_tool_item", 1)
+	await process_frame
+	if str(missing_consumable_tool_result.get("reason", "")) != "missing_consumable_tools":
+		errors.append("deconstruct should report missing_consumable_tools when consumable tool is only equipped")
+	if not _inventory_feedback_line(game_root).contains("缺少可消耗拆解工具"):
+		errors.append("inventory feedback should localize missing consumable deconstruct tool")
+	player_ref.equipment.clear()
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should select bandages before dropping through inventory panel")
 	var quantity_spin: SpinBox = _quantity_spin(game_root)
@@ -615,7 +632,7 @@ func _install_deconstruct_requirement_smoke_item(game_root: Node) -> void:
 			"weight": 0.1,
 			"fragments": [{
 				"kind": "crafting",
-				"deconstruct_required_tools": ["1151"],
+				"deconstruct_required_tools": [{"item_id": "1151", "consume_on_deconstruct": true, "consume_count": 1}],
 				"deconstruct_required_station": "smoke_station",
 				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
 			}],

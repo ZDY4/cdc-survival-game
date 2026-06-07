@@ -391,6 +391,46 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("successful requirement-gated deconstruct should consume source item")
 	if int(player.inventory.get("1104", 0)) != 1:
 		errors.append("successful requirement-gated deconstruct should add yield")
+	var consumable_deconstruct_items: Dictionary = _consumable_deconstruct_tool_smoke_items(registry.get_library("items"))
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.inventory["smoke_deconstruct_consumable_tool_item"] = 1
+	player.equipment["tool"] = "1151"
+	var missing_consumable_deconstruct_tool: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "smoke_deconstruct_consumable_tool_item",
+		"count": 1,
+		"item_library": consumable_deconstruct_items,
+	})
+	if str(missing_consumable_deconstruct_tool.get("reason", "")) != "missing_consumable_tools":
+		errors.append("deconstruct should require consumable tool from inventory before consuming source")
+	if int(player.inventory.get("smoke_deconstruct_consumable_tool_item", 0)) != 1:
+		errors.append("missing consumable deconstruct tool should not consume source item")
+	player.equipment.clear()
+	player.inventory["1151"] = 1
+	var event_count_before_deconstruct: int = _event_count(simulation.snapshot(), "item_deconstructed")
+	var consumable_deconstruct_result: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "smoke_deconstruct_consumable_tool_item",
+		"count": 1,
+		"item_library": consumable_deconstruct_items,
+	})
+	if not bool(consumable_deconstruct_result.get("success", false)):
+		errors.append("deconstruct with consumable tool in inventory should succeed: %s" % consumable_deconstruct_result.get("reason", "unknown"))
+	if int(player.inventory.get("1151", 0)) != 0:
+		errors.append("successful consumable-tool deconstruct should consume tool from inventory")
+	if _array_or_empty(consumable_deconstruct_result.get("consumed_tools", [])).is_empty():
+		errors.append("deconstruct result should expose consumed_tools")
+	var deconstruct_events: Array = _events_of_kind(simulation.snapshot(), "item_deconstructed")
+	if deconstruct_events.size() <= event_count_before_deconstruct:
+		errors.append("consumable-tool deconstruct should emit item_deconstructed event")
+	elif _array_or_empty(_dictionary_or_empty(_dictionary_or_empty(deconstruct_events[deconstruct_events.size() - 1]).get("payload", {})).get("consumed_tools", [])).is_empty():
+		errors.append("item_deconstructed event should expose consumed_tools")
 	player.inventory.clear()
 	player.inventory_order.clear()
 	player.equipment.clear()
@@ -544,6 +584,23 @@ func _deconstruct_requirement_smoke_items(base_items: Dictionary) -> Dictionary:
 	return output
 
 
+func _consumable_deconstruct_tool_smoke_items(base_items: Dictionary) -> Dictionary:
+	var output := base_items.duplicate(true)
+	output["smoke_deconstruct_consumable_tool_item"] = {
+		"data": {
+			"id": "smoke_deconstruct_consumable_tool_item",
+			"name": "消耗拆解工具测试物品",
+			"weight": 0.1,
+			"fragments": [{
+				"kind": "crafting",
+				"deconstruct_required_tools": [{"item_id": "1151", "consume_on_deconstruct": true, "consume_count": 1}],
+				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
+			}],
+		},
+	}
+	return output
+
+
 func _event_count(snapshot: Dictionary, kind: String) -> int:
 	var count := 0
 	for event in snapshot.get("events", []):
@@ -551,6 +608,15 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _events_of_kind(snapshot: Dictionary, kind: String) -> Array:
+	var output: Array = []
+	for event in snapshot.get("events", []):
+		var event_data: Dictionary = _dictionary_or_empty(event)
+		if str(event_data.get("kind", "")) == kind:
+			output.append(event_data)
+	return output
 
 
 func _last_event(snapshot: Dictionary, kind: String) -> Dictionary:

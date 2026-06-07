@@ -860,13 +860,32 @@ func _deconstruct_requirements_text(item: Dictionary) -> String:
 	var parts: Array[String] = []
 	var required_tools: Array = _array_or_empty(requirements.get("required_tools", []))
 	if not required_tools.is_empty():
-		parts.append("工具 %s" % ", ".join(_string_array(required_tools)))
+		parts.append("工具 %s" % ", ".join(_deconstruct_tool_requirement_texts(required_tools)))
 	var station := str(requirements.get("required_station", "none"))
 	if station not in ["", "none"]:
 		parts.append("工作台 %s" % station)
 	if parts.is_empty():
 		return ""
 	return " | 拆解要求 %s" % " / ".join(parts)
+
+
+func _deconstruct_tool_requirement_texts(required_tools: Array) -> Array[String]:
+	var output: Array[String] = []
+	for entry in required_tools:
+		if typeof(entry) != TYPE_DICTIONARY:
+			output.append(str(entry))
+			continue
+		var tool: Dictionary = _dictionary_or_empty(entry)
+		var label := str(tool.get("name", tool.get("item_id", "")))
+		if label.is_empty():
+			continue
+		var required: int = max(1, int(tool.get("required", 1)))
+		if required > 1:
+			label = "%s x%d" % [label, required]
+		if bool(tool.get("consume_on_deconstruct", false)):
+			label = "%s(消耗 %d)" % [label, max(1, int(tool.get("consume_count", 1)))]
+		output.append(label)
+	return output
 
 
 func _deconstruct_preview_text(item: Dictionary) -> String:
