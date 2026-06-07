@@ -341,13 +341,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_equipment_context_menu(errors, game_root, "main_hand", "1002", true, false, false, "main hand equipment context menu")
 	_expect_blocker(errors, game_root, "equipment_context_menu", "equipment context menu blocker")
 	_assert_close_priority(errors, game_root, ["equipment_context_menu"], "equipment context menu close priority")
+	_assert_context_menu_event(errors, game_root, "equipment_context_menu", "character", "equipment context menu event")
 	_press_key(game_root, KEY_ESCAPE)
 	if bool(_dictionary_or_empty(game_root.context_menu_snapshot()).get("active", false)):
 		errors.append("Esc should close equipment context menu")
 	if not game_root.character_panel.visible:
 		errors.append("closing equipment context menu should keep character panel open")
+	_assert_no_context_menu_event(errors, game_root, "equipment context menu Esc close event clear")
 	_open_equipment_context_menu(game_root, "main_hand")
 	_assert_equipment_context_menu(errors, game_root, "main_hand", "1002", true, false, false, "equipment context menu outside click setup")
+	_assert_context_menu_event(errors, game_root, "equipment_context_menu", "character", "equipment context menu outside click event setup")
 	var before_outside_click_grid: Dictionary = _dictionary_or_empty(_player(game_root).get("grid_position", {})).duplicate(true)
 	_click_world_outside_ui(game_root, Vector2(720, 520), MOUSE_BUTTON_LEFT)
 	if bool(_dictionary_or_empty(game_root.context_menu_snapshot()).get("active", false)):
@@ -358,6 +361,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("outside click used for context menu close should not also select world target")
 	if not game_root.character_panel.visible:
 		errors.append("outside click closing equipment context menu should keep character panel open")
+	_assert_no_context_menu_event(errors, game_root, "equipment context menu outside close event clear")
 	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player_ref == null:
 		errors.append("player actor should exist for equipped ammo display test")
@@ -997,6 +1001,36 @@ func _assert_close_priority(errors: Array[String], game_root: Node, expected_pre
 	for index in range(expected_prefix.size()):
 		if str(runtime_priority[index]) != expected_prefix[index]:
 			errors.append("%s: runtime close priority expected %s at %d, got %s" % [context, expected_prefix[index], index, runtime_priority])
+
+
+func _assert_context_menu_event(errors: Array[String], game_root: Node, expected_menu_id: String, expected_owner: String, context: String) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot() if game_root.has_method("menu_state_snapshot") else {})
+	var event: Dictionary = _dictionary_or_empty(snapshot.get("context_menu_event", {}))
+	if event.is_empty():
+		errors.append("%s: menu state should expose context_menu_event: %s" % [context, snapshot])
+		return
+	if str(event.get("event", "")) != "context_menu_opened" or str(event.get("panel_id", "")) != expected_menu_id:
+		errors.append("%s: context menu event expected opened:%s, got %s" % [context, expected_menu_id, event])
+	if str(event.get("owner_panel", "")) != expected_owner:
+		errors.append("%s: context menu event owner expected %s, got %s" % [context, expected_owner, event])
+	var latest: Dictionary = _dictionary_or_empty(snapshot.get("latest_event", {}))
+	if str(latest.get("event", "")) != "context_menu_opened" or str(latest.get("panel_id", "")) != expected_menu_id:
+		errors.append("%s: latest event should mirror context menu event: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
+	var runtime_event: Dictionary = _dictionary_or_empty(runtime_menu.get("context_menu_event", {}))
+	if str(runtime_event.get("event", "")) != "context_menu_opened" or str(runtime_event.get("panel_id", "")) != expected_menu_id:
+		errors.append("%s: runtime menu should expose context menu event %s: %s" % [context, expected_menu_id, runtime_menu])
+
+
+func _assert_no_context_menu_event(errors: Array[String], game_root: Node, context: String) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot() if game_root.has_method("menu_state_snapshot") else {})
+	if not _dictionary_or_empty(snapshot.get("context_menu_event", {})).is_empty():
+		errors.append("%s: context_menu_event should clear when no menu is active: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
+	if not _dictionary_or_empty(runtime_menu.get("context_menu_event", {})).is_empty():
+		errors.append("%s: runtime context_menu_event should clear when no menu is active: %s" % [context, runtime_menu])
 
 
 func _assert_debug_overlay_line(errors: Array[String], game_root: Node, expected: String, context: String) -> void:

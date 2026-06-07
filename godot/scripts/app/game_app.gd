@@ -450,9 +450,10 @@ func menu_state_snapshot() -> Dictionary:
 		var panel_priority: Array = _array_or_empty(panel_snapshot.get("close_priority", []))
 		panel_snapshot["panel_close_priority"] = panel_priority.duplicate(true)
 		panel_snapshot["close_priority"] = _root_close_priority(panel_priority)
+		_apply_context_menu_event_to_menu_state(panel_snapshot)
 		return panel_snapshot
 	var fallback_priority: Array[String] = ["settings"]
-	return {
+	var fallback := {
 		"active_stage_panel": "",
 		"stage_panel_open": false,
 		"stage_panels": [],
@@ -465,6 +466,34 @@ func menu_state_snapshot() -> Dictionary:
 		"panel_close_priority": fallback_priority.duplicate(true),
 		"close_priority": _root_close_priority(fallback_priority),
 	}
+	_apply_context_menu_event_to_menu_state(fallback)
+	return fallback
+
+
+func _apply_context_menu_event_to_menu_state(menu_state: Dictionary) -> void:
+	var context_menu: Dictionary = context_menu_snapshot()
+	if not bool(context_menu.get("active", false)):
+		menu_state["context_menu_event"] = {}
+		return
+	var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
+	var event := {
+		"sequence": int(menu_state.get("recent_event_count", 0)) + 1,
+		"event": "context_menu_opened",
+		"panel_id": str(top_menu.get("id", "context_menu")),
+		"kind": str(top_menu.get("kind", "context_menu")),
+		"visible": true,
+		"reason": "context_menu_snapshot",
+		"owner_panel": str(top_menu.get("owner_panel", "")),
+		"mouse_blocks_world": bool(top_menu.get("mouse_blocks_world", true)),
+	}
+	var recent_events: Array = _array_or_empty(menu_state.get("recent_events", [])).duplicate(true)
+	recent_events.append(event)
+	while recent_events.size() > 8:
+		recent_events.pop_front()
+	menu_state["recent_events"] = recent_events
+	menu_state["recent_event_count"] = recent_events.size()
+	menu_state["latest_event"] = event.duplicate(true)
+	menu_state["context_menu_event"] = event.duplicate(true)
 
 
 func _root_close_priority(panel_priority: Array = []) -> Array[String]:
