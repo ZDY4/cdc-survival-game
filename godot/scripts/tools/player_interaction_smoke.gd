@@ -1654,7 +1654,7 @@ func _expect_picking_priority_snapshot(errors: Array[String], picking: Dictionar
 	if int(picking.get("selected_priority", 99)) != priority_order.find(selected_category):
 		errors.append("picking selected priority should match priority order for %s" % selected_category)
 	var sort_keys: Array = _array_or_empty(picking.get("sort_keys", []))
-	for sort_key in ["priority", "subpriority", "hit_fraction", "anchor_noise", "hit_index"]:
+	for sort_key in ["priority", "subpriority", "door_aabb_distance", "hit_fraction", "anchor_noise", "hit_index"]:
 		if not sort_keys.has(sort_key):
 			errors.append("picking diagnostics should expose sort key %s" % sort_key)
 	if int(picking.get("hit_count", 0)) <= 0:
@@ -1671,6 +1671,10 @@ func _expect_picking_priority_snapshot(errors: Array[String], picking: Dictionar
 			errors.append("picking candidate hit_fraction should be normalized")
 		if not candidate_data.has("distance"):
 			errors.append("picking candidate should expose ray distance")
+		if not candidate_data.has("door_aabb_distance"):
+			errors.append("picking candidate should expose door AABB distance")
+		elif float(candidate_data.get("door_aabb_distance", -1.0)) < 0.0:
+			errors.append("picking candidate door AABB distance should be non-negative")
 		if not candidate_data.has("anchor_noise"):
 			errors.append("picking candidate should expose anchor noise")
 

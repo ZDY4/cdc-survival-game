@@ -962,6 +962,7 @@ func _pick_world_target(ray_from: Vector3, ray_to: Vector3) -> Dictionary:
 			"subpriority": _picking_subpriority(metadata, category),
 			"distance": hit_distance,
 			"hit_fraction": hit_distance / ray_length,
+			"door_aabb_distance": _picking_door_aabb_distance(metadata, category, hit_position),
 			"anchor_noise": _picking_anchor_noise(metadata, hit_position),
 			"target_id": str(metadata.get("target_id", "")),
 			"target_type": str(metadata.get("target_type", "")),
@@ -1025,6 +1026,14 @@ func _picking_subpriority(metadata: Dictionary, category: String) -> int:
 
 
 func _picking_anchor_noise(metadata: Dictionary, hit_position: Vector3) -> float:
+	var bounds: Dictionary = _picking_cell_bounds(metadata)
+	if bool(bounds.get("has_bounds", false)):
+		var center: Vector3 = Vector3(
+			float(bounds.get("center_x", hit_position.x)),
+			float(metadata.get("y", _observed_level())),
+			float(bounds.get("center_z", hit_position.z))
+		)
+		return Vector2(center.x - hit_position.x, center.z - hit_position.z).length()
 	var anchor: Dictionary = _dictionary_or_empty(metadata.get("anchor", metadata.get("grid", {})))
 	if anchor.is_empty():
 		return 0.0
@@ -1036,6 +1045,55 @@ func _picking_anchor_noise(metadata: Dictionary, hit_position: Vector3) -> float
 	return Vector2(anchor_position.x - hit_position.x, anchor_position.z - hit_position.z).length()
 
 
+func _picking_door_aabb_distance(metadata: Dictionary, category: String, hit_position: Vector3) -> float:
+	if category != "door":
+		return 0.0
+	var bounds: Dictionary = _picking_cell_bounds(metadata)
+	if not bool(bounds.get("has_bounds", false)):
+		return 0.0
+	var dx: float = 0.0
+	if hit_position.x < float(bounds.get("min_x", hit_position.x)):
+		dx = float(bounds.get("min_x", hit_position.x)) - hit_position.x
+	elif hit_position.x > float(bounds.get("max_x", hit_position.x)):
+		dx = hit_position.x - float(bounds.get("max_x", hit_position.x))
+	var dz: float = 0.0
+	if hit_position.z < float(bounds.get("min_z", hit_position.z)):
+		dz = float(bounds.get("min_z", hit_position.z)) - hit_position.z
+	elif hit_position.z > float(bounds.get("max_z", hit_position.z)):
+		dz = hit_position.z - float(bounds.get("max_z", hit_position.z))
+	return Vector2(dx, dz).length()
+
+
+func _picking_cell_bounds(metadata: Dictionary) -> Dictionary:
+	var cells: Array = _array_or_empty(metadata.get("cells", []))
+	if cells.is_empty():
+		var door: Dictionary = _dictionary_or_empty(metadata.get("door", {}))
+		cells = _array_or_empty(door.get("cells", []))
+	if cells.is_empty():
+		return {"has_bounds": false}
+	var min_x: float = INF
+	var max_x: float = -INF
+	var min_z: float = INF
+	var max_z: float = -INF
+	for cell in cells:
+		var cell_data: Dictionary = _dictionary_or_empty(cell)
+		var cell_x: float = float(cell_data.get("x", 0.0)) * GRID_SIZE
+		var cell_z: float = float(cell_data.get("z", 0.0)) * GRID_SIZE
+		min_x = minf(min_x, cell_x - GRID_SIZE * 0.5)
+		max_x = maxf(max_x, cell_x + GRID_SIZE * 0.5)
+		min_z = minf(min_z, cell_z - GRID_SIZE * 0.5)
+		max_z = maxf(max_z, cell_z + GRID_SIZE * 0.5)
+	return {
+		"has_bounds": true,
+		"min_x": min_x,
+		"max_x": max_x,
+		"min_z": min_z,
+		"max_z": max_z,
+		"center_x": (min_x + max_x) * 0.5,
+		"center_z": (min_z + max_z) * 0.5,
+	}
+
+
 func _sort_pick_candidates(left: Dictionary, right: Dictionary) -> bool:
 	var left_priority: int = int(left.get("priority", 99))
 	var right_priority: int = int(right.get("priority", 99))
@@ -1045,6 +1103,10 @@ func _sort_pick_candidates(left: Dictionary, right: Dictionary) -> bool:
 	var right_subpriority: int = int(right.get("subpriority", 0))
 	if left_subpriority != right_subpriority:
 		return left_subpriority < right_subpriority
+	var left_door_distance: float = float(left.get("door_aabb_distance", 0.0))
+	var right_door_distance: float = float(right.get("door_aabb_distance", 0.0))
+	if absf(left_door_distance - right_door_distance) > 0.0001:
+		return left_door_distance < right_door_distance
 	var left_fraction: float = float(left.get("hit_fraction", 0.0))
 	var right_fraction: float = float(right.get("hit_fraction", 0.0))
 	if absf(left_fraction - right_fraction) > 0.0001:
@@ -1067,6 +1129,7 @@ func _picking_diagnostics(category: String, priority: int, hit_count: int, selec
 			"hit_index": int(item.get("hit_index", 0)),
 			"hit_fraction": float(item.get("hit_fraction", 0.0)),
 			"distance": float(item.get("distance", 0.0)),
+			"door_aabb_distance": float(item.get("door_aabb_distance", 0.0)),
 			"anchor_noise": float(item.get("anchor_noise", 0.0)),
 			"target_id": str(item.get("target_id", "")),
 			"target_type": str(item.get("target_type", "")),
@@ -1076,7 +1139,7 @@ func _picking_diagnostics(category: String, priority: int, hit_count: int, selec
 		"selected_category": category,
 		"selected_priority": priority,
 		"selected_hit_index": selected_hit_index,
-		"sort_keys": ["priority", "subpriority", "hit_fraction", "anchor_noise", "hit_index"],
+		"sort_keys": ["priority", "subpriority", "door_aabb_distance", "hit_fraction", "anchor_noise", "hit_index"],
 		"hit_count": hit_count,
 		"candidate_count": candidate_output.size(),
 		"candidates": candidate_output,
