@@ -1116,10 +1116,16 @@ func _add_pickable_box(parent: Node3D, size: Vector3, local_position: Vector3 = 
 	var body := StaticBody3D.new()
 	body.name = "PickableBody"
 	body.set_meta("interaction_target", parent.get_meta("interaction_target"))
+	body.set_meta("pick_proxy_kind", "box")
+	body.set_meta("pick_proxy_size", size)
+	body.set_meta("pick_proxy_local_position", local_position)
 	var shape := CollisionShape3D.new()
+	shape.name = "PickableShape"
 	var box := BoxShape3D.new()
 	box.size = size
 	shape.shape = box
+	shape.set_meta("pick_proxy_kind", "box")
+	shape.set_meta("pick_proxy_size", size)
 	body.add_child(shape)
 	body.position = local_position
 	parent.add_child(body)
@@ -1129,11 +1135,18 @@ func _add_pickable_capsule(parent: Node3D, radius: float, height: float) -> void
 	var body := StaticBody3D.new()
 	body.name = "PickableBody"
 	body.set_meta("interaction_target", parent.get_meta("interaction_target"))
+	body.set_meta("pick_proxy_kind", "capsule")
+	body.set_meta("pick_proxy_radius", radius)
+	body.set_meta("pick_proxy_height", height)
 	var shape := CollisionShape3D.new()
+	shape.name = "PickableShape"
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = radius
 	capsule.height = height
 	shape.shape = capsule
+	shape.set_meta("pick_proxy_kind", "capsule")
+	shape.set_meta("pick_proxy_radius", radius)
+	shape.set_meta("pick_proxy_height", height)
 	body.add_child(shape)
 	parent.add_child(body)
 

@@ -974,6 +974,11 @@ func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, erro
 		errors.append("scene smoke visual instancing mismatch %d/%d" % [instantiated_count, declared_count])
 	if int(stats.get("zero_scale_nodes", 0)) > 0:
 		errors.append("runtime map visual nodes should not use zero scale")
+	if int(stats.get("pickable_bodies", 0)) > 0:
+		if int(stats.get("collision_shapes", 0)) <= 0:
+			errors.append("runtime map visual pick proxies should expose collision shapes")
+		if int(stats.get("physics_bodies", 0)) <= 0:
+			errors.append("runtime map visual pick proxies should expose physics bodies")
 
 
 func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[String]) -> void:
@@ -1212,6 +1217,15 @@ func _declared_visual_stats(root: Node, label: String, errors: Array[String], re
 		var pickable_body: Node = node.find_child("PickableBody", false, false)
 		if pickable_body != null:
 			pickable_body_count += 1
+			_merge_visual_diagnostics(diagnostic_totals, _node_visual_diagnostics(pickable_body))
+			if require_pickable:
+				if str(pickable_body.get_meta("pick_proxy_kind", "")) == "":
+					errors.append("%s object %s PickableBody should expose pick_proxy_kind metadata" % [label, object_id])
+				var pickable_shape: CollisionShape3D = pickable_body.find_child("PickableShape", false, false) as CollisionShape3D
+				if pickable_shape == null:
+					errors.append("%s object %s PickableBody should expose PickableShape" % [label, object_id])
+				elif str(pickable_shape.get_meta("pick_proxy_kind", "")) == "":
+					errors.append("%s object %s PickableShape should expose pick_proxy_kind metadata" % [label, object_id])
 		elif require_pickable and node.has_meta("interaction_target"):
 			missing_pickable_body_count += 1
 			errors.append("%s object %s is an active interaction visual but has no PickableBody" % [label, object_id])
