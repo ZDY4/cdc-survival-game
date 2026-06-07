@@ -418,6 +418,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if blocker_name != "modal:inventory_discard_confirm":
 			errors.append("discard confirmation blocker should be modal:inventory_discard_confirm, got %s" % blocker_name)
 		_assert_modal_stack(errors, game_root, "inventory_discard_confirm", "inventory", "discard confirmation")
+		_assert_discard_quantity_modal_details(errors, game_root, 2, 3, true, "", "discard confirmation")
 		_assert_modal_menu_event(errors, game_root, "inventory_discard_confirm", "inventory", "discard confirmation menu event")
 		if discard_quantity_input != null:
 			discard_quantity_input.text = "0"
@@ -427,12 +428,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("invalid discard quantity should keep modal open")
 			if not _discard_error_text(game_root).contains("大于 0"):
 				errors.append("invalid discard quantity should show reason")
+			_assert_discard_quantity_modal_details(errors, game_root, 0, 3, false, "大于 0", "invalid discard confirmation")
 			if _player_inventory_count(game_root, "1006") != 3:
 				errors.append("invalid discard quantity should not mutate inventory")
 			_press_discard_quantity_button(game_root, "DiscardQuantityMaxButton")
 			await process_frame
 			if discard_quantity_input.text != "3":
 				errors.append("discard max button should use available inventory count")
+			_assert_discard_quantity_modal_details(errors, game_root, 3, 3, true, "", "discard max quantity")
 			_press_discard_quantity_button(game_root, "DiscardQuantityMinusButton")
 			await process_frame
 			if discard_quantity_input.text != "2":
@@ -996,6 +999,32 @@ func _assert_modal_stack(errors: Array[String], game_root: Node, expected_id: St
 	var runtime_stack: Dictionary = _dictionary_or_empty(runtime.get("modal_stack", {}))
 	if str(_dictionary_or_empty(runtime_stack.get("top", {})).get("id", "")) != expected_id:
 		errors.append("%s: runtime modal stack should expose top %s: %s" % [context, expected_id, runtime_stack])
+
+
+func _assert_discard_quantity_modal_details(errors: Array[String], game_root: Node, expected_count: int, expected_available: int, expected_valid: bool, expected_error_fragment: String, context: String) -> void:
+	var stack_snapshot: Dictionary = _dictionary_or_empty(game_root.modal_stack_snapshot()) if game_root.has_method("modal_stack_snapshot") else {}
+	var top: Dictionary = _dictionary_or_empty(stack_snapshot.get("top", {}))
+	if str(top.get("id", "")) != "inventory_discard_confirm":
+		errors.append("%s: discard modal details require inventory_discard_confirm top: %s" % [context, stack_snapshot])
+		return
+	if not bool(top.get("dialog_visible", false)):
+		errors.append("%s: discard modal snapshot should expose visible dialog: %s" % [context, top])
+	if int(top.get("count", -1)) != expected_count or int(top.get("available", -1)) != expected_available:
+		errors.append("%s: discard modal should expose count/available %d/%d, got %s" % [context, expected_count, expected_available, top])
+	if int(top.get("quantity_min", 0)) != 1 or int(top.get("quantity_max", 0)) != expected_available:
+		errors.append("%s: discard modal should expose quantity bounds: %s" % [context, top])
+	if bool(top.get("quantity_valid", not expected_valid)) != expected_valid:
+		errors.append("%s: discard modal quantity_valid expected %s, got %s" % [context, str(expected_valid), top])
+	var error_text := str(top.get("quantity_error", ""))
+	if expected_error_fragment.is_empty():
+		if not error_text.is_empty():
+			errors.append("%s: discard modal quantity_error should be empty, got %s" % [context, top])
+	elif not error_text.contains(expected_error_fragment):
+		errors.append("%s: discard modal quantity_error should contain %s, got %s" % [context, expected_error_fragment, top])
+	if not bool(top.get("quantity_input_mouse_blocks_world", false)) or str(top.get("quantity_input_mouse_filter", "")) != "stop":
+		errors.append("%s: discard quantity input should stop world mouse input: %s" % [context, top])
+	if not bool(top.get("confirm_button_mouse_blocks_world", false)) or not bool(top.get("cancel_button_mouse_blocks_world", false)):
+		errors.append("%s: discard modal buttons should stop world mouse input: %s" % [context, top])
 
 
 func _assert_modal_menu_event(errors: Array[String], game_root: Node, expected_id: String, expected_owner: String, context: String) -> void:

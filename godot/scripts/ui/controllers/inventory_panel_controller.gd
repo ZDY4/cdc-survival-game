@@ -522,6 +522,8 @@ func blocking_modal_name() -> String:
 func blocking_modal_snapshot() -> Dictionary:
 	if not has_blocking_modal():
 		return {}
+	var quantity_value := _discard_quantity_value()
+	var quantity_valid := quantity_value >= 1 and (_pending_discard_available <= 0 or quantity_value <= _pending_discard_available)
 	return {
 		"id": "inventory_discard_confirm",
 		"name": "modal:inventory_discard_confirm",
@@ -529,10 +531,25 @@ func blocking_modal_snapshot() -> Dictionary:
 		"owner_panel": "inventory",
 		"blocks_gameplay": true,
 		"mouse_blocks_world": true,
+		"dialog_visible": _discard_dialog.visible,
 		"item_id": str(_pending_discard_item.get("item_id", "")),
 		"item_name": str(_pending_discard_item.get("name", _pending_discard_item.get("item_id", ""))),
-		"count": _discard_quantity_value(),
+		"count": quantity_value,
 		"available": _pending_discard_available,
+		"quantity_min": 1,
+		"quantity_max": _pending_discard_available,
+		"quantity_text": _discard_quantity_input.text if _discard_quantity_input != null else str(quantity_value),
+		"quantity_valid": quantity_valid,
+		"quantity_error": _discard_error_label.text if _discard_error_label != null else "",
+		"quantity_input_mouse_filter": _control_mouse_filter_name(_discard_quantity_input),
+		"quantity_input_mouse_blocks_world": _control_mouse_blocks_world(_discard_quantity_input),
+		"minus_button_disabled": _discard_minus_button.disabled if _discard_minus_button != null else true,
+		"plus_button_disabled": _discard_plus_button.disabled if _discard_plus_button != null else true,
+		"max_button_disabled": _discard_max_button.disabled if _discard_max_button != null else true,
+		"confirm_button_mouse_filter": _control_mouse_filter_name(_discard_dialog.get_ok_button()),
+		"confirm_button_mouse_blocks_world": _control_mouse_blocks_world(_discard_dialog.get_ok_button()),
+		"cancel_button_mouse_filter": _control_mouse_filter_name(_discard_dialog.get_cancel_button()),
+		"cancel_button_mouse_blocks_world": _control_mouse_blocks_world(_discard_dialog.get_cancel_button()),
 	}
 
 
@@ -701,6 +718,24 @@ func _refresh_discard_dialog_text(count: int) -> void:
 		_pending_discard_item.get("name", item_id),
 		maxi(0, count),
 	]
+
+
+func _control_mouse_blocks_world(control: Control) -> bool:
+	return control != null and control.mouse_filter == Control.MOUSE_FILTER_STOP
+
+
+func _control_mouse_filter_name(control: Control) -> String:
+	if control == null:
+		return ""
+	match control.mouse_filter:
+		Control.MOUSE_FILTER_STOP:
+			return "stop"
+		Control.MOUSE_FILTER_PASS:
+			return "pass"
+		Control.MOUSE_FILTER_IGNORE:
+			return "ignore"
+		_:
+			return str(control.mouse_filter)
 
 
 func _current_inventory_count(item_id: String) -> int:

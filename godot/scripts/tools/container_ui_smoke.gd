@@ -1177,6 +1177,16 @@ func _assert_container_quantity_modal(errors: Array[String], game_root: Node, ex
 		errors.append("%s: modal stack should expose transfer payload: %s" % [context, top])
 	if not bool(top.get("blocks_gameplay", false)) or not bool(top.get("mouse_blocks_world", false)):
 		errors.append("%s: quantity modal should block gameplay and mouse world input: %s" % [context, top])
+	if not bool(top.get("dialog_visible", false)):
+		errors.append("%s: quantity modal should expose visible dialog: %s" % [context, top])
+	if int(top.get("quantity_min", 0)) != 1 or int(top.get("quantity_max", 0)) < expected_count:
+		errors.append("%s: quantity modal should expose valid bounds: %s" % [context, top])
+	if not bool(top.get("quantity_valid", false)) or str(top.get("quantity_text", "")) != str(expected_count):
+		errors.append("%s: quantity modal should expose valid selected quantity: %s" % [context, top])
+	if not bool(top.get("confirm_button_mouse_blocks_world", false)) or not bool(top.get("cancel_button_mouse_blocks_world", false)):
+		errors.append("%s: quantity modal buttons should stop world mouse input: %s" % [context, top])
+	if str(top.get("confirm_button_mouse_filter", "")) != "stop" or str(top.get("cancel_button_mouse_filter", "")) != "stop":
+		errors.append("%s: quantity modal button mouse filters should be stop: %s" % [context, top])
 	var menu_state: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot()) if game_root.has_method("menu_state_snapshot") else {}
 	var modal_event: Dictionary = _dictionary_or_empty(menu_state.get("modal_event", {}))
 	if str(modal_event.get("panel_id", "")) != "container_quantity_confirm" or str(modal_event.get("owner_panel", "")) != "container":
