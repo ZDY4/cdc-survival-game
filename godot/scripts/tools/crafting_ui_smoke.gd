@@ -167,6 +167,35 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("consumable tool UI craft should consume player inventory tool")
 	if _array_or_empty(consumable_tool_result.get("consumed_tools", [])).is_empty():
 		errors.append("consumable tool UI craft result should expose consumed_tools")
+	player_for_consumable_tool.inventory["1011"] = 1
+	player_for_consumable_tool.inventory.erase("1151")
+	var nearby_tool_grid: Dictionary = player_for_consumable_tool.grid_position.to_dictionary()
+	game_root.simulation.map_interaction_targets["smoke_consumable_tool_crate_ui"] = {
+		"target_id": "smoke_consumable_tool_crate_ui",
+		"target_type": "map_object",
+		"display_name": "消耗工具箱",
+		"kind": "container",
+		"anchor": nearby_tool_grid,
+		"cells": [nearby_tool_grid],
+		"container_inventory": [{"item_id": "1151", "count": 1}],
+	}
+	game_root.refresh_inventory_panel()
+	game_root.refresh_crafting_panel()
+	var nearby_consumable_tool_result: Dictionary = game_root.craft_player_recipe("smoke_consumes_tool_recipe")
+	if not bool(nearby_consumable_tool_result.get("success", false)):
+		errors.append("nearby container consumable tool UI craft should succeed: %s" % nearby_consumable_tool_result.get("reason", "unknown"))
+	var nearby_tool_target: Dictionary = _dictionary_or_empty(game_root.simulation.map_interaction_targets.get("smoke_consumable_tool_crate_ui", {}))
+	if _inventory_entry_count(_array_or_empty(nearby_tool_target.get("container_inventory", [])), "1151") != 0:
+		errors.append("nearby container consumable tool UI craft should consume target container tool")
+	var nearby_consumed_tools: Array = _array_or_empty(nearby_consumable_tool_result.get("consumed_tools", []))
+	var nearby_source_seen := false
+	for consumed_tool in nearby_consumed_tools:
+		var consumed_tool_data: Dictionary = _dictionary_or_empty(consumed_tool)
+		if str(consumed_tool_data.get("source", "")) == "nearby_container" and str(consumed_tool_data.get("container_id", "")) == "smoke_consumable_tool_crate_ui":
+			nearby_source_seen = true
+	if not nearby_source_seen:
+		errors.append("nearby container consumable tool UI craft should report container source: %s" % nearby_consumed_tools)
+	game_root.simulation.map_interaction_targets.erase("smoke_consumable_tool_crate_ui")
 	player_for_consumable_tool.inventory["1011"] = 2
 	player_for_consumable_tool.inventory["1151"] = 1
 	player_for_consumable_tool.tool_durability["1151"] = 5.0
@@ -854,6 +883,15 @@ func _player_inventory_count(game_root: Node, item_id: String) -> int:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return int(actor_data.get("inventory", {}).get(item_id, 0))
 	return 0
+
+
+func _inventory_entry_count(entries: Array, item_id: String) -> int:
+	var total := 0
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("item_id", "")) == item_id:
+			total += max(0, int(entry_data.get("count", 0)))
+	return total
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:

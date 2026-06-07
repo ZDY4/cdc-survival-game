@@ -250,6 +250,51 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var last_event: Dictionary = _last_event(simulation.snapshot(), "recipe_crafted")
 	if _array_or_empty(_dictionary_or_empty(last_event.get("payload", {})).get("consumed_tools", [])).is_empty():
 		errors.append("recipe_crafted event should expose consumed_tools")
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.inventory["1011"] = 2
+	player.equipment["utility"] = "1151"
+	var equipped_tool_craft: Dictionary = simulation.craft_recipe(1, "smoke_consumes_tool_recipe", consumable_tool_recipes)
+	if not bool(equipped_tool_craft.get("success", false)):
+		errors.append("equipped consumable tool craft should succeed: %s" % equipped_tool_craft.get("reason", "unknown"))
+	if player.equipment.has("utility"):
+		errors.append("equipped consumable tool craft should remove consumed equipment slot")
+	var equipped_consumed_tools: Array = _array_or_empty(equipped_tool_craft.get("consumed_tools", []))
+	if equipped_consumed_tools.is_empty() or str(_dictionary_or_empty(equipped_consumed_tools[0]).get("source", "")) != "equipment":
+		errors.append("equipped consumable tool craft should report equipment source: %s" % equipped_consumed_tools)
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.inventory["1011"] = 2
+	simulation.container_sessions["smoke_consumable_tool_crate"] = {
+		"container_id": "smoke_consumable_tool_crate",
+		"display_name": "消耗工具箱",
+		"inventory": [{"item_id": "1151", "count": 1}],
+	}
+	var nearby_consumable_tool_craft: Dictionary = simulation.craft_recipe(1, "smoke_consumes_tool_recipe", consumable_tool_recipes, {
+		"nearby_tool_containers": [{
+			"container_id": "smoke_consumable_tool_crate",
+			"display_name": "消耗工具箱",
+			"inventory": [{"item_id": "1151", "count": 1}],
+		}],
+	})
+	if not bool(nearby_consumable_tool_craft.get("success", false)):
+		errors.append("nearby container consumable tool craft should succeed: %s" % nearby_consumable_tool_craft.get("reason", "unknown"))
+	var tool_crate: Dictionary = _dictionary_or_empty(simulation.container_sessions.get("smoke_consumable_tool_crate", {}))
+	if _inventory_entry_count(_array_or_empty(tool_crate.get("inventory", [])), "1151") != 0:
+		errors.append("nearby container consumable tool craft should consume container tool")
+	if int(player.inventory.get("1151", 0)) != 0:
+		errors.append("nearby container consumable tool craft should not add tool to player inventory")
+	var nearby_consumed_tools: Array = _array_or_empty(nearby_consumable_tool_craft.get("consumed_tools", []))
+	var nearby_source_seen := false
+	for consumed_tool in nearby_consumed_tools:
+		var consumed_tool_data: Dictionary = _dictionary_or_empty(consumed_tool)
+		if str(consumed_tool_data.get("source", "")) == "nearby_container" and str(consumed_tool_data.get("container_id", "")) == "smoke_consumable_tool_crate":
+			nearby_source_seen = true
+	if not nearby_source_seen:
+		errors.append("nearby container consumable tool craft should report container source: %s" % nearby_consumed_tools)
+	simulation.container_sessions.erase("smoke_consumable_tool_crate")
 	var durable_tool_recipes: Dictionary = _durable_tool_smoke_recipes()
 	player.inventory.clear()
 	player.inventory_order.clear()
@@ -787,6 +832,15 @@ func _last_event(snapshot: Dictionary, kind: String) -> Dictionary:
 		if str(event_data.get("kind", "")) == kind:
 			return event_data
 	return {}
+
+
+func _inventory_entry_count(entries: Array, item_id: String) -> int:
+	var total := 0
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if str(entry_data.get("item_id", "")) == item_id:
+			total += max(0, int(entry_data.get("count", 0)))
+	return total
 
 
 func _expect_turn_policy(errors: Array[String], result: Dictionary, expected_action: String, expected_auto_advanced: bool, context: String) -> void:
