@@ -9,7 +9,7 @@
   "stack_mode": "intensity",
   "color_tint": "#00FF66",
   "description": "每秒恢复5点生命值",
-  "icon_path": "assets/icons/effects/regeneration.png",
+  "icon_path": "res://assets/icons/effects/regeneration.svg",
   "tick_interval": 1.0,
   "duration": 30.0,
   "visual_effect": "heal_particles",

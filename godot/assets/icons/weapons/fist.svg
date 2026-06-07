@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect width="128" height="128" rx="16" fill="hsl(243, 42%, 20%)"/>
+  <rect x="12" y="12" width="104" height="104" rx="12" fill="hsl(219, 62%, 48%)" opacity="0.82"/>
+  <path d="M24 88 L44 48 L64 74 L82 36 L104 88 Z" fill="white" opacity="0.24"/>
+  <circle cx="92" cy="34" r="10" fill="white" opacity="0.34"/>
+  <text x="64" y="72" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="white">FIS</text>
+  <text x="64" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="white" opacity="0.72">icons/weapons</text>
+</svg>

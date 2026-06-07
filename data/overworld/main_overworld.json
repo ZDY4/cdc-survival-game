@@ -22,7 +22,7 @@
         "z": 1
       },
       "danger_level": 4,
-      "icon": "assets/icons/location_hospital.png"
+      "icon": "res://assets/icons/location_hospital.svg"
     },
     {
       "id": "school",
@@ -41,7 +41,7 @@
         "z": 1
       },
       "danger_level": 3,
-      "icon": "assets/icons/location_school.png"
+      "icon": "res://assets/icons/location_school.svg"
     },
     {
       "id": "supermarket",
@@ -60,7 +60,7 @@
         "z": 4
       },
       "danger_level": 2,
-      "icon": "assets/icons/location_supermarket.png"
+      "icon": "res://assets/icons/location_supermarket.svg"
     },
     {
       "id": "street_a",
@@ -79,7 +79,7 @@
         "z": 4
       },
       "danger_level": 2,
-      "icon": "assets/icons/location_street.png"
+      "icon": "res://assets/icons/location_street.svg"
     },
     {
       "id": "survivor_outpost_01",
@@ -98,7 +98,7 @@
         "z": 4
       },
       "danger_level": 0,
-      "icon": "assets/icons/location_safehouse.png"
+      "icon": "res://assets/icons/location_safehouse.svg"
     },
     {
       "id": "street_b",
@@ -117,7 +117,7 @@
         "z": 4
       },
       "danger_level": 3,
-      "icon": "assets/icons/location_street.png"
+      "icon": "res://assets/icons/location_street.svg"
     },
     {
       "id": "factory",
@@ -136,7 +136,7 @@
         "z": 7
       },
       "danger_level": 4,
-      "icon": "assets/icons/location_factory.png"
+      "icon": "res://assets/icons/location_factory.svg"
     },
     {
       "id": "forest",
@@ -155,7 +155,7 @@
         "z": 7
       },
       "danger_level": 2,
-      "icon": "assets/icons/location_forest.png"
+      "icon": "res://assets/icons/location_forest.svg"
     },
     {
       "id": "survivor_outpost_01_perimeter",
@@ -174,7 +174,7 @@
         "z": 4
       },
       "danger_level": 2,
-      "icon": "assets/icons/location_street.png"
+      "icon": "res://assets/icons/location_street.svg"
     },
     {
       "id": "ruins",
@@ -193,7 +193,7 @@
         "z": 7
       },
       "danger_level": 5,
-      "icon": "assets/icons/location_ruins.png"
+      "icon": "res://assets/icons/location_ruins.svg"
     },
     {
       "id": "subway",
@@ -212,7 +212,7 @@
         "z": 10
       },
       "danger_level": 5,
-      "icon": "assets/icons/location_subway.png"
+      "icon": "res://assets/icons/location_subway.svg"
     },
     {
       "id": "survivor_outpost_01_interior",
@@ -231,7 +231,7 @@
         "z": 4
       },
       "danger_level": 0,
-      "icon": "assets/icons/location_safehouse.png"
+      "icon": "res://assets/icons/location_safehouse.svg"
     }
   ],
   "cells": [

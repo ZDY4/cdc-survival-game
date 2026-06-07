@@ -151,6 +151,6 @@ static func _fallback_key_for_media_path(path: String) -> String:
 		return "material"
 	if normalized.contains("/items/"):
 		return "item"
-	if normalized.contains("/locations/"):
+	if normalized.contains("/locations/") or normalized.contains("/location_"):
 		return "location"
 	return "generic"

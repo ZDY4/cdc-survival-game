@@ -8,7 +8,7 @@
       "title": "Factory Run Turn In",
       "speaker": "老王",
       "text": "看你这身灰，东西应该带回来了。把稳压器模块给我，我马上让工坊装到备用电机上。",
-      "portrait": "assets/portraits/trader_lao_wang.png",
+      "portrait": "res://assets/portraits/trader_lao_wang.svg",
       "is_start": true,
       "next": "choice_1"
     },
@@ -44,7 +44,7 @@
       "type": "dialog",
       "speaker": "老王",
       "text": "行，这块还能用。备用电机先能顶住几晚了。拿上这点弹药和元件，接下来我得盯一趟废弃超市的长途口粮单，你先把补给备齐。",
-      "portrait": "assets/portraits/trader_lao_wang.png",
+      "portrait": "res://assets/portraits/trader_lao_wang.svg",
       "next": "turn_in_end"
     },
     {

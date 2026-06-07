@@ -9,7 +9,7 @@
   "stack_mode": "extend",
   "color_tint": "#660066",
   "description": "每秒损失3点生命值",
-  "icon_path": "assets/icons/effects/poison.png",
+  "icon_path": "res://assets/icons/effects/poison.svg",
   "tick_interval": 1.0,
   "duration": 20.0,
   "visual_effect": "poison_particles",

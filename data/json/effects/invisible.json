@@ -9,7 +9,7 @@
   "stack_mode": "refresh",
   "color_tint": "#CC99FF",
   "description": "敌人无法发现你",
-  "icon_path": "assets/icons/effects/invisible.png",
+  "icon_path": "res://assets/icons/effects/invisible.svg",
   "tick_interval": 0.0,
   "duration": 20.0,
   "visual_effect": "invisible_particles",

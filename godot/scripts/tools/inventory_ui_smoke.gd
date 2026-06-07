@@ -42,8 +42,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("initial inventory missing bootstrap ammo")
 	var ammo_snapshot := _inventory_snapshot_item(game_root, "1009")
 	var ammo_icon := _dictionary_or_empty(ammo_snapshot.get("icon_asset", {}))
-	if str(ammo_icon.get("reason", "")) != "legacy_root_asset_reference":
-		errors.append("inventory item snapshot should expose legacy icon path diagnostic: %s" % ammo_icon)
+	if not bool(ammo_icon.get("ok", false)) or not bool(ammo_icon.get("exists", false)):
+		errors.append("inventory item snapshot should expose existing Godot icon asset: %s" % ammo_icon)
+	if str(ammo_icon.get("resource_path", "")) != "res://assets/icons/ammo/ammo_pistol.svg":
+		errors.append("inventory item snapshot should expose migrated ammo icon resource path: %s" % ammo_icon)
 	if str(ammo_icon.get("fallback_key", "")) != "ammo":
 		errors.append("inventory item snapshot should expose ammo icon fallback key: %s" % ammo_icon)
 	if _sort_button(game_root, "SortOrderButton") == null:

@@ -7,7 +7,7 @@
   "stack_mode": "refresh",
   "color_tint": "#FF0000",
   "description": "伤害提升25%，但防御降低10点",
-  "icon_path": "assets/icons/effects/berserk.png",
+  "icon_path": "res://assets/icons/effects/berserk.svg",
   "tick_interval": 0.0,
   "duration": 60.0,
   "visual_effect": "berserk_particles",

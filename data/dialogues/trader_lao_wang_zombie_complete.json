@@ -8,7 +8,7 @@
       "title": "Zombie Hunt Complete",
       "speaker": "老王",
       "text": "干得不错，门口总算能喘口气了。医院那条线我已经跟陈医生打过招呼，你去诊所找他，他会告诉你下一步要拿什么。",
-      "portrait": "assets/portraits/trader_lao_wang.png",
+      "portrait": "res://assets/portraits/trader_lao_wang.svg",
       "is_start": true,
       "next": "choice_1"
     },

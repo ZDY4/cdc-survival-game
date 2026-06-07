@@ -8,7 +8,7 @@
       "title": "Outpost Trade",
       "speaker": "老王",
       "text": "东侧路口先稳住了，后面要跑更远。你要补给就直说，别等到出了门才发现自己少东西。",
-      "portrait": "assets/portraits/trader_lao_wang.png",
+      "portrait": "res://assets/portraits/trader_lao_wang.svg",
       "is_start": true,
       "next": "choice_1"
     },

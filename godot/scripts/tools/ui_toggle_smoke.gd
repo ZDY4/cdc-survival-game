@@ -1,6 +1,7 @@
 extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
+const MapSnapshot = preload("res://scripts/ui/snapshots/map_snapshot.gd")
 const SETTINGS_PANEL_CONTROLLER = preload("res://scripts/ui/controllers/settings_panel_controller.gd")
 const SETTINGS_SMOKE_PATH := "user://settings_ui_smoke.json"
 
@@ -464,6 +465,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("map canvas should summarize entry points, got %s" % _map_canvas_state_line(game_root))
 	if not _map_canvas_state_line(game_root).contains("world 11"):
 		errors.append("map canvas should summarize overworld locations, got %s" % _map_canvas_state_line(game_root))
+	var map_snapshot: Dictionary = MapSnapshot.new(game_root.registry).build(game_root.simulation.snapshot(), game_root.world_result)
+	var safehouse_icon := _location_icon_asset(map_snapshot, "survivor_outpost_01")
+	if not bool(safehouse_icon.get("ok", false)) or not bool(safehouse_icon.get("exists", false)):
+		errors.append("map snapshot should expose existing Godot location icon asset: %s" % safehouse_icon)
+	if str(safehouse_icon.get("fallback_key", "")) != "location":
+		errors.append("map snapshot should expose location icon fallback key: %s" % safehouse_icon)
 	var zoom_in_button: Button = game_root.map_panel.find_child("ZoomInButton", true, false) as Button
 	if zoom_in_button == null:
 		errors.append("map canvas should expose zoom in button")
@@ -1778,6 +1785,14 @@ func _player(game_root: Node) -> Dictionary:
 		var actor_data: Dictionary = actor
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return actor_data
+	return {}
+
+
+func _location_icon_asset(map_snapshot: Dictionary, location_id: String) -> Dictionary:
+	for location in _array_or_empty(_dictionary_or_empty(map_snapshot.get("overworld_overview", {})).get("locations", [])):
+		var location_data: Dictionary = _dictionary_or_empty(location)
+		if str(location_data.get("id", "")) == location_id:
+			return _dictionary_or_empty(location_data.get("icon_asset", {}))
 	return {}
 
 

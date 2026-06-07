@@ -8,7 +8,7 @@
       "title": "Medicine Run Turn In",
       "speaker": "陈医生",
       "text": "你真把急救包带回来了。先给我，我马上拆开补进诊所储备。",
-      "portrait": "assets/portraits/doctor.png",
+      "portrait": "res://assets/portraits/doctor.svg",
       "is_start": true,
       "next": "choice_1"
     },
@@ -42,7 +42,7 @@
       "type": "dialog",
       "speaker": "陈医生",
       "text": "够用了，这一趟救了诊所的命。你先休整，后面我再安排更远的活。",
-      "portrait": "assets/portraits/doctor.png",
+      "portrait": "res://assets/portraits/doctor.svg",
       "next": "turn_in_end"
     },
     {

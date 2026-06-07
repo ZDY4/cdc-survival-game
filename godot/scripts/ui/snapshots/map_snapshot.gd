@@ -1,5 +1,7 @@
 extends RefCounted
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+
 var registry: RefCounted
 
 
@@ -84,6 +86,8 @@ func _overworld_overview(active_location_id: String, unlocked_locations: Variant
 				"id": location_id,
 				"name": str(location_data.get("name", location_id)),
 				"kind": str(location_data.get("kind", "")),
+				"icon": str(location_data.get("icon", "")),
+				"icon_asset": AssetPathResolver.resolve_media_asset(str(location_data.get("icon", "")), "location"),
 				"map_id": str(location_data.get("map_id", "")),
 				"danger_level": int(location_data.get("danger_level", 0)),
 				"grid": _dictionary_or_empty(location_data.get("overworld_cell", {})).duplicate(true),

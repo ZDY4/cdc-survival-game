@@ -8,7 +8,7 @@
       "title": "Factory Run Offer",
       "speaker": "老王",
       "text": "诊所那边暂时缓过来了，可据点的备用电机快彻底趴窝。南边那座废弃工厂里应该还能拆出一块稳压器模块，你跑一趟，把能用的那块给我带回来。",
-      "portrait": "assets/portraits/trader_lao_wang.png",
+      "portrait": "res://assets/portraits/trader_lao_wang.svg",
       "is_start": true,
       "next": "choice_1"
     },
@@ -52,7 +52,7 @@
       "type": "dialog",
       "speaker": "老王",
       "text": "工厂比医院更空，也更远。先穿过装卸区，再往里摸到后面的控制间，拿到稳压器模块就撤。别空着口袋去，至少把绷带、水和子弹备够。",
-      "portrait": "assets/portraits/trader_lao_wang.png",
+      "portrait": "res://assets/portraits/trader_lao_wang.svg",
       "next": "accept_end"
     },
     {

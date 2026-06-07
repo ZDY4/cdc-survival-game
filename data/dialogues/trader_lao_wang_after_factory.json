@@ -8,7 +8,7 @@
       "title": "After Factory",
       "speaker": "老王",
       "text": "备用电机已经装上了，据点夜里总算不至于一片黑。下一趟我盯的是废弃超市那边的长途口粮，你先把绷带、弹药和水备齐，再决定什么时候出门。",
-      "portrait": "assets/portraits/trader_lao_wang.png",
+      "portrait": "res://assets/portraits/trader_lao_wang.svg",
       "is_start": true,
       "next": "choice_1"
     },

@@ -8,7 +8,7 @@
       "title": "Medicine Run Offer",
       "speaker": "陈医生",
       "text": "老王应该已经跟你提过了。诊所的急救包快见底了，城里的废弃医院也许还能翻出一份能用的，你愿意跑一趟吗？",
-      "portrait": "assets/portraits/doctor.png",
+      "portrait": "res://assets/portraits/doctor.svg",
       "is_start": true,
       "next": "choice_1"
     },
@@ -50,7 +50,7 @@
       "type": "dialog",
       "speaker": "陈医生",
       "text": "目标很简单，去废弃医院带回 1 份急救包就行。别久留，拿到东西立刻回撤。",
-      "portrait": "assets/portraits/doctor.png",
+      "portrait": "res://assets/portraits/doctor.svg",
       "next": "accept_end"
     },
     {

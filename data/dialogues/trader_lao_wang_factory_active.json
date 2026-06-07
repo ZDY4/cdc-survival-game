@@ -8,7 +8,7 @@
       "title": "Factory Run Reminder",
       "speaker": "老王",
       "text": "别在工厂外面晃太久。先过装卸区，再摸进后面的控制间，把那块稳压器模块拿到手就回撤。那趟比医院长，绷带和子弹别省到路上。",
-      "portrait": "assets/portraits/trader_lao_wang.png",
+      "portrait": "res://assets/portraits/trader_lao_wang.svg",
       "is_start": true,
       "next": "choice_1"
     },

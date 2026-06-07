@@ -60,8 +60,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue target line should show target actor display name")
 	var dialogue_snapshot: Dictionary = DialogueSnapshot.new(game_root.registry).build(game_root.simulation.snapshot())
 	var portrait_asset := _dictionary_or_empty(dialogue_snapshot.get("portrait_asset", {}))
-	if str(portrait_asset.get("reason", "")) != "legacy_root_asset_reference":
-		errors.append("dialogue snapshot should expose legacy portrait path diagnostic: %s" % portrait_asset)
+	if not bool(portrait_asset.get("ok", false)) or not bool(portrait_asset.get("exists", false)):
+		errors.append("dialogue snapshot should expose existing Godot portrait asset: %s" % portrait_asset)
+	if str(portrait_asset.get("resource_path", "")) != "res://assets/portraits/trader_lao_wang.svg":
+		errors.append("dialogue snapshot should expose migrated portrait resource path: %s" % portrait_asset)
 	if str(portrait_asset.get("fallback_key", "")) != "portrait":
 		errors.append("dialogue snapshot should expose portrait fallback key: %s" % portrait_asset)
 	var text_scroll: ScrollContainer = _text_scroll(game_root)

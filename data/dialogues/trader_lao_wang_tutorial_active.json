@@ -8,7 +8,7 @@
       "title": "Supply Run Reminder",
       "speaker": "老王",
       "text": "别往远处跑，就在据点外警戒区找。先把路障外那两处补给点摸一遍，拿够两罐罐头就回来。",
-      "portrait": "assets/portraits/trader_lao_wang.png",
+      "portrait": "res://assets/portraits/trader_lao_wang.svg",
       "is_start": true,
       "next": "choice_1"
     },
