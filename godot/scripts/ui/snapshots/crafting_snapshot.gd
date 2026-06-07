@@ -17,6 +17,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	var crafted_recipes: Dictionary = _flag_dictionary(runtime_snapshot.get("crafted_recipes", []))
 	var completed_quests: Dictionary = _flag_dictionary(runtime_snapshot.get("completed_quests", []))
 	var world_flags: Dictionary = _flag_dictionary(runtime_snapshot.get("world_flags", []))
+	var station_snapshot: Dictionary = _station_snapshot(player, crafting_context)
 	var recipes: Array[Dictionary] = []
 	var recipe_ids: Array = registry.get_library("recipes").keys()
 	recipe_ids.sort()
@@ -29,6 +30,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 		"owner_name": str(player.get("display_name", "")),
 		"recipes": recipes,
 		"craftable_count": _craftable_count(recipes),
+		"station_snapshot": station_snapshot,
 	}
 
 
@@ -281,6 +283,45 @@ func _station_check(player: Dictionary, required_station: String, crafting_conte
 	return {
 		"success": true,
 		"station": station,
+	}
+
+
+func _station_snapshot(player: Dictionary, crafting_context: Dictionary) -> Dictionary:
+	var stations: Array[Dictionary] = []
+	for station in _array_or_empty(crafting_context.get("crafting_stations", [])):
+		var station_data: Dictionary = _dictionary_or_empty(station)
+		var station_id := str(station_data.get("station_id", "")).strip_edges()
+		if station_id.is_empty():
+			continue
+		var distance: int = _distance_to_station(player, station_data)
+		var station_range: int = max(0, int(station_data.get("range", 1)))
+		var entry := station_data.duplicate(true)
+		entry["station_id"] = station_id
+		entry["display_name"] = str(entry.get("display_name", station_id))
+		entry["distance"] = distance
+		entry["range"] = station_range
+		entry["in_range"] = distance <= station_range
+		stations.append(entry)
+	stations.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var distance_a: int = int(a.get("distance", 2147483647))
+		var distance_b: int = int(b.get("distance", 2147483647))
+		if distance_a == distance_b:
+			return str(a.get("station_id", "")) < str(b.get("station_id", ""))
+		return distance_a < distance_b
+	)
+	var in_range: Array[Dictionary] = []
+	var by_id: Dictionary = {}
+	for station in stations:
+		var station_data: Dictionary = _dictionary_or_empty(station)
+		by_id[str(station_data.get("station_id", ""))] = station_data.duplicate(true)
+		if bool(station_data.get("in_range", false)):
+			in_range.append(station_data.duplicate(true))
+	return {
+		"stations": stations,
+		"in_range": in_range,
+		"by_id": by_id,
+		"count": stations.size(),
+		"in_range_count": in_range.size(),
 	}
 
 

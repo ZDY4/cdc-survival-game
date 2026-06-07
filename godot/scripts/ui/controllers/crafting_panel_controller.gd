@@ -38,13 +38,14 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_last_snapshot = snapshot.duplicate(true)
 	var recipes: Array = snapshot.get("recipes", [])
 	var visible_recipes: Array[Dictionary] = _visible_recipes(recipes)
-	_summary_label.text = "%s | 配方 %d/%d | 可制作 %d | %s | %s" % [
+	_summary_label.text = "%s | 配方 %d/%d | 可制作 %d | %s | %s | %s" % [
 		snapshot.get("owner_name", ""),
 		visible_recipes.size(),
 		recipes.size(),
 		int(snapshot.get("craftable_count", 0)),
 		_category_label(_category_filter),
 		_sort_label(_sort_mode),
+		_station_summary_text(_dictionary_or_empty(snapshot.get("station_snapshot", {}))),
 	]
 	_rebuild_category_buttons(recipes)
 	_refresh_sort_buttons()
@@ -394,6 +395,32 @@ func _materials_text(materials: Array, multiplier: int = 1) -> String:
 			int(data.get("required", 0)) * multiplier,
 		])
 	return "无" if parts.is_empty() else ", ".join(parts)
+
+
+func _station_summary_text(station_snapshot: Dictionary) -> String:
+	var stations: Array = _array_or_empty(station_snapshot.get("stations", []))
+	if stations.is_empty():
+		return "工作台 无"
+	var labels: Array[String] = []
+	for station in stations:
+		var data: Dictionary = _dictionary_or_empty(station)
+		var label := str(data.get("display_name", data.get("station_id", "")))
+		if label.is_empty():
+			continue
+		var distance: int = int(data.get("distance", 2147483647))
+		var station_range: int = int(data.get("range", 0))
+		if bool(data.get("in_range", false)):
+			label = "%s@%d/%d" % [label, distance, station_range]
+		else:
+			label = "%s@%d" % [label, distance]
+		labels.append(label)
+		if labels.size() >= 3:
+			break
+	return "工作台 %d/%d %s" % [
+		int(station_snapshot.get("in_range_count", 0)),
+		int(station_snapshot.get("count", stations.size())),
+		", ".join(labels),
+	]
 
 
 func _tools_text(tools: Array) -> String:

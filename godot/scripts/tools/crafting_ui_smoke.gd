@@ -306,10 +306,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _recipe_line(game_root, "recipe_knife_basic").contains("需工作台 workbench"):
 		errors.append("tool-gated recipe should advance to station reason when tool exists")
 	if _crafting_station_count(game_root) <= 0:
-		errors.append("crafting UI should receive map crafting stations")
+		errors.append("crafting UI snapshot should expose map crafting station annotations")
 	for station_id in ["workbench", "medical_station", "forge"]:
 		if not _has_crafting_station(game_root, station_id):
-			errors.append("crafting UI should receive %s station" % station_id)
+			errors.append("crafting UI snapshot should expose %s station" % station_id)
+	var station_snapshot: Dictionary = _dictionary_or_empty(_crafting_snapshot(game_root).get("station_snapshot", {}))
+	var workbench_station: Dictionary = _dictionary_or_empty(_dictionary_or_empty(station_snapshot.get("by_id", {})).get("workbench", {}))
+	if str(workbench_station.get("display_name", "")) != "工作坊工作台" or int(workbench_station.get("range", 0)) <= 0:
+		errors.append("crafting station annotation should expose display name and range from map scene")
+	if not workbench_station.has("distance") or not workbench_station.has("in_range"):
+		errors.append("crafting station annotation should expose distance and in_range state")
+	if not _summary_line(game_root).contains("工作台"):
+		errors.append("crafting summary should show station annotation summary")
 	var station_locator: Button = _missing_reason_button(game_root, "MissingReasonStation_workbench")
 	if station_locator == null:
 		errors.append("crafting detail should expose missing station locator")
@@ -582,12 +590,18 @@ func _missing_reason_button(game_root: Node, node_name: String) -> Button:
 
 
 func _recipe_snapshot(game_root: Node, recipe_id: String) -> Dictionary:
-	var snapshot: Dictionary = game_root.crafting_panel.get("_last_snapshot")
+	var snapshot: Dictionary = _crafting_snapshot(game_root)
 	for recipe in snapshot.get("recipes", []):
 		var recipe_data: Dictionary = recipe
 		if str(recipe_data.get("recipe_id", "")) == recipe_id:
 			return recipe_data
 	return {"recipe_id": recipe_id, "name": recipe_id}
+
+
+func _crafting_snapshot(game_root: Node) -> Dictionary:
+	if game_root == null or game_root.crafting_panel == null:
+		return {}
+	return _dictionary_or_empty(game_root.crafting_panel.get("_last_snapshot"))
 
 
 func _player_inventory_count(game_root: Node, item_id: String) -> int:
@@ -612,19 +626,13 @@ func _event_count(game_root: Node, kind: String) -> int:
 
 
 func _crafting_station_count(game_root: Node) -> int:
-	var world_result: Dictionary = _dictionary_or_empty(game_root.world_result)
-	var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
-	return _array_or_empty(map.get("crafting_stations", [])).size()
+	var station_snapshot: Dictionary = _dictionary_or_empty(_crafting_snapshot(game_root).get("station_snapshot", {}))
+	return int(station_snapshot.get("count", 0))
 
 
 func _has_crafting_station(game_root: Node, station_id: String) -> bool:
-	var world_result: Dictionary = _dictionary_or_empty(game_root.world_result)
-	var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
-	for station in _array_or_empty(map.get("crafting_stations", [])):
-		var data: Dictionary = _dictionary_or_empty(station)
-		if str(data.get("station_id", "")) == station_id:
-			return true
-	return false
+	var station_snapshot: Dictionary = _dictionary_or_empty(_crafting_snapshot(game_root).get("station_snapshot", {}))
+	return _dictionary_or_empty(station_snapshot.get("by_id", {})).has(station_id)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
