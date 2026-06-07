@@ -43,6 +43,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var force_end_player: RefCounted = force_end_simulation.actor_registry.get_actor(1)
 	_expect_force_end_combat(errors, force_end_simulation, registry, force_end_player, force_end_player.grid_position.to_dictionary())
 	_expect_combat_npc_turn_ap_and_close(errors, registry)
+	_expect_combat_entry_participants_and_round(errors, registry)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
 	_expect_deterministic_combat_rng(errors, simulation, registry, player, player_grid)
 	_expect_deterministic_loot_rng(errors, registry, player_grid)
@@ -286,6 +287,103 @@ func _expect_combat_npc_turn_ap_and_close(errors: Array[String], registry: RefCo
 	var ended_payload: Dictionary = _event_payload_after(simulation.snapshot(), "turn_ended", npc_id, event_count_before)
 	if str(ended_payload.get("reason", "")) != "npc_turn_exhausted":
 		errors.append("combat NPC turn_ended should expose npc_turn_exhausted")
+
+
+func _expect_combat_entry_participants_and_round(errors: Array[String], registry: RefCounted) -> void:
+	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var simulation: RefCounted = runtime_result.get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("combat entry participant smoke missing player")
+		return
+	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	var y: int = int(player_grid.get("y", 0))
+	var hostile_a: int = _register_test_actor(simulation, "combat_entry_hostile_a", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 4,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	var hostile_b: int = _register_test_actor(simulation, "combat_entry_hostile_b", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 5,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	var friendly_id: int = _register_test_actor(simulation, "combat_entry_friendly", "friendly", {
+		"x": int(player_grid.get("x", 0)) + 6,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	var spectator_id: int = _register_test_actor(simulation, "combat_entry_spectator", "player", {
+		"x": int(player_grid.get("x", 0)) + 6,
+		"y": y,
+		"z": int(player_grid.get("z", 0)) + 1,
+	}, 20.0)
+	var spectator: RefCounted = simulation.actor_registry.get_actor(spectator_id)
+	if spectator != null:
+		spectator.map_id = "other_map"
+	var defeated_id: int = _register_test_actor(simulation, "combat_entry_defeated", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 7,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	}, 0.0)
+	var remote_id: int = _register_test_actor(simulation, "combat_entry_remote", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 8,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	var remote: RefCounted = simulation.actor_registry.get_actor(remote_id)
+	if remote != null:
+		remote.map_id = "other_map"
+	var started_before: int = _event_count(simulation.snapshot(), "combat_started")
+	simulation._enter_combat([player.actor_id, hostile_a], "participant_smoke_start")
+	var snapshot: Dictionary = simulation.snapshot()
+	var participants: Array = _array_or_empty(snapshot.get("combat_state", {}).get("participants", []))
+	if not participants.has(player.actor_id) or not participants.has(hostile_a) or not participants.has(hostile_b):
+		errors.append("combat entry should collect player and same-map hostile participants")
+	if not participants.has(friendly_id):
+		errors.append("combat entry should collect friendly participant hostile to the hostile seed")
+	if participants.has(spectator_id):
+		errors.append("combat entry should not collect remote-map spectator participant")
+	if participants.has(defeated_id):
+		errors.append("combat entry should not collect defeated participant")
+	if participants.has(remote_id):
+		errors.append("combat entry should not collect remote-map participant")
+	if _event_count(snapshot, "combat_started") != started_before + 1:
+		errors.append("combat entry should emit one combat_started event")
+	var started_payload: Dictionary = _last_event_payload(snapshot, "combat_started")
+	if not _array_or_empty(started_payload.get("seed_participants", [])).has(hostile_a):
+		errors.append("combat_started should expose seed participants")
+	if not _array_or_empty(started_payload.get("added_participants", [])).has(hostile_b):
+		errors.append("combat_started should expose collected added participants")
+	if int(started_payload.get("last_hostile_seen_turn", 0)) != int(simulation.turn_state.get("round", 1)):
+		errors.append("combat_started should initialize last_hostile_seen_turn")
+	var started_after_first: int = _event_count(snapshot, "combat_started")
+	var updated_before_duplicate: int = _event_count(snapshot, "combat_participants_updated")
+	simulation._enter_combat([player.actor_id, hostile_a], "participant_smoke_duplicate")
+	if _event_count(simulation.snapshot(), "combat_started") != started_after_first:
+		errors.append("duplicate combat entry should not emit another combat_started")
+	if _event_count(simulation.snapshot(), "combat_participants_updated") != updated_before_duplicate:
+		errors.append("duplicate combat entry should not emit participant update without additions")
+	var late_hostile: int = _register_test_actor(simulation, "combat_entry_late_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 9,
+		"y": y,
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	simulation._enter_combat([late_hostile], "participant_smoke_late")
+	var updated_payload: Dictionary = _last_event_payload(simulation.snapshot(), "combat_participants_updated")
+	if not _array_or_empty(updated_payload.get("added_participants", [])).has(late_hostile):
+		errors.append("active combat entry should emit added late participant")
+	var combat_round_before: int = int(simulation.snapshot().get("combat_state", {}).get("round", 0))
+	var turn_round_before: int = int(simulation.turn_state.get("round", 1))
+	simulation.advance_world_turn(_topology(simulation, registry))
+	var round_snapshot: Dictionary = simulation.snapshot()
+	if bool(round_snapshot.get("combat_state", {}).get("active", false)):
+		if int(round_snapshot.get("combat_state", {}).get("round", 0)) != combat_round_before + 1:
+			errors.append("active combat world turn should increment combat round")
+		if int(round_snapshot.get("combat_state", {}).get("round", 0)) < int(round_snapshot.get("turn_state", {}).get("round", 0)):
+			errors.append("combat round should keep pace with turn round while combat is active")
+	if int(simulation.turn_state.get("round", 1)) != turn_round_before + 1:
+		errors.append("world turn should still increment global turn round")
 
 
 func _expect_combat_pending_cancel_turn_policy(errors: Array[String], registry: RefCounted) -> void:

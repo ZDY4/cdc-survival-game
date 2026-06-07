@@ -2855,6 +2855,8 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 			if bool(visibility_result.get("combat_exited", false)):
 				break
 	turn_state["round"] = int(turn_state.get("round", 1)) + 1
+	if bool(combat_state.get("active", false)):
+		combat_state["round"] = int(combat_state.get("round", 0)) + 1
 	return results
 
 
@@ -3145,11 +3147,12 @@ func _result_changes_active_map(result: Dictionary) -> bool:
 
 
 func _enter_combat(actor_ids: Array, reason: String) -> void:
-	var participants: Array[int] = []
+	var seed_participants: Array[int] = []
 	for actor_id in actor_ids:
 		var normalized_id: int = int(actor_id)
-		if normalized_id > 0 and not participants.has(normalized_id):
-			participants.append(normalized_id)
+		if normalized_id > 0 and not seed_participants.has(normalized_id):
+			seed_participants.append(normalized_id)
+	var participants: Array[int] = _collect_combat_participants(seed_participants)
 	for actor in actor_registry.actors():
 		if participants.has(actor.actor_id):
 			actor.in_combat = true
@@ -3158,16 +3161,83 @@ func _enter_combat(actor_ids: Array, reason: String) -> void:
 		combat_state["round"] = int(turn_state.get("round", 1))
 		combat_state["participants"] = participants
 		combat_state["turns_without_hostile_player_sight"] = 0
+		combat_state["last_hostile_seen_turn"] = int(turn_state.get("round", 1)) if _participants_include_hostile_player_pair(participants) else 0
 		_emit("combat_started", {
 			"participants": participants,
+			"seed_participants": seed_participants,
+			"added_participants": participants.duplicate(),
+			"round": int(combat_state.get("round", 0)),
+			"last_hostile_seen_turn": int(combat_state.get("last_hostile_seen_turn", 0)),
 			"reason": reason,
 		})
 	else:
 		var existing: Array = _array_or_empty(combat_state.get("participants", []))
+		var added: Array[int] = []
 		for actor_id in participants:
 			if not existing.has(actor_id):
 				existing.append(actor_id)
+				added.append(actor_id)
 		combat_state["participants"] = existing
+		if not added.is_empty():
+			for actor in actor_registry.actors():
+				if added.has(actor.actor_id):
+					actor.in_combat = true
+			if _participants_include_hostile_player_pair(existing):
+				combat_state["last_hostile_seen_turn"] = int(turn_state.get("round", 1))
+			_emit("combat_participants_updated", {
+				"participants": existing.duplicate(),
+				"seed_participants": seed_participants,
+				"added_participants": added,
+				"round": int(combat_state.get("round", 0)),
+				"last_hostile_seen_turn": int(combat_state.get("last_hostile_seen_turn", 0)),
+				"reason": reason,
+			})
+
+
+func _collect_combat_participants(seed_participants: Array[int]) -> Array[int]:
+	var participants: Array[int] = []
+	for actor_id in seed_participants:
+		var actor: RefCounted = actor_registry.get_actor(actor_id)
+		if actor != null and _actor_can_participate_in_combat(actor) and not participants.has(actor.actor_id):
+			participants.append(actor.actor_id)
+	for actor in actor_registry.actors():
+		if not _actor_can_participate_in_combat(actor):
+			continue
+		if participants.has(actor.actor_id):
+			continue
+		if _actor_hostile_to_any(actor.actor_id, participants):
+			participants.append(actor.actor_id)
+	participants.sort()
+	return participants
+
+
+func _actor_can_participate_in_combat(actor: RefCounted) -> bool:
+	if actor == null or actor.hp <= 0.0:
+		return false
+	if not actor.map_id.is_empty() and actor.map_id != active_map_id:
+		return false
+	return true
+
+
+func _actor_hostile_to_any(actor_id: int, participants: Array[int]) -> bool:
+	for participant_id in participants:
+		if are_actors_hostile(actor_id, participant_id):
+			return true
+	return false
+
+
+func _participants_include_hostile_player_pair(participants: Array) -> bool:
+	for left in participants:
+		var left_actor: RefCounted = actor_registry.get_actor(int(left))
+		if left_actor == null:
+			continue
+		for right in participants:
+			var right_actor: RefCounted = actor_registry.get_actor(int(right))
+			if right_actor == null or left_actor.actor_id == right_actor.actor_id:
+				continue
+			if left_actor.side == "player" and are_actors_hostile(left_actor.actor_id, right_actor.actor_id):
+				return true
+	return false
 
 
 func exit_combat_if_clear(reason: String = "hostiles_cleared") -> bool:
