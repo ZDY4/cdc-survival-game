@@ -254,7 +254,7 @@ func confirm_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, 
 		match str(entry.get("source", "")):
 			"shop":
 				_inventory_entries.add_actor_item(actor, item_id, count)
-				_inventory_entries.add(shop["inventory"], item_id, -count)
+				_inventory_entries.remove_from_stack(shop["inventory"], item_id, count, int(entry.get("stack_index", 0)))
 			"player":
 				_inventory_entries.add_actor_item(actor, item_id, -count)
 				_inventory_entries.add(shop["inventory"], item_id, count)
@@ -303,6 +303,7 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 		return permission
 	var normalized_entries: Array[Dictionary] = []
 	var buy_counts: Dictionary = {}
+	var buy_stack_counts: Dictionary = {}
 	var sell_counts: Dictionary = {}
 	var equipment_sell_counts: Dictionary = {}
 	var buy_total: int = 0
@@ -317,15 +318,23 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 		match source:
 			"shop":
 				var buy_unit_price: int = _trade_unit_price(item_id, float(shop.get("buy_price_modifier", 1.0)), item_library)
+				var stack_index: int = max(0, int(entry.get("stack_index", 0)))
 				buy_total += buy_unit_price * count
-				buy_counts[item_id] = int(buy_counts.get(item_id, 0)) + count
-				normalized_entries.append({
+				if stack_index > 0:
+					var stack_key := "%s#%d" % [item_id, stack_index]
+					buy_stack_counts[stack_key] = int(buy_stack_counts.get(stack_key, 0)) + count
+				else:
+					buy_counts[item_id] = int(buy_counts.get(item_id, 0)) + count
+				var normalized_entry := {
 					"source": source,
 					"item_id": item_id,
 					"count": count,
 					"unit_price": buy_unit_price,
 					"total_price": buy_unit_price * count,
-				})
+				}
+				if stack_index > 0:
+					normalized_entry["stack_index"] = stack_index
+				normalized_entries.append(normalized_entry)
 			"player":
 				if not _is_item_sellable(item_id, item_library):
 					return {"success": false, "reason": "item_not_sellable", "item_id": item_id, "count": count, "failed_index": index}
@@ -363,6 +372,14 @@ func quote_trade_cart(simulation: RefCounted, actor_id: int, shop_id: String, en
 		var available: int = _inventory_entries.count(_array_or_empty(shop.get("inventory", [])), str(item_id))
 		if available < required:
 			return {"success": false, "reason": "shop_stock_insufficient", "item_id": str(item_id), "count": required, "available": available}
+	for stack_key in buy_stack_counts.keys():
+		var key_parts: PackedStringArray = str(stack_key).split("#", false, 1)
+		var item_id: String = key_parts[0] if key_parts.size() > 0 else ""
+		var stack_index: int = int(key_parts[1]) if key_parts.size() > 1 else 0
+		var required: int = int(buy_stack_counts[stack_key])
+		var available: int = _inventory_entries.stack_count_at(_array_or_empty(shop.get("inventory", [])), item_id, stack_index)
+		if available < required:
+			return {"success": false, "reason": "shop_stock_insufficient", "item_id": item_id, "count": required, "available": available, "stack_index": stack_index}
 	for item_id in sell_counts.keys():
 		var required: int = int(sell_counts[item_id])
 		var available: int = int(actor.inventory.get(str(item_id), 0))

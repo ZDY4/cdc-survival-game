@@ -463,6 +463,28 @@ func _run_checks(game_root: Node) -> Array[String]:
 		stack_player.money = 200
 		game_root.refresh_inventory_panel()
 		game_root.refresh_trade_panel()
+		var stacked_shop_cart_button: Button = _trade_item_button_with_text(game_root, "shop", "堆 1/2")
+		if stacked_shop_cart_button == null:
+			errors.append("multi-stack shop should expose first stack button after direct-buy reset")
+		else:
+			stacked_shop_cart_button.pressed.emit()
+			_set_trade_quantity(game_root, 1)
+			_press_queue_button(game_root)
+			_press_confirm_cart_button(game_root)
+			var selected_cart_stacks: Array = _shop_stack_counts(game_root, "1006")
+			if selected_cart_stacks.size() != 2 or int(selected_cart_stacks[0]) != 1 or int(selected_cart_stacks[1]) != 3:
+				errors.append("trade cart buy should consume selected first shop stack: %s" % selected_cart_stacks)
+			stack_shop["money"] = 1000
+			stack_shop["inventory"] = [
+				{"item_id": "1006", "count": 2, "price": 10},
+				{"item_id": "1006", "count": 3, "price": 10},
+			]
+			game_root.simulation.shop_sessions["trader_lao_wang_shop"] = stack_shop
+			stack_player.inventory["1006"] = 1
+			stack_player.inventory_stacks = stack_inventory_stacks_before.duplicate(true)
+			stack_player.money = 200
+			game_root.refresh_inventory_panel()
+			game_root.refresh_trade_panel()
 	var stacked_buy: Dictionary = game_root.buy_active_trade_item("1006", 4)
 	if not bool(stacked_buy.get("success", false)):
 		errors.append("buying across shop stacks should succeed: %s" % stacked_buy)
