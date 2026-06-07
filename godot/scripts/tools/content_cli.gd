@@ -6,6 +6,7 @@ const ContentCliDomains = preload("res://scripts/tools/content_cli_domains.gd")
 const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd")
 const ContentJsonFormatter = preload("res://scripts/tools/content_json_formatter.gd")
 const ContentRecordCliCommands = preload("res://scripts/tools/content_record_cli_commands.gd")
+const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
 
 var _record_commands := ContentRecordCliCommands.new()
@@ -23,6 +24,12 @@ func _init() -> void:
 	match command:
 		"diff-summary":
 			exit_code = _diff_summary_command(args)
+		"fix":
+			var registry: ContentRegistry = _load_registry_or_null()
+			if registry == null:
+				quit(1)
+				return
+			exit_code = _fix_command(args, registry)
 		"validate":
 			var registry: ContentRegistry = _load_registry_or_null()
 			if registry == null:
@@ -66,7 +73,7 @@ func _init() -> void:
 
 
 func _content_args() -> Array[String]:
-	var known := ["validate", "locate", "summarize", "references", "format", "diff-summary", "asset-manifest"]
+	var known := ["validate", "locate", "summarize", "references", "format", "fix", "diff-summary", "asset-manifest"]
 	var raw := OS.get_cmdline_user_args()
 	if raw.is_empty():
 		raw = OS.get_cmdline_args()
@@ -155,6 +162,89 @@ func _format_changed_command(registry: ContentRegistry, dry_run: bool = false) -
 		print("would_rewrite_files: %d" % would_rewrite_files)
 	print("status: ok")
 	return 0
+
+
+func _fix_command(args: Array[String], registry: ContentRegistry) -> int:
+	var options := _parse_format_options(args)
+	var positional: Array[String] = options.get("args", [])
+	var dry_run := bool(options.get("dry_run", false))
+	if positional.size() != 2 or positional[1] != "changed":
+		printerr(_usage())
+		return 2
+	return _fix_changed_command(registry, dry_run)
+
+
+func _fix_changed_command(registry: ContentRegistry, dry_run: bool = false) -> int:
+	var paths := _changed_supported_paths()
+	var schema_pending := _schema_migration_pending_changed(registry)
+	print("mode: fix_changed")
+	print("dry_run: %s" % str(dry_run).to_lower())
+	print("changed_supported_files: %d" % paths.size())
+	print("schema_migration_pending_files: %d" % schema_pending.size())
+	if paths.is_empty():
+		_print_schema_pending(schema_pending)
+		print("formatted_files: 0")
+		print("would_format_files: 0")
+		print("status: %s" % ("ok" if not schema_pending.is_empty() else "no_supported_changes"))
+		return 0
+
+	var formatted_files := 0
+	var would_format_files := 0
+	for relative_path in paths:
+		var report: Dictionary = _format_relative_path(relative_path, registry, {"dry_run": dry_run})
+		if report.is_empty():
+			printerr("unsupported changed content path: %s" % relative_path)
+			return 1
+		if bool(report.get("changed", false)):
+			would_format_files += 1
+			if not dry_run:
+				formatted_files += 1
+		var label := "unchanged"
+		if bool(report.get("changed", false)):
+			label = "would_format" if dry_run else "formatted"
+		print("- [%s] %s %s @ %s" % [
+			label,
+			report.get("kind", ""),
+			report.get("id", ""),
+			report.get("relative_path", ""),
+		])
+	_print_schema_pending(schema_pending)
+	print("formatted_files: %d" % formatted_files)
+	print("would_format_files: %d" % would_format_files)
+	print("status: ok")
+	return 0
+
+
+func _schema_migration_pending_changed(registry: ContentRegistry) -> Array[Dictionary]:
+	var pending: Array[Dictionary] = []
+	var entries := _record_commands.changed_validation_records_for_paths(registry, ContentDiffSummary.new().changed_path_entries(ContentCliDomains.git_status_paths_for_validate()))
+	for entry in entries:
+		var entry_data: Dictionary = entry
+		if not bool(entry_data.get("found", false)):
+			continue
+		var domain := str(entry_data.get("domain", ""))
+		var id_value := str(entry_data.get("id", ""))
+		var validation := ContentRecordValidator.new().validate_record(domain, id_value, registry)
+		var schema: Dictionary = _dictionary_or_empty(validation.get("schema_migration", {}))
+		if not bool(schema.get("needs_migration", false)):
+			continue
+		pending.append({
+			"kind": _singular_domain(domain),
+			"id": id_value,
+			"relative_path": str(entry_data.get("relative_path", "")),
+			"schema_status": str(schema.get("status", "")),
+		})
+	return pending
+
+
+func _print_schema_pending(schema_pending: Array[Dictionary]) -> void:
+	for pending in schema_pending:
+		print("- [schema_pending] %s %s @ %s status:%s" % [
+			pending.get("kind", ""),
+			pending.get("id", ""),
+			pending.get("relative_path", ""),
+			pending.get("schema_status", ""),
+		])
 
 
 func _diff_summary_command(args: Array[String]) -> int:
@@ -358,5 +448,11 @@ func _repo_relative_path(path: String) -> String:
 	return normalized
 
 
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
+
+
 func _usage() -> String:
-	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance|ai|json> <id> | content_cli validate changed | content_cli format [--dry-run] changed | content_cli format [--dry-run] <kind> <id> | content_cli diff-summary changed | content_cli diff-summary --path <repo-relative-or-absolute-path> | content_cli asset-manifest all"
+	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance|ai|json> <id> | content_cli validate changed | content_cli format [--dry-run] changed | content_cli format [--dry-run] <kind> <id> | content_cli fix [--dry-run] changed | content_cli diff-summary changed | content_cli diff-summary --path <repo-relative-or-absolute-path> | content_cli asset-manifest all"

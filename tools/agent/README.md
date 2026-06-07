@@ -165,6 +165,7 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind qu
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind item -Id 1006
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed -DryRun
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command fix -Kind changed -DryRun
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind dialogue -Id trader_lao_wang_intro
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind skill_tree -Id survival
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind settlement -Id survivor_outpost_01_settlement
@@ -177,13 +178,14 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command asset-manifest -Kin
 行为：
 
 - 固定调用 `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd -- ...`。
-- 当前覆盖 `locate` / `summarize` / `references` / `validate` / `validate changed` / `format` / `format changed` / `format -DryRun` / `diff-summary` / `asset-manifest`。
+- 当前覆盖 `locate` / `summarize` / `references` / `validate` / `validate changed` / `format` / `format changed` / `format -DryRun` / `fix changed` / `diff-summary` / `asset-manifest`。
 - `summarize` 输出 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `ai` / `json` 的高信号字段摘要。
 - `map locate` 和 `map summarize` 以 `godot/scenes/maps/*.tscn` 为主来源，便于地图布局继续按 Godot scene 工作流维护。
 - `validate` 对 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `appearance` / `ai` / `json` 执行记录级诊断，输出 `relative_path`、`status` 和字段级 issue；`validate changed` 会批量检查这些已迁移编辑内容，并输出 `change_status_summary` 汇总 modified / added / untracked / deleted / renamed 数量。deleted 内容会诊断 `content_file_deleted`，renamed 内容会保留 source path 并诊断 `renamed_content_file_not_loaded`。
 - `diff-summary changed` 会按 Git status 扫描已迁移内容域，输出每个受支持内容文件的 diff 状态、增删行和 hunk 数，并汇总 `total_added_lines` / `total_removed_lines` / `total_changed_hunks`；`diff-summary --path` 仍用于单文件摘要。
 - `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map` / `shop` / `world_tile` / `appearance` / `ai` / `json`，用于替代旧 `content_tools` 的常用引用查询。
 - `format` 覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `ai` / `json`，只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量；加 `-DryRun` 时输出 `dry_run: true`，批量 `changed` 模式还会输出 `would_rewrite_files`，不落盘。
+- `fix changed` 是批量修复编排入口；第一版复用格式化修复，输出 `formatted_files` / `would_format_files`，并报告仍待 schema migration 写回的 changed 内容记录。
 - `asset-manifest all` 输出内容数据中显式引用的 Godot media / model 资产清单，包含领域、记录 id、字段路径、资源类型、解析后的 `res://assets/...` 路径、缺失状态和汇总计数。
 
 ### `test-godot-editor.ps1`

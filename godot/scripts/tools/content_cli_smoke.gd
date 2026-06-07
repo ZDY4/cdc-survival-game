@@ -95,6 +95,7 @@ func _run() -> Array[String]:
 	_expect_invalid_overworld_entry(errors, registry)
 	_expect_format_domain_support(errors, registry)
 	_expect_json_formatter_dry_run(errors)
+	_expect_fix_changed_schema_pending(errors, registry)
 	_expect_summary_domains(errors, registry)
 	_expect_map_scene_summary(errors, registry)
 	return errors
@@ -822,6 +823,16 @@ func _expect_json_formatter_dry_run(errors: Array[String]) -> void:
 	if after_write == raw or not after_write.contains("\n  \"values\": ["):
 		errors.append("formatter write should persist formatted JSON, got: %s" % after_write)
 	DirAccess.remove_absolute(path)
+
+
+func _expect_fix_changed_schema_pending(errors: Array[String], registry: ContentRegistry) -> void:
+	var entries := ContentRecordCliCommands.new().changed_validation_records_for_paths(registry, ["data/items/1006.json"])
+	if entries.size() != 1 or not bool(_dictionary_or_empty(entries[0]).get("found", false)):
+		errors.append("fix changed smoke should resolve changed item fixture: %s" % entries)
+		return
+	var schema := _dictionary_or_empty(ContentRecordValidator.new().validate_record("items", "1006", registry).get("schema_migration", {}))
+	if not bool(schema.get("needs_migration", false)):
+		errors.append("fix changed smoke needs legacy schema fixture for item 1006: %s" % schema)
 
 
 func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -> void:

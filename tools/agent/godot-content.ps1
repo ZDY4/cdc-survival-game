@@ -10,9 +10,10 @@ summarize, references, validate, format, diff-summary, and asset-manifest comman
 `change_status_summary` line for modified / added / untracked / deleted / renamed records.
 `diff-summary changed` prints per-file line/hunk counts plus aggregate totals for the same changed content scope.
 `format -DryRun` reports whether records would be rewritten without touching files.
+`fix changed` batches safe content repairs; the first Godot implementation applies JSON formatting and reports pending schema migrations.
 
 .PARAMETER Command
-Content command to run: locate, summarize, references, validate, format, diff-summary, or asset-manifest.
+Content command to run: locate, summarize, references, validate, format, fix, diff-summary, or asset-manifest.
 
 .PARAMETER Kind
 Content kind such as item, recipe, character, dialogue, dialogue_rule, quest, skill, skill_tree,
@@ -26,7 +27,7 @@ Content id for locate/summarize/references/validate/format, or the path for diff
 Path to the Godot command line entrypoint.
 
 .PARAMETER DryRun
-Preview `format` / `format changed` rewrites without writing files.
+Preview `format` / `format changed` / `fix changed` rewrites without writing files.
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind item -Id 1006
@@ -44,6 +45,9 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind item -
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed -DryRun
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command fix -Kind changed -DryRun
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind skill_tree -Id survival
@@ -68,7 +72,7 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command asset-manifest -Kin
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("locate", "summarize", "references", "validate", "format", "diff-summary", "asset-manifest")]
+    [ValidateSet("locate", "summarize", "references", "validate", "format", "fix", "diff-summary", "asset-manifest")]
     [string]$Command,
 
     [Parameter(Mandatory = $true)]
@@ -94,8 +98,8 @@ if (-not (Test-Path -LiteralPath $Godot)) {
 if (-not (Test-Path -LiteralPath $godotProject)) {
     throw "Godot project not found: $godotProject"
 }
-if ($DryRun -and $Command -ne "format") {
-    throw "-DryRun is only supported with -Command format"
+if ($DryRun -and $Command -notin @("format", "fix")) {
+    throw "-DryRun is only supported with -Command format or -Command fix"
 }
 
 if ($Command -eq "diff-summary") {

@@ -38,6 +38,7 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed -DryRun`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command fix -Kind changed -DryRun`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id <file>`
 - `pwsh -NoProfile -File tools/agent/test-godot-static.ps1`
