@@ -27,7 +27,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}, crafting_con
 		var count: int = int(inventory.get(item_id, 0))
 		if count <= 0:
 			continue
-		var item_snapshot: Dictionary = _item_snapshot(str(item_id), count, tool_durability, inventory, equipment, crafting_context)
+		var item_snapshot: Dictionary = _item_snapshot(player, str(item_id), count, tool_durability, inventory, equipment, crafting_context)
 		item_snapshot["order_index"] = order_index
 		item_snapshot["stack_counts"] = _stack_counts_for(str(item_id), count, inventory_stacks)
 		item_snapshot["stack_count"] = _array_or_empty(item_snapshot.get("stack_counts", [])).size()
@@ -58,7 +58,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}, crafting_con
 	}
 
 
-func _item_snapshot(item_id: String, count: int, tool_durability: Dictionary = {}, inventory: Dictionary = {}, equipment: Dictionary = {}, crafting_context: Dictionary = {}) -> Dictionary:
+func _item_snapshot(player: Dictionary, item_id: String, count: int, tool_durability: Dictionary = {}, inventory: Dictionary = {}, equipment: Dictionary = {}, crafting_context: Dictionary = {}) -> Dictionary:
 	var record: Dictionary = registry.get_library("items").get(item_id, {})
 	if record.is_empty():
 		return {
@@ -84,6 +84,7 @@ func _item_snapshot(item_id: String, count: int, tool_durability: Dictionary = {
 			"deconstructable": false,
 			"deconstruct_yield": [],
 			"deconstruct_preview": {},
+			"deconstruct_unavailable": {"reason": "unknown_item"},
 			"stackable": false,
 			"max_stack": 1,
 		}
@@ -98,6 +99,8 @@ func _item_snapshot(item_id: String, count: int, tool_durability: Dictionary = {
 	var use_allowed: bool = not usable.is_empty() and _is_item_use_allowed(data)
 	var crafting_fragment: Dictionary = _fragment_by_kind(data, "crafting")
 	var deconstruct_yield: Array[Dictionary] = _deconstruct_yield(data)
+	var deconstruct_requirements: Dictionary = _deconstruct_requirements(player, crafting_fragment, tool_durability, inventory, equipment, crafting_context)
+	var deconstructable := not deconstruct_yield.is_empty()
 	return {
 		"item_id": item_id,
 		"name": str(data.get("name", item_id)),
@@ -118,10 +121,11 @@ func _item_snapshot(item_id: String, count: int, tool_durability: Dictionary = {
 		"use_ap_cost": max(1.0, ceil(float(usable.get("use_time", 1.0)))) if not usable.is_empty() else 0.0,
 		"use_effect_ids": _string_array(usable.get("effect_ids", [])) if not usable.is_empty() else [],
 		"droppable": _is_item_droppable(data),
-		"deconstructable": not deconstruct_yield.is_empty(),
+		"deconstructable": deconstructable,
 		"deconstruct_yield": deconstruct_yield,
 		"deconstruct_preview": _deconstruct_preview(deconstruct_yield, count),
-		"deconstruct_requirements": _deconstruct_requirements(crafting_fragment, tool_durability, inventory, equipment, crafting_context),
+		"deconstruct_requirements": deconstruct_requirements,
+		"deconstruct_unavailable": _deconstruct_unavailable(crafting_fragment, deconstruct_yield, deconstruct_requirements),
 		"stackable": _stackable(data),
 		"max_stack": _max_stack(data),
 	}
@@ -282,12 +286,52 @@ func _deconstruct_preview(deconstruct_yield: Array[Dictionary], source_count: in
 	}
 
 
-func _deconstruct_requirements(crafting_fragment: Dictionary, tool_durability: Dictionary = {}, inventory: Dictionary = {}, equipment: Dictionary = {}, crafting_context: Dictionary = {}) -> Dictionary:
-	if crafting_fragment.is_empty():
+func _deconstruct_unavailable(crafting_fragment: Dictionary, deconstruct_yield: Array[Dictionary], requirements: Dictionary) -> Dictionary:
+	if deconstruct_yield.is_empty():
+		var reason := "missing_deconstruct_yield" if not crafting_fragment.is_empty() else "no_crafting_fragment"
+		return {
+			"reason": reason,
+			"text": "没有拆解产物",
+		}
+	var missing_parts: Array[String] = []
+	var missing_tools: Array[Dictionary] = []
+	for tool in _array_or_empty(requirements.get("required_tools", [])):
+		var tool_data: Dictionary = _dictionary_or_empty(tool)
+		var tool_name := str(tool_data.get("name", tool_data.get("item_id", "")))
+		if bool(tool_data.get("consume_on_deconstruct", false)) and int(tool_data.get("missing_count", 0)) > 0:
+			missing_parts.append("缺少可消耗工具 %s x%d" % [tool_name, int(tool_data.get("missing_count", 0))])
+			missing_tools.append(tool_data.duplicate(true))
+		var durability_cost := float(tool_data.get("durability_cost", 0.0))
+		if durability_cost > 0.0 and float(tool_data.get("available_durability", 0.0)) < durability_cost:
+			missing_parts.append("工具耐久不足 %s %.1f/%.1f" % [
+				tool_name,
+				float(tool_data.get("available_durability", 0.0)),
+				durability_cost,
+			])
+			missing_tools.append(tool_data.duplicate(true))
+	var station := str(requirements.get("required_station", "none"))
+	if station not in ["", "none"] and not bool(requirements.get("station_available", false)):
+		missing_parts.append("需要工作台 %s" % station)
+	if missing_parts.is_empty():
 		return {}
 	return {
+		"reason": "requirements_unmet",
+		"text": "；".join(missing_parts),
+		"missing_tools": missing_tools,
+		"required_station": station if station not in ["", "none"] else "",
+	}
+
+
+func _deconstruct_requirements(player: Dictionary, crafting_fragment: Dictionary, tool_durability: Dictionary = {}, inventory: Dictionary = {}, equipment: Dictionary = {}, crafting_context: Dictionary = {}) -> Dictionary:
+	if crafting_fragment.is_empty():
+		return {}
+	var required_station := str(crafting_fragment.get("deconstruct_required_station", crafting_fragment.get("required_deconstruct_station", "none")))
+	var station: Dictionary = _nearest_station(player, required_station, _array_or_empty(crafting_context.get("crafting_stations", [])))
+	return {
 		"required_tools": _deconstruct_required_tools(crafting_fragment, tool_durability, inventory, equipment, crafting_context),
-		"required_station": str(crafting_fragment.get("deconstruct_required_station", crafting_fragment.get("required_deconstruct_station", "none"))),
+		"required_station": required_station,
+		"station_available": required_station in ["", "none"] or not station.is_empty(),
+		"station": station,
 	}
 
 
@@ -446,6 +490,45 @@ func _inventory_entry_count(entries: Array, item_id: String) -> int:
 		if _normalize_content_id(entry_data.get("item_id", "")) == item_id:
 			total += max(0, int(entry_data.get("count", 0)))
 	return total
+
+
+func _nearest_station(player: Dictionary, station_id: String, stations: Array) -> Dictionary:
+	var normalized_station := station_id.strip_edges()
+	if normalized_station in ["", "none"]:
+		return {}
+	var best_station: Dictionary = {}
+	var best_distance := 2147483647
+	for station in stations:
+		var station_data: Dictionary = _dictionary_or_empty(station)
+		if str(station_data.get("station_id", "")) != normalized_station:
+			continue
+		var distance: int = _distance_to_station(player, station_data)
+		var station_range: int = max(0, int(station_data.get("range", 1)))
+		if distance > station_range:
+			continue
+		if distance < best_distance:
+			best_distance = distance
+			best_station = station_data.duplicate(true)
+			best_station["distance"] = distance
+	return best_station
+
+
+func _distance_to_station(player: Dictionary, station: Dictionary) -> int:
+	var player_grid: Dictionary = _dictionary_or_empty(player.get("grid_position", {}))
+	var best_distance := 2147483647
+	for cell in _array_or_empty(station.get("cells", [])):
+		var cell_data: Dictionary = _dictionary_or_empty(cell)
+		if int(cell_data.get("y", 0)) != int(player_grid.get("y", 0)):
+			continue
+		var dx: int = abs(int(cell_data.get("x", 0)) - int(player_grid.get("x", 0)))
+		var dz: int = abs(int(cell_data.get("z", 0)) - int(player_grid.get("z", 0)))
+		best_distance = mini(best_distance, dx + dz)
+	if best_distance != 2147483647:
+		return best_distance
+	var anchor: Dictionary = _dictionary_or_empty(station.get("anchor", {}))
+	if int(anchor.get("y", 0)) != int(player_grid.get("y", 0)):
+		return best_distance
+	return abs(int(anchor.get("x", 0)) - int(player_grid.get("x", 0))) + abs(int(anchor.get("z", 0)) - int(player_grid.get("z", 0)))
 
 
 func _tool_durability(tool_id: String, tool_durability: Dictionary) -> float:

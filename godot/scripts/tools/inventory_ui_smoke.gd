@@ -389,6 +389,20 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should select ammo row for detail")
 	if not _detail_line(game_root).contains("弹药") or not _detail_line(game_root).contains("总价 50"):
 		errors.append("inventory detail should show selected item category and value")
+	player_ref.inventory["smoke_non_deconstructable_ui_item"] = 1
+	game_root.refresh_inventory_panel()
+	if not _press_inventory_item_with_text(game_root, "不可拆解UI测试物品"):
+		errors.append("should select non-deconstructable UI smoke item")
+	if not _detail_line(game_root).contains("拆解不可用 没有拆解产物"):
+		errors.append("inventory detail should explain why item cannot be deconstructed")
+	if not _open_inventory_context_menu(game_root, "不可拆解UI测试物品"):
+		errors.append("should open context menu for non-deconstructable smoke item")
+	elif not _context_action_disabled(game_root, 6):
+		errors.append("context menu should disable deconstruct for non-deconstructable smoke item")
+	elif not _context_action_tooltip(game_root, 6).contains("没有拆解产物"):
+		errors.append("disabled deconstruct context action should explain missing yield")
+	player_ref.inventory.erase("smoke_non_deconstructable_ui_item")
+	game_root.refresh_inventory_panel()
 	var item_scroll: Node = game_root.inventory_panel.get_node_or_null("InventoryPanel/InventoryLines/ItemScroll")
 	if item_scroll == null:
 		errors.append("inventory panel should wrap item rows in a scroll container")
@@ -495,6 +509,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory detail should show deconstruct tool consumption and station requirements")
 	if not _detail_line(game_root).contains("拆解产物 塑料 x1"):
 		errors.append("inventory detail should show deconstruct yield preview")
+	if not _detail_line(game_root).contains("拆解不可用 需要工作台 smoke_station"):
+		errors.append("inventory detail should explain missing deconstruct station")
+	if not _open_inventory_context_menu(game_root, "拆解要求测试物品"):
+		errors.append("should open context menu for station-gated deconstruct item")
+	elif not _context_action_tooltip(game_root, 6).contains("需要工作台 smoke_station"):
+		errors.append("deconstruct context tooltip should preview missing station requirement")
 	var gated_item_snapshot: Dictionary = _inventory_snapshot_item(game_root, "smoke_deconstruct_tool_item")
 	var gated_requirements: Dictionary = _dictionary_or_empty(gated_item_snapshot.get("deconstruct_requirements", {}))
 	var gated_tools: Array = _array_or_empty(gated_requirements.get("required_tools", []))
@@ -852,6 +872,20 @@ func _install_deconstruct_requirement_smoke_item(game_root: Node) -> void:
 				"kind": "crafting",
 				"deconstruct_required_tools": [{"item_id": "1151", "consume_on_deconstruct": true, "consume_count": 1}],
 				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
+			}],
+		},
+	}
+	items["smoke_non_deconstructable_ui_item"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_non_deconstructable_ui_item",
+			"name": "不可拆解UI测试物品",
+			"description": "用于验证不可拆解原因展示",
+			"value": 1,
+			"weight": 0.1,
+			"fragments": [{
+				"kind": "crafting",
+				"deconstruct_yield": [],
 			}],
 		},
 	}

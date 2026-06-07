@@ -417,6 +417,7 @@ func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> 
 	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_SPLIT), _split_context_tooltip(item))
 	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_STORE_CONTAINER), "存入当前打开的容器" if has_container else "需要先打开一个容器")
 	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_SELL_TRADE), "出售给当前交易对象" if has_trade else "需要先打开交易")
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_DECONSTRUCT), _deconstruct_context_tooltip(item))
 	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
 	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
 
@@ -879,8 +880,9 @@ func _apply_detail(item: Dictionary) -> void:
 	var stack_suffix := " | 堆叠 %d" % int(item.get("max_stack", 1)) if bool(item.get("stackable", false)) else ""
 	var deconstruct_suffix := _deconstruct_requirements_text(item)
 	var deconstruct_preview_suffix := _deconstruct_preview_text(item)
+	var deconstruct_unavailable_suffix := _deconstruct_unavailable_text(item)
 	var description := str(item.get("description", ""))
-	_detail_label.text = "%s | %s | 单重 %.2f kg | 总重 %.2f kg | 单价 %d | 总价 %d%s%s%s%s%s%s" % [
+	_detail_label.text = "%s | %s | 单重 %.2f kg | 总重 %.2f kg | 单价 %d | 总价 %d%s%s%s%s%s%s%s" % [
 		item.get("name", item.get("item_id", "")),
 		item.get("category_label", "杂项"),
 		float(item.get("unit_weight", 0.0)),
@@ -892,6 +894,7 @@ func _apply_detail(item: Dictionary) -> void:
 		stack_suffix,
 		deconstruct_suffix,
 		deconstruct_preview_suffix,
+		deconstruct_unavailable_suffix,
 		"\n%s" % description if not description.is_empty() else "",
 	]
 	_update_action_buttons(item)
@@ -956,6 +959,23 @@ func _deconstruct_tool_sources_text(required_tools: Array) -> String:
 	if parts.is_empty():
 		return ""
 	return " | 拆解工具来源 %s" % ", ".join(parts)
+
+
+func _deconstruct_unavailable_text(item: Dictionary) -> String:
+	var unavailable: Dictionary = _dictionary_or_empty(item.get("deconstruct_unavailable", {}))
+	var text := str(unavailable.get("text", "")).strip_edges()
+	if text.is_empty():
+		return ""
+	return " | 拆解不可用 %s" % text
+
+
+func _deconstruct_context_tooltip(item: Dictionary) -> String:
+	if bool(item.get("deconstructable", false)) and int(item.get("count", 0)) > 0:
+		var unavailable: Dictionary = _dictionary_or_empty(item.get("deconstruct_unavailable", {}))
+		var warning := str(unavailable.get("text", "")).strip_edges()
+		return "拆解选中的数量" if warning.is_empty() else "拆解选中的数量；%s" % warning
+	var unavailable_text := str(_dictionary_or_empty(item.get("deconstruct_unavailable", {})).get("text", "")).strip_edges()
+	return unavailable_text if not unavailable_text.is_empty() else "选中的物品不能拆解"
 
 
 func _deconstruct_preview_text(item: Dictionary) -> String:
