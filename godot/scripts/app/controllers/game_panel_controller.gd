@@ -661,6 +661,7 @@ func _menu_close_priority() -> Array[String]:
 
 
 func _panel_blocker_snapshot(name: String, kind: String, panel_id: String, panel: Control) -> Dictionary:
+	var content := _panel_content(panel_id, panel)
 	return {
 		"blocked": true,
 		"name": name,
@@ -668,8 +669,27 @@ func _panel_blocker_snapshot(name: String, kind: String, panel_id: String, panel
 		"modal_id": "",
 		"panel_id": panel_id,
 		"mouse_blocks_world": panel != null and panel.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"content_mouse_blocks_world": content != null and content.mouse_filter == Control.MOUSE_FILTER_STOP,
 		"visible": panel != null and panel.visible,
 	}
+
+
+func _panel_content(panel_id: String, panel: Control) -> Control:
+	if panel == null:
+		return null
+	match panel_id:
+		"inventory", "character", "journal", "map", "skills", "crafting":
+			return _stage_panel_content(panel_id, panel)
+		"settings":
+			return panel.find_child("SettingsPanel", true, false) as Control
+		"dialogue":
+			return panel.find_child("DialoguePanel", true, false) as Control
+		"trade":
+			return panel.find_child("TradePanel", true, false) as Control
+		"container":
+			return panel.find_child("ContainerPanel", true, false) as Control
+		_:
+			return null
 
 
 func _modal_owner_panel_id(modal_name: String) -> String:

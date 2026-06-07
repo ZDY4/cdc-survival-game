@@ -42,11 +42,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(result.get("success", false)):
 		errors.append("talk execution failed: %s" % result.get("reason", "unknown"))
+	_finish_presentations(game_root)
 
 	if game_root.dialogue_panel == null:
 		return ["dialogue panel was not created"]
 	if not game_root.dialogue_panel.visible:
 		errors.append("dialogue panel is not visible after talk")
+	_assert_panel_mouse_blocker(errors, game_root.dialogue_panel, "DialoguePanel", "dialogue open")
 	if _speaker_line(game_root) != "老王":
 		errors.append("dialogue speaker mismatch: %s" % _speaker_line(game_root))
 	if result.get("dialogue_id", "") != "trader_lao_wang_tutorial_active":
@@ -187,6 +189,22 @@ func _option_button_count(game_root: Node) -> int:
 	if box == null:
 		return 0
 	return box.get_child_count()
+
+
+func _assert_panel_mouse_blocker(errors: Array[String], panel: Control, content_name: String, context: String) -> void:
+	if panel == null:
+		errors.append("%s: panel should exist" % context)
+		return
+	if panel.mouse_filter != Control.MOUSE_FILTER_STOP:
+		errors.append("%s: panel root should stop mouse input" % context)
+	var content := panel.find_child(content_name, true, false) as Control
+	if content == null or content.mouse_filter != Control.MOUSE_FILTER_STOP:
+		errors.append("%s: %s should stop mouse input" % [context, content_name])
+
+
+func _finish_presentations(game_root: Node) -> void:
+	if game_root.has_method("finish_world_action_presentations"):
+		game_root.finish_world_action_presentations()
 
 
 func _press_key(game_root: Node, key: int) -> void:

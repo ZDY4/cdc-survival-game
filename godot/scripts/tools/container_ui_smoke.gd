@@ -42,8 +42,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var open_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(open_result.get("success", false)):
 		errors.append("container open failed: %s" % open_result.get("reason", "unknown"))
+	_finish_presentations(game_root)
 	if not game_root.container_panel.visible:
 		errors.append("container panel should be visible after opening container")
+	_assert_panel_blocker(errors, game_root, "container", "ContainerPanel", "container open")
 	var opened_session: Dictionary = _container_session(game_root.simulation.snapshot(), "survivor_outpost_01_clinic_supply_cabinet")
 	if str(opened_session.get("container_type", "")) != "map":
 		errors.append("opened map container session should expose container_type=map")
@@ -636,6 +638,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("container reopen failed: %s" % reopen_result.get("reason", "unknown"))
 	if not game_root.container_panel.visible:
 		errors.append("container panel should reopen for Esc close check")
+	_finish_presentations(game_root)
 	_press_key(game_root, KEY_ESCAPE)
 	if game_root.container_panel.visible:
 		errors.append("Esc should close container panel")
@@ -723,6 +726,7 @@ func _press_close_button(game_root: Node) -> void:
 
 
 func _execute_primary_and_complete(game_root: Node, max_waits: int = 8) -> Dictionary:
+	_finish_presentations(game_root)
 	var result: Dictionary = game_root.execute_primary_interaction()
 	var waits := 0
 	while waits < max_waits and _has_pending(game_root) and not _final_interaction_result(result):
@@ -734,6 +738,7 @@ func _execute_primary_and_complete(game_root: Node, max_waits: int = 8) -> Dicti
 		var pending_result: Dictionary = wait_result.get("pending_result", {})
 		result = pending_result if not pending_result.is_empty() else wait_result
 		_refresh_runtime_world(game_root, result)
+	_finish_presentations(game_root)
 	return result
 
 
@@ -768,6 +773,7 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 		"money": 0,
 	}
 	player.active_container_id = container_id
+	_finish_presentations(game_root)
 	var take_all: Dictionary = game_root.take_all_active_container_items()
 	if not bool(take_all.get("success", false)):
 		errors.append("empty state setup take all failed: %s" % take_all.get("reason", "unknown"))
@@ -1118,6 +1124,24 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _assert_panel_blocker(errors: Array[String], game_root: Node, panel_id: String, content_name: String, context: String) -> void:
+	if str(game_root.gameplay_input_blocker_name()) != panel_id:
+		errors.append("%s: blocker expected %s, got %s" % [context, panel_id, str(game_root.gameplay_input_blocker_name())])
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.gameplay_input_blocker_snapshot())
+	if str(snapshot.get("panel_id", "")) != panel_id:
+		errors.append("%s: blocker snapshot panel expected %s, got %s" % [context, panel_id, snapshot])
+	if not bool(snapshot.get("mouse_blocks_world", false)) or not bool(snapshot.get("content_mouse_blocks_world", false)):
+		errors.append("%s: panel blocker should stop mouse on root and content: %s" % [context, snapshot])
+	var content := game_root.find_child(content_name, true, false) as Control
+	if content == null or content.mouse_filter != Control.MOUSE_FILTER_STOP:
+		errors.append("%s: %s should stop mouse input" % [context, content_name])
+
+
+func _finish_presentations(game_root: Node) -> void:
+	if game_root.has_method("finish_world_action_presentations"):
+		game_root.finish_world_action_presentations()
 
 
 func _array_or_empty(value: Variant) -> Array:

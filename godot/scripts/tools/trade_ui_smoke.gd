@@ -42,9 +42,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var result: Dictionary = game_root.execute_primary_interaction()
 	if not bool(result.get("success", false)):
 		errors.append("talk execution failed: %s" % result.get("reason", "unknown"))
+	_finish_presentations(game_root)
 
 	if not game_root.trade_panel.visible:
 		errors.append("trade panel did not open after trader talk")
+	_assert_panel_blocker(errors, game_root, "trade", "TradePanel", "trade open")
 	if not _title_line(game_root).contains("废土商人·老王"):
 		errors.append("trade title did not use trader display name")
 	if not _summary_line(game_root).contains("资金 500"):
@@ -409,6 +411,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("equipped item sell should reopen confirmation dialog")
 	var trade_confirmed_before_equipment_sell: int = _event_count(game_root, "trade_confirmed")
 	_confirm_equipment_sell_dialog(game_root)
+	_finish_presentations(game_root)
 	game_root.refresh_inventory_panel()
 	game_root.refresh_trade_panel()
 	if _event_count(game_root, "trade_confirmed") <= trade_confirmed_before_equipment_sell:
@@ -630,6 +633,24 @@ func _assert_modal_stack(errors: Array[String], game_root: Node, expected_id: St
 		errors.append("%s: runtime modal stack should expose top %s: %s" % [context, expected_id, runtime_stack])
 
 
+func _assert_panel_blocker(errors: Array[String], game_root: Node, panel_id: String, content_name: String, context: String) -> void:
+	if str(game_root.gameplay_input_blocker_name()) != panel_id:
+		errors.append("%s: blocker expected %s, got %s" % [context, panel_id, str(game_root.gameplay_input_blocker_name())])
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.gameplay_input_blocker_snapshot())
+	if str(snapshot.get("panel_id", "")) != panel_id:
+		errors.append("%s: blocker snapshot panel expected %s, got %s" % [context, panel_id, snapshot])
+	if not bool(snapshot.get("mouse_blocks_world", false)) or not bool(snapshot.get("content_mouse_blocks_world", false)):
+		errors.append("%s: panel blocker should stop mouse on root and content: %s" % [context, snapshot])
+	var content := game_root.find_child(content_name, true, false) as Control
+	if content == null or content.mouse_filter != Control.MOUSE_FILTER_STOP:
+		errors.append("%s: %s should stop mouse input" % [context, content_name])
+
+
+func _finish_presentations(game_root: Node) -> void:
+	if game_root.has_method("finish_world_action_presentations"):
+		game_root.finish_world_action_presentations()
+
+
 func _press_close_button(game_root: Node) -> void:
 	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CloseButton")
 	if button is Button:
@@ -637,12 +658,14 @@ func _press_close_button(game_root: Node) -> void:
 
 
 func _reopen_trade(game_root: Node, errors: Array[String]) -> void:
+	_finish_presentations(game_root)
 	var trader_node: Node = game_root.find_child("Actor_trader_lao_wang_2", true, false)
 	if trader_node == null:
 		errors.append("missing trader actor node for trade reopen")
 		return
 	game_root.select_interaction_node(trader_node)
 	var result: Dictionary = game_root.execute_primary_interaction()
+	_finish_presentations(game_root)
 	if not bool(result.get("success", false)):
 		errors.append("trade reopen failed: %s" % result.get("reason", "unknown"))
 	if not game_root.trade_panel.visible:
