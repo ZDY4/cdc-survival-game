@@ -214,6 +214,10 @@ func _expect_schema_migration_diagnostics(errors: Array[String], registry: Conte
 		errors.append("schema migration should report deprecated schemaVersion: %s" % [legacy_schema])
 	if _array_or_empty(legacy_schema.get("migration_log", [])).is_empty():
 		errors.append("schema migration should expose migration log for legacy fields: %s" % [legacy_schema])
+	var legacy_diff: Dictionary = _dictionary_or_empty(_dictionary_or_empty(legacy_schema.get("roundtrip", {})).get("diff_summary", {}))
+	if not _array_or_empty(legacy_diff.get("fields_removed", [])).has("schemaVersion") \
+			or not _array_or_empty(legacy_diff.get("fields_added", [])).has("schema_version"):
+		errors.append("schema migration should migrate deprecated schemaVersion into schema_version: %s" % [legacy_schema])
 
 
 func _expect_asset_path_resolver(errors: Array[String]) -> void:
@@ -855,6 +859,7 @@ func _expect_schema_migration_writer(errors: Array[String]) -> void:
 		"data": {
 			"id": "schema_writer_smoke",
 			"name": "Schema Writer Smoke",
+			"schemaVersion": 0,
 		},
 	}
 	var writer := ContentSchemaMigrationWriter.new()
@@ -873,6 +878,8 @@ func _expect_schema_migration_writer(errors: Array[String]) -> void:
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(parsed) != TYPE_DICTIONARY or int(parsed.get("schema_version", 0)) != ContentSchemaMigration.CURRENT_SCHEMA_VERSION:
 		errors.append("schema migration writer should write current schema_version, got: %s" % [FileAccess.get_file_as_string(path)])
+	elif parsed.has("schemaVersion"):
+		errors.append("schema migration writer should remove deprecated schemaVersion, got: %s" % [parsed])
 	DirAccess.remove_absolute(path)
 
 

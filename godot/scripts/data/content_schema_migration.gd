@@ -51,6 +51,8 @@ func migrate_data(data: Dictionary) -> Dictionary:
 	var source_version := _read_schema_version(migrated)
 	if source_version <= CURRENT_SCHEMA_VERSION:
 		migrated["schema_version"] = CURRENT_SCHEMA_VERSION
+	for field in _deprecated_fields(migrated):
+		migrated.erase(field)
 	return migrated
 
 
