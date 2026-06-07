@@ -295,12 +295,23 @@ func _assert_broken_slot_feedback(errors: Array[String], menu: Control, slot_id:
 		errors.append("broken save should expose failure category %s: %s" % [expected_category, selected_summary])
 	if bool(selected_summary.get("loadable", true)) or not bool(selected_summary.get("can_delete", false)) or not bool(selected_summary.get("recoverable", false)):
 		errors.append("broken save should expose recovery state: %s" % selected_summary)
+	if not bool(selected_summary.get("can_export_recovery", false)) or str(selected_summary.get("recovery_export_path", "")).is_empty() or str(selected_summary.get("recovery_suggestion", "")).is_empty():
+		errors.append("broken save should expose recovery export metadata: %s" % selected_summary)
 	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
-	if line == null or not line.text.contains(expected_name) or not line.text.contains(expected_text):
+	if line == null or not line.text.contains(expected_name) or not line.text.contains(expected_text) or not line.text.contains("可导出"):
 		errors.append("broken save summary should include slot name and explain reason %s: %s" % [expected_reason, line.text if line != null else ""])
 	var continue_button: Button = menu.find_child("ContinueButton", true, false) as Button
 	if continue_button == null or not continue_button.disabled:
 		errors.append("continue button should be disabled for broken save")
+	var export_button: Button = menu.find_child("ExportRecoveryButton", true, false) as Button
+	if export_button == null or export_button.disabled:
+		errors.append("export recovery button should be enabled for broken save")
+	else:
+		var export_result: Dictionary = _dictionary_or_empty(menu.call("export_selected_slot_for_recovery"))
+		if not bool(export_result.get("ok", false)):
+			errors.append("export recovery should succeed for broken save: %s" % export_result)
+		elif not FileAccess.file_exists(str(export_result.get("export_path", ""))):
+			errors.append("export recovery should create backup file: %s" % export_result)
 	var delete_button: Button = menu.find_child("DeleteSlotButton", true, false) as Button
 	if delete_button == null or delete_button.disabled:
 		errors.append("delete button should remain enabled for broken save cleanup")

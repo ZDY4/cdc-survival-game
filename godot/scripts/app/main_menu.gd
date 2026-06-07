@@ -13,6 +13,7 @@ var last_action: Dictionary = {}
 var _slot_option: OptionButton
 var _overwrite_dialog: ConfirmationDialog
 var _delete_button: Button
+var _export_recovery_button: Button
 var _continue_button: Button
 var _slot_name_edit: LineEdit
 var _rename_button: Button
@@ -79,6 +80,35 @@ func delete_selected_slot() -> Dictionary:
 		"slot_display_name": display_name,
 	}
 	_set_feedback("已删除 %s" % display_name if deleted else "删除存档失败")
+	_refresh_save_slots()
+	return last_action.duplicate(true)
+
+
+func export_selected_slot_for_recovery() -> Dictionary:
+	var summary := _selected_slot_summary()
+	if summary.is_empty():
+		last_action = {
+			"ok": false,
+			"action": "export_recovery",
+			"reason": "selected_slot_missing",
+			"save_slot": save_slot,
+		}
+		_set_feedback("没有可导出的存档")
+		return last_action.duplicate(true)
+	var result: Dictionary = SaveService.new(save_root).export_slot_for_recovery(save_slot)
+	last_action = {
+		"ok": bool(result.get("ok", false)),
+		"action": "export_recovery",
+		"save_slot": save_slot,
+		"slot_display_name": _slot_display_name(summary),
+		"reason": str(result.get("reason", "")),
+		"export_path": str(result.get("export_path", "")),
+		"absolute_export_path": str(result.get("absolute_export_path", "")),
+	}
+	if bool(result.get("ok", false)):
+		_set_feedback("已导出坏档备份: %s" % str(result.get("export_path", "")))
+	else:
+		_set_feedback("导出坏档失败: %s" % _save_failure_text(str(result.get("reason", ""))))
 	_refresh_save_slots()
 	return last_action.duplicate(true)
 
@@ -211,6 +241,8 @@ func _build_layout() -> void:
 	box.add_child(_slot_summary_label)
 	_delete_button = _menu_button("DeleteSlotButton", "删除存档", delete_selected_slot)
 	box.add_child(_delete_button)
+	_export_recovery_button = _menu_button("ExportRecoveryButton", "导出坏档备份", export_selected_slot_for_recovery)
+	box.add_child(_export_recovery_button)
 	box.add_child(_menu_button("QuitButton", "退出", quit_game))
 
 	_overwrite_dialog = ConfirmationDialog.new()
@@ -268,6 +300,10 @@ func _refresh_continue_state() -> void:
 	if _delete_button != null:
 		_delete_button.disabled = _selected_slot_summary().is_empty()
 		_delete_button.tooltip_text = "删除 %s" % _selected_slot_display_name() if not _delete_button.disabled else "没有可删除的存档"
+	if _export_recovery_button != null:
+		var selected_summary := _selected_slot_summary()
+		_export_recovery_button.disabled = selected_summary.is_empty() or bool(selected_summary.get("ok", false)) or not bool(selected_summary.get("can_export_recovery", false))
+		_export_recovery_button.tooltip_text = "导出坏档备份到 recoveries" if not _export_recovery_button.disabled else "当前槽无需或不能导出坏档备份"
 	_refresh_rename_state()
 
 
@@ -304,7 +340,12 @@ func _refresh_slot_summary() -> void:
 		_slot_summary_label.text = "没有可继续的存档"
 		return
 	if not bool(summary.get("ok", false)):
-		_slot_summary_label.text = "%s | 存档不可加载: %s" % [_slot_display_name(summary), _save_failure_text(str(summary.get("reason", "unknown")))]
+		_slot_summary_label.text = "%s | 存档不可加载: %s | %s | 可导出: %s" % [
+			_slot_display_name(summary),
+			_save_failure_text(str(summary.get("reason", "unknown"))),
+			str(summary.get("recovery_suggestion", "")),
+			str(summary.get("recovery_export_path", "")),
+		]
 		return
 	var player: Dictionary = _dictionary_or_empty(summary.get("player", {}))
 	_slot_summary_label.text = "%s | 地图 %s | 地点 %s | %s @ %s | Lv%d HP %s/%s AP %s | 回合 %d %s | 任务 %d/%d | %s | %s" % [

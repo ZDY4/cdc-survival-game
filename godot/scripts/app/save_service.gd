@@ -172,6 +172,34 @@ func delete_snapshot(slot_id: String) -> bool:
 	return true
 
 
+func export_slot_for_recovery(slot_id: String) -> Dictionary:
+	var slot_key: String = _slot_key(slot_id)
+	if slot_key.is_empty():
+		return _failed("slot_id_empty")
+	var source_path: String = _slot_path(slot_key)
+	if not FileAccess.file_exists(source_path):
+		return _failed("save_file_missing")
+	var source := FileAccess.open(source_path, FileAccess.READ)
+	if source == null:
+		return _failed("save_file_unreadable")
+	var recovery_dir := save_root.path_join("recoveries")
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(recovery_dir))
+	var stamp := Time.get_datetime_string_from_system(false, true).replace(":", "").replace("-", "").replace("T", "_")
+	var export_path := recovery_dir.path_join("%s_%s.json" % [slot_key, stamp])
+	var target := FileAccess.open(export_path, FileAccess.WRITE)
+	if target == null:
+		return _failed("save_file_unwritable")
+	target.store_buffer(source.get_buffer(source.get_length()))
+	return {
+		"ok": true,
+		"slot_id": slot_key,
+		"source_path": source_path,
+		"export_path": export_path,
+		"absolute_export_path": ProjectSettings.globalize_path(export_path),
+		"recovery_suggestion": _recovery_suggestion(str(slot_summary(slot_key).get("reason", ""))),
+	}
+
+
 func _ensure_save_root() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(save_root))
 
@@ -254,6 +282,7 @@ func _failed(reason: String) -> Dictionary:
 
 
 func _failed_slot(slot_id: String, path: String, reason: String, metadata: Dictionary = {}) -> Dictionary:
+	var recovery_export_path := _recovery_export_path(slot_id)
 	return {
 		"ok": false,
 		"loadable": false,
@@ -261,6 +290,10 @@ func _failed_slot(slot_id: String, path: String, reason: String, metadata: Dicti
 		"recoverable": true,
 		"failure_category": _failure_category(reason),
 		"metadata_recovered": not metadata.is_empty(),
+		"can_export_recovery": FileAccess.file_exists(path),
+		"recovery_export_path": recovery_export_path,
+		"absolute_recovery_export_path": ProjectSettings.globalize_path(recovery_export_path),
+		"recovery_suggestion": _recovery_suggestion(reason),
 		"slot_id": slot_id,
 		"slot_display_name": _slot_display_name(slot_id, metadata),
 		"thumbnail_asset": _dictionary_or_empty(metadata.get("thumbnail_asset", _save_fallback_thumbnail_asset())),
@@ -285,6 +318,26 @@ func _failure_category(reason: String) -> String:
 			return "slot"
 		_:
 			return "unknown"
+
+
+func _recovery_export_path(slot_id: String) -> String:
+	return save_root.path_join("recoveries").path_join("%s_<timestamp>.json" % slot_id)
+
+
+func _recovery_suggestion(reason: String) -> String:
+	match reason:
+		"save_json_invalid":
+			return "建议先导出坏档备份，再删除或手工检查 JSON。"
+		"save_schema_unsupported":
+			return "建议先导出旧版本存档，等待后续迁移器或手工转换。"
+		"runtime_snapshot_missing":
+			return "建议导出 envelope 备份；该槽缺少运行时快照，当前不能继续游戏。"
+		"save_file_unreadable":
+			return "建议检查文件权限或磁盘状态，再尝试导出备份。"
+		"save_file_missing":
+			return "存档文件已缺失，可清理该槽位记录。"
+		_:
+			return "建议先导出备份，再删除或进一步排查。"
 
 
 func _load_metadata(slot_id: String, envelope: Dictionary, runtime_snapshot: Dictionary) -> Dictionary:
