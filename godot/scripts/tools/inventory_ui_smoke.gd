@@ -872,9 +872,29 @@ func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_da
 	var preview: Dictionary = _dictionary_or_empty(snapshot.get("preview", {}))
 	if not bool(preview.get("has_preview", false)) or str(preview.get("text", "")).is_empty():
 		errors.append("%s: drag snapshot should expose preview text: %s" % [context, snapshot])
+	_assert_drag_preview_diagnostics(errors, preview, context)
 	var runtime_drag: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("drag", {}))
 	if not runtime_drag.has("active") or not runtime_drag.has("target"):
 		errors.append("%s: runtime control should expose drag state shape: %s" % [context, runtime_drag])
+
+
+func _assert_drag_preview_diagnostics(errors: Array[String], preview: Dictionary, context: String) -> void:
+	var position: Dictionary = _dictionary_or_empty(preview.get("screen_position", {}))
+	var viewport: Dictionary = _dictionary_or_empty(preview.get("viewport_size", {}))
+	var estimated_size: Dictionary = _dictionary_or_empty(preview.get("estimated_size", {}))
+	var anchor: Dictionary = _dictionary_or_empty(preview.get("anchor", {}))
+	if position.is_empty() or not position.has("x") or not position.has("y"):
+		errors.append("%s: drag preview should expose screen position: %s" % [context, preview])
+	if viewport.is_empty() or float(viewport.get("x", 0.0)) <= 0.0 or float(viewport.get("y", 0.0)) <= 0.0:
+		errors.append("%s: drag preview should expose viewport size: %s" % [context, preview])
+	if estimated_size.is_empty() or float(estimated_size.get("x", 0.0)) <= 0.0 or float(estimated_size.get("y", 0.0)) <= 0.0:
+		errors.append("%s: drag preview should expose estimated size: %s" % [context, preview])
+	if anchor.is_empty() or not anchor.has("x") or not anchor.has("y"):
+		errors.append("%s: drag preview should expose anchor: %s" % [context, preview])
+	if str(preview.get("lifecycle_state", "")) != "dragging":
+		errors.append("%s: drag preview should expose dragging lifecycle: %s" % [context, preview])
+	if str(preview.get("threshold_policy", "")) != "godot_default":
+		errors.append("%s: drag preview should expose threshold policy: %s" % [context, preview])
 
 
 func _inventory_item_button(game_root: Node, needle: String) -> Button:

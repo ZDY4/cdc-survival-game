@@ -1662,6 +1662,24 @@ func _assert_ui_layer_stack(errors: Array[String], game_root: Node, drag_data: D
 			errors.append("%s: UI layer stack should include drag preview layer: %s" % [context, snapshot])
 		elif not bool(drag_layer.get("blocks_gameplay", false)) or not bool(drag_layer.get("mouse_blocks_world", false)):
 			errors.append("%s: drag preview layer should block gameplay while dragging: %s" % [context, drag_layer])
+		else:
+			_assert_drag_preview_layer_diagnostics(errors, _dictionary_or_empty(drag_layer.get("preview", {})), context)
+
+
+func _assert_drag_preview_layer_diagnostics(errors: Array[String], preview: Dictionary, context: String) -> void:
+	var position: Dictionary = _dictionary_or_empty(preview.get("screen_position", {}))
+	var viewport: Dictionary = _dictionary_or_empty(preview.get("viewport_size", {}))
+	var estimated_size: Dictionary = _dictionary_or_empty(preview.get("estimated_size", {}))
+	if position.is_empty() or not position.has("x") or not position.has("y"):
+		errors.append("%s: drag layer preview should expose screen position: %s" % [context, preview])
+	if viewport.is_empty() or float(viewport.get("x", 0.0)) <= 0.0 or float(viewport.get("y", 0.0)) <= 0.0:
+		errors.append("%s: drag layer preview should expose viewport size: %s" % [context, preview])
+	if estimated_size.is_empty() or float(estimated_size.get("x", 0.0)) <= 0.0 or float(estimated_size.get("y", 0.0)) <= 0.0:
+		errors.append("%s: drag layer preview should expose estimated size: %s" % [context, preview])
+	if str(preview.get("lifecycle_state", "")) != "dragging":
+		errors.append("%s: drag layer preview should expose dragging lifecycle: %s" % [context, preview])
+	if str(preview.get("threshold_policy", "")) != "godot_default":
+		errors.append("%s: drag layer preview should expose threshold policy: %s" % [context, preview])
 
 
 func _layer_by_id(layers: Array, layer_id: String) -> Dictionary:

@@ -1498,10 +1498,27 @@ func _drag_preview_snapshot(drag_data: Dictionary, payload: Dictionary) -> Dicti
 				var name := str(payload.get("name", payload.get("item_id", "")))
 				var count := int(payload.get("count", 0))
 				text = "%s x%d" % [name, count] if not name.is_empty() and count > 0 else name
+	var viewport := get_viewport()
+	var mouse_position := viewport.get_mouse_position() if viewport != null else Vector2.ZERO
+	var viewport_size := viewport.get_visible_rect().size if viewport != null else Vector2.ZERO
+	var estimated_size := _drag_preview_estimated_size(text)
 	return {
 		"text": text,
 		"has_preview": not text.is_empty(),
+		"screen_position": _vector2_snapshot(mouse_position),
+		"viewport_size": _vector2_snapshot(viewport_size),
+		"estimated_size": _vector2_snapshot(estimated_size),
+		"anchor": _vector2_snapshot(Vector2(8.0, 8.0)),
+		"lifecycle_state": "dragging",
+		"threshold_policy": "godot_default",
+		"threshold_px": -1,
 	}
+
+
+func _drag_preview_estimated_size(text: String) -> Vector2:
+	if text.is_empty():
+		return Vector2.ZERO
+	return Vector2(maxf(48.0, float(text.length() * 8 + 16)), 24.0)
 
 
 func _drag_hover_target_snapshot(control: Control) -> Dictionary:
