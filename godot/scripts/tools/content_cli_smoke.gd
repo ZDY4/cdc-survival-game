@@ -127,6 +127,13 @@ func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) 
 		errors.append("validate changed should resolve changed item path: %s" % [entries])
 	if not _has_changed_entry(entries, "appearance", "default_humanoid", "data/appearance/characters/default_humanoid.json"):
 		errors.append("validate changed should support appearance changed path: %s" % [entries])
+	var changed_summary: Dictionary = commands.changed_status_summary(entries)
+	var changed_counts: Dictionary = _dictionary_or_empty(changed_summary.get("counts", {}))
+	var changed_domains: Dictionary = _dictionary_or_empty(changed_summary.get("domains", {}))
+	if int(changed_summary.get("total", 0)) != 2 or int(changed_counts.get("changed", 0)) != 2:
+		errors.append("validate changed summary should count deduplicated changed records: %s" % [changed_summary])
+	if int(_dictionary_or_empty(changed_domains.get("items", {})).get("changed", 0)) != 1:
+		errors.append("validate changed summary should include item domain counts: %s" % [changed_summary])
 	var missing_entries := commands.changed_validation_records_for_paths(registry, ["data/items/missing_item_for_changed_smoke.json"])
 	if missing_entries.size() != 1 or bool(_dictionary_or_empty(missing_entries[0]).get("found", true)):
 		errors.append("validate changed should report supported but unloaded changed files: %s" % [missing_entries])
@@ -152,6 +159,12 @@ func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) 
 			errors.append("validate changed should classify deleted content path: %s" % [status_entries])
 		if str(renamed_entry.get("change_status", "")) != "renamed" or str(renamed_entry.get("source_relative_path", "")) != "data/items/old_item_for_changed_smoke.json":
 			errors.append("validate changed should preserve renamed content source path: %s" % [status_entries])
+		var status_summary: Dictionary = commands.changed_status_summary(status_entries)
+		var status_counts: Dictionary = _dictionary_or_empty(status_summary.get("counts", {}))
+		if int(status_summary.get("total", 0)) != 2 or int(status_counts.get("deleted", 0)) != 1 or int(status_counts.get("renamed", 0)) != 1:
+			errors.append("validate changed summary should count deleted/renamed entries: %s" % [status_summary])
+		if str(status_summary.get("text", "")) != "deleted=1, renamed=1":
+			errors.append("validate changed summary text should be stable: %s" % [status_summary])
 
 
 func _expect_schema_migration_diagnostics(errors: Array[String], registry: ContentRegistry) -> void:

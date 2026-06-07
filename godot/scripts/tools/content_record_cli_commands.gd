@@ -116,10 +116,12 @@ func _nested_ai_reference_lookup(args: Array[String], registry: ContentRegistry)
 func _validate_changed_command(registry: ContentRegistry) -> int:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
 	var entries := changed_validation_records_for_paths(registry, ContentDiffSummary.new().changed_path_entries(ContentCliDomains.git_status_paths_for_validate()))
+	var status_summary := changed_status_summary(entries)
 	var invalid_records := 0
 	print("mode: validate_changed")
 	print("domains: %s" % ContentCliDomains.validate_domain_names())
 	print("changed_supported_files: %d" % entries.size())
+	print("change_status_summary: %s" % status_summary.get("text", "none"))
 	if entries.is_empty():
 		print("checked_records: 0")
 		print("invalid_records: 0")
@@ -160,6 +162,28 @@ func _validate_changed_command(registry: ContentRegistry) -> int:
 	return 0 if invalid_records == 0 else 2
 
 
+func changed_status_summary(entries: Array) -> Dictionary:
+	var counts: Dictionary = {}
+	var domains: Dictionary = {}
+	for entry_value in entries:
+		var entry := _dictionary_or_empty(entry_value)
+		var status := str(entry.get("change_status", entry.get("status", "changed")))
+		if status.is_empty():
+			status = "changed"
+		counts[status] = int(counts.get(status, 0)) + 1
+		var domain := str(entry.get("domain", ""))
+		if not domain.is_empty():
+			var domain_counts: Dictionary = _dictionary_or_empty(domains.get(domain, {}))
+			domain_counts[status] = int(domain_counts.get(status, 0)) + 1
+			domains[domain] = domain_counts
+	return {
+		"total": entries.size(),
+		"counts": counts,
+		"domains": domains,
+		"text": _changed_status_summary_text(counts),
+	}
+
+
 func changed_validation_records_for_paths(registry: ContentRegistry, changed_paths: Array) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var seen: Dictionary = {}
@@ -198,6 +222,27 @@ func _changed_path_entry(value: Variant) -> Dictionary:
 		"status": "changed",
 		"status_code": "",
 	}
+
+
+func _changed_status_summary_text(counts: Dictionary) -> String:
+	if counts.is_empty():
+		return "none"
+	var order: Array[String] = ["modified", "added", "untracked", "deleted", "renamed", "changed"]
+	var parts: Array[String] = []
+	var emitted: Dictionary = {}
+	for status in order:
+		if counts.has(status):
+			parts.append("%s=%d" % [status, int(counts.get(status, 0))])
+			emitted[status] = true
+	var extra_statuses: Array[String] = []
+	for status_value in counts.keys():
+		var status := str(status_value)
+		if not emitted.has(status):
+			extra_statuses.append(status)
+	extra_statuses.sort()
+	for status in extra_statuses:
+		parts.append("%s=%d" % [status, int(counts.get(status, 0))])
+	return ", ".join(parts)
 
 
 func _missing_changed_label(change_status: String) -> String:
