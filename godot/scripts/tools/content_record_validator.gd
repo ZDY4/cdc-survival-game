@@ -3,15 +3,17 @@ extends RefCounted
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const AiRecordValidator = preload("res://scripts/tools/ai_record_validator.gd")
 const ContentBasicRecordValidator = preload("res://scripts/tools/content_basic_record_validator.gd")
+const JsonRecordValidator = preload("res://scripts/tools/json_record_validator.gd")
 const NarrativeRecordValidator = preload("res://scripts/tools/narrative_record_validator.gd")
 const WorldRecordValidator = preload("res://scripts/tools/world_record_validator.gd")
 
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 
-const EDITOR_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance", "ai"]
+const EDITOR_DOMAINS := ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance", "ai", "json"]
 
 var ai_validator: AiRecordValidator = AiRecordValidator.new()
 var basic_validator: ContentBasicRecordValidator = ContentBasicRecordValidator.new()
+var json_validator: JsonRecordValidator = JsonRecordValidator.new()
 var narrative_validator: NarrativeRecordValidator = NarrativeRecordValidator.new()
 var world_validator: WorldRecordValidator = WorldRecordValidator.new()
 
@@ -52,6 +54,8 @@ func validate_record(domain: String, id_value: String, registry: ContentRegistry
 			_validate_appearance(id_value, record, issues)
 		"ai":
 			ai_validator.validate_record(domain, id_value, record, registry, issues)
+		"json":
+			json_validator.validate_record(domain, id_value, record, registry, issues)
 		_:
 			issues.append(_issue("warning", "$", "shallow_validation", "record-level validation not implemented for domain %s" % domain))
 

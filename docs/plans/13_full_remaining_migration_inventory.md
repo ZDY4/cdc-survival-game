@@ -62,7 +62,7 @@
 - [~] 安全写回：格式化、dry-run、diff summary、失败不落盘、原子替换。
 - [ ] JSON path 定位：校验错误能定位到文件、字段路径和数组索引。
 - [ ] `changed` / `diff-summary` 等旧 content_tools 行为完整迁移。
-- [~] 跨 domain 引用校验：item、recipe、quest、dialogue、dialogue rule、skill、character、settlement、map、overworld、shop、world tile、appearance profile、AI behavior / profile、appearance asset path 和物品 appearance `visual_asset` -> Godot glTF 已有第一版覆盖，`references shop <id>` 可反查店主和交易对话，`references dialogue_rule <id>` 可反查角色绑定和默认 / 变体对话，`references ai <id>` 可反查角色 life 绑定和 AI 集合内引用，`references world_tile <id>` 可反查地图和 overworld tile 使用点，`references appearance <id>` 可反查角色外观绑定；待补更多 legacy json 字段和地图 asset id 映射校验。
+- [~] 跨 domain 引用校验：item、recipe、quest、dialogue、dialogue rule、skill、character、settlement、map、overworld、shop、world tile、appearance profile、AI behavior / profile、legacy json effects、appearance asset path 和物品 appearance `visual_asset` -> Godot glTF 已有第一版覆盖，`references shop <id>` 可反查店主和交易对话，`references dialogue_rule <id>` 可反查角色绑定和默认 / 变体对话，`references ai <id>` 可反查角色 life 绑定和 AI 集合内引用，`references json <id>` 可反查物品 effect 使用点，`references world_tile <id>` 可反查地图和 overworld tile 使用点，`references appearance <id>` 可反查角色外观绑定；待补更多 legacy json 字段和地图 asset id 映射校验。
 - [ ] 内容版本和 schema migration：旧字段、缺省字段、废弃字段、迁移日志和 snapshot roundtrip。
 
 参考：`content_tools/src/app/**`、`game_data/src/content_registry.rs`、`game_data/src/file_backed.rs`、`game_data/src/content.rs`。
@@ -77,7 +77,7 @@
 - [~] `data/characters`：玩家、友方 NPC、中立 NPC、敌人、商人、医生、任务角色、loadout、AI、dialogue / shop 绑定。
 - [~] `data/dialogue_rules` 和 `data/dialogues`：节点、选项、条件、动作、任务接取 / 推进 / 交付、交易打开、fallback、结束。
 - [~] `data/items`：武器、装备、消耗品、材料、工具、任务物品、货币、占位物、模型、效果、价格、重量、堆叠。
-- [~] `data/json`：ammo、attribute、balance、camp relations、clues、effects、encounters、scavenge、structures、tools、weather 等是否仍为权威或需合并。
+- [~] `data/json`：ammo、attribute、balance、camp relations、clues、effects、encounters、scavenge、structures、tools、weather 等是否仍为权威或需合并；Godot content CLI 已支持 `json` 的 locate / summarize / references / validate / format 第一版，覆盖 effect 记录和 legacy item/tool 引用基础校验。
 - [~] `data/maps`：迁移期 JSON 备份；每张图必须和 `godot/scenes/maps/*.tscn` 对照，不再作为新地图权威。
 - [~] `data/overworld`：地点解锁、旅行、遭遇、入口、返回。
 - [~] `data/quests`：collect / kill / dialogue / turn-in、奖励、失败、互斥、world flag。

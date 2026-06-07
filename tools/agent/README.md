@@ -159,6 +159,7 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind dia
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind dialogue_rule -Id trader_lao_wang
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind skill_tree -Id survival
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind ai -Id guard_settlement
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind json -Id stun
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind item -Id 1006
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind quest -Id tutorial_survive
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command validate -Kind changed
@@ -174,11 +175,11 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 
 - 固定调用 `D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/content_cli.gd -- ...`。
 - 当前覆盖 `locate` / `summarize` / `references` / `validate` / `validate changed` / `format` / `format changed` / `diff-summary`。
-- `summarize` 输出 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `ai` 的高信号字段摘要。
+- `summarize` 输出 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `ai` / `json` 的高信号字段摘要。
 - `map locate` 和 `map summarize` 以 `godot/scenes/maps/*.tscn` 为主来源，便于地图布局继续按 Godot scene 工作流维护。
-- `validate` 对 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `appearance` / `ai` 执行记录级诊断，输出 `relative_path`、`status` 和字段级 issue；`validate changed` 会批量检查这些已迁移编辑内容。
-- `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map` / `shop` / `world_tile` / `appearance` / `ai`，用于替代旧 `content_tools` 的常用引用查询。
-- `format` 覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `ai`，只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量。
+- `validate` 对 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `appearance` / `ai` / `json` 执行记录级诊断，输出 `relative_path`、`status` 和字段级 issue；`validate changed` 会批量检查这些已迁移编辑内容。
+- `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map` / `shop` / `world_tile` / `appearance` / `ai` / `json`，用于替代旧 `content_tools` 的常用引用查询。
+- `format` 覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `dialogue_rule` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `shop` / `world_tile` / `ai` / `json`，只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量。
 
 ### `test-godot-editor.ps1`
 

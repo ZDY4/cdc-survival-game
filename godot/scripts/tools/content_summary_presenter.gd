@@ -44,6 +44,8 @@ func summary_lines(domain: String, id_value: String, record: Dictionary, relativ
 			lines.append_array(_world_tile_lines(data))
 		"ai":
 			lines.append_array(_ai_lines(data))
+		"json":
+			lines.append_array(_json_lines(data))
 	return lines
 
 
@@ -268,6 +270,30 @@ func _ai_lines(data: Dictionary) -> Array[String]:
 	if lines.is_empty():
 		lines.append("ai_collections: -")
 	return lines
+
+
+func _json_lines(data: Dictionary) -> Array[String]:
+	if data.has("id") and (_is_effect_like(data) or data.has("gameplay_effect")):
+		return [
+			"name: %s" % data.get("name", ""),
+			"category: %s" % data.get("category", ""),
+			"duration: %.2f" % float(data.get("duration", 0.0)),
+			"stat_modifiers: %d" % _dictionary_or_empty(data.get("stat_modifiers", data.get("modifiers", {}))).size(),
+			"special_effects: %s" % _join_or_dash(_string_array(_array_or_empty(data.get("special_effects", [])))),
+			"has_gameplay_effect: %s" % str(data.has("gameplay_effect")).to_lower(),
+		]
+	var keys: Array[String] = []
+	for key in data.keys():
+		keys.append(str(key))
+	keys.sort()
+	return [
+		"top_level_keys: %s" % _join_or_dash(keys),
+		"entry_count: %d" % data.size(),
+	]
+
+
+func _is_effect_like(data: Dictionary) -> bool:
+	return data.has("stat_modifiers") or data.has("special_effects") or data.has("visual_effect") or data.has("tick_interval")
 
 
 func _dialogue_start_node(nodes: Array) -> String:

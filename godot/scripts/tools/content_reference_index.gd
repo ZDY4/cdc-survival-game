@@ -41,6 +41,8 @@ func references_for(domain: String, id_value: String, registry: ContentRegistry)
 			return _appearance_references(id_value, registry)
 		"ai":
 			return _ai_references(id_value, registry)
+		"json":
+			return _json_references(id_value, registry)
 	return []
 
 
@@ -61,6 +63,7 @@ func supports_domain(domain: String) -> bool:
 		"world_tiles",
 		"appearance",
 		"ai",
+		"json",
 	].has(domain)
 
 
@@ -410,6 +413,25 @@ func _ai_references(ai_id: String, registry: ContentRegistry) -> Array[Dictionar
 			var action: Dictionary = _dictionary_or_empty(data["actions"][i])
 			_collect_scalar_ref(hits, ai_id, "ai", record_id, path, "actions[%d].executor_binding_id" % i, action.get("executor_binding_id", ""))
 			_collect_string_array_refs(hits, ai_id, "ai", record_id, path, "actions[%d].expected_fact_ids" % i, _array_or_empty(action.get("expected_fact_ids", [])))
+	return hits
+
+
+func _json_references(json_id: String, registry: ContentRegistry) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	for item_id in registry.get_library("items").keys():
+		var record: Dictionary = _dictionary_or_empty(registry.get_library("items").get(item_id, {}))
+		var fragments: Array = _array_or_empty(_dictionary_or_empty(record.get("data", {})).get("fragments", []))
+		for fragment_index in range(fragments.size()):
+			var fragment: Dictionary = _dictionary_or_empty(fragments[fragment_index])
+			match str(fragment.get("kind", "")):
+				"usable":
+					_collect_string_array_refs(hits, json_id, "item", item_id, record.get("path", ""), "fragments[%d].effect_ids" % fragment_index, _array_or_empty(fragment.get("effect_ids", [])))
+				"equip":
+					_collect_string_array_refs(hits, json_id, "item", item_id, record.get("path", ""), "fragments[%d].equip_effect_ids" % fragment_index, _array_or_empty(fragment.get("equip_effect_ids", [])))
+					_collect_string_array_refs(hits, json_id, "item", item_id, record.get("path", ""), "fragments[%d].unequip_effect_ids" % fragment_index, _array_or_empty(fragment.get("unequip_effect_ids", [])))
+				"weapon":
+					_collect_string_array_refs(hits, json_id, "item", item_id, record.get("path", ""), "fragments[%d].on_hit_effect_ids" % fragment_index, _array_or_empty(fragment.get("on_hit_effect_ids", [])))
+	_sources.collect_legacy_json_refs(hits, json_id, "json", ["effect_id", "effectId", "base_effect_id", "baseEffectId"], [])
 	return hits
 
 

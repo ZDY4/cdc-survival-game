@@ -18,7 +18,7 @@ func _init() -> void:
 
 	print("content_cli_smoke passed:")
 	print({
-		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "dialogue_rule", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "shop", "world_tile", "appearance", "ai"],
+		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "dialogue_rule", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "shop", "world_tile", "appearance", "ai", "json"],
 	})
 	quit(0)
 
@@ -47,6 +47,7 @@ func _run() -> Array[String]:
 	_expect_min_refs(errors, index, registry, "world_tiles", "surface_placeholder_basic", 1)
 	_expect_min_refs(errors, index, registry, "appearance", "default_humanoid", 1)
 	_expect_min_refs(errors, index, registry, "ai", "guard_settlement", 1)
+	_expect_min_refs(errors, index, registry, "json", "stun", 1)
 	_expect_valid_record(errors, registry, "items", "1006")
 	_expect_valid_record(errors, registry, "recipes", "recipe_first_aid_kit")
 	_expect_valid_record(errors, registry, "characters", "zombie_walker")
@@ -62,6 +63,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "world_tiles", "surface_placeholder_basic")
 	_expect_valid_record(errors, registry, "appearance", "default_humanoid")
 	_expect_valid_record(errors, registry, "ai", "guard_settlement")
+	_expect_valid_record(errors, registry, "json", "stun")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
 	_expect_invalid_item_appearance_asset_ref(errors, registry)
@@ -73,6 +75,7 @@ func _run() -> Array[String]:
 	_expect_invalid_character_ai_ref(errors, registry)
 	_expect_invalid_ai_behavior_group_ref(errors, registry)
 	_expect_invalid_ai_action_executor_ref(errors, registry)
+	_expect_invalid_json_item_ref(errors, registry)
 	_expect_recipe_unlock_source_refs(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
 	_expect_invalid_dialogue_shop_ref(errors, registry)
@@ -106,7 +109,7 @@ func _expect_valid_record(errors: Array[String], registry: ContentRegistry, doma
 func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) -> void:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
 	var checked := 0
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance", "ai"]:
+	for domain in ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance", "ai", "json"]:
 		for id_value in registry.get_library(domain).keys():
 			var validation := validator.validate_record(domain, str(id_value), registry)
 			checked += 1
@@ -343,6 +346,33 @@ func _expect_invalid_ai_action_executor_ref(errors: Array[String], registry: Con
 		errors.append("invalid AI action executor smoke did not report unknown_executor: %s" % validation.get("issues", []))
 
 
+func _expect_invalid_json_item_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("json").get("ammo_types", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing ammo_types fixture for legacy JSON validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var ammo: Dictionary = data.get("ammo_pistol", {}).duplicate(true)
+	var recipe: Dictionary = ammo.get("craft_recipe", {}).duplicate(true)
+	var materials: Array = recipe.get("materials", []).duplicate(true)
+	if materials.is_empty():
+		errors.append("legacy JSON validation smoke missing ammo material fixture")
+		return
+	var material: Dictionary = materials[0].duplicate(true)
+	material["item"] = "missing_item_for_validator_smoke"
+	materials[0] = material
+	recipe["materials"] = materials
+	ammo["craft_recipe"] = recipe
+	data["ammo_pistol"] = ammo
+	source["data"] = data
+	var validation := ContentRecordValidator.new().validate_record("json", "ammo_types", _registry_with_override(registry, "json", "ammo_types", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid legacy JSON item reference smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_item"):
+		errors.append("invalid legacy JSON item smoke did not report unknown_item: %s" % validation.get("issues", []))
+
+
 func _expect_recipe_unlock_source_refs(errors: Array[String], registry: ContentRegistry) -> void:
 	var source: Dictionary = registry.get_library("recipes").get("recipe_first_aid_kit", {}).duplicate(true)
 	if source.is_empty():
@@ -577,6 +607,7 @@ func _expect_format_domain_support(errors: Array[String], registry: ContentRegis
 		"shops": "data/shops/trader_lao_wang_shop.json",
 		"world_tiles": "data/world_tiles/surface_placeholder_basic.json",
 		"ai": "data/ai/behaviors/guard_settlement.json",
+		"json": "data/json/effects/stun.json",
 	}
 	var domain_helper = load("res://scripts/tools/content_cli_domains.gd")
 	for domain in supported.keys():
@@ -603,6 +634,7 @@ func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -
 		{"domain": "shops", "id": "trader_lao_wang_shop", "expected": "inventory_count: 6"},
 		{"domain": "world_tiles", "id": "surface_placeholder_basic", "expected": "prototype_count: 8"},
 		{"domain": "ai", "id": "guard_settlement", "expected": "action_groups: duty_travel_actions, guard_actions"},
+		{"domain": "json", "id": "stun", "expected": "special_effects: stun"},
 	]
 	for test_case in cases:
 		var domain := str(test_case["domain"])
