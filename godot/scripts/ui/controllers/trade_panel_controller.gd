@@ -1,6 +1,7 @@
 extends Control
 
 const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 signal close_requested
 signal trade_requested(source: String, item_id: String, count: int)
@@ -37,6 +38,7 @@ var _player_money: int = 0
 var _shop_money: int = 0
 var _trade_allowed: bool = true
 var _trade_block_reason: String = ""
+var _reason_catalog := ReasonCatalog.new()
 
 
 func _ready() -> void:
@@ -306,18 +308,20 @@ func _item_line(item: Dictionary, source: String) -> Button:
 	var button := Button.new()
 	button.name = "Item_%s" % item.get("item_id", "unknown")
 	var disabled_reason: String = str(item.get("disabled_reason", ""))
+	var disabled_reason_text := _trade_reason_text(disabled_reason)
 	button.text = "%s x%d | %d%s" % [
 		item.get("name", item.get("item_id", "")),
 		int(item.get("count", 0)),
 		int(item.get("price", 0)),
-		" | %s" % disabled_reason if not disabled_reason.is_empty() else "",
+		" | %s" % disabled_reason_text if not disabled_reason_text.is_empty() else "",
 	]
 	button.tooltip_text = str(item.get("description", ""))
 	var trade_disabled_reason := _trade_disabled_reason(item, source)
-	if not disabled_reason.is_empty():
-		button.tooltip_text = "%s\n%s" % [button.tooltip_text, disabled_reason] if not button.tooltip_text.is_empty() else disabled_reason
-	if not trade_disabled_reason.is_empty() and trade_disabled_reason != disabled_reason:
-		button.tooltip_text = "%s\n%s" % [button.tooltip_text, trade_disabled_reason] if not button.tooltip_text.is_empty() else trade_disabled_reason
+	var trade_disabled_reason_text := _trade_reason_text(trade_disabled_reason)
+	if not disabled_reason_text.is_empty():
+		button.tooltip_text = "%s\n%s" % [button.tooltip_text, disabled_reason_text] if not button.tooltip_text.is_empty() else disabled_reason_text
+	if not trade_disabled_reason_text.is_empty() and trade_disabled_reason_text != disabled_reason_text:
+		button.tooltip_text = "%s\n%s" % [button.tooltip_text, trade_disabled_reason_text] if not button.tooltip_text.is_empty() else trade_disabled_reason_text
 	button.disabled = not trade_disabled_reason.is_empty()
 	button.set_meta("trade_item", item.duplicate(true))
 	button.set_meta("trade_source", source)
@@ -372,6 +376,7 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 		return
 	var description := str(item.get("description", ""))
 	var disabled_reason := str(item.get("disabled_reason", ""))
+	var disabled_reason_text := _trade_reason_text(disabled_reason)
 	_selected_source = source
 	_selected_item_id = str(item.get("item_id", ""))
 	_selected_item_snapshot = item.duplicate(true)
@@ -383,7 +388,7 @@ func _apply_detail(item: Dictionary, source: String) -> void:
 		int(item.get("price", 0)),
 		int(item.get("price", 0)) * int(_quantity_spin.value if _quantity_spin != null else 1),
 		"\n%s" % description if not description.is_empty() else "",
-		"\n%s" % disabled_reason if not disabled_reason.is_empty() else "",
+		"\n%s" % disabled_reason_text if not disabled_reason_text.is_empty() else "",
 	]
 
 
@@ -404,11 +409,12 @@ func _update_trade_controls(item: Dictionary, source: String) -> void:
 	_quantity_spin.value = clampi(int(_quantity_spin.value), 1, available)
 	var item_id := str(item.get("item_id", ""))
 	var disabled_reason := _selected_trade_disabled_reason(item, source)
+	var disabled_reason_text := _trade_reason_text(disabled_reason)
 	_trade_button.disabled = not disabled_reason.is_empty()
-	_trade_button.tooltip_text = disabled_reason if _trade_button.disabled else "执行当前选择的交易"
+	_trade_button.tooltip_text = disabled_reason_text if _trade_button.disabled else "执行当前选择的交易"
 	_queue_button.disabled = _trade_button.disabled
-	_queue_button.tooltip_text = disabled_reason if _queue_button.disabled else "把当前选择加入购物车"
-	_quantity_spin.tooltip_text = "交易数量：%d / %d" % [int(_quantity_spin.value), available] if disabled_reason.is_empty() else disabled_reason
+	_queue_button.tooltip_text = disabled_reason_text if _queue_button.disabled else "把当前选择加入购物车"
+	_quantity_spin.tooltip_text = "交易数量：%d / %d" % [int(_quantity_spin.value), available] if disabled_reason.is_empty() else disabled_reason_text
 	match source:
 		"shop":
 			_trade_button.text = "购买"
@@ -430,6 +436,7 @@ func _open_context_menu_for_item(item: Dictionary, source: String, screen_positi
 	_context_menu.add_item(action_label, CONTEXT_TRADE)
 	_context_menu.add_item("加入购物车", CONTEXT_QUEUE)
 	var disabled_reason := _selected_trade_disabled_reason(item, source)
+	var disabled_reason_text := _trade_reason_text(disabled_reason)
 	var disabled := not disabled_reason.is_empty()
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_TRADE), disabled)
 	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_QUEUE), disabled)
@@ -439,11 +446,11 @@ func _open_context_menu_for_item(item: Dictionary, source: String, screen_positi
 	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_INSPECT), "查看价格、描述和交易限制")
 	_context_menu.set_item_tooltip(
 		_context_menu.get_item_index(CONTEXT_TRADE),
-		"%s x%d | 小计 %d（当前堆叠 %d）" % [action_label, selected_count, total_price, total_count] if not disabled else disabled_reason
+		"%s x%d | 小计 %d（当前堆叠 %d）" % [action_label, selected_count, total_price, total_count] if not disabled else disabled_reason_text
 	)
 	_context_menu.set_item_tooltip(
 		_context_menu.get_item_index(CONTEXT_QUEUE),
-		"加入购物车 x%d | 小计 %d（当前堆叠 %d）" % [selected_count, total_price, total_count] if not disabled else disabled_reason
+		"加入购物车 x%d | 小计 %d（当前堆叠 %d）" % [selected_count, total_price, total_count] if not disabled else disabled_reason_text
 	)
 	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
 	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
@@ -996,7 +1003,7 @@ func _update_drop_zone_drag_state(from_control: Control, source: String, accepte
 	if reason.is_empty() and not accepted:
 		reason = str(from_control.get_meta("trade_drop_reject_reason", ""))
 	var source_text := _source_display(source) if not source.is_empty() else "未知来源"
-	var preview_text := "可放入：%s" % source_text if accepted else "不可放入：%s | %s" % [source_text, reason]
+	var preview_text := "可放入：%s" % source_text if accepted else "不可放入：%s | %s" % [source_text, _trade_reason_text(reason)]
 	from_control.set_meta("trade_drop_last_source", source)
 	from_control.set_meta("trade_drop_last_accept", accepted)
 	from_control.set_meta("trade_drop_last_reject_reason", reason)
@@ -1082,6 +1089,14 @@ func _trade_disabled_reason(item: Dictionary, source: String) -> String:
 			return disabled_reason if not disabled_reason.is_empty() else "该物品不可出售"
 		return ""
 	return "未知交易来源：%s" % source
+
+
+func _trade_reason_text(reason: String) -> String:
+	var normalized := reason.strip_edges()
+	if normalized.is_empty():
+		return ""
+	var entry: Dictionary = _reason_catalog.entry_for(normalized)
+	return str(entry.get("disabled_text", normalized)) if bool(entry.get("known", false)) else normalized
 
 
 func _drop_reject_reason(item: Dictionary, source: String, from_control: Control) -> String:

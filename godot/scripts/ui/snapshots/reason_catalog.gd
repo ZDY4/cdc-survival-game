@@ -66,6 +66,11 @@ const REASONS := {
 	"player_stock_insufficient": {"category": "trade", "text": "玩家库存不足"},
 	"player_money_insufficient": {"category": "trade", "text": "玩家资金不足"},
 	"shop_money_insufficient": {"category": "trade", "text": "商店资金不足"},
+	"buy_zone_requires_shop_source": {"category": "trade", "text": "购买区只接受店铺物品"},
+	"sell_zone_requires_player_or_equipment_source": {"category": "trade", "text": "出售区只接受背包或装备物品"},
+	"drop_zone_source_mismatch": {"category": "trade", "text": "拖拽来源不匹配"},
+	"trade_item_rejected": {"category": "trade", "text": "交易物品被拒绝"},
+	"unknown_trade_item": {"category": "trade", "text": "未知交易物品"},
 	"skill_not_learned": {"category": "skill", "text": "技能未学习"},
 	"skill_not_active": {"category": "skill", "text": "技能不是主动技能"},
 	"skill_on_cooldown": {"category": "skill", "text": "技能冷却中"},
@@ -222,6 +227,14 @@ const REASON_METADATA := {
 	"player_money_insufficient": {
 		"payload_fields": ["shop_id", "price", "player_money"],
 		"disabled_text": "资金不足",
+	},
+	"buy_zone_requires_shop_source": {
+		"payload_fields": ["source", "drop_zone"],
+		"disabled_text": "购买区只接受店铺物品",
+	},
+	"sell_zone_requires_player_or_equipment_source": {
+		"payload_fields": ["source", "drop_zone"],
+		"disabled_text": "出售区只接受背包或装备物品",
 	},
 	"skill_on_cooldown": {
 		"payload_fields": ["skill_id", "cooldown_remaining", "actor_id"],

@@ -67,6 +67,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("buy drop zone should expose stable reject reason metadata")
 	if _trade_zone_reject_reason(game_root, "SellDropZone") != "sell_zone_requires_player_or_equipment_source":
 		errors.append("sell drop zone should expose stable reject reason metadata")
+	game_root.trade_panel.call("_update_drop_zone_drag_state", _trade_zone_control(game_root, "BuyDropZone"), "player", false, "buy_zone_requires_shop_source")
+	if _trade_zone_meta_text(game_root, "BuyDropZone", "trade_drop_last_reject_reason") != "buy_zone_requires_shop_source":
+		errors.append("buy drop zone should preserve stable reject reason code")
+	if not _trade_zone_meta_text(game_root, "BuyDropZone", "trade_drop_last_preview_text").contains("购买区只接受店铺物品"):
+		errors.append("buy drop zone preview should use reason catalog text")
+	game_root.trade_panel.call("_update_drop_zone_drag_state", _trade_zone_control(game_root, "SellDropZone"), "shop", false, "sell_zone_requires_player_or_equipment_source")
+	if _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_reject_reason") != "sell_zone_requires_player_or_equipment_source":
+		errors.append("sell drop zone should preserve stable reject reason code")
+	if not _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_preview_text").contains("出售区只接受背包或装备物品"):
+		errors.append("sell drop zone preview should use reason catalog text")
 
 	var item_text: String = "\n".join(_item_lines(game_root))
 	if not item_text.contains("急救包 x1"):
@@ -234,8 +244,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("sell drop zone should record rejected shop drag")
 	if _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_source") != "shop":
 		errors.append("sell drop zone should remember rejected drag source")
-	if not _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_preview_text").contains("sell_zone_requires_player_or_equipment_source"):
-		errors.append("sell drop zone should expose last reject preview text")
+	if _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_reject_reason") != "sell_zone_requires_player_or_equipment_source":
+		errors.append("sell drop zone should preserve stable last reject reason code")
+	if not _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_preview_text").contains("出售区只接受背包或装备物品"):
+		errors.append("sell drop zone should expose catalog reject preview text")
 	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
 		errors.append("should drag shop bandage back to cart after zone rejection")
 	if not _drop_trade_item_with_text_on_cart_entry(game_root, "shop", "绷带", 0):
@@ -272,8 +284,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("buy drop zone can_drop should reject player sell item")
 	if _trade_zone_last_accept(game_root, "BuyDropZone"):
 		errors.append("buy drop zone should record rejected player drag")
-	if not _trade_zone_meta_text(game_root, "BuyDropZone", "trade_drop_last_preview_text").contains("buy_zone_requires_shop_source"):
-		errors.append("buy drop zone should expose last reject preview text")
+	if _trade_zone_meta_text(game_root, "BuyDropZone", "trade_drop_last_reject_reason") != "buy_zone_requires_shop_source":
+		errors.append("buy drop zone should preserve stable last reject reason code")
+	if not _trade_zone_meta_text(game_root, "BuyDropZone", "trade_drop_last_preview_text").contains("购买区只接受店铺物品"):
+		errors.append("buy drop zone should expose catalog reject preview text")
 	if not _drop_inventory_item_to_trade_cart(game_root, "绷带"):
 		errors.append("should drag inventory bandage to trade cart")
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
