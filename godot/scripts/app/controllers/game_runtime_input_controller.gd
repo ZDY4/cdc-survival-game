@@ -160,7 +160,7 @@ func input(event: InputEvent) -> void:
 		_handle_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
 		var mouse_button := event as InputEventMouseButton
-		if _close_interaction_menu_on_outside_click(mouse_button):
+		if _close_context_menu_on_outside_click(mouse_button):
 			var menu_viewport := game_root.get_viewport()
 			if menu_viewport != null:
 				menu_viewport.set_input_as_handled()
@@ -184,7 +184,7 @@ func unhandled_input(event: InputEvent) -> void:
 		_handle_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
 		var mouse_button := event as InputEventMouseButton
-		if _close_interaction_menu_on_outside_click(mouse_button):
+		if _close_context_menu_on_outside_click(mouse_button):
 			return
 		if _gameplay_input_blocked_by_ui():
 			return
@@ -244,17 +244,19 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 	return false
 
 
-func _close_interaction_menu_on_outside_click(mouse_event: InputEventMouseButton) -> bool:
+func _close_context_menu_on_outside_click(mouse_event: InputEventMouseButton) -> bool:
 	if not mouse_event.pressed:
 		return false
 	if mouse_event.button_index != MOUSE_BUTTON_LEFT and mouse_event.button_index != MOUSE_BUTTON_RIGHT:
 		return false
-	if not _interaction_menu_open():
+	if not _context_menu_open():
 		return false
 	if _mouse_over_blocking_ui():
 		return false
 	if game_root.hud != null and game_root.hud.has_method("hide_interaction_menu"):
 		game_root.hud.hide_interaction_menu()
+	if game_root.has_method("close_active_context_menu"):
+		game_root.close_active_context_menu()
 	return true
 
 
@@ -2042,6 +2044,12 @@ func _gameplay_input_blocked_by_ui() -> bool:
 
 func _interaction_menu_open() -> bool:
 	return game_root.hud != null and game_root.hud.has_method("is_interaction_menu_open") and bool(game_root.hud.is_interaction_menu_open())
+
+
+func _context_menu_open() -> bool:
+	if game_root.has_method("context_menu_snapshot"):
+		return bool(_dictionary_or_empty(game_root.context_menu_snapshot()).get("active", false))
+	return _interaction_menu_open()
 
 
 func _runtime_has_pending() -> bool:

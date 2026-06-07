@@ -346,6 +346,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("Esc should close equipment context menu")
 	if not game_root.character_panel.visible:
 		errors.append("closing equipment context menu should keep character panel open")
+	_open_equipment_context_menu(game_root, "main_hand")
+	_assert_equipment_context_menu(errors, game_root, "main_hand", "1002", true, false, false, "equipment context menu outside click setup")
+	var before_outside_click_grid: Dictionary = _dictionary_or_empty(_player(game_root).get("grid_position", {})).duplicate(true)
+	_click_world_outside_ui(game_root, Vector2(720, 520), MOUSE_BUTTON_LEFT)
+	if bool(_dictionary_or_empty(game_root.context_menu_snapshot()).get("active", false)):
+		errors.append("outside world click should close equipment context menu")
+	if not _dictionary_or_empty(_player(game_root).get("grid_position", {})).is_empty() and _dictionary_or_empty(_player(game_root).get("grid_position", {})) != before_outside_click_grid:
+		errors.append("outside click used for context menu close should not also move player")
+	if game_root.runtime_input_controller.has_selection_state():
+		errors.append("outside click used for context menu close should not also select world target")
+	if not game_root.character_panel.visible:
+		errors.append("outside click closing equipment context menu should keep character panel open")
 	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player_ref == null:
 		errors.append("player actor should exist for equipped ammo display test")
@@ -766,6 +778,19 @@ func _press_key_with_modifiers(game_root: Node, key: int, ctrl: bool = false, al
 	event.alt_pressed = alt
 	event.shift_pressed = shift
 	game_root.runtime_input_controller.input(event)
+
+
+func _click_world_outside_ui(game_root: Node, position: Vector2, button_index: int = MOUSE_BUTTON_LEFT) -> void:
+	var press := InputEventMouseButton.new()
+	press.button_index = button_index
+	press.position = position
+	press.pressed = true
+	game_root.runtime_input_controller.input(press)
+	var release := InputEventMouseButton.new()
+	release.button_index = button_index
+	release.position = position
+	release.pressed = false
+	game_root.runtime_input_controller.input(release)
 
 
 func _press_key_down(game_root: Node, key: int) -> void:
