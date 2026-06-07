@@ -61,6 +61,14 @@ func validate_craft_recipe(simulation: RefCounted, progression_rules: RefCounted
 			"reason": "missing_tools",
 			"missing_tools": missing_tools,
 		}
+	var missing_durability_tools: Array[Dictionary] = _missing_tool_durability(actor, required_tools, simulation.item_library)
+	if not missing_durability_tools.is_empty():
+		return {
+			"success": false,
+			"reason": "tool_durability_insufficient",
+			"missing_tools": missing_durability_tools,
+			"missing_durability_tools": missing_durability_tools,
+		}
 	var tool_consumption: Array[Dictionary] = _tool_consumption_requirements(actor, required_tools)
 	var missing_consumable_tools: Array[Dictionary] = _missing_consumable_tools(actor, tool_consumption, simulation.item_library)
 	if not missing_consumable_tools.is_empty():
@@ -216,17 +224,22 @@ func _tool_requirement(tool: Variant) -> Dictionary:
 func _tool_consumption_requirements(actor: RefCounted, required_tools: Array[Dictionary]) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	for tool in required_tools:
-		if not bool(tool.get("consume_on_craft", false)):
+		var durability_cost: float = max(0.0, float(tool.get("durability_cost", 0.0)))
+		if not bool(tool.get("consume_on_craft", false)) and durability_cost <= 0.0:
 			continue
 		var tool_id := str(tool.get("item_id", ""))
 		if tool_id.is_empty():
 			continue
-		output.append({
+		var requirement := {
 			"item_id": tool_id,
-			"count": max(1, int(tool.get("consume_count", tool.get("required", 1)))),
+			"count": max(1, int(tool.get("consume_count", tool.get("required", 1)))) if durability_cost <= 0.0 else 0,
 			"available": int(actor.inventory.get(tool_id, 0)) if actor != null else 0,
 			"requirement_kind": "tool",
-		})
+		}
+		if durability_cost > 0.0:
+			requirement["durability_cost"] = durability_cost
+			requirement["available_durability"] = _tool_durability(actor, tool_id)
+		output.append(requirement)
 	return output
 
 
@@ -234,6 +247,8 @@ func _missing_consumable_tools(actor: RefCounted, tool_consumption: Array[Dictio
 	var missing: Array[Dictionary] = []
 	for tool in tool_consumption:
 		var tool_id := str(tool.get("item_id", ""))
+		if float(tool.get("durability_cost", 0.0)) > 0.0:
+			continue
 		var required_count: int = max(1, int(tool.get("count", 1)))
 		var available_count: int = int(actor.inventory.get(tool_id, 0)) if actor != null else 0
 		if not tool_id.is_empty() and available_count >= required_count:
@@ -248,12 +263,46 @@ func _missing_consumable_tools(actor: RefCounted, tool_consumption: Array[Dictio
 	return missing
 
 
+func _missing_tool_durability(actor: RefCounted, required_tools: Array[Dictionary], item_library: Dictionary) -> Array[Dictionary]:
+	var missing: Array[Dictionary] = []
+	for tool in required_tools:
+		var tool_id := str(tool.get("item_id", ""))
+		var durability_cost: float = max(0.0, float(tool.get("durability_cost", 0.0)))
+		if tool_id.is_empty() or durability_cost <= 0.0:
+			continue
+		var available_durability: float = _tool_durability(actor, tool_id)
+		if available_durability >= durability_cost:
+			continue
+		missing.append({
+			"item_id": tool_id,
+			"name": _item_name(tool_id, item_library),
+			"available_durability": available_durability,
+			"required_durability": durability_cost,
+			"durability_cost": durability_cost,
+		})
+	return missing
+
+
 func _consume_recipe_tools(actor: RefCounted, tool_consumption: Array[Dictionary]) -> Array[Dictionary]:
 	var consumed: Array[Dictionary] = []
 	for tool in tool_consumption:
 		var tool_id := str(tool.get("item_id", ""))
 		var count: int = max(1, int(tool.get("count", 1)))
+		var durability_cost: float = max(0.0, float(tool.get("durability_cost", 0.0)))
 		if actor == null or tool_id.is_empty():
+			continue
+		if durability_cost > 0.0:
+			var durability_before: float = _tool_durability(actor, tool_id)
+			var durability_after: float = max(0.0, durability_before - durability_cost)
+			actor.tool_durability[tool_id] = durability_after
+			consumed.append({
+				"item_id": tool_id,
+				"count": 0,
+				"durability_cost": durability_cost,
+				"durability_before": durability_before,
+				"durability_after": durability_after,
+				"requirement_kind": "tool",
+			})
 			continue
 		var before_count: int = int(actor.inventory.get(tool_id, 0))
 		_inventory_entries.add_actor_item(actor, tool_id, -count)
@@ -265,6 +314,14 @@ func _consume_recipe_tools(actor: RefCounted, tool_consumption: Array[Dictionary
 			"requirement_kind": "tool",
 		})
 	return consumed
+
+
+func _tool_durability(actor: RefCounted, tool_id: String) -> float:
+	if actor == null or tool_id.is_empty():
+		return 0.0
+	if actor.tool_durability.has(tool_id):
+		return max(0.0, float(actor.tool_durability.get(tool_id, 0.0)))
+	return 100.0
 
 
 func _recipe_consumes_required_tools(recipe: Dictionary) -> bool:

@@ -13,6 +13,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
+	var tool_durability: Dictionary = _dictionary_or_empty(player.get("tool_durability", {}))
 	var progression: Dictionary = _dictionary_or_empty(player.get("progression", {}))
 	var crafted_recipes: Dictionary = _flag_dictionary(runtime_snapshot.get("crafted_recipes", []))
 	var completed_quests: Dictionary = _flag_dictionary(runtime_snapshot.get("completed_quests", []))
@@ -23,7 +24,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	var recipe_ids: Array = registry.get_library("recipes").keys()
 	recipe_ids.sort()
 	for recipe_id in recipe_ids:
-		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), player, inventory, equipment, progression, crafted_recipes, completed_quests, world_flags, crafting_context)
+		var recipe_view: Dictionary = _recipe_snapshot(str(recipe_id), player, inventory, equipment, tool_durability, progression, crafted_recipes, completed_quests, world_flags, crafting_context)
 		if not recipe_view.is_empty():
 			recipes.append(recipe_view)
 	return {
@@ -35,7 +36,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 	}
 
 
-func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary, world_flags: Dictionary, crafting_context: Dictionary) -> Dictionary:
+func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, tool_durability: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary, world_flags: Dictionary, crafting_context: Dictionary) -> Dictionary:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("recipes").get(recipe_id, {}))
 	var recipe: Dictionary = _dictionary_or_empty(record.get("data", record))
 	if recipe.is_empty():
@@ -54,7 +55,7 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 			"required": required_count,
 			"available": int(inventory.get(item_id, 0)),
 		})
-	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), recipe, inventory, equipment, crafting_context)
+	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), recipe, inventory, equipment, tool_durability, crafting_context)
 	var required_station := str(recipe.get("required_station", "none"))
 	var station_check: Dictionary = _station_check(player, required_station, crafting_context)
 	var unlock_check: Dictionary = _unlock_check(recipe, inventory, progression, crafted_recipes, completed_quests, world_flags)
@@ -111,6 +112,28 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 		})
 	if not missing_tools.is_empty():
 		return {"can_craft": false, "reason": "missing_tools", "missing_tools": missing_tools}
+	var missing_durability_tools: Array[Dictionary] = []
+	for tool in required_tools:
+		var tool_data: Dictionary = _dictionary_or_empty(tool)
+		var durability_cost: float = max(0.0, float(tool_data.get("durability_cost", 0.0)))
+		if durability_cost <= 0.0:
+			continue
+		var available_durability: float = float(tool_data.get("available_durability", 0.0))
+		if available_durability >= durability_cost:
+			continue
+		missing_durability_tools.append({
+			"item_id": str(tool_data.get("item_id", "")),
+			"name": str(tool_data.get("name", tool_data.get("item_id", ""))),
+			"available_durability": available_durability,
+			"required_durability": durability_cost,
+			"durability_cost": durability_cost,
+		})
+	if not missing_durability_tools.is_empty():
+		return {
+			"can_craft": false,
+			"reason": "tool_durability_insufficient",
+			"missing_tools": missing_durability_tools,
+		}
 	var missing_consumable_tools: Array[Dictionary] = []
 	for tool in required_tools:
 		var tool_data: Dictionary = _dictionary_or_empty(tool)
@@ -445,7 +468,7 @@ func _distance_to_station(player: Dictionary, station: Dictionary) -> int:
 	return abs(int(anchor.get("x", 0)) - int(player_grid.get("x", 0))) + abs(int(anchor.get("z", 0)) - int(player_grid.get("z", 0)))
 
 
-func _required_tools_snapshot(required_tools: Array, recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> Array[Dictionary]:
+func _required_tools_snapshot(required_tools: Array, recipe: Dictionary, inventory: Dictionary, equipment: Dictionary, tool_durability: Dictionary, crafting_context: Dictionary = {}) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	var recipe_consumes_tools: bool = _recipe_consumes_required_tools(recipe)
 	var recipe_consume_count: int = _recipe_required_tool_consume_count(recipe)
@@ -471,6 +494,7 @@ func _required_tools_snapshot(required_tools: Array, recipe: Dictionary, invento
 			"consume_count": consume_count if consume_on_craft else 0,
 			"can_consume": not consume_on_craft or int(inventory.get(tool_id, 0)) >= consume_count,
 			"durability_cost": float(tool_data.get("durability_cost", 0.0)),
+			"available_durability": _tool_durability(tool_id, tool_durability),
 		})
 	return output
 
@@ -518,6 +542,14 @@ func _tool_available_count(tool_id: String, inventory: Dictionary, equipment: Di
 		var container_data: Dictionary = _dictionary_or_empty(container)
 		count += _inventory_entry_count(_array_or_empty(container_data.get("inventory", [])), tool_id)
 	return count
+
+
+func _tool_durability(tool_id: String, tool_durability: Dictionary) -> float:
+	if tool_id.is_empty():
+		return 0.0
+	if tool_durability.has(tool_id):
+		return max(0.0, float(tool_durability.get(tool_id, 0.0)))
+	return 100.0
 
 
 func _inventory_entry_count(entries: Array, item_id: String) -> int:

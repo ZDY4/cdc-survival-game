@@ -220,6 +220,34 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var last_event: Dictionary = _last_event(simulation.snapshot(), "recipe_crafted")
 	if _array_or_empty(_dictionary_or_empty(last_event.get("payload", {})).get("consumed_tools", [])).is_empty():
 		errors.append("recipe_crafted event should expose consumed_tools")
+	var durable_tool_recipes: Dictionary = _durable_tool_smoke_recipes()
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.tool_durability.clear()
+	player.inventory["1151"] = 1
+	player.inventory["1011"] = 4
+	player.tool_durability["1151"] = 5.0
+	var durable_tool_craft: Dictionary = simulation.craft_recipe(1, "smoke_durable_tool_recipe", durable_tool_recipes)
+	if not bool(durable_tool_craft.get("success", false)):
+		errors.append("durable tool craft should succeed: %s" % durable_tool_craft.get("reason", "unknown"))
+	if int(player.inventory.get("1151", 0)) != 1:
+		errors.append("durable tool craft should not consume whole tool item")
+	if not is_equal_approx(float(player.tool_durability.get("1151", 0.0)), 2.0):
+		errors.append("durable tool craft should reduce tool durability to 2.0")
+	var durable_consumed: Array = _array_or_empty(durable_tool_craft.get("consumed_tools", []))
+	if durable_consumed.is_empty() or not is_equal_approx(float(_dictionary_or_empty(durable_consumed[0]).get("durability_cost", 0.0)), 3.0):
+		errors.append("durable tool craft should expose durability consumption payload")
+	var durable_event: Dictionary = _last_event(simulation.snapshot(), "recipe_crafted")
+	var durable_event_tools: Array = _array_or_empty(_dictionary_or_empty(durable_event.get("payload", {})).get("consumed_tools", []))
+	if durable_event_tools.is_empty() or not _dictionary_or_empty(durable_event_tools[0]).has("durability_after"):
+		errors.append("durable tool recipe_crafted event should expose durability_after")
+	player.inventory["1011"] = 2
+	var low_durability_craft: Dictionary = simulation.craft_recipe(1, "smoke_durable_tool_recipe", durable_tool_recipes)
+	if str(low_durability_craft.get("reason", "")) != "tool_durability_insufficient":
+		errors.append("durable tool craft should reject when durability is insufficient")
+	if int(player.inventory.get("1151", 0)) != 1 or int(player.inventory.get("1011", 0)) != 2:
+		errors.append("durability rejected craft should not consume tool or material")
 	player.inventory.clear()
 	player.inventory_order.clear()
 	player.equipment.clear()
@@ -574,6 +602,26 @@ func _consumable_tool_smoke_recipes() -> Dictionary:
 				"is_default_unlocked": true,
 				"unlock_conditions": [],
 				"required_tools": [{"item_id": "1151", "consume_on_craft": true, "consume_count": 1}],
+				"required_station": "none",
+				"skill_requirements": {},
+				"materials": [{"item_id": "1011", "count": 2}],
+				"output": {"item_id": "1006", "count": 1},
+				"craft_time": 0.0,
+				"experience_reward": 0,
+			},
+		},
+	}
+
+
+func _durable_tool_smoke_recipes() -> Dictionary:
+	return {
+		"smoke_durable_tool_recipe": {
+			"data": {
+				"id": "smoke_durable_tool_recipe",
+				"name": "工具耐久测试配方",
+				"is_default_unlocked": true,
+				"unlock_conditions": [],
+				"required_tools": [{"item_id": "1151", "durability_cost": 3.0}],
 				"required_station": "none",
 				"skill_requirements": {},
 				"materials": [{"item_id": "1011", "count": 2}],

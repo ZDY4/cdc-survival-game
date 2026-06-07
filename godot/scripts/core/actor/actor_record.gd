@@ -16,6 +16,7 @@ var in_combat: bool = false
 var grid_position: RefCounted
 var inventory: Dictionary = {}
 var inventory_order: Array[String] = []
+var tool_durability: Dictionary = {}
 var equipment: Dictionary = {}
 var weapon_ammo: Dictionary = {}
 var money: int = 0
@@ -56,6 +57,7 @@ func to_dictionary() -> Dictionary:
 		"grid_position": grid_position.to_dictionary(),
 		"inventory": inventory,
 		"inventory_order": inventory_order.duplicate(),
+		"tool_durability": tool_durability.duplicate(true),
 		"equipment": equipment,
 		"weapon_ammo": weapon_ammo,
 		"money": money,

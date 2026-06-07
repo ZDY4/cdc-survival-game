@@ -36,6 +36,7 @@ const REASONS := {
 	"materials_insufficient": {"category": "crafting", "text": "材料不足"},
 	"missing_tools": {"category": "crafting", "text": "缺少工具"},
 	"missing_consumable_tools": {"category": "crafting", "text": "缺少可消耗工具"},
+	"tool_durability_insufficient": {"category": "crafting", "text": "工具耐久不足"},
 	"missing_skills": {"category": "skill", "text": "技能不足"},
 	"missing_skill_requirements": {"category": "skill", "text": "技能不足"},
 	"missing_station": {"category": "crafting", "text": "缺少工作台"},

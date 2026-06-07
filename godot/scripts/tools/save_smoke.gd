@@ -93,6 +93,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 	var player_for_reload: RefCounted = simulation.actor_registry.get_actor(1)
 	player_for_reload.inventory["1004"] = 1
 	player_for_reload.inventory["1009"] = 3
+	player_for_reload.tool_durability["1151"] = 42.5
 	simulation.equip_item(1, "1004", "main_hand", registry.get_library("items"))
 	player_for_reload.ap = 6.0
 	simulation.submit_player_command({
@@ -367,6 +368,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("player inventory_order did not roundtrip")
 	if _inventory_count(player_restored, "1031") != 1:
 		errors.append("taken container item did not roundtrip in player inventory")
+	if JSON.stringify(_dictionary_or_empty(player_restored.get("tool_durability", {}))) != JSON.stringify(_dictionary_or_empty(player_original.get("tool_durability", {}))):
+		errors.append("player tool_durability did not roundtrip")
 	if JSON.stringify(player_restored.get("equipment", {})) != JSON.stringify(player_original.get("equipment", {})):
 		errors.append("player equipment did not roundtrip")
 	if JSON.stringify(_normalized_resources(player_restored)) != JSON.stringify(_normalized_resources(player_original)):

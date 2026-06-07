@@ -28,6 +28,7 @@ func register_actor(request: Dictionary) -> ActorRecord:
 	record.grid_position = request.get("grid_position")
 	record.inventory = _dictionary_or_empty(request.get("inventory", {})).duplicate(true)
 	record.inventory_order = _inventory_order(request.get("inventory_order", []), record.inventory)
+	record.tool_durability = _float_dictionary(request.get("tool_durability", {}))
 	record.equipment = _dictionary_or_empty(request.get("equipment", {})).duplicate(true)
 	record.weapon_ammo = _int_dictionary(request.get("weapon_ammo", {}))
 	record.money = max(0, int(request.get("money", 0)))
@@ -114,6 +115,7 @@ func load_snapshot(records: Array) -> void:
 		record.grid_position = GridCoord.from_dictionary(_dictionary_or_empty(actor_data.get("grid_position", {})))
 		record.inventory = _dictionary_or_empty(actor_data.get("inventory", {})).duplicate(true)
 		record.inventory_order = _inventory_order(actor_data.get("inventory_order", []), record.inventory)
+		record.tool_durability = _float_dictionary(actor_data.get("tool_durability", {}))
 		record.equipment = _dictionary_or_empty(actor_data.get("equipment", {})).duplicate(true)
 		record.weapon_ammo = _int_dictionary(actor_data.get("weapon_ammo", {}))
 		record.money = max(0, int(actor_data.get("money", 0)))
@@ -155,6 +157,13 @@ func _int_dictionary(value: Variant) -> Dictionary:
 	var output: Dictionary = {}
 	for key in _dictionary_or_empty(value).keys():
 		output[str(key)] = int(_dictionary_or_empty(value).get(key, 0))
+	return output
+
+
+func _float_dictionary(value: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	for key in _dictionary_or_empty(value).keys():
+		output[str(key)] = max(0.0, float(_dictionary_or_empty(value).get(key, 0.0)))
 	return output
 
 
