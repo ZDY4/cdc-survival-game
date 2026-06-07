@@ -541,6 +541,35 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var safehouse_thumbnail := _location_thumbnail_asset(map_snapshot, "survivor_outpost_01")
 	if str(safehouse_thumbnail.get("resource_path", "")) != str(safehouse_icon.get("resource_path", "")) or str(safehouse_thumbnail.get("thumbnail_domain", "")) != "location":
 		errors.append("map snapshot should expose location thumbnail asset: %s" % safehouse_thumbnail)
+	var hospital_button := _overworld_location_button(game_root, "hospital")
+	if hospital_button == null:
+		errors.append("map panel should expose unlocked overworld location button for hospital")
+	else:
+		hospital_button.pressed.emit()
+		await process_frame
+		_assert_overworld_prompt_modal(errors, game_root, "hospital", "hospital overworld prompt")
+		var close_prompt_result: Dictionary = _dictionary_or_empty(game_root.close_active_ui("keyboard_escape"))
+		if str(close_prompt_result.get("closed", "")) != "modal:overworld_prompt":
+			errors.append("Esc should close overworld prompt first, got %s" % close_prompt_result)
+		if not game_root.map_panel.visible:
+			errors.append("closing overworld prompt should keep map panel open")
+		if str(game_root.simulation.active_location_id) != "survivor_outpost_01":
+			errors.append("closing overworld prompt should not change active location")
+		hospital_button = _overworld_location_button(game_root, "hospital")
+		if hospital_button != null:
+			hospital_button.pressed.emit()
+			await process_frame
+			var prompt_dialog: ConfirmationDialog = game_root.map_panel.find_child("OverworldPromptDialog", true, false) as ConfirmationDialog
+			if prompt_dialog != null:
+				prompt_dialog.confirmed.emit()
+			await process_frame
+			if str(game_root.simulation.active_location_id) != "hospital" or str(game_root.simulation.active_map_id) != "hospital":
+				errors.append("confirming overworld prompt should enter hospital, got %s/%s" % [str(game_root.simulation.active_location_id), str(game_root.simulation.active_map_id)])
+			game_root.enter_overworld_location_from_panel("survivor_outpost_01")
+			await process_frame
+			if not game_root.map_panel.visible:
+				_press_key(game_root, KEY_M)
+			_expect_stage_open(errors, game_root, "map", "returning from overworld prompt should reopen map")
 	var zoom_in_button: Button = game_root.map_panel.find_child("ZoomInButton", true, false) as Button
 	if zoom_in_button == null:
 		errors.append("map canvas should expose zoom in button")
@@ -1948,6 +1977,32 @@ func _map_canvas_state_line(game_root: Node) -> String:
 	if label is Label:
 		return str((label as Label).text)
 	return ""
+
+
+func _overworld_location_button(game_root: Node, location_id: String) -> Button:
+	var actions: Node = game_root.map_panel.find_child("OverworldActions", true, false)
+	if actions == null:
+		return null
+	for child in actions.get_children():
+		if child is Button and str(child.get_meta("overworld_location_id", "")) == location_id:
+			return child as Button
+	return null
+
+
+func _assert_overworld_prompt_modal(errors: Array[String], game_root: Node, expected_location_id: String, context: String) -> void:
+	if str(game_root.gameplay_input_blocker_name()) != "modal:overworld_prompt":
+		errors.append("%s: blocker should be modal:overworld_prompt, got %s" % [context, str(game_root.gameplay_input_blocker_name())])
+	var stack: Dictionary = _dictionary_or_empty(game_root.modal_stack_snapshot()) if game_root.has_method("modal_stack_snapshot") else {}
+	var top: Dictionary = _dictionary_or_empty(stack.get("top", {}))
+	if str(top.get("id", "")) != "overworld_prompt" or str(top.get("owner_panel", "")) != "map":
+		errors.append("%s: modal stack should expose map overworld prompt: %s" % [context, stack])
+	if str(top.get("location_id", "")) != expected_location_id:
+		errors.append("%s: modal prompt location expected %s, got %s" % [context, expected_location_id, top])
+	if not bool(top.get("blocks_gameplay", false)) or not bool(top.get("mouse_blocks_world", false)):
+		errors.append("%s: overworld prompt should block gameplay and world mouse: %s" % [context, top])
+	var close_priority: Array = _array_or_empty(game_root.menu_state_snapshot().get("close_priority", [])) if game_root.has_method("menu_state_snapshot") else []
+	if close_priority.is_empty() or str(close_priority[0]) != "modal:overworld_prompt":
+		errors.append("%s: close priority should put overworld prompt first: %s" % [context, close_priority])
 
 
 func _attribute_button(game_root: Node, attribute: String) -> Button:

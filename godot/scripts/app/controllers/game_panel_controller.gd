@@ -72,6 +72,7 @@ func setup_panels() -> void:
 	journal_panel = _ensure_panel(journal_panel, JOURNAL_PANEL_SCENE, "JournalPanelRoot")
 	_connect_journal_tracking()
 	map_panel = _ensure_panel(map_panel, MAP_PANEL_SCENE, "MapPanelRoot")
+	_connect_map_panel()
 	skills_panel = _ensure_panel(skills_panel, SKILLS_PANEL_SCENE, "SkillsPanelRoot")
 	crafting_panel = _ensure_panel(crafting_panel, CRAFTING_PANEL_SCENE, "CraftingPanelRoot")
 	settings_panel = _ensure_settings_panel()
@@ -456,6 +457,10 @@ func close_blocking_modal() -> Dictionary:
 		var container_result: Dictionary = container_panel.call("close_blocking_modal")
 		if bool(container_result.get("success", false)):
 			return container_result
+	if map_panel != null and map_panel.has_method("close_blocking_modal"):
+		var map_result: Dictionary = map_panel.call("close_blocking_modal")
+		if bool(map_result.get("success", false)):
+			return map_result
 	if skills_panel != null and skills_panel.has_method("close_blocking_modal"):
 		var skills_result: Dictionary = skills_panel.call("close_blocking_modal")
 		if bool(skills_result.get("success", false)):
@@ -500,6 +505,14 @@ func _connect_journal_tracking() -> void:
 	var callback := Callable(self, "_on_tracked_quest_changed")
 	if not journal_panel.is_connected("tracked_quest_changed", callback):
 		journal_panel.connect("tracked_quest_changed", callback)
+
+
+func _connect_map_panel() -> void:
+	if map_panel == null or not map_panel.has_signal("overworld_location_requested"):
+		return
+	var callback := Callable(parent, "enter_overworld_location_from_panel")
+	if not map_panel.is_connected("overworld_location_requested", callback):
+		map_panel.connect("overworld_location_requested", callback)
 
 
 func _on_tracked_quest_changed(quest_id: String) -> void:
@@ -660,6 +673,10 @@ func _blocking_modal_name() -> String:
 		var container_modal := str(container_panel.call("blocking_modal_name"))
 		if not container_modal.is_empty():
 			return container_modal
+	if map_panel != null and map_panel.has_method("blocking_modal_name"):
+		var map_modal := str(map_panel.call("blocking_modal_name"))
+		if not map_modal.is_empty():
+			return map_modal
 	if skills_panel != null and skills_panel.has_method("blocking_modal_name"):
 		var skills_modal := str(skills_panel.call("blocking_modal_name"))
 		if not skills_modal.is_empty():
@@ -668,7 +685,7 @@ func _blocking_modal_name() -> String:
 
 
 func _blocking_modal_snapshot() -> Dictionary:
-	for panel in [inventory_panel, trade_panel, container_panel, skills_panel]:
+	for panel in [inventory_panel, trade_panel, container_panel, map_panel, skills_panel]:
 		if panel != null and panel.has_method("blocking_modal_snapshot"):
 			var snapshot: Dictionary = _dictionary_or_empty(panel.call("blocking_modal_snapshot"))
 			if not snapshot.is_empty():

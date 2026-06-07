@@ -59,6 +59,7 @@ const PLAYER_COMMAND_AUTHORITY_AUDIT: Array[Dictionary] = [
 	{"app_method": "craft_player_recipe", "action": "craft", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "GameApp", "blocker": "_player_command_rejection"},
 	{"app_method": "confirm_crafting_queue", "action": "crafting_queue", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "GameApp", "blocker": "_player_command_rejection"},
 	{"app_method": "turn_in_player_quest", "action": "quest_turn_in", "authority_kind": "core_service", "core_service": "Simulation.turn_in_quest", "owner": "GameApp", "blocker": "quest_state"},
+	{"app_method": "enter_overworld_location_from_panel", "action": "enter_overworld_location", "authority_kind": "core_service", "core_service": "Simulation.enter_location", "owner": "GameApp", "blocker": "map_panel_prompt"},
 ]
 
 var registry: ContentRegistry
@@ -2768,6 +2769,18 @@ func turn_in_player_quest(quest_id: String) -> Dictionary:
 	refresh_journal_panel()
 	refresh_skills_panel()
 	refresh_crafting_panel()
+	return result
+
+
+func enter_overworld_location_from_panel(location_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing", "location_id": location_id}
+	var result: Dictionary = simulation.enter_location(1, location_id, registry.get_library("overworld"))
+	if bool(result.get("success", false)):
+		_rebuild_world_after_runtime_change({}, result)
+	else:
+		refresh_hud(current_interaction_prompt())
+		refresh_map_panel()
 	return result
 
 
