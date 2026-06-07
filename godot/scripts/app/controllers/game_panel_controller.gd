@@ -10,6 +10,7 @@ const JournalSnapshot = preload("res://scripts/ui/snapshots/journal_snapshot.gd"
 const MapSnapshot = preload("res://scripts/ui/snapshots/map_snapshot.gd")
 const SkillsSnapshot = preload("res://scripts/ui/snapshots/skills_snapshot.gd")
 const CraftingSnapshot = preload("res://scripts/ui/snapshots/crafting_snapshot.gd")
+const UIThemeService = preload("res://scripts/ui/ui_theme_service.gd")
 const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
 const DIALOGUE_PANEL_SCENE = preload("res://scenes/ui/dialogue_panel.tscn")
 const INVENTORY_PANEL_SCENE = preload("res://scenes/ui/inventory_panel.tscn")
@@ -36,6 +37,8 @@ var settings_open := false
 var tracked_quest_id := ""
 var panel_event_sequence := 0
 var recent_panel_events: Array[Dictionary] = []
+var ui_theme: Theme
+var last_theme_result: Dictionary = {}
 var _last_panel_visibility: Dictionary = {}
 
 var hud: Control
@@ -72,8 +75,33 @@ func setup_panels() -> void:
 	skills_panel = _ensure_panel(skills_panel, SKILLS_PANEL_SCENE, "SkillsPanelRoot")
 	crafting_panel = _ensure_panel(crafting_panel, CRAFTING_PANEL_SCENE, "CraftingPanelRoot")
 	settings_panel = _ensure_settings_panel()
+	_apply_ui_theme()
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
+
+
+func _apply_ui_theme() -> void:
+	ui_theme = UIThemeService.build_default_theme()
+	last_theme_result = UIThemeService.theme_snapshot(ui_theme)
+	for panel in _theme_targets():
+		if panel != null:
+			panel.theme = ui_theme
+
+
+func _theme_targets() -> Array[Control]:
+	return [
+		hud,
+		dialogue_panel,
+		inventory_panel,
+		trade_panel,
+		container_panel,
+		character_panel,
+		journal_panel,
+		map_panel,
+		skills_panel,
+		crafting_panel,
+		settings_panel,
+	]
 
 
 func refresh_all(selected_prompt: Dictionary = {}) -> void:
@@ -299,6 +327,15 @@ func menu_state_snapshot() -> Dictionary:
 		"recent_event_count": recent_panel_events.size(),
 		"latest_event": recent_panel_events[recent_panel_events.size() - 1].duplicate(true) if not recent_panel_events.is_empty() else {},
 	}
+
+
+func ui_theme_snapshot() -> Dictionary:
+	if ui_theme == null:
+		return {"applied": false, "reason": "theme_missing"}
+	var snapshot := UIThemeService.theme_snapshot(ui_theme)
+	snapshot["panel_count"] = _theme_targets().size()
+	snapshot["last_apply"] = last_theme_result.duplicate(true)
+	return snapshot
 
 
 func gameplay_input_blocker_snapshot() -> Dictionary:

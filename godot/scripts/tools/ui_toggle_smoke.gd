@@ -82,6 +82,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("auto tick should start disabled")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
 	_assert_runtime_performance(errors, game_root, "initial runtime performance")
+	_assert_ui_theme(errors, game_root, "initial UI theme")
 	_exercise_audio_feedback(errors, game_root)
 	_assert_ai_debug_snapshot(errors, game_root, "initial AI debug")
 	_exercise_debug_panel(errors, game_root)
@@ -1158,6 +1159,21 @@ func _assert_runtime_performance(errors: Array[String], game_root: Node, context
 	_assert_runtime_control_line(errors, game_root, "Path", "%s HUD path token" % context)
 	_assert_runtime_control_line(errors, game_root, "Lat", "%s HUD latency token" % context)
 	_assert_runtime_control_line(errors, game_root, "R", "%s HUD render token" % context)
+
+
+func _assert_ui_theme(errors: Array[String], game_root: Node, context: String) -> void:
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var theme: Dictionary = _dictionary_or_empty(runtime.get("ui_theme", {}))
+	if not bool(theme.get("applied", false)):
+		errors.append("%s: runtime should apply UI theme: %s" % [context, theme])
+	if str(theme.get("font_resource_path", "")) != "res://assets/fonts/NotoSansCJKsc-Regular.otf":
+		errors.append("%s: UI theme should use NotoSans CJK font: %s" % [context, theme])
+	if int(theme.get("panel_count", 0)) < 10:
+		errors.append("%s: UI theme should cover game HUD and panels: %s" % [context, theme])
+	if game_root.hud == null or game_root.hud.theme == null:
+		errors.append("%s: HUD root should receive the shared UI theme" % context)
+	elif game_root.hud.theme.default_font == null or game_root.hud.theme.default_font.resource_path != "res://assets/fonts/NotoSansCJKsc-Regular.otf":
+		errors.append("%s: HUD theme should expose NotoSans CJK font resource" % context)
 
 
 func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:

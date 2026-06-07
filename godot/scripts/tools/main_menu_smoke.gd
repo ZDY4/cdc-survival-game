@@ -30,6 +30,7 @@ func _run() -> void:
 	get_root().add_child(menu)
 	await process_frame
 	_assert_empty_menu_runtime(errors, menu)
+	_assert_main_menu_theme(errors, menu)
 	_assert_continue_disabled_without_save(errors, menu)
 	_assert_new_game_request(errors, menu)
 	menu.queue_free()
@@ -88,6 +89,17 @@ func _assert_empty_menu_runtime(errors: Array[String], menu: Control) -> void:
 		errors.append("main menu should not instantiate game root before starting")
 	if menu.find_child("WorldContainer", true, false) != null:
 		errors.append("main menu should not render map/world before starting")
+
+
+func _assert_main_menu_theme(errors: Array[String], menu: Control) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
+	var theme: Dictionary = _dictionary_or_empty(snapshot.get("ui_theme", {}))
+	if not bool(theme.get("applied", false)):
+		errors.append("main menu should apply UI theme: %s" % theme)
+	if str(theme.get("font_resource_path", "")) != "res://assets/fonts/NotoSansCJKsc-Regular.otf":
+		errors.append("main menu should use NotoSans CJK font: %s" % theme)
+	if menu.theme == null or menu.theme.default_font == null or menu.theme.default_font.resource_path != "res://assets/fonts/NotoSansCJKsc-Regular.otf":
+		errors.append("main menu root should expose NotoSans CJK theme")
 
 
 func _assert_continue_disabled_without_save(errors: Array[String], menu: Control) -> void:

@@ -405,6 +405,12 @@ func menu_state_snapshot() -> Dictionary:
 	}
 
 
+func ui_theme_snapshot() -> Dictionary:
+	if panel_controller != null and panel_controller.has_method("ui_theme_snapshot"):
+		return _dictionary_or_empty(panel_controller.call("ui_theme_snapshot"))
+	return {"applied": false, "reason": "panel_controller_missing"}
+
+
 func context_menu_snapshot() -> Dictionary:
 	var menus: Array[Dictionary] = []
 	if hud != null and hud.has_method("interaction_menu_snapshot"):
@@ -725,6 +731,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"ui_blocker_snapshot": gameplay_input_blocker_snapshot(),
 		"modal_stack": modal_stack_snapshot(),
 		"menu_state": menu_state_snapshot(),
+		"ui_theme": ui_theme_snapshot(),
 		"context_menu": context_menu_snapshot(),
 		"controls_hint": controls_hint_snapshot(),
 		"debug_console": debug_console_snapshot(),

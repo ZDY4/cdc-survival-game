@@ -4,6 +4,7 @@ const GAME_ROOT_SCENE := "res://scenes/game/game_root.tscn"
 const DEFAULT_SAVE_SLOT := "default"
 const DEFAULT_SAVE_ROOT := "user://saves"
 const SaveService = preload("res://scripts/app/save_service.gd")
+const UIThemeService = preload("res://scripts/ui/ui_theme_service.gd")
 
 var save_slot := DEFAULT_SAVE_SLOT
 var save_root := DEFAULT_SAVE_ROOT
@@ -18,11 +19,13 @@ var _rename_button: Button
 var _slot_summary_label: Label
 var _feedback_label: Label
 var _slot_summaries: Array[Dictionary] = []
+var _theme_result: Dictionary = {}
 
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	_theme_result = UIThemeService.apply_default_theme(self)
 	save_slot = str(ProjectSettings.get_setting("cdc/main_menu_save_slot", DEFAULT_SAVE_SLOT))
 	save_root = str(ProjectSettings.get_setting("cdc/save_root", DEFAULT_SAVE_ROOT))
 	_build_layout()
@@ -123,6 +126,7 @@ func main_menu_snapshot() -> Dictionary:
 		"selected_slot_summary": selected_summary,
 		"overwrite_confirm_visible": _overwrite_dialog != null and _overwrite_dialog.visible,
 		"last_action": last_action.duplicate(true),
+		"ui_theme": _theme_result.duplicate(true),
 	}
 
 
