@@ -2196,6 +2196,7 @@ func deconstruct_player_item(item_id: String, count: int = 1) -> Dictionary:
 		"action": "deconstruct",
 		"item_id": item_id,
 		"count": count,
+		"crafting_context": _crafting_context(),
 	})
 	_record_inventory_feedback(result, "deconstruct", item_id, count)
 	refresh_inventory_panel()

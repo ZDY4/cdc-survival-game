@@ -78,6 +78,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 	var icon_asset := AssetPathResolver.resolve_media_asset(icon_path, _icon_fallback_key(category))
 	var usable: Dictionary = _fragment_by_kind(data, "usable")
 	var use_allowed: bool = not usable.is_empty() and _is_item_use_allowed(data)
+	var crafting_fragment: Dictionary = _fragment_by_kind(data, "crafting")
 	var deconstruct_yield: Array[Dictionary] = _deconstruct_yield(data)
 	return {
 		"item_id": item_id,
@@ -101,6 +102,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"droppable": _is_item_droppable(data),
 		"deconstructable": not deconstruct_yield.is_empty(),
 		"deconstruct_yield": deconstruct_yield,
+		"deconstruct_requirements": _deconstruct_requirements(crafting_fragment),
 		"stackable": _stackable(data),
 		"max_stack": _max_stack(data),
 	}
@@ -210,6 +212,36 @@ func _deconstruct_yield(item_data: Dictionary) -> Array[Dictionary]:
 	return output
 
 
+func _deconstruct_requirements(crafting_fragment: Dictionary) -> Dictionary:
+	if crafting_fragment.is_empty():
+		return {}
+	return {
+		"required_tools": _normalized_item_ids(crafting_fragment.get("deconstruct_required_tools", crafting_fragment.get("required_deconstruct_tools", crafting_fragment.get("deconstruct_required_tool_ids", crafting_fragment.get("required_deconstruct_tool_ids", []))))),
+		"required_station": str(crafting_fragment.get("deconstruct_required_station", crafting_fragment.get("required_deconstruct_station", "none"))),
+	}
+
+
+func _normalized_item_ids(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_normalized_item_id(output, entry)
+	else:
+		_append_normalized_item_id(output, value)
+	return output
+
+
+func _append_normalized_item_id(output: Array[String], value: Variant) -> void:
+	var raw_value: Variant = value
+	if typeof(value) == TYPE_DICTIONARY:
+		var data: Dictionary = _dictionary_or_empty(value)
+		raw_value = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var normalized_id := str(raw_value).strip_edges()
+	if normalized_id.is_empty() or output.has(normalized_id):
+		return
+	output.append(normalized_id)
+
+
 func _has_fragment(item_data: Dictionary, kind: String) -> bool:
 	return not _fragment_by_kind(item_data, kind).is_empty()
 
@@ -300,6 +332,13 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "AP 不足，使用 %s 需要 %.0f，当前 %.0f。" % [item_name, float(feedback.get("required_ap", 0.0)), float(feedback.get("available_ap", 0.0))]
 		"ap_insufficient_deconstruct":
 			return "AP 不足，拆解 %s 需要 %.0f，当前 %.0f。" % [item_name, float(feedback.get("required_ap", 0.0)), float(feedback.get("available_ap", 0.0))]
+		"missing_tools":
+			return "缺少拆解工具，无法拆解 %s。" % item_name
+		"missing_station":
+			return "缺少拆解工作台 %s，无法拆解 %s。" % [
+				str(feedback.get("required_station", "")),
+				item_name,
+			]
 		"not_enough_items":
 			return "背包中没有足够的 %s，需要 %d，当前 %d。" % [item_name, int(feedback.get("required", count)), int(feedback.get("current", 0))]
 		"inventory_over_capacity":

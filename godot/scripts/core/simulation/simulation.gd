@@ -1512,6 +1512,9 @@ func _submit_inventory_action_command(actor: RefCounted, command: Dictionary) ->
 func _submit_deconstruct_action(actor: RefCounted, command: Dictionary, items: Dictionary) -> Dictionary:
 	var item_id: String = str(command.get("item_id", ""))
 	var count: int = max(1, int(command.get("count", 1)))
+	var requirements: Dictionary = _deconstruct_requirement_check(actor, item_id, items, _dictionary_or_empty(command.get("crafting_context", {})))
+	if not bool(requirements.get("success", false)):
+		return requirements
 	var cost: float = _deconstruct_command_ap_cost(item_id, items, count, command)
 	if actor.ap < cost:
 		return {
@@ -1528,6 +1531,110 @@ func _submit_deconstruct_action(actor: RefCounted, command: Dictionary, items: D
 		result["ap_cost"] = cost
 		result["ap_remaining"] = actor.ap
 	return result
+
+
+func _deconstruct_requirement_check(actor: RefCounted, item_id: String, items: Dictionary, crafting_context: Dictionary = {}) -> Dictionary:
+	var normalized_item_id: String = _inventory_entries.normalize_content_id(item_id)
+	var item_record: Dictionary = _dictionary_or_empty(items.get(normalized_item_id, {}))
+	var item_data: Dictionary = _dictionary_or_empty(item_record.get("data", item_record))
+	var crafting_fragment: Dictionary = _item_crafting_fragment(item_data)
+	if crafting_fragment.is_empty():
+		return {"success": true}
+	var missing_tools: Array[Dictionary] = []
+	for tool_id in _deconstruct_required_tool_ids(crafting_fragment):
+		var available_count: int = _actor_tool_available_count(actor, tool_id, crafting_context)
+		if available_count > 0:
+			continue
+		missing_tools.append({
+			"item_id": tool_id,
+			"required": 1,
+			"available": available_count,
+		})
+	if not missing_tools.is_empty():
+		return {
+			"success": false,
+			"reason": "missing_tools",
+			"item_id": normalized_item_id,
+			"missing_tools": missing_tools,
+		}
+	var required_station := str(crafting_fragment.get("deconstruct_required_station", crafting_fragment.get("required_deconstruct_station", ""))).strip_edges()
+	if required_station in ["", "none"]:
+		return {"success": true}
+	var station: Dictionary = _nearest_crafting_station(actor, required_station, _array_or_empty(crafting_context.get("crafting_stations", [])))
+	if station.is_empty():
+		return {
+			"success": false,
+			"reason": "missing_station",
+			"item_id": normalized_item_id,
+			"required_station": required_station,
+		}
+	return {
+		"success": true,
+		"required_station": required_station,
+		"station": station,
+	}
+
+
+func _deconstruct_required_tool_ids(crafting_fragment: Dictionary) -> Array[String]:
+	var output: Array[String] = []
+	for key in ["deconstruct_required_tools", "required_deconstruct_tools", "deconstruct_required_tool_ids", "required_deconstruct_tool_ids"]:
+		if not crafting_fragment.has(key):
+			continue
+		_append_unique_normalized_item_id(output, crafting_fragment.get(key))
+	return output
+
+
+func _actor_tool_available_count(actor: RefCounted, tool_id: String, crafting_context: Dictionary = {}) -> int:
+	if actor == null or tool_id.is_empty():
+		return 0
+	var count := 0
+	if int(actor.inventory.get(tool_id, 0)) > 0:
+		count += int(actor.inventory.get(tool_id, 0))
+	for slot_id in actor.equipment.keys():
+		if _inventory_entries.normalize_content_id(actor.equipment.get(slot_id, "")) == tool_id:
+			count += 1
+	for container in _array_or_empty(crafting_context.get("nearby_tool_containers", [])):
+		var container_data: Dictionary = _dictionary_or_empty(container)
+		count += _inventory_entries.count(_array_or_empty(container_data.get("inventory", [])), tool_id)
+	return count
+
+
+func _nearest_crafting_station(actor: RefCounted, station_id: String, stations: Array) -> Dictionary:
+	var best_station: Dictionary = {}
+	var best_distance := 2147483647
+	for station in stations:
+		var station_data: Dictionary = _dictionary_or_empty(station)
+		if str(station_data.get("station_id", "")) != station_id:
+			continue
+		var distance: int = _distance_to_crafting_station(actor, station_data)
+		var station_range: int = max(0, int(station_data.get("range", 1)))
+		if distance > station_range:
+			continue
+		if distance < best_distance:
+			best_distance = distance
+			best_station = station_data.duplicate(true)
+			best_station["distance"] = distance
+	return best_station
+
+
+func _distance_to_crafting_station(actor: RefCounted, station: Dictionary) -> int:
+	if actor == null:
+		return 2147483647
+	var actor_grid: Dictionary = actor.grid_position.to_dictionary()
+	var best_distance := 2147483647
+	for cell in _array_or_empty(station.get("cells", [])):
+		var cell_data: Dictionary = _dictionary_or_empty(cell)
+		if int(cell_data.get("y", 0)) != int(actor_grid.get("y", 0)):
+			continue
+		var dx: int = abs(int(cell_data.get("x", 0)) - int(actor_grid.get("x", 0)))
+		var dz: int = abs(int(cell_data.get("z", 0)) - int(actor_grid.get("z", 0)))
+		best_distance = mini(best_distance, dx + dz)
+	if best_distance != 2147483647:
+		return best_distance
+	var anchor: Dictionary = _dictionary_or_empty(station.get("anchor", {}))
+	if int(anchor.get("y", 0)) != int(actor_grid.get("y", 0)):
+		return best_distance
+	return abs(int(anchor.get("x", 0)) - int(actor_grid.get("x", 0))) + abs(int(anchor.get("z", 0)) - int(actor_grid.get("z", 0)))
 
 
 func _craft_command_ap_cost(recipe_id: String, recipes: Dictionary, count: int, command: Dictionary = {}) -> float:

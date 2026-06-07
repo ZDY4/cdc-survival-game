@@ -37,6 +37,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("initial inventory summary should include bootstrap inventory")
 	if not _summary_line(game_root).contains("/60.0 kg"):
 		errors.append("initial inventory summary should include carry capacity")
+	_install_deconstruct_requirement_smoke_item(game_root)
 	var initial_text: String = "\n".join(_item_lines(game_root))
 	if not initial_text.contains("手枪弹药 x10"):
 		errors.append("initial inventory missing bootstrap ammo")
@@ -389,6 +390,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory summary did not update total weight after deconstructing water bottle")
 	if not _summary_line(game_root).contains("/60.0 kg"):
 		errors.append("inventory summary should keep carry capacity after inventory changes")
+	player_ref.inventory["smoke_deconstruct_tool_item"] = 1
+	player_ref.inventory["1151"] = 1
+	game_root.refresh_inventory_panel()
+	if not _press_inventory_item_with_text(game_root, "拆解要求测试物品"):
+		errors.append("should select deconstruct requirement smoke item")
+	if not _detail_line(game_root).contains("拆解要求 工具 1151 / 工作台 smoke_station"):
+		errors.append("inventory detail should show deconstruct tool and station requirements")
+	if game_root.has_method("finish_world_action_presentations"):
+		game_root.finish_world_action_presentations()
+		await process_frame
+	var gated_deconstruct_result: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_tool_item", 1)
+	await process_frame
+	if str(gated_deconstruct_result.get("reason", "")) != "missing_station":
+		errors.append("deconstructing requirement-gated item away from station should report missing_station")
+	if not _inventory_feedback_line(game_root).contains("缺少拆解工作台 smoke_station"):
+		errors.append("inventory feedback should localize missing deconstruct station")
+	if _player_inventory_count(game_root, "smoke_deconstruct_tool_item") != 1:
+		errors.append("failed station-gated deconstruct should not consume source item")
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should select bandages before dropping through inventory panel")
 	var quantity_spin: SpinBox = _quantity_spin(game_root)
@@ -571,6 +590,26 @@ func _inventory_snapshot_item(game_root: Node, item_id: String) -> Dictionary:
 		if str(item_data.get("item_id", "")) == item_id:
 			return item_data
 	return {}
+
+
+func _install_deconstruct_requirement_smoke_item(game_root: Node) -> void:
+	var items: Dictionary = game_root.registry.get_library("items")
+	items["smoke_deconstruct_tool_item"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_deconstruct_tool_item",
+			"name": "拆解要求测试物品",
+			"description": "用于验证拆解工具和工作台要求",
+			"value": 1,
+			"weight": 0.1,
+			"fragments": [{
+				"kind": "crafting",
+				"deconstruct_required_tools": ["1151"],
+				"deconstruct_required_station": "smoke_station",
+				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
+			}],
+		},
+	}
 
 
 func _has_pending(game_root: Node) -> bool:

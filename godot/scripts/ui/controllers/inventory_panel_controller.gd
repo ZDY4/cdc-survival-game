@@ -833,8 +833,9 @@ func _apply_detail(item: Dictionary) -> void:
 	var slots: Array = item.get("equip_slots", [])
 	var slot_suffix := " | 槽位 %s" % ", ".join(slots) if not slots.is_empty() else ""
 	var stack_suffix := " | 堆叠 %d" % int(item.get("max_stack", 1)) if bool(item.get("stackable", false)) else ""
+	var deconstruct_suffix := _deconstruct_requirements_text(item)
 	var description := str(item.get("description", ""))
-	_detail_label.text = "%s | %s | 单重 %.2f kg | 总重 %.2f kg | 单价 %d | 总价 %d%s%s%s%s" % [
+	_detail_label.text = "%s | %s | 单重 %.2f kg | 总重 %.2f kg | 单价 %d | 总价 %d%s%s%s%s%s" % [
 		item.get("name", item.get("item_id", "")),
 		item.get("category_label", "杂项"),
 		float(item.get("unit_weight", 0.0)),
@@ -844,9 +845,26 @@ func _apply_detail(item: Dictionary) -> void:
 		rarity_suffix,
 		slot_suffix,
 		stack_suffix,
+		deconstruct_suffix,
 		"\n%s" % description if not description.is_empty() else "",
 	]
 	_update_action_buttons(item)
+
+
+func _deconstruct_requirements_text(item: Dictionary) -> String:
+	if not bool(item.get("deconstructable", false)):
+		return ""
+	var requirements: Dictionary = _dictionary_or_empty(item.get("deconstruct_requirements", {}))
+	var parts: Array[String] = []
+	var required_tools: Array = _array_or_empty(requirements.get("required_tools", []))
+	if not required_tools.is_empty():
+		parts.append("工具 %s" % ", ".join(_string_array(required_tools)))
+	var station := str(requirements.get("required_station", "none"))
+	if station not in ["", "none"]:
+		parts.append("工作台 %s" % station)
+	if parts.is_empty():
+		return ""
+	return " | 拆解要求 %s" % " / ".join(parts)
 
 
 func _update_action_buttons(item: Dictionary) -> void:
@@ -974,6 +992,13 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	for entry in _array_or_empty(value):
+		output.append(str(entry))
+	return output
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

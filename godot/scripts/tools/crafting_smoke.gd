@@ -338,6 +338,59 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	})
 	if str(not_deconstructable.get("reason", "")) != "item_not_deconstructable":
 		errors.append("item without deconstruct yield should report item_not_deconstructable")
+	var deconstruct_requirements_items: Dictionary = _deconstruct_requirement_smoke_items(registry.get_library("items"))
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.inventory["smoke_deconstruct_tool_item"] = 1
+	var missing_deconstruct_tool: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "smoke_deconstruct_tool_item",
+		"count": 1,
+		"item_library": deconstruct_requirements_items,
+	})
+	if str(missing_deconstruct_tool.get("reason", "")) != "missing_tools":
+		errors.append("deconstruct should report missing_tools when required tool is absent")
+	if int(player.inventory.get("smoke_deconstruct_tool_item", 0)) != 1:
+		errors.append("missing deconstruct tool should not consume source item")
+	player.inventory["1151"] = 1
+	var missing_deconstruct_station: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "smoke_deconstruct_tool_item",
+		"count": 1,
+		"item_library": deconstruct_requirements_items,
+	})
+	if str(missing_deconstruct_station.get("reason", "")) != "missing_station":
+		errors.append("deconstruct should report missing_station after tool requirement passes")
+	if int(player.inventory.get("smoke_deconstruct_tool_item", 0)) != 1:
+		errors.append("missing deconstruct station should not consume source item")
+	var deconstruct_with_context: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "smoke_deconstruct_tool_item",
+		"count": 1,
+		"item_library": deconstruct_requirements_items,
+		"crafting_context": {
+			"crafting_stations": [{
+				"station_id": "workbench",
+				"display_name": "测试工作台",
+				"range": 1,
+				"anchor": player.grid_position.to_dictionary(),
+				"cells": [player.grid_position.to_dictionary()],
+			}],
+		},
+	})
+	if not bool(deconstruct_with_context.get("success", false)):
+		errors.append("deconstruct should succeed when tool and station requirements pass: %s" % deconstruct_with_context.get("reason", "unknown"))
+	if int(player.inventory.get("smoke_deconstruct_tool_item", 0)) != 0:
+		errors.append("successful requirement-gated deconstruct should consume source item")
+	if int(player.inventory.get("1104", 0)) != 1:
+		errors.append("successful requirement-gated deconstruct should add yield")
 	player.inventory.clear()
 	player.inventory_order.clear()
 	player.equipment.clear()
@@ -471,6 +524,24 @@ func _consumable_tool_smoke_recipes() -> Dictionary:
 			},
 		},
 	}
+
+
+func _deconstruct_requirement_smoke_items(base_items: Dictionary) -> Dictionary:
+	var output := base_items.duplicate(true)
+	output["smoke_deconstruct_tool_item"] = {
+		"data": {
+			"id": "smoke_deconstruct_tool_item",
+			"name": "拆解要求测试物品",
+			"weight": 0.1,
+			"fragments": [{
+				"kind": "crafting",
+				"deconstruct_required_tools": ["1151"],
+				"deconstruct_required_station": "workbench",
+				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
+			}],
+		},
+	}
+	return output
 
 
 func _event_count(snapshot: Dictionary, kind: String) -> int:
