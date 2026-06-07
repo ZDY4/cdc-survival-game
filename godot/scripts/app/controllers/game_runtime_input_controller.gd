@@ -949,14 +949,20 @@ func _pick_world_target(ray_from: Vector3, ray_to: Vector3) -> Dictionary:
 		if target_node == null:
 			continue
 		var metadata: Dictionary = _metadata_for_interaction_node(target_node)
-		var category := _picking_category(metadata)
+		var category: String = _picking_category(metadata)
+		var hit_position: Vector3 = hit.get("position", ray_from)
+		var hit_distance: float = ray_from.distance_to(hit_position)
+		var ray_length: float = max(ray_from.distance_to(ray_to), 0.001)
 		candidates.append({
 			"hit": hit,
 			"hit_index": index,
 			"node": target_node,
 			"category": category,
 			"priority": _picking_priority_rank(category),
-			"distance": ray_from.distance_to(hit.get("position", ray_from)),
+			"subpriority": _picking_subpriority(metadata, category),
+			"distance": hit_distance,
+			"hit_fraction": hit_distance / ray_length,
+			"anchor_noise": _picking_anchor_noise(metadata, hit_position),
 			"target_id": str(metadata.get("target_id", "")),
 			"target_type": str(metadata.get("target_type", "")),
 		})
@@ -987,11 +993,11 @@ func _metadata_for_interaction_node(node: Node) -> Dictionary:
 
 
 func _picking_category(metadata: Dictionary) -> String:
-	var target_type := str(metadata.get("target_type", ""))
+	var target_type: String = str(metadata.get("target_type", ""))
 	if target_type == "actor":
 		return "actor"
 	if target_type == "map_object":
-		var target_kind := str(metadata.get("target_kind", metadata.get("kind", "")))
+		var target_kind: String = str(metadata.get("target_kind", metadata.get("kind", "")))
 		if target_kind == "door":
 			return "door"
 		if target_kind in ["scene_transition", "enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor"]:
@@ -1003,20 +1009,50 @@ func _picking_category(metadata: Dictionary) -> String:
 
 
 func _picking_priority_rank(category: String) -> int:
-	var normalized := "actor" if category.begins_with("actor") else category
-	var index := PICKING_PRIORITY.find(normalized)
+	var normalized: String = "actor" if category.begins_with("actor") else category
+	var index: int = PICKING_PRIORITY.find(normalized)
 	return index if index >= 0 else PICKING_PRIORITY.size()
 
 
+func _picking_subpriority(metadata: Dictionary, category: String) -> int:
+	if category == "trigger":
+		var target_kind: String = str(metadata.get("target_kind", metadata.get("kind", "")))
+		if target_kind == "scene_transition":
+			return 0
+		if target_kind.begins_with("enter_") or target_kind.begins_with("exit_"):
+			return 1
+	return 0
+
+
+func _picking_anchor_noise(metadata: Dictionary, hit_position: Vector3) -> float:
+	var anchor: Dictionary = _dictionary_or_empty(metadata.get("anchor", metadata.get("grid", {})))
+	if anchor.is_empty():
+		return 0.0
+	var anchor_position: Vector3 = Vector3(
+		float(anchor.get("x", hit_position.x)),
+		float(anchor.get("y", _observed_level())),
+		float(anchor.get("z", hit_position.z))
+	)
+	return Vector2(anchor_position.x - hit_position.x, anchor_position.z - hit_position.z).length()
+
+
 func _sort_pick_candidates(left: Dictionary, right: Dictionary) -> bool:
-	var left_priority := int(left.get("priority", 99))
-	var right_priority := int(right.get("priority", 99))
+	var left_priority: int = int(left.get("priority", 99))
+	var right_priority: int = int(right.get("priority", 99))
 	if left_priority != right_priority:
 		return left_priority < right_priority
-	var left_distance := float(left.get("distance", 0.0))
-	var right_distance := float(right.get("distance", 0.0))
-	if absf(left_distance - right_distance) > 0.0001:
-		return left_distance < right_distance
+	var left_subpriority: int = int(left.get("subpriority", 0))
+	var right_subpriority: int = int(right.get("subpriority", 0))
+	if left_subpriority != right_subpriority:
+		return left_subpriority < right_subpriority
+	var left_fraction: float = float(left.get("hit_fraction", 0.0))
+	var right_fraction: float = float(right.get("hit_fraction", 0.0))
+	if absf(left_fraction - right_fraction) > 0.0001:
+		return left_fraction < right_fraction
+	var left_noise: float = float(left.get("anchor_noise", 0.0))
+	var right_noise: float = float(right.get("anchor_noise", 0.0))
+	if absf(left_noise - right_noise) > 0.0001:
+		return left_noise < right_noise
 	return int(left.get("hit_index", 0)) < int(right.get("hit_index", 0))
 
 
@@ -1027,7 +1063,11 @@ func _picking_diagnostics(category: String, priority: int, hit_count: int, selec
 		candidate_output.append({
 			"category": str(item.get("category", "")),
 			"priority": int(item.get("priority", 99)),
+			"subpriority": int(item.get("subpriority", 0)),
 			"hit_index": int(item.get("hit_index", 0)),
+			"hit_fraction": float(item.get("hit_fraction", 0.0)),
+			"distance": float(item.get("distance", 0.0)),
+			"anchor_noise": float(item.get("anchor_noise", 0.0)),
 			"target_id": str(item.get("target_id", "")),
 			"target_type": str(item.get("target_type", "")),
 		})
@@ -1036,6 +1076,7 @@ func _picking_diagnostics(category: String, priority: int, hit_count: int, selec
 		"selected_category": category,
 		"selected_priority": priority,
 		"selected_hit_index": selected_hit_index,
+		"sort_keys": ["priority", "subpriority", "hit_fraction", "anchor_noise", "hit_index"],
 		"hit_count": hit_count,
 		"candidate_count": candidate_output.size(),
 		"candidates": candidate_output,

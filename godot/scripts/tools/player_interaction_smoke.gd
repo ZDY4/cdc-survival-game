@@ -1653,10 +1653,26 @@ func _expect_picking_priority_snapshot(errors: Array[String], picking: Dictionar
 		errors.append("picking selected category expected %s, got %s" % [expected_pick_category, selected_category])
 	if int(picking.get("selected_priority", 99)) != priority_order.find(selected_category):
 		errors.append("picking selected priority should match priority order for %s" % selected_category)
+	var sort_keys: Array = _array_or_empty(picking.get("sort_keys", []))
+	for sort_key in ["priority", "subpriority", "hit_fraction", "anchor_noise", "hit_index"]:
+		if not sort_keys.has(sort_key):
+			errors.append("picking diagnostics should expose sort key %s" % sort_key)
 	if int(picking.get("hit_count", 0)) <= 0:
 		errors.append("picking diagnostics should expose hit count")
 	if int(picking.get("candidate_count", 0)) <= 0:
 		errors.append("picking diagnostics should expose interaction candidate count")
+	for candidate in _array_or_empty(picking.get("candidates", [])):
+		var candidate_data: Dictionary = _dictionary_or_empty(candidate)
+		if not candidate_data.has("subpriority"):
+			errors.append("picking candidate should expose subpriority")
+		if not candidate_data.has("hit_fraction"):
+			errors.append("picking candidate should expose hit_fraction")
+		elif float(candidate_data.get("hit_fraction", -1.0)) < 0.0 or float(candidate_data.get("hit_fraction", 2.0)) > 1.0:
+			errors.append("picking candidate hit_fraction should be normalized")
+		if not candidate_data.has("distance"):
+			errors.append("picking candidate should expose ray distance")
+		if not candidate_data.has("anchor_noise"):
+			errors.append("picking candidate should expose anchor noise")
 
 
 func _expected_pick_category(target_category: String) -> String:
