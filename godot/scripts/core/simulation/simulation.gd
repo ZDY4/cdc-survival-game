@@ -844,23 +844,17 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 			advance_world_turn(topology)
 			_open_turn(actor_id, "player_turn")
 			turn_auto_ended = true
-	var turn_policy := {
-		"action_kind": "cancel_pending",
-		"success": true,
-		"reason": "auto_ended" if turn_auto_ended else ("preserved_turn" if had_pending else "no_pending"),
-		"cancel_reason": reason,
-		"had_pending": had_pending,
-		"auto_end_requested": auto_end_turn,
-		"auto_advanced": turn_auto_ended,
-		"turn_open_before": turn_open_before,
-		"turn_open_after": bool(actor.turn_open) if actor != null else false,
-		"round_before": round_before,
-		"round_after": int(turn_state.get("round", 1)),
-		"ap_before_cancel": ap_before,
-		"ap_after_cancel": actor.ap if actor != null else 0.0,
-		"pending_movement": false,
-		"pending_interaction": false,
-	}
+	var turn_policy: Dictionary = _build_cancel_turn_policy(
+		"cancel_pending",
+		reason,
+		had_pending,
+		auto_end_turn,
+		turn_auto_ended,
+		actor,
+		ap_before,
+		turn_open_before,
+		round_before
+	)
 	return {
 		"success": true,
 		"had_pending": had_pending,
@@ -4044,6 +4038,19 @@ func _cancel_pending_for_new_target_command(actor_id: int, command_kind: String,
 		"movement": movement,
 		"interaction": interaction,
 	}
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	payload["turn_policy"] = _build_cancel_turn_policy(
+		"replace_pending_target",
+		"new_target_command",
+		true,
+		false,
+		false,
+		actor,
+		actor.ap if actor != null else 0.0,
+		bool(actor.turn_open) if actor != null else false,
+		int(turn_state.get("round", 1)),
+		{"replacement_kind": command_kind}
+	)
 	if not movement.is_empty():
 		_emit("movement_cancelled", {
 			"actor_id": int(movement.get("actor_id", actor_id)),
@@ -4060,6 +4067,29 @@ func _cancel_pending_for_new_target_command(actor_id: int, command_kind: String,
 		})
 	_emit("pending_cancelled", payload.duplicate(true))
 	return payload
+
+
+func _build_cancel_turn_policy(action_kind: String, reason: String, had_pending: bool, auto_end_requested: bool, auto_advanced: bool, actor: RefCounted, ap_before: float, turn_open_before: bool, round_before: int, extra: Dictionary = {}) -> Dictionary:
+	var policy := {
+		"action_kind": action_kind,
+		"success": true,
+		"reason": "auto_ended" if auto_advanced else ("preserved_turn" if had_pending else "no_pending"),
+		"cancel_reason": reason,
+		"had_pending": had_pending,
+		"auto_end_requested": auto_end_requested,
+		"auto_advanced": auto_advanced,
+		"turn_open_before": turn_open_before,
+		"turn_open_after": bool(actor.turn_open) if actor != null else false,
+		"round_before": round_before,
+		"round_after": int(turn_state.get("round", 1)),
+		"ap_before_cancel": ap_before,
+		"ap_after_cancel": actor.ap if actor != null else 0.0,
+		"pending_movement": false,
+		"pending_interaction": false,
+	}
+	for key in extra.keys():
+		policy[key] = extra[key]
+	return policy
 
 
 func _command_replaces_pending_target(command_kind: String, command: Dictionary) -> bool:

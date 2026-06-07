@@ -110,6 +110,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 		errors.append("new target command should report cancelled pending reason")
 	if _dictionary_or_empty(cancelled_pending.get("movement", {})).is_empty():
 		errors.append("new target command should include cancelled movement payload")
+	_expect_replacement_cancel_turn_policy(errors, cancelled_pending, "move", "new target command")
 	var replacement_pending: Dictionary = _dictionary_or_empty(simulation.snapshot().get("pending_movement", {}))
 	var replacement_target: Dictionary = _dictionary_or_empty(replacement_pending.get("target_position", {}))
 	if int(replacement_target.get("x", -999)) != int(replacement_goal.get("x", -998)) or int(replacement_target.get("z", -999)) != int(replacement_goal.get("z", -998)):
@@ -261,6 +262,25 @@ func _expect_cancel_turn_policy(errors: Array[String], result: Dictionary, expec
 		errors.append("%s turn_policy reason should be %s, got %s" % [context, expected_reason, policy.get("reason", "")])
 	if bool(policy.get("pending_movement", true)) or bool(policy.get("pending_interaction", true)):
 		errors.append("%s turn_policy should report pending cleared" % context)
+
+
+func _expect_replacement_cancel_turn_policy(errors: Array[String], cancelled_pending: Dictionary, expected_replacement_kind: String, context: String) -> void:
+	var policy: Dictionary = _dictionary_or_empty(cancelled_pending.get("turn_policy", {}))
+	if policy.is_empty():
+		errors.append("%s should expose replacement cancel turn_policy" % context)
+		return
+	if str(policy.get("action_kind", "")) != "replace_pending_target":
+		errors.append("%s turn_policy should expose replace_pending_target action kind" % context)
+	if str(policy.get("cancel_reason", "")) != "new_target_command":
+		errors.append("%s turn_policy should expose new_target_command cancel reason" % context)
+	if str(policy.get("replacement_kind", "")) != expected_replacement_kind:
+		errors.append("%s turn_policy should expose replacement kind %s" % [context, expected_replacement_kind])
+	if not bool(policy.get("had_pending", false)):
+		errors.append("%s turn_policy should report had_pending" % context)
+	if bool(policy.get("auto_advanced", false)):
+		errors.append("%s turn_policy should preserve turn without auto advance" % context)
+	if str(policy.get("reason", "")) != "preserved_turn":
+		errors.append("%s turn_policy should report preserved_turn, got %s" % [context, policy.get("reason", "")])
 
 
 func _expect_configured_ap_rules(registry: RefCounted) -> Array[String]:
