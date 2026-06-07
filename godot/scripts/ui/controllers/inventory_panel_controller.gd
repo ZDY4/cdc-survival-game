@@ -59,13 +59,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 
 	_last_snapshot = snapshot.duplicate(true)
 	_title_label.text = "%s 的背包" % snapshot.get("owner_name", "")
-	var max_weight := float(snapshot.get("max_weight", 0.0))
-	var weight_text := "%.1f/%.1f kg" % [float(snapshot.get("total_weight", 0.0)), max_weight] if max_weight > 0.0 else "%.1f kg" % float(snapshot.get("total_weight", 0.0))
-	_summary_label.text = "%d 类物品 | %s%s" % [
-		int(snapshot.get("item_count", 0)),
-		weight_text,
-		" | 超重" if bool(snapshot.get("over_capacity", false)) else "",
-	]
+	_summary_label.text = _summary_text(snapshot)
 	_apply_feedback(_dictionary_or_empty(snapshot.get("feedback", {})))
 	_refresh_filter_buttons()
 	_refresh_sort_buttons()
@@ -81,6 +75,29 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		var item_data: Dictionary = item
 		_items_box.add_child(_item_line(item_data))
 	_apply_detail(_selected_visible_item(visible_items))
+
+
+func _summary_text(snapshot: Dictionary) -> String:
+	var max_weight := float(snapshot.get("max_weight", 0.0))
+	var weight_text := "%.1f/%.1f kg" % [float(snapshot.get("total_weight", 0.0)), max_weight] if max_weight > 0.0 else "%.1f kg" % float(snapshot.get("total_weight", 0.0))
+	var parts: Array[String] = [
+		"%d 类物品" % int(snapshot.get("item_count", 0)),
+		weight_text,
+	]
+	var max_items := int(snapshot.get("max_items", -1))
+	if max_items >= 0:
+		parts.append("种类 %d/%d" % [int(snapshot.get("current_item_count", snapshot.get("item_count", 0))), max_items])
+	var max_stacks := int(snapshot.get("max_stacks", -1))
+	if max_stacks >= 0:
+		parts.append("槽位 %d/%d" % [int(snapshot.get("current_stack_count", 0)), max_stacks])
+	if bool(snapshot.get("over_capacity", false)):
+		if bool(snapshot.get("over_item_capacity", false)):
+			parts.append("种类超限")
+		elif bool(snapshot.get("over_stack_capacity", false)):
+			parts.append("槽位超限")
+		else:
+			parts.append("超重")
+	return " | ".join(parts)
 
 
 func _build_layout() -> void:

@@ -38,6 +38,20 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("initial inventory summary should include bootstrap inventory")
 	if not _summary_line(game_root).contains("/60.0 kg"):
 		errors.append("initial inventory summary should include carry capacity")
+	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	var initial_capacity_snapshot: Dictionary = _inventory_snapshot(game_root)
+	var initial_attributes: Dictionary = player_ref.combat_attributes.duplicate(true)
+	var item_limit: int = int(initial_capacity_snapshot.get("current_item_count", initial_capacity_snapshot.get("item_count", 0)))
+	var stack_limit: int = int(initial_capacity_snapshot.get("current_stack_count", 0))
+	player_ref.combat_attributes["max_inventory_items"] = item_limit
+	player_ref.combat_attributes["max_inventory_stacks"] = stack_limit
+	game_root.refresh_inventory_panel()
+	if not _summary_line(game_root).contains("种类 %d/%d" % [item_limit, item_limit]):
+		errors.append("inventory summary should expose item capacity preview: %s" % _summary_line(game_root))
+	if not _summary_line(game_root).contains("槽位 %d/%d" % [stack_limit, stack_limit]):
+		errors.append("inventory summary should expose stack capacity preview: %s" % _summary_line(game_root))
+	player_ref.combat_attributes = initial_attributes.duplicate(true)
+	game_root.refresh_inventory_panel()
 	_install_deconstruct_requirement_smoke_item(game_root)
 	var initial_text: String = "\n".join(_item_lines(game_root))
 	if not initial_text.contains("手枪弹药 x10"):
@@ -78,7 +92,6 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory drag append should restore ammo after baseball bat")
 	if not _event_seen(game_root, "inventory_reordered"):
 		errors.append("inventory drag reorder should emit inventory_reordered")
-	var player_ref: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	player_ref.hp = 50.0
 	player_ref.ap = 6.0
 	player_ref.inventory["1006"] = 2
@@ -728,12 +741,16 @@ func _container_session(snapshot: Dictionary, container_id: String) -> Dictionar
 
 
 func _inventory_snapshot_item(game_root: Node, item_id: String) -> Dictionary:
-	var snapshot: Dictionary = _dictionary_or_empty(game_root.inventory_panel.get("_last_snapshot"))
+	var snapshot: Dictionary = _inventory_snapshot(game_root)
 	for item in _array_or_empty(snapshot.get("items", [])):
 		var item_data: Dictionary = _dictionary_or_empty(item)
 		if str(item_data.get("item_id", "")) == item_id:
 			return item_data
 	return {}
+
+
+func _inventory_snapshot(game_root: Node) -> Dictionary:
+	return _dictionary_or_empty(game_root.inventory_panel.get("_last_snapshot"))
 
 
 func _install_deconstruct_requirement_smoke_item(game_root: Node) -> void:
