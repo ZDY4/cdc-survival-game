@@ -39,6 +39,8 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 		errors.append("reachable move failed: %s" % move_result.get("reason", "unknown"))
 	if int(move_result.get("steps", 0)) != 1:
 		errors.append("reachable command move should take 1 step")
+	_expect_turn_policy(errors, move_result, "move", false, "ap_still_affordable", "reachable move")
+	_expect_turn_policy_event(errors, simulation.snapshot(), "move", "reachable move")
 	if player.grid_position.key() == "%d:%d:%d" % [int(start.get("x", 0)), int(start.get("y", 0)), int(start.get("z", 0))]:
 		errors.append("player grid position did not update after move")
 	if _event_count(simulation.snapshot(), "actor_moved") != 1:
@@ -191,6 +193,7 @@ func _expect_ap_depletion_auto_advances_turn(errors: Array[String], simulation: 
 		errors.append("AP-depleting move failed: %s" % result.get("reason", "unknown"))
 	if not bool(result.get("auto_turn_advanced", false)):
 		errors.append("AP-depleting move should auto advance the player turn")
+	_expect_turn_policy(errors, result, "move", true, "ap_depleted_auto_advanced", "AP-depleting move")
 	if player.ap < 1.0:
 		errors.append("auto advanced player turn should reopen with affordable AP")
 	if int(simulation.snapshot().get("turn_state", {}).get("round", 0)) <= round_before:
@@ -203,6 +206,43 @@ func _expect_ap_depletion_auto_advances_turn(errors: Array[String], simulation: 
 		errors.append("turn_ended should include actor_id, AP, round, and reason")
 	if not _has_turn_payload_for_actor(simulation.snapshot(), "turn_started", 1):
 		errors.append("turn_started should include actor_id, AP, round, and reason")
+
+
+func _expect_turn_policy(errors: Array[String], result: Dictionary, expected_action: String, expected_auto_advanced: bool, expected_reason: String, context: String) -> void:
+	var policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	if policy.is_empty():
+		errors.append("%s should expose turn_policy" % context)
+		return
+	if str(policy.get("action_kind", "")) != expected_action:
+		errors.append("%s turn_policy should expose action kind %s" % [context, expected_action])
+	if bool(policy.get("success", false)) != bool(result.get("success", false)):
+		errors.append("%s turn_policy success should mirror command result" % context)
+	if not policy.has("ap_after_action") or not policy.has("affordable_ap_threshold"):
+		errors.append("%s turn_policy should expose AP after action and affordable threshold" % context)
+	if bool(policy.get("auto_advanced", false)) != expected_auto_advanced:
+		errors.append("%s turn_policy auto_advanced should be %s" % [context, str(expected_auto_advanced)])
+	if str(policy.get("reason", "")) != expected_reason:
+		errors.append("%s turn_policy reason should be %s, got %s" % [context, expected_reason, policy.get("reason", "")])
+	if expected_auto_advanced:
+		if not policy.has("ap_after_auto"):
+			errors.append("%s turn_policy should expose AP after auto turn" % context)
+		if int(policy.get("auto_turn_cycles", 0)) <= 0:
+			errors.append("%s turn_policy should expose positive auto turn cycle count" % context)
+	var runtime_delta: Dictionary = _dictionary_or_empty(result.get("runtime_snapshot_delta", {}))
+	var delta_policy: Dictionary = _dictionary_or_empty(runtime_delta.get("turn_policy", {}))
+	if delta_policy.is_empty():
+		errors.append("%s runtime delta should expose turn_policy" % context)
+	elif str(delta_policy.get("action_kind", "")) != expected_action:
+		errors.append("%s runtime delta turn_policy should mirror action kind" % context)
+
+
+func _expect_turn_policy_event(errors: Array[String], snapshot: Dictionary, expected_action: String, context: String) -> void:
+	var payload: Dictionary = _last_event_payload(snapshot, "player_command_completed")
+	var policy: Dictionary = _dictionary_or_empty(payload.get("turn_policy", {}))
+	if policy.is_empty():
+		errors.append("%s player_command_completed should expose turn_policy" % context)
+	elif str(policy.get("action_kind", "")) != expected_action:
+		errors.append("%s player_command_completed turn_policy should mirror action kind" % context)
 
 
 func _expect_configured_ap_rules(registry: RefCounted) -> Array[String]:

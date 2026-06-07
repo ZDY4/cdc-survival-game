@@ -1027,17 +1027,26 @@ func _submit_wait_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 func _finalize_player_ap_action(actor: RefCounted, result: Dictionary, command: Dictionary, reason: String) -> Dictionary:
 	if actor == null or not bool(result.get("success", false)):
 		return result
-	if not actor.turn_open or actor.ap >= _affordable_ap_threshold(actor):
+	var policy: Dictionary = _build_turn_policy(actor, reason, result)
+	result["turn_policy"] = policy.duplicate(true)
+	if not actor.turn_open:
+		result["turn_policy"]["reason"] = "turn_closed"
+		return result
+	if actor.ap >= float(policy.get("affordable_ap_threshold", 0.0)):
+		result["turn_policy"]["reason"] = "ap_still_affordable"
 		return result
 	if _result_changes_active_map(result):
 		result["auto_turn_skipped"] = "map_changed"
+		result["turn_policy"]["reason"] = "map_changed"
 		return result
 	if not str(actor.active_dialogue_id).is_empty():
 		result["auto_turn_skipped"] = "active_dialogue"
+		result["turn_policy"]["reason"] = "active_dialogue"
 		return result
 	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
 	if topology.is_empty():
 		result["auto_turn_skipped"] = "topology_missing"
+		result["turn_policy"]["reason"] = "topology_missing"
 		return result
 	var auto_turn: Dictionary = _auto_advance_player_turn(actor, topology, reason)
 	if bool(auto_turn.get("advanced", false)):
@@ -1045,7 +1054,40 @@ func _finalize_player_ap_action(actor: RefCounted, result: Dictionary, command: 
 		result["auto_turn_advanced"] = true
 		result["auto_turn"] = auto_turn
 		result["turn_state"] = turn_state.duplicate(true)
+		result["turn_policy"]["auto_advanced"] = true
+		result["turn_policy"]["reason"] = "ap_depleted_auto_advanced"
+		result["turn_policy"]["ap_after_auto"] = actor.ap
+		result["turn_policy"]["auto_turn_cycles"] = _array_or_empty(auto_turn.get("cycles", [])).size()
+	else:
+		result["turn_policy"]["reason"] = "auto_advance_unresolved"
 	return result
+
+
+func _build_turn_policy(actor: RefCounted, action_kind: String, result: Dictionary) -> Dictionary:
+	var ap_after: float = actor.ap if actor != null else 0.0
+	var threshold: float = _affordable_ap_threshold(actor) if actor != null else AFFORDABLE_AP_THRESHOLD
+	var policy := {
+		"action_kind": action_kind,
+		"success": bool(result.get("success", false)),
+		"ap_after_action": ap_after,
+		"affordable_ap_threshold": threshold,
+		"below_affordable_threshold": ap_after < threshold,
+		"pending_movement": not pending_movement.is_empty(),
+		"pending_interaction": not pending_interaction.is_empty(),
+		"auto_advanced": false,
+		"reason": "pending_evaluation",
+	}
+	if result.has("ap_cost"):
+		policy["ap_cost"] = float(result.get("ap_cost", 0.0))
+	elif result.has("steps"):
+		policy["ap_cost"] = float(result.get("steps", 0))
+	elif result.has("attack_result"):
+		var attack_result: Dictionary = _dictionary_or_empty(result.get("attack_result", {}))
+		if attack_result.has("ap_cost"):
+			policy["ap_cost"] = float(attack_result.get("ap_cost", 0.0))
+	if result.has("reason"):
+		policy["result_reason"] = str(result.get("reason", ""))
+	return policy
 
 
 func _auto_advance_player_turn(actor: RefCounted, topology: Dictionary, reason: String) -> Dictionary:
@@ -3899,6 +3941,8 @@ func _normalize_player_command_result(result: Dictionary, command: Dictionary, c
 	completion_payload["reason"] = reason
 	if not success:
 		_copy_failure_context(output, completion_payload)
+	if output.has("turn_policy"):
+		completion_payload["turn_policy"] = _dictionary_or_empty(output.get("turn_policy", {})).duplicate(true)
 	_emit("player_command_completed" if success else "player_command_rejected", completion_payload)
 	var emitted_events := _events_since(event_start_index)
 	if not output.has("events"):
@@ -3931,6 +3975,8 @@ func _normalize_player_command_result(result: Dictionary, command: Dictionary, c
 	output["events"] = updated_events
 	var runtime_delta: Dictionary = _dictionary_or_empty(output.get("runtime_snapshot_delta", {})).duplicate(true)
 	runtime_delta["events"] = updated_events
+	if output.has("turn_policy"):
+		runtime_delta["turn_policy"] = _dictionary_or_empty(output.get("turn_policy", {})).duplicate(true)
 	output["runtime_snapshot_delta"] = runtime_delta
 	return output
 
