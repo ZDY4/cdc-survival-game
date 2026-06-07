@@ -64,6 +64,29 @@ func changed_path_entries(path_roots: Array[String]) -> Array[Dictionary]:
 	return entries
 
 
+func aggregate_summaries(summaries: Array) -> Dictionary:
+	var total_added := 0
+	var total_removed := 0
+	var total_hunks := 0
+	var counts: Dictionary = {}
+	for summary_value in summaries:
+		var summary := _dictionary_or_empty(summary_value)
+		var status := str(summary.get("status", "changed"))
+		if status.is_empty():
+			status = "changed"
+		counts[status] = int(counts.get(status, 0)) + 1
+		total_added += int(summary.get("added_lines", 0))
+		total_removed += int(summary.get("removed_lines", 0))
+		total_hunks += int(summary.get("changed_hunks", 0))
+	return {
+		"total": summaries.size(),
+		"total_added_lines": total_added,
+		"total_removed_lines": total_removed,
+		"total_changed_hunks": total_hunks,
+		"status_counts": counts,
+	}
+
+
 func _report(relative_path: String, status: String, added_lines: int, removed_lines: int, changed_hunks: int) -> Dictionary:
 	return {
 		"ok": true,

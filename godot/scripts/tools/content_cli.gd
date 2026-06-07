@@ -143,6 +143,8 @@ func _format_changed_command(registry: ContentRegistry) -> int:
 
 
 func _diff_summary_command(args: Array[String]) -> int:
+	if args.size() == 2 and args[1] == "changed":
+		return _diff_summary_changed_command()
 	if args.size() != 3 or args[1] != "--path":
 		printerr(_usage())
 		return 2
@@ -157,6 +159,50 @@ func _diff_summary_command(args: Array[String]) -> int:
 	print("added_lines: %d" % int(summary.get("added_lines", 0)))
 	print("removed_lines: %d" % int(summary.get("removed_lines", 0)))
 	print("changed_hunks: %d" % int(summary.get("changed_hunks", 0)))
+	return 0
+
+
+func _diff_summary_changed_command() -> int:
+	var entries: Array[Dictionary] = []
+	for changed_entry in ContentDiffSummary.new().changed_path_entries(ContentCliDomains.git_status_paths_for_validate()):
+		var path := str(changed_entry.get("path", "")).replace("\\", "/").simplify_path()
+		if path.is_empty() or ContentCliDomains.validate_domain_for_relative_path(path).is_empty():
+			continue
+		var summary: Dictionary = ContentDiffSummary.new().summarize_path(path)
+		if not bool(summary.get("ok", false)):
+			printerr(summary.get("message", "diff summary failed"))
+			return 1
+		summary["source_path"] = str(changed_entry.get("source_path", ""))
+		summary["status_code"] = str(changed_entry.get("status_code", ""))
+		entries.append(summary)
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("path", "")) < str(b.get("path", ""))
+	)
+	print("mode: diff_summary_changed")
+	print("changed_supported_files: %d" % entries.size())
+	if entries.is_empty():
+		print("total_added_lines: 0")
+		print("total_removed_lines: 0")
+		print("total_changed_hunks: 0")
+		print("status: no_supported_changes")
+		return 0
+
+	for summary in entries:
+		var source_path := str(summary.get("source_path", ""))
+		var source_suffix := " <- %s" % source_path if not source_path.is_empty() else ""
+		print("- [%s] %s +%d -%d hunks:%d%s" % [
+			str(summary.get("status", "")),
+			str(summary.get("path", "")),
+			int(summary.get("added_lines", 0)),
+			int(summary.get("removed_lines", 0)),
+			int(summary.get("changed_hunks", 0)),
+			source_suffix,
+		])
+	var aggregate: Dictionary = ContentDiffSummary.new().aggregate_summaries(entries)
+	print("total_added_lines: %d" % int(aggregate.get("total_added_lines", 0)))
+	print("total_removed_lines: %d" % int(aggregate.get("total_removed_lines", 0)))
+	print("total_changed_hunks: %d" % int(aggregate.get("total_changed_hunks", 0)))
+	print("status: ok")
 	return 0
 
 
@@ -283,4 +329,4 @@ func _repo_relative_path(path: String) -> String:
 
 
 func _usage() -> String:
-	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance|ai|json> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary --path <repo-relative-or-absolute-path> | content_cli asset-manifest all"
+	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance|ai|json> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary changed | content_cli diff-summary --path <repo-relative-or-absolute-path> | content_cli asset-manifest all"

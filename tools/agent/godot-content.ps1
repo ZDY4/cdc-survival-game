@@ -8,6 +8,7 @@ This is the Godot migration replacement path for common `content_tools` locate,
 summarize, references, validate, format, diff-summary, and asset-manifest commands.
 `validate changed` filters Git status to migrated content domains and prints a
 `change_status_summary` line for modified / added / untracked / deleted / renamed records.
+`diff-summary changed` prints per-file line/hunk counts plus aggregate totals for the same changed content scope.
 
 .PARAMETER Command
 Content command to run: locate, summarize, references, validate, format, diff-summary, or asset-manifest.
@@ -15,7 +16,7 @@ Content command to run: locate, summarize, references, validate, format, diff-su
 .PARAMETER Kind
 Content kind such as item, recipe, character, dialogue, dialogue_rule, quest, skill, skill_tree,
 settlement, overworld, map, shop, world_tile, appearance, ai, json, changed for `validate changed` / `format changed`,
-all for `asset-manifest all`, or path for `diff-summary --path`.
+changed for `diff-summary changed`, all for `asset-manifest all`, or path for `diff-summary --path`.
 
 .PARAMETER Id
 Content id for locate/summarize/references/validate/format, or the path for diff-summary.
@@ -45,6 +46,11 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind settle
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind overworld -Id main_overworld
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind changed
+
+Reports diff totals for all supported changed content files.
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id data/items/1006.json
@@ -80,13 +86,16 @@ if (-not (Test-Path -LiteralPath $godotProject)) {
 }
 
 if ($Command -eq "diff-summary") {
-    if ($Kind -ne "path") {
-        throw "Use -Kind path with -Command diff-summary"
+    if ($Kind -eq "changed") {
+        $contentArgs = @($Command, "changed")
+    } elseif ($Kind -eq "path") {
+        if ([string]::IsNullOrWhiteSpace($Id)) {
+            throw "-Command diff-summary -Kind path requires -Id <repo-relative-or-absolute-path>"
+        }
+        $contentArgs = @($Command, "--path", $Id)
+    } else {
+        throw "Use -Kind changed or -Kind path with -Command diff-summary"
     }
-    if ([string]::IsNullOrWhiteSpace($Id)) {
-        throw "-Command diff-summary requires -Id <repo-relative-or-absolute-path>"
-    }
-    $contentArgs = @($Command, "--path", $Id)
 } elseif ($Command -eq "asset-manifest") {
     if ($Kind -ne "all") {
         throw "Use -Kind all with -Command asset-manifest"

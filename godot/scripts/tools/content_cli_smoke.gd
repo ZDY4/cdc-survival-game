@@ -6,6 +6,7 @@ const ContentRecordCliCommands = preload("res://scripts/tools/content_record_cli
 const ContentSchemaMigration = preload("res://scripts/data/content_schema_migration.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
+const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
@@ -68,6 +69,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "ai", "guard_settlement")
 	_expect_valid_record(errors, registry, "json", "stun")
 	_expect_validate_changed(errors, registry)
+	_expect_diff_summary_changed(errors)
 	_expect_schema_migration_diagnostics(errors, registry)
 	_expect_asset_path_resolver(errors)
 	_expect_asset_manifest(errors, registry)
@@ -165,6 +167,22 @@ func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) 
 			errors.append("validate changed summary should count deleted/renamed entries: %s" % [status_summary])
 		if str(status_summary.get("text", "")) != "deleted=1, renamed=1":
 			errors.append("validate changed summary text should be stable: %s" % [status_summary])
+
+
+func _expect_diff_summary_changed(errors: Array[String]) -> void:
+	var aggregate: Dictionary = ContentDiffSummary.new().aggregate_summaries([
+		{"path": "data/items/1006.json", "status": "modified", "added_lines": 3, "removed_lines": 1, "changed_hunks": 2},
+		{"path": "data/items/new.json", "status": "untracked", "added_lines": 5, "removed_lines": 0, "changed_hunks": 1},
+		{"path": "data/items/old.json", "status": "deleted", "added_lines": 0, "removed_lines": 4, "changed_hunks": 1},
+	])
+	var counts: Dictionary = _dictionary_or_empty(aggregate.get("status_counts", {}))
+	if int(aggregate.get("total", 0)) != 3 \
+			or int(aggregate.get("total_added_lines", 0)) != 8 \
+			or int(aggregate.get("total_removed_lines", 0)) != 5 \
+			or int(aggregate.get("total_changed_hunks", 0)) != 4:
+		errors.append("diff-summary changed should aggregate totals: %s" % [aggregate])
+	if int(counts.get("modified", 0)) != 1 or int(counts.get("untracked", 0)) != 1 or int(counts.get("deleted", 0)) != 1:
+		errors.append("diff-summary changed should aggregate status counts: %s" % [aggregate])
 
 
 func _expect_schema_migration_diagnostics(errors: Array[String], registry: ContentRegistry) -> void:

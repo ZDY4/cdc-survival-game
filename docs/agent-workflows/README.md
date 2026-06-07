@@ -37,6 +37,7 @@
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command references -Kind <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind <item|recipe|character|dialogue|quest|skill|skill_tree|settlement|overworld|map> -Id <id>`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed`
+- `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind changed`
 - `pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind path -Id <file>`
 - `pwsh -NoProfile -File tools/agent/test-godot-static.ps1`
 - `pwsh -NoProfile -File tools/agent/test-godot-static.ps1 -Scenario Import`
@@ -88,6 +89,8 @@ Godot editor 复核优先跑 `test-godot-editor.ps1`。
 内容定位、摘要、引用、格式化、diff 摘要和全量校验优先跑 `godot-content.ps1`。
 
 内容改动复核时，`validate changed` 的 `change_status_summary` 是批量影响面摘要：它按 Git status 汇总 modified / added / untracked / deleted / renamed 的受支持内容文件数量。若输出 `status: no_supported_changes`，说明当前 Git 变更没有落在已迁移内容域；若出现 `content_file_deleted` 或 `renamed_content_file_not_loaded`，需要确认删除 / 重命名是否已经同步到引用、任务、商店、地图或其他内容入口。
+
+需要审阅内容改动规模时，先跑 `diff-summary changed` 获取受支持内容文件的逐文件增删行和 hunk 数，再对热点文件使用 `diff-summary -Kind path -Id <file>` 做单文件复核。
 
 Godot import/cache 预热和 GDScript 静态解析优先跑 `test-godot-static.ps1`。
 
