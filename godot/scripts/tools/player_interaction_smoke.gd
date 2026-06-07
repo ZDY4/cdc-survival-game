@@ -83,6 +83,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		elif not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after visible pickup selection")
 		_expect_right_click_menu_buttons(errors, game_root)
+	_expect_friendly_and_map_container_context_menus(errors, game_root)
 
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if camera == null:
@@ -350,6 +351,32 @@ func _expect_interaction_menu_options(
 		elif str(detail.get("disabled_reason", "")) != expected_reason or str(detail.get("disabled_reason_text", "")).is_empty():
 			errors.append("%s context menu snapshot disabled detail %s should expose reason and localized text" % [context, option_id])
 	game_root.hud.hide_interaction_menu()
+
+
+func _expect_friendly_and_map_container_context_menus(errors: Array[String], game_root: Node) -> void:
+	var trader_node: Node = game_root.find_child("Actor_trader_lao_wang_2", true, false)
+	if trader_node == null:
+		errors.append("friendly actor context menu smoke should find trader actor")
+	else:
+		var trader_selection: Dictionary = game_root.select_interaction_node(trader_node)
+		if not bool(trader_selection.get("success", false)):
+			errors.append("friendly actor selection for context menu failed: %s" % trader_selection.get("prompt", {}).get("reason", "unknown"))
+		else:
+			_expect_interaction_menu_options(errors, game_root, "friendly actor", ["talk"], {"attack": "target_not_hostile"})
+	var container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_canteen_food_crate", true, false)
+	if container_node == null:
+		errors.append("map container context menu smoke should find canteen food crate")
+	else:
+		var container_selection: Dictionary = game_root.select_interaction_node(container_node)
+		if not bool(container_selection.get("success", false)):
+			errors.append("map container selection for context menu failed: %s" % container_selection.get("prompt", {}).get("reason", "unknown"))
+		else:
+			_expect_interaction_menu_options(errors, game_root, "map container", ["open_container"], {
+				"pickup": "target_not_pickup",
+				"talk": "target_not_actor",
+				"attack": "target_not_actor",
+			})
+	game_root.clear_interaction_selection("context_menu_smoke_cleanup")
 
 
 func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
