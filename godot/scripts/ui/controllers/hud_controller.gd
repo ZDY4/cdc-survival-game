@@ -867,6 +867,14 @@ func _disabled_reason_text(reason: String) -> String:
 			return "缺少钥匙"
 		"door_tool_missing":
 			return "缺少工具"
+		"scene_transition_world_flag_missing":
+			return "缺少世界状态"
+		"scene_transition_world_flag_blocked":
+			return "世界状态阻止"
+		"scene_transition_location_locked":
+			return "地点未解锁"
+		"scene_transition_location_blocked":
+			return "地点已被封锁"
 		"interaction_option_unavailable":
 			return "不可用"
 	if reason.is_empty():

@@ -526,8 +526,12 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 	var map: Dictionary = _dictionary_or_empty(game_root.world_result.get("map", {})).duplicate(true)
 	var door_id := "player_interaction_smoke_door"
 	var keyed_door_id := "player_interaction_smoke_keyed_door"
+	var locked_door_id := "player_interaction_smoke_locked_door"
+	var tooled_door_id := "player_interaction_smoke_tooled_door"
 	var door_grid := {"x": 27, "y": 0, "z": 39}
 	var keyed_door_grid := {"x": 28, "y": 0, "z": 39}
+	var locked_door_grid := {"x": 29, "y": 0, "z": 39}
+	var tooled_door_grid := {"x": 30, "y": 0, "z": 39}
 	var door_summary := {
 		"door_id": door_id,
 		"object_id": door_id,
@@ -548,6 +552,21 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 	keyed_door_summary["cells"] = [keyed_door_grid.duplicate(true)]
 	keyed_door_summary["locked"] = true
 	keyed_door_summary["required_item_ids"] = ["1138"]
+	var locked_door_summary := door_summary.duplicate(true)
+	locked_door_summary["door_id"] = locked_door_id
+	locked_door_summary["object_id"] = locked_door_id
+	locked_door_summary["display_name"] = "纯锁测试门"
+	locked_door_summary["anchor"] = locked_door_grid.duplicate(true)
+	locked_door_summary["cells"] = [locked_door_grid.duplicate(true)]
+	locked_door_summary["locked"] = true
+	var tooled_door_summary := door_summary.duplicate(true)
+	tooled_door_summary["door_id"] = tooled_door_id
+	tooled_door_summary["object_id"] = tooled_door_id
+	tooled_door_summary["display_name"] = "缺工具测试门"
+	tooled_door_summary["anchor"] = tooled_door_grid.duplicate(true)
+	tooled_door_summary["cells"] = [tooled_door_grid.duplicate(true)]
+	tooled_door_summary["locked"] = true
+	tooled_door_summary["required_tool_ids"] = ["1138"]
 	var interaction_targets: Dictionary = _dictionary_or_empty(map.get("interaction_targets", {})).duplicate(true)
 	interaction_targets[door_id] = {
 		"target_id": door_id,
@@ -567,10 +586,30 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 		"cells": [keyed_door_grid.duplicate(true)],
 		"door": keyed_door_summary.duplicate(true),
 	}
+	interaction_targets[locked_door_id] = {
+		"target_id": locked_door_id,
+		"target_type": "map_object",
+		"display_name": "纯锁测试门",
+		"kind": "door",
+		"anchor": locked_door_grid.duplicate(true),
+		"cells": [locked_door_grid.duplicate(true)],
+		"door": locked_door_summary.duplicate(true),
+	}
+	interaction_targets[tooled_door_id] = {
+		"target_id": tooled_door_id,
+		"target_type": "map_object",
+		"display_name": "缺工具测试门",
+		"kind": "door",
+		"anchor": tooled_door_grid.duplicate(true),
+		"cells": [tooled_door_grid.duplicate(true)],
+		"door": tooled_door_summary.duplicate(true),
+	}
 	map["interaction_targets"] = interaction_targets
 	var door_objects: Array = _array_or_empty(map.get("door_objects", [])).duplicate(true)
 	door_objects.append(door_summary.duplicate(true))
 	door_objects.append(keyed_door_summary.duplicate(true))
+	door_objects.append(locked_door_summary.duplicate(true))
+	door_objects.append(tooled_door_summary.duplicate(true))
 	map["door_objects"] = door_objects
 	game_root.world_result["map"] = map
 	game_root.simulation.configure_map_interactions(interaction_targets)
@@ -618,17 +657,7 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 			"pickup": "target_not_pickup",
 			"open_container": "target_not_container",
 		})
-	var keyed_metadata := {
-		"target_type": "map_object",
-		"target_id": keyed_door_id,
-		"target_kind": "door",
-		"door": keyed_door_summary.duplicate(true),
-	}
-	var keyed_door_node := Node3D.new()
-	keyed_door_node.name = "MapObject_%s" % keyed_door_id
-	keyed_door_node.position = Vector3(float(keyed_door_grid["x"]), 0.18, float(keyed_door_grid["z"]))
-	keyed_door_node.set_meta("interaction_target", keyed_metadata)
-	_add_pickable_smoke_box(keyed_door_node, keyed_metadata)
+	var keyed_door_node := _temporary_door_node(keyed_door_id, keyed_door_grid, keyed_door_summary)
 	game_root.world_container.add_child(keyed_door_node)
 	var keyed_selection: Dictionary = game_root.select_interaction_node(keyed_door_node)
 	if not bool(keyed_selection.get("success", false)):
@@ -639,6 +668,43 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 			"pickup": "target_not_pickup",
 			"open_container": "target_not_container",
 		})
+	var locked_door_node := _temporary_door_node(locked_door_id, locked_door_grid, locked_door_summary)
+	game_root.world_container.add_child(locked_door_node)
+	var locked_selection: Dictionary = game_root.select_interaction_node(locked_door_node)
+	if not bool(locked_selection.get("success", false)):
+		errors.append("locked door selection for context menu failed: %s" % locked_selection.get("prompt", {}).get("reason", "unknown"))
+	else:
+		_expect_interaction_menu_options(errors, game_root, "locked door", ["inspect"], {
+			"door_toggle": "door_locked",
+			"pickup": "target_not_pickup",
+			"open_container": "target_not_container",
+		})
+	var tooled_door_node := _temporary_door_node(tooled_door_id, tooled_door_grid, tooled_door_summary)
+	game_root.world_container.add_child(tooled_door_node)
+	var tooled_selection: Dictionary = game_root.select_interaction_node(tooled_door_node)
+	if not bool(tooled_selection.get("success", false)):
+		errors.append("tool-locked door selection for context menu failed: %s" % tooled_selection.get("prompt", {}).get("reason", "unknown"))
+	else:
+		_expect_interaction_menu_options(errors, game_root, "tool-locked door", ["inspect"], {
+			"door_toggle": "door_tool_missing",
+			"pickup": "target_not_pickup",
+			"open_container": "target_not_container",
+		})
+
+
+func _temporary_door_node(door_id: String, grid: Dictionary, door_summary: Dictionary) -> Node3D:
+	var metadata := {
+		"target_type": "map_object",
+		"target_id": door_id,
+		"target_kind": "door",
+		"door": door_summary.duplicate(true),
+	}
+	var door_node := Node3D.new()
+	door_node.name = "MapObject_%s" % door_id
+	door_node.position = Vector3(float(grid.get("x", 0)), 0.18, float(grid.get("z", 0)))
+	door_node.set_meta("interaction_target", metadata)
+	_add_pickable_smoke_box(door_node, metadata)
+	return door_node
 
 
 func _expect_transition_hover_diagnostics(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
@@ -680,6 +746,35 @@ func _expect_transition_hover_diagnostics(errors: Array[String], game_root: Node
 		errors.append("transition selection for context menu failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
 	else:
 		_expect_interaction_menu_options(errors, game_root, "transition", ["enter_subscene", "inspect"], {
+			"pickup": "target_not_pickup",
+			"open_container": "target_not_container",
+		})
+	var flagged_transition_id := "player_interaction_smoke_flagged_transition"
+	var map: Dictionary = _dictionary_or_empty(game_root.world_result.get("map", {})).duplicate(true)
+	var interaction_targets: Dictionary = _dictionary_or_empty(map.get("interaction_targets", {})).duplicate(true)
+	interaction_targets[flagged_transition_id] = {
+		"target_id": flagged_transition_id,
+		"target_type": "map_object",
+		"display_name": "缺状态测试入口",
+		"kind": "enter_subscene",
+		"anchor": {"x": 26, "y": 0, "z": 39},
+		"cells": [{"x": 26, "y": 0, "z": 39}],
+		"target_map_id": "survivor_outpost_01_interior",
+		"target_entry_point_id": "default_entry",
+		"required_world_flags": ["player_interaction_smoke_flag"],
+	}
+	map["interaction_targets"] = interaction_targets
+	game_root.world_result["map"] = map
+	game_root.simulation.configure_map_interactions(interaction_targets)
+	var flagged_selection: Dictionary = game_root.select_interaction_target({
+		"target_type": "map_object",
+		"target_id": flagged_transition_id,
+	})
+	if not bool(flagged_selection.get("success", false)):
+		errors.append("flag-gated transition selection for context menu failed: %s" % flagged_selection.get("prompt", {}).get("reason", "unknown"))
+	else:
+		_expect_interaction_menu_options(errors, game_root, "flag-gated transition", ["inspect"], {
+			"enter_subscene": "scene_transition_world_flag_missing",
 			"pickup": "target_not_pickup",
 			"open_container": "target_not_container",
 		})
