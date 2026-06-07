@@ -9,7 +9,9 @@ const SaveService = preload("res://scripts/app/save_service.gd")
 const SAVE_ROOT := "user://main_menu_smoke_saves"
 const SAVE_SLOT := "continue_slot"
 const SECOND_SAVE_SLOT := "older_slot"
-const BROKEN_SAVE_SLOT := "broken_slot"
+const BROKEN_SCHEMA_SLOT := "broken_schema_slot"
+const BROKEN_JSON_SLOT := "broken_json_slot"
+const MISSING_RUNTIME_SLOT := "missing_runtime_slot"
 const SECOND_SAVE_NAME := "旧营地存档"
 const RENAMED_SAVE_NAME := "重命名后的继续存档"
 
@@ -38,14 +40,18 @@ func _run() -> void:
 
 	_write_continue_save(errors, SECOND_SAVE_SLOT, 2, SECOND_SAVE_NAME)
 	_write_continue_save(errors, SAVE_SLOT, 1)
-	_write_broken_save()
+	_write_broken_schema_save()
+	_write_broken_json_save()
+	_write_missing_runtime_save()
 	var continue_menu: Control = MAIN_MENU_SCENE.instantiate()
 	get_root().add_child(continue_menu)
 	await process_frame
 	_assert_continue_enabled_with_save(errors, continue_menu)
 	_assert_slot_metadata(errors, continue_menu)
 	await _assert_slot_rename(errors, continue_menu, SAVE_SLOT, RENAMED_SAVE_NAME)
-	await _assert_broken_slot_feedback(errors, continue_menu)
+	await _assert_broken_slot_feedback(errors, continue_menu, BROKEN_SCHEMA_SLOT, "save_schema_unsupported", "schema", "损坏测试存档", "存档版本不兼容")
+	await _assert_broken_slot_feedback(errors, continue_menu, BROKEN_JSON_SLOT, "save_json_invalid", "json", "存档 broken_json_slot", "存档 JSON 损坏")
+	await _assert_broken_slot_feedback(errors, continue_menu, MISSING_RUNTIME_SLOT, "runtime_snapshot_missing", "snapshot", "缺快照测试存档", "存档缺少运行时快照")
 	await _select_slot(errors, continue_menu, SAVE_SLOT)
 	_assert_new_game_overwrite_confirmation(errors, continue_menu)
 	await _select_slot(errors, continue_menu, SECOND_SAVE_SLOT)
@@ -140,16 +146,41 @@ func _write_continue_save(errors: Array[String], slot_id: String, player_x_offse
 		errors.append("failed to write %s save for main menu smoke" % slot_id)
 
 
-func _write_broken_save() -> void:
+func _write_broken_schema_save() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_ROOT))
-	var file := FileAccess.open(SAVE_ROOT.path_join("%s.json" % BROKEN_SAVE_SLOT), FileAccess.WRITE)
+	var file := FileAccess.open(SAVE_ROOT.path_join("%s.json" % BROKEN_SCHEMA_SLOT), FileAccess.WRITE)
 	if file == null:
 		return
 	file.store_string(JSON.stringify({
 		"schema_version": 999,
-		"slot_id": BROKEN_SAVE_SLOT,
+		"slot_id": BROKEN_SCHEMA_SLOT,
 		"metadata": {
 			"slot_display_name": "损坏测试存档",
+		},
+		"runtime_snapshot": {},
+	}, "\t"))
+	file.close()
+
+
+func _write_broken_json_save() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_ROOT))
+	var file := FileAccess.open(SAVE_ROOT.path_join("%s.json" % BROKEN_JSON_SLOT), FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string("{ this is not valid json")
+	file.close()
+
+
+func _write_missing_runtime_save() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVE_ROOT))
+	var file := FileAccess.open(SAVE_ROOT.path_join("%s.json" % MISSING_RUNTIME_SLOT), FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify({
+		"schema_version": 1,
+		"slot_id": MISSING_RUNTIME_SLOT,
+		"metadata": {
+			"slot_display_name": "缺快照测试存档",
 		},
 		"runtime_snapshot": {},
 	}, "\t"))
@@ -174,8 +205,8 @@ func _assert_continue_enabled_with_save(errors: Array[String], menu: Control) ->
 func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
 	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
 	var slots: Array = _array_or_empty(snapshot.get("slots", []))
-	if slots.size() != 3:
-		errors.append("main menu should list three smoke save slots including broken slot: %s" % snapshot)
+	if slots.size() != 5:
+		errors.append("main menu should list five smoke save slots including broken slots: %s" % snapshot)
 	for slot in slots:
 		var summary: Dictionary = _dictionary_or_empty(slot)
 		if str(summary.get("slot_display_name", "")).is_empty():
@@ -252,23 +283,28 @@ func _assert_slot_rename(errors: Array[String], menu: Control, slot_id: String, 
 		errors.append("renamed save metadata should preserve thumbnail asset: %s" % loaded)
 
 
-func _assert_broken_slot_feedback(errors: Array[String], menu: Control) -> void:
-	await _select_slot(errors, menu, BROKEN_SAVE_SLOT)
+func _assert_broken_slot_feedback(errors: Array[String], menu: Control, slot_id: String, expected_reason: String, expected_category: String, expected_name: String, expected_text: String) -> void:
+	await _select_slot(errors, menu, slot_id)
 	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
 	if bool(snapshot.get("continue_available", true)):
 		errors.append("broken save slot should not be continueable: %s" % snapshot)
-	if str(snapshot.get("continue_reason", "")) != "save_schema_unsupported":
-		errors.append("broken save should expose schema reason: %s" % snapshot)
+	if str(snapshot.get("continue_reason", "")) != expected_reason:
+		errors.append("broken save should expose %s reason: %s" % [expected_reason, snapshot])
+	var selected_summary: Dictionary = _dictionary_or_empty(snapshot.get("selected_slot_summary", {}))
+	if str(selected_summary.get("failure_category", "")) != expected_category:
+		errors.append("broken save should expose failure category %s: %s" % [expected_category, selected_summary])
+	if bool(selected_summary.get("loadable", true)) or not bool(selected_summary.get("can_delete", false)) or not bool(selected_summary.get("recoverable", false)):
+		errors.append("broken save should expose recovery state: %s" % selected_summary)
 	var line: Label = menu.find_child("SaveSlotSummaryLine", true, false) as Label
-	if line == null or not line.text.contains("损坏测试存档") or not line.text.contains("存档版本不兼容"):
-		errors.append("broken save summary should include slot name and explain incompatible schema")
+	if line == null or not line.text.contains(expected_name) or not line.text.contains(expected_text):
+		errors.append("broken save summary should include slot name and explain reason %s: %s" % [expected_reason, line.text if line != null else ""])
 	var continue_button: Button = menu.find_child("ContinueButton", true, false) as Button
 	if continue_button == null or not continue_button.disabled:
 		errors.append("continue button should be disabled for broken save")
 	var delete_button: Button = menu.find_child("DeleteSlotButton", true, false) as Button
 	if delete_button == null or delete_button.disabled:
 		errors.append("delete button should remain enabled for broken save cleanup")
-	_assert_delete_slot(errors, menu, BROKEN_SAVE_SLOT)
+	_assert_delete_slot(errors, menu, slot_id)
 	await menu.get_tree().process_frame
 
 
@@ -358,7 +394,9 @@ func _option_contains_text(option: OptionButton, needle: String) -> bool:
 func _clear_smoke_save() -> void:
 	SaveService.new(SAVE_ROOT).delete_snapshot(SAVE_SLOT)
 	SaveService.new(SAVE_ROOT).delete_snapshot(SECOND_SAVE_SLOT)
-	SaveService.new(SAVE_ROOT).delete_snapshot(BROKEN_SAVE_SLOT)
+	SaveService.new(SAVE_ROOT).delete_snapshot(BROKEN_SCHEMA_SLOT)
+	SaveService.new(SAVE_ROOT).delete_snapshot(BROKEN_JSON_SLOT)
+	SaveService.new(SAVE_ROOT).delete_snapshot(MISSING_RUNTIME_SLOT)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

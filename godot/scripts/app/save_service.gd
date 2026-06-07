@@ -68,7 +68,7 @@ func slot_summary(slot_id: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return _failed_slot(slot_key, path, "save_file_unreadable")
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	var parsed: Variant = _parse_json_silent(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return _failed_slot(slot_key, path, "save_json_invalid")
 	var envelope: Dictionary = parsed
@@ -83,6 +83,10 @@ func slot_summary(slot_id: String) -> Dictionary:
 		metadata = _metadata_from_snapshot(slot_key, snapshot)
 	var output := {
 		"ok": true,
+		"loadable": true,
+		"can_delete": true,
+		"recoverable": false,
+		"failure_category": "",
 		"slot_id": str(envelope.get("slot_id", slot_key)),
 		"slot_display_name": _slot_display_name(str(envelope.get("slot_id", slot_key)), metadata),
 		"path": path,
@@ -106,7 +110,7 @@ func load_snapshot(slot_id: String) -> Dictionary:
 	if file == null:
 		return _failed("save_file_unreadable")
 
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	var parsed: Variant = _parse_json_silent(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return _failed("save_json_invalid")
 
@@ -139,7 +143,7 @@ func rename_slot(slot_id: String, display_name: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return _failed("save_file_unreadable")
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	var parsed: Variant = _parse_json_silent(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return _failed("save_json_invalid")
 	var envelope: Dictionary = parsed
@@ -178,6 +182,13 @@ func _slot_path(slot_id: String) -> String:
 
 func _slot_key(slot_id: String) -> String:
 	return slot_id.strip_edges().replace("\\", "_").replace("/", "_").replace(":", "_")
+
+
+func _parse_json_silent(text: String) -> Variant:
+	var parser := JSON.new()
+	if parser.parse(text) != OK:
+		return null
+	return parser.data
 
 
 func _metadata_from_snapshot(slot_id: String, snapshot: Dictionary) -> Dictionary:
@@ -245,12 +256,35 @@ func _failed(reason: String) -> Dictionary:
 func _failed_slot(slot_id: String, path: String, reason: String, metadata: Dictionary = {}) -> Dictionary:
 	return {
 		"ok": false,
+		"loadable": false,
+		"can_delete": true,
+		"recoverable": true,
+		"failure_category": _failure_category(reason),
+		"metadata_recovered": not metadata.is_empty(),
 		"slot_id": slot_id,
 		"slot_display_name": _slot_display_name(slot_id, metadata),
 		"thumbnail_asset": _dictionary_or_empty(metadata.get("thumbnail_asset", _save_fallback_thumbnail_asset())),
 		"path": path,
 		"reason": reason,
 	}
+
+
+func _failure_category(reason: String) -> String:
+	match reason:
+		"save_file_missing":
+			return "missing"
+		"save_file_unreadable":
+			return "io"
+		"save_json_invalid":
+			return "json"
+		"save_schema_unsupported":
+			return "schema"
+		"runtime_snapshot_missing":
+			return "snapshot"
+		"slot_id_empty":
+			return "slot"
+		_:
+			return "unknown"
 
 
 func _load_metadata(slot_id: String, envelope: Dictionary, runtime_snapshot: Dictionary) -> Dictionary:
