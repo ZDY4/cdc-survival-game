@@ -628,7 +628,7 @@ func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
 		parts.append("Context %s/%d" % [str(top_context.get("id", "")), int(context_menu.get("count", 0))])
 	var tooltip: Dictionary = _dictionary_or_empty(runtime_control.get("tooltip", {}))
 	if bool(tooltip.get("active", false)):
-		parts.append("Tip %s/%s" % [str(tooltip.get("owner_panel", "")), str(tooltip.get("source_name", ""))])
+		parts.append(_tooltip_runtime_token(tooltip))
 	var drag: Dictionary = _dictionary_or_empty(runtime_control.get("drag", {}))
 	if bool(drag.get("active", false)):
 		var target: Dictionary = _dictionary_or_empty(drag.get("target", {}))
@@ -1497,7 +1497,7 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 		parts.append("Context %s/%d" % [str(top_context.get("id", "")), int(context_menu.get("count", 0))])
 	var tooltip: Dictionary = _dictionary_or_empty(control_data.get("tooltip", {}))
 	if bool(tooltip.get("active", false)):
-		parts.append("Tip %s/%s" % [str(tooltip.get("owner_panel", "")), str(tooltip.get("source_name", ""))])
+		parts.append(_tooltip_runtime_token(tooltip))
 	var drag: Dictionary = _dictionary_or_empty(control_data.get("drag", {}))
 	if bool(drag.get("active", false)):
 		var target: Dictionary = _dictionary_or_empty(drag.get("target", {}))
@@ -1545,6 +1545,14 @@ func _append_menu_event_tokens(parts: Array[String], menu_state: Dictionary) -> 
 	var context_menu_event: Dictionary = _dictionary_or_empty(menu_state.get("context_menu_event", {}))
 	if not context_menu_event.is_empty():
 		parts.append("ContextEvent %s:%s" % [str(context_menu_event.get("event", "")), str(context_menu_event.get("panel_id", ""))])
+
+
+func _tooltip_runtime_token(tooltip: Dictionary) -> String:
+	var position: Dictionary = _dictionary_or_empty(tooltip.get("screen_position", {}))
+	var position_text := ""
+	if not position.is_empty():
+		position_text = "@%d,%d" % [int(round(float(position.get("x", 0.0)))), int(round(float(position.get("y", 0.0))))]
+	return "Tip %s/%s%s" % [str(tooltip.get("owner_panel", "")), str(tooltip.get("source_name", "")), position_text]
 
 
 func _selection_debug_control_text(value: Variant) -> String:

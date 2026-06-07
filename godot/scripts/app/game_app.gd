@@ -610,30 +610,19 @@ func context_menu_snapshot() -> Dictionary:
 
 
 func hover_tooltip_snapshot(control: Control = null) -> Dictionary:
+	var viewport := get_viewport()
+	var query_source := "explicit" if control != null else "hovered"
 	var source := control
 	if source == null:
-		var viewport := get_viewport()
 		source = viewport.gui_get_hovered_control() if viewport != null else null
 	if source == null:
-		return {"active": false, "source_path": "", "source_name": "", "source_class": "", "owner_panel": "", "text": ""}
+		return _tooltip_snapshot_base(null, null, query_source, "no_source")
 	var tooltip_source := _tooltip_source_for_control(source)
 	if tooltip_source == null:
-		return {
-			"active": false,
-			"source_path": str(source.get_path()),
-			"source_name": str(source.name),
-			"source_class": source.get_class(),
-			"owner_panel": _owner_panel_for_control(source),
-			"text": "",
-		}
-	return {
-		"active": true,
-		"source_path": str(tooltip_source.get_path()),
-		"source_name": str(tooltip_source.name),
-		"source_class": tooltip_source.get_class(),
-		"owner_panel": _owner_panel_for_control(tooltip_source),
-		"text": str(tooltip_source.tooltip_text),
-	}
+		return _tooltip_snapshot_base(source, null, query_source, "no_text")
+	var snapshot := _tooltip_snapshot_base(source, tooltip_source, query_source, "active")
+	snapshot["active"] = true
+	return snapshot
 
 
 func hotbar_hit_test_snapshot(screen_position: Vector2 = Vector2(-1.0, -1.0)) -> Dictionary:
@@ -788,6 +777,13 @@ func ui_layer_stack_snapshot(drag_data: Variant = {}, drag_hover_target: Control
 			"blocks_gameplay": false,
 			"source": "tooltip",
 			"text": str(tooltip.get("text", "")),
+			"source_path": str(tooltip.get("source_path", "")),
+			"source_name": str(tooltip.get("source_name", "")),
+			"screen_position": _dictionary_or_empty(tooltip.get("screen_position", {})).duplicate(true),
+			"source_rect": _dictionary_or_empty(tooltip.get("source_rect", {})).duplicate(true),
+			"viewport_size": _dictionary_or_empty(tooltip.get("viewport_size", {})).duplicate(true),
+			"lifecycle_state": str(tooltip.get("lifecycle_state", "")),
+			"delay_policy": str(tooltip.get("delay_policy", "")),
 		})
 	layers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var ap := int(a.get("priority", 0))
@@ -1323,6 +1319,61 @@ func _last_pathfinding_visited_cell_count() -> int:
 	var hover: Dictionary = runtime_hover_snapshot()
 	var move_preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
 	return int(move_preview.get("visited_cell_count", 0))
+
+
+func _tooltip_snapshot_base(source: Control, tooltip_source: Control, query_source: String, lifecycle_state: String) -> Dictionary:
+	var viewport := get_viewport()
+	var mouse_position := viewport.get_mouse_position() if viewport != null else Vector2.ZERO
+	var viewport_size := viewport.get_visible_rect().size if viewport != null else Vector2.ZERO
+	var resolved_source := tooltip_source if tooltip_source != null else source
+	var button := resolved_source as BaseButton
+	return {
+		"active": lifecycle_state == "active",
+		"lifecycle_state": lifecycle_state,
+		"query_source": query_source,
+		"requested_source_path": str(source.get_path()) if source != null else "",
+		"requested_source_name": str(source.name) if source != null else "",
+		"requested_source_class": source.get_class() if source != null else "",
+		"source_path": str(resolved_source.get_path()) if resolved_source != null else "",
+		"source_name": str(resolved_source.name) if resolved_source != null else "",
+		"source_class": resolved_source.get_class() if resolved_source != null else "",
+		"owner_panel": _owner_panel_for_control(resolved_source) if resolved_source != null else "",
+		"text": str(resolved_source.tooltip_text) if resolved_source != null else "",
+		"text_length": str(resolved_source.tooltip_text).length() if resolved_source != null else 0,
+		"screen_position": _vector2_snapshot(mouse_position),
+		"viewport_size": _vector2_snapshot(viewport_size),
+		"source_rect": _control_rect_snapshot(resolved_source),
+		"requested_source_rect": _control_rect_snapshot(source),
+		"visible": resolved_source != null and resolved_source.is_visible_in_tree(),
+		"disabled": button != null and button.disabled,
+		"mouse_filter": _mouse_filter_name(resolved_source.mouse_filter) if resolved_source != null else "",
+		"mouse_filter_id": int(resolved_source.mouse_filter) if resolved_source != null else -1,
+		"mouse_blocks_world": resolved_source != null and resolved_source.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"delay_policy": "godot_default",
+		"delay_ms": -1,
+	}
+
+
+func _vector2_snapshot(value: Vector2) -> Dictionary:
+	return {"x": value.x, "y": value.y}
+
+
+func _control_rect_snapshot(control: Control) -> Dictionary:
+	if control == null or not control.is_inside_tree():
+		return {}
+	var rect := control.get_global_rect()
+	return {"x": rect.position.x, "y": rect.position.y, "w": rect.size.x, "h": rect.size.y}
+
+
+func _mouse_filter_name(mouse_filter: int) -> String:
+	match mouse_filter:
+		Control.MOUSE_FILTER_STOP:
+			return "stop"
+		Control.MOUSE_FILTER_PASS:
+			return "pass"
+		Control.MOUSE_FILTER_IGNORE:
+			return "ignore"
+	return "unknown"
 
 
 func _tooltip_source_for_control(control: Control) -> Control:

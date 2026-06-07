@@ -1647,6 +1647,15 @@ func _assert_ui_layer_stack(errors: Array[String], game_root: Node, drag_data: D
 			errors.append("%s: UI layer stack should include tooltip layer: %s" % [context, snapshot])
 		elif bool(tooltip_layer.get("blocks_gameplay", true)) or bool(tooltip_layer.get("mouse_blocks_world", true)):
 			errors.append("%s: tooltip layer should be non-blocking: %s" % [context, tooltip_layer])
+		else:
+			var tooltip_rect: Dictionary = _dictionary_or_empty(tooltip_layer.get("source_rect", {}))
+			var tooltip_position: Dictionary = _dictionary_or_empty(tooltip_layer.get("screen_position", {}))
+			if tooltip_rect.is_empty() or not tooltip_rect.has("w") or not tooltip_rect.has("h"):
+				errors.append("%s: tooltip layer should expose source rect: %s" % [context, tooltip_layer])
+			if tooltip_position.is_empty() or not tooltip_position.has("x") or not tooltip_position.has("y"):
+				errors.append("%s: tooltip layer should expose screen position: %s" % [context, tooltip_layer])
+			if str(tooltip_layer.get("delay_policy", "")) != "godot_default":
+				errors.append("%s: tooltip layer should expose delay policy: %s" % [context, tooltip_layer])
 	if not drag_data.is_empty():
 		var drag_layer: Dictionary = _layer_by_id(_array_or_empty(snapshot.get("layers", [])), "drag_preview")
 		if drag_layer.is_empty():
@@ -2101,6 +2110,19 @@ func _assert_hover_tooltip_snapshot(errors: Array[String], game_root: Node, cont
 		errors.append("%s: tooltip text should include %s, got %s" % [context, expected_text, snapshot])
 	if str(snapshot.get("source_name", "")).is_empty() or str(snapshot.get("source_path", "")).is_empty():
 		errors.append("%s: tooltip snapshot should expose source identity: %s" % [context, snapshot])
+	if str(snapshot.get("lifecycle_state", "")) != "active":
+		errors.append("%s: tooltip snapshot should expose active lifecycle: %s" % [context, snapshot])
+	if str(snapshot.get("delay_policy", "")) != "godot_default" or int(snapshot.get("delay_ms", 0)) != -1:
+		errors.append("%s: tooltip snapshot should expose Godot default delay policy: %s" % [context, snapshot])
+	var source_rect: Dictionary = _dictionary_or_empty(snapshot.get("source_rect", {}))
+	if source_rect.is_empty() or float(source_rect.get("w", 0.0)) <= 0.0 or float(source_rect.get("h", 0.0)) <= 0.0:
+		errors.append("%s: tooltip snapshot should expose non-empty source rect: %s" % [context, snapshot])
+	var screen_position: Dictionary = _dictionary_or_empty(snapshot.get("screen_position", {}))
+	var viewport_size: Dictionary = _dictionary_or_empty(snapshot.get("viewport_size", {}))
+	if not screen_position.has("x") or not screen_position.has("y") or float(viewport_size.get("x", 0.0)) <= 0.0 or float(viewport_size.get("y", 0.0)) <= 0.0:
+		errors.append("%s: tooltip snapshot should expose screen and viewport geometry: %s" % [context, snapshot])
+	if not snapshot.has("visible") or not snapshot.has("mouse_filter") or not snapshot.has("mouse_blocks_world"):
+		errors.append("%s: tooltip snapshot should expose visibility and mouse filter diagnostics: %s" % [context, snapshot])
 	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
 	var runtime_tooltip: Dictionary = _dictionary_or_empty(runtime.get("tooltip", {}))
 	if not runtime_tooltip.has("active") or not runtime_tooltip.has("text"):
