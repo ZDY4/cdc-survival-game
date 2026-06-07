@@ -390,7 +390,12 @@ func modal_stack_snapshot() -> Dictionary:
 
 func menu_state_snapshot() -> Dictionary:
 	if panel_controller != null and panel_controller.has_method("menu_state_snapshot"):
-		return _dictionary_or_empty(panel_controller.call("menu_state_snapshot"))
+		var panel_snapshot: Dictionary = _dictionary_or_empty(panel_controller.call("menu_state_snapshot")).duplicate(true)
+		var panel_priority: Array = _array_or_empty(panel_snapshot.get("close_priority", []))
+		panel_snapshot["panel_close_priority"] = panel_priority.duplicate(true)
+		panel_snapshot["close_priority"] = _root_close_priority(panel_priority)
+		return panel_snapshot
+	var fallback_priority: Array[String] = ["settings"]
 	return {
 		"active_stage_panel": "",
 		"stage_panel_open": false,
@@ -401,8 +406,41 @@ func menu_state_snapshot() -> Dictionary:
 		"open_panel_count": 0,
 		"gameplay_blocked": false,
 		"blocker": {},
-		"close_priority": ["settings"],
+		"panel_close_priority": fallback_priority.duplicate(true),
+		"close_priority": _root_close_priority(fallback_priority),
 	}
+
+
+func _root_close_priority(panel_priority: Array = []) -> Array[String]:
+	var priority: Array[String] = []
+	if is_debug_console_open():
+		priority.append("debug_console")
+	var modal_name := _panel_modal_blocker_name()
+	if not modal_name.is_empty():
+		priority.append(modal_name)
+	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
+		priority.append("interaction_menu")
+	if _world_action_presenter_blocks_input():
+		priority.append("world_action_presenter")
+	if not active_skill_targeting.is_empty():
+		priority.append("skill_targeting")
+	if runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()):
+		priority.append("selection")
+	var has_pending := false
+	var pending_state: Dictionary = _runtime_pending_state_snapshot()
+	if not _dictionary_or_empty(pending_state.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_interaction", {})).is_empty():
+		has_pending = true
+	for item in panel_priority:
+		var id := str(item)
+		if id == "settings" and has_pending:
+			continue
+		if not id.is_empty() and not priority.has(id):
+			priority.append(id)
+	if has_pending:
+		priority.append("pending")
+	if priority.is_empty():
+		priority.append("settings")
+	return priority
 
 
 func ui_theme_snapshot() -> Dictionary:

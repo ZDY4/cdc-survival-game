@@ -134,7 +134,7 @@
 
 - 已迁移统一命令返回结构第一版：`success`、`kind`、`reason`、`events`、`turn_state`、`combat_state`、`runtime_snapshot_delta`、`ui_feedback`、`prompt`、`context_snapshot` 已稳定出现在 `Simulation.submit_player_command()` 的所有返回结果中，并由 `Interaction` smoke 覆盖。
 - 部分迁移命令 reject 语义：无 actor、非玩家 actor、玩家回合关闭、未知交互目标、未知攻击目标和 AP 不足移动排队已有稳定 reason，并通过 `player_command_rejected` / `ui_feedback` payload 由 `Interaction` / `Movement` smoke 覆盖；移动阻挡、跨层/LOS 攻击、材料/技能/资金/数量等领域失败已有分散 smoke 覆盖；常见移动/交互/战斗/技能/制作/容器/交易失败码已有 HUD 中文反馈映射，并由 `UI` smoke 覆盖典型攻击和制作拒绝。待补统一覆盖目标不可见、UI modal 阻塞、缺工具、完整禁用 reason 和跨系统 reason 文档。
-- 可取消命令分类第一版已迁移：`wait` 保留为推进 pending 的命令，新的 `move` / `interact` / `attack` 目标命令会统一取消旧 pending movement / pending interaction，清空旧 interaction prompt，发出 `movement_cancelled` / `interaction_cancelled` / `pending_cancelled` 并在命令结果中暴露 `cancelled_pending`；已由 `Movement` / `PlayerInteraction` / `Interaction` smoke 覆盖。待补 targeting、dialogue、trade、container、quantity modal、menu panel 的完整关闭优先级。
+- 可取消命令分类第一版已迁移：`wait` 保留为推进 pending 的命令，新的 `move` / `interact` / `attack` 目标命令会统一取消旧 pending movement / pending interaction，清空旧 interaction prompt，发出 `movement_cancelled` / `interaction_cancelled` / `pending_cancelled` 并在命令结果中暴露 `cancelled_pending`；root close priority snapshot 第一版已补齐 debug console、modal、interaction menu、world action presenter、skill targeting、selection、panel close priority 和 pending 的真实关闭顺序，并由 `UIToggle` smoke 覆盖 interaction menu / stage panel / pending 代表路径；已由 `Movement` / `PlayerInteraction` / `Interaction` / `UIToggle` smoke 覆盖。待补 quantity modal、更多 menu panel 组合和关闭优先级 HUD polish。
 - 待补命令审计：smoke 中应能断言每个玩家动作只通过 `Simulation.submit_player_command()` 或 core service 修改业务状态。
 
 ## 2. 回合、AP 与时间推进

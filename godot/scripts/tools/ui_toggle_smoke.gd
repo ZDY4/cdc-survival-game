@@ -568,6 +568,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			if not str(disabled_container_option.tooltip_text).contains("target_not_container"):
 				errors.append("disabled interaction menu option tooltip should include reason")
 		_expect_blocker(errors, game_root, "interaction_menu", "open interaction menu blocker")
+		_assert_close_priority(errors, game_root, ["interaction_menu"], "interaction menu close priority")
 		_assert_ui_layer_stack(errors, game_root, {}, null, null, "interaction_menu", true, "interaction menu layer stack")
 		_press_key(game_root, KEY_ESCAPE)
 		if bool(game_root.hud.is_interaction_menu_open()):
@@ -723,6 +724,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		"target_position": far_target.duplicate(true),
 		"path": [_dictionary_or_empty(_player(game_root).get("grid_position", {})).duplicate(true), far_target.duplicate(true)],
 	}
+	_assert_close_priority(errors, game_root, ["pending"], "pending movement close priority")
 	var space_cancel_result: Dictionary = game_root.press_space_action() if game_root.has_method("press_space_action") else {}
 	if not game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
 		errors.append("Space should clear pending movement")
@@ -925,6 +927,10 @@ func _assert_menu_state(errors: Array[String], game_root: Node, expected_stage: 
 		errors.append("%s: runtime menu state should match app menu state: %s" % [context, runtime_menu])
 	if expected_blocked and _array_or_empty(snapshot.get("close_priority", [])).is_empty():
 		errors.append("%s: blocked menu state should expose close priority: %s" % [context, snapshot])
+	if expected_blocked and not expected_stage.is_empty():
+		var panel_priority: Array = _array_or_empty(snapshot.get("panel_close_priority", []))
+		if panel_priority.is_empty() or str(panel_priority[0]) != "stage:%s" % expected_stage:
+			errors.append("%s: menu snapshot should expose panel close priority first stage panel: %s" % [context, snapshot])
 	if not expected_event.is_empty() or not expected_panel.is_empty():
 		var latest: Dictionary = _dictionary_or_empty(snapshot.get("latest_event", {}))
 		if str(latest.get("event", "")) != expected_event or str(latest.get("panel_id", "")) != expected_panel:
@@ -935,6 +941,26 @@ func _assert_menu_state(errors: Array[String], game_root: Node, expected_stage: 
 		var runtime_latest: Dictionary = _dictionary_or_empty(runtime_menu.get("latest_event", {}))
 		if str(runtime_latest.get("event", "")) != expected_event or str(runtime_latest.get("panel_id", "")) != expected_panel:
 			errors.append("%s: runtime menu latest panel event expected %s:%s, got %s" % [context, expected_event, expected_panel, runtime_menu])
+
+
+func _assert_close_priority(errors: Array[String], game_root: Node, expected_prefix: Array[String], context: String) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot() if game_root.has_method("menu_state_snapshot") else {})
+	var priority: Array = _array_or_empty(snapshot.get("close_priority", []))
+	if priority.size() < expected_prefix.size():
+		errors.append("%s: close priority too short, expected prefix %s got %s" % [context, expected_prefix, priority])
+		return
+	for index in range(expected_prefix.size()):
+		if str(priority[index]) != expected_prefix[index]:
+			errors.append("%s: close priority expected %s at %d, got %s" % [context, expected_prefix[index], index, priority])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
+	var runtime_priority: Array = _array_or_empty(runtime_menu.get("close_priority", []))
+	if runtime_priority.size() < expected_prefix.size():
+		errors.append("%s: runtime close priority too short, expected prefix %s got %s" % [context, expected_prefix, runtime_priority])
+		return
+	for index in range(expected_prefix.size()):
+		if str(runtime_priority[index]) != expected_prefix[index]:
+			errors.append("%s: runtime close priority expected %s at %d, got %s" % [context, expected_prefix[index], index, runtime_priority])
 
 
 func _assert_debug_overlay_line(errors: Array[String], game_root: Node, expected: String, context: String) -> void:
