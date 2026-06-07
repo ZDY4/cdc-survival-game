@@ -83,7 +83,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		elif not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after visible pickup selection")
 		_expect_right_click_menu_buttons(errors, game_root)
-	_expect_friendly_and_map_container_context_menus(errors, game_root)
+	await _expect_friendly_neutral_and_map_container_context_menus(errors, game_root)
+	player_node = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		return ["missing generated player actor node after neutral context menu smoke"]
+	pickup_node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
+	if pickup_node == null:
+		return ["missing generated pickup node after neutral context menu smoke"]
+	visual_pickup_node = game_root.find_child("survivor_outpost_01_pickup_medkit", true, false)
 
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if camera == null:
@@ -353,7 +360,7 @@ func _expect_interaction_menu_options(
 	game_root.hud.hide_interaction_menu()
 
 
-func _expect_friendly_and_map_container_context_menus(errors: Array[String], game_root: Node) -> void:
+func _expect_friendly_neutral_and_map_container_context_menus(errors: Array[String], game_root: Node) -> void:
 	var trader_node: Node = game_root.find_child("Actor_trader_lao_wang_2", true, false)
 	if trader_node == null:
 		errors.append("friendly actor context menu smoke should find trader actor")
@@ -363,6 +370,7 @@ func _expect_friendly_and_map_container_context_menus(errors: Array[String], gam
 			errors.append("friendly actor selection for context menu failed: %s" % trader_selection.get("prompt", {}).get("reason", "unknown"))
 		else:
 			_expect_interaction_menu_options(errors, game_root, "friendly actor", ["talk"], {"attack": "target_not_hostile"})
+	await _expect_neutral_actor_context_menu(errors, game_root)
 	var container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_canteen_food_crate", true, false)
 	if container_node == null:
 		errors.append("map container context menu smoke should find canteen food crate")
@@ -377,6 +385,76 @@ func _expect_friendly_and_map_container_context_menus(errors: Array[String], gam
 				"attack": "target_not_actor",
 			})
 	game_root.clear_interaction_selection("context_menu_smoke_cleanup")
+
+
+func _expect_neutral_actor_context_menu(errors: Array[String], game_root: Node) -> void:
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("neutral actor context smoke missing player actor")
+		return
+	var player_grid: Dictionary = _player_grid(game_root)
+	var neutral_grid := _near_open_grid_from(player_grid, game_root.world_result.get("map", {}))
+	var neutral_id: int = game_root.simulation.register_actor({
+		"definition_id": "neutral_actor_context_smoke",
+		"display_name": "Neutral Context Smoke",
+		"kind": "npc",
+		"side": "neutral",
+		"group_id": "neutral",
+		"map_id": game_root.simulation.active_map_id,
+		"appearance_profile_id": "default_humanoid",
+		"model_asset": "preview_placeholders/characters/humanoid_mannequin.gltf",
+		"grid_position": GridCoord.from_dictionary(neutral_grid),
+		"ap": 0.0,
+		"turn_open": false,
+		"max_hp": 10.0,
+		"hp": 10.0,
+		"combat_attributes": {"evasion": 0.0},
+	})
+	game_root._rebuild_world_after_runtime_change()
+	await process_frame
+	var neutral_node: Node3D = game_root.find_child("Actor_neutral_actor_context_smoke_%d" % neutral_id, true, false) as Node3D
+	if neutral_node == null:
+		errors.append("neutral actor context smoke should render actor node")
+		_cleanup_neutral_actor_context_smoke(game_root, neutral_id)
+		return
+	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	if camera == null:
+		errors.append("neutral actor context smoke missing camera")
+		_cleanup_neutral_actor_context_smoke(game_root, neutral_id)
+		return
+	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(neutral_node.global_position))
+	if not bool(hover_result.get("success", false)):
+		errors.append("neutral actor hover raycast failed: %s" % hover_result.get("reason", "unknown"))
+	var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
+	if str(hover.get("target_category", "")) != "actor:neutral":
+		errors.append("neutral actor hover should expose actor:neutral category, got %s" % hover)
+	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
+	if str(prompt.get("primary_option_kind", "")) != "talk":
+		errors.append("neutral actor hover prompt should prefer talk: %s" % prompt)
+	var attack_preview: Dictionary = _dictionary_or_empty(hover.get("attack_preview", {}))
+	if not attack_preview.is_empty() and bool(attack_preview.get("can_attack", true)):
+		errors.append("neutral actor hover attack preview must not be attackable: %s" % attack_preview)
+	_expect_hover_target_outline(errors, game_root, "actor:neutral", str(neutral_id))
+	_expect_attack_marker_hidden(errors, game_root)
+	_expect_attack_outline_hidden(errors, game_root)
+	_expect_attack_range_markers_hidden(errors, game_root)
+	var selection: Dictionary = game_root.select_interaction_node(neutral_node)
+	if not bool(selection.get("success", false)):
+		errors.append("neutral actor selection for context menu failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
+	else:
+		var selection_prompt: Dictionary = _dictionary_or_empty(selection.get("prompt", {}))
+		if str(selection_prompt.get("primary_option_kind", "")) != "talk":
+			errors.append("neutral actor selection should keep talk as primary option: %s" % selection_prompt)
+		_expect_interaction_menu_options(errors, game_root, "neutral actor", ["talk"], {"attack": "target_not_hostile"})
+	_cleanup_neutral_actor_context_smoke(game_root, neutral_id)
+
+
+func _cleanup_neutral_actor_context_smoke(game_root: Node, neutral_id: int) -> void:
+	game_root.hud.hide_interaction_menu()
+	game_root.clear_interaction_selection("neutral_actor_context_smoke_cleanup")
+	if game_root.simulation.actor_registry.get_actor(neutral_id) != null:
+		game_root.simulation.actor_registry.unregister_actor(neutral_id)
+	game_root._rebuild_world_after_runtime_change()
 
 
 func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:

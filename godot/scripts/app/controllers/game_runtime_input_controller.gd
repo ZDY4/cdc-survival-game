@@ -861,14 +861,17 @@ func _set_hover_interaction(target_node: Node, world_position: Vector3, picking:
 			metadata = raw
 	metadata = _merge_world_interaction_target(metadata)
 	var target_id := str(metadata.get("target_id", ""))
+	if target_id.is_empty() and int(metadata.get("actor_id", 0)) > 0:
+		target_id = str(int(metadata.get("actor_id", 0)))
+		metadata["target_id"] = target_id
 	var target_name := str(metadata.get("target_name", metadata.get("display_name", "")))
 	if target_name.is_empty():
 		target_name = target_id
 	if target_name.is_empty() and target_node != null:
 		target_name = str(target_node.name)
 	var prompt: Dictionary = _hover_prompt_for_target(metadata)
-	var attack_preview: Dictionary = _attack_preview_for_target(metadata)
 	var target_category: String = _hover_target_category(metadata, prompt)
+	var attack_preview: Dictionary = _attack_preview_for_target(metadata) if str(prompt.get("primary_option_kind", "")) == "attack" else {}
 	_apply_hover_cursor_state({}, attack_preview)
 	_update_hover_target_outline(metadata, _grid_from_world_position(world_position), target_category, attack_preview)
 	return _replace_hover_state({
