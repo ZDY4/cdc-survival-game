@@ -528,6 +528,47 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("queue batch crafting should emit recipe_crafted for each crafted item")
 	if not _detail_text(game_root).contains("最大 0"):
 		errors.append("crafting panel should refresh max craft count after batch crafting")
+	player.inventory["1011"] = 104
+	player.ap = 0.5
+	game_root.refresh_inventory_panel()
+	game_root.refresh_crafting_panel()
+	if not _press_recipe_line(game_root, "recipe_bandage_basic"):
+		errors.append("should reselect basic bandage for multi-entry queue")
+	await process_frame
+	var cross_turn_bandages_before := _player_inventory_count(game_root, "1006")
+	var cross_turn_crafted_events_before := _event_count(game_root, "recipe_crafted")
+	var queue_start: Dictionary = game_root.confirm_crafting_queue([
+		{"recipe_id": "recipe_bandage_basic", "count": 50},
+		{"recipe_id": "recipe_bandage_basic", "count": 1},
+	])
+	await process_frame
+	if not bool(queue_start.get("success", false)) or not bool(queue_start.get("pending", false)):
+		errors.append("multi-entry cross-turn queue should start with pending first entry: %s" % queue_start)
+	if not _pending_crafting_line(game_root).contains("正在制作 基础绷带 x50"):
+		errors.append("first multi-entry queue craft should remain pending after AP auto turns: %s" % _pending_crafting_line(game_root))
+	if not _queue_line(game_root).contains("制作队列 1项/1次") or not _queue_line(game_root).contains("基础绷带 x1"):
+		errors.append("multi-entry queue should retain remaining entry while first craft is pending: %s" % _queue_line(game_root))
+	_assert_craft_queue_snapshot(errors, game_root, 1, 1, 1, true, "multi-entry cross-turn queue pending first")
+	var queue_wait: Dictionary = game_root.simulation.submit_player_command({
+		"kind": "wait",
+		"actor_id": 1,
+		"topology": _dictionary_or_empty(game_root.world_result.get("map", {})),
+	})
+	game_root.call("_continue_crafting_queue_after_wait", queue_wait)
+	game_root.refresh_inventory_panel()
+	game_root.refresh_crafting_panel()
+	await process_frame
+	if not _pending_crafting_line(game_root).contains("正在制作 无"):
+		errors.append("multi-entry queue should clear pending after wait continuation: %s" % _pending_crafting_line(game_root))
+	if not _queue_line(game_root).contains("制作队列 空"):
+		errors.append("multi-entry queue should consume remaining entry after pending completion: %s" % _queue_line(game_root))
+	_assert_craft_queue_snapshot(errors, game_root, 0, 0, 0, false, "multi-entry cross-turn queue completed")
+	if _player_inventory_count(game_root, "1011") != 2:
+		errors.append("multi-entry cross-turn queue should consume first and resumed second craft materials")
+	if _player_inventory_count(game_root, "1006") != cross_turn_bandages_before + 51:
+		errors.append("multi-entry cross-turn queue should add outputs from both queue entries")
+	if _event_count(game_root, "recipe_crafted") < cross_turn_crafted_events_before + 51:
+		errors.append("multi-entry cross-turn queue should emit recipe_crafted for all completed crafts")
 	player.inventory["1011"] = 100
 	player.ap = 0.5
 	game_root.refresh_crafting_panel()

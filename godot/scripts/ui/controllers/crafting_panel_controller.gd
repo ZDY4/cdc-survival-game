@@ -1107,12 +1107,14 @@ func _confirm_craft_queue() -> void:
 	var queued_entries := _craft_queue.duplicate(true)
 	var result: Dictionary = root.confirm_crafting_queue(queued_entries)
 	if bool(result.get("success", false)):
-		_craft_queue.clear()
-		_sync_craft_queue_to_root()
-		_feedback_label.text = "已执行制作队列: %d次" % int(result.get("completed_count", 0))
+		if bool(result.get("pending", false)):
+			_feedback_label.text = "已开始制作队列: %d次 | 剩余 %d项" % [
+				int(result.get("completed_count", 0)),
+				int(result.get("remaining_queue_count", _craft_queue.size())),
+			]
+		else:
+			_feedback_label.text = "已执行制作队列: %d次" % int(result.get("completed_count", 0))
 	elif bool(result.get("partial_success", false)):
-		_craft_queue.clear()
-		_sync_craft_queue_to_root()
 		_feedback_label.text = "制作队列部分完成: %d次 | 失败 %d项" % [
 			int(result.get("completed_count", 0)),
 			int(result.get("failed_count", 0)),
@@ -1124,8 +1126,6 @@ func _confirm_craft_queue() -> void:
 			reason = str(_dictionary_or_empty(failed[0]).get("reason", "unknown"))
 		_feedback_label.text = "制作队列失败: %s" % _craft_failure_text(reason)
 	_refresh_queue_view()
-	if not _last_snapshot.is_empty():
-		apply_snapshot(_last_snapshot)
 
 
 func _sync_craft_queue_to_root() -> void:
