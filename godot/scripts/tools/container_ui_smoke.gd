@@ -75,6 +75,28 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("container detail line should switch to selected player item details")
 	if _container_transfer_button_text(game_root) != "存放":
 		errors.append("selecting player item should set transfer action to store")
+	if not _open_container_context_menu(game_root, "container", "抗生素"):
+		errors.append("should open container item context menu for antibiotics")
+	else:
+		_assert_container_context_menu(errors, game_root, "1031", "container", "拿取选中数量", "container antibiotics context")
+		_execute_container_context_action(game_root, 1)
+		if not _event_seen(game_root, "container_item_taken"):
+			errors.append("container context selected transfer should emit container_item_taken")
+		if not _container_player_text(game_root).contains("抗生素 x1"):
+			errors.append("container context selected transfer should move item to player column")
+		if not _drop_container_item_with_text(game_root, "player", "抗生素", "container"):
+			errors.append("container context setup should restore antibiotics to container")
+	if not _open_container_context_menu(game_root, "player", "水瓶"):
+		errors.append("should open container player item context menu for water bottle")
+	else:
+		_assert_container_context_menu(errors, game_root, "1008", "player", "存放选中数量", "container player water context")
+		_execute_container_context_action(game_root, 2)
+		if not _event_seen(game_root, "container_item_stored"):
+			errors.append("container context all transfer should emit container_item_stored")
+		if not _container_text(game_root).contains("水瓶 x1"):
+			errors.append("container context all transfer should store player water bottle")
+		if not _drop_container_item_with_text(game_root, "container", "水瓶", "player"):
+			errors.append("container context setup should restore water bottle to player")
 	if not _press_container_item_with_text(game_root, "player", "手枪弹药"):
 		errors.append("should select stacked ammo in player column for quantity controls")
 	else:
@@ -939,6 +961,14 @@ func _open_inventory_context_menu(game_root: Node, item_needle: String) -> bool:
 	return true
 
 
+func _open_container_context_menu(game_root: Node, source: String, item_needle: String) -> bool:
+	var button: Button = _container_item_button_with_text(game_root, source, item_needle)
+	if button == null or not button.has_meta("container_item"):
+		return false
+	game_root.container_panel.call("_open_context_menu_for_item", button.get_meta("container_item"), source, Vector2.ZERO)
+	return true
+
+
 func _inventory_item_button(game_root: Node, text: String) -> Button:
 	var item_box: Node = game_root.inventory_panel.get_node("InventoryPanel/InventoryLines/ItemScroll/ItemLines")
 	for child in item_box.get_children():
@@ -959,6 +989,10 @@ func _context_action_disabled(game_root: Node, action_id: int) -> bool:
 
 func _execute_inventory_context_action(game_root: Node, action_id: int) -> void:
 	game_root.inventory_panel.call("_execute_context_action", action_id)
+
+
+func _execute_container_context_action(game_root: Node, action_id: int) -> void:
+	game_root.container_panel.call("_execute_context_action", action_id)
 
 
 func _container_item_lines(game_root: Node) -> Array[String]:
@@ -1148,6 +1182,52 @@ func _assert_panel_blocker(errors: Array[String], game_root: Node, panel_id: Str
 	var content := game_root.find_child(content_name, true, false) as Control
 	if content == null or content.mouse_filter != Control.MOUSE_FILTER_STOP:
 		errors.append("%s: %s should stop mouse input" % [context, content_name])
+
+
+func _assert_container_context_menu(errors: Array[String], game_root: Node, expected_item_id: String, expected_source: String, expected_label: String, context: String) -> void:
+	if not game_root.has_method("context_menu_snapshot"):
+		errors.append("%s: game root should expose context_menu_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.context_menu_snapshot())
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: context menu snapshot should be active: %s" % [context, snapshot])
+		return
+	var top: Dictionary = _dictionary_or_empty(snapshot.get("top", {}))
+	if str(top.get("id", "")) != "container_context_menu" or str(top.get("kind", "")) != "container_item":
+		errors.append("%s: expected container context top, got %s" % [context, top])
+	if str(top.get("owner_panel", "")) != "container":
+		errors.append("%s: container context owner should be container: %s" % [context, top])
+	if str(top.get("item_id", "")) != expected_item_id:
+		errors.append("%s: context menu item expected %s, got %s" % [context, expected_item_id, top])
+	if str(top.get("source", "")) != expected_source:
+		errors.append("%s: context menu source expected %s, got %s" % [context, expected_source, top])
+	if int(top.get("selected_count", 0)) <= 0 or int(top.get("item_count", 0)) <= 0:
+		errors.append("%s: context menu should expose selected and total counts: %s" % [context, top])
+	if int(top.get("option_count", 0)) != 2:
+		errors.append("%s: container context menu should expose two transfer options: %s" % [context, top])
+	var expected_action_seen := false
+	var all_action_seen := false
+	for option in _array_or_empty(top.get("options", [])):
+		var option_data: Dictionary = _dictionary_or_empty(option)
+		if str(option_data.get("label", "")) == expected_label:
+			expected_action_seen = true
+			if bool(option_data.get("disabled", true)):
+				errors.append("%s: selected transfer option should be enabled: %s" % [context, option_data])
+			if not str(option_data.get("tooltip", "")).contains("当前堆叠"):
+				errors.append("%s: selected transfer tooltip should expose stack count: %s" % [context, option_data])
+		if int(option_data.get("id", -1)) == 2:
+			all_action_seen = true
+			if bool(option_data.get("disabled", true)):
+				errors.append("%s: all transfer option should be enabled: %s" % [context, option_data])
+	if not expected_action_seen:
+		errors.append("%s: context menu should include %s: %s" % [context, expected_label, top])
+	if not all_action_seen:
+		errors.append("%s: context menu should include all-item transfer option: %s" % [context, top])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_context: Dictionary = _dictionary_or_empty(runtime.get("context_menu", {}))
+	var runtime_top: Dictionary = _dictionary_or_empty(runtime_context.get("top", {}))
+	if str(runtime_top.get("id", "")) != "container_context_menu" or str(runtime_top.get("item_id", "")) != expected_item_id:
+		errors.append("%s: runtime context menu should expose container item %s: %s" % [context, expected_item_id, runtime_context])
 
 
 func _finish_presentations(game_root: Node) -> void:

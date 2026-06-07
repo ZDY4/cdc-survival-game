@@ -6,6 +6,9 @@ signal close_requested
 signal transfer_requested(source: String, item_id: String, count: int)
 signal transfer_all_requested(source: String)
 
+const CONTEXT_TRANSFER := 1
+const CONTEXT_TRANSFER_ALL := 2
+
 var _panel: PanelContainer
 var _title_label: Label
 var _close_button: Button
@@ -23,6 +26,9 @@ var _take_all_button: Button
 var _store_all_button: Button
 var _items_box: VBoxContainer
 var _player_items_box: VBoxContainer
+var _context_menu: PopupMenu
+var _context_item: Dictionary = {}
+var _context_source := ""
 var _selected_source: String = ""
 var _selected_item_id: String = ""
 var _container_transferable_count := 0
@@ -46,6 +52,10 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if _panel != null:
 		_panel.mouse_filter = Control.MOUSE_FILTER_STOP if active else Control.MOUSE_FILTER_IGNORE
 	if not active:
+		if _context_menu != null:
+			_context_menu.hide()
+		_context_item = {}
+		_context_source = ""
 		return
 
 	if snapshot.has("error"):
@@ -227,6 +237,10 @@ func _build_layout() -> void:
 		Callable(self, "_can_drop_container_data"),
 		Callable(self, "_drop_container_data")
 	)
+	_context_menu = PopupMenu.new()
+	_context_menu.name = "ContainerContextMenu"
+	_context_menu.id_pressed.connect(_execute_context_action)
+	add_child(_context_menu)
 	container_column.add_child(container_title)
 	container_scroll.add_child(_items_box)
 	container_column.add_child(container_scroll)
@@ -262,6 +276,13 @@ func _item_line(item: Dictionary, source: String) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
 		_apply_detail(item.duplicate(true), source)
+	)
+	button.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event == null or not mouse_event.pressed or mouse_event.button_index != MOUSE_BUTTON_RIGHT:
+			return
+		button.accept_event()
+		_open_context_menu_for_item(item.duplicate(true), source, button.get_global_mouse_position())
 	)
 	return button
 
@@ -355,6 +376,96 @@ func _drop_target_source(from_control: Control) -> String:
 	if from_control != null and from_control.has_meta("container_source"):
 		return str(from_control.get_meta("container_source"))
 	return ""
+
+
+func _open_context_menu_for_item(item: Dictionary, source: String, screen_position: Vector2) -> void:
+	if _context_menu == null:
+		return
+	_apply_detail(item.duplicate(true), source)
+	_context_item = item.duplicate(true)
+	_context_source = source
+	_context_menu.clear()
+	var selected_count := _selected_transfer_count(item)
+	var total_count := maxi(0, int(item.get("count", 0)))
+	var transfer_label := "拿取选中数量" if source == "container" else "存放选中数量"
+	var transfer_all_label := "全部拿取此项" if source == "container" else "全部存放此项"
+	if source != "container" and source != "player":
+		transfer_label = "转移选中数量"
+		transfer_all_label = "全部转移此项"
+	_context_menu.add_item(transfer_label, CONTEXT_TRANSFER)
+	_context_menu.add_item(transfer_all_label, CONTEXT_TRANSFER_ALL)
+	var disabled := total_count <= 0 or str(item.get("item_id", "")).is_empty() or (source != "container" and source != "player")
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_TRANSFER), disabled)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_TRANSFER_ALL), disabled)
+	_context_menu.set_item_tooltip(
+		_context_menu.get_item_index(CONTEXT_TRANSFER),
+		"%s x%d（当前堆叠 %d）" % [transfer_label, selected_count, total_count] if not disabled else "当前物品不能转移"
+	)
+	_context_menu.set_item_tooltip(
+		_context_menu.get_item_index(CONTEXT_TRANSFER_ALL),
+		"%s x%d" % [transfer_all_label, total_count] if not disabled else "当前物品不能转移"
+	)
+	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
+	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
+
+
+func context_menu_snapshot() -> Dictionary:
+	if _context_menu == null or not _context_menu.visible:
+		return {}
+	return {
+		"id": "container_context_menu",
+		"name": "container_context_menu",
+		"kind": "container_item",
+		"owner_panel": "container",
+		"active": true,
+		"visible": true,
+		"mouse_blocks_world": true,
+		"item_id": str(_context_item.get("item_id", "")),
+		"item_name": str(_context_item.get("name", _context_item.get("item_id", ""))),
+		"item_count": int(_context_item.get("count", 0)),
+		"source": _context_source,
+		"selected_count": _selected_transfer_count(_context_item),
+		"option_count": _context_menu.item_count,
+		"options": _container_context_option_summaries(),
+	}
+
+
+func _container_context_option_summaries() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	if _context_menu == null:
+		return output
+	for index in range(_context_menu.item_count):
+		output.append({
+			"id": _context_menu.get_item_id(index),
+			"label": _context_menu.get_item_text(index),
+			"disabled": _context_menu.is_item_disabled(index),
+			"tooltip": _context_menu.get_item_tooltip(index),
+		})
+	return output
+
+
+func _execute_context_action(action_id: int) -> void:
+	if _context_item.is_empty() or _context_source.is_empty():
+		return
+	var item_id := str(_context_item.get("item_id", ""))
+	if item_id.is_empty():
+		return
+	var available := maxi(0, int(_context_item.get("count", 0)))
+	if available <= 0:
+		return
+	match action_id:
+		CONTEXT_TRANSFER:
+			transfer_requested.emit(_context_source, item_id, _selected_transfer_count(_context_item))
+		CONTEXT_TRANSFER_ALL:
+			transfer_requested.emit(_context_source, item_id, available)
+	if _context_menu != null:
+		_context_menu.hide()
+
+
+func _selected_transfer_count(item: Dictionary) -> int:
+	var available := maxi(1, int(item.get("count", 1)))
+	var selected_count := int(_quantity_spin.value if _quantity_spin != null else 1)
+	return clampi(selected_count, 1, available)
 
 
 func _empty_line() -> Label:

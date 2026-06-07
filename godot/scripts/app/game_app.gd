@@ -500,6 +500,10 @@ func context_menu_snapshot() -> Dictionary:
 		var inventory_menu: Dictionary = _dictionary_or_empty(inventory_panel.call("context_menu_snapshot"))
 		if not inventory_menu.is_empty():
 			menus.append(inventory_menu)
+	if container_panel != null and container_panel.has_method("context_menu_snapshot"):
+		var container_menu: Dictionary = _dictionary_or_empty(container_panel.call("context_menu_snapshot"))
+		if not container_menu.is_empty():
+			menus.append(container_menu)
 	return {
 		"active": not menus.is_empty(),
 		"count": menus.size(),
