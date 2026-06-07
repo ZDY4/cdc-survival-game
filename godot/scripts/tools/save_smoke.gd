@@ -176,6 +176,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"recipe_library": registry.get_library("recipes"),
 		"topology": topology,
 	})
+	simulation.crafting_queue = [{"recipe_id": "recipe_bandage_basic", "count": 2}]
 	var trader_shop: Dictionary = simulation.shop_sessions.get("trader_lao_wang_shop", {}).duplicate(true)
 	trader_shop["target_actor_definition_id"] = "trader_lao_wang"
 	trader_shop["required_relationship_min"] = 10.0
@@ -409,6 +410,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("pending_crafting did not roundtrip")
 	if not _runtime_queue_has_kind(restored, "pending_crafting"):
 		errors.append("runtime_command_queue should expose restored pending_crafting")
+	if JSON.stringify(restored.get("crafting_queue", [])) != JSON.stringify(original.get("crafting_queue", [])):
+		errors.append("crafting_queue did not roundtrip")
 	var restored_clinic_container: Dictionary = _container_session(restored, "survivor_outpost_01_clinic_supply_cabinet")
 	if str(restored_clinic_container.get("container_type", "")) != "map":
 		errors.append("map container type metadata did not roundtrip")
@@ -577,6 +580,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 	legacy.erase("pending_movement")
 	legacy.erase("pending_interaction")
 	legacy.erase("pending_crafting")
+	legacy.erase("crafting_queue")
 	legacy.erase("door_states")
 	legacy.erase("corpse_containers")
 	legacy.erase("interaction_menu")
@@ -594,11 +598,13 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 		errors.append("legacy snapshot migration should default active_location_id from start_location_id")
 	if str(restored.get("active_entry_point_id", "")) != str(snapshot.get("start_entry_point_id", "")):
 		errors.append("legacy snapshot migration should default active_entry_point_id from start_entry_point_id")
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "pending_crafting", "runtime_command_queue", "runtime_command_history", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "debug_runtime_diagnostics", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "hotbar_group_labels", "relationships"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "pending_crafting", "crafting_queue", "runtime_command_queue", "runtime_command_history", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "debug_runtime_diagnostics", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "hotbar_group_labels", "relationships"]:
 		if not restored.has(key):
 			errors.append("legacy snapshot migration missing %s" % key)
 	if not _dictionary_or_empty(restored.get("pending_crafting", {})).is_empty():
 		errors.append("legacy snapshot migration should default pending_crafting to empty")
+	if not _array_or_empty(restored.get("crafting_queue", [])).is_empty():
+		errors.append("legacy snapshot migration should default crafting_queue to empty")
 	if _relationship_score(restored, 1, 2) < 49.9:
 		errors.append("legacy snapshot migration should initialize player/trader relationship from sides")
 	if not _has_event(restored, "snapshot_migrated"):

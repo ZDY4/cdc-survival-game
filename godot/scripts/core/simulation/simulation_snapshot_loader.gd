@@ -49,6 +49,7 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.pending_movement = _dictionary_or_empty(snapshot_data.get("pending_movement", {})).duplicate(true)
 	simulation.pending_interaction = _dictionary_or_empty(snapshot_data.get("pending_interaction", {})).duplicate(true)
 	simulation.pending_crafting = _dictionary_or_empty(snapshot_data.get("pending_crafting", {})).duplicate(true)
+	simulation.crafting_queue = _load_crafting_queue(snapshot_data.get("crafting_queue", []))
 	simulation.corpse_containers = _load_corpse_containers(snapshot_data.get("corpse_containers", []))
 	_sync_corpse_container_sessions(simulation)
 	simulation.interaction_menu = _dictionary_or_empty(snapshot_data.get("interaction_menu", {})).duplicate(true)
@@ -66,6 +67,20 @@ func _load_events(entries: Variant) -> Array[SimulationEvent]:
 	for event_data in _array_or_empty(entries):
 		var event: Dictionary = _dictionary_or_empty(event_data)
 		output.append(SimulationEvent.new(str(event.get("kind", "")), _dictionary_or_empty(event.get("payload", {}))))
+	return output
+
+
+func _load_crafting_queue(entries: Variant) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for entry in _array_or_empty(entries):
+		var data: Dictionary = _dictionary_or_empty(entry)
+		var recipe_id := str(data.get("recipe_id", "")).strip_edges()
+		if recipe_id.is_empty():
+			continue
+		output.append({
+			"recipe_id": recipe_id,
+			"count": max(1, int(data.get("count", 1))),
+		})
 	return output
 
 

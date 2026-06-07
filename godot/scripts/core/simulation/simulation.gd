@@ -85,6 +85,7 @@ var combat_state: Dictionary = {
 var pending_movement: Dictionary = {}
 var pending_interaction: Dictionary = {}
 var pending_crafting: Dictionary = {}
+var crafting_queue: Array = []
 var corpse_containers: Dictionary = {}
 var interaction_menu: Dictionary = {}
 var hotbar: Dictionary = {}

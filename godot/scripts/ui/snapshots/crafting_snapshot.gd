@@ -34,7 +34,36 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 		"craftable_count": _craftable_count(recipes),
 		"station_snapshot": station_snapshot,
 		"pending_crafting": _dictionary_or_empty(runtime_snapshot.get("pending_crafting", {})).duplicate(true),
+		"crafting_queue": _crafting_queue_snapshot(runtime_snapshot.get("crafting_queue", []), recipes),
 	}
+
+
+func _crafting_queue_snapshot(entries: Variant, recipes: Array[Dictionary]) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for entry in _array_or_empty(entries):
+		var data: Dictionary = _dictionary_or_empty(entry)
+		var recipe_id := str(data.get("recipe_id", "")).strip_edges()
+		if recipe_id.is_empty():
+			continue
+		var recipe: Dictionary = _recipe_snapshot_by_id(recipes, recipe_id)
+		var output_count: int = max(1, int(recipe.get("output_count", 1)))
+		output.append({
+			"recipe_id": recipe_id,
+			"name": str(recipe.get("name", recipe_id)),
+			"count": max(1, int(data.get("count", 1))),
+			"output_item_id": str(recipe.get("output_item_id", "")),
+			"output_name": str(recipe.get("output_name", recipe.get("output_item_id", ""))),
+			"output_count": output_count,
+		})
+	return output
+
+
+func _recipe_snapshot_by_id(recipes: Array[Dictionary], recipe_id: String) -> Dictionary:
+	for recipe in recipes:
+		var recipe_data: Dictionary = _dictionary_or_empty(recipe)
+		if str(recipe_data.get("recipe_id", "")) == recipe_id:
+			return recipe_data
+	return {}
 
 
 func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictionary, equipment: Dictionary, tool_durability: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary, world_flags: Dictionary, crafting_context: Dictionary) -> Dictionary:

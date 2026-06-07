@@ -487,6 +487,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if not _queue_line(game_root).contains("制作队列 1项/2次") or not _queue_line(game_root).contains("基础绷带 x2"):
 			errors.append("crafting queue should show queued batch bandage")
 		_assert_craft_queue_snapshot(errors, game_root, 1, 2, 2, true, "queued batch bandage")
+		_assert_app_craft_queue_snapshot(errors, game_root, 1, 2, "queued batch bandage app state")
+		game_root.refresh_crafting_panel()
+		await process_frame
+		if not _queue_line(game_root).contains("制作队列 1项/2次") or not _queue_line(game_root).contains("基础绷带 x2"):
+			errors.append("crafting queue should survive panel refresh")
+		_assert_craft_queue_snapshot(errors, game_root, 1, 2, 2, true, "queued batch bandage after refresh")
 		if _player_inventory_count(game_root, "1011") != 4:
 			errors.append("queueing craft should not consume materials")
 		var cancel_button := _cancel_queue_entry_button(game_root, 0)
@@ -640,6 +646,17 @@ func _assert_craft_queue_snapshot(errors: Array[String], game_root: Node, expect
 				output_seen = true
 		if not output_seen:
 			errors.append("%s: queue should aggregate bandage output: %s" % [context, outputs])
+
+
+func _assert_app_craft_queue_snapshot(errors: Array[String], game_root: Node, expected_entries: int, expected_total_count: int, context: String) -> void:
+	if not game_root.has_method("crafting_queue_snapshot"):
+		errors.append("%s: game root should expose crafting_queue_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.crafting_queue_snapshot())
+	if int(snapshot.get("entry_count", -1)) != expected_entries:
+		errors.append("%s: app queue entry count expected %d got %s" % [context, expected_entries, snapshot])
+	if int(snapshot.get("total_count", -1)) != expected_total_count:
+		errors.append("%s: app queue total count expected %d got %s" % [context, expected_total_count, snapshot])
 
 
 func _assert_pending_crafting_snapshot(errors: Array[String], game_root: Node, expected_recipe_id: String, expected_count: int, expected_active: bool, context: String) -> void:

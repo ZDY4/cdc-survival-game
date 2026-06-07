@@ -40,6 +40,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		_build_layout()
 
 	_last_snapshot = snapshot.duplicate(true)
+	_craft_queue = _craft_queue_entries_from_snapshot(snapshot.get("crafting_queue", []))
 	var recipes: Array = snapshot.get("recipes", [])
 	var visible_recipes: Array[Dictionary] = _visible_recipes(recipes)
 	_summary_label.text = "%s | 配方 %d/%d | 可制作 %d | %s | %s | %s" % [
@@ -842,6 +843,7 @@ func _queue_recipe(recipe: Dictionary, count: int) -> void:
 			continue
 		entry["count"] = max(1, int(entry.get("count", 1))) + max(1, count)
 		_craft_queue[index] = entry
+		_sync_craft_queue_to_root()
 		_feedback_label.text = "已加入队列: %s x%d" % [recipe.get("name", recipe_id), int(entry.get("count", 1))]
 		_refresh_queue_view()
 		return
@@ -853,6 +855,7 @@ func _queue_recipe(recipe: Dictionary, count: int) -> void:
 		"output_name": str(recipe.get("output_name", recipe.get("output_item_id", ""))),
 		"output_count": max(1, int(recipe.get("output_count", 1))),
 	})
+	_sync_craft_queue_to_root()
 	_feedback_label.text = "已加入队列: %s x%d" % [recipe.get("name", recipe_id), max(1, count)]
 	_refresh_queue_view()
 
@@ -1048,6 +1051,7 @@ func _cancel_queue_entry(index: int) -> void:
 		return
 	var entry: Dictionary = _dictionary_or_empty(_craft_queue[index])
 	_craft_queue.remove_at(index)
+	_sync_craft_queue_to_root()
 	_feedback_label.text = "已取消队列项: %s" % entry.get("name", entry.get("recipe_id", ""))
 	_refresh_queue_view()
 
@@ -1056,6 +1060,7 @@ func _clear_craft_queue() -> void:
 	if _craft_queue.is_empty():
 		return
 	_craft_queue.clear()
+	_sync_craft_queue_to_root()
 	_feedback_label.text = "已清空制作队列"
 	_refresh_queue_view()
 
@@ -1071,9 +1076,11 @@ func _confirm_craft_queue() -> void:
 	var result: Dictionary = root.confirm_crafting_queue(queued_entries)
 	if bool(result.get("success", false)):
 		_craft_queue.clear()
+		_sync_craft_queue_to_root()
 		_feedback_label.text = "已执行制作队列: %d次" % int(result.get("completed_count", 0))
 	elif bool(result.get("partial_success", false)):
 		_craft_queue.clear()
+		_sync_craft_queue_to_root()
 		_feedback_label.text = "制作队列部分完成: %d次 | 失败 %d项" % [
 			int(result.get("completed_count", 0)),
 			int(result.get("failed_count", 0)),
@@ -1087,6 +1094,33 @@ func _confirm_craft_queue() -> void:
 	_refresh_queue_view()
 	if not _last_snapshot.is_empty():
 		apply_snapshot(_last_snapshot)
+
+
+func _sync_craft_queue_to_root() -> void:
+	if not _last_snapshot.is_empty():
+		_last_snapshot["crafting_queue"] = _craft_queue.duplicate(true)
+	var root := get_parent()
+	if root == null or not root.has_method("update_crafting_queue"):
+		return
+	root.update_crafting_queue(_craft_queue.duplicate(true))
+
+
+func _craft_queue_entries_from_snapshot(entries: Variant) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for entry in _array_or_empty(entries):
+		var data: Dictionary = _dictionary_or_empty(entry)
+		var recipe_id := str(data.get("recipe_id", "")).strip_edges()
+		if recipe_id.is_empty():
+			continue
+		output.append({
+			"recipe_id": recipe_id,
+			"name": str(data.get("name", recipe_id)),
+			"count": max(1, int(data.get("count", 1))),
+			"output_item_id": str(data.get("output_item_id", "")),
+			"output_name": str(data.get("output_name", data.get("output_item_id", ""))),
+			"output_count": max(1, int(data.get("output_count", 1))),
+		})
+	return output
 
 
 func _cancel_pending_crafting() -> void:

@@ -2752,6 +2752,8 @@ func confirm_crafting_queue(entries: Array) -> Dictionary:
 		var result_data: Dictionary = _dictionary_or_empty(result)
 		if not bool(result_data.get("success", false)):
 			failed.append(result_data.duplicate(true))
+	if failed.is_empty() or completed_count > 0:
+		update_crafting_queue([])
 	refresh_inventory_panel()
 	refresh_crafting_panel()
 	refresh_skills_panel()
@@ -2763,6 +2765,48 @@ func confirm_crafting_queue(entries: Array) -> Dictionary:
 		"results": results,
 		"failed": failed,
 	}
+
+
+func update_crafting_queue(entries: Array) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	simulation.crafting_queue = _normalized_crafting_queue(entries)
+	return {
+		"success": true,
+		"entry_count": simulation.crafting_queue.size(),
+		"crafting_queue": simulation.crafting_queue.duplicate(true),
+	}
+
+
+func crafting_queue_snapshot() -> Dictionary:
+	if simulation == null:
+		return {"entries": [], "entry_count": 0, "total_count": 0}
+	return {
+		"entries": simulation.crafting_queue.duplicate(true),
+		"entry_count": simulation.crafting_queue.size(),
+		"total_count": _crafting_queue_total_count(simulation.crafting_queue),
+	}
+
+
+func _normalized_crafting_queue(entries: Array) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for entry in _array_or_empty(entries):
+		var data: Dictionary = _dictionary_or_empty(entry)
+		var recipe_id := str(data.get("recipe_id", "")).strip_edges()
+		if recipe_id.is_empty():
+			continue
+		output.append({
+			"recipe_id": recipe_id,
+			"count": max(1, int(data.get("count", 1))),
+		})
+	return output
+
+
+func _crafting_queue_total_count(entries: Array) -> int:
+	var total := 0
+	for entry in entries:
+		total += max(1, int(_dictionary_or_empty(entry).get("count", 1)))
+	return total
 
 
 func cancel_pending_crafting(reason: String = "crafting_ui") -> Dictionary:

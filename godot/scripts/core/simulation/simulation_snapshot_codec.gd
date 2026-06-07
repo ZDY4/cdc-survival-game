@@ -45,6 +45,7 @@ func build(simulation: RefCounted) -> Dictionary:
 		"pending_movement": simulation.pending_movement.duplicate(true),
 		"pending_interaction": simulation.pending_interaction.duplicate(true),
 		"pending_crafting": simulation.pending_crafting.duplicate(true),
+		"crafting_queue": _crafting_queue_snapshots(simulation.crafting_queue),
 		"runtime_command_queue": runtime_queue,
 		"runtime_command_history": command_history,
 		"pending_progression_step": _pending_progression_step(control_actor),
@@ -348,6 +349,20 @@ func _hotbar_group_label_snapshots(hotbar_group_labels: Dictionary) -> Dictionar
 		if label.is_empty():
 			continue
 		output[str(group_id)] = label
+	return output
+
+
+func _crafting_queue_snapshots(entries: Array) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for entry in entries:
+		var data: Dictionary = _dictionary_or_empty(entry)
+		var recipe_id := str(data.get("recipe_id", "")).strip_edges()
+		if recipe_id.is_empty():
+			continue
+		output.append({
+			"recipe_id": recipe_id,
+			"count": max(1, int(data.get("count", 1))),
+		})
 	return output
 
 
