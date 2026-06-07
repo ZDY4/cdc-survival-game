@@ -4,6 +4,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const HudSnapshot = preload("res://scripts/ui/snapshots/hud_snapshot.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const HUD_SCENE = preload("res://scenes/ui/hud.tscn")
 
@@ -39,6 +40,7 @@ func _init() -> void:
 	hud.apply_snapshot(snapshot)
 
 	var errors := _validate_hud(hud, snapshot)
+	errors.append_array(_validate_reason_catalog())
 	errors.append_array(_validate_hud_failure_feedback(hud, simulation, world_result, registry))
 	errors.append_array(_validate_hud_combat_hud(hud, simulation, world_result))
 	errors.append_array(_validate_hud_combat_feedback(hud, simulation, world_result))
@@ -147,6 +149,39 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("HUD snapshot should expose disabled_options")
 	elif not _has_disabled_option(interaction.get("disabled_options", []), "open_container", "target_not_container"):
 		errors.append("HUD snapshot should expose disabled interaction reason")
+	return errors
+
+
+func _validate_reason_catalog() -> Array[String]:
+	var errors: Array[String] = []
+	var catalog := ReasonCatalog.new()
+	var snapshot: Dictionary = catalog.catalog_snapshot()
+	var counts: Dictionary = _dictionary_or_empty(snapshot.get("category_counts", {}))
+	if int(snapshot.get("reason_count", 0)) < 50:
+		errors.append("reason catalog should cover cross-system failure reasons: %s" % snapshot)
+	for category in ["system", "ui", "movement", "interaction", "combat", "crafting", "container", "trade", "skill", "door", "transition"]:
+		if int(counts.get(category, 0)) <= 0:
+			errors.append("reason catalog should include category %s: %s" % [category, snapshot])
+	var expectations := {
+		"unknown_player_command": ["system", "未知命令"],
+		"ui_modal_blocks_player_commands": ["ui", "界面确认中"],
+		"path_unreachable": ["movement", "无法到达"],
+		"target_not_hostile": ["combat", "不能攻击友方"],
+		"materials_insufficient": ["crafting", "材料不足"],
+		"container_inventory_insufficient": ["container", "容器物品不足"],
+		"player_money_insufficient": ["trade", "玩家资金不足"],
+		"skill_on_cooldown": ["skill", "技能冷却中"],
+	}
+	for reason in expectations.keys():
+		var expected: Array = expectations[reason]
+		var entry: Dictionary = catalog.entry_for(reason)
+		if not bool(entry.get("known", false)) \
+				or str(entry.get("category", "")) != str(expected[0]) \
+				or not str(entry.get("text", "")).contains(str(expected[1])):
+			errors.append("reason catalog entry mismatch for %s: %s" % [reason, entry])
+	var unknown: Dictionary = catalog.entry_for("smoke_unknown_reason")
+	if bool(unknown.get("known", true)) or str(unknown.get("text", "")) != "smoke_unknown_reason":
+		errors.append("reason catalog should preserve unknown reason text: %s" % unknown)
 	return errors
 
 
