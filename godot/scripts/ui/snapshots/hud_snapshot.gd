@@ -133,6 +133,10 @@ func _combat_hud_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Di
 	var combat_state: Dictionary = _dictionary_or_empty(runtime_snapshot.get("combat_state", {}))
 	var active_actor_id := int(turn_state.get("active_actor_id", 0))
 	var active_actor := _actor_by_id(runtime_snapshot, active_actor_id)
+	var current_combat_actor_id := int(combat_state.get("current_combat_actor_id", active_actor_id))
+	var current_combat_actor := _actor_by_id(runtime_snapshot, current_combat_actor_id)
+	var next_combat_actor_id := int(combat_state.get("next_combat_actor_id", 0))
+	var next_combat_actor := _actor_by_id(runtime_snapshot, next_combat_actor_id)
 	var player_actor_id := int(player.get("actor_id", 0))
 	var target_preview := _combat_target_preview(runtime_snapshot)
 	return {
@@ -143,6 +147,12 @@ func _combat_hud_summary(runtime_snapshot: Dictionary, player: Dictionary) -> Di
 		"active_actor_id": active_actor_id,
 		"active_actor_name": str(active_actor.get("display_name", "")),
 		"active_actor_kind": str(active_actor.get("kind", "")),
+		"current_combat_actor_id": current_combat_actor_id,
+		"current_combat_actor_name": str(current_combat_actor.get("display_name", "")),
+		"next_combat_actor_id": next_combat_actor_id,
+		"next_combat_actor_name": str(next_combat_actor.get("display_name", "")),
+		"turn_order": _array_or_empty(combat_state.get("turn_order", [])).duplicate(true),
+		"initiative": _array_or_empty(combat_state.get("initiative", [])).duplicate(true),
 		"player_turn": active_actor_id == player_actor_id and str(turn_state.get("phase", "")) == "player",
 		"enemy_count": _hostile_actor_count(runtime_snapshot),
 		"participant_count": _array_or_empty(combat_state.get("participants", [])).size(),

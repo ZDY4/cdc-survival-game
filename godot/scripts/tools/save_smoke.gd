@@ -221,6 +221,39 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"money": 2,
 		"inventory": [{"item_id": "1006", "count": 1}],
 	}
+	var active_combat_zombie: int = _register_zombie(simulation, registry)
+	var active_target: RefCounted = simulation.actor_registry.get_actor(active_combat_zombie)
+	active_target.grid_position = GridCoord.new(3, 0, 0)
+	active_target.combat_attributes["speed"] = 3.0
+	player.combat_attributes["speed"] = 5.0
+	simulation.combat_state["active"] = true
+	simulation.combat_state["round"] = 7
+	simulation.combat_state["participants"] = [1, active_combat_zombie]
+	simulation.combat_state["turn_order"] = [1, active_combat_zombie]
+	simulation.combat_state["initiative"] = [
+		{
+			"actor_id": 1,
+			"display_name": player.display_name,
+			"kind": player.kind,
+			"side": player.side,
+			"speed": 5.0,
+			"initiative": 5.0,
+			"order_index": 0,
+			"turn_open": player.turn_open,
+		},
+		{
+			"actor_id": active_combat_zombie,
+			"display_name": active_target.display_name,
+			"kind": active_target.kind,
+			"side": active_target.side,
+			"speed": 3.0,
+			"initiative": 3.0,
+			"order_index": 1,
+			"turn_open": active_target.turn_open,
+		},
+	]
+	simulation.combat_state["current_combat_actor_id"] = 1
+	simulation.combat_state["next_combat_actor_id"] = active_combat_zombie
 
 
 func _register_zombie(simulation: RefCounted, registry: RefCounted) -> int:
@@ -280,6 +313,16 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 			errors.append("snapshot field mismatch: %s" % key)
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
 		errors.append("container sessions did not roundtrip")
+	var original_combat_state: Dictionary = _dictionary_or_empty(original.get("combat_state", {}))
+	var restored_combat_state: Dictionary = _dictionary_or_empty(restored.get("combat_state", {}))
+	if JSON.stringify(_normalized_combat_state(restored_combat_state)) != JSON.stringify(_normalized_combat_state(original_combat_state)):
+		errors.append("combat_state initiative summary did not roundtrip")
+	if not bool(restored_combat_state.get("active", false)):
+		errors.append("combat_state active test fixture should roundtrip as active")
+	if _array_or_empty(restored_combat_state.get("turn_order", [])).size() < 2:
+		errors.append("combat_state turn_order should roundtrip non-empty order")
+	if _array_or_empty(restored_combat_state.get("initiative", [])).size() < 2:
+		errors.append("combat_state initiative should roundtrip non-empty entries")
 	var restored_clinic_container: Dictionary = _container_session(restored, "survivor_outpost_01_clinic_supply_cabinet")
 	if str(restored_clinic_container.get("container_type", "")) != "map":
 		errors.append("map container type metadata did not roundtrip")
@@ -547,6 +590,31 @@ func _normalized_ai_intents(snapshot: Dictionary) -> Array[Dictionary]:
 	return output
 
 
+func _normalized_combat_state(combat_state: Dictionary) -> Dictionary:
+	var initiative: Array[Dictionary] = []
+	for entry in _array_or_empty(combat_state.get("initiative", [])):
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		initiative.append({
+			"actor_id": int(entry_data.get("actor_id", 0)),
+			"display_name": str(entry_data.get("display_name", "")),
+			"kind": str(entry_data.get("kind", "")),
+			"side": str(entry_data.get("side", "")),
+			"speed": float(entry_data.get("speed", 0.0)),
+			"initiative": float(entry_data.get("initiative", 0.0)),
+			"order_index": int(entry_data.get("order_index", 0)),
+			"turn_open": bool(entry_data.get("turn_open", false)),
+		})
+	return {
+		"active": bool(combat_state.get("active", false)),
+		"round": int(combat_state.get("round", 0)),
+		"participants": _int_array(combat_state.get("participants", [])),
+		"turn_order": _int_array(combat_state.get("turn_order", [])),
+		"initiative": initiative,
+		"current_combat_actor_id": int(combat_state.get("current_combat_actor_id", 0)),
+		"next_combat_actor_id": int(combat_state.get("next_combat_actor_id", 0)),
+	}
+
+
 func _inventory_count(actor: Dictionary, item_id: String) -> int:
 	var inventory: Dictionary = actor.get("inventory", {})
 	return int(inventory.get(item_id, 0))
@@ -665,6 +733,13 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _int_array(value: Variant) -> Array[int]:
+	var output: Array[int] = []
+	for item in _array_or_empty(value):
+		output.append(int(item))
+	return output
 
 
 func _normalized_container_sessions(snapshot: Dictionary) -> Array[Dictionary]:

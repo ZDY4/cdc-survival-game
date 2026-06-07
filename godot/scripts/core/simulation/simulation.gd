@@ -72,6 +72,10 @@ var combat_state: Dictionary = {
 	"active": false,
 	"round": 0,
 	"participants": [],
+	"turn_order": [],
+	"initiative": [],
+	"current_combat_actor_id": 0,
+	"next_combat_actor_id": 0,
 	"last_hostile_seen_turn": 0,
 	"turns_without_hostile_player_sight": 0,
 	"combat_rng_seed": 12648430,
@@ -3591,6 +3595,7 @@ func _open_turn(actor_id: int, reason: String) -> void:
 	actor.turn_open = true
 	turn_state["active_actor_id"] = actor_id
 	turn_state["phase"] = "player" if actor.kind == "player" else "npc"
+	_refresh_combat_turn_order("turn_opened")
 	_emit("turn_started", {
 		"actor_id": actor_id,
 		"ap": actor.ap,
@@ -3607,6 +3612,7 @@ func _close_turn(actor_id: int, reason: String) -> void:
 	if actor == null:
 		return
 	actor.turn_open = false
+	_refresh_combat_turn_order("turn_closed")
 	_emit("turn_ended", {
 		"actor_id": actor_id,
 		"ap": actor.ap,
@@ -3685,10 +3691,15 @@ func _enter_combat(actor_ids: Array, reason: String) -> void:
 		combat_state["active"] = true
 		combat_state["round"] = int(turn_state.get("round", 1))
 		combat_state["participants"] = participants
+		_refresh_combat_turn_order("combat_started")
 		combat_state["turns_without_hostile_player_sight"] = 0
 		combat_state["last_hostile_seen_turn"] = int(turn_state.get("round", 1)) if _participants_include_hostile_player_pair(participants) else 0
 		_emit("combat_started", {
 			"participants": participants,
+			"turn_order": _array_or_empty(combat_state.get("turn_order", [])).duplicate(true),
+			"initiative": _array_or_empty(combat_state.get("initiative", [])).duplicate(true),
+			"current_combat_actor_id": int(combat_state.get("current_combat_actor_id", 0)),
+			"next_combat_actor_id": int(combat_state.get("next_combat_actor_id", 0)),
 			"seed_participants": seed_participants,
 			"added_participants": participants.duplicate(),
 			"round": int(combat_state.get("round", 0)),
@@ -3707,10 +3718,15 @@ func _enter_combat(actor_ids: Array, reason: String) -> void:
 			for actor in actor_registry.actors():
 				if added.has(actor.actor_id):
 					actor.in_combat = true
+			_refresh_combat_turn_order("combat_participants_updated")
 			if _participants_include_hostile_player_pair(existing):
 				combat_state["last_hostile_seen_turn"] = int(turn_state.get("round", 1))
 			_emit("combat_participants_updated", {
 				"participants": existing.duplicate(),
+				"turn_order": _array_or_empty(combat_state.get("turn_order", [])).duplicate(true),
+				"initiative": _array_or_empty(combat_state.get("initiative", [])).duplicate(true),
+				"current_combat_actor_id": int(combat_state.get("current_combat_actor_id", 0)),
+				"next_combat_actor_id": int(combat_state.get("next_combat_actor_id", 0)),
 				"seed_participants": seed_participants,
 				"added_participants": added,
 				"round": int(combat_state.get("round", 0)),
@@ -3734,6 +3750,87 @@ func _collect_combat_participants(seed_participants: Array[int]) -> Array[int]:
 			participants.append(actor.actor_id)
 	participants.sort()
 	return participants
+
+
+func _refresh_combat_turn_order(reason: String = "refresh") -> void:
+	if not bool(combat_state.get("active", false)):
+		combat_state["turn_order"] = []
+		combat_state["initiative"] = []
+		combat_state["current_combat_actor_id"] = 0
+		combat_state["next_combat_actor_id"] = 0
+		return
+	var participants: Array[int] = []
+	for value in _array_or_empty(combat_state.get("participants", [])):
+		var actor_id := int(value)
+		var actor: RefCounted = actor_registry.get_actor(actor_id)
+		if actor == null or not _actor_can_participate_in_combat(actor):
+			continue
+		if not participants.has(actor_id):
+			participants.append(actor_id)
+	participants.sort_custom(func(left: int, right: int) -> bool:
+		return _combat_initiative_sort_key(left) < _combat_initiative_sort_key(right)
+	)
+	var initiative: Array[Dictionary] = []
+	for index in range(participants.size()):
+		var actor_id: int = int(participants[index])
+		var actor: RefCounted = actor_registry.get_actor(actor_id)
+		if actor == null:
+			continue
+		initiative.append({
+			"actor_id": actor_id,
+			"display_name": actor.display_name,
+			"kind": actor.kind,
+			"side": actor.side,
+			"speed": _combat_initiative_speed(actor),
+			"initiative": _combat_initiative_score(actor),
+			"order_index": index,
+			"turn_open": actor.turn_open,
+		})
+	combat_state["participants"] = participants
+	combat_state["turn_order"] = participants.duplicate()
+	combat_state["initiative"] = initiative
+	combat_state["current_combat_actor_id"] = _current_combat_actor_id(participants)
+	combat_state["next_combat_actor_id"] = _next_combat_actor_id(participants, int(combat_state.get("current_combat_actor_id", 0)))
+	combat_state["turn_order_reason"] = reason
+
+
+func _combat_initiative_sort_key(actor_id: int) -> Array:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return [9999, 9999, actor_id]
+	var side_rank := 0 if actor.side == "player" else 1
+	return [-_combat_initiative_score(actor), side_rank, actor_id]
+
+
+func _combat_initiative_score(actor: RefCounted) -> float:
+	return _combat_initiative_speed(actor)
+
+
+func _combat_initiative_speed(actor: RefCounted) -> float:
+	var attributes: Dictionary = _dictionary_or_empty(actor.combat_attributes)
+	return float(attributes.get("initiative", attributes.get("speed", 0.0)))
+
+
+func _current_combat_actor_id(turn_order: Array[int]) -> int:
+	var active_actor_id := int(turn_state.get("active_actor_id", 0))
+	if turn_order.has(active_actor_id):
+		return active_actor_id
+	for actor_id in turn_order:
+		var actor: RefCounted = actor_registry.get_actor(int(actor_id))
+		if actor != null and actor.turn_open:
+			return int(actor_id)
+	return 0
+
+
+func _next_combat_actor_id(turn_order: Array[int], current_actor_id: int) -> int:
+	if turn_order.is_empty():
+		return 0
+	if current_actor_id <= 0:
+		return int(turn_order[0])
+	var current_index := turn_order.find(current_actor_id)
+	if current_index < 0:
+		return int(turn_order[0])
+	return int(turn_order[(current_index + 1) % turn_order.size()])
 
 
 func _actor_can_participate_in_combat(actor: RefCounted) -> bool:
@@ -3892,6 +3989,10 @@ func _finish_combat_state(reason: String, metadata: Dictionary = {}, close_turns
 			actor.turn_open = false
 	combat_state["active"] = false
 	combat_state["participants"] = []
+	combat_state["turn_order"] = []
+	combat_state["initiative"] = []
+	combat_state["current_combat_actor_id"] = 0
+	combat_state["next_combat_actor_id"] = 0
 	combat_state["turns_without_hostile_player_sight"] = 0
 	combat_state["last_hostile_seen_turn"] = 0
 	turn_state["phase"] = "player"

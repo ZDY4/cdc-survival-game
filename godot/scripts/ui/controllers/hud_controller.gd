@@ -1458,6 +1458,11 @@ func _combat_hud_text(value: Variant) -> String:
 	var participant_count := int(combat_hud.get("participant_count", 0))
 	if participant_count > 0:
 		parts.append("Participants %d" % participant_count)
+	if bool(combat_hud.get("active", false)) and int(combat_hud.get("next_combat_actor_id", 0)) > 0:
+		var next_actor_name := str(combat_hud.get("next_combat_actor_name", "")).strip_edges()
+		if next_actor_name.is_empty():
+			next_actor_name = "actor"
+		parts.append("Next %s#%d" % [next_actor_name, int(combat_hud.get("next_combat_actor_id", 0))])
 	var target_text := _combat_target_preview_text(combat_hud.get("target_preview", {}))
 	if not target_text.is_empty():
 		parts.append(target_text)

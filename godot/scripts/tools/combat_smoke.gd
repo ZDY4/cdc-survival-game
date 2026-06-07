@@ -349,9 +349,23 @@ func _expect_combat_entry_participants_and_round(errors: Array[String], registry
 		errors.append("combat entry should not collect defeated participant")
 	if participants.has(remote_id):
 		errors.append("combat entry should not collect remote-map participant")
+	var turn_order: Array = _array_or_empty(snapshot.get("combat_state", {}).get("turn_order", []))
+	if turn_order.size() != participants.size():
+		errors.append("combat entry should build turn_order for every participant")
+	if not turn_order.has(player.actor_id) or not turn_order.has(hostile_a) or not turn_order.has(friendly_id):
+		errors.append("combat turn_order should include player, hostile and friendly participants")
+	var initiative: Array = _array_or_empty(snapshot.get("combat_state", {}).get("initiative", []))
+	if initiative.size() != turn_order.size():
+		errors.append("combat entry should expose initiative details for turn_order")
+	if int(snapshot.get("combat_state", {}).get("current_combat_actor_id", 0)) != int(simulation.turn_state.get("active_actor_id", 0)):
+		errors.append("combat entry should expose current combat actor from active turn")
+	if int(snapshot.get("combat_state", {}).get("next_combat_actor_id", 0)) <= 0:
+		errors.append("combat entry should expose next combat actor")
 	if _event_count(snapshot, "combat_started") != started_before + 1:
 		errors.append("combat entry should emit one combat_started event")
 	var started_payload: Dictionary = _last_event_payload(snapshot, "combat_started")
+	if _array_or_empty(started_payload.get("turn_order", [])).is_empty() or _array_or_empty(started_payload.get("initiative", [])).is_empty():
+		errors.append("combat_started should expose turn order and initiative")
 	if not _array_or_empty(started_payload.get("seed_participants", [])).has(hostile_a):
 		errors.append("combat_started should expose seed participants")
 	if not _array_or_empty(started_payload.get("added_participants", [])).has(hostile_b):
@@ -374,6 +388,10 @@ func _expect_combat_entry_participants_and_round(errors: Array[String], registry
 	var updated_payload: Dictionary = _last_event_payload(simulation.snapshot(), "combat_participants_updated")
 	if not _array_or_empty(updated_payload.get("added_participants", [])).has(late_hostile):
 		errors.append("active combat entry should emit added late participant")
+	if not _array_or_empty(simulation.snapshot().get("combat_state", {}).get("turn_order", [])).has(late_hostile):
+		errors.append("active combat participant update should refresh turn_order")
+	if _array_or_empty(updated_payload.get("turn_order", [])).is_empty():
+		errors.append("combat_participants_updated should expose refreshed turn_order")
 	var combat_round_before: int = int(simulation.snapshot().get("combat_state", {}).get("round", 0))
 	var turn_round_before: int = int(simulation.turn_state.get("round", 1))
 	simulation.advance_world_turn(_topology(simulation, registry))

@@ -32,6 +32,14 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation._vision_rules.load_snapshot(_dictionary_or_empty(snapshot_data.get("vision", {})))
 	simulation.turn_state = _dictionary_or_empty(snapshot_data.get("turn_state", simulation.turn_state)).duplicate(true)
 	simulation.combat_state = _dictionary_or_empty(snapshot_data.get("combat_state", simulation.combat_state)).duplicate(true)
+	if not simulation.combat_state.has("turn_order"):
+		simulation.combat_state["turn_order"] = []
+	if not simulation.combat_state.has("initiative"):
+		simulation.combat_state["initiative"] = []
+	if not simulation.combat_state.has("current_combat_actor_id"):
+		simulation.combat_state["current_combat_actor_id"] = int(_dictionary_or_empty(simulation.turn_state).get("active_actor_id", 0)) if bool(simulation.combat_state.get("active", false)) else 0
+	if not simulation.combat_state.has("next_combat_actor_id"):
+		simulation.combat_state["next_combat_actor_id"] = 0
 	if not simulation.combat_state.has("turns_without_hostile_player_sight"):
 		simulation.combat_state["turns_without_hostile_player_sight"] = 0
 	if not simulation.combat_state.has("combat_rng_seed"):

@@ -278,6 +278,13 @@ func _validate_hud_combat_hud(hud: Control, simulation: RefCounted, world_result
 		"active": true,
 		"round": 3,
 		"participants": [1, 42],
+		"turn_order": [1, 42],
+		"initiative": [
+			{"actor_id": 1, "initiative": 5.0, "speed": 5.0, "order_index": 0},
+			{"actor_id": 42, "initiative": 4.0, "speed": 4.0, "order_index": 1},
+		],
+		"current_combat_actor_id": 1,
+		"next_combat_actor_id": 42,
 		"turns_without_hostile_player_sight": 0,
 	}
 	runtime_snapshot["target_preview"] = {
@@ -303,12 +310,16 @@ func _validate_hud_combat_hud(hud: Control, simulation: RefCounted, world_result
 		errors.append("combat HUD should count active hostile enemies")
 	if int(combat_hud.get("participant_count", 0)) != 2:
 		errors.append("combat HUD should expose participant count")
+	if int(combat_hud.get("next_combat_actor_id", 0)) != 42:
+		errors.append("combat HUD should expose next combat actor")
+	if _array_or_empty(combat_hud.get("turn_order", [])).size() != 2 or _array_or_empty(combat_hud.get("initiative", [])).size() != 2:
+		errors.append("combat HUD should expose turn_order and initiative")
 	var preview: Dictionary = _dictionary_or_empty(combat_hud.get("target_preview", {}))
 	if int(preview.get("target_actor_id", 0)) != 42 or absf(float(preview.get("estimated_damage", -1.0)) - 5.0) > 0.001:
 		errors.append("combat HUD should expose target preview and damage estimate")
 	hud.apply_snapshot(snapshot)
 	var combat_line := str(hud.get_node("HudPanel/HudLines/CombatHudLine").text)
-	for token in ["Combat on", "Round 4", "Enemies 1", "Participants 2", "Target Zombie Smoke#42", "Hit 75%", "Crit 10%", "Dmg 5 (0-10)"]:
+	for token in ["Combat on", "Round 4", "Enemies 1", "Participants 2", "Next Zombie Smoke#42", "Target Zombie Smoke#42", "Hit 75%", "Crit 10%", "Dmg 5 (0-10)"]:
 		if not combat_line.contains(token):
 			errors.append("combat HUD line missing %s, got %s" % [token, combat_line])
 	return errors
