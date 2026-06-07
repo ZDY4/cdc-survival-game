@@ -8,6 +8,8 @@ It runs Godot 4.6.3 headless scripts from `godot/scripts/tools/`, captures conso
 output, and writes a JSON result under `.local/agent-smoke/godot_game`.
 It also covers `godot/scripts/app/headless_runner.gd`, the migrated replacement
 path for server/headless smoke entrypoints.
+When the Scene scenario passes, it also writes `Scene.asset-diagnostics.json`
+with map visual, glTF import, and UID baseline diagnostics parsed from the log.
 
 .PARAMETER Scenario
 Smoke scenario to run. Use `All` to run every migrated Godot smoke scenario.
@@ -143,6 +145,81 @@ $runStamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runRoot = Join-Path $OutputRoot $runStamp
 New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
 
+function Export-SceneAssetDiagnostics {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ConsoleLog,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RunRoot
+    )
+
+    if (-not (Test-Path -LiteralPath $ConsoleLog)) {
+        return $null
+    }
+
+    $rawLog = Get-Content -LiteralPath $ConsoleLog -Raw
+    $marker = "scene_smoke passed:"
+    $markerIndex = $rawLog.LastIndexOf($marker, [System.StringComparison]::Ordinal)
+    if ($markerIndex -lt 0) {
+        return $null
+    }
+
+    $jsonText = $rawLog.Substring($markerIndex + $marker.Length).Trim()
+    try {
+        $counts = $jsonText | ConvertFrom-Json -Depth 100
+    }
+    catch {
+        $jsonStart = $jsonText.IndexOf("{", [System.StringComparison]::Ordinal)
+        $jsonEnd = $jsonText.LastIndexOf("}", [System.StringComparison]::Ordinal)
+        if ($jsonStart -lt 0 -or $jsonEnd -le $jsonStart) {
+            throw "Scene smoke log did not contain parseable JSON after marker '$marker': $ConsoleLog"
+        }
+        $counts = $jsonText.Substring($jsonStart, $jsonEnd - $jsonStart + 1) | ConvertFrom-Json -Depth 100
+    }
+
+    $diagnosticsPath = Join-Path $RunRoot "Scene.asset-diagnostics.json"
+    $diagnostics = [ordered]@{
+        generatedAt = (Get-Date).ToString("o")
+        sourceLog = $ConsoleLog
+        scenario = "Scene"
+        summary = [ordered]@{
+            mapSceneCount = $counts.map_scene_count
+            allMapDeclaredVisuals = $counts.all_map_declared_visuals
+            allMapInstantiatedVisuals = $counts.all_map_instantiated_visuals
+            allMapVisualFallbacks = $counts.all_map_visual_fallbacks
+            allMapVisualOverlaps = $counts.all_map_visual_overlaps
+            allMapVisualAssetPathCount = $counts.all_map_visual_asset_path_count
+            allMapVisualSceneReportCount = $counts.all_map_visual_scene_report_count
+            gltfAssetCount = $counts.gltf_asset_count
+            gltfMeshCount = $counts.gltf_mesh_count
+            gltfMaterialCount = $counts.gltf_material_count
+            gltfImportUidBaselineCount = $counts.gltf_import_uid_baseline_count
+            assetUidSidecarBaselineCount = $counts.asset_uid_sidecar_baseline_count
+        }
+        mapVisualSceneReports = @($counts.all_map_visual_scene_reports)
+        mapVisualAssetPaths = @($counts.all_map_visual_asset_paths)
+        gltfAssetDiagnostics = @($counts.gltf_asset_diagnostics)
+        gltfImportUidBaseline = @($counts.gltf_import_uid_baseline)
+        assetUidSidecarBaseline = @($counts.asset_uid_sidecar_baseline)
+        missingOrInvalid = [ordered]@{
+            missingExternalBuffers = @($counts.gltf_missing_external_buffers)
+            bufferLengthMismatches = @($counts.gltf_buffer_length_mismatches)
+            missingImportFiles = @($counts.gltf_missing_import_files)
+            importSourceMismatches = @($counts.gltf_import_source_mismatches)
+            missingImportUids = @($counts.gltf_missing_import_uids)
+            missingImportDestinations = @($counts.gltf_missing_import_destinations)
+            duplicateImportUids = @($counts.gltf_duplicate_import_uids)
+            invalidUidSidecars = @($counts.asset_invalid_uid_sidecars)
+            uidSidecarsMissingResources = @($counts.asset_uid_sidecars_missing_resources)
+            duplicateResourceUids = @($counts.asset_duplicate_resource_uids)
+        }
+    }
+
+    $diagnostics | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $diagnosticsPath
+    return $diagnosticsPath
+}
+
 $startedAt = Get-Date
 $status = "passed"
 $results = @()
@@ -166,12 +243,20 @@ try {
         if ($exitCode -ne 0) {
             $status = "failed"
         }
+        $assetDiagnostics = $null
+        if ($name -eq "Scene" -and $exitCode -eq 0) {
+            $assetDiagnostics = Export-SceneAssetDiagnostics -ConsoleLog $consoleLog -RunRoot $runRoot
+            if ($assetDiagnostics) {
+                Write-Host "Scene asset diagnostics written to $assetDiagnostics"
+            }
+        }
         $results += [PSCustomObject]@{
             scenario = $name
             script = $scriptPath
             status = $scenarioStatus
             exitCode = $exitCode
             consoleLog = $consoleLog
+            assetDiagnostics = $assetDiagnostics
         }
         if ($exitCode -ne 0) {
             break

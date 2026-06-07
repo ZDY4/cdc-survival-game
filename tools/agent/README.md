@@ -253,6 +253,7 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Save
 - `MigrationGuard` 调用 `godot/scripts/tools/mainline_migration_guard.gd`，用于确认 Godot 版本为 `4.6.3`，且主线未重新引入 Rust / Cargo / Bevy 时代源码文件。
 - 默认 `-Scenario All` 会运行所有已迁移 Godot smoke；`-Scenario Door` 是门相关链路的聚合复核，会顺序运行 `World`、`Scene`、`Movement`、`AI`、`Interaction`、`PlayerInteraction` 和 `Save`。
 - 输出 console log 和 result JSON 到 `.local/agent-smoke/godot_game/<timestamp>/`。
+- `Scene` 场景通过后，会从 `Scene.log` 解析 `scene_smoke passed` 的 JSON，并额外输出 `Scene.asset-diagnostics.json`；其中包含逐地图 MapVisual 报告、glTF 资产诊断、import UID baseline、sidecar UID baseline 和缺失 / 重复 / 非法资源清单，便于人工审阅或后续 diff。
 
 ## Maintenance Rule
 
