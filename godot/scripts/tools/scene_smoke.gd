@@ -1526,6 +1526,9 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 	counts["gltf_missing_import_destinations"] = missing_import_destinations
 	counts["gltf_missing_import_destination_count"] = missing_import_destinations.size()
 	counts["gltf_import_uid_count"] = import_uids.size()
+	var import_uid_baseline := _uid_baseline_entries(import_uids)
+	counts["gltf_import_uid_baseline"] = import_uid_baseline
+	counts["gltf_import_uid_baseline_count"] = import_uid_baseline.size()
 	var duplicate_uids := _duplicate_uid_entries(import_uids)
 	counts["gltf_duplicate_import_uids"] = duplicate_uids
 	counts["gltf_duplicate_import_uid_count"] = duplicate_uids.size()
@@ -1547,6 +1550,8 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 		errors.append("gltf .import missing imported destination: %s" % destination)
 	for duplicate in duplicate_uids:
 		errors.append("resource uid reused by multiple imported assets: %s" % duplicate)
+	if import_uid_baseline.size() != asset_paths.size():
+		errors.append("gltf import uid baseline should cover every glTF asset")
 	if int(diagnostic_totals.get("zero_scale_nodes", 0)) > 0:
 		errors.append("gltf asset nodes should not use zero scale")
 
@@ -1632,6 +1637,7 @@ func _validate_asset_uid_sidecars(counts: Dictionary, import_uids: Dictionary, e
 	sidecar_paths.sort()
 	var invalid_sidecars: Array[String] = []
 	var missing_resources: Array[String] = []
+	var sidecar_uid_baseline: Array[Dictionary] = []
 	var all_uids := import_uids.duplicate(true)
 	for sidecar_path in sidecar_paths:
 		var uid := FileAccess.get_file_as_string(sidecar_path).strip_edges()
@@ -1640,12 +1646,20 @@ func _validate_asset_uid_sidecars(counts: Dictionary, import_uids: Dictionary, e
 		var resource_path := sidecar_path.trim_suffix(".uid")
 		if not FileAccess.file_exists(resource_path):
 			missing_resources.append(resource_path)
+		sidecar_uid_baseline.append({
+			"path": resource_path,
+			"sidecar_path": sidecar_path,
+			"uid": uid,
+		})
 		if not uid.is_empty():
 			if not all_uids.has(uid):
 				all_uids[uid] = []
 			(all_uids[uid] as Array).append(sidecar_path)
 	var duplicate_uids := _duplicate_uid_entries(all_uids)
+	sidecar_uid_baseline.sort_custom(Callable(self, "_compare_uid_baseline_entries"))
 	counts["asset_uid_sidecar_count"] = sidecar_paths.size()
+	counts["asset_uid_sidecar_baseline"] = sidecar_uid_baseline
+	counts["asset_uid_sidecar_baseline_count"] = sidecar_uid_baseline.size()
 	counts["asset_invalid_uid_sidecars"] = invalid_sidecars
 	counts["asset_invalid_uid_sidecar_count"] = invalid_sidecars.size()
 	counts["asset_uid_sidecars_missing_resources"] = missing_resources
@@ -1658,6 +1672,25 @@ func _validate_asset_uid_sidecars(counts: Dictionary, import_uids: Dictionary, e
 		errors.append("asset .uid sidecar points to missing resource: %s" % resource_path)
 	for duplicate in duplicate_uids:
 		errors.append("resource uid reused by multiple assets: %s" % duplicate)
+	if sidecar_uid_baseline.size() != sidecar_paths.size():
+		errors.append("asset uid sidecar baseline should cover every .uid sidecar")
+
+
+func _uid_baseline_entries(uid_map: Dictionary) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for uid_value in uid_map.keys():
+		var uid := str(uid_value)
+		for path_value in _array_or_empty(uid_map.get(uid_value, [])):
+			entries.append({
+				"path": str(path_value),
+				"uid": uid,
+			})
+	entries.sort_custom(Callable(self, "_compare_uid_baseline_entries"))
+	return entries
+
+
+func _compare_uid_baseline_entries(a: Dictionary, b: Dictionary) -> bool:
+	return str(a.get("path", "")) < str(b.get("path", ""))
 
 
 func _collect_uid_sidecars(root_path: String, output: Array[String], errors: Array[String]) -> void:
