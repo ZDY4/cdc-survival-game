@@ -31,6 +31,14 @@ const HOVER_COLOR_TRIGGER := Color(0.70, 0.55, 1.0, 0.50)
 const HOVER_COLOR_DOOR := Color(0.95, 0.72, 0.28, 0.56)
 const HOVER_COLOR_ACTOR := Color(1.0, 0.88, 0.22, 0.50)
 const PICKING_PRIORITY: Array[String] = ["actor", "door", "map_object", "trigger", "grid"]
+const PICKING_TRANSITION_KIND_RANK := {
+	"scene_transition": 0,
+	"exit_to_outdoor": 1,
+	"enter_subscene": 2,
+	"enter_outdoor_location": 3,
+	"enter_overworld": 4,
+	"trigger": 8,
+}
 
 var game_root: Node
 var world_container: Node3D
@@ -960,6 +968,11 @@ func _pick_world_target(ray_from: Vector3, ray_to: Vector3) -> Dictionary:
 			"category": category,
 			"priority": _picking_priority_rank(category),
 			"subpriority": _picking_subpriority(metadata, category),
+			"transition_rank": _picking_transition_rank(metadata, category),
+			"transition_kind": _picking_transition_kind(metadata, category),
+			"transition_target_map_id": str(metadata.get("target_map_id", "")),
+			"transition_entry_point_id": str(metadata.get("target_entry_point_id", metadata.get("entry_point_id", ""))),
+			"transition_return_spawn_id": str(metadata.get("return_spawn_id", "")),
 			"distance": hit_distance,
 			"hit_fraction": hit_distance / ray_length,
 			"door_aabb_distance": _picking_door_aabb_distance(metadata, category, hit_position),
@@ -1017,12 +1030,28 @@ func _picking_priority_rank(category: String) -> int:
 
 func _picking_subpriority(metadata: Dictionary, category: String) -> int:
 	if category == "trigger":
-		var target_kind: String = str(metadata.get("target_kind", metadata.get("kind", "")))
-		if target_kind == "scene_transition":
-			return 0
-		if target_kind.begins_with("enter_") or target_kind.begins_with("exit_"):
-			return 1
+		return _picking_transition_rank(metadata, category)
 	return 0
+
+
+func _picking_transition_rank(metadata: Dictionary, category: String) -> int:
+	if category != "trigger":
+		return 0
+	var target_kind: String = _picking_transition_kind(metadata, category)
+	return int(PICKING_TRANSITION_KIND_RANK.get(target_kind, PICKING_TRANSITION_KIND_RANK.get("trigger", 8)))
+
+
+func _picking_transition_kind(metadata: Dictionary, category: String) -> String:
+	if category != "trigger":
+		return ""
+	var target_kind: String = str(metadata.get("target_kind", metadata.get("kind", "")))
+	if target_kind.is_empty():
+		return "trigger"
+	if PICKING_TRANSITION_KIND_RANK.has(target_kind):
+		return target_kind
+	if target_kind.begins_with("enter_") or target_kind.begins_with("exit_"):
+		return target_kind
+	return "trigger"
 
 
 func _picking_anchor_noise(metadata: Dictionary, hit_position: Vector3) -> float:
@@ -1126,6 +1155,11 @@ func _picking_diagnostics(category: String, priority: int, hit_count: int, selec
 			"category": str(item.get("category", "")),
 			"priority": int(item.get("priority", 99)),
 			"subpriority": int(item.get("subpriority", 0)),
+			"transition_rank": int(item.get("transition_rank", 0)),
+			"transition_kind": str(item.get("transition_kind", "")),
+			"transition_target_map_id": str(item.get("transition_target_map_id", "")),
+			"transition_entry_point_id": str(item.get("transition_entry_point_id", "")),
+			"transition_return_spawn_id": str(item.get("transition_return_spawn_id", "")),
 			"hit_index": int(item.get("hit_index", 0)),
 			"hit_fraction": float(item.get("hit_fraction", 0.0)),
 			"distance": float(item.get("distance", 0.0)),
@@ -1136,6 +1170,7 @@ func _picking_diagnostics(category: String, priority: int, hit_count: int, selec
 		})
 	return {
 		"priority_order": PICKING_PRIORITY.duplicate(),
+		"transition_rank_order": PICKING_TRANSITION_KIND_RANK.duplicate(true),
 		"selected_category": category,
 		"selected_priority": priority,
 		"selected_hit_index": selected_hit_index,

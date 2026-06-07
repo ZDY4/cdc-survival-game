@@ -107,6 +107,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after hover selection")
 		await _expect_door_hover_outline(errors, game_root, camera)
+		_expect_transition_hover_diagnostics(errors, game_root, camera)
 		_expect_ground_hover_move_preview(errors, game_root, camera, player_node)
 		_expect_ground_clear_selection_policy(errors, game_root, camera, pickup_node)
 		_expect_pending_movement_path_markers(errors, game_root)
@@ -473,6 +474,42 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 			errors.append("door hover outline should expose closed door state")
 		if bool(outline.get_meta("door_locked", true)):
 			errors.append("door hover outline should expose unlocked door state")
+
+
+func _expect_transition_hover_diagnostics(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	var transition_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
+	if transition_node == null:
+		errors.append("missing generated transition trigger node")
+		return
+	var transition_3d := transition_node as Node3D
+	if transition_3d == null:
+		errors.append("generated transition trigger should be Node3D")
+		return
+	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(transition_3d.global_position))
+	if not bool(hover_result.get("success", false)):
+		errors.append("transition trigger hover raycast failed: %s" % hover_result.get("reason", "unknown"))
+		return
+	_expect_hover_runtime_state(errors, game_root, "interaction", "survivor_outpost_01_interior_door", "trigger")
+	var control_snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var picking: Dictionary = _dictionary_or_empty(_dictionary_or_empty(control_snapshot.get("selection_debug", {})).get("picking", {}))
+	var transition_rank_order: Dictionary = _dictionary_or_empty(picking.get("transition_rank_order", {}))
+	if transition_rank_order.is_empty():
+		errors.append("picking diagnostics should expose transition rank order")
+	var matched_candidate: Dictionary = {}
+	for candidate in _array_or_empty(picking.get("candidates", [])):
+		var candidate_data: Dictionary = _dictionary_or_empty(candidate)
+		if str(candidate_data.get("target_id", "")) == "survivor_outpost_01_interior_door":
+			matched_candidate = candidate_data
+			break
+	if matched_candidate.is_empty():
+		errors.append("picking diagnostics should include transition trigger candidate")
+		return
+	if str(matched_candidate.get("transition_kind", "")) != "enter_subscene":
+		errors.append("transition trigger candidate should expose enter_subscene kind")
+	if int(matched_candidate.get("transition_rank", -1)) != int(transition_rank_order.get("enter_subscene", -2)):
+		errors.append("transition trigger rank should match rank order")
+	if str(matched_candidate.get("transition_target_map_id", "")) != "survivor_outpost_01_interior":
+		errors.append("transition trigger should expose target map id")
 
 
 func _add_pickable_smoke_box(parent: Node3D, metadata: Dictionary) -> void:
@@ -1665,6 +1702,14 @@ func _expect_picking_priority_snapshot(errors: Array[String], picking: Dictionar
 		var candidate_data: Dictionary = _dictionary_or_empty(candidate)
 		if not candidate_data.has("subpriority"):
 			errors.append("picking candidate should expose subpriority")
+		if not candidate_data.has("transition_rank"):
+			errors.append("picking candidate should expose transition rank")
+		elif str(candidate_data.get("category", "")) == "trigger" and int(candidate_data.get("transition_rank", -1)) < 0:
+			errors.append("trigger picking candidate transition rank should be non-negative")
+		if not candidate_data.has("transition_kind"):
+			errors.append("picking candidate should expose transition kind")
+		if not candidate_data.has("transition_target_map_id"):
+			errors.append("picking candidate should expose transition target map id")
 		if not candidate_data.has("hit_fraction"):
 			errors.append("picking candidate should expose hit_fraction")
 		elif float(candidate_data.get("hit_fraction", -1.0)) < 0.0 or float(candidate_data.get("hit_fraction", 2.0)) > 1.0:
