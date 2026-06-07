@@ -611,18 +611,38 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if not str(_player(game_root).get("active_container_id", "")).is_empty():
 			errors.append("Esc should clear active container runtime state")
 
-	var player_grid: Dictionary = _player(game_root).get("grid_position", {})
-	game_root.simulation.pending_movement = {
-		"actor_id": 1,
-		"target_position": {"x": int(player_grid.get("x", 0)) + 3, "y": int(player_grid.get("y", 0)), "z": int(player_grid.get("z", 0))},
-		"path": [player_grid.duplicate(true)],
-	}
+	var player_grid: Dictionary = _dictionary_or_empty(_player(game_root).get("grid_position", {}))
+	var player_actor: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player_actor != null:
+		player_actor.ap = 1.0
+	var far_target: Dictionary = _far_open_grid_from(player_grid, _dictionary_or_empty(game_root.world_result.get("map", {})))
+	var move_result: Dictionary = game_root.execute_move_to_grid(far_target)
+	if not bool(move_result.get("success", false)):
+		errors.append("Esc action presenter smoke should start pending movement: %s" % move_result.get("reason", "unknown"))
+	var presenter_before_esc: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if not bool(presenter_before_esc.get("active", false)):
+		errors.append("Esc action presenter smoke should have active movement presenter before Esc")
+	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
+		var current_grid: Dictionary = _dictionary_or_empty(_player(game_root).get("grid_position", {}))
+		game_root.simulation.pending_movement = {
+			"actor_id": 1,
+			"target_position": far_target.duplicate(true),
+			"path": [current_grid.duplicate(true), far_target.duplicate(true)],
+		}
+	_press_key(game_root, KEY_ESCAPE)
+	var presenter_after_esc: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if bool(presenter_after_esc.get("active", false)):
+		errors.append("Esc should finish active world action presenter")
+	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
+		errors.append("Esc should preserve pending movement when it only finishes action presenter")
 	var before_pending_cancelled := _event_count(game_root, "pending_cancelled")
 	_press_key(game_root, KEY_ESCAPE)
 	if not game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
 		errors.append("Esc should clear pending movement")
 	if _event_count(game_root, "pending_cancelled") <= before_pending_cancelled:
 		errors.append("Esc pending cancellation should emit pending_cancelled")
+	if player_actor != null:
+		player_actor.ap = 6.0
 
 	game_root.simulation.pending_interaction = {
 		"actor_id": 1,
@@ -741,6 +761,25 @@ func _move_player_to_interaction_target(game_root: Node, target_id: String) -> v
 	player.grid_position.x = int(grid.get("x", player.grid_position.x))
 	player.grid_position.y = int(grid.get("y", player.grid_position.y))
 	player.grid_position.z = int(grid.get("z", player.grid_position.z))
+
+
+func _far_open_grid_from(before: Dictionary, topology: Dictionary) -> Dictionary:
+	var bounds: Dictionary = _dictionary_or_empty(topology.get("bounds", {}))
+	var max_x := int(bounds.get("width", int(before.get("x", 0)) + 8)) - 1
+	var max_z := int(bounds.get("height", int(before.get("z", 0)) + 8)) - 1
+	var y := int(before.get("y", 0))
+	var candidates := [
+		{"x": min(max_x, int(before.get("x", 0)) + 6), "y": y, "z": int(before.get("z", 0))},
+		{"x": max(0, int(before.get("x", 0)) - 6), "y": y, "z": int(before.get("z", 0))},
+		{"x": int(before.get("x", 0)), "y": y, "z": min(max_z, int(before.get("z", 0)) + 6)},
+		{"x": int(before.get("x", 0)), "y": y, "z": max(0, int(before.get("z", 0)) - 6)},
+	]
+	var blocking: Dictionary = _dictionary_or_empty(topology.get("blocking_cells", {}))
+	for candidate in candidates:
+		var key := "%d:%d:%d" % [int(candidate.get("x", 0)), y, int(candidate.get("z", 0))]
+		if not blocking.has(key) and (int(candidate.get("x", 0)) != int(before.get("x", 0)) or int(candidate.get("z", 0)) != int(before.get("z", 0))):
+			return candidate
+	return before.duplicate(true)
 
 
 func _expect_stage_open(errors: Array[String], game_root: Node, panel_id: String, context: String) -> void:

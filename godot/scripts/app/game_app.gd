@@ -1127,6 +1127,16 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 			hud.hide_debug_console()
 		refresh_hud(current_interaction_prompt())
 		return {"success": true, "closed": "debug_console"}
+	if _world_action_presenter_blocks_input():
+		var pending_before: Dictionary = _runtime_pending_state_snapshot()
+		var result: Dictionary = finish_world_action_presentations()
+		return {
+			"success": true,
+			"closed": "world_action_presenter",
+			"result": result,
+			"pending_before": pending_before,
+			"pending_after": _runtime_pending_state_snapshot(),
+		}
 	if not active_skill_targeting.is_empty():
 		return cancel_active_skill_targeting(reason)
 	if runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()):
@@ -1165,6 +1175,16 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 		refresh_all_panels(current_interaction_prompt())
 		return {"success": true, "closed": "", "opened": "settings"}
 	return {"success": false, "reason": "panel_controller_missing"}
+
+
+func _runtime_pending_state_snapshot() -> Dictionary:
+	if simulation == null:
+		return {"pending_movement": {}, "pending_interaction": {}}
+	var snapshot: Dictionary = simulation.snapshot()
+	return {
+		"pending_movement": _dictionary_or_empty(snapshot.get("pending_movement", {})).duplicate(true),
+		"pending_interaction": _dictionary_or_empty(snapshot.get("pending_interaction", {})).duplicate(true),
+	}
 
 
 func select_interaction_target(target: Dictionary) -> Dictionary:
