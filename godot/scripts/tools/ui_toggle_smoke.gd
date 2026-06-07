@@ -1463,6 +1463,15 @@ func _assert_ai_debug_snapshot(errors: Array[String], game_root: Node, context: 
 		errors.append("%s: ai_debug latest intent should expose intent and reason: %s" % [context, latest])
 	if int(latest.get("path_length", -1)) < 0:
 		errors.append("%s: ai_debug path length should be non-negative: %s" % [context, latest])
+	var goal: Dictionary = _dictionary_or_empty(latest.get("goal", {}))
+	var action: Dictionary = _dictionary_or_empty(latest.get("action", {}))
+	var blackboard: Dictionary = _dictionary_or_empty(latest.get("blackboard", {}))
+	if goal.is_empty() or action.is_empty() or blackboard.is_empty():
+		errors.append("%s: ai_debug should expose goal/action/blackboard: %s" % [context, latest])
+	if str(action.get("kind", "")).is_empty() or str(action.get("reason", "")).is_empty():
+		errors.append("%s: ai_debug action should expose kind and reason: %s" % [context, action])
+	if not blackboard.has("target_tracking_state") or not blackboard.has("candidate_count") or not blackboard.has("blocked_by_los_count"):
+		errors.append("%s: ai_debug blackboard should expose target memory and LOS counts: %s" % [context, blackboard])
 	_assert_runtime_control_line(errors, game_root, "AI #2", "%s HUD AI token" % context)
 
 

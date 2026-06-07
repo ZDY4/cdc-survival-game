@@ -1244,13 +1244,50 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 	var actor_id := int(intent.get("actor_id", 0))
 	if actor_id <= 0:
 		return {}
+	var path: Array = _array_or_empty(intent.get("path", []))
+	var target_actor_id := int(intent.get("target_actor_id", 0))
+	var reason := str(intent.get("reason", ""))
+	var intent_kind := str(intent.get("intent", ""))
+	var target_tracking_state := str(intent.get("target_tracking_state", ""))
+	var goal := {
+		"id": "hostile_target" if target_actor_id > 0 else "none",
+		"kind": "combat" if target_actor_id > 0 else "idle",
+		"target_actor_id": target_actor_id,
+		"target_grid": _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true),
+		"tracking_state": target_tracking_state,
+		"lost": bool(intent.get("target_lost", false)),
+		"lost_reason": str(intent.get("target_lost_reason", "")),
+	}
+	var action := {
+		"id": intent_kind,
+		"kind": intent_kind,
+		"reason": reason,
+		"planned_intent": str(intent.get("planned_intent", "")),
+		"path_length": path.size(),
+		"remaining_steps": int(intent.get("remaining_steps", 0)),
+		"required_ap": float(intent.get("required_ap", 0.0)),
+		"available_ap": float(intent.get("available_ap", intent.get("ap", 0.0))),
+	}
+	var blackboard := {
+		"target_actor_id": target_actor_id,
+		"previous_target_actor_id": int(intent.get("previous_target_actor_id", 0)),
+		"last_seen_target_actor_id": int(intent.get("last_seen_target_actor_id", 0)),
+		"target_tracking_state": target_tracking_state,
+		"target_lost": bool(intent.get("target_lost", false)),
+		"target_lost_reason": str(intent.get("target_lost_reason", "")),
+		"candidate_count": int(intent.get("candidate_count", 0)),
+		"blocked_by_los_count": int(intent.get("blocked_by_los_count", 0)),
+		"ammo_ready": bool(intent.get("ammo_ready", true)),
+		"can_reload": bool(intent.get("can_reload", false)),
+		"ap": float(intent.get("ap", 0.0)),
+	}
 	return {
 		"actor_id": actor_id,
-		"intent": str(intent.get("intent", "")),
-		"reason": str(intent.get("reason", "")),
-		"target_actor_id": int(intent.get("target_actor_id", 0)),
+		"intent": intent_kind,
+		"reason": reason,
+		"target_actor_id": target_actor_id,
 		"target_grid": _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true),
-		"path_length": _array_or_empty(intent.get("path", [])).size(),
+		"path_length": path.size(),
 		"ap": float(intent.get("ap", 0.0)),
 		"distance": float(intent.get("distance", -1.0)),
 		"aggro_range": float(intent.get("aggro_range", 0.0)),
@@ -1260,6 +1297,12 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"ammo_ready": bool(intent.get("ammo_ready", true)),
 		"can_reload": bool(intent.get("can_reload", false)),
 		"failure_reason": str(intent.get("failure_reason", intent.get("reason", ""))),
+		"goal": goal,
+		"action": action,
+		"blackboard": blackboard,
+		"target_tracking_state": target_tracking_state,
+		"target_lost": bool(intent.get("target_lost", false)),
+		"target_lost_reason": str(intent.get("target_lost_reason", "")),
 	}
 
 

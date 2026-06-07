@@ -1662,13 +1662,16 @@ func _ai_debug_control_text(value: Variant) -> String:
 		target_text = " ->#%d" % target_actor_id
 	var path_length := int(intent.get("path_length", 0))
 	var path_text := "" if path_length <= 0 else " path%d" % path_length
+	var tracking_state := str(intent.get("target_tracking_state", ""))
+	var tracking_text := "" if tracking_state.is_empty() or tracking_state == "none" else " %s" % tracking_state
 	var reason := str(intent.get("reason", ""))
 	var reason_text := "" if reason.is_empty() else " %s" % reason
-	return "AI #%d %s%s%s%s" % [
+	return "AI #%d %s%s%s%s%s" % [
 		int(intent.get("actor_id", 0)),
 		str(intent.get("intent", "")),
 		target_text,
 		path_text,
+		tracking_text,
 		reason_text,
 	]
 
