@@ -397,6 +397,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should select deconstruct requirement smoke item")
 	if not _detail_line(game_root).contains("拆解要求 工具 1151 / 工作台 smoke_station"):
 		errors.append("inventory detail should show deconstruct tool and station requirements")
+	if not _detail_line(game_root).contains("拆解产物 塑料 x1"):
+		errors.append("inventory detail should show deconstruct yield preview")
+	var gated_item_snapshot: Dictionary = _inventory_snapshot_item(game_root, "smoke_deconstruct_tool_item")
+	var gated_preview: Dictionary = _dictionary_or_empty(gated_item_snapshot.get("deconstruct_preview", {}))
+	var gated_preview_entries: Array = _array_or_empty(gated_preview.get("entries", []))
+	if gated_preview_entries.is_empty():
+		errors.append("inventory snapshot should expose deconstruct preview entries")
+	else:
+		var first_preview: Dictionary = _dictionary_or_empty(gated_preview_entries[0])
+		if str(first_preview.get("name", "")) != "塑料" or int(first_preview.get("total_count", 0)) != 1:
+			errors.append("deconstruct preview should include localized yield name and total count")
 	if game_root.has_method("finish_world_action_presentations"):
 		game_root.finish_world_action_presentations()
 		await process_frame

@@ -66,6 +66,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 			"droppable": true,
 			"deconstructable": false,
 			"deconstruct_yield": [],
+			"deconstruct_preview": {},
 			"stackable": false,
 			"max_stack": 1,
 		}
@@ -102,6 +103,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"droppable": _is_item_droppable(data),
 		"deconstructable": not deconstruct_yield.is_empty(),
 		"deconstruct_yield": deconstruct_yield,
+		"deconstruct_preview": _deconstruct_preview(deconstruct_yield, count),
 		"deconstruct_requirements": _deconstruct_requirements(crafting_fragment),
 		"stackable": _stackable(data),
 		"max_stack": _max_stack(data),
@@ -212,6 +214,36 @@ func _deconstruct_yield(item_data: Dictionary) -> Array[Dictionary]:
 	return output
 
 
+func _deconstruct_preview(deconstruct_yield: Array[Dictionary], source_count: int) -> Dictionary:
+	if deconstruct_yield.is_empty():
+		return {}
+	var entries: Array[Dictionary] = []
+	var total_weight := 0.0
+	var preview_count: int = max(1, source_count)
+	for entry in deconstruct_yield:
+		var item_id := str(entry.get("item_id", ""))
+		var count_per_item: int = int(entry.get("count", 0))
+		if item_id.is_empty() or count_per_item <= 0:
+			continue
+		var total_count: int = count_per_item * preview_count
+		var item_data: Dictionary = _item_data(item_id)
+		var unit_weight := float(item_data.get("weight", 0.0))
+		total_weight += unit_weight * float(total_count)
+		entries.append({
+			"item_id": item_id,
+			"name": str(item_data.get("name", item_id)),
+			"count_per_item": count_per_item,
+			"total_count": total_count,
+			"unit_weight": unit_weight,
+			"total_weight": unit_weight * float(total_count),
+		})
+	return {
+		"source_count": preview_count,
+		"entries": entries,
+		"total_weight": total_weight,
+	}
+
+
 func _deconstruct_requirements(crafting_fragment: Dictionary) -> Dictionary:
 	if crafting_fragment.is_empty():
 		return {}
@@ -244,6 +276,11 @@ func _append_normalized_item_id(output: Array[String], value: Variant) -> void:
 
 func _has_fragment(item_data: Dictionary, kind: String) -> bool:
 	return not _fragment_by_kind(item_data, kind).is_empty()
+
+
+func _item_data(item_id: String) -> Dictionary:
+	var record: Dictionary = registry.get_library("items").get(item_id, {})
+	return _dictionary_or_empty(record.get("data", record))
 
 
 func _fragment_by_kind(item_data: Dictionary, kind: String) -> Dictionary:

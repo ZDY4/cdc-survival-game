@@ -834,8 +834,9 @@ func _apply_detail(item: Dictionary) -> void:
 	var slot_suffix := " | 槽位 %s" % ", ".join(slots) if not slots.is_empty() else ""
 	var stack_suffix := " | 堆叠 %d" % int(item.get("max_stack", 1)) if bool(item.get("stackable", false)) else ""
 	var deconstruct_suffix := _deconstruct_requirements_text(item)
+	var deconstruct_preview_suffix := _deconstruct_preview_text(item)
 	var description := str(item.get("description", ""))
-	_detail_label.text = "%s | %s | 单重 %.2f kg | 总重 %.2f kg | 单价 %d | 总价 %d%s%s%s%s%s" % [
+	_detail_label.text = "%s | %s | 单重 %.2f kg | 总重 %.2f kg | 单价 %d | 总价 %d%s%s%s%s%s%s" % [
 		item.get("name", item.get("item_id", "")),
 		item.get("category_label", "杂项"),
 		float(item.get("unit_weight", 0.0)),
@@ -846,6 +847,7 @@ func _apply_detail(item: Dictionary) -> void:
 		slot_suffix,
 		stack_suffix,
 		deconstruct_suffix,
+		deconstruct_preview_suffix,
 		"\n%s" % description if not description.is_empty() else "",
 	]
 	_update_action_buttons(item)
@@ -865,6 +867,26 @@ func _deconstruct_requirements_text(item: Dictionary) -> String:
 	if parts.is_empty():
 		return ""
 	return " | 拆解要求 %s" % " / ".join(parts)
+
+
+func _deconstruct_preview_text(item: Dictionary) -> String:
+	if not bool(item.get("deconstructable", false)):
+		return ""
+	var preview: Dictionary = _dictionary_or_empty(item.get("deconstruct_preview", {}))
+	var entries: Array = _array_or_empty(preview.get("entries", []))
+	if entries.is_empty():
+		return ""
+	var parts: Array[String] = []
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		var name := str(entry_data.get("name", entry_data.get("item_id", "")))
+		var total_count := int(entry_data.get("total_count", 0))
+		if name.is_empty() or total_count <= 0:
+			continue
+		parts.append("%s x%d" % [name, total_count])
+	if parts.is_empty():
+		return ""
+	return " | 拆解产物 %s" % ", ".join(parts)
 
 
 func _update_action_buttons(item: Dictionary) -> void:
