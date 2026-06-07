@@ -450,6 +450,7 @@ func menu_state_snapshot() -> Dictionary:
 		var panel_priority: Array = _array_or_empty(panel_snapshot.get("close_priority", []))
 		panel_snapshot["panel_close_priority"] = panel_priority.duplicate(true)
 		panel_snapshot["close_priority"] = _root_close_priority(panel_priority)
+		_apply_modal_event_to_menu_state(panel_snapshot)
 		_apply_context_menu_event_to_menu_state(panel_snapshot)
 		return panel_snapshot
 	var fallback_priority: Array[String] = ["settings"]
@@ -466,8 +467,36 @@ func menu_state_snapshot() -> Dictionary:
 		"panel_close_priority": fallback_priority.duplicate(true),
 		"close_priority": _root_close_priority(fallback_priority),
 	}
+	_apply_modal_event_to_menu_state(fallback)
 	_apply_context_menu_event_to_menu_state(fallback)
 	return fallback
+
+
+func _apply_modal_event_to_menu_state(menu_state: Dictionary) -> void:
+	var modal_stack: Dictionary = modal_stack_snapshot()
+	if not bool(modal_stack.get("active", false)):
+		menu_state["modal_event"] = {}
+		return
+	var top_modal: Dictionary = _dictionary_or_empty(modal_stack.get("top", {}))
+	var modal_id := str(top_modal.get("id", top_modal.get("modal_id", "modal")))
+	var event := {
+		"event": "modal_opened",
+		"panel_id": modal_id,
+		"kind": str(top_modal.get("kind", "modal")),
+		"visible": true,
+		"reason": "modal_stack_snapshot",
+		"owner_panel": str(top_modal.get("owner_panel", "")),
+		"mouse_blocks_world": bool(top_modal.get("mouse_blocks_world", true)),
+		"blocks_gameplay": bool(top_modal.get("blocks_gameplay", true)),
+	}
+	if top_modal.has("item_id"):
+		event["item_id"] = str(top_modal.get("item_id", ""))
+	if top_modal.has("skill_id"):
+		event["skill_id"] = str(top_modal.get("skill_id", ""))
+	if top_modal.has("count"):
+		event["count"] = int(top_modal.get("count", 0))
+	event = _append_menu_state_event(menu_state, event)
+	menu_state["modal_event"] = event.duplicate(true)
 
 
 func _apply_context_menu_event_to_menu_state(menu_state: Dictionary) -> void:
@@ -477,7 +506,6 @@ func _apply_context_menu_event_to_menu_state(menu_state: Dictionary) -> void:
 		return
 	var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
 	var event := {
-		"sequence": int(menu_state.get("recent_event_count", 0)) + 1,
 		"event": "context_menu_opened",
 		"panel_id": str(top_menu.get("id", "context_menu")),
 		"kind": str(top_menu.get("kind", "context_menu")),
@@ -486,14 +514,21 @@ func _apply_context_menu_event_to_menu_state(menu_state: Dictionary) -> void:
 		"owner_panel": str(top_menu.get("owner_panel", "")),
 		"mouse_blocks_world": bool(top_menu.get("mouse_blocks_world", true)),
 	}
+	event = _append_menu_state_event(menu_state, event)
+	menu_state["context_menu_event"] = event.duplicate(true)
+
+
+func _append_menu_state_event(menu_state: Dictionary, event: Dictionary) -> Dictionary:
+	var enriched_event := event.duplicate(true)
+	enriched_event["sequence"] = int(menu_state.get("recent_event_count", 0)) + 1
 	var recent_events: Array = _array_or_empty(menu_state.get("recent_events", [])).duplicate(true)
-	recent_events.append(event)
+	recent_events.append(enriched_event)
 	while recent_events.size() > 8:
 		recent_events.pop_front()
 	menu_state["recent_events"] = recent_events
 	menu_state["recent_event_count"] = recent_events.size()
-	menu_state["latest_event"] = event.duplicate(true)
-	menu_state["context_menu_event"] = event.duplicate(true)
+	menu_state["latest_event"] = enriched_event.duplicate(true)
+	return enriched_event
 
 
 func _root_close_priority(panel_priority: Array = []) -> Array[String]:

@@ -129,12 +129,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if str(game_root.gameplay_input_blocker_name()) != "modal:skill_learn_confirm":
 		errors.append("skill learn confirmation blocker should be modal:skill_learn_confirm")
 	_assert_modal_stack(errors, game_root, "skill_learn_confirm", "skills", "skill learn confirmation")
+	_assert_modal_menu_event(errors, game_root, "skill_learn_confirm", "skills", "skill learn confirmation menu event")
 	_expect_modal_player_commands_blocked(errors, game_root, "skill_learn_confirm")
 	var esc_learn_result: Dictionary = game_root.close_active_ui("keyboard_escape")
 	if str(esc_learn_result.get("closed", "")) != "modal:skill_learn_confirm":
 		errors.append("Esc should close skill learn confirmation before skills stage panel")
 	if _learn_confirm_dialog_visible(game_root):
 		errors.append("Esc should hide skill learn confirmation")
+	_assert_no_modal_menu_event(errors, game_root, "skill learn confirmation Esc close menu event clear")
 	if not _summary_line(game_root).contains("技能点 1"):
 		errors.append("Esc cancelling skill learn confirmation should keep skill point")
 	_learn_button(game_root, "survival").pressed.emit()
@@ -932,6 +934,41 @@ func _assert_modal_stack(errors: Array[String], game_root: Node, expected_id: St
 	var runtime_stack: Dictionary = _dictionary_or_empty(runtime.get("modal_stack", {}))
 	if str(_dictionary_or_empty(runtime_stack.get("top", {})).get("id", "")) != expected_id:
 		errors.append("%s: runtime modal stack should expose top %s: %s" % [context, expected_id, runtime_stack])
+
+
+func _assert_modal_menu_event(errors: Array[String], game_root: Node, expected_id: String, expected_owner: String, context: String) -> void:
+	if not game_root.has_method("menu_state_snapshot"):
+		errors.append("%s: game root should expose menu_state_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot())
+	var event: Dictionary = _dictionary_or_empty(snapshot.get("modal_event", {}))
+	if event.is_empty():
+		errors.append("%s: menu state should expose modal_event: %s" % [context, snapshot])
+		return
+	if str(event.get("event", "")) != "modal_opened" or str(event.get("panel_id", "")) != expected_id:
+		errors.append("%s: modal event expected opened:%s, got %s" % [context, expected_id, event])
+	if str(event.get("owner_panel", "")) != expected_owner:
+		errors.append("%s: modal event owner expected %s, got %s" % [context, expected_owner, event])
+	if not bool(event.get("blocks_gameplay", false)) or not bool(event.get("mouse_blocks_world", false)):
+		errors.append("%s: modal event should expose gameplay and mouse blockers: %s" % [context, event])
+	var latest: Dictionary = _dictionary_or_empty(snapshot.get("latest_event", {}))
+	if str(latest.get("event", "")) != "modal_opened" or str(latest.get("panel_id", "")) != expected_id:
+		errors.append("%s: latest event should mirror modal event: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
+	var runtime_event: Dictionary = _dictionary_or_empty(runtime_menu.get("modal_event", {}))
+	if str(runtime_event.get("event", "")) != "modal_opened" or str(runtime_event.get("panel_id", "")) != expected_id:
+		errors.append("%s: runtime menu should expose modal event %s: %s" % [context, expected_id, runtime_menu])
+
+
+func _assert_no_modal_menu_event(errors: Array[String], game_root: Node, context: String) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot() if game_root.has_method("menu_state_snapshot") else {})
+	if not _dictionary_or_empty(snapshot.get("modal_event", {})).is_empty():
+		errors.append("%s: modal_event should clear when no modal is active: %s" % [context, snapshot])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
+	if not _dictionary_or_empty(runtime_menu.get("modal_event", {})).is_empty():
+		errors.append("%s: runtime modal_event should clear when no modal is active: %s" % [context, runtime_menu])
 
 
 func _expect_modal_player_commands_blocked(errors: Array[String], game_root: Node, expected_modal_id: String) -> void:
