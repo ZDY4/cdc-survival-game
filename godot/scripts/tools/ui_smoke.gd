@@ -161,7 +161,7 @@ func _validate_reason_catalog() -> Array[String]:
 	var metadata_coverage: Dictionary = _dictionary_or_empty(snapshot.get("metadata_coverage", {}))
 	if int(snapshot.get("reason_count", 0)) < 50:
 		errors.append("reason catalog should cover cross-system failure reasons: %s" % snapshot)
-	for category in ["system", "ui", "movement", "interaction", "combat", "crafting", "container", "trade", "skill", "door", "transition"]:
+	for category in ["system", "ui", "movement", "interaction", "combat", "crafting", "container", "trade", "skill", "door", "transition", "quest", "ai", "save", "map_asset"]:
 		if int(counts.get(category, 0)) <= 0:
 			errors.append("reason catalog should include category %s: %s" % [category, snapshot])
 	for key in ["missing_source_module", "missing_payload_fields", "missing_disabled_text", "missing_remediation"]:
@@ -176,6 +176,10 @@ func _validate_reason_catalog() -> Array[String]:
 		"container_inventory_insufficient": ["container", "容器物品不足", "available", "容器数量不足"],
 		"player_money_insufficient": ["trade", "玩家资金不足", "player_money", "资金不足"],
 		"skill_on_cooldown": ["skill", "技能冷却中", "cooldown_remaining", "技能冷却中"],
+		"turn_in_requires_dialogue": ["quest", "需要通过指定对话", "dialogue_id", "需要通过指定对话"],
+		"weapon_magazine_empty": ["ai", "武器弹匣为空", "loaded", "需要换弹"],
+		"save_schema_unsupported": ["save", "存档版本不兼容", "schema_version", "存档版本不兼容"],
+		"map_scene_missing": ["map_asset", "地图场景缺失", "path", "地图场景缺失"],
 	}
 	for reason in expectations.keys():
 		var expected: Array = expectations[reason]

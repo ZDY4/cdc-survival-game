@@ -8,6 +8,7 @@ func load_map_definition(map_id: String) -> Dictionary:
 	if not ResourceLoader.exists(path):
 		return {
 			"ok": false,
+			"reason": "map_scene_missing",
 			"error": "map scene not found: %s" % path,
 			"path": path,
 		}
@@ -16,6 +17,7 @@ func load_map_definition(map_id: String) -> Dictionary:
 	if packed == null:
 		return {
 			"ok": false,
+			"reason": "map_scene_load_failed",
 			"error": "failed to load map scene: %s" % path,
 			"path": path,
 		}
@@ -26,6 +28,7 @@ func load_map_definition(map_id: String) -> Dictionary:
 			root.free()
 		return {
 			"ok": false,
+			"reason": "map_scene_root_invalid",
 			"error": "map scene root does not expose to_definition: %s" % path,
 			"path": path,
 		}

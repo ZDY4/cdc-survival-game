@@ -109,6 +109,30 @@ const REASONS := {
 	"turn_in_target_mismatch": {"category": "quest", "text": "当前交付对象不符合条件"},
 	"turn_in_target_missing": {"category": "quest", "text": "交付对象未指定"},
 	"objective_incomplete": {"category": "quest", "text": "目标尚未完成"},
+	"target_in_attack_range": {"category": "ai", "text": "目标在攻击范围内"},
+	"target_inside_min_range": {"category": "ai", "text": "目标距离过近"},
+	"target_in_aggro_range": {"category": "ai", "text": "目标在警戒范围内"},
+	"target_visible": {"category": "ai", "text": "目标可见"},
+	"no_target_in_aggro_range": {"category": "ai", "text": "警戒范围内没有目标"},
+	"weapon_magazine_empty": {"category": "ai", "text": "武器弹匣为空"},
+	"weapon_ammo_unavailable": {"category": "ai", "text": "武器弹药不可用"},
+	"no_ai_profile": {"category": "ai", "text": "缺少 AI 配置"},
+	"settlement_missing": {"category": "ai", "text": "缺少 settlement 上下文"},
+	"same_side": {"category": "ai", "text": "同阵营目标"},
+	"side_hostile": {"category": "ai", "text": "敌对阵营目标"},
+	"neutral": {"category": "ai", "text": "中立目标"},
+	"slot_id_empty": {"category": "save", "text": "存档槽位为空"},
+	"slot_display_name_empty": {"category": "save", "text": "存档名称为空"},
+	"save_file_missing": {"category": "save", "text": "存档文件缺失"},
+	"save_file_unreadable": {"category": "save", "text": "存档无法读取"},
+	"save_file_unwritable": {"category": "save", "text": "存档无法写入"},
+	"save_json_invalid": {"category": "save", "text": "存档 JSON 损坏"},
+	"save_schema_unsupported": {"category": "save", "text": "存档版本不兼容"},
+	"runtime_snapshot_missing": {"category": "save", "text": "存档缺少运行时快照"},
+	"map_scene_missing": {"category": "map_asset", "text": "地图场景缺失"},
+	"map_scene_load_failed": {"category": "map_asset", "text": "地图场景加载失败"},
+	"map_scene_root_invalid": {"category": "map_asset", "text": "地图场景根节点无效"},
+	"map_scene_definition_missing": {"category": "map_asset", "text": "地图场景定义缺失"},
 	"maxed": {"category": "skill", "text": "技能已满级"},
 	"missing_skill_points": {"category": "skill", "text": "缺少技能点"},
 	"missing_prerequisites": {"category": "skill", "text": "缺少前置技能"},
@@ -245,6 +269,24 @@ const CATEGORY_METADATA := {
 		"disabled_text": "任务交付不可用",
 		"remediation": "检查任务状态、目标进度、交付 NPC、对话上下文和奖励配置。",
 	},
+	"ai": {
+		"source_module": "godot/scripts/core/ai/ai_rules.gd intent and hostility selection",
+		"payload_fields": ["actor_id", "target_actor_id", "intent", "distance"],
+		"disabled_text": "AI 行为不可用",
+		"remediation": "检查阵营、感知范围、视线、武器弹药、目标距离和 AI context。",
+	},
+	"save": {
+		"source_module": "godot/scripts/app/save_service.gd slot and envelope validation",
+		"payload_fields": ["slot_id", "path", "schema_version"],
+		"disabled_text": "存档不可用",
+		"remediation": "检查槽位 id、文件可读写、JSON envelope、schema_version 和 runtime_snapshot。",
+	},
+	"map_asset": {
+		"source_module": "godot/scripts/world/map_scene_loader.gd Godot map scene loading",
+		"payload_fields": ["map_id", "path", "error"],
+		"disabled_text": "地图资源不可用",
+		"remediation": "检查 godot/scenes/maps/*.tscn 是否存在、可加载，并且根节点暴露 to_definition()。",
+	},
 }
 
 const REASON_METADATA := {
@@ -335,6 +377,42 @@ const REASON_METADATA := {
 	"turn_in_target_missing": {
 		"payload_fields": ["quest_id", "target_definition_id", "target_actor_id"],
 		"disabled_text": "交付对象未指定",
+	},
+	"target_in_attack_range": {
+		"payload_fields": ["actor_id", "target_actor_id", "distance", "attack_range"],
+		"disabled_text": "可攻击目标",
+	},
+	"weapon_magazine_empty": {
+		"payload_fields": ["actor_id", "weapon_item_id", "weapon_slot_id", "loaded", "capacity"],
+		"disabled_text": "需要换弹",
+	},
+	"no_target_in_aggro_range": {
+		"payload_fields": ["actor_id", "aggro_range", "candidate_count"],
+		"disabled_text": "未发现目标",
+	},
+	"save_schema_unsupported": {
+		"payload_fields": ["slot_id", "path", "schema_version"],
+		"disabled_text": "存档版本不兼容",
+	},
+	"save_json_invalid": {
+		"payload_fields": ["slot_id", "path"],
+		"disabled_text": "存档 JSON 损坏",
+	},
+	"runtime_snapshot_missing": {
+		"payload_fields": ["slot_id", "path"],
+		"disabled_text": "存档缺少运行时快照",
+	},
+	"map_scene_missing": {
+		"payload_fields": ["map_id", "path"],
+		"disabled_text": "地图场景缺失",
+	},
+	"map_scene_load_failed": {
+		"payload_fields": ["map_id", "path", "error"],
+		"disabled_text": "地图场景加载失败",
+	},
+	"map_scene_root_invalid": {
+		"payload_fields": ["map_id", "path", "error"],
+		"disabled_text": "地图场景根节点无效",
 	},
 	"buy_zone_requires_shop_source": {
 		"payload_fields": ["source", "drop_zone"],

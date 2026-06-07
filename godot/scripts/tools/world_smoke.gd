@@ -28,6 +28,7 @@ func _init() -> void:
 
 	var errors := _validate_world(world_result)
 	errors.append_array(_validate_legacy_actor_appearance_fill(builder, runtime_snapshot))
+	errors.append_array(_validate_map_scene_failure_reasons(builder, runtime_snapshot))
 	errors.append_array(_validate_door_topology_and_runtime())
 	if not errors.is_empty():
 		for error in errors:
@@ -105,6 +106,20 @@ func _validate_legacy_actor_appearance_fill(builder: RefCounted, runtime_snapsho
 			return ["legacy player actor should fill model_asset from appearance profile"]
 		return []
 	return ["legacy world snapshot missing player actor"]
+
+
+func _validate_map_scene_failure_reasons(builder: RefCounted, runtime_snapshot: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var missing_map_id := "missing_map_scene_reason_smoke"
+	var load_result: Dictionary = MapSceneLoader.new().load_map_definition(missing_map_id)
+	if bool(load_result.get("ok", false)) or str(load_result.get("reason", "")) != "map_scene_missing":
+		errors.append("missing map scene should expose stable map_scene_missing reason: %s" % load_result)
+	var missing_snapshot := runtime_snapshot.duplicate(true)
+	missing_snapshot["active_map_id"] = missing_map_id
+	var world_result: Dictionary = builder.build_from_runtime_snapshot(missing_snapshot)
+	if bool(world_result.get("ok", false)) or str(world_result.get("reason", "")) != "map_scene_missing":
+		errors.append("world snapshot build should propagate map scene failure reason: %s" % world_result)
+	return errors
 
 
 func _validate_door_topology_and_runtime() -> Array[String]:

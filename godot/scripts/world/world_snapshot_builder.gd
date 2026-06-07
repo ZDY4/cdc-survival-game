@@ -20,6 +20,7 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	if map_definition.is_empty():
 		return {
 			"ok": false,
+			"reason": str(map_definition_result.get("reason", "map_scene_definition_missing")),
 			"error": str(map_definition_result.get("error", "map scene definition missing: %s" % map_id)),
 		}
 
