@@ -179,13 +179,13 @@
 
 ### 3.3 UI 状态机
 
-- 部分迁移 `UiMenuState` 等价物：active stage panel、settings panel、blocking gameplay input、close stage panels 和 toggle panel 已有运行逻辑；`menu_state_snapshot()` / `runtime_control.menu_state` 第一版会暴露 active stage、settings、stage panel 列表、open panels、gameplay blocker 和 close priority，并由 `UIToggle` smoke 覆盖。待补 context menu 与 modal/stage/settings 的完整优先级矩阵。
+- 部分迁移 `UiMenuState` 等价物：active stage panel、settings panel、blocking gameplay input、close stage panels 和 toggle panel 已有运行逻辑；`menu_state_snapshot()` / `runtime_control.menu_state` 第一版会暴露 active stage、settings、stage panel 列表、open panels、gameplay blocker、close priority 和 stage 主面板容器 mouse blocker 诊断，并由 `UIToggle` smoke 覆盖。待补 context menu 与 modal/stage/settings 的完整优先级矩阵。
 - 部分迁移 `UiModalState` 等价物：trade equipment sell confirm modal、inventory discard confirm modal 和 skill learn confirm modal 已接入 gameplay blocker 与 Esc 优先关闭；`modal_stack_snapshot()` / `runtime_control.modal_stack` 第一版会暴露 active/count/top/stack、owner panel、业务目标和 mouse/gameplay blocker 诊断，并由 `InventoryUI` / `TradeUI` / `SkillsUI` / `UIToggle` smoke 覆盖；待补 item quantity、container modal 和 overworld prompt。
 - 部分迁移 `UiContextMenuState`：HUD interaction menu 和库存物品右键菜单已暴露 `context_menu_snapshot()` / `runtime_control.context_menu`，包含 top/menu 列表、目标、位置、动作、禁用态和 tooltip 摘要，并由 `UIToggle` / `InventoryUI` smoke 覆盖；待补容器物品、装备槽、技能条目和交易行的上下文菜单目标、动作与关闭优先级矩阵。
 - 部分迁移 `UiHoverTooltipState`：GUI 控件 tooltip 已通过 `hover_tooltip_snapshot()` / `runtime_control.tooltip` 暴露 source path/name/class、owner panel 和文本；Character 装备槽与 HUD hotbar tooltip 已由 `UIToggle` / `SkillsUI` smoke 覆盖，HUD runtime/debug 行会显示当前 tooltip 摘要；待补 tooltip 屏幕位置、延迟、显隐生命周期、场景切换/库存/容器/交易/制作按钮全量覆盖和 tooltip layer 阻塞/关闭优先级。
 - 部分迁移 `UiInventoryDragState`：`drag_state_snapshot()` / `runtime_control.drag` 已统一暴露 inventory item、skill hotbar、trade item、container item 和 trade cart entry 的 drag source、payload、preview 文本与 hover target 摘要，HUD runtime/debug 行会显示 drag token，并由 `InventoryUI` / `SkillsUI` / `TradeUI` smoke 覆盖；拖拽数据生成函数可被诊断调用且不会在非拖拽帧触发 Godot `set_drag_preview` 错误。待补真实 drag preview layer、屏幕位置、拖拽阈值、hover 高亮全量覆盖、装备槽可用性细节和一次性 suppress click。
 - 部分迁移 panel open / close 统一事件：stage/settings/dialogue/trade/container 可见性变化会写入 `menu_state_snapshot().recent_events/latest_event` 和 `runtime_control.menu_state`，HUD runtime/debug 行显示最近 `Panel opened/closed:<panel>`，并由 `UIToggle` smoke 覆盖 inventory 与 settings 打开/关闭；待补 modal/context menu 同步事件、toast/feed 表现和更完整 reason 映射。
-- 部分迁移 UI mouse blocker：stage/settings、interaction menu、trade equipment sell confirm modal 与 inventory discard confirm modal 已阻止 gameplay 输入；待补 debug selection panel 显示、quantity/overworld modal、tooltip 和 drag preview。
+- 部分迁移 UI mouse blocker：stage/settings、interaction menu、trade equipment sell confirm modal 与 inventory discard confirm modal 已阻止 gameplay 输入；stage panel 根节点与主面板容器的 `mouse_filter` 会随显隐同步，并由 `UIToggle` smoke 覆盖防点击穿透诊断；待补 debug selection panel 显示、quantity/overworld modal、tooltip 和 drag preview。
 
 ## 4. 移动、路径、空间与地图规则
 
@@ -430,7 +430,7 @@
 - 部分迁移 interaction menu：右键位置、目标名称、主动作/可用/禁用摘要、可用选项、禁用选项、禁用原因 tooltip/meta、按钮 hover 详情和 Esc / 外部点击关闭第一版已有；待补更完整视觉布局和上下文菜单 polish。
 - 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、物品数量、slot tooltip、物品使用效果摘要、AP / resource cost、AP / resource / item count insufficient、cooldown 文本/禁用态和冷却遮罩；观察模式 dock 已显示模式、播放、速度、自动推进和楼层状态，Observe / Player、Play、Speed、Auto 按钮已有第一版控制，observe mode 下普通 hotbar 会隐藏。待补更完整 slot tooltip、完整冲突策略和视觉 polish。
 - 部分迁移 discard modal layer：背包丢弃确认弹窗已接入 blocker 与 Esc；待迁移 tooltip layer、context menu layer、drag preview layer、overworld prompt layer，以及更统一的 modal layer 表现。
-- 待补所有 UI 的 mouse_filter / blocker，使面板不会把点击穿透到世界。
+- 待补 modal / tooltip / context menu / drag preview / overworld prompt 的更细 mouse_filter / blocker 策略；stage/settings/dialogue/trade/container 基础面板防点击穿透已有第一版。
 
 ### 13.3 面板
 

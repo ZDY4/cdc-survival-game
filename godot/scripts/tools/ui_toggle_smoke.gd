@@ -796,6 +796,11 @@ func _expect_stage_open(errors: Array[String], game_root: Node, panel_id: String
 		var expected_filter := Control.MOUSE_FILTER_STOP if should_open else Control.MOUSE_FILTER_IGNORE
 		if panel.mouse_filter != expected_filter:
 			errors.append("%s: panel %s mouse_filter mismatch" % [context, id])
+		var content := _panel_content(game_root, id)
+		if content == null:
+			errors.append("%s: missing stage panel content %s" % [context, id])
+		elif content.mouse_filter != expected_filter:
+			errors.append("%s: panel %s content mouse_filter mismatch" % [context, id])
 
 
 func _expect_stage_closed(errors: Array[String], game_root: Node, context: String) -> void:
@@ -805,6 +810,11 @@ func _expect_stage_closed(errors: Array[String], game_root: Node, context: Strin
 		var panel: Control = _panel(game_root, id)
 		if panel != null and panel.visible:
 			errors.append("%s: panel %s should be hidden" % [context, id])
+		if panel != null and panel.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			errors.append("%s: closed panel %s should ignore mouse input" % [context, id])
+		var content := _panel_content(game_root, id)
+		if content != null and content.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+			errors.append("%s: closed panel %s content should ignore mouse input" % [context, id])
 
 
 func _assert_menu_state(errors: Array[String], game_root: Node, expected_stage: String, expected_settings: bool, expected_blocked: bool, context: String, expected_event: String = "", expected_panel: String = "") -> void:
@@ -821,6 +831,11 @@ func _assert_menu_state(errors: Array[String], game_root: Node, expected_stage: 
 	var stage_panels: Array = _array_or_empty(snapshot.get("stage_panels", []))
 	if stage_panels.size() != _stage_panel_ids().size():
 		errors.append("%s: menu snapshot should expose all stage panels: %s" % [context, snapshot])
+	for stage_panel_value in stage_panels:
+		var stage_panel: Dictionary = _dictionary_or_empty(stage_panel_value)
+		var is_active := str(stage_panel.get("id", "")) == expected_stage
+		if bool(stage_panel.get("content_mouse_blocks_world", false)) != is_active:
+			errors.append("%s: menu snapshot content blocker mismatch: %s" % [context, stage_panel])
 	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
 	var runtime_menu: Dictionary = _dictionary_or_empty(runtime.get("menu_state", {}))
 	if str(runtime_menu.get("active_stage_panel", "")) != expected_stage or bool(runtime_menu.get("settings_open", false)) != expected_settings:
@@ -1749,6 +1764,13 @@ func _panel(game_root: Node, panel_id: String) -> Control:
 			return game_root.crafting_panel
 		_:
 			return null
+
+
+func _panel_content(game_root: Node, panel_id: String) -> Control:
+	var panel := _panel(game_root, panel_id)
+	if panel == null:
+		return null
+	return panel.find_child("%sPanel" % panel_id.capitalize(), true, false) as Control
 
 
 func _player(game_root: Node) -> Dictionary:

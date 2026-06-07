@@ -264,11 +264,13 @@ func menu_state_snapshot() -> Dictionary:
 	var stage_states: Array[Dictionary] = []
 	for panel_id in stage_ids:
 		var panel := _stage_panel(panel_id)
+		var content := _stage_panel_content(panel_id, panel)
 		stage_states.append({
 			"id": panel_id,
 			"visible": panel != null and panel.visible,
 			"active": panel_id == active_stage_panel,
 			"mouse_blocks_world": panel != null and panel.mouse_filter == Control.MOUSE_FILTER_STOP,
+			"content_mouse_blocks_world": content != null and content.mouse_filter == Control.MOUSE_FILTER_STOP,
 		})
 	var open_panels: Array[String] = []
 	if not active_stage_panel.is_empty():
@@ -501,6 +503,7 @@ func _apply_stage_panel_visibility() -> void:
 		var open := panel_id == active_stage_panel
 		panel.visible = open
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP if open else Control.MOUSE_FILTER_IGNORE
+		_apply_stage_panel_content_mouse_filter(panel_id, panel, open)
 	_record_panel_visibility_changes("stage_visibility")
 
 
@@ -535,6 +538,20 @@ func _stage_panel(panel_id: String) -> Control:
 			return crafting_panel
 		_:
 			return null
+
+
+func _apply_stage_panel_content_mouse_filter(panel_id: String, panel: Control, open: bool) -> void:
+	var content := _stage_panel_content(panel_id, panel)
+	if content == null:
+		return
+	content.mouse_filter = Control.MOUSE_FILTER_STOP if open else Control.MOUSE_FILTER_IGNORE
+
+
+func _stage_panel_content(panel_id: String, panel: Control) -> Control:
+	if panel == null:
+		return null
+	var node_name := "%sPanel" % panel_id.capitalize()
+	return panel.find_child(node_name, true, false) as Control
 
 
 func _panel_visible(panel: Control) -> bool:
