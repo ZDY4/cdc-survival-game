@@ -813,6 +813,7 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 	var ap_before: float = actor.ap if actor != null else 0.0
 	var turn_open_before: bool = bool(actor.turn_open) if actor != null else false
 	var round_before: int = int(turn_state.get("round", 1))
+	var combat_active_before: bool = bool(combat_state.get("active", false))
 	var movement: Dictionary = pending_movement.duplicate(true)
 	var interaction: Dictionary = pending_interaction.duplicate(true)
 	pending_movement.clear()
@@ -838,12 +839,25 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 			"interaction": interaction,
 		})
 	var turn_auto_ended := false
+	var auto_end_blocked_reason := ""
 	if had_pending and auto_end_turn:
-		if actor != null and actor.turn_open and not bool(combat_state.get("active", false)):
+		if actor != null and actor.turn_open and not combat_active_before:
 			_close_turn(actor_id, "pending_cancelled:%s" % reason)
 			advance_world_turn(topology)
 			_open_turn(actor_id, "player_turn")
 			turn_auto_ended = true
+		elif combat_active_before:
+			auto_end_blocked_reason = "combat_active"
+		elif actor == null:
+			auto_end_blocked_reason = "actor_missing"
+		elif not actor.turn_open:
+			auto_end_blocked_reason = "turn_closed"
+	var cancel_policy_extra := {
+		"combat_active_before": combat_active_before,
+		"combat_active_after": bool(combat_state.get("active", false)),
+	}
+	if not auto_end_blocked_reason.is_empty():
+		cancel_policy_extra["auto_end_blocked_reason"] = auto_end_blocked_reason
 	var turn_policy: Dictionary = _build_cancel_turn_policy(
 		"cancel_pending",
 		reason,
@@ -853,7 +867,8 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 		actor,
 		ap_before,
 		turn_open_before,
-		round_before
+		round_before,
+		cancel_policy_extra
 	)
 	return {
 		"success": true,

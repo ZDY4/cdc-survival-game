@@ -46,6 +46,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_deterministic_combat_rng(errors, simulation, registry, player, player_grid)
 	_expect_deterministic_loot_rng(errors, registry, player_grid)
 	_expect_combat_attribute_damage_modifiers(errors, simulation, registry, player, player_grid)
+	_expect_combat_pending_cancel_turn_policy(errors, registry)
 	_expect_weapon_profile_attack(errors, simulation, registry, player, player_grid)
 	_expect_attack_spatial_failures(errors, simulation, registry, player, player_grid)
 	_expect_attack_target_preview(errors, simulation, registry, player, player_grid)
@@ -224,6 +225,64 @@ func _expect_force_end_combat(errors: Array[String], simulation: RefCounted, reg
 	_restore_player_turn(simulation, player)
 	if simulation.actor_registry.get_actor(defeat_target) != null:
 		simulation.actor_registry.unregister_actor(defeat_target)
+
+
+func _expect_combat_pending_cancel_turn_policy(errors: Array[String], registry: RefCounted) -> void:
+	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var simulation: RefCounted = runtime_result.get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	player.grid_position = GridCoord.from_dictionary(player_grid)
+	player.ap = 0.0
+	player.equipment["main_hand"] = "1002"
+	player.combat_attributes["accuracy"] = 100.0
+	_restore_player_turn(simulation, player)
+	var target_id: int = _register_test_actor(simulation, "combat_cancel_pending_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	simulation._enter_combat([player.actor_id, target_id], "combat_cancel_pending_smoke")
+	var topology: Dictionary = _topology(simulation, registry)
+	var queued: Dictionary = simulation.submit_player_command({
+		"kind": "attack",
+		"target_actor_id": target_id,
+		"topology": topology,
+	})
+	if str(queued.get("reason", "")) != "ap_insufficient_attack_queued":
+		errors.append("combat AP-insufficient attack should queue pending attack, got %s" % queued.get("reason", "unknown"))
+	var pending: Dictionary = _dictionary_or_empty(simulation.snapshot().get("pending_interaction", {}))
+	if str(pending.get("kind", "")) != "attack":
+		errors.append("combat AP-insufficient attack should create pending attack interaction")
+	var round_before: int = int(simulation.snapshot().get("turn_state", {}).get("round", 0))
+	var cancel_events_before: int = _event_count(simulation.snapshot(), "interaction_cancelled")
+	var cancelled: Dictionary = simulation.cancel_pending("combat_smoke_cancel", true, topology)
+	if not bool(cancelled.get("had_pending", false)):
+		errors.append("combat cancel_pending should report queued pending attack")
+	var policy: Dictionary = _dictionary_or_empty(cancelled.get("turn_policy", {}))
+	if str(policy.get("action_kind", "")) != "cancel_pending":
+		errors.append("combat cancel turn_policy should expose cancel_pending action")
+	if str(policy.get("reason", "")) != "preserved_turn":
+		errors.append("combat cancel turn_policy should preserve turn, got %s" % policy.get("reason", ""))
+	if str(policy.get("auto_end_blocked_reason", "")) != "combat_active":
+		errors.append("combat cancel turn_policy should explain combat_active auto-end block")
+	if bool(policy.get("auto_advanced", true)):
+		errors.append("combat cancel turn_policy should not auto advance while combat is active")
+	if not bool(policy.get("combat_active_before", false)) or not bool(policy.get("combat_active_after", false)):
+		errors.append("combat cancel turn_policy should preserve combat active diagnostics")
+	if bool(policy.get("pending_interaction", true)) or bool(policy.get("pending_movement", true)):
+		errors.append("combat cancel turn_policy should report pending cleared")
+	if int(simulation.snapshot().get("turn_state", {}).get("round", 0)) != round_before:
+		errors.append("combat cancel should not advance world round")
+	if not bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
+		errors.append("combat cancel should keep combat active")
+	if _event_count(simulation.snapshot(), "interaction_cancelled") <= cancel_events_before:
+		errors.append("combat cancel should emit interaction_cancelled")
+	if not _dictionary_or_empty(simulation.snapshot().get("pending_interaction", {})).is_empty():
+		errors.append("combat cancel should clear pending interaction")
+	simulation.force_end_combat("combat_cancel_smoke_cleanup")
+	if simulation.actor_registry.get_actor(target_id) != null:
+		simulation.actor_registry.unregister_actor(target_id)
 
 
 func _expect_deterministic_combat_rng(errors: Array[String], simulation: RefCounted, registry: RefCounted, player: RefCounted, player_grid: Dictionary) -> void:
