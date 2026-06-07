@@ -537,6 +537,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	player_ref.inventory["smoke_deconstruct_consumable_tool_ui_item"] = 1
 	player_ref.equipment["tool"] = "1151"
 	game_root.refresh_inventory_panel()
+	if not _press_inventory_item_with_text(game_root, "消耗拆解工具UI测试物品"):
+		errors.append("should select consumable deconstruct UI smoke item with equipped tool")
+	if not _detail_line(game_root).contains("拆解工具来源 装备:tool x1"):
+		errors.append("inventory detail should preview equipped deconstruct tool source")
 	var equipped_consumable_tool_result: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_consumable_tool_ui_item", 1)
 	await process_frame
 	if not bool(equipped_consumable_tool_result.get("success", false)):
@@ -561,6 +565,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		"container_inventory": [{"item_id": "1151", "count": 1}],
 	}
 	game_root.refresh_inventory_panel()
+	if not _press_inventory_item_with_text(game_root, "消耗拆解工具UI测试物品"):
+		errors.append("should select consumable deconstruct UI smoke item with nearby container tool")
+	if not _detail_line(game_root).contains("拆解工具来源 附近容器:拆解工具箱 x1"):
+		errors.append("inventory detail should preview nearby container deconstruct tool source")
 	var nearby_consumable_tool_result: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_consumable_tool_ui_item", 1)
 	await process_frame
 	if not bool(nearby_consumable_tool_result.get("success", false)):

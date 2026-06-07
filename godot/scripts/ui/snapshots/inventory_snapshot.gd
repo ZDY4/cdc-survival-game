@@ -13,11 +13,12 @@ func _init(p_registry: RefCounted) -> void:
 	registry = p_registry
 
 
-func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionary:
+func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}, crafting_context: Dictionary = {}) -> Dictionary:
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
 	var inventory_stacks: Dictionary = _dictionary_or_empty(player.get("inventory_stacks", {}))
 	var tool_durability: Dictionary = _dictionary_or_empty(player.get("tool_durability", {}))
+	var equipment: Dictionary = _dictionary_or_empty(player.get("equipment", {}))
 	var inventory_order: Array[String] = _inventory_order(player.get("inventory_order", []), inventory)
 	var items: Array[Dictionary] = []
 	var total_weight := 0.0
@@ -26,7 +27,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		var count: int = int(inventory.get(item_id, 0))
 		if count <= 0:
 			continue
-		var item_snapshot: Dictionary = _item_snapshot(str(item_id), count, tool_durability)
+		var item_snapshot: Dictionary = _item_snapshot(str(item_id), count, tool_durability, inventory, equipment, crafting_context)
 		item_snapshot["order_index"] = order_index
 		item_snapshot["stack_counts"] = _stack_counts_for(str(item_id), count, inventory_stacks)
 		item_snapshot["stack_count"] = _array_or_empty(item_snapshot.get("stack_counts", [])).size()
@@ -57,7 +58,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 	}
 
 
-func _item_snapshot(item_id: String, count: int, tool_durability: Dictionary = {}) -> Dictionary:
+func _item_snapshot(item_id: String, count: int, tool_durability: Dictionary = {}, inventory: Dictionary = {}, equipment: Dictionary = {}, crafting_context: Dictionary = {}) -> Dictionary:
 	var record: Dictionary = registry.get_library("items").get(item_id, {})
 	if record.is_empty():
 		return {
@@ -120,7 +121,7 @@ func _item_snapshot(item_id: String, count: int, tool_durability: Dictionary = {
 		"deconstructable": not deconstruct_yield.is_empty(),
 		"deconstruct_yield": deconstruct_yield,
 		"deconstruct_preview": _deconstruct_preview(deconstruct_yield, count),
-		"deconstruct_requirements": _deconstruct_requirements(crafting_fragment, tool_durability),
+		"deconstruct_requirements": _deconstruct_requirements(crafting_fragment, tool_durability, inventory, equipment, crafting_context),
 		"stackable": _stackable(data),
 		"max_stack": _max_stack(data),
 	}
@@ -281,30 +282,30 @@ func _deconstruct_preview(deconstruct_yield: Array[Dictionary], source_count: in
 	}
 
 
-func _deconstruct_requirements(crafting_fragment: Dictionary, tool_durability: Dictionary = {}) -> Dictionary:
+func _deconstruct_requirements(crafting_fragment: Dictionary, tool_durability: Dictionary = {}, inventory: Dictionary = {}, equipment: Dictionary = {}, crafting_context: Dictionary = {}) -> Dictionary:
 	if crafting_fragment.is_empty():
 		return {}
 	return {
-		"required_tools": _deconstruct_required_tools(crafting_fragment, tool_durability),
+		"required_tools": _deconstruct_required_tools(crafting_fragment, tool_durability, inventory, equipment, crafting_context),
 		"required_station": str(crafting_fragment.get("deconstruct_required_station", crafting_fragment.get("required_deconstruct_station", "none"))),
 	}
 
 
-func _deconstruct_required_tools(crafting_fragment: Dictionary, tool_durability: Dictionary = {}) -> Array[Dictionary]:
+func _deconstruct_required_tools(crafting_fragment: Dictionary, tool_durability: Dictionary = {}, inventory: Dictionary = {}, equipment: Dictionary = {}, crafting_context: Dictionary = {}) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	for key in ["deconstruct_required_tools", "required_deconstruct_tools", "deconstruct_required_tool_ids", "required_deconstruct_tool_ids"]:
 		if not crafting_fragment.has(key):
 			continue
-		_append_deconstruct_required_tools(output, crafting_fragment.get(key), crafting_fragment, tool_durability)
+		_append_deconstruct_required_tools(output, crafting_fragment.get(key), crafting_fragment, tool_durability, inventory, equipment, crafting_context)
 	return output
 
 
-func _append_deconstruct_required_tools(output: Array[Dictionary], value: Variant, crafting_fragment: Dictionary, tool_durability: Dictionary = {}) -> void:
+func _append_deconstruct_required_tools(output: Array[Dictionary], value: Variant, crafting_fragment: Dictionary, tool_durability: Dictionary = {}, inventory: Dictionary = {}, equipment: Dictionary = {}, crafting_context: Dictionary = {}) -> void:
 	if typeof(value) == TYPE_ARRAY:
 		for entry in value:
-			_append_deconstruct_required_tools(output, entry, crafting_fragment, tool_durability)
+			_append_deconstruct_required_tools(output, entry, crafting_fragment, tool_durability, inventory, equipment, crafting_context)
 		return
-	var tool: Dictionary = _deconstruct_tool_requirement(value, crafting_fragment, tool_durability)
+	var tool: Dictionary = _deconstruct_tool_requirement(value, crafting_fragment, tool_durability, inventory, equipment, crafting_context)
 	var tool_id := str(tool.get("item_id", ""))
 	if tool_id.is_empty():
 		return
@@ -316,6 +317,9 @@ func _append_deconstruct_required_tools(output: Array[Dictionary], value: Varian
 		if bool(tool.get("consume_on_deconstruct", false)):
 			existing["consume_on_deconstruct"] = true
 			existing["consume_count"] = max(int(existing.get("consume_count", 1)), int(tool.get("consume_count", 1)))
+			existing["consumption_sources"] = _merge_tool_consumption_sources(_array_or_empty(existing.get("consumption_sources", [])), _array_or_empty(tool.get("consumption_sources", [])))
+			existing["available"] = _consumption_source_total(_array_or_empty(existing.get("consumption_sources", [])))
+			existing["missing_count"] = max(0, int(existing.get("consume_count", 1)) - int(existing.get("available", 0)))
 		if float(tool.get("durability_cost", 0.0)) > 0.0:
 			existing["durability_cost"] = max(float(existing.get("durability_cost", 0.0)), float(tool.get("durability_cost", 0.0)))
 			existing["available_durability"] = float(tool.get("available_durability", 0.0))
@@ -324,7 +328,7 @@ func _append_deconstruct_required_tools(output: Array[Dictionary], value: Varian
 	output.append(tool)
 
 
-func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary, tool_durability: Dictionary = {}) -> Dictionary:
+func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary, tool_durability: Dictionary = {}, inventory: Dictionary = {}, equipment: Dictionary = {}, crafting_context: Dictionary = {}) -> Dictionary:
 	var data: Dictionary = _dictionary_or_empty(tool)
 	var raw_id: Variant = tool
 	if not data.is_empty():
@@ -335,7 +339,7 @@ func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary,
 		consume_on_deconstruct = true
 	var consume_count: int = max(1, int(data.get("consume_count", data.get("consumed_count", data.get("tool_consume_count", data.get("deconstruct_tool_consume_count", crafting_fragment.get("required_tool_consume_count", crafting_fragment.get("deconstruct_tool_consume_count", crafting_fragment.get("tool_consume_count", 1)))))))))
 	var durability_cost: float = max(0.0, float(data.get("durability_cost", data.get("tool_durability_cost", data.get("deconstruct_tool_durability_cost", data.get("required_tool_durability_cost", 0.0))))))
-	return {
+	var output := {
 		"item_id": tool_id,
 		"name": str(_item_data(tool_id).get("name", tool_id)),
 		"required": max(1, int(data.get("required", data.get("required_count", data.get("count", 1))))),
@@ -344,6 +348,104 @@ func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary,
 		"durability_cost": durability_cost,
 		"available_durability": _tool_durability(tool_id, tool_durability),
 	}
+	if consume_on_deconstruct:
+		var sources: Array[Dictionary] = _tool_consumption_sources(tool_id, consume_count, inventory, equipment, crafting_context)
+		output["consumption_sources"] = sources
+		output["available"] = _consumption_source_total(sources)
+		output["missing_count"] = max(0, consume_count - int(output.get("available", 0)))
+	return output
+
+
+func _tool_consumption_sources(tool_id: String, count: int, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var remaining: int = max(0, count)
+	if remaining > 0:
+		var actor_count: int = max(0, int(inventory.get(tool_id, 0)))
+		if actor_count > 0:
+			var used_actor_count: int = mini(actor_count, remaining)
+			output.append({
+				"source": "actor_inventory",
+				"label": "背包",
+				"count": used_actor_count,
+				"available": actor_count,
+			})
+			remaining -= used_actor_count
+	if remaining > 0:
+		var slot_ids: Array = equipment.keys()
+		slot_ids.sort()
+		for slot_id in slot_ids:
+			if remaining <= 0:
+				break
+			if _normalize_content_id(equipment.get(slot_id, "")) != tool_id:
+				continue
+			output.append({
+				"source": "equipment",
+				"label": "装备:%s" % str(slot_id),
+				"slot_id": str(slot_id),
+				"count": 1,
+				"available": 1,
+			})
+			remaining -= 1
+	if remaining > 0:
+		for container in _array_or_empty(crafting_context.get("nearby_tool_containers", [])):
+			if remaining <= 0:
+				break
+			var container_data: Dictionary = _dictionary_or_empty(container)
+			var container_count: int = _inventory_entry_count(_array_or_empty(container_data.get("inventory", [])), tool_id)
+			if container_count <= 0:
+				continue
+			var used_container_count: int = mini(container_count, remaining)
+			var container_id := str(container_data.get("container_id", ""))
+			var display_name := str(container_data.get("display_name", container_id))
+			output.append({
+				"source": "nearby_container",
+				"label": "附近容器:%s" % display_name,
+				"container_id": container_id,
+				"display_name": display_name,
+				"count": used_container_count,
+				"available": container_count,
+			})
+			remaining -= used_container_count
+	return output
+
+
+func _merge_tool_consumption_sources(left: Array, right: Array) -> Array:
+	var output: Array = left.duplicate(true)
+	for source in right:
+		var source_data: Dictionary = _dictionary_or_empty(source)
+		var matched := false
+		for index in range(output.size()):
+			var existing: Dictionary = _dictionary_or_empty(output[index])
+			if str(existing.get("source", "")) != str(source_data.get("source", "")):
+				continue
+			if str(existing.get("slot_id", "")) != str(source_data.get("slot_id", "")):
+				continue
+			if str(existing.get("container_id", "")) != str(source_data.get("container_id", "")):
+				continue
+			existing["count"] = int(existing.get("count", 0)) + int(source_data.get("count", 0))
+			existing["available"] = int(existing.get("available", 0)) + int(source_data.get("available", 0))
+			output[index] = existing
+			matched = true
+			break
+		if not matched:
+			output.append(source_data.duplicate(true))
+	return output
+
+
+func _consumption_source_total(sources: Array) -> int:
+	var total := 0
+	for source in sources:
+		total += max(0, int(_dictionary_or_empty(source).get("count", 0)))
+	return total
+
+
+func _inventory_entry_count(entries: Array, item_id: String) -> int:
+	var total := 0
+	for entry in entries:
+		var entry_data: Dictionary = _dictionary_or_empty(entry)
+		if _normalize_content_id(entry_data.get("item_id", "")) == item_id:
+			total += max(0, int(entry_data.get("count", 0)))
+	return total
 
 
 func _tool_durability(tool_id: String, tool_durability: Dictionary) -> float:

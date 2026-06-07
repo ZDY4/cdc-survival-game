@@ -175,7 +175,7 @@ func _actor_display_name(actor_id: int) -> String:
 func refresh_inventory_panel() -> void:
 	if inventory_panel == null or simulation == null:
 		return
-	inventory_panel.apply_snapshot(InventorySnapshot.new(registry).build(simulation.snapshot(), active_inventory_feedback))
+	inventory_panel.apply_snapshot(InventorySnapshot.new(registry).build(simulation.snapshot(), active_inventory_feedback, _crafting_context()))
 	_apply_stage_panel_visibility()
 
 

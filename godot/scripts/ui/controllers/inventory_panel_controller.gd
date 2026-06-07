@@ -910,7 +910,8 @@ func _deconstruct_requirements_text(item: Dictionary) -> String:
 		parts.append("工作台 %s" % station)
 	if parts.is_empty():
 		return ""
-	return " | 拆解要求 %s" % " / ".join(parts)
+	var source_suffix := _deconstruct_tool_sources_text(required_tools)
+	return " | 拆解要求 %s%s" % [" / ".join(parts), source_suffix]
 
 
 func _deconstruct_tool_requirement_texts(required_tools: Array) -> Array[String]:
@@ -933,6 +934,28 @@ func _deconstruct_tool_requirement_texts(required_tools: Array) -> Array[String]
 			label = "%s(耐久 %.1f/-%.1f)" % [label, float(tool.get("available_durability", 0.0)), durability_cost]
 		output.append(label)
 	return output
+
+
+func _deconstruct_tool_sources_text(required_tools: Array) -> String:
+	var parts: Array[String] = []
+	var missing_count := 0
+	for entry in required_tools:
+		var tool: Dictionary = _dictionary_or_empty(entry)
+		if not bool(tool.get("consume_on_deconstruct", false)):
+			continue
+		missing_count += max(0, int(tool.get("missing_count", 0)))
+		for source in _array_or_empty(tool.get("consumption_sources", [])):
+			var source_data: Dictionary = _dictionary_or_empty(source)
+			var label := str(source_data.get("label", source_data.get("source", ""))).strip_edges()
+			var count := int(source_data.get("count", 0))
+			if label.is_empty() or count <= 0:
+				continue
+			parts.append("%s x%d" % [label, count])
+	if missing_count > 0:
+		parts.append("缺 %d" % missing_count)
+	if parts.is_empty():
+		return ""
+	return " | 拆解工具来源 %s" % ", ".join(parts)
 
 
 func _deconstruct_preview_text(item: Dictionary) -> String:
