@@ -1378,6 +1378,8 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 	var material_total := 0
 	var diagnostic_totals := _empty_visual_diagnostics()
 	var zero_bounds: Array[String] = []
+	var missing_collision_assets: Array[String] = []
+	var asset_diagnostics: Array[Dictionary] = []
 	for asset_path in asset_paths:
 		if not ResourceLoader.exists(asset_path):
 			errors.append("gltf asset missing imported resource: %s" % asset_path)
@@ -1393,6 +1395,8 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 		var stats := _gltf_instance_stats(instance)
 		var mesh_count := int(stats.get("mesh_count", 0))
 		var material_count := int(stats.get("material_count", 0))
+		var collision_count := int(stats.get("collision_shapes", 0))
+		var physics_count := int(stats.get("physics_bodies", 0))
 		mesh_total += mesh_count
 		material_total += material_count
 		_merge_visual_diagnostics(diagnostic_totals, stats)
@@ -1401,12 +1405,26 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 		var bounds: AABB = stats.get("bounds", AABB())
 		if bounds.size.length() <= 0.001:
 			zero_bounds.append(asset_path)
+		if collision_count <= 0 or physics_count <= 0:
+			missing_collision_assets.append(asset_path)
+		asset_diagnostics.append({
+			"path": asset_path,
+			"mesh_count": mesh_count,
+			"material_count": material_count,
+			"collision_shapes": collision_count,
+			"physics_bodies": physics_count,
+			"bounds_size": _vector3_summary(bounds.size),
+			"max_origin_offset": float(stats.get("max_origin_offset", 0.0)),
+		})
 		instance.free()
 	for asset_path in zero_bounds:
 		errors.append("gltf asset should have non-zero visual bounds: %s" % asset_path)
 	counts["gltf_asset_count"] = asset_paths.size()
 	counts["gltf_mesh_count"] = mesh_total
 	counts["gltf_material_count"] = material_total
+	counts["gltf_assets_missing_collision"] = missing_collision_assets
+	counts["gltf_assets_missing_collision_count"] = missing_collision_assets.size()
+	counts["gltf_asset_diagnostics"] = asset_diagnostics
 	_apply_visual_diagnostic_counts(counts, "gltf", diagnostic_totals)
 	if asset_paths.is_empty():
 		errors.append("scene smoke expected glTF assets under res://assets")
@@ -1468,6 +1486,14 @@ func _gltf_instance_stats(root: Node) -> Dictionary:
 		"non_unit_scale_nodes": int(diagnostics.get("non_unit_scale_nodes", 0)),
 		"zero_scale_nodes": int(diagnostics.get("zero_scale_nodes", 0)),
 		"max_origin_offset": float(diagnostics.get("max_origin_offset", 0.0)),
+	}
+
+
+func _vector3_summary(value: Vector3) -> Dictionary:
+	return {
+		"x": snappedf(value.x, 0.001),
+		"y": snappedf(value.y, 0.001),
+		"z": snappedf(value.z, 0.001),
 	}
 
 
