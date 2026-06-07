@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "description": "Scene smoke map scene resource reference baseline for Godot map visual asset paths.",
+  "generatedFrom": "tools/agent/test-godot-game.ps1 -Scenario Scene",
+  "sceneResourceReferences": [
+    {
+      "scenePath": "res://scenes/maps/factory.tscn",
+      "assetPaths": [
+        "res://assets/container_placeholders/crate_wood.gltf",
+        "res://assets/container_placeholders/locker_metal.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/barricade_scrap.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/crate_stack_large.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/desk_wood.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/pallet_stack.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/shelf_metal.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/table_metal.gltf"
+      ],
+      "assetPathCount": 8,
+      "declared": 17,
+      "instantiated": 17,
+      "visualChildren": 17,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/forest.tscn",
+      "assetPaths": [],
+      "assetPathCount": 0,
+      "declared": 0,
+      "instantiated": 0,
+      "visualChildren": 0,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/hospital.tscn",
+      "assetPaths": [
+        "res://assets/container_placeholders/cabinet_medical.gltf",
+        "res://assets/container_placeholders/locker_metal.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/barricade_scrap.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/chair_metal.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/counter_canteen.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/desk_wood.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/pallet_stack.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/shelf_metal.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/table_metal.gltf"
+      ],
+      "assetPathCount": 9,
+      "declared": 16,
+      "instantiated": 16,
+      "visualChildren": 16,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/ruins.tscn",
+      "assetPaths": [],
+      "assetPathCount": 0,
+      "declared": 0,
+      "instantiated": 0,
+      "visualChildren": 0,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/school.tscn",
+      "assetPaths": [],
+      "assetPathCount": 0,
+      "declared": 0,
+      "instantiated": 0,
+      "visualChildren": 0,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/street_a.tscn",
+      "assetPaths": [],
+      "assetPathCount": 0,
+      "declared": 0,
+      "instantiated": 0,
+      "visualChildren": 0,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/street_b.tscn",
+      "assetPaths": [],
+      "assetPathCount": 0,
+      "declared": 0,
+      "instantiated": 0,
+      "visualChildren": 0,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/subway.tscn",
+      "assetPaths": [],
+      "assetPathCount": 0,
+      "declared": 0,
+      "instantiated": 0,
+      "visualChildren": 0,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/supermarket.tscn",
+      "assetPaths": [],
+      "assetPathCount": 0,
+      "declared": 0,
+      "instantiated": 0,
+      "visualChildren": 0,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/survivor_outpost_01_interior.tscn",
+      "assetPaths": [],
+      "assetPathCount": 0,
+      "declared": 0,
+      "instantiated": 0,
+      "visualChildren": 0,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/survivor_outpost_01_perimeter.tscn",
+      "assetPaths": [
+        "res://assets/container_placeholders/crate_wood.gltf",
+        "res://assets/world_tiles/building_wall/corner.gltf",
+        "res://assets/world_tiles/building_wall/floor_flat.gltf",
+        "res://assets/world_tiles/building_wall/straight.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/barrel_rust.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/bush_dry.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/roadblock_concrete.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/sandbag_barrier.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/tree_dead.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/wrecked_car.gltf"
+      ],
+      "assetPathCount": 10,
+      "declared": 11,
+      "instantiated": 11,
+      "visualChildren": 37,
+      "fallbackVisuals": 0
+    },
+    {
+      "scenePath": "res://scenes/maps/survivor_outpost_01.tscn",
+      "assetPaths": [
+        "res://assets/container_placeholders/cabinet_medical.gltf",
+        "res://assets/container_placeholders/crate_wood.gltf",
+        "res://assets/container_placeholders/locker_metal.gltf",
+        "res://assets/world_tiles/building_wall/corner.gltf",
+        "res://assets/world_tiles/building_wall/floor_flat.gltf",
+        "res://assets/world_tiles/building_wall/straight.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/barricade_scrap.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/cabinet_wood.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/chair_metal.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/counter_canteen.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/crate_stack_large.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/desk_wood.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/gate_pillar_concrete.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/pallet_stack.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/shelf_metal.gltf",
+        "res://assets/world_tiles/prop_placeholder_basic/table_metal.gltf"
+      ],
+      "assetPathCount": 16,
+      "declared": 34,
+      "instantiated": 34,
+      "visualChildren": 599,
+      "fallbackVisuals": 0
+    }
+  ]
+}

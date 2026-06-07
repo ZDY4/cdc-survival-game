@@ -9,7 +9,8 @@ output, and writes a JSON result under `.local/agent-smoke/godot_game`.
 It also covers `godot/scripts/app/headless_runner.gd`, the migrated replacement
 path for server/headless smoke entrypoints.
 When the Scene scenario passes, it also writes `Scene.asset-diagnostics.json`
-with map visual, glTF import, and UID baseline diagnostics parsed from the log.
+with map visual, scene resource reference, glTF import, and UID baseline
+diagnostics parsed from the log.
 
 .PARAMETER Scenario
 Smoke scenario to run. Use `All` to run every migrated Godot smoke scenario.
@@ -199,6 +200,114 @@ function Compare-UidBaselineEntries {
     return $mismatches
 }
 
+function New-SceneResourceReferenceBaseline {
+    param(
+        [Parameter(Mandatory = $true)]
+        [array]$SceneReports
+    )
+
+    $entries = @()
+    foreach ($report in $SceneReports) {
+        $scenePath = [string]$report.scene_path
+        if ([string]::IsNullOrWhiteSpace($scenePath)) {
+            continue
+        }
+        $assetPaths = @(
+            @($report.asset_paths) |
+                ForEach-Object { [string]$_ } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                Sort-Object -Unique
+        )
+        $entries += [PSCustomObject]@{
+            scenePath = $scenePath
+            assetPaths = @($assetPaths)
+            assetPathCount = $assetPaths.Length
+            declared = [int]$report.declared
+            instantiated = [int]$report.instantiated
+            visualChildren = [int]$report.visual_children
+            fallbackVisuals = [int]$report.fallback_visuals
+        }
+    }
+    return @($entries | Sort-Object -Property scenePath)
+}
+
+function Compare-SceneResourceReferenceBaseline {
+    param(
+        [Parameter(Mandatory = $true)]
+        [array]$Expected,
+
+        [Parameter(Mandatory = $true)]
+        [array]$Actual
+    )
+
+    $addedScenes = @()
+    $removedScenes = @()
+    $changedScenes = @()
+    $expectedByScene = @{}
+    foreach ($entry in $Expected) {
+        $scenePath = [string]$entry.scenePath
+        if (-not [string]::IsNullOrWhiteSpace($scenePath)) {
+            $expectedByScene[$scenePath] = $entry
+        }
+    }
+    $actualByScene = @{}
+    foreach ($entry in $Actual) {
+        $scenePath = [string]$entry.scenePath
+        if (-not [string]::IsNullOrWhiteSpace($scenePath)) {
+            $actualByScene[$scenePath] = $entry
+        }
+    }
+
+    foreach ($scenePath in @($expectedByScene.Keys | Sort-Object)) {
+        if (-not $actualByScene.ContainsKey($scenePath)) {
+            $removedScenes += $scenePath
+            continue
+        }
+        $expectedAssets = @(@($expectedByScene[$scenePath].assetPaths) | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+        $actualAssets = @(@($actualByScene[$scenePath].assetPaths) | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+        $expectedSet = @{}
+        foreach ($asset in $expectedAssets) {
+            $expectedSet[$asset] = $true
+        }
+        $actualSet = @{}
+        foreach ($asset in $actualAssets) {
+            $actualSet[$asset] = $true
+        }
+        $addedAssets = @($actualAssets | Where-Object { -not $expectedSet.ContainsKey($_) })
+        $removedAssets = @($expectedAssets | Where-Object { -not $actualSet.ContainsKey($_) })
+        if ($addedAssets.Length -gt 0 -or $removedAssets.Length -gt 0) {
+            $changedScenes += [PSCustomObject]@{
+                scenePath = $scenePath
+                addedAssets = @($addedAssets)
+                removedAssets = @($removedAssets)
+                expectedAssetCount = $expectedAssets.Length
+                actualAssetCount = $actualAssets.Length
+            }
+        }
+    }
+
+    foreach ($scenePath in @($actualByScene.Keys | Sort-Object)) {
+        if (-not $expectedByScene.ContainsKey($scenePath)) {
+            $addedScenes += $scenePath
+        }
+    }
+
+    $changedAssetCount = 0
+    foreach ($entry in $changedScenes) {
+        $changedAssetCount += @($entry.addedAssets).Length + @($entry.removedAssets).Length
+    }
+    return [PSCustomObject]@{
+        status = if ($addedScenes.Length -eq 0 -and $removedScenes.Length -eq 0 -and $changedScenes.Length -eq 0) { "matched" } else { "changed" }
+        addedSceneCount = $addedScenes.Length
+        removedSceneCount = $removedScenes.Length
+        changedSceneCount = $changedScenes.Length
+        changedAssetCount = $changedAssetCount
+        addedScenes = @($addedScenes)
+        removedScenes = @($removedScenes)
+        changedScenes = @($changedScenes)
+    }
+}
+
 function Export-SceneAssetDiagnostics {
     param(
         [Parameter(Mandatory = $true)]
@@ -237,6 +346,7 @@ function Export-SceneAssetDiagnostics {
 
     $diagnosticsPath = Join-Path $RunRoot "Scene.asset-diagnostics.json"
     $baselinePath = Join-Path $RepoRoot "docs\baselines\scene_asset_uid_baseline.json"
+    $referenceBaselinePath = Join-Path $RepoRoot "docs\baselines\scene_resource_reference_baseline.json"
     $baselineStatus = "missing"
     $baselineMismatches = @()
     if (Test-Path -LiteralPath $baselinePath) {
@@ -256,6 +366,25 @@ function Export-SceneAssetDiagnostics {
         )
         $baselineStatus = if ($baselineMismatches.Length -eq 0) { "matched" } else { "mismatched" }
     }
+    $sceneReferenceBaseline = New-SceneResourceReferenceBaseline -SceneReports @($counts.all_map_visual_scene_reports)
+    $sceneReferenceStatus = "missing"
+    $sceneReferenceDiff = [PSCustomObject]@{
+        status = "missing"
+        addedSceneCount = 0
+        removedSceneCount = 0
+        changedSceneCount = 0
+        changedAssetCount = 0
+        addedScenes = @()
+        removedScenes = @()
+        changedScenes = @()
+    }
+    if (Test-Path -LiteralPath $referenceBaselinePath) {
+        $referenceBaseline = Get-Content -LiteralPath $referenceBaselinePath -Raw | ConvertFrom-Json -Depth 100
+        $sceneReferenceDiff = Compare-SceneResourceReferenceBaseline `
+            -Expected @($referenceBaseline.sceneResourceReferences) `
+            -Actual @($sceneReferenceBaseline)
+        $sceneReferenceStatus = [string]$sceneReferenceDiff.status
+    }
 
     $diagnostics = [ordered]@{
         generatedAt = (Get-Date).ToString("o")
@@ -274,9 +403,25 @@ function Export-SceneAssetDiagnostics {
             gltfMaterialCount = $counts.gltf_material_count
             gltfImportUidBaselineCount = $counts.gltf_import_uid_baseline_count
             assetUidSidecarBaselineCount = $counts.asset_uid_sidecar_baseline_count
+            sceneResourceReferenceBaselineCount = $sceneReferenceBaseline.Length
+            sceneResourceReferenceBaselineStatus = $sceneReferenceStatus
+            sceneResourceReferenceChangedSceneCount = $sceneReferenceDiff.changedSceneCount
+            sceneResourceReferenceChangedAssetCount = $sceneReferenceDiff.changedAssetCount
         }
         mapVisualSceneReports = @($counts.all_map_visual_scene_reports)
         mapVisualAssetPaths = @($counts.all_map_visual_asset_paths)
+        sceneResourceReferenceBaseline = @($sceneReferenceBaseline)
+        sceneResourceReferenceDiff = [ordered]@{
+            baselinePath = $referenceBaselinePath
+            status = $sceneReferenceStatus
+            addedSceneCount = $sceneReferenceDiff.addedSceneCount
+            removedSceneCount = $sceneReferenceDiff.removedSceneCount
+            changedSceneCount = $sceneReferenceDiff.changedSceneCount
+            changedAssetCount = $sceneReferenceDiff.changedAssetCount
+            addedScenes = @($sceneReferenceDiff.addedScenes)
+            removedScenes = @($sceneReferenceDiff.removedScenes)
+            changedScenes = @($sceneReferenceDiff.changedScenes)
+        }
         gltfAssetDiagnostics = @($counts.gltf_asset_diagnostics)
         gltfImportUidBaseline = @($counts.gltf_import_uid_baseline)
         assetUidSidecarBaseline = @($counts.asset_uid_sidecar_baseline)
@@ -333,12 +478,22 @@ try {
         $assetBaselinePath = $null
         $assetBaselineStatus = $null
         $assetBaselineMismatchCount = $null
+        $sceneReferenceBaselineStatus = $null
+        $sceneReferenceChangedSceneCount = $null
+        $sceneReferenceChangedAssetCount = $null
         if ($name -eq "Scene" -and $exitCode -eq 0) {
             $assetDiagnosticResult = Export-SceneAssetDiagnostics -ConsoleLog $consoleLog -RunRoot $runRoot -RepoRoot $repoRoot
             $assetDiagnostics = $assetDiagnosticResult.path
             $assetBaselinePath = $assetDiagnosticResult.baselinePath
             $assetBaselineStatus = $assetDiagnosticResult.baselineStatus
             $assetBaselineMismatchCount = $assetDiagnosticResult.baselineMismatchCount
+            $diagnosticJson = $null
+            if ($assetDiagnostics -and (Test-Path -LiteralPath $assetDiagnostics)) {
+                $diagnosticJson = Get-Content -LiteralPath $assetDiagnostics -Raw | ConvertFrom-Json -Depth 100
+                $sceneReferenceBaselineStatus = [string]$diagnosticJson.sceneResourceReferenceDiff.status
+                $sceneReferenceChangedSceneCount = [int]$diagnosticJson.sceneResourceReferenceDiff.changedSceneCount
+                $sceneReferenceChangedAssetCount = [int]$diagnosticJson.sceneResourceReferenceDiff.changedAssetCount
+            }
             if ($assetDiagnostics) {
                 Write-Host "Scene asset diagnostics written to $assetDiagnostics"
             }
@@ -368,6 +523,9 @@ try {
             assetUidBaseline = $assetBaselinePath
             assetUidBaselineStatus = $assetBaselineStatus
             assetUidBaselineMismatchCount = $assetBaselineMismatchCount
+            sceneResourceReferenceBaselineStatus = $sceneReferenceBaselineStatus
+            sceneResourceReferenceChangedSceneCount = $sceneReferenceChangedSceneCount
+            sceneResourceReferenceChangedAssetCount = $sceneReferenceChangedAssetCount
         }
         if ($exitCode -ne 0) {
             break

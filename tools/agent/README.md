@@ -253,8 +253,9 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Save
 - `MigrationGuard` 调用 `godot/scripts/tools/mainline_migration_guard.gd`，用于确认 Godot 版本为 `4.6.3`，且主线未重新引入 Rust / Cargo / Bevy 时代源码文件。
 - 默认 `-Scenario All` 会运行所有已迁移 Godot smoke；`-Scenario Door` 是门相关链路的聚合复核，会顺序运行 `World`、`Scene`、`Movement`、`AI`、`Interaction`、`PlayerInteraction` 和 `Save`。
 - 输出 console log 和 result JSON 到 `.local/agent-smoke/godot_game/<timestamp>/`。
-- `Scene` 场景通过后，会从 `Scene.log` 解析 `scene_smoke passed` 的 JSON，并额外输出 `Scene.asset-diagnostics.json`；其中包含逐地图 MapVisual 报告、glTF 资产诊断、import UID baseline、sidecar UID baseline 和缺失 / 重复 / 非法资源清单，便于人工审阅或后续 diff。
+- `Scene` 场景通过后，会从 `Scene.log` 解析 `scene_smoke passed` 的 JSON，并额外输出 `Scene.asset-diagnostics.json`；其中包含逐地图 MapVisual 报告、map scene resource reference baseline / diff、glTF 资产诊断、import UID baseline、sidecar UID baseline 和缺失 / 重复 / 非法资源清单，便于人工审阅或后续 diff。
 - `Scene.asset-diagnostics.json` 会对比 `docs/baselines/scene_asset_uid_baseline.json`；glTF import UID 或 `.uid` sidecar 路径 / UID 漂移会让 `Scene` 场景失败。确认为有意资源重导入时，先审阅报告，再更新该 baseline。
+- `Scene.asset-diagnostics.json` 也会对比 `docs/baselines/scene_resource_reference_baseline.json`，输出每张 map scene 新增 / 移除的 Godot 资源引用；该差异用于资源迁移审阅，不默认作为失败门禁。
 
 ## Maintenance Rule
 
