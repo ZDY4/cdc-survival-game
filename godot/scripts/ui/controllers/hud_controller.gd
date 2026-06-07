@@ -685,8 +685,13 @@ func _option_button(option: Dictionary) -> Button:
 	button.tooltip_text = _option_tooltip(option)
 	button.custom_minimum_size = Vector2(160, 28)
 	button.focus_mode = Control.FOCUS_NONE
+	button.set_meta("option_id", str(option.get("id", "")))
 	button.set_meta("option_kind", str(option.get("kind", "")))
+	button.set_meta("display_name", str(option.get("display_name", option.get("id", ""))))
+	button.set_meta("disabled", false)
+	button.set_meta("disabled_reason", "")
 	button.set_meta("ap_cost", float(option.get("ap_cost", 0.0)))
+	button.set_meta("interaction_range", int(option.get("interaction_range", 0)))
 	button.mouse_entered.connect(func() -> void:
 		_menu_hover_label.text = _option_hover_text(option)
 	)
@@ -715,8 +720,11 @@ func _disabled_option_button(option: Dictionary) -> Button:
 	button.disabled = true
 	button.set_meta("option_id", option_id)
 	button.set_meta("option_kind", str(option.get("kind", "")))
+	button.set_meta("display_name", str(option.get("display_name", option_id)))
+	button.set_meta("disabled", true)
 	button.set_meta("disabled_reason", reason)
 	button.set_meta("ap_cost", float(option.get("ap_cost", 0.0)))
+	button.set_meta("interaction_range", int(option.get("interaction_range", 0)))
 	button.mouse_entered.connect(func() -> void:
 		_menu_hover_label.text = _option_hover_text(option)
 	)
@@ -766,6 +774,7 @@ func _interaction_menu_snapshot_from_prompt(interaction: Dictionary, visible: bo
 		"disabled_option_count": disabled_options.size(),
 		"options": _context_option_summaries(options),
 		"disabled_options": _context_option_summaries(disabled_options),
+		"option_details": _context_option_detail_map(options, disabled_options),
 	}
 
 
@@ -784,6 +793,40 @@ func _context_option_summaries(options: Array) -> Array[Dictionary]:
 			"ap_cost": float(data.get("ap_cost", 0.0)),
 		})
 	return output
+
+
+func _context_option_detail_map(options: Array, disabled_options: Array) -> Dictionary:
+	var output: Dictionary = {}
+	for option in options:
+		var data: Dictionary = _dictionary_or_empty(option)
+		var option_id := str(data.get("id", ""))
+		if option_id.is_empty():
+			continue
+		output[option_id] = _context_option_detail(data, true)
+	for option in disabled_options:
+		var data: Dictionary = _dictionary_or_empty(option)
+		var option_id := str(data.get("id", ""))
+		if option_id.is_empty():
+			continue
+		output[option_id] = _context_option_detail(data, false)
+	return output
+
+
+func _context_option_detail(option: Dictionary, enabled: bool) -> Dictionary:
+	var disabled_reason := str(option.get("disabled_reason", ""))
+	return {
+		"id": str(option.get("id", "")),
+		"kind": str(option.get("kind", "")),
+		"display_name": str(option.get("display_name", option.get("id", ""))),
+		"enabled": enabled,
+		"disabled": not enabled or bool(option.get("disabled", false)),
+		"disabled_reason": disabled_reason,
+		"disabled_reason_text": _disabled_reason_text(disabled_reason) if not disabled_reason.is_empty() else "",
+		"ap_cost": float(option.get("ap_cost", 0.0)),
+		"interaction_range": int(option.get("interaction_range", 0)),
+		"tooltip": _option_tooltip(option),
+		"hover_text": _option_hover_text(option),
+	}
 
 
 func _option_hover_text(option: Dictionary) -> String:

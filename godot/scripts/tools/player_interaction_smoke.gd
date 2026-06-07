@@ -245,12 +245,35 @@ func _expect_right_click_menu_buttons(errors: Array[String], game_root: Node) ->
 	elif option_button.text != "拾取":
 		errors.append("right-click interaction menu pickup option should use localized display name")
 	else:
+		if str(option_button.get_meta("option_id", "")) != "pickup":
+			errors.append("right-click interaction menu pickup option should expose option_id metadata")
+		if bool(option_button.get_meta("disabled", true)):
+			errors.append("right-click interaction menu pickup option should expose enabled metadata")
 		option_button.mouse_entered.emit()
 		var hover_label: Label = menu.find_child("MenuHoverHint", true, false) as Label
 		if hover_label == null:
 			errors.append("right-click interaction menu should expose hover detail line")
 		elif not hover_label.text.contains("kind=pickup"):
 			errors.append("right-click interaction menu hover detail should expose option kind")
+	var disabled_open: Button = menu.find_child("DisabledOption_open_container", true, false) as Button
+	if disabled_open == null:
+		errors.append("right-click interaction menu should expose disabled open_container option")
+	elif str(disabled_open.get_meta("disabled_reason", "")) != "target_not_container":
+		errors.append("disabled open_container option should expose target_not_container reason")
+	var menu_snapshot: Dictionary = _dictionary_or_empty(game_root.hud.interaction_menu_snapshot() if game_root.hud.has_method("interaction_menu_snapshot") else {})
+	var option_details: Dictionary = _dictionary_or_empty(menu_snapshot.get("option_details", {}))
+	var pickup_detail: Dictionary = _dictionary_or_empty(option_details.get("pickup", {}))
+	if pickup_detail.is_empty() or not bool(pickup_detail.get("enabled", false)):
+		errors.append("interaction menu snapshot should expose enabled pickup detail")
+	var open_detail: Dictionary = _dictionary_or_empty(option_details.get("open_container", {}))
+	if open_detail.is_empty() or str(open_detail.get("disabled_reason", "")) != "target_not_container":
+		errors.append("interaction menu snapshot should expose disabled open_container detail")
+	var talk_detail: Dictionary = _dictionary_or_empty(option_details.get("talk", {}))
+	if talk_detail.is_empty() or str(talk_detail.get("disabled_reason", "")) != "target_not_actor":
+		errors.append("interaction menu snapshot should expose disabled talk detail")
+	var attack_detail: Dictionary = _dictionary_or_empty(option_details.get("attack", {}))
+	if attack_detail.is_empty() or str(attack_detail.get("disabled_reason", "")) != "target_not_actor":
+		errors.append("interaction menu snapshot should expose disabled attack detail")
 	var before_grid: Dictionary = _player_grid(game_root)
 	var outside_click := InputEventMouseButton.new()
 	outside_click.button_index = MOUSE_BUTTON_LEFT
