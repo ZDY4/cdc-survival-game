@@ -1,8 +1,10 @@
 extends RefCounted
 
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 var registry: RefCounted
+var _reason_catalog := ReasonCatalog.new()
 
 
 func _init(p_registry: RefCounted) -> void:
@@ -253,7 +255,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 		"container_tool_missing":
 			return "缺少操作该容器所需的%s。" % item_name
 		_:
-			return str(feedback.get("reason", ""))
+			var fallback_reason := str(feedback.get("reason", ""))
+			return _reason_catalog.disabled_text_for(fallback_reason) if not fallback_reason.is_empty() else ""
 
 
 func _container_capacity_text(item_name: String, feedback: Dictionary) -> String:
