@@ -809,6 +809,10 @@ func preview_skill_target(actor_id: int, skill_id: String, skill_library: Dictio
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, topology: Dictionary = {}) -> Dictionary:
 	var actor_id: int = _player_actor_id()
 	var had_pending: bool = not pending_movement.is_empty() or not pending_interaction.is_empty()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	var ap_before: float = actor.ap if actor != null else 0.0
+	var turn_open_before: bool = bool(actor.turn_open) if actor != null else false
+	var round_before: int = int(turn_state.get("round", 1))
 	var movement: Dictionary = pending_movement.duplicate(true)
 	var interaction: Dictionary = pending_interaction.duplicate(true)
 	pending_movement.clear()
@@ -833,16 +837,35 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 			"movement": movement,
 			"interaction": interaction,
 		})
+	var turn_auto_ended := false
 	if had_pending and auto_end_turn:
-		var actor: RefCounted = actor_registry.get_actor(actor_id)
 		if actor != null and actor.turn_open and not bool(combat_state.get("active", false)):
 			_close_turn(actor_id, "pending_cancelled:%s" % reason)
 			advance_world_turn(topology)
 			_open_turn(actor_id, "player_turn")
+			turn_auto_ended = true
+	var turn_policy := {
+		"action_kind": "cancel_pending",
+		"success": true,
+		"reason": "auto_ended" if turn_auto_ended else ("preserved_turn" if had_pending else "no_pending"),
+		"cancel_reason": reason,
+		"had_pending": had_pending,
+		"auto_end_requested": auto_end_turn,
+		"auto_advanced": turn_auto_ended,
+		"turn_open_before": turn_open_before,
+		"turn_open_after": bool(actor.turn_open) if actor != null else false,
+		"round_before": round_before,
+		"round_after": int(turn_state.get("round", 1)),
+		"ap_before_cancel": ap_before,
+		"ap_after_cancel": actor.ap if actor != null else 0.0,
+		"pending_movement": false,
+		"pending_interaction": false,
+	}
 	return {
 		"success": true,
 		"had_pending": had_pending,
 		"reason": reason,
+		"turn_policy": turn_policy,
 	}
 
 

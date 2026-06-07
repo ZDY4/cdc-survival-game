@@ -659,6 +659,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("Esc should clear pending movement")
 	if _event_count(game_root, "pending_cancelled") <= before_pending_cancelled:
 		errors.append("Esc pending cancellation should emit pending_cancelled")
+	game_root.simulation.pending_movement = {
+		"actor_id": 1,
+		"target_position": far_target.duplicate(true),
+		"path": [_dictionary_or_empty(_player(game_root).get("grid_position", {})).duplicate(true), far_target.duplicate(true)],
+	}
+	var app_cancel_result: Dictionary = game_root.cancel_pending("keyboard_escape_smoke", false)
+	_expect_cancel_turn_policy(errors, app_cancel_result, false, "preserved_turn", false, "Esc/app pending movement cancel")
 	if player_actor != null:
 		player_actor.ap = 6.0
 
@@ -679,6 +686,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("Esc pending interaction cancellation should emit pending_cancelled")
 	if _event_count(game_root, "interaction_cancelled") <= before_interaction_cancelled:
 		errors.append("Esc pending interaction cancellation should emit interaction_cancelled")
+
+	game_root.simulation.pending_movement = {
+		"actor_id": 1,
+		"target_position": far_target.duplicate(true),
+		"path": [_dictionary_or_empty(_player(game_root).get("grid_position", {})).duplicate(true), far_target.duplicate(true)],
+	}
+	var space_cancel_result: Dictionary = game_root.press_space_action() if game_root.has_method("press_space_action") else {}
+	if not game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
+		errors.append("Space should clear pending movement")
+	_expect_cancel_turn_policy(errors, space_cancel_result, true, "auto_ended", true, "Space pending movement cancel")
 
 	return errors
 
@@ -721,6 +738,23 @@ func _release_key(game_root: Node, key: int) -> void:
 	event.physical_keycode = key
 	event.pressed = false
 	game_root.runtime_input_controller.input(event)
+
+
+func _expect_cancel_turn_policy(errors: Array[String], result: Dictionary, expected_auto_advanced: bool, expected_reason: String, expected_auto_end_requested: bool, context: String) -> void:
+	var policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	if policy.is_empty():
+		errors.append("%s should expose cancel turn_policy" % context)
+		return
+	if str(policy.get("action_kind", "")) != "cancel_pending":
+		errors.append("%s turn_policy should expose cancel_pending action kind" % context)
+	if bool(policy.get("auto_end_requested", false)) != expected_auto_end_requested:
+		errors.append("%s turn_policy auto_end_requested should be %s" % [context, str(expected_auto_end_requested)])
+	if expected_reason != "no_pending" and not bool(policy.get("had_pending", false)):
+		errors.append("%s turn_policy should report had_pending" % context)
+	if bool(policy.get("auto_advanced", false)) != expected_auto_advanced:
+		errors.append("%s turn_policy auto_advanced should be %s" % [context, str(expected_auto_advanced)])
+	if str(policy.get("reason", "")) != expected_reason:
+		errors.append("%s turn_policy reason should be %s, got %s" % [context, expected_reason, policy.get("reason", "")])
 
 
 func _dialogue_option_digit(game_root: Node, fragments: Array[String]) -> int:

@@ -131,6 +131,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	var cancel_result: Dictionary = simulation.cancel_pending("movement_smoke_cancelled")
 	if not bool(cancel_result.get("had_pending", false)):
 		errors.append("cancel_pending should report the queued movement")
+	_expect_cancel_turn_policy(errors, cancel_result, false, "preserved_turn", "manual movement cancel")
 	if not simulation.snapshot().get("pending_movement", {}).is_empty():
 		errors.append("cancel_pending should clear pending movement")
 	if _event_count(simulation.snapshot(), "movement_cancelled") <= movement_cancelled_before:
@@ -243,6 +244,23 @@ func _expect_turn_policy_event(errors: Array[String], snapshot: Dictionary, expe
 		errors.append("%s player_command_completed should expose turn_policy" % context)
 	elif str(policy.get("action_kind", "")) != expected_action:
 		errors.append("%s player_command_completed turn_policy should mirror action kind" % context)
+
+
+func _expect_cancel_turn_policy(errors: Array[String], result: Dictionary, expected_auto_advanced: bool, expected_reason: String, context: String) -> void:
+	var policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	if policy.is_empty():
+		errors.append("%s should expose cancel turn_policy" % context)
+		return
+	if str(policy.get("action_kind", "")) != "cancel_pending":
+		errors.append("%s turn_policy should expose cancel_pending action kind" % context)
+	if bool(policy.get("had_pending", false)) != bool(result.get("had_pending", false)):
+		errors.append("%s turn_policy should mirror had_pending" % context)
+	if bool(policy.get("auto_advanced", false)) != expected_auto_advanced:
+		errors.append("%s turn_policy auto_advanced should be %s" % [context, str(expected_auto_advanced)])
+	if str(policy.get("reason", "")) != expected_reason:
+		errors.append("%s turn_policy reason should be %s, got %s" % [context, expected_reason, policy.get("reason", "")])
+	if bool(policy.get("pending_movement", true)) or bool(policy.get("pending_interaction", true)):
+		errors.append("%s turn_policy should report pending cleared" % context)
 
 
 func _expect_configured_ap_rules(registry: RefCounted) -> Array[String]:
