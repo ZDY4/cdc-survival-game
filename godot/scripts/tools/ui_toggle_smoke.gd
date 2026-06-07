@@ -1370,6 +1370,10 @@ func _expected_blocker_kind(blocker_name: String) -> String:
 
 func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 	_assert_legacy_settings_migrated(errors, game_root)
+	if _settings_button_icon_path(game_root, "KeybindingCycleButton") != "res://assets/icons/settings/keybinding.svg":
+		errors.append("settings keybinding button should expose and render settings icon")
+	if _settings_button_icon_path(game_root, "ResetSettingsButton") != "res://assets/icons/settings/reset.svg":
+		errors.append("settings reset button should expose and render settings icon")
 	_set_slider(game_root, "MasterVolumeSlider", 65)
 	_set_slider(game_root, "MusicVolumeSlider", 40)
 	_set_slider(game_root, "SfxVolumeSlider", 55)
@@ -1478,6 +1482,13 @@ func _drag_control(control: Control, from: Vector2, to: Vector2) -> void:
 func _settings_line(game_root: Node, node_name: String) -> String:
 	var label: Label = game_root.settings_panel.find_child(node_name, true, false) as Label
 	return "" if label == null else str(label.text)
+
+
+func _settings_button_icon_path(game_root: Node, node_name: String) -> String:
+	var button: Button = game_root.settings_panel.find_child(node_name, true, false) as Button
+	if button == null or button.icon == null or not button.has_meta("icon_resource_path"):
+		return ""
+	return str(button.get_meta("icon_resource_path"))
 
 
 func _assert_legacy_settings_migrated(errors: Array[String], game_root: Node) -> void:

@@ -1,5 +1,8 @@
 extends Control
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+
 const DEFAULT_SETTINGS_PATH := "user://settings.json"
 const SETTINGS_SCHEMA_VERSION := 1
 
@@ -161,6 +164,7 @@ func _settings_keybinding_row() -> HBoxContainer:
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.focus_mode = Control.FOCUS_NONE
 	button.tooltip_text = "切换按键方案"
+	_apply_settings_button_icon(button, "res://assets/icons/settings/keybinding.svg")
 	button.pressed.connect(func() -> void:
 		settings_state["keybinding_profile"] = _next_keybinding_profile(str(settings_state.get("keybinding_profile", "default")))
 		_commit_settings_update()
@@ -180,9 +184,22 @@ func _settings_reset_row() -> HBoxContainer:
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.focus_mode = Control.FOCUS_NONE
 	button.tooltip_text = "恢复默认设置并保存"
+	_apply_settings_button_icon(button, "res://assets/icons/settings/reset.svg")
 	button.pressed.connect(reset_to_defaults, CONNECT_DEFERRED)
 	row.add_child(button)
 	return row
+
+
+func _apply_settings_button_icon(button: Button, resource_path: String) -> void:
+	var icon_asset := AssetPathResolver.resolve_media_asset(resource_path, "settings")
+	var texture := MediaTextureLoader.texture_from_asset(icon_asset)
+	if texture == null:
+		button.icon = null
+		return
+	button.icon = texture
+	button.expand_icon = true
+	button.set_meta("icon_resource_path", MediaTextureLoader.resource_path_from_asset(icon_asset))
+	button.set_meta("icon_fallback_key", str(icon_asset.get("fallback_key", "")))
 
 
 func reset_to_defaults() -> Dictionary:
