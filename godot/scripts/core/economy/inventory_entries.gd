@@ -59,7 +59,7 @@ func add_actor_item(actor: RefCounted, item_id: String, delta: int) -> void:
 		if current_count <= 0 and not actor.inventory_order.has(normalized_item_id):
 			actor.inventory_order.append(normalized_item_id)
 		if "inventory_stacks" in actor:
-			_sync_actor_inventory_stacks(actor, normalized_item_id)
+			_apply_actor_inventory_stack_delta(actor, normalized_item_id, current_count, delta, next_count)
 
 
 func sync_actor_inventory_order(actor: RefCounted) -> void:
@@ -120,14 +120,47 @@ func _sync_actor_inventory_stacks(actor: RefCounted, item_id: String) -> void:
 	if total_count <= 0:
 		actor.inventory_stacks.erase(item_id)
 		return
+	actor.inventory_stacks[item_id] = _normalized_actor_inventory_stacks(actor, item_id, total_count)
+
+
+func _apply_actor_inventory_stack_delta(actor: RefCounted, item_id: String, previous_total: int, delta: int, next_total: int) -> void:
+	if actor == null or item_id.is_empty():
+		return
+	if next_total <= 0:
+		actor.inventory_stacks.erase(item_id)
+		return
+	var stacks: Array[int] = _normalized_actor_inventory_stacks(actor, item_id, previous_total)
+	if delta > 0:
+		stacks.append(delta)
+	elif delta < 0:
+		var remaining: int = -delta
+		for index in range(stacks.size() - 1, -1, -1):
+			if remaining <= 0:
+				break
+			var stack_count: int = int(stacks[index])
+			var consumed: int = min(stack_count, remaining)
+			stack_count -= consumed
+			remaining -= consumed
+			if stack_count <= 0:
+				stacks.remove_at(index)
+			else:
+				stacks[index] = stack_count
+	actor.inventory_stacks[item_id] = _stacks_or_single_total(stacks, next_total)
+
+
+func _normalized_actor_inventory_stacks(actor: RefCounted, item_id: String, total_count: int) -> Array[int]:
 	var stacks: Array[int] = []
 	for stack_count in _array_or_empty(actor.inventory_stacks.get(item_id, [])):
 		var count: int = max(0, int(stack_count))
 		if count > 0:
 			stacks.append(count)
+	return _stacks_or_single_total(stacks, total_count)
+
+
+func _stacks_or_single_total(stacks: Array[int], total_count: int) -> Array[int]:
 	var stack_sum := 0
 	for count in stacks:
 		stack_sum += count
 	if stacks.is_empty() or stack_sum != total_count:
 		stacks = [total_count]
-	actor.inventory_stacks[item_id] = stacks
+	return stacks

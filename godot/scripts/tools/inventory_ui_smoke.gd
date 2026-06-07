@@ -1,6 +1,7 @@
 extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
+const InventoryEntries = preload("res://scripts/core/economy/inventory_entries.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
@@ -258,6 +259,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 		var split_stacks: Array = _array_or_empty(split_snapshot.get("stack_counts", []))
 		if split_stacks.size() != 2 or int(split_stacks[0]) != 2 or int(split_stacks[1]) != 1:
 			errors.append("split stack snapshot should expose 2/1 stack counts: %s" % split_snapshot)
+		var stack_drop_result: Dictionary = game_root.drop_player_item("1010", 1)
+		await process_frame
+		if not bool(stack_drop_result.get("success", false)):
+			errors.append("dropping from split stack should succeed: %s" % stack_drop_result)
+		game_root.refresh_inventory_panel()
+		var after_stack_drop: Dictionary = _inventory_snapshot_item(game_root, "1010")
+		var after_drop_stacks: Array = _array_or_empty(after_stack_drop.get("stack_counts", []))
+		if after_drop_stacks.size() != 1 or int(after_drop_stacks[0]) != 2:
+			errors.append("stack-aware removal should consume the newest split stack first: %s" % after_stack_drop)
+		InventoryEntries.new().add_actor_item(player_ref, "1010", 2)
+		game_root.refresh_inventory_panel()
+		var after_stack_add: Dictionary = _inventory_snapshot_item(game_root, "1010")
+		var after_add_stacks: Array = _array_or_empty(after_stack_add.get("stack_counts", []))
+		if after_add_stacks.size() != 2 or int(after_add_stacks[0]) != 2 or int(after_add_stacks[1]) != 2:
+			errors.append("stack-aware add should append a new stack instead of collapsing existing stacks: %s" % after_stack_add)
+		if not _open_inventory_context_menu(game_root, "废金属"):
+			errors.append("should reopen context menu for temporary scrap metal after stack mutations")
+			return errors
 		_execute_inventory_context_action(game_root, 7)
 		await process_frame
 		if not _discard_dialog_visible(game_root):
@@ -265,7 +284,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		var drop_all_quantity_input: LineEdit = _discard_quantity_input(game_root)
 		if drop_all_quantity_input == null:
 			errors.append("drop all discard modal should expose quantity input")
-		elif drop_all_quantity_input.text != "3":
+		elif drop_all_quantity_input.text != "4":
 			errors.append("drop all discard modal should start from full stack count")
 		_confirm_discard_dialog(game_root)
 		await process_frame
