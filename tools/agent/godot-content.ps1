@@ -9,6 +9,7 @@ summarize, references, validate, format, diff-summary, and asset-manifest comman
 `validate changed` filters Git status to migrated content domains and prints a
 `change_status_summary` line for modified / added / untracked / deleted / renamed records.
 `diff-summary changed` prints per-file line/hunk counts plus aggregate totals for the same changed content scope.
+`format -DryRun` reports whether records would be rewritten without touching files.
 
 .PARAMETER Command
 Content command to run: locate, summarize, references, validate, format, diff-summary, or asset-manifest.
@@ -24,6 +25,9 @@ Content id for locate/summarize/references/validate/format, or the path for diff
 .PARAMETER Godot
 Path to the Godot command line entrypoint.
 
+.PARAMETER DryRun
+Preview `format` / `format changed` rewrites without writing files.
+
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command summarize -Kind item -Id 1006
 
@@ -37,6 +41,9 @@ Runs validation for supported changed content files and reports changed file cou
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind item -Id 1006
+
+.EXAMPLE
+pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind changed -DryRun
 
 .EXAMPLE
 pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command format -Kind skill_tree -Id survival
@@ -71,7 +78,10 @@ param(
     [string]$Id,
 
     [Parameter(Mandatory = $false)]
-    [string]$Godot = "D:\godot\godot.cmd"
+    [string]$Godot = "D:\godot\godot.cmd",
+
+    [Parameter(Mandatory = $false)]
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -83,6 +93,9 @@ if (-not (Test-Path -LiteralPath $Godot)) {
 }
 if (-not (Test-Path -LiteralPath $godotProject)) {
     throw "Godot project not found: $godotProject"
+}
+if ($DryRun -and $Command -ne "format") {
+    throw "-DryRun is only supported with -Command format"
 }
 
 if ($Command -eq "diff-summary") {
@@ -105,6 +118,9 @@ if ($Command -eq "diff-summary") {
     $contentArgs = @($Command, $Kind)
     if ($PSBoundParameters.ContainsKey("Id") -and -not [string]::IsNullOrWhiteSpace($Id)) {
         $contentArgs += $Id
+    }
+    if ($DryRun) {
+        $contentArgs += "--dry-run"
     }
 }
 

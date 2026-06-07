@@ -7,6 +7,7 @@ const ContentSchemaMigration = preload("res://scripts/data/content_schema_migrat
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentSummaryPresenter = preload("res://scripts/tools/content_summary_presenter.gd")
 const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd")
+const ContentJsonFormatter = preload("res://scripts/tools/content_json_formatter.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
@@ -93,6 +94,7 @@ func _run() -> Array[String]:
 	_expect_invalid_settlement_anchor(errors, registry)
 	_expect_invalid_overworld_entry(errors, registry)
 	_expect_format_domain_support(errors, registry)
+	_expect_json_formatter_dry_run(errors)
 	_expect_summary_domains(errors, registry)
 	_expect_map_scene_summary(errors, registry)
 	return errors
@@ -794,6 +796,32 @@ func _expect_format_domain_support(errors: Array[String], registry: ContentRegis
 		var record: Dictionary = registry.get_library(domain).get(relative_path.get_file().get_basename(), {})
 		if record.is_empty():
 			errors.append("format support smoke missing fixture for %s @ %s" % [domain, relative_path])
+
+
+func _expect_json_formatter_dry_run(errors: Array[String]) -> void:
+	var path := ProjectSettings.globalize_path("user://content_formatter_dry_run_smoke.json")
+	var raw := "{\"id\":\"dry_run_smoke\",\"values\":[1,2]}"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		errors.append("dry-run formatter smoke could not create temp file: %s" % error_string(FileAccess.get_open_error()))
+		return
+	file.store_string(raw)
+	file.close()
+
+	var preview := ContentJsonFormatter.write_formatted_file(path, {"dry_run": true})
+	if not bool(preview.get("ok", false)) or not bool(preview.get("changed", false)) or not bool(preview.get("dry_run", false)):
+		errors.append("dry-run formatter should report a changed preview: %s" % preview)
+	var after_preview := FileAccess.get_file_as_string(path)
+	if after_preview != raw:
+		errors.append("dry-run formatter should not rewrite file contents")
+
+	var write := ContentJsonFormatter.write_formatted_file(path)
+	if not bool(write.get("ok", false)) or not bool(write.get("changed", false)) or bool(write.get("dry_run", false)):
+		errors.append("formatter write should report real change: %s" % write)
+	var after_write := FileAccess.get_file_as_string(path)
+	if after_write == raw or not after_write.contains("\n  \"values\": ["):
+		errors.append("formatter write should persist formatted JSON, got: %s" % after_write)
+	DirAccess.remove_absolute(path)
 
 
 func _expect_summary_domains(errors: Array[String], registry: ContentRegistry) -> void:

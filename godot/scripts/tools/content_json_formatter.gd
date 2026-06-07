@@ -64,14 +64,15 @@ static func format_text(raw: String) -> String:
 	return output.rstrip(" \t\r\n") + "\n"
 
 
-static func write_formatted_file(path: String) -> Dictionary:
+static func write_formatted_file(path: String, options: Dictionary = {}) -> Dictionary:
 	var before := FileAccess.get_file_as_string(path)
 	var formatted := format_text(before)
 	if formatted.is_empty():
 		return _failed("format_failed", "failed to format JSON text: %s" % path)
 
 	var changed := before != formatted
-	if changed:
+	var dry_run := bool(options.get("dry_run", false))
+	if changed and not dry_run:
 		# 内容格式化是 agent 复核入口，写入失败必须带路径，方便直接定位坏文件。
 		var file := FileAccess.open(path, FileAccess.WRITE)
 		if file == null:
@@ -82,6 +83,7 @@ static func write_formatted_file(path: String) -> Dictionary:
 		"ok": true,
 		"status": "ok",
 		"changed": changed,
+		"dry_run": dry_run,
 	}
 
 

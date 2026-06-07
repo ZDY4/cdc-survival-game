@@ -90,54 +90,69 @@ func _load_registry_or_null() -> ContentRegistry:
 
 
 func _format_command(args: Array[String], registry: ContentRegistry) -> int:
-	if args.size() == 2 and args[1] == "changed":
-		return _format_changed_command(registry)
-	if args.size() != 3:
+	var options := _parse_format_options(args)
+	var positional: Array[String] = options.get("args", [])
+	var dry_run := bool(options.get("dry_run", false))
+	if positional.size() == 2 and positional[1] == "changed":
+		return _format_changed_command(registry, dry_run)
+	if positional.size() != 3:
 		printerr(_usage())
 		return 2
 
-	var domain := _normalize_domain(args[1])
-	var id_value := ContentRegistry.normalize_content_id(args[2])
+	var domain := _normalize_domain(positional[1])
+	var id_value := ContentRegistry.normalize_content_id(positional[2])
 	var record: Dictionary = registry.get_library(domain).get(id_value, {})
 	if record.is_empty():
-		printerr("not found: %s %s" % [args[1], id_value])
+		printerr("not found: %s %s" % [positional[1], id_value])
 		return 1
 	if not ContentCliDomains.supports_format_domain(domain):
-		printerr("format currently supports %s, got %s" % [ContentCliDomains.format_domain_names(), args[1]])
+		printerr("format currently supports %s, got %s" % [ContentCliDomains.format_domain_names(), positional[1]])
 		return 2
 
-	var report: Dictionary = _format_record(domain, id_value, record)
+	var report: Dictionary = _format_record(domain, id_value, record, {"dry_run": dry_run})
 	print("mode: format")
 	print("kind: %s" % _singular_domain(domain))
 	print("id: %s" % id_value)
 	print("relative_path: %s" % report.get("relative_path", ""))
 	print("changed: %s" % str(report.get("changed", false)).to_lower())
+	print("dry_run: %s" % str(report.get("dry_run", false)).to_lower())
 	return 0
 
 
-func _format_changed_command(registry: ContentRegistry) -> int:
+func _format_changed_command(registry: ContentRegistry, dry_run: bool = false) -> int:
 	var paths := _changed_supported_paths()
 	print("mode: format_changed")
+	print("dry_run: %s" % str(dry_run).to_lower())
 	print("changed_supported_files: %d" % paths.size())
 	if paths.is_empty():
+		if dry_run:
+			print("would_rewrite_files: 0")
 		print("status: no_supported_changes")
 		return 0
 
 	var rewritten_files := 0
+	var would_rewrite_files := 0
 	for relative_path in paths:
-		var report: Dictionary = _format_relative_path(relative_path, registry)
+		var report: Dictionary = _format_relative_path(relative_path, registry, {"dry_run": dry_run})
 		if report.is_empty():
 			printerr("unsupported changed content path: %s" % relative_path)
 			return 1
 		if bool(report.get("changed", false)):
-			rewritten_files += 1
+			would_rewrite_files += 1
+			if not dry_run:
+				rewritten_files += 1
+		var label := "unchanged"
+		if bool(report.get("changed", false)):
+			label = "would_change" if dry_run else "changed"
 		print("- [%s] %s %s @ %s" % [
-			"changed" if bool(report.get("changed", false)) else "unchanged",
+			label,
 			report.get("kind", ""),
 			report.get("id", ""),
 			report.get("relative_path", ""),
 		])
 	print("rewritten_files: %d" % rewritten_files)
+	if dry_run:
+		print("would_rewrite_files: %d" % would_rewrite_files)
 	print("status: ok")
 	return 0
 
@@ -221,9 +236,9 @@ func _asset_manifest_command(args: Array[String], registry: ContentRegistry) -> 
 	return 0
 
 
-func _format_record(domain: String, id_value: String, record: Dictionary) -> Dictionary:
+func _format_record(domain: String, id_value: String, record: Dictionary, options: Dictionary = {}) -> Dictionary:
 	var path: String = str(record.get("path", ""))
-	var format_result := ContentJsonFormatter.write_formatted_file(path)
+	var format_result := ContentJsonFormatter.write_formatted_file(path, options)
 	if not bool(format_result.get("ok", false)):
 		printerr(format_result.get("message", "failed to format JSON text: %s" % path))
 		return {}
@@ -232,10 +247,11 @@ func _format_record(domain: String, id_value: String, record: Dictionary) -> Dic
 		"id": id_value,
 		"relative_path": _repo_relative_path(path),
 		"changed": bool(format_result.get("changed", false)),
+		"dry_run": bool(format_result.get("dry_run", false)),
 	}
 
 
-func _format_relative_path(relative_path: String, registry: ContentRegistry) -> Dictionary:
+func _format_relative_path(relative_path: String, registry: ContentRegistry, options: Dictionary = {}) -> Dictionary:
 	var path_domain := _domain_for_relative_path(relative_path)
 	if path_domain.is_empty():
 		return {}
@@ -243,7 +259,7 @@ func _format_relative_path(relative_path: String, registry: ContentRegistry) -> 
 	for id_value in registry.get_library(path_domain).keys():
 		var record: Dictionary = registry.get_library(path_domain)[id_value]
 		if str(record.get("path", "")).replace("\\", "/") == full_path.replace("\\", "/"):
-			return _format_record(path_domain, id_value, record)
+			return _format_record(path_domain, id_value, record, options)
 	return {}
 
 
@@ -289,6 +305,20 @@ func _normalize_domain(kind: String) -> String:
 			return kind
 
 
+func _parse_format_options(args: Array[String]) -> Dictionary:
+	var positional: Array[String] = []
+	var dry_run := false
+	for arg in args:
+		if arg == "--dry-run":
+			dry_run = true
+			continue
+		positional.append(arg)
+	return {
+		"args": positional,
+		"dry_run": dry_run,
+	}
+
+
 func _singular_domain(domain: String) -> String:
 	match domain:
 		"items":
@@ -329,4 +359,4 @@ func _repo_relative_path(path: String) -> String:
 
 
 func _usage() -> String:
-	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance|ai|json> <id> | content_cli validate changed | content_cli format changed | content_cli diff-summary changed | content_cli diff-summary --path <repo-relative-or-absolute-path> | content_cli asset-manifest all"
+	return "usage: content_cli <locate|validate|summarize|references|format> <item|recipe|character|dialogue|dialogue_rule|quest|skill|skill_tree|settlement|overworld|map|shop|world_tile|appearance|ai|json> <id> | content_cli validate changed | content_cli format [--dry-run] changed | content_cli format [--dry-run] <kind> <id> | content_cli diff-summary changed | content_cli diff-summary --path <repo-relative-or-absolute-path> | content_cli asset-manifest all"
