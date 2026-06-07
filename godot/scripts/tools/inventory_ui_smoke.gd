@@ -447,6 +447,39 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _inventory_feedback_line(game_root).contains("缺少可消耗拆解工具"):
 		errors.append("inventory feedback should localize missing consumable deconstruct tool")
 	player_ref.equipment.clear()
+	player_ref.inventory.clear()
+	player_ref.inventory_order.clear()
+	player_ref.tool_durability.clear()
+	player_ref.inventory["smoke_deconstruct_durable_tool_item"] = 2
+	player_ref.inventory["1151"] = 1
+	player_ref.tool_durability["1151"] = 5.0
+	game_root.refresh_inventory_panel()
+	if not _press_inventory_item_with_text(game_root, "耐久拆解测试物品"):
+		errors.append("should select durable deconstruct smoke item")
+	if not _detail_line(game_root).contains("螺丝刀(耐久 5.0/-3.0)"):
+		errors.append("inventory detail should show deconstruct tool durability requirement")
+	var durable_deconstruct_result: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_durable_tool_item", 1)
+	await process_frame
+	if not bool(durable_deconstruct_result.get("success", false)):
+		errors.append("durable deconstruct from inventory should succeed: %s" % durable_deconstruct_result.get("reason", "unknown"))
+	if _player_inventory_count(game_root, "1151") != 1:
+		errors.append("durable deconstruct should not consume whole tool item")
+	if not is_equal_approx(float(player_ref.tool_durability.get("1151", 0.0)), 2.0):
+		errors.append("durable deconstruct should reduce tool durability to 2.0")
+	var low_durability_deconstruct: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_durable_tool_item", 1)
+	await process_frame
+	if str(low_durability_deconstruct.get("reason", "")) != "tool_durability_insufficient":
+		errors.append("low durability deconstruct should report tool_durability_insufficient")
+	if not _inventory_feedback_line(game_root).contains("拆解工具耐久不足"):
+		errors.append("inventory feedback should localize deconstruct tool durability failure")
+	if _player_inventory_count(game_root, "smoke_deconstruct_durable_tool_item") != 1:
+		errors.append("failed low-durability deconstruct should keep source item")
+	player_ref.inventory.clear()
+	player_ref.inventory_order.clear()
+	player_ref.inventory["1006"] = 3
+	player_ref.tool_durability.clear()
+	player_ref.equipment.clear()
+	game_root.refresh_inventory_panel()
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should select bandages before dropping through inventory panel")
 	var quantity_spin: SpinBox = _quantity_spin(game_root)
@@ -645,6 +678,21 @@ func _install_deconstruct_requirement_smoke_item(game_root: Node) -> void:
 				"kind": "crafting",
 				"deconstruct_required_tools": [{"item_id": "1151", "consume_on_deconstruct": true, "consume_count": 1}],
 				"deconstruct_required_station": "smoke_station",
+				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
+			}],
+		},
+	}
+	items["smoke_deconstruct_durable_tool_item"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_deconstruct_durable_tool_item",
+			"name": "耐久拆解测试物品",
+			"description": "用于验证拆解工具耐久消耗",
+			"value": 1,
+			"weight": 0.1,
+			"fragments": [{
+				"kind": "crafting",
+				"deconstruct_required_tools": [{"item_id": "1151", "durability_cost": 3.0}],
 				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
 			}],
 		},

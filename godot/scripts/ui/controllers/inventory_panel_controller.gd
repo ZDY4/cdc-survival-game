@@ -884,6 +884,9 @@ func _deconstruct_tool_requirement_texts(required_tools: Array) -> Array[String]
 			label = "%s x%d" % [label, required]
 		if bool(tool.get("consume_on_deconstruct", false)):
 			label = "%s(消耗 %d)" % [label, max(1, int(tool.get("consume_count", 1)))]
+		var durability_cost: float = max(0.0, float(tool.get("durability_cost", 0.0)))
+		if durability_cost > 0.0:
+			label = "%s(耐久 %.1f/-%.1f)" % [label, float(tool.get("available_durability", 0.0)), durability_cost]
 		output.append(label)
 	return output
 

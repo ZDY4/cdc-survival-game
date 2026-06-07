@@ -16,6 +16,7 @@ func _init(p_registry: RefCounted) -> void:
 func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionary:
 	var player: Dictionary = _player_actor(runtime_snapshot)
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
+	var tool_durability: Dictionary = _dictionary_or_empty(player.get("tool_durability", {}))
 	var inventory_order: Array[String] = _inventory_order(player.get("inventory_order", []), inventory)
 	var items: Array[Dictionary] = []
 	var total_weight := 0.0
@@ -24,7 +25,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 		var count: int = int(inventory.get(item_id, 0))
 		if count <= 0:
 			continue
-		var item_snapshot: Dictionary = _item_snapshot(str(item_id), count)
+		var item_snapshot: Dictionary = _item_snapshot(str(item_id), count, tool_durability)
 		item_snapshot["order_index"] = order_index
 		total_weight += float(item_snapshot.get("total_weight", 0.0))
 		items.append(item_snapshot)
@@ -43,7 +44,7 @@ func build(runtime_snapshot: Dictionary, feedback: Dictionary = {}) -> Dictionar
 	}
 
 
-func _item_snapshot(item_id: String, count: int) -> Dictionary:
+func _item_snapshot(item_id: String, count: int, tool_durability: Dictionary = {}) -> Dictionary:
 	var record: Dictionary = registry.get_library("items").get(item_id, {})
 	if record.is_empty():
 		return {
@@ -106,7 +107,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"deconstructable": not deconstruct_yield.is_empty(),
 		"deconstruct_yield": deconstruct_yield,
 		"deconstruct_preview": _deconstruct_preview(deconstruct_yield, count),
-		"deconstruct_requirements": _deconstruct_requirements(crafting_fragment),
+		"deconstruct_requirements": _deconstruct_requirements(crafting_fragment, tool_durability),
 		"stackable": _stackable(data),
 		"max_stack": _max_stack(data),
 	}
@@ -246,30 +247,30 @@ func _deconstruct_preview(deconstruct_yield: Array[Dictionary], source_count: in
 	}
 
 
-func _deconstruct_requirements(crafting_fragment: Dictionary) -> Dictionary:
+func _deconstruct_requirements(crafting_fragment: Dictionary, tool_durability: Dictionary = {}) -> Dictionary:
 	if crafting_fragment.is_empty():
 		return {}
 	return {
-		"required_tools": _deconstruct_required_tools(crafting_fragment),
+		"required_tools": _deconstruct_required_tools(crafting_fragment, tool_durability),
 		"required_station": str(crafting_fragment.get("deconstruct_required_station", crafting_fragment.get("required_deconstruct_station", "none"))),
 	}
 
 
-func _deconstruct_required_tools(crafting_fragment: Dictionary) -> Array[Dictionary]:
+func _deconstruct_required_tools(crafting_fragment: Dictionary, tool_durability: Dictionary = {}) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	for key in ["deconstruct_required_tools", "required_deconstruct_tools", "deconstruct_required_tool_ids", "required_deconstruct_tool_ids"]:
 		if not crafting_fragment.has(key):
 			continue
-		_append_deconstruct_required_tools(output, crafting_fragment.get(key), crafting_fragment)
+		_append_deconstruct_required_tools(output, crafting_fragment.get(key), crafting_fragment, tool_durability)
 	return output
 
 
-func _append_deconstruct_required_tools(output: Array[Dictionary], value: Variant, crafting_fragment: Dictionary) -> void:
+func _append_deconstruct_required_tools(output: Array[Dictionary], value: Variant, crafting_fragment: Dictionary, tool_durability: Dictionary = {}) -> void:
 	if typeof(value) == TYPE_ARRAY:
 		for entry in value:
-			_append_deconstruct_required_tools(output, entry, crafting_fragment)
+			_append_deconstruct_required_tools(output, entry, crafting_fragment, tool_durability)
 		return
-	var tool: Dictionary = _deconstruct_tool_requirement(value, crafting_fragment)
+	var tool: Dictionary = _deconstruct_tool_requirement(value, crafting_fragment, tool_durability)
 	var tool_id := str(tool.get("item_id", ""))
 	if tool_id.is_empty():
 		return
@@ -281,12 +282,15 @@ func _append_deconstruct_required_tools(output: Array[Dictionary], value: Varian
 		if bool(tool.get("consume_on_deconstruct", false)):
 			existing["consume_on_deconstruct"] = true
 			existing["consume_count"] = max(int(existing.get("consume_count", 1)), int(tool.get("consume_count", 1)))
+		if float(tool.get("durability_cost", 0.0)) > 0.0:
+			existing["durability_cost"] = max(float(existing.get("durability_cost", 0.0)), float(tool.get("durability_cost", 0.0)))
+			existing["available_durability"] = float(tool.get("available_durability", 0.0))
 		output[index] = existing
 		return
 	output.append(tool)
 
 
-func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary) -> Dictionary:
+func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary, tool_durability: Dictionary = {}) -> Dictionary:
 	var data: Dictionary = _dictionary_or_empty(tool)
 	var raw_id: Variant = tool
 	if not data.is_empty():
@@ -296,13 +300,24 @@ func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary)
 	if bool(crafting_fragment.get("consume_required_tools_on_deconstruct", crafting_fragment.get("consume_deconstruct_tools", crafting_fragment.get("consume_required_tools", false)))):
 		consume_on_deconstruct = true
 	var consume_count: int = max(1, int(data.get("consume_count", data.get("consumed_count", data.get("tool_consume_count", data.get("deconstruct_tool_consume_count", crafting_fragment.get("required_tool_consume_count", crafting_fragment.get("deconstruct_tool_consume_count", crafting_fragment.get("tool_consume_count", 1)))))))))
+	var durability_cost: float = max(0.0, float(data.get("durability_cost", data.get("tool_durability_cost", data.get("deconstruct_tool_durability_cost", data.get("required_tool_durability_cost", 0.0))))))
 	return {
 		"item_id": tool_id,
 		"name": str(_item_data(tool_id).get("name", tool_id)),
 		"required": max(1, int(data.get("required", data.get("required_count", data.get("count", 1))))),
 		"consume_on_deconstruct": consume_on_deconstruct,
 		"consume_count": consume_count if consume_on_deconstruct else 0,
+		"durability_cost": durability_cost,
+		"available_durability": _tool_durability(tool_id, tool_durability),
 	}
+
+
+func _tool_durability(tool_id: String, tool_durability: Dictionary) -> float:
+	if tool_id.is_empty():
+		return 0.0
+	if tool_durability.has(tool_id):
+		return max(0.0, float(tool_durability.get(tool_id, 0.0)))
+	return 100.0
 
 
 func _normalized_item_ids(value: Variant) -> Array[String]:
@@ -425,6 +440,8 @@ func _feedback_text(feedback: Dictionary) -> String:
 			return "缺少拆解工具，无法拆解 %s。" % item_name
 		"missing_consumable_tools":
 			return "缺少可消耗拆解工具，无法拆解 %s。" % item_name
+		"tool_durability_insufficient":
+			return "拆解工具耐久不足，无法拆解 %s。" % item_name
 		"missing_station":
 			return "缺少拆解工作台 %s，无法拆解 %s。" % [
 				str(feedback.get("required_station", "")),

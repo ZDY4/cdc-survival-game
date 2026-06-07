@@ -1564,6 +1564,15 @@ func _deconstruct_requirement_check(actor: RefCounted, item_id: String, items: D
 			"item_id": normalized_item_id,
 			"missing_tools": missing_tools,
 		}
+	var missing_durability_tools: Array[Dictionary] = _missing_deconstruct_tool_durability(actor, required_tools, items)
+	if not missing_durability_tools.is_empty():
+		return {
+			"success": false,
+			"reason": "tool_durability_insufficient",
+			"item_id": normalized_item_id,
+			"missing_tools": missing_durability_tools,
+			"missing_durability_tools": missing_durability_tools,
+		}
 	var tool_consumption: Array[Dictionary] = _deconstruct_tool_consumption_requirements(actor, required_tools)
 	var missing_consumable_tools: Array[Dictionary] = _missing_deconstruct_consumable_tools(actor, tool_consumption, items)
 	if not missing_consumable_tools.is_empty():
@@ -1623,6 +1632,8 @@ func _append_deconstruct_tool_requirements(output: Array[Dictionary], value: Var
 		if bool(requirement.get("consume_on_deconstruct", false)):
 			existing["consume_on_deconstruct"] = true
 			existing["consume_count"] = max(int(existing.get("consume_count", 1)), int(requirement.get("consume_count", 1)))
+		if float(requirement.get("durability_cost", 0.0)) > 0.0:
+			existing["durability_cost"] = max(float(existing.get("durability_cost", 0.0)), float(requirement.get("durability_cost", 0.0)))
 		output[index] = existing
 		return
 	output.append(requirement)
@@ -1638,11 +1649,13 @@ func _deconstruct_tool_requirement(tool: Variant, crafting_fragment: Dictionary)
 	if _deconstruct_consumes_required_tools(crafting_fragment):
 		consume_on_deconstruct = true
 	var consume_count: int = max(1, int(data.get("consume_count", data.get("consumed_count", data.get("tool_consume_count", data.get("deconstruct_tool_consume_count", _deconstruct_required_tool_consume_count(crafting_fragment)))))))
+	var durability_cost: float = float(data.get("durability_cost", data.get("tool_durability_cost", data.get("deconstruct_tool_durability_cost", data.get("required_tool_durability_cost", 0.0)))))
 	return {
 		"item_id": _inventory_entries.normalize_content_id(raw_id),
 		"required": required_count,
 		"consume_on_deconstruct": consume_on_deconstruct,
 		"consume_count": consume_count,
+		"durability_cost": max(0.0, durability_cost),
 	}
 
 
@@ -1657,17 +1670,22 @@ func _deconstruct_required_tool_consume_count(crafting_fragment: Dictionary) -> 
 func _deconstruct_tool_consumption_requirements(actor: RefCounted, required_tools: Array[Dictionary]) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
 	for tool in required_tools:
-		if not bool(tool.get("consume_on_deconstruct", false)):
+		var durability_cost: float = max(0.0, float(tool.get("durability_cost", 0.0)))
+		if not bool(tool.get("consume_on_deconstruct", false)) and durability_cost <= 0.0:
 			continue
 		var tool_id := str(tool.get("item_id", ""))
 		if tool_id.is_empty():
 			continue
-		output.append({
+		var requirement := {
 			"item_id": tool_id,
-			"count": max(1, int(tool.get("consume_count", tool.get("required", 1)))),
+			"count": max(1, int(tool.get("consume_count", tool.get("required", 1)))) if durability_cost <= 0.0 else 0,
 			"available": int(actor.inventory.get(tool_id, 0)) if actor != null else 0,
 			"requirement_kind": "tool",
-		})
+		}
+		if durability_cost > 0.0:
+			requirement["durability_cost"] = durability_cost
+			requirement["available_durability"] = _actor_tool_durability(actor, tool_id)
+		output.append(requirement)
 	return output
 
 
@@ -1675,6 +1693,8 @@ func _missing_deconstruct_consumable_tools(actor: RefCounted, tool_consumption: 
 	var missing: Array[Dictionary] = []
 	for tool in tool_consumption:
 		var tool_id := str(tool.get("item_id", ""))
+		if float(tool.get("durability_cost", 0.0)) > 0.0:
+			continue
 		var required_count: int = max(1, int(tool.get("count", 1)))
 		var available_count: int = int(actor.inventory.get(tool_id, 0)) if actor != null else 0
 		if not tool_id.is_empty() and available_count >= required_count:
@@ -1689,13 +1709,47 @@ func _missing_deconstruct_consumable_tools(actor: RefCounted, tool_consumption: 
 	return missing
 
 
+func _missing_deconstruct_tool_durability(actor: RefCounted, required_tools: Array[Dictionary], items: Dictionary) -> Array[Dictionary]:
+	var missing: Array[Dictionary] = []
+	for tool in required_tools:
+		var tool_id := str(tool.get("item_id", ""))
+		var durability_cost: float = max(0.0, float(tool.get("durability_cost", 0.0)))
+		if tool_id.is_empty() or durability_cost <= 0.0:
+			continue
+		var available_durability: float = _actor_tool_durability(actor, tool_id)
+		if available_durability >= durability_cost:
+			continue
+		missing.append({
+			"item_id": tool_id,
+			"name": _item_name_from_library(tool_id, items),
+			"available_durability": available_durability,
+			"required_durability": durability_cost,
+			"durability_cost": durability_cost,
+		})
+	return missing
+
+
 func _consume_deconstruct_tools(actor: RefCounted, tool_consumption: Array) -> Array[Dictionary]:
 	var consumed: Array[Dictionary] = []
 	for tool in tool_consumption:
 		var tool_data: Dictionary = _dictionary_or_empty(tool)
 		var tool_id := str(tool_data.get("item_id", ""))
 		var count: int = max(1, int(tool_data.get("count", 1)))
+		var durability_cost: float = max(0.0, float(tool_data.get("durability_cost", 0.0)))
 		if actor == null or tool_id.is_empty():
+			continue
+		if durability_cost > 0.0:
+			var durability_before: float = _actor_tool_durability(actor, tool_id)
+			var durability_after: float = max(0.0, durability_before - durability_cost)
+			actor.tool_durability[tool_id] = durability_after
+			consumed.append({
+				"item_id": tool_id,
+				"count": 0,
+				"durability_cost": durability_cost,
+				"durability_before": durability_before,
+				"durability_after": durability_after,
+				"requirement_kind": "tool",
+			})
 			continue
 		var before_count: int = int(actor.inventory.get(tool_id, 0))
 		_inventory_entries.add_actor_item(actor, tool_id, -count)
@@ -1707,6 +1761,14 @@ func _consume_deconstruct_tools(actor: RefCounted, tool_consumption: Array) -> A
 			"requirement_kind": "tool",
 		})
 	return consumed
+
+
+func _actor_tool_durability(actor: RefCounted, tool_id: String) -> float:
+	if actor == null or tool_id.is_empty():
+		return 0.0
+	if actor.tool_durability.has(tool_id):
+		return max(0.0, float(actor.tool_durability.get(tool_id, 0.0)))
+	return 100.0
 
 
 func _attach_consumed_tools_to_last_event(kind: String, consumed_tools: Array[Dictionary]) -> void:

@@ -478,9 +478,52 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("consumable-tool deconstruct should emit item_deconstructed event")
 	elif _array_or_empty(_dictionary_or_empty(_dictionary_or_empty(deconstruct_events[deconstruct_events.size() - 1]).get("payload", {})).get("consumed_tools", [])).is_empty():
 		errors.append("item_deconstructed event should expose consumed_tools")
+	var durable_deconstruct_items: Dictionary = _durable_deconstruct_tool_smoke_items(registry.get_library("items"))
 	player.inventory.clear()
 	player.inventory_order.clear()
 	player.equipment.clear()
+	player.tool_durability.clear()
+	player.inventory["smoke_deconstruct_durable_tool_item"] = 2
+	player.inventory["1151"] = 1
+	player.tool_durability["1151"] = 5.0
+	var durable_deconstruct_result: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "smoke_deconstruct_durable_tool_item",
+		"count": 1,
+		"item_library": durable_deconstruct_items,
+	})
+	if not bool(durable_deconstruct_result.get("success", false)):
+		errors.append("deconstruct with durable tool should succeed: %s" % durable_deconstruct_result.get("reason", "unknown"))
+	if int(player.inventory.get("1151", 0)) != 1:
+		errors.append("durable deconstruct should not consume whole tool item")
+	if not is_equal_approx(float(player.tool_durability.get("1151", 0.0)), 2.0):
+		errors.append("durable deconstruct should reduce tool durability to 2.0")
+	var durable_deconstruct_tools: Array = _array_or_empty(durable_deconstruct_result.get("consumed_tools", []))
+	if durable_deconstruct_tools.is_empty() or not _dictionary_or_empty(durable_deconstruct_tools[0]).has("durability_after"):
+		errors.append("durable deconstruct should expose durability consumption payload")
+	var durable_deconstruct_event: Dictionary = _last_event(simulation.snapshot(), "item_deconstructed")
+	var durable_deconstruct_event_tools: Array = _array_or_empty(_dictionary_or_empty(durable_deconstruct_event.get("payload", {})).get("consumed_tools", []))
+	if durable_deconstruct_event_tools.is_empty() or not is_equal_approx(float(_dictionary_or_empty(durable_deconstruct_event_tools[0]).get("durability_cost", 0.0)), 3.0):
+		errors.append("durable deconstruct event should expose durability_cost")
+	var low_durability_deconstruct: Dictionary = simulation.submit_player_command({
+		"kind": "inventory_action",
+		"actor_id": 1,
+		"action": "deconstruct",
+		"item_id": "smoke_deconstruct_durable_tool_item",
+		"count": 1,
+		"item_library": durable_deconstruct_items,
+	})
+	if str(low_durability_deconstruct.get("reason", "")) != "tool_durability_insufficient":
+		errors.append("durable deconstruct should reject when durability is insufficient")
+	if int(player.inventory.get("smoke_deconstruct_durable_tool_item", 0)) != 1 or int(player.inventory.get("1151", 0)) != 1:
+		errors.append("durability rejected deconstruct should not consume source or tool")
+	player.inventory.clear()
+	player.inventory_order.clear()
+	player.equipment.clear()
+	player.tool_durability.clear()
+	player.ap = 6.0
 	player.inventory["1003"] = 50
 	player.inventory["1011"] = 10
 	var overweight_craft: Dictionary = simulation.craft_recipe(1, "recipe_bandage_basic", recipes)
@@ -493,6 +536,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	player.inventory.clear()
 	player.inventory_order.clear()
 	player.equipment.clear()
+	player.ap = 6.0
 	player.inventory["1003"] = 49
 	player.inventory["1004"] = 2
 	player.inventory["1010"] = 0
@@ -661,6 +705,26 @@ func _consumable_deconstruct_tool_smoke_items(base_items: Dictionary) -> Diction
 			"fragments": [{
 				"kind": "crafting",
 				"deconstruct_required_tools": [{"item_id": "1151", "consume_on_deconstruct": true, "consume_count": 1}],
+				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
+			}],
+		},
+	}
+	return output
+
+
+func _durable_deconstruct_tool_smoke_items(base_items: Dictionary) -> Dictionary:
+	var output := base_items.duplicate(true)
+	output["smoke_deconstruct_durable_tool_item"] = {
+		"path": "<smoke>",
+		"data": {
+			"id": "smoke_deconstruct_durable_tool_item",
+			"name": "耐久拆解测试物品",
+			"description": "用于验证拆解工具耐久消耗",
+			"value": 1,
+			"weight": 0.1,
+			"fragments": [{
+				"kind": "crafting",
+				"deconstruct_required_tools": [{"item_id": "1151", "durability_cost": 3.0}],
 				"deconstruct_yield": [{"item_id": "1104", "count": 1}],
 			}],
 		},
