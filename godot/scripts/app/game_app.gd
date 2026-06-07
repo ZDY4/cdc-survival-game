@@ -285,6 +285,8 @@ func gameplay_input_blocked_by_ui() -> bool:
 		return true
 	if panel_controller != null and panel_controller.gameplay_input_blocked():
 		return true
+	if _world_action_presenter_blocks_input():
+		return true
 	return hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open())
 
 
@@ -293,6 +295,8 @@ func gameplay_input_blocker_name() -> String:
 		return "debug_console"
 	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
 		return "interaction_menu"
+	if _world_action_presenter_blocks_input():
+		return "world_action_presenter"
 	if panel_controller != null and panel_controller.has_method("gameplay_input_blocker_name"):
 		return str(panel_controller.gameplay_input_blocker_name())
 	return ""
@@ -317,6 +321,19 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 			"panel_id": "hud",
 			"mouse_blocks_world": true,
 		}
+	if _world_action_presenter_blocks_input():
+		var presenter: Dictionary = world_action_presenter_snapshot()
+		return {
+			"blocked": true,
+			"name": "world_action_presenter",
+			"kind": "world_action_presenter",
+			"modal_id": "",
+			"panel_id": "world",
+			"mouse_blocks_world": true,
+			"action_kind": str(presenter.get("kind", "")),
+			"active_count": int(presenter.get("active_count", 0)),
+			"sequence": int(presenter.get("sequence", 0)),
+		}
 	if panel_controller != null and panel_controller.has_method("gameplay_input_blocker_snapshot"):
 		var snapshot: Dictionary = _dictionary_or_empty(panel_controller.call("gameplay_input_blocker_snapshot"))
 		if not snapshot.is_empty():
@@ -330,6 +347,13 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 		"panel_id": "",
 		"mouse_blocks_world": not name.is_empty(),
 	}
+
+
+func _world_action_presenter_blocks_input() -> bool:
+	if world_action_presenter == null:
+		return false
+	var snapshot: Dictionary = world_action_presenter_snapshot()
+	return bool(snapshot.get("active", false))
 
 
 func modal_stack_snapshot() -> Dictionary:

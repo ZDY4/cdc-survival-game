@@ -379,7 +379,7 @@
 - 移动逐格表现第一版已迁移：`WorldActionPresenter` 会从 `movement_step` / `actor_moved` 事件重建路径，把重绘后的 actor node 临时放回旧格，再按每格短 tween 播放到最终格；节点带 `action_presenter_active`、`action_presenter_kind`、`action_presenter_step_count` metadata，`PlayerInteraction` smoke 已覆盖左键地面移动会生成 movement presenter。待补转向、AP 内/跨回合 pending 段落、自动开门步骤、移动取消后的表现清理和 headless fast-forward。
 - 攻击表现队列第一版已迁移 impact marker：`WorldActionPresenter` 会从 `attack_resolved` 生成 attack snapshot，并在目标 actor 上方短暂生成 `WorldActionAttackImpact`，marker 暴露 `actor_id`、`target_actor_id`、`damage`、`hit_kind`、`critical`、`defeated` metadata；`PlayerInteraction` smoke 已覆盖真实 attack 命令会生成 presenter 和 impact marker。待补 `on_hit_effect_applied`、`actor_defeated`、`corpse_created`、`combat_started` / `combat_ended` 阶段，以及转向、近战挥击或远程开火、命中/未命中/格挡/暴击反馈、状态效果图标更新、伤害飘字、死亡/尸体出现和战斗 HUD 刷新；最终血量、死亡和掉落仍以 core snapshot 为准。
 - 交互表现队列第一版已迁移 pulse marker：`interaction_succeeded` payload 已补 `target_grid`，`WorldActionPresenter` 会从交互事件生成 interaction snapshot，并在仍存在的目标节点或已消费目标原格子上短暂生成 `WorldActionInteractionPulse`，marker 暴露 `actor_id`、`target_id`、`target_type`、`target_name`、`target_grid`、`option_kind` metadata；跨地图 `scene_transition` 会跳过旧坐标移动 tween；`PlayerInteraction` smoke 已覆盖 pickup 交互会生成 presenter 和 pulse marker。待补 container、door、dialogue、trade、scene transition 等更细分阶段表现，以及“表现完成 -> 打开 UI / 刷新地图”的稳定顺序。
-- 待补表现期间输入和 UI blocker：动作表现播放中应短暂阻止新的世界点击、hotbar 和面板快捷动作，或按旧 Rust 规则允许排队/取消；blocker 状态需进入 `runtime_control` / HUD debug，Esc 是否取消表现、是否取消 pending、是否自动结束回合要按动作类型明确。
+- 表现期间输入 blocker 第一版已迁移：`WorldActionPresenter` active 时会通过 `GameApp.gameplay_input_blocked_by_ui()` 阻止新的世界点击，并通过 `gameplay_input_blocker_snapshot()` / `runtime_control.ui_blocker_snapshot` 暴露 `world_action_presenter`、action kind、active count 和 sequence 诊断，`PlayerInteraction` smoke 已覆盖地面点击移动表现期间的 blocker。待补 hotbar / 面板快捷动作是否同步阻塞、按旧 Rust 规则排队/取消的策略、Esc 是否取消表现、是否取消 pending、是否自动结束回合。
 - 待补刷新时机第二版：当前第一版仍在最终 world refresh 后回放 actor tween，解决“视觉瞬移”的主观问题，但不是严格的“表现结束后再刷新最终 snapshot”；后续要把移动、攻击、开门、容器/对话打开和跨地图切换统一到 action queue 驱动的刷新时序。
 - smoke / 验收第一版已补：`PlayerInteraction` smoke 会断言命令 result 生成 movement presenter、step_count 为正、玩家节点有 active presenter metadata；待扩展 `Movement` / `Combat` / `Interaction` / `Scene` smoke，覆盖攻击 windup/impact/feedback/death、交互 door/pickup/container/dialogue 阶段和 headless fast-forward 顺序。
 
@@ -510,7 +510,7 @@
 2. 战斗空间等价：LOS、跨层、AOE、友军伤害、战斗退出和目标预览。
 3. 背包/容器/交易高级 UI：数量弹窗、上下文菜单、拖拽、购物车、详情和失败提示。
 4. 技能和 hotbar：多槽、快捷键、目标选择、状态堆叠、非战斗 modifier 消费点、cooldown。
-5. 动作表现队列：`WorldActionPresenter` 第一版已接入移动逐格 tween 与 attack/interaction snapshot；继续补攻击/交互阶段表现、表现期间 input blocker 和最终 snapshot refresh 时机。
+5. 动作表现队列：`WorldActionPresenter` 第一版已接入移动逐格 tween、attack/interaction snapshot 和表现期间 input blocker；继续补攻击/交互阶段表现、hotbar / 面板快捷动作阻塞策略和最终 snapshot refresh 时机。
 6. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
 7. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick 和运行时状态 snapshot。
 8. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。

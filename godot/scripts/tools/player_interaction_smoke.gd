@@ -120,13 +120,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("pickup execution failed: %s" % pickup_result.get("reason", "unknown"))
 	else:
 		_expect_world_action_interaction_presenter(errors, game_root, "survivor_outpost_01_pickup_medkit", "pickup")
+	await _wait_for_world_action_presenter_idle(game_root)
 	if int(_player_inventory(game_root).get("1006", 0)) <= 0:
 		errors.append("pickup execution did not add item 1006")
 	await process_frame
 	if game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false) != null:
 		errors.append("consumed pickup node was not removed from generated scene")
-	_expect_ground_grid_move(errors, game_root)
-	_expect_hostile_attack_hover_preview(errors, game_root)
+	await _expect_ground_grid_move(errors, game_root)
+	await _expect_hostile_attack_hover_preview(errors, game_root)
 	await _expect_corpse_world_interaction(errors, game_root)
 	var move_camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if move_camera == null:
@@ -279,6 +280,7 @@ func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
 		errors.append("ground grid fallback move should update player grid")
 	if not _hud_interaction_line(game_root).contains("移动"):
 		errors.append("ground grid fallback selection should show move prompt")
+	await _wait_for_world_action_presenter_idle(game_root)
 
 
 func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node) -> void:
@@ -355,6 +357,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		else:
 			game_root._rebuild_world_after_runtime_change({}, {"result": attack_result})
 			_expect_world_action_attack_presenter(errors, game_root, target_id, attack_result)
+			await _wait_for_world_action_presenter_idle(game_root)
 	_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
 
 
@@ -611,6 +614,35 @@ func _expect_world_action_interaction_presenter(errors: Array[String], game_root
 		errors.append("interaction pulse marker should expose target grid")
 
 
+func _expect_world_action_input_blocker(errors: Array[String], game_root: Node, expected_action_kind: String) -> void:
+	if not game_root.has_method("gameplay_input_blocker_snapshot"):
+		errors.append("game root should expose gameplay input blocker snapshot")
+		return
+	var blocker: Dictionary = _dictionary_or_empty(game_root.gameplay_input_blocker_snapshot())
+	if not bool(blocker.get("blocked", false)):
+		errors.append("world action presenter should block gameplay input while active")
+	if str(blocker.get("name", "")) != "world_action_presenter":
+		errors.append("world action presenter blocker name expected world_action_presenter, got %s" % blocker.get("name", ""))
+	if str(blocker.get("kind", "")) != "world_action_presenter":
+		errors.append("world action presenter blocker kind expected world_action_presenter, got %s" % blocker.get("kind", ""))
+	if not bool(blocker.get("mouse_blocks_world", false)):
+		errors.append("world action presenter blocker should block world mouse input")
+	if str(blocker.get("action_kind", "")) != expected_action_kind:
+		errors.append("world action presenter blocker action kind expected %s, got %s" % [expected_action_kind, blocker.get("action_kind", "")])
+	var control_snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var control_blocker: Dictionary = _dictionary_or_empty(control_snapshot.get("ui_blocker_snapshot", {}))
+	if str(control_blocker.get("name", "")) != "world_action_presenter":
+		errors.append("runtime control should expose world action presenter blocker snapshot")
+
+
+func _wait_for_world_action_presenter_idle(game_root: Node, max_frames: int = 90) -> void:
+	for _index in range(max_frames):
+		var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+		if not bool(presenter.get("active", false)):
+			return
+		await process_frame
+
+
 func _expect_attack_marker_hidden(errors: Array[String], game_root: Node) -> void:
 	var marker: MeshInstance3D = game_root.find_child("AttackTargetMarker", true, false) as MeshInstance3D
 	if marker == null:
@@ -732,6 +764,7 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 	if not str(_actor_by_id(game_root.simulation.snapshot(), 1).get("active_container_id", "")).begins_with("corpse_corpse_world_smoke_"):
 		errors.append("opening corpse should set player active_container_id")
 	game_root.close_active_container("corpse_world_smoke_cleanup")
+	await _wait_for_world_action_presenter_idle(game_root)
 
 
 func _corpse_node_for_source_actor(game_root: Node, source_actor_id: int) -> Node3D:
@@ -775,12 +808,14 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("left mouse click movement should enqueue world action presenter movement, got %s" % JSON.stringify(presenter))
 	elif int(presenter.get("step_count", 0)) <= 0:
 		errors.append("world action presenter movement should expose positive step_count")
+	_expect_world_action_input_blocker(errors, game_root, "movement")
 	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node == null:
 		errors.append("world action presenter movement should keep player node visible")
 	elif not bool(player_node.get_meta("action_presenter_active", false)):
 		errors.append("player node should expose active movement presenter metadata after click")
 	game_root.cancel_pending("viewport_far_click_smoke", false)
+	await _wait_for_world_action_presenter_idle(game_root)
 	if player != null:
 		player.ap = 6.0
 
