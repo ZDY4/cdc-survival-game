@@ -3,6 +3,7 @@ extends SceneTree
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
+const DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
 
 
 func _init() -> void:
@@ -57,6 +58,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue text missing start node")
 	if not _target_line(game_root).contains("老王"):
 		errors.append("dialogue target line should show target actor display name")
+	var dialogue_snapshot: Dictionary = DialogueSnapshot.new(game_root.registry).build(game_root.simulation.snapshot())
+	var portrait_asset := _dictionary_or_empty(dialogue_snapshot.get("portrait_asset", {}))
+	if str(portrait_asset.get("reason", "")) != "legacy_root_asset_reference":
+		errors.append("dialogue snapshot should expose legacy portrait path diagnostic: %s" % portrait_asset)
+	if str(portrait_asset.get("fallback_key", "")) != "portrait":
+		errors.append("dialogue snapshot should expose portrait fallback key: %s" % portrait_asset)
 	var text_scroll: ScrollContainer = _text_scroll(game_root)
 	if text_scroll == null:
 		errors.append("dialogue text should be wrapped in a scroll container")

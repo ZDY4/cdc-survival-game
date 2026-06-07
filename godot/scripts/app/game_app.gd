@@ -295,6 +295,9 @@ func gameplay_input_blocked_by_ui() -> bool:
 func gameplay_input_blocker_name() -> String:
 	if is_debug_console_open():
 		return "debug_console"
+	var panel_modal_name := _panel_modal_blocker_name()
+	if not panel_modal_name.is_empty():
+		return panel_modal_name
 	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
 		return "interaction_menu"
 	if _world_action_presenter_blocks_input():
@@ -314,6 +317,9 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 			"panel_id": "hud",
 			"mouse_blocks_world": true,
 		}
+	var panel_modal_snapshot := _panel_modal_blocker_snapshot()
+	if not panel_modal_snapshot.is_empty():
+		return panel_modal_snapshot
 	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
 		return {
 			"blocked": true,
@@ -349,6 +355,20 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 		"panel_id": "",
 		"mouse_blocks_world": not name.is_empty(),
 	}
+
+
+func _panel_modal_blocker_name() -> String:
+	var snapshot := _panel_modal_blocker_snapshot()
+	return str(snapshot.get("name", ""))
+
+
+func _panel_modal_blocker_snapshot() -> Dictionary:
+	if panel_controller == null or not panel_controller.has_method("gameplay_input_blocker_snapshot"):
+		return {}
+	var snapshot: Dictionary = _dictionary_or_empty(panel_controller.call("gameplay_input_blocker_snapshot"))
+	if str(snapshot.get("kind", "")) == "modal":
+		return snapshot
+	return {}
 
 
 func _world_action_presenter_blocks_input() -> bool:
@@ -1127,6 +1147,10 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 			hud.hide_debug_console()
 		refresh_hud(current_interaction_prompt())
 		return {"success": true, "closed": "debug_console"}
+	if panel_controller != null and panel_controller.has_method("close_blocking_modal"):
+		var modal_result: Dictionary = panel_controller.call("close_blocking_modal")
+		if bool(modal_result.get("success", false)):
+			return {"success": true, "closed": str(modal_result.get("closed", "modal")), "result": modal_result}
 	if _world_action_presenter_blocks_input():
 		var pending_before: Dictionary = _runtime_pending_state_snapshot()
 		var result: Dictionary = finish_world_action_presentations()
@@ -1147,10 +1171,6 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 		return {"success": true, "closed": "interaction_menu"}
 	if runtime_input_controller != null:
 		runtime_input_controller.clear_selection_state()
-	if panel_controller != null and panel_controller.has_method("close_blocking_modal"):
-		var modal_result: Dictionary = panel_controller.call("close_blocking_modal")
-		if bool(modal_result.get("success", false)):
-			return {"success": true, "closed": str(modal_result.get("closed", "modal")), "result": modal_result}
 	var dialogue_result := close_active_dialogue(reason)
 	if bool(dialogue_result.get("success", false)):
 		return {"success": true, "closed": "dialogue", "result": dialogue_result}

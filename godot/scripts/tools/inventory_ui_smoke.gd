@@ -40,6 +40,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var initial_text: String = "\n".join(_item_lines(game_root))
 	if not initial_text.contains("手枪弹药 x10"):
 		errors.append("initial inventory missing bootstrap ammo")
+	var ammo_snapshot := _inventory_snapshot_item(game_root, "1009")
+	var ammo_icon := _dictionary_or_empty(ammo_snapshot.get("icon_asset", {}))
+	if str(ammo_icon.get("reason", "")) != "legacy_root_asset_reference":
+		errors.append("inventory item snapshot should expose legacy icon path diagnostic: %s" % ammo_icon)
+	if str(ammo_icon.get("fallback_key", "")) != "ammo":
+		errors.append("inventory item snapshot should expose ammo icon fallback key: %s" % ammo_icon)
 	if _sort_button(game_root, "SortOrderButton") == null:
 		errors.append("inventory panel should expose inventory order sort")
 	if not _text_ordered(initial_text, "水瓶 x1", "绷带 x1") \
@@ -396,8 +402,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("opening discard confirmation should not mutate inventory")
 		if not bool(game_root.gameplay_input_blocked_by_ui()):
 			errors.append("discard confirmation should block gameplay input")
-		if str(game_root.gameplay_input_blocker_name()) != "modal:inventory_discard_confirm":
-			errors.append("discard confirmation blocker should be modal:inventory_discard_confirm")
+		var blocker_name := str(game_root.gameplay_input_blocker_name())
+		if blocker_name != "modal:inventory_discard_confirm":
+			errors.append("discard confirmation blocker should be modal:inventory_discard_confirm, got %s" % blocker_name)
 		_assert_modal_stack(errors, game_root, "inventory_discard_confirm", "inventory", "discard confirmation")
 		if discard_quantity_input != null:
 			discard_quantity_input.text = "0"
@@ -423,7 +430,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("discard plus button should increase quantity")
 		var esc_discard_result: Dictionary = game_root.close_active_ui("keyboard_escape")
 		if str(esc_discard_result.get("closed", "")) != "modal:inventory_discard_confirm":
-			errors.append("Esc should close inventory discard modal before other UI")
+			errors.append("Esc should close inventory discard modal before other UI, got %s" % esc_discard_result)
 		if _discard_dialog_visible(game_root):
 			errors.append("Esc should hide inventory discard modal")
 		if _player_inventory_count(game_root, "1006") != 3:
@@ -537,6 +544,15 @@ func _container_session(snapshot: Dictionary, container_id: String) -> Dictionar
 		var session: Dictionary = _dictionary_or_empty(entry)
 		if str(session.get("container_id", "")) == container_id:
 			return session
+	return {}
+
+
+func _inventory_snapshot_item(game_root: Node, item_id: String) -> Dictionary:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.inventory_panel.get("_last_snapshot"))
+	for item in _array_or_empty(snapshot.get("items", [])):
+		var item_data: Dictionary = _dictionary_or_empty(item)
+		if str(item_data.get("item_id", "")) == item_id:
+			return item_data
 	return {}
 
 

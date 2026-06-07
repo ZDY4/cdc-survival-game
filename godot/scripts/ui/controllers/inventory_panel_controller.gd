@@ -538,6 +538,9 @@ func _open_discard_dialog_for_item(item: Dictionary, count: int) -> void:
 	_pending_discard_item = item.duplicate(true)
 	_pending_discard_count = normalized_count
 	_pending_discard_available = available
+	var root := get_parent()
+	if root != null and root.has_method("finish_world_action_presentations"):
+		root.finish_world_action_presentations()
 	_discard_dialog.dialog_text = "丢弃 %s x%d 会在当前位置生成掉落容器。确定丢弃吗？" % [
 		item.get("name", item_id),
 		normalized_count,

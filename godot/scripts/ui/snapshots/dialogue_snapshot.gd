@@ -1,5 +1,7 @@
 extends RefCounted
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+
 var registry: RefCounted
 
 
@@ -23,6 +25,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 			"target": _dialogue_target(runtime_snapshot, dialogue_id),
 			"text": "对话资源缺失：%s" % dialogue_id,
 			"portrait": "",
+			"portrait_asset": AssetPathResolver.resolve_media_asset("", "portrait"),
 			"options": [],
 			"fallback": true,
 			"error": "unknown_dialogue",
@@ -45,6 +48,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"target": _dialogue_target(runtime_snapshot, dialogue_id),
 		"text": current_node.get("text", ""),
 		"portrait": current_node.get("portrait", ""),
+		"portrait_asset": AssetPathResolver.resolve_media_asset(str(current_node.get("portrait", "")), "portrait"),
 		"options": _options_from_node(choice_node),
 	}
 

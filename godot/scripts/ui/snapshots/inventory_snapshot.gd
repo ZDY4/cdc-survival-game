@@ -1,6 +1,7 @@
 extends RefCounted
 
 const InventoryCapacity = preload("res://scripts/core/economy/inventory_capacity.gd")
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 
 var registry: RefCounted
 var _inventory_capacity := InventoryCapacity.new()
@@ -55,6 +56,8 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 			"rarity": "",
 			"category": "misc",
 			"category_label": _category_label("misc"),
+			"icon_path": "",
+			"icon_asset": AssetPathResolver.resolve_media_asset("", "item"),
 			"equip_slots": [],
 			"usable": false,
 			"use_ap_cost": 0.0,
@@ -70,6 +73,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 	var unit_weight: float = float(data.get("weight", 0.0))
 	var value: int = int(data.get("value", 0))
 	var category: String = _category(data)
+	var icon_path := str(data.get("icon_path", ""))
 	var usable: Dictionary = _fragment_by_kind(data, "usable")
 	var use_allowed: bool = not usable.is_empty() and _is_item_use_allowed(data)
 	var deconstruct_yield: Array[Dictionary] = _deconstruct_yield(data)
@@ -85,6 +89,8 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"rarity": _rarity(data),
 		"category": category,
 		"category_label": _category_label(category),
+		"icon_path": icon_path,
+		"icon_asset": AssetPathResolver.resolve_media_asset(icon_path, _icon_fallback_key(category)),
 		"equip_slots": _equip_slots(data),
 		"usable": use_allowed,
 		"use_ap_cost": max(1.0, ceil(float(usable.get("use_time", 1.0)))) if not usable.is_empty() else 0.0,
@@ -129,6 +135,20 @@ func _category_label(category: String) -> String:
 			return "材料"
 		_:
 			return "杂项"
+
+
+func _icon_fallback_key(category: String) -> String:
+	match category:
+		"equipment":
+			return "equipment"
+		"consumable":
+			return "item"
+		"ammo":
+			return "ammo"
+		"material":
+			return "material"
+		_:
+			return "item"
 
 
 func _equip_slots(item_data: Dictionary) -> Array[String]:

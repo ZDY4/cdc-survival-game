@@ -168,6 +168,11 @@ func _expect_asset_path_resolver(errors: Array[String]) -> void:
 	var missing := AssetPathResolver.resolve_equipment_visual_asset("builtin:weapon:missing_for_resolver_smoke")
 	if not bool(missing.get("ok", false)) or bool(missing.get("exists", true)):
 		errors.append("asset resolver should return missing existing-state for known builtin patterns, got %s" % missing)
+	var media := AssetPathResolver.resolve_media_asset("assets" + "/icons/weapons/knife.png", "")
+	if bool(media.get("ok", false)) or str(media.get("reason", "")) != "legacy_root_asset_reference":
+		errors.append("asset resolver should flag legacy media root references, got %s" % media)
+	if str(media.get("fallback_key", "")) != "weapon" or not bool(media.get("legacy", false)):
+		errors.append("asset resolver should derive media fallback diagnostics, got %s" % media)
 
 
 func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry) -> void:
