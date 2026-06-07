@@ -2,6 +2,8 @@ extends Control
 
 signal view_changed(state: Dictionary)
 
+const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+
 const MIN_ZOOM := 0.55
 const MAX_ZOOM := 2.5
 
@@ -58,6 +60,7 @@ func view_state() -> Dictionary:
 		"marker_count": _array_or_empty(snapshot.get("tracked_markers", [])).size(),
 		"entry_count": _entry_points().size(),
 		"overworld_location_count": _overworld_locations().size(),
+		"overworld_icon_count": _overworld_icon_count(),
 	}
 
 
@@ -152,6 +155,11 @@ func _draw_overworld_overview(canvas_rect: Rect2) -> void:
 		if bool(location_data.get("active", false)):
 			color = Color(1.0, 0.78, 0.26, 1.0)
 		draw_circle(point, 3.5 if not bool(location_data.get("active", false)) else 5.5, color)
+		var texture := MediaTextureLoader.texture_from_asset(_dictionary_or_empty(location_data.get("icon_asset", {})))
+		if texture != null:
+			var icon_size := 13.0 if bool(location_data.get("active", false)) else 9.0
+			var alpha := 1.0 if bool(location_data.get("unlocked", false)) else 0.46
+			draw_texture_rect(texture, Rect2(point - Vector2(icon_size * 0.5, icon_size * 0.5), Vector2(icon_size, icon_size)), false, Color(1.0, 1.0, 1.0, alpha))
 		if bool(location_data.get("active", false)):
 			draw_circle(point, 8.0, Color(1.0, 0.78, 0.26, 0.28))
 
@@ -182,6 +190,16 @@ func _entry_points() -> Dictionary:
 
 func _overworld_locations() -> Array:
 	return _array_or_empty(_dictionary_or_empty(snapshot.get("overworld_overview", {})).get("locations", []))
+
+
+func _overworld_icon_count() -> int:
+	var count := 0
+	for location in _overworld_locations():
+		var location_data: Dictionary = _dictionary_or_empty(location)
+		var icon_asset := _dictionary_or_empty(location_data.get("icon_asset", {}))
+		if bool(icon_asset.get("ok", false)) and bool(icon_asset.get("exists", false)):
+			count += 1
+	return count
 
 
 func _overworld_grid_to_canvas(grid: Dictionary, rect: Rect2, overview: Dictionary) -> Vector2:

@@ -48,6 +48,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory item snapshot should expose migrated ammo icon resource path: %s" % ammo_icon)
 	if str(ammo_icon.get("fallback_key", "")) != "ammo":
 		errors.append("inventory item snapshot should expose ammo icon fallback key: %s" % ammo_icon)
+	var ammo_button: Button = game_root.inventory_panel.find_child("Item_1009", true, false) as Button
+	if ammo_button == null:
+		errors.append("inventory panel should render ammo item row")
+	elif ammo_button.icon == null or str(ammo_button.get_meta("icon_resource_path", "")) != "res://assets/icons/ammo/ammo_pistol.svg":
+		errors.append("inventory item row should render migrated ammo icon: %s" % str(ammo_button.get_meta("icon_resource_path", "")))
 	if _sort_button(game_root, "SortOrderButton") == null:
 		errors.append("inventory panel should expose inventory order sort")
 	if not _text_ordered(initial_text, "水瓶 x1", "绷带 x1") \

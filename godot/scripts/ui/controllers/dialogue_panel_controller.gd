@@ -2,7 +2,10 @@ extends Control
 
 signal close_requested
 
+const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+
 var _panel: PanelContainer
+var _portrait_rect: TextureRect
 var _speaker_label: Label
 var _target_label: Label
 var _text_scroll: ScrollContainer
@@ -42,6 +45,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_speaker_label.text = str(snapshot.get("speaker", ""))
 	_target_label.text = _target_text(snapshot)
 	_text_label.text = str(snapshot.get("text", ""))
+	_apply_portrait(snapshot)
 	var options: Array = snapshot.get("options", [])
 	_options_label.text = _options_hint(options)
 	_rebuild_option_buttons(options)
@@ -70,6 +74,11 @@ func _build_layout() -> void:
 	var header := HBoxContainer.new()
 	header.name = "DialogueHeader"
 	header.add_theme_constant_override("separation", 8)
+	_portrait_rect = TextureRect.new()
+	_portrait_rect.name = "PortraitTexture"
+	_portrait_rect.custom_minimum_size = Vector2(48, 48)
+	_portrait_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_portrait_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_speaker_label = _label("SpeakerLine")
 	_speaker_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_close_button = Button.new()
@@ -99,6 +108,7 @@ func _build_layout() -> void:
 	_target_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_options_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	header.add_child(_portrait_rect)
 	header.add_child(_speaker_label)
 	header.add_child(_close_button)
 	box.add_child(header)
@@ -114,6 +124,20 @@ func _label(node_name: String) -> Label:
 	label.name = node_name
 	label.clip_text = true
 	return label
+
+
+func _apply_portrait(snapshot: Dictionary) -> void:
+	if _portrait_rect == null:
+		return
+	var portrait_asset := _dictionary_or_empty(snapshot.get("portrait_asset", {}))
+	var texture := MediaTextureLoader.texture_from_asset(portrait_asset)
+	_portrait_rect.texture = texture
+	_portrait_rect.visible = texture != null
+	if texture == null:
+		_portrait_rect.remove_meta("portrait_resource_path")
+		return
+	_portrait_rect.set_meta("portrait_resource_path", MediaTextureLoader.resource_path_from_asset(portrait_asset))
+	_portrait_rect.set_meta("portrait_fallback_key", str(portrait_asset.get("fallback_key", "")))
 
 
 func _options_hint(options: Array) -> String:

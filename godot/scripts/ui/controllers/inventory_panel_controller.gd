@@ -1,5 +1,7 @@
 extends Control
 
+const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+
 const CONTEXT_USE := 1
 const CONTEXT_EQUIP := 2
 const CONTEXT_DROP := 3
@@ -250,6 +252,7 @@ func _item_line(item: Dictionary) -> Button:
 	button.tooltip_text = str(item.get("description", ""))
 	button.set_meta("inventory_item", item.duplicate(true))
 	button.set_meta("inventory_index", int(item.get("order_index", 0)))
+	_apply_item_icon(button, item)
 	button.set_drag_forwarding(
 		Callable(self, "_get_inventory_item_drag_data"),
 		Callable(self, "_can_drop_inventory_data"),
@@ -268,6 +271,18 @@ func _item_line(item: Dictionary) -> Button:
 		_open_context_menu_for_item(item.duplicate(true), button.get_global_mouse_position())
 	)
 	return button
+
+
+func _apply_item_icon(button: Button, item: Dictionary) -> void:
+	var icon_asset := _dictionary_or_empty(item.get("icon_asset", {}))
+	var texture := MediaTextureLoader.texture_from_asset(icon_asset)
+	if texture == null:
+		button.icon = null
+		return
+	button.icon = texture
+	button.expand_icon = true
+	button.set_meta("icon_resource_path", MediaTextureLoader.resource_path_from_asset(icon_asset))
+	button.set_meta("icon_fallback_key", str(icon_asset.get("fallback_key", "")))
 
 
 func _empty_inventory_drag_data(_position: Vector2, _from_control: Control) -> Variant:

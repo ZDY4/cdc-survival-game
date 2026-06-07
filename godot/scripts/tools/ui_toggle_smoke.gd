@@ -465,6 +465,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("map canvas should summarize entry points, got %s" % _map_canvas_state_line(game_root))
 	if not _map_canvas_state_line(game_root).contains("world 11"):
 		errors.append("map canvas should summarize overworld locations, got %s" % _map_canvas_state_line(game_root))
+	if not _map_canvas_state_line(game_root).contains("icon 11"):
+		errors.append("map canvas should summarize migrated overworld location icons, got %s" % _map_canvas_state_line(game_root))
 	var map_snapshot: Dictionary = MapSnapshot.new(game_root.registry).build(game_root.simulation.snapshot(), game_root.world_result)
 	var safehouse_icon := _location_icon_asset(map_snapshot, "survivor_outpost_01")
 	if not bool(safehouse_icon.get("ok", false)) or not bool(safehouse_icon.get("exists", false)):

@@ -66,6 +66,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue snapshot should expose migrated portrait resource path: %s" % portrait_asset)
 	if str(portrait_asset.get("fallback_key", "")) != "portrait":
 		errors.append("dialogue snapshot should expose portrait fallback key: %s" % portrait_asset)
+	var portrait_rect: TextureRect = game_root.dialogue_panel.find_child("PortraitTexture", true, false) as TextureRect
+	if portrait_rect == null:
+		errors.append("dialogue panel should expose portrait texture rect")
+	elif portrait_rect.texture == null or str(portrait_rect.get_meta("portrait_resource_path", "")) != "res://assets/portraits/trader_lao_wang.svg":
+		errors.append("dialogue panel should render migrated portrait texture: %s" % str(portrait_rect.get_meta("portrait_resource_path", "")))
 	var text_scroll: ScrollContainer = _text_scroll(game_root)
 	if text_scroll == null:
 		errors.append("dialogue text should be wrapped in a scroll container")

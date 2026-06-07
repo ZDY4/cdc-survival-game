@@ -239,13 +239,14 @@ func _canvas_state_text() -> String:
 	if _canvas == null or not _canvas.has_method("view_state"):
 		return "地图画布: 未就绪"
 	var state: Dictionary = _dictionary_or_empty(_canvas.call("view_state"))
-	return "地图画布: zoom %.2f | pan %.0f,%.0f | marker %d | entry %d | world %d" % [
+	return "地图画布: zoom %.2f | pan %.0f,%.0f | marker %d | entry %d | world %d | icon %d" % [
 		float(state.get("zoom", 1.0)),
 		float(_dictionary_or_empty(state.get("pan", {})).get("x", 0.0)),
 		float(_dictionary_or_empty(state.get("pan", {})).get("y", 0.0)),
 		int(state.get("marker_count", 0)),
 		int(state.get("entry_count", 0)),
 		int(state.get("overworld_location_count", 0)),
+		int(state.get("overworld_icon_count", 0)),
 	]
 
 
