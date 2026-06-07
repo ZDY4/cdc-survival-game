@@ -755,6 +755,9 @@ func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
 			"required_tool_ids": ["1150"],
 			"consume_required_tools_on_unlock": true,
 		}),
+		"durable_tool_door_interaction_smoke": _door_target("durable_tool_door_interaction_smoke", false, true, door_grid, {
+			"required_tools": [{"item_id": "1150", "durability_cost": 3.0}],
+		}),
 	})
 	var prompt: Dictionary = simulation.query_interaction_options(1, {
 		"target_type": "map_object",
@@ -851,6 +854,32 @@ func _expect_door_interaction(simulation: RefCounted) -> Array[String]:
 		errors.append("consuming tool locked door should open with tool: %s" % consume_tool_result.get("reason", "unknown"))
 	if int(player.inventory.get("1150", 0)) != 0:
 		errors.append("consuming tool locked door should consume one tool")
+	player.inventory["1150"] = 1
+	player.tool_durability["1150"] = 5.0
+	var durable_tool_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "durable_tool_door_interaction_smoke",
+	}, "door_toggle")
+	if not bool(durable_tool_result.get("success", false)) or not bool(durable_tool_result.get("is_open", false)):
+		errors.append("durable tool locked door should open with enough durability: %s" % durable_tool_result.get("reason", "unknown"))
+	if int(player.inventory.get("1150", 0)) != 1:
+		errors.append("durable tool locked door should not consume whole tool")
+	if not is_equal_approx(float(player.tool_durability.get("1150", 0.0)), 2.0):
+		errors.append("durable tool locked door should reduce tool durability to 2.0")
+	var durable_consumed: Array = _array_or_empty(durable_tool_result.get("consumed_unlock_requirements", []))
+	if durable_consumed.is_empty() or not _dictionary_or_empty(durable_consumed[0]).has("durability_after"):
+		errors.append("durable tool locked door should expose durability unlock payload")
+	simulation.configure_map_interactions({
+		"low_durability_tool_door_interaction_smoke": _door_target("low_durability_tool_door_interaction_smoke", false, true, door_grid, {
+			"required_tools": [{"item_id": "1150", "durability_cost": 3.0}],
+		}),
+	})
+	var low_durability_tool_result: Dictionary = simulation.execute_interaction(1, {
+		"target_type": "map_object",
+		"target_id": "low_durability_tool_door_interaction_smoke",
+	}, "door_toggle")
+	if str(low_durability_tool_result.get("reason", "")) != "tool_durability_insufficient":
+		errors.append("low-durability locked door should reject with tool_durability_insufficient")
 	if _event_count(simulation.snapshot(), "door_unlocked") <= 0 or _event_count(simulation.snapshot(), "unlock_requirement_consumed") <= 0:
 		errors.append("consuming locked doors should emit unlock consumption events")
 	return errors
@@ -1064,3 +1093,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

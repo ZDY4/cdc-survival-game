@@ -248,6 +248,14 @@ func _door_permission(actor: RefCounted, actor_id: int, door_id: String, door: D
 			"missing_tool_ids": missing_tool_ids,
 			"required_tool_ids": required_tool_ids,
 		})
+	var missing_durability_tools: Array[Dictionary] = [] if unlock_consumed else _missing_door_tool_durability(actor, _required_tool_requirements(door))
+	if not missing_durability_tools.is_empty():
+		return _permission_failure(base, "tool_durability_insufficient", {
+			"item_id": str(_dictionary_or_empty(missing_durability_tools[0]).get("item_id", "")),
+			"missing_tools": missing_durability_tools,
+			"missing_durability_tools": missing_durability_tools,
+			"required_tool_ids": required_tool_ids,
+		})
 	var has_unlock_requirements: bool = not required_item_ids.is_empty() or not required_tool_ids.is_empty()
 	if bool(door.get("locked", false)) and not has_unlock_requirements:
 		return _permission_failure(base, "door_locked", {})
@@ -272,6 +280,9 @@ func _door_runtime_field_keys() -> Array[String]:
 		"unlock_tool_consume_count",
 		"key_consume_count",
 		"tool_consume_count",
+		"tool_durability_cost",
+		"unlock_tool_durability_cost",
+		"required_tool_durability_cost",
 		"unlock_requirements_consumed",
 		"unlock_consumed_actor_id",
 	]
@@ -300,9 +311,26 @@ func _consume_door_unlock_requirements(actor: RefCounted, actor_id: int, door_id
 					"consume_count": item_count,
 				})
 			consumed.append(consume_result)
+	var durable_tools: Array[Dictionary] = _door_durable_tool_consumption_requirements(actor, source)
+	for tool in durable_tools:
+		var durability_result: Dictionary = _consume_actor_tool_durability(actor, str(tool.get("item_id", "")), float(tool.get("durability_cost", 0.0)), "tool")
+		if not bool(durability_result.get("success", false)):
+			return _permission_failure({
+				"success": true,
+				"actor_id": actor_id,
+				"door_id": door_id,
+			}, "tool_durability_insufficient", {
+				"item_id": str(tool.get("item_id", "")),
+				"required_tool_ids": _required_tool_ids(source),
+				"durability_cost": float(tool.get("durability_cost", 0.0)),
+				"available_durability": float(durability_result.get("durability_before", 0.0)),
+			})
+		consumed.append(durability_result)
 	if _door_consumes_required_tools(source):
 		var tool_count: int = _door_required_tool_consume_count(source)
 		for tool_id in _required_tool_ids(source):
+			if _door_tool_requirement_has_durability(source, tool_id):
+				continue
 			var consume_result: Dictionary = _consume_actor_inventory_requirement(actor, tool_id, tool_count, "tool")
 			if not bool(consume_result.get("success", false)):
 				return _permission_failure({
@@ -360,6 +388,32 @@ func _consume_actor_inventory_requirement(actor: RefCounted, item_id: String, co
 	}
 
 
+func _consume_actor_tool_durability(actor: RefCounted, item_id: String, durability_cost: float, requirement_kind: String) -> Dictionary:
+	var normalized_item_id: String = _door_normalize_content_id(item_id)
+	var cost: float = max(0.0, durability_cost)
+	var before_durability: float = _actor_tool_durability(actor, normalized_item_id)
+	if actor == null or normalized_item_id.is_empty() or cost <= 0.0 or before_durability < cost:
+		return {
+			"success": false,
+			"item_id": normalized_item_id,
+			"count": 0,
+			"durability_cost": cost,
+			"durability_before": before_durability,
+			"requirement_kind": requirement_kind,
+		}
+	var after_durability: float = max(0.0, before_durability - cost)
+	actor.tool_durability[normalized_item_id] = after_durability
+	return {
+		"success": true,
+		"item_id": normalized_item_id,
+		"count": 0,
+		"durability_cost": cost,
+		"durability_before": before_durability,
+		"durability_after": after_durability,
+		"requirement_kind": requirement_kind,
+	}
+
+
 func _door_consumes_required_items(door: Dictionary) -> bool:
 	return bool(door.get("consume_required_items_on_unlock", door.get("consume_required_items", door.get("consume_keys_on_unlock", false))))
 
@@ -376,6 +430,23 @@ func _door_required_tool_consume_count(door: Dictionary) -> int:
 	return max(1, int(door.get("required_tool_consume_count", door.get("unlock_tool_consume_count", door.get("tool_consume_count", 1)))))
 
 
+func _door_durable_tool_consumption_requirements(actor: RefCounted, door: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for requirement in _required_tool_requirements(door):
+		var tool_id := str(requirement.get("item_id", ""))
+		var durability_cost: float = max(0.0, float(requirement.get("durability_cost", 0.0)))
+		if tool_id.is_empty() or durability_cost <= 0.0:
+			continue
+		output.append({
+			"item_id": tool_id,
+			"count": 0,
+			"durability_cost": durability_cost,
+			"available_durability": _actor_tool_durability(actor, tool_id),
+			"requirement_kind": "tool",
+		})
+	return output
+
+
 func _required_item_ids(value: Dictionary) -> Array[String]:
 	var output: Array[String] = []
 	_append_unique_normalized_item_id(output, value.get("required_item_ids", []))
@@ -388,6 +459,70 @@ func _required_tool_ids(value: Dictionary) -> Array[String]:
 	_append_unique_normalized_item_id(output, value.get("required_tool_ids", []))
 	_append_unique_normalized_item_id(output, value.get("required_tools", []))
 	return output
+
+
+func _required_tool_requirements(value: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	_append_tool_requirements(output, value.get("required_tool_ids", []), value)
+	_append_tool_requirements(output, value.get("required_tools", []), value)
+	return output
+
+
+func _append_tool_requirements(output: Array[Dictionary], value: Variant, source: Dictionary) -> void:
+	if typeof(value) == TYPE_ARRAY:
+		for entry in value:
+			_append_tool_requirements(output, entry, source)
+		return
+	var requirement: Dictionary = _tool_requirement(value, source)
+	var tool_id := str(requirement.get("item_id", ""))
+	if tool_id.is_empty():
+		return
+	for index in range(output.size()):
+		var existing: Dictionary = _dictionary_or_empty(output[index])
+		if str(existing.get("item_id", "")) != tool_id:
+			continue
+		existing["durability_cost"] = max(float(existing.get("durability_cost", 0.0)), float(requirement.get("durability_cost", 0.0)))
+		output[index] = existing
+		return
+	output.append(requirement)
+
+
+func _tool_requirement(value: Variant, source: Dictionary) -> Dictionary:
+	var data: Dictionary = _dictionary_or_empty(value)
+	var raw_id: Variant = value
+	if not data.is_empty():
+		raw_id = data.get("item_id", data.get("itemId", data.get("tool_id", data.get("toolId", data.get("id", "")))))
+	var durability_cost: float = float(data.get("durability_cost", data.get("tool_durability_cost", data.get("unlock_tool_durability_cost", data.get("required_tool_durability_cost", source.get("tool_durability_cost", source.get("unlock_tool_durability_cost", 0.0)))))))
+	return {
+		"item_id": _door_normalize_content_id(raw_id),
+		"durability_cost": max(0.0, durability_cost),
+	}
+
+
+func _missing_door_tool_durability(actor: RefCounted, tool_requirements: Array[Dictionary]) -> Array[Dictionary]:
+	var missing: Array[Dictionary] = []
+	for tool in tool_requirements:
+		var tool_id := str(tool.get("item_id", ""))
+		var durability_cost: float = max(0.0, float(tool.get("durability_cost", 0.0)))
+		if tool_id.is_empty() or durability_cost <= 0.0:
+			continue
+		var available_durability: float = _actor_tool_durability(actor, tool_id)
+		if available_durability >= durability_cost:
+			continue
+		missing.append({
+			"item_id": tool_id,
+			"available_durability": available_durability,
+			"required_durability": durability_cost,
+			"durability_cost": durability_cost,
+		})
+	return missing
+
+
+func _door_tool_requirement_has_durability(source: Dictionary, tool_id: String) -> bool:
+	for requirement in _required_tool_requirements(source):
+		if str(requirement.get("item_id", "")) == tool_id and float(requirement.get("durability_cost", 0.0)) > 0.0:
+			return true
+	return false
 
 
 func _missing_actor_items(actor: RefCounted, item_ids: Array[String]) -> Array[String]:

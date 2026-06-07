@@ -177,6 +177,7 @@ func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> voi
 		"required_tool_ids": ["1150"],
 		"consume_required_items_on_unlock": true,
 		"consume_required_tools_on_unlock": true,
+		"tool_durability_cost": 3.0,
 		"unlock_requirements_consumed": true,
 		"unlock_consumed_actor_id": 1,
 	}
@@ -359,6 +360,8 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 		errors.append("door consume_required_items_on_unlock did not roundtrip")
 	if not bool(restored_door.get("consume_required_tools_on_unlock", false)):
 		errors.append("door consume_required_tools_on_unlock did not roundtrip")
+	if not is_equal_approx(float(restored_door.get("tool_durability_cost", 0.0)), 3.0):
+		errors.append("door tool_durability_cost did not roundtrip")
 	if not bool(restored_door.get("unlock_requirements_consumed", false)):
 		errors.append("door unlock_requirements_consumed did not roundtrip")
 	if int(restored_door.get("unlock_consumed_actor_id", 0)) != 1:
