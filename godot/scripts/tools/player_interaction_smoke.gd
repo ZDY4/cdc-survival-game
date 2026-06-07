@@ -342,6 +342,17 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		_expect_attack_target_marker(errors, game_root, target_id)
 		_expect_attack_target_outline(errors, game_root, target_id)
 		_expect_attack_range_markers(errors, game_root, target_id)
+		var attack_result: Dictionary = game_root.simulation.submit_player_command({
+			"kind": "attack",
+			"actor_id": 1,
+			"target_actor_id": target_id,
+			"topology": _dictionary_or_empty(game_root.world_result.get("map", {})),
+		})
+		if not bool(attack_result.get("success", false)):
+			errors.append("attack presenter smoke attack failed: %s" % attack_result.get("reason", "unknown"))
+		else:
+			game_root._rebuild_world_after_runtime_change({}, {"result": attack_result})
+			_expect_world_action_attack_presenter(errors, game_root, target_id, attack_result)
 	_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
 
 
@@ -552,6 +563,26 @@ func _expect_attack_range_los_filter(errors: Array[String], game_root: Node) -> 
 				and int(grid.get("z", 0)) == int(blocked_candidate.get("z", 0)):
 			errors.append("attack range marker candidates should filter LOS-blocked cells")
 			return
+
+
+func _expect_world_action_attack_presenter(errors: Array[String], game_root: Node, target_id: int, attack_result: Dictionary) -> void:
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "attack":
+		errors.append("attack command should enqueue world action presenter attack, got %s" % JSON.stringify(presenter))
+	if int(presenter.get("target_actor_id", 0)) != target_id:
+		errors.append("attack presenter should expose target actor id")
+	if str(presenter.get("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
+		errors.append("attack presenter should expose hit kind")
+	var impact: MeshInstance3D = game_root.find_child("WorldActionAttackImpact", true, false) as MeshInstance3D
+	if impact == null:
+		errors.append("attack presenter should render WorldActionAttackImpact marker")
+		return
+	if str(impact.get_meta("action_presenter_kind", "")) != "attack":
+		errors.append("attack impact marker should expose attack presenter kind")
+	if int(impact.get_meta("target_actor_id", 0)) != target_id:
+		errors.append("attack impact marker should expose target actor id")
+	if str(impact.get_meta("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
+		errors.append("attack impact marker should expose hit kind")
 
 
 func _expect_attack_marker_hidden(errors: Array[String], game_root: Node) -> void:

@@ -19,9 +19,10 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 	if not movement.is_empty():
 		_start_movement_tween(host, movement)
 		return latest.duplicate(true)
-	var attack := _attack_presentation(events)
+	var attack := _attack_presentation(events, world_root, world_result)
 	if not attack.is_empty():
-		return _record_latest(attack)
+		_start_attack_feedback(host, world_root, attack)
+		return latest.duplicate(true)
 	var interaction := _interaction_presentation(events)
 	if not interaction.is_empty():
 		return _record_latest(interaction)
@@ -159,21 +160,90 @@ func _result_changes_map(command_result: Dictionary, events: Array) -> bool:
 	return false
 
 
-func _attack_presentation(events: Array) -> Dictionary:
+func _attack_presentation(events: Array, world_root: Node, world_result: Dictionary) -> Dictionary:
 	for index in range(events.size() - 1, -1, -1):
 		var event: Dictionary = _dictionary_or_empty(events[index])
 		if str(event.get("kind", "")) != "attack_resolved":
 			continue
 		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		var actor_id := int(payload.get("actor_id", 0))
+		var target_actor_id := int(payload.get("target_actor_id", 0))
+		var target_node := _actor_node(world_root, world_result, target_actor_id)
 		return {
 			"active": false,
 			"kind": "attack",
-			"actor_id": int(payload.get("attacker_id", payload.get("actor_id", 0))),
-			"target_actor_id": int(payload.get("target_actor_id", 0)),
+			"actor_id": actor_id,
+			"target_actor_id": target_actor_id,
 			"damage": float(payload.get("damage", 0.0)),
 			"hit_kind": str(payload.get("hit_kind", "")),
+			"critical": bool(payload.get("critical", false)),
+			"defeated": bool(payload.get("defeated", false)),
+			"target_node": target_node,
+			"node_path": str(target_node.get_path()) if target_node != null else "",
 		}
 	return {}
+
+
+func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) -> void:
+	var target_node: Node3D = attack.get("target_node", null)
+	if target_node == null:
+		_record_latest(_attack_public_snapshot(attack, false, "target_node_missing"))
+		return
+	sequence += 1
+	active_count += 1
+	var marker := MeshInstance3D.new()
+	marker.name = "WorldActionAttackImpact"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.22
+	mesh.height = 0.44
+	mesh.radial_segments = 12
+	mesh.rings = 6
+	marker.mesh = mesh
+	marker.material_override = _attack_material(str(attack.get("hit_kind", "")), bool(attack.get("critical", false)), bool(attack.get("defeated", false)))
+	var target_position := target_node.global_position if target_node.is_inside_tree() else target_node.position
+	marker.position = target_position + Vector3(0.0, 1.05, 0.0)
+	marker.set_meta("action_presenter_active", true)
+	marker.set_meta("action_presenter_kind", "attack")
+	marker.set_meta("actor_id", int(attack.get("actor_id", 0)))
+	marker.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
+	marker.set_meta("damage", float(attack.get("damage", 0.0)))
+	marker.set_meta("hit_kind", str(attack.get("hit_kind", "")))
+	marker.set_meta("critical", bool(attack.get("critical", false)))
+	marker.set_meta("defeated", bool(attack.get("defeated", false)))
+	_presentation_layer(world_root).add_child(marker)
+	var tween := host.create_tween()
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(marker, "scale", Vector3(1.45, 1.45, 1.45), 0.08)
+	tween.tween_property(marker, "scale", Vector3(0.35, 0.35, 0.35), 0.10)
+	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker)))
+	var snapshot_data := _attack_public_snapshot(attack, true, "")
+	snapshot_data["marker_path"] = str(marker.get_path())
+	_record_latest(snapshot_data)
+
+
+func _on_attack_feedback_finished(marker_ref: WeakRef) -> void:
+	active_count = max(0, active_count - 1)
+	var marker := marker_ref.get_ref() as Node
+	if marker != null and not marker.is_queued_for_deletion():
+		marker.queue_free()
+	latest["active"] = active_count > 0
+	latest["active_count"] = active_count
+
+
+func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -> Dictionary:
+	return {
+		"active": active,
+		"kind": "attack",
+		"reason": reason,
+		"actor_id": int(attack.get("actor_id", 0)),
+		"target_actor_id": int(attack.get("target_actor_id", 0)),
+		"node_path": str(attack.get("node_path", "")),
+		"damage": float(attack.get("damage", 0.0)),
+		"hit_kind": str(attack.get("hit_kind", "")),
+		"critical": bool(attack.get("critical", false)),
+		"defeated": bool(attack.get("defeated", false)),
+	}
 
 
 func _interaction_presentation(events: Array) -> Dictionary:
@@ -202,6 +272,31 @@ func _actor_node(world_root: Node, world_result: Dictionary, actor_id: int) -> N
 		var definition_id := str(actor_data.get("definition_id", ""))
 		return world_root.find_child("Actor_%s_%d" % [definition_id, actor_id], true, false) as Node3D
 	return null
+
+
+func _presentation_layer(world_root: Node) -> Node3D:
+	var layer: Node3D = world_root.find_child("WorldActionPresentationLayer", false, false) as Node3D
+	if layer == null:
+		layer = Node3D.new()
+		layer.name = "WorldActionPresentationLayer"
+		world_root.add_child(layer)
+	return layer
+
+
+func _attack_material(hit_kind: String, critical: bool, defeated: bool) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if defeated:
+		material.albedo_color = Color(0.96, 0.12, 0.08, 0.92)
+	elif critical:
+		material.albedo_color = Color(1.0, 0.86, 0.18, 0.94)
+	elif hit_kind == "miss":
+		material.albedo_color = Color(0.64, 0.78, 0.94, 0.84)
+	elif hit_kind == "blocked":
+		material.albedo_color = Color(0.55, 0.57, 0.66, 0.86)
+	else:
+		material.albedo_color = Color(1.0, 0.34, 0.18, 0.9)
+	return material
 
 
 func _presentation_public_snapshot(presentation: Dictionary, active: bool) -> Dictionary:
