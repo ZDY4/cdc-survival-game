@@ -332,6 +332,31 @@ func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_
 	var missing_tool_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
 	if not missing_tool_feedback_line.contains("失败 制作: 缺少工具"):
 		errors.append("event feedback line should localize missing tool rejection, got %s" % missing_tool_feedback_line)
+	var consumable_tool_recipes := _consumable_tool_smoke_recipes()
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.inventory.erase("1151")
+	player.inventory["1011"] = 1
+	var consumable_tool_failure: Dictionary = simulation.submit_player_command({
+		"kind": "craft",
+		"actor_id": 1,
+		"recipe_id": "smoke_consumes_tool_recipe",
+		"recipe_library": consumable_tool_recipes,
+		"crafting_context": {
+			"nearby_tool_containers": [{
+				"container_id": "ui_smoke_tool_crate",
+				"display_name": "工具箱",
+				"inventory": [{"item_id": "1151", "count": 1}],
+			}],
+		},
+	})
+	if bool(consumable_tool_failure.get("success", false)) or str(consumable_tool_failure.get("reason", "")) != "missing_consumable_tools":
+		errors.append("HUD failure feedback setup should reject missing consumable tool crafting")
+	var consumable_tool_snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, {})
+	hud.apply_snapshot(consumable_tool_snapshot)
+	var consumable_tool_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
+	if not consumable_tool_feedback_line.contains("失败 制作: 缺少可消耗工具"):
+		errors.append("event feedback line should localize missing consumable tool rejection, got %s" % consumable_tool_feedback_line)
+	_validate_feedback_toasts(errors, hud, consumable_tool_snapshot, "consumable tool rejection toast", "error", "player_command_rejected")
 	return errors
 
 
@@ -411,6 +436,26 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _consumable_tool_smoke_recipes() -> Dictionary:
+	return {
+		"smoke_consumes_tool_recipe": {
+			"data": {
+				"id": "smoke_consumes_tool_recipe",
+				"name": "消耗工具测试配方",
+				"is_default_unlocked": true,
+				"unlock_conditions": [],
+				"required_tools": [{"item_id": "1151", "consume_on_craft": true, "consume_count": 1}],
+				"required_station": "none",
+				"skill_requirements": {},
+				"materials": [{"item_id": "1011", "count": 1}],
+				"output": {"item_id": "1006", "count": 1},
+				"craft_time": 0.0,
+				"experience_reward": 0,
+			},
+		},
+	}
 
 
 func _register_smoke_hostile(simulation: RefCounted, grid: Dictionary) -> int:

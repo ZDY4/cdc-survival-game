@@ -994,6 +994,8 @@ func _failure_reason_text(reason: String) -> String:
 			return "材料不足"
 		"missing_tools":
 			return "缺少工具"
+		"missing_consumable_tools":
+			return "缺少可消耗工具"
 		"missing_skills":
 			return "技能不足"
 		"missing_station":
