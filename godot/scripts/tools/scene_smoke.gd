@@ -967,10 +967,13 @@ func _validate_declared_map_visual_assets(root: Node3D, counts: Dictionary, erro
 	counts["map_visual_missing_pickable_bodies"] = int(stats.get("missing_pickable_bodies", 0))
 	counts["map_visual_duplicate_ids"] = int(stats.get("duplicate_ids", 0))
 	counts["map_visual_overlaps"] = int(stats.get("overlaps", 0))
+	_apply_visual_diagnostic_counts(counts, "map_visual", stats)
 	if declared_count <= 0:
 		errors.append("scene smoke expected at least one map object with declared visual props")
 	if instantiated_count != declared_count:
 		errors.append("scene smoke visual instancing mismatch %d/%d" % [instantiated_count, declared_count])
+	if int(stats.get("zero_scale_nodes", 0)) > 0:
+		errors.append("runtime map visual nodes should not use zero scale")
 
 
 func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[String]) -> void:
@@ -986,6 +989,7 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 	var pickable_total := 0
 	var duplicate_total := 0
 	var overlap_total := 0
+	var diagnostic_totals := _empty_visual_diagnostics()
 	var asset_paths := {}
 	dir.list_dir_begin()
 	while true:
@@ -1012,6 +1016,7 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 		pickable_total += int(stats.get("pickable_bodies", 0))
 		duplicate_total += int(stats.get("duplicate_ids", 0))
 		overlap_total += int(stats.get("overlaps", 0))
+		_merge_visual_diagnostics(diagnostic_totals, stats)
 		for asset_path in _array_or_empty(stats.get("asset_paths", [])):
 			asset_paths[str(asset_path)] = true
 		scene_root.free()
@@ -1026,6 +1031,7 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 	counts["all_map_visual_pickable_bodies"] = pickable_total
 	counts["all_map_visual_duplicate_ids"] = duplicate_total
 	counts["all_map_visual_overlaps"] = overlap_total
+	_apply_visual_diagnostic_counts(counts, "all_map_visual", diagnostic_totals)
 	if map_count <= 0:
 		errors.append("scene smoke expected at least one map scene")
 	if declared_total <= 0:
@@ -1034,6 +1040,8 @@ func _validate_all_map_scene_visual_assets(counts: Dictionary, errors: Array[Str
 		errors.append("all map scene visual instancing mismatch %d/%d" % [instantiated_total, declared_total])
 	if duplicate_total > 0:
 		errors.append("all map scene visual object ids should be unique")
+	if int(diagnostic_totals.get("zero_scale_nodes", 0)) > 0:
+		errors.append("all map scene visual nodes should not use zero scale")
 
 
 func _validate_runtime_map_object_fallbacks(root: Node3D, counts: Dictionary, errors: Array[String]) -> void:
@@ -1157,6 +1165,7 @@ func _declared_visual_stats(root: Node, label: String, errors: Array[String], re
 	var missing_pickable_body_count := 0
 	var duplicate_id_count := 0
 	var overlap_count := 0
+	var diagnostic_totals := _empty_visual_diagnostics()
 	var object_ids := {}
 	var anchor_objects := {}
 	var asset_paths := {}
@@ -1199,6 +1208,7 @@ func _declared_visual_stats(root: Node, label: String, errors: Array[String], re
 		visual_child_count += visuals_container.get_child_count()
 		_collect_visual_instance_asset_paths(visuals_container, asset_paths)
 		fallback_visual_count += _map_object_fallback_count(visuals_container)
+		_merge_visual_diagnostics(diagnostic_totals, _node_visual_diagnostics(visuals_container))
 		var pickable_body: Node = node.find_child("PickableBody", false, false)
 		if pickable_body != null:
 			pickable_body_count += 1
@@ -1216,6 +1226,15 @@ func _declared_visual_stats(root: Node, label: String, errors: Array[String], re
 		"missing_pickable_bodies": missing_pickable_body_count,
 		"duplicate_ids": duplicate_id_count,
 		"overlaps": overlap_count,
+		"mesh_nodes": int(diagnostic_totals.get("mesh_nodes", 0)),
+		"hidden_nodes": int(diagnostic_totals.get("hidden_nodes", 0)),
+		"collision_shapes": int(diagnostic_totals.get("collision_shapes", 0)),
+		"physics_bodies": int(diagnostic_totals.get("physics_bodies", 0)),
+		"area_bodies": int(diagnostic_totals.get("area_bodies", 0)),
+		"shadow_disabled_meshes": int(diagnostic_totals.get("shadow_disabled_meshes", 0)),
+		"non_unit_scale_nodes": int(diagnostic_totals.get("non_unit_scale_nodes", 0)),
+		"zero_scale_nodes": int(diagnostic_totals.get("zero_scale_nodes", 0)),
+		"max_origin_offset": float(diagnostic_totals.get("max_origin_offset", 0.0)),
 	}
 
 
@@ -1266,12 +1285,84 @@ func _sorted_dictionary_keys(values: Dictionary) -> Array[String]:
 	return keys
 
 
+func _empty_visual_diagnostics() -> Dictionary:
+	return {
+		"mesh_nodes": 0,
+		"hidden_nodes": 0,
+		"collision_shapes": 0,
+		"physics_bodies": 0,
+		"area_bodies": 0,
+		"shadow_disabled_meshes": 0,
+		"non_unit_scale_nodes": 0,
+		"zero_scale_nodes": 0,
+		"max_origin_offset": 0.0,
+	}
+
+
+func _merge_visual_diagnostics(target: Dictionary, source: Dictionary) -> void:
+	for key in ["mesh_nodes", "hidden_nodes", "collision_shapes", "physics_bodies", "area_bodies", "shadow_disabled_meshes", "non_unit_scale_nodes", "zero_scale_nodes"]:
+		target[key] = int(target.get(key, 0)) + int(source.get(key, 0))
+	target["max_origin_offset"] = maxf(float(target.get("max_origin_offset", 0.0)), float(source.get("max_origin_offset", 0.0)))
+
+
+func _apply_visual_diagnostic_counts(counts: Dictionary, prefix: String, stats: Dictionary) -> void:
+	counts["%s_mesh_nodes" % prefix] = int(stats.get("mesh_nodes", 0))
+	counts["%s_hidden_nodes" % prefix] = int(stats.get("hidden_nodes", 0))
+	counts["%s_collision_shapes" % prefix] = int(stats.get("collision_shapes", 0))
+	counts["%s_physics_bodies" % prefix] = int(stats.get("physics_bodies", 0))
+	counts["%s_area_bodies" % prefix] = int(stats.get("area_bodies", 0))
+	counts["%s_shadow_disabled_meshes" % prefix] = int(stats.get("shadow_disabled_meshes", 0))
+	counts["%s_non_unit_scale_nodes" % prefix] = int(stats.get("non_unit_scale_nodes", 0))
+	counts["%s_zero_scale_nodes" % prefix] = int(stats.get("zero_scale_nodes", 0))
+	counts["%s_max_origin_offset" % prefix] = float(stats.get("max_origin_offset", 0.0))
+
+
+func _node_visual_diagnostics(root: Node) -> Dictionary:
+	var stats := _empty_visual_diagnostics()
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			pending.append(child)
+		var node_3d := node as Node3D
+		if node_3d != null:
+			if not node_3d.visible:
+				stats["hidden_nodes"] = int(stats["hidden_nodes"]) + 1
+			if _node_has_zero_scale(node_3d):
+				stats["zero_scale_nodes"] = int(stats["zero_scale_nodes"]) + 1
+			elif _node_has_non_unit_scale(node_3d):
+				stats["non_unit_scale_nodes"] = int(stats["non_unit_scale_nodes"]) + 1
+			stats["max_origin_offset"] = maxf(float(stats["max_origin_offset"]), node_3d.position.length())
+		if node is CollisionShape3D:
+			stats["collision_shapes"] = int(stats["collision_shapes"]) + 1
+		if node is PhysicsBody3D:
+			stats["physics_bodies"] = int(stats["physics_bodies"]) + 1
+		if node is Area3D:
+			stats["area_bodies"] = int(stats["area_bodies"]) + 1
+		var mesh_node := node as MeshInstance3D
+		if mesh_node == null:
+			continue
+		stats["mesh_nodes"] = int(stats["mesh_nodes"]) + 1
+		if mesh_node.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			stats["shadow_disabled_meshes"] = int(stats["shadow_disabled_meshes"]) + 1
+	return stats
+
+
+func _node_has_zero_scale(node: Node3D) -> bool:
+	return absf(node.scale.x) <= 0.001 or absf(node.scale.y) <= 0.001 or absf(node.scale.z) <= 0.001
+
+
+func _node_has_non_unit_scale(node: Node3D) -> bool:
+	return absf(node.scale.x - 1.0) > 0.001 or absf(node.scale.y - 1.0) > 0.001 or absf(node.scale.z - 1.0) > 0.001
+
+
 func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -> void:
 	var asset_paths: Array[String] = []
 	_collect_gltf_assets("res://assets", asset_paths, errors)
 	asset_paths.sort()
 	var mesh_total := 0
 	var material_total := 0
+	var diagnostic_totals := _empty_visual_diagnostics()
 	var zero_bounds: Array[String] = []
 	for asset_path in asset_paths:
 		if not ResourceLoader.exists(asset_path):
@@ -1290,6 +1381,7 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 		var material_count := int(stats.get("material_count", 0))
 		mesh_total += mesh_count
 		material_total += material_count
+		_merge_visual_diagnostics(diagnostic_totals, stats)
 		if mesh_count <= 0:
 			errors.append("gltf asset should contain at least one mesh: %s" % asset_path)
 		var bounds: AABB = stats.get("bounds", AABB())
@@ -1301,8 +1393,11 @@ func _validate_imported_gltf_assets(counts: Dictionary, errors: Array[String]) -
 	counts["gltf_asset_count"] = asset_paths.size()
 	counts["gltf_mesh_count"] = mesh_total
 	counts["gltf_material_count"] = material_total
+	_apply_visual_diagnostic_counts(counts, "gltf", diagnostic_totals)
 	if asset_paths.is_empty():
 		errors.append("scene smoke expected glTF assets under res://assets")
+	if int(diagnostic_totals.get("zero_scale_nodes", 0)) > 0:
+		errors.append("gltf asset nodes should not use zero scale")
 
 
 func _collect_gltf_assets(root_path: String, output: Array[String], errors: Array[String]) -> void:
@@ -1328,6 +1423,7 @@ func _gltf_instance_stats(root: Node) -> Dictionary:
 	var material_count := 0
 	var has_bounds := false
 	var bounds := AABB()
+	var diagnostics := _node_visual_diagnostics(root)
 	var pending: Array[Node] = [root]
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
@@ -1349,6 +1445,15 @@ func _gltf_instance_stats(root: Node) -> Dictionary:
 		"mesh_count": mesh_count,
 		"material_count": material_count,
 		"bounds": bounds,
+		"mesh_nodes": int(diagnostics.get("mesh_nodes", 0)),
+		"hidden_nodes": int(diagnostics.get("hidden_nodes", 0)),
+		"collision_shapes": int(diagnostics.get("collision_shapes", 0)),
+		"physics_bodies": int(diagnostics.get("physics_bodies", 0)),
+		"area_bodies": int(diagnostics.get("area_bodies", 0)),
+		"shadow_disabled_meshes": int(diagnostics.get("shadow_disabled_meshes", 0)),
+		"non_unit_scale_nodes": int(diagnostics.get("non_unit_scale_nodes", 0)),
+		"zero_scale_nodes": int(diagnostics.get("zero_scale_nodes", 0)),
+		"max_origin_offset": float(diagnostics.get("max_origin_offset", 0.0)),
 	}
 
 
