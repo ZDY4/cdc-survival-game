@@ -35,6 +35,7 @@ const CRAFTING_SECONDS_PER_AP := 10.0
 const DEFAULT_ATTACK_RANGE := 1
 const NPC_AGGRO_RANGE := 8
 const COMBAT_EXIT_NO_SIGHT_TURNS := 3
+const MAX_NPC_COMBAT_ACTIONS_PER_TURN := 8
 const HOTBAR_SLOT_COUNT := 10
 const DEFAULT_HOTBAR_GROUP_ID := "group_1"
 const HOTBAR_GROUP_COUNT := 3
@@ -3315,7 +3316,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 			"affordable_ap_threshold": _affordable_ap_threshold(actor),
 			"combat_active": bool(combat_state.get("active", false)) and actor.in_combat,
 		}
-		var result: Dictionary = _advance_npc_turn(actor, topology)
+		var result: Dictionary = _advance_npc_turn(actor, topology, bool(turn_open_snapshot.get("combat_active", false)))
 		result["turn_open"] = turn_open_snapshot
 		result["ap_after_action"] = actor.ap
 		result["turn_close_reason"] = _npc_turn_close_reason(actor, result)
@@ -3407,7 +3408,55 @@ func _tick_actor_active_effects() -> void:
 		actor.active_effects = remaining
 
 
-func _advance_npc_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
+func _advance_npc_turn(actor: RefCounted, topology: Dictionary, combat_turn_active: bool = false) -> Dictionary:
+	if combat_turn_active:
+		return _advance_npc_combat_turn(actor, topology)
+	return _advance_npc_action(actor, topology)
+
+
+func _advance_npc_combat_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
+	var actions: Array[Dictionary] = []
+	var ap_before: float = actor.ap
+	var limit_reached := false
+	while actor != null and actor.ap >= _affordable_ap_threshold(actor):
+		if actions.size() >= MAX_NPC_COMBAT_ACTIONS_PER_TURN:
+			limit_reached = true
+			break
+		var action: Dictionary = _advance_npc_action(actor, topology)
+		actions.append(action.duplicate(true))
+		var intent := str(action.get("intent", ""))
+		if intent == "idle" or intent == "wait":
+			break
+		if not bool(action.get("success", false)):
+			break
+		if not bool(combat_state.get("active", false)) or not actor.in_combat:
+			break
+		if float(actor.ap) <= 0.0:
+			break
+	var output: Dictionary = actions.back().duplicate(true) if not actions.is_empty() else {
+		"success": true,
+		"actor_id": actor.actor_id if actor != null else 0,
+		"intent": "idle",
+		"reason": "no_combat_action",
+	}
+	output["actions"] = actions
+	output["action_count"] = actions.size()
+	output["ap_before_actions"] = ap_before
+	output["ap_after_actions"] = actor.ap if actor != null else 0.0
+	output["combat_action_loop"] = true
+	output["combat_action_limit"] = MAX_NPC_COMBAT_ACTIONS_PER_TURN
+	output["combat_action_limit_reached"] = limit_reached
+	if limit_reached:
+		_emit("npc_combat_action_limit_reached", {
+			"actor_id": actor.actor_id if actor != null else 0,
+			"action_count": actions.size(),
+			"ap": actor.ap if actor != null else 0.0,
+			"limit": MAX_NPC_COMBAT_ACTIONS_PER_TURN,
+		})
+	return output
+
+
+func _advance_npc_action(actor: RefCounted, topology: Dictionary) -> Dictionary:
 	var weapon_profile: Dictionary = _attack_profile(actor, item_library)
 	var intent: Dictionary = decide_actor_intent(actor.actor_id, {
 		"topology": topology,

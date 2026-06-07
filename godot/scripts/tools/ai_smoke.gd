@@ -178,38 +178,44 @@ func _expect_target_tracking_and_loss(errors: Array[String], simulation: RefCoun
 
 
 func _expect_hostile_weapon_and_reload_intents(errors: Array[String], simulation: RefCounted, registry: RefCounted, player_grid: RefCounted) -> void:
-	var topology: Dictionary = _topology(simulation, registry)
 	var ranged_ai := {"aggro_range": 20.0, "attack_range": 1.2}
-	var pistol_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 4, player_grid.y, player_grid.z + 1), {
+
+	var pistol_simulation: RefCounted = _isolated_ai_simulation(registry, player_grid)
+	var pistol_player: RefCounted = pistol_simulation.actor_registry.get_actor(1)
+	var pistol_topology: Dictionary = _topology(pistol_simulation, registry)
+	var pistol_id: int = _register_character(pistol_simulation, registry, "zombie_walker", GridCoord.new(pistol_player.grid_position.x + 4, pistol_player.grid_position.y, pistol_player.grid_position.z + 1), {
 		"ai": ranged_ai,
 		"equipment": {"main_hand": "1004"},
 		"weapon_ammo": {"main_hand": 1},
 		"inventory": {"1009": 2},
 	})
-	var pistol_intent: Dictionary = simulation.decide_actor_intent(pistol_id, {
-		"topology": topology,
-		"active_map_id": simulation.active_map_id,
+	var pistol_intent: Dictionary = pistol_simulation.decide_actor_intent(pistol_id, {
+		"topology": pistol_topology,
+		"active_map_id": pistol_simulation.active_map_id,
 	})
 	if pistol_intent.get("intent", "") != "attack":
 		errors.append("armed hostile should attack inside weapon range, got %s/%s" % [pistol_intent.get("intent", ""), pistol_intent.get("reason", "")])
 	if int(pistol_intent.get("attack_range", 0)) < 8 or str(pistol_intent.get("weapon_item_id", "")) != "1004":
 		errors.append("armed hostile intent should use equipped weapon range and expose weapon item id")
-	var attack_events_before: int = _event_count(simulation.snapshot(), "attack_resolved")
-	var attack_result: Dictionary = simulation.submit_player_command({"kind": "wait", "topology": topology})
+	var attack_events_before: int = _event_count(pistol_simulation.snapshot(), "attack_resolved")
+	var attack_result: Dictionary = pistol_simulation.submit_player_command({"kind": "wait", "topology": pistol_topology})
 	if not _npc_results_include_attack(_array_or_empty(attack_result.get("npc_results", [])), pistol_id):
 		errors.append("armed hostile should attack during world turn from weapon range")
-	var pistol: RefCounted = simulation.actor_registry.get_actor(pistol_id)
+	var pistol: RefCounted = pistol_simulation.actor_registry.get_actor(pistol_id)
 	if pistol == null or int(pistol.weapon_ammo.get("main_hand", 0)) != 0:
 		errors.append("armed hostile attack should consume loaded magazine ammo")
-	if _event_count(simulation.snapshot(), "attack_resolved") <= attack_events_before:
+	if _event_count(pistol_simulation.snapshot(), "attack_resolved") <= attack_events_before:
 		errors.append("armed hostile attack should emit attack_resolved")
 
-	var min_range_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 1, player_grid.y, player_grid.z + 1), {
+	var min_range_simulation: RefCounted = _isolated_ai_simulation(registry, player_grid)
+	var min_range_player: RefCounted = min_range_simulation.actor_registry.get_actor(1)
+	var min_range_topology: Dictionary = _topology(min_range_simulation, registry)
+	var min_range_id: int = _register_character(min_range_simulation, registry, "zombie_walker", GridCoord.new(min_range_player.grid_position.x + 1, min_range_player.grid_position.y, min_range_player.grid_position.z + 1), {
 		"ai": ranged_ai,
 	})
-	var min_range_intent: Dictionary = simulation.decide_actor_intent(min_range_id, {
-		"topology": topology,
-		"active_map_id": simulation.active_map_id,
+	var min_range_intent: Dictionary = min_range_simulation.decide_actor_intent(min_range_id, {
+		"topology": min_range_topology,
+		"active_map_id": min_range_simulation.active_map_id,
 		"weapon_profile": {
 			"item_id": "synthetic_min_range_weapon",
 			"range": 6,
@@ -223,34 +229,40 @@ func _expect_hostile_weapon_and_reload_intents(errors: Array[String], simulation
 	if int(min_range_intent.get("min_range", 0)) != 2:
 		errors.append("minimum-range hostile intent should expose min_range")
 
-	var reload_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 4, player_grid.y, player_grid.z + 2), {
+	var reload_simulation: RefCounted = _isolated_ai_simulation(registry, player_grid)
+	var reload_player: RefCounted = reload_simulation.actor_registry.get_actor(1)
+	var reload_topology: Dictionary = _topology(reload_simulation, registry)
+	var reload_id: int = _register_character(reload_simulation, registry, "zombie_walker", GridCoord.new(reload_player.grid_position.x + 4, reload_player.grid_position.y, reload_player.grid_position.z + 2), {
 		"ai": ranged_ai,
 		"equipment": {"main_hand": "1004"},
 		"weapon_ammo": {"main_hand": 0},
 		"inventory": {"1009": 2},
 	})
-	var reload_intent: Dictionary = simulation.decide_actor_intent(reload_id, {
-		"topology": topology,
-		"active_map_id": simulation.active_map_id,
+	var reload_intent: Dictionary = reload_simulation.decide_actor_intent(reload_id, {
+		"topology": reload_topology,
+		"active_map_id": reload_simulation.active_map_id,
 	})
 	if reload_intent.get("intent", "") != "reload" or reload_intent.get("reason", "") != "weapon_magazine_empty":
 		errors.append("empty magazine hostile should reload before attacking")
-	var reload_result: Dictionary = simulation.submit_player_command({"kind": "wait", "topology": topology})
+	var reload_result: Dictionary = reload_simulation.submit_player_command({"kind": "wait", "topology": reload_topology})
 	if not _npc_results_include_intent(_array_or_empty(reload_result.get("npc_results", [])), reload_id, "reload"):
 		errors.append("empty magazine hostile should reload during world turn")
-	var reloader: RefCounted = simulation.actor_registry.get_actor(reload_id)
+	var reloader: RefCounted = reload_simulation.actor_registry.get_actor(reload_id)
 	if reloader == null or int(reloader.weapon_ammo.get("main_hand", 0)) <= 0 or int(reloader.inventory.get("1009", 0)) >= 2:
 		errors.append("hostile reload should move ammo from inventory into magazine")
 
-	var dry_id: int = _register_character(simulation, registry, "zombie_walker", GridCoord.new(player_grid.x + 4, player_grid.y, player_grid.z + 3), {
+	var dry_simulation: RefCounted = _isolated_ai_simulation(registry, player_grid)
+	var dry_player: RefCounted = dry_simulation.actor_registry.get_actor(1)
+	var dry_topology: Dictionary = _topology(dry_simulation, registry)
+	var dry_id: int = _register_character(dry_simulation, registry, "zombie_walker", GridCoord.new(dry_player.grid_position.x + 4, dry_player.grid_position.y, dry_player.grid_position.z + 3), {
 		"ai": ranged_ai,
 		"equipment": {"main_hand": "1004"},
 		"weapon_ammo": {"main_hand": 0},
 		"inventory": {},
 	})
-	var dry_intent: Dictionary = simulation.decide_actor_intent(dry_id, {
-		"topology": topology,
-		"active_map_id": simulation.active_map_id,
+	var dry_intent: Dictionary = dry_simulation.decide_actor_intent(dry_id, {
+		"topology": dry_topology,
+		"active_map_id": dry_simulation.active_map_id,
 	})
 	if dry_intent.get("intent", "") != "idle" or dry_intent.get("reason", "") != "weapon_ammo_unavailable":
 		errors.append("hostile with empty magazine and no ammo should idle with weapon_ammo_unavailable, got %s/%s" % [dry_intent.get("intent", ""), dry_intent.get("reason", "")])
@@ -377,6 +389,14 @@ func _move_non_player_actors_out_of_test_lane(simulation: RefCounted) -> void:
 		if actor.actor_id == 1:
 			continue
 		actor.grid_position = GridCoord.new(0, 0, 10 + actor.actor_id)
+
+
+func _isolated_ai_simulation(registry: RefCounted, player_grid: RefCounted) -> RefCounted:
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(player_grid.x, player_grid.y, player_grid.z)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	return simulation
 
 
 func _door_test_topology(locked: bool) -> Dictionary:

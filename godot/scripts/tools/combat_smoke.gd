@@ -44,6 +44,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_force_end_combat(errors, force_end_simulation, registry, force_end_player, force_end_player.grid_position.to_dictionary())
 	_expect_combat_npc_turn_ap_and_close(errors, registry)
 	_expect_combat_world_turn_uses_initiative_order(errors, registry)
+	_expect_combat_npc_multi_action_loop(errors, registry)
 	_expect_combat_entry_participants_and_round(errors, registry)
 	_expect_combat_exit_exploration_recovery(errors, registry)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
@@ -336,6 +337,43 @@ func _expect_combat_world_turn_uses_initiative_order(errors: Array[String], regi
 		errors.append("combat initiative world turn should execute both hostile turns")
 	elif ordered_npcs[0] != fast_id or ordered_npcs[1] != slow_id:
 		errors.append("combat initiative world turn should follow turn_order, got %s" % JSON.stringify(ordered_npcs))
+
+
+func _expect_combat_npc_multi_action_loop(errors: Array[String], registry: RefCounted) -> void:
+	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var simulation: RefCounted = runtime_result.get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("combat NPC multi-action smoke missing player")
+		return
+	var player_grid: Dictionary = player.grid_position.to_dictionary()
+	player.hp = 100.0
+	player.max_hp = 100.0
+	player.defense = 99.0
+	var npc_id: int = _register_test_actor(simulation, "combat_multi_action_hostile", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 20.0)
+	var npc: RefCounted = simulation.actor_registry.get_actor(npc_id)
+	npc.combat_attributes["combat_turn_ap_gain"] = 4.0
+	npc.combat_attributes["combat_turn_ap_max"] = 4.0
+	npc.combat_attributes["combat_affordable_ap_threshold"] = 2.0
+	simulation._enter_combat([player.actor_id, npc_id], "npc_multi_action_smoke")
+	var results: Array = simulation.advance_world_turn(_topology(simulation, registry))
+	var npc_result: Dictionary = _npc_result_for_actor(results, npc_id)
+	if int(npc_result.get("action_count", 0)) != 2:
+		errors.append("combat NPC should spend 4 AP on two attacks, got %s" % JSON.stringify(npc_result.get("actions", [])))
+	if not bool(npc_result.get("combat_action_loop", false)):
+		errors.append("combat NPC multi-action result should expose combat_action_loop")
+	var actions: Array = _array_or_empty(npc_result.get("actions", []))
+	for action in actions:
+		if str(_dictionary_or_empty(action).get("intent", "")) != "attack":
+			errors.append("combat NPC multi-action entries should be attacks")
+	if float(npc_result.get("ap_after_actions", -1.0)) != 0.0:
+		errors.append("combat NPC multi-action should exhaust AP")
+	if _event_count(simulation.snapshot(), "attack_resolved") < 2:
+		errors.append("combat NPC multi-action should emit attack_resolved for each attack")
 
 
 func _expect_combat_entry_participants_and_round(errors: Array[String], registry: RefCounted) -> void:
