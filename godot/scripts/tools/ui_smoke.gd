@@ -161,7 +161,7 @@ func _validate_reason_catalog() -> Array[String]:
 	var metadata_coverage: Dictionary = _dictionary_or_empty(snapshot.get("metadata_coverage", {}))
 	if int(snapshot.get("reason_count", 0)) < 50:
 		errors.append("reason catalog should cover cross-system failure reasons: %s" % snapshot)
-	for category in ["system", "ui", "movement", "interaction", "combat", "crafting", "container", "trade", "skill", "door", "transition", "quest", "ai", "save", "map_asset"]:
+	for category in ["system", "ui", "movement", "interaction", "combat", "pending", "crafting", "container", "trade", "skill", "door", "transition", "quest", "ai", "save", "map_asset"]:
 		if int(counts.get(category, 0)) <= 0:
 			errors.append("reason catalog should include category %s: %s" % [category, snapshot])
 	for key in ["missing_source_module", "missing_payload_fields", "missing_disabled_text", "missing_remediation"]:
@@ -173,6 +173,8 @@ func _validate_reason_catalog() -> Array[String]:
 		"path_unreachable": ["movement", "无法到达", "visited_cell_count", "没有可达路径"],
 		"target_not_hostile": ["combat", "不能攻击友方", "relationship", "不能攻击友方"],
 		"materials_insufficient": ["crafting", "材料不足", "missing_materials", "材料不足"],
+		"new_target_command": ["pending", "选择了新目标", "replacement_kind", "选择了新目标"],
+		"crafting_ui": ["pending", "制作面板取消", "pending_crafting", "制作面板取消"],
 		"container_inventory_insufficient": ["container", "容器物品不足", "available", "容器数量不足"],
 		"player_money_insufficient": ["trade", "玩家资金不足", "player_money", "资金不足"],
 		"skill_on_cooldown": ["skill", "技能冷却中", "cooldown_remaining", "技能冷却中"],
@@ -214,6 +216,15 @@ func _validate_hud_reason_catalog_bridge(hud: Control) -> Array[String]:
 		errors.append("HUD skill target reason text should use reason catalog fallback")
 	if hud.call("_skill_target_reason_text", "smoke_unknown_reason") != "smoke_unknown_reason":
 		errors.append("HUD should preserve unknown skill target reasons")
+	hud.apply_snapshot({
+		"event_feedback": [{
+			"kind": "crafting_cancelled",
+			"text": "已取消制作: 制作面板取消",
+		}],
+	})
+	var event_feedback_line: Label = hud.find_child("EventFeedbackLine", true, false) as Label
+	if event_feedback_line == null or not event_feedback_line.text.contains("制作面板取消"):
+		errors.append("HUD event feedback should render catalog pending cancellation text")
 	return errors
 
 

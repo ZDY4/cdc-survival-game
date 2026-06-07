@@ -15,6 +15,7 @@
 - `movement` / `spatial` / `vision`：移动、楼层、射程、视线问题。
 - `interaction` / `targeting` / `combat`：交互目标、攻击目标和战斗失败。
 - `ap`：AP 不足和排队。
+- `pending`：新目标替换、键盘取消、制作面板取消、地点切换等 pending 行动取消原因。
 - `inventory` / `container` / `trade`：背包、容器和交易失败。
 - `crafting` / `skill`：制作、工作台、技能、资源和技能目标失败。
 - `door` / `transition`：门和地图 / 地点切换失败。
@@ -40,6 +41,7 @@
   `unknown_player_command`、`ui_modal_blocks_player_commands`、`path_unreachable`、`target_not_hostile`、`materials_insufficient`、`container_inventory_insufficient`、`player_money_insufficient`、`skill_on_cooldown`。
 - `UI` smoke 会校验所有已知 reason 都具备 `source_module`、`payload_fields`、`disabled_text` 和 `remediation`，并抽查关键 reason 的 payload 字段与禁用态文案。
 - HUD 的 interaction menu、hover 移动 / 攻击预览和技能目标提示已接入 `disabled_text_for()` fallback；原有短文案覆盖仍保留，例如 `target_not_hostile` 在菜单中继续显示为“非敌对目标”。
+- HUD 的 pending 取消反馈已接入 catalog，`new_target_command`、`keyboard`、`crafting_ui` 和 `location_change` 等取消原因会显示稳定中文文案。
 - Crafting 面板的执行失败反馈和未知 recipe reason fallback 已接入 `disabled_text_for()`；结构化缺材料 / 缺工具 / 缺工作台详情仍由 Crafting snapshot 和 controller 自身生成。
 - Trade 面板的按钮、上下文菜单、物品行详情和 drop-zone 拒绝预览已接入 `disabled_text_for()` fallback；已有中文权限说明原样保留，drop-zone metadata 继续保存稳定 reason code。
 - Container 面板的反馈 snapshot 兜底已接入 `disabled_text_for()`；已有容量、权限、钥匙、工具、关系等详细中文说明继续优先使用，未特化的容器 reason 显示 catalog 中文短文案。

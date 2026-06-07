@@ -821,18 +821,11 @@ func _command_kind_label(kind: String) -> String:
 
 
 func _pending_cancel_reason_text(reason: String) -> String:
-	match reason:
-		"new_target_command":
-			return "选择了新目标"
-		"keyboard":
-			return "键盘取消"
-		"smoke_cancel", "movement_smoke_cancelled":
-			return "测试取消"
 	if reason.begins_with("pending_cancelled:"):
 		return _pending_cancel_reason_text(reason.trim_prefix("pending_cancelled:"))
 	if reason.is_empty():
 		return "已取消"
-	return reason
+	return reason_catalog.text_for(reason)
 
 
 func _progression_source_text(source: String) -> String:

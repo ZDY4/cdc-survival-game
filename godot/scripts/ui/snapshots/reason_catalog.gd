@@ -34,6 +34,14 @@ const REASONS := {
 	"ap_insufficient_deconstruct": {"category": "ap", "text": "AP不足，无法拆解"},
 	"ap_insufficient_movement_queued": {"category": "ap", "text": "AP不足，移动已排队"},
 	"ap_insufficient_interaction_queued": {"category": "ap", "text": "AP不足，交互已排队"},
+	"new_target_command": {"category": "pending", "text": "选择了新目标"},
+	"keyboard": {"category": "pending", "text": "键盘取消"},
+	"crafting_ui": {"category": "pending", "text": "制作面板取消"},
+	"location_change": {"category": "pending", "text": "地点切换取消"},
+	"smoke_cancel": {"category": "pending", "text": "测试取消"},
+	"movement_smoke_cancelled": {"category": "pending", "text": "测试取消"},
+	"keyboard_escape_smoke": {"category": "pending", "text": "键盘取消"},
+	"combat_smoke_cancel": {"category": "pending", "text": "测试取消"},
 	"materials_insufficient": {"category": "crafting", "text": "材料不足"},
 	"missing_tools": {"category": "crafting", "text": "缺少工具"},
 	"missing_consumable_tools": {"category": "crafting", "text": "缺少可消耗工具"},
@@ -223,6 +231,12 @@ const CATEGORY_METADATA := {
 		"disabled_text": "AP 不足",
 		"remediation": "检查 AP 消耗、pending 行动和自动推进回合策略。",
 	},
+	"pending": {
+		"source_module": "godot/scripts/core/simulation/simulation.gd pending cancellation",
+		"payload_fields": ["actor_id", "reason", "movement", "interaction", "crafting"],
+		"disabled_text": "已取消待执行动作",
+		"remediation": "检查取消来源、新目标替换、UI 关闭顺序和 pending movement / interaction / crafting payload。",
+	},
 	"crafting": {
 		"source_module": "godot/scripts/core/crafting and recipe runner",
 		"payload_fields": ["recipe_id", "materials", "tools", "station_id"],
@@ -311,6 +325,22 @@ const REASON_METADATA := {
 	"materials_insufficient": {
 		"payload_fields": ["recipe_id", "missing_materials", "inventory"],
 		"disabled_text": "材料不足",
+	},
+	"new_target_command": {
+		"payload_fields": ["actor_id", "replacement_kind", "replacement", "movement", "interaction", "crafting"],
+		"disabled_text": "选择了新目标",
+	},
+	"keyboard": {
+		"payload_fields": ["actor_id", "reason", "turn_policy"],
+		"disabled_text": "键盘取消",
+	},
+	"crafting_ui": {
+		"payload_fields": ["actor_id", "pending_crafting", "turn_policy"],
+		"disabled_text": "制作面板取消",
+	},
+	"location_change": {
+		"payload_fields": ["actor_id", "location_id", "entry_point_id", "movement", "interaction", "crafting"],
+		"disabled_text": "地点切换取消",
 	},
 	"inventory_over_capacity": {
 		"payload_fields": ["item_id", "count", "current_weight", "max_weight"],
