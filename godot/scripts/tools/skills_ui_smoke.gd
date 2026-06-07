@@ -67,6 +67,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills detail should show direct unlock chain for survival")
 	if not _skill_line_tooltip(game_root, "survival").contains("解锁 医疗知识 / 观察力 / 低姿潜行"):
 		errors.append("skills row tooltip should expose unlock chain")
+	if not _open_skill_context_menu(game_root, "survival"):
+		errors.append("should open skill context menu for survival")
+	else:
+		_assert_skill_context_menu(errors, game_root, "survival", "skill survival context")
+		_close_skill_context_menu(game_root)
 	if _learn_button(game_root, "medicine") == null or not _learn_button(game_root, "medicine").disabled:
 		errors.append("medicine learn button should be disabled before survival prerequisite")
 	if _filter_button(game_root, "FilterActiveButton") == null:
@@ -613,6 +618,60 @@ func _skill_drag_data(game_root: Node, skill_id: String) -> Dictionary:
 	if line == null:
 		return {}
 	return _dictionary_or_empty(game_root.skills_panel._get_skill_drag_data(Vector2.ZERO, line))
+
+
+func _open_skill_context_menu(game_root: Node, skill_id: String) -> bool:
+	var row: Node = game_root.skills_panel.find_child("Skill_%s" % skill_id, true, false)
+	if row == null:
+		return false
+	var line: Control = row.get_node("Line") as Control
+	if line == null or not line.has_meta("skill_drag_data"):
+		return false
+	game_root.skills_panel.call("_open_context_menu_for_skill", line.get_meta("skill_drag_data"), Vector2.ZERO)
+	return true
+
+
+func _close_skill_context_menu(game_root: Node) -> void:
+	if game_root.skills_panel != null and game_root.skills_panel.has_method("close_context_menu"):
+		game_root.skills_panel.call("close_context_menu")
+
+
+func _assert_skill_context_menu(errors: Array[String], game_root: Node, expected_skill_id: String, context: String) -> void:
+	if not game_root.has_method("context_menu_snapshot"):
+		errors.append("%s: game root should expose context_menu_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.context_menu_snapshot())
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: context menu snapshot should be active: %s" % [context, snapshot])
+		return
+	var top: Dictionary = _dictionary_or_empty(snapshot.get("top", {}))
+	if str(top.get("id", "")) != "skill_context_menu" or str(top.get("kind", "")) != "skill_item":
+		errors.append("%s: expected skill context top, got %s" % [context, top])
+	if str(top.get("owner_panel", "")) != "skills":
+		errors.append("%s: skill context owner should be skills: %s" % [context, top])
+	if str(top.get("skill_id", "")) != expected_skill_id:
+		errors.append("%s: skill context id expected %s, got %s" % [context, expected_skill_id, top])
+	if int(top.get("option_count", 0)) != 5:
+		errors.append("%s: skill context should expose inspect/learn/bind/use/clear options: %s" % [context, top])
+	var inspect_seen := false
+	var bind_seen := false
+	for option in _array_or_empty(top.get("options", [])):
+		var option_data: Dictionary = _dictionary_or_empty(option)
+		if int(option_data.get("id", -1)) == 1:
+			inspect_seen = true
+			if bool(option_data.get("disabled", false)):
+				errors.append("%s: inspect option should be enabled: %s" % [context, option_data])
+		if int(option_data.get("id", -1)) == 3:
+			bind_seen = true
+			if not bool(option_data.get("disabled", false)):
+				errors.append("%s: unlearned passive bind option should be disabled: %s" % [context, option_data])
+	if not inspect_seen or not bind_seen:
+		errors.append("%s: skill context should include inspect and bind options: %s" % [context, top])
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var runtime_context: Dictionary = _dictionary_or_empty(runtime.get("context_menu", {}))
+	var runtime_top: Dictionary = _dictionary_or_empty(runtime_context.get("top", {}))
+	if str(runtime_top.get("id", "")) != "skill_context_menu" or str(runtime_top.get("skill_id", "")) != expected_skill_id:
+		errors.append("%s: runtime context menu should expose skill %s: %s" % [context, expected_skill_id, runtime_context])
 
 
 func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_kind: String, expected_source_owner: String, expected_target_kind: String, context: String) -> void:

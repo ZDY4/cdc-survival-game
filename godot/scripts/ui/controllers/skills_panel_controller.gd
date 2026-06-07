@@ -2,6 +2,12 @@ extends Control
 
 const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
 
+const CONTEXT_INSPECT := 1
+const CONTEXT_LEARN := 2
+const CONTEXT_BIND := 3
+const CONTEXT_USE := 4
+const CONTEXT_CLEAR_BINDING := 5
+
 var _panel: PanelContainer
 var _summary_label: Label
 var _hotbar_label: Label
@@ -12,6 +18,8 @@ var _tree_box: VBoxContainer
 var _detail_title_label: Label
 var _detail_body_label: Label
 var _learn_confirm_dialog: ConfirmationDialog
+var _context_menu: PopupMenu
+var _context_skill: Dictionary = {}
 var _filter_mode: String = "all"
 var _tree_filter_mode: String = "all"
 var _selected_skill_id := ""
@@ -106,6 +114,10 @@ func _build_layout() -> void:
 	_learn_confirm_dialog.get_ok_button().text = "学习"
 	_learn_confirm_dialog.get_cancel_button().text = "取消"
 	add_child(_learn_confirm_dialog)
+	_context_menu = PopupMenu.new()
+	_context_menu.name = "SkillContextMenu"
+	_context_menu.id_pressed.connect(_execute_context_action)
+	add_child(_context_menu)
 	box.add_child(_summary_label)
 	box.add_child(_hotbar_label)
 	box.add_child(_feedback_label)
@@ -189,6 +201,13 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 		_learn_feedback_text = ""
 		apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
+	line.gui_input.connect(func(event: InputEvent) -> void:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event == null or not mouse_event.pressed or mouse_event.button_index != MOUSE_BUTTON_RIGHT:
+			return
+		line.accept_event()
+		_open_context_menu_for_skill(skill.duplicate(true), line.get_global_mouse_position())
+	)
 	var learn_button := _button("LearnButton", "+", "学习 %s" % skill.get("name", skill_id), not bool(skill.get("can_learn", false)))
 	learn_button.pressed.connect(func() -> void:
 		_open_learn_confirm(skill.duplicate(true))
@@ -258,6 +277,103 @@ func _empty_skill_drop_check(_position: Vector2, _data: Variant, _from_control: 
 
 func _empty_skill_drop(_position: Vector2, _data: Variant, _from_control: Control) -> void:
 	pass
+
+
+func _open_context_menu_for_skill(skill: Dictionary, screen_position: Vector2) -> void:
+	if _context_menu == null:
+		return
+	_selected_skill_id = str(skill.get("skill_id", ""))
+	_apply_detail(skill.duplicate(true))
+	_context_skill = skill.duplicate(true)
+	_context_menu.clear()
+	_context_menu.add_item("检查", CONTEXT_INSPECT)
+	_context_menu.add_item("学习", CONTEXT_LEARN)
+	_context_menu.add_item("绑定到热栏", CONTEXT_BIND)
+	_context_menu.add_item("使用", CONTEXT_USE)
+	_context_menu.add_item("清空绑定", CONTEXT_CLEAR_BINDING)
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_LEARN), not bool(skill.get("can_learn", false)))
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_BIND), not bool(skill.get("can_bind", false)))
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_USE), not bool(skill.get("can_use", false)))
+	_context_menu.set_item_disabled(_context_menu.get_item_index(CONTEXT_CLEAR_BINDING), str(skill.get("bound_slot", "")).is_empty())
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_INSPECT), "查看技能详情、前置和解锁")
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_LEARN), "学习 %s：%s" % [skill.get("name", skill.get("skill_id", "")), _reason_text(skill)])
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_BIND), "绑定到第一个空快捷栏" if bool(skill.get("can_bind", false)) else "需要先学习主动或切换技能")
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_USE), _use_state_text(skill))
+	_context_menu.set_item_tooltip(_context_menu.get_item_index(CONTEXT_CLEAR_BINDING), "清空 %s" % str(skill.get("bound_slot", "")) if not str(skill.get("bound_slot", "")).is_empty() else "当前技能未绑定")
+	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
+	_context_menu.popup(Rect2i(popup_position, Vector2i(190, 1)))
+
+
+func context_menu_snapshot() -> Dictionary:
+	if _context_menu == null or not _context_menu.visible:
+		return {}
+	return {
+		"id": "skill_context_menu",
+		"name": "skill_context_menu",
+		"kind": "skill_item",
+		"owner_panel": "skills",
+		"active": true,
+		"visible": true,
+		"mouse_blocks_world": true,
+		"skill_id": str(_context_skill.get("skill_id", "")),
+		"skill_name": str(_context_skill.get("name", _context_skill.get("skill_id", ""))),
+		"level": int(_context_skill.get("level", 0)),
+		"max_level": int(_context_skill.get("max_level", 1)),
+		"tree_id": str(_context_skill.get("tree_id", "")),
+		"activation_mode": str(_context_skill.get("activation_mode", "passive")),
+		"bound_slot": str(_context_skill.get("bound_slot", "")),
+		"can_learn": bool(_context_skill.get("can_learn", false)),
+		"can_bind": bool(_context_skill.get("can_bind", false)),
+		"can_use": bool(_context_skill.get("can_use", false)),
+		"option_count": _context_menu.item_count,
+		"options": _skill_context_option_summaries(),
+	}
+
+
+func close_context_menu() -> void:
+	if _context_menu != null:
+		_context_menu.hide()
+	_context_skill = {}
+
+
+func _skill_context_option_summaries() -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	if _context_menu == null:
+		return output
+	for index in range(_context_menu.item_count):
+		output.append({
+			"id": _context_menu.get_item_id(index),
+			"label": _context_menu.get_item_text(index),
+			"disabled": _context_menu.is_item_disabled(index),
+			"tooltip": _context_menu.get_item_tooltip(index),
+		})
+	return output
+
+
+func _execute_context_action(action_id: int) -> void:
+	if _context_skill.is_empty():
+		return
+	var skill_id := str(_context_skill.get("skill_id", ""))
+	match action_id:
+		CONTEXT_INSPECT:
+			_apply_detail(_context_skill.duplicate(true))
+		CONTEXT_LEARN:
+			_open_learn_confirm(_context_skill.duplicate(true))
+		CONTEXT_BIND:
+			var root := get_parent()
+			if root != null and root.has_method("bind_player_skill_to_hotbar"):
+				root.bind_player_skill_to_hotbar("", skill_id)
+		CONTEXT_USE:
+			var root := get_parent()
+			if root != null and root.has_method("use_hotbar_slot"):
+				root.use_hotbar_slot(str(_context_skill.get("bound_slot", "")))
+		CONTEXT_CLEAR_BINDING:
+			var root := get_parent()
+			var bound_slot_id := str(_context_skill.get("bound_slot", ""))
+			if root != null and root.has_method("bind_player_skill_to_hotbar") and not bound_slot_id.is_empty():
+				root.bind_player_skill_to_hotbar(bound_slot_id, "")
+	if _context_menu != null:
+		_context_menu.hide()
 
 
 func has_blocking_modal() -> bool:
