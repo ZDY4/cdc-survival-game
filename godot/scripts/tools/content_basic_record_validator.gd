@@ -96,6 +96,9 @@ func _validate_character(id_value: String, record: Dictionary, registry: Content
 		var settlement_id := str(life.get("settlement_id", ""))
 		if not settlement_id.is_empty() and not registry.has_id("settlements", settlement_id):
 			issues.append(_issue("error", "$.life.settlement_id", "unknown_settlement", "unknown settlement id %s" % settlement_id))
+	var appearance_profile_id := ContentRegistry.normalize_content_id(data.get("appearance_profile_id", ""))
+	if not appearance_profile_id.is_empty() and not registry.has_id("appearance", appearance_profile_id):
+		issues.append(_issue("error", "$.appearance_profile_id", "unknown_appearance", "unknown appearance profile id %s" % appearance_profile_id))
 
 
 func _validate_map(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:

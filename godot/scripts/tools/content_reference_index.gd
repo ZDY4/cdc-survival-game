@@ -31,6 +31,8 @@ func references_for(domain: String, id_value: String, registry: ContentRegistry)
 			return _settlement_references(id_value, registry)
 		"overworld":
 			return _overworld_references(id_value, registry)
+		"appearance":
+			return _appearance_references(id_value, registry)
 	return []
 
 
@@ -46,6 +48,7 @@ func supports_domain(domain: String) -> bool:
 		"skill_trees",
 		"settlements",
 		"overworld",
+		"appearance",
 	].has(domain)
 
 
@@ -258,6 +261,22 @@ func _overworld_references(overworld_id: String, registry: ContentRegistry) -> A
 		for object_index in range(objects.size()):
 			var object: Dictionary = _dictionary_or_empty(objects[object_index])
 			_collect_location_refs_from_props(hits, location_ids, "map", map_id, map_record["path"], object_index, object)
+	return hits
+
+
+func _appearance_references(appearance_id: String, registry: ContentRegistry) -> Array[Dictionary]:
+	var hits: Array[Dictionary] = []
+	for character_id in registry.get_library("characters").keys():
+		var record: Dictionary = registry.get_library("characters")[character_id]
+		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+		if ContentRegistry.normalize_content_id(data.get("appearance_profile_id", "")) == appearance_id:
+			hits.append(_reference_hit("character", character_id, record.get("path", ""), "appearance_profile_id"))
+	_collect_legacy_json_scalar_refs(
+		hits,
+		appearance_id,
+		["appearance_profile_id", "appearanceProfileId", "appearance_id", "appearanceId"],
+		"appearance"
+	)
 	return hits
 
 

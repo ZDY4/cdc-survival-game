@@ -174,8 +174,8 @@ pwsh -NoProfile -File tools/agent/godot-content.ps1 -Command diff-summary -Kind 
 - 当前覆盖 `locate` / `summarize` / `references` / `validate` / `validate changed` / `format` / `format changed` / `diff-summary`。
 - `summarize` 输出 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` 的高信号字段摘要。
 - `map locate` 和 `map summarize` 以 `godot/scenes/maps/*.tscn` 为主来源，便于地图布局继续按 Godot scene 工作流维护。
-- `validate` 对 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` 执行记录级诊断，输出 `relative_path`、`status` 和字段级 issue；`validate changed` 会批量检查这些已迁移编辑内容。
-- `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map`，用于替代旧 `content_tools` 的常用引用查询。
+- `validate` 对 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `appearance` 执行记录级诊断，输出 `relative_path`、`status` 和字段级 issue；`validate changed` 会批量检查这些已迁移编辑内容。
+- `references` 当前覆盖 `item` / `recipe` / `character` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld` / `map` / `appearance`，用于替代旧 `content_tools` 的常用引用查询。
 - `format` 覆盖 `item` / `recipe` / `character` / `map` / `dialogue` / `quest` / `skill` / `skill_tree` / `settlement` / `overworld`，只重排 JSON 空白，不通过 Godot Dictionary 重写字段顺序或数字字面量。
 
 ### `test-godot-editor.ps1`

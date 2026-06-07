@@ -18,7 +18,7 @@ func _init() -> void:
 
 	print("content_cli_smoke passed:")
 	print({
-		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map"],
+		"covered_reference_domains": ["item", "recipe", "character", "dialogue", "quest", "skill", "skill_tree", "settlement", "overworld", "map", "appearance"],
 	})
 	quit(0)
 
@@ -42,6 +42,7 @@ func _run() -> Array[String]:
 	_expect_min_refs(errors, index, registry, "settlements", "survivor_outpost_01_settlement", 1)
 	_expect_min_refs(errors, index, registry, "overworld", "main_overworld", 1)
 	_expect_min_refs(errors, index, registry, "maps", "survivor_outpost_01", 1)
+	_expect_min_refs(errors, index, registry, "appearance", "default_humanoid", 1)
 	_expect_valid_record(errors, registry, "items", "1006")
 	_expect_valid_record(errors, registry, "recipes", "recipe_first_aid_kit")
 	_expect_valid_record(errors, registry, "characters", "zombie_walker")
@@ -55,6 +56,7 @@ func _run() -> Array[String]:
 	_expect_valid_record(errors, registry, "appearance", "default_humanoid")
 	_expect_validate_changed(errors, registry)
 	_expect_invalid_recipe_ref(errors, registry)
+	_expect_invalid_character_appearance_ref(errors, registry)
 	_expect_recipe_unlock_source_refs(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
 	_expect_invalid_settlement_anchor(errors, registry)
@@ -116,6 +118,23 @@ func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry
 			found_unknown_item = true
 	if not found_unknown_item:
 		errors.append("invalid recipe reference smoke did not report unknown_item: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_character_appearance_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("characters").get("player", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing player fixture for invalid appearance validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	data["appearance_profile_id"] = "missing_appearance_for_validator_smoke"
+	source["data"] = data
+	var validator: ContentRecordValidator = ContentRecordValidator.new()
+	var validation := validator.validate_record("characters", "player", _registry_with_override(registry, "characters", "player", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid character appearance reference smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "unknown_appearance"):
+		errors.append("invalid character appearance smoke did not report unknown_appearance: %s" % validation.get("issues", []))
 
 
 func _expect_recipe_unlock_source_refs(errors: Array[String], registry: ContentRegistry) -> void:
