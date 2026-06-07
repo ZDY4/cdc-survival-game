@@ -947,8 +947,9 @@ func player_command_authority_audit_snapshot() -> Dictionary:
 			if core_service.is_empty():
 				missing_core_service.append(item.duplicate(true))
 		entries.append(item)
+	var debug_console_audit: Dictionary = _debug_console_mutation_authority_audit()
 	return {
-		"audit_version": 1,
+		"audit_version": 2,
 		"requires_simulation_authority": true,
 		"business_entry_count": entries.size(),
 		"submit_player_command_entry_count": command_count,
@@ -962,6 +963,52 @@ func player_command_authority_audit_snapshot() -> Dictionary:
 		"missing_command_kind": missing_command_kind,
 		"missing_core_service": missing_core_service,
 		"entries": entries,
+		"debug_console_mutation_audit": debug_console_audit,
+	}
+
+
+func _debug_console_mutation_authority_audit() -> Dictionary:
+	var mutating_commands: Array[Dictionary] = []
+	var missing_permission: Array[Dictionary] = []
+	var missing_runtime_flag: Array[Dictionary] = []
+	var missing_usage: Array[Dictionary] = []
+	var permission_snapshot: Dictionary = _debug_console_command_runner.permission_snapshot(self)
+	for command in _debug_console_command_runner.command_schema():
+		var command_data: Dictionary = _dictionary_or_empty(command).duplicate(true)
+		if not bool(command_data.get("mutates_runtime", false)):
+			continue
+		var permission := str(command_data.get("permission", "")).strip_edges()
+		var usage := str(command_data.get("usage", "")).strip_edges()
+		var item := {
+			"id": str(command_data.get("id", usage)),
+			"usage": usage,
+			"permission": permission,
+			"mutates_runtime": true,
+			"authority_kind": "debug_console_runtime_mutation",
+			"runner": "DebugConsoleCommandRunner",
+		}
+		if permission != "debug_runtime_mutation":
+			missing_permission.append(item.duplicate(true))
+		if not bool(command_data.get("mutates_runtime", false)):
+			missing_runtime_flag.append(item.duplicate(true))
+		if usage.is_empty():
+			missing_usage.append(item.duplicate(true))
+		mutating_commands.append(item)
+	return {
+		"authority_kind": "debug_console_runtime_mutation",
+		"runner": "DebugConsoleCommandRunner",
+		"permission": "debug_runtime_mutation",
+		"runtime_mutation_setting": str(permission_snapshot.get("runtime_mutation_setting", "")),
+		"allow_runtime_mutation": bool(permission_snapshot.get("allow_runtime_mutation", false)),
+		"mutating_command_count": mutating_commands.size(),
+		"schema_mutating_command_count": int(permission_snapshot.get("mutating_command_count", 0)),
+		"missing_permission_count": missing_permission.size(),
+		"missing_runtime_flag_count": missing_runtime_flag.size(),
+		"missing_usage_count": missing_usage.size(),
+		"commands": mutating_commands,
+		"missing_permission": missing_permission,
+		"missing_runtime_flag": missing_runtime_flag,
+		"missing_usage": missing_usage,
 	}
 
 

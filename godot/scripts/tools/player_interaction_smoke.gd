@@ -1699,7 +1699,49 @@ func _expect_player_command_authority_audit(errors: Array[String], game_root: No
 		errors.append("player command audit should document allowed Simulation core service entries")
 	if mixed_count < 1:
 		errors.append("player command audit should document mixed wait/dialogue flow")
+	_expect_debug_console_mutation_audit(errors, audit)
 	_expect_player_command_authority_source(errors, entries)
+
+
+func _expect_debug_console_mutation_audit(errors: Array[String], audit: Dictionary) -> void:
+	var debug_audit: Dictionary = _dictionary_or_empty(audit.get("debug_console_mutation_audit", {}))
+	if debug_audit.is_empty():
+		errors.append("player command audit should expose debug console mutation audit")
+		return
+	if str(debug_audit.get("authority_kind", "")) != "debug_console_runtime_mutation":
+		errors.append("debug console mutation audit should use explicit debug authority kind")
+	if str(debug_audit.get("runner", "")) != "DebugConsoleCommandRunner":
+		errors.append("debug console mutation audit should name the command runner")
+	if str(debug_audit.get("permission", "")) != "debug_runtime_mutation":
+		errors.append("debug console mutation audit should require debug_runtime_mutation permission")
+	if str(debug_audit.get("runtime_mutation_setting", "")) != "cdc/debug_console/allow_runtime_mutation":
+		errors.append("debug console mutation audit should expose runtime mutation project setting")
+	if int(debug_audit.get("mutating_command_count", 0)) < 4:
+		errors.append("debug console mutation audit should cover restart/give/teleport/spawn/unlock")
+	if int(debug_audit.get("mutating_command_count", -1)) != int(debug_audit.get("schema_mutating_command_count", -2)):
+		errors.append("debug console mutation audit count should match command schema permission snapshot")
+	if int(debug_audit.get("missing_permission_count", 0)) != 0:
+		errors.append("debug console mutating commands should all declare debug_runtime_mutation permission")
+	if int(debug_audit.get("missing_runtime_flag_count", 0)) != 0:
+		errors.append("debug console mutating commands should all declare mutates_runtime")
+	if int(debug_audit.get("missing_usage_count", 0)) != 0:
+		errors.append("debug console mutating commands should all expose usage")
+	var commands: Array = _array_or_empty(debug_audit.get("commands", []))
+	var by_id: Dictionary = {}
+	for command in commands:
+		var command_data: Dictionary = _dictionary_or_empty(command)
+		var command_id := str(command_data.get("id", ""))
+		if command_id.is_empty():
+			errors.append("debug console mutation command missing id")
+			continue
+		by_id[command_id] = command_data
+		if not bool(command_data.get("mutates_runtime", false)):
+			errors.append("debug console mutation command %s should be marked mutates_runtime" % command_id)
+		if str(command_data.get("permission", "")) != "debug_runtime_mutation":
+			errors.append("debug console mutation command %s should require debug_runtime_mutation" % command_id)
+	for command_id in ["restart", "give item", "teleport", "spawn", "unlock location"]:
+		if not by_id.has(command_id):
+			errors.append("debug console mutation audit missing %s" % command_id)
 
 
 func _expect_player_command_authority_source(errors: Array[String], entries: Array) -> void:
