@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ContentCliDomains = preload("res://scripts/tools/content_cli_domains.gd")
+const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd")
 const ContentReferenceIndex = preload("res://scripts/tools/content_reference_index.gd")
 const ContentRecordValidator = preload("res://scripts/tools/content_record_validator.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
@@ -114,31 +115,80 @@ func _nested_ai_reference_lookup(args: Array[String], registry: ContentRegistry)
 
 func _validate_changed_command(registry: ContentRegistry) -> int:
 	var validator: ContentRecordValidator = ContentRecordValidator.new()
-	var checked_records := 0
+	var entries := changed_validation_records_for_paths(registry, ContentDiffSummary.new().changed_paths(ContentCliDomains.git_status_paths_for_validate()))
 	var invalid_records := 0
 	print("mode: validate_changed")
 	print("domains: %s" % ContentCliDomains.validate_domain_names())
-	for domain in ContentCliDomains.VALIDATE_CHANGED_DOMAINS:
-		for id_value in registry.get_library(domain).keys():
-			var id_string := str(id_value)
-			var record: Dictionary = registry.get_library(domain).get(id_string, {})
-			var validation := validator.validate_record(domain, id_string, registry)
-			checked_records += 1
-			if not bool(validation.get("ok", false)):
-				invalid_records += 1
-				print("- [%s] %s @ %s" % [_singular_domain(domain), id_string, _repo_relative_path(str(record.get("path", "")))])
-				for issue in validation.get("issues", []):
-					var data: Dictionary = _dictionary_or_empty(issue)
-					print("  - [%s] %s: %s (%s)" % [
-						data.get("severity", "error"),
-						data.get("code", "validation_error"),
-						data.get("message", ""),
-						_issue_location(data),
-					])
-	print("checked_records: %d" % checked_records)
+	print("changed_supported_files: %d" % entries.size())
+	if entries.is_empty():
+		print("checked_records: 0")
+		print("invalid_records: 0")
+		print("status: no_supported_changes")
+		return 0
+	for entry in entries:
+		var domain := str(entry.get("domain", ""))
+		var id_string := str(entry.get("id", ""))
+		var record: Dictionary = _dictionary_or_empty(entry.get("record", {}))
+		var relative_path := str(entry.get("relative_path", ""))
+		if not bool(entry.get("found", false)):
+			invalid_records += 1
+			print("- [missing] %s @ %s" % [_singular_domain(domain), relative_path])
+			print("  - [error] content_file_not_loaded: changed content file is not loaded by registry (%s:$)" % relative_path)
+			continue
+		var validation := validator.validate_record(domain, id_string, registry)
+		if not bool(validation.get("ok", false)):
+			invalid_records += 1
+			print("- [%s] %s @ %s" % [_singular_domain(domain), id_string, _repo_relative_path(str(record.get("path", "")))])
+			for issue in validation.get("issues", []):
+				var data: Dictionary = _dictionary_or_empty(issue)
+				print("  - [%s] %s: %s (%s)" % [
+					data.get("severity", "error"),
+					data.get("code", "validation_error"),
+					data.get("message", ""),
+					_issue_location(data),
+				])
+	print("checked_records: %d" % entries.size())
 	print("invalid_records: %d" % invalid_records)
 	print("status: %s" % ("ok" if invalid_records == 0 else "invalid"))
 	return 0 if invalid_records == 0 else 2
+
+
+func changed_validation_records_for_paths(registry: ContentRegistry, relative_paths: Array[String]) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var seen: Dictionary = {}
+	for path_value in relative_paths:
+		var relative_path := str(path_value).replace("\\", "/").simplify_path()
+		var domain := ContentCliDomains.validate_domain_for_relative_path(relative_path)
+		if domain.is_empty():
+			continue
+		var key := "%s:%s" % [domain, relative_path]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		var record_entry := _record_for_relative_path(registry, domain, relative_path)
+		record_entry["domain"] = domain
+		record_entry["relative_path"] = relative_path
+		entries.append(record_entry)
+	return entries
+
+
+func _record_for_relative_path(registry: ContentRegistry, domain: String, relative_path: String) -> Dictionary:
+	var normalized_path := relative_path.replace("\\", "/")
+	for id_value in registry.get_library(domain).keys():
+		var id_string := str(id_value)
+		var record: Dictionary = _dictionary_or_empty(registry.get_library(domain).get(id_string, {}))
+		var record_path := _repo_relative_path(str(record.get("path", ""))).replace("\\", "/")
+		if record_path == normalized_path:
+			return {
+				"found": true,
+				"id": id_string,
+				"record": record,
+			}
+	return {
+		"found": false,
+		"id": normalized_path.get_file().get_basename(),
+		"record": {},
+	}
 
 
 func _record_lookup(args: Array[String], registry: ContentRegistry) -> Dictionary:

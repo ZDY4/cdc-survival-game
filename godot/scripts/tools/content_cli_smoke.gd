@@ -107,16 +107,23 @@ func _expect_valid_record(errors: Array[String], registry: ContentRegistry, doma
 
 
 func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) -> void:
-	var validator: ContentRecordValidator = ContentRecordValidator.new()
-	var checked := 0
-	for domain in ["items", "recipes", "characters", "maps", "dialogues", "dialogue_rules", "quests", "skills", "skill_trees", "settlements", "overworld", "shops", "world_tiles", "appearance", "ai", "json"]:
-		for id_value in registry.get_library(domain).keys():
-			var validation := validator.validate_record(domain, str(id_value), registry)
-			checked += 1
-			if not bool(validation.get("ok", false)):
-				errors.append("validate changed smoke failed for %s %s: %s" % [domain, id_value, validation.get("issues", [])])
-	if checked < 100:
-		errors.append("validate changed smoke expected broad migrated editor coverage, checked only %d records" % checked)
+	var commands := ContentRecordCliCommands.new()
+	var entries := commands.changed_validation_records_for_paths(registry, [
+		"data/items/1006.json",
+		"data/items/1006.json",
+		"data/appearance/characters/default_humanoid.json",
+		"docs/plans/13_full_remaining_migration_inventory.md",
+	])
+	if entries.size() != 2:
+		errors.append("validate changed should include supported content paths once, got %s" % [entries])
+		return
+	if not _has_changed_entry(entries, "items", "1006", "data/items/1006.json"):
+		errors.append("validate changed should resolve changed item path: %s" % [entries])
+	if not _has_changed_entry(entries, "appearance", "default_humanoid", "data/appearance/characters/default_humanoid.json"):
+		errors.append("validate changed should support appearance changed path: %s" % [entries])
+	var missing_entries := commands.changed_validation_records_for_paths(registry, ["data/items/missing_item_for_changed_smoke.json"])
+	if missing_entries.size() != 1 or bool(_dictionary_or_empty(missing_entries[0]).get("found", true)):
+		errors.append("validate changed should report supported but unloaded changed files: %s" % [missing_entries])
 
 
 func _expect_invalid_recipe_ref(errors: Array[String], registry: ContentRegistry) -> void:
@@ -601,6 +608,17 @@ func _expect_issue_location(errors: Array[String], validation: Dictionary, code:
 			errors.append("%s: location should combine file and json path, got %s" % [context, issue_data])
 		return
 	errors.append("%s: missing issue code %s in %s" % [context, code, validation.get("issues", [])])
+
+
+func _has_changed_entry(entries: Array[Dictionary], domain: String, id_value: String, relative_path: String) -> bool:
+	for entry in entries:
+		var data: Dictionary = _dictionary_or_empty(entry)
+		if str(data.get("domain", "")) == domain \
+				and str(data.get("id", "")) == id_value \
+				and str(data.get("relative_path", "")) == relative_path \
+				and bool(data.get("found", false)):
+			return true
+	return false
 
 
 func _has_reference_detail(hits: Array[Dictionary], detail: String) -> bool:
