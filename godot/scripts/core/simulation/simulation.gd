@@ -3278,19 +3278,38 @@ func _npc_approach(actor: RefCounted, target_actor_id: int, topology: Dictionary
 	var goals: Array[RefCounted] = _adjacent_goals(target.grid_position)
 	var best_plan: Dictionary = {}
 	var best_goal: RefCounted = null
+	var attempted_goals: Array[Dictionary] = []
 	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
 	for goal in goals:
 		var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
+		attempted_goals.append(_npc_approach_attempt_summary(goal, plan))
 		if not bool(plan.get("success", false)):
 			continue
 		if best_plan.is_empty() or int(plan.get("steps", 999999)) < int(best_plan.get("steps", 999999)):
 			best_plan = plan
 			best_goal = goal
 	if best_goal == null:
-		return {"success": false, "reason": "npc_no_adjacent_path", "actor_id": actor.actor_id}
+		return {
+			"success": false,
+			"reason": "npc_no_adjacent_path",
+			"actor_id": actor.actor_id,
+			"target_actor_id": target_actor_id,
+			"target_grid": target.grid_position.to_dictionary(),
+			"attempted_goals": attempted_goals,
+			"attempted_goal_count": attempted_goals.size(),
+		}
 	var path: Array = _array_or_empty(best_plan.get("path", []))
 	if path.size() <= 1:
-		return {"success": true, "actor_id": actor.actor_id, "reason": "already_adjacent"}
+		return {
+			"success": true,
+			"actor_id": actor.actor_id,
+			"target_actor_id": target_actor_id,
+			"reason": "already_adjacent",
+			"chosen_goal": best_goal.to_dictionary(),
+			"attempted_goals": attempted_goals,
+			"path": path.duplicate(true),
+			"path_length": path.size(),
+		}
 	var next_step: Dictionary = _dictionary_or_empty(path[1])
 	var from: Dictionary = actor.grid_position.to_dictionary()
 	_auto_open_door_for_step(actor.actor_id, next_step, topology)
@@ -3310,8 +3329,29 @@ func _npc_approach(actor: RefCounted, target_actor_id: int, topology: Dictionary
 	return {
 		"success": true,
 		"actor_id": actor.actor_id,
+		"target_actor_id": target_actor_id,
 		"to": next_step,
+		"chosen_goal": best_goal.to_dictionary(),
+		"attempted_goals": attempted_goals,
+		"path": path.duplicate(true),
+		"path_length": path.size(),
+		"remaining_steps": max(0, int(best_plan.get("steps", 0)) - 1),
 	}
+
+
+func _npc_approach_attempt_summary(goal: RefCounted, plan: Dictionary) -> Dictionary:
+	var summary := {
+		"goal": goal.to_dictionary() if goal != null else {},
+		"success": bool(plan.get("success", false)),
+		"reason": str(plan.get("reason", "ok" if bool(plan.get("success", false)) else "unknown")),
+		"steps": int(plan.get("steps", 0)),
+		"visited_cell_count": int(plan.get("visited_cell_count", 0)),
+		"pathfinding_time_ms": float(plan.get("pathfinding_time_ms", 0.0)),
+	}
+	for key in ["blocker", "bounds", "start", "goal", "start_level", "goal_level"]:
+		if plan.has(key):
+			summary[key] = plan.get(key)
+	return summary
 
 
 func _npc_turn_close_reason(actor: RefCounted, result: Dictionary) -> String:

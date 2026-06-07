@@ -265,6 +265,17 @@ func _expect_hostile_auto_open_door(registry: RefCounted) -> Array[String]:
 	var locked_npc_result: Dictionary = _npc_result_for_actor(locked_result, locked_zombie_id)
 	if str(locked_npc_result.get("reason", "")) != "npc_no_adjacent_path":
 		errors.append("hostile should not approach through locked door")
+	if int(locked_npc_result.get("attempted_goal_count", 0)) <= 0:
+		errors.append("failed hostile approach should expose attempted goal count")
+	var attempts: Array = _array_or_empty(locked_npc_result.get("attempted_goals", []))
+	if attempts.is_empty():
+		errors.append("failed hostile approach should expose attempted path goals")
+	else:
+		var blocked_attempt: Dictionary = _first_attempt_with_reason(attempts, "path_unreachable")
+		if blocked_attempt.is_empty():
+			errors.append("failed hostile approach should include path_unreachable attempt diagnostics: %s" % attempts)
+		elif int(blocked_attempt.get("visited_cell_count", 0)) <= 0 or _dictionary_or_empty(blocked_attempt.get("goal", {})).is_empty():
+			errors.append("failed hostile approach attempt should expose goal and visited cell count: %s" % blocked_attempt)
 	return errors
 
 
@@ -396,6 +407,14 @@ func _npc_result_for_actor(results: Array, actor_id: int) -> Dictionary:
 		var result_data: Dictionary = _dictionary_or_empty(result)
 		if int(result_data.get("actor_id", 0)) == actor_id:
 			return result_data
+	return {}
+
+
+func _first_attempt_with_reason(attempts: Array, reason: String) -> Dictionary:
+	for attempt in attempts:
+		var attempt_data: Dictionary = _dictionary_or_empty(attempt)
+		if str(attempt_data.get("reason", "")) == reason:
+			return attempt_data
 	return {}
 
 
