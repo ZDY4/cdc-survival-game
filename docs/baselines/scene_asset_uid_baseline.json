@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "description": "Scene smoke asset UID baseline for Godot glTF imports and asset .uid sidecars.",
+  "generatedFrom": "tools/agent/test-godot-game.ps1 -Scenario Scene",
+  "gltfImportUidBaseline": [
+    {
+      "path": "res://assets/container_placeholders/cabinet_medical.gltf",
+      "uid": "uid://cwrynlwtye02b"
+    },
+    {
+      "path": "res://assets/container_placeholders/crate_wood.gltf",
+      "uid": "uid://nqlb1pn2ubmf"
+    },
+    {
+      "path": "res://assets/container_placeholders/locker_metal.gltf",
+      "uid": "uid://bh287ollhukoi"
+    },
+    {
+      "path": "res://assets/preview_placeholders/characters/humanoid_mannequin.gltf",
+      "uid": "uid://cjrua0ig2ryjs"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/equipment_accessory.gltf",
+      "uid": "uid://cvn4ho7sya4i4"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/equipment_back.gltf",
+      "uid": "uid://ccptheurvx4w8"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/equipment_body.gltf",
+      "uid": "uid://cja4nvdis4xx2"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/equipment_feet.gltf",
+      "uid": "uid://b0p17aa8e3ibx"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/equipment_hands.gltf",
+      "uid": "uid://bexpn35pdrjud"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/equipment_head.gltf",
+      "uid": "uid://dyiqsdcsg3kyx"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/equipment_legs.gltf",
+      "uid": "uid://xavg0g1nts0b"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_blunt.gltf",
+      "uid": "uid://coois77rrqjm3"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_dagger.gltf",
+      "uid": "uid://c2igum04ontul"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_heavy.gltf",
+      "uid": "uid://b5e8djb4fds50"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_light.gltf",
+      "uid": "uid://dbdc47bq6sdnk"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_pistol.gltf",
+      "uid": "uid://cvj6marmmw7ph"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_pole.gltf",
+      "uid": "uid://bliednt6x17sd"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_rifle.gltf",
+      "uid": "uid://de0te6oeesple"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_shotgun.gltf",
+      "uid": "uid://qbc5faj1bnfv"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_sword.gltf",
+      "uid": "uid://cgq8vtnrpm4pn"
+    },
+    {
+      "path": "res://assets/preview_placeholders/placeholders/weapon_unarmed.gltf",
+      "uid": "uid://cq4vdgielx4eo"
+    },
+    {
+      "path": "res://assets/world_tiles/building_wall/corner.gltf",
+      "uid": "uid://bhlenbitla2f6"
+    },
+    {
+      "path": "res://assets/world_tiles/building_wall/cross.gltf",
+      "uid": "uid://yhxeq16pi5fw"
+    },
+    {
+      "path": "res://assets/world_tiles/building_wall/end.gltf",
+      "uid": "uid://b1bd3iv7dn1v2"
+    },
+    {
+      "path": "res://assets/world_tiles/building_wall/floor_flat.gltf",
+      "uid": "uid://mkm6m2xqn2sn"
+    },
+    {
+      "path": "res://assets/world_tiles/building_wall/isolated.gltf",
+      "uid": "uid://b001u7fgin3s"
+    },
+    {
+      "path": "res://assets/world_tiles/building_wall/straight.gltf",
+      "uid": "uid://b6jrhddcdc1de"
+    },
+    {
+      "path": "res://assets/world_tiles/building_wall/t_junction.gltf",
+      "uid": "uid://bcorirocl148d"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/barrel_rust.gltf",
+      "uid": "uid://bxn34ylbv3gm"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/barricade_scrap.gltf",
+      "uid": "uid://bof15s0nfjp1h"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/bush_dry.gltf",
+      "uid": "uid://dytxskw2jbwpv"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/cabinet_wood.gltf",
+      "uid": "uid://dpn6rgegj8acl"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/chair_metal.gltf",
+      "uid": "uid://kk8bp3vy4lyt"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/counter_canteen.gltf",
+      "uid": "uid://b0gogkxjrvj41"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/crate_stack_large.gltf",
+      "uid": "uid://xvegwxrl15iy"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/desk_wood.gltf",
+      "uid": "uid://sbjef1wnms3w"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/gate_pillar_concrete.gltf",
+      "uid": "uid://ds0cdw3kxnupc"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/pallet_stack.gltf",
+      "uid": "uid://da10fexr00x5u"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/roadblock_concrete.gltf",
+      "uid": "uid://hrltyff0h80y"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/sandbag_barrier.gltf",
+      "uid": "uid://bmdv6xapfykdd"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/shelf_metal.gltf",
+      "uid": "uid://egxan45mkuv1"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/table_metal.gltf",
+      "uid": "uid://dx5a4s2x0vypq"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/tree_dead.gltf",
+      "uid": "uid://b5uramuyx8nad"
+    },
+    {
+      "path": "res://assets/world_tiles/prop_placeholder_basic/wrecked_car.gltf",
+      "uid": "uid://b426b8xfbwt04"
+    },
+    {
+      "path": "res://assets/world_tiles/surface_placeholder_basic/cliff_inner_corner.gltf",
+      "uid": "uid://cw5x3ratdu5ua"
+    },
+    {
+      "path": "res://assets/world_tiles/surface_placeholder_basic/cliff_outer_corner.gltf",
+      "uid": "uid://chv0v4uht1mr7"
+    },
+    {
+      "path": "res://assets/world_tiles/surface_placeholder_basic/cliff_side.gltf",
+      "uid": "uid://blrpdpb40hbb1"
+    },
+    {
+      "path": "res://assets/world_tiles/surface_placeholder_basic/flat.gltf",
+      "uid": "uid://bm06qk6tnprly"
+    },
+    {
+      "path": "res://assets/world_tiles/surface_placeholder_basic/ramp_east.gltf",
+      "uid": "uid://pkqt5ue8gyh2"
+    },
+    {
+      "path": "res://assets/world_tiles/surface_placeholder_basic/ramp_north.gltf",
+      "uid": "uid://dnw3cn5txc6wa"
+    },
+    {
+      "path": "res://assets/world_tiles/surface_placeholder_basic/ramp_south.gltf",
+      "uid": "uid://7wtkqfov7b3j"
+    },
+    {
+      "path": "res://assets/world_tiles/surface_placeholder_basic/ramp_west.gltf",
+      "uid": "uid://dxscp5sejtyd2"
+    }
+  ],
+  "assetUidSidecarBaseline": [
+    {
+      "path": "res://assets/shaders/fog_of_war_canvas.gdshader",
+      "sidecar_path": "res://assets/shaders/fog_of_war_canvas.gdshader.uid",
+      "uid": "uid://dh1fe1npakfyw"
+    }
+  ]
+}

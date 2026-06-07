@@ -145,13 +145,70 @@ $runStamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runRoot = Join-Path $OutputRoot $runStamp
 New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
 
+function Compare-UidBaselineEntries {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Label,
+
+        [Parameter(Mandatory = $true)]
+        [array]$Expected,
+
+        [Parameter(Mandatory = $true)]
+        [array]$Actual,
+
+        [switch]$CompareSidecarPath
+    )
+
+    $mismatches = @()
+    $expectedByPath = @{}
+    foreach ($entry in $Expected) {
+        $path = [string]$entry.path
+        if (-not [string]::IsNullOrWhiteSpace($path)) {
+            $expectedByPath[$path] = $entry
+        }
+    }
+
+    $actualByPath = @{}
+    foreach ($entry in $Actual) {
+        $path = [string]$entry.path
+        if (-not [string]::IsNullOrWhiteSpace($path)) {
+            $actualByPath[$path] = $entry
+        }
+    }
+
+    foreach ($path in @($expectedByPath.Keys | Sort-Object)) {
+        if (-not $actualByPath.ContainsKey($path)) {
+            $mismatches += "$Label missing actual path: $path"
+            continue
+        }
+        $expectedEntry = $expectedByPath[$path]
+        $actualEntry = $actualByPath[$path]
+        if ([string]$expectedEntry.uid -ne [string]$actualEntry.uid) {
+            $mismatches += "$Label uid changed for ${path}: expected $($expectedEntry.uid), got $($actualEntry.uid)"
+        }
+        if ($CompareSidecarPath -and [string]$expectedEntry.sidecar_path -ne [string]$actualEntry.sidecar_path) {
+            $mismatches += "$Label sidecar path changed for ${path}: expected $($expectedEntry.sidecar_path), got $($actualEntry.sidecar_path)"
+        }
+    }
+
+    foreach ($path in @($actualByPath.Keys | Sort-Object)) {
+        if (-not $expectedByPath.ContainsKey($path)) {
+            $mismatches += "$Label new actual path not in baseline: $path"
+        }
+    }
+    return $mismatches
+}
+
 function Export-SceneAssetDiagnostics {
     param(
         [Parameter(Mandatory = $true)]
         [string]$ConsoleLog,
 
         [Parameter(Mandatory = $true)]
-        [string]$RunRoot
+        [string]$RunRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
     )
 
     if (-not (Test-Path -LiteralPath $ConsoleLog)) {
@@ -179,6 +236,27 @@ function Export-SceneAssetDiagnostics {
     }
 
     $diagnosticsPath = Join-Path $RunRoot "Scene.asset-diagnostics.json"
+    $baselinePath = Join-Path $RepoRoot "docs\baselines\scene_asset_uid_baseline.json"
+    $baselineStatus = "missing"
+    $baselineMismatches = @()
+    if (Test-Path -LiteralPath $baselinePath) {
+        $baseline = Get-Content -LiteralPath $baselinePath -Raw | ConvertFrom-Json -Depth 100
+        $gltfMismatches = Compare-UidBaselineEntries `
+            -Label "gltf import uid" `
+            -Expected @($baseline.gltfImportUidBaseline) `
+            -Actual @($counts.gltf_import_uid_baseline)
+        $sidecarMismatches = Compare-UidBaselineEntries `
+            -Label "asset sidecar uid" `
+            -Expected @($baseline.assetUidSidecarBaseline) `
+            -Actual @($counts.asset_uid_sidecar_baseline) `
+            -CompareSidecarPath
+        $baselineMismatches = @(
+            @($gltfMismatches + $sidecarMismatches) |
+                Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+        )
+        $baselineStatus = if ($baselineMismatches.Length -eq 0) { "matched" } else { "mismatched" }
+    }
+
     $diagnostics = [ordered]@{
         generatedAt = (Get-Date).ToString("o")
         sourceLog = $ConsoleLog
@@ -202,6 +280,12 @@ function Export-SceneAssetDiagnostics {
         gltfAssetDiagnostics = @($counts.gltf_asset_diagnostics)
         gltfImportUidBaseline = @($counts.gltf_import_uid_baseline)
         assetUidSidecarBaseline = @($counts.asset_uid_sidecar_baseline)
+        uidBaselineComparison = [ordered]@{
+            baselinePath = $baselinePath
+            status = $baselineStatus
+            mismatchCount = $baselineMismatches.Length
+            mismatches = @($baselineMismatches)
+        }
         missingOrInvalid = [ordered]@{
             missingExternalBuffers = @($counts.gltf_missing_external_buffers)
             bufferLengthMismatches = @($counts.gltf_buffer_length_mismatches)
@@ -217,7 +301,13 @@ function Export-SceneAssetDiagnostics {
     }
 
     $diagnostics | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $diagnosticsPath
-    return $diagnosticsPath
+    return [PSCustomObject]@{
+        path = $diagnosticsPath
+        baselinePath = $baselinePath
+        baselineStatus = $baselineStatus
+        baselineMismatchCount = $baselineMismatches.Length
+        baselineMismatches = @($baselineMismatches)
+    }
 }
 
 $startedAt = Get-Date
@@ -239,16 +329,34 @@ try {
         & $Godot --headless --path godot --script $scriptPath @scriptArgs 2>&1 |
             Tee-Object -FilePath $consoleLog
         $exitCode = $LASTEXITCODE
-        $scenarioStatus = if ($exitCode -eq 0) { "passed" } else { "failed" }
-        if ($exitCode -ne 0) {
-            $status = "failed"
-        }
         $assetDiagnostics = $null
+        $assetBaselinePath = $null
+        $assetBaselineStatus = $null
+        $assetBaselineMismatchCount = $null
         if ($name -eq "Scene" -and $exitCode -eq 0) {
-            $assetDiagnostics = Export-SceneAssetDiagnostics -ConsoleLog $consoleLog -RunRoot $runRoot
+            $assetDiagnosticResult = Export-SceneAssetDiagnostics -ConsoleLog $consoleLog -RunRoot $runRoot -RepoRoot $repoRoot
+            $assetDiagnostics = $assetDiagnosticResult.path
+            $assetBaselinePath = $assetDiagnosticResult.baselinePath
+            $assetBaselineStatus = $assetDiagnosticResult.baselineStatus
+            $assetBaselineMismatchCount = $assetDiagnosticResult.baselineMismatchCount
             if ($assetDiagnostics) {
                 Write-Host "Scene asset diagnostics written to $assetDiagnostics"
             }
+            if ($assetBaselineStatus -eq "mismatched") {
+                Write-Host "Scene asset UID baseline mismatch against $assetBaselinePath"
+                foreach ($mismatch in $assetDiagnosticResult.baselineMismatches) {
+                    Write-Host "  $mismatch"
+                }
+                $exitCode = 1
+            } elseif ($assetBaselineStatus -eq "matched") {
+                Write-Host "Scene asset UID baseline matched $assetBaselinePath"
+            } else {
+                Write-Host "Scene asset UID baseline not found at $assetBaselinePath"
+            }
+        }
+        $scenarioStatus = if ($exitCode -eq 0) { "passed" } else { "failed" }
+        if ($exitCode -ne 0) {
+            $status = "failed"
         }
         $results += [PSCustomObject]@{
             scenario = $name
@@ -257,6 +365,9 @@ try {
             exitCode = $exitCode
             consoleLog = $consoleLog
             assetDiagnostics = $assetDiagnostics
+            assetUidBaseline = $assetBaselinePath
+            assetUidBaselineStatus = $assetBaselineStatus
+            assetUidBaselineMismatchCount = $assetBaselineMismatchCount
         }
         if ($exitCode -ne 0) {
             break
