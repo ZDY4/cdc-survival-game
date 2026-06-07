@@ -33,7 +33,7 @@ func select_target(target: Dictionary) -> Dictionary:
 
 func select_node(node: Node) -> Dictionary:
 	if node == null or not node.has_meta("interaction_target"):
-		return clear_selection()
+		return clear_selection("node_without_interaction_target")
 	var metadata: Variant = node.get_meta("interaction_target")
 	if typeof(metadata) != TYPE_DICTIONARY:
 		selected_prompt = _failed_prompt("interaction_target_metadata_invalid")
@@ -41,10 +41,15 @@ func select_node(node: Node) -> Dictionary:
 	return select_target(metadata)
 
 
-func clear_selection() -> Dictionary:
+func clear_selection(reason: String = "cleared") -> Dictionary:
+	var previous_target := selected_target.duplicate(true)
+	var previous_prompt := selected_prompt.duplicate(true)
 	selected_target = {}
 	selected_prompt = {}
-	return _selection_result(true)
+	var result := _selection_result(true)
+	result["reason"] = reason
+	result["turn_policy"] = _build_clear_selection_turn_policy(reason, previous_target, previous_prompt)
+	return result
 
 
 func execute_primary_interaction() -> Dictionary:
@@ -141,6 +146,27 @@ func _selection_result(success: bool) -> Dictionary:
 		"success": success,
 		"target": selected_target.duplicate(true),
 		"prompt": current_prompt(),
+	}
+
+
+func _build_clear_selection_turn_policy(reason: String, previous_target: Dictionary, previous_prompt: Dictionary) -> Dictionary:
+	var snapshot: Dictionary = simulation.snapshot() if simulation != null and simulation.has_method("snapshot") else {}
+	var pending_movement: Dictionary = _dictionary_or_empty(snapshot.get("pending_movement", {}))
+	var pending_interaction: Dictionary = _dictionary_or_empty(snapshot.get("pending_interaction", {}))
+	var current_actor: Dictionary = _dictionary_or_empty(snapshot.get("current_control_actor", {}))
+	return {
+		"action_kind": "clear_selection",
+		"reason": reason,
+		"had_selection": not previous_target.is_empty(),
+		"had_prompt": not previous_prompt.is_empty(),
+		"had_pending": not pending_movement.is_empty() or not pending_interaction.is_empty(),
+		"pending_movement": pending_movement.duplicate(true),
+		"pending_interaction": pending_interaction.duplicate(true),
+		"ap_after": float(current_actor.get("ap", 0.0)),
+		"affordable_ap_threshold": float(current_actor.get("affordable_ap_threshold", 1.0)),
+		"auto_advanced": false,
+		"turn_preserved": true,
+		"skip_reason": "selection_only",
 	}
 
 

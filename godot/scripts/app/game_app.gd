@@ -1280,13 +1280,13 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 	if not active_skill_targeting.is_empty():
 		return cancel_active_skill_targeting(reason)
 	if runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()):
-		runtime_input_controller.clear_selection_state()
-		return {"success": true, "closed": "selection"}
+		var selection_result: Dictionary = runtime_input_controller.clear_selection_state(reason)
+		return {"success": true, "closed": "selection", "result": selection_result}
 	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
 		hud.hide_interaction_menu()
 		return {"success": true, "closed": "interaction_menu"}
 	if runtime_input_controller != null:
-		runtime_input_controller.clear_selection_state()
+		runtime_input_controller.clear_selection_state(reason)
 	var dialogue_result := close_active_dialogue(reason)
 	if bool(dialogue_result.get("success", false)):
 		return {"success": true, "closed": "dialogue", "result": dialogue_result}
@@ -1339,10 +1339,10 @@ func select_interaction_node(node: Node) -> Dictionary:
 	return result
 
 
-func clear_interaction_selection() -> Dictionary:
+func clear_interaction_selection(reason: String = "cleared") -> Dictionary:
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}
-	var result: Dictionary = interaction_controller.clear_selection()
+	var result: Dictionary = interaction_controller.clear_selection(reason)
 	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 	return result
 
@@ -2718,9 +2718,9 @@ func _focused_actor_busy_state(focused_actor: Dictionary) -> Dictionary:
 
 func _clear_focus_switch_ui_state() -> void:
 	if runtime_input_controller != null and runtime_input_controller.has_method("clear_selection_state"):
-		runtime_input_controller.clear_selection_state()
+		runtime_input_controller.clear_selection_state("focus_switch")
 	if interaction_controller != null:
-		interaction_controller.clear_selection()
+		interaction_controller.clear_selection("focus_switch")
 	if hud != null and hud.has_method("hide_interaction_menu"):
 		hud.hide_interaction_menu()
 

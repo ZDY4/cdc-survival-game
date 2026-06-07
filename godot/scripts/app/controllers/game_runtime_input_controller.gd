@@ -68,6 +68,7 @@ var last_hover_state: Dictionary = {
 	"move_preview": {},
 	"attack_preview": {},
 }
+var last_selection_clear_result: Dictionary = {}
 
 
 func _init(p_game_root: Node) -> void:
@@ -259,20 +260,20 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	query.collide_with_areas = false
 	var hit: Dictionary = space_state.intersect_ray(query)
 	if hit.is_empty():
-		_clear_hover("no_hit")
-		return {"success": false, "reason": "no_hit"}
+		var no_hit_clear_result := _clear_hover("no_hit")
+		return {"success": false, "reason": "no_hit", "clear_selection_result": no_hit_clear_result}
 
 	var hit_position: Vector3 = hit.get("position", Vector3.ZERO)
 	_update_hover_cursor(hit_position)
 	var collider: Object = hit.get("collider", null)
 	var target_node := _interaction_node(collider as Node)
 	if target_node == null:
-		_clear_selection_only()
+		var ground_clear_result := _clear_selection_only("ground_hover")
 		var hover_changed := _set_hover_ground(hit_position)
 		if hover_changed and game_root.has_method("refresh_hud"):
 			game_root.refresh_hud(game_root.current_interaction_prompt() if game_root.has_method("current_interaction_prompt") else {})
 		_preview_skill_target_from_hover({"success": true, "kind": "ground", "position": hit_position})
-		return {"success": true, "kind": "ground", "position": hit_position}
+		return {"success": true, "kind": "ground", "position": hit_position, "clear_selection_result": ground_clear_result}
 
 	if selected_node != target_node and game_root.has_method("select_interaction_node"):
 		selected_node = target_node
@@ -538,13 +539,14 @@ func _digit_for_key(key: int) -> int:
 			return -1
 
 
-func clear_selection_state() -> void:
+func clear_selection_state(reason: String = "cleared") -> Dictionary:
 	is_middle_mouse_dragging = false
 	has_camera_drag_anchor = false
-	_clear_selection_only()
+	var result := _clear_selection_only(reason)
 	_clear_skill_target_preview_markers()
 	_clear_move_path_preview_markers()
 	_update_pending_movement_path_markers()
+	return result
 
 
 func update_skill_target_preview_markers(preview: Dictionary) -> void:
@@ -771,18 +773,50 @@ func _update_hover_cursor(world_position: Vector3) -> void:
 	hover_cursor.visible = true
 
 
-func _clear_hover(reason: String = "") -> void:
+func _clear_hover(reason: String = "") -> Dictionary:
 	hover_cursor.visible = false
-	_clear_selection_only()
+	var result := _clear_selection_only(reason)
 	_set_hover_failure(reason)
+	return result
 
 
-func _clear_selection_only() -> void:
+func _clear_selection_only(reason: String = "cleared") -> Dictionary:
 	if selected_node == null:
-		return
+		last_selection_clear_result = _selection_clear_result(false, reason, {})
+		return last_selection_clear_result.duplicate(true)
 	selected_node = null
 	if game_root.has_method("clear_interaction_selection"):
-		game_root.clear_interaction_selection()
+		last_selection_clear_result = game_root.clear_interaction_selection(reason)
+		return last_selection_clear_result.duplicate(true)
+	last_selection_clear_result = _selection_clear_result(false, reason, {
+		"success": false,
+		"reason": "clear_interaction_selection_missing",
+	})
+	return last_selection_clear_result.duplicate(true)
+
+
+func selection_clear_result_snapshot() -> Dictionary:
+	return last_selection_clear_result.duplicate(true)
+
+
+func _selection_clear_result(had_selected_node: bool, reason: String, source_result: Dictionary) -> Dictionary:
+	return {
+		"success": bool(source_result.get("success", true)),
+		"reason": reason,
+		"had_selected_node": had_selected_node,
+		"target": {},
+		"prompt": {},
+		"turn_policy": {
+			"action_kind": "clear_selection",
+			"reason": reason,
+			"had_selection": had_selected_node,
+			"had_prompt": false,
+			"had_pending": _runtime_has_pending(),
+			"auto_advanced": false,
+			"turn_preserved": true,
+			"skip_reason": "selection_only",
+		},
+	}
 
 
 func _set_hover_ground(world_position: Vector3) -> bool:

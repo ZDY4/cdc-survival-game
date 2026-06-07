@@ -107,6 +107,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("HUD did not show pickup prompt after hover selection")
 		await _expect_door_hover_outline(errors, game_root, camera)
 		_expect_ground_hover_move_preview(errors, game_root, camera, player_node)
+		_expect_ground_clear_selection_policy(errors, game_root, camera, pickup_node)
 		_expect_pending_movement_path_markers(errors, game_root)
 
 	var pickup_selection: Dictionary = game_root.select_interaction_node(pickup_node)
@@ -923,6 +924,55 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 	var runtime_line := _hud_runtime_control_line(game_root)
 	if not runtime_line.contains("Hover ground") or not runtime_line.contains("可达"):
 		errors.append("HUD runtime control line should show ground move preview, got %s" % runtime_line)
+
+
+func _expect_ground_clear_selection_policy(errors: Array[String], game_root: Node, camera: Camera3D, pickup_node: Node) -> void:
+	var selection: Dictionary = game_root.select_interaction_node(pickup_node)
+	if not bool(selection.get("success", false)):
+		errors.append("ground clear selection setup should select pickup: %s" % selection.get("prompt", {}).get("reason", "unknown"))
+		return
+	if not game_root.runtime_input_controller.has_selection_state():
+		var pickup_position := (pickup_node as Node3D).global_position if pickup_node is Node3D else Vector3.ZERO
+		game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(pickup_position))
+	if not game_root.runtime_input_controller.has_selection_state():
+		errors.append("ground clear selection setup should create runtime selected node")
+		return
+	var before_snapshot: Dictionary = game_root.simulation.snapshot()
+	var before_actor: Dictionary = _actor_by_id(before_snapshot, 1)
+	var before_ap := float(before_actor.get("ap", 0.0))
+	var before_round := int(_dictionary_or_empty(before_snapshot.get("turn_state", {})).get("round", 0))
+	var before_pending_movement: Dictionary = _dictionary_or_empty(before_snapshot.get("pending_movement", {}))
+	var before_pending_interaction: Dictionary = _dictionary_or_empty(before_snapshot.get("pending_interaction", {}))
+	var target_grid: Dictionary = _near_open_grid_from(_player_grid(game_root), game_root.world_result.get("map", {}))
+	var target := Vector3(float(target_grid.get("x", 0)), 0.0, float(target_grid.get("z", 0)))
+	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(target))
+	var clear_result: Dictionary = _dictionary_or_empty(hover_result.get("clear_selection_result", {}))
+	if clear_result.is_empty():
+		errors.append("ground hover should return clear_selection_result when replacing an interaction target")
+		return
+	var policy: Dictionary = _dictionary_or_empty(clear_result.get("turn_policy", {}))
+	if str(policy.get("action_kind", "")) != "clear_selection":
+		errors.append("ground clear selection policy should use action_kind clear_selection: %s" % JSON.stringify(policy))
+	if str(policy.get("reason", "")) != "ground_hover":
+		errors.append("ground clear selection policy should preserve reason ground_hover")
+	if not bool(policy.get("had_selection", false)):
+		errors.append("ground clear selection policy should record previous selected target")
+	if bool(policy.get("auto_advanced", true)):
+		errors.append("ground clear selection policy should not auto advance turn")
+	if not bool(policy.get("turn_preserved", false)):
+		errors.append("ground clear selection policy should preserve current turn")
+	if str(policy.get("skip_reason", "")) != "selection_only":
+		errors.append("ground clear selection policy should explain selection_only skip")
+	var after_snapshot: Dictionary = game_root.simulation.snapshot()
+	var after_actor: Dictionary = _actor_by_id(after_snapshot, 1)
+	if absf(float(after_actor.get("ap", 0.0)) - before_ap) > 0.001:
+		errors.append("ground clear selection should not consume AP")
+	if int(_dictionary_or_empty(after_snapshot.get("turn_state", {})).get("round", 0)) != before_round:
+		errors.append("ground clear selection should not advance turn round")
+	if JSON.stringify(_dictionary_or_empty(after_snapshot.get("pending_movement", {}))) != JSON.stringify(before_pending_movement):
+		errors.append("ground clear selection should preserve pending movement")
+	if JSON.stringify(_dictionary_or_empty(after_snapshot.get("pending_interaction", {}))) != JSON.stringify(before_pending_interaction):
+		errors.append("ground clear selection should preserve pending interaction")
 
 
 func _expect_ground_hover_cursor_preview(errors: Array[String], game_root: Node) -> void:
