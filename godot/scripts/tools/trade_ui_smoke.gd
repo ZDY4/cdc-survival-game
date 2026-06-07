@@ -77,6 +77,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("trade player column missing player inventory")
 	if not _player_item_text(game_root).contains("主手 小刀 x1"):
 		errors.append("trade player column missing equipped main hand item")
+	if _trade_item_icon_path(game_root, "shop", "急救包") != "res://assets/icons/items/medkit.svg":
+		errors.append("trade shop item row should expose and render item icon")
+	if _trade_item_icon_path(game_root, "player", "绷带") != "res://assets/icons/items/bandage.svg":
+		errors.append("trade player item row should expose and render item icon")
+	if _trade_item_icon_path(game_root, "player", "主手 小刀") != "res://assets/icons/weapons/knife.svg":
+		errors.append("trade equipment item row should expose and render item icon")
 	if not _detail_line(game_root).contains("店铺：") or not _detail_line(game_root).contains("单价"):
 		errors.append("trade detail should default to selected shop item")
 	if not _press_trade_item_with_text(game_root, "player", "绷带"):
@@ -841,6 +847,13 @@ func _trade_item_button_with_text(game_root: Node, source: String, text: String)
 		if child is Button and str((child as Button).text).contains(text):
 			return child as Button
 	return null
+
+
+func _trade_item_icon_path(game_root: Node, source: String, text: String) -> String:
+	var button: Button = _trade_item_button_with_text(game_root, source, text)
+	if button == null or button.icon == null or not button.has_meta("icon_resource_path"):
+		return ""
+	return str(button.get_meta("icon_resource_path"))
 
 
 func _trade_item_disabled(game_root: Node, source: String, text: String) -> bool:

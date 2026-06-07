@@ -1,5 +1,7 @@
 extends Control
 
+const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
+
 signal close_requested
 signal transfer_requested(source: String, item_id: String, count: int)
 signal transfer_all_requested(source: String)
@@ -250,6 +252,7 @@ func _item_line(item: Dictionary, source: String) -> Button:
 	button.tooltip_text = str(item.get("description", ""))
 	button.set_meta("container_item", item.duplicate(true))
 	button.set_meta("container_source", source)
+	_apply_item_icon(button, item)
 	button.set_drag_forwarding(
 		Callable(self, "_get_container_item_drag_data"),
 		Callable(self, "_cannot_drop_container_item_data"),
@@ -261,6 +264,18 @@ func _item_line(item: Dictionary, source: String) -> Button:
 		_apply_detail(item.duplicate(true), source)
 	)
 	return button
+
+
+func _apply_item_icon(button: Button, item: Dictionary) -> void:
+	var icon_asset := _dictionary_or_empty(item.get("icon_asset", {}))
+	var texture := MediaTextureLoader.texture_from_asset(icon_asset)
+	if texture == null:
+		button.icon = null
+		return
+	button.icon = texture
+	button.expand_icon = true
+	button.set_meta("icon_resource_path", MediaTextureLoader.resource_path_from_asset(icon_asset))
+	button.set_meta("icon_fallback_key", str(icon_asset.get("fallback_key", "")))
 
 
 func _empty_container_drag_data(_position: Vector2, _from_control: Control) -> Variant:

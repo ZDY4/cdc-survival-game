@@ -60,6 +60,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("container column should expose container items")
 	if not _container_player_text(game_root).contains("水瓶"):
 		errors.append("player column should expose inventory items")
+	if _container_item_icon_path(game_root, "container", "绷带") != "res://assets/icons/items/bandage.svg":
+		errors.append("container item row should expose and render item icon")
+	if _container_item_icon_path(game_root, "player", "水瓶") != "res://assets/icons/items/water_bottle.svg":
+		errors.append("container player item row should expose and render item icon")
 	if not _container_text(game_root).contains("kg") or not _container_player_text(game_root).contains("kg"):
 		errors.append("container columns should expose basic item detail text")
 	if not _container_has_scroll_columns(game_root):
@@ -1026,6 +1030,13 @@ func _container_item_button_with_text(game_root: Node, source: String, text: Str
 		if child is Button and str((child as Button).text).contains(text):
 			return child as Button
 	return null
+
+
+func _container_item_icon_path(game_root: Node, source: String, text: String) -> String:
+	var button: Button = _container_item_button_with_text(game_root, source, text)
+	if button == null or button.icon == null or not button.has_meta("icon_resource_path"):
+		return ""
+	return str(button.get_meta("icon_resource_path"))
 
 
 func _set_container_transfer_quantity(game_root: Node, count: int) -> void:

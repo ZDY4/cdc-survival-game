@@ -1,5 +1,7 @@
 extends RefCounted
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+
 var registry: RefCounted
 
 
@@ -98,6 +100,7 @@ func _shop_items(entries: Array, buy_price_modifier: float) -> Array[Dictionary]
 		var item_data: Dictionary = _item_data(item_id)
 		var base_price: int = int(item_data.get("value", 0))
 		var price: int = _trade_price(base_price, buy_price_modifier)
+		var icon_path := str(item_data.get("icon_path", ""))
 		items.append({
 			"item_id": item_id,
 			"name": str(item_data.get("name", item_id)),
@@ -106,6 +109,7 @@ func _shop_items(entries: Array, buy_price_modifier: float) -> Array[Dictionary]
 			"price": price,
 			"base_price": base_price,
 			"rarity": _rarity(item_data),
+			"icon_asset": AssetPathResolver.resolve_media_asset(icon_path, "item"),
 		})
 
 	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -124,6 +128,7 @@ func _inventory_items(inventory: Dictionary, sell_price_modifier: float) -> Arra
 		var item_data: Dictionary = _item_data(normalized_item_id)
 		var base_price := int(item_data.get("value", 0))
 		var sellable: bool = _is_item_sellable(item_data)
+		var icon_path := str(item_data.get("icon_path", ""))
 		items.append({
 			"item_id": normalized_item_id,
 			"name": str(item_data.get("name", normalized_item_id)),
@@ -134,6 +139,7 @@ func _inventory_items(inventory: Dictionary, sell_price_modifier: float) -> Arra
 			"rarity": _rarity(item_data),
 			"sellable": sellable,
 			"disabled_reason": "" if sellable else "不可出售",
+			"icon_asset": AssetPathResolver.resolve_media_asset(icon_path, "item"),
 		})
 	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
@@ -151,6 +157,7 @@ func _player_trade_items(player: Dictionary, sell_price_modifier: float) -> Arra
 		var item_data: Dictionary = _item_data(normalized_item_id)
 		var base_price: int = int(item_data.get("value", 0))
 		var sellable: bool = _is_item_sellable(item_data)
+		var icon_path := str(item_data.get("icon_path", ""))
 		items.append({
 			"source": "equipment:%s" % normalized_slot_id,
 			"slot_id": normalized_slot_id,
@@ -164,6 +171,7 @@ func _player_trade_items(player: Dictionary, sell_price_modifier: float) -> Arra
 			"equipped": true,
 			"sellable": sellable,
 			"disabled_reason": "" if sellable else "不可出售",
+			"icon_asset": AssetPathResolver.resolve_media_asset(icon_path, "item"),
 		})
 	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var a_equipped: bool = bool(a.get("equipped", false))
