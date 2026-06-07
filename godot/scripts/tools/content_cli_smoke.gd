@@ -10,6 +10,7 @@ const ContentDiffSummary = preload("res://scripts/tools/content_diff_summary.gd"
 const ContentJsonFormatter = preload("res://scripts/tools/content_json_formatter.gd")
 const ContentSchemaMigrationWriter = preload("res://scripts/tools/content_schema_migration_writer.gd")
 const ContentWriteService = preload("res://scripts/data/content_write_service.gd")
+const JsonSourceLocator = preload("res://scripts/tools/json_source_locator.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 const ContentAssetManifest = preload("res://scripts/tools/content_asset_manifest.gd")
@@ -95,6 +96,7 @@ func _run() -> Array[String]:
 	_expect_invalid_dialogue_rule_item_ref(errors, registry)
 	_expect_invalid_settlement_anchor(errors, registry)
 	_expect_invalid_overworld_entry(errors, registry)
+	_expect_json_source_locator_complex_keys(errors)
 	_expect_format_domain_support(errors, registry)
 	_expect_json_formatter_dry_run(errors)
 	_expect_content_write_failure_injection(errors)
@@ -759,6 +761,17 @@ func _expect_issue_location(errors: Array[String], validation: Dictionary, code:
 			errors.append("%s: location should combine file, line/column and json path, got %s" % [context, issue_data])
 		return
 	errors.append("%s: missing issue code %s in %s" % [context, code, validation.get("issues", [])])
+
+
+func _expect_json_source_locator_complex_keys(errors: Array[String]) -> void:
+	var text := "{\n  \"plain\": 1,\n  \"a.b\": {\n    \"slash/key\": [\n      {\"target value\": 7}\n    ]\n  }\n}\n"
+	var locator := JsonSourceLocator.new()
+	var dotted := locator.locate(text, "$[\"a.b\"][\"slash/key\"][0][\"target value\"]")
+	if int(dotted.get("line", 0)) != 5 or int(dotted.get("column", 0)) != 8:
+		errors.append("json source locator should support quoted keys with dots/slashes/spaces: %s" % dotted)
+	var missing := locator.locate(text, "$.a.b")
+	if not missing.is_empty():
+		errors.append("json source locator should not treat dotted key as nested path without quoted brackets: %s" % missing)
 
 
 func _has_changed_entry(entries: Array[Dictionary], domain: String, id_value: String, relative_path: String) -> bool:

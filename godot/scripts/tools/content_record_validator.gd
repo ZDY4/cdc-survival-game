@@ -117,7 +117,7 @@ func _with_location(issues: Array[Dictionary], domain: String, id_value: String,
 
 
 func _normalize_json_path(field: String) -> String:
-	var normalized := field.strip_edges().replace("\\", "/").replace("/", ".")
+	var normalized := _normalize_json_path_separators(field.strip_edges())
 	while normalized.contains(".."):
 		normalized = normalized.replace("..", ".")
 	normalized = normalized.replace(".[", "[")
@@ -128,6 +128,43 @@ func _normalize_json_path(field: String) -> String:
 	if normalized.begins_with("."):
 		return "$%s" % normalized
 	return "$.%s" % normalized
+
+
+func _normalize_json_path_separators(field: String) -> String:
+	var output := ""
+	var in_bracket := false
+	var in_string := false
+	var quote := ""
+	var escaped := false
+	for i in range(field.length()):
+		var current := field[i]
+		if in_string:
+			output += current
+			if escaped:
+				escaped = false
+			elif current == "\\":
+				escaped = true
+			elif current == quote:
+				in_string = false
+			continue
+		if in_bracket and (current == "\"" or current == "'"):
+			in_string = true
+			quote = current
+			output += current
+			continue
+		if current == "[":
+			in_bracket = true
+			output += current
+			continue
+		if current == "]":
+			in_bracket = false
+			output += current
+			continue
+		if not in_bracket and (current == "\\" or current == "/"):
+			output += "."
+			continue
+		output += current
+	return output
 
 
 func _repo_relative_path(path: String) -> String:

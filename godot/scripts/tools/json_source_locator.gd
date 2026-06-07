@@ -199,10 +199,16 @@ func _path_tokens(json_path: String) -> Array:
 			var end := path.find("]", index)
 			if end < 0:
 				return []
-			var number := path.substr(index + 1, end - index - 1)
-			if not number.is_valid_int():
-				return []
-			tokens.append(int(number))
+			var bracket := path.substr(index + 1, end - index - 1).strip_edges()
+			if bracket.begins_with("\"") or bracket.begins_with("'"):
+				var parsed := _parse_path_string(bracket, 0)
+				if not bool(parsed.get("ok", false)) or int(parsed.get("end", -1)) != bracket.length():
+					return []
+				tokens.append(str(parsed.get("value", "")))
+			else:
+				if not bracket.is_valid_int():
+					return []
+				tokens.append(int(bracket))
 			index = end + 1
 			continue
 		part += current
@@ -210,6 +216,42 @@ func _path_tokens(json_path: String) -> Array:
 	if not part.is_empty():
 		tokens.append(part)
 	return tokens
+
+
+func _parse_path_string(text: String, index: int) -> Dictionary:
+	if index >= text.length() or (text[index] != "\"" and text[index] != "'"):
+		return {"ok": false}
+	var quote := text[index]
+	index += 1
+	var value := ""
+	while index < text.length():
+		var current := text[index]
+		if current == quote:
+			return {"ok": true, "value": value, "end": index + 1}
+		if current == "\\":
+			if index + 1 >= text.length():
+				return {"ok": false}
+			var escaped := text[index + 1]
+			match escaped:
+				"\"", "'", "\\", "/":
+					value += escaped
+				"b":
+					value += "\b"
+				"f":
+					value += "\f"
+				"n":
+					value += "\n"
+				"r":
+					value += "\r"
+				"t":
+					value += "\t"
+				_:
+					value += escaped
+			index += 2
+			continue
+		value += current
+		index += 1
+	return {"ok": false}
 
 
 func _skip_whitespace(text: String, index: int) -> int:
