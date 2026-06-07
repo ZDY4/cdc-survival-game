@@ -444,43 +444,45 @@ func close_context_menu() -> void:
 func _execute_context_action(action_id: int) -> void:
 	if _context_item.is_empty():
 		return
+	var action_item := _context_item.duplicate(true)
 	var item_id: String = str(_context_item.get("item_id", ""))
 	if item_id.is_empty():
 		return
+	close_context_menu()
 	if action_id == CONTEXT_INSPECT:
-		_apply_inspect_detail(_context_item)
+		_apply_inspect_detail(action_item)
 		return
 	var root := get_parent()
 	if root == null:
 		return
 	match action_id:
 		CONTEXT_USE:
-			if bool(_context_item.get("usable", false)) and root.has_method("use_player_item"):
+			if bool(action_item.get("usable", false)) and root.has_method("use_player_item"):
 				root.use_player_item(item_id)
 		CONTEXT_EQUIP:
-			var slots: Array = _array_or_empty(_context_item.get("equip_slots", []))
+			var slots: Array = _array_or_empty(action_item.get("equip_slots", []))
 			if not slots.is_empty() and root.has_method("equip_player_item"):
 				root.equip_player_item(item_id, str(slots[0]))
 		CONTEXT_DROP:
-			if bool(_context_item.get("droppable", true)):
-				_open_discard_dialog_for_item(_context_item, _drag_drop_count(_context_item))
+			if bool(action_item.get("droppable", true)):
+				_open_discard_dialog_for_item(action_item, _drag_drop_count(action_item))
 		CONTEXT_DROP_ALL:
-			if bool(_context_item.get("droppable", true)):
-				_open_discard_dialog_for_item(_context_item, int(_context_item.get("count", 1)))
+			if bool(action_item.get("droppable", true)):
+				_open_discard_dialog_for_item(action_item, int(action_item.get("count", 1)))
 		CONTEXT_SPLIT:
 			if root.has_method("split_player_inventory_stack"):
-				root.split_player_inventory_stack(item_id, _drag_drop_count(_context_item))
+				root.split_player_inventory_stack(item_id, _drag_drop_count(action_item))
 		CONTEXT_STORE_CONTAINER:
 			if root.has_method("store_active_container_item"):
-				root.store_active_container_item(item_id, _drag_drop_count(_context_item))
+				root.store_active_container_item(item_id, _drag_drop_count(action_item))
 		CONTEXT_SELL_TRADE:
 			if root.has_method("sell_active_trade_item"):
-				root.sell_active_trade_item(item_id, _drag_drop_count(_context_item))
+				root.sell_active_trade_item(item_id, _drag_drop_count(action_item))
 		CONTEXT_DECONSTRUCT:
-			if bool(_context_item.get("deconstructable", false)) and root.has_method("deconstruct_player_item"):
-				root.deconstruct_player_item(item_id, _drag_drop_count(_context_item))
+			if bool(action_item.get("deconstructable", false)) and root.has_method("deconstruct_player_item"):
+				root.deconstruct_player_item(item_id, _drag_drop_count(action_item))
 		CONTEXT_HOTBAR:
-			if bool(_context_item.get("usable", false)) and root.has_method("bind_player_item_to_hotbar"):
+			if bool(action_item.get("usable", false)) and root.has_method("bind_player_item_to_hotbar"):
 				root.bind_player_item_to_hotbar("", item_id)
 
 

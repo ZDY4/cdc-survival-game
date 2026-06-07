@@ -27,10 +27,12 @@ var _store_all_button: Button
 var _items_box: VBoxContainer
 var _player_items_box: VBoxContainer
 var _context_menu: PopupMenu
+var _quantity_confirm_dialog: ConfirmationDialog
 var _context_item: Dictionary = {}
 var _context_source := ""
 var _selected_source: String = ""
 var _selected_item_id: String = ""
+var _pending_quantity_transfer: Dictionary = {}
 var _container_transferable_count := 0
 var _player_transferable_count := 0
 
@@ -54,8 +56,11 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if not active:
 		if _context_menu != null:
 			_context_menu.hide()
+		if _quantity_confirm_dialog != null:
+			_quantity_confirm_dialog.hide()
 		_context_item = {}
 		_context_source = ""
+		_pending_quantity_transfer = {}
 		return
 
 	if snapshot.has("error"):
@@ -170,7 +175,7 @@ func _build_layout() -> void:
 	_transfer_button.pressed.connect(func() -> void:
 		if _selected_item_id.is_empty() or _selected_source.is_empty():
 			return
-		transfer_requested.emit(_selected_source, _selected_item_id, int(_quantity_spin.value))
+		_request_transfer(_selected_source, _selected_item_id, int(_quantity_spin.value))
 	)
 	_take_all_button = Button.new()
 	_take_all_button.name = "TakeAllButton"
@@ -241,6 +246,14 @@ func _build_layout() -> void:
 	_context_menu.name = "ContainerContextMenu"
 	_context_menu.id_pressed.connect(_execute_context_action)
 	add_child(_context_menu)
+	_quantity_confirm_dialog = ConfirmationDialog.new()
+	_quantity_confirm_dialog.name = "ContainerQuantityConfirmDialog"
+	_quantity_confirm_dialog.title = "确认数量转移"
+	_quantity_confirm_dialog.dialog_text = "确定要转移选中的数量吗？"
+	_quantity_confirm_dialog.confirmed.connect(_confirm_pending_quantity_transfer)
+	_quantity_confirm_dialog.get_ok_button().text = "转移"
+	_quantity_confirm_dialog.get_cancel_button().text = "取消"
+	add_child(_quantity_confirm_dialog)
 	container_column.add_child(container_title)
 	container_scroll.add_child(_items_box)
 	container_column.add_child(container_scroll)
@@ -362,7 +375,7 @@ func _drop_container_data(position: Vector2, data: Variant, from_control: Contro
 			var available: int = maxi(1, int(item.get("count", 1)))
 			var requested: int = int(drag_data.get("count", _quantity_spin.value if _quantity_spin != null else 1))
 			var count: int = clampi(requested, 1, available)
-			transfer_requested.emit(source, item_id, count)
+			_request_transfer(source, item_id, count)
 		"inventory_item":
 			var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
 			var available: int = maxi(1, int(item.get("count", 1)))
@@ -370,6 +383,102 @@ func _drop_container_data(position: Vector2, data: Variant, from_control: Contro
 			var root := get_parent()
 			if root != null and root.has_method("store_active_container_item"):
 				root.store_active_container_item(item_id, count)
+
+
+func has_blocking_modal() -> bool:
+	return _quantity_confirm_dialog != null and _quantity_confirm_dialog.visible and not _pending_quantity_transfer.is_empty()
+
+
+func blocking_modal_name() -> String:
+	if has_blocking_modal():
+		return "container_quantity_confirm"
+	return ""
+
+
+func blocking_modal_snapshot() -> Dictionary:
+	if not has_blocking_modal():
+		return {}
+	return {
+		"id": "container_quantity_confirm",
+		"name": "modal:container_quantity_confirm",
+		"kind": "quantity",
+		"owner_panel": "container",
+		"blocks_gameplay": true,
+		"mouse_blocks_world": true,
+		"source": str(_pending_quantity_transfer.get("source", "")),
+		"item_id": str(_pending_quantity_transfer.get("item_id", "")),
+		"item_name": str(_pending_quantity_transfer.get("item_name", _pending_quantity_transfer.get("item_id", ""))),
+		"count": int(_pending_quantity_transfer.get("count", 0)),
+		"available": int(_pending_quantity_transfer.get("available", 0)),
+	}
+
+
+func close_blocking_modal() -> Dictionary:
+	if not has_blocking_modal():
+		return {"success": false, "reason": "modal_inactive"}
+	_quantity_confirm_dialog.hide()
+	_pending_quantity_transfer = {}
+	return {
+		"success": true,
+		"closed": "modal:container_quantity_confirm",
+	}
+
+
+func _request_transfer(source: String, item_id: String, count: int, force_confirm: bool = false) -> void:
+	if source.is_empty() or item_id.is_empty() or count <= 0:
+		return
+	var item := _item_snapshot_for_transfer(source, item_id)
+	var available := maxi(1, int(item.get("count", count)))
+	var normalized_count := clampi(count, 1, available)
+	if normalized_count > 1 and not force_confirm:
+		_open_quantity_confirm(source, item_id, normalized_count, available, item)
+		return
+	transfer_requested.emit(source, item_id, normalized_count)
+
+
+func _open_quantity_confirm(source: String, item_id: String, count: int, available: int, item: Dictionary) -> void:
+	if _quantity_confirm_dialog == null:
+		return
+	_pending_quantity_transfer = {
+		"source": source,
+		"item_id": item_id,
+		"item_name": str(item.get("name", item_id)),
+		"count": count,
+		"available": available,
+	}
+	var action := "拿取" if source == "container" else ("存放" if source == "player" else "转移")
+	_quantity_confirm_dialog.dialog_text = "%s %s x%d（当前可用 %d）。确定继续吗？" % [
+		action,
+		str(_pending_quantity_transfer.get("item_name", item_id)),
+		count,
+		available,
+	]
+	_quantity_confirm_dialog.popup_centered()
+
+
+func _confirm_pending_quantity_transfer() -> void:
+	var pending := _pending_quantity_transfer.duplicate(true)
+	_pending_quantity_transfer = {}
+	if _quantity_confirm_dialog != null:
+		_quantity_confirm_dialog.hide()
+	_request_transfer(
+		str(pending.get("source", "")),
+		str(pending.get("item_id", "")),
+		int(pending.get("count", 0)),
+		true
+	)
+
+
+func _item_snapshot_for_transfer(source: String, item_id: String) -> Dictionary:
+	var box: VBoxContainer = _items_box if source == "container" else _player_items_box
+	if box == null:
+		return {}
+	for child in box.get_children():
+		if child.has_meta("container_item"):
+			var item: Dictionary = _dictionary_or_empty(child.get_meta("container_item"))
+			if str(item.get("item_id", "")) == item_id:
+				return item.duplicate(true)
+	return {}
 
 
 func _drop_target_source(from_control: Control) -> String:
@@ -462,9 +571,9 @@ func _execute_context_action(action_id: int) -> void:
 		return
 	match action_id:
 		CONTEXT_TRANSFER:
-			transfer_requested.emit(_context_source, item_id, _selected_transfer_count(_context_item))
+			_request_transfer(_context_source, item_id, _selected_transfer_count(_context_item))
 		CONTEXT_TRANSFER_ALL:
-			transfer_requested.emit(_context_source, item_id, available)
+			_request_transfer(_context_source, item_id, available)
 	if _context_menu != null:
 		_context_menu.hide()
 

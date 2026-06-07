@@ -452,6 +452,10 @@ func close_blocking_modal() -> Dictionary:
 		var result: Dictionary = trade_panel.call("close_blocking_modal")
 		if bool(result.get("success", false)):
 			return result
+	if container_panel != null and container_panel.has_method("close_blocking_modal"):
+		var container_result: Dictionary = container_panel.call("close_blocking_modal")
+		if bool(container_result.get("success", false)):
+			return container_result
 	if skills_panel != null and skills_panel.has_method("close_blocking_modal"):
 		var skills_result: Dictionary = skills_panel.call("close_blocking_modal")
 		if bool(skills_result.get("success", false)):
@@ -652,6 +656,10 @@ func _blocking_modal_name() -> String:
 		var trade_modal := str(trade_panel.call("blocking_modal_name"))
 		if not trade_modal.is_empty():
 			return trade_modal
+	if container_panel != null and container_panel.has_method("blocking_modal_name"):
+		var container_modal := str(container_panel.call("blocking_modal_name"))
+		if not container_modal.is_empty():
+			return container_modal
 	if skills_panel != null and skills_panel.has_method("blocking_modal_name"):
 		var skills_modal := str(skills_panel.call("blocking_modal_name"))
 		if not skills_modal.is_empty():
@@ -660,7 +668,7 @@ func _blocking_modal_name() -> String:
 
 
 func _blocking_modal_snapshot() -> Dictionary:
-	for panel in [inventory_panel, trade_panel, skills_panel]:
+	for panel in [inventory_panel, trade_panel, container_panel, skills_panel]:
 		if panel != null and panel.has_method("blocking_modal_snapshot"):
 			var snapshot: Dictionary = _dictionary_or_empty(panel.call("blocking_modal_snapshot"))
 			if not snapshot.is_empty():

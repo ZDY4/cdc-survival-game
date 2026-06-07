@@ -117,6 +117,28 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_set_container_transfer_quantity(game_root, 1)
 		if not _container_transfer_tooltip(game_root).contains("x1"):
 			errors.append("transfer tooltip should include current selected quantity")
+		_set_container_transfer_quantity(game_root, 3)
+		var stored_ammo_before: int = _event_count(game_root, "container_item_stored")
+		_press_container_transfer(game_root)
+		_assert_container_quantity_modal(errors, game_root, "player", "1009", 3, "container quantity transfer open")
+		if _event_count(game_root, "container_item_stored") != stored_ammo_before:
+			errors.append("quantity modal should not transfer before confirmation")
+		var modal_close_result: Dictionary = _dictionary_or_empty(game_root.close_active_ui())
+		if str(modal_close_result.get("closed", "")) != "modal:container_quantity_confirm":
+			errors.append("Esc close should dismiss container quantity modal first, got %s" % modal_close_result)
+		if not game_root.container_panel.visible:
+			errors.append("closing quantity modal should keep container panel open")
+		_assert_no_container_quantity_modal(errors, game_root, "container quantity transfer Esc close")
+		_press_container_transfer(game_root)
+		_assert_container_quantity_modal(errors, game_root, "player", "1009", 3, "container quantity transfer reopen")
+		_confirm_container_quantity_modal(game_root)
+		if _event_count(game_root, "container_item_stored") <= stored_ammo_before:
+			errors.append("confirming quantity modal should store selected ammo")
+		if not _container_text(game_root).contains("手枪弹药 x3"):
+			errors.append("confirmed quantity modal should move selected ammo into container")
+		if not _drop_container_item_with_text(game_root, "container", "手枪弹药", "player"):
+			errors.append("quantity modal smoke should restore ammo to player column")
+		_set_container_transfer_quantity(game_root, 1)
 
 	if not _drop_container_item_with_text(game_root, "container", "抗生素", "player"):
 		errors.append("should drag antibiotics from container to player column")
@@ -315,6 +337,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("selecting container money should use take action")
 		_press_container_quantity_all(game_root)
 		_press_container_transfer(game_root)
+		_assert_container_quantity_modal(errors, game_root, "container", "money", 23, "container money quantity transfer")
+		_confirm_container_quantity_modal(game_root)
 		if not _event_seen(game_root, "container_money_taken"):
 			errors.append("taking container money should emit container_money_taken")
 		if not _event_seen(game_root, "container_transferred"):
@@ -333,6 +357,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("inventory context menu should enable store-in-container when a container is active")
 	else:
 		_execute_inventory_context_action(game_root, 9)
+		if bool(_dictionary_or_empty(game_root.context_menu_snapshot()).get("active", false)):
+			errors.append("inventory context store should close context menu after execution")
 		if not _event_seen(game_root, "container_item_stored"):
 			errors.append("inventory context store should emit container_item_stored")
 		if not _container_text(game_root).contains("水瓶 x3"):
@@ -665,9 +691,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not game_root.container_panel.visible:
 		errors.append("container panel should reopen for Esc close check")
 	_finish_presentations(game_root)
-	_press_key(game_root, KEY_ESCAPE)
+	var esc_container_result: Dictionary = _dictionary_or_empty(game_root.close_active_ui("keyboard_escape"))
+	if str(esc_container_result.get("closed", "")) != "container":
+		errors.append("Esc close should target container panel, got %s" % esc_container_result)
 	if game_root.container_panel.visible:
-		errors.append("Esc should close container panel")
+		errors.append("Esc should close container panel; blocker=%s close=%s stack=%s" % [
+			str(game_root.gameplay_input_blocker_name()),
+			JSON.stringify(game_root.menu_state_snapshot().get("close_priority", [])) if game_root.has_method("menu_state_snapshot") else "[]",
+			JSON.stringify(game_root.modal_stack_snapshot()) if game_root.has_method("modal_stack_snapshot") else "{}",
+		])
 	if not _active_container_id(game_root).is_empty():
 		errors.append("Esc should clear active container runtime state")
 	var range_container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_clinic_supply_cabinet", true, false)
@@ -905,6 +937,15 @@ func _event_seen(game_root: Node, kind: String) -> bool:
 	return false
 
 
+func _event_count(game_root: Node, kind: String) -> int:
+	var count := 0
+	for event in game_root.simulation.snapshot().get("events", []):
+		var event_data: Dictionary = _dictionary_or_empty(event)
+		if str(event_data.get("kind", "")) == kind:
+			count += 1
+	return count
+
+
 func _last_event_payload(game_root: Node, kind: String) -> Dictionary:
 	var events: Array = game_root.simulation.snapshot().get("events", [])
 	for index in range(events.size() - 1, -1, -1):
@@ -1118,6 +1159,50 @@ func _press_container_transfer(game_root: Node) -> void:
 	var button: Node = game_root.container_panel.get_node_or_null("ContainerPanel/ContainerLines/TransferControls/TransferButton")
 	if button is Button:
 		(button as Button).pressed.emit()
+
+
+func _assert_container_quantity_modal(errors: Array[String], game_root: Node, expected_source: String, expected_item_id: String, expected_count: int, context: String) -> void:
+	var dialog: ConfirmationDialog = game_root.container_panel.find_child("ContainerQuantityConfirmDialog", true, false) as ConfirmationDialog
+	if dialog == null or not dialog.visible:
+		errors.append("%s: container quantity modal should be visible" % context)
+	if str(game_root.gameplay_input_blocker_name()) != "modal:container_quantity_confirm":
+		errors.append("%s: blocker should be modal:container_quantity_confirm, got %s" % [context, str(game_root.gameplay_input_blocker_name())])
+	var stack: Dictionary = _dictionary_or_empty(game_root.modal_stack_snapshot()) if game_root.has_method("modal_stack_snapshot") else {}
+	var top: Dictionary = _dictionary_or_empty(stack.get("top", {}))
+	if str(top.get("id", "")) != "container_quantity_confirm":
+		errors.append("%s: modal stack top should expose container_quantity_confirm: %s" % [context, stack])
+	if str(top.get("owner_panel", "")) != "container" or str(top.get("kind", "")) != "quantity":
+		errors.append("%s: modal stack top should expose owner/kind: %s" % [context, top])
+	if str(top.get("source", "")) != expected_source or str(top.get("item_id", "")) != expected_item_id or int(top.get("count", 0)) != expected_count:
+		errors.append("%s: modal stack should expose transfer payload: %s" % [context, top])
+	if not bool(top.get("blocks_gameplay", false)) or not bool(top.get("mouse_blocks_world", false)):
+		errors.append("%s: quantity modal should block gameplay and mouse world input: %s" % [context, top])
+	var menu_state: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot()) if game_root.has_method("menu_state_snapshot") else {}
+	var modal_event: Dictionary = _dictionary_or_empty(menu_state.get("modal_event", {}))
+	if str(modal_event.get("panel_id", "")) != "container_quantity_confirm" or str(modal_event.get("owner_panel", "")) != "container":
+		errors.append("%s: menu state should expose quantity modal event: %s" % [context, menu_state])
+	var runtime_menu: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("menu_state", {}))
+	var runtime_event: Dictionary = _dictionary_or_empty(runtime_menu.get("modal_event", {}))
+	if str(runtime_event.get("panel_id", "")) != "container_quantity_confirm":
+		errors.append("%s: runtime menu should expose quantity modal event: %s" % [context, runtime_menu])
+
+
+func _assert_no_container_quantity_modal(errors: Array[String], game_root: Node, context: String) -> void:
+	var dialog: ConfirmationDialog = game_root.container_panel.find_child("ContainerQuantityConfirmDialog", true, false) as ConfirmationDialog
+	if dialog != null and dialog.visible:
+		errors.append("%s: container quantity modal should be hidden" % context)
+	var stack: Dictionary = _dictionary_or_empty(game_root.modal_stack_snapshot()) if game_root.has_method("modal_stack_snapshot") else {}
+	if bool(stack.get("active", false)):
+		errors.append("%s: modal stack should be inactive: %s" % [context, stack])
+	var menu_state: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot()) if game_root.has_method("menu_state_snapshot") else {}
+	if not _dictionary_or_empty(menu_state.get("modal_event", {})).is_empty():
+		errors.append("%s: modal event should clear after close: %s" % [context, menu_state])
+
+
+func _confirm_container_quantity_modal(game_root: Node) -> void:
+	var dialog: ConfirmationDialog = game_root.container_panel.find_child("ContainerQuantityConfirmDialog", true, false) as ConfirmationDialog
+	if dialog != null:
+		dialog.confirmed.emit()
 
 
 func _press_container_bulk_button(game_root: Node, node_name: String) -> void:

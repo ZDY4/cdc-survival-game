@@ -111,6 +111,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("inspect context action should not spend AP")
 			if _player_inventory_count(game_root, "1006") != count_before_inspect:
 				errors.append("inspect context action should not mutate inventory")
+			if not _open_inventory_context_menu(game_root, "绷带"):
+				errors.append("should reopen context menu for bandage after inspect")
 		if _context_action_disabled(game_root, 5):
 			errors.append("usable item context menu should enable add-to-hotbar")
 		else:
