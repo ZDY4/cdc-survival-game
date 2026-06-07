@@ -37,6 +37,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("journal missing tutorial quest title")
 	if _quest_icon_path(game_root, "tutorial_survive") != "res://assets/icons/quests/quest_collect.svg":
 		errors.append("journal collect quest title should expose and render quest icon")
+	var tutorial_thumbnail := _dictionary_or_empty(_quest_snapshot(game_root, "tutorial_survive").get("thumbnail_asset", {}))
+	if str(tutorial_thumbnail.get("resource_path", "")) != "res://assets/icons/quests/quest_collect.svg" or str(tutorial_thumbnail.get("thumbnail_domain", "")) != "quest":
+		errors.append("journal active quest should expose collect thumbnail asset: %s" % tutorial_thumbnail)
 	if not _quest_text(game_root).contains("进度: 0/2"):
 		errors.append("journal missing initial objective progress")
 	if not _quest_text(game_root).contains("- 摸一遍警戒区前沿补给点，带回 2 罐罐头: 0/2"):
@@ -96,6 +99,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("journal should list completed tutorial quest")
 	if _completed_quest_icon_path(game_root, "tutorial_survive") != "res://assets/icons/quests/quest_completed.svg":
 		errors.append("journal completed quest row should expose and render completed icon")
+	var completed_thumbnail := _dictionary_or_empty(_completed_quest_snapshot(game_root, "tutorial_survive").get("thumbnail_asset", {}))
+	if str(completed_thumbnail.get("resource_path", "")) != "res://assets/icons/quests/quest_completed.svg" or str(completed_thumbnail.get("thumbnail_domain", "")) != "quest":
+		errors.append("journal completed quest should expose completed thumbnail asset: %s" % completed_thumbnail)
 	if not _press_completed_quest(game_root, "tutorial_survive"):
 		errors.append("should select completed tutorial quest")
 	await process_frame
@@ -274,6 +280,24 @@ func _quest_icon_path(game_root: Node, quest_id: String) -> String:
 	return str(button.get_meta("icon_resource_path"))
 
 
+func _quest_snapshot(game_root: Node, quest_id: String) -> Dictionary:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.journal_panel.get("_last_snapshot"))
+	for quest in _array_or_empty(snapshot.get("quests", [])):
+		var quest_data: Dictionary = _dictionary_or_empty(quest)
+		if str(quest_data.get("quest_id", "")) == quest_id:
+			return quest_data
+	return {}
+
+
+func _completed_quest_snapshot(game_root: Node, quest_id: String) -> Dictionary:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.journal_panel.get("_last_snapshot"))
+	for quest in _array_or_empty(snapshot.get("completed_quests", [])):
+		var quest_data: Dictionary = _dictionary_or_empty(quest)
+		if str(quest_data.get("quest_id", "")) == quest_id:
+			return quest_data
+	return {}
+
+
 func _completed_quest_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
 	var quest_box: Node = game_root.journal_panel.get_node("JournalPanel/JournalLines/CompletedQuestLines")
@@ -314,6 +338,18 @@ func _player_skill_points(game_root: Node) -> int:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return int(actor_data.get("progression", {}).get("available_skill_points", 0))
 	return 0
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _event_seen(game_root: Node, kind: String) -> bool:

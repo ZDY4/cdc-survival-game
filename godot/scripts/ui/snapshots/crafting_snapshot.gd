@@ -58,6 +58,7 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check, unlock_check, crafting_context)
 	var max_craft_count: int = _max_craft_count(materials, bool(availability.get("can_craft", false)))
 	var output_count: int = max(1, int(output.get("count", 1)))
+	var output_icon_asset := AssetPathResolver.resolve_media_asset(str(output_item.get("icon_path", "")), "item")
 	return {
 		"recipe_id": recipe_id,
 		"name": str(recipe.get("name", recipe_id)),
@@ -65,7 +66,8 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 		"category": str(recipe.get("category", "")),
 		"output_item_id": output_item_id,
 		"output_name": str(output_item.get("name", output_item_id)),
-		"output_icon_asset": AssetPathResolver.resolve_media_asset(str(output_item.get("icon_path", "")), "item"),
+		"output_icon_asset": output_icon_asset,
+		"thumbnail_asset": _thumbnail_asset(output_icon_asset, "recipe"),
 		"output_count": output_count,
 		"preview_output_count": output_count * max(1, max_craft_count),
 		"materials": materials,
@@ -136,6 +138,14 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 	if not missing_materials.is_empty():
 		return {"can_craft": false, "reason": "materials_insufficient", "missing_materials": missing_materials}
 	return {"can_craft": true, "reason": "available"}
+
+
+func _thumbnail_asset(icon_asset: Dictionary, domain: String) -> Dictionary:
+	var thumbnail := icon_asset.duplicate(true)
+	thumbnail["thumbnail"] = true
+	thumbnail["thumbnail_domain"] = domain
+	thumbnail["source"] = "output_icon_asset"
+	return thumbnail
 
 
 func _unlock_check(recipe: Dictionary, inventory: Dictionary, progression: Dictionary, crafted_recipes: Dictionary, completed_quests: Dictionary, world_flags: Dictionary) -> Dictionary:

@@ -40,6 +40,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("skills panel missing medicine skill row")
 	if not _skill_line_has_icon(game_root, "survival", "res://assets/icons/skills/survival.svg"):
 		errors.append("survival skill row should render migrated skill icon")
+	var survival_thumbnail := _dictionary_or_empty(_skill_snapshot(game_root, "survival").get("thumbnail_asset", {}))
+	if str(survival_thumbnail.get("resource_path", "")) != "res://assets/icons/skills/survival.svg" or str(survival_thumbnail.get("thumbnail_domain", "")) != "skill":
+		errors.append("survival skill snapshot should expose thumbnail asset: %s" % survival_thumbnail)
 	if not _detail_text(game_root).contains("详情: 战斗训练 0/5"):
 		errors.append("skills detail should select the first visible skill by default")
 	if not _press_skill_line(game_root, "medicine"):
@@ -476,6 +479,17 @@ func _skill_line(game_root: Node, skill_id: String) -> String:
 func _skill_line_has_icon(game_root: Node, skill_id: String, expected_resource_path: String) -> bool:
 	var button := _skill_line_button(game_root, skill_id)
 	return button != null and button.icon != null and str(button.get_meta("icon_resource_path", "")) == expected_resource_path
+
+
+func _skill_snapshot(game_root: Node, skill_id: String) -> Dictionary:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.get("_last_snapshot"))
+	for tree in _array_or_empty(snapshot.get("trees", [])):
+		var tree_data: Dictionary = _dictionary_or_empty(tree)
+		for skill in _array_or_empty(tree_data.get("skills", [])):
+			var skill_data: Dictionary = _dictionary_or_empty(skill)
+			if str(skill_data.get("skill_id", "")) == skill_id:
+				return skill_data
+	return {}
 
 
 func _skill_line_button(game_root: Node, skill_id: String) -> Button:

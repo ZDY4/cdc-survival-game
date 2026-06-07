@@ -48,6 +48,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("basic bandage should initially show missing materials")
 	if not _recipe_line_has_icon(game_root, "recipe_bandage_basic", "res://assets/icons/items/bandage.svg"):
 		errors.append("basic bandage recipe row should render migrated output item icon")
+	var bandage_thumbnail := _dictionary_or_empty(_recipe_snapshot(game_root, "recipe_bandage_basic").get("thumbnail_asset", {}))
+	if str(bandage_thumbnail.get("resource_path", "")) != "res://assets/icons/items/bandage.svg" or str(bandage_thumbnail.get("thumbnail_domain", "")) != "recipe":
+		errors.append("basic bandage recipe snapshot should expose output thumbnail asset: %s" % bandage_thumbnail)
 	_press_category_button(game_root, "weapon")
 	await process_frame
 	if _recipe_text(game_root).contains("基础绷带"):

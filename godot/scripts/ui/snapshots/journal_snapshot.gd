@@ -51,11 +51,13 @@ func _quest_view(state: Dictionary) -> Dictionary:
 	var turn_in_ready: bool = manual_turn_in and current >= target
 	var objective_snapshot: Dictionary = _objective_snapshot(objective, current, target)
 	var objective_progress: Array[Dictionary] = _objective_progress_list(quest_data, completed)
+	var icon_asset := _quest_icon_asset(quest_data, objective_snapshot, false)
 	return {
 		"quest_id": quest_id,
 		"title": str(quest_data.get("title", quest_id)),
 		"description": str(quest_data.get("description", "")),
-		"icon_asset": _quest_icon_asset(quest_data, objective_snapshot, false),
+		"icon_asset": icon_asset,
+		"thumbnail_asset": _thumbnail_asset(icon_asset, "quest"),
 		"objective_text": str(objective.get("description", quest_data.get("description", ""))),
 		"current_node_id": str(state.get("current_node_id", objective_id)),
 		"objective": objective_snapshot,
@@ -83,11 +85,13 @@ func _completed_quest_view(quest_id: String) -> Dictionary:
 	var target: int = max(1, int(objective.get("count", 0)))
 	var objective_snapshot: Dictionary = _objective_snapshot(objective, target, target)
 	var objective_progress: Array[Dictionary] = _completed_objective_progress_list(quest_data)
+	var icon_asset := _quest_icon_asset(quest_data, objective_snapshot, true)
 	return {
 		"quest_id": quest_id,
 		"title": str(quest_data.get("title", quest_id)),
 		"description": str(quest_data.get("description", "")),
-		"icon_asset": _quest_icon_asset(quest_data, objective_snapshot, true),
+		"icon_asset": icon_asset,
+		"thumbnail_asset": _thumbnail_asset(icon_asset, "quest"),
 		"objective_text": str(objective.get("description", quest_data.get("description", ""))),
 		"current_node_id": "completed",
 		"objective": objective_snapshot,
@@ -116,6 +120,14 @@ func _current_objective(quest_data: Dictionary, current_node_id: String) -> Dict
 		if node.get("type", "") == "objective":
 			return node
 	return {}
+
+
+func _thumbnail_asset(icon_asset: Dictionary, domain: String) -> Dictionary:
+	var thumbnail := icon_asset.duplicate(true)
+	thumbnail["thumbnail"] = true
+	thumbnail["thumbnail_domain"] = domain
+	thumbnail["source"] = "icon_asset"
+	return thumbnail
 
 
 func _reward_snapshot(quest_data: Dictionary) -> Dictionary:

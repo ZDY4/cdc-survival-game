@@ -1,5 +1,7 @@
 extends RefCounted
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+
 const SAVE_SCHEMA_VERSION := 1
 
 var save_root: String = "user://saves"
@@ -185,9 +187,11 @@ func _metadata_from_snapshot(slot_id: String, snapshot: Dictionary) -> Dictionar
 	var turn_state := _dictionary_or_empty(snapshot.get("turn_state", {}))
 	var combat_state := _dictionary_or_empty(snapshot.get("combat_state", {}))
 	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
+	var thumbnail_asset := _save_thumbnail_asset(snapshot)
 	return {
 		"slot_id": slot_id,
 		"slot_display_name": _default_slot_display_name(slot_id, snapshot),
+		"thumbnail_asset": thumbnail_asset,
 		"updated_at": Time.get_datetime_string_from_system(false, true),
 		"active_map_id": str(snapshot.get("active_map_id", "")),
 		"active_location_id": str(snapshot.get("active_location_id", "")),
@@ -243,6 +247,7 @@ func _failed_slot(slot_id: String, path: String, reason: String, metadata: Dicti
 		"ok": false,
 		"slot_id": slot_id,
 		"slot_display_name": _slot_display_name(slot_id, metadata),
+		"thumbnail_asset": _dictionary_or_empty(metadata.get("thumbnail_asset", _save_fallback_thumbnail_asset())),
 		"path": path,
 		"reason": reason,
 	}
@@ -251,7 +256,59 @@ func _failed_slot(slot_id: String, path: String, reason: String, metadata: Dicti
 func _load_metadata(slot_id: String, envelope: Dictionary, runtime_snapshot: Dictionary) -> Dictionary:
 	var metadata: Dictionary = _dictionary_or_empty(envelope.get("metadata", _metadata_from_snapshot(slot_id, runtime_snapshot))).duplicate(true)
 	metadata["slot_display_name"] = _slot_display_name(slot_id, metadata)
+	if _dictionary_or_empty(metadata.get("thumbnail_asset", {})).is_empty():
+		metadata["thumbnail_asset"] = _save_thumbnail_asset(runtime_snapshot)
 	return metadata
+
+
+func _save_thumbnail_asset(snapshot: Dictionary) -> Dictionary:
+	var path := _save_thumbnail_path(snapshot)
+	var thumbnail := AssetPathResolver.resolve_media_asset(path, "location")
+	thumbnail["thumbnail"] = true
+	thumbnail["thumbnail_domain"] = "save_slot"
+	thumbnail["source"] = "save_metadata"
+	return thumbnail
+
+
+func _save_fallback_thumbnail_asset() -> Dictionary:
+	return _save_thumbnail_asset({})
+
+
+func _save_thumbnail_path(snapshot: Dictionary) -> String:
+	var location_id := str(snapshot.get("active_location_id", "")).strip_edges()
+	match location_id:
+		"survivor_outpost", "survivor_outpost_01":
+			return "res://assets/icons/location_safehouse.svg"
+		"hospital":
+			return "res://assets/icons/location_hospital.svg"
+		"school":
+			return "res://assets/icons/location_school.svg"
+		"factory":
+			return "res://assets/icons/location_factory.svg"
+		"forest":
+			return "res://assets/icons/location_forest.svg"
+		"subway":
+			return "res://assets/icons/location_subway.svg"
+		"supermarket":
+			return "res://assets/icons/location_supermarket.svg"
+	var map_id := str(snapshot.get("active_map_id", "")).strip_edges()
+	if map_id.contains("hospital"):
+		return "res://assets/icons/location_hospital.svg"
+	if map_id.contains("school"):
+		return "res://assets/icons/location_school.svg"
+	if map_id.contains("factory"):
+		return "res://assets/icons/location_factory.svg"
+	if map_id.contains("forest"):
+		return "res://assets/icons/location_forest.svg"
+	if map_id.contains("subway"):
+		return "res://assets/icons/location_subway.svg"
+	if map_id.contains("supermarket"):
+		return "res://assets/icons/location_supermarket.svg"
+	if map_id.contains("outpost"):
+		return "res://assets/icons/location_safehouse.svg"
+	if map_id.contains("ruins"):
+		return "res://assets/icons/location_ruins.svg"
+	return "res://assets/icons/location_safehouse.svg"
 
 
 func _slot_display_name(slot_id: String, metadata: Dictionary) -> String:

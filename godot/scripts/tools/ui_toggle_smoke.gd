@@ -474,6 +474,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("map snapshot should expose existing Godot location icon asset: %s" % safehouse_icon)
 	if str(safehouse_icon.get("fallback_key", "")) != "location":
 		errors.append("map snapshot should expose location icon fallback key: %s" % safehouse_icon)
+	var safehouse_thumbnail := _location_thumbnail_asset(map_snapshot, "survivor_outpost_01")
+	if str(safehouse_thumbnail.get("resource_path", "")) != str(safehouse_icon.get("resource_path", "")) or str(safehouse_thumbnail.get("thumbnail_domain", "")) != "location":
+		errors.append("map snapshot should expose location thumbnail asset: %s" % safehouse_thumbnail)
 	var zoom_in_button: Button = game_root.map_panel.find_child("ZoomInButton", true, false) as Button
 	if zoom_in_button == null:
 		errors.append("map canvas should expose zoom in button")
@@ -1843,6 +1846,14 @@ func _location_icon_asset(map_snapshot: Dictionary, location_id: String) -> Dict
 		var location_data: Dictionary = _dictionary_or_empty(location)
 		if str(location_data.get("id", "")) == location_id:
 			return _dictionary_or_empty(location_data.get("icon_asset", {}))
+	return {}
+
+
+func _location_thumbnail_asset(map_snapshot: Dictionary, location_id: String) -> Dictionary:
+	for location in _array_or_empty(_dictionary_or_empty(map_snapshot.get("overworld_overview", {})).get("locations", [])):
+		var location_data: Dictionary = _dictionary_or_empty(location)
+		if str(location_data.get("id", "")) == location_id:
+			return _dictionary_or_empty(location_data.get("thumbnail_asset", {}))
 	return {}
 
 

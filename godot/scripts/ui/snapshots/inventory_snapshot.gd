@@ -58,6 +58,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 			"category_label": _category_label("misc"),
 			"icon_path": "",
 			"icon_asset": AssetPathResolver.resolve_media_asset("", "item"),
+			"thumbnail_asset": _thumbnail_asset(AssetPathResolver.resolve_media_asset("", "item"), "item"),
 			"equip_slots": [],
 			"usable": false,
 			"use_ap_cost": 0.0,
@@ -74,6 +75,7 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 	var value: int = int(data.get("value", 0))
 	var category: String = _category(data)
 	var icon_path := str(data.get("icon_path", ""))
+	var icon_asset := AssetPathResolver.resolve_media_asset(icon_path, _icon_fallback_key(category))
 	var usable: Dictionary = _fragment_by_kind(data, "usable")
 	var use_allowed: bool = not usable.is_empty() and _is_item_use_allowed(data)
 	var deconstruct_yield: Array[Dictionary] = _deconstruct_yield(data)
@@ -90,7 +92,8 @@ func _item_snapshot(item_id: String, count: int) -> Dictionary:
 		"category": category,
 		"category_label": _category_label(category),
 		"icon_path": icon_path,
-		"icon_asset": AssetPathResolver.resolve_media_asset(icon_path, _icon_fallback_key(category)),
+		"icon_asset": icon_asset,
+		"thumbnail_asset": _thumbnail_asset(icon_asset, "item"),
 		"equip_slots": _equip_slots(data),
 		"usable": use_allowed,
 		"use_ap_cost": max(1.0, ceil(float(usable.get("use_time", 1.0)))) if not usable.is_empty() else 0.0,
@@ -149,6 +152,14 @@ func _icon_fallback_key(category: String) -> String:
 			return "material"
 		_:
 			return "item"
+
+
+func _thumbnail_asset(icon_asset: Dictionary, domain: String) -> Dictionary:
+	var thumbnail := icon_asset.duplicate(true)
+	thumbnail["thumbnail"] = true
+	thumbnail["thumbnail_domain"] = domain
+	thumbnail["source"] = "icon_asset"
+	return thumbnail
 
 
 func _equip_slots(item_data: Dictionary) -> Array[String]:

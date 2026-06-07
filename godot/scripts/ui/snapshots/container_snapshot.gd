@@ -52,6 +52,7 @@ func _container_item_snapshots(session: Dictionary) -> Array[Dictionary]:
 	var items: Array[Dictionary] = _item_snapshots(session.get("inventory", []))
 	var money: int = max(0, int(session.get("money", 0)))
 	if money > 0:
+		var money_icon_asset := AssetPathResolver.resolve_media_asset("", "money")
 		items.append({
 			"item_id": "money",
 			"kind": "money",
@@ -61,7 +62,8 @@ func _container_item_snapshots(session: Dictionary) -> Array[Dictionary]:
 			"unit_weight": 0.0,
 			"total_weight": 0.0,
 			"rarity": "",
-			"icon_asset": AssetPathResolver.resolve_media_asset("", "money"),
+			"icon_asset": money_icon_asset,
+			"thumbnail_asset": _thumbnail_asset(money_icon_asset, "item"),
 		})
 	return items
 
@@ -76,6 +78,7 @@ func _item_snapshots(entries: Array) -> Array[Dictionary]:
 			continue
 		var item_data: Dictionary = _item_data(item_id)
 		var icon_path := str(item_data.get("icon_path", ""))
+		var icon_asset := AssetPathResolver.resolve_media_asset(icon_path, "item")
 		items.append({
 			"item_id": item_id,
 			"name": str(item_data.get("name", item_id)),
@@ -84,7 +87,8 @@ func _item_snapshots(entries: Array) -> Array[Dictionary]:
 			"unit_weight": float(item_data.get("weight", 0.0)),
 			"total_weight": float(item_data.get("weight", 0.0)) * float(count),
 			"rarity": _rarity(item_data),
-			"icon_asset": AssetPathResolver.resolve_media_asset(icon_path, "item"),
+			"icon_asset": icon_asset,
+			"thumbnail_asset": _thumbnail_asset(icon_asset, "item"),
 		})
 
 	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -104,6 +108,7 @@ func _inventory_item_snapshots(inventory: Dictionary) -> Array[Dictionary]:
 			continue
 		var item_data: Dictionary = _item_data(normalized_item_id)
 		var icon_path := str(item_data.get("icon_path", ""))
+		var icon_asset := AssetPathResolver.resolve_media_asset(icon_path, "item")
 		entries.append({
 			"item_id": normalized_item_id,
 			"name": str(item_data.get("name", normalized_item_id)),
@@ -112,7 +117,8 @@ func _inventory_item_snapshots(inventory: Dictionary) -> Array[Dictionary]:
 			"unit_weight": float(item_data.get("weight", 0.0)),
 			"total_weight": float(item_data.get("weight", 0.0)) * float(count),
 			"rarity": _rarity(item_data),
-			"icon_asset": AssetPathResolver.resolve_media_asset(icon_path, "item"),
+			"icon_asset": icon_asset,
+			"thumbnail_asset": _thumbnail_asset(icon_asset, "item"),
 		})
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a.get("name", a.get("item_id", ""))) < str(b.get("name", b.get("item_id", "")))
@@ -126,6 +132,14 @@ func _player_actor(runtime_snapshot: Dictionary) -> Dictionary:
 		if actor_data.get("kind", "") == "player":
 			return actor_data
 	return {}
+
+
+func _thumbnail_asset(icon_asset: Dictionary, domain: String) -> Dictionary:
+	var thumbnail := icon_asset.duplicate(true)
+	thumbnail["thumbnail"] = true
+	thumbnail["thumbnail_domain"] = domain
+	thumbnail["source"] = "icon_asset"
+	return thumbnail
 
 
 func _container_session(runtime_snapshot: Dictionary, container_id: String) -> Dictionary:

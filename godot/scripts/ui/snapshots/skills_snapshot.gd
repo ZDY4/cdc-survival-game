@@ -74,11 +74,13 @@ func _skill_snapshot(skill_id: String, progression: Dictionary, learned: Diction
 	var resource_costs: Array[Dictionary] = _resource_costs(activation)
 	var use_state: Dictionary = _use_state(current_level, activation_mode, bound_slot, hotbar, resource_costs, resources)
 	var prerequisites: Array = _array_or_empty(skill_data.get("prerequisites", []))
+	var icon_asset := AssetPathResolver.resolve_media_asset(str(skill_data.get("icon", "")), "skill")
 	return {
 		"skill_id": skill_id,
 		"name": str(skill_data.get("name", skill_id)),
 		"icon": str(skill_data.get("icon", "")),
-		"icon_asset": AssetPathResolver.resolve_media_asset(str(skill_data.get("icon", "")), "skill"),
+		"icon_asset": icon_asset,
+		"thumbnail_asset": _thumbnail_asset(icon_asset, "skill"),
 		"description": str(skill_data.get("description", "")),
 		"tree_id": str(skill_data.get("tree_id", "")),
 		"level": current_level,
@@ -111,6 +113,14 @@ func _prerequisite_chain(skill_id: String, prerequisites: Array) -> Array[Dictio
 	for prerequisite in prerequisites:
 		_append_prerequisite_chain(output, str(prerequisite), skill_id, 1, seen)
 	return output
+
+
+func _thumbnail_asset(icon_asset: Dictionary, domain: String) -> Dictionary:
+	var thumbnail := icon_asset.duplicate(true)
+	thumbnail["thumbnail"] = true
+	thumbnail["thumbnail_domain"] = domain
+	thumbnail["source"] = "icon_asset"
+	return thumbnail
 
 
 func _append_prerequisite_chain(output: Array[Dictionary], prerequisite_id: String, target_skill_id: String, depth: int, seen: Dictionary) -> void:

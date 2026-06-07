@@ -178,6 +178,9 @@ func _assert_slot_metadata(errors: Array[String], menu: Control) -> void:
 			errors.append("slot summary should include actor/event counts: %s" % summary)
 		if str(summary.get("updated_at", "")).is_empty():
 			errors.append("slot summary should include updated_at: %s" % summary)
+		var thumbnail := _dictionary_or_empty(summary.get("thumbnail_asset", {}))
+		if str(thumbnail.get("thumbnail_domain", "")) != "save_slot" or not bool(thumbnail.get("ok", false)) or not bool(thumbnail.get("exists", false)):
+			errors.append("slot summary should include existing save thumbnail asset: %s" % summary)
 		if str(summary.get("turn_phase", "")).is_empty():
 			errors.append("slot summary should include turn phase: %s" % summary)
 		if not summary.has("combat_active"):
@@ -232,6 +235,9 @@ func _assert_slot_rename(errors: Array[String], menu: Control, slot_id: String, 
 	var metadata: Dictionary = _dictionary_or_empty(loaded.get("metadata", {}))
 	if str(metadata.get("slot_display_name", "")) != display_name:
 		errors.append("renamed save metadata should persist display name: %s" % loaded)
+	var thumbnail := _dictionary_or_empty(metadata.get("thumbnail_asset", {}))
+	if str(thumbnail.get("thumbnail_domain", "")) != "save_slot" or str(thumbnail.get("resource_path", "")).is_empty():
+		errors.append("renamed save metadata should preserve thumbnail asset: %s" % loaded)
 
 
 func _assert_broken_slot_feedback(errors: Array[String], menu: Control) -> void:
