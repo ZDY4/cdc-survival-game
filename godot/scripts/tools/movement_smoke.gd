@@ -62,6 +62,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 		errors.append("ap_spent should include move reason")
 
 	_expect_ap_depletion_auto_advances_turn(errors, simulation, topology)
+	errors.append_array(_expect_auto_advance_limit_guard(registry))
 	errors.append_array(_expect_configured_ap_rules(registry))
 
 	var blocked_goal: Dictionary = _first_blocking_cell(topology)
@@ -208,6 +209,64 @@ func _expect_ap_depletion_auto_advances_turn(errors: Array[String], simulation: 
 		errors.append("turn_ended should include actor_id, AP, round, and reason")
 	if not _has_turn_payload_for_actor(simulation.snapshot(), "turn_started", 1):
 		errors.append("turn_started should include actor_id, AP, round, and reason")
+
+
+func _expect_auto_advance_limit_guard(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position.x = 0
+	player.grid_position.y = 0
+	player.grid_position.z = 0
+	_move_non_player_actors_out_of_test_lane(simulation)
+	var topology := {
+		"bounds": {
+			"min_x": 0,
+			"max_x": 3,
+			"min_z": 0,
+			"max_z": 0,
+		},
+		"blocking_cells": {},
+		"sight_blocking_cells": {},
+		"door_objects": [],
+	}
+	player.combat_attributes["turn_ap_gain"] = 0.0
+	player.combat_attributes["turn_ap_max"] = 0.0
+	player.combat_attributes["affordable_ap_threshold"] = 1.0
+	player.ap = 1.0
+	var goal := {"x": 3, "y": 0, "z": 0}
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "move",
+		"target_position": goal,
+		"topology": topology,
+	})
+	if not bool(result.get("success", false)):
+		errors.append("auto advance limit guard setup move should succeed: %s" % result.get("reason", "unknown"))
+	if not bool(result.get("auto_turn_limit_reached", false)):
+		errors.append("auto advance guard should report auto_turn_limit_reached")
+	var auto_turn: Dictionary = _dictionary_or_empty(result.get("auto_turn", {}))
+	if not bool(auto_turn.get("limit_reached", false)):
+		errors.append("auto_turn payload should expose limit_reached")
+	if int(auto_turn.get("limit", 0)) <= 0:
+		errors.append("auto_turn payload should expose positive limit")
+	var policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	if str(policy.get("reason", "")) != "auto_advance_limit_reached":
+		errors.append("turn_policy should expose auto_advance_limit_reached, got %s" % policy.get("reason", ""))
+	if not bool(policy.get("auto_turn_limit_reached", false)):
+		errors.append("turn_policy should expose auto_turn_limit_reached")
+	if int(policy.get("auto_turn_cycles", 0)) != int(auto_turn.get("limit", -1)):
+		errors.append("auto_turn_cycles should match configured guard limit")
+	var limit_payload: Dictionary = _last_event_payload(simulation.snapshot(), "auto_turn_advance_limit_reached")
+	if limit_payload.is_empty():
+		errors.append("auto advance guard should emit auto_turn_advance_limit_reached")
+	else:
+		if int(limit_payload.get("actor_id", 0)) != 1:
+			errors.append("auto advance limit event should include player actor id")
+		if int(limit_payload.get("limit", 0)) != int(auto_turn.get("limit", -1)):
+			errors.append("auto advance limit event should include guard limit")
+		if float(limit_payload.get("ap", 1.0)) >= float(limit_payload.get("affordable_ap_threshold", 0.0)):
+			errors.append("auto advance limit event should expose below-threshold AP")
+	return errors
 
 
 func _expect_turn_policy(errors: Array[String], result: Dictionary, expected_action: String, expected_auto_advanced: bool, expected_reason: String, context: String) -> void:

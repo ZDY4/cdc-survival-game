@@ -145,7 +145,7 @@
 - AP carry / cap 参数来源第一版已迁移：`turn_ap_gain`、`turn_ap_max`、`affordable_ap_threshold` 会优先读取 actor `combat_attributes` 的显式字段，缺省时从 `speed + 1` 派生回合 AP，并在 `turn_started` payload 和 runtime snapshot `current_control_actor` 中暴露；已由 `Movement` smoke 覆盖。待补更完整 action cost 配置表和不同状态/装备/技能对 AP 参数的叠加规则。
 - 玩家行动后“是否自动结束回合”的策略快照第一版已迁移：`Simulation.submit_player_command()` 对移动、攻击、交互、制作和技能成功行动返回 `turn_policy`，暴露 action kind、行动后 AP、可行动阈值、pending 状态、自动推进状态、跳过/推进原因和自动推进循环数；`cancel_pending()` 也会返回取消策略，区分保留回合、无 pending 和自动结束回合；新目标命令替换旧 pending 时，`cancelled_pending.turn_policy` 会记录 `replace_pending_target`、replacement kind 和保留回合策略；输入层清理空地 / 空白 selection 也会返回 `clear_selection` 策略，标记 `selection_only`、保留回合且不消耗 AP / pending；战斗中取消 pending attack 会保留 combat active、阻止自动结束回合，并在策略中暴露 `auto_end_blocked_reason=combat_active`。移动自动推进已由 `Movement` smoke 覆盖，攻击 / 技能由 `Combat` smoke 覆盖，交互由 `Interaction` smoke 覆盖，制作由 `Crafting` smoke 覆盖，手动取消 / Esc 保留回合 / Space 自动结束 / 目标命令替换取消由 `Movement` / `UIToggle` smoke 覆盖，空地清理选择由 `PlayerInteraction` smoke 覆盖，战斗内取消由 `Combat` smoke 覆盖。待补更多 UI 入口对该策略的展示 polish。
 - 待补长按 Space 连续等待 / 连续结束回合，按下、松开、重复间隔、pending 中禁用连等。
-- 待补自动推进保护：循环上限触发后的状态恢复、错误事件、UI 提示和 pending 清理策略。
+- 自动推进保护第一版已迁移：玩家行动后 AP 仍低于可行动阈值且自动推进达到循环上限时，会保留当前状态、在 `auto_turn` / `turn_policy` 中暴露 `limit`、`limit_reached`、`auto_turn_limit_reached` 和 `auto_advance_limit_reached` reason，并发出 `auto_turn_advance_limit_reached` 事件，payload 带 actor、AP、阈值、round 和 pending 摘要；已由 `Movement` smoke 覆盖。待补 UI 提示 polish、pending 清理策略和异常恢复流程。
 
 ### 2.2 战斗回合
 

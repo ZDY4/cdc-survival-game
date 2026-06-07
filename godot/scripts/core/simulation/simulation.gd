@@ -1090,6 +1090,11 @@ func _finalize_player_ap_action(actor: RefCounted, result: Dictionary, command: 
 		result["turn_policy"]["reason"] = "ap_depleted_auto_advanced"
 		result["turn_policy"]["ap_after_auto"] = actor.ap
 		result["turn_policy"]["auto_turn_cycles"] = _array_or_empty(auto_turn.get("cycles", [])).size()
+		result["turn_policy"]["auto_turn_limit_reached"] = bool(auto_turn.get("limit_reached", false))
+		if bool(auto_turn.get("limit_reached", false)):
+			result["auto_turn_limit_reached"] = true
+			result["turn_policy"]["reason"] = "auto_advance_limit_reached"
+			result["turn_policy"]["auto_turn_limit"] = int(auto_turn.get("limit", AUTO_TURN_ADVANCE_LIMIT))
 	else:
 		result["turn_policy"]["reason"] = "auto_advance_unresolved"
 	return result
@@ -1125,6 +1130,7 @@ func _build_turn_policy(actor: RefCounted, action_kind: String, result: Dictiona
 func _auto_advance_player_turn(actor: RefCounted, topology: Dictionary, reason: String) -> Dictionary:
 	var cycles: Array[Dictionary] = []
 	var guard := 0
+	var limit_reached := false
 	while guard < AUTO_TURN_ADVANCE_LIMIT:
 		guard += 1
 		if actor == null or not actor.turn_open:
@@ -1149,10 +1155,24 @@ func _auto_advance_player_turn(actor: RefCounted, topology: Dictionary, reason: 
 			break
 		if not bool(pending_result.get("success", false)):
 			break
+	limit_reached = guard >= AUTO_TURN_ADVANCE_LIMIT and actor != null and actor.turn_open and actor.ap < _affordable_ap_threshold(actor)
+	if limit_reached:
+		_emit("auto_turn_advance_limit_reached", {
+			"actor_id": actor.actor_id,
+			"reason": reason,
+			"limit": AUTO_TURN_ADVANCE_LIMIT,
+			"cycles": cycles.size(),
+			"ap": actor.ap,
+			"affordable_ap_threshold": _affordable_ap_threshold(actor),
+			"pending_movement": pending_movement.duplicate(true),
+			"pending_interaction": pending_interaction.duplicate(true),
+			"round": int(turn_state.get("round", 1)),
+		})
 	return {
 		"advanced": not cycles.is_empty(),
 		"cycles": cycles,
-		"limit_reached": guard >= AUTO_TURN_ADVANCE_LIMIT,
+		"limit": AUTO_TURN_ADVANCE_LIMIT,
+		"limit_reached": limit_reached,
 	}
 
 
