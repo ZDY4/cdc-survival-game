@@ -269,6 +269,8 @@ func _expect_right_click_menu_buttons(errors: Array[String], game_root: Node) ->
 		errors.append("right-click interaction menu should expose disabled open_container option")
 	elif str(disabled_open.get_meta("disabled_reason", "")) != "target_not_container":
 		errors.append("disabled open_container option should expose target_not_container reason")
+	elif str(disabled_open.get_meta("disabled_reason_text", "")).is_empty() or not str(disabled_open.tooltip_text).contains(str(disabled_open.get_meta("disabled_reason_text", ""))):
+		errors.append("disabled open_container option should expose localized reason text in tooltip")
 	var menu_snapshot: Dictionary = _dictionary_or_empty(game_root.hud.interaction_menu_snapshot() if game_root.hud.has_method("interaction_menu_snapshot") else {})
 	var option_details: Dictionary = _dictionary_or_empty(menu_snapshot.get("option_details", {}))
 	var pickup_detail: Dictionary = _dictionary_or_empty(option_details.get("pickup", {}))
@@ -351,8 +353,13 @@ func _expect_interaction_menu_options(
 				expected_reason,
 				button.get_meta("disabled_reason", ""),
 			])
-		if not str(button.tooltip_text).contains(expected_reason):
-			errors.append("%s context menu disabled option %s tooltip should include raw reason" % [context, option_id])
+		var reason_text := str(button.get_meta("disabled_reason_text", ""))
+		if reason_text.is_empty():
+			errors.append("%s context menu disabled option %s should expose localized reason text meta" % [context, option_id])
+		if not str(button.tooltip_text).contains(reason_text):
+			errors.append("%s context menu disabled option %s tooltip should include localized reason text" % [context, option_id])
+		if str(button.tooltip_text).contains(expected_reason):
+			errors.append("%s context menu disabled option %s tooltip should not expose raw reason code" % [context, option_id])
 		var detail: Dictionary = _dictionary_or_empty(option_details.get(option_id, {}))
 		if detail.is_empty() or not bool(detail.get("disabled", false)):
 			errors.append("%s context menu snapshot should expose disabled detail for %s" % [context, option_id])
@@ -2383,12 +2390,13 @@ func _expect_player_command_authority_source(errors: Array[String], entries: Arr
 		var authority_kind := str(entry_data.get("authority_kind", ""))
 		var command_kind := str(entry_data.get("command_kind", ""))
 		var core_service := str(entry_data.get("core_service", ""))
+		var authority_helper := str(entry_data.get("authority_helper", ""))
 		match authority_kind:
 			"submit_player_command":
-				if not _body_uses_submit_authority(body, owner):
+				if not _body_uses_submit_authority(body, owner) and not _helper_uses_submit_authority(source, authority_helper, owner):
 					errors.append("player command audit method %s should use submit_player_command authority" % method_name)
 			"submit_player_command_or_ui_state":
-				if not _body_uses_submit_authority(body, owner) and not body.contains("active_skill_targeting"):
+				if not _body_uses_submit_authority(body, owner) and not _helper_uses_submit_authority(source, authority_helper, owner) and not body.contains("active_skill_targeting"):
 					errors.append("player command audit method %s should use submit authority or only stage UI targeting state" % method_name)
 			"core_service":
 				if not body.contains(_core_service_call_token(core_service)):
@@ -2412,6 +2420,15 @@ func _body_uses_submit_authority(body: String, owner: String) -> bool:
 	if owner == "GameApp" and (body.contains("interaction_controller.execute_primary_interaction") or body.contains("interaction_controller.execute_selected_option") or body.contains("interaction_controller.execute_move_to_grid")):
 		return true
 	return false
+
+
+func _helper_uses_submit_authority(source: String, helper_name: String, owner: String) -> bool:
+	if helper_name.is_empty():
+		return false
+	var helper_body := _method_body(source, helper_name)
+	if helper_body.is_empty():
+		return false
+	return _body_uses_submit_authority(helper_body, owner)
 
 
 func _core_service_call_token(core_service: String) -> String:

@@ -847,12 +847,13 @@ func _disabled_option_button(option: Dictionary) -> Button:
 	var button := Button.new()
 	var option_id := str(option.get("id", "unknown"))
 	var reason := str(option.get("disabled_reason", "interaction_option_unavailable"))
+	var reason_text := _disabled_reason_text(reason)
 	button.name = "DisabledOption_%s" % option_id
 	button.text = "%s - %s" % [
 		str(option.get("display_name", option_id)),
-		_disabled_reason_text(reason),
+		reason_text,
 	]
-	button.tooltip_text = "%s | %s" % [_option_tooltip(option), reason]
+	button.tooltip_text = _disabled_option_tooltip(option, reason_text)
 	button.custom_minimum_size = Vector2(160, 28)
 	button.focus_mode = Control.FOCUS_NONE
 	button.disabled = true
@@ -861,6 +862,7 @@ func _disabled_option_button(option: Dictionary) -> Button:
 	button.set_meta("display_name", str(option.get("display_name", option_id)))
 	button.set_meta("disabled", true)
 	button.set_meta("disabled_reason", reason)
+	button.set_meta("disabled_reason_text", reason_text)
 	button.set_meta("ap_cost", float(option.get("ap_cost", 0.0)))
 	button.set_meta("interaction_range", int(option.get("interaction_range", 0)))
 	button.mouse_entered.connect(func() -> void:
@@ -879,6 +881,15 @@ func _option_tooltip(option: Dictionary) -> String:
 	if bool(option.get("disabled", false)):
 		parts.append(_disabled_reason_text(str(option.get("disabled_reason", ""))))
 	return " | ".join(parts)
+
+
+func _disabled_option_tooltip(option: Dictionary, reason_text: String) -> String:
+	var tooltip := _option_tooltip(option)
+	if reason_text.is_empty():
+		return tooltip
+	if tooltip.contains(reason_text):
+		return tooltip
+	return "%s | %s" % [tooltip, reason_text]
 
 
 func _interaction_menu_summary(interaction: Dictionary) -> String:

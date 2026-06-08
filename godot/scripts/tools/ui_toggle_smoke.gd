@@ -668,8 +668,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("disabled interaction menu option should be disabled")
 			if str(disabled_container_option.get_meta("disabled_reason", "")) != "target_not_container":
 				errors.append("disabled interaction menu option should expose disabled reason")
-			if not str(disabled_container_option.tooltip_text).contains("target_not_container"):
-				errors.append("disabled interaction menu option tooltip should include reason")
+			var reason_text := str(disabled_container_option.get_meta("disabled_reason_text", ""))
+			if reason_text.is_empty():
+				errors.append("disabled interaction menu option should expose localized reason text")
+			if not str(disabled_container_option.tooltip_text).contains(reason_text):
+				errors.append("disabled interaction menu option tooltip should include localized reason")
+			if str(disabled_container_option.tooltip_text).contains("target_not_container"):
+				errors.append("disabled interaction menu option tooltip should not expose raw reason code")
 		_expect_blocker(errors, game_root, "interaction_menu", "open interaction menu blocker")
 		_assert_close_priority(errors, game_root, ["interaction_menu"], "interaction menu close priority")
 		_assert_ui_layer_stack(errors, game_root, {}, null, null, "interaction_menu", true, "interaction menu layer stack")
