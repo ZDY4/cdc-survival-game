@@ -1,6 +1,6 @@
 {
   "id": "default_humanoid",
-  "base_model_asset": "preview_placeholders/characters/humanoid_mannequin.gltf",
+  "base_model_asset": "builtin:character:humanoid",
   "preview_camera_preset_id": "character_standard",
   "equip_anchor_profile_id": "humanoid_basic",
   "idle_animation": "idle",

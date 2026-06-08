@@ -3,6 +3,7 @@ extends RefCounted
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 const JsonLoader = preload("res://scripts/data/json_loader.gd")
 const ValidationResult = preload("res://scripts/data/validation_result.gd")
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 
 const DOMAIN_SPECS := [
 	{"domain": "items", "dir": "items", "id_field": "id", "required": ["id", "name", "fragments"], "recursive": false},
@@ -178,7 +179,6 @@ func _validate_bootstrap_refs(result: ValidationResult) -> void:
 
 
 func _validate_appearance_asset_refs(result: ValidationResult) -> void:
-	var assets_root := ContentPaths.assets_root()
 	for appearance_id in get_library("appearance").keys():
 		var record: Dictionary = get_library("appearance")[appearance_id]
 		var path: String = record["path"]
@@ -187,12 +187,12 @@ func _validate_appearance_asset_refs(result: ValidationResult) -> void:
 		if base_model_asset.is_empty():
 			result.add_error(path, appearance_id, "base_model_asset", "missing base model asset path")
 			continue
-		if not base_model_asset.ends_with(".gltf"):
-			result.add_error(path, appearance_id, "base_model_asset", "base model asset must reference a .gltf file")
+		var resolved_asset := AssetPathResolver.resolve_model_asset(base_model_asset)
+		if not bool(resolved_asset.get("ok", false)):
+			result.add_error(path, appearance_id, "base_model_asset", str(resolved_asset.get("message", "invalid base model asset")))
 			continue
-		var full_path := assets_root.path_join(base_model_asset).simplify_path()
-		if not FileAccess.file_exists(full_path):
-			result.add_error(path, appearance_id, "base_model_asset", "asset file does not exist: %s" % full_path)
+		if not bool(resolved_asset.get("exists", false)):
+			result.add_error(path, appearance_id, "base_model_asset", "asset file does not exist: %s" % str(resolved_asset.get("absolute_path", "")))
 
 
 func _validate_item_ref(item_id: Variant, path: String, content_id: String, field: String, result: ValidationResult) -> void:

@@ -3,6 +3,7 @@ extends RefCounted
 const ContentPaths = preload("res://scripts/data/content_paths.gd")
 
 const ASSETS_RESOURCE_ROOT := "res://assets/"
+const BUILTIN_CHARACTER_PREFIX := "builtin:character:"
 const BUILTIN_WEAPON_PREFIX := "builtin:weapon:"
 const BUILTIN_ITEM_PREFIX := "builtin:item:"
 const MEDIA_EXTENSIONS := {
@@ -18,6 +19,8 @@ static func resolve_model_asset(asset_id: String) -> Dictionary:
 	var normalized := asset_id.strip_edges()
 	if normalized.is_empty():
 		return _invalid("", "missing_asset", "asset id is empty")
+	if normalized.begins_with(BUILTIN_CHARACTER_PREFIX):
+		return _resolve_builtin_character(normalized)
 	if normalized.begins_with(BUILTIN_WEAPON_PREFIX):
 		return _resolve_relative_gltf("preview_placeholders/placeholders/weapon_%s.gltf" % normalized.trim_prefix(BUILTIN_WEAPON_PREFIX), normalized)
 	if normalized.begins_with(BUILTIN_ITEM_PREFIX):
@@ -115,6 +118,15 @@ static func _resolve_relative_gltf(path: String, source_id: String) -> Dictionar
 		"absolute_path": absolute_path,
 		"exists": FileAccess.file_exists(absolute_path),
 	}
+
+
+static func _resolve_builtin_character(source_id: String) -> Dictionary:
+	var character_key := source_id.trim_prefix(BUILTIN_CHARACTER_PREFIX).strip_edges()
+	match character_key:
+		"humanoid", "default_humanoid":
+			return _resolve_relative_gltf("preview_placeholders/characters/humanoid_mannequin.gltf", source_id)
+		_:
+			return _resolve_relative_gltf("preview_placeholders/characters/%s.gltf" % character_key, source_id)
 
 
 static func _invalid(source_id: String, reason: String, message: String) -> Dictionary:

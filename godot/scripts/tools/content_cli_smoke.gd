@@ -225,6 +225,11 @@ func _expect_schema_migration_diagnostics(errors: Array[String], registry: Conte
 
 
 func _expect_asset_path_resolver(errors: Array[String]) -> void:
+	var character := AssetPathResolver.resolve_model_asset("builtin:character:humanoid")
+	if not bool(character.get("ok", false)) or str(character.get("relative_path", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
+		errors.append("asset resolver should map builtin character visual assets, got %s" % character)
+	if not bool(character.get("exists", false)):
+		errors.append("asset resolver builtin character should resolve to an existing Godot asset: %s" % character)
 	var weapon := AssetPathResolver.resolve_equipment_visual_asset("builtin:weapon:dagger")
 	if not bool(weapon.get("ok", false)) or str(weapon.get("relative_path", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("asset resolver should map builtin weapon visual assets, got %s" % weapon)
@@ -261,6 +266,10 @@ func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) ->
 		errors.append("asset manifest should include item appearance model path")
 	if _asset_manifest_entry(manifest, "overworld", "main_overworld", "locations[0].icon").get("resource_path", "") != "res://assets/icons/location_hospital.svg":
 		errors.append("asset manifest should include overworld location icon path")
+	var appearance_entry := _asset_manifest_entry(manifest, "appearance", "default_humanoid", "base_model_asset")
+	if str(appearance_entry.get("source_id", "")) != "builtin:character:humanoid" \
+			or str(appearance_entry.get("resource_path", "")) != "res://assets/preview_placeholders/characters/humanoid_mannequin.gltf":
+		errors.append("asset manifest should normalize builtin character appearance asset: %s" % appearance_entry)
 	var world_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "building_wall", "prototypes[building_wall/isolated].source.path")
 	if str(world_tile_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/isolated.gltf":
 		errors.append("asset manifest should include world tile glTF path: %s" % world_tile_entry)
