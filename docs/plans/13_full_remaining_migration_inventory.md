@@ -324,9 +324,9 @@
 
 ### 9.1 角色进度
 
-- 已有 XP、等级、技能点、属性点第一版；属性点分配 core 命令、`attribute_allocated` 事件、constitution / strength / agility 的最小派生刷新和 Character 面板加点按钮已纳入 `Progression` / `UIToggle` smoke；待补属性要求显示、升级反馈、奖励明细。
+- 已有 XP、等级、技能点、属性点第一版；属性点分配 core 命令、`attribute_allocated` 事件、constitution / strength / agility 的最小派生刷新和 Character 面板加点按钮已纳入 `Progression` / `UIToggle` smoke；升级 / 经验 / 技能点 / 学习技能 / 属性分配反馈结构化明细第一版已迁移到 HUD snapshot 的 `feedback_details` 和 toast metadata，并由 `Progression` smoke 覆盖。待补属性要求显示、升级弹层和更完整派生值展示。
 - 待补属性分配撤销/确认策略和更完整的属性影响派生值刷新。
-- progression 事件反馈第一版已迁移：`experience_granted`、`actor_leveled_up`、`skill_points_granted`、`attribute_allocated`、`skill_learned` 会进入 HUD event feedback，并由 `Progression` smoke 覆盖；待补 toast 过渡表现、详细日志和奖励明细弹层。
+- progression 事件反馈第一版已迁移：`experience_granted`、`actor_leveled_up`、`skill_points_granted`、`attribute_allocated`、`skill_learned` 会进入 HUD event feedback；`feedback_details` 会暴露稳定的 kind / label / amount / detail / display_text 明细，toast 节点会挂 `toast_has_details`、`toast_detail_count` 和 `toast_detail_summary` metadata，并由 `Progression` / `UI` smoke 覆盖。待补详细事件日志、奖励明细弹层和升级动画占位。
 
 ### 9.2 技能树
 
@@ -358,7 +358,7 @@
 - 任务链奖励状态第一版已迁移：完成任务后可通过 reward 解锁地点、设置 world flags 和发放金钱；后续任务仍按 prerequisites 自动启动，prerequisites 兼容旧字符串任务 id，并支持结构化 completed quest / world flag / item count / relationship score 条件；奖励 payload 会暴露 money / unlocked_locations / world_flags，并由 `Quest` smoke 覆盖。待补互斥任务、替代分支和更复杂任务链条件。
 - Journal 详情第一版已迁移：目标节点、任务描述、目标类型/需求、当前进度、可交付状态、奖励详情、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付后的完成/奖励反馈和手动交付失败历史第一版已纳入 `JournalUI` / `UI` smoke；目标进度列表第一版已从 quest flow 中所有 objective 节点派生并在列表/详情展示，已纳入 `JournalUI` smoke。待补多分支/替代目标状态和更完整失败反馈。
 - 地图目标 marker 第一版已迁移：追踪 collect 目标会在当前地图标出匹配 pickup 或含目标物品的容器，追踪 kill 目标会标出当前地图匹配 enemy_type 的 actor；找不到目标时保留 unresolved marker 和 reason；地图面板 canvas 第一版会绘制地图边界、网格、入口点、可定位任务 marker 和 overworld inset，并支持缩放/平移按钮，已纳入 `JournalUI` / `UIToggle` smoke。待补跨地图显式路线、目标优先级、完成/失败反馈和更完整图形 polish。
-- 任务反馈 HUD 第一版已迁移：`quest_started`、`quest_progressed`、`quest_completed`、`quest_reward_granted` 会进入 HUD event feedback；奖励反馈会展示 XP、技能点、金钱、物品数量、解锁地点数量和 world flag 数量，并由 `Quest` smoke 覆盖。待补 toast、事件日志、HUD 提醒过渡、奖励动画占位和更完整失败反馈。
+- 任务反馈 HUD 第一版已迁移：`quest_started`、`quest_progressed`、`quest_completed`、`quest_reward_granted` 会进入 HUD event feedback；奖励反馈会展示 XP、技能点、金钱、物品数量、解锁地点数量和 world flag 数量；任务奖励结构化明细第一版已进入 `feedback_details` 和 toast metadata，覆盖金钱、物品、解锁地点、world flag 和关系变化，并由 `Quest` / `UI` smoke 覆盖。待补事件日志、HUD 提醒过渡、奖励动画占位和更完整失败反馈。
 
 ## 11. 制作和配方
 

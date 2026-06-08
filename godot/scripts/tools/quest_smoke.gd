@@ -104,9 +104,7 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 
 
 func _hud_feedback_text(simulation: RefCounted, registry: RefCounted) -> String:
-	var runtime_snapshot: Dictionary = simulation.snapshot()
-	var world_snapshot: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
-	var hud_snapshot: Dictionary = HudSnapshot.new(registry).build(runtime_snapshot, world_snapshot, {})
+	var hud_snapshot: Dictionary = _hud_snapshot(simulation, registry)
 	var parts: Array[String] = []
 	for entry in hud_snapshot.get("event_feedback", []):
 		var data: Dictionary = _dictionary_or_empty(entry)
@@ -114,6 +112,12 @@ func _hud_feedback_text(simulation: RefCounted, registry: RefCounted) -> String:
 		if not text.is_empty():
 			parts.append(text)
 	return " | ".join(parts)
+
+
+func _hud_snapshot(simulation: RefCounted, registry: RefCounted) -> Dictionary:
+	var runtime_snapshot: Dictionary = simulation.snapshot()
+	var world_snapshot: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
+	return HudSnapshot.new(registry).build(runtime_snapshot, world_snapshot, {})
 
 
 func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) -> Array[String]:
@@ -198,6 +202,24 @@ func _expect_state_reward_quest(simulation: RefCounted, registry: RefCounted) ->
 		errors.append("HUD reward feedback should include world flag count, got %s" % feedback_text)
 	if not feedback_text.contains("关系") or not feedback_text.contains("+9"):
 		errors.append("HUD reward feedback should include relationship delta details, got %s" % feedback_text)
+	var hud_snapshot: Dictionary = _hud_snapshot(simulation, registry)
+	var reward_detail: Dictionary = _feedback_detail_by_kind(hud_snapshot, "quest_reward_granted")
+	if reward_detail.is_empty():
+		errors.append("HUD should expose structured quest reward feedback details")
+	else:
+		if int(reward_detail.get("entry_count", 0)) < 4:
+			errors.append("quest reward feedback details should expose reward entries: %s" % reward_detail)
+		if not _feedback_detail_has_entry(reward_detail, "money", 13):
+			errors.append("quest reward feedback details should include money 13: %s" % reward_detail)
+		if not _feedback_detail_has_entry(reward_detail, "location", 1, "quest_reward_smoke_location"):
+			errors.append("quest reward feedback details should include unlocked location id: %s" % reward_detail)
+		if not _feedback_detail_has_entry(reward_detail, "world_flag", 1, "quest_reward_smoke_flag"):
+			errors.append("quest reward feedback details should include world flag id: %s" % reward_detail)
+		if not _feedback_detail_has_kind(reward_detail, "relationship"):
+			errors.append("quest reward feedback details should include relationship delta: %s" % reward_detail)
+	var reward_toast: Dictionary = _feedback_toast_by_kind(hud_snapshot, "quest_reward_granted")
+	if reward_toast.is_empty() or not bool(reward_toast.get("has_details", false)):
+		errors.append("quest reward toast should carry structured details: %s" % reward_toast)
 	return errors
 
 
@@ -264,6 +286,45 @@ func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
 		if str(event_data.get("kind", "")) == kind:
 			return _dictionary_or_empty(event_data.get("payload", {}))
 	return {}
+
+
+func _feedback_detail_by_kind(hud_snapshot: Dictionary, kind: String) -> Dictionary:
+	var details: Array = _array_or_empty(hud_snapshot.get("feedback_details", []))
+	for index in range(details.size() - 1, -1, -1):
+		var detail: Dictionary = _dictionary_or_empty(details[index])
+		if str(detail.get("kind", "")) == kind:
+			return detail
+	return {}
+
+
+func _feedback_toast_by_kind(hud_snapshot: Dictionary, kind: String) -> Dictionary:
+	var toasts: Array = _array_or_empty(hud_snapshot.get("feedback_toasts", []))
+	for index in range(toasts.size() - 1, -1, -1):
+		var toast: Dictionary = _dictionary_or_empty(toasts[index])
+		if str(toast.get("kind", "")) == kind:
+			return toast
+	return {}
+
+
+func _feedback_detail_has_kind(detail: Dictionary, kind: String) -> bool:
+	for value in _array_or_empty(detail.get("entries", [])):
+		var entry: Dictionary = _dictionary_or_empty(value)
+		if str(entry.get("kind", "")) == kind:
+			return true
+	return false
+
+
+func _feedback_detail_has_entry(detail: Dictionary, kind: String, amount: Variant, detail_text: String = "") -> bool:
+	for value in _array_or_empty(detail.get("entries", [])):
+		var entry: Dictionary = _dictionary_or_empty(value)
+		if str(entry.get("kind", "")) != kind:
+			continue
+		if str(entry.get("amount", "")) != str(amount):
+			continue
+		if not detail_text.is_empty() and str(entry.get("detail", "")) != detail_text:
+			continue
+		return true
+	return false
 
 
 func _array_or_empty(value: Variant) -> Array:

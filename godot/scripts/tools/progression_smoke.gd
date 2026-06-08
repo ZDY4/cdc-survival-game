@@ -45,6 +45,9 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("grant_skill_points failed: %s" % skill_points_result.get("reason", "unknown"))
 	if not _hud_feedback_text(simulation, registry).contains("技能点 +1"):
 		errors.append("HUD feedback should show granted skill points")
+	var skill_points_detail: Dictionary = _feedback_detail_by_kind(_hud_snapshot(simulation, registry), "skill_points_granted")
+	if skill_points_detail.is_empty() or not _feedback_detail_has_entry(skill_points_detail, "skill_points", 1):
+		errors.append("HUD should expose structured skill point feedback details: %s" % skill_points_detail)
 	var prerequisite_result: Dictionary = simulation.learn_skill(1, "medicine", registry.get_library("skills"))
 	if prerequisite_result.get("reason", "") != "skill_prerequisite_missing":
 		errors.append("medicine should require survival prerequisite")
@@ -58,6 +61,9 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("learning survival should consume one skill point")
 	if not _hud_feedback_text(simulation, registry).contains("学习技能: Survival Lv1"):
 		errors.append("HUD feedback should show learned skill")
+	var learned_detail: Dictionary = _feedback_detail_by_kind(_hud_snapshot(simulation, registry), "skill_learned")
+	if learned_detail.is_empty() or not _feedback_detail_has_entry(learned_detail, "skill", 1, "剩余技能点 0"):
+		errors.append("HUD should expose structured learned skill feedback details: %s" % learned_detail)
 	var survival_effect: Dictionary = _active_skill_effect(player, "survival")
 	if survival_effect.is_empty():
 		errors.append("learning survival should add passive active effect")
@@ -107,6 +113,20 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	var level_feedback := _hud_feedback_text(simulation, registry)
 	if not level_feedback.contains("经验 +100") or not level_feedback.contains("升级: Lv2"):
 		errors.append("HUD feedback should show experience and level up, got %s" % level_feedback)
+	var level_hud: Dictionary = _hud_snapshot(simulation, registry)
+	var level_detail: Dictionary = _feedback_detail_by_kind(level_hud, "actor_leveled_up")
+	if level_detail.is_empty():
+		errors.append("HUD should expose structured level up feedback details")
+	else:
+		if not _feedback_detail_has_entry(level_detail, "level", 2):
+			errors.append("level up feedback details should include level 2: %s" % level_detail)
+		if not _feedback_detail_has_entry(level_detail, "stat_points", 3):
+			errors.append("level up feedback details should include available stat points: %s" % level_detail)
+		if not _feedback_detail_has_entry(level_detail, "skill_points", 1):
+			errors.append("level up feedback details should include available skill points: %s" % level_detail)
+	var level_toast: Dictionary = _feedback_toast_by_kind(level_hud, "actor_leveled_up")
+	if level_toast.is_empty() or not bool(level_toast.get("has_details", false)):
+		errors.append("level up toast should carry structured details: %s" % level_toast)
 	if int(player.progression.get("available_stat_points", 0)) != 3:
 		errors.append("level up should grant 3 stat points")
 	var max_hp_before_attribute: float = player.max_hp
@@ -123,6 +143,9 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("attribute_allocated event missing")
 	if not _hud_feedback_text(simulation, registry).contains("属性: 体质 7"):
 		errors.append("HUD feedback should show allocated attribute")
+	var attribute_detail: Dictionary = _feedback_detail_by_kind(_hud_snapshot(simulation, registry), "attribute_allocated")
+	if attribute_detail.is_empty() or not _feedback_detail_has_entry(attribute_detail, "attribute", 7, "剩余 2"):
+		errors.append("HUD should expose structured attribute feedback details: %s" % attribute_detail)
 
 	var zombie: int = _register_zombie(simulation, registry)
 	var target: RefCounted = simulation.actor_registry.get_actor(zombie)
@@ -175,9 +198,7 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 
 
 func _hud_feedback_text(simulation: RefCounted, registry: RefCounted) -> String:
-	var runtime_snapshot: Dictionary = simulation.snapshot()
-	var world_snapshot: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
-	var hud_snapshot: Dictionary = HudSnapshot.new(registry).build(runtime_snapshot, world_snapshot, {})
+	var hud_snapshot: Dictionary = _hud_snapshot(simulation, registry)
 	var parts: Array[String] = []
 	for entry in hud_snapshot.get("event_feedback", []):
 		var data: Dictionary = _dictionary_or_empty(entry)
@@ -185,6 +206,12 @@ func _hud_feedback_text(simulation: RefCounted, registry: RefCounted) -> String:
 		if not text.is_empty():
 			parts.append(text)
 	return " | ".join(parts)
+
+
+func _hud_snapshot(simulation: RefCounted, registry: RefCounted) -> Dictionary:
+	var runtime_snapshot: Dictionary = simulation.snapshot()
+	var world_snapshot: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
+	return HudSnapshot.new(registry).build(runtime_snapshot, world_snapshot, {})
 
 
 func _active_skill_effect(actor: RefCounted, skill_id: String) -> Dictionary:
@@ -204,10 +231,45 @@ func _active_skill_effect_count(actor: RefCounted, skill_id: String) -> int:
 	return count
 
 
+func _feedback_detail_by_kind(hud_snapshot: Dictionary, kind: String) -> Dictionary:
+	for value in _array_or_empty(hud_snapshot.get("feedback_details", [])):
+		var detail: Dictionary = _dictionary_or_empty(value)
+		if str(detail.get("kind", "")) == kind:
+			return detail
+	return {}
+
+
+func _feedback_toast_by_kind(hud_snapshot: Dictionary, kind: String) -> Dictionary:
+	for value in _array_or_empty(hud_snapshot.get("feedback_toasts", [])):
+		var toast: Dictionary = _dictionary_or_empty(value)
+		if str(toast.get("kind", "")) == kind:
+			return toast
+	return {}
+
+
+func _feedback_detail_has_entry(detail: Dictionary, kind: String, amount: Variant, detail_text: String = "") -> bool:
+	for value in _array_or_empty(detail.get("entries", [])):
+		var entry: Dictionary = _dictionary_or_empty(value)
+		if str(entry.get("kind", "")) != kind:
+			continue
+		if str(entry.get("amount", "")) != str(amount):
+			continue
+		if not detail_text.is_empty() and str(entry.get("detail", "")) != detail_text:
+			continue
+		return true
+	return false
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
 
 
 func _digest(snapshot: Dictionary) -> Dictionary:

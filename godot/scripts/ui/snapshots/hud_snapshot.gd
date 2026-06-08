@@ -40,6 +40,7 @@ func build(runtime_snapshot: Dictionary, world_snapshot: Dictionary, selected_ta
 		"hotbar_group_labels": _dictionary_or_empty(runtime_snapshot.get("hotbar_group_labels", {})).duplicate(true),
 		"event_feedback": _event_feedback(runtime_snapshot),
 		"feedback_toasts": _feedback_toasts(runtime_snapshot),
+		"feedback_details": _feedback_details(runtime_snapshot),
 		"tracked_quest": {"active": false, "quest_id": ""},
 	}
 
@@ -543,8 +544,25 @@ func _event_feedback(runtime_snapshot: Dictionary) -> Array[Dictionary]:
 		var summary := _event_feedback_entry(event)
 		if summary.is_empty():
 			continue
-		output.push_front(summary)
+		output.push_front(_feedback_summary_with_details(summary, event, index))
 		if output.size() >= 3:
+			break
+	return output
+
+
+func _feedback_details(runtime_snapshot: Dictionary) -> Array[Dictionary]:
+	var events: Array = runtime_snapshot.get("events", [])
+	var output: Array[Dictionary] = []
+	for index in range(events.size() - 1, -1, -1):
+		var event: Dictionary = _dictionary_or_empty(events[index])
+		var summary := _event_feedback_entry(event)
+		if summary.is_empty():
+			continue
+		var details := _feedback_detail_entry(summary, event, index)
+		if details.is_empty():
+			continue
+		output.push_front(details)
+		if output.size() >= 5:
 			break
 	return output
 
@@ -558,6 +576,7 @@ func _feedback_toasts(runtime_snapshot: Dictionary) -> Array[Dictionary]:
 		var summary := _event_feedback_entry(event)
 		if summary.is_empty():
 			continue
+		summary = _feedback_summary_with_details(summary, event, index)
 		var toast := _feedback_toast_entry(summary, event, index, toast_slot, events.size())
 		if toast.is_empty():
 			continue
@@ -583,6 +602,7 @@ func _feedback_toast_entry(summary: Dictionary, event: Dictionary, event_index: 
 	if age_events > fade_start:
 		alpha = clamp(1.0 - (float(age_events - fade_start) / float(max(1, ttl_events - fade_start))), 0.25, 1.0)
 	var phase := "enter" if age_events == 0 else ("hold" if age_events <= fade_start else "fade")
+	var details: Dictionary = _dictionary_or_empty(summary.get("details", {})).duplicate(true)
 	return {
 		"id": "toast_%d_%s" % [event_index, kind],
 		"kind": kind,
@@ -596,6 +616,9 @@ func _feedback_toast_entry(summary: Dictionary, event: Dictionary, event_index: 
 		"fade_start_event": fade_start,
 		"alpha": alpha,
 		"visible": alpha > 0.0,
+		"details": details,
+		"has_details": not details.is_empty(),
+		"detail_count": _array_or_empty(details.get("entries", [])).size(),
 		"transition": {
 			"style": "event_age_fade",
 			"enter_events": 1,
@@ -613,6 +636,149 @@ func _feedback_toast_severity(kind: String, text: String) -> String:
 	if kind in ["attack_resolved", "relationship_changed", "movement_cancelled", "interaction_cancelled", "crafting_queued", "crafting_cancelled", "pending_cancelled"]:
 		return "warning"
 	return "info"
+
+
+func _feedback_summary_with_details(summary: Dictionary, event: Dictionary, event_index: int) -> Dictionary:
+	var enriched := summary.duplicate(true)
+	enriched["event_index"] = event_index
+	var details := _feedback_detail_entry(enriched, event, event_index)
+	if not details.is_empty():
+		enriched["details"] = details
+	return enriched
+
+
+func _feedback_detail_entry(summary: Dictionary, event: Dictionary, event_index: int) -> Dictionary:
+	var kind := str(summary.get("kind", event.get("kind", "")))
+	var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+	var entries: Array[Dictionary] = _feedback_detail_entries(kind, payload)
+	if entries.is_empty():
+		return {}
+	return {
+		"id": "feedback_detail_%d_%s" % [event_index, kind],
+		"kind": kind,
+		"text": str(summary.get("text", "")),
+		"event_index": event_index,
+		"title": _feedback_detail_title(kind, payload),
+		"entries": entries,
+		"entry_count": entries.size(),
+		"summary": _feedback_detail_summary(entries),
+	}
+
+
+func _feedback_detail_entries(kind: String, payload: Dictionary) -> Array[Dictionary]:
+	match kind:
+		"quest_reward_granted":
+			return _quest_reward_detail_entries(payload)
+		"actor_leveled_up":
+			return _level_up_detail_entries(payload)
+		"experience_granted":
+			return _single_feedback_detail("experience", "XP", int(payload.get("amount", 0)), _progression_source_text(str(payload.get("source", ""))))
+		"skill_points_granted":
+			return _single_feedback_detail("skill_points", "技能点", int(payload.get("amount", 0)), "可用 %d" % int(payload.get("available_skill_points", 0)))
+		"attribute_allocated":
+			return _single_feedback_detail("attribute", _attribute_label(str(payload.get("attribute", ""))), int(payload.get("value", 0)), "剩余 %d" % int(payload.get("available_stat_points", 0)))
+		"skill_learned":
+			return _single_feedback_detail("skill", _skill_label(str(payload.get("skill_id", ""))), int(payload.get("level", 0)), "剩余技能点 %d" % int(payload.get("available_skill_points", 0)))
+		_:
+			return []
+
+
+func _feedback_detail_title(kind: String, payload: Dictionary) -> String:
+	match kind:
+		"quest_reward_granted":
+			return "任务奖励: %s" % _quest_title_from_payload(payload)
+		"actor_leveled_up":
+			return "升级奖励"
+		"experience_granted":
+			return "经验"
+		"skill_points_granted":
+			return "技能点"
+		"attribute_allocated":
+			return "属性分配"
+		"skill_learned":
+			return "学习技能"
+		_:
+			return kind
+
+
+func _quest_reward_detail_entries(payload: Dictionary) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var experience: int = int(payload.get("experience", 0))
+	if experience > 0:
+		entries.append(_feedback_detail("experience", "XP", experience))
+	var skill_points: int = int(payload.get("skill_points", 0))
+	if skill_points > 0:
+		entries.append(_feedback_detail("skill_points", "技能点", skill_points))
+	var money: int = int(payload.get("money", 0))
+	if money > 0:
+		entries.append(_feedback_detail("money", "金钱", money))
+	for item in _array_or_empty(payload.get("items", [])):
+		var item_data: Dictionary = _dictionary_or_empty(item)
+		var item_id := str(item_data.get("item_id", item_data.get("id", "")))
+		var count: int = max(0, int(item_data.get("count", 0)))
+		if count <= 0:
+			continue
+		entries.append(_feedback_detail("item", _item_label(item_id), count, item_id))
+	for location_id in _array_or_empty(payload.get("unlocked_locations", [])):
+		var location := str(location_id)
+		if not location.is_empty():
+			entries.append(_feedback_detail("location", "解锁地点", 1, location))
+	for flag_id in _array_or_empty(payload.get("world_flags", [])):
+		var flag := str(flag_id)
+		if not flag.is_empty():
+			entries.append(_feedback_detail("world_flag", "世界状态", 1, flag))
+	for change in _array_or_empty(payload.get("relationship_changes", [])):
+		var change_data: Dictionary = _dictionary_or_empty(change)
+		var delta: float = float(change_data.get("score_delta", float(change_data.get("score", 0.0)) - float(change_data.get("score_before", 0.0))))
+		entries.append(_feedback_detail("relationship", _relationship_changes_summary([change_data]), delta, str(change_data.get("target_definition_id", ""))))
+	return entries
+
+
+func _level_up_detail_entries(payload: Dictionary) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	var new_level: int = int(payload.get("new_level", 0))
+	if new_level > 0:
+		entries.append(_feedback_detail("level", "等级", new_level))
+	var stat_points: int = int(payload.get("available_stat_points", 0))
+	if stat_points > 0:
+		entries.append(_feedback_detail("stat_points", "可用属性点", stat_points))
+	var skill_points: int = int(payload.get("available_skill_points", 0))
+	if skill_points > 0:
+		entries.append(_feedback_detail("skill_points", "可用技能点", skill_points))
+	return entries
+
+
+func _single_feedback_detail(kind: String, label: String, amount: int, detail: String = "") -> Array[Dictionary]:
+	if amount <= 0 and kind != "attribute":
+		return []
+	return [_feedback_detail(kind, label, amount, detail)]
+
+
+func _feedback_detail(kind: String, label: String, amount: Variant, detail: String = "") -> Dictionary:
+	return {
+		"kind": kind,
+		"label": label,
+		"amount": amount,
+		"detail": detail,
+		"display_text": _feedback_detail_display_text(label, amount, detail),
+	}
+
+
+func _feedback_detail_display_text(label: String, amount: Variant, detail: String) -> String:
+	var amount_text := _number_text(float(amount)) if typeof(amount) in [TYPE_FLOAT, TYPE_INT] else str(amount)
+	if detail.is_empty():
+		return "%s %s" % [label, amount_text]
+	return "%s %s (%s)" % [label, amount_text, detail]
+
+
+func _feedback_detail_summary(entries: Array[Dictionary]) -> String:
+	var parts: Array[String] = []
+	for entry in entries:
+		var data: Dictionary = _dictionary_or_empty(entry)
+		var text := str(data.get("display_text", ""))
+		if not text.is_empty():
+			parts.append(text)
+	return " | ".join(parts)
 
 
 func _event_feedback_entry(event: Dictionary) -> Dictionary:

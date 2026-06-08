@@ -523,6 +523,13 @@ func _validate_feedback_toasts(errors: Array[String], hud: Control, snapshot: Di
 		errors.append("%s: toast row should expose stable minimum width metadata" % context)
 	if str(row.get_meta("toast_border_color", "")).is_empty():
 		errors.append("%s: toast row should expose severity border color metadata" % context)
+	if bool(toast.get("has_details", false)):
+		if not bool(row.get_meta("toast_has_details", false)):
+			errors.append("%s: toast row should expose structured detail metadata" % context)
+		if int(row.get_meta("toast_detail_count", 0)) != int(toast.get("detail_count", 0)):
+			errors.append("%s: toast row detail count should match snapshot" % context)
+		if str(row.get_meta("toast_detail_summary", "")) != str(_dictionary_or_empty(toast.get("details", {})).get("summary", "")):
+			errors.append("%s: toast row detail summary should match snapshot" % context)
 	var label := row.get_node_or_null("FeedbackToastLabel") as Label
 	if label == null:
 		errors.append("%s: latest toast should render inner Label" % context)
@@ -536,6 +543,8 @@ func _validate_feedback_toasts(errors: Array[String], hud: Control, snapshot: Di
 			errors.append("%s: toast node should expose transition metadata" % context)
 		if absf(float(node.get_meta("toast_alpha", -1.0)) - float(toast.get("alpha", 0.0))) > 0.001:
 			errors.append("%s: toast node should expose alpha metadata" % context)
+		if bool(toast.get("has_details", false)) and int(node.get_meta("toast_detail_count", 0)) != int(toast.get("detail_count", 0)):
+			errors.append("%s: toast node should expose structured detail count metadata" % context)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

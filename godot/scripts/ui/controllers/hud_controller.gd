@@ -422,6 +422,10 @@ func _apply_feedback_toast_metadata(node: Node, toast: Dictionary) -> void:
 	node.set_meta("toast_ttl_events", int(toast.get("ttl_events", 0)))
 	node.set_meta("toast_age_events", int(toast.get("age_events", 0)))
 	node.set_meta("toast_transition_style", str(_dictionary_or_empty(toast.get("transition", {})).get("style", "")))
+	var details: Dictionary = _dictionary_or_empty(toast.get("details", {}))
+	node.set_meta("toast_has_details", bool(toast.get("has_details", not details.is_empty())))
+	node.set_meta("toast_detail_count", int(toast.get("detail_count", _array_or_empty(details.get("entries", [])).size())))
+	node.set_meta("toast_detail_summary", str(details.get("summary", "")))
 
 
 func _feedback_toast_style(severity: String, alpha: float, phase: String) -> StyleBoxFlat:
