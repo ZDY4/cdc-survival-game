@@ -192,6 +192,7 @@ func _quest_references(quest_id: String, registry: ContentRegistry) -> Array[Dic
 				var action: Dictionary = _dictionary_or_empty(actions[action_index])
 				if str(action.get("quest_id", action.get("questId", ""))) == quest_id:
 					hits.append(_reference_hit("dialogue", dialogue_id, record["path"], "nodes[%d].actions[%d].quest_id type=%s" % [node_index, action_index, action.get("type", "")]))
+				_collect_dialogue_action_condition_quest_refs(hits, quest_id, dialogue_id, record["path"], node_index, action_index, action)
 
 	for recipe_id in registry.get_library("recipes").keys():
 		var recipe_record: Dictionary = registry.get_library("recipes")[recipe_id]
@@ -456,6 +457,16 @@ func _collect_string_array_refs(hits: Array[Dictionary], target_id: String, sour
 	for i in range(values.size()):
 		if str(values[i]) == target_id:
 			hits.append(_reference_hit(source_kind, source_id, path, "%s[%d]" % [field, i]))
+
+
+func _collect_dialogue_action_condition_quest_refs(hits: Array[Dictionary], quest_id: String, dialogue_id: String, path: String, node_index: int, action_index: int, action: Dictionary) -> void:
+	for condition_key in ["when", "condition", "conditions"]:
+		var condition: Dictionary = _dictionary_or_empty(action.get(condition_key, {}))
+		if condition.is_empty():
+			continue
+		var base_field := "nodes[%d].actions[%d].%s" % [node_index, action_index, condition_key]
+		_collect_string_array_refs(hits, quest_id, "dialogue", dialogue_id, path, base_field.path_join("player_active_quests_any"), _array_or_empty(condition.get("player_active_quests_any", [])))
+		_collect_string_array_refs(hits, quest_id, "dialogue", dialogue_id, path, base_field.path_join("player_completed_quests_any"), _array_or_empty(condition.get("player_completed_quests_any", [])))
 
 
 func _collect_scalar_ref(hits: Array[Dictionary], target_id: String, source_kind: String, source_id: String, path: String, field: String, value: Variant) -> void:

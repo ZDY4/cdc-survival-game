@@ -100,6 +100,9 @@ func _validate_dialogue_rule_condition(condition: Dictionary, field: String, reg
 	_validate_ref_array(condition.get("player_active_quests_any", []), field.path_join("player_active_quests_any"), "quests", "unknown_quest", registry, issues)
 	_validate_ref_array(condition.get("player_completed_quests_any", []), field.path_join("player_completed_quests_any"), "quests", "unknown_quest", registry, issues)
 	_validate_item_count_min(condition.get("player_item_count_min", {}), field.path_join("player_item_count_min"), registry, issues)
+	_validate_world_flag_array(condition.get("world_flags_all", []), field.path_join("world_flags_all"), issues)
+	_validate_world_flag_array(condition.get("world_flags_any", []), field.path_join("world_flags_any"), issues)
+	_validate_world_flag_array(condition.get("world_flags_none", []), field.path_join("world_flags_none"), issues)
 	if condition.has("npc_role_in"):
 		var roles := _array_or_empty(condition.get("npc_role_in", []))
 		if roles.is_empty():
@@ -117,6 +120,9 @@ func _validate_dialogue_rule_condition(condition: Dictionary, field: String, reg
 
 
 func _validate_dialogue_action(action: Dictionary, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	for condition_key in ["when", "condition", "conditions"]:
+		if action.has(condition_key):
+			_validate_dialogue_rule_condition(_dictionary_or_empty(action.get(condition_key, {})), field.path_join(condition_key), registry, issues)
 	match str(action.get("type", "")):
 		"open_trade":
 			var shop_id := ContentRegistry.normalize_content_id(action.get("shop_id", action.get("shopId", action.get("action_key", action.get("actionKey", "")))))
@@ -127,6 +133,20 @@ func _validate_dialogue_action(action: Dictionary, field: String, registry: Cont
 			_validate_ref(action.get("quest_id", null), field.path_join("quest_id"), "quests", "unknown_quest", registry, issues)
 		"unlock_location":
 			_validate_overworld_location_ref(action.get("location_id", null), field.path_join("location_id"), registry, issues)
+		"set_world_flag", "set_flag", "world_flag":
+			var flag_id := str(action.get("flag_id", action.get("flagId", action.get("world_flag", action.get("worldFlag", ""))))).strip_edges()
+			if flag_id.is_empty():
+				issues.append(_issue("error", field.path_join("flag_id"), "missing_world_flag", "world flag id is required"))
+		"change_relationship", "adjust_relationship", "set_relationship":
+			var target_definition_id := ContentRegistry.normalize_content_id(action.get("target_definition_id", action.get("targetDefinitionId", "")))
+			if not target_definition_id.is_empty() and not registry.has_id("characters", target_definition_id):
+				issues.append(_issue("error", field.path_join("target_definition_id"), "unknown_character", "unknown character id %s" % target_definition_id))
+		"give_item", "grant_item":
+			_validate_ref(action.get("item_id", action.get("itemId", action.get("id", null))), field.path_join("item_id"), "items", "unknown_item", registry, issues)
+			if action.has("count") and int(action.get("count", 0)) < 1:
+				issues.append(_issue("error", field.path_join("count"), "number_too_small", "item count must be >= 1"))
+		"give_reward", "grant_reward":
+			_validate_reward_action(action, field, registry, issues)
 		_:
 			issues.append(_issue("error", field.path_join("type"), "unknown_dialogue_action", "unsupported dialogue action type %s" % action.get("type", "")))
 
@@ -255,6 +275,15 @@ func _validate_item_entries(entries: Variant, field: String, registry: ContentRe
 		_expect_number_at_least(issues, entry, "count", entry_field.path_join("count"), 1.0)
 
 
+func _validate_reward_action(action: Dictionary, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	var rewards: Dictionary = _dictionary_or_empty(action.get("rewards", action))
+	if rewards.has("items"):
+		_validate_item_entries(rewards.get("items", []), field.path_join("rewards.items"), registry, issues)
+	for key in ["money", "experience", "xp", "skill_points", "skillPoints"]:
+		if rewards.has(key) and float(rewards.get(key, 0.0)) < 0.0:
+			issues.append(_issue("error", field.path_join(key), "number_too_small", "%s must be >= 0" % key))
+
+
 func _validate_ref_array(values: Variant, field: String, domain: String, code: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
 	if values == null:
 		return
@@ -279,6 +308,18 @@ func _validate_item_count_min(values: Variant, field: String, registry: ContentR
 			issues.append(_issue("error", "%s.%s" % [field, normalized], "unknown_item", "unknown items id %s" % normalized))
 		if float(counts[item_id]) < 1.0:
 			issues.append(_issue("error", "%s.%s" % [field, normalized], "number_too_small", "item minimum count must be >= 1"))
+
+
+func _validate_world_flag_array(values: Variant, field: String, issues: Array[Dictionary]) -> void:
+	if values == null:
+		return
+	if typeof(values) != TYPE_ARRAY:
+		issues.append(_issue("error", field, "expected_array", "expected an array of world flag ids"))
+		return
+	var entries: Array = values
+	for i in range(entries.size()):
+		if str(entries[i]).strip_edges().is_empty():
+			issues.append(_issue("error", "%s[%d]" % [field, i], "missing_world_flag", "world flag id must be a non-empty string"))
 
 
 func _validate_optional_ratio(data: Dictionary, key: String, field: String, issues: Array[Dictionary]) -> void:

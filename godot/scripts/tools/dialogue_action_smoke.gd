@@ -418,6 +418,54 @@ func _expect_scripted_state_actions(game_root: Node) -> Array[String]:
 	_expect_dialogue_action_resolved(errors, game_root, "dialogue_action_smoke_scripted", "scripted_actions", ["set_world_flag", "change_relationship", "give_item", "give_reward"], "scripted dialogue actions")
 	if not _dialogue_text(game_root).contains("状态已经记录"):
 		errors.append("scripted dialogue actions should advance to confirmation dialog")
+	errors.append_array(_expect_conditional_scripted_actions(game_root))
+	return errors
+
+
+func _expect_conditional_scripted_actions(game_root: Node) -> Array[String]:
+	var errors: Array[String] = []
+	_install_conditional_scripted_dialogue(game_root)
+	var simulation: RefCounted = game_root.simulation
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.inventory.erase("1005")
+	player.active_dialogue_id = "dialogue_action_smoke_conditional"
+	player.active_dialogue_node_id = ""
+	var bandage_before: int = int(player.inventory.get("1006", 0))
+	var ammo_before: int = int(player.inventory.get("1007", 0))
+	game_root.refresh_dialogue_panel()
+	var preview: Dictionary = _dialogue_option_preview(game_root, "conditional_actions")
+	_expect_preview_action_sequence(errors, preview, ["give_item", "set_world_flag", "give_item"], "", false, "conditional dialogue action")
+	var action_previews: Array = _array_or_empty(preview.get("action_previews", []))
+	if action_previews.size() != 3:
+		errors.append("conditional dialogue action preview should expose three actions: %s" % preview)
+	elif not bool(_dictionary_or_empty(action_previews[0]).get("has_condition", false)):
+		errors.append("conditional dialogue action preview should expose action condition: %s" % action_previews[0])
+	else:
+		var condition_preview: Dictionary = _dictionary_or_empty(_dictionary_or_empty(action_previews[0]).get("condition_preview", {}))
+		if bool(condition_preview.get("ready", true)) or str(condition_preview.get("reason", "")) != "dialogue_action_condition_not_met":
+			errors.append("conditional dialogue action preview should report unmet item condition: %s" % condition_preview)
+	var result: Dictionary = game_root.choose_dialogue_option("apply_conditional")
+	if not bool(result.get("success", false)):
+		errors.append("conditional dialogue action option should succeed with skipped action: %s" % result)
+	var emitted_actions: Array = _array_or_empty(result.get("emitted_actions", []))
+	if emitted_actions.size() != 3:
+		errors.append("conditional dialogue action result should expose every action result: %s" % result)
+	else:
+		var skipped_action: Dictionary = _dictionary_or_empty(emitted_actions[0])
+		if not bool(skipped_action.get("skipped", false)) or str(skipped_action.get("reason", "")) != "dialogue_action_condition_not_met":
+			errors.append("unmet conditional action should be skipped with condition reason: %s" % skipped_action)
+		if not bool(_dictionary_or_empty(emitted_actions[1]).get("success", false)) or not bool(_dictionary_or_empty(emitted_actions[2]).get("success", false)):
+			errors.append("met conditional actions should still execute after a skip: %s" % emitted_actions)
+	if int(player.inventory.get("1006", 0)) != bandage_before:
+		errors.append("skipped conditional give_item should not change bandage count")
+	if not simulation.world_flags.has("dialogue_action_smoke_condition_met"):
+		errors.append("met conditional set_world_flag should set runtime world flag")
+	if int(player.inventory.get("1007", 0)) != ammo_before + 1:
+		errors.append("met conditional give_item should run after world flag action")
+	if not _last_resolved_action_has_skip(game_root, "dialogue_action_smoke_conditional", "conditional_actions"):
+		errors.append("conditional dialogue action should emit skipped dialogue_action_resolved payload")
+	if not _dialogue_text(game_root).contains("条件动作已经处理"):
+		errors.append("conditional dialogue actions should advance to confirmation dialog")
 	return errors
 
 
@@ -527,6 +575,82 @@ func _install_scripted_dialogue(game_root: Node) -> void:
 	game_root.registry.libraries["dialogues"] = dialogue_library
 
 
+func _install_conditional_scripted_dialogue(game_root: Node) -> void:
+	var dialogue_library: Dictionary = game_root.registry.libraries.get("dialogues", {})
+	dialogue_library["dialogue_action_smoke_conditional"] = {
+		"path": "res://scripts/tools/dialogue_action_smoke.gd",
+		"data": {
+			"dialog_id": "dialogue_action_smoke_conditional",
+			"nodes": [
+				{
+					"id": "start",
+					"type": "dialog",
+					"speaker": "Smoke",
+					"text": "准备执行条件动作。",
+					"is_start": true,
+					"next": "choice_1",
+				},
+				{
+					"id": "choice_1",
+					"type": "choice",
+					"options": [
+						{
+							"id": "apply_conditional",
+							"text": "处理条件动作",
+							"next": "conditional_actions",
+						},
+					],
+				},
+				{
+					"id": "conditional_actions",
+					"type": "action",
+					"actions": [
+						{
+							"type": "give_item",
+							"item_id": "1006",
+							"count": 3,
+							"when": {
+								"player_item_count_min": {
+									"1005": 1,
+								},
+							},
+						},
+						{
+							"type": "set_world_flag",
+							"flag_id": "dialogue_action_smoke_condition_met",
+							"when": {
+								"world_flags_none": ["dialogue_action_smoke_condition_met"],
+							},
+						},
+						{
+							"type": "give_item",
+							"item_id": "1007",
+							"count": 1,
+							"when": {
+								"world_flags_all": ["dialogue_action_smoke_condition_met"],
+							},
+						},
+					],
+					"next": "confirm",
+				},
+				{
+					"id": "confirm",
+					"type": "dialog",
+					"speaker": "Smoke",
+					"text": "条件动作已经处理。",
+					"next": "done",
+				},
+				{
+					"id": "done",
+					"type": "end",
+					"end_type": "leave",
+				},
+			],
+		},
+	}
+	game_root.registry.libraries["dialogues"] = dialogue_library
+
+
 func _install_explicit_shop_trade_dialogue(game_root: Node) -> void:
 	var dialogue_library: Dictionary = game_root.registry.libraries.get("dialogues", {})
 	dialogue_library["dialogue_action_smoke_explicit_shop_trade"] = {
@@ -591,6 +715,20 @@ func _events_by_kind(game_root: Node, kind: String) -> Array[Dictionary]:
 		if str(event_data.get("kind", "")) == kind:
 			output.append(event_data)
 	return output
+
+
+func _last_resolved_action_has_skip(game_root: Node, dialogue_id: String, node_id: String) -> bool:
+	var events: Array = _events_by_kind(game_root, "dialogue_action_resolved")
+	for event_index in range(events.size() - 1, -1, -1):
+		var event: Dictionary = _dictionary_or_empty(events[event_index])
+		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		if str(payload.get("dialogue_id", "")) != dialogue_id or str(payload.get("node_id", "")) != node_id:
+			continue
+		var action_result: Dictionary = _dictionary_or_empty(payload.get("action_result", {}))
+		var action_summary: Dictionary = _dictionary_or_empty(payload.get("action_summary", {}))
+		if bool(action_result.get("skipped", false)) and bool(action_summary.get("skipped", false)):
+			return true
+	return false
 
 
 func _array_or_empty(value: Variant) -> Array:

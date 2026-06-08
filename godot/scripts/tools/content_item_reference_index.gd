@@ -16,6 +16,7 @@ func references_for(item_id: String, registry: ContentRegistry) -> Array[Diction
 	_collect_shop_refs(hits, item_id, registry)
 	_collect_bootstrap_refs(hits, item_id, registry)
 	_collect_quest_refs(hits, item_id, registry)
+	_collect_dialogue_refs(hits, item_id, registry)
 	_collect_overworld_refs(hits, item_id, registry)
 	_collect_legacy_json_refs(hits, item_id)
 	return hits
@@ -104,6 +105,35 @@ func _collect_quest_refs(hits: Array[Dictionary], item_id: String, registry: Con
 			_collect_item_entries(hits, item_id, "quest", quest_id, record["path"], "flow.nodes.%s.rewards.items" % node_id, rewards.get("items", []), "id")
 
 
+func _collect_dialogue_refs(hits: Array[Dictionary], item_id: String, registry: ContentRegistry) -> void:
+	for dialogue_id in registry.get_library("dialogues").keys():
+		var record: Dictionary = registry.get_library("dialogues")[dialogue_id]
+		var nodes: Array = _array_or_empty(_dictionary_or_empty(record.get("data", {})).get("nodes", []))
+		for node_index in range(nodes.size()):
+			var node: Dictionary = _dictionary_or_empty(nodes[node_index])
+			var actions: Array = _array_or_empty(node.get("actions", []))
+			for action_index in range(actions.size()):
+				var action: Dictionary = _dictionary_or_empty(actions[action_index])
+				var action_type := str(action.get("type", action.get("action_type", "")))
+				if action_type in ["give_item", "grant_item"] and _normalize_id(action.get("item_id", action.get("itemId", action.get("id", "")))) == item_id:
+					hits.append(_reference_hit("dialogue", dialogue_id, record["path"], "nodes[%d].actions[%d].item_id type=%s" % [node_index, action_index, action_type]))
+				if action_type in ["give_reward", "grant_reward"]:
+					var rewards: Dictionary = _dictionary_or_empty(action.get("rewards", action))
+					_collect_item_entries(hits, item_id, "dialogue", dialogue_id, record["path"], "nodes[%d].actions[%d].rewards.items" % [node_index, action_index], _array_or_empty(rewards.get("items", [])), "id")
+				_collect_dialogue_action_condition_item_refs(hits, item_id, dialogue_id, record["path"], node_index, action_index, action)
+
+
+func _collect_dialogue_action_condition_item_refs(hits: Array[Dictionary], item_id: String, dialogue_id: String, path: String, node_index: int, action_index: int, action: Dictionary) -> void:
+	for condition_key in ["when", "condition", "conditions"]:
+		var condition: Dictionary = _dictionary_or_empty(action.get(condition_key, {}))
+		if condition.is_empty():
+			continue
+		var requirements: Dictionary = _dictionary_or_empty(condition.get("player_item_count_min", {}))
+		for required_item_id in requirements.keys():
+			if _normalize_id(required_item_id) == item_id:
+				hits.append(_reference_hit("dialogue", dialogue_id, path, "nodes[%d].actions[%d].%s.player_item_count_min.%s" % [node_index, action_index, condition_key, required_item_id]))
+
+
 func _collect_overworld_refs(hits: Array[Dictionary], item_id: String, registry: ContentRegistry) -> void:
 	for overworld_id in registry.get_library("overworld").keys():
 		var record: Dictionary = registry.get_library("overworld")[overworld_id]
@@ -141,3 +171,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

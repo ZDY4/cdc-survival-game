@@ -173,11 +173,15 @@ func _resolution_failure(reason: String, start_node_id: String, node_id: String,
 
 func _action_preview(action: Dictionary, node_id: String, runtime_snapshot: Dictionary, player: Dictionary) -> Dictionary:
 	var action_type := str(action.get("type", action.get("action_type", "")))
+	var condition: Dictionary = _action_condition(action)
 	var preview := {
 		"type": action_type,
 		"node_id": node_id,
-		"requires_runtime_validation": action_type in ["turn_in_quest", "start_quest", "give_item", "give_reward", "grant_item", "grant_reward", "change_relationship", "adjust_relationship", "set_relationship"],
+		"requires_runtime_validation": not condition.is_empty() or action_type in ["turn_in_quest", "start_quest", "give_item", "give_reward", "grant_item", "grant_reward", "change_relationship", "adjust_relationship", "set_relationship"],
 	}
+	if not condition.is_empty():
+		preview["has_condition"] = true
+		preview["condition_preview"] = _condition_preview(condition, runtime_snapshot, player)
 	match action_type:
 		"start_quest", "turn_in_quest":
 			preview["quest_id"] = str(action.get("quest_id", action.get("questId", "")))
@@ -205,6 +209,41 @@ func _action_preview(action: Dictionary, node_id: String, runtime_snapshot: Dict
 			preview["target_definition_id"] = str(action.get("target_definition_id", action.get("targetDefinitionId", "")))
 			preview["delta"] = float(action.get("delta", action.get("amount", 0.0)))
 	return preview
+
+
+func _action_condition(action: Dictionary) -> Dictionary:
+	for key in ["when", "condition", "conditions"]:
+		var condition: Dictionary = _dictionary_or_empty(action.get(key, {}))
+		if not condition.is_empty():
+			return condition
+	return {}
+
+
+func _condition_preview(condition: Dictionary, runtime_snapshot: Dictionary, player: Dictionary) -> Dictionary:
+	var missing: Array[Dictionary] = []
+	if condition.has("player_active_quests_any") and not _quest_list_has_any(runtime_snapshot.get("active_quests", []), _array_or_empty(condition.get("player_active_quests_any", []))):
+		missing.append({"kind": "player_active_quests_any", "ids": _array_or_empty(condition.get("player_active_quests_any", []))})
+	if condition.has("player_completed_quests_any") and not _completed_quests_have_any(runtime_snapshot.get("completed_quests", []), _array_or_empty(condition.get("player_completed_quests_any", []))):
+		missing.append({"kind": "player_completed_quests_any", "ids": _array_or_empty(condition.get("player_completed_quests_any", []))})
+	if condition.has("player_item_count_min"):
+		var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
+		for item_id in _dictionary_or_empty(condition.get("player_item_count_min", {})).keys():
+			var required := int(_dictionary_or_empty(condition.get("player_item_count_min", {})).get(item_id, 0))
+			var current := int(inventory.get(str(item_id), 0))
+			if current < required:
+				missing.append({"kind": "player_item_count_min", "item_id": str(item_id), "required": required, "current": current})
+	if condition.has("world_flags_all") and not _flag_list_has_all(runtime_snapshot.get("world_flags", []), _array_or_empty(condition.get("world_flags_all", []))):
+		missing.append({"kind": "world_flags_all", "ids": _array_or_empty(condition.get("world_flags_all", []))})
+	if condition.has("world_flags_any") and not _flag_list_has_any(runtime_snapshot.get("world_flags", []), _array_or_empty(condition.get("world_flags_any", []))):
+		missing.append({"kind": "world_flags_any", "ids": _array_or_empty(condition.get("world_flags_any", []))})
+	if condition.has("world_flags_none") and _flag_list_has_any(runtime_snapshot.get("world_flags", []), _array_or_empty(condition.get("world_flags_none", []))):
+		missing.append({"kind": "world_flags_none", "ids": _array_or_empty(condition.get("world_flags_none", []))})
+	return {
+		"condition": condition.duplicate(true),
+		"ready": missing.is_empty(),
+		"missing": missing,
+		"reason": "" if missing.is_empty() else "dialogue_action_condition_not_met",
+	}
 
 
 func _turn_in_quest_preview(quest_id: String, runtime_snapshot: Dictionary, player: Dictionary) -> Dictionary:
@@ -292,6 +331,35 @@ func _active_quest_state(runtime_snapshot: Dictionary, quest_id: String) -> Dict
 		if str(state_data.get("quest_id", "")) == quest_id:
 			return state_data
 	return {}
+
+
+func _quest_list_has_any(values: Variant, required_ids: Array) -> bool:
+	for state in _array_or_empty(values):
+		var state_data: Dictionary = _dictionary_or_empty(state)
+		if required_ids.has(str(state_data.get("quest_id", ""))):
+			return true
+	return false
+
+
+func _completed_quests_have_any(values: Variant, required_ids: Array) -> bool:
+	for quest_id in _array_or_empty(values):
+		if required_ids.has(str(quest_id)):
+			return true
+	return false
+
+
+func _flag_list_has_any(values: Variant, required_ids: Array) -> bool:
+	for flag_id in _array_or_empty(values):
+		if required_ids.has(str(flag_id)):
+			return true
+	return false
+
+
+func _flag_list_has_all(values: Variant, required_ids: Array) -> bool:
+	for required_id in required_ids:
+		if not _flag_list_has_any(values, [str(required_id)]):
+			return false
+	return true
 
 
 func _quest_objective(quest_data: Dictionary, current_node_id: String) -> Dictionary:
