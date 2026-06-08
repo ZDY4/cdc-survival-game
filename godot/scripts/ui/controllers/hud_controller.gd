@@ -1076,6 +1076,12 @@ func _hotbar_group_button(group_id: String, active_group_id: String, group_label
 	button.focus_mode = Control.FOCUS_NONE
 	button.set_meta("hotbar_group_id", group_id)
 	button.set_meta("active", group_id == active_group_id)
+	button.set_drag_forwarding(
+		Callable(self, "_empty_hotbar_drag_data"),
+		Callable(self, "_can_drop_hotbar_group"),
+		Callable(self, "_drop_hotbar_group")
+	)
+	_prepare_hotbar_group_drop_target(button)
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("set_hotbar_group"):
@@ -1380,6 +1386,17 @@ func _empty_hotbar_drag_data(_position: Vector2, _from_control: Control) -> Vari
 	return null
 
 
+func _can_drop_hotbar_group(_position: Vector2, data: Variant, from_control: Control) -> bool:
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	var reject_reason := "hotbar_group_drag_unsupported" if not drag_data.is_empty() else ""
+	_apply_hotbar_group_drag_hover(from_control, reject_reason)
+	return false
+
+
+func _drop_hotbar_group(_position: Vector2, _data: Variant, from_control: Control) -> void:
+	_clear_hotbar_group_drag_hover(from_control)
+
+
 func _can_drop_hotbar_skill(_position: Vector2, data: Variant, from_control: Control) -> bool:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	var acceptance: Dictionary = _hotbar_drop_acceptance(from_control, drag_data)
@@ -1400,6 +1417,46 @@ func _drop_hotbar_skill(position: Vector2, data: Variant, from_control: Control)
 	_clear_hotbar_drag_hover(from_control)
 	if root != null and root.has_method("bind_player_skill_to_hotbar"):
 		root.bind_player_skill_to_hotbar(slot_id, skill_id)
+
+
+func _prepare_hotbar_group_drop_target(control: Control) -> void:
+	if control == null:
+		return
+	control.set_meta("hotbar_group_drag_hovered", false)
+	control.set_meta("hotbar_group_drag_last_accept", false)
+	control.set_meta("hotbar_group_drag_reject_reason", "")
+	control.set_meta("hotbar_group_drag_highlight_style", "")
+	control.set_meta("hotbar_group_drag_highlight_color", "")
+	control.mouse_exited.connect(func() -> void:
+		_clear_hotbar_group_drag_hover(control)
+	)
+
+
+func _apply_hotbar_group_drag_hover(control: Control, reject_reason: String) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_group_id"):
+		return
+	var color_text := "#e25c5c"
+	control.set_meta("hotbar_group_drag_hovered", true)
+	control.set_meta("hotbar_group_drag_last_accept", false)
+	control.set_meta("hotbar_group_drag_reject_reason", reject_reason)
+	control.set_meta("hotbar_group_drag_highlight_style", "reject")
+	control.set_meta("hotbar_group_drag_highlight_color", color_text)
+	control.modulate = Color(1.0, 0.90, 0.90, 1.0)
+	if control is Button:
+		(control as Button).add_theme_color_override("font_color", Color.html(color_text))
+
+
+func _clear_hotbar_group_drag_hover(control: Control) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_group_id"):
+		return
+	control.set_meta("hotbar_group_drag_hovered", false)
+	control.set_meta("hotbar_group_drag_last_accept", false)
+	control.set_meta("hotbar_group_drag_reject_reason", "")
+	control.set_meta("hotbar_group_drag_highlight_style", "")
+	control.set_meta("hotbar_group_drag_highlight_color", "")
+	control.modulate = Color.WHITE
+	if control is Button:
+		(control as Button).remove_theme_color_override("font_color")
 
 
 func _prepare_hotbar_drop_target(control: Control) -> void:

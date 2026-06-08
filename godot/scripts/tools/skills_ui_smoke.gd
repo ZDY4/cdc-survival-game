@@ -198,6 +198,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_assert_hotbar_drag_hover_target(errors, game_root, _non_skill_hotbar_drag_data(), hotbar_slot_control, false, "hotbar_slot_requires_skill_hotbar", "non-skill to HUD hotbar reject target")
 		_assert_hotbar_hover_render(errors, game_root, _non_skill_hotbar_drag_data(), hotbar_slot_control, false, "hotbar_slot_requires_skill_hotbar", "non-skill to HUD hotbar reject render")
 		_assert_hotbar_group_drag_reject(errors, game_root, adrenaline_drag_data, _hud_hotbar_group_button(game_root, "group_1"), "hotbar_group_drag_unsupported", "adrenaline skill to HUD hotbar group reject target")
+		_assert_hotbar_group_hover_render(errors, game_root, adrenaline_drag_data, _hud_hotbar_group_button(game_root, "group_1"), "hotbar_group_drag_unsupported", "adrenaline skill to HUD hotbar group reject render")
 	if not _drag_skill_to_hud_hotbar(game_root, "adrenaline_rush", "slot_3"):
 		errors.append("dragging learned active skill to HUD hotbar should be accepted")
 	await process_frame
@@ -958,6 +959,25 @@ func _assert_hotbar_group_drag_reject(errors: Array[String], game_root: Node, dr
 	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
 	if str(highlight.get("style", "")) != "reject" or bool(highlight.get("accepted", true)):
 		errors.append("%s: hotbar group hover should expose reject highlight, got %s" % [context, highlight])
+
+
+func _assert_hotbar_group_hover_render(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: hotbar group target should be available" % context)
+		return
+	var accepted := bool(game_root.hud.call("_can_drop_hotbar_group", Vector2.ZERO, drag_data, target))
+	if accepted:
+		errors.append("%s: hotbar group hover render should reject drag data" % context)
+	if not bool(target.get_meta("hotbar_group_drag_hovered", false)):
+		errors.append("%s: hotbar group should record active hover render state" % context)
+	if bool(target.get_meta("hotbar_group_drag_last_accept", true)):
+		errors.append("%s: hotbar group hover render should record reject state" % context)
+	if str(target.get_meta("hotbar_group_drag_reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: hotbar group hover render reject reason expected %s, got %s" % [context, expected_reject_reason, target.get_meta("hotbar_group_drag_reject_reason", "")])
+	if str(target.get_meta("hotbar_group_drag_highlight_style", "")) != "reject":
+		errors.append("%s: hotbar group hover render style should be reject, got %s" % [context, target.get_meta("hotbar_group_drag_highlight_style", "")])
+	if str(target.get_meta("hotbar_group_drag_highlight_color", "")) != "#e25c5c":
+		errors.append("%s: hotbar group hover render color should be reject red, got %s" % [context, target.get_meta("hotbar_group_drag_highlight_color", "")])
 
 
 func _non_skill_hotbar_drag_data() -> Dictionary:
