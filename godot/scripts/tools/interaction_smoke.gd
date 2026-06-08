@@ -43,6 +43,12 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		"target_id": "survivor_outpost_01_pickup_medkit",
 	})
 	_expect_prompt_snapshot(errors, prompt_probe, "pickup", "pickup", 1.0)
+	_expect_target_resolution(errors, prompt_probe, "map_object", "map_object", "pickup", "explicit map object prompt")
+	var inferred_map_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"target_id": "survivor_outpost_01_pickup_medkit",
+	})
+	_expect_prompt_snapshot(errors, inferred_map_prompt, "pickup", "pickup", 1.0)
+	_expect_target_resolution(errors, inferred_map_prompt, "map_object", "map_object", "pickup", "inferred map object prompt")
 	_expect_prompt_range(errors, prompt_probe, 1, "pickup prompt")
 	_expect_disabled_option(errors, prompt_probe, "open_container", "target_not_container", "pickup prompt")
 	_expect_disabled_option(errors, prompt_probe, "talk", "target_not_actor", "pickup prompt")
@@ -51,6 +57,7 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		"actor_id": 1,
 	})
 	_expect_prompt_snapshot(errors, self_prompt_probe, "wait", "wait", 1.0)
+	_expect_target_resolution(errors, self_prompt_probe, "self", "actor", "wait", "self prompt")
 	_expect_prompt_range(errors, self_prompt_probe, 0, "self prompt")
 	_expect_disabled_option(errors, self_prompt_probe, "attack", "self_target", "self prompt")
 	if str(self_prompt_probe.get("action_label", "")) != "等待":
@@ -62,6 +69,13 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		"actor_id": 2,
 	})
 	_expect_prompt_snapshot(errors, friendly_prompt, "talk", "talk", 1.0)
+	_expect_target_resolution(errors, friendly_prompt, "actor", "actor", "talk", "friendly prompt")
+	var inferred_actor_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"actor_id": 2,
+		"target_id": "survivor_outpost_01_pickup_medkit",
+	})
+	_expect_prompt_snapshot(errors, inferred_actor_prompt, "talk", "talk", 1.0)
+	_expect_target_resolution(errors, inferred_actor_prompt, "actor", "actor", "talk", "inferred actor priority prompt")
 	_expect_prompt_range(errors, friendly_prompt, 2, "friendly prompt")
 	_expect_disabled_option(errors, friendly_prompt, "attack", "target_not_hostile", "friendly prompt")
 	var disabled_execute: Dictionary = simulation.execute_interaction(1, {
@@ -99,8 +113,29 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 		},
 	})
 	_expect_prompt_snapshot(errors, grid_prompt, "move", "move", 0.0)
+	_expect_target_resolution(errors, grid_prompt, "grid", "grid", "move", "grid prompt")
 	_expect_prompt_range(errors, grid_prompt, 0, "grid prompt")
 	_expect_disabled_option(errors, grid_prompt, "pickup", "target_empty", "grid prompt")
+	var inferred_grid_prompt: Dictionary = simulation.query_interaction_options(1, {
+		"grid": {
+			"x": 26,
+			"y": 0,
+			"z": 39,
+		},
+	})
+	_expect_prompt_snapshot(errors, inferred_grid_prompt, "move", "move", 0.0)
+	_expect_target_resolution(errors, inferred_grid_prompt, "grid", "grid", "move", "inferred grid prompt")
+	_expect_target_resolution_failure(errors, simulation.query_interaction_options(1, {
+		"target_type": "actor",
+		"actor_id": 99999,
+	}), "unknown_actor_target", "unknown actor target")
+	_expect_target_resolution_failure(errors, simulation.query_interaction_options(1, {
+		"target_type": "map_object",
+		"target_id": "missing_interaction_target",
+	}), "unknown_map_object_target", "unknown map object target")
+	_expect_target_resolution_failure(errors, simulation.query_interaction_options(1, {
+		"target_type": "grid",
+	}), "grid_target_missing", "missing grid target")
 	var hidden_prompt_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	hidden_prompt_simulation.set_actor_vision_radius(1, 0)
 	hidden_prompt_simulation.refresh_actor_vision(1, _topology(hidden_prompt_simulation, registry))
@@ -149,8 +184,8 @@ func _run_interaction_checks(simulation: RefCounted, registry: RefCounted) -> Ar
 	})
 	if bool(second_pickup.get("success", false)):
 		errors.append("pickup target was not consumed")
-	_expect_rejected_command(errors, second_pickup, "interaction_target_unavailable", "consumed pickup")
-	_expect_runtime_snapshot_after_reject(errors, simulation.snapshot(), "interaction_target_unavailable")
+	_expect_rejected_command(errors, second_pickup, "interaction_target_consumed", "consumed pickup")
+	_expect_runtime_snapshot_after_reject(errors, simulation.snapshot(), "interaction_target_consumed")
 
 	var talk_result: Dictionary = _submit_and_complete(simulation, registry, {
 		"kind": "interact",
@@ -621,6 +656,40 @@ func _expect_prompt_snapshot(errors: Array[String], prompt: Dictionary, expected
 			errors.append("prompt option should include kind")
 		if not option.has("ap_cost") or not option.has("disabled") or not option.has("disabled_reason"):
 			errors.append("prompt option should include ap_cost and disabled metadata")
+	if _dictionary_or_empty(prompt.get("target_resolution", {})).is_empty():
+		errors.append("prompt snapshot should include target_resolution")
+
+
+func _expect_target_resolution(errors: Array[String], prompt: Dictionary, inferred_type: String, resolved_type: String, resolved_kind: String, context: String) -> void:
+	var resolution: Dictionary = _dictionary_or_empty(prompt.get("target_resolution", {}))
+	if resolution.is_empty():
+		errors.append("%s should expose target_resolution" % context)
+		return
+	if not bool(resolution.get("success", false)):
+		errors.append("%s target_resolution should succeed: %s" % [context, resolution])
+	if str(resolution.get("inferred_target_type", "")) != inferred_type:
+		errors.append("%s target_resolution inferred type expected %s got %s" % [context, inferred_type, resolution.get("inferred_target_type", "")])
+	if str(resolution.get("resolved_target_type", "")) != resolved_type:
+		errors.append("%s target_resolution resolved type expected %s got %s" % [context, resolved_type, resolution.get("resolved_target_type", "")])
+	if str(resolution.get("resolved_target_kind", "")) != resolved_kind:
+		errors.append("%s target_resolution resolved kind expected %s got %s" % [context, resolved_kind, resolution.get("resolved_target_kind", "")])
+	if _array_or_empty(resolution.get("priority", [])).is_empty():
+		errors.append("%s target_resolution should expose priority" % context)
+
+
+func _expect_target_resolution_failure(errors: Array[String], prompt: Dictionary, expected_reason: String, context: String) -> void:
+	if bool(prompt.get("ok", false)):
+		errors.append("%s should fail target resolution" % context)
+	if str(prompt.get("reason", "")) != expected_reason:
+		errors.append("%s expected reason %s got %s" % [context, expected_reason, prompt.get("reason", "")])
+	var resolution: Dictionary = _dictionary_or_empty(prompt.get("target_resolution", {}))
+	if resolution.is_empty():
+		errors.append("%s failure should expose target_resolution" % context)
+		return
+	if bool(resolution.get("success", true)):
+		errors.append("%s target_resolution should be failed: %s" % [context, resolution])
+	if str(resolution.get("reason", "")) != expected_reason:
+		errors.append("%s target_resolution reason expected %s got %s" % [context, expected_reason, resolution.get("reason", "")])
 
 
 func _expect_disabled_option(errors: Array[String], prompt: Dictionary, option_id: String, reason: String, context: String) -> void:

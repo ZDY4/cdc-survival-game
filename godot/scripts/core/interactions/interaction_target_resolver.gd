@@ -7,8 +7,11 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 		return _failed_prompt("unknown_actor")
 
 	var target_data: Dictionary = _resolve_target(simulation, target)
-	if target_data.is_empty():
-		return _failed_prompt("interaction_target_unavailable")
+	if _target_resolution_failed(target_data):
+		var failed: Dictionary = _failed_prompt(str(target_data.get("reason", "interaction_target_unavailable")))
+		failed["target_resolution"] = _target_resolution_snapshot(target, {}, false, str(target_data.get("reason", "interaction_target_unavailable")))
+		failed["target_type"] = str(target_data.get("target_type", _inferred_target_type(target)))
+		return failed
 	var visibility: Dictionary = _visibility_check(simulation, actor_id, target_data)
 	if not bool(visibility.get("success", true)):
 		var failed: Dictionary = _failed_prompt(str(visibility.get("reason", "target_not_visible")))
@@ -17,6 +20,7 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 		failed["target_kind"] = target_data.get("kind", target_data.get("target_type", ""))
 		failed["target_type"] = target_data.get("target_type", "")
 		failed["target_grid"] = _dictionary_or_empty(visibility.get("target_grid", {}))
+		failed["target_resolution"] = _target_resolution_snapshot(target, target_data, true, "")
 		return failed
 
 	var candidate_options: Array = _candidate_options_for_target(simulation, actor, target_data)
@@ -43,6 +47,7 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 		"target_name": target_data.get("display_name", ""),
 		"target_kind": target_data.get("kind", target_data.get("target_type", "")),
 		"target_type": target_data.get("target_type", ""),
+		"target_resolution": _target_resolution_snapshot(target, target_data, true, ""),
 		"options": enabled_options,
 		"disabled_options": disabled_options,
 		"primary_option_id": primary_option.get("id", ""),
@@ -56,19 +61,22 @@ func query(simulation: RefCounted, actor_id: int, target: Dictionary) -> Diction
 
 
 func _resolve_target(simulation: RefCounted, target: Dictionary) -> Dictionary:
-	var target_type: String = str(target.get("target_type", "map_object"))
+	var target_type: String = _inferred_target_type(target)
 	match target_type:
 		"actor":
 			var actor_id: int = int(target.get("actor_id", 0))
+			if actor_id <= 0:
+				return _resolution_failed("actor_id_missing", target_type)
 			var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
 			if actor == null:
-				return {}
+				return _resolution_failed("unknown_actor_target", target_type)
 			if actor.actor_id == int(target.get("command_actor_id", 0)) or actor.actor_id == _player_actor_id(simulation):
 				return {
 					"target_type": "actor",
 					"actor_id": actor.actor_id,
 					"definition_id": actor.definition_id,
 					"display_name": actor.display_name,
+					"grid_position": actor.grid_position.to_dictionary(),
 					"kind": "wait",
 				}
 			var hostility: Dictionary = _actor_hostility(simulation, _player_actor_id(simulation), actor.actor_id)
@@ -96,29 +104,92 @@ func _resolve_target(simulation: RefCounted, target: Dictionary) -> Dictionary:
 		"self":
 			var self_actor: RefCounted = simulation.actor_registry.get_actor(int(target.get("actor_id", _player_actor_id(simulation))))
 			if self_actor == null:
-				return {}
+				return _resolution_failed("unknown_self_target", target_type)
 			return {
 				"target_type": "actor",
 				"actor_id": self_actor.actor_id,
 				"definition_id": self_actor.definition_id,
 				"display_name": self_actor.display_name,
+				"grid_position": self_actor.grid_position.to_dictionary(),
 				"kind": "wait",
 			}
 		"grid":
 			var grid: Dictionary = _dictionary_or_empty(target.get("grid", target.get("target_position", {})))
 			if grid.is_empty():
-				return {}
+				return _resolution_failed("grid_target_missing", target_type)
 			return {
 				"target_type": "grid",
 				"display_name": "移动",
 				"kind": "move",
 				"grid": grid,
 			}
-		_:
+		"map_object":
 			var target_id: String = str(target.get("target_id", ""))
-			if target_id.is_empty() or simulation.consumed_interaction_targets.has(target_id):
-				return {}
-			return simulation.map_interaction_targets.get(target_id, {})
+			if target_id.is_empty():
+				return _resolution_failed("map_object_target_missing", target_type)
+			if simulation.consumed_interaction_targets.has(target_id):
+				return _resolution_failed("interaction_target_consumed", target_type)
+			var map_target: Dictionary = _dictionary_or_empty(simulation.map_interaction_targets.get(target_id, {}))
+			if map_target.is_empty():
+				return _resolution_failed("unknown_map_object_target", target_type)
+			return map_target
+		_:
+			return _resolution_failed("unknown_interaction_target_type", target_type)
+
+
+func _inferred_target_type(target: Dictionary) -> String:
+	var explicit := str(target.get("target_type", "")).strip_edges()
+	if not explicit.is_empty():
+		return explicit
+	if target.has("actor_id"):
+		return "actor"
+	if target.has("target_id"):
+		return "map_object"
+	if typeof(target.get("grid", null)) == TYPE_DICTIONARY or typeof(target.get("target_position", null)) == TYPE_DICTIONARY:
+		return "grid"
+	return "map_object"
+
+
+func _resolution_failed(reason: String, target_type: String) -> Dictionary:
+	return {
+		"__resolution_failed": true,
+		"reason": reason,
+		"target_type": target_type,
+	}
+
+
+func _target_resolution_failed(target_data: Dictionary) -> bool:
+	return target_data.is_empty() or bool(target_data.get("__resolution_failed", false))
+
+
+func _target_resolution_snapshot(requested_target: Dictionary, resolved_target: Dictionary, success: bool, reason: String) -> Dictionary:
+	return {
+		"success": success,
+		"reason": reason,
+		"requested_target_type": str(requested_target.get("target_type", "")),
+		"inferred_target_type": _inferred_target_type(requested_target),
+		"priority": _resolution_priority_for_target(requested_target),
+		"resolved_target_type": str(resolved_target.get("target_type", "")),
+		"resolved_target_kind": str(resolved_target.get("kind", "")),
+		"target_id": str(requested_target.get("target_id", resolved_target.get("target_id", ""))),
+		"actor_id": int(requested_target.get("actor_id", resolved_target.get("actor_id", 0))),
+		"has_grid": not _dictionary_or_empty(requested_target.get("grid", requested_target.get("target_position", {}))).is_empty(),
+	}
+
+
+func _resolution_priority_for_target(target: Dictionary) -> Array[String]:
+	if not str(target.get("target_type", "")).strip_edges().is_empty():
+		return [str(target.get("target_type", ""))]
+	var priority: Array[String] = []
+	if target.has("actor_id"):
+		priority.append("actor")
+	if target.has("target_id"):
+		priority.append("map_object")
+	if typeof(target.get("grid", null)) == TYPE_DICTIONARY or typeof(target.get("target_position", null)) == TYPE_DICTIONARY:
+		priority.append("grid")
+	if priority.is_empty():
+		priority.append("map_object")
+	return priority
 
 
 func _visibility_check(simulation: RefCounted, actor_id: int, target_data: Dictionary) -> Dictionary:
