@@ -1029,6 +1029,10 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 		"success": true,
 		"had_pending": had_pending,
 		"reason": reason,
+		"pending_movement": movement.duplicate(true),
+		"pending_interaction": interaction.duplicate(true),
+		"pending_crafting": crafting.duplicate(true),
+		"cancelled_crafting": crafting.duplicate(true),
 		"turn_policy": turn_policy,
 	}
 

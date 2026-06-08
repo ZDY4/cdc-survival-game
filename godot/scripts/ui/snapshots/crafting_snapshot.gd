@@ -36,6 +36,7 @@ func build(runtime_snapshot: Dictionary, crafting_context: Dictionary = {}) -> D
 		"pending_crafting": _dictionary_or_empty(runtime_snapshot.get("pending_crafting", {})).duplicate(true),
 		"crafting_queue": _crafting_queue_snapshot(runtime_snapshot.get("crafting_queue", []), recipes),
 		"crafting_queue_result": _dictionary_or_empty(crafting_context.get("latest_crafting_queue_result", {})).duplicate(true),
+		"pending_crafting_result": _dictionary_or_empty(crafting_context.get("latest_pending_crafting_result", {})).duplicate(true),
 	}
 
 

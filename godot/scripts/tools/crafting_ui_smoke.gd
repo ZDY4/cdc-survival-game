@@ -677,12 +677,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if cancelled_progress_bar != null and cancelled_progress_bar.visible:
 			errors.append("cancelled pending crafting should hide progress bar")
 		_assert_pending_crafting_snapshot(errors, game_root, "", 0, false, "cancelled pending craft")
+		_assert_pending_crafting_cancel_result(errors, game_root, "recipe_bandage_basic", 50, "crafting_ui", "cancelled pending craft")
 		if _player_inventory_count(game_root, "1011") != 100:
 			errors.append("cancelling pending crafting should not consume queued materials")
 		if not _event_seen(game_root, "crafting_cancelled"):
 			errors.append("cancelling pending crafting should emit crafting_cancelled")
 		if not _feedback_text(game_root).contains("已取消正在制作"):
 			errors.append("crafting panel should show pending cancellation feedback")
+		if not _feedback_text(game_root).contains("基础绷带 x50") or not _feedback_text(game_root).contains("AP"):
+			errors.append("crafting panel should show cancelled recipe and AP feedback: %s" % _feedback_text(game_root))
 	return errors
 
 
@@ -881,6 +884,37 @@ func _assert_pending_crafting_snapshot(errors: Array[String], game_root: Node, e
 		errors.append("%s: active pending should expose enabled cancel: %s" % [context, pending])
 	if float(pending.get("progress_bar_value", 0.0)) <= 0.0 or float(pending.get("progress_bar_max", 0.0)) <= 0.0:
 		errors.append("%s: active pending should expose progress bar values: %s" % [context, pending])
+
+
+func _assert_pending_crafting_cancel_result(errors: Array[String], game_root: Node, expected_recipe_id: String, expected_count: int, expected_reason: String, context: String) -> void:
+	if not game_root.crafting_panel.has_method("craft_queue_snapshot"):
+		errors.append("%s: crafting panel should expose craft_queue_snapshot for pending cancel result" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.crafting_panel.craft_queue_snapshot())
+	var result: Dictionary = _dictionary_or_empty(snapshot.get("pending_result", {}))
+	if result.is_empty():
+		errors.append("%s: pending cancel result should be present: %s" % [context, snapshot])
+		return
+	if str(result.get("reason", "")) != "pending_cancelled":
+		errors.append("%s: pending cancel reason should be pending_cancelled: %s" % [context, result])
+	if str(result.get("cancel_reason", "")) != expected_reason:
+		errors.append("%s: pending cancel origin expected %s got %s" % [context, expected_reason, result])
+	if str(result.get("recipe_id", "")) != expected_recipe_id:
+		errors.append("%s: pending cancel recipe expected %s got %s" % [context, expected_recipe_id, result])
+	if int(result.get("count", 0)) != expected_count:
+		errors.append("%s: pending cancel count expected %d got %s" % [context, expected_count, result])
+	if float(result.get("required_ap", 0.0)) <= 0.0 or float(result.get("progress_ap", 0.0)) <= 0.0:
+		errors.append("%s: pending cancel should expose AP progress: %s" % [context, result])
+	if float(result.get("remaining_ap", -1.0)) < 0.0:
+		errors.append("%s: pending cancel remaining AP should be non-negative: %s" % [context, result])
+	if int(result.get("remaining_queue_count", -1)) != 0 or int(result.get("remaining_total_count", -1)) != 0:
+		errors.append("%s: pending cancel should expose empty remaining queue: %s" % [context, result])
+	var policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	if str(policy.get("action_kind", "")) != "cancel_pending":
+		errors.append("%s: pending cancel should expose cancel turn policy: %s" % [context, result])
+	var summary := str(result.get("summary", ""))
+	if not summary.contains("基础绷带 x50") or not summary.contains("AP"):
+		errors.append("%s: pending cancel summary should include recipe and AP: %s" % [context, result])
 
 
 func _confirm_queue_button(game_root: Node) -> Button:

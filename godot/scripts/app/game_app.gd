@@ -93,6 +93,7 @@ var active_container_feedback: Dictionary = {}
 var active_character_feedback: Dictionary = {}
 var active_inventory_feedback: Dictionary = {}
 var latest_crafting_queue_result: Dictionary = {}
+var latest_pending_crafting_result: Dictionary = {}
 var debug_overlay_mode: String = "off"
 var info_panel_pages: Array[Dictionary] = [
 	{"id": "overview", "title": "Overview", "tab_label": "Overview"},
@@ -2716,6 +2717,7 @@ func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 		"crafting_context": _crafting_context(),
 		"topology": _dictionary_or_empty(world_result.get("map", {})),
 	})
+	latest_pending_crafting_result = {}
 	refresh_inventory_panel()
 	refresh_crafting_panel()
 	refresh_skills_panel()
@@ -2731,6 +2733,7 @@ func confirm_crafting_queue(entries: Array) -> Dictionary:
 	simulation.crafting_queue = _normalized_crafting_queue(entries)
 	var queue_result: Dictionary = _advance_crafting_queue("confirm")
 	_set_latest_crafting_queue_result(queue_result, "confirm")
+	latest_pending_crafting_result = {}
 	refresh_inventory_panel()
 	refresh_crafting_panel()
 	refresh_skills_panel()
@@ -2914,6 +2917,7 @@ func cancel_pending_crafting(reason: String = "crafting_ui") -> Dictionary:
 		"topology": _dictionary_or_empty(world_result.get("map", {})),
 	})
 	if bool(result.get("success", false)) and bool(result.get("had_pending", false)):
+		latest_pending_crafting_result = _pending_crafting_cancel_feedback_snapshot(result, reason)
 		latest_crafting_queue_result = {
 			"active": true,
 			"reason": "pending_cancelled",
@@ -2921,6 +2925,8 @@ func cancel_pending_crafting(reason: String = "crafting_ui") -> Dictionary:
 			"remaining_queue_count": simulation.crafting_queue.size(),
 			"remaining_total_count": _crafting_queue_total_count(simulation.crafting_queue),
 		}
+	elif bool(result.get("success", false)):
+		latest_pending_crafting_result = {}
 	refresh_inventory_panel()
 	refresh_crafting_panel()
 	refresh_skills_panel()
@@ -2973,12 +2979,47 @@ func _crafting_queue_feedback_snapshot(result: Dictionary, trigger: String) -> D
 	}
 
 
+func _pending_crafting_cancel_feedback_snapshot(result: Dictionary, reason: String) -> Dictionary:
+	var cancelled: Dictionary = _dictionary_or_empty(result.get("pending_crafting", {}))
+	if cancelled.is_empty():
+		cancelled = _dictionary_or_empty(result.get("cancelled_crafting", {}))
+	if cancelled.is_empty():
+		return {}
+	var required_ap: float = max(0.0, float(cancelled.get("required_ap", 0.0)))
+	var progress_ap: float = clampf(float(cancelled.get("progress_ap", 0.0)), 0.0, required_ap)
+	var remaining_ap: float = max(0.0, float(cancelled.get("remaining_ap", required_ap - progress_ap)))
+	var recipe_id := str(cancelled.get("recipe_id", ""))
+	return {
+		"active": true,
+		"reason": "pending_cancelled",
+		"cancel_reason": reason,
+		"recipe_id": recipe_id,
+		"count": max(1, int(cancelled.get("count", 1))),
+		"required_ap": required_ap,
+		"progress_ap": progress_ap,
+		"remaining_ap": remaining_ap,
+		"progress_ratio": 0.0 if required_ap <= 0.0 else progress_ap / required_ap,
+		"turn_policy": _dictionary_or_empty(result.get("turn_policy", {})).duplicate(true),
+		"remaining_queue_count": simulation.crafting_queue.size() if simulation != null else 0,
+		"remaining_total_count": _crafting_queue_total_count(simulation.crafting_queue) if simulation != null else 0,
+		"pending_crafting": cancelled.duplicate(true),
+		"summary": "已取消正在制作: %s x%d | 进度 %.1f/%.1f AP | 剩余 %.1f AP" % [
+			recipe_id,
+			max(1, int(cancelled.get("count", 1))),
+			progress_ap,
+			required_ap,
+			remaining_ap,
+		],
+	}
+
+
 func _crafting_context() -> Dictionary:
 	return {
 		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),
 		"world_flags": _dictionary_or_empty(simulation.world_flags if simulation != null else {}).duplicate(true),
 		"nearby_tool_containers": _nearby_tool_containers(),
 		"latest_crafting_queue_result": latest_crafting_queue_result.duplicate(true),
+		"latest_pending_crafting_result": latest_pending_crafting_result.duplicate(true),
 	}
 
 

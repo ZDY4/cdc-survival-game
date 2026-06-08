@@ -1073,6 +1073,7 @@ func craft_queue_snapshot() -> Dictionary:
 	var queued_entries := _craft_queue_summaries()
 	var pending := _pending_crafting_snapshot()
 	var latest_result: Dictionary = _dictionary_or_empty(_last_snapshot.get("crafting_queue_result", {})).duplicate(true)
+	var pending_result: Dictionary = _pending_crafting_result_snapshot()
 	return {
 		"active": not queued_entries.is_empty() or bool(pending.get("active", false)),
 		"entry_count": queued_entries.size(),
@@ -1086,6 +1087,7 @@ func craft_queue_snapshot() -> Dictionary:
 		"summary": str(_queue_label.text) if _queue_label != null else "",
 		"pending_summary": str(_pending_label.text) if _pending_label != null else "",
 		"latest_result": latest_result,
+		"pending_result": pending_result,
 		"queue_feedback": str(_queue_feedback_label.text) if _queue_feedback_label != null else "",
 		"feedback": str(_feedback_label.text) if _feedback_label != null else "",
 	}
@@ -1181,6 +1183,30 @@ func _pending_crafting_snapshot() -> Dictionary:
 		"progress_bar_value": float(_pending_progress_bar.value) if _pending_progress_bar != null else progress_ap,
 		"progress_bar_max": float(_pending_progress_bar.max_value) if _pending_progress_bar != null else max(1.0, required_ap),
 	}
+
+
+func _pending_crafting_result_snapshot() -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(_last_snapshot.get("pending_crafting_result", {})).duplicate(true)
+	if result.is_empty():
+		return {}
+	var recipe_id := str(result.get("recipe_id", ""))
+	var recipe: Dictionary = _recipe_by_id(_last_snapshot.get("recipes", []), recipe_id)
+	var recipe_name := str(recipe.get("name", recipe_id))
+	result["name"] = recipe_name
+	if result.has("summary"):
+		result["raw_summary"] = str(result.get("summary", ""))
+	result["summary"] = _pending_crafting_result_summary(result, recipe_name)
+	return result
+
+
+func _pending_crafting_result_summary(result: Dictionary, recipe_name: String) -> String:
+	return "已取消正在制作: %s x%d | 进度 %.1f/%.1f AP | 剩余 %.1f AP" % [
+		recipe_name,
+		max(1, int(result.get("count", 1))),
+		float(result.get("progress_ap", 0.0)),
+		float(result.get("required_ap", 0.0)),
+		float(result.get("remaining_ap", 0.0)),
+	]
 
 
 func _refresh_pending_crafting_view() -> void:
@@ -1371,7 +1397,11 @@ func _cancel_pending_crafting() -> void:
 		return
 	var result: Dictionary = root.cancel_pending_crafting("crafting_ui")
 	if bool(result.get("success", false)) and bool(result.get("had_pending", false)):
-		_feedback_label.text = "已取消正在制作"
+		var pending_result: Dictionary = _pending_crafting_result_snapshot()
+		if pending_result.is_empty():
+			_feedback_label.text = "已取消正在制作"
+		else:
+			_feedback_label.text = str(pending_result.get("summary", _pending_crafting_result_summary(pending_result, str(pending_result.get("name", pending_result.get("recipe_id", ""))))))
 	elif bool(result.get("success", false)):
 		_feedback_label.text = "没有正在制作"
 	else:
