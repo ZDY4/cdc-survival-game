@@ -249,6 +249,8 @@ func _validate_player_equipment_models(player: Node, errors: Array[String]) -> v
 			errors.append("equipment model %s should expose slot_id metadata" % slot_id)
 		if str(model.get_meta("attach_target", "")) == "":
 			errors.append("equipment model %s should expose attach_target metadata" % slot_id)
+		if str(model.get_meta("socket_id", "")) == "" or str(model.get_meta("body_region", "")) == "":
+			errors.append("equipment model %s should expose Godot socket/body region metadata" % slot_id)
 		if not model.has_meta("attach_offset") or not model.has_meta("attach_rotation_degrees") or not model.has_meta("attach_scale"):
 			errors.append("equipment model %s should expose attachment transform metadata" % slot_id)
 		_validate_visual_collision_proxy(model, errors, "equipment model %s" % slot_id)
@@ -261,6 +263,8 @@ func _validate_player_equipment_models(player: Node, errors: Array[String]) -> v
 		var rotation: Vector3 = main_hand.get_meta("attach_rotation_degrees", Vector3.ZERO)
 		if absf(rotation.z) < 1.0:
 			errors.append("main_hand weapon should expose hand-held rotation")
+		if str(main_hand.get_meta("socket_id", "")) != "socket_hand_r" or str(main_hand.get_meta("body_region", "")) != "hands":
+			errors.append("main_hand weapon should expose right-hand socket presentation")
 
 
 func _validate_visual_collision_proxy(node: Node, errors: Array[String], label: String) -> void:
@@ -690,6 +694,8 @@ func _validate_equipment_attach_points(errors: Array[String]) -> void:
 				errors.append("%s equipment should expose attach_target metadata" % attach_target)
 			if not model.has_meta("attach_offset") or not model.has_meta("attach_rotation_degrees") or not model.has_meta("attach_scale"):
 				errors.append("%s equipment should expose transform metadata" % attach_target)
+			if str(model.get_meta("socket_id", "")) == "" or str(model.get_meta("body_region", "")) == "":
+				errors.append("%s equipment should expose socket/body region metadata" % attach_target)
 		var off_hand: Node = actor_node.find_child("EquipmentModel_off_hand", true, false)
 		if off_hand != null:
 			var off_rotation: Vector3 = off_hand.get_meta("attach_rotation_degrees", Vector3.ZERO)
@@ -700,6 +706,18 @@ func _validate_equipment_attach_points(errors: Array[String]) -> void:
 			var back_offset: Vector3 = back.get_meta("attach_offset", Vector3.ZERO)
 			if back_offset.z <= 0.0:
 				errors.append("back equipment should attach behind actor")
+		var ranged: Node = actor_node.find_child("EquipmentModel_main_hand", true, false)
+		if ranged == null:
+			errors.append("equipment attach smoke should render ranged main hand model")
+		else:
+			if str(ranged.get_meta("weapon_visual_kind", "")) != "ranged_weapon" or str(ranged.get_meta("reload_visual_state", "")) != "loaded":
+				errors.append("ranged equipment should expose weapon/reload visual metadata")
+			var muzzle: Node = ranged.find_child("EquipmentMuzzleMarker", true, false)
+			if muzzle == null:
+				errors.append("ranged equipment should render muzzle marker")
+			else:
+				if str(muzzle.get_meta("reload_visual_state", "")) != "loaded" or int(muzzle.get_meta("loaded_ammo", 0)) != 7:
+					errors.append("muzzle marker should expose loaded ammo diagnostics")
 	_validate_label3d_fonts(root, "equipment attach markers", errors)
 	root.queue_free()
 
@@ -713,8 +731,29 @@ func _equipment_attach_world() -> Dictionary:
 			"visual_asset": "builtin:item:body",
 			"model_asset": "preview_placeholders/placeholders/equipment_body.gltf",
 			"attach_target": attach_target,
+			"socket_id": "socket_%s" % attach_target,
+			"body_region": attach_target,
 			"presentation_mode": "attach",
 		})
+	visuals.append({
+		"slot_id": "main_hand",
+		"item_id": "scene_smoke_ranged",
+		"visual_asset": "builtin:weapon:pistol",
+		"model_asset": "preview_placeholders/placeholders/weapon_pistol.gltf",
+		"attach_target": "main_hand",
+		"socket_id": "socket_hand_r",
+		"body_region": "hands",
+		"presentation_mode": "attach",
+		"attach_offset": Vector3(0.36, 0.30, -0.08),
+		"attach_rotation_degrees": Vector3(0.0, -24.0, -18.0),
+		"attach_scale": Vector3.ONE * 0.92,
+		"muzzle_offset": Vector3(0.08, 0.04, -0.34),
+		"weapon_visual_kind": "ranged_weapon",
+		"reload_visual_state": "loaded",
+		"loaded_ammo": 7,
+		"max_ammo": 12,
+		"ammo_type": "1009",
+	})
 	return {
 		"map": {
 			"map_id": "scene_smoke_equipment_map",

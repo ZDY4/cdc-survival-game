@@ -66,7 +66,7 @@ func _actors_on_map(actors: Array, active_map_id: String) -> Array[Dictionary]:
 			"map_id": actor_map_id,
 			"appearance_profile_id": appearance_profile_id,
 			"model_asset": model_asset,
-			"equipment_visuals": _equipment_visuals(_dictionary_or_empty(actor.get("equipment", {}))),
+			"equipment_visuals": _equipment_visuals(actor),
 			"ap": float(actor.get("ap", 0.0)),
 			"turn_open": bool(actor.get("turn_open", false)),
 			"in_combat": bool(actor.get("in_combat", false)),
@@ -92,10 +92,12 @@ func _model_asset_for_appearance(appearance_profile_id: String) -> String:
 	return _resolved_model_asset(str(appearance_data.get("base_model_asset", "")))
 
 
-func _equipment_visuals(equipment: Dictionary) -> Array[Dictionary]:
+func _equipment_visuals(actor: Dictionary) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
+	var equipment: Dictionary = _dictionary_or_empty(actor.get("equipment", {}))
 	if registry == null or equipment.is_empty():
 		return output
+	var weapon_ammo: Dictionary = _dictionary_or_empty(actor.get("weapon_ammo", {}))
 	var slots: Array = equipment.keys()
 	slots.sort()
 	for slot_id in slots:
@@ -109,13 +111,31 @@ func _equipment_visuals(equipment: Dictionary) -> Array[Dictionary]:
 		var model_asset := _model_asset_for_equipment_visual(visual_asset)
 		if model_asset.is_empty():
 			continue
+		var weapon: Dictionary = _weapon_definition(item_data)
+		var attach_target := str(appearance.get("attach_target", slot_id))
+		var presentation := _equipment_presentation_profile(str(slot_id), attach_target, appearance, weapon, weapon_ammo)
 		output.append({
 			"slot_id": str(slot_id),
 			"item_id": item_id,
+			"equip_slot": str(appearance.get("equip_slot", slot_id)),
 			"visual_asset": visual_asset,
 			"model_asset": model_asset,
-			"attach_target": str(appearance.get("attach_target", slot_id)),
+			"attach_target": attach_target,
+			"socket_id": str(presentation.get("socket_id", "")),
+			"body_region": str(presentation.get("body_region", "")),
 			"presentation_mode": str(appearance.get("presentation_mode", "")),
+			"hide_base_regions": _array_or_empty(appearance.get("hide_base_regions", [])).duplicate(true),
+			"preview_transform": _dictionary_or_empty(appearance.get("preview_transform", {})).duplicate(true),
+			"attach_offset": presentation.get("attach_offset", Vector3.ZERO),
+			"attach_rotation_degrees": presentation.get("attach_rotation_degrees", Vector3.ZERO),
+			"attach_scale": presentation.get("attach_scale", Vector3.ONE),
+			"muzzle_offset": presentation.get("muzzle_offset", Vector3.ZERO),
+			"reload_visual_state": str(presentation.get("reload_visual_state", "")),
+			"weapon_visual_kind": str(presentation.get("weapon_visual_kind", "")),
+			"ammo_type": str(weapon.get("ammo_type", "")),
+			"max_ammo": _safe_int(weapon.get("max_ammo", 0), 0),
+			"loaded_ammo": _safe_int(presentation.get("loaded_ammo", -1), -1),
+			"reload_time": _safe_float(weapon.get("reload_time", 0.0), 0.0),
 			"tint": str(appearance.get("tint", "")),
 		})
 	return output
@@ -127,6 +147,195 @@ func _appearance_definition(item_data: Dictionary) -> Dictionary:
 		if str(fragment_data.get("kind", "")) == "appearance":
 			return _dictionary_or_empty(fragment_data.get("definition", {}))
 	return {}
+
+
+func _weapon_definition(item_data: Dictionary) -> Dictionary:
+	for fragment in _array_or_empty(item_data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) == "weapon":
+			return fragment_data
+	return {}
+
+
+func _equipment_presentation_profile(slot_id: String, attach_target: String, appearance: Dictionary, weapon: Dictionary, weapon_ammo: Dictionary) -> Dictionary:
+	var preview_transform: Dictionary = _dictionary_or_empty(appearance.get("preview_transform", {}))
+	var default_offset := _equipment_default_offset(attach_target, slot_id)
+	var default_rotation := _equipment_default_rotation(attach_target, slot_id)
+	var default_scale := Vector3.ONE * _equipment_default_scale(attach_target, slot_id)
+	var max_ammo := _safe_int(weapon.get("max_ammo", 0), 0)
+	var loaded_ammo := _safe_int(weapon_ammo.get(slot_id, -1), -1)
+	var reload_state := "melee"
+	if max_ammo > 0:
+		reload_state = "untracked_magazine" if loaded_ammo < 0 else ("empty_magazine" if loaded_ammo <= 0 else "loaded")
+	return {
+		"socket_id": _equipment_socket_id(attach_target, slot_id),
+		"body_region": _equipment_body_region(attach_target, slot_id),
+		"attach_offset": _vector3_from_value(preview_transform.get("offset", preview_transform.get("position", {})), default_offset),
+		"attach_rotation_degrees": _vector3_from_value(preview_transform.get("rotation_degrees", preview_transform.get("rotation", {})), default_rotation),
+		"attach_scale": _scale_vector_from_value(preview_transform.get("scale", null), default_scale),
+		"muzzle_offset": _equipment_muzzle_offset(attach_target, slot_id, weapon),
+		"reload_visual_state": reload_state,
+		"weapon_visual_kind": _equipment_weapon_visual_kind(weapon),
+		"loaded_ammo": loaded_ammo,
+	}
+
+
+func _equipment_socket_id(attach_target: String, slot_id: String) -> String:
+	match attach_target:
+		"main_hand":
+			return "socket_hand_r"
+		"off_hand":
+			return "socket_hand_l"
+		"hands":
+			return "socket_hands"
+		"head":
+			return "socket_head"
+		"body":
+			return "socket_torso"
+		"legs":
+			return "socket_hips"
+		"feet":
+			return "socket_feet"
+		"back":
+			return "socket_back"
+		"accessory":
+			return "socket_accessory"
+	if slot_id == "main_hand" or slot_id == "off_hand":
+		return _equipment_socket_id(slot_id, "")
+	return "socket_actor_root"
+
+
+func _equipment_body_region(attach_target: String, slot_id: String) -> String:
+	match attach_target:
+		"head", "body", "legs", "feet", "hands", "back", "accessory":
+			return attach_target
+		"main_hand", "off_hand":
+			return "hands"
+	if slot_id in ["head", "body", "legs", "feet", "hands", "back", "accessory"]:
+		return slot_id
+	return "root"
+
+
+func _equipment_default_offset(attach_target: String, slot_id: String = "") -> Vector3:
+	match attach_target:
+		"main_hand":
+			return Vector3(0.36, 0.30, -0.08)
+		"off_hand":
+			return Vector3(-0.36, 0.30, -0.08)
+		"hands":
+			return Vector3(0.0, 0.28, -0.10)
+		"body":
+			return Vector3(0.0, 0.18, 0.0)
+		"legs":
+			return Vector3(0.0, -0.18, 0.0)
+		"feet":
+			return Vector3(0.0, -0.42, 0.0)
+		"head":
+			return Vector3(0.0, 0.62, 0.0)
+		"back":
+			return Vector3(0.0, 0.15, 0.30)
+		"accessory":
+			return Vector3(0.18, 0.44, -0.18)
+	if slot_id == "main_hand" or slot_id == "off_hand":
+		return _equipment_default_offset(slot_id, "")
+	return Vector3.ZERO
+
+
+func _equipment_default_rotation(attach_target: String, slot_id: String = "") -> Vector3:
+	match attach_target:
+		"main_hand":
+			return Vector3(0.0, -24.0, -18.0)
+		"off_hand":
+			return Vector3(0.0, 24.0, 18.0)
+		"hands":
+			return Vector3(0.0, 0.0, 0.0)
+		"back":
+			return Vector3(0.0, 180.0, 8.0)
+		"accessory":
+			return Vector3(0.0, 18.0, 0.0)
+	if slot_id == "main_hand" or slot_id == "off_hand":
+		return _equipment_default_rotation(slot_id, "")
+	return Vector3.ZERO
+
+
+func _equipment_default_scale(attach_target: String, slot_id: String = "") -> float:
+	match attach_target:
+		"main_hand", "off_hand":
+			return 0.92
+		"hands", "head", "accessory":
+			return 0.72
+		"back":
+			return 0.82
+		"body", "legs", "feet":
+			return 0.88
+	if slot_id == "main_hand" or slot_id == "off_hand":
+		return _equipment_default_scale(slot_id, "")
+	return 1.0
+
+
+func _equipment_muzzle_offset(attach_target: String, slot_id: String, weapon: Dictionary) -> Vector3:
+	if _safe_int(weapon.get("max_ammo", 0), 0) <= 0:
+		return Vector3.ZERO
+	var base := Vector3(0.0, 0.04, -0.34)
+	if attach_target == "off_hand" or slot_id == "off_hand":
+		base.x = -0.08
+	else:
+		base.x = 0.08
+	return base
+
+
+func _equipment_weapon_visual_kind(weapon: Dictionary) -> String:
+	if weapon.is_empty():
+		return "equipment"
+	if _safe_int(weapon.get("max_ammo", 0), 0) > 0:
+		return "ranged_weapon"
+	return "melee_weapon"
+
+
+func _safe_int(value: Variant, fallback: int = 0) -> int:
+	if value == null:
+		return fallback
+	if value is int:
+		return value
+	if value is float:
+		return int(value)
+	var text := str(value).strip_edges()
+	if text.is_empty() or text.to_lower() == "null":
+		return fallback
+	if not text.is_valid_int() and not text.is_valid_float():
+		return fallback
+	return int(float(text))
+
+
+func _safe_float(value: Variant, fallback: float = 0.0) -> float:
+	if value == null:
+		return fallback
+	if value is float or value is int:
+		return float(value)
+	var text := str(value).strip_edges()
+	if text.is_empty() or text.to_lower() == "null" or not text.is_valid_float():
+		return fallback
+	return float(text)
+
+
+func _vector3_from_value(value: Variant, fallback: Vector3) -> Vector3:
+	if value is Vector3:
+		return value
+	if value is Dictionary:
+		var data: Dictionary = _dictionary_or_empty(value)
+		if data.has("x") or data.has("y") or data.has("z"):
+			return Vector3(float(data.get("x", fallback.x)), float(data.get("y", fallback.y)), float(data.get("z", fallback.z)))
+	if value is Array:
+		var values: Array = _array_or_empty(value)
+		if values.size() >= 3:
+			return Vector3(float(values[0]), float(values[1]), float(values[2]))
+	return fallback
+
+
+func _scale_vector_from_value(value: Variant, fallback: Vector3) -> Vector3:
+	if value is float or value is int:
+		return Vector3.ONE * max(0.001, float(value))
+	return _vector3_from_value(value, fallback)
 
 
 func _model_asset_for_equipment_visual(visual_asset: String) -> String:

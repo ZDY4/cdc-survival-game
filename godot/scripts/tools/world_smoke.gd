@@ -79,6 +79,20 @@ func _validate_player_equipment_visuals(player_actor: Dictionary, errors: Array[
 		errors.append("player main_hand equipment should resolve dagger glTF")
 	if by_slot.has("body") and str(by_slot["body"].get("model_asset", "")) != "preview_placeholders/placeholders/equipment_body.gltf":
 		errors.append("player body equipment should resolve body glTF")
+	if by_slot.has("main_hand"):
+		var main_hand: Dictionary = _dictionary_or_empty(by_slot.get("main_hand", {}))
+		if str(main_hand.get("socket_id", "")) != "socket_hand_r" or str(main_hand.get("body_region", "")) != "hands":
+			errors.append("player main_hand equipment should expose Godot socket/body region presentation")
+		if typeof(main_hand.get("attach_offset", Vector3.ZERO)) != TYPE_VECTOR3 or typeof(main_hand.get("attach_rotation_degrees", Vector3.ZERO)) != TYPE_VECTOR3 or typeof(main_hand.get("attach_scale", Vector3.ZERO)) != TYPE_VECTOR3:
+			errors.append("player main_hand equipment should expose Vector3 attachment profile")
+		if str(main_hand.get("weapon_visual_kind", "")) != "melee_weapon" or str(main_hand.get("reload_visual_state", "")) != "melee":
+			errors.append("player dagger should expose melee weapon visual state")
+	if by_slot.has("body"):
+		var body: Dictionary = _dictionary_or_empty(by_slot.get("body", {}))
+		if str(body.get("presentation_mode", "")) != "replace_region" or not _array_or_empty(body.get("hide_base_regions", [])).has("body"):
+			errors.append("player body equipment should expose replace region presentation")
+		if str(body.get("socket_id", "")) != "socket_torso" or str(body.get("body_region", "")) != "body":
+			errors.append("player body equipment should expose torso socket/body region")
 
 
 func _validate_legacy_actor_appearance_fill(builder: RefCounted, runtime_snapshot: Dictionary) -> Array[String]:

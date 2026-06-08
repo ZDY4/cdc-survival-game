@@ -1194,9 +1194,16 @@ func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
 		model_root.set_meta("item_id", str(visual_data.get("item_id", "")))
 		model_root.set_meta("model_asset", model_asset)
 		model_root.set_meta("attach_target", str(visual_data.get("attach_target", slot_id)))
+		model_root.set_meta("socket_id", str(visual_data.get("socket_id", "")))
+		model_root.set_meta("body_region", str(visual_data.get("body_region", "")))
 		model_root.set_meta("presentation_mode", str(visual_data.get("presentation_mode", "")))
+		model_root.set_meta("hide_base_regions", _array_or_empty(visual_data.get("hide_base_regions", [])).duplicate(true))
+		model_root.set_meta("weapon_visual_kind", str(visual_data.get("weapon_visual_kind", "")))
+		model_root.set_meta("reload_visual_state", str(visual_data.get("reload_visual_state", "")))
+		model_root.set_meta("muzzle_offset", _vector3_or_default(visual_data.get("muzzle_offset", Vector3.ZERO), Vector3.ZERO))
 		_apply_equipment_model_transform(model_root as Node3D, visual_data)
 		parent.add_child(model_root)
+		_add_equipment_muzzle_marker(model_root as Node3D, visual_data)
 		_add_visual_collision_proxy(model_root as Node3D, model_asset)
 
 
@@ -1205,12 +1212,40 @@ func _apply_equipment_model_transform(model_root: Node3D, visual_data: Dictionar
 		return
 	var slot_id := str(visual_data.get("slot_id", ""))
 	var attach_target := str(visual_data.get("attach_target", slot_id))
-	model_root.position = _equipment_model_offset(attach_target, slot_id)
-	model_root.rotation_degrees = _equipment_model_rotation(attach_target, slot_id)
-	model_root.scale = Vector3.ONE * _equipment_model_scale(attach_target, slot_id)
+	model_root.position = _vector3_or_default(visual_data.get("attach_offset", null), _equipment_model_offset(attach_target, slot_id))
+	model_root.rotation_degrees = _vector3_or_default(visual_data.get("attach_rotation_degrees", null), _equipment_model_rotation(attach_target, slot_id))
+	model_root.scale = _vector3_or_default(visual_data.get("attach_scale", null), Vector3.ONE * _equipment_model_scale(attach_target, slot_id))
 	model_root.set_meta("attach_offset", model_root.position)
 	model_root.set_meta("attach_rotation_degrees", model_root.rotation_degrees)
 	model_root.set_meta("attach_scale", model_root.scale)
+
+
+func _add_equipment_muzzle_marker(model_root: Node3D, visual_data: Dictionary) -> void:
+	if model_root == null:
+		return
+	if str(visual_data.get("weapon_visual_kind", "")) != "ranged_weapon":
+		return
+	var muzzle_offset := _vector3_or_default(visual_data.get("muzzle_offset", Vector3.ZERO), Vector3.ZERO)
+	if muzzle_offset == Vector3.ZERO:
+		return
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.045
+	mesh.height = 0.09
+	mesh.radial_segments = 12
+	mesh.rings = 6
+	var marker := MeshInstance3D.new()
+	marker.name = "EquipmentMuzzleMarker"
+	marker.mesh = mesh
+	marker.material_override = combat_critical_material if str(visual_data.get("reload_visual_state", "")) == "loaded" else combat_blocked_material
+	marker.position = muzzle_offset
+	marker.set_meta("slot_id", str(visual_data.get("slot_id", "")))
+	marker.set_meta("item_id", str(visual_data.get("item_id", "")))
+	marker.set_meta("muzzle_offset", muzzle_offset)
+	marker.set_meta("reload_visual_state", str(visual_data.get("reload_visual_state", "")))
+	marker.set_meta("loaded_ammo", int(visual_data.get("loaded_ammo", -1)))
+	marker.set_meta("max_ammo", int(visual_data.get("max_ammo", 0)))
+	marker.set_meta("ammo_type", str(visual_data.get("ammo_type", "")))
+	model_root.add_child(marker)
 
 
 func _equipment_model_offset(attach_target: String, slot_id: String = "") -> Vector3:
@@ -1392,6 +1427,20 @@ func _collect_visual_bounds(node: Node, parent_transform: Transform3D, state: Di
 		if str(child.name) == "GeneratedVisualCollisionProxy":
 			continue
 		_collect_visual_bounds(child, local_transform, state)
+
+
+func _vector3_or_default(value: Variant, fallback: Vector3) -> Vector3:
+	if value is Vector3:
+		return value
+	if value is Dictionary:
+		var data: Dictionary = _dictionary_or_empty(value)
+		if data.has("x") or data.has("y") or data.has("z"):
+			return Vector3(float(data.get("x", fallback.x)), float(data.get("y", fallback.y)), float(data.get("z", fallback.z)))
+	if value is Array:
+		var values: Array = _array_or_empty(value)
+		if values.size() >= 3:
+			return Vector3(float(values[0]), float(values[1]), float(values[2]))
+	return fallback
 
 
 func _add_pickable_box(parent: Node3D, size: Vector3, local_position: Vector3 = Vector3.ZERO) -> void:
