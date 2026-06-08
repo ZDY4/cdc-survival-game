@@ -403,7 +403,7 @@ func _expect_invalid_world_tile_asset_ref(errors: Array[String], registry: Conte
 		return
 	var prototype: Dictionary = prototypes[0].duplicate(true)
 	var prototype_source: Dictionary = prototype.get("source", {}).duplicate(true)
-	prototype_source["path"] = "world_tiles/missing_for_validator_smoke.gltf"
+	prototype_source["path"] = "builtin:world_tile:missing_for_validator_smoke"
 	prototype["source"] = prototype_source
 	prototypes[0] = prototype
 	data["prototypes"] = prototypes
