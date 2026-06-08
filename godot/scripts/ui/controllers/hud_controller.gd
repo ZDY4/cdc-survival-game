@@ -1272,7 +1272,7 @@ func _observe_tooltip(meta_key: String, meta_value: Variant, disabled: bool) -> 
 		"observe_mode":
 			state = "观察模式 %s" % ("开启" if bool(meta_value) else "关闭")
 	if disabled:
-		state = "%s | 暂不可切换" % state
+		state = "%s | %s" % [state, _reason_catalog.disabled_text_for("observe_control_unavailable")]
 	else:
 		match meta_key:
 			"observe_mode":

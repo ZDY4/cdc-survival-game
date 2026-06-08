@@ -1666,6 +1666,7 @@ func _assert_observe_play_button(errors: Array[String], game_root: Node, expecte
 		errors.append("%s: ObservePlayButton disabled expected %s" % [context, str(expected_disabled)])
 	if bool(button.get_meta("observe_playback", not expected_playing)) != expected_playing:
 		errors.append("%s: ObservePlayButton should expose playback metadata %s" % [context, str(expected_playing)])
+	_assert_observe_disabled_tooltip(errors, button, expected_disabled, context)
 
 
 func _assert_observe_speed_button(errors: Array[String], game_root: Node, expected_speed: String, expected_disabled: bool, context: String) -> void:
@@ -1679,6 +1680,16 @@ func _assert_observe_speed_button(errors: Array[String], game_root: Node, expect
 		errors.append("%s: ObserveSpeedButton disabled expected %s" % [context, str(expected_disabled)])
 	if str(button.get_meta("observe_speed", "")) != expected_speed:
 		errors.append("%s: ObserveSpeedButton should expose speed metadata %s" % [context, expected_speed])
+	_assert_observe_disabled_tooltip(errors, button, expected_disabled, context)
+
+
+func _assert_observe_disabled_tooltip(errors: Array[String], button: Button, expected_disabled: bool, context: String) -> void:
+	if not expected_disabled:
+		return
+	if str(button.get_meta("disabled_reason", "")) != "observe_control_unavailable":
+		errors.append("%s: disabled observe button should expose observe_control_unavailable metadata" % context)
+	if not str(button.tooltip_text).contains("观察控制暂不可用"):
+		errors.append("%s: disabled observe tooltip should use reason catalog text, got %s" % [context, button.tooltip_text])
 
 
 func _observe_auto_button(game_root: Node) -> Button:

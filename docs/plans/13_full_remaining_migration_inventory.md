@@ -339,7 +339,7 @@
 
 - 已有 hotbar 多组第一版：`Simulation` 持有 `hotbar_groups` / `active_hotbar_group` / `hotbar_group_labels`，旧 `hotbar` 字段继续代表当前组；`group_1` 到 `group_3` 可切换，当前组绑定/使用技能或物品，非当前组会独立保存；HUD 已提供组按钮并显示自定义组名，`Alt+1/2/3` 可走输入层切换快捷栏组，HUD tooltip 和 Skills 摘要显示当前组名，组名随存档 roundtrip，已纳入 `SkillsUI` / `UI` / `Save` smoke。待补更多组数配置和更完整快捷键冲突矩阵。
 - 已有 Skills 面板 hotbar 可用/冷却/资源不足不可用原因文本、按钮禁用和技能 `activation.ap_cost` / `activation.resource_costs` 展示与扣除第一版；HUD hotbar 槽位已显示 key、技能短名、cooldown 文本、slot tooltip、冷却禁用态和冷却遮罩，主动技能激活后会落到 actor active effects，并纳入 `SkillsUI` / `UI` smoke。待补多组 hotbar 的资源消耗汇总展示和组级状态 UI polish。
-- 观察模式 hotbar 表现第一版已迁移：HUD `ObserveHotbarDock` 展示 observe mode、playback、speed、auto tick 和当前观察楼层；Observe / Player 模式按钮提供 free observe 入口，Play / Speed 按钮在 observe mode 中会调用 `toggle_observe_playback` / `cycle_observe_speed`，Auto 按钮会调用现有 `toggle_auto_tick`；observe speed 会影响自动推进间隔，Space 在 observe mode 下切换播放；进入 observe mode 后普通 hotbar / 组按钮隐藏，player command 会被统一拒绝，并由 `UI` / `UIToggle` smoke 覆盖。待补完整快捷键冲突策略和视觉 polish。
+- 观察模式 hotbar 表现第一版已迁移：HUD `ObserveHotbarDock` 展示 observe mode、playback、speed、auto tick 和当前观察楼层；Observe / Player 模式按钮提供 free observe 入口，Play / Speed 按钮在 observe mode 中会调用 `toggle_observe_playback` / `cycle_observe_speed`，Auto 按钮会调用现有 `toggle_auto_tick`；observe speed 会影响自动推进间隔，Space 在 observe mode 下切换播放；进入 observe mode 后普通 hotbar / 组按钮隐藏，player command 会被统一拒绝；观察控制禁用 tooltip 已接入 `ReasonCatalog.disabled_text_for("observe_control_unavailable")`，并由 `UI` / `UIToggle` smoke 覆盖。待补完整快捷键冲突策略和视觉 polish。
 
 ## 10. 任务、对话和剧情动作
 
@@ -427,7 +427,7 @@
 
 - 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；combat HUD 当前回合、行动方、敌人数量、参与者数量、目标预览和命中 / 暴击 / 伤害预估第一版已纳入 `UI` / `PlayerInteraction` smoke；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能、progression、任务推进和命令拒绝失败反馈，常见失败 reason 已映射为中文提示；toast / 过渡表现第一版已同源派生 `feedback_toasts`，按 info/success/warning/error 分类，带 enter/hold/fade phase、alpha、ttl 和非阻塞 `FeedbackToastLayer` metadata，已纳入 `UI` / `Progression` / `Quest` smoke。待补更完整状态行、战斗布局和反馈 toast/feed 视觉 polish。
 - 部分迁移 interaction menu：右键位置、目标名称、主动作/可用/禁用摘要、可用选项、禁用选项、禁用原因 tooltip/meta、按钮 hover 详情、Esc / 外部点击关闭和 `ui_layer_stack_snapshot()` context menu 层级诊断第一版已有；待补更完整视觉布局和上下文菜单 polish。
-- 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、物品数量、slot tooltip、物品使用效果摘要、AP / resource cost、AP / resource / item count insufficient、cooldown 文本/禁用态和冷却遮罩；观察模式 dock 已显示模式、播放、速度、自动推进和楼层状态，Observe / Player、Play、Speed、Auto 按钮已有第一版控制，observe mode 下普通 hotbar 会隐藏。待补更完整 slot tooltip、完整冲突策略和视觉 polish。
+- 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、物品数量、slot tooltip、物品使用效果摘要、AP / resource cost、AP / resource / item count insufficient、cooldown 文本/禁用态和冷却遮罩；观察模式 dock 已显示模式、播放、速度、自动推进和楼层状态，Observe / Player、Play、Speed、Auto 按钮已有第一版控制，observe mode 下普通 hotbar 会隐藏，禁用观察控制的 tooltip 会显示 catalog 文案。待补更完整 slot tooltip、完整冲突策略和视觉 polish。
 - 部分迁移 modal layer：背包丢弃确认弹窗、容器数量确认弹窗和地图 `overworld_prompt` 已接入 blocker 与 Esc；背包丢弃与容器数量弹窗 snapshot 已暴露数量上下限、有效性、错误文本、dialog 可见性、mouse_filter 和 blocker 诊断，并由 `InventoryUI` / `ContainerUI` smoke 覆盖；tooltip、context menu 和 drag preview 已接入统一 `ui_layer_stack_snapshot()` 诊断，tooltip 为非阻塞提示层且暴露屏幕坐标、source rect、viewport、lifecycle 和 delay policy，drag preview 在拖拽期间作为阻塞世界点击的表现层并暴露 preview screen position、viewport、estimated size、lifecycle 和 threshold policy；待补更统一的 modal layer 表现。
 - 待补 tooltip / context menu / drag preview 的真实视觉 polish；stage/settings/dialogue/trade/container 基础面板根节点与主容器防点击穿透已有第一版。
 
