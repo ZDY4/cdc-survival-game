@@ -90,6 +90,7 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 	var required_tools: Array[Dictionary] = _required_tools_snapshot(_array_or_empty(recipe.get("required_tools", [])), recipe, inventory, equipment, tool_durability, crafting_context)
 	var required_station := str(recipe.get("required_station", "none"))
 	var station_check: Dictionary = _station_check(player, required_station, crafting_context)
+	var station_permission_preview: Dictionary = _station_permission_preview(required_station, station_check)
 	var unlock_check: Dictionary = _unlock_check(recipe, inventory, progression, crafted_recipes, completed_quests, world_flags)
 	var availability: Dictionary = _availability(recipe, inventory, equipment, progression, materials, required_tools, station_check, unlock_check, crafting_context)
 	var max_craft_count: int = _max_craft_count(materials, required_tools, bool(availability.get("can_craft", false)))
@@ -110,6 +111,7 @@ func _recipe_snapshot(recipe_id: String, player: Dictionary, inventory: Dictiona
 		"required_tools": required_tools,
 		"required_station": required_station,
 		"available_station": _dictionary_or_empty(station_check.get("station", {})).duplicate(true),
+		"station_permission_preview": station_permission_preview,
 		"skill_requirements": _dictionary_or_empty(recipe.get("skill_requirements", {})).duplicate(true),
 		"craft_time": float(recipe.get("craft_time", 0.0)),
 		"experience_reward": int(recipe.get("experience_reward", 0)),
@@ -392,6 +394,89 @@ func _station_snapshot(player: Dictionary, crafting_context: Dictionary) -> Dict
 		"count": stations.size(),
 		"in_range_count": in_range.size(),
 	}
+
+
+func _station_permission_preview(required_station: String, station_check: Dictionary) -> Dictionary:
+	var station_id := required_station.strip_edges()
+	if station_id in ["", "none"]:
+		return {
+			"active": false,
+			"required_station": station_id,
+			"state": "none",
+			"text": "无需工作台",
+		}
+	var station: Dictionary = _dictionary_or_empty(station_check.get("station", {}))
+	var permission: Dictionary = _dictionary_or_empty(station.get("permission", station_check))
+	var reason := str(permission.get("reason", station_check.get("reason", ""))).strip_edges()
+	var success := bool(permission.get("success", station_check.get("success", false)))
+	var display_name := str(station.get("display_name", station_id))
+	var distance := int(station.get("distance", -1))
+	var station_range := int(station.get("range", 0))
+	var state := "available" if success else ("missing_station" if reason == "missing_station" or station.is_empty() else "blocked")
+	var blockers := _station_permission_blockers(permission)
+	return {
+		"active": true,
+		"required_station": station_id,
+		"station_id": str(station.get("station_id", station_id)),
+		"display_name": display_name,
+		"distance": distance,
+		"range": station_range,
+		"in_range": bool(station.get("in_range", false)),
+		"success": success,
+		"available": success,
+		"state": state,
+		"reason": reason,
+		"blockers": blockers,
+		"text": _station_permission_preview_text(display_name, distance, station_range, success, reason, blockers),
+	}
+
+
+func _station_permission_blockers(permission: Dictionary) -> Array[Dictionary]:
+	var blockers: Array[Dictionary] = []
+	var reason := str(permission.get("reason", "")).strip_edges()
+	match reason:
+		"station_world_flag_missing":
+			for flag_id in _string_array(permission.get("required_world_flags", [])):
+				blockers.append({"kind": "world_flag", "id": flag_id, "state": "missing"})
+		"station_world_flag_blocked":
+			for flag_id in _string_array(permission.get("blocked_world_flags", [])):
+				blockers.append({"kind": "world_flag", "id": flag_id, "state": "blocked"})
+		"station_item_missing":
+			for item_id in _string_array(permission.get("required_item_ids", [])):
+				blockers.append({"kind": "item", "id": item_id, "state": "missing"})
+		"station_tool_missing":
+			for item_id in _string_array(permission.get("required_tool_ids", [])):
+				blockers.append({"kind": "tool", "id": item_id, "state": "missing"})
+	if blockers.is_empty():
+		var fallback := str(permission.get("flag_id", permission.get("item_id", ""))).strip_edges()
+		if not fallback.is_empty():
+			blockers.append({"kind": "unknown", "id": fallback, "state": "missing"})
+	return blockers
+
+
+func _station_permission_preview_text(display_name: String, distance: int, station_range: int, success: bool, reason: String, blockers: Array[Dictionary]) -> String:
+	var distance_text := "距离 %d/%d" % [distance, station_range] if distance >= 0 else "距离未知"
+	if success:
+		return "工作台权限: %s 可用 | %s" % [display_name, distance_text]
+	var blocker_ids: Array[String] = []
+	for blocker in blockers:
+		var blocker_data: Dictionary = _dictionary_or_empty(blocker)
+		var blocker_id := str(blocker_data.get("id", "")).strip_edges()
+		if not blocker_id.is_empty():
+			blocker_ids.append(blocker_id)
+	var detail := ", ".join(blocker_ids)
+	match reason:
+		"missing_station":
+			return "工作台权限: 缺少 %s" % display_name
+		"station_world_flag_missing":
+			return "工作台权限: %s 未启用 %s | %s" % [display_name, detail, distance_text]
+		"station_world_flag_blocked":
+			return "工作台权限: %s 被封锁 %s | %s" % [display_name, detail, distance_text]
+		"station_item_missing":
+			return "工作台权限: %s 缺钥匙 %s | %s" % [display_name, detail, distance_text]
+		"station_tool_missing":
+			return "工作台权限: %s 缺工具 %s | %s" % [display_name, detail, distance_text]
+	return "工作台权限: %s %s | %s" % [display_name, reason, distance_text]
 
 
 func _station_permission(player: Dictionary, station: Dictionary, crafting_context: Dictionary) -> Dictionary:

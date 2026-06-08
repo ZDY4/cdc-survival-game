@@ -300,6 +300,9 @@ func _apply_detail(recipe: Dictionary) -> void:
 	])
 	lines.append("材料: %s" % _materials_text(recipe.get("materials", []), selected_count))
 	lines.append("要求: %s" % _requirements_text(recipe))
+	var station_preview: Dictionary = _station_permission_preview(recipe)
+	if bool(station_preview.get("active", false)):
+		lines.append(str(station_preview.get("text", "")))
 	lines.append("时间 %.1fs | XP %d | 最大 %d | %s" % [
 		float(recipe.get("craft_time", 0.0)),
 		int(recipe.get("experience_reward", 0)),
@@ -1006,6 +1009,10 @@ func _station_permission_text(recipe: Dictionary) -> String:
 	return reason
 
 
+func _station_permission_preview(recipe: Dictionary) -> Dictionary:
+	return _dictionary_or_empty(recipe.get("station_permission_preview", {})).duplicate(true)
+
+
 func _station_reason_detail(recipe: Dictionary) -> String:
 	var station: Dictionary = _dictionary_or_empty(recipe.get("available_station", {}))
 	var permission: Dictionary = _dictionary_or_empty(station.get("permission", station))
@@ -1079,6 +1086,7 @@ func craft_queue_snapshot() -> Dictionary:
 	var pending := _pending_crafting_snapshot()
 	var latest_result: Dictionary = _dictionary_or_empty(_last_snapshot.get("crafting_queue_result", {})).duplicate(true)
 	var pending_result: Dictionary = _pending_crafting_result_snapshot()
+	var station_permission_preview: Dictionary = _station_permission_preview(_recipe_by_id(_last_snapshot.get("recipes", []), _selected_recipe_id))
 	return {
 		"active": not queued_entries.is_empty() or bool(pending.get("active", false)),
 		"entry_count": queued_entries.size(),
@@ -1093,6 +1101,7 @@ func craft_queue_snapshot() -> Dictionary:
 		"pending_summary": str(_pending_label.text) if _pending_label != null else "",
 		"latest_result": latest_result,
 		"pending_result": pending_result,
+		"station_permission_preview": station_permission_preview,
 		"queue_feedback": str(_queue_feedback_label.text) if _queue_feedback_label != null else "",
 		"feedback": str(_feedback_label.text) if _feedback_label != null else "",
 	}

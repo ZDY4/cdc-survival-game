@@ -468,6 +468,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("crafting UI should show station permission missing world flag")
 	if not _detail_text(game_root).contains("未启用 crafting_ui_station_permission_smoke"):
 		errors.append("crafting detail should preview station permission missing world flag")
+	_assert_station_permission_preview(errors, game_root, "recipe_knife_basic", false, "station_world_flag_missing", "crafting_ui_station_permission_smoke", "station permission blocked")
 	game_root.simulation.world_flags["crafting_ui_station_permission_smoke"] = true
 	game_root.refresh_crafting_panel()
 	await process_frame
@@ -475,6 +476,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("crafting UI should clear station permission reason after world flag")
 	if _detail_text(game_root).contains("未启用 crafting_ui_station_permission_smoke"):
 		errors.append("crafting detail should clear station permission reason after world flag")
+	_assert_station_permission_preview(errors, game_root, "recipe_knife_basic", true, "", "", "station permission restored")
 	game_root.simulation.world_flags.erase("crafting_ui_station_permission_smoke")
 	map_data["crafting_stations"] = original_stations
 	game_root.world_result["map"] = map_data
@@ -930,6 +932,44 @@ func _assert_pending_crafting_cancel_result(errors: Array[String], game_root: No
 	var summary := str(result.get("summary", ""))
 	if not summary.contains("基础绷带 x50") or not summary.contains("AP"):
 		errors.append("%s: pending cancel summary should include recipe and AP: %s" % [context, result])
+
+
+func _assert_station_permission_preview(errors: Array[String], game_root: Node, recipe_id: String, expected_success: bool, expected_reason: String, expected_blocker_id: String, context: String) -> void:
+	var recipe: Dictionary = _recipe_snapshot(game_root, recipe_id)
+	var preview: Dictionary = _dictionary_or_empty(recipe.get("station_permission_preview", {}))
+	if preview.is_empty() or not bool(preview.get("active", false)):
+		errors.append("%s: recipe should expose station permission preview: %s" % [context, recipe])
+		return
+	if bool(preview.get("success", false)) != expected_success:
+		errors.append("%s: station permission success expected %s got %s" % [context, str(expected_success), preview])
+	if expected_reason.is_empty():
+		if not str(preview.get("reason", "")).is_empty():
+			errors.append("%s: restored station permission should clear reason: %s" % [context, preview])
+	else:
+		if str(preview.get("reason", "")) != expected_reason:
+			errors.append("%s: station permission reason expected %s got %s" % [context, expected_reason, preview])
+		if not str(preview.get("text", "")).contains(expected_blocker_id):
+			errors.append("%s: station permission text should include blocker: %s" % [context, preview])
+		var blockers: Array = _array_or_empty(preview.get("blockers", []))
+		var blocker_seen := false
+		for blocker in blockers:
+			var blocker_data: Dictionary = _dictionary_or_empty(blocker)
+			if str(blocker_data.get("id", "")) == expected_blocker_id:
+				blocker_seen = true
+		if not blocker_seen:
+			errors.append("%s: station permission blockers should include %s: %s" % [context, expected_blocker_id, preview])
+	if not game_root.crafting_panel.has_method("craft_queue_snapshot"):
+		errors.append("%s: crafting panel should expose craft_queue_snapshot for station preview" % context)
+		return
+	var panel_snapshot: Dictionary = _dictionary_or_empty(game_root.crafting_panel.craft_queue_snapshot())
+	var panel_preview: Dictionary = _dictionary_or_empty(panel_snapshot.get("station_permission_preview", {}))
+	if str(panel_preview.get("required_station", "")) != str(preview.get("required_station", "")):
+		errors.append("%s: panel station preview should mirror selected recipe: %s" % [context, panel_snapshot])
+	if bool(panel_preview.get("success", false)) != expected_success:
+		errors.append("%s: panel station preview success expected %s got %s" % [context, str(expected_success), panel_preview])
+	var detail := _detail_text(game_root)
+	if not detail.contains(str(preview.get("text", ""))):
+		errors.append("%s: detail text should include station permission preview: %s / %s" % [context, preview, detail])
 
 
 func _confirm_queue_button(game_root: Node) -> Button:
