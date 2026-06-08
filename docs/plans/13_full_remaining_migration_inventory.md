@@ -345,7 +345,7 @@
 
 ### 10.1 对话
 
-- 已有对话推进、交易入口和 dialogue rules variant 选择；对话选项 resolution preview 第一版已迁移到 `DialogueSnapshot`，会暴露 action/end/next-node 预览、runtime validation 标记，并由对话按钮 tooltip / meta 展示；`DialogueAction` / `DialogueUI` smoke 已覆盖 open_trade、unlock_location + start_quest、turn_in_quest 的 preview 与 actual resolution 一致性。待补条件化动作、失败回滚和更完整 UI polish。
+- 已有对话推进、交易入口和 dialogue rules variant 选择；对话选项 resolution preview 第一版已迁移到 `DialogueSnapshot`，会暴露 action/end/next-node 预览、runtime validation 标记，并由对话按钮 tooltip / meta 展示；`turn_in_quest` 预览已补交付需求、任务名、物品当前 / 需求数量、对话交付对象和阻塞 reason；`DialogueAction` / `DialogueUI` smoke 已覆盖 open_trade、unlock_location + start_quest、turn_in_quest 的 preview 与 actual resolution 一致性。待补条件化动作、失败回滚和更完整 UI polish。
 - fallback 对话和缺文件回退第一版已迁移：缺失 dialogue 资源会显示可继续的 fallback 文案，保留 dialogue id 诊断，Space / Enter 可结束并发出 `missing_dialogue` end type；open_trade 的 NPC action key / 显式 `shop_id` 第一版已迁移，脚本化对话可不依赖当前选中 NPC 直接打开指定商店，并由 `DialogueAction` smoke 覆盖。待补更完整目标名解析和对话资源目录规则。
 - 对话选项键盘 `1-9`、Enter/Space 推进、选项节点必须显式选择、无选项节点自动下一步第一版已迁移并由 `DialogueUI` smoke 覆盖；待补菜单内快捷键冲突和更完整诊断日志。
 - 对话动作第一版已迁移：action node 可启动任务、手动交付任务并发放奖励/扣交付物品、打开交易、解锁地点、设置 world flags、调整或设置 relationship score、单独给物品和给奖励包；动作结果会回传到 `emitted_actions`，world flag / relationship / item / reward 变更走 `Simulation` 统一事件并由 `DialogueAction` smoke 覆盖。待补失败回滚、条件化动作、动作诊断日志和 UI 反馈 polish。
@@ -354,7 +354,7 @@
 ### 10.2 任务
 
 - 已有 collect / kill / manual turn-in 第一版；待补完整 objective 类型、失败/替代分支、可追踪目标。
-- dialogue turn-in 失败语义第一版已迁移：对话 action 失败会停止推进，不进入成功确认台词，返回 `dialogue_action_failed` 并发出诊断事件；手动交付物品不足会保留任务 active、不扣物品、不完成任务，已由 `DialogueAction` smoke 覆盖。待补对话中交付提示、奖励失败回滚和更完整失败 UI。
+- dialogue turn-in 失败语义第一版已迁移：对话 action 失败会停止推进，不进入成功确认台词，返回 `dialogue_action_failed` 并发出诊断事件；手动交付物品不足会保留任务 active、不扣物品、不完成任务；对话选项 tooltip / meta 已显示交付提示，缺急救包时显示 `not_enough_items` 和 `急救包 0/1`，满足时显示 `急救包 1/1`，已由 `DialogueAction` smoke 覆盖。待补奖励失败回滚和更完整失败 UI。
 - 任务链奖励状态第一版已迁移：完成任务后可通过 reward 解锁地点、设置 world flags 和发放金钱；后续任务仍按 prerequisites 自动启动，prerequisites 兼容旧字符串任务 id，并支持结构化 completed quest / world flag / item count / relationship score 条件；奖励 payload 会暴露 money / unlocked_locations / world_flags，并由 `Quest` smoke 覆盖。待补互斥任务、替代分支和更复杂任务链条件。
 - Journal 详情第一版已迁移：目标节点、任务描述、目标类型/需求、当前进度、可交付状态、奖励详情、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付后的完成/奖励反馈和手动交付失败历史第一版已纳入 `JournalUI` / `UI` smoke；目标进度列表第一版已从 quest flow 中所有 objective 节点派生并在列表/详情展示，已纳入 `JournalUI` smoke。待补多分支/替代目标状态和更完整失败反馈。
 - 地图目标 marker 第一版已迁移：追踪 collect 目标会在当前地图标出匹配 pickup 或含目标物品的容器，追踪 kill 目标会标出当前地图匹配 enemy_type 的 actor；找不到目标时保留 unresolved marker 和 reason；地图面板 canvas 第一版会绘制地图边界、网格、入口点、可定位任务 marker 和 overworld inset，并支持缩放/平移按钮，已纳入 `JournalUI` / `UIToggle` smoke。待补跨地图显式路线、目标优先级、完成/失败反馈和更完整图形 polish。

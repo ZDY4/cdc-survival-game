@@ -112,6 +112,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_preview_action_sequence(errors, failed_turn_in_preview, ["turn_in_quest"], "", false, "doctor failed turn-in option")
 	if not _preview_first_action_requires_runtime_validation(failed_turn_in_preview):
 		errors.append("doctor failed turn-in preview should flag runtime validation")
+	var failed_turn_in_requirement_preview := _turn_in_preview_from_resolution(failed_turn_in_preview)
+	if bool(failed_turn_in_requirement_preview.get("ready", true)) or str(failed_turn_in_requirement_preview.get("reason", "")) != "not_enough_items":
+		errors.append("doctor failed turn-in preview should expose missing item reason: %s" % failed_turn_in_requirement_preview)
+	if not str(failed_turn_in_requirement_preview.get("summary", "")).contains("急救包 0/1"):
+		errors.append("doctor failed turn-in preview should expose item count: %s" % failed_turn_in_requirement_preview)
+	var failed_turn_in_button: Button = _dialogue_option_button(game_root, 1)
+	if failed_turn_in_button == null:
+		errors.append("doctor failed turn-in should expose option button")
+	elif bool(failed_turn_in_button.get_meta("preview_turn_in_ready", true)) or str(failed_turn_in_button.get_meta("preview_turn_in_reason", "")) != "not_enough_items" or not str(failed_turn_in_button.tooltip_text).contains("急救包 0/1"):
+		errors.append("doctor failed turn-in button should expose missing item preview")
 	var failed_turn_in_result: Dictionary = game_root.choose_dialogue_option("turn_in_action")
 	if bool(failed_turn_in_result.get("success", false)):
 		errors.append("doctor turn-in without item should fail")
@@ -144,6 +154,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_dialogue_panel()
 	var turn_in_preview: Dictionary = _dialogue_option_preview(game_root, "turn_in_action")
 	_expect_preview_action_sequence(errors, turn_in_preview, ["turn_in_quest"], "", false, "doctor turn-in option")
+	var ready_turn_in_requirement_preview := _turn_in_preview_from_resolution(turn_in_preview)
+	if not bool(ready_turn_in_requirement_preview.get("ready", false)) or not str(ready_turn_in_requirement_preview.get("reason", "")).is_empty():
+		errors.append("doctor turn-in preview should be ready with medkit: %s" % ready_turn_in_requirement_preview)
+	if not str(ready_turn_in_requirement_preview.get("summary", "")).contains("急救包 1/1"):
+		errors.append("doctor turn-in preview should expose ready item count: %s" % ready_turn_in_requirement_preview)
+	var ready_turn_in_button: Button = _dialogue_option_button(game_root, 1)
+	if ready_turn_in_button == null:
+		errors.append("doctor ready turn-in should expose option button")
+	elif not bool(ready_turn_in_button.get_meta("preview_turn_in_ready", false)) or not str(ready_turn_in_button.get_meta("preview_turn_in_summary", "")).contains("急救包 1/1") or not str(ready_turn_in_button.tooltip_text).contains("急救包 1/1"):
+		errors.append("doctor ready turn-in button should expose ready item preview")
 	var turn_in_result: Dictionary = game_root.choose_dialogue_option("turn_in_action")
 	if not bool(turn_in_result.get("success", false)):
 		errors.append("doctor turn-in option failed: %s" % turn_in_result.get("reason", "unknown"))
@@ -213,6 +233,15 @@ func _preview_first_action_requires_runtime_validation(preview: Dictionary) -> b
 	if actions.is_empty():
 		return false
 	return bool(_dictionary_or_empty(actions[0]).get("requires_runtime_validation", false))
+
+
+func _turn_in_preview_from_resolution(preview: Dictionary) -> Dictionary:
+	for action in _array_or_empty(preview.get("action_previews", [])):
+		var action_data := _dictionary_or_empty(action)
+		var turn_in_preview := _dictionary_or_empty(action_data.get("turn_in_preview", {}))
+		if not turn_in_preview.is_empty():
+			return turn_in_preview
+	return {}
 
 
 func _execute_primary_and_complete(game_root: Node, max_waits: int = 16) -> Dictionary:
@@ -308,6 +337,10 @@ func _dialogue_text(game_root: Node) -> String:
 	if label == null:
 		return ""
 	return label.text
+
+
+func _dialogue_option_button(game_root: Node, index: int) -> Button:
+	return game_root.dialogue_panel.find_child("DialogueOption_%d" % index, true, false) as Button
 
 
 func _expect_scripted_state_actions(game_root: Node) -> Array[String]:

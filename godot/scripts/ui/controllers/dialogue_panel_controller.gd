@@ -203,6 +203,10 @@ func _option_button(option_index: int, option: Dictionary) -> Button:
 	button.set_meta("preview_will_finish", bool(preview.get("will_finish", false)))
 	button.set_meta("preview_action_count", int(preview.get("action_count", _array_or_empty(option.get("action_previews", [])).size())))
 	button.set_meta("preview_action_types", ",".join(_string_array(_array_or_empty(option.get("action_types_preview", [])))))
+	var turn_in_preview := _first_turn_in_preview(preview)
+	button.set_meta("preview_turn_in_ready", bool(turn_in_preview.get("ready", true)))
+	button.set_meta("preview_turn_in_reason", str(turn_in_preview.get("reason", "")))
+	button.set_meta("preview_turn_in_summary", str(turn_in_preview.get("summary", "")))
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("choose_dialogue_option"):
@@ -216,6 +220,12 @@ func _option_tooltip(option_index: int, option: Dictionary, preview: Dictionary)
 	var action_types := _string_array(_array_or_empty(option.get("action_types_preview", [])))
 	if not action_types.is_empty():
 		parts.append("actions: %s" % ", ".join(action_types))
+	var turn_in_preview := _first_turn_in_preview(preview)
+	var turn_in_summary := str(turn_in_preview.get("summary", ""))
+	if not turn_in_summary.is_empty():
+		parts.append("交付: %s" % turn_in_summary)
+		if not bool(turn_in_preview.get("ready", true)):
+			parts.append("交付限制: %s" % str(turn_in_preview.get("reason", "")))
 	if bool(preview.get("will_finish", false)):
 		parts.append("end: %s" % str(preview.get("end_type", "leave")))
 	else:
@@ -226,6 +236,15 @@ func _option_tooltip(option_index: int, option: Dictionary, preview: Dictionary)
 	if not bool(preview.get("ok", true)):
 		parts.append("preview reason: %s" % str(preview.get("reason", "")))
 	return " | ".join(parts)
+
+
+func _first_turn_in_preview(preview: Dictionary) -> Dictionary:
+	for action in _array_or_empty(preview.get("action_previews", [])):
+		var action_data := _dictionary_or_empty(action)
+		var turn_in_preview := _dictionary_or_empty(action_data.get("turn_in_preview", {}))
+		if not turn_in_preview.is_empty():
+			return turn_in_preview
+	return {}
 
 
 func _string_array(values: Array) -> Array[String]:

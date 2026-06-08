@@ -49,7 +49,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"text": current_node.get("text", ""),
 		"portrait": current_node.get("portrait", ""),
 		"portrait_asset": AssetPathResolver.resolve_media_asset(str(current_node.get("portrait", "")), "portrait"),
-		"options": _options_from_node(choice_node, node_map),
+		"options": _options_from_node(choice_node, node_map, runtime_snapshot, player),
 	}
 
 
@@ -88,14 +88,14 @@ func _current_node(player: Dictionary, start_node: Dictionary, node_map: Diction
 	return start_node
 
 
-func _options_from_node(node: Dictionary, node_map: Dictionary) -> Array[Dictionary]:
+func _options_from_node(node: Dictionary, node_map: Dictionary, runtime_snapshot: Dictionary, player: Dictionary) -> Array[Dictionary]:
 	if node.get("type", "") != "choice":
 		return []
 	var output: Array[Dictionary] = []
 	for option in node.get("options", []):
 		var option_data: Dictionary = _dictionary_or_empty(option)
 		var next_node_id := str(option_data.get("next", ""))
-		var resolution_preview := _resolution_preview(next_node_id, node_map)
+		var resolution_preview := _resolution_preview(next_node_id, node_map, runtime_snapshot, player)
 		output.append({
 			"id": str(option_data.get("id", "")),
 			"text": str(option_data.get("text", "")),
@@ -111,7 +111,7 @@ func _options_from_node(node: Dictionary, node_map: Dictionary) -> Array[Diction
 	return output
 
 
-func _resolution_preview(node_id: String, node_map: Dictionary) -> Dictionary:
+func _resolution_preview(node_id: String, node_map: Dictionary, runtime_snapshot: Dictionary, player: Dictionary) -> Dictionary:
 	var action_previews: Array[Dictionary] = []
 	var action_types: Array[String] = []
 	var visited: Dictionary = {}
@@ -129,7 +129,7 @@ func _resolution_preview(node_id: String, node_map: Dictionary) -> Dictionary:
 		match node_type:
 			"action":
 				for action in _array_or_empty(current_node.get("actions", [])):
-					var action_preview := _action_preview(_dictionary_or_empty(action), current_node_id)
+					var action_preview := _action_preview(_dictionary_or_empty(action), current_node_id, runtime_snapshot, player)
 					action_previews.append(action_preview)
 					var action_type := str(action_preview.get("type", ""))
 					if not action_type.is_empty():
@@ -171,7 +171,7 @@ func _resolution_failure(reason: String, start_node_id: String, node_id: String,
 	}
 
 
-func _action_preview(action: Dictionary, node_id: String) -> Dictionary:
+func _action_preview(action: Dictionary, node_id: String, runtime_snapshot: Dictionary, player: Dictionary) -> Dictionary:
 	var action_type := str(action.get("type", action.get("action_type", "")))
 	var preview := {
 		"type": action_type,
@@ -181,6 +181,8 @@ func _action_preview(action: Dictionary, node_id: String) -> Dictionary:
 	match action_type:
 		"start_quest", "turn_in_quest":
 			preview["quest_id"] = str(action.get("quest_id", action.get("questId", "")))
+			if action_type == "turn_in_quest":
+				preview["turn_in_preview"] = _turn_in_quest_preview(str(preview.get("quest_id", "")), runtime_snapshot, player)
 		"open_trade":
 			preview["shop_id"] = str(action.get("shop_id", action.get("shopId", action.get("action_key", action.get("actionKey", "")))))
 		"unlock_location":
@@ -203,6 +205,179 @@ func _action_preview(action: Dictionary, node_id: String) -> Dictionary:
 			preview["target_definition_id"] = str(action.get("target_definition_id", action.get("targetDefinitionId", "")))
 			preview["delta"] = float(action.get("delta", action.get("amount", 0.0)))
 	return preview
+
+
+func _turn_in_quest_preview(quest_id: String, runtime_snapshot: Dictionary, player: Dictionary) -> Dictionary:
+	var active_state: Dictionary = _active_quest_state(runtime_snapshot, quest_id)
+	var record: Dictionary = _dictionary_or_empty(registry.get_library("quests").get(quest_id, {}))
+	var quest_data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+	var title: String = str(quest_data.get("title", quest_id))
+	if quest_id.is_empty() or quest_data.is_empty():
+		return _turn_in_preview_result(quest_id, title, false, "unknown_quest", [], [], "", 0, 1)
+	if active_state.is_empty():
+		return _turn_in_preview_result(quest_id, title, false, "quest_not_active", [], [], "", 0, 1)
+	var objective: Dictionary = _quest_objective(quest_data, str(active_state.get("current_node_id", "")))
+	if objective.is_empty() or not bool(objective.get("manual_turn_in", false)):
+		return _turn_in_preview_result(quest_id, title, false, "quest_not_waiting_for_turn_in", [], [], "", 0, 1)
+	var objective_id: String = str(objective.get("id", ""))
+	var completed: Dictionary = _dictionary_or_empty(active_state.get("completed_objectives", {}))
+	var target: int = max(1, int(objective.get("count", 1)))
+	var current: int = int(completed.get(objective_id, 0)) if not objective_id.is_empty() else 0
+	var item_id: String = _normalize_content_id(objective.get("item_id", ""))
+	var item_name: String = _item_name(item_id)
+	var inventory: Dictionary = _dictionary_or_empty(player.get("inventory", {}))
+	var inventory_count: int = int(inventory.get(item_id, 0)) if not item_id.is_empty() else 0
+	var requirements: Array[Dictionary] = []
+	var missing: Array[Dictionary] = []
+	if not item_id.is_empty():
+		var item_requirement: Dictionary = {
+			"kind": "item",
+			"item_id": item_id,
+			"item_name": item_name,
+			"required": target,
+			"current": inventory_count,
+			"ready": inventory_count >= target,
+			"text": "%s %d/%d" % [item_name if not item_name.is_empty() else item_id, inventory_count, target],
+		}
+		requirements.append(item_requirement)
+		if not bool(item_requirement.get("ready", false)):
+			missing.append(item_requirement)
+	var turn_in_info: Dictionary = _turn_in_info(quest_data, objective)
+	if bool(turn_in_info.get("requires_dialogue", false)):
+		requirements.append({
+			"kind": "dialogue",
+			"target_definition_id": str(turn_in_info.get("target_definition_id", "")),
+			"target_name": str(turn_in_info.get("target_name", "")),
+			"dialogue_id": str(turn_in_info.get("dialogue_id", "")),
+			"dialogue_rule_id": str(turn_in_info.get("dialogue_rule_id", "")),
+			"ready": true,
+			"text": str(turn_in_info.get("summary", "")),
+		})
+	var reason: String = ""
+	if current < target:
+		reason = "quest_objective_incomplete"
+	elif not missing.is_empty():
+		reason = "not_enough_items"
+	var ready: bool = reason.is_empty()
+	return _turn_in_preview_result(quest_id, title, ready, reason, requirements, missing, str(turn_in_info.get("summary", "")), current, target)
+
+
+func _turn_in_preview_result(quest_id: String, title: String, ready: bool, reason: String, requirements: Array[Dictionary], missing: Array[Dictionary], turn_in_summary: String, current: int, target: int) -> Dictionary:
+	var parts: Array[String] = []
+	if not title.is_empty():
+		parts.append(title)
+	for requirement in requirements:
+		var text := str(_dictionary_or_empty(requirement).get("text", ""))
+		if not text.is_empty():
+			parts.append(text)
+	if not turn_in_summary.is_empty():
+		parts.append(turn_in_summary)
+	return {
+		"quest_id": quest_id,
+		"title": title,
+		"ready": ready,
+		"reason": reason,
+		"objective_current": current,
+		"objective_target": target,
+		"requirements": requirements,
+		"missing_requirements": missing,
+		"turn_in_summary": turn_in_summary,
+		"summary": " / ".join(parts),
+	}
+
+
+func _active_quest_state(runtime_snapshot: Dictionary, quest_id: String) -> Dictionary:
+	for state in _array_or_empty(runtime_snapshot.get("active_quests", [])):
+		var state_data: Dictionary = _dictionary_or_empty(state)
+		if str(state_data.get("quest_id", "")) == quest_id:
+			return state_data
+	return {}
+
+
+func _quest_objective(quest_data: Dictionary, current_node_id: String) -> Dictionary:
+	var nodes: Dictionary = _dictionary_or_empty(_dictionary_or_empty(quest_data.get("flow", {})).get("nodes", {}))
+	var current_node: Dictionary = _dictionary_or_empty(nodes.get(current_node_id, {}))
+	if str(current_node.get("type", "")) == "objective":
+		return current_node
+	for node_id in nodes.keys():
+		var node: Dictionary = _dictionary_or_empty(nodes[node_id])
+		if str(node.get("type", "")) == "objective":
+			return node
+	return {}
+
+
+func _turn_in_info(quest_data: Dictionary, objective: Dictionary) -> Dictionary:
+	var source: Dictionary = quest_data.duplicate(true)
+	for key in _dictionary_or_empty(quest_data.get("turn_in", {})).keys():
+		source[key] = _dictionary_or_empty(quest_data.get("turn_in", {})).get(key)
+	for key in objective.keys():
+		var key_text := str(key)
+		if key_text.begins_with("turn_in") or key_text.begins_with("turnIn") or key_text.contains("dialogue") or key_text.contains("target") or key_text == "npc":
+			source[key] = objective.get(key)
+	for key in _dictionary_or_empty(objective.get("turn_in", {})).keys():
+		source[key] = _dictionary_or_empty(objective.get("turn_in", {})).get(key)
+	var target_definition_id: String = _first_string(source, [
+		"turn_in_target_definition_id",
+		"turn_in_actor_definition_id",
+		"target_definition_id",
+		"targetDefinitionId",
+		"npc_definition_id",
+		"npc",
+	])
+	var dialogue_id: String = _first_string(source, ["turn_in_dialogue_id", "dialogue_id", "dialogue"])
+	var dialogue_rule_id: String = _first_string(source, ["turn_in_dialogue_rule_id", "dialogue_rule_id"])
+	var requires_dialogue: bool = bool(source.get("requires_dialogue_turn_in", source.get("turn_in_requires_dialogue", false)))
+	if not target_definition_id.is_empty() or not dialogue_id.is_empty() or not dialogue_rule_id.is_empty():
+		requires_dialogue = true
+	var target_name: String = _character_name(target_definition_id)
+	if target_name.is_empty():
+		target_name = target_definition_id
+	var parts: Array[String] = []
+	if requires_dialogue:
+		parts.append("对话交付")
+		if not target_name.is_empty():
+			parts.append("对象: %s" % target_name)
+		if not dialogue_id.is_empty():
+			parts.append("对话: %s" % dialogue_id)
+		if not dialogue_rule_id.is_empty():
+			parts.append("规则: %s" % dialogue_rule_id)
+	return {
+		"requires_dialogue": requires_dialogue,
+		"target_definition_id": target_definition_id,
+		"target_name": target_name,
+		"dialogue_id": dialogue_id,
+		"dialogue_rule_id": dialogue_rule_id,
+		"summary": " / ".join(parts),
+	}
+
+
+func _item_name(item_id: String) -> String:
+	var record: Dictionary = _dictionary_or_empty(registry.get_library("items").get(item_id, {}))
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+	return str(data.get("name", data.get("display_name", item_id)))
+
+
+func _character_name(definition_id: String) -> String:
+	var record: Dictionary = _dictionary_or_empty(registry.get_library("characters").get(definition_id, {}))
+	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+	var identity: Dictionary = _dictionary_or_empty(data.get("identity", {}))
+	return str(identity.get("name", data.get("name", data.get("display_name", definition_id))))
+
+
+func _first_string(source: Dictionary, keys: Array[String]) -> String:
+	for key in keys:
+		var value := str(source.get(key, ""))
+		if not value.is_empty():
+			return value
+	return ""
+
+
+func _normalize_content_id(value: Variant) -> String:
+	if typeof(value) == TYPE_FLOAT:
+		return str(int(value))
+	if typeof(value) == TYPE_INT:
+		return str(value)
+	return str(value)
 
 
 func _dialogue_target(runtime_snapshot: Dictionary, dialogue_id: String) -> Dictionary:
