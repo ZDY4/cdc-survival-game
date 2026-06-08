@@ -297,32 +297,53 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	damage_label.position = target_position + Vector3(0.0, 1.52, 0.0)
 	damage_label.set_meta("action_presenter_sequence", run_sequence)
 	_track_active_node(damage_label)
+	var on_hit_label: Label3D = _attack_on_hit_effect_label(attack) as Label3D
+	if on_hit_label != null:
+		on_hit_label.position = target_position + Vector3(0.0, 1.88, 0.0)
+		on_hit_label.set_meta("action_presenter_sequence", run_sequence)
+		_track_active_node(on_hit_label)
 	var layer := _presentation_layer(world_root)
 	layer.add_child(marker)
 	layer.add_child(damage_label)
+	if on_hit_label != null:
+		layer.add_child(on_hit_label)
 	var tween := host.create_tween()
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(marker, "scale", Vector3(0.72, 0.72, 0.72), float(ATTACK_PHASE_DURATIONS[0]))
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.16, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
+	if on_hit_label != null:
+		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.12, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[1]))
+	if on_hit_label != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[1]))
 	tween.tween_property(marker, "scale", Vector3(1.45, 1.45, 1.45), float(ATTACK_PHASE_DURATIONS[1]))
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.36, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
+	if on_hit_label != null:
+		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.30, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[2]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[2]))
+	if on_hit_label != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[2]))
 	tween.tween_property(marker, "scale", Vector3(0.35, 0.35, 0.35), float(ATTACK_PHASE_DURATIONS[2]))
 	tween.parallel().tween_property(damage_label, "modulate", Color(damage_label.modulate.r, damage_label.modulate.g, damage_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
-	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label)))
+	if on_hit_label != null:
+		tween.parallel().tween_property(on_hit_label, "modulate", Color(on_hit_label.modulate.r, on_hit_label.modulate.g, on_hit_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
+	var on_hit_label_ref: WeakRef = weakref(on_hit_label) if on_hit_label != null else null
+	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label), on_hit_label_ref))
 	var snapshot_data := _attack_public_snapshot(attack, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
 	snapshot_data["damage_label_path"] = str(damage_label.get_path())
 	snapshot_data["damage_label_text"] = str(damage_label.text)
+	if on_hit_label != null:
+		snapshot_data["on_hit_effect_label_path"] = str(on_hit_label.get_path())
+		snapshot_data["on_hit_effect_label_text"] = str(on_hit_label.text)
 	_record_latest(snapshot_data)
 
 
-func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null) -> void:
+func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null, on_hit_label_ref: WeakRef = null) -> void:
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
 		marker.set_meta("action_presenter_active", false)
@@ -332,6 +353,11 @@ func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef
 		if damage_label != null and not damage_label.is_queued_for_deletion():
 			damage_label.set_meta("action_presenter_active", false)
 			damage_label.queue_free()
+	if on_hit_label_ref != null:
+		var on_hit_label := on_hit_label_ref.get_ref() as Node
+		if on_hit_label != null and not on_hit_label.is_queued_for_deletion():
+			on_hit_label.set_meta("action_presenter_active", false)
+			on_hit_label.queue_free()
 	_prune_active_refs()
 	latest["active"] = active_count > 0
 	latest["active_count"] = active_count
@@ -347,6 +373,7 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 		"node_path": str(attack.get("node_path", "")),
 		"damage": float(attack.get("damage", 0.0)),
 		"damage_label_text": _attack_feedback_text(attack),
+		"on_hit_effect_label_text": _on_hit_effect_feedback_text(attack),
 		"hit_kind": str(attack.get("hit_kind", "")),
 		"critical": bool(attack.get("critical", false)),
 		"defeated": bool(attack.get("defeated", false)),
@@ -409,6 +436,38 @@ func _attack_damage_label(attack: Dictionary) -> Label3D:
 	return label
 
 
+func _attack_on_hit_effect_label(attack: Dictionary):
+	var effects: Array = _array_or_empty(attack.get("applied_on_hit_effects", []))
+	if effects.is_empty():
+		return null
+	var label := Label3D.new()
+	label.name = "WorldActionOnHitEffect"
+	label.text = _on_hit_effect_feedback_text(attack)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 14
+	label.modulate = _on_hit_effect_feedback_color(effects)
+	label.outline_size = 4
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
+	var font_result := UIThemeService.apply_label3d_font(label)
+	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	label.set_meta("action_presenter_active", true)
+	label.set_meta("action_presenter_kind", "attack_on_hit_effect")
+	label.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
+	label.set_meta("action_presenter_phase_count", ATTACK_PHASES.size())
+	label.set_meta("action_presenter_current_phase", ATTACK_PHASES[0])
+	label.set_meta("action_presenter_duration_sec", _duration_sum(ATTACK_PHASE_DURATIONS))
+	label.set_meta("actor_id", int(attack.get("actor_id", 0)))
+	label.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
+	_apply_attack_event_meta(label, attack)
+	label.set_meta("effect_ids", _on_hit_effect_ids(effects))
+	label.set_meta("effect_names", _on_hit_effect_names(effects))
+	label.set_meta("effect_categories", _on_hit_effect_categories(effects))
+	label.set_meta("applied_effect_count", effects.size())
+	label.set_meta("text", label.text)
+	return label
+
+
 func _apply_attack_event_meta(node: Node, attack: Dictionary) -> void:
 	node.set_meta("attack_delivery", str(attack.get("attack_delivery", "")))
 	node.set_meta("range", int(attack.get("range", 0)))
@@ -452,6 +511,64 @@ func _attack_feedback_text(attack: Dictionary) -> String:
 	if bool(attack.get("defeated", false)):
 		text = "%s KO" % text
 	return text
+
+
+func _on_hit_effect_feedback_text(attack: Dictionary) -> String:
+	var effects: Array = _array_or_empty(attack.get("applied_on_hit_effects", []))
+	if effects.is_empty():
+		return ""
+	var names := _on_hit_effect_names(effects)
+	if names.is_empty():
+		return "EFFECT x%d" % effects.size()
+	if names.size() == 1:
+		return "+%s" % str(names[0])
+	return "+%s +%d" % [str(names[0]), names.size() - 1]
+
+
+func _on_hit_effect_feedback_color(effects: Array) -> Color:
+	for effect in effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		var applied: Dictionary = _dictionary_or_empty(effect_data.get("effect", {}))
+		var category := str(applied.get("category", effect_data.get("category", "")))
+		if category in ["debuff", "negative", "harmful"]:
+			return Color(0.92, 0.22, 0.18, 0.94)
+		if category in ["buff", "positive", "beneficial"]:
+			return Color(0.36, 0.92, 0.42, 0.94)
+	return Color(0.74, 0.54, 1.0, 0.92)
+
+
+func _on_hit_effect_ids(effects: Array) -> Array[String]:
+	var output: Array[String] = []
+	for effect in effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		var effect_id := str(effect_data.get("effect_id", ""))
+		if effect_id.is_empty():
+			effect_id = str(_dictionary_or_empty(effect_data.get("effect", {})).get("base_effect_id", ""))
+		if not effect_id.is_empty():
+			output.append(effect_id)
+	return output
+
+
+func _on_hit_effect_names(effects: Array) -> Array[String]:
+	var output: Array[String] = []
+	for effect in effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		var applied: Dictionary = _dictionary_or_empty(effect_data.get("effect", {}))
+		var name := str(applied.get("name", effect_data.get("name", effect_data.get("effect_id", "")))).strip_edges()
+		if not name.is_empty():
+			output.append(name)
+	return output
+
+
+func _on_hit_effect_categories(effects: Array) -> Array[String]:
+	var output: Array[String] = []
+	for effect in effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		var applied: Dictionary = _dictionary_or_empty(effect_data.get("effect", {}))
+		var category := str(applied.get("category", effect_data.get("category", ""))).strip_edges()
+		if not category.is_empty():
+			output.append(category)
+	return output
 
 
 func _attack_feedback_color(hit_kind: String, critical: bool, defeated: bool) -> Color:

@@ -144,6 +144,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await _expect_hostile_attack_hover_preview(errors, game_root)
 	await _expect_corpse_world_interaction(errors, game_root)
 	await _expect_independent_combat_event_presenters(errors, game_root)
+	await _expect_on_hit_effect_attack_presenter(errors, game_root)
 	var move_camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if move_camera == null:
 		errors.append("missing runtime camera before mouse ground move")
@@ -1213,6 +1214,32 @@ func _expect_attack_marker_metadata(errors: Array[String], marker: Node, attack_
 	_expect_attack_event_metadata(errors, marker_snapshot, attack_result, context)
 
 
+func _expect_on_hit_effect_marker_metadata(errors: Array[String], label: Label3D, attack_result: Dictionary) -> void:
+	var effects: Array = _array_or_empty(attack_result.get("applied_on_hit_effects", []))
+	if str(label.get_meta("action_presenter_kind", "")) != "attack_on_hit_effect":
+		errors.append("on-hit effect label should expose attack_on_hit_effect kind")
+	if label.text.is_empty():
+		errors.append("on-hit effect label should not be empty")
+	if label.font == null or label.font.resource_path != WORLD_LABEL_FONT_PATH:
+		errors.append("on-hit effect label should use world Label3D font")
+	if str(label.get_meta("font_resource_path", "")) != WORLD_LABEL_FONT_PATH:
+		errors.append("on-hit effect label should expose font resource path")
+	if label.billboard != BaseMaterial3D.BILLBOARD_ENABLED or not label.no_depth_test:
+		errors.append("on-hit effect label should billboard and render above map meshes")
+	if int(label.get_meta("applied_effect_count", -1)) != effects.size():
+		errors.append("on-hit effect label should expose applied_effect_count")
+	if int(label.get_meta("applied_on_hit_effect_count", -1)) != effects.size():
+		errors.append("on-hit effect label should expose applied_on_hit_effect_count")
+	if not _array_or_empty(label.get_meta("effect_ids", [])).has("bleeding"):
+		errors.append("on-hit effect label should expose effect_ids")
+	if not _array_or_empty(label.get_meta("effect_names", [])).has("Bleeding"):
+		errors.append("on-hit effect label should expose effect_names")
+	if not _array_or_empty(label.get_meta("effect_categories", [])).has("debuff"):
+		errors.append("on-hit effect label should expose effect_categories")
+	_expect_attack_marker_metadata(errors, label, attack_result, "on-hit effect label")
+	_expect_action_marker_phases(errors, label, ["windup", "impact", "fade"], "on-hit effect label")
+
+
 func _expect_world_action_interaction_presenter(errors: Array[String], game_root: Node, target_id: String, option_kind: String) -> void:
 	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
 	if str(presenter.get("kind", "")) != "interaction":
@@ -1567,6 +1594,76 @@ func _expect_independent_combat_event_presenters(errors: Array[String], game_roo
 	var ended_marker: MeshInstance3D = game_root.find_child("WorldActionCombatEvent", true, false) as MeshInstance3D
 	if ended_marker != null and str(ended_marker.get_meta("reason", "")) != "smoke_combat_ended":
 		errors.append("combat_ended marker should expose end reason")
+	await _wait_for_world_action_presenter_idle(game_root)
+
+
+func _expect_on_hit_effect_attack_presenter(errors: Array[String], game_root: Node) -> void:
+	await _wait_for_world_action_presenter_idle(game_root)
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("on-hit attack presenter needs player actor node")
+		return
+	var attack_payload := {
+		"actor_id": 1,
+		"target_actor_id": 1,
+		"damage": 3.0,
+		"hit_kind": "hit",
+		"critical": false,
+		"defeated": false,
+		"range": 1,
+		"weapon_item_id": "smoke_bleed_knife",
+		"weapon_profile": {"item_id": "smoke_bleed_knife"},
+		"base_damage": 4.0,
+		"crit_multiplier": 1.5,
+		"crit_roll": 0.9,
+		"crit_chance": 0.1,
+		"defense": 1.0,
+		"damage_reduction": 1.0,
+		"damage_bonus": 0.0,
+		"hit_roll": 0.2,
+		"hit_chance": 0.95,
+		"accuracy": 12.0,
+		"evasion": 1.0,
+		"triggered_on_hit_effect_ids": ["bleeding"],
+		"applied_on_hit_effects": [{
+			"effect_id": "bleeding",
+			"weapon_item_id": "smoke_bleed_knife",
+			"stack_count": 1,
+			"category": "debuff",
+			"effect": {
+				"base_effect_id": "bleeding",
+				"name": "Bleeding",
+				"category": "debuff",
+			},
+		}],
+		"combat_rng_seed": 11,
+		"combat_rng_counter": 2,
+		"combat_rng_salt": 37,
+		"friendly_fire": false,
+		"relationship_consequence": {},
+	}
+	_present_synthetic_world_action_event(game_root, "attack_resolved", attack_payload)
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "attack":
+		errors.append("on-hit effect attack should enqueue attack presenter, got %s" % JSON.stringify(presenter))
+	if str(presenter.get("on_hit_effect_label_text", "")).is_empty():
+		errors.append("attack presenter should expose on_hit_effect_label_text")
+	if not str(presenter.get("on_hit_effect_label_text", "")).contains("Bleeding"):
+		errors.append("attack presenter on-hit label text should mention effect name")
+	if str(presenter.get("on_hit_effect_label_path", "")).is_empty():
+		errors.append("attack presenter should expose on_hit_effect_label_path")
+	_expect_attack_event_metadata(errors, presenter, attack_payload, "on-hit effect attack presenter")
+	_expect_action_presenter_phases(errors, presenter, ["windup", "impact", "fade"], "on-hit effect attack presenter")
+	var label: Label3D = game_root.find_child("WorldActionOnHitEffect", true, false) as Label3D
+	if label == null:
+		errors.append("attack presenter should render WorldActionOnHitEffect label")
+		return
+	if str(presenter.get("on_hit_effect_label_text", "")) != str(label.text):
+		errors.append("attack presenter should expose the rendered on-hit effect label text")
+	if label.global_position.distance_to(player_node.global_position + Vector3(0.0, 1.88, 0.0)) > 0.3:
+		errors.append("on-hit effect label should appear above target actor")
+	_expect_on_hit_effect_marker_metadata(errors, label, attack_payload)
+	_expect_world_action_input_blocker(errors, game_root, "attack")
 	await _wait_for_world_action_presenter_idle(game_root)
 
 
