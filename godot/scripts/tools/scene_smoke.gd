@@ -253,6 +253,8 @@ func _validate_player_equipment_models(player: Node, errors: Array[String]) -> v
 			errors.append("equipment model %s should expose Godot socket/body region metadata" % slot_id)
 		if not model.has_meta("attach_offset") or not model.has_meta("attach_rotation_degrees") or not model.has_meta("attach_scale"):
 			errors.append("equipment model %s should expose attachment transform metadata" % slot_id)
+		if str(model.get_meta("tint", "")).strip_edges().is_empty() or not bool(model.get_meta("tint_applied", false)) or int(model.get_meta("tinted_mesh_count", 0)) <= 0:
+			errors.append("equipment model %s should apply appearance tint metadata" % slot_id)
 		_validate_visual_collision_proxy(model, errors, "equipment model %s" % slot_id)
 	var main_hand: Node = player.find_child("EquipmentModel_main_hand", true, false)
 	if main_hand != null and str(main_hand.get_meta("model_asset", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
@@ -712,6 +714,8 @@ func _validate_equipment_attach_points(errors: Array[String]) -> void:
 		else:
 			if str(ranged.get_meta("weapon_visual_kind", "")) != "ranged_weapon" or str(ranged.get_meta("reload_visual_state", "")) != "loaded":
 				errors.append("ranged equipment should expose weapon/reload visual metadata")
+			if str(ranged.get_meta("tint", "")) != "#5d636b" or not bool(ranged.get_meta("tint_applied", false)):
+				errors.append("ranged equipment should apply tint presentation")
 			var muzzle: Node = ranged.find_child("EquipmentMuzzleMarker", true, false)
 			if muzzle == null:
 				errors.append("ranged equipment should render muzzle marker")
@@ -753,6 +757,7 @@ func _equipment_attach_world() -> Dictionary:
 		"loaded_ammo": 7,
 		"max_ammo": 12,
 		"ammo_type": "1009",
+		"tint": "#5d636b",
 	})
 	return {
 		"map": {

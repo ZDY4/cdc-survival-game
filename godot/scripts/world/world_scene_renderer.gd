@@ -1198,10 +1198,12 @@ func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
 		model_root.set_meta("body_region", str(visual_data.get("body_region", "")))
 		model_root.set_meta("presentation_mode", str(visual_data.get("presentation_mode", "")))
 		model_root.set_meta("hide_base_regions", _array_or_empty(visual_data.get("hide_base_regions", [])).duplicate(true))
+		model_root.set_meta("tint", str(visual_data.get("tint", "")))
 		model_root.set_meta("weapon_visual_kind", str(visual_data.get("weapon_visual_kind", "")))
 		model_root.set_meta("reload_visual_state", str(visual_data.get("reload_visual_state", "")))
 		model_root.set_meta("muzzle_offset", _vector3_or_default(visual_data.get("muzzle_offset", Vector3.ZERO), Vector3.ZERO))
 		_apply_equipment_model_transform(model_root as Node3D, visual_data)
+		_apply_equipment_model_tint(model_root as Node3D, str(visual_data.get("tint", "")))
 		parent.add_child(model_root)
 		_add_equipment_muzzle_marker(model_root as Node3D, visual_data)
 		_add_visual_collision_proxy(model_root as Node3D, model_asset)
@@ -1218,6 +1220,38 @@ func _apply_equipment_model_transform(model_root: Node3D, visual_data: Dictionar
 	model_root.set_meta("attach_offset", model_root.position)
 	model_root.set_meta("attach_rotation_degrees", model_root.rotation_degrees)
 	model_root.set_meta("attach_scale", model_root.scale)
+
+
+func _apply_equipment_model_tint(model_root: Node3D, tint_value: String) -> void:
+	if model_root == null:
+		return
+	var tint_color := _color_from_hex(tint_value)
+	model_root.set_meta("tint_color", tint_color)
+	if tint_value.strip_edges().is_empty():
+		model_root.set_meta("tint_applied", false)
+		model_root.set_meta("tinted_mesh_count", 0)
+		return
+	var tinted_count := 0
+	var pending: Array[Node] = [model_root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			pending.append(child)
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance == null:
+			continue
+		var material := StandardMaterial3D.new()
+		if mesh_instance.material_override is StandardMaterial3D:
+			material = (mesh_instance.material_override as StandardMaterial3D).duplicate(true)
+		elif mesh_instance.mesh != null and mesh_instance.mesh.get_surface_count() > 0 and mesh_instance.mesh.surface_get_material(0) is StandardMaterial3D:
+			material = (mesh_instance.mesh.surface_get_material(0) as StandardMaterial3D).duplicate(true)
+		material.albedo_color = tint_color
+		mesh_instance.material_override = material
+		mesh_instance.set_meta("equipment_tint", tint_value)
+		mesh_instance.set_meta("equipment_tint_color", tint_color)
+		tinted_count += 1
+	model_root.set_meta("tint_applied", tinted_count > 0)
+	model_root.set_meta("tinted_mesh_count", tinted_count)
 
 
 func _add_equipment_muzzle_marker(model_root: Node3D, visual_data: Dictionary) -> void:
@@ -1441,6 +1475,15 @@ func _vector3_or_default(value: Variant, fallback: Vector3) -> Vector3:
 		if values.size() >= 3:
 			return Vector3(float(values[0]), float(values[1]), float(values[2]))
 	return fallback
+
+
+func _color_from_hex(value: String, fallback: Color = Color(1.0, 1.0, 1.0, 1.0)) -> Color:
+	var text := value.strip_edges()
+	if text.is_empty():
+		return fallback
+	var color := Color.from_string(text, fallback)
+	color.a = 1.0
+	return color
 
 
 func _add_pickable_box(parent: Node3D, size: Vector3, local_position: Vector3 = Vector3.ZERO) -> void:
