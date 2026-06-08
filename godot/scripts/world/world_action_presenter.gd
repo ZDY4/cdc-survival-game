@@ -300,6 +300,14 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	if delivery_marker != null:
 		delivery_marker.set_meta("action_presenter_sequence", run_sequence)
 		_track_active_node(delivery_marker)
+	var muzzle_flash: MeshInstance3D = _attack_muzzle_flash_marker(attack, delivery_marker)
+	if muzzle_flash != null:
+		muzzle_flash.set_meta("action_presenter_sequence", run_sequence)
+		_track_active_node(muzzle_flash)
+	var projectile_trail: MeshInstance3D = _attack_projectile_trail_marker(attack, delivery_marker)
+	if projectile_trail != null:
+		projectile_trail.set_meta("action_presenter_sequence", run_sequence)
+		_track_active_node(projectile_trail)
 	var damage_label := _attack_damage_label(attack)
 	damage_label.position = target_position + Vector3(0.0, 1.52, 0.0)
 	damage_label.set_meta("action_presenter_sequence", run_sequence)
@@ -313,6 +321,10 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	layer.add_child(marker)
 	if delivery_marker != null:
 		layer.add_child(delivery_marker)
+	if projectile_trail != null:
+		layer.add_child(projectile_trail)
+	if muzzle_flash != null:
+		layer.add_child(muzzle_flash)
 	layer.add_child(damage_label)
 	if on_hit_label != null:
 		layer.add_child(on_hit_label)
@@ -323,42 +335,70 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	tween.tween_property(marker, "scale", Vector3(0.72, 0.72, 0.72), float(ATTACK_PHASE_DURATIONS[0]))
 	if delivery_marker != null:
 		tween.parallel().tween_property(delivery_marker, "scale", Vector3(1.0, 1.0, 1.0), float(ATTACK_PHASE_DURATIONS[0]))
+	if projectile_trail != null:
+		tween.parallel().tween_property(projectile_trail, "scale", Vector3(1.0, 1.0, 1.0), float(ATTACK_PHASE_DURATIONS[0]))
+	if muzzle_flash != null:
+		tween.parallel().tween_property(muzzle_flash, "scale", Vector3(1.32, 1.32, 1.32), float(ATTACK_PHASE_DURATIONS[0]))
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.16, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.12, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[1]))
 	if delivery_marker != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(delivery_marker), ATTACK_PHASES[1]))
+	if projectile_trail != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(projectile_trail), ATTACK_PHASES[1]))
+	if muzzle_flash != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(muzzle_flash), ATTACK_PHASES[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[1]))
 	if on_hit_label != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[1]))
 	tween.tween_property(marker, "scale", Vector3(1.45, 1.45, 1.45), float(ATTACK_PHASE_DURATIONS[1]))
 	if delivery_marker != null:
 		tween.parallel().tween_property(delivery_marker, "scale", Vector3(1.08, 1.08, 1.08), float(ATTACK_PHASE_DURATIONS[1]))
+	if projectile_trail != null:
+		tween.parallel().tween_property(projectile_trail, "scale", Vector3(1.04, 1.04, 1.04), float(ATTACK_PHASE_DURATIONS[1]))
+	if muzzle_flash != null:
+		tween.parallel().tween_property(muzzle_flash, "scale", Vector3(1.72, 1.72, 1.72), float(ATTACK_PHASE_DURATIONS[1]))
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.36, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.30, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[2]))
 	if delivery_marker != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(delivery_marker), ATTACK_PHASES[2]))
+	if projectile_trail != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(projectile_trail), ATTACK_PHASES[2]))
+	if muzzle_flash != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(muzzle_flash), ATTACK_PHASES[2]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[2]))
 	if on_hit_label != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[2]))
 	tween.tween_property(marker, "scale", Vector3(0.35, 0.35, 0.35), float(ATTACK_PHASE_DURATIONS[2]))
 	if delivery_marker != null:
 		tween.parallel().tween_property(delivery_marker, "scale", Vector3(0.12, 0.12, 0.12), float(ATTACK_PHASE_DURATIONS[2]))
+	if projectile_trail != null:
+		tween.parallel().tween_property(projectile_trail, "scale", Vector3(0.16, 0.16, 0.16), float(ATTACK_PHASE_DURATIONS[2]))
+	if muzzle_flash != null:
+		tween.parallel().tween_property(muzzle_flash, "scale", Vector3(0.10, 0.10, 0.10), float(ATTACK_PHASE_DURATIONS[2]))
 	tween.parallel().tween_property(damage_label, "modulate", Color(damage_label.modulate.r, damage_label.modulate.g, damage_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "modulate", Color(on_hit_label.modulate.r, on_hit_label.modulate.g, on_hit_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
 	var on_hit_label_ref: WeakRef = weakref(on_hit_label) if on_hit_label != null else null
 	var delivery_marker_ref: WeakRef = weakref(delivery_marker) if delivery_marker != null else null
-	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label), on_hit_label_ref, delivery_marker_ref))
+	var muzzle_flash_ref: WeakRef = weakref(muzzle_flash) if muzzle_flash != null else null
+	var projectile_trail_ref: WeakRef = weakref(projectile_trail) if projectile_trail != null else null
+	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label), on_hit_label_ref, delivery_marker_ref, muzzle_flash_ref, projectile_trail_ref))
 	var snapshot_data := _attack_public_snapshot(attack, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
 	if delivery_marker != null:
 		snapshot_data["delivery_marker_path"] = str(delivery_marker.get_path())
 		snapshot_data["delivery_visual_kind"] = str(delivery_marker.get_meta("delivery_visual_kind", ""))
 		snapshot_data["delivery_distance"] = float(delivery_marker.get_meta("delivery_distance", 0.0))
+	if muzzle_flash != null:
+		snapshot_data["muzzle_flash_path"] = str(muzzle_flash.get_path())
+		snapshot_data["muzzle_flash_visual_kind"] = str(muzzle_flash.get_meta("muzzle_flash_visual_kind", ""))
+	if projectile_trail != null:
+		snapshot_data["projectile_trail_path"] = str(projectile_trail.get_path())
+		snapshot_data["projectile_trail_visual_kind"] = str(projectile_trail.get_meta("projectile_trail_visual_kind", ""))
 	snapshot_data["damage_label_path"] = str(damage_label.get_path())
 	snapshot_data["damage_label_text"] = str(damage_label.text)
 	if on_hit_label != null:
@@ -367,7 +407,7 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	_record_latest(snapshot_data)
 
 
-func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null, on_hit_label_ref: WeakRef = null, delivery_marker_ref: WeakRef = null) -> void:
+func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null, on_hit_label_ref: WeakRef = null, delivery_marker_ref: WeakRef = null, muzzle_flash_ref: WeakRef = null, projectile_trail_ref: WeakRef = null) -> void:
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
 		marker.set_meta("action_presenter_active", false)
@@ -377,6 +417,16 @@ func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef
 		if delivery_marker != null and not delivery_marker.is_queued_for_deletion():
 			delivery_marker.set_meta("action_presenter_active", false)
 			delivery_marker.queue_free()
+	if muzzle_flash_ref != null:
+		var muzzle_flash := muzzle_flash_ref.get_ref() as Node
+		if muzzle_flash != null and not muzzle_flash.is_queued_for_deletion():
+			muzzle_flash.set_meta("action_presenter_active", false)
+			muzzle_flash.queue_free()
+	if projectile_trail_ref != null:
+		var projectile_trail := projectile_trail_ref.get_ref() as Node
+		if projectile_trail != null and not projectile_trail.is_queued_for_deletion():
+			projectile_trail.set_meta("action_presenter_active", false)
+			projectile_trail.queue_free()
 	if damage_label_ref != null:
 		var damage_label := damage_label_ref.get_ref() as Node
 		if damage_label != null and not damage_label.is_queued_for_deletion():
@@ -513,6 +563,84 @@ func _attack_delivery_marker(attack: Dictionary, target_position: Vector3):
 	marker.set_meta("delivery_distance", distance)
 	marker.set_meta("actor_node_path", str(actor_node.get_path()))
 	marker.set_meta("target_node_path", str(target_node.get_path()))
+	marker.set_meta("start_position", start)
+	marker.set_meta("end_position", end)
+	marker.set_meta("actor_id", int(attack.get("actor_id", 0)))
+	marker.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
+	_apply_attack_event_meta(marker, attack)
+	return marker
+
+
+func _attack_muzzle_flash_marker(attack: Dictionary, delivery_marker: MeshInstance3D):
+	if str(attack.get("attack_delivery", "")) != "ranged" or delivery_marker == null:
+		return null
+	var start: Variant = delivery_marker.get_meta("start_position", null)
+	var end: Variant = delivery_marker.get_meta("end_position", null)
+	if typeof(start) != TYPE_VECTOR3 or typeof(end) != TYPE_VECTOR3:
+		return null
+	var direction: Vector3 = (end as Vector3) - (start as Vector3)
+	if direction.length() <= 0.01:
+		direction = Vector3.FORWARD
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.13
+	mesh.height = 0.26
+	mesh.radial_segments = 14
+	mesh.rings = 6
+	var marker := MeshInstance3D.new()
+	marker.name = "WorldActionMuzzleFlash"
+	marker.mesh = mesh
+	marker.material_override = _attack_muzzle_flash_material()
+	marker.position = (start as Vector3) + direction.normalized() * 0.18
+	marker.basis = _basis_from_y(direction.normalized())
+	marker.scale = Vector3(0.24, 0.24, 0.24)
+	marker.set_meta("action_presenter_active", true)
+	marker.set_meta("action_presenter_kind", "attack_muzzle_flash")
+	marker.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
+	marker.set_meta("action_presenter_phase_count", ATTACK_PHASES.size())
+	marker.set_meta("action_presenter_current_phase", ATTACK_PHASES[0])
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(ATTACK_PHASE_DURATIONS))
+	marker.set_meta("muzzle_flash_visual_kind", "muzzle_flash")
+	marker.set_meta("start_position", start)
+	marker.set_meta("end_position", end)
+	marker.set_meta("direction", direction.normalized())
+	marker.set_meta("actor_id", int(attack.get("actor_id", 0)))
+	marker.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
+	_apply_attack_event_meta(marker, attack)
+	return marker
+
+
+func _attack_projectile_trail_marker(attack: Dictionary, delivery_marker: MeshInstance3D):
+	if str(attack.get("attack_delivery", "")) != "ranged" or delivery_marker == null:
+		return null
+	var start: Variant = delivery_marker.get_meta("start_position", null)
+	var end: Variant = delivery_marker.get_meta("end_position", null)
+	if typeof(start) != TYPE_VECTOR3 or typeof(end) != TYPE_VECTOR3:
+		return null
+	var direction: Vector3 = (end as Vector3) - (start as Vector3)
+	var distance := direction.length()
+	if distance <= 0.01:
+		direction = Vector3.FORWARD
+		distance = 0.34
+	var mesh := CylinderMesh.new()
+	mesh.radial_segments = 8
+	mesh.top_radius = 0.025
+	mesh.bottom_radius = 0.025
+	mesh.height = max(0.30, distance)
+	var marker := MeshInstance3D.new()
+	marker.name = "WorldActionProjectileTrail"
+	marker.mesh = mesh
+	marker.material_override = _attack_projectile_trail_material()
+	marker.position = (start as Vector3).lerp(end as Vector3, 0.5)
+	marker.basis = _basis_from_y(direction.normalized())
+	marker.scale = Vector3(0.22, 0.22, 0.22)
+	marker.set_meta("action_presenter_active", true)
+	marker.set_meta("action_presenter_kind", "attack_projectile_trail")
+	marker.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
+	marker.set_meta("action_presenter_phase_count", ATTACK_PHASES.size())
+	marker.set_meta("action_presenter_current_phase", ATTACK_PHASES[0])
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(ATTACK_PHASE_DURATIONS))
+	marker.set_meta("projectile_trail_visual_kind", "projectile_trail")
+	marker.set_meta("trail_distance", distance)
 	marker.set_meta("start_position", start)
 	marker.set_meta("end_position", end)
 	marker.set_meta("actor_id", int(attack.get("actor_id", 0)))
@@ -1089,6 +1217,22 @@ func _attack_delivery_material(delivery: String) -> StandardMaterial3D:
 		material.albedo_color = Color(1.0, 0.88, 0.32, 0.88)
 	else:
 		material.albedo_color = Color(1.0, 0.44, 0.18, 0.82)
+	return material
+
+
+func _attack_muzzle_flash_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	material.albedo_color = Color(1.0, 0.92, 0.28, 0.95)
+	return material
+
+
+func _attack_projectile_trail_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	material.albedo_color = Color(0.98, 0.84, 0.34, 0.68)
 	return material
 
 

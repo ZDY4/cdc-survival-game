@@ -1269,6 +1269,11 @@ func _expect_attack_delivery_marker(errors: Array[String], game_root: Node, atta
 		errors.append("attack presenter should expose delivery marker path")
 	if float(presenter.get("delivery_distance", 0.0)) <= 0.0:
 		errors.append("attack presenter should expose delivery distance")
+	if expected_visual_kind == "ranged_projectile":
+		if str(presenter.get("muzzle_flash_visual_kind", "")) != "muzzle_flash" or str(presenter.get("muzzle_flash_path", "")).is_empty():
+			errors.append("ranged attack presenter should expose muzzle flash path and visual kind")
+		if str(presenter.get("projectile_trail_visual_kind", "")) != "projectile_trail" or str(presenter.get("projectile_trail_path", "")).is_empty():
+			errors.append("ranged attack presenter should expose projectile trail path and visual kind")
 	var marker: MeshInstance3D = game_root.find_child("WorldActionAttackDelivery", true, false) as MeshInstance3D
 	if marker == null:
 		errors.append("attack presenter should render WorldActionAttackDelivery marker")
@@ -1290,6 +1295,47 @@ func _expect_attack_delivery_marker(errors: Array[String], game_root: Node, atta
 		errors.append("attack delivery marker should render above map meshes")
 	_expect_attack_marker_metadata(errors, marker, attack_result, "attack delivery marker")
 	_expect_action_marker_phases(errors, marker, ["windup", "impact", "fade"], "attack delivery marker")
+	if expected_visual_kind == "ranged_projectile":
+		_expect_ranged_attack_fx_markers(errors, game_root, attack_result, marker)
+
+
+func _expect_ranged_attack_fx_markers(errors: Array[String], game_root: Node, attack_result: Dictionary, delivery_marker: MeshInstance3D) -> void:
+	var muzzle: MeshInstance3D = game_root.find_child("WorldActionMuzzleFlash", true, false) as MeshInstance3D
+	if muzzle == null:
+		errors.append("ranged attack should render WorldActionMuzzleFlash")
+	else:
+		if str(muzzle.get_meta("action_presenter_kind", "")) != "attack_muzzle_flash":
+			errors.append("muzzle flash should expose attack_muzzle_flash kind")
+		if str(muzzle.get_meta("muzzle_flash_visual_kind", "")) != "muzzle_flash":
+			errors.append("muzzle flash should expose visual kind")
+		if typeof(muzzle.get_meta("start_position", null)) != TYPE_VECTOR3 or typeof(muzzle.get_meta("end_position", null)) != TYPE_VECTOR3:
+			errors.append("muzzle flash should expose start/end positions")
+		if typeof(muzzle.get_meta("direction", null)) != TYPE_VECTOR3:
+			errors.append("muzzle flash should expose direction")
+		var muzzle_material := muzzle.material_override as StandardMaterial3D
+		if muzzle_material == null or not muzzle_material.no_depth_test:
+			errors.append("muzzle flash should render above map meshes")
+		_expect_attack_marker_metadata(errors, muzzle, attack_result, "muzzle flash marker")
+		_expect_action_marker_phases(errors, muzzle, ["windup", "impact", "fade"], "muzzle flash marker")
+	var trail: MeshInstance3D = game_root.find_child("WorldActionProjectileTrail", true, false) as MeshInstance3D
+	if trail == null:
+		errors.append("ranged attack should render WorldActionProjectileTrail")
+	else:
+		if str(trail.get_meta("action_presenter_kind", "")) != "attack_projectile_trail":
+			errors.append("projectile trail should expose attack_projectile_trail kind")
+		if str(trail.get_meta("projectile_trail_visual_kind", "")) != "projectile_trail":
+			errors.append("projectile trail should expose visual kind")
+		if float(trail.get_meta("trail_distance", 0.0)) <= 0.0:
+			errors.append("projectile trail should expose positive trail distance")
+		if absf(float(trail.get_meta("trail_distance", 0.0)) - float(delivery_marker.get_meta("delivery_distance", 0.0))) > 0.01:
+			errors.append("projectile trail distance should match delivery distance")
+		if typeof(trail.get_meta("start_position", null)) != TYPE_VECTOR3 or typeof(trail.get_meta("end_position", null)) != TYPE_VECTOR3:
+			errors.append("projectile trail should expose start/end positions")
+		var trail_material := trail.material_override as StandardMaterial3D
+		if trail_material == null or not trail_material.no_depth_test:
+			errors.append("projectile trail should render above map meshes")
+		_expect_attack_marker_metadata(errors, trail, attack_result, "projectile trail marker")
+		_expect_action_marker_phases(errors, trail, ["windup", "impact", "fade"], "projectile trail marker")
 
 
 func _expect_on_hit_effect_marker_metadata(errors: Array[String], label: Label3D, attack_result: Dictionary) -> void:
