@@ -1072,6 +1072,12 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 	if badge == null:
 		errors.append("empty container should expose ContainerStateBadge")
 	else:
+		if not bool(badge.get_meta("container_open", false)):
+			errors.append("open container badge should expose container_open")
+		if str(badge.get_meta("container_open_state", "")) != "open":
+			errors.append("open container badge should expose open state")
+		if not _array_or_empty(badge.get_meta("container_open_actor_ids", [])).has(1):
+			errors.append("open container badge should expose opener actor id")
 		if not bool(badge.get_meta("container_empty", false)):
 			errors.append("empty container badge should expose container_empty")
 		if str(badge.get_meta("container_visual_state", "")) != "empty":
@@ -1089,12 +1095,22 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 		errors.append("empty container interaction metadata should expose container model asset id")
 	if not bool(node_target.get("container_empty", false)):
 		errors.append("empty container interaction metadata should expose container_empty")
+	if not bool(node_target.get("container_open", false)):
+		errors.append("empty container interaction metadata should expose container_open")
+	if str(node_target.get("container_open_state", "")) != "open":
+		errors.append("empty container interaction metadata should expose open state")
+	if not _array_or_empty(node_target.get("container_open_actor_ids", [])).has(1):
+		errors.append("empty container interaction metadata should expose opener actor id")
 	if int(node_target.get("container_item_count", -1)) != 0:
 		errors.append("empty container interaction metadata should expose zero item count")
 	var pickable_body: Node = container_node.find_child("PickableBody", true, false)
 	var pickable_target: Dictionary = _dictionary_or_empty(pickable_body.get_meta("interaction_target", {}) if pickable_body != null else {})
 	if pickable_body == null or not bool(pickable_target.get("container_empty", false)):
 		errors.append("empty container pickable body should mirror container_empty metadata")
+	if pickable_body == null or not bool(pickable_target.get("container_open", false)):
+		errors.append("empty container pickable body should mirror container_open metadata")
+	if pickable_body == null or str(pickable_target.get("container_open_state", "")) != "open":
+		errors.append("empty container pickable body should mirror open state metadata")
 	if pickable_body == null or str(pickable_target.get("container_type", "")) != "map":
 		errors.append("empty container pickable body should mirror container_type metadata")
 	if pickable_body == null or str(pickable_target.get("container_visual_id", "")) != "cabinet_medical":

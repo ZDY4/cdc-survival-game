@@ -30,7 +30,7 @@ func build_from_runtime_snapshot(runtime_snapshot: Dictionary) -> Dictionary:
 	_apply_consumed_interaction_targets(map_snapshot, runtime_snapshot.get("consumed_interaction_targets", []))
 	var corpses: Array[Dictionary] = _corpses_on_map(runtime_snapshot.get("corpse_containers", []), map_id)
 	_apply_corpse_interaction_targets(map_snapshot, corpses)
-	_apply_container_session_states(map_snapshot, runtime_snapshot.get("container_sessions", []))
+	_apply_container_session_states(map_snapshot, runtime_snapshot.get("container_sessions", []), _active_container_actor_ids(runtime_snapshot.get("actors", [])))
 	var actors: Array[Dictionary] = _actors_on_map(runtime_snapshot.get("actors", []), map_id)
 	_apply_actor_quest_markers(actors, runtime_snapshot)
 	_apply_actor_combat_feedback(actors, runtime_snapshot)
@@ -543,7 +543,7 @@ func _apply_door_states(map_snapshot: Dictionary, state_values: Array) -> void:
 	map_snapshot["interaction_targets"] = interaction_targets
 
 
-func _apply_container_session_states(map_snapshot: Dictionary, session_values: Array) -> void:
+func _apply_container_session_states(map_snapshot: Dictionary, session_values: Array, active_container_actor_ids: Dictionary = {}) -> void:
 	var states: Dictionary = {}
 	for value in _array_or_empty(session_values):
 		var session: Dictionary = _dictionary_or_empty(value)
@@ -552,6 +552,7 @@ func _apply_container_session_states(map_snapshot: Dictionary, session_values: A
 			continue
 		var inventory: Array = _array_or_empty(session.get("inventory", []))
 		var money: int = max(0, int(session.get("money", 0)))
+		var open_actor_ids: Array = _array_or_empty(active_container_actor_ids.get(container_id, [])).duplicate(true)
 		states[container_id] = {
 			"container_id": container_id,
 			"container_type": str(session.get("container_type", "map")),
@@ -567,6 +568,9 @@ func _apply_container_session_states(map_snapshot: Dictionary, session_values: A
 			"container_stack_count": _container_stack_count(inventory),
 			"container_money": money,
 			"container_empty": _container_item_count(inventory) <= 0 and money <= 0,
+			"container_open": not open_actor_ids.is_empty(),
+			"container_open_state": "open" if not open_actor_ids.is_empty() else "closed",
+			"container_open_actor_ids": open_actor_ids,
 		}
 	if states.is_empty():
 		return
@@ -591,6 +595,21 @@ func _objects_with_container_state(objects: Array, states: Dictionary) -> Array[
 		if states.has(object_id):
 			object_data["container_state"] = _dictionary_or_empty(states[object_id]).duplicate(true)
 		output.append(object_data)
+	return output
+
+
+func _active_container_actor_ids(actors: Variant) -> Dictionary:
+	var output: Dictionary = {}
+	for value in _array_or_empty(actors):
+		var actor: Dictionary = _dictionary_or_empty(value)
+		var container_id := str(actor.get("active_container_id", "")).strip_edges()
+		if container_id.is_empty():
+			continue
+		if not output.has(container_id):
+			output[container_id] = []
+		var ids: Array = _array_or_empty(output[container_id])
+		ids.append(int(actor.get("actor_id", 0)))
+		output[container_id] = ids
 	return output
 
 
