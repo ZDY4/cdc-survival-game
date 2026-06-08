@@ -236,10 +236,16 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 	row.set_meta("equipment_slot", actual_slot_id)
 	row.set_meta("equipment_display_slot", slot_id)
 	row.set_meta("equipment_data", data.duplicate(true))
+	row.set_meta("equipment_drag_hovered", false)
+	row.set_meta("equipment_drag_last_accept", false)
+	row.set_meta("equipment_drag_reject_reason", "")
 	row.set_drag_forwarding(
 		Callable(self, "_empty_character_drag_data"),
 		Callable(self, "_can_drop_equipment_data"),
 		Callable(self, "_drop_equipment_data")
+	)
+	row.mouse_exited.connect(func() -> void:
+		_clear_equipment_drag_hover(row)
 	)
 	row.tooltip_text = _equipment_tooltip(data)
 	row.gui_input.connect(func(event: InputEvent) -> void:
@@ -401,13 +407,17 @@ func _empty_character_drag_data(_position: Vector2, _from_control: Control) -> V
 func _can_drop_equipment_data(_position: Vector2, data: Variant, from_control: Control) -> bool:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	if str(drag_data.get("kind", "")) != "inventory_item":
+		_apply_equipment_drag_hover(from_control, false, "equipment_slot_requires_inventory_item")
 		return false
 	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 	var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
 	var slot_id: String = _drop_equipment_slot(from_control)
 	if item_id.is_empty() or slot_id.is_empty():
+		_apply_equipment_drag_hover(from_control, false, "equipment_slot_missing_item" if item_id.is_empty() else "equipment_slot_missing_slot")
 		return false
-	return _item_can_equip_to_slot(item, slot_id)
+	var accepted := _item_can_equip_to_slot(item, slot_id)
+	_apply_equipment_drag_hover(from_control, accepted, "" if accepted else "equipment_slot_incompatible")
+	return accepted
 
 
 func _drop_equipment_data(position: Vector2, data: Variant, from_control: Control) -> void:
@@ -418,8 +428,43 @@ func _drop_equipment_data(position: Vector2, data: Variant, from_control: Contro
 	var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
 	var slot_id: String = _drop_equipment_slot(from_control)
 	var root := get_parent()
+	_clear_equipment_drag_hover(from_control)
 	if root != null and root.has_method("equip_player_item"):
 		root.equip_player_item(item_id, slot_id)
+
+
+func _apply_equipment_drag_hover(control: Control, accepted: bool, reject_reason: String) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("equipment_slot"):
+		return
+	var color_text := "#4ecb71" if accepted else "#e25c5c"
+	var style := "accept" if accepted else "reject"
+	control.set_meta("equipment_drag_hovered", true)
+	control.set_meta("equipment_drag_last_accept", accepted)
+	control.set_meta("equipment_drag_reject_reason", reject_reason)
+	control.set_meta("equipment_drag_highlight_style", style)
+	control.set_meta("equipment_drag_highlight_color", color_text)
+	control.modulate = Color(0.90, 1.0, 0.92, 1.0) if accepted else Color(1.0, 0.90, 0.90, 1.0)
+	var label := control.get_node_or_null("Line") as Label
+	if label != null:
+		label.add_theme_color_override("font_color", Color.html(color_text))
+		label.set_meta("equipment_drag_highlight_style", style)
+		label.set_meta("equipment_drag_highlight_color", color_text)
+
+
+func _clear_equipment_drag_hover(control: Control) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("equipment_slot"):
+		return
+	control.set_meta("equipment_drag_hovered", false)
+	control.set_meta("equipment_drag_last_accept", false)
+	control.set_meta("equipment_drag_reject_reason", "")
+	control.set_meta("equipment_drag_highlight_style", "")
+	control.set_meta("equipment_drag_highlight_color", "")
+	control.modulate = Color.WHITE
+	var label := control.get_node_or_null("Line") as Label
+	if label != null:
+		label.remove_theme_color_override("font_color")
+		label.set_meta("equipment_drag_highlight_style", "")
+		label.set_meta("equipment_drag_highlight_color", "")
 
 
 func _drop_equipment_slot(from_control: Control) -> String:

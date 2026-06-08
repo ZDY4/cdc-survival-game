@@ -418,6 +418,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_ui_layer_stack(errors, game_root, baseball_drag_data, _equipment_slot_control(game_root, "main_hand"), null, "drag_preview", true, "inventory drag preview layer stack")
 	_assert_equipment_drag_hover_target(errors, game_root, baseball_drag_data, _equipment_slot_control(game_root, "main_hand"), true, "", "inventory baseball bat to main hand hover")
 	_assert_equipment_drag_hover_target(errors, game_root, _skill_hotbar_drag_data("adrenaline_rush", "肾上腺冲刺"), _equipment_slot_control(game_root, "main_hand"), false, "equipment_slot_requires_inventory_item", "skill hotbar to equipment slot reject hover")
+	_assert_equipment_slot_hover_render(errors, game_root, baseball_drag_data, _equipment_slot_control(game_root, "main_hand"), true, "", "inventory baseball bat equipment hover render")
+	_assert_equipment_slot_hover_render(errors, game_root, _skill_hotbar_drag_data("adrenaline_rush", "肾上腺冲刺"), _equipment_slot_control(game_root, "main_hand"), false, "equipment_slot_requires_inventory_item", "skill hotbar equipment hover reject render")
 	var before_drag_equipped := _event_count(game_root, "item_equipped")
 	if not _drop_inventory_item_to_equipment_slot(game_root, "棒球棒", "main_hand"):
 		errors.append("should drag inventory baseball bat to main hand equipment slot")
@@ -1811,6 +1813,33 @@ func _assert_equipment_drag_hover_target(errors: Array[String], game_root: Node,
 		errors.append("%s: equipment hover highlight style expected %s, got %s" % [context, expected_style, highlight])
 	if str(highlight.get("target_kind", "")) != "equipment_slot" or str(highlight.get("target_id", "")) != str(target.get_meta("equipment_slot", "")):
 		errors.append("%s: equipment hover highlight should identify target slot: %s" % [context, highlight])
+
+
+func _assert_equipment_slot_hover_render(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: equipment slot control should exist" % context)
+		return
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	var can_drop: bool = bool(game_root.character_panel.call("_can_drop_equipment_data", Vector2.ZERO, drag_data, target))
+	if can_drop != expected_accept:
+		errors.append("%s: equipment can_drop expected %s, got %s" % [context, expected_accept, can_drop])
+	if not bool(target.get_meta("equipment_drag_hovered", false)):
+		errors.append("%s: equipment slot should record active drag hover render state" % context)
+	if bool(target.get_meta("equipment_drag_last_accept", false)) != expected_accept:
+		errors.append("%s: equipment hover render accept expected %s, got %s" % [context, expected_accept, target.get_meta("equipment_drag_last_accept", false)])
+	if str(target.get_meta("equipment_drag_reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: equipment hover render reject reason expected %s, got %s" % [context, expected_reject_reason, target.get_meta("equipment_drag_reject_reason", "")])
+	var expected_style := "accept" if expected_accept else "reject"
+	var expected_color := "#4ecb71" if expected_accept else "#e25c5c"
+	if str(target.get_meta("equipment_drag_highlight_style", "")) != expected_style:
+		errors.append("%s: equipment hover render style expected %s, got %s" % [context, expected_style, target.get_meta("equipment_drag_highlight_style", "")])
+	if str(target.get_meta("equipment_drag_highlight_color", "")) != expected_color:
+		errors.append("%s: equipment hover render color expected %s, got %s" % [context, expected_color, target.get_meta("equipment_drag_highlight_color", "")])
+	var label := target.get_node_or_null("Line") as Label
+	if label == null or str(label.get_meta("equipment_drag_highlight_color", "")) != expected_color:
+		errors.append("%s: equipment hover render should mark row label color: %s" % [context, label])
 
 
 func _assert_drag_preview_layer_diagnostics(errors: Array[String], preview: Dictionary, context: String) -> void:
