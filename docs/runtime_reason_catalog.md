@@ -47,6 +47,7 @@
 - Container 面板的反馈 snapshot 兜底已接入 `disabled_text_for()`；已有容量、权限、钥匙、工具、关系等详细中文说明继续优先使用，未特化的容器 reason 显示 catalog 中文短文案。
 - Inventory 面板的反馈 snapshot 兜底已接入 `disabled_text_for()`；已有 AP、数量、负重、使用、拆解等详细中文说明继续优先使用，未特化的背包 reason 显示 catalog 中文短文案。
 - Skills 面板的学习 / 绑定 / 使用按钮禁用 tooltip 和 learn/use reason 兜底已接入 `disabled_text_for()`；已有前置、属性、冷却和资源不足等详细说明继续优先使用。
+- HUD 拖拽目标拒绝诊断已纳入 catalog：热栏槽会稳定返回 `hotbar_slot_requires_skill_hotbar`、`hotbar_slot_missing_skill`、`hotbar_slot_missing_slot`；热栏组按钮会返回 `hotbar_group_drag_unsupported`；观察控制按钮会返回 `observe_hotbar_drag_unsupported`。这些 reason 只描述 Godot UI 拖放目标是否接受当前 payload，不改变技能绑定、热栏切组或观察模式业务规则。
 - Journal 面板的交付按钮 tooltip、交付条件 tooltip、详情交付限制和交付失败反馈兜底已接入 `disabled_text_for()`；已有物品不足、目标未完成和对话交付等详细说明继续优先使用。
 - AI intent / 阵营判定、SaveService 槽位 / envelope 校验和 MapSceneLoader 地图场景加载失败 reason 已纳入目录；`World` smoke 覆盖缺失地图 scene 的稳定 `map_scene_missing` reason 透传。
 
