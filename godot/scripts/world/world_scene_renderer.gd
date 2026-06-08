@@ -13,6 +13,8 @@ const BEVY_DEFAULT_VIEWPORT_SIZE := Vector2(1440.0, 900.0)
 const BEVY_DEFAULT_ZOOM_FACTOR := 1.0
 const BEVY_LEVEL_PLANE_HEIGHT := GRID_SIZE * 0.5
 const UIThemeService = preload("res://scripts/ui/ui_theme_service.gd")
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+const STATUS_EFFECT_ICON_FALLBACK_ROOT := "res://assets/icons/effects"
 
 var ground_material := _material(Color(0.22, 0.26, 0.23))
 var actor_material := _material(Color(0.78, 0.78, 0.68))
@@ -783,6 +785,11 @@ func _add_actor_status_effect_icon(parent: Node3D, actor_data: Dictionary, effec
 	_apply_status_effect_meta(icon, actor_data, effect, index)
 	parent.add_child(icon)
 
+	var sprite: Sprite3D = _status_effect_sprite(effect, index, x_offset) as Sprite3D
+	if sprite != null:
+		_apply_status_effect_meta(sprite, actor_data, effect, index)
+		parent.add_child(sprite)
+
 	var label := Label3D.new()
 	label.name = "ActorStatusEffectLabel_%d" % index
 	label.text = _status_effect_label_text(effect, index)
@@ -812,6 +819,60 @@ func _status_effect_material(effect: Dictionary) -> StandardMaterial3D:
 	return status_generic_material
 
 
+func _status_effect_sprite(effect: Dictionary, index: int, x_offset: float):
+	var texture := _status_effect_texture(effect)
+	if texture == null:
+		return null
+	var sprite := Sprite3D.new()
+	sprite.name = "ActorStatusEffectSprite_%d" % index
+	sprite.texture = texture
+	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sprite.no_depth_test = true
+	sprite.pixel_size = 0.0022
+	sprite.modulate = Color(1.0, 1.0, 1.0, 0.96)
+	sprite.position = Vector3(x_offset, 0.01, 0.012)
+	sprite.set_meta("icon_resource_path", _status_effect_icon_resource_path(effect))
+	sprite.set_meta("icon_loaded", true)
+	return sprite
+
+
+func _status_effect_texture(effect: Dictionary) -> Texture2D:
+	var resource_path := _status_effect_icon_resource_path(effect)
+	if resource_path.is_empty():
+		return null
+	if resource_path.get_extension().to_lower() == "svg":
+		return _svg_texture_from_file(resource_path)
+	var resource := load(resource_path)
+	if resource is Texture2D:
+		return resource as Texture2D
+	return null
+
+
+func _status_effect_icon_resource_path(effect: Dictionary) -> String:
+	var icon_path := str(effect.get("icon_path", "")).strip_edges()
+	if icon_path.is_empty():
+		var base_effect_id := str(effect.get("base_effect_id", effect.get("effect_id", ""))).strip_edges()
+		if base_effect_id.begins_with("effect:"):
+			base_effect_id = base_effect_id.trim_prefix("effect:")
+		if not base_effect_id.is_empty():
+			icon_path = "%s/%s.svg" % [STATUS_EFFECT_ICON_FALLBACK_ROOT, base_effect_id]
+	var asset := AssetPathResolver.resolve_media_asset(icon_path, "effect")
+	if not bool(asset.get("ok", false)) or not bool(asset.get("exists", false)):
+		return ""
+	return str(asset.get("resource_path", ""))
+
+
+func _svg_texture_from_file(resource_path: String) -> Texture2D:
+	var file := FileAccess.open(resource_path, FileAccess.READ)
+	if file == null:
+		return null
+	var image := Image.new()
+	var error := image.load_svg_from_string(file.get_as_text())
+	if error != OK:
+		return null
+	return ImageTexture.create_from_image(image)
+
+
 func _status_effect_label_text(effect: Dictionary, index: int) -> String:
 	var effect_id := str(effect.get("effect_id", "")).strip_edges()
 	if not effect_id.is_empty():
@@ -823,6 +884,8 @@ func _apply_status_effect_meta(node: Node, actor_data: Dictionary, effect: Dicti
 	node.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
 	node.set_meta("effect_index", index)
 	node.set_meta("effect_id", str(effect.get("effect_id", "")))
+	node.set_meta("base_effect_id", str(effect.get("base_effect_id", "")))
+	node.set_meta("icon_path", str(effect.get("icon_path", "")))
 	node.set_meta("source", str(effect.get("source", "")))
 	node.set_meta("skill_id", str(effect.get("skill_id", "")))
 	node.set_meta("category", str(effect.get("category", "")))

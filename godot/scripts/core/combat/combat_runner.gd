@@ -448,6 +448,7 @@ func _build_on_hit_active_effect(effect_id: String, effect_data: Dictionary, att
 		"target_actor_id": target.actor_id,
 		"weapon_item_id": str(profile.get("item_id", "")),
 		"name": str(effect_data.get("name", effect_id)),
+		"icon_path": str(effect_data.get("icon_path", "")),
 		"category": str(effect_data.get("category", "debuff")),
 		"duration_remaining": duration,
 		"is_infinite": is_infinite,

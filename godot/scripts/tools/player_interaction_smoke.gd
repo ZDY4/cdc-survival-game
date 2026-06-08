@@ -622,10 +622,12 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 	var original_equipment: Dictionary = player.equipment.duplicate(true)
 	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
 	var original_ap: float = player.ap
+	var original_attack_power: float = player.attack_power
 	var player_grid: Dictionary = _player_grid(game_root)
 	var target_grid := _near_open_grid_from(player_grid, game_root.world_result.get("map", {}), game_root)
-	player.equipment = {"main_hand": "1003"}
+	player.equipment = {"main_hand": "1002"}
 	player.combat_attributes["accuracy"] = 100.0
+	player.attack_power = 1.0
 	player.ap = 6.0
 	var target_id: int = game_root.simulation.register_actor({
 		"definition_id": "attack_hover_preview_smoke",
@@ -647,7 +649,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if camera == null:
 		errors.append("attack hover preview smoke missing camera")
-		_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
+		_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap, original_attack_power)
 		return
 	if game_root.runtime_input_controller != null and game_root.runtime_input_controller.has_method("focus_current_actor"):
 		game_root.runtime_input_controller.focus_current_actor()
@@ -696,8 +698,9 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		else:
 			game_root._rebuild_world_after_runtime_change({}, {"result": attack_result})
 			_expect_world_action_attack_presenter(errors, game_root, target_id, attack_result)
+			_expect_on_hit_status_effect_world_icon(errors, game_root, target_id, "effect:bleeding", "res://assets/icons/effects/bleeding.svg")
 			await _wait_for_world_action_presenter_idle(game_root)
-	_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap)
+	_cleanup_attack_hover_preview_smoke(game_root, player, target_id, original_equipment, original_attributes, original_ap, original_attack_power)
 
 
 func _expect_attack_hover_cursor_preview(errors: Array[String], game_root: Node, target_id: int) -> void:
@@ -716,6 +719,48 @@ func _expect_attack_hover_cursor_preview(errors: Array[String], game_root: Node,
 		errors.append("attack hover cursor should expose material")
 	elif material.albedo_color.r <= material.albedo_color.g:
 		errors.append("attack hover cursor should use orange/red-tinted preview color")
+
+
+func _expect_on_hit_status_effect_world_icon(errors: Array[String], game_root: Node, target_id: int, effect_id: String, expected_resource_path: String) -> void:
+	var actor_node: Node = game_root.find_child("Actor_attack_hover_preview_smoke_%d" % target_id, true, false)
+	if actor_node == null:
+		errors.append("on-hit status effect world icon should have target actor node")
+		return
+	var container: Node = actor_node.find_child("ActorStatusEffectIcons", true, false)
+	if container == null:
+		errors.append("on-hit status effect should render ActorStatusEffectIcons")
+		return
+	if int(container.get_meta("effect_count", 0)) <= 0:
+		errors.append("on-hit status effect container should expose effect_count")
+	var icon: Node = _status_effect_child_by_effect_id(container, effect_id, "ActorStatusEffectIcon")
+	if icon == null:
+		errors.append("on-hit status effect icons should include %s" % effect_id)
+	else:
+		if str(icon.get_meta("base_effect_id", "")) != effect_id.trim_prefix("effect:"):
+			errors.append("on-hit status effect icon should expose base_effect_id")
+		if str(icon.get_meta("icon_path", "")) != expected_resource_path:
+			errors.append("on-hit status effect icon should expose icon_path")
+	var sprite: Sprite3D = _status_effect_child_by_effect_id(container, effect_id, "ActorStatusEffectSprite") as Sprite3D
+	if sprite == null:
+		errors.append("on-hit status effect should render Sprite3D icon")
+		return
+	if sprite.texture == null:
+		errors.append("on-hit status effect Sprite3D should load texture")
+	if str(sprite.get_meta("icon_resource_path", "")) != expected_resource_path:
+		errors.append("on-hit status effect Sprite3D should expose icon resource path")
+	if not bool(sprite.get_meta("icon_loaded", false)):
+		errors.append("on-hit status effect Sprite3D should expose icon_loaded")
+
+
+func _status_effect_child_by_effect_id(root: Node, effect_id: String, name_prefix: String) -> Node:
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if str(node.get_meta("effect_id", "")) == effect_id and node.name.begins_with(name_prefix):
+			return node
+		for child in node.get_children():
+			pending.append(child)
+	return null
 
 
 func _expect_hover_target_outline(errors: Array[String], game_root: Node, expected_category: String, expected_target_id: String) -> void:
@@ -1461,12 +1506,13 @@ func _expect_attack_range_markers_hidden(errors: Array[String], game_root: Node)
 		errors.append("attack range markers should stay empty for non-attack hover")
 
 
-func _cleanup_attack_hover_preview_smoke(game_root: Node, player: RefCounted, target_id: int, original_equipment: Dictionary, original_attributes: Dictionary, original_ap: float) -> void:
+func _cleanup_attack_hover_preview_smoke(game_root: Node, player: RefCounted, target_id: int, original_equipment: Dictionary, original_attributes: Dictionary, original_ap: float, original_attack_power: float) -> void:
 	if game_root.simulation.actor_registry.get_actor(target_id) != null:
 		game_root.simulation.actor_registry.unregister_actor(target_id)
 	player.equipment = original_equipment
 	player.combat_attributes = original_attributes
 	player.ap = original_ap
+	player.attack_power = original_attack_power
 	game_root._rebuild_world_after_runtime_change()
 
 

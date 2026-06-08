@@ -384,6 +384,7 @@ func _validate_synthetic_actor_side_badges(errors: Array[String]) -> void:
 					"source": "skill",
 					"skill_id": "adrenaline_rush",
 					"category": "buff",
+					"icon_path": "res://assets/icons/effects/agility_boost.svg",
 					"level": 1,
 					"duration_remaining": 8.0,
 					"modifiers": {"damage_bonus": 0.25},
@@ -440,6 +441,16 @@ func _validate_actor_status_effect_icons(actor_node: Node, errors: Array[String]
 			errors.append("buff status effect icon should expose category")
 		if absf(float(buff.get_meta("duration_remaining", 0.0)) - 8.0) > 0.001:
 			errors.append("buff status effect icon should expose duration")
+	var buff_sprite: Sprite3D = _status_effect_sprite_by_effect_id(container, "skill_adrenaline_rush") as Sprite3D
+	if buff_sprite == null:
+		errors.append("status effect icons should render Sprite3D icon when icon_path exists")
+	else:
+		if buff_sprite.texture == null:
+			errors.append("status effect Sprite3D should load texture")
+		if str(buff_sprite.get_meta("icon_resource_path", "")) != "res://assets/icons/effects/agility_boost.svg":
+			errors.append("status effect Sprite3D should expose icon resource path")
+		if not bool(buff_sprite.get_meta("icon_loaded", false)):
+			errors.append("status effect Sprite3D should expose icon_loaded")
 	if container.find_child("ActorStatusEffectLabel_0", true, false) == null:
 		errors.append("status effect icons should render compact labels")
 
@@ -449,6 +460,17 @@ func _status_effect_icon_by_effect_id(root: Node, effect_id: String) -> Node:
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
 		if str(node.get_meta("effect_id", "")) == effect_id and node.name.begins_with("ActorStatusEffectIcon"):
+			return node
+		for child in node.get_children():
+			pending.append(child)
+	return null
+
+
+func _status_effect_sprite_by_effect_id(root: Node, effect_id: String) -> Node:
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if str(node.get_meta("effect_id", "")) == effect_id and node.name.begins_with("ActorStatusEffectSprite"):
 			return node
 		for child in node.get_children():
 			pending.append(child)
