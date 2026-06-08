@@ -150,6 +150,35 @@ func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) 
 	var missing_entries := commands.changed_validation_records_for_paths(registry, ["data/items/missing_item_for_changed_smoke.json"])
 	if missing_entries.size() != 1 or bool(_dictionary_or_empty(missing_entries[0]).get("found", true)):
 		errors.append("validate changed should report supported but unloaded changed files: %s" % [missing_entries])
+	var missing_status_entries := commands.changed_validation_records_for_paths(registry, [
+		{
+			"path": "data/items/added_item_for_changed_smoke.json",
+			"status": "added",
+			"status_code": "A",
+		},
+		{
+			"path": "data/quests/modified_quest_for_changed_smoke.json",
+			"status": "modified",
+			"status_code": "M",
+		},
+		{
+			"path": "data/appearance/characters/untracked_appearance_for_changed_smoke.json",
+			"status": "untracked",
+			"status_code": "??",
+		},
+	])
+	if missing_status_entries.size() != 3:
+		errors.append("validate changed should keep added/modified/untracked missing entries: %s" % [missing_status_entries])
+	else:
+		_expect_missing_changed_entry(errors, missing_status_entries[0], "items", "added_item_for_changed_smoke", "added")
+		_expect_missing_changed_entry(errors, missing_status_entries[1], "quests", "modified_quest_for_changed_smoke", "modified")
+		_expect_missing_changed_entry(errors, missing_status_entries[2], "appearance", "untracked_appearance_for_changed_smoke", "untracked")
+		var missing_status_summary: Dictionary = commands.changed_status_summary(missing_status_entries)
+		var missing_status_counts: Dictionary = _dictionary_or_empty(missing_status_summary.get("counts", {}))
+		if int(missing_status_counts.get("added", 0)) != 1 or int(missing_status_counts.get("modified", 0)) != 1 or int(missing_status_counts.get("untracked", 0)) != 1:
+			errors.append("validate changed summary should count added/modified/untracked missing entries: %s" % [missing_status_summary])
+		if int(_dictionary_or_empty(_dictionary_or_empty(missing_status_summary.get("domains", {})).get("appearance", {})).get("untracked", 0)) != 1:
+			errors.append("validate changed summary should count recursive appearance domain: %s" % [missing_status_summary])
 	var status_entries := commands.changed_validation_records_for_paths(registry, [
 		{
 			"path": "data/items/deleted_item_for_changed_smoke.json",
@@ -178,6 +207,34 @@ func _expect_validate_changed(errors: Array[String], registry: ContentRegistry) 
 			errors.append("validate changed summary should count deleted/renamed entries: %s" % [status_summary])
 		if str(status_summary.get("text", "")) != "deleted=1, renamed=1":
 			errors.append("validate changed summary text should be stable: %s" % [status_summary])
+	var loaded_rename_entries := commands.changed_validation_records_for_paths(registry, [
+		{
+			"path": "data/items/1006.json",
+			"source_path": "data/items/old_1006_for_changed_smoke.json",
+			"status": "renamed",
+			"status_code": "R",
+		},
+	])
+	if loaded_rename_entries.size() != 1:
+		errors.append("validate changed should keep loaded rename entry: %s" % [loaded_rename_entries])
+	else:
+		var loaded_rename: Dictionary = _dictionary_or_empty(loaded_rename_entries[0])
+		if not bool(loaded_rename.get("found", false)) or str(loaded_rename.get("id", "")) != "1006" or str(loaded_rename.get("change_status", "")) != "renamed":
+			errors.append("validate changed should resolve renamed path that is loaded: %s" % [loaded_rename_entries])
+		if str(loaded_rename.get("source_relative_path", "")) != "data/items/old_1006_for_changed_smoke.json":
+			errors.append("validate changed loaded rename should preserve source path: %s" % [loaded_rename_entries])
+	if commands.call("_missing_changed_label", "added") != "added_missing" \
+			or commands.call("_missing_changed_code", "added") != "added_content_file_not_loaded" \
+			or not str(commands.call("_missing_changed_message", {"change_status": "added"})).contains("added content file"):
+		errors.append("validate changed should expose stable added missing diagnostics")
+	if commands.call("_missing_changed_label", "untracked") != "untracked_missing" \
+			or commands.call("_missing_changed_code", "untracked") != "untracked_content_file_not_loaded" \
+			or not str(commands.call("_missing_changed_message", {"change_status": "untracked"})).contains("untracked content file"):
+		errors.append("validate changed should expose stable untracked missing diagnostics")
+	if commands.call("_missing_changed_label", "modified") != "modified_missing" \
+			or commands.call("_missing_changed_code", "modified") != "modified_content_file_not_loaded" \
+			or not str(commands.call("_missing_changed_message", {"change_status": "modified"})).contains("modified content file"):
+		errors.append("validate changed should expose stable modified missing diagnostics")
 
 
 func _expect_diff_summary_changed(errors: Array[String]) -> void:
@@ -839,6 +896,16 @@ func _has_changed_entry(entries: Array[Dictionary], domain: String, id_value: St
 				and bool(data.get("found", false)):
 			return true
 	return false
+
+
+func _expect_missing_changed_entry(errors: Array[String], entry: Dictionary, domain: String, id_value: String, change_status: String) -> void:
+	var data: Dictionary = _dictionary_or_empty(entry)
+	if bool(data.get("found", true)):
+		errors.append("validate changed missing entry should not be found: %s" % [entry])
+	if str(data.get("domain", "")) != domain or str(data.get("id", "")) != id_value:
+		errors.append("validate changed missing entry should expose domain/id %s %s: %s" % [domain, id_value, entry])
+	if str(data.get("change_status", "")) != change_status:
+		errors.append("validate changed missing entry should expose status %s: %s" % [change_status, entry])
 
 
 func _has_reference_detail(hits: Array[Dictionary], detail: String) -> bool:

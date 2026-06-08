@@ -247,6 +247,12 @@ func _changed_status_summary_text(counts: Dictionary) -> String:
 
 func _missing_changed_label(change_status: String) -> String:
 	match change_status:
+		"added":
+			return "added_missing"
+		"untracked":
+			return "untracked_missing"
+		"modified":
+			return "modified_missing"
 		"deleted":
 			return "deleted"
 		"renamed":
@@ -256,6 +262,12 @@ func _missing_changed_label(change_status: String) -> String:
 
 func _missing_changed_code(change_status: String) -> String:
 	match change_status:
+		"added":
+			return "added_content_file_not_loaded"
+		"untracked":
+			return "untracked_content_file_not_loaded"
+		"modified":
+			return "modified_content_file_not_loaded"
 		"deleted":
 			return "content_file_deleted"
 		"renamed":
@@ -266,6 +278,12 @@ func _missing_changed_code(change_status: String) -> String:
 func _missing_changed_message(entry: Dictionary) -> String:
 	var source_path := str(entry.get("source_relative_path", ""))
 	match str(entry.get("change_status", "")):
+		"added":
+			return "added content file is not loaded by registry"
+		"untracked":
+			return "untracked content file is not loaded by registry"
+		"modified":
+			return "modified content file is not loaded by registry"
 		"deleted":
 			return "changed content file was deleted and is no longer loaded by registry"
 		"renamed":
