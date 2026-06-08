@@ -9,7 +9,9 @@ const FALLBACK_SOUND_ID := "event_fallback"
 const EVENT_SOUND_MAP := {
 	"pickup_granted": "pickup",
 	"container_opened": "container_open",
+	"container_closed": "container_close",
 	"container_transferred": "item_transfer",
+	"inventory_item_dropped": "item_drop",
 	"trade_confirmed": "trade_confirm",
 	"trade_closed": "ui_click",
 	"recipe_crafted": "craft",
@@ -36,6 +38,8 @@ const SOUND_PROFILES := {
 	"pickup": {"frequency": 760.0, "duration": 0.07, "volume": 0.12},
 	"item_transfer": {"frequency": 680.0, "duration": 0.055, "volume": 0.11},
 	"container_open": {"frequency": 320.0, "duration": 0.10, "volume": 0.13},
+	"container_close": {"frequency": 240.0, "duration": 0.08, "volume": 0.11},
+	"item_drop": {"frequency": 360.0, "duration": 0.06, "volume": 0.11},
 	"trade_confirm": {"frequency": 880.0, "duration": 0.08, "volume": 0.12},
 	"craft": {"frequency": 540.0, "duration": 0.12, "volume": 0.13},
 	"skill": {"frequency": 700.0, "duration": 0.12, "volume": 0.12},

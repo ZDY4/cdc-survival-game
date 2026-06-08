@@ -1467,7 +1467,17 @@ func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
 	var hit: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
 	if str(hit.get("last_sound_id", "")) != "hit":
 		errors.append("damaging attack should trigger hit audio feedback: %s" % hit)
-	var fallback_before := int(hit.get("fallback_count", 0))
+	game_root.simulation.emit_event("container_closed", {"container_id": "audio_smoke_container", "reason": "smoke"})
+	game_root.refresh_hud()
+	var container_close: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(container_close.get("last_sound_id", "")) != "container_close":
+		errors.append("container_closed should trigger container close audio feedback: %s" % container_close)
+	game_root.simulation.emit_event("inventory_item_dropped", {"container_id": "audio_smoke_drop", "item_id": "1001", "count": 1})
+	game_root.refresh_hud()
+	var item_drop: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(item_drop.get("last_sound_id", "")) != "item_drop":
+		errors.append("inventory item drop should trigger item drop audio feedback: %s" % item_drop)
+	var fallback_before := int(item_drop.get("fallback_count", 0))
 	game_root.simulation.emit_event("audio_missing_asset_probe", {"reason": "smoke"})
 	game_root.refresh_hud()
 	var fallback: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
