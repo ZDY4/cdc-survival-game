@@ -442,6 +442,14 @@ func _assert_hover_tooltip_snapshot(errors: Array[String], game_root: Node, cont
 		errors.append("%s: runtime control should expose tooltip state shape: %s" % [context, runtime_tooltip])
 	else:
 		_assert_tooltip_visual_diagnostics(errors, _dictionary_or_empty(runtime_tooltip.get("visual", {})), _dictionary_or_empty(runtime_tooltip.get("recommended_rect", {})), "%s runtime" % context)
+	game_root.call("_render_tooltip_snapshot", snapshot)
+	var render: Dictionary = _dictionary_or_empty(game_root.tooltip_render_snapshot())
+	if not bool(render.get("active", false)) or bool(render.get("mouse_blocks_world", true)):
+		errors.append("%s: tooltip render should be active and non-blocking: %s" % [context, render])
+	if str(render.get("owner_panel", "")) != expected_owner or not str(render.get("text", "")).contains(expected_text):
+		errors.append("%s: tooltip render should mirror snapshot owner/text: %s" % [context, render])
+	if game_root.get_node_or_null("TooltipLayer/TooltipPanel/TooltipLabel") == null:
+		errors.append("%s: tooltip render should create TooltipLayer panel label" % context)
 
 
 func _assert_tooltip_visual_diagnostics(errors: Array[String], visual: Dictionary, rect: Dictionary, context: String) -> void:

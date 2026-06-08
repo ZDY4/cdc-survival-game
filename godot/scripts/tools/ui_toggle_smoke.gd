@@ -2290,6 +2290,30 @@ func _assert_hover_tooltip_snapshot(errors: Array[String], game_root: Node, cont
 		errors.append("%s: runtime control should expose tooltip state shape: %s" % [context, runtime_tooltip])
 	else:
 		_assert_tooltip_visual_diagnostics(errors, _dictionary_or_empty(runtime_tooltip.get("visual", {})), _dictionary_or_empty(runtime_tooltip.get("recommended_rect", {})), "%s runtime" % context)
+	game_root.call("_render_tooltip_snapshot", snapshot)
+	var render: Dictionary = _dictionary_or_empty(game_root.tooltip_render_snapshot())
+	_assert_tooltip_render(errors, game_root, render, expected_owner, expected_text, context)
+
+
+func _assert_tooltip_render(errors: Array[String], game_root: Node, render: Dictionary, expected_owner: String, expected_text: String, context: String) -> void:
+	if not bool(render.get("active", false)):
+		errors.append("%s: tooltip render should be active: %s" % [context, render])
+	if bool(render.get("mouse_blocks_world", true)):
+		errors.append("%s: tooltip render should stay non-blocking: %s" % [context, render])
+	if str(render.get("owner_panel", "")) != expected_owner or not str(render.get("text", "")).contains(expected_text):
+		errors.append("%s: tooltip render should mirror snapshot owner/text: %s" % [context, render])
+	if not bool(render.get("label_text_matches", false)):
+		errors.append("%s: tooltip render label text should match snapshot: %s" % [context, render])
+	var layer: Node = game_root.get_node_or_null("TooltipLayer")
+	var panel: Node = game_root.get_node_or_null("TooltipLayer/TooltipPanel")
+	var label: Node = game_root.get_node_or_null("TooltipLayer/TooltipPanel/TooltipLabel")
+	if not (layer is Control) or not (panel is PanelContainer) or not (label is Label):
+		errors.append("%s: tooltip render should create Control/PanelContainer/Label nodes" % context)
+		return
+	if (layer as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE or (panel as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		errors.append("%s: tooltip render nodes should ignore mouse input" % context)
+	if not (panel as PanelContainer).has_theme_stylebox_override("panel"):
+		errors.append("%s: tooltip panel should carry stylebox override" % context)
 
 
 func _assert_tooltip_visual_diagnostics(errors: Array[String], visual: Dictionary, rect: Dictionary, context: String) -> void:

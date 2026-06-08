@@ -87,6 +87,10 @@ var map_panel: Control
 var skills_panel: Control
 var crafting_panel: Control
 var settings_panel: Control
+var tooltip_layer: Control
+var tooltip_panel: PanelContainer
+var tooltip_label: Label
+var last_tooltip_render_snapshot: Dictionary = {"active": false}
 var active_trade_target: Dictionary = {}
 var active_trade_feedback: Dictionary = {}
 var active_container_feedback: Dictionary = {}
@@ -151,6 +155,7 @@ func _ready() -> void:
 	_refresh_debug_overlay()
 	_setup_audio_feedback_controller()
 	_setup_panels()
+	_setup_tooltip_layer()
 	refresh_all_panels()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
 
@@ -184,6 +189,7 @@ func _process(delta: float) -> void:
 	_update_runtime_performance(delta)
 	if runtime_input_controller != null:
 		runtime_input_controller.process(delta)
+	_update_tooltip_layer()
 	_process_auto_tick(delta)
 
 
@@ -820,6 +826,115 @@ func ui_layer_stack_snapshot(drag_data: Variant = {}, drag_hover_target: Control
 	}
 
 
+func _setup_tooltip_layer() -> void:
+	if tooltip_layer != null:
+		return
+	tooltip_layer = Control.new()
+	tooltip_layer.name = "TooltipLayer"
+	tooltip_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tooltip_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tooltip_layer.visible = false
+	add_child(tooltip_layer)
+	tooltip_panel = PanelContainer.new()
+	tooltip_panel.name = "TooltipPanel"
+	tooltip_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tooltip_panel.visible = false
+	tooltip_layer.add_child(tooltip_panel)
+	tooltip_label = Label.new()
+	tooltip_label.name = "TooltipLabel"
+	tooltip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tooltip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tooltip_panel.add_child(tooltip_label)
+
+
+func _update_tooltip_layer() -> void:
+	_setup_tooltip_layer()
+	var snapshot: Dictionary = hover_tooltip_snapshot()
+	if not bool(snapshot.get("active", false)):
+		_hide_tooltip_layer(str(snapshot.get("lifecycle_state", "inactive")))
+		return
+	_render_tooltip_snapshot(snapshot)
+
+
+func _hide_tooltip_layer(reason: String) -> void:
+	if tooltip_layer != null:
+		tooltip_layer.visible = false
+	if tooltip_panel != null:
+		tooltip_panel.visible = false
+	last_tooltip_render_snapshot = {
+		"active": false,
+		"reason": reason,
+		"layer_exists": tooltip_layer != null,
+		"mouse_blocks_world": false,
+	}
+
+
+func _render_tooltip_snapshot(snapshot: Dictionary) -> void:
+	if tooltip_layer == null or tooltip_panel == null or tooltip_label == null:
+		_hide_tooltip_layer("layer_missing")
+		return
+	var rect: Dictionary = _dictionary_or_empty(snapshot.get("recommended_rect", {}))
+	var visual: Dictionary = _dictionary_or_empty(snapshot.get("visual", {}))
+	var position := Vector2(float(rect.get("x", 8.0)), float(rect.get("y", 8.0)))
+	var size := Vector2(float(rect.get("w", 160.0)), float(rect.get("h", 28.0)))
+	tooltip_layer.visible = true
+	tooltip_panel.visible = true
+	tooltip_panel.position = position
+	tooltip_panel.custom_minimum_size = size
+	tooltip_panel.size = size
+	tooltip_panel.add_theme_stylebox_override("panel", _tooltip_panel_style(visual))
+	tooltip_label.text = str(snapshot.get("text", ""))
+	tooltip_label.custom_minimum_size = Vector2(max(1.0, size.x - 20.0), 0.0)
+	tooltip_label.add_theme_font_size_override("font_size", 12)
+	tooltip_label.set_meta("tooltip_text_length", int(snapshot.get("text_length", 0)))
+	tooltip_label.set_meta("tooltip_owner_panel", str(snapshot.get("owner_panel", "")))
+	tooltip_label.set_meta("tooltip_source_name", str(snapshot.get("source_name", "")))
+	tooltip_panel.set_meta("tooltip_visual_style", str(visual.get("style", "")))
+	tooltip_panel.set_meta("tooltip_theme_type", str(visual.get("theme_type", "")))
+	tooltip_panel.set_meta("tooltip_recommended_rect", rect.duplicate(true))
+	tooltip_panel.set_meta("tooltip_non_blocking", bool(visual.get("non_blocking", false)))
+	last_tooltip_render_snapshot = {
+		"active": true,
+		"layer_path": str(tooltip_layer.get_path()),
+		"panel_path": str(tooltip_panel.get_path()),
+		"label_path": str(tooltip_label.get_path()),
+		"owner_panel": str(snapshot.get("owner_panel", "")),
+		"source_name": str(snapshot.get("source_name", "")),
+		"text": str(snapshot.get("text", "")),
+		"text_length": int(snapshot.get("text_length", 0)),
+		"mouse_blocks_world": tooltip_layer.mouse_filter == Control.MOUSE_FILTER_STOP or tooltip_panel.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"layer_mouse_filter": _mouse_filter_name(tooltip_layer.mouse_filter),
+		"panel_mouse_filter": _mouse_filter_name(tooltip_panel.mouse_filter),
+		"visual": visual.duplicate(true),
+		"recommended_rect": rect.duplicate(true),
+		"actual_rect": {"x": tooltip_panel.position.x, "y": tooltip_panel.position.y, "w": tooltip_panel.size.x, "h": tooltip_panel.size.y},
+		"label_text_matches": tooltip_label.text == str(snapshot.get("text", "")),
+	}
+
+
+func _tooltip_panel_style(visual: Dictionary) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.055, 0.078, 0.105, 0.88)
+	style.border_color = Color(0.39, 0.50, 0.61, 0.96)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	var radius := int(visual.get("corner_radius", 4))
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_right = radius
+	style.corner_radius_bottom_left = radius
+	var padding: Dictionary = _dictionary_or_empty(visual.get("padding", {}))
+	var padding_x := float(padding.get("x", 10.0))
+	var padding_y := float(padding.get("y", 7.0))
+	style.content_margin_left = padding_x
+	style.content_margin_right = padding_x
+	style.content_margin_top = padding_y
+	style.content_margin_bottom = padding_y
+	return style
+
+
 func handle_trade_shortcut(event: InputEventKey) -> bool:
 	if panel_controller == null:
 		return false
@@ -1087,6 +1202,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"debug_panel": debug_panel_snapshot(),
 		"hover": runtime_hover_snapshot(),
 		"tooltip": hover_tooltip_snapshot(),
+		"tooltip_render": tooltip_render_snapshot(),
 		"hotbar_hit_test": hotbar_hit_test_snapshot(),
 		"drag": drag_state_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
@@ -1098,6 +1214,10 @@ func runtime_control_snapshot() -> Dictionary:
 		"skill_targeting": _skill_targeting_snapshot(),
 		"player_command_authority_audit": player_command_authority_audit_snapshot(),
 	}
+
+
+func tooltip_render_snapshot() -> Dictionary:
+	return last_tooltip_render_snapshot.duplicate(true)
 
 
 func player_command_authority_audit_snapshot() -> Dictionary:
