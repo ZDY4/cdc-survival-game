@@ -28,6 +28,11 @@ const EVENT_SOUND_MAP := {
 	"corpse_created": "death",
 	"combat_started": "combat_start",
 	"combat_ended": "combat_end",
+	"stage_panel_opened": "ui_panel_open",
+	"stage_panel_closed": "ui_panel_close",
+	"settings_panel_opened": "ui_panel_open",
+	"settings_panel_closed": "ui_panel_close",
+	"ui_button_pressed": "ui_click",
 	"player_command_rejected": "error",
 	"ui_feedback": "ui_feedback",
 	"audio_missing_asset_probe": "missing_audio_asset",
@@ -35,6 +40,8 @@ const EVENT_SOUND_MAP := {
 
 const SOUND_PROFILES := {
 	"ui_click": {"frequency": 620.0, "duration": 0.045, "volume": 0.10},
+	"ui_panel_open": {"frequency": 660.0, "duration": 0.055, "volume": 0.10},
+	"ui_panel_close": {"frequency": 420.0, "duration": 0.050, "volume": 0.09},
 	"ui_feedback": {"frequency": 520.0, "duration": 0.05, "volume": 0.10},
 	"error": {"frequency": 180.0, "duration": 0.11, "volume": 0.14},
 	"pickup": {"frequency": 760.0, "duration": 0.07, "volume": 0.12},
@@ -112,6 +119,16 @@ func process_runtime_snapshot(runtime_snapshot: Dictionary) -> void:
 	last_event_index = events.size()
 
 
+func play_ui_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
+	var event_payload := payload.duplicate(true)
+	event_payload["audio_source"] = str(event_payload.get("audio_source", "ui"))
+	_process_event({
+		"kind": event_kind,
+		"payload": event_payload,
+	}, -1)
+	return snapshot()
+
+
 func snapshot() -> Dictionary:
 	return {
 		"enabled": enabled,
@@ -158,6 +175,9 @@ func _process_event(event_data: Dictionary, event_index: int) -> void:
 		"fallback": used_fallback,
 		"bus": BUS_NAME,
 		"placeholder": placeholder_enabled,
+		"audio_source": str(payload.get("audio_source", "simulation")),
+		"panel_id": str(payload.get("panel_id", "")),
+		"action": str(payload.get("action", "")),
 	}
 	recent_events.append(entry)
 	while recent_events.size() > MAX_RECENT_EVENTS:

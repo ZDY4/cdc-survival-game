@@ -1457,6 +1457,35 @@ func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
 	if int(initial.get("mapped_event_count", 0)) <= 0 or int(initial.get("sound_profile_count", 0)) <= 0:
 		errors.append("audio feedback should expose mapped events and generated profiles: %s" % initial)
 	var before_count := int(initial.get("triggered_count", 0))
+	var panel_open_result: Dictionary = game_root.toggle_stage_panel("inventory")
+	if not bool(panel_open_result.get("success", false)):
+		errors.append("audio smoke should open inventory panel: %s" % panel_open_result)
+	var panel_open: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(panel_open.get("last_event_kind", "")) != "stage_panel_opened" or str(panel_open.get("last_sound_id", "")) != "ui_panel_open":
+		errors.append("stage panel open should trigger UI panel open audio feedback: %s" % panel_open)
+	_assert_recent_audio_event(errors, panel_open, "stage_panel_opened", "ui_panel_open", "ui", "inventory", "stage panel open audio")
+	var panel_close_result: Dictionary = game_root.toggle_stage_panel("inventory")
+	if not bool(panel_close_result.get("success", false)):
+		errors.append("audio smoke should close inventory panel: %s" % panel_close_result)
+	var panel_close: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(panel_close.get("last_event_kind", "")) != "stage_panel_closed" or str(panel_close.get("last_sound_id", "")) != "ui_panel_close":
+		errors.append("stage panel close should trigger UI panel close audio feedback: %s" % panel_close)
+	_assert_recent_audio_event(errors, panel_close, "stage_panel_closed", "ui_panel_close", "ui", "inventory", "stage panel close audio")
+	var settings_open_result: Dictionary = game_root.close_active_ui("audio_settings_open_smoke")
+	if not bool(settings_open_result.get("success", false)) or str(settings_open_result.get("opened", "")) != "settings":
+		errors.append("audio smoke should open settings through close_active_ui: %s" % settings_open_result)
+	var settings_open_audio: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(settings_open_audio.get("last_event_kind", "")) != "settings_panel_opened" or str(settings_open_audio.get("last_sound_id", "")) != "ui_panel_open":
+		errors.append("settings open should trigger UI panel open audio feedback: %s" % settings_open_audio)
+	_assert_recent_audio_event(errors, settings_open_audio, "settings_panel_opened", "ui_panel_open", "ui", "settings", "settings open audio")
+	var settings_close_result: Dictionary = game_root.close_active_ui("audio_settings_close_smoke")
+	if not bool(settings_close_result.get("success", false)) or str(settings_close_result.get("closed", "")) != "settings":
+		errors.append("audio smoke should close settings through close_active_ui: %s" % settings_close_result)
+	var settings_close_audio: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(settings_close_audio.get("last_event_kind", "")) != "settings_panel_closed" or str(settings_close_audio.get("last_sound_id", "")) != "ui_panel_close":
+		errors.append("settings close should trigger UI panel close audio feedback: %s" % settings_close_audio)
+	_assert_recent_audio_event(errors, settings_close_audio, "settings_panel_closed", "ui_panel_close", "ui", "settings", "settings close audio")
+	before_count = int(settings_close_audio.get("triggered_count", before_count))
 	game_root.simulation.emit_event("pickup_granted", {"target_id": "audio_smoke_pickup"})
 	game_root.refresh_hud()
 	var pickup: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
@@ -1524,6 +1553,20 @@ func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
 	var runtime_audio: Dictionary = _dictionary_or_empty(runtime.get("audio_feedback", {}))
 	if str(runtime_audio.get("last_sound_id", "")) != str(fallback.get("last_sound_id", "")):
 		errors.append("runtime control should expose latest audio feedback snapshot: %s" % runtime_audio)
+
+
+func _assert_recent_audio_event(errors: Array[String], snapshot: Dictionary, expected_event_kind: String, expected_sound_id: String, expected_source: String, expected_panel_id: String, context: String) -> void:
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = _dictionary_or_empty(recent[recent.size() - 1])
+	if str(entry.get("event_kind", "")) != expected_event_kind or str(entry.get("sound_id", "")) != expected_sound_id:
+		errors.append("%s: recent audio event mismatch: %s" % [context, entry])
+	if str(entry.get("audio_source", "")) != expected_source:
+		errors.append("%s: recent audio source expected %s, got %s" % [context, expected_source, entry.get("audio_source", "")])
+	if str(entry.get("panel_id", "")) != expected_panel_id:
+		errors.append("%s: recent audio panel expected %s, got %s" % [context, expected_panel_id, entry.get("panel_id", "")])
 
 
 func _assert_ai_debug_snapshot(errors: Array[String], game_root: Node, context: String) -> void:

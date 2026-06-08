@@ -327,6 +327,10 @@ func toggle_stage_panel(panel_id: String) -> Dictionary:
 		return _action_presenter_command_rejected("toggle_stage_panel:%s" % panel_id)
 	var result: Dictionary = panel_controller.toggle_stage_panel(panel_id)
 	if bool(result.get("success", false)):
+		_play_ui_audio_feedback("stage_panel_opened" if bool(result.get("open", false)) else "stage_panel_closed", {
+			"panel_id": panel_id,
+			"action": "toggle_stage_panel",
+		})
 		refresh_all_panels(current_interaction_prompt())
 	return result
 
@@ -334,7 +338,13 @@ func toggle_stage_panel(panel_id: String) -> Dictionary:
 func close_stage_panels() -> Dictionary:
 	if panel_controller == null:
 		return {"success": false, "reason": "panel_controller_missing"}
-	return panel_controller.close_stage_panels()
+	var result: Dictionary = panel_controller.close_stage_panels()
+	if bool(result.get("success", false)) and bool(result.get("closed", false)):
+		_play_ui_audio_feedback("stage_panel_closed", {
+			"panel_id": str(result.get("panel_id", "stage")),
+			"action": "close_stage_panels",
+		})
+	return result
 
 
 func any_stage_panel_open() -> bool:
@@ -2413,6 +2423,10 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 		return {"success": true, "closed": "stage_panel"}
 	if is_settings_open():
 		panel_controller.close_settings_panel()
+		_play_ui_audio_feedback("settings_panel_closed", {
+			"panel_id": "settings",
+			"action": "close_settings_panel",
+		})
 		refresh_all_panels(current_interaction_prompt())
 		return {"success": true, "closed": "settings"}
 	var pending_result: Dictionary = cancel_pending(reason, false)
@@ -2420,6 +2434,10 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 		return {"success": true, "closed": "pending", "result": pending_result}
 	if panel_controller != null:
 		panel_controller.open_settings_panel()
+		_play_ui_audio_feedback("settings_panel_opened", {
+			"panel_id": "settings",
+			"action": "open_settings_panel",
+		})
 		refresh_all_panels(current_interaction_prompt())
 		return {"success": true, "closed": "", "opened": "settings"}
 	return {"success": false, "reason": "panel_controller_missing"}
@@ -3791,6 +3809,12 @@ func _process_audio_feedback() -> void:
 		return
 	if audio_feedback_controller.has_method("process_runtime_snapshot"):
 		audio_feedback_controller.call("process_runtime_snapshot", simulation.snapshot())
+
+
+func _play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
+	if audio_feedback_controller == null or not audio_feedback_controller.has_method("play_ui_feedback"):
+		return {"enabled": false, "reason": "audio_feedback_missing"}
+	return _dictionary_or_empty(audio_feedback_controller.call("play_ui_feedback", event_kind, payload))
 
 
 func _setup_panels() -> void:
