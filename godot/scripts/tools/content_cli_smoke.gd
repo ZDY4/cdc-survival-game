@@ -274,6 +274,8 @@ func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) ->
 		errors.append("asset manifest should include item icon path")
 	if _asset_manifest_entry(manifest, "items", "1002", "fragments[3].definition.visual_asset").get("resource_path", "") != "res://assets/preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("asset manifest should include item appearance model path")
+	if _asset_manifest_entry(manifest, "characters", "trader_lao_wang", "presentation.portrait_path").get("resource_path", "") != "res://assets/portraits/trader_lao_wang.svg":
+		errors.append("asset manifest should include character portrait path")
 	if _asset_manifest_entry(manifest, "overworld", "main_overworld", "locations[0].icon").get("resource_path", "") != "res://assets/icons/location_hospital.svg":
 		errors.append("asset manifest should include overworld location icon path")
 	var appearance_entry := _asset_manifest_entry(manifest, "appearance", "default_humanoid", "base_model_asset")

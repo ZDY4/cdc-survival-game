@@ -6,6 +6,7 @@ const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
 func build(registry: RefCounted) -> Dictionary:
 	var entries: Array[Dictionary] = []
 	_collect_item_assets(entries, registry)
+	_collect_character_assets(entries, registry)
 	_collect_dialogue_assets(entries, registry)
 	_collect_skill_assets(entries, registry)
 	_collect_overworld_assets(entries, registry)
@@ -40,6 +41,15 @@ func _collect_item_assets(entries: Array[Dictionary], registry: RefCounted) -> v
 				continue
 			var definition: Dictionary = _dictionary_or_empty(fragment.get("definition", {}))
 			_add_model_entry(entries, "items", str(item_id), "fragments[%d].definition.visual_asset" % index, str(definition.get("visual_asset", "")))
+
+
+func _collect_character_assets(entries: Array[Dictionary], registry: RefCounted) -> void:
+	for character_id in _sorted_keys(registry.get_library("characters")):
+		var record: Dictionary = registry.get_library("characters")[character_id]
+		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+		var presentation: Dictionary = _dictionary_or_empty(data.get("presentation", {}))
+		_add_media_entry(entries, "characters", str(character_id), "presentation.portrait_path", str(presentation.get("portrait_path", "")), "portrait")
+		_add_media_entry(entries, "characters", str(character_id), "presentation.avatar_path", str(presentation.get("avatar_path", "")), "portrait")
 
 
 func _collect_dialogue_assets(entries: Array[Dictionary], registry: RefCounted) -> void:
