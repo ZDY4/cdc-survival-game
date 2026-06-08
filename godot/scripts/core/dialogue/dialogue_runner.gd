@@ -128,10 +128,12 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 		var node_type: String = str(node.get("type", ""))
 		match node_type:
 			"action":
-				for action in _array_or_empty(node.get("actions", [])):
-					var action_data: Dictionary = _dictionary_or_empty(action)
+				var actions: Array = _array_or_empty(node.get("actions", []))
+				for action_index in range(actions.size()):
+					var action_data: Dictionary = _dictionary_or_empty(actions[action_index])
 					var action_result: Dictionary = _action_runner.apply_action(simulation, actor_id, action_data, _dialogue_action_context(dialogue_id, current_node_id, actor))
 					emitted_actions.append(action_result)
+					_emit_dialogue_action_resolved(simulation, actor_id, actor, dialogue_id, current_node_id, action_index, action_data, action_result)
 					if not bool(action_result.get("success", false)):
 						var action_type := str(action_result.get("type", action_data.get("type", "")))
 						simulation.emit_event("dialogue_action_failed", {
@@ -207,6 +209,48 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _emit_dialogue_action_resolved(simulation: RefCounted, actor_id: int, actor: RefCounted, dialogue_id: String, node_id: String, action_index: int, action_data: Dictionary, action_result: Dictionary) -> void:
+	if simulation == null or not simulation.has_method("emit_event"):
+		return
+	var action_type := str(action_result.get("type", action_data.get("type", action_data.get("action_type", ""))))
+	var payload := {
+		"actor_id": actor_id,
+		"dialogue_id": dialogue_id,
+		"node_id": node_id,
+		"action_index": action_index,
+		"action_type": action_type,
+		"success": bool(action_result.get("success", false)),
+		"reason": str(action_result.get("reason", "")),
+		"target_actor_id": int(actor.active_dialogue_target_actor_id) if actor != null else 0,
+		"target_definition_id": str(actor.active_dialogue_target_definition_id) if actor != null else "",
+		"action_summary": _dialogue_action_summary(action_data, action_result),
+		"action_result": action_result.duplicate(true),
+	}
+	simulation.emit_event("dialogue_action_resolved", payload)
+
+
+func _dialogue_action_summary(action_data: Dictionary, action_result: Dictionary) -> Dictionary:
+	var summary := {
+		"type": str(action_result.get("type", action_data.get("type", action_data.get("action_type", "")))),
+	}
+	for key in [
+		"quest_id",
+		"location_id",
+		"shop_id",
+		"item_id",
+		"flag_id",
+		"target_actor_id",
+		"target_definition_id",
+		"count",
+		"status",
+	]:
+		if action_result.has(key):
+			summary[key] = action_result.get(key)
+		elif action_data.has(key):
+			summary[key] = action_data.get(key)
+	return summary
 
 
 func _dialogue_action_context(dialogue_id: String, node_id: String, actor: RefCounted) -> Dictionary:

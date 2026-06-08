@@ -82,6 +82,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(accept_result.get("success", false)):
 		errors.append("doctor accept option failed: %s" % accept_result.get("reason", "unknown"))
 	_expect_actual_matches_preview(errors, accept_preview, accept_result, "doctor accept option")
+	_expect_dialogue_action_resolved(errors, game_root, "doctor_chen_find_medicine_offer", "accept_job", ["unlock_location", "start_quest"], "doctor accept option")
 	if not simulation.unlocked_locations.has("hospital"):
 		errors.append("doctor accept should unlock hospital")
 	if not _active_quest_ids(game_root).has("find_medicine"):
@@ -138,6 +139,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("failed turn-in should not advance to confirmation dialog")
 	if _event_count(game_root, "dialogue_action_failed") <= 0:
 		errors.append("failed turn-in should emit dialogue_action_failed")
+	_expect_dialogue_action_resolved(errors, game_root, "doctor_chen_find_medicine_turn_in", "turn_in_action", ["turn_in_quest"], "doctor failed turn-in option", false, "not_enough_items")
 
 	player.inventory["1005"] = 1
 	var wrong_target_turn_in: Dictionary = simulation.turn_in_quest(1, "find_medicine", {
@@ -168,6 +170,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(turn_in_result.get("success", false)):
 		errors.append("doctor turn-in option failed: %s" % turn_in_result.get("reason", "unknown"))
 	_expect_actual_matches_preview(errors, turn_in_preview, turn_in_result, "doctor turn-in option")
+	_expect_dialogue_action_resolved(errors, game_root, "doctor_chen_find_medicine_turn_in", "turn_in_action", ["turn_in_quest"], "doctor turn-in option")
 	if int(player.inventory.get("1005", 0)) != 0:
 		errors.append("turn-in should consume medkit")
 	if _active_quest_ids(game_root).has("find_medicine"):
@@ -226,6 +229,35 @@ func _expect_actual_matches_preview(errors: Array[String], preview: Dictionary, 
 		errors.append("%s actual end_type should match preview: %s vs %s" % [context, resolved_result, preview])
 	if not bool(preview.get("will_finish", false)) and str(resolved_result.get("node_id", "")) != str(preview.get("next_node_id", "")):
 		errors.append("%s actual next node should match preview: %s vs %s" % [context, resolved_result, preview])
+
+
+func _expect_dialogue_action_resolved(errors: Array[String], game_root: Node, dialogue_id: String, node_id: String, expected_actions: Array[String], context: String, expected_success: bool = true, expected_reason: String = "") -> void:
+	var events: Array = _events_by_kind(game_root, "dialogue_action_resolved")
+	var matched_actions: Array[String] = []
+	for event_index in range(events.size() - 1, -1, -1):
+		var event: Dictionary = _dictionary_or_empty(events[event_index])
+		var event_data: Dictionary = _dictionary_or_empty(event)
+		var payload: Dictionary = _dictionary_or_empty(event_data.get("payload", {}))
+		if str(payload.get("dialogue_id", "")) != dialogue_id or str(payload.get("node_id", "")) != node_id:
+			continue
+		var action_type := str(payload.get("action_type", ""))
+		if not expected_actions.has(action_type) or matched_actions.has(action_type):
+			continue
+		matched_actions.append(action_type)
+		if bool(payload.get("success", false)) != expected_success:
+			errors.append("%s resolved event success mismatch for %s: %s" % [context, action_type, payload])
+		if expected_reason != "" and str(payload.get("reason", "")) != expected_reason:
+			errors.append("%s resolved event reason mismatch for %s: %s" % [context, action_type, payload])
+		var summary: Dictionary = _dictionary_or_empty(payload.get("action_summary", {}))
+		if str(summary.get("type", "")) != action_type:
+			errors.append("%s resolved event should expose action summary type: %s" % [context, payload])
+		if _dictionary_or_empty(payload.get("action_result", {})).is_empty():
+			errors.append("%s resolved event should include action_result: %s" % [context, payload])
+	matched_actions.sort()
+	var expected_sorted := expected_actions.duplicate()
+	expected_sorted.sort()
+	if matched_actions != expected_sorted:
+		errors.append("%s should emit dialogue_action_resolved for %s, got %s" % [context, expected_sorted, matched_actions])
 
 
 func _preview_first_action_requires_runtime_validation(preview: Dictionary) -> bool:
@@ -383,6 +415,7 @@ func _expect_scripted_state_actions(game_root: Node) -> Array[String]:
 		errors.append("give_reward dialogue action should emit dialogue_reward_granted")
 	if _array_or_empty(result.get("emitted_actions", [])).size() != 4:
 		errors.append("scripted dialogue action result should expose emitted action results")
+	_expect_dialogue_action_resolved(errors, game_root, "dialogue_action_smoke_scripted", "scripted_actions", ["set_world_flag", "change_relationship", "give_item", "give_reward"], "scripted dialogue actions")
 	if not _dialogue_text(game_root).contains("状态已经记录"):
 		errors.append("scripted dialogue actions should advance to confirmation dialog")
 	return errors
@@ -549,6 +582,15 @@ func _event_count(game_root: Node, kind: String) -> int:
 		if str(event_data.get("kind", "")) == kind:
 			count += 1
 	return count
+
+
+func _events_by_kind(game_root: Node, kind: String) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for event in game_root.simulation.snapshot().get("events", []):
+		var event_data: Dictionary = _dictionary_or_empty(event)
+		if str(event_data.get("kind", "")) == kind:
+			output.append(event_data)
+	return output
 
 
 func _array_or_empty(value: Variant) -> Array:
