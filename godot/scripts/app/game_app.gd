@@ -1906,7 +1906,26 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		var cart_target: Dictionary = _trade_cart_drag_hover_target_snapshot(control, drag_data, "trade_cart", str(control.get_meta("trade_cart_target")))
 		for key in cart_target:
 			target[key] = cart_target[key]
+	else:
+		var observe_key := _observe_hotbar_meta_key(control)
+		if not observe_key.is_empty():
+			var observe_target: Dictionary = _observe_hotbar_drag_hover_target_snapshot(control, drag_data, observe_key)
+			for key in observe_target:
+				target[key] = observe_target[key]
 	return target
+
+
+func _observe_hotbar_drag_hover_target_snapshot(_control: Control, drag_data: Dictionary, observe_key: String) -> Dictionary:
+	var reject_reason := "observe_hotbar_drag_unsupported" if not drag_data.is_empty() else ""
+	return {
+		"target_kind": "observe_hotbar",
+		"target_id": observe_key,
+		"observe_key": observe_key,
+		"accepts": "",
+		"last_accept": false,
+		"reject_reason": reject_reason,
+		"hover_highlight": _drag_hover_highlight(not drag_data.is_empty(), "observe_hotbar", observe_key, reject_reason, false),
+	}
 
 
 func _hotbar_slot_drag_hover_target_snapshot(control: Control, drag_data: Dictionary) -> Dictionary:

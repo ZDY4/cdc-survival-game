@@ -1205,6 +1205,12 @@ func _observe_button(node_name: String, text: String, meta_key: String, meta_val
 	button.disabled = disabled
 	button.set_meta(meta_key, meta_value)
 	button.set_meta("disabled_reason", "observe_control_unavailable" if disabled else "")
+	button.set_drag_forwarding(
+		Callable(self, "_empty_hotbar_drag_data"),
+		Callable(self, "_can_drop_observe_hotbar"),
+		Callable(self, "_drop_observe_hotbar")
+	)
+	_prepare_observe_hotbar_drop_target(button)
 	return button
 
 
@@ -1397,6 +1403,17 @@ func _drop_hotbar_group(_position: Vector2, _data: Variant, from_control: Contro
 	_clear_hotbar_group_drag_hover(from_control)
 
 
+func _can_drop_observe_hotbar(_position: Vector2, data: Variant, from_control: Control) -> bool:
+	var drag_data: Dictionary = _dictionary_or_empty(data)
+	var reject_reason := "observe_hotbar_drag_unsupported" if not drag_data.is_empty() else ""
+	_apply_observe_hotbar_drag_hover(from_control, reject_reason)
+	return false
+
+
+func _drop_observe_hotbar(_position: Vector2, _data: Variant, from_control: Control) -> void:
+	_clear_observe_hotbar_drag_hover(from_control)
+
+
 func _can_drop_hotbar_skill(_position: Vector2, data: Variant, from_control: Control) -> bool:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	var acceptance: Dictionary = _hotbar_drop_acceptance(from_control, drag_data)
@@ -1430,6 +1447,53 @@ func _prepare_hotbar_group_drop_target(control: Control) -> void:
 	control.mouse_exited.connect(func() -> void:
 		_clear_hotbar_group_drag_hover(control)
 	)
+
+
+func _prepare_observe_hotbar_drop_target(control: Control) -> void:
+	if control == null:
+		return
+	control.set_meta("observe_hotbar_drag_hovered", false)
+	control.set_meta("observe_hotbar_drag_last_accept", false)
+	control.set_meta("observe_hotbar_drag_reject_reason", "")
+	control.set_meta("observe_hotbar_drag_highlight_style", "")
+	control.set_meta("observe_hotbar_drag_highlight_color", "")
+	control.mouse_exited.connect(func() -> void:
+		_clear_observe_hotbar_drag_hover(control)
+	)
+
+
+func _apply_observe_hotbar_drag_hover(control: Control, reject_reason: String) -> void:
+	if control == null or not is_instance_valid(control) or _observe_control_key(control).is_empty():
+		return
+	var color_text := "#e25c5c"
+	control.set_meta("observe_hotbar_drag_hovered", true)
+	control.set_meta("observe_hotbar_drag_last_accept", false)
+	control.set_meta("observe_hotbar_drag_reject_reason", reject_reason)
+	control.set_meta("observe_hotbar_drag_highlight_style", "reject")
+	control.set_meta("observe_hotbar_drag_highlight_color", color_text)
+	control.modulate = Color(1.0, 0.90, 0.90, 1.0)
+	if control is Button:
+		(control as Button).add_theme_color_override("font_color", Color.html(color_text))
+
+
+func _clear_observe_hotbar_drag_hover(control: Control) -> void:
+	if control == null or not is_instance_valid(control) or _observe_control_key(control).is_empty():
+		return
+	control.set_meta("observe_hotbar_drag_hovered", false)
+	control.set_meta("observe_hotbar_drag_last_accept", false)
+	control.set_meta("observe_hotbar_drag_reject_reason", "")
+	control.set_meta("observe_hotbar_drag_highlight_style", "")
+	control.set_meta("observe_hotbar_drag_highlight_color", "")
+	control.modulate = Color.WHITE
+	if control is Button:
+		(control as Button).remove_theme_color_override("font_color")
+
+
+func _observe_control_key(control: Control) -> String:
+	for key in ["observe_mode", "observe_playback", "observe_speed", "auto_tick", "observe_level"]:
+		if control != null and control.has_meta(key):
+			return key
+	return ""
 
 
 func _apply_hotbar_group_drag_hover(control: Control, reject_reason: String) -> void:

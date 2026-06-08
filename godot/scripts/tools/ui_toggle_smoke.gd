@@ -153,6 +153,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_runtime_control_line(errors, game_root, "Observe on pause x1", "observe mode enabled HUD")
 	_assert_hotbar_visibility(errors, game_root, false, "observe mode should hide normal hotbar")
 	_assert_observe_hotbar_hit_test(errors, game_root, "observe hotbar hit-test")
+	_assert_observe_hotbar_drag_reject(errors, game_root, _skill_hotbar_drag_data("adrenaline_rush", "肾上腺冲刺"), _observe_mode_button(game_root), "observe_hotbar_drag_unsupported", "skill drag to observe hotbar reject target")
+	_assert_observe_hotbar_hover_render(errors, game_root, _skill_hotbar_drag_data("adrenaline_rush", "肾上腺冲刺"), _observe_mode_button(game_root), "observe_hotbar_drag_unsupported", "skill drag to observe hotbar reject render")
 	_assert_observe_mode_button(errors, game_root, true, "observe mode enabled button")
 	_assert_observe_play_button(errors, game_root, false, false, "observe mode initial play button")
 	_assert_observe_speed_button(errors, game_root, "x1", false, "observe mode initial speed button")
@@ -1550,6 +1552,42 @@ func _assert_observe_hotbar_hit_test(errors: Array[String], game_root: Node, con
 		errors.append("%s: observe hotbar should expose mode button" % context)
 		return
 	_assert_hotbar_hit(errors, game_root, observe_button, "observe_hotbar", "observe_mode", "", context)
+
+
+func _assert_observe_hotbar_drag_reject(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: observe hotbar target should be available" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != "observe_hotbar":
+		errors.append("%s: expected observe_hotbar target, got %s" % [context, target_snapshot])
+	if bool(target_snapshot.get("last_accept", true)):
+		errors.append("%s: observe hotbar should reject drag data, got %s" % [context, target_snapshot])
+	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: observe hotbar reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
+	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	if str(highlight.get("style", "")) != "reject" or bool(highlight.get("accepted", true)):
+		errors.append("%s: observe hotbar hover should expose reject highlight, got %s" % [context, highlight])
+
+
+func _assert_observe_hotbar_hover_render(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: observe hotbar target should be available" % context)
+		return
+	var accepted := bool(game_root.hud.call("_can_drop_observe_hotbar", Vector2.ZERO, drag_data, target))
+	if accepted:
+		errors.append("%s: observe hotbar hover render should reject drag data" % context)
+	if not bool(target.get_meta("observe_hotbar_drag_hovered", false)):
+		errors.append("%s: observe hotbar should record active hover render state" % context)
+	if bool(target.get_meta("observe_hotbar_drag_last_accept", true)):
+		errors.append("%s: observe hotbar hover render should record reject state" % context)
+	if str(target.get_meta("observe_hotbar_drag_reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: observe hotbar hover render reject reason expected %s, got %s" % [context, expected_reject_reason, target.get_meta("observe_hotbar_drag_reject_reason", "")])
+	if str(target.get_meta("observe_hotbar_drag_highlight_style", "")) != "reject":
+		errors.append("%s: observe hotbar hover render style should be reject, got %s" % [context, target.get_meta("observe_hotbar_drag_highlight_style", "")])
+	if str(target.get_meta("observe_hotbar_drag_highlight_color", "")) != "#e25c5c":
+		errors.append("%s: observe hotbar hover render color should be reject red, got %s" % [context, target.get_meta("observe_hotbar_drag_highlight_color", "")])
 
 
 func _assert_hotbar_hit(errors: Array[String], game_root: Node, control: Control, expected_kind: String, expected_id: String, expected_group_id: String, context: String) -> void:

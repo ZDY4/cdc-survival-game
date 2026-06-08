@@ -132,6 +132,7 @@ const REASONS := {
 	"hotbar_slot_missing_skill": {"category": "skill", "text": "缺少热栏技能"},
 	"hotbar_slot_missing_slot": {"category": "skill", "text": "缺少热栏槽位"},
 	"hotbar_group_drag_unsupported": {"category": "skill", "text": "热栏组不支持拖拽放置"},
+	"observe_hotbar_drag_unsupported": {"category": "ui", "text": "观察控制不支持拖拽放置"},
 	"quest_not_active": {"category": "quest", "text": "任务未激活"},
 	"quest_not_waiting_for_turn_in": {"category": "quest", "text": "任务不需要手动交付"},
 	"quest_objective_incomplete": {"category": "quest", "text": "任务目标尚未完成"},
@@ -558,6 +559,10 @@ const REASON_METADATA := {
 	"hotbar_group_drag_unsupported": {
 		"payload_fields": ["drag_kind", "group_id"],
 		"disabled_text": "不能拖到热栏组",
+	},
+	"observe_hotbar_drag_unsupported": {
+		"payload_fields": ["drag_kind", "observe_key"],
+		"disabled_text": "不能拖到观察控制",
 	},
 	"skill_on_cooldown": {
 		"payload_fields": ["skill_id", "cooldown_remaining", "actor_id"],
