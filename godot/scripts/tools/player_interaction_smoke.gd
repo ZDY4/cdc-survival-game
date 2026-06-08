@@ -1166,6 +1166,38 @@ func _expect_world_action_interaction_presenter(errors: Array[String], game_root
 	_expect_action_marker_phases(errors, pulse, ["start", "pulse", "fade"], "interaction pulse marker")
 
 
+func _expect_world_action_combat_event_presenter(errors: Array[String], game_root: Node, event_kind: String, source_actor_id: int, target_node: Node3D) -> void:
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "combat_event":
+		errors.append("combat event should enqueue world action presenter combat_event, got %s" % JSON.stringify(presenter))
+	if str(presenter.get("event_kind", "")) != event_kind:
+		errors.append("combat event presenter should expose event kind %s, got %s" % [event_kind, presenter.get("event_kind", "")])
+	if int(presenter.get("source_actor_id", 0)) != source_actor_id:
+		errors.append("combat event presenter should expose source actor id")
+	if str(presenter.get("container_id", "")).is_empty():
+		errors.append("combat event presenter should expose corpse container id")
+	if _dictionary_or_empty(presenter.get("target_grid", {})).is_empty():
+		errors.append("combat event presenter should expose target grid")
+	_expect_action_presenter_phases(errors, presenter, ["signal", "resolve", "fade"], "combat event presenter")
+	var marker: MeshInstance3D = game_root.find_child("WorldActionCombatEvent", true, false) as MeshInstance3D
+	if marker == null:
+		errors.append("combat event presenter should render WorldActionCombatEvent marker")
+		return
+	if str(marker.get_meta("action_presenter_kind", "")) != "combat_event":
+		errors.append("combat event marker should expose combat_event presenter kind")
+	if str(marker.get_meta("event_kind", "")) != event_kind:
+		errors.append("combat event marker should expose event kind")
+	if int(marker.get_meta("source_actor_id", 0)) != source_actor_id:
+		errors.append("combat event marker should expose source actor id")
+	if str(marker.get_meta("container_id", "")).is_empty():
+		errors.append("combat event marker should expose container id")
+	if _dictionary_or_empty(marker.get_meta("target_grid", {})).is_empty():
+		errors.append("combat event marker should expose target grid")
+	if target_node != null and marker.global_position.distance_to(target_node.global_position + Vector3(0.0, 1.16, 0.0)) > 0.2:
+		errors.append("combat event marker should appear above corpse node")
+	_expect_action_marker_phases(errors, marker, ["signal", "resolve", "fade"], "combat event marker")
+
+
 func _expect_action_presenter_phases(errors: Array[String], presenter: Dictionary, expected: Array[String], context: String) -> void:
 	var phases := _string_array(presenter.get("phases", []))
 	if phases != expected:
@@ -1342,12 +1374,14 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 		if game_root.simulation.actor_registry.get_actor(target_id) != null:
 			game_root.simulation.actor_registry.unregister_actor(target_id)
 		return
-	game_root._rebuild_world_after_runtime_change()
-	await process_frame
+	game_root._rebuild_world_after_runtime_change({}, {"result": attack_result})
 	var corpse_node: Node3D = _corpse_node_for_source_actor(game_root, target_id)
 	if corpse_node == null:
 		errors.append("defeated target should render a Corpse_* world node")
 		return
+	_expect_world_action_combat_event_presenter(errors, game_root, "corpse_created", target_id, corpse_node)
+	await _wait_for_world_action_presenter_idle(game_root)
+	await process_frame
 	if corpse_node.find_child("CorpseModel", true, false) == null:
 		errors.append("corpse world node should reuse defeated actor model asset")
 	var pickable_body: Node = corpse_node.find_child("PickableBody", true, false)

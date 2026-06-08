@@ -5,8 +5,10 @@ const DEFAULT_ACTOR_Y := 0.58
 const STEP_DURATION_SEC := 0.07
 const ATTACK_PHASES := ["windup", "impact", "fade"]
 const INTERACTION_PHASES := ["start", "pulse", "fade"]
+const COMBAT_EVENT_PHASES := ["signal", "resolve", "fade"]
 const ATTACK_PHASE_DURATIONS := [0.06, 0.08, 0.10]
 const INTERACTION_PHASE_DURATIONS := [0.06, 0.08, 0.10]
+const COMBAT_EVENT_PHASE_DURATIONS := [0.05, 0.10, 0.12]
 
 var sequence: int = 0
 var active_count: int = 0
@@ -32,10 +34,18 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 		return latest.duplicate(true)
 	var attack := _attack_presentation(events, world_root, world_result)
 	if not attack.is_empty():
+		var combat_event := _combat_event_presentation(events, world_root, world_result)
+		if attack.get("target_node", null) == null and not combat_event.is_empty():
+			_start_combat_event_feedback(host, world_root, combat_event)
+			return latest.duplicate(true)
 		_start_attack_feedback(host, world_root, attack)
 		return latest.duplicate(true)
 	if not interaction.is_empty():
 		_start_interaction_feedback(host, world_root, interaction)
+		return latest.duplicate(true)
+	var combat_event := _combat_event_presentation(events, world_root, world_result)
+	if not combat_event.is_empty():
+		_start_combat_event_feedback(host, world_root, combat_event)
 		return latest.duplicate(true)
 	return _record_latest({"active": false, "kind": "none", "event_count": events.size()})
 
@@ -403,6 +413,130 @@ func _interaction_public_snapshot(interaction: Dictionary, active: bool, reason:
 	}
 
 
+func _combat_event_presentation(events: Array, world_root: Node, world_result: Dictionary) -> Dictionary:
+	var event_kinds: Array[String] = []
+	var selected_event: Dictionary = {}
+	var priority := {
+		"corpse_created": 4,
+		"actor_defeated": 3,
+		"combat_ended": 2,
+		"combat_started": 1,
+	}
+	var selected_priority := 0
+	for event_value in events:
+		var event: Dictionary = _dictionary_or_empty(event_value)
+		var kind := str(event.get("kind", ""))
+		if not priority.has(kind):
+			continue
+		event_kinds.append(kind)
+		var event_priority: int = int(priority.get(kind, 0))
+		if event_priority >= selected_priority:
+			selected_event = event
+			selected_priority = event_priority
+	if selected_event.is_empty():
+		return {}
+	var payload: Dictionary = _dictionary_or_empty(selected_event.get("payload", {}))
+	var event_kind := str(selected_event.get("kind", ""))
+	var target_node := _combat_event_node(world_root, world_result, event_kind, payload)
+	var grid := _combat_event_grid(payload)
+	return {
+		"active": false,
+		"kind": "combat_event",
+		"event_kind": event_kind,
+		"event_kinds": event_kinds,
+		"actor_id": int(payload.get("actor_id", payload.get("source_actor_id", 0))),
+		"source_actor_id": int(payload.get("source_actor_id", payload.get("actor_id", 0))),
+		"defeated_by_actor_id": int(payload.get("defeated_by_actor_id", payload.get("defeated_by", 0))),
+		"container_id": str(payload.get("container_id", "")),
+		"reason": str(payload.get("reason", "")),
+		"target_node": target_node,
+		"target_grid": grid,
+		"node_path": str(target_node.get_path()) if target_node != null else "",
+	}
+
+
+func _start_combat_event_feedback(host: Node, world_root: Node, combat_event: Dictionary) -> void:
+	var target_node: Node3D = combat_event.get("target_node", null)
+	var target_grid: Dictionary = _dictionary_or_empty(combat_event.get("target_grid", {}))
+	if target_node == null and target_grid.is_empty():
+		_record_latest(_combat_event_public_snapshot(combat_event, false, "target_missing"))
+		return
+	sequence += 1
+	var marker := MeshInstance3D.new()
+	marker.name = "WorldActionCombatEvent"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.18
+	mesh.height = 0.36
+	mesh.radial_segments = 10
+	mesh.rings = 5
+	marker.mesh = mesh
+	marker.material_override = _combat_event_material(str(combat_event.get("event_kind", "")))
+	var target_position := Vector3.ZERO
+	if target_node != null:
+		target_position = target_node.global_position if target_node.is_inside_tree() else target_node.position
+	else:
+		target_position = _grid_to_world(target_grid, 0.42)
+	marker.position = target_position + Vector3(0.0, 1.16, 0.0)
+	marker.set_meta("action_presenter_active", true)
+	marker.set_meta("action_presenter_kind", "combat_event")
+	marker.set_meta("action_presenter_phases", COMBAT_EVENT_PHASES.duplicate())
+	marker.set_meta("action_presenter_phase_count", COMBAT_EVENT_PHASES.size())
+	marker.set_meta("action_presenter_current_phase", COMBAT_EVENT_PHASES[0])
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(COMBAT_EVENT_PHASE_DURATIONS))
+	marker.set_meta("event_kind", str(combat_event.get("event_kind", "")))
+	marker.set_meta("event_kinds", _array_or_empty(combat_event.get("event_kinds", [])).duplicate(true))
+	marker.set_meta("actor_id", int(combat_event.get("actor_id", 0)))
+	marker.set_meta("source_actor_id", int(combat_event.get("source_actor_id", 0)))
+	marker.set_meta("defeated_by_actor_id", int(combat_event.get("defeated_by_actor_id", 0)))
+	marker.set_meta("container_id", str(combat_event.get("container_id", "")))
+	marker.set_meta("target_grid", target_grid.duplicate(true))
+	_track_active_node(marker)
+	_presentation_layer(world_root).add_child(marker)
+	var tween := host.create_tween()
+	_track_active_tween(tween)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(marker, "scale", Vector3(0.82, 0.82, 0.82), float(COMBAT_EVENT_PHASE_DURATIONS[0]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), COMBAT_EVENT_PHASES[1]))
+	tween.tween_property(marker, "scale", Vector3(1.55, 1.55, 1.55), float(COMBAT_EVENT_PHASE_DURATIONS[1]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), COMBAT_EVENT_PHASES[2]))
+	tween.tween_property(marker, "scale", Vector3(0.42, 0.42, 0.42), float(COMBAT_EVENT_PHASE_DURATIONS[2]))
+	tween.finished.connect(Callable(self, "_on_combat_event_feedback_finished").bind(weakref(marker)))
+	var snapshot_data := _combat_event_public_snapshot(combat_event, true, "")
+	snapshot_data["marker_path"] = str(marker.get_path())
+	_record_latest(snapshot_data)
+
+
+func _on_combat_event_feedback_finished(marker_ref: WeakRef) -> void:
+	var marker := marker_ref.get_ref() as Node
+	if marker != null and not marker.is_queued_for_deletion():
+		marker.set_meta("action_presenter_active", false)
+		marker.queue_free()
+	_prune_active_refs()
+	latest["active"] = active_count > 0
+	latest["active_count"] = active_count
+
+
+func _combat_event_public_snapshot(combat_event: Dictionary, active: bool, reason: String) -> Dictionary:
+	return {
+		"active": active,
+		"kind": "combat_event",
+		"reason": reason,
+		"event_kind": str(combat_event.get("event_kind", "")),
+		"event_kinds": _array_or_empty(combat_event.get("event_kinds", [])).duplicate(true),
+		"actor_id": int(combat_event.get("actor_id", 0)),
+		"source_actor_id": int(combat_event.get("source_actor_id", 0)),
+		"defeated_by_actor_id": int(combat_event.get("defeated_by_actor_id", 0)),
+		"container_id": str(combat_event.get("container_id", "")),
+		"target_grid": _dictionary_or_empty(combat_event.get("target_grid", {})).duplicate(true),
+		"node_path": str(combat_event.get("node_path", "")),
+		"phases": COMBAT_EVENT_PHASES.duplicate(),
+		"phase_count": COMBAT_EVENT_PHASES.size(),
+		"current_phase": COMBAT_EVENT_PHASES[0] if active else "",
+		"duration_sec": _duration_sum(COMBAT_EVENT_PHASE_DURATIONS) if active else 0.0,
+	}
+
+
 func _actor_node(world_root: Node, world_result: Dictionary, actor_id: int) -> Node3D:
 	if actor_id <= 0:
 		return null
@@ -413,6 +547,24 @@ func _actor_node(world_root: Node, world_result: Dictionary, actor_id: int) -> N
 		var definition_id := str(actor_data.get("definition_id", ""))
 		return world_root.find_child("Actor_%s_%d" % [definition_id, actor_id], true, false) as Node3D
 	return null
+
+
+func _combat_event_node(world_root: Node, world_result: Dictionary, event_kind: String, payload: Dictionary) -> Node3D:
+	if event_kind == "corpse_created":
+		var container_id := str(payload.get("container_id", ""))
+		if not container_id.is_empty():
+			var corpse_node := world_root.find_child("Corpse_%s" % container_id, true, false) as Node3D
+			if corpse_node != null:
+				return corpse_node
+	var actor_id := int(payload.get("actor_id", payload.get("source_actor_id", 0)))
+	return _actor_node(world_root, world_result, actor_id)
+
+
+func _combat_event_grid(payload: Dictionary) -> Dictionary:
+	var grid: Dictionary = _dictionary_or_empty(payload.get("grid_position", {}))
+	if grid.is_empty():
+		grid = _dictionary_or_empty(payload.get("target_grid", {}))
+	return grid.duplicate(true)
 
 
 func _interaction_target_node(world_root: Node, world_result: Dictionary, payload: Dictionary) -> Node3D:
@@ -467,6 +619,23 @@ func _interaction_material(option_kind: String) -> StandardMaterial3D:
 			material.albedo_color = Color(0.72, 0.54, 1.0, 0.84)
 		_:
 			material.albedo_color = Color(0.9, 0.86, 0.34, 0.8)
+	return material
+
+
+func _combat_event_material(event_kind: String) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	match event_kind:
+		"corpse_created":
+			material.albedo_color = Color(0.82, 0.18, 0.14, 0.88)
+		"actor_defeated":
+			material.albedo_color = Color(0.96, 0.1, 0.1, 0.9)
+		"combat_started":
+			material.albedo_color = Color(1.0, 0.45, 0.16, 0.86)
+		"combat_ended":
+			material.albedo_color = Color(0.2, 0.86, 0.58, 0.84)
+		_:
+			material.albedo_color = Color(0.9, 0.86, 0.34, 0.82)
 	return material
 
 
