@@ -118,6 +118,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("doctor failed turn-in preview should expose missing item reason: %s" % failed_turn_in_requirement_preview)
 	if not str(failed_turn_in_requirement_preview.get("summary", "")).contains("急救包 0/1"):
 		errors.append("doctor failed turn-in preview should expose item count: %s" % failed_turn_in_requirement_preview)
+	if not str(failed_turn_in_requirement_preview.get("summary", "")).contains("战地医生·陈医生"):
+		errors.append("doctor failed turn-in preview should resolve target display name: %s" % failed_turn_in_requirement_preview)
 	var failed_turn_in_button: Button = _dialogue_option_button(game_root, 1)
 	if failed_turn_in_button == null:
 		errors.append("doctor failed turn-in should expose option button")
@@ -161,6 +163,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("doctor turn-in preview should be ready with medkit: %s" % ready_turn_in_requirement_preview)
 	if not str(ready_turn_in_requirement_preview.get("summary", "")).contains("急救包 1/1"):
 		errors.append("doctor turn-in preview should expose ready item count: %s" % ready_turn_in_requirement_preview)
+	if not str(ready_turn_in_requirement_preview.get("summary", "")).contains("战地医生·陈医生"):
+		errors.append("doctor ready turn-in preview should resolve target display name: %s" % ready_turn_in_requirement_preview)
 	var ready_turn_in_button: Button = _dialogue_option_button(game_root, 1)
 	if ready_turn_in_button == null:
 		errors.append("doctor ready turn-in should expose option button")

@@ -429,7 +429,10 @@ func _character_name(definition_id: String) -> String:
 	var record: Dictionary = _dictionary_or_empty(registry.get_library("characters").get(definition_id, {}))
 	var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
 	var identity: Dictionary = _dictionary_or_empty(data.get("identity", {}))
-	return str(identity.get("name", data.get("name", data.get("display_name", definition_id))))
+	var identity_name := _first_string(identity, ["display_name", "name", "title"])
+	if not identity_name.is_empty():
+		return identity_name
+	return _first_string(data, ["display_name", "name", "title"])
 
 
 func _first_string(source: Dictionary, keys: Array[String]) -> String:
