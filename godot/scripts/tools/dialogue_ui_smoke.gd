@@ -37,6 +37,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if trader_node == null:
 		return ["missing generated trader actor node"]
 
+	_force_tutorial_active_dialogue_state(game_root.simulation)
 	var selection: Dictionary = game_root.select_interaction_node(trader_node)
 	if not bool(selection.get("success", false)):
 		errors.append("trader selection failed")
@@ -52,8 +53,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_panel_mouse_blocker(errors, game_root.dialogue_panel, "DialoguePanel", "dialogue open")
 	if _speaker_line(game_root) != "老王":
 		errors.append("dialogue speaker mismatch: %s" % _speaker_line(game_root))
-	if result.get("dialogue_id", "") != "trader_lao_wang_tutorial_active":
-		errors.append("talk should use dialogue rule variant for tutorial-active trader")
+	var dialogue_id := _dialogue_id_from_interaction_result(result)
+	if dialogue_id != "trader_lao_wang_tutorial_active":
+		errors.append("talk should use dialogue rule variant for tutorial-active trader, got %s with quests %s / completed %s" % [
+			result,
+			game_root.simulation.active_quests,
+			game_root.simulation.completed_quests,
+		])
 	if not _text_line(game_root).contains("警戒区"):
 		errors.append("dialogue text missing start node")
 	if not _target_line(game_root).contains("老王"):
@@ -96,6 +102,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue option button 2 should show option text")
 	elif not str(trade_button.tooltip_text).contains("trade_action"):
 		errors.append("dialogue option button tooltip should expose next node id")
+	else:
+		if str(trade_button.get_meta("preview_action_types", "")) != "open_trade":
+			errors.append("dialogue option button should expose preview action types")
+		if str(trade_button.get_meta("preview_end_type", "")) != "trade":
+			errors.append("dialogue option button should expose preview end type")
+		if not bool(trade_button.get_meta("preview_will_finish", false)):
+			errors.append("dialogue option button should expose preview finished flag")
+		if not str(trade_button.tooltip_text).contains("actions: open_trade") or not str(trade_button.tooltip_text).contains("end: trade"):
+			errors.append("dialogue option button tooltip should expose action/end preview")
 	var before_events: int = game_root.simulation.snapshot().get("events", []).size()
 	_press_key(game_root, KEY_SPACE)
 	if not _player(game_root).get("active_dialogue_id", "") == "trader_lao_wang_tutorial_active":
@@ -114,6 +129,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_key_advances_dialogue_without_options(errors, game_root, KEY_ENTER, "Enter")
 	_expect_missing_dialogue_fallback(errors, game_root)
 	return errors
+
+
+func _force_tutorial_active_dialogue_state(simulation: RefCounted) -> void:
+	for quest_id in ["factory_spare_power", "find_medicine", "zombie_hunter", "tutorial_survive"]:
+		simulation.active_quests.erase(quest_id)
+		simulation.completed_quests.erase(quest_id)
+	simulation.active_quests["tutorial_survive"] = {
+		"quest_id": "tutorial_survive",
+		"current_node_id": "step_1",
+		"completed_objectives": {},
+	}
 
 
 func _execute_primary_and_complete(game_root: Node, max_waits: int = 16) -> Dictionary:
@@ -154,7 +180,7 @@ func _final_interaction_result(result: Dictionary) -> bool:
 	if not bool(result.get("success", false)):
 		return true
 	return bool(result.get("consumed_target", false)) \
-		or result.has("dialogue_id") \
+		or not _dialogue_id_from_interaction_result(result).is_empty() \
 		or result.has("container") \
 		or _has_context_snapshot(result) \
 		or bool(result.get("waited", false)) \
@@ -167,6 +193,20 @@ func _has_context_snapshot(result: Dictionary) -> bool:
 		return false
 	var context_dictionary: Dictionary = context
 	return not context_dictionary.is_empty()
+
+
+func _dialogue_id_from_interaction_result(result: Dictionary) -> String:
+	var dialogue_id := str(result.get("dialogue_id", ""))
+	if not dialogue_id.is_empty():
+		return dialogue_id
+	for key in ["result", "pending_result", "auto_turn_final_result"]:
+		var nested := _dictionary_or_empty(result.get(key, {}))
+		if nested.is_empty():
+			continue
+		var nested_dialogue_id := _dialogue_id_from_interaction_result(nested)
+		if not nested_dialogue_id.is_empty():
+			return nested_dialogue_id
+	return ""
 
 
 func _speaker_line(game_root: Node) -> String:

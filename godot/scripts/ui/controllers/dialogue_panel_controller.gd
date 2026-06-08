@@ -187,13 +187,22 @@ func _option_button(option_index: int, option: Dictionary) -> Button:
 	var button := Button.new()
 	button.name = "DialogueOption_%d" % (option_index + 1)
 	button.text = "%d. %s" % [option_index + 1, str(option.get("text", ""))]
-	button.tooltip_text = "选择 %d | next: %s" % [option_index + 1, str(option.get("next", ""))]
+	var preview: Dictionary = _dictionary_or_empty(option.get("resolution_preview", {}))
+	button.tooltip_text = _option_tooltip(option_index, option, preview)
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.custom_minimum_size = Vector2(420, 28)
 	button.set_meta("option_index", option_index)
+	button.set_meta("option_id", str(option.get("id", "")))
 	button.set_meta("next", str(option.get("next", "")))
+	button.set_meta("preview_ok", bool(preview.get("ok", true)))
+	button.set_meta("preview_next_node_id", str(preview.get("next_node_id", "")))
+	button.set_meta("preview_next_node_type", str(preview.get("next_node_type", "")))
+	button.set_meta("preview_end_type", str(preview.get("end_type", "")))
+	button.set_meta("preview_will_finish", bool(preview.get("will_finish", false)))
+	button.set_meta("preview_action_count", int(preview.get("action_count", _array_or_empty(option.get("action_previews", [])).size())))
+	button.set_meta("preview_action_types", ",".join(_string_array(_array_or_empty(option.get("action_types_preview", [])))))
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("choose_dialogue_option"):
@@ -202,7 +211,37 @@ func _option_button(option_index: int, option: Dictionary) -> Button:
 	return button
 
 
+func _option_tooltip(option_index: int, option: Dictionary, preview: Dictionary) -> String:
+	var parts: Array[String] = ["选择 %d | next: %s" % [option_index + 1, str(option.get("next", ""))]]
+	var action_types := _string_array(_array_or_empty(option.get("action_types_preview", [])))
+	if not action_types.is_empty():
+		parts.append("actions: %s" % ", ".join(action_types))
+	if bool(preview.get("will_finish", false)):
+		parts.append("end: %s" % str(preview.get("end_type", "leave")))
+	else:
+		var next_type := str(preview.get("next_node_type", ""))
+		var next_node := str(preview.get("next_node_id", ""))
+		if not next_type.is_empty() or not next_node.is_empty():
+			parts.append("preview: %s %s" % [next_type, next_node])
+	if not bool(preview.get("ok", true)):
+		parts.append("preview reason: %s" % str(preview.get("reason", "")))
+	return " | ".join(parts)
+
+
+func _string_array(values: Array) -> Array[String]:
+	var output: Array[String] = []
+	for value in values:
+		output.append(str(value))
+	return output
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []

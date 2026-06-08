@@ -49,7 +49,7 @@ func build(runtime_snapshot: Dictionary) -> Dictionary:
 		"text": current_node.get("text", ""),
 		"portrait": current_node.get("portrait", ""),
 		"portrait_asset": AssetPathResolver.resolve_media_asset(str(current_node.get("portrait", "")), "portrait"),
-		"options": _options_from_node(choice_node),
+		"options": _options_from_node(choice_node, node_map),
 	}
 
 
@@ -88,17 +88,121 @@ func _current_node(player: Dictionary, start_node: Dictionary, node_map: Diction
 	return start_node
 
 
-func _options_from_node(node: Dictionary) -> Array[Dictionary]:
+func _options_from_node(node: Dictionary, node_map: Dictionary) -> Array[Dictionary]:
 	if node.get("type", "") != "choice":
 		return []
 	var output: Array[Dictionary] = []
 	for option in node.get("options", []):
 		var option_data: Dictionary = _dictionary_or_empty(option)
+		var next_node_id := str(option_data.get("next", ""))
+		var resolution_preview := _resolution_preview(next_node_id, node_map)
 		output.append({
+			"id": str(option_data.get("id", "")),
 			"text": str(option_data.get("text", "")),
-			"next": str(option_data.get("next", "")),
+			"next": next_node_id,
+			"resolution_preview": resolution_preview,
+			"action_previews": _array_or_empty(resolution_preview.get("action_previews", [])),
+			"action_types_preview": _array_or_empty(resolution_preview.get("action_types", [])),
+			"end_type_preview": str(resolution_preview.get("end_type", "")),
+			"next_node_preview": str(resolution_preview.get("next_node_id", "")),
+			"next_node_type_preview": str(resolution_preview.get("next_node_type", "")),
+			"will_finish_preview": bool(resolution_preview.get("will_finish", false)),
 		})
 	return output
+
+
+func _resolution_preview(node_id: String, node_map: Dictionary) -> Dictionary:
+	var action_previews: Array[Dictionary] = []
+	var action_types: Array[String] = []
+	var visited: Dictionary = {}
+	var current_node_id := node_id
+	var steps := 0
+	while not current_node_id.is_empty() and steps < 32:
+		steps += 1
+		if visited.has(current_node_id):
+			return _resolution_failure("dialogue_resolution_cycle", node_id, current_node_id, "", action_previews, action_types)
+		visited[current_node_id] = true
+		var current_node: Dictionary = _dictionary_or_empty(node_map.get(current_node_id, {}))
+		if current_node.is_empty():
+			return _resolution_failure("dialogue_node_missing", node_id, current_node_id, "", action_previews, action_types)
+		var node_type := str(current_node.get("type", ""))
+		match node_type:
+			"action":
+				for action in _array_or_empty(current_node.get("actions", [])):
+					var action_preview := _action_preview(_dictionary_or_empty(action), current_node_id)
+					action_previews.append(action_preview)
+					var action_type := str(action_preview.get("type", ""))
+					if not action_type.is_empty():
+						action_types.append(action_type)
+				current_node_id = str(current_node.get("next", ""))
+			"dialog", "choice":
+				return _resolution_success(node_id, current_node_id, node_type, false, "", action_previews, action_types)
+			"end":
+				return _resolution_success(node_id, current_node_id, node_type, true, str(current_node.get("end_type", "leave")), action_previews, action_types)
+			_:
+				return _resolution_failure("dialogue_node_unsupported", node_id, current_node_id, node_type, action_previews, action_types)
+	return _resolution_success(node_id, "", "implicit_end", true, "leave", action_previews, action_types)
+
+
+func _resolution_success(start_node_id: String, next_node_id: String, next_node_type: String, will_finish: bool, end_type: String, action_previews: Array[Dictionary], action_types: Array[String]) -> Dictionary:
+	return {
+		"ok": true,
+		"start_node_id": start_node_id,
+		"next_node_id": next_node_id,
+		"next_node_type": next_node_type,
+		"will_finish": will_finish,
+		"end_type": end_type,
+		"action_previews": action_previews,
+		"action_types": action_types,
+		"action_count": action_previews.size(),
+	}
+
+
+func _resolution_failure(reason: String, start_node_id: String, node_id: String, node_type: String, action_previews: Array[Dictionary], action_types: Array[String]) -> Dictionary:
+	return {
+		"ok": false,
+		"reason": reason,
+		"start_node_id": start_node_id,
+		"node_id": node_id,
+		"node_type": node_type,
+		"action_previews": action_previews,
+		"action_types": action_types,
+		"action_count": action_previews.size(),
+	}
+
+
+func _action_preview(action: Dictionary, node_id: String) -> Dictionary:
+	var action_type := str(action.get("type", action.get("action_type", "")))
+	var preview := {
+		"type": action_type,
+		"node_id": node_id,
+		"requires_runtime_validation": action_type in ["turn_in_quest", "start_quest", "give_item", "give_reward", "grant_item", "grant_reward", "change_relationship", "adjust_relationship", "set_relationship"],
+	}
+	match action_type:
+		"start_quest", "turn_in_quest":
+			preview["quest_id"] = str(action.get("quest_id", action.get("questId", "")))
+		"open_trade":
+			preview["shop_id"] = str(action.get("shop_id", action.get("shopId", action.get("action_key", action.get("actionKey", "")))))
+		"unlock_location":
+			preview["location_id"] = str(action.get("location_id", action.get("locationId", "")))
+		"set_world_flag", "set_flag", "world_flag":
+			preview["flag_id"] = str(action.get("flag_id", action.get("flagId", action.get("world_flag", action.get("worldFlag", "")))))
+			preview["value"] = bool(action.get("value", action.get("enabled", true)))
+		"give_item", "grant_item":
+			preview["item_id"] = str(action.get("item_id", action.get("itemId", action.get("id", ""))))
+			preview["count"] = max(1, int(action.get("count", 1)))
+		"give_reward", "grant_reward":
+			var rewards: Dictionary = _dictionary_or_empty(action.get("rewards", action))
+			preview["reward_summary"] = {
+				"item_count": _array_or_empty(rewards.get("items", [])).size(),
+				"money": int(rewards.get("money", 0)),
+				"experience": int(rewards.get("experience", rewards.get("xp", 0))),
+				"skill_points": int(rewards.get("skill_points", rewards.get("skillPoints", 0))),
+			}
+		"change_relationship", "adjust_relationship", "set_relationship":
+			preview["target_definition_id"] = str(action.get("target_definition_id", action.get("targetDefinitionId", "")))
+			preview["delta"] = float(action.get("delta", action.get("amount", 0.0)))
+	return preview
 
 
 func _dialogue_target(runtime_snapshot: Dictionary, dialogue_id: String) -> Dictionary:
@@ -131,3 +235,9 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
