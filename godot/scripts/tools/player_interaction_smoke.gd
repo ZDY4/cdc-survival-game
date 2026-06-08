@@ -1275,6 +1275,8 @@ func _expect_attack_delivery_marker(errors: Array[String], game_root: Node, atta
 			errors.append("ranged attack presenter should expose muzzle flash path and visual kind")
 		if str(presenter.get("projectile_trail_visual_kind", "")) != "projectile_trail" or str(presenter.get("projectile_trail_path", "")).is_empty():
 			errors.append("ranged attack presenter should expose projectile trail path and visual kind")
+		if str(presenter.get("shell_eject_visual_kind", "")) != "shell_eject" or str(presenter.get("shell_eject_path", "")).is_empty():
+			errors.append("ranged attack presenter should expose shell eject path and visual kind")
 	var marker: MeshInstance3D = game_root.find_child("WorldActionAttackDelivery", true, false) as MeshInstance3D
 	if marker == null:
 		errors.append("attack presenter should render WorldActionAttackDelivery marker")
@@ -1337,6 +1339,23 @@ func _expect_ranged_attack_fx_markers(errors: Array[String], game_root: Node, at
 			errors.append("projectile trail should render above map meshes")
 		_expect_attack_marker_metadata(errors, trail, attack_result, "projectile trail marker")
 		_expect_action_marker_phases(errors, trail, ["windup", "impact", "fade"], "projectile trail marker")
+	var shell: MeshInstance3D = game_root.find_child("WorldActionShellEject", true, false) as MeshInstance3D
+	if shell == null:
+		errors.append("ranged attack should render WorldActionShellEject")
+	else:
+		if str(shell.get_meta("action_presenter_kind", "")) != "attack_shell_eject":
+			errors.append("shell eject should expose attack_shell_eject kind")
+		if str(shell.get_meta("shell_eject_visual_kind", "")) != "shell_eject":
+			errors.append("shell eject should expose visual kind")
+		if typeof(shell.get_meta("start_position", null)) != TYPE_VECTOR3 or typeof(shell.get_meta("end_position", null)) != TYPE_VECTOR3:
+			errors.append("shell eject should expose start/end positions")
+		if typeof(shell.get_meta("eject_vector", null)) != TYPE_VECTOR3:
+			errors.append("shell eject should expose eject vector")
+		var shell_material := shell.material_override as StandardMaterial3D
+		if shell_material == null or not shell_material.no_depth_test:
+			errors.append("shell eject should render above map meshes")
+		_expect_attack_marker_metadata(errors, shell, attack_result, "shell eject marker")
+		_expect_action_marker_phases(errors, shell, ["windup", "impact", "fade"], "shell eject marker")
 
 
 func _expect_on_hit_effect_marker_metadata(errors: Array[String], label: Label3D, attack_result: Dictionary) -> void:

@@ -314,6 +314,10 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	if projectile_trail != null:
 		projectile_trail.set_meta("action_presenter_sequence", run_sequence)
 		_track_active_node(projectile_trail)
+	var shell_eject: MeshInstance3D = _attack_shell_eject_marker(attack, delivery_marker)
+	if shell_eject != null:
+		shell_eject.set_meta("action_presenter_sequence", run_sequence)
+		_track_active_node(shell_eject)
 	var damage_label := _attack_damage_label(attack)
 	damage_label.position = target_position + Vector3(0.0, 1.52, 0.0)
 	damage_label.set_meta("action_presenter_sequence", run_sequence)
@@ -331,6 +335,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		layer.add_child(projectile_trail)
 	if muzzle_flash != null:
 		layer.add_child(muzzle_flash)
+	if shell_eject != null:
+		layer.add_child(shell_eject)
 	layer.add_child(damage_label)
 	if on_hit_label != null:
 		layer.add_child(on_hit_label)
@@ -345,6 +351,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		tween.parallel().tween_property(projectile_trail, "scale", Vector3(1.0, 1.0, 1.0), float(ATTACK_PHASE_DURATIONS[0]))
 	if muzzle_flash != null:
 		tween.parallel().tween_property(muzzle_flash, "scale", Vector3(1.32, 1.32, 1.32), float(ATTACK_PHASE_DURATIONS[0]))
+	if shell_eject != null:
+		tween.parallel().tween_property(shell_eject, "scale", Vector3(0.90, 0.90, 0.90), float(ATTACK_PHASE_DURATIONS[0]))
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.16, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.12, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
@@ -355,6 +363,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(projectile_trail), ATTACK_PHASES[1]))
 	if muzzle_flash != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(muzzle_flash), ATTACK_PHASES[1]))
+	if shell_eject != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(shell_eject), ATTACK_PHASES[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[1]))
 	if on_hit_label != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[1]))
@@ -365,6 +375,9 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		tween.parallel().tween_property(projectile_trail, "scale", Vector3(1.04, 1.04, 1.04), float(ATTACK_PHASE_DURATIONS[1]))
 	if muzzle_flash != null:
 		tween.parallel().tween_property(muzzle_flash, "scale", Vector3(1.72, 1.72, 1.72), float(ATTACK_PHASE_DURATIONS[1]))
+	if shell_eject != null:
+		tween.parallel().tween_property(shell_eject, "position", _vector3_or_default(shell_eject.get_meta("end_position", Vector3.ZERO), shell_eject.position), float(ATTACK_PHASE_DURATIONS[1]))
+		tween.parallel().tween_property(shell_eject, "scale", Vector3(1.08, 1.08, 1.08), float(ATTACK_PHASE_DURATIONS[1]))
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.36, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.30, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
@@ -375,6 +388,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(projectile_trail), ATTACK_PHASES[2]))
 	if muzzle_flash != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(muzzle_flash), ATTACK_PHASES[2]))
+	if shell_eject != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(shell_eject), ATTACK_PHASES[2]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[2]))
 	if on_hit_label != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[2]))
@@ -385,6 +400,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		tween.parallel().tween_property(projectile_trail, "scale", Vector3(0.16, 0.16, 0.16), float(ATTACK_PHASE_DURATIONS[2]))
 	if muzzle_flash != null:
 		tween.parallel().tween_property(muzzle_flash, "scale", Vector3(0.10, 0.10, 0.10), float(ATTACK_PHASE_DURATIONS[2]))
+	if shell_eject != null:
+		tween.parallel().tween_property(shell_eject, "scale", Vector3(0.16, 0.16, 0.16), float(ATTACK_PHASE_DURATIONS[2]))
 	tween.parallel().tween_property(damage_label, "modulate", Color(damage_label.modulate.r, damage_label.modulate.g, damage_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "modulate", Color(on_hit_label.modulate.r, on_hit_label.modulate.g, on_hit_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
@@ -392,7 +409,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	var delivery_marker_ref: WeakRef = weakref(delivery_marker) if delivery_marker != null else null
 	var muzzle_flash_ref: WeakRef = weakref(muzzle_flash) if muzzle_flash != null else null
 	var projectile_trail_ref: WeakRef = weakref(projectile_trail) if projectile_trail != null else null
-	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label), on_hit_label_ref, delivery_marker_ref, muzzle_flash_ref, projectile_trail_ref))
+	var shell_eject_ref: WeakRef = weakref(shell_eject) if shell_eject != null else null
+	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label), on_hit_label_ref, delivery_marker_ref, muzzle_flash_ref, projectile_trail_ref, shell_eject_ref))
 	var snapshot_data := _attack_public_snapshot(attack, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
 	if delivery_marker != null:
@@ -405,6 +423,9 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	if projectile_trail != null:
 		snapshot_data["projectile_trail_path"] = str(projectile_trail.get_path())
 		snapshot_data["projectile_trail_visual_kind"] = str(projectile_trail.get_meta("projectile_trail_visual_kind", ""))
+	if shell_eject != null:
+		snapshot_data["shell_eject_path"] = str(shell_eject.get_path())
+		snapshot_data["shell_eject_visual_kind"] = str(shell_eject.get_meta("shell_eject_visual_kind", ""))
 	snapshot_data["damage_label_path"] = str(damage_label.get_path())
 	snapshot_data["damage_label_text"] = str(damage_label.text)
 	if on_hit_label != null:
@@ -413,7 +434,7 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	_record_latest(snapshot_data)
 
 
-func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null, on_hit_label_ref: WeakRef = null, delivery_marker_ref: WeakRef = null, muzzle_flash_ref: WeakRef = null, projectile_trail_ref: WeakRef = null) -> void:
+func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null, on_hit_label_ref: WeakRef = null, delivery_marker_ref: WeakRef = null, muzzle_flash_ref: WeakRef = null, projectile_trail_ref: WeakRef = null, shell_eject_ref: WeakRef = null) -> void:
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
 		marker.set_meta("action_presenter_active", false)
@@ -433,6 +454,11 @@ func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef
 		if projectile_trail != null and not projectile_trail.is_queued_for_deletion():
 			projectile_trail.set_meta("action_presenter_active", false)
 			projectile_trail.queue_free()
+	if shell_eject_ref != null:
+		var shell_eject := shell_eject_ref.get_ref() as Node
+		if shell_eject != null and not shell_eject.is_queued_for_deletion():
+			shell_eject.set_meta("action_presenter_active", false)
+			shell_eject.queue_free()
 	if damage_label_ref != null:
 		var damage_label := damage_label_ref.get_ref() as Node
 		if damage_label != null and not damage_label.is_queued_for_deletion():
@@ -649,6 +675,52 @@ func _attack_projectile_trail_marker(attack: Dictionary, delivery_marker: MeshIn
 	marker.set_meta("trail_distance", distance)
 	marker.set_meta("start_position", start)
 	marker.set_meta("end_position", end)
+	marker.set_meta("actor_id", int(attack.get("actor_id", 0)))
+	marker.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
+	_apply_attack_event_meta(marker, attack)
+	return marker
+
+
+func _attack_shell_eject_marker(attack: Dictionary, delivery_marker: MeshInstance3D):
+	if str(attack.get("attack_delivery", "")) != "ranged" or delivery_marker == null:
+		return null
+	var start: Variant = delivery_marker.get_meta("start_position", null)
+	var end: Variant = delivery_marker.get_meta("end_position", null)
+	if typeof(start) != TYPE_VECTOR3 or typeof(end) != TYPE_VECTOR3:
+		return null
+	var forward: Vector3 = (end as Vector3) - (start as Vector3)
+	if forward.length() <= 0.01:
+		forward = Vector3.FORWARD
+	forward = forward.normalized()
+	var right := forward.cross(Vector3.UP).normalized()
+	if right.length() <= 0.01:
+		right = Vector3.RIGHT
+	var upward := Vector3.UP
+	var eject_vector := (right * 0.34 + upward * 0.20 - forward * 0.08).normalized()
+	var shell_start := (start as Vector3) + right * 0.16 + upward * 0.06
+	var shell_end := shell_start + eject_vector * 0.56
+	var mesh := CylinderMesh.new()
+	mesh.radial_segments = 8
+	mesh.top_radius = 0.026
+	mesh.bottom_radius = 0.032
+	mesh.height = 0.16
+	var marker := MeshInstance3D.new()
+	marker.name = "WorldActionShellEject"
+	marker.mesh = mesh
+	marker.material_override = _attack_shell_eject_material()
+	marker.position = shell_start
+	marker.basis = _basis_from_y(eject_vector)
+	marker.scale = Vector3(0.34, 0.34, 0.34)
+	marker.set_meta("action_presenter_active", true)
+	marker.set_meta("action_presenter_kind", "attack_shell_eject")
+	marker.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
+	marker.set_meta("action_presenter_phase_count", ATTACK_PHASES.size())
+	marker.set_meta("action_presenter_current_phase", ATTACK_PHASES[0])
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(ATTACK_PHASE_DURATIONS))
+	marker.set_meta("shell_eject_visual_kind", "shell_eject")
+	marker.set_meta("start_position", shell_start)
+	marker.set_meta("end_position", shell_end)
+	marker.set_meta("eject_vector", eject_vector)
 	marker.set_meta("actor_id", int(attack.get("actor_id", 0)))
 	marker.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
 	_apply_attack_event_meta(marker, attack)
@@ -1418,6 +1490,14 @@ func _attack_projectile_trail_material() -> StandardMaterial3D:
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.no_depth_test = true
 	material.albedo_color = Color(0.98, 0.84, 0.34, 0.68)
+	return material
+
+
+func _attack_shell_eject_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	material.albedo_color = Color(0.95, 0.70, 0.32, 0.88)
 	return material
 
 
