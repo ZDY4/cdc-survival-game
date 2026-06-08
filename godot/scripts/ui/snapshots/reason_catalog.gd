@@ -121,6 +121,9 @@ const REASONS := {
 	"drop_zone_source_mismatch": {"category": "trade", "text": "拖拽来源不匹配"},
 	"trade_item_rejected": {"category": "trade", "text": "交易物品被拒绝"},
 	"unknown_trade_item": {"category": "trade", "text": "未知交易物品"},
+	"cart_entry_missing_index": {"category": "trade", "text": "购物车条目索引缺失"},
+	"cart_entry_requires_cart_target": {"category": "trade", "text": "购物车条目只能拖到购物车"},
+	"trade_cart_unsupported_drag_data": {"category": "trade", "text": "不支持的购物车拖拽数据"},
 	"equipment_slot_requires_inventory_item": {"category": "equipment", "text": "装备槽只接受背包物品"},
 	"equipment_slot_missing_item": {"category": "equipment", "text": "缺少装备物品"},
 	"equipment_slot_missing_slot": {"category": "equipment", "text": "缺少装备槽位"},
@@ -507,6 +510,18 @@ const REASON_METADATA := {
 	"sell_zone_requires_player_or_equipment_source": {
 		"payload_fields": ["source", "drop_zone"],
 		"disabled_text": "出售区只接受背包或装备物品",
+	},
+	"cart_entry_missing_index": {
+		"payload_fields": ["index"],
+		"disabled_text": "购物车条目索引缺失",
+	},
+	"cart_entry_requires_cart_target": {
+		"payload_fields": ["index", "target_kind"],
+		"disabled_text": "购物车条目只能拖到购物车",
+	},
+	"trade_cart_unsupported_drag_data": {
+		"payload_fields": ["drag_kind", "target_kind"],
+		"disabled_text": "不支持的购物车拖拽数据",
 	},
 	"equipment_slot_requires_inventory_item": {
 		"payload_fields": ["drag_kind", "slot_id"],

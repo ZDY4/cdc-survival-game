@@ -268,6 +268,8 @@ func _build_layout() -> void:
 	cart_scroll.name = "CartScroll"
 	cart_scroll.custom_minimum_size = Vector2(580, 72)
 	cart_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	cart_scroll.set_meta("trade_cart_target", "cart")
+	_prepare_trade_cart_drop_target(cart_scroll)
 	cart_scroll.set_drag_forwarding(
 		Callable(self, "_empty_trade_drag_data"),
 		Callable(self, "_can_drop_cart_data"),
@@ -276,6 +278,8 @@ func _build_layout() -> void:
 	_cart_items_box = VBoxContainer.new()
 	_cart_items_box.name = "CartItemLines"
 	_cart_items_box.add_theme_constant_override("separation", 4)
+	_cart_items_box.set_meta("trade_cart_target", "cart")
+	_prepare_trade_cart_drop_target(_cart_items_box)
 	_cart_items_box.set_drag_forwarding(
 		Callable(self, "_empty_trade_drag_data"),
 		Callable(self, "_can_drop_cart_data"),
@@ -709,32 +713,43 @@ func _ignore_trade_item_drop(_position: Vector2, _data: Variant, _from_control: 
 
 func _can_drop_cart_data(_position: Vector2, data: Variant, _from_control: Control) -> bool:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
+	var accepted := false
+	var reject_reason := ""
+	var source_for_preview := ""
 	match str(drag_data.get("kind", "")):
 		"trade_item":
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 			var source: String = str(drag_data.get("source", ""))
-			var accepted := not item.is_empty() and _item_can_trade(item, source) and _drag_source_matches_drop_zone(source, _from_control)
-			_update_drop_zone_drag_state(_from_control, source, accepted, _drop_reject_reason(item, source, _from_control))
-			return accepted
+			accepted = not item.is_empty() and _item_can_trade(item, source) and _drag_source_matches_drop_zone(source, _from_control)
+			reject_reason = "" if accepted else _drop_reject_reason(item, source, _from_control)
+			source_for_preview = source
 		"inventory_item":
 			var item: Dictionary = _trade_item_from_inventory_drag(drag_data)
-			var accepted := not item.is_empty() and _item_can_trade(item, "player") and _drag_source_matches_drop_zone("player", _from_control)
-			_update_drop_zone_drag_state(_from_control, "player", accepted, _drop_reject_reason(item, "player", _from_control))
-			return accepted
+			accepted = not item.is_empty() and _item_can_trade(item, "player") and _drag_source_matches_drop_zone("player", _from_control)
+			reject_reason = "" if accepted else _drop_reject_reason(item, "player", _from_control)
+			source_for_preview = "player"
 		"trade_cart_entry":
 			var from_index: int = int(drag_data.get("index", -1))
-			var accepted := from_index >= 0 and from_index < _cart_entries.size() and not _is_trade_drop_zone(_from_control)
-			_update_drop_zone_drag_state(_from_control, "cart", accepted, str(_from_control.get_meta("trade_drop_reject_reason", "cart_entry_requires_cart_target")) if _is_trade_drop_zone(_from_control) else "")
-			return accepted
+			accepted = from_index >= 0 and from_index < _cart_entries.size() and not _is_trade_drop_zone(_from_control)
+			if accepted:
+				reject_reason = ""
+			elif _is_trade_drop_zone(_from_control):
+				reject_reason = str(_from_control.get_meta("trade_drop_reject_reason", "cart_entry_requires_cart_target"))
+			else:
+				reject_reason = "cart_entry_missing_index"
+			source_for_preview = "cart"
 		_:
-			_update_drop_zone_drag_state(_from_control, "", false, "unsupported_drag_data")
-			return false
+			reject_reason = "trade_cart_unsupported_drag_data"
+	_update_drop_zone_drag_state(_from_control, source_for_preview, accepted, reject_reason)
+	_apply_trade_cart_drag_hover(_from_control, accepted, reject_reason)
+	return accepted
 
 
 func _drop_cart_data(position: Vector2, data: Variant, from_control: Control) -> void:
 	if not _can_drop_cart_data(position, data, from_control):
 		return
 	var drag_data: Dictionary = _dictionary_or_empty(data)
+	_clear_trade_cart_drag_hover(from_control)
 	match str(drag_data.get("kind", "")):
 		"trade_item":
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
@@ -751,6 +766,55 @@ func _drop_cart_data(position: Vector2, data: Variant, from_control: Control) ->
 			_queue_trade_entry(item, "player", count)
 		"trade_cart_entry":
 			_reorder_cart_entry(int(drag_data.get("index", -1)), _cart_drop_index(from_control))
+
+
+func _prepare_trade_cart_drop_target(control: Control) -> void:
+	if control == null:
+		return
+	control.set_meta("trade_cart_drag_hovered", false)
+	control.set_meta("trade_cart_drag_last_accept", false)
+	control.set_meta("trade_cart_drag_reject_reason", "")
+	control.set_meta("trade_cart_drag_highlight_style", "")
+	control.set_meta("trade_cart_drag_highlight_color", "")
+	control.mouse_exited.connect(func() -> void:
+		_clear_trade_cart_drag_hover(control)
+	)
+
+
+func _apply_trade_cart_drag_hover(control: Control, accepted: bool, reject_reason: String) -> void:
+	if control == null or not is_instance_valid(control):
+		return
+	if not control.has_meta("trade_cart_target") and not control.has_meta("cart_index"):
+		return
+	var color_text := "#4ecb71" if accepted else "#e25c5c"
+	var style := "accept" if accepted else "reject"
+	control.set_meta("trade_cart_drag_hovered", true)
+	control.set_meta("trade_cart_drag_last_accept", accepted)
+	control.set_meta("trade_cart_drag_reject_reason", reject_reason)
+	control.set_meta("trade_cart_drag_highlight_style", style)
+	control.set_meta("trade_cart_drag_highlight_color", color_text)
+	control.modulate = Color(0.92, 1.0, 0.94, 1.0) if accepted else Color(1.0, 0.92, 0.92, 1.0)
+	var label := control.get_node_or_null("CartEntryLabel") as Label
+	if label != null:
+		label.add_theme_color_override("font_color", Color.html(color_text))
+		label.set_meta("trade_cart_drag_highlight_color", color_text)
+
+
+func _clear_trade_cart_drag_hover(control: Control) -> void:
+	if control == null or not is_instance_valid(control):
+		return
+	if not control.has_meta("trade_cart_target") and not control.has_meta("cart_index"):
+		return
+	control.set_meta("trade_cart_drag_hovered", false)
+	control.set_meta("trade_cart_drag_last_accept", false)
+	control.set_meta("trade_cart_drag_reject_reason", "")
+	control.set_meta("trade_cart_drag_highlight_style", "")
+	control.set_meta("trade_cart_drag_highlight_color", "")
+	control.modulate = Color.WHITE
+	var label := control.get_node_or_null("CartEntryLabel") as Label
+	if label != null:
+		label.remove_theme_color_override("font_color")
+		label.set_meta("trade_cart_drag_highlight_color", "")
 
 
 func _emit_selected_trade() -> void:
@@ -828,6 +892,7 @@ func _cart_entry_row(entry: Dictionary, index: int) -> HBoxContainer:
 	row.name = "CartEntry_%d" % index
 	row.add_theme_constant_override("separation", 6)
 	row.set_meta("cart_index", index)
+	_prepare_trade_cart_drop_target(row)
 	row.set_drag_forwarding(
 		Callable(self, "_get_cart_entry_drag_data"),
 		Callable(self, "_can_drop_cart_data"),

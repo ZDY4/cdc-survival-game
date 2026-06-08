@@ -226,6 +226,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should drag shop bandage to trade cart")
 	if not _cart_line(game_root).contains("购买 绷带 x1"):
 		errors.append("dragged shop item should queue cart buy")
+	_assert_trade_cart_hover_target(errors, game_root, _trade_drag_data(game_root, "shop", "绷带"), _trade_cart_target(game_root), "trade_cart", true, "", "shop bandage to trade cart hover target")
+	_assert_trade_cart_hover_render(errors, game_root, _trade_drag_data(game_root, "shop", "绷带"), _trade_cart_target(game_root), true, "", "shop bandage to trade cart hover render")
 	_press_cart_entry_button(game_root, 0, "RemoveButton")
 	if not _drop_trade_item_to_zone(game_root, "shop", "绷带", "BuyDropZone"):
 		errors.append("should drag shop bandage to buy drop zone")
@@ -250,6 +252,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("sell drop zone should expose catalog reject preview text")
 	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
 		errors.append("should drag shop bandage back to cart after zone rejection")
+	_assert_trade_cart_hover_target(errors, game_root, _trade_drag_data(game_root, "shop", "绷带"), _trade_cart_entry_control(game_root, 0), "trade_cart_entry", true, "", "shop bandage to cart entry hover target")
+	_assert_trade_cart_hover_render(errors, game_root, _trade_drag_data(game_root, "shop", "绷带"), _trade_cart_entry_control(game_root, 0), true, "", "shop bandage to cart entry hover render")
 	if not _drop_trade_item_with_text_on_cart_entry(game_root, "shop", "绷带", 0):
 		errors.append("should drag shop bandage onto existing cart entry")
 	if not _cart_line(game_root).contains("购买 绷带 x2"):
@@ -304,6 +308,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should drag shop bandage to trade cart for reorder")
 	if not _text_ordered(_cart_line(game_root), "购买 急救包 x1", "购买 绷带 x1"):
 		errors.append("cart reorder setup should place medkit before bandage")
+	_assert_trade_cart_hover_target(errors, game_root, {"kind": "trade_cart_entry", "index": 1, "drag_preview_text": "购买 绷带 x1"}, _trade_cart_entry_control(game_root, 0), "trade_cart_entry", true, "", "cart entry reorder hover target")
+	_assert_trade_cart_hover_render(errors, game_root, {"kind": "trade_cart_entry", "index": 1, "drag_preview_text": "购买 绷带 x1"}, _trade_cart_entry_control(game_root, 0), true, "", "cart entry reorder hover render")
+	_assert_trade_cart_hover_target(errors, game_root, {"kind": "trade_cart_entry", "index": -1, "drag_preview_text": "失效条目"}, _trade_cart_target(game_root), "trade_cart", false, "cart_entry_missing_index", "invalid cart entry reject hover target")
 	_reorder_cart_entry(game_root, 1, 0)
 	if not _text_ordered(_cart_line(game_root), "购买 绷带 x1", "购买 急救包 x1"):
 		errors.append("cart entry drag should reorder queued items")
@@ -1057,7 +1064,7 @@ func _press_trade_item_with_text(game_root: Node, source: String, text: String) 
 
 
 func _drop_trade_item_with_text(game_root: Node, source: String, text: String, count: int = 1) -> bool:
-	return _drop_trade_item_with_text_on_target(game_root, source, text, null, count)
+	return _drop_trade_item_with_text_on_target(game_root, source, text, _trade_cart_target(game_root), count)
 
 
 func _drop_trade_item_with_text_on_cart_entry(game_root: Node, source: String, text: String, target_index: int, count: int = 1) -> bool:
@@ -1171,6 +1178,14 @@ func _trade_zone_control(game_root: Node, zone_name: String) -> Control:
 	return game_root.trade_panel.find_child(zone_name, true, false) as Control
 
 
+func _trade_cart_target(game_root: Node) -> Control:
+	return game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartScroll/CartItemLines") as Control
+
+
+func _trade_cart_entry_control(game_root: Node, index: int) -> Control:
+	return game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CartScroll/CartItemLines/CartEntry_%d" % index) as Control
+
+
 func _trade_drag_data(game_root: Node, source: String, text: String) -> Dictionary:
 	var button: Button = _trade_item_button_with_text(game_root, source, text)
 	if button == null:
@@ -1203,6 +1218,53 @@ func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_da
 	var runtime_drag: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("drag", {}))
 	if not runtime_drag.has("active") or not runtime_drag.has("target"):
 		errors.append("%s: runtime control should expose drag state shape: %s" % [context, runtime_drag])
+
+
+func _assert_trade_cart_hover_target(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_target_kind: String, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: trade cart target should exist" % context)
+		return
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != expected_target_kind:
+		errors.append("%s: target kind expected %s, got %s" % [context, expected_target_kind, snapshot])
+	if not str(target_snapshot.get("accepts", "")).contains("trade_item") or not str(target_snapshot.get("accepts", "")).contains("trade_cart_entry"):
+		errors.append("%s: trade cart target should declare accepted drag kinds: %s" % [context, target_snapshot])
+	if bool(target_snapshot.get("last_accept", false)) != expected_accept:
+		errors.append("%s: trade cart accept expected %s, got %s" % [context, expected_accept, target_snapshot])
+	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: trade cart reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
+	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	var expected_style := "accept" if expected_accept else "reject"
+	if not bool(highlight.get("active", false)) or str(highlight.get("style", "")) != expected_style:
+		errors.append("%s: trade cart hover highlight should expose %s: %s" % [context, expected_style, highlight])
+
+
+func _assert_trade_cart_hover_render(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: trade cart target should exist" % context)
+		return
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	var can_drop: bool = bool(game_root.trade_panel.call("_can_drop_cart_data", Vector2.ZERO, drag_data, target))
+	if can_drop != expected_accept:
+		errors.append("%s: trade cart can_drop expected %s, got %s" % [context, expected_accept, can_drop])
+	if not bool(target.get_meta("trade_cart_drag_hovered", false)):
+		errors.append("%s: trade cart target should record active hover render state" % context)
+	if bool(target.get_meta("trade_cart_drag_last_accept", false)) != expected_accept:
+		errors.append("%s: trade cart hover accept expected %s, got %s" % [context, expected_accept, target.get_meta("trade_cart_drag_last_accept", false)])
+	if str(target.get_meta("trade_cart_drag_reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: trade cart hover reject reason expected %s, got %s" % [context, expected_reject_reason, target.get_meta("trade_cart_drag_reject_reason", "")])
+	var expected_style := "accept" if expected_accept else "reject"
+	var expected_color := "#4ecb71" if expected_accept else "#e25c5c"
+	if str(target.get_meta("trade_cart_drag_highlight_style", "")) != expected_style:
+		errors.append("%s: trade cart hover style expected %s, got %s" % [context, expected_style, target.get_meta("trade_cart_drag_highlight_style", "")])
+	if str(target.get_meta("trade_cart_drag_highlight_color", "")) != expected_color:
+		errors.append("%s: trade cart hover color expected %s, got %s" % [context, expected_color, target.get_meta("trade_cart_drag_highlight_color", "")])
 
 
 func _assert_drag_preview_diagnostics(errors: Array[String], preview: Dictionary, context: String) -> void:
