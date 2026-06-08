@@ -18,6 +18,7 @@ var _queue_feedback_label: Label
 var _queue_box: VBoxContainer
 var _pending_label: Label
 var _pending_progress_bar: ProgressBar
+var _pending_progress_state_label: Label
 var _cancel_pending_button: Button
 var _confirm_queue_button: Button
 var _clear_queue_button: Button
@@ -146,6 +147,9 @@ func _build_layout() -> void:
 	_pending_progress_bar.custom_minimum_size = Vector2(0, 14)
 	_pending_progress_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pending_progress_bar.visible = false
+	_pending_progress_state_label = _label("PendingCraftingProgressStateLine")
+	_pending_progress_state_label.text = "制作进度 空"
+	_pending_progress_state_label.visible = false
 	_cancel_pending_button = _toolbar_button("CancelPendingCraftingButton", "取消制作", "取消正在跨回合进行的制作")
 	_cancel_pending_button.toggle_mode = false
 	_cancel_pending_button.pressed.connect(_cancel_pending_crafting, CONNECT_DEFERRED)
@@ -184,6 +188,7 @@ func _build_layout() -> void:
 	box.add_child(_quantity_spin)
 	box.add_child(_pending_label)
 	box.add_child(_pending_progress_bar)
+	box.add_child(_pending_progress_state_label)
 	box.add_child(_cancel_pending_button)
 	box.add_child(_queue_label)
 	box.add_child(_queue_feedback_label)
@@ -1159,6 +1164,10 @@ func _pending_crafting_snapshot() -> Dictionary:
 	if pending.is_empty():
 		return {
 			"active": false,
+			"progress_state": "inactive",
+			"progress_state_text": "无进行中的制作",
+			"progress_state_visible": _pending_progress_state_label != null and _pending_progress_state_label.visible,
+			"progress_state_line": str(_pending_progress_state_label.text) if _pending_progress_state_label != null else "",
 			"cancel_enabled": _cancel_pending_button != null and not _cancel_pending_button.disabled,
 			"progress_bar_visible": _pending_progress_bar != null and _pending_progress_bar.visible,
 			"progress_bar_value": float(_pending_progress_bar.value) if _pending_progress_bar != null else 0.0,
@@ -1169,6 +1178,9 @@ func _pending_crafting_snapshot() -> Dictionary:
 	var required_ap: float = max(0.0, float(pending.get("required_ap", 0.0)))
 	var progress_ap: float = clampf(float(pending.get("progress_ap", 0.0)), 0.0, required_ap)
 	var remaining_ap: float = max(0.0, float(pending.get("remaining_ap", required_ap - progress_ap)))
+	var progress_ratio: float = 0.0 if required_ap <= 0.0 else progress_ap / required_ap
+	var progress_state: String = _pending_progress_state(progress_ratio)
+	var progress_text: String = _pending_progress_state_text(progress_state, remaining_ap)
 	return {
 		"active": true,
 		"recipe_id": recipe_id,
@@ -1177,11 +1189,16 @@ func _pending_crafting_snapshot() -> Dictionary:
 		"progress_ap": progress_ap,
 		"required_ap": required_ap,
 		"remaining_ap": remaining_ap,
-		"progress_ratio": 0.0 if required_ap <= 0.0 else progress_ap / required_ap,
+		"progress_ratio": progress_ratio,
+		"progress_state": progress_state,
+		"progress_state_text": progress_text,
+		"progress_state_visible": _pending_progress_state_label != null and _pending_progress_state_label.visible,
+		"progress_state_line": str(_pending_progress_state_label.text) if _pending_progress_state_label != null else "",
 		"cancel_enabled": _cancel_pending_button != null and not _cancel_pending_button.disabled,
 		"progress_bar_visible": _pending_progress_bar != null and _pending_progress_bar.visible,
 		"progress_bar_value": float(_pending_progress_bar.value) if _pending_progress_bar != null else progress_ap,
 		"progress_bar_max": float(_pending_progress_bar.max_value) if _pending_progress_bar != null else max(1.0, required_ap),
+		"progress_bar_color": str(_pending_progress_color(progress_state).to_html(false)),
 	}
 
 
@@ -1220,6 +1237,11 @@ func _refresh_pending_crafting_view() -> void:
 		_pending_progress_bar.max_value = 1.0
 		_pending_progress_bar.value = 0.0
 		_pending_progress_bar.tooltip_text = "没有正在制作的配方"
+		_pending_progress_bar.remove_theme_stylebox_override("fill")
+		if _pending_progress_state_label != null:
+			_pending_progress_state_label.text = "制作进度 空"
+			_pending_progress_state_label.visible = false
+			_pending_progress_state_label.tooltip_text = "没有正在制作的配方"
 		_cancel_pending_button.disabled = true
 		return
 	var recipe_id: String = str(pending.get("recipe_id", ""))
@@ -1228,7 +1250,10 @@ func _refresh_pending_crafting_view() -> void:
 	var required_ap: float = max(0.0, float(pending.get("required_ap", 0.0)))
 	var progress_ap: float = clampf(float(pending.get("progress_ap", 0.0)), 0.0, required_ap)
 	var remaining_ap: float = max(0.0, float(pending.get("remaining_ap", required_ap - progress_ap)))
-	var progress_percent: int = 0 if required_ap <= 0.0 else int(roundf((progress_ap / required_ap) * 100.0))
+	var progress_ratio: float = 0.0 if required_ap <= 0.0 else progress_ap / required_ap
+	var progress_percent: int = int(roundf(progress_ratio * 100.0))
+	var progress_state: String = _pending_progress_state(progress_ratio)
+	var progress_text: String = _pending_progress_state_text(progress_state, remaining_ap)
 	_pending_label.text = "正在制作 %s x%d | 进度 %.1f/%.1f AP (%d%%) | 剩余 %.1f AP" % [
 		recipe_name,
 		max(1, int(pending.get("count", 1))),
@@ -1241,12 +1266,60 @@ func _refresh_pending_crafting_view() -> void:
 	_pending_progress_bar.min_value = 0.0
 	_pending_progress_bar.max_value = max(1.0, required_ap)
 	_pending_progress_bar.value = progress_ap
-	_pending_progress_bar.tooltip_text = "制作进度 %.1f/%.1f AP，剩余 %.1f AP" % [
+	_pending_progress_bar.add_theme_stylebox_override("fill", _pending_progress_fill_style(progress_state))
+	_pending_progress_bar.set_meta("progress_state", progress_state)
+	_pending_progress_bar.set_meta("progress_ratio", progress_ratio)
+	_pending_progress_bar.set_meta("progress_color", _pending_progress_color(progress_state).to_html(false))
+	_pending_progress_bar.tooltip_text = "%s | 制作进度 %.1f/%.1f AP，剩余 %.1f AP" % [
+		progress_text,
 		progress_ap,
 		required_ap,
 		remaining_ap,
 	]
+	if _pending_progress_state_label != null:
+		_pending_progress_state_label.visible = true
+		_pending_progress_state_label.text = "%s | %d%%" % [progress_text, progress_percent]
+		_pending_progress_state_label.add_theme_color_override("font_color", _pending_progress_color(progress_state))
+		_pending_progress_state_label.tooltip_text = _pending_progress_bar.tooltip_text
 	_cancel_pending_button.disabled = false
+
+
+func _pending_progress_state(progress_ratio: float) -> String:
+	if progress_ratio >= 0.85:
+		return "nearly_done"
+	if progress_ratio >= 0.35:
+		return "in_progress"
+	return "starting"
+
+
+func _pending_progress_state_text(progress_state: String, remaining_ap: float) -> String:
+	match progress_state:
+		"nearly_done":
+			return "即将完成，剩余 %.1f AP" % remaining_ap
+		"in_progress":
+			return "制作进行中，剩余 %.1f AP" % remaining_ap
+		_:
+			return "刚开始制作，剩余 %.1f AP" % remaining_ap
+
+
+func _pending_progress_color(progress_state: String) -> Color:
+	match progress_state:
+		"nearly_done":
+			return Color(0.35, 0.78, 0.45, 1.0)
+		"in_progress":
+			return Color(0.28, 0.58, 0.92, 1.0)
+		_:
+			return Color(0.86, 0.67, 0.27, 1.0)
+
+
+func _pending_progress_fill_style(progress_state: String) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = _pending_progress_color(progress_state)
+	style.corner_radius_top_left = 2
+	style.corner_radius_top_right = 2
+	style.corner_radius_bottom_left = 2
+	style.corner_radius_bottom_right = 2
+	return style
 
 
 func _refresh_queue_feedback_view() -> void:

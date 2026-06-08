@@ -867,6 +867,10 @@ func _assert_pending_crafting_snapshot(errors: Array[String], game_root: Node, e
 	if bool(pending.get("progress_bar_visible", false)) != expected_active:
 		errors.append("%s: pending progress bar visibility expected %s got %s" % [context, str(expected_active), pending])
 	if not expected_active:
+		if str(pending.get("progress_state", "")) != "inactive":
+			errors.append("%s: inactive pending should expose inactive progress state: %s" % [context, pending])
+		if bool(pending.get("progress_state_visible", false)):
+			errors.append("%s: inactive pending progress state line should be hidden: %s" % [context, pending])
 		if bool(pending.get("cancel_enabled", false)):
 			errors.append("%s: inactive pending should not expose enabled cancel: %s" % [context, pending])
 		if float(pending.get("progress_bar_value", 0.0)) != 0.0:
@@ -880,10 +884,21 @@ func _assert_pending_crafting_snapshot(errors: Array[String], game_root: Node, e
 		errors.append("%s: pending should expose required AP: %s" % [context, pending])
 	if float(pending.get("progress_ratio", -1.0)) < 0.0 or float(pending.get("progress_ratio", 2.0)) > 1.0:
 		errors.append("%s: pending progress ratio should be clamped: %s" % [context, pending])
+	var progress_state := str(pending.get("progress_state", ""))
+	if not ["starting", "in_progress", "nearly_done"].has(progress_state):
+		errors.append("%s: active pending should expose progress state: %s" % [context, pending])
+	if str(pending.get("progress_state_text", "")).is_empty() or not str(pending.get("progress_state_text", "")).contains("剩余"):
+		errors.append("%s: active pending should expose localized progress state text: %s" % [context, pending])
+	if not bool(pending.get("progress_state_visible", false)):
+		errors.append("%s: active pending should show progress state line: %s" % [context, pending])
+	if str(pending.get("progress_state_line", "")).is_empty() or not str(pending.get("progress_state_line", "")).contains("%"):
+		errors.append("%s: active pending progress state line should include percent: %s" % [context, pending])
 	if not bool(pending.get("cancel_enabled", false)):
 		errors.append("%s: active pending should expose enabled cancel: %s" % [context, pending])
 	if float(pending.get("progress_bar_value", 0.0)) <= 0.0 or float(pending.get("progress_bar_max", 0.0)) <= 0.0:
 		errors.append("%s: active pending should expose progress bar values: %s" % [context, pending])
+	if str(pending.get("progress_bar_color", "")).is_empty():
+		errors.append("%s: active pending should expose progress bar color diagnostic: %s" % [context, pending])
 
 
 func _assert_pending_crafting_cancel_result(errors: Array[String], game_root: Node, expected_recipe_id: String, expected_count: int, expected_reason: String, context: String) -> void:
