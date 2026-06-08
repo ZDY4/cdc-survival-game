@@ -528,6 +528,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		var first_preview: Dictionary = _dictionary_or_empty(gated_preview_entries[0])
 		if str(first_preview.get("name", "")) != "塑料" or int(first_preview.get("total_count", 0)) != 1:
 			errors.append("deconstruct preview should include localized yield name and total count")
+	_assert_deconstruct_preview_snapshot(errors, game_root, "smoke_deconstruct_tool_item", "塑料", 1, "gated deconstruct preview")
 	if game_root.has_method("finish_world_action_presentations"):
 		game_root.finish_world_action_presentations()
 		await process_frame
@@ -849,6 +850,29 @@ func _inventory_snapshot_item(game_root: Node, item_id: String) -> Dictionary:
 
 func _inventory_snapshot(game_root: Node) -> Dictionary:
 	return _dictionary_or_empty(game_root.inventory_panel.get("_last_snapshot"))
+
+
+func _assert_deconstruct_preview_snapshot(errors: Array[String], game_root: Node, expected_item_id: String, expected_output_name: String, expected_output_count: int, context: String) -> void:
+	if not game_root.inventory_panel.has_method("deconstruct_preview_snapshot"):
+		errors.append("%s: inventory panel should expose deconstruct_preview_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.inventory_panel.deconstruct_preview_snapshot())
+	if not bool(snapshot.get("active", false)):
+		errors.append("%s: deconstruct preview should be active: %s" % [context, snapshot])
+		return
+	if str(snapshot.get("item_id", "")) != expected_item_id:
+		errors.append("%s: deconstruct preview item expected %s got %s" % [context, expected_item_id, snapshot])
+	var entries: Array = _array_or_empty(snapshot.get("entries", []))
+	if entries.is_empty():
+		errors.append("%s: deconstruct preview should expose entries: %s" % [context, snapshot])
+		return
+	var first: Dictionary = _dictionary_or_empty(entries[0])
+	if str(first.get("name", "")) != expected_output_name or int(first.get("total_count", 0)) != expected_output_count:
+		errors.append("%s: deconstruct preview first entry expected %s x%d got %s" % [context, expected_output_name, expected_output_count, first])
+	if not str(snapshot.get("summary", "")).contains("%s x%d" % [expected_output_name, expected_output_count]):
+		errors.append("%s: deconstruct preview summary should include output: %s" % [context, snapshot])
+	if not str(snapshot.get("detail_line_text", "")).contains("拆解产物 %s x%d" % [expected_output_name, expected_output_count]):
+		errors.append("%s: deconstruct preview should mirror detail line: %s" % [context, snapshot])
 
 
 func _install_deconstruct_requirement_smoke_item(game_root: Node) -> void:

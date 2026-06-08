@@ -1122,6 +1122,43 @@ func _deconstruct_preview_text(item: Dictionary) -> String:
 	return " | 拆解产物 %s" % ", ".join(parts)
 
 
+func deconstruct_preview_snapshot() -> Dictionary:
+	if _selected_item.is_empty() or not bool(_selected_item.get("deconstructable", false)):
+		return {
+			"active": false,
+			"item_id": str(_selected_item.get("item_id", "")),
+			"entries": [],
+			"summary": "拆解产物 无",
+			"detail_line_text": str(_detail_label.text) if _detail_label != null else "",
+		}
+	var preview: Dictionary = _dictionary_or_empty(_selected_item.get("deconstruct_preview", {}))
+	var entries: Array[Dictionary] = []
+	var summary_parts: Array[String] = []
+	for entry in _array_or_empty(preview.get("entries", [])):
+		var data: Dictionary = _dictionary_or_empty(entry)
+		var item_id := str(data.get("item_id", ""))
+		var name := str(data.get("name", item_id))
+		var total_count := int(data.get("total_count", 0))
+		if item_id.is_empty() or total_count <= 0:
+			continue
+		var row := data.duplicate(true)
+		row["line_text"] = "%s x%d" % [name, total_count]
+		entries.append(row)
+		summary_parts.append(str(row.get("line_text", "")))
+	return {
+		"active": not entries.is_empty(),
+		"item_id": str(_selected_item.get("item_id", "")),
+		"name": str(_selected_item.get("name", _selected_item.get("item_id", ""))),
+		"source_count": int(preview.get("source_count", max(1, int(_selected_item.get("count", 1))))),
+		"entries": entries,
+		"entry_count": entries.size(),
+		"total_weight": float(preview.get("total_weight", 0.0)),
+		"summary": "拆解产物 %s" % ", ".join(summary_parts) if not summary_parts.is_empty() else "拆解产物 无",
+		"detail_line_text": str(_detail_label.text) if _detail_label != null else "",
+		"action_quantity": int(_quantity_spin.value) if _quantity_spin != null else 1,
+	}
+
+
 func _update_action_buttons(item: Dictionary) -> void:
 	if _use_button == null or _equip_button == null or _drop_button == null or _quantity_spin == null:
 		return
