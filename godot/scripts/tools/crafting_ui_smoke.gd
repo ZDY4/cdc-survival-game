@@ -622,6 +622,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _queue_line(game_root).contains("制作队列 1项/1次") or not _queue_line(game_root).contains("基础绷带 x1"):
 		errors.append("multi-entry queue should retain remaining entry while first craft is pending: %s" % _queue_line(game_root))
 	_assert_craft_queue_snapshot(errors, game_root, 1, 1, 1, true, "multi-entry cross-turn queue pending first")
+	_assert_queue_feedback(errors, game_root, "confirm", true, 0, 1, "multi-entry cross-turn queue pending first")
 	var queue_wait: Dictionary = game_root.simulation.submit_player_command({
 		"kind": "wait",
 		"actor_id": 1,
@@ -636,6 +637,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _queue_line(game_root).contains("制作队列 空"):
 		errors.append("multi-entry queue should consume remaining entry after pending completion: %s" % _queue_line(game_root))
 	_assert_craft_queue_snapshot(errors, game_root, 0, 0, 0, false, "multi-entry cross-turn queue completed")
+	_assert_queue_feedback(errors, game_root, "pending_completed", false, 1, 0, "multi-entry cross-turn queue completed")
 	if _player_inventory_count(game_root, "1011") != 2:
 		errors.append("multi-entry cross-turn queue should consume first and resumed second craft materials")
 	if _player_inventory_count(game_root, "1006") != cross_turn_bandages_before + 51:
@@ -779,6 +781,13 @@ func _queue_line(game_root: Node) -> String:
 	return str(label.text)
 
 
+func _queue_feedback_line(game_root: Node) -> String:
+	var label: Label = game_root.crafting_panel.find_child("CraftQueueFeedbackLine", true, false) as Label
+	if label == null:
+		return ""
+	return str(label.text)
+
+
 func _assert_craft_queue_snapshot(errors: Array[String], game_root: Node, expected_entries: int, expected_total_count: int, expected_total_output: int, expected_confirm_enabled: bool, context: String) -> void:
 	if not game_root.crafting_panel.has_method("craft_queue_snapshot"):
 		errors.append("%s: crafting panel should expose craft_queue_snapshot" % context)
@@ -807,6 +816,30 @@ func _assert_craft_queue_snapshot(errors: Array[String], game_root: Node, expect
 				output_seen = true
 		if not output_seen:
 			errors.append("%s: queue should aggregate bandage output: %s" % [context, outputs])
+
+
+func _assert_queue_feedback(errors: Array[String], game_root: Node, expected_trigger: String, expected_pending: bool, expected_completed: int, expected_remaining_entries: int, context: String) -> void:
+	if not game_root.crafting_panel.has_method("craft_queue_snapshot"):
+		errors.append("%s: crafting panel should expose craft_queue_snapshot for queue feedback" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.crafting_panel.craft_queue_snapshot())
+	var latest: Dictionary = _dictionary_or_empty(snapshot.get("latest_result", {}))
+	if latest.is_empty():
+		errors.append("%s: queue feedback latest_result should be present: %s" % [context, snapshot])
+		return
+	if str(latest.get("trigger", "")) != expected_trigger:
+		errors.append("%s: queue feedback trigger expected %s got %s" % [context, expected_trigger, latest])
+	if bool(latest.get("pending", false)) != expected_pending:
+		errors.append("%s: queue feedback pending expected %s got %s" % [context, str(expected_pending), latest])
+	if int(latest.get("completed_count", -1)) != expected_completed:
+		errors.append("%s: queue feedback completed expected %d got %s" % [context, expected_completed, latest])
+	if int(latest.get("remaining_queue_count", -1)) != expected_remaining_entries:
+		errors.append("%s: queue feedback remaining entries expected %d got %s" % [context, expected_remaining_entries, latest])
+	var feedback := _queue_feedback_line(game_root)
+	if expected_pending and not feedback.contains("队列进行中"):
+		errors.append("%s: queue feedback line should show in-progress state: %s" % [context, feedback])
+	if not expected_pending and not feedback.contains("队列完成"):
+		errors.append("%s: queue feedback line should show completed state: %s" % [context, feedback])
 
 
 func _assert_app_craft_queue_snapshot(errors: Array[String], game_root: Node, expected_entries: int, expected_total_count: int, context: String) -> void:

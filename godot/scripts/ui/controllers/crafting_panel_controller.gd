@@ -14,6 +14,7 @@ var _detail_body_label: Label
 var _missing_reason_box: VBoxContainer
 var _quantity_spin: SpinBox
 var _queue_label: Label
+var _queue_feedback_label: Label
 var _queue_box: VBoxContainer
 var _pending_label: Label
 var _pending_progress_bar: ProgressBar
@@ -131,6 +132,7 @@ func _build_layout() -> void:
 		_apply_detail(_recipe_by_id(_last_snapshot.get("recipes", []), _selected_recipe_id))
 	, CONNECT_DEFERRED)
 	_queue_label = _label("CraftQueueLine")
+	_queue_feedback_label = _label("CraftQueueFeedbackLine")
 	_queue_box = VBoxContainer.new()
 	_queue_box.name = "CraftQueueEntries"
 	_queue_box.add_theme_constant_override("separation", 3)
@@ -184,6 +186,7 @@ func _build_layout() -> void:
 	box.add_child(_pending_progress_bar)
 	box.add_child(_cancel_pending_button)
 	box.add_child(_queue_label)
+	box.add_child(_queue_feedback_label)
 	box.add_child(_queue_box)
 	var queue_buttons := HBoxContainer.new()
 	queue_buttons.name = "CraftQueueButtons"
@@ -1039,6 +1042,7 @@ func _refresh_queue_view() -> void:
 	if _queue_label == null or _queue_box == null:
 		return
 	_refresh_pending_crafting_view()
+	_refresh_queue_feedback_view()
 	_clear_box(_queue_box)
 	if _craft_queue.is_empty():
 		_queue_label.text = "制作队列 空"
@@ -1068,6 +1072,7 @@ func _refresh_queue_view() -> void:
 func craft_queue_snapshot() -> Dictionary:
 	var queued_entries := _craft_queue_summaries()
 	var pending := _pending_crafting_snapshot()
+	var latest_result: Dictionary = _dictionary_or_empty(_last_snapshot.get("crafting_queue_result", {})).duplicate(true)
 	return {
 		"active": not queued_entries.is_empty() or bool(pending.get("active", false)),
 		"entry_count": queued_entries.size(),
@@ -1080,6 +1085,8 @@ func craft_queue_snapshot() -> Dictionary:
 		"clear_enabled": _clear_queue_button != null and not _clear_queue_button.disabled,
 		"summary": str(_queue_label.text) if _queue_label != null else "",
 		"pending_summary": str(_pending_label.text) if _pending_label != null else "",
+		"latest_result": latest_result,
+		"queue_feedback": str(_queue_feedback_label.text) if _queue_feedback_label != null else "",
 		"feedback": str(_feedback_label.text) if _feedback_label != null else "",
 	}
 
@@ -1214,6 +1221,44 @@ func _refresh_pending_crafting_view() -> void:
 		remaining_ap,
 	]
 	_cancel_pending_button.disabled = false
+
+
+func _refresh_queue_feedback_view() -> void:
+	if _queue_feedback_label == null:
+		return
+	var latest: Dictionary = _dictionary_or_empty(_last_snapshot.get("crafting_queue_result", {}))
+	if latest.is_empty():
+		_queue_feedback_label.text = "队列反馈 无"
+		_queue_feedback_label.tooltip_text = "没有最近的制作队列结果"
+		return
+	var summary := str(latest.get("summary", ""))
+	if summary.is_empty():
+		summary = _queue_feedback_summary(latest)
+	_queue_feedback_label.text = summary
+	_queue_feedback_label.tooltip_text = "触发: %s | 完成 %d | 失败 %d | 剩余 %d项/%d次 | pending %s" % [
+		str(latest.get("trigger", latest.get("reason", ""))),
+		int(latest.get("completed_count", 0)),
+		int(latest.get("failed_count", 0)),
+		int(latest.get("remaining_queue_count", 0)),
+		int(latest.get("remaining_total_count", 0)),
+		str(latest.get("pending_recipe_id", "")),
+	]
+
+
+func _queue_feedback_summary(latest: Dictionary) -> String:
+	if bool(latest.get("pending", false)):
+		return "队列进行中: 已完成 %d 次，剩余 %d 项" % [
+			int(latest.get("completed_count", 0)),
+			int(latest.get("remaining_queue_count", 0)),
+		]
+	if bool(latest.get("success", false)):
+		return "队列完成: 已制作 %d 次" % int(latest.get("completed_count", 0))
+	if bool(latest.get("partial_success", false)):
+		return "队列部分完成: 已制作 %d 次，失败 %d 项" % [
+			int(latest.get("completed_count", 0)),
+			int(latest.get("failed_count", 0)),
+		]
+	return "队列反馈: %s" % str(latest.get("reason", "unknown"))
 
 
 func _queue_entry_row(index: int, entry: Dictionary) -> HBoxContainer:

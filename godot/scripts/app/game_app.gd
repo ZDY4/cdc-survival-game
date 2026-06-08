@@ -92,6 +92,7 @@ var active_trade_feedback: Dictionary = {}
 var active_container_feedback: Dictionary = {}
 var active_character_feedback: Dictionary = {}
 var active_inventory_feedback: Dictionary = {}
+var latest_crafting_queue_result: Dictionary = {}
 var debug_overlay_mode: String = "off"
 var info_panel_pages: Array[Dictionary] = [
 	{"id": "overview", "title": "Overview", "tab_label": "Overview"},
@@ -2729,6 +2730,7 @@ func confirm_crafting_queue(entries: Array) -> Dictionary:
 		return blocked
 	simulation.crafting_queue = _normalized_crafting_queue(entries)
 	var queue_result: Dictionary = _advance_crafting_queue("confirm")
+	_set_latest_crafting_queue_result(queue_result, "confirm")
 	refresh_inventory_panel()
 	refresh_crafting_panel()
 	refresh_skills_panel()
@@ -2826,6 +2828,7 @@ func _continue_crafting_queue_after_wait(result: Dictionary) -> void:
 	if not _wait_result_resumed_active_crafting_queue(result):
 		return
 	result["crafting_queue_result"] = _advance_crafting_queue("pending_completed")
+	_set_latest_crafting_queue_result(_dictionary_or_empty(result.get("crafting_queue_result", {})), "pending_completed")
 
 
 func _wait_result_resumed_active_crafting_queue(result: Dictionary) -> bool:
@@ -2855,6 +2858,13 @@ func update_crafting_queue(entries: Array) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
 	simulation.crafting_queue = _normalized_crafting_queue(entries)
+	if simulation.crafting_queue.is_empty():
+		latest_crafting_queue_result = {
+			"active": false,
+			"reason": "queue_cleared",
+			"entry_count": 0,
+			"total_count": 0,
+		}
 	return {
 		"success": true,
 		"entry_count": simulation.crafting_queue.size(),
@@ -2869,6 +2879,7 @@ func crafting_queue_snapshot() -> Dictionary:
 		"entries": simulation.crafting_queue.duplicate(true),
 		"entry_count": simulation.crafting_queue.size(),
 		"total_count": _crafting_queue_total_count(simulation.crafting_queue),
+		"latest_result": latest_crafting_queue_result.duplicate(true),
 	}
 
 
@@ -2902,10 +2913,64 @@ func cancel_pending_crafting(reason: String = "crafting_ui") -> Dictionary:
 		"reason": reason,
 		"topology": _dictionary_or_empty(world_result.get("map", {})),
 	})
+	if bool(result.get("success", false)) and bool(result.get("had_pending", false)):
+		latest_crafting_queue_result = {
+			"active": true,
+			"reason": "pending_cancelled",
+			"cancel_reason": reason,
+			"remaining_queue_count": simulation.crafting_queue.size(),
+			"remaining_total_count": _crafting_queue_total_count(simulation.crafting_queue),
+		}
 	refresh_inventory_panel()
 	refresh_crafting_panel()
 	refresh_skills_panel()
 	return result
+
+
+func _set_latest_crafting_queue_result(result: Dictionary, trigger: String) -> void:
+	if result.is_empty():
+		latest_crafting_queue_result = {}
+		return
+	latest_crafting_queue_result = _crafting_queue_feedback_snapshot(result, trigger)
+
+
+func _crafting_queue_feedback_snapshot(result: Dictionary, trigger: String) -> Dictionary:
+	var remaining_queue: Array = _array_or_empty(result.get("remaining_queue", []))
+	var pending: Dictionary = _dictionary_or_empty(simulation.pending_crafting) if simulation != null else {}
+	var summary := ""
+	if bool(result.get("pending", false)):
+		summary = "队列进行中: 已完成 %d 次，正在制作 %s x%d，剩余 %d 项" % [
+			int(result.get("completed_count", 0)),
+			str(pending.get("recipe_id", "")),
+			max(1, int(pending.get("count", 1))) if not pending.is_empty() else 1,
+			int(result.get("remaining_queue_count", remaining_queue.size())),
+		]
+	elif bool(result.get("success", false)):
+		summary = "队列完成: 已制作 %d 次" % int(result.get("completed_count", 0))
+	elif bool(result.get("partial_success", false)):
+		summary = "队列部分完成: 已制作 %d 次，失败 %d 项" % [
+			int(result.get("completed_count", 0)),
+			int(result.get("failed_count", 0)),
+		]
+	else:
+		summary = "队列失败: %s" % str(result.get("reason", "unknown"))
+	return {
+		"active": true,
+		"trigger": trigger,
+		"success": bool(result.get("success", false)),
+		"partial_success": bool(result.get("partial_success", false)),
+		"pending": bool(result.get("pending", false)),
+		"started_pending": bool(result.get("started_pending", false)),
+		"completed_count": int(result.get("completed_count", 0)),
+		"failed_count": int(result.get("failed_count", 0)),
+		"remaining_queue_count": int(result.get("remaining_queue_count", remaining_queue.size())),
+		"remaining_total_count": _crafting_queue_total_count(remaining_queue),
+		"queue_empty": bool(result.get("queue_empty", remaining_queue.is_empty())),
+		"pending_recipe_id": str(pending.get("recipe_id", "")),
+		"pending_count": max(1, int(pending.get("count", 1))) if not pending.is_empty() else 0,
+		"summary": summary,
+		"reason": str(result.get("reason", "")),
+	}
 
 
 func _crafting_context() -> Dictionary:
@@ -2913,6 +2978,7 @@ func _crafting_context() -> Dictionary:
 		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),
 		"world_flags": _dictionary_or_empty(simulation.world_flags if simulation != null else {}).duplicate(true),
 		"nearby_tool_containers": _nearby_tool_containers(),
+		"latest_crafting_queue_result": latest_crafting_queue_result.duplicate(true),
 	}
 
 
