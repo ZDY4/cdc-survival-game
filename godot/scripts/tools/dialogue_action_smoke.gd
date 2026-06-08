@@ -444,6 +444,14 @@ func _expect_conditional_scripted_actions(game_root: Node) -> Array[String]:
 		var condition_preview: Dictionary = _dictionary_or_empty(_dictionary_or_empty(action_previews[0]).get("condition_preview", {}))
 		if bool(condition_preview.get("ready", true)) or str(condition_preview.get("reason", "")) != "dialogue_action_condition_not_met":
 			errors.append("conditional dialogue action preview should report unmet item condition: %s" % condition_preview)
+	var conditional_button: Button = _dialogue_option_button(game_root, 1)
+	if conditional_button == null:
+		errors.append("conditional dialogue action should expose option button")
+	elif bool(conditional_button.get_meta("preview_condition_ready", true)) \
+			or str(conditional_button.get_meta("preview_condition_reason", "")) != "dialogue_action_condition_not_met" \
+			or int(conditional_button.get_meta("preview_condition_missing_count", 0)) < 1 \
+			or not str(conditional_button.tooltip_text).contains("条件限制: dialogue_action_condition_not_met"):
+		errors.append("conditional dialogue action button should expose condition preview: meta=%s tooltip=%s" % [conditional_button.get_meta_list(), conditional_button.tooltip_text])
 	var result: Dictionary = game_root.choose_dialogue_option("apply_conditional")
 	if not bool(result.get("success", false)):
 		errors.append("conditional dialogue action option should succeed with skipped action: %s" % result)

@@ -207,6 +207,11 @@ func _option_button(option_index: int, option: Dictionary) -> Button:
 	button.set_meta("preview_turn_in_ready", bool(turn_in_preview.get("ready", true)))
 	button.set_meta("preview_turn_in_reason", str(turn_in_preview.get("reason", "")))
 	button.set_meta("preview_turn_in_summary", str(turn_in_preview.get("summary", "")))
+	var condition_preview := _first_condition_preview(preview)
+	button.set_meta("preview_condition_ready", bool(condition_preview.get("ready", true)))
+	button.set_meta("preview_condition_reason", str(condition_preview.get("reason", "")))
+	button.set_meta("preview_condition_summary", _condition_preview_summary(condition_preview))
+	button.set_meta("preview_condition_missing_count", _array_or_empty(condition_preview.get("missing", [])).size())
 	button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("choose_dialogue_option"):
@@ -226,6 +231,12 @@ func _option_tooltip(option_index: int, option: Dictionary, preview: Dictionary)
 		parts.append("交付: %s" % turn_in_summary)
 		if not bool(turn_in_preview.get("ready", true)):
 			parts.append("交付限制: %s" % str(turn_in_preview.get("reason", "")))
+	var condition_preview := _first_condition_preview(preview)
+	var condition_summary := _condition_preview_summary(condition_preview)
+	if not condition_summary.is_empty():
+		parts.append("条件: %s" % condition_summary)
+		if not bool(condition_preview.get("ready", true)):
+			parts.append("条件限制: %s" % str(condition_preview.get("reason", "")))
 	if bool(preview.get("will_finish", false)):
 		parts.append("end: %s" % str(preview.get("end_type", "leave")))
 	else:
@@ -236,6 +247,38 @@ func _option_tooltip(option_index: int, option: Dictionary, preview: Dictionary)
 	if not bool(preview.get("ok", true)):
 		parts.append("preview reason: %s" % str(preview.get("reason", "")))
 	return " | ".join(parts)
+
+
+func _first_condition_preview(preview: Dictionary) -> Dictionary:
+	for action in _array_or_empty(preview.get("action_previews", [])):
+		var action_data := _dictionary_or_empty(action)
+		var condition_preview := _dictionary_or_empty(action_data.get("condition_preview", {}))
+		if not condition_preview.is_empty():
+			return condition_preview
+	return {}
+
+
+func _condition_preview_summary(condition_preview: Dictionary) -> String:
+	if condition_preview.is_empty():
+		return ""
+	var missing: Array = _array_or_empty(condition_preview.get("missing", []))
+	if missing.is_empty():
+		return "满足"
+	var parts: Array[String] = []
+	for missing_entry in missing:
+		var data: Dictionary = _dictionary_or_empty(missing_entry)
+		match str(data.get("kind", "")):
+			"player_item_count_min":
+				parts.append("%s %d/%d" % [
+					str(data.get("item_id", "")),
+					int(data.get("current", 0)),
+					int(data.get("required", 0)),
+				])
+			"player_active_quests_any", "player_completed_quests_any", "world_flags_all", "world_flags_any", "world_flags_none":
+				parts.append("%s: %s" % [str(data.get("kind", "")), ", ".join(_string_array(_array_or_empty(data.get("ids", []))))])
+			_:
+				parts.append(str(data.get("kind", "condition")))
+	return " / ".join(parts)
 
 
 func _first_turn_in_preview(preview: Dictionary) -> Dictionary:
