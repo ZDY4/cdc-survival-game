@@ -481,6 +481,10 @@ func close_blocking_modal() -> Dictionary:
 		var skills_result: Dictionary = skills_panel.call("close_blocking_modal")
 		if bool(skills_result.get("success", false)):
 			return skills_result
+	if crafting_panel != null and crafting_panel.has_method("close_blocking_modal"):
+		var crafting_result: Dictionary = crafting_panel.call("close_blocking_modal")
+		if bool(crafting_result.get("success", false)):
+			return crafting_result
 	return {"success": false, "reason": "modal_inactive"}
 
 
@@ -697,11 +701,15 @@ func _blocking_modal_name() -> String:
 		var skills_modal := str(skills_panel.call("blocking_modal_name"))
 		if not skills_modal.is_empty():
 			return skills_modal
+	if crafting_panel != null and crafting_panel.has_method("blocking_modal_name"):
+		var crafting_modal := str(crafting_panel.call("blocking_modal_name"))
+		if not crafting_modal.is_empty():
+			return crafting_modal
 	return ""
 
 
 func _blocking_modal_snapshot() -> Dictionary:
-	for panel in [inventory_panel, trade_panel, container_panel, map_panel, skills_panel]:
+	for panel in [inventory_panel, trade_panel, container_panel, map_panel, skills_panel, crafting_panel]:
 		if panel != null and panel.has_method("blocking_modal_snapshot"):
 			var snapshot: Dictionary = _dictionary_or_empty(panel.call("blocking_modal_snapshot"))
 			if not snapshot.is_empty():
@@ -777,6 +785,8 @@ func _modal_owner_panel_id(modal_name: String) -> String:
 		return "trade"
 	if modal_name.begins_with("skill_"):
 		return "skills"
+	if modal_name.begins_with("craft_"):
+		return "crafting"
 	return ""
 
 

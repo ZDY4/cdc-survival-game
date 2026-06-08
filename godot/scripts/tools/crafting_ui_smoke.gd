@@ -169,6 +169,50 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("consumable tool UI craft result should expose consumed_tools")
 	player_for_consumable_tool.inventory["1011"] = 1
 	player_for_consumable_tool.inventory.erase("1151")
+	player_for_consumable_tool.equipment["utility"] = "1151"
+	game_root.refresh_inventory_panel()
+	game_root.refresh_crafting_panel()
+	if not _press_recipe_line(game_root, "smoke_consumes_tool_recipe"):
+		errors.append("should select consumable tool smoke recipe for equipped tool")
+	await process_frame
+	var equipped_tool_snapshot: Dictionary = _recipe_snapshot(game_root, "smoke_consumes_tool_recipe")
+	var equipped_required_tools: Array = _array_or_empty(equipped_tool_snapshot.get("required_tools", []))
+	if equipped_required_tools.is_empty() or int(_dictionary_or_empty(equipped_required_tools[0]).get("equipment_available", 0)) != 1:
+		errors.append("crafting snapshot should expose equipped consumable tool availability: %s" % equipped_required_tools)
+	var craft_button: Button = _craft_button(game_root, "smoke_consumes_tool_recipe")
+	if craft_button == null:
+		errors.append("equipped consumable tool recipe should expose craft button")
+	else:
+		craft_button.pressed.emit()
+		await process_frame
+		if not _craft_equipment_dialog_visible(game_root):
+			errors.append("equipped consumable tool craft should open equipment consumption confirmation")
+		_assert_craft_equipment_modal_details(errors, game_root, "smoke_consumes_tool_recipe", 1, "1151", "utility", "equipped craft confirmation")
+		var esc_craft_result: Dictionary = game_root.close_active_ui("keyboard_escape")
+		if str(esc_craft_result.get("closed", "")) != "modal:craft_equipment_tool_confirm":
+			errors.append("Esc should close equipped craft confirmation before consuming equipment, got %s" % esc_craft_result)
+		if not player_for_consumable_tool.equipment.has("utility"):
+			errors.append("Esc closing equipped craft confirmation should keep equipped tool")
+		if _player_inventory_count(game_root, "1011") != 1:
+			errors.append("Esc closing equipped craft confirmation should keep craft material")
+		craft_button = _craft_button(game_root, "smoke_consumes_tool_recipe")
+		if craft_button == null:
+			errors.append("equipped consumable tool recipe should still expose craft button after Esc")
+		else:
+			craft_button.pressed.emit()
+			await process_frame
+			_confirm_craft_equipment_dialog(game_root)
+			await process_frame
+	if player_for_consumable_tool.equipment.has("utility"):
+		errors.append("confirmed equipped consumable craft should remove equipment slot")
+	if _player_inventory_count(game_root, "1011") != 0:
+		errors.append("confirmed equipped consumable craft should consume material")
+	var equipped_craft_event: Dictionary = _last_event_payload(game_root, "recipe_crafted")
+	var equipped_consumed_tools: Array = _array_or_empty(equipped_craft_event.get("consumed_tools", []))
+	if equipped_consumed_tools.is_empty() or str(_dictionary_or_empty(equipped_consumed_tools[0]).get("source", "")) != "equipment":
+		errors.append("equipped consumable tool craft event should report equipment source: %s" % equipped_consumed_tools)
+	player_for_consumable_tool.inventory["1011"] = 1
+	player_for_consumable_tool.equipment.clear()
 	var nearby_tool_grid: Dictionary = player_for_consumable_tool.grid_position.to_dictionary()
 	game_root.simulation.map_interaction_targets["smoke_consumable_tool_crate_ui"] = {
 		"target_id": "smoke_consumable_tool_crate_ui",
@@ -686,6 +730,41 @@ func _craft_button(game_root: Node, recipe_id: String) -> Button:
 	return row.get_node("CraftButton") as Button
 
 
+func _craft_equipment_dialog_visible(game_root: Node) -> bool:
+	var dialog: Node = game_root.crafting_panel.get_node_or_null("CraftEquipmentToolConfirmDialog")
+	if dialog is ConfirmationDialog:
+		return bool((dialog as ConfirmationDialog).visible)
+	return false
+
+
+func _confirm_craft_equipment_dialog(game_root: Node) -> void:
+	var dialog: Node = game_root.crafting_panel.get_node_or_null("CraftEquipmentToolConfirmDialog")
+	if dialog is ConfirmationDialog:
+		(dialog as ConfirmationDialog).confirmed.emit()
+		(dialog as ConfirmationDialog).hide()
+
+
+func _assert_craft_equipment_modal_details(errors: Array[String], game_root: Node, expected_recipe_id: String, expected_count: int, expected_tool_id: String, expected_slot_id: String, context: String) -> void:
+	var stack_snapshot: Dictionary = _dictionary_or_empty(game_root.modal_stack_snapshot()) if game_root.has_method("modal_stack_snapshot") else {}
+	var top: Dictionary = _dictionary_or_empty(stack_snapshot.get("top", {}))
+	if str(top.get("id", "")) != "craft_equipment_tool_confirm":
+		errors.append("%s: craft equipment modal details require confirm top: %s" % [context, stack_snapshot])
+		return
+	if str(top.get("recipe_id", "")) != expected_recipe_id or int(top.get("count", 0)) != expected_count:
+		errors.append("%s: craft equipment modal should expose recipe/count: %s" % [context, top])
+	if str(top.get("owner_panel", "")) != "crafting":
+		errors.append("%s: craft equipment modal should be owned by crafting panel: %s" % [context, top])
+	var sources: Array = _array_or_empty(top.get("equipment_sources", []))
+	if sources.is_empty():
+		errors.append("%s: craft equipment modal should expose equipment source: %s" % [context, top])
+		return
+	var source: Dictionary = _dictionary_or_empty(sources[0])
+	if str(source.get("item_id", "")) != expected_tool_id or str(source.get("slot_id", "")) != expected_slot_id:
+		errors.append("%s: craft equipment source expected %s/%s, got %s" % [context, expected_tool_id, expected_slot_id, source])
+	if not bool(top.get("confirm_button_mouse_blocks_world", false)) or not bool(top.get("cancel_button_mouse_blocks_world", false)):
+		errors.append("%s: craft equipment modal buttons should stop world mouse input: %s" % [context, top])
+
+
 func _queue_button(game_root: Node, recipe_id: String) -> Button:
 	var row: Node = game_root.crafting_panel.find_child("Recipe_%s" % recipe_id, true, false)
 	if row == null:
@@ -905,6 +984,15 @@ func _event_count(game_root: Node, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _last_event_payload(game_root: Node, kind: String) -> Dictionary:
+	var events: Array = _array_or_empty(game_root.simulation.snapshot().get("events", []))
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) == kind:
+			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
 
 
 func _crafting_station_count(game_root: Node) -> int:

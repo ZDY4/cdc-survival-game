@@ -20,6 +20,7 @@ var _pending_progress_bar: ProgressBar
 var _cancel_pending_button: Button
 var _confirm_queue_button: Button
 var _clear_queue_button: Button
+var _craft_equipment_dialog: ConfirmationDialog
 var _feedback_label: Label
 var _category_filter := "all"
 var _sort_mode := "name"
@@ -28,6 +29,8 @@ var _selected_recipe_id := ""
 var _craft_queue: Array[Dictionary] = []
 var _last_snapshot: Dictionary = {}
 var _reason_catalog := ReasonCatalog.new()
+var _pending_craft_recipe: Dictionary = {}
+var _pending_craft_count := 0
 
 
 func _ready() -> void:
@@ -150,6 +153,15 @@ func _build_layout() -> void:
 	_clear_queue_button = _toolbar_button("ClearCraftQueueButton", "清空", "取消全部队列")
 	_clear_queue_button.toggle_mode = false
 	_clear_queue_button.pressed.connect(_clear_craft_queue, CONNECT_DEFERRED)
+	_craft_equipment_dialog = ConfirmationDialog.new()
+	_craft_equipment_dialog.name = "CraftEquipmentToolConfirmDialog"
+	_craft_equipment_dialog.title = "确认制作"
+	_craft_equipment_dialog.dialog_text = "制作会消耗已装备工具。确定继续吗？"
+	_craft_equipment_dialog.confirmed.connect(_confirm_pending_craft_equipment)
+	_craft_equipment_dialog.canceled.connect(_cancel_pending_craft_equipment)
+	_craft_equipment_dialog.get_ok_button().text = "继续制作"
+	_craft_equipment_dialog.get_cancel_button().text = "取消"
+	add_child(_craft_equipment_dialog)
 	box.add_child(_summary_label)
 	box.add_child(_search_box)
 	box.add_child(_category_box)
@@ -220,11 +232,8 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 	button.disabled = not bool(recipe.get("can_craft", false))
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.pressed.connect(func() -> void:
-		var root := get_parent()
-		if root != null and root.has_method("craft_player_recipe"):
-			var count := int(_quantity_spin.value) if _quantity_spin != null and _selected_recipe_id == recipe_id else 1
-			var result: Dictionary = root.craft_player_recipe(recipe_id, max(1, count))
-			_set_feedback_from_result(result, recipe)
+		var count := int(_quantity_spin.value) if _quantity_spin != null and _selected_recipe_id == recipe_id else 1
+		_request_craft_recipe(recipe, max(1, count))
 	, CONNECT_DEFERRED)
 	var queue_button := Button.new()
 	queue_button.name = "QueueButton"
@@ -666,6 +675,161 @@ func _add_sort_button(node_name: String, text: String, mode: String) -> void:
 			apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
 	_sort_box.add_child(button)
+
+
+func has_blocking_modal() -> bool:
+	return _craft_equipment_dialog != null and _craft_equipment_dialog.visible
+
+
+func blocking_modal_name() -> String:
+	if _craft_equipment_dialog != null and _craft_equipment_dialog.visible:
+		return "craft_equipment_tool_confirm"
+	return ""
+
+
+func blocking_modal_snapshot() -> Dictionary:
+	if not has_blocking_modal():
+		return {}
+	return {
+		"id": "craft_equipment_tool_confirm",
+		"name": "modal:craft_equipment_tool_confirm",
+		"kind": "confirm",
+		"owner_panel": "crafting",
+		"blocks_gameplay": true,
+		"mouse_blocks_world": true,
+		"dialog_visible": _craft_equipment_dialog.visible,
+		"recipe_id": str(_pending_craft_recipe.get("recipe_id", "")),
+		"recipe_name": str(_pending_craft_recipe.get("name", _pending_craft_recipe.get("recipe_id", ""))),
+		"count": _pending_craft_count,
+		"equipment_sources": _craft_equipment_sources(_pending_craft_recipe, _pending_craft_count),
+		"confirm_button_mouse_filter": _control_mouse_filter_name(_craft_equipment_dialog.get_ok_button()),
+		"confirm_button_mouse_blocks_world": _control_mouse_blocks_world(_craft_equipment_dialog.get_ok_button()),
+		"cancel_button_mouse_filter": _control_mouse_filter_name(_craft_equipment_dialog.get_cancel_button()),
+		"cancel_button_mouse_blocks_world": _control_mouse_blocks_world(_craft_equipment_dialog.get_cancel_button()),
+	}
+
+
+func close_blocking_modal() -> Dictionary:
+	if not has_blocking_modal():
+		return {"success": false, "reason": "modal_inactive"}
+	_craft_equipment_dialog.hide()
+	_pending_craft_recipe = {}
+	_pending_craft_count = 0
+	return {
+		"success": true,
+		"closed": "modal:craft_equipment_tool_confirm",
+	}
+
+
+func _request_craft_recipe(recipe: Dictionary, count: int) -> void:
+	var recipe_id := str(recipe.get("recipe_id", ""))
+	if recipe_id.is_empty():
+		return
+	var root := get_parent()
+	if root == null or not root.has_method("craft_player_recipe"):
+		_feedback_label.text = "制作失败: %s | 运行时未就绪" % str(recipe.get("name", recipe_id))
+		return
+	var normalized_count := clampi(count, 1, maxi(1, int(recipe.get("max_craft_count", 1))))
+	if _craft_consumes_equipped_tool(recipe, normalized_count):
+		_open_craft_equipment_confirm(recipe, normalized_count)
+		return
+	var result: Dictionary = root.craft_player_recipe(recipe_id, normalized_count)
+	_set_feedback_from_result(result, recipe)
+
+
+func _craft_consumes_equipped_tool(recipe: Dictionary, count: int) -> bool:
+	return not _craft_equipment_sources(recipe, count).is_empty()
+
+
+func _craft_equipment_sources(recipe: Dictionary, count: int) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for tool in _array_or_empty(recipe.get("required_tools", [])):
+		var tool_data: Dictionary = _tool_data(tool)
+		if not bool(tool_data.get("consume_on_craft", false)):
+			continue
+		var remaining: int = max(1, int(tool_data.get("consume_count", 1))) * max(1, count)
+		for source in _array_or_empty(tool_data.get("available_sources", tool_data.get("consumption_sources", []))):
+			if remaining <= 0:
+				break
+			var source_data: Dictionary = _dictionary_or_empty(source)
+			var source_count: int = mini(remaining, max(0, int(source_data.get("count", 0))))
+			if source_count <= 0:
+				continue
+			if str(source_data.get("source", "")) == "equipment":
+				var entry := source_data.duplicate(true)
+				entry["count"] = source_count
+				entry["item_id"] = str(tool_data.get("item_id", ""))
+				entry["item_name"] = str(tool_data.get("name", tool_data.get("item_id", "")))
+				output.append(entry)
+			remaining -= source_count
+	return output
+
+
+func _open_craft_equipment_confirm(recipe: Dictionary, count: int) -> void:
+	if _craft_equipment_dialog == null or recipe.is_empty():
+		return
+	var recipe_id := str(recipe.get("recipe_id", ""))
+	if recipe_id.is_empty():
+		return
+	var root := get_parent()
+	if root != null and root.has_method("finish_world_action_presentations"):
+		root.finish_world_action_presentations()
+	_pending_craft_recipe = recipe.duplicate(true)
+	_pending_craft_count = count
+	_craft_equipment_dialog.dialog_text = "制作 %s x%d 会消耗已装备工具：%s。确定继续吗？" % [
+		str(recipe.get("name", recipe_id)),
+		count,
+		", ".join(_craft_equipment_source_labels(recipe, count)),
+	]
+	_craft_equipment_dialog.popup_centered()
+
+
+func _craft_equipment_source_labels(recipe: Dictionary, count: int) -> Array[String]:
+	var labels: Array[String] = []
+	for source in _craft_equipment_sources(recipe, count):
+		var source_data: Dictionary = _dictionary_or_empty(source)
+		var slot := str(source_data.get("slot_id", ""))
+		var name := str(source_data.get("item_name", source_data.get("item_id", "")))
+		labels.append("%s%s" % [name, " (%s)" % slot if not slot.is_empty() else ""])
+	return labels
+
+
+func _confirm_pending_craft_equipment() -> void:
+	if _pending_craft_recipe.is_empty():
+		return
+	var recipe := _pending_craft_recipe.duplicate(true)
+	var count := maxi(1, _pending_craft_count)
+	_pending_craft_recipe = {}
+	_pending_craft_count = 0
+	if _craft_equipment_dialog != null:
+		_craft_equipment_dialog.hide()
+	var root := get_parent()
+	if root != null and root.has_method("craft_player_recipe"):
+		var result: Dictionary = root.craft_player_recipe(str(recipe.get("recipe_id", "")), count)
+		_set_feedback_from_result(result, recipe)
+
+
+func _cancel_pending_craft_equipment() -> void:
+	_pending_craft_recipe = {}
+	_pending_craft_count = 0
+
+
+func _control_mouse_blocks_world(control: Control) -> bool:
+	return control != null and control.mouse_filter == Control.MOUSE_FILTER_STOP
+
+
+func _control_mouse_filter_name(control: Control) -> String:
+	if control == null:
+		return "none"
+	match control.mouse_filter:
+		Control.MOUSE_FILTER_STOP:
+			return "stop"
+		Control.MOUSE_FILTER_PASS:
+			return "pass"
+		Control.MOUSE_FILTER_IGNORE:
+			return "ignore"
+		_:
+			return str(control.mouse_filter)
 
 
 func _toolbar_button(node_name: String, text: String, tooltip: String) -> Button:

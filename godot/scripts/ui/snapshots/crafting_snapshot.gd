@@ -171,15 +171,16 @@ func _availability(recipe: Dictionary, inventory: Dictionary, equipment: Diction
 			continue
 		var tool_id := str(tool_data.get("item_id", ""))
 		var consume_count: int = max(1, int(tool_data.get("consume_count", 1)))
-		var inventory_available: int = int(inventory.get(tool_id, 0))
-		if not tool_id.is_empty() and inventory_available >= consume_count:
+		var consumable_available: int = int(tool_data.get("consumable_available", tool_data.get("inventory_available", 0)))
+		if not tool_id.is_empty() and consumable_available >= consume_count:
 			continue
 		missing_consumable_tools.append({
 			"item_id": tool_id,
 			"name": str(tool_data.get("name", tool_id)),
-			"available": inventory_available,
+			"available": consumable_available,
 			"required": consume_count,
 			"consume_on_craft": true,
+			"consumption_sources": _array_or_empty(tool_data.get("available_sources", [])),
 		})
 	if not missing_consumable_tools.is_empty():
 		return {
@@ -514,15 +515,25 @@ func _required_tools_snapshot(required_tools: Array, recipe: Dictionary, invento
 				tool_data["consume_count"] = recipe_consume_count
 		var consume_on_craft: bool = bool(tool_data.get("consume_on_craft", false))
 		var consume_count: int = max(1, int(tool_data.get("consume_count", tool_data.get("required", 1))))
+		var consumption_sources: Array[Dictionary] = []
+		if consume_on_craft:
+			consumption_sources = _tool_consumption_sources(tool_id, consume_count, inventory, equipment, crafting_context)
+		var consumable_available: int = _consumption_source_total(consumption_sources)
+		var available_sources: Array[Dictionary] = _tool_availability_sources(tool_id, inventory, equipment, crafting_context)
 		output.append({
 			"item_id": tool_id,
 			"name": str(_item_data(tool_id).get("name", tool_id)),
 			"available": available_count,
 			"inventory_available": int(inventory.get(tool_id, 0)),
+			"equipment_available": _equipment_tool_count(tool_id, equipment),
+			"nearby_container_available": _nearby_container_tool_count(tool_id, crafting_context),
+			"available_sources": available_sources,
 			"required": max(1, int(tool_data.get("required", 1))),
 			"consume_on_craft": consume_on_craft,
 			"consume_count": consume_count if consume_on_craft else 0,
-			"can_consume": not consume_on_craft or int(inventory.get(tool_id, 0)) >= consume_count,
+			"can_consume": not consume_on_craft or consumable_available >= consume_count,
+			"consumable_available": _consumption_source_total(available_sources) if consume_on_craft else 0,
+			"consumption_sources": consumption_sources,
 			"durability_cost": float(tool_data.get("durability_cost", 0.0)),
 			"available_durability": _tool_durability(tool_id, tool_durability),
 		})
@@ -568,6 +579,113 @@ func _tool_available_count(tool_id: String, inventory: Dictionary, equipment: Di
 	for slot_id in equipment.keys():
 		if _normalize_content_id(equipment.get(slot_id, "")) == tool_id:
 			count += 1
+	for container in _array_or_empty(crafting_context.get("nearby_tool_containers", [])):
+		var container_data: Dictionary = _dictionary_or_empty(container)
+		count += _inventory_entry_count(_array_or_empty(container_data.get("inventory", [])), tool_id)
+	return count
+
+
+func _tool_availability_sources(tool_id: String, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	if tool_id.is_empty():
+		return output
+	var inventory_count: int = max(0, int(inventory.get(tool_id, 0)))
+	if inventory_count > 0:
+		output.append({
+			"source": "actor_inventory",
+			"count": inventory_count,
+			"inventory_before": inventory_count,
+		})
+	var slot_ids: Array = equipment.keys()
+	slot_ids.sort()
+	for slot_id in slot_ids:
+		if _normalize_content_id(equipment.get(slot_id, "")) != tool_id:
+			continue
+		output.append({
+			"source": "equipment",
+			"slot_id": str(slot_id),
+			"count": 1,
+		})
+	for container in _array_or_empty(crafting_context.get("nearby_tool_containers", [])):
+		var container_data: Dictionary = _dictionary_or_empty(container)
+		var inventory_entries: Array = _array_or_empty(container_data.get("inventory", []))
+		var container_count: int = _inventory_entry_count(inventory_entries, tool_id)
+		if container_count <= 0:
+			continue
+		output.append({
+			"source": "nearby_container",
+			"container_id": str(container_data.get("container_id", "")),
+			"display_name": str(container_data.get("display_name", container_data.get("container_id", ""))),
+			"count": container_count,
+			"inventory_before": container_count,
+		})
+	return output
+
+
+func _tool_consumption_sources(tool_id: String, count: int, inventory: Dictionary, equipment: Dictionary, crafting_context: Dictionary = {}) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var remaining: int = max(0, count)
+	if remaining <= 0 or tool_id.is_empty():
+		return output
+	var inventory_count: int = max(0, int(inventory.get(tool_id, 0)))
+	if inventory_count > 0:
+		var consumed_inventory_count: int = mini(inventory_count, remaining)
+		output.append({
+			"source": "actor_inventory",
+			"count": consumed_inventory_count,
+			"inventory_before": inventory_count,
+		})
+		remaining -= consumed_inventory_count
+	var slot_ids: Array = equipment.keys()
+	slot_ids.sort()
+	for slot_id in slot_ids:
+		if remaining <= 0:
+			break
+		if _normalize_content_id(equipment.get(slot_id, "")) != tool_id:
+			continue
+		output.append({
+			"source": "equipment",
+			"slot_id": str(slot_id),
+			"count": 1,
+		})
+		remaining -= 1
+	for container in _array_or_empty(crafting_context.get("nearby_tool_containers", [])):
+		if remaining <= 0:
+			break
+		var container_data: Dictionary = _dictionary_or_empty(container)
+		var inventory_entries: Array = _array_or_empty(container_data.get("inventory", []))
+		var container_count: int = _inventory_entry_count(inventory_entries, tool_id)
+		if container_count <= 0:
+			continue
+		var consumed_container_count: int = mini(container_count, remaining)
+		output.append({
+			"source": "nearby_container",
+			"container_id": str(container_data.get("container_id", "")),
+			"display_name": str(container_data.get("display_name", container_data.get("container_id", ""))),
+			"count": consumed_container_count,
+			"inventory_before": container_count,
+		})
+		remaining -= consumed_container_count
+	return output
+
+
+func _consumption_source_total(sources: Array[Dictionary]) -> int:
+	var total := 0
+	for source in sources:
+		total += max(0, int(_dictionary_or_empty(source).get("count", 0)))
+	return total
+
+
+func _equipment_tool_count(tool_id: String, equipment: Dictionary) -> int:
+	var count := 0
+	for slot_id in equipment.keys():
+		if _normalize_content_id(equipment.get(slot_id, "")) == tool_id:
+			count += 1
+	return count
+
+
+func _nearby_container_tool_count(tool_id: String, crafting_context: Dictionary = {}) -> int:
+	var count := 0
 	for container in _array_or_empty(crafting_context.get("nearby_tool_containers", [])):
 		var container_data: Dictionary = _dictionary_or_empty(container)
 		count += _inventory_entry_count(_array_or_empty(container_data.get("inventory", [])), tool_id)
@@ -626,7 +744,7 @@ func _max_consumable_tool_count(required_tools: Array[Dictionary]) -> int:
 		if not bool(tool_data.get("consume_on_craft", false)):
 			continue
 		var consume_count: int = max(1, int(tool_data.get("consume_count", 1)))
-		max_count = mini(max_count, int(tool_data.get("inventory_available", 0)) / consume_count)
+		max_count = mini(max_count, int(tool_data.get("consumable_available", tool_data.get("inventory_available", 0))) / consume_count)
 	return max_count
 
 
