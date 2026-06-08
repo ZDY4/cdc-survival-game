@@ -1881,8 +1881,9 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		for key in hotbar_target:
 			target[key] = hotbar_target[key]
 	elif control.has_meta("hotbar_group_id"):
-		target["target_kind"] = "hotbar_group"
-		target["target_id"] = str(control.get_meta("hotbar_group_id"))
+		var hotbar_group_target: Dictionary = _hotbar_group_drag_hover_target_snapshot(control, drag_data)
+		for key in hotbar_group_target:
+			target[key] = hotbar_group_target[key]
 	elif control.has_meta("inventory_action_target"):
 		var inventory_action_target: Dictionary = _inventory_action_drag_hover_target_snapshot(control, drag_data)
 		for key in inventory_action_target:
@@ -1936,6 +1937,20 @@ func _hotbar_slot_drag_acceptance(slot_id: String, drag_data: Dictionary) -> Dic
 	if slot_id.is_empty():
 		return {"accept": false, "reason": "hotbar_slot_missing_slot"}
 	return {"accept": true, "reason": ""}
+
+
+func _hotbar_group_drag_hover_target_snapshot(control: Control, drag_data: Dictionary) -> Dictionary:
+	var group_id := str(control.get_meta("hotbar_group_id", ""))
+	var reject_reason := "hotbar_group_drag_unsupported" if not drag_data.is_empty() else ""
+	return {
+		"target_kind": "hotbar_group",
+		"target_id": group_id,
+		"group_id": group_id,
+		"accepts": "",
+		"last_accept": false,
+		"reject_reason": reject_reason,
+		"hover_highlight": _drag_hover_highlight(not drag_data.is_empty(), "hotbar_group", group_id, reject_reason, false),
+	}
 
 
 func _trade_cart_drag_hover_target_snapshot(control: Control, drag_data: Dictionary, target_kind: String, target_id: String) -> Dictionary:
