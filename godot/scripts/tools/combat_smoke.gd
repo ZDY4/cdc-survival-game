@@ -45,6 +45,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_combat_npc_turn_ap_and_close(errors, registry)
 	_expect_combat_world_turn_uses_initiative_order(errors, registry)
 	_expect_combat_npc_multi_action_loop(errors, registry)
+	_expect_combat_npc_reload_then_attack(errors, registry)
 	_expect_combat_entry_participants_and_round(errors, registry)
 	_expect_combat_exit_exploration_recovery(errors, registry)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
@@ -374,6 +375,82 @@ func _expect_combat_npc_multi_action_loop(errors: Array[String], registry: RefCo
 		errors.append("combat NPC multi-action should exhaust AP")
 	if _event_count(simulation.snapshot(), "attack_resolved") < 2:
 		errors.append("combat NPC multi-action should emit attack_resolved for each attack")
+
+
+func _expect_combat_npc_reload_then_attack(errors: Array[String], registry: RefCounted) -> void:
+	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var simulation: RefCounted = runtime_result.get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("combat NPC reload loop smoke missing player")
+		return
+	player.grid_position = GridCoord.new(0, 0, 0)
+	player.hp = 100.0
+	player.max_hp = 100.0
+	player.defense = 99.0
+	player.combat_attributes["evasion"] = 0.0
+	var npc_id: int = _register_test_actor(simulation, "combat_reload_hostile", "hostile", {
+		"x": 4,
+		"y": 0,
+		"z": 0,
+	}, 40.0)
+	var npc: RefCounted = simulation.actor_registry.get_actor(npc_id)
+	if npc == null:
+		errors.append("combat NPC reload loop smoke missing hostile")
+		return
+	npc.equipment["main_hand"] = "1004"
+	npc.weapon_ammo["main_hand"] = 0
+	npc.inventory["1009"] = 2
+	npc.ai["aggro_range"] = 20.0
+	npc.combat_attributes["combat_turn_ap_gain"] = 5.0
+	npc.combat_attributes["combat_turn_ap_max"] = 5.0
+	npc.combat_attributes["combat_affordable_ap_threshold"] = 1.0
+	npc.combat_attributes["accuracy"] = 100.0
+	npc.combat_attributes["evasion"] = 0.0
+	var topology := {
+		"bounds": {
+			"min_x": -2,
+			"max_x": 8,
+			"min_z": -2,
+			"max_z": 2,
+		},
+		"sight_blocking_cells": {},
+	}
+	simulation._enter_combat([player.actor_id, npc_id], "npc_reload_attack_smoke")
+	var event_start: int = simulation.snapshot().get("events", []).size()
+	var results: Array = simulation.advance_world_turn(topology)
+	var npc_result: Dictionary = _npc_result_for_actor(results, npc_id)
+	if npc_result.is_empty():
+		errors.append("combat NPC reload loop should return NPC result")
+		return
+	if not bool(npc_result.get("combat_action_loop", false)):
+		errors.append("combat NPC reload loop should expose combat_action_loop")
+	var actions: Array = _array_or_empty(npc_result.get("actions", []))
+	if actions.size() < 2:
+		errors.append("combat NPC reload loop should perform reload then attack, got %s" % JSON.stringify(actions))
+	else:
+		if str(_dictionary_or_empty(actions[0]).get("intent", "")) != "reload":
+			errors.append("combat NPC reload loop first action should reload")
+		if str(_dictionary_or_empty(actions[1]).get("intent", "")) != "attack":
+			errors.append("combat NPC reload loop second action should attack")
+	if int(npc.inventory.get("1009", 0)) != 0:
+		errors.append("combat NPC reload should move spare pistol ammo into magazine before attack")
+	if int(npc.weapon_ammo.get("main_hand", 0)) != 1:
+		errors.append("combat NPC reload then attack should leave one loaded round")
+	if absf(float(npc_result.get("ap_after_actions", -1.0)) - 1.0) > 0.01:
+		errors.append("combat NPC reload then attack should spend 4 of 5 AP")
+	if _event_count_for_actor_after(simulation.snapshot(), "weapon_reloaded", npc_id, event_start) != 1:
+		errors.append("combat NPC reload loop should emit one weapon_reloaded event")
+	if _event_count_for_actor_after(simulation.snapshot(), "ammo_consumed", npc_id, event_start) != 1:
+		errors.append("combat NPC reload loop should emit one ammo_consumed event")
+	if _event_count_for_actor_after(simulation.snapshot(), "attack_resolved", npc_id, event_start) != 1:
+		errors.append("combat NPC reload loop should emit one attack_resolved event")
+	var reload_payload: Dictionary = _event_payload_after(simulation.snapshot(), "weapon_reloaded", npc_id, event_start)
+	if int(reload_payload.get("loaded_count", 0)) != 2 or int(reload_payload.get("remaining_inventory", -1)) != 0:
+		errors.append("combat NPC reload event should expose loaded_count and remaining inventory")
+	var intent_payload: Dictionary = _event_payload_after(simulation.snapshot(), "ai_intent_decided", npc_id, event_start)
+	if str(intent_payload.get("intent", "")) != "reload" or not bool(intent_payload.get("can_reload", false)):
+		errors.append("combat NPC reload intent should expose reload diagnostic payload")
 
 
 func _expect_combat_entry_participants_and_round(errors: Array[String], registry: RefCounted) -> void:
@@ -1721,15 +1798,17 @@ func _expect_corpse_inventory_and_metadata(errors: Array[String], simulation: Re
 			errors.append("corpse should include actor inventory bandages")
 		if _entry_count(corpse_inventory, "1004") != 1:
 			errors.append("corpse should include equipped weapon")
-		if _entry_count(corpse_inventory, "1009") != 9:
-			errors.append("corpse should merge inventory ammo, loaded ammo and loot table ammo")
+		var corpse_ammo_count: int = _entry_count(corpse_inventory, "1009")
+		if corpse_ammo_count != 9:
+			errors.append("corpse should merge inventory ammo, loaded ammo and loot table ammo, got %d" % corpse_ammo_count)
 		var container: Dictionary = _container_by_id(simulation.snapshot(), str(corpse.get("container_id", "")))
 		if str(container.get("container_type", "")) != "corpse":
 			errors.append("corpse container session should expose container_type=corpse")
 		if str(container.get("container_origin", "")) != "combat_defeat":
 			errors.append("corpse container session should expose container_origin=combat_defeat")
-		if _entry_count(_array_or_empty(container.get("inventory", [])), "1009") != 9:
-			errors.append("corpse container session should mirror merged ammo")
+		var container_ammo_count: int = _entry_count(_array_or_empty(container.get("inventory", [])), "1009")
+		if container_ammo_count != 9:
+			errors.append("corpse container session should mirror merged ammo, got %d" % container_ammo_count)
 		if int(container.get("money", 0)) != 17:
 			errors.append("corpse container session should mirror corpse money")
 		var player_money_before: int = int(player.money)
@@ -2077,11 +2156,12 @@ func _container_by_id(snapshot: Dictionary, container_id: String) -> Dictionary:
 
 
 func _entry_count(entries: Array, item_id: String) -> int:
+	var total := 0
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
 		if str(entry_data.get("item_id", "")) == item_id:
-			return int(entry_data.get("count", 0))
-	return 0
+			total += int(entry_data.get("count", 0))
+	return total
 
 
 func _event_count(snapshot: Dictionary, kind: String) -> int:
@@ -2112,6 +2192,19 @@ func _event_payload_after(snapshot: Dictionary, kind: String, actor_id: int, sta
 		if int(payload.get("actor_id", 0)) == actor_id:
 			return payload
 	return {}
+
+
+func _event_count_for_actor_after(snapshot: Dictionary, kind: String, actor_id: int, start_index: int) -> int:
+	var count := 0
+	var events: Array = _array_or_empty(snapshot.get("events", []))
+	for index in range(max(0, start_index), events.size()):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) != kind:
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event_data.get("payload", {}))
+		if int(payload.get("actor_id", 0)) == actor_id:
+			count += 1
+	return count
 
 
 func _npc_result_for_actor(results: Array, actor_id: int) -> Dictionary:
