@@ -86,6 +86,15 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("dialogue panel diagnostic meta should expose dialogue id")
 	if int(game_root.dialogue_panel.get_meta("target_actor_id", 0)) <= 0:
 		errors.append("dialogue panel diagnostic meta should expose target actor id")
+	if str(game_root.dialogue_panel.get_meta("target_definition_id", "")) != "trader_lao_wang":
+		errors.append("dialogue panel diagnostic meta should expose target definition id")
+	if not str(game_root.dialogue_panel.get_meta("target_display_name", "")).contains("老王"):
+		errors.append("dialogue panel diagnostic meta should expose target display name")
+	if str(game_root.dialogue_panel.get_meta("target_source", "")) != "active_actor_state":
+		errors.append("dialogue panel diagnostic meta should expose target source")
+	var panel_node: Control = game_root.dialogue_panel.find_child("DialoguePanel", true, false) as Control
+	if panel_node == null or not str(panel_node.tooltip_text).contains("target_source=active_actor_state"):
+		errors.append("dialogue panel tooltip should expose target source")
 	if not _options_line(game_root).contains("看看货") or not _options_line(game_root).contains("明白"):
 		errors.append("dialogue options missing expected choices")
 	if not _options_line(game_root).contains("选择:"):

@@ -165,10 +165,15 @@ func _apply_diagnostics(snapshot: Dictionary) -> void:
 	set_meta("dialogue_id", str(snapshot.get("dialogue_id", "")))
 	set_meta("node_id", str(snapshot.get("node_id", "")))
 	set_meta("target_actor_id", int(target.get("actor_id", 0)))
-	_panel.tooltip_text = "dialogue=%s node=%s target_actor=%d" % [
+	set_meta("target_definition_id", str(target.get("definition_id", "")))
+	set_meta("target_display_name", str(target.get("display_name", "")))
+	set_meta("target_source", str(target.get("source", "")))
+	_panel.tooltip_text = "dialogue=%s node=%s target_actor=%d target_definition=%s target_source=%s" % [
 		str(snapshot.get("dialogue_id", "")),
 		str(snapshot.get("node_id", "")),
 		int(target.get("actor_id", 0)),
+		str(target.get("definition_id", "")),
+		str(target.get("source", "")),
 	]
 
 
