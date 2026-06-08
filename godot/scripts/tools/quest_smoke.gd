@@ -236,7 +236,9 @@ func _expect_structured_prerequisites(registry: RefCounted) -> Array[String]:
 			"description": "smoke-only structured prerequisite quest",
 			"prerequisites": [
 				"tutorial_survive",
-				{"type": "world_flag", "id": "quest_prereq_flag"},
+				{"world_flags_all": ["quest_prereq_flag", "quest_prereq_flag_all"]},
+				{"type": "world_flags_any", "ids": ["quest_prereq_flag_any_a", "quest_prereq_flag_any_b"]},
+				{"type": "world_flags_none", "ids": ["quest_prereq_flag_blocked"]},
 				{"type": "item", "item_id": "1007", "count": 2},
 				{"type": "relationship", "target_definition_id": "trader_lao_wang", "min": 80},
 			],
@@ -257,8 +259,18 @@ func _expect_structured_prerequisites(registry: RefCounted) -> Array[String]:
 		errors.append("structured prerequisite quest should not start before prerequisites")
 	simulation.completed_quests["tutorial_survive"] = true
 	if simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
-		errors.append("structured prerequisite quest should wait for world flag")
+		errors.append("structured prerequisite quest should wait for all world flags")
 	simulation.world_flags["quest_prereq_flag"] = true
+	if simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
+		errors.append("structured prerequisite quest should wait for second all-world flag")
+	simulation.world_flags["quest_prereq_flag_all"] = true
+	if simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
+		errors.append("structured prerequisite quest should wait for any-world flag")
+	simulation.world_flags["quest_prereq_flag_any_b"] = true
+	simulation.world_flags["quest_prereq_flag_blocked"] = true
+	if simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
+		errors.append("structured prerequisite quest should reject blocked none-world flag")
+	simulation.world_flags.erase("quest_prereq_flag_blocked")
 	if simulation.start_quest(1, "quest_structured_prerequisite_smoke"):
 		errors.append("structured prerequisite quest should wait for required item")
 	player.inventory["1007"] = 2

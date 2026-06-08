@@ -442,7 +442,15 @@ func _prerequisite_completed(simulation: RefCounted, actor_id: int, prerequisite
 	if typeof(prerequisite) != TYPE_DICTIONARY:
 		return simulation.completed_quests.has(str(prerequisite))
 	var condition: Dictionary = _dictionary_or_empty(prerequisite)
+	if condition.has("world_flags_all") and not _dictionary_has_all_keys(simulation.world_flags, _array_or_empty(condition.get("world_flags_all", []))):
+		return false
+	if condition.has("world_flags_any") and not _dictionary_has_any_key(simulation.world_flags, _array_or_empty(condition.get("world_flags_any", []))):
+		return false
+	if condition.has("world_flags_none") and _dictionary_has_any_key(simulation.world_flags, _array_or_empty(condition.get("world_flags_none", []))):
+		return false
 	var condition_type: String = str(condition.get("type", condition.get("kind", "quest"))).strip_edges()
+	if not condition.has("type") and not condition.has("kind") and (condition.has("world_flags_all") or condition.has("world_flags_any") or condition.has("world_flags_none")):
+		return true
 	match condition_type:
 		"quest", "completed_quest", "quest_completed":
 			var quest_id: String = str(condition.get("quest_id", condition.get("id", ""))).strip_edges()
@@ -451,6 +459,12 @@ func _prerequisite_completed(simulation: RefCounted, actor_id: int, prerequisite
 			var flag_id: String = str(condition.get("flag_id", condition.get("id", ""))).strip_edges()
 			var expected: bool = bool(condition.get("value", true))
 			return not flag_id.is_empty() and simulation.world_flags.has(flag_id) == expected
+		"world_flags_all", "flags_all":
+			return _dictionary_has_all_keys(simulation.world_flags, _array_or_empty(condition.get("ids", condition.get("flags", []))))
+		"world_flags_any", "flags_any":
+			return _dictionary_has_any_key(simulation.world_flags, _array_or_empty(condition.get("ids", condition.get("flags", []))))
+		"world_flags_none", "flags_none":
+			return not _dictionary_has_any_key(simulation.world_flags, _array_or_empty(condition.get("ids", condition.get("flags", []))))
 		"item", "inventory_item":
 			var item_id: String = _inventory_entries.normalize_content_id(condition.get("item_id", condition.get("id", "")))
 			var count: int = max(1, int(condition.get("count", 1)))
@@ -473,3 +487,23 @@ func _prerequisite_completed(simulation: RefCounted, actor_id: int, prerequisite
 			return true
 		_:
 			return false
+
+
+func _dictionary_has_all_keys(source: Dictionary, values: Array) -> bool:
+	for value in values:
+		var key := str(value).strip_edges()
+		if key.is_empty():
+			continue
+		if not source.has(key):
+			return false
+	return true
+
+
+func _dictionary_has_any_key(source: Dictionary, values: Array) -> bool:
+	for value in values:
+		var key := str(value).strip_edges()
+		if key.is_empty():
+			continue
+		if source.has(key):
+			return true
+	return false

@@ -8,6 +8,7 @@ signal tracked_quest_changed(quest_id: String)
 var _panel: PanelContainer
 var _summary_label: Label
 var _quest_box: VBoxContainer
+var _locked_box: VBoxContainer
 var _completed_box: VBoxContainer
 var _detail_title_label: Label
 var _detail_body_label: Label
@@ -35,14 +36,17 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	_last_snapshot = snapshot.duplicate(true)
 	_tracked_quest_id = str(snapshot.get("tracked_quest_id", _tracked_quest_id))
 	var quests: Array = snapshot.get("quests", [])
+	var locked_quests: Array = snapshot.get("locked_quests", [])
 	var completed_quests: Array = snapshot.get("completed_quests", [])
-	_summary_label.text = "任务 %d | 已完成 %d" % [
+	_summary_label.text = "任务 %d | 未解锁 %d | 已完成 %d" % [
 		quests.size(),
+		int(snapshot.get("locked_count", locked_quests.size())),
 		int(snapshot.get("completed_count", 0)),
 	]
 	_feedback_label.text = _journal_feedback_text
 	_failure_history_label.text = _failure_history_text()
 	_clear_quests()
+	_clear_locked_quests()
 	_clear_completed_quests()
 	if quests.is_empty():
 		var empty := _label("QuestEmpty")
@@ -57,7 +61,19 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 			_quest_box.add_child(_quest_objective(quest_data))
 			for progress in _array_or_empty(quest_data.get("objective_progress", [])):
 				_quest_box.add_child(_objective_progress_line(str(quest_data.get("quest_id", "unknown")), _dictionary_or_empty(progress)))
+			for prerequisite in _array_or_empty(quest_data.get("prerequisites", [])):
+				_quest_box.add_child(_prerequisite_line(str(quest_data.get("quest_id", "unknown")), _dictionary_or_empty(prerequisite)))
 			_quest_box.add_child(_quest_reward(quest_data))
+
+	if not locked_quests.is_empty():
+		var locked_title := _label("LockedQuestHeader")
+		locked_title.text = "未解锁"
+		_locked_box.add_child(locked_title)
+		for quest in locked_quests:
+			var locked_data: Dictionary = quest
+			_locked_box.add_child(_locked_quest_line(locked_data))
+			for prerequisite in _array_or_empty(locked_data.get("missing_prerequisites", [])):
+				_locked_box.add_child(_prerequisite_line(str(locked_data.get("quest_id", "unknown")), _dictionary_or_empty(prerequisite)))
 
 	if completed_quests.is_empty():
 		var completed_empty := _label("CompletedQuestEmpty")
@@ -102,6 +118,9 @@ func _build_layout() -> void:
 	_quest_box = VBoxContainer.new()
 	_quest_box.name = "QuestLines"
 	_quest_box.add_theme_constant_override("separation", 4)
+	_locked_box = VBoxContainer.new()
+	_locked_box.name = "LockedQuestLines"
+	_locked_box.add_theme_constant_override("separation", 4)
 	_completed_box = VBoxContainer.new()
 	_completed_box.name = "CompletedQuestLines"
 	_completed_box.add_theme_constant_override("separation", 4)
@@ -118,6 +137,7 @@ func _build_layout() -> void:
 	_failure_history_label = _label("JournalFailureHistoryLine")
 	box.add_child(_summary_label)
 	box.add_child(_quest_box)
+	box.add_child(_locked_box)
 	box.add_child(_completed_box)
 	box.add_child(_detail_title_label)
 	box.add_child(_detail_body_label)
@@ -165,6 +185,16 @@ func _completed_quest_line(quest: Dictionary) -> Button:
 	return button
 
 
+func _locked_quest_line(quest: Dictionary) -> Label:
+	var label := _label("LockedQuest_%s" % quest.get("quest_id", "unknown"))
+	label.text = "%s | %s" % [
+		str(quest.get("title", quest.get("quest_id", ""))),
+		str(quest.get("prerequisite_summary", "未满足")),
+	]
+	label.tooltip_text = _prerequisites_tooltip(_array_or_empty(quest.get("missing_prerequisites", [])))
+	return label
+
+
 func _apply_quest_icon(button: Button, quest: Dictionary) -> void:
 	var icon_asset := _dictionary_or_empty(quest.get("icon_asset", {}))
 	var texture := MediaTextureLoader.texture_from_asset(icon_asset)
@@ -201,6 +231,20 @@ func _objective_progress_line(quest_id: String, progress: Dictionary) -> Label:
 		str(progress.get("requirement_text", "")),
 		"完成" if str(progress.get("state", "")) == "completed" else "进行中",
 	]
+	return label
+
+
+func _prerequisite_line(quest_id: String, prerequisite: Dictionary) -> Label:
+	var label := _label("Prerequisite_%s_%s_%s" % [
+		quest_id,
+		str(prerequisite.get("kind", "unknown")),
+		str(prerequisite.get("id", "unknown")).replace(":", "_").replace(",", "_"),
+	])
+	label.text = "- 前置: %s | %s" % [
+		str(prerequisite.get("text", prerequisite.get("title", ""))),
+		str(prerequisite.get("state_text", "已满足" if bool(prerequisite.get("satisfied", false)) else "未满足")),
+	]
+	label.tooltip_text = _prerequisite_tooltip(prerequisite)
 	return label
 
 
@@ -274,6 +318,10 @@ func _apply_detail(quest: Dictionary) -> void:
 	if not progress_lines.is_empty():
 		lines.append("目标进度:")
 		lines.append_array(progress_lines)
+	var prerequisite_lines := _prerequisite_texts(quest.get("prerequisites", []))
+	if not prerequisite_lines.is_empty():
+		lines.append("前置条件: %s" % str(quest.get("prerequisite_summary", "")))
+		lines.append_array(prerequisite_lines)
 	if bool(quest.get("manual_turn_in", false)):
 		var turn_in_requirements: Dictionary = _dictionary_or_empty(quest.get("turn_in_requirements", {}))
 		lines.append("交付: %s" % ("可交付" if bool(quest.get("turn_in_ready", false)) else "需要完成目标后手动交付"))
@@ -324,6 +372,33 @@ func _objective_progress_texts(value: Variant) -> Array[String]:
 			"完成" if str(progress_data.get("state", "")) == "completed" else "进行中",
 		])
 	return result
+
+
+func _prerequisite_texts(value: Variant) -> Array[String]:
+	var result: Array[String] = []
+	for prerequisite in _array_or_empty(value):
+		var prerequisite_data: Dictionary = _dictionary_or_empty(prerequisite)
+		result.append("- %s | %s" % [
+			str(prerequisite_data.get("text", prerequisite_data.get("title", ""))),
+			str(prerequisite_data.get("state_text", "已满足" if bool(prerequisite_data.get("satisfied", false)) else "未满足")),
+		])
+	return result
+
+
+func _prerequisite_tooltip(prerequisite: Dictionary) -> String:
+	var lines: Array[String] = [str(prerequisite.get("text", prerequisite.get("title", "")))]
+	lines.append("状态: %s" % str(prerequisite.get("state_text", "")))
+	var reason := str(prerequisite.get("reason", ""))
+	if not reason.is_empty():
+		lines.append("原因: %s" % _journal_reason_text(reason))
+	return "\n".join(lines)
+
+
+func _prerequisites_tooltip(prerequisites: Array) -> String:
+	var lines: Array[String] = []
+	for prerequisite in prerequisites:
+		lines.append(_prerequisite_tooltip(_dictionary_or_empty(prerequisite)))
+	return "\n\n".join(lines)
 
 
 func _turn_in_button_tooltip(quest: Dictionary) -> String:
@@ -414,6 +489,12 @@ func _label(node_name: String) -> Label:
 func _clear_quests() -> void:
 	for child in _quest_box.get_children():
 		_quest_box.remove_child(child)
+		child.free()
+
+
+func _clear_locked_quests() -> void:
+	for child in _locked_box.get_children():
+		_locked_box.remove_child(child)
 		child.free()
 
 

@@ -35,8 +35,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("journal panel should use reason catalog fallback for turn-in reasons")
 	if not _summary_line(game_root).contains("任务 1"):
 		errors.append("journal summary should show one active quest")
+	if not _summary_line(game_root).contains("未解锁"):
+		errors.append("journal summary should expose locked quest count")
 	if not _quest_text(game_root).contains("补给试跑"):
 		errors.append("journal missing tutorial quest title")
+	if not _locked_quest_text(game_root).contains("警戒区清剿") or not _locked_quest_text(game_root).contains("完成任务: 补给试跑 | 未完成"):
+		errors.append("journal should show locked follow-up quest prerequisite")
+	await _expect_locked_prerequisite_matrix(errors, game_root)
 	if _quest_icon_path(game_root, "tutorial_survive") != "res://assets/icons/quests/quest_collect.svg":
 		errors.append("journal collect quest title should expose and render quest icon")
 	var tutorial_thumbnail := _dictionary_or_empty(_quest_snapshot(game_root, "tutorial_survive").get("thumbnail_asset", {}))
@@ -229,6 +234,63 @@ func _expect_dialogue_turn_in_snapshot(errors: Array[String], game_root: Node) -
 	game_root.refresh_journal_panel()
 
 
+func _expect_locked_prerequisite_matrix(errors: Array[String], game_root: Node) -> void:
+	var quest_library: Dictionary = game_root.registry.get_library("quests")
+	var smoke_id := "journal_prerequisite_matrix_smoke"
+	quest_library[smoke_id] = {
+		"data": {
+			"quest_id": smoke_id,
+			"title": "条件矩阵测试",
+			"description": "smoke-only locked prerequisite matrix quest",
+			"prerequisites": [
+				"tutorial_survive",
+				{"world_flags_all": ["journal_flag_a", "journal_flag_b"]},
+				{"world_flags_any": ["journal_flag_c", "journal_flag_d"]},
+				{"world_flags_none": ["journal_flag_blocked"]},
+				{"type": "item", "item_id": "1007", "count": 2},
+				{"type": "relationship", "target_definition_id": "trader_lao_wang", "min": 80},
+			],
+			"flow": {
+				"nodes": {
+					"step_1": {
+						"id": "step_1",
+						"type": "objective",
+						"objective_type": "collect",
+						"item_id": 1007,
+						"count": 1,
+					},
+				},
+			},
+		},
+	}
+	game_root.simulation.quest_library[smoke_id] = quest_library[smoke_id]
+	game_root.refresh_journal_panel()
+	await game_root.get_tree().process_frame
+	var locked := _locked_quest_snapshot(game_root, smoke_id)
+	if locked.is_empty():
+		errors.append("journal should expose smoke locked quest")
+		return
+	if int(locked.get("missing_prerequisite_count", 0)) < 5:
+		errors.append("locked quest should expose multiple missing prerequisites: %s" % locked)
+	if not str(locked.get("prerequisite_summary", "")).contains("已满足 1/6"):
+		errors.append("locked quest should summarize satisfied prerequisite matrix: %s" % locked.get("prerequisite_summary", ""))
+	if not _prerequisite_kind_seen(locked, "quest", "quest_not_completed"):
+		errors.append("locked quest should expose missing completed quest prerequisite: %s" % locked)
+	if not _prerequisite_kind_seen(locked, "world_flags_all", "world_flags_all_missing"):
+		errors.append("locked quest should expose missing all-world-flags prerequisite: %s" % locked)
+	if not _prerequisite_kind_seen(locked, "world_flags_any", "world_flags_any_missing"):
+		errors.append("locked quest should expose missing any-world-flags prerequisite: %s" % locked)
+	if not _prerequisite_kind_seen(locked, "world_flags_none", ""):
+		errors.append("locked quest should expose satisfied none-world-flags prerequisite: %s" % locked)
+	if not _prerequisite_kind_seen(locked, "item", "item_count_missing"):
+		errors.append("locked quest should expose missing item count prerequisite: %s" % locked)
+	if not _prerequisite_kind_seen(locked, "relationship", "relationship_below_min"):
+		errors.append("locked quest should expose relationship min prerequisite: %s" % locked)
+	var locked_text := _locked_quest_text(game_root)
+	if not locked_text.contains("条件矩阵测试") or not locked_text.contains("全部世界状态") or not locked_text.contains("持有物品: 罐头食品 x2") or not locked_text.contains("关系至少 80"):
+		errors.append("journal locked quest UI should show prerequisite matrix text: %s" % locked_text)
+
+
 func _summary_line(game_root: Node) -> String:
 	return game_root.journal_panel.get_node("JournalPanel/JournalLines/SummaryLine").text
 
@@ -249,6 +311,10 @@ func _quest_lines(game_root: Node) -> Array[String]:
 
 func _quest_text(game_root: Node) -> String:
 	return "\n".join(_quest_lines(game_root))
+
+
+func _locked_quest_text(game_root: Node) -> String:
+	return "\n".join(_locked_quest_lines(game_root))
 
 
 func _completed_quest_text(game_root: Node) -> String:
@@ -344,6 +410,15 @@ func _completed_quest_snapshot(game_root: Node, quest_id: String) -> Dictionary:
 	return {}
 
 
+func _locked_quest_snapshot(game_root: Node, quest_id: String) -> Dictionary:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.journal_panel.get("_last_snapshot"))
+	for quest in _array_or_empty(snapshot.get("locked_quests", [])):
+		var quest_data: Dictionary = _dictionary_or_empty(quest)
+		if str(quest_data.get("quest_id", "")) == quest_id:
+			return quest_data
+	return {}
+
+
 func _completed_quest_lines(game_root: Node) -> Array[String]:
 	var output: Array[String] = []
 	var quest_box: Node = game_root.journal_panel.get_node("JournalPanel/JournalLines/CompletedQuestLines")
@@ -353,6 +428,30 @@ func _completed_quest_lines(game_root: Node) -> Array[String]:
 		elif child is Label:
 			output.append((child as Label).text)
 	return output
+
+
+func _locked_quest_lines(game_root: Node) -> Array[String]:
+	var output: Array[String] = []
+	var quest_box: Node = game_root.journal_panel.get_node("JournalPanel/JournalLines/LockedQuestLines")
+	for child in quest_box.get_children():
+		if child is Label:
+			output.append((child as Label).text)
+		elif child is Button:
+			output.append((child as Button).text)
+	return output
+
+
+func _prerequisite_kind_seen(quest: Dictionary, kind: String, reason: String) -> bool:
+	for prerequisite in _array_or_empty(quest.get("prerequisites", [])):
+		var prerequisite_data: Dictionary = _dictionary_or_empty(prerequisite)
+		if str(prerequisite_data.get("kind", "")) != kind:
+			continue
+		if not reason.is_empty() and str(prerequisite_data.get("reason", "")) != reason:
+			continue
+		if reason.is_empty() and not bool(prerequisite_data.get("satisfied", false)):
+			continue
+		return true
+	return false
 
 
 func _press_completed_quest(game_root: Node, quest_id: String) -> bool:
