@@ -2,6 +2,7 @@ extends SceneTree
 
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
 const MapSnapshot = preload("res://scripts/ui/snapshots/map_snapshot.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 const SETTINGS_PANEL_CONTROLLER = preload("res://scripts/ui/controllers/settings_panel_controller.gd")
 const SETTINGS_SMOKE_PATH := "user://settings_ui_smoke.json"
 
@@ -189,6 +190,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var bad_speed_result: Dictionary = game_root.set_observe_speed("warp")
 	if bool(bad_speed_result.get("success", false)) or str(bad_speed_result.get("reason", "")) != "unknown_observe_speed":
 		errors.append("unknown observe speed should be rejected")
+	_assert_observe_reason_catalog(errors, "unknown_observe_speed", "未知观察速度", "unknown observe speed reason catalog")
 	_press_key(game_root, KEY_SPACE)
 	if bool(game_root.is_auto_tick_enabled()):
 		errors.append("second Space in observe mode should pause observe playback")
@@ -205,6 +207,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_observe_mode_button(errors, game_root, false, "observe mode disabled button")
 	_assert_observe_play_button(errors, game_root, false, true, "observe mode disabled play button")
 	_assert_observe_speed_button(errors, game_root, "x10", true, "observe mode disabled speed button")
+	_assert_observe_reason_catalog(errors, "observe_mode_disabled", "先开启观察模式", "observe disabled reason catalog")
+	_assert_observe_reason_catalog(errors, "observe_control_unavailable", "观察控制暂不可用", "observe control unavailable reason catalog")
 	_press_key(game_root, KEY_V)
 	if str(game_root.current_debug_overlay_mode()) != "walkable":
 		errors.append("V should switch debug overlay mode to walkable")
@@ -1622,6 +1626,18 @@ func _assert_observe_blocks_player_commands(errors: Array[String], game_root: No
 	var item_result: Dictionary = game_root.use_player_item("1006")
 	if bool(item_result.get("success", false)) or str(item_result.get("reason", "")) != "observe_mode_blocks_player_commands":
 		errors.append("observe mode should reject inventory item commands: %s" % item_result)
+	_assert_observe_reason_catalog(errors, "observe_mode_blocks_player_commands", "观察模式中不可操作玩家", "observe blocks player commands reason catalog")
+
+
+func _assert_observe_reason_catalog(errors: Array[String], reason: String, expected_disabled_text: String, context: String) -> void:
+	var catalog := ReasonCatalog.new()
+	var entry: Dictionary = _dictionary_or_empty(catalog.entry_for(reason))
+	if not bool(entry.get("known", false)):
+		errors.append("%s: reason should be known: %s" % [context, entry])
+	if str(entry.get("category", "")) != "ui":
+		errors.append("%s: reason should be ui category: %s" % [context, entry])
+	if not str(entry.get("disabled_text", "")).contains(expected_disabled_text):
+		errors.append("%s: disabled text should include %s, got %s" % [context, expected_disabled_text, entry])
 
 
 func _assert_observe_mode_button(errors: Array[String], game_root: Node, expected_enabled: bool, context: String) -> void:

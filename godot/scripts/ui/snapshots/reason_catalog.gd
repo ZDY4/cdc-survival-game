@@ -3,6 +3,10 @@ extends RefCounted
 const REASONS := {
 	"unknown_player_command": {"category": "system", "text": "未知命令"},
 	"ui_modal_blocks_player_commands": {"category": "ui", "text": "界面确认中，无法执行"},
+	"observe_mode_blocks_player_commands": {"category": "ui", "text": "观察模式中，无法执行玩家命令"},
+	"observe_mode_disabled": {"category": "ui", "text": "观察模式未开启"},
+	"unknown_observe_speed": {"category": "ui", "text": "未知观察速度"},
+	"observe_control_unavailable": {"category": "ui", "text": "观察控制暂不可用"},
 	"unknown_actor": {"category": "actor", "text": "未知角色"},
 	"command_actor_not_player": {"category": "actor", "text": "非玩家角色"},
 	"turn_closed": {"category": "turn", "text": "回合未开启"},
@@ -277,6 +281,12 @@ const CATEGORY_METADATA := {
 		"disabled_text": "背包操作不可用",
 		"remediation": "检查数量、堆叠、负重、关键物品和装备状态。",
 	},
+	"equipment": {
+		"source_module": "godot/scripts/core/economy equipment services",
+		"payload_fields": ["item_id", "slot_id", "equip_slots", "equipment"],
+		"disabled_text": "装备操作不可用",
+		"remediation": "检查装备槽位、物品可装备槽、当前装备和背包来源。",
+	},
 	"container": {
 		"source_module": "godot/scripts/core/economy container runner",
 		"payload_fields": ["container_id", "item_id", "count", "session"],
@@ -335,6 +345,22 @@ const REASON_METADATA := {
 	"ui_modal_blocks_player_commands": {
 		"payload_fields": ["action", "modal_id", "blocker_snapshot"],
 		"disabled_text": "先处理当前弹窗",
+	},
+	"observe_mode_blocks_player_commands": {
+		"payload_fields": ["action", "observe_mode", "blocker"],
+		"disabled_text": "观察模式中不可操作玩家",
+	},
+	"observe_mode_disabled": {
+		"payload_fields": ["observe_mode", "observe_playback", "observe_speed"],
+		"disabled_text": "先开启观察模式",
+	},
+	"unknown_observe_speed": {
+		"payload_fields": ["observe_speed", "requested_speed", "known_speeds"],
+		"disabled_text": "未知观察速度",
+	},
+	"observe_control_unavailable": {
+		"payload_fields": ["observe_key", "observe_mode", "disabled"],
+		"disabled_text": "观察控制暂不可用",
 	},
 	"path_unreachable": {
 		"payload_fields": ["grid", "goal", "visited_cell_count"],

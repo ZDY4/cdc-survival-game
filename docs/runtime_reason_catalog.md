@@ -42,6 +42,7 @@
 - `UI` smoke 会校验所有已知 reason 都具备 `source_module`、`payload_fields`、`disabled_text` 和 `remediation`，并抽查关键 reason 的 payload 字段与禁用态文案。
 - HUD 的 interaction menu、hover 移动 / 攻击预览和技能目标提示已接入 `disabled_text_for()` fallback；原有短文案覆盖仍保留，例如 `target_not_hostile` 在菜单中继续显示为“非敌对目标”。
 - HUD 的 pending 取消反馈已接入 catalog，`new_target_command`、`keyboard`、`crafting_ui` 和 `location_change` 等取消原因会显示稳定中文文案。
+- 观察模式相关入口 reason 已纳入 catalog，`observe_mode_blocks_player_commands`、`observe_mode_disabled`、`unknown_observe_speed` 和 `observe_control_unavailable` 会提供 UI 分类、payload 字段和禁用短文案，供 HUD / observe hotbar 诊断展示。
 - Crafting 面板的执行失败反馈和未知 recipe reason fallback 已接入 `disabled_text_for()`；结构化缺材料 / 缺工具 / 缺工作台详情仍由 Crafting snapshot 和 controller 自身生成。
 - Trade 面板的按钮、上下文菜单、物品行详情和 drop-zone 拒绝预览已接入 `disabled_text_for()` fallback；已有中文权限说明原样保留，drop-zone metadata 继续保存稳定 reason code。
 - Container 面板的反馈 snapshot 兜底已接入 `disabled_text_for()`；已有容量、权限、钥匙、工具、关系等详细中文说明继续优先使用，未特化的容器 reason 显示 catalog 中文短文案。
