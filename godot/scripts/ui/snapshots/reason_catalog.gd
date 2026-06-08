@@ -128,6 +128,9 @@ const REASONS := {
 	"equipment_slot_missing_item": {"category": "equipment", "text": "缺少装备物品"},
 	"equipment_slot_missing_slot": {"category": "equipment", "text": "缺少装备槽位"},
 	"equipment_slot_incompatible": {"category": "equipment", "text": "物品不能装备到该槽位"},
+	"hotbar_slot_requires_skill_hotbar": {"category": "skill", "text": "热栏槽只接受技能拖拽"},
+	"hotbar_slot_missing_skill": {"category": "skill", "text": "缺少热栏技能"},
+	"hotbar_slot_missing_slot": {"category": "skill", "text": "缺少热栏槽位"},
 	"quest_not_active": {"category": "quest", "text": "任务未激活"},
 	"quest_not_waiting_for_turn_in": {"category": "quest", "text": "任务不需要手动交付"},
 	"quest_objective_incomplete": {"category": "quest", "text": "任务目标尚未完成"},
@@ -538,6 +541,18 @@ const REASON_METADATA := {
 	"equipment_slot_incompatible": {
 		"payload_fields": ["item_id", "slot_id", "equip_slots"],
 		"disabled_text": "物品不能装备到该槽位",
+	},
+	"hotbar_slot_requires_skill_hotbar": {
+		"payload_fields": ["drag_kind", "slot_id"],
+		"disabled_text": "只接受技能拖拽",
+	},
+	"hotbar_slot_missing_skill": {
+		"payload_fields": ["skill_id", "slot_id"],
+		"disabled_text": "缺少技能",
+	},
+	"hotbar_slot_missing_slot": {
+		"payload_fields": ["skill_id", "slot_id"],
+		"disabled_text": "缺少热栏槽位",
 	},
 	"skill_on_cooldown": {
 		"payload_fields": ["skill_id", "cooldown_remaining", "actor_id"],

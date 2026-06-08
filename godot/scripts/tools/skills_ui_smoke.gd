@@ -190,7 +190,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _bind_button(game_root, "adrenaline_rush") == null or _bind_button(game_root, "adrenaline_rush").disabled:
 		errors.append("learned active skill should allow hotbar binding")
 	else:
-		_assert_drag_state_snapshot(errors, game_root, _skill_drag_data(game_root, "adrenaline_rush"), _hud_hotbar_slot_control(game_root, "slot_3"), "skill_hotbar", "skills", "hotbar_slot", "adrenaline skill to HUD hotbar")
+		var hotbar_slot_control := _hud_hotbar_slot_control(game_root, "slot_3")
+		var adrenaline_drag_data := _skill_drag_data(game_root, "adrenaline_rush")
+		_assert_drag_state_snapshot(errors, game_root, adrenaline_drag_data, hotbar_slot_control, "skill_hotbar", "skills", "hotbar_slot", "adrenaline skill to HUD hotbar")
+		_assert_hotbar_drag_hover_target(errors, game_root, adrenaline_drag_data, hotbar_slot_control, true, "", "adrenaline skill to HUD hotbar hover target")
+		_assert_hotbar_hover_render(errors, game_root, adrenaline_drag_data, hotbar_slot_control, true, "", "adrenaline skill to HUD hotbar hover render")
+		_assert_hotbar_drag_hover_target(errors, game_root, _non_skill_hotbar_drag_data(), hotbar_slot_control, false, "hotbar_slot_requires_skill_hotbar", "non-skill to HUD hotbar reject target")
+		_assert_hotbar_hover_render(errors, game_root, _non_skill_hotbar_drag_data(), hotbar_slot_control, false, "hotbar_slot_requires_skill_hotbar", "non-skill to HUD hotbar reject render")
 	if not _drag_skill_to_hud_hotbar(game_root, "adrenaline_rush", "slot_3"):
 		errors.append("dragging learned active skill to HUD hotbar should be accepted")
 	await process_frame
@@ -888,6 +894,62 @@ func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_da
 	var runtime_drag: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("drag", {}))
 	if not runtime_drag.has("active") or not runtime_drag.has("target"):
 		errors.append("%s: runtime control should expose drag state shape: %s" % [context, runtime_drag])
+
+
+func _assert_hotbar_drag_hover_target(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: hotbar target should be available" % context)
+		return
+	if not game_root.has_method("drag_state_snapshot"):
+		errors.append("%s: game root should expose drag_state_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != "hotbar_slot":
+		errors.append("%s: expected hotbar_slot target, got %s" % [context, target_snapshot])
+	if str(target_snapshot.get("accepts", "")) != "skill_hotbar":
+		errors.append("%s: hotbar slot should accept skill_hotbar, got %s" % [context, target_snapshot])
+	if bool(target_snapshot.get("last_accept", false)) != expected_accept:
+		errors.append("%s: hotbar target accept expected %s, got %s" % [context, expected_accept, target_snapshot])
+	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: hotbar target reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
+	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	if bool(highlight.get("accepted", false)) != expected_accept:
+		errors.append("%s: hotbar hover highlight accept expected %s, got %s" % [context, expected_accept, highlight])
+	var expected_style := "accept" if expected_accept else "reject"
+	if str(highlight.get("style", "")) != expected_style:
+		errors.append("%s: hotbar hover highlight style expected %s, got %s" % [context, expected_style, highlight])
+
+
+func _assert_hotbar_hover_render(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: hotbar target should be available" % context)
+		return
+	var accepted := bool(game_root.hud.call("_can_drop_hotbar_skill", Vector2.ZERO, drag_data, target))
+	if accepted != expected_accept:
+		errors.append("%s: hotbar hover render accept expected %s, got %s" % [context, expected_accept, accepted])
+	if not bool(target.get_meta("hotbar_drag_hovered", false)):
+		errors.append("%s: hotbar slot should record active hover render state" % context)
+	if bool(target.get_meta("hotbar_drag_last_accept", false)) != expected_accept:
+		errors.append("%s: hotbar hover render last accept expected %s, got %s" % [context, expected_accept, target.get_meta("hotbar_drag_last_accept", false)])
+	if str(target.get_meta("hotbar_drag_reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: hotbar hover render reject reason expected %s, got %s" % [context, expected_reject_reason, target.get_meta("hotbar_drag_reject_reason", "")])
+	var expected_style := "accept" if expected_accept else "reject"
+	var expected_color := "#4ecb71" if expected_accept else "#e25c5c"
+	if str(target.get_meta("hotbar_drag_highlight_style", "")) != expected_style:
+		errors.append("%s: hotbar hover render style expected %s, got %s" % [context, expected_style, target.get_meta("hotbar_drag_highlight_style", "")])
+	if str(target.get_meta("hotbar_drag_highlight_color", "")) != expected_color:
+		errors.append("%s: hotbar hover render color expected %s, got %s" % [context, expected_color, target.get_meta("hotbar_drag_highlight_color", "")])
+
+
+func _non_skill_hotbar_drag_data() -> Dictionary:
+	return {
+		"kind": "inventory_item",
+		"item_id": "1006",
+		"item": {"item_id": "1006", "name": "绷带"},
+		"count": 1,
+		"drag_preview_text": "绷带 x1",
+	}
 
 
 func _expect_targeted_hotbar_skill(errors: Array[String], game_root: Node) -> void:

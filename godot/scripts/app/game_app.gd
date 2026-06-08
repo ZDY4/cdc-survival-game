@@ -1877,8 +1877,9 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		for key in equipment_target:
 			target[key] = equipment_target[key]
 	elif control.has_meta("hotbar_slot_id"):
-		target["target_kind"] = "hotbar_slot"
-		target["target_id"] = str(control.get_meta("hotbar_slot_id"))
+		var hotbar_target: Dictionary = _hotbar_slot_drag_hover_target_snapshot(control, drag_data)
+		for key in hotbar_target:
+			target[key] = hotbar_target[key]
 	elif control.has_meta("hotbar_group_id"):
 		target["target_kind"] = "hotbar_group"
 		target["target_id"] = str(control.get_meta("hotbar_group_id"))
@@ -1905,6 +1906,36 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		for key in cart_target:
 			target[key] = cart_target[key]
 	return target
+
+
+func _hotbar_slot_drag_hover_target_snapshot(control: Control, drag_data: Dictionary) -> Dictionary:
+	var slot_id := str(control.get_meta("hotbar_slot_id", ""))
+	var group_id := str(control.get_meta("hotbar_group_id", ""))
+	var acceptance: Dictionary = _hotbar_slot_drag_acceptance(slot_id, drag_data)
+	var last_accept := bool(acceptance.get("accept", false))
+	var reject_reason := str(acceptance.get("reason", ""))
+	return {
+		"target_kind": "hotbar_slot",
+		"target_id": slot_id,
+		"slot_id": slot_id,
+		"group_id": group_id,
+		"accepts": "skill_hotbar",
+		"last_accept": last_accept,
+		"reject_reason": reject_reason,
+		"hover_highlight": _drag_hover_highlight(not drag_data.is_empty(), "hotbar_slot", slot_id, reject_reason, last_accept),
+	}
+
+
+func _hotbar_slot_drag_acceptance(slot_id: String, drag_data: Dictionary) -> Dictionary:
+	if drag_data.is_empty():
+		return {"accept": false, "reason": ""}
+	if str(drag_data.get("kind", "")) != "skill_hotbar":
+		return {"accept": false, "reason": "hotbar_slot_requires_skill_hotbar"}
+	if str(drag_data.get("skill_id", "")).is_empty():
+		return {"accept": false, "reason": "hotbar_slot_missing_skill"}
+	if slot_id.is_empty():
+		return {"accept": false, "reason": "hotbar_slot_missing_slot"}
+	return {"accept": true, "reason": ""}
 
 
 func _trade_cart_drag_hover_target_snapshot(control: Control, drag_data: Dictionary, target_kind: String, target_id: String) -> Dictionary:

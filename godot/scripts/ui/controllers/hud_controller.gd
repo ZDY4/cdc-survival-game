@@ -1134,6 +1134,7 @@ func _hotbar_button(slot: Dictionary) -> Button:
 		Callable(self, "_can_drop_hotbar_skill"),
 		Callable(self, "_drop_hotbar_skill")
 	)
+	_prepare_hotbar_drop_target(button)
 	if bool(slot.get("empty", true)):
 		button.text = "%s:-" % key_label
 		button.tooltip_text = "%s 热栏 %s：空 | 可拖入主动技能" % [group_label, key_label]
@@ -1381,11 +1382,10 @@ func _empty_hotbar_drag_data(_position: Vector2, _from_control: Control) -> Vari
 
 func _can_drop_hotbar_skill(_position: Vector2, data: Variant, from_control: Control) -> bool:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
-	if str(drag_data.get("kind", "")) != "skill_hotbar":
-		return false
-	if str(drag_data.get("skill_id", "")).is_empty():
-		return false
-	return from_control != null and from_control.has_meta("hotbar_slot_id")
+	var acceptance: Dictionary = _hotbar_drop_acceptance(from_control, drag_data)
+	var accepted := bool(acceptance.get("accept", false))
+	_apply_hotbar_drag_hover(from_control, accepted, str(acceptance.get("reason", "")))
+	return accepted
 
 
 func _drop_hotbar_skill(position: Vector2, data: Variant, from_control: Control) -> void:
@@ -1397,8 +1397,60 @@ func _drop_hotbar_skill(position: Vector2, data: Variant, from_control: Control)
 	if slot_id.is_empty() or skill_id.is_empty():
 		return
 	var root := get_parent()
+	_clear_hotbar_drag_hover(from_control)
 	if root != null and root.has_method("bind_player_skill_to_hotbar"):
 		root.bind_player_skill_to_hotbar(slot_id, skill_id)
+
+
+func _prepare_hotbar_drop_target(control: Control) -> void:
+	if control == null:
+		return
+	control.set_meta("hotbar_drag_hovered", false)
+	control.set_meta("hotbar_drag_last_accept", false)
+	control.set_meta("hotbar_drag_reject_reason", "")
+	control.set_meta("hotbar_drag_highlight_style", "")
+	control.set_meta("hotbar_drag_highlight_color", "")
+	control.mouse_exited.connect(func() -> void:
+		_clear_hotbar_drag_hover(control)
+	)
+
+
+func _hotbar_drop_acceptance(control: Control, drag_data: Dictionary) -> Dictionary:
+	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_slot_id"):
+		return {"accept": false, "reason": "hotbar_slot_missing_slot"}
+	if str(drag_data.get("kind", "")) != "skill_hotbar":
+		return {"accept": false, "reason": "hotbar_slot_requires_skill_hotbar"}
+	if str(drag_data.get("skill_id", "")).is_empty():
+		return {"accept": false, "reason": "hotbar_slot_missing_skill"}
+	return {"accept": true, "reason": ""}
+
+
+func _apply_hotbar_drag_hover(control: Control, accepted: bool, reject_reason: String) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_slot_id"):
+		return
+	var color_text := "#4ecb71" if accepted else "#e25c5c"
+	var style := "accept" if accepted else "reject"
+	control.set_meta("hotbar_drag_hovered", true)
+	control.set_meta("hotbar_drag_last_accept", accepted)
+	control.set_meta("hotbar_drag_reject_reason", reject_reason)
+	control.set_meta("hotbar_drag_highlight_style", style)
+	control.set_meta("hotbar_drag_highlight_color", color_text)
+	control.modulate = Color(0.90, 1.0, 0.92, 1.0) if accepted else Color(1.0, 0.90, 0.90, 1.0)
+	if control is Button:
+		(control as Button).add_theme_color_override("font_color", Color.html(color_text))
+
+
+func _clear_hotbar_drag_hover(control: Control) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_slot_id"):
+		return
+	control.set_meta("hotbar_drag_hovered", false)
+	control.set_meta("hotbar_drag_last_accept", false)
+	control.set_meta("hotbar_drag_reject_reason", "")
+	control.set_meta("hotbar_drag_highlight_style", "")
+	control.set_meta("hotbar_drag_highlight_color", "")
+	control.modulate = Color.WHITE
+	if control is Button:
+		(control as Button).remove_theme_color_override("font_color")
 
 
 func _short_hotbar_label(label: String) -> String:
