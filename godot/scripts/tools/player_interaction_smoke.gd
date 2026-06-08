@@ -143,6 +143,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await _expect_ground_grid_move(errors, game_root)
 	await _expect_hostile_attack_hover_preview(errors, game_root)
 	await _expect_corpse_world_interaction(errors, game_root)
+	await _expect_independent_combat_event_presenters(errors, game_root)
 	var move_camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if move_camera == null:
 		errors.append("missing runtime camera before mouse ground move")
@@ -1196,10 +1197,17 @@ func _expect_world_action_combat_event_presenter(errors: Array[String], game_roo
 		errors.append("combat event presenter should expose event kind %s, got %s" % [event_kind, presenter.get("event_kind", "")])
 	if int(presenter.get("source_actor_id", 0)) != source_actor_id:
 		errors.append("combat event presenter should expose source actor id")
-	if str(presenter.get("container_id", "")).is_empty():
+	if event_kind == "corpse_created" and str(presenter.get("container_id", "")).is_empty():
 		errors.append("combat event presenter should expose corpse container id")
 	if _dictionary_or_empty(presenter.get("target_grid", {})).is_empty():
 		errors.append("combat event presenter should expose target grid")
+	if event_kind in ["combat_started", "combat_ended"]:
+		if int(presenter.get("participant_count", 0)) <= 0:
+			errors.append("%s presenter should expose participant_count" % event_kind)
+		if _array_or_empty(presenter.get("participants", [])).is_empty():
+			errors.append("%s presenter should expose participants" % event_kind)
+		if str(presenter.get("reason", "")).is_empty():
+			errors.append("%s presenter should expose reason" % event_kind)
 	_expect_action_presenter_phases(errors, presenter, ["signal", "resolve", "fade"], "combat event presenter")
 	var marker: MeshInstance3D = game_root.find_child("WorldActionCombatEvent", true, false) as MeshInstance3D
 	if marker == null:
@@ -1211,12 +1219,19 @@ func _expect_world_action_combat_event_presenter(errors: Array[String], game_roo
 		errors.append("combat event marker should expose event kind")
 	if int(marker.get_meta("source_actor_id", 0)) != source_actor_id:
 		errors.append("combat event marker should expose source actor id")
-	if str(marker.get_meta("container_id", "")).is_empty():
+	if event_kind == "corpse_created" and str(marker.get_meta("container_id", "")).is_empty():
 		errors.append("combat event marker should expose container id")
 	if _dictionary_or_empty(marker.get_meta("target_grid", {})).is_empty():
 		errors.append("combat event marker should expose target grid")
+	if event_kind in ["combat_started", "combat_ended"]:
+		if int(marker.get_meta("participant_count", 0)) <= 0:
+			errors.append("%s marker should expose participant_count" % event_kind)
+		if _array_or_empty(marker.get_meta("participants", [])).is_empty():
+			errors.append("%s marker should expose participants" % event_kind)
+		if str(marker.get_meta("reason", "")).is_empty():
+			errors.append("%s marker should expose reason" % event_kind)
 	if target_node != null and marker.global_position.distance_to(target_node.global_position + Vector3(0.0, 1.16, 0.0)) > 0.2:
-		errors.append("combat event marker should appear above corpse node")
+		errors.append("combat event marker should appear above target node")
 	_expect_action_marker_phases(errors, marker, ["signal", "resolve", "fade"], "combat event marker")
 
 
@@ -1452,6 +1467,71 @@ func _corpse_node_for_source_actor(game_root: Node, source_actor_id: int) -> Nod
 	if corpse_id.is_empty():
 		return null
 	return game_root.find_child("Corpse_%s" % corpse_id, true, false) as Node3D
+
+
+func _expect_independent_combat_event_presenters(errors: Array[String], game_root: Node) -> void:
+	await _wait_for_world_action_presenter_idle(game_root)
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("independent combat event presenter needs player actor node")
+		return
+	var started_payload := {
+		"participants": [1],
+		"added_participants": [1],
+		"turn_order": [1],
+		"current_combat_actor_id": 1,
+		"next_combat_actor_id": 0,
+		"round": 7,
+		"reason": "smoke_combat_started",
+	}
+	_present_synthetic_world_action_event(game_root, "combat_started", started_payload)
+	_expect_world_action_combat_event_presenter(errors, game_root, "combat_started", 1, player_node)
+	var started_presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if int(started_presenter.get("round", 0)) != 7:
+		errors.append("combat_started presenter should expose round")
+	if int(started_presenter.get("current_combat_actor_id", 0)) != 1:
+		errors.append("combat_started presenter should expose current_combat_actor_id")
+	if not _array_or_empty(started_presenter.get("added_participants", [])).has(1):
+		errors.append("combat_started presenter should expose added_participants")
+	var started_marker: MeshInstance3D = game_root.find_child("WorldActionCombatEvent", true, false) as MeshInstance3D
+	if started_marker != null:
+		if int(started_marker.get_meta("round", 0)) != 7:
+			errors.append("combat_started marker should expose round")
+		if int(started_marker.get_meta("current_combat_actor_id", 0)) != 1:
+			errors.append("combat_started marker should expose current_combat_actor_id")
+		if not _array_or_empty(started_marker.get_meta("added_participants", [])).has(1):
+			errors.append("combat_started marker should expose added_participants")
+	_expect_world_action_input_blocker(errors, game_root, "combat_event")
+	await _wait_for_world_action_presenter_idle(game_root)
+
+	var ended_payload := {
+		"participants": [1],
+		"reason": "smoke_combat_ended",
+		"recovery": {"turn_reopened": true},
+	}
+	_present_synthetic_world_action_event(game_root, "combat_ended", ended_payload)
+	_expect_world_action_combat_event_presenter(errors, game_root, "combat_ended", 1, player_node)
+	var ended_presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(ended_presenter.get("reason", "")) != "smoke_combat_ended":
+		errors.append("combat_ended presenter should expose end reason")
+	var ended_marker: MeshInstance3D = game_root.find_child("WorldActionCombatEvent", true, false) as MeshInstance3D
+	if ended_marker != null and str(ended_marker.get_meta("reason", "")) != "smoke_combat_ended":
+		errors.append("combat_ended marker should expose end reason")
+	await _wait_for_world_action_presenter_idle(game_root)
+
+
+func _present_synthetic_world_action_event(game_root: Node, event_kind: String, payload: Dictionary) -> void:
+	if game_root.world_action_presenter == null:
+		return
+	game_root.world_action_presenter.call("present_result", game_root, game_root.world_container, {
+		"success": true,
+		"result": {
+			"events": [{
+				"kind": event_kind,
+				"payload": payload.duplicate(true),
+			}],
+		},
+	}, game_root.world_result)
 
 
 func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], game_root: Node, camera: Camera3D) -> void:

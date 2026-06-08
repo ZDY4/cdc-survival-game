@@ -514,18 +514,35 @@ func _combat_event_presentation(events: Array, world_root: Node, world_result: D
 		return {}
 	var payload: Dictionary = _dictionary_or_empty(selected_event.get("payload", {}))
 	var event_kind := str(selected_event.get("kind", ""))
+	var participants := _int_array(payload.get("participants", []))
+	var added_participants := _int_array(payload.get("added_participants", []))
+	var turn_order := _int_array(payload.get("turn_order", []))
+	var actor_candidates := _combat_event_actor_candidates(event_kind, payload, participants, added_participants, turn_order)
 	var target_node := _combat_event_node(world_root, world_result, event_kind, payload)
-	var grid := _combat_event_grid(payload)
+	if target_node == null:
+		target_node = _first_actor_node(world_root, world_result, actor_candidates)
+	var grid := _combat_event_grid(payload, world_result, actor_candidates, target_node)
+	var primary_actor_id := int(payload.get("actor_id", payload.get("source_actor_id", 0)))
+	if primary_actor_id <= 0 and not actor_candidates.is_empty():
+		primary_actor_id = int(actor_candidates[0])
+	var source_actor_id := int(payload.get("source_actor_id", payload.get("actor_id", primary_actor_id)))
 	return {
 		"active": false,
 		"kind": "combat_event",
 		"event_kind": event_kind,
 		"event_kinds": event_kinds,
-		"actor_id": int(payload.get("actor_id", payload.get("source_actor_id", 0))),
-		"source_actor_id": int(payload.get("source_actor_id", payload.get("actor_id", 0))),
+		"actor_id": primary_actor_id,
+		"source_actor_id": source_actor_id,
 		"defeated_by_actor_id": int(payload.get("defeated_by_actor_id", payload.get("defeated_by", 0))),
 		"container_id": str(payload.get("container_id", "")),
 		"reason": str(payload.get("reason", "")),
+		"participants": participants,
+		"participant_count": participants.size(),
+		"added_participants": added_participants,
+		"turn_order": turn_order,
+		"current_combat_actor_id": int(payload.get("current_combat_actor_id", 0)),
+		"next_combat_actor_id": int(payload.get("next_combat_actor_id", 0)),
+		"round": int(payload.get("round", 0)),
 		"target_node": target_node,
 		"target_grid": grid,
 		"node_path": str(target_node.get_path()) if target_node != null else "",
@@ -566,6 +583,14 @@ func _start_combat_event_feedback(host: Node, world_root: Node, combat_event: Di
 	marker.set_meta("source_actor_id", int(combat_event.get("source_actor_id", 0)))
 	marker.set_meta("defeated_by_actor_id", int(combat_event.get("defeated_by_actor_id", 0)))
 	marker.set_meta("container_id", str(combat_event.get("container_id", "")))
+	marker.set_meta("reason", str(combat_event.get("reason", "")))
+	marker.set_meta("participants", _array_or_empty(combat_event.get("participants", [])).duplicate(true))
+	marker.set_meta("participant_count", int(combat_event.get("participant_count", 0)))
+	marker.set_meta("added_participants", _array_or_empty(combat_event.get("added_participants", [])).duplicate(true))
+	marker.set_meta("turn_order", _array_or_empty(combat_event.get("turn_order", [])).duplicate(true))
+	marker.set_meta("current_combat_actor_id", int(combat_event.get("current_combat_actor_id", 0)))
+	marker.set_meta("next_combat_actor_id", int(combat_event.get("next_combat_actor_id", 0)))
+	marker.set_meta("round", int(combat_event.get("round", 0)))
 	marker.set_meta("target_grid", target_grid.duplicate(true))
 	_track_active_node(marker)
 	_presentation_layer(world_root).add_child(marker)
@@ -595,16 +620,25 @@ func _on_combat_event_feedback_finished(marker_ref: WeakRef) -> void:
 
 
 func _combat_event_public_snapshot(combat_event: Dictionary, active: bool, reason: String) -> Dictionary:
+	var event_reason := str(combat_event.get("reason", ""))
 	return {
 		"active": active,
 		"kind": "combat_event",
-		"reason": reason,
+		"reason": reason if not reason.is_empty() else event_reason,
+		"event_reason": event_reason,
 		"event_kind": str(combat_event.get("event_kind", "")),
 		"event_kinds": _array_or_empty(combat_event.get("event_kinds", [])).duplicate(true),
 		"actor_id": int(combat_event.get("actor_id", 0)),
 		"source_actor_id": int(combat_event.get("source_actor_id", 0)),
 		"defeated_by_actor_id": int(combat_event.get("defeated_by_actor_id", 0)),
 		"container_id": str(combat_event.get("container_id", "")),
+		"participants": _array_or_empty(combat_event.get("participants", [])).duplicate(true),
+		"participant_count": int(combat_event.get("participant_count", 0)),
+		"added_participants": _array_or_empty(combat_event.get("added_participants", [])).duplicate(true),
+		"turn_order": _array_or_empty(combat_event.get("turn_order", [])).duplicate(true),
+		"current_combat_actor_id": int(combat_event.get("current_combat_actor_id", 0)),
+		"next_combat_actor_id": int(combat_event.get("next_combat_actor_id", 0)),
+		"round": int(combat_event.get("round", 0)),
 		"target_grid": _dictionary_or_empty(combat_event.get("target_grid", {})).duplicate(true),
 		"node_path": str(combat_event.get("node_path", "")),
 		"phases": COMBAT_EVENT_PHASES.duplicate(),
@@ -637,11 +671,73 @@ func _combat_event_node(world_root: Node, world_result: Dictionary, event_kind: 
 	return _actor_node(world_root, world_result, actor_id)
 
 
-func _combat_event_grid(payload: Dictionary) -> Dictionary:
+func _first_actor_node(world_root: Node, world_result: Dictionary, actor_ids: Array) -> Node3D:
+	for actor_id_value in actor_ids:
+		var node := _actor_node(world_root, world_result, int(actor_id_value))
+		if node != null:
+			return node
+	return null
+
+
+func _combat_event_actor_candidates(event_kind: String, payload: Dictionary, participants: Array, added_participants: Array, turn_order: Array) -> Array:
+	var candidates: Array = []
+	for key in ["actor_id", "source_actor_id", "current_combat_actor_id", "next_combat_actor_id", "defeated_by_actor_id", "defeated_by"]:
+		_append_actor_candidate(candidates, int(payload.get(key, 0)))
+	if event_kind == "combat_started":
+		for actor_id in _int_array(payload.get("seed_participants", [])):
+			_append_actor_candidate(candidates, int(actor_id))
+		for actor_id in added_participants:
+			_append_actor_candidate(candidates, int(actor_id))
+	if event_kind == "combat_ended":
+		for actor_id in participants:
+			_append_actor_candidate(candidates, int(actor_id))
+	for actor_id in turn_order:
+		_append_actor_candidate(candidates, int(actor_id))
+	for actor_id in participants:
+		_append_actor_candidate(candidates, int(actor_id))
+	_append_actor_candidate(candidates, 1)
+	return candidates
+
+
+func _append_actor_candidate(candidates: Array, actor_id: int) -> void:
+	if actor_id <= 0 or candidates.has(actor_id):
+		return
+	candidates.append(actor_id)
+
+
+func _combat_event_grid(payload: Dictionary, world_result: Dictionary, actor_ids: Array, target_node: Node3D = null) -> Dictionary:
 	var grid: Dictionary = _dictionary_or_empty(payload.get("grid_position", {}))
 	if grid.is_empty():
 		grid = _dictionary_or_empty(payload.get("target_grid", {}))
+	if grid.is_empty():
+		for actor_id in actor_ids:
+			grid = _actor_grid(world_result, int(actor_id))
+			if not grid.is_empty():
+				break
+	if grid.is_empty() and target_node != null:
+		grid = _node_grid(target_node)
 	return grid.duplicate(true)
+
+
+func _actor_grid(world_result: Dictionary, actor_id: int) -> Dictionary:
+	if actor_id <= 0:
+		return {}
+	for actor in _array_or_empty(world_result.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if int(actor_data.get("actor_id", 0)) == actor_id:
+			return _dictionary_or_empty(actor_data.get("grid_position", {})).duplicate(true)
+	return {}
+
+
+func _node_grid(node: Node3D) -> Dictionary:
+	if node == null:
+		return {}
+	var position := node.global_position if node.is_inside_tree() else node.position
+	return {
+		"x": int(round(position.x / GRID_SIZE)),
+		"y": int(floor(position.y)),
+		"z": int(round(position.z / GRID_SIZE)),
+	}
 
 
 func _interaction_target_node(world_root: Node, world_result: Dictionary, payload: Dictionary) -> Node3D:
@@ -812,3 +908,12 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _int_array(value: Variant) -> Array:
+	var output: Array = []
+	for item in _array_or_empty(value):
+		var normalized := int(item)
+		if normalized > 0 and not output.has(normalized):
+			output.append(normalized)
+	return output
