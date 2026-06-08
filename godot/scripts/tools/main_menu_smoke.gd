@@ -104,6 +104,8 @@ func _assert_main_menu_theme(errors: Array[String], menu: Control) -> void:
 		errors.append("main menu should apply UI theme: %s" % theme)
 	if str(theme.get("font_resource_path", "")) != "res://assets/fonts/NotoSansCJKsc-Regular.otf":
 		errors.append("main menu should use NotoSans CJK font: %s" % theme)
+	if str(theme.get("theme_resource_path", "")) != "res://assets/themes/default_ui_theme.tres" or not bool(theme.get("theme_resource_loaded", false)):
+		errors.append("main menu should load Godot theme resource: %s" % theme)
 	if menu.theme == null or menu.theme.default_font == null or menu.theme.default_font.resource_path != "res://assets/fonts/NotoSansCJKsc-Regular.otf":
 		errors.append("main menu root should expose NotoSans CJK theme")
 

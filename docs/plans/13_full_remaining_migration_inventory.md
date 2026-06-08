@@ -106,7 +106,7 @@
 
 ### 0.5 资产和表现不可遗漏项
 
-- [~] 字体：`NotoSansCJKsc-Regular.otf` 第一版 UI theme 已迁移，`UIThemeService` 会加载 `res://assets/fonts/NotoSansCJKsc-Regular.otf` 并统一应用到主菜单、HUD、对话、背包、交易、容器、角色、任务、地图、技能、制作和设置等顶层 Control；世界 `Label3D` 字体第一版也已迁移，角色名、尸体名、状态效果、任务标记和战斗反馈会复用同一字体并写入字体 metadata；runtime / main menu snapshot 暴露 `ui_theme` 诊断，`UIToggle` / `MainMenu` / `Scene` smoke 覆盖字体路径、应用状态、面板覆盖数量和世界文字字体。待补 theme resource 文件化、字号/行高/按钮状态规范、富文本 fallback 和 CJK fallback 视觉回归截图。
+- [~] 字体：`NotoSansCJKsc-Regular.otf` 第一版 UI theme 已迁移，`UIThemeService` 会加载 `res://assets/fonts/NotoSansCJKsc-Regular.otf` 并统一应用到主菜单、HUD、对话、背包、交易、容器、角色、任务、地图、技能、制作和设置等顶层 Control；Godot theme resource 文件化第一版已迁移，默认主题落地为 `res://assets/themes/default_ui_theme.tres`，`UIThemeService` 优先加载该资源并保留代码 fallback，runtime / main menu snapshot 暴露 `theme_resource_path`、`theme_exists` 和 `theme_resource_loaded` 诊断；世界 `Label3D` 字体第一版也已迁移，角色名、尸体名、状态效果、任务标记和战斗反馈会复用同一字体并写入字体 metadata；`UIToggle` / `MainMenu` / `Scene` smoke 覆盖字体路径、theme resource、应用状态、面板覆盖数量和世界文字字体。待补字号/行高/按钮状态规范、富文本 fallback 和 CJK fallback 视觉回归截图。
 - [~] Fog shader：旧 WGSL 只迁视觉语义，Godot 侧以 `fog_of_war_canvas.gdshader` 为准。
 - [~] 容器模型：`cabinet_medical.gltf`、`crate_wood.gltf`、`locker_metal.gltf`，待补 collision、picking、hover outline、打开 / 关闭状态和 container type 映射。
 - [~] 角色、装备、武器占位模型：待补 appearance profile、socket、body region override、scale、offset、手部挂点、远程 muzzle、reload 状态和 hotbar 图标。
@@ -464,7 +464,7 @@
 - container / pickup / trigger / door / corpse fallback 表现第一版已迁移：door fallback 已有开合/锁定状态；生成层 map object 在缺少真实 map scene visual 时会按 pickup / container / trigger 生成不同形状、材质和 `fallback_category` meta，并报告 source object、target kind、source visual 和 source visual asset，容器会显示 `ContainerStateBadge` 并暴露 empty/item/money metadata，且有真实 visual 的对象不会重复叠加 fallback；corpse fallback 已有名称、容器徽标和 loot metadata；已由 `Scene` / `PlayerInteraction` / `ContainerUI` smoke 覆盖。待补真实美术资源替换、重叠检查和声音占位。
 - WGSL 旧 shader 不迁代码，只迁视觉目标：grid ground、tile instancing、building wall、fog post-process 的效果要用 Godot shader / material 实现。
 - 音频资产策略第一版已迁移：UI 反馈、拾取、开门、交易、制作、攻击、受击、死亡、任务进度和任务完成会由 `AudioFeedbackController` 从 simulation event 映射到 `SFX` bus 的生成占位音，并通过 runtime snapshot 暴露 fallback 诊断；待补真实音频资源、UI 点击细分、音乐、环境声、3D 空间衰减和不同材质/武器/门类型的音色。
-- 字体和中文渲染策略第一版已迁移：主菜单与运行时顶层 UI Control 统一使用 `UIThemeService` 生成的 `NotoSansCJKsc-Regular.otf` theme；世界 `Label3D` 也统一使用同一字体，覆盖角色名、尸体名、状态效果、任务标记和战斗反馈，并通过 snapshot / smoke 诊断字体路径和应用状态。待补 theme resource 文件化、字号/行高规范、富文本 fallback 和截图级缺字回归。
+- 字体和中文渲染策略第一版已迁移：主菜单与运行时顶层 UI Control 统一使用 `res://assets/themes/default_ui_theme.tres`，该 Godot theme resource 绑定 `NotoSansCJKsc-Regular.otf`，`UIThemeService` 只负责加载、fallback 和 snapshot 诊断；世界 `Label3D` 也统一使用同一字体，覆盖角色名、尸体名、状态效果、任务标记和战斗反馈，并通过 snapshot / smoke 诊断字体路径和应用状态。待补字号/行高规范、富文本 fallback 和截图级缺字回归。
 
 ## 15. 内容工具和 agent workflow
 

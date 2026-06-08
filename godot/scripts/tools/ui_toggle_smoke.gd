@@ -1397,6 +1397,8 @@ func _assert_ui_theme(errors: Array[String], game_root: Node, context: String) -
 		errors.append("%s: runtime should apply UI theme: %s" % [context, theme])
 	if str(theme.get("font_resource_path", "")) != "res://assets/fonts/NotoSansCJKsc-Regular.otf":
 		errors.append("%s: UI theme should use NotoSans CJK font: %s" % [context, theme])
+	if str(theme.get("theme_resource_path", "")) != "res://assets/themes/default_ui_theme.tres" or not bool(theme.get("theme_resource_loaded", false)):
+		errors.append("%s: UI theme should load Godot theme resource: %s" % [context, theme])
 	if int(theme.get("panel_count", 0)) < 10:
 		errors.append("%s: UI theme should cover game HUD and panels: %s" % [context, theme])
 	if game_root.hud == null or game_root.hud.theme == null:
