@@ -220,6 +220,9 @@ func _attack_presentation(events: Array, world_root: Node, world_result: Diction
 		var actor_id := int(payload.get("actor_id", 0))
 		var target_actor_id := int(payload.get("target_actor_id", 0))
 		var target_node := _actor_node(world_root, world_result, target_actor_id)
+		var triggered_effect_ids := _string_array(payload.get("triggered_on_hit_effect_ids", []))
+		var applied_effects := _array_or_empty(payload.get("applied_on_hit_effects", [])).duplicate(true)
+		var attack_range := int(payload.get("range", 1))
 		return {
 			"active": false,
 			"kind": "attack",
@@ -229,6 +232,29 @@ func _attack_presentation(events: Array, world_root: Node, world_result: Diction
 			"hit_kind": str(payload.get("hit_kind", "")),
 			"critical": bool(payload.get("critical", false)),
 			"defeated": bool(payload.get("defeated", false)),
+			"attack_delivery": _attack_delivery(attack_range),
+			"range": attack_range,
+			"weapon_item_id": str(payload.get("weapon_item_id", "")),
+			"base_damage": float(payload.get("base_damage", 0.0)),
+			"crit_multiplier": float(payload.get("crit_multiplier", 1.0)),
+			"crit_roll": float(payload.get("crit_roll", 1.0)),
+			"crit_chance": float(payload.get("crit_chance", 0.0)),
+			"defense": float(payload.get("defense", 0.0)),
+			"damage_reduction": float(payload.get("damage_reduction", 0.0)),
+			"damage_bonus": float(payload.get("damage_bonus", 0.0)),
+			"hit_roll": float(payload.get("hit_roll", 0.0)),
+			"hit_chance": float(payload.get("hit_chance", 1.0)),
+			"accuracy": float(payload.get("accuracy", 0.0)),
+			"evasion": float(payload.get("evasion", 0.0)),
+			"triggered_on_hit_effect_ids": triggered_effect_ids,
+			"triggered_on_hit_effect_count": triggered_effect_ids.size(),
+			"applied_on_hit_effects": applied_effects,
+			"applied_on_hit_effect_count": applied_effects.size(),
+			"combat_rng_seed": int(payload.get("combat_rng_seed", 0)),
+			"combat_rng_counter": int(payload.get("combat_rng_counter", 0)),
+			"combat_rng_salt": int(payload.get("combat_rng_salt", 0)),
+			"friendly_fire": bool(payload.get("friendly_fire", false)),
+			"relationship_consequence": _dictionary_or_empty(payload.get("relationship_consequence", {})).duplicate(true),
 			"target_node": target_node,
 			"node_path": str(target_node.get_path()) if target_node != null else "",
 		}
@@ -265,6 +291,7 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	marker.set_meta("hit_kind", str(attack.get("hit_kind", "")))
 	marker.set_meta("critical", bool(attack.get("critical", false)))
 	marker.set_meta("defeated", bool(attack.get("defeated", false)))
+	_apply_attack_event_meta(marker, attack)
 	_track_active_node(marker)
 	var damage_label := _attack_damage_label(attack)
 	damage_label.position = target_position + Vector3(0.0, 1.52, 0.0)
@@ -323,6 +350,29 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 		"hit_kind": str(attack.get("hit_kind", "")),
 		"critical": bool(attack.get("critical", false)),
 		"defeated": bool(attack.get("defeated", false)),
+		"attack_delivery": str(attack.get("attack_delivery", "")),
+		"range": int(attack.get("range", 0)),
+		"weapon_item_id": str(attack.get("weapon_item_id", "")),
+		"base_damage": float(attack.get("base_damage", 0.0)),
+		"crit_multiplier": float(attack.get("crit_multiplier", 1.0)),
+		"crit_roll": float(attack.get("crit_roll", 1.0)),
+		"crit_chance": float(attack.get("crit_chance", 0.0)),
+		"defense": float(attack.get("defense", 0.0)),
+		"damage_reduction": float(attack.get("damage_reduction", 0.0)),
+		"damage_bonus": float(attack.get("damage_bonus", 0.0)),
+		"hit_roll": float(attack.get("hit_roll", 0.0)),
+		"hit_chance": float(attack.get("hit_chance", 1.0)),
+		"accuracy": float(attack.get("accuracy", 0.0)),
+		"evasion": float(attack.get("evasion", 0.0)),
+		"triggered_on_hit_effect_ids": _array_or_empty(attack.get("triggered_on_hit_effect_ids", [])).duplicate(true),
+		"triggered_on_hit_effect_count": int(attack.get("triggered_on_hit_effect_count", 0)),
+		"applied_on_hit_effects": _array_or_empty(attack.get("applied_on_hit_effects", [])).duplicate(true),
+		"applied_on_hit_effect_count": int(attack.get("applied_on_hit_effect_count", 0)),
+		"combat_rng_seed": int(attack.get("combat_rng_seed", 0)),
+		"combat_rng_counter": int(attack.get("combat_rng_counter", 0)),
+		"combat_rng_salt": int(attack.get("combat_rng_salt", 0)),
+		"friendly_fire": bool(attack.get("friendly_fire", false)),
+		"relationship_consequence": _dictionary_or_empty(attack.get("relationship_consequence", {})).duplicate(true),
 		"phases": ATTACK_PHASES.duplicate(),
 		"phase_count": ATTACK_PHASES.size(),
 		"current_phase": ATTACK_PHASES[0] if active else "",
@@ -354,8 +404,39 @@ func _attack_damage_label(attack: Dictionary) -> Label3D:
 	label.set_meta("hit_kind", str(attack.get("hit_kind", "")))
 	label.set_meta("critical", bool(attack.get("critical", false)))
 	label.set_meta("defeated", bool(attack.get("defeated", false)))
+	_apply_attack_event_meta(label, attack)
 	label.set_meta("text", label.text)
 	return label
+
+
+func _apply_attack_event_meta(node: Node, attack: Dictionary) -> void:
+	node.set_meta("attack_delivery", str(attack.get("attack_delivery", "")))
+	node.set_meta("range", int(attack.get("range", 0)))
+	node.set_meta("weapon_item_id", str(attack.get("weapon_item_id", "")))
+	node.set_meta("base_damage", float(attack.get("base_damage", 0.0)))
+	node.set_meta("crit_multiplier", float(attack.get("crit_multiplier", 1.0)))
+	node.set_meta("crit_roll", float(attack.get("crit_roll", 1.0)))
+	node.set_meta("crit_chance", float(attack.get("crit_chance", 0.0)))
+	node.set_meta("defense", float(attack.get("defense", 0.0)))
+	node.set_meta("damage_reduction", float(attack.get("damage_reduction", 0.0)))
+	node.set_meta("damage_bonus", float(attack.get("damage_bonus", 0.0)))
+	node.set_meta("hit_roll", float(attack.get("hit_roll", 0.0)))
+	node.set_meta("hit_chance", float(attack.get("hit_chance", 1.0)))
+	node.set_meta("accuracy", float(attack.get("accuracy", 0.0)))
+	node.set_meta("evasion", float(attack.get("evasion", 0.0)))
+	node.set_meta("triggered_on_hit_effect_ids", _array_or_empty(attack.get("triggered_on_hit_effect_ids", [])).duplicate(true))
+	node.set_meta("triggered_on_hit_effect_count", int(attack.get("triggered_on_hit_effect_count", 0)))
+	node.set_meta("applied_on_hit_effects", _array_or_empty(attack.get("applied_on_hit_effects", [])).duplicate(true))
+	node.set_meta("applied_on_hit_effect_count", int(attack.get("applied_on_hit_effect_count", 0)))
+	node.set_meta("combat_rng_seed", int(attack.get("combat_rng_seed", 0)))
+	node.set_meta("combat_rng_counter", int(attack.get("combat_rng_counter", 0)))
+	node.set_meta("combat_rng_salt", int(attack.get("combat_rng_salt", 0)))
+	node.set_meta("friendly_fire", bool(attack.get("friendly_fire", false)))
+	node.set_meta("relationship_consequence", _dictionary_or_empty(attack.get("relationship_consequence", {})).duplicate(true))
+
+
+func _attack_delivery(attack_range: int) -> String:
+	return "ranged" if attack_range > 1 else "melee"
 
 
 func _attack_feedback_text(attack: Dictionary) -> String:
@@ -908,6 +989,13 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _string_array(value: Variant) -> Array[String]:
+	var output: Array[String] = []
+	for item in _array_or_empty(value):
+		output.append(str(item))
+	return output
 
 
 func _int_array(value: Variant) -> Array:

@@ -622,7 +622,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 	var original_ap: float = player.ap
 	var player_grid: Dictionary = _player_grid(game_root)
 	var target_grid := _near_open_grid_from(player_grid, game_root.world_result.get("map", {}), game_root)
-	player.equipment = {}
+	player.equipment = {"main_hand": "1003"}
 	player.combat_attributes["accuracy"] = 100.0
 	player.ap = 6.0
 	var target_id: int = game_root.simulation.register_actor({
@@ -637,8 +637,8 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		"grid_position": GridCoord.from_dictionary(target_grid),
 		"ap": 0.0,
 		"turn_open": false,
-		"max_hp": 12.0,
-		"hp": 12.0,
+		"max_hp": 120.0,
+		"hp": 120.0,
 		"combat_attributes": {"evasion": 0.0, "damage_reduction": 0.0},
 	})
 	game_root._rebuild_world_after_runtime_change()
@@ -1128,6 +1128,7 @@ func _expect_world_action_attack_presenter(errors: Array[String], game_root: Nod
 		errors.append("attack presenter should expose target actor id")
 	if str(presenter.get("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
 		errors.append("attack presenter should expose hit kind")
+	_expect_attack_event_metadata(errors, presenter, attack_result, "attack presenter")
 	_expect_action_presenter_phases(errors, presenter, ["windup", "impact", "fade"], "attack presenter")
 	var impact: MeshInstance3D = game_root.find_child("WorldActionAttackImpact", true, false) as MeshInstance3D
 	if impact == null:
@@ -1139,6 +1140,7 @@ func _expect_world_action_attack_presenter(errors: Array[String], game_root: Nod
 		errors.append("attack impact marker should expose target actor id")
 	if str(impact.get_meta("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
 		errors.append("attack impact marker should expose hit kind")
+	_expect_attack_marker_metadata(errors, impact, attack_result, "attack impact marker")
 	_expect_action_marker_phases(errors, impact, ["windup", "impact", "fade"], "attack impact marker")
 	var damage_text: Label3D = game_root.find_child("WorldActionDamageText", true, false) as Label3D
 	if damage_text == null:
@@ -1150,6 +1152,7 @@ func _expect_world_action_attack_presenter(errors: Array[String], game_root: Nod
 		errors.append("attack damage text should expose target actor id")
 	if str(damage_text.get_meta("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
 		errors.append("attack damage text should expose hit kind")
+	_expect_attack_marker_metadata(errors, damage_text, attack_result, "attack damage text")
 	if str(presenter.get("damage_label_text", "")) != str(damage_text.text):
 		errors.append("attack presenter should expose damage label text")
 	if damage_text.text.is_empty():
@@ -1161,6 +1164,53 @@ func _expect_world_action_attack_presenter(errors: Array[String], game_root: Nod
 	if damage_text.billboard != BaseMaterial3D.BILLBOARD_ENABLED or not damage_text.no_depth_test:
 		errors.append("attack damage text should billboard and render above map meshes")
 	_expect_action_marker_phases(errors, damage_text, ["windup", "impact", "fade"], "attack damage text")
+
+
+func _expect_attack_event_metadata(errors: Array[String], snapshot: Dictionary, attack_result: Dictionary, context: String) -> void:
+	var expected_range := int(attack_result.get("range", 0))
+	if int(snapshot.get("range", 0)) != expected_range:
+		errors.append("%s should expose resolved attack range" % context)
+	if str(snapshot.get("attack_delivery", "")) != ("ranged" if expected_range > 1 else "melee"):
+		errors.append("%s should expose attack_delivery from range" % context)
+	if str(snapshot.get("weapon_item_id", "")) != str(_dictionary_or_empty(attack_result.get("weapon_profile", {})).get("item_id", "")):
+		errors.append("%s should expose weapon_item_id from attack event" % context)
+	if absf(float(snapshot.get("hit_chance", -1.0)) - float(attack_result.get("hit_chance", -2.0))) > 0.001:
+		errors.append("%s should expose hit_chance" % context)
+	if absf(float(snapshot.get("hit_roll", -1.0)) - float(attack_result.get("hit_roll", -2.0))) > 0.001:
+		errors.append("%s should expose hit_roll" % context)
+	if absf(float(snapshot.get("crit_chance", -1.0)) - float(attack_result.get("crit_chance", -2.0))) > 0.001:
+		errors.append("%s should expose crit_chance" % context)
+	if absf(float(snapshot.get("crit_roll", -1.0)) - float(attack_result.get("crit_roll", -2.0))) > 0.001:
+		errors.append("%s should expose crit_roll" % context)
+	if int(snapshot.get("combat_rng_counter", -1)) < 0:
+		errors.append("%s should expose combat_rng_counter" % context)
+	if bool(snapshot.get("friendly_fire", true)) != bool(attack_result.get("friendly_fire", false)):
+		errors.append("%s should expose friendly_fire" % context)
+	if int(snapshot.get("triggered_on_hit_effect_count", -1)) != _array_or_empty(attack_result.get("triggered_on_hit_effect_ids", [])).size():
+		errors.append("%s should expose triggered_on_hit_effect_count" % context)
+	if int(snapshot.get("applied_on_hit_effect_count", -1)) != _array_or_empty(attack_result.get("applied_on_hit_effects", [])).size():
+		errors.append("%s should expose applied_on_hit_effect_count" % context)
+	var consequence: Dictionary = _dictionary_or_empty(snapshot.get("relationship_consequence", {}))
+	if bool(attack_result.get("friendly_fire", false)) and consequence.is_empty():
+		errors.append("%s should expose relationship consequence for friendly fire" % context)
+
+
+func _expect_attack_marker_metadata(errors: Array[String], marker: Node, attack_result: Dictionary, context: String) -> void:
+	var marker_snapshot := {
+		"range": marker.get_meta("range", 0),
+		"attack_delivery": marker.get_meta("attack_delivery", ""),
+		"weapon_item_id": marker.get_meta("weapon_item_id", ""),
+		"hit_chance": marker.get_meta("hit_chance", -1.0),
+		"hit_roll": marker.get_meta("hit_roll", -1.0),
+		"crit_chance": marker.get_meta("crit_chance", -1.0),
+		"crit_roll": marker.get_meta("crit_roll", -1.0),
+		"combat_rng_counter": marker.get_meta("combat_rng_counter", -1),
+		"friendly_fire": marker.get_meta("friendly_fire", false),
+		"triggered_on_hit_effect_count": marker.get_meta("triggered_on_hit_effect_count", -1),
+		"applied_on_hit_effect_count": marker.get_meta("applied_on_hit_effect_count", -1),
+		"relationship_consequence": marker.get_meta("relationship_consequence", {}),
+	}
+	_expect_attack_event_metadata(errors, marker_snapshot, attack_result, context)
 
 
 func _expect_world_action_interaction_presenter(errors: Array[String], game_root: Node, target_id: String, option_kind: String) -> void:
