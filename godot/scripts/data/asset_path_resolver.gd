@@ -7,6 +7,7 @@ const BUILTIN_CHARACTER_PREFIX := "builtin:character:"
 const BUILTIN_CONTAINER_PREFIX := "builtin:container:"
 const BUILTIN_WEAPON_PREFIX := "builtin:weapon:"
 const BUILTIN_ITEM_PREFIX := "builtin:item:"
+const BUILTIN_WORLD_TILE_PREFIX := "builtin:world_tile:"
 const MEDIA_EXTENSIONS := {
 	"jpeg": true,
 	"jpg": true,
@@ -28,6 +29,8 @@ static func resolve_model_asset(asset_id: String) -> Dictionary:
 		return _resolve_relative_gltf("preview_placeholders/placeholders/weapon_%s.gltf" % normalized.trim_prefix(BUILTIN_WEAPON_PREFIX), normalized)
 	if normalized.begins_with(BUILTIN_ITEM_PREFIX):
 		return _resolve_relative_gltf("preview_placeholders/placeholders/equipment_%s.gltf" % normalized.trim_prefix(BUILTIN_ITEM_PREFIX), normalized)
+	if normalized.begins_with(BUILTIN_WORLD_TILE_PREFIX):
+		return _resolve_relative_gltf("world_tiles/%s.gltf" % normalized.trim_prefix(BUILTIN_WORLD_TILE_PREFIX), normalized)
 	return _resolve_relative_gltf(normalized, normalized)
 
 

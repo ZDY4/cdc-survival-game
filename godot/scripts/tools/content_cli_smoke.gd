@@ -235,6 +235,11 @@ func _expect_asset_path_resolver(errors: Array[String]) -> void:
 		errors.append("asset resolver should map builtin container visual assets, got %s" % container)
 	if not bool(container.get("exists", false)):
 		errors.append("asset resolver builtin container should resolve to an existing Godot asset: %s" % container)
+	var world_tile := AssetPathResolver.resolve_model_asset("builtin:world_tile:building_wall/isolated")
+	if not bool(world_tile.get("ok", false)) or str(world_tile.get("relative_path", "")) != "world_tiles/building_wall/isolated.gltf":
+		errors.append("asset resolver should map builtin world tile visual assets, got %s" % world_tile)
+	if not bool(world_tile.get("exists", false)):
+		errors.append("asset resolver builtin world tile should resolve to an existing Godot asset: %s" % world_tile)
 	var weapon := AssetPathResolver.resolve_equipment_visual_asset("builtin:weapon:dagger")
 	if not bool(weapon.get("ok", false)) or str(weapon.get("relative_path", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("asset resolver should map builtin weapon visual assets, got %s" % weapon)
@@ -276,7 +281,8 @@ func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) ->
 			or str(appearance_entry.get("resource_path", "")) != "res://assets/preview_placeholders/characters/humanoid_mannequin.gltf":
 		errors.append("asset manifest should normalize builtin character appearance asset: %s" % appearance_entry)
 	var world_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "building_wall", "prototypes[building_wall/isolated].source.path")
-	if str(world_tile_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/isolated.gltf":
+	if str(world_tile_entry.get("source_id", "")) != "builtin:world_tile:building_wall/isolated" \
+			or str(world_tile_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/isolated.gltf":
 		errors.append("asset manifest should include world tile glTF path: %s" % world_tile_entry)
 	var container_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "prop_placeholders", "prototypes[props/crate_wood].source.path")
 	if str(container_tile_entry.get("source_id", "")) != "builtin:container:crate_wood" \

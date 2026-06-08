@@ -18,7 +18,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall/isolated.gltf",
+        "path": "builtin:world_tile:building_wall/isolated",
         "scene_index": 0
       }
     },
@@ -40,7 +40,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall/end.gltf",
+        "path": "builtin:world_tile:building_wall/end",
         "scene_index": 0
       }
     },
@@ -62,7 +62,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall/straight.gltf",
+        "path": "builtin:world_tile:building_wall/straight",
         "scene_index": 0
       }
     },
@@ -84,7 +84,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall/corner.gltf",
+        "path": "builtin:world_tile:building_wall/corner",
         "scene_index": 0
       }
     },
@@ -106,7 +106,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall/t_junction.gltf",
+        "path": "builtin:world_tile:building_wall/t_junction",
         "scene_index": 0
       }
     },
@@ -128,7 +128,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall/cross.gltf",
+        "path": "builtin:world_tile:building_wall/cross",
         "scene_index": 0
       }
     },
@@ -150,7 +150,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/building_wall/floor_flat.gltf",
+        "path": "builtin:world_tile:building_wall/floor_flat",
         "scene_index": 0
       }
     }

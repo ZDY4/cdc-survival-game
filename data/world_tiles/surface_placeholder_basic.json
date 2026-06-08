@@ -18,7 +18,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/surface_placeholder_basic/flat.gltf",
+        "path": "builtin:world_tile:surface_placeholder_basic/flat",
         "scene_index": 0
       }
     },
@@ -40,7 +40,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/surface_placeholder_basic/ramp_north.gltf",
+        "path": "builtin:world_tile:surface_placeholder_basic/ramp_north",
         "scene_index": 0
       }
     },
@@ -62,7 +62,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/surface_placeholder_basic/ramp_east.gltf",
+        "path": "builtin:world_tile:surface_placeholder_basic/ramp_east",
         "scene_index": 0
       }
     },
@@ -84,7 +84,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/surface_placeholder_basic/ramp_south.gltf",
+        "path": "builtin:world_tile:surface_placeholder_basic/ramp_south",
         "scene_index": 0
       }
     },
@@ -106,7 +106,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/surface_placeholder_basic/ramp_west.gltf",
+        "path": "builtin:world_tile:surface_placeholder_basic/ramp_west",
         "scene_index": 0
       }
     },
@@ -128,7 +128,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/surface_placeholder_basic/cliff_side.gltf",
+        "path": "builtin:world_tile:surface_placeholder_basic/cliff_side",
         "scene_index": 0
       }
     },
@@ -150,7 +150,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/surface_placeholder_basic/cliff_outer_corner.gltf",
+        "path": "builtin:world_tile:surface_placeholder_basic/cliff_outer_corner",
         "scene_index": 0
       }
     },
@@ -172,7 +172,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/surface_placeholder_basic/cliff_inner_corner.gltf",
+        "path": "builtin:world_tile:surface_placeholder_basic/cliff_inner_corner",
         "scene_index": 0
       }
     }

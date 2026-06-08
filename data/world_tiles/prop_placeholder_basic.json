@@ -18,7 +18,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/tree_dead.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/tree_dead",
         "scene_index": 0
       }
     },
@@ -40,7 +40,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/bush_dry.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/bush_dry",
         "scene_index": 0
       }
     },
@@ -62,7 +62,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/roadblock_concrete.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/roadblock_concrete",
         "scene_index": 0
       }
     },
@@ -84,7 +84,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/sandbag_barrier.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/sandbag_barrier",
         "scene_index": 0
       }
     },
@@ -106,7 +106,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/wrecked_car.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/wrecked_car",
         "scene_index": 0
       }
     },
@@ -128,7 +128,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/barrel_rust.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/barrel_rust",
         "scene_index": 0
       }
     },
@@ -150,7 +150,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/pallet_stack.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/pallet_stack",
         "scene_index": 0
       }
     },
@@ -172,7 +172,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/chair_metal.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/chair_metal",
         "scene_index": 0
       }
     },
@@ -194,7 +194,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/table_metal.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/table_metal",
         "scene_index": 0
       }
     },
@@ -216,7 +216,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/desk_wood.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/desk_wood",
         "scene_index": 0
       }
     },
@@ -238,7 +238,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/shelf_metal.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/shelf_metal",
         "scene_index": 0
       }
     },
@@ -260,7 +260,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/cabinet_wood.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/cabinet_wood",
         "scene_index": 0
       }
     },
@@ -282,7 +282,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/counter_canteen.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/counter_canteen",
         "scene_index": 0
       }
     },
@@ -304,7 +304,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/crate_stack_large.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/crate_stack_large",
         "scene_index": 0
       }
     },
@@ -326,7 +326,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/barricade_scrap.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/barricade_scrap",
         "scene_index": 0
       }
     },
@@ -348,7 +348,7 @@
       "receive_shadows": true,
       "source": {
         "kind": "gltf_scene",
-        "path": "world_tiles/prop_placeholder_basic/gate_pillar_concrete.gltf",
+        "path": "builtin:world_tile:prop_placeholder_basic/gate_pillar_concrete",
         "scene_index": 0
       }
     }
