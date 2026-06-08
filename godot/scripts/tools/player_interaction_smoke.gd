@@ -133,8 +133,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(pickup_result.get("success", false)):
 		errors.append("pickup execution failed: %s" % pickup_result.get("reason", "unknown"))
 	else:
-		_expect_world_action_interaction_presenter(errors, game_root, "survivor_outpost_01_pickup_medkit", "pickup")
+		_expect_world_action_interaction_presenter(errors, game_root, "survivor_outpost_01_pickup_medkit", "pickup", "item_pickup")
 	await _wait_for_world_action_presenter_idle(game_root)
+	await _expect_interaction_visual_profiles(errors, game_root)
 	if int(_player_inventory(game_root).get("1006", 0)) <= 0:
 		errors.append("pickup execution did not add item 1006")
 	await process_frame
@@ -1317,7 +1318,7 @@ func _expect_on_hit_effect_marker_metadata(errors: Array[String], label: Label3D
 	_expect_action_marker_phases(errors, label, ["windup", "impact", "fade"], "on-hit effect label")
 
 
-func _expect_world_action_interaction_presenter(errors: Array[String], game_root: Node, target_id: String, option_kind: String) -> void:
+func _expect_world_action_interaction_presenter(errors: Array[String], game_root: Node, target_id: String, option_kind: String, expected_visual_kind: String = "") -> void:
 	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
 	if str(presenter.get("kind", "")) != "interaction":
 		errors.append("interaction command should enqueue world action presenter interaction, got %s" % JSON.stringify(presenter))
@@ -1325,8 +1326,14 @@ func _expect_world_action_interaction_presenter(errors: Array[String], game_root
 		errors.append("interaction presenter should expose target id %s, got %s" % [target_id, presenter.get("target_id", "")])
 	if str(presenter.get("option_kind", "")) != option_kind:
 		errors.append("interaction presenter should expose option kind %s, got %s" % [option_kind, presenter.get("option_kind", "")])
+	if not expected_visual_kind.is_empty() and str(presenter.get("visual_kind", "")) != expected_visual_kind:
+		errors.append("interaction presenter should expose visual kind %s, got %s" % [expected_visual_kind, presenter.get("visual_kind", "")])
 	if _dictionary_or_empty(presenter.get("target_grid", {})).is_empty():
 		errors.append("interaction presenter should expose target grid")
+	if _array_or_empty(presenter.get("phase_durations", [])).size() != 3:
+		errors.append("interaction presenter should expose three phase durations")
+	if float(presenter.get("marker_y_offset", 0.0)) <= 0.0:
+		errors.append("interaction presenter should expose marker_y_offset")
 	_expect_action_presenter_phases(errors, presenter, ["start", "pulse", "fade"], "interaction presenter")
 	var pulse: MeshInstance3D = game_root.find_child("WorldActionInteractionPulse", true, false) as MeshInstance3D
 	if pulse == null:
@@ -1338,9 +1345,47 @@ func _expect_world_action_interaction_presenter(errors: Array[String], game_root
 		errors.append("interaction pulse marker should expose target id")
 	if str(pulse.get_meta("option_kind", "")) != option_kind:
 		errors.append("interaction pulse marker should expose option kind")
+	if not expected_visual_kind.is_empty() and str(pulse.get_meta("visual_kind", "")) != expected_visual_kind:
+		errors.append("interaction pulse marker should expose visual kind")
+	if _array_or_empty(pulse.get_meta("action_presenter_phase_durations", [])).size() != 3:
+		errors.append("interaction pulse marker should expose phase durations")
+	if float(pulse.get_meta("marker_y_offset", 0.0)) <= 0.0:
+		errors.append("interaction pulse marker should expose marker_y_offset")
+	if float(pulse.get_meta("marker_height", 0.0)) <= 0.0:
+		errors.append("interaction pulse marker should expose marker height")
 	if _dictionary_or_empty(pulse.get_meta("target_grid", {})).is_empty():
 		errors.append("interaction pulse marker should expose target grid")
 	_expect_action_marker_phases(errors, pulse, ["start", "pulse", "fade"], "interaction pulse marker")
+
+
+func _expect_interaction_visual_profiles(errors: Array[String], game_root: Node) -> void:
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("interaction visual profile smoke needs player node")
+		return
+	var player_grid: Dictionary = _player_grid(game_root)
+	var profiles := [
+		{"option_kind": "open_container", "visual_kind": "container_open", "target_id": "smoke_container", "target_type": "map_object"},
+		{"option_kind": "door_toggle", "visual_kind": "door_toggle", "target_id": "smoke_door", "target_type": "map_object"},
+		{"option_kind": "talk", "visual_kind": "dialogue_start", "target_id": "1", "target_type": "actor"},
+		{"option_kind": "open_trade", "visual_kind": "trade_open", "target_id": "1", "target_type": "actor"},
+		{"option_kind": "open_crafting", "visual_kind": "crafting_station", "target_id": "smoke_station", "target_type": "map_object"},
+		{"option_kind": "enter_subscene", "visual_kind": "scene_transition", "target_id": "smoke_transition", "target_type": "trigger"},
+		{"option_kind": "wait", "visual_kind": "wait", "target_id": "1", "target_type": "actor"},
+	]
+	for profile_value in profiles:
+		var profile: Dictionary = _dictionary_or_empty(profile_value)
+		await _wait_for_world_action_presenter_idle(game_root)
+		_present_synthetic_world_action_event(game_root, "interaction_succeeded", {
+			"actor_id": 1,
+			"target_id": str(profile.get("target_id", "")),
+			"target_type": str(profile.get("target_type", "")),
+			"target_name": "Synthetic %s" % str(profile.get("option_kind", "")),
+			"target_grid": player_grid.duplicate(true),
+			"option_kind": str(profile.get("option_kind", "")),
+		})
+		_expect_world_action_interaction_presenter(errors, game_root, str(profile.get("target_id", "")), str(profile.get("option_kind", "")), str(profile.get("visual_kind", "")))
+	await _wait_for_world_action_presenter_idle(game_root)
 
 
 func _expect_world_action_combat_event_presenter(errors: Array[String], game_root: Node, event_kind: String, source_actor_id: int, target_node: Node3D) -> void:

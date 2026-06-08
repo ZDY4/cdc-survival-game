@@ -682,6 +682,8 @@ func _interaction_presentation(events: Array, world_root: Node, world_result: Di
 		var target_type := str(payload.get("target_type", ""))
 		var target_node := _interaction_target_node(world_root, world_result, payload)
 		var target_grid: Dictionary = _dictionary_or_empty(payload.get("target_grid", {}))
+		var option_kind := str(payload.get("option_kind", ""))
+		var visual_profile := _interaction_visual_profile(option_kind)
 		return {
 			"active": false,
 			"kind": "interaction",
@@ -690,7 +692,10 @@ func _interaction_presentation(events: Array, world_root: Node, world_result: Di
 			"target_type": target_type,
 			"target_name": str(payload.get("target_name", "")),
 			"target_grid": target_grid,
-			"option_kind": str(payload.get("option_kind", "")),
+			"option_kind": option_kind,
+			"visual_kind": str(visual_profile.get("visual_kind", "")),
+			"phase_durations": _array_or_empty(visual_profile.get("phase_durations", [])).duplicate(true),
+			"marker_y_offset": float(visual_profile.get("y_offset", 0.22)),
 			"target_node": target_node,
 			"node_path": str(target_node.get_path()) if target_node != null else "",
 		}
@@ -704,13 +709,15 @@ func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dict
 		_record_latest(_interaction_public_snapshot(interaction, false, "target_missing"))
 		return
 	sequence += 1
+	var visual_profile := _interaction_visual_profile(str(interaction.get("option_kind", "")))
+	var phase_durations: Array = _phase_durations_or_default(visual_profile.get("phase_durations", INTERACTION_PHASE_DURATIONS), INTERACTION_PHASE_DURATIONS)
 	var marker := MeshInstance3D.new()
 	marker.name = "WorldActionInteractionPulse"
 	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.34
-	mesh.bottom_radius = 0.34
-	mesh.height = 0.055
-	mesh.radial_segments = 24
+	mesh.top_radius = float(visual_profile.get("top_radius", 0.34))
+	mesh.bottom_radius = float(visual_profile.get("bottom_radius", 0.34))
+	mesh.height = float(visual_profile.get("height", 0.055))
+	mesh.radial_segments = int(visual_profile.get("radial_segments", 24))
 	marker.mesh = mesh
 	marker.material_override = _interaction_material(str(interaction.get("option_kind", "")))
 	var target_position := Vector3.ZERO
@@ -718,30 +725,36 @@ func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dict
 		target_position = target_node.global_position if target_node.is_inside_tree() else target_node.position
 	else:
 		target_position = _grid_to_world(target_grid, 0.12)
-	marker.position = target_position + Vector3(0.0, 0.22, 0.0)
+	marker.position = target_position + Vector3(0.0, float(visual_profile.get("y_offset", 0.22)), 0.0)
 	marker.set_meta("action_presenter_active", true)
 	marker.set_meta("action_presenter_kind", "interaction")
 	marker.set_meta("action_presenter_phases", INTERACTION_PHASES.duplicate())
 	marker.set_meta("action_presenter_phase_count", INTERACTION_PHASES.size())
 	marker.set_meta("action_presenter_current_phase", INTERACTION_PHASES[0])
-	marker.set_meta("action_presenter_duration_sec", _duration_sum(INTERACTION_PHASE_DURATIONS))
+	marker.set_meta("action_presenter_phase_durations", phase_durations.duplicate(true))
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(phase_durations))
 	marker.set_meta("actor_id", int(interaction.get("actor_id", 0)))
 	marker.set_meta("target_id", str(interaction.get("target_id", "")))
 	marker.set_meta("target_type", str(interaction.get("target_type", "")))
 	marker.set_meta("target_name", str(interaction.get("target_name", "")))
 	marker.set_meta("target_grid", target_grid.duplicate(true))
 	marker.set_meta("option_kind", str(interaction.get("option_kind", "")))
+	marker.set_meta("visual_kind", str(visual_profile.get("visual_kind", "")))
+	marker.set_meta("marker_y_offset", float(visual_profile.get("y_offset", 0.22)))
+	marker.set_meta("marker_top_radius", float(visual_profile.get("top_radius", 0.34)))
+	marker.set_meta("marker_bottom_radius", float(visual_profile.get("bottom_radius", 0.34)))
+	marker.set_meta("marker_height", float(visual_profile.get("height", 0.055)))
 	_track_active_node(marker)
 	_presentation_layer(world_root).add_child(marker)
 	var tween := host.create_tween()
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
-	tween.tween_property(marker, "scale", Vector3(0.82, 1.0, 0.82), float(INTERACTION_PHASE_DURATIONS[0]))
+	tween.tween_property(marker, "scale", _vector3_or_default(visual_profile.get("start_scale", Vector3(0.82, 1.0, 0.82)), Vector3(0.82, 1.0, 0.82)), float(phase_durations[0]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), INTERACTION_PHASES[1]))
-	tween.tween_property(marker, "scale", Vector3(1.35, 1.0, 1.35), float(INTERACTION_PHASE_DURATIONS[1]))
+	tween.tween_property(marker, "scale", _vector3_or_default(visual_profile.get("pulse_scale", Vector3(1.35, 1.0, 1.35)), Vector3(1.35, 1.0, 1.35)), float(phase_durations[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), INTERACTION_PHASES[2]))
-	tween.tween_property(marker, "scale", Vector3(0.55, 1.0, 0.55), float(INTERACTION_PHASE_DURATIONS[2]))
+	tween.tween_property(marker, "scale", _vector3_or_default(visual_profile.get("fade_scale", Vector3(0.55, 1.0, 0.55)), Vector3(0.55, 1.0, 0.55)), float(phase_durations[2]))
 	tween.finished.connect(Callable(self, "_on_interaction_feedback_finished").bind(weakref(marker)))
 	var snapshot_data := _interaction_public_snapshot(interaction, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
@@ -769,11 +782,14 @@ func _interaction_public_snapshot(interaction: Dictionary, active: bool, reason:
 		"target_name": str(interaction.get("target_name", "")),
 		"target_grid": _dictionary_or_empty(interaction.get("target_grid", {})).duplicate(true),
 		"option_kind": str(interaction.get("option_kind", "")),
+		"visual_kind": str(interaction.get("visual_kind", _interaction_visual_kind(str(interaction.get("option_kind", ""))))),
 		"node_path": str(interaction.get("node_path", "")),
 		"phases": INTERACTION_PHASES.duplicate(),
 		"phase_count": INTERACTION_PHASES.size(),
 		"current_phase": INTERACTION_PHASES[0] if active else "",
-		"duration_sec": _duration_sum(INTERACTION_PHASE_DURATIONS) if active else 0.0,
+		"phase_durations": _phase_durations_or_default(interaction.get("phase_durations", INTERACTION_PHASE_DURATIONS), INTERACTION_PHASE_DURATIONS),
+		"duration_sec": _duration_sum(_phase_durations_or_default(interaction.get("phase_durations", INTERACTION_PHASE_DURATIONS), INTERACTION_PHASE_DURATIONS)) if active else 0.0,
+		"marker_y_offset": float(interaction.get("marker_y_offset", 0.22)),
 	}
 
 
@@ -1076,20 +1092,94 @@ func _attack_delivery_material(delivery: String) -> StandardMaterial3D:
 	return material
 
 
+func _interaction_visual_profile(option_kind: String) -> Dictionary:
+	var profile := {
+		"visual_kind": _interaction_visual_kind(option_kind),
+		"phase_durations": INTERACTION_PHASE_DURATIONS.duplicate(),
+		"top_radius": 0.34,
+		"bottom_radius": 0.34,
+		"height": 0.055,
+		"radial_segments": 24,
+		"y_offset": 0.22,
+		"start_scale": Vector3(0.82, 1.0, 0.82),
+		"pulse_scale": Vector3(1.35, 1.0, 1.35),
+		"fade_scale": Vector3(0.55, 1.0, 0.55),
+		"color": Color(0.9, 0.86, 0.34, 0.8),
+	}
+	match option_kind:
+		"pickup":
+			profile["color"] = Color(0.22, 0.74, 1.0, 0.82)
+			profile["pulse_scale"] = Vector3(1.42, 1.0, 1.42)
+		"open_container":
+			profile["color"] = Color(0.34, 0.92, 0.42, 0.82)
+			profile["height"] = 0.08
+			profile["y_offset"] = 0.36
+			profile["pulse_scale"] = Vector3(1.24, 1.18, 1.24)
+		"door_toggle":
+			profile["color"] = Color(0.98, 0.66, 0.22, 0.86)
+			profile["top_radius"] = 0.24
+			profile["bottom_radius"] = 0.42
+			profile["height"] = 0.11
+			profile["y_offset"] = 0.42
+			profile["pulse_scale"] = Vector3(1.18, 1.34, 1.18)
+		"talk":
+			profile["color"] = Color(0.72, 0.54, 1.0, 0.84)
+			profile["y_offset"] = 0.92
+			profile["pulse_scale"] = Vector3(1.15, 1.26, 1.15)
+		"open_trade":
+			profile["color"] = Color(0.26, 0.86, 0.76, 0.84)
+			profile["y_offset"] = 0.86
+			profile["pulse_scale"] = Vector3(1.22, 1.16, 1.22)
+		"open_crafting":
+			profile["color"] = Color(0.96, 0.78, 0.26, 0.84)
+			profile["height"] = 0.075
+			profile["pulse_scale"] = Vector3(1.18, 1.28, 1.18)
+		"enter_subscene", "scene_transition":
+			profile["color"] = Color(0.42, 0.8, 1.0, 0.86)
+			profile["top_radius"] = 0.22
+			profile["bottom_radius"] = 0.48
+			profile["height"] = 0.14
+			profile["y_offset"] = 0.3
+			profile["phase_durations"] = [0.05, 0.12, 0.14]
+			profile["pulse_scale"] = Vector3(1.52, 1.0, 1.52)
+		"wait":
+			profile["color"] = Color(0.7, 0.76, 0.86, 0.78)
+			profile["top_radius"] = 0.26
+			profile["bottom_radius"] = 0.26
+			profile["height"] = 0.045
+			profile["y_offset"] = 0.74
+			profile["phase_durations"] = [0.05, 0.07, 0.08]
+	return profile
+
+
+func _interaction_visual_kind(option_kind: String) -> String:
+	match option_kind:
+		"pickup":
+			return "item_pickup"
+		"open_container":
+			return "container_open"
+		"door_toggle":
+			return "door_toggle"
+		"talk":
+			return "dialogue_start"
+		"open_trade":
+			return "trade_open"
+		"open_crafting":
+			return "crafting_station"
+		"enter_subscene", "scene_transition":
+			return "scene_transition"
+		"wait":
+			return "wait"
+	return "interaction_pulse"
+
+
 func _interaction_material(option_kind: String) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	match option_kind:
-		"pickup":
-			material.albedo_color = Color(0.22, 0.74, 1.0, 0.82)
-		"open_container":
-			material.albedo_color = Color(0.34, 0.92, 0.42, 0.82)
-		"door_toggle":
-			material.albedo_color = Color(0.98, 0.66, 0.22, 0.86)
-		"talk":
-			material.albedo_color = Color(0.72, 0.54, 1.0, 0.84)
-		_:
-			material.albedo_color = Color(0.9, 0.86, 0.34, 0.8)
+	material.no_depth_test = true
+	var profile := _interaction_visual_profile(option_kind)
+	var color: Variant = profile.get("color", Color(0.9, 0.86, 0.34, 0.8))
+	material.albedo_color = color if typeof(color) == TYPE_COLOR else Color(0.9, 0.86, 0.34, 0.8)
 	return material
 
 
@@ -1136,6 +1226,22 @@ func _duration_sum(values: Array) -> float:
 	for value in values:
 		total += float(value)
 	return total
+
+
+func _phase_durations_or_default(value: Variant, fallback: Array) -> Array:
+	var source := _array_or_empty(value)
+	if source.size() < 3:
+		source = fallback
+	var output: Array = []
+	for index in range(3):
+		output.append(max(0.001, float(source[index])))
+	return output
+
+
+func _vector3_or_default(value: Variant, fallback: Vector3) -> Vector3:
+	if typeof(value) == TYPE_VECTOR3:
+		return value
+	return fallback
 
 
 func _track_active_node(node: Node) -> void:
