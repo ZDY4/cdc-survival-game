@@ -1907,11 +1907,9 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		for key in container_target:
 			target[key] = container_target[key]
 	elif control.has_meta("trade_drop_zone"):
-		target["target_kind"] = "trade_drop_zone"
-		target["target_id"] = str(control.get_meta("trade_drop_zone"))
-		target["accepts"] = str(control.get_meta("trade_drop_accepts", ""))
-		target["last_accept"] = bool(control.get_meta("trade_drop_last_accept", false))
-		target["reject_reason"] = str(control.get_meta("trade_drop_last_reject_reason", control.get_meta("trade_drop_reject_reason", "")))
+		var trade_drop_target: Dictionary = _trade_drop_zone_drag_hover_target_snapshot(control, drag_data)
+		for key in trade_drop_target:
+			target[key] = trade_drop_target[key]
 	elif control.has_meta("cart_index"):
 		var cart_entry_target: Dictionary = _trade_cart_drag_hover_target_snapshot(control, drag_data, "trade_cart_entry", str(control.get_meta("cart_index")))
 		for key in cart_entry_target:
@@ -2014,6 +2012,58 @@ func _trade_cart_drag_hover_target_snapshot(control: Control, drag_data: Diction
 		"reject_reason": reject_reason,
 		"hover_highlight": _drag_hover_highlight(not drag_data.is_empty(), target_kind, target_id, reject_reason, last_accept),
 	}
+
+
+func _trade_drop_zone_drag_hover_target_snapshot(control: Control, drag_data: Dictionary) -> Dictionary:
+	var zone_id := str(control.get_meta("trade_drop_zone", ""))
+	var acceptance: Dictionary = _trade_drop_zone_drag_acceptance(control, drag_data)
+	var last_accept := bool(acceptance.get("accept", false))
+	var reject_reason := str(acceptance.get("reason", ""))
+	return {
+		"target_kind": "trade_drop_zone",
+		"target_id": zone_id,
+		"zone_id": zone_id,
+		"accepts": str(control.get_meta("trade_drop_accepts", "")),
+		"last_accept": last_accept,
+		"reject_reason": reject_reason,
+		"last_source": str(acceptance.get("source", control.get_meta("trade_drop_last_source", ""))),
+		"last_preview_text": str(control.get_meta("trade_drop_last_preview_text", "")),
+		"hover_highlight": _drag_hover_highlight(not drag_data.is_empty(), "trade_drop_zone", zone_id, reject_reason, last_accept),
+	}
+
+
+func _trade_drop_zone_drag_acceptance(control: Control, drag_data: Dictionary) -> Dictionary:
+	if drag_data.is_empty():
+		return {"accept": bool(control.get_meta("trade_drop_last_accept", false)), "reason": str(control.get_meta("trade_drop_last_reject_reason", "")), "source": str(control.get_meta("trade_drop_last_source", ""))}
+	var zone_id := str(control.get_meta("trade_drop_zone", ""))
+	match str(drag_data.get("kind", "")):
+		"trade_item":
+			var source := str(drag_data.get("source", ""))
+			if source.is_empty():
+				return {"accept": false, "reason": "unknown_trade_item", "source": source}
+			if not _trade_drop_zone_source_matches(zone_id, source):
+				return {"accept": false, "reason": str(control.get_meta("trade_drop_reject_reason", "drop_zone_source_mismatch")), "source": source}
+			return {"accept": true, "reason": "", "source": source}
+		"inventory_item":
+			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+			var item_id := str(drag_data.get("item_id", item.get("item_id", "")))
+			if item_id.is_empty():
+				return {"accept": false, "reason": "unknown_trade_item", "source": "player"}
+			if not _trade_drop_zone_source_matches(zone_id, "player"):
+				return {"accept": false, "reason": str(control.get_meta("trade_drop_reject_reason", "drop_zone_source_mismatch")), "source": "player"}
+			return {"accept": true, "reason": "", "source": "player"}
+		"trade_cart_entry":
+			return {"accept": false, "reason": "cart_entry_requires_cart_target", "source": "cart"}
+	return {"accept": false, "reason": "trade_cart_unsupported_drag_data", "source": ""}
+
+
+func _trade_drop_zone_source_matches(zone_id: String, source: String) -> bool:
+	match zone_id:
+		"buy":
+			return source == "shop"
+		"sell":
+			return source == "player" or source.begins_with("equipment:")
+	return true
 
 
 func _trade_cart_drag_acceptance(control: Control, drag_data: Dictionary) -> Dictionary:

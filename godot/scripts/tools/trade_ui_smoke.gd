@@ -250,6 +250,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("sell drop zone should preserve stable last reject reason code")
 	if not _trade_zone_meta_text(game_root, "SellDropZone", "trade_drop_last_preview_text").contains("出售区只接受背包或装备物品"):
 		errors.append("sell drop zone should expose catalog reject preview text")
+	_assert_trade_drop_zone_hover_target(errors, game_root, _trade_drag_data(game_root, "shop", "绷带"), _trade_zone_control(game_root, "SellDropZone"), false, "sell_zone_requires_player_or_equipment_source", "shop bandage to sell drop zone reject hover")
 	if not _drop_trade_item_with_text(game_root, "shop", "绷带"):
 		errors.append("should drag shop bandage back to cart after zone rejection")
 	_assert_trade_cart_hover_target(errors, game_root, _trade_drag_data(game_root, "shop", "绷带"), _trade_cart_entry_control(game_root, 0), "trade_cart_entry", true, "", "shop bandage to cart entry hover target")
@@ -292,6 +293,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("buy drop zone should preserve stable last reject reason code")
 	if not _trade_zone_meta_text(game_root, "BuyDropZone", "trade_drop_last_preview_text").contains("购买区只接受店铺物品"):
 		errors.append("buy drop zone should expose catalog reject preview text")
+	_assert_trade_drop_zone_hover_target(errors, game_root, _trade_drag_data(game_root, "player", "绷带"), _trade_zone_control(game_root, "BuyDropZone"), false, "buy_zone_requires_shop_source", "player bandage to buy drop zone reject hover")
 	if not _drop_inventory_item_to_trade_cart(game_root, "绷带"):
 		errors.append("should drag inventory bandage to trade cart")
 	if not _cart_line(game_root).contains("出售 绷带 x1"):
@@ -1211,6 +1213,8 @@ func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_da
 	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
 	if str(target_snapshot.get("target_kind", "")) != expected_target_kind:
 		errors.append("%s: target kind expected %s, got %s" % [context, expected_target_kind, snapshot])
+	if expected_target_kind == "trade_drop_zone":
+		_assert_trade_drop_zone_target_shape(errors, target_snapshot, context)
 	var preview: Dictionary = _dictionary_or_empty(snapshot.get("preview", {}))
 	if not bool(preview.get("has_preview", false)) or str(preview.get("text", "")).is_empty():
 		errors.append("%s: drag snapshot should expose preview text: %s" % [context, snapshot])
@@ -1218,6 +1222,39 @@ func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_da
 	var runtime_drag: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("drag", {}))
 	if not runtime_drag.has("active") or not runtime_drag.has("target"):
 		errors.append("%s: runtime control should expose drag state shape: %s" % [context, runtime_drag])
+
+
+func _assert_trade_drop_zone_hover_target(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: trade drop zone target should exist" % context)
+		return
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != "trade_drop_zone":
+		errors.append("%s: target should be trade_drop_zone: %s" % [context, snapshot])
+	if bool(target_snapshot.get("last_accept", false)) != expected_accept:
+		errors.append("%s: trade drop zone accept expected %s, got %s" % [context, expected_accept, target_snapshot])
+	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: trade drop zone reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
+	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	_assert_drag_reject_reason_text(errors, target_snapshot, highlight, expected_reject_reason, context)
+	_assert_trade_drop_zone_target_shape(errors, target_snapshot, context)
+	var expected_style := "accept" if expected_accept else "reject"
+	if not bool(highlight.get("active", false)) or str(highlight.get("style", "")) != expected_style:
+		errors.append("%s: trade drop zone hover highlight should expose %s: %s" % [context, expected_style, highlight])
+
+
+func _assert_trade_drop_zone_target_shape(errors: Array[String], target_snapshot: Dictionary, context: String) -> void:
+	if str(target_snapshot.get("target_id", "")).is_empty() or str(target_snapshot.get("zone_id", "")).is_empty():
+		errors.append("%s: trade drop zone should expose zone id: %s" % [context, target_snapshot])
+	if not str(target_snapshot.get("accepts", "")).contains("shop") and not str(target_snapshot.get("accepts", "")).contains("player"):
+		errors.append("%s: trade drop zone should expose accepted source summary: %s" % [context, target_snapshot])
+	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	if str(highlight.get("target_kind", "")) != "trade_drop_zone" or str(highlight.get("target_id", "")) != str(target_snapshot.get("target_id", "")):
+		errors.append("%s: trade drop zone hover highlight should identify target: %s" % [context, highlight])
 
 
 func _assert_trade_cart_hover_target(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_target_kind: String, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
