@@ -60,29 +60,38 @@ func _build_layout() -> void:
 	box.add_child(_settings_label("TitleLine", "设置"))
 	box.add_child(_settings_label("AudioLine", ""))
 	box.add_child(_settings_slider_row("MasterVolume", "主音量", int(settings_state.get("master_volume", 100)), func(value: float) -> void:
-		settings_state["master_volume"] = int(roundf(value))
+		var next_value := int(roundf(value))
+		settings_state["master_volume"] = next_value
 		_commit_settings_update()
+		_play_settings_control_audio("ui_slider_changed", _settings_control_audio_payload("MasterVolumeSlider", "slider", "change", "master_volume", next_value))
 	))
 	box.add_child(_settings_slider_row("MusicVolume", "音乐", int(settings_state.get("music_volume", 100)), func(value: float) -> void:
-		settings_state["music_volume"] = int(roundf(value))
+		var next_value := int(roundf(value))
+		settings_state["music_volume"] = next_value
 		_commit_settings_update()
+		_play_settings_control_audio("ui_slider_changed", _settings_control_audio_payload("MusicVolumeSlider", "slider", "change", "music_volume", next_value))
 	))
 	box.add_child(_settings_slider_row("SfxVolume", "音效", int(settings_state.get("sfx_volume", 100)), func(value: float) -> void:
-		settings_state["sfx_volume"] = int(roundf(value))
+		var next_value := int(roundf(value))
+		settings_state["sfx_volume"] = next_value
 		_commit_settings_update()
+		_play_settings_control_audio("ui_slider_changed", _settings_control_audio_payload("SfxVolumeSlider", "slider", "change", "sfx_volume", next_value))
 	))
 	box.add_child(_settings_label("DisplayLine", ""))
 	box.add_child(_settings_option_row("WindowMode", "窗口", _settings_window_modes(), str(settings_state.get("window_mode", "windowed")), func(option_id: String) -> void:
 		settings_state["window_mode"] = option_id
 		_commit_settings_update()
+		_play_settings_control_audio("ui_option_selected", _settings_control_audio_payload("WindowModeOption", "option", "select", "window_mode", option_id))
 	))
 	box.add_child(_settings_option_row("Resolution", "分辨率", _settings_resolutions(), str(settings_state.get("resolution", "1280x720")), func(option_id: String) -> void:
 		settings_state["resolution"] = option_id
 		_commit_settings_update()
+		_play_settings_control_audio("ui_option_selected", _settings_control_audio_payload("ResolutionOption", "option", "select", "resolution", option_id))
 	))
 	box.add_child(_settings_checkbox_row("VSync", "VSync", bool(settings_state.get("vsync", true)), func(enabled: bool) -> void:
 		settings_state["vsync"] = enabled
 		_commit_settings_update()
+		_play_settings_control_audio("ui_toggle_changed", _settings_control_audio_payload("VSyncCheckBox", "checkbox", "toggle", "vsync", enabled))
 	))
 	box.add_child(_settings_keybinding_row())
 	box.add_child(_settings_label("ControlsLine", ""))
@@ -168,6 +177,7 @@ func _settings_keybinding_row() -> HBoxContainer:
 	button.pressed.connect(func() -> void:
 		settings_state["keybinding_profile"] = _next_keybinding_profile(str(settings_state.get("keybinding_profile", "default")))
 		_commit_settings_update()
+		_play_settings_control_audio("ui_button_pressed", _settings_control_audio_payload("KeybindingCycleButton", "button", "press", "keybinding_profile", settings_state.get("keybinding_profile", "default")))
 	, CONNECT_DEFERRED)
 	row.add_child(label)
 	row.add_child(button)
@@ -185,7 +195,10 @@ func _settings_reset_row() -> HBoxContainer:
 	button.focus_mode = Control.FOCUS_NONE
 	button.tooltip_text = "恢复默认设置并保存"
 	_apply_settings_button_icon(button, "res://assets/icons/settings/reset.svg")
-	button.pressed.connect(reset_to_defaults, CONNECT_DEFERRED)
+	button.pressed.connect(func() -> void:
+		reset_to_defaults()
+		_play_settings_control_audio("ui_button_pressed", _settings_control_audio_payload("ResetSettingsButton", "button", "press", "all", "default"))
+	, CONNECT_DEFERRED)
 	row.add_child(button)
 	return row
 
@@ -390,6 +403,27 @@ func _notify_settings_applied() -> void:
 	var target := get_parent()
 	if target != null and target.has_method("settings_applied"):
 		target.call("settings_applied", settings_snapshot())
+
+
+func _play_settings_control_audio(event_kind: String, payload: Dictionary) -> Dictionary:
+	var target := get_parent()
+	if target == null:
+		return {}
+	if target.has_method("play_ui_audio_feedback"):
+		return _dictionary_or_empty(target.call("play_ui_audio_feedback", event_kind, payload))
+	return {}
+
+
+func _settings_control_audio_payload(control_name: String, control_kind: String, action: String, setting_key: String, value: Variant) -> Dictionary:
+	return {
+		"audio_source": "ui",
+		"panel_id": "settings",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+		"setting_key": setting_key,
+		"value": value,
+	}
 
 
 func _panel_key_labels_for_profile(profile: String) -> Dictionary:

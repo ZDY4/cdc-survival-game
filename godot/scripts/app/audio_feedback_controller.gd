@@ -33,6 +33,9 @@ const EVENT_SOUND_MAP := {
 	"settings_panel_opened": "ui_panel_open",
 	"settings_panel_closed": "ui_panel_close",
 	"ui_button_pressed": "ui_click",
+	"ui_slider_changed": "ui_slider",
+	"ui_option_selected": "ui_select",
+	"ui_toggle_changed": "ui_toggle",
 	"player_command_rejected": "error",
 	"ui_feedback": "ui_feedback",
 	"audio_missing_asset_probe": "missing_audio_asset",
@@ -40,6 +43,9 @@ const EVENT_SOUND_MAP := {
 
 const SOUND_PROFILES := {
 	"ui_click": {"frequency": 620.0, "duration": 0.045, "volume": 0.10},
+	"ui_slider": {"frequency": 580.0, "duration": 0.035, "volume": 0.08},
+	"ui_select": {"frequency": 700.0, "duration": 0.050, "volume": 0.10},
+	"ui_toggle": {"frequency": 500.0, "duration": 0.055, "volume": 0.10},
 	"ui_panel_open": {"frequency": 660.0, "duration": 0.055, "volume": 0.10},
 	"ui_panel_close": {"frequency": 420.0, "duration": 0.050, "volume": 0.09},
 	"ui_feedback": {"frequency": 520.0, "duration": 0.05, "volume": 0.10},
@@ -178,6 +184,10 @@ func _process_event(event_data: Dictionary, event_index: int) -> void:
 		"audio_source": str(payload.get("audio_source", "simulation")),
 		"panel_id": str(payload.get("panel_id", "")),
 		"action": str(payload.get("action", "")),
+		"control_name": str(payload.get("control_name", "")),
+		"control_kind": str(payload.get("control_kind", "")),
+		"setting_key": str(payload.get("setting_key", "")),
+		"value": payload.get("value", null),
 	}
 	recent_events.append(entry)
 	while recent_events.size() > MAX_RECENT_EVENTS:

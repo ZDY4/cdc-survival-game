@@ -1503,6 +1503,10 @@ func audio_feedback_snapshot() -> Dictionary:
 	return _dictionary_or_empty(audio_feedback_controller.call("snapshot"))
 
 
+func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
+	return _play_ui_audio_feedback(event_kind, payload)
+
+
 func finish_world_action_presentations() -> Dictionary:
 	if world_action_presenter == null or not world_action_presenter.has_method("finish_active_presentations"):
 		return world_action_presenter_snapshot()

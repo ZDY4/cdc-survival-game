@@ -1555,7 +1555,7 @@ func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
 		errors.append("runtime control should expose latest audio feedback snapshot: %s" % runtime_audio)
 
 
-func _assert_recent_audio_event(errors: Array[String], snapshot: Dictionary, expected_event_kind: String, expected_sound_id: String, expected_source: String, expected_panel_id: String, context: String) -> void:
+func _assert_recent_audio_event(errors: Array[String], snapshot: Dictionary, expected_event_kind: String, expected_sound_id: String, expected_source: String, expected_panel_id: String, context: String, expected_action: String = "", expected_control_kind: String = "", expected_control_name: String = "") -> void:
 	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
 	if recent.is_empty():
 		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
@@ -1567,6 +1567,12 @@ func _assert_recent_audio_event(errors: Array[String], snapshot: Dictionary, exp
 		errors.append("%s: recent audio source expected %s, got %s" % [context, expected_source, entry.get("audio_source", "")])
 	if str(entry.get("panel_id", "")) != expected_panel_id:
 		errors.append("%s: recent audio panel expected %s, got %s" % [context, expected_panel_id, entry.get("panel_id", "")])
+	if not expected_action.is_empty() and str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	if not expected_control_kind.is_empty() and str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if not expected_control_name.is_empty() and str(entry.get("control_name", "")) != expected_control_name:
+		errors.append("%s: recent audio control name expected %s, got %s" % [context, expected_control_name, entry.get("control_name", "")])
 
 
 func _assert_ai_debug_snapshot(errors: Array[String], game_root: Node, context: String) -> void:
@@ -2107,13 +2113,26 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 	if _settings_button_icon_path(game_root, "ResetSettingsButton") != "res://assets/icons/settings/reset.svg":
 		errors.append("settings reset button should expose and render settings icon")
 	_set_slider(game_root, "MasterVolumeSlider", 65)
+	await game_root.get_tree().process_frame
+	_assert_settings_control_audio(errors, game_root, "ui_slider_changed", "ui_slider", "MasterVolumeSlider", "slider", "change", "master_volume", "65", "master volume slider audio")
 	_set_slider(game_root, "MusicVolumeSlider", 40)
+	await game_root.get_tree().process_frame
+	_assert_settings_control_audio(errors, game_root, "ui_slider_changed", "ui_slider", "MusicVolumeSlider", "slider", "change", "music_volume", "40", "music volume slider audio")
 	_set_slider(game_root, "SfxVolumeSlider", 55)
+	await game_root.get_tree().process_frame
+	_assert_settings_control_audio(errors, game_root, "ui_slider_changed", "ui_slider", "SfxVolumeSlider", "slider", "change", "sfx_volume", "55", "sfx volume slider audio")
 	_select_option(game_root, "WindowModeOption", "fullscreen")
+	await game_root.get_tree().process_frame
+	_assert_settings_control_audio(errors, game_root, "ui_option_selected", "ui_select", "WindowModeOption", "option", "select", "window_mode", "fullscreen", "window mode option audio")
 	_select_option(game_root, "ResolutionOption", "1920x1080")
+	await game_root.get_tree().process_frame
+	_assert_settings_control_audio(errors, game_root, "ui_option_selected", "ui_select", "ResolutionOption", "option", "select", "resolution", "1920x1080", "resolution option audio")
 	_toggle_checkbox(game_root, "VSyncCheckBox", false)
+	await game_root.get_tree().process_frame
+	_assert_settings_control_audio(errors, game_root, "ui_toggle_changed", "ui_toggle", "VSyncCheckBox", "checkbox", "toggle", "vsync", "false", "vsync checkbox audio")
 	_press_button(game_root, "KeybindingCycleButton")
 	await game_root.get_tree().process_frame
+	_assert_settings_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "KeybindingCycleButton", "button", "press", "keybinding_profile", "left_handed", "keybinding button audio")
 	var snapshot: Dictionary = game_root.panel_controller.settings_snapshot()
 	if int(snapshot.get("master_volume", 0)) != 65 or int(snapshot.get("music_volume", 0)) != 40 or int(snapshot.get("sfx_volume", 0)) != 55:
 		errors.append("settings sliders should update runtime audio state: %s" % snapshot)
@@ -2192,6 +2211,22 @@ func _press_button(game_root: Node, node_name: String) -> void:
 	var button: Button = game_root.settings_panel.find_child(node_name, true, false) as Button
 	if button != null:
 		button.pressed.emit()
+
+
+func _assert_settings_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_setting_key: String, expected_value: String, context: String) -> void:
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot()) if game_root.has_method("audio_feedback_snapshot") else {}
+	if str(snapshot.get("last_event_kind", "")) != expected_event_kind or str(snapshot.get("last_sound_id", "")) != expected_sound_id:
+		errors.append("%s: settings control should trigger %s/%s audio feedback: %s" % [context, expected_event_kind, expected_sound_id, snapshot])
+		return
+	_assert_recent_audio_event(errors, snapshot, expected_event_kind, expected_sound_id, "ui", "settings", context, expected_action, expected_control_kind, expected_control_name)
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		return
+	var entry: Dictionary = _dictionary_or_empty(recent[recent.size() - 1])
+	if str(entry.get("setting_key", "")) != expected_setting_key:
+		errors.append("%s: recent audio setting key expected %s, got %s" % [context, expected_setting_key, entry.get("setting_key", "")])
+	if str(entry.get("value", "")) != expected_value:
+		errors.append("%s: recent audio value expected %s, got %s" % [context, expected_value, entry.get("value", "")])
 
 
 func _drag_control(control: Control, from: Vector2, to: Vector2) -> void:
@@ -2279,6 +2314,7 @@ func _assert_left_handed_keybinding(errors: Array[String], game_root: Node) -> v
 func _assert_settings_reset_defaults(errors: Array[String], game_root: Node) -> void:
 	_press_button(game_root, "ResetSettingsButton")
 	await game_root.get_tree().process_frame
+	_assert_settings_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ResetSettingsButton", "button", "press", "all", "default", "reset settings button audio")
 	var snapshot: Dictionary = game_root.panel_controller.settings_snapshot()
 	if int(snapshot.get("master_volume", 0)) != 100 or int(snapshot.get("music_volume", 0)) != 100 or int(snapshot.get("sfx_volume", 0)) != 100:
 		errors.append("reset settings should restore default audio: %s" % snapshot)
