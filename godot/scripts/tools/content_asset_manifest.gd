@@ -101,11 +101,7 @@ func _add_model_entry(entries: Array[Dictionary], domain: String, record_id: Str
 	var normalized := source_id.strip_edges()
 	if normalized.is_empty():
 		return
-	var result: Dictionary
-	if normalized.begins_with("builtin:"):
-		result = AssetPathResolver.resolve_model_asset(normalized)
-	else:
-		result = AssetPathResolver.resolve_gltf_source_path(normalized)
+	var result: Dictionary = AssetPathResolver.resolve_model_asset(normalized)
 	entries.append(_entry_from_result(domain, record_id, field, "model", result))
 
 

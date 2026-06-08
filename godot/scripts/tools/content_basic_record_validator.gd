@@ -455,11 +455,9 @@ func _validate_world_tile_source(source: Dictionary, field: String, issues: Arra
 		issues.append(_issue("error", field.path_join("kind"), "unsupported_source_kind", "world tile source kind must be gltf_scene"))
 	var path := str(source.get("path", "")).strip_edges()
 	if path.is_empty():
-		issues.append(_issue("error", field.path_join("path"), "missing_asset", "world tile source path is required"))
-	elif not path.ends_with(".gltf"):
-		issues.append(_issue("error", field.path_join("path"), "invalid_asset_format", "world tile source must reference a .gltf file"))
+		issues.append(_issue("error", field.path_join("path"), "missing_asset", "world tile source asset is required"))
 	else:
-		var resolved_asset := AssetPathResolver.resolve_gltf_source_path(path)
+		var resolved_asset := AssetPathResolver.resolve_model_asset(path)
 		if not bool(resolved_asset.get("ok", false)):
 			issues.append(_issue("error", field.path_join("path"), str(resolved_asset.get("reason", "invalid_asset_path")), str(resolved_asset.get("message", "invalid asset path"))))
 		elif not bool(resolved_asset.get("exists", false)):

@@ -4,6 +4,7 @@ const ContentPaths = preload("res://scripts/data/content_paths.gd")
 
 const ASSETS_RESOURCE_ROOT := "res://assets/"
 const BUILTIN_CHARACTER_PREFIX := "builtin:character:"
+const BUILTIN_CONTAINER_PREFIX := "builtin:container:"
 const BUILTIN_WEAPON_PREFIX := "builtin:weapon:"
 const BUILTIN_ITEM_PREFIX := "builtin:item:"
 const MEDIA_EXTENSIONS := {
@@ -21,6 +22,8 @@ static func resolve_model_asset(asset_id: String) -> Dictionary:
 		return _invalid("", "missing_asset", "asset id is empty")
 	if normalized.begins_with(BUILTIN_CHARACTER_PREFIX):
 		return _resolve_builtin_character(normalized)
+	if normalized.begins_with(BUILTIN_CONTAINER_PREFIX):
+		return _resolve_relative_gltf("container_placeholders/%s.gltf" % normalized.trim_prefix(BUILTIN_CONTAINER_PREFIX), normalized)
 	if normalized.begins_with(BUILTIN_WEAPON_PREFIX):
 		return _resolve_relative_gltf("preview_placeholders/placeholders/weapon_%s.gltf" % normalized.trim_prefix(BUILTIN_WEAPON_PREFIX), normalized)
 	if normalized.begins_with(BUILTIN_ITEM_PREFIX):

@@ -230,6 +230,11 @@ func _expect_asset_path_resolver(errors: Array[String]) -> void:
 		errors.append("asset resolver should map builtin character visual assets, got %s" % character)
 	if not bool(character.get("exists", false)):
 		errors.append("asset resolver builtin character should resolve to an existing Godot asset: %s" % character)
+	var container := AssetPathResolver.resolve_model_asset("builtin:container:crate_wood")
+	if not bool(container.get("ok", false)) or str(container.get("relative_path", "")) != "container_placeholders/crate_wood.gltf":
+		errors.append("asset resolver should map builtin container visual assets, got %s" % container)
+	if not bool(container.get("exists", false)):
+		errors.append("asset resolver builtin container should resolve to an existing Godot asset: %s" % container)
 	var weapon := AssetPathResolver.resolve_equipment_visual_asset("builtin:weapon:dagger")
 	if not bool(weapon.get("ok", false)) or str(weapon.get("relative_path", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":
 		errors.append("asset resolver should map builtin weapon visual assets, got %s" % weapon)
@@ -273,6 +278,10 @@ func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) ->
 	var world_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "building_wall", "prototypes[building_wall/isolated].source.path")
 	if str(world_tile_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/isolated.gltf":
 		errors.append("asset manifest should include world tile glTF path: %s" % world_tile_entry)
+	var container_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "prop_placeholders", "prototypes[props/crate_wood].source.path")
+	if str(container_tile_entry.get("source_id", "")) != "builtin:container:crate_wood" \
+			or str(container_tile_entry.get("resource_path", "")) != "res://assets/container_placeholders/crate_wood.gltf":
+		errors.append("asset manifest should normalize builtin container world tile asset: %s" % container_tile_entry)
 
 
 func _asset_manifest_entry(manifest: Dictionary, domain: String, record_id: String, field: String) -> Dictionary:
