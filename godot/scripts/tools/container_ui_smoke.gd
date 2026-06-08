@@ -1486,6 +1486,7 @@ func _assert_container_drop_hover_target(errors: Array[String], game_root: Node,
 	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
 		errors.append("%s: container column reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
 	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	_assert_drag_reject_reason_text(errors, target_snapshot, highlight, expected_reject_reason, context)
 	var expected_style := "accept" if expected_accept else "reject"
 	if not bool(highlight.get("active", false)) or str(highlight.get("style", "")) != expected_style:
 		errors.append("%s: container column hover highlight should expose %s: %s" % [context, expected_style, highlight])
@@ -1513,6 +1514,19 @@ func _assert_container_drop_hover_render(errors: Array[String], game_root: Node,
 		errors.append("%s: container drop hover style expected %s, got %s" % [context, expected_style, target.get_meta("container_drag_highlight_style", "")])
 	if str(target.get_meta("container_drag_highlight_color", "")) != expected_color:
 		errors.append("%s: container drop hover color expected %s, got %s" % [context, expected_color, target.get_meta("container_drag_highlight_color", "")])
+
+
+func _assert_drag_reject_reason_text(errors: Array[String], target_snapshot: Dictionary, highlight: Dictionary, expected_reject_reason: String, context: String) -> void:
+	var reason_text := str(target_snapshot.get("reject_reason_text", ""))
+	var highlight_text := str(highlight.get("reject_reason_text", ""))
+	if expected_reject_reason.is_empty():
+		if not reason_text.is_empty() or not highlight_text.is_empty():
+			errors.append("%s: accepted drag target should not expose reject reason text: %s / %s" % [context, target_snapshot, highlight])
+		return
+	if reason_text.is_empty():
+		errors.append("%s: rejected drag target should expose reject reason text: %s" % [context, target_snapshot])
+	if highlight_text != reason_text:
+		errors.append("%s: hover highlight should mirror reject reason text: %s / %s" % [context, target_snapshot, highlight])
 
 
 func _confirm_container_quantity_modal(game_root: Node) -> void:

@@ -12,6 +12,7 @@ const GamePanelController = preload("res://scripts/app/controllers/game_panel_co
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 const AUTO_TICK_INTERVAL_SEC := 0.45
 const CRAFTING_QUEUE_ADVANCE_LIMIT := 16
 const OBSERVE_SPEEDS: Array[Dictionary] = [
@@ -74,6 +75,7 @@ var fog_overlay_controller: RefCounted = FogOverlayController.new()
 var debug_overlay_controller: RefCounted = DebugOverlayController.new()
 var world_action_presenter: RefCounted = WorldActionPresenter.new()
 var audio_feedback_controller: Node
+var reason_catalog: RefCounted = ReasonCatalog.new()
 var world_container: Node3D
 var fog_overlay: ColorRect
 var hud: Control
@@ -1871,7 +1873,7 @@ func _drag_preview_estimated_size(text: String) -> Vector2:
 
 func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -> Dictionary:
 	if control == null:
-		return {"active": false, "owner_panel": "", "target_kind": "", "target_id": "", "source_path": "", "accepts": "", "last_accept": false, "reject_reason": "", "hover_highlight": _drag_hover_highlight(false, "", "", "", false)}
+		return _enrich_drag_hover_target_reason({"active": false, "owner_panel": "", "target_kind": "", "target_id": "", "source_path": "", "accepts": "", "last_accept": false, "reject_reason": "", "reject_reason_text": "", "hover_highlight": _drag_hover_highlight(false, "", "", "", false)})
 	var target := {
 		"active": true,
 		"owner_panel": _owner_panel_for_control(control),
@@ -1881,6 +1883,7 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		"accepts": "",
 		"last_accept": false,
 		"reject_reason": "",
+		"reject_reason_text": "",
 		"hover_highlight": _drag_hover_highlight(false, "", "", "", false),
 	}
 	if control.has_meta("equipment_slot"):
@@ -1923,7 +1926,23 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 			var observe_target: Dictionary = _observe_hotbar_drag_hover_target_snapshot(control, drag_data, observe_key)
 			for key in observe_target:
 				target[key] = observe_target[key]
+	return _enrich_drag_hover_target_reason(target)
+
+
+func _enrich_drag_hover_target_reason(target: Dictionary) -> Dictionary:
+	var reject_reason := str(target.get("reject_reason", ""))
+	var reject_text := _drag_reject_reason_text(reject_reason)
+	target["reject_reason_text"] = reject_text
+	var highlight: Dictionary = _dictionary_or_empty(target.get("hover_highlight", {})).duplicate(true)
+	highlight["reject_reason_text"] = reject_text
+	target["hover_highlight"] = highlight
 	return target
+
+
+func _drag_reject_reason_text(reason: String) -> String:
+	if reason.is_empty():
+		return ""
+	return str(reason_catalog.call("disabled_text_for", reason))
 
 
 func _observe_hotbar_drag_hover_target_snapshot(_control: Control, drag_data: Dictionary, observe_key: String) -> Dictionary:
@@ -2157,6 +2176,7 @@ func _drag_hover_highlight(active: bool, target_kind: String, target_id: String,
 		"target_id": target_id,
 		"accepted": accepted,
 		"reject_reason": reject_reason,
+		"reject_reason_text": _drag_reject_reason_text(reject_reason),
 		"outline_width": 2.0 if active else 0.0,
 	}
 

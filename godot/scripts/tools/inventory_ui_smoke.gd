@@ -1312,6 +1312,7 @@ func _assert_inventory_action_drag_hover_target(errors: Array[String], game_root
 	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
 		errors.append("%s: inventory action reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
 	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	_assert_drag_reject_reason_text(errors, target_snapshot, highlight, expected_reject_reason, context)
 	var expected_style := "accept" if expected_accept else "reject"
 	if not bool(highlight.get("active", false)) or str(highlight.get("style", "")) != expected_style:
 		errors.append("%s: inventory action hover highlight should expose %s: %s" % [context, expected_style, highlight])
@@ -1362,6 +1363,19 @@ func _assert_drag_preview_diagnostics(errors: Array[String], preview: Dictionary
 		errors.append("%s: drag preview should expose dragging lifecycle: %s" % [context, preview])
 	if str(preview.get("threshold_policy", "")) != "godot_default":
 		errors.append("%s: drag preview should expose threshold policy: %s" % [context, preview])
+
+
+func _assert_drag_reject_reason_text(errors: Array[String], target_snapshot: Dictionary, highlight: Dictionary, expected_reject_reason: String, context: String) -> void:
+	var reason_text := str(target_snapshot.get("reject_reason_text", ""))
+	var highlight_text := str(highlight.get("reject_reason_text", ""))
+	if expected_reject_reason.is_empty():
+		if not reason_text.is_empty() or not highlight_text.is_empty():
+			errors.append("%s: accepted drag target should not expose reject reason text: %s / %s" % [context, target_snapshot, highlight])
+		return
+	if reason_text.is_empty():
+		errors.append("%s: rejected drag target should expose reject reason text: %s" % [context, target_snapshot])
+	if highlight_text != reason_text:
+		errors.append("%s: hover highlight should mirror reject reason text: %s / %s" % [context, target_snapshot, highlight])
 
 
 func _inventory_item_button(game_root: Node, needle: String) -> Button:

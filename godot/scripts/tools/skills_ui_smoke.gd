@@ -916,6 +916,7 @@ func _assert_hotbar_drag_hover_target(errors: Array[String], game_root: Node, dr
 	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
 		errors.append("%s: hotbar target reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
 	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	_assert_drag_reject_reason_text(errors, target_snapshot, highlight, expected_reject_reason, context)
 	if bool(highlight.get("accepted", false)) != expected_accept:
 		errors.append("%s: hotbar hover highlight accept expected %s, got %s" % [context, expected_accept, highlight])
 	var expected_style := "accept" if expected_accept else "reject"
@@ -957,6 +958,7 @@ func _assert_hotbar_group_drag_reject(errors: Array[String], game_root: Node, dr
 	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
 		errors.append("%s: hotbar group reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
 	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	_assert_drag_reject_reason_text(errors, target_snapshot, highlight, expected_reject_reason, context)
 	if str(highlight.get("style", "")) != "reject" or bool(highlight.get("accepted", true)):
 		errors.append("%s: hotbar group hover should expose reject highlight, got %s" % [context, highlight])
 
@@ -988,6 +990,19 @@ func _non_skill_hotbar_drag_data() -> Dictionary:
 		"count": 1,
 		"drag_preview_text": "绷带 x1",
 	}
+
+
+func _assert_drag_reject_reason_text(errors: Array[String], target_snapshot: Dictionary, highlight: Dictionary, expected_reject_reason: String, context: String) -> void:
+	var reason_text := str(target_snapshot.get("reject_reason_text", ""))
+	var highlight_text := str(highlight.get("reject_reason_text", ""))
+	if expected_reject_reason.is_empty():
+		if not reason_text.is_empty() or not highlight_text.is_empty():
+			errors.append("%s: accepted drag target should not expose reject reason text: %s / %s" % [context, target_snapshot, highlight])
+		return
+	if reason_text.is_empty():
+		errors.append("%s: rejected drag target should expose reject reason text: %s" % [context, target_snapshot])
+	if highlight_text != reason_text:
+		errors.append("%s: hover highlight should mirror reject reason text: %s / %s" % [context, target_snapshot, highlight])
 
 
 func _expect_targeted_hotbar_skill(errors: Array[String], game_root: Node) -> void:
