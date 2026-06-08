@@ -5,6 +5,7 @@ const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const MapSceneLoaderScript = preload("res://scripts/world/map_scene_loader.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
+const WORLD_LABEL_FONT_PATH := "res://assets/fonts/NotoSansCJKsc-Regular.otf"
 
 
 func _init() -> void:
@@ -1138,6 +1139,27 @@ func _expect_world_action_attack_presenter(errors: Array[String], game_root: Nod
 	if str(impact.get_meta("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
 		errors.append("attack impact marker should expose hit kind")
 	_expect_action_marker_phases(errors, impact, ["windup", "impact", "fade"], "attack impact marker")
+	var damage_text: Label3D = game_root.find_child("WorldActionDamageText", true, false) as Label3D
+	if damage_text == null:
+		errors.append("attack presenter should render WorldActionDamageText label")
+		return
+	if str(damage_text.get_meta("action_presenter_kind", "")) != "attack_damage_text":
+		errors.append("attack damage text should expose attack_damage_text kind")
+	if int(damage_text.get_meta("target_actor_id", 0)) != target_id:
+		errors.append("attack damage text should expose target actor id")
+	if str(damage_text.get_meta("hit_kind", "")) != str(attack_result.get("hit_kind", "")):
+		errors.append("attack damage text should expose hit kind")
+	if str(presenter.get("damage_label_text", "")) != str(damage_text.text):
+		errors.append("attack presenter should expose damage label text")
+	if damage_text.text.is_empty():
+		errors.append("attack damage text should not be empty")
+	if damage_text.font == null or damage_text.font.resource_path != WORLD_LABEL_FONT_PATH:
+		errors.append("attack damage text should use world Label3D font")
+	if str(damage_text.get_meta("font_resource_path", "")) != WORLD_LABEL_FONT_PATH:
+		errors.append("attack damage text should expose font resource path")
+	if damage_text.billboard != BaseMaterial3D.BILLBOARD_ENABLED or not damage_text.no_depth_test:
+		errors.append("attack damage text should billboard and render above map meshes")
+	_expect_action_marker_phases(errors, damage_text, ["windup", "impact", "fade"], "attack damage text")
 
 
 func _expect_world_action_interaction_presenter(errors: Array[String], game_root: Node, target_id: String, option_kind: String) -> void:

@@ -1,5 +1,7 @@
 extends RefCounted
 
+const UIThemeService = preload("res://scripts/ui/ui_theme_service.gd")
+
 const GRID_SIZE := 1.0
 const DEFAULT_ACTOR_Y := 0.58
 const STEP_DURATION_SEC := 0.07
@@ -239,6 +241,7 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		_record_latest(_attack_public_snapshot(attack, false, "target_node_missing"))
 		return
 	sequence += 1
+	var run_sequence := sequence
 	var marker := MeshInstance3D.new()
 	marker.name = "WorldActionAttackImpact"
 	var mesh := SphereMesh.new()
@@ -263,27 +266,45 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	marker.set_meta("critical", bool(attack.get("critical", false)))
 	marker.set_meta("defeated", bool(attack.get("defeated", false)))
 	_track_active_node(marker)
-	_presentation_layer(world_root).add_child(marker)
+	var damage_label := _attack_damage_label(attack)
+	damage_label.position = target_position + Vector3(0.0, 1.52, 0.0)
+	damage_label.set_meta("action_presenter_sequence", run_sequence)
+	_track_active_node(damage_label)
+	var layer := _presentation_layer(world_root)
+	layer.add_child(marker)
+	layer.add_child(damage_label)
 	var tween := host.create_tween()
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(marker, "scale", Vector3(0.72, 0.72, 0.72), float(ATTACK_PHASE_DURATIONS[0]))
+	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.16, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[1]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[1]))
 	tween.tween_property(marker, "scale", Vector3(1.45, 1.45, 1.45), float(ATTACK_PHASE_DURATIONS[1]))
+	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.36, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[2]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[2]))
 	tween.tween_property(marker, "scale", Vector3(0.35, 0.35, 0.35), float(ATTACK_PHASE_DURATIONS[2]))
-	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker)))
+	tween.parallel().tween_property(damage_label, "modulate", Color(damage_label.modulate.r, damage_label.modulate.g, damage_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
+	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label)))
 	var snapshot_data := _attack_public_snapshot(attack, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
+	snapshot_data["damage_label_path"] = str(damage_label.get_path())
+	snapshot_data["damage_label_text"] = str(damage_label.text)
 	_record_latest(snapshot_data)
 
 
-func _on_attack_feedback_finished(marker_ref: WeakRef) -> void:
+func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null) -> void:
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
 		marker.set_meta("action_presenter_active", false)
 		marker.queue_free()
+	if damage_label_ref != null:
+		var damage_label := damage_label_ref.get_ref() as Node
+		if damage_label != null and not damage_label.is_queued_for_deletion():
+			damage_label.set_meta("action_presenter_active", false)
+			damage_label.queue_free()
 	_prune_active_refs()
 	latest["active"] = active_count > 0
 	latest["active_count"] = active_count
@@ -298,6 +319,7 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 		"target_actor_id": int(attack.get("target_actor_id", 0)),
 		"node_path": str(attack.get("node_path", "")),
 		"damage": float(attack.get("damage", 0.0)),
+		"damage_label_text": _attack_feedback_text(attack),
 		"hit_kind": str(attack.get("hit_kind", "")),
 		"critical": bool(attack.get("critical", false)),
 		"defeated": bool(attack.get("defeated", false)),
@@ -306,6 +328,61 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 		"current_phase": ATTACK_PHASES[0] if active else "",
 		"duration_sec": _duration_sum(ATTACK_PHASE_DURATIONS) if active else 0.0,
 	}
+
+
+func _attack_damage_label(attack: Dictionary) -> Label3D:
+	var label := Label3D.new()
+	label.name = "WorldActionDamageText"
+	label.text = _attack_feedback_text(attack)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 18
+	label.modulate = _attack_feedback_color(str(attack.get("hit_kind", "")), bool(attack.get("critical", false)), bool(attack.get("defeated", false)))
+	label.outline_size = 4
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
+	var font_result := UIThemeService.apply_label3d_font(label)
+	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	label.set_meta("action_presenter_active", true)
+	label.set_meta("action_presenter_kind", "attack_damage_text")
+	label.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
+	label.set_meta("action_presenter_phase_count", ATTACK_PHASES.size())
+	label.set_meta("action_presenter_current_phase", ATTACK_PHASES[0])
+	label.set_meta("action_presenter_duration_sec", _duration_sum(ATTACK_PHASE_DURATIONS))
+	label.set_meta("actor_id", int(attack.get("actor_id", 0)))
+	label.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
+	label.set_meta("damage", float(attack.get("damage", 0.0)))
+	label.set_meta("hit_kind", str(attack.get("hit_kind", "")))
+	label.set_meta("critical", bool(attack.get("critical", false)))
+	label.set_meta("defeated", bool(attack.get("defeated", false)))
+	label.set_meta("text", label.text)
+	return label
+
+
+func _attack_feedback_text(attack: Dictionary) -> String:
+	var hit_kind := str(attack.get("hit_kind", "hit"))
+	if hit_kind == "miss":
+		return "MISS"
+	if hit_kind == "blocked":
+		return "BLOCK"
+	var amount := int(round(max(0.0, float(attack.get("damage", 0.0)))))
+	var text := "-%d" % amount
+	if bool(attack.get("critical", false)):
+		text = "CRIT %s" % text
+	if bool(attack.get("defeated", false)):
+		text = "%s KO" % text
+	return text
+
+
+func _attack_feedback_color(hit_kind: String, critical: bool, defeated: bool) -> Color:
+	if defeated:
+		return Color(1.0, 0.16, 0.12, 0.96)
+	if critical:
+		return Color(1.0, 0.86, 0.18, 0.96)
+	if hit_kind == "miss":
+		return Color(0.66, 0.82, 1.0, 0.9)
+	if hit_kind == "blocked":
+		return Color(0.72, 0.74, 0.82, 0.9)
+	return Color(1.0, 0.38, 0.22, 0.94)
 
 
 func _interaction_presentation(events: Array, world_root: Node, world_result: Dictionary) -> Dictionary:
