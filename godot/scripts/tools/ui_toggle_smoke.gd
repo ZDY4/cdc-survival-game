@@ -1759,6 +1759,8 @@ func _assert_ui_layer_stack(errors: Array[String], game_root: Node, drag_data: D
 			errors.append("%s: drag preview layer should block gameplay while dragging: %s" % [context, drag_layer])
 		else:
 			_assert_drag_preview_layer_diagnostics(errors, _dictionary_or_empty(drag_layer.get("preview", {})), context)
+			var render: Dictionary = _dictionary_or_empty(game_root.render_drag_preview_for_snapshot(drag_data, drag_target))
+			_assert_drag_preview_render(errors, game_root, render, _dictionary_or_empty(drag_layer.get("preview", {})), context)
 
 
 func _assert_drag_preview_layer_diagnostics(errors: Array[String], preview: Dictionary, context: String) -> void:
@@ -1775,6 +1777,27 @@ func _assert_drag_preview_layer_diagnostics(errors: Array[String], preview: Dict
 		errors.append("%s: drag layer preview should expose dragging lifecycle: %s" % [context, preview])
 	if str(preview.get("threshold_policy", "")) != "godot_default":
 		errors.append("%s: drag layer preview should expose threshold policy: %s" % [context, preview])
+
+
+func _assert_drag_preview_render(errors: Array[String], game_root: Node, render: Dictionary, preview: Dictionary, context: String) -> void:
+	if not bool(render.get("active", false)):
+		errors.append("%s: drag preview render should be active: %s" % [context, render])
+	if not bool(render.get("mouse_blocks_world", false)):
+		errors.append("%s: drag preview render should block world mouse while dragging: %s" % [context, render])
+	if str(render.get("text", "")) != str(preview.get("text", "")) or not bool(render.get("label_text_matches", false)):
+		errors.append("%s: drag preview render text should match preview: %s / %s" % [context, render, preview])
+	if str(render.get("lifecycle_state", "")) != "dragging" or str(render.get("threshold_policy", "")) != "godot_default":
+		errors.append("%s: drag preview render should expose lifecycle and threshold: %s" % [context, render])
+	var layer: Node = game_root.get_node_or_null("DragPreviewLayer")
+	var panel: Node = game_root.get_node_or_null("DragPreviewLayer/DragPreviewPanel")
+	var label: Node = game_root.get_node_or_null("DragPreviewLayer/DragPreviewPanel/DragPreviewLabel")
+	if not (layer is Control) or not (panel is PanelContainer) or not (label is Label):
+		errors.append("%s: drag preview render should create Control/PanelContainer/Label nodes" % context)
+		return
+	if (layer as Control).mouse_filter != Control.MOUSE_FILTER_STOP or (panel as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		errors.append("%s: drag preview layer should block world and keep panel passive" % context)
+	if not (panel as PanelContainer).has_theme_stylebox_override("panel"):
+		errors.append("%s: drag preview panel should carry stylebox override" % context)
 
 
 func _layer_by_id(layers: Array, layer_id: String) -> Dictionary:

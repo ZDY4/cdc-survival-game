@@ -91,6 +91,10 @@ var tooltip_layer: Control
 var tooltip_panel: PanelContainer
 var tooltip_label: Label
 var last_tooltip_render_snapshot: Dictionary = {"active": false}
+var drag_preview_layer: Control
+var drag_preview_panel: PanelContainer
+var drag_preview_label: Label
+var last_drag_preview_render_snapshot: Dictionary = {"active": false}
 var active_trade_target: Dictionary = {}
 var active_trade_feedback: Dictionary = {}
 var active_container_feedback: Dictionary = {}
@@ -156,6 +160,7 @@ func _ready() -> void:
 	_setup_audio_feedback_controller()
 	_setup_panels()
 	_setup_tooltip_layer()
+	_setup_drag_preview_layer()
 	refresh_all_panels()
 	print("Godot game root generated world: %s" % JSON.stringify(counts))
 
@@ -935,6 +940,117 @@ func _tooltip_panel_style(visual: Dictionary) -> StyleBoxFlat:
 	return style
 
 
+func _setup_drag_preview_layer() -> void:
+	if drag_preview_layer != null:
+		return
+	drag_preview_layer = Control.new()
+	drag_preview_layer.name = "DragPreviewLayer"
+	drag_preview_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	drag_preview_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	drag_preview_layer.visible = false
+	add_child(drag_preview_layer)
+	drag_preview_panel = PanelContainer.new()
+	drag_preview_panel.name = "DragPreviewPanel"
+	drag_preview_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	drag_preview_panel.visible = false
+	drag_preview_layer.add_child(drag_preview_panel)
+	drag_preview_label = Label.new()
+	drag_preview_label.name = "DragPreviewLabel"
+	drag_preview_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	drag_preview_label.clip_text = true
+	drag_preview_panel.add_child(drag_preview_label)
+
+
+func render_drag_preview_for_snapshot(drag_data: Variant = {}, hover_target: Control = null) -> Dictionary:
+	var drag: Dictionary = drag_state_snapshot(drag_data, hover_target)
+	if not bool(drag.get("active", false)):
+		_hide_drag_preview_layer("inactive")
+		return drag_preview_render_snapshot()
+	_render_drag_preview_snapshot(drag)
+	return drag_preview_render_snapshot()
+
+
+func _hide_drag_preview_layer(reason: String) -> void:
+	if drag_preview_layer != null:
+		drag_preview_layer.visible = false
+	if drag_preview_panel != null:
+		drag_preview_panel.visible = false
+	last_drag_preview_render_snapshot = {
+		"active": false,
+		"reason": reason,
+		"layer_exists": drag_preview_layer != null,
+		"mouse_blocks_world": false,
+	}
+
+
+func _render_drag_preview_snapshot(drag: Dictionary) -> void:
+	_setup_drag_preview_layer()
+	if drag_preview_layer == null or drag_preview_panel == null or drag_preview_label == null:
+		_hide_drag_preview_layer("layer_missing")
+		return
+	var preview: Dictionary = _dictionary_or_empty(drag.get("preview", {}))
+	var position_data: Dictionary = _dictionary_or_empty(preview.get("screen_position", {}))
+	var anchor_data: Dictionary = _dictionary_or_empty(preview.get("anchor", {}))
+	var size_data: Dictionary = _dictionary_or_empty(preview.get("estimated_size", {}))
+	var position := Vector2(float(position_data.get("x", 0.0)) + float(anchor_data.get("x", 8.0)), float(position_data.get("y", 0.0)) + float(anchor_data.get("y", 8.0)))
+	var size := Vector2(maxf(48.0, float(size_data.get("x", 80.0))), maxf(24.0, float(size_data.get("y", 24.0))))
+	drag_preview_layer.visible = true
+	drag_preview_panel.visible = true
+	drag_preview_panel.position = position
+	drag_preview_panel.custom_minimum_size = size
+	drag_preview_panel.size = size
+	drag_preview_panel.add_theme_stylebox_override("panel", _drag_preview_panel_style(str(drag.get("kind", ""))))
+	drag_preview_label.text = str(preview.get("text", ""))
+	drag_preview_label.custom_minimum_size = Vector2(max(1.0, size.x - 18.0), max(1.0, size.y - 8.0))
+	drag_preview_label.add_theme_font_size_override("font_size", 12)
+	drag_preview_panel.set_meta("drag_preview_kind", str(drag.get("kind", "")))
+	drag_preview_panel.set_meta("drag_preview_text", drag_preview_label.text)
+	drag_preview_panel.set_meta("drag_preview_lifecycle", str(preview.get("lifecycle_state", "")))
+	drag_preview_panel.set_meta("drag_preview_threshold_policy", str(preview.get("threshold_policy", "")))
+	last_drag_preview_render_snapshot = {
+		"active": true,
+		"layer_path": str(drag_preview_layer.get_path()),
+		"panel_path": str(drag_preview_panel.get_path()),
+		"label_path": str(drag_preview_label.get_path()),
+		"kind": str(drag.get("kind", "")),
+		"owner_panel": str(_dictionary_or_empty(drag.get("source", {})).get("owner_panel", "")),
+		"text": drag_preview_label.text,
+		"mouse_blocks_world": drag_preview_layer.mouse_filter == Control.MOUSE_FILTER_STOP,
+		"layer_mouse_filter": _mouse_filter_name(drag_preview_layer.mouse_filter),
+		"panel_mouse_filter": _mouse_filter_name(drag_preview_panel.mouse_filter),
+		"preview": preview.duplicate(true),
+		"actual_rect": {"x": drag_preview_panel.position.x, "y": drag_preview_panel.position.y, "w": drag_preview_panel.size.x, "h": drag_preview_panel.size.y},
+		"label_text_matches": drag_preview_label.text == str(preview.get("text", "")),
+		"threshold_policy": str(preview.get("threshold_policy", "")),
+		"lifecycle_state": str(preview.get("lifecycle_state", "")),
+	}
+
+
+func _drag_preview_panel_style(kind: String) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.11, 0.13, 0.16, 0.86)
+	style.border_color = Color(0.58, 0.68, 0.74, 0.96)
+	if kind == "skill_hotbar":
+		style.border_color = Color(0.45, 0.66, 0.90, 0.96)
+	elif kind in ["trade_item", "trade_cart_entry"]:
+		style.border_color = Color(0.74, 0.62, 0.36, 0.96)
+	elif kind == "container_item":
+		style.border_color = Color(0.42, 0.70, 0.55, 0.96)
+	style.border_width_left = 2
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_right = 4
+	style.corner_radius_bottom_left = 4
+	style.content_margin_left = 8
+	style.content_margin_right = 8
+	style.content_margin_top = 4
+	style.content_margin_bottom = 4
+	return style
+
+
 func handle_trade_shortcut(event: InputEventKey) -> bool:
 	if panel_controller == null:
 		return false
@@ -1205,6 +1321,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"tooltip_render": tooltip_render_snapshot(),
 		"hotbar_hit_test": hotbar_hit_test_snapshot(),
 		"drag": drag_state_snapshot(),
+		"drag_preview_render": drag_preview_render_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
 		"action_presenter": world_action_presenter_snapshot(),
 		"ai_debug": ai_debug_snapshot(),
@@ -1218,6 +1335,10 @@ func runtime_control_snapshot() -> Dictionary:
 
 func tooltip_render_snapshot() -> Dictionary:
 	return last_tooltip_render_snapshot.duplicate(true)
+
+
+func drag_preview_render_snapshot() -> Dictionary:
+	return last_drag_preview_render_snapshot.duplicate(true)
 
 
 func player_command_authority_audit_snapshot() -> Dictionary:
