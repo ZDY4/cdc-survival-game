@@ -144,12 +144,16 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_confirm_container_quantity_modal(game_root)
 		if _event_count(game_root, "container_item_stored") <= stored_ammo_before:
 			errors.append("confirming quantity modal should store selected ammo")
-		if not _container_text(game_root).contains("手枪弹药 x3"):
-			errors.append("confirmed quantity modal should move selected ammo into container")
-		if not _drop_container_item_with_text(game_root, "container", "手枪弹药", "player"):
-			errors.append("quantity modal smoke should restore ammo to player column")
-		_set_container_transfer_quantity(game_root, 1)
+	if not _container_text(game_root).contains("手枪弹药 x3"):
+		errors.append("confirmed quantity modal should move selected ammo into container")
+	if not _drop_container_item_with_text(game_root, "container", "手枪弹药", "player"):
+		errors.append("quantity modal smoke should restore ammo to player column")
+	_set_container_transfer_quantity(game_root, 1)
 
+	_assert_container_drop_hover_target(errors, game_root, _container_drag_data(game_root, "container", "抗生素"), _container_item_box(game_root, "player") as Control, true, "", "container antibiotics to player hover target")
+	_assert_container_drop_hover_render(errors, game_root, _container_drag_data(game_root, "container", "抗生素"), _container_item_box(game_root, "player") as Control, true, "", "container antibiotics to player hover render")
+	_assert_container_drop_hover_target(errors, game_root, _container_drag_data(game_root, "container", "抗生素"), _container_item_box(game_root, "container") as Control, false, "container_drop_same_column", "container antibiotics same column reject target")
+	_assert_container_drop_hover_render(errors, game_root, _container_drag_data(game_root, "container", "抗生素"), _container_item_box(game_root, "container") as Control, false, "container_drop_same_column", "container antibiotics same column reject render")
 	if not _drop_container_item_with_text(game_root, "container", "抗生素", "player"):
 		errors.append("should drag antibiotics from container to player column")
 	if not _event_seen(game_root, "container_item_taken"):
@@ -480,6 +484,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _inventory_text(game_root).contains("水瓶 x1"):
 		errors.append("inventory panel should remove stored water bottle")
 	player_refill_water(game_root)
+	_assert_container_drop_hover_target(errors, game_root, _inventory_drag_data(game_root, "水瓶"), _container_item_box(game_root, "container") as Control, true, "", "inventory water to container hover target")
+	_assert_container_drop_hover_render(errors, game_root, _inventory_drag_data(game_root, "水瓶"), _container_item_box(game_root, "container") as Control, true, "", "inventory water to container hover render")
+	_assert_container_drop_hover_target(errors, game_root, _inventory_drag_data(game_root, "水瓶"), _container_item_box(game_root, "player") as Control, false, "container_drop_requires_container_column", "inventory water to player column reject target")
 	if not _drop_inventory_item_to_container(game_root, "水瓶"):
 		errors.append("should drag inventory water bottle into active container")
 	if not _event_seen(game_root, "container_item_stored"):
@@ -1298,6 +1305,38 @@ func _drop_container_item_with_text(game_root: Node, source: String, text: Strin
 	return true
 
 
+func _container_drag_data(game_root: Node, source: String, text: String, count: int = 1) -> Dictionary:
+	var button: Button = _container_item_button_with_text(game_root, source, text)
+	if button == null or not button.has_meta("container_item"):
+		return {}
+	var item: Dictionary = _dictionary_or_empty(button.get_meta("container_item"))
+	if item.is_empty():
+		return {}
+	return {
+		"kind": "container_item",
+		"source": str(button.get_meta("container_source", source)),
+		"item": item.duplicate(true),
+		"count": count,
+		"drag_preview_text": "%s x%d" % [str(item.get("name", item.get("item_id", ""))), count],
+	}
+
+
+func _inventory_drag_data(game_root: Node, text: String, count: int = 1) -> Dictionary:
+	var button: Button = _inventory_item_button(game_root, text)
+	if button == null or not button.has_meta("inventory_item"):
+		return {}
+	var item: Dictionary = _dictionary_or_empty(button.get_meta("inventory_item"))
+	if item.is_empty():
+		return {}
+	return {
+		"kind": "inventory_item",
+		"item": item.duplicate(true),
+		"item_id": str(item.get("item_id", "")),
+		"count": count,
+		"drag_preview_text": "%s x%d" % [str(item.get("name", item.get("item_id", ""))), count],
+	}
+
+
 func _drop_inventory_item_to_container(game_root: Node, text: String, count: int = 1) -> bool:
 	var button: Button = _inventory_item_button(game_root, text)
 	var target: Node = _container_item_box(game_root, "container")
@@ -1425,6 +1464,55 @@ func _assert_no_container_quantity_modal(errors: Array[String], game_root: Node,
 	var menu_state: Dictionary = _dictionary_or_empty(game_root.menu_state_snapshot()) if game_root.has_method("menu_state_snapshot") else {}
 	if not _dictionary_or_empty(menu_state.get("modal_event", {})).is_empty():
 		errors.append("%s: modal event should clear after close: %s" % [context, menu_state])
+
+
+func _assert_container_drop_hover_target(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: container drop target should exist" % context)
+		return
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != "container_column":
+		errors.append("%s: target should be container_column: %s" % [context, snapshot])
+	if str(target_snapshot.get("target_id", "")) != str(target.get_meta("container_source", "")):
+		errors.append("%s: target id should match container source meta: %s" % [context, target_snapshot])
+	if not str(target_snapshot.get("accepts", "")).contains("container_item") or not str(target_snapshot.get("accepts", "")).contains("inventory_item"):
+		errors.append("%s: container column should declare accepted drag kinds: %s" % [context, target_snapshot])
+	if bool(target_snapshot.get("last_accept", false)) != expected_accept:
+		errors.append("%s: container column accept expected %s, got %s" % [context, expected_accept, target_snapshot])
+	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: container column reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
+	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	var expected_style := "accept" if expected_accept else "reject"
+	if not bool(highlight.get("active", false)) or str(highlight.get("style", "")) != expected_style:
+		errors.append("%s: container column hover highlight should expose %s: %s" % [context, expected_style, highlight])
+
+
+func _assert_container_drop_hover_render(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: container drop target should exist" % context)
+		return
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	var can_drop: bool = bool(game_root.container_panel.call("_can_drop_container_data", Vector2.ZERO, drag_data, target))
+	if can_drop != expected_accept:
+		errors.append("%s: container drop can_drop expected %s, got %s" % [context, expected_accept, can_drop])
+	if not bool(target.get_meta("container_drag_hovered", false)):
+		errors.append("%s: container drop target should record active hover render state" % context)
+	if bool(target.get_meta("container_drag_last_accept", false)) != expected_accept:
+		errors.append("%s: container drop hover accept expected %s, got %s" % [context, expected_accept, target.get_meta("container_drag_last_accept", false)])
+	if str(target.get_meta("container_drag_reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: container drop hover reject reason expected %s, got %s" % [context, expected_reject_reason, target.get_meta("container_drag_reject_reason", "")])
+	var expected_style := "accept" if expected_accept else "reject"
+	var expected_color := "#4ecb71" if expected_accept else "#e25c5c"
+	if str(target.get_meta("container_drag_highlight_style", "")) != expected_style:
+		errors.append("%s: container drop hover style expected %s, got %s" % [context, expected_style, target.get_meta("container_drag_highlight_style", "")])
+	if str(target.get_meta("container_drag_highlight_color", "")) != expected_color:
+		errors.append("%s: container drop hover color expected %s, got %s" % [context, expected_color, target.get_meta("container_drag_highlight_color", "")])
 
 
 func _confirm_container_quantity_modal(game_root: Node) -> void:

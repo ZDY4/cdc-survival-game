@@ -220,6 +220,7 @@ func _build_layout() -> void:
 	_items_box.name = "ItemLines"
 	_items_box.add_theme_constant_override("separation", 4)
 	_items_box.set_meta("container_source", "container")
+	_prepare_container_drop_target(_items_box)
 	_items_box.set_drag_forwarding(
 		Callable(self, "_empty_container_drag_data"),
 		Callable(self, "_can_drop_container_data"),
@@ -238,6 +239,7 @@ func _build_layout() -> void:
 	_player_items_box.name = "PlayerItemLines"
 	_player_items_box.add_theme_constant_override("separation", 4)
 	_player_items_box.set_meta("container_source", "player")
+	_prepare_container_drop_target(_player_items_box)
 	_player_items_box.set_drag_forwarding(
 		Callable(self, "_empty_container_drag_data"),
 		Callable(self, "_can_drop_container_data"),
@@ -350,18 +352,40 @@ func _ignore_container_item_drop(_position: Vector2, _data: Variant, _from_contr
 func _can_drop_container_data(_position: Vector2, data: Variant, from_control: Control) -> bool:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	var target_source: String = _drop_target_source(from_control)
+	var accepted := false
+	var reject_reason := ""
 	match str(drag_data.get("kind", "")):
 		"container_item":
 			var source: String = str(drag_data.get("source", ""))
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 			var item_id: String = str(item.get("item_id", ""))
-			return not item_id.is_empty() and not source.is_empty() and not target_source.is_empty() and source != target_source
+			accepted = not item_id.is_empty() and not source.is_empty() and not target_source.is_empty() and source != target_source
+			if accepted:
+				reject_reason = ""
+			elif target_source.is_empty():
+				reject_reason = "container_drop_target_missing"
+			elif source.is_empty():
+				reject_reason = "container_drop_source_missing"
+			elif item_id.is_empty():
+				reject_reason = "container_drop_item_missing"
+			else:
+				reject_reason = "container_drop_same_column"
 		"inventory_item":
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 			var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
-			return target_source == "container" and not item_id.is_empty()
+			accepted = target_source == "container" and not item_id.is_empty()
+			if accepted:
+				reject_reason = ""
+			elif target_source.is_empty():
+				reject_reason = "container_drop_target_missing"
+			elif item_id.is_empty():
+				reject_reason = "container_drop_item_missing"
+			else:
+				reject_reason = "container_drop_requires_container_column"
 		_:
-			return false
+			reject_reason = "container_drop_unsupported_drag_data"
+	_apply_container_drag_hover(from_control, accepted, reject_reason)
+	return accepted
 
 
 func _drop_container_data(position: Vector2, data: Variant, from_control: Control) -> void:
@@ -384,6 +408,44 @@ func _drop_container_data(position: Vector2, data: Variant, from_control: Contro
 			var root := get_parent()
 			if root != null and root.has_method("store_active_container_item"):
 				root.store_active_container_item(item_id, count)
+	_clear_container_drag_hover(from_control)
+
+
+func _prepare_container_drop_target(control: Control) -> void:
+	if control == null:
+		return
+	control.set_meta("container_drag_hovered", false)
+	control.set_meta("container_drag_last_accept", false)
+	control.set_meta("container_drag_reject_reason", "")
+	control.set_meta("container_drag_highlight_style", "")
+	control.set_meta("container_drag_highlight_color", "")
+	control.mouse_exited.connect(func() -> void:
+		_clear_container_drag_hover(control)
+	)
+
+
+func _apply_container_drag_hover(control: Control, accepted: bool, reject_reason: String) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("container_source"):
+		return
+	var color_text := "#4ecb71" if accepted else "#e25c5c"
+	var style := "accept" if accepted else "reject"
+	control.set_meta("container_drag_hovered", true)
+	control.set_meta("container_drag_last_accept", accepted)
+	control.set_meta("container_drag_reject_reason", reject_reason)
+	control.set_meta("container_drag_highlight_style", style)
+	control.set_meta("container_drag_highlight_color", color_text)
+	control.modulate = Color(0.92, 1.0, 0.94, 1.0) if accepted else Color(1.0, 0.92, 0.92, 1.0)
+
+
+func _clear_container_drag_hover(control: Control) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("container_source"):
+		return
+	control.set_meta("container_drag_hovered", false)
+	control.set_meta("container_drag_last_accept", false)
+	control.set_meta("container_drag_reject_reason", "")
+	control.set_meta("container_drag_highlight_style", "")
+	control.set_meta("container_drag_highlight_color", "")
+	control.modulate = Color.WHITE
 
 
 func has_blocking_modal() -> bool:

@@ -1887,8 +1887,9 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		for key in inventory_action_target:
 			target[key] = inventory_action_target[key]
 	elif control.has_meta("container_source"):
-		target["target_kind"] = "container_column"
-		target["target_id"] = str(control.get_meta("container_source"))
+		var container_target: Dictionary = _container_drag_hover_target_snapshot(control, drag_data)
+		for key in container_target:
+			target[key] = container_target[key]
 	elif control.has_meta("trade_drop_zone"):
 		target["target_kind"] = "trade_drop_zone"
 		target["target_id"] = str(control.get_meta("trade_drop_zone"))
@@ -1899,6 +1900,50 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		target["target_kind"] = "trade_cart_entry"
 		target["target_id"] = str(control.get_meta("cart_index"))
 	return target
+
+
+func _container_drag_hover_target_snapshot(control: Control, drag_data: Dictionary) -> Dictionary:
+	var column_source := str(control.get_meta("container_source", ""))
+	var acceptance: Dictionary = _container_drag_acceptance(column_source, drag_data)
+	var last_accept := bool(acceptance.get("accept", false))
+	var reject_reason := str(acceptance.get("reason", ""))
+	return {
+		"target_kind": "container_column",
+		"target_id": column_source,
+		"column_source": column_source,
+		"accepts": "container_item,inventory_item",
+		"last_accept": last_accept,
+		"reject_reason": reject_reason,
+		"hover_highlight": _drag_hover_highlight(not drag_data.is_empty(), "container_column", column_source, reject_reason, last_accept),
+	}
+
+
+func _container_drag_acceptance(column_source: String, drag_data: Dictionary) -> Dictionary:
+	if drag_data.is_empty():
+		return {"accept": false, "reason": ""}
+	if column_source.is_empty():
+		return {"accept": false, "reason": "container_drop_target_missing"}
+	match str(drag_data.get("kind", "")):
+		"container_item":
+			var source := str(drag_data.get("source", ""))
+			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+			var item_id := str(item.get("item_id", ""))
+			if source.is_empty():
+				return {"accept": false, "reason": "container_drop_source_missing"}
+			if item_id.is_empty():
+				return {"accept": false, "reason": "container_drop_item_missing"}
+			if source == column_source:
+				return {"accept": false, "reason": "container_drop_same_column"}
+			return {"accept": true, "reason": ""}
+		"inventory_item":
+			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+			var item_id := str(drag_data.get("item_id", item.get("item_id", "")))
+			if item_id.is_empty():
+				return {"accept": false, "reason": "container_drop_item_missing"}
+			if column_source != "container":
+				return {"accept": false, "reason": "container_drop_requires_container_column"}
+			return {"accept": true, "reason": ""}
+	return {"accept": false, "reason": "container_drop_unsupported_drag_data"}
 
 
 func _inventory_action_drag_hover_target_snapshot(control: Control, drag_data: Dictionary) -> Dictionary:

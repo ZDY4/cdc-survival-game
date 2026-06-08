@@ -98,6 +98,12 @@ const REASONS := {
 	"container_inactive": {"category": "container", "text": "容器未激活"},
 	"container_target_missing": {"category": "container", "text": "容器目标不存在"},
 	"unknown_container_transfer_source": {"category": "container", "text": "未知容器转移来源"},
+	"container_drop_target_missing": {"category": "container", "text": "缺少容器拖拽目标"},
+	"container_drop_source_missing": {"category": "container", "text": "缺少容器拖拽来源"},
+	"container_drop_item_missing": {"category": "container", "text": "缺少容器拖拽物品"},
+	"container_drop_same_column": {"category": "container", "text": "不能拖回同一栏"},
+	"container_drop_requires_container_column": {"category": "container", "text": "背包物品只能存入容器栏"},
+	"container_drop_unsupported_drag_data": {"category": "container", "text": "不支持的容器拖拽数据"},
 	"door_locked": {"category": "door", "text": "门已锁定"},
 	"door_key_missing": {"category": "door", "text": "缺少钥匙"},
 	"door_tool_missing": {"category": "door", "text": "缺少开锁工具"},
@@ -409,6 +415,30 @@ const REASON_METADATA := {
 	"unknown_container_transfer_source": {
 		"payload_fields": ["source", "container_id", "item_id", "count"],
 		"disabled_text": "未知容器转移来源",
+	},
+	"container_drop_target_missing": {
+		"payload_fields": ["target_source"],
+		"disabled_text": "缺少容器拖拽目标",
+	},
+	"container_drop_source_missing": {
+		"payload_fields": ["source", "target_source"],
+		"disabled_text": "缺少容器拖拽来源",
+	},
+	"container_drop_item_missing": {
+		"payload_fields": ["item_id", "source", "target_source"],
+		"disabled_text": "缺少容器拖拽物品",
+	},
+	"container_drop_same_column": {
+		"payload_fields": ["source", "target_source", "item_id"],
+		"disabled_text": "不能拖回同一栏",
+	},
+	"container_drop_requires_container_column": {
+		"payload_fields": ["source", "target_source", "item_id"],
+		"disabled_text": "只能存入容器栏",
+	},
+	"container_drop_unsupported_drag_data": {
+		"payload_fields": ["drag_kind", "target_source"],
+		"disabled_text": "不支持的拖拽数据",
 	},
 	"player_money_insufficient": {
 		"payload_fields": ["shop_id", "price", "player_money"],
