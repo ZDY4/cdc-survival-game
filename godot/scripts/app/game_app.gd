@@ -1883,8 +1883,9 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		target["target_kind"] = "hotbar_group"
 		target["target_id"] = str(control.get_meta("hotbar_group_id"))
 	elif control.has_meta("inventory_action_target"):
-		target["target_kind"] = "inventory_action"
-		target["target_id"] = str(control.get_meta("inventory_action_target"))
+		var inventory_action_target: Dictionary = _inventory_action_drag_hover_target_snapshot(control, drag_data)
+		for key in inventory_action_target:
+			target[key] = inventory_action_target[key]
 	elif control.has_meta("container_source"):
 		target["target_kind"] = "container_column"
 		target["target_id"] = str(control.get_meta("container_source"))
@@ -1898,6 +1899,45 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 		target["target_kind"] = "trade_cart_entry"
 		target["target_id"] = str(control.get_meta("cart_index"))
 	return target
+
+
+func _inventory_action_drag_hover_target_snapshot(control: Control, drag_data: Dictionary) -> Dictionary:
+	var action_id := str(control.get_meta("inventory_action_target", ""))
+	var acceptance: Dictionary = _inventory_action_drag_acceptance(action_id, drag_data)
+	var last_accept := bool(acceptance.get("accept", false))
+	var reject_reason := str(acceptance.get("reason", ""))
+	return {
+		"target_kind": "inventory_action",
+		"target_id": action_id,
+		"action_id": action_id,
+		"accepts": "inventory_item",
+		"last_accept": last_accept,
+		"reject_reason": reject_reason,
+		"hover_highlight": _drag_hover_highlight(not drag_data.is_empty(), "inventory_action", action_id, reject_reason, last_accept),
+	}
+
+
+func _inventory_action_drag_acceptance(action_id: String, drag_data: Dictionary) -> Dictionary:
+	if drag_data.is_empty():
+		return {"accept": false, "reason": ""}
+	if str(drag_data.get("kind", "")) != "inventory_item":
+		return {"accept": false, "reason": "inventory_action_requires_inventory_item"}
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var item_id := str(drag_data.get("item_id", item.get("item_id", "")))
+	if item_id.is_empty():
+		return {"accept": false, "reason": "inventory_action_missing_item"}
+	match action_id:
+		"equip":
+			if _array_or_empty(item.get("equip_slots", [])).is_empty():
+				return {"accept": false, "reason": "item_not_equippable"}
+			return {"accept": true, "reason": ""}
+		"drop":
+			if not bool(item.get("droppable", true)):
+				return {"accept": false, "reason": "item_not_droppable"}
+			if int(item.get("count", 0)) <= 0:
+				return {"accept": false, "reason": "invalid_quantity"}
+			return {"accept": true, "reason": ""}
+	return {"accept": false, "reason": "unknown_inventory_action"}
 
 
 func _equipment_drag_hover_target_snapshot(control: Control, drag_data: Dictionary) -> Dictionary:

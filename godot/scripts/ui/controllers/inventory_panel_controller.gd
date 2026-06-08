@@ -161,6 +161,7 @@ func _build_layout() -> void:
 	, CONNECT_DEFERRED)
 	_equip_button = _action_button("EquipSelectedButton", "装备", "装备选中的物品")
 	_equip_button.set_meta("inventory_action_target", "equip")
+	_prepare_inventory_action_drop_target(_equip_button)
 	_equip_button.set_drag_forwarding(
 		Callable(self, "_empty_inventory_drag_data"),
 		Callable(self, "_can_drop_inventory_action_data"),
@@ -179,6 +180,7 @@ func _build_layout() -> void:
 	, CONNECT_DEFERRED)
 	_drop_button = _action_button("DropSelectedButton", "丢弃", "丢弃选中的数量")
 	_drop_button.set_meta("inventory_action_target", "drop")
+	_prepare_inventory_action_drop_target(_drop_button)
 	_drop_button.set_drag_forwarding(
 		Callable(self, "_empty_inventory_drag_data"),
 		Callable(self, "_can_drop_inventory_action_data"),
@@ -196,6 +198,7 @@ func _build_layout() -> void:
 	_drop_zone.custom_minimum_size = Vector2(0, 34)
 	_drop_zone.mouse_filter = Control.MOUSE_FILTER_STOP
 	_drop_zone.set_meta("inventory_action_target", "drop")
+	_prepare_inventory_action_drop_target(_drop_zone)
 	_drop_zone.set_drag_forwarding(
 		Callable(self, "_empty_inventory_drag_data"),
 		Callable(self, "_can_drop_inventory_action_data"),
@@ -364,18 +367,31 @@ func _drop_inventory_data(position: Vector2, data: Variant, from_control: Contro
 func _can_drop_inventory_action_data(_position: Vector2, data: Variant, from_control: Control) -> bool:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	if str(drag_data.get("kind", "")) != "inventory_item":
+		_apply_inventory_action_drag_hover(from_control, false, "inventory_action_requires_inventory_item")
 		return false
 	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 	var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
 	if item_id.is_empty():
+		_apply_inventory_action_drag_hover(from_control, false, "inventory_action_missing_item")
 		return false
+	var accepted := false
+	var reject_reason := ""
 	match _inventory_action_target(from_control):
 		"equip":
-			return not _array_or_empty(item.get("equip_slots", [])).is_empty()
+			accepted = not _array_or_empty(item.get("equip_slots", [])).is_empty()
+			reject_reason = "" if accepted else "item_not_equippable"
 		"drop":
-			return bool(item.get("droppable", true)) and int(item.get("count", 0)) > 0
+			accepted = bool(item.get("droppable", true)) and int(item.get("count", 0)) > 0
+			if accepted:
+				reject_reason = ""
+			elif not bool(item.get("droppable", true)):
+				reject_reason = "item_not_droppable"
+			else:
+				reject_reason = "invalid_quantity"
 		_:
-			return false
+			reject_reason = "unknown_inventory_action"
+	_apply_inventory_action_drag_hover(from_control, accepted, reject_reason)
+	return accepted
 
 
 func _drop_inventory_action_data(position: Vector2, data: Variant, from_control: Control) -> void:
@@ -387,6 +403,7 @@ func _drop_inventory_action_data(position: Vector2, data: Variant, from_control:
 	var root := get_parent()
 	if root == null:
 		return
+	_clear_inventory_action_drag_hover(from_control)
 	match _inventory_action_target(from_control):
 		"equip":
 			var slots: Array = _array_or_empty(item.get("equip_slots", []))
@@ -394,6 +411,72 @@ func _drop_inventory_action_data(position: Vector2, data: Variant, from_control:
 				root.equip_player_item(item_id, str(slots[0]))
 		"drop":
 			_open_discard_dialog_for_item(item, _drag_drop_count(item))
+
+
+func _prepare_inventory_action_drop_target(control: Control) -> void:
+	if control == null:
+		return
+	control.set_meta("inventory_action_drag_hovered", false)
+	control.set_meta("inventory_action_drag_last_accept", false)
+	control.set_meta("inventory_action_drag_reject_reason", "")
+	control.set_meta("inventory_action_drag_highlight_style", "")
+	control.set_meta("inventory_action_drag_highlight_color", "")
+	control.mouse_exited.connect(func() -> void:
+		_clear_inventory_action_drag_hover(control)
+	)
+
+
+func _apply_inventory_action_drag_hover(control: Control, accepted: bool, reject_reason: String) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("inventory_action_target"):
+		return
+	var color_text := "#4ecb71" if accepted else "#e25c5c"
+	var style := "accept" if accepted else "reject"
+	control.set_meta("inventory_action_drag_hovered", true)
+	control.set_meta("inventory_action_drag_last_accept", accepted)
+	control.set_meta("inventory_action_drag_reject_reason", reject_reason)
+	control.set_meta("inventory_action_drag_highlight_style", style)
+	control.set_meta("inventory_action_drag_highlight_color", color_text)
+	control.modulate = Color(0.90, 1.0, 0.92, 1.0) if accepted else Color(1.0, 0.90, 0.90, 1.0)
+	if control is Button:
+		(control as Button).add_theme_color_override("font_color", Color.html(color_text))
+	elif control is PanelContainer:
+		(control as PanelContainer).add_theme_stylebox_override("panel", _inventory_action_drop_style(Color.html(color_text), accepted))
+		var label := control.get_node_or_null("DropZoneLabel") as Label
+		if label != null:
+			label.add_theme_color_override("font_color", Color.html(color_text))
+			label.set_meta("inventory_action_drag_highlight_color", color_text)
+
+
+func _clear_inventory_action_drag_hover(control: Control) -> void:
+	if control == null or not is_instance_valid(control) or not control.has_meta("inventory_action_target"):
+		return
+	control.set_meta("inventory_action_drag_hovered", false)
+	control.set_meta("inventory_action_drag_last_accept", false)
+	control.set_meta("inventory_action_drag_reject_reason", "")
+	control.set_meta("inventory_action_drag_highlight_style", "")
+	control.set_meta("inventory_action_drag_highlight_color", "")
+	control.modulate = Color.WHITE
+	if control is Button:
+		(control as Button).remove_theme_color_override("font_color")
+	elif control is PanelContainer:
+		(control as PanelContainer).remove_theme_stylebox_override("panel")
+		var label := control.get_node_or_null("DropZoneLabel") as Label
+		if label != null:
+			label.remove_theme_color_override("font_color")
+			label.set_meta("inventory_action_drag_highlight_color", "")
+
+
+func _inventory_action_drop_style(color: Color, accepted: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.10, 0.16, 0.12, 0.88) if accepted else Color(0.18, 0.10, 0.10, 0.88)
+	style.border_color = color
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	style.content_margin_left = 8
+	style.content_margin_right = 8
+	style.content_margin_top = 4
+	style.content_margin_bottom = 4
+	return style
 
 
 func _open_context_menu_for_item(item: Dictionary, screen_position: Vector2) -> void:

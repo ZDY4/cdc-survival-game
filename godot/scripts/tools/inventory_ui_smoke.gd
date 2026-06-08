@@ -222,6 +222,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var quest_drop_button: Button = _drop_button(game_root)
 	if quest_drop_button == null or not quest_drop_button.disabled:
 		errors.append("quest item should disable drop button")
+	_assert_inventory_action_drag_hover_target(errors, game_root, _inventory_drag_data(game_root, "罐头食品"), quest_drop_button, false, "item_not_droppable", "quest food drop button reject hover target")
+	_assert_inventory_action_hover_render(errors, game_root, _inventory_drag_data(game_root, "罐头食品"), _drop_zone(game_root), false, "item_not_droppable", "quest food drop zone reject hover render")
+	_assert_inventory_action_drag_hover_target(errors, game_root, _inventory_drag_data(game_root, "罐头食品"), _equip_button(game_root), false, "item_not_equippable", "quest food equip button reject hover target")
 	if not _open_inventory_context_menu(game_root, "罐头食品"):
 		errors.append("should open context menu for quest food item")
 	else:
@@ -461,6 +464,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("selected equippable item should enable equip button after context unequip")
 	else:
 		_assert_drag_state_snapshot(errors, game_root, _inventory_drag_data(game_root, "棒球棒"), equip_button, "inventory_item", "inventory", "inventory_action", "drop baseball bat on equip button")
+		_assert_inventory_action_drag_hover_target(errors, game_root, _inventory_drag_data(game_root, "棒球棒"), equip_button, true, "", "baseball bat equip action hover target")
+		_assert_inventory_action_hover_render(errors, game_root, _inventory_drag_data(game_root, "棒球棒"), equip_button, true, "", "baseball bat equip action hover render")
 	if equip_button == null or equip_button.disabled:
 		pass
 	elif not _drag_inventory_item_to_action(game_root, "棒球棒", "EquipSelectedButton"):
@@ -750,21 +755,24 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("context dropping one bandage should leave two bandages")
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should reselect bandages before drag dropping")
-	elif not _drag_inventory_item_to_drop_zone(game_root, "绷带"):
-		errors.append("should drag bandages onto drop zone")
 	else:
-		await process_frame
-		if not _discard_dialog_visible(game_root):
-			errors.append("drop zone should open discard confirmation dialog")
-		if _player_inventory_count(game_root, "1006") != 2:
-			errors.append("drop zone confirmation should not mutate inventory before confirm")
-		var drop_zone_close_result: Dictionary = game_root.close_active_ui("keyboard_escape")
-		if str(drop_zone_close_result.get("closed", "")) != "modal:inventory_discard_confirm":
-			errors.append("Esc should close drop zone discard modal")
-		if _discard_dialog_visible(game_root):
-			errors.append("drop zone Esc should hide discard modal")
-		if _player_inventory_count(game_root, "1006") != 2:
-			errors.append("drop zone Esc should keep inventory unchanged")
+		_assert_inventory_action_drag_hover_target(errors, game_root, _inventory_drag_data(game_root, "绷带"), _drop_zone(game_root), true, "", "bandage drop zone hover target")
+		_assert_inventory_action_hover_render(errors, game_root, _inventory_drag_data(game_root, "绷带"), _drop_zone(game_root), true, "", "bandage drop zone hover render")
+		if not _drag_inventory_item_to_drop_zone(game_root, "绷带"):
+			errors.append("should drag bandages onto drop zone")
+		else:
+			await process_frame
+			if not _discard_dialog_visible(game_root):
+				errors.append("drop zone should open discard confirmation dialog")
+			if _player_inventory_count(game_root, "1006") != 2:
+				errors.append("drop zone confirmation should not mutate inventory before confirm")
+			var drop_zone_close_result: Dictionary = game_root.close_active_ui("keyboard_escape")
+			if str(drop_zone_close_result.get("closed", "")) != "modal:inventory_discard_confirm":
+				errors.append("Esc should close drop zone discard modal")
+			if _discard_dialog_visible(game_root):
+				errors.append("drop zone Esc should hide discard modal")
+			if _player_inventory_count(game_root, "1006") != 2:
+				errors.append("drop zone Esc should keep inventory unchanged")
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should reselect bandages before drag dropping to button")
 	quantity_spin = _quantity_spin(game_root)
@@ -1077,6 +1085,10 @@ func _drop_button(game_root: Node) -> Button:
 	return game_root.inventory_panel.find_child("DropSelectedButton", true, false) as Button
 
 
+func _drop_zone(game_root: Node) -> Control:
+	return game_root.inventory_panel.find_child("DropZone", true, false) as Control
+
+
 func _quantity_spin(game_root: Node) -> SpinBox:
 	return game_root.inventory_panel.find_child("QuantitySpin", true, false) as SpinBox
 
@@ -1278,6 +1290,59 @@ func _assert_drag_state_snapshot(errors: Array[String], game_root: Node, drag_da
 	var runtime_drag: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("drag", {}))
 	if not runtime_drag.has("active") or not runtime_drag.has("target"):
 		errors.append("%s: runtime control should expose drag state shape: %s" % [context, runtime_drag])
+
+
+func _assert_inventory_action_drag_hover_target(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: inventory action target should exist" % context)
+		return
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != "inventory_action":
+		errors.append("%s: target should be inventory_action: %s" % [context, snapshot])
+	if str(target_snapshot.get("target_id", "")) != str(target.get_meta("inventory_action_target", "")):
+		errors.append("%s: target id should match action meta: %s" % [context, target_snapshot])
+	if str(target_snapshot.get("accepts", "")) != "inventory_item":
+		errors.append("%s: inventory action should declare accepted drag kind: %s" % [context, target_snapshot])
+	if bool(target_snapshot.get("last_accept", false)) != expected_accept:
+		errors.append("%s: inventory action accept expected %s, got %s" % [context, expected_accept, target_snapshot])
+	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: inventory action reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
+	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	var expected_style := "accept" if expected_accept else "reject"
+	if not bool(highlight.get("active", false)) or str(highlight.get("style", "")) != expected_style:
+		errors.append("%s: inventory action hover highlight should expose %s: %s" % [context, expected_style, highlight])
+
+
+func _assert_inventory_action_hover_render(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: inventory action target should exist" % context)
+		return
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	var can_drop: bool = bool(game_root.inventory_panel.call("_can_drop_inventory_action_data", Vector2.ZERO, drag_data, target))
+	if can_drop != expected_accept:
+		errors.append("%s: inventory action can_drop expected %s, got %s" % [context, expected_accept, can_drop])
+	if not bool(target.get_meta("inventory_action_drag_hovered", false)):
+		errors.append("%s: inventory action target should record active hover render state" % context)
+	if bool(target.get_meta("inventory_action_drag_last_accept", false)) != expected_accept:
+		errors.append("%s: inventory action hover accept expected %s, got %s" % [context, expected_accept, target.get_meta("inventory_action_drag_last_accept", false)])
+	if str(target.get_meta("inventory_action_drag_reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: inventory action hover reject reason expected %s, got %s" % [context, expected_reject_reason, target.get_meta("inventory_action_drag_reject_reason", "")])
+	var expected_style := "accept" if expected_accept else "reject"
+	var expected_color := "#4ecb71" if expected_accept else "#e25c5c"
+	if str(target.get_meta("inventory_action_drag_highlight_style", "")) != expected_style:
+		errors.append("%s: inventory action hover style expected %s, got %s" % [context, expected_style, target.get_meta("inventory_action_drag_highlight_style", "")])
+	if str(target.get_meta("inventory_action_drag_highlight_color", "")) != expected_color:
+		errors.append("%s: inventory action hover color expected %s, got %s" % [context, expected_color, target.get_meta("inventory_action_drag_highlight_color", "")])
+	if target is PanelContainer:
+		var label := target.get_node_or_null("DropZoneLabel") as Label
+		if label == null or str(label.get_meta("inventory_action_drag_highlight_color", "")) != expected_color:
+			errors.append("%s: inventory drop zone label should expose hover color meta: %s" % [context, label])
 
 
 func _assert_drag_preview_diagnostics(errors: Array[String], preview: Dictionary, context: String) -> void:

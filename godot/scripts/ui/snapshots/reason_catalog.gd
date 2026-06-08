@@ -66,6 +66,10 @@ const REASONS := {
 	"item_use_forbidden": {"category": "inventory", "text": "物品当前禁止使用"},
 	"item_not_droppable": {"category": "inventory", "text": "物品不可丢弃"},
 	"item_not_in_inventory": {"category": "inventory", "text": "物品不在背包中"},
+	"item_not_equippable": {"category": "equipment", "text": "物品不可装备"},
+	"inventory_action_requires_inventory_item": {"category": "inventory", "text": "背包操作只接受背包物品"},
+	"inventory_action_missing_item": {"category": "inventory", "text": "缺少背包物品"},
+	"unknown_inventory_action": {"category": "inventory", "text": "未知背包操作"},
 	"inventory_split_requires_stack_model": {"category": "inventory", "text": "需要多堆叠背包模型"},
 	"unknown_item": {"category": "inventory", "text": "未知物品"},
 	"unknown_effect": {"category": "inventory", "text": "未知物品效果"},
@@ -357,6 +361,22 @@ const REASON_METADATA := {
 	"item_not_droppable": {
 		"payload_fields": ["item_id", "count"],
 		"disabled_text": "物品不可丢弃",
+	},
+	"item_not_equippable": {
+		"payload_fields": ["item_id", "equip_slots"],
+		"disabled_text": "物品不可装备",
+	},
+	"inventory_action_requires_inventory_item": {
+		"payload_fields": ["drag_kind", "action_id"],
+		"disabled_text": "只接受背包物品",
+	},
+	"inventory_action_missing_item": {
+		"payload_fields": ["item_id", "action_id"],
+		"disabled_text": "缺少背包物品",
+	},
+	"unknown_inventory_action": {
+		"payload_fields": ["action_id"],
+		"disabled_text": "未知背包操作",
 	},
 	"inventory_split_requires_stack_model": {
 		"payload_fields": ["item_id", "count"],
