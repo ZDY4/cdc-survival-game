@@ -207,6 +207,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_observe_mode_button(errors, game_root, false, "observe mode disabled button")
 	_assert_observe_play_button(errors, game_root, false, true, "observe mode disabled play button")
 	_assert_observe_speed_button(errors, game_root, "x10", true, "observe mode disabled speed button")
+	_assert_observe_disabled_hotbar_hit(errors, game_root, _observe_play_button(game_root), "observe_playback", "observe disabled play hit-test")
+	_assert_observe_disabled_hotbar_hit(errors, game_root, _observe_speed_button(game_root), "observe_speed", "observe disabled speed hit-test")
 	_assert_observe_reason_catalog(errors, "observe_mode_disabled", "先开启观察模式", "observe disabled reason catalog")
 	_assert_observe_reason_catalog(errors, "observe_control_unavailable", "观察控制暂不可用", "observe control unavailable reason catalog")
 	_press_key(game_root, KEY_V)
@@ -1614,6 +1616,25 @@ func _assert_hotbar_hit(errors: Array[String], game_root: Node, control: Control
 		errors.append("%s: hotbar hit should block world mouse picking: %s" % [context, hit])
 	if str(hit.get("source_path", "")).is_empty() or str(hit.get("source_name", "")).is_empty():
 		errors.append("%s: hotbar hit should expose source control: %s" % [context, hit])
+	if not bool(hit.get("disabled", false)) and (not str(hit.get("disabled_reason", "")).is_empty() or not str(hit.get("disabled_reason_text", "")).is_empty()):
+		errors.append("%s: enabled hotbar hit should not expose disabled reason text: %s" % [context, hit])
+
+
+func _assert_observe_disabled_hotbar_hit(errors: Array[String], game_root: Node, control: Control, expected_id: String, context: String) -> void:
+	if control == null:
+		errors.append("%s: observe disabled target should be available" % context)
+		return
+	var rect: Rect2 = control.get_global_rect()
+	var center: Vector2 = rect.position + rect.size * 0.5
+	var hit: Dictionary = _dictionary_or_empty(game_root.hotbar_hit_test_snapshot(center))
+	if str(hit.get("target_kind", "")) != "observe_hotbar" or str(hit.get("target_id", "")) != expected_id:
+		errors.append("%s: observe disabled hit target mismatch: %s" % [context, hit])
+	if not bool(hit.get("disabled", false)):
+		errors.append("%s: observe disabled hit should expose disabled=true: %s" % [context, hit])
+	if str(hit.get("disabled_reason", "")) != "observe_control_unavailable":
+		errors.append("%s: observe disabled hit should expose disabled reason: %s" % [context, hit])
+	if not str(hit.get("disabled_reason_text", "")).contains("观察控制暂不可用"):
+		errors.append("%s: observe disabled hit should expose disabled reason text: %s" % [context, hit])
 
 
 func _assert_observe_blocks_player_commands(errors: Array[String], game_root: Node) -> void:

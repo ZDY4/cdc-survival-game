@@ -702,6 +702,7 @@ func _hotbar_hit_control_snapshot(control: Control, position: Vector2) -> Dictio
 			target_id = observe_key
 	var rect := control.get_global_rect()
 	var button := control as BaseButton
+	var disabled_reason := str(control.get_meta("disabled_reason", ""))
 	return {
 		"active": true,
 		"owner_panel": "hud",
@@ -712,14 +713,24 @@ func _hotbar_hit_control_snapshot(control: Control, position: Vector2) -> Dictio
 		"source_name": str(control.name),
 		"mouse_blocks_world": control.mouse_filter == Control.MOUSE_FILTER_STOP,
 		"disabled": button != null and button.disabled,
+		"disabled_reason": disabled_reason,
+		"disabled_reason_text": _hotbar_hit_disabled_reason_text(disabled_reason),
 		"tooltip": str(control.tooltip_text),
 		"screen_position": {"x": position.x, "y": position.y},
 		"rect": {"x": rect.position.x, "y": rect.position.y, "w": rect.size.x, "h": rect.size.y},
 	}
 
 
+func _hotbar_hit_disabled_reason_text(reason: String) -> String:
+	if reason.is_empty():
+		return ""
+	if hud != null and hud.has_method("_disabled_reason_text"):
+		return str(hud.call("_disabled_reason_text", reason))
+	return reason
+
+
 func _observe_hotbar_meta_key(control: Control) -> String:
-	for key in ["observe_mode", "observe_playback", "observe_speed", "auto_tick", "observe_level"]:
+	for key in ["observe_playback", "observe_speed", "auto_tick", "observe_level", "observe_mode"]:
 		if control.has_meta(key):
 			return key
 	return ""

@@ -1490,7 +1490,7 @@ func _clear_observe_hotbar_drag_hover(control: Control) -> void:
 
 
 func _observe_control_key(control: Control) -> String:
-	for key in ["observe_mode", "observe_playback", "observe_speed", "auto_tick", "observe_level"]:
+	for key in ["observe_playback", "observe_speed", "auto_tick", "observe_level", "observe_mode"]:
 		if control != null and control.has_meta(key):
 			return key
 	return ""
