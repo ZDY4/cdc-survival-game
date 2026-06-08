@@ -1750,6 +1750,7 @@ func _assert_ui_layer_stack(errors: Array[String], game_root: Node, drag_data: D
 				errors.append("%s: tooltip layer should expose screen position: %s" % [context, tooltip_layer])
 			if str(tooltip_layer.get("delay_policy", "")) != "godot_default":
 				errors.append("%s: tooltip layer should expose delay policy: %s" % [context, tooltip_layer])
+			_assert_tooltip_visual_diagnostics(errors, _dictionary_or_empty(tooltip_layer.get("visual", {})), _dictionary_or_empty(tooltip_layer.get("recommended_rect", {})), context)
 	if not drag_data.is_empty():
 		var drag_layer: Dictionary = _layer_by_id(_array_or_empty(snapshot.get("layers", [])), "drag_preview")
 		if drag_layer.is_empty():
@@ -2282,10 +2283,28 @@ func _assert_hover_tooltip_snapshot(errors: Array[String], game_root: Node, cont
 		errors.append("%s: tooltip snapshot should expose screen and viewport geometry: %s" % [context, snapshot])
 	if not snapshot.has("visible") or not snapshot.has("mouse_filter") or not snapshot.has("mouse_blocks_world"):
 		errors.append("%s: tooltip snapshot should expose visibility and mouse filter diagnostics: %s" % [context, snapshot])
+	_assert_tooltip_visual_diagnostics(errors, _dictionary_or_empty(snapshot.get("visual", {})), _dictionary_or_empty(snapshot.get("recommended_rect", {})), context)
 	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
 	var runtime_tooltip: Dictionary = _dictionary_or_empty(runtime.get("tooltip", {}))
 	if not runtime_tooltip.has("active") or not runtime_tooltip.has("text"):
 		errors.append("%s: runtime control should expose tooltip state shape: %s" % [context, runtime_tooltip])
+	else:
+		_assert_tooltip_visual_diagnostics(errors, _dictionary_or_empty(runtime_tooltip.get("visual", {})), _dictionary_or_empty(runtime_tooltip.get("recommended_rect", {})), "%s runtime" % context)
+
+
+func _assert_tooltip_visual_diagnostics(errors: Array[String], visual: Dictionary, rect: Dictionary, context: String) -> void:
+	if str(visual.get("style", "")) != "panel_container":
+		errors.append("%s: tooltip visual should use panel container style: %s" % [context, visual])
+	if str(visual.get("theme_type", "")) != "TooltipPanel" or str(visual.get("label_theme_type", "")) != "TooltipLabel":
+		errors.append("%s: tooltip visual should expose theme types: %s" % [context, visual])
+	if not bool(visual.get("viewport_avoidance", false)) or not bool(visual.get("non_blocking", false)):
+		errors.append("%s: tooltip visual should be viewport-aware and non-blocking: %s" % [context, visual])
+	if float(visual.get("max_width", 0.0)) < 240.0 or float(visual.get("padding", {}).get("x", 0.0)) <= 0.0:
+		errors.append("%s: tooltip visual should expose max width and padding: %s" % [context, visual])
+	if rect.is_empty():
+		rect = _dictionary_or_empty(visual.get("recommended_rect", {}))
+	if float(rect.get("w", 0.0)) <= 0.0 or float(rect.get("h", 0.0)) <= 0.0:
+		errors.append("%s: tooltip visual should expose recommended rect: %s / %s" % [context, visual, rect])
 
 
 func _equipment_model_asset(game_root: Node, slot_id: String) -> String:
