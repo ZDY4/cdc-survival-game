@@ -219,6 +219,7 @@ func _attack_presentation(events: Array, world_root: Node, world_result: Diction
 		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
 		var actor_id := int(payload.get("actor_id", 0))
 		var target_actor_id := int(payload.get("target_actor_id", 0))
+		var actor_node := _actor_node(world_root, world_result, actor_id)
 		var target_node := _actor_node(world_root, world_result, target_actor_id)
 		var triggered_effect_ids := _string_array(payload.get("triggered_on_hit_effect_ids", []))
 		var applied_effects := _array_or_empty(payload.get("applied_on_hit_effects", [])).duplicate(true)
@@ -255,6 +256,8 @@ func _attack_presentation(events: Array, world_root: Node, world_result: Diction
 			"combat_rng_salt": int(payload.get("combat_rng_salt", 0)),
 			"friendly_fire": bool(payload.get("friendly_fire", false)),
 			"relationship_consequence": _dictionary_or_empty(payload.get("relationship_consequence", {})).duplicate(true),
+			"actor_node": actor_node,
+			"actor_node_path": str(actor_node.get_path()) if actor_node != null else "",
 			"target_node": target_node,
 			"node_path": str(target_node.get_path()) if target_node != null else "",
 		}
@@ -293,6 +296,10 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	marker.set_meta("defeated", bool(attack.get("defeated", false)))
 	_apply_attack_event_meta(marker, attack)
 	_track_active_node(marker)
+	var delivery_marker: MeshInstance3D = _attack_delivery_marker(attack, target_position)
+	if delivery_marker != null:
+		delivery_marker.set_meta("action_presenter_sequence", run_sequence)
+		_track_active_node(delivery_marker)
 	var damage_label := _attack_damage_label(attack)
 	damage_label.position = target_position + Vector3(0.0, 1.52, 0.0)
 	damage_label.set_meta("action_presenter_sequence", run_sequence)
@@ -304,6 +311,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		_track_active_node(on_hit_label)
 	var layer := _presentation_layer(world_root)
 	layer.add_child(marker)
+	if delivery_marker != null:
+		layer.add_child(delivery_marker)
 	layer.add_child(damage_label)
 	if on_hit_label != null:
 		layer.add_child(on_hit_label)
@@ -312,29 +321,44 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(marker, "scale", Vector3(0.72, 0.72, 0.72), float(ATTACK_PHASE_DURATIONS[0]))
+	if delivery_marker != null:
+		tween.parallel().tween_property(delivery_marker, "scale", Vector3(1.0, 1.0, 1.0), float(ATTACK_PHASE_DURATIONS[0]))
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.16, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.12, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[1]))
+	if delivery_marker != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(delivery_marker), ATTACK_PHASES[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[1]))
 	if on_hit_label != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[1]))
 	tween.tween_property(marker, "scale", Vector3(1.45, 1.45, 1.45), float(ATTACK_PHASE_DURATIONS[1]))
+	if delivery_marker != null:
+		tween.parallel().tween_property(delivery_marker, "scale", Vector3(1.08, 1.08, 1.08), float(ATTACK_PHASE_DURATIONS[1]))
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.36, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.30, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[2]))
+	if delivery_marker != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(delivery_marker), ATTACK_PHASES[2]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[2]))
 	if on_hit_label != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[2]))
 	tween.tween_property(marker, "scale", Vector3(0.35, 0.35, 0.35), float(ATTACK_PHASE_DURATIONS[2]))
+	if delivery_marker != null:
+		tween.parallel().tween_property(delivery_marker, "scale", Vector3(0.12, 0.12, 0.12), float(ATTACK_PHASE_DURATIONS[2]))
 	tween.parallel().tween_property(damage_label, "modulate", Color(damage_label.modulate.r, damage_label.modulate.g, damage_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "modulate", Color(on_hit_label.modulate.r, on_hit_label.modulate.g, on_hit_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
 	var on_hit_label_ref: WeakRef = weakref(on_hit_label) if on_hit_label != null else null
-	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label), on_hit_label_ref))
+	var delivery_marker_ref: WeakRef = weakref(delivery_marker) if delivery_marker != null else null
+	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label), on_hit_label_ref, delivery_marker_ref))
 	var snapshot_data := _attack_public_snapshot(attack, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
+	if delivery_marker != null:
+		snapshot_data["delivery_marker_path"] = str(delivery_marker.get_path())
+		snapshot_data["delivery_visual_kind"] = str(delivery_marker.get_meta("delivery_visual_kind", ""))
+		snapshot_data["delivery_distance"] = float(delivery_marker.get_meta("delivery_distance", 0.0))
 	snapshot_data["damage_label_path"] = str(damage_label.get_path())
 	snapshot_data["damage_label_text"] = str(damage_label.text)
 	if on_hit_label != null:
@@ -343,11 +367,16 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	_record_latest(snapshot_data)
 
 
-func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null, on_hit_label_ref: WeakRef = null) -> void:
+func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null, on_hit_label_ref: WeakRef = null, delivery_marker_ref: WeakRef = null) -> void:
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
 		marker.set_meta("action_presenter_active", false)
 		marker.queue_free()
+	if delivery_marker_ref != null:
+		var delivery_marker := delivery_marker_ref.get_ref() as Node
+		if delivery_marker != null and not delivery_marker.is_queued_for_deletion():
+			delivery_marker.set_meta("action_presenter_active", false)
+			delivery_marker.queue_free()
 	if damage_label_ref != null:
 		var damage_label := damage_label_ref.get_ref() as Node
 		if damage_label != null and not damage_label.is_queued_for_deletion():
@@ -370,6 +399,7 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 		"reason": reason,
 		"actor_id": int(attack.get("actor_id", 0)),
 		"target_actor_id": int(attack.get("target_actor_id", 0)),
+		"actor_node_path": str(attack.get("actor_node_path", "")),
 		"node_path": str(attack.get("node_path", "")),
 		"damage": float(attack.get("damage", 0.0)),
 		"damage_label_text": _attack_feedback_text(attack),
@@ -378,6 +408,7 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 		"critical": bool(attack.get("critical", false)),
 		"defeated": bool(attack.get("defeated", false)),
 		"attack_delivery": str(attack.get("attack_delivery", "")),
+		"delivery_visual_kind": _attack_delivery_visual_kind(attack),
 		"range": int(attack.get("range", 0)),
 		"weapon_item_id": str(attack.get("weapon_item_id", "")),
 		"base_damage": float(attack.get("base_damage", 0.0)),
@@ -434,6 +465,60 @@ func _attack_damage_label(attack: Dictionary) -> Label3D:
 	_apply_attack_event_meta(label, attack)
 	label.set_meta("text", label.text)
 	return label
+
+
+func _attack_delivery_marker(attack: Dictionary, target_position: Vector3):
+	var actor_node: Node3D = attack.get("actor_node", null)
+	var target_node: Node3D = attack.get("target_node", null)
+	if actor_node == null or target_node == null:
+		return null
+	var actor_position := actor_node.global_position if actor_node.is_inside_tree() else actor_node.position
+	var end_position := target_node.global_position if target_node.is_inside_tree() else target_node.position
+	var start := actor_position + Vector3(0.0, 1.02, 0.0)
+	var end := end_position + Vector3(0.0, 1.02, 0.0)
+	var direction := end - start
+	var distance := direction.length()
+	if distance <= 0.01:
+		direction = Vector3.FORWARD
+		distance = 0.34
+	var delivery := str(attack.get("attack_delivery", ""))
+	var visual_kind := _attack_delivery_visual_kind(attack)
+	var marker := MeshInstance3D.new()
+	marker.name = "WorldActionAttackDelivery"
+	var mesh := CylinderMesh.new()
+	mesh.radial_segments = 10
+	if delivery == "ranged":
+		mesh.top_radius = 0.045
+		mesh.bottom_radius = 0.045
+		mesh.height = max(0.35, distance)
+		marker.position = start.lerp(end, 0.5)
+	else:
+		mesh.top_radius = 0.07
+		mesh.bottom_radius = 0.18
+		mesh.height = 0.62
+		marker.position = target_position + Vector3(0.0, 1.18, 0.0)
+	marker.mesh = mesh
+	marker.material_override = _attack_delivery_material(delivery)
+	marker.basis = _basis_from_y(direction.normalized())
+	if delivery != "ranged":
+		marker.rotate_object_local(Vector3.RIGHT, deg_to_rad(28.0))
+	marker.scale = Vector3(0.28, 0.28, 0.28)
+	marker.set_meta("action_presenter_active", true)
+	marker.set_meta("action_presenter_kind", "attack_delivery")
+	marker.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
+	marker.set_meta("action_presenter_phase_count", ATTACK_PHASES.size())
+	marker.set_meta("action_presenter_current_phase", ATTACK_PHASES[0])
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(ATTACK_PHASE_DURATIONS))
+	marker.set_meta("delivery_visual_kind", visual_kind)
+	marker.set_meta("delivery_distance", distance)
+	marker.set_meta("actor_node_path", str(actor_node.get_path()))
+	marker.set_meta("target_node_path", str(target_node.get_path()))
+	marker.set_meta("start_position", start)
+	marker.set_meta("end_position", end)
+	marker.set_meta("actor_id", int(attack.get("actor_id", 0)))
+	marker.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
+	_apply_attack_event_meta(marker, attack)
+	return marker
 
 
 func _attack_on_hit_effect_label(attack: Dictionary):
@@ -496,6 +581,10 @@ func _apply_attack_event_meta(node: Node, attack: Dictionary) -> void:
 
 func _attack_delivery(attack_range: int) -> String:
 	return "ranged" if attack_range > 1 else "melee"
+
+
+func _attack_delivery_visual_kind(attack: Dictionary) -> String:
+	return "ranged_projectile" if str(attack.get("attack_delivery", "")) == "ranged" else "melee_swing"
 
 
 func _attack_feedback_text(attack: Dictionary) -> String:
@@ -976,6 +1065,17 @@ func _attack_material(hit_kind: String, critical: bool, defeated: bool) -> Stand
 	return material
 
 
+func _attack_delivery_material(delivery: String) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	if delivery == "ranged":
+		material.albedo_color = Color(1.0, 0.88, 0.32, 0.88)
+	else:
+		material.albedo_color = Color(1.0, 0.44, 0.18, 0.82)
+	return material
+
+
 func _interaction_material(option_kind: String) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -1088,6 +1188,18 @@ func _record_latest(snapshot_data: Dictionary) -> Dictionary:
 
 func _grid_to_world(grid: Dictionary, y: float = DEFAULT_ACTOR_Y) -> Vector3:
 	return Vector3(float(grid.get("x", 0)) * GRID_SIZE, float(grid.get("y", 0)) + y, float(grid.get("z", 0)) * GRID_SIZE)
+
+
+func _basis_from_y(direction: Vector3) -> Basis:
+	var y_axis := direction.normalized()
+	if y_axis.length() <= 0.001:
+		y_axis = Vector3.UP
+	var helper := Vector3.UP
+	if absf(y_axis.dot(helper)) > 0.96:
+		helper = Vector3.RIGHT
+	var x_axis := helper.cross(y_axis).normalized()
+	var z_axis := x_axis.cross(y_axis).normalized()
+	return Basis(x_axis, y_axis, z_axis)
 
 
 func _grid_key(grid: Dictionary) -> String:

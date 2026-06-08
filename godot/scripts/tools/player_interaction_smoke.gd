@@ -145,6 +145,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await _expect_corpse_world_interaction(errors, game_root)
 	await _expect_independent_combat_event_presenters(errors, game_root)
 	await _expect_on_hit_effect_attack_presenter(errors, game_root)
+	await _expect_attack_delivery_presenters(errors, game_root)
 	var move_camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if move_camera == null:
 		errors.append("missing runtime camera before mouse ground move")
@@ -1214,6 +1215,37 @@ func _expect_attack_marker_metadata(errors: Array[String], marker: Node, attack_
 	_expect_attack_event_metadata(errors, marker_snapshot, attack_result, context)
 
 
+func _expect_attack_delivery_marker(errors: Array[String], game_root: Node, attack_result: Dictionary, expected_visual_kind: String) -> void:
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("delivery_visual_kind", "")) != expected_visual_kind:
+		errors.append("attack presenter should expose delivery visual kind %s, got %s" % [expected_visual_kind, presenter.get("delivery_visual_kind", "")])
+	if str(presenter.get("delivery_marker_path", "")).is_empty():
+		errors.append("attack presenter should expose delivery marker path")
+	if float(presenter.get("delivery_distance", 0.0)) <= 0.0:
+		errors.append("attack presenter should expose delivery distance")
+	var marker: MeshInstance3D = game_root.find_child("WorldActionAttackDelivery", true, false) as MeshInstance3D
+	if marker == null:
+		errors.append("attack presenter should render WorldActionAttackDelivery marker")
+		return
+	if str(marker.get_meta("action_presenter_kind", "")) != "attack_delivery":
+		errors.append("attack delivery marker should expose attack_delivery kind")
+	if str(marker.get_meta("delivery_visual_kind", "")) != expected_visual_kind:
+		errors.append("attack delivery marker should expose %s visual kind" % expected_visual_kind)
+	if int(marker.get_meta("actor_id", 0)) != int(attack_result.get("actor_id", 0)):
+		errors.append("attack delivery marker should expose actor id")
+	if int(marker.get_meta("target_actor_id", 0)) != int(attack_result.get("target_actor_id", 0)):
+		errors.append("attack delivery marker should expose target actor id")
+	if str(marker.get_meta("actor_node_path", "")).is_empty() or str(marker.get_meta("target_node_path", "")).is_empty():
+		errors.append("attack delivery marker should expose actor and target node paths")
+	if typeof(marker.get_meta("start_position", null)) != TYPE_VECTOR3 or typeof(marker.get_meta("end_position", null)) != TYPE_VECTOR3:
+		errors.append("attack delivery marker should expose start/end positions")
+	var material := marker.material_override as StandardMaterial3D
+	if material == null or not material.no_depth_test:
+		errors.append("attack delivery marker should render above map meshes")
+	_expect_attack_marker_metadata(errors, marker, attack_result, "attack delivery marker")
+	_expect_action_marker_phases(errors, marker, ["windup", "impact", "fade"], "attack delivery marker")
+
+
 func _expect_on_hit_effect_marker_metadata(errors: Array[String], label: Label3D, attack_result: Dictionary) -> void:
 	var effects: Array = _array_or_empty(attack_result.get("applied_on_hit_effects", []))
 	if str(label.get_meta("action_presenter_kind", "")) != "attack_on_hit_effect":
@@ -1665,6 +1697,88 @@ func _expect_on_hit_effect_attack_presenter(errors: Array[String], game_root: No
 	_expect_on_hit_effect_marker_metadata(errors, label, attack_payload)
 	_expect_world_action_input_blocker(errors, game_root, "attack")
 	await _wait_for_world_action_presenter_idle(game_root)
+
+
+func _expect_attack_delivery_presenters(errors: Array[String], game_root: Node) -> void:
+	await _wait_for_world_action_presenter_idle(game_root)
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("attack delivery presenter needs player actor node")
+		return
+	var player_grid: Dictionary = _player_grid(game_root)
+	var target_grid := {
+		"x": int(player_grid.get("x", 0)) + 3,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}
+	var target_id: int = game_root.simulation.register_actor({
+		"definition_id": "attack_delivery_smoke",
+		"display_name": "Attack Delivery Smoke",
+		"kind": "npc",
+		"side": "hostile",
+		"group_id": "hostile",
+		"map_id": game_root.simulation.active_map_id,
+		"appearance_profile_id": "default_humanoid",
+		"model_asset": "preview_placeholders/characters/humanoid_mannequin.gltf",
+		"grid_position": GridCoord.from_dictionary(target_grid),
+		"ap": 0.0,
+		"turn_open": false,
+		"max_hp": 16.0,
+		"hp": 16.0,
+		"combat_attributes": {"evasion": 0.0},
+	})
+	game_root._rebuild_world_after_runtime_change()
+	var target_node: Node3D = game_root.find_child("Actor_attack_delivery_smoke_%d" % target_id, true, false) as Node3D
+	if target_node == null:
+		errors.append("attack delivery presenter should render synthetic target actor node")
+		game_root.simulation.actor_registry.unregister_actor(target_id)
+		game_root._rebuild_world_after_runtime_change()
+		return
+	var melee_payload := _synthetic_attack_payload(1, target_id, 1, "smoke_knife")
+	_present_synthetic_world_action_event(game_root, "attack_resolved", melee_payload)
+	_expect_attack_delivery_marker(errors, game_root, melee_payload, "melee_swing")
+	_expect_world_action_input_blocker(errors, game_root, "attack")
+	await _wait_for_world_action_presenter_idle(game_root)
+
+	var ranged_payload := _synthetic_attack_payload(1, target_id, 6, "smoke_pistol")
+	_present_synthetic_world_action_event(game_root, "attack_resolved", ranged_payload)
+	_expect_attack_delivery_marker(errors, game_root, ranged_payload, "ranged_projectile")
+	_expect_world_action_input_blocker(errors, game_root, "attack")
+	await _wait_for_world_action_presenter_idle(game_root)
+	game_root.simulation.actor_registry.unregister_actor(target_id)
+	game_root._rebuild_world_after_runtime_change()
+
+
+func _synthetic_attack_payload(actor_id: int, target_actor_id: int, attack_range: int, weapon_item_id: String) -> Dictionary:
+	return {
+		"actor_id": actor_id,
+		"target_actor_id": target_actor_id,
+		"damage": 2.0,
+		"hit_kind": "hit",
+		"critical": false,
+		"defeated": false,
+		"range": attack_range,
+		"weapon_item_id": weapon_item_id,
+		"weapon_profile": {"item_id": weapon_item_id},
+		"base_damage": 3.0,
+		"crit_multiplier": 1.5,
+		"crit_roll": 0.8,
+		"crit_chance": 0.1,
+		"defense": 0.0,
+		"damage_reduction": 0.0,
+		"damage_bonus": 0.0,
+		"hit_roll": 0.25,
+		"hit_chance": 0.9,
+		"accuracy": 10.0,
+		"evasion": 0.0,
+		"triggered_on_hit_effect_ids": [],
+		"applied_on_hit_effects": [],
+		"combat_rng_seed": 17,
+		"combat_rng_counter": 3,
+		"combat_rng_salt": 41,
+		"friendly_fire": false,
+		"relationship_consequence": {},
+	}
 
 
 func _present_synthetic_world_action_event(game_root: Node, event_kind: String, payload: Dictionary) -> void:
