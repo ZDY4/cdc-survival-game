@@ -35,6 +35,7 @@ var _discard_error_label: Label
 var _discard_minus_button: Button
 var _discard_plus_button: Button
 var _discard_max_button: Button
+var _deconstruct_equipment_dialog: ConfirmationDialog
 var _items_box: VBoxContainer
 var _category_filter: String = "all"
 var _sort_mode: String = "order"
@@ -45,6 +46,8 @@ var _context_item: Dictionary = {}
 var _pending_discard_item: Dictionary = {}
 var _pending_discard_count := 0
 var _pending_discard_available := 0
+var _pending_deconstruct_item: Dictionary = {}
+var _pending_deconstruct_count := 0
 
 
 func _ready() -> void:
@@ -217,6 +220,15 @@ func _build_layout() -> void:
 	_discard_dialog.get_cancel_button().text = "取消"
 	_build_discard_quantity_controls()
 	add_child(_discard_dialog)
+	_deconstruct_equipment_dialog = ConfirmationDialog.new()
+	_deconstruct_equipment_dialog.name = "DeconstructEquipmentToolConfirmDialog"
+	_deconstruct_equipment_dialog.title = "确认拆解"
+	_deconstruct_equipment_dialog.dialog_text = "拆解会消耗已装备工具。确定继续吗？"
+	_deconstruct_equipment_dialog.confirmed.connect(_confirm_pending_deconstruct_equipment)
+	_deconstruct_equipment_dialog.canceled.connect(_cancel_pending_deconstruct_equipment)
+	_deconstruct_equipment_dialog.get_ok_button().text = "继续拆解"
+	_deconstruct_equipment_dialog.get_cancel_button().text = "取消"
+	add_child(_deconstruct_equipment_dialog)
 	var action_row := HBoxContainer.new()
 	action_row.name = "ActionBar"
 	action_row.add_theme_constant_override("separation", 4)
@@ -505,7 +517,7 @@ func _execute_context_action(action_id: int) -> void:
 				root.sell_active_trade_item(item_id, _drag_drop_count(action_item))
 		CONTEXT_DECONSTRUCT:
 			if bool(action_item.get("deconstructable", false)) and root.has_method("deconstruct_player_item"):
-				root.deconstruct_player_item(item_id, _drag_drop_count(action_item))
+				_request_deconstruct_item(action_item, _drag_drop_count(action_item))
 		CONTEXT_HOTBAR:
 			if bool(action_item.get("usable", false)) and root.has_method("bind_player_item_to_hotbar"):
 				root.bind_player_item_to_hotbar("", item_id)
@@ -555,18 +567,39 @@ func _apply_feedback(feedback: Dictionary) -> void:
 
 
 func has_blocking_modal() -> bool:
-	return _discard_dialog != null and _discard_dialog.visible
+	return (_discard_dialog != null and _discard_dialog.visible) \
+		or (_deconstruct_equipment_dialog != null and _deconstruct_equipment_dialog.visible)
 
 
 func blocking_modal_name() -> String:
-	if has_blocking_modal():
+	if _discard_dialog != null and _discard_dialog.visible:
 		return "inventory_discard_confirm"
+	if _deconstruct_equipment_dialog != null and _deconstruct_equipment_dialog.visible:
+		return "inventory_deconstruct_equipment_confirm"
 	return ""
 
 
 func blocking_modal_snapshot() -> Dictionary:
 	if not has_blocking_modal():
 		return {}
+	if _deconstruct_equipment_dialog != null and _deconstruct_equipment_dialog.visible:
+		return {
+			"id": "inventory_deconstruct_equipment_confirm",
+			"name": "modal:inventory_deconstruct_equipment_confirm",
+			"kind": "confirm",
+			"owner_panel": "inventory",
+			"blocks_gameplay": true,
+			"mouse_blocks_world": true,
+			"dialog_visible": _deconstruct_equipment_dialog.visible,
+			"item_id": str(_pending_deconstruct_item.get("item_id", "")),
+			"item_name": str(_pending_deconstruct_item.get("name", _pending_deconstruct_item.get("item_id", ""))),
+			"count": _pending_deconstruct_count,
+			"equipment_sources": _deconstruct_equipment_sources(_pending_deconstruct_item),
+			"confirm_button_mouse_filter": _control_mouse_filter_name(_deconstruct_equipment_dialog.get_ok_button()),
+			"confirm_button_mouse_blocks_world": _control_mouse_blocks_world(_deconstruct_equipment_dialog.get_ok_button()),
+			"cancel_button_mouse_filter": _control_mouse_filter_name(_deconstruct_equipment_dialog.get_cancel_button()),
+			"cancel_button_mouse_blocks_world": _control_mouse_blocks_world(_deconstruct_equipment_dialog.get_cancel_button()),
+		}
 	var quantity_value := _discard_quantity_value()
 	var quantity_valid := quantity_value >= 1 and (_pending_discard_available <= 0 or quantity_value <= _pending_discard_available)
 	return {
@@ -601,6 +634,14 @@ func blocking_modal_snapshot() -> Dictionary:
 func close_blocking_modal() -> Dictionary:
 	if not has_blocking_modal():
 		return {"success": false, "reason": "modal_inactive"}
+	if _deconstruct_equipment_dialog != null and _deconstruct_equipment_dialog.visible:
+		_deconstruct_equipment_dialog.hide()
+		_pending_deconstruct_item = {}
+		_pending_deconstruct_count = 0
+		return {
+			"success": true,
+			"closed": "modal:inventory_deconstruct_equipment_confirm",
+		}
 	_discard_dialog.hide()
 	_pending_discard_item = {}
 	_pending_discard_count = 0
@@ -610,6 +651,89 @@ func close_blocking_modal() -> Dictionary:
 		"success": true,
 		"closed": "modal:inventory_discard_confirm",
 	}
+
+
+func _request_deconstruct_item(item: Dictionary, count: int) -> void:
+	if item.is_empty() or not bool(item.get("deconstructable", false)):
+		return
+	var root := get_parent()
+	if root == null or not root.has_method("deconstruct_player_item"):
+		return
+	var normalized_count := clampi(count, 1, maxi(1, int(item.get("count", 1))))
+	if _deconstruct_consumes_equipped_tool(item):
+		_open_deconstruct_equipment_confirm(item, normalized_count)
+		return
+	root.deconstruct_player_item(str(item.get("item_id", "")), normalized_count)
+
+
+func _deconstruct_consumes_equipped_tool(item: Dictionary) -> bool:
+	return not _deconstruct_equipment_sources(item).is_empty()
+
+
+func _deconstruct_equipment_sources(item: Dictionary) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var requirements: Dictionary = _dictionary_or_empty(item.get("deconstruct_requirements", {}))
+	for tool in _array_or_empty(requirements.get("required_tools", [])):
+		var tool_data: Dictionary = _dictionary_or_empty(tool)
+		if not bool(tool_data.get("consume_on_deconstruct", false)):
+			continue
+		for source in _array_or_empty(tool_data.get("consumption_sources", [])):
+			var source_data: Dictionary = _dictionary_or_empty(source)
+			if str(source_data.get("source", "")) != "equipment":
+				continue
+			var entry := source_data.duplicate(true)
+			entry["item_id"] = str(tool_data.get("item_id", ""))
+			entry["item_name"] = str(tool_data.get("name", tool_data.get("item_id", "")))
+			output.append(entry)
+	return output
+
+
+func _open_deconstruct_equipment_confirm(item: Dictionary, count: int) -> void:
+	if _deconstruct_equipment_dialog == null or item.is_empty():
+		return
+	var item_id := str(item.get("item_id", ""))
+	if item_id.is_empty():
+		return
+	var root := get_parent()
+	if root != null and root.has_method("finish_world_action_presentations"):
+		root.finish_world_action_presentations()
+	_pending_deconstruct_item = item.duplicate(true)
+	_pending_deconstruct_count = count
+	_deconstruct_equipment_dialog.dialog_text = "拆解 %s x%d 会消耗已装备工具：%s。确定继续吗？" % [
+		str(item.get("name", item_id)),
+		count,
+		", ".join(_deconstruct_equipment_source_labels(item)),
+	]
+	_deconstruct_equipment_dialog.popup_centered()
+
+
+func _deconstruct_equipment_source_labels(item: Dictionary) -> Array[String]:
+	var labels: Array[String] = []
+	for source in _deconstruct_equipment_sources(item):
+		var source_data: Dictionary = _dictionary_or_empty(source)
+		var slot := str(source_data.get("slot_id", ""))
+		var name := str(source_data.get("item_name", source_data.get("item_id", "")))
+		labels.append("%s%s" % [name, " (%s)" % slot if not slot.is_empty() else ""])
+	return labels
+
+
+func _confirm_pending_deconstruct_equipment() -> void:
+	if _pending_deconstruct_item.is_empty():
+		return
+	var item_id := str(_pending_deconstruct_item.get("item_id", ""))
+	var count := maxi(1, _pending_deconstruct_count)
+	_pending_deconstruct_item = {}
+	_pending_deconstruct_count = 0
+	if _deconstruct_equipment_dialog != null:
+		_deconstruct_equipment_dialog.hide()
+	var root := get_parent()
+	if root != null and root.has_method("deconstruct_player_item"):
+		root.deconstruct_player_item(item_id, count)
+
+
+func _cancel_pending_deconstruct_equipment() -> void:
+	_pending_deconstruct_item = {}
+	_pending_deconstruct_count = 0
 
 
 func _open_discard_dialog_for_item(item: Dictionary, count: int) -> void:

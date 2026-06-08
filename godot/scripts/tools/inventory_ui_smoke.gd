@@ -561,15 +561,39 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should select consumable deconstruct UI smoke item with equipped tool")
 	if not _detail_line(game_root).contains("拆解工具来源 装备:tool x1"):
 		errors.append("inventory detail should preview equipped deconstruct tool source")
-	var equipped_consumable_tool_result: Dictionary = game_root.deconstruct_player_item("smoke_deconstruct_consumable_tool_ui_item", 1)
+	if not _open_inventory_context_menu(game_root, "消耗拆解工具UI测试物品"):
+		errors.append("should open context menu for equipped consumable deconstruct")
+	elif _context_action_disabled(game_root, 6):
+		errors.append("context menu should enable equipped consumable deconstruct")
+	else:
+		_execute_inventory_context_action(game_root, 6)
+		await process_frame
+		if not _deconstruct_equipment_dialog_visible(game_root):
+			errors.append("equipped consumable deconstruct should open equipment consumption confirmation")
+		_assert_modal_stack(errors, game_root, "inventory_deconstruct_equipment_confirm", "inventory", "equipped deconstruct confirmation")
+		_assert_deconstruct_equipment_modal_details(errors, game_root, "smoke_deconstruct_consumable_tool_ui_item", 1, "1151", "tool", "equipped deconstruct confirmation")
+		var esc_deconstruct_result: Dictionary = game_root.close_active_ui("keyboard_escape")
+		if str(esc_deconstruct_result.get("closed", "")) != "modal:inventory_deconstruct_equipment_confirm":
+			errors.append("Esc should close equipped deconstruct confirmation before consuming equipment, got %s" % esc_deconstruct_result)
+		if not player_ref.equipment.has("tool"):
+			errors.append("Esc closing equipped deconstruct confirmation should keep equipped tool")
+		if _player_inventory_count(game_root, "smoke_deconstruct_consumable_tool_ui_item") != 1:
+			errors.append("Esc closing equipped deconstruct confirmation should keep source item")
+	if not _open_inventory_context_menu(game_root, "消耗拆解工具UI测试物品"):
+		errors.append("should reopen context menu for equipped consumable deconstruct")
+	else:
+		_execute_inventory_context_action(game_root, 6)
+		await process_frame
+		_confirm_deconstruct_equipment_dialog(game_root)
 	await process_frame
-	if not bool(equipped_consumable_tool_result.get("success", false)):
-		errors.append("deconstruct should consume equipped consumable tool: %s" % equipped_consumable_tool_result.get("reason", "unknown"))
 	if player_ref.equipment.has("tool"):
 		errors.append("successful equipped consumable deconstruct should remove equipment slot")
-	var equipped_consumed_tools: Array = _array_or_empty(equipped_consumable_tool_result.get("consumed_tools", []))
+	if _player_inventory_count(game_root, "smoke_deconstruct_consumable_tool_ui_item") != 0:
+		errors.append("confirmed equipped consumable deconstruct should consume source item")
+	var equipped_event_payload: Dictionary = _last_event_payload(game_root, "item_deconstructed")
+	var equipped_consumed_tools: Array = _array_or_empty(equipped_event_payload.get("consumed_tools", []))
 	if equipped_consumed_tools.is_empty() or str(_dictionary_or_empty(equipped_consumed_tools[0]).get("source", "")) != "equipment":
-		errors.append("equipped consumable deconstruct should report equipment source: %s" % equipped_consumed_tools)
+		errors.append("equipped consumable deconstruct event should report equipment source: %s" % equipped_consumed_tools)
 	player_ref.inventory.clear()
 	player_ref.inventory_order.clear()
 	player_ref.equipment.clear()
@@ -1040,8 +1064,22 @@ func _discard_dialog_visible(game_root: Node) -> bool:
 	return false
 
 
+func _deconstruct_equipment_dialog_visible(game_root: Node) -> bool:
+	var dialog: Node = game_root.inventory_panel.get_node_or_null("DeconstructEquipmentToolConfirmDialog")
+	if dialog is ConfirmationDialog:
+		return bool((dialog as ConfirmationDialog).visible)
+	return false
+
+
 func _confirm_discard_dialog(game_root: Node) -> void:
 	var dialog: Node = game_root.inventory_panel.get_node_or_null("DiscardConfirmDialog")
+	if dialog is ConfirmationDialog:
+		(dialog as ConfirmationDialog).confirmed.emit()
+		(dialog as ConfirmationDialog).hide()
+
+
+func _confirm_deconstruct_equipment_dialog(game_root: Node) -> void:
+	var dialog: Node = game_root.inventory_panel.get_node_or_null("DeconstructEquipmentToolConfirmDialog")
 	if dialog is ConfirmationDialog:
 		(dialog as ConfirmationDialog).confirmed.emit()
 		(dialog as ConfirmationDialog).hide()
@@ -1364,6 +1402,25 @@ func _assert_discard_quantity_modal_details(errors: Array[String], game_root: No
 		errors.append("%s: discard quantity input should stop world mouse input: %s" % [context, top])
 	if not bool(top.get("confirm_button_mouse_blocks_world", false)) or not bool(top.get("cancel_button_mouse_blocks_world", false)):
 		errors.append("%s: discard modal buttons should stop world mouse input: %s" % [context, top])
+
+
+func _assert_deconstruct_equipment_modal_details(errors: Array[String], game_root: Node, expected_item_id: String, expected_count: int, expected_tool_id: String, expected_slot_id: String, context: String) -> void:
+	var stack_snapshot: Dictionary = _dictionary_or_empty(game_root.modal_stack_snapshot()) if game_root.has_method("modal_stack_snapshot") else {}
+	var top: Dictionary = _dictionary_or_empty(stack_snapshot.get("top", {}))
+	if str(top.get("id", "")) != "inventory_deconstruct_equipment_confirm":
+		errors.append("%s: deconstruct equipment modal details require confirm top: %s" % [context, stack_snapshot])
+		return
+	if str(top.get("item_id", "")) != expected_item_id or int(top.get("count", 0)) != expected_count:
+		errors.append("%s: deconstruct equipment modal should expose item/count: %s" % [context, top])
+	var sources: Array = _array_or_empty(top.get("equipment_sources", []))
+	if sources.is_empty():
+		errors.append("%s: deconstruct equipment modal should expose equipment source: %s" % [context, top])
+		return
+	var source: Dictionary = _dictionary_or_empty(sources[0])
+	if str(source.get("item_id", "")) != expected_tool_id or str(source.get("slot_id", "")) != expected_slot_id:
+		errors.append("%s: deconstruct equipment source expected %s/%s, got %s" % [context, expected_tool_id, expected_slot_id, source])
+	if not bool(top.get("confirm_button_mouse_blocks_world", false)) or not bool(top.get("cancel_button_mouse_blocks_world", false)):
+		errors.append("%s: deconstruct equipment modal buttons should stop world mouse input: %s" % [context, top])
 
 
 func _assert_modal_menu_event(errors: Array[String], game_root: Node, expected_id: String, expected_owner: String, context: String) -> void:
