@@ -115,6 +115,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_expect_hover_runtime_state(errors, game_root, "interaction", "survivor_outpost_01_pickup_medkit", "pickup")
 		if not _hud_interaction_line(game_root).contains("拾取"):
 			errors.append("HUD did not show pickup prompt after hover selection")
+		_expect_container_hover_outline_visual_metadata(errors, game_root, camera)
 		await _expect_door_hover_outline(errors, game_root, camera)
 		_expect_transition_hover_diagnostics(errors, game_root, camera)
 		_expect_ground_hover_move_preview(errors, game_root, camera, player_node)
@@ -735,6 +736,31 @@ func _expect_hover_target_outline_hidden(errors: Array[String], game_root: Node)
 		errors.append("hover target outline should exist")
 	elif outline.visible:
 		errors.append("hover target outline should hide while attack outline is active")
+
+
+func _expect_container_hover_outline_visual_metadata(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	var container_id := "survivor_outpost_01_canteen_food_crate"
+	var container_node: Node3D = game_root.find_child("MapObject_%s" % container_id, true, false) as Node3D
+	if container_node == null:
+		errors.append("container hover outline smoke should find canteen food crate")
+		return
+	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(container_node.global_position))
+	if not bool(hover_result.get("success", false)):
+		errors.append("container hover raycast failed: %s" % hover_result.get("reason", "unknown"))
+		return
+	if str(hover_result.get("kind", "")) != "interaction":
+		errors.append("container hover should select interaction target")
+		return
+	_expect_hover_target_outline(errors, game_root, "container", container_id)
+	var outline: MeshInstance3D = game_root.find_child("HoverTargetOutline", true, false) as MeshInstance3D
+	if outline == null:
+		return
+	if str(outline.get_meta("container_visual_id", "")) != "crate_wood":
+		errors.append("container hover outline should expose container visual id")
+	if str(outline.get_meta("container_visual_prototype_id", "")) != "props/crate_wood":
+		errors.append("container hover outline should expose container visual prototype id")
+	if str(outline.get_meta("container_model_asset_id", "")) != "builtin:container:crate_wood":
+		errors.append("container hover outline should expose container model asset id")
 
 
 func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: Camera3D) -> void:

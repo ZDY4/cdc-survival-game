@@ -1451,6 +1451,9 @@ func _update_hover_target_outline(target: Dictionary, grid: Dictionary, target_c
 	var door: Dictionary = _dictionary_or_empty(target.get("door", {}))
 	hover_target_outline.set_meta("door_is_open", bool(door.get("is_open", false)))
 	hover_target_outline.set_meta("door_locked", bool(door.get("locked", false)))
+	hover_target_outline.set_meta("container_visual_id", str(target.get("container_visual_id", "")))
+	hover_target_outline.set_meta("container_visual_prototype_id", str(target.get("container_visual_prototype_id", "")))
+	hover_target_outline.set_meta("container_model_asset_id", str(target.get("container_model_asset_id", "")))
 
 
 func _hide_hover_target_outline() -> void:
@@ -1463,6 +1466,9 @@ func _hide_hover_target_outline() -> void:
 	hover_target_outline.set_meta("target_category", "")
 	hover_target_outline.set_meta("door_is_open", false)
 	hover_target_outline.set_meta("door_locked", false)
+	hover_target_outline.set_meta("container_visual_id", "")
+	hover_target_outline.set_meta("container_visual_prototype_id", "")
+	hover_target_outline.set_meta("container_model_asset_id", "")
 
 
 func _hover_outline_color(target_category: String) -> Color:
