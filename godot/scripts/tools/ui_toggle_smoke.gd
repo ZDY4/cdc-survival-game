@@ -416,6 +416,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_inventory_panel()
 	var baseball_drag_data := _inventory_drag_data(game_root, "棒球棒")
 	_assert_ui_layer_stack(errors, game_root, baseball_drag_data, _equipment_slot_control(game_root, "main_hand"), null, "drag_preview", true, "inventory drag preview layer stack")
+	_assert_equipment_drag_hover_target(errors, game_root, baseball_drag_data, _equipment_slot_control(game_root, "main_hand"), true, "", "inventory baseball bat to main hand hover")
+	_assert_equipment_drag_hover_target(errors, game_root, _skill_hotbar_drag_data("adrenaline_rush", "肾上腺冲刺"), _equipment_slot_control(game_root, "main_hand"), false, "equipment_slot_requires_inventory_item", "skill hotbar to equipment slot reject hover")
 	var before_drag_equipped := _event_count(game_root, "item_equipped")
 	if not _drop_inventory_item_to_equipment_slot(game_root, "棒球棒", "main_hand"):
 		errors.append("should drag inventory baseball bat to main hand equipment slot")
@@ -1761,6 +1763,54 @@ func _assert_ui_layer_stack(errors: Array[String], game_root: Node, drag_data: D
 			_assert_drag_preview_layer_diagnostics(errors, _dictionary_or_empty(drag_layer.get("preview", {})), context)
 			var render: Dictionary = _dictionary_or_empty(game_root.render_drag_preview_for_snapshot(drag_data, drag_target))
 			_assert_drag_preview_render(errors, game_root, render, _dictionary_or_empty(drag_layer.get("preview", {})), context)
+			if drag_target != null and drag_target.has_meta("equipment_slot"):
+				_assert_equipment_drag_layer_target(errors, drag_layer, str(drag_target.get_meta("equipment_slot")), context)
+
+
+func _assert_equipment_drag_layer_target(errors: Array[String], drag_layer: Dictionary, expected_slot_id: String, context: String) -> void:
+	var target: Dictionary = _dictionary_or_empty(drag_layer.get("target", {}))
+	if str(target.get("target_kind", "")) != "equipment_slot":
+		errors.append("%s: drag layer target should expose equipment slot: %s" % [context, target])
+	if str(target.get("slot_id", target.get("target_id", ""))) != expected_slot_id:
+		errors.append("%s: drag layer target slot expected %s, got %s" % [context, expected_slot_id, target])
+	if str(target.get("accepts", "")) != "inventory_item":
+		errors.append("%s: equipment drag layer target should accept inventory_item: %s" % [context, target])
+	var highlight: Dictionary = _dictionary_or_empty(target.get("hover_highlight", {}))
+	if not bool(highlight.get("active", false)):
+		errors.append("%s: equipment drag layer should expose active hover highlight: %s" % [context, target])
+	if not highlight.has("style") or not highlight.has("color") or not highlight.has("accepted"):
+		errors.append("%s: equipment drag layer highlight should expose visual details: %s" % [context, highlight])
+
+
+func _assert_equipment_drag_hover_target(errors: Array[String], game_root: Node, drag_data: Dictionary, target: Control, expected_accept: bool, expected_reject_reason: String, context: String) -> void:
+	if target == null:
+		errors.append("%s: equipment slot control should exist" % context)
+		return
+	if drag_data.is_empty():
+		errors.append("%s: drag data should be available" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.drag_state_snapshot(drag_data, target))
+	var target_snapshot: Dictionary = _dictionary_or_empty(snapshot.get("target", {}))
+	if str(target_snapshot.get("target_kind", "")) != "equipment_slot":
+		errors.append("%s: target should be equipment_slot: %s" % [context, snapshot])
+	if str(target_snapshot.get("target_id", "")) != str(target.get_meta("equipment_slot", "")):
+		errors.append("%s: target id should match slot meta: %s" % [context, target_snapshot])
+	if str(target_snapshot.get("accepts", "")) != "inventory_item":
+		errors.append("%s: equipment target should declare accepted drag kind: %s" % [context, target_snapshot])
+	if bool(target_snapshot.get("last_accept", false)) != expected_accept:
+		errors.append("%s: equipment target accept expected %s, got %s" % [context, expected_accept, target_snapshot])
+	if str(target_snapshot.get("reject_reason", "")) != expected_reject_reason:
+		errors.append("%s: equipment target reject reason expected %s, got %s" % [context, expected_reject_reason, target_snapshot])
+	var highlight: Dictionary = _dictionary_or_empty(target_snapshot.get("hover_highlight", {}))
+	if not bool(highlight.get("active", false)):
+		errors.append("%s: equipment hover highlight should be active: %s" % [context, target_snapshot])
+	if bool(highlight.get("accepted", false)) != expected_accept:
+		errors.append("%s: equipment hover highlight accept expected %s, got %s" % [context, expected_accept, highlight])
+	var expected_style := "accept" if expected_accept else "reject"
+	if str(highlight.get("style", "")) != expected_style:
+		errors.append("%s: equipment hover highlight style expected %s, got %s" % [context, expected_style, highlight])
+	if str(highlight.get("target_kind", "")) != "equipment_slot" or str(highlight.get("target_id", "")) != str(target.get_meta("equipment_slot", "")):
+		errors.append("%s: equipment hover highlight should identify target slot: %s" % [context, highlight])
 
 
 func _assert_drag_preview_layer_diagnostics(errors: Array[String], preview: Dictionary, context: String) -> void:
@@ -2275,6 +2325,20 @@ func _inventory_drag_data(game_root: Node, item_needle: String) -> Dictionary:
 		return {}
 	var data: Variant = game_root.inventory_panel.call("_get_inventory_item_drag_data", Vector2.ZERO, source)
 	return _dictionary_or_empty(data)
+
+
+func _skill_hotbar_drag_data(skill_id: String, skill_name: String) -> Dictionary:
+	return {
+		"kind": "skill_hotbar",
+		"skill_id": skill_id,
+		"skill": {
+			"skill_id": skill_id,
+			"name": skill_name,
+		},
+		"source": "skills",
+		"from_index": -1,
+		"count": 1,
+	}
 
 
 func _assert_hover_tooltip_snapshot(errors: Array[String], game_root: Node, control: Control, expected_owner: String, expected_text: String, context: String) -> void:

@@ -111,6 +111,10 @@ const REASONS := {
 	"drop_zone_source_mismatch": {"category": "trade", "text": "拖拽来源不匹配"},
 	"trade_item_rejected": {"category": "trade", "text": "交易物品被拒绝"},
 	"unknown_trade_item": {"category": "trade", "text": "未知交易物品"},
+	"equipment_slot_requires_inventory_item": {"category": "equipment", "text": "装备槽只接受背包物品"},
+	"equipment_slot_missing_item": {"category": "equipment", "text": "缺少装备物品"},
+	"equipment_slot_missing_slot": {"category": "equipment", "text": "缺少装备槽位"},
+	"equipment_slot_incompatible": {"category": "equipment", "text": "物品不能装备到该槽位"},
 	"quest_not_active": {"category": "quest", "text": "任务未激活"},
 	"quest_not_waiting_for_turn_in": {"category": "quest", "text": "任务不需要手动交付"},
 	"quest_objective_incomplete": {"category": "quest", "text": "任务目标尚未完成"},
@@ -453,6 +457,22 @@ const REASON_METADATA := {
 	"sell_zone_requires_player_or_equipment_source": {
 		"payload_fields": ["source", "drop_zone"],
 		"disabled_text": "出售区只接受背包或装备物品",
+	},
+	"equipment_slot_requires_inventory_item": {
+		"payload_fields": ["drag_kind", "slot_id"],
+		"disabled_text": "装备槽只接受背包物品",
+	},
+	"equipment_slot_missing_item": {
+		"payload_fields": ["item_id", "slot_id"],
+		"disabled_text": "缺少装备物品",
+	},
+	"equipment_slot_missing_slot": {
+		"payload_fields": ["item_id", "slot_id"],
+		"disabled_text": "缺少装备槽位",
+	},
+	"equipment_slot_incompatible": {
+		"payload_fields": ["item_id", "slot_id", "equip_slots"],
+		"disabled_text": "物品不能装备到该槽位",
 	},
 	"skill_on_cooldown": {
 		"payload_fields": ["skill_id", "cooldown_remaining", "actor_id"],

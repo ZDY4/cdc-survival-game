@@ -728,14 +728,14 @@ func _observe_hotbar_meta_key(control: Control) -> String:
 func drag_state_snapshot(data: Variant = {}, hover_target: Control = null) -> Dictionary:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	if drag_data.is_empty():
-		return {"active": false, "kind": "", "source": {}, "target": _drag_hover_target_snapshot(hover_target), "preview": {}, "payload": {}}
+		return {"active": false, "kind": "", "source": {}, "target": _drag_hover_target_snapshot(hover_target, drag_data), "preview": {}, "payload": {}}
 	var kind := str(drag_data.get("kind", ""))
 	var payload := _drag_payload_snapshot(drag_data)
 	return {
 		"active": true,
 		"kind": kind,
 		"source": _drag_source_snapshot(drag_data, kind),
-		"target": _drag_hover_target_snapshot(hover_target),
+		"target": _drag_hover_target_snapshot(hover_target, drag_data),
 		"preview": _drag_preview_snapshot(drag_data, payload),
 		"payload": payload,
 	}
@@ -1858,9 +1858,9 @@ func _drag_preview_estimated_size(text: String) -> Vector2:
 	return Vector2(maxf(48.0, float(text.length() * 8 + 16)), 24.0)
 
 
-func _drag_hover_target_snapshot(control: Control) -> Dictionary:
+func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -> Dictionary:
 	if control == null:
-		return {"active": false, "owner_panel": "", "target_kind": "", "target_id": "", "source_path": "", "accepts": "", "last_accept": false, "reject_reason": ""}
+		return {"active": false, "owner_panel": "", "target_kind": "", "target_id": "", "source_path": "", "accepts": "", "last_accept": false, "reject_reason": "", "hover_highlight": _drag_hover_highlight(false, "", "", "", false)}
 	var target := {
 		"active": true,
 		"owner_panel": _owner_panel_for_control(control),
@@ -1870,10 +1870,12 @@ func _drag_hover_target_snapshot(control: Control) -> Dictionary:
 		"accepts": "",
 		"last_accept": false,
 		"reject_reason": "",
+		"hover_highlight": _drag_hover_highlight(false, "", "", "", false),
 	}
 	if control.has_meta("equipment_slot"):
-		target["target_kind"] = "equipment_slot"
-		target["target_id"] = str(control.get_meta("equipment_slot"))
+		var equipment_target: Dictionary = _equipment_drag_hover_target_snapshot(control, drag_data)
+		for key in equipment_target:
+			target[key] = equipment_target[key]
 	elif control.has_meta("hotbar_slot_id"):
 		target["target_kind"] = "hotbar_slot"
 		target["target_id"] = str(control.get_meta("hotbar_slot_id"))
@@ -1896,6 +1898,62 @@ func _drag_hover_target_snapshot(control: Control) -> Dictionary:
 		target["target_kind"] = "trade_cart_entry"
 		target["target_id"] = str(control.get_meta("cart_index"))
 	return target
+
+
+func _equipment_drag_hover_target_snapshot(control: Control, drag_data: Dictionary) -> Dictionary:
+	var slot_id := str(control.get_meta("equipment_slot", ""))
+	var display_slot := str(control.get_meta("equipment_display_slot", slot_id))
+	var equipment_data: Dictionary = _dictionary_or_empty(control.get_meta("equipment_data", {}))
+	var acceptance: Dictionary = _equipment_drag_acceptance(slot_id, drag_data)
+	var last_accept := bool(acceptance.get("accept", false))
+	var reject_reason := str(acceptance.get("reason", ""))
+	return {
+		"target_kind": "equipment_slot",
+		"target_id": slot_id,
+		"slot_id": slot_id,
+		"display_slot": display_slot,
+		"accepts": "inventory_item",
+		"last_accept": last_accept,
+		"reject_reason": reject_reason,
+		"current_item_id": str(equipment_data.get("item_id", "")),
+		"current_item_name": str(equipment_data.get("name", equipment_data.get("item_id", ""))),
+		"hover_highlight": _drag_hover_highlight(not drag_data.is_empty(), "equipment_slot", slot_id, reject_reason, last_accept),
+	}
+
+
+func _equipment_drag_acceptance(slot_id: String, drag_data: Dictionary) -> Dictionary:
+	if drag_data.is_empty():
+		return {"accept": false, "reason": ""}
+	if str(drag_data.get("kind", "")) != "inventory_item":
+		return {"accept": false, "reason": "equipment_slot_requires_inventory_item"}
+	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var item_id := str(drag_data.get("item_id", item.get("item_id", "")))
+	if item_id.is_empty():
+		return {"accept": false, "reason": "equipment_slot_missing_item"}
+	if slot_id.is_empty():
+		return {"accept": false, "reason": "equipment_slot_missing_slot"}
+	for candidate in _array_or_empty(item.get("equip_slots", [])):
+		if str(candidate) == slot_id:
+			return {"accept": true, "reason": ""}
+	return {"accept": false, "reason": "equipment_slot_incompatible"}
+
+
+func _drag_hover_highlight(active: bool, target_kind: String, target_id: String, reject_reason: String, accepted: bool) -> Dictionary:
+	var style := "accept" if accepted else "reject"
+	var color := "#4ecb71" if accepted else "#e25c5c"
+	if not active:
+		style = "inactive"
+		color = "#00000000"
+	return {
+		"active": active,
+		"style": style,
+		"color": color,
+		"target_kind": target_kind,
+		"target_id": target_id,
+		"accepted": accepted,
+		"reject_reason": reject_reason,
+		"outline_width": 2.0 if active else 0.0,
+	}
 
 
 func settings_applied(_snapshot: Dictionary = {}) -> void:
