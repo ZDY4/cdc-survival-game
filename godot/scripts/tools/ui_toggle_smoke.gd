@@ -1467,6 +1467,41 @@ func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
 	var hit: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
 	if str(hit.get("last_sound_id", "")) != "hit":
 		errors.append("damaging attack should trigger hit audio feedback: %s" % hit)
+	game_root.simulation.emit_event("attack_resolved", {"damage": 0.0, "range": 6, "weapon_item_id": "1004", "target_actor_id": 2})
+	game_root.refresh_hud()
+	var ranged_attack: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(ranged_attack.get("last_sound_id", "")) != "attack_ranged":
+		errors.append("ranged miss should trigger ranged attack audio feedback: %s" % ranged_attack)
+	game_root.simulation.emit_event("attack_resolved", {"damage": 2.0, "range": 6, "weapon_item_id": "1004", "target_actor_id": 2})
+	game_root.refresh_hud()
+	var ranged_hit: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(ranged_hit.get("last_sound_id", "")) != "hit_ranged":
+		errors.append("ranged hit should trigger ranged hit audio feedback: %s" % ranged_hit)
+	game_root.simulation.emit_event("weapon_reloaded", {"actor_id": 1, "slot_id": "main_hand", "weapon_item_id": "1004", "ammo_type": "1009", "loaded_count": 6})
+	game_root.refresh_hud()
+	var reload: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(reload.get("last_sound_id", "")) != "weapon_reload":
+		errors.append("weapon_reloaded should trigger reload audio feedback: %s" % reload)
+	game_root.simulation.emit_event("ammo_consumed", {"actor_id": 1, "weapon_item_id": "1004", "ammo_type": "1009", "consumed": 1})
+	game_root.refresh_hud()
+	var ammo: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(ammo.get("last_sound_id", "")) != "ammo_consume":
+		errors.append("ammo_consumed should trigger ammo consume audio feedback: %s" % ammo)
+	game_root.simulation.emit_event("door_toggled", {"door_id": "audio_smoke_door", "is_open": true})
+	game_root.refresh_hud()
+	var door_open: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(door_open.get("last_sound_id", "")) != "door_open":
+		errors.append("opened door should trigger door open audio feedback: %s" % door_open)
+	game_root.simulation.emit_event("door_toggled", {"door_id": "audio_smoke_door", "is_open": false})
+	game_root.refresh_hud()
+	var door_close: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(door_close.get("last_sound_id", "")) != "door_close":
+		errors.append("closed door should trigger door close audio feedback: %s" % door_close)
+	game_root.simulation.emit_event("door_auto_opened", {"door_id": "audio_smoke_door", "is_open": true})
+	game_root.refresh_hud()
+	var door_auto: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(door_auto.get("last_sound_id", "")) != "door_auto_open":
+		errors.append("auto-opened door should trigger auto door audio feedback: %s" % door_auto)
 	game_root.simulation.emit_event("container_closed", {"container_id": "audio_smoke_container", "reason": "smoke"})
 	game_root.refresh_hud()
 	var container_close: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())

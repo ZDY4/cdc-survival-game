@@ -22,6 +22,8 @@ const EVENT_SOUND_MAP := {
 	"door_unlocked": "door_unlock",
 	"door_auto_opened": "door_toggle",
 	"attack_resolved": "attack",
+	"weapon_reloaded": "weapon_reload",
+	"ammo_consumed": "ammo_consume",
 	"actor_defeated": "death",
 	"corpse_created": "death",
 	"combat_started": "combat_start",
@@ -46,11 +48,19 @@ const SOUND_PROFILES := {
 	"quest_update": {"frequency": 840.0, "duration": 0.10, "volume": 0.12},
 	"quest_complete": {"frequency": 980.0, "duration": 0.16, "volume": 0.14},
 	"door_toggle": {"frequency": 260.0, "duration": 0.12, "volume": 0.13},
+	"door_open": {"frequency": 300.0, "duration": 0.12, "volume": 0.13},
+	"door_close": {"frequency": 210.0, "duration": 0.11, "volume": 0.12},
+	"door_auto_open": {"frequency": 340.0, "duration": 0.09, "volume": 0.11},
 	"door_unlock": {"frequency": 470.0, "duration": 0.11, "volume": 0.12},
 	"combat_start": {"frequency": 220.0, "duration": 0.13, "volume": 0.14},
 	"combat_end": {"frequency": 360.0, "duration": 0.10, "volume": 0.11},
 	"attack": {"frequency": 300.0, "duration": 0.07, "volume": 0.14},
+	"attack_melee": {"frequency": 280.0, "duration": 0.075, "volume": 0.13},
+	"attack_ranged": {"frequency": 720.0, "duration": 0.045, "volume": 0.15},
 	"hit": {"frequency": 190.0, "duration": 0.09, "volume": 0.15},
+	"hit_ranged": {"frequency": 230.0, "duration": 0.075, "volume": 0.15},
+	"weapon_reload": {"frequency": 520.0, "duration": 0.13, "volume": 0.12},
+	"ammo_consume": {"frequency": 780.0, "duration": 0.035, "volume": 0.08},
 	"death": {"frequency": 120.0, "duration": 0.18, "volume": 0.15},
 	"event_fallback": {"frequency": 440.0, "duration": 0.055, "volume": 0.08},
 }
@@ -156,11 +166,23 @@ func _process_event(event_data: Dictionary, event_index: int) -> void:
 
 
 func _sound_id_for_event(event_kind: String, payload: Dictionary) -> String:
-	if event_kind == "attack_resolved" and _event_damage_value(payload) > 0.0:
-		return "hit"
+	match event_kind:
+		"attack_resolved":
+			return _attack_sound_id(payload)
+		"door_toggled":
+			return "door_open" if bool(payload.get("is_open", false)) else "door_close"
+		"door_auto_opened":
+			return "door_auto_open"
 	if EVENT_SOUND_MAP.has(event_kind):
 		return str(EVENT_SOUND_MAP[event_kind])
 	return ""
+
+
+func _attack_sound_id(payload: Dictionary) -> String:
+	var ranged := int(payload.get("range", 1)) > 1
+	if _event_damage_value(payload) > 0.0:
+		return "hit_ranged" if ranged else "hit"
+	return "attack_ranged" if ranged else "attack_melee"
 
 
 func _event_damage_value(payload: Dictionary) -> float:
