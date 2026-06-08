@@ -187,6 +187,7 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 		primary_trigger_option = _dictionary_or_empty(trigger_options[0])
 	var pickup_props: Dictionary = _dictionary_or_empty(props.get("pickup", {}))
 	var container_props: Dictionary = _dictionary_or_empty(props.get("container", {}))
+	var visual_props: Dictionary = _dictionary_or_empty(props.get("visual", {}))
 	var interaction_kind: String = str(interaction_props.get("interaction_kind", ""))
 	if interaction_kind.is_empty():
 		interaction_kind = str(trigger_props.get("interaction_kind", ""))
@@ -238,6 +239,17 @@ func _interaction_target(object_summary: Dictionary, fallback_kind: String) -> D
 	if interaction_kind == "container":
 		target["container_type"] = str(container_props.get("container_type", "map"))
 		target["container_origin"] = str(container_props.get("container_origin", "map_scene"))
+		var container_visual_id := str(container_props.get("visual_id", "")).strip_edges()
+		if container_visual_id.is_empty():
+			container_visual_id = str(visual_props.get("visual_id", "")).strip_edges()
+		if container_visual_id.is_empty():
+			container_visual_id = str(visual_props.get("prototype_id", "")).trim_prefix("props/").strip_edges()
+		if not container_visual_id.is_empty():
+			target["container_visual_id"] = container_visual_id
+			target["container_model_asset_id"] = "builtin:container:%s" % container_visual_id
+		var prototype_id := str(visual_props.get("prototype_id", "")).strip_edges()
+		if not prototype_id.is_empty():
+			target["container_visual_prototype_id"] = prototype_id
 	_copy_optional_container_fields(target, container_props)
 	_copy_optional_transition_fields(target, interaction_props, trigger_props, primary_trigger_option)
 	return target

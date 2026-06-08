@@ -242,6 +242,9 @@ func _interaction_target_meta(object_id: String, target_data: Dictionary) -> Dic
 		meta["container_item_count"] = int(target_data.get("container_item_count", 0))
 		meta["container_stack_count"] = int(target_data.get("container_stack_count", 0))
 		meta["container_money"] = int(target_data.get("container_money", 0))
+		meta["container_visual_id"] = str(target_data.get("container_visual_id", ""))
+		meta["container_visual_prototype_id"] = str(target_data.get("container_visual_prototype_id", ""))
+		meta["container_model_asset_id"] = str(target_data.get("container_model_asset_id", ""))
 	return meta
 
 
@@ -546,6 +549,9 @@ func _apply_container_state_visual(parent: Node, target_data: Dictionary) -> voi
 	badge.set_meta("container_item_count", int(target_data.get("container_item_count", 0)))
 	badge.set_meta("container_stack_count", int(target_data.get("container_stack_count", 0)))
 	badge.set_meta("container_money", int(target_data.get("container_money", 0)))
+	badge.set_meta("container_visual_id", str(target_data.get("container_visual_id", "")))
+	badge.set_meta("container_visual_prototype_id", str(target_data.get("container_visual_prototype_id", "")))
+	badge.set_meta("container_model_asset_id", str(target_data.get("container_model_asset_id", "")))
 	badge.set_meta("container_visual_state", "empty" if is_empty else "filled")
 
 

@@ -1076,9 +1076,17 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 			errors.append("empty container badge should expose container_empty")
 		if str(badge.get_meta("container_visual_state", "")) != "empty":
 			errors.append("empty container badge should expose empty visual state")
+		if str(badge.get_meta("container_visual_id", "")) != "cabinet_medical":
+			errors.append("empty container badge should expose container visual id")
+		if str(badge.get_meta("container_model_asset_id", "")) != "builtin:container:cabinet_medical":
+			errors.append("empty container badge should expose container model asset id")
 	var node_target: Dictionary = _dictionary_or_empty(container_node.get_meta("interaction_target", {}))
 	if str(node_target.get("container_type", "")) != "map":
 		errors.append("empty container interaction metadata should expose container_type")
+	if str(node_target.get("container_visual_id", "")) != "cabinet_medical":
+		errors.append("empty container interaction metadata should expose container visual id")
+	if str(node_target.get("container_model_asset_id", "")) != "builtin:container:cabinet_medical":
+		errors.append("empty container interaction metadata should expose container model asset id")
 	if not bool(node_target.get("container_empty", false)):
 		errors.append("empty container interaction metadata should expose container_empty")
 	if int(node_target.get("container_item_count", -1)) != 0:
@@ -1089,6 +1097,10 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 		errors.append("empty container pickable body should mirror container_empty metadata")
 	if pickable_body == null or str(pickable_target.get("container_type", "")) != "map":
 		errors.append("empty container pickable body should mirror container_type metadata")
+	if pickable_body == null or str(pickable_target.get("container_visual_id", "")) != "cabinet_medical":
+		errors.append("empty container pickable body should mirror container visual id")
+	if pickable_body == null or str(pickable_target.get("container_model_asset_id", "")) != "builtin:container:cabinet_medical":
+		errors.append("empty container pickable body should mirror container model asset id")
 	game_root.select_interaction_node(container_node)
 	var open_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(open_result.get("success", false)):
