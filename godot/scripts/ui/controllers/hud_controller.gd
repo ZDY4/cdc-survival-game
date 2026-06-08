@@ -384,24 +384,91 @@ func _apply_feedback_toasts(value: Variant) -> void:
 		var toast: Dictionary = _dictionary_or_empty(toast_value)
 		if toast.is_empty() or not bool(toast.get("visible", true)):
 			continue
-		_feedback_toast_layer.add_child(_feedback_toast_label(toast))
+		_feedback_toast_layer.add_child(_feedback_toast_row(toast))
 
 
-func _feedback_toast_label(toast: Dictionary) -> Label:
-	var label := _line("FeedbackToast_%s" % str(toast.get("id", "toast")))
+func _feedback_toast_row(toast: Dictionary) -> PanelContainer:
+	var row := PanelContainer.new()
+	row.name = "FeedbackToast_%s" % str(toast.get("id", "toast"))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.custom_minimum_size = Vector2(260, 28)
+	var severity := str(toast.get("severity", "info"))
+	var alpha := float(toast.get("alpha", 1.0))
+	var phase := str(toast.get("phase", "visible"))
+	row.add_theme_stylebox_override("panel", _feedback_toast_style(severity, alpha, phase))
+	row.modulate.a = clampf(alpha + 0.12, 0.0, 1.0)
+	_apply_feedback_toast_metadata(row, toast)
+	row.set_meta("toast_visual_kind", "panel")
+	row.set_meta("toast_border_color", _feedback_toast_border_color(severity).to_html())
+	row.set_meta("toast_background_alpha", alpha)
+	row.set_meta("toast_minimum_width", row.custom_minimum_size.x)
+	var label := _line("FeedbackToastLabel")
 	label.text = str(toast.get("text", ""))
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.modulate = _feedback_toast_color(str(toast.get("severity", "info")), float(toast.get("alpha", 1.0)))
-	label.set_meta("toast_id", str(toast.get("id", "")))
-	label.set_meta("toast_kind", str(toast.get("kind", "")))
-	label.set_meta("toast_severity", str(toast.get("severity", "")))
-	label.set_meta("toast_phase", str(toast.get("phase", "")))
-	label.set_meta("toast_slot", int(toast.get("slot", 0)))
-	label.set_meta("toast_alpha", float(toast.get("alpha", 1.0)))
-	label.set_meta("toast_ttl_events", int(toast.get("ttl_events", 0)))
-	label.set_meta("toast_age_events", int(toast.get("age_events", 0)))
-	label.set_meta("toast_transition_style", str(_dictionary_or_empty(toast.get("transition", {})).get("style", "")))
-	return label
+	label.modulate = _feedback_toast_color(severity, 1.0)
+	label.tooltip_text = "%s | %s" % [severity, str(_dictionary_or_empty(toast.get("transition", {})).get("style", ""))]
+	_apply_feedback_toast_metadata(label, toast)
+	row.add_child(label)
+	return row
+
+
+func _apply_feedback_toast_metadata(node: Node, toast: Dictionary) -> void:
+	node.set_meta("toast_id", str(toast.get("id", "")))
+	node.set_meta("toast_kind", str(toast.get("kind", "")))
+	node.set_meta("toast_severity", str(toast.get("severity", "")))
+	node.set_meta("toast_phase", str(toast.get("phase", "")))
+	node.set_meta("toast_slot", int(toast.get("slot", 0)))
+	node.set_meta("toast_alpha", float(toast.get("alpha", 1.0)))
+	node.set_meta("toast_ttl_events", int(toast.get("ttl_events", 0)))
+	node.set_meta("toast_age_events", int(toast.get("age_events", 0)))
+	node.set_meta("toast_transition_style", str(_dictionary_or_empty(toast.get("transition", {})).get("style", "")))
+
+
+func _feedback_toast_style(severity: String, alpha: float, phase: String) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	var background_alpha := clampf(0.58 * alpha, 0.18, 0.72)
+	if phase == "fading":
+		background_alpha = clampf(0.42 * alpha, 0.12, 0.56)
+	style.bg_color = _feedback_toast_background_color(severity, background_alpha)
+	style.border_color = _feedback_toast_border_color(severity)
+	style.border_color.a = clampf(0.84 * alpha, 0.22, 0.92)
+	style.border_width_left = 2
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_right = 4
+	style.corner_radius_bottom_left = 4
+	style.content_margin_left = 9
+	style.content_margin_right = 9
+	style.content_margin_top = 5
+	style.content_margin_bottom = 5
+	return style
+
+
+func _feedback_toast_background_color(severity: String, alpha: float) -> Color:
+	match severity:
+		"success":
+			return Color(0.08, 0.20, 0.13, alpha)
+		"warning":
+			return Color(0.22, 0.17, 0.06, alpha)
+		"error":
+			return Color(0.24, 0.09, 0.08, alpha)
+		_:
+			return Color(0.08, 0.12, 0.18, alpha)
+
+
+func _feedback_toast_border_color(severity: String) -> Color:
+	match severity:
+		"success":
+			return Color(0.33, 0.72, 0.43, 1.0)
+		"warning":
+			return Color(0.90, 0.66, 0.20, 1.0)
+		"error":
+			return Color(0.86, 0.34, 0.30, 1.0)
+		_:
+			return Color(0.38, 0.55, 0.74, 1.0)
 
 
 func _feedback_toast_color(severity: String, alpha: float) -> Color:

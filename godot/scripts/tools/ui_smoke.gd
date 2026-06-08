@@ -505,20 +505,35 @@ func _validate_feedback_toasts(errors: Array[String], hud: Control, snapshot: Di
 	if not (layer is Control) or (layer as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
 		errors.append("%s: FeedbackToastLayer should not block mouse input" % context)
 	if layer.get_child_count() <= 0:
-		errors.append("%s: FeedbackToastLayer should render toast labels" % context)
+		errors.append("%s: FeedbackToastLayer should render toast rows" % context)
 		return
-	var label := layer.get_child(layer.get_child_count() - 1) as Label
+	var row := layer.get_child(layer.get_child_count() - 1) as PanelContainer
+	if row == null:
+		errors.append("%s: latest toast should render as PanelContainer" % context)
+		return
+	if row.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		errors.append("%s: toast row should not block mouse input" % context)
+	if not row.has_meta("toast_visual_kind") or str(row.get_meta("toast_visual_kind", "")) != "panel":
+		errors.append("%s: toast row should expose visual kind metadata" % context)
+	if not row.has_theme_stylebox_override("panel"):
+		errors.append("%s: toast row should expose panel stylebox override" % context)
+	if float(row.get_meta("toast_minimum_width", 0.0)) < 240.0:
+		errors.append("%s: toast row should expose stable minimum width metadata" % context)
+	if str(row.get_meta("toast_border_color", "")).is_empty():
+		errors.append("%s: toast row should expose severity border color metadata" % context)
+	var label := row.get_node_or_null("FeedbackToastLabel") as Label
 	if label == null:
-		errors.append("%s: latest toast should render as Label" % context)
+		errors.append("%s: latest toast should render inner Label" % context)
 		return
 	if not str(label.text).contains(str(toast.get("text", ""))):
 		errors.append("%s: toast label text should match snapshot: %s vs %s" % [context, label.text, toast])
-	if str(label.get_meta("toast_id", "")) != str(toast.get("id", "")):
-		errors.append("%s: toast label should expose id metadata" % context)
-	if str(label.get_meta("toast_transition_style", "")) != "event_age_fade":
-		errors.append("%s: toast label should expose transition metadata" % context)
-	if absf(float(label.get_meta("toast_alpha", -1.0)) - float(toast.get("alpha", 0.0))) > 0.001:
-		errors.append("%s: toast label should expose alpha metadata" % context)
+	for node in [row, label]:
+		if str(node.get_meta("toast_id", "")) != str(toast.get("id", "")):
+			errors.append("%s: toast node should expose id metadata" % context)
+		if str(node.get_meta("toast_transition_style", "")) != "event_age_fade":
+			errors.append("%s: toast node should expose transition metadata" % context)
+		if absf(float(node.get_meta("toast_alpha", -1.0)) - float(toast.get("alpha", 0.0))) > 0.001:
+			errors.append("%s: toast node should expose alpha metadata" % context)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
