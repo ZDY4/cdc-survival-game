@@ -106,8 +106,22 @@ func _assert_main_menu_theme(errors: Array[String], menu: Control) -> void:
 		errors.append("main menu should use NotoSans CJK font: %s" % theme)
 	if str(theme.get("theme_resource_path", "")) != "res://assets/themes/default_ui_theme.tres" or not bool(theme.get("theme_resource_loaded", false)):
 		errors.append("main menu should load Godot theme resource: %s" % theme)
+	_assert_main_menu_theme_standards(errors, theme)
 	if menu.theme == null or menu.theme.default_font == null or menu.theme.default_font.resource_path != "res://assets/fonts/NotoSansCJKsc-Regular.otf":
 		errors.append("main menu root should expose NotoSans CJK theme")
+
+
+func _assert_main_menu_theme_standards(errors: Array[String], theme: Dictionary) -> void:
+	var font_sizes: Dictionary = _dictionary_or_empty(theme.get("control_font_sizes", {}))
+	if int(font_sizes.get("Label", 0)) != 14 or int(font_sizes.get("Button", 0)) != 14:
+		errors.append("main menu theme should standardize base control font sizes: %s" % theme)
+	var constants: Dictionary = _dictionary_or_empty(theme.get("layout_constants", {}))
+	if int(constants.get("button_minimum_height", 0)) != 30:
+		errors.append("main menu theme should standardize button minimum height: %s" % theme)
+	var button_styles: Dictionary = _dictionary_or_empty(theme.get("button_state_styles", {}))
+	var states: Dictionary = _dictionary_or_empty(button_styles.get("states", {}))
+	if not bool(states.get("normal", false)) or not bool(states.get("disabled", false)) or not bool(button_styles.get("font_disabled_color", false)):
+		errors.append("main menu theme should define button normal/disabled states: %s" % theme)
 
 
 func _assert_continue_disabled_without_save(errors: Array[String], menu: Control) -> void:

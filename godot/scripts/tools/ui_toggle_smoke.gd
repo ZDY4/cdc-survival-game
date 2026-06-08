@@ -1399,12 +1399,33 @@ func _assert_ui_theme(errors: Array[String], game_root: Node, context: String) -
 		errors.append("%s: UI theme should use NotoSans CJK font: %s" % [context, theme])
 	if str(theme.get("theme_resource_path", "")) != "res://assets/themes/default_ui_theme.tres" or not bool(theme.get("theme_resource_loaded", false)):
 		errors.append("%s: UI theme should load Godot theme resource: %s" % [context, theme])
+	_assert_ui_theme_standards(errors, theme, context)
 	if int(theme.get("panel_count", 0)) < 10:
 		errors.append("%s: UI theme should cover game HUD and panels: %s" % [context, theme])
 	if game_root.hud == null or game_root.hud.theme == null:
 		errors.append("%s: HUD root should receive the shared UI theme" % context)
 	elif game_root.hud.theme.default_font == null or game_root.hud.theme.default_font.resource_path != "res://assets/fonts/NotoSansCJKsc-Regular.otf":
 		errors.append("%s: HUD theme should expose NotoSans CJK font resource" % context)
+
+
+func _assert_ui_theme_standards(errors: Array[String], theme: Dictionary, context: String) -> void:
+	var font_sizes: Dictionary = _dictionary_or_empty(theme.get("control_font_sizes", {}))
+	if int(font_sizes.get("Label", 0)) != 14 or int(font_sizes.get("Button", 0)) != 14:
+		errors.append("%s: UI theme should standardize base control font sizes: %s" % [context, theme])
+	if int(font_sizes.get("TooltipLabel", 0)) != 12 or int(font_sizes.get("HeaderMedium", 0)) != 18:
+		errors.append("%s: UI theme should standardize secondary font sizes: %s" % [context, theme])
+	var constants: Dictionary = _dictionary_or_empty(theme.get("layout_constants", {}))
+	if int(constants.get("button_minimum_height", 0)) != 30:
+		errors.append("%s: UI theme should standardize button minimum height: %s" % [context, theme])
+	if int(constants.get("vbox_separation", 0)) != 4 or int(constants.get("hbox_separation", 0)) != 4:
+		errors.append("%s: UI theme should standardize base container separation: %s" % [context, theme])
+	var button_styles: Dictionary = _dictionary_or_empty(theme.get("button_state_styles", {}))
+	var states: Dictionary = _dictionary_or_empty(button_styles.get("states", {}))
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		if not bool(states.get(state, false)):
+			errors.append("%s: UI theme should define Button %s style: %s" % [context, state, theme])
+	if not bool(button_styles.get("font_disabled_color", false)):
+		errors.append("%s: UI theme should define disabled button font color: %s" % [context, theme])
 
 
 func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
