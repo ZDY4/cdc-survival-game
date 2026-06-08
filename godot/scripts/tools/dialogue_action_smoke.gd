@@ -154,8 +154,22 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("wrong dialogue target should reject quest turn-in: %s" % wrong_target_turn_in)
 	player.active_dialogue_id = "doctor_chen_find_medicine_turn_in"
 	player.active_dialogue_node_id = "choice_1"
-	_set_dialogue_target(player, doctor)
+	_set_dialogue_target(player, null)
+	simulation.emit_event("dialogue_started", {
+		"actor_id": player.actor_id,
+		"target_actor_id": 0,
+		"target_definition_id": "doctor_chen",
+		"dialogue_id": "doctor_chen_find_medicine_turn_in",
+		"dialogue_rule_source": "smoke_event_only",
+	})
+	var event_only_target: Dictionary = _dictionary_or_empty(DialogueSnapshot.new(game_root.registry).build(simulation.snapshot()).get("target", {}))
+	if int(event_only_target.get("actor_id", 0)) != int(doctor.actor_id) or str(event_only_target.get("display_name", "")) != "战地医生·陈医生":
+		errors.append("event-only dialogue target should resolve actor and display name: %s" % event_only_target)
+	_set_dialogue_definition_target(player, "doctor_chen")
 	game_root.refresh_dialogue_panel()
+	var definition_only_target: Dictionary = _dictionary_or_empty(DialogueSnapshot.new(game_root.registry).build(simulation.snapshot()).get("target", {}))
+	if int(definition_only_target.get("actor_id", 0)) != int(doctor.actor_id) or str(definition_only_target.get("display_name", "")) != "战地医生·陈医生":
+		errors.append("definition-only dialogue target should resolve actor and display name: %s" % definition_only_target)
 	var turn_in_preview: Dictionary = _dialogue_option_preview(game_root, "turn_in_action")
 	_expect_preview_action_sequence(errors, turn_in_preview, ["turn_in_quest"], "", false, "doctor turn-in option")
 	var ready_turn_in_requirement_preview := _turn_in_preview_from_resolution(turn_in_preview)
@@ -872,3 +886,10 @@ func _set_dialogue_target(player: RefCounted, target: RefCounted) -> void:
 		return
 	player.active_dialogue_target_actor_id = target.actor_id if target != null else 0
 	player.active_dialogue_target_definition_id = target.definition_id if target != null else ""
+
+
+func _set_dialogue_definition_target(player: RefCounted, definition_id: String) -> void:
+	if player == null:
+		return
+	player.active_dialogue_target_actor_id = 0
+	player.active_dialogue_target_definition_id = definition_id

@@ -135,7 +135,7 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 					var action_data: Dictionary = _dictionary_or_empty(actions[action_index])
 					var action_result: Dictionary = _conditional_action_result(simulation, actor_id, actor, action_data)
 					if action_result.is_empty():
-						action_result = _action_runner.apply_action(simulation, actor_id, action_data, _dialogue_action_context(dialogue_id, current_node_id, actor))
+						action_result = _action_runner.apply_action(simulation, actor_id, action_data, _dialogue_action_context(simulation, dialogue_id, current_node_id, actor))
 					emitted_actions.append(action_result)
 					node_action_results.append(action_result)
 					_emit_dialogue_action_resolved(simulation, actor_id, actor, dialogue_id, current_node_id, action_index, action_data, action_result)
@@ -274,6 +274,7 @@ func _conditional_action_result(simulation: RefCounted, actor_id: int, actor: Re
 	if _dialogue_action_condition_matches(simulation, actor, target_actor, condition):
 		return {}
 	var action_type := str(action_data.get("type", action_data.get("action_type", "")))
+	var target_context := _dialogue_target_context(simulation, actor)
 	return {
 		"type": action_type,
 		"success": true,
@@ -281,8 +282,8 @@ func _conditional_action_result(simulation: RefCounted, actor_id: int, actor: Re
 		"status": "condition_not_met",
 		"reason": "dialogue_action_condition_not_met",
 		"actor_id": actor_id,
-		"target_actor_id": int(target_actor.actor_id) if target_actor != null else 0,
-		"target_definition_id": str(target_actor.definition_id) if target_actor != null else str(actor.active_dialogue_target_definition_id) if actor != null else "",
+		"target_actor_id": int(target_context.get("target_actor_id", 0)),
+		"target_definition_id": str(target_context.get("target_definition_id", "")),
 		"condition": condition.duplicate(true),
 	}
 
@@ -388,10 +389,24 @@ func _dialogue_target_actor(simulation: RefCounted, actor: RefCounted) -> RefCou
 	return null
 
 
+func _dialogue_target_context(simulation: RefCounted, actor: RefCounted) -> Dictionary:
+	var target_actor_id := int(actor.active_dialogue_target_actor_id) if actor != null else 0
+	var target_definition_id := str(actor.active_dialogue_target_definition_id) if actor != null else ""
+	var target_actor: RefCounted = _dialogue_target_actor(simulation, actor)
+	if target_actor != null:
+		target_actor_id = int(target_actor.actor_id)
+		target_definition_id = str(target_actor.definition_id)
+	return {
+		"target_actor_id": target_actor_id,
+		"target_definition_id": target_definition_id,
+	}
+
+
 func _emit_dialogue_action_resolved(simulation: RefCounted, actor_id: int, actor: RefCounted, dialogue_id: String, node_id: String, action_index: int, action_data: Dictionary, action_result: Dictionary) -> void:
 	if simulation == null or not simulation.has_method("emit_event"):
 		return
 	var action_type := str(action_result.get("type", action_data.get("type", action_data.get("action_type", ""))))
+	var target_context := _dialogue_target_context(simulation, actor)
 	var payload := {
 		"actor_id": actor_id,
 		"dialogue_id": dialogue_id,
@@ -400,8 +415,8 @@ func _emit_dialogue_action_resolved(simulation: RefCounted, actor_id: int, actor
 		"action_type": action_type,
 		"success": bool(action_result.get("success", false)),
 		"reason": str(action_result.get("reason", "")),
-		"target_actor_id": int(actor.active_dialogue_target_actor_id) if actor != null else 0,
-		"target_definition_id": str(actor.active_dialogue_target_definition_id) if actor != null else "",
+		"target_actor_id": int(target_context.get("target_actor_id", 0)),
+		"target_definition_id": str(target_context.get("target_definition_id", "")),
 		"action_summary": _dialogue_action_summary(action_data, action_result),
 		"action_result": action_result.duplicate(true),
 	}
@@ -433,13 +448,14 @@ func _dialogue_action_summary(action_data: Dictionary, action_result: Dictionary
 	return summary
 
 
-func _dialogue_action_context(dialogue_id: String, node_id: String, actor: RefCounted) -> Dictionary:
+func _dialogue_action_context(simulation: RefCounted, dialogue_id: String, node_id: String, actor: RefCounted) -> Dictionary:
+	var target_context := _dialogue_target_context(simulation, actor)
 	return {
 		"source": "dialogue",
 		"dialogue_id": dialogue_id,
 		"dialogue_node_id": node_id,
-		"target_actor_id": int(actor.active_dialogue_target_actor_id) if actor != null else 0,
-		"target_definition_id": str(actor.active_dialogue_target_definition_id) if actor != null else "",
+		"target_actor_id": int(target_context.get("target_actor_id", 0)),
+		"target_definition_id": str(target_context.get("target_definition_id", "")),
 	}
 
 

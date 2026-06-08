@@ -452,7 +452,10 @@ func _normalize_content_id(value: Variant) -> String:
 
 
 func _dialogue_target(runtime_snapshot: Dictionary, dialogue_id: String) -> Dictionary:
-	var target_actor_id := 0
+	var player := _player_actor(runtime_snapshot)
+	var target_actor_id := int(player.get("active_dialogue_target_actor_id", 0))
+	var target_definition_id := str(player.get("active_dialogue_target_definition_id", ""))
+	var source := "active_actor_state" if target_actor_id > 0 or not target_definition_id.is_empty() else ""
 	for index in range(runtime_snapshot.get("events", []).size() - 1, -1, -1):
 		var event: Dictionary = _dictionary_or_empty(runtime_snapshot.get("events", [])[index])
 		if str(event.get("kind", "")) != "dialogue_started":
@@ -460,21 +463,58 @@ func _dialogue_target(runtime_snapshot: Dictionary, dialogue_id: String) -> Dict
 		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
 		if str(payload.get("dialogue_id", "")) != dialogue_id:
 			continue
-		target_actor_id = int(payload.get("target_actor_id", 0))
+		if target_actor_id <= 0:
+			target_actor_id = int(payload.get("target_actor_id", 0))
+		if target_definition_id.is_empty():
+			target_definition_id = str(payload.get("target_definition_id", ""))
+		if source.is_empty():
+			source = "dialogue_started_event"
 		break
+	if target_actor_id <= 0 and not target_definition_id.is_empty():
+		var actor_by_definition := _actor_by_definition(runtime_snapshot, target_definition_id)
+		if not actor_by_definition.is_empty():
+			target_actor_id = int(actor_by_definition.get("actor_id", 0))
+			source = "definition_actor_lookup"
 	if target_actor_id <= 0:
-		return {}
+		if target_definition_id.is_empty():
+			return {}
+		return {
+			"actor_id": 0,
+			"definition_id": target_definition_id,
+			"display_name": _character_name(target_definition_id),
+			"source": source if not source.is_empty() else "definition_id",
+		}
 	for actor in runtime_snapshot.get("actors", []):
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
 		if int(actor_data.get("actor_id", 0)) == target_actor_id:
+			var actor_definition_id := str(actor_data.get("definition_id", target_definition_id))
+			var display_name := str(actor_data.get("display_name", ""))
+			if display_name.is_empty():
+				display_name = _character_name(actor_definition_id)
 			return {
 				"actor_id": target_actor_id,
-				"definition_id": str(actor_data.get("definition_id", "")),
-				"display_name": str(actor_data.get("display_name", "")),
+				"definition_id": actor_definition_id,
+				"display_name": display_name,
 				"kind": str(actor_data.get("kind", "")),
 				"side": str(actor_data.get("side", "")),
+				"source": source if not source.is_empty() else "actor_id",
 			}
-	return {"actor_id": target_actor_id}
+	return {
+		"actor_id": target_actor_id,
+		"definition_id": target_definition_id,
+		"display_name": _character_name(target_definition_id),
+		"source": source if not source.is_empty() else "actor_id",
+	}
+
+
+func _actor_by_definition(runtime_snapshot: Dictionary, definition_id: String) -> Dictionary:
+	if definition_id.is_empty():
+		return {}
+	for actor in runtime_snapshot.get("actors", []):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if str(actor_data.get("definition_id", "")) == definition_id:
+			return actor_data
+	return {}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
