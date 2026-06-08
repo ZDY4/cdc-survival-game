@@ -147,6 +147,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await _expect_independent_combat_event_presenters(errors, game_root)
 	await _expect_on_hit_effect_attack_presenter(errors, game_root)
 	await _expect_attack_delivery_presenters(errors, game_root)
+	await _expect_reload_presenter(errors, game_root)
 	var move_camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if move_camera == null:
 		errors.append("missing runtime camera before mouse ground move")
@@ -1884,6 +1885,78 @@ func _expect_attack_delivery_presenters(errors: Array[String], game_root: Node) 
 	await _wait_for_world_action_presenter_idle(game_root)
 	game_root.simulation.actor_registry.unregister_actor(target_id)
 	game_root._rebuild_world_after_runtime_change()
+
+
+func _expect_reload_presenter(errors: Array[String], game_root: Node) -> void:
+	await _wait_for_world_action_presenter_idle(game_root)
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("reload presenter needs player actor node")
+		return
+	var payload := {
+		"actor_id": 1,
+		"slot_id": "main_hand",
+		"weapon_item_id": "1004",
+		"ammo_type": "1009",
+		"loaded": 10,
+		"loaded_before": 0,
+		"loaded_count": 10,
+		"capacity": 12,
+		"remaining_inventory": 2,
+		"ap_cost": 2.0,
+	}
+	_present_synthetic_world_action_event(game_root, "weapon_reloaded", payload)
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "reload":
+		errors.append("weapon_reloaded event should enqueue reload presenter, got %s" % JSON.stringify(presenter))
+	if str(presenter.get("event_kind", "")) != "weapon_reloaded":
+		errors.append("reload presenter should expose weapon_reloaded event kind")
+	if str(presenter.get("visual_kind", "")) != "reload_pulse":
+		errors.append("reload presenter should expose reload_pulse visual kind")
+	if int(presenter.get("loaded", 0)) != 10 or int(presenter.get("capacity", 0)) != 12:
+		errors.append("reload presenter should expose loaded/capacity")
+	if int(presenter.get("loaded_count", 0)) != 10 or int(presenter.get("remaining_inventory", 0)) != 2:
+		errors.append("reload presenter should expose loaded_count and remaining inventory")
+	if str(presenter.get("weapon_item_id", "")) != "1004" or str(presenter.get("ammo_type", "")) != "1009":
+		errors.append("reload presenter should expose weapon and ammo ids")
+	if str(presenter.get("marker_path", "")).is_empty() or str(presenter.get("label_path", "")).is_empty():
+		errors.append("reload presenter should expose marker and label paths")
+	if not str(presenter.get("label_text", "")).contains("RELOAD"):
+		errors.append("reload presenter should expose label text")
+	_expect_action_presenter_phases(errors, presenter, ["prepare", "load", "ready"], "reload presenter")
+	var marker: MeshInstance3D = game_root.find_child("WorldActionReloadPulse", true, false) as MeshInstance3D
+	if marker == null:
+		errors.append("reload presenter should render WorldActionReloadPulse")
+	else:
+		if str(marker.get_meta("action_presenter_kind", "")) != "reload":
+			errors.append("reload pulse should expose reload presenter kind")
+		if str(marker.get_meta("visual_kind", "")) != "reload_pulse":
+			errors.append("reload pulse should expose visual kind")
+		if int(marker.get_meta("loaded", 0)) != 10 or int(marker.get_meta("capacity", 0)) != 12:
+			errors.append("reload pulse should expose loaded/capacity")
+		var material := marker.material_override as StandardMaterial3D
+		if material == null or not material.no_depth_test:
+			errors.append("reload pulse should render above map meshes")
+		if marker.global_position.distance_to(player_node.global_position + Vector3(0.0, 1.08, 0.0)) > 0.3:
+			errors.append("reload pulse should appear above actor")
+		_expect_action_marker_phases(errors, marker, ["prepare", "load", "ready"], "reload pulse")
+	var label: Label3D = game_root.find_child("WorldActionReloadText", true, false) as Label3D
+	if label == null:
+		errors.append("reload presenter should render WorldActionReloadText")
+	else:
+		if str(label.get_meta("action_presenter_kind", "")) != "reload_text":
+			errors.append("reload text should expose reload_text kind")
+		if not label.text.contains("10/12"):
+			errors.append("reload text should expose loaded ammo summary")
+		if label.font == null or label.font.resource_path != WORLD_LABEL_FONT_PATH:
+			errors.append("reload text should use world Label3D font")
+		if str(label.get_meta("font_resource_path", "")) != WORLD_LABEL_FONT_PATH:
+			errors.append("reload text should expose font resource path")
+		if label.billboard != BaseMaterial3D.BILLBOARD_ENABLED or not label.no_depth_test:
+			errors.append("reload text should billboard and render above map meshes")
+		_expect_action_marker_phases(errors, label, ["prepare", "load", "ready"], "reload text")
+	_expect_world_action_input_blocker(errors, game_root, "reload")
+	await _wait_for_world_action_presenter_idle(game_root)
 
 
 func _synthetic_attack_payload(actor_id: int, target_actor_id: int, attack_range: int, weapon_item_id: String) -> Dictionary:

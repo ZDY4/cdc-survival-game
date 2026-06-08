@@ -8,9 +8,11 @@ const STEP_DURATION_SEC := 0.07
 const ATTACK_PHASES := ["windup", "impact", "fade"]
 const INTERACTION_PHASES := ["start", "pulse", "fade"]
 const COMBAT_EVENT_PHASES := ["signal", "resolve", "fade"]
+const RELOAD_PHASES := ["prepare", "load", "ready"]
 const ATTACK_PHASE_DURATIONS := [0.06, 0.08, 0.10]
 const INTERACTION_PHASE_DURATIONS := [0.06, 0.08, 0.10]
 const COMBAT_EVENT_PHASE_DURATIONS := [0.05, 0.10, 0.12]
+const RELOAD_PHASE_DURATIONS := [0.07, 0.12, 0.10]
 
 var sequence: int = 0
 var active_count: int = 0
@@ -44,6 +46,10 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 		return latest.duplicate(true)
 	if not interaction.is_empty():
 		_start_interaction_feedback(host, world_root, interaction)
+		return latest.duplicate(true)
+	var reload := _reload_presentation(events, world_root, world_result)
+	if not reload.is_empty():
+		_start_reload_feedback(host, world_root, reload)
 		return latest.duplicate(true)
 	var combat_event := _combat_event_presentation(events, world_root, world_result)
 	if not combat_event.is_empty():
@@ -921,6 +927,185 @@ func _interaction_public_snapshot(interaction: Dictionary, active: bool, reason:
 	}
 
 
+func _reload_presentation(events: Array, world_root: Node, world_result: Dictionary) -> Dictionary:
+	for index in range(events.size() - 1, -1, -1):
+		var event: Dictionary = _dictionary_or_empty(events[index])
+		if str(event.get("kind", "")) != "weapon_reloaded":
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		var actor_id := int(payload.get("actor_id", 0))
+		var actor_node := _actor_node(world_root, world_result, actor_id)
+		var actor_grid := _actor_grid(world_result, actor_id)
+		if actor_grid.is_empty() and actor_node != null:
+			actor_grid = _node_grid(actor_node)
+		return {
+			"active": false,
+			"kind": "reload",
+			"event_kind": "weapon_reloaded",
+			"actor_id": actor_id,
+			"slot_id": str(payload.get("slot_id", "")),
+			"weapon_item_id": str(payload.get("weapon_item_id", "")),
+			"ammo_type": str(payload.get("ammo_type", "")),
+			"loaded": int(payload.get("loaded", 0)),
+			"loaded_before": int(payload.get("loaded_before", 0)),
+			"loaded_count": int(payload.get("loaded_count", 0)),
+			"capacity": int(payload.get("capacity", 0)),
+			"remaining_inventory": int(payload.get("remaining_inventory", 0)),
+			"ap_cost": float(payload.get("ap_cost", 0.0)),
+			"actor_node": actor_node,
+			"node_path": str(actor_node.get_path()) if actor_node != null else "",
+			"target_grid": actor_grid.duplicate(true),
+		}
+	return {}
+
+
+func _start_reload_feedback(host: Node, world_root: Node, reload: Dictionary) -> void:
+	var actor_node: Node3D = reload.get("actor_node", null)
+	var target_grid: Dictionary = _dictionary_or_empty(reload.get("target_grid", {}))
+	if actor_node == null and target_grid.is_empty():
+		_record_latest(_reload_public_snapshot(reload, false, "actor_missing"))
+		return
+	sequence += 1
+	var marker := MeshInstance3D.new()
+	marker.name = "WorldActionReloadPulse"
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.30
+	mesh.bottom_radius = 0.30
+	mesh.height = 0.08
+	mesh.radial_segments = 20
+	marker.mesh = mesh
+	marker.material_override = _reload_material()
+	var target_position := Vector3.ZERO
+	if actor_node != null:
+		target_position = actor_node.global_position if actor_node.is_inside_tree() else actor_node.position
+	else:
+		target_position = _grid_to_world(target_grid, 0.58)
+	marker.position = target_position + Vector3(0.0, 1.08, 0.0)
+	marker.scale = Vector3(0.70, 0.70, 0.70)
+	marker.set_meta("action_presenter_active", true)
+	marker.set_meta("action_presenter_kind", "reload")
+	marker.set_meta("action_presenter_phases", RELOAD_PHASES.duplicate())
+	marker.set_meta("action_presenter_phase_count", RELOAD_PHASES.size())
+	marker.set_meta("action_presenter_current_phase", RELOAD_PHASES[0])
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(RELOAD_PHASE_DURATIONS))
+	_apply_reload_event_meta(marker, reload)
+	_track_active_node(marker)
+	var label := _reload_label(reload)
+	label.position = target_position + Vector3(0.0, 1.44, 0.0)
+	_track_active_node(label)
+	var layer := _presentation_layer(world_root)
+	layer.add_child(marker)
+	layer.add_child(label)
+	var tween := host.create_tween()
+	_track_active_tween(tween)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(marker, "scale", Vector3(1.05, 1.05, 1.05), float(RELOAD_PHASE_DURATIONS[0]))
+	tween.parallel().tween_property(label, "position", label.position + Vector3(0.0, 0.08, 0.0), float(RELOAD_PHASE_DURATIONS[0]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), RELOAD_PHASES[1]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(label), RELOAD_PHASES[1]))
+	tween.tween_property(marker, "scale", Vector3(1.44, 1.18, 1.44), float(RELOAD_PHASE_DURATIONS[1]))
+	tween.parallel().tween_property(label, "position", label.position + Vector3(0.0, 0.24, 0.0), float(RELOAD_PHASE_DURATIONS[1]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), RELOAD_PHASES[2]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(label), RELOAD_PHASES[2]))
+	tween.tween_property(marker, "scale", Vector3(0.38, 0.38, 0.38), float(RELOAD_PHASE_DURATIONS[2]))
+	tween.parallel().tween_property(label, "modulate", Color(label.modulate.r, label.modulate.g, label.modulate.b, 0.0), float(RELOAD_PHASE_DURATIONS[2]))
+	tween.finished.connect(Callable(self, "_on_reload_feedback_finished").bind(weakref(marker), weakref(label)))
+	var snapshot_data := _reload_public_snapshot(reload, true, "")
+	snapshot_data["marker_path"] = str(marker.get_path())
+	snapshot_data["label_path"] = str(label.get_path())
+	snapshot_data["label_text"] = str(label.text)
+	_record_latest(snapshot_data)
+
+
+func _on_reload_feedback_finished(marker_ref: WeakRef, label_ref: WeakRef) -> void:
+	var marker := marker_ref.get_ref() as Node
+	if marker != null and not marker.is_queued_for_deletion():
+		marker.set_meta("action_presenter_active", false)
+		marker.queue_free()
+	var label := label_ref.get_ref() as Node
+	if label != null and not label.is_queued_for_deletion():
+		label.set_meta("action_presenter_active", false)
+		label.queue_free()
+	_prune_active_refs()
+	latest["active"] = active_count > 0
+	latest["active_count"] = active_count
+
+
+func _reload_public_snapshot(reload: Dictionary, active: bool, reason: String) -> Dictionary:
+	return {
+		"active": active,
+		"kind": "reload",
+		"reason": reason,
+		"event_kind": str(reload.get("event_kind", "weapon_reloaded")),
+		"actor_id": int(reload.get("actor_id", 0)),
+		"slot_id": str(reload.get("slot_id", "")),
+		"weapon_item_id": str(reload.get("weapon_item_id", "")),
+		"ammo_type": str(reload.get("ammo_type", "")),
+		"loaded": int(reload.get("loaded", 0)),
+		"loaded_before": int(reload.get("loaded_before", 0)),
+		"loaded_count": int(reload.get("loaded_count", 0)),
+		"capacity": int(reload.get("capacity", 0)),
+		"remaining_inventory": int(reload.get("remaining_inventory", 0)),
+		"ap_cost": float(reload.get("ap_cost", 0.0)),
+		"target_grid": _dictionary_or_empty(reload.get("target_grid", {})).duplicate(true),
+		"node_path": str(reload.get("node_path", "")),
+		"phases": RELOAD_PHASES.duplicate(),
+		"phase_count": RELOAD_PHASES.size(),
+		"current_phase": RELOAD_PHASES[0] if active else "",
+		"duration_sec": _duration_sum(RELOAD_PHASE_DURATIONS) if active else 0.0,
+		"visual_kind": "reload_pulse",
+	}
+
+
+func _reload_label(reload: Dictionary) -> Label3D:
+	var label := Label3D.new()
+	label.name = "WorldActionReloadText"
+	label.text = _reload_feedback_text(reload)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 14
+	label.modulate = Color(0.48, 0.88, 1.0, 0.94)
+	label.outline_size = 4
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
+	var font_result := UIThemeService.apply_label3d_font(label)
+	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	label.set_meta("action_presenter_active", true)
+	label.set_meta("action_presenter_kind", "reload_text")
+	label.set_meta("action_presenter_phases", RELOAD_PHASES.duplicate())
+	label.set_meta("action_presenter_phase_count", RELOAD_PHASES.size())
+	label.set_meta("action_presenter_current_phase", RELOAD_PHASES[0])
+	label.set_meta("action_presenter_duration_sec", _duration_sum(RELOAD_PHASE_DURATIONS))
+	_apply_reload_event_meta(label, reload)
+	label.set_meta("text", label.text)
+	return label
+
+
+func _apply_reload_event_meta(node: Node, reload: Dictionary) -> void:
+	node.set_meta("event_kind", str(reload.get("event_kind", "weapon_reloaded")))
+	node.set_meta("visual_kind", "reload_pulse")
+	node.set_meta("actor_id", int(reload.get("actor_id", 0)))
+	node.set_meta("slot_id", str(reload.get("slot_id", "")))
+	node.set_meta("weapon_item_id", str(reload.get("weapon_item_id", "")))
+	node.set_meta("ammo_type", str(reload.get("ammo_type", "")))
+	node.set_meta("loaded", int(reload.get("loaded", 0)))
+	node.set_meta("loaded_before", int(reload.get("loaded_before", 0)))
+	node.set_meta("loaded_count", int(reload.get("loaded_count", 0)))
+	node.set_meta("capacity", int(reload.get("capacity", 0)))
+	node.set_meta("remaining_inventory", int(reload.get("remaining_inventory", 0)))
+	node.set_meta("ap_cost", float(reload.get("ap_cost", 0.0)))
+	node.set_meta("target_grid", _dictionary_or_empty(reload.get("target_grid", {})).duplicate(true))
+
+
+func _reload_feedback_text(reload: Dictionary) -> String:
+	var loaded := int(reload.get("loaded", 0))
+	var capacity := int(reload.get("capacity", 0))
+	var loaded_count := int(reload.get("loaded_count", 0))
+	if capacity > 0:
+		return "RELOAD +%d  %d/%d" % [loaded_count, loaded, capacity]
+	return "RELOAD +%d" % loaded_count
+
+
 func _combat_event_presentation(events: Array, world_root: Node, world_result: Dictionary) -> Dictionary:
 	var event_kinds: Array[String] = []
 	var selected_event: Dictionary = {}
@@ -1233,6 +1418,14 @@ func _attack_projectile_trail_material() -> StandardMaterial3D:
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.no_depth_test = true
 	material.albedo_color = Color(0.98, 0.84, 0.34, 0.68)
+	return material
+
+
+func _reload_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	material.albedo_color = Color(0.30, 0.78, 1.0, 0.82)
 	return material
 
 
