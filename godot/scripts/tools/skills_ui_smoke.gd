@@ -50,6 +50,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _press_skill_line(game_root, "medicine"):
 		errors.append("should select medicine skill row")
 	await process_frame
+	_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Skill_medicine_Line", "skill_row", "select_skill", {"skill_id": "medicine"}, "medicine skill row audio")
 	if not _detail_text(game_root).contains("详情: 医疗知识 0/3"):
 		errors.append("skills detail should show selected skill title")
 	if not _detail_text(game_root).contains("提升治疗与恢复相关判定"):
@@ -65,6 +66,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _press_skill_line(game_root, "survival"):
 		errors.append("should select survival skill row")
 	await process_frame
+	_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Skill_survival_Line", "skill_row", "select_skill", {"skill_id": "survival"}, "survival skill row audio")
 	if not _detail_text(game_root).contains("解锁: 医疗知识 / 观察力 / 低姿潜行"):
 		errors.append("skills detail should show direct unlock chain for survival")
 	if not _skill_line_tooltip(game_root, "survival").contains("解锁 医疗知识 / 观察力 / 低姿潜行"):
@@ -82,6 +84,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_filter_button(game_root, "FilterActiveButton").pressed.emit()
 		await process_frame
+		_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "FilterActiveButton", "filter_button", "filter_mode", {"filter_id": "active"}, "active filter audio")
 		if not _skill_text(game_root).contains("肾上腺激发 0/3"):
 			errors.append("active filter should keep active skill rows")
 		if not _skill_text(game_root).contains("低姿潜行 0/3"):
@@ -93,6 +96,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		else:
 			_filter_button(game_root, "FilterAllButton").pressed.emit()
 			await process_frame
+			_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "FilterAllButton", "filter_button", "filter_mode", {"filter_id": "all"}, "all filter audio")
 			if not _skill_text(game_root).contains("生存本能 0/5"):
 				errors.append("all filter should restore passive skill rows")
 	if _tree_filter_button(game_root, "survival") == null:
@@ -100,6 +104,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_tree_filter_button(game_root, "survival").pressed.emit()
 		await process_frame
+		_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TreeFilter_survival", "tree_filter_button", "tree_filter_mode", {"tree_id": "survival"}, "survival tree filter audio")
 		if not _skill_text(game_root).contains("生存本能 0/5"):
 			errors.append("survival tree filter should keep survival skill rows")
 		if _skill_text(game_root).contains("战斗训练 0/5"):
@@ -109,6 +114,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		else:
 			_tree_filter_button(game_root, "all").pressed.emit()
 			await process_frame
+			_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TreeFilterAllButton", "tree_filter_button", "tree_filter_mode", {"tree_id": "all"}, "all tree filter audio")
 			if not _skill_text(game_root).contains("战斗训练 0/5"):
 				errors.append("all tree filter should restore combat skill rows")
 	await _assert_skill_tree_graph_pan(errors, game_root)
@@ -124,6 +130,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 
 	_learn_button(game_root, "survival").pressed.emit()
 	await process_frame
+	_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Skill_survival_LearnButton", "button", "open_learn_confirm", {"skill_id": "survival"}, "survival learn button audio")
 	if not _learn_confirm_dialog_visible(game_root):
 		errors.append("survival learn button should open skill learn confirmation dialog")
 	if not _summary_line(game_root).contains("技能点 1"):
@@ -149,6 +156,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	_confirm_learn_dialog(game_root)
 	await process_frame
+	_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "LearnSkillConfirmDialog", "dialog", "confirm_learn", {"skill_id": "survival"}, "survival learn confirmation audio")
 	if not _summary_line(game_root).contains("技能点 0"):
 		errors.append("skills summary did not refresh consumed skill point")
 	if not _skill_text(game_root).contains("生存本能 1/5"):
@@ -183,6 +191,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await process_frame
 		_confirm_learn_dialog(game_root)
 		await process_frame
+		_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "LearnSkillConfirmDialog", "dialog", "confirm_learn", {"skill_id": "adrenaline_rush"}, "adrenaline learn confirmation audio")
 	if not _skill_text(game_root).contains("肾上腺激发 1/3"):
 		errors.append("adrenaline_rush should be learned through skills UI confirmation")
 	if not _feedback_line(game_root).contains("已学习 肾上腺激发") or not _feedback_line(game_root).contains("可绑定到快捷栏"):
@@ -280,6 +289,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("learned toggle skill should allow hotbar binding")
 	_bind_button(game_root, "low_profile").pressed.emit()
 	await process_frame
+	_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Skill_low_profile_BindButton", "button", "bind_hotbar", {"skill_id": "low_profile"}, "low profile bind button audio")
 	if not _hotbar_line(game_root).contains("slot_3:adrenaline_rush"):
 		errors.append("binding a second skill should keep dragged hotbar slot")
 	if not _hotbar_line(game_root).contains("slot_1:low_profile"):
@@ -288,6 +298,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("bound toggle skill should expose enabled clear button")
 	_clear_button(game_root, "low_profile").pressed.emit()
 	await process_frame
+	_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Skill_low_profile_ClearButton", "button", "clear_hotbar", {"skill_id": "low_profile", "slot_id": "slot_1"}, "low profile clear button audio")
 	if not _hotbar_line(game_root).contains("slot_3:adrenaline_rush"):
 		errors.append("clearing second hotbar slot should keep dragged slot")
 	if _hotbar_line(game_root).contains("slot_1:low_profile"):
@@ -638,6 +649,7 @@ func _assert_skill_tree_graph_pan(errors: Array[String], game_root: Node) -> voi
 	wheel_up.pressed = true
 	wheel_up.position = Vector2(20, 20)
 	game_root.skills_panel.call("_handle_skill_graph_input", wheel_up)
+	_assert_skills_control_audio(errors, game_root, "ui_slider_changed", "ui_slider", "SkillTreeGraphCanvas", "graph", "wheel_zoom_in", {}, "skill tree wheel zoom audio")
 	var zoomed_snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
 	if float(zoomed_snapshot.get("zoom", 1.0)) <= float(moved_snapshot.get("zoom", 1.0)):
 		errors.append("skill tree graph wheel up should increase zoom: before %s after %s" % [moved_snapshot, zoomed_snapshot])
@@ -647,6 +659,7 @@ func _assert_skill_tree_graph_pan(errors: Array[String], game_root: Node) -> voi
 	else:
 		zoom_out_button.pressed.emit()
 		await game_root.get_tree().process_frame
+		_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "SkillTreeZoomOutButton", "button", "zoom_out", {}, "skill tree zoom out audio")
 		var zoom_out_snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
 		if float(zoom_out_snapshot.get("zoom", 0.0)) >= float(zoomed_snapshot.get("zoom", 0.0)):
 			errors.append("skill tree graph zoom out button should reduce zoom: before %s after %s" % [zoomed_snapshot, zoom_out_snapshot])
@@ -656,6 +669,7 @@ func _assert_skill_tree_graph_pan(errors: Array[String], game_root: Node) -> voi
 	else:
 		reset_button.pressed.emit()
 		await game_root.get_tree().process_frame
+		_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "SkillTreeResetPanButton", "button", "reset_pan", {}, "skill tree reset pan audio")
 		var reset_snapshot: Dictionary = _dictionary_or_empty(game_root.skills_panel.skill_tree_graph_snapshot())
 		var reset_pan: Dictionary = _dictionary_or_empty(reset_snapshot.get("pan", {}))
 		if absf(float(reset_pan.get("x", 0.0))) > 0.001 or absf(float(reset_pan.get("y", 0.0))) > 0.001:
@@ -683,6 +697,7 @@ func _assert_skill_tree_graph_pan(errors: Array[String], game_root: Node) -> voi
 	release.position = click_position
 	game_root.skills_panel.call("_handle_skill_graph_input", release)
 	await game_root.get_tree().process_frame
+	_assert_skills_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "SkillTreeGraphCanvas", "graph", "select_graph_node", {"skill_id": "survival"}, "skill tree node select audio")
 	if not _detail_text(game_root).contains("详情: 生存本能"):
 		errors.append("clicking graph node should select matching skill detail")
 
@@ -1290,6 +1305,34 @@ func _recent_menu_events_contain(menu_state: Dictionary, expected_event: String,
 		if str(event.get("event", "")) == expected_event and str(event.get("panel_id", "")) == expected_id:
 			return true
 	return false
+
+
+func _assert_skills_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(snapshot.get("last_event_kind", "")) != expected_event_kind or str(snapshot.get("last_sound_id", "")) != expected_sound_id:
+		errors.append("%s: expected %s/%s audio feedback, got %s" % [context, expected_event_kind, expected_sound_id, snapshot])
+		return
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = _dictionary_or_empty(recent[recent.size() - 1])
+	if str(entry.get("audio_source", "")) != "ui" or str(entry.get("panel_id", "")) != "skills":
+		errors.append("%s: recent audio source/panel mismatch: %s" % [context, entry])
+	if str(entry.get("event_kind", "")) != expected_event_kind or str(entry.get("sound_id", "")) != expected_sound_id:
+		errors.append("%s: recent audio event mismatch: %s" % [context, entry])
+	if str(entry.get("control_name", "")) != expected_control_name:
+		errors.append("%s: recent audio control name expected %s, got %s" % [context, expected_control_name, entry.get("control_name", "")])
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
 
 
 func _expect_modal_player_commands_blocked(errors: Array[String], game_root: Node, expected_modal_id: String) -> void:

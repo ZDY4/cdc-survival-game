@@ -154,16 +154,21 @@ func _build_layout() -> void:
 	box.add_child(_tree_filter_box)
 	var reset_pan_button := _button("SkillTreeResetPanButton", "复位", "复位技能树视图", false)
 	reset_pan_button.custom_minimum_size = Vector2(58, 28)
-	reset_pan_button.pressed.connect(Callable(self, "reset_skill_tree_pan"), CONNECT_DEFERRED)
+	reset_pan_button.pressed.connect(func() -> void:
+		reset_skill_tree_pan()
+		_play_skills_control_audio("ui_button_pressed", "SkillTreeResetPanButton", "button", "reset_pan", {"value": "zero"})
+	, CONNECT_DEFERRED)
 	var zoom_out_button := _button("SkillTreeZoomOutButton", "-", "缩小技能树视图", false)
 	zoom_out_button.custom_minimum_size = Vector2(34, 28)
 	zoom_out_button.pressed.connect(func() -> void:
 		_set_skill_tree_zoom(_skill_graph_zoom - 0.1)
+		_play_skills_control_audio("ui_button_pressed", "SkillTreeZoomOutButton", "button", "zoom_out", {"value": _skill_graph_zoom})
 	, CONNECT_DEFERRED)
 	var zoom_in_button := _button("SkillTreeZoomInButton", "+", "放大技能树视图", false)
 	zoom_in_button.custom_minimum_size = Vector2(34, 28)
 	zoom_in_button.pressed.connect(func() -> void:
 		_set_skill_tree_zoom(_skill_graph_zoom + 0.1)
+		_play_skills_control_audio("ui_button_pressed", "SkillTreeZoomInButton", "button", "zoom_in", {"value": _skill_graph_zoom})
 	, CONNECT_DEFERRED)
 	_graph_header_box.add_child(_graph_status_label)
 	_graph_header_box.add_child(zoom_out_button)
@@ -285,10 +290,12 @@ func _handle_skill_graph_input(event: InputEvent) -> void:
 	if mouse_button != null:
 		if mouse_button.pressed and mouse_button.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_set_skill_tree_zoom(_skill_graph_zoom + 0.1)
+			_play_skills_control_audio("ui_slider_changed", "SkillTreeGraphCanvas", "graph", "wheel_zoom_in", {"value": _skill_graph_zoom})
 			_graph_canvas.accept_event()
 			return
 		if mouse_button.pressed and mouse_button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_set_skill_tree_zoom(_skill_graph_zoom - 0.1)
+			_play_skills_control_audio("ui_slider_changed", "SkillTreeGraphCanvas", "graph", "wheel_zoom_out", {"value": _skill_graph_zoom})
 			_graph_canvas.accept_event()
 			return
 		if mouse_button.button_index == MOUSE_BUTTON_LEFT:
@@ -305,6 +312,7 @@ func _handle_skill_graph_input(event: InputEvent) -> void:
 					if not skill_id.is_empty():
 						_selected_skill_id = skill_id
 						_learn_feedback_text = ""
+						_play_skills_control_audio("ui_button_pressed", "SkillTreeGraphCanvas", "graph", "select_graph_node", {"skill_id": skill_id})
 						_graph_canvas.accept_event()
 						apply_snapshot(_last_snapshot)
 						return
@@ -559,6 +567,7 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	line.pressed.connect(func() -> void:
 		_selected_skill_id = skill_id
 		_learn_feedback_text = ""
+		_play_skills_control_audio("ui_button_pressed", "Skill_%s_Line" % skill_id, "skill_row", "select_skill", {"skill_id": skill_id})
 		apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
 	line.gui_input.connect(func(event: InputEvent) -> void:
@@ -571,18 +580,21 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 	var learn_button := _button("LearnButton", "+", _learn_button_tooltip(skill), not bool(skill.get("can_learn", false)))
 	learn_button.pressed.connect(func() -> void:
 		_open_learn_confirm(skill.duplicate(true))
+		_play_skills_control_audio("ui_button_pressed", "Skill_%s_LearnButton" % skill_id, "button", "open_learn_confirm", {"skill_id": skill_id})
 	, CONNECT_DEFERRED)
 	var bind_button := _button("BindButton", "B", _bind_button_tooltip(skill), not bool(skill.get("can_bind", false)))
 	bind_button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("bind_player_skill_to_hotbar"):
 			root.bind_player_skill_to_hotbar("", skill_id)
+			_play_skills_control_audio("ui_button_pressed", "Skill_%s_BindButton" % skill_id, "button", "bind_hotbar", {"skill_id": skill_id})
 	, CONNECT_DEFERRED)
 	var use_button := _button("UseButton", "U", _use_button_tooltip(skill), not bool(skill.get("can_use", false)))
 	use_button.pressed.connect(func() -> void:
 		var root := get_parent()
 		if root != null and root.has_method("use_hotbar_slot"):
 			root.use_hotbar_slot(str(skill.get("bound_slot", "")))
+			_play_skills_control_audio("ui_button_pressed", "Skill_%s_UseButton" % skill_id, "button", "use_skill", {"skill_id": skill_id, "slot_id": str(skill.get("bound_slot", ""))})
 	, CONNECT_DEFERRED)
 	var bound_slot_id: String = str(skill.get("bound_slot", ""))
 	var clear_button := _button("ClearButton", "X", "清空 %s" % bound_slot_id, bound_slot_id.is_empty())
@@ -590,6 +602,7 @@ func _skill_row(skill: Dictionary) -> HBoxContainer:
 		var root := get_parent()
 		if root != null and root.has_method("bind_player_skill_to_hotbar"):
 			root.bind_player_skill_to_hotbar(bound_slot_id, "")
+			_play_skills_control_audio("ui_button_pressed", "Skill_%s_ClearButton" % skill_id, "button", "clear_hotbar", {"skill_id": skill_id, "slot_id": bound_slot_id})
 	, CONNECT_DEFERRED)
 	row.add_child(line)
 	row.add_child(learn_button)
@@ -717,21 +730,26 @@ func _execute_context_action(action_id: int) -> void:
 	match action_id:
 		CONTEXT_INSPECT:
 			_apply_detail(_context_skill.duplicate(true))
+			_play_skills_control_audio("ui_button_pressed", "SkillContextMenu", "context_menu", "inspect_skill", {"skill_id": skill_id})
 		CONTEXT_LEARN:
 			_open_learn_confirm(_context_skill.duplicate(true))
+			_play_skills_control_audio("ui_button_pressed", "SkillContextMenu", "context_menu", "open_learn_confirm", {"skill_id": skill_id})
 		CONTEXT_BIND:
 			var root := get_parent()
 			if root != null and root.has_method("bind_player_skill_to_hotbar"):
 				root.bind_player_skill_to_hotbar("", skill_id)
+				_play_skills_control_audio("ui_button_pressed", "SkillContextMenu", "context_menu", "bind_hotbar", {"skill_id": skill_id})
 		CONTEXT_USE:
 			var root := get_parent()
 			if root != null and root.has_method("use_hotbar_slot"):
 				root.use_hotbar_slot(str(_context_skill.get("bound_slot", "")))
+				_play_skills_control_audio("ui_button_pressed", "SkillContextMenu", "context_menu", "use_skill", {"skill_id": skill_id, "slot_id": str(_context_skill.get("bound_slot", ""))})
 		CONTEXT_CLEAR_BINDING:
 			var root := get_parent()
 			var bound_slot_id := str(_context_skill.get("bound_slot", ""))
 			if root != null and root.has_method("bind_player_skill_to_hotbar") and not bound_slot_id.is_empty():
 				root.bind_player_skill_to_hotbar(bound_slot_id, "")
+				_play_skills_control_audio("ui_button_pressed", "SkillContextMenu", "context_menu", "clear_hotbar", {"skill_id": skill_id, "slot_id": bound_slot_id})
 	if _context_menu != null:
 		_context_menu.hide()
 
@@ -803,6 +821,7 @@ func _confirm_pending_learn() -> void:
 		if bool(result.get("success", false)):
 			_selected_skill_id = skill_id
 			_learn_feedback_text = _learn_feedback(skill_name, activation_mode)
+			_play_skills_control_audio("ui_button_pressed", "LearnSkillConfirmDialog", "dialog", "confirm_learn", {"skill_id": skill_id})
 			if not _last_snapshot.is_empty():
 				apply_snapshot(_last_snapshot)
 
@@ -1141,6 +1160,7 @@ func _add_filter_button(node_name: String, text: String, mode: String) -> void:
 	button.pressed.connect(func() -> void:
 		_filter_mode = mode
 		_refresh_filter_buttons()
+		_play_skills_control_audio("ui_button_pressed", node_name, "filter_button", "filter_mode", {"filter_id": mode})
 		if not _last_snapshot.is_empty():
 			apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
@@ -1177,6 +1197,7 @@ func _add_tree_filter_button(node_name: String, text: String, tree_id: String) -
 	button.button_pressed = _tree_filter_mode == tree_id
 	button.pressed.connect(func() -> void:
 		_tree_filter_mode = tree_id
+		_play_skills_control_audio("ui_button_pressed", node_name, "tree_filter_button", "tree_filter_mode", {"tree_id": tree_id})
 		if not _last_snapshot.is_empty():
 			apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
@@ -1208,6 +1229,22 @@ func _label(node_name: String) -> Label:
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _play_skills_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "skills",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
 
 
 func _clear_trees() -> void:

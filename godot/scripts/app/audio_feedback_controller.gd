@@ -187,6 +187,10 @@ func _process_event(event_data: Dictionary, event_index: int) -> void:
 		"control_name": str(payload.get("control_name", "")),
 		"control_kind": str(payload.get("control_kind", "")),
 		"setting_key": str(payload.get("setting_key", "")),
+		"skill_id": str(payload.get("skill_id", "")),
+		"slot_id": str(payload.get("slot_id", "")),
+		"filter_id": str(payload.get("filter_id", "")),
+		"tree_id": str(payload.get("tree_id", "")),
 		"value": payload.get("value", null),
 	}
 	recent_events.append(entry)
