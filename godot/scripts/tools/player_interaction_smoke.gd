@@ -272,6 +272,9 @@ func _expect_right_click_menu_buttons(errors: Array[String], game_root: Node) ->
 	elif str(disabled_open.get_meta("disabled_reason_text", "")).is_empty() or not str(disabled_open.tooltip_text).contains(str(disabled_open.get_meta("disabled_reason_text", ""))):
 		errors.append("disabled open_container option should expose localized reason text in tooltip")
 	var menu_snapshot: Dictionary = _dictionary_or_empty(game_root.hud.interaction_menu_snapshot() if game_root.hud.has_method("interaction_menu_snapshot") else {})
+	var disabled_summaries: Array = _array_or_empty(menu_snapshot.get("disabled_options", []))
+	if not _disabled_option_summary_has_text(disabled_summaries, "open_container", "target_not_container"):
+		errors.append("interaction menu snapshot disabled summary should expose localized reason text")
 	var option_details: Dictionary = _dictionary_or_empty(menu_snapshot.get("option_details", {}))
 	var pickup_detail: Dictionary = _dictionary_or_empty(option_details.get("pickup", {}))
 	if pickup_detail.is_empty() or not bool(pickup_detail.get("enabled", false)):
@@ -318,6 +321,7 @@ func _expect_interaction_menu_options(
 		errors.append("%s context menu should be visible" % context)
 	var snapshot: Dictionary = _dictionary_or_empty(game_root.hud.interaction_menu_snapshot() if game_root.hud.has_method("interaction_menu_snapshot") else {})
 	var option_details: Dictionary = _dictionary_or_empty(snapshot.get("option_details", {}))
+	var disabled_summaries: Array = _array_or_empty(snapshot.get("disabled_options", []))
 	for option_id in enabled_option_ids:
 		var button: Button = menu.find_child("Option_%s" % option_id, true, false) as Button
 		if button == null:
@@ -360,12 +364,22 @@ func _expect_interaction_menu_options(
 			errors.append("%s context menu disabled option %s tooltip should include localized reason text" % [context, option_id])
 		if str(button.tooltip_text).contains(expected_reason):
 			errors.append("%s context menu disabled option %s tooltip should not expose raw reason code" % [context, option_id])
+		if not _disabled_option_summary_has_text(disabled_summaries, option_id, expected_reason):
+			errors.append("%s context menu disabled summary %s should expose localized reason text" % [context, option_id])
 		var detail: Dictionary = _dictionary_or_empty(option_details.get(option_id, {}))
 		if detail.is_empty() or not bool(detail.get("disabled", false)):
 			errors.append("%s context menu snapshot should expose disabled detail for %s" % [context, option_id])
 		elif str(detail.get("disabled_reason", "")) != expected_reason or str(detail.get("disabled_reason_text", "")).is_empty():
 			errors.append("%s context menu snapshot disabled detail %s should expose reason and localized text" % [context, option_id])
 	game_root.hud.hide_interaction_menu()
+
+
+func _disabled_option_summary_has_text(disabled_summaries: Array, option_id: String, reason: String) -> bool:
+	for value in disabled_summaries:
+		var summary: Dictionary = _dictionary_or_empty(value)
+		if str(summary.get("id", "")) == option_id and str(summary.get("disabled_reason", "")) == reason:
+			return not str(summary.get("disabled_reason_text", "")).is_empty()
+	return false
 
 
 func _expect_friendly_neutral_and_map_container_context_menus(errors: Array[String], game_root: Node) -> void:

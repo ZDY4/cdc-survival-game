@@ -939,6 +939,7 @@ func _context_option_summaries(options: Array) -> Array[Dictionary]:
 			"display_name": str(data.get("display_name", data.get("id", ""))),
 			"disabled": bool(data.get("disabled", false)),
 			"disabled_reason": str(data.get("disabled_reason", "")),
+			"disabled_reason_text": _disabled_reason_text(str(data.get("disabled_reason", ""))) if not str(data.get("disabled_reason", "")).is_empty() else "",
 			"ap_cost": float(data.get("ap_cost", 0.0)),
 		})
 	return output

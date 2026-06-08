@@ -82,8 +82,20 @@ func _prompt_summary(selected_target: Dictionary) -> Dictionary:
 		"target_distance": int(selected_target.get("target_distance", -1)),
 		"requires_approach": bool(selected_target.get("requires_approach", false)),
 		"options": selected_target.get("options", []),
-		"disabled_options": selected_target.get("disabled_options", []),
+		"disabled_options": _disabled_option_summaries(selected_target.get("disabled_options", [])),
 	}
+
+
+func _disabled_option_summaries(options: Variant) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for value in _array_or_empty(options):
+		var option: Dictionary = _dictionary_or_empty(value).duplicate(true)
+		if option.is_empty():
+			continue
+		var reason := str(option.get("disabled_reason", ""))
+		option["disabled_reason_text"] = reason_catalog.disabled_text_for(reason) if not reason.is_empty() else ""
+		output.append(option)
+	return output
 
 
 func _status_badges(runtime_snapshot: Dictionary, player: Dictionary) -> Array[Dictionary]:

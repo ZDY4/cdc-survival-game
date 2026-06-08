@@ -480,7 +480,7 @@ func _has_disabled_option(options: Array, option_id: String, reason: String) -> 
 	for candidate in options:
 		var option: Dictionary = _dictionary_or_empty(candidate)
 		if str(option.get("id", "")) == option_id and str(option.get("disabled_reason", "")) == reason:
-			return true
+			return not str(option.get("disabled_reason_text", "")).is_empty()
 	return false
 
 
