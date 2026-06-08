@@ -474,6 +474,38 @@ func _expect_conditional_scripted_actions(game_root: Node) -> Array[String]:
 		errors.append("conditional dialogue action should emit skipped dialogue_action_resolved payload")
 	if not _dialogue_text(game_root).contains("条件动作已经处理"):
 		errors.append("conditional dialogue actions should advance to confirmation dialog")
+	errors.append_array(_expect_rollback_scripted_actions(game_root))
+	return errors
+
+
+func _expect_rollback_scripted_actions(game_root: Node) -> Array[String]:
+	var errors: Array[String] = []
+	_install_rollback_scripted_dialogue(game_root)
+	var simulation: RefCounted = game_root.simulation
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.active_dialogue_id = "dialogue_action_smoke_rollback"
+	player.active_dialogue_node_id = ""
+	var bandage_before: int = int(player.inventory.get("1006", 0))
+	var item_granted_events_before := _event_count(game_root, "dialogue_item_granted")
+	game_root.refresh_dialogue_panel()
+	var result: Dictionary = game_root.choose_dialogue_option("apply_rollback")
+	if bool(result.get("success", false)) or str(result.get("reason", "")) != "dialogue_action_failed":
+		errors.append("rollback dialogue action should fail at action node: %s" % result)
+	var restored_player: RefCounted = simulation.actor_registry.get_actor(1)
+	if int(restored_player.inventory.get("1006", 0)) != bandage_before:
+		errors.append("rollback dialogue action should restore inventory after earlier successful action")
+	if _event_count(game_root, "dialogue_item_granted") != item_granted_events_before:
+		errors.append("rollback dialogue action should remove emitted mutation events from failed transaction")
+	var rollback_payload: Dictionary = _last_event_payload(game_root, "dialogue_action_rollback")
+	if str(rollback_payload.get("dialogue_id", "")) != "dialogue_action_smoke_rollback" \
+			or str(rollback_payload.get("node_id", "")) != "rollback_actions" \
+			or int(rollback_payload.get("failed_action_index", -1)) != 1 \
+			or int(rollback_payload.get("rolled_back_action_count", 0)) != 2:
+		errors.append("rollback dialogue action should emit transaction diagnostic payload: %s" % rollback_payload)
+	if _dialogue_text(game_root).contains("回滚失败后不应看到这句"):
+		errors.append("rollback dialogue action should not advance to confirmation dialog")
+	_expect_dialogue_action_resolved(errors, game_root, "dialogue_action_smoke_rollback", "rollback_actions", ["give_item"], "rollback successful action diagnostic")
+	_expect_dialogue_action_resolved(errors, game_root, "dialogue_action_smoke_rollback", "rollback_actions", ["unsupported_rollback_action"], "rollback failed action diagnostic", false, "unsupported_dialogue_action")
 	return errors
 
 
@@ -659,6 +691,65 @@ func _install_conditional_scripted_dialogue(game_root: Node) -> void:
 	game_root.registry.libraries["dialogues"] = dialogue_library
 
 
+func _install_rollback_scripted_dialogue(game_root: Node) -> void:
+	var dialogue_library: Dictionary = game_root.registry.libraries.get("dialogues", {})
+	dialogue_library["dialogue_action_smoke_rollback"] = {
+		"path": "res://scripts/tools/dialogue_action_smoke.gd",
+		"data": {
+			"dialog_id": "dialogue_action_smoke_rollback",
+			"nodes": [
+				{
+					"id": "start",
+					"type": "dialog",
+					"speaker": "Smoke",
+					"text": "准备执行回滚动作。",
+					"is_start": true,
+					"next": "choice_1",
+				},
+				{
+					"id": "choice_1",
+					"type": "choice",
+					"options": [
+						{
+							"id": "apply_rollback",
+							"text": "测试回滚",
+							"next": "rollback_actions",
+						},
+					],
+				},
+				{
+					"id": "rollback_actions",
+					"type": "action",
+					"actions": [
+						{
+							"type": "give_item",
+							"item_id": "1006",
+							"count": 5,
+						},
+						{
+							"type": "unsupported_rollback_action",
+						},
+					],
+					"next": "confirm",
+				},
+				{
+					"id": "confirm",
+					"type": "dialog",
+					"speaker": "Smoke",
+					"text": "回滚失败后不应看到这句。",
+					"next": "done",
+				},
+				{
+					"id": "done",
+					"type": "end",
+					"end_type": "leave",
+				},
+			],
+		},
+	}
+	game_root.registry.libraries["dialogues"] = dialogue_library
+
+
 func _install_explicit_shop_trade_dialogue(game_root: Node) -> void:
 	var dialogue_library: Dictionary = game_root.registry.libraries.get("dialogues", {})
 	dialogue_library["dialogue_action_smoke_explicit_shop_trade"] = {
@@ -723,6 +814,13 @@ func _events_by_kind(game_root: Node, kind: String) -> Array[Dictionary]:
 		if str(event_data.get("kind", "")) == kind:
 			output.append(event_data)
 	return output
+
+
+func _last_event_payload(game_root: Node, kind: String) -> Dictionary:
+	var events: Array = _events_by_kind(game_root, kind)
+	if events.is_empty():
+		return {}
+	return _dictionary_or_empty(_dictionary_or_empty(events[events.size() - 1]).get("payload", {}))
 
 
 func _last_resolved_action_has_skip(game_root: Node, dialogue_id: String, node_id: String) -> bool:

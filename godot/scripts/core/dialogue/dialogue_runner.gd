@@ -129,15 +129,20 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 		match node_type:
 			"action":
 				var actions: Array = _array_or_empty(node.get("actions", []))
+				var rollback_snapshot: Dictionary = simulation.snapshot()
+				var node_action_results: Array[Dictionary] = []
 				for action_index in range(actions.size()):
 					var action_data: Dictionary = _dictionary_or_empty(actions[action_index])
 					var action_result: Dictionary = _conditional_action_result(simulation, actor_id, actor, action_data)
 					if action_result.is_empty():
 						action_result = _action_runner.apply_action(simulation, actor_id, action_data, _dialogue_action_context(dialogue_id, current_node_id, actor))
 					emitted_actions.append(action_result)
+					node_action_results.append(action_result)
 					_emit_dialogue_action_resolved(simulation, actor_id, actor, dialogue_id, current_node_id, action_index, action_data, action_result)
 					if not bool(action_result.get("success", false)):
 						var action_type := str(action_result.get("type", action_data.get("type", "")))
+						if _should_rollback_action_node(node_action_results):
+							actor = _rollback_failed_action_node(simulation, actor_id, actor, rollback_snapshot, dialogue_id, current_node_id, action_index, actions, node_action_results, action_result)
 						simulation.emit_event("dialogue_action_failed", {
 							"actor_id": actor_id,
 							"dialogue_id": dialogue_id,
@@ -211,6 +216,54 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _should_rollback_action_node(node_action_results: Array[Dictionary]) -> bool:
+	if node_action_results.size() <= 1:
+		return false
+	for result_index in range(node_action_results.size() - 1):
+		var result: Dictionary = _dictionary_or_empty(node_action_results[result_index])
+		if bool(result.get("success", false)) and not bool(result.get("skipped", false)):
+			return true
+	return false
+
+
+func _rollback_failed_action_node(
+		simulation: RefCounted,
+		actor_id: int,
+		actor: RefCounted,
+		rollback_snapshot: Dictionary,
+		dialogue_id: String,
+		node_id: String,
+		failed_action_index: int,
+		actions: Array,
+		node_action_results: Array[Dictionary],
+		failed_action_result: Dictionary) -> RefCounted:
+	if rollback_snapshot.is_empty():
+		return actor
+	simulation.load_snapshot(rollback_snapshot)
+	var restored_actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	simulation.emit_event("dialogue_action_rollback", {
+		"actor_id": actor_id,
+		"dialogue_id": dialogue_id,
+		"node_id": node_id,
+		"failed_action_index": failed_action_index,
+		"failed_action_type": str(failed_action_result.get("type", _dictionary_or_empty(actions[failed_action_index]).get("type", ""))),
+		"reason": str(failed_action_result.get("reason", "dialogue_action_failed")),
+		"rolled_back_action_count": node_action_results.size(),
+		"action_results": _duplicate_dictionary_array(node_action_results),
+	})
+	for replay_index in range(node_action_results.size()):
+		var replay_action: Dictionary = _dictionary_or_empty(actions[replay_index])
+		_emit_dialogue_action_resolved(simulation, actor_id, restored_actor, dialogue_id, node_id, replay_index, replay_action, node_action_results[replay_index])
+	return restored_actor
+
+
+func _duplicate_dictionary_array(values: Array[Dictionary]) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for value in values:
+		output.append(_dictionary_or_empty(value).duplicate(true))
+	return output
 
 
 func _conditional_action_result(simulation: RefCounted, actor_id: int, actor: RefCounted, action_data: Dictionary) -> Dictionary:
