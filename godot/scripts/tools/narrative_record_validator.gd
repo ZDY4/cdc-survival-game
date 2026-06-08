@@ -1,6 +1,7 @@
 extends RefCounted
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
+const ContentPaths = preload("res://scripts/data/content_paths.gd")
 
 
 func supports_domain(domain: String) -> bool:
@@ -22,6 +23,7 @@ func validate_record(domain: String, id_value: String, record: Dictionary, regis
 
 
 func _validate_dialogue(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	_validate_record_path("dialogues", id_value, record, issues)
 	var data := _dictionary_or_empty(record.get("data", {}))
 	_expect_id_matches(issues, data.get("dialog_id", ""), id_value, "$.dialog_id")
 	var nodes := _array_or_empty(data.get("nodes", []))
@@ -78,6 +80,7 @@ func _validate_dialogue_node(node: Dictionary, field: String, node_ids: Dictiona
 
 
 func _validate_dialogue_rule(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:
+	_validate_record_path("dialogue_rules", id_value, record, issues)
 	var data := _dictionary_or_empty(record.get("data", {}))
 	_expect_id_matches(issues, data.get("dialogue_key", ""), id_value, "$.dialogue_key")
 	_validate_ref(data.get("dialogue_key", null), "$.dialogue_key", "characters", "unknown_character", registry, issues)
@@ -252,6 +255,27 @@ func _validate_tree_skill_link(skill_id: Variant, field: String, tree_skills: Di
 	var normalized := ContentRegistry.normalize_content_id(skill_id)
 	if normalized.is_empty() or not tree_skills.has(normalized):
 		issues.append(_issue("error", field, "unknown_tree_skill", "skill tree link references unknown tree skill %s" % normalized))
+
+
+func _validate_record_path(domain_dir: String, id_value: String, record: Dictionary, issues: Array[Dictionary]) -> void:
+	var actual_path := _normalized_source_path(str(record.get("path", "")))
+	if actual_path.is_empty():
+		issues.append(_issue("error", "$", "%s_path_missing" % domain_dir.trim_suffix("s"), "%s record path is required" % domain_dir))
+		return
+	var expected_path := _normalized_source_path(ContentPaths.domain_path(domain_dir).path_join("%s.json" % id_value))
+	if actual_path.to_lower() == expected_path.to_lower():
+		return
+	var code := "dialogue_rule_path_mismatch" if domain_dir == "dialogue_rules" else "dialogue_path_mismatch"
+	issues.append(_issue(
+		"error",
+		"$",
+		code,
+		"%s record %s must live at %s, got %s" % [domain_dir, id_value, expected_path, actual_path]
+	))
+
+
+func _normalized_source_path(path: String) -> String:
+	return path.strip_edges().replace("\\", "/").simplify_path()
 
 
 func _validate_overworld_location_ref(location_id: Variant, field: String, registry: ContentRegistry, issues: Array[Dictionary]) -> void:

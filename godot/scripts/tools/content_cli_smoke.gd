@@ -91,6 +91,8 @@ func _run() -> Array[String]:
 	_expect_recipe_unlock_source_refs(errors, registry)
 	_expect_invalid_dialogue_ref(errors, registry)
 	_expect_invalid_dialogue_shop_ref(errors, registry)
+	_expect_invalid_dialogue_path(errors, registry)
+	_expect_invalid_dialogue_rule_path(errors, registry)
 	_expect_invalid_dialogue_rule_dialogue_ref(errors, registry)
 	_expect_invalid_dialogue_rule_quest_ref(errors, registry)
 	_expect_invalid_dialogue_rule_item_ref(errors, registry)
@@ -642,6 +644,34 @@ func _expect_invalid_dialogue_shop_ref(errors: Array[String], registry: ContentR
 					errors.append("invalid dialogue shop smoke did not report unknown_shop: %s" % validation.get("issues", []))
 				return
 	errors.append("dialogue shop validation smoke could not find open_trade action")
+
+
+func _expect_invalid_dialogue_path(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("dialogues").get("trader_lao_wang_intro", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing trader_lao_wang_intro fixture for dialogue path validation smoke")
+		return
+	source["path"] = ProjectSettings.globalize_path("res://../data/dialogue_rules/trader_lao_wang_intro.json")
+	var validation := ContentRecordValidator.new().validate_record("dialogues", "trader_lao_wang_intro", _registry_with_override(registry, "dialogues", "trader_lao_wang_intro", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid dialogue path smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "dialogue_path_mismatch"):
+		errors.append("invalid dialogue path smoke did not report dialogue_path_mismatch: %s" % validation.get("issues", []))
+
+
+func _expect_invalid_dialogue_rule_path(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("dialogue_rules").get("trader_lao_wang", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing trader_lao_wang fixture for dialogue rule path validation smoke")
+		return
+	source["path"] = ProjectSettings.globalize_path("res://../data/dialogues/trader_lao_wang.json")
+	var validation := ContentRecordValidator.new().validate_record("dialogue_rules", "trader_lao_wang", _registry_with_override(registry, "dialogue_rules", "trader_lao_wang", source))
+	if bool(validation.get("ok", false)):
+		errors.append("expected invalid dialogue rule path smoke to fail")
+		return
+	if not _has_issue_code(validation.get("issues", []), "dialogue_rule_path_mismatch"):
+		errors.append("invalid dialogue rule path smoke did not report dialogue_rule_path_mismatch: %s" % validation.get("issues", []))
 
 
 func _expect_invalid_dialogue_rule_dialogue_ref(errors: Array[String], registry: ContentRegistry) -> void:
