@@ -563,6 +563,107 @@ func _apply_container_state_visual(parent: Node, target_data: Dictionary) -> voi
 	badge.set_meta("container_visual_prototype_id", str(target_data.get("container_visual_prototype_id", "")))
 	badge.set_meta("container_model_asset_id", str(target_data.get("container_model_asset_id", "")))
 	badge.set_meta("container_visual_state", "empty" if is_empty else "filled")
+	_apply_container_open_state_visual(parent_3d, target_data, is_open, is_empty)
+
+
+func _apply_container_open_state_visual(parent: Node3D, target_data: Dictionary, is_open: bool, is_empty: bool) -> void:
+	var visual: MeshInstance3D = parent.find_child("ContainerOpenStateVisual", false, false) as MeshInstance3D
+	if visual == null:
+		visual = MeshInstance3D.new()
+		visual.name = "ContainerOpenStateVisual"
+		parent.add_child(visual)
+	var visual_kind := _container_open_visual_kind(target_data)
+	var profile := _container_open_visual_profile(visual_kind, is_open)
+	var mesh := BoxMesh.new()
+	mesh.size = profile.get("mesh_size", Vector3(0.48, 0.06, 0.44))
+	visual.mesh = mesh
+	visual.material_override = container_state_open_material if is_open else (container_state_empty_material if is_empty else container_state_filled_material)
+	visual.position = profile.get("position", Vector3(0.0, 0.48, 0.0))
+	visual.rotation_degrees = profile.get("rotation_degrees", Vector3.ZERO)
+	visual.visible = true
+	visual.set_meta("target_kind", "container")
+	visual.set_meta("target_id", str(target_data.get("target_id", "")))
+	visual.set_meta("container_type", str(target_data.get("container_type", "")))
+	visual.set_meta("container_origin", str(target_data.get("container_origin", "")))
+	visual.set_meta("container_empty", is_empty)
+	visual.set_meta("container_open", is_open)
+	visual.set_meta("container_open_state", "open" if is_open else "closed")
+	visual.set_meta("container_open_actor_ids", _array_or_empty(target_data.get("container_open_actor_ids", [])).duplicate(true))
+	visual.set_meta("container_item_count", int(target_data.get("container_item_count", 0)))
+	visual.set_meta("container_stack_count", int(target_data.get("container_stack_count", 0)))
+	visual.set_meta("container_money", int(target_data.get("container_money", 0)))
+	visual.set_meta("container_visual_id", str(target_data.get("container_visual_id", "")))
+	visual.set_meta("container_visual_prototype_id", str(target_data.get("container_visual_prototype_id", "")))
+	visual.set_meta("container_model_asset_id", str(target_data.get("container_model_asset_id", "")))
+	visual.set_meta("container_visual_state", "empty" if is_empty else "filled")
+	visual.set_meta("container_open_visual_kind", visual_kind)
+	visual.set_meta("container_open_angle_degrees", float(profile.get("open_angle_degrees", 0.0)))
+	visual.set_meta("container_open_offset", profile.get("open_offset", Vector3.ZERO))
+	visual.set_meta("container_open_pivot_hint", str(profile.get("pivot_hint", "")))
+
+
+func _container_open_visual_kind(target_data: Dictionary) -> String:
+	var values := [
+		str(target_data.get("container_visual_id", "")),
+		str(target_data.get("container_visual_prototype_id", "")),
+		str(target_data.get("container_model_asset_id", "")),
+		str(target_data.get("container_type", "")),
+	]
+	var key := " ".join(values).to_lower()
+	if key.contains("cabinet"):
+		return "cabinet_open"
+	if key.contains("locker"):
+		return "locker_open"
+	if key.contains("crate"):
+		return "crate_open"
+	return "container_open"
+
+
+func _container_open_visual_profile(visual_kind: String, is_open: bool) -> Dictionary:
+	match visual_kind:
+		"cabinet_open":
+			var angle := -68.0 if is_open else 0.0
+			var offset := Vector3(0.16, 0.02, 0.0) if is_open else Vector3.ZERO
+			return {
+				"mesh_size": Vector3(0.06, 0.48, 0.42),
+				"position": Vector3(0.33, 0.34, 0.0) + offset,
+				"rotation_degrees": Vector3(0.0, angle, 0.0),
+				"open_angle_degrees": absf(angle),
+				"open_offset": offset,
+				"pivot_hint": "right_side_hinge",
+			}
+		"locker_open":
+			var angle := -74.0 if is_open else 0.0
+			var offset := Vector3(0.18, 0.02, 0.0) if is_open else Vector3.ZERO
+			return {
+				"mesh_size": Vector3(0.055, 0.58, 0.34),
+				"position": Vector3(0.31, 0.38, 0.0) + offset,
+				"rotation_degrees": Vector3(0.0, angle, 0.0),
+				"open_angle_degrees": absf(angle),
+				"open_offset": offset,
+				"pivot_hint": "right_side_hinge",
+			}
+		"crate_open":
+			var angle := -58.0 if is_open else 0.0
+			var offset := Vector3(0.0, 0.10, -0.12) if is_open else Vector3.ZERO
+			return {
+				"mesh_size": Vector3(0.50, 0.055, 0.46),
+				"position": Vector3(0.0, 0.48, 0.0) + offset,
+				"rotation_degrees": Vector3(angle, 0.0, 0.0),
+				"open_angle_degrees": absf(angle),
+				"open_offset": offset,
+				"pivot_hint": "back_lid_hinge",
+			}
+	var angle := -52.0 if is_open else 0.0
+	var offset := Vector3(0.0, 0.08, -0.10) if is_open else Vector3.ZERO
+	return {
+		"mesh_size": Vector3(0.46, 0.055, 0.42),
+		"position": Vector3(0.0, 0.48, 0.0) + offset,
+		"rotation_degrees": Vector3(angle, 0.0, 0.0),
+		"open_angle_degrees": absf(angle),
+		"open_offset": offset,
+		"pivot_hint": "generic_lid_hinge",
+	}
 
 
 func _container_item_count(inventory: Array) -> int:

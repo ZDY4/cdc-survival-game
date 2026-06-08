@@ -1086,6 +1086,35 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 			errors.append("empty container badge should expose container visual id")
 		if str(badge.get_meta("container_model_asset_id", "")) != "builtin:container:cabinet_medical":
 			errors.append("empty container badge should expose container model asset id")
+	var open_visual: Node = container_node.find_child("ContainerOpenStateVisual", true, false)
+	if open_visual == null:
+		errors.append("empty open container should expose ContainerOpenStateVisual")
+	else:
+		if not bool(open_visual.get_meta("container_open", false)):
+			errors.append("open container visual should expose container_open")
+		if str(open_visual.get_meta("container_open_state", "")) != "open":
+			errors.append("open container visual should expose open state")
+		if not _array_or_empty(open_visual.get_meta("container_open_actor_ids", [])).has(1):
+			errors.append("open container visual should expose opener actor id")
+		if not bool(open_visual.get_meta("container_empty", false)):
+			errors.append("empty container visual should expose container_empty")
+		if str(open_visual.get_meta("container_visual_state", "")) != "empty":
+			errors.append("empty container visual should expose empty visual state")
+		if str(open_visual.get_meta("container_visual_id", "")) != "cabinet_medical":
+			errors.append("empty container visual should expose container visual id")
+		if str(open_visual.get_meta("container_model_asset_id", "")) != "builtin:container:cabinet_medical":
+			errors.append("empty container visual should expose container model asset id")
+		if str(open_visual.get_meta("container_type", "")) != "map":
+			errors.append("open container visual should expose container_type")
+		if str(open_visual.get_meta("container_open_visual_kind", "")) != "cabinet_open":
+			errors.append("medical cabinet should use cabinet open visual kind")
+		if float(open_visual.get_meta("container_open_angle_degrees", 0.0)) <= 0.0:
+			errors.append("open container visual should expose positive open angle")
+		var open_offset: Variant = open_visual.get_meta("container_open_offset", Vector3.ZERO)
+		if typeof(open_offset) != TYPE_VECTOR3 or open_offset == Vector3.ZERO:
+			errors.append("open container visual should expose non-zero open offset")
+		if str(open_visual.get_meta("container_open_pivot_hint", "")).is_empty():
+			errors.append("open container visual should expose pivot hint")
 	var node_target: Dictionary = _dictionary_or_empty(container_node.get_meta("interaction_target", {}))
 	if str(node_target.get("container_type", "")) != "map":
 		errors.append("empty container interaction metadata should expose container_type")
