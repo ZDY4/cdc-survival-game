@@ -14,6 +14,7 @@ const RuntimeViewStateController = preload("res://scripts/app/controllers/runtim
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
 const AiDebugSnapshotBuilder = preload("res://scripts/app/controllers/ai_debug_snapshot_builder.gd")
+const WorldTimeSnapshotBuilder = preload("res://scripts/app/controllers/world_time_snapshot_builder.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -69,6 +70,7 @@ var debug_runtime_controller: RefCounted = DebugRuntimeController.new()
 var game_input_router: RefCounted = GameInputRouter.new()
 var player_command_authority_audit: RefCounted = PlayerCommandAuthorityAudit.new()
 var ai_debug_snapshot_builder: RefCounted = AiDebugSnapshotBuilder.new()
+var world_time_snapshot_builder: RefCounted = WorldTimeSnapshotBuilder.new()
 var runtime_boot_controller: RefCounted = RuntimeBootController.new()
 var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
 var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
@@ -1318,30 +1320,7 @@ func ai_debug_snapshot() -> Dictionary:
 
 
 func runtime_world_time_snapshot() -> Dictionary:
-	if simulation == null:
-		return {
-			"day": "monday",
-			"minute_of_day": 540,
-			"hour": 9,
-			"minute": 0,
-			"display_time": "09:00",
-			"display_label": "monday 09:00",
-		}
-	var runtime_snapshot: Dictionary = simulation.snapshot()
-	var world_time: Dictionary = _dictionary_or_empty(runtime_snapshot.get("world_time", {}))
-	var minute_of_day: int = posmod(int(world_time.get("minute_of_day", 540)), 1440)
-	var hour := int(minute_of_day / 60)
-	var minute := minute_of_day % 60
-	var display_time := "%02d:%02d" % [hour, minute]
-	var day := str(world_time.get("day", "monday"))
-	return {
-		"day": day,
-		"minute_of_day": minute_of_day,
-		"hour": hour,
-		"minute": minute,
-		"display_time": display_time,
-		"display_label": "%s %s" % [day, display_time],
-	}
+	return _dictionary_or_empty(world_time_snapshot_builder.call("snapshot", simulation))
 
 
 func world_action_presenter_snapshot() -> Dictionary:
