@@ -1268,6 +1268,17 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DebugConsoleInput", "text_submit", "submit_debug_console_command", {"value": "show fps"}, "debug console show fps audio")
 	if not bool(fps_result.get("success", false)):
 		errors.append("debug console show fps should succeed: %s" % fps_result)
+	if not bool(fps_result.get("visible", false)):
+		errors.append("debug console show fps should open debug panel: %s" % fps_result)
+	_assert_debug_panel_snapshot(errors, game_root, true, "show fps opened debug panel")
+	var panel_snapshot: Dictionary = _dictionary_or_empty(game_root.debug_panel_snapshot())
+	var panel_lines: Array = _array_or_empty(panel_snapshot.get("lines", []))
+	if not _strings_contain_token(panel_lines, "Perf "):
+		errors.append("show fps debug panel should expose performance line: %s" % panel_snapshot)
+	var fps_close_result: Dictionary = game_root.submit_debug_console_command("show fps")
+	if not bool(fps_close_result.get("success", false)) or bool(fps_close_result.get("visible", true)):
+		errors.append("debug console show fps should close debug panel on second call: %s" % fps_close_result)
+	_assert_debug_panel_snapshot(errors, game_root, false, "show fps closed debug panel")
 	var overlay_before := str(game_root.current_debug_overlay_mode())
 	var overlay_result: Dictionary = game_root.submit_debug_console_command("show overlays")
 	if not bool(overlay_result.get("success", false)):
@@ -3004,6 +3015,13 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _strings_contain_token(values: Array, token: String) -> bool:
+	for value in values:
+		if str(value).contains(token):
+			return true
+	return false
 
 
 func _event_count(game_root: Node, kind: String) -> int:

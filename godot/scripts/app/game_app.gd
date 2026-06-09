@@ -1166,12 +1166,12 @@ func _execute_debug_console_command(command: String) -> Dictionary:
 		"help":
 			return {"success": true, "message": _debug_console_command_runner.help_text()}
 		"show fps":
-			var perf: Dictionary = runtime_performance_snapshot()
-			return {"success": true, "message": "fps=%d frame=%.1fms path=%.2fms" % [
-				int(round(float(perf.get("fps", 0.0)))),
-				float(perf.get("frame_time_ms", 0.0)),
-				float(perf.get("pathfinding_time_ms", 0.0)),
-			]}
+			var panel_result: Dictionary = toggle_debug_panel()
+			return {
+				"success": bool(panel_result.get("success", false)),
+				"message": "fps panel=%s" % ("on" if bool(panel_result.get("visible", false)) else "off"),
+				"visible": bool(panel_result.get("visible", false)),
+			}
 		"show overlays":
 			var overlay_result: Dictionary = cycle_debug_overlay_mode()
 			return {"success": bool(overlay_result.get("success", false)), "message": "overlay=%s" % str(overlay_result.get("mode", debug_overlay_mode))}

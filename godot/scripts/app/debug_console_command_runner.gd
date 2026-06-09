@@ -23,7 +23,7 @@ func command_schema() -> Array[Dictionary]:
 		{
 			"id": "show fps",
 			"usage": "show fps",
-			"description": "显示 FPS、帧耗时和最近一次寻路耗时。",
+			"description": "打开或关闭包含 FPS、帧耗时和最近一次寻路耗时的常驻调试面板。",
 			"mutates_runtime": false,
 			"examples": ["show fps"],
 		},
