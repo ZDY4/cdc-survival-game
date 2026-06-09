@@ -4,11 +4,32 @@
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_6pvmj"]
 [ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_0b02x"]
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.22, 0.26, 0.23, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+material = SubResource("StandardMaterial3D_ground")
+size = Vector3(12, 0.08, 12)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground_picker"]
+size = Vector3(12, 0.12, 12)
+
 [node name="ruins" type="Node3D" unique_id=1651050657]
 script = ExtResource("1_bw05g")
 map_id = "ruins"
 map_name = "ruins"
 map_size = Vector2i(12, 12)
+
+[node name="Ground" type="MeshInstance3D" parent="." unique_id=1250442679]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, -0.04, 5.5)
+mesh = SubResource("BoxMesh_ground")
+
+[node name="GroundPicker" type="StaticBody3D" parent="." unique_id=104018378]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, -0.04, 5.5)
+
+[node name="GroundPickerShape" type="CollisionShape3D" parent="GroundPicker" unique_id=1493805176]
+shape = SubResource("BoxShape3D_ground_picker")
 
 [node name="EntryPoints" type="Node3D" parent="." unique_id=488068502]
 

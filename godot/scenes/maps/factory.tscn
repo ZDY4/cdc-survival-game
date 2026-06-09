@@ -392,11 +392,32 @@ _surfaces = [{
 blend_shape_mode = 0
 shadow_mesh = SubResource("ArrayMesh_bagj8")
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.22, 0.26, 0.23, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+material = SubResource("StandardMaterial3D_ground")
+size = Vector3(18, 0.08, 14)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground_picker"]
+size = Vector3(18, 0.12, 14)
+
 [node name="factory" type="Node3D" unique_id=240828709]
 script = ExtResource("1_ctpsf")
 map_id = "factory"
 map_name = "factory"
 map_size = Vector2i(18, 14)
+
+[node name="Ground" type="MeshInstance3D" parent="." unique_id=1281096250]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, -0.04, 6.5)
+mesh = SubResource("BoxMesh_ground")
+
+[node name="GroundPicker" type="StaticBody3D" parent="." unique_id=388644549]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, -0.04, 6.5)
+
+[node name="GroundPickerShape" type="CollisionShape3D" parent="GroundPicker" unique_id=157858315]
+shape = SubResource("BoxShape3D_ground_picker")
 
 [node name="EntryPoints" type="Node3D" parent="." unique_id=718211635]
 

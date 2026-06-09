@@ -385,11 +385,32 @@ _surfaces = [{
 blend_shape_mode = 0
 shadow_mesh = SubResource("ArrayMesh_bagj8")
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.22, 0.26, 0.23, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+material = SubResource("StandardMaterial3D_ground")
+size = Vector3(20, 0.08, 20)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground_picker"]
+size = Vector3(20, 0.12, 20)
+
 [node name="survivor_outpost_01_perimeter" type="Node3D" unique_id=1889836604]
 script = ExtResource("1_2hkxp")
 map_id = "survivor_outpost_01_perimeter"
 map_name = "survivor outpost 01 perimeter"
 map_size = Vector2i(20, 20)
+
+[node name="Ground" type="MeshInstance3D" parent="." unique_id=1020464727]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.5, -0.04, 9.5)
+mesh = SubResource("BoxMesh_ground")
+
+[node name="GroundPicker" type="StaticBody3D" parent="." unique_id=1470383658]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.5, -0.04, 9.5)
+
+[node name="GroundPickerShape" type="CollisionShape3D" parent="GroundPicker" unique_id=1678609560]
+shape = SubResource("BoxShape3D_ground_picker")
 
 [node name="EntryPoints" type="Node3D" parent="." unique_id=195261907]
 

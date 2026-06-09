@@ -72,12 +72,15 @@ func render_world(parent: Node3D, world_snapshot: Dictionary, options: Dictionar
 		"cameras": 0,
 	}
 
-	_spawn_ground(root, map)
-	counts["ground"] = 1
 	var visual_object_ids: Dictionary = {}
 	if bool(options.get("load_map_visuals", _should_load_map_visuals())):
 		counts["map_visuals"] = _spawn_map_scene_visuals(root, map)
 		visual_object_ids = _map_visual_object_ids(root)
+	if _has_scene_ground(root):
+		counts["ground"] = 1
+	else:
+		_spawn_ground(root, map)
+		counts["ground"] = 1
 	counts["objects"] = _spawn_interaction_target_markers(root, map, visual_object_ids)
 	counts["actors"] = _spawn_actor_markers(root, _array_or_empty(world_snapshot.get("actors", [])))
 	counts["corpses"] = _spawn_corpse_markers(root, _array_or_empty(world_snapshot.get("corpses", [])))
@@ -116,6 +119,10 @@ func _spawn_ground(root: Node3D, map: Dictionary) -> void:
 	body.add_child(shape)
 	body.position = node.position
 	root.add_child(body)
+
+
+func _has_scene_ground(root: Node) -> bool:
+	return root.find_child("Ground", true, false) != null
 
 
 func _spawn_map_scene_visuals(root: Node3D, map: Dictionary) -> int:
