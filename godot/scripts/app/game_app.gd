@@ -23,6 +23,7 @@ const TooltipSnapshotController = preload("res://scripts/app/controllers/tooltip
 const DragSnapshotController = preload("res://scripts/app/controllers/drag_snapshot_controller.gd")
 const DragHoverTargetController = preload("res://scripts/app/controllers/drag_hover_target_controller.gd")
 const UiBlockerStateController = preload("res://scripts/app/controllers/ui_blocker_state_controller.gd")
+const ContainerActionController = preload("res://scripts/app/controllers/container_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -61,6 +62,7 @@ var tooltip_snapshot_controller: RefCounted = TooltipSnapshotController.new()
 var drag_snapshot_controller: RefCounted = DragSnapshotController.new()
 var drag_hover_target_controller: RefCounted = DragHoverTargetController.new()
 var ui_blocker_state_controller: RefCounted = UiBlockerStateController.new()
+var container_action_controller: RefCounted = ContainerActionController.new()
 var tooltip_layer: Control:
 	get:
 		return ui_overlay_render_controller.tooltip_layer if ui_overlay_render_controller != null else null
@@ -1595,117 +1597,52 @@ func press_enter_action() -> Dictionary:
 
 
 func take_active_container_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var container_id: String = _active_container_id()
-	if container_id.is_empty():
-		var missing_result := {"success": false, "reason": "active_container_missing"}
-		_record_container_feedback(missing_result, "take_container", "", item_id, count)
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "take_container",
-		"container_id": container_id,
-		"item_id": item_id,
-		"count": count,
-		"stack_index": stack_index,
-	})
-	_record_container_feedback(result, "take_container", container_id, item_id, count)
-	refresh_inventory_panel()
-	refresh_container_panel()
-	refresh_journal_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("take_item", _active_container_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
+	return _apply_container_action_operation(operation)
 
 
 func take_active_container_money(count: int = -1) -> Dictionary:
-	var container_id: String = _active_container_id()
-	if container_id.is_empty():
-		var missing_result := {"success": false, "reason": "active_container_missing"}
-		_record_container_feedback(missing_result, "take_container_money", "", "money", count)
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "take_container_money",
-		"container_id": container_id,
-		"count": count,
-	})
-	_record_container_feedback(result, "take_container_money", container_id, "money", count)
-	refresh_inventory_panel()
-	refresh_container_panel()
-	refresh_hud()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("take_money", _active_container_id(), count, Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
+	return _apply_container_action_operation(operation)
 
 
 func take_all_active_container_items() -> Dictionary:
-	var container_id: String = _active_container_id()
-	if container_id.is_empty():
-		var missing_result := {"success": false, "reason": "active_container_missing"}
-		_record_container_feedback(missing_result, "take_all_container", "", "", 0)
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "take_all_container",
-		"container_id": container_id,
-		"include_money": true,
-	})
-	_record_container_feedback(result, "take_all_container", container_id, str(result.get("item_id", "")), int(result.get("count", 0)))
-	refresh_inventory_panel()
-	refresh_container_panel()
-	refresh_journal_panel()
-	refresh_hud()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("take_all", _active_container_id(), Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
+	return _apply_container_action_operation(operation)
 
 
 func store_active_container_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var container_id: String = _active_container_id()
-	if container_id.is_empty():
-		var missing_result := {"success": false, "reason": "active_container_missing"}
-		_record_container_feedback(missing_result, "store_container", "", item_id, count)
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "store_container",
-		"container_id": container_id,
-		"item_id": item_id,
-		"count": count,
-		"stack_index": stack_index,
-	})
-	_record_container_feedback(result, "store_container", container_id, item_id, count)
-	refresh_inventory_panel()
-	refresh_container_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("store_item", _active_container_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
+	return _apply_container_action_operation(operation)
 
 
 func store_all_active_container_items() -> Dictionary:
-	var container_id: String = _active_container_id()
-	if container_id.is_empty():
-		var missing_result := {"success": false, "reason": "active_container_missing"}
-		_record_container_feedback(missing_result, "store_all_container", "", "", 0)
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "store_all_container",
-		"container_id": container_id,
-	})
-	_record_container_feedback(result, "store_all_container", container_id, str(result.get("item_id", "")), int(result.get("count", 0)))
-	refresh_inventory_panel()
-	refresh_container_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("store_all", _active_container_id(), Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
+	return _apply_container_action_operation(operation)
 
 
 func transfer_active_container_item(source: String, item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	match source:
-		"container":
-			if str(item_id) == "money":
-				return take_active_container_money(count)
-			return take_active_container_item(item_id, count, stack_index)
-		"player":
-			return store_active_container_item(item_id, count, stack_index)
-		_:
-			return {"success": false, "reason": "unknown_container_transfer_source", "source": source}
+	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("transfer_item", source, _active_container_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
+	return _apply_container_action_operation(operation)
 
 
 func transfer_all_active_container_items(source: String) -> Dictionary:
-	match source:
-		"container":
-			return take_all_active_container_items()
-		"player":
-			return store_all_active_container_items()
-		_:
-			return {"success": false, "reason": "unknown_container_transfer_source", "source": source}
+	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("transfer_all", source, _active_container_id(), Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
+	return _apply_container_action_operation(operation)
+
+
+func _apply_container_action_operation(operation: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
+	if refresh_panels.has("inventory"):
+		refresh_inventory_panel()
+	if refresh_panels.has("container"):
+		refresh_container_panel()
+	if refresh_panels.has("journal"):
+		refresh_journal_panel()
+	if refresh_panels.has("hud"):
+		refresh_hud()
+	return result
 
 
 func has_active_container_session() -> bool:
