@@ -163,11 +163,8 @@ func _ready() -> void:
 	_sync_observed_level_to_map()
 
 	interaction_controller = PlayerInteractionController.new(registry, simulation, world_result)
-	_setup_world_container()
-	var counts: Dictionary = _render_world()
-	_setup_runtime_input_controller()
-	_refresh_fog_overlay()
-	_refresh_debug_overlay()
+	var counts: Dictionary = _apply_world_root_snapshot(true)
+	_refresh_world_runtime_bindings()
 	_setup_audio_feedback_controller()
 	_configure_runtime_audio_layers()
 	_setup_panels()
@@ -2868,11 +2865,8 @@ func press_space_action() -> Dictionary:
 		world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
 		if interaction_controller != null:
 			interaction_controller.world_result = world_result
-		_setup_world_container()
-		_render_world()
-		_setup_runtime_input_controller()
-		_refresh_fog_overlay()
-		_refresh_debug_overlay()
+		_apply_world_root_snapshot(true)
+		_refresh_world_runtime_bindings()
 	refresh_all_panels(current_interaction_prompt())
 	return result
 
@@ -2930,11 +2924,8 @@ func _submit_auto_tick_wait() -> Dictionary:
 		world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
 		if interaction_controller != null:
 			interaction_controller.world_result = world_result
-		_setup_world_container()
-		_render_world()
-		_setup_runtime_input_controller()
-		_refresh_fog_overlay()
-		_refresh_debug_overlay()
+		_apply_world_root_snapshot(true)
+		_refresh_world_runtime_bindings()
 		refresh_all_panels(current_interaction_prompt())
 	return result
 
@@ -3943,14 +3934,9 @@ func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}, comma
 		simulation.configure_map_interactions(_dictionary_or_empty(map.get("interaction_targets", {})))
 	if interaction_controller != null:
 		interaction_controller.world_result = world_result
-	_setup_world_container()
-	_render_world()
+	_apply_world_root_snapshot(true)
 	_present_world_action(command_result)
-	_setup_runtime_input_controller()
-	_refresh_fog_overlay()
-	_refresh_debug_overlay()
-	_configure_runtime_audio_layers()
-	_setup_panels()
+	_refresh_world_runtime_bindings()
 	refresh_all_panels(selected_prompt)
 
 
@@ -3967,6 +3953,24 @@ func _setup_runtime_input_controller() -> void:
 	if runtime_input_controller == null:
 		runtime_input_controller = GameRuntimeInputController.new(self)
 	runtime_input_controller.attach_world(world_container, world_result)
+
+
+func _refresh_world_runtime_bindings() -> void:
+	_setup_runtime_input_controller()
+	_configure_runtime_audio_layers()
+	_setup_panels()
+
+
+func _apply_world_root_snapshot(render_world: bool = true) -> Dictionary:
+	_setup_world_container()
+	var counts: Dictionary = {}
+	if render_world:
+		counts = _render_world()
+	elif runtime_input_controller != null:
+		runtime_input_controller.world_result = world_result
+	_refresh_fog_overlay()
+	_refresh_debug_overlay()
+	return counts
 
 
 func _render_world() -> Dictionary:
@@ -4100,13 +4104,9 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	world_result = interaction_controller.world_result
 	_sync_observed_level_to_map()
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
-	_setup_world_container()
-	_render_world()
+	_apply_world_root_snapshot(true)
 	_present_world_action(result)
-	_setup_runtime_input_controller()
-	_refresh_fog_overlay()
-	_refresh_debug_overlay()
-	_setup_panels()
+	_refresh_world_runtime_bindings()
 	var deferred_ui := false
 	if not stage_panel_to_open.is_empty():
 		deferred_ui = _queue_or_open_stage_panel_after_world_action(stage_panel_to_open, result)
@@ -4272,16 +4272,8 @@ func _apply_world_result_without_present(next_world_result: Dictionary, render_w
 		simulation.configure_map_interactions(_dictionary_or_empty(map.get("interaction_targets", {})))
 	if interaction_controller != null:
 		interaction_controller.world_result = world_result
-	_setup_world_container()
-	if render_world:
-		_render_world()
-		_setup_runtime_input_controller()
-	elif runtime_input_controller != null:
-		runtime_input_controller.world_result = world_result
-	_refresh_fog_overlay()
-	_refresh_debug_overlay()
-	_configure_runtime_audio_layers()
-	_setup_panels()
+	_apply_world_root_snapshot(render_world)
+	_refresh_world_runtime_bindings()
 
 
 func _apply_pending_world_action_ui(trigger: String) -> bool:
