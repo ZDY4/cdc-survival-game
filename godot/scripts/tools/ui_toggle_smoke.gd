@@ -350,6 +350,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_hover_tooltip_snapshot(errors, game_root, _equipment_slot_control(game_root, "main_hand"), "character", "锋利的匕首", "main hand equipment tooltip snapshot")
 	_assert_ui_layer_stack(errors, game_root, {}, null, _equipment_slot_control(game_root, "main_hand"), "stage:character", true, "character tooltip layer stack")
 	_open_equipment_context_menu(game_root, "main_hand")
+	_assert_character_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Equipment_main_hand_ContextMenu", "context_menu", "open_context_menu", {"slot_id": "main_hand", "item_id": "1002", "value": "main_hand"}, "main hand equipment context open audio")
 	_assert_equipment_context_menu(errors, game_root, "main_hand", "1002", true, false, false, "main hand equipment context menu")
 	_expect_blocker(errors, game_root, "equipment_context_menu", "equipment context menu blocker")
 	_assert_close_priority(errors, game_root, ["equipment_context_menu"], "equipment context menu close priority")
@@ -396,6 +397,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			var before_reload_events := _event_count(game_root, "weapon_reloaded")
 			reload_button.pressed.emit()
 			await process_frame
+			_assert_character_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Equipment_main_hand_ReloadButton", "button", "reload_equipped_slot", {"slot_id": "main_hand", "item_id": "1004", "ammo_count": "10"}, "character reload button audio")
 			if int(player_ref.weapon_ammo.get("main_hand", 0)) != 10:
 				errors.append("character panel reload should move pistol ammo into magazine")
 			if _player_inventory_count(game_root, "1009") != 0:
@@ -459,6 +461,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		var before_unequipped := _event_count(game_root, "item_unequipped")
 		main_hand_button.pressed.emit()
 		await process_frame
+		_assert_character_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Equipment_main_hand_UnequipButton", "button", "unequip_equipped_slot", {"slot_id": "main_hand", "item_id": "1002"}, "character unequip button audio")
 		if not _equipment_line(game_root, "main_hand").contains("主手: 空"):
 			errors.append("character panel should refresh main hand as empty after unequip")
 		if not _equipment_model_asset(game_root, "main_hand").is_empty():
@@ -492,6 +495,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		constitution_button.pressed.emit()
 		await process_frame
+		_assert_character_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Attribute_constitution_AllocateButton", "attribute_button", "allocate_attribute", {"attribute_id": "constitution", "value": "6"}, "character attribute allocate audio")
 		if not _character_summary_line(game_root).contains("属性点 2"):
 			errors.append("character summary should refresh consumed stat point")
 		if not _attribute_line(game_root, "constitution").contains("constitution: 7"):
@@ -2227,6 +2231,38 @@ func _assert_settings_control_audio(errors: Array[String], game_root: Node, expe
 		errors.append("%s: recent audio setting key expected %s, got %s" % [context, expected_setting_key, entry.get("setting_key", "")])
 	if str(entry.get("value", "")) != expected_value:
 		errors.append("%s: recent audio value expected %s, got %s" % [context, expected_value, entry.get("value", "")])
+
+
+func _assert_character_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = {}
+	for index in range(recent.size() - 1, -1, -1):
+		var candidate: Dictionary = _dictionary_or_empty(recent[index])
+		if str(candidate.get("audio_source", "")) != "ui" or str(candidate.get("panel_id", "")) != "character":
+			continue
+		if str(candidate.get("event_kind", "")) != expected_event_kind or str(candidate.get("sound_id", "")) != expected_sound_id:
+			continue
+		if str(candidate.get("control_name", "")) != expected_control_name:
+			continue
+		entry = candidate
+		break
+	if entry.is_empty():
+		errors.append("%s: expected character audio %s/%s/%s, got %s" % [context, expected_event_kind, expected_sound_id, expected_control_name, snapshot])
+		return
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
 
 
 func _drag_control(control: Control, from: Vector2, to: Vector2) -> void:

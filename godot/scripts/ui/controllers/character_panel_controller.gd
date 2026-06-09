@@ -140,6 +140,10 @@ func _attribute_rows(attributes: Dictionary, available_stat_points: int) -> Arra
 		label.text = "%s: %s" % [key, str(attributes.get(key, 0))]
 		var add_button := _button("AllocateButton", "+", "分配 1 点到 %s" % attribute_id, available_stat_points <= 0)
 		add_button.pressed.connect(func() -> void:
+			_play_character_control_audio("ui_button_pressed", "Attribute_%s_AllocateButton" % attribute_id, "attribute_button", "allocate_attribute", {
+				"attribute_id": attribute_id,
+				"value": int(attributes.get(key, 0)),
+			})
 			var root := get_parent()
 			if root != null and root.has_method("allocate_player_attribute_point"):
 				root.allocate_player_attribute_point(attribute_id)
@@ -271,6 +275,7 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 	if bool(reload.get("reloadable", false)):
 		var reload_button := _button("ReloadButton", "装", "装填 %s" % str(data.get("label", slot_id)), not bool(reload.get("can_reload", false)))
 		reload_button.pressed.connect(func() -> void:
+			_play_character_control_audio("ui_button_pressed", "Equipment_%s_ReloadButton" % slot_id, "button", "reload_equipped_slot", _equipment_audio_payload(data))
 			var root := get_parent()
 			if root != null and root.has_method("reload_player_equipped_slot"):
 				root.reload_player_equipped_slot(actual_slot_id)
@@ -278,6 +283,7 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 		row.add_child(reload_button)
 	var unequip_button := _button("UnequipButton", "卸", "卸下 %s" % str(data.get("label", slot_id)), not bool(data.get("equipped", false)))
 	unequip_button.pressed.connect(func() -> void:
+		_play_character_control_audio("ui_button_pressed", "Equipment_%s_UnequipButton" % slot_id, "button", "unequip_equipped_slot", _equipment_audio_payload(data))
 		var root := get_parent()
 		if root != null and root.has_method("unequip_player_slot"):
 			root.unequip_player_slot(actual_slot_id)
@@ -289,6 +295,8 @@ func _equipment_row(data: Dictionary) -> HBoxContainer:
 func _open_context_menu_for_equipment(data: Dictionary, screen_position: Vector2) -> void:
 	if _context_menu == null:
 		return
+	var display_slot := str(data.get("slot_id", data.get("actual_slot_id", "")))
+	_play_character_control_audio("ui_button_pressed", "Equipment_%s_ContextMenu" % display_slot, "context_menu", "open_context_menu", _equipment_audio_payload(data))
 	_context_equipment = data.duplicate(true)
 	_context_menu.clear()
 	_context_menu.add_item("检查", CONTEXT_INSPECT)
@@ -357,6 +365,8 @@ func _execute_context_action(action_id: int) -> void:
 	if _context_equipment.is_empty():
 		return
 	var slot_id := str(_context_equipment.get("actual_slot_id", _context_equipment.get("slot_id", "")))
+	var action_name := _context_action_name(action_id)
+	_play_character_control_audio("ui_button_pressed", "EquipmentContextMenu", "context_menu", action_name, _equipment_audio_payload(_context_equipment))
 	if action_id == CONTEXT_INSPECT:
 		_apply_equipment_inspect_feedback(_context_equipment)
 		return
@@ -373,6 +383,17 @@ func _execute_context_action(action_id: int) -> void:
 			if bool(reload.get("reloadable", false)) and bool(reload.get("can_reload", false)) and root.has_method("reload_player_equipped_slot"):
 				root.reload_player_equipped_slot(slot_id)
 	close_context_menu()
+
+
+func _context_action_name(action_id: int) -> String:
+	match action_id:
+		CONTEXT_INSPECT:
+			return "inspect_equipped_slot"
+		CONTEXT_UNEQUIP:
+			return "context_unequip_equipped_slot"
+		CONTEXT_RELOAD:
+			return "context_reload_equipped_slot"
+	return "unknown_context_action"
 
 
 func _apply_equipment_inspect_feedback(data: Dictionary) -> void:
@@ -596,6 +617,38 @@ func _button(node_name: String, text: String, tooltip: String, disabled: bool) -
 	button.disabled = disabled
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	return button
+
+
+func _play_character_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "character",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
+
+
+func _equipment_audio_payload(data: Dictionary, extra_payload: Dictionary = {}) -> Dictionary:
+	var slot_id := str(data.get("actual_slot_id", data.get("slot_id", "")))
+	var payload := {
+		"slot_id": slot_id,
+		"item_id": str(data.get("item_id", "")),
+		"value": str(data.get("slot_id", slot_id)),
+	}
+	var reload: Dictionary = _dictionary_or_empty(data.get("reload", {}))
+	if bool(reload.get("reloadable", false)):
+		payload["count"] = int(reload.get("loaded", 0))
+		payload["ammo_count"] = int(reload.get("inventory_ammo", 0))
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
 
 
 func _clear_box(box: VBoxContainer) -> void:
