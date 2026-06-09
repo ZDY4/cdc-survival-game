@@ -18,6 +18,7 @@ const WorldTimeSnapshotBuilder = preload("res://scripts/app/controllers/world_ti
 const UiFeedbackStateController = preload("res://scripts/app/controllers/ui_feedback_state_controller.gd")
 const SkillTargetingController = preload("res://scripts/app/controllers/skill_targeting_controller.gd")
 const CraftingFeedbackController = preload("res://scripts/app/controllers/crafting_feedback_controller.gd")
+const CraftingActionController = preload("res://scripts/app/controllers/crafting_action_controller.gd")
 const UiOverlayRenderController = preload("res://scripts/app/controllers/ui_overlay_render_controller.gd")
 const TooltipSnapshotController = preload("res://scripts/app/controllers/tooltip_snapshot_controller.gd")
 const DragSnapshotController = preload("res://scripts/app/controllers/drag_snapshot_controller.gd")
@@ -146,6 +147,7 @@ var active_inventory_feedback: Dictionary:
 		if ui_feedback_state_controller != null:
 			ui_feedback_state_controller.active_inventory_feedback = value.duplicate(true)
 var crafting_feedback_controller: RefCounted = CraftingFeedbackController.new()
+var crafting_action_controller: RefCounted = CraftingActionController.new()
 var latest_crafting_queue_result: Dictionary:
 	get:
 		return crafting_feedback_controller.latest_queue_result if crafting_feedback_controller != null else {}
@@ -2000,20 +2002,8 @@ func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 	var blocked: Dictionary = _player_command_rejection("craft")
 	if not blocked.is_empty():
 		return blocked
-	var result: Dictionary = simulation.submit_player_command({
-		"kind": "craft",
-		"actor_id": 1,
-		"recipe_id": recipe_id,
-		"count": max(1, count),
-		"recipe_library": registry.get_library("recipes"),
-		"crafting_context": _crafting_context(),
-		"topology": _dictionary_or_empty(world_result.get("map", {})),
-	})
-	crafting_feedback_controller.call("clear_pending_result")
-	refresh_inventory_panel()
-	refresh_crafting_panel()
-	refresh_skills_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("craft_recipe", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller))
+	return _apply_crafting_action_operation(operation)
 
 
 func confirm_crafting_queue(entries: Array) -> Dictionary:
@@ -2022,186 +2012,71 @@ func confirm_crafting_queue(entries: Array) -> Dictionary:
 	var blocked: Dictionary = _player_command_rejection("crafting_queue")
 	if not blocked.is_empty():
 		return blocked
-	simulation.crafting_queue = _normalized_crafting_queue(entries)
-	var queue_result: Dictionary = _advance_crafting_queue("confirm")
-	_set_latest_crafting_queue_result(queue_result, "confirm")
-	crafting_feedback_controller.call("clear_pending_result")
-	refresh_inventory_panel()
-	refresh_crafting_panel()
-	refresh_skills_panel()
-	return queue_result
+	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("confirm_queue", simulation, entries, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT))
+	return _apply_crafting_action_operation(operation)
 
 
 func _advance_crafting_queue(reason: String) -> Dictionary:
-	var results: Array[Dictionary] = []
-	var completed_count: int = 0
-	var failed: Array[Dictionary] = []
-	var started_pending := false
-	var guard := 0
-	var advance_limit: int = max(CRAFTING_QUEUE_ADVANCE_LIMIT, simulation.crafting_queue.size() + 1)
-	while guard < advance_limit:
-		guard += 1
-		if not _dictionary_or_empty(simulation.pending_crafting).is_empty():
-			break
-		if simulation.crafting_queue.is_empty():
-			break
-		var entry_data: Dictionary = _dictionary_or_empty(simulation.crafting_queue[0])
-		var recipe_id := str(entry_data.get("recipe_id", "")).strip_edges()
-		var count: int = max(1, int(entry_data.get("count", 1)))
-		if recipe_id.is_empty():
-			var missing_recipe_id_result := {"success": false, "reason": "recipe_id_missing", "entry": entry_data.duplicate(true)}
-			results.append(missing_recipe_id_result)
-			failed.append(missing_recipe_id_result)
-			break
-		var result: Dictionary = _submit_crafting_queue_entry(recipe_id, count)
-		result["queued_recipe_id"] = recipe_id
-		result["queued_count"] = count
-		results.append(result)
-		var completed_entry_count: int = _completed_crafting_count_from_queue_result(result)
-		completed_count += completed_entry_count
-		if not _dictionary_or_empty(simulation.pending_crafting).is_empty():
-			simulation.crafting_queue.remove_at(0)
-			started_pending = true
-			break
-		if bool(result.get("success", false)):
-			simulation.crafting_queue.remove_at(0)
-			continue
-		if bool(result.get("partial_success", false)) and completed_entry_count > 0:
-			var remaining_count: int = max(0, count - completed_entry_count)
-			if remaining_count > 0:
-				var remaining_entry: Dictionary = entry_data.duplicate(true)
-				remaining_entry["count"] = remaining_count
-				simulation.crafting_queue[0] = remaining_entry
-			else:
-				simulation.crafting_queue.remove_at(0)
-		failed.append(result.duplicate(true))
-		break
-	var limit_reached: bool = guard >= advance_limit and not simulation.crafting_queue.is_empty() and _dictionary_or_empty(simulation.pending_crafting).is_empty()
-	if limit_reached:
-		var limit_result := {
-			"success": false,
-			"reason": "crafting_queue_advance_limit_reached",
-			"limit": advance_limit,
-			"remaining_queue": simulation.crafting_queue.duplicate(true),
-		}
-		results.append(limit_result)
-		failed.append(limit_result)
-	return {
-		"success": failed.is_empty(),
-		"partial_success": completed_count > 0 and not failed.is_empty(),
-		"completed_count": completed_count,
-		"failed_count": failed.size(),
-		"results": results,
-		"failed": failed,
-		"pending": not _dictionary_or_empty(simulation.pending_crafting).is_empty(),
-		"started_pending": started_pending,
-		"remaining_queue": simulation.crafting_queue.duplicate(true),
-		"remaining_queue_count": simulation.crafting_queue.size(),
-		"queue_empty": simulation.crafting_queue.is_empty(),
-		"reason": reason,
-	}
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	return _dictionary_or_empty(crafting_action_controller.call("advance_queue", simulation, reason, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), CRAFTING_QUEUE_ADVANCE_LIMIT))
 
 
 func _submit_crafting_queue_entry(recipe_id: String, count: int) -> Dictionary:
-	return simulation.submit_player_command({
-		"kind": "craft",
-		"actor_id": 1,
-		"recipe_id": recipe_id,
-		"count": max(1, count),
-		"recipe_library": registry.get_library("recipes"),
-		"crafting_context": _crafting_context(),
-		"topology": _dictionary_or_empty(world_result.get("map", {})),
-		"crafting_queue_active": true,
-	})
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	return _dictionary_or_empty(crafting_action_controller.call("_submit_craft", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), true))
 
 
 func _continue_crafting_queue_after_wait(result: Dictionary) -> void:
-	if simulation == null or simulation.crafting_queue.is_empty():
-		return
-	if not _dictionary_or_empty(simulation.pending_crafting).is_empty():
-		return
-	if not _wait_result_resumed_active_crafting_queue(result):
-		return
-	result["crafting_queue_result"] = _advance_crafting_queue("pending_completed")
-	_set_latest_crafting_queue_result(_dictionary_or_empty(result.get("crafting_queue_result", {})), "pending_completed")
+	crafting_action_controller.call("continue_queue_after_wait", simulation, result, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT)
 
 
 func _wait_result_resumed_active_crafting_queue(result: Dictionary) -> bool:
-	var pending_result: Dictionary = _dictionary_or_empty(result.get("pending_result", {}))
-	if pending_result.is_empty():
-		return false
-	var resumed: Dictionary = _dictionary_or_empty(pending_result.get("resumed_pending_crafting", {}))
-	if resumed.is_empty():
-		return false
-	var command: Dictionary = _dictionary_or_empty(resumed.get("command", {}))
-	return bool(command.get("crafting_queue_active", false))
+	return bool(crafting_action_controller.call("wait_result_resumed_active_crafting_queue", result))
 
 
 func _completed_crafting_count_from_queue_result(result: Dictionary) -> int:
-	if not _dictionary_or_empty(simulation.pending_crafting).is_empty():
-		return 0
-	if bool(result.get("partial_success", false)):
-		return max(0, int(result.get("completed_count", 0)))
-	if not bool(result.get("success", false)):
-		return 0
-	if result.has("completed_count"):
-		return max(0, int(result.get("completed_count", 0)))
-	return max(1, int(result.get("count", result.get("queued_count", 1))))
+	return int(crafting_action_controller.call("completed_crafting_count_from_queue_result", simulation, result))
 
 
 func update_crafting_queue(entries: Array) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	simulation.crafting_queue = _normalized_crafting_queue(entries)
-	if simulation.crafting_queue.is_empty():
-		crafting_feedback_controller.call("record_queue_cleared")
-	return {
-		"success": true,
-		"entry_count": simulation.crafting_queue.size(),
-		"crafting_queue": simulation.crafting_queue.duplicate(true),
-	}
+	return _dictionary_or_empty(crafting_action_controller.call("update_queue", simulation, entries, crafting_feedback_controller))
 
 
 func crafting_queue_snapshot() -> Dictionary:
-	if simulation == null:
-		return {"entries": [], "entry_count": 0, "total_count": 0}
-	return _dictionary_or_empty(crafting_feedback_controller.call("queue_snapshot", simulation.crafting_queue))
+	return _dictionary_or_empty(crafting_action_controller.call("queue_snapshot", simulation, crafting_feedback_controller))
 
 
 func _normalized_crafting_queue(entries: Array) -> Array[Dictionary]:
-	return _array_of_dictionaries(crafting_feedback_controller.call("normalize_queue", entries))
+	return _array_of_dictionaries(crafting_action_controller.call("normalize_queue", entries, crafting_feedback_controller))
 
 
 func _crafting_queue_total_count(entries: Array) -> int:
-	return int(crafting_feedback_controller.call("queue_total_count", entries))
+	return int(crafting_action_controller.call("queue_total_count", entries, crafting_feedback_controller))
 
 
 func cancel_pending_crafting(reason: String = "crafting_ui") -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	var result: Dictionary = simulation.submit_player_command({
-		"kind": "cancel_pending",
-		"actor_id": 1,
-		"reason": reason,
-		"topology": _dictionary_or_empty(world_result.get("map", {})),
-	})
-	if bool(result.get("success", false)) and bool(result.get("had_pending", false)):
-		crafting_feedback_controller.call("record_pending_cancelled", result, reason, simulation.crafting_queue)
-	elif bool(result.get("success", false)):
-		crafting_feedback_controller.call("clear_pending_result")
-	refresh_inventory_panel()
-	refresh_crafting_panel()
-	refresh_skills_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("cancel_pending", simulation, reason, _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller))
+	return _apply_crafting_action_operation(operation)
 
 
 func _set_latest_crafting_queue_result(result: Dictionary, trigger: String) -> void:
-	crafting_feedback_controller.call(
-		"record_queue_result",
-		result,
-		trigger,
-		_dictionary_or_empty(simulation.pending_crafting) if simulation != null else {}
-	)
+	crafting_action_controller.call("record_queue_result", crafting_feedback_controller, result, trigger, simulation)
+
+
+func _apply_crafting_action_operation(operation: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
+	if refresh_panels.has("inventory"):
+		refresh_inventory_panel()
+	if refresh_panels.has("crafting"):
+		refresh_crafting_panel()
+	if refresh_panels.has("skills"):
+		refresh_skills_panel()
+	return result
 
 
 func _crafting_context() -> Dictionary:

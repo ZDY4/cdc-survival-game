@@ -37,9 +37,9 @@ const PLAYER_COMMAND_AUTHORITY_AUDIT: Array[Dictionary] = [
 	{"app_method": "use_hotbar_slot", "action": "use_hotbar", "authority_kind": "submit_player_command", "command_kind": "use_skill_or_inventory_action", "owner": "GameApp", "blocker": "_player_command_rejection"},
 	{"app_method": "begin_skill_targeting", "action": "begin_skill_targeting", "authority_kind": "submit_player_command_or_ui_state", "command_kind": "use_skill", "owner": "GameApp", "blocker": "_player_command_rejection"},
 	{"app_method": "confirm_active_skill_target", "action": "confirm_skill_target", "authority_kind": "submit_player_command", "command_kind": "use_skill", "owner": "GameApp", "blocker": "_player_command_rejection"},
-	{"app_method": "craft_player_recipe", "action": "craft", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "GameApp", "blocker": "_player_command_rejection"},
-	{"app_method": "confirm_crafting_queue", "action": "crafting_queue", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "GameApp", "blocker": "_player_command_rejection", "authority_helper": "_submit_crafting_queue_entry"},
-	{"app_method": "cancel_pending_crafting", "action": "cancel_pending_crafting", "authority_kind": "submit_player_command", "command_kind": "cancel_pending", "owner": "GameApp", "blocker": "pending_crafting"},
+	{"app_method": "craft_player_recipe", "action": "craft", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "CraftingActionController", "blocker": "_player_command_rejection"},
+	{"app_method": "confirm_crafting_queue", "action": "crafting_queue", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "CraftingActionController", "blocker": "_player_command_rejection", "authority_helper": "CraftingActionController.advance_queue"},
+	{"app_method": "cancel_pending_crafting", "action": "cancel_pending_crafting", "authority_kind": "submit_player_command", "command_kind": "cancel_pending", "owner": "CraftingActionController", "blocker": "pending_crafting"},
 	{"app_method": "turn_in_player_quest", "action": "quest_turn_in", "authority_kind": "core_service", "core_service": "Simulation.turn_in_quest", "owner": "GameApp", "blocker": "quest_state"},
 	{"app_method": "enter_overworld_location_from_panel", "action": "enter_overworld_location", "authority_kind": "core_service", "core_service": "Simulation.enter_location", "owner": "GameApp", "blocker": "map_panel_prompt"},
 ]
