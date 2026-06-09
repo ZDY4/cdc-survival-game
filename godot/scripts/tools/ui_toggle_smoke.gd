@@ -122,6 +122,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("second A should disable auto tick")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "auto tick off HUD")
 	_assert_observe_auto_button(errors, game_root, false, "auto tick off observe hotbar")
+	await _exercise_hotbar_group_audio(errors, game_root)
 	_exercise_debug_console(errors, game_root)
 	var observe_auto_button: Button = _observe_auto_button(game_root)
 	if observe_auto_button == null:
@@ -129,6 +130,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		observe_auto_button.pressed.emit()
 		await _wait_process_frames(2)
+		_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ObserveAutoButton", "observe_button", "toggle_auto_tick", {"value": "on", "auto_tick": false}, "observe auto on audio")
 		if not bool(game_root.is_auto_tick_enabled()):
 			errors.append("observe hotbar auto button should enable auto tick")
 		_assert_runtime_control_line(errors, game_root, "AutoTick on", "observe auto button on HUD")
@@ -139,6 +141,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		else:
 			observe_auto_button.pressed.emit()
 			await _wait_process_frames(2)
+			_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ObserveAutoButton", "observe_button", "toggle_auto_tick", {"value": "off", "auto_tick": true}, "observe auto off audio")
 			if bool(game_root.is_auto_tick_enabled()):
 				errors.append("observe hotbar auto button should disable auto tick")
 			_assert_runtime_control_line(errors, game_root, "AutoTick off", "observe auto button off HUD")
@@ -149,6 +152,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		observe_mode_button.pressed.emit()
 		await _wait_process_frames(2)
+		_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ObserveModeButton", "observe_button", "toggle_observe_mode", {"value": "on", "observe_mode": false}, "observe mode on audio")
 	if not bool(game_root.is_observe_mode_enabled()):
 		errors.append("ObserveModeButton should enable observe mode")
 	_assert_runtime_control_line(errors, game_root, "Observe on pause x1", "observe mode enabled HUD")
@@ -175,6 +179,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		observe_speed_button.pressed.emit()
 		await _wait_process_frames(2)
+		_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ObserveSpeedButton", "observe_button", "cycle_observe_speed", {"value": "x1", "observe_speed": "x1", "observe_mode": true}, "observe speed audio")
 		var control_snapshot: Dictionary = game_root.runtime_control_snapshot()
 		if str(control_snapshot.get("observe_speed", "")) != "x2":
 			errors.append("observe speed button should cycle x1 to x2: %s" % control_snapshot)
@@ -200,6 +205,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		observe_mode_button.pressed.emit()
 		await _wait_process_frames(2)
+		_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ObserveModeButton", "observe_button", "toggle_observe_mode", {"value": "off", "observe_mode": true}, "observe mode off audio")
 	if bool(game_root.is_observe_mode_enabled()):
 		errors.append("ObserveModeButton should disable observe mode")
 	_assert_runtime_control_line(errors, game_root, "Observe off pause x10", "observe mode disabled HUD")
@@ -521,9 +527,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(adrenaline_result.get("success", false)):
 		errors.append("learning adrenaline rush for character status effects failed: %s" % adrenaline_result.get("reason", "unknown"))
 	game_root.bind_player_skill_to_hotbar("slot_1", "adrenaline_rush")
-	var hotbar_result: Dictionary = game_root.use_hotbar_slot("slot_1")
-	if not bool(hotbar_result.get("success", false)):
-		errors.append("using adrenaline rush for character status effects failed: %s" % hotbar_result.get("reason", "unknown"))
+	game_root.refresh_hud(game_root.current_interaction_prompt())
+	var hotbar_button: Button = game_root.hud.find_child("HotbarSlot_slot_1", true, false) as Button
+	if hotbar_button == null:
+		errors.append("HUD should expose bound slot_1 button for adrenaline rush")
+	else:
+		hotbar_button.pressed.emit()
+		await _wait_process_frames(2)
+		_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "HotbarSlot_slot_1", "hotbar_slot_button", "use_hotbar_slot", {"slot_id": "slot_1", "group_id": "group_1", "skill_id": "adrenaline_rush"}, "hotbar slot skill audio")
 	if not _status_effect_line(game_root, "StatusEffect_skill_adrenaline_rush").contains("肾上腺激发 | buff | 技能: 肾上腺激发 | Lv1 | 8回合 | damage_bonus +0.25"):
 		errors.append("character panel should show timed adrenaline rush status effect")
 	if not _status_effect_tooltip(game_root, "StatusEffect_skill_adrenaline_rush").contains("剩余回合: 8") or not _status_effect_tooltip(game_root, "StatusEffect_skill_adrenaline_rush").contains("技能ID: adrenaline_rush"):
@@ -1643,6 +1654,23 @@ func _assert_hotbar_visibility(errors: Array[String], game_root: Node, expected_
 		errors.append("%s: HotbarGroupBar visible expected %s" % [context, str(expected_visible)])
 
 
+func _exercise_hotbar_group_audio(errors: Array[String], game_root: Node) -> void:
+	var hotbar_group_2: Button = game_root.hud.find_child("HotbarGroup_group_2", true, false) as Button
+	if hotbar_group_2 == null:
+		errors.append("HUD should expose hotbar group 2 button")
+	else:
+		hotbar_group_2.pressed.emit()
+		await _wait_process_frames(2)
+		_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "HotbarGroup_group_2", "hotbar_group_button", "set_hotbar_group", {"group_id": "group_2", "value": "G2"}, "hotbar group 2 audio")
+	var hotbar_group_1: Button = game_root.hud.find_child("HotbarGroup_group_1", true, false) as Button
+	if hotbar_group_1 == null:
+		errors.append("HUD should expose hotbar group 1 button")
+	else:
+		hotbar_group_1.pressed.emit()
+		await _wait_process_frames(2)
+		_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "HotbarGroup_group_1", "hotbar_group_button", "set_hotbar_group", {"group_id": "group_1", "value": "G1"}, "hotbar group 1 audio")
+
+
 func _assert_hotbar_hit_test(errors: Array[String], game_root: Node, context: String) -> void:
 	var slot_button: Button = game_root.hud.find_child("HotbarSlot_slot_1", true, false) as Button
 	var group_button: Button = game_root.hud.find_child("HotbarGroup_group_1", true, false) as Button
@@ -2291,6 +2319,38 @@ func _assert_map_control_audio(errors: Array[String], game_root: Node, expected_
 		break
 	if entry.is_empty():
 		errors.append("%s: expected map audio %s/%s/%s, got %s" % [context, expected_event_kind, expected_sound_id, expected_control_name, snapshot])
+		return
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
+
+
+func _assert_hud_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = {}
+	for index in range(recent.size() - 1, -1, -1):
+		var candidate: Dictionary = _dictionary_or_empty(recent[index])
+		if str(candidate.get("audio_source", "")) != "ui" or str(candidate.get("panel_id", "")) != "hud":
+			continue
+		if str(candidate.get("event_kind", "")) != expected_event_kind or str(candidate.get("sound_id", "")) != expected_sound_id:
+			continue
+		if str(candidate.get("control_name", "")) != expected_control_name:
+			continue
+		entry = candidate
+		break
+	if entry.is_empty():
+		errors.append("%s: expected HUD audio %s/%s/%s, got %s" % [context, expected_event_kind, expected_sound_id, expected_control_name, snapshot])
 		return
 	if str(entry.get("control_kind", "")) != expected_control_kind:
 		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])

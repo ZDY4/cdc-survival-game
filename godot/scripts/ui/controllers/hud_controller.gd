@@ -1099,6 +1099,10 @@ func _hotbar_group_button(group_id: String, active_group_id: String, group_label
 	)
 	_prepare_hotbar_group_drop_target(button)
 	button.pressed.connect(func() -> void:
+		_play_hud_control_audio("ui_button_pressed", button.name, "hotbar_group_button", "set_hotbar_group", {
+			"group_id": group_id,
+			"value": group_label,
+		})
 		var root := get_parent()
 		if root != null and root.has_method("set_hotbar_group"):
 			root.call_deferred("set_hotbar_group", group_id)
@@ -1168,9 +1172,10 @@ func _hotbar_button(slot: Dictionary) -> Button:
 	button.tooltip_text = _hotbar_tooltip(key_label, group_label, kind, entry_label, slot)
 	button.disabled = cooldown > 0.0 or not can_use
 	button.pressed.connect(func() -> void:
+		_play_hud_control_audio("ui_button_pressed", button.name, "hotbar_slot_button", "use_hotbar_slot", _hotbar_audio_payload(slot))
 		var root := get_parent()
 		if root != null and root.has_method("use_hotbar_slot"):
-			root.use_hotbar_slot(slot_id)
+			root.call_deferred("use_hotbar_slot", slot_id)
 	)
 	_add_hotbar_cooldown_mask(button, slot_id, cooldown)
 	return button
@@ -1233,6 +1238,10 @@ func _observe_button(node_name: String, text: String, meta_key: String, meta_val
 func _observe_mode_button(observe_mode: bool) -> Button:
 	var button := _observe_button("ObserveModeButton", "Player" if observe_mode else "Observe", "observe_mode", observe_mode, false)
 	button.pressed.connect(func() -> void:
+		_play_hud_control_audio("ui_button_pressed", "ObserveModeButton", "observe_button", "toggle_observe_mode", {
+			"observe_mode": observe_mode,
+			"value": "off" if observe_mode else "on",
+		})
 		var root := get_parent()
 		if root != null and root.has_method("toggle_observe_mode"):
 			root.call_deferred("toggle_observe_mode")
@@ -1245,6 +1254,11 @@ func _observe_play_button(playback: bool, observe_mode: bool) -> Button:
 	button.set_meta("observe_mode", observe_mode)
 	if observe_mode:
 		button.pressed.connect(func() -> void:
+			_play_hud_control_audio("ui_button_pressed", "ObservePlayButton", "observe_button", "toggle_observe_playback", {
+				"observe_mode": observe_mode,
+				"observe_playback": playback,
+				"value": "pause" if playback else "play",
+			})
 			var root := get_parent()
 			if root != null and root.has_method("toggle_observe_playback"):
 				root.call_deferred("toggle_observe_playback")
@@ -1257,6 +1271,11 @@ func _observe_speed_button(speed: String, observe_mode: bool) -> Button:
 	button.set_meta("observe_mode", observe_mode)
 	if observe_mode:
 		button.pressed.connect(func() -> void:
+			_play_hud_control_audio("ui_button_pressed", "ObserveSpeedButton", "observe_button", "cycle_observe_speed", {
+				"observe_mode": observe_mode,
+				"observe_speed": speed,
+				"value": speed,
+			})
 			var root := get_parent()
 			if root != null and root.has_method("cycle_observe_speed"):
 				root.call_deferred("cycle_observe_speed")
@@ -1267,11 +1286,45 @@ func _observe_speed_button(speed: String, observe_mode: bool) -> Button:
 func _observe_auto_button(auto_tick: bool) -> Button:
 	var button := _observe_button("ObserveAutoButton", "Auto on" if auto_tick else "Auto off", "auto_tick", auto_tick, false)
 	button.pressed.connect(func() -> void:
+		_play_hud_control_audio("ui_button_pressed", "ObserveAutoButton", "observe_button", "toggle_auto_tick", {
+			"auto_tick": auto_tick,
+			"value": "off" if auto_tick else "on",
+		})
 		var root := get_parent()
 		if root != null and root.has_method("toggle_auto_tick"):
 			root.call_deferred("toggle_auto_tick")
 	)
 	return button
+
+
+func _play_hud_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "hud",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
+
+
+func _hotbar_audio_payload(slot: Dictionary, extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"slot_id": str(slot.get("slot_id", "")),
+		"group_id": str(slot.get("group_id", "")),
+		"skill_id": str(slot.get("skill_id", "")),
+		"item_id": str(slot.get("item_id", "")),
+		"value": str(slot.get("label", "")),
+		"count": int(slot.get("item_count", 0)),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
 
 
 func _observe_tooltip(meta_key: String, meta_value: Variant, disabled: bool) -> String:
