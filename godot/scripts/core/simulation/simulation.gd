@@ -42,6 +42,7 @@ const HOTBAR_GROUP_COUNT := 3
 const RELATIONSHIP_HOSTILE_THRESHOLD := -50.0
 const RELATIONSHIP_FRIENDLY_THRESHOLD := 0.0
 const WORLD_TURN_MINUTES := 15
+const LIFE_RESERVATION_MIN_TTL_MINUTES := WORLD_TURN_MINUTES * 2
 const WORLD_DAYS := ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 var actor_registry := ActorRegistry.new()
@@ -3724,6 +3725,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 	turn_state["phase"] = "world"
 	_tick_hotbar_cooldowns()
 	_tick_actor_active_effects()
+	var expired_reservations: Array[Dictionary] = _expire_life_planner_reservations()
 	var life_tick_results: Array[Dictionary] = _tick_settlement_life_needs(WORLD_TURN_MINUTES)
 	if bool(combat_state.get("active", false)):
 		_refresh_combat_turn_order("world_turn_started")
@@ -3769,6 +3771,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 		"after": world_time.duplicate(true),
 		"minutes": WORLD_TURN_MINUTES,
 		"life_tick_count": life_tick_results.size(),
+		"expired_life_reservation_count": expired_reservations.size(),
 	})
 	return results
 
@@ -3785,6 +3788,26 @@ func _advance_world_time(minutes: int) -> void:
 func _world_day_index(day: String) -> int:
 	var index: int = WORLD_DAYS.find(day)
 	return index if index >= 0 else 0
+
+
+func _world_time_total_minutes(value: Dictionary) -> int:
+	return _world_day_index(str(value.get("day", "monday"))) * 1440 + posmod(int(value.get("minute_of_day", 0)), 1440)
+
+
+func _world_time_after(value: Dictionary, minutes: int) -> Dictionary:
+	var current_day: String = str(value.get("day", "monday"))
+	var current_minute: int = posmod(int(value.get("minute_of_day", 0)), 1440)
+	var total_minutes: int = current_minute + max(0, minutes)
+	var day_offset: int = int(total_minutes / 1440)
+	return {
+		"day": WORLD_DAYS[(_world_day_index(current_day) + day_offset) % WORLD_DAYS.size()],
+		"minute_of_day": posmod(total_minutes, 1440),
+	}
+
+
+func _world_time_elapsed_minutes(start_total_minutes: int, end_total_minutes: int) -> int:
+	var week_minutes := WORLD_DAYS.size() * 1440
+	return posmod(end_total_minutes - start_total_minutes, week_minutes)
 
 
 func _tick_settlement_life_needs(minutes: int) -> Array[Dictionary]:
@@ -3826,6 +3849,54 @@ func _tick_settlement_life_needs(minutes: int) -> Array[Dictionary]:
 		output.append(tick)
 		_emit("settlement_life_needs_ticked", tick.duplicate(true))
 	return output
+
+
+func _expire_life_planner_reservations() -> Array[Dictionary]:
+	var expired: Array[Dictionary] = []
+	for actor in actor_registry.actors():
+		if actor.hp <= 0.0:
+			continue
+		var life: Dictionary = _dictionary_or_empty(actor.life)
+		if str(life.get("settlement_id", "")).is_empty():
+			continue
+		var runtime: Dictionary = _ensure_life_runtime(actor)
+		var reservations: Dictionary = _dictionary_or_empty(runtime.get("reservations", {}))
+		if reservations.is_empty():
+			continue
+		var planner_state: Dictionary = _dictionary_or_empty(runtime.get("planner_state", {})).duplicate(true)
+		var changed := false
+		for reservation_target in reservations.keys():
+			var target := str(reservation_target)
+			var reservation: Dictionary = _dictionary_or_empty(reservations.get(reservation_target, {}))
+			if not _life_planner_reservation_expired(reservation):
+				continue
+			var release: Dictionary = _release_life_planner_reservation(actor, runtime, planner_state, target, {
+				"action_id": str(reservation.get("action_id", "")),
+			}, {
+				"smart_object_id": str(reservation.get("smart_object_id", "")),
+				"smart_object_kind": str(reservation.get("smart_object_kind", "")),
+				"target_grid": _dictionary_or_empty(reservation.get("target_grid", {})).duplicate(true),
+			}, {
+				"smart_object_id": str(reservation.get("smart_object_id", "")),
+				"smart_object_kind": str(reservation.get("smart_object_kind", "")),
+				"target_grid": _dictionary_or_empty(reservation.get("target_grid", {})).duplicate(true),
+			}, "reservation_expired")
+			expired.append(release.duplicate(true))
+			changed = true
+		if changed:
+			runtime["planner_state"] = planner_state
+			_set_life_runtime(actor, runtime)
+	return expired
+
+
+func _life_planner_reservation_expired(reservation: Dictionary) -> bool:
+	if reservation.is_empty() or not bool(reservation.get("active", false)):
+		return false
+	var ttl_minutes := int(reservation.get("reservation_ttl_minutes", 0))
+	var created_total_minutes := int(reservation.get("created_total_minutes", -1))
+	if ttl_minutes <= 0 or created_total_minutes < 0:
+		return false
+	return _world_time_elapsed_minutes(created_total_minutes, _world_time_total_minutes(world_time)) >= ttl_minutes
 
 
 func _life_need_tick_for_actor(ticks: Array[Dictionary], actor_id: int) -> Dictionary:
@@ -4477,6 +4548,7 @@ func _apply_life_planner_reservation(actor: RefCounted, runtime: Dictionary, pla
 	var reservation_target := str(action.get("reservation_target", ""))
 	if reservation_target.is_empty():
 		return {}
+	var ttl_minutes := _life_planner_reservation_ttl_minutes(action)
 	var reservation: Dictionary = {
 		"active": true,
 		"phase": "reserved",
@@ -4487,6 +4559,9 @@ func _apply_life_planner_reservation(actor: RefCounted, runtime: Dictionary, pla
 		"actor_id": actor.actor_id,
 		"definition_id": actor.definition_id,
 		"world_time": world_time.duplicate(true),
+		"created_total_minutes": _world_time_total_minutes(world_time),
+		"reservation_ttl_minutes": ttl_minutes,
+		"expires_world_time": _world_time_after(world_time, ttl_minutes),
 		"target_grid": _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true),
 	}
 	var reservations: Dictionary = _dictionary_or_empty(runtime.get("reservations", {})).duplicate(true)
@@ -4531,6 +4606,14 @@ func _release_life_planner_reservation(actor: RefCounted, runtime: Dictionary, p
 		planner_state[fact_key] = false
 	_emit("settlement_life_reservation_released", reservation.duplicate(true))
 	return reservation
+
+
+func _life_planner_reservation_ttl_minutes(action: Dictionary) -> int:
+	var explicit_ttl := int(action.get("reservation_ttl_minutes", 0))
+	if explicit_ttl > 0:
+		return max(LIFE_RESERVATION_MIN_TTL_MINUTES, explicit_ttl)
+	var action_minutes: int = max(int(action.get("perform_minutes", 0)), int(action.get("default_travel_minutes", 0)))
+	return max(LIFE_RESERVATION_MIN_TTL_MINUTES, action_minutes)
 
 
 func _life_reservation_flag_key(reservation_target: String) -> String:

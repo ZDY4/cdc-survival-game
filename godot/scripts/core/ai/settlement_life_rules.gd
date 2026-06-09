@@ -329,6 +329,9 @@ func _planner_action_summary(action: Dictionary) -> Dictionary:
 		"need_effects": _dictionary_or_empty(action.get("need_effects", {})).duplicate(true),
 		"effects": _array_or_empty(action.get("effects", [])).duplicate(true),
 		"world_state_effects": _dictionary_or_empty(action.get("world_state_effects", {})).duplicate(true),
+		"default_travel_minutes": int(action.get("default_travel_minutes", 0)),
+		"perform_minutes": int(action.get("perform_minutes", 0)),
+		"reservation_ttl_minutes": int(action.get("reservation_ttl_minutes", 0)),
 	}
 
 

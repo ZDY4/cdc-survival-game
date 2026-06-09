@@ -229,6 +229,62 @@ func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[
 	errors.append_array(_expect_settlement_life_queue_progression(registry))
 	errors.append_array(_expect_settlement_life_world_state_effects(registry))
 	errors.append_array(_expect_settlement_life_failure_replan(registry))
+	errors.append_array(_expect_settlement_life_reservation_expiry(registry))
+	return errors
+
+
+func _expect_settlement_life_reservation_expiry(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 360}
+	var cook_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(10, 0, 20), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var cook: RefCounted = simulation.actor_registry.get_actor(cook_id)
+	cook.map_id = "inactive_reservation_expiry_map"
+	cook.life["runtime"] = {
+		"meal_object_reserved": true,
+		"planner_state": {
+			"has_reserved_meal_seat": true,
+			"reservation.meal_object.active": true,
+		},
+		"reservations": {
+			"meal_object": {
+				"active": true,
+				"phase": "reserved",
+				"reservation_target": "meal_object",
+				"smart_object_id": "canteen_seat_cook_01",
+				"smart_object_kind": "meal_seat",
+				"action_id": "travel_to_canteen",
+				"actor_id": cook_id,
+				"definition_id": cook.definition_id,
+				"world_time": {"day": "monday", "minute_of_day": 300},
+				"created_total_minutes": 300,
+				"reservation_ttl_minutes": 30,
+				"expires_world_time": {"day": "monday", "minute_of_day": 330},
+				"target_grid": {"x": 10, "y": 0, "z": 20},
+			}
+		}
+	}
+	simulation.advance_world_turn(_open_settlement_topology())
+	var life_runtime: Dictionary = _life_runtime_for_actor(simulation, cook_id)
+	var reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(life_runtime.get("reservations", {})).get("meal_object", {}))
+	if reservation.is_empty() or bool(reservation.get("active", true)) or str(reservation.get("release_reason", "")) != "reservation_expired":
+		errors.append("settlement GOAP expired reservation should be released, got %s" % life_runtime)
+	if bool(life_runtime.get("meal_object_reserved", true)):
+		errors.append("settlement GOAP expired reservation should clear legacy meal_object_reserved flag")
+	var planner_state: Dictionary = _dictionary_or_empty(life_runtime.get("planner_state", {}))
+	if bool(planner_state.get("has_reserved_meal_seat", true)) or bool(planner_state.get("reservation.meal_object.active", true)):
+		errors.append("settlement GOAP expired reservation should clear planner reservation facts, got %s" % planner_state)
+	var release_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_reservation_released")
+	if int(release_event.get("actor_id", 0)) != cook_id or str(release_event.get("release_reason", "")) != "reservation_expired":
+		errors.append("settlement_life_reservation_released should expose reservation expiry, got %s" % release_event)
+	var time_event: Dictionary = _last_event_payload(simulation.snapshot(), "world_time_advanced")
+	if int(time_event.get("expired_life_reservation_count", 0)) < 1:
+		errors.append("world_time_advanced should count expired life reservations, got %s" % time_event)
 	return errors
 
 
