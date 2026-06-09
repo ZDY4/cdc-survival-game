@@ -15,6 +15,7 @@ const WorldActionFlowController = preload("res://scripts/app/controllers/world_a
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
 const AiDebugSnapshotBuilder = preload("res://scripts/app/controllers/ai_debug_snapshot_builder.gd")
 const WorldTimeSnapshotBuilder = preload("res://scripts/app/controllers/world_time_snapshot_builder.gd")
+const UiFeedbackStateController = preload("res://scripts/app/controllers/ui_feedback_state_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -57,10 +58,31 @@ var drag_preview_panel: PanelContainer
 var drag_preview_label: Label
 var last_drag_preview_render_snapshot: Dictionary = {"active": false}
 var active_trade_target: Dictionary = {}
-var active_trade_feedback: Dictionary = {}
-var active_container_feedback: Dictionary = {}
-var active_character_feedback: Dictionary = {}
-var active_inventory_feedback: Dictionary = {}
+var ui_feedback_state_controller: RefCounted = UiFeedbackStateController.new()
+var active_trade_feedback: Dictionary:
+	get:
+		return ui_feedback_state_controller.active_trade_feedback if ui_feedback_state_controller != null else {}
+	set(value):
+		if ui_feedback_state_controller != null:
+			ui_feedback_state_controller.active_trade_feedback = value.duplicate(true)
+var active_container_feedback: Dictionary:
+	get:
+		return ui_feedback_state_controller.active_container_feedback if ui_feedback_state_controller != null else {}
+	set(value):
+		if ui_feedback_state_controller != null:
+			ui_feedback_state_controller.active_container_feedback = value.duplicate(true)
+var active_character_feedback: Dictionary:
+	get:
+		return ui_feedback_state_controller.active_character_feedback if ui_feedback_state_controller != null else {}
+	set(value):
+		if ui_feedback_state_controller != null:
+			ui_feedback_state_controller.active_character_feedback = value.duplicate(true)
+var active_inventory_feedback: Dictionary:
+	get:
+		return ui_feedback_state_controller.active_inventory_feedback if ui_feedback_state_controller != null else {}
+	set(value):
+		if ui_feedback_state_controller != null:
+			ui_feedback_state_controller.active_inventory_feedback = value.duplicate(true)
 var latest_crafting_queue_result: Dictionary = {}
 var latest_pending_crafting_result: Dictionary = {}
 var active_skill_targeting: Dictionary = {}
@@ -3825,46 +3847,19 @@ func _ui_modal_command_rejected(action: String, modal_name: String) -> Dictionar
 
 
 func _record_container_feedback(result: Dictionary, action: String, container_id: String, item_id: String, count: int) -> void:
-	if bool(result.get("success", false)) and not bool(result.get("partial_success", false)):
-		active_container_feedback = {}
-		return
-	active_container_feedback = result.duplicate(true)
-	active_container_feedback["type"] = "error"
-	active_container_feedback["action"] = action
-	active_container_feedback["container_id"] = str(result.get("container_id", container_id))
-	active_container_feedback["item_id"] = str(result.get("item_id", item_id))
-	active_container_feedback["count"] = count
+	ui_feedback_state_controller.call("record_container_feedback", result, action, container_id, item_id, count)
 
 
 func _record_trade_feedback(result: Dictionary, action: String, shop_id: String, item_id: String, count: int) -> void:
-	if bool(result.get("success", false)):
-		active_trade_feedback = {}
-		return
-	active_trade_feedback = result.duplicate(true)
-	active_trade_feedback["type"] = "error"
-	active_trade_feedback["action"] = action
-	active_trade_feedback["shop_id"] = str(result.get("shop_id", shop_id))
-	active_trade_feedback["item_id"] = str(result.get("item_id", item_id))
-	active_trade_feedback["count"] = count
+	ui_feedback_state_controller.call("record_trade_feedback", result, action, shop_id, item_id, count)
 
 
 func _record_inventory_feedback(result: Dictionary, action: String, item_id: String, count: int) -> void:
-	active_inventory_feedback = result.duplicate(true)
-	active_inventory_feedback["type"] = "success" if bool(result.get("success", false)) else "error"
-	active_inventory_feedback["action"] = action
-	active_inventory_feedback["item_id"] = str(result.get("item_id", item_id))
-	active_inventory_feedback["count"] = int(result.get("count", count))
+	ui_feedback_state_controller.call("record_inventory_feedback", result, action, item_id, count)
 
 
 func _record_character_feedback(result: Dictionary, action: String, slot_id: String, item_id: String) -> void:
-	if bool(result.get("success", false)):
-		active_character_feedback = {}
-		return
-	active_character_feedback = result.duplicate(true)
-	active_character_feedback["type"] = "error"
-	active_character_feedback["action"] = action
-	active_character_feedback["slot_id"] = str(result.get("slot_id", slot_id))
-	active_character_feedback["item_id"] = str(result.get("item_id", item_id))
+	ui_feedback_state_controller.call("record_character_feedback", result, action, slot_id, item_id)
 
 
 func _interaction_result_opens_container(result: Dictionary) -> bool:

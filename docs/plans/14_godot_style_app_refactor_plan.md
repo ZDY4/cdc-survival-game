@@ -25,13 +25,14 @@
 - 玩家命令 authority audit 已抽到 `godot/scripts/app/controllers/player_command_authority_audit.gd`。
 - AI debug snapshot 构建已抽到 `godot/scripts/app/controllers/ai_debug_snapshot_builder.gd`。
 - world time snapshot 格式化已抽到 `godot/scripts/app/controllers/world_time_snapshot_builder.gd`。
+- 背包、容器、交易和角色面板的运行时反馈状态已抽到 `godot/scripts/app/controllers/ui_feedback_state_controller.gd`，`GameApp.active_*_feedback` 仅作为 smoke / tool 兼容属性保留。
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 3480 行，还保留大量 UI facade、玩家动作 facade、拖拽/tooltip snapshot、skill targeting 和 smoke 兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 4100 行，还保留大量 UI facade、玩家动作 facade、拖拽/tooltip snapshot、skill targeting、crafting queue feedback 和 smoke 兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` / `HudRoot` script；当前仍主要依赖现有 HUD controller 和根脚本转发。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
-- 下一步优先抽取边界清楚的 UI runtime facade 或玩家动作 facade，而不是一次性重命名根脚本。
+- 下一步优先抽取 tooltip / drag snapshot、skill targeting、crafting queue feedback 或玩家动作 facade，而不是一次性重命名根脚本。
 
 ## 当前问题
 
@@ -229,10 +230,10 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 ### Phase 0: 建立重构安全网
 
-- [ ] 固定当前可用 smoke 清单，至少覆盖 game startup、UI toggle、player interaction、editor static check。
-- [ ] 修复阻塞 smoke 的 scene 解析问题，例如 `*.tscn` 中非法 tag。
-- [ ] 为 `GameApp` 当前对外 facade 列表做一次 inventory，标记哪些是 tool / smoke 兼容入口。
-- [ ] 新增重构期间临时约束：新增功能不得继续扩大 `game_app.gd`。
+- [x] 固定当前可用 smoke 清单，至少覆盖 Godot check-only、UI toggle 和 player interaction。
+- [x] 为 `GameApp` 当前对外 facade 做滚动 inventory，保留 tool / smoke 兼容入口。
+- [x] 新增重构期间临时约束：新增功能不得继续扩大 `game_app.gd`。
+- [ ] 补齐完整 facade inventory 文档，明确哪些入口可以在 Phase 7 删除或重命名。
 
 验收：
 
@@ -244,11 +245,11 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 优先拆 debug，因为它边界清楚、风险低，并且最近已有 `show fps`、debug console 输入等变更。
 
-- [ ] 新建 `debug_runtime_controller.gd`。
-- [ ] 将 `show fps`、`show overlays`、`observe mode`、`help`、`clear` 的应用层行为迁入 controller。
-- [ ] 保留 `debug_console_command_runner.gd` 作为命令 schema / mutation command runner。
-- [ ] `GameRoot` 只调用 `debug_runtime_controller.execute(command)`。
-- [ ] smoke 继续通过 `submit_debug_console_command()` 验证兼容入口。
+- [x] 新建 `debug_runtime_controller.gd`。
+- [x] 将 debug console 命令执行和 debug overlay mode 状态迁入 controller。
+- [x] 保留 `debug_console_command_runner.gd` 作为命令 schema / mutation command runner。
+- [ ] 继续收敛 observe mode / auto tick / info panel 与 debug runtime 的边界，避免调试状态散在多个 controller 中。
+- [x] smoke 继续通过 `submit_debug_console_command()` 验证兼容入口。
 
 验收：
 
@@ -259,9 +260,12 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 ### Phase 2: 拆 HUD facade
 
+- [x] 保留原有 panel controller 内部实现，先不大改面板内部结构。
+- [x] HUD 运行时刷新已通过 `hud_controller.apply_runtime_snapshot()` 和 `input_blocker_snapshot()` 收敛为 facade。
+- [x] 背包、容器、交易和角色面板的反馈状态已抽到 `ui_feedback_state_controller.gd`。
 - [ ] 引入 `HudRoot` facade，统一承接 HUD、stage panels、debug console、debug panel、tooltip 和 context menu。
 - [ ] 将 `GameApp` 中直接操作 HUD 子节点的代码替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
-- [ ] 保留原有 panel controller 内部实现，先不大改面板内部结构。
+- [ ] 将 tooltip、drag preview、context menu 和 modal blocker 状态继续从 `GameApp` 移出。
 - [ ] 将 UI blocker / active modal / focus 状态统一暴露为 `hud_root.input_blocker_snapshot()`。
 
 验收：
@@ -272,8 +276,9 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 ### Phase 3: 拆输入路由
 
-- [ ] 新建 `game_input_router.gd`。
-- [ ] 将顶层快捷键、UI blocker 判断、玩家命令分发、相机命令分发集中到 input router。
+- [x] 新建 `game_input_router.gd`。
+- [x] 顶层输入分发已迁入 input router。
+- [ ] 将顶层快捷键、UI blocker 判断、玩家命令分发、相机命令分发进一步集中到 input router。
 - [ ] 玩家移动 / 交互输入继续交给现有 runtime input controller，但从 `GameApp` 直接调用改为 input router 调用。
 - [ ] 相机控制逐步迁到 `camera_rig_controller.gd`。
 
@@ -285,10 +290,10 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 ### Phase 4: 拆 WorldRoot
 
-- [ ] 新建或整理 `world_root.tscn`。
-- [ ] 将地图容器、actor/object 容器、fog overlay、debug overlay、camera rig 作为 WorldRoot 子节点。
-- [ ] 将 `_setup_world_container()`、`_render_world()`、`_refresh_fog_overlay()`、`_refresh_debug_overlay()` 收敛为 WorldRoot / WorldController 接口。
-- [ ] `GameRoot` 只调用 `world_root.apply_world_snapshot(world_result)`。
+- [x] 世界表现入口已抽到 `godot/scripts/world/world_root.gd`。
+- [x] 将地图容器、actor/object 容器、fog overlay、debug overlay、camera rig 的主要显示入口收敛到 WorldRoot。
+- [x] `GameApp` 主要通过 WorldRoot 接口应用世界快照和 debug overlay。
+- [ ] 继续整理 `world_root.tscn` / camera rig controller，减少 `GameApp` 对世界节点引用的兼容字段。
 
 验收：
 
@@ -298,9 +303,10 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 ### Phase 5: 拆 runtime refresh
 
-- [ ] 新建 `runtime_refresh_controller.gd`。
-- [ ] 将 runtime snapshot -> world snapshot -> world apply -> HUD apply 的顺序收敛到 controller。
-- [ ] 明确 refresh reason：startup、player command、debug command、world action final refresh、editor smoke。
+- [x] 新建 `runtime_refresh_controller.gd`。
+- [x] 将 runtime snapshot -> world snapshot 的构建迁入 controller。
+- [x] 明确 refresh reason：startup、player command、debug command、world action final refresh、editor smoke。
+- [ ] 继续将 world apply -> HUD apply 的最终顺序收敛到 controller，减少根脚本手写刷新链。
 - [ ] 将错误处理和日志集中到 refresh controller。
 
 验收：
@@ -313,10 +319,10 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 这是风险最高阶段，应最后做。
 
-- [ ] 新建 `world_action_flow_controller.gd`。
-- [ ] 将 presenter started / finished、input block、pending UI、pending final refresh 从 `GameRoot` 移出。
+- [x] 新建 `world_action_flow_controller.gd`。
+- [x] 将 world action presenter、queue、pending UI 和 pending final refresh 状态迁出 `GameApp`。
 - [ ] 使用 signal 通知 `RuntimeRefreshController` 何时执行最终刷新。
-- [ ] 保留当前 action presentation 行为，不在同一阶段重做动效。
+- [x] 保留当前 action presentation 行为，不在同一阶段重做动效。
 
 验收：
 
