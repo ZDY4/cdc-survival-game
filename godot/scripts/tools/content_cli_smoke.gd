@@ -83,6 +83,7 @@ func _run() -> Array[String]:
 	_expect_invalid_shop_item_ref(errors, registry)
 	_expect_invalid_world_tile_asset_ref(errors, registry)
 	_expect_invalid_map_world_tile_ref(errors, registry)
+	_expect_invalid_map_world_tile_asset_ref(errors, registry)
 	_expect_invalid_overworld_surface_set_ref(errors, registry)
 	_expect_invalid_character_ai_ref(errors, registry)
 	_expect_invalid_ai_behavior_group_ref(errors, registry)
@@ -504,6 +505,33 @@ func _expect_invalid_map_world_tile_ref(errors: Array[String], registry: Content
 			errors.append("invalid map world tile smoke did not report unknown_world_tile_prototype: %s" % validation.get("issues", []))
 		return
 	errors.append("map world tile validation smoke could not find visual prototype fixture")
+
+
+func _expect_invalid_map_world_tile_asset_ref(errors: Array[String], registry: ContentRegistry) -> void:
+	var source: Dictionary = registry.get_library("world_tiles").get("prop_placeholder_basic", {}).duplicate(true)
+	if source.is_empty():
+		errors.append("missing prop_placeholder_basic fixture for map world tile asset validation smoke")
+		return
+	var data: Dictionary = source.get("data", {}).duplicate(true)
+	var prototypes: Array = data.get("prototypes", []).duplicate(true)
+	for i in range(prototypes.size()):
+		var prototype: Dictionary = prototypes[i].duplicate(true)
+		if str(prototype.get("id", "")) != "props/table_metal":
+			continue
+		var prototype_source: Dictionary = prototype.get("source", {}).duplicate(true)
+		prototype_source["path"] = "builtin:world_tile:missing_for_map_asset_validator_smoke"
+		prototype["source"] = prototype_source
+		prototypes[i] = prototype
+		data["prototypes"] = prototypes
+		source["data"] = data
+		var validation := ContentRecordValidator.new().validate_record("maps", "survivor_outpost_01", _registry_with_override(registry, "world_tiles", "prop_placeholder_basic", source))
+		if bool(validation.get("ok", false)):
+			errors.append("expected invalid map world tile asset smoke to fail")
+			return
+		if not _has_issue_code(validation.get("issues", []), "missing_asset_file"):
+			errors.append("invalid map world tile asset smoke did not report missing_asset_file: %s" % validation.get("issues", []))
+		return
+	errors.append("map world tile asset validation smoke could not find props/table_metal prototype fixture")
 
 
 func _expect_invalid_overworld_surface_set_ref(errors: Array[String], registry: ContentRegistry) -> void:

@@ -504,6 +504,22 @@ func _validate_world_tile_id(id_value: Variant, field: String, bucket: String, c
 	var ids: Dictionary = _dictionary_or_empty(world_tile_index.get(bucket, {}))
 	if not ids.has(normalized):
 		issues.append(_issue("error", field, code, "unknown world tile %s id %s" % [bucket.trim_suffix("s"), normalized]))
+		return
+	if bucket == "prototypes":
+		_validate_indexed_world_tile_asset(normalized, _dictionary_or_empty(ids.get(normalized, {})), field, issues)
+
+
+func _validate_indexed_world_tile_asset(prototype_id: String, prototype: Dictionary, field: String, issues: Array[Dictionary]) -> void:
+	var source: Dictionary = _dictionary_or_empty(prototype.get("source", {}))
+	var path := str(source.get("path", "")).strip_edges()
+	if path.is_empty():
+		issues.append(_issue("error", field, "missing_asset", "map visual prototype %s has no source asset path" % prototype_id))
+		return
+	var resolved_asset := AssetPathResolver.resolve_model_asset(path)
+	if not bool(resolved_asset.get("ok", false)):
+		issues.append(_issue("error", field, str(resolved_asset.get("reason", "invalid_asset_path")), "map visual prototype %s has invalid asset path: %s" % [prototype_id, str(resolved_asset.get("message", "invalid asset path"))]))
+	elif not bool(resolved_asset.get("exists", false)):
+		issues.append(_issue("error", field, "missing_asset_file", "map visual prototype %s asset file does not exist: %s" % [prototype_id, str(resolved_asset.get("absolute_path", ""))]))
 
 
 func _world_tile_index(registry: ContentRegistry) -> Dictionary:
@@ -515,9 +531,10 @@ func _world_tile_index(registry: ContentRegistry) -> Dictionary:
 	for record in registry.get_library("world_tiles").values():
 		var data: Dictionary = _dictionary_or_empty(_dictionary_or_empty(record).get("data", {}))
 		for prototype in data.get("prototypes", []):
-			var prototype_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(prototype).get("id", ""))
+			var prototype_data: Dictionary = _dictionary_or_empty(prototype)
+			var prototype_id := ContentRegistry.normalize_content_id(prototype_data.get("id", ""))
 			if not prototype_id.is_empty():
-				output["prototypes"][prototype_id] = true
+				output["prototypes"][prototype_id] = prototype_data.duplicate(true)
 		for surface_set in data.get("surface_sets", []):
 			var surface_set_id := ContentRegistry.normalize_content_id(_dictionary_or_empty(surface_set).get("id", ""))
 			if not surface_set_id.is_empty():
