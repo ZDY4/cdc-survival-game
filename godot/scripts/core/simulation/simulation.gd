@@ -3748,7 +3748,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 	_tick_actor_active_effects()
 	var expired_reservations: Array[Dictionary] = _expire_life_planner_reservations()
 	var life_tick_results: Array[Dictionary] = _tick_settlement_life_needs(WORLD_TURN_MINUTES)
-	var background_life_ticks: Array[Dictionary] = _tick_background_settlement_life(life_tick_results, WORLD_TURN_MINUTES)
+	var background_life_ticks: Array[Dictionary] = _tick_background_settlement_life(life_tick_results, WORLD_TURN_MINUTES, expired_reservations)
 	if bool(combat_state.get("active", false)):
 		_refresh_combat_turn_order("world_turn_started")
 	for actor in _world_turn_actor_order():
@@ -3931,8 +3931,9 @@ func _life_need_tick_for_actor(ticks: Array[Dictionary], actor_id: int) -> Dicti
 	return {}
 
 
-func _tick_background_settlement_life(life_tick_results: Array[Dictionary], minutes: int) -> Array[Dictionary]:
+func _tick_background_settlement_life(life_tick_results: Array[Dictionary], minutes: int, expired_reservations: Array[Dictionary] = []) -> Array[Dictionary]:
 	var output: Array[Dictionary] = []
+	var expired_actor_ids: Dictionary = _life_reservation_actor_id_set(expired_reservations)
 	for actor in actor_registry.actors():
 		if actor.kind == "player" or actor.hp <= 0.0:
 			continue
@@ -3942,13 +3943,14 @@ func _tick_background_settlement_life(life_tick_results: Array[Dictionary], minu
 		if str(life.get("settlement_id", "")).is_empty():
 			continue
 		var need_tick: Dictionary = _life_need_tick_for_actor(life_tick_results, actor.actor_id)
-		var presence: Dictionary = _record_life_presence(actor, "background", minutes, need_tick)
+		var background_action: Dictionary = _background_life_idle_result(actor, {}, "background_life_reservation_expired") if expired_actor_ids.has(actor.actor_id) else _advance_background_settlement_life(actor, minutes)
+		var presence: Dictionary = _record_life_presence(actor, "background", minutes, need_tick, background_action)
 		output.append(presence)
 		_emit("settlement_life_background_ticked", presence.duplicate(true))
 	return output
 
 
-func _record_life_presence(actor: RefCounted, mode: String, minutes: int, need_tick: Dictionary = {}) -> Dictionary:
+func _record_life_presence(actor: RefCounted, mode: String, minutes: int, need_tick: Dictionary = {}, background_action: Dictionary = {}) -> Dictionary:
 	var life: Dictionary = _dictionary_or_empty(actor.life)
 	var presence: Dictionary = {
 		"actor_id": actor.actor_id,
@@ -3963,10 +3965,163 @@ func _record_life_presence(actor: RefCounted, mode: String, minutes: int, need_t
 	}
 	if not need_tick.is_empty():
 		presence["last_need_tick"] = need_tick.duplicate(true)
+	if not background_action.is_empty():
+		presence["background_action"] = _background_life_action_summary(background_action)
 	var runtime: Dictionary = _ensure_life_runtime(actor)
 	runtime["presence"] = presence.duplicate(true)
 	_set_life_runtime(actor, runtime)
 	return presence
+
+
+func _life_reservation_actor_id_set(reservations: Array[Dictionary]) -> Dictionary:
+	var output: Dictionary = {}
+	for reservation in reservations:
+		var data: Dictionary = _dictionary_or_empty(reservation)
+		var actor_id := int(data.get("actor_id", 0))
+		if actor_id > 0:
+			output[actor_id] = true
+	return output
+
+
+func _advance_background_settlement_life(actor: RefCounted, minutes: int) -> Dictionary:
+	var intent: Dictionary = decide_actor_intent(actor.actor_id, {"background_life": true})
+	var intent_name := str(intent.get("intent", ""))
+	if not ["follow_route", "return_home", "use_smart_object"].has(intent_name):
+		return _background_life_idle_result(actor, intent, "background_life_no_action")
+	var background_intent: Dictionary = intent.duplicate(true)
+	var target_grid: Dictionary = _background_life_target_grid(actor, background_intent)
+	if target_grid.is_empty():
+		var failed_result: Dictionary = _background_life_base_result(actor, background_intent, false, "background_life_target_missing")
+		_record_life_planner_runtime(actor, background_intent, failed_result)
+		_emit("settlement_life_background_action_failed", failed_result.duplicate(true))
+		return failed_result
+	background_intent["target_grid"] = target_grid.duplicate(true)
+	var action_key := _background_life_action_key(background_intent, target_grid)
+	var duration_minutes := _background_life_action_duration_minutes(background_intent)
+	var runtime: Dictionary = _ensure_life_runtime(actor)
+	var previous_action: Dictionary = _dictionary_or_empty(runtime.get("background_action", {}))
+	var elapsed_before: int = int(previous_action.get("elapsed_minutes", 0)) if str(previous_action.get("action_key", "")) == action_key else 0
+	var elapsed_after: int = elapsed_before + max(0, minutes)
+	var completed: bool = duration_minutes <= 0 or elapsed_after >= duration_minutes
+	var result: Dictionary = _background_life_base_result(actor, background_intent, true, "background_life_action_completed" if completed else "background_life_action_progressed")
+	var from_grid: Dictionary = actor.grid_position.to_dictionary()
+	result["action_key"] = action_key
+	result["target_grid"] = target_grid.duplicate(true)
+	result["from"] = from_grid
+	result["elapsed_before_minutes"] = elapsed_before
+	result["elapsed_minutes"] = elapsed_after
+	result["action_duration_minutes"] = duration_minutes
+	result["remaining_minutes"] = max(0, duration_minutes - elapsed_after)
+	result["completed"] = completed
+	result["world_time"] = world_time.duplicate(true)
+	_attach_life_smart_object_summary(background_intent, result)
+	if completed:
+		actor.grid_position = GridCoord.from_dictionary(target_grid)
+		result["to"] = actor.grid_position.to_dictionary()
+		result["remaining_steps"] = 0
+		_apply_life_arrival_effect(actor, background_intent, result)
+		_record_life_planner_runtime(actor, background_intent, result)
+		runtime = _ensure_life_runtime(actor)
+		runtime.erase("background_action")
+		runtime["last_background_action"] = result.duplicate(true)
+		_set_life_runtime(actor, runtime)
+		_emit("settlement_life_background_action_completed", result.duplicate(true))
+	else:
+		result["to"] = from_grid
+		result["remaining_steps"] = 1
+		_record_life_planner_runtime(actor, background_intent, result)
+		runtime = _ensure_life_runtime(actor)
+		runtime["background_action"] = _background_life_action_summary(result)
+		_set_life_runtime(actor, runtime)
+		_emit("settlement_life_background_action_progressed", result.duplicate(true))
+	return result
+
+
+func _background_life_idle_result(actor: RefCounted, intent: Dictionary, reason: String) -> Dictionary:
+	return _background_life_base_result(actor, intent, true, reason)
+
+
+func _background_life_base_result(actor: RefCounted, intent: Dictionary, success: bool, reason: String) -> Dictionary:
+	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
+	return {
+		"success": success,
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"intent": str(intent.get("intent", "idle")),
+		"reason": reason,
+		"life_intent": intent.duplicate(true),
+		"goal_id": str(intent.get("goal_id", planner.get("goal_id", ""))),
+		"planner_action_id": str(intent.get("planner_action_id", planner.get("action_id", ""))),
+		"planner_action_reason": str(intent.get("planner_action_reason", planner.get("action_reason", ""))),
+	}
+
+
+func _background_life_target_grid(actor: RefCounted, intent: Dictionary) -> Dictionary:
+	if str(intent.get("intent", "")) == "follow_route":
+		var route_grids: Array = _array_or_empty(intent.get("route_grids", []))
+		if route_grids.is_empty():
+			return {}
+		return _next_life_route_grid(actor, route_grids)
+	return _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true)
+
+
+func _background_life_action_duration_minutes(intent: Dictionary) -> int:
+	var action: Dictionary = _background_life_current_planner_action(intent)
+	if not action.is_empty():
+		var travel_minutes := int(action.get("default_travel_minutes", 0))
+		var perform_minutes := int(action.get("perform_minutes", 0))
+		return max(travel_minutes, perform_minutes)
+	match str(intent.get("intent", "")):
+		"follow_route", "return_home", "use_smart_object":
+			return WORLD_TURN_MINUTES
+	return 0
+
+
+func _background_life_current_planner_action(intent: Dictionary) -> Dictionary:
+	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
+	var queue: Array = _array_or_empty(planner.get("action_queue", []))
+	var current_index: int = int(planner.get("current_action_index", 0))
+	if current_index < 0 or current_index >= queue.size():
+		return {}
+	return _dictionary_or_empty(queue[current_index]).duplicate(true)
+
+
+func _background_life_action_key(intent: Dictionary, target_grid: Dictionary) -> String:
+	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
+	var parts: Array[String] = [
+		str(intent.get("intent", "")),
+		str(intent.get("goal_id", planner.get("goal_id", ""))),
+		str(intent.get("planner_action_id", planner.get("action_id", ""))),
+		str(planner.get("current_action_index", 0)),
+		str(intent.get("route_id", "")),
+		str(intent.get("smart_object_id", "")),
+		JSON.stringify(target_grid),
+	]
+	return "|".join(parts)
+
+
+func _background_life_action_summary(result: Dictionary) -> Dictionary:
+	return {
+		"actor_id": int(result.get("actor_id", 0)),
+		"definition_id": str(result.get("definition_id", "")),
+		"intent": str(result.get("intent", "")),
+		"reason": str(result.get("reason", "")),
+		"success": bool(result.get("success", false)),
+		"completed": bool(result.get("completed", false)),
+		"goal_id": str(result.get("goal_id", "")),
+		"planner_action_id": str(result.get("planner_action_id", "")),
+		"planner_action_reason": str(result.get("planner_action_reason", "")),
+		"action_key": str(result.get("action_key", "")),
+		"elapsed_minutes": int(result.get("elapsed_minutes", 0)),
+		"action_duration_minutes": int(result.get("action_duration_minutes", 0)),
+		"remaining_minutes": int(result.get("remaining_minutes", 0)),
+		"target_grid": _dictionary_or_empty(result.get("target_grid", {})).duplicate(true),
+		"from": _dictionary_or_empty(result.get("from", {})).duplicate(true),
+		"to": _dictionary_or_empty(result.get("to", {})).duplicate(true),
+		"smart_object_id": str(result.get("smart_object_id", "")),
+		"smart_object_kind": str(result.get("smart_object_kind", "")),
+		"world_time": _dictionary_or_empty(result.get("world_time", {})).duplicate(true),
+	}
 
 
 func _life_need_profile(actor: RefCounted) -> Dictionary:

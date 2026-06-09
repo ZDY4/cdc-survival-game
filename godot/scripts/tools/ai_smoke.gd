@@ -227,6 +227,49 @@ func _expect_settlement_life_background_tick(registry: RefCounted) -> Array[Stri
 	var restored_presence: Dictionary = _dictionary_or_empty(_life_runtime_for_actor(restored, guard_id).get("presence", {}))
 	if JSON.stringify(restored_presence) != JSON.stringify(presence):
 		errors.append("background life presence should roundtrip through actor life snapshot, got %s" % restored_presence)
+	var action_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var action_player: RefCounted = action_simulation.actor_registry.get_actor(1)
+	action_player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(action_simulation)
+	action_simulation.world_time = {"day": "monday", "minute_of_day": 360}
+	var cook_id: int = _register_character(action_simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(8, 0, 10), {
+		"map_id": remote_map_id,
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var cook: RefCounted = action_simulation.actor_registry.get_actor(cook_id)
+	cook.life["duty_route_id"] = ""
+	cook.life["runtime"] = {
+		"needs": {
+			"hunger": {"current": 80.0, "max": 100.0},
+			"energy": {"current": 75.0, "max": 100.0},
+			"morale": {"current": 50.0, "max": 100.0},
+		}
+	}
+	var action_results: Array = action_simulation.advance_world_turn(_open_settlement_topology())
+	var action_result: Dictionary = _npc_result_for_actor(action_results, cook_id)
+	if not action_result.is_empty():
+		errors.append("off-map settlement action NPC should not enter active-map turn results, got %s" % action_result)
+	var action_runtime: Dictionary = _life_runtime_for_actor(action_simulation, cook_id)
+	var action_presence: Dictionary = _dictionary_or_empty(action_runtime.get("presence", {}))
+	var background_action: Dictionary = _dictionary_or_empty(action_presence.get("background_action", {}))
+	if str(background_action.get("planner_action_id", "")) != "travel_to_canteen" or not bool(background_action.get("completed", false)):
+		errors.append("off-map settlement NPC should complete first background travel action, got %s" % background_action)
+	if cook.grid_position.key() != GridCoord.from_dictionary(_dictionary_or_empty(background_action.get("target_grid", {}))).key():
+		errors.append("completed background settlement action should move actor to target grid, got %s" % cook.grid_position.to_dictionary())
+	var action_planner: Dictionary = _planner_runtime_for_actor(action_simulation, cook_id)
+	if int(action_planner.get("current_action_index", -1)) != 1 or str(action_planner.get("next_action_id", "")) != "restock_meal_service":
+		errors.append("background completed action should advance planner queue, got %s" % action_planner)
+	var meal_reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(action_runtime.get("reservations", {})).get("meal_object", {}))
+	if meal_reservation.is_empty() or not bool(meal_reservation.get("active", false)):
+		errors.append("background completed action should reserve target smart object, got %s" % action_runtime)
+	var completed_event: Dictionary = _last_event_payload_for_actor(action_simulation.snapshot(), "settlement_life_background_action_completed", cook_id)
+	if str(completed_event.get("planner_action_id", "")) != "travel_to_canteen" or not bool(completed_event.get("completed", false)):
+		errors.append("settlement_life_background_action_completed should expose completed planner action, got %s" % completed_event)
+	var action_restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	action_restored.load_snapshot(action_simulation.snapshot())
+	var restored_action: Dictionary = _dictionary_or_empty(_life_runtime_for_actor(action_restored, cook_id).get("last_background_action", {}))
+	if str(restored_action.get("planner_action_id", "")) != "travel_to_canteen" or not bool(restored_action.get("completed", false)):
+		errors.append("background completed action should roundtrip through actor life snapshot, got %s" % restored_action)
 	return errors
 
 
