@@ -12,6 +12,7 @@ func build(registry: RefCounted) -> Dictionary:
 	_collect_overworld_assets(entries, registry)
 	_collect_appearance_assets(entries, registry)
 	_collect_world_tile_assets(entries, registry)
+	_collect_map_assets(entries, registry)
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var left := "%s/%s/%s" % [a.get("domain", ""), a.get("record_id", ""), a.get("field", "")]
 		var right := "%s/%s/%s" % [b.get("domain", ""), b.get("record_id", ""), b.get("field", "")]
@@ -100,6 +101,37 @@ func _collect_world_tile_assets(entries: Array[Dictionary], registry: RefCounted
 			_add_model_entry(entries, "world_tiles", str(world_tile_id), "prototypes[%s].source.path" % prototype_id, str(source.get("path", "")))
 
 
+func _collect_map_assets(entries: Array[Dictionary], registry: RefCounted) -> void:
+	var prototype_sources: Dictionary = _world_tile_prototype_sources(registry)
+	for map_id in _sorted_keys(registry.get_library("maps")):
+		var record: Dictionary = registry.get_library("maps")[map_id]
+		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+		var objects: Array = _array_or_empty(data.get("objects", []))
+		for index in range(objects.size()):
+			var object: Dictionary = _dictionary_or_empty(objects[index])
+			var visual: Dictionary = _dictionary_or_empty(_dictionary_or_empty(object.get("props", {})).get("visual", {}))
+			var prototype_id := str(visual.get("prototype_id", "")).strip_edges()
+			if prototype_id.is_empty() or not prototype_sources.has(prototype_id):
+				continue
+			_add_model_reference_entry(entries, "maps", str(map_id), "objects[%d].props.visual.prototype_id" % index, str(prototype_sources.get(prototype_id, "")), prototype_id)
+
+
+func _world_tile_prototype_sources(registry: RefCounted) -> Dictionary:
+	var output := {}
+	for world_tile_id in _sorted_keys(registry.get_library("world_tiles")):
+		var record: Dictionary = registry.get_library("world_tiles")[world_tile_id]
+		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+		var prototypes: Array = _array_or_empty(data.get("prototypes", []))
+		for prototype in prototypes:
+			var prototype_data: Dictionary = _dictionary_or_empty(prototype)
+			var prototype_id := str(prototype_data.get("id", "")).strip_edges()
+			var source: Dictionary = _dictionary_or_empty(prototype_data.get("source", {}))
+			if prototype_id.is_empty() or str(source.get("kind", "")) != "gltf_scene":
+				continue
+			output[prototype_id] = str(source.get("path", ""))
+	return output
+
+
 func _add_media_entry(entries: Array[Dictionary], domain: String, record_id: String, field: String, source_id: String, fallback_key: String) -> void:
 	var normalized := source_id.strip_edges()
 	if normalized.is_empty():
@@ -113,6 +145,16 @@ func _add_model_entry(entries: Array[Dictionary], domain: String, record_id: Str
 		return
 	var result: Dictionary = AssetPathResolver.resolve_model_asset(normalized)
 	entries.append(_entry_from_result(domain, record_id, field, "model", result))
+
+
+func _add_model_reference_entry(entries: Array[Dictionary], domain: String, record_id: String, field: String, source_id: String, reference_id: String) -> void:
+	var normalized := source_id.strip_edges()
+	if normalized.is_empty():
+		return
+	var result: Dictionary = AssetPathResolver.resolve_model_asset(normalized)
+	var entry: Dictionary = _entry_from_result(domain, record_id, field, "model", result)
+	entry["reference_id"] = reference_id
+	entries.append(entry)
 
 
 func _entry_from_result(domain: String, record_id: String, field: String, asset_kind: String, result: Dictionary) -> Dictionary:

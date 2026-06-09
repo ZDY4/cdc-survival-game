@@ -350,6 +350,11 @@ func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) ->
 	if str(container_tile_entry.get("source_id", "")) != "builtin:container:crate_wood" \
 			or str(container_tile_entry.get("resource_path", "")) != "res://assets/container_placeholders/crate_wood.gltf":
 		errors.append("asset manifest should normalize builtin container world tile asset: %s" % container_tile_entry)
+	var map_visual_entry := _asset_manifest_entry(manifest, "maps", "survivor_outpost_01", "objects[14].props.visual.prototype_id")
+	if str(map_visual_entry.get("reference_id", "")) != "props/table_metal" \
+			or str(map_visual_entry.get("source_id", "")) != "builtin:world_tile:prop_placeholder_basic/table_metal" \
+			or str(map_visual_entry.get("resource_path", "")) != "res://assets/world_tiles/prop_placeholder_basic/table_metal.gltf":
+		errors.append("asset manifest should expose map visual prototype asset path: %s" % map_visual_entry)
 
 
 func _asset_manifest_entry(manifest: Dictionary, domain: String, record_id: String, field: String) -> Dictionary:
