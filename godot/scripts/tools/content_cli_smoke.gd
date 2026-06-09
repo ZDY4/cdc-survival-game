@@ -355,6 +355,16 @@ func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) ->
 			or str(map_visual_entry.get("source_id", "")) != "builtin:world_tile:prop_placeholder_basic/table_metal" \
 			or str(map_visual_entry.get("resource_path", "")) != "res://assets/world_tiles/prop_placeholder_basic/table_metal.gltf":
 		errors.append("asset manifest should expose map visual prototype asset path: %s" % map_visual_entry)
+	var map_wall_entry := _asset_manifest_entry(manifest, "maps", "survivor_outpost_01", "objects[0].props.building.tile_set.wall_set_id.isolated_prototype_id")
+	if str(map_wall_entry.get("reference_id", "")) != "building_wall:building_wall/isolated" \
+			or str(map_wall_entry.get("source_id", "")) != "builtin:world_tile:building_wall/isolated" \
+			or str(map_wall_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/isolated.gltf":
+		errors.append("asset manifest should expose map wall set prototype asset path: %s" % map_wall_entry)
+	var map_floor_entry := _asset_manifest_entry(manifest, "maps", "survivor_outpost_01", "objects[0].props.building.tile_set.floor_surface_set_id.flat_top_prototype_id")
+	if str(map_floor_entry.get("reference_id", "")) != "building_wall/floor:building_wall/floor_flat" \
+			or str(map_floor_entry.get("source_id", "")) != "builtin:world_tile:building_wall/floor_flat" \
+			or str(map_floor_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/floor_flat.gltf":
+		errors.append("asset manifest should expose map surface set prototype asset path: %s" % map_floor_entry)
 
 
 func _asset_manifest_entry(manifest: Dictionary, domain: String, record_id: String, field: String) -> Dictionary:

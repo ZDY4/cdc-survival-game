@@ -103,6 +103,8 @@ func _collect_world_tile_assets(entries: Array[Dictionary], registry: RefCounted
 
 func _collect_map_assets(entries: Array[Dictionary], registry: RefCounted) -> void:
 	var prototype_sources: Dictionary = _world_tile_prototype_sources(registry)
+	var surface_sets: Dictionary = _world_tile_surface_set_prototypes(registry)
+	var wall_sets: Dictionary = _world_tile_wall_set_prototypes(registry)
 	for map_id in _sorted_keys(registry.get_library("maps")):
 		var record: Dictionary = registry.get_library("maps")[map_id]
 		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
@@ -112,8 +114,36 @@ func _collect_map_assets(entries: Array[Dictionary], registry: RefCounted) -> vo
 			var visual: Dictionary = _dictionary_or_empty(_dictionary_or_empty(object.get("props", {})).get("visual", {}))
 			var prototype_id := str(visual.get("prototype_id", "")).strip_edges()
 			if prototype_id.is_empty() or not prototype_sources.has(prototype_id):
-				continue
-			_add_model_reference_entry(entries, "maps", str(map_id), "objects[%d].props.visual.prototype_id" % index, str(prototype_sources.get(prototype_id, "")), prototype_id)
+				pass
+			else:
+				_add_model_reference_entry(entries, "maps", str(map_id), "objects[%d].props.visual.prototype_id" % index, str(prototype_sources.get(prototype_id, "")), prototype_id)
+			var tile_set: Dictionary = _dictionary_or_empty(_dictionary_or_empty(_dictionary_or_empty(object.get("props", {})).get("building", {})).get("tile_set", {}))
+			_collect_map_tile_set_assets(entries, "maps", str(map_id), index, tile_set, prototype_sources, surface_sets, wall_sets)
+
+
+func _collect_map_tile_set_assets(
+		entries: Array[Dictionary],
+		domain: String,
+		record_id: String,
+		object_index: int,
+		tile_set: Dictionary,
+		prototype_sources: Dictionary,
+		surface_sets: Dictionary,
+		wall_sets: Dictionary) -> void:
+	var wall_set_id := str(tile_set.get("wall_set_id", "")).strip_edges()
+	if wall_sets.has(wall_set_id):
+		var wall_set: Dictionary = _dictionary_or_empty(wall_sets.get(wall_set_id, {}))
+		for role in _sorted_keys(wall_set):
+			var prototype_id := str(wall_set.get(role, ""))
+			if prototype_sources.has(prototype_id):
+				_add_model_reference_entry(entries, domain, record_id, "objects[%d].props.building.tile_set.wall_set_id.%s" % [object_index, role], str(prototype_sources.get(prototype_id, "")), "%s:%s" % [wall_set_id, prototype_id])
+	var surface_set_id := str(tile_set.get("floor_surface_set_id", "")).strip_edges()
+	if surface_sets.has(surface_set_id):
+		var surface_set: Dictionary = _dictionary_or_empty(surface_sets.get(surface_set_id, {}))
+		for role in _sorted_keys(surface_set):
+			var prototype_id := str(surface_set.get(role, ""))
+			if prototype_sources.has(prototype_id):
+				_add_model_reference_entry(entries, domain, record_id, "objects[%d].props.building.tile_set.floor_surface_set_id.%s" % [object_index, role], str(prototype_sources.get(prototype_id, "")), "%s:%s" % [surface_set_id, prototype_id])
 
 
 func _world_tile_prototype_sources(registry: RefCounted) -> Dictionary:
@@ -129,6 +159,49 @@ func _world_tile_prototype_sources(registry: RefCounted) -> Dictionary:
 			if prototype_id.is_empty() or str(source.get("kind", "")) != "gltf_scene":
 				continue
 			output[prototype_id] = str(source.get("path", ""))
+	return output
+
+
+func _world_tile_surface_set_prototypes(registry: RefCounted) -> Dictionary:
+	var output := {}
+	for world_tile_id in _sorted_keys(registry.get_library("world_tiles")):
+		var record: Dictionary = registry.get_library("world_tiles")[world_tile_id]
+		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+		for surface_set_source in _array_or_empty(data.get("surface_sets", [])):
+			var surface_set: Dictionary = _dictionary_or_empty(surface_set_source)
+			var surface_set_id := str(surface_set.get("id", "")).strip_edges()
+			if surface_set_id.is_empty():
+				continue
+			var prototypes := {}
+			for key in ["flat_top_prototype_id", "cliff_inner_corner_prototype_id", "cliff_outer_corner_prototype_id", "cliff_side_prototype_id"]:
+				var prototype_id := str(surface_set.get(key, "")).strip_edges()
+				if not prototype_id.is_empty():
+					prototypes[key] = prototype_id
+			var ramp_top_ids: Dictionary = _dictionary_or_empty(surface_set.get("ramp_top_prototype_ids", {}))
+			for direction in _sorted_keys(ramp_top_ids):
+				var ramp_prototype_id := str(ramp_top_ids.get(direction, "")).strip_edges()
+				if not ramp_prototype_id.is_empty():
+					prototypes["ramp_top_prototype_ids.%s" % direction] = ramp_prototype_id
+			output[surface_set_id] = prototypes
+	return output
+
+
+func _world_tile_wall_set_prototypes(registry: RefCounted) -> Dictionary:
+	var output := {}
+	for world_tile_id in _sorted_keys(registry.get_library("world_tiles")):
+		var record: Dictionary = registry.get_library("world_tiles")[world_tile_id]
+		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
+		for wall_set_source in _array_or_empty(data.get("wall_sets", [])):
+			var wall_set: Dictionary = _dictionary_or_empty(wall_set_source)
+			var wall_set_id := str(wall_set.get("id", "")).strip_edges()
+			if wall_set_id.is_empty():
+				continue
+			var prototypes := {}
+			for key in ["isolated_prototype_id", "end_prototype_id", "straight_prototype_id", "corner_prototype_id", "t_junction_prototype_id", "cross_prototype_id"]:
+				var prototype_id := str(wall_set.get(key, "")).strip_edges()
+				if not prototype_id.is_empty():
+					prototypes[key] = prototype_id
+			output[wall_set_id] = prototypes
 	return output
 
 
