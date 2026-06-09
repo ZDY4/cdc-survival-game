@@ -18,8 +18,29 @@ func rebuild_world_result(simulation: RefCounted, interaction_controller: RefCou
 		return {"ok": false, "reason": "registry_missing", "source": source, "world_result": {}}
 	if simulation == null:
 		return {"ok": false, "reason": "simulation_missing", "source": source, "world_result": {}}
-	var next_world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+	var built: Dictionary = build_world_result_from_snapshot(simulation.snapshot(), source)
+	var next_world_result: Dictionary = _dictionary_or_empty(built.get("world_result", {}))
 	return apply_existing_world_result(simulation, interaction_controller, next_world_result, source)
+
+
+func build_world_result_from_snapshot(runtime_snapshot: Dictionary, source: String = "") -> Dictionary:
+	if registry == null:
+		return {"ok": false, "reason": "registry_missing", "source": source, "world_result": {}}
+	var next_world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
+	if not bool(next_world_result.get("ok", false)):
+		return {
+			"ok": false,
+			"reason": "world_result_failed",
+			"source": source,
+			"error": str(next_world_result.get("error", "world refresh failed")),
+			"world_result": next_world_result,
+		}
+	return {
+		"ok": true,
+		"source": source,
+		"world_result": next_world_result,
+		"map": _dictionary_or_empty(next_world_result.get("map", {})),
+	}
 
 
 func apply_existing_world_result(simulation: RefCounted, interaction_controller: RefCounted, next_world_result: Dictionary, source: String = "") -> Dictionary:

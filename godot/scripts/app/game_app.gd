@@ -2,7 +2,6 @@ extends Node3D
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
-const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const WorldRoot = preload("res://scripts/world/world_root.gd")
 const WorldActionPresenter = preload("res://scripts/world/world_action_presenter.gd")
 const DebugRuntimeController = preload("res://scripts/app/controllers/debug_runtime_controller.gd")
@@ -159,13 +158,12 @@ func _ready() -> void:
 	var runtime_result: Dictionary = _build_runtime_from_startup_request(startup_request)
 	simulation = runtime_result.get("simulation")
 	var runtime_snapshot: Dictionary = runtime_result.get("snapshot", {})
-	world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(runtime_snapshot)
-	if not bool(world_result.get("ok", false)):
-		push_error(str(world_result.get("error", "world build failed")))
+	var startup_refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_world_result_from_snapshot", runtime_snapshot, "startup"))
+	if not _accept_runtime_refresh_result(startup_refresh, "world build failed"):
 		return
-	_sync_observed_level_to_map()
 
 	interaction_controller = PlayerInteractionController.new(registry, simulation, world_result)
+	_apply_existing_runtime_world_result(world_result, "startup_interaction_sync", "world build failed")
 	var counts: Dictionary = _apply_world_root_snapshot(true)
 	_refresh_world_runtime_bindings()
 	_setup_audio_feedback_controller()
@@ -4242,7 +4240,8 @@ func _apply_pending_world_action_final_refresh(trigger: String) -> bool:
 	pending_world_action_final_refresh.clear()
 	var final_world_result: Dictionary = _dictionary_or_empty(pending_refresh.get("world_result", {}))
 	if final_world_result.is_empty() or not bool(final_world_result.get("ok", false)):
-		final_world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+		var fallback_refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_world_result_from_snapshot", simulation.snapshot(), "pending_final_refresh_fallback"))
+		final_world_result = _dictionary_or_empty(fallback_refresh.get("world_result", {}))
 	if not _apply_world_result_without_present(final_world_result, bool(pending_refresh.get("render_world", true))):
 		return false
 	var applied: Dictionary = _deferred_world_refresh_public_snapshot(pending_refresh)
