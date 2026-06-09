@@ -212,6 +212,16 @@ func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[
 	var planner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(result.get("life_intent", {})).get("planner", {}))
 	if str(planner.get("goal_id", "")) != "satisfy_shift" or str(planner.get("action_id", "")) != "travel_to_canteen":
 		errors.append("settlement GOAP should expose satisfy_shift/travel_to_canteen planner summary, got %s" % planner)
+	if int(planner.get("queue_length", 0)) < 2:
+		errors.append("settlement GOAP support action should expose a multi-action queue, got %s" % planner)
+	var runtime_planner: Dictionary = _planner_runtime_for_actor(simulation, cook_id)
+	if str(runtime_planner.get("goal_id", "")) != "satisfy_shift" or str(runtime_planner.get("action_id", "")) != "travel_to_canteen":
+		errors.append("settlement GOAP runtime should store current goal/action, got %s" % runtime_planner)
+	if int(runtime_planner.get("queue_length", 0)) < 2:
+		errors.append("settlement GOAP runtime should persist action queue summary, got %s" % runtime_planner)
+	var planner_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_planner_updated")
+	if int(planner_event.get("actor_id", 0)) != cook_id:
+		errors.append("settlement_life_planner_updated event should include cook actor")
 	var tick_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_needs_ticked")
 	if int(tick_event.get("actor_id", 0)) != cook_id:
 		errors.append("settlement life need tick event should include cook actor")
@@ -246,6 +256,8 @@ func _expect_settlement_life_need_effect_action(registry: RefCounted) -> Array[S
 	var planner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(result.get("life_intent", {})).get("planner", {}))
 	if str(planner.get("goal_id", "")) != "eat_meal" or str(planner.get("action_id", "")) != "eat_meal":
 		errors.append("settlement GOAP should select eat_meal action during meal window, got %s" % planner)
+	if int(planner.get("queue_length", 0)) != 1:
+		errors.append("settlement GOAP direct eat_meal action should expose single-action queue, got %s" % planner)
 	var need_change: Dictionary = _dictionary_or_empty(result.get("life_need_change", {}))
 	if need_change.is_empty():
 		errors.append("settlement GOAP smart object use should expose need change")
@@ -263,6 +275,9 @@ func _expect_settlement_life_need_effect_action(registry: RefCounted) -> Array[S
 	var restored_needs: Dictionary = _dictionary_or_empty(_dictionary_or_empty(restored_actor.life.get("runtime", {})).get("needs", {}))
 	if _need_current(restored_needs, "hunger") <= 40.0:
 		errors.append("settlement life needs should roundtrip through actor life snapshot")
+	var restored_planner: Dictionary = _planner_runtime_for_actor(restored, cook_id)
+	if str(restored_planner.get("goal_id", "")) != "eat_meal" or str(restored_planner.get("action_id", "")) != "eat_meal":
+		errors.append("settlement GOAP planner runtime should roundtrip through actor life snapshot")
 	return errors
 
 
@@ -775,6 +790,15 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 func _need_current(needs: Dictionary, need_id: String) -> float:
 	var need: Dictionary = _dictionary_or_empty(needs.get(need_id, {}))
 	return float(need.get("current", 0.0))
+
+
+func _planner_runtime_for_actor(simulation: RefCounted, actor_id: int) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {}
+	var life: Dictionary = _dictionary_or_empty(actor.life)
+	var runtime: Dictionary = _dictionary_or_empty(life.get("runtime", {}))
+	return _dictionary_or_empty(runtime.get("planner", {}))
 
 
 func _npc_results_include_attack(results: Array, actor_id: int) -> bool:

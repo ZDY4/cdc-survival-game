@@ -4274,21 +4274,69 @@ func _advance_npc_action(actor: RefCounted, topology: Dictionary) -> Dictionary:
 
 func _advance_npc_life_action(actor: RefCounted, intent: Dictionary, topology: Dictionary) -> Dictionary:
 	if actor.ap < 1.0:
-		return _npc_wait_for_ap(actor, 0, str(intent.get("intent", "life")), "ap_insufficient_npc_life_move", 1.0)
+		var wait_result: Dictionary = _npc_wait_for_ap(actor, 0, str(intent.get("intent", "life")), "ap_insufficient_npc_life_move", 1.0)
+		wait_result["life_intent"] = intent.duplicate(true)
+		_record_life_planner_runtime(actor, intent, wait_result)
+		return wait_result
+	var result: Dictionary = {}
 	match str(intent.get("intent", "")):
 		"follow_route":
-			return _npc_follow_route(actor, intent, topology)
+			result = _npc_follow_route(actor, intent, topology)
 		"return_home":
-			return _npc_move_to_life_target(actor, _dictionary_or_empty(intent.get("target_grid", {})), topology, intent, "return_home", "life_return_home")
+			result = _npc_move_to_life_target(actor, _dictionary_or_empty(intent.get("target_grid", {})), topology, intent, "return_home", "life_return_home")
 		"use_smart_object":
-			return _npc_move_to_life_target(actor, _dictionary_or_empty(intent.get("target_grid", {})), topology, intent, "use_smart_object", "life_use_smart_object")
-	return {
-		"success": true,
-		"actor_id": actor.actor_id,
-		"intent": "idle",
-		"reason": "life_intent_unhandled",
-		"life_intent": intent.duplicate(true),
+			result = _npc_move_to_life_target(actor, _dictionary_or_empty(intent.get("target_grid", {})), topology, intent, "use_smart_object", "life_use_smart_object")
+	if result.is_empty():
+		result = {
+			"success": true,
+			"actor_id": actor.actor_id,
+			"intent": "idle",
+			"reason": "life_intent_unhandled",
+			"life_intent": intent.duplicate(true),
+		}
+	_record_life_planner_runtime(actor, intent, result)
+	return result
+
+
+func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result: Dictionary) -> void:
+	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
+	if planner.is_empty():
+		return
+	var runtime: Dictionary = _ensure_life_runtime(actor)
+	var execution: Dictionary = {
+		"world_time": world_time.duplicate(true),
+		"goal_id": str(planner.get("goal_id", "")),
+		"action_id": str(planner.get("action_id", "")),
+		"intent": str(intent.get("intent", "")),
+		"result_intent": str(result.get("intent", "")),
+		"success": bool(result.get("success", false)),
+		"reason": str(result.get("reason", "")),
+		"remaining_steps": int(result.get("remaining_steps", 0)),
+		"target_grid": _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true),
+		"smart_object_id": str(result.get("smart_object_id", intent.get("smart_object_id", ""))),
+		"route_id": str(result.get("route_id", intent.get("route_id", ""))),
 	}
+	var planner_runtime: Dictionary = {
+		"goal_id": str(planner.get("goal_id", "")),
+		"goal_score": float(planner.get("goal_score", 0.0)),
+		"score_rule_ids": _array_or_empty(planner.get("score_rule_ids", [])).duplicate(true),
+		"action_id": str(planner.get("action_id", "")),
+		"action_reason": str(planner.get("action_reason", "")),
+		"action_queue": _array_or_empty(planner.get("action_queue", [])).duplicate(true),
+		"queue_length": int(planner.get("queue_length", 0)),
+		"requirements": _array_or_empty(planner.get("requirements", [])).duplicate(true),
+		"unmet_requirements": _array_or_empty(planner.get("unmet_requirements", [])).duplicate(true),
+		"facts": _dictionary_or_empty(planner.get("facts", {})).duplicate(true),
+		"role": str(planner.get("role", "")),
+		"last_execution": execution,
+	}
+	runtime["planner"] = planner_runtime
+	_set_life_runtime(actor, runtime)
+	_emit("settlement_life_planner_updated", {
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"planner": planner_runtime.duplicate(true),
+	})
 
 
 func _npc_follow_route(actor: RefCounted, intent: Dictionary, topology: Dictionary) -> Dictionary:

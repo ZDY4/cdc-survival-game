@@ -82,6 +82,8 @@ func _planned_life_intent(actor: RefCounted, life: Dictionary, settlement: Dicti
 			"action_id": str(action.get("id", "")),
 			"action_cost": float(action.get("planner_cost", 0.0)),
 			"action_reason": str(action_result.get("reason", "")),
+			"action_queue": _array_or_empty(action_result.get("action_queue", [])).duplicate(true),
+			"queue_length": _array_or_empty(action_result.get("action_queue", [])).size(),
 			"requirements": requirements.duplicate(true),
 			"unmet_requirements": _unmet_assignments(requirements, state),
 			"facts": facts.duplicate(true),
@@ -234,7 +236,11 @@ func _select_goal_action(requirements: Array, action_ids: Array, planner_data: D
 			var support: Dictionary = _support_action_for_preconditions(action, action_ids, actions, state)
 			if support.is_empty():
 				continue
-			return {"action": support, "reason": "support_precondition:%s" % str(action.get("id", ""))}
+			return {
+				"action": support,
+				"reason": "support_precondition:%s" % str(action.get("id", "")),
+				"action_queue": [_planner_action_summary(support), _planner_action_summary(action)],
+			}
 		var score := float(match_count * 100) - float(action.get("planner_cost", 0.0))
 		if unmet.is_empty() and _assignments_satisfied(_array_or_empty(action.get("preconditions", [])), state):
 			score += 10.0
@@ -243,7 +249,18 @@ func _select_goal_action(requirements: Array, action_ids: Array, planner_data: D
 			best = action
 	if best.is_empty():
 		return {}
-	return {"action": best, "reason": "satisfy_goal"}
+	return {"action": best, "reason": "satisfy_goal", "action_queue": [_planner_action_summary(best)]}
+
+
+func _planner_action_summary(action: Dictionary) -> Dictionary:
+	return {
+		"action_id": str(action.get("id", "")),
+		"executor_binding_id": str(action.get("executor_binding_id", "")),
+		"planner_cost": float(action.get("planner_cost", 0.0)),
+		"target_anchor": str(action.get("target_anchor", "")),
+		"reservation_target": str(action.get("reservation_target", "")),
+		"need_effects": _dictionary_or_empty(action.get("need_effects", {})).duplicate(true),
+	}
 
 
 func _support_action_for_preconditions(action: Dictionary, action_ids: Array, actions: Dictionary, state: Dictionary) -> Dictionary:
