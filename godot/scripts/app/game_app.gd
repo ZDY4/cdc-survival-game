@@ -8,6 +8,7 @@ const GamePanelController = preload("res://scripts/app/controllers/game_panel_co
 const GameInputRouter = preload("res://scripts/app/controllers/game_input_router.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const RuntimeRefreshController = preload("res://scripts/app/controllers/runtime_refresh_controller.gd")
+const RuntimePerformanceTracker = preload("res://scripts/app/controllers/runtime_performance_tracker.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
@@ -128,15 +129,28 @@ var focused_actor_id: int = 0
 var observed_map_level: int = 0
 var active_skill_targeting: Dictionary = {}
 var active_skill_target_preview: Dictionary = {}
-var performance_frame_time_ms: float = 0.0
-var performance_fps: float = 0.0
-var performance_last_process_tick_msec: int = 0
-var performance_last_hud_refresh_tick_msec: int = 0
-var performance_last_render_counts: Dictionary = {}
-var performance_render_sequence: int = 0
 var debug_runtime_controller: RefCounted = DebugRuntimeController.new()
 var game_input_router: RefCounted = GameInputRouter.new()
 var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
+var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
+var performance_frame_time_ms: float:
+	get:
+		return float(runtime_performance_tracker.frame_time_ms) if runtime_performance_tracker != null else 0.0
+var performance_fps: float:
+	get:
+		return float(runtime_performance_tracker.fps) if runtime_performance_tracker != null else 0.0
+var performance_last_process_tick_msec: int:
+	get:
+		return int(runtime_performance_tracker.last_process_tick_msec) if runtime_performance_tracker != null else 0
+var performance_last_hud_refresh_tick_msec: int:
+	get:
+		return int(runtime_performance_tracker.last_hud_refresh_tick_msec) if runtime_performance_tracker != null else 0
+var performance_last_render_counts: Dictionary:
+	get:
+		return runtime_performance_tracker.last_render_counts.duplicate(true) if runtime_performance_tracker != null else {}
+var performance_render_sequence: int:
+	get:
+		return int(runtime_performance_tracker.render_sequence) if runtime_performance_tracker != null else 0
 
 
 func _ready() -> void:
@@ -216,7 +230,7 @@ func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 	if panel_controller == null:
 		return
 	_process_audio_feedback()
-	performance_last_hud_refresh_tick_msec = Time.get_ticks_msec()
+	runtime_performance_tracker.call("mark_hud_refresh")
 	if selected_prompt.is_empty():
 		selected_prompt = current_interaction_prompt()
 	panel_controller.refresh_hud(selected_prompt)
@@ -1748,29 +1762,7 @@ func _ai_life_status_group(state_id: String, planner_action_id: String) -> Strin
 
 
 func runtime_performance_snapshot() -> Dictionary:
-	var now_msec: int = Time.get_ticks_msec()
-	var fps: float = performance_fps
-	if fps <= 0.0:
-		fps = float(Engine.get_frames_per_second())
-	if fps <= 0.0:
-		fps = 60.0
-	return {
-		"fps": fps,
-		"frame_time_ms": performance_frame_time_ms,
-		"pathfinding_time_ms": _last_pathfinding_time_ms(),
-		"pathfinding_visited_cell_count": _last_pathfinding_visited_cell_count(),
-		"last_process_tick_msec": performance_last_process_tick_msec,
-		"last_hud_refresh_tick_msec": performance_last_hud_refresh_tick_msec,
-		"hud_latency_ms": max(0, now_msec - performance_last_hud_refresh_tick_msec) if performance_last_hud_refresh_tick_msec > 0 else 0,
-		"render_sequence": performance_render_sequence,
-		"render_counts": performance_last_render_counts.duplicate(true),
-		"render_count": int(performance_last_render_counts.get("total", 0)),
-		"actor_count": int(performance_last_render_counts.get("actors", 0)),
-		"object_count": int(performance_last_render_counts.get("objects", 0)),
-		"collider_count": int(performance_last_render_counts.get("colliders", 0)),
-		"light_count": int(performance_last_render_counts.get("lights", 0)),
-		"camera_count": int(performance_last_render_counts.get("cameras", 0)),
-	}
+	return _dictionary_or_empty(runtime_performance_tracker.call("snapshot", _last_pathfinding_time_ms(), _last_pathfinding_visited_cell_count()))
 
 
 func runtime_hover_snapshot() -> Dictionary:
@@ -1786,12 +1778,7 @@ func runtime_selection_debug_snapshot() -> Dictionary:
 
 
 func _update_runtime_performance(delta: float) -> void:
-	performance_last_process_tick_msec = Time.get_ticks_msec()
-	performance_frame_time_ms = max(0.0, delta * 1000.0)
-	var current_fps: float = Performance.get_monitor(Performance.TIME_FPS)
-	if current_fps <= 0.0 and delta > 0.0:
-		current_fps = 1.0 / delta
-	performance_fps = max(0.0, current_fps)
+	runtime_performance_tracker.call("update_process", delta)
 
 
 func _last_pathfinding_time_ms() -> float:
@@ -3966,14 +3953,7 @@ func _render_world() -> Dictionary:
 		return {}
 	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
 	var counts: Dictionary = _dictionary_or_empty(world_root.call("apply_world_snapshot", world_result, runtime_snapshot))
-	if world_root.has_method("render_count_summary"):
-		performance_last_render_counts = _dictionary_or_empty(world_root.call("render_count_summary"))
-	else:
-		performance_last_render_counts = _render_count_summary(counts)
-	if world_root.get("render_sequence") != null:
-		performance_render_sequence = int(world_root.get("render_sequence"))
-	else:
-		performance_render_sequence += 1
+	runtime_performance_tracker.call("record_world_render", counts, world_root, Callable(self, "_render_count_summary"))
 	if world_root.has_method("ensure_world_container"):
 		world_container = world_root.call("ensure_world_container")
 	return counts
