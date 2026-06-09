@@ -1537,6 +1537,14 @@ func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
 	var ranged_hit: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
 	if str(ranged_hit.get("last_sound_id", "")) != "hit_ranged":
 		errors.append("ranged hit should trigger ranged hit audio feedback: %s" % ranged_hit)
+	var ranged_spatial: Dictionary = _dictionary_or_empty(ranged_hit.get("spatial", {}))
+	if str(ranged_spatial.get("last_event_kind", "")) != "attack_resolved" or str(ranged_spatial.get("last_sound_id", "")) != "hit_ranged":
+		errors.append("runtime attack event should trigger spatial attack feedback: %s" % ranged_hit)
+	if str(ranged_spatial.get("audio_source", "")) != "simulation_spatial":
+		errors.append("runtime spatial attack should identify simulation source: %s" % ranged_spatial)
+	var attack_position: Dictionary = _dictionary_or_empty(ranged_spatial.get("last_position", {}))
+	if attack_position.is_empty():
+		errors.append("runtime spatial attack should expose derived world position: %s" % ranged_spatial)
 	game_root.simulation.emit_event("weapon_reloaded", {"actor_id": 1, "slot_id": "main_hand", "weapon_item_id": "1004", "ammo_type": "1009", "loaded_count": 6})
 	game_root.refresh_hud()
 	var reload: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())

@@ -9,6 +9,21 @@ const PLAYER_POOL_SIZE := 4
 const SPATIAL_PLAYER_POOL_SIZE := 3
 const FALLBACK_SOUND_ID := "event_fallback"
 
+const SPATIAL_EVENT_KINDS := {
+	"pickup_granted": true,
+	"container_opened": true,
+	"container_closed": true,
+	"container_transferred": true,
+	"door_toggled": true,
+	"door_unlocked": true,
+	"door_auto_opened": true,
+	"attack_resolved": true,
+	"weapon_reloaded": true,
+	"ammo_consumed": true,
+	"actor_defeated": true,
+	"corpse_created": true,
+}
+
 const EVENT_SOUND_MAP := {
 	"pickup_granted": "pickup",
 	"container_opened": "container_open",
@@ -104,6 +119,7 @@ var _ambience_phase := 0.0
 var _music_snapshot: Dictionary = {}
 var _ambience_snapshot: Dictionary = {}
 var _spatial_snapshot: Dictionary = {}
+var _spatial_event_sequence := 0
 var _settings_snapshot: Dictionary = {}
 var _music_start_count := 0
 var _ambience_start_count := 0
@@ -142,6 +158,7 @@ func reset() -> void:
 	_spatial_triggered_count = 0
 	_spatial_played_count = 0
 	_spatial_skipped_headless_count = 0
+	_spatial_event_sequence = 0
 	_spatial_snapshot.clear()
 
 
@@ -168,6 +185,7 @@ func process_runtime_snapshot(runtime_snapshot: Dictionary) -> void:
 		if event_data.is_empty():
 			continue
 		_process_event(event_data, index)
+		_process_spatial_runtime_event(event_data, runtime_snapshot)
 	last_event_index = events.size()
 
 
@@ -185,6 +203,7 @@ func play_spatial_feedback(event_kind: String, payload: Dictionary = {}, positio
 	var event_payload := payload.duplicate(true)
 	event_payload["audio_source"] = str(event_payload.get("audio_source", "world_spatial"))
 	event_payload["spatial"] = true
+	event_payload["spatial_source"] = str(event_payload.get("spatial_source", "manual"))
 	_process_event({
 		"kind": event_kind,
 		"payload": event_payload,
@@ -251,6 +270,7 @@ func _process_event(event_data: Dictionary, event_index: int) -> void:
 		"bus": BUS_NAME,
 		"placeholder": placeholder_enabled,
 		"audio_source": str(payload.get("audio_source", "simulation")),
+		"spatial_source": str(payload.get("spatial_source", "")),
 		"panel_id": str(payload.get("panel_id", "")),
 		"action": str(payload.get("action", "")),
 		"reason": str(payload.get("reason", "")),
@@ -292,11 +312,92 @@ func _process_event(event_data: Dictionary, event_index: int) -> void:
 		"total_price": int(payload.get("total_price", 0)),
 		"value": payload.get("value", null),
 	}
+	if payload.has("spatial_position"):
+		entry["spatial_position"] = _dictionary_or_empty(payload.get("spatial_position", {})).duplicate(true)
 	recent_events.append(entry)
 	while recent_events.size() > MAX_RECENT_EVENTS:
 		recent_events.pop_front()
 	if not bool(payload.get("spatial", false)):
 		_play_placeholder_sound(sound_id)
+
+
+func _process_spatial_runtime_event(event_data: Dictionary, runtime_snapshot: Dictionary) -> void:
+	var event_kind := str(event_data.get("kind", "")).strip_edges()
+	if event_kind.is_empty() or not SPATIAL_EVENT_KINDS.has(event_kind):
+		return
+	var payload: Dictionary = _dictionary_or_empty(event_data.get("payload", {}))
+	if str(payload.get("audio_source", "simulation")) == "ui":
+		return
+	var position_result: Dictionary = _spatial_position_for_event(event_kind, payload, runtime_snapshot)
+	if not bool(position_result.get("success", false)):
+		return
+	var spatial_payload := payload.duplicate(true)
+	spatial_payload["audio_source"] = "simulation_spatial"
+	spatial_payload["spatial"] = true
+	spatial_payload["spatial_source"] = str(position_result.get("source", "runtime_snapshot"))
+	spatial_payload["spatial_grid"] = _dictionary_or_empty(position_result.get("grid", {})).duplicate(true)
+	spatial_payload["spatial_position"] = _dictionary_or_empty(position_result.get("position", {})).duplicate(true)
+	_spatial_event_sequence += 1
+	spatial_payload["spatial_event_sequence"] = _spatial_event_sequence
+	var sound_id := _sound_id_for_event(event_kind, spatial_payload)
+	if sound_id.is_empty():
+		return
+	_play_spatial_placeholder_sound(sound_id, _vector3_from_snapshot(_dictionary_or_empty(position_result.get("position", {}))), event_kind, spatial_payload)
+
+
+func _spatial_position_for_event(event_kind: String, payload: Dictionary, runtime_snapshot: Dictionary) -> Dictionary:
+	var actors_by_id := _actors_by_id(runtime_snapshot)
+	var grid := _event_grid(payload, actors_by_id)
+	if grid.is_empty():
+		return {"success": false, "reason": "spatial_grid_missing", "event_kind": event_kind}
+	var position := _grid_to_world_position(grid)
+	return {
+		"success": true,
+		"event_kind": event_kind,
+		"source": str(grid.get("spatial_source", "payload_or_actor_grid")),
+		"grid": grid,
+		"position": _vector3_snapshot(position),
+	}
+
+
+func _event_grid(payload: Dictionary, actors_by_id: Dictionary) -> Dictionary:
+	for key in ["target_grid", "grid_position", "anchor", "grid"]:
+		var explicit_grid: Dictionary = _dictionary_or_empty(payload.get(key, {}))
+		if not explicit_grid.is_empty():
+			var output := explicit_grid.duplicate(true)
+			output["spatial_source"] = key
+			return output
+	for actor_key in ["target_actor_id", "actor_id", "source_actor_id", "defeated_by_actor_id"]:
+		var actor_id := int(payload.get(actor_key, 0))
+		if actor_id <= 0 or not actors_by_id.has(actor_id):
+			continue
+		var actor_data: Dictionary = _dictionary_or_empty(actors_by_id.get(actor_id, {}))
+		var actor_grid: Dictionary = _dictionary_or_empty(actor_data.get("grid_position", {}))
+		if actor_grid.is_empty():
+			continue
+		var output := actor_grid.duplicate(true)
+		output["spatial_source"] = actor_key
+		output["spatial_actor_id"] = actor_id
+		return output
+	return {}
+
+
+func _actors_by_id(runtime_snapshot: Dictionary) -> Dictionary:
+	var output := {}
+	for actor_value in _array_or_empty(runtime_snapshot.get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor_value)
+		var actor_id := int(actor_data.get("actor_id", 0))
+		if actor_id > 0:
+			output[actor_id] = actor_data
+	return output
+
+
+func _grid_to_world_position(grid: Dictionary) -> Vector3:
+	return Vector3(
+		float(grid.get("x", 0)),
+		float(grid.get("y", 0)) + 0.65,
+		float(grid.get("z", 0))
+	)
 
 
 func _sound_id_for_event(event_kind: String, payload: Dictionary) -> String:
@@ -579,6 +680,14 @@ func _vector3_snapshot(value: Vector3) -> Dictionary:
 		"y": value.y,
 		"z": value.z,
 	}
+
+
+func _vector3_from_snapshot(value: Dictionary) -> Vector3:
+	return Vector3(
+		float(value.get("x", 0.0)),
+		float(value.get("y", 0.0)),
+		float(value.get("z", 0.0))
+	)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
