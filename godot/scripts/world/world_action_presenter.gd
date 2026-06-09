@@ -31,6 +31,7 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 	var events := _events_from_result(command_result)
 	if _result_changes_map(command_result, events):
 		return _record_latest({"active": false, "kind": "scene_transition", "event_count": events.size()})
+	var movement_cancelled := _movement_cancelled_presentation(events, world_root, world_result)
 	var movement := _movement_presentation(events, world_root, world_result)
 	var interaction := _interaction_presentation(events, world_root, world_result)
 	if not movement.is_empty() and not interaction.is_empty():
@@ -59,6 +60,8 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 	if not combat_event.is_empty():
 		_start_combat_event_feedback(host, world_root, combat_event)
 		return latest.duplicate(true)
+	if not movement_cancelled.is_empty():
+		return _record_latest(_movement_cancelled_public_snapshot(movement_cancelled))
 	return _record_latest({"active": false, "kind": "none", "event_count": events.size()})
 
 
@@ -169,6 +172,37 @@ func _movement_presentation(events: Array, world_root: Node, world_result: Dicti
 		"pending_movement_required_ap": float(pending_segment.get("required_ap", 0.0)),
 		"pending_movement_available_ap": float(pending_segment.get("available_ap", 0.0)),
 		"actor_node": actor_node,
+	}
+
+
+func _movement_cancelled_presentation(events: Array, world_root: Node, world_result: Dictionary) -> Dictionary:
+	var selected_payload: Dictionary = {}
+	for event_value in events:
+		var event: Dictionary = _dictionary_or_empty(event_value)
+		if str(event.get("kind", "")) != "movement_cancelled":
+			continue
+		selected_payload = _dictionary_or_empty(event.get("payload", {}))
+	if selected_payload.is_empty():
+		return {}
+	var actor_id := int(selected_payload.get("actor_id", 0))
+	var pending_movement: Dictionary = _dictionary_or_empty(selected_payload.get("pending_movement", {})).duplicate(true)
+	var actor_node := _actor_node(world_root, world_result, actor_id)
+	var cleared_marker_count := _clear_pending_movement_segment_markers(world_root, actor_id)
+	var cleared_actor_metadata := _clear_pending_movement_actor_metadata(actor_node)
+	return {
+		"active": false,
+		"kind": "movement_cancelled",
+		"actor_id": actor_id,
+		"reason": str(selected_payload.get("reason", "")),
+		"pending_movement": pending_movement,
+		"target_position": _dictionary_or_empty(pending_movement.get("target_position", {})).duplicate(true),
+		"path": _array_or_empty(pending_movement.get("path", [])).duplicate(true),
+		"remaining_steps": int(pending_movement.get("remaining_steps", max(0, _array_or_empty(pending_movement.get("path", [])).size() - 1))),
+		"required_ap": float(pending_movement.get("required_ap", 0.0)),
+		"available_ap": float(pending_movement.get("available_ap", 0.0)),
+		"cleared_marker_count": cleared_marker_count,
+		"cleared_actor_metadata": cleared_actor_metadata,
+		"node_path": str(actor_node.get_path()) if actor_node != null else "",
 	}
 
 
@@ -507,6 +541,41 @@ func _on_pending_movement_segment_marker_finished(marker_ref: WeakRef) -> void:
 	_prune_active_refs()
 	latest["active"] = active_count > 0
 	latest["active_count"] = active_count
+
+
+func _clear_pending_movement_segment_markers(world_root: Node, actor_id: int) -> int:
+	if world_root == null:
+		return 0
+	var cleared := 0
+	var layer := world_root.find_child("WorldActionPresentationLayer", false, false)
+	if layer == null:
+		return 0
+	for child in layer.get_children():
+		var node := child as Node
+		if node == null:
+			continue
+		if str(node.name) != "WorldActionPendingMovementSegment":
+			continue
+		if actor_id > 0 and int(node.get_meta("actor_id", 0)) != actor_id:
+			continue
+		node.set_meta("action_presenter_active", false)
+		node.set_meta("action_presenter_cancelled", true)
+		node.queue_free()
+		cleared += 1
+	_prune_active_refs()
+	return cleared
+
+
+func _clear_pending_movement_actor_metadata(actor_node: Node3D) -> bool:
+	if actor_node == null:
+		return false
+	actor_node.set_meta("action_presenter_pending_movement_segment_active", false)
+	actor_node.set_meta("action_presenter_pending_movement_target_position", {})
+	actor_node.set_meta("action_presenter_pending_movement_remaining_steps", 0)
+	actor_node.set_meta("action_presenter_pending_movement_required_ap", 0.0)
+	actor_node.set_meta("action_presenter_pending_movement_available_ap", 0.0)
+	actor_node.set_meta("action_presenter_pending_movement_cancelled", true)
+	return true
 
 
 func _path_index_for_grid(path: Array, grid: Dictionary) -> int:
@@ -2028,6 +2097,24 @@ func _presentation_public_snapshot(presentation: Dictionary, active: bool) -> Di
 		"pending_movement_remaining_steps": int(presentation.get("pending_movement_remaining_steps", 0)),
 		"pending_movement_required_ap": float(presentation.get("pending_movement_required_ap", 0.0)),
 		"pending_movement_available_ap": float(presentation.get("pending_movement_available_ap", 0.0)),
+	}
+
+
+func _movement_cancelled_public_snapshot(presentation: Dictionary) -> Dictionary:
+	return {
+		"active": false,
+		"kind": "movement_cancelled",
+		"actor_id": int(presentation.get("actor_id", 0)),
+		"reason": str(presentation.get("reason", "")),
+		"node_path": str(presentation.get("node_path", "")),
+		"pending_movement": _dictionary_or_empty(presentation.get("pending_movement", {})).duplicate(true),
+		"target_position": _dictionary_or_empty(presentation.get("target_position", {})).duplicate(true),
+		"path": _array_or_empty(presentation.get("path", [])).duplicate(true),
+		"remaining_steps": int(presentation.get("remaining_steps", 0)),
+		"required_ap": float(presentation.get("required_ap", 0.0)),
+		"available_ap": float(presentation.get("available_ap", 0.0)),
+		"cleared_marker_count": int(presentation.get("cleared_marker_count", 0)),
+		"cleared_actor_metadata": bool(presentation.get("cleared_actor_metadata", false)),
 	}
 
 

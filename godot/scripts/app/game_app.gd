@@ -2610,7 +2610,10 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false) -
 	if interaction_controller == null:
 		return {"success": false, "reason": "interaction_controller_missing"}
 	var result: Dictionary = interaction_controller.cancel_pending(reason, auto_end_turn)
-	refresh_all_panels(current_interaction_prompt())
+	if bool(result.get("had_pending", false)):
+		_rebuild_world_after_runtime_change(current_interaction_prompt(), result)
+	else:
+		refresh_all_panels(current_interaction_prompt())
 	return result
 
 

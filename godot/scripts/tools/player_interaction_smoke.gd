@@ -2554,7 +2554,45 @@ func _expect_cancel_pending(errors: Array[String], game_root: Node) -> void:
 	var move_result: Dictionary = game_root.execute_move_to_grid(far_target)
 	if not bool(move_result.get("success", false)):
 		errors.append("far grid move should start partial movement before queueing: %s" % move_result.get("reason", "unknown"))
+	if _dictionary_or_empty(game_root.simulation.snapshot().get("pending_movement", {})).is_empty():
+		var current_grid: Dictionary = _player_grid(game_root)
+		game_root.simulation.pending_movement = {
+			"actor_id": 1,
+			"target_position": far_target.duplicate(true),
+			"path": [current_grid.duplicate(true), far_target.duplicate(true)],
+			"required_ap": 1.0,
+			"available_ap": 0.0,
+			"remaining_steps": 1,
+		}
 	var cancel_result: Dictionary = game_root.cancel_pending("smoke_cancel", false)
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "movement_cancelled":
+		errors.append("cancel pending movement should expose movement_cancelled presenter, got %s" % JSON.stringify(presenter))
+	if bool(presenter.get("active", true)):
+		errors.append("movement_cancelled presenter should not keep world action active")
+	if str(presenter.get("reason", "")) != "smoke_cancel":
+		errors.append("movement_cancelled presenter should preserve cancel reason")
+	if int(presenter.get("actor_id", 0)) != 1:
+		errors.append("movement_cancelled presenter should expose player actor id")
+	if _dictionary_or_empty(presenter.get("pending_movement", {})).is_empty():
+		errors.append("movement_cancelled presenter should expose cancelled pending movement")
+	if not bool(presenter.get("cleared_actor_metadata", false)):
+		errors.append("movement_cancelled presenter should clear actor pending metadata")
+	var cancelled_events: Array = _array_or_empty(cancel_result.get("events", []))
+	var found_movement_cancelled := false
+	for event_value in cancelled_events:
+		var event: Dictionary = _dictionary_or_empty(event_value)
+		if str(event.get("kind", "")) == "movement_cancelled":
+			found_movement_cancelled = true
+			break
+	if not found_movement_cancelled:
+		errors.append("cancel_pending result should expose movement_cancelled event for presenter")
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node != null:
+		if bool(player_node.get_meta("action_presenter_pending_movement_segment_active", false)):
+			errors.append("cancel pending should clear actor pending movement segment active metadata")
+		if int(player_node.get_meta("action_presenter_pending_movement_remaining_steps", 0)) != 0:
+			errors.append("cancel pending should clear actor pending movement remaining steps metadata")
 	await _wait_for_world_action_presenter_idle(game_root)
 	var snapshot: Dictionary = game_root.simulation.snapshot()
 	if not snapshot.get("pending_movement", {}).is_empty() or not snapshot.get("pending_interaction", {}).is_empty():

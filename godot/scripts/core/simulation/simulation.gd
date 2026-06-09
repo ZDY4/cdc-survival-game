@@ -957,6 +957,7 @@ func preview_skill_target(actor_id: int, skill_id: String, skill_library: Dictio
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, topology: Dictionary = {}) -> Dictionary:
 	var actor_id: int = _player_actor_id()
+	var event_start_index: int = events.size()
 	var had_pending: bool = not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty()
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	var ap_before: float = actor.ap if actor != null else 0.0
@@ -1028,7 +1029,7 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 		round_before,
 		cancel_policy_extra
 	)
-	return {
+	var output := {
 		"success": true,
 		"had_pending": had_pending,
 		"reason": reason,
@@ -1038,6 +1039,18 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 		"cancelled_crafting": crafting.duplicate(true),
 		"turn_policy": turn_policy,
 	}
+	var emitted_events := _events_since(event_start_index)
+	output["events"] = emitted_events
+	output["runtime_snapshot_delta"] = {
+		"active_map_id": active_map_id,
+		"combat_active": bool(combat_state.get("active", false)),
+		"events": emitted_events,
+		"pending_movement": pending_movement.duplicate(true),
+		"pending_interaction": pending_interaction.duplicate(true),
+		"pending_crafting": pending_crafting.duplicate(true),
+		"turn_state": turn_state.duplicate(true),
+	}
+	return output
 
 
 func snapshot() -> Dictionary:
