@@ -6,6 +6,27 @@
 
 重点不是简单拆小文件，而是让 `GameApp` 从承载启动、输入、世界刷新、UI 编排、debug、smoke 适配的全能脚本，收敛为薄的根节点；让世界、UI、输入、debug 和运行时刷新分别由明确的 scene / controller 负责。
 
+## 当前执行状态
+
+截至 2026-06-10，计划已开始执行，但尚未完成“薄根节点”终态。
+
+已完成或基本收敛：
+
+- debug console 命令执行已抽到 `godot/scripts/app/controllers/debug_runtime_controller.gd`。
+- HUD 运行时刷新已通过 `hud_controller.apply_runtime_snapshot()` 和 `input_blocker_snapshot()` 收敛为 facade。
+- 顶层输入分发已抽到 `godot/scripts/app/controllers/game_input_router.gd`。
+- 世界表现入口已抽到 `godot/scripts/world/world_root.gd`，`GameApp` 主要调用 WorldRoot 接口。
+- runtime refresh / world snapshot 构建已抽到 `godot/scripts/app/controllers/runtime_refresh_controller.gd`。
+- world action presenter、queue、pending UI 和 final refresh 状态已抽到 `godot/scripts/app/controllers/world_action_flow_controller.gd`。
+- 运行时性能统计已抽到 `godot/scripts/app/controllers/runtime_performance_tracker.gd`。
+
+仍需继续推进：
+
+- `godot/scripts/app/game_app.gd` 仍约 4000 行，还保留大量 UI facade、玩家动作 facade、拖拽/tooltip snapshot、observe/focus/auto tick 和 smoke 兼容入口。
+- 运行时 UI 还没有完全落成独立 `HudRoot.tscn` / `HudRoot` script；当前仍主要依赖现有 HUD controller 和根脚本转发。
+- `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
+- 下一步优先抽取边界清楚的 UI runtime facade 或玩家动作 facade，而不是一次性重命名根脚本。
+
 ## 当前问题
 
 当前 `godot/scripts/app/game_app.gd` 承担了过多职责：
