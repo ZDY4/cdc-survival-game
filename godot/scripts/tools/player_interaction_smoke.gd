@@ -2264,14 +2264,19 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("world action presenter movement should expose positive step_count")
 	_expect_world_action_input_blocker(errors, game_root, "movement")
 	_expect_world_action_queue_presenting(errors, game_root, "movement", "move")
+	var render_sequence_before_finish := int(game_root.get("performance_render_sequence"))
+	var camera_before_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	var camera_instance_before_finish := camera_before_finish.get_instance_id() if camera_before_finish != null else 0
 	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	var visual_start := Vector3(float(before.get("x", 0)), 0.58, float(before.get("z", 0)))
+	var visual_final := Vector3(float(after.get("x", 0)), 0.58, float(after.get("z", 0)))
 	if player_node == null:
 		errors.append("world action presenter movement should keep player node visible")
 	else:
 		if not bool(player_node.get_meta("action_presenter_active", false)):
 			errors.append("player node should expose active movement presenter metadata after click")
-		var visual_start := Vector3(float(before.get("x", 0)), player_node.position.y, float(before.get("z", 0)))
-		var visual_final := Vector3(float(after.get("x", 0)), player_node.position.y, float(after.get("z", 0)))
+		visual_start.y = player_node.position.y
+		visual_final.y = player_node.position.y
 		if player_node.position.distance_to(visual_final) <= 0.05:
 			errors.append("player visual node should not snap to final grid before movement presenter finishes")
 		if player_node.position.distance_to(visual_start) > player_node.position.distance_to(visual_final):
@@ -2284,6 +2289,16 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("world action queue should be inactive after presenter fast-forward")
 	if str(completed_queue.get("finish_reason", "")) != "fast_forwarded":
 		errors.append("world action queue should record fast-forward finish reason")
+	if bool(_dictionary_or_empty(completed_queue.get("applied_final_refresh", {})).get("render_world", true)):
+		errors.append("move final refresh should skip full world render")
+	if int(game_root.get("performance_render_sequence")) != render_sequence_before_finish:
+		errors.append("move final refresh should not increment world render sequence")
+	var camera_after_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
+	var camera_instance_after_finish := camera_after_finish.get_instance_id() if camera_after_finish != null else 0
+	if camera_instance_before_finish != 0 and camera_instance_after_finish != camera_instance_before_finish:
+		errors.append("move final refresh should not replace WorldCamera")
+	if player_node != null and player_node.position.distance_to(visual_final) > 0.08:
+		errors.append("player visual node should finish at final movement grid without full rerender")
 	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
 		player.ap = 6.0
@@ -2312,6 +2327,8 @@ func _expect_world_action_queue_presenting(errors: Array[String], game_root: Nod
 		errors.append("world action queue should expose final_refresh_deferred=true while presenter is active")
 	if not bool(action_queue.get("pending_final_refresh_active", false)):
 		errors.append("world action queue should expose pending final world refresh while presenter is active")
+	if bool(_dictionary_or_empty(action_queue.get("pending_final_refresh", {})).get("render_world", true)):
+		errors.append("movement pending final refresh should skip full world render")
 	if _array_or_empty(action_queue.get("phase_order", [])).find("presenter_started") < 0:
 		errors.append("world action queue should expose presenter_started phase")
 	if int(action_queue.get("event_count", 0)) <= 0:

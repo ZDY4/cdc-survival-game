@@ -2779,7 +2779,7 @@ func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 		_setup_world_container()
 		_present_world_action(result)
 		if _world_action_presenter_blocks_input():
-			_queue_deferred_world_refresh(final_world_result, _dictionary_or_empty(result.get("prompt", {})), result, "execute_move_to_grid")
+			_queue_deferred_world_refresh(final_world_result, _dictionary_or_empty(result.get("prompt", {})), result, "execute_move_to_grid", false)
 			refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 			return result
 	world_result = interaction_controller.world_result
@@ -4218,7 +4218,7 @@ func _process_world_action_queue_completion() -> void:
 	_apply_pending_world_action_ui("presenter_finished")
 
 
-func _queue_deferred_world_refresh(final_world_result: Dictionary, selected_prompt: Dictionary, command_result: Dictionary, source: String) -> void:
+func _queue_deferred_world_refresh(final_world_result: Dictionary, selected_prompt: Dictionary, command_result: Dictionary, source: String, render_world: bool = true) -> void:
 	pending_world_action_final_refresh = {
 		"kind": "final_world_refresh",
 		"source": source,
@@ -4226,6 +4226,7 @@ func _queue_deferred_world_refresh(final_world_result: Dictionary, selected_prom
 		"presenter_kind": str(world_action_presenter_snapshot().get("kind", "")),
 		"queued_sequence": int(world_action_queue_state.get("sequence", 0)),
 		"refresh_after": "presenter_finished",
+		"render_world": render_world,
 		"refresh_all_panels": true,
 		"prompt": selected_prompt.duplicate(true),
 		"world_result": final_world_result.duplicate(true),
@@ -4246,7 +4247,7 @@ func _apply_pending_world_action_final_refresh(trigger: String) -> bool:
 	var final_world_result: Dictionary = _dictionary_or_empty(pending_refresh.get("world_result", {}))
 	if final_world_result.is_empty() or not bool(final_world_result.get("ok", false)):
 		final_world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
-	_apply_world_result_without_present(final_world_result)
+	_apply_world_result_without_present(final_world_result, bool(pending_refresh.get("render_world", true)))
 	var applied: Dictionary = _deferred_world_refresh_public_snapshot(pending_refresh)
 	applied["trigger"] = trigger
 	applied["applied"] = true
@@ -4268,12 +4269,13 @@ func _deferred_world_refresh_public_snapshot(source: Dictionary) -> Dictionary:
 		"presenter_kind": str(source.get("presenter_kind", "")),
 		"queued_sequence": int(source.get("queued_sequence", 0)),
 		"refresh_after": str(source.get("refresh_after", "")),
+		"render_world": bool(source.get("render_world", true)),
 		"refresh_all_panels": bool(source.get("refresh_all_panels", false)),
 		"prompt": _dictionary_or_empty(source.get("prompt", {})).duplicate(true),
 	}
 
 
-func _apply_world_result_without_present(next_world_result: Dictionary) -> void:
+func _apply_world_result_without_present(next_world_result: Dictionary, render_world: bool = true) -> void:
 	world_result = next_world_result
 	if not bool(world_result.get("ok", false)):
 		push_error(str(world_result.get("error", "world refresh failed")))
@@ -4285,8 +4287,11 @@ func _apply_world_result_without_present(next_world_result: Dictionary) -> void:
 	if interaction_controller != null:
 		interaction_controller.world_result = world_result
 	_setup_world_container()
-	_render_world()
-	_setup_runtime_input_controller()
+	if render_world:
+		_render_world()
+		_setup_runtime_input_controller()
+	elif runtime_input_controller != null:
+		runtime_input_controller.world_result = world_result
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
 	_configure_runtime_audio_layers()
