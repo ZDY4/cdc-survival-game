@@ -501,6 +501,20 @@ func _validate_actor_life_status_markers(registry: RefCounted, errors: Array[Str
 			errors.append("actor with life status should render ActorLifeStatusIcon")
 		elif str(icon.get_meta("life_status_activity_id", "")) != "restock_meal_service":
 			errors.append("life status icon should expose activity metadata")
+		var animation: AnimationPlayer = actor_node.find_child("ActorLifeStatusAnimation", true, false) as AnimationPlayer
+		if animation == null:
+			errors.append("actor with life status should render ActorLifeStatusAnimation")
+		else:
+			if not bool(animation.get_meta("life_status_animation_enabled", false)):
+				errors.append("life status animation should expose enabled metadata")
+			if str(animation.get_meta("life_status_animation_name", "")) != "life_status_pulse_service":
+				errors.append("service life status should use service pulse animation, got %s" % animation.get_meta("life_status_animation_name", ""))
+			if not animation.has_animation("life_status_pulse_service"):
+				errors.append("life status animation player should own service pulse animation")
+			if float(animation.get_meta("life_status_animation_duration", 0.0)) <= 0.0:
+				errors.append("life status animation should expose positive duration")
+			if float(animation.get_meta("life_status_animation_max_scale", 0.0)) <= float(animation.get_meta("life_status_animation_min_scale", 0.0)):
+				errors.append("life status animation should expose a pulse scale range")
 	_validate_label3d_fonts(root, "actor life status markers", errors)
 	root.queue_free()
 

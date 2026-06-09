@@ -893,7 +893,60 @@ func _add_actor_life_status_marker(parent: Node3D, actor_data: Dictionary) -> vo
 	_apply_world_label_font(label)
 	_apply_life_status_meta(label, actor_data, status)
 	container.add_child(label)
+	_add_actor_life_status_animation(container, actor_data, status)
 	parent.add_child(container)
+
+
+func _add_actor_life_status_animation(container: Node3D, actor_data: Dictionary, status: Dictionary) -> void:
+	var profile: Dictionary = _life_status_animation_profile(str(status.get("state_group", "")), str(status.get("state_id", "")))
+	var animation_name: String = str(profile.get("animation_name", "life_status_pulse_idle"))
+	var duration: float = max(0.1, float(profile.get("duration", 1.2)))
+	var min_scale: float = float(profile.get("min_scale", 0.92))
+	var max_scale: float = float(profile.get("max_scale", 1.12))
+	var animation: Animation = Animation.new()
+	animation.length = duration
+	animation.loop_mode = Animation.LOOP_LINEAR
+	var track: int = animation.add_track(Animation.TYPE_VALUE)
+	animation.track_set_path(track, NodePath("ActorLifeStatusIcon:scale"))
+	animation.track_insert_key(track, 0.0, Vector3.ONE * min_scale)
+	animation.track_insert_key(track, duration * 0.5, Vector3.ONE * max_scale)
+	animation.track_insert_key(track, duration, Vector3.ONE * min_scale)
+	var library: AnimationLibrary = AnimationLibrary.new()
+	library.add_animation(animation_name, animation)
+	var player: AnimationPlayer = AnimationPlayer.new()
+	player.name = "ActorLifeStatusAnimation"
+	player.root_node = NodePath("..")
+	player.add_animation_library("", library)
+	player.autoplay = animation_name
+	_apply_life_status_meta(player, actor_data, status)
+	player.set_meta("life_status_animation_enabled", true)
+	player.set_meta("life_status_animation_name", animation_name)
+	player.set_meta("life_status_animation_duration", duration)
+	player.set_meta("life_status_animation_min_scale", min_scale)
+	player.set_meta("life_status_animation_max_scale", max_scale)
+	container.set_meta("life_status_animation_enabled", true)
+	container.set_meta("life_status_animation_name", animation_name)
+	container.set_meta("life_status_animation_duration", duration)
+	container.add_child(player)
+	player.play(animation_name)
+
+
+func _life_status_animation_profile(state_group: String, state_id: String) -> Dictionary:
+	match state_id:
+		"blocked":
+			return {"animation_name": "life_status_pulse_blocked", "duration": 0.52, "min_scale": 0.88, "max_scale": 1.28}
+		"traveling", "patrolling":
+			return {"animation_name": "life_status_pulse_work", "duration": 0.86, "min_scale": 0.90, "max_scale": 1.18}
+		"eating", "resting", "relaxing":
+			return {"animation_name": "life_status_pulse_rest", "duration": 1.65, "min_scale": 0.94, "max_scale": 1.08}
+	match state_group:
+		"service":
+			return {"animation_name": "life_status_pulse_service", "duration": 1.05, "min_scale": 0.90, "max_scale": 1.20}
+		"work":
+			return {"animation_name": "life_status_pulse_work", "duration": 0.95, "min_scale": 0.91, "max_scale": 1.16}
+		"rest":
+			return {"animation_name": "life_status_pulse_rest", "duration": 1.65, "min_scale": 0.94, "max_scale": 1.08}
+	return {"animation_name": "life_status_pulse_idle", "duration": 1.35, "min_scale": 0.96, "max_scale": 1.06}
 
 
 func _life_status_material(state_group: String) -> StandardMaterial3D:
