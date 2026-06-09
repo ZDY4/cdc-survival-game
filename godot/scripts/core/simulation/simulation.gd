@@ -41,6 +41,8 @@ const DEFAULT_HOTBAR_GROUP_ID := "group_1"
 const HOTBAR_GROUP_COUNT := 3
 const RELATIONSHIP_HOSTILE_THRESHOLD := -50.0
 const RELATIONSHIP_FRIENDLY_THRESHOLD := 0.0
+const WORLD_TURN_MINUTES := 15
+const WORLD_DAYS := ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 var actor_registry := ActorRegistry.new()
 var active_map_id: String = ""
@@ -3716,9 +3718,11 @@ func _skill_effect_modifiers(modifier_definitions: Dictionary, learned_level: in
 func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 	var runtime_topology: Dictionary = _topology_with_runtime_door_states(topology)
 	var results: Array[Dictionary] = []
+	var time_before: Dictionary = world_time.duplicate(true)
 	turn_state["phase"] = "world"
 	_tick_hotbar_cooldowns()
 	_tick_actor_active_effects()
+	var life_tick_results: Array[Dictionary] = _tick_settlement_life_needs(WORLD_TURN_MINUTES)
 	if bool(combat_state.get("active", false)):
 		_refresh_combat_turn_order("world_turn_started")
 	for actor in _world_turn_actor_order():
@@ -3740,6 +3744,9 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 		result["turn_open"] = turn_open_snapshot
 		result["ap_after_action"] = actor.ap
 		result["turn_close_reason"] = _npc_turn_close_reason(actor, result)
+		result["world_turn_minutes"] = WORLD_TURN_MINUTES
+		result["world_time_before"] = time_before.duplicate(true)
+		result["life_need_tick"] = _life_need_tick_for_actor(life_tick_results, actor.actor_id)
 		results.append(result)
 		_close_turn(actor.actor_id, str(result.get("turn_close_reason", "npc_turn_complete")))
 		result["turn_closed"] = true
@@ -3751,7 +3758,187 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 	turn_state["round"] = int(turn_state.get("round", 1)) + 1
 	if bool(combat_state.get("active", false)):
 		combat_state["round"] = int(combat_state.get("round", 0)) + 1
+	_advance_world_time(WORLD_TURN_MINUTES)
+	for result in results:
+		var result_data: Dictionary = result
+		result_data["world_time_after"] = world_time.duplicate(true)
+	_emit("world_time_advanced", {
+		"before": time_before,
+		"after": world_time.duplicate(true),
+		"minutes": WORLD_TURN_MINUTES,
+		"life_tick_count": life_tick_results.size(),
+	})
 	return results
+
+
+func _advance_world_time(minutes: int) -> void:
+	var current_day: String = str(world_time.get("day", "monday"))
+	var current_minute: int = posmod(int(world_time.get("minute_of_day", 540)), 1440)
+	var total_minutes: int = current_minute + max(0, minutes)
+	var day_offset: int = int(total_minutes / 1440)
+	world_time["minute_of_day"] = posmod(total_minutes, 1440)
+	world_time["day"] = WORLD_DAYS[(_world_day_index(current_day) + day_offset) % WORLD_DAYS.size()]
+
+
+func _world_day_index(day: String) -> int:
+	var index: int = WORLD_DAYS.find(day)
+	return index if index >= 0 else 0
+
+
+func _tick_settlement_life_needs(minutes: int) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	var tick_minutes: int = max(0, minutes)
+	if tick_minutes <= 0:
+		return output
+	for actor in actor_registry.actors():
+		if actor.hp <= 0.0:
+			continue
+		var life: Dictionary = _dictionary_or_empty(actor.life)
+		if str(life.get("settlement_id", "")).is_empty():
+			continue
+		var profile: Dictionary = _life_need_profile(actor)
+		var before: Dictionary = _life_needs_snapshot(actor)
+		var runtime: Dictionary = _ensure_life_runtime(actor)
+		var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {})).duplicate(true)
+		var hours: float = float(tick_minutes) / 60.0
+		_apply_life_need_decay(needs, "hunger", float(profile.get("hunger_decay_per_hour", 0.0)) * hours)
+		_apply_life_need_decay(needs, "energy", float(profile.get("energy_decay_per_hour", 0.0)) * hours)
+		_apply_life_need_decay(needs, "morale", float(profile.get("morale_decay_per_hour", 0.0)) * hours)
+		runtime["needs"] = needs
+		runtime["last_need_tick"] = {
+			"world_time": world_time.duplicate(true),
+			"minutes": tick_minutes,
+			"profile_id": str(life.get("need_profile_id", "")),
+		}
+		_set_life_runtime(actor, runtime)
+		var after: Dictionary = _life_needs_snapshot(actor)
+		var tick: Dictionary = {
+			"actor_id": actor.actor_id,
+			"definition_id": actor.definition_id,
+			"settlement_id": str(life.get("settlement_id", "")),
+			"profile_id": str(life.get("need_profile_id", "")),
+			"minutes": tick_minutes,
+			"needs_before": before,
+			"needs_after": after,
+		}
+		output.append(tick)
+		_emit("settlement_life_needs_ticked", tick.duplicate(true))
+	return output
+
+
+func _life_need_tick_for_actor(ticks: Array[Dictionary], actor_id: int) -> Dictionary:
+	for tick in ticks:
+		var tick_data: Dictionary = tick
+		if int(tick_data.get("actor_id", 0)) == actor_id:
+			return tick_data.duplicate(true)
+	return {}
+
+
+func _life_need_profile(actor: RefCounted) -> Dictionary:
+	var life: Dictionary = _dictionary_or_empty(actor.life)
+	var profile_id: String = str(life.get("need_profile_id", ""))
+	var output: Dictionary = {}
+	for profile in _ai_collection("need_profiles"):
+		var profile_data: Dictionary = _dictionary_or_empty(profile)
+		if str(profile_data.get("id", "")) == profile_id:
+			output = profile_data.duplicate(true)
+			break
+	var override: Dictionary = _dictionary_or_empty(life.get("need_profile_override", {}))
+	for key in override.keys():
+		output[str(key)] = override[key]
+	return output
+
+
+func _ai_collection(collection_name: String) -> Array:
+	for record in ai_library.values():
+		var record_data: Dictionary = _dictionary_or_empty(record)
+		var data: Dictionary = _dictionary_or_empty(record_data.get("data", record_data))
+		if data.has(collection_name):
+			return _array_or_empty(data.get(collection_name, []))
+	return []
+
+
+func _life_needs_snapshot(actor: RefCounted) -> Dictionary:
+	var runtime: Dictionary = _ensure_life_runtime(actor)
+	var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {}))
+	return {
+		"hunger": _life_need_value_snapshot(needs, "hunger"),
+		"energy": _life_need_value_snapshot(needs, "energy"),
+		"morale": _life_need_value_snapshot(needs, "morale"),
+	}
+
+
+func _life_need_value_snapshot(needs: Dictionary, need_id: String) -> Dictionary:
+	var data: Dictionary = _dictionary_or_empty(needs.get(need_id, {}))
+	var max_value: float = max(1.0, float(data.get("max", 100.0)))
+	return {
+		"current": clampf(float(data.get("current", max_value)), 0.0, max_value),
+		"max": max_value,
+	}
+
+
+func _ensure_life_runtime(actor: RefCounted) -> Dictionary:
+	var life: Dictionary = _dictionary_or_empty(actor.life).duplicate(true)
+	var runtime: Dictionary = _dictionary_or_empty(life.get("runtime", {})).duplicate(true)
+	var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {})).duplicate(true)
+	for need_id in ["hunger", "energy", "morale"]:
+		if not needs.has(need_id):
+			needs[need_id] = {"current": 100.0, "max": 100.0}
+		else:
+			needs[need_id] = _life_need_value_snapshot(needs, need_id)
+	runtime["needs"] = needs
+	life["runtime"] = runtime
+	actor.life = life
+	return runtime
+
+
+func _set_life_runtime(actor: RefCounted, runtime: Dictionary) -> void:
+	var life: Dictionary = _dictionary_or_empty(actor.life).duplicate(true)
+	life["runtime"] = runtime.duplicate(true)
+	actor.life = life
+
+
+func _apply_life_need_decay(needs: Dictionary, need_id: String, amount: float) -> void:
+	if amount <= 0.0:
+		return
+	var data: Dictionary = _life_need_value_snapshot(needs, need_id)
+	data["current"] = clampf(float(data.get("current", 100.0)) - amount, 0.0, float(data.get("max", 100.0)))
+	needs[need_id] = data
+
+
+func _apply_life_need_delta(actor: RefCounted, deltas: Dictionary, source: String, source_id: String = "") -> Dictionary:
+	if deltas.is_empty():
+		return {}
+	var before: Dictionary = _life_needs_snapshot(actor)
+	var runtime: Dictionary = _ensure_life_runtime(actor)
+	var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {})).duplicate(true)
+	for key in deltas.keys():
+		var normalized: String = str(key).trim_suffix("_delta")
+		if not ["hunger", "energy", "morale"].has(normalized):
+			continue
+		var data: Dictionary = _life_need_value_snapshot(needs, normalized)
+		data["current"] = clampf(float(data.get("current", 100.0)) + float(deltas.get(key, 0.0)), 0.0, float(data.get("max", 100.0)))
+		needs[normalized] = data
+	runtime["needs"] = needs
+	runtime["last_need_effect"] = {
+		"source": source,
+		"source_id": source_id,
+		"world_time": world_time.duplicate(true),
+		"deltas": deltas.duplicate(true),
+	}
+	_set_life_runtime(actor, runtime)
+	var after: Dictionary = _life_needs_snapshot(actor)
+	var payload: Dictionary = {
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"source": source,
+		"source_id": source_id,
+		"deltas": deltas.duplicate(true),
+		"needs_before": before,
+		"needs_after": after,
+	}
+	_emit("settlement_life_needs_changed", payload.duplicate(true))
+	return payload
 
 
 func _world_turn_actor_order() -> Array:
@@ -4167,7 +4354,7 @@ func _npc_move_to_life_target(actor: RefCounted, target_grid: Dictionary, topolo
 		}
 	var path: Array = _array_or_empty(best_plan.get("path", []))
 	if path.size() <= 1:
-		return {
+		var already_result := {
 			"success": true,
 			"actor_id": actor.actor_id,
 			"intent": intent_name,
@@ -4179,6 +4366,8 @@ func _npc_move_to_life_target(actor: RefCounted, target_grid: Dictionary, topolo
 			"path_length": path.size(),
 			"life_intent": intent.duplicate(true),
 		}
+		_apply_life_arrival_effect(actor, intent, already_result)
+		return already_result
 	var next_step: Dictionary = _dictionary_or_empty(path[1])
 	var from: Dictionary = actor.grid_position.to_dictionary()
 	_auto_open_door_for_step(actor.actor_id, next_step, topology)
@@ -4197,7 +4386,7 @@ func _npc_move_to_life_target(actor: RefCounted, target_grid: Dictionary, topolo
 		"steps": 1,
 		"life_intent": intent_name,
 	})
-	return {
+	var move_result := {
 		"success": true,
 		"actor_id": actor.actor_id,
 		"intent": intent_name,
@@ -4212,6 +4401,52 @@ func _npc_move_to_life_target(actor: RefCounted, target_grid: Dictionary, topolo
 		"remaining_steps": max(0, int(best_plan.get("steps", 0)) - 1),
 		"life_intent": intent.duplicate(true),
 	}
+	if actor.grid_position.key() == target_coord.key():
+		_apply_life_arrival_effect(actor, intent, move_result)
+	return move_result
+
+
+func _apply_life_arrival_effect(actor: RefCounted, intent: Dictionary, result: Dictionary) -> void:
+	if str(intent.get("intent", "")) != "use_smart_object":
+		return
+	var smart_object_id := str(intent.get("smart_object_id", ""))
+	var smart_object_kind := str(intent.get("smart_object_kind", ""))
+	var deltas: Dictionary = _smart_object_need_deltas(smart_object_kind, _array_or_empty(intent.get("smart_object_tags", [])))
+	var need_change: Dictionary = _apply_life_need_delta(actor, deltas, "smart_object", smart_object_id)
+	result["smart_object_id"] = smart_object_id
+	result["smart_object_kind"] = smart_object_kind
+	result["life_need_change"] = need_change
+	_emit("settlement_life_smart_object_used", {
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"settlement_id": str(intent.get("settlement_id", "")),
+		"smart_object_id": smart_object_id,
+		"smart_object_kind": smart_object_kind,
+		"smart_object_tags": _array_or_empty(intent.get("smart_object_tags", [])).duplicate(true),
+		"target_grid": _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true),
+		"need_change": need_change,
+	})
+
+
+func _smart_object_need_deltas(kind: String, tags: Array) -> Dictionary:
+	match kind:
+		"bed":
+			return {"energy_delta": 20.0, "morale_delta": 4.0}
+		"canteen_seat":
+			return {"hunger_delta": 28.0, "morale_delta": 3.0}
+		"recreation_spot":
+			return {"morale_delta": 20.0}
+		"medical_station":
+			return {"morale_delta": 8.0}
+		"guard_post":
+			return {"morale_delta": 2.0}
+		"alarm_point":
+			return {"morale_delta": -2.0}
+	if tags.has("meal"):
+		return {"hunger_delta": 20.0}
+	if tags.has("morale"):
+		return {"morale_delta": 15.0}
+	return {}
 
 
 func _npc_wait_for_ap(actor: RefCounted, target_actor_id: int, planned_intent: String, reason: String, required_ap: float) -> Dictionary:

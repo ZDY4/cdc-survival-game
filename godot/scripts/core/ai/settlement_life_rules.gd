@@ -30,6 +30,8 @@ func decide_intent(actor: RefCounted, context: Dictionary) -> Dictionary:
 				"intent": "use_smart_object",
 				"settlement_id": str(settlement.get("id", "")),
 				"smart_object_id": str(duty_object.get("id", "")),
+				"smart_object_kind": str(duty_object.get("kind", "")),
+				"smart_object_tags": _array_or_empty(duty_object.get("tags", [])).duplicate(true),
 				"target_grid": _anchor_grid(settlement, str(duty_object.get("anchor_id", ""))),
 				"schedule_label": str(schedule_block.get("label", "")),
 			}

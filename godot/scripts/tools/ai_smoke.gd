@@ -144,6 +144,21 @@ func _expect_settlement_life_world_turn(registry: RefCounted) -> Array[String]:
 		errors.append("settlement patrol movement_step should expose life_intent")
 	if str(_dictionary_or_empty(patrol_simulation.snapshot().get("world_time", {})).get("day", "")) != "monday":
 		errors.append("simulation snapshot should persist world_time day")
+	if int(_dictionary_or_empty(patrol_simulation.snapshot().get("world_time", {})).get("minute_of_day", 0)) != 555:
+		errors.append("world turn should advance world_time by 15 minutes")
+	var patrol_need_tick: Dictionary = _dictionary_or_empty(patrol_result.get("life_need_tick", {}))
+	if patrol_need_tick.is_empty():
+		errors.append("settlement world turn should expose life need tick on NPC result")
+	else:
+		var needs_before: Dictionary = _dictionary_or_empty(patrol_need_tick.get("needs_before", {}))
+		var needs_after: Dictionary = _dictionary_or_empty(patrol_need_tick.get("needs_after", {}))
+		if _need_current(needs_after, "hunger") >= _need_current(needs_before, "hunger"):
+			errors.append("settlement life hunger should decay during world turn")
+		if _need_current(needs_after, "energy") >= _need_current(needs_before, "energy"):
+			errors.append("settlement life energy should decay during world turn")
+	var time_event: Dictionary = _last_event_payload(patrol_simulation.snapshot(), "world_time_advanced")
+	if int(time_event.get("minutes", 0)) != 15 or int(time_event.get("life_tick_count", 0)) <= 0:
+		errors.append("world_time_advanced event should expose minutes and life tick count")
 
 	var home_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var home_player: RefCounted = home_simulation.actor_registry.get_actor(1)
@@ -165,6 +180,57 @@ func _expect_settlement_life_world_turn(registry: RefCounted) -> Array[String]:
 	restored.load_snapshot(home_simulation.snapshot())
 	if JSON.stringify(restored.snapshot().get("world_time", {})) != JSON.stringify(home_simulation.snapshot().get("world_time", {})):
 		errors.append("world_time should roundtrip through simulation snapshot")
+	errors.append_array(_expect_settlement_life_smart_object_effect(registry))
+	return errors
+
+
+func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 360}
+	var cook_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(8, 0, 10), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var cook: RefCounted = simulation.actor_registry.get_actor(cook_id)
+	cook.life["duty_route_id"] = ""
+	cook.life["runtime"] = {
+		"needs": {
+			"hunger": {"current": 50.0, "max": 100.0},
+			"energy": {"current": 75.0, "max": 100.0},
+			"morale": {"current": 50.0, "max": 100.0},
+		}
+	}
+	var results: Array = simulation.advance_world_turn(_open_settlement_topology())
+	var result: Dictionary = _npc_result_for_actor(results, cook_id)
+	if str(result.get("intent", "")) != "use_smart_object":
+		errors.append("settlement cook without route should use smart object on shift, got %s" % result)
+	if str(result.get("smart_object_kind", "")) != "bed":
+		errors.append("settlement smart object result should expose selected kind, got %s" % result)
+	var need_change: Dictionary = _dictionary_or_empty(result.get("life_need_change", {}))
+	if need_change.is_empty():
+		errors.append("settlement smart object use should expose need change")
+	else:
+		var before: Dictionary = _dictionary_or_empty(need_change.get("needs_before", {}))
+		var after: Dictionary = _dictionary_or_empty(need_change.get("needs_after", {}))
+		if _need_current(after, "energy") <= _need_current(before, "energy"):
+			errors.append("bed smart object should recover energy")
+		if _need_current(after, "morale") <= _need_current(before, "morale"):
+			errors.append("bed smart object should recover morale")
+	var smart_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_smart_object_used")
+	if str(smart_event.get("smart_object_kind", "")) != "bed":
+		errors.append("smart object used event should expose kind")
+	var tick_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_needs_ticked")
+	if int(tick_event.get("actor_id", 0)) != cook_id:
+		errors.append("settlement life need tick event should include cook actor")
+	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	restored.load_snapshot(simulation.snapshot())
+	var restored_actor: RefCounted = restored.actor_registry.get_actor(cook_id)
+	var restored_needs: Dictionary = _dictionary_or_empty(_dictionary_or_empty(restored_actor.life.get("runtime", {})).get("needs", {}))
+	if _need_current(restored_needs, "energy") <= 75.0:
+		errors.append("settlement life needs should roundtrip through actor life snapshot")
 	return errors
 
 
@@ -672,6 +738,11 @@ func _event_count(snapshot: Dictionary, kind: String) -> int:
 		if event_data.get("kind", "") == kind:
 			count += 1
 	return count
+
+
+func _need_current(needs: Dictionary, need_id: String) -> float:
+	var need: Dictionary = _dictionary_or_empty(needs.get(need_id, {}))
+	return float(need.get("current", 0.0))
 
 
 func _npc_results_include_attack(results: Array, actor_id: int) -> bool:
