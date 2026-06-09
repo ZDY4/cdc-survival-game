@@ -33,6 +33,7 @@ var _last_snapshot: Dictionary = {}
 var _reason_catalog := ReasonCatalog.new()
 var _pending_craft_recipe: Dictionary = {}
 var _pending_craft_count := 0
+var _suppress_quantity_audio := false
 
 
 func _ready() -> void:
@@ -104,6 +105,10 @@ func _build_layout() -> void:
 	_search_box.custom_minimum_size = Vector2(0, 28)
 	_search_box.text_changed.connect(func(text: String) -> void:
 		_search_text = text.strip_edges().to_lower()
+		_play_crafting_control_audio("ui_slider_changed", "SearchBox", "line_edit", "search_recipe", {
+			"recipe_id": _selected_recipe_id,
+			"value": text,
+		})
 		if not _last_snapshot.is_empty():
 			apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
@@ -130,6 +135,12 @@ func _build_layout() -> void:
 	_quantity_spin.value = 1
 	_quantity_spin.custom_minimum_size = Vector2(84, 28)
 	_quantity_spin.value_changed.connect(func(_value: float) -> void:
+		if not _suppress_quantity_audio and not _selected_recipe_id.is_empty():
+			_play_crafting_control_audio("ui_slider_changed", "CraftQuantitySpin", "spin_box", "set_craft_quantity", {
+				"recipe_id": _selected_recipe_id,
+				"count": int(_quantity_spin.value),
+				"value": int(_quantity_spin.value),
+			})
 		_apply_detail(_recipe_by_id(_last_snapshot.get("recipes", []), _selected_recipe_id))
 	, CONNECT_DEFERRED)
 	_queue_label = _label("CraftQueueLine")
@@ -152,19 +163,34 @@ func _build_layout() -> void:
 	_pending_progress_state_label.visible = false
 	_cancel_pending_button = _toolbar_button("CancelPendingCraftingButton", "取消制作", "取消正在跨回合进行的制作")
 	_cancel_pending_button.toggle_mode = false
-	_cancel_pending_button.pressed.connect(_cancel_pending_crafting, CONNECT_DEFERRED)
+	_cancel_pending_button.pressed.connect(func() -> void:
+		_play_crafting_control_audio("ui_button_pressed", "CancelPendingCraftingButton", "button", "cancel_pending_crafting", _pending_crafting_audio_payload())
+		_cancel_pending_crafting()
+	, CONNECT_DEFERRED)
 	_confirm_queue_button = _toolbar_button("ConfirmCraftQueueButton", "执行队列", "按顺序制作队列中的配方")
 	_confirm_queue_button.toggle_mode = false
-	_confirm_queue_button.pressed.connect(_confirm_craft_queue, CONNECT_DEFERRED)
+	_confirm_queue_button.pressed.connect(func() -> void:
+		_play_crafting_control_audio("ui_button_pressed", "ConfirmCraftQueueButton", "button", "confirm_craft_queue", {"queue_count": _craft_queue.size(), "count": _craft_queue_total_count()})
+		_confirm_craft_queue()
+	, CONNECT_DEFERRED)
 	_clear_queue_button = _toolbar_button("ClearCraftQueueButton", "清空", "取消全部队列")
 	_clear_queue_button.toggle_mode = false
-	_clear_queue_button.pressed.connect(_clear_craft_queue, CONNECT_DEFERRED)
+	_clear_queue_button.pressed.connect(func() -> void:
+		_play_crafting_control_audio("ui_button_pressed", "ClearCraftQueueButton", "button", "clear_craft_queue", {"queue_count": _craft_queue.size(), "count": _craft_queue_total_count()})
+		_clear_craft_queue()
+	, CONNECT_DEFERRED)
 	_craft_equipment_dialog = ConfirmationDialog.new()
 	_craft_equipment_dialog.name = "CraftEquipmentToolConfirmDialog"
 	_craft_equipment_dialog.title = "确认制作"
 	_craft_equipment_dialog.dialog_text = "制作会消耗已装备工具。确定继续吗？"
-	_craft_equipment_dialog.confirmed.connect(_confirm_pending_craft_equipment)
-	_craft_equipment_dialog.canceled.connect(_cancel_pending_craft_equipment)
+	_craft_equipment_dialog.confirmed.connect(func() -> void:
+		_play_crafting_control_audio("ui_button_pressed", "CraftEquipmentToolConfirmDialog", "dialog", "confirm_equipment_tool_craft", _recipe_audio_payload(_pending_craft_recipe, {"count": _pending_craft_count}))
+		_confirm_pending_craft_equipment()
+	)
+	_craft_equipment_dialog.canceled.connect(func() -> void:
+		_play_crafting_control_audio("ui_button_pressed", "CraftEquipmentToolConfirmDialog", "dialog", "cancel_equipment_tool_craft", _recipe_audio_payload(_pending_craft_recipe, {"count": _pending_craft_count}))
+		_cancel_pending_craft_equipment()
+	)
 	_craft_equipment_dialog.get_ok_button().text = "继续制作"
 	_craft_equipment_dialog.get_cancel_button().text = "取消"
 	add_child(_craft_equipment_dialog)
@@ -229,7 +255,10 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 	line.pressed.connect(func() -> void:
 		_selected_recipe_id = recipe_id
 		if _quantity_spin != null:
+			_suppress_quantity_audio = true
 			_quantity_spin.value = 1
+			_suppress_quantity_audio = false
+		_play_crafting_control_audio("ui_button_pressed", "Recipe_%s" % recipe_id, "recipe_row", "select_recipe", _recipe_audio_payload(recipe, {"count": 1}))
 		apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
 	var button := Button.new()
@@ -241,6 +270,7 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.pressed.connect(func() -> void:
 		var count := int(_quantity_spin.value) if _quantity_spin != null and _selected_recipe_id == recipe_id else 1
+		_play_crafting_control_audio("ui_button_pressed", "CraftButton_%s" % recipe_id, "button", "craft_recipe", _recipe_audio_payload(recipe, {"count": max(1, count)}))
 		_request_craft_recipe(recipe, max(1, count))
 	, CONNECT_DEFERRED)
 	var queue_button := Button.new()
@@ -253,6 +283,7 @@ func _recipe_row(recipe: Dictionary) -> HBoxContainer:
 	queue_button.focus_mode = Control.FOCUS_NONE
 	queue_button.pressed.connect(func() -> void:
 		var count := int(_quantity_spin.value) if _quantity_spin != null and _selected_recipe_id == recipe_id else 1
+		_play_crafting_control_audio("ui_button_pressed", "QueueButton_%s" % recipe_id, "button", "queue_recipe", _recipe_audio_payload(recipe, {"count": max(1, count), "queue_count": _craft_queue.size()}))
 		_queue_recipe(recipe, max(1, count))
 	, CONNECT_DEFERRED)
 	row.add_child(line)
@@ -409,6 +440,10 @@ func _missing_reason_button(node_name: String, text: String, query: String) -> B
 	button.custom_minimum_size = Vector2(320, 24)
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
+		_play_crafting_control_audio("ui_button_pressed", node_name, "missing_reason_button", "locate_missing_reason", {
+			"recipe_id": _selected_recipe_id,
+			"value": query,
+		})
 		_locate_missing_reason(query)
 	, CONNECT_DEFERRED)
 	return button
@@ -671,6 +706,9 @@ func _add_category_button(node_name: String, text: String, category: String) -> 
 	button.button_pressed = _category_filter == category
 	button.pressed.connect(func() -> void:
 		_category_filter = category
+		_play_crafting_control_audio("ui_button_pressed", node_name, "filter_button", "filter_category", {
+			"category_id": category,
+		})
 		if not _last_snapshot.is_empty():
 			apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
@@ -682,6 +720,9 @@ func _add_sort_button(node_name: String, text: String, mode: String) -> void:
 	button.button_pressed = _sort_mode == mode
 	button.pressed.connect(func() -> void:
 		_sort_mode = mode
+		_play_crafting_control_audio("ui_button_pressed", node_name, "sort_button", "sort_mode", {
+			"sort_id": mode,
+		})
 		if not _last_snapshot.is_empty():
 			apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
@@ -1388,6 +1429,7 @@ func _queue_entry_row(index: int, entry: Dictionary) -> HBoxContainer:
 	cancel_button.custom_minimum_size = Vector2(32, 24)
 	cancel_button.focus_mode = Control.FOCUS_NONE
 	cancel_button.pressed.connect(func() -> void:
+		_play_crafting_control_audio("ui_button_pressed", "CancelCraftQueueEntry_%d" % index, "queue_entry_button", "cancel_queue_entry", _queue_entry_audio_payload(entry, index))
 		_cancel_queue_entry(index)
 	, CONNECT_DEFERRED)
 	row.add_child(label)
@@ -1563,6 +1605,63 @@ func _label(node_name: String) -> Label:
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _play_crafting_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "crafting",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
+
+
+func _recipe_audio_payload(recipe: Dictionary, extra_payload: Dictionary = {}) -> Dictionary:
+	var count := int(extra_payload.get("count", 0))
+	if count <= 0 and _quantity_spin != null:
+		count = int(_quantity_spin.value)
+	var payload := {
+		"recipe_id": str(recipe.get("recipe_id", extra_payload.get("recipe_id", ""))),
+		"category_id": str(recipe.get("category", extra_payload.get("category_id", ""))),
+		"item_id": str(recipe.get("output_item_id", extra_payload.get("item_id", ""))),
+		"count": maxi(0, count),
+		"queue_count": _craft_queue.size(),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
+
+
+func _queue_entry_audio_payload(entry: Dictionary, index: int, extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"recipe_id": str(entry.get("recipe_id", "")),
+		"item_id": str(entry.get("output_item_id", "")),
+		"count": int(entry.get("count", 0)),
+		"queue_count": _craft_queue.size(),
+		"value": index,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
+
+
+func _pending_crafting_audio_payload(extra_payload: Dictionary = {}) -> Dictionary:
+	var pending: Dictionary = _dictionary_or_empty(_last_snapshot.get("pending_crafting", {}))
+	var payload := {
+		"recipe_id": str(pending.get("recipe_id", "")),
+		"count": int(pending.get("count", 0)),
+		"queue_count": _craft_queue.size(),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
 
 
 func _clear_recipes() -> void:

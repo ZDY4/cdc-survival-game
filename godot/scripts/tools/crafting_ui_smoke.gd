@@ -53,6 +53,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("basic bandage recipe snapshot should expose output thumbnail asset: %s" % bandage_thumbnail)
 	_press_category_button(game_root, "weapon")
 	await process_frame
+	_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "FilterCategory_weapon", "filter_button", "filter_category", {"category_id": "weapon"}, "weapon category filter audio")
 	if _recipe_text(game_root).contains("基础绷带"):
 		errors.append("weapon category filter should hide medical recipes")
 	if not _recipe_text(game_root).contains("小刀"):
@@ -73,6 +74,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		skill_unlock_locator.pressed.emit()
 		await process_frame
+		_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "MissingReasonUnlock_survival", "missing_reason_button", "locate_missing_reason", {"recipe_id": "smoke_skill_unlock_recipe", "value": "生存本能"}, "skill unlock locator audio")
 		if _search_box(game_root) == null or _search_box(game_root).text != "生存本能":
 			errors.append("missing skill unlock locator should search by skill name")
 		_search_box(game_root).text = ""
@@ -203,6 +205,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			await process_frame
 			_confirm_craft_equipment_dialog(game_root)
 			await process_frame
+			_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "CraftEquipmentToolConfirmDialog", "dialog", "confirm_equipment_tool_craft", {"recipe_id": "smoke_consumes_tool_recipe", "count": "1"}, "equipped craft confirmation audio")
 	if player_for_consumable_tool.equipment.has("utility"):
 		errors.append("confirmed equipped consumable craft should remove equipment slot")
 	if _player_inventory_count(game_root, "1011") != 0:
@@ -305,6 +308,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		search.text = "血清"
 		search.text_changed.emit(search.text)
 		await process_frame
+		_assert_crafting_control_audio(errors, game_root, "ui_slider_changed", "ui_slider", "SearchBox", "line_edit", "search_recipe", {"value": "血清"}, "crafting search audio")
 		if not _recipe_text(game_root).contains("抗体血清"):
 			errors.append("crafting search should match recipe names")
 		if _recipe_text(game_root).contains("基础绷带"):
@@ -529,6 +533,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_crafting_panel()
 	_press_sort_button(game_root, "SortCraftableButton")
 	await process_frame
+	_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "SortCraftableButton", "sort_button", "sort_mode", {"sort_id": "craftable"}, "craftable sort audio")
 	if not _summary_line(game_root).contains("可制作优先"):
 		errors.append("crafting summary should show active sort mode")
 	if _recipe_lines(game_root).is_empty() or not _recipe_lines(game_root)[0].contains("基础绷带"):
@@ -538,6 +543,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _press_recipe_line(game_root, "recipe_bandage_basic"):
 		errors.append("should select basic bandage recipe")
 	await process_frame
+	_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Recipe_recipe_bandage_basic", "recipe_row", "select_recipe", {"recipe_id": "recipe_bandage_basic", "count": "1"}, "bandage recipe row select audio")
 	var quantity_spin: SpinBox = _quantity_spin(game_root)
 	if quantity_spin == null:
 		errors.append("crafting panel should expose quantity spin")
@@ -546,6 +552,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("crafting quantity max should reflect available materials")
 		quantity_spin.value = 2
 		await process_frame
+		_assert_crafting_control_audio(errors, game_root, "ui_slider_changed", "ui_slider", "CraftQuantitySpin", "spin_box", "set_craft_quantity", {"recipe_id": "recipe_bandage_basic", "count": "2", "value": "2"}, "craft quantity spin audio")
 	if not _detail_text(game_root).contains("输出: 绷带 x2"):
 		errors.append("crafting detail should preview multiplied output")
 	if not _detail_text(game_root).contains("材料: 布料 4/4"):
@@ -559,6 +566,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_queue_button(game_root, "recipe_bandage_basic").pressed.emit()
 		await process_frame
+		_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "QueueButton_recipe_bandage_basic", "button", "queue_recipe", {"recipe_id": "recipe_bandage_basic", "count": "2"}, "queue bandage audio")
 		if not _queue_line(game_root).contains("制作队列 1项/2次") or not _queue_line(game_root).contains("基础绷带 x2"):
 			errors.append("crafting queue should show queued batch bandage")
 		_assert_craft_queue_snapshot(errors, game_root, 1, 2, 2, true, "queued batch bandage")
@@ -576,6 +584,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		else:
 			cancel_button.pressed.emit()
 			await process_frame
+			_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "CancelCraftQueueEntry_0", "queue_entry_button", "cancel_queue_entry", {"recipe_id": "recipe_bandage_basic", "count": "2", "queue_count": "1", "value": "0"}, "cancel queue entry audio")
 			if not _queue_line(game_root).contains("制作队列 空"):
 				errors.append("cancelling queued craft should empty queue")
 			_assert_craft_queue_snapshot(errors, game_root, 0, 0, 0, false, "cancelled queue item")
@@ -588,6 +597,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		else:
 			_confirm_queue_button(game_root).pressed.emit()
 	await process_frame
+	_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ConfirmCraftQueueButton", "button", "confirm_craft_queue", {"queue_count": "1", "count": "2"}, "confirm craft queue audio")
 	if not _feedback_text(game_root).contains("已执行制作队列: 2次"):
 		errors.append("crafting panel should show queue execution feedback")
 	if not _queue_line(game_root).contains("制作队列 空"):
@@ -673,6 +683,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		cancel_pending_button.pressed.emit()
 		await process_frame
+		_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "CancelPendingCraftingButton", "button", "cancel_pending_crafting", {"recipe_id": "recipe_bandage_basic", "count": "50"}, "cancel pending crafting audio")
 		if not _pending_crafting_line(game_root).contains("正在制作 无"):
 			errors.append("cancelled pending crafting should clear pending line")
 		var cancelled_progress_bar := _pending_crafting_progress_bar(game_root)
@@ -970,6 +981,38 @@ func _assert_station_permission_preview(errors: Array[String], game_root: Node, 
 	var detail := _detail_text(game_root)
 	if not detail.contains(str(preview.get("text", ""))):
 		errors.append("%s: detail text should include station permission preview: %s / %s" % [context, preview, detail])
+
+
+func _assert_crafting_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = {}
+	for index in range(recent.size() - 1, -1, -1):
+		var candidate: Dictionary = _dictionary_or_empty(recent[index])
+		if str(candidate.get("audio_source", "")) != "ui" or str(candidate.get("panel_id", "")) != "crafting":
+			continue
+		if str(candidate.get("event_kind", "")) != expected_event_kind or str(candidate.get("sound_id", "")) != expected_sound_id:
+			continue
+		if str(candidate.get("control_name", "")) != expected_control_name:
+			continue
+		entry = candidate
+		break
+	if entry.is_empty():
+		errors.append("%s: expected crafting audio %s/%s/%s, got %s" % [context, expected_event_kind, expected_sound_id, expected_control_name, snapshot])
+		return
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
 
 
 func _confirm_queue_button(game_root: Node) -> Button:
