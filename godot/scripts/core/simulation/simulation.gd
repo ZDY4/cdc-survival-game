@@ -3984,6 +3984,9 @@ func _record_life_presence(actor: RefCounted, mode: String, minutes: int, need_t
 		presence["last_need_tick"] = need_tick.duplicate(true)
 	if not background_action.is_empty():
 		presence["background_action"] = _background_life_action_summary(background_action)
+	var status: Dictionary = _record_life_status(actor, _life_status_from_background_action(actor, background_action, presence))
+	if not status.is_empty():
+		presence["status"] = status.duplicate(true)
 	var runtime: Dictionary = _ensure_life_runtime(actor)
 	runtime["presence"] = presence.duplicate(true)
 	_set_life_runtime(actor, runtime)
@@ -3998,6 +4001,159 @@ func _life_reservation_actor_id_set(reservations: Array[Dictionary]) -> Dictiona
 		if actor_id > 0:
 			output[actor_id] = true
 	return output
+
+
+func _record_life_status(actor: RefCounted, status: Dictionary) -> Dictionary:
+	if actor == null or status.is_empty():
+		return {}
+	var runtime: Dictionary = _ensure_life_runtime(actor)
+	var previous: Dictionary = _dictionary_or_empty(runtime.get("status", {}))
+	var output: Dictionary = status.duplicate(true)
+	output["previous_state_id"] = str(previous.get("state_id", ""))
+	output["changed"] = _life_status_changed(previous, output)
+	runtime["status"] = output.duplicate(true)
+	_set_life_runtime(actor, runtime)
+	if bool(output.get("changed", false)):
+		_emit("settlement_life_status_changed", output.duplicate(true))
+	return output
+
+
+func _life_status_changed(previous: Dictionary, status: Dictionary) -> bool:
+	if previous.is_empty():
+		return true
+	for key in ["state_id", "state_group", "activity_id", "mode", "planner_action_id", "smart_object_id", "route_id"]:
+		if str(previous.get(key, "")) != str(status.get(key, "")):
+			return true
+	return false
+
+
+func _life_status_from_background_action(actor: RefCounted, action: Dictionary, presence: Dictionary) -> Dictionary:
+	if action.is_empty():
+		return _life_status_base(actor, "background_idle", "idle", "background_idle", "后台待命", presence, {})
+	var status: Dictionary = _life_status_from_life_result(actor, _dictionary_or_empty(action.get("life_intent", {})), action, "background")
+	status["mode"] = "background"
+	status["elapsed_minutes"] = int(action.get("elapsed_minutes", 0))
+	status["remaining_minutes"] = int(action.get("remaining_minutes", 0))
+	status["action_duration_minutes"] = int(action.get("action_duration_minutes", 0))
+	status["completed"] = bool(action.get("completed", false))
+	status["world_time"] = _dictionary_or_empty(presence.get("world_time", world_time)).duplicate(true)
+	return status
+
+
+func _life_status_from_life_result(actor: RefCounted, intent: Dictionary, result: Dictionary, mode: String) -> Dictionary:
+	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
+	var planner_action_id := str(intent.get("planner_action_id", planner.get("action_id", result.get("planner_action_id", ""))))
+	var status_id := _life_status_id(intent, result, planner_action_id)
+	var group := _life_status_group(status_id, planner_action_id)
+	var activity_id := planner_action_id if not planner_action_id.is_empty() else str(result.get("intent", intent.get("intent", "idle")))
+	var label := _life_status_label(status_id, activity_id)
+	var status: Dictionary = _life_status_base(actor, status_id, group, activity_id, label, {
+		"mode": mode,
+		"world_time": world_time.duplicate(true),
+	}, result)
+	status["goal_id"] = str(intent.get("goal_id", planner.get("goal_id", result.get("goal_id", ""))))
+	status["planner_action_id"] = planner_action_id
+	status["planner_action_reason"] = str(intent.get("planner_action_reason", planner.get("action_reason", result.get("planner_action_reason", ""))))
+	status["intent"] = str(result.get("intent", intent.get("intent", "")))
+	status["reason"] = str(result.get("reason", ""))
+	status["settlement_id"] = str(intent.get("settlement_id", status.get("settlement_id", "")))
+	status["schedule_label"] = str(intent.get("schedule_label", ""))
+	status["route_id"] = str(result.get("route_id", intent.get("route_id", "")))
+	status["anchor_id"] = str(intent.get("anchor_id", ""))
+	status["smart_object_id"] = str(result.get("smart_object_id", intent.get("smart_object_id", "")))
+	status["smart_object_kind"] = str(result.get("smart_object_kind", intent.get("smart_object_kind", "")))
+	status["target_grid"] = _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true)
+	return status
+
+
+func _life_status_base(actor: RefCounted, state_id: String, state_group: String, activity_id: String, activity_label: String, presence: Dictionary, result: Dictionary) -> Dictionary:
+	var life: Dictionary = _dictionary_or_empty(actor.life)
+	return {
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"settlement_id": str(life.get("settlement_id", "")),
+		"state_id": state_id,
+		"state_group": state_group,
+		"activity_id": activity_id,
+		"activity_label": activity_label,
+		"mode": str(presence.get("mode", "online")),
+		"world_time": _dictionary_or_empty(presence.get("world_time", world_time)).duplicate(true),
+		"success": bool(result.get("success", true)),
+	}
+
+
+func _life_status_id(intent: Dictionary, result: Dictionary, planner_action_id: String) -> String:
+	if not bool(result.get("success", true)):
+		return "blocked"
+	match planner_action_id:
+		"travel_to_duty_area", "travel_home", "travel_to_canteen", "travel_to_leisure":
+			return "traveling"
+		"patrol_route":
+			return "patrolling"
+		"stand_guard", "respond_alarm", "raise_alarm":
+			return "guarding"
+		"restock_meal_service":
+			return "servicing"
+		"treat_patients":
+			return "treating"
+		"eat_meal":
+			return "eating"
+		"sleep":
+			return "resting"
+		"relax":
+			return "relaxing"
+		"idle_safely":
+			return "idle"
+	match str(result.get("intent", intent.get("intent", ""))):
+		"follow_route":
+			return "patrolling"
+		"return_home":
+			return "traveling"
+		"use_smart_object":
+			return "servicing"
+	return "idle"
+
+
+func _life_status_group(state_id: String, planner_action_id: String) -> String:
+	match state_id:
+		"traveling", "patrolling":
+			return "work"
+		"guarding", "servicing", "treating":
+			return "service"
+		"eating", "resting", "relaxing":
+			return "rest"
+		"blocked":
+			return "blocked"
+	if planner_action_id.is_empty():
+		return "idle"
+	return "work"
+
+
+func _life_status_label(state_id: String, activity_id: String) -> String:
+	match state_id:
+		"traveling":
+			return "前往目标"
+		"patrolling":
+			return "巡逻"
+		"guarding":
+			return "警戒"
+		"servicing":
+			return "服务"
+		"treating":
+			return "治疗"
+		"eating":
+			return "用餐"
+		"resting":
+			return "休息"
+		"relaxing":
+			return "放松"
+		"blocked":
+			return "受阻"
+		"background_idle":
+			return "后台待命"
+	if activity_id.is_empty():
+		return "待命"
+	return activity_id
 
 
 func _advance_background_settlement_life(actor: RefCounted, minutes: int) -> Dictionary:
@@ -4605,6 +4761,9 @@ func _advance_npc_life_action(actor: RefCounted, intent: Dictionary, topology: D
 			"life_intent": intent.duplicate(true),
 		}
 	_record_life_planner_runtime(actor, intent, result)
+	var status: Dictionary = _record_life_status(actor, _life_status_from_life_result(actor, intent, result, "online"))
+	if not status.is_empty():
+		result["life_status"] = status.duplicate(true)
 	return result
 
 

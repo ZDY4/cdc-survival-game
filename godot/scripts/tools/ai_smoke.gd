@@ -166,6 +166,12 @@ func _expect_settlement_life_world_turn(registry: RefCounted) -> Array[String]:
 	var patrol_runtime_presence: Dictionary = _dictionary_or_empty(patrol_life_runtime.get("presence", {}))
 	if str(patrol_runtime_presence.get("mode", "")) != "online" or str(patrol_runtime_presence.get("active_map_id", "")) != patrol_simulation.active_map_id:
 		errors.append("settlement online actor runtime should store active-map presence, got %s" % patrol_runtime_presence)
+	var patrol_status: Dictionary = _dictionary_or_empty(patrol_result.get("life_status", {}))
+	if str(patrol_status.get("mode", "")) != "online" or str(patrol_status.get("state_id", "")).is_empty() or str(patrol_status.get("state_group", "")).is_empty():
+		errors.append("settlement online actor result should expose life status, got %s" % patrol_status)
+	var patrol_runtime_status: Dictionary = _dictionary_or_empty(patrol_life_runtime.get("status", {}))
+	if str(patrol_runtime_status.get("mode", "")) != "online" or int(patrol_runtime_status.get("actor_id", 0)) != patrol_guard_id:
+		errors.append("settlement online actor runtime should store life status, got %s" % patrol_runtime_status)
 
 	var home_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var home_player: RefCounted = home_simulation.actor_registry.get_actor(1)
@@ -216,6 +222,9 @@ func _expect_settlement_life_background_tick(registry: RefCounted) -> Array[Stri
 		errors.append("background presence should expose actor and active map ids, got %s" % presence)
 	if not bool(presence.get("has_need_tick", false)) or _dictionary_or_empty(presence.get("last_need_tick", {})).is_empty():
 		errors.append("background presence should link the need tick summary, got %s" % presence)
+	var background_status: Dictionary = _dictionary_or_empty(presence.get("status", {}))
+	if str(background_status.get("mode", "")) != "background" or str(background_status.get("state_id", "")).is_empty():
+		errors.append("background presence should expose life status, got %s" % background_status)
 	var background_event: Dictionary = _last_event_payload_for_actor(simulation.snapshot(), "settlement_life_background_ticked", guard_id)
 	if str(background_event.get("mode", "")) != "background" or str(background_event.get("actor_map_id", "")) != remote_map_id:
 		errors.append("settlement_life_background_ticked should expose remote actor presence, got %s" % background_event)
@@ -227,6 +236,9 @@ func _expect_settlement_life_background_tick(registry: RefCounted) -> Array[Stri
 	var restored_presence: Dictionary = _dictionary_or_empty(_life_runtime_for_actor(restored, guard_id).get("presence", {}))
 	if JSON.stringify(restored_presence) != JSON.stringify(presence):
 		errors.append("background life presence should roundtrip through actor life snapshot, got %s" % restored_presence)
+	var restored_status: Dictionary = _dictionary_or_empty(_life_runtime_for_actor(restored, guard_id).get("status", {}))
+	if JSON.stringify(restored_status) != JSON.stringify(_dictionary_or_empty(runtime.get("status", {}))):
+		errors.append("background life status should roundtrip through actor life snapshot, got %s" % restored_status)
 	var action_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var action_player: RefCounted = action_simulation.actor_registry.get_actor(1)
 	action_player.grid_position = GridCoord.new(0, 0, 0)
@@ -254,6 +266,9 @@ func _expect_settlement_life_background_tick(registry: RefCounted) -> Array[Stri
 	var background_action: Dictionary = _dictionary_or_empty(action_presence.get("background_action", {}))
 	if str(background_action.get("planner_action_id", "")) != "travel_to_canteen" or not bool(background_action.get("completed", false)):
 		errors.append("off-map settlement NPC should complete first background travel action, got %s" % background_action)
+	var travel_status: Dictionary = _dictionary_or_empty(action_presence.get("status", {}))
+	if str(travel_status.get("mode", "")) != "background" or str(travel_status.get("state_id", "")) != "traveling":
+		errors.append("background travel should expose traveling life status, got %s" % travel_status)
 	if cook.grid_position.key() != GridCoord.from_dictionary(_dictionary_or_empty(background_action.get("target_grid", {}))).key():
 		errors.append("completed background settlement action should move actor to target grid, got %s" % cook.grid_position.to_dictionary())
 	var action_planner: Dictionary = _planner_runtime_for_actor(action_simulation, cook_id)
@@ -277,6 +292,9 @@ func _expect_settlement_life_background_tick(registry: RefCounted) -> Array[Stri
 		errors.append("background queued restock should be in progress after one segment, got %s" % restock_progress)
 	if int(restock_progress.get("elapsed_minutes", 0)) != 15 or int(restock_progress.get("remaining_minutes", 0)) != 30:
 		errors.append("background restock first segment should expose 15/45 minute progress, got %s" % restock_progress)
+	var restock_status: Dictionary = _dictionary_or_empty(action_runtime.get("status", {}))
+	if str(restock_status.get("state_id", "")) != "servicing" or str(restock_status.get("state_group", "")) != "service" or str(restock_status.get("mode", "")) != "background":
+		errors.append("background restock progress should expose service life status, got %s" % restock_status)
 	meal_reservation = _dictionary_or_empty(_dictionary_or_empty(action_runtime.get("reservations", {})).get("meal_object", {}))
 	if meal_reservation.is_empty() or not bool(meal_reservation.get("active", false)):
 		errors.append("background restock should keep reservation while action is in progress, got %s" % action_runtime)
@@ -293,6 +311,9 @@ func _expect_settlement_life_background_tick(registry: RefCounted) -> Array[Stri
 	var restock_completed: Dictionary = _dictionary_or_empty(action_runtime.get("last_background_action", {}))
 	if str(restock_completed.get("planner_action_id", "")) != "restock_meal_service" or not bool(restock_completed.get("completed", false)):
 		errors.append("background restock should complete after three segments, got %s" % restock_completed)
+	var completed_status: Dictionary = _dictionary_or_empty(action_runtime.get("status", {}))
+	if str(completed_status.get("state_id", "")) != "servicing" or not bool(completed_status.get("completed", false)):
+		errors.append("background restock completion should retain completed service status, got %s" % completed_status)
 	var final_planner: Dictionary = _planner_runtime_for_actor(action_simulation, cook_id)
 	if not bool(final_planner.get("queue_complete", false)) or int(final_planner.get("queue_remaining", -1)) != 0:
 		errors.append("background restock completion should finish planner queue, got %s" % final_planner)
