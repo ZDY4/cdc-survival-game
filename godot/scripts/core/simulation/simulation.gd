@@ -5163,6 +5163,7 @@ func _resume_pending_interaction(actor: RefCounted, topology: Dictionary, moveme
 
 func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 	var equipped_item_id: String = str(actor.equipment.get("main_hand", ""))
+	var item_data: Dictionary = _item_data_from_library(equipped_item_id, items)
 	var weapon: Dictionary = _weapon_fragment(equipped_item_id, items)
 	if weapon.is_empty():
 		return {
@@ -5177,11 +5178,16 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 			"on_hit_effect_ids": [],
 			"equipment_slot": "main_hand",
 			"max_ammo": 0,
+			"effect_data": _dictionary_or_empty(item_data.get("effect_data", {})).duplicate(true),
 		}
 	var attack_speed: float = max(0.1, float(weapon.get("attack_speed", 1.0)))
 	var weapon_range: int = max(1, _optional_int(weapon.get("range", DEFAULT_ATTACK_RANGE), DEFAULT_ATTACK_RANGE))
 	var weapon_min_range: int = clampi(_weapon_min_range(weapon), 0, weapon_range)
 	var max_ammo: int = _equipment_effects.weapon_magazine_capacity(actor, weapon, items)
+	var effect_data: Dictionary = _dictionary_or_empty(item_data.get("effect_data", {}))
+	var on_hit_effect_ids: Array[String] = _string_array(weapon.get("on_hit_effect_ids", []))
+	if on_hit_effect_ids.is_empty():
+		on_hit_effect_ids = _string_array(weapon.get("special_effects", []))
 	var profile := {
 		"item_id": equipped_item_id,
 		"damage": float(weapon.get("damage", actor.attack_power)),
@@ -5193,12 +5199,18 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 		"crit_multiplier": max(1.0, float(weapon.get("crit_multiplier", 1.0))),
 		"ammo_type": _normalize_item_id(weapon.get("ammo_type", "")),
 		"ammo_per_attack": 1,
-		"on_hit_effect_ids": _string_array(weapon.get("on_hit_effect_ids", [])),
+		"on_hit_effect_ids": on_hit_effect_ids,
 		"equipment_slot": "main_hand",
 		"max_ammo": max_ammo,
+		"effect_data": effect_data.duplicate(true),
 	}
 	if weapon.get("accuracy", null) != null:
 		profile["accuracy"] = _optional_float(weapon.get("accuracy", 0.0), 0.0)
+	for key in ["armor_pierce", "armor_break_chance", "armor_break_defense_multiplier"]:
+		if weapon.has(key):
+			profile[key] = _optional_float(weapon.get(key, 0.0), 0.0)
+		elif effect_data.has(key):
+			profile[key] = _optional_float(effect_data.get(key, 0.0), 0.0)
 	return profile
 
 
@@ -5238,17 +5250,23 @@ func _weapon_min_range(weapon: Dictionary) -> int:
 
 
 func _weapon_fragment(item_id: String, items: Dictionary) -> Dictionary:
-	if item_id.is_empty():
+	var item: Dictionary = _item_data_from_library(item_id, items)
+	if item.is_empty():
 		return {}
-	var record: Dictionary = _dictionary_or_empty(items.get(item_id, {}))
-	if record.is_empty():
-		return {}
-	var item: Dictionary = _dictionary_or_empty(record.get("data", record))
 	for fragment in _array_or_empty(item.get("fragments", [])):
 		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
 		if str(fragment_data.get("kind", "")) == "weapon":
 			return fragment_data
 	return {}
+
+
+func _item_data_from_library(item_id: String, items: Dictionary) -> Dictionary:
+	if item_id.is_empty():
+		return {}
+	var record: Dictionary = _dictionary_or_empty(items.get(item_id, {}))
+	if record.is_empty():
+		return {}
+	return _dictionary_or_empty(record.get("data", record))
 
 
 func _skill_data(skill_id: String, skills: Dictionary) -> Dictionary:

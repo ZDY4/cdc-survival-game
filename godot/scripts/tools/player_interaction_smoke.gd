@@ -1248,6 +1248,22 @@ func _expect_attack_event_metadata(errors: Array[String], snapshot: Dictionary, 
 		errors.append("%s should expose crit_chance" % context)
 	if absf(float(snapshot.get("crit_roll", -1.0)) - float(attack_result.get("crit_roll", -2.0))) > 0.001:
 		errors.append("%s should expose crit_roll" % context)
+	if absf(float(snapshot.get("defense", -1.0)) - float(attack_result.get("defense", 0.0))) > 0.001:
+		errors.append("%s should expose defense" % context)
+	if absf(float(snapshot.get("effective_defense", -1.0)) - float(attack_result.get("effective_defense", attack_result.get("defense", 0.0)))) > 0.001:
+		errors.append("%s should expose effective_defense" % context)
+	if absf(float(snapshot.get("armor_pierce", -1.0)) - float(attack_result.get("armor_pierce", 0.0))) > 0.001:
+		errors.append("%s should expose armor_pierce" % context)
+	if absf(float(snapshot.get("armor_pierced_defense", -1.0)) - float(attack_result.get("armor_pierced_defense", 0.0))) > 0.001:
+		errors.append("%s should expose armor_pierced_defense" % context)
+	if absf(float(snapshot.get("armor_break_chance", -1.0)) - float(attack_result.get("armor_break_chance", 0.0))) > 0.001:
+		errors.append("%s should expose armor_break_chance" % context)
+	if absf(float(snapshot.get("armor_break_roll", -1.0)) - float(attack_result.get("armor_break_roll", 1.0))) > 0.001:
+		errors.append("%s should expose armor_break_roll" % context)
+	if bool(snapshot.get("armor_break_triggered", false)) != bool(attack_result.get("armor_break_triggered", false)):
+		errors.append("%s should expose armor_break_triggered" % context)
+	if absf(float(snapshot.get("armor_break_defense_reduction", -1.0)) - float(attack_result.get("armor_break_defense_reduction", 0.0))) > 0.001:
+		errors.append("%s should expose armor_break_defense_reduction" % context)
 	if int(snapshot.get("combat_rng_counter", -1)) < 0:
 		errors.append("%s should expose combat_rng_counter" % context)
 	if bool(snapshot.get("friendly_fire", true)) != bool(attack_result.get("friendly_fire", false)):
@@ -1270,6 +1286,14 @@ func _expect_attack_marker_metadata(errors: Array[String], marker: Node, attack_
 		"hit_roll": marker.get_meta("hit_roll", -1.0),
 		"crit_chance": marker.get_meta("crit_chance", -1.0),
 		"crit_roll": marker.get_meta("crit_roll", -1.0),
+		"defense": marker.get_meta("defense", -1.0),
+		"effective_defense": marker.get_meta("effective_defense", -1.0),
+		"armor_pierce": marker.get_meta("armor_pierce", -1.0),
+		"armor_pierced_defense": marker.get_meta("armor_pierced_defense", -1.0),
+		"armor_break_chance": marker.get_meta("armor_break_chance", -1.0),
+		"armor_break_roll": marker.get_meta("armor_break_roll", -1.0),
+		"armor_break_triggered": marker.get_meta("armor_break_triggered", false),
+		"armor_break_defense_reduction": marker.get_meta("armor_break_defense_reduction", -1.0),
 		"combat_rng_counter": marker.get_meta("combat_rng_counter", -1),
 		"friendly_fire": marker.get_meta("friendly_fire", false),
 		"triggered_on_hit_effect_count": marker.get_meta("triggered_on_hit_effect_count", -1),

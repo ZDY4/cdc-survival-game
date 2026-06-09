@@ -1000,6 +1000,51 @@ func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation
 	if absf(float(armored.get("damage", 0.0)) - 4.0) > 0.01:
 		errors.append("equipped armor modifiers should apply defense and damage_reduction")
 
+	var pierce_target: int = _register_test_actor(simulation, "armor_pierce_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) - 2,
+		"y": y,
+		"z": z,
+	}, 40.0)
+	var pierce_actor: RefCounted = simulation.actor_registry.get_actor(pierce_target)
+	pierce_actor.defense = 10.0
+	pierce_actor.combat_attributes = {"damage_reduction": 0.0}
+	var pierce: Dictionary = simulation.perform_attack(player.actor_id, pierce_target, {}, {"range": 3, "weapon_profile": {"damage": 20.0, "crit_chance": 0.0, "armor_pierce": 0.5}})
+	if absf(float(pierce.get("damage", 0.0)) - 15.0) > 0.01:
+		errors.append("armor_pierce 0.5 should reduce 10 defense to 5 before damage")
+	if absf(float(pierce.get("effective_defense", 0.0)) - 5.0) > 0.01:
+		errors.append("armor_pierce attack should expose effective_defense 5")
+	if absf(float(pierce.get("armor_pierced_defense", 0.0)) - 5.0) > 0.01:
+		errors.append("armor_pierce attack should expose pierced defense amount")
+
+	var break_target: int = _register_test_actor(simulation, "armor_break_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) - 2,
+		"y": y,
+		"z": z + 1,
+	}, 40.0)
+	var break_actor: RefCounted = simulation.actor_registry.get_actor(break_target)
+	break_actor.defense = 15.0
+	break_actor.combat_attributes = {"damage_reduction": 0.0}
+	var break_attack: Dictionary = simulation.perform_attack(player.actor_id, break_target, {}, {
+		"range": 3,
+		"weapon_profile": {
+			"damage": 20.0,
+			"crit_chance": 0.0,
+			"armor_break_chance": 1.0,
+			"on_hit_effect_ids": ["armor_break"],
+		},
+	})
+	if absf(float(break_attack.get("damage", 0.0)) - 20.0) > 0.01:
+		errors.append("triggered armor_break should ignore remaining defense for current hit")
+	if not bool(break_attack.get("armor_break_triggered", false)):
+		errors.append("armor_break chance 1.0 should trigger")
+	if absf(float(break_attack.get("armor_break_defense_reduction", 0.0)) - 15.0) > 0.01:
+		errors.append("armor_break should expose defense reduction")
+	if not _array_or_empty(break_attack.get("triggered_on_hit_effect_ids", [])).has("armor_break"):
+		errors.append("triggered armor_break should remain in triggered_on_hit_effect_ids")
+	var break_event: Dictionary = _last_event_payload(simulation.snapshot(), "attack_resolved")
+	if not bool(break_event.get("armor_break_triggered", false)) or absf(float(break_event.get("effective_defense", 0.0))) > 0.01:
+		errors.append("attack_resolved should expose armor_break diagnostics")
+
 	var crit_target: int = _register_test_actor(simulation, "crit_target", "hostile", {
 		"x": int(player_grid.get("x", 0)),
 		"y": y,
@@ -1058,7 +1103,7 @@ func _expect_combat_attribute_damage_modifiers(errors: Array[String], simulation
 	if absf(float(buffed.get("damage_bonus", 0.0)) - 0.29) > 0.001:
 		errors.append("buffed attack result should expose stacked 0.29 damage_bonus")
 
-	for actor_id in [miss_target, blocked_target, reduced_target, armored_target, crit_target, passive_target, buffed_target]:
+	for actor_id in [miss_target, blocked_target, reduced_target, armored_target, pierce_target, break_target, crit_target, passive_target, buffed_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.combat_attributes = original_attributes
@@ -2021,6 +2066,54 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	_restore_player_turn(simulation, player)
 	player.ap = 20.0
 
+	player.equipment["main_hand"] = "1013"
+	var wrench_target: int = _register_test_actor(simulation, "weapon_profile_armor_break_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 1,
+	}, 80.0)
+	var wrench_enemy: RefCounted = simulation.actor_registry.get_actor(wrench_target)
+	wrench_enemy.hp = 80.0
+	wrench_enemy.max_hp = 80.0
+	wrench_enemy.defense = 10.0
+	wrench_enemy.combat_attributes["evasion"] = 0.0
+	var wrench_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": wrench_target, "topology": topology})
+	if not bool(wrench_result.get("success", false)):
+		errors.append("pipe wrench armor_break attack should succeed: %s" % wrench_result.get("reason", "unknown"))
+	if absf(float(wrench_result.get("armor_break_chance", 0.0)) - 0.25) > 0.001:
+		errors.append("pipe wrench attack should expose item effect_data armor_break_chance")
+	var wrench_profile: Dictionary = _dictionary_or_empty(wrench_result.get("weapon_profile", {}))
+	if absf(float(_dictionary_or_empty(wrench_profile.get("effect_data", {})).get("armor_break_chance", 0.0)) - 0.25) > 0.001:
+		errors.append("pipe wrench weapon_profile should carry top-level item effect_data")
+	_restore_player_turn(simulation, player)
+	player.ap = 20.0
+
+	player.equipment["main_hand"] = "1019"
+	player.weapon_ammo["main_hand"] = 1
+	var rifle_target: int = _register_test_actor(simulation, "weapon_profile_armor_pierce_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 3,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 1,
+	}, 80.0)
+	var rifle_enemy: RefCounted = simulation.actor_registry.get_actor(rifle_target)
+	rifle_enemy.hp = 80.0
+	rifle_enemy.max_hp = 80.0
+	rifle_enemy.defense = 10.0
+	rifle_enemy.combat_attributes["evasion"] = 0.0
+	var rifle_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": rifle_target, "topology": topology})
+	if not bool(rifle_result.get("success", false)):
+		errors.append("rifle armor_pierce attack should succeed: %s" % rifle_result.get("reason", "unknown"))
+	if absf(float(rifle_result.get("armor_pierce", 0.0)) - 0.5) > 0.001:
+		errors.append("rifle attack should expose item effect_data armor_pierce")
+	if absf(float(rifle_result.get("effective_defense", 0.0)) - 5.0) > 0.01:
+		errors.append("rifle armor_pierce should reduce defense 10 to effective_defense 5")
+	if simulation.actor_registry.get_actor(wrench_target) != null:
+		simulation.actor_registry.unregister_actor(wrench_target)
+	if simulation.actor_registry.get_actor(rifle_target) != null:
+		simulation.actor_registry.unregister_actor(rifle_target)
+	_restore_player_turn(simulation, player)
+	player.ap = 20.0
+
 	player.equipment["main_hand"] = "1002"
 	player.ap = 20.0
 	var bleeding_target: int = _register_test_actor(simulation, "on_hit_bleeding_target", "hostile", {
@@ -2184,7 +2277,7 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	var inventory_no_ammo: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": inventory_no_ammo_target, "topology": topology})
 	if inventory_no_ammo.get("reason", "") != "ammo_insufficient":
 		errors.append("ranged weapon without tracked magazine or inventory ammo should report ammo_insufficient")
-	for actor_id in [blunt_target, bleeding_target, poison_target, dot_defeat_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
+	for actor_id in [blunt_target, wrench_target, rifle_target, bleeding_target, poison_target, dot_defeat_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.active_effects = original_active_effects

@@ -32,7 +32,8 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	if bool(hit_roll.get("hit", true)):
 		critical_roll = _critical_hit(simulation, attacker, target, profile)
 	var critical: bool = bool(critical_roll.get("critical", false))
-	var damage_result: Dictionary = _resolve_damage(simulation, attacker, target, profile, critical) if bool(hit_roll.get("hit", true)) else _miss_damage_result(simulation, target, hit_roll)
+	var armor_context: Dictionary = _armor_context(simulation, attacker, target, profile, bool(hit_roll.get("hit", true)))
+	var damage_result: Dictionary = _resolve_damage(simulation, attacker, target, profile, critical, armor_context) if bool(hit_roll.get("hit", true)) else _miss_damage_result(simulation, target, hit_roll)
 	var damage: float = float(damage_result.get("damage", 0.0))
 	var triggered_on_hit_effect_ids: Array[String] = _triggered_on_hit_effect_ids(profile, damage_result)
 	target.hp = max(0.0, target.hp - damage)
@@ -52,6 +53,16 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"hit_chance": float(hit_roll.get("chance", 1.0)),
 		"accuracy": float(hit_roll.get("accuracy", 0.0)),
 		"evasion": float(hit_roll.get("evasion", 0.0)),
+		"defense": float(damage_result.get("defense", 0.0)),
+		"effective_defense": float(damage_result.get("effective_defense", damage_result.get("defense", 0.0))),
+		"damage_reduction": float(damage_result.get("damage_reduction", 0.0)),
+		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
+		"armor_pierce": float(damage_result.get("armor_pierce", 0.0)),
+		"armor_pierced_defense": float(damage_result.get("armor_pierced_defense", 0.0)),
+		"armor_break_chance": float(damage_result.get("armor_break_chance", 0.0)),
+		"armor_break_roll": float(damage_result.get("armor_break_roll", 1.0)),
+		"armor_break_triggered": bool(damage_result.get("armor_break_triggered", false)),
+		"armor_break_defense_reduction": float(damage_result.get("armor_break_defense_reduction", 0.0)),
 		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
 		"applied_on_hit_effects": applied_on_hit_effects.duplicate(true),
 		"friendly_fire": bool(target_check.get("friendly_fire", false)),
@@ -71,8 +82,15 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"crit_roll": float(critical_roll.get("roll", 1.0)),
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
 		"defense": float(damage_result.get("defense", 0.0)),
+		"effective_defense": float(damage_result.get("effective_defense", damage_result.get("defense", 0.0))),
 		"damage_reduction": float(damage_result.get("damage_reduction", 0.0)),
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
+		"armor_pierce": float(damage_result.get("armor_pierce", 0.0)),
+		"armor_pierced_defense": float(damage_result.get("armor_pierced_defense", 0.0)),
+		"armor_break_chance": float(damage_result.get("armor_break_chance", 0.0)),
+		"armor_break_roll": float(damage_result.get("armor_break_roll", 1.0)),
+		"armor_break_triggered": bool(damage_result.get("armor_break_triggered", false)),
+		"armor_break_defense_reduction": float(damage_result.get("armor_break_defense_reduction", 0.0)),
 		"hit_kind": str(damage_result.get("hit_kind", "hit")),
 		"hit_roll": float(hit_roll.get("roll", 0.0)),
 		"hit_chance": float(hit_roll.get("chance", 1.0)),
@@ -118,7 +136,16 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"hit_chance": float(hit_roll.get("chance", 1.0)),
 		"accuracy": float(hit_roll.get("accuracy", 0.0)),
 		"evasion": float(hit_roll.get("evasion", 0.0)),
+		"defense": float(damage_result.get("defense", 0.0)),
+		"effective_defense": float(damage_result.get("effective_defense", damage_result.get("defense", 0.0))),
+		"damage_reduction": float(damage_result.get("damage_reduction", 0.0)),
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
+		"armor_pierce": float(damage_result.get("armor_pierce", 0.0)),
+		"armor_pierced_defense": float(damage_result.get("armor_pierced_defense", 0.0)),
+		"armor_break_chance": float(damage_result.get("armor_break_chance", 0.0)),
+		"armor_break_roll": float(damage_result.get("armor_break_roll", 1.0)),
+		"armor_break_triggered": bool(damage_result.get("armor_break_triggered", false)),
+		"armor_break_defense_reduction": float(damage_result.get("armor_break_defense_reduction", 0.0)),
 		"triggered_on_hit_effect_ids": triggered_on_hit_effect_ids,
 		"applied_on_hit_effects": applied_on_hit_effects.duplicate(true),
 		"weapon_profile": profile,
@@ -393,7 +420,12 @@ func _triggered_on_hit_effect_ids(profile: Dictionary, damage_result: Dictionary
 	var hit_kind: String = str(damage_result.get("hit_kind", "hit"))
 	if not ["hit", "crit"].has(hit_kind):
 		return []
-	return _string_array(profile.get("on_hit_effect_ids", []))
+	var output: Array[String] = []
+	for effect_id in _string_array(profile.get("on_hit_effect_ids", [])):
+		if effect_id == "armor_break" and _armor_break_chance(profile) > 0.0 and not bool(damage_result.get("armor_break_triggered", false)):
+			continue
+		output.append(effect_id)
+	return output
 
 
 func _apply_on_hit_effects(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary, effect_ids: Array[String]) -> Array[Dictionary]:
@@ -567,19 +599,28 @@ func _hit_preview(simulation: RefCounted, attacker: RefCounted, target: RefCount
 
 
 func _miss_damage_result(simulation: RefCounted, target: RefCounted, hit_roll: Dictionary) -> Dictionary:
+	var defense: float = max(0.0, _combat_attribute(simulation, target, "defense", target.defense))
 	return {
 		"damage": 0.0,
 		"hit_kind": "miss",
-		"defense": max(0.0, _combat_attribute(simulation, target, "defense", target.defense)),
+		"defense": defense,
+		"effective_defense": defense,
 		"damage_reduction": clampf(_combat_attribute(simulation, target, "damage_reduction", 0.0), 0.0, 0.95),
 		"damage_bonus": 0.0,
+		"armor_pierce": 0.0,
+		"armor_pierced_defense": 0.0,
+		"armor_break_chance": 0.0,
+		"armor_break_roll": 1.0,
+		"armor_break_triggered": false,
+		"armor_break_defense_reduction": 0.0,
 		"hit_chance": float(hit_roll.get("chance", 0.0)),
 	}
 
 
 func _damage_preview(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:
-	var normal: Dictionary = _resolve_damage(simulation, attacker, target, profile, false)
-	var critical: Dictionary = _resolve_damage(simulation, attacker, target, profile, true)
+	var armor_context: Dictionary = _armor_preview_context(profile)
+	var normal: Dictionary = _resolve_damage(simulation, attacker, target, profile, false, armor_context)
+	var critical: Dictionary = _resolve_damage(simulation, attacker, target, profile, true, armor_context)
 	return {
 		"estimated_damage": float(normal.get("damage", 0.0)),
 		"minimum_damage": 0.0,
@@ -588,17 +629,26 @@ func _damage_preview(simulation: RefCounted, attacker: RefCounted, target: RefCo
 	}
 
 
-func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary, critical: bool) -> Dictionary:
+func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary, critical: bool, armor_context: Dictionary = {}) -> Dictionary:
 	var attack_damage: float = float(profile.get("damage", _combat_attribute(simulation, attacker, "attack_power", attacker.attack_power)))
 	var defense: float = max(0.0, _combat_attribute(simulation, target, "defense", target.defense))
-	var base_damage: float = max(0.0, attack_damage - defense)
+	var armor_result: Dictionary = _effective_defense_after_armor_effects(defense, armor_context)
+	var effective_defense: float = float(armor_result.get("effective_defense", defense))
+	var base_damage: float = max(0.0, attack_damage - effective_defense)
 	if base_damage <= 0.0:
 		return {
 			"damage": 0.0,
 			"hit_kind": "blocked",
 			"defense": defense,
+			"effective_defense": effective_defense,
 			"damage_reduction": 0.0,
 			"damage_bonus": 0.0,
+			"armor_pierce": float(armor_result.get("armor_pierce", 0.0)),
+			"armor_pierced_defense": float(armor_result.get("armor_pierced_defense", 0.0)),
+			"armor_break_chance": float(armor_context.get("armor_break_chance", 0.0)),
+			"armor_break_roll": float(armor_context.get("armor_break_roll", 1.0)),
+			"armor_break_triggered": bool(armor_context.get("armor_break_triggered", false)),
+			"armor_break_defense_reduction": float(armor_result.get("armor_break_defense_reduction", 0.0)),
 		}
 	var damage_reduction: float = clampf(_combat_attribute(simulation, target, "damage_reduction", 0.0), 0.0, 0.95)
 	var damage_bonus: float = max(0.0, _active_effect_modifier(attacker, "damage_bonus"))
@@ -608,9 +658,82 @@ func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCo
 		"damage": damage,
 		"hit_kind": "crit" if critical else "hit",
 		"defense": defense,
+		"effective_defense": effective_defense,
 		"damage_reduction": damage_reduction,
 		"damage_bonus": damage_bonus,
+		"armor_pierce": float(armor_result.get("armor_pierce", 0.0)),
+		"armor_pierced_defense": float(armor_result.get("armor_pierced_defense", 0.0)),
+		"armor_break_chance": float(armor_context.get("armor_break_chance", 0.0)),
+		"armor_break_roll": float(armor_context.get("armor_break_roll", 1.0)),
+		"armor_break_triggered": bool(armor_context.get("armor_break_triggered", false)),
+		"armor_break_defense_reduction": float(armor_result.get("armor_break_defense_reduction", 0.0)),
 	}
+
+
+func _armor_context(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary, hit: bool) -> Dictionary:
+	var context: Dictionary = _armor_preview_context(profile)
+	if not hit:
+		context["armor_break_triggered"] = false
+		return context
+	var chance: float = float(context.get("armor_break_chance", 0.0))
+	if chance <= 0.0:
+		return context
+	if chance >= 1.0:
+		context["armor_break_roll"] = 0.0
+		context["armor_break_triggered"] = true
+		return context
+	var salt: int = int(attacker.actor_id ^ (target.actor_id << 11) ^ abs(hash(str(profile.get("item_id", "")))) ^ 1199540897)
+	var roll_data: Dictionary = _next_combat_random_unit(simulation, salt)
+	var roll: float = float(roll_data.get("roll", 1.0))
+	context["armor_break_roll"] = roll
+	context["armor_break_triggered"] = roll <= chance
+	context["armor_break_rng_counter"] = int(roll_data.get("counter", int(simulation.combat_state.get("combat_rng_counter", 0))))
+	context["armor_break_rng_salt"] = int(roll_data.get("salt", salt))
+	return context
+
+
+func _armor_preview_context(profile: Dictionary) -> Dictionary:
+	var chance: float = _armor_break_chance(profile)
+	return {
+		"armor_pierce": _armor_pierce(profile),
+		"armor_break_chance": chance,
+		"armor_break_roll": 1.0,
+		"armor_break_triggered": chance >= 1.0,
+		"armor_break_defense_multiplier": _armor_break_defense_multiplier(profile),
+	}
+
+
+func _effective_defense_after_armor_effects(defense: float, armor_context: Dictionary) -> Dictionary:
+	var pierce: float = clampf(float(armor_context.get("armor_pierce", 0.0)), 0.0, 1.0)
+	var pierced_defense: float = defense * pierce
+	var after_pierce: float = max(0.0, defense - pierced_defense)
+	var break_reduction: float = 0.0
+	var effective_defense: float = after_pierce
+	if bool(armor_context.get("armor_break_triggered", false)):
+		var multiplier: float = clampf(float(armor_context.get("armor_break_defense_multiplier", 0.0)), 0.0, 1.0)
+		effective_defense = after_pierce * multiplier
+		break_reduction = max(0.0, after_pierce - effective_defense)
+	return {
+		"effective_defense": effective_defense,
+		"armor_pierce": pierce,
+		"armor_pierced_defense": pierced_defense,
+		"armor_break_defense_reduction": break_reduction,
+	}
+
+
+func _armor_pierce(profile: Dictionary) -> float:
+	var effect_data: Dictionary = _dictionary_or_empty(profile.get("effect_data", {}))
+	return clampf(float(profile.get("armor_pierce", effect_data.get("armor_pierce", 0.0))), 0.0, 1.0)
+
+
+func _armor_break_chance(profile: Dictionary) -> float:
+	var effect_data: Dictionary = _dictionary_or_empty(profile.get("effect_data", {}))
+	return clampf(float(profile.get("armor_break_chance", effect_data.get("armor_break_chance", 0.0))), 0.0, 1.0)
+
+
+func _armor_break_defense_multiplier(profile: Dictionary) -> float:
+	var effect_data: Dictionary = _dictionary_or_empty(profile.get("effect_data", {}))
+	return clampf(float(profile.get("armor_break_defense_multiplier", effect_data.get("armor_break_defense_multiplier", 0.0))), 0.0, 1.0)
 
 
 func _critical_hit(simulation: RefCounted, attacker: RefCounted, target: RefCounted, profile: Dictionary) -> Dictionary:

@@ -641,8 +641,15 @@ func _attack_presentation(events: Array, world_root: Node, world_result: Diction
 			"crit_roll": float(payload.get("crit_roll", 1.0)),
 			"crit_chance": float(payload.get("crit_chance", 0.0)),
 			"defense": float(payload.get("defense", 0.0)),
+			"effective_defense": float(payload.get("effective_defense", payload.get("defense", 0.0))),
 			"damage_reduction": float(payload.get("damage_reduction", 0.0)),
 			"damage_bonus": float(payload.get("damage_bonus", 0.0)),
+			"armor_pierce": float(payload.get("armor_pierce", 0.0)),
+			"armor_pierced_defense": float(payload.get("armor_pierced_defense", 0.0)),
+			"armor_break_chance": float(payload.get("armor_break_chance", 0.0)),
+			"armor_break_roll": float(payload.get("armor_break_roll", 1.0)),
+			"armor_break_triggered": bool(payload.get("armor_break_triggered", false)),
+			"armor_break_defense_reduction": float(payload.get("armor_break_defense_reduction", 0.0)),
 			"hit_roll": float(payload.get("hit_roll", 0.0)),
 			"hit_chance": float(payload.get("hit_chance", 1.0)),
 			"accuracy": float(payload.get("accuracy", 0.0)),
@@ -961,8 +968,15 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 		"crit_roll": float(attack.get("crit_roll", 1.0)),
 		"crit_chance": float(attack.get("crit_chance", 0.0)),
 		"defense": float(attack.get("defense", 0.0)),
+		"effective_defense": float(attack.get("effective_defense", attack.get("defense", 0.0))),
 		"damage_reduction": float(attack.get("damage_reduction", 0.0)),
 		"damage_bonus": float(attack.get("damage_bonus", 0.0)),
+		"armor_pierce": float(attack.get("armor_pierce", 0.0)),
+		"armor_pierced_defense": float(attack.get("armor_pierced_defense", 0.0)),
+		"armor_break_chance": float(attack.get("armor_break_chance", 0.0)),
+		"armor_break_roll": float(attack.get("armor_break_roll", 1.0)),
+		"armor_break_triggered": bool(attack.get("armor_break_triggered", false)),
+		"armor_break_defense_reduction": float(attack.get("armor_break_defense_reduction", 0.0)),
 		"hit_roll": float(attack.get("hit_roll", 0.0)),
 		"hit_chance": float(attack.get("hit_chance", 1.0)),
 		"accuracy": float(attack.get("accuracy", 0.0)),
@@ -1269,8 +1283,15 @@ func _apply_attack_event_meta(node: Node, attack: Dictionary) -> void:
 	node.set_meta("crit_roll", float(attack.get("crit_roll", 1.0)))
 	node.set_meta("crit_chance", float(attack.get("crit_chance", 0.0)))
 	node.set_meta("defense", float(attack.get("defense", 0.0)))
+	node.set_meta("effective_defense", float(attack.get("effective_defense", attack.get("defense", 0.0))))
 	node.set_meta("damage_reduction", float(attack.get("damage_reduction", 0.0)))
 	node.set_meta("damage_bonus", float(attack.get("damage_bonus", 0.0)))
+	node.set_meta("armor_pierce", float(attack.get("armor_pierce", 0.0)))
+	node.set_meta("armor_pierced_defense", float(attack.get("armor_pierced_defense", 0.0)))
+	node.set_meta("armor_break_chance", float(attack.get("armor_break_chance", 0.0)))
+	node.set_meta("armor_break_roll", float(attack.get("armor_break_roll", 1.0)))
+	node.set_meta("armor_break_triggered", bool(attack.get("armor_break_triggered", false)))
+	node.set_meta("armor_break_defense_reduction", float(attack.get("armor_break_defense_reduction", 0.0)))
 	node.set_meta("hit_roll", float(attack.get("hit_roll", 0.0)))
 	node.set_meta("hit_chance", float(attack.get("hit_chance", 1.0)))
 	node.set_meta("accuracy", float(attack.get("accuracy", 0.0)))
