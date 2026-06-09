@@ -63,10 +63,15 @@ var active_character_feedback: Dictionary = {}
 var active_inventory_feedback: Dictionary = {}
 var latest_crafting_queue_result: Dictionary = {}
 var latest_pending_crafting_result: Dictionary = {}
-var debug_overlay_mode: String = "off"
 var active_skill_targeting: Dictionary = {}
 var active_skill_target_preview: Dictionary = {}
 var debug_runtime_controller: RefCounted = DebugRuntimeController.new()
+var debug_overlay_mode: String:
+	get:
+		return str(debug_runtime_controller.current_debug_overlay_mode()) if debug_runtime_controller != null else "off"
+	set(value):
+		if debug_runtime_controller != null:
+			debug_runtime_controller.debug_overlay_mode = value
 var game_input_router: RefCounted = GameInputRouter.new()
 var player_command_authority_audit: RefCounted = PlayerCommandAuthorityAudit.new()
 var ai_debug_snapshot_builder: RefCounted = AiDebugSnapshotBuilder.new()
@@ -1167,21 +1172,17 @@ func debug_panel_snapshot() -> Dictionary:
 
 
 func cycle_debug_overlay_mode() -> Dictionary:
-	var modes := ["off", "walkable", "vision", "blocked_sight", "level"]
-	var index := modes.find(debug_overlay_mode)
-	if index < 0:
-		index = 0
-	debug_overlay_mode = modes[(index + 1) % modes.size()]
+	var result: Dictionary = _dictionary_or_empty(debug_runtime_controller.call("cycle_debug_overlay_mode"))
 	_refresh_debug_overlay()
 	refresh_hud(current_interaction_prompt())
 	_play_hud_shortcut_audio("ui_option_selected", "DebugOverlayShortcut", "keyboard_shortcut", "cycle_debug_overlay", {
-		"value": debug_overlay_mode,
+		"value": current_debug_overlay_mode(),
 	})
-	return {"success": true, "mode": debug_overlay_mode}
+	return result
 
 
 func current_debug_overlay_mode() -> String:
-	return debug_overlay_mode
+	return str(debug_runtime_controller.call("current_debug_overlay_mode"))
 
 
 func debug_overlay_snapshot() -> Dictionary:
@@ -3528,7 +3529,7 @@ func _refresh_debug_overlay() -> void:
 	if world_root == null:
 		return
 	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
-	world_root.call("refresh_debug_overlay", debug_overlay_mode, world_result, runtime_snapshot)
+	world_root.call("refresh_debug_overlay", current_debug_overlay_mode(), world_result, runtime_snapshot)
 	if world_root.has_method("ensure_world_container"):
 		world_container = world_root.call("ensure_world_container")
 

@@ -3,6 +3,7 @@ extends RefCounted
 const DebugConsoleCommandRunner = preload("res://scripts/app/debug_console_command_runner.gd")
 
 var _command_runner := DebugConsoleCommandRunner.new()
+var debug_overlay_mode: String = "off"
 
 
 func command_schema() -> Array[Dictionary]:
@@ -40,6 +41,19 @@ func execute(game_root: Node, command: String) -> Dictionary:
 		"clear":
 			return _clear_console(game_root)
 	return {"success": false, "reason": "unknown_command", "message": "unknown command: %s" % command}
+
+
+func cycle_debug_overlay_mode() -> Dictionary:
+	var modes := ["off", "walkable", "vision", "blocked_sight", "level"]
+	var index := modes.find(debug_overlay_mode)
+	if index < 0:
+		index = 0
+	debug_overlay_mode = modes[(index + 1) % modes.size()]
+	return {"success": true, "mode": debug_overlay_mode}
+
+
+func current_debug_overlay_mode() -> String:
+	return debug_overlay_mode
 
 
 func _toggle_fps_panel(game_root: Node) -> Dictionary:
