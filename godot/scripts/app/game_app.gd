@@ -3,10 +3,8 @@ extends Node3D
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
-const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
+const WorldRoot = preload("res://scripts/world/world_root.gd")
 const WorldActionPresenter = preload("res://scripts/world/world_action_presenter.gd")
-const FogOverlayController = preload("res://scripts/world/fog_overlay_controller.gd")
-const DebugOverlayController = preload("res://scripts/world/debug_overlay_controller.gd")
 const DebugRuntimeController = preload("res://scripts/app/controllers/debug_runtime_controller.gd")
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameInputRouter = preload("res://scripts/app/controllers/game_input_router.gd")
@@ -72,8 +70,7 @@ var world_result: Dictionary = {}
 var interaction_controller: RefCounted
 var runtime_input_controller: RefCounted
 var panel_controller: RefCounted
-var fog_overlay_controller: RefCounted = FogOverlayController.new()
-var debug_overlay_controller: RefCounted = DebugOverlayController.new()
+var world_root: Node3D
 var world_action_presenter: RefCounted = WorldActionPresenter.new()
 var world_action_queue_sequence: int = 0
 var world_action_queue_state: Dictionary = {
@@ -1208,8 +1205,8 @@ func current_debug_overlay_mode() -> String:
 
 
 func debug_overlay_snapshot() -> Dictionary:
-	if debug_overlay_controller != null and debug_overlay_controller.has_method("snapshot"):
-		return debug_overlay_controller.snapshot()
+	if world_root != null and world_root.has_method("debug_overlay_snapshot"):
+		return _dictionary_or_empty(world_root.call("debug_overlay_snapshot"))
 	return {"active": false, "mode": "off", "cell_count": 0}
 
 
@@ -3958,11 +3955,12 @@ func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}, comma
 
 
 func _setup_world_container() -> void:
-	if world_container != null:
-		return
-	world_container = Node3D.new()
-	world_container.name = "WorldContainer"
-	add_child(world_container)
+	if world_root == null or not is_instance_valid(world_root):
+		world_root = WorldRoot.new()
+		world_root.name = "WorldRoot"
+		add_child(world_root)
+	if world_root.has_method("ensure_world_container"):
+		world_container = world_root.call("ensure_world_container")
 
 
 func _setup_runtime_input_controller() -> void:
@@ -3972,11 +3970,20 @@ func _setup_runtime_input_controller() -> void:
 
 
 func _render_world() -> Dictionary:
-	if world_container == null:
+	if world_root == null:
 		return {}
-	var counts: Dictionary = WorldSceneRenderer.new().render_world(world_container, world_result)
-	performance_last_render_counts = _render_count_summary(counts)
-	performance_render_sequence += 1
+	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
+	var counts: Dictionary = _dictionary_or_empty(world_root.call("apply_world_snapshot", world_result, runtime_snapshot))
+	if world_root.has_method("render_count_summary"):
+		performance_last_render_counts = _dictionary_or_empty(world_root.call("render_count_summary"))
+	else:
+		performance_last_render_counts = _render_count_summary(counts)
+	if world_root.get("render_sequence") != null:
+		performance_render_sequence = int(world_root.get("render_sequence"))
+	else:
+		performance_render_sequence += 1
+	if world_root.has_method("ensure_world_container"):
+		world_container = world_root.call("ensure_world_container")
 	return counts
 
 
@@ -3991,16 +3998,19 @@ func _render_count_summary(counts: Dictionary) -> Dictionary:
 
 
 func _refresh_fog_overlay() -> void:
-	if simulation == null or world_result.is_empty():
+	if simulation == null or world_result.is_empty() or world_root == null:
 		return
-	fog_overlay = fog_overlay_controller.ensure_overlay(self, _dictionary_or_empty(world_result.get("map", {})), simulation.snapshot())
+	world_root.call("refresh_fog", world_result, simulation.snapshot())
+	fog_overlay = world_root.get("fog_overlay")
 
 
 func _refresh_debug_overlay() -> void:
-	if debug_overlay_controller == null or world_container == null:
+	if world_root == null:
 		return
 	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
-	debug_overlay_controller.apply_overlay(world_container, debug_overlay_mode, _dictionary_or_empty(world_result.get("map", {})), runtime_snapshot)
+	world_root.call("refresh_debug_overlay", debug_overlay_mode, world_result, runtime_snapshot)
+	if world_root.has_method("ensure_world_container"):
+		world_container = world_root.call("ensure_world_container")
 
 
 func _setup_audio_feedback_controller() -> void:
