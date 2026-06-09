@@ -1385,6 +1385,23 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 	if bool(closed_door_preview.get("can_attack", true)) or closed_door_preview.get("reason", "") != "target_blocked_by_los":
 		errors.append("closed door attack preview should report target_blocked_by_los, got %s" % closed_door_preview.get("reason", ""))
 	_expect_spatial_diagnostics(errors, closed_door_preview, "closed door LOS preview", true, true, true, false, true, "target_blocked_by_los")
+	var closed_door_attack: Dictionary = simulation.perform_attack(1, door_los_target, door_topology, {"range": 8})
+	if bool(closed_door_attack.get("success", false)) or closed_door_attack.get("reason", "") != "target_blocked_by_los":
+		errors.append("closed door perform_attack should report target_blocked_by_los, got %s" % closed_door_attack.get("reason", ""))
+	_expect_spatial_diagnostics(errors, closed_door_attack, "closed door LOS attack", true, true, true, false, true, "target_blocked_by_los")
+	player.ap = 20.0
+	var closed_door_command_ap_before: float = player.ap
+	var closed_door_command: Dictionary = simulation.submit_player_command({
+		"kind": "attack",
+		"target_actor_id": door_los_target,
+		"topology": door_topology,
+		"range": 8,
+	})
+	if bool(closed_door_command.get("success", false)) or closed_door_command.get("reason", "") != "target_blocked_by_los":
+		errors.append("closed door submit attack should report target_blocked_by_los, got %s" % closed_door_command.get("reason", ""))
+	if absf(player.ap - closed_door_command_ap_before) > 0.01:
+		errors.append("closed door submit attack rejection should not spend AP")
+	_expect_spatial_diagnostics(errors, closed_door_command, "closed door submit attack", true, true, true, false, true, "target_blocked_by_los")
 	simulation.door_states[door_id]["is_open"] = true
 	var open_door_preview: Dictionary = simulation.preview_attack(1, door_los_target, door_topology, {"range": 8})
 	if not bool(open_door_preview.get("can_attack", false)):

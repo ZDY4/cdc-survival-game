@@ -1555,6 +1555,17 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 			"confirmation_required": bool(attack_options.get("confirmation_required", false)),
 			"friendly_fire_relationship_delta": float(attack_options.get("friendly_fire_relationship_delta", -75.0)),
 		})
+	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
+	var preflight: Dictionary = preview_attack(actor.actor_id, target_actor_id, topology, {
+		"range": attack_range,
+		"min_range": min_range,
+		"weapon_profile": profile,
+		"allow_non_hostile_attack": bool(attack_options.get("allow_non_hostile_attack", false)),
+		"confirmation_required": bool(attack_options.get("confirmation_required", false)),
+		"friendly_fire_relationship_delta": float(attack_options.get("friendly_fire_relationship_delta", -75.0)),
+	})
+	if not bool(preflight.get("can_attack", false)) and str(preflight.get("reason", "")) != "ap_insufficient":
+		return preflight
 	var attack_cost: float = float(command.get("ap_cost", profile.get("ap_cost", DEFAULT_ATTACK_AP)))
 	if actor.ap < attack_cost:
 		pending_interaction = {
@@ -1578,7 +1589,7 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 		return durability_check
 	_spend_ap(actor, attack_cost, "attack")
 	_enter_combat([actor.actor_id, target_actor_id], "player_attack")
-	var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, _dictionary_or_empty(command.get("topology", {})), {
+	var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, topology, {
 		"range": attack_range,
 		"min_range": min_range,
 		"weapon_profile": profile,
