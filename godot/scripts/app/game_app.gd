@@ -26,6 +26,7 @@ const UiBlockerStateController = preload("res://scripts/app/controllers/ui_block
 const ContainerActionController = preload("res://scripts/app/controllers/container_action_controller.gd")
 const InventoryActionController = preload("res://scripts/app/controllers/inventory_action_controller.gd")
 const TradeActionController = preload("res://scripts/app/controllers/trade_action_controller.gd")
+const CharacterActionController = preload("res://scripts/app/controllers/character_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -67,6 +68,7 @@ var ui_blocker_state_controller: RefCounted = UiBlockerStateController.new()
 var container_action_controller: RefCounted = ContainerActionController.new()
 var inventory_action_controller: RefCounted = InventoryActionController.new()
 var trade_action_controller: RefCounted = TradeActionController.new()
+var character_action_controller: RefCounted = CharacterActionController.new()
 var tooltip_layer: Control:
 	get:
 		return ui_overlay_render_controller.tooltip_layer if ui_overlay_render_controller != null else null
@@ -1747,69 +1749,49 @@ func _confirm_trade_cart_action(shop_id: String, entries: Array) -> Dictionary:
 
 
 func equip_player_item(item_id: String, slot_id: String) -> Dictionary:
-	if simulation == null:
-		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "slot_id": slot_id}
-		_record_character_feedback(missing_result, "equip", slot_id, item_id)
-		refresh_character_panel()
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "equip",
-		"item_id": item_id,
-		"slot_id": slot_id,
-	})
-	_record_character_feedback(result, "equip", slot_id, item_id)
-	if bool(result.get("success", false)):
-		_rebuild_world_after_runtime_change()
-	else:
-		refresh_inventory_panel()
-		refresh_character_panel()
-	return result
+	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
+	var operation: Dictionary = _dictionary_or_empty(character_action_controller.call("equip_item", item_id, slot_id, submit, Callable(self, "_record_character_feedback")))
+	return _apply_character_action_operation(operation)
 
 
 func unequip_player_slot(slot_id: String) -> Dictionary:
-	if simulation == null:
-		var missing_result := {"success": false, "reason": "simulation_missing", "slot_id": slot_id}
-		_record_character_feedback(missing_result, "unequip", slot_id, "")
-		refresh_character_panel()
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "unequip",
-		"slot_id": slot_id,
-	})
-	_record_character_feedback(result, "unequip", slot_id, str(result.get("item_id", "")))
-	if bool(result.get("success", false)):
-		_rebuild_world_after_runtime_change()
-	else:
-		refresh_inventory_panel()
-		refresh_character_panel()
-	return result
+	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
+	var operation: Dictionary = _dictionary_or_empty(character_action_controller.call("unequip_slot", slot_id, submit, Callable(self, "_record_character_feedback")))
+	return _apply_character_action_operation(operation)
 
 
 func reload_player_equipped_slot(slot_id: String = "main_hand") -> Dictionary:
-	if simulation == null:
-		var missing_result := {"success": false, "reason": "simulation_missing", "slot_id": slot_id}
-		_record_character_feedback(missing_result, "reload", slot_id, "")
-		refresh_character_panel()
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "reload_equipped",
-		"slot_id": slot_id,
-	})
-	_record_character_feedback(result, "reload", slot_id, str(result.get("item_id", "")))
-	refresh_hud()
-	refresh_inventory_panel()
-	refresh_character_panel()
-	return result
+	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
+	var operation: Dictionary = _dictionary_or_empty(character_action_controller.call("reload_slot", slot_id, submit, Callable(self, "_record_character_feedback")))
+	return _apply_character_action_operation(operation)
 
 
 func allocate_player_attribute_point(attribute: String) -> Dictionary:
+	var allocate := Callable(self, "_allocate_attribute_action") if simulation != null else Callable()
+	var operation: Dictionary = _dictionary_or_empty(character_action_controller.call("allocate_attribute", attribute, allocate))
+	return _apply_character_action_operation(operation)
+
+
+func _apply_character_action_operation(operation: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if bool(operation.get("rebuild_world", false)):
+		_rebuild_world_after_runtime_change()
+	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
+	if refresh_panels.has("hud"):
+		refresh_hud()
+	if refresh_panels.has("inventory"):
+		refresh_inventory_panel()
+	if refresh_panels.has("character"):
+		refresh_character_panel()
+	if refresh_panels.has("skills"):
+		refresh_skills_panel()
+	return result
+
+
+func _allocate_attribute_action(attribute: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	var result: Dictionary = simulation.allocate_attribute_point(1, attribute)
-	refresh_hud()
-	refresh_character_panel()
-	refresh_skills_panel()
-	return result
+	return _dictionary_or_empty(simulation.allocate_attribute_point(1, attribute))
 
 
 func learn_player_skill(skill_id: String) -> Dictionary:
