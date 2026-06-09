@@ -421,6 +421,7 @@ func _attack_presentation(events: Array, world_root: Node, world_result: Diction
 		var triggered_effect_ids := _string_array(payload.get("triggered_on_hit_effect_ids", []))
 		var applied_effects := _array_or_empty(payload.get("applied_on_hit_effects", [])).duplicate(true)
 		var attack_range := int(payload.get("range", 1))
+		var attack_facing := _attack_facing_from_nodes(actor_node, target_node)
 		return {
 			"active": false,
 			"kind": "attack",
@@ -453,6 +454,9 @@ func _attack_presentation(events: Array, world_root: Node, world_result: Diction
 			"combat_rng_salt": int(payload.get("combat_rng_salt", 0)),
 			"friendly_fire": bool(payload.get("friendly_fire", false)),
 			"relationship_consequence": _dictionary_or_empty(payload.get("relationship_consequence", {})).duplicate(true),
+			"attack_facing": attack_facing,
+			"attack_facing_direction": str(attack_facing.get("direction", "")),
+			"attack_facing_yaw_degrees": float(attack_facing.get("yaw_degrees", actor_node.rotation_degrees.y if actor_node != null else 0.0)),
 			"actor_node": actor_node,
 			"actor_node_path": str(actor_node.get_path()) if actor_node != null else "",
 			"target_node": target_node,
@@ -468,6 +472,10 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		return
 	sequence += 1
 	var run_sequence := sequence
+	var actor_node: Node3D = attack.get("actor_node", null)
+	if actor_node != null:
+		_apply_attack_facing(weakref(actor_node), _dictionary_or_empty(attack.get("attack_facing", {})))
+		_track_active_node(actor_node)
 	var marker := MeshInstance3D.new()
 	marker.name = "WorldActionAttackImpact"
 	var mesh := SphereMesh.new()
@@ -665,6 +673,39 @@ func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef
 	latest["active_count"] = active_count
 
 
+func _attack_facing_from_nodes(actor_node: Node3D, target_node: Node3D) -> Dictionary:
+	if actor_node == null or target_node == null:
+		return {}
+	var actor_position := actor_node.global_position if actor_node.is_inside_tree() else actor_node.position
+	var target_position := target_node.global_position if target_node.is_inside_tree() else target_node.position
+	var dx := target_position.x - actor_position.x
+	var dz := target_position.z - actor_position.z
+	if absf(dx) <= 0.001 and absf(dz) <= 0.001:
+		return {}
+	var direction := _movement_cardinal_direction(1 if dx > 0.0 else -1 if dx < 0.0 else 0, 1 if dz > 0.0 else -1 if dz < 0.0 else 0)
+	return {
+		"direction": direction,
+		"yaw_degrees": _movement_direction_yaw_degrees(direction),
+		"source": "attack",
+		"from_position": actor_position,
+		"to_position": target_position,
+	}
+
+
+func _apply_attack_facing(actor_ref: WeakRef, facing: Dictionary) -> void:
+	var actor_node := actor_ref.get_ref() as Node3D
+	if actor_node == null or actor_node.is_queued_for_deletion() or facing.is_empty():
+		return
+	var yaw := float(facing.get("yaw_degrees", actor_node.rotation_degrees.y))
+	actor_node.rotation_degrees = Vector3(actor_node.rotation_degrees.x, yaw, actor_node.rotation_degrees.z)
+	actor_node.set_meta("action_presenter_final_rotation_degrees", actor_node.rotation_degrees)
+	actor_node.set_meta("action_presenter_attack_facing", facing.duplicate(true))
+	actor_node.set_meta("action_presenter_attack_facing_direction", str(facing.get("direction", "")))
+	actor_node.set_meta("action_presenter_attack_facing_yaw_degrees", yaw)
+	latest["attack_facing_direction"] = str(facing.get("direction", ""))
+	latest["attack_facing_yaw_degrees"] = yaw
+
+
 func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -> Dictionary:
 	return {
 		"active": active,
@@ -704,6 +745,9 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 		"combat_rng_salt": int(attack.get("combat_rng_salt", 0)),
 		"friendly_fire": bool(attack.get("friendly_fire", false)),
 		"relationship_consequence": _dictionary_or_empty(attack.get("relationship_consequence", {})).duplicate(true),
+		"attack_facing": _dictionary_or_empty(attack.get("attack_facing", {})).duplicate(true),
+		"attack_facing_direction": str(attack.get("attack_facing_direction", "")),
+		"attack_facing_yaw_degrees": float(attack.get("attack_facing_yaw_degrees", 0.0)),
 		"phases": ATTACK_PHASES.duplicate(),
 		"phase_count": ATTACK_PHASES.size(),
 		"current_phase": ATTACK_PHASES[0] if active else "",
@@ -974,6 +1018,9 @@ func _apply_attack_event_meta(node: Node, attack: Dictionary) -> void:
 	node.set_meta("combat_rng_salt", int(attack.get("combat_rng_salt", 0)))
 	node.set_meta("friendly_fire", bool(attack.get("friendly_fire", false)))
 	node.set_meta("relationship_consequence", _dictionary_or_empty(attack.get("relationship_consequence", {})).duplicate(true))
+	node.set_meta("attack_facing", _dictionary_or_empty(attack.get("attack_facing", {})).duplicate(true))
+	node.set_meta("attack_facing_direction", str(attack.get("attack_facing_direction", "")))
+	node.set_meta("attack_facing_yaw_degrees", float(attack.get("attack_facing_yaw_degrees", 0.0)))
 
 
 func _attack_delivery(attack_range: int) -> String:

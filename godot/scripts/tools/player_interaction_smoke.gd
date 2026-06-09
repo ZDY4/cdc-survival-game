@@ -1264,7 +1264,7 @@ func _expect_attack_marker_metadata(errors: Array[String], marker: Node, attack_
 	_expect_attack_event_metadata(errors, marker_snapshot, attack_result, context)
 
 
-func _expect_attack_delivery_marker(errors: Array[String], game_root: Node, attack_result: Dictionary, expected_visual_kind: String) -> void:
+func _expect_attack_delivery_marker(errors: Array[String], game_root: Node, attack_result: Dictionary, expected_visual_kind: String, expected_facing_direction: String = "", expected_facing_yaw: float = 0.0) -> void:
 	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
 	if str(presenter.get("delivery_visual_kind", "")) != expected_visual_kind:
 		errors.append("attack presenter should expose delivery visual kind %s, got %s" % [expected_visual_kind, presenter.get("delivery_visual_kind", "")])
@@ -1272,6 +1272,11 @@ func _expect_attack_delivery_marker(errors: Array[String], game_root: Node, atta
 		errors.append("attack presenter should expose delivery marker path")
 	if float(presenter.get("delivery_distance", 0.0)) <= 0.0:
 		errors.append("attack presenter should expose delivery distance")
+	if not expected_facing_direction.is_empty():
+		if str(presenter.get("attack_facing_direction", "")) != expected_facing_direction:
+			errors.append("attack presenter should expose attack facing %s, got %s" % [expected_facing_direction, presenter.get("attack_facing_direction", "")])
+		if absf(float(presenter.get("attack_facing_yaw_degrees", -1.0)) - expected_facing_yaw) > 0.001:
+			errors.append("attack presenter should expose attack facing yaw %.1f" % expected_facing_yaw)
 	if expected_visual_kind == "ranged_projectile":
 		if str(presenter.get("muzzle_flash_visual_kind", "")) != "muzzle_flash" or str(presenter.get("muzzle_flash_path", "")).is_empty():
 			errors.append("ranged attack presenter should expose muzzle flash path and visual kind")
@@ -1295,6 +1300,21 @@ func _expect_attack_delivery_marker(errors: Array[String], game_root: Node, atta
 		errors.append("attack delivery marker should expose actor and target node paths")
 	if typeof(marker.get_meta("start_position", null)) != TYPE_VECTOR3 or typeof(marker.get_meta("end_position", null)) != TYPE_VECTOR3:
 		errors.append("attack delivery marker should expose start/end positions")
+	if not expected_facing_direction.is_empty():
+		if str(marker.get_meta("attack_facing_direction", "")) != expected_facing_direction:
+			errors.append("attack delivery marker should expose attack facing %s" % expected_facing_direction)
+		if absf(float(marker.get_meta("attack_facing_yaw_degrees", -1.0)) - expected_facing_yaw) > 0.001:
+			errors.append("attack delivery marker should expose attack facing yaw %.1f" % expected_facing_yaw)
+		var actor_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+		if actor_node == null:
+			errors.append("attack facing smoke should find player actor node")
+		else:
+			if str(actor_node.get_meta("action_presenter_attack_facing_direction", "")) != expected_facing_direction:
+				errors.append("attack actor node should expose attack facing direction")
+			if absf(float(actor_node.get_meta("action_presenter_attack_facing_yaw_degrees", -1.0)) - expected_facing_yaw) > 0.001:
+				errors.append("attack actor node should expose attack facing yaw")
+			if absf(actor_node.rotation_degrees.y - expected_facing_yaw) > 0.001:
+				errors.append("attack actor node should rotate toward target, got %s" % str(actor_node.rotation_degrees))
 	var material := marker.material_override as StandardMaterial3D
 	if material == null or not material.no_depth_test:
 		errors.append("attack delivery marker should render above map meshes")
@@ -1895,13 +1915,13 @@ func _expect_attack_delivery_presenters(errors: Array[String], game_root: Node) 
 		return
 	var melee_payload := _synthetic_attack_payload(1, target_id, 1, "smoke_knife")
 	_present_synthetic_world_action_event(game_root, "attack_resolved", melee_payload)
-	_expect_attack_delivery_marker(errors, game_root, melee_payload, "melee_swing")
+	_expect_attack_delivery_marker(errors, game_root, melee_payload, "melee_swing", "east", 90.0)
 	_expect_world_action_input_blocker(errors, game_root, "attack")
 	await _wait_for_world_action_presenter_idle(game_root)
 
 	var ranged_payload := _synthetic_attack_payload(1, target_id, 6, "smoke_pistol")
 	_present_synthetic_world_action_event(game_root, "attack_resolved", ranged_payload)
-	_expect_attack_delivery_marker(errors, game_root, ranged_payload, "ranged_projectile")
+	_expect_attack_delivery_marker(errors, game_root, ranged_payload, "ranged_projectile", "east", 90.0)
 	_expect_world_action_input_blocker(errors, game_root, "attack")
 	await _wait_for_world_action_presenter_idle(game_root)
 	game_root.simulation.actor_registry.unregister_actor(target_id)
