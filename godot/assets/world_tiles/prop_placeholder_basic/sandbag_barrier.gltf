@@ -11,7 +11,7 @@
       ],
       "min": [
         -1.1699999570846558,
-        0.0,
+        0,
         -0.14000000059604645
       ],
       "type": "VEC3"
@@ -80,7 +80,8 @@
             "POSITION": 0,
             "TEXCOORD_0": 2
           },
-          "indices": 3
+          "indices": 3,
+          "material": 0
         }
       ]
     }
@@ -96,6 +97,21 @@
       "nodes": [
         0
       ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "faded_sandbag_canvas",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.45,
+          0.42,
+          0.31,
+          1
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 0.97
+      }
     }
   ]
 }
