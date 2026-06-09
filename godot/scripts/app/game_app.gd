@@ -3,7 +3,6 @@ extends Node3D
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const WorldRoot = preload("res://scripts/world/world_root.gd")
 const DebugRuntimeController = preload("res://scripts/app/controllers/debug_runtime_controller.gd")
-const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameInputRouter = preload("res://scripts/app/controllers/game_input_router.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const RuntimeBootController = preload("res://scripts/app/controllers/runtime_boot_controller.gd")
@@ -32,6 +31,7 @@ const SkillActionController = preload("res://scripts/app/controllers/skill_actio
 const WorldPanelActionController = preload("res://scripts/app/controllers/world_panel_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
+const HudRoot = preload("res://scripts/ui/hud_root.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 const CRAFTING_QUEUE_ADVANCE_LIMIT := 16
 
@@ -41,6 +41,7 @@ var world_result: Dictionary = {}
 var interaction_controller: RefCounted
 var runtime_input_controller: RefCounted
 var panel_controller: RefCounted
+var hud_root: RefCounted
 var world_root: Node3D
 var world_action_flow_controller: RefCounted = WorldActionFlowController.new()
 var world_action_presenter: RefCounted:
@@ -316,80 +317,75 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
 	_process_audio_feedback()
 	runtime_performance_tracker.call("mark_hud_refresh")
 	if selected_prompt.is_empty():
 		selected_prompt = current_interaction_prompt()
-	panel_controller.refresh_hud(selected_prompt)
+	hud_root.refresh_hud(selected_prompt)
 
 
 func refresh_dialogue_panel() -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
-	panel_controller.refresh_dialogue_panel()
+	hud_root.refresh_panel("dialogue")
 
 
 func refresh_inventory_panel() -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
-	panel_controller.active_inventory_feedback = active_inventory_feedback
-	panel_controller.refresh_inventory_panel()
+	hud_root.refresh_panel("inventory", _ui_feedback_payload())
 
 
 func refresh_trade_panel() -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
 	if not _active_trade_target_available():
 		close_trade_panel("target_unavailable")
 		return
-	panel_controller.active_trade_target = active_trade_target
-	panel_controller.active_trade_feedback = active_trade_feedback
-	panel_controller.refresh_trade_panel()
+	hud_root.refresh_panel("trade", _ui_feedback_payload())
 
 
 func refresh_container_panel() -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
 	if simulation != null:
 		var close_reason := _active_container_close_reason()
 		if not close_reason.is_empty():
 			active_container_feedback = {}
 			simulation.close_container(1, close_reason)
-	panel_controller.active_container_feedback = active_container_feedback
-	panel_controller.refresh_container_panel()
+	hud_root.refresh_panel("container", _ui_feedback_payload())
 
 
 func refresh_character_panel() -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
-	panel_controller.active_character_feedback = active_character_feedback
-	panel_controller.refresh_character_panel()
+	hud_root.refresh_panel("character", _ui_feedback_payload())
 
 
 func refresh_journal_panel() -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
-	panel_controller.refresh_journal_panel()
+	hud_root.refresh_panel("journal")
 
 
 func refresh_map_panel() -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
-	panel_controller.refresh_map_panel()
+	hud_root.refresh_panel("map")
 
 
 func refresh_skills_panel() -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
-	panel_controller.refresh_skills_panel()
+	hud_root.refresh_panel("skills")
 
 
 func refresh_crafting_panel() -> void:
-	if panel_controller == null:
+	if hud_root == null:
 		return
-	panel_controller.refresh_crafting_panel()
+	hud_root.refresh_panel("crafting")
 
 
 func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
@@ -406,11 +402,11 @@ func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
 
 
 func toggle_stage_panel(panel_id: String) -> Dictionary:
-	if panel_controller == null:
+	if hud_root == null:
 		return {"success": false, "reason": "panel_controller_missing"}
 	if _world_action_presenter_blocks_input():
 		return _action_presenter_command_rejected("toggle_stage_panel:%s" % panel_id)
-	var result: Dictionary = panel_controller.toggle_stage_panel(panel_id)
+	var result: Dictionary = _dictionary_or_empty(hud_root.toggle_stage_panel(panel_id))
 	if bool(result.get("success", false)):
 		_play_ui_audio_feedback("stage_panel_opened" if bool(result.get("open", false)) else "stage_panel_closed", {
 			"panel_id": panel_id,
@@ -421,9 +417,9 @@ func toggle_stage_panel(panel_id: String) -> Dictionary:
 
 
 func close_stage_panels() -> Dictionary:
-	if panel_controller == null:
+	if hud_root == null:
 		return {"success": false, "reason": "panel_controller_missing"}
-	var result: Dictionary = panel_controller.close_stage_panels()
+	var result: Dictionary = _dictionary_or_empty(hud_root.close_stage_panels())
 	if bool(result.get("success", false)) and bool(result.get("closed", false)):
 		_play_ui_audio_feedback("stage_panel_closed", {
 			"panel_id": str(result.get("panel_id", "stage")),
@@ -433,25 +429,23 @@ func close_stage_panels() -> Dictionary:
 
 
 func any_stage_panel_open() -> bool:
-	return panel_controller != null and panel_controller.any_stage_panel_open()
+	return hud_root != null and hud_root.any_stage_panel_open()
 
 
 func is_settings_open() -> bool:
-	return panel_controller != null and panel_controller.is_settings_open()
+	return hud_root != null and hud_root.is_settings_open()
 
 
 func gameplay_input_blocked_by_ui() -> bool:
 	var hud_blocker := _hud_input_blocker_snapshot()
-	var panel_blocked: bool = panel_controller != null and panel_controller.gameplay_input_blocked()
+	var panel_blocked: bool = hud_root != null and hud_root.gameplay_input_blocked()
 	return bool(ui_blocker_state_controller.call("gameplay_input_blocked", hud_blocker, panel_blocked, _world_action_presenter_blocks_input()))
 
 
 func gameplay_input_blocker_name() -> String:
 	var hud_blocker := _hud_input_blocker_snapshot()
 	var context_menu: Dictionary = context_menu_snapshot()
-	var panel_blocker_name := ""
-	if panel_controller != null and panel_controller.has_method("gameplay_input_blocker_name"):
-		panel_blocker_name = str(panel_controller.gameplay_input_blocker_name())
+	var panel_blocker_name: String = hud_root.gameplay_input_blocker_name() if hud_root != null else ""
 	return str(ui_blocker_state_controller.call("blocker_name", hud_blocker, _panel_modal_blocker_snapshot(), context_menu, _world_action_presenter_blocks_input(), panel_blocker_name))
 
 
@@ -465,26 +459,8 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 
 
 func _hud_input_blocker_snapshot() -> Dictionary:
-	if hud != null and hud.has_method("input_blocker_snapshot"):
-		return _dictionary_or_empty(hud.call("input_blocker_snapshot"))
-	if is_debug_console_open():
-		return {
-			"blocked": true,
-			"name": "debug_console",
-			"kind": "debug_console",
-			"modal_id": "",
-			"panel_id": "hud",
-			"mouse_blocks_world": true,
-		}
-	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
-		return {
-			"blocked": true,
-			"name": "interaction_menu",
-			"kind": "context_menu",
-			"modal_id": "",
-			"panel_id": "hud",
-			"mouse_blocks_world": true,
-		}
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.hud_input_blocker_snapshot(is_debug_console_open()))
 	return {}
 
 
@@ -492,10 +468,7 @@ func _close_hud_interaction_menu() -> bool:
 	var hud_blocker := _hud_input_blocker_snapshot()
 	if str(hud_blocker.get("name", "")) != "interaction_menu":
 		return false
-	if hud != null and hud.has_method("hide_interaction_menu"):
-		hud.hide_interaction_menu()
-		return true
-	return false
+	return hud_root != null and hud_root.close_hud_interaction_menu()
 
 
 func _panel_modal_blocker_name() -> String:
@@ -508,9 +481,9 @@ func _panel_modal_blocker_snapshot() -> Dictionary:
 
 
 func _panel_input_blocker_snapshot() -> Dictionary:
-	if panel_controller == null or not panel_controller.has_method("gameplay_input_blocker_snapshot"):
+	if hud_root == null:
 		return {}
-	return _dictionary_or_empty(panel_controller.call("gameplay_input_blocker_snapshot"))
+	return _dictionary_or_empty(hud_root.gameplay_input_blocker_snapshot())
 
 
 func _world_action_presenter_blocks_input() -> bool:
@@ -520,16 +493,16 @@ func _world_action_presenter_blocks_input() -> bool:
 
 
 func modal_stack_snapshot() -> Dictionary:
-	if panel_controller != null and panel_controller.has_method("modal_stack_snapshot"):
-		return _dictionary_or_empty(panel_controller.call("modal_stack_snapshot"))
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.modal_stack_snapshot())
 	return {"active": false, "count": 0, "top": {}, "stack": []}
 
 
 func menu_state_snapshot() -> Dictionary:
 	var panel_snapshot: Dictionary = {}
 	var fallback_priority: Array[String] = ["settings"]
-	if panel_controller != null and panel_controller.has_method("menu_state_snapshot"):
-		panel_snapshot = _dictionary_or_empty(panel_controller.call("menu_state_snapshot")).duplicate(true)
+	if hud_root != null:
+		panel_snapshot = _dictionary_or_empty(hud_root.menu_state_snapshot()).duplicate(true)
 	return _dictionary_or_empty(ui_blocker_state_controller.call("menu_state_snapshot", panel_snapshot, fallback_priority, modal_stack_snapshot(), context_menu_snapshot(), _close_context_snapshot()))
 
 
@@ -551,43 +524,15 @@ func _close_context_snapshot() -> Dictionary:
 
 
 func ui_theme_snapshot() -> Dictionary:
-	if panel_controller != null and panel_controller.has_method("ui_theme_snapshot"):
-		return _dictionary_or_empty(panel_controller.call("ui_theme_snapshot"))
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.ui_theme_snapshot())
 	return {"applied": false, "reason": "panel_controller_missing"}
 
 
 func context_menu_snapshot() -> Dictionary:
-	var menus: Array[Dictionary] = []
-	if hud != null and hud.has_method("interaction_menu_snapshot"):
-		var interaction_menu: Dictionary = _dictionary_or_empty(hud.call("interaction_menu_snapshot"))
-		if not interaction_menu.is_empty():
-			menus.append(interaction_menu)
-	if inventory_panel != null and inventory_panel.has_method("context_menu_snapshot"):
-		var inventory_menu: Dictionary = _dictionary_or_empty(inventory_panel.call("context_menu_snapshot"))
-		if not inventory_menu.is_empty():
-			menus.append(inventory_menu)
-	if container_panel != null and container_panel.has_method("context_menu_snapshot"):
-		var container_menu: Dictionary = _dictionary_or_empty(container_panel.call("context_menu_snapshot"))
-		if not container_menu.is_empty():
-			menus.append(container_menu)
-	if trade_panel != null and trade_panel.has_method("context_menu_snapshot"):
-		var trade_menu: Dictionary = _dictionary_or_empty(trade_panel.call("context_menu_snapshot"))
-		if not trade_menu.is_empty():
-			menus.append(trade_menu)
-	if skills_panel != null and skills_panel.has_method("context_menu_snapshot"):
-		var skills_menu: Dictionary = _dictionary_or_empty(skills_panel.call("context_menu_snapshot"))
-		if not skills_menu.is_empty():
-			menus.append(skills_menu)
-	if character_panel != null and character_panel.has_method("context_menu_snapshot"):
-		var character_menu: Dictionary = _dictionary_or_empty(character_panel.call("context_menu_snapshot"))
-		if not character_menu.is_empty():
-			menus.append(character_menu)
-	return {
-		"active": not menus.is_empty(),
-		"count": menus.size(),
-		"top": menus[menus.size() - 1].duplicate(true) if not menus.is_empty() else {},
-		"menus": menus,
-	}
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.context_menu_snapshot())
+	return {"active": false, "count": 0, "top": {}, "menus": []}
 
 
 func hover_tooltip_snapshot(control: Control = null) -> Dictionary:
@@ -747,9 +692,9 @@ func _render_drag_preview_snapshot(drag: Dictionary) -> void:
 
 
 func handle_trade_shortcut(event: InputEventKey) -> bool:
-	if panel_controller == null:
+	if hud_root == null:
 		return false
-	return panel_controller.handle_trade_shortcut(event)
+	return hud_root.handle_trade_shortcut(event)
 
 
 func toggle_controls_hint() -> Dictionary:
@@ -1231,7 +1176,7 @@ func change_observed_level(direction: int) -> Dictionary:
 
 
 func cycle_focused_actor() -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(runtime_view_state_controller.call("cycle_focused_actor", world_result, simulation, observe_mode_enabled, panel_controller != null and panel_controller.gameplay_input_blocked()))
+	var result: Dictionary = _dictionary_or_empty(runtime_view_state_controller.call("cycle_focused_actor", world_result, simulation, observe_mode_enabled, hud_root != null and hud_root.gameplay_input_blocked()))
 	if bool(result.get("success", false)):
 		_clear_focus_switch_ui_state()
 		if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
@@ -1241,7 +1186,7 @@ func cycle_focused_actor() -> Dictionary:
 
 
 func focus_actor(actor_id: int) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(runtime_view_state_controller.call("focus_actor", actor_id, world_result, simulation, observe_mode_enabled, panel_controller != null and panel_controller.gameplay_input_blocked()))
+	var result: Dictionary = _dictionary_or_empty(runtime_view_state_controller.call("focus_actor", actor_id, world_result, simulation, observe_mode_enabled, hud_root != null and hud_root.gameplay_input_blocked()))
 	if bool(result.get("success", false)):
 		_clear_focus_switch_ui_state()
 		if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
@@ -1286,8 +1231,8 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 			hud.hide_debug_console()
 		refresh_hud(current_interaction_prompt())
 		return {"success": true, "closed": "debug_console"}
-	if panel_controller != null and panel_controller.has_method("close_blocking_modal"):
-		var modal_result: Dictionary = panel_controller.call("close_blocking_modal")
+	if hud_root != null:
+		var modal_result: Dictionary = _dictionary_or_empty(hud_root.close_blocking_modal())
 		if bool(modal_result.get("success", false)):
 			return {"success": true, "closed": str(modal_result.get("closed", "modal")), "result": modal_result}
 	if _world_action_presenter_blocks_input():
@@ -1325,7 +1270,7 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 		close_stage_panels()
 		return {"success": true, "closed": "stage_panel"}
 	if is_settings_open():
-		panel_controller.close_settings_panel()
+		hud_root.close_settings_panel()
 		_play_ui_audio_feedback("settings_panel_closed", {
 			"panel_id": "settings",
 			"action": "close_settings_panel",
@@ -1335,8 +1280,8 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 	var pending_result: Dictionary = cancel_pending(reason, false)
 	if bool(pending_result.get("had_pending", false)):
 		return {"success": true, "closed": "pending", "result": pending_result}
-	if panel_controller != null:
-		panel_controller.open_settings_panel()
+	if hud_root != null:
+		hud_root.open_settings_panel()
 		_play_ui_audio_feedback("settings_panel_opened", {
 			"panel_id": "settings",
 			"action": "open_settings_panel",
@@ -2280,28 +2225,40 @@ func _play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Di
 
 
 func _setup_panels() -> void:
-	if panel_controller == null:
-		panel_controller = GamePanelController.new(self, registry, simulation, world_result)
-	panel_controller.update_world_result(world_result)
-	panel_controller.active_trade_target = active_trade_target
-	panel_controller.active_trade_feedback = active_trade_feedback
-	panel_controller.active_container_feedback = active_container_feedback
-	panel_controller.active_character_feedback = active_character_feedback
-	panel_controller.active_inventory_feedback = active_inventory_feedback
-	panel_controller.setup_panels()
+	if hud_root == null:
+		hud_root = HudRoot.new(self)
+	hud_root.setup_panels(registry, simulation, world_result, _ui_feedback_payload())
+	panel_controller = hud_root.panel_controller
+	_sync_panel_refs_from_hud_root()
 	# 对外保留面板引用，方便既有 smoke 和编辑器入口继续做状态复核。
-	hud = panel_controller.hud
 	_sync_debug_console_schema()
-	dialogue_panel = panel_controller.dialogue_panel
-	inventory_panel = panel_controller.inventory_panel
-	trade_panel = panel_controller.trade_panel
-	container_panel = panel_controller.container_panel
-	character_panel = panel_controller.character_panel
-	journal_panel = panel_controller.journal_panel
-	map_panel = panel_controller.map_panel
-	skills_panel = panel_controller.skills_panel
-	crafting_panel = panel_controller.crafting_panel
-	settings_panel = panel_controller.settings_panel
+
+
+func _ui_feedback_payload() -> Dictionary:
+	return {
+		"active_trade_target": active_trade_target,
+		"active_trade_feedback": active_trade_feedback,
+		"active_container_feedback": active_container_feedback,
+		"active_character_feedback": active_character_feedback,
+		"active_inventory_feedback": active_inventory_feedback,
+	}
+
+
+func _sync_panel_refs_from_hud_root() -> void:
+	if hud_root == null:
+		return
+	var refs: Dictionary = _dictionary_or_empty(hud_root.panel_refs())
+	hud = refs.get("hud", null) as Control
+	dialogue_panel = refs.get("dialogue", null) as Control
+	inventory_panel = refs.get("inventory", null) as Control
+	trade_panel = refs.get("trade", null) as Control
+	container_panel = refs.get("container", null) as Control
+	character_panel = refs.get("character", null) as Control
+	journal_panel = refs.get("journal", null) as Control
+	map_panel = refs.get("map", null) as Control
+	skills_panel = refs.get("skills", null) as Control
+	crafting_panel = refs.get("crafting", null) as Control
+	settings_panel = refs.get("settings", null) as Control
 
 
 func _sync_debug_console_schema() -> void:
@@ -2369,21 +2326,9 @@ func _interaction_result_stage_panel(result: Dictionary) -> String:
 
 
 func _open_stage_panel_from_interaction(panel_id: String) -> void:
-	if panel_controller == null or not ["crafting"].has(panel_id):
+	if hud_root == null or not ["crafting"].has(panel_id):
 		return
-	if panel_controller.has_method("open_stage_panel"):
-		panel_controller.call("open_stage_panel", panel_id)
-		return
-	if panel_controller.has_method("toggle_stage_panel"):
-		var menu_state: Dictionary = _dictionary_or_empty(panel_controller.call("menu_state_snapshot"))
-		var already_open := false
-		for stage in _array_or_empty(menu_state.get("stage_panels", [])):
-			var stage_data: Dictionary = _dictionary_or_empty(stage)
-			if str(stage_data.get("id", "")) == panel_id and bool(stage_data.get("active", false)):
-				already_open = true
-				break
-		if not already_open:
-			panel_controller.call("toggle_stage_panel", panel_id)
+	hud_root.open_stage_panel(panel_id)
 
 
 func _queue_or_open_stage_panel_after_world_action(panel_id: String, result: Dictionary) -> bool:
@@ -2609,7 +2554,7 @@ func _dialogue_trade_shop_id(result: Dictionary) -> String:
 
 
 func _current_dialogue_snapshot() -> Dictionary:
-	if panel_controller == null or simulation == null:
+	if simulation == null:
 		return {}
 	var DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
 	return DialogueSnapshot.new(registry).build(simulation.snapshot())
