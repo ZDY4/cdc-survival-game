@@ -9,10 +9,12 @@ const ATTACK_PHASES := ["windup", "impact", "fade"]
 const INTERACTION_PHASES := ["start", "pulse", "fade"]
 const COMBAT_EVENT_PHASES := ["signal", "resolve", "fade"]
 const RELOAD_PHASES := ["prepare", "load", "ready"]
+const DOOR_AUTO_OPEN_PHASES := ["approach", "open", "clear"]
 const ATTACK_PHASE_DURATIONS := [0.06, 0.08, 0.10]
 const INTERACTION_PHASE_DURATIONS := [0.06, 0.08, 0.10]
 const COMBAT_EVENT_PHASE_DURATIONS := [0.05, 0.10, 0.12]
 const RELOAD_PHASE_DURATIONS := [0.07, 0.12, 0.10]
+const DOOR_AUTO_OPEN_PHASE_DURATIONS := [0.04, 0.08, 0.08]
 
 var sequence: int = 0
 var active_count: int = 0
@@ -30,11 +32,11 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 	var movement := _movement_presentation(events, world_root, world_result)
 	var interaction := _interaction_presentation(events, world_root, world_result)
 	if not movement.is_empty() and not interaction.is_empty():
-		_start_movement_tween(host, movement)
+		_start_movement_tween(host, world_root, movement)
 		_start_interaction_feedback(host, world_root, interaction)
 		return latest.duplicate(true)
 	if not movement.is_empty():
-		_start_movement_tween(host, movement)
+		_start_movement_tween(host, world_root, movement)
 		return latest.duplicate(true)
 	var attack := _attack_presentation(events, world_root, world_result)
 	if not attack.is_empty():
@@ -107,6 +109,7 @@ func _events_from_result(command_result: Dictionary) -> Array:
 func _movement_presentation(events: Array, world_root: Node, world_result: Dictionary) -> Dictionary:
 	var last_move: Dictionary = {}
 	var step_events: Array[Dictionary] = []
+	var door_auto_open_events: Array[Dictionary] = []
 	for event_value in events:
 		var event: Dictionary = _dictionary_or_empty(event_value)
 		match str(event.get("kind", "")):
@@ -114,6 +117,8 @@ func _movement_presentation(events: Array, world_root: Node, world_result: Dicti
 				step_events.append(event)
 			"actor_moved":
 				last_move = event
+			"door_auto_opened":
+				door_auto_open_events.append(event)
 	if last_move.is_empty():
 		return {}
 	var payload: Dictionary = _dictionary_or_empty(last_move.get("payload", {}))
@@ -127,6 +132,7 @@ func _movement_presentation(events: Array, world_root: Node, world_result: Dicti
 			"actor_id": actor_id,
 		}
 	var path := _movement_path(actor_id, payload, step_events)
+	var door_auto_opens := _movement_door_auto_opens(actor_id, door_auto_open_events)
 	return {
 		"active": path.size() > 1,
 		"kind": "movement",
@@ -135,8 +141,37 @@ func _movement_presentation(events: Array, world_root: Node, world_result: Dicti
 		"path": path,
 		"step_count": max(0, path.size() - 1),
 		"duration_sec": float(max(0, path.size() - 1)) * STEP_DURATION_SEC,
+		"door_auto_opens": door_auto_opens,
+		"door_auto_open_count": door_auto_opens.size(),
+		"door_auto_open_door_ids": _door_auto_open_ids(door_auto_opens),
 		"actor_node": actor_node,
 	}
+
+
+func _movement_door_auto_opens(actor_id: int, events: Array[Dictionary]) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for event in events:
+		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		if int(payload.get("actor_id", 0)) != actor_id:
+			continue
+		var grid: Dictionary = _dictionary_or_empty(payload.get("grid", {}))
+		output.append({
+			"actor_id": actor_id,
+			"door_id": str(payload.get("door_id", "")),
+			"grid": grid.duplicate(true),
+			"is_open": true,
+		})
+	return output
+
+
+func _door_auto_open_ids(entries: Array[Dictionary]) -> Array[String]:
+	var output: Array[String] = []
+	for entry in entries:
+		var door_id := str(entry.get("door_id", ""))
+		if door_id.is_empty() or output.has(door_id):
+			continue
+		output.append(door_id)
+	return output
 
 
 func _movement_path(actor_id: int, moved_payload: Dictionary, step_events: Array[Dictionary]) -> Array[Dictionary]:
@@ -169,7 +204,7 @@ func _dedupe_grid_path(path: Array[Dictionary]) -> Array[Dictionary]:
 	return output
 
 
-func _start_movement_tween(host: Node, movement: Dictionary) -> void:
+func _start_movement_tween(host: Node, world_root: Node, movement: Dictionary) -> void:
 	var actor_node: Node3D = movement.get("actor_node", null)
 	var path: Array = _array_or_empty(movement.get("path", []))
 	if actor_node == null or path.size() <= 1:
@@ -179,12 +214,17 @@ func _start_movement_tween(host: Node, movement: Dictionary) -> void:
 	var run_sequence := sequence
 	var y := actor_node.position.y
 	actor_node.position = _grid_to_world(_dictionary_or_empty(path[0]), y)
+	var door_auto_opens: Array = _array_or_empty(movement.get("door_auto_opens", []))
+	var door_auto_open_ids: Array = _array_or_empty(movement.get("door_auto_open_door_ids", []))
 	actor_node.set_meta("action_presenter_active", true)
 	actor_node.set_meta("action_presenter_kind", "movement")
 	actor_node.set_meta("action_presenter_sequence", run_sequence)
 	actor_node.set_meta("action_presenter_step_count", max(0, path.size() - 1))
 	actor_node.set_meta("action_presenter_final_position", _grid_to_world(_dictionary_or_empty(path[path.size() - 1]), y))
+	actor_node.set_meta("action_presenter_auto_opened_door_ids", door_auto_open_ids.duplicate(true))
+	actor_node.set_meta("action_presenter_auto_opened_door_count", door_auto_opens.size())
 	_track_active_node(actor_node)
+	var door_marker_paths := _start_door_auto_open_markers(host, world_root, movement, path)
 	var tween := host.create_tween()
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
@@ -192,7 +232,78 @@ func _start_movement_tween(host: Node, movement: Dictionary) -> void:
 	for index in range(1, path.size()):
 		tween.tween_property(actor_node, "position", _grid_to_world(_dictionary_or_empty(path[index]), y), STEP_DURATION_SEC)
 	tween.finished.connect(Callable(self, "_on_movement_tween_finished").bind(run_sequence, weakref(actor_node)))
-	_record_latest(_presentation_public_snapshot(movement, true))
+	var snapshot_data := _presentation_public_snapshot(movement, true)
+	snapshot_data["door_auto_open_marker_paths"] = door_marker_paths
+	_record_latest(snapshot_data)
+
+
+func _start_door_auto_open_markers(host: Node, world_root: Node, movement: Dictionary, path: Array) -> Array[String]:
+	var marker_paths: Array[String] = []
+	var door_auto_opens: Array = _array_or_empty(movement.get("door_auto_opens", []))
+	if host == null or world_root == null or door_auto_opens.is_empty():
+		return marker_paths
+	var layer := _presentation_layer(world_root)
+	for index in range(door_auto_opens.size()):
+		var entry: Dictionary = _dictionary_or_empty(door_auto_opens[index])
+		var grid: Dictionary = _dictionary_or_empty(entry.get("grid", {}))
+		if grid.is_empty():
+			continue
+		var marker := MeshInstance3D.new()
+		marker.name = "WorldActionDoorAutoOpen"
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = 0.30
+		mesh.bottom_radius = 0.46
+		mesh.height = 0.08
+		mesh.radial_segments = 24
+		marker.mesh = mesh
+		marker.material_override = _door_auto_open_material()
+		marker.position = _grid_to_world(grid, 0.36)
+		marker.scale = Vector3(0.72, 1.0, 0.72)
+		marker.set_meta("action_presenter_active", true)
+		marker.set_meta("action_presenter_kind", "door_auto_open")
+		marker.set_meta("action_presenter_phases", DOOR_AUTO_OPEN_PHASES.duplicate())
+		marker.set_meta("action_presenter_phase_count", DOOR_AUTO_OPEN_PHASES.size())
+		marker.set_meta("action_presenter_current_phase", DOOR_AUTO_OPEN_PHASES[0])
+		marker.set_meta("action_presenter_duration_sec", _duration_sum(DOOR_AUTO_OPEN_PHASE_DURATIONS))
+		marker.set_meta("action_presenter_sequence", sequence)
+		marker.set_meta("actor_id", int(entry.get("actor_id", 0)))
+		marker.set_meta("door_id", str(entry.get("door_id", "")))
+		marker.set_meta("door_grid", grid.duplicate(true))
+		marker.set_meta("movement_step_index", _path_index_for_grid(path, grid))
+		_track_active_node(marker)
+		layer.add_child(marker)
+		marker_paths.append(str(marker.get_path()))
+		var tween := host.create_tween()
+		_track_active_tween(tween)
+		tween.set_trans(Tween.TRANS_SINE)
+		tween.set_ease(Tween.EASE_OUT)
+		tween.tween_property(marker, "scale", Vector3(0.95, 1.0, 0.95), float(DOOR_AUTO_OPEN_PHASE_DURATIONS[0]))
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), DOOR_AUTO_OPEN_PHASES[1]))
+		tween.tween_property(marker, "scale", Vector3(1.34, 1.12, 1.34), float(DOOR_AUTO_OPEN_PHASE_DURATIONS[1]))
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), DOOR_AUTO_OPEN_PHASES[2]))
+		tween.tween_property(marker, "scale", Vector3(0.45, 0.8, 0.45), float(DOOR_AUTO_OPEN_PHASE_DURATIONS[2]))
+		tween.finished.connect(Callable(self, "_on_door_auto_open_marker_finished").bind(weakref(marker)))
+	return marker_paths
+
+
+func _on_door_auto_open_marker_finished(marker_ref: WeakRef) -> void:
+	var marker := marker_ref.get_ref() as Node
+	if marker != null and not marker.is_queued_for_deletion():
+		marker.set_meta("action_presenter_active", false)
+		marker.queue_free()
+	_prune_active_refs()
+	latest["active"] = active_count > 0
+	latest["active_count"] = active_count
+
+
+func _path_index_for_grid(path: Array, grid: Dictionary) -> int:
+	var key := _grid_key(grid)
+	if key.is_empty():
+		return -1
+	for index in range(path.size()):
+		if _grid_key(_dictionary_or_empty(path[index])) == key:
+			return index
+	return -1
 
 
 func _on_movement_tween_finished(run_sequence: int, actor_ref: WeakRef) -> void:
@@ -1600,6 +1711,14 @@ func _interaction_material(option_kind: String) -> StandardMaterial3D:
 	return material
 
 
+func _door_auto_open_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	material.albedo_color = Color(0.98, 0.66, 0.22, 0.84)
+	return material
+
+
 func _combat_event_material(event_kind: String) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -1626,6 +1745,9 @@ func _presentation_public_snapshot(presentation: Dictionary, active: bool) -> Di
 		"path": _array_or_empty(presentation.get("path", [])).duplicate(true),
 		"step_count": int(presentation.get("step_count", 0)),
 		"duration_sec": float(presentation.get("duration_sec", 0.0)),
+		"door_auto_opens": _array_or_empty(presentation.get("door_auto_opens", [])).duplicate(true),
+		"door_auto_open_count": int(presentation.get("door_auto_open_count", 0)),
+		"door_auto_open_door_ids": _array_or_empty(presentation.get("door_auto_open_door_ids", [])).duplicate(true),
 	}
 
 

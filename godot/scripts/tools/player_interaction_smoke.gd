@@ -153,6 +153,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("missing runtime camera before mouse ground move")
 	else:
 		await _expect_mouse_left_click_far_ground_starts_moving(errors, game_root, move_camera)
+	await _expect_auto_open_door_movement_presenter(errors, game_root)
 	await _expect_cancel_pending(errors, game_root)
 
 	var door_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
@@ -2011,15 +2012,19 @@ func _synthetic_attack_payload(actor_id: int, target_actor_id: int, attack_range
 
 
 func _present_synthetic_world_action_event(game_root: Node, event_kind: String, payload: Dictionary) -> void:
+	_present_synthetic_world_action_events(game_root, [{
+		"kind": event_kind,
+		"payload": payload.duplicate(true),
+	}])
+
+
+func _present_synthetic_world_action_events(game_root: Node, events: Array) -> void:
 	if game_root.world_action_presenter == null:
 		return
 	game_root.world_action_presenter.call("present_result", game_root, game_root.world_container, {
 		"success": true,
 		"result": {
-			"events": [{
-				"kind": event_kind,
-				"payload": payload.duplicate(true),
-			}],
+			"events": events.duplicate(true),
 		},
 	}, game_root.world_result)
 
@@ -2063,6 +2068,69 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	await _wait_for_world_action_presenter_idle(game_root)
 	if player != null:
 		player.ap = 6.0
+
+
+func _expect_auto_open_door_movement_presenter(errors: Array[String], game_root: Node) -> void:
+	var player_grid: Dictionary = _player_grid(game_root)
+	var from_grid := {
+		"x": int(player_grid.get("x", 0)) - 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}
+	var door_id := "synthetic_auto_open_door"
+	_present_synthetic_world_action_events(game_root, [
+		{
+			"kind": "movement_step",
+			"payload": {
+				"actor_id": 1,
+				"from": from_grid.duplicate(true),
+				"to": player_grid.duplicate(true),
+			},
+		},
+		{
+			"kind": "door_auto_opened",
+			"payload": {
+				"actor_id": 1,
+				"door_id": door_id,
+				"grid": player_grid.duplicate(true),
+			},
+		},
+		{
+			"kind": "actor_moved",
+			"payload": {
+				"actor_id": 1,
+				"from": from_grid.duplicate(true),
+				"to": player_grid.duplicate(true),
+			},
+		},
+	])
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "movement":
+		errors.append("auto-open door movement should still expose movement presenter, got %s" % JSON.stringify(presenter))
+	if int(presenter.get("door_auto_open_count", 0)) != 1:
+		errors.append("auto-open door movement presenter should expose one auto-open step")
+	if _string_array(presenter.get("door_auto_open_door_ids", [])).find(door_id) < 0:
+		errors.append("auto-open door movement presenter should expose door id")
+	var marker: MeshInstance3D = game_root.find_child("WorldActionDoorAutoOpen", true, false) as MeshInstance3D
+	if marker == null:
+		errors.append("auto-open door movement should create WorldActionDoorAutoOpen marker")
+	else:
+		if str(marker.get_meta("action_presenter_kind", "")) != "door_auto_open":
+			errors.append("auto-open door marker should expose presenter kind door_auto_open")
+		if str(marker.get_meta("door_id", "")) != door_id:
+			errors.append("auto-open door marker should expose door id")
+		if int(marker.get_meta("movement_step_index", -1)) < 1:
+			errors.append("auto-open door marker should expose movement step index")
+		_expect_action_marker_phases(errors, marker, ["approach", "open", "clear"], "auto-open door movement marker")
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("auto-open door presenter should keep player node visible")
+	else:
+		if int(player_node.get_meta("action_presenter_auto_opened_door_count", 0)) != 1:
+			errors.append("movement actor node should expose auto-opened door count")
+		if _string_array(player_node.get_meta("action_presenter_auto_opened_door_ids", [])).find(door_id) < 0:
+			errors.append("movement actor node should expose auto-opened door id")
+	await _wait_for_world_action_presenter_idle(game_root)
 
 
 func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, camera: Camera3D, player_node: Node3D) -> void:
