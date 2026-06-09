@@ -162,6 +162,7 @@ func _quest_title(quest: Dictionary) -> Button:
 	_apply_quest_icon(button, quest)
 	button.pressed.connect(func() -> void:
 		_selected_quest_id = quest_id
+		_play_journal_control_audio("ui_button_pressed", "Quest_%s" % quest_id, "quest_row", "select_quest", _quest_audio_payload(quest, {"quest_state": str(quest.get("state", "active"))}))
 		apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
 	return button
@@ -180,6 +181,7 @@ func _completed_quest_line(quest: Dictionary) -> Button:
 	_apply_quest_icon(button, quest)
 	button.pressed.connect(func() -> void:
 		_selected_quest_id = quest_id
+		_play_journal_control_audio("ui_button_pressed", "CompletedQuest_%s" % quest_id, "completed_quest_row", "select_completed_quest", _quest_audio_payload(quest, {"quest_state": "completed"}))
 		apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
 	return button
@@ -272,9 +274,11 @@ func _quest_reward(quest: Dictionary) -> HBoxContainer:
 			var result: Dictionary = root.turn_in_player_quest(quest_id)
 			if bool(result.get("success", false)):
 				_journal_feedback_text = "已完成 %s，获得奖励: %s" % [quest_title, reward_text]
+				_play_journal_control_audio("ui_button_pressed", "TurnInButton", "button", "turn_in_quest_success", _quest_audio_payload(quest, {"quest_id": quest_id}))
 			else:
 				_journal_feedback_text = "交付 %s 失败: %s" % [quest_title, _turn_in_failure_text(result)]
 				_record_failure(quest_title, result)
+				_play_journal_control_audio("ui_button_pressed", "TurnInButton", "button", "turn_in_quest_failed", _quest_audio_payload(quest, {"quest_id": quest_id, "reason": str(result.get("reason", ""))}))
 			_feedback_label.text = _journal_feedback_text
 			_failure_history_label.text = _failure_history_text()
 	, CONNECT_DEFERRED)
@@ -340,6 +344,10 @@ func _toggle_tracked_quest() -> void:
 	if _selected_quest_id.is_empty():
 		return
 	_tracked_quest_id = "" if _tracked_quest_id == _selected_quest_id else _selected_quest_id
+	_play_journal_control_audio("ui_button_pressed", "TrackQuestButton", "button", "toggle_track_quest", {
+		"quest_id": _selected_quest_id,
+		"value": not _tracked_quest_id.is_empty(),
+	})
 	_last_snapshot["tracked_quest_id"] = _tracked_quest_id
 	tracked_quest_changed.emit(_tracked_quest_id)
 	if not _last_snapshot.is_empty():
@@ -484,6 +492,32 @@ func _label(node_name: String) -> Label:
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _play_journal_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "journal",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
+
+
+func _quest_audio_payload(quest: Dictionary, extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"quest_id": str(quest.get("quest_id", extra_payload.get("quest_id", ""))),
+		"count": int(quest.get("progress_current", extra_payload.get("count", 0))),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
 
 
 func _clear_quests() -> void:

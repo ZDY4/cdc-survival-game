@@ -63,6 +63,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		track_button.pressed.emit()
 		await process_frame
+		_assert_journal_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TrackQuestButton", "button", "toggle_track_quest", {"quest_id": "tutorial_survive", "value": "true"}, "track quest audio")
 		if not _quest_title_text(game_root, "tutorial_survive").begins_with("* "):
 			errors.append("tracking quest should mark quest title")
 		if _track_button(game_root) == null or str(_track_button(game_root).text) != "取消追踪":
@@ -75,6 +76,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("tracking selected collect quest should expose map target marker")
 		_track_button(game_root).pressed.emit()
 		await process_frame
+		_assert_journal_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TrackQuestButton", "button", "toggle_track_quest", {"quest_id": "tutorial_survive", "value": "false"}, "clear tracked quest audio")
 		if _quest_title_text(game_root, "tutorial_survive").begins_with("* "):
 			errors.append("pressing track again should clear tracked marker")
 		if not _hud_quest_line(game_root).contains("Quest none"):
@@ -112,6 +114,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _press_completed_quest(game_root, "tutorial_survive"):
 		errors.append("should select completed tutorial quest")
 	await process_frame
+	_assert_journal_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "CompletedQuest_tutorial_survive", "completed_quest_row", "select_completed_quest", {"quest_id": "tutorial_survive", "quest_state": "completed", "count": "2"}, "completed quest row select audio")
 	if not _detail_text(game_root).contains("详情: 补给试跑（已完成）"):
 		errors.append("completed quest detail should show completed title")
 	if not _detail_text(game_root).contains("进度: 2/2 | 已完成"):
@@ -165,6 +168,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	_turn_in_button(game_root, "find_medicine").pressed.emit()
 	await process_frame
+	_assert_journal_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TurnInButton", "button", "turn_in_quest_failed", {"quest_id": "find_medicine", "reason": "turn_in_requires_dialogue"}, "journal direct turn-in failure audio")
 	if not _journal_failure_history_text(game_root).contains("医院取药: 需要通过指定对话交付"):
 		errors.append("journal should record dialogue-gated direct turn-in failure history")
 	player.inventory["1005"] = 1
@@ -483,6 +487,34 @@ func _player_skill_points(game_root: Node) -> int:
 		if int(actor_data.get("actor_id", 0)) == 1:
 			return int(actor_data.get("progression", {}).get("available_skill_points", 0))
 	return 0
+
+
+func _assert_journal_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(snapshot.get("last_event_kind", "")) != expected_event_kind or str(snapshot.get("last_sound_id", "")) != expected_sound_id:
+		errors.append("%s: expected %s/%s audio feedback, got %s" % [context, expected_event_kind, expected_sound_id, snapshot])
+		return
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = _dictionary_or_empty(recent[recent.size() - 1])
+	if str(entry.get("audio_source", "")) != "ui" or str(entry.get("panel_id", "")) != "journal":
+		errors.append("%s: recent audio source/panel mismatch: %s" % [context, entry])
+	if str(entry.get("event_kind", "")) != expected_event_kind or str(entry.get("sound_id", "")) != expected_sound_id:
+		errors.append("%s: recent audio event mismatch: %s" % [context, entry])
+	if str(entry.get("control_name", "")) != expected_control_name:
+		errors.append("%s: recent audio control name expected %s, got %s" % [context, expected_control_name, entry.get("control_name", "")])
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
