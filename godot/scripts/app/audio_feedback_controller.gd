@@ -197,6 +197,9 @@ func _process_event(event_data: Dictionary, event_index: int) -> void:
 		"target_source": str(payload.get("target_source", "")),
 		"count": int(payload.get("count", 0)),
 		"stack_index": int(payload.get("stack_index", 0)),
+		"cart_count": int(payload.get("cart_count", 0)),
+		"unit_price": int(payload.get("unit_price", 0)),
+		"total_price": int(payload.get("total_price", 0)),
 		"value": payload.get("value", null),
 	}
 	recent_events.append(entry)

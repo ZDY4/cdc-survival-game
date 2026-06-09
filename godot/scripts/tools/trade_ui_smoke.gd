@@ -99,10 +99,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should open trade context menu for shop bandage")
 	else:
 		_assert_trade_context_menu(errors, game_root, "1006", "shop", "购买选中数量", "shop bandage context")
+		_assert_trade_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TradeContextMenu", "context_menu", "open_context_menu", {"source": "shop", "item_id": "1006", "count": "1", "unit_price": "24", "total_price": "24"}, "shop bandage context menu audio")
 		_execute_trade_context_action(game_root, 2)
+		_assert_trade_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TradeContextMenu", "context_menu", "context_queue_item", {"source": "shop", "item_id": "1006", "count": "1", "unit_price": "24", "total_price": "24"}, "shop bandage context queue audio")
 		if not _cart_line(game_root).contains("购买 绷带 x1"):
 			errors.append("trade context queue should add shop bandage to cart")
 		_press_cart_entry_button(game_root, 0, "RemoveButton")
+		_assert_trade_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "CartEntry_0_RemoveButton", "cart_button", "remove_cart_entry", {"source": "shop", "item_id": "1006", "count": "1", "cart_count": "1", "unit_price": "24", "total_price": "24"}, "shop bandage cart remove audio")
 		if not _cart_line(game_root).contains("购物车为空"):
 			_press_clear_cart_button(game_root)
 	_close_trade_context_menu(game_root)
@@ -110,15 +113,20 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should open trade context menu for player bandage")
 	else:
 		_assert_trade_context_menu(errors, game_root, "1006", "player", "出售选中数量", "player bandage context")
+		_assert_trade_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TradeContextMenu", "context_menu", "open_context_menu", {"source": "player", "item_id": "1006", "count": "1", "unit_price": "16", "total_price": "16"}, "player bandage context menu audio")
 		_execute_trade_context_action(game_root, 2)
+		_assert_trade_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TradeContextMenu", "context_menu", "context_queue_item", {"source": "player", "item_id": "1006", "count": "1", "unit_price": "16", "total_price": "16"}, "player bandage context queue audio")
 		if not _cart_line(game_root).contains("出售 绷带 x1"):
 			errors.append("trade context queue should add player bandage sell to cart")
 		_press_cart_entry_button(game_root, 0, "RemoveButton")
+		_assert_trade_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "CartEntry_0_RemoveButton", "cart_button", "remove_cart_entry", {"source": "player", "item_id": "1006", "count": "1", "cart_count": "1", "unit_price": "16", "total_price": "16"}, "player bandage cart remove audio")
 		if not _cart_line(game_root).contains("购物车为空"):
 			_press_clear_cart_button(game_root)
 	_close_trade_context_menu(game_root)
 	if not _press_trade_item_with_text(game_root, "player", "绷带"):
 		errors.append("should select player bandage in trade panel")
+	else:
+		_assert_trade_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Item_player_1006", "item_row", "select_item", {"source": "player", "item_id": "1006", "count": "1", "unit_price": "16", "total_price": "16"}, "player bandage row select audio")
 	if _trade_button_text(game_root) != "出售":
 		errors.append("selecting player item should set trade action to sell")
 	var player_money_before_context_sell: int = _player_money(game_root)
@@ -193,6 +201,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 
 	if not _press_trade_item_with_text(game_root, "shop", "绷带"):
 		errors.append("should select shop bandage in trade panel")
+	else:
+		_assert_trade_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Item_shop_1006", "item_row", "select_item", {"source": "shop", "item_id": "1006", "count": "8", "unit_price": "24"}, "shop bandage row select audio")
 	if _trade_button_text(game_root) != "购买":
 		errors.append("selecting shop item should set trade action to buy")
 	_set_trade_quantity(game_root, 1)
@@ -1316,6 +1326,34 @@ func _assert_drag_reject_reason_text(errors: Array[String], target_snapshot: Dic
 		errors.append("%s: rejected drag target should expose reject reason text: %s" % [context, target_snapshot])
 	if highlight_text != reason_text:
 		errors.append("%s: hover highlight should mirror reject reason text: %s / %s" % [context, target_snapshot, highlight])
+
+
+func _assert_trade_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(snapshot.get("last_event_kind", "")) != expected_event_kind or str(snapshot.get("last_sound_id", "")) != expected_sound_id:
+		errors.append("%s: expected %s/%s audio feedback, got %s" % [context, expected_event_kind, expected_sound_id, snapshot])
+		return
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = _dictionary_or_empty(recent[recent.size() - 1])
+	if str(entry.get("audio_source", "")) != "ui" or str(entry.get("panel_id", "")) != "trade":
+		errors.append("%s: recent audio source/panel mismatch: %s" % [context, entry])
+	if str(entry.get("event_kind", "")) != expected_event_kind or str(entry.get("sound_id", "")) != expected_sound_id:
+		errors.append("%s: recent audio event mismatch: %s" % [context, entry])
+	if str(entry.get("control_name", "")) != expected_control_name:
+		errors.append("%s: recent audio control name expected %s, got %s" % [context, expected_control_name, entry.get("control_name", "")])
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
 
 
 func _assert_drag_preview_diagnostics(errors: Array[String], preview: Dictionary, context: String) -> void:

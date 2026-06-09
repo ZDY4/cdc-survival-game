@@ -39,6 +39,7 @@ var _shop_money: int = 0
 var _trade_allowed: bool = true
 var _trade_block_reason: String = ""
 var _reason_catalog := ReasonCatalog.new()
+var _suppress_quantity_audio := false
 
 
 func _ready() -> void:
@@ -141,6 +142,7 @@ func _build_layout() -> void:
 	_close_button.tooltip_text = "关闭交易"
 	_close_button.custom_minimum_size = Vector2(28, 24)
 	_close_button.pressed.connect(func() -> void:
+		_play_trade_control_audio("ui_button_pressed", "CloseButton", "button", "close_trade")
 		close_requested.emit()
 	)
 	_summary_label = _label("SummaryLine")
@@ -156,6 +158,10 @@ func _build_layout() -> void:
 	_quantity_spin.step = 1
 	_quantity_spin.value = 1
 	_quantity_spin.custom_minimum_size = Vector2(84, 0)
+	_quantity_spin.value_changed.connect(func(_value: float) -> void:
+		if not _suppress_quantity_audio and not _selected_item_id.is_empty():
+			_play_trade_control_audio("ui_slider_changed", "QuantitySpin", "spin_box", "set_trade_quantity", _selected_trade_audio_payload({"value": int(_quantity_spin.value)}))
+	)
 	_trade_button = Button.new()
 	_trade_button.name = "TradeButton"
 	_trade_button.text = "交易"
@@ -166,8 +172,10 @@ func _build_layout() -> void:
 		if not _item_can_trade(_selected_item_snapshot, _selected_source):
 			return
 		if _requires_equipment_sell_confirmation(_selected_source):
+			_play_trade_control_audio("ui_button_pressed", "TradeButton", "button", "open_equipment_sell_confirm", _selected_trade_audio_payload())
 			_open_equipment_sell_dialog()
 			return
+		_play_trade_control_audio("ui_button_pressed", "TradeButton", "button", "trade_selected", _selected_trade_audio_payload())
 		_emit_selected_trade()
 	)
 	trade_controls.add_child(_quantity_spin)
@@ -230,6 +238,7 @@ func _build_layout() -> void:
 	_clear_cart_button.text = "清空"
 	_clear_cart_button.disabled = true
 	_clear_cart_button.pressed.connect(func() -> void:
+		_play_trade_control_audio("ui_button_pressed", "ClearCartButton", "button", "clear_cart", {"cart_count": _cart_entries.size()})
 		_clear_cart()
 	)
 	_confirm_cart_button = Button.new()
@@ -239,6 +248,7 @@ func _build_layout() -> void:
 	_confirm_cart_button.pressed.connect(func() -> void:
 		if _cart_entries.is_empty():
 			return
+		_play_trade_control_audio("ui_button_pressed", "ConfirmCartButton", "button", "confirm_cart", {"cart_count": _cart_entries.size()})
 		trade_cart_confirmed.emit(_cart_entries.duplicate(true))
 		_clear_cart()
 	)
@@ -292,6 +302,7 @@ func _build_layout() -> void:
 	_equipment_sell_dialog.dialog_text = "确定要出售已装备物品吗？"
 	_equipment_sell_dialog.confirmed.connect(func() -> void:
 		_equipment_sell_dialog.hide()
+		_play_trade_control_audio("ui_button_pressed", "EquipmentSellConfirmDialog", "dialog", "confirm_equipment_sell", _selected_trade_audio_payload())
 		_emit_selected_trade()
 	)
 	_equipment_sell_dialog.get_ok_button().text = "出售"
@@ -340,6 +351,7 @@ func _item_line(item: Dictionary, source: String) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
 		_apply_detail(item.duplicate(true), source)
+		_play_trade_control_audio("ui_button_pressed", "Item_%s_%s" % [source.replace(":", "_"), item.get("item_id", "unknown")], "item_row", "select_item", _item_audio_payload(item, source))
 	)
 	button.gui_input.connect(func(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
@@ -484,6 +496,7 @@ func _open_context_menu_for_item(item: Dictionary, source: String, screen_positi
 	)
 	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
 	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
+	_play_trade_control_audio("ui_button_pressed", "TradeContextMenu", "context_menu", "open_context_menu", _item_audio_payload(item, source, {"count": selected_count}))
 
 
 func context_menu_snapshot() -> Dictionary:
@@ -536,13 +549,17 @@ func _execute_context_action(action_id: int) -> void:
 	match action_id:
 		CONTEXT_INSPECT:
 			_apply_detail(_context_item.duplicate(true), _context_source)
+			_play_trade_control_audio("ui_button_pressed", "TradeContextMenu", "context_menu", "context_inspect", _item_audio_payload(_context_item, _context_source, {"count": _selected_trade_count(_context_item)}))
 		CONTEXT_TRADE:
 			if _item_can_trade(_context_item, _context_source):
 				if _requires_equipment_sell_confirmation(_context_source):
+					_play_trade_control_audio("ui_button_pressed", "TradeContextMenu", "context_menu", "context_open_equipment_sell_confirm", _item_audio_payload(_context_item, _context_source, {"count": _selected_trade_count(_context_item)}))
 					_open_equipment_sell_dialog()
 				else:
+					_play_trade_control_audio("ui_button_pressed", "TradeContextMenu", "context_menu", "context_trade_selected", _item_audio_payload(_context_item, _context_source, {"count": _selected_trade_count(_context_item)}))
 					trade_requested.emit(_context_source, str(_context_item.get("item_id", "")), _selected_trade_count(_context_item), _stack_index_for_trade(_context_source, _context_item))
 		CONTEXT_QUEUE:
+			_play_trade_control_audio("ui_button_pressed", "TradeContextMenu", "context_menu", "context_queue_item", _item_audio_payload(_context_item, _context_source, {"count": _selected_trade_count(_context_item)}))
 			_queue_trade_entry(_context_item, _context_source, _selected_trade_count(_context_item))
 	if _context_menu != null:
 		_context_menu.hide()
@@ -621,6 +638,7 @@ func _queue_selected_item() -> void:
 	var count := int(_quantity_spin.value if _quantity_spin != null else 1)
 	if count <= 0:
 		return
+	_play_trade_control_audio("ui_button_pressed", "QueueButton", "button", "queue_selected", _selected_trade_audio_payload({"count": count}))
 	_queue_trade_entry(_selected_item_snapshot, _selected_source, count)
 
 
@@ -643,6 +661,7 @@ func _confirm_cart_from_shortcut() -> void:
 	set_meta("trade_last_shortcut", "confirm_cart")
 	if _confirm_cart_button == null or _confirm_cart_button.disabled or _cart_entries.is_empty():
 		return
+	_play_trade_control_audio("ui_button_pressed", "ConfirmCartShortcut", "shortcut", "confirm_cart", {"cart_count": _cart_entries.size()})
 	trade_cart_confirmed.emit(_cart_entries.duplicate(true))
 	_clear_cart()
 
@@ -651,6 +670,7 @@ func _clear_cart_from_shortcut() -> void:
 	set_meta("trade_last_shortcut", "clear_cart")
 	if _cart_entries.is_empty():
 		return
+	_play_trade_control_audio("ui_button_pressed", "ClearCartShortcut", "shortcut", "clear_cart", {"cart_count": _cart_entries.size()})
 	_clear_cart()
 
 
@@ -755,16 +775,19 @@ func _drop_cart_data(position: Vector2, data: Variant, from_control: Control) ->
 			var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
 			var source: String = str(drag_data.get("source", ""))
 			var count: int = int(drag_data.get("count", 1))
+			_play_trade_control_audio("ui_button_pressed", "TradeCartDropTarget", "drop_target", "drop_queue_item", _item_audio_payload(item, source, {"count": count, "target_source": "cart"}))
 			if _merge_trade_item_into_cart_entry(item, source, count, _cart_drop_index(from_control)):
 				return
 			_queue_trade_entry(item, source, count)
 		"inventory_item":
 			var item: Dictionary = _trade_item_from_inventory_drag(drag_data)
 			var count: int = int(drag_data.get("count", 1))
+			_play_trade_control_audio("ui_button_pressed", "TradeCartDropTarget", "drop_target", "drop_queue_item", _item_audio_payload(item, "player", {"count": count, "target_source": "cart"}))
 			if _merge_trade_item_into_cart_entry(item, "player", count, _cart_drop_index(from_control)):
 				return
 			_queue_trade_entry(item, "player", count)
 		"trade_cart_entry":
+			_play_trade_control_audio("ui_button_pressed", "TradeCartDropTarget", "drop_target", "reorder_cart_entry", {"cart_count": _cart_entries.size(), "value": int(drag_data.get("index", -1))})
 			_reorder_cart_entry(int(drag_data.get("index", -1)), _cart_drop_index(from_control))
 
 
@@ -914,6 +937,7 @@ func _cart_entry_row(entry: Dictionary, index: int) -> HBoxContainer:
 	decrease_button.custom_minimum_size = Vector2(28, 24)
 	decrease_button.disabled = int(entry.get("count", 0)) <= 1
 	decrease_button.pressed.connect(func() -> void:
+		_play_trade_control_audio("ui_button_pressed", "CartEntry_%d_DecreaseButton" % index, "cart_button", "decrease_cart_entry", _cart_entry_audio_payload(entry, index, {"count": maxi(1, int(entry.get("count", 1)) - 1)}))
 		_adjust_cart_entry(index, -1)
 	)
 	var increase_button := Button.new()
@@ -922,6 +946,7 @@ func _cart_entry_row(entry: Dictionary, index: int) -> HBoxContainer:
 	increase_button.custom_minimum_size = Vector2(28, 24)
 	increase_button.disabled = int(entry.get("count", 0)) >= int(entry.get("max_count", entry.get("count", 0)))
 	increase_button.pressed.connect(func() -> void:
+		_play_trade_control_audio("ui_button_pressed", "CartEntry_%d_IncreaseButton" % index, "cart_button", "increase_cart_entry", _cart_entry_audio_payload(entry, index, {"count": mini(int(entry.get("max_count", entry.get("count", 1))), int(entry.get("count", 1)) + 1)}))
 		_adjust_cart_entry(index, 1)
 	)
 	var remove_button := Button.new()
@@ -929,6 +954,7 @@ func _cart_entry_row(entry: Dictionary, index: int) -> HBoxContainer:
 	remove_button.text = "移除"
 	remove_button.custom_minimum_size = Vector2(52, 24)
 	remove_button.pressed.connect(func() -> void:
+		_play_trade_control_audio("ui_button_pressed", "CartEntry_%d_RemoveButton" % index, "cart_button", "remove_cart_entry", _cart_entry_audio_payload(entry, index))
 		_remove_cart_entry(index)
 	)
 	row.add_child(label)
@@ -1216,6 +1242,66 @@ func _label(node_name: String) -> Label:
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _play_trade_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "trade",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
+
+
+func _selected_trade_audio_payload(extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"item_id": _selected_item_id,
+		"count": int(_quantity_spin.value if _quantity_spin != null else 0),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _item_audio_payload(_selected_item_snapshot, _selected_source, payload)
+
+
+func _item_audio_payload(item: Dictionary, source: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var count := int(extra_payload.get("count", item.get("count", 0)))
+	var unit_price := int(item.get("price", extra_payload.get("unit_price", 0)))
+	var payload := {
+		"source": source,
+		"item_id": str(item.get("item_id", extra_payload.get("item_id", ""))),
+		"count": count,
+		"stack_index": _stack_index_for_trade(source, item),
+		"unit_price": unit_price,
+		"total_price": unit_price * maxi(0, count),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
+
+
+func _cart_entry_audio_payload(entry: Dictionary, index: int, extra_payload: Dictionary = {}) -> Dictionary:
+	var count := int(extra_payload.get("count", entry.get("count", 0)))
+	var unit_price := int(entry.get("unit_price", extra_payload.get("unit_price", 0)))
+	var payload := {
+		"source": str(entry.get("source", "")),
+		"item_id": str(entry.get("item_id", "")),
+		"count": count,
+		"stack_index": int(entry.get("stack_index", 0)),
+		"cart_count": _cart_entries.size(),
+		"unit_price": unit_price,
+		"total_price": unit_price * maxi(0, count),
+		"value": index,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
 
 
 func _clear_items() -> void:
