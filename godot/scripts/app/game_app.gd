@@ -1,12 +1,12 @@
 extends Node3D
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
-const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldRoot = preload("res://scripts/world/world_root.gd")
 const DebugRuntimeController = preload("res://scripts/app/controllers/debug_runtime_controller.gd")
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameInputRouter = preload("res://scripts/app/controllers/game_input_router.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
+const RuntimeBootController = preload("res://scripts/app/controllers/runtime_boot_controller.gd")
 const RuntimeRefreshController = preload("res://scripts/app/controllers/runtime_refresh_controller.gd")
 const RuntimePerformanceTracker = preload("res://scripts/app/controllers/runtime_performance_tracker.gd")
 const RuntimeControlStateController = preload("res://scripts/app/controllers/runtime_control_state_controller.gd")
@@ -109,6 +109,7 @@ var active_skill_targeting: Dictionary = {}
 var active_skill_target_preview: Dictionary = {}
 var debug_runtime_controller: RefCounted = DebugRuntimeController.new()
 var game_input_router: RefCounted = GameInputRouter.new()
+var runtime_boot_controller: RefCounted = RuntimeBootController.new()
 var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
 var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
 var runtime_control_state_controller: RefCounted = RuntimeControlStateController.new()
@@ -177,9 +178,9 @@ func _ready() -> void:
 			push_error(error)
 		return
 	runtime_refresh_controller.configure(registry)
+	runtime_boot_controller.configure(registry)
 
-	var startup_request := _consume_startup_request()
-	var runtime_result: Dictionary = _build_runtime_from_startup_request(startup_request)
+	var runtime_result: Dictionary = _dictionary_or_empty(runtime_boot_controller.call("build_startup_runtime"))
 	simulation = runtime_result.get("simulation")
 	var runtime_snapshot: Dictionary = runtime_result.get("snapshot", {})
 	var startup_refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_world_result_from_snapshot", runtime_snapshot, "startup"))
@@ -200,28 +201,11 @@ func _ready() -> void:
 
 
 func _consume_startup_request() -> Dictionary:
-	var request: Dictionary = _dictionary_or_empty(ProjectSettings.get_setting("cdc/startup_request", {})).duplicate(true)
-	if not request.is_empty():
-		ProjectSettings.set_setting("cdc/startup_request", {})
-	return request
+	return _dictionary_or_empty(runtime_boot_controller.call("consume_startup_request"))
 
 
 func _build_runtime_from_startup_request(request: Dictionary) -> Dictionary:
-	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
-	var mode := str(request.get("mode", "new_game"))
-	if mode != "continue":
-		return runtime_result
-	var snapshot: Dictionary = _dictionary_or_empty(request.get("runtime_snapshot", {}))
-	var loaded_simulation: RefCounted = runtime_result.get("simulation")
-	if loaded_simulation == null or snapshot.is_empty():
-		push_warning("继续游戏请求缺少有效快照，回退到新游戏")
-		return runtime_result
-	loaded_simulation.load_snapshot(snapshot)
-	return {
-		"ok": true,
-		"simulation": loaded_simulation,
-		"snapshot": loaded_simulation.snapshot(),
-	}
+	return _dictionary_or_empty(runtime_boot_controller.call("build_runtime_from_startup_request", request))
 
 
 func _process(delta: float) -> void:

@@ -12,6 +12,7 @@
 
 已完成或基本收敛：
 
+- startup request 和 new/continue runtime 构建已抽到 `godot/scripts/app/controllers/runtime_boot_controller.gd`。
 - debug console 命令执行已抽到 `godot/scripts/app/controllers/debug_runtime_controller.gd`。
 - HUD 运行时刷新已通过 `hud_controller.apply_runtime_snapshot()` 和 `input_blocker_snapshot()` 收敛为 facade。
 - 顶层输入分发已抽到 `godot/scripts/app/controllers/game_input_router.gd`。
