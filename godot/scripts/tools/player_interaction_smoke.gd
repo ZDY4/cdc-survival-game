@@ -2081,6 +2081,7 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	elif int(presenter.get("step_count", 0)) <= 0:
 		errors.append("world action presenter movement should expose positive step_count")
 	_expect_world_action_input_blocker(errors, game_root, "movement")
+	_expect_world_action_queue_presenting(errors, game_root, "movement", "move")
 	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node == null:
 		errors.append("world action presenter movement should keep player node visible")
@@ -2088,8 +2089,42 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("player node should expose active movement presenter metadata after click")
 	game_root.cancel_pending("viewport_far_click_smoke", false)
 	await _wait_for_world_action_presenter_idle(game_root)
+	var completed_queue: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
+	if str(completed_queue.get("state", "")) != "completed":
+		errors.append("world action queue should complete after presenter fast-forward")
+	if bool(completed_queue.get("active", true)):
+		errors.append("world action queue should be inactive after presenter fast-forward")
+	if str(completed_queue.get("finish_reason", "")) != "fast_forwarded":
+		errors.append("world action queue should record fast-forward finish reason")
 	if player != null:
 		player.ap = 6.0
+
+
+func _expect_world_action_queue_presenting(errors: Array[String], game_root: Node, expected_presenter_kind: String, expected_command_kind: String) -> void:
+	var action_queue: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
+	if action_queue.is_empty():
+		errors.append("runtime control should expose world action queue snapshot")
+		return
+	if not bool(action_queue.get("active", false)):
+		errors.append("world action queue should be active while presenter blocks input")
+	if str(action_queue.get("state", "")) != "presenting":
+		errors.append("world action queue should expose presenting state while active")
+	if str(action_queue.get("presenter_kind", "")) != expected_presenter_kind:
+		errors.append("world action queue presenter kind expected %s, got %s" % [expected_presenter_kind, action_queue.get("presenter_kind", "")])
+	if str(action_queue.get("command_kind", "")) != expected_command_kind:
+		errors.append("world action queue command kind expected %s, got %s" % [expected_command_kind, action_queue.get("command_kind", "")])
+	if str(action_queue.get("current_strategy", "")) != "refresh_before_present":
+		errors.append("world action queue should expose current refresh-before-present strategy")
+	if str(action_queue.get("target_strategy", "")) != "present_before_final_refresh":
+		errors.append("world action queue should expose target present-before-final-refresh strategy")
+	if str(action_queue.get("refresh_timing", "")) != "world_rendered_before_presenter":
+		errors.append("world action queue should expose current refresh timing")
+	if bool(action_queue.get("final_refresh_deferred", true)):
+		errors.append("world action queue should expose final_refresh_deferred=false for current first phase")
+	if _array_or_empty(action_queue.get("phase_order", [])).find("presenter_started") < 0:
+		errors.append("world action queue should expose presenter_started phase")
+	if int(action_queue.get("event_count", 0)) <= 0:
+		errors.append("world action queue should expose positive event count")
 
 
 func _expect_auto_open_door_movement_presenter(errors: Array[String], game_root: Node) -> void:

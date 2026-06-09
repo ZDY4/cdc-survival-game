@@ -74,6 +74,14 @@ var panel_controller: RefCounted
 var fog_overlay_controller: RefCounted = FogOverlayController.new()
 var debug_overlay_controller: RefCounted = DebugOverlayController.new()
 var world_action_presenter: RefCounted = WorldActionPresenter.new()
+var world_action_queue_sequence: int = 0
+var world_action_queue_state: Dictionary = {
+	"active": false,
+	"state": "idle",
+	"sequence": 0,
+	"current_strategy": "refresh_before_present",
+	"target_strategy": "present_before_final_refresh",
+}
 var audio_feedback_controller: Node
 var reason_catalog: RefCounted = ReasonCatalog.new()
 var world_container: Node3D
@@ -1369,6 +1377,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"drag_preview_render": drag_preview_render_snapshot(),
 		"selection_debug": runtime_selection_debug_snapshot(),
 		"action_presenter": world_action_presenter_snapshot(),
+		"world_action_queue": world_action_queue_snapshot(),
 		"ai_debug": ai_debug_snapshot(),
 		"debug_overlay": debug_overlay_snapshot(),
 		"audio_feedback": audio_feedback_snapshot(),
@@ -1519,6 +1528,21 @@ func world_action_presenter_snapshot() -> Dictionary:
 	return _dictionary_or_empty(world_action_presenter.call("snapshot"))
 
 
+func world_action_queue_snapshot() -> Dictionary:
+	var output: Dictionary = world_action_queue_state.duplicate(true)
+	var presenter: Dictionary = world_action_presenter_snapshot()
+	var presenter_active := bool(presenter.get("active", false))
+	output["presenter_active"] = presenter_active
+	output["presenter_kind"] = str(presenter.get("kind", ""))
+	output["presenter_sequence"] = int(presenter.get("sequence", 0))
+	output["input_blocked"] = _world_action_presenter_blocks_input()
+	if str(output.get("state", "")) == "presenting" and not presenter_active:
+		output["active"] = false
+		output["state"] = "completed"
+		world_action_queue_state = output.duplicate(true)
+	return output
+
+
 func audio_feedback_snapshot() -> Dictionary:
 	if audio_feedback_controller == null or not audio_feedback_controller.has_method("snapshot"):
 		return {"enabled": false, "reason": "audio_feedback_missing"}
@@ -1552,6 +1576,7 @@ func finish_world_action_presentations() -> Dictionary:
 	if world_action_presenter == null or not world_action_presenter.has_method("finish_active_presentations"):
 		return world_action_presenter_snapshot()
 	var result: Dictionary = _dictionary_or_empty(world_action_presenter.call("finish_active_presentations"))
+	_record_world_action_queue_finished(result)
 	refresh_hud(current_interaction_prompt())
 	return result
 
@@ -3982,7 +4007,93 @@ func _open_stage_panel_from_interaction(panel_id: String) -> void:
 func _present_world_action(command_result: Dictionary) -> void:
 	if world_action_presenter == null or command_result.is_empty() or world_container == null:
 		return
-	world_action_presenter.call("present_result", self, world_container, command_result, world_result)
+	var presenter_result: Dictionary = _dictionary_or_empty(world_action_presenter.call("present_result", self, world_container, command_result, world_result))
+	_record_world_action_queue_presented(command_result, presenter_result)
+
+
+func _record_world_action_queue_presented(command_result: Dictionary, presenter_result: Dictionary) -> void:
+	world_action_queue_sequence += 1
+	var presenter_active := bool(presenter_result.get("active", false))
+	var presenter_kind := str(presenter_result.get("kind", "none"))
+	var phase_order := [
+		"command_result_received",
+		"runtime_snapshot_applied",
+		"world_snapshot_built",
+		"world_rendered",
+		"presenter_started",
+	]
+	world_action_queue_state = {
+		"active": presenter_active,
+		"state": "presenting" if presenter_active else "completed",
+		"sequence": world_action_queue_sequence,
+		"current_strategy": "refresh_before_present",
+		"target_strategy": "present_before_final_refresh",
+		"refresh_timing": "world_rendered_before_presenter",
+		"next_strategy_step": "defer_final_world_refresh_until_presenter_finished",
+		"phase_order": phase_order,
+		"command_kind": _world_action_command_kind(command_result),
+		"success": bool(command_result.get("success", false)),
+		"reason": str(command_result.get("reason", "")),
+		"event_count": _world_action_event_count(command_result),
+		"presenter_kind": presenter_kind,
+		"presenter_active": presenter_active,
+		"presenter_sequence": int(presenter_result.get("sequence", 0)),
+		"presenter_snapshot": presenter_result.duplicate(true),
+		"final_refresh_deferred": false,
+		"final_refresh_deferred_supported": false,
+	}
+
+
+func _record_world_action_queue_finished(finish_result: Dictionary) -> void:
+	var output: Dictionary = world_action_queue_state.duplicate(true)
+	output["active"] = false
+	output["state"] = "completed"
+	output["finished"] = true
+	output["finish_reason"] = "fast_forwarded" if bool(finish_result.get("fast_forwarded", false)) else "presenter_idle"
+	output["finish_result"] = finish_result.duplicate(true)
+	output["presenter_active"] = bool(finish_result.get("active", false))
+	output["presenter_kind"] = str(finish_result.get("kind", output.get("presenter_kind", "")))
+	output["presenter_sequence"] = int(finish_result.get("sequence", output.get("presenter_sequence", 0)))
+	world_action_queue_state = output
+
+
+func _world_action_command_kind(command_result: Dictionary) -> String:
+	var result: Dictionary = _dictionary_or_empty(command_result.get("result", {}))
+	var kind := str(result.get("kind", ""))
+	if not kind.is_empty():
+		return kind
+	kind = str(command_result.get("kind", ""))
+	if not kind.is_empty():
+		return kind
+	var events: Array = _world_action_events_from_result(command_result)
+	for event_value in events:
+		var event: Dictionary = _dictionary_or_empty(event_value)
+		match str(event.get("kind", "")):
+			"movement_step", "actor_moved", "movement_queued", "movement_cancelled":
+				return "move"
+			"attack_resolved":
+				return "attack"
+			"interaction_succeeded", "interaction_queued", "interaction_cancelled":
+				return "interact"
+			"weapon_reloaded":
+				return "reload"
+	return ""
+
+
+func _world_action_event_count(command_result: Dictionary) -> int:
+	return _world_action_events_from_result(command_result).size()
+
+
+func _world_action_events_from_result(command_result: Dictionary) -> Array:
+	var direct_events := _array_or_empty(command_result.get("events", []))
+	if not direct_events.is_empty():
+		return direct_events
+	var result: Dictionary = _dictionary_or_empty(command_result.get("result", {}))
+	var nested_events := _array_or_empty(result.get("events", []))
+	if not nested_events.is_empty():
+		return nested_events
+	var runtime_delta: Dictionary = _dictionary_or_empty(result.get("runtime_snapshot_delta", {}))
+	return _array_or_empty(runtime_delta.get("events", []))
 
 
 func _submit_inventory_action(action: Dictionary) -> Dictionary:
