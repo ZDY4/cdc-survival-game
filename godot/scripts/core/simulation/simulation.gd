@@ -1573,6 +1573,9 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 	var ammo_check: Dictionary = _attack_ammo_check(actor, profile)
 	if not bool(ammo_check.get("success", true)):
 		return ammo_check
+	var durability_check: Dictionary = _attack_weapon_durability_check(actor, profile)
+	if not bool(durability_check.get("success", true)):
+		return durability_check
 	_spend_ap(actor, attack_cost, "attack")
 	_enter_combat([actor.actor_id, target_actor_id], "player_attack")
 	var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, _dictionary_or_empty(command.get("topology", {})), {
@@ -1587,6 +1590,9 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 		var ammo_result: Dictionary = _consume_attack_ammo(actor, profile)
 		if bool(ammo_result.get("consumed", false)):
 			result["ammo_consumed"] = ammo_result
+		var durability_result: Dictionary = _consume_attack_weapon_durability(actor, profile)
+		if bool(durability_result.get("consumed", false)):
+			result["weapon_durability_consumed"] = durability_result
 		pending_interaction.clear()
 	return result
 
@@ -4001,6 +4007,12 @@ func _advance_npc_action(actor: RefCounted, topology: Dictionary) -> Dictionary:
 				ammo_check["target_actor_id"] = target_actor_id
 				ammo_check["intent"] = "attack"
 				return ammo_check
+			var durability_check: Dictionary = _attack_weapon_durability_check(actor, weapon_profile)
+			if not bool(durability_check.get("success", true)):
+				durability_check["actor_id"] = actor.actor_id
+				durability_check["target_actor_id"] = target_actor_id
+				durability_check["intent"] = "attack"
+				return durability_check
 			_spend_ap(actor, attack_cost, "npc_attack")
 			_enter_combat([actor.actor_id, target_actor_id], "npc_attack")
 			var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, topology, {
@@ -4012,6 +4024,9 @@ func _advance_npc_action(actor: RefCounted, topology: Dictionary) -> Dictionary:
 				var ammo_result: Dictionary = _consume_attack_ammo(actor, weapon_profile)
 				if bool(ammo_result.get("consumed", false)):
 					result["ammo_consumed"] = ammo_result
+				var durability_result: Dictionary = _consume_attack_weapon_durability(actor, weapon_profile)
+				if bool(durability_result.get("consumed", false)):
+					result["weapon_durability_consumed"] = durability_result
 			result["intent"] = "attack"
 			return result
 		"reload":
@@ -5185,6 +5200,7 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 	var weapon_min_range: int = clampi(_weapon_min_range(weapon), 0, weapon_range)
 	var max_ammo: int = _equipment_effects.weapon_magazine_capacity(actor, weapon, items)
 	var effect_data: Dictionary = _dictionary_or_empty(item_data.get("effect_data", {}))
+	var durability: Dictionary = _item_durability_fragment(item_data)
 	var on_hit_effect_ids: Array[String] = _string_array(weapon.get("on_hit_effect_ids", []))
 	if on_hit_effect_ids.is_empty():
 		on_hit_effect_ids = _string_array(weapon.get("special_effects", []))
@@ -5204,6 +5220,10 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 		"max_ammo": max_ammo,
 		"effect_data": effect_data.duplicate(true),
 	}
+	if not durability.is_empty():
+		profile["durability_cost"] = max(0.0, _optional_float(weapon.get("durability_cost", effect_data.get("durability_cost", 1.0)), 1.0))
+		profile["durability_default"] = max(0.0, _optional_float(durability.get("durability", durability.get("max_durability", 100.0)), 100.0))
+		profile["max_durability"] = max(1.0, _optional_float(durability.get("max_durability", profile.get("durability_default", 100.0)), 100.0))
 	if weapon.get("accuracy", null) != null:
 		profile["accuracy"] = _optional_float(weapon.get("accuracy", 0.0), 0.0)
 	for key in ["armor_pierce", "armor_break_chance", "armor_break_defense_multiplier"]:
@@ -5256,6 +5276,14 @@ func _weapon_fragment(item_id: String, items: Dictionary) -> Dictionary:
 	for fragment in _array_or_empty(item.get("fragments", [])):
 		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
 		if str(fragment_data.get("kind", "")) == "weapon":
+			return fragment_data
+	return {}
+
+
+func _item_durability_fragment(item_data: Dictionary) -> Dictionary:
+	for fragment in _array_or_empty(item_data.get("fragments", [])):
+		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
+		if str(fragment_data.get("kind", "")) == "durability":
 			return fragment_data
 	return {}
 
@@ -5349,6 +5377,68 @@ func _consume_attack_ammo(actor: RefCounted, profile: Dictionary) -> Dictionary:
 		"count": count,
 		"remaining": int(actor.inventory.get(ammo_type, 0)),
 	}
+
+
+func _attack_weapon_durability_check(actor: RefCounted, profile: Dictionary) -> Dictionary:
+	var item_id := str(profile.get("item_id", "")).strip_edges()
+	var cost: float = max(0.0, float(profile.get("durability_cost", 0.0)))
+	if actor == null or item_id.is_empty() or cost <= 0.0:
+		return {"success": true}
+	var current: float = _weapon_durability(actor, profile)
+	if current >= cost:
+		return {"success": true}
+	return {
+		"success": false,
+		"reason": "weapon_durability_insufficient",
+		"actor_id": actor.actor_id,
+		"weapon_item_id": item_id,
+		"slot_id": str(profile.get("equipment_slot", "main_hand")),
+		"durability_before": current,
+		"durability_cost": cost,
+		"max_durability": float(profile.get("max_durability", max(1.0, current))),
+	}
+
+
+func _consume_attack_weapon_durability(actor: RefCounted, profile: Dictionary) -> Dictionary:
+	var item_id := str(profile.get("item_id", "")).strip_edges()
+	var cost: float = max(0.0, float(profile.get("durability_cost", 0.0)))
+	if actor == null or item_id.is_empty() or cost <= 0.0:
+		return {"consumed": false}
+	var before: float = _weapon_durability(actor, profile)
+	if before < cost:
+		return {
+			"consumed": false,
+			"reason": "weapon_durability_insufficient",
+			"weapon_item_id": item_id,
+			"durability_before": before,
+			"durability_cost": cost,
+		}
+	var after: float = max(0.0, before - cost)
+	actor.tool_durability[item_id] = after
+	var payload := {
+		"actor_id": actor.actor_id,
+		"weapon_item_id": item_id,
+		"slot_id": str(profile.get("equipment_slot", "main_hand")),
+		"durability_cost": cost,
+		"durability_before": before,
+		"durability_after": after,
+		"max_durability": float(profile.get("max_durability", max(1.0, before))),
+	}
+	_emit("weapon_durability_consumed", payload.duplicate(true))
+	var result: Dictionary = payload.duplicate(true)
+	result["consumed"] = true
+	return result
+
+
+func _weapon_durability(actor: RefCounted, profile: Dictionary) -> float:
+	if actor == null:
+		return 0.0
+	var item_id := str(profile.get("item_id", "")).strip_edges()
+	if item_id.is_empty():
+		return 0.0
+	if actor.tool_durability.has(item_id):
+		return max(0.0, float(actor.tool_durability.get(item_id, 0.0)))
+	return max(0.0, float(profile.get("durability_default", profile.get("max_durability", 100.0))))
 
 
 func _normalize_item_id(value: Variant) -> String:

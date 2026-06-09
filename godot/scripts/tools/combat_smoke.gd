@@ -2008,6 +2008,7 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	var original_active_effects: Array[Dictionary] = player.active_effects.duplicate(true)
 	var no_active_effects: Array[Dictionary] = []
 	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
+	var original_tool_durability: Dictionary = player.tool_durability.duplicate(true)
 	player.active_effects = no_active_effects
 	player.combat_attributes["accuracy"] = 100.0
 	player.ap = 20.0
@@ -2115,6 +2116,51 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	player.ap = 20.0
 
 	player.equipment["main_hand"] = "1002"
+	player.tool_durability["1002"] = 2.0
+	var durable_weapon_target: int = _register_test_actor(simulation, "weapon_profile_durability_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 1,
+	}, 80.0)
+	var durable_weapon_enemy: RefCounted = simulation.actor_registry.get_actor(durable_weapon_target)
+	durable_weapon_enemy.hp = 80.0
+	durable_weapon_enemy.max_hp = 80.0
+	durable_weapon_enemy.defense = 0.0
+	durable_weapon_enemy.combat_attributes["evasion"] = 0.0
+	var durability_events_before: int = _event_count(simulation.snapshot(), "weapon_durability_consumed")
+	var durable_weapon_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": durable_weapon_target, "topology": topology})
+	if not bool(durable_weapon_result.get("success", false)):
+		errors.append("weapon durability attack should succeed: %s" % durable_weapon_result.get("reason", "unknown"))
+	if not is_equal_approx(float(player.tool_durability.get("1002", 0.0)), 1.0):
+		errors.append("successful weapon attack should reduce weapon durability by 1")
+	var durability_payload: Dictionary = _dictionary_or_empty(durable_weapon_result.get("weapon_durability_consumed", {}))
+	if not bool(durability_payload.get("consumed", false)) or str(durability_payload.get("weapon_item_id", "")) != "1002":
+		errors.append("attack result should expose weapon_durability_consumed payload")
+	if _event_count(simulation.snapshot(), "weapon_durability_consumed") <= durability_events_before:
+		errors.append("weapon durability consumption should emit event")
+	_restore_player_turn(simulation, player)
+	player.ap = 20.0
+	player.tool_durability["1002"] = 0.0
+	var broken_weapon_target: int = _register_test_actor(simulation, "weapon_profile_broken_weapon_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 2,
+	}, 80.0)
+	var ap_before_broken_attack: float = player.ap
+	var broken_weapon_result: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": broken_weapon_target, "topology": topology})
+	if str(broken_weapon_result.get("reason", "")) != "weapon_durability_insufficient":
+		errors.append("zero durability weapon should reject attack before AP spend")
+	if absf(player.ap - ap_before_broken_attack) > 0.01:
+		errors.append("weapon durability rejection should not spend AP")
+	if simulation.actor_registry.get_actor(durable_weapon_target) != null:
+		simulation.actor_registry.unregister_actor(durable_weapon_target)
+	if simulation.actor_registry.get_actor(broken_weapon_target) != null:
+		simulation.actor_registry.unregister_actor(broken_weapon_target)
+	_restore_player_turn(simulation, player)
+	player.ap = 20.0
+
+	player.equipment["main_hand"] = "1002"
+	player.tool_durability["1002"] = 50.0
 	player.ap = 20.0
 	var bleeding_target: int = _register_test_actor(simulation, "on_hit_bleeding_target", "hostile", {
 		"x": int(player_grid.get("x", 0)) + 1,
@@ -2277,11 +2323,12 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	var inventory_no_ammo: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": inventory_no_ammo_target, "topology": topology})
 	if inventory_no_ammo.get("reason", "") != "ammo_insufficient":
 		errors.append("ranged weapon without tracked magazine or inventory ammo should report ammo_insufficient")
-	for actor_id in [blunt_target, wrench_target, rifle_target, bleeding_target, poison_target, dot_defeat_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
+	for actor_id in [blunt_target, wrench_target, rifle_target, durable_weapon_target, broken_weapon_target, bleeding_target, poison_target, dot_defeat_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.active_effects = original_active_effects
 	player.combat_attributes = original_attributes
+	player.tool_durability = original_tool_durability
 	simulation.exit_combat_if_clear("weapon_profile_smoke_cleanup")
 
 
