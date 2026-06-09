@@ -1501,6 +1501,41 @@ func _expect_skill_targeting_preview(errors: Array[String], simulation: RefCount
 	var blocked_single: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", single_skill, {"actor_id": hostile_id}, los_blocked_topology)
 	if blocked_single.get("reason", "") != "skill_target_blocked_by_los":
 		errors.append("single skill target blocked by LOS should report skill_target_blocked_by_los, got %s" % blocked_single.get("reason", ""))
+	var skill_door_id := "combat_smoke_skill_los_door"
+	var skill_door_topology: Dictionary = _door_los_test_topology(player_grid, {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, skill_door_id)
+	simulation.door_states[skill_door_id] = {
+		"door_id": skill_door_id,
+		"object_id": skill_door_id,
+		"is_open": false,
+		"blocks_sight_when_closed": true,
+	}
+	var closed_door_skill: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", single_skill, {"actor_id": hostile_id}, skill_door_topology)
+	if closed_door_skill.get("reason", "") != "skill_target_blocked_by_los":
+		errors.append("closed door skill target should report skill_target_blocked_by_los, got %s" % closed_door_skill.get("reason", ""))
+	simulation.door_states[skill_door_id]["is_open"] = true
+	var open_door_skill_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", single_skill, {"actor_id": hostile_id}, skill_door_topology)
+	if not bool(open_door_skill_preview.get("success", false)):
+		errors.append("open door skill target preview should use runtime door LOS state: %s" % open_door_skill_preview.get("reason", "unknown"))
+	var ap_before_open_door_skill: float = player.ap
+	var open_door_skill_use: Dictionary = simulation.submit_player_command({
+		"kind": "use_skill",
+		"skill_id": "adrenaline_rush",
+		"skill_library": single_skill,
+		"target": {"actor_id": hostile_id},
+		"topology": skill_door_topology,
+	})
+	if not bool(open_door_skill_use.get("success", false)):
+		errors.append("open door skill use should use runtime door LOS state: %s" % open_door_skill_use.get("reason", "unknown"))
+	elif player.ap >= ap_before_open_door_skill:
+		errors.append("open door skill use should spend AP after passing LOS")
+	simulation.door_states.erase(skill_door_id)
+	var reset_after_open_door_skill: Array[Dictionary] = []
+	player.active_effects = reset_after_open_door_skill
+	player.ap = 20.0
 	var friendly_preview: Dictionary = simulation.preview_skill_target(player.actor_id, "adrenaline_rush", single_skill, {"actor_id": friendly_id}, topology)
 	if friendly_preview.get("reason", "") != "skill_target_not_hostile":
 		errors.append("hostile-only skill should reject friendly target, got %s" % friendly_preview.get("reason", ""))

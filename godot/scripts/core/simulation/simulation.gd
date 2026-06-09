@@ -948,7 +948,7 @@ func preview_skill_target(actor_id: int, skill_id: String, skill_library: Dictio
 	var activation: Dictionary = _dictionary_or_empty(skill.get("activation", {}))
 	var command := {
 		"target": target.duplicate(true),
-		"topology": topology.duplicate(true),
+		"topology": _topology_with_runtime_door_states(topology),
 	}
 	return _skill_target_preview(actor, skill_id, activation, command)
 
@@ -2953,19 +2953,20 @@ func _apply_skill_activation_effect(actor: RefCounted, skill_id: String, learned
 func _skill_target_preview(actor: RefCounted, skill_id: String, activation: Dictionary, command: Dictionary) -> Dictionary:
 	var targeting: Dictionary = _skill_targeting_definition(activation)
 	var target_kind: String = str(targeting.get("kind", targeting.get("target_kind", targeting.get("shape", "self"))))
+	var topology: Dictionary = _topology_with_runtime_door_states(_dictionary_or_empty(command.get("topology", {})))
 	match target_kind:
 		"self":
 			return _skill_self_target_preview(actor, skill_id, targeting)
 		"single", "actor", "single_actor":
-			return _skill_actor_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), _dictionary_or_empty(command.get("topology", {})))
+			return _skill_actor_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
 		"grid", "point":
-			return _skill_grid_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), _dictionary_or_empty(command.get("topology", {})))
+			return _skill_grid_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
 		"radius", "circle":
-			return _skill_radius_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), _dictionary_or_empty(command.get("topology", {})))
+			return _skill_radius_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
 		"line":
-			return _skill_line_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), _dictionary_or_empty(command.get("topology", {})))
+			return _skill_line_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
 		"cone":
-			return _skill_cone_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), _dictionary_or_empty(command.get("topology", {})))
+			return _skill_cone_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
 	return {
 		"success": false,
 		"reason": "skill_target_shape_unknown",
