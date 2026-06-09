@@ -1581,9 +1581,7 @@ func finish_world_action_presentations() -> Dictionary:
 		return world_action_presenter_snapshot()
 	var result: Dictionary = _dictionary_or_empty(world_action_presenter.call("finish_active_presentations"))
 	_record_world_action_queue_finished(result)
-	if _apply_pending_world_action_ui("presenter_finished"):
-		refresh_all_panels(current_interaction_prompt())
-	else:
+	if not _apply_pending_world_action_ui("presenter_finished"):
 		refresh_hud(current_interaction_prompt())
 	return result
 
@@ -3972,9 +3970,15 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
 	_setup_panels()
+	var deferred_ui := false
 	if not stage_panel_to_open.is_empty():
-		_queue_or_open_stage_panel_after_world_action(stage_panel_to_open, result)
-	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
+		deferred_ui = _queue_or_open_stage_panel_after_world_action(stage_panel_to_open, result)
+	elif _queue_or_refresh_all_panels_after_world_action(result):
+		deferred_ui = true
+	if deferred_ui:
+		refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
+	else:
+		refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
 
 
 func _interaction_result_stage_panel(result: Dictionary) -> String:
@@ -4011,9 +4015,9 @@ func _open_stage_panel_from_interaction(panel_id: String) -> void:
 			panel_controller.call("toggle_stage_panel", panel_id)
 
 
-func _queue_or_open_stage_panel_after_world_action(panel_id: String, result: Dictionary) -> void:
+func _queue_or_open_stage_panel_after_world_action(panel_id: String, result: Dictionary) -> bool:
 	if panel_id.is_empty():
-		return
+		return false
 	if _world_action_presenter_blocks_input():
 		pending_world_action_ui = {
 			"kind": "open_stage_panel",
@@ -4023,11 +4027,32 @@ func _queue_or_open_stage_panel_after_world_action(panel_id: String, result: Dic
 			"presenter_kind": str(world_action_presenter_snapshot().get("kind", "")),
 			"queued_sequence": int(world_action_queue_state.get("sequence", 0)),
 			"open_after": "presenter_finished",
+			"refresh_all_panels": true,
+			"prompt": _dictionary_or_empty(result.get("prompt", {})).duplicate(true),
 		}
 		world_action_queue_state["pending_ui"] = pending_world_action_ui.duplicate(true)
 		world_action_queue_state["pending_ui_active"] = true
-		return
+		return true
 	_open_stage_panel_from_interaction(panel_id)
+	return false
+
+
+func _queue_or_refresh_all_panels_after_world_action(result: Dictionary) -> bool:
+	if not _world_action_presenter_blocks_input():
+		return false
+	pending_world_action_ui = {
+		"kind": "refresh_all_panels",
+		"source": "interaction_result",
+		"command_kind": _world_action_command_kind(result),
+		"presenter_kind": str(world_action_presenter_snapshot().get("kind", "")),
+		"queued_sequence": int(world_action_queue_state.get("sequence", 0)),
+		"open_after": "presenter_finished",
+		"refresh_all_panels": true,
+		"prompt": _dictionary_or_empty(result.get("prompt", {})).duplicate(true),
+	}
+	world_action_queue_state["pending_ui"] = pending_world_action_ui.duplicate(true)
+	world_action_queue_state["pending_ui_active"] = true
+	return true
 
 
 func _process_world_action_queue_completion() -> void:
@@ -4048,6 +4073,8 @@ func _apply_pending_world_action_ui(trigger: String) -> bool:
 	pending_world_action_ui.clear()
 	if str(pending_ui.get("kind", "")) == "open_stage_panel":
 		_open_stage_panel_from_interaction(str(pending_ui.get("panel_id", "")))
+	if bool(pending_ui.get("refresh_all_panels", false)) or str(pending_ui.get("kind", "")) == "refresh_all_panels":
+		refresh_all_panels(_dictionary_or_empty(pending_ui.get("prompt", {})))
 	var applied: Dictionary = pending_ui.duplicate(true)
 	applied["trigger"] = trigger
 	applied["applied"] = true

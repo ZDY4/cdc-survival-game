@@ -1752,12 +1752,24 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 	var open_result: Dictionary = _execute_primary_and_complete(game_root)
 	if not bool(open_result.get("success", false)):
 		errors.append("corpse open container failed: %s" % open_result.get("reason", "unknown"))
+	var queue_before_finish: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
+	var pending_ui: Dictionary = _dictionary_or_empty(queue_before_finish.get("pending_ui", {}))
 	if not game_root.container_panel.visible:
-		errors.append("opening corpse should show container panel")
+		if not bool(queue_before_finish.get("pending_ui_active", false)):
+			errors.append("opening corpse should either show container panel or queue UI refresh while presenter is active")
+		if str(pending_ui.get("kind", "")) != "refresh_all_panels":
+			errors.append("opening corpse pending UI should refresh session panels after presenter, got %s" % JSON.stringify(pending_ui))
+	else:
+		errors.append("opening corpse should defer container panel until interaction presenter completes")
 	if not str(_actor_by_id(game_root.simulation.snapshot(), 1).get("active_container_id", "")).begins_with("corpse_corpse_world_smoke_"):
 		errors.append("opening corpse should set player active_container_id")
-	game_root.close_active_container("corpse_world_smoke_cleanup")
 	await _wait_for_world_action_presenter_idle(game_root)
+	if not game_root.container_panel.visible:
+		errors.append("opening corpse should show container panel after presenter completes")
+	var queue_after_finish: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
+	if bool(queue_after_finish.get("pending_ui_active", true)):
+		errors.append("opening corpse pending UI should clear after presenter completes")
+	game_root.close_active_container("corpse_world_smoke_cleanup")
 
 
 func _corpse_node_for_source_actor(game_root: Node, source_actor_id: int) -> Node3D:
