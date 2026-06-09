@@ -13,6 +13,7 @@ var _text_label: Label
 var _options_label: Label
 var _options_box: VBoxContainer
 var _close_button: Button
+var _last_snapshot: Dictionary = {}
 
 
 func _ready() -> void:
@@ -25,6 +26,7 @@ func _ready() -> void:
 func apply_snapshot(snapshot: Dictionary) -> void:
 	if _panel == null:
 		_build_layout()
+	_last_snapshot = snapshot.duplicate(true)
 
 	var active: bool = bool(snapshot.get("active", false))
 	visible = active
@@ -88,6 +90,7 @@ func _build_layout() -> void:
 	_close_button.custom_minimum_size = Vector2(28, 24)
 	_close_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	_close_button.pressed.connect(func() -> void:
+		_play_dialogue_control_audio("ui_button_pressed", "CloseButton", "button", "close_dialogue", _dialogue_audio_payload())
 		close_requested.emit()
 	)
 	_target_label = _label("TargetLine")
@@ -218,6 +221,7 @@ func _option_button(option_index: int, option: Dictionary) -> Button:
 	button.set_meta("preview_condition_summary", _condition_preview_summary(condition_preview))
 	button.set_meta("preview_condition_missing_count", _array_or_empty(condition_preview.get("missing", [])).size())
 	button.pressed.connect(func() -> void:
+		_play_dialogue_control_audio("ui_button_pressed", "DialogueOption_%d" % (option_index + 1), "option_button", "choose_option", _dialogue_option_audio_payload(option_index, option, preview))
 		var root := get_parent()
 		if root != null and root.has_method("choose_dialogue_option"):
 			root.choose_dialogue_option(option_index)
@@ -252,6 +256,44 @@ func _option_tooltip(option_index: int, option: Dictionary, preview: Dictionary)
 	if not bool(preview.get("ok", true)):
 		parts.append("preview reason: %s" % str(preview.get("reason", "")))
 	return " | ".join(parts)
+
+
+func _play_dialogue_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "dialogue",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
+
+
+func _dialogue_audio_payload(extra_payload: Dictionary = {}) -> Dictionary:
+	var target: Dictionary = _dictionary_or_empty(_last_snapshot.get("target", {}))
+	var payload := {
+		"dialogue_id": str(_last_snapshot.get("dialogue_id", "")),
+		"node_id": str(_last_snapshot.get("node_id", "")),
+		"target_actor_id": int(target.get("actor_id", 0)),
+		"target_definition_id": str(target.get("definition_id", "")),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
+
+
+func _dialogue_option_audio_payload(option_index: int, option: Dictionary, preview: Dictionary) -> Dictionary:
+	return _dialogue_audio_payload({
+		"option_id": str(option.get("id", "")),
+		"option_index": option_index + 1,
+		"value": str(option.get("text", "")),
+		"reason": str(preview.get("reason", "")),
+	})
 
 
 func _first_condition_preview(preview: Dictionary) -> Dictionary:

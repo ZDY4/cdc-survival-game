@@ -129,6 +129,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if trade_button != null:
 		trade_button.pressed.emit()
 		await process_frame
+		_assert_dialogue_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DialogueOption_2", "option_button", "choose_option", {
+			"dialogue_id": "trader_lao_wang_tutorial_active",
+			"option_index": "2",
+			"value": "先看看货。",
+			"target_definition_id": "trader_lao_wang",
+		}, "trade option audio")
 	if not game_root.trade_panel.visible:
 		errors.append("dialogue option button should choose trade dialogue option and open trade")
 	if not _player(game_root).get("active_dialogue_id", "") == "":
@@ -321,6 +327,9 @@ func _expect_close_button_closes_dialogue(errors: Array[String], game_root: Node
 	var before_events: int = game_root.simulation.snapshot().get("events", []).size()
 	close_button.pressed.emit()
 	await process_frame
+	_assert_dialogue_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "CloseButton", "button", "close_dialogue", {
+		"dialogue_id": "trader_lao_wang_intro",
+	}, "dialogue close button audio")
 	if not str(_player(game_root).get("active_dialogue_id", "")).is_empty():
 		errors.append("dialogue close button should clear active dialogue runtime state")
 	if game_root.dialogue_panel.visible:
@@ -376,7 +385,45 @@ func _last_event_payload(game_root: Node, kind: String) -> Dictionary:
 	return {}
 
 
+func _assert_dialogue_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = {}
+	for index in range(recent.size() - 1, -1, -1):
+		var candidate: Dictionary = _dictionary_or_empty(recent[index])
+		if str(candidate.get("audio_source", "")) != "ui" or str(candidate.get("panel_id", "")) != "dialogue":
+			continue
+		if str(candidate.get("event_kind", "")) != expected_event_kind or str(candidate.get("sound_id", "")) != expected_sound_id:
+			continue
+		if str(candidate.get("control_name", "")) != expected_control_name:
+			continue
+		entry = candidate
+		break
+	if entry.is_empty():
+		errors.append("%s: expected dialogue audio %s/%s/%s, got %s" % [context, expected_event_kind, expected_sound_id, expected_control_name, snapshot])
+		return
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	if typeof(value) == TYPE_ARRAY:
+		return value
+	return []
