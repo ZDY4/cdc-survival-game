@@ -1631,6 +1631,8 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
 	var planner_goal_id := str(planner.get("goal_id", intent.get("goal_id", "")))
 	var planner_action_id := str(planner.get("action_id", intent.get("planner_action_id", "")))
+	var life_status_id := _ai_life_status_id(intent_kind, planner_action_id, reason)
+	var life_status_group := _ai_life_status_group(life_status_id, planner_action_id)
 	var life_goal_kind := "settlement_life" if not settlement_id.is_empty() else ("combat" if target_actor_id > 0 else "idle")
 	var goal_id := "none"
 	if target_actor_id > 0:
@@ -1654,6 +1656,8 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"smart_object_id": smart_object_id,
 		"planner_score": float(planner.get("goal_score", intent.get("planner_goal_score", 0.0))),
 		"planner_action_id": planner_action_id,
+		"life_status_id": life_status_id,
+		"life_status_group": life_status_group,
 		"tracking_state": target_tracking_state,
 		"lost": bool(intent.get("target_lost", false)),
 		"lost_reason": str(intent.get("target_lost_reason", "")),
@@ -1674,6 +1678,8 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"anchor_id": anchor_id,
 		"smart_object_id": smart_object_id,
 		"schedule_label": schedule_label,
+		"life_status_id": life_status_id,
+		"life_status_group": life_status_group,
 	}
 	var blackboard := {
 		"target_actor_id": target_actor_id,
@@ -1695,6 +1701,8 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"schedule_label": schedule_label,
 		"planner_goal_id": planner_goal_id,
 		"planner_action_id": planner_action_id,
+		"life_status_id": life_status_id,
+		"life_status_group": life_status_group,
 		"planner_score_rule_ids": _array_or_empty(planner.get("score_rule_ids", [])).duplicate(true),
 		"planner_facts": _dictionary_or_empty(planner.get("facts", {})).duplicate(true),
 	}
@@ -1708,6 +1716,8 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"anchor_id": anchor_id,
 		"smart_object_id": smart_object_id,
 		"schedule_label": schedule_label,
+		"life_status_id": life_status_id,
+		"life_status_group": life_status_group,
 		"target_actor_id": target_actor_id,
 		"target_grid": _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true),
 		"path_length": path.size(),
@@ -1728,6 +1738,53 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"target_lost": bool(intent.get("target_lost", false)),
 		"target_lost_reason": str(intent.get("target_lost_reason", "")),
 	}
+
+
+func _ai_life_status_id(intent_kind: String, planner_action_id: String, reason: String) -> String:
+	if reason.begins_with("life_") and reason.ends_with("_unreachable"):
+		return "blocked"
+	match planner_action_id:
+		"travel_to_duty_area", "travel_home", "travel_to_canteen", "travel_to_leisure":
+			return "traveling"
+		"patrol_route":
+			return "patrolling"
+		"stand_guard", "respond_alarm", "raise_alarm":
+			return "guarding"
+		"restock_meal_service":
+			return "servicing"
+		"treat_patients":
+			return "treating"
+		"eat_meal":
+			return "eating"
+		"sleep":
+			return "resting"
+		"relax":
+			return "relaxing"
+		"idle_safely":
+			return "idle"
+	match intent_kind:
+		"follow_route":
+			return "patrolling"
+		"return_home":
+			return "traveling"
+		"use_smart_object":
+			return "servicing"
+	return ""
+
+
+func _ai_life_status_group(state_id: String, planner_action_id: String) -> String:
+	match state_id:
+		"traveling", "patrolling":
+			return "work"
+		"guarding", "servicing", "treating":
+			return "service"
+		"eating", "resting", "relaxing":
+			return "rest"
+		"blocked":
+			return "blocked"
+	if state_id.is_empty() and planner_action_id.is_empty():
+		return ""
+	return "idle" if state_id == "idle" else "work"
 
 
 func runtime_performance_snapshot() -> Dictionary:

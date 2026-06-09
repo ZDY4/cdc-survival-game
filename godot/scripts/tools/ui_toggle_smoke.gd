@@ -1713,6 +1713,8 @@ func _assert_settlement_life_ai_debug(errors: Array[String], game_root: Node, co
 		errors.append("%s: settlement life ai_debug latest intent should expose actor 3: %s" % [context, ai_debug])
 	if str(latest.get("settlement_id", "")).is_empty() or str(latest.get("route_id", "")).is_empty():
 		errors.append("%s: settlement life ai_debug should expose settlement and route ids: %s" % [context, latest])
+	if str(latest.get("life_status_id", "")) != "traveling" or str(latest.get("life_status_group", "")) != "work":
+		errors.append("%s: settlement life ai_debug should expose derived life status: %s" % [context, latest])
 	var goal: Dictionary = _dictionary_or_empty(latest.get("goal", {}))
 	var action: Dictionary = _dictionary_or_empty(latest.get("action", {}))
 	var blackboard: Dictionary = _dictionary_or_empty(latest.get("blackboard", {}))
@@ -1720,10 +1722,13 @@ func _assert_settlement_life_ai_debug(errors: Array[String], game_root: Node, co
 		errors.append("%s: settlement life goal should expose route target: %s" % [context, goal])
 	if str(action.get("schedule_label", "")).is_empty():
 		errors.append("%s: settlement life action should expose schedule label: %s" % [context, action])
+	if str(action.get("life_status_id", "")) != "traveling" or str(blackboard.get("life_status_id", "")) != "traveling":
+		errors.append("%s: settlement life action/blackboard should mirror life status: %s / %s" % [context, action, blackboard])
 	if int(blackboard.get("route_grid_count", 0)) <= 0:
 		errors.append("%s: settlement life blackboard should expose route grid count: %s" % [context, blackboard])
 	_assert_runtime_control_line(errors, game_root, "AI #3 follow_route", "%s settlement life HUD AI token" % context)
 	_assert_runtime_control_line(errors, game_root, "route:", "%s settlement life HUD route token" % context)
+	_assert_runtime_control_line(errors, game_root, "status:traveling", "%s settlement life HUD status token" % context)
 
 
 func _assert_observe_auto_button(errors: Array[String], game_root: Node, expected_enabled: bool, context: String) -> void:

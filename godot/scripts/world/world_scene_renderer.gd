@@ -38,6 +38,11 @@ var status_buff_material := _unshaded_material(Color(0.43, 0.86, 0.38, 0.9))
 var status_passive_material := _unshaded_material(Color(0.62, 0.72, 0.95, 0.9))
 var status_debuff_material := _unshaded_material(Color(0.92, 0.22, 0.18, 0.9))
 var status_generic_material := _unshaded_material(Color(0.86, 0.78, 0.36, 0.9))
+var life_status_work_material := _unshaded_material(Color(0.28, 0.68, 1.0, 0.9))
+var life_status_service_material := _unshaded_material(Color(0.42, 0.88, 0.56, 0.9))
+var life_status_rest_material := _unshaded_material(Color(0.78, 0.62, 1.0, 0.9))
+var life_status_blocked_material := _unshaded_material(Color(0.94, 0.28, 0.22, 0.92))
+var life_status_idle_material := _unshaded_material(Color(0.72, 0.76, 0.72, 0.82))
 var quest_offer_material := _unshaded_material(Color(1.0, 0.72, 0.20, 0.94))
 var quest_turn_in_ready_material := _unshaded_material(Color(1.0, 0.84, 0.18, 0.94))
 var quest_turn_in_pending_material := _unshaded_material(Color(0.34, 0.82, 1.0, 0.86))
@@ -765,6 +770,7 @@ func _add_actor_status_markers(parent: Node3D, actor_data: Dictionary) -> void:
 	_add_actor_side_badge(parent, actor_data)
 	_add_actor_resource_bar(parent, actor_data, "health", 0.98, _actor_health_ratio(actor_data), actor_health_material, actor_health_missing_material)
 	_add_actor_resource_bar(parent, actor_data, "ap", 0.86, _actor_ap_ratio(actor_data), actor_ap_material, actor_ap_missing_material)
+	_add_actor_life_status_marker(parent, actor_data)
 	_add_actor_status_effect_icons(parent, actor_data)
 
 
@@ -851,6 +857,101 @@ func _actor_side_color(side: String) -> Color:
 		"neutral":
 			return Color(1.0, 0.88, 0.32, 0.95)
 	return Color(0.82, 0.82, 0.76, 0.95)
+
+
+func _add_actor_life_status_marker(parent: Node3D, actor_data: Dictionary) -> void:
+	var status: Dictionary = _dictionary_or_empty(actor_data.get("life_status", {}))
+	if status.is_empty() or str(status.get("state_id", "")).is_empty():
+		return
+	var container := Node3D.new()
+	container.name = "ActorLifeStatusMarker"
+	container.position = Vector3(-0.34, 1.30, 0.0)
+	_apply_life_status_meta(container, actor_data, status)
+
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.08
+	mesh.height = 0.16
+	mesh.radial_segments = 12
+	mesh.rings = 6
+	var icon := MeshInstance3D.new()
+	icon.name = "ActorLifeStatusIcon"
+	icon.mesh = mesh
+	icon.material_override = _life_status_material(str(status.get("state_group", "")))
+	_apply_life_status_meta(icon, actor_data, status)
+	container.add_child(icon)
+
+	var label := Label3D.new()
+	label.name = "ActorLifeStatusLabel"
+	label.text = _life_status_label_text(status)
+	label.position = Vector3(0.0, 0.08, 0.0)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 9
+	label.modulate = Color(0.94, 0.96, 0.88, 0.96)
+	label.outline_size = 3
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
+	_apply_world_label_font(label)
+	_apply_life_status_meta(label, actor_data, status)
+	container.add_child(label)
+	parent.add_child(container)
+
+
+func _life_status_material(state_group: String) -> StandardMaterial3D:
+	match state_group:
+		"work":
+			return life_status_work_material
+		"service":
+			return life_status_service_material
+		"rest":
+			return life_status_rest_material
+		"blocked":
+			return life_status_blocked_material
+	return life_status_idle_material
+
+
+func _life_status_label_text(status: Dictionary) -> String:
+	var state_id := str(status.get("state_id", ""))
+	match state_id:
+		"traveling":
+			return "行"
+		"patrolling":
+			return "巡"
+		"guarding":
+			return "守"
+		"servicing":
+			return "服"
+		"treating":
+			return "医"
+		"eating":
+			return "餐"
+		"resting":
+			return "休"
+		"relaxing":
+			return "闲"
+		"blocked":
+			return "!"
+		"background_idle":
+			return "待"
+	var label := str(status.get("activity_label", ""))
+	return label.substr(0, 1) if not label.is_empty() else "待"
+
+
+func _apply_life_status_meta(node: Node, actor_data: Dictionary, status: Dictionary) -> void:
+	node.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
+	node.set_meta("life_status", status.duplicate(true))
+	node.set_meta("life_status_state_id", str(status.get("state_id", "")))
+	node.set_meta("life_status_group", str(status.get("state_group", "")))
+	node.set_meta("life_status_activity_id", str(status.get("activity_id", "")))
+	node.set_meta("life_status_activity_label", str(status.get("activity_label", "")))
+	node.set_meta("life_status_mode", str(status.get("mode", "")))
+	node.set_meta("life_status_goal_id", str(status.get("goal_id", "")))
+	node.set_meta("life_status_planner_action_id", str(status.get("planner_action_id", "")))
+	node.set_meta("life_status_route_id", str(status.get("route_id", "")))
+	node.set_meta("life_status_anchor_id", str(status.get("anchor_id", "")))
+	node.set_meta("life_status_smart_object_id", str(status.get("smart_object_id", "")))
+	node.set_meta("life_status_elapsed_minutes", int(status.get("elapsed_minutes", 0)))
+	node.set_meta("life_status_remaining_minutes", int(status.get("remaining_minutes", 0)))
+	node.set_meta("life_status_completed", bool(status.get("completed", false)))
 
 
 func _add_actor_status_effect_icons(parent: Node3D, actor_data: Dictionary) -> void:

@@ -74,6 +74,7 @@ func _validate_scene(root: Node3D, world_result: Dictionary, counts: Dictionary,
 		errors.append("expected camera")
 	else:
 		_validate_player_camera_focus(root, errors)
+	_validate_actor_life_status_markers(registry, errors)
 	_validate_label3d_fonts(root, "startup generated world", errors)
 	_validate_runtime_map_object_fallbacks(root, counts, errors)
 	_validate_synthetic_actor_side_badges(errors)
@@ -459,6 +460,100 @@ func _validate_actor_status_effect_icons(actor_node: Node, errors: Array[String]
 			errors.append("status effect Sprite3D should expose icon_loaded")
 	if container.find_child("ActorStatusEffectLabel_0", true, false) == null:
 		errors.append("status effect icons should render compact labels")
+
+
+func _validate_actor_life_status_markers(registry: RefCounted, errors: Array[String]) -> void:
+	var world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(_life_status_runtime_snapshot())
+	if not bool(world_result.get("ok", false)):
+		errors.append("life status marker smoke failed to build world snapshot: %s" % world_result.get("error", "unknown"))
+		return
+	var service_actor: Dictionary = _actor_by_id(_array_or_empty(world_result.get("actors", [])), 9602)
+	var life_status: Dictionary = _dictionary_or_empty(service_actor.get("life_status", {}))
+	if str(life_status.get("state_id", "")) != "servicing" or str(life_status.get("state_group", "")) != "service":
+		errors.append("world snapshot should expose actor life status from runtime: %s" % life_status)
+	var root := Node3D.new()
+	root.name = "SceneSmokeLifeStatusRoot"
+	get_root().add_child(root)
+	WorldSceneRenderer.new().render_world(root, world_result, {"load_map_visuals": false})
+	var actor_node: Node = root.find_child("Actor_scene_smoke_life_9602", true, false)
+	if actor_node == null:
+		errors.append("life status smoke actor should render")
+	else:
+		var marker: Node = actor_node.find_child("ActorLifeStatusMarker", true, false)
+		if marker == null:
+			errors.append("actor with life status should render ActorLifeStatusMarker")
+		else:
+			if str(marker.get_meta("life_status_state_id", "")) != "servicing":
+				errors.append("life status marker should expose servicing state metadata")
+			if str(marker.get_meta("life_status_group", "")) != "service":
+				errors.append("life status marker should expose service group metadata")
+			if str(marker.get_meta("life_status_mode", "")) != "online":
+				errors.append("life status marker should expose online mode metadata")
+			if str(marker.get_meta("life_status_planner_action_id", "")) != "restock_meal_service":
+				errors.append("life status marker should expose planner action metadata")
+		var label: Label3D = actor_node.find_child("ActorLifeStatusLabel", true, false) as Label3D
+		if label == null:
+			errors.append("actor with life status should render ActorLifeStatusLabel")
+		elif label.text != "服":
+			errors.append("life status label should render compact service glyph, got %s" % label.text)
+		var icon: MeshInstance3D = actor_node.find_child("ActorLifeStatusIcon", true, false) as MeshInstance3D
+		if icon == null:
+			errors.append("actor with life status should render ActorLifeStatusIcon")
+		elif str(icon.get_meta("life_status_activity_id", "")) != "restock_meal_service":
+			errors.append("life status icon should expose activity metadata")
+	_validate_label3d_fonts(root, "actor life status markers", errors)
+	root.queue_free()
+
+
+func _life_status_runtime_snapshot() -> Dictionary:
+	return {
+		"active_map_id": "survivor_outpost_01",
+		"actors": [{
+			"actor_id": 9601,
+			"definition_id": "player",
+			"display_name": "Player",
+			"kind": "player",
+			"side": "player",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 1, "y": 0, "z": 1},
+			"ap": 6.0,
+			"combat": {"hp": 10.0, "max_hp": 10.0, "attributes": {"turn_ap_max": 6.0}},
+		}, {
+			"actor_id": 9602,
+			"definition_id": "scene_smoke_life",
+			"display_name": "Life Status Smoke",
+			"kind": "npc",
+			"side": "friendly",
+			"map_id": "survivor_outpost_01",
+			"grid_position": {"x": 2, "y": 0, "z": 1},
+			"ap": 3.0,
+			"combat": {"hp": 8.0, "max_hp": 8.0, "attributes": {"turn_ap_max": 6.0}},
+			"life": {
+				"settlement_id": "survivor_outpost_01_settlement",
+				"runtime": {
+					"status": {
+						"actor_id": 9602,
+						"definition_id": "scene_smoke_life",
+						"settlement_id": "survivor_outpost_01_settlement",
+						"state_id": "servicing",
+						"state_group": "service",
+						"activity_id": "restock_meal_service",
+						"activity_label": "服务",
+						"mode": "online",
+						"goal_id": "satisfy_shift",
+						"planner_action_id": "restock_meal_service",
+						"smart_object_id": "meal_counter",
+					},
+				},
+			},
+		}],
+		"events": [],
+		"corpse_containers": [],
+		"consumed_interaction_targets": [],
+		"door_states": [],
+		"active_quests": [],
+		"completed_quests": [],
+	}
 
 
 func _status_effect_icon_by_effect_id(root: Node, effect_id: String) -> Node:

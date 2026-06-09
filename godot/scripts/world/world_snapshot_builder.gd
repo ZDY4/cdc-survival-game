@@ -71,9 +71,16 @@ func _actors_on_map(actors: Array, active_map_id: String) -> Array[Dictionary]:
 			"turn_open": bool(actor.get("turn_open", false)),
 			"in_combat": bool(actor.get("in_combat", false)),
 			"combat": _dictionary_or_empty(actor.get("combat", {})).duplicate(true),
+			"life_status": _actor_life_status(actor),
 			"grid_position": actor.get("grid_position", {}),
 		})
 	return output
+
+
+func _actor_life_status(actor: Dictionary) -> Dictionary:
+	var life: Dictionary = _dictionary_or_empty(actor.get("life", {}))
+	var runtime: Dictionary = _dictionary_or_empty(life.get("runtime", {}))
+	return _dictionary_or_empty(runtime.get("status", {})).duplicate(true)
 
 
 func _appearance_profile_id_for_actor(definition_id: String) -> String:

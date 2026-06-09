@@ -1991,15 +1991,20 @@ func _ai_debug_control_text(value: Variant) -> String:
 		settlement_text = " object:%s" % smart_object_id
 	elif not anchor_id.is_empty():
 		settlement_text = " anchor:%s" % anchor_id
+	var status_text := ""
+	var life_status_id := str(intent.get("life_status_id", ""))
+	if not life_status_id.is_empty():
+		status_text = " status:%s" % life_status_id
 	var reason := str(intent.get("reason", ""))
 	var reason_text := "" if reason.is_empty() else " %s" % reason
-	return "AI #%d %s%s%s%s%s%s" % [
+	return "AI #%d %s%s%s%s%s%s%s" % [
 		int(intent.get("actor_id", 0)),
 		str(intent.get("intent", "")),
 		target_text,
 		path_text,
 		tracking_text,
 		settlement_text,
+		status_text,
 		reason_text,
 	]
 
