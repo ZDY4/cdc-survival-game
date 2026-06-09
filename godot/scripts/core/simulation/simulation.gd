@@ -4418,10 +4418,12 @@ func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result:
 	var planner_state: Dictionary = _dictionary_or_empty(runtime.get("planner_state", {})).duplicate(true)
 	var applied_effects: Array = []
 	var applied_world_state_effects: Array = []
+	var applied_executor_side_effects: Array = []
 	var reservation_result: Dictionary = {}
 	if completed_current_action:
 		applied_effects = _apply_life_planner_action_effects(planner_state, _array_or_empty(completed_action.get("effects", [])))
 		applied_world_state_effects = _apply_life_planner_world_state_effects(actor, completed_action)
+		applied_executor_side_effects = _apply_life_planner_executor_side_effects(actor, completed_action, intent, result)
 	var next_index: int = current_index + 1 if completed_current_action else current_index
 	next_index = clampi(next_index, 0, queue.size())
 	var queue_complete: bool = not queue.is_empty() and next_index >= queue.size()
@@ -4429,6 +4431,7 @@ func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result:
 		reservation_result = _record_life_planner_reservation_step(actor, runtime, planner_state, completed_action, intent, result, queue_complete)
 	execution["applied_effects"] = applied_effects.duplicate(true)
 	execution["applied_world_state_effects"] = applied_world_state_effects.duplicate(true)
+	execution["applied_executor_side_effects"] = applied_executor_side_effects.duplicate(true)
 	if not reservation_result.is_empty():
 		execution["reservation"] = reservation_result.duplicate(true)
 	var planner_runtime: Dictionary = {
@@ -4554,6 +4557,37 @@ func _apply_life_planner_world_state_effects(actor: RefCounted, action: Dictiona
 		applied.append(summary)
 		_emit("settlement_life_world_state_effect_applied", summary.duplicate(true))
 	return applied
+
+
+func _apply_life_planner_executor_side_effects(actor: RefCounted, action: Dictionary, intent: Dictionary, result: Dictionary) -> Array:
+	var action_id := str(action.get("action_id", ""))
+	var executor_binding_id := str(action.get("executor_binding_id", ""))
+	var applied: Array = []
+	if executor_binding_id == "resolve_alarm" and action_id == "respond_alarm":
+		applied.append(_apply_life_executor_world_flag(actor, action_id, executor_binding_id, "world_alert_active", false, "alarm_resolved"))
+	if action_id == "restock_meal_service":
+		applied.append(_apply_life_executor_world_flag(actor, action_id, executor_binding_id, "settlement_meal_service_restocked", true, "service_restocked"))
+	elif action_id == "treat_patients":
+		applied.append(_apply_life_executor_world_flag(actor, action_id, executor_binding_id, "settlement_patients_treated", true, "service_completed"))
+	if not applied.is_empty():
+		result["life_executor_side_effects"] = applied.duplicate(true)
+	return applied
+
+
+func _apply_life_executor_world_flag(actor: RefCounted, action_id: String, executor_binding_id: String, flag_id: String, value: bool, effect_kind: String) -> Dictionary:
+	var flag_result: Dictionary = set_world_flag(flag_id, value, "settlement_life_executor", actor.actor_id)
+	var summary: Dictionary = {
+		"kind": effect_kind,
+		"flag_id": flag_id,
+		"value": value,
+		"changed": bool(flag_result.get("changed", false)),
+		"action_id": action_id,
+		"executor_binding_id": executor_binding_id,
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+	}
+	_emit("settlement_life_executor_side_effect_applied", summary.duplicate(true))
+	return summary
 
 
 func _record_life_planner_reservation_step(actor: RefCounted, runtime: Dictionary, planner_state: Dictionary, action: Dictionary, intent: Dictionary, result: Dictionary, queue_complete: bool) -> Dictionary:

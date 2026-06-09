@@ -411,6 +411,8 @@ func _smart_object_intent_for_action(base: Dictionary, life: Dictionary, settlem
 
 
 func _alarm_intent_for_action(base: Dictionary, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary, context: Dictionary) -> Dictionary:
+	if str(action.get("target_anchor", "")) != "alarm":
+		return _smart_object_intent_for_action(base, life, settlement, ai_library, action, context)
 	var smart_object: Dictionary = _smart_object_for_kind(life, settlement, ai_library, "alarm_point", "", context)
 	if smart_object.is_empty():
 		return _travel_intent_for_action(base, life, settlement, action)

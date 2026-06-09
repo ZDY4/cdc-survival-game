@@ -228,9 +228,79 @@ func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[
 	errors.append_array(_expect_settlement_life_need_effect_action(registry))
 	errors.append_array(_expect_settlement_life_queue_progression(registry))
 	errors.append_array(_expect_settlement_life_world_state_effects(registry))
+	errors.append_array(_expect_settlement_life_executor_side_effects(registry))
 	errors.append_array(_expect_settlement_life_failure_replan(registry))
 	errors.append_array(_expect_settlement_life_reservation_expiry(registry))
 	errors.append_array(_expect_settlement_life_reservation_conflict(registry))
+	return errors
+
+
+func _expect_settlement_life_executor_side_effects(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 540}
+	simulation.set_world_flag("world_alert_active", true, "ai_smoke_seed")
+	var guard_id: int = _register_character(simulation, registry, "survivor_outpost_01_guard_liu", GridCoord.new(24, 0, 35), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var guard: RefCounted = simulation.actor_registry.get_actor(guard_id)
+	guard.life["runtime"] = {
+		"planner_state": {"threat_detected": true},
+		"needs": {
+			"hunger": {"current": 80.0, "max": 100.0},
+			"energy": {"current": 80.0, "max": 100.0},
+			"morale": {"current": 80.0, "max": 100.0},
+		},
+		"planner": {
+			"goal_id": "respond_threat",
+			"goal_score": 1050.0,
+			"score_rule_ids": ["respond_threat_if_alert", "guard_bonus_respond_threat"],
+			"action_id": "respond_alarm",
+			"action_reason": "seeded_executor_side_effect",
+			"action_queue": [{
+				"action_id": "respond_alarm",
+				"executor_binding_id": "resolve_alarm",
+				"planner_cost": 1.0,
+				"target_anchor": "duty",
+				"reservation_target": "guard_post",
+				"need_effects": {},
+				"effects": [
+					{"key": "threat_detected", "value": false},
+					{"key": "threat_resolved", "value": true},
+					{"key": "at_duty_area", "value": true},
+				],
+				"world_state_effects": {},
+				"default_travel_minutes": 10,
+				"perform_minutes": 45,
+				"reservation_ttl_minutes": 0,
+			}],
+			"queue_length": 1,
+			"current_action_index": 0,
+			"queue_remaining": 1,
+			"queue_complete": false,
+			"requirements": [{"key": "threat_resolved", "value": true}],
+			"unmet_requirements": [{"key": "threat_resolved", "value": true}],
+			"facts": {"threat_detected": true},
+			"role": "guard",
+		},
+	}
+	var results: Array = simulation.advance_world_turn(_open_settlement_topology())
+	var result: Dictionary = _npc_result_for_actor(results, guard_id)
+	if str(result.get("intent", "")) != "use_smart_object" or str(result.get("smart_object_id", "")) != "guard_post_main_gate":
+		errors.append("respond_alarm should target duty guard post instead of alarm bell, got %s" % result)
+	if _array_or_empty(simulation.snapshot().get("world_flags", [])).has("world_alert_active"):
+		errors.append("respond_alarm executor side effect should clear world_alert_active")
+	var runtime: Dictionary = _planner_runtime_for_actor(simulation, guard_id)
+	var last_execution: Dictionary = _dictionary_or_empty(runtime.get("last_execution", {}))
+	var side_effects: Array = _array_or_empty(last_execution.get("applied_executor_side_effects", []))
+	if side_effects.is_empty() or str(_dictionary_or_empty(side_effects.front()).get("flag_id", "")) != "world_alert_active" or bool(_dictionary_or_empty(side_effects.front()).get("value", true)):
+		errors.append("respond_alarm should expose applied executor side effects, got %s" % last_execution)
+	var side_effect_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_executor_side_effect_applied")
+	if int(side_effect_event.get("actor_id", 0)) != guard_id or str(side_effect_event.get("flag_id", "")) != "world_alert_active":
+		errors.append("settlement_life_executor_side_effect_applied should expose alarm side effect, got %s" % side_effect_event)
 	return errors
 
 
@@ -502,6 +572,11 @@ func _expect_settlement_life_queue_progression(registry: RefCounted) -> Array[St
 		errors.append("settlement GOAP should reuse queued restock action on next turn, got %s" % second_planner)
 	if not bool(second_runtime.get("queue_complete", false)) or int(second_runtime.get("queue_remaining", -1)) != 0:
 		errors.append("settlement GOAP queue should complete after second queued action, got %s" % second_runtime)
+	var service_side_effects: Array = _array_or_empty(_dictionary_or_empty(second_runtime.get("last_execution", {})).get("applied_executor_side_effects", []))
+	if service_side_effects.is_empty() or str(_dictionary_or_empty(service_side_effects.front()).get("flag_id", "")) != "settlement_meal_service_restocked":
+		errors.append("settlement GOAP restock action should expose service executor side effect, got %s" % second_runtime)
+	if not _array_or_empty(simulation.snapshot().get("world_flags", [])).has("settlement_meal_service_restocked"):
+		errors.append("settlement GOAP restock action should set settlement_meal_service_restocked world flag")
 	var released_reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(second_life_runtime.get("reservations", {})).get("meal_object", {}))
 	if released_reservation.is_empty() or bool(released_reservation.get("active", true)):
 		errors.append("settlement GOAP queue completion should release meal object reservation, got %s" % second_life_runtime)
