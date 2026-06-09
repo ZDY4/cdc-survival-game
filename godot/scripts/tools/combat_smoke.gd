@@ -1280,6 +1280,39 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 		errors.append("submit attack with blocked LOS should expose attacker and target grids")
 	_expect_spatial_diagnostics(errors, command_los_result, "submit blocked LOS attack", true, true, true, false, true, "target_blocked_by_los")
 
+	var door_los_target: int = _register_character(simulation, registry, "zombie_walker", {
+		"x": int(player_grid.get("x", 0)) + 2,
+		"y": y,
+		"z": z,
+	})
+	var door_id := "combat_smoke_los_door"
+	var door_grid := {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": y,
+		"z": z,
+	}
+	var door_topology: Dictionary = _door_los_test_topology(player_grid, door_grid, door_id)
+	simulation.door_states[door_id] = {
+		"door_id": door_id,
+		"object_id": door_id,
+		"is_open": false,
+		"blocks_sight_when_closed": true,
+	}
+	var closed_door_preview: Dictionary = simulation.preview_attack(1, door_los_target, door_topology, {"range": 8})
+	if bool(closed_door_preview.get("can_attack", true)) or closed_door_preview.get("reason", "") != "target_blocked_by_los":
+		errors.append("closed door attack preview should report target_blocked_by_los, got %s" % closed_door_preview.get("reason", ""))
+	_expect_spatial_diagnostics(errors, closed_door_preview, "closed door LOS preview", true, true, true, false, true, "target_blocked_by_los")
+	simulation.door_states[door_id]["is_open"] = true
+	var open_door_preview: Dictionary = simulation.preview_attack(1, door_los_target, door_topology, {"range": 8})
+	if not bool(open_door_preview.get("can_attack", false)):
+		errors.append("open door attack preview should allow LOS through door: %s" % open_door_preview.get("reason", "unknown"))
+	_expect_spatial_diagnostics(errors, open_door_preview, "open door LOS preview", true, true, true, true, true, "")
+	var open_door_attack: Dictionary = simulation.perform_attack(1, door_los_target, door_topology, {"range": 8})
+	if not bool(open_door_attack.get("success", false)):
+		errors.append("open door perform_attack should use runtime door LOS state: %s" % open_door_attack.get("reason", "unknown"))
+	_expect_spatial_diagnostics(errors, open_door_attack, "open door LOS attack", true, true, true, true, true, "")
+	simulation.door_states.erase(door_id)
+
 	var command_close_target: int = _register_character(simulation, registry, "zombie_walker", {
 		"x": int(player_grid.get("x", 0)) + 1,
 		"y": y,
@@ -1303,7 +1336,7 @@ func _expect_attack_spatial_failures(errors: Array[String], simulation: RefCount
 		errors.append("submit attack inside minimum range should not emit combat_started")
 	_expect_spatial_diagnostics(errors, command_close_result, "submit minimum-range attack", true, true, false, true, true, "target_too_close")
 
-	for actor_id in [level_target, far_target, close_target, hidden_target, los_target, command_los_target, command_close_target]:
+	for actor_id in [level_target, far_target, close_target, hidden_target, los_target, command_los_target, door_los_target, command_close_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	simulation.exit_combat_if_clear("spatial_failure_smoke_cleanup")
@@ -2287,3 +2320,32 @@ func _spatial_test_topology(player_grid: Dictionary, blocker_grid: Dictionary) -
 			"%d:%d:%d" % [bx, by, bz]: true,
 		},
 	}
+
+
+func _door_los_test_topology(player_grid: Dictionary, door_grid: Dictionary, door_id: String) -> Dictionary:
+	var topology: Dictionary = _spatial_test_topology(player_grid, door_grid)
+	var door: Dictionary = {
+		"door_id": door_id,
+		"object_id": door_id,
+		"display_name": "Combat Smoke Door",
+		"is_open": false,
+		"locked": false,
+		"blocks_movement": true,
+		"blocks_sight": true,
+		"blocks_sight_when_closed": true,
+		"cells": [door_grid.duplicate(true)],
+	}
+	topology["door_objects"] = [door]
+	topology["blocking_cells"] = {
+		_grid_key(door_grid): door_id,
+	}
+	topology["sight_blocking_cells"] = {
+		_grid_key(door_grid): door_id,
+	}
+	topology["blocking_cell_count"] = 1
+	topology["sight_blocking_cell_count"] = 1
+	return topology
+
+
+func _grid_key(grid: Dictionary) -> String:
+	return "%d:%d:%d" % [int(grid.get("x", 0)), int(grid.get("y", 0)), int(grid.get("z", 0))]

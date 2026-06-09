@@ -837,18 +837,19 @@ func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary, 
 
 
 func perform_attack(actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
-	return _combat_runner.perform_attack(self, actor_id, target_actor_id, topology, options)
+	return _combat_runner.perform_attack(self, actor_id, target_actor_id, _topology_with_runtime_door_states(topology), options)
 
 
 func preview_attack(actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
+	var combat_topology: Dictionary = _topology_with_runtime_door_states(topology)
 	var actor: RefCounted = actor_registry.get_actor(actor_id)
 	if actor == null:
-		return _combat_runner.preview_attack(self, actor_id, target_actor_id, topology, options)
+		return _combat_runner.preview_attack(self, actor_id, target_actor_id, combat_topology, options)
 	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
 	if profile.is_empty():
 		profile = _attack_profile(actor, _dictionary_or_empty(options.get("item_library", item_library)))
 	var attack_range: int = int(options.get("range", int(profile.get("range", DEFAULT_ATTACK_RANGE))))
-	var preview: Dictionary = _combat_runner.preview_attack(self, actor_id, target_actor_id, topology, {
+	var preview: Dictionary = _combat_runner.preview_attack(self, actor_id, target_actor_id, combat_topology, {
 		"range": attack_range,
 		"min_range": _attack_min_range_from_options(options, profile),
 		"weapon_profile": profile,
@@ -4798,7 +4799,7 @@ func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dicti
 func _topology_with_auto_open_doors(actor_id: int, topology: Dictionary) -> Dictionary:
 	if topology.is_empty():
 		return {}
-	var output: Dictionary = topology.duplicate(true)
+	var output: Dictionary = _topology_with_runtime_door_states(topology)
 	var blocking_cells: Dictionary = _dictionary_or_empty(output.get("blocking_cells", {})).duplicate(true)
 	var sight_blocking_cells: Dictionary = _dictionary_or_empty(output.get("sight_blocking_cells", {})).duplicate(true)
 	for door in _array_or_empty(output.get("door_objects", [])):
@@ -4821,6 +4822,57 @@ func _topology_with_auto_open_doors(actor_id: int, topology: Dictionary) -> Dict
 	output["blocking_cell_count"] = blocking_cells.size()
 	output["sight_blocking_cell_count"] = sight_blocking_cells.size()
 	return output
+
+
+func _topology_with_runtime_door_states(topology: Dictionary) -> Dictionary:
+	if topology.is_empty() or door_states.is_empty():
+		return topology
+	var output: Dictionary = topology.duplicate(true)
+	var blocking_cells: Dictionary = _dictionary_or_empty(output.get("blocking_cells", {})).duplicate(true)
+	var sight_blocking_cells: Dictionary = _dictionary_or_empty(output.get("sight_blocking_cells", {})).duplicate(true)
+	var door_objects: Array = _array_or_empty(output.get("door_objects", [])).duplicate(true)
+	for index in range(door_objects.size()):
+		var door: Dictionary = _dictionary_or_empty(door_objects[index])
+		var door_id := str(door.get("door_id", door.get("object_id", ""))).strip_edges()
+		if door_id.is_empty() or not door_states.has(door_id):
+			continue
+		var state: Dictionary = _dictionary_or_empty(door_states.get(door_id, {}))
+		var merged: Dictionary = door.duplicate(true)
+		for key in _door_runtime_field_keys():
+			if state.has(key):
+				merged[key] = state.get(key)
+		if state.has("is_open"):
+			merged["is_open"] = bool(state.get("is_open", false))
+		if state.has("locked"):
+			merged["locked"] = bool(state.get("locked", false))
+		merged["blocks_movement"] = not bool(merged.get("is_open", false))
+		merged["blocks_sight"] = not bool(merged.get("is_open", false)) and bool(merged.get("blocks_sight_when_closed", true))
+		door_objects[index] = merged
+		_apply_door_runtime_blocking_cells(merged, blocking_cells, sight_blocking_cells)
+	output["door_objects"] = door_objects
+	output["blocking_cells"] = blocking_cells
+	output["sight_blocking_cells"] = sight_blocking_cells
+	output["blocking_cell_count"] = blocking_cells.size()
+	output["sight_blocking_cell_count"] = sight_blocking_cells.size()
+	return output
+
+
+func _apply_door_runtime_blocking_cells(door: Dictionary, blocking_cells: Dictionary, sight_blocking_cells: Dictionary) -> void:
+	var door_id := str(door.get("object_id", door.get("door_id", ""))).strip_edges()
+	if door_id.is_empty():
+		return
+	for cell in _array_or_empty(door.get("cells", [])):
+		var key := _grid_key(_dictionary_or_empty(cell))
+		if key.is_empty():
+			continue
+		if bool(door.get("blocks_movement", false)):
+			blocking_cells[key] = door_id
+		elif str(blocking_cells.get(key, "")) == door_id:
+			blocking_cells.erase(key)
+		if bool(door.get("blocks_sight", false)):
+			sight_blocking_cells[key] = door_id
+		elif str(sight_blocking_cells.get(key, "")) == door_id:
+			sight_blocking_cells.erase(key)
 
 
 func _auto_open_door_for_step(actor_id: int, step: Dictionary, topology: Dictionary) -> Dictionary:
