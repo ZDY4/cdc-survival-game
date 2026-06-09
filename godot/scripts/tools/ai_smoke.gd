@@ -270,6 +270,40 @@ func _expect_settlement_life_background_tick(registry: RefCounted) -> Array[Stri
 	var restored_action: Dictionary = _dictionary_or_empty(_life_runtime_for_actor(action_restored, cook_id).get("last_background_action", {}))
 	if str(restored_action.get("planner_action_id", "")) != "travel_to_canteen" or not bool(restored_action.get("completed", false)):
 		errors.append("background completed action should roundtrip through actor life snapshot, got %s" % restored_action)
+	action_simulation.advance_world_turn(_open_settlement_topology())
+	action_runtime = _life_runtime_for_actor(action_simulation, cook_id)
+	var restock_progress: Dictionary = _dictionary_or_empty(action_runtime.get("background_action", {}))
+	if str(restock_progress.get("planner_action_id", "")) != "restock_meal_service" or bool(restock_progress.get("completed", true)):
+		errors.append("background queued restock should be in progress after one segment, got %s" % restock_progress)
+	if int(restock_progress.get("elapsed_minutes", 0)) != 15 or int(restock_progress.get("remaining_minutes", 0)) != 30:
+		errors.append("background restock first segment should expose 15/45 minute progress, got %s" % restock_progress)
+	meal_reservation = _dictionary_or_empty(_dictionary_or_empty(action_runtime.get("reservations", {})).get("meal_object", {}))
+	if meal_reservation.is_empty() or not bool(meal_reservation.get("active", false)):
+		errors.append("background restock should keep reservation while action is in progress, got %s" % action_runtime)
+	var progress_event: Dictionary = _last_event_payload_for_actor(action_simulation.snapshot(), "settlement_life_background_action_progressed", cook_id)
+	if str(progress_event.get("planner_action_id", "")) != "restock_meal_service" or int(progress_event.get("remaining_minutes", 0)) != 30:
+		errors.append("settlement_life_background_action_progressed should expose restock progress, got %s" % progress_event)
+	action_simulation.advance_world_turn(_open_settlement_topology())
+	action_runtime = _life_runtime_for_actor(action_simulation, cook_id)
+	restock_progress = _dictionary_or_empty(action_runtime.get("background_action", {}))
+	if int(restock_progress.get("elapsed_minutes", 0)) != 30 or int(restock_progress.get("remaining_minutes", 0)) != 15:
+		errors.append("background restock second segment should keep progressing without reservation expiry, got %s" % restock_progress)
+	action_simulation.advance_world_turn(_open_settlement_topology())
+	action_runtime = _life_runtime_for_actor(action_simulation, cook_id)
+	var restock_completed: Dictionary = _dictionary_or_empty(action_runtime.get("last_background_action", {}))
+	if str(restock_completed.get("planner_action_id", "")) != "restock_meal_service" or not bool(restock_completed.get("completed", false)):
+		errors.append("background restock should complete after three segments, got %s" % restock_completed)
+	var final_planner: Dictionary = _planner_runtime_for_actor(action_simulation, cook_id)
+	if not bool(final_planner.get("queue_complete", false)) or int(final_planner.get("queue_remaining", -1)) != 0:
+		errors.append("background restock completion should finish planner queue, got %s" % final_planner)
+	meal_reservation = _dictionary_or_empty(_dictionary_or_empty(action_runtime.get("reservations", {})).get("meal_object", {}))
+	if meal_reservation.is_empty() or bool(meal_reservation.get("active", true)):
+		errors.append("background restock completion should release meal reservation, got %s" % action_runtime)
+	if not _array_or_empty(action_simulation.snapshot().get("world_flags", [])).has("settlement_meal_service_restocked"):
+		errors.append("background restock executor side effect should set settlement_meal_service_restocked")
+	var restock_completed_event: Dictionary = _last_event_payload_for_actor(action_simulation.snapshot(), "settlement_life_background_action_completed", cook_id)
+	if str(restock_completed_event.get("planner_action_id", "")) != "restock_meal_service" or int(restock_completed_event.get("elapsed_minutes", 0)) != 45:
+		errors.append("settlement_life_background_action_completed should expose completed restock duration, got %s" % restock_completed_event)
 	return errors
 
 

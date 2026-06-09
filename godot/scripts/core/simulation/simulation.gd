@@ -3894,6 +3894,8 @@ func _expire_life_planner_reservations() -> Array[Dictionary]:
 			var reservation: Dictionary = _dictionary_or_empty(reservations.get(reservation_target, {}))
 			if not _life_planner_reservation_expired(reservation):
 				continue
+			if _life_background_action_holds_reservation(runtime, target, reservation):
+				continue
 			var release: Dictionary = _release_life_planner_reservation(actor, runtime, planner_state, target, {
 				"action_id": str(reservation.get("action_id", "")),
 			}, {
@@ -3921,6 +3923,21 @@ func _life_planner_reservation_expired(reservation: Dictionary) -> bool:
 	if ttl_minutes <= 0 or created_total_minutes < 0:
 		return false
 	return _world_time_elapsed_minutes(created_total_minutes, _world_time_total_minutes(world_time)) >= ttl_minutes
+
+
+func _life_background_action_holds_reservation(runtime: Dictionary, reservation_target: String, reservation: Dictionary) -> bool:
+	var action: Dictionary = _dictionary_or_empty(runtime.get("background_action", {}))
+	if action.is_empty() or bool(action.get("completed", false)):
+		return false
+	if int(action.get("remaining_minutes", 0)) <= 0:
+		return false
+	if str(action.get("reservation_target", "")) != reservation_target:
+		return false
+	var reserved_smart_object_id := str(reservation.get("smart_object_id", ""))
+	var action_smart_object_id := str(action.get("smart_object_id", ""))
+	if not reserved_smart_object_id.is_empty() and not action_smart_object_id.is_empty() and reserved_smart_object_id != action_smart_object_id:
+		return false
+	return true
 
 
 func _life_need_tick_for_actor(ticks: Array[Dictionary], actor_id: int) -> Dictionary:
@@ -3998,6 +4015,7 @@ func _advance_background_settlement_life(actor: RefCounted, minutes: int) -> Dic
 	background_intent["target_grid"] = target_grid.duplicate(true)
 	var action_key := _background_life_action_key(background_intent, target_grid)
 	var duration_minutes := _background_life_action_duration_minutes(background_intent)
+	var planner_action: Dictionary = _background_life_current_planner_action(background_intent)
 	var runtime: Dictionary = _ensure_life_runtime(actor)
 	var previous_action: Dictionary = _dictionary_or_empty(runtime.get("background_action", {}))
 	var elapsed_before: int = int(previous_action.get("elapsed_minutes", 0)) if str(previous_action.get("action_key", "")) == action_key else 0
@@ -4014,6 +4032,7 @@ func _advance_background_settlement_life(actor: RefCounted, minutes: int) -> Dic
 	result["remaining_minutes"] = max(0, duration_minutes - elapsed_after)
 	result["completed"] = completed
 	result["world_time"] = world_time.duplicate(true)
+	result["reservation_target"] = str(planner_action.get("reservation_target", ""))
 	_attach_life_smart_object_summary(background_intent, result)
 	if completed:
 		actor.grid_position = GridCoord.from_dictionary(target_grid)
@@ -4115,6 +4134,7 @@ func _background_life_action_summary(result: Dictionary) -> Dictionary:
 		"elapsed_minutes": int(result.get("elapsed_minutes", 0)),
 		"action_duration_minutes": int(result.get("action_duration_minutes", 0)),
 		"remaining_minutes": int(result.get("remaining_minutes", 0)),
+		"reservation_target": str(result.get("reservation_target", "")),
 		"target_grid": _dictionary_or_empty(result.get("target_grid", {})).duplicate(true),
 		"from": _dictionary_or_empty(result.get("from", {})).duplicate(true),
 		"to": _dictionary_or_empty(result.get("to", {})).duplicate(true),
