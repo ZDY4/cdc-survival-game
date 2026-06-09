@@ -65,6 +65,9 @@ func _planned_life_intent(actor: RefCounted, life: Dictionary, settlement: Dicti
 	var goal_ids: Array = _available_goal_ids(behavior_chain, planner_data)
 	var action_ids: Array = _available_action_ids(behavior_chain, planner_data)
 	var scored_goals: Array[Dictionary] = _score_goals(goal_ids, planner_data, state)
+	var queued_intent: Dictionary = _queued_life_intent(actor, life, settlement, ai_library, planner_data, state, schedule_block, scored_goals)
+	if not queued_intent.is_empty():
+		return queued_intent
 	for scored_goal in scored_goals:
 		var goal: Dictionary = _dictionary_or_empty(scored_goal.get("goal", {}))
 		var requirements: Array = _goal_requirements(goal, state)
@@ -84,6 +87,9 @@ func _planned_life_intent(actor: RefCounted, life: Dictionary, settlement: Dicti
 			"action_reason": str(action_result.get("reason", "")),
 			"action_queue": _array_or_empty(action_result.get("action_queue", [])).duplicate(true),
 			"queue_length": _array_or_empty(action_result.get("action_queue", [])).size(),
+			"current_action_index": 0,
+			"queue_remaining": _array_or_empty(action_result.get("action_queue", [])).size(),
+			"queue_complete": false,
 			"requirements": requirements.duplicate(true),
 			"unmet_requirements": _unmet_assignments(requirements, state),
 			"facts": facts.duplicate(true),
@@ -96,6 +102,49 @@ func _planned_life_intent(actor: RefCounted, life: Dictionary, settlement: Dicti
 		intent["planner_goal_score"] = float(scored_goal.get("score", 0.0))
 		return intent
 	return {}
+
+
+func _queued_life_intent(actor: RefCounted, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, planner_data: Dictionary, state: Dictionary, schedule_block: Dictionary, scored_goals: Array[Dictionary]) -> Dictionary:
+	var runtime: Dictionary = _dictionary_or_empty(life.get("runtime", {}))
+	var runtime_planner: Dictionary = _dictionary_or_empty(runtime.get("planner", {}))
+	if runtime_planner.is_empty() or bool(runtime_planner.get("queue_complete", false)):
+		return {}
+	var queue: Array = _array_or_empty(runtime_planner.get("action_queue", []))
+	var current_index: int = int(runtime_planner.get("current_action_index", 0))
+	if queue.is_empty() or current_index < 0 or current_index >= queue.size():
+		return {}
+	var queued_goal_id := str(runtime_planner.get("goal_id", ""))
+	if queued_goal_id.is_empty() or _top_scored_goal_id(scored_goals) != queued_goal_id:
+		return {}
+	var queued_action_id := str(_dictionary_or_empty(queue[current_index]).get("action_id", ""))
+	var action: Dictionary = _dictionary_or_empty(_dictionary_or_empty(planner_data.get("actions", {})).get(queued_action_id, {}))
+	if action.is_empty() or not _assignments_satisfied(_array_or_empty(action.get("preconditions", [])), state):
+		return {}
+	var intent: Dictionary = _intent_for_planner_action(actor, life, settlement, ai_library, action, schedule_block)
+	if intent.is_empty():
+		return {}
+	var planner_summary: Dictionary = runtime_planner.duplicate(true)
+	planner_summary["action_id"] = queued_action_id
+	planner_summary["action_cost"] = float(action.get("planner_cost", 0.0))
+	planner_summary["action_reason"] = "queued_action"
+	planner_summary["facts"] = _dictionary_or_empty(state.get("facts", {})).duplicate(true)
+	planner_summary["current_action_index"] = current_index
+	planner_summary["queue_length"] = queue.size()
+	planner_summary["queue_remaining"] = max(0, queue.size() - current_index)
+	planner_summary["queue_complete"] = false
+	intent["planner"] = planner_summary
+	intent["goal_id"] = queued_goal_id
+	intent["planner_action_id"] = queued_action_id
+	intent["planner_action_reason"] = "queued_action"
+	intent["planner_goal_score"] = float(planner_summary.get("goal_score", 0.0))
+	return intent
+
+
+func _top_scored_goal_id(scored_goals: Array[Dictionary]) -> String:
+	if scored_goals.is_empty():
+		return ""
+	var goal: Dictionary = _dictionary_or_empty(_dictionary_or_empty(scored_goals.front()).get("goal", {}))
+	return str(goal.get("id", ""))
 
 
 func _planner_data(ai_library: Dictionary) -> Dictionary:
@@ -122,7 +171,8 @@ func _planner_data(ai_library: Dictionary) -> Dictionary:
 
 
 func _planner_world_state(actor: RefCounted, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, context: Dictionary, schedule_block: Dictionary, day: String, minute_of_day: int) -> Dictionary:
-	var needs: Dictionary = _dictionary_or_empty(_dictionary_or_empty(life.get("runtime", {})).get("needs", {}))
+	var runtime: Dictionary = _dictionary_or_empty(life.get("runtime", {}))
+	var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {}))
 	var hunger := _need_current(needs, "hunger")
 	var energy := _need_current(needs, "energy")
 	var morale := _need_current(needs, "morale")
@@ -167,6 +217,9 @@ func _planner_world_state(actor: RefCounted, life: Dictionary, settlement: Dicti
 		"morale_recovered": morale >= 70.0,
 		"is_idle_safe": false,
 	}
+	for key in _dictionary_or_empty(runtime.get("planner_state", {})).keys():
+		var state_key := str(key)
+		state[state_key] = runtime["planner_state"][key]
 	for key in personality.keys():
 		state["personality.%s" % str(key)] = personality[key]
 	return state
@@ -260,6 +313,7 @@ func _planner_action_summary(action: Dictionary) -> Dictionary:
 		"target_anchor": str(action.get("target_anchor", "")),
 		"reservation_target": str(action.get("reservation_target", "")),
 		"need_effects": _dictionary_or_empty(action.get("need_effects", {})).duplicate(true),
+		"effects": _array_or_empty(action.get("effects", [])).duplicate(true),
 	}
 
 

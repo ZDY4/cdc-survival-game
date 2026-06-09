@@ -4316,20 +4316,39 @@ func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result:
 		"smart_object_id": str(result.get("smart_object_id", intent.get("smart_object_id", ""))),
 		"route_id": str(result.get("route_id", intent.get("route_id", ""))),
 	}
+	var queue: Array = _array_or_empty(planner.get("action_queue", [])).duplicate(true)
+	var current_index: int = clampi(int(planner.get("current_action_index", 0)), 0, max(0, queue.size()))
+	var completed_current_action: bool = _life_planner_action_completed(result)
+	var completed_action: Dictionary = _dictionary_or_empty(queue[current_index]) if current_index >= 0 and current_index < queue.size() else {}
+	var planner_state: Dictionary = _dictionary_or_empty(runtime.get("planner_state", {})).duplicate(true)
+	var applied_effects: Array = []
+	if completed_current_action:
+		applied_effects = _apply_life_planner_action_effects(planner_state, _array_or_empty(completed_action.get("effects", [])))
+	var next_index: int = current_index + 1 if completed_current_action else current_index
+	next_index = clampi(next_index, 0, queue.size())
+	var queue_complete: bool = not queue.is_empty() and next_index >= queue.size()
+	execution["applied_effects"] = applied_effects.duplicate(true)
 	var planner_runtime: Dictionary = {
 		"goal_id": str(planner.get("goal_id", "")),
 		"goal_score": float(planner.get("goal_score", 0.0)),
 		"score_rule_ids": _array_or_empty(planner.get("score_rule_ids", [])).duplicate(true),
 		"action_id": str(planner.get("action_id", "")),
 		"action_reason": str(planner.get("action_reason", "")),
-		"action_queue": _array_or_empty(planner.get("action_queue", [])).duplicate(true),
-		"queue_length": int(planner.get("queue_length", 0)),
+		"action_queue": queue,
+		"queue_length": queue.size(),
+		"current_action_index": next_index,
+		"completed_action_index": current_index if completed_current_action else -1,
+		"completed_action_id": str(planner.get("action_id", "")) if completed_current_action else "",
+		"next_action_id": _life_planner_queue_action_id(queue, next_index),
+		"queue_remaining": max(0, queue.size() - next_index),
+		"queue_complete": queue_complete,
 		"requirements": _array_or_empty(planner.get("requirements", [])).duplicate(true),
 		"unmet_requirements": _array_or_empty(planner.get("unmet_requirements", [])).duplicate(true),
 		"facts": _dictionary_or_empty(planner.get("facts", {})).duplicate(true),
 		"role": str(planner.get("role", "")),
 		"last_execution": execution,
 	}
+	runtime["planner_state"] = planner_state
 	runtime["planner"] = planner_runtime
 	_set_life_runtime(actor, runtime)
 	_emit("settlement_life_planner_updated", {
@@ -4337,6 +4356,46 @@ func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result:
 		"definition_id": actor.definition_id,
 		"planner": planner_runtime.duplicate(true),
 	})
+
+
+func _life_planner_action_completed(result: Dictionary) -> bool:
+	if not bool(result.get("success", false)):
+		return false
+	var intent_name := str(result.get("intent", ""))
+	if not ["follow_route", "return_home", "use_smart_object"].has(intent_name):
+		return false
+	if str(result.get("reason", "")) == "already_at_life_target":
+		return true
+	if result.has("remaining_steps"):
+		return int(result.get("remaining_steps", 0)) <= 0
+	return false
+
+
+func _life_planner_queue_action_id(queue: Array, index: int) -> String:
+	if index < 0 or index >= queue.size():
+		return ""
+	return str(_dictionary_or_empty(queue[index]).get("action_id", ""))
+
+
+func _apply_life_planner_action_effects(planner_state: Dictionary, effects: Array) -> Array:
+	var applied: Array = []
+	for effect in effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		var key := str(effect_data.get("key", ""))
+		if key.is_empty():
+			continue
+		var value: bool = bool(effect_data.get("value", false))
+		if value and _life_planner_location_fact_keys().has(key):
+			for sibling_key in _life_planner_location_fact_keys():
+				if sibling_key != key:
+					planner_state[sibling_key] = false
+		planner_state[key] = value
+		applied.append({"key": key, "value": value})
+	return applied
+
+
+func _life_planner_location_fact_keys() -> Array[String]:
+	return ["at_home", "at_duty_area", "at_canteen", "at_leisure"]
 
 
 func _npc_follow_route(actor: RefCounted, intent: Dictionary, topology: Dictionary) -> Dictionary:

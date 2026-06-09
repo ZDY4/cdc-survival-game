@@ -226,6 +226,44 @@ func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[
 	if int(tick_event.get("actor_id", 0)) != cook_id:
 		errors.append("settlement life need tick event should include cook actor")
 	errors.append_array(_expect_settlement_life_need_effect_action(registry))
+	errors.append_array(_expect_settlement_life_queue_progression(registry))
+	return errors
+
+
+func _expect_settlement_life_queue_progression(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 360}
+	var cook_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(10, 0, 20), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var cook: RefCounted = simulation.actor_registry.get_actor(cook_id)
+	cook.life["duty_route_id"] = ""
+	cook.life["runtime"] = {
+		"needs": {
+			"hunger": {"current": 80.0, "max": 100.0},
+			"energy": {"current": 75.0, "max": 100.0},
+			"morale": {"current": 50.0, "max": 100.0},
+		}
+	}
+	var first_results: Array = simulation.advance_world_turn(_open_settlement_topology())
+	var first_result: Dictionary = _npc_result_for_actor(first_results, cook_id)
+	var first_runtime: Dictionary = _planner_runtime_for_actor(simulation, cook_id)
+	if str(first_result.get("intent", "")) != "use_smart_object" or int(first_result.get("remaining_steps", -1)) != 0:
+		errors.append("settlement GOAP first queue action should move into canteen and complete travel action, got %s" % first_result)
+	if int(first_runtime.get("current_action_index", -1)) != 1 or str(first_runtime.get("next_action_id", "")) != "restock_meal_service":
+		errors.append("settlement GOAP queue should advance to restock action, got %s" % first_runtime)
+	var second_results: Array = simulation.advance_world_turn(_open_settlement_topology())
+	var second_result: Dictionary = _npc_result_for_actor(second_results, cook_id)
+	var second_runtime: Dictionary = _planner_runtime_for_actor(simulation, cook_id)
+	var second_planner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(second_result.get("life_intent", {})).get("planner", {}))
+	if str(second_planner.get("action_reason", "")) != "queued_action" or str(second_planner.get("action_id", "")) != "restock_meal_service":
+		errors.append("settlement GOAP should reuse queued restock action on next turn, got %s" % second_planner)
+	if not bool(second_runtime.get("queue_complete", false)) or int(second_runtime.get("queue_remaining", -1)) != 0:
+		errors.append("settlement GOAP queue should complete after second queued action, got %s" % second_runtime)
 	return errors
 
 
