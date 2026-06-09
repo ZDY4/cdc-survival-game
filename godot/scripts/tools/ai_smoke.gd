@@ -172,6 +172,8 @@ func _expect_settlement_life_world_turn(registry: RefCounted) -> Array[String]:
 	var patrol_runtime_status: Dictionary = _dictionary_or_empty(patrol_life_runtime.get("status", {}))
 	if str(patrol_runtime_status.get("mode", "")) != "online" or int(patrol_runtime_status.get("actor_id", 0)) != patrol_guard_id:
 		errors.append("settlement online actor runtime should store life status, got %s" % patrol_runtime_status)
+	if str(patrol_runtime_status.get("state_id", "")) == "background_idle":
+		errors.append("settlement online presence should not overwrite action status with background_idle, got %s" % patrol_runtime_status)
 
 	var home_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var home_player: RefCounted = home_simulation.actor_registry.get_actor(1)
@@ -301,6 +303,29 @@ func _expect_settlement_life_background_tick(registry: RefCounted) -> Array[Stri
 	var progress_event: Dictionary = _last_event_payload_for_actor(action_simulation.snapshot(), "settlement_life_background_action_progressed", cook_id)
 	if str(progress_event.get("planner_action_id", "")) != "restock_meal_service" or int(progress_event.get("remaining_minutes", 0)) != 30:
 		errors.append("settlement_life_background_action_progressed should expose restock progress, got %s" % progress_event)
+	var sync_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	sync_simulation.load_snapshot(action_simulation.snapshot())
+	sync_simulation.active_map_id = remote_map_id
+	var sync_results: Array = sync_simulation.advance_world_turn(_open_settlement_topology())
+	var sync_result: Dictionary = _npc_result_for_actor(sync_results, cook_id)
+	var sync_summary: Dictionary = _dictionary_or_empty(sync_result.get("life_background_resync", {}))
+	if str(sync_summary.get("reason", "")) != "actor_became_online" or str(sync_summary.get("to_mode", "")) != "online":
+		errors.append("background action should resync when actor becomes active-map online, got %s" % sync_result)
+	var sync_runtime: Dictionary = _life_runtime_for_actor(sync_simulation, cook_id)
+	if not _dictionary_or_empty(sync_runtime.get("background_action", {})).is_empty():
+		errors.append("online resync should clear in-progress background action, got %s" % sync_runtime)
+	var last_resync: Dictionary = _dictionary_or_empty(sync_runtime.get("last_background_resync", {}))
+	if str(last_resync.get("active_map_id", "")) != remote_map_id or _dictionary_or_empty(last_resync.get("background_action", {})).is_empty():
+		errors.append("online resync should store background handoff summary, got %s" % last_resync)
+	var sync_event: Dictionary = _last_event_payload_for_actor(sync_simulation.snapshot(), "settlement_life_background_resynced", cook_id)
+	if str(sync_event.get("reason", "")) != "actor_became_online" or str(sync_event.get("active_map_id", "")) != remote_map_id:
+		errors.append("settlement_life_background_resynced should expose active map handoff, got %s" % sync_event)
+	var sync_presence: Dictionary = _dictionary_or_empty(sync_runtime.get("presence", {}))
+	if str(sync_presence.get("mode", "")) != "online":
+		errors.append("online resync turn should finish with online presence, got %s" % sync_presence)
+	var sync_status: Dictionary = _dictionary_or_empty(sync_presence.get("status", {}))
+	if str(sync_status.get("mode", "")) != "online" or str(sync_status.get("state_id", "")) == "background_idle":
+		errors.append("online resync presence should keep online life status, got %s" % sync_presence)
 	action_simulation.advance_world_turn(_open_settlement_topology())
 	action_runtime = _life_runtime_for_actor(action_simulation, cook_id)
 	restock_progress = _dictionary_or_empty(action_runtime.get("background_action", {}))

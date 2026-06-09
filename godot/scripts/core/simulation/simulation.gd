@@ -3787,6 +3787,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 			continue
 		if actor.hp <= 0.0:
 			continue
+		var background_resync: Dictionary = _sync_online_life_background_action(actor)
 		_open_turn(actor.actor_id, "npc_turn")
 		var turn_open_snapshot := {
 			"ap": actor.ap,
@@ -3796,6 +3797,8 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 			"combat_active": bool(combat_state.get("active", false)) and actor.in_combat,
 		}
 		var result: Dictionary = _advance_npc_turn(actor, runtime_topology, bool(turn_open_snapshot.get("combat_active", false)))
+		if not background_resync.is_empty():
+			result["life_background_resync"] = background_resync.duplicate(true)
 		result["turn_open"] = turn_open_snapshot
 		result["ap_after_action"] = actor.ap
 		result["turn_close_reason"] = _npc_turn_close_reason(actor, result)
@@ -3996,6 +3999,38 @@ func _tick_background_settlement_life(life_tick_results: Array[Dictionary], minu
 	return output
 
 
+func _sync_online_life_background_action(actor: RefCounted) -> Dictionary:
+	if actor == null or actor.hp <= 0.0:
+		return {}
+	if actor.map_id.is_empty() or actor.map_id != active_map_id:
+		return {}
+	var life: Dictionary = _dictionary_or_empty(actor.life)
+	if str(life.get("settlement_id", "")).is_empty():
+		return {}
+	var runtime: Dictionary = _ensure_life_runtime(actor)
+	var background_action: Dictionary = _dictionary_or_empty(runtime.get("background_action", {}))
+	if background_action.is_empty() or bool(background_action.get("completed", false)):
+		return {}
+	var previous_presence: Dictionary = _dictionary_or_empty(runtime.get("presence", {}))
+	var resync := {
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"settlement_id": str(life.get("settlement_id", "")),
+		"reason": "actor_became_online",
+		"from_mode": str(previous_presence.get("mode", "background")),
+		"to_mode": "online",
+		"actor_map_id": actor.map_id,
+		"active_map_id": active_map_id,
+		"world_time": world_time.duplicate(true),
+		"background_action": _background_life_action_summary(background_action),
+	}
+	runtime.erase("background_action")
+	runtime["last_background_resync"] = resync.duplicate(true)
+	_set_life_runtime(actor, runtime)
+	_emit("settlement_life_background_resynced", resync.duplicate(true))
+	return resync
+
+
 func _record_life_presence(actor: RefCounted, mode: String, minutes: int, need_tick: Dictionary = {}, background_action: Dictionary = {}) -> Dictionary:
 	var life: Dictionary = _dictionary_or_empty(actor.life)
 	var presence: Dictionary = {
@@ -4013,10 +4048,17 @@ func _record_life_presence(actor: RefCounted, mode: String, minutes: int, need_t
 		presence["last_need_tick"] = need_tick.duplicate(true)
 	if not background_action.is_empty():
 		presence["background_action"] = _background_life_action_summary(background_action)
-	var status: Dictionary = _record_life_status(actor, _life_status_from_background_action(actor, background_action, presence))
+	var runtime: Dictionary = _ensure_life_runtime(actor)
+	var status: Dictionary = {}
+	if mode == "background":
+		status = _record_life_status(actor, _life_status_from_background_action(actor, background_action, presence))
+	else:
+		status = _dictionary_or_empty(runtime.get("status", {})).duplicate(true)
+		if status.is_empty() or str(status.get("mode", "")) != mode:
+			status = _record_life_status(actor, _life_status_base(actor, "idle", "idle", "idle", "待命", presence, {}))
 	if not status.is_empty():
 		presence["status"] = status.duplicate(true)
-	var runtime: Dictionary = _ensure_life_runtime(actor)
+	runtime = _ensure_life_runtime(actor)
 	runtime["presence"] = presence.duplicate(true)
 	_set_life_runtime(actor, runtime)
 	return presence
