@@ -278,6 +278,28 @@ func layer_priority(kind: String, layer_id: String) -> int:
 	return 0
 
 
+func close_active_context_menu(context_menu: Dictionary, owner_panels: Dictionary) -> Dictionary:
+	if not bool(context_menu.get("active", false)):
+		return {"success": false, "reason": "context_menu_inactive"}
+	var top_menu: Dictionary = dictionary_or_empty(context_menu.get("top", {}))
+	var owner_panel := str(top_menu.get("owner_panel", ""))
+	var menu_id := str(top_menu.get("id", "context_menu"))
+	var panel: Object = owner_panels.get(owner_panel, null)
+	if panel == null or not panel.has_method("close_context_menu"):
+		return {
+			"success": false,
+			"reason": "context_menu_owner_missing",
+			"closed": menu_id,
+			"owner_panel": owner_panel,
+		}
+	panel.call("close_context_menu")
+	return {
+		"success": true,
+		"closed": menu_id,
+		"owner_panel": owner_panel,
+	}
+
+
 func dictionary_or_empty(value: Variant) -> Dictionary:
 	return value if typeof(value) == TYPE_DICTIONARY else {}
 

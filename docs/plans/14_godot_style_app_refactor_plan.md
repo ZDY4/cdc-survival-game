@@ -36,10 +36,10 @@
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 3096 行，还保留大量 UI facade、玩家动作 facade、context menu 关闭转发和 smoke 兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 3072 行，还保留大量 UI facade、玩家动作 facade 和 smoke 兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` / `HudRoot` script；当前仍主要依赖现有 HUD controller 和根脚本转发。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
-- 下一步优先抽取 context menu 关闭转发或玩家动作 facade，而不是一次性重命名根脚本。
+- 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
 
 ## 当前问题
 
@@ -277,9 +277,10 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] drag source / payload / preview snapshot 组装已抽到 `drag_snapshot_controller.gd`。
 - [x] hotbar、observe hotbar、equipment、inventory action、container 和 trade 的 drag hover target / acceptance 已抽到 `drag_hover_target_controller.gd`。
 - [x] gameplay input blocker、modal/context menu event、close priority 和 UI layer stack 组装已抽到 `ui_blocker_state_controller.gd`。
+- [x] context menu 关闭转发已抽到 `ui_blocker_state_controller.gd`，`GameApp` 只提供 owner panel 映射。
 - [ ] 引入 `HudRoot` facade，统一承接 HUD、stage panels、debug console、debug panel、tooltip 和 context menu。
 - [ ] 将 `GameApp` 中直接操作 HUD 子节点的代码替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
-- [ ] 将 context menu 关闭转发继续从 `GameApp` 移出。
+- [ ] 将玩家动作 facade 继续从 `GameApp` 移出。
 - [ ] 将 UI blocker / active modal / focus 状态统一暴露为 `hud_root.input_blocker_snapshot()`。
 
 验收：

@@ -1333,41 +1333,17 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 
 
 func close_active_context_menu() -> Dictionary:
-	var snapshot: Dictionary = context_menu_snapshot()
-	if not bool(snapshot.get("active", false)):
-		return {"success": false, "reason": "context_menu_inactive"}
-	var top_menu: Dictionary = _dictionary_or_empty(snapshot.get("top", {}))
-	var owner_panel := str(top_menu.get("owner_panel", ""))
-	var menu_id := str(top_menu.get("id", "context_menu"))
-	var panel := _context_menu_owner_panel(owner_panel)
-	if panel == null or not panel.has_method("close_context_menu"):
-		return {
-			"success": false,
-			"reason": "context_menu_owner_missing",
-			"closed": menu_id,
-			"owner_panel": owner_panel,
-		}
-	panel.call("close_context_menu")
+	return _dictionary_or_empty(ui_blocker_state_controller.call("close_active_context_menu", context_menu_snapshot(), _context_menu_owner_panels()))
+
+
+func _context_menu_owner_panels() -> Dictionary:
 	return {
-		"success": true,
-		"closed": menu_id,
-		"owner_panel": owner_panel,
+		"inventory": inventory_panel,
+		"container": container_panel,
+		"trade": trade_panel,
+		"skills": skills_panel,
+		"character": character_panel,
 	}
-
-
-func _context_menu_owner_panel(owner_panel: String) -> Node:
-	match owner_panel:
-		"inventory":
-			return inventory_panel
-		"container":
-			return container_panel
-		"trade":
-			return trade_panel
-		"skills":
-			return skills_panel
-		"character":
-			return character_panel
-	return null
 
 
 func _runtime_pending_state_snapshot() -> Dictionary:
