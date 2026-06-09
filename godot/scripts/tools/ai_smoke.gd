@@ -227,6 +227,75 @@ func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[
 		errors.append("settlement life need tick event should include cook actor")
 	errors.append_array(_expect_settlement_life_need_effect_action(registry))
 	errors.append_array(_expect_settlement_life_queue_progression(registry))
+	errors.append_array(_expect_settlement_life_world_state_effects(registry))
+	return errors
+
+
+func _expect_settlement_life_world_state_effects(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 540}
+	simulation.set_world_flag("world_alert_active", true, "ai_smoke_seed")
+	var guard_id: int = _register_character(simulation, registry, "survivor_outpost_01_guard_liu", GridCoord.new(24, 0, 31), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var guard: RefCounted = simulation.actor_registry.get_actor(guard_id)
+	guard.life["runtime"] = {
+		"planner_state": {"threat_detected": true},
+		"needs": {
+			"hunger": {"current": 80.0, "max": 100.0},
+			"energy": {"current": 80.0, "max": 100.0},
+			"morale": {"current": 80.0, "max": 100.0},
+		},
+		"planner": {
+			"goal_id": "respond_threat",
+			"goal_score": 1050.0,
+			"score_rule_ids": ["respond_threat_if_alert", "guard_bonus_respond_threat"],
+			"action_id": "raise_alarm",
+			"action_reason": "seeded_world_state_effect",
+			"action_queue": [{
+				"action_id": "raise_alarm",
+				"executor_binding_id": "resolve_alarm",
+				"planner_cost": 1.0,
+				"target_anchor": "alarm",
+				"reservation_target": "",
+				"need_effects": {},
+				"effects": [{"key": "alarm_raised", "value": true}],
+				"world_state_effects": {"set_world_alert_active": true},
+			}],
+			"queue_length": 1,
+			"current_action_index": 0,
+			"queue_remaining": 1,
+			"queue_complete": false,
+			"requirements": [{"key": "threat_resolved", "value": true}],
+			"unmet_requirements": [{"key": "threat_resolved", "value": true}],
+			"facts": {"threat_detected": true},
+			"role": "guard",
+		},
+	}
+	var results: Array = simulation.advance_world_turn(_open_settlement_topology())
+	var result: Dictionary = _npc_result_for_actor(results, guard_id)
+	if str(result.get("intent", "")) != "use_smart_object":
+		errors.append("settlement GOAP seeded alarm action should use alarm smart object, got %s" % result)
+	var world_flags: Array = _array_or_empty(simulation.snapshot().get("world_flags", []))
+	if not world_flags.has("world_alert_active"):
+		errors.append("settlement GOAP world_state_effects should set world_alert_active flag")
+	var runtime: Dictionary = _life_runtime_for_actor(simulation, guard_id)
+	var planner: Dictionary = _dictionary_or_empty(runtime.get("planner", {}))
+	var last_execution: Dictionary = _dictionary_or_empty(planner.get("last_execution", {}))
+	var applied_world_effects: Array = _array_or_empty(last_execution.get("applied_world_state_effects", []))
+	if applied_world_effects.is_empty() or str(_dictionary_or_empty(applied_world_effects.front()).get("flag_id", "")) != "world_alert_active":
+		errors.append("settlement GOAP last execution should expose applied world state effects, got %s" % last_execution)
+	var effect_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_world_state_effect_applied")
+	if int(effect_event.get("actor_id", 0)) != guard_id or str(effect_event.get("flag_id", "")) != "world_alert_active":
+		errors.append("settlement_life_world_state_effect_applied should expose world flag effect, got %s" % effect_event)
+	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	restored.load_snapshot(simulation.snapshot())
+	if not _array_or_empty(restored.snapshot().get("world_flags", [])).has("world_alert_active"):
+		errors.append("settlement GOAP world_state_effects world flag should roundtrip through snapshot")
 	return errors
 
 

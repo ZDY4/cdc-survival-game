@@ -326,6 +326,7 @@ func _planner_action_summary(action: Dictionary) -> Dictionary:
 		"reservation_target": str(action.get("reservation_target", "")),
 		"need_effects": _dictionary_or_empty(action.get("need_effects", {})).duplicate(true),
 		"effects": _array_or_empty(action.get("effects", [])).duplicate(true),
+		"world_state_effects": _dictionary_or_empty(action.get("world_state_effects", {})).duplicate(true),
 	}
 
 

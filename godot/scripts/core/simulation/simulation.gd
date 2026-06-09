@@ -738,6 +738,8 @@ func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
 		resolved_context["ai"] = ai_library
 	if not resolved_context.has("settlements"):
 		resolved_context["settlements"] = settlement_library
+	if not resolved_context.has("world_alert_active"):
+		resolved_context["world_alert_active"] = world_flags.has("world_alert_active")
 	if resolved_context.has("topology"):
 		resolved_context["topology"] = _topology_with_runtime_door_states(_dictionary_or_empty(resolved_context.get("topology", {})))
 	if not resolved_context.has("weapon_profile"):
@@ -4322,15 +4324,18 @@ func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result:
 	var completed_action: Dictionary = _dictionary_or_empty(queue[current_index]) if current_index >= 0 and current_index < queue.size() else {}
 	var planner_state: Dictionary = _dictionary_or_empty(runtime.get("planner_state", {})).duplicate(true)
 	var applied_effects: Array = []
+	var applied_world_state_effects: Array = []
 	var reservation_result: Dictionary = {}
 	if completed_current_action:
 		applied_effects = _apply_life_planner_action_effects(planner_state, _array_or_empty(completed_action.get("effects", [])))
+		applied_world_state_effects = _apply_life_planner_world_state_effects(actor, completed_action)
 	var next_index: int = current_index + 1 if completed_current_action else current_index
 	next_index = clampi(next_index, 0, queue.size())
 	var queue_complete: bool = not queue.is_empty() and next_index >= queue.size()
 	if completed_current_action:
 		reservation_result = _record_life_planner_reservation_step(actor, runtime, planner_state, completed_action, intent, result, queue_complete)
 	execution["applied_effects"] = applied_effects.duplicate(true)
+	execution["applied_world_state_effects"] = applied_world_state_effects.duplicate(true)
 	if not reservation_result.is_empty():
 		execution["reservation"] = reservation_result.duplicate(true)
 	var planner_runtime: Dictionary = {
@@ -4396,6 +4401,36 @@ func _apply_life_planner_action_effects(planner_state: Dictionary, effects: Arra
 					planner_state[sibling_key] = false
 		planner_state[key] = value
 		applied.append({"key": key, "value": value})
+	return applied
+
+
+func _apply_life_planner_world_state_effects(actor: RefCounted, action: Dictionary) -> Array:
+	var effects: Dictionary = _dictionary_or_empty(action.get("world_state_effects", {}))
+	var applied: Array = []
+	for key in effects.keys():
+		var effect_key := str(key)
+		if effect_key.is_empty():
+			continue
+		var flag_id := ""
+		var value := bool(effects.get(key, false))
+		if effect_key.begins_with("set_"):
+			flag_id = effect_key.trim_prefix("set_")
+		elif effect_key.begins_with("clear_"):
+			flag_id = effect_key.trim_prefix("clear_")
+			value = false
+		if flag_id.is_empty():
+			continue
+		var result: Dictionary = set_world_flag(flag_id, value, "settlement_life_world_state_effect", actor.actor_id)
+		var summary: Dictionary = {
+			"key": effect_key,
+			"flag_id": flag_id,
+			"value": value,
+			"changed": bool(result.get("changed", false)),
+			"action_id": str(action.get("action_id", "")),
+			"actor_id": actor.actor_id,
+		}
+		applied.append(summary)
+		_emit("settlement_life_world_state_effect_applied", summary.duplicate(true))
 	return applied
 
 
