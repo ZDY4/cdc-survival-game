@@ -1996,6 +1996,77 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 		errors.append("bleeding intensity stack should increase to 2 after second hit")
 	if _event_count(simulation.snapshot(), "on_hit_effect_applied") < 4:
 		errors.append("on-hit effect runtime should emit on_hit_effect_applied events")
+	var bleeding_hp_before_tick: float = bleeding_enemy.hp
+	var damage_events_before: int = _event_count(simulation.snapshot(), "active_effect_damage_tick")
+	simulation.advance_world_turn(topology)
+	if absf((bleeding_hp_before_tick - bleeding_enemy.hp) - 10.0) > 0.01:
+		errors.append("bleeding active effect should deal stack-scaled DoT damage on world turn")
+	var bleeding_tick_payload: Dictionary = _last_event_payload(simulation.snapshot(), "active_effect_damage_tick")
+	if str(bleeding_tick_payload.get("base_effect_id", "")) != "bleeding":
+		errors.append("bleeding DoT tick should expose base_effect_id")
+	if int(bleeding_tick_payload.get("stack_count", 0)) != 2:
+		errors.append("bleeding DoT tick should expose stack count")
+	if _event_count(simulation.snapshot(), "active_effect_damage_tick") <= damage_events_before:
+		errors.append("bleeding DoT tick should emit active_effect_damage_tick")
+	var poison_target: int = _register_test_actor(simulation, "poison_dot_tick_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 4,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 40.0)
+	var poison_enemy: RefCounted = simulation.actor_registry.get_actor(poison_target)
+	poison_enemy.hp = 40.0
+	var poison_effects: Array[Dictionary] = [{
+		"effect_id": "effect:poison",
+		"base_effect_id": "poison",
+		"source": "smoke",
+		"source_actor_id": player.actor_id,
+		"target_actor_id": poison_target,
+		"name": "Poison",
+		"category": "debuff",
+		"duration_remaining": 3.0,
+		"is_infinite": false,
+		"special_effects": ["poison"],
+		"stack_count": 3,
+	}]
+	poison_enemy.active_effects = poison_effects
+	var poison_hp_before_tick: float = poison_enemy.hp
+	simulation.advance_world_turn(topology)
+	if absf((poison_hp_before_tick - poison_enemy.hp) - 9.0) > 0.01:
+		errors.append("poison active effect should deal stack-scaled DoT damage on world turn")
+	var poison_tick_payload: Dictionary = _last_event_payload(simulation.snapshot(), "active_effect_damage_tick")
+	if str(poison_tick_payload.get("base_effect_id", "")) != "poison":
+		errors.append("poison DoT tick should expose base_effect_id")
+	_restore_player_turn(simulation, player)
+	player.ap = 20.0
+	var dot_defeat_target: int = _register_test_actor(simulation, "on_hit_bleeding_dot_defeat", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 3,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}, 40.0)
+	var dot_defeat_enemy: RefCounted = simulation.actor_registry.get_actor(dot_defeat_target)
+	dot_defeat_enemy.hp = 40.0
+	dot_defeat_enemy.max_hp = 40.0
+	dot_defeat_enemy.defense = 0.0
+	dot_defeat_enemy.xp_reward = 4
+	var dot_defeat_attack: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": dot_defeat_target, "topology": topology})
+	if not bool(dot_defeat_attack.get("success", false)):
+		errors.append("bleeding setup attack for DoT defeat should succeed: %s" % dot_defeat_attack.get("reason", "unknown"))
+	elif simulation.actor_registry.get_actor(dot_defeat_target) != null:
+		dot_defeat_enemy = simulation.actor_registry.get_actor(dot_defeat_target)
+		dot_defeat_enemy.hp = 4.0
+		var defeated_events_before: int = _event_count(simulation.snapshot(), "actor_defeated")
+		simulation.advance_world_turn(topology)
+		if simulation.actor_registry.get_actor(dot_defeat_target) != null:
+			errors.append("bleeding DoT should defeat low HP target")
+		if _event_count(simulation.snapshot(), "actor_defeated") <= defeated_events_before:
+			errors.append("bleeding DoT defeat should emit actor_defeated")
+		if _corpse_by_source_actor(simulation.snapshot(), dot_defeat_target).is_empty():
+			errors.append("bleeding DoT defeat should create corpse container")
+		var dot_defeat_payload: Dictionary = _last_event_payload(simulation.snapshot(), "active_effect_defeated_actor")
+		if int(dot_defeat_payload.get("actor_id", 0)) != dot_defeat_target:
+			errors.append("bleeding DoT defeat should emit active_effect_defeated_actor")
+	_restore_player_turn(simulation, player)
+	player.ap = 20.0
 
 	player.equipment["main_hand"] = "1004"
 	player.inventory["1009"] = 2
@@ -2020,8 +2091,11 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 		errors.append("pistol attack should expose weapon base_damage 25")
 	if not _array_or_empty(pistol_result.get("triggered_on_hit_effect_ids", [])).has("headshot_bonus"):
 		errors.append("pistol hit should expose headshot_bonus on-hit effect")
-	if not _array_or_empty(pistol_result.get("applied_on_hit_effects", [])).is_empty():
-		errors.append("placeholder headshot_bonus should not create active on-hit effect runtime")
+	for applied_effect in _array_or_empty(pistol_result.get("applied_on_hit_effects", [])):
+		if bool(_dictionary_or_empty(applied_effect).get("applied", false)):
+			errors.append("placeholder headshot_bonus should not create active on-hit effect runtime")
+	if not _active_effect_by_id(pistol_enemy, "effect:headshot_bonus").is_empty():
+		errors.append("placeholder headshot_bonus should not be stored on target active_effects")
 	player.inventory["1009"] = 2
 	player.weapon_ammo["main_hand"] = 1
 	var magazine_target: int = _register_test_actor(simulation, "weapon_profile_magazine_target", "hostile", {
@@ -2058,7 +2132,7 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	var inventory_no_ammo: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": inventory_no_ammo_target, "topology": topology})
 	if inventory_no_ammo.get("reason", "") != "ammo_insufficient":
 		errors.append("ranged weapon without tracked magazine or inventory ammo should report ammo_insufficient")
-	for actor_id in [blunt_target, bleeding_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
+	for actor_id in [blunt_target, bleeding_target, poison_target, dot_defeat_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.active_effects = original_active_effects

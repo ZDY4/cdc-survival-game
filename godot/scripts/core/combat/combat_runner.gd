@@ -177,6 +177,10 @@ func preview_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 	return preview
 
 
+func defeat_actor(simulation: RefCounted, actor_id: int, target_actor_id: int, target: RefCounted) -> void:
+	_defeat_actor(simulation, actor_id, target_actor_id, target)
+
+
 func validate_attack_target(simulation: RefCounted, actor_id: int, target_actor_id: int, options: Dictionary = {}) -> Dictionary:
 	var attacker: RefCounted = simulation.actor_registry.get_actor(actor_id)
 	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)

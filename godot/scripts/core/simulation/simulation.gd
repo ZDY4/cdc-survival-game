@@ -3741,7 +3741,10 @@ func _tick_hotbar_cooldowns() -> void:
 
 func _tick_actor_active_effects() -> void:
 	for actor in actor_registry.actors():
+		if actor.hp <= 0.0:
+			continue
 		var remaining: Array[Dictionary] = []
+		var defeated_by_effect := false
 		for effect in actor.active_effects:
 			var effect_data: Dictionary = effect.duplicate(true)
 			if bool(effect_data.get("is_infinite", false)):
@@ -3750,6 +3753,10 @@ func _tick_actor_active_effects() -> void:
 			var before: float = float(effect_data.get("duration_remaining", 0.0))
 			var after: float = max(0.0, before - 1.0)
 			effect_data["duration_remaining"] = after
+			var damage_tick: Dictionary = _apply_active_effect_damage_tick(actor, effect_data, before, after)
+			if bool(damage_tick.get("defeated", false)):
+				defeated_by_effect = true
+				break
 			if after > 0.0:
 				remaining.append(effect_data)
 				_emit("skill_effect_ticked", {
@@ -3765,7 +3772,90 @@ func _tick_actor_active_effects() -> void:
 					"effect_id": str(effect_data.get("effect_id", "")),
 					"skill_id": str(effect_data.get("skill_id", "")),
 				})
-		actor.active_effects = remaining
+		if not defeated_by_effect and actor_registry.get_actor(actor.actor_id) != null:
+			actor.active_effects = remaining
+
+
+func _apply_active_effect_damage_tick(actor: RefCounted, effect_data: Dictionary, before_duration: float, after_duration: float) -> Dictionary:
+	var damage: float = _active_effect_tick_damage(effect_data)
+	if damage <= 0.0:
+		return {"success": false, "reason": "no_damage"}
+	var hp_before: float = actor.hp
+	actor.hp = max(0.0, actor.hp - damage)
+	actor.resources["hp"] = {"current": actor.hp, "max": actor.max_hp}
+	var source_actor_id: int = int(effect_data.get("source_actor_id", 0))
+	_emit("active_effect_damage_tick", {
+		"actor_id": actor.actor_id,
+		"source_actor_id": source_actor_id,
+		"effect_id": str(effect_data.get("effect_id", "")),
+		"base_effect_id": str(effect_data.get("base_effect_id", "")),
+		"special_effects": _string_array(effect_data.get("special_effects", [])),
+		"stack_count": int(effect_data.get("stack_count", 1)),
+		"damage": damage,
+		"hp_before": hp_before,
+		"hp_after": actor.hp,
+		"duration_before": before_duration,
+		"duration_after": after_duration,
+		"defeated": actor.hp <= 0.0,
+	})
+	if actor.hp > 0.0:
+		return {"success": true, "damage": damage, "defeated": false}
+	_defeat_actor_from_active_effect(source_actor_id, actor, effect_data)
+	return {"success": true, "damage": damage, "defeated": true}
+
+
+func _active_effect_tick_damage(effect_data: Dictionary) -> float:
+	var special_effects: Array[String] = _string_array(effect_data.get("special_effects", []))
+	var base_effect_id := str(effect_data.get("base_effect_id", effect_data.get("effect_id", ""))).trim_prefix("effect:")
+	var library_effect: Dictionary = _effect_data(base_effect_id)
+	var damage: float = _effect_tick_damage_value(effect_data)
+	if damage <= 0.0:
+		damage = _effect_tick_damage_value(library_effect)
+	if damage <= 0.0:
+		if special_effects.has("bleeding") or base_effect_id == "bleeding":
+			damage = 5.0
+		elif special_effects.has("poison") or base_effect_id == "poison":
+			damage = 3.0
+	var interval: float = max(1.0, float(effect_data.get("tick_interval", library_effect.get("tick_interval", 1.0))))
+	if interval > 1.0:
+		damage = damage / interval
+	return max(0.0, damage * max(1, int(effect_data.get("stack_count", 1))))
+
+
+func _effect_tick_damage_value(effect_data: Dictionary) -> float:
+	if effect_data.is_empty():
+		return 0.0
+	for key in ["damage_per_tick", "tick_damage", "dot_damage", "damage_over_time", "bleeding_damage", "poison_damage"]:
+		if effect_data.has(key):
+			return max(0.0, float(effect_data.get(key, 0.0)))
+	var gameplay: Dictionary = _dictionary_or_empty(effect_data.get("gameplay_effect", {}))
+	var resource_deltas: Dictionary = _dictionary_or_empty(gameplay.get("resource_deltas", {}))
+	for key in ["hp", "health"]:
+		if resource_deltas.has(key):
+			return max(0.0, -float(resource_deltas.get(key, 0.0)))
+	return 0.0
+
+
+func _effect_data(effect_id: String) -> Dictionary:
+	if effect_id.is_empty():
+		return {}
+	var record: Dictionary = _dictionary_or_empty(effect_library.get(effect_id, {}))
+	return _dictionary_or_empty(record.get("data", record))
+
+
+func _defeat_actor_from_active_effect(source_actor_id: int, target: RefCounted, effect_data: Dictionary) -> void:
+	var defeated_by_actor_id: int = source_actor_id
+	if actor_registry.get_actor(defeated_by_actor_id) == null:
+		defeated_by_actor_id = 0
+	_combat_runner.defeat_actor(self, defeated_by_actor_id, target.actor_id, target)
+	_emit("active_effect_defeated_actor", {
+		"actor_id": target.actor_id,
+		"source_actor_id": defeated_by_actor_id,
+		"effect_id": str(effect_data.get("effect_id", "")),
+		"base_effect_id": str(effect_data.get("base_effect_id", "")),
+	})
+	if target.side == "player":
+		exit_combat_if_player_defeated("player_defeated_by_active_effect")
 
 
 func _advance_npc_turn(actor: RefCounted, topology: Dictionary, combat_turn_active: bool = false) -> Dictionary:
