@@ -82,6 +82,7 @@ var world_action_queue_state: Dictionary = {
 	"current_strategy": "refresh_before_present",
 	"target_strategy": "present_before_final_refresh",
 }
+var pending_world_action_ui: Dictionary = {}
 var audio_feedback_controller: Node
 var reason_catalog: RefCounted = ReasonCatalog.new()
 var world_container: Node3D
@@ -205,6 +206,7 @@ func _process(delta: float) -> void:
 	_update_runtime_performance(delta)
 	if runtime_input_controller != null:
 		runtime_input_controller.process(delta)
+	_process_world_action_queue_completion()
 	_update_tooltip_layer()
 	_process_auto_tick(delta)
 
@@ -1536,6 +1538,8 @@ func world_action_queue_snapshot() -> Dictionary:
 	output["presenter_kind"] = str(presenter.get("kind", ""))
 	output["presenter_sequence"] = int(presenter.get("sequence", 0))
 	output["input_blocked"] = _world_action_presenter_blocks_input()
+	output["pending_ui"] = pending_world_action_ui.duplicate(true)
+	output["pending_ui_active"] = not pending_world_action_ui.is_empty()
 	if str(output.get("state", "")) == "presenting" and not presenter_active:
 		output["active"] = false
 		output["state"] = "completed"
@@ -1577,7 +1581,10 @@ func finish_world_action_presentations() -> Dictionary:
 		return world_action_presenter_snapshot()
 	var result: Dictionary = _dictionary_or_empty(world_action_presenter.call("finish_active_presentations"))
 	_record_world_action_queue_finished(result)
-	refresh_hud(current_interaction_prompt())
+	if _apply_pending_world_action_ui("presenter_finished"):
+		refresh_all_panels(current_interaction_prompt())
+	else:
+		refresh_hud(current_interaction_prompt())
 	return result
 
 
@@ -3966,7 +3973,7 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	_refresh_debug_overlay()
 	_setup_panels()
 	if not stage_panel_to_open.is_empty():
-		_open_stage_panel_from_interaction(stage_panel_to_open)
+		_queue_or_open_stage_panel_after_world_action(stage_panel_to_open, result)
 	refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
 
 
@@ -4002,6 +4009,53 @@ func _open_stage_panel_from_interaction(panel_id: String) -> void:
 				break
 		if not already_open:
 			panel_controller.call("toggle_stage_panel", panel_id)
+
+
+func _queue_or_open_stage_panel_after_world_action(panel_id: String, result: Dictionary) -> void:
+	if panel_id.is_empty():
+		return
+	if _world_action_presenter_blocks_input():
+		pending_world_action_ui = {
+			"kind": "open_stage_panel",
+			"panel_id": panel_id,
+			"source": "interaction_result",
+			"command_kind": _world_action_command_kind(result),
+			"presenter_kind": str(world_action_presenter_snapshot().get("kind", "")),
+			"queued_sequence": int(world_action_queue_state.get("sequence", 0)),
+			"open_after": "presenter_finished",
+		}
+		world_action_queue_state["pending_ui"] = pending_world_action_ui.duplicate(true)
+		world_action_queue_state["pending_ui_active"] = true
+		return
+	_open_stage_panel_from_interaction(panel_id)
+
+
+func _process_world_action_queue_completion() -> void:
+	if pending_world_action_ui.is_empty():
+		return
+	if _world_action_presenter_blocks_input():
+		return
+	var queue_state := str(world_action_queue_state.get("state", ""))
+	if queue_state == "presenting":
+		_record_world_action_queue_finished(world_action_presenter_snapshot())
+	_apply_pending_world_action_ui("presenter_finished")
+
+
+func _apply_pending_world_action_ui(trigger: String) -> bool:
+	if pending_world_action_ui.is_empty():
+		return false
+	var pending_ui: Dictionary = pending_world_action_ui.duplicate(true)
+	pending_world_action_ui.clear()
+	if str(pending_ui.get("kind", "")) == "open_stage_panel":
+		_open_stage_panel_from_interaction(str(pending_ui.get("panel_id", "")))
+	var applied: Dictionary = pending_ui.duplicate(true)
+	applied["trigger"] = trigger
+	applied["applied"] = true
+	world_action_queue_state["pending_ui"] = {}
+	world_action_queue_state["pending_ui_active"] = false
+	world_action_queue_state["applied_deferred_ui"] = applied
+	world_action_queue_state["deferred_ui_applied"] = true
+	return true
 
 
 func _present_world_action(command_result: Dictionary) -> void:

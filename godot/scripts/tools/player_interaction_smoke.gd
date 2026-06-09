@@ -510,15 +510,29 @@ func _expect_crafting_station_interaction(errors: Array[String], game_root: Node
 	if str(command_result.get("open_panel", "")) != "crafting" or str(command_result.get("station_id", "")) != "workbench":
 		errors.append("crafting station interaction should return crafting panel target and station id: %s" % result)
 	var menu_state: Dictionary = _dictionary_or_empty(game_root.panel_controller.menu_state_snapshot() if game_root.panel_controller != null else {})
+	if _stage_panel_active(menu_state, "crafting"):
+		errors.append("crafting station interaction should defer crafting panel until world action presenter completes")
+	var queue_before_finish: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
+	var pending_ui: Dictionary = _dictionary_or_empty(queue_before_finish.get("pending_ui", {}))
+	if not bool(queue_before_finish.get("pending_ui_active", false)):
+		errors.append("crafting station interaction should queue pending UI while presenter is active")
+	if str(pending_ui.get("kind", "")) != "open_stage_panel" or str(pending_ui.get("panel_id", "")) != "crafting":
+		errors.append("crafting station pending UI should open crafting panel after presenter, got %s" % JSON.stringify(pending_ui))
+	await _wait_for_world_action_presenter_idle(game_root)
+	menu_state = _dictionary_or_empty(game_root.panel_controller.menu_state_snapshot() if game_root.panel_controller != null else {})
 	if not _stage_panel_active(menu_state, "crafting"):
-		errors.append("crafting station interaction should open crafting stage panel")
+		errors.append("crafting station interaction should open crafting stage panel after presenter completes")
+	var queue_after_finish: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
+	if bool(queue_after_finish.get("pending_ui_active", true)):
+		errors.append("crafting station pending UI should clear after presenter completes")
+	if not bool(queue_after_finish.get("deferred_ui_applied", false)):
+		errors.append("crafting station queue should record deferred UI application")
 	var station_snapshot: Dictionary = _dictionary_or_empty(game_root.crafting_panel.get("_last_snapshot")).get("station_snapshot", {})
 	if not _dictionary_or_empty(_dictionary_or_empty(station_snapshot).get("by_id", {})).has("workbench"):
 		errors.append("crafting panel snapshot should retain workbench station after station interaction")
 	game_root.close_stage_panels()
 	game_root.clear_interaction_selection("crafting_station_smoke_cleanup")
 	_restore_player_for_crafting_station_smoke(game_root, original_grid, original_ap)
-	await _wait_for_world_action_presenter_idle(game_root)
 
 
 func _restore_player_for_crafting_station_smoke(game_root: Node, original_grid: Dictionary, original_ap: float) -> void:
