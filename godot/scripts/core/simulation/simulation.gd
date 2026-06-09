@@ -4322,12 +4322,16 @@ func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result:
 	var completed_action: Dictionary = _dictionary_or_empty(queue[current_index]) if current_index >= 0 and current_index < queue.size() else {}
 	var planner_state: Dictionary = _dictionary_or_empty(runtime.get("planner_state", {})).duplicate(true)
 	var applied_effects: Array = []
+	var reservation_result: Dictionary = {}
 	if completed_current_action:
 		applied_effects = _apply_life_planner_action_effects(planner_state, _array_or_empty(completed_action.get("effects", [])))
+		reservation_result = _apply_life_planner_reservation(actor, runtime, planner_state, completed_action, intent, result)
 	var next_index: int = current_index + 1 if completed_current_action else current_index
 	next_index = clampi(next_index, 0, queue.size())
 	var queue_complete: bool = not queue.is_empty() and next_index >= queue.size()
 	execution["applied_effects"] = applied_effects.duplicate(true)
+	if not reservation_result.is_empty():
+		execution["reservation"] = reservation_result.duplicate(true)
 	var planner_runtime: Dictionary = {
 		"goal_id": str(planner.get("goal_id", "")),
 		"goal_score": float(planner.get("goal_score", 0.0)),
@@ -4392,6 +4396,65 @@ func _apply_life_planner_action_effects(planner_state: Dictionary, effects: Arra
 		planner_state[key] = value
 		applied.append({"key": key, "value": value})
 	return applied
+
+
+func _apply_life_planner_reservation(actor: RefCounted, runtime: Dictionary, planner_state: Dictionary, action: Dictionary, intent: Dictionary, result: Dictionary) -> Dictionary:
+	var reservation_target := str(action.get("reservation_target", ""))
+	if reservation_target.is_empty():
+		return {}
+	var reservation: Dictionary = {
+		"active": true,
+		"reservation_target": reservation_target,
+		"smart_object_id": str(result.get("smart_object_id", intent.get("smart_object_id", ""))),
+		"smart_object_kind": str(result.get("smart_object_kind", intent.get("smart_object_kind", ""))),
+		"action_id": str(action.get("action_id", "")),
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"world_time": world_time.duplicate(true),
+		"target_grid": _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true),
+	}
+	var reservations: Dictionary = _dictionary_or_empty(runtime.get("reservations", {})).duplicate(true)
+	reservations[reservation_target] = reservation.duplicate(true)
+	runtime["reservations"] = reservations
+	var flag_key := _life_reservation_flag_key(reservation_target)
+	if not flag_key.is_empty():
+		runtime[flag_key] = true
+	planner_state["reservation.%s.active" % reservation_target] = true
+	var fact_key := _life_reservation_fact_key(reservation_target)
+	if not fact_key.is_empty():
+		planner_state[fact_key] = true
+	_emit("settlement_life_reservation_updated", reservation.duplicate(true))
+	return reservation
+
+
+func _life_reservation_flag_key(reservation_target: String) -> String:
+	match reservation_target:
+		"bed":
+			return "bed_reserved"
+		"meal_object":
+			return "meal_object_reserved"
+		"guard_post":
+			return "guard_post_reserved"
+		"medical_station":
+			return "medical_station_reserved"
+		"leisure_object":
+			return "leisure_object_reserved"
+	return ""
+
+
+func _life_reservation_fact_key(reservation_target: String) -> String:
+	match reservation_target:
+		"bed":
+			return "has_reserved_bed"
+		"meal_object":
+			return "has_reserved_meal_seat"
+		"guard_post":
+			return "has_reserved_guard_post"
+		"medical_station":
+			return "has_reserved_medical_station"
+		"leisure_object":
+			return "has_reserved_leisure_object"
+	return ""
 
 
 func _life_planner_location_fact_keys() -> Array[String]:

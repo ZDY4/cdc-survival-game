@@ -172,6 +172,7 @@ func _planner_data(ai_library: Dictionary) -> Dictionary:
 
 func _planner_world_state(actor: RefCounted, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, context: Dictionary, schedule_block: Dictionary, day: String, minute_of_day: int) -> Dictionary:
 	var runtime: Dictionary = _dictionary_or_empty(life.get("runtime", {}))
+	var reservations: Dictionary = _dictionary_or_empty(runtime.get("reservations", {}))
 	var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {}))
 	var hunger := _need_current(needs, "hunger")
 	var energy := _need_current(needs, "energy")
@@ -184,6 +185,11 @@ func _planner_world_state(actor: RefCounted, life: Dictionary, settlement: Dicti
 	var meal_window_open := _meal_window_open(settlement, minute_of_day)
 	var on_shift := not schedule_block.is_empty()
 	var shift_starting_soon := _shift_starting_soon(str(life.get("schedule_profile_id", "")), day, minute_of_day, ai_library)
+	var bed_reserved: bool = bool(runtime.get("bed_reserved", false)) or _reservation_active(reservations, "bed")
+	var meal_object_reserved: bool = bool(runtime.get("meal_object_reserved", false)) or _reservation_active(reservations, "meal_object")
+	var guard_post_reserved: bool = bool(runtime.get("guard_post_reserved", false)) or _reservation_active(reservations, "guard_post")
+	var medical_station_reserved: bool = bool(runtime.get("medical_station_reserved", false)) or _reservation_active(reservations, "medical_station")
+	var leisure_object_reserved: bool = bool(runtime.get("leisure_object_reserved", false)) or _reservation_active(reservations, "leisure_object")
 	var state := {
 		"role": role,
 		"need.hunger": hunger,
@@ -204,10 +210,16 @@ func _planner_world_state(actor: RefCounted, life: Dictionary, settlement: Dicti
 		"threat_detected": bool(context.get("world_alert_active", false)),
 		"availability.patrol_route": not _route_by_id(settlement, str(life.get("duty_route_id", ""))).is_empty(),
 		"settlement.guard_coverage_insufficient": bool(context.get("guard_coverage_insufficient", false)),
-		"reservation.bed.active": bool(_dictionary_or_empty(life.get("runtime", {})).get("bed_reserved", false)),
-		"reservation.meal_object.active": bool(_dictionary_or_empty(life.get("runtime", {})).get("meal_object_reserved", false)),
-		"has_reserved_bed": bool(_dictionary_or_empty(life.get("runtime", {})).get("bed_reserved", false)),
-		"has_reserved_meal_seat": bool(_dictionary_or_empty(life.get("runtime", {})).get("meal_object_reserved", false)),
+		"reservation.bed.active": bed_reserved,
+		"reservation.meal_object.active": meal_object_reserved,
+		"reservation.guard_post.active": guard_post_reserved,
+		"reservation.medical_station.active": medical_station_reserved,
+		"reservation.leisure_object.active": leisure_object_reserved,
+		"has_reserved_bed": bed_reserved,
+		"has_reserved_meal_seat": meal_object_reserved,
+		"has_reserved_guard_post": guard_post_reserved,
+		"has_reserved_medical_station": medical_station_reserved,
+		"has_reserved_leisure_object": leisure_object_reserved,
 		"is_hungry": hunger <= 50.0,
 		"is_very_hungry": hunger <= 25.0,
 		"sleepy": energy <= 50.0,
@@ -549,6 +561,13 @@ func _reservation_target_tag(reservation_target: String, target_anchor_kind: Str
 		"leisure_object":
 			return "morale"
 	return target_anchor_kind
+
+
+func _reservation_active(reservations: Dictionary, reservation_target: String) -> bool:
+	if reservation_target.is_empty():
+		return false
+	var reservation: Dictionary = _dictionary_or_empty(reservations.get(reservation_target, {}))
+	return not reservation.is_empty() and bool(reservation.get("active", true))
 
 
 func _target_anchor_for_action(life: Dictionary, settlement: Dictionary, action: Dictionary) -> String:

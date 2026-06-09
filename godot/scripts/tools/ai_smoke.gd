@@ -252,10 +252,22 @@ func _expect_settlement_life_queue_progression(registry: RefCounted) -> Array[St
 	var first_results: Array = simulation.advance_world_turn(_open_settlement_topology())
 	var first_result: Dictionary = _npc_result_for_actor(first_results, cook_id)
 	var first_runtime: Dictionary = _planner_runtime_for_actor(simulation, cook_id)
+	var first_life_runtime: Dictionary = _life_runtime_for_actor(simulation, cook_id)
 	if str(first_result.get("intent", "")) != "use_smart_object" or int(first_result.get("remaining_steps", -1)) != 0:
 		errors.append("settlement GOAP first queue action should move into canteen and complete travel action, got %s" % first_result)
 	if int(first_runtime.get("current_action_index", -1)) != 1 or str(first_runtime.get("next_action_id", "")) != "restock_meal_service":
 		errors.append("settlement GOAP queue should advance to restock action, got %s" % first_runtime)
+	var meal_reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(first_life_runtime.get("reservations", {})).get("meal_object", {}))
+	if meal_reservation.is_empty() or str(meal_reservation.get("smart_object_id", "")) != "canteen_seat_cook_01":
+		errors.append("settlement GOAP travel action should reserve cook meal object, got %s" % first_life_runtime)
+	if not bool(first_life_runtime.get("meal_object_reserved", false)):
+		errors.append("settlement GOAP reservation should expose legacy meal_object_reserved flag")
+	var first_planner_state: Dictionary = _dictionary_or_empty(first_life_runtime.get("planner_state", {}))
+	if not bool(first_planner_state.get("has_reserved_meal_seat", false)) or not bool(first_planner_state.get("reservation.meal_object.active", false)):
+		errors.append("settlement GOAP reservation should update planner state reservation facts, got %s" % first_planner_state)
+	var reservation_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_reservation_updated")
+	if int(reservation_event.get("actor_id", 0)) != cook_id or str(reservation_event.get("reservation_target", "")) != "meal_object":
+		errors.append("settlement_life_reservation_updated should expose cook meal reservation, got %s" % reservation_event)
 	var second_results: Array = simulation.advance_world_turn(_open_settlement_topology())
 	var second_result: Dictionary = _npc_result_for_actor(second_results, cook_id)
 	var second_runtime: Dictionary = _planner_runtime_for_actor(simulation, cook_id)
@@ -264,6 +276,12 @@ func _expect_settlement_life_queue_progression(registry: RefCounted) -> Array[St
 		errors.append("settlement GOAP should reuse queued restock action on next turn, got %s" % second_planner)
 	if not bool(second_runtime.get("queue_complete", false)) or int(second_runtime.get("queue_remaining", -1)) != 0:
 		errors.append("settlement GOAP queue should complete after second queued action, got %s" % second_runtime)
+	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	restored.load_snapshot(simulation.snapshot())
+	var restored_life_runtime: Dictionary = _life_runtime_for_actor(restored, cook_id)
+	var restored_reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(restored_life_runtime.get("reservations", {})).get("meal_object", {}))
+	if restored_reservation.is_empty() or str(restored_reservation.get("smart_object_id", "")) != "canteen_seat_cook_01":
+		errors.append("settlement GOAP reservation should roundtrip through actor life snapshot, got %s" % restored_life_runtime)
 	return errors
 
 
@@ -837,6 +855,14 @@ func _planner_runtime_for_actor(simulation: RefCounted, actor_id: int) -> Dictio
 	var life: Dictionary = _dictionary_or_empty(actor.life)
 	var runtime: Dictionary = _dictionary_or_empty(life.get("runtime", {}))
 	return _dictionary_or_empty(runtime.get("planner", {}))
+
+
+func _life_runtime_for_actor(simulation: RefCounted, actor_id: int) -> Dictionary:
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {}
+	var life: Dictionary = _dictionary_or_empty(actor.life)
+	return _dictionary_or_empty(life.get("runtime", {}))
 
 
 func _npc_results_include_attack(results: Array, actor_id: int) -> bool:
