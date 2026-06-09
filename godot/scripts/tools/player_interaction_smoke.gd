@@ -1421,6 +1421,33 @@ func _expect_on_hit_effect_marker_metadata(errors: Array[String], label: Label3D
 	_expect_action_marker_phases(errors, label, ["windup", "impact", "fade"], "on-hit effect label")
 
 
+func _expect_on_hit_effect_pulse_metadata(errors: Array[String], pulse: MeshInstance3D, attack_result: Dictionary) -> void:
+	var effects: Array = _array_or_empty(attack_result.get("applied_on_hit_effects", []))
+	if str(pulse.get_meta("action_presenter_kind", "")) != "attack_on_hit_effect_pulse":
+		errors.append("on-hit effect pulse should expose attack_on_hit_effect_pulse kind")
+	if str(pulse.get_meta("visual_kind", "")) != "on_hit_effect_pulse":
+		errors.append("on-hit effect pulse should expose visual kind")
+	if int(pulse.get_meta("applied_effect_count", -1)) != effects.size():
+		errors.append("on-hit effect pulse should expose applied_effect_count")
+	if int(pulse.get_meta("applied_on_hit_effect_count", -1)) != effects.size():
+		errors.append("on-hit effect pulse should expose applied_on_hit_effect_count")
+	if not _array_or_empty(pulse.get_meta("effect_ids", [])).has("bleeding"):
+		errors.append("on-hit effect pulse should expose effect_ids")
+	if not _array_or_empty(pulse.get_meta("effect_names", [])).has("Bleeding"):
+		errors.append("on-hit effect pulse should expose effect_names")
+	if not _array_or_empty(pulse.get_meta("effect_categories", [])).has("debuff"):
+		errors.append("on-hit effect pulse should expose effect_categories")
+	if float(pulse.get_meta("pulse_radius", 0.0)) <= 0.0:
+		errors.append("on-hit effect pulse should expose pulse radius")
+	if float(pulse.get_meta("pulse_y_offset", 0.0)) <= 0.0:
+		errors.append("on-hit effect pulse should expose y offset")
+	var material := pulse.material_override as StandardMaterial3D
+	if material == null or not material.no_depth_test:
+		errors.append("on-hit effect pulse should render above map meshes")
+	_expect_attack_marker_metadata(errors, pulse, attack_result, "on-hit effect pulse")
+	_expect_action_marker_phases(errors, pulse, ["windup", "impact", "fade"], "on-hit effect pulse")
+
+
 func _expect_world_action_interaction_presenter(errors: Array[String], game_root: Node, target_id: String, option_kind: String, expected_visual_kind: String = "") -> void:
 	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
 	if str(presenter.get("kind", "")) != "interaction":
@@ -1976,6 +2003,18 @@ func _expect_on_hit_effect_attack_presenter(errors: Array[String], game_root: No
 		errors.append("attack presenter on-hit label text should mention effect name")
 	if str(presenter.get("on_hit_effect_label_path", "")).is_empty():
 		errors.append("attack presenter should expose on_hit_effect_label_path")
+	if str(presenter.get("on_hit_effect_pulse_path", "")).is_empty():
+		errors.append("attack presenter should expose on_hit_effect_pulse_path")
+	if str(presenter.get("on_hit_effect_pulse_visual_kind", "")) != "on_hit_effect_pulse":
+		errors.append("attack presenter should expose on_hit_effect_pulse visual kind")
+	if int(presenter.get("on_hit_effect_pulse_effect_count", -1)) != _array_or_empty(attack_payload.get("applied_on_hit_effects", [])).size():
+		errors.append("attack presenter should expose on_hit_effect_pulse_effect_count")
+	if not _array_or_empty(presenter.get("on_hit_effect_ids", [])).has("bleeding"):
+		errors.append("attack presenter should expose on-hit effect ids")
+	if not _array_or_empty(presenter.get("on_hit_effect_names", [])).has("Bleeding"):
+		errors.append("attack presenter should expose on-hit effect names")
+	if not _array_or_empty(presenter.get("on_hit_effect_categories", [])).has("debuff"):
+		errors.append("attack presenter should expose on-hit effect categories")
 	_expect_attack_event_metadata(errors, presenter, attack_payload, "on-hit effect attack presenter")
 	_expect_action_presenter_phases(errors, presenter, ["windup", "impact", "fade"], "on-hit effect attack presenter")
 	var label: Label3D = game_root.find_child("WorldActionOnHitEffect", true, false) as Label3D
@@ -1987,6 +2026,13 @@ func _expect_on_hit_effect_attack_presenter(errors: Array[String], game_root: No
 	if label.global_position.distance_to(player_node.global_position + Vector3(0.0, 1.88, 0.0)) > 0.3:
 		errors.append("on-hit effect label should appear above target actor")
 	_expect_on_hit_effect_marker_metadata(errors, label, attack_payload)
+	var pulse: MeshInstance3D = game_root.find_child("WorldActionOnHitEffectPulse", true, false) as MeshInstance3D
+	if pulse == null:
+		errors.append("attack presenter should render WorldActionOnHitEffectPulse marker")
+		return
+	if pulse.global_position.distance_to(player_node.global_position + Vector3(0.0, 0.78, 0.0)) > 0.3:
+		errors.append("on-hit effect pulse should appear around target actor")
+	_expect_on_hit_effect_pulse_metadata(errors, pulse, attack_payload)
 	_expect_world_action_input_blocker(errors, game_root, "attack")
 	await _wait_for_world_action_presenter_idle(game_root)
 

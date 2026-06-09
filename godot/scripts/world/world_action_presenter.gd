@@ -728,6 +728,10 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 		on_hit_label.position = target_position + Vector3(0.0, 1.88, 0.0)
 		on_hit_label.set_meta("action_presenter_sequence", run_sequence)
 		_track_active_node(on_hit_label)
+	var on_hit_pulse: MeshInstance3D = _attack_on_hit_effect_pulse_marker(attack, target_position) as MeshInstance3D
+	if on_hit_pulse != null:
+		on_hit_pulse.set_meta("action_presenter_sequence", run_sequence)
+		_track_active_node(on_hit_pulse)
 	var layer := _presentation_layer(world_root)
 	layer.add_child(marker)
 	if delivery_marker != null:
@@ -741,6 +745,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	layer.add_child(damage_label)
 	if on_hit_label != null:
 		layer.add_child(on_hit_label)
+	if on_hit_pulse != null:
+		layer.add_child(on_hit_pulse)
 	var tween := host.create_tween()
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
@@ -757,6 +763,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.16, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.12, 0.0), float(ATTACK_PHASE_DURATIONS[0]))
+	if on_hit_pulse != null:
+		tween.parallel().tween_property(on_hit_pulse, "scale", Vector3(0.74, 1.0, 0.74), float(ATTACK_PHASE_DURATIONS[0]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[1]))
 	if delivery_marker != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(delivery_marker), ATTACK_PHASES[1]))
@@ -769,6 +777,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[1]))
 	if on_hit_label != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[1]))
+	if on_hit_pulse != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_pulse), ATTACK_PHASES[1]))
 	tween.tween_property(marker, "scale", Vector3(1.45, 1.45, 1.45), float(ATTACK_PHASE_DURATIONS[1]))
 	if delivery_marker != null:
 		tween.parallel().tween_property(delivery_marker, "scale", Vector3(1.08, 1.08, 1.08), float(ATTACK_PHASE_DURATIONS[1]))
@@ -782,6 +792,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	tween.parallel().tween_property(damage_label, "position", damage_label.position + Vector3(0.0, 0.36, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "position", on_hit_label.position + Vector3(0.0, 0.30, 0.0), float(ATTACK_PHASE_DURATIONS[1]))
+	if on_hit_pulse != null:
+		tween.parallel().tween_property(on_hit_pulse, "scale", Vector3(1.56, 1.0, 1.56), float(ATTACK_PHASE_DURATIONS[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), ATTACK_PHASES[2]))
 	if delivery_marker != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(delivery_marker), ATTACK_PHASES[2]))
@@ -794,6 +806,8 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(damage_label), ATTACK_PHASES[2]))
 	if on_hit_label != null:
 		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_label), ATTACK_PHASES[2]))
+	if on_hit_pulse != null:
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(on_hit_pulse), ATTACK_PHASES[2]))
 	tween.tween_property(marker, "scale", Vector3(0.35, 0.35, 0.35), float(ATTACK_PHASE_DURATIONS[2]))
 	if delivery_marker != null:
 		tween.parallel().tween_property(delivery_marker, "scale", Vector3(0.12, 0.12, 0.12), float(ATTACK_PHASE_DURATIONS[2]))
@@ -806,12 +820,15 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	tween.parallel().tween_property(damage_label, "modulate", Color(damage_label.modulate.r, damage_label.modulate.g, damage_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
 	if on_hit_label != null:
 		tween.parallel().tween_property(on_hit_label, "modulate", Color(on_hit_label.modulate.r, on_hit_label.modulate.g, on_hit_label.modulate.b, 0.0), float(ATTACK_PHASE_DURATIONS[2]))
+	if on_hit_pulse != null:
+		tween.parallel().tween_property(on_hit_pulse, "scale", Vector3(1.95, 1.0, 1.95), float(ATTACK_PHASE_DURATIONS[2]))
 	var on_hit_label_ref: WeakRef = weakref(on_hit_label) if on_hit_label != null else null
+	var on_hit_pulse_ref: WeakRef = weakref(on_hit_pulse) if on_hit_pulse != null else null
 	var delivery_marker_ref: WeakRef = weakref(delivery_marker) if delivery_marker != null else null
 	var muzzle_flash_ref: WeakRef = weakref(muzzle_flash) if muzzle_flash != null else null
 	var projectile_trail_ref: WeakRef = weakref(projectile_trail) if projectile_trail != null else null
 	var shell_eject_ref: WeakRef = weakref(shell_eject) if shell_eject != null else null
-	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label), on_hit_label_ref, delivery_marker_ref, muzzle_flash_ref, projectile_trail_ref, shell_eject_ref))
+	tween.finished.connect(Callable(self, "_on_attack_feedback_finished").bind(weakref(marker), weakref(damage_label), on_hit_label_ref, delivery_marker_ref, muzzle_flash_ref, projectile_trail_ref, shell_eject_ref, on_hit_pulse_ref))
 	var snapshot_data := _attack_public_snapshot(attack, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
 	if delivery_marker != null:
@@ -832,10 +849,17 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	if on_hit_label != null:
 		snapshot_data["on_hit_effect_label_path"] = str(on_hit_label.get_path())
 		snapshot_data["on_hit_effect_label_text"] = str(on_hit_label.text)
+	if on_hit_pulse != null:
+		snapshot_data["on_hit_effect_pulse_path"] = str(on_hit_pulse.get_path())
+		snapshot_data["on_hit_effect_pulse_visual_kind"] = str(on_hit_pulse.get_meta("visual_kind", ""))
+		snapshot_data["on_hit_effect_pulse_effect_count"] = int(on_hit_pulse.get_meta("applied_effect_count", 0))
+		snapshot_data["on_hit_effect_ids"] = _array_or_empty(on_hit_pulse.get_meta("effect_ids", [])).duplicate(true)
+		snapshot_data["on_hit_effect_names"] = _array_or_empty(on_hit_pulse.get_meta("effect_names", [])).duplicate(true)
+		snapshot_data["on_hit_effect_categories"] = _array_or_empty(on_hit_pulse.get_meta("effect_categories", [])).duplicate(true)
 	_record_latest(snapshot_data)
 
 
-func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null, on_hit_label_ref: WeakRef = null, delivery_marker_ref: WeakRef = null, muzzle_flash_ref: WeakRef = null, projectile_trail_ref: WeakRef = null, shell_eject_ref: WeakRef = null) -> void:
+func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef = null, on_hit_label_ref: WeakRef = null, delivery_marker_ref: WeakRef = null, muzzle_flash_ref: WeakRef = null, projectile_trail_ref: WeakRef = null, shell_eject_ref: WeakRef = null, on_hit_pulse_ref: WeakRef = null) -> void:
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
 		marker.set_meta("action_presenter_active", false)
@@ -870,6 +894,11 @@ func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef
 		if on_hit_label != null and not on_hit_label.is_queued_for_deletion():
 			on_hit_label.set_meta("action_presenter_active", false)
 			on_hit_label.queue_free()
+	if on_hit_pulse_ref != null:
+		var on_hit_pulse := on_hit_pulse_ref.get_ref() as Node
+		if on_hit_pulse != null and not on_hit_pulse.is_queued_for_deletion():
+			on_hit_pulse.set_meta("action_presenter_active", false)
+			on_hit_pulse.queue_free()
 	_prune_active_refs()
 	latest["active"] = active_count > 0
 	latest["active_count"] = active_count
@@ -1194,6 +1223,41 @@ func _attack_on_hit_effect_label(attack: Dictionary):
 	label.set_meta("applied_effect_count", effects.size())
 	label.set_meta("text", label.text)
 	return label
+
+
+func _attack_on_hit_effect_pulse_marker(attack: Dictionary, target_position: Vector3):
+	var effects: Array = _array_or_empty(attack.get("applied_on_hit_effects", []))
+	if effects.is_empty():
+		return null
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.46
+	mesh.bottom_radius = 0.46
+	mesh.height = 0.04
+	mesh.radial_segments = 32
+	var marker := MeshInstance3D.new()
+	marker.name = "WorldActionOnHitEffectPulse"
+	marker.mesh = mesh
+	marker.material_override = _attack_on_hit_effect_pulse_material(effects)
+	marker.position = target_position + Vector3(0.0, 0.78, 0.0)
+	marker.scale = Vector3(0.42, 1.0, 0.42)
+	marker.set_meta("action_presenter_active", true)
+	marker.set_meta("action_presenter_kind", "attack_on_hit_effect_pulse")
+	marker.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
+	marker.set_meta("action_presenter_phase_count", ATTACK_PHASES.size())
+	marker.set_meta("action_presenter_current_phase", ATTACK_PHASES[0])
+	marker.set_meta("action_presenter_duration_sec", _duration_sum(ATTACK_PHASE_DURATIONS))
+	marker.set_meta("visual_kind", "on_hit_effect_pulse")
+	marker.set_meta("actor_id", int(attack.get("actor_id", 0)))
+	marker.set_meta("target_actor_id", int(attack.get("target_actor_id", 0)))
+	_apply_attack_event_meta(marker, attack)
+	marker.set_meta("effect_ids", _on_hit_effect_ids(effects))
+	marker.set_meta("effect_names", _on_hit_effect_names(effects))
+	marker.set_meta("effect_categories", _on_hit_effect_categories(effects))
+	marker.set_meta("applied_effect_count", effects.size())
+	marker.set_meta("pulse_y_offset", 0.78)
+	marker.set_meta("pulse_radius", mesh.top_radius)
+	marker.set_meta("pulse_height", mesh.height)
+	return marker
 
 
 func _apply_attack_event_meta(node: Node, attack: Dictionary) -> void:
@@ -1976,6 +2040,15 @@ func _attack_shell_eject_material() -> StandardMaterial3D:
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.no_depth_test = true
 	material.albedo_color = Color(0.95, 0.70, 0.32, 0.88)
+	return material
+
+
+func _attack_on_hit_effect_pulse_material(effects: Array) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var color := _on_hit_effect_feedback_color(effects)
+	material.albedo_color = Color(color.r, color.g, color.b, 0.58)
 	return material
 
 
