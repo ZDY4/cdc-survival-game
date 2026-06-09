@@ -1437,6 +1437,11 @@ func _expect_world_action_interaction_presenter(errors: Array[String], game_root
 		errors.append("interaction presenter should expose three phase durations")
 	if float(presenter.get("marker_y_offset", 0.0)) <= 0.0:
 		errors.append("interaction presenter should expose marker_y_offset")
+	var expected_label_text := _expected_interaction_label_text(option_kind)
+	if str(presenter.get("label_text", "")) != expected_label_text:
+		errors.append("interaction presenter should expose label text %s, got %s" % [expected_label_text, presenter.get("label_text", "")])
+	if float(presenter.get("label_y_offset", 0.0)) <= 0.0:
+		errors.append("interaction presenter should expose label_y_offset")
 	_expect_action_presenter_phases(errors, presenter, ["start", "pulse", "fade"], "interaction presenter")
 	var pulse: MeshInstance3D = game_root.find_child("WorldActionInteractionPulse", true, false) as MeshInstance3D
 	if pulse == null:
@@ -1459,6 +1464,48 @@ func _expect_world_action_interaction_presenter(errors: Array[String], game_root
 	if _dictionary_or_empty(pulse.get_meta("target_grid", {})).is_empty():
 		errors.append("interaction pulse marker should expose target grid")
 	_expect_action_marker_phases(errors, pulse, ["start", "pulse", "fade"], "interaction pulse marker")
+	var label: Label3D = game_root.find_child("WorldActionInteractionText", true, false) as Label3D
+	if label == null:
+		errors.append("interaction presenter should render WorldActionInteractionText label")
+		return
+	if str(label.get_meta("action_presenter_kind", "")) != "interaction_text":
+		errors.append("interaction text label should expose interaction_text presenter kind")
+	if str(label.text) != expected_label_text:
+		errors.append("interaction text label should display %s, got %s" % [expected_label_text, label.text])
+	if str(label.get_meta("text", "")) != expected_label_text:
+		errors.append("interaction text label should expose text metadata")
+	if str(label.get_meta("target_id", "")) != target_id:
+		errors.append("interaction text label should expose target id")
+	if str(label.get_meta("option_kind", "")) != option_kind:
+		errors.append("interaction text label should expose option kind")
+	if not expected_visual_kind.is_empty() and str(label.get_meta("visual_kind", "")) != expected_visual_kind:
+		errors.append("interaction text label should expose visual kind")
+	if _dictionary_or_empty(label.get_meta("target_grid", {})).is_empty():
+		errors.append("interaction text label should expose target grid")
+	if str(label.get_meta("font_resource_path", "")) != WORLD_LABEL_FONT_PATH:
+		errors.append("interaction text label should use world label font")
+	_expect_action_marker_phases(errors, label, ["start", "pulse", "fade"], "interaction text label")
+
+
+func _expected_interaction_label_text(option_kind: String) -> String:
+	match option_kind:
+		"pickup":
+			return "拾取"
+		"open_container":
+			return "打开"
+		"door_toggle":
+			return "开关"
+		"talk":
+			return "对话"
+		"open_trade":
+			return "交易"
+		"open_crafting":
+			return "制作"
+		"enter_subscene", "scene_transition":
+			return "进入"
+		"wait":
+			return "等待"
+	return "互动"
 
 
 func _expect_interaction_visual_profiles(errors: Array[String], game_root: Node) -> void:

@@ -1391,27 +1391,44 @@ func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dict
 	marker.set_meta("marker_bottom_radius", float(visual_profile.get("bottom_radius", 0.34)))
 	marker.set_meta("marker_height", float(visual_profile.get("height", 0.055)))
 	_track_active_node(marker)
-	_presentation_layer(world_root).add_child(marker)
+	var label := _interaction_label(interaction, visual_profile)
+	label.position = target_position + Vector3(0.0, float(visual_profile.get("label_y_offset", 1.18)), 0.0)
+	_track_active_node(label)
+	var layer := _presentation_layer(world_root)
+	layer.add_child(marker)
+	layer.add_child(label)
 	var tween := host.create_tween()
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(marker, "scale", _vector3_or_default(visual_profile.get("start_scale", Vector3(0.82, 1.0, 0.82)), Vector3(0.82, 1.0, 0.82)), float(phase_durations[0]))
+	tween.parallel().tween_property(label, "position", label.position + Vector3(0.0, 0.08, 0.0), float(phase_durations[0]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), INTERACTION_PHASES[1]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(label), INTERACTION_PHASES[1]))
 	tween.tween_property(marker, "scale", _vector3_or_default(visual_profile.get("pulse_scale", Vector3(1.35, 1.0, 1.35)), Vector3(1.35, 1.0, 1.35)), float(phase_durations[1]))
+	tween.parallel().tween_property(label, "position", label.position + Vector3(0.0, 0.24, 0.0), float(phase_durations[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), INTERACTION_PHASES[2]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(label), INTERACTION_PHASES[2]))
 	tween.tween_property(marker, "scale", _vector3_or_default(visual_profile.get("fade_scale", Vector3(0.55, 1.0, 0.55)), Vector3(0.55, 1.0, 0.55)), float(phase_durations[2]))
-	tween.finished.connect(Callable(self, "_on_interaction_feedback_finished").bind(weakref(marker)))
+	tween.parallel().tween_property(label, "modulate", Color(label.modulate.r, label.modulate.g, label.modulate.b, 0.0), float(phase_durations[2]))
+	tween.finished.connect(Callable(self, "_on_interaction_feedback_finished").bind(weakref(marker), weakref(label)))
 	var snapshot_data := _interaction_public_snapshot(interaction, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
+	snapshot_data["label_path"] = str(label.get_path())
+	snapshot_data["label_text"] = str(label.text)
 	_record_latest(snapshot_data)
 
 
-func _on_interaction_feedback_finished(marker_ref: WeakRef) -> void:
+func _on_interaction_feedback_finished(marker_ref: WeakRef, label_ref: WeakRef = null) -> void:
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
 		marker.set_meta("action_presenter_active", false)
 		marker.queue_free()
+	if label_ref != null:
+		var label := label_ref.get_ref() as Node
+		if label != null and not label.is_queued_for_deletion():
+			label.set_meta("action_presenter_active", false)
+			label.queue_free()
 	_prune_active_refs()
 	latest["active"] = active_count > 0
 	latest["active_count"] = active_count
@@ -1436,6 +1453,8 @@ func _interaction_public_snapshot(interaction: Dictionary, active: bool, reason:
 		"phase_durations": _phase_durations_or_default(interaction.get("phase_durations", INTERACTION_PHASE_DURATIONS), INTERACTION_PHASE_DURATIONS),
 		"duration_sec": _duration_sum(_phase_durations_or_default(interaction.get("phase_durations", INTERACTION_PHASE_DURATIONS), INTERACTION_PHASE_DURATIONS)) if active else 0.0,
 		"marker_y_offset": float(interaction.get("marker_y_offset", 0.22)),
+		"label_text": _interaction_feedback_text(str(interaction.get("option_kind", ""))),
+		"label_y_offset": float(_interaction_visual_profile(str(interaction.get("option_kind", ""))).get("label_y_offset", 1.18)),
 	}
 
 
@@ -1962,49 +1981,66 @@ func _interaction_visual_profile(option_kind: String) -> Dictionary:
 		"pulse_scale": Vector3(1.35, 1.0, 1.35),
 		"fade_scale": Vector3(0.55, 1.0, 0.55),
 		"color": Color(0.9, 0.86, 0.34, 0.8),
+		"label_color": Color(1.0, 0.92, 0.44, 0.94),
+		"label_y_offset": 1.18,
 	}
 	match option_kind:
 		"pickup":
 			profile["color"] = Color(0.22, 0.74, 1.0, 0.82)
+			profile["label_color"] = Color(0.70, 0.92, 1.0, 0.96)
 			profile["pulse_scale"] = Vector3(1.42, 1.0, 1.42)
 		"open_container":
 			profile["color"] = Color(0.34, 0.92, 0.42, 0.82)
+			profile["label_color"] = Color(0.66, 1.0, 0.62, 0.96)
 			profile["height"] = 0.08
 			profile["y_offset"] = 0.36
+			profile["label_y_offset"] = 1.24
 			profile["pulse_scale"] = Vector3(1.24, 1.18, 1.24)
 		"door_toggle":
 			profile["color"] = Color(0.98, 0.66, 0.22, 0.86)
+			profile["label_color"] = Color(1.0, 0.78, 0.38, 0.96)
 			profile["top_radius"] = 0.24
 			profile["bottom_radius"] = 0.42
 			profile["height"] = 0.11
 			profile["y_offset"] = 0.42
+			profile["label_y_offset"] = 1.30
 			profile["pulse_scale"] = Vector3(1.18, 1.34, 1.18)
 		"talk":
 			profile["color"] = Color(0.72, 0.54, 1.0, 0.84)
+			profile["label_color"] = Color(0.86, 0.74, 1.0, 0.96)
 			profile["y_offset"] = 0.92
+			profile["label_y_offset"] = 1.58
 			profile["pulse_scale"] = Vector3(1.15, 1.26, 1.15)
 		"open_trade":
 			profile["color"] = Color(0.26, 0.86, 0.76, 0.84)
+			profile["label_color"] = Color(0.62, 1.0, 0.92, 0.96)
 			profile["y_offset"] = 0.86
+			profile["label_y_offset"] = 1.50
 			profile["pulse_scale"] = Vector3(1.22, 1.16, 1.22)
 		"open_crafting":
 			profile["color"] = Color(0.96, 0.78, 0.26, 0.84)
+			profile["label_color"] = Color(1.0, 0.88, 0.48, 0.96)
 			profile["height"] = 0.075
+			profile["label_y_offset"] = 1.22
 			profile["pulse_scale"] = Vector3(1.18, 1.28, 1.18)
 		"enter_subscene", "scene_transition":
 			profile["color"] = Color(0.42, 0.8, 1.0, 0.86)
+			profile["label_color"] = Color(0.70, 0.90, 1.0, 0.96)
 			profile["top_radius"] = 0.22
 			profile["bottom_radius"] = 0.48
 			profile["height"] = 0.14
 			profile["y_offset"] = 0.3
+			profile["label_y_offset"] = 1.26
 			profile["phase_durations"] = [0.05, 0.12, 0.14]
 			profile["pulse_scale"] = Vector3(1.52, 1.0, 1.52)
 		"wait":
 			profile["color"] = Color(0.7, 0.76, 0.86, 0.78)
+			profile["label_color"] = Color(0.84, 0.88, 0.96, 0.94)
 			profile["top_radius"] = 0.26
 			profile["bottom_radius"] = 0.26
 			profile["height"] = 0.045
 			profile["y_offset"] = 0.74
+			profile["label_y_offset"] = 1.34
 			profile["phase_durations"] = [0.05, 0.07, 0.08]
 	return profile
 
@@ -2038,6 +2074,57 @@ func _interaction_material(option_kind: String) -> StandardMaterial3D:
 	var color: Variant = profile.get("color", Color(0.9, 0.86, 0.34, 0.8))
 	material.albedo_color = color if typeof(color) == TYPE_COLOR else Color(0.9, 0.86, 0.34, 0.8)
 	return material
+
+
+func _interaction_label(interaction: Dictionary, visual_profile: Dictionary) -> Label3D:
+	var label := Label3D.new()
+	label.name = "WorldActionInteractionText"
+	label.text = _interaction_feedback_text(str(interaction.get("option_kind", "")))
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 14
+	var label_color: Variant = visual_profile.get("label_color", Color(1.0, 0.92, 0.44, 0.94))
+	label.modulate = label_color if typeof(label_color) == TYPE_COLOR else Color(1.0, 0.92, 0.44, 0.94)
+	label.outline_size = 4
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
+	var font_result := UIThemeService.apply_label3d_font(label)
+	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	label.set_meta("action_presenter_active", true)
+	label.set_meta("action_presenter_kind", "interaction_text")
+	label.set_meta("action_presenter_phases", INTERACTION_PHASES.duplicate())
+	label.set_meta("action_presenter_phase_count", INTERACTION_PHASES.size())
+	label.set_meta("action_presenter_current_phase", INTERACTION_PHASES[0])
+	label.set_meta("action_presenter_duration_sec", _duration_sum(_phase_durations_or_default(visual_profile.get("phase_durations", INTERACTION_PHASE_DURATIONS), INTERACTION_PHASE_DURATIONS)))
+	label.set_meta("actor_id", int(interaction.get("actor_id", 0)))
+	label.set_meta("target_id", str(interaction.get("target_id", "")))
+	label.set_meta("target_type", str(interaction.get("target_type", "")))
+	label.set_meta("target_name", str(interaction.get("target_name", "")))
+	label.set_meta("target_grid", _dictionary_or_empty(interaction.get("target_grid", {})).duplicate(true))
+	label.set_meta("option_kind", str(interaction.get("option_kind", "")))
+	label.set_meta("visual_kind", str(visual_profile.get("visual_kind", "")))
+	label.set_meta("text", label.text)
+	return label
+
+
+func _interaction_feedback_text(option_kind: String) -> String:
+	match option_kind:
+		"pickup":
+			return "拾取"
+		"open_container":
+			return "打开"
+		"door_toggle":
+			return "开关"
+		"talk":
+			return "对话"
+		"open_trade":
+			return "交易"
+		"open_crafting":
+			return "制作"
+		"enter_subscene", "scene_transition":
+			return "进入"
+		"wait":
+			return "等待"
+	return "互动"
 
 
 func _door_auto_open_material() -> StandardMaterial3D:
