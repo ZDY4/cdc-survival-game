@@ -3,12 +3,12 @@ extends Node3D
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldRoot = preload("res://scripts/world/world_root.gd")
-const WorldActionPresenter = preload("res://scripts/world/world_action_presenter.gd")
 const DebugRuntimeController = preload("res://scripts/app/controllers/debug_runtime_controller.gd")
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameInputRouter = preload("res://scripts/app/controllers/game_input_router.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const RuntimeRefreshController = preload("res://scripts/app/controllers/runtime_refresh_controller.gd")
+const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -71,17 +71,12 @@ var interaction_controller: RefCounted
 var runtime_input_controller: RefCounted
 var panel_controller: RefCounted
 var world_root: Node3D
-var world_action_presenter: RefCounted = WorldActionPresenter.new()
-var world_action_queue_sequence: int = 0
-var world_action_queue_state: Dictionary = {
-	"active": false,
-	"state": "idle",
-	"sequence": 0,
-	"current_strategy": "present_before_final_refresh",
-	"target_strategy": "present_before_final_refresh",
-}
-var pending_world_action_ui: Dictionary = {}
-var pending_world_action_final_refresh: Dictionary = {}
+var world_action_flow_controller: RefCounted = WorldActionFlowController.new()
+var world_action_presenter: RefCounted:
+	get:
+		if world_action_flow_controller == null:
+			return null
+		return world_action_flow_controller.presenter
 var audio_feedback_controller: Node
 var reason_catalog: RefCounted = ReasonCatalog.new()
 var world_container: Node3D
@@ -466,10 +461,9 @@ func _panel_modal_blocker_snapshot() -> Dictionary:
 
 
 func _world_action_presenter_blocks_input() -> bool:
-	if world_action_presenter == null:
+	if world_action_flow_controller == null:
 		return false
-	var snapshot: Dictionary = world_action_presenter_snapshot()
-	return bool(snapshot.get("active", false))
+	return bool(world_action_flow_controller.call("blocks_input"))
 
 
 func modal_stack_snapshot() -> Dictionary:
@@ -1530,28 +1524,15 @@ func runtime_world_time_snapshot() -> Dictionary:
 
 
 func world_action_presenter_snapshot() -> Dictionary:
-	if world_action_presenter == null:
+	if world_action_flow_controller == null:
 		return {"active": false, "kind": "missing"}
-	return _dictionary_or_empty(world_action_presenter.call("snapshot"))
+	return _dictionary_or_empty(world_action_flow_controller.call("presenter_snapshot"))
 
 
 func world_action_queue_snapshot() -> Dictionary:
-	var output: Dictionary = world_action_queue_state.duplicate(true)
-	var presenter: Dictionary = world_action_presenter_snapshot()
-	var presenter_active := bool(presenter.get("active", false))
-	output["presenter_active"] = presenter_active
-	output["presenter_kind"] = str(presenter.get("kind", ""))
-	output["presenter_sequence"] = int(presenter.get("sequence", 0))
-	output["input_blocked"] = _world_action_presenter_blocks_input()
-	output["pending_ui"] = pending_world_action_ui.duplicate(true)
-	output["pending_ui_active"] = not pending_world_action_ui.is_empty()
-	output["pending_final_refresh"] = pending_world_action_final_refresh.duplicate(true)
-	output["pending_final_refresh_active"] = not pending_world_action_final_refresh.is_empty()
-	if str(output.get("state", "")) == "presenting" and not presenter_active and pending_world_action_ui.is_empty() and pending_world_action_final_refresh.is_empty():
-		output["active"] = false
-		output["state"] = "completed"
-		world_action_queue_state = output.duplicate(true)
-	return output
+	if world_action_flow_controller == null:
+		return {"active": false, "state": "idle", "sequence": 0}
+	return _dictionary_or_empty(world_action_flow_controller.call("snapshot"))
 
 
 func audio_feedback_snapshot() -> Dictionary:
@@ -1584,10 +1565,9 @@ func _play_hud_shortcut_audio(event_kind: String, control_name: String, control_
 
 
 func finish_world_action_presentations() -> Dictionary:
-	if world_action_presenter == null or not world_action_presenter.has_method("finish_active_presentations"):
+	if world_action_flow_controller == null or not world_action_flow_controller.has_method("finish_active_presentations"):
 		return world_action_presenter_snapshot()
-	var result: Dictionary = _dictionary_or_empty(world_action_presenter.call("finish_active_presentations"))
-	_record_world_action_queue_finished(result)
+	var result: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("finish_active_presentations"))
 	var applied_refresh := _apply_pending_world_action_final_refresh("presenter_finished")
 	if not _apply_pending_world_action_ui("presenter_finished") and not applied_refresh:
 		refresh_hud(current_interaction_prompt())
@@ -4164,19 +4144,7 @@ func _queue_or_open_stage_panel_after_world_action(panel_id: String, result: Dic
 	if panel_id.is_empty():
 		return false
 	if _world_action_presenter_blocks_input():
-		pending_world_action_ui = {
-			"kind": "open_stage_panel",
-			"panel_id": panel_id,
-			"source": "interaction_result",
-			"command_kind": _world_action_command_kind(result),
-			"presenter_kind": str(world_action_presenter_snapshot().get("kind", "")),
-			"queued_sequence": int(world_action_queue_state.get("sequence", 0)),
-			"open_after": "presenter_finished",
-			"refresh_all_panels": true,
-			"prompt": _dictionary_or_empty(result.get("prompt", {})).duplicate(true),
-		}
-		world_action_queue_state["pending_ui"] = pending_world_action_ui.duplicate(true)
-		world_action_queue_state["pending_ui_active"] = true
+		world_action_flow_controller.call("queue_open_stage_panel", panel_id, result, _dictionary_or_empty(result.get("prompt", {})))
 		return true
 	_open_stage_panel_from_interaction(panel_id)
 	return false
@@ -4185,90 +4153,42 @@ func _queue_or_open_stage_panel_after_world_action(panel_id: String, result: Dic
 func _queue_or_refresh_all_panels_after_world_action(result: Dictionary) -> bool:
 	if not _world_action_presenter_blocks_input():
 		return false
-	pending_world_action_ui = {
-		"kind": "refresh_all_panels",
-		"source": "interaction_result",
-		"command_kind": _world_action_command_kind(result),
-		"presenter_kind": str(world_action_presenter_snapshot().get("kind", "")),
-		"queued_sequence": int(world_action_queue_state.get("sequence", 0)),
-		"open_after": "presenter_finished",
-		"refresh_all_panels": true,
-		"prompt": _dictionary_or_empty(result.get("prompt", {})).duplicate(true),
-	}
-	world_action_queue_state["pending_ui"] = pending_world_action_ui.duplicate(true)
-	world_action_queue_state["pending_ui_active"] = true
+	world_action_flow_controller.call("queue_refresh_all_panels", result, _dictionary_or_empty(result.get("prompt", {})))
 	return true
 
 
 func _process_world_action_queue_completion() -> void:
-	var queue_state := str(world_action_queue_state.get("state", ""))
-	if pending_world_action_ui.is_empty() and pending_world_action_final_refresh.is_empty() and queue_state != "presenting":
+	if not bool(world_action_flow_controller.call("should_process_completion")):
 		return
 	if _world_action_presenter_blocks_input():
 		return
-	if queue_state == "presenting":
-		_record_world_action_queue_finished(world_action_presenter_snapshot())
+	world_action_flow_controller.call("mark_presenter_finished_if_needed")
 	_apply_pending_world_action_final_refresh("presenter_finished")
 	_apply_pending_world_action_ui("presenter_finished")
 
 
 func _queue_deferred_world_refresh(final_world_result: Dictionary, selected_prompt: Dictionary, command_result: Dictionary, source: String, render_world: bool = true) -> void:
-	pending_world_action_final_refresh = {
-		"kind": "final_world_refresh",
-		"source": source,
-		"command_kind": _world_action_command_kind(command_result),
-		"presenter_kind": str(world_action_presenter_snapshot().get("kind", "")),
-		"queued_sequence": int(world_action_queue_state.get("sequence", 0)),
-		"refresh_after": "presenter_finished",
-		"render_world": render_world,
-		"refresh_all_panels": true,
-		"prompt": selected_prompt.duplicate(true),
-		"world_result": final_world_result.duplicate(true),
-	}
-	world_action_queue_state["current_strategy"] = "present_before_final_refresh"
-	world_action_queue_state["refresh_timing"] = "presenter_before_final_world_render"
-	world_action_queue_state["final_refresh_deferred"] = true
-	world_action_queue_state["final_refresh_deferred_supported"] = true
-	world_action_queue_state["pending_final_refresh"] = _deferred_world_refresh_public_snapshot(pending_world_action_final_refresh)
-	world_action_queue_state["pending_final_refresh_active"] = true
+	world_action_flow_controller.call("queue_deferred_world_refresh", final_world_result, selected_prompt, command_result, source, render_world)
 
 
 func _apply_pending_world_action_final_refresh(trigger: String) -> bool:
-	if pending_world_action_final_refresh.is_empty():
+	var pending_refresh: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("take_pending_final_refresh"))
+	if pending_refresh.is_empty():
 		return false
-	var pending_refresh: Dictionary = pending_world_action_final_refresh.duplicate(true)
-	pending_world_action_final_refresh.clear()
 	var final_world_result: Dictionary = _dictionary_or_empty(pending_refresh.get("world_result", {}))
 	if final_world_result.is_empty() or not bool(final_world_result.get("ok", false)):
 		var fallback_refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_world_result_from_snapshot", simulation.snapshot(), "pending_final_refresh_fallback"))
 		final_world_result = _dictionary_or_empty(fallback_refresh.get("world_result", {}))
 	if not _apply_world_result_without_present(final_world_result, bool(pending_refresh.get("render_world", true))):
 		return false
-	var applied: Dictionary = _deferred_world_refresh_public_snapshot(pending_refresh)
-	applied["trigger"] = trigger
-	applied["applied"] = true
-	world_action_queue_state["pending_final_refresh"] = {}
-	world_action_queue_state["pending_final_refresh_active"] = false
-	world_action_queue_state["final_refresh_deferred"] = false
-	world_action_queue_state["final_refresh_applied"] = true
-	world_action_queue_state["applied_final_refresh"] = applied
+	world_action_flow_controller.call("mark_final_refresh_applied", pending_refresh, trigger)
 	if bool(pending_refresh.get("refresh_all_panels", false)):
 		refresh_all_panels(_dictionary_or_empty(pending_refresh.get("prompt", {})))
 	return true
 
 
 func _deferred_world_refresh_public_snapshot(source: Dictionary) -> Dictionary:
-	return {
-		"kind": str(source.get("kind", "final_world_refresh")),
-		"source": str(source.get("source", "")),
-		"command_kind": str(source.get("command_kind", "")),
-		"presenter_kind": str(source.get("presenter_kind", "")),
-		"queued_sequence": int(source.get("queued_sequence", 0)),
-		"refresh_after": str(source.get("refresh_after", "")),
-		"render_world": bool(source.get("render_world", true)),
-		"refresh_all_panels": bool(source.get("refresh_all_panels", false)),
-		"prompt": _dictionary_or_empty(source.get("prompt", {})).duplicate(true),
-	}
+	return _dictionary_or_empty(world_action_flow_controller.call("deferred_world_refresh_public_snapshot", source))
 
 
 func _apply_world_result_without_present(next_world_result: Dictionary, render_world: bool = true) -> bool:
@@ -4280,113 +4200,39 @@ func _apply_world_result_without_present(next_world_result: Dictionary, render_w
 
 
 func _apply_pending_world_action_ui(trigger: String) -> bool:
-	if pending_world_action_ui.is_empty():
+	var pending_ui: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("take_pending_ui"))
+	if pending_ui.is_empty():
 		return false
-	var pending_ui: Dictionary = pending_world_action_ui.duplicate(true)
-	pending_world_action_ui.clear()
 	if str(pending_ui.get("kind", "")) == "open_stage_panel":
 		_open_stage_panel_from_interaction(str(pending_ui.get("panel_id", "")))
 	if bool(pending_ui.get("refresh_all_panels", false)) or str(pending_ui.get("kind", "")) == "refresh_all_panels":
 		refresh_all_panels(_dictionary_or_empty(pending_ui.get("prompt", {})))
-	var applied: Dictionary = pending_ui.duplicate(true)
-	applied["trigger"] = trigger
-	applied["applied"] = true
-	world_action_queue_state["pending_ui"] = {}
-	world_action_queue_state["pending_ui_active"] = false
-	world_action_queue_state["applied_deferred_ui"] = applied
-	world_action_queue_state["deferred_ui_applied"] = true
+	world_action_flow_controller.call("mark_deferred_ui_applied", pending_ui, trigger)
 	return true
 
 
 func _present_world_action(command_result: Dictionary) -> void:
-	if world_action_presenter == null or command_result.is_empty() or world_container == null:
-		return
-	var presenter_result: Dictionary = _dictionary_or_empty(world_action_presenter.call("present_result", self, world_container, command_result, world_result))
-	_record_world_action_queue_presented(command_result, presenter_result)
+	world_action_flow_controller.call("present_result", self, world_container, command_result, world_result)
 
 
 func _record_world_action_queue_presented(command_result: Dictionary, presenter_result: Dictionary) -> void:
-	world_action_queue_sequence += 1
-	var presenter_active := bool(presenter_result.get("active", false))
-	var presenter_kind := str(presenter_result.get("kind", "none"))
-	var phase_order := [
-		"command_result_received",
-		"runtime_snapshot_applied",
-		"presenter_started",
-		"final_world_refresh_deferred",
-	]
-	world_action_queue_state = {
-		"active": presenter_active,
-		"state": "presenting" if presenter_active else "completed",
-		"sequence": world_action_queue_sequence,
-		"current_strategy": "present_before_final_refresh",
-		"target_strategy": "present_before_final_refresh",
-		"refresh_timing": "presenter_before_final_world_render",
-		"next_strategy_step": "apply_final_world_refresh_after_presenter_finished",
-		"phase_order": phase_order,
-		"command_kind": _world_action_command_kind(command_result),
-		"success": bool(command_result.get("success", false)),
-		"reason": str(command_result.get("reason", "")),
-		"event_count": _world_action_event_count(command_result),
-		"presenter_kind": presenter_kind,
-		"presenter_active": presenter_active,
-		"presenter_sequence": int(presenter_result.get("sequence", 0)),
-		"presenter_snapshot": presenter_result.duplicate(true),
-		"final_refresh_deferred": false,
-		"final_refresh_deferred_supported": true,
-	}
+	world_action_flow_controller.call("record_presented", command_result, presenter_result)
 
 
 func _record_world_action_queue_finished(finish_result: Dictionary) -> void:
-	var output: Dictionary = world_action_queue_state.duplicate(true)
-	output["active"] = false
-	output["state"] = "completed"
-	output["finished"] = true
-	output["finish_reason"] = "fast_forwarded" if bool(finish_result.get("fast_forwarded", false)) else "presenter_idle"
-	output["finish_result"] = finish_result.duplicate(true)
-	output["presenter_active"] = bool(finish_result.get("active", false))
-	output["presenter_kind"] = str(finish_result.get("kind", output.get("presenter_kind", "")))
-	output["presenter_sequence"] = int(finish_result.get("sequence", output.get("presenter_sequence", 0)))
-	world_action_queue_state = output
+	world_action_flow_controller.call("record_finished", finish_result)
 
 
 func _world_action_command_kind(command_result: Dictionary) -> String:
-	var result: Dictionary = _dictionary_or_empty(command_result.get("result", {}))
-	var kind := str(result.get("kind", ""))
-	if not kind.is_empty():
-		return kind
-	kind = str(command_result.get("kind", ""))
-	if not kind.is_empty():
-		return kind
-	var events: Array = _world_action_events_from_result(command_result)
-	for event_value in events:
-		var event: Dictionary = _dictionary_or_empty(event_value)
-		match str(event.get("kind", "")):
-			"movement_step", "actor_moved", "movement_queued", "movement_cancelled":
-				return "move"
-			"attack_resolved":
-				return "attack"
-			"interaction_succeeded", "interaction_queued", "interaction_cancelled":
-				return "interact"
-			"weapon_reloaded":
-				return "reload"
-	return ""
+	return str(world_action_flow_controller.call("command_kind", command_result))
 
 
 func _world_action_event_count(command_result: Dictionary) -> int:
-	return _world_action_events_from_result(command_result).size()
+	return int(world_action_flow_controller.call("event_count", command_result))
 
 
 func _world_action_events_from_result(command_result: Dictionary) -> Array:
-	var direct_events := _array_or_empty(command_result.get("events", []))
-	if not direct_events.is_empty():
-		return direct_events
-	var result: Dictionary = _dictionary_or_empty(command_result.get("result", {}))
-	var nested_events := _array_or_empty(result.get("events", []))
-	if not nested_events.is_empty():
-		return nested_events
-	var runtime_delta: Dictionary = _dictionary_or_empty(result.get("runtime_snapshot_delta", {}))
-	return _array_or_empty(runtime_delta.get("events", []))
+	return _array_or_empty(world_action_flow_controller.call("events_from_result", command_result))
 
 
 func _submit_inventory_action(action: Dictionary) -> Dictionary:
