@@ -69,8 +69,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_no_blocker(errors, game_root, "initial")
 	_assert_info_panel(errors, game_root, "overview", "Overview", "Info Overview 1/9", "initial info panel")
 	_press_key(game_root, KEY_BRACKETRIGHT)
+	_assert_hud_control_audio(errors, game_root, "ui_option_selected", "ui_select", "InfoPanelShortcut", "keyboard_shortcut", "cycle_info_panel", {"value": "selection", "option_index": 1}, "] info panel audio")
 	_assert_info_panel(errors, game_root, "selection", "Selection", "Info Selection 2/9", "] should advance info panel")
 	_press_key(game_root, KEY_BRACKETLEFT)
+	_assert_hud_control_audio(errors, game_root, "ui_option_selected", "ui_select", "InfoPanelShortcut", "keyboard_shortcut", "cycle_info_panel", {"value": "overview", "option_index": 0}, "[ info panel audio")
 	_assert_info_panel(errors, game_root, "overview", "Overview", "Info Overview 1/9", "[ should return to overview")
 	_press_key(game_root, KEY_BRACKETLEFT)
 	_assert_info_panel(errors, game_root, "performance", "Performance", "Info Performance 9/9", "[ should wrap info panel")
@@ -229,6 +231,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_debug_overlay_snapshot(errors, game_root, "vision", true, "vision overlay world")
 	_assert_vision_radius_overlay(errors, game_root, "vision radius overlay")
 	_press_key(game_root, KEY_V)
+	_assert_hud_control_audio(errors, game_root, "ui_option_selected", "ui_select", "DebugOverlayShortcut", "keyboard_shortcut", "cycle_debug_overlay", {"value": "blocked_sight"}, "blocked sight overlay audio")
 	if str(game_root.current_debug_overlay_mode()) != "blocked_sight":
 		errors.append("third V should switch debug overlay mode to blocked_sight")
 	_assert_debug_overlay_line(errors, game_root, "Overlay blocked_sight", "blocked sight overlay HUD")
@@ -239,6 +242,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_debug_overlay_line(errors, game_root, "Overlay level", "level overlay HUD")
 	_assert_debug_overlay_snapshot(errors, game_root, "level", true, "level overlay world")
 	_press_key(game_root, KEY_V)
+	_assert_hud_control_audio(errors, game_root, "ui_option_selected", "ui_select", "DebugOverlayShortcut", "keyboard_shortcut", "cycle_debug_overlay", {"value": "off"}, "off overlay audio")
 	if str(game_root.current_debug_overlay_mode()) != "off":
 		errors.append("fifth V should switch debug overlay mode back to off")
 	_assert_debug_overlay_line(errors, game_root, "Overlay off", "off overlay HUD")
@@ -247,12 +251,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("controls hint should be hidden initially")
 	_assert_controls_hint_snapshot(errors, game_root, false, "initial controls hint")
 	_press_key(game_root, KEY_SLASH)
+	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ControlsHintShortcut", "keyboard_shortcut", "toggle_controls_hint", {"value": "on"}, "controls hint on audio")
 	if not bool(game_root.controls_hint_visible()):
 		errors.append("/ should show controls hint")
 	if not game_root.hud.find_child("ControlsHint", true, false).visible:
 		errors.append("controls hint node should be visible after /")
 	_assert_controls_hint_snapshot(errors, game_root, true, "visible controls hint")
 	_press_key(game_root, KEY_SLASH)
+	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ControlsHintShortcut", "keyboard_shortcut", "toggle_controls_hint", {"value": "off"}, "controls hint off audio")
 	if bool(game_root.controls_hint_visible()):
 		errors.append("/ should hide controls hint")
 	_assert_controls_hint_snapshot(errors, game_root, false, "hidden controls hint")
@@ -1189,6 +1195,7 @@ func _exercise_debug_panel(errors: Array[String], game_root: Node) -> void:
 		return
 	_assert_debug_panel_snapshot(errors, game_root, false, "initial debug panel")
 	_press_key(game_root, KEY_F3)
+	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DebugPanelShortcut", "keyboard_shortcut", "toggle_debug_panel", {"value": "open"}, "debug panel open audio")
 	_assert_debug_panel_snapshot(errors, game_root, true, "F3 opened debug panel")
 	var panel: Control = game_root.hud.find_child("DebugPanel", true, false) as Control
 	if panel == null or not panel.visible:
@@ -1207,6 +1214,7 @@ func _exercise_debug_panel(errors: Array[String], game_root: Node) -> void:
 		errors.append("debug panel should expose diagnostic lines in runtime snapshot: %s" % debug_panel)
 	_assert_runtime_control_line(errors, game_root, "Perf", "debug panel should keep runtime HUD diagnostics")
 	_press_key(game_root, KEY_F3)
+	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DebugPanelShortcut", "keyboard_shortcut", "toggle_debug_panel", {"value": "close"}, "debug panel close audio")
 	_assert_debug_panel_snapshot(errors, game_root, false, "F3 closed debug panel")
 
 
@@ -1236,6 +1244,7 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 		return
 	_assert_debug_console_snapshot(errors, game_root, false, "initial console")
 	_press_key(game_root, KEY_QUOTELEFT)
+	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DebugConsoleShortcut", "keyboard_shortcut", "toggle_debug_console", {"value": "open"}, "debug console open audio")
 	_assert_debug_console_snapshot(errors, game_root, true, "opened console")
 	_expect_blocker(errors, game_root, "debug_console", "debug console blocker")
 	var console: Node = game_root.hud.find_child("DebugConsole", true, false)
@@ -1244,6 +1253,7 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 	if game_root.hud.find_child("ConsoleInput", true, false) == null:
 		errors.append("debug console should expose ConsoleInput")
 	var fps_result: Dictionary = game_root.submit_debug_console_command("show fps")
+	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DebugConsoleInput", "text_submit", "submit_debug_console_command", {"value": "show fps"}, "debug console show fps audio")
 	if not bool(fps_result.get("success", false)):
 		errors.append("debug console show fps should succeed: %s" % fps_result)
 	var overlay_before := str(game_root.current_debug_overlay_mode())
@@ -1268,6 +1278,7 @@ func _exercise_debug_console(errors: Array[String], game_root: Node) -> void:
 	if not _debug_console_schema_has_mutating_command(snapshot, "give item"):
 		errors.append("debug console schema should mark give item as mutating: %s" % snapshot)
 	var help_result: Dictionary = game_root.submit_debug_console_command("help")
+	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DebugConsoleInput", "text_submit", "submit_debug_console_command", {"value": "help"}, "debug console help audio")
 	if not bool(help_result.get("success", false)) or not str(help_result.get("message", "")).contains("give item <item_id> [count]"):
 		errors.append("debug console help should include command usage: %s" % help_result)
 	_exercise_debug_console_keyboard_features(errors, game_root)

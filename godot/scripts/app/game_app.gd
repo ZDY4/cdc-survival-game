@@ -1085,6 +1085,9 @@ func toggle_controls_hint() -> Dictionary:
 		return {"success": false, "reason": "hud_missing"}
 	var result: Dictionary = hud.toggle_controls_hint()
 	refresh_hud(current_interaction_prompt())
+	_play_hud_shortcut_audio("ui_button_pressed", "ControlsHintShortcut", "keyboard_shortcut", "toggle_controls_hint", {
+		"value": "on" if bool(result.get("visible", false)) else "off",
+	})
 	return result
 
 
@@ -1097,6 +1100,9 @@ func toggle_debug_console() -> Dictionary:
 		return {"success": false, "reason": "hud_missing"}
 	var result: Dictionary = hud.toggle_debug_console()
 	refresh_hud(current_interaction_prompt())
+	_play_hud_shortcut_audio("ui_button_pressed", "DebugConsoleShortcut", "keyboard_shortcut", "toggle_debug_console", {
+		"value": "open" if bool(result.get("visible", false)) else "close",
+	})
 	return result
 
 
@@ -1126,6 +1132,10 @@ func submit_debug_console_command(command_text: String) -> Dictionary:
 	if hud != null and hud.has_method("set_debug_console_result"):
 		hud.set_debug_console_result(command, result)
 	refresh_all_panels(current_interaction_prompt())
+	_play_hud_shortcut_audio("ui_button_pressed", "DebugConsoleInput", "text_submit", "submit_debug_console_command", {
+		"value": command,
+		"reason": str(result.get("reason", "")),
+	})
 	return result
 
 
@@ -1170,6 +1180,9 @@ func toggle_debug_panel() -> Dictionary:
 		return {"success": false, "reason": "hud_missing"}
 	var result: Dictionary = hud.toggle_debug_panel()
 	refresh_hud(current_interaction_prompt())
+	_play_hud_shortcut_audio("ui_button_pressed", "DebugPanelShortcut", "keyboard_shortcut", "toggle_debug_panel", {
+		"value": "open" if bool(result.get("visible", false)) else "close",
+	})
 	return result
 
 
@@ -1191,6 +1204,9 @@ func cycle_debug_overlay_mode() -> Dictionary:
 	debug_overlay_mode = modes[(index + 1) % modes.size()]
 	_refresh_debug_overlay()
 	refresh_hud(current_interaction_prompt())
+	_play_hud_shortcut_audio("ui_option_selected", "DebugOverlayShortcut", "keyboard_shortcut", "cycle_debug_overlay", {
+		"value": debug_overlay_mode,
+	})
 	return {"success": true, "mode": debug_overlay_mode}
 
 
@@ -1293,6 +1309,11 @@ func cycle_info_panel(direction: int) -> Dictionary:
 	active_info_panel_index = posmod(active_info_panel_index + direction, info_panel_pages.size())
 	refresh_hud(current_interaction_prompt())
 	var page := current_info_panel_page()
+	_play_hud_shortcut_audio("ui_option_selected", "InfoPanelShortcut", "keyboard_shortcut", "cycle_info_panel", {
+		"value": str(page.get("id", "")),
+		"count": info_panel_pages.size(),
+		"option_index": active_info_panel_index,
+	})
 	return {
 		"success": true,
 		"page_id": page.get("id", ""),
@@ -1504,6 +1525,19 @@ func audio_feedback_snapshot() -> Dictionary:
 
 
 func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
+	return _play_ui_audio_feedback(event_kind, payload)
+
+
+func _play_hud_shortcut_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "hud",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
 	return _play_ui_audio_feedback(event_kind, payload)
 
 
