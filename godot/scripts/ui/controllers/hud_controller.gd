@@ -64,6 +64,10 @@ func _ready() -> void:
 
 
 func apply_snapshot(snapshot: Dictionary) -> void:
+	apply_runtime_snapshot(snapshot)
+
+
+func apply_runtime_snapshot(snapshot: Dictionary) -> void:
 	if _world_label == null:
 		_build_layout()
 
@@ -349,6 +353,37 @@ func interaction_menu_snapshot() -> Dictionary:
 	snapshot["mouse_blocks_world"] = _interaction_menu.mouse_filter == Control.MOUSE_FILTER_STOP
 	snapshot["position"] = {"x": _interaction_menu.position.x, "y": _interaction_menu.position.y}
 	return snapshot
+
+
+func input_blocker_snapshot() -> Dictionary:
+	if console_visible:
+		return {
+			"blocked": true,
+			"name": "debug_console",
+			"kind": "debug_console",
+			"modal_id": "",
+			"panel_id": "hud",
+			"mouse_blocks_world": true,
+		}
+	var interaction_menu := interaction_menu_snapshot()
+	if not interaction_menu.is_empty():
+		return {
+			"blocked": true,
+			"name": "interaction_menu",
+			"kind": "context_menu",
+			"modal_id": "",
+			"panel_id": "hud",
+			"mouse_blocks_world": bool(interaction_menu.get("mouse_blocks_world", true)),
+			"menu": interaction_menu,
+		}
+	return {
+		"blocked": false,
+		"name": "",
+		"kind": "",
+		"modal_id": "",
+		"panel_id": "",
+		"mouse_blocks_world": false,
+	}
 
 
 func _line(node_name: String) -> Label:

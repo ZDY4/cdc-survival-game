@@ -132,7 +132,10 @@ func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 		snapshot["runtime_control"] = parent.runtime_control_snapshot()
 		_apply_runtime_attack_preview(snapshot)
 	snapshot["tracked_quest"] = _tracked_quest_snapshot()
-	hud.apply_snapshot(snapshot)
+	if hud.has_method("apply_runtime_snapshot"):
+		hud.apply_runtime_snapshot(snapshot)
+	else:
+		hud.apply_snapshot(snapshot)
 
 
 func refresh_dialogue_panel() -> void:

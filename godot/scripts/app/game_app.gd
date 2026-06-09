@@ -372,23 +372,23 @@ func is_settings_open() -> bool:
 
 
 func gameplay_input_blocked_by_ui() -> bool:
-	if is_debug_console_open():
+	var hud_blocker := _hud_input_blocker_snapshot()
+	if bool(hud_blocker.get("blocked", false)):
 		return true
 	if panel_controller != null and panel_controller.gameplay_input_blocked():
 		return true
 	if _world_action_presenter_blocks_input():
 		return true
-	return hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open())
+	return false
 
 
 func gameplay_input_blocker_name() -> String:
-	if is_debug_console_open():
-		return "debug_console"
+	var hud_blocker := _hud_input_blocker_snapshot()
+	if bool(hud_blocker.get("blocked", false)):
+		return str(hud_blocker.get("name", ""))
 	var panel_modal_name := _panel_modal_blocker_name()
 	if not panel_modal_name.is_empty():
 		return panel_modal_name
-	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
-		return "interaction_menu"
 	var context_menu: Dictionary = context_menu_snapshot()
 	if bool(context_menu.get("active", false)):
 		return str(_dictionary_or_empty(context_menu.get("top", {})).get("id", "context_menu"))
@@ -400,27 +400,12 @@ func gameplay_input_blocker_name() -> String:
 
 
 func gameplay_input_blocker_snapshot() -> Dictionary:
-	if is_debug_console_open():
-		return {
-			"blocked": true,
-			"name": "debug_console",
-			"kind": "debug_console",
-			"modal_id": "",
-			"panel_id": "hud",
-			"mouse_blocks_world": true,
-		}
+	var hud_blocker := _hud_input_blocker_snapshot()
+	if bool(hud_blocker.get("blocked", false)):
+		return hud_blocker
 	var panel_modal_snapshot := _panel_modal_blocker_snapshot()
 	if not panel_modal_snapshot.is_empty():
 		return panel_modal_snapshot
-	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
-		return {
-			"blocked": true,
-			"name": "interaction_menu",
-			"kind": "context_menu",
-			"modal_id": "",
-			"panel_id": "hud",
-			"mouse_blocks_world": true,
-		}
 	var context_menu: Dictionary = context_menu_snapshot()
 	if bool(context_menu.get("active", false)):
 		var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
@@ -459,6 +444,40 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 		"panel_id": "",
 		"mouse_blocks_world": not name.is_empty(),
 	}
+
+
+func _hud_input_blocker_snapshot() -> Dictionary:
+	if hud != null and hud.has_method("input_blocker_snapshot"):
+		return _dictionary_or_empty(hud.call("input_blocker_snapshot"))
+	if is_debug_console_open():
+		return {
+			"blocked": true,
+			"name": "debug_console",
+			"kind": "debug_console",
+			"modal_id": "",
+			"panel_id": "hud",
+			"mouse_blocks_world": true,
+		}
+	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
+		return {
+			"blocked": true,
+			"name": "interaction_menu",
+			"kind": "context_menu",
+			"modal_id": "",
+			"panel_id": "hud",
+			"mouse_blocks_world": true,
+		}
+	return {}
+
+
+func _close_hud_interaction_menu() -> bool:
+	var hud_blocker := _hud_input_blocker_snapshot()
+	if str(hud_blocker.get("name", "")) != "interaction_menu":
+		return false
+	if hud != null and hud.has_method("hide_interaction_menu"):
+		hud.hide_interaction_menu()
+		return true
+	return false
 
 
 func _panel_modal_blocker_name() -> String:
@@ -577,13 +596,13 @@ func _append_menu_state_event(menu_state: Dictionary, event: Dictionary) -> Dict
 
 func _root_close_priority(panel_priority: Array = []) -> Array[String]:
 	var priority: Array[String] = []
-	if is_debug_console_open():
-		priority.append("debug_console")
+	var hud_blocker := _hud_input_blocker_snapshot()
+	var hud_blocker_name := str(hud_blocker.get("name", ""))
+	if bool(hud_blocker.get("blocked", false)) and not hud_blocker_name.is_empty():
+		priority.append(hud_blocker_name)
 	var modal_name := _panel_modal_blocker_name()
 	if not modal_name.is_empty():
 		priority.append(modal_name)
-	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
-		priority.append("interaction_menu")
 	var context_menu: Dictionary = context_menu_snapshot()
 	if bool(context_menu.get("active", false)):
 		var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
@@ -2594,8 +2613,7 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 	if runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()):
 		var selection_result: Dictionary = runtime_input_controller.clear_selection_state(reason)
 		return {"success": true, "closed": "selection", "result": selection_result}
-	if hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open()):
-		hud.hide_interaction_menu()
+	if _close_hud_interaction_menu():
 		return {"success": true, "closed": "interaction_menu"}
 	var context_menu_close_result: Dictionary = close_active_context_menu()
 	if bool(context_menu_close_result.get("success", false)):
@@ -4673,8 +4691,7 @@ func _clear_focus_switch_ui_state() -> void:
 		runtime_input_controller.clear_selection_state("focus_switch")
 	if interaction_controller != null:
 		interaction_controller.clear_selection("focus_switch")
-	if hud != null and hud.has_method("hide_interaction_menu"):
-		hud.hide_interaction_menu()
+	_close_hud_interaction_menu()
 
 
 func _sync_observed_level_to_map() -> void:
