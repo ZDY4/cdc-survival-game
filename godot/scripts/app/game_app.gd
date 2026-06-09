@@ -1628,10 +1628,15 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 	var anchor_id := str(intent.get("anchor_id", ""))
 	var smart_object_id := str(intent.get("smart_object_id", ""))
 	var schedule_label := str(intent.get("schedule_label", ""))
+	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
+	var planner_goal_id := str(planner.get("goal_id", intent.get("goal_id", "")))
+	var planner_action_id := str(planner.get("action_id", intent.get("planner_action_id", "")))
 	var life_goal_kind := "settlement_life" if not settlement_id.is_empty() else ("combat" if target_actor_id > 0 else "idle")
 	var goal_id := "none"
 	if target_actor_id > 0:
 		goal_id = "hostile_target"
+	elif not planner_goal_id.is_empty():
+		goal_id = planner_goal_id
 	elif not route_id.is_empty():
 		goal_id = route_id
 	elif not smart_object_id.is_empty():
@@ -1647,15 +1652,19 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"route_id": route_id,
 		"anchor_id": anchor_id,
 		"smart_object_id": smart_object_id,
+		"planner_score": float(planner.get("goal_score", intent.get("planner_goal_score", 0.0))),
+		"planner_action_id": planner_action_id,
 		"tracking_state": target_tracking_state,
 		"lost": bool(intent.get("target_lost", false)),
 		"lost_reason": str(intent.get("target_lost_reason", "")),
 	}
 	var action := {
-		"id": intent_kind,
+		"id": planner_action_id if not planner_action_id.is_empty() else intent_kind,
 		"kind": intent_kind,
 		"reason": reason,
 		"planned_intent": str(intent.get("planned_intent", "")),
+		"planner_reason": str(planner.get("action_reason", intent.get("planner_action_reason", ""))),
+		"planner_cost": float(planner.get("action_cost", 0.0)),
 		"path_length": path.size(),
 		"remaining_steps": int(intent.get("remaining_steps", 0)),
 		"required_ap": float(intent.get("required_ap", 0.0)),
@@ -1684,6 +1693,10 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"anchor_id": anchor_id,
 		"smart_object_id": smart_object_id,
 		"schedule_label": schedule_label,
+		"planner_goal_id": planner_goal_id,
+		"planner_action_id": planner_action_id,
+		"planner_score_rule_ids": _array_or_empty(planner.get("score_rule_ids", [])).duplicate(true),
+		"planner_facts": _dictionary_or_empty(planner.get("facts", {})).duplicate(true),
 	}
 	return {
 		"actor_id": actor_id,
@@ -1707,6 +1720,7 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"ammo_ready": bool(intent.get("ammo_ready", true)),
 		"can_reload": bool(intent.get("can_reload", false)),
 		"failure_reason": str(intent.get("failure_reason", intent.get("reason", ""))),
+		"planner": planner.duplicate(true),
 		"goal": goal,
 		"action": action,
 		"blackboard": blackboard,

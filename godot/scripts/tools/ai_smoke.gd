@@ -206,30 +206,62 @@ func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[
 	var results: Array = simulation.advance_world_turn(_open_settlement_topology())
 	var result: Dictionary = _npc_result_for_actor(results, cook_id)
 	if str(result.get("intent", "")) != "use_smart_object":
-		errors.append("settlement cook without route should use smart object on shift, got %s" % result)
-	if str(result.get("smart_object_kind", "")) != "bed":
-		errors.append("settlement smart object result should expose selected kind, got %s" % result)
-	var need_change: Dictionary = _dictionary_or_empty(result.get("life_need_change", {}))
-	if need_change.is_empty():
-		errors.append("settlement smart object use should expose need change")
-	else:
-		var before: Dictionary = _dictionary_or_empty(need_change.get("needs_before", {}))
-		var after: Dictionary = _dictionary_or_empty(need_change.get("needs_after", {}))
-		if _need_current(after, "energy") <= _need_current(before, "energy"):
-			errors.append("bed smart object should recover energy")
-		if _need_current(after, "morale") <= _need_current(before, "morale"):
-			errors.append("bed smart object should recover morale")
-	var smart_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_smart_object_used")
-	if str(smart_event.get("smart_object_kind", "")) != "bed":
-		errors.append("smart object used event should expose kind")
+		errors.append("settlement cook without route should use GOAP smart object action on shift, got %s" % result)
+	if str(result.get("smart_object_kind", "")) != "canteen_seat":
+		errors.append("settlement GOAP shift action should target canteen service smart object, got %s" % result)
+	var planner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(result.get("life_intent", {})).get("planner", {}))
+	if str(planner.get("goal_id", "")) != "satisfy_shift" or str(planner.get("action_id", "")) != "travel_to_canteen":
+		errors.append("settlement GOAP should expose satisfy_shift/travel_to_canteen planner summary, got %s" % planner)
 	var tick_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_needs_ticked")
 	if int(tick_event.get("actor_id", 0)) != cook_id:
 		errors.append("settlement life need tick event should include cook actor")
+	errors.append_array(_expect_settlement_life_need_effect_action(registry))
+	return errors
+
+
+func _expect_settlement_life_need_effect_action(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 420}
+	var cook_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(9, 0, 20), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var cook: RefCounted = simulation.actor_registry.get_actor(cook_id)
+	cook.life["duty_route_id"] = ""
+	cook.life["runtime"] = {
+		"meal_object_reserved": true,
+		"needs": {
+			"hunger": {"current": 40.0, "max": 100.0},
+			"energy": {"current": 75.0, "max": 100.0},
+			"morale": {"current": 50.0, "max": 100.0},
+		}
+	}
+	var results: Array = simulation.advance_world_turn(_open_settlement_topology())
+	var result: Dictionary = _npc_result_for_actor(results, cook_id)
+	if str(result.get("intent", "")) != "use_smart_object":
+		errors.append("settlement cook should use smart object for eat_meal, got %s" % result)
+	var planner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(result.get("life_intent", {})).get("planner", {}))
+	if str(planner.get("goal_id", "")) != "eat_meal" or str(planner.get("action_id", "")) != "eat_meal":
+		errors.append("settlement GOAP should select eat_meal action during meal window, got %s" % planner)
+	var need_change: Dictionary = _dictionary_or_empty(result.get("life_need_change", {}))
+	if need_change.is_empty():
+		errors.append("settlement GOAP smart object use should expose need change")
+	else:
+		var before: Dictionary = _dictionary_or_empty(need_change.get("needs_before", {}))
+		var after: Dictionary = _dictionary_or_empty(need_change.get("needs_after", {}))
+		if _need_current(after, "hunger") <= _need_current(before, "hunger"):
+			errors.append("eat_meal action should recover hunger from data need_effects")
+	var smart_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_smart_object_used")
+	if str(smart_event.get("smart_object_kind", "")) != "canteen_seat":
+		errors.append("smart object used event should expose canteen kind")
 	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	restored.load_snapshot(simulation.snapshot())
 	var restored_actor: RefCounted = restored.actor_registry.get_actor(cook_id)
 	var restored_needs: Dictionary = _dictionary_or_empty(_dictionary_or_empty(restored_actor.life.get("runtime", {})).get("needs", {}))
-	if _need_current(restored_needs, "energy") <= 75.0:
+	if _need_current(restored_needs, "hunger") <= 40.0:
 		errors.append("settlement life needs should roundtrip through actor life snapshot")
 	return errors
 

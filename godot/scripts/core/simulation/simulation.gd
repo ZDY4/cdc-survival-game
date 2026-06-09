@@ -4401,9 +4401,18 @@ func _npc_move_to_life_target(actor: RefCounted, target_grid: Dictionary, topolo
 		"remaining_steps": max(0, int(best_plan.get("steps", 0)) - 1),
 		"life_intent": intent.duplicate(true),
 	}
+	_attach_life_smart_object_summary(intent, move_result)
 	if actor.grid_position.key() == target_coord.key():
 		_apply_life_arrival_effect(actor, intent, move_result)
 	return move_result
+
+
+func _attach_life_smart_object_summary(intent: Dictionary, result: Dictionary) -> void:
+	if str(intent.get("intent", "")) != "use_smart_object":
+		return
+	result["smart_object_id"] = str(intent.get("smart_object_id", ""))
+	result["smart_object_kind"] = str(intent.get("smart_object_kind", ""))
+	result["smart_object_tags"] = _array_or_empty(intent.get("smart_object_tags", [])).duplicate(true)
 
 
 func _apply_life_arrival_effect(actor: RefCounted, intent: Dictionary, result: Dictionary) -> void:
@@ -4411,10 +4420,13 @@ func _apply_life_arrival_effect(actor: RefCounted, intent: Dictionary, result: D
 		return
 	var smart_object_id := str(intent.get("smart_object_id", ""))
 	var smart_object_kind := str(intent.get("smart_object_kind", ""))
-	var deltas: Dictionary = _smart_object_need_deltas(smart_object_kind, _array_or_empty(intent.get("smart_object_tags", [])))
+	var deltas: Dictionary = _dictionary_or_empty(intent.get("need_effects", {})).duplicate(true)
+	if deltas.is_empty():
+		deltas = _smart_object_need_deltas(smart_object_kind, _array_or_empty(intent.get("smart_object_tags", [])))
 	var need_change: Dictionary = _apply_life_need_delta(actor, deltas, "smart_object", smart_object_id)
 	result["smart_object_id"] = smart_object_id
 	result["smart_object_kind"] = smart_object_kind
+	result["smart_object_tags"] = _array_or_empty(intent.get("smart_object_tags", [])).duplicate(true)
 	result["life_need_change"] = need_change
 	_emit("settlement_life_smart_object_used", {
 		"actor_id": actor.actor_id,
