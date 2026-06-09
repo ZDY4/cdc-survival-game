@@ -2267,9 +2267,15 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node == null:
 		errors.append("world action presenter movement should keep player node visible")
-	elif not bool(player_node.get_meta("action_presenter_active", false)):
-		errors.append("player node should expose active movement presenter metadata after click")
-	game_root.cancel_pending("viewport_far_click_smoke", false)
+	else:
+		if not bool(player_node.get_meta("action_presenter_active", false)):
+			errors.append("player node should expose active movement presenter metadata after click")
+		var visual_start := Vector3(float(before.get("x", 0)), player_node.position.y, float(before.get("z", 0)))
+		var visual_final := Vector3(float(after.get("x", 0)), player_node.position.y, float(after.get("z", 0)))
+		if player_node.position.distance_to(visual_final) <= 0.05:
+			errors.append("player visual node should not snap to final grid before movement presenter finishes")
+		if player_node.position.distance_to(visual_start) > player_node.position.distance_to(visual_final):
+			errors.append("player visual node should remain closer to movement start than final grid on first frame")
 	await _wait_for_world_action_presenter_idle(game_root)
 	var completed_queue: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
 	if str(completed_queue.get("state", "")) != "completed":
@@ -2278,6 +2284,7 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("world action queue should be inactive after presenter fast-forward")
 	if str(completed_queue.get("finish_reason", "")) != "fast_forwarded":
 		errors.append("world action queue should record fast-forward finish reason")
+	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
 		player.ap = 6.0
 
@@ -2295,14 +2302,16 @@ func _expect_world_action_queue_presenting(errors: Array[String], game_root: Nod
 		errors.append("world action queue presenter kind expected %s, got %s" % [expected_presenter_kind, action_queue.get("presenter_kind", "")])
 	if str(action_queue.get("command_kind", "")) != expected_command_kind:
 		errors.append("world action queue command kind expected %s, got %s" % [expected_command_kind, action_queue.get("command_kind", "")])
-	if str(action_queue.get("current_strategy", "")) != "refresh_before_present":
-		errors.append("world action queue should expose current refresh-before-present strategy")
+	if str(action_queue.get("current_strategy", "")) != "present_before_final_refresh":
+		errors.append("world action queue should expose present-before-final-refresh strategy")
 	if str(action_queue.get("target_strategy", "")) != "present_before_final_refresh":
 		errors.append("world action queue should expose target present-before-final-refresh strategy")
-	if str(action_queue.get("refresh_timing", "")) != "world_rendered_before_presenter":
-		errors.append("world action queue should expose current refresh timing")
-	if bool(action_queue.get("final_refresh_deferred", true)):
-		errors.append("world action queue should expose final_refresh_deferred=false for current first phase")
+	if str(action_queue.get("refresh_timing", "")) != "presenter_before_final_world_render":
+		errors.append("world action queue should expose presenter-before-final-world-render timing")
+	if not bool(action_queue.get("final_refresh_deferred", false)):
+		errors.append("world action queue should expose final_refresh_deferred=true while presenter is active")
+	if not bool(action_queue.get("pending_final_refresh_active", false)):
+		errors.append("world action queue should expose pending final world refresh while presenter is active")
 	if _array_or_empty(action_queue.get("phase_order", [])).find("presenter_started") < 0:
 		errors.append("world action queue should expose presenter_started phase")
 	if int(action_queue.get("event_count", 0)) <= 0:
