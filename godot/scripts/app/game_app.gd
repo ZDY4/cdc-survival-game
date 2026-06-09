@@ -22,6 +22,7 @@ const UiOverlayRenderController = preload("res://scripts/app/controllers/ui_over
 const TooltipSnapshotController = preload("res://scripts/app/controllers/tooltip_snapshot_controller.gd")
 const DragSnapshotController = preload("res://scripts/app/controllers/drag_snapshot_controller.gd")
 const DragHoverTargetController = preload("res://scripts/app/controllers/drag_hover_target_controller.gd")
+const UiBlockerStateController = preload("res://scripts/app/controllers/ui_blocker_state_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -59,6 +60,7 @@ var ui_overlay_render_controller: RefCounted = UiOverlayRenderController.new()
 var tooltip_snapshot_controller: RefCounted = TooltipSnapshotController.new()
 var drag_snapshot_controller: RefCounted = DragSnapshotController.new()
 var drag_hover_target_controller: RefCounted = DragHoverTargetController.new()
+var ui_blocker_state_controller: RefCounted = UiBlockerStateController.new()
 var tooltip_layer: Control:
 	get:
 		return ui_overlay_render_controller.tooltip_layer if ui_overlay_render_controller != null else null
@@ -426,77 +428,26 @@ func is_settings_open() -> bool:
 
 func gameplay_input_blocked_by_ui() -> bool:
 	var hud_blocker := _hud_input_blocker_snapshot()
-	if bool(hud_blocker.get("blocked", false)):
-		return true
-	if panel_controller != null and panel_controller.gameplay_input_blocked():
-		return true
-	if _world_action_presenter_blocks_input():
-		return true
-	return false
+	var panel_blocked: bool = panel_controller != null and panel_controller.gameplay_input_blocked()
+	return bool(ui_blocker_state_controller.call("gameplay_input_blocked", hud_blocker, panel_blocked, _world_action_presenter_blocks_input()))
 
 
 func gameplay_input_blocker_name() -> String:
 	var hud_blocker := _hud_input_blocker_snapshot()
-	if bool(hud_blocker.get("blocked", false)):
-		return str(hud_blocker.get("name", ""))
-	var panel_modal_name := _panel_modal_blocker_name()
-	if not panel_modal_name.is_empty():
-		return panel_modal_name
 	var context_menu: Dictionary = context_menu_snapshot()
-	if bool(context_menu.get("active", false)):
-		return str(_dictionary_or_empty(context_menu.get("top", {})).get("id", "context_menu"))
-	if _world_action_presenter_blocks_input():
-		return "world_action_presenter"
+	var panel_blocker_name := ""
 	if panel_controller != null and panel_controller.has_method("gameplay_input_blocker_name"):
-		return str(panel_controller.gameplay_input_blocker_name())
-	return ""
+		panel_blocker_name = str(panel_controller.gameplay_input_blocker_name())
+	return str(ui_blocker_state_controller.call("blocker_name", hud_blocker, _panel_modal_blocker_snapshot(), context_menu, _world_action_presenter_blocks_input(), panel_blocker_name))
 
 
 func gameplay_input_blocker_snapshot() -> Dictionary:
 	var hud_blocker := _hud_input_blocker_snapshot()
-	if bool(hud_blocker.get("blocked", false)):
-		return hud_blocker
-	var panel_modal_snapshot := _panel_modal_blocker_snapshot()
-	if not panel_modal_snapshot.is_empty():
-		return panel_modal_snapshot
 	var context_menu: Dictionary = context_menu_snapshot()
-	if bool(context_menu.get("active", false)):
-		var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
-		return {
-			"blocked": true,
-			"name": str(top_menu.get("id", "context_menu")),
-			"kind": "context_menu",
-			"modal_id": "",
-			"panel_id": str(top_menu.get("owner_panel", "")),
-			"mouse_blocks_world": bool(top_menu.get("mouse_blocks_world", true)),
-			"option_count": int(top_menu.get("option_count", 0)),
-		}
-	if _world_action_presenter_blocks_input():
-		var presenter: Dictionary = world_action_presenter_snapshot()
-		return {
-			"blocked": true,
-			"name": "world_action_presenter",
-			"kind": "world_action_presenter",
-			"modal_id": "",
-			"panel_id": "world",
-			"mouse_blocks_world": true,
-			"action_kind": str(presenter.get("kind", "")),
-			"active_count": int(presenter.get("active_count", 0)),
-			"sequence": int(presenter.get("sequence", 0)),
-		}
-	if panel_controller != null and panel_controller.has_method("gameplay_input_blocker_snapshot"):
-		var snapshot: Dictionary = _dictionary_or_empty(panel_controller.call("gameplay_input_blocker_snapshot"))
-		if not snapshot.is_empty():
-			return snapshot
-	var name := gameplay_input_blocker_name()
-	return {
-		"blocked": not name.is_empty(),
-		"name": name,
-		"kind": "",
-		"modal_id": "",
-		"panel_id": "",
-		"mouse_blocks_world": not name.is_empty(),
-	}
+	var world_blocks := _world_action_presenter_blocks_input()
+	var panel_blocker: Dictionary = _panel_input_blocker_snapshot()
+	var fallback_name := gameplay_input_blocker_name()
+	return _dictionary_or_empty(ui_blocker_state_controller.call("blocker_snapshot", hud_blocker, _panel_modal_blocker_snapshot(), context_menu, world_action_presenter_snapshot(), world_blocks, panel_blocker, fallback_name))
 
 
 func _hud_input_blocker_snapshot() -> Dictionary:
@@ -539,12 +490,13 @@ func _panel_modal_blocker_name() -> String:
 
 
 func _panel_modal_blocker_snapshot() -> Dictionary:
+	return _dictionary_or_empty(ui_blocker_state_controller.call("panel_modal_blocker_snapshot", _panel_input_blocker_snapshot()))
+
+
+func _panel_input_blocker_snapshot() -> Dictionary:
 	if panel_controller == null or not panel_controller.has_method("gameplay_input_blocker_snapshot"):
 		return {}
-	var snapshot: Dictionary = _dictionary_or_empty(panel_controller.call("gameplay_input_blocker_snapshot"))
-	if str(snapshot.get("kind", "")) == "modal":
-		return snapshot
-	return {}
+	return _dictionary_or_empty(panel_controller.call("gameplay_input_blocker_snapshot"))
 
 
 func _world_action_presenter_blocks_input() -> bool:
@@ -560,128 +512,28 @@ func modal_stack_snapshot() -> Dictionary:
 
 
 func menu_state_snapshot() -> Dictionary:
-	if panel_controller != null and panel_controller.has_method("menu_state_snapshot"):
-		var panel_snapshot: Dictionary = _dictionary_or_empty(panel_controller.call("menu_state_snapshot")).duplicate(true)
-		var panel_priority: Array = _array_or_empty(panel_snapshot.get("close_priority", []))
-		panel_snapshot["panel_close_priority"] = panel_priority.duplicate(true)
-		panel_snapshot["close_priority"] = _root_close_priority(panel_priority)
-		_apply_modal_event_to_menu_state(panel_snapshot)
-		_apply_context_menu_event_to_menu_state(panel_snapshot)
-		return panel_snapshot
+	var panel_snapshot: Dictionary = {}
 	var fallback_priority: Array[String] = ["settings"]
-	var fallback := {
-		"active_stage_panel": "",
-		"stage_panel_open": false,
-		"stage_panels": [],
-		"stage_panel_ids": [],
-		"settings_open": false,
-		"open_panels": [],
-		"open_panel_count": 0,
-		"gameplay_blocked": false,
-		"blocker": {},
-		"panel_close_priority": fallback_priority.duplicate(true),
-		"close_priority": _root_close_priority(fallback_priority),
-	}
-	_apply_modal_event_to_menu_state(fallback)
-	_apply_context_menu_event_to_menu_state(fallback)
-	return fallback
-
-
-func _apply_modal_event_to_menu_state(menu_state: Dictionary) -> void:
-	var modal_stack: Dictionary = modal_stack_snapshot()
-	if not bool(modal_stack.get("active", false)):
-		menu_state["modal_event"] = {}
-		return
-	var top_modal: Dictionary = _dictionary_or_empty(modal_stack.get("top", {}))
-	var modal_id := str(top_modal.get("id", top_modal.get("modal_id", "modal")))
-	var event := {
-		"event": "modal_opened",
-		"panel_id": modal_id,
-		"kind": str(top_modal.get("kind", "modal")),
-		"visible": true,
-		"reason": "modal_stack_snapshot",
-		"owner_panel": str(top_modal.get("owner_panel", "")),
-		"mouse_blocks_world": bool(top_modal.get("mouse_blocks_world", true)),
-		"blocks_gameplay": bool(top_modal.get("blocks_gameplay", true)),
-	}
-	if top_modal.has("item_id"):
-		event["item_id"] = str(top_modal.get("item_id", ""))
-	if top_modal.has("skill_id"):
-		event["skill_id"] = str(top_modal.get("skill_id", ""))
-	if top_modal.has("count"):
-		event["count"] = int(top_modal.get("count", 0))
-	event = _append_menu_state_event(menu_state, event)
-	menu_state["modal_event"] = event.duplicate(true)
-
-
-func _apply_context_menu_event_to_menu_state(menu_state: Dictionary) -> void:
-	var context_menu: Dictionary = context_menu_snapshot()
-	if not bool(context_menu.get("active", false)):
-		menu_state["context_menu_event"] = {}
-		return
-	var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
-	var event := {
-		"event": "context_menu_opened",
-		"panel_id": str(top_menu.get("id", "context_menu")),
-		"kind": str(top_menu.get("kind", "context_menu")),
-		"visible": true,
-		"reason": "context_menu_snapshot",
-		"owner_panel": str(top_menu.get("owner_panel", "")),
-		"mouse_blocks_world": bool(top_menu.get("mouse_blocks_world", true)),
-	}
-	event = _append_menu_state_event(menu_state, event)
-	menu_state["context_menu_event"] = event.duplicate(true)
-
-
-func _append_menu_state_event(menu_state: Dictionary, event: Dictionary) -> Dictionary:
-	var enriched_event := event.duplicate(true)
-	enriched_event["sequence"] = int(menu_state.get("recent_event_count", 0)) + 1
-	var recent_events: Array = _array_or_empty(menu_state.get("recent_events", [])).duplicate(true)
-	recent_events.append(enriched_event)
-	while recent_events.size() > 8:
-		recent_events.pop_front()
-	menu_state["recent_events"] = recent_events
-	menu_state["recent_event_count"] = recent_events.size()
-	menu_state["latest_event"] = enriched_event.duplicate(true)
-	return enriched_event
+	if panel_controller != null and panel_controller.has_method("menu_state_snapshot"):
+		panel_snapshot = _dictionary_or_empty(panel_controller.call("menu_state_snapshot")).duplicate(true)
+	return _dictionary_or_empty(ui_blocker_state_controller.call("menu_state_snapshot", panel_snapshot, fallback_priority, modal_stack_snapshot(), context_menu_snapshot(), _close_context_snapshot()))
 
 
 func _root_close_priority(panel_priority: Array = []) -> Array[String]:
-	var priority: Array[String] = []
-	var hud_blocker := _hud_input_blocker_snapshot()
-	var hud_blocker_name := str(hud_blocker.get("name", ""))
-	if bool(hud_blocker.get("blocked", false)) and not hud_blocker_name.is_empty():
-		priority.append(hud_blocker_name)
-	var modal_name := _panel_modal_blocker_name()
-	if not modal_name.is_empty():
-		priority.append(modal_name)
-	var context_menu: Dictionary = context_menu_snapshot()
-	if bool(context_menu.get("active", false)):
-		var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
-		var context_menu_id := str(top_menu.get("id", "context_menu"))
-		if not context_menu_id.is_empty() and not priority.has(context_menu_id):
-			priority.append(context_menu_id)
-	if _world_action_presenter_blocks_input():
-		priority.append("world_action_presenter")
-	if not active_skill_targeting.is_empty():
-		priority.append("skill_targeting")
-	if runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()):
-		priority.append("selection")
-	var has_pending := false
+	return _array_or_empty(ui_blocker_state_controller.call("root_close_priority", panel_priority, _close_context_snapshot()))
+
+
+func _close_context_snapshot() -> Dictionary:
 	var pending_state: Dictionary = _runtime_pending_state_snapshot()
-	if not _dictionary_or_empty(pending_state.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_crafting", {})).is_empty():
-		has_pending = true
-	for item in panel_priority:
-		var id := str(item)
-		if id == "settings" and has_pending:
-			continue
-		if not id.is_empty() and not priority.has(id):
-			priority.append(id)
-	if has_pending:
-		priority.append("pending")
-	if priority.is_empty():
-		priority.append("settings")
-	return priority
+	return {
+		"hud_blocker": _hud_input_blocker_snapshot(),
+		"panel_modal": _panel_modal_blocker_snapshot(),
+		"context_menu": context_menu_snapshot(),
+		"world_action_blocks": _world_action_presenter_blocks_input(),
+		"skill_targeting_active": not active_skill_targeting.is_empty(),
+		"selection_active": runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()),
+		"has_pending": not _dictionary_or_empty(pending_state.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_crafting", {})).is_empty(),
+	}
 
 
 func ui_theme_snapshot() -> Dictionary:
@@ -835,88 +687,7 @@ func ui_layer_stack_snapshot(drag_data: Variant = {}, drag_hover_target: Control
 	var context_menu: Dictionary = context_menu_snapshot()
 	var drag: Dictionary = drag_state_snapshot(drag_data, drag_hover_target)
 	var tooltip: Dictionary = hover_tooltip_snapshot(tooltip_control)
-	var layers: Array[Dictionary] = []
-	if bool(blocker.get("blocked", false)) and (str(blocker.get("kind", "")) != "context_menu" or not bool(context_menu.get("active", false))):
-		var blocker_kind := str(blocker.get("kind", ""))
-		layers.append({
-			"id": str(blocker.get("name", "")),
-			"kind": blocker_kind,
-			"owner_panel": str(blocker.get("panel_id", "")),
-			"priority": _ui_layer_priority(blocker_kind, str(blocker.get("name", ""))),
-			"mouse_blocks_world": bool(blocker.get("mouse_blocks_world", true)),
-			"blocks_gameplay": true,
-			"source": "blocker",
-		})
-	if bool(drag.get("active", false)):
-		layers.append({
-			"id": "drag_preview",
-			"kind": "drag_preview",
-			"owner_panel": str(_dictionary_or_empty(drag.get("source", {})).get("owner_panel", "")),
-			"priority": _ui_layer_priority("drag_preview", "drag_preview"),
-			"mouse_blocks_world": true,
-			"blocks_gameplay": true,
-			"source": "drag",
-			"preview": _dictionary_or_empty(drag.get("preview", {})).duplicate(true),
-			"target": _dictionary_or_empty(drag.get("target", {})).duplicate(true),
-		})
-	if bool(context_menu.get("active", false)):
-		var top_menu: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
-		layers.append({
-			"id": str(top_menu.get("id", "context_menu")),
-			"kind": str(top_menu.get("kind", "context_menu")),
-			"owner_panel": str(top_menu.get("owner_panel", "hud")),
-			"priority": _ui_layer_priority("context_menu", str(top_menu.get("id", ""))),
-			"mouse_blocks_world": true,
-			"blocks_gameplay": true,
-			"source": "context_menu",
-			"option_count": int(top_menu.get("option_count", 0)),
-		})
-	if bool(tooltip.get("active", false)):
-		layers.append({
-			"id": "tooltip",
-			"kind": "tooltip",
-			"owner_panel": str(tooltip.get("owner_panel", "")),
-			"priority": _ui_layer_priority("tooltip", "tooltip"),
-			"mouse_blocks_world": false,
-			"blocks_gameplay": false,
-			"source": "tooltip",
-			"text": str(tooltip.get("text", "")),
-			"source_path": str(tooltip.get("source_path", "")),
-			"source_name": str(tooltip.get("source_name", "")),
-			"screen_position": _dictionary_or_empty(tooltip.get("screen_position", {})).duplicate(true),
-			"source_rect": _dictionary_or_empty(tooltip.get("source_rect", {})).duplicate(true),
-			"viewport_size": _dictionary_or_empty(tooltip.get("viewport_size", {})).duplicate(true),
-			"lifecycle_state": str(tooltip.get("lifecycle_state", "")),
-			"delay_policy": str(tooltip.get("delay_policy", "")),
-			"visual": _dictionary_or_empty(tooltip.get("visual", {})).duplicate(true),
-			"recommended_rect": _dictionary_or_empty(tooltip.get("recommended_rect", {})).duplicate(true),
-		})
-	layers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		var ap := int(a.get("priority", 0))
-		var bp := int(b.get("priority", 0))
-		if ap == bp:
-			return str(a.get("id", "")) < str(b.get("id", ""))
-		return ap > bp
-	)
-	var top_blocking: Dictionary = {}
-	for layer in layers:
-		var layer_data: Dictionary = _dictionary_or_empty(layer)
-		if bool(layer_data.get("blocks_gameplay", false)) or bool(layer_data.get("mouse_blocks_world", false)):
-			top_blocking = layer_data.duplicate(true)
-			break
-	return {
-		"active": not layers.is_empty(),
-		"count": layers.size(),
-		"blocks_world": not top_blocking.is_empty(),
-		"top": layers[0].duplicate(true) if not layers.is_empty() else {},
-		"top_blocking": top_blocking,
-		"layers": layers,
-		"blocker": blocker,
-		"modal_stack": modal_stack,
-		"context_menu": context_menu,
-		"drag": drag,
-		"tooltip": tooltip,
-	}
+	return _dictionary_or_empty(ui_blocker_state_controller.call("layer_stack_snapshot", blocker, modal_stack, context_menu, drag, tooltip))
 
 
 func _setup_tooltip_layer() -> void:
@@ -1348,19 +1119,7 @@ func _owner_panel_for_control(control: Control) -> String:
 
 
 func _ui_layer_priority(kind: String, layer_id: String) -> int:
-	if layer_id == "debug_console" or kind == "debug_console":
-		return 1000
-	if kind == "modal" or layer_id.begins_with("modal:"):
-		return 900
-	if kind == "drag_preview":
-		return 800
-	if kind == "context_menu" or layer_id == "interaction_menu":
-		return 700
-	if kind in ["stage", "settings", "panel", "world_action_presenter"]:
-		return 600
-	if kind == "tooltip":
-		return 100
-	return 0
+	return int(ui_blocker_state_controller.call("layer_priority", kind, layer_id))
 
 
 func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -> Dictionary:
