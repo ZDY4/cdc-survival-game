@@ -84,6 +84,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if bool(game_root.is_auto_tick_enabled()):
 		errors.append("auto tick should start disabled")
 	_assert_runtime_control_line(errors, game_root, "AutoTick off", "initial auto tick HUD")
+	_assert_runtime_world_time(errors, game_root, "initial runtime world time")
 	_assert_runtime_performance(errors, game_root, "initial runtime performance")
 	_assert_ui_theme(errors, game_root, "initial UI theme")
 	_exercise_audio_feedback(errors, game_root)
@@ -1189,6 +1190,17 @@ func _assert_runtime_control_line(errors: Array[String], game_root: Node, expect
 		errors.append("%s: RuntimeControlLine expected to contain %s, got %s" % [context, expected, str((label as Label).text)])
 
 
+func _assert_runtime_world_time(errors: Array[String], game_root: Node, context: String) -> void:
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var world_time: Dictionary = _dictionary_or_empty(runtime.get("world_time", {}))
+	if world_time.is_empty():
+		errors.append("%s: runtime_control should expose world_time" % context)
+		return
+	if str(world_time.get("day", "")) != "monday" or str(world_time.get("display_time", "")) != "09:00":
+		errors.append("%s: world_time should expose default monday 09:00, got %s" % [context, world_time])
+	_assert_runtime_control_line(errors, game_root, "Time monday 09:00", "%s HUD time token" % context)
+
+
 func _exercise_debug_panel(errors: Array[String], game_root: Node) -> void:
 	if not game_root.has_method("debug_panel_snapshot"):
 		errors.append("game root should expose debug_panel_snapshot")
@@ -1684,6 +1696,34 @@ func _assert_ai_debug_snapshot(errors: Array[String], game_root: Node, context: 
 	if not blackboard.has("target_tracking_state") or not blackboard.has("candidate_count") or not blackboard.has("blocked_by_los_count"):
 		errors.append("%s: ai_debug blackboard should expose target memory and LOS counts: %s" % [context, blackboard])
 	_assert_runtime_control_line(errors, game_root, "AI #2", "%s HUD AI token" % context)
+	_assert_settlement_life_ai_debug(errors, game_root, context)
+
+
+func _assert_settlement_life_ai_debug(errors: Array[String], game_root: Node, context: String) -> void:
+	var intent: Dictionary = game_root.simulation.decide_actor_intent(3, {
+		"topology": game_root.world_result.get("map", {}),
+		"active_map_id": game_root.simulation.active_map_id,
+	})
+	if str(intent.get("intent", "")) != "follow_route":
+		errors.append("%s: settlement life actor should choose follow_route at default world time: %s" % [context, intent])
+	game_root.refresh_hud(game_root.current_interaction_prompt())
+	var ai_debug: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("ai_debug", {}))
+	var latest: Dictionary = _dictionary_or_empty(ai_debug.get("latest_intent", {}))
+	if int(latest.get("actor_id", 0)) != 3:
+		errors.append("%s: settlement life ai_debug latest intent should expose actor 3: %s" % [context, ai_debug])
+	if str(latest.get("settlement_id", "")).is_empty() or str(latest.get("route_id", "")).is_empty():
+		errors.append("%s: settlement life ai_debug should expose settlement and route ids: %s" % [context, latest])
+	var goal: Dictionary = _dictionary_or_empty(latest.get("goal", {}))
+	var action: Dictionary = _dictionary_or_empty(latest.get("action", {}))
+	var blackboard: Dictionary = _dictionary_or_empty(latest.get("blackboard", {}))
+	if str(goal.get("kind", "")) != "settlement_life" or str(goal.get("route_id", "")).is_empty():
+		errors.append("%s: settlement life goal should expose route target: %s" % [context, goal])
+	if str(action.get("schedule_label", "")).is_empty():
+		errors.append("%s: settlement life action should expose schedule label: %s" % [context, action])
+	if int(blackboard.get("route_grid_count", 0)) <= 0:
+		errors.append("%s: settlement life blackboard should expose route grid count: %s" % [context, blackboard])
+	_assert_runtime_control_line(errors, game_root, "AI #3 follow_route", "%s settlement life HUD AI token" % context)
+	_assert_runtime_control_line(errors, game_root, "route:", "%s settlement life HUD route token" % context)
 
 
 func _assert_observe_auto_button(errors: Array[String], game_root: Node, expected_enabled: bool, context: String) -> void:

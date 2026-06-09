@@ -1846,6 +1846,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 		"play" if bool(control_data.get("observe_playback", false)) else "pause",
 		str(control_data.get("observe_speed", "x1")),
 	])
+	var world_time: Dictionary = _dictionary_or_empty(control_data.get("world_time", {}))
+	if not world_time.is_empty():
+		parts.append("Time %s" % str(world_time.get("display_label", "")))
 	var map_level: Dictionary = control_data.get("map_level", {})
 	if not map_level.is_empty():
 		parts.append("Level %d" % int(map_level.get("current", 0)))
@@ -1978,14 +1981,25 @@ func _ai_debug_control_text(value: Variant) -> String:
 	var path_text := "" if path_length <= 0 else " path%d" % path_length
 	var tracking_state := str(intent.get("target_tracking_state", ""))
 	var tracking_text := "" if tracking_state.is_empty() or tracking_state == "none" else " %s" % tracking_state
+	var settlement_text := ""
+	var route_id := str(intent.get("route_id", ""))
+	var anchor_id := str(intent.get("anchor_id", ""))
+	var smart_object_id := str(intent.get("smart_object_id", ""))
+	if not route_id.is_empty():
+		settlement_text = " route:%s" % route_id
+	elif not smart_object_id.is_empty():
+		settlement_text = " object:%s" % smart_object_id
+	elif not anchor_id.is_empty():
+		settlement_text = " anchor:%s" % anchor_id
 	var reason := str(intent.get("reason", ""))
 	var reason_text := "" if reason.is_empty() else " %s" % reason
-	return "AI #%d %s%s%s%s%s" % [
+	return "AI #%d %s%s%s%s%s%s" % [
 		int(intent.get("actor_id", 0)),
 		str(intent.get("intent", "")),
 		target_text,
 		path_text,
 		tracking_text,
+		settlement_text,
 		reason_text,
 	]
 

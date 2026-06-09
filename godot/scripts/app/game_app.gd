@@ -1359,6 +1359,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"observe_speed": observe_speed_id,
 		"observe_speed_multiplier": _observe_speed_multiplier(),
 		"observe_interval_sec": _auto_tick_interval_sec(),
+		"world_time": runtime_world_time_snapshot(),
 		"map_level": map_level_snapshot(),
 		"focused_actor": focused_actor_snapshot(),
 		"ui_blocker": gameplay_input_blocker_name(),
@@ -1524,6 +1525,33 @@ func ai_debug_snapshot() -> Dictionary:
 	}
 
 
+func runtime_world_time_snapshot() -> Dictionary:
+	if simulation == null:
+		return {
+			"day": "monday",
+			"minute_of_day": 540,
+			"hour": 9,
+			"minute": 0,
+			"display_time": "09:00",
+			"display_label": "monday 09:00",
+		}
+	var runtime_snapshot: Dictionary = simulation.snapshot()
+	var world_time: Dictionary = _dictionary_or_empty(runtime_snapshot.get("world_time", {}))
+	var minute_of_day: int = posmod(int(world_time.get("minute_of_day", 540)), 1440)
+	var hour := int(minute_of_day / 60)
+	var minute := minute_of_day % 60
+	var display_time := "%02d:%02d" % [hour, minute]
+	var day := str(world_time.get("day", "monday"))
+	return {
+		"day": day,
+		"minute_of_day": minute_of_day,
+		"hour": hour,
+		"minute": minute,
+		"display_time": display_time,
+		"display_label": "%s %s" % [day, display_time],
+	}
+
+
 func world_action_presenter_snapshot() -> Dictionary:
 	if world_action_presenter == null:
 		return {"active": false, "kind": "missing"}
@@ -1595,11 +1623,30 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 	var reason := str(intent.get("reason", ""))
 	var intent_kind := str(intent.get("intent", ""))
 	var target_tracking_state := str(intent.get("target_tracking_state", ""))
+	var settlement_id := str(intent.get("settlement_id", ""))
+	var route_id := str(intent.get("route_id", ""))
+	var anchor_id := str(intent.get("anchor_id", ""))
+	var smart_object_id := str(intent.get("smart_object_id", ""))
+	var schedule_label := str(intent.get("schedule_label", ""))
+	var life_goal_kind := "settlement_life" if not settlement_id.is_empty() else ("combat" if target_actor_id > 0 else "idle")
+	var goal_id := "none"
+	if target_actor_id > 0:
+		goal_id = "hostile_target"
+	elif not route_id.is_empty():
+		goal_id = route_id
+	elif not smart_object_id.is_empty():
+		goal_id = smart_object_id
+	elif not anchor_id.is_empty():
+		goal_id = anchor_id
 	var goal := {
-		"id": "hostile_target" if target_actor_id > 0 else "none",
-		"kind": "combat" if target_actor_id > 0 else "idle",
+		"id": goal_id,
+		"kind": life_goal_kind,
 		"target_actor_id": target_actor_id,
 		"target_grid": _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true),
+		"settlement_id": settlement_id,
+		"route_id": route_id,
+		"anchor_id": anchor_id,
+		"smart_object_id": smart_object_id,
 		"tracking_state": target_tracking_state,
 		"lost": bool(intent.get("target_lost", false)),
 		"lost_reason": str(intent.get("target_lost_reason", "")),
@@ -1613,6 +1660,11 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"remaining_steps": int(intent.get("remaining_steps", 0)),
 		"required_ap": float(intent.get("required_ap", 0.0)),
 		"available_ap": float(intent.get("available_ap", intent.get("ap", 0.0))),
+		"settlement_id": settlement_id,
+		"route_id": route_id,
+		"anchor_id": anchor_id,
+		"smart_object_id": smart_object_id,
+		"schedule_label": schedule_label,
 	}
 	var blackboard := {
 		"target_actor_id": target_actor_id,
@@ -1626,11 +1678,23 @@ func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
 		"ammo_ready": bool(intent.get("ammo_ready", true)),
 		"can_reload": bool(intent.get("can_reload", false)),
 		"ap": float(intent.get("ap", 0.0)),
+		"settlement_id": settlement_id,
+		"route_id": route_id,
+		"route_grid_count": _array_or_empty(intent.get("route_grids", [])).size(),
+		"anchor_id": anchor_id,
+		"smart_object_id": smart_object_id,
+		"schedule_label": schedule_label,
 	}
 	return {
 		"actor_id": actor_id,
 		"intent": intent_kind,
 		"reason": reason,
+		"settlement_id": settlement_id,
+		"route_id": route_id,
+		"route_grid_count": _array_or_empty(intent.get("route_grids", [])).size(),
+		"anchor_id": anchor_id,
+		"smart_object_id": smart_object_id,
+		"schedule_label": schedule_label,
 		"target_actor_id": target_actor_id,
 		"target_grid": _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true),
 		"path_length": path.size(),
