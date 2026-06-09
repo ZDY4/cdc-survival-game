@@ -159,6 +159,7 @@ const REASONS := {
 	"target_in_aggro_range": {"category": "ai", "text": "目标在警戒范围内"},
 	"target_visible": {"category": "ai", "text": "目标可见"},
 	"no_target_in_aggro_range": {"category": "ai", "text": "警戒范围内没有目标"},
+	"weapon_durability_insufficient": {"category": "equipment", "text": "武器耐久不足"},
 	"weapon_magazine_empty": {"category": "ai", "text": "武器弹匣为空"},
 	"weapon_ammo_unavailable": {"category": "ai", "text": "武器弹药不可用"},
 	"no_ai_profile": {"category": "ai", "text": "缺少 AI 配置"},
@@ -518,6 +519,10 @@ const REASON_METADATA := {
 	"weapon_magazine_empty": {
 		"payload_fields": ["actor_id", "weapon_item_id", "weapon_slot_id", "loaded", "capacity"],
 		"disabled_text": "需要换弹",
+	},
+	"weapon_durability_insufficient": {
+		"payload_fields": ["actor_id", "target_actor_id", "weapon_item_id", "slot_id", "durability_before", "durability_cost", "max_durability"],
+		"disabled_text": "武器耐久不足",
 	},
 	"no_target_in_aggro_range": {
 		"payload_fields": ["actor_id", "aggro_range", "candidate_count"],

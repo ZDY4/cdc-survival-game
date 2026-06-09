@@ -182,6 +182,7 @@ func _validate_reason_catalog() -> Array[String]:
 		"skill_on_cooldown": ["skill", "技能冷却中", "cooldown_remaining", "技能冷却中"],
 		"turn_in_requires_dialogue": ["quest", "需要通过指定对话", "dialogue_id", "需要通过指定对话"],
 		"weapon_magazine_empty": ["ai", "武器弹匣为空", "loaded", "需要换弹"],
+		"weapon_durability_insufficient": ["equipment", "武器耐久不足", "durability_before", "武器耐久不足"],
 		"save_schema_unsupported": ["save", "存档版本不兼容", "schema_version", "存档版本不兼容"],
 		"map_scene_missing": ["map_asset", "地图场景缺失", "path", "地图场景缺失"],
 	}
@@ -401,6 +402,36 @@ func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_
 	if not hidden_feedback_line.contains("失败 攻击: 目标不可见"):
 		errors.append("event feedback line should localize hidden target rejection, got %s" % hidden_feedback_line)
 	simulation.actor_registry.unregister_actor(hidden_target_id)
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	var original_equipment: Dictionary = player.equipment.duplicate(true) if player != null else {}
+	var original_tool_durability: Dictionary = player.tool_durability.duplicate(true) if player != null else {}
+	if player != null:
+		player.equipment["main_hand"] = "1002"
+		player.tool_durability["1002"] = 0.0
+		player.ap = maxf(player.ap, 10.0)
+	var broken_weapon_target_id := _register_smoke_hostile(simulation, {
+		"x": int(player_grid.get("x", 0)) + 1,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	})
+	var broken_weapon_attack: Dictionary = simulation.submit_player_command({
+		"kind": "attack",
+		"target_actor_id": broken_weapon_target_id,
+		"topology": world_result.get("map", {}),
+	})
+	if bool(broken_weapon_attack.get("success", false)) or str(broken_weapon_attack.get("reason", "")) != "weapon_durability_insufficient":
+		errors.append("HUD failure feedback setup should reject zero durability weapon attack")
+	var broken_weapon_snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, {})
+	hud.apply_snapshot(broken_weapon_snapshot)
+	var broken_weapon_feedback_line := str(hud.get_node("HudPanel/HudLines/EventFeedbackLine").text)
+	if not broken_weapon_feedback_line.contains("失败 攻击: 武器耐久不足"):
+		errors.append("event feedback line should localize weapon durability rejection, got %s" % broken_weapon_feedback_line)
+	_validate_feedback_toasts(errors, hud, broken_weapon_snapshot, "weapon durability rejection toast", "error", "player_command_rejected")
+	if simulation.actor_registry.get_actor(broken_weapon_target_id) != null:
+		simulation.actor_registry.unregister_actor(broken_weapon_target_id)
+	if player != null:
+		player.equipment = original_equipment
+		player.tool_durability = original_tool_durability
 	var craft_failure: Dictionary = simulation.submit_player_command({
 		"kind": "craft",
 		"actor_id": 1,
@@ -430,7 +461,6 @@ func _validate_hud_failure_feedback(hud: Control, simulation: RefCounted, world_
 	if not missing_tool_feedback_line.contains("失败 制作: 缺少工具"):
 		errors.append("event feedback line should localize missing tool rejection, got %s" % missing_tool_feedback_line)
 	var consumable_tool_recipes := _consumable_tool_smoke_recipes()
-	var player: RefCounted = simulation.actor_registry.get_actor(1)
 	player.inventory.erase("1151")
 	player.inventory["1011"] = 1
 	var consumable_tool_failure: Dictionary = simulation.submit_player_command({
