@@ -20,6 +20,7 @@ const SkillTargetingController = preload("res://scripts/app/controllers/skill_ta
 const CraftingFeedbackController = preload("res://scripts/app/controllers/crafting_feedback_controller.gd")
 const UiOverlayRenderController = preload("res://scripts/app/controllers/ui_overlay_render_controller.gd")
 const TooltipSnapshotController = preload("res://scripts/app/controllers/tooltip_snapshot_controller.gd")
+const DragSnapshotController = preload("res://scripts/app/controllers/drag_snapshot_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -55,6 +56,7 @@ var crafting_panel: Control
 var settings_panel: Control
 var ui_overlay_render_controller: RefCounted = UiOverlayRenderController.new()
 var tooltip_snapshot_controller: RefCounted = TooltipSnapshotController.new()
+var drag_snapshot_controller: RefCounted = DragSnapshotController.new()
 var tooltip_layer: Control:
 	get:
 		return ui_overlay_render_controller.tooltip_layer if ui_overlay_render_controller != null else null
@@ -821,18 +823,8 @@ func _observe_hotbar_meta_key(control: Control) -> String:
 
 func drag_state_snapshot(data: Variant = {}, hover_target: Control = null) -> Dictionary:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
-	if drag_data.is_empty():
-		return {"active": false, "kind": "", "source": {}, "target": _drag_hover_target_snapshot(hover_target, drag_data), "preview": {}, "payload": {}}
-	var kind := str(drag_data.get("kind", ""))
-	var payload := _drag_payload_snapshot(drag_data)
-	return {
-		"active": true,
-		"kind": kind,
-		"source": _drag_source_snapshot(drag_data, kind),
-		"target": _drag_hover_target_snapshot(hover_target, drag_data),
-		"preview": _drag_preview_snapshot(drag_data, payload),
-		"payload": payload,
-	}
+	var target: Dictionary = _drag_hover_target_snapshot(hover_target, drag_data)
+	return _dictionary_or_empty(drag_snapshot_controller.call("drag_state_snapshot", get_viewport(), drag_data, target))
 
 
 func ui_layer_stack_snapshot(drag_data: Variant = {}, drag_hover_target: Control = null, tooltip_control: Control = null) -> Dictionary:
@@ -1367,94 +1359,6 @@ func _ui_layer_priority(kind: String, layer_id: String) -> int:
 	if kind == "tooltip":
 		return 100
 	return 0
-
-
-func _drag_source_snapshot(drag_data: Dictionary, kind: String) -> Dictionary:
-	var output := {
-		"kind": kind,
-		"owner_panel": _drag_source_owner(kind, drag_data),
-		"source": str(drag_data.get("source", "")),
-		"from_index": int(drag_data.get("from_index", drag_data.get("index", -1))),
-	}
-	if kind == "skill_hotbar":
-		output["source"] = "skills"
-	elif kind == "inventory_item" and str(output.get("source", "")).is_empty():
-		output["source"] = "inventory"
-	return output
-
-
-func _drag_source_owner(kind: String, drag_data: Dictionary) -> String:
-	match kind:
-		"inventory_item":
-			return "inventory"
-		"skill_hotbar":
-			return "skills"
-		"trade_item", "trade_cart_entry":
-			return "trade"
-		"container_item":
-			return "container"
-	var source := str(drag_data.get("source", ""))
-	return source if source in ["inventory", "skills", "trade", "container", "hud", "character"] else ""
-
-
-func _drag_payload_snapshot(drag_data: Dictionary) -> Dictionary:
-	var kind := str(drag_data.get("kind", ""))
-	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
-	var skill: Dictionary = _dictionary_or_empty(drag_data.get("skill", {}))
-	match kind:
-		"inventory_item", "trade_item", "container_item":
-			return {
-				"item_id": str(drag_data.get("item_id", item.get("item_id", ""))),
-				"name": str(item.get("name", drag_data.get("item_id", ""))),
-				"count": int(drag_data.get("count", item.get("count", 1))),
-				"item_count": int(item.get("count", drag_data.get("count", 1))),
-			}
-		"skill_hotbar":
-			return {
-				"skill_id": str(drag_data.get("skill_id", skill.get("skill_id", ""))),
-				"name": str(skill.get("name", drag_data.get("skill_id", ""))),
-				"count": 1,
-			}
-		"trade_cart_entry":
-			return {
-				"index": int(drag_data.get("index", -1)),
-				"name": str(drag_data.get("name", "")),
-				"count": int(drag_data.get("count", 1)),
-			}
-	return {"count": int(drag_data.get("count", 0))}
-
-
-func _drag_preview_snapshot(drag_data: Dictionary, payload: Dictionary) -> Dictionary:
-	var text := str(drag_data.get("drag_preview_text", ""))
-	if text.is_empty():
-		match str(drag_data.get("kind", "")):
-			"skill_hotbar":
-				text = "%s -> 热栏" % str(payload.get("name", payload.get("skill_id", "")))
-			_:
-				var name := str(payload.get("name", payload.get("item_id", "")))
-				var count := int(payload.get("count", 0))
-				text = "%s x%d" % [name, count] if not name.is_empty() and count > 0 else name
-	var viewport := get_viewport()
-	var mouse_position := viewport.get_mouse_position() if viewport != null else Vector2.ZERO
-	var viewport_size := viewport.get_visible_rect().size if viewport != null else Vector2.ZERO
-	var estimated_size := _drag_preview_estimated_size(text)
-	return {
-		"text": text,
-		"has_preview": not text.is_empty(),
-		"screen_position": _vector2_snapshot(mouse_position),
-		"viewport_size": _vector2_snapshot(viewport_size),
-		"estimated_size": _vector2_snapshot(estimated_size),
-		"anchor": _vector2_snapshot(Vector2(8.0, 8.0)),
-		"lifecycle_state": "dragging",
-		"threshold_policy": "godot_default",
-		"threshold_px": -1,
-	}
-
-
-func _drag_preview_estimated_size(text: String) -> Vector2:
-	if text.is_empty():
-		return Vector2.ZERO
-	return Vector2(maxf(48.0, float(text.length() * 8 + 16)), 24.0)
 
 
 func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -> Dictionary:
