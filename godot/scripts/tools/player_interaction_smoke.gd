@@ -155,6 +155,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		await _expect_mouse_left_click_far_ground_starts_moving(errors, game_root, move_camera)
 	await _expect_auto_open_door_movement_presenter(errors, game_root)
 	await _expect_movement_turning_presenter(errors, game_root)
+	await _expect_pending_segment_movement_presenter(errors, game_root)
 	await _expect_cancel_pending(errors, game_root)
 
 	var door_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
@@ -2227,6 +2228,93 @@ func _expect_movement_turning_presenter(errors: Array[String], game_root: Node) 
 			errors.append("turning movement actor metadata should preserve final south facing")
 		if absf(player_node.rotation_degrees.y - 180.0) > 0.001:
 			errors.append("turning movement fast-forward should apply final south rotation, got %s" % str(player_node.rotation_degrees))
+
+
+func _expect_pending_segment_movement_presenter(errors: Array[String], game_root: Node) -> void:
+	var player_grid: Dictionary = _player_grid(game_root)
+	var start_grid := {
+		"x": int(player_grid.get("x", 0)),
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}
+	var segment_end := {
+		"x": int(start_grid.get("x", 0)) + 1,
+		"y": int(start_grid.get("y", 0)),
+		"z": int(start_grid.get("z", 0)),
+	}
+	var pending_next := {
+		"x": int(segment_end.get("x", 0)) + 1,
+		"y": int(segment_end.get("y", 0)),
+		"z": int(segment_end.get("z", 0)),
+	}
+	var pending_target := {
+		"x": int(pending_next.get("x", 0)) + 1,
+		"y": int(pending_next.get("y", 0)),
+		"z": int(pending_next.get("z", 0)),
+	}
+	_present_synthetic_world_action_events(game_root, [
+		{
+			"kind": "movement_step",
+			"payload": {
+				"actor_id": 1,
+				"from": start_grid.duplicate(true),
+				"to": segment_end.duplicate(true),
+			},
+		},
+		{
+			"kind": "actor_moved",
+			"payload": {
+				"actor_id": 1,
+				"from": start_grid.duplicate(true),
+				"to": segment_end.duplicate(true),
+			},
+		},
+		{
+			"kind": "movement_queued",
+			"payload": {
+				"actor_id": 1,
+				"target_position": pending_target.duplicate(true),
+				"path": [segment_end.duplicate(true), pending_next.duplicate(true), pending_target.duplicate(true)],
+				"required_ap": 2.0,
+				"available_ap": 0.0,
+				"remaining_steps": 2,
+			},
+		},
+	])
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "movement":
+		errors.append("pending segment movement should expose movement presenter, got %s" % JSON.stringify(presenter))
+	if not bool(presenter.get("pending_movement_segment_active", false)):
+		errors.append("pending segment movement presenter should expose active pending segment")
+	if int(presenter.get("pending_movement_remaining_steps", 0)) != 2:
+		errors.append("pending segment movement presenter should expose remaining steps")
+	if absf(float(presenter.get("pending_movement_required_ap", 0.0)) - 2.0) > 0.001:
+		errors.append("pending segment movement presenter should expose required AP")
+	var segment: Dictionary = _dictionary_or_empty(presenter.get("pending_movement_segment", {}))
+	if _array_or_empty(segment.get("path", [])).size() != 3:
+		errors.append("pending segment movement presenter should preserve queued path")
+	if JSON.stringify(_dictionary_or_empty(segment.get("target_position", {}))) != JSON.stringify(pending_target):
+		errors.append("pending segment movement presenter should expose queued target")
+	var marker: MeshInstance3D = game_root.find_child("WorldActionPendingMovementSegment", true, false) as MeshInstance3D
+	if marker == null:
+		errors.append("pending segment movement should create WorldActionPendingMovementSegment marker")
+	else:
+		if str(marker.get_meta("action_presenter_kind", "")) != "pending_movement_segment":
+			errors.append("pending segment marker should expose presenter kind")
+		if int(marker.get_meta("actor_id", 0)) != 1:
+			errors.append("pending segment marker should expose actor id")
+		if int(marker.get_meta("remaining_steps", 0)) != 2:
+			errors.append("pending segment marker should expose remaining steps")
+		if _dictionary_or_empty(marker.get_meta("target_position", {})).is_empty():
+			errors.append("pending segment marker should expose target position")
+		_expect_action_marker_phases(errors, marker, ["queued", "preview", "hold"], "pending segment movement marker")
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node != null:
+		if not bool(player_node.get_meta("action_presenter_pending_movement_segment_active", false)):
+			errors.append("movement actor node should expose pending segment active metadata")
+		if int(player_node.get_meta("action_presenter_pending_movement_remaining_steps", 0)) != 2:
+			errors.append("movement actor node should expose pending segment remaining steps")
+	await _wait_for_world_action_presenter_idle(game_root)
 
 
 func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, camera: Camera3D, player_node: Node3D) -> void:

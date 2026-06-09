@@ -10,11 +10,13 @@ const INTERACTION_PHASES := ["start", "pulse", "fade"]
 const COMBAT_EVENT_PHASES := ["signal", "resolve", "fade"]
 const RELOAD_PHASES := ["prepare", "load", "ready"]
 const DOOR_AUTO_OPEN_PHASES := ["approach", "open", "clear"]
+const PENDING_MOVEMENT_SEGMENT_PHASES := ["queued", "preview", "hold"]
 const ATTACK_PHASE_DURATIONS := [0.06, 0.08, 0.10]
 const INTERACTION_PHASE_DURATIONS := [0.06, 0.08, 0.10]
 const COMBAT_EVENT_PHASE_DURATIONS := [0.05, 0.10, 0.12]
 const RELOAD_PHASE_DURATIONS := [0.07, 0.12, 0.10]
 const DOOR_AUTO_OPEN_PHASE_DURATIONS := [0.04, 0.08, 0.08]
+const PENDING_MOVEMENT_SEGMENT_PHASE_DURATIONS := [0.04, 0.08, 0.12]
 
 var sequence: int = 0
 var active_count: int = 0
@@ -114,6 +116,7 @@ func _movement_presentation(events: Array, world_root: Node, world_result: Dicti
 	var last_move: Dictionary = {}
 	var step_events: Array[Dictionary] = []
 	var door_auto_open_events: Array[Dictionary] = []
+	var movement_queued_events: Array[Dictionary] = []
 	for event_value in events:
 		var event: Dictionary = _dictionary_or_empty(event_value)
 		match str(event.get("kind", "")):
@@ -123,6 +126,8 @@ func _movement_presentation(events: Array, world_root: Node, world_result: Dicti
 				last_move = event
 			"door_auto_opened":
 				door_auto_open_events.append(event)
+			"movement_queued":
+				movement_queued_events.append(event)
 	if last_move.is_empty():
 		return {}
 	var payload: Dictionary = _dictionary_or_empty(last_move.get("payload", {}))
@@ -137,6 +142,7 @@ func _movement_presentation(events: Array, world_root: Node, world_result: Dicti
 		}
 	var path := _movement_path(actor_id, payload, step_events)
 	var door_auto_opens := _movement_door_auto_opens(actor_id, door_auto_open_events)
+	var pending_segment := _movement_pending_segment(actor_id, movement_queued_events, path)
 	var movement_facings := _movement_facings_from_path(path)
 	var current_facing: Dictionary = _dictionary_or_empty(movement_facings[0]) if not movement_facings.is_empty() else {}
 	var final_facing: Dictionary = _dictionary_or_empty(movement_facings[movement_facings.size() - 1]) if not movement_facings.is_empty() else {}
@@ -157,6 +163,11 @@ func _movement_presentation(events: Array, world_root: Node, world_result: Dicti
 		"door_auto_opens": door_auto_opens,
 		"door_auto_open_count": door_auto_opens.size(),
 		"door_auto_open_door_ids": _door_auto_open_ids(door_auto_opens),
+		"pending_movement_segment": pending_segment,
+		"pending_movement_segment_active": bool(pending_segment.get("active", false)),
+		"pending_movement_remaining_steps": int(pending_segment.get("remaining_steps", 0)),
+		"pending_movement_required_ap": float(pending_segment.get("required_ap", 0.0)),
+		"pending_movement_available_ap": float(pending_segment.get("available_ap", 0.0)),
 		"actor_node": actor_node,
 	}
 
@@ -185,6 +196,48 @@ func _door_auto_open_ids(entries: Array[Dictionary]) -> Array[String]:
 			continue
 		output.append(door_id)
 	return output
+
+
+func _movement_pending_segment(actor_id: int, events: Array[Dictionary], completed_path: Array[Dictionary]) -> Dictionary:
+	var queued_payload: Dictionary = {}
+	for event in events:
+		var payload: Dictionary = _dictionary_or_empty(event.get("payload", {}))
+		if int(payload.get("actor_id", 0)) != actor_id:
+			continue
+		queued_payload = payload
+	if queued_payload.is_empty():
+		return {}
+	var pending_path: Array[Dictionary] = []
+	for grid_value in _array_or_empty(queued_payload.get("path", [])):
+		var grid: Dictionary = _dictionary_or_empty(grid_value)
+		if not grid.is_empty():
+			pending_path.append(grid.duplicate(true))
+	var completed_end: Dictionary = _dictionary_or_empty(completed_path[completed_path.size() - 1]) if not completed_path.is_empty() else {}
+	if not completed_end.is_empty():
+		if pending_path.is_empty() or _grid_key(_dictionary_or_empty(pending_path[0])) != _grid_key(completed_end):
+			pending_path.push_front(completed_end.duplicate(true))
+	pending_path = _dedupe_grid_path(pending_path)
+	var target_position: Dictionary = _dictionary_or_empty(queued_payload.get("target_position", {})).duplicate(true)
+	if target_position.is_empty() and not pending_path.is_empty():
+		target_position = _dictionary_or_empty(pending_path[pending_path.size() - 1]).duplicate(true)
+	var remaining_steps := int(queued_payload.get("remaining_steps", max(0, pending_path.size() - 1)))
+	var next_grid: Dictionary = {}
+	if pending_path.size() > 1:
+		next_grid = _dictionary_or_empty(pending_path[1]).duplicate(true)
+	elif not pending_path.is_empty():
+		next_grid = _dictionary_or_empty(pending_path[0]).duplicate(true)
+	return {
+		"active": remaining_steps > 0 and not target_position.is_empty(),
+		"actor_id": actor_id,
+		"target_position": target_position,
+		"path": pending_path,
+		"next_grid": next_grid,
+		"remaining_steps": remaining_steps,
+		"required_ap": float(queued_payload.get("required_ap", 0.0)),
+		"available_ap": float(queued_payload.get("available_ap", 0.0)),
+		"completed_step_count": max(0, completed_path.size() - 1),
+		"queued_step_count": remaining_steps,
+	}
 
 
 func _movement_path(actor_id: int, moved_payload: Dictionary, step_events: Array[Dictionary]) -> Array[Dictionary]:
@@ -285,10 +338,17 @@ func _start_movement_tween(host: Node, world_root: Node, movement: Dictionary) -
 	actor_node.set_meta("action_presenter_final_facing_yaw_degrees", float(final_facing.get("yaw_degrees", actor_node.rotation_degrees.y)))
 	actor_node.set_meta("action_presenter_auto_opened_door_ids", door_auto_open_ids.duplicate(true))
 	actor_node.set_meta("action_presenter_auto_opened_door_count", door_auto_opens.size())
+	var pending_segment: Dictionary = _dictionary_or_empty(movement.get("pending_movement_segment", {}))
+	actor_node.set_meta("action_presenter_pending_movement_segment_active", bool(pending_segment.get("active", false)))
+	actor_node.set_meta("action_presenter_pending_movement_target_position", _dictionary_or_empty(pending_segment.get("target_position", {})).duplicate(true))
+	actor_node.set_meta("action_presenter_pending_movement_remaining_steps", int(pending_segment.get("remaining_steps", 0)))
+	actor_node.set_meta("action_presenter_pending_movement_required_ap", float(pending_segment.get("required_ap", 0.0)))
+	actor_node.set_meta("action_presenter_pending_movement_available_ap", float(pending_segment.get("available_ap", 0.0)))
 	if not movement_facings.is_empty():
 		_apply_movement_facing(weakref(actor_node), _dictionary_or_empty(movement_facings[0]))
 	_track_active_node(actor_node)
 	var door_marker_paths := _start_door_auto_open_markers(host, world_root, movement, path)
+	var pending_marker_paths := _start_pending_movement_segment_markers(host, world_root, movement)
 	var tween := host.create_tween()
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
@@ -300,6 +360,7 @@ func _start_movement_tween(host: Node, world_root: Node, movement: Dictionary) -
 	tween.finished.connect(Callable(self, "_on_movement_tween_finished").bind(run_sequence, weakref(actor_node)))
 	var snapshot_data := _presentation_public_snapshot(movement, true)
 	snapshot_data["door_auto_open_marker_paths"] = door_marker_paths
+	snapshot_data["pending_movement_segment_marker_paths"] = pending_marker_paths
 	_record_latest(snapshot_data)
 
 
@@ -367,6 +428,78 @@ func _start_door_auto_open_markers(host: Node, world_root: Node, movement: Dicti
 
 
 func _on_door_auto_open_marker_finished(marker_ref: WeakRef) -> void:
+	var marker := marker_ref.get_ref() as Node
+	if marker != null and not marker.is_queued_for_deletion():
+		marker.set_meta("action_presenter_active", false)
+		marker.queue_free()
+	_prune_active_refs()
+	latest["active"] = active_count > 0
+	latest["active_count"] = active_count
+
+
+func _start_pending_movement_segment_markers(host: Node, world_root: Node, movement: Dictionary) -> Array[String]:
+	var marker_paths: Array[String] = []
+	var segment: Dictionary = _dictionary_or_empty(movement.get("pending_movement_segment", {}))
+	if host == null or world_root == null or not bool(segment.get("active", false)):
+		return marker_paths
+	var path: Array = _array_or_empty(segment.get("path", []))
+	if path.is_empty():
+		return marker_paths
+	var layer := _presentation_layer(world_root)
+	var target_grid: Dictionary = _dictionary_or_empty(segment.get("target_position", {}))
+	var next_grid: Dictionary = _dictionary_or_empty(segment.get("next_grid", target_grid))
+	for index in range(path.size()):
+		var grid: Dictionary = _dictionary_or_empty(path[index])
+		if grid.is_empty():
+			continue
+		var marker := MeshInstance3D.new()
+		marker.name = "WorldActionPendingMovementSegment"
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = 0.18
+		mesh.bottom_radius = 0.28
+		mesh.height = 0.045
+		mesh.radial_segments = 20
+		marker.mesh = mesh
+		marker.material_override = _pending_movement_segment_material(index, path.size())
+		marker.position = _grid_to_world(grid, 0.18)
+		marker.scale = Vector3(0.72, 1.0, 0.72)
+		marker.set_meta("action_presenter_active", true)
+		marker.set_meta("action_presenter_kind", "pending_movement_segment")
+		marker.set_meta("action_presenter_phases", PENDING_MOVEMENT_SEGMENT_PHASES.duplicate())
+		marker.set_meta("action_presenter_phase_count", PENDING_MOVEMENT_SEGMENT_PHASES.size())
+		marker.set_meta("action_presenter_current_phase", PENDING_MOVEMENT_SEGMENT_PHASES[0])
+		marker.set_meta("action_presenter_duration_sec", _duration_sum(PENDING_MOVEMENT_SEGMENT_PHASE_DURATIONS))
+		marker.set_meta("action_presenter_sequence", sequence)
+		marker.set_meta("actor_id", int(segment.get("actor_id", 0)))
+		marker.set_meta("grid", grid.duplicate(true))
+		marker.set_meta("path_index", index)
+		marker.set_meta("target_position", target_grid.duplicate(true))
+		marker.set_meta("next_grid", next_grid.duplicate(true))
+		marker.set_meta("remaining_steps", int(segment.get("remaining_steps", 0)))
+		marker.set_meta("required_ap", float(segment.get("required_ap", 0.0)))
+		marker.set_meta("available_ap", float(segment.get("available_ap", 0.0)))
+		marker.set_meta("completed_step_count", int(segment.get("completed_step_count", 0)))
+		marker.set_meta("queued_step_count", int(segment.get("queued_step_count", 0)))
+		_track_active_node(marker)
+		layer.add_child(marker)
+		marker_paths.append(str(marker.get_path()))
+		var tween := host.create_tween()
+		_track_active_tween(tween)
+		tween.set_trans(Tween.TRANS_SINE)
+		tween.set_ease(Tween.EASE_OUT)
+		var delay := float(index) * 0.015
+		if delay > 0.0:
+			tween.tween_interval(delay)
+		tween.tween_property(marker, "scale", Vector3(0.92, 1.0, 0.92), float(PENDING_MOVEMENT_SEGMENT_PHASE_DURATIONS[0]))
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), PENDING_MOVEMENT_SEGMENT_PHASES[1]))
+		tween.tween_property(marker, "scale", Vector3(1.08, 1.0, 1.08), float(PENDING_MOVEMENT_SEGMENT_PHASE_DURATIONS[1]))
+		tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), PENDING_MOVEMENT_SEGMENT_PHASES[2]))
+		tween.tween_property(marker, "scale", Vector3(0.55, 1.0, 0.55), float(PENDING_MOVEMENT_SEGMENT_PHASE_DURATIONS[2]))
+		tween.finished.connect(Callable(self, "_on_pending_movement_segment_marker_finished").bind(weakref(marker)))
+	return marker_paths
+
+
+func _on_pending_movement_segment_marker_finished(marker_ref: WeakRef) -> void:
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
 		marker.set_meta("action_presenter_active", false)
@@ -1846,6 +1979,15 @@ func _door_auto_open_material() -> StandardMaterial3D:
 	return material
 
 
+func _pending_movement_segment_material(path_index: int, path_size: int) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.no_depth_test = true
+	var ratio := 1.0 if path_size <= 1 else clampf(float(path_index) / float(path_size - 1), 0.0, 1.0)
+	material.albedo_color = Color(0.24 + ratio * 0.22, 0.72 - ratio * 0.12, 1.0, 0.56)
+	return material
+
+
 func _combat_event_material(event_kind: String) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -1881,6 +2023,11 @@ func _presentation_public_snapshot(presentation: Dictionary, active: bool) -> Di
 		"door_auto_opens": _array_or_empty(presentation.get("door_auto_opens", [])).duplicate(true),
 		"door_auto_open_count": int(presentation.get("door_auto_open_count", 0)),
 		"door_auto_open_door_ids": _array_or_empty(presentation.get("door_auto_open_door_ids", [])).duplicate(true),
+		"pending_movement_segment": _dictionary_or_empty(presentation.get("pending_movement_segment", {})).duplicate(true),
+		"pending_movement_segment_active": bool(presentation.get("pending_movement_segment_active", false)),
+		"pending_movement_remaining_steps": int(presentation.get("pending_movement_remaining_steps", 0)),
+		"pending_movement_required_ap": float(presentation.get("pending_movement_required_ap", 0.0)),
+		"pending_movement_available_ap": float(presentation.get("pending_movement_available_ap", 0.0)),
 	}
 
 
