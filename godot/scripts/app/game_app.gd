@@ -27,6 +27,7 @@ const ContainerActionController = preload("res://scripts/app/controllers/contain
 const InventoryActionController = preload("res://scripts/app/controllers/inventory_action_controller.gd")
 const TradeActionController = preload("res://scripts/app/controllers/trade_action_controller.gd")
 const CharacterActionController = preload("res://scripts/app/controllers/character_action_controller.gd")
+const SkillActionController = preload("res://scripts/app/controllers/skill_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -69,6 +70,7 @@ var container_action_controller: RefCounted = ContainerActionController.new()
 var inventory_action_controller: RefCounted = InventoryActionController.new()
 var trade_action_controller: RefCounted = TradeActionController.new()
 var character_action_controller: RefCounted = CharacterActionController.new()
+var skill_action_controller: RefCounted = SkillActionController.new()
 var tooltip_layer: Control:
 	get:
 		return ui_overlay_render_controller.tooltip_layer if ui_overlay_render_controller != null else null
@@ -1800,15 +1802,8 @@ func learn_player_skill(skill_id: String) -> Dictionary:
 	var blocked: Dictionary = _player_command_rejection("learn_skill")
 	if not blocked.is_empty():
 		return blocked
-	var result: Dictionary = simulation.submit_player_command({
-		"kind": "learn_skill",
-		"actor_id": 1,
-		"skill_id": skill_id,
-		"skill_library": registry.get_library("skills"),
-	})
-	refresh_character_panel()
-	refresh_skills_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("learn_skill", skill_id, Callable(self, "_submit_player_command_action"), registry.get_library("skills")))
+	return _apply_skill_action_operation(operation)
 
 
 func bind_player_skill_to_hotbar(slot_id: String, skill_id: String) -> Dictionary:
@@ -1817,16 +1812,8 @@ func bind_player_skill_to_hotbar(slot_id: String, skill_id: String) -> Dictionar
 	var blocked: Dictionary = _player_command_rejection("bind_hotbar")
 	if not blocked.is_empty():
 		return blocked
-	var result: Dictionary = simulation.submit_player_command({
-		"kind": "bind_hotbar",
-		"actor_id": 1,
-		"slot_id": slot_id,
-		"skill_id": skill_id,
-		"skill_library": registry.get_library("skills"),
-	})
-	refresh_hud()
-	refresh_skills_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("bind_skill_to_hotbar", slot_id, skill_id, Callable(self, "_submit_player_command_action"), registry.get_library("skills")))
+	return _apply_skill_action_operation(operation)
 
 
 func bind_player_item_to_hotbar(slot_id: String, item_id: String) -> Dictionary:
@@ -1835,18 +1822,8 @@ func bind_player_item_to_hotbar(slot_id: String, item_id: String) -> Dictionary:
 	var blocked: Dictionary = _player_command_rejection("bind_hotbar")
 	if not blocked.is_empty():
 		return blocked
-	var result: Dictionary = simulation.submit_player_command({
-		"kind": "bind_hotbar",
-		"actor_id": 1,
-		"slot_id": slot_id,
-		"hotbar_kind": "item",
-		"item_id": item_id,
-		"item_library": registry.get_library("items"),
-		"effect_library": registry.get_library("json"),
-	})
-	refresh_hud()
-	refresh_inventory_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("bind_item_to_hotbar", slot_id, item_id, Callable(self, "_submit_player_command_action"), registry.get_library("items"), registry.get_library("json")))
+	return _apply_skill_action_operation(operation)
 
 
 func set_hotbar_group(group_id: String) -> Dictionary:
@@ -1854,24 +1831,17 @@ func set_hotbar_group(group_id: String) -> Dictionary:
 		return {"success": false, "reason": "simulation_missing"}
 	if _world_action_presenter_blocks_input():
 		return _action_presenter_command_rejected("set_hotbar_group")
-	if not simulation.has_method("set_active_hotbar_group"):
-		return {"success": false, "reason": "hotbar_group_unsupported"}
-	var result: Dictionary = simulation.set_active_hotbar_group(group_id)
-	refresh_hud()
-	refresh_skills_panel()
-	refresh_inventory_panel()
-	return result
+	var set_group := Callable(simulation, "set_active_hotbar_group") if simulation.has_method("set_active_hotbar_group") else Callable()
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("set_hotbar_group", group_id, set_group))
+	return _apply_skill_action_operation(operation)
 
 
 func set_hotbar_group_label(group_id: String, label: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	if not simulation.has_method("set_hotbar_group_label"):
-		return {"success": false, "reason": "hotbar_group_label_unsupported"}
-	var result: Dictionary = simulation.set_hotbar_group_label(group_id, label)
-	refresh_hud()
-	refresh_skills_panel()
-	return result
+	var set_label := Callable(simulation, "set_hotbar_group_label") if simulation.has_method("set_hotbar_group_label") else Callable()
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("set_hotbar_group_label", group_id, label, set_label))
+	return _apply_skill_action_operation(operation)
 
 
 func cycle_hotbar_group(direction: int) -> Dictionary:
@@ -1879,13 +1849,29 @@ func cycle_hotbar_group(direction: int) -> Dictionary:
 		return {"success": false, "reason": "simulation_missing"}
 	if _world_action_presenter_blocks_input():
 		return _action_presenter_command_rejected("cycle_hotbar_group")
-	if not simulation.has_method("cycle_hotbar_group"):
-		return {"success": false, "reason": "hotbar_group_unsupported"}
-	var result: Dictionary = simulation.cycle_hotbar_group(direction)
-	refresh_hud()
-	refresh_skills_panel()
-	refresh_inventory_panel()
+	var cycle_group := Callable(simulation, "cycle_hotbar_group") if simulation.has_method("cycle_hotbar_group") else Callable()
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("cycle_hotbar_group", direction, cycle_group))
+	return _apply_skill_action_operation(operation)
+
+
+func _apply_skill_action_operation(operation: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
+	if refresh_panels.has("hud"):
+		refresh_hud()
+	if refresh_panels.has("inventory"):
+		refresh_inventory_panel()
+	if refresh_panels.has("character"):
+		refresh_character_panel()
+	if refresh_panels.has("skills"):
+		refresh_skills_panel()
 	return result
+
+
+func _submit_player_command_action(command: Dictionary) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	return _dictionary_or_empty(simulation.submit_player_command(command))
 
 
 func use_hotbar_slot(slot_id: String) -> Dictionary:
