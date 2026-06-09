@@ -743,6 +743,8 @@ func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
 		resolved_context["world_alert_active"] = world_flags.has("world_alert_active")
 	if not resolved_context.has("life_reservations_by_smart_object"):
 		resolved_context["life_reservations_by_smart_object"] = _active_life_reservations_by_smart_object(actor_id)
+	if not resolved_context.has("life_reservation_claims_by_smart_object"):
+		resolved_context["life_reservation_claims_by_smart_object"] = _active_life_reservation_claims_by_smart_object(actor_id)
 	if resolved_context.has("topology"):
 		resolved_context["topology"] = _topology_with_runtime_door_states(_dictionary_or_empty(resolved_context.get("topology", {})))
 	if not resolved_context.has("weapon_profile"):
@@ -765,6 +767,14 @@ func decide_all_ai_intents(context: Dictionary = {}) -> Array[Dictionary]:
 
 func _active_life_reservations_by_smart_object(excluded_actor_id: int = 0) -> Dictionary:
 	var output: Dictionary = {}
+	var claims: Dictionary = _active_life_reservation_claims_by_smart_object(excluded_actor_id)
+	for smart_object_id in claims.keys():
+		output[str(smart_object_id)] = _array_or_empty(claims.get(smart_object_id, [])).size()
+	return output
+
+
+func _active_life_reservation_claims_by_smart_object(excluded_actor_id: int = 0) -> Dictionary:
+	var output: Dictionary = {}
 	for actor in actor_registry.actors():
 		if actor == null or actor.actor_id == excluded_actor_id or actor.hp <= 0.0:
 			continue
@@ -778,8 +788,27 @@ func _active_life_reservations_by_smart_object(excluded_actor_id: int = 0) -> Di
 			var smart_object_id := str(reservation_data.get("smart_object_id", ""))
 			if smart_object_id.is_empty():
 				continue
-			output[smart_object_id] = int(output.get(smart_object_id, 0)) + 1
+			if not output.has(smart_object_id):
+				output[smart_object_id] = []
+			var claims: Array = _array_or_empty(output.get(smart_object_id, []))
+			claims.append(_life_reservation_claim_summary(actor, reservation_data))
+			output[smart_object_id] = claims
 	return output
+
+
+func _life_reservation_claim_summary(actor: RefCounted, reservation: Dictionary) -> Dictionary:
+	return {
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"reservation_target": str(reservation.get("reservation_target", "")),
+		"smart_object_id": str(reservation.get("smart_object_id", "")),
+		"smart_object_kind": str(reservation.get("smart_object_kind", "")),
+		"action_id": str(reservation.get("action_id", "")),
+		"priority": float(reservation.get("reservation_priority", 0.0)),
+		"preemptible": bool(reservation.get("reservation_preemptible", true)),
+		"created_total_minutes": int(reservation.get("created_total_minutes", -1)),
+		"reservation_ttl_minutes": int(reservation.get("reservation_ttl_minutes", 0)),
+	}
 
 
 func unlock_location(location_id: String) -> bool:
@@ -4978,6 +5007,7 @@ func _apply_life_planner_reservation(actor: RefCounted, runtime: Dictionary, pla
 	var reservation_target := str(action.get("reservation_target", ""))
 	if reservation_target.is_empty():
 		return {}
+	var preemption: Dictionary = _apply_life_reservation_preemption(actor, reservation_target, action, intent, result)
 	var ttl_minutes := _life_planner_reservation_ttl_minutes(action)
 	var reservation: Dictionary = {
 		"active": true,
@@ -4993,7 +5023,11 @@ func _apply_life_planner_reservation(actor: RefCounted, runtime: Dictionary, pla
 		"reservation_ttl_minutes": ttl_minutes,
 		"expires_world_time": _world_time_after(world_time, ttl_minutes),
 		"target_grid": _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true),
+		"reservation_priority": _life_reservation_priority(action, intent, result),
+		"reservation_preemptible": _life_reservation_preemptible(action, intent, result),
 	}
+	if not preemption.is_empty():
+		reservation["preempted_reservation"] = preemption.duplicate(true)
 	var reservations: Dictionary = _dictionary_or_empty(runtime.get("reservations", {})).duplicate(true)
 	reservations[reservation_target] = reservation.duplicate(true)
 	runtime["reservations"] = reservations
@@ -5006,6 +5040,83 @@ func _apply_life_planner_reservation(actor: RefCounted, runtime: Dictionary, pla
 		planner_state[fact_key] = true
 	_emit("settlement_life_reservation_updated", reservation.duplicate(true))
 	return reservation
+
+
+func _apply_life_reservation_preemption(requester: RefCounted, reservation_target: String, action: Dictionary, intent: Dictionary, result: Dictionary) -> Dictionary:
+	var preemption: Dictionary = _dictionary_or_empty(result.get("reservation_preemption", intent.get("reservation_preemption", {}))).duplicate(true)
+	if preemption.is_empty():
+		return {}
+	var preempted_actor_id := int(preemption.get("actor_id", preemption.get("preempted_actor_id", 0)))
+	if preempted_actor_id <= 0 or requester == null or preempted_actor_id == requester.actor_id:
+		return {}
+	var preempted_actor: RefCounted = actor_registry.get_actor(preempted_actor_id)
+	if preempted_actor == null or preempted_actor.hp <= 0.0:
+		return {}
+	var preempted_runtime: Dictionary = _ensure_life_runtime(preempted_actor)
+	var preempted_reservations: Dictionary = _dictionary_or_empty(preempted_runtime.get("reservations", {}))
+	var preempted_target := str(preemption.get("reservation_target", reservation_target))
+	var existing: Dictionary = _dictionary_or_empty(preempted_reservations.get(preempted_target, {}))
+	if existing.is_empty() or not bool(existing.get("active", false)):
+		return {}
+	var planner_state: Dictionary = _dictionary_or_empty(preempted_runtime.get("planner_state", {})).duplicate(true)
+	var release: Dictionary = _release_life_planner_reservation(preempted_actor, preempted_runtime, planner_state, preempted_target, {
+		"action_id": str(existing.get("action_id", "")),
+	}, {
+		"smart_object_id": str(existing.get("smart_object_id", "")),
+		"smart_object_kind": str(existing.get("smart_object_kind", "")),
+		"target_grid": _dictionary_or_empty(existing.get("target_grid", {})).duplicate(true),
+	}, {
+		"smart_object_id": str(existing.get("smart_object_id", "")),
+		"smart_object_kind": str(existing.get("smart_object_kind", "")),
+		"target_grid": _dictionary_or_empty(existing.get("target_grid", {})).duplicate(true),
+	}, "reservation_preempted")
+	var planner_runtime: Dictionary = _dictionary_or_empty(preempted_runtime.get("planner", {})).duplicate(true)
+	var replan_request := {
+		"actor_id": preempted_actor.actor_id,
+		"definition_id": preempted_actor.definition_id,
+		"goal_id": str(planner_runtime.get("goal_id", "")),
+		"action_id": str(planner_runtime.get("action_id", existing.get("action_id", ""))),
+		"intent": "reservation",
+		"reason": "reservation_preempted",
+		"world_time": world_time.duplicate(true),
+		"reservation_target": preempted_target,
+		"smart_object_id": str(existing.get("smart_object_id", "")),
+		"preempted_by_actor_id": requester.actor_id,
+		"preempted_by_definition_id": requester.definition_id,
+		"requester_action_id": str(action.get("action_id", intent.get("planner_action_id", ""))),
+		"request_priority": _life_reservation_priority(action, intent, result),
+		"preempted_priority": float(existing.get("reservation_priority", preemption.get("preempted_priority", 0.0))),
+	}
+	planner_runtime["replan_requested"] = true
+	planner_runtime["replan_request"] = replan_request.duplicate(true)
+	preempted_runtime["planner"] = planner_runtime
+	preempted_runtime["planner_state"] = planner_state
+	_set_life_runtime(preempted_actor, preempted_runtime)
+	_emit("settlement_life_planner_replan_requested", replan_request.duplicate(true))
+	var event := release.duplicate(true)
+	event["preempted_by_actor_id"] = requester.actor_id
+	event["preempted_by_definition_id"] = requester.definition_id
+	event["requester_action_id"] = str(action.get("action_id", intent.get("planner_action_id", "")))
+	event["request_priority"] = _life_reservation_priority(action, intent, result)
+	event["preempted_priority"] = float(existing.get("reservation_priority", preemption.get("preempted_priority", 0.0)))
+	_emit("settlement_life_reservation_preempted", event.duplicate(true))
+	return event
+
+
+func _life_reservation_priority(action: Dictionary, intent: Dictionary, result: Dictionary = {}) -> float:
+	if result.has("reservation_priority"):
+		return float(result.get("reservation_priority", 0.0))
+	if intent.has("reservation_priority"):
+		return float(intent.get("reservation_priority", 0.0))
+	return float(action.get("reservation_priority", 0.0))
+
+
+func _life_reservation_preemptible(action: Dictionary, intent: Dictionary, result: Dictionary = {}) -> bool:
+	if result.has("reservation_preemptible"):
+		return bool(result.get("reservation_preemptible", true))
+	if intent.has("reservation_preemptible"):
+		return bool(intent.get("reservation_preemptible", true))
+	return bool(action.get("reservation_preemptible", true))
 
 
 func _release_life_planner_reservation(actor: RefCounted, runtime: Dictionary, planner_state: Dictionary, reservation_target: String, action: Dictionary, intent: Dictionary, result: Dictionary, reason: String) -> Dictionary:
@@ -5202,6 +5313,13 @@ func _attach_life_smart_object_summary(intent: Dictionary, result: Dictionary) -
 	result["smart_object_id"] = str(intent.get("smart_object_id", ""))
 	result["smart_object_kind"] = str(intent.get("smart_object_kind", ""))
 	result["smart_object_tags"] = _array_or_empty(intent.get("smart_object_tags", [])).duplicate(true)
+	if intent.has("reservation_priority"):
+		result["reservation_priority"] = float(intent.get("reservation_priority", 0.0))
+	if intent.has("reservation_preemptible"):
+		result["reservation_preemptible"] = bool(intent.get("reservation_preemptible", true))
+	var preemption: Dictionary = _dictionary_or_empty(intent.get("reservation_preemption", {}))
+	if not preemption.is_empty():
+		result["reservation_preemption"] = preemption.duplicate(true)
 
 
 func _apply_life_arrival_effect(actor: RefCounted, intent: Dictionary, result: Dictionary) -> void:
@@ -5216,6 +5334,13 @@ func _apply_life_arrival_effect(actor: RefCounted, intent: Dictionary, result: D
 	result["smart_object_id"] = smart_object_id
 	result["smart_object_kind"] = smart_object_kind
 	result["smart_object_tags"] = _array_or_empty(intent.get("smart_object_tags", [])).duplicate(true)
+	if intent.has("reservation_priority"):
+		result["reservation_priority"] = float(intent.get("reservation_priority", 0.0))
+	if intent.has("reservation_preemptible"):
+		result["reservation_preemptible"] = bool(intent.get("reservation_preemptible", true))
+	var preemption: Dictionary = _dictionary_or_empty(intent.get("reservation_preemption", {}))
+	if not preemption.is_empty():
+		result["reservation_preemption"] = preemption.duplicate(true)
 	result["life_need_change"] = need_change
 	_emit("settlement_life_smart_object_used", {
 		"actor_id": actor.actor_id,

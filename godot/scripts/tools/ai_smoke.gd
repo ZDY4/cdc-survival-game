@@ -376,6 +376,7 @@ func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[
 	errors.append_array(_expect_settlement_life_failure_replan(registry))
 	errors.append_array(_expect_settlement_life_reservation_expiry(registry))
 	errors.append_array(_expect_settlement_life_reservation_conflict(registry))
+	errors.append_array(_expect_settlement_life_reservation_preemption(registry))
 	return errors
 
 
@@ -475,6 +476,8 @@ func _expect_settlement_life_reservation_conflict(registry: RefCounted) -> Array
 				"reservation_ttl_minutes": 60,
 				"expires_world_time": {"day": "monday", "minute_of_day": 420},
 				"target_grid": {"x": 10, "y": 0, "z": 20},
+				"reservation_priority": 999.0,
+				"reservation_preemptible": false,
 			}
 		}
 	}
@@ -499,6 +502,114 @@ func _expect_settlement_life_reservation_conflict(registry: RefCounted) -> Array
 	if not reservation_counts.is_empty():
 		errors.append("settlement GOAP intent should not leak raw reservation context into public intent, got %s" % reservation_counts)
 	return errors
+
+
+func _expect_settlement_life_reservation_preemption(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 720}
+	var hungry_cook_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(10, 0, 20), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var hungry_cook: RefCounted = simulation.actor_registry.get_actor(hungry_cook_id)
+	hungry_cook.life["duty_route_id"] = ""
+	hungry_cook.life["runtime"] = {
+		"needs": {
+			"hunger": {"current": 10.0, "max": 100.0},
+			"energy": {"current": 80.0, "max": 100.0},
+			"morale": {"current": 60.0, "max": 100.0},
+		}
+	}
+	var low_cook_holder_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(30, 0, 20), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var low_cook_holder: RefCounted = simulation.actor_registry.get_actor(low_cook_holder_id)
+	low_cook_holder.life["runtime"] = _reserved_meal_runtime(low_cook_holder, "canteen_seat_cook_01", {"x": 10, "y": 0, "z": 20}, 100.0, true)
+	var low_meal_holder_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(31, 0, 20), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var low_meal_holder: RefCounted = simulation.actor_registry.get_actor(low_meal_holder_id)
+	low_meal_holder.life["runtime"] = _reserved_meal_runtime(low_meal_holder, "canteen_seat_01", {"x": 9, "y": 0, "z": 20}, 100.0, true)
+	var intent: Dictionary = simulation.decide_actor_intent(hungry_cook_id, {"topology": _open_settlement_topology()})
+	var intent_preemption: Dictionary = _dictionary_or_empty(intent.get("reservation_preemption", {}))
+	if str(intent.get("smart_object_id", "")) != "canteen_seat_cook_01" or int(intent_preemption.get("actor_id", 0)) != low_cook_holder_id:
+		errors.append("high-priority life reservation should preempt lower-priority cook seat claim, got %s" % intent)
+	if float(intent.get("reservation_priority", 0.0)) <= float(intent_preemption.get("preempted_priority", 9999.0)):
+		errors.append("preempting intent should expose higher reservation priority, got %s" % intent)
+	var results: Array = simulation.advance_world_turn(_open_settlement_topology())
+	var result: Dictionary = _npc_result_for_actor(results, hungry_cook_id)
+	var result_preemption: Dictionary = _dictionary_or_empty(result.get("reservation_preemption", {}))
+	if int(result_preemption.get("actor_id", 0)) != low_cook_holder_id:
+		errors.append("preempting world turn result should retain preemption summary, got %s" % result)
+	var hungry_runtime: Dictionary = _life_runtime_for_actor(simulation, hungry_cook_id)
+	var new_reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(hungry_runtime.get("reservations", {})).get("meal_object", {}))
+	if str(new_reservation.get("smart_object_id", "")) != "canteen_seat_cook_01" or float(new_reservation.get("reservation_priority", 0.0)) <= 100.0:
+		errors.append("preempting actor should reserve preempted smart object with priority, got %s" % new_reservation)
+	if _dictionary_or_empty(new_reservation.get("preempted_reservation", {})).is_empty():
+		errors.append("new reservation should reference preempted reservation, got %s" % new_reservation)
+	var preempted_runtime: Dictionary = _life_runtime_for_actor(simulation, low_cook_holder_id)
+	var preempted_reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(preempted_runtime.get("reservations", {})).get("meal_object", {}))
+	if bool(preempted_reservation.get("active", true)) or str(preempted_reservation.get("release_reason", "")) != "reservation_preempted":
+		errors.append("preempted reservation should be released with reservation_preempted, got %s" % preempted_reservation)
+	var replan_event: Dictionary = _last_event_payload_for_actor(simulation.snapshot(), "settlement_life_planner_replan_requested", low_cook_holder_id)
+	if str(replan_event.get("reason", "")) != "reservation_preempted":
+		errors.append("preempted actor should emit reservation_preempted replan request, got %s" % replan_event)
+	var preempt_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_reservation_preempted")
+	if int(preempt_event.get("actor_id", 0)) != low_cook_holder_id or int(preempt_event.get("preempted_by_actor_id", 0)) != hungry_cook_id:
+		errors.append("settlement_life_reservation_preempted should expose both actors, got %s" % preempt_event)
+	var release_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_reservation_released")
+	if int(release_event.get("actor_id", 0)) != low_cook_holder_id or str(release_event.get("release_reason", "")) != "reservation_preempted":
+		errors.append("reservation release event should expose preemption release, got %s" % release_event)
+	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	restored.load_snapshot(simulation.snapshot())
+	var restored_reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(_life_runtime_for_actor(restored, hungry_cook_id).get("reservations", {})).get("meal_object", {}))
+	if str(restored_reservation.get("smart_object_id", "")) != "canteen_seat_cook_01" or float(restored_reservation.get("reservation_priority", 0.0)) <= 100.0:
+		errors.append("preempting reservation priority should roundtrip through actor life snapshot, got %s" % restored_reservation)
+	var restored_preempted: Dictionary = _dictionary_or_empty(_dictionary_or_empty(_life_runtime_for_actor(restored, low_cook_holder_id).get("reservations", {})).get("meal_object", {}))
+	if str(restored_preempted.get("release_reason", "")) != "reservation_preempted":
+		errors.append("preempted reservation release should roundtrip through actor life snapshot, got %s" % restored_preempted)
+	var claims: Dictionary = _dictionary_or_empty(simulation.decide_actor_intent(low_meal_holder_id, {}).get("life_reservation_claims_by_smart_object", {}))
+	if not claims.is_empty():
+		errors.append("public intent should not leak raw reservation claims context, got %s" % claims)
+	return errors
+
+
+func _reserved_meal_runtime(actor: RefCounted, smart_object_id: String, target_grid: Dictionary, priority: float, preemptible: bool) -> Dictionary:
+	return {
+		"meal_object_reserved": true,
+		"planner_state": {
+			"has_reserved_meal_seat": true,
+			"reservation.meal_object.active": true,
+		},
+		"planner": {
+			"goal_id": "idle_safely",
+			"goal_score": priority,
+			"action_id": "travel_to_canteen",
+			"queue_complete": false,
+		},
+		"reservations": {
+			"meal_object": {
+				"active": true,
+				"phase": "reserved",
+				"reservation_target": "meal_object",
+				"smart_object_id": smart_object_id,
+				"smart_object_kind": "canteen_seat",
+				"action_id": "travel_to_canteen",
+				"actor_id": actor.actor_id,
+				"definition_id": actor.definition_id,
+				"world_time": {"day": "monday", "minute_of_day": 720},
+				"created_total_minutes": 720,
+				"reservation_ttl_minutes": 60,
+				"expires_world_time": {"day": "monday", "minute_of_day": 780},
+				"target_grid": target_grid.duplicate(true),
+				"reservation_priority": priority,
+				"reservation_preemptible": preemptible,
+			}
+		}
+	}
 
 
 func _expect_settlement_life_reservation_expiry(registry: RefCounted) -> Array[String]:

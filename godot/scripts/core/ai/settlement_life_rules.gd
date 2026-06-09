@@ -75,20 +75,23 @@ func _planned_life_intent(actor: RefCounted, life: Dictionary, settlement: Dicti
 		if action_result.is_empty():
 			continue
 		var action: Dictionary = _dictionary_or_empty(action_result.get("action", {}))
-		var intent: Dictionary = _intent_for_planner_action(actor, life, settlement, ai_library, action, schedule_block, context)
+		var goal_score := float(scored_goal.get("score", 0.0))
+		var action_for_intent: Dictionary = _action_with_reservation_priority(action, goal_score)
+		var intent: Dictionary = _intent_for_planner_action(actor, life, settlement, ai_library, action_for_intent, schedule_block, context)
 		if intent.is_empty():
 			continue
+		var action_queue: Array = _action_queue_with_reservation_priority(_array_or_empty(action_result.get("action_queue", [])), goal_score)
 		var planner_summary: Dictionary = {
 			"goal_id": str(goal.get("id", "")),
-			"goal_score": float(scored_goal.get("score", 0.0)),
+			"goal_score": goal_score,
 			"score_rule_ids": _array_or_empty(scored_goal.get("score_rule_ids", [])).duplicate(true),
 			"action_id": str(action.get("id", "")),
 			"action_cost": float(action.get("planner_cost", 0.0)),
 			"action_reason": str(action_result.get("reason", "")),
-			"action_queue": _array_or_empty(action_result.get("action_queue", [])).duplicate(true),
-			"queue_length": _array_or_empty(action_result.get("action_queue", [])).size(),
+			"action_queue": action_queue,
+			"queue_length": action_queue.size(),
 			"current_action_index": 0,
-			"queue_remaining": _array_or_empty(action_result.get("action_queue", [])).size(),
+			"queue_remaining": action_queue.size(),
 			"queue_complete": false,
 			"requirements": requirements.duplicate(true),
 			"unmet_requirements": _unmet_assignments(requirements, state),
@@ -122,7 +125,9 @@ func _queued_life_intent(actor: RefCounted, life: Dictionary, settlement: Dictio
 	var action: Dictionary = _dictionary_or_empty(_dictionary_or_empty(planner_data.get("actions", {})).get(queued_action_id, {}))
 	if action.is_empty() or not _assignments_satisfied(_array_or_empty(action.get("preconditions", [])), state):
 		return {}
-	var intent: Dictionary = _intent_for_planner_action(actor, life, settlement, ai_library, action, schedule_block, context)
+	var goal_score := float(runtime_planner.get("goal_score", 0.0))
+	var action_for_intent: Dictionary = _action_with_reservation_priority(action, goal_score)
+	var intent: Dictionary = _intent_for_planner_action(actor, life, settlement, ai_library, action_for_intent, schedule_block, context)
 	if intent.is_empty():
 		return {}
 	var planner_summary: Dictionary = runtime_planner.duplicate(true)
@@ -320,7 +325,7 @@ func _select_goal_action(requirements: Array, action_ids: Array, planner_data: D
 
 
 func _planner_action_summary(action: Dictionary) -> Dictionary:
-	return {
+	var summary := {
 		"action_id": str(action.get("id", "")),
 		"executor_binding_id": str(action.get("executor_binding_id", "")),
 		"planner_cost": float(action.get("planner_cost", 0.0)),
@@ -333,6 +338,34 @@ func _planner_action_summary(action: Dictionary) -> Dictionary:
 		"perform_minutes": int(action.get("perform_minutes", 0)),
 		"reservation_ttl_minutes": int(action.get("reservation_ttl_minutes", 0)),
 	}
+	if not str(summary.get("reservation_target", "")).is_empty():
+		summary["reservation_priority"] = float(action.get("reservation_priority", 0.0))
+		summary["reservation_preemptible"] = bool(action.get("reservation_preemptible", true))
+	return summary
+
+
+func _action_with_reservation_priority(action: Dictionary, goal_score: float) -> Dictionary:
+	var output: Dictionary = action.duplicate(true)
+	if str(output.get("reservation_target", "")).is_empty():
+		return output
+	if not output.has("reservation_priority"):
+		output["reservation_priority"] = goal_score
+	if not output.has("reservation_preemptible"):
+		output["reservation_preemptible"] = true
+	return output
+
+
+func _action_queue_with_reservation_priority(queue: Array, goal_score: float) -> Array:
+	var output: Array = []
+	for entry in queue:
+		var entry_data: Dictionary = _dictionary_or_empty(entry).duplicate(true)
+		if not str(entry_data.get("reservation_target", "")).is_empty():
+			if not entry_data.has("reservation_priority") or float(entry_data.get("reservation_priority", 0.0)) <= 0.0:
+				entry_data["reservation_priority"] = goal_score
+			if not entry_data.has("reservation_preemptible"):
+				entry_data["reservation_preemptible"] = true
+		output.append(entry_data)
+	return output
 
 
 func _support_action_for_preconditions(action: Dictionary, action_ids: Array, actions: Dictionary, state: Dictionary) -> Dictionary:
@@ -401,19 +434,27 @@ func _smart_object_intent_for_action(base: Dictionary, life: Dictionary, settlem
 	var smart_object: Dictionary = _smart_object_for_action(life, settlement, ai_library, action, context)
 	if smart_object.is_empty():
 		return {}
-	return base.merged({
+	var intent := base.merged({
 		"intent": "use_smart_object",
 		"smart_object_id": str(smart_object.get("id", "")),
 		"smart_object_kind": str(smart_object.get("kind", "")),
 		"smart_object_tags": _array_or_empty(smart_object.get("tags", [])).duplicate(true),
 		"target_grid": _anchor_grid(settlement, str(smart_object.get("anchor_id", ""))),
 	}, true)
+	var preemption: Dictionary = _dictionary_or_empty(smart_object.get("_reservation_preemption", {}))
+	if not preemption.is_empty():
+		preemption["requester_actor_id"] = int(base.get("actor_id", 0))
+		preemption["requester_action_id"] = str(action.get("id", ""))
+		intent["reservation_preemption"] = preemption.duplicate(true)
+	intent["reservation_priority"] = float(action.get("reservation_priority", 0.0))
+	intent["reservation_preemptible"] = bool(action.get("reservation_preemptible", true))
+	return intent
 
 
 func _alarm_intent_for_action(base: Dictionary, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary, context: Dictionary) -> Dictionary:
 	if str(action.get("target_anchor", "")) != "alarm":
 		return _smart_object_intent_for_action(base, life, settlement, ai_library, action, context)
-	var smart_object: Dictionary = _smart_object_for_kind(life, settlement, ai_library, "alarm_point", "", context)
+	var smart_object: Dictionary = _smart_object_for_kind(life, settlement, ai_library, "alarm_point", "", {}, context)
 	if smart_object.is_empty():
 		return _travel_intent_for_action(base, life, settlement, action)
 	return base.merged({
@@ -501,13 +542,13 @@ func _smart_object_for_action(life: Dictionary, settlement: Dictionary, ai_libra
 	var desired_kind := _reservation_target_kind(reservation_target, target_anchor_kind)
 	var desired_tag := _reservation_target_tag(reservation_target, target_anchor_kind)
 	if not desired_kind.is_empty():
-		var smart_object: Dictionary = _smart_object_for_kind(life, settlement, ai_library, desired_kind, desired_tag, context)
+		var smart_object: Dictionary = _smart_object_for_kind(life, settlement, ai_library, desired_kind, desired_tag, action, context)
 		if not smart_object.is_empty():
 			return smart_object
 	return _first_accessible_smart_object(life, settlement, ai_library, context)
 
 
-func _smart_object_for_kind(life: Dictionary, settlement: Dictionary, ai_library: Dictionary, kind: String, desired_tag: String, context: Dictionary) -> Dictionary:
+func _smart_object_for_kind(life: Dictionary, settlement: Dictionary, ai_library: Dictionary, kind: String, desired_tag: String, action: Dictionary, context: Dictionary) -> Dictionary:
 	var access_profile_id: String = str(life.get("smart_object_access_profile_id", ""))
 	var fallback: Dictionary = {}
 	for profile in _ai_collection(ai_library, "smart_object_access_profiles"):
@@ -527,14 +568,15 @@ func _smart_object_for_kind(life: Dictionary, settlement: Dictionary, ai_library
 				var object_data: Dictionary = _dictionary_or_empty(smart_object)
 				if str(object_data.get("kind", "")) != kind:
 					continue
-				if not _smart_object_has_reservation_capacity(object_data, context):
+				var availability: Dictionary = _smart_object_reservation_availability(object_data, action, context)
+				if not bool(availability.get("available", false)):
 					continue
 				if fallback.is_empty():
-					fallback = object_data
+					fallback = _smart_object_with_preemption(object_data, availability)
 				var score := _tag_match_score(_array_or_empty(object_data.get("tags", [])), preferred_tags)
 				if score > best_score:
 					best_score = score
-					best_object = object_data
+					best_object = _smart_object_with_preemption(object_data, availability)
 			if not best_object.is_empty():
 				return best_object
 	return fallback
@@ -588,6 +630,61 @@ func _smart_object_has_reservation_capacity(smart_object: Dictionary, context: D
 	var reserved_count := int(reservation_counts.get(object_id, 0))
 	var capacity: int = max(1, int(smart_object.get("capacity", 1)))
 	return reserved_count < capacity
+
+
+func _smart_object_reservation_availability(smart_object: Dictionary, action: Dictionary, context: Dictionary) -> Dictionary:
+	var object_id := str(smart_object.get("id", ""))
+	if object_id.is_empty():
+		return {"available": true}
+	var reservation_counts: Dictionary = _dictionary_or_empty(context.get("life_reservations_by_smart_object", {}))
+	var reserved_count := int(reservation_counts.get(object_id, 0))
+	var capacity: int = max(1, int(smart_object.get("capacity", 1)))
+	if reserved_count < capacity:
+		return {"available": true, "reserved_count": reserved_count, "capacity": capacity}
+	var preemption: Dictionary = _reservation_preemption_candidate(object_id, action, context)
+	if preemption.is_empty():
+		return {"available": false, "reserved_count": reserved_count, "capacity": capacity}
+	return {
+		"available": true,
+		"reserved_count": reserved_count,
+		"capacity": capacity,
+		"reservation_preemption": preemption,
+	}
+
+
+func _reservation_preemption_candidate(smart_object_id: String, action: Dictionary, context: Dictionary) -> Dictionary:
+	var request_priority := float(action.get("reservation_priority", 0.0))
+	if request_priority <= 0.0:
+		return {}
+	var claims_by_object: Dictionary = _dictionary_or_empty(context.get("life_reservation_claims_by_smart_object", {}))
+	var claims: Array = _array_or_empty(claims_by_object.get(smart_object_id, []))
+	var best: Dictionary = {}
+	var best_priority := INF
+	for claim in claims:
+		var claim_data: Dictionary = _dictionary_or_empty(claim)
+		if claim_data.is_empty() or not bool(claim_data.get("preemptible", true)):
+			continue
+		var priority := float(claim_data.get("priority", 0.0))
+		if request_priority <= priority + 0.001:
+			continue
+		if priority < best_priority:
+			best_priority = priority
+			best = claim_data
+	if best.is_empty():
+		return {}
+	var output: Dictionary = best.duplicate(true)
+	output["smart_object_id"] = smart_object_id
+	output["request_priority"] = request_priority
+	output["preempted_priority"] = best_priority
+	return output
+
+
+func _smart_object_with_preemption(smart_object: Dictionary, availability: Dictionary) -> Dictionary:
+	var output: Dictionary = smart_object.duplicate(true)
+	var preemption: Dictionary = _dictionary_or_empty(availability.get("reservation_preemption", {}))
+	if not preemption.is_empty():
+		output["_reservation_preemption"] = preemption.duplicate(true)
+	return output
 
 
 func _target_anchor_for_action(life: Dictionary, settlement: Dictionary, action: Dictionary) -> String:
