@@ -404,6 +404,49 @@ func _expect_hostile_auto_open_door(registry: RefCounted) -> Array[String]:
 			errors.append("failed hostile approach should include path_unreachable attempt diagnostics: %s" % attempts)
 		elif int(blocked_attempt.get("visited_cell_count", 0)) <= 0 or _dictionary_or_empty(blocked_attempt.get("goal", {})).is_empty():
 			errors.append("failed hostile approach attempt should expose goal and visited cell count: %s" % blocked_attempt)
+
+	var keyed_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var keyed_player: RefCounted = keyed_simulation.actor_registry.get_actor(1)
+	keyed_player.grid_position = GridCoord.new(3, 0, 0)
+	_move_non_player_actors_out_of_test_lane(keyed_simulation)
+	var keyed_zombie_id: int = _register_character(keyed_simulation, registry, "zombie_walker", GridCoord.new(0, 0, 0), {
+		"ai": {"aggro_range": 10.0, "attack_range": 1.0},
+		"inventory": {"1138": 1},
+	})
+	keyed_simulation.configure_map_interactions({
+		"ai_smoke_door": _door_target("ai_smoke_door", false, true, {"required_item_ids": ["1138"]}),
+	})
+	var keyed_result: Array = keyed_simulation.advance_world_turn(_door_test_topology(true, {"required_item_ids": ["1138"]}))
+	if not _npc_results_include_intent(keyed_result, keyed_zombie_id, "approach"):
+		errors.append("hostile with required key should approach through locked door")
+	var keyed_zombie: RefCounted = keyed_simulation.actor_registry.get_actor(keyed_zombie_id)
+	if keyed_zombie == null or keyed_zombie.grid_position.x != 1:
+		errors.append("hostile with required key should step onto opened door cell")
+	if not bool(_dictionary_or_empty(keyed_simulation.door_states.get("ai_smoke_door", {})).get("is_open", false)):
+		errors.append("hostile keyed auto-open should persist door open state")
+	var keyed_payload: Dictionary = _last_event_payload(keyed_simulation.snapshot(), "door_auto_opened")
+	if int(keyed_payload.get("actor_id", 0)) != keyed_zombie_id:
+		errors.append("keyed hostile door_auto_opened should include actor id")
+
+	var tool_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var tool_player: RefCounted = tool_simulation.actor_registry.get_actor(1)
+	tool_player.grid_position = GridCoord.new(3, 0, 0)
+	_move_non_player_actors_out_of_test_lane(tool_simulation)
+	var tool_zombie_id: int = _register_character(tool_simulation, registry, "zombie_walker", GridCoord.new(0, 0, 0), {
+		"ai": {"aggro_range": 10.0, "attack_range": 1.0},
+		"inventory": {"1150": 1},
+	})
+	tool_simulation.configure_map_interactions({
+		"ai_smoke_door": _door_target("ai_smoke_door", false, true, {"required_tool_ids": ["1150"]}),
+	})
+	var tool_result: Array = tool_simulation.advance_world_turn(_door_test_topology(true, {"required_tool_ids": ["1150"]}))
+	if not _npc_results_include_intent(tool_result, tool_zombie_id, "approach"):
+		errors.append("hostile with required tool should approach through locked door")
+	var tool_zombie: RefCounted = tool_simulation.actor_registry.get_actor(tool_zombie_id)
+	if tool_zombie == null or tool_zombie.grid_position.x != 1:
+		errors.append("hostile with required tool should step onto opened door cell")
+	if not bool(_dictionary_or_empty(tool_simulation.door_states.get("ai_smoke_door", {})).get("is_open", false)):
+		errors.append("hostile tool auto-open should persist door open state")
 	return errors
 
 
@@ -422,7 +465,7 @@ func _isolated_ai_simulation(registry: RefCounted, player_grid: RefCounted) -> R
 	return simulation
 
 
-func _door_test_topology(locked: bool) -> Dictionary:
+func _door_test_topology(locked: bool, extra_door: Dictionary = {}) -> Dictionary:
 	return {
 		"bounds": {
 			"min_x": 0,
@@ -434,7 +477,7 @@ func _door_test_topology(locked: bool) -> Dictionary:
 			"1:0:0": "ai_smoke_door",
 		},
 		"sight_blocking_cells": {},
-		"door_objects": [_door_summary("ai_smoke_door", false, locked)],
+		"door_objects": [_door_summary("ai_smoke_door", false, locked, extra_door)],
 	}
 
 
@@ -475,8 +518,8 @@ func _line_test_topology(max_x: int) -> Dictionary:
 	}
 
 
-func _door_target(target_id: String, is_open: bool, locked: bool) -> Dictionary:
-	var door: Dictionary = _door_summary(target_id, is_open, locked)
+func _door_target(target_id: String, is_open: bool, locked: bool, extra_door: Dictionary = {}) -> Dictionary:
+	var door: Dictionary = _door_summary(target_id, is_open, locked, extra_door)
 	return {
 		"target_id": target_id,
 		"target_type": "map_object",
@@ -488,8 +531,8 @@ func _door_target(target_id: String, is_open: bool, locked: bool) -> Dictionary:
 	}
 
 
-func _door_summary(target_id: String, is_open: bool, locked: bool) -> Dictionary:
-	return {
+func _door_summary(target_id: String, is_open: bool, locked: bool, extra_door: Dictionary = {}) -> Dictionary:
+	var door := {
 		"door_id": target_id,
 		"object_id": target_id,
 		"display_name": "AI 测试门",
@@ -501,6 +544,9 @@ func _door_summary(target_id: String, is_open: bool, locked: bool) -> Dictionary
 		"blocks_sight": false,
 		"blocks_sight_when_closed": false,
 	}
+	for key in extra_door.keys():
+		door[key] = extra_door[key]
+	return door
 
 
 func _register_character(simulation: RefCounted, registry: RefCounted, definition_id: String, grid: RefCounted, overrides: Dictionary = {}) -> int:
