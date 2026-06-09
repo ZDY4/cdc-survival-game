@@ -160,6 +160,7 @@ func _ready() -> void:
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
 	_setup_audio_feedback_controller()
+	_configure_runtime_audio_layers()
 	_setup_panels()
 	_setup_tooltip_layer()
 	_setup_drag_preview_layer()
@@ -1528,6 +1529,12 @@ func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dic
 	return _play_ui_audio_feedback(event_kind, payload)
 
 
+func play_spatial_audio_feedback(event_kind: String, payload: Dictionary = {}, position: Vector3 = Vector3.ZERO) -> Dictionary:
+	if audio_feedback_controller == null or not audio_feedback_controller.has_method("play_spatial_feedback"):
+		return {"enabled": false, "reason": "audio_feedback_missing"}
+	return _dictionary_or_empty(audio_feedback_controller.call("play_spatial_feedback", event_kind, payload, position))
+
+
 func _play_hud_shortcut_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
 	var payload := {
 		"audio_source": "ui",
@@ -2280,8 +2287,9 @@ func _drag_hover_highlight(active: bool, target_kind: String, target_id: String,
 	}
 
 
-func settings_applied(_snapshot: Dictionary = {}) -> void:
-	pass
+func settings_applied(snapshot: Dictionary = {}) -> void:
+	if audio_feedback_controller != null and audio_feedback_controller.has_method("apply_settings_snapshot"):
+		audio_feedback_controller.call("apply_settings_snapshot", snapshot)
 
 
 func current_map_level() -> int:
@@ -3784,6 +3792,7 @@ func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}, comma
 	_setup_runtime_input_controller()
 	_refresh_fog_overlay()
 	_refresh_debug_overlay()
+	_configure_runtime_audio_layers()
 	_setup_panels()
 	refresh_all_panels(selected_prompt)
 
@@ -3840,6 +3849,13 @@ func _setup_audio_feedback_controller() -> void:
 	audio_feedback_controller = AudioFeedbackController.new()
 	audio_feedback_controller.name = "AudioFeedbackController"
 	add_child(audio_feedback_controller)
+
+
+func _configure_runtime_audio_layers() -> void:
+	if audio_feedback_controller == null or simulation == null:
+		return
+	if audio_feedback_controller.has_method("configure_runtime_audio"):
+		audio_feedback_controller.call("configure_runtime_audio", simulation.snapshot(), world_result)
 
 
 func _process_audio_feedback() -> void:

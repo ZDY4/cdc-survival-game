@@ -1486,6 +1486,7 @@ func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
 		errors.append("audio feedback should resolve SFX bus index: %s" % initial)
 	if int(initial.get("mapped_event_count", 0)) <= 0 or int(initial.get("sound_profile_count", 0)) <= 0:
 		errors.append("audio feedback should expose mapped events and generated profiles: %s" % initial)
+	_assert_audio_mix_layers(errors, initial, "initial audio feedback")
 	var before_count := int(initial.get("triggered_count", 0))
 	var panel_open_result: Dictionary = game_root.toggle_stage_panel("inventory")
 	if not bool(panel_open_result.get("success", false)):
@@ -1583,6 +1584,22 @@ func _exercise_audio_feedback(errors: Array[String], game_root: Node) -> void:
 	var runtime_audio: Dictionary = _dictionary_or_empty(runtime.get("audio_feedback", {}))
 	if str(runtime_audio.get("last_sound_id", "")) != str(fallback.get("last_sound_id", "")):
 		errors.append("runtime control should expose latest audio feedback snapshot: %s" % runtime_audio)
+	var spatial_before := int(_dictionary_or_empty(fallback.get("spatial", {})).get("triggered_count", 0))
+	var spatial_result: Dictionary = _dictionary_or_empty(game_root.play_spatial_audio_feedback("attack_resolved", {
+		"damage": 0.0,
+		"range": 5,
+		"target_actor_id": 2,
+	}, Vector3(3.0, 0.0, 4.0)))
+	var spatial: Dictionary = _dictionary_or_empty(spatial_result.get("spatial", {}))
+	if int(spatial.get("triggered_count", 0)) <= spatial_before:
+		errors.append("spatial audio feedback should increment spatial trigger count: %s" % spatial_result)
+	if str(spatial.get("last_sound_id", "")) != "attack_ranged":
+		errors.append("spatial ranged attack should resolve ranged sound id: %s" % spatial)
+	if str(spatial.get("bus", "")) != "SFX" or int(spatial.get("bus_index", -1)) < 0:
+		errors.append("spatial audio should target SFX bus: %s" % spatial)
+	var last_position: Dictionary = _dictionary_or_empty(spatial.get("last_position", {}))
+	if not is_equal_approx(float(last_position.get("x", 0.0)), 3.0) or not is_equal_approx(float(last_position.get("z", 0.0)), 4.0):
+		errors.append("spatial audio should expose world position diagnostics: %s" % spatial)
 
 
 func _assert_recent_audio_event(errors: Array[String], snapshot: Dictionary, expected_event_kind: String, expected_sound_id: String, expected_source: String, expected_panel_id: String, context: String, expected_action: String = "", expected_control_kind: String = "", expected_control_name: String = "") -> void:
@@ -1603,6 +1620,28 @@ func _assert_recent_audio_event(errors: Array[String], snapshot: Dictionary, exp
 		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
 	if not expected_control_name.is_empty() and str(entry.get("control_name", "")) != expected_control_name:
 		errors.append("%s: recent audio control name expected %s, got %s" % [context, expected_control_name, entry.get("control_name", "")])
+
+
+func _assert_audio_mix_layers(errors: Array[String], snapshot: Dictionary, context: String) -> void:
+	var buses: Dictionary = _dictionary_or_empty(snapshot.get("buses", {}))
+	for bus_name in ["Master", "Music", "SFX"]:
+		var bus: Dictionary = _dictionary_or_empty(buses.get(bus_name, {}))
+		if not bool(bus.get("exists", false)) or int(bus.get("index", -1)) < 0:
+			errors.append("%s: audio bus %s should exist: %s" % [context, bus_name, buses])
+	var layers: Dictionary = _dictionary_or_empty(snapshot.get("mix_layers", {}))
+	for layer_id in ["ui", "sfx", "music", "ambience", "spatial"]:
+		var layer: Dictionary = _dictionary_or_empty(layers.get(layer_id, {}))
+		if str(layer.get("bus", "")).is_empty() or not bool(layer.get("placeholder", false)):
+			errors.append("%s: audio mix layer %s should expose bus and placeholder state: %s" % [context, layer_id, layers])
+	var music: Dictionary = _dictionary_or_empty(snapshot.get("music", {}))
+	if not bool(music.get("active", false)) or str(music.get("bus", "")) != "Music" or str(music.get("track_id", "")).is_empty():
+		errors.append("%s: runtime music placeholder should be active on Music bus: %s" % [context, music])
+	var ambience: Dictionary = _dictionary_or_empty(snapshot.get("ambience", {}))
+	if not bool(ambience.get("active", false)) or str(ambience.get("bus", "")) != "SFX" or str(ambience.get("ambience_id", "")).is_empty():
+		errors.append("%s: runtime ambience placeholder should be active on SFX bus: %s" % [context, ambience])
+	var spatial: Dictionary = _dictionary_or_empty(snapshot.get("spatial", {}))
+	if str(spatial.get("bus", "")) != "SFX" or int(spatial.get("player_pool_size", 0)) <= 0:
+		errors.append("%s: spatial audio layer should expose SFX pool diagnostics: %s" % [context, spatial])
 
 
 func _assert_ai_debug_snapshot(errors: Array[String], game_root: Node, context: String) -> void:
@@ -2200,6 +2239,10 @@ func _exercise_settings_panel(errors: Array[String], game_root: Node) -> void:
 		errors.append("settings music volume should apply to audio bus: %s" % applied)
 	if not bool(_dictionary_or_empty(audio.get("SFX", {})).get("applied", false)):
 		errors.append("settings SFX volume should apply to audio bus: %s" % applied)
+	var audio_feedback: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	var audio_settings: Dictionary = _dictionary_or_empty(audio_feedback.get("settings", {}))
+	if int(audio_settings.get("music_volume", 0)) != 40 or int(audio_settings.get("sfx_volume", 0)) != 55:
+		errors.append("audio feedback layer should receive applied settings snapshot: %s" % audio_feedback)
 	var keybinding: Dictionary = _dictionary_or_empty(applied.get("keybinding", {}))
 	if not bool(keybinding.get("applied", false)) or str(keybinding.get("profile", "")) != "left_handed":
 		errors.append("settings keybinding profile should apply to runtime input: %s" % applied)
