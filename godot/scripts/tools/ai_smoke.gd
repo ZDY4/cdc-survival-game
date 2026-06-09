@@ -271,17 +271,29 @@ func _expect_settlement_life_queue_progression(registry: RefCounted) -> Array[St
 	var second_results: Array = simulation.advance_world_turn(_open_settlement_topology())
 	var second_result: Dictionary = _npc_result_for_actor(second_results, cook_id)
 	var second_runtime: Dictionary = _planner_runtime_for_actor(simulation, cook_id)
+	var second_life_runtime: Dictionary = _life_runtime_for_actor(simulation, cook_id)
 	var second_planner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(second_result.get("life_intent", {})).get("planner", {}))
 	if str(second_planner.get("action_reason", "")) != "queued_action" or str(second_planner.get("action_id", "")) != "restock_meal_service":
 		errors.append("settlement GOAP should reuse queued restock action on next turn, got %s" % second_planner)
 	if not bool(second_runtime.get("queue_complete", false)) or int(second_runtime.get("queue_remaining", -1)) != 0:
 		errors.append("settlement GOAP queue should complete after second queued action, got %s" % second_runtime)
+	var released_reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(second_life_runtime.get("reservations", {})).get("meal_object", {}))
+	if released_reservation.is_empty() or bool(released_reservation.get("active", true)):
+		errors.append("settlement GOAP queue completion should release meal object reservation, got %s" % second_life_runtime)
+	if bool(second_life_runtime.get("meal_object_reserved", true)):
+		errors.append("settlement GOAP released reservation should clear legacy meal_object_reserved flag")
+	var second_planner_state: Dictionary = _dictionary_or_empty(second_life_runtime.get("planner_state", {}))
+	if bool(second_planner_state.get("has_reserved_meal_seat", true)) or bool(second_planner_state.get("reservation.meal_object.active", true)):
+		errors.append("settlement GOAP released reservation should clear planner state reservation facts, got %s" % second_planner_state)
+	var release_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_reservation_released")
+	if int(release_event.get("actor_id", 0)) != cook_id or str(release_event.get("reservation_target", "")) != "meal_object":
+		errors.append("settlement_life_reservation_released should expose cook meal reservation release, got %s" % release_event)
 	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	restored.load_snapshot(simulation.snapshot())
 	var restored_life_runtime: Dictionary = _life_runtime_for_actor(restored, cook_id)
 	var restored_reservation: Dictionary = _dictionary_or_empty(_dictionary_or_empty(restored_life_runtime.get("reservations", {})).get("meal_object", {}))
-	if restored_reservation.is_empty() or str(restored_reservation.get("smart_object_id", "")) != "canteen_seat_cook_01":
-		errors.append("settlement GOAP reservation should roundtrip through actor life snapshot, got %s" % restored_life_runtime)
+	if restored_reservation.is_empty() or bool(restored_reservation.get("active", true)) or str(restored_reservation.get("smart_object_id", "")) != "canteen_seat_cook_01":
+		errors.append("settlement GOAP released reservation should roundtrip through actor life snapshot, got %s" % restored_life_runtime)
 	return errors
 
 

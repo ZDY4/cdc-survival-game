@@ -4325,10 +4325,11 @@ func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result:
 	var reservation_result: Dictionary = {}
 	if completed_current_action:
 		applied_effects = _apply_life_planner_action_effects(planner_state, _array_or_empty(completed_action.get("effects", [])))
-		reservation_result = _apply_life_planner_reservation(actor, runtime, planner_state, completed_action, intent, result)
 	var next_index: int = current_index + 1 if completed_current_action else current_index
 	next_index = clampi(next_index, 0, queue.size())
 	var queue_complete: bool = not queue.is_empty() and next_index >= queue.size()
+	if completed_current_action:
+		reservation_result = _record_life_planner_reservation_step(actor, runtime, planner_state, completed_action, intent, result, queue_complete)
 	execution["applied_effects"] = applied_effects.duplicate(true)
 	if not reservation_result.is_empty():
 		execution["reservation"] = reservation_result.duplicate(true)
@@ -4398,12 +4399,22 @@ func _apply_life_planner_action_effects(planner_state: Dictionary, effects: Arra
 	return applied
 
 
+func _record_life_planner_reservation_step(actor: RefCounted, runtime: Dictionary, planner_state: Dictionary, action: Dictionary, intent: Dictionary, result: Dictionary, queue_complete: bool) -> Dictionary:
+	var reservation_target := str(action.get("reservation_target", ""))
+	if reservation_target.is_empty():
+		return {}
+	if queue_complete:
+		return _release_life_planner_reservation(actor, runtime, planner_state, reservation_target, action, intent, result, "planner_queue_complete")
+	return _apply_life_planner_reservation(actor, runtime, planner_state, action, intent, result)
+
+
 func _apply_life_planner_reservation(actor: RefCounted, runtime: Dictionary, planner_state: Dictionary, action: Dictionary, intent: Dictionary, result: Dictionary) -> Dictionary:
 	var reservation_target := str(action.get("reservation_target", ""))
 	if reservation_target.is_empty():
 		return {}
 	var reservation: Dictionary = {
 		"active": true,
+		"phase": "reserved",
 		"reservation_target": reservation_target,
 		"smart_object_id": str(result.get("smart_object_id", intent.get("smart_object_id", ""))),
 		"smart_object_kind": str(result.get("smart_object_kind", intent.get("smart_object_kind", ""))),
@@ -4424,6 +4435,36 @@ func _apply_life_planner_reservation(actor: RefCounted, runtime: Dictionary, pla
 	if not fact_key.is_empty():
 		planner_state[fact_key] = true
 	_emit("settlement_life_reservation_updated", reservation.duplicate(true))
+	return reservation
+
+
+func _release_life_planner_reservation(actor: RefCounted, runtime: Dictionary, planner_state: Dictionary, reservation_target: String, action: Dictionary, intent: Dictionary, result: Dictionary, reason: String) -> Dictionary:
+	var reservations: Dictionary = _dictionary_or_empty(runtime.get("reservations", {})).duplicate(true)
+	var existing: Dictionary = _dictionary_or_empty(reservations.get(reservation_target, {})).duplicate(true)
+	var reservation: Dictionary = existing.duplicate(true)
+	reservation["active"] = false
+	reservation["phase"] = "released"
+	reservation["release_reason"] = reason
+	reservation["reservation_target"] = reservation_target
+	reservation["action_id"] = str(action.get("action_id", ""))
+	reservation["actor_id"] = actor.actor_id
+	reservation["definition_id"] = actor.definition_id
+	reservation["released_world_time"] = world_time.duplicate(true)
+	if reservation.get("smart_object_id", "") == "":
+		reservation["smart_object_id"] = str(result.get("smart_object_id", intent.get("smart_object_id", "")))
+	if reservation.get("smart_object_kind", "") == "":
+		reservation["smart_object_kind"] = str(result.get("smart_object_kind", intent.get("smart_object_kind", "")))
+	reservation["target_grid"] = _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true)
+	reservations[reservation_target] = reservation.duplicate(true)
+	runtime["reservations"] = reservations
+	var flag_key := _life_reservation_flag_key(reservation_target)
+	if not flag_key.is_empty():
+		runtime[flag_key] = false
+	planner_state["reservation.%s.active" % reservation_target] = false
+	var fact_key := _life_reservation_fact_key(reservation_target)
+	if not fact_key.is_empty():
+		planner_state[fact_key] = false
+	_emit("settlement_life_reservation_released", reservation.duplicate(true))
 	return reservation
 
 
