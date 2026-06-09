@@ -155,9 +155,11 @@ func _build_layout() -> void:
 	_use_button.pressed.connect(func() -> void:
 		if _selected_item.is_empty():
 			return
+		var item_id := str(_selected_item.get("item_id", ""))
 		var root := get_parent()
 		if root != null and root.has_method("use_player_item"):
-			root.use_player_item(str(_selected_item.get("item_id", "")))
+			root.use_player_item(item_id)
+			_play_inventory_control_audio("ui_button_pressed", "UseSelectedButton", "button", "use_item", {"item_id": item_id, "count": 1})
 	, CONNECT_DEFERRED)
 	_equip_button = _action_button("EquipSelectedButton", "装备", "装备选中的物品")
 	_equip_button.set_meta("inventory_action_target", "equip")
@@ -174,9 +176,11 @@ func _build_layout() -> void:
 		var slots: Array = _array_or_empty(_selected_item.get("equip_slots", []))
 		if slots.is_empty():
 			return
+		var item_id := str(_selected_item.get("item_id", ""))
 		var root := get_parent()
 		if root != null and root.has_method("equip_player_item"):
-			root.equip_player_item(str(_selected_item.get("item_id", "")), str(slots[0]))
+			root.equip_player_item(item_id, str(slots[0]))
+			_play_inventory_control_audio("ui_button_pressed", "EquipSelectedButton", "button", "equip_item", {"item_id": item_id, "slot_id": str(slots[0]), "count": 1})
 	, CONNECT_DEFERRED)
 	_drop_button = _action_button("DropSelectedButton", "丢弃", "丢弃选中的数量")
 	_drop_button.set_meta("inventory_action_target", "drop")
@@ -190,7 +194,9 @@ func _build_layout() -> void:
 	_drop_button.pressed.connect(func() -> void:
 		if _selected_item.is_empty():
 			return
-		_open_discard_dialog_for_item(_selected_item, int(_quantity_spin.value if _quantity_spin != null else 1))
+		var count := int(_quantity_spin.value if _quantity_spin != null else 1)
+		_open_discard_dialog_for_item(_selected_item, count)
+		_play_inventory_control_audio("ui_button_pressed", "DropSelectedButton", "button", "open_discard_confirm", {"item_id": str(_selected_item.get("item_id", "")), "count": count})
 	, CONNECT_DEFERRED)
 	_drop_zone = PanelContainer.new()
 	_drop_zone.name = "DropZone"
@@ -295,6 +301,7 @@ func _item_line(item: Dictionary) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
 		_apply_detail(item.duplicate(true))
+		_play_inventory_control_audio("ui_button_pressed", "Item_%s" % item.get("item_id", "unknown"), "item_row", "select_item", {"item_id": str(item.get("item_id", "")), "count": int(item.get("count", 0))})
 	)
 	button.gui_input.connect(func(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
@@ -812,6 +819,7 @@ func _confirm_pending_deconstruct_equipment() -> void:
 	var root := get_parent()
 	if root != null and root.has_method("deconstruct_player_item"):
 		root.deconstruct_player_item(item_id, count)
+		_play_inventory_control_audio("ui_button_pressed", "DeconstructEquipmentToolConfirmDialog", "dialog", "confirm_deconstruct", {"item_id": item_id, "count": count})
 
 
 func _cancel_pending_deconstruct_equipment() -> void:
@@ -864,6 +872,7 @@ func _confirm_pending_discard() -> void:
 	var root := get_parent()
 	if root != null and root.has_method("drop_player_item"):
 		root.drop_player_item(item_id, count)
+		_play_inventory_control_audio("ui_button_pressed", "DiscardConfirmDialog", "dialog", "confirm_discard", {"item_id": item_id, "count": count})
 
 
 func _build_discard_quantity_controls() -> void:
@@ -881,6 +890,7 @@ func _build_discard_quantity_controls() -> void:
 	_discard_quantity_input.text_changed.connect(func(_text: String) -> void:
 		_refresh_discard_dialog_text(_discard_quantity_value())
 		_clear_discard_quantity_error()
+		_play_inventory_control_audio("ui_slider_changed", "DiscardQuantityInput", "line_edit", "discard_quantity_text_changed", {"item_id": str(_pending_discard_item.get("item_id", "")), "count": _discard_quantity_value(), "value": _discard_quantity_input.text})
 	, CONNECT_DEFERRED)
 	_discard_quantity_input.text_submitted.connect(func(_text: String) -> void:
 		_confirm_pending_discard()
@@ -888,14 +898,17 @@ func _build_discard_quantity_controls() -> void:
 	_discard_minus_button = _action_button("DiscardQuantityMinusButton", "-", "减少 1")
 	_discard_minus_button.pressed.connect(func() -> void:
 		_adjust_discard_quantity(-1)
+		_play_inventory_control_audio("ui_button_pressed", "DiscardQuantityMinusButton", "button", "decrease_discard_quantity", {"item_id": str(_pending_discard_item.get("item_id", "")), "count": _discard_quantity_value()})
 	, CONNECT_DEFERRED)
 	_discard_plus_button = _action_button("DiscardQuantityPlusButton", "+", "增加 1")
 	_discard_plus_button.pressed.connect(func() -> void:
 		_adjust_discard_quantity(1)
+		_play_inventory_control_audio("ui_button_pressed", "DiscardQuantityPlusButton", "button", "increase_discard_quantity", {"item_id": str(_pending_discard_item.get("item_id", "")), "count": _discard_quantity_value()})
 	, CONNECT_DEFERRED)
 	_discard_max_button = _action_button("DiscardQuantityMaxButton", "最大", "设为最大数量")
 	_discard_max_button.pressed.connect(func() -> void:
 		_set_discard_quantity(_pending_discard_available)
+		_play_inventory_control_audio("ui_button_pressed", "DiscardQuantityMaxButton", "button", "max_discard_quantity", {"item_id": str(_pending_discard_item.get("item_id", "")), "count": _discard_quantity_value()})
 	, CONNECT_DEFERRED)
 	var row := HBoxContainer.new()
 	row.name = "DiscardQuantityControls"
@@ -1276,6 +1289,7 @@ func _add_filter_button(node_name: String, text: String, category: String) -> vo
 	var button := _toolbar_button(node_name, text, "显示%s物品" % text)
 	button.pressed.connect(func() -> void:
 		_category_filter = category
+		_play_inventory_control_audio("ui_button_pressed", node_name, "filter_button", "filter_category", {"filter_id": category})
 		if not _last_snapshot.is_empty():
 			apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
@@ -1286,6 +1300,7 @@ func _add_sort_button(node_name: String, text: String, mode: String) -> void:
 	var button := _toolbar_button(node_name, text, "按%s排序" % text)
 	button.pressed.connect(func() -> void:
 		_sort_mode = mode
+		_play_inventory_control_audio("ui_button_pressed", node_name, "sort_button", "sort_mode", {"sort_id": mode})
 		if not _last_snapshot.is_empty():
 			apply_snapshot(_last_snapshot)
 	, CONNECT_DEFERRED)
@@ -1355,6 +1370,22 @@ func _label(node_name: String) -> Label:
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _play_inventory_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "inventory",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
 
 
 func _clear_items() -> void:

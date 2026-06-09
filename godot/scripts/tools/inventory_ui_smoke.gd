@@ -98,6 +98,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_inventory_panel()
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should select bandage row before using item")
+	await process_frame
+	_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Item_1006", "item_row", "select_item", {"item_id": "1006", "count": "2"}, "bandage row select audio")
 	var use_button: Button = _use_button(game_root)
 	if use_button == null or use_button.disabled:
 		errors.append("selected consumable should enable use button")
@@ -359,6 +361,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_filter_button(game_root, "FilterEquipmentButton").pressed.emit()
 		await process_frame
+		_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "FilterEquipmentButton", "filter_button", "filter_category", {"filter_id": "equipment"}, "equipment filter audio")
 		var equipment_text: String = "\n".join(_item_lines(game_root))
 		if not equipment_text.contains("棒球棒 x1"):
 			errors.append("equipment filter should keep weapon rows")
@@ -369,6 +372,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_filter_button(game_root, "FilterAmmoButton").pressed.emit()
 		await process_frame
+		_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "FilterAmmoButton", "filter_button", "filter_category", {"filter_id": "ammo"}, "ammo filter audio")
 		var ammo_text: String = "\n".join(_item_lines(game_root))
 		if not ammo_text.contains("手枪弹药 x10"):
 			errors.append("ammo filter should keep ammo rows")
@@ -379,6 +383,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_filter_button(game_root, "FilterAllButton").pressed.emit()
 		await process_frame
+		_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "FilterAllButton", "filter_button", "filter_category", {"filter_id": "all"}, "all filter audio")
 		if not "\n".join(_item_lines(game_root)).contains("棒球棒 x1"):
 			errors.append("all filter should restore inventory rows")
 	if _sort_button(game_root, "SortValueButton") == null:
@@ -386,10 +391,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_sort_button(game_root, "SortValueButton").pressed.emit()
 		await process_frame
+		_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "SortValueButton", "sort_button", "sort_mode", {"sort_id": "value"}, "value sort audio")
 		if not _text_ordered("\n".join(_item_lines(game_root)), "棒球棒 x1", "手枪弹药 x10"):
 			errors.append("value sort should place higher value item before ammo")
 	if not _press_inventory_item_with_text(game_root, "手枪弹药"):
 		errors.append("should select ammo row for detail")
+	await process_frame
+	_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Item_1009", "item_row", "select_item", {"item_id": "1009", "count": "10"}, "ammo row select audio")
 	if not _detail_line(game_root).contains("弹药") or not _detail_line(game_root).contains("总价 50"):
 		errors.append("inventory detail should show selected item category and value")
 	player_ref.inventory["smoke_non_deconstructable_ui_item"] = 1
@@ -671,6 +679,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.refresh_inventory_panel()
 	if not _press_inventory_item_with_text(game_root, "绷带"):
 		errors.append("should select bandages before dropping through inventory panel")
+	await process_frame
+	_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Item_1006", "item_row", "select_item", {"item_id": "1006", "count": "3"}, "drop bandage row select audio")
 	var quantity_spin: SpinBox = _quantity_spin(game_root)
 	var drop_button: Button = _drop_button(game_root)
 	var discard_quantity_input: LineEdit = null
@@ -683,6 +693,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		drop_button.pressed.emit()
 		await process_frame
+		_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DropSelectedButton", "button", "open_discard_confirm", {"item_id": "1006", "count": "2"}, "drop selected button audio")
 		if not _discard_dialog_visible(game_root):
 			errors.append("drop button should open discard confirmation dialog")
 		discard_quantity_input = _discard_quantity_input(game_root)
@@ -713,15 +724,18 @@ func _run_checks(game_root: Node) -> Array[String]:
 				errors.append("invalid discard quantity should not mutate inventory")
 			_press_discard_quantity_button(game_root, "DiscardQuantityMaxButton")
 			await process_frame
+			_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DiscardQuantityMaxButton", "button", "max_discard_quantity", {"item_id": "1006", "count": "3"}, "discard max quantity audio")
 			if discard_quantity_input.text != "3":
 				errors.append("discard max button should use available inventory count")
 			_assert_discard_quantity_modal_details(errors, game_root, 3, 3, true, "", "discard max quantity")
 			_press_discard_quantity_button(game_root, "DiscardQuantityMinusButton")
 			await process_frame
+			_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DiscardQuantityMinusButton", "button", "decrease_discard_quantity", {"item_id": "1006", "count": "2"}, "discard minus quantity audio")
 			if discard_quantity_input.text != "2":
 				errors.append("discard minus button should decrease quantity")
 			_press_discard_quantity_button(game_root, "DiscardQuantityPlusButton")
 			await process_frame
+			_assert_inventory_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "DiscardQuantityPlusButton", "button", "increase_discard_quantity", {"item_id": "1006", "count": "3"}, "discard plus quantity audio")
 			if discard_quantity_input.text != "3":
 				errors.append("discard plus button should increase quantity")
 		var esc_discard_result: Dictionary = game_root.close_active_ui("keyboard_escape")
@@ -1376,6 +1390,34 @@ func _assert_drag_reject_reason_text(errors: Array[String], target_snapshot: Dic
 		errors.append("%s: rejected drag target should expose reject reason text: %s" % [context, target_snapshot])
 	if highlight_text != reason_text:
 		errors.append("%s: hover highlight should mirror reject reason text: %s / %s" % [context, target_snapshot, highlight])
+
+
+func _assert_inventory_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(snapshot.get("last_event_kind", "")) != expected_event_kind or str(snapshot.get("last_sound_id", "")) != expected_sound_id:
+		errors.append("%s: expected %s/%s audio feedback, got %s" % [context, expected_event_kind, expected_sound_id, snapshot])
+		return
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = _dictionary_or_empty(recent[recent.size() - 1])
+	if str(entry.get("audio_source", "")) != "ui" or str(entry.get("panel_id", "")) != "inventory":
+		errors.append("%s: recent audio source/panel mismatch: %s" % [context, entry])
+	if str(entry.get("event_kind", "")) != expected_event_kind or str(entry.get("sound_id", "")) != expected_sound_id:
+		errors.append("%s: recent audio event mismatch: %s" % [context, entry])
+	if str(entry.get("control_name", "")) != expected_control_name:
+		errors.append("%s: recent audio control name expected %s, got %s" % [context, expected_control_name, entry.get("control_name", "")])
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
 
 
 func _inventory_item_button(game_root: Node, needle: String) -> Button:
