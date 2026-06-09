@@ -1550,6 +1550,11 @@ func _expect_world_action_combat_event_presenter(errors: Array[String], game_roo
 		errors.append("combat event presenter should expose corpse container id")
 	if _dictionary_or_empty(presenter.get("target_grid", {})).is_empty():
 		errors.append("combat event presenter should expose target grid")
+	var expected_label_text := _expected_combat_event_label_text(event_kind)
+	if str(presenter.get("label_text", "")) != expected_label_text:
+		errors.append("combat event presenter should expose label text %s, got %s" % [expected_label_text, presenter.get("label_text", "")])
+	if float(presenter.get("label_y_offset", 0.0)) <= 0.0:
+		errors.append("combat event presenter should expose label_y_offset")
 	if event_kind in ["combat_started", "combat_ended"]:
 		if int(presenter.get("participant_count", 0)) <= 0:
 			errors.append("%s presenter should expose participant_count" % event_kind)
@@ -1582,6 +1587,40 @@ func _expect_world_action_combat_event_presenter(errors: Array[String], game_roo
 	if target_node != null and marker.global_position.distance_to(target_node.global_position + Vector3(0.0, 1.16, 0.0)) > 0.2:
 		errors.append("combat event marker should appear above target node")
 	_expect_action_marker_phases(errors, marker, ["signal", "resolve", "fade"], "combat event marker")
+	var label: Label3D = game_root.find_child("WorldActionCombatEventText", true, false) as Label3D
+	if label == null:
+		errors.append("combat event presenter should render WorldActionCombatEventText label")
+		return
+	if str(label.get_meta("action_presenter_kind", "")) != "combat_event_text":
+		errors.append("combat event text label should expose combat_event_text presenter kind")
+	if str(label.text) != expected_label_text:
+		errors.append("combat event text label should display %s, got %s" % [expected_label_text, label.text])
+	if str(label.get_meta("text", "")) != expected_label_text:
+		errors.append("combat event text label should expose text metadata")
+	if str(label.get_meta("event_kind", "")) != event_kind:
+		errors.append("combat event text label should expose event kind")
+	if int(label.get_meta("source_actor_id", 0)) != source_actor_id:
+		errors.append("combat event text label should expose source actor id")
+	if event_kind == "corpse_created" and str(label.get_meta("container_id", "")).is_empty():
+		errors.append("combat event text label should expose corpse container id")
+	if _dictionary_or_empty(label.get_meta("target_grid", {})).is_empty():
+		errors.append("combat event text label should expose target grid")
+	if str(label.get_meta("font_resource_path", "")) != WORLD_LABEL_FONT_PATH:
+		errors.append("combat event text label should use world label font")
+	_expect_action_marker_phases(errors, label, ["signal", "resolve", "fade"], "combat event text label")
+
+
+func _expected_combat_event_label_text(event_kind: String) -> String:
+	match event_kind:
+		"corpse_created":
+			return "掉落"
+		"actor_defeated":
+			return "击败"
+		"combat_started":
+			return "战斗"
+		"combat_ended":
+			return "脱战"
+	return "战斗"
 
 
 func _expect_action_presenter_phases(errors: Array[String], presenter: Dictionary, expected: Array[String], context: String) -> void:

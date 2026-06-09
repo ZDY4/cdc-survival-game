@@ -1740,27 +1740,44 @@ func _start_combat_event_feedback(host: Node, world_root: Node, combat_event: Di
 	marker.set_meta("round", int(combat_event.get("round", 0)))
 	marker.set_meta("target_grid", target_grid.duplicate(true))
 	_track_active_node(marker)
-	_presentation_layer(world_root).add_child(marker)
+	var label := _combat_event_label(combat_event)
+	label.position = target_position + Vector3(0.0, _combat_event_label_y_offset(str(combat_event.get("event_kind", ""))), 0.0)
+	_track_active_node(label)
+	var layer := _presentation_layer(world_root)
+	layer.add_child(marker)
+	layer.add_child(label)
 	var tween := host.create_tween()
 	_track_active_tween(tween)
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(marker, "scale", Vector3(0.82, 0.82, 0.82), float(COMBAT_EVENT_PHASE_DURATIONS[0]))
+	tween.parallel().tween_property(label, "position", label.position + Vector3(0.0, 0.08, 0.0), float(COMBAT_EVENT_PHASE_DURATIONS[0]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), COMBAT_EVENT_PHASES[1]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(label), COMBAT_EVENT_PHASES[1]))
 	tween.tween_property(marker, "scale", Vector3(1.55, 1.55, 1.55), float(COMBAT_EVENT_PHASE_DURATIONS[1]))
+	tween.parallel().tween_property(label, "position", label.position + Vector3(0.0, 0.22, 0.0), float(COMBAT_EVENT_PHASE_DURATIONS[1]))
 	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(marker), COMBAT_EVENT_PHASES[2]))
+	tween.tween_callback(Callable(self, "_set_marker_phase").bind(weakref(label), COMBAT_EVENT_PHASES[2]))
 	tween.tween_property(marker, "scale", Vector3(0.42, 0.42, 0.42), float(COMBAT_EVENT_PHASE_DURATIONS[2]))
-	tween.finished.connect(Callable(self, "_on_combat_event_feedback_finished").bind(weakref(marker)))
+	tween.parallel().tween_property(label, "modulate", Color(label.modulate.r, label.modulate.g, label.modulate.b, 0.0), float(COMBAT_EVENT_PHASE_DURATIONS[2]))
+	tween.finished.connect(Callable(self, "_on_combat_event_feedback_finished").bind(weakref(marker), weakref(label)))
 	var snapshot_data := _combat_event_public_snapshot(combat_event, true, "")
 	snapshot_data["marker_path"] = str(marker.get_path())
+	snapshot_data["label_path"] = str(label.get_path())
+	snapshot_data["label_text"] = str(label.text)
 	_record_latest(snapshot_data)
 
 
-func _on_combat_event_feedback_finished(marker_ref: WeakRef) -> void:
+func _on_combat_event_feedback_finished(marker_ref: WeakRef, label_ref: WeakRef = null) -> void:
 	var marker := marker_ref.get_ref() as Node
 	if marker != null and not marker.is_queued_for_deletion():
 		marker.set_meta("action_presenter_active", false)
 		marker.queue_free()
+	if label_ref != null:
+		var label := label_ref.get_ref() as Node
+		if label != null and not label.is_queued_for_deletion():
+			label.set_meta("action_presenter_active", false)
+			label.queue_free()
 	_prune_active_refs()
 	latest["active"] = active_count > 0
 	latest["active_count"] = active_count
@@ -1792,6 +1809,8 @@ func _combat_event_public_snapshot(combat_event: Dictionary, active: bool, reaso
 		"phase_count": COMBAT_EVENT_PHASES.size(),
 		"current_phase": COMBAT_EVENT_PHASES[0] if active else "",
 		"duration_sec": _duration_sum(COMBAT_EVENT_PHASE_DURATIONS) if active else 0.0,
+		"label_text": _combat_event_feedback_text(str(combat_event.get("event_kind", ""))),
+		"label_y_offset": _combat_event_label_y_offset(str(combat_event.get("event_kind", ""))),
 	}
 
 
@@ -2159,6 +2178,74 @@ func _combat_event_material(event_kind: String) -> StandardMaterial3D:
 		_:
 			material.albedo_color = Color(0.9, 0.86, 0.34, 0.82)
 	return material
+
+
+func _combat_event_label(combat_event: Dictionary) -> Label3D:
+	var event_kind := str(combat_event.get("event_kind", ""))
+	var label := Label3D.new()
+	label.name = "WorldActionCombatEventText"
+	label.text = _combat_event_feedback_text(event_kind)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 15
+	label.modulate = _combat_event_label_color(event_kind)
+	label.outline_size = 4
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
+	var font_result := UIThemeService.apply_label3d_font(label)
+	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	label.set_meta("action_presenter_active", true)
+	label.set_meta("action_presenter_kind", "combat_event_text")
+	label.set_meta("action_presenter_phases", COMBAT_EVENT_PHASES.duplicate())
+	label.set_meta("action_presenter_phase_count", COMBAT_EVENT_PHASES.size())
+	label.set_meta("action_presenter_current_phase", COMBAT_EVENT_PHASES[0])
+	label.set_meta("action_presenter_duration_sec", _duration_sum(COMBAT_EVENT_PHASE_DURATIONS))
+	label.set_meta("event_kind", event_kind)
+	label.set_meta("event_kinds", _array_or_empty(combat_event.get("event_kinds", [])).duplicate(true))
+	label.set_meta("actor_id", int(combat_event.get("actor_id", 0)))
+	label.set_meta("source_actor_id", int(combat_event.get("source_actor_id", 0)))
+	label.set_meta("defeated_by_actor_id", int(combat_event.get("defeated_by_actor_id", 0)))
+	label.set_meta("container_id", str(combat_event.get("container_id", "")))
+	label.set_meta("reason", str(combat_event.get("reason", "")))
+	label.set_meta("participants", _array_or_empty(combat_event.get("participants", [])).duplicate(true))
+	label.set_meta("participant_count", int(combat_event.get("participant_count", 0)))
+	label.set_meta("target_grid", _dictionary_or_empty(combat_event.get("target_grid", {})).duplicate(true))
+	label.set_meta("text", label.text)
+	return label
+
+
+func _combat_event_feedback_text(event_kind: String) -> String:
+	match event_kind:
+		"corpse_created":
+			return "掉落"
+		"actor_defeated":
+			return "击败"
+		"combat_started":
+			return "战斗"
+		"combat_ended":
+			return "脱战"
+	return "战斗"
+
+
+func _combat_event_label_color(event_kind: String) -> Color:
+	match event_kind:
+		"corpse_created":
+			return Color(1.0, 0.52, 0.42, 0.96)
+		"actor_defeated":
+			return Color(1.0, 0.34, 0.30, 0.96)
+		"combat_started":
+			return Color(1.0, 0.68, 0.34, 0.96)
+		"combat_ended":
+			return Color(0.58, 1.0, 0.74, 0.96)
+	return Color(1.0, 0.90, 0.46, 0.94)
+
+
+func _combat_event_label_y_offset(event_kind: String) -> float:
+	match event_kind:
+		"corpse_created", "actor_defeated":
+			return 1.58
+		"combat_started", "combat_ended":
+			return 1.44
+	return 1.48
 
 
 func _presentation_public_snapshot(presentation: Dictionary, active: bool) -> Dictionary:
