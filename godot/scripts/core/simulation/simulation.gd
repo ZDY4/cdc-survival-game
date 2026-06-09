@@ -3748,6 +3748,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 	_tick_actor_active_effects()
 	var expired_reservations: Array[Dictionary] = _expire_life_planner_reservations()
 	var life_tick_results: Array[Dictionary] = _tick_settlement_life_needs(WORLD_TURN_MINUTES)
+	var background_life_ticks: Array[Dictionary] = _tick_background_settlement_life(life_tick_results, WORLD_TURN_MINUTES)
 	if bool(combat_state.get("active", false)):
 		_refresh_combat_turn_order("world_turn_started")
 	for actor in _world_turn_actor_order():
@@ -3772,6 +3773,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 		result["world_turn_minutes"] = WORLD_TURN_MINUTES
 		result["world_time_before"] = time_before.duplicate(true)
 		result["life_need_tick"] = _life_need_tick_for_actor(life_tick_results, actor.actor_id)
+		result["life_presence"] = _record_life_presence(actor, "online", WORLD_TURN_MINUTES, result["life_need_tick"])
 		results.append(result)
 		_close_turn(actor.actor_id, str(result.get("turn_close_reason", "npc_turn_complete")))
 		result["turn_closed"] = true
@@ -3792,6 +3794,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 		"after": world_time.duplicate(true),
 		"minutes": WORLD_TURN_MINUTES,
 		"life_tick_count": life_tick_results.size(),
+		"background_life_tick_count": background_life_ticks.size(),
 		"expired_life_reservation_count": expired_reservations.size(),
 	})
 	return results
@@ -3926,6 +3929,44 @@ func _life_need_tick_for_actor(ticks: Array[Dictionary], actor_id: int) -> Dicti
 		if int(tick_data.get("actor_id", 0)) == actor_id:
 			return tick_data.duplicate(true)
 	return {}
+
+
+func _tick_background_settlement_life(life_tick_results: Array[Dictionary], minutes: int) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	for actor in actor_registry.actors():
+		if actor.kind == "player" or actor.hp <= 0.0:
+			continue
+		if actor.map_id.is_empty() or actor.map_id == active_map_id:
+			continue
+		var life: Dictionary = _dictionary_or_empty(actor.life)
+		if str(life.get("settlement_id", "")).is_empty():
+			continue
+		var need_tick: Dictionary = _life_need_tick_for_actor(life_tick_results, actor.actor_id)
+		var presence: Dictionary = _record_life_presence(actor, "background", minutes, need_tick)
+		output.append(presence)
+		_emit("settlement_life_background_ticked", presence.duplicate(true))
+	return output
+
+
+func _record_life_presence(actor: RefCounted, mode: String, minutes: int, need_tick: Dictionary = {}) -> Dictionary:
+	var life: Dictionary = _dictionary_or_empty(actor.life)
+	var presence: Dictionary = {
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"settlement_id": str(life.get("settlement_id", "")),
+		"mode": mode,
+		"actor_map_id": actor.map_id,
+		"active_map_id": active_map_id,
+		"world_time": world_time.duplicate(true),
+		"minutes": max(0, minutes),
+		"has_need_tick": not need_tick.is_empty(),
+	}
+	if not need_tick.is_empty():
+		presence["last_need_tick"] = need_tick.duplicate(true)
+	var runtime: Dictionary = _ensure_life_runtime(actor)
+	runtime["presence"] = presence.duplicate(true)
+	_set_life_runtime(actor, runtime)
+	return presence
 
 
 func _life_need_profile(actor: RefCounted) -> Dictionary:

@@ -159,6 +159,13 @@ func _expect_settlement_life_world_turn(registry: RefCounted) -> Array[String]:
 	var time_event: Dictionary = _last_event_payload(patrol_simulation.snapshot(), "world_time_advanced")
 	if int(time_event.get("minutes", 0)) != 15 or int(time_event.get("life_tick_count", 0)) <= 0:
 		errors.append("world_time_advanced event should expose minutes and life tick count")
+	var patrol_presence: Dictionary = _dictionary_or_empty(patrol_result.get("life_presence", {}))
+	if str(patrol_presence.get("mode", "")) != "online" or int(patrol_presence.get("actor_id", 0)) != patrol_guard_id:
+		errors.append("settlement online actor result should expose online life presence, got %s" % patrol_presence)
+	var patrol_life_runtime: Dictionary = _life_runtime_for_actor(patrol_simulation, patrol_guard_id)
+	var patrol_runtime_presence: Dictionary = _dictionary_or_empty(patrol_life_runtime.get("presence", {}))
+	if str(patrol_runtime_presence.get("mode", "")) != "online" or str(patrol_runtime_presence.get("active_map_id", "")) != patrol_simulation.active_map_id:
+		errors.append("settlement online actor runtime should store active-map presence, got %s" % patrol_runtime_presence)
 
 	var home_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	var home_player: RefCounted = home_simulation.actor_registry.get_actor(1)
@@ -180,7 +187,46 @@ func _expect_settlement_life_world_turn(registry: RefCounted) -> Array[String]:
 	restored.load_snapshot(home_simulation.snapshot())
 	if JSON.stringify(restored.snapshot().get("world_time", {})) != JSON.stringify(home_simulation.snapshot().get("world_time", {})):
 		errors.append("world_time should roundtrip through simulation snapshot")
+	errors.append_array(_expect_settlement_life_background_tick(registry))
 	errors.append_array(_expect_settlement_life_smart_object_effect(registry))
+	return errors
+
+
+func _expect_settlement_life_background_tick(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 540}
+	var remote_map_id := "remote_background_map"
+	var guard_id: int = _register_character(simulation, registry, "survivor_outpost_01_guard_liu", GridCoord.new(24, 0, 35), {
+		"map_id": remote_map_id,
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var results: Array = simulation.advance_world_turn(_open_settlement_topology())
+	var result: Dictionary = _npc_result_for_actor(results, guard_id)
+	if not result.is_empty():
+		errors.append("off-map settlement NPC should not execute active-map turn result, got %s" % result)
+	var runtime: Dictionary = _life_runtime_for_actor(simulation, guard_id)
+	var presence: Dictionary = _dictionary_or_empty(runtime.get("presence", {}))
+	if str(presence.get("mode", "")) != "background":
+		errors.append("off-map settlement NPC should store background presence, got %s" % presence)
+	if str(presence.get("actor_map_id", "")) != remote_map_id or str(presence.get("active_map_id", "")) != simulation.active_map_id:
+		errors.append("background presence should expose actor and active map ids, got %s" % presence)
+	if not bool(presence.get("has_need_tick", false)) or _dictionary_or_empty(presence.get("last_need_tick", {})).is_empty():
+		errors.append("background presence should link the need tick summary, got %s" % presence)
+	var background_event: Dictionary = _last_event_payload_for_actor(simulation.snapshot(), "settlement_life_background_ticked", guard_id)
+	if str(background_event.get("mode", "")) != "background" or str(background_event.get("actor_map_id", "")) != remote_map_id:
+		errors.append("settlement_life_background_ticked should expose remote actor presence, got %s" % background_event)
+	var time_event: Dictionary = _last_event_payload(simulation.snapshot(), "world_time_advanced")
+	if int(time_event.get("background_life_tick_count", 0)) < 1:
+		errors.append("world_time_advanced should count background life ticks, got %s" % time_event)
+	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	restored.load_snapshot(simulation.snapshot())
+	var restored_presence: Dictionary = _dictionary_or_empty(_life_runtime_for_actor(restored, guard_id).get("presence", {}))
+	if JSON.stringify(restored_presence) != JSON.stringify(presence):
+		errors.append("background life presence should roundtrip through actor life snapshot, got %s" % restored_presence)
 	return errors
 
 
@@ -1211,6 +1257,18 @@ func _last_event_payload(snapshot: Dictionary, kind: String) -> Dictionary:
 		var event_data: Dictionary = _dictionary_or_empty(events[index])
 		if str(event_data.get("kind", "")) == kind:
 			return _dictionary_or_empty(event_data.get("payload", {}))
+	return {}
+
+
+func _last_event_payload_for_actor(snapshot: Dictionary, kind: String, actor_id: int) -> Dictionary:
+	var events: Array = snapshot.get("events", [])
+	for index in range(events.size() - 1, -1, -1):
+		var event_data: Dictionary = _dictionary_or_empty(events[index])
+		if str(event_data.get("kind", "")) != kind:
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event_data.get("payload", {}))
+		if int(payload.get("actor_id", 0)) == actor_id:
+			return payload
 	return {}
 
 
