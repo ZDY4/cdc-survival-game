@@ -1484,6 +1484,9 @@ func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Diction
 
 
 func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionary:
+	var corpse_target: Dictionary = _corpse_attack_target(command)
+	if not corpse_target.is_empty():
+		return corpse_target
 	var target_actor_id: int = int(command.get("target_actor_id", 0))
 	var target: RefCounted = actor_registry.get_actor(target_actor_id)
 	if target == null:
@@ -1548,6 +1551,36 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 			result["ammo_consumed"] = ammo_result
 		pending_interaction.clear()
 	return result
+
+
+func _corpse_attack_target(command: Dictionary) -> Dictionary:
+	var target: Dictionary = _dictionary_or_empty(command.get("target", {}))
+	var target_type := str(command.get("target_type", target.get("target_type", ""))).strip_edges()
+	var corpse_id := str(command.get("container_id", command.get("corpse_id", command.get("target_id", target.get("container_id", target.get("target_id", "")))))).strip_edges()
+	if target_type == "corpse" or target_type == "corpse_container":
+		return _corpse_attack_rejection(corpse_id, target)
+	if corpse_id.is_empty():
+		return {}
+	if corpse_containers.has(corpse_id):
+		return _corpse_attack_rejection(corpse_id, _dictionary_or_empty(corpse_containers.get(corpse_id, target)))
+	var target_data: Dictionary = _dictionary_or_empty(map_interaction_targets.get(corpse_id, {}))
+	if str(target_data.get("container_type", target.get("container_type", ""))) == "corpse":
+		return _corpse_attack_rejection(corpse_id, target_data)
+	return {}
+
+
+func _corpse_attack_rejection(corpse_id: String, target_data: Dictionary = {}) -> Dictionary:
+	var corpse: Dictionary = _dictionary_or_empty(corpse_containers.get(corpse_id, target_data))
+	return {
+		"success": false,
+		"reason": "target_is_corpse",
+		"target_type": "corpse",
+		"corpse_id": corpse_id,
+		"container_id": str(corpse.get("container_id", corpse_id)),
+		"display_name": str(corpse.get("display_name", target_data.get("display_name", corpse_id))),
+		"source_actor_id": int(corpse.get("source_actor_id", target_data.get("source_actor_id", 0))),
+		"grid_position": _dictionary_or_empty(corpse.get("grid_position", target_data.get("grid_position", target_data.get("anchor", {})))).duplicate(true),
+	}
 
 
 func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary:

@@ -1811,6 +1811,22 @@ func _expect_corpse_inventory_and_metadata(errors: Array[String], simulation: Re
 			errors.append("corpse container session should mirror merged ammo, got %d" % container_ammo_count)
 		if int(container.get("money", 0)) != 17:
 			errors.append("corpse container session should mirror corpse money")
+		_restore_player_turn(simulation, player)
+		var corpse_attack_ap_before: float = player.ap
+		var corpse_attack: Dictionary = simulation.submit_player_command({
+			"kind": "attack",
+			"target_type": "corpse",
+			"target_id": str(corpse.get("container_id", "")),
+			"container_id": str(corpse.get("container_id", "")),
+		})
+		if bool(corpse_attack.get("success", false)) or str(corpse_attack.get("reason", "")) != "target_is_corpse":
+			errors.append("attacking corpse target should report target_is_corpse: %s" % corpse_attack)
+		if str(corpse_attack.get("container_id", "")) != str(corpse.get("container_id", "")):
+			errors.append("corpse attack rejection should expose corpse container id")
+		if absf(player.ap - corpse_attack_ap_before) > 0.01:
+			errors.append("corpse attack rejection should not spend AP")
+		if bool(simulation.snapshot().get("combat_state", {}).get("active", false)):
+			errors.append("corpse attack rejection should not enter combat")
 		var player_money_before: int = int(player.money)
 		var money_result: Dictionary = simulation.take_money_from_container(player.actor_id, str(corpse.get("container_id", "")), -1)
 		if not bool(money_result.get("success", false)):

@@ -26,6 +26,7 @@ const REASONS := {
 	"target_empty": {"category": "targeting", "text": "目标为空"},
 	"target_hostile": {"category": "targeting", "text": "敌对目标不能交谈"},
 	"target_not_hostile": {"category": "combat", "text": "不能攻击友方或中立目标"},
+	"target_is_corpse": {"category": "combat", "text": "尸体不能攻击，只能搜刮"},
 	"attacker_defeated": {"category": "combat", "text": "攻击者已倒下"},
 	"target_defeated": {"category": "combat", "text": "目标已倒下"},
 	"unknown_attacker": {"category": "combat", "text": "未知攻击者"},
@@ -377,6 +378,10 @@ const REASON_METADATA := {
 	"target_not_hostile": {
 		"payload_fields": ["actor_id", "target_actor_id", "relationship"],
 		"disabled_text": "不能攻击友方或中立目标",
+	},
+	"target_is_corpse": {
+		"payload_fields": ["corpse_id", "container_id", "source_actor_id", "grid_position"],
+		"disabled_text": "尸体只能打开容器",
 	},
 	"materials_insufficient": {
 		"payload_fields": ["recipe_id", "missing_materials", "inventory"],
