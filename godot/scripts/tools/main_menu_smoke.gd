@@ -135,6 +135,7 @@ func _assert_continue_disabled_without_save(errors: Array[String], menu: Control
 
 func _assert_new_game_request(errors: Array[String], menu: Control) -> void:
 	var result: Dictionary = _dictionary_or_empty(menu.call("new_game"))
+	_assert_main_menu_control_audio(errors, menu, "ui_button_pressed", "ui_click", "NewGameButton", "button", "new_game", {"slot_id": SAVE_SLOT}, "new game button audio")
 	var request: Dictionary = _dictionary_or_empty(ProjectSettings.get_setting("cdc/startup_request", {}))
 	if not bool(result.get("ok", false)) or str(result.get("action", "")) != "new_game":
 		errors.append("new game should report successful start request: %s" % result)
@@ -278,6 +279,7 @@ func _assert_slot_rename(errors: Array[String], menu: Control, slot_id: String, 
 	name_edit.text = display_name
 	rename_button.pressed.emit()
 	await menu.get_tree().process_frame
+	_assert_main_menu_control_audio(errors, menu, "ui_button_pressed", "ui_click", "RenameSlotButton", "button", "rename_slot", {"slot_id": slot_id, "value": display_name}, "rename slot button audio")
 	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
 	var selected_summary: Dictionary = _dictionary_or_empty(snapshot.get("selected_slot_summary", {}))
 	if str(selected_summary.get("slot_display_name", "")) != display_name:
@@ -324,6 +326,7 @@ func _assert_broken_slot_feedback(errors: Array[String], menu: Control, slot_id:
 		errors.append("export recovery button should be enabled for broken save")
 	else:
 		var export_result: Dictionary = _dictionary_or_empty(menu.call("export_selected_slot_for_recovery"))
+		_assert_main_menu_control_audio(errors, menu, "ui_button_pressed", "ui_click", "ExportRecoveryButton", "button", "export_recovery", {"slot_id": slot_id}, "export recovery button audio")
 		if not bool(export_result.get("ok", false)):
 			errors.append("export recovery should succeed for broken save: %s" % export_result)
 		elif not FileAccess.file_exists(str(export_result.get("export_path", ""))):
@@ -338,6 +341,7 @@ func _assert_broken_slot_feedback(errors: Array[String], menu: Control, slot_id:
 func _assert_new_game_overwrite_confirmation(errors: Array[String], menu: Control) -> void:
 	ProjectSettings.set_setting("cdc/startup_request", {})
 	var result: Dictionary = _dictionary_or_empty(menu.call("new_game"))
+	_assert_main_menu_control_audio(errors, menu, "ui_button_pressed", "ui_click", "NewGameButton", "button", "new_game", {"slot_id": SAVE_SLOT}, "new game overwrite button audio")
 	var snapshot: Dictionary = _dictionary_or_empty(menu.call("main_menu_snapshot"))
 	if str(result.get("reason", "")) != "overwrite_confirmation_required":
 		errors.append("new game should require overwrite confirmation when slot exists: %s" % result)
@@ -347,6 +351,7 @@ func _assert_new_game_overwrite_confirmation(errors: Array[String], menu: Contro
 	if not request_before_confirm.is_empty():
 		errors.append("new game overwrite confirmation should not set startup request before confirm: %s" % request_before_confirm)
 	menu.call("confirm_new_game_overwrite")
+	_assert_main_menu_control_audio(errors, menu, "ui_button_pressed", "ui_click", "OverwriteConfirmDialog", "dialog", "confirm_overwrite", {"slot_id": SAVE_SLOT}, "overwrite confirm dialog audio")
 	var request_after_confirm: Dictionary = _dictionary_or_empty(ProjectSettings.get_setting("cdc/startup_request", {}))
 	if str(request_after_confirm.get("mode", "")) != "new_game" or not bool(request_after_confirm.get("overwrite_slot", false)):
 		errors.append("confirming overwrite should set new game startup request: %s" % request_after_confirm)
@@ -363,12 +368,14 @@ func _select_slot(errors: Array[String], menu: Control, slot_id: String) -> void
 			slot_option.select(i)
 			slot_option.item_selected.emit(i)
 			await menu.get_tree().process_frame
+			_assert_main_menu_control_audio(errors, menu, "ui_option_selected", "ui_select", "SaveSlotOption", "option", "select_save_slot", {"slot_id": slot_id}, "save slot option audio")
 			return
 	errors.append("save slot option did not contain %s" % slot_id)
 
 
 func _assert_continue_request(errors: Array[String], menu: Control) -> void:
 	var result: Dictionary = _dictionary_or_empty(menu.call("continue_game"))
+	_assert_main_menu_control_audio(errors, menu, "ui_button_pressed", "ui_click", "ContinueButton", "button", "continue_game", {"slot_id": SECOND_SAVE_SLOT}, "continue button audio")
 	var request: Dictionary = _dictionary_or_empty(ProjectSettings.get_setting("cdc/startup_request", {}))
 	if not bool(result.get("ok", false)) or str(result.get("action", "")) != "continue":
 		errors.append("continue should report successful start request: %s" % result)
@@ -399,6 +406,7 @@ func _assert_game_root_loaded_continue_snapshot(errors: Array[String], game_root
 
 func _assert_delete_slot(errors: Array[String], menu: Control, slot_id: String) -> void:
 	var result: Dictionary = _dictionary_or_empty(menu.call("delete_selected_slot"))
+	_assert_main_menu_control_audio(errors, menu, "ui_button_pressed", "ui_click", "DeleteSlotButton", "button", "delete_slot", {"slot_id": slot_id}, "delete slot button audio")
 	if not bool(result.get("ok", false)):
 		errors.append("delete selected slot should succeed: %s" % result)
 	var service := SaveService.new(SAVE_ROOT)
@@ -416,6 +424,38 @@ func _option_contains_text(option: OptionButton, needle: String) -> bool:
 		if option.get_item_text(i).contains(needle):
 			return true
 	return false
+
+
+func _assert_main_menu_control_audio(errors: Array[String], menu: Control, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not menu.has_method("audio_feedback_snapshot"):
+		errors.append("%s: main menu should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(menu.call("audio_feedback_snapshot"))
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = {}
+	for index in range(recent.size() - 1, -1, -1):
+		var candidate: Dictionary = _dictionary_or_empty(recent[index])
+		if str(candidate.get("audio_source", "")) != "ui" or str(candidate.get("panel_id", "")) != "main_menu":
+			continue
+		if str(candidate.get("event_kind", "")) != expected_event_kind or str(candidate.get("sound_id", "")) != expected_sound_id:
+			continue
+		if str(candidate.get("control_name", "")) != expected_control_name:
+			continue
+		entry = candidate
+		break
+	if entry.is_empty():
+		errors.append("%s: expected main menu audio %s/%s/%s, got %s" % [context, expected_event_kind, expected_sound_id, expected_control_name, snapshot])
+		return
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
 
 
 func _clear_smoke_save() -> void:

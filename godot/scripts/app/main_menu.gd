@@ -3,6 +3,7 @@ extends Control
 const GAME_ROOT_SCENE := "res://scenes/game/game_root.tscn"
 const DEFAULT_SAVE_SLOT := "default"
 const DEFAULT_SAVE_ROOT := "user://saves"
+const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const SaveService = preload("res://scripts/app/save_service.gd")
 const UIThemeService = preload("res://scripts/ui/ui_theme_service.gd")
 
@@ -21,12 +22,14 @@ var _slot_summary_label: Label
 var _feedback_label: Label
 var _slot_summaries: Array[Dictionary] = []
 var _theme_result: Dictionary = {}
+var _audio_feedback_controller: Node
 
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_theme_result = UIThemeService.apply_default_theme(self)
+	_setup_audio_feedback_controller()
 	save_slot = str(ProjectSettings.get_setting("cdc/main_menu_save_slot", DEFAULT_SAVE_SLOT))
 	save_root = str(ProjectSettings.get_setting("cdc/save_root", DEFAULT_SAVE_ROOT))
 	_build_layout()
@@ -34,18 +37,21 @@ func _ready() -> void:
 
 
 func new_game() -> Dictionary:
+	_play_main_menu_control_audio("ui_button_pressed", "NewGameButton", "button", "new_game", _selected_slot_audio_payload())
 	if _selected_slot_exists():
 		return _open_overwrite_confirm()
 	return _start_game({"mode": "new_game", "save_slot": save_slot})
 
 
 func confirm_new_game_overwrite() -> Dictionary:
+	_play_main_menu_control_audio("ui_button_pressed", "OverwriteConfirmDialog", "dialog", "confirm_overwrite", _selected_slot_audio_payload())
 	if _overwrite_dialog != null:
 		_overwrite_dialog.hide()
 	return _start_game({"mode": "new_game", "save_slot": save_slot, "overwrite_slot": true})
 
 
 func continue_game() -> Dictionary:
+	_play_main_menu_control_audio("ui_button_pressed", "ContinueButton", "button", "continue_game", _selected_slot_audio_payload())
 	var load_result: Dictionary = SaveService.new(save_root).load_snapshot(save_slot)
 	if not bool(load_result.get("ok", false)):
 		last_action = {
@@ -65,6 +71,7 @@ func continue_game() -> Dictionary:
 
 
 func quit_game() -> Dictionary:
+	_play_main_menu_control_audio("ui_button_pressed", "QuitButton", "button", "quit_game", _selected_slot_audio_payload())
 	last_action = {"ok": true, "action": "quit_game"}
 	get_tree().quit(0)
 	return last_action.duplicate(true)
@@ -72,6 +79,7 @@ func quit_game() -> Dictionary:
 
 func delete_selected_slot() -> Dictionary:
 	var display_name := _selected_slot_display_name()
+	_play_main_menu_control_audio("ui_button_pressed", "DeleteSlotButton", "button", "delete_slot", _selected_slot_audio_payload({"value": display_name}))
 	var deleted := SaveService.new(save_root).delete_snapshot(save_slot)
 	last_action = {
 		"ok": deleted,
@@ -86,6 +94,7 @@ func delete_selected_slot() -> Dictionary:
 
 func export_selected_slot_for_recovery() -> Dictionary:
 	var summary := _selected_slot_summary()
+	_play_main_menu_control_audio("ui_button_pressed", "ExportRecoveryButton", "button", "export_recovery", _slot_audio_payload(summary))
 	if summary.is_empty():
 		last_action = {
 			"ok": false,
@@ -115,6 +124,7 @@ func export_selected_slot_for_recovery() -> Dictionary:
 
 func rename_selected_slot() -> Dictionary:
 	var summary := _selected_slot_summary()
+	_play_main_menu_control_audio("ui_button_pressed", "RenameSlotButton", "button", "rename_slot", _slot_audio_payload(summary, {"value": _slot_name_edit.text.strip_edges() if _slot_name_edit != null else ""}))
 	if summary.is_empty():
 		last_action = {
 			"ok": false,
@@ -157,7 +167,24 @@ func main_menu_snapshot() -> Dictionary:
 		"overwrite_confirm_visible": _overwrite_dialog != null and _overwrite_dialog.visible,
 		"last_action": last_action.duplicate(true),
 		"ui_theme": _theme_result.duplicate(true),
+		"audio_feedback": audio_feedback_snapshot(),
 	}
+
+
+func audio_feedback_snapshot() -> Dictionary:
+	if _audio_feedback_controller == null or not _audio_feedback_controller.has_method("snapshot"):
+		return {"enabled": false, "reason": "audio_feedback_missing"}
+	return _dictionary_or_empty(_audio_feedback_controller.call("snapshot"))
+
+
+func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
+	return _play_main_menu_control_audio(
+		event_kind,
+		str(payload.get("control_name", "")),
+		str(payload.get("control_kind", "")),
+		str(payload.get("action", "")),
+		payload
+	)
 
 
 func _start_game(request: Dictionary) -> Dictionary:
@@ -374,6 +401,7 @@ func _select_save_slot(index: int) -> void:
 	if selected.is_empty():
 		return
 	save_slot = selected
+	_play_main_menu_control_audio("ui_option_selected", "SaveSlotOption", "option", "select_save_slot", _selected_slot_audio_payload({"value": _slot_option.get_item_text(index)}))
 	ProjectSettings.set_setting("cdc/main_menu_save_slot", save_slot)
 	_refresh_continue_state()
 	_refresh_rename_state()
@@ -482,6 +510,43 @@ func _number_text(value: float) -> String:
 func _set_feedback(text: String) -> void:
 	if _feedback_label != null:
 		_feedback_label.text = text
+
+
+func _setup_audio_feedback_controller() -> void:
+	if _audio_feedback_controller != null:
+		return
+	_audio_feedback_controller = AudioFeedbackController.new()
+	_audio_feedback_controller.name = "MainMenuAudioFeedbackController"
+	add_child(_audio_feedback_controller)
+
+
+func _play_main_menu_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	if _audio_feedback_controller == null or not _audio_feedback_controller.has_method("play_ui_feedback"):
+		return {"enabled": false, "reason": "audio_feedback_missing"}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "main_menu",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(_audio_feedback_controller.call("play_ui_feedback", event_kind, payload))
+
+
+func _selected_slot_audio_payload(extra_payload: Dictionary = {}) -> Dictionary:
+	return _slot_audio_payload(_selected_slot_summary(), extra_payload)
+
+
+func _slot_audio_payload(summary: Dictionary, extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"slot_id": save_slot,
+		"value": _slot_display_name(summary),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
