@@ -143,6 +143,8 @@ func submit_player_command(command: Dictionary) -> Dictionary:
 		return _normalize_player_command_result({"success": false, "reason": "command_actor_not_player"}, command, kind, actor_id, event_start_index)
 	if not actor.turn_open:
 		return _normalize_player_command_result({"success": false, "reason": "turn_closed", "turn_state": turn_state.duplicate(true)}, command, kind, actor_id, event_start_index)
+	if _actor_has_special_effect(actor, "stun") and kind != "cancel_pending":
+		return _normalize_player_command_result(_submit_stunned_player_turn(actor, command, kind), command, kind, actor_id, event_start_index)
 
 	var result: Dictionary = {}
 	var cancelled_pending: Dictionary = _cancel_pending_for_new_target_command(actor_id, kind, command)
@@ -1227,6 +1229,26 @@ func _submit_wait_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 		"kind": "wait",
 		"npc_results": npc_results,
 		"pending_result": pending_result,
+		"turn_state": turn_state.duplicate(true),
+	}
+
+
+func _submit_stunned_player_turn(actor: RefCounted, command: Dictionary, command_kind: String) -> Dictionary:
+	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
+	var skip_payload: Dictionary = _stunned_turn_skip_payload(actor, "player_command:%s" % command_kind)
+	_emit("actor_turn_skipped", skip_payload.duplicate(true))
+	_close_turn(actor.actor_id, "stunned")
+	var npc_results: Array[Dictionary] = advance_world_turn(topology)
+	_open_turn(actor.actor_id, "player_turn")
+	return {
+		"success": false,
+		"kind": "stunned_turn_skip",
+		"reason": "actor_stunned",
+		"actor_id": actor.actor_id,
+		"command_kind": command_kind,
+		"effect_ids": _array_or_empty(skip_payload.get("effect_ids", [])).duplicate(true),
+		"skipped_turn": true,
+		"npc_results": npc_results,
 		"turn_state": turn_state.duplicate(true),
 	}
 
@@ -3858,7 +3880,61 @@ func _defeat_actor_from_active_effect(source_actor_id: int, target: RefCounted, 
 		exit_combat_if_player_defeated("player_defeated_by_active_effect")
 
 
+func _actor_has_special_effect(actor: RefCounted, special_effect_id: String) -> bool:
+	return not _actor_special_effects(actor, special_effect_id).is_empty()
+
+
+func _actor_special_effects(actor: RefCounted, special_effect_id: String) -> Array[Dictionary]:
+	var output: Array[Dictionary] = []
+	if actor == null:
+		return output
+	for effect in actor.active_effects:
+		var effect_data: Dictionary = _dictionary_or_empty(effect)
+		var base_effect_id := str(effect_data.get("base_effect_id", effect_data.get("effect_id", ""))).trim_prefix("effect:")
+		if base_effect_id == special_effect_id or str(effect_data.get("effect_id", "")) == special_effect_id:
+			output.append(effect_data.duplicate(true))
+			continue
+		if _string_array(effect_data.get("special_effects", [])).has(special_effect_id):
+			output.append(effect_data.duplicate(true))
+	return output
+
+
+func _stunned_turn_skip_payload(actor: RefCounted, reason: String) -> Dictionary:
+	var effects: Array[Dictionary] = _actor_special_effects(actor, "stun")
+	var effect_ids: Array[String] = []
+	for effect in effects:
+		var effect_id := str(effect.get("effect_id", ""))
+		if not effect_id.is_empty():
+			effect_ids.append(effect_id)
+	return {
+		"actor_id": actor.actor_id,
+		"reason": reason,
+		"special_effect": "stun",
+		"effect_ids": effect_ids,
+		"effects": effects.duplicate(true),
+		"ap": actor.ap,
+		"round": int(turn_state.get("round", 1)),
+		"combat_active": bool(combat_state.get("active", false)) and actor.in_combat,
+	}
+
+
+func _stunned_npc_turn_result(actor: RefCounted, reason: String = "npc_turn") -> Dictionary:
+	var payload: Dictionary = _stunned_turn_skip_payload(actor, reason)
+	_emit("actor_turn_skipped", payload.duplicate(true))
+	return {
+		"success": true,
+		"actor_id": actor.actor_id,
+		"intent": "skip",
+		"reason": "actor_stunned",
+		"skipped_turn": true,
+		"effect_ids": _array_or_empty(payload.get("effect_ids", [])).duplicate(true),
+		"ap": actor.ap,
+	}
+
+
 func _advance_npc_turn(actor: RefCounted, topology: Dictionary, combat_turn_active: bool = false) -> Dictionary:
+	if _actor_has_special_effect(actor, "stun"):
+		return _stunned_npc_turn_result(actor, "npc_turn")
 	if combat_turn_active:
 		return _advance_npc_combat_turn(actor, topology)
 	return _advance_npc_action(actor, topology)
@@ -4100,6 +4176,8 @@ func _npc_turn_close_reason(actor: RefCounted, result: Dictionary) -> String:
 		return "npc_turn_actor_missing"
 	if actor.ap <= 0.0:
 		return "npc_turn_exhausted"
+	if str(result.get("intent", "")) == "skip" and bool(result.get("skipped_turn", false)):
+		return "npc_turn_stunned"
 	if str(result.get("intent", "")) == "idle":
 		return "npc_turn_idle"
 	if str(result.get("intent", "")) == "wait":

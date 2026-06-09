@@ -46,6 +46,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 	_expect_combat_world_turn_uses_initiative_order(errors, registry)
 	_expect_combat_npc_multi_action_loop(errors, registry)
 	_expect_combat_npc_reload_then_attack(errors, registry)
+	_expect_stunned_player_command_skip(errors, registry)
 	_expect_combat_entry_participants_and_round(errors, registry)
 	_expect_combat_exit_exploration_recovery(errors, registry)
 	_expect_attack_target_rejections(errors, simulation, player, player_grid)
@@ -451,6 +452,43 @@ func _expect_combat_npc_reload_then_attack(errors: Array[String], registry: RefC
 	var intent_payload: Dictionary = _event_payload_after(simulation.snapshot(), "ai_intent_decided", npc_id, event_start)
 	if str(intent_payload.get("intent", "")) != "reload" or not bool(intent_payload.get("can_reload", false)):
 		errors.append("combat NPC reload intent should expose reload diagnostic payload")
+
+
+func _expect_stunned_player_command_skip(errors: Array[String], registry: RefCounted) -> void:
+	var runtime_result: Dictionary = CoreRuntimeBootstrap.new(registry).build_new_game_runtime()
+	var simulation: RefCounted = runtime_result.get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("stunned player smoke should find player")
+		return
+	player.turn_open = true
+	player.ap = 6.0
+	var original_grid: Dictionary = player.grid_position.to_dictionary()
+	var stun_effects: Array[Dictionary] = [_stun_effect(player.actor_id, player.actor_id, 2.0)]
+	player.active_effects = stun_effects
+	var skipped_events_before: int = _event_count(simulation.snapshot(), "actor_turn_skipped")
+	var result: Dictionary = simulation.submit_player_command({
+		"kind": "move",
+		"target_position": {
+			"x": int(original_grid.get("x", 0)) + 1,
+			"y": int(original_grid.get("y", 0)),
+			"z": int(original_grid.get("z", 0)),
+		},
+		"topology": _topology(simulation, registry),
+	})
+	if str(result.get("reason", "")) != "actor_stunned":
+		errors.append("stunned player command should return actor_stunned")
+	if not bool(result.get("skipped_turn", false)):
+		errors.append("stunned player command should expose skipped_turn")
+	if _event_count(simulation.snapshot(), "actor_turn_skipped") <= skipped_events_before:
+		errors.append("stunned player command should emit actor_turn_skipped")
+	var skip_payload: Dictionary = _last_event_payload(simulation.snapshot(), "actor_turn_skipped")
+	if int(skip_payload.get("actor_id", 0)) != player.actor_id or str(skip_payload.get("special_effect", "")) != "stun":
+		errors.append("stunned player skip payload should expose actor and special effect")
+	if player.grid_position.to_dictionary() != original_grid:
+		errors.append("stunned player command should not move player")
+	if not player.turn_open:
+		errors.append("stunned player command should reopen player turn after world turn")
 
 
 func _expect_combat_entry_participants_and_round(errors: Array[String], registry: RefCounted) -> void:
@@ -1968,6 +2006,20 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	stun_effect = _active_effect_by_id(blunt, "effect:stun")
 	if not stun_effect.is_empty() and absf(float(stun_effect.get("duration_remaining", 0.0)) - 6.0) > 0.001:
 		errors.append("stun on-hit effect should extend duration to 6 after second hit")
+	var stun_skipped_before: int = _event_count(simulation.snapshot(), "actor_turn_skipped")
+	var stun_turn_results: Array = simulation.advance_world_turn(topology)
+	var stun_turn: Dictionary = _npc_result_for_actor(stun_turn_results, blunt_target)
+	if str(stun_turn.get("reason", "")) != "actor_stunned":
+		errors.append("stunned NPC turn should return actor_stunned")
+	if not bool(stun_turn.get("skipped_turn", false)):
+		errors.append("stunned NPC turn should expose skipped_turn")
+	if _event_count(simulation.snapshot(), "actor_turn_skipped") <= stun_skipped_before:
+		errors.append("stunned NPC turn should emit actor_turn_skipped")
+	var stun_skip_payload: Dictionary = _last_event_payload(simulation.snapshot(), "actor_turn_skipped")
+	if int(stun_skip_payload.get("actor_id", 0)) != blunt_target or str(stun_skip_payload.get("special_effect", "")) != "stun":
+		errors.append("stunned NPC skip payload should expose actor and stun")
+	_restore_player_turn(simulation, player)
+	player.ap = 20.0
 
 	player.equipment["main_hand"] = "1002"
 	player.ap = 20.0
@@ -2258,6 +2310,23 @@ func _active_effect_by_id(actor: RefCounted, effect_id: String) -> Dictionary:
 		if str(effect_data.get("effect_id", "")) == effect_id:
 			return effect_data
 	return {}
+
+
+func _stun_effect(source_actor_id: int, target_actor_id: int, duration: float = 2.0) -> Dictionary:
+	return {
+		"effect_id": "effect:stun",
+		"base_effect_id": "stun",
+		"source": "smoke",
+		"source_actor_id": source_actor_id,
+		"target_actor_id": target_actor_id,
+		"name": "Stun",
+		"category": "debuff",
+		"duration_remaining": duration,
+		"is_infinite": false,
+		"modifiers": {"speed": -100.0},
+		"special_effects": ["stun"],
+		"stack_count": 1,
+	}
 
 
 func _active_quest_ids(snapshot: Dictionary) -> Array[String]:
