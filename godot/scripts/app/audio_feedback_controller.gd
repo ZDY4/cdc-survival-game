@@ -193,6 +193,8 @@ func _process_event(event_data: Dictionary, event_index: int) -> void:
 		"dialogue_id": str(payload.get("dialogue_id", "")),
 		"node_id": str(payload.get("node_id", "")),
 		"option_id": str(payload.get("option_id", "")),
+		"location_id": str(payload.get("location_id", "")),
+		"map_id": str(payload.get("map_id", "")),
 		"quest_id": str(payload.get("quest_id", "")),
 		"quest_state": str(payload.get("quest_state", "")),
 		"recipe_id": str(payload.get("recipe_id", "")),

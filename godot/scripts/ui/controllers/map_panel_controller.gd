@@ -204,7 +204,10 @@ func _refresh_overworld_actions(value: Variant) -> void:
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
 		button.set_meta("overworld_location_id", str(location_data.get("id", "")))
 		button.set_meta("overworld_location", location_data.duplicate(true))
-		button.pressed.connect(_open_overworld_prompt.bind(location_data.duplicate(true)), CONNECT_DEFERRED)
+		button.pressed.connect(func() -> void:
+			_play_map_control_audio("ui_button_pressed", button.name, "overworld_location_button", "open_overworld_prompt", _overworld_location_audio_payload(location_data))
+			_open_overworld_prompt(location_data.duplicate(true))
+		, CONNECT_DEFERRED)
 		_overworld_actions_box.add_child(button)
 	if count == 0:
 		var label := _label("OverworldActionsEmpty")
@@ -226,6 +229,7 @@ func _open_overworld_prompt(location: Dictionary) -> void:
 
 func _confirm_overworld_prompt() -> void:
 	var location_id := str(_pending_overworld_location.get("id", ""))
+	_play_map_control_audio("ui_button_pressed", "OverworldPromptDialog", "dialog", "confirm_overworld_prompt", _overworld_location_audio_payload(_pending_overworld_location))
 	_pending_overworld_location = {}
 	if _overworld_prompt_dialog != null:
 		_overworld_prompt_dialog.hide()
@@ -369,33 +373,36 @@ func _canvas_toolbar() -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.name = "MapCanvasToolbar"
 	row.add_theme_constant_override("separation", 4)
-	row.add_child(_canvas_button("ZoomOutButton", "-", func() -> void:
+	row.add_child(_canvas_button("ZoomOutButton", "-", "zoom_out", func() -> void:
 		_canvas.call("zoom_out")
 		_canvas_state_label.text = _canvas_state_text()
 	))
-	row.add_child(_canvas_button("ZoomResetButton", "1:1", func() -> void:
+	row.add_child(_canvas_button("ZoomResetButton", "1:1", "reset_zoom", func() -> void:
 		_canvas.call("reset_view")
 		_canvas_state_label.text = _canvas_state_text()
 	))
-	row.add_child(_canvas_button("PanResetButton", "Pan", func() -> void:
+	row.add_child(_canvas_button("PanResetButton", "Pan", "reset_pan", func() -> void:
 		_canvas.call("reset_pan")
 		_canvas_state_label.text = _canvas_state_text()
 	))
-	row.add_child(_canvas_button("ZoomInButton", "+", func() -> void:
+	row.add_child(_canvas_button("ZoomInButton", "+", "zoom_in", func() -> void:
 		_canvas.call("zoom_in")
 		_canvas_state_label.text = _canvas_state_text()
 	))
 	return row
 
 
-func _canvas_button(node_name: String, text: String, callback: Callable) -> Button:
+func _canvas_button(node_name: String, text: String, action: String, callback: Callable) -> Button:
 	var button := Button.new()
 	button.name = node_name
 	button.text = text
 	button.custom_minimum_size = Vector2(40, 26)
 	button.focus_mode = Control.FOCUS_NONE
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
-	button.pressed.connect(callback, CONNECT_DEFERRED)
+	button.pressed.connect(func() -> void:
+		_play_map_control_audio("ui_button_pressed", node_name, "canvas_button", action, _canvas_audio_payload())
+		callback.call()
+	, CONNECT_DEFERRED)
 	return button
 
 
@@ -418,6 +425,44 @@ func _canvas_state_text() -> String:
 func _on_canvas_view_changed(_state: Dictionary) -> void:
 	if _canvas_state_label != null:
 		_canvas_state_label.text = _canvas_state_text()
+
+
+func _play_map_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "map",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
+
+
+func _overworld_location_audio_payload(location: Dictionary, extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"location_id": str(location.get("id", "")),
+		"map_id": str(location.get("map_id", "")),
+		"value": str(location.get("name", location.get("id", ""))),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
+
+
+func _canvas_audio_payload(extra_payload: Dictionary = {}) -> Dictionary:
+	var state: Dictionary = _dictionary_or_empty(_canvas.call("view_state")) if _canvas != null and _canvas.has_method("view_state") else {}
+	var payload := {
+		"count": int(state.get("marker_count", 0)),
+		"value": str(state.get("zoom", "")),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
 
 
 func _array_or_empty(value: Variant) -> Array:

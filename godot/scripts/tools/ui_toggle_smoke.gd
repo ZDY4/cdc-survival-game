@@ -596,6 +596,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			errors.append("hospital overworld button should expose route tooltip, got %s" % hospital_button.tooltip_text)
 		hospital_button.pressed.emit()
 		await process_frame
+		_assert_map_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "OverworldLocation_hospital", "overworld_location_button", "open_overworld_prompt", {"location_id": "hospital", "map_id": "hospital", "value": "废弃医院"}, "hospital overworld prompt open audio")
 		_assert_overworld_prompt_modal(errors, game_root, "hospital", "hospital overworld prompt")
 		var close_prompt_result: Dictionary = _dictionary_or_empty(game_root.close_active_ui("keyboard_escape"))
 		if str(close_prompt_result.get("closed", "")) != "modal:overworld_prompt":
@@ -612,6 +613,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 			if prompt_dialog != null:
 				prompt_dialog.confirmed.emit()
 			await process_frame
+			_assert_map_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "OverworldPromptDialog", "dialog", "confirm_overworld_prompt", {"location_id": "hospital", "map_id": "hospital", "value": "废弃医院"}, "hospital overworld prompt confirm audio")
 			if str(game_root.simulation.active_location_id) != "hospital" or str(game_root.simulation.active_map_id) != "hospital":
 				errors.append("confirming overworld prompt should enter hospital, got %s/%s" % [str(game_root.simulation.active_location_id), str(game_root.simulation.active_map_id)])
 			game_root.enter_overworld_location_from_panel("survivor_outpost_01")
@@ -625,6 +627,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		zoom_in_button.pressed.emit()
 		await process_frame
+		_assert_map_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ZoomInButton", "canvas_button", "zoom_in", {}, "map zoom in audio")
 		if not _map_canvas_state_line(game_root).contains("zoom 1.15"):
 			errors.append("map canvas zoom button should update state line, got %s" % _map_canvas_state_line(game_root))
 	if map_canvas != null:
@@ -638,6 +641,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		else:
 			pan_reset_button.pressed.emit()
 			await process_frame
+			_assert_map_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "PanResetButton", "canvas_button", "reset_pan", {}, "map pan reset audio")
 			if not _map_canvas_state_line(game_root).contains("pan 0,0"):
 				errors.append("map canvas pan reset should clear pan state line, got %s" % _map_canvas_state_line(game_root))
 
@@ -2255,6 +2259,38 @@ func _assert_character_control_audio(errors: Array[String], game_root: Node, exp
 		break
 	if entry.is_empty():
 		errors.append("%s: expected character audio %s/%s/%s, got %s" % [context, expected_event_kind, expected_sound_id, expected_control_name, snapshot])
+		return
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
+
+
+func _assert_map_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = {}
+	for index in range(recent.size() - 1, -1, -1):
+		var candidate: Dictionary = _dictionary_or_empty(recent[index])
+		if str(candidate.get("audio_source", "")) != "ui" or str(candidate.get("panel_id", "")) != "map":
+			continue
+		if str(candidate.get("event_kind", "")) != expected_event_kind or str(candidate.get("sound_id", "")) != expected_sound_id:
+			continue
+		if str(candidate.get("control_name", "")) != expected_control_name:
+			continue
+		entry = candidate
+		break
+	if entry.is_empty():
+		errors.append("%s: expected map audio %s/%s/%s, got %s" % [context, expected_event_kind, expected_sound_id, expected_control_name, snapshot])
 		return
 	if str(entry.get("control_kind", "")) != expected_control_kind:
 		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
