@@ -36,6 +36,7 @@ var _selected_item_snapshot: Dictionary = {}
 var _pending_quantity_transfer: Dictionary = {}
 var _container_transferable_count := 0
 var _player_transferable_count := 0
+var _suppress_quantity_audio := false
 
 
 func _ready() -> void:
@@ -133,6 +134,7 @@ func _build_layout() -> void:
 	_close_button.tooltip_text = "关闭容器"
 	_close_button.custom_minimum_size = Vector2(28, 24)
 	_close_button.pressed.connect(func() -> void:
+		_play_container_control_audio("ui_button_pressed", "CloseButton", "button", "close_container")
 		close_requested.emit()
 	)
 	_summary_label = _label("SummaryLine")
@@ -154,19 +156,24 @@ func _build_layout() -> void:
 	_quantity_spin.tooltip_text = "选择要转移的数量"
 	_quantity_spin.value_changed.connect(func(_value: float) -> void:
 		_sync_quantity_controls()
+		if not _suppress_quantity_audio and not _selected_item_id.is_empty():
+			_play_container_control_audio("ui_slider_changed", "QuantitySpin", "spin_box", "set_transfer_quantity", _selected_transfer_audio_payload({"value": int(_quantity_spin.value)}))
 	)
 	_quantity_minus_button = _quantity_button("QuantityMinusButton", "-", "减少 1")
 	_quantity_minus_button.pressed.connect(func() -> void:
 		_adjust_transfer_quantity(-1)
+		_play_container_control_audio("ui_button_pressed", "QuantityMinusButton", "button", "decrease_transfer_quantity", _selected_transfer_audio_payload())
 	)
 	_quantity_plus_button = _quantity_button("QuantityPlusButton", "+", "增加 1")
 	_quantity_plus_button.pressed.connect(func() -> void:
 		_adjust_transfer_quantity(1)
+		_play_container_control_audio("ui_button_pressed", "QuantityPlusButton", "button", "increase_transfer_quantity", _selected_transfer_audio_payload())
 	)
 	_quantity_all_button = _quantity_button("QuantityAllButton", "全部", "选择当前堆叠的全部数量")
 	_quantity_all_button.custom_minimum_size = Vector2(48, 0)
 	_quantity_all_button.pressed.connect(func() -> void:
 		_set_transfer_quantity(_selected_available_count())
+		_play_container_control_audio("ui_button_pressed", "QuantityAllButton", "button", "max_transfer_quantity", _selected_transfer_audio_payload())
 	)
 	_transfer_button = Button.new()
 	_transfer_button.name = "TransferButton"
@@ -176,6 +183,7 @@ func _build_layout() -> void:
 	_transfer_button.pressed.connect(func() -> void:
 		if _selected_item_id.is_empty() or _selected_source.is_empty():
 			return
+		_play_container_control_audio("ui_button_pressed", "TransferButton", "button", "transfer_selected", _selected_transfer_audio_payload())
 		_request_transfer(_selected_source, _selected_item_id, int(_quantity_spin.value), false, _selected_item_snapshot)
 	)
 	_take_all_button = Button.new()
@@ -185,6 +193,7 @@ func _build_layout() -> void:
 	_take_all_button.focus_mode = Control.FOCUS_NONE
 	_take_all_button.disabled = true
 	_take_all_button.pressed.connect(func() -> void:
+		_play_container_control_audio("ui_button_pressed", "TakeAllButton", "button", "transfer_all", {"source": "container", "count": _container_transferable_count})
 		transfer_all_requested.emit("container")
 	)
 	_store_all_button = Button.new()
@@ -194,6 +203,7 @@ func _build_layout() -> void:
 	_store_all_button.focus_mode = Control.FOCUS_NONE
 	_store_all_button.disabled = true
 	_store_all_button.pressed.connect(func() -> void:
+		_play_container_control_audio("ui_button_pressed", "StoreAllButton", "button", "transfer_all", {"source": "player", "count": _player_transferable_count})
 		transfer_all_requested.emit("player")
 	)
 	transfer_controls.add_child(_quantity_spin)
@@ -292,6 +302,7 @@ func _item_line(item: Dictionary, source: String) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(func() -> void:
 		_apply_detail(item.duplicate(true), source)
+		_play_container_control_audio("ui_button_pressed", "Item_%s_%s" % [source, item.get("item_id", "unknown")], "item_row", "select_item", _item_audio_payload(item, source))
 	)
 	button.gui_input.connect(func(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseButton
@@ -393,6 +404,7 @@ func _drop_container_data(position: Vector2, data: Variant, from_control: Contro
 		return
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	var item: Dictionary = _dictionary_or_empty(drag_data.get("item", {}))
+	var target_source := _drop_target_source(from_control)
 	match str(drag_data.get("kind", "")):
 		"container_item":
 			var source: String = str(drag_data.get("source", ""))
@@ -400,6 +412,7 @@ func _drop_container_data(position: Vector2, data: Variant, from_control: Contro
 			var available: int = maxi(1, int(item.get("count", 1)))
 			var requested: int = int(drag_data.get("count", _quantity_spin.value if _quantity_spin != null else 1))
 			var count: int = clampi(requested, 1, available)
+			_play_container_control_audio("ui_button_pressed", "DropTo%sColumn" % target_source.capitalize(), "drop_target", "drop_transfer_item", _item_audio_payload(item, source, {"target_source": target_source, "count": count}))
 			_request_transfer(source, item_id, count, false, item)
 		"inventory_item":
 			var item_id: String = str(drag_data.get("item_id", item.get("item_id", "")))
@@ -408,6 +421,7 @@ func _drop_container_data(position: Vector2, data: Variant, from_control: Contro
 			var root := get_parent()
 			if root != null and root.has_method("store_active_container_item"):
 				root.store_active_container_item(item_id, count)
+				_play_container_control_audio("ui_button_pressed", "DropToContainerColumn", "drop_target", "drop_store_item", _item_audio_payload(item, "player", {"target_source": "container", "count": count}))
 	_clear_container_drag_hover(from_control)
 
 
@@ -537,6 +551,12 @@ func _confirm_pending_quantity_transfer() -> void:
 	_pending_quantity_transfer = {}
 	if _quantity_confirm_dialog != null:
 		_quantity_confirm_dialog.hide()
+	_play_container_control_audio("ui_button_pressed", "ContainerQuantityConfirmDialog", "dialog", "confirm_quantity_transfer", {
+		"source": str(pending.get("source", "")),
+		"item_id": str(pending.get("item_id", "")),
+		"count": int(pending.get("count", 0)),
+		"stack_index": int(_dictionary_or_empty(pending.get("item", {})).get("stack_index", 0)),
+	})
 	_request_transfer(
 		str(pending.get("source", "")),
 		str(pending.get("item_id", "")),
@@ -611,6 +631,7 @@ func _open_context_menu_for_item(item: Dictionary, source: String, screen_positi
 	)
 	var popup_position := Vector2i(int(screen_position.x), int(screen_position.y))
 	_context_menu.popup(Rect2i(popup_position, Vector2i(180, 1)))
+	_play_container_control_audio("ui_button_pressed", "ContainerContextMenu", "context_menu", "open_context_menu", _item_audio_payload(item, source, {"count": selected_count}))
 
 
 func context_menu_snapshot() -> Dictionary:
@@ -666,8 +687,10 @@ func _execute_context_action(action_id: int) -> void:
 		return
 	match action_id:
 		CONTEXT_TRANSFER:
+			_play_container_control_audio("ui_button_pressed", "ContainerContextMenu", "context_menu", "context_transfer_selected", _item_audio_payload(_context_item, _context_source, {"count": _selected_transfer_count(_context_item)}))
 			_request_transfer(_context_source, item_id, _selected_transfer_count(_context_item), false, _context_item)
 		CONTEXT_TRANSFER_ALL:
+			_play_container_control_audio("ui_button_pressed", "ContainerContextMenu", "context_menu", "context_transfer_all", _item_audio_payload(_context_item, _context_source, {"count": available}))
 			_request_transfer(_context_source, item_id, available, false, _context_item)
 	if _context_menu != null:
 		_context_menu.hide()
@@ -782,7 +805,9 @@ func _adjust_transfer_quantity(delta: int) -> void:
 func _set_transfer_quantity(count: int) -> void:
 	if _quantity_spin == null:
 		return
+	_suppress_quantity_audio = true
 	_quantity_spin.value = clampi(count, 1, maxi(1, _selected_available_count()))
+	_suppress_quantity_audio = false
 	_sync_quantity_controls()
 
 
@@ -897,6 +922,44 @@ func _label(node_name: String) -> Label:
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _play_container_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "container",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
+
+
+func _selected_transfer_audio_payload(extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"item_id": _selected_item_id,
+		"count": int(_quantity_spin.value if _quantity_spin != null else 0),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _item_audio_payload(_selected_item_snapshot, _selected_source, payload)
+
+
+func _item_audio_payload(item: Dictionary, source: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var payload := {
+		"source": source,
+		"item_id": str(item.get("item_id", extra_payload.get("item_id", ""))),
+		"count": int(item.get("count", extra_payload.get("count", 0))),
+		"stack_index": int(item.get("stack_index", extra_payload.get("stack_index", 0))),
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return payload
 
 
 func _quantity_button(node_name: String, text: String, tooltip: String) -> Button:

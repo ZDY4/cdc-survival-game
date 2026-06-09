@@ -14,7 +14,7 @@ func _run() -> void:
 	get_root().add_child(game_root)
 	await process_frame
 
-	var errors: Array[String] = _run_checks(game_root)
+	var errors: Array[String] = await _run_checks(game_root)
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -81,6 +81,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	game_root.active_container_feedback = {}
 	game_root.refresh_container_panel()
 	_press_first_player_container_item(game_root)
+	await process_frame
+	_assert_container_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Item_player_1009", "item_row", "select_item", {"source": "player", "item_id": "1009", "count": "10"}, "first player row select audio")
 	if not _container_detail(game_root).contains("背包：") or not _container_detail(game_root).contains("总重"):
 		errors.append("container detail line should switch to selected player item details")
 	if _container_transfer_button_text(game_root) != "存放":
@@ -89,6 +91,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should open container item context menu for antibiotics")
 	else:
 		_assert_container_context_menu(errors, game_root, "1031", "container", "拿取选中数量", "container antibiotics context")
+		_assert_container_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ContainerContextMenu", "context_menu", "open_context_menu", {"source": "container", "item_id": "1031", "count": "1"}, "container antibiotics context menu audio")
 		_execute_container_context_action(game_root, 1)
 		if not _event_seen(game_root, "container_item_taken"):
 			errors.append("container context selected transfer should emit container_item_taken")
@@ -100,6 +103,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should open container player item context menu for water bottle")
 	else:
 		_assert_container_context_menu(errors, game_root, "1008", "player", "存放选中数量", "container player water context")
+		_assert_container_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ContainerContextMenu", "context_menu", "open_context_menu", {"source": "player", "item_id": "1008", "count": "1"}, "container player water context menu audio")
 		_execute_container_context_action(game_root, 2)
 		if not _event_seen(game_root, "container_item_stored"):
 			errors.append("container context all transfer should emit container_item_stored")
@@ -110,9 +114,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _press_container_item_with_text(game_root, "player", "手枪弹药"):
 		errors.append("should select stacked ammo in player column for quantity controls")
 	else:
+		await process_frame
+		_assert_container_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "Item_player_1009", "item_row", "select_item", {"source": "player", "item_id": "1009", "count": "10"}, "player ammo row select audio")
 		if not _container_quantity_label(game_root).contains("1/10"):
 			errors.append("quantity label should show selected stacked item range")
 		_press_container_quantity_all(game_root)
+		await process_frame
+		_assert_container_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "QuantityAllButton", "button", "max_transfer_quantity", {"source": "player", "item_id": "1009", "count": "10"}, "container quantity all audio")
 		if _container_quantity_spin_value(game_root) != 10 or not _container_quantity_label(game_root).contains("10/10"):
 			errors.append("quantity all button should select full stacked count")
 		if not _container_quantity_button_disabled(game_root, "QuantityPlusButton"):
@@ -122,6 +130,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		if _container_quantity_button_disabled(game_root, "QuantityMinusButton"):
 			errors.append("quantity minus should be enabled above one")
 		_press_container_quantity_minus(game_root)
+		await process_frame
+		_assert_container_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "QuantityMinusButton", "button", "decrease_transfer_quantity", {"source": "player", "item_id": "1009", "count": "9"}, "container quantity minus audio")
 		if _container_quantity_spin_value(game_root) != 9 or not _container_quantity_label(game_root).contains("9/10"):
 			errors.append("quantity minus should decrement selected count")
 		_set_container_transfer_quantity(game_root, 1)
@@ -130,6 +140,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_set_container_transfer_quantity(game_root, 3)
 		var stored_ammo_before: int = _event_count(game_root, "container_item_stored")
 		_press_container_transfer(game_root)
+		await process_frame
+		_assert_container_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "TransferButton", "button", "transfer_selected", {"source": "player", "item_id": "1009", "count": "3"}, "container transfer selected audio")
 		_assert_container_quantity_modal(errors, game_root, "player", "1009", 3, "container quantity transfer open")
 		if _event_count(game_root, "container_item_stored") != stored_ammo_before:
 			errors.append("quantity modal should not transfer before confirmation")
@@ -142,6 +154,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		_press_container_transfer(game_root)
 		_assert_container_quantity_modal(errors, game_root, "player", "1009", 3, "container quantity transfer reopen")
 		_confirm_container_quantity_modal(game_root)
+		await process_frame
+		_assert_container_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ContainerQuantityConfirmDialog", "dialog", "confirm_quantity_transfer", {"source": "player", "item_id": "1009", "count": "3"}, "container quantity confirm audio")
 		if _event_count(game_root, "container_item_stored") <= stored_ammo_before:
 			errors.append("confirming quantity modal should store selected ammo")
 	if not _container_text(game_root).contains("手枪弹药 x3"):
@@ -1584,6 +1598,34 @@ func _assert_drag_reject_reason_text(errors: Array[String], target_snapshot: Dic
 		errors.append("%s: rejected drag target should expose reject reason text: %s" % [context, target_snapshot])
 	if highlight_text != reason_text:
 		errors.append("%s: hover highlight should mirror reject reason text: %s / %s" % [context, target_snapshot, highlight])
+
+
+func _assert_container_control_audio(errors: Array[String], game_root: Node, expected_event_kind: String, expected_sound_id: String, expected_control_name: String, expected_control_kind: String, expected_action: String, expected_payload: Dictionary, context: String) -> void:
+	if not game_root.has_method("audio_feedback_snapshot"):
+		errors.append("%s: game root should expose audio_feedback_snapshot" % context)
+		return
+	var snapshot: Dictionary = _dictionary_or_empty(game_root.audio_feedback_snapshot())
+	if str(snapshot.get("last_event_kind", "")) != expected_event_kind or str(snapshot.get("last_sound_id", "")) != expected_sound_id:
+		errors.append("%s: expected %s/%s audio feedback, got %s" % [context, expected_event_kind, expected_sound_id, snapshot])
+		return
+	var recent: Array = _array_or_empty(snapshot.get("recent_events", []))
+	if recent.is_empty():
+		errors.append("%s: audio snapshot should expose recent events: %s" % [context, snapshot])
+		return
+	var entry: Dictionary = _dictionary_or_empty(recent[recent.size() - 1])
+	if str(entry.get("audio_source", "")) != "ui" or str(entry.get("panel_id", "")) != "container":
+		errors.append("%s: recent audio source/panel mismatch: %s" % [context, entry])
+	if str(entry.get("event_kind", "")) != expected_event_kind or str(entry.get("sound_id", "")) != expected_sound_id:
+		errors.append("%s: recent audio event mismatch: %s" % [context, entry])
+	if str(entry.get("control_name", "")) != expected_control_name:
+		errors.append("%s: recent audio control name expected %s, got %s" % [context, expected_control_name, entry.get("control_name", "")])
+	if str(entry.get("control_kind", "")) != expected_control_kind:
+		errors.append("%s: recent audio control kind expected %s, got %s" % [context, expected_control_kind, entry.get("control_kind", "")])
+	if str(entry.get("action", "")) != expected_action:
+		errors.append("%s: recent audio action expected %s, got %s" % [context, expected_action, entry.get("action", "")])
+	for key in expected_payload.keys():
+		if str(entry.get(key, "")) != str(expected_payload.get(key, "")):
+			errors.append("%s: recent audio payload %s expected %s, got %s" % [context, key, expected_payload.get(key, ""), entry.get(key, "")])
 
 
 func _confirm_container_quantity_modal(game_root: Node) -> void:

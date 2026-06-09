@@ -193,7 +193,10 @@ func _process_event(event_data: Dictionary, event_index: int) -> void:
 		"filter_id": str(payload.get("filter_id", "")),
 		"sort_id": str(payload.get("sort_id", "")),
 		"tree_id": str(payload.get("tree_id", "")),
+		"source": str(payload.get("source", "")),
+		"target_source": str(payload.get("target_source", "")),
 		"count": int(payload.get("count", 0)),
+		"stack_index": int(payload.get("stack_index", 0)),
 		"value": payload.get("value", null),
 	}
 	recent_events.append(entry)
