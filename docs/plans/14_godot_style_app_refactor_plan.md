@@ -31,14 +31,14 @@
 - tooltip layer 和 drag preview layer 的节点创建、样式、显示/隐藏和 render snapshot 已抽到 `godot/scripts/app/controllers/ui_overlay_render_controller.gd`，`GameApp` 仅保留兼容 facade。
 - tooltip source 解析、tooltip snapshot 和 tooltip visual placement 计算已抽到 `godot/scripts/app/controllers/tooltip_snapshot_controller.gd`，`GameApp.hover_tooltip_snapshot()` 仅作为兼容 facade。
 - drag source、payload、preview 文案、preview 尺寸和 drag state 组装已抽到 `godot/scripts/app/controllers/drag_snapshot_controller.gd`。
-- hotbar / observe hotbar 的 drag hover target 和 acceptance 已抽到 `godot/scripts/app/controllers/drag_hover_target_controller.gd`；equipment、inventory action、container 和 trade 的 hover acceptance 仍在 `GameApp` 中等待后续迁移。
+- hotbar、observe hotbar、equipment、inventory action、container 和 trade 的 drag hover target / acceptance 已抽到 `godot/scripts/app/controllers/drag_hover_target_controller.gd`，`GameApp` 只保留 `drag_state_snapshot()` 兼容 facade 和 reason 文案补全。
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 3568 行，还保留大量 UI facade、玩家动作 facade、部分 drag hover acceptance 计算和 smoke 兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 3337 行，还保留大量 UI facade、玩家动作 facade、context menu / modal blocker 状态和 smoke 兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` / `HudRoot` script；当前仍主要依赖现有 HUD controller 和根脚本转发。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
-- 下一步优先抽取 drag hover acceptance 计算或玩家动作 facade，而不是一次性重命名根脚本。
+- 下一步优先抽取 context menu / modal blocker 状态或玩家动作 facade，而不是一次性重命名根脚本。
 
 ## 当前问题
 
@@ -274,10 +274,10 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] tooltip / drag preview overlay render layer 已抽到 `ui_overlay_render_controller.gd`。
 - [x] tooltip snapshot 计算已抽到 `tooltip_snapshot_controller.gd`。
 - [x] drag source / payload / preview snapshot 组装已抽到 `drag_snapshot_controller.gd`。
-- [x] hotbar / observe hotbar 的 drag hover target 和 acceptance 已抽到 `drag_hover_target_controller.gd`。
+- [x] hotbar、observe hotbar、equipment、inventory action、container 和 trade 的 drag hover target / acceptance 已抽到 `drag_hover_target_controller.gd`。
 - [ ] 引入 `HudRoot` facade，统一承接 HUD、stage panels、debug console、debug panel、tooltip 和 context menu。
 - [ ] 将 `GameApp` 中直接操作 HUD 子节点的代码替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
-- [ ] 将剩余 equipment、inventory action、container、trade 的 drag hover acceptance 计算、context menu 和 modal blocker 状态继续从 `GameApp` 移出。
+- [ ] 将 context menu 和 modal blocker 状态继续从 `GameApp` 移出。
 - [ ] 将 UI blocker / active modal / focus 状态统一暴露为 `hud_root.input_blocker_snapshot()`。
 
 验收：
