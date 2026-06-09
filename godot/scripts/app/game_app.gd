@@ -215,11 +215,15 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and _handle_debug_console_key(event as InputEventKey):
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventKey and is_debug_console_open():
+		return
 	if runtime_input_controller != null:
 		runtime_input_controller.input(event)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and is_debug_console_open():
+		return
 	if runtime_input_controller != null:
 		runtime_input_controller.unhandled_input(event)
 
