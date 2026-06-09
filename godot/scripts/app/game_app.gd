@@ -24,6 +24,7 @@ const DragSnapshotController = preload("res://scripts/app/controllers/drag_snaps
 const DragHoverTargetController = preload("res://scripts/app/controllers/drag_hover_target_controller.gd")
 const UiBlockerStateController = preload("res://scripts/app/controllers/ui_blocker_state_controller.gd")
 const ContainerActionController = preload("res://scripts/app/controllers/container_action_controller.gd")
+const InventoryActionController = preload("res://scripts/app/controllers/inventory_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -63,6 +64,7 @@ var drag_snapshot_controller: RefCounted = DragSnapshotController.new()
 var drag_hover_target_controller: RefCounted = DragHoverTargetController.new()
 var ui_blocker_state_controller: RefCounted = UiBlockerStateController.new()
 var container_action_controller: RefCounted = ContainerActionController.new()
+var inventory_action_controller: RefCounted = InventoryActionController.new()
 var tooltip_layer: Control:
 	get:
 		return ui_overlay_render_controller.tooltip_layer if ui_overlay_render_controller != null else null
@@ -1650,91 +1652,48 @@ func has_active_container_session() -> bool:
 
 
 func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
-	if simulation == null:
-		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "count": count}
-		_record_inventory_feedback(missing_result, "drop", item_id, count)
-		refresh_inventory_panel()
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "drop",
-		"item_id": item_id,
-		"count": count,
-	})
-	_record_inventory_feedback(result, "drop", item_id, count)
-	if bool(result.get("success", false)):
-		_rebuild_world_after_runtime_change()
-	else:
-		refresh_inventory_panel()
-	return result
+	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
+	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("drop_item", item_id, count, submit, Callable(self, "_record_inventory_feedback")))
+	return _apply_inventory_action_operation(operation)
 
 
 func deconstruct_player_item(item_id: String, count: int = 1) -> Dictionary:
-	if simulation == null:
-		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "count": count}
-		_record_inventory_feedback(missing_result, "deconstruct", item_id, count)
-		refresh_inventory_panel()
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "deconstruct",
-		"item_id": item_id,
-		"count": count,
-		"crafting_context": _crafting_context(),
-	})
-	_record_inventory_feedback(result, "deconstruct", item_id, count)
-	refresh_inventory_panel()
-	refresh_crafting_panel()
-	return result
+	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
+	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("deconstruct_item", item_id, count, _crafting_context(), submit, Callable(self, "_record_inventory_feedback")))
+	return _apply_inventory_action_operation(operation)
 
 
 func split_player_inventory_stack(item_id: String, count: int = 1, source_stack_index: int = 0) -> Dictionary:
-	if simulation == null:
-		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "count": count}
-		_record_inventory_feedback(missing_result, "split_stack", item_id, count)
-		refresh_inventory_panel()
-		return missing_result
-	var command := {
-		"action": "split_stack",
-		"item_id": item_id,
-		"count": count,
-	}
-	if source_stack_index > 0:
-		command["source_stack_index"] = source_stack_index
-	var result: Dictionary = _submit_inventory_action(command)
-	_record_inventory_feedback(result, "split_stack", item_id, count)
-	refresh_inventory_panel()
-	return result
+	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
+	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("split_stack", item_id, count, source_stack_index, submit, Callable(self, "_record_inventory_feedback")))
+	return _apply_inventory_action_operation(operation)
 
 
 func reorder_player_inventory_item(item_id: String, target_index: int) -> Dictionary:
-	if simulation == null:
-		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id, "target_index": target_index}
-		_record_inventory_feedback(missing_result, "reorder_inventory", item_id, 1)
-		refresh_inventory_panel()
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "reorder_inventory",
-		"item_id": item_id,
-		"target_index": target_index,
-	})
-	_record_inventory_feedback(result, "reorder_inventory", item_id, 1)
-	refresh_inventory_panel()
-	return result
+	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
+	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("reorder_item", item_id, target_index, submit, Callable(self, "_record_inventory_feedback")))
+	return _apply_inventory_action_operation(operation)
 
 
 func use_player_item(item_id: String) -> Dictionary:
-	if simulation == null:
-		var missing_result := {"success": false, "reason": "simulation_missing", "item_id": item_id}
-		_record_inventory_feedback(missing_result, "use_item", item_id, 1)
+	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
+	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("use_item", item_id, submit, Callable(self, "_record_inventory_feedback")))
+	return _apply_inventory_action_operation(operation)
+
+
+func _apply_inventory_action_operation(operation: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if bool(operation.get("rebuild_world", false)):
+		_rebuild_world_after_runtime_change()
+	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
+	if refresh_panels.has("hud"):
+		refresh_hud()
+	if refresh_panels.has("inventory"):
 		refresh_inventory_panel()
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "use_item",
-		"item_id": item_id,
-	})
-	_record_inventory_feedback(result, "use_item", item_id, 1)
-	refresh_hud()
-	refresh_inventory_panel()
-	refresh_character_panel()
+	if refresh_panels.has("character"):
+		refresh_character_panel()
+	if refresh_panels.has("crafting"):
+		refresh_crafting_panel()
 	return result
 
 
