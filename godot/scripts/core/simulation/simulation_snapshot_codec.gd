@@ -39,6 +39,7 @@ func build(simulation: RefCounted) -> Dictionary:
 		"world_flags": simulation.world_flags.keys(),
 		"relationships": _relationship_snapshots(simulation.relationships),
 		"ai_intents": _ai_intent_snapshots(simulation.ai_intents),
+		"world_time": simulation.world_time.duplicate(true),
 		"vision": simulation._vision_rules.snapshot(),
 		"turn_state": simulation.turn_state.duplicate(true),
 		"combat_state": simulation.combat_state.duplicate(true),

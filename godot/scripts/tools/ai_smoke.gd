@@ -107,6 +107,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("guard should return home outside shift")
 	if home.get("anchor_id", "") != "guard_bed_01":
 		errors.append("guard return home should use life.home_anchor")
+	errors.append_array(_expect_settlement_life_world_turn(registry))
 
 	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	restored.load_snapshot(simulation.snapshot())
@@ -114,6 +115,56 @@ func _run_checks(simulation: RefCounted, registry: RefCounted) -> Array[String]:
 		errors.append("ai intents should roundtrip through simulation snapshot")
 	if _event_count(simulation.snapshot(), "ai_intent_decided") < 5:
 		errors.append("AI intent decisions should emit events")
+	return errors
+
+
+func _expect_settlement_life_world_turn(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var patrol_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var patrol_player: RefCounted = patrol_simulation.actor_registry.get_actor(1)
+	patrol_player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(patrol_simulation)
+	patrol_simulation.world_time = {"day": "monday", "minute_of_day": 540}
+	var patrol_guard_id: int = _register_character(patrol_simulation, registry, "survivor_outpost_01_guard_liu", GridCoord.new(24, 0, 35), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var patrol_results: Array = patrol_simulation.advance_world_turn(_open_settlement_topology())
+	var patrol_result: Dictionary = _npc_result_for_actor(patrol_results, patrol_guard_id)
+	if str(patrol_result.get("intent", "")) != "follow_route":
+		errors.append("settlement guard should execute follow_route during world turn, got %s" % patrol_result)
+	if str(patrol_result.get("reason", "")) != "life_follow_route":
+		errors.append("settlement guard patrol should expose life_follow_route reason")
+	var patrol_guard: RefCounted = patrol_simulation.actor_registry.get_actor(patrol_guard_id)
+	if patrol_guard == null or (patrol_guard.grid_position.x == 24 and patrol_guard.grid_position.z == 35):
+		errors.append("settlement guard patrol should move one step during world turn")
+	if _dictionary_or_empty(patrol_result.get("life_intent", {})).is_empty():
+		errors.append("settlement patrol result should include source life intent")
+	var movement_payload: Dictionary = _last_event_payload(patrol_simulation.snapshot(), "movement_step")
+	if str(movement_payload.get("life_intent", "")) != "follow_route":
+		errors.append("settlement patrol movement_step should expose life_intent")
+	if str(_dictionary_or_empty(patrol_simulation.snapshot().get("world_time", {})).get("day", "")) != "monday":
+		errors.append("simulation snapshot should persist world_time day")
+
+	var home_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var home_player: RefCounted = home_simulation.actor_registry.get_actor(1)
+	home_player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(home_simulation)
+	home_simulation.world_time = {"day": "monday", "minute_of_day": 1200}
+	var home_guard_id: int = _register_character(home_simulation, registry, "survivor_outpost_01_guard_liu", GridCoord.new(24, 0, 35), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var home_results: Array = home_simulation.advance_world_turn(_open_settlement_topology())
+	var home_result: Dictionary = _npc_result_for_actor(home_results, home_guard_id)
+	if str(home_result.get("intent", "")) != "return_home":
+		errors.append("settlement guard should execute return_home outside shift, got %s" % home_result)
+	if str(home_result.get("reason", "")) != "life_return_home":
+		errors.append("settlement guard return should expose life_return_home reason")
+	if _dictionary_or_empty(home_result.get("target_grid", {})).is_empty():
+		errors.append("settlement guard return should expose target grid")
+	var restored: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	restored.load_snapshot(home_simulation.snapshot())
+	if JSON.stringify(restored.snapshot().get("world_time", {})) != JSON.stringify(home_simulation.snapshot().get("world_time", {})):
+		errors.append("world_time should roundtrip through simulation snapshot")
 	return errors
 
 
@@ -511,6 +562,20 @@ func _line_test_topology(max_x: int) -> Dictionary:
 			"max_x": max_x,
 			"min_z": 0,
 			"max_z": 0,
+		},
+		"blocking_cells": {},
+		"sight_blocking_cells": {},
+		"door_objects": [],
+	}
+
+
+func _open_settlement_topology() -> Dictionary:
+	return {
+		"bounds": {
+			"min_x": 0,
+			"max_x": 48,
+			"min_z": 0,
+			"max_z": 48,
 		},
 		"blocking_cells": {},
 		"sight_blocking_cells": {},

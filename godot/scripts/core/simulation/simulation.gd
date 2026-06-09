@@ -59,11 +59,17 @@ var item_library: Dictionary = {}
 var effect_library: Dictionary = {}
 var quest_library: Dictionary = {}
 var dialogue_rule_library: Dictionary = {}
+var ai_library: Dictionary = {}
+var settlement_library: Dictionary = {}
 var active_quests: Dictionary = {}
 var completed_quests: Dictionary = {}
 var world_flags: Dictionary = {}
 var relationships: Dictionary = {}
 var ai_intents: Dictionary = {}
+var world_time: Dictionary = {
+	"day": "monday",
+	"minute_of_day": 540,
+}
 var turn_state: Dictionary = {
 	"round": 1,
 	"phase": "player",
@@ -613,6 +619,11 @@ func configure_effects(effects: Dictionary) -> void:
 	effect_library = effects.duplicate(true)
 
 
+func configure_ai_life(ai: Dictionary, settlements: Dictionary) -> void:
+	ai_library = ai.duplicate(true)
+	settlement_library = settlements.duplicate(true)
+
+
 func start_quest(actor_id: int, quest_id: String) -> bool:
 	return _quest_runner.start(self, actor_id, quest_id)
 
@@ -715,6 +726,16 @@ func are_actors_hostile(actor_id: int, target_actor_id: int) -> bool:
 
 func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
 	var resolved_context: Dictionary = context.duplicate(true)
+	if not resolved_context.has("active_map_id"):
+		resolved_context["active_map_id"] = active_map_id
+	if not resolved_context.has("day"):
+		resolved_context["day"] = str(world_time.get("day", "monday"))
+	if not resolved_context.has("minute_of_day"):
+		resolved_context["minute_of_day"] = int(world_time.get("minute_of_day", 540))
+	if not resolved_context.has("ai"):
+		resolved_context["ai"] = ai_library
+	if not resolved_context.has("settlements"):
+		resolved_context["settlements"] = settlement_library
 	if resolved_context.has("topology"):
 		resolved_context["topology"] = _topology_with_runtime_door_states(_dictionary_or_empty(resolved_context.get("topology", {})))
 	if not resolved_context.has("weapon_profile"):
@@ -4054,11 +4075,142 @@ func _advance_npc_action(actor: RefCounted, topology: Dictionary) -> Dictionary:
 			var move_result: Dictionary = _npc_approach(actor, target_actor_id, topology)
 			move_result["intent"] = "approach"
 			return move_result
+		"follow_route", "return_home", "use_smart_object":
+			return _advance_npc_life_action(actor, intent, topology)
 	return {
 		"success": true,
 		"actor_id": actor.actor_id,
 		"intent": "idle",
 		"reason": intent.get("reason", "idle"),
+	}
+
+
+func _advance_npc_life_action(actor: RefCounted, intent: Dictionary, topology: Dictionary) -> Dictionary:
+	if actor.ap < 1.0:
+		return _npc_wait_for_ap(actor, 0, str(intent.get("intent", "life")), "ap_insufficient_npc_life_move", 1.0)
+	match str(intent.get("intent", "")):
+		"follow_route":
+			return _npc_follow_route(actor, intent, topology)
+		"return_home":
+			return _npc_move_to_life_target(actor, _dictionary_or_empty(intent.get("target_grid", {})), topology, intent, "return_home", "life_return_home")
+		"use_smart_object":
+			return _npc_move_to_life_target(actor, _dictionary_or_empty(intent.get("target_grid", {})), topology, intent, "use_smart_object", "life_use_smart_object")
+	return {
+		"success": true,
+		"actor_id": actor.actor_id,
+		"intent": "idle",
+		"reason": "life_intent_unhandled",
+		"life_intent": intent.duplicate(true),
+	}
+
+
+func _npc_follow_route(actor: RefCounted, intent: Dictionary, topology: Dictionary) -> Dictionary:
+	var route_grids: Array = _array_or_empty(intent.get("route_grids", []))
+	if route_grids.is_empty():
+		return {
+			"success": false,
+			"actor_id": actor.actor_id,
+			"intent": "follow_route",
+			"reason": "life_route_empty",
+			"life_intent": intent.duplicate(true),
+		}
+	var target_grid: Dictionary = _next_life_route_grid(actor, route_grids)
+	return _npc_move_to_life_target(actor, target_grid, topology, intent, "follow_route", "life_follow_route")
+
+
+func _next_life_route_grid(actor: RefCounted, route_grids: Array) -> Dictionary:
+	var nearest_index: int = 0
+	var nearest_distance: int = 999999
+	for index in range(route_grids.size()):
+		var grid: Dictionary = _dictionary_or_empty(route_grids[index])
+		var distance: int = _grid_distance(actor.grid_position, GridCoord.from_dictionary(grid))
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_index = index
+		if actor.grid_position.key() == GridCoord.from_dictionary(grid).key():
+			var next_index := (index + 1) % route_grids.size()
+			return _dictionary_or_empty(route_grids[next_index]).duplicate(true)
+	return _dictionary_or_empty(route_grids[nearest_index]).duplicate(true)
+
+
+func _npc_move_to_life_target(actor: RefCounted, target_grid: Dictionary, topology: Dictionary, intent: Dictionary, intent_name: String, move_reason: String) -> Dictionary:
+	if topology.is_empty():
+		return {"success": false, "reason": "npc_topology_missing", "actor_id": actor.actor_id, "intent": intent_name, "life_intent": intent.duplicate(true)}
+	if target_grid.is_empty():
+		return {"success": false, "reason": "life_target_missing", "actor_id": actor.actor_id, "intent": intent_name, "life_intent": intent.duplicate(true)}
+	var target_coord: RefCounted = GridCoord.from_dictionary(target_grid)
+	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
+	var candidates: Array[RefCounted] = [target_coord]
+	if _occupied_actor_cells(actor.actor_id).has(target_coord.key()):
+		candidates.append_array(_adjacent_goals(target_coord))
+	var best_plan: Dictionary = {}
+	var best_goal: RefCounted = null
+	var attempted_goals: Array[Dictionary] = []
+	for goal in candidates:
+		var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
+		attempted_goals.append(_npc_approach_attempt_summary(goal, plan))
+		if not bool(plan.get("success", false)):
+			continue
+		if best_plan.is_empty() or int(plan.get("steps", 999999)) < int(best_plan.get("steps", 999999)):
+			best_plan = plan
+			best_goal = goal
+	if best_goal == null:
+		return {
+			"success": false,
+			"actor_id": actor.actor_id,
+			"intent": intent_name,
+			"reason": "life_target_unreachable",
+			"target_grid": target_grid.duplicate(true),
+			"attempted_goals": attempted_goals,
+			"attempted_goal_count": attempted_goals.size(),
+			"life_intent": intent.duplicate(true),
+		}
+	var path: Array = _array_or_empty(best_plan.get("path", []))
+	if path.size() <= 1:
+		return {
+			"success": true,
+			"actor_id": actor.actor_id,
+			"intent": intent_name,
+			"reason": "already_at_life_target",
+			"target_grid": target_grid.duplicate(true),
+			"chosen_goal": best_goal.to_dictionary(),
+			"attempted_goals": attempted_goals,
+			"path": path.duplicate(true),
+			"path_length": path.size(),
+			"life_intent": intent.duplicate(true),
+		}
+	var next_step: Dictionary = _dictionary_or_empty(path[1])
+	var from: Dictionary = actor.grid_position.to_dictionary()
+	_auto_open_door_for_step(actor.actor_id, next_step, topology)
+	actor.grid_position = GridCoord.from_dictionary(next_step)
+	_spend_ap(actor, min(actor.ap, 1.0), move_reason)
+	_emit("movement_step", {
+		"actor_id": actor.actor_id,
+		"from": from,
+		"to": next_step,
+		"life_intent": intent_name,
+	})
+	_emit("actor_moved", {
+		"actor_id": actor.actor_id,
+		"from": from,
+		"to": next_step,
+		"steps": 1,
+		"life_intent": intent_name,
+	})
+	return {
+		"success": true,
+		"actor_id": actor.actor_id,
+		"intent": intent_name,
+		"reason": move_reason,
+		"from": from,
+		"to": next_step,
+		"target_grid": target_grid.duplicate(true),
+		"chosen_goal": best_goal.to_dictionary(),
+		"attempted_goals": attempted_goals,
+		"path": path.duplicate(true),
+		"path_length": path.size(),
+		"remaining_steps": max(0, int(best_plan.get("steps", 0)) - 1),
+		"life_intent": intent.duplicate(true),
 	}
 
 

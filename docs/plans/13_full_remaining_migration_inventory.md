@@ -200,7 +200,7 @@
 
 - generated door runtime 第一版已迁移：地图对象可通过 `props.door` 生成 `door_objects`、默认关闭、未锁、阻挡 movement / sight，`Simulation.toggle_door()` 会写入 `door_states`，world snapshot 会按 door state 更新 movement / sight blocking，并由 `World` / `Interaction` / `Save` smoke 覆盖。待补将现有地图建筑门洞批量标注为真实 `props.door`。
 - 锁门权限第一版已迁移：纯 `locked` 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；门 `props.door` / runtime `door_states` 支持 `required_item_ids` / `required_items` 和 `required_tool_ids` / `required_tools`，玩家背包或装备满足钥匙/工具后可打开锁门，缺失时返回 `door_key_missing` / `door_tool_missing`，HUD 有中文失败提示；显式配置 `consume_required_items_on_unlock` / `consume_required_tools_on_unlock` 时会在开锁成功后消耗背包钥匙/工具、记录 `unlock_requirements_consumed` 并解除 locked，配置和解锁状态随存档 roundtrip；门开锁工具耐久第一版已迁移，结构化 `required_tools` 或顶层 `tool_durability_cost` / `unlock_tool_durability_cost` 可声明耐久消耗，耐久不足返回 `tool_durability_insufficient`，成功时扣 actor `tool_durability` 而不消耗整件工具，结果和事件会暴露耐久成本与前后值；新增耐久路径已由 `Interaction` / `Save` smoke 覆盖。待补逐件/多 stack 工具耐久、失败概率和更完整开锁表现。
-- 自动开门第一版已迁移：玩家移动路径和 hostile AI 追击路径遇到可开启关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`；玩家路径已复用锁门钥匙/工具权限，缺钥匙/工具仍保持不可达，满足要求会自动开门通过；已由 `Movement` / `AI` / `Door` smoke 覆盖。待补 settlement / GOAP 路径自动开门、开合模型状态更新和声音占位。
+- 自动开门第一版已迁移：玩家移动路径、hostile AI 追击路径和 settlement life 世界回合移动遇到可开启关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`；玩家路径和 AI / life 路径已复用同一钥匙/工具权限，缺钥匙/工具仍保持不可达，满足要求会自动开门通过；已由 `Movement` / `AI` / `Door` smoke 覆盖。待补 GOAP planner 路径自动开门、开合模型状态更新和声音占位。
 - 待补建筑 footprint 阻挡：复杂 footprint、多层 story、door opening、wall visual、floor visual 和路径阻挡一致。
 - 门 hover / fallback 开合表现第一版已迁移：world renderer 会把 `target_kind=door` 和 door 状态 metadata 写入 pickable map object，runtime hover 会合并 world interaction target、把 `door_toggle` 归类为 `door`，并用门专属 outline 颜色和 `door_is_open` / `door_locked` meta 表现；无真实门模型时会生成 `DoorStateVisual` fallback，关闭/打开/锁定状态有稳定 meta、颜色和打开旋转；已由 `PlayerInteraction` / `Scene` smoke 覆盖。待补真实门模型、碰撞体、交互提示 polish 和声音占位。
 
@@ -275,10 +275,10 @@
 
 ### 7.2 Settlement life / GOAP
 
-- 待迁移 settlement life：工作、休息、巡逻、返回 home anchor、使用 smart object、schedule、背景状态。
+- settlement life 世界回合第一版已迁移：`Simulation` 会加载 `data/ai` 与 `data/settlements`，把 `world_time.day` / `minute_of_day`、active map、AI profile 和 settlement 数据传给 intent resolver；非战斗 NPC 在 `advance_world_turn()` 中可执行 `follow_route`、`return_home` 和 `use_smart_object` intent，按现有 topology / pathfinder / door permission 逐步移动、消耗 AP，并发出带 `life_intent` 的 `movement_step` / `actor_moved` 事件；`world_time` 已进入 snapshot / save roundtrip，旧存档会默认迁移为 monday 09:00；已由 `AI` / `Save` smoke 覆盖。待补工作/休息/服务状态、smart object 使用结果、背景状态和地图 route polish。
 - 待迁移 GOAP / planner：world state、datum assignment、score rules、conditional requirements、builtin executor、失败重规划。
 - 待迁移在线/后台状态同步：玩家所在地图实体存在时同步 presence，不在地图时后台 tick。
-- 待迁移 NPC 当前目标、计划和后台状态的运行时 snapshot 字段，便于 smoke 与 HUD 复核。
+- 待迁移 NPC 当前目标、计划、后台状态和 `world_time` 推进策略的运行时 snapshot 字段，便于 smoke 与 HUD 复核。
 
 ### 7.3 关系和阵营
 
@@ -486,7 +486,7 @@
 - `Movement`：对角移动和禁止穿角第一版已迁移：`Pathfinder` 支持八方向邻居但对角步会检查两侧正交格，避免穿过地图阻挡或 actor 占用夹角；长路径跨回合恢复第一版已迁移，pending movement 会暴露 `remaining_steps`，AP 不足时先走当前可负担步数、自动推进回合后继续恢复并清空 pending；已由 `Movement` smoke 覆盖开放对角一步路径、双边阻挡不可达和 4 步路线分两回合抵达。待补跨层楼梯、取消策略和更多复杂重规划细节。
 - `PlayerInteraction`：UI blocker、右键菜单关闭、hover prompt、actor/object/grid 优先级和不可见目标已有第一版覆盖；中立 actor hover/category/menu 已补首轮 smoke，攻击预览只在主动作是 `attack` 时出现；待补更多复杂重叠目标和视觉 polish。
 - `Combat`：LOS、门开闭遮挡、跨层、AOE、友军伤害、战斗退出 decay / 强制退出 / 跨地图退出 / 玩家死亡退出、远程弹药/reload、暴击 seed、特殊弹药 profile 合并 / 伤害修正 / on-hit 效果已有第一版 smoke；待补高低差/楼梯、更多特殊武器、战斗队列 UI 和表现层 polish。
-- `AI`：敌对 NPC 门追击第一版已覆盖未锁门、钥匙锁和工具锁的自动开门，通过统一门权限 / topology / pathfinder 路径执行，不为 AI 复制专用门规则；待补更复杂重规划、感知丢失细节、settlement life 和后台 tick。
+- `AI`：敌对 NPC 门追击第一版已覆盖未锁门、钥匙锁和工具锁的自动开门，通过统一门权限 / topology / pathfinder 路径执行，不为 AI 复制专用门规则；settlement life 第一版已覆盖巡逻 `follow_route`、下班 `return_home`、smart object 目标移动、AP 消耗、移动事件和 `world_time` 存档。待补更复杂重规划、感知丢失细节、完整 GOAP planner、后台 tick 和在线/离线同步。
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、背包使用成功/失败反馈、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示、数量上下限/有效性/mouse_filter/blocker 诊断、角色面板装备替换属性变化对比、任务/关键物品禁用、多 stack 拆分、actor 背包增删保持堆叠、`inventory_stacks` 存档 roundtrip、stack_counts snapshot、拆分菜单启用态、具体堆叠来源选择、拆解工具消耗来源预览和装备工具消耗确认弹窗第一版已有 smoke；待补更完整上下文菜单 polish。
 - `ContainerUI`：关闭、Esc 关闭优先级、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、选中数量确认 modal、全部拿取/全部存放、双向拖拽、背包面板拖入存放、拖拽列 hover accept/reject 高亮、基础失败提示、权限预览、背包负重限制、容器自身容量限制、容器锁定/权限拒绝、钥匙/工具解锁、显式消耗、工具耐久消耗、容器库存多 stack 扣减/追加、容器/背包多堆叠列表/详情/tooltip 展示、容器栏选中具体堆叠直接拿取、背包栏选中具体堆叠直接存放和容器/背包双栏物品图标已有 smoke；待补逐件/多 stack 工具耐久和更多跨面板拖拽视觉 polish。
 - `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售、背包负重限制、拖拽入队、buy/sell drop zone、drop zone 来源/拒绝提示、hover 高亮、稳定 accept/reject 文案、最近一次拖拽接受/拒绝预览、购物车和购物车条目拖拽 hover 高亮、业务拒绝原因、drag preview 文案与几何/生命周期诊断、统一 drag preview layer 真实视觉、交易面板快捷键、店铺多 stack 买入/卖出、店铺/玩家多堆叠列表/详情/tooltip 展示、店铺栏选中具体堆叠直接购买、玩家栏选中具体堆叠直接出售、店铺购物车购买逐堆叠来源、玩家购物车出售逐堆叠来源和店铺/玩家/装备物品图标已有 smoke；待补更多跨面板 hover 高亮 polish。
@@ -511,7 +511,7 @@
 4. 技能和 hotbar：多槽、快捷键、目标选择、状态堆叠、非战斗 modifier 消费点、cooldown。
 5. 动作表现队列：`WorldActionPresenter` 第一版已接入移动逐格 tween、攻击 `windup/impact/fade` 三阶段 impact、伤害飘字、攻击事件诊断 metadata、战斗事件 marker、交互 `start/pulse/fade` 三阶段 pulse、表现期间 input blocker，以及 hotbar / 面板 / 技能 / 制作等 UI 动作拒绝；继续补 quantity / drag / tooltip 等 UI layer 阻塞矩阵、表现截图级验收和最终 snapshot refresh 时机。
 6. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
-7. NPC life / GOAP：战斗 AI 稳定后恢复 settlement life、后台 tick 和运行时状态 snapshot。
+7. NPC life / GOAP：继续推进 settlement life 的工作/休息/服务状态、GOAP planner、后台 tick、在线/离线同步和运行时状态 snapshot。
 8. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。
 
 ## 20. 阶段提交与验收规则

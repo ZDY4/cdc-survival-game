@@ -29,6 +29,7 @@ func load(simulation: RefCounted, snapshot_data: Dictionary) -> void:
 	simulation.relationships = _load_relationships(snapshot_data.get("relationships", []))
 	_initialize_missing_relationships(simulation)
 	simulation.ai_intents = _load_ai_intents(snapshot_data.get("ai_intents", []))
+	simulation.world_time = _world_time_snapshot(snapshot_data.get("world_time", simulation.world_time))
 	simulation._vision_rules.load_snapshot(_dictionary_or_empty(snapshot_data.get("vision", {})))
 	simulation.turn_state = _dictionary_or_empty(snapshot_data.get("turn_state", simulation.turn_state)).duplicate(true)
 	simulation.combat_state = _dictionary_or_empty(snapshot_data.get("combat_state", simulation.combat_state)).duplicate(true)
@@ -329,6 +330,14 @@ func _load_ai_intents(entries: Variant) -> Dictionary:
 		if actor_id > 0:
 			output[actor_id] = intent_data.duplicate(true)
 	return output
+
+
+func _world_time_snapshot(value: Variant) -> Dictionary:
+	var data: Dictionary = _dictionary_or_empty(value)
+	return {
+		"day": str(data.get("day", "monday")),
+		"minute_of_day": posmod(int(data.get("minute_of_day", 540)), 1440),
+	}
 
 
 func _load_relationships(entries: Variant) -> Dictionary:

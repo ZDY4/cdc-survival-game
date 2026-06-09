@@ -44,6 +44,10 @@ func _init() -> void:
 
 
 func _prepare_runtime_state(simulation: RefCounted, registry: RefCounted) -> void:
+	simulation.world_time = {
+		"day": "wednesday",
+		"minute_of_day": 1110,
+	}
 	simulation.execute_interaction(1, {
 		"target_type": "map_object",
 		"target_id": "survivor_outpost_01_pickup_medkit",
@@ -392,7 +396,7 @@ func _validate_roundtrip(saved: bool, original: Dictionary, loaded: Dictionary, 
 	if int(metadata_player.get("inventory_stack_count", 0)) <= 0 or int(metadata_player.get("inventory_item_count", 0)) <= 0:
 		errors.append("save metadata player inventory counts should be present")
 
-	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes", "world_flags", "door_states", "relationships"]:
+	for key in ["active_map_id", "active_location_id", "active_entry_point_id", "consumed_interaction_targets", "completed_quests", "crafted_recipes", "world_flags", "world_time", "door_states", "relationships"]:
 		if JSON.stringify(restored.get(key)) != JSON.stringify(original.get(key)):
 			errors.append("snapshot field mismatch: %s" % key)
 	if JSON.stringify(_normalized_container_sessions(restored)) != JSON.stringify(_normalized_container_sessions(original)):
@@ -611,6 +615,7 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 	legacy.erase("hotbar_groups")
 	legacy.erase("hotbar_group_labels")
 	legacy.erase("relationships")
+	legacy.erase("world_time")
 	var restored_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
 	restored_simulation.load_snapshot(legacy)
 	var restored: Dictionary = restored_simulation.snapshot()
@@ -620,9 +625,12 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 		errors.append("legacy snapshot migration should default active_location_id from start_location_id")
 	if str(restored.get("active_entry_point_id", "")) != str(snapshot.get("start_entry_point_id", "")):
 		errors.append("legacy snapshot migration should default active_entry_point_id from start_entry_point_id")
-	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "pending_crafting", "crafting_queue", "runtime_command_queue", "runtime_command_history", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "debug_runtime_diagnostics", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "hotbar_group_labels", "relationships"]:
+	for key in ["turn_state", "combat_state", "pending_movement", "pending_interaction", "pending_crafting", "crafting_queue", "runtime_command_queue", "runtime_command_history", "pending_progression_step", "current_control_actor", "recent_interaction_target", "recent_failure", "recent_event_feedback", "target_preview", "target_selection_state", "ui_menu_state_refs", "debug_runtime_diagnostics", "door_states", "corpse_containers", "interaction_menu", "hotbar", "active_hotbar_group", "hotbar_groups", "hotbar_group_labels", "relationships", "world_time"]:
 		if not restored.has(key):
 			errors.append("legacy snapshot migration missing %s" % key)
+	var restored_world_time: Dictionary = _dictionary_or_empty(restored.get("world_time", {}))
+	if str(restored_world_time.get("day", "")) != "monday" or int(restored_world_time.get("minute_of_day", -1)) != 540:
+		errors.append("legacy snapshot migration should default world_time to monday 09:00")
 	if not _dictionary_or_empty(restored.get("pending_crafting", {})).is_empty():
 		errors.append("legacy snapshot migration should default pending_crafting to empty")
 	if not _array_or_empty(restored.get("crafting_queue", [])).is_empty():
