@@ -485,7 +485,7 @@
 
 - `Movement`：对角移动和禁止穿角第一版已迁移：`Pathfinder` 支持八方向邻居但对角步会检查两侧正交格，避免穿过地图阻挡或 actor 占用夹角；长路径跨回合恢复第一版已迁移，pending movement 会暴露 `remaining_steps`，AP 不足时先走当前可负担步数、自动推进回合后继续恢复并清空 pending；已由 `Movement` smoke 覆盖开放对角一步路径、双边阻挡不可达和 4 步路线分两回合抵达。待补跨层楼梯、取消策略和更多复杂重规划细节。
 - `PlayerInteraction`：UI blocker、右键菜单关闭、hover prompt、actor/object/grid 优先级和不可见目标已有第一版覆盖；中立 actor hover/category/menu 已补首轮 smoke，攻击预览只在主动作是 `attack` 时出现；待补更多复杂重叠目标和视觉 polish。
-- `Combat`：LOS、跨层、AOE、友军伤害、战斗退出 decay / 强制退出 / 跨地图退出 / 玩家死亡退出、远程弹药/reload、暴击 seed 已有第一版 smoke；待补门开闭遮挡、高低差/楼梯、特殊武器/特殊弹药、战斗队列 UI 和表现层 polish。
+- `Combat`：LOS、跨层、AOE、友军伤害、战斗退出 decay / 强制退出 / 跨地图退出 / 玩家死亡退出、远程弹药/reload、暴击 seed、特殊弹药 profile 合并 / 伤害修正 / on-hit 效果已有第一版 smoke；待补门开闭遮挡、高低差/楼梯、更多特殊武器、战斗队列 UI 和表现层 polish。
 - `AI`：补开门、重规划、感知丢失、settlement life、后台 tick。
 - `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、背包使用成功/失败反馈、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示、数量上下限/有效性/mouse_filter/blocker 诊断、角色面板装备替换属性变化对比、任务/关键物品禁用、多 stack 拆分、actor 背包增删保持堆叠、`inventory_stacks` 存档 roundtrip、stack_counts snapshot、拆分菜单启用态、具体堆叠来源选择、拆解工具消耗来源预览和装备工具消耗确认弹窗第一版已有 smoke；待补更完整上下文菜单 polish。
 - `ContainerUI`：关闭、Esc 关闭优先级、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、选中数量确认 modal、全部拿取/全部存放、双向拖拽、背包面板拖入存放、拖拽列 hover accept/reject 高亮、基础失败提示、权限预览、背包负重限制、容器自身容量限制、容器锁定/权限拒绝、钥匙/工具解锁、显式消耗、工具耐久消耗、容器库存多 stack 扣减/追加、容器/背包多堆叠列表/详情/tooltip 展示、容器栏选中具体堆叠直接拿取、背包栏选中具体堆叠直接存放和容器/背包双栏物品图标已有 smoke；待补逐件/多 stack 工具耐久和更多跨面板拖拽视觉 polish。

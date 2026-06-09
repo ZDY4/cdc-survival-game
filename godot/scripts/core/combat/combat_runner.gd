@@ -33,7 +33,7 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		critical_roll = _critical_hit(simulation, attacker, target, profile)
 	var critical: bool = bool(critical_roll.get("critical", false))
 	var armor_context: Dictionary = _armor_context(simulation, attacker, target, profile, bool(hit_roll.get("hit", true)))
-	var damage_result: Dictionary = _resolve_damage(simulation, attacker, target, profile, critical, armor_context) if bool(hit_roll.get("hit", true)) else _miss_damage_result(simulation, target, hit_roll)
+	var damage_result: Dictionary = _resolve_damage(simulation, attacker, target, profile, critical, armor_context) if bool(hit_roll.get("hit", true)) else _miss_damage_result(simulation, target, hit_roll, profile)
 	var damage: float = float(damage_result.get("damage", 0.0))
 	var triggered_on_hit_effect_ids: Array[String] = _triggered_on_hit_effect_ids(profile, damage_result)
 	target.hp = max(0.0, target.hp - damage)
@@ -57,6 +57,9 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"effective_defense": float(damage_result.get("effective_defense", damage_result.get("defense", 0.0))),
 		"damage_reduction": float(damage_result.get("damage_reduction", 0.0)),
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
+		"ammo_profile": _dictionary_or_empty(profile.get("ammo_profile", {})).duplicate(true),
+		"ammo_damage_bonus": float(damage_result.get("ammo_damage_bonus", 0.0)),
+		"ammo_damage_flat_bonus": float(profile.get("ammo_damage_flat_bonus", 0.0)),
 		"armor_pierce": float(damage_result.get("armor_pierce", 0.0)),
 		"armor_pierced_defense": float(damage_result.get("armor_pierced_defense", 0.0)),
 		"armor_break_chance": float(damage_result.get("armor_break_chance", 0.0)),
@@ -78,13 +81,16 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"range": int(options.get("range", 1)),
 		"weapon_item_id": profile.get("item_id", ""),
 		"base_damage": float(profile.get("damage", attacker.attack_power)),
-		"crit_multiplier": float(profile.get("crit_multiplier", 1.0)),
+		"crit_multiplier": _critical_multiplier(simulation, attacker, profile),
 		"crit_roll": float(critical_roll.get("roll", 1.0)),
 		"crit_chance": float(critical_roll.get("chance", 0.0)),
 		"defense": float(damage_result.get("defense", 0.0)),
 		"effective_defense": float(damage_result.get("effective_defense", damage_result.get("defense", 0.0))),
 		"damage_reduction": float(damage_result.get("damage_reduction", 0.0)),
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
+		"ammo_profile": _dictionary_or_empty(profile.get("ammo_profile", {})).duplicate(true),
+		"ammo_damage_bonus": float(damage_result.get("ammo_damage_bonus", 0.0)),
+		"ammo_damage_flat_bonus": float(profile.get("ammo_damage_flat_bonus", 0.0)),
 		"armor_pierce": float(damage_result.get("armor_pierce", 0.0)),
 		"armor_pierced_defense": float(damage_result.get("armor_pierced_defense", 0.0)),
 		"armor_break_chance": float(damage_result.get("armor_break_chance", 0.0)),
@@ -140,6 +146,9 @@ func perform_attack(simulation: RefCounted, actor_id: int, target_actor_id: int,
 		"effective_defense": float(damage_result.get("effective_defense", damage_result.get("defense", 0.0))),
 		"damage_reduction": float(damage_result.get("damage_reduction", 0.0)),
 		"damage_bonus": float(damage_result.get("damage_bonus", 0.0)),
+		"ammo_profile": _dictionary_or_empty(profile.get("ammo_profile", {})).duplicate(true),
+		"ammo_damage_bonus": float(damage_result.get("ammo_damage_bonus", 0.0)),
+		"ammo_damage_flat_bonus": float(profile.get("ammo_damage_flat_bonus", 0.0)),
 		"armor_pierce": float(damage_result.get("armor_pierce", 0.0)),
 		"armor_pierced_defense": float(damage_result.get("armor_pierced_defense", 0.0)),
 		"armor_break_chance": float(damage_result.get("armor_break_chance", 0.0)),
@@ -598,7 +607,7 @@ func _hit_preview(simulation: RefCounted, attacker: RefCounted, target: RefCount
 	}
 
 
-func _miss_damage_result(simulation: RefCounted, target: RefCounted, hit_roll: Dictionary) -> Dictionary:
+func _miss_damage_result(simulation: RefCounted, target: RefCounted, hit_roll: Dictionary, profile: Dictionary) -> Dictionary:
 	var defense: float = max(0.0, _combat_attribute(simulation, target, "defense", target.defense))
 	return {
 		"damage": 0.0,
@@ -607,6 +616,7 @@ func _miss_damage_result(simulation: RefCounted, target: RefCounted, hit_roll: D
 		"effective_defense": defense,
 		"damage_reduction": clampf(_combat_attribute(simulation, target, "damage_reduction", 0.0), 0.0, 0.95),
 		"damage_bonus": 0.0,
+		"ammo_damage_bonus": float(profile.get("ammo_damage_bonus", 0.0)),
 		"armor_pierce": 0.0,
 		"armor_pierced_defense": 0.0,
 		"armor_break_chance": 0.0,
@@ -643,6 +653,7 @@ func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCo
 			"effective_defense": effective_defense,
 			"damage_reduction": 0.0,
 			"damage_bonus": 0.0,
+			"ammo_damage_bonus": float(profile.get("ammo_damage_bonus", 0.0)),
 			"armor_pierce": float(armor_result.get("armor_pierce", 0.0)),
 			"armor_pierced_defense": float(armor_result.get("armor_pierced_defense", 0.0)),
 			"armor_break_chance": float(armor_context.get("armor_break_chance", 0.0)),
@@ -651,7 +662,8 @@ func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCo
 			"armor_break_defense_reduction": float(armor_result.get("armor_break_defense_reduction", 0.0)),
 		}
 	var damage_reduction: float = clampf(_combat_attribute(simulation, target, "damage_reduction", 0.0), 0.0, 0.95)
-	var damage_bonus: float = max(0.0, _active_effect_modifier(attacker, "damage_bonus"))
+	var ammo_damage_bonus: float = max(0.0, float(profile.get("ammo_damage_bonus", 0.0)))
+	var damage_bonus: float = max(0.0, _active_effect_modifier(attacker, "damage_bonus") + ammo_damage_bonus)
 	var multiplier: float = _critical_multiplier(simulation, attacker, profile) if critical else 1.0
 	var damage: float = max(1.0, round(base_damage * (1.0 + damage_bonus) * (1.0 - damage_reduction) * multiplier))
 	return {
@@ -661,6 +673,7 @@ func _resolve_damage(simulation: RefCounted, attacker: RefCounted, target: RefCo
 		"effective_defense": effective_defense,
 		"damage_reduction": damage_reduction,
 		"damage_bonus": damage_bonus,
+		"ammo_damage_bonus": ammo_damage_bonus,
 		"armor_pierce": float(armor_result.get("armor_pierce", 0.0)),
 		"armor_pierced_defense": float(armor_result.get("armor_pierced_defense", 0.0)),
 		"armor_break_chance": float(armor_context.get("armor_break_chance", 0.0)),
@@ -759,9 +772,10 @@ func _critical_chance(simulation: RefCounted, attacker: RefCounted, profile: Dic
 
 
 func _critical_multiplier(simulation: RefCounted, attacker: RefCounted, profile: Dictionary) -> float:
+	var bonus: float = max(0.0, float(profile.get("crit_multiplier_bonus", 0.0)))
 	if profile.has("crit_multiplier"):
-		return max(1.0, float(profile.get("crit_multiplier", 1.0)))
-	return max(1.0, _combat_attribute(simulation, attacker, "crit_damage", 1.0))
+		return max(1.0, float(profile.get("crit_multiplier", 1.0)) + bonus)
+	return max(1.0, _combat_attribute(simulation, attacker, "crit_damage", 1.0) + bonus)
 
 
 func _combat_attribute(simulation: RefCounted, actor: RefCounted, key: String, fallback: float = 0.0) -> float:

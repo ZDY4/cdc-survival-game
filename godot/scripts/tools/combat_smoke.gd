@@ -2287,6 +2287,60 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 			errors.append("placeholder headshot_bonus should not create active on-hit effect runtime")
 	if not _active_effect_by_id(pistol_enemy, "effect:headshot_bonus").is_empty():
 		errors.append("placeholder headshot_bonus should not be stored on target active_effects")
+	_restore_player_turn(simulation, player)
+	player.equipment["main_hand"] = "1004"
+	player.inventory["1009"] = 2
+	player.weapon_ammo.erase("main_hand")
+	player.ap = 20.0
+	var special_ammo_items: Dictionary = simulation.item_library.duplicate(true)
+	var pistol_ammo_record: Dictionary = _dictionary_or_empty(special_ammo_items.get("1009", {})).duplicate(true)
+	var pistol_ammo_data: Dictionary = _dictionary_or_empty(pistol_ammo_record.get("data", pistol_ammo_record)).duplicate(true)
+	pistol_ammo_data["ammo_data"] = {
+		"damage_flat_bonus": 5.0,
+		"damage_bonus": 0.2,
+		"armor_pierce": 0.25,
+		"on_hit_effect_ids": ["poison"],
+	}
+	pistol_ammo_record["data"] = pistol_ammo_data
+	special_ammo_items["1009"] = pistol_ammo_record
+	var special_ammo_target: int = _register_test_actor(simulation, "weapon_profile_special_ammo_target", "hostile", {
+		"x": int(player_grid.get("x", 0)) + 8,
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)) + 1,
+	}, 90.0)
+	var special_ammo_enemy: RefCounted = simulation.actor_registry.get_actor(special_ammo_target)
+	special_ammo_enemy.hp = 90.0
+	special_ammo_enemy.max_hp = 90.0
+	special_ammo_enemy.defense = 10.0
+	special_ammo_enemy.combat_attributes["evasion"] = 0.0
+	var special_ammo_result: Dictionary = simulation.submit_player_command({
+		"kind": "attack",
+		"target_actor_id": special_ammo_target,
+		"topology": topology,
+		"item_library": special_ammo_items,
+	})
+	if not bool(special_ammo_result.get("success", false)):
+		errors.append("special ammo pistol attack should succeed: %s" % special_ammo_result.get("reason", "unknown"))
+	var special_ammo_profile: Dictionary = _dictionary_or_empty(_dictionary_or_empty(special_ammo_result.get("weapon_profile", {})).get("ammo_profile", {}))
+	if str(special_ammo_profile.get("item_id", "")) != "1009":
+		errors.append("weapon profile should expose ammo_profile for consumed ammo")
+	if absf(float(special_ammo_profile.get("damage_flat_bonus", 0.0)) - 5.0) > 0.001:
+		errors.append("ammo_profile should expose flat damage bonus")
+	if absf(float(special_ammo_result.get("ammo_damage_bonus", 0.0)) - 0.2) > 0.001:
+		errors.append("attack result should expose ammo percent damage bonus")
+	if absf(float(special_ammo_result.get("armor_pierce", 0.0)) - 0.25) > 0.001:
+		errors.append("special ammo armor pierce should enter attack result")
+	if not bool(special_ammo_result.get("critical", false)) and absf(float(special_ammo_result.get("damage", 0.0)) - 27.0) > 0.01:
+		errors.append("non-critical special ammo should apply flat, percent and armor pierce damage")
+	if not _array_or_empty(special_ammo_result.get("triggered_on_hit_effect_ids", [])).has("poison"):
+		errors.append("special ammo on-hit effect should merge into attack effects")
+	var special_ammo_event: Dictionary = _last_attack_resolved_for_weapon(simulation.snapshot(), "1004")
+	if absf(float(special_ammo_event.get("ammo_damage_flat_bonus", 0.0)) - 5.0) > 0.001:
+		errors.append("attack_resolved should expose special ammo flat bonus")
+	if str(_dictionary_or_empty(special_ammo_event.get("ammo_profile", {})).get("item_id", "")) != "1009":
+		errors.append("attack_resolved should expose special ammo profile")
+	if not _array_or_empty(special_ammo_event.get("triggered_on_hit_effect_ids", [])).has("poison"):
+		errors.append("attack_resolved should expose special ammo on-hit effect")
 	player.inventory["1009"] = 2
 	player.weapon_ammo["main_hand"] = 1
 	var magazine_target: int = _register_test_actor(simulation, "weapon_profile_magazine_target", "hostile", {
@@ -2323,7 +2377,7 @@ func _expect_weapon_profile_attack(errors: Array[String], simulation: RefCounted
 	var inventory_no_ammo: Dictionary = simulation.submit_player_command({"kind": "attack", "target_actor_id": inventory_no_ammo_target, "topology": topology})
 	if inventory_no_ammo.get("reason", "") != "ammo_insufficient":
 		errors.append("ranged weapon without tracked magazine or inventory ammo should report ammo_insufficient")
-	for actor_id in [blunt_target, wrench_target, rifle_target, durable_weapon_target, broken_weapon_target, bleeding_target, poison_target, dot_defeat_target, pistol_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
+	for actor_id in [blunt_target, wrench_target, rifle_target, durable_weapon_target, broken_weapon_target, bleeding_target, poison_target, dot_defeat_target, pistol_target, special_ammo_target, magazine_target, no_ammo_target, inventory_no_ammo_target]:
 		if simulation.actor_registry.get_actor(actor_id) != null:
 			simulation.actor_registry.unregister_actor(actor_id)
 	player.active_effects = original_active_effects
