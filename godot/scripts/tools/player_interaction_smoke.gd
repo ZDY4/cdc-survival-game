@@ -154,6 +154,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		await _expect_mouse_left_click_far_ground_starts_moving(errors, game_root, move_camera)
 	await _expect_auto_open_door_movement_presenter(errors, game_root)
+	await _expect_movement_turning_presenter(errors, game_root)
 	await _expect_cancel_pending(errors, game_root)
 
 	var door_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
@@ -2131,6 +2132,81 @@ func _expect_auto_open_door_movement_presenter(errors: Array[String], game_root:
 		if _string_array(player_node.get_meta("action_presenter_auto_opened_door_ids", [])).find(door_id) < 0:
 			errors.append("movement actor node should expose auto-opened door id")
 	await _wait_for_world_action_presenter_idle(game_root)
+
+
+func _expect_movement_turning_presenter(errors: Array[String], game_root: Node) -> void:
+	var player_grid: Dictionary = _player_grid(game_root)
+	var start_grid := {
+		"x": int(player_grid.get("x", 0)),
+		"y": int(player_grid.get("y", 0)),
+		"z": int(player_grid.get("z", 0)),
+	}
+	var turn_grid := {
+		"x": int(start_grid.get("x", 0)) + 1,
+		"y": int(start_grid.get("y", 0)),
+		"z": int(start_grid.get("z", 0)),
+	}
+	var final_grid := {
+		"x": int(turn_grid.get("x", 0)),
+		"y": int(turn_grid.get("y", 0)),
+		"z": int(turn_grid.get("z", 0)) + 1,
+	}
+	_present_synthetic_world_action_events(game_root, [
+		{
+			"kind": "movement_step",
+			"payload": {
+				"actor_id": 1,
+				"from": start_grid.duplicate(true),
+				"to": turn_grid.duplicate(true),
+			},
+		},
+		{
+			"kind": "movement_step",
+			"payload": {
+				"actor_id": 1,
+				"from": turn_grid.duplicate(true),
+				"to": final_grid.duplicate(true),
+			},
+		},
+		{
+			"kind": "actor_moved",
+			"payload": {
+				"actor_id": 1,
+				"from": start_grid.duplicate(true),
+				"to": final_grid.duplicate(true),
+			},
+		},
+	])
+	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+	if str(presenter.get("kind", "")) != "movement":
+		errors.append("turning movement should expose movement presenter, got %s" % JSON.stringify(presenter))
+	var facings: Array = _array_or_empty(presenter.get("movement_facings", []))
+	if facings.size() != 2:
+		errors.append("turning movement presenter should expose two facing segments")
+	else:
+		var first_facing: Dictionary = _dictionary_or_empty(facings[0])
+		var final_facing: Dictionary = _dictionary_or_empty(facings[1])
+		if str(first_facing.get("direction", "")) != "east" or absf(float(first_facing.get("yaw_degrees", 0.0)) - 90.0) > 0.001:
+			errors.append("turning movement first facing should be east / 90 degrees")
+		if str(final_facing.get("direction", "")) != "south" or absf(float(final_facing.get("yaw_degrees", 0.0)) - 180.0) > 0.001:
+			errors.append("turning movement final facing should be south / 180 degrees")
+	if str(presenter.get("final_facing_direction", "")) != "south":
+		errors.append("turning movement presenter should expose final south facing")
+	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node == null:
+		errors.append("turning movement presenter should keep player node visible")
+	else:
+		if str(player_node.get_meta("action_presenter_current_facing_direction", "")) != "east":
+			errors.append("turning movement should apply first segment facing immediately")
+		if absf(float(player_node.get_meta("action_presenter_current_facing_yaw_degrees", 0.0)) - 90.0) > 0.001:
+			errors.append("turning movement actor metadata should expose current east yaw")
+	await _wait_for_world_action_presenter_idle(game_root)
+	player_node = game_root.find_child("Actor_player_1", true, false) as Node3D
+	if player_node != null:
+		if str(player_node.get_meta("action_presenter_final_facing_direction", "")) != "south":
+			errors.append("turning movement actor metadata should preserve final south facing")
+		if absf(player_node.rotation_degrees.y - 180.0) > 0.001:
+			errors.append("turning movement fast-forward should apply final south rotation, got %s" % str(player_node.rotation_degrees))
 
 
 func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, camera: Camera3D, player_node: Node3D) -> void:
