@@ -1,9 +1,11 @@
 extends RefCounted
 
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
+const UiOverlayRenderController = preload("res://scripts/app/controllers/ui_overlay_render_controller.gd")
 
 var parent: Node
 var panel_controller: RefCounted
+var ui_overlay_render_controller: RefCounted = UiOverlayRenderController.new()
 
 
 func _init(p_parent: Node = null) -> void:
@@ -150,6 +152,46 @@ func handle_trade_shortcut(event: InputEventKey) -> bool:
 func close_trade_panel() -> void:
 	if panel_controller != null:
 		panel_controller.close_trade_panel()
+
+
+func setup_tooltip_layer(owner: Node = null) -> void:
+	ui_overlay_render_controller.call("setup_tooltip_layer", _overlay_owner(owner))
+
+
+func update_tooltip_layer(snapshot: Dictionary, owner: Node = null) -> void:
+	setup_tooltip_layer(owner)
+	if not bool(snapshot.get("active", false)):
+		hide_tooltip_layer(str(snapshot.get("lifecycle_state", "inactive")))
+		return
+	render_tooltip_snapshot(snapshot, owner)
+
+
+func hide_tooltip_layer(reason: String) -> void:
+	ui_overlay_render_controller.call("hide_tooltip_layer", reason)
+
+
+func render_tooltip_snapshot(snapshot: Dictionary, owner: Node = null) -> void:
+	ui_overlay_render_controller.call("render_tooltip_snapshot", _overlay_owner(owner), snapshot)
+
+
+func tooltip_render_snapshot() -> Dictionary:
+	return dictionary_or_empty(ui_overlay_render_controller.call("tooltip_render_snapshot"))
+
+
+func setup_drag_preview_layer(owner: Node = null) -> void:
+	ui_overlay_render_controller.call("setup_drag_preview_layer", _overlay_owner(owner))
+
+
+func render_drag_preview_snapshot(drag: Dictionary, owner: Node = null) -> void:
+	ui_overlay_render_controller.call("render_drag_preview_snapshot", _overlay_owner(owner), drag)
+
+
+func hide_drag_preview_layer(reason: String) -> void:
+	ui_overlay_render_controller.call("hide_drag_preview_layer", reason)
+
+
+func drag_preview_render_snapshot() -> Dictionary:
+	return dictionary_or_empty(ui_overlay_render_controller.call("drag_preview_render_snapshot"))
 
 
 func toggle_controls_hint() -> Dictionary:
@@ -327,6 +369,10 @@ func _apply_feedback(feedback: Dictionary) -> void:
 		panel_controller.active_character_feedback = dictionary_or_empty(feedback.get("active_character_feedback", {}))
 	if feedback.has("active_inventory_feedback"):
 		panel_controller.active_inventory_feedback = dictionary_or_empty(feedback.get("active_inventory_feedback", {}))
+
+
+func _overlay_owner(owner: Node = null) -> Node:
+	return owner if owner != null else parent
 
 
 func dictionary_or_empty(value: Variant) -> Dictionary:

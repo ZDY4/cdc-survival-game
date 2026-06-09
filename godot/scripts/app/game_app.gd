@@ -18,7 +18,6 @@ const UiFeedbackStateController = preload("res://scripts/app/controllers/ui_feed
 const SkillTargetingController = preload("res://scripts/app/controllers/skill_targeting_controller.gd")
 const CraftingFeedbackController = preload("res://scripts/app/controllers/crafting_feedback_controller.gd")
 const CraftingActionController = preload("res://scripts/app/controllers/crafting_action_controller.gd")
-const UiOverlayRenderController = preload("res://scripts/app/controllers/ui_overlay_render_controller.gd")
 const TooltipSnapshotController = preload("res://scripts/app/controllers/tooltip_snapshot_controller.gd")
 const DragSnapshotController = preload("res://scripts/app/controllers/drag_snapshot_controller.gd")
 const DragHoverTargetController = preload("res://scripts/app/controllers/drag_hover_target_controller.gd")
@@ -64,7 +63,6 @@ var map_panel: Control
 var skills_panel: Control
 var crafting_panel: Control
 var settings_panel: Control
-var ui_overlay_render_controller: RefCounted = UiOverlayRenderController.new()
 var tooltip_snapshot_controller: RefCounted = TooltipSnapshotController.new()
 var drag_snapshot_controller: RefCounted = DragSnapshotController.new()
 var drag_hover_target_controller: RefCounted = DragHoverTargetController.new()
@@ -77,52 +75,68 @@ var skill_action_controller: RefCounted = SkillActionController.new()
 var world_panel_action_controller: RefCounted = WorldPanelActionController.new()
 var tooltip_layer: Control:
 	get:
-		return ui_overlay_render_controller.tooltip_layer if ui_overlay_render_controller != null else null
+		var controller := _ui_overlay_controller()
+		return controller.tooltip_layer if controller != null else null
 	set(value):
-		if ui_overlay_render_controller != null:
-			ui_overlay_render_controller.tooltip_layer = value
+		var controller := _ui_overlay_controller()
+		if controller != null:
+			controller.tooltip_layer = value
 var tooltip_panel: PanelContainer:
 	get:
-		return ui_overlay_render_controller.tooltip_panel if ui_overlay_render_controller != null else null
+		var controller := _ui_overlay_controller()
+		return controller.tooltip_panel if controller != null else null
 	set(value):
-		if ui_overlay_render_controller != null:
-			ui_overlay_render_controller.tooltip_panel = value
+		var controller := _ui_overlay_controller()
+		if controller != null:
+			controller.tooltip_panel = value
 var tooltip_label: Label:
 	get:
-		return ui_overlay_render_controller.tooltip_label if ui_overlay_render_controller != null else null
+		var controller := _ui_overlay_controller()
+		return controller.tooltip_label if controller != null else null
 	set(value):
-		if ui_overlay_render_controller != null:
-			ui_overlay_render_controller.tooltip_label = value
+		var controller := _ui_overlay_controller()
+		if controller != null:
+			controller.tooltip_label = value
 var last_tooltip_render_snapshot: Dictionary:
 	get:
-		return ui_overlay_render_controller.last_tooltip_render_snapshot if ui_overlay_render_controller != null else {"active": false}
+		var controller := _ui_overlay_controller()
+		return controller.last_tooltip_render_snapshot if controller != null else {"active": false}
 	set(value):
-		if ui_overlay_render_controller != null:
-			ui_overlay_render_controller.last_tooltip_render_snapshot = value.duplicate(true)
+		var controller := _ui_overlay_controller()
+		if controller != null:
+			controller.last_tooltip_render_snapshot = value.duplicate(true)
 var drag_preview_layer: Control:
 	get:
-		return ui_overlay_render_controller.drag_preview_layer if ui_overlay_render_controller != null else null
+		var controller := _ui_overlay_controller()
+		return controller.drag_preview_layer if controller != null else null
 	set(value):
-		if ui_overlay_render_controller != null:
-			ui_overlay_render_controller.drag_preview_layer = value
+		var controller := _ui_overlay_controller()
+		if controller != null:
+			controller.drag_preview_layer = value
 var drag_preview_panel: PanelContainer:
 	get:
-		return ui_overlay_render_controller.drag_preview_panel if ui_overlay_render_controller != null else null
+		var controller := _ui_overlay_controller()
+		return controller.drag_preview_panel if controller != null else null
 	set(value):
-		if ui_overlay_render_controller != null:
-			ui_overlay_render_controller.drag_preview_panel = value
+		var controller := _ui_overlay_controller()
+		if controller != null:
+			controller.drag_preview_panel = value
 var drag_preview_label: Label:
 	get:
-		return ui_overlay_render_controller.drag_preview_label if ui_overlay_render_controller != null else null
+		var controller := _ui_overlay_controller()
+		return controller.drag_preview_label if controller != null else null
 	set(value):
-		if ui_overlay_render_controller != null:
-			ui_overlay_render_controller.drag_preview_label = value
+		var controller := _ui_overlay_controller()
+		if controller != null:
+			controller.drag_preview_label = value
 var last_drag_preview_render_snapshot: Dictionary:
 	get:
-		return ui_overlay_render_controller.last_drag_preview_render_snapshot if ui_overlay_render_controller != null else {"active": false}
+		var controller := _ui_overlay_controller()
+		return controller.last_drag_preview_render_snapshot if controller != null else {"active": false}
 	set(value):
-		if ui_overlay_render_controller != null:
-			ui_overlay_render_controller.last_drag_preview_render_snapshot = value.duplicate(true)
+		var controller := _ui_overlay_controller()
+		if controller != null:
+			controller.last_drag_preview_render_snapshot = value.duplicate(true)
 var active_trade_target: Dictionary = {}
 var ui_feedback_state_controller: RefCounted = UiFeedbackStateController.new()
 var active_trade_feedback: Dictionary:
@@ -535,6 +549,10 @@ func context_menu_snapshot() -> Dictionary:
 	return {"active": false, "count": 0, "top": {}, "menus": []}
 
 
+func _ui_overlay_controller() -> RefCounted:
+	return hud_root.ui_overlay_render_controller if hud_root != null else null
+
+
 func hover_tooltip_snapshot(control: Control = null) -> Dictionary:
 	return _dictionary_or_empty(tooltip_snapshot_controller.call("hover_tooltip_snapshot", get_viewport(), control))
 
@@ -650,28 +668,30 @@ func ui_layer_stack_snapshot(drag_data: Variant = {}, drag_hover_target: Control
 
 
 func _setup_tooltip_layer() -> void:
-	ui_overlay_render_controller.call("setup_tooltip_layer", self)
+	if hud_root != null:
+		hud_root.setup_tooltip_layer(self)
 
 
 func _update_tooltip_layer() -> void:
-	_setup_tooltip_layer()
-	var snapshot: Dictionary = hover_tooltip_snapshot()
-	if not bool(snapshot.get("active", false)):
-		_hide_tooltip_layer(str(snapshot.get("lifecycle_state", "inactive")))
+	if hud_root == null:
 		return
-	_render_tooltip_snapshot(snapshot)
+	var snapshot: Dictionary = hover_tooltip_snapshot()
+	hud_root.update_tooltip_layer(snapshot, self)
 
 
 func _hide_tooltip_layer(reason: String) -> void:
-	ui_overlay_render_controller.call("hide_tooltip_layer", reason)
+	if hud_root != null:
+		hud_root.hide_tooltip_layer(reason)
 
 
 func _render_tooltip_snapshot(snapshot: Dictionary) -> void:
-	ui_overlay_render_controller.call("render_tooltip_snapshot", self, snapshot)
+	if hud_root != null:
+		hud_root.render_tooltip_snapshot(snapshot, self)
 
 
 func _setup_drag_preview_layer() -> void:
-	ui_overlay_render_controller.call("setup_drag_preview_layer", self)
+	if hud_root != null:
+		hud_root.setup_drag_preview_layer(self)
 
 
 func render_drag_preview_for_snapshot(drag_data: Variant = {}, hover_target: Control = null) -> Dictionary:
@@ -684,11 +704,13 @@ func render_drag_preview_for_snapshot(drag_data: Variant = {}, hover_target: Con
 
 
 func _hide_drag_preview_layer(reason: String) -> void:
-	ui_overlay_render_controller.call("hide_drag_preview_layer", reason)
+	if hud_root != null:
+		hud_root.hide_drag_preview_layer(reason)
 
 
 func _render_drag_preview_snapshot(drag: Dictionary) -> void:
-	ui_overlay_render_controller.call("render_drag_preview_snapshot", self, drag)
+	if hud_root != null:
+		hud_root.render_drag_preview_snapshot(drag, self)
 
 
 func handle_trade_shortcut(event: InputEventKey) -> bool:
