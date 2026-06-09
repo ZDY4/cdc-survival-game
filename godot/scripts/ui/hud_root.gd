@@ -152,6 +152,93 @@ func close_trade_panel() -> void:
 		panel_controller.close_trade_panel()
 
 
+func toggle_controls_hint() -> Dictionary:
+	var hud: Control = panel("hud")
+	if hud == null or not hud.has_method("toggle_controls_hint"):
+		return {"success": false, "reason": "hud_missing"}
+	return dictionary_or_empty(hud.call("toggle_controls_hint"))
+
+
+func controls_hint_visible() -> bool:
+	var hud: Control = panel("hud")
+	return hud != null and hud.has_method("is_controls_hint_visible") and bool(hud.call("is_controls_hint_visible"))
+
+
+func controls_hint_snapshot() -> Dictionary:
+	var hud: Control = panel("hud")
+	if hud != null and hud.has_method("controls_hint_snapshot"):
+		return dictionary_or_empty(hud.call("controls_hint_snapshot"))
+	return {"visible": false, "line_count": 0, "lines": []}
+
+
+func toggle_debug_console() -> Dictionary:
+	var hud: Control = panel("hud")
+	if hud == null or not hud.has_method("toggle_debug_console"):
+		return {"success": false, "reason": "hud_missing"}
+	return dictionary_or_empty(hud.call("toggle_debug_console"))
+
+
+func close_debug_console() -> Dictionary:
+	var hud: Control = panel("hud")
+	if hud == null or not hud.has_method("hide_debug_console"):
+		return {"success": false, "reason": "hud_missing"}
+	hud.call("hide_debug_console")
+	return {"success": true, "visible": false}
+
+
+func is_debug_console_open() -> bool:
+	var hud: Control = panel("hud")
+	return hud != null and hud.has_method("is_debug_console_open") and bool(hud.call("is_debug_console_open"))
+
+
+func debug_console_snapshot(permission: Dictionary = {}) -> Dictionary:
+	var hud: Control = panel("hud")
+	if hud != null and hud.has_method("debug_console_snapshot"):
+		var snapshot: Dictionary = dictionary_or_empty(hud.call("debug_console_snapshot"))
+		snapshot["permission"] = permission.duplicate(true)
+		return snapshot
+	return {
+		"visible": false,
+		"history": [],
+		"history_count": 0,
+		"suggestions": [],
+		"suggestion_count": 0,
+		"input_text": "",
+		"permission": permission.duplicate(true),
+	}
+
+
+func set_debug_console_schema(schema: Array, suggestions: Array, permission: Dictionary = {}) -> void:
+	var hud: Control = panel("hud")
+	if hud != null and hud.has_method("set_debug_console_schema"):
+		hud.call("set_debug_console_schema", schema, suggestions, permission)
+
+
+func set_debug_console_result(command: String, result: Dictionary) -> void:
+	var hud: Control = panel("hud")
+	if hud != null and hud.has_method("set_debug_console_result"):
+		hud.call("set_debug_console_result", command, result)
+
+
+func toggle_debug_panel() -> Dictionary:
+	var hud: Control = panel("hud")
+	if hud == null or not hud.has_method("toggle_debug_panel"):
+		return {"success": false, "reason": "hud_missing"}
+	return dictionary_or_empty(hud.call("toggle_debug_panel"))
+
+
+func is_debug_panel_open() -> bool:
+	var hud: Control = panel("hud")
+	return hud != null and hud.has_method("is_debug_panel_open") and bool(hud.call("is_debug_panel_open"))
+
+
+func debug_panel_snapshot() -> Dictionary:
+	var hud: Control = panel("hud")
+	if hud != null and hud.has_method("debug_panel_snapshot"):
+		return dictionary_or_empty(hud.call("debug_panel_snapshot"))
+	return {"visible": false, "line_count": 0, "lines": []}
+
+
 func hud_input_blocker_snapshot(debug_console_open: bool = false) -> Dictionary:
 	var hud: Control = panel("hud")
 	if hud != null and hud.has_method("input_blocker_snapshot"):

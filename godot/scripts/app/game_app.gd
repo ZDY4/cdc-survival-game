@@ -698,9 +698,9 @@ func handle_trade_shortcut(event: InputEventKey) -> bool:
 
 
 func toggle_controls_hint() -> Dictionary:
-	if hud == null or not hud.has_method("toggle_controls_hint"):
-		return {"success": false, "reason": "hud_missing"}
-	var result: Dictionary = hud.toggle_controls_hint()
+	if hud_root == null:
+		return {"success": false, "reason": "hud_root_missing"}
+	var result: Dictionary = _dictionary_or_empty(hud_root.toggle_controls_hint())
 	refresh_hud(current_interaction_prompt())
 	_play_hud_shortcut_audio("ui_button_pressed", "ControlsHintShortcut", "keyboard_shortcut", "toggle_controls_hint", {
 		"value": "on" if bool(result.get("visible", false)) else "off",
@@ -709,13 +709,13 @@ func toggle_controls_hint() -> Dictionary:
 
 
 func controls_hint_visible() -> bool:
-	return hud != null and hud.has_method("is_controls_hint_visible") and bool(hud.is_controls_hint_visible())
+	return hud_root != null and bool(hud_root.controls_hint_visible())
 
 
 func toggle_debug_console() -> Dictionary:
-	if hud == null or not hud.has_method("toggle_debug_console"):
-		return {"success": false, "reason": "hud_missing"}
-	var result: Dictionary = hud.toggle_debug_console()
+	if hud_root == null:
+		return {"success": false, "reason": "hud_root_missing"}
+	var result: Dictionary = _dictionary_or_empty(hud_root.toggle_debug_console())
 	refresh_hud(current_interaction_prompt())
 	_play_hud_shortcut_audio("ui_button_pressed", "DebugConsoleShortcut", "keyboard_shortcut", "toggle_debug_console", {
 		"value": "open" if bool(result.get("visible", false)) else "close",
@@ -724,22 +724,21 @@ func toggle_debug_console() -> Dictionary:
 
 
 func close_debug_console() -> Dictionary:
-	if hud == null or not hud.has_method("hide_debug_console"):
-		return {"success": false, "reason": "hud_missing"}
-	hud.hide_debug_console()
+	if hud_root == null:
+		return {"success": false, "reason": "hud_root_missing"}
+	var result: Dictionary = _dictionary_or_empty(hud_root.close_debug_console())
 	refresh_hud(current_interaction_prompt())
-	return {"success": true, "visible": false}
+	return result
 
 
 func is_debug_console_open() -> bool:
-	return hud != null and hud.has_method("is_debug_console_open") and bool(hud.is_debug_console_open())
+	return hud_root != null and bool(hud_root.is_debug_console_open())
 
 
 func debug_console_snapshot() -> Dictionary:
-	if hud != null and hud.has_method("debug_console_snapshot"):
-		var snapshot: Dictionary = hud.debug_console_snapshot()
-		snapshot["permission"] = debug_runtime_controller.permission_snapshot(self)
-		return snapshot
+	var permission: Dictionary = debug_runtime_controller.permission_snapshot(self)
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.debug_console_snapshot(permission))
 	return {
 		"visible": false,
 		"history": [],
@@ -747,15 +746,15 @@ func debug_console_snapshot() -> Dictionary:
 		"suggestions": [],
 		"suggestion_count": 0,
 		"input_text": "",
-		"permission": debug_runtime_controller.permission_snapshot(self),
+		"permission": permission,
 	}
 
 
 func submit_debug_console_command(command_text: String) -> Dictionary:
 	var command := command_text.strip_edges()
 	var result: Dictionary = _execute_debug_console_command(command)
-	if hud != null and hud.has_method("set_debug_console_result"):
-		hud.set_debug_console_result(command, result)
+	if hud_root != null:
+		hud_root.set_debug_console_result(command, result)
 	refresh_all_panels(current_interaction_prompt())
 	_play_hud_shortcut_audio("ui_button_pressed", "DebugConsoleInput", "text_submit", "submit_debug_console_command", {
 		"value": command,
@@ -769,15 +768,15 @@ func _execute_debug_console_command(command: String) -> Dictionary:
 
 
 func controls_hint_snapshot() -> Dictionary:
-	if hud != null and hud.has_method("controls_hint_snapshot"):
-		return hud.controls_hint_snapshot()
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.controls_hint_snapshot())
 	return {"visible": false, "line_count": 0, "lines": []}
 
 
 func toggle_debug_panel() -> Dictionary:
-	if hud == null or not hud.has_method("toggle_debug_panel"):
-		return {"success": false, "reason": "hud_missing"}
-	var result: Dictionary = hud.toggle_debug_panel()
+	if hud_root == null:
+		return {"success": false, "reason": "hud_root_missing"}
+	var result: Dictionary = _dictionary_or_empty(hud_root.toggle_debug_panel())
 	refresh_hud(current_interaction_prompt())
 	_play_hud_shortcut_audio("ui_button_pressed", "DebugPanelShortcut", "keyboard_shortcut", "toggle_debug_panel", {
 		"value": "open" if bool(result.get("visible", false)) else "close",
@@ -786,12 +785,12 @@ func toggle_debug_panel() -> Dictionary:
 
 
 func is_debug_panel_open() -> bool:
-	return hud != null and hud.has_method("is_debug_panel_open") and bool(hud.is_debug_panel_open())
+	return hud_root != null and bool(hud_root.is_debug_panel_open())
 
 
 func debug_panel_snapshot() -> Dictionary:
-	if hud != null and hud.has_method("debug_panel_snapshot"):
-		return hud.debug_panel_snapshot()
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.debug_panel_snapshot())
 	return {"visible": false, "line_count": 0, "lines": []}
 
 
@@ -1227,8 +1226,8 @@ func close_active_container(reason: String = "closed") -> Dictionary:
 
 func close_active_ui(reason: String = "closed") -> Dictionary:
 	if is_debug_console_open():
-		if hud != null and hud.has_method("hide_debug_console"):
-			hud.hide_debug_console()
+		if hud_root != null:
+			hud_root.close_debug_console()
 		refresh_hud(current_interaction_prompt())
 		return {"success": true, "closed": "debug_console"}
 	if hud_root != null:
@@ -2262,14 +2261,13 @@ func _sync_panel_refs_from_hud_root() -> void:
 
 
 func _sync_debug_console_schema() -> void:
-	if hud == null:
+	if hud_root == null:
 		return
-	if hud.has_method("set_debug_console_schema"):
-		hud.set_debug_console_schema(
-			debug_runtime_controller.command_schema(),
-			debug_runtime_controller.command_suggestions(),
-			debug_runtime_controller.permission_snapshot(self)
-		)
+	hud_root.set_debug_console_schema(
+		debug_runtime_controller.command_schema(),
+		debug_runtime_controller.command_suggestions(),
+		debug_runtime_controller.permission_snapshot(self)
+	)
 
 
 func _update_trade_target_after_interaction(result: Dictionary, executed_target: Dictionary) -> void:
