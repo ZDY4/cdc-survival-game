@@ -3605,6 +3605,7 @@ func _expect_player_command_authority_source(errors: Array[String], entries: Arr
 		"CharacterActionController": _read_text_file("res://scripts/app/controllers/character_action_controller.gd"),
 		"SkillActionController": _read_text_file("res://scripts/app/controllers/skill_action_controller.gd"),
 		"CraftingActionController": _read_text_file("res://scripts/app/controllers/crafting_action_controller.gd"),
+		"WorldPanelActionController": _read_text_file("res://scripts/app/controllers/world_panel_action_controller.gd"),
 	}
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
@@ -3694,6 +3695,10 @@ func _body_uses_core_service(body: String, owner: String, core_service: String) 
 			return body.contains("set_label.call")
 		"Simulation.cycle_hotbar_group":
 			return body.contains("cycle_group.call")
+		"Simulation.turn_in_quest":
+			return body.contains("turn_in.call")
+		"Simulation.enter_location":
+			return body.contains("enter_location.call")
 	return false
 
 

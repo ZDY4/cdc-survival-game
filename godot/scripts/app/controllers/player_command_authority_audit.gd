@@ -40,8 +40,8 @@ const PLAYER_COMMAND_AUTHORITY_AUDIT: Array[Dictionary] = [
 	{"app_method": "craft_player_recipe", "owner_method": "craft_recipe", "action": "craft", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "CraftingActionController", "blocker": "_player_command_rejection"},
 	{"app_method": "confirm_crafting_queue", "owner_method": "confirm_queue", "action": "crafting_queue", "authority_kind": "submit_player_command", "command_kind": "craft", "owner": "CraftingActionController", "blocker": "_player_command_rejection", "authority_helper": "advance_queue"},
 	{"app_method": "cancel_pending_crafting", "owner_method": "cancel_pending", "action": "cancel_pending_crafting", "authority_kind": "submit_player_command", "command_kind": "cancel_pending", "owner": "CraftingActionController", "blocker": "pending_crafting"},
-	{"app_method": "turn_in_player_quest", "action": "quest_turn_in", "authority_kind": "core_service", "core_service": "Simulation.turn_in_quest", "owner": "GameApp", "blocker": "quest_state"},
-	{"app_method": "enter_overworld_location_from_panel", "action": "enter_overworld_location", "authority_kind": "core_service", "core_service": "Simulation.enter_location", "owner": "GameApp", "blocker": "map_panel_prompt"},
+	{"app_method": "turn_in_player_quest", "owner_method": "turn_in_quest", "action": "quest_turn_in", "authority_kind": "core_service", "core_service": "Simulation.turn_in_quest", "owner": "WorldPanelActionController", "blocker": "quest_state"},
+	{"app_method": "enter_overworld_location_from_panel", "owner_method": "enter_overworld_location", "action": "enter_overworld_location", "authority_kind": "core_service", "core_service": "Simulation.enter_location", "owner": "WorldPanelActionController", "blocker": "map_panel_prompt"},
 ]
 
 

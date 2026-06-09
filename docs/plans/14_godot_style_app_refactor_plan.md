@@ -35,10 +35,11 @@
 - gameplay input blocker、modal/context menu event、close priority 和 UI layer stack 组装已抽到 `godot/scripts/app/controllers/ui_blocker_state_controller.gd`；`GameApp` 只保留从 HUD / panel 节点读取当前状态的 facade。
 - 容器 take / store / transfer 玩家动作 facade 已抽到 `godot/scripts/app/controllers/container_action_controller.gd`；背包 drop / use / deconstruct / split / reorder 玩家动作 facade 已抽到 `godot/scripts/app/controllers/inventory_action_controller.gd`；交易 buy / sell / cart 玩家动作 facade 已抽到 `godot/scripts/app/controllers/trade_action_controller.gd`；装备 equip / unequip / reload 和属性点 facade 已抽到 `godot/scripts/app/controllers/character_action_controller.gd`；技能 learn / bind / hotbar group / hotbar use / runtime target confirm facade 已抽到 `godot/scripts/app/controllers/skill_action_controller.gd`。
 - 制作配方提交、制作队列推进、等待后续队列恢复、pending crafting 取消和 queue snapshot facade 已抽到 `godot/scripts/app/controllers/crafting_action_controller.gd`；`GameApp` 只保留 smoke / UI 兼容入口和刷新执行。
+- 任务 turn-in 和地图面板进入 overworld location 的 action facade 已抽到 `godot/scripts/app/controllers/world_panel_action_controller.gd`；`GameApp` 只保留兼容入口、world rebuild 和刷新执行。
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 2160 行，还保留大量 UI facade、任务、地图面板、对话、移动/交互等玩家动作 facade，以及 smoke 兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 2187 行，还保留大量 UI facade、对话、移动/交互等玩家动作 facade，以及 smoke 兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` / `HudRoot` script；当前仍主要依赖现有 HUD controller 和根脚本转发。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
@@ -286,6 +287,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 装备 equip / unequip / reload 和属性点 facade 已抽到 `character_action_controller.gd`，`GameApp` 只保留兼容方法和刷新执行。
 - [x] 技能 learn / bind / hotbar group / hotbar use / runtime target confirm facade 已抽到 `skill_action_controller.gd`，`GameApp` 只保留兼容方法、target marker 更新和刷新执行。
 - [x] 制作配方提交、制作队列推进、等待后续队列恢复、pending crafting 取消和 queue snapshot facade 已抽到 `crafting_action_controller.gd`，`GameApp` 只保留兼容方法和刷新执行。
+- [x] 任务 turn-in 和地图面板进入 overworld location facade 已抽到 `world_panel_action_controller.gd`，`GameApp` 只保留兼容方法、world rebuild 和刷新执行。
 - [ ] 引入 `HudRoot` facade，统一承接 HUD、stage panels、debug console、debug panel、tooltip 和 context menu。
 - [ ] 将 `GameApp` 中直接操作 HUD 子节点的代码替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
 - [ ] 将玩家动作 facade 继续从 `GameApp` 移出。

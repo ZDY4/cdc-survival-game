@@ -29,6 +29,7 @@ const InventoryActionController = preload("res://scripts/app/controllers/invento
 const TradeActionController = preload("res://scripts/app/controllers/trade_action_controller.gd")
 const CharacterActionController = preload("res://scripts/app/controllers/character_action_controller.gd")
 const SkillActionController = preload("res://scripts/app/controllers/skill_action_controller.gd")
+const WorldPanelActionController = preload("res://scripts/app/controllers/world_panel_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -72,6 +73,7 @@ var inventory_action_controller: RefCounted = InventoryActionController.new()
 var trade_action_controller: RefCounted = TradeActionController.new()
 var character_action_controller: RefCounted = CharacterActionController.new()
 var skill_action_controller: RefCounted = SkillActionController.new()
+var world_panel_action_controller: RefCounted = WorldPanelActionController.new()
 var tooltip_layer: Control:
 	get:
 		return ui_overlay_render_controller.tooltip_layer if ui_overlay_render_controller != null else null
@@ -2101,25 +2103,53 @@ func _container_inventory_for_crafting(container_id: String, target: Dictionary)
 
 
 func turn_in_player_quest(quest_id: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var result: Dictionary = simulation.turn_in_quest(1, quest_id)
-	refresh_inventory_panel()
-	refresh_journal_panel()
-	refresh_skills_panel()
-	refresh_crafting_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(world_panel_action_controller.call(
+		"turn_in_quest",
+		quest_id,
+		Callable(self, "_turn_in_quest_action") if simulation != null else Callable()
+	))
+	return _apply_world_panel_action_operation(operation)
 
 
 func enter_overworld_location_from_panel(location_id: String) -> Dictionary:
+	var operation: Dictionary = _dictionary_or_empty(world_panel_action_controller.call(
+		"enter_overworld_location",
+		location_id,
+		Callable(self, "_enter_overworld_location_action") if simulation != null else Callable()
+	))
+	return _apply_world_panel_action_operation(operation)
+
+
+func _turn_in_quest_action(quest_id: String) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	return _dictionary_or_empty(simulation.turn_in_quest(1, quest_id))
+
+
+func _enter_overworld_location_action(location_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing", "location_id": location_id}
-	var result: Dictionary = simulation.enter_location(1, location_id, registry.get_library("overworld"))
-	if bool(result.get("success", false)):
+	return _dictionary_or_empty(simulation.enter_location(1, location_id, registry.get_library("overworld")))
+
+
+func _apply_world_panel_action_operation(operation: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if bool(operation.get("rebuild_world", false)):
 		_rebuild_world_after_runtime_change({}, result)
-	else:
+		return result
+	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
+	if refresh_panels.has("hud"):
 		refresh_hud(current_interaction_prompt())
+	if refresh_panels.has("inventory"):
+		refresh_inventory_panel()
+	if refresh_panels.has("journal"):
+		refresh_journal_panel()
+	if refresh_panels.has("map"):
 		refresh_map_panel()
+	if refresh_panels.has("skills"):
+		refresh_skills_panel()
+	if refresh_panels.has("crafting"):
+		refresh_crafting_panel()
 	return result
 
 
