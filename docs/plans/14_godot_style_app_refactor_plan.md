@@ -27,13 +27,14 @@
 - world time snapshot 格式化已抽到 `godot/scripts/app/controllers/world_time_snapshot_builder.gd`。
 - 背包、容器、交易和角色面板的运行时反馈状态已抽到 `godot/scripts/app/controllers/ui_feedback_state_controller.gd`，`GameApp.active_*_feedback` 仅作为 smoke / tool 兼容属性保留。
 - skill targeting 状态、preview 记录、confirm/cancel 状态转换和 skill activation targeting 解析已抽到 `godot/scripts/app/controllers/skill_targeting_controller.gd`，`GameApp.active_skill_targeting` / `active_skill_target_preview` 仅作为兼容属性保留。
+- crafting queue latest result、pending cancel feedback、queue 标准化和 queue summary 已抽到 `godot/scripts/app/controllers/crafting_feedback_controller.gd`，`GameApp.latest_*_crafting_result` 仅作为兼容属性保留。
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 4050 行，还保留大量 UI facade、玩家动作 facade、拖拽/tooltip snapshot、crafting queue feedback 和 smoke 兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 3970 行，还保留大量 UI facade、玩家动作 facade、拖拽/tooltip snapshot 和 smoke 兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` / `HudRoot` script；当前仍主要依赖现有 HUD controller 和根脚本转发。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
-- 下一步优先抽取 tooltip / drag snapshot、crafting queue feedback 或玩家动作 facade，而不是一次性重命名根脚本。
+- 下一步优先抽取 tooltip / drag snapshot 或玩家动作 facade，而不是一次性重命名根脚本。
 
 ## 当前问题
 
@@ -265,6 +266,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] HUD 运行时刷新已通过 `hud_controller.apply_runtime_snapshot()` 和 `input_blocker_snapshot()` 收敛为 facade。
 - [x] 背包、容器、交易和角色面板的反馈状态已抽到 `ui_feedback_state_controller.gd`。
 - [x] skill targeting 状态和 targeting definition 解析已抽到 `skill_targeting_controller.gd`。
+- [x] crafting queue / pending crafting 反馈状态已抽到 `crafting_feedback_controller.gd`。
 - [ ] 引入 `HudRoot` facade，统一承接 HUD、stage panels、debug console、debug panel、tooltip 和 context menu。
 - [ ] 将 `GameApp` 中直接操作 HUD 子节点的代码替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
 - [ ] 将 tooltip、drag preview、context menu 和 modal blocker 状态继续从 `GameApp` 移出。
