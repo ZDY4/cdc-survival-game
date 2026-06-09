@@ -2571,7 +2571,8 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 		player.ap = 0.0
 	var target_grid: Dictionary = _near_open_grid_from(_player_grid(game_root), game_root.world_result.get("map", {}))
 	var target := Vector3(float(target_grid.get("x", 0)), 0.0, float(target_grid.get("z", 0)))
-	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(target))
+	var hover_screen_position := camera.unproject_position(target)
+	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(hover_screen_position)
 	if player != null:
 		player.ap = old_ap
 	if not bool(hover_result.get("success", false)):
@@ -2589,6 +2590,7 @@ func _expect_ground_hover_move_preview(errors: Array[String], game_root: Node, c
 		errors.append("ground hover preview should expose AP-insufficient pending state")
 	_expect_ground_hover_cursor_preview(errors, game_root)
 	_expect_move_path_preview_markers(errors, game_root, move_preview)
+	_expect_same_ground_hover_reuses_move_path_preview_markers(errors, game_root, hover_screen_position)
 	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
 	if str(prompt.get("primary_option_id", "")) != "move":
 		errors.append("ground hover prompt should expose move primary option")
@@ -2712,6 +2714,29 @@ func _expect_move_path_preview_markers(errors: Array[String], game_root: Node, m
 			break
 	if pending_marker == null:
 		errors.append("move path preview should mark cells beyond current AP as pending")
+
+
+func _expect_same_ground_hover_reuses_move_path_preview_markers(errors: Array[String], game_root: Node, screen_position: Vector2) -> void:
+	var container: Node3D = game_root.find_child("MovePathPreviewMarkers", true, false) as Node3D
+	if container == null:
+		return
+	var children_before := container.get_children()
+	if children_before.is_empty():
+		return
+	var first_marker_id := (children_before.front() as Node).get_instance_id()
+	var marker_count := int(container.get_meta("marker_count", 0))
+	var path_length := int(container.get_meta("path_length", 0))
+	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(screen_position)
+	if not bool(hover_result.get("success", false)):
+		errors.append("same ground hover reuse setup should still hit ground")
+		return
+	var children_after := container.get_children()
+	if int(container.get_meta("marker_count", 0)) != marker_count:
+		errors.append("same ground hover should not change move path marker count")
+	if int(container.get_meta("path_length", 0)) != path_length:
+		errors.append("same ground hover should not change move path length")
+	if children_after.is_empty() or (children_after.front() as Node).get_instance_id() != first_marker_id:
+		errors.append("same ground hover should reuse existing move path marker nodes")
 
 
 func _expect_pending_movement_path_markers(errors: Array[String], game_root: Node) -> void:

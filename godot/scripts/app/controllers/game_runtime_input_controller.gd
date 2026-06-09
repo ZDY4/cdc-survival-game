@@ -64,6 +64,7 @@ var is_camera_following_player := true
 var is_space_wait_held := false
 var space_wait_elapsed_sec := 0.0
 var space_wait_repeated := false
+var hover_refresh_requested := false
 var _vision_geometry := VisionGeometry.new()
 var last_hover_state: Dictionary = {
 	"active": false,
@@ -132,6 +133,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	_clear_selection_only()
 	_set_hover_failure("world_changed")
 	_update_pending_movement_path_markers()
+	_request_hover_refresh()
 	selected_node = null
 
 
@@ -140,9 +142,12 @@ func process(delta: float) -> void:
 		return
 	_process_space_wait_hold(delta)
 	if is_camera_following_player and not is_middle_mouse_dragging:
-		camera_target = _clamp_camera_target(_focused_actor_position())
-		_apply_camera_transform()
-	if _mouse_inside_viewport():
+		var follow_target := _clamp_camera_target(_focused_actor_position())
+		if camera_target.distance_squared_to(follow_target) > 0.000001:
+			camera_target = follow_target
+			_apply_camera_transform()
+	if hover_refresh_requested and not is_middle_mouse_dragging and _mouse_inside_viewport():
+		hover_refresh_requested = false
 		update_hover_at_screen_position(game_root.get_viewport().get_mouse_position())
 	_update_pending_movement_path_markers()
 
@@ -206,6 +211,7 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 			_begin_camera_drag(mouse_event.position)
 		else:
 			has_camera_drag_anchor = false
+			_request_hover_refresh()
 		return true
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
 		var hover_result: Dictionary = update_hover_at_screen_position(mouse_event.position)
@@ -372,6 +378,7 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 	elif key == KEY_0 and event.ctrl_pressed:
 		camera_zoom_factor = 1.0
 		_apply_camera_transform()
+		_request_hover_refresh()
 		return true
 	elif key == KEY_F:
 		focus_current_actor()
@@ -620,6 +627,7 @@ func focus_current_actor() -> void:
 	has_camera_drag_anchor = false
 	camera_target = _clamp_camera_target(_focused_actor_position())
 	_apply_camera_transform()
+	_request_hover_refresh()
 
 
 func has_selection_state() -> bool:
@@ -689,6 +697,7 @@ func _zoom_camera_wheel(direction: float) -> void:
 func _scale_zoom(multiplier: float) -> void:
 	camera_zoom_factor = clampf(camera_zoom_factor * multiplier, ZOOM_MIN, ZOOM_MAX)
 	_apply_camera_transform()
+	_request_hover_refresh()
 
 
 func _apply_camera_transform() -> void:
@@ -702,6 +711,10 @@ func _apply_camera_transform() -> void:
 	camera.global_position = camera_target + _bevy_camera_offset(distance)
 	camera.look_at(camera_target, Vector3.BACK)
 	_sync_camera_focus_meta()
+
+
+func _request_hover_refresh() -> void:
+	hover_refresh_requested = true
 
 
 func _bevy_camera_offset(distance: float) -> Vector3:
@@ -833,6 +846,8 @@ func _selection_clear_result(had_selected_node: bool, reason: String, source_res
 
 func _set_hover_ground(world_position: Vector3, picking: Dictionary = {}) -> bool:
 	var grid: Dictionary = _grid_from_world_position(world_position)
+	if _can_reuse_ground_hover(grid):
+		return false
 	var move_preview: Dictionary = _move_preview_for_grid(grid)
 	_apply_hover_cursor_state(move_preview)
 	_hide_hover_target_outline()
@@ -852,6 +867,17 @@ func _set_hover_ground(world_position: Vector3, picking: Dictionary = {}) -> boo
 		"attack_preview": {},
 		"picking": picking.duplicate(true),
 	})
+
+
+func _can_reuse_ground_hover(grid: Dictionary) -> bool:
+	if _skill_targeting_active():
+		return false
+	if str(last_hover_state.get("kind", "")) != "ground":
+		return false
+	var previous_grid: Dictionary = _dictionary_or_empty(last_hover_state.get("grid", {}))
+	return int(previous_grid.get("x", -999999)) == int(grid.get("x", 999999)) \
+		and int(previous_grid.get("y", -999999)) == int(grid.get("y", 999999)) \
+		and int(previous_grid.get("z", -999999)) == int(grid.get("z", 999999))
 
 
 func _set_hover_interaction(target_node: Node, world_position: Vector3, picking: Dictionary = {}) -> bool:
