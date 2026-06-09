@@ -25,6 +25,7 @@ const DragHoverTargetController = preload("res://scripts/app/controllers/drag_ho
 const UiBlockerStateController = preload("res://scripts/app/controllers/ui_blocker_state_controller.gd")
 const ContainerActionController = preload("res://scripts/app/controllers/container_action_controller.gd")
 const InventoryActionController = preload("res://scripts/app/controllers/inventory_action_controller.gd")
+const TradeActionController = preload("res://scripts/app/controllers/trade_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -65,6 +66,7 @@ var drag_hover_target_controller: RefCounted = DragHoverTargetController.new()
 var ui_blocker_state_controller: RefCounted = UiBlockerStateController.new()
 var container_action_controller: RefCounted = ContainerActionController.new()
 var inventory_action_controller: RefCounted = InventoryActionController.new()
+var trade_action_controller: RefCounted = TradeActionController.new()
 var tooltip_layer: Control:
 	get:
 		return ui_overlay_render_controller.tooltip_layer if ui_overlay_render_controller != null else null
@@ -1698,74 +1700,23 @@ func _apply_inventory_action_operation(operation: Dictionary) -> Dictionary:
 
 
 func buy_active_trade_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var shop_id: String = _active_shop_id()
-	if shop_id.is_empty():
-		var missing_result := {"success": false, "reason": "active_trade_missing"}
-		_record_trade_feedback(missing_result, "buy_shop", "", item_id, count)
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "buy_shop",
-		"shop_id": shop_id,
-		"item_id": item_id,
-		"count": count,
-		"stack_index": stack_index,
-	})
-	_record_trade_feedback(result, "buy_shop", shop_id, item_id, count)
-	refresh_inventory_panel()
-	refresh_trade_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("buy_item", _active_shop_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_trade_feedback")))
+	return _apply_trade_action_operation(operation)
 
 
 func sell_active_trade_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var shop_id: String = _active_shop_id()
-	if shop_id.is_empty():
-		var missing_result := {"success": false, "reason": "active_trade_missing"}
-		_record_trade_feedback(missing_result, "sell_shop", "", item_id, count)
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "sell_shop",
-		"shop_id": shop_id,
-		"item_id": item_id,
-		"count": count,
-		"stack_index": stack_index,
-	})
-	_record_trade_feedback(result, "sell_shop", shop_id, item_id, count)
-	refresh_inventory_panel()
-	refresh_trade_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("sell_item", _active_shop_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_trade_feedback")))
+	return _apply_trade_action_operation(operation)
 
 
 func sell_active_trade_equipment(slot_id: String, item_id: String) -> Dictionary:
-	var shop_id: String = _active_shop_id()
-	if shop_id.is_empty():
-		var missing_result := {"success": false, "reason": "active_trade_missing"}
-		_record_trade_feedback(missing_result, "sell_equipped_shop", "", item_id, 1)
-		return missing_result
-	var result: Dictionary = _submit_inventory_action({
-		"action": "sell_equipped_shop",
-		"shop_id": shop_id,
-		"slot_id": slot_id,
-		"item_id": item_id,
-		"count": 1,
-	})
-	_record_trade_feedback(result, "sell_equipped_shop", shop_id, item_id, 1)
-	if bool(result.get("success", false)):
-		_rebuild_world_after_runtime_change()
-	else:
-		refresh_inventory_panel()
-		refresh_trade_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("sell_equipment", _active_shop_id(), slot_id, item_id, Callable(self, "_submit_inventory_action"), Callable(self, "_record_trade_feedback")))
+	return _apply_trade_action_operation(operation)
 
 
 func transfer_active_trade_item(source: String, item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	match source:
-		"shop":
-			return buy_active_trade_item(item_id, count, stack_index)
-		"player":
-			return sell_active_trade_item(item_id, count, stack_index)
-	if source.begins_with("equipment:"):
-		return sell_active_trade_equipment(source.trim_prefix("equipment:"), item_id)
-	return {"success": false, "reason": "unknown_trade_transfer_source", "source": source}
+	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("transfer_item", source, _active_shop_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_trade_feedback")))
+	return _apply_trade_action_operation(operation)
 
 
 func has_active_trade_session() -> bool:
@@ -1773,18 +1724,26 @@ func has_active_trade_session() -> bool:
 
 
 func confirm_active_trade_cart(entries: Array) -> Dictionary:
-	if entries.is_empty():
-		return {"success": false, "reason": "empty_trade_cart"}
-	var shop_id: String = _active_shop_id()
-	if shop_id.is_empty():
-		var missing_result := {"success": false, "reason": "active_trade_missing"}
-		_record_trade_feedback(missing_result, "trade_cart", "", "", 0)
-		return missing_result
-	var result: Dictionary = simulation.confirm_trade_cart(1, shop_id, entries, registry.get_library("items"))
-	_record_trade_feedback(result, "trade_cart", shop_id, str(result.get("item_id", "")), int(result.get("count", 0)))
-	refresh_inventory_panel()
-	refresh_trade_panel()
+	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("confirm_cart", entries, _active_shop_id(), Callable(self, "_confirm_trade_cart_action"), Callable(self, "_record_trade_feedback")))
+	return _apply_trade_action_operation(operation)
+
+
+func _apply_trade_action_operation(operation: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if bool(operation.get("rebuild_world", false)):
+		_rebuild_world_after_runtime_change()
+	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
+	if refresh_panels.has("inventory"):
+		refresh_inventory_panel()
+	if refresh_panels.has("trade"):
+		refresh_trade_panel()
 	return result
+
+
+func _confirm_trade_cart_action(shop_id: String, entries: Array) -> Dictionary:
+	if simulation == null or registry == null:
+		return {"success": false, "reason": "simulation_missing"}
+	return _dictionary_or_empty(simulation.confirm_trade_cart(1, shop_id, entries, registry.get_library("items")))
 
 
 func equip_player_item(item_id: String, slot_id: String) -> Dictionary:
