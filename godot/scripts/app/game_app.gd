@@ -7,7 +7,7 @@ const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd"
 const WorldActionPresenter = preload("res://scripts/world/world_action_presenter.gd")
 const FogOverlayController = preload("res://scripts/world/fog_overlay_controller.gd")
 const DebugOverlayController = preload("res://scripts/world/debug_overlay_controller.gd")
-const DebugConsoleCommandRunner = preload("res://scripts/app/debug_console_command_runner.gd")
+const DebugRuntimeController = preload("res://scripts/app/controllers/debug_runtime_controller.gd")
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
@@ -141,7 +141,7 @@ var performance_last_process_tick_msec: int = 0
 var performance_last_hud_refresh_tick_msec: int = 0
 var performance_last_render_counts: Dictionary = {}
 var performance_render_sequence: int = 0
-var _debug_console_command_runner := DebugConsoleCommandRunner.new()
+var debug_runtime_controller: RefCounted = DebugRuntimeController.new()
 
 
 func _ready() -> void:
@@ -1129,7 +1129,7 @@ func is_debug_console_open() -> bool:
 func debug_console_snapshot() -> Dictionary:
 	if hud != null and hud.has_method("debug_console_snapshot"):
 		var snapshot: Dictionary = hud.debug_console_snapshot()
-		snapshot["permission"] = _debug_console_command_runner.permission_snapshot(self)
+		snapshot["permission"] = debug_runtime_controller.permission_snapshot(self)
 		return snapshot
 	return {
 		"visible": false,
@@ -1138,7 +1138,7 @@ func debug_console_snapshot() -> Dictionary:
 		"suggestions": [],
 		"suggestion_count": 0,
 		"input_text": "",
-		"permission": _debug_console_command_runner.permission_snapshot(self),
+		"permission": debug_runtime_controller.permission_snapshot(self),
 	}
 
 
@@ -1156,33 +1156,7 @@ func submit_debug_console_command(command_text: String) -> Dictionary:
 
 
 func _execute_debug_console_command(command: String) -> Dictionary:
-	var normalized := command.to_lower().strip_edges()
-	var debug_result: Dictionary = _debug_console_command_runner.execute(self, command)
-	if not debug_result.is_empty():
-		return debug_result
-	match normalized:
-		"":
-			return {"success": false, "reason": "empty_command", "message": "empty command"}
-		"help":
-			return {"success": true, "message": _debug_console_command_runner.help_text()}
-		"show fps":
-			var panel_result: Dictionary = toggle_debug_panel()
-			return {
-				"success": bool(panel_result.get("success", false)),
-				"message": "fps panel=%s" % ("on" if bool(panel_result.get("visible", false)) else "off"),
-				"visible": bool(panel_result.get("visible", false)),
-			}
-		"show overlays":
-			var overlay_result: Dictionary = cycle_debug_overlay_mode()
-			return {"success": bool(overlay_result.get("success", false)), "message": "overlay=%s" % str(overlay_result.get("mode", debug_overlay_mode))}
-		"observe mode":
-			var observe_result: Dictionary = toggle_observe_mode()
-			return {"success": bool(observe_result.get("success", false)), "message": "observe=%s" % ("on" if bool(observe_result.get("observe_mode", observe_mode_enabled)) else "off")}
-		"clear":
-			if hud != null and hud.has_method("clear_debug_console_history"):
-				hud.clear_debug_console_history()
-			return {"success": true, "message": "console cleared"}
-	return {"success": false, "reason": "unknown_command", "message": "unknown command: %s" % command}
+	return debug_runtime_controller.execute(self, command)
 
 
 func controls_hint_snapshot() -> Dictionary:
@@ -1465,8 +1439,8 @@ func _debug_console_mutation_authority_audit() -> Dictionary:
 	var missing_permission: Array[Dictionary] = []
 	var missing_runtime_flag: Array[Dictionary] = []
 	var missing_usage: Array[Dictionary] = []
-	var permission_snapshot: Dictionary = _debug_console_command_runner.permission_snapshot(self)
-	for command in _debug_console_command_runner.command_schema():
+	var permission_snapshot: Dictionary = debug_runtime_controller.permission_snapshot(self)
+	for command in debug_runtime_controller.command_schema():
 		var command_data: Dictionary = _dictionary_or_empty(command).duplicate(true)
 		if not bool(command_data.get("mutates_runtime", false)):
 			continue
@@ -4085,9 +4059,9 @@ func _sync_debug_console_schema() -> void:
 		return
 	if hud.has_method("set_debug_console_schema"):
 		hud.set_debug_console_schema(
-			_debug_console_command_runner.command_schema(),
-			_debug_console_command_runner.command_suggestions(),
-			_debug_console_command_runner.permission_snapshot(self)
+			debug_runtime_controller.command_schema(),
+			debug_runtime_controller.command_suggestions(),
+			debug_runtime_controller.permission_snapshot(self)
 		)
 
 
