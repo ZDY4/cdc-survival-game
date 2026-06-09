@@ -268,7 +268,7 @@
 
 ### 7.1 战斗 AI
 
-- hostile attack / approach、aggro range 和 LOS 感知第一版已迁移：敌对 NPC 会按 active map、阵营、存活状态、感知距离和 topology LOS 选择目标，LOS 被阻挡时保持 idle 并返回 `target_blocked_by_los`；玩家等待推进 NPC 回合时会传入当前地图 topology，避免隔墙攻击；已由 `AI` smoke 覆盖。待补丢失目标、重规划、绕障、开门、AP 分配和失败结束回合。
+- hostile attack / approach、aggro range 和 LOS 感知第一版已迁移：敌对 NPC 会按 active map、阵营、存活状态、感知距离和 topology LOS 选择目标，LOS 被阻挡时保持 idle 并返回 `target_blocked_by_los`；AI intent、NPC world turn 和 combat visibility decay 会先套用运行时 `door_states`，关门阻挡感知、开门恢复感知；玩家等待推进 NPC 回合时会传入当前地图 topology，避免隔墙攻击；已由 `AI` smoke 覆盖。待补丢失目标、重规划、绕障、AP 分配和失败结束回合。
 - NPC 武器射程、弹药和 reload 第一版已迁移：敌对 NPC intent 会读取已装备主手武器 profile，按武器 range / min_range 判断远程攻击，低于最小射程时不发起非法攻击并返回 `target_inside_min_range`；攻击前校验 AP / 弹药，攻击后消耗弹匣或背包弹药；弹匣为空且背包有弹药时优先 `reload`，无弹药时 idle 并返回 `weapon_ammo_unavailable`；攻击或换弹 AP 不足时会等待而不误报失败、不攻击、不改弹匣；已由 `AI` / `Combat` smoke 覆盖。待补低于最小射程时的后退/换位战术、多武器选择、换武器、NPC 特殊弹药策略和 reload 动画/反馈。
 - 待补 NPC 技能使用、逃跑、治疗、保护友军、呼叫增援。
 - AI 行为事件和诊断 payload 第一版已迁移：`ai_intent_decided` 会暴露 intent、reason、target、target_grid、distance、aggro_range、attack_range、AP、path、weapon、ammo 和 reload 状态，占位空值保持稳定；NPC approach 成功 / 失败结果会暴露 `attempted_goals`、`attempted_goal_count`、chosen goal、path、remaining steps 和每个候选邻接格的 pathfinding reason / visited cell count，锁门无法接近会返回稳定 `npc_no_adjacent_path` 细分诊断；AI intent 会记忆 `last_seen_target_actor_id`、`previous_target_actor_id`、`target_tracking_state`、`target_lost` 和 `target_lost_reason`，可区分 acquired / tracking / lost / none，并随 snapshot roundtrip；`runtime_control.ai_debug` 会汇总 intent、reason、target、path_length、AP、weapon/ammo 和 failure reason，并新增稳定 `goal` / `action` / `blackboard` 子对象，HUD runtime 行显示 `AI #...` 摘要和目标追踪状态；已由 `AI` / `UIToggle` smoke 覆盖。待补统一 debug panel 展示 polish。

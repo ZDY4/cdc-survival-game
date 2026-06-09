@@ -141,6 +141,29 @@ func _expect_hostile_los_blocked_intent(errors: Array[String], simulation: RefCo
 		errors.append("blocked LOS hostile should not attack during world turn")
 	if _event_count(simulation.snapshot(), "attack_resolved") != before_events:
 		errors.append("blocked LOS hostile should not emit attack_resolved")
+	var door_id := "ai_smoke_los_door"
+	var door_topology := _door_los_topology(player_grid, door_id)
+	zombie.grid_position = GridCoord.new(player_grid.x + 2, player_grid.y, player_grid.z)
+	simulation.door_states[door_id] = {
+		"door_id": door_id,
+		"object_id": door_id,
+		"is_open": false,
+		"blocks_sight_when_closed": true,
+	}
+	var closed_door: Dictionary = simulation.decide_actor_intent(zombie_id, {
+		"topology": door_topology,
+		"active_map_id": simulation.active_map_id,
+	})
+	if closed_door.get("intent", "") != "idle" or closed_door.get("reason", "") != "target_blocked_by_los":
+		errors.append("closed door should block hostile LOS, got %s/%s" % [closed_door.get("intent", ""), closed_door.get("reason", "")])
+	simulation.door_states[door_id]["is_open"] = true
+	var open_door: Dictionary = simulation.decide_actor_intent(zombie_id, {
+		"topology": door_topology,
+		"active_map_id": simulation.active_map_id,
+	})
+	if open_door.get("intent", "") == "idle" or open_door.get("reason", "") == "target_blocked_by_los":
+		errors.append("open door should let hostile LOS use runtime door state, got %s/%s" % [open_door.get("intent", ""), open_door.get("reason", "")])
+	simulation.door_states.erase(door_id)
 	zombie.grid_position = original_grid
 
 
@@ -412,6 +435,29 @@ func _door_test_topology(locked: bool) -> Dictionary:
 		},
 		"sight_blocking_cells": {},
 		"door_objects": [_door_summary("ai_smoke_door", false, locked)],
+	}
+
+
+func _door_los_topology(player_grid: RefCounted, door_id: String) -> Dictionary:
+	var door_grid := {"x": player_grid.x + 1, "y": player_grid.y, "z": player_grid.z}
+	var door_key := "%d:%d:%d" % [int(door_grid.get("x", 0)), int(door_grid.get("y", 0)), int(door_grid.get("z", 0))]
+	var door: Dictionary = _door_summary(door_id, false, false)
+	door["anchor"] = door_grid.duplicate(true)
+	door["cells"] = [door_grid.duplicate(true)]
+	door["blocks_sight"] = true
+	door["blocks_sight_when_closed"] = true
+	return {
+		"bounds": {
+			"min_x": player_grid.x,
+			"max_x": player_grid.x + 3,
+			"min_z": player_grid.z,
+			"max_z": player_grid.z,
+		},
+		"blocking_cells": {},
+		"sight_blocking_cells": {
+			door_key: door_id,
+		},
+		"door_objects": [door],
 	}
 
 

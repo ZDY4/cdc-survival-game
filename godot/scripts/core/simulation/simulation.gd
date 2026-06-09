@@ -713,6 +713,8 @@ func are_actors_hostile(actor_id: int, target_actor_id: int) -> bool:
 
 func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
 	var resolved_context: Dictionary = context.duplicate(true)
+	if resolved_context.has("topology"):
+		resolved_context["topology"] = _topology_with_runtime_door_states(_dictionary_or_empty(resolved_context.get("topology", {})))
 	if not resolved_context.has("weapon_profile"):
 		var actor: RefCounted = actor_registry.get_actor(actor_id)
 		if actor != null:
@@ -3639,6 +3641,7 @@ func _skill_effect_modifiers(modifier_definitions: Dictionary, learned_level: in
 
 
 func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
+	var runtime_topology: Dictionary = _topology_with_runtime_door_states(topology)
 	var results: Array[Dictionary] = []
 	turn_state["phase"] = "world"
 	_tick_hotbar_cooldowns()
@@ -3660,7 +3663,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 			"affordable_ap_threshold": _affordable_ap_threshold(actor),
 			"combat_active": bool(combat_state.get("active", false)) and actor.in_combat,
 		}
-		var result: Dictionary = _advance_npc_turn(actor, topology, bool(turn_open_snapshot.get("combat_active", false)))
+		var result: Dictionary = _advance_npc_turn(actor, runtime_topology, bool(turn_open_snapshot.get("combat_active", false)))
 		result["turn_open"] = turn_open_snapshot
 		result["ap_after_action"] = actor.ap
 		result["turn_close_reason"] = _npc_turn_close_reason(actor, result)
@@ -3669,7 +3672,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 		result["turn_closed"] = true
 		result["ap_after_close"] = actor.ap
 		if bool(combat_state.get("active", false)):
-			var visibility_result: Dictionary = update_combat_visibility_decay(topology)
+			var visibility_result: Dictionary = update_combat_visibility_decay(runtime_topology)
 			if bool(visibility_result.get("combat_exited", false)):
 				break
 	turn_state["round"] = int(turn_state.get("round", 1)) + 1
@@ -4326,7 +4329,7 @@ func exit_combat_if_player_defeated(reason: String = "player_defeated") -> bool:
 func update_combat_visibility_decay(topology: Dictionary = {}) -> Dictionary:
 	if not bool(combat_state.get("active", false)):
 		return {"success": false, "reason": "combat_inactive"}
-	var visibility_pair: Dictionary = hostile_player_visibility_pair(topology)
+	var visibility_pair: Dictionary = hostile_player_visibility_pair(_topology_with_runtime_door_states(topology))
 	if not visibility_pair.is_empty():
 		var previous: int = int(combat_state.get("turns_without_hostile_player_sight", 0))
 		combat_state["turns_without_hostile_player_sight"] = 0
@@ -4370,6 +4373,7 @@ func update_combat_visibility_decay(topology: Dictionary = {}) -> Dictionary:
 
 
 func hostile_player_visibility_pair(topology: Dictionary = {}) -> Dictionary:
+	var visibility_topology: Dictionary = _topology_with_runtime_door_states(topology)
 	for hostile in actor_registry.actors():
 		if hostile.side != "hostile" or hostile.hp <= 0.0:
 			continue
@@ -4380,7 +4384,7 @@ func hostile_player_visibility_pair(topology: Dictionary = {}) -> Dictionary:
 				continue
 			if not player.map_id.is_empty() and player.map_id != active_map_id:
 				continue
-			if _hostile_can_see_player(hostile, player, topology):
+			if _hostile_can_see_player(hostile, player, visibility_topology):
 				return {
 					"hostile_actor_id": hostile.actor_id,
 					"player_actor_id": player.actor_id,
