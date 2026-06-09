@@ -3593,23 +3593,36 @@ func _expect_debug_console_mutation_audit(errors: Array[String], audit: Dictiona
 
 func _expect_player_command_authority_source(errors: Array[String], entries: Array) -> void:
 	var game_app_source := _read_text_file("res://scripts/app/game_app.gd")
-	var interaction_source := _read_text_file("res://scripts/app/controllers/player_interaction_controller.gd")
 	if game_app_source.is_empty():
 		errors.append("player command audit could not read game_app.gd")
 		return
-	if interaction_source.is_empty():
-		errors.append("player command audit could not read player_interaction_controller.gd")
-		return
+	var owner_sources := {
+		"GameApp": game_app_source,
+		"PlayerInteractionController": _read_text_file("res://scripts/app/controllers/player_interaction_controller.gd"),
+		"ContainerActionController": _read_text_file("res://scripts/app/controllers/container_action_controller.gd"),
+		"InventoryActionController": _read_text_file("res://scripts/app/controllers/inventory_action_controller.gd"),
+		"TradeActionController": _read_text_file("res://scripts/app/controllers/trade_action_controller.gd"),
+		"CharacterActionController": _read_text_file("res://scripts/app/controllers/character_action_controller.gd"),
+		"SkillActionController": _read_text_file("res://scripts/app/controllers/skill_action_controller.gd"),
+		"CraftingActionController": _read_text_file("res://scripts/app/controllers/crafting_action_controller.gd"),
+	}
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
 		var method_name := str(entry_data.get("app_method", ""))
 		if method_name.is_empty():
 			continue
+		if _method_body(game_app_source, method_name).is_empty():
+			errors.append("player command audit source is missing GameApp facade %s" % method_name)
+			continue
 		var owner := str(entry_data.get("owner", "GameApp"))
-		var source := interaction_source if owner == "PlayerInteractionController" else game_app_source
-		var body := _method_body(source, method_name)
+		var source := str(owner_sources.get(owner, ""))
+		if source.is_empty():
+			errors.append("player command audit could not read source for %s" % owner)
+			continue
+		var owner_method := str(entry_data.get("owner_method", method_name))
+		var body := _method_body(source, owner_method)
 		if body.is_empty():
-			errors.append("player command audit source is missing method body for %s.%s" % [owner, method_name])
+			errors.append("player command audit source is missing method body for %s.%s" % [owner, owner_method])
 			continue
 		var authority_kind := str(entry_data.get("authority_kind", ""))
 		var command_kind := str(entry_data.get("command_kind", ""))
@@ -3620,15 +3633,15 @@ func _expect_player_command_authority_source(errors: Array[String], entries: Arr
 				if not _body_uses_submit_authority(body, owner) and not _helper_uses_submit_authority(source, authority_helper, owner):
 					errors.append("player command audit method %s should use submit_player_command authority" % method_name)
 			"submit_player_command_or_ui_state":
-				if not _body_uses_submit_authority(body, owner) and not _helper_uses_submit_authority(source, authority_helper, owner) and not body.contains("active_skill_targeting"):
+				if not _body_uses_submit_authority(body, owner) and not _helper_uses_submit_authority(source, authority_helper, owner) and not _body_stages_ui_targeting_state(body, owner):
 					errors.append("player command audit method %s should use submit authority or only stage UI targeting state" % method_name)
 			"core_service":
-				if not body.contains(_core_service_call_token(core_service)):
+				if not _body_uses_core_service(body, owner, core_service):
 					errors.append("player command audit method %s should call %s" % [method_name, core_service])
 			"mixed":
 				if not _body_uses_submit_authority(body, owner):
 					errors.append("player command audit mixed method %s should include submit_player_command path" % method_name)
-				if not core_service.is_empty() and not body.contains(_core_service_call_token(core_service)):
+				if not core_service.is_empty() and not _body_uses_core_service(body, owner, core_service):
 					errors.append("player command audit mixed method %s should include %s path" % [method_name, core_service])
 		if (authority_kind == "submit_player_command" or authority_kind == "mixed" or authority_kind == "submit_player_command_or_ui_state") and command_kind.is_empty():
 			errors.append("player command audit submit entry %s should declare command_kind" % method_name)
@@ -3638,6 +3651,12 @@ func _body_uses_submit_authority(body: String, owner: String) -> bool:
 	if body.contains("simulation.submit_player_command"):
 		return true
 	if body.contains("_submit_inventory_action"):
+		return true
+	if body.contains("submit_inventory_action"):
+		return true
+	if body.contains("submit_command.call") or body.contains("submit_skill_command.call"):
+		return true
+	if body.contains("_submit_craft("):
 		return true
 	if owner == "PlayerInteractionController" and body.contains("execute_selected_option("):
 		return true
@@ -3653,6 +3672,29 @@ func _helper_uses_submit_authority(source: String, helper_name: String, owner: S
 	if helper_body.is_empty():
 		return false
 	return _body_uses_submit_authority(helper_body, owner)
+
+
+func _body_stages_ui_targeting_state(body: String, owner: String) -> bool:
+	if owner == "SkillActionController":
+		return body.contains("begin_targeting") or body.contains("targeting_controller")
+	return body.contains("active_skill_targeting")
+
+
+func _body_uses_core_service(body: String, owner: String, core_service: String) -> bool:
+	if body.contains(_core_service_call_token(core_service)):
+		return true
+	match core_service:
+		"Simulation.confirm_trade_cart":
+			return body.contains("confirm_trade_cart.call")
+		"Simulation.allocate_attribute_point":
+			return body.contains("allocate_attribute_point.call")
+		"Simulation.set_active_hotbar_group":
+			return body.contains("set_group.call")
+		"Simulation.set_hotbar_group_label":
+			return body.contains("set_label.call")
+		"Simulation.cycle_hotbar_group":
+			return body.contains("cycle_group.call")
+	return false
 
 
 func _core_service_call_token(core_service: String) -> String:

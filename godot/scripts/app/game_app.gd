@@ -1858,9 +1858,14 @@ func cycle_hotbar_group(direction: int) -> Dictionary:
 
 func _apply_skill_action_operation(operation: Dictionary) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if operation.has("target_markers") and runtime_input_controller != null and runtime_input_controller.has_method("update_skill_target_preview_markers"):
+		runtime_input_controller.update_skill_target_preview_markers(_dictionary_or_empty(operation.get("target_markers", {})))
 	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
 	if refresh_panels.has("hud"):
-		refresh_hud()
+		if bool(operation.get("selected_prompt", false)):
+			refresh_hud(current_interaction_prompt())
+		else:
+			refresh_hud()
 	if refresh_panels.has("inventory"):
 		refresh_inventory_panel()
 	if refresh_panels.has("character"):
@@ -1876,38 +1881,30 @@ func _submit_player_command_action(command: Dictionary) -> Dictionary:
 	return _dictionary_or_empty(simulation.submit_player_command(command))
 
 
+func _preview_skill_target_action(skill_id: String, target: Dictionary) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	return _dictionary_or_empty(simulation.preview_skill_target(1, skill_id, registry.get_library("skills"), target, _dictionary_or_empty(world_result.get("map", {}))))
+
+
 func use_hotbar_slot(slot_id: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
 	var blocked: Dictionary = _player_command_rejection("hotbar")
 	if not blocked.is_empty():
 		return blocked
-	var slot: Dictionary = _dictionary_or_empty(_dictionary_or_empty(simulation.snapshot().get("hotbar", {})).get(slot_id, {}))
-	if str(slot.get("kind", "")) == "item":
-		var result: Dictionary = _submit_inventory_action({
-			"action": "use_item",
-			"item_id": str(slot.get("item_id", "")),
-			"item_library": registry.get_library("items"),
-			"effect_library": registry.get_library("json"),
-		})
-		refresh_hud()
-		refresh_character_panel()
-		refresh_inventory_panel()
-		return result
-	var skill_id := str(slot.get("skill_id", ""))
-	if _skill_requires_runtime_target(skill_id):
-		return begin_skill_targeting(slot_id, skill_id)
-	var result: Dictionary = simulation.submit_player_command({
-		"kind": "use_skill",
-		"actor_id": 1,
-		"slot_id": slot_id,
-		"skill_library": registry.get_library("skills"),
-		"target": {"target_type": "self"},
-	})
-	refresh_hud()
-	refresh_character_panel()
-	refresh_skills_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call(
+		"use_hotbar_slot",
+		slot_id,
+		simulation.snapshot(),
+		registry.get_library("skills"),
+		registry.get_library("items"),
+		registry.get_library("json"),
+		Callable(self, "_submit_player_command_action"),
+		Callable(self, "_submit_inventory_action"),
+		skill_targeting_controller
+	))
+	return _apply_skill_action_operation(operation)
 
 
 func begin_skill_targeting(slot_id: String, skill_id: String = "") -> Dictionary:
@@ -1916,76 +1913,48 @@ func begin_skill_targeting(slot_id: String, skill_id: String = "") -> Dictionary
 	var blocked: Dictionary = _player_command_rejection("use_skill")
 	if not blocked.is_empty():
 		return blocked
-	var result: Dictionary = _dictionary_or_empty(skill_targeting_controller.call(
-		"begin_targeting",
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call(
+		"begin_skill_targeting",
 		slot_id,
 		skill_id,
 		simulation.snapshot(),
-		registry.get_library("skills")
+		registry.get_library("skills"),
+		Callable(self, "_submit_player_command_action"),
+		skill_targeting_controller
 	))
-	if not bool(result.get("success", false)):
-		return result
-	if bool(result.get("immediate", false)):
-		return simulation.submit_player_command({
-			"kind": "use_skill",
-			"actor_id": 1,
-			"slot_id": slot_id,
-			"skill_id": str(result.get("skill_id", skill_id)),
-			"skill_library": registry.get_library("skills"),
-			"target": _dictionary_or_empty(result.get("target", {"target_type": "self"})),
-		})
-	refresh_hud(current_interaction_prompt())
-	return result
+	return _apply_skill_action_operation(operation)
 
 
 func preview_active_skill_target(target: Dictionary) -> Dictionary:
-	if active_skill_targeting.is_empty() or simulation == null:
-		return {"success": false, "reason": "skill_targeting_inactive"}
-	var skill_id := str(active_skill_targeting.get("skill_id", ""))
-	var preview: Dictionary = simulation.preview_skill_target(1, skill_id, registry.get_library("skills"), target, _dictionary_or_empty(world_result.get("map", {})))
-	skill_targeting_controller.call("record_preview", preview)
-	if runtime_input_controller != null and runtime_input_controller.has_method("update_skill_target_preview_markers"):
-		runtime_input_controller.update_skill_target_preview_markers(active_skill_target_preview)
-	refresh_hud(current_interaction_prompt())
-	return preview
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call(
+		"preview_active_skill_target",
+		target,
+		Callable(self, "_preview_skill_target_action") if simulation != null else Callable(),
+		skill_targeting_controller
+	))
+	return _apply_skill_action_operation(operation)
 
 
 func confirm_active_skill_target(target: Dictionary = {}) -> Dictionary:
-	if active_skill_targeting.is_empty() or simulation == null:
+	if simulation == null:
 		return {"success": false, "reason": "skill_targeting_inactive"}
 	var blocked: Dictionary = _player_command_rejection("use_skill")
 	if not blocked.is_empty():
 		return blocked
-	var confirm: Dictionary = _dictionary_or_empty(skill_targeting_controller.call("confirm_target", target))
-	if not bool(confirm.get("success", false)):
-		return confirm
-	var result: Dictionary = simulation.submit_player_command({
-		"kind": "use_skill",
-		"actor_id": 1,
-		"slot_id": str(confirm.get("slot_id", "")),
-		"skill_id": str(confirm.get("skill_id", "")),
-		"skill_library": registry.get_library("skills"),
-		"target": _dictionary_or_empty(confirm.get("target", {})),
-		"topology": _dictionary_or_empty(world_result.get("map", {})),
-	})
-	skill_targeting_controller.call("complete_confirm", bool(result.get("success", false)))
-	if bool(result.get("success", false)):
-		if runtime_input_controller != null and runtime_input_controller.has_method("update_skill_target_preview_markers"):
-			runtime_input_controller.update_skill_target_preview_markers({})
-	refresh_hud(current_interaction_prompt())
-	refresh_character_panel()
-	refresh_skills_panel()
-	return result
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call(
+		"confirm_active_skill_target",
+		target,
+		Callable(self, "_submit_player_command_action"),
+		registry.get_library("skills"),
+		_dictionary_or_empty(world_result.get("map", {})),
+		skill_targeting_controller
+	))
+	return _apply_skill_action_operation(operation)
 
 
 func cancel_active_skill_targeting(reason: String = "cancelled") -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(skill_targeting_controller.call("cancel", reason))
-	if not bool(result.get("success", false)):
-		return result
-	if runtime_input_controller != null and runtime_input_controller.has_method("update_skill_target_preview_markers"):
-		runtime_input_controller.update_skill_target_preview_markers({})
-	refresh_hud(current_interaction_prompt())
-	return result
+	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("cancel_active_skill_targeting", reason, skill_targeting_controller))
+	return _apply_skill_action_operation(operation)
 
 
 func has_active_skill_targeting() -> bool:
