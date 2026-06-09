@@ -19,10 +19,11 @@
 - runtime refresh / world snapshot 构建已抽到 `godot/scripts/app/controllers/runtime_refresh_controller.gd`。
 - world action presenter、queue、pending UI 和 final refresh 状态已抽到 `godot/scripts/app/controllers/world_action_flow_controller.gd`。
 - 运行时性能统计已抽到 `godot/scripts/app/controllers/runtime_performance_tracker.gd`。
+- observe mode、auto tick 和 info panel 状态已抽到 `godot/scripts/app/controllers/runtime_control_state_controller.gd`。
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 4000 行，还保留大量 UI facade、玩家动作 facade、拖拽/tooltip snapshot、observe/focus/auto tick 和 smoke 兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 3950 行，还保留大量 UI facade、玩家动作 facade、拖拽/tooltip snapshot、focus/skill targeting 和 smoke 兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` / `HudRoot` script；当前仍主要依赖现有 HUD controller 和根脚本转发。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取边界清楚的 UI runtime facade 或玩家动作 facade，而不是一次性重命名根脚本。

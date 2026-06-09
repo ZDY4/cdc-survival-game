@@ -9,18 +9,12 @@ const GameInputRouter = preload("res://scripts/app/controllers/game_input_router
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const RuntimeRefreshController = preload("res://scripts/app/controllers/runtime_refresh_controller.gd")
 const RuntimePerformanceTracker = preload("res://scripts/app/controllers/runtime_performance_tracker.gd")
+const RuntimeControlStateController = preload("res://scripts/app/controllers/runtime_control_state_controller.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
-const AUTO_TICK_INTERVAL_SEC := 0.45
 const CRAFTING_QUEUE_ADVANCE_LIMIT := 16
-const OBSERVE_SPEEDS: Array[Dictionary] = [
-	{"id": "x1", "multiplier": 1.0},
-	{"id": "x2", "multiplier": 2.0},
-	{"id": "x5", "multiplier": 5.0},
-	{"id": "x10", "multiplier": 10.0},
-]
 const PLAYER_COMMAND_AUTHORITY_AUDIT: Array[Dictionary] = [
 	{"app_method": "execute_primary_interaction", "action": "interact", "authority_kind": "submit_player_command", "command_kind": "interact", "owner": "GameApp", "blocker": "_player_command_rejection"},
 	{"app_method": "execute_interaction_option", "action": "interact_option", "authority_kind": "submit_player_command", "command_kind": "interact", "owner": "GameApp", "blocker": "_player_command_rejection"},
@@ -109,22 +103,6 @@ var active_inventory_feedback: Dictionary = {}
 var latest_crafting_queue_result: Dictionary = {}
 var latest_pending_crafting_result: Dictionary = {}
 var debug_overlay_mode: String = "off"
-var info_panel_pages: Array[Dictionary] = [
-	{"id": "overview", "title": "Overview", "tab_label": "Overview"},
-	{"id": "selection", "title": "Selection", "tab_label": "Select"},
-	{"id": "actor", "title": "Selected Actor", "tab_label": "Actor"},
-	{"id": "world", "title": "World", "tab_label": "World"},
-	{"id": "interaction", "title": "Interaction", "tab_label": "Interact"},
-	{"id": "turn_sys", "title": "Turn System", "tab_label": "Turn"},
-	{"id": "events", "title": "Events", "tab_label": "Events"},
-	{"id": "ai", "title": "AI", "tab_label": "AI"},
-	{"id": "performance", "title": "Performance", "tab_label": "Perf"},
-]
-var active_info_panel_index: int = 0
-var auto_tick_enabled := false
-var auto_tick_elapsed_sec := 0.0
-var observe_mode_enabled := false
-var observe_speed_id := "x1"
 var focused_actor_id: int = 0
 var observed_map_level: int = 0
 var active_skill_targeting: Dictionary = {}
@@ -133,6 +111,43 @@ var debug_runtime_controller: RefCounted = DebugRuntimeController.new()
 var game_input_router: RefCounted = GameInputRouter.new()
 var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
 var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
+var runtime_control_state_controller: RefCounted = RuntimeControlStateController.new()
+var info_panel_pages: Array[Dictionary]:
+	get:
+		return runtime_control_state_controller.info_panel_pages if runtime_control_state_controller != null else []
+	set(value):
+		if runtime_control_state_controller != null:
+			runtime_control_state_controller.info_panel_pages = value
+var active_info_panel_index: int:
+	get:
+		return int(runtime_control_state_controller.active_info_panel_index) if runtime_control_state_controller != null else 0
+	set(value):
+		if runtime_control_state_controller != null:
+			runtime_control_state_controller.active_info_panel_index = value
+var auto_tick_enabled: bool:
+	get:
+		return bool(runtime_control_state_controller.auto_tick_enabled) if runtime_control_state_controller != null else false
+	set(value):
+		if runtime_control_state_controller != null:
+			runtime_control_state_controller.auto_tick_enabled = value
+var auto_tick_elapsed_sec: float:
+	get:
+		return float(runtime_control_state_controller.auto_tick_elapsed_sec) if runtime_control_state_controller != null else 0.0
+	set(value):
+		if runtime_control_state_controller != null:
+			runtime_control_state_controller.auto_tick_elapsed_sec = value
+var observe_mode_enabled: bool:
+	get:
+		return bool(runtime_control_state_controller.observe_mode_enabled) if runtime_control_state_controller != null else false
+	set(value):
+		if runtime_control_state_controller != null:
+			runtime_control_state_controller.observe_mode_enabled = value
+var observe_speed_id: String:
+	get:
+		return str(runtime_control_state_controller.observe_speed_id) if runtime_control_state_controller != null else "x1"
+	set(value):
+		if runtime_control_state_controller != null:
+			runtime_control_state_controller.observe_speed_id = value
 var performance_frame_time_ms: float:
 	get:
 		return float(runtime_performance_tracker.frame_time_ms) if runtime_performance_tracker != null else 0.0
@@ -1217,14 +1232,12 @@ func debug_overlay_snapshot() -> Dictionary:
 
 
 func toggle_auto_tick() -> Dictionary:
-	if observe_mode_enabled:
-		return toggle_observe_playback()
 	if has_active_dialogue() or gameplay_input_blocked_by_ui():
-		return {"success": false, "reason": "ui_blocked", "enabled": auto_tick_enabled}
-	auto_tick_enabled = not auto_tick_enabled
-	auto_tick_elapsed_sec = 0.0
-	refresh_hud(current_interaction_prompt())
-	return {"success": true, "enabled": auto_tick_enabled}
+		return runtime_control_state_controller.call("toggle_auto_tick", true)
+	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("toggle_auto_tick", false))
+	if bool(result.get("success", false)):
+		refresh_hud(current_interaction_prompt())
+	return result
 
 
 func is_auto_tick_enabled() -> bool:
@@ -1240,139 +1253,91 @@ func can_issue_player_commands() -> bool:
 
 
 func toggle_observe_mode() -> Dictionary:
-	return set_observe_mode(not observe_mode_enabled)
+	return set_observe_mode(not is_observe_mode_enabled())
 
 
 func set_observe_mode(enabled: bool) -> Dictionary:
-	if gameplay_input_blocked_by_ui():
-		return {"success": false, "reason": "ui_blocked", "observe_mode": observe_mode_enabled}
-	observe_mode_enabled = enabled
-	if not observe_mode_enabled:
-		auto_tick_enabled = false
-		auto_tick_elapsed_sec = 0.0
-	refresh_hud(current_interaction_prompt())
-	return {
-		"success": true,
-		"observe_mode": observe_mode_enabled,
-		"observe_playback": _observe_playback_enabled(),
-		"observe_speed": observe_speed_id,
-	}
+	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("set_observe_mode", enabled, gameplay_input_blocked_by_ui()))
+	if bool(result.get("success", false)):
+		refresh_hud(current_interaction_prompt())
+	return result
 
 
 func toggle_observe_playback() -> Dictionary:
-	if not observe_mode_enabled:
-		return {"success": false, "reason": "observe_mode_disabled", "observe_playback": false}
-	if has_active_dialogue() or gameplay_input_blocked_by_ui():
-		return {"success": false, "reason": "ui_blocked", "observe_playback": _observe_playback_enabled()}
-	auto_tick_enabled = not auto_tick_enabled
-	auto_tick_elapsed_sec = 0.0
-	refresh_hud(current_interaction_prompt())
-	return {
-		"success": true,
-		"observe_playback": _observe_playback_enabled(),
-		"auto_tick": auto_tick_enabled,
-		"observe_speed": observe_speed_id,
-	}
+	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("toggle_observe_playback", has_active_dialogue() or gameplay_input_blocked_by_ui()))
+	if bool(result.get("success", false)):
+		refresh_hud(current_interaction_prompt())
+	return result
 
 
 func cycle_observe_speed() -> Dictionary:
-	if not observe_mode_enabled:
-		return {"success": false, "reason": "observe_mode_disabled", "observe_speed": observe_speed_id}
-	var current_index := _observe_speed_index(observe_speed_id)
-	var next_index := (current_index + 1) % OBSERVE_SPEEDS.size()
-	return set_observe_speed(str(OBSERVE_SPEEDS[next_index].get("id", "x1")))
+	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("cycle_observe_speed"))
+	if bool(result.get("success", false)):
+		refresh_hud(current_interaction_prompt())
+	return result
 
 
 func set_observe_speed(speed_id: String) -> Dictionary:
-	if not observe_mode_enabled:
-		return {"success": false, "reason": "observe_mode_disabled", "observe_speed": observe_speed_id}
-	var normalized := speed_id.strip_edges().to_lower()
-	if _observe_speed_index(normalized) < 0:
-		return {"success": false, "reason": "unknown_observe_speed", "observe_speed": observe_speed_id}
-	observe_speed_id = normalized
-	auto_tick_elapsed_sec = 0.0
-	refresh_hud(current_interaction_prompt())
-	return {
-		"success": true,
-		"observe_speed": observe_speed_id,
-		"interval_sec": _auto_tick_interval_sec(),
-	}
+	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("set_observe_speed", speed_id))
+	if bool(result.get("success", false)):
+		refresh_hud(current_interaction_prompt())
+	return result
 
 
 func cycle_info_panel(direction: int) -> Dictionary:
-	if info_panel_pages.size() <= 1:
-		return {"success": false, "reason": "not_enough_info_pages"}
-	active_info_panel_index = posmod(active_info_panel_index + direction, info_panel_pages.size())
+	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("cycle_info_panel", direction))
+	if not bool(result.get("success", false)):
+		return result
 	refresh_hud(current_interaction_prompt())
 	var page := current_info_panel_page()
 	_play_hud_shortcut_audio("ui_option_selected", "InfoPanelShortcut", "keyboard_shortcut", "cycle_info_panel", {
 		"value": str(page.get("id", "")),
-		"count": info_panel_pages.size(),
-		"option_index": active_info_panel_index,
+		"count": int(result.get("count", info_panel_pages.size())),
+		"option_index": int(result.get("index", active_info_panel_index)),
 	})
-	return {
-		"success": true,
-		"page_id": page.get("id", ""),
-		"title": page.get("title", ""),
-		"index": active_info_panel_index,
-		"count": info_panel_pages.size(),
-	}
+	return result
 
 
 func current_info_panel_page() -> Dictionary:
-	if info_panel_pages.is_empty():
-		return {}
-	active_info_panel_index = clampi(active_info_panel_index, 0, info_panel_pages.size() - 1)
-	return info_panel_pages[active_info_panel_index].duplicate(true)
+	return _dictionary_or_empty(runtime_control_state_controller.call("current_info_panel_page"))
 
 
 func info_panel_snapshot() -> Dictionary:
-	var page := current_info_panel_page()
-	return {
-		"active_page": page,
-		"enabled_pages": info_panel_pages.duplicate(true),
-		"active_index": active_info_panel_index,
-		"count": info_panel_pages.size(),
-	}
+	return _dictionary_or_empty(runtime_control_state_controller.call("info_panel_snapshot"))
 
 
 func runtime_control_snapshot() -> Dictionary:
-	return {
-		"auto_tick": auto_tick_enabled,
-		"observe_mode": observe_mode_enabled,
-		"observe_playback": _observe_playback_enabled(),
-		"observe_speed": observe_speed_id,
-		"observe_speed_multiplier": _observe_speed_multiplier(),
-		"observe_interval_sec": _auto_tick_interval_sec(),
-		"world_time": runtime_world_time_snapshot(),
-		"map_level": map_level_snapshot(),
-		"focused_actor": focused_actor_snapshot(),
-		"ui_blocker": gameplay_input_blocker_name(),
-		"ui_blocker_snapshot": gameplay_input_blocker_snapshot(),
-		"modal_stack": modal_stack_snapshot(),
-		"menu_state": menu_state_snapshot(),
-		"ui_theme": ui_theme_snapshot(),
-		"ui_layer_stack": ui_layer_stack_snapshot(),
-		"context_menu": context_menu_snapshot(),
-		"controls_hint": controls_hint_snapshot(),
-		"debug_console": debug_console_snapshot(),
-		"debug_panel": debug_panel_snapshot(),
-		"hover": runtime_hover_snapshot(),
-		"tooltip": hover_tooltip_snapshot(),
-		"tooltip_render": tooltip_render_snapshot(),
-		"hotbar_hit_test": hotbar_hit_test_snapshot(),
-		"drag": drag_state_snapshot(),
-		"drag_preview_render": drag_preview_render_snapshot(),
-		"selection_debug": runtime_selection_debug_snapshot(),
-		"action_presenter": world_action_presenter_snapshot(),
-		"world_action_queue": world_action_queue_snapshot(),
-		"ai_debug": ai_debug_snapshot(),
-		"debug_overlay": debug_overlay_snapshot(),
-		"audio_feedback": audio_feedback_snapshot(),
-		"performance": runtime_performance_snapshot(),
-		"skill_targeting": _skill_targeting_snapshot(),
-		"player_command_authority_audit": player_command_authority_audit_snapshot(),
-	}
+	var snapshot: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("runtime_control_snapshot"))
+	snapshot["observe_interval_sec"] = _auto_tick_interval_sec()
+	snapshot["world_time"] = runtime_world_time_snapshot()
+	snapshot["map_level"] = map_level_snapshot()
+	snapshot["focused_actor"] = focused_actor_snapshot()
+	snapshot["ui_blocker"] = gameplay_input_blocker_name()
+	snapshot["ui_blocker_snapshot"] = gameplay_input_blocker_snapshot()
+	snapshot["modal_stack"] = modal_stack_snapshot()
+	snapshot["menu_state"] = menu_state_snapshot()
+	snapshot["ui_theme"] = ui_theme_snapshot()
+	snapshot["ui_layer_stack"] = ui_layer_stack_snapshot()
+	snapshot["context_menu"] = context_menu_snapshot()
+	snapshot["controls_hint"] = controls_hint_snapshot()
+	snapshot["debug_console"] = debug_console_snapshot()
+	snapshot["debug_panel"] = debug_panel_snapshot()
+	snapshot["hover"] = runtime_hover_snapshot()
+	snapshot["tooltip"] = hover_tooltip_snapshot()
+	snapshot["tooltip_render"] = tooltip_render_snapshot()
+	snapshot["hotbar_hit_test"] = hotbar_hit_test_snapshot()
+	snapshot["drag"] = drag_state_snapshot()
+	snapshot["drag_preview_render"] = drag_preview_render_snapshot()
+	snapshot["selection_debug"] = runtime_selection_debug_snapshot()
+	snapshot["action_presenter"] = world_action_presenter_snapshot()
+	snapshot["world_action_queue"] = world_action_queue_snapshot()
+	snapshot["ai_debug"] = ai_debug_snapshot()
+	snapshot["debug_overlay"] = debug_overlay_snapshot()
+	snapshot["audio_feedback"] = audio_feedback_snapshot()
+	snapshot["performance"] = runtime_performance_snapshot()
+	snapshot["skill_targeting"] = _skill_targeting_snapshot()
+	snapshot["player_command_authority_audit"] = player_command_authority_audit_snapshot()
+	return snapshot
 
 
 func tooltip_render_snapshot() -> Dictionary:
@@ -2838,38 +2803,24 @@ func press_space_action() -> Dictionary:
 
 
 func _process_auto_tick(delta: float) -> void:
-	if not auto_tick_enabled:
-		auto_tick_elapsed_sec = 0.0
-		return
-	auto_tick_elapsed_sec += delta
-	if auto_tick_elapsed_sec < _auto_tick_interval_sec():
-		return
-	auto_tick_elapsed_sec = 0.0
-	_submit_auto_tick_wait()
+	if bool(runtime_control_state_controller.call("should_submit_auto_tick", delta)):
+		_submit_auto_tick_wait()
 
 
 func _observe_playback_enabled() -> bool:
-	return observe_mode_enabled and auto_tick_enabled
+	return bool(runtime_control_state_controller.call("observe_playback_enabled"))
 
 
 func _observe_speed_index(speed_id: String) -> int:
-	for index in range(OBSERVE_SPEEDS.size()):
-		if str(OBSERVE_SPEEDS[index].get("id", "")) == speed_id:
-			return index
-	return -1
+	return int(runtime_control_state_controller.call("observe_speed_index", speed_id))
 
 
 func _observe_speed_multiplier() -> float:
-	var index := _observe_speed_index(observe_speed_id)
-	if index < 0:
-		return 1.0
-	return maxf(1.0, float(OBSERVE_SPEEDS[index].get("multiplier", 1.0)))
+	return float(runtime_control_state_controller.call("observe_speed_multiplier"))
 
 
 func _auto_tick_interval_sec() -> float:
-	if not observe_mode_enabled:
-		return AUTO_TICK_INTERVAL_SEC
-	return maxf(0.01, AUTO_TICK_INTERVAL_SEC / _observe_speed_multiplier())
+	return float(runtime_control_state_controller.call("auto_tick_interval_sec"))
 
 
 func _submit_auto_tick_wait() -> Dictionary:
