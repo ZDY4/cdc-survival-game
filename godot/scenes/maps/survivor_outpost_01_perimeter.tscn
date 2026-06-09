@@ -438,6 +438,7 @@ props_json = "{
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1159942878 instance=ExtResource("4_egj72")]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=127457239 instance=ExtResource("5_d62rs")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@561" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=103527194 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
@@ -455,7 +456,7 @@ transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
 
 [node name="@Node3D@565" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=103879207 instance=ExtResource("6_o1e23")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0, 1)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 1)
 
 [node name="@Node3D@566" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1348375940 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
@@ -518,36 +519,37 @@ props_json = "{
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=349394715 instance=ExtResource("4_egj72")]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1162819546 instance=ExtResource("5_d62rs")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@552" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=814319790 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1031034861 instance=ExtResource("6_o1e23")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 0)
 
 [node name="@Node3D@553" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1537992545 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 
 [node name="@Node3D@554" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1658839376 instance=ExtResource("5_d62rs")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 0)
 
 [node name="@Node3D@555" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1591847864 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@556" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=589532151 instance=ExtResource("5_d62rs")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@557" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1787541927 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
 
 [node name="@Node3D@558" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1135426238 instance=ExtResource("6_o1e23")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 1)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 1)
 
 [node name="@Node3D@559" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=31491381 instance=ExtResource("4_egj72")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 1)
 
 [node name="@Node3D@560" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=1297729703 instance=ExtResource("5_d62rs")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 1)
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 2, 0, 1)
 
 [node name="survivor_outpost_01_perimeter_return_gate" type="Node3D" parent="Objects" unique_id=1205287661]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8)

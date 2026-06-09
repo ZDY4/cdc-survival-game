@@ -811,54 +811,55 @@ props_json = "{
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1159942878 instance=ExtResource("4_64gy7")]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=127457239 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@503" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=2053590905 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1934651983 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 0)
 
 [node name="@Node3D@504" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1457984463 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 
 [node name="@Node3D@505" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=69670518 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 0)
 
 [node name="@Node3D@506" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1955062395 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
 
 [node name="@Node3D@507" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=738420354 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 0)
 
 [node name="@Node3D@508" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1032868228 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
 
 [node name="@Node3D@509" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=2040069372 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 0)
 
 [node name="@Node3D@510" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1609112159 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
 
 [node name="@Node3D@511" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=657934054 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 0)
 
 [node name="@Node3D@512" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1148846274 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
 
 [node name="@Node3D@513" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=706516209 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 0)
 
 [node name="@Node3D@514" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=793662165 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
 
 [node name="@Node3D@515" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=652152987 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 7, 0, 0)
 
 [node name="@Node3D@516" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1524379057 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@517" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=458121632 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@518" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=701829385 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
@@ -882,13 +883,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 1)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 1)
 
 [node name="@Node3D@525" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=460718360 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 7, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 1)
 
 [node name="@Node3D@526" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1614732012 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@527" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1688395346 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@528" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=2065942117 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 2)
@@ -912,55 +913,55 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 2)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 2)
 
 [node name="@Node3D@535" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=797330241 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 7, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 2)
 
 [node name="@Node3D@536" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=361470067 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@537" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1451020855 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@538" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=2143518746 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 3)
 
 [node name="@Node3D@539" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=811565092 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 3)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 3)
 
 [node name="@Node3D@540" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=56522628 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 3)
 
 [node name="@Node3D@541" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=80935996 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 3)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 3)
 
 [node name="@Node3D@542" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1082780871 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 3)
 
 [node name="@Node3D@543" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=455211938 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 3, 0, 3)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 3)
 
 [node name="@Node3D@544" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=198501791 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 3)
 
 [node name="@Node3D@545" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1713591661 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 4, 0, 3)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 3)
 
 [node name="@Node3D@546" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1178783569 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 3)
 
 [node name="@Node3D@547" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1094526928 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 5, 0, 3)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 3)
 
 [node name="@Node3D@548" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1676551821 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 3)
 
 [node name="@Node3D@549" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=441678279 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 6, 0, 3)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 3)
 
 [node name="@Node3D@550" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1831282890 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 3)
 
 [node name="@Node3D@551" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=555694920 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 7, 0, 3)
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 7, 0, 3)
 
 [node name="survivor_outpost_01_dormitory" type="Node3D" parent="Objects" unique_id=2057978033]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 6)
@@ -999,66 +1000,67 @@ props_json = "{
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1581239866 instance=ExtResource("4_64gy7")]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=30306244 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@406" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=311596800 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1771484525 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 0)
 
 [node name="@Node3D@407" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1278682455 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 
 [node name="@Node3D@408" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1081449034 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 0)
 
 [node name="@Node3D@409" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=785517061 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
 
 [node name="@Node3D@410" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1556104474 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 0)
 
 [node name="@Node3D@411" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1814038430 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
 
 [node name="@Node3D@412" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=505953602 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 0)
 
 [node name="@Node3D@413" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=2110663228 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
 
 [node name="@Node3D@414" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1962501322 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 0)
 
 [node name="@Node3D@415" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1306759048 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
 
 [node name="@Node3D@416" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1841275649 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 0)
 
 [node name="@Node3D@417" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=432617529 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
 
 [node name="@Node3D@418" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=712727064 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 0)
 
 [node name="@Node3D@419" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1388678180 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
 
 [node name="@Node3D@420" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1288691298 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 8, 0, 0)
 
 [node name="@Node3D@421" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1774974045 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 0)
 
 [node name="@Node3D@422" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=542321580 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 9, 0, 0)
 
 [node name="@Node3D@423" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=898997632 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@424" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=752435487 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@425" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=217856052 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
@@ -1088,13 +1090,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 1)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 1)
 
 [node name="@Node3D@434" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=2139436859 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 1)
 
 [node name="@Node3D@435" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1724036417 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@436" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=838365126 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@437" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1248461264 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 2)
@@ -1124,13 +1126,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 2)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 2)
 
 [node name="@Node3D@446" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=986706800 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 2)
 
 [node name="@Node3D@447" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1005685723 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@448" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=452287013 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@449" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=2095194595 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 3)
@@ -1160,13 +1162,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 3)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 3)
 
 [node name="@Node3D@458" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1283352351 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 3)
 
 [node name="@Node3D@459" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1613688246 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@460" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1516382250 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@461" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1862191403 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 4)
@@ -1196,13 +1198,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 4)
 
 [node name="@Node3D@470" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=783535422 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 4)
 
 [node name="@Node3D@471" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1167057607 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@472" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=274836835 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@473" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1540472051 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 5)
@@ -1232,67 +1234,67 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 5)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 5)
 
 [node name="@Node3D@482" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=650276449 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 5)
 
 [node name="@Node3D@483" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1704982859 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@484" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=961456494 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@485" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1236294584 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 6)
 
 [node name="@Node3D@486" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1279344851 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 6)
 
 [node name="@Node3D@487" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=93208513 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 6)
 
 [node name="@Node3D@488" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=870905763 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 6)
 
 [node name="@Node3D@489" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1445780250 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 6)
 
 [node name="@Node3D@490" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=2027943360 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 3, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 6)
 
 [node name="@Node3D@491" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=282222680 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 6)
 
 [node name="@Node3D@492" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=20884767 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 4, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 6)
 
 [node name="@Node3D@493" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=407489767 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 6)
 
 [node name="@Node3D@494" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1279691805 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 5, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 6)
 
 [node name="@Node3D@495" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=291152748 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 6)
 
 [node name="@Node3D@496" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=319463760 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 6, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 6)
 
 [node name="@Node3D@497" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=670742083 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 6)
 
 [node name="@Node3D@498" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=2022584170 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 7, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 6)
 
 [node name="@Node3D@499" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=483845916 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 6)
 
 [node name="@Node3D@500" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1678335828 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 8, 0, 6)
 
 [node name="@Node3D@501" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1907686375 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 6)
 
 [node name="@Node3D@502" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1129417279 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 9, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 6)
 
 [node name="survivor_outpost_01_canteen" type="Node3D" parent="Objects" unique_id=521747886]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 18)
@@ -1331,72 +1333,73 @@ props_json = "{
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1704557472 instance=ExtResource("4_64gy7")]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=2077807367 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@287" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=666274725 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1409393808 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 0)
 
 [node name="@Node3D@288" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1994616924 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 
 [node name="@Node3D@289" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1550119631 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 0)
 
 [node name="@Node3D@290" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=430930286 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
 
 [node name="@Node3D@291" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1768675300 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 0)
 
 [node name="@Node3D@292" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=234887699 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
 
 [node name="@Node3D@293" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=685316803 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 0)
 
 [node name="@Node3D@294" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=2125789269 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
 
 [node name="@Node3D@295" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1746383526 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 0)
 
 [node name="@Node3D@296" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1679283056 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
 
 [node name="@Node3D@297" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=907177404 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 0)
 
 [node name="@Node3D@298" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1498928849 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
 
 [node name="@Node3D@299" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=810036807 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 0)
 
 [node name="@Node3D@300" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=574860213 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
 
 [node name="@Node3D@301" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1568236951 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 8, 0, 0)
 
 [node name="@Node3D@302" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1114576037 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 0)
 
 [node name="@Node3D@303" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=963014792 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 9, 0, 0)
 
 [node name="@Node3D@304" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=549992836 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 0)
 
 [node name="@Node3D@305" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1725427982 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 10, 0, 0)
 
 [node name="@Node3D@306" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=2036645623 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@307" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=2139820983 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@308" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1593231791 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
@@ -1429,13 +1432,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 1)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 1)
 
 [node name="@Node3D@318" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1665991256 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 10, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 1)
 
 [node name="@Node3D@319" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1625798870 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@320" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1824842540 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@321" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1451837654 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 2)
@@ -1468,13 +1471,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 2)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 2)
 
 [node name="@Node3D@331" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=24548079 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 10, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 2)
 
 [node name="@Node3D@332" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=698890559 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@333" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=815425263 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@334" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1460142612 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 3)
@@ -1507,13 +1510,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 3)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 3)
 
 [node name="@Node3D@344" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=241401710 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 10, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 3)
 
 [node name="@Node3D@345" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=643334139 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@346" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=681484811 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@347" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=460884219 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 4)
@@ -1546,13 +1549,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 4)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 4)
 
 [node name="@Node3D@357" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1511644423 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 10, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 4)
 
 [node name="@Node3D@358" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=865416757 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@359" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1083787529 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@360" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=140272199 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 5)
@@ -1585,13 +1588,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 5)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 5)
 
 [node name="@Node3D@370" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=2146338781 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 10, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 5)
 
 [node name="@Node3D@371" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1118617376 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@372" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=915274423 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@373" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=218418727 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 6)
@@ -1624,73 +1627,73 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 6)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 6)
 
 [node name="@Node3D@383" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=173301789 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 10, 0, 6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 6)
 
 [node name="@Node3D@384" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=908773978 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 7)
 
 [node name="@Node3D@385" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1783127325 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 7)
 
 [node name="@Node3D@386" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1711289671 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 7)
 
 [node name="@Node3D@387" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=965264200 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 7)
 
 [node name="@Node3D@388" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=316069656 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 7)
 
 [node name="@Node3D@389" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1023145106 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 7)
 
 [node name="@Node3D@390" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1515566894 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 7)
 
 [node name="@Node3D@391" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=308966795 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 3, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 7)
 
 [node name="@Node3D@392" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1765338829 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 7)
 
 [node name="@Node3D@393" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=783494172 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 4, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 7)
 
 [node name="@Node3D@394" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=847343309 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 7)
 
 [node name="@Node3D@395" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=119846780 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 5, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 7)
 
 [node name="@Node3D@396" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1560734559 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 7)
 
 [node name="@Node3D@397" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1659771458 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 6, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 7)
 
 [node name="@Node3D@398" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=701752781 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 7)
 
 [node name="@Node3D@399" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=2048058933 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 7, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 7)
 
 [node name="@Node3D@400" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=267700820 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 7)
 
 [node name="@Node3D@401" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=794105913 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 8, 0, 7)
 
 [node name="@Node3D@402" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1424234957 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 7)
 
 [node name="@Node3D@403" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=486706098 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 9, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 9, 0, 7)
 
 [node name="@Node3D@404" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=495124409 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 7)
 
 [node name="@Node3D@405" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=395079763 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 10, 0, 7)
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 10, 0, 7)
 
 [node name="survivor_outpost_01_clinic" type="Node3D" parent="Objects" unique_id=923072285]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28, 0, 6)
@@ -1729,60 +1732,61 @@ props_json = "{
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1434238078 instance=ExtResource("4_64gy7")]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=727963762 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@199" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=533146398 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=30635950 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 0)
 
 [node name="@Node3D@200" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1327320506 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 
 [node name="@Node3D@201" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1632542416 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 0)
 
 [node name="@Node3D@202" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1903458744 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
 
 [node name="@Node3D@203" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1797267382 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 0)
 
 [node name="@Node3D@204" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1167135691 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
 
 [node name="@Node3D@205" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1802165355 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 0)
 
 [node name="@Node3D@206" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=970202795 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
 
 [node name="@Node3D@207" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1254476700 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 0)
 
 [node name="@Node3D@208" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1978663477 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
 
 [node name="@Node3D@209" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1640365977 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 0)
 
 [node name="@Node3D@210" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=924339458 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
 
 [node name="@Node3D@211" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=709966217 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 0)
 
 [node name="@Node3D@212" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1554307031 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
 
 [node name="@Node3D@213" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1726872336 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8, 0, 0)
 
 [node name="@Node3D@214" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=553706008 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@215" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=2096124039 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@216" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1443933619 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
@@ -1809,13 +1813,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 1)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 1)
 
 [node name="@Node3D@224" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1657431756 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 1)
 
 [node name="@Node3D@225" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=652122179 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@226" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=2065038344 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@227" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=2071601570 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 2)
@@ -1842,13 +1846,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 2)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 2)
 
 [node name="@Node3D@235" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1571306782 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 2)
 
 [node name="@Node3D@236" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=534252529 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@237" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1007896848 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@238" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1349203410 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 3)
@@ -1875,13 +1879,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 3)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 3)
 
 [node name="@Node3D@246" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1134826579 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 3)
 
 [node name="@Node3D@247" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=2063116795 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@248" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=285444352 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@249" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1373023635 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 4)
@@ -1908,13 +1912,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 4)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4)
 
 [node name="@Node3D@257" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1744456149 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4)
 
 [node name="@Node3D@258" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=190080821 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@259" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1887781287 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@260" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=719829303 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 5)
@@ -1941,61 +1945,61 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 5)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 5)
 
 [node name="@Node3D@268" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1439785794 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 5)
 
 [node name="@Node3D@269" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=708996116 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@270" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1113640157 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@271" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1515131535 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 6)
 
 [node name="@Node3D@272" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1749987642 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 6)
 
 [node name="@Node3D@273" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=2045700664 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 6)
 
 [node name="@Node3D@274" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1791228308 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 6)
 
 [node name="@Node3D@275" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1336283681 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 6)
 
 [node name="@Node3D@276" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1636327249 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 3, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 6)
 
 [node name="@Node3D@277" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1412129497 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 6)
 
 [node name="@Node3D@278" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=318371187 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 4, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 6)
 
 [node name="@Node3D@279" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1198585554 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 6)
 
 [node name="@Node3D@280" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1232276637 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 5, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 6)
 
 [node name="@Node3D@281" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1697181712 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 6)
 
 [node name="@Node3D@282" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=2140017502 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 6, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 6)
 
 [node name="@Node3D@283" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=708047092 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 6)
 
 [node name="@Node3D@284" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=49090499 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 7, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 6)
 
 [node name="@Node3D@285" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=2139558994 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 6)
 
 [node name="@Node3D@286" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=54586759 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 6)
 
 [node name="survivor_outpost_01_storage" type="Node3D" parent="Objects" unique_id=308881233]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 29, 0, 18)
@@ -2034,66 +2038,67 @@ props_json = "{
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1302515425 instance=ExtResource("4_64gy7")]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1528608164 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@102" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=388371693 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1415325459 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 0)
 
 [node name="@Node3D@103" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1386716479 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 
 [node name="@Node3D@104" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1734813408 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 0)
 
 [node name="@Node3D@105" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=466268551 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
 
 [node name="@Node3D@106" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1980559280 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 0)
 
 [node name="@Node3D@107" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1714025336 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
 
 [node name="@Node3D@108" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=354894270 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 0)
 
 [node name="@Node3D@109" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=893434024 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
 
 [node name="@Node3D@110" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1392177195 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 0)
 
 [node name="@Node3D@111" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=983261857 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
 
 [node name="@Node3D@112" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1192726626 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 0)
 
 [node name="@Node3D@113" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1058784219 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
 
 [node name="@Node3D@114" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=2125414961 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 0)
 
 [node name="@Node3D@115" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=2025625051 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
 
 [node name="@Node3D@116" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=966143808 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 8, 0, 0)
 
 [node name="@Node3D@117" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=62424867 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 0)
 
 [node name="@Node3D@118" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=889950568 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 9, 0, 0)
 
 [node name="@Node3D@119" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=2037792530 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@120" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1933547420 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@121" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1090347584 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
@@ -2123,13 +2128,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 1)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 1)
 
 [node name="@Node3D@130" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=624841190 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 1)
 
 [node name="@Node3D@131" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=121607890 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@132" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1202589625 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@133" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=999816639 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 2)
@@ -2159,13 +2164,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 2)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 2)
 
 [node name="@Node3D@142" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=470893034 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 2)
 
 [node name="@Node3D@143" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1981388549 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@144" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1640981502 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@145" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=2040719753 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 3)
@@ -2195,13 +2200,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 3)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 3)
 
 [node name="@Node3D@154" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=926021841 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 3)
 
 [node name="@Node3D@155" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=746536771 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@156" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1427381570 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@157" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1212354937 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 4)
@@ -2231,13 +2236,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 4)
 
 [node name="@Node3D@166" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=524647911 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 4)
 
 [node name="@Node3D@167" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=710323436 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@168" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1279494771 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@169" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=379795409 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 5)
@@ -2267,67 +2272,67 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 5)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 5)
 
 [node name="@Node3D@178" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1135395075 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 5)
 
 [node name="@Node3D@179" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1543611101 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@180" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=339376001 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@181" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1840892560 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 6)
 
 [node name="@Node3D@182" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1071280144 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 6)
 
 [node name="@Node3D@183" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1944607555 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 6)
 
 [node name="@Node3D@184" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=33167786 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 6)
 
 [node name="@Node3D@185" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=50678205 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 6)
 
 [node name="@Node3D@186" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1571906734 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 3, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 6)
 
 [node name="@Node3D@187" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=459321207 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 6)
 
 [node name="@Node3D@188" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=2100058355 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 4, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 6)
 
 [node name="@Node3D@189" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1076608864 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 6)
 
 [node name="@Node3D@190" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1306994974 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 5, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 6)
 
 [node name="@Node3D@191" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1042343064 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 6)
 
 [node name="@Node3D@192" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=983881723 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 6, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 6)
 
 [node name="@Node3D@193" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=13869802 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 6)
 
 [node name="@Node3D@194" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=779867203 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 7, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 6)
 
 [node name="@Node3D@195" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=634526202 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 6)
 
 [node name="@Node3D@196" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=998876726 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 8, 0, 6)
 
 [node name="@Node3D@197" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=850521948 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 6)
 
 [node name="@Node3D@198" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=589038173 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 9, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 9, 0, 6)
 
 [node name="survivor_outpost_01_workshop" type="Node3D" parent="Objects" unique_id=2140700328]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27, 0, 29)
@@ -2366,60 +2371,61 @@ props_json = "{
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=592066245 instance=ExtResource("4_64gy7")]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1578747577 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@14" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=661333145 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1892257465 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 0)
 
 [node name="@Node3D@15" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=373997313 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
 
 [node name="@Node3D@16" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=154615130 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 0)
 
 [node name="@Node3D@17" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=826784824 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
 
 [node name="@Node3D@18" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=86405716 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 0)
 
 [node name="@Node3D@19" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1731126862 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
 
 [node name="@Node3D@20" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=2094410325 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 0)
 
 [node name="@Node3D@21" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=2014778814 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
 
 [node name="@Node3D@22" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=314866137 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 0)
 
 [node name="@Node3D@23" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1629589919 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
 
 [node name="@Node3D@24" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1255888582 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 0)
 
 [node name="@Node3D@25" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1246194908 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
 
 [node name="@Node3D@26" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1205351946 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 0)
 
 [node name="@Node3D@27" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=301268653 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
 
 [node name="@Node3D@28" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=2081013577 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8, 0, 0)
 
 [node name="@Node3D@29" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1024968732 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@30" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=717488752 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@31" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1780437969 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
@@ -2446,13 +2452,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 1)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 1)
 
 [node name="@Node3D@39" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=990510124 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 1)
 
 [node name="@Node3D@40" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1108795576 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@41" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1030500328 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
 
 [node name="@Node3D@42" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=41095042 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 2)
@@ -2479,13 +2485,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 2)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 2)
 
 [node name="@Node3D@50" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1300451947 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 2)
 
 [node name="@Node3D@51" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=637255429 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@52" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=457788597 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 
 [node name="@Node3D@53" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1645191605 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 3)
@@ -2512,13 +2518,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 3)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 3)
 
 [node name="@Node3D@61" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1322502390 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 3)
 
 [node name="@Node3D@62" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1923823124 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@63" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=2061835591 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="@Node3D@64" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1062207091 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 4)
@@ -2545,13 +2551,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 4)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4)
 
 [node name="@Node3D@72" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1825509349 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4)
 
 [node name="@Node3D@73" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=367458992 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@74" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=139033939 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 
 [node name="@Node3D@75" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1344436717 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 5)
@@ -2578,61 +2584,61 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 5)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 5)
 
 [node name="@Node3D@83" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=2066781600 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 5)
 
 [node name="@Node3D@84" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1242416281 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@85" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=2059113702 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
 
 [node name="@Node3D@86" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=96356902 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 6)
 
 [node name="@Node3D@87" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1641852558 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 6)
 
 [node name="@Node3D@88" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1103133918 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 6)
 
 [node name="@Node3D@89" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1554566170 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 6)
 
 [node name="@Node3D@90" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1762307111 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 6)
 
 [node name="@Node3D@91" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1681331004 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 3, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 6)
 
 [node name="@Node3D@92" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=119232160 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 6)
 
 [node name="@Node3D@93" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1563051360 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 4, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4, 0, 6)
 
 [node name="@Node3D@94" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1509350633 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 6)
 
 [node name="@Node3D@95" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=570022030 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 5, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5, 0, 6)
 
 [node name="@Node3D@96" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1651015845 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 6)
 
 [node name="@Node3D@97" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=858592449 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 6, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 6, 0, 6)
 
 [node name="@Node3D@98" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=179759970 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 6)
 
 [node name="@Node3D@99" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=1373794760 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 7, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 7, 0, 6)
 
 [node name="@Node3D@100" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=782642258 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 6)
 
 [node name="@Node3D@101" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=488347626 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 8, 0, 6)
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 8, 0, 6)
 
 [node name="survivor_outpost_01_watchtower_upper" type="Node3D" parent="Objects" unique_id=51824289]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 40, 1, 31)
@@ -2699,24 +2705,25 @@ props_json = "{
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper/Visuals" unique_id=1102300198 instance=ExtResource("4_64gy7")]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper/Visuals" unique_id=868872708 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@8" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper/Visuals" unique_id=1419752376 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
 
 [node name="@Node3D@9" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper/Visuals" unique_id=1207190428 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
 
 [node name="@Node3D@10" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper/Visuals" unique_id=1414931410 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@11" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper/Visuals" unique_id=1575966548 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1)
 
 [node name="@Node3D@12" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper/Visuals" unique_id=91793345 instance=ExtResource("4_64gy7")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
 
 [node name="@Node3D@13" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper/Visuals" unique_id=940898230 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 1)
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0, 1)
 
 [node name="survivor_outpost_01_dorm_wall_segment" type="Node3D" parent="Objects" unique_id=248796067]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 8)
@@ -2761,12 +2768,13 @@ props_json = "{
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_dorm_wall_segment" unique_id=955739045]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_dorm_wall_segment/Visuals" unique_id=1637485364 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_dorm_wall_segment/Visuals" unique_id=1000754335 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 0)
 
 [node name="@Node3D@7" type="Node3D" parent="Objects/survivor_outpost_01_dorm_wall_segment/Visuals" unique_id=800385432 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 2, 0, 0)
 
 [node name="survivor_outpost_01_clinic_wall_segment" type="Node3D" parent="Objects" unique_id=2041968081]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 31, 0, 8)
@@ -2819,18 +2827,19 @@ props_json = "{
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_clinic_wall_segment" unique_id=11686785]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_clinic_wall_segment/Visuals" unique_id=1958332097 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="building_wall_straight" type="Node3D" parent="Objects/survivor_outpost_01_clinic_wall_segment/Visuals" unique_id=519125701 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 1, 0, 0)
 
 [node name="@Node3D@4" type="Node3D" parent="Objects/survivor_outpost_01_clinic_wall_segment/Visuals" unique_id=1117494921 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 2, 0, 0)
 
 [node name="@Node3D@5" type="Node3D" parent="Objects/survivor_outpost_01_clinic_wall_segment/Visuals" unique_id=1002075827 instance=ExtResource("6_w5e4p")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 0)
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 3, 0, 0)
 
 [node name="@Node3D@6" type="Node3D" parent="Objects/survivor_outpost_01_clinic_wall_segment/Visuals" unique_id=2081653757 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 4, 0, 0)
 
 [node name="survivor_outpost_01_outer_wall_west" type="Node3D" parent="Objects" unique_id=85903670]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 38)
@@ -2871,9 +2880,10 @@ props_json = "{
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_west" unique_id=2145021472]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_west/Visuals" unique_id=774105850 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@3" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_west/Visuals" unique_id=553083260 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
 
 [node name="survivor_outpost_01_outer_wall_east" type="Node3D" parent="Objects" unique_id=1304590995]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 26, 0, 38)
@@ -2914,9 +2924,10 @@ props_json = "{
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_east" unique_id=1312157999]
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_east/Visuals" unique_id=827874374 instance=ExtResource("5_b3sd5")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
 
 [node name="@Node3D@2" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_east/Visuals" unique_id=1921255356 instance=ExtResource("5_b3sd5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0, 0)
 
 [node name="survivor_outpost_01_perimeter_gate" type="Node3D" parent="Objects" unique_id=1118154145]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 47, 0, 8)
