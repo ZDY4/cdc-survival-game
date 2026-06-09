@@ -9,6 +9,7 @@ const FogOverlayController = preload("res://scripts/world/fog_overlay_controller
 const DebugOverlayController = preload("res://scripts/world/debug_overlay_controller.gd")
 const DebugRuntimeController = preload("res://scripts/app/controllers/debug_runtime_controller.gd")
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
+const GameInputRouter = preload("res://scripts/app/controllers/game_input_router.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
@@ -142,6 +143,7 @@ var performance_last_hud_refresh_tick_msec: int = 0
 var performance_last_render_counts: Dictionary = {}
 var performance_render_sequence: int = 0
 var debug_runtime_controller: RefCounted = DebugRuntimeController.new()
+var game_input_router: RefCounted = GameInputRouter.new()
 
 
 func _ready() -> void:
@@ -213,37 +215,11 @@ func _process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and _handle_debug_console_key(event as InputEventKey):
-		get_viewport().set_input_as_handled()
-		return
-	if event is InputEventKey and is_debug_console_open():
-		return
-	if runtime_input_controller != null:
-		runtime_input_controller.input(event)
+	game_input_router.input(self, runtime_input_controller, event)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and is_debug_console_open():
-		return
-	if runtime_input_controller != null:
-		runtime_input_controller.unhandled_input(event)
-
-
-func _handle_debug_console_key(event: InputEventKey) -> bool:
-	if not event.pressed or event.echo:
-		return false
-	var key := event.keycode
-	if key == 0:
-		key = event.physical_keycode
-	if key == KEY_QUOTELEFT:
-		toggle_debug_console()
-		return true
-	if is_debug_console_open() and key == KEY_ESCAPE:
-		if hud != null and hud.has_method("hide_debug_console"):
-			hud.hide_debug_console()
-		refresh_hud(current_interaction_prompt())
-		return true
-	return false
+	game_input_router.unhandled_input(self, runtime_input_controller, event)
 
 
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
@@ -1139,6 +1115,14 @@ func toggle_debug_console() -> Dictionary:
 		"value": "open" if bool(result.get("visible", false)) else "close",
 	})
 	return result
+
+
+func close_debug_console() -> Dictionary:
+	if hud == null or not hud.has_method("hide_debug_console"):
+		return {"success": false, "reason": "hud_missing"}
+	hud.hide_debug_console()
+	refresh_hud(current_interaction_prompt())
+	return {"success": true, "visible": false}
 
 
 func is_debug_console_open() -> bool:
