@@ -1,0 +1,52 @@
+extends RefCounted
+
+const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
+
+var registry: RefCounted
+
+
+func _init(p_registry: RefCounted = null) -> void:
+	registry = p_registry
+
+
+func configure(p_registry: RefCounted) -> void:
+	registry = p_registry
+
+
+func rebuild_world_result(simulation: RefCounted, interaction_controller: RefCounted = null, source: String = "") -> Dictionary:
+	if registry == null:
+		return {"ok": false, "reason": "registry_missing", "source": source, "world_result": {}}
+	if simulation == null:
+		return {"ok": false, "reason": "simulation_missing", "source": source, "world_result": {}}
+	var next_world_result: Dictionary = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
+	return apply_existing_world_result(simulation, interaction_controller, next_world_result, source)
+
+
+func apply_existing_world_result(simulation: RefCounted, interaction_controller: RefCounted, next_world_result: Dictionary, source: String = "") -> Dictionary:
+	if next_world_result.is_empty():
+		return {"ok": false, "reason": "world_result_missing", "source": source, "world_result": {}}
+	if not bool(next_world_result.get("ok", false)):
+		return {
+			"ok": false,
+			"reason": "world_result_failed",
+			"source": source,
+			"error": str(next_world_result.get("error", "world refresh failed")),
+			"world_result": next_world_result,
+		}
+	if simulation != null:
+		var map: Dictionary = _dictionary_or_empty(next_world_result.get("map", {}))
+		simulation.configure_map_interactions(_dictionary_or_empty(map.get("interaction_targets", {})))
+	if interaction_controller != null:
+		interaction_controller.world_result = next_world_result
+	return {
+		"ok": true,
+		"source": source,
+		"world_result": next_world_result,
+		"map": _dictionary_or_empty(next_world_result.get("map", {})),
+	}
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

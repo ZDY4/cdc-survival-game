@@ -9,6 +9,7 @@ const DebugRuntimeController = preload("res://scripts/app/controllers/debug_runt
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const GameInputRouter = preload("res://scripts/app/controllers/game_input_router.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
+const RuntimeRefreshController = preload("res://scripts/app/controllers/runtime_refresh_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
@@ -141,6 +142,7 @@ var performance_last_render_counts: Dictionary = {}
 var performance_render_sequence: int = 0
 var debug_runtime_controller: RefCounted = DebugRuntimeController.new()
 var game_input_router: RefCounted = GameInputRouter.new()
+var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
 
 
 func _ready() -> void:
@@ -151,6 +153,7 @@ func _ready() -> void:
 		for error in load_result.errors:
 			push_error(error)
 		return
+	runtime_refresh_controller.configure(registry)
 
 	var startup_request := _consume_startup_request()
 	var runtime_result: Dictionary = _build_runtime_from_startup_request(startup_request)
@@ -2862,11 +2865,9 @@ func press_space_action() -> Dictionary:
 	})
 	if bool(result.get("success", false)):
 		_continue_crafting_queue_after_wait(result)
-		world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
-		if interaction_controller != null:
-			interaction_controller.world_result = world_result
-		_apply_world_root_snapshot(true)
-		_refresh_world_runtime_bindings()
+		if _rebuild_runtime_world_result("press_space_action"):
+			_apply_world_root_snapshot(true)
+			_refresh_world_runtime_bindings()
 	refresh_all_panels(current_interaction_prompt())
 	return result
 
@@ -2921,11 +2922,9 @@ func _submit_auto_tick_wait() -> Dictionary:
 	})
 	if bool(result.get("success", false)):
 		_continue_crafting_queue_after_wait(result)
-		world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
-		if interaction_controller != null:
-			interaction_controller.world_result = world_result
-		_apply_world_root_snapshot(true)
-		_refresh_world_runtime_bindings()
+		if _rebuild_runtime_world_result("auto_tick_wait"):
+			_apply_world_root_snapshot(true)
+			_refresh_world_runtime_bindings()
 		refresh_all_panels(current_interaction_prompt())
 	return result
 
@@ -3924,20 +3923,31 @@ func enter_overworld_location_from_panel(location_id: String) -> Dictionary:
 
 
 func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}, command_result: Dictionary = {}) -> void:
-	world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
-	if not bool(world_result.get("ok", false)):
-		push_error(str(world_result.get("error", "world rebuild failed")))
+	if not _rebuild_runtime_world_result("runtime_change"):
 		return
-	_sync_observed_level_to_map()
-	if simulation != null:
-		var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
-		simulation.configure_map_interactions(_dictionary_or_empty(map.get("interaction_targets", {})))
-	if interaction_controller != null:
-		interaction_controller.world_result = world_result
 	_apply_world_root_snapshot(true)
 	_present_world_action(command_result)
 	_refresh_world_runtime_bindings()
 	refresh_all_panels(selected_prompt)
+
+
+func _rebuild_runtime_world_result(source: String) -> bool:
+	var refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("rebuild_world_result", simulation, interaction_controller, source))
+	return _accept_runtime_refresh_result(refresh, "world rebuild failed")
+
+
+func _apply_existing_runtime_world_result(next_world_result: Dictionary, source: String, fallback_error: String = "world refresh failed") -> bool:
+	var refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("apply_existing_world_result", simulation, interaction_controller, next_world_result, source))
+	return _accept_runtime_refresh_result(refresh, fallback_error)
+
+
+func _accept_runtime_refresh_result(refresh: Dictionary, fallback_error: String) -> bool:
+	world_result = _dictionary_or_empty(refresh.get("world_result", {}))
+	if not bool(refresh.get("ok", false)):
+		push_error(str(refresh.get("error", refresh.get("reason", fallback_error))))
+		return false
+	_sync_observed_level_to_map()
+	return true
 
 
 func _setup_world_container() -> void:
@@ -4233,7 +4243,8 @@ func _apply_pending_world_action_final_refresh(trigger: String) -> bool:
 	var final_world_result: Dictionary = _dictionary_or_empty(pending_refresh.get("world_result", {}))
 	if final_world_result.is_empty() or not bool(final_world_result.get("ok", false)):
 		final_world_result = WorldSnapshotBuilder.new(registry).build_from_runtime_snapshot(simulation.snapshot())
-	_apply_world_result_without_present(final_world_result, bool(pending_refresh.get("render_world", true)))
+	if not _apply_world_result_without_present(final_world_result, bool(pending_refresh.get("render_world", true))):
+		return false
 	var applied: Dictionary = _deferred_world_refresh_public_snapshot(pending_refresh)
 	applied["trigger"] = trigger
 	applied["applied"] = true
@@ -4261,19 +4272,12 @@ func _deferred_world_refresh_public_snapshot(source: Dictionary) -> Dictionary:
 	}
 
 
-func _apply_world_result_without_present(next_world_result: Dictionary, render_world: bool = true) -> void:
-	world_result = next_world_result
-	if not bool(world_result.get("ok", false)):
-		push_error(str(world_result.get("error", "world refresh failed")))
-		return
-	_sync_observed_level_to_map()
-	if simulation != null:
-		var map: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
-		simulation.configure_map_interactions(_dictionary_or_empty(map.get("interaction_targets", {})))
-	if interaction_controller != null:
-		interaction_controller.world_result = world_result
+func _apply_world_result_without_present(next_world_result: Dictionary, render_world: bool = true) -> bool:
+	if not _apply_existing_runtime_world_result(next_world_result, "world_result_without_present", "world refresh failed"):
+		return false
 	_apply_world_root_snapshot(render_world)
 	_refresh_world_runtime_bindings()
+	return true
 
 
 func _apply_pending_world_action_ui(trigger: String) -> bool:
