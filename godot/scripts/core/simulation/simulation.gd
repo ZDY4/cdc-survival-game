@@ -4321,6 +4321,7 @@ func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result:
 	var queue: Array = _array_or_empty(planner.get("action_queue", [])).duplicate(true)
 	var current_index: int = clampi(int(planner.get("current_action_index", 0)), 0, max(0, queue.size()))
 	var completed_current_action: bool = _life_planner_action_completed(result)
+	var replan_request: Dictionary = _life_planner_replan_request(actor, planner, result, current_index)
 	var completed_action: Dictionary = _dictionary_or_empty(queue[current_index]) if current_index >= 0 and current_index < queue.size() else {}
 	var planner_state: Dictionary = _dictionary_or_empty(runtime.get("planner_state", {})).duplicate(true)
 	var applied_effects: Array = []
@@ -4358,9 +4359,16 @@ func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result:
 		"role": str(planner.get("role", "")),
 		"last_execution": execution,
 	}
+	if not replan_request.is_empty():
+		planner_runtime["replan_requested"] = true
+		planner_runtime["replan_request"] = replan_request.duplicate(true)
+		execution["replan_requested"] = true
+		execution["replan_request"] = replan_request.duplicate(true)
 	runtime["planner_state"] = planner_state
 	runtime["planner"] = planner_runtime
 	_set_life_runtime(actor, runtime)
+	if not replan_request.is_empty():
+		_emit("settlement_life_planner_replan_requested", replan_request.duplicate(true))
 	_emit("settlement_life_planner_updated", {
 		"actor_id": actor.actor_id,
 		"definition_id": actor.definition_id,
@@ -4379,6 +4387,28 @@ func _life_planner_action_completed(result: Dictionary) -> bool:
 	if result.has("remaining_steps"):
 		return int(result.get("remaining_steps", 0)) <= 0
 	return false
+
+
+func _life_planner_replan_request(actor: RefCounted, planner: Dictionary, result: Dictionary, current_index: int) -> Dictionary:
+	if bool(result.get("success", false)):
+		return {}
+	var action_id := str(planner.get("action_id", ""))
+	if action_id.is_empty():
+		return {}
+	var intent_name := str(result.get("intent", ""))
+	if not ["follow_route", "return_home", "use_smart_object"].has(intent_name):
+		return {}
+	return {
+		"actor_id": actor.actor_id,
+		"definition_id": actor.definition_id,
+		"goal_id": str(planner.get("goal_id", "")),
+		"action_id": action_id,
+		"action_index": current_index,
+		"intent": intent_name,
+		"reason": str(result.get("reason", "")),
+		"world_time": world_time.duplicate(true),
+		"target_grid": _dictionary_or_empty(result.get("target_grid", {})).duplicate(true),
+	}
 
 
 func _life_planner_queue_action_id(queue: Array, index: int) -> String:

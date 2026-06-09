@@ -109,6 +109,8 @@ func _queued_life_intent(actor: RefCounted, life: Dictionary, settlement: Dictio
 	var runtime_planner: Dictionary = _dictionary_or_empty(runtime.get("planner", {}))
 	if runtime_planner.is_empty() or bool(runtime_planner.get("queue_complete", false)):
 		return {}
+	if bool(runtime_planner.get("replan_requested", false)):
+		return {}
 	var queue: Array = _array_or_empty(runtime_planner.get("action_queue", []))
 	var current_index: int = int(runtime_planner.get("current_action_index", 0))
 	if queue.is_empty() or current_index < 0 or current_index >= queue.size():

@@ -228,6 +228,52 @@ func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[
 	errors.append_array(_expect_settlement_life_need_effect_action(registry))
 	errors.append_array(_expect_settlement_life_queue_progression(registry))
 	errors.append_array(_expect_settlement_life_world_state_effects(registry))
+	errors.append_array(_expect_settlement_life_failure_replan(registry))
+	return errors
+
+
+func _expect_settlement_life_failure_replan(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 360}
+	var cook_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(10, 0, 20), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var cook: RefCounted = simulation.actor_registry.get_actor(cook_id)
+	cook.life["duty_route_id"] = ""
+	cook.life["runtime"] = {
+		"needs": {
+			"hunger": {"current": 80.0, "max": 100.0},
+			"energy": {"current": 75.0, "max": 100.0},
+			"morale": {"current": 50.0, "max": 100.0},
+		}
+	}
+	var blocked_topology: Dictionary = _open_settlement_topology()
+	blocked_topology["bounds"] = {"min_x": 10, "max_x": 10, "min_z": 20, "max_z": 20}
+	var failed_results: Array = simulation.advance_world_turn(blocked_topology)
+	var failed_result: Dictionary = _npc_result_for_actor(failed_results, cook_id)
+	if bool(failed_result.get("success", true)) or str(failed_result.get("reason", "")) != "life_target_unreachable":
+		errors.append("settlement GOAP blocked action should fail with life_target_unreachable, got %s" % failed_result)
+	var failed_runtime: Dictionary = _planner_runtime_for_actor(simulation, cook_id)
+	if not bool(failed_runtime.get("replan_requested", false)):
+		errors.append("settlement GOAP failed action should request replan, got %s" % failed_runtime)
+	var replan_request: Dictionary = _dictionary_or_empty(failed_runtime.get("replan_request", {}))
+	if str(replan_request.get("reason", "")) != "life_target_unreachable" or int(replan_request.get("actor_id", 0)) != cook_id:
+		errors.append("settlement GOAP replan request should expose actor and failure reason, got %s" % replan_request)
+	var replan_event: Dictionary = _last_event_payload(simulation.snapshot(), "settlement_life_planner_replan_requested")
+	if int(replan_event.get("actor_id", 0)) != cook_id or str(replan_event.get("reason", "")) != "life_target_unreachable":
+		errors.append("settlement_life_planner_replan_requested should expose failed planner action, got %s" % replan_event)
+	var recovered_results: Array = simulation.advance_world_turn(_open_settlement_topology())
+	var recovered_result: Dictionary = _npc_result_for_actor(recovered_results, cook_id)
+	var recovered_planner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(recovered_result.get("life_intent", {})).get("planner", {}))
+	if str(recovered_planner.get("action_reason", "")) == "queued_action":
+		errors.append("settlement GOAP should replan after failed queue instead of reusing queued action, got %s" % recovered_planner)
+	var recovered_runtime: Dictionary = _planner_runtime_for_actor(simulation, cook_id)
+	if bool(recovered_runtime.get("replan_requested", false)):
+		errors.append("settlement GOAP successful replan should clear replan_requested, got %s" % recovered_runtime)
 	return errors
 
 
