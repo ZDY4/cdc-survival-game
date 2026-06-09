@@ -230,6 +230,60 @@ func _expect_settlement_life_smart_object_effect(registry: RefCounted) -> Array[
 	errors.append_array(_expect_settlement_life_world_state_effects(registry))
 	errors.append_array(_expect_settlement_life_failure_replan(registry))
 	errors.append_array(_expect_settlement_life_reservation_expiry(registry))
+	errors.append_array(_expect_settlement_life_reservation_conflict(registry))
+	return errors
+
+
+func _expect_settlement_life_reservation_conflict(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position = GridCoord.new(0, 0, 0)
+	_move_non_player_actors_out_of_test_lane(simulation)
+	simulation.world_time = {"day": "monday", "minute_of_day": 360}
+	var reserved_cook_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(0, 0, 10), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var reserved_cook: RefCounted = simulation.actor_registry.get_actor(reserved_cook_id)
+	reserved_cook.life["runtime"] = {
+		"reservations": {
+			"meal_object": {
+				"active": true,
+				"phase": "reserved",
+				"reservation_target": "meal_object",
+				"smart_object_id": "canteen_seat_cook_01",
+				"smart_object_kind": "canteen_seat",
+				"action_id": "travel_to_canteen",
+				"actor_id": reserved_cook_id,
+				"definition_id": reserved_cook.definition_id,
+				"world_time": {"day": "monday", "minute_of_day": 360},
+				"created_total_minutes": 360,
+				"reservation_ttl_minutes": 60,
+				"expires_world_time": {"day": "monday", "minute_of_day": 420},
+				"target_grid": {"x": 10, "y": 0, "z": 20},
+			}
+		}
+	}
+	var cook_id: int = _register_character(simulation, registry, "survivor_outpost_01_cook_mei", GridCoord.new(10, 0, 20), {
+		"combat_attributes": {"turn_ap_gain": 1.0, "turn_ap_max": 1.0, "affordable_ap_threshold": 1.0},
+	})
+	var cook: RefCounted = simulation.actor_registry.get_actor(cook_id)
+	cook.life["duty_route_id"] = ""
+	cook.life["runtime"] = {
+		"needs": {
+			"hunger": {"current": 80.0, "max": 100.0},
+			"energy": {"current": 75.0, "max": 100.0},
+			"morale": {"current": 50.0, "max": 100.0},
+		}
+	}
+	var intent: Dictionary = simulation.decide_actor_intent(cook_id, {"topology": _open_settlement_topology()})
+	if str(intent.get("intent", "")) != "use_smart_object":
+		errors.append("settlement GOAP reservation conflict should still find alternate smart object, got %s" % intent)
+	if str(intent.get("smart_object_id", "")) != "canteen_seat_01":
+		errors.append("settlement GOAP reservation conflict should avoid reserved cook canteen seat, got %s" % intent)
+	var reservation_counts: Dictionary = _dictionary_or_empty(simulation.decide_actor_intent(cook_id, {}).get("life_reservations_by_smart_object", {}))
+	if not reservation_counts.is_empty():
+		errors.append("settlement GOAP intent should not leak raw reservation context into public intent, got %s" % reservation_counts)
 	return errors
 
 

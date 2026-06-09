@@ -65,7 +65,7 @@ func _planned_life_intent(actor: RefCounted, life: Dictionary, settlement: Dicti
 	var goal_ids: Array = _available_goal_ids(behavior_chain, planner_data)
 	var action_ids: Array = _available_action_ids(behavior_chain, planner_data)
 	var scored_goals: Array[Dictionary] = _score_goals(goal_ids, planner_data, state)
-	var queued_intent: Dictionary = _queued_life_intent(actor, life, settlement, ai_library, planner_data, state, schedule_block, scored_goals)
+	var queued_intent: Dictionary = _queued_life_intent(actor, life, settlement, ai_library, planner_data, state, schedule_block, scored_goals, context)
 	if not queued_intent.is_empty():
 		return queued_intent
 	for scored_goal in scored_goals:
@@ -75,7 +75,7 @@ func _planned_life_intent(actor: RefCounted, life: Dictionary, settlement: Dicti
 		if action_result.is_empty():
 			continue
 		var action: Dictionary = _dictionary_or_empty(action_result.get("action", {}))
-		var intent: Dictionary = _intent_for_planner_action(actor, life, settlement, ai_library, action, schedule_block)
+		var intent: Dictionary = _intent_for_planner_action(actor, life, settlement, ai_library, action, schedule_block, context)
 		if intent.is_empty():
 			continue
 		var planner_summary: Dictionary = {
@@ -104,7 +104,7 @@ func _planned_life_intent(actor: RefCounted, life: Dictionary, settlement: Dicti
 	return {}
 
 
-func _queued_life_intent(actor: RefCounted, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, planner_data: Dictionary, state: Dictionary, schedule_block: Dictionary, scored_goals: Array[Dictionary]) -> Dictionary:
+func _queued_life_intent(actor: RefCounted, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, planner_data: Dictionary, state: Dictionary, schedule_block: Dictionary, scored_goals: Array[Dictionary], context: Dictionary) -> Dictionary:
 	var runtime: Dictionary = _dictionary_or_empty(life.get("runtime", {}))
 	var runtime_planner: Dictionary = _dictionary_or_empty(runtime.get("planner", {}))
 	if runtime_planner.is_empty() or bool(runtime_planner.get("queue_complete", false)):
@@ -122,7 +122,7 @@ func _queued_life_intent(actor: RefCounted, life: Dictionary, settlement: Dictio
 	var action: Dictionary = _dictionary_or_empty(_dictionary_or_empty(planner_data.get("actions", {})).get(queued_action_id, {}))
 	if action.is_empty() or not _assignments_satisfied(_array_or_empty(action.get("preconditions", [])), state):
 		return {}
-	var intent: Dictionary = _intent_for_planner_action(actor, life, settlement, ai_library, action, schedule_block)
+	var intent: Dictionary = _intent_for_planner_action(actor, life, settlement, ai_library, action, schedule_block, context)
 	if intent.is_empty():
 		return {}
 	var planner_summary: Dictionary = runtime_planner.duplicate(true)
@@ -348,7 +348,7 @@ func _support_action_for_preconditions(action: Dictionary, action_ids: Array, ac
 	return {}
 
 
-func _intent_for_planner_action(actor: RefCounted, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary, schedule_block: Dictionary) -> Dictionary:
+func _intent_for_planner_action(actor: RefCounted, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary, schedule_block: Dictionary, context: Dictionary) -> Dictionary:
 	var binding := str(action.get("executor_binding_id", ""))
 	var base := {
 		"success": true,
@@ -370,11 +370,11 @@ func _intent_for_planner_action(actor: RefCounted, life: Dictionary, settlement:
 		"travel_to_anchor":
 			return _travel_intent_for_action(base, life, settlement, action)
 		"use_smart_object":
-			return _smart_object_intent_for_action(base, life, settlement, ai_library, action)
+			return _smart_object_intent_for_action(base, life, settlement, ai_library, action, context)
 		"idle_at_anchor":
 			return _travel_intent_for_action(base, life, settlement, action)
 		"resolve_alarm":
-			return _alarm_intent_for_action(base, life, settlement, ai_library, action)
+			return _alarm_intent_for_action(base, life, settlement, ai_library, action, context)
 	return {}
 
 
@@ -397,8 +397,8 @@ func _travel_intent_for_action(base: Dictionary, life: Dictionary, settlement: D
 	}, true)
 
 
-func _smart_object_intent_for_action(base: Dictionary, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary) -> Dictionary:
-	var smart_object: Dictionary = _smart_object_for_action(life, settlement, ai_library, action)
+func _smart_object_intent_for_action(base: Dictionary, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary, context: Dictionary) -> Dictionary:
+	var smart_object: Dictionary = _smart_object_for_action(life, settlement, ai_library, action, context)
 	if smart_object.is_empty():
 		return {}
 	return base.merged({
@@ -410,8 +410,8 @@ func _smart_object_intent_for_action(base: Dictionary, life: Dictionary, settlem
 	}, true)
 
 
-func _alarm_intent_for_action(base: Dictionary, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary) -> Dictionary:
-	var smart_object: Dictionary = _smart_object_for_kind(life, settlement, ai_library, "alarm_point", "")
+func _alarm_intent_for_action(base: Dictionary, life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary, context: Dictionary) -> Dictionary:
+	var smart_object: Dictionary = _smart_object_for_kind(life, settlement, ai_library, "alarm_point", "", context)
 	if smart_object.is_empty():
 		return _travel_intent_for_action(base, life, settlement, action)
 	return base.merged({
@@ -479,7 +479,7 @@ func _shift_starting_soon(profile_id: String, day: String, minute_of_day: int, a
 	return false
 
 
-func _first_accessible_smart_object(life: Dictionary, settlement: Dictionary, ai_library: Dictionary) -> Dictionary:
+func _first_accessible_smart_object(life: Dictionary, settlement: Dictionary, ai_library: Dictionary, context: Dictionary = {}) -> Dictionary:
 	var access_profile_id: String = str(life.get("smart_object_access_profile_id", ""))
 	for profile in _ai_collection(ai_library, "smart_object_access_profiles"):
 		var profile_data: Dictionary = _dictionary_or_empty(profile)
@@ -487,25 +487,25 @@ func _first_accessible_smart_object(life: Dictionary, settlement: Dictionary, ai
 			continue
 		for rule in _array_or_empty(profile_data.get("rules", [])):
 			var rule_data: Dictionary = _dictionary_or_empty(rule)
-			var smart_object: Dictionary = _matching_smart_object(settlement, rule_data)
+			var smart_object: Dictionary = _matching_smart_object(settlement, rule_data, context)
 			if not smart_object.is_empty():
 				return smart_object
 	return {}
 
 
-func _smart_object_for_action(life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary) -> Dictionary:
+func _smart_object_for_action(life: Dictionary, settlement: Dictionary, ai_library: Dictionary, action: Dictionary, context: Dictionary) -> Dictionary:
 	var reservation_target := str(action.get("reservation_target", ""))
 	var target_anchor_kind := str(action.get("target_anchor", ""))
 	var desired_kind := _reservation_target_kind(reservation_target, target_anchor_kind)
 	var desired_tag := _reservation_target_tag(reservation_target, target_anchor_kind)
 	if not desired_kind.is_empty():
-		var smart_object: Dictionary = _smart_object_for_kind(life, settlement, ai_library, desired_kind, desired_tag)
+		var smart_object: Dictionary = _smart_object_for_kind(life, settlement, ai_library, desired_kind, desired_tag, context)
 		if not smart_object.is_empty():
 			return smart_object
-	return _first_accessible_smart_object(life, settlement, ai_library)
+	return _first_accessible_smart_object(life, settlement, ai_library, context)
 
 
-func _smart_object_for_kind(life: Dictionary, settlement: Dictionary, ai_library: Dictionary, kind: String, desired_tag: String) -> Dictionary:
+func _smart_object_for_kind(life: Dictionary, settlement: Dictionary, ai_library: Dictionary, kind: String, desired_tag: String, context: Dictionary) -> Dictionary:
 	var access_profile_id: String = str(life.get("smart_object_access_profile_id", ""))
 	var fallback: Dictionary = {}
 	for profile in _ai_collection(ai_library, "smart_object_access_profiles"):
@@ -524,6 +524,8 @@ func _smart_object_for_kind(life: Dictionary, settlement: Dictionary, ai_library
 			for smart_object in _array_or_empty(settlement.get("smart_objects", [])):
 				var object_data: Dictionary = _dictionary_or_empty(smart_object)
 				if str(object_data.get("kind", "")) != kind:
+					continue
+				if not _smart_object_has_reservation_capacity(object_data, context):
 					continue
 				if fallback.is_empty():
 					fallback = object_data
@@ -576,6 +578,16 @@ func _reservation_active(reservations: Dictionary, reservation_target: String) -
 	return not reservation.is_empty() and bool(reservation.get("active", true))
 
 
+func _smart_object_has_reservation_capacity(smart_object: Dictionary, context: Dictionary) -> bool:
+	var object_id := str(smart_object.get("id", ""))
+	if object_id.is_empty():
+		return true
+	var reservation_counts: Dictionary = _dictionary_or_empty(context.get("life_reservations_by_smart_object", {}))
+	var reserved_count := int(reservation_counts.get(object_id, 0))
+	var capacity: int = max(1, int(smart_object.get("capacity", 1)))
+	return reserved_count < capacity
+
+
 func _target_anchor_for_action(life: Dictionary, settlement: Dictionary, action: Dictionary) -> String:
 	match str(action.get("target_anchor", "")):
 		"home":
@@ -618,7 +630,7 @@ func _meal_window_open(settlement: Dictionary, minute_of_day: int) -> bool:
 	return false
 
 
-func _matching_smart_object(settlement: Dictionary, rule: Dictionary) -> Dictionary:
+func _matching_smart_object(settlement: Dictionary, rule: Dictionary, context: Dictionary = {}) -> Dictionary:
 	var required_kind: String = str(rule.get("kind", ""))
 	var preferred_tags: Array = _array_or_empty(rule.get("preferred_tags", []))
 	var fallback_to_any: bool = bool(rule.get("fallback_to_any", false))
@@ -626,6 +638,8 @@ func _matching_smart_object(settlement: Dictionary, rule: Dictionary) -> Diction
 	for smart_object in _array_or_empty(settlement.get("smart_objects", [])):
 		var object_data: Dictionary = _dictionary_or_empty(smart_object)
 		if not required_kind.is_empty() and str(object_data.get("kind", "")) != required_kind:
+			continue
+		if not _smart_object_has_reservation_capacity(object_data, context):
 			continue
 		if fallback.is_empty():
 			fallback = object_data

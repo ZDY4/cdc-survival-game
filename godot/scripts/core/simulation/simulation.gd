@@ -741,6 +741,8 @@ func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
 		resolved_context["settlements"] = settlement_library
 	if not resolved_context.has("world_alert_active"):
 		resolved_context["world_alert_active"] = world_flags.has("world_alert_active")
+	if not resolved_context.has("life_reservations_by_smart_object"):
+		resolved_context["life_reservations_by_smart_object"] = _active_life_reservations_by_smart_object(actor_id)
 	if resolved_context.has("topology"):
 		resolved_context["topology"] = _topology_with_runtime_door_states(_dictionary_or_empty(resolved_context.get("topology", {})))
 	if not resolved_context.has("weapon_profile"):
@@ -758,6 +760,25 @@ func decide_all_ai_intents(context: Dictionary = {}) -> Array[Dictionary]:
 		if actor == null or actor.kind == "player":
 			continue
 		output.append(decide_actor_intent(actor.actor_id, context))
+	return output
+
+
+func _active_life_reservations_by_smart_object(excluded_actor_id: int = 0) -> Dictionary:
+	var output: Dictionary = {}
+	for actor in actor_registry.actors():
+		if actor == null or actor.actor_id == excluded_actor_id or actor.hp <= 0.0:
+			continue
+		var runtime: Dictionary = _dictionary_or_empty(_dictionary_or_empty(actor.life).get("runtime", {}))
+		for reservation in _dictionary_or_empty(runtime.get("reservations", {})).values():
+			var reservation_data: Dictionary = _dictionary_or_empty(reservation)
+			if reservation_data.is_empty() or not bool(reservation_data.get("active", false)):
+				continue
+			if _life_planner_reservation_expired(reservation_data):
+				continue
+			var smart_object_id := str(reservation_data.get("smart_object_id", ""))
+			if smart_object_id.is_empty():
+				continue
+			output[smart_object_id] = int(output.get(smart_object_id, 0)) + 1
 	return output
 
 
