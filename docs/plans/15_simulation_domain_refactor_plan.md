@@ -243,10 +243,12 @@ func execute(simulation: RefCounted, actor: RefCounted, command: Dictionary) -> 
 
 ### Phase 0: Inventory 和安全网
 
-- [ ] 生成 `simulation.gd` 函数 inventory，按本文分类标注归属。
-- [ ] 标出 public API、smoke 直接依赖和可私有化入口。
-- [ ] 记录每类对应 smoke 场景。
-- [ ] 不改行为，只补充文档和必要注释。
+- [x] 生成 `simulation.gd` 函数 inventory，按本文分类标注归属。
+- [x] 标出 public API、smoke 直接依赖和可私有化入口。
+- [x] 记录每类对应 smoke 场景。
+- [x] 不改行为，只补充文档和必要注释。
+
+证据：`docs/plans/inventories/15_simulation_function_inventory.md`
 
 验收：
 

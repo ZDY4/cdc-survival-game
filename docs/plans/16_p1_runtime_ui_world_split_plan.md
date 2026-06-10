@@ -91,10 +91,12 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 0: Inventory 和依赖确认
 
-- [ ] 为三个 P1 文件生成函数 inventory，按职责分组。
-- [ ] 标记 public API、smoke 直接调用和只供内部使用的入口。
-- [ ] 列出每个文件对应 smoke 场景。
-- [ ] 记录现有 direct-call fallback，确认哪些必须暂保留。
+- [x] 为三个 P1 文件生成函数 inventory，按职责分组。
+- [x] 标记 public API、smoke 直接调用和只供内部使用的入口。
+- [x] 列出每个文件对应 smoke 场景。
+- [x] 记录现有 direct-call fallback，确认哪些必须暂保留。
+
+证据：`docs/plans/inventories/16_p1_runtime_ui_world_function_inventory.md`
 
 验收：
 
