@@ -3607,6 +3607,7 @@ func _expect_player_command_authority_source(errors: Array[String], entries: Arr
 		"CraftingActionController": _read_text_file("res://scripts/app/controllers/crafting_action_controller.gd"),
 		"WorldPanelActionController": _read_text_file("res://scripts/app/controllers/world_panel_action_controller.gd"),
 		"DialogueActionController": _read_text_file("res://scripts/app/controllers/dialogue_action_controller.gd"),
+		"WaitActionController": _read_text_file("res://scripts/app/controllers/wait_action_controller.gd"),
 	}
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
@@ -3659,6 +3660,8 @@ func _body_uses_submit_authority(body: String, owner: String) -> bool:
 	if body.contains("submit_command.call") or body.contains("submit_skill_command.call"):
 		return true
 	if body.contains("_submit_craft("):
+		return true
+	if body.contains("wait_action_controller.call(\"submit_wait\""):
 		return true
 	if owner == "PlayerInteractionController" and body.contains("execute_selected_option("):
 		return true

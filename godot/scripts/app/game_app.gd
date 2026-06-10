@@ -29,6 +29,7 @@ const CharacterActionController = preload("res://scripts/app/controllers/charact
 const SkillActionController = preload("res://scripts/app/controllers/skill_action_controller.gd")
 const WorldPanelActionController = preload("res://scripts/app/controllers/world_panel_action_controller.gd")
 const DialogueActionController = preload("res://scripts/app/controllers/dialogue_action_controller.gd")
+const WaitActionController = preload("res://scripts/app/controllers/wait_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const HudRoot = preload("res://scripts/ui/hud_root.gd")
@@ -75,6 +76,7 @@ var character_action_controller: RefCounted = CharacterActionController.new()
 var skill_action_controller: RefCounted = SkillActionController.new()
 var world_panel_action_controller: RefCounted = WorldPanelActionController.new()
 var dialogue_action_controller: RefCounted = DialogueActionController.new()
+var wait_action_controller: RefCounted = WaitActionController.new()
 var tooltip_layer: Control:
 	get:
 		var controller := _ui_overlay_controller()
@@ -1506,20 +1508,8 @@ func press_space_action() -> Dictionary:
 	var pending_result: Dictionary = cancel_pending("keyboard", true)
 	if bool(pending_result.get("had_pending", false)):
 		return pending_result
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var result: Dictionary = simulation.submit_player_command({
-		"kind": "wait",
-		"actor_id": 1,
-		"topology": _dictionary_or_empty(world_result.get("map", {})),
-	})
-	if bool(result.get("success", false)):
-		_continue_crafting_queue_after_wait(result)
-		if _rebuild_runtime_world_result("press_space_action"):
-			_apply_world_root_snapshot(true)
-			_refresh_world_runtime_bindings()
-	refresh_all_panels(current_interaction_prompt())
-	return result
+	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call("submit_wait", simulation, _dictionary_or_empty(world_result.get("map", {}))))
+	return _apply_wait_action_operation(operation, "press_space_action")
 
 
 func _process_auto_tick(delta: float) -> void:
@@ -1544,23 +1534,27 @@ func _auto_tick_interval_sec() -> float:
 
 
 func _submit_auto_tick_wait() -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	if has_active_dialogue() or gameplay_input_blocked_by_ui():
-		return {"success": false, "reason": "ui_blocked"}
-	var snapshot: Dictionary = simulation.snapshot()
-	if not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty():
-		return {"success": false, "reason": "pending_blocked"}
-	var result: Dictionary = simulation.submit_player_command({
-		"kind": "wait",
-		"actor_id": 1,
-		"topology": _dictionary_or_empty(world_result.get("map", {})),
-	})
-	if bool(result.get("success", false)):
+	var snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
+	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call(
+		"auto_tick_wait",
+		simulation,
+		has_active_dialogue(),
+		gameplay_input_blocked_by_ui(),
+		snapshot,
+		_dictionary_or_empty(world_result.get("map", {}))
+	))
+	return _apply_wait_action_operation(operation, "auto_tick_wait")
+
+
+func _apply_wait_action_operation(operation: Dictionary, refresh_reason: String) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	var refresh_steps: Array = _array_or_empty(operation.get("refresh", []))
+	if refresh_steps.has("runtime"):
 		_continue_crafting_queue_after_wait(result)
-		if _rebuild_runtime_world_result("auto_tick_wait"):
+		if _rebuild_runtime_world_result(refresh_reason):
 			_apply_world_root_snapshot(true)
 			_refresh_world_runtime_bindings()
+	if refresh_steps.has("all_panels"):
 		refresh_all_panels(current_interaction_prompt())
 	return result
 
