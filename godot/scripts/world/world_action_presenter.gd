@@ -1,6 +1,8 @@
 extends RefCounted
 
-const UIThemeService = preload("res://scripts/ui/ui_theme_service.gd")
+const PresentationTracker = preload("res://scripts/world/presentation/presentation_tracker.gd")
+const PresentationMaterials = preload("res://scripts/world/presentation/presentation_materials.gd")
+const PresentationNodeFactory = preload("res://scripts/world/presentation/presentation_node_factory.gd")
 
 const GRID_SIZE := 1.0
 const DEFAULT_ACTOR_Y := 0.58
@@ -18,11 +20,9 @@ const RELOAD_PHASE_DURATIONS := [0.07, 0.12, 0.10]
 const DOOR_AUTO_OPEN_PHASE_DURATIONS := [0.04, 0.08, 0.08]
 const PENDING_MOVEMENT_SEGMENT_PHASE_DURATIONS := [0.04, 0.08, 0.12]
 
-var sequence: int = 0
-var active_count: int = 0
-var active_refs: Array[WeakRef] = []
-var active_tweens: Array = []
-var latest: Dictionary = {}
+var _tracker := PresentationTracker.new()
+var _materials := PresentationMaterials.new()
+var _node_factory := PresentationNodeFactory.new()
 
 
 func present_result(host: Node, world_root: Node, command_result: Dictionary, world_result: Dictionary) -> Dictionary:
@@ -37,70 +37,40 @@ func present_result(host: Node, world_root: Node, command_result: Dictionary, wo
 	if not movement.is_empty() and not interaction.is_empty():
 		_start_movement_tween(host, world_root, movement)
 		_start_interaction_feedback(host, world_root, interaction)
-		return latest.duplicate(true)
+		return _tracker.latest_snapshot()
 	if not movement.is_empty():
 		_start_movement_tween(host, world_root, movement)
-		return latest.duplicate(true)
+		return _tracker.latest_snapshot()
 	var attack := _attack_presentation(events, world_root, world_result)
 	if not attack.is_empty():
 		var combat_event := _combat_event_presentation(events, world_root, world_result)
 		if attack.get("target_node", null) == null and not combat_event.is_empty():
 			_start_combat_event_feedback(host, world_root, combat_event)
-			return latest.duplicate(true)
+			return _tracker.latest_snapshot()
 		_start_attack_feedback(host, world_root, attack)
-		return latest.duplicate(true)
+		return _tracker.latest_snapshot()
 	if not interaction.is_empty():
 		_start_interaction_feedback(host, world_root, interaction)
-		return latest.duplicate(true)
+		return _tracker.latest_snapshot()
 	var reload := _reload_presentation(events, world_root, world_result)
 	if not reload.is_empty():
 		_start_reload_feedback(host, world_root, reload)
-		return latest.duplicate(true)
+		return _tracker.latest_snapshot()
 	var combat_event := _combat_event_presentation(events, world_root, world_result)
 	if not combat_event.is_empty():
 		_start_combat_event_feedback(host, world_root, combat_event)
-		return latest.duplicate(true)
+		return _tracker.latest_snapshot()
 	if not movement_cancelled.is_empty():
 		return _record_latest(_movement_cancelled_public_snapshot(movement_cancelled))
 	return _record_latest({"active": false, "kind": "none", "event_count": events.size()})
 
 
 func snapshot() -> Dictionary:
-	_prune_active_refs()
-	var output := latest.duplicate(true)
-	output["active"] = active_count > 0
-	output["active_count"] = active_count
-	output["sequence"] = sequence
-	return output
+	return _tracker.snapshot()
 
 
 func finish_active_presentations() -> Dictionary:
-	for tween_value in active_tweens:
-		var tween := tween_value as Tween
-		if tween != null and tween.is_valid():
-			tween.kill()
-	active_tweens.clear()
-	for node_ref in active_refs:
-		var node := node_ref.get_ref() as Node
-		if node == null or node.is_queued_for_deletion():
-			continue
-		if node is Node3D and node.has_meta("action_presenter_final_position"):
-			var final_position: Variant = node.get_meta("action_presenter_final_position")
-			if typeof(final_position) == TYPE_VECTOR3:
-				(node as Node3D).position = final_position
-		if node is Node3D and node.has_meta("action_presenter_final_rotation_degrees"):
-			var final_rotation: Variant = node.get_meta("action_presenter_final_rotation_degrees")
-			if typeof(final_rotation) == TYPE_VECTOR3:
-				(node as Node3D).rotation_degrees = final_rotation
-		node.set_meta("action_presenter_active", false)
-		if str(node.name).begins_with("WorldAction"):
-			node.queue_free()
-	active_refs.clear()
-	active_count = 0
-	latest["active"] = false
-	latest["active_count"] = 0
-	latest["fast_forwarded"] = true
-	return snapshot()
+	return _tracker.finish_active_presentations()
 
 
 func _events_from_result(command_result: Dictionary) -> Array:
@@ -353,8 +323,7 @@ func _start_movement_tween(host: Node, world_root: Node, movement: Dictionary) -
 	if actor_node == null or path.size() <= 1:
 		_record_latest(_presentation_public_snapshot(movement, false))
 		return
-	sequence += 1
-	var run_sequence := sequence
+	var run_sequence := _tracker.next_sequence()
 	var y := actor_node.position.y
 	actor_node.position = _grid_to_world(_dictionary_or_empty(path[0]), y)
 	var door_auto_opens: Array = _array_or_empty(movement.get("door_auto_opens", []))
@@ -407,9 +376,9 @@ func _apply_movement_facing(actor_ref: WeakRef, facing: Dictionary) -> void:
 	actor_node.set_meta("action_presenter_current_step_index", int(facing.get("step_index", 0)))
 	actor_node.set_meta("action_presenter_current_facing_direction", str(facing.get("direction", "")))
 	actor_node.set_meta("action_presenter_current_facing_yaw_degrees", yaw)
-	latest["current_step_index"] = int(facing.get("step_index", 0))
-	latest["current_facing_direction"] = str(facing.get("direction", ""))
-	latest["current_facing_yaw_degrees"] = yaw
+	_tracker.set_latest_value("current_step_index", int(facing.get("step_index", 0)))
+	_tracker.set_latest_value("current_facing_direction", str(facing.get("direction", "")))
+	_tracker.set_latest_value("current_facing_yaw_degrees", yaw)
 
 
 func _start_door_auto_open_markers(host: Node, world_root: Node, movement: Dictionary, path: Array) -> Array[String]:
@@ -423,15 +392,7 @@ func _start_door_auto_open_markers(host: Node, world_root: Node, movement: Dicti
 		var grid: Dictionary = _dictionary_or_empty(entry.get("grid", {}))
 		if grid.is_empty():
 			continue
-		var marker := MeshInstance3D.new()
-		marker.name = "WorldActionDoorAutoOpen"
-		var mesh := CylinderMesh.new()
-		mesh.top_radius = 0.30
-		mesh.bottom_radius = 0.46
-		mesh.height = 0.08
-		mesh.radial_segments = 24
-		marker.mesh = mesh
-		marker.material_override = _door_auto_open_material()
+		var marker := _node_factory.cylinder_marker("WorldActionDoorAutoOpen", 0.30, 0.46, 0.08, 24, _door_auto_open_material())
 		marker.position = _grid_to_world(grid, 0.36)
 		marker.scale = Vector3(0.72, 1.0, 0.72)
 		marker.set_meta("action_presenter_active", true)
@@ -440,7 +401,7 @@ func _start_door_auto_open_markers(host: Node, world_root: Node, movement: Dicti
 		marker.set_meta("action_presenter_phase_count", DOOR_AUTO_OPEN_PHASES.size())
 		marker.set_meta("action_presenter_current_phase", DOOR_AUTO_OPEN_PHASES[0])
 		marker.set_meta("action_presenter_duration_sec", _duration_sum(DOOR_AUTO_OPEN_PHASE_DURATIONS))
-		marker.set_meta("action_presenter_sequence", sequence)
+		marker.set_meta("action_presenter_sequence", _tracker.current_sequence())
 		marker.set_meta("actor_id", int(entry.get("actor_id", 0)))
 		marker.set_meta("door_id", str(entry.get("door_id", "")))
 		marker.set_meta("door_grid", grid.duplicate(true))
@@ -467,8 +428,7 @@ func _on_door_auto_open_marker_finished(marker_ref: WeakRef) -> void:
 		marker.set_meta("action_presenter_active", false)
 		marker.queue_free()
 	_prune_active_refs()
-	latest["active"] = active_count > 0
-	latest["active_count"] = active_count
+	_tracker.refresh_latest_active()
 
 
 func _start_pending_movement_segment_markers(host: Node, world_root: Node, movement: Dictionary) -> Array[String]:
@@ -486,15 +446,7 @@ func _start_pending_movement_segment_markers(host: Node, world_root: Node, movem
 		var grid: Dictionary = _dictionary_or_empty(path[index])
 		if grid.is_empty():
 			continue
-		var marker := MeshInstance3D.new()
-		marker.name = "WorldActionPendingMovementSegment"
-		var mesh := CylinderMesh.new()
-		mesh.top_radius = 0.18
-		mesh.bottom_radius = 0.28
-		mesh.height = 0.045
-		mesh.radial_segments = 20
-		marker.mesh = mesh
-		marker.material_override = _pending_movement_segment_material(index, path.size())
+		var marker := _node_factory.cylinder_marker("WorldActionPendingMovementSegment", 0.18, 0.28, 0.045, 20, _pending_movement_segment_material(index, path.size()))
 		marker.position = _grid_to_world(grid, 0.18)
 		marker.scale = Vector3(0.72, 1.0, 0.72)
 		marker.set_meta("action_presenter_active", true)
@@ -503,7 +455,7 @@ func _start_pending_movement_segment_markers(host: Node, world_root: Node, movem
 		marker.set_meta("action_presenter_phase_count", PENDING_MOVEMENT_SEGMENT_PHASES.size())
 		marker.set_meta("action_presenter_current_phase", PENDING_MOVEMENT_SEGMENT_PHASES[0])
 		marker.set_meta("action_presenter_duration_sec", _duration_sum(PENDING_MOVEMENT_SEGMENT_PHASE_DURATIONS))
-		marker.set_meta("action_presenter_sequence", sequence)
+		marker.set_meta("action_presenter_sequence", _tracker.current_sequence())
 		marker.set_meta("actor_id", int(segment.get("actor_id", 0)))
 		marker.set_meta("grid", grid.duplicate(true))
 		marker.set_meta("path_index", index)
@@ -539,8 +491,7 @@ func _on_pending_movement_segment_marker_finished(marker_ref: WeakRef) -> void:
 		marker.set_meta("action_presenter_active", false)
 		marker.queue_free()
 	_prune_active_refs()
-	latest["active"] = active_count > 0
-	latest["active_count"] = active_count
+	_tracker.refresh_latest_active()
 
 
 func _clear_pending_movement_segment_markers(world_root: Node, actor_id: int) -> int:
@@ -593,8 +544,7 @@ func _on_movement_tween_finished(run_sequence: int, actor_ref: WeakRef) -> void:
 	if actor_node != null and not actor_node.is_queued_for_deletion() and int(actor_node.get_meta("action_presenter_sequence", 0)) == run_sequence:
 		actor_node.set_meta("action_presenter_active", false)
 	_prune_active_refs()
-	latest["active"] = active_count > 0
-	latest["active_count"] = active_count
+	_tracker.refresh_latest_active()
 
 
 func _result_changes_map(command_result: Dictionary, events: Array) -> bool:
@@ -679,21 +629,19 @@ func _start_attack_feedback(host: Node, world_root: Node, attack: Dictionary) ->
 	if target_node == null:
 		_record_latest(_attack_public_snapshot(attack, false, "target_node_missing"))
 		return
-	sequence += 1
-	var run_sequence := sequence
+	var run_sequence := _tracker.next_sequence()
 	var actor_node: Node3D = attack.get("actor_node", null)
 	if actor_node != null:
 		_apply_attack_facing(weakref(actor_node), _dictionary_or_empty(attack.get("attack_facing", {})))
 		_track_active_node(actor_node)
-	var marker := MeshInstance3D.new()
-	marker.name = "WorldActionAttackImpact"
-	var mesh := SphereMesh.new()
-	mesh.radius = 0.22
-	mesh.height = 0.44
-	mesh.radial_segments = 12
-	mesh.rings = 6
-	marker.mesh = mesh
-	marker.material_override = _attack_material(str(attack.get("hit_kind", "")), bool(attack.get("critical", false)), bool(attack.get("defeated", false)))
+	var marker := _node_factory.sphere_marker(
+		"WorldActionAttackImpact",
+		0.22,
+		0.44,
+		12,
+		6,
+		_attack_material(str(attack.get("hit_kind", "")), bool(attack.get("critical", false)), bool(attack.get("defeated", false)))
+	)
 	var target_position := target_node.global_position if target_node.is_inside_tree() else target_node.position
 	marker.position = target_position + Vector3(0.0, 1.05, 0.0)
 	marker.set_meta("action_presenter_active", true)
@@ -907,8 +855,7 @@ func _on_attack_feedback_finished(marker_ref: WeakRef, damage_label_ref: WeakRef
 			on_hit_pulse.set_meta("action_presenter_active", false)
 			on_hit_pulse.queue_free()
 	_prune_active_refs()
-	latest["active"] = active_count > 0
-	latest["active_count"] = active_count
+	_tracker.refresh_latest_active()
 
 
 func _attack_facing_from_nodes(actor_node: Node3D, target_node: Node3D) -> Dictionary:
@@ -940,8 +887,8 @@ func _apply_attack_facing(actor_ref: WeakRef, facing: Dictionary) -> void:
 	actor_node.set_meta("action_presenter_attack_facing", facing.duplicate(true))
 	actor_node.set_meta("action_presenter_attack_facing_direction", str(facing.get("direction", "")))
 	actor_node.set_meta("action_presenter_attack_facing_yaw_degrees", yaw)
-	latest["attack_facing_direction"] = str(facing.get("direction", ""))
-	latest["attack_facing_yaw_degrees"] = yaw
+	_tracker.set_latest_value("attack_facing_direction", str(facing.get("direction", "")))
+	_tracker.set_latest_value("attack_facing_yaw_degrees", yaw)
 
 
 func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -> Dictionary:
@@ -1001,17 +948,12 @@ func _attack_public_snapshot(attack: Dictionary, active: bool, reason: String) -
 
 
 func _attack_damage_label(attack: Dictionary) -> Label3D:
-	var label := Label3D.new()
-	label.name = "WorldActionDamageText"
-	label.text = _attack_feedback_text(attack)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.font_size = 18
-	label.modulate = _attack_feedback_color(str(attack.get("hit_kind", "")), bool(attack.get("critical", false)), bool(attack.get("defeated", false)))
-	label.outline_size = 4
-	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
-	var font_result := UIThemeService.apply_label3d_font(label)
-	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	var label := _node_factory.label3d(
+		"WorldActionDamageText",
+		_attack_feedback_text(attack),
+		18,
+		_attack_feedback_color(str(attack.get("hit_kind", "")), bool(attack.get("critical", false)), bool(attack.get("defeated", false)))
+	)
 	label.set_meta("action_presenter_active", true)
 	label.set_meta("action_presenter_kind", "attack_damage_text")
 	label.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
@@ -1045,22 +987,25 @@ func _attack_delivery_marker(attack: Dictionary, target_position: Vector3):
 		distance = 0.34
 	var delivery := str(attack.get("attack_delivery", ""))
 	var visual_kind := _attack_delivery_visual_kind(attack)
-	var marker := MeshInstance3D.new()
-	marker.name = "WorldActionAttackDelivery"
-	var mesh := CylinderMesh.new()
-	mesh.radial_segments = 10
+	var top_radius := 0.07
+	var bottom_radius := 0.18
+	var height := 0.62
 	if delivery == "ranged":
-		mesh.top_radius = 0.045
-		mesh.bottom_radius = 0.045
-		mesh.height = max(0.35, distance)
+		top_radius = 0.045
+		bottom_radius = 0.045
+		height = max(0.35, distance)
+	var marker := _node_factory.cylinder_marker(
+		"WorldActionAttackDelivery",
+		top_radius,
+		bottom_radius,
+		height,
+		10,
+		_attack_delivery_material(delivery)
+	)
+	if delivery == "ranged":
 		marker.position = start.lerp(end, 0.5)
 	else:
-		mesh.top_radius = 0.07
-		mesh.bottom_radius = 0.18
-		mesh.height = 0.62
 		marker.position = target_position + Vector3(0.0, 1.18, 0.0)
-	marker.mesh = mesh
-	marker.material_override = _attack_delivery_material(delivery)
 	marker.basis = _basis_from_y(direction.normalized())
 	if delivery != "ranged":
 		marker.rotate_object_local(Vector3.RIGHT, deg_to_rad(28.0))
@@ -1093,15 +1038,7 @@ func _attack_muzzle_flash_marker(attack: Dictionary, delivery_marker: MeshInstan
 	var direction: Vector3 = (end as Vector3) - (start as Vector3)
 	if direction.length() <= 0.01:
 		direction = Vector3.FORWARD
-	var mesh := SphereMesh.new()
-	mesh.radius = 0.13
-	mesh.height = 0.26
-	mesh.radial_segments = 14
-	mesh.rings = 6
-	var marker := MeshInstance3D.new()
-	marker.name = "WorldActionMuzzleFlash"
-	marker.mesh = mesh
-	marker.material_override = _attack_muzzle_flash_material()
+	var marker := _node_factory.sphere_marker("WorldActionMuzzleFlash", 0.13, 0.26, 14, 6, _attack_muzzle_flash_material())
 	marker.position = (start as Vector3) + direction.normalized() * 0.18
 	marker.basis = _basis_from_y(direction.normalized())
 	marker.scale = Vector3(0.24, 0.24, 0.24)
@@ -1133,15 +1070,7 @@ func _attack_projectile_trail_marker(attack: Dictionary, delivery_marker: MeshIn
 	if distance <= 0.01:
 		direction = Vector3.FORWARD
 		distance = 0.34
-	var mesh := CylinderMesh.new()
-	mesh.radial_segments = 8
-	mesh.top_radius = 0.025
-	mesh.bottom_radius = 0.025
-	mesh.height = max(0.30, distance)
-	var marker := MeshInstance3D.new()
-	marker.name = "WorldActionProjectileTrail"
-	marker.mesh = mesh
-	marker.material_override = _attack_projectile_trail_material()
+	var marker := _node_factory.cylinder_marker("WorldActionProjectileTrail", 0.025, 0.025, max(0.30, distance), 8, _attack_projectile_trail_material())
 	marker.position = (start as Vector3).lerp(end as Vector3, 0.5)
 	marker.basis = _basis_from_y(direction.normalized())
 	marker.scale = Vector3(0.22, 0.22, 0.22)
@@ -1179,15 +1108,7 @@ func _attack_shell_eject_marker(attack: Dictionary, delivery_marker: MeshInstanc
 	var eject_vector := (right * 0.34 + upward * 0.20 - forward * 0.08).normalized()
 	var shell_start := (start as Vector3) + right * 0.16 + upward * 0.06
 	var shell_end := shell_start + eject_vector * 0.56
-	var mesh := CylinderMesh.new()
-	mesh.radial_segments = 8
-	mesh.top_radius = 0.026
-	mesh.bottom_radius = 0.032
-	mesh.height = 0.16
-	var marker := MeshInstance3D.new()
-	marker.name = "WorldActionShellEject"
-	marker.mesh = mesh
-	marker.material_override = _attack_shell_eject_material()
+	var marker := _node_factory.cylinder_marker("WorldActionShellEject", 0.026, 0.032, 0.16, 8, _attack_shell_eject_material())
 	marker.position = shell_start
 	marker.basis = _basis_from_y(eject_vector)
 	marker.scale = Vector3(0.34, 0.34, 0.34)
@@ -1211,17 +1132,12 @@ func _attack_on_hit_effect_label(attack: Dictionary):
 	var effects: Array = _array_or_empty(attack.get("applied_on_hit_effects", []))
 	if effects.is_empty():
 		return null
-	var label := Label3D.new()
-	label.name = "WorldActionOnHitEffect"
-	label.text = _on_hit_effect_feedback_text(attack)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.font_size = 14
-	label.modulate = _on_hit_effect_feedback_color(effects)
-	label.outline_size = 4
-	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
-	var font_result := UIThemeService.apply_label3d_font(label)
-	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	var label := _node_factory.label3d(
+		"WorldActionOnHitEffect",
+		_on_hit_effect_feedback_text(attack),
+		14,
+		_on_hit_effect_feedback_color(effects)
+	)
 	label.set_meta("action_presenter_active", true)
 	label.set_meta("action_presenter_kind", "attack_on_hit_effect")
 	label.set_meta("action_presenter_phases", ATTACK_PHASES.duplicate())
@@ -1243,15 +1159,8 @@ func _attack_on_hit_effect_pulse_marker(attack: Dictionary, target_position: Vec
 	var effects: Array = _array_or_empty(attack.get("applied_on_hit_effects", []))
 	if effects.is_empty():
 		return null
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.46
-	mesh.bottom_radius = 0.46
-	mesh.height = 0.04
-	mesh.radial_segments = 32
-	var marker := MeshInstance3D.new()
-	marker.name = "WorldActionOnHitEffectPulse"
-	marker.mesh = mesh
-	marker.material_override = _attack_on_hit_effect_pulse_material(effects)
+	var marker := _node_factory.cylinder_marker("WorldActionOnHitEffectPulse", 0.46, 0.46, 0.04, 32, _attack_on_hit_effect_pulse_material(effects))
+	var mesh := marker.mesh as CylinderMesh
 	marker.position = target_position + Vector3(0.0, 0.78, 0.0)
 	marker.scale = Vector3(0.42, 1.0, 0.42)
 	marker.set_meta("action_presenter_active", true)
@@ -1346,15 +1255,7 @@ func _on_hit_effect_feedback_text(attack: Dictionary) -> String:
 
 
 func _on_hit_effect_feedback_color(effects: Array) -> Color:
-	for effect in effects:
-		var effect_data: Dictionary = _dictionary_or_empty(effect)
-		var applied: Dictionary = _dictionary_or_empty(effect_data.get("effect", {}))
-		var category := str(applied.get("category", effect_data.get("category", "")))
-		if category in ["debuff", "negative", "harmful"]:
-			return Color(0.92, 0.22, 0.18, 0.94)
-		if category in ["buff", "positive", "beneficial"]:
-			return Color(0.36, 0.92, 0.42, 0.94)
-	return Color(0.74, 0.54, 1.0, 0.92)
+	return _materials.on_hit_effect_feedback_color(effects)
 
 
 func _on_hit_effect_ids(effects: Array) -> Array[String]:
@@ -1439,18 +1340,17 @@ func _start_interaction_feedback(host: Node, world_root: Node, interaction: Dict
 	if target_node == null and target_grid.is_empty():
 		_record_latest(_interaction_public_snapshot(interaction, false, "target_missing"))
 		return
-	sequence += 1
+	_tracker.next_sequence()
 	var visual_profile := _interaction_visual_profile(str(interaction.get("option_kind", "")))
 	var phase_durations: Array = _phase_durations_or_default(visual_profile.get("phase_durations", INTERACTION_PHASE_DURATIONS), INTERACTION_PHASE_DURATIONS)
-	var marker := MeshInstance3D.new()
-	marker.name = "WorldActionInteractionPulse"
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = float(visual_profile.get("top_radius", 0.34))
-	mesh.bottom_radius = float(visual_profile.get("bottom_radius", 0.34))
-	mesh.height = float(visual_profile.get("height", 0.055))
-	mesh.radial_segments = int(visual_profile.get("radial_segments", 24))
-	marker.mesh = mesh
-	marker.material_override = _interaction_material(str(interaction.get("option_kind", "")))
+	var marker := _node_factory.cylinder_marker(
+		"WorldActionInteractionPulse",
+		float(visual_profile.get("top_radius", 0.34)),
+		float(visual_profile.get("bottom_radius", 0.34)),
+		float(visual_profile.get("height", 0.055)),
+		int(visual_profile.get("radial_segments", 24)),
+		_interaction_material(str(interaction.get("option_kind", "")))
+	)
 	var target_position := Vector3.ZERO
 	if target_node != null:
 		target_position = target_node.global_position if target_node.is_inside_tree() else target_node.position
@@ -1515,8 +1415,7 @@ func _on_interaction_feedback_finished(marker_ref: WeakRef, label_ref: WeakRef =
 			label.set_meta("action_presenter_active", false)
 			label.queue_free()
 	_prune_active_refs()
-	latest["active"] = active_count > 0
-	latest["active_count"] = active_count
+	_tracker.refresh_latest_active()
 
 
 func _interaction_public_snapshot(interaction: Dictionary, active: bool, reason: String) -> Dictionary:
@@ -1581,16 +1480,8 @@ func _start_reload_feedback(host: Node, world_root: Node, reload: Dictionary) ->
 	if actor_node == null and target_grid.is_empty():
 		_record_latest(_reload_public_snapshot(reload, false, "actor_missing"))
 		return
-	sequence += 1
-	var marker := MeshInstance3D.new()
-	marker.name = "WorldActionReloadPulse"
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.30
-	mesh.bottom_radius = 0.30
-	mesh.height = 0.08
-	mesh.radial_segments = 20
-	marker.mesh = mesh
-	marker.material_override = _reload_material()
+	_tracker.next_sequence()
+	var marker := _node_factory.cylinder_marker("WorldActionReloadPulse", 0.30, 0.30, 0.08, 20, _reload_material())
 	var target_position := Vector3.ZERO
 	if actor_node != null:
 		target_position = actor_node.global_position if actor_node.is_inside_tree() else actor_node.position
@@ -1644,8 +1535,7 @@ func _on_reload_feedback_finished(marker_ref: WeakRef, label_ref: WeakRef) -> vo
 		label.set_meta("action_presenter_active", false)
 		label.queue_free()
 	_prune_active_refs()
-	latest["active"] = active_count > 0
-	latest["active_count"] = active_count
+	_tracker.refresh_latest_active()
 
 
 func _reload_public_snapshot(reload: Dictionary, active: bool, reason: String) -> Dictionary:
@@ -1675,17 +1565,12 @@ func _reload_public_snapshot(reload: Dictionary, active: bool, reason: String) -
 
 
 func _reload_label(reload: Dictionary) -> Label3D:
-	var label := Label3D.new()
-	label.name = "WorldActionReloadText"
-	label.text = _reload_feedback_text(reload)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.font_size = 14
-	label.modulate = Color(0.48, 0.88, 1.0, 0.94)
-	label.outline_size = 4
-	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
-	var font_result := UIThemeService.apply_label3d_font(label)
-	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	var label := _node_factory.label3d(
+		"WorldActionReloadText",
+		_reload_feedback_text(reload),
+		14,
+		Color(0.48, 0.88, 1.0, 0.94)
+	)
 	label.set_meta("action_presenter_active", true)
 	label.set_meta("action_presenter_kind", "reload_text")
 	label.set_meta("action_presenter_phases", RELOAD_PHASES.duplicate())
@@ -1787,16 +1672,15 @@ func _start_combat_event_feedback(host: Node, world_root: Node, combat_event: Di
 	if target_node == null and target_grid.is_empty():
 		_record_latest(_combat_event_public_snapshot(combat_event, false, "target_missing"))
 		return
-	sequence += 1
-	var marker := MeshInstance3D.new()
-	marker.name = "WorldActionCombatEvent"
-	var mesh := SphereMesh.new()
-	mesh.radius = 0.18
-	mesh.height = 0.36
-	mesh.radial_segments = 10
-	mesh.rings = 5
-	marker.mesh = mesh
-	marker.material_override = _combat_event_material(str(combat_event.get("event_kind", "")))
+	_tracker.next_sequence()
+	var marker := _node_factory.sphere_marker(
+		"WorldActionCombatEvent",
+		0.18,
+		0.36,
+		10,
+		5,
+		_combat_event_material(str(combat_event.get("event_kind", "")))
+	)
 	var target_position := Vector3.ZERO
 	if target_node != null:
 		target_position = target_node.global_position if target_node.is_inside_tree() else target_node.position
@@ -1864,8 +1748,7 @@ func _on_combat_event_feedback_finished(marker_ref: WeakRef, label_ref: WeakRef 
 			label.set_meta("action_presenter_active", false)
 			label.queue_free()
 	_prune_active_refs()
-	latest["active"] = active_count > 0
-	latest["active_count"] = active_count
+	_tracker.refresh_latest_active()
 
 
 func _combat_event_public_snapshot(combat_event: Dictionary, active: bool, reason: String) -> Dictionary:
@@ -2014,71 +1897,31 @@ func _presentation_layer(world_root: Node) -> Node3D:
 
 
 func _attack_material(hit_kind: String, critical: bool, defeated: bool) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	if defeated:
-		material.albedo_color = Color(0.96, 0.12, 0.08, 0.92)
-	elif critical:
-		material.albedo_color = Color(1.0, 0.86, 0.18, 0.94)
-	elif hit_kind == "miss":
-		material.albedo_color = Color(0.64, 0.78, 0.94, 0.84)
-	elif hit_kind == "blocked":
-		material.albedo_color = Color(0.55, 0.57, 0.66, 0.86)
-	else:
-		material.albedo_color = Color(1.0, 0.34, 0.18, 0.9)
-	return material
+	return _materials.attack_material(hit_kind, critical, defeated)
 
 
 func _attack_delivery_material(delivery: String) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	if delivery == "ranged":
-		material.albedo_color = Color(1.0, 0.88, 0.32, 0.88)
-	else:
-		material.albedo_color = Color(1.0, 0.44, 0.18, 0.82)
-	return material
+	return _materials.attack_delivery_material(delivery)
 
 
 func _attack_muzzle_flash_material() -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	material.albedo_color = Color(1.0, 0.92, 0.28, 0.95)
-	return material
+	return _materials.attack_muzzle_flash_material()
 
 
 func _attack_projectile_trail_material() -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	material.albedo_color = Color(0.98, 0.84, 0.34, 0.68)
-	return material
+	return _materials.attack_projectile_trail_material()
 
 
 func _attack_shell_eject_material() -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	material.albedo_color = Color(0.95, 0.70, 0.32, 0.88)
-	return material
+	return _materials.attack_shell_eject_material()
 
 
 func _attack_on_hit_effect_pulse_material(effects: Array) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var color := _on_hit_effect_feedback_color(effects)
-	material.albedo_color = Color(color.r, color.g, color.b, 0.58)
-	return material
+	return _materials.attack_on_hit_effect_pulse_material(effects)
 
 
 func _reload_material() -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	material.albedo_color = Color(0.30, 0.78, 1.0, 0.82)
-	return material
+	return _materials.reload_material()
 
 
 func _interaction_visual_profile(option_kind: String) -> Dictionary:
@@ -2180,28 +2023,17 @@ func _interaction_visual_kind(option_kind: String) -> String:
 
 
 func _interaction_material(option_kind: String) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var profile := _interaction_visual_profile(option_kind)
-	var color: Variant = profile.get("color", Color(0.9, 0.86, 0.34, 0.8))
-	material.albedo_color = color if typeof(color) == TYPE_COLOR else Color(0.9, 0.86, 0.34, 0.8)
-	return material
+	return _materials.interaction_material(_interaction_visual_profile(option_kind))
 
 
 func _interaction_label(interaction: Dictionary, visual_profile: Dictionary) -> Label3D:
-	var label := Label3D.new()
-	label.name = "WorldActionInteractionText"
-	label.text = _interaction_feedback_text(str(interaction.get("option_kind", "")))
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.font_size = 14
 	var label_color: Variant = visual_profile.get("label_color", Color(1.0, 0.92, 0.44, 0.94))
-	label.modulate = label_color if typeof(label_color) == TYPE_COLOR else Color(1.0, 0.92, 0.44, 0.94)
-	label.outline_size = 4
-	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
-	var font_result := UIThemeService.apply_label3d_font(label)
-	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	var label := _node_factory.label3d(
+		"WorldActionInteractionText",
+		_interaction_feedback_text(str(interaction.get("option_kind", ""))),
+		14,
+		label_color if typeof(label_color) == TYPE_COLOR else Color(1.0, 0.92, 0.44, 0.94)
+	)
 	label.set_meta("action_presenter_active", true)
 	label.set_meta("action_presenter_kind", "interaction_text")
 	label.set_meta("action_presenter_phases", INTERACTION_PHASES.duplicate())
@@ -2241,52 +2073,25 @@ func _interaction_feedback_text(option_kind: String) -> String:
 
 
 func _door_auto_open_material() -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	material.albedo_color = Color(0.98, 0.66, 0.22, 0.84)
-	return material
+	return _materials.door_auto_open_material()
 
 
 func _pending_movement_segment_material(path_index: int, path_size: int) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var ratio := 1.0 if path_size <= 1 else clampf(float(path_index) / float(path_size - 1), 0.0, 1.0)
-	material.albedo_color = Color(0.24 + ratio * 0.22, 0.72 - ratio * 0.12, 1.0, 0.56)
-	return material
+	return _materials.pending_movement_segment_material(path_index, path_size)
 
 
 func _combat_event_material(event_kind: String) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	match event_kind:
-		"corpse_created":
-			material.albedo_color = Color(0.82, 0.18, 0.14, 0.88)
-		"actor_defeated":
-			material.albedo_color = Color(0.96, 0.1, 0.1, 0.9)
-		"combat_started":
-			material.albedo_color = Color(1.0, 0.45, 0.16, 0.86)
-		"combat_ended":
-			material.albedo_color = Color(0.2, 0.86, 0.58, 0.84)
-		_:
-			material.albedo_color = Color(0.9, 0.86, 0.34, 0.82)
-	return material
+	return _materials.combat_event_material(event_kind)
 
 
 func _combat_event_label(combat_event: Dictionary) -> Label3D:
 	var event_kind := str(combat_event.get("event_kind", ""))
-	var label := Label3D.new()
-	label.name = "WorldActionCombatEventText"
-	label.text = _combat_event_feedback_text(event_kind)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.font_size = 15
-	label.modulate = _combat_event_label_color(event_kind)
-	label.outline_size = 4
-	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.78)
-	var font_result := UIThemeService.apply_label3d_font(label)
-	label.set_meta("font_resource_path", str(font_result.get("font_resource_path", "")))
+	var label := _node_factory.label3d(
+		"WorldActionCombatEventText",
+		_combat_event_feedback_text(event_kind),
+		15,
+		_combat_event_label_color(event_kind)
+	)
 	label.set_meta("action_presenter_active", true)
 	label.set_meta("action_presenter_kind", "combat_event_text")
 	label.set_meta("action_presenter_phases", COMBAT_EVENT_PHASES.duplicate())
@@ -2391,8 +2196,8 @@ func _set_marker_phase(marker_ref: WeakRef, phase: String) -> void:
 	if marker == null or marker.is_queued_for_deletion():
 		return
 	marker.set_meta("action_presenter_current_phase", phase)
-	if str(latest.get("marker_path", "")) == str(marker.get_path()):
-		latest["current_phase"] = phase
+	if str(_tracker.latest_value("marker_path", "")) == str(marker.get_path()):
+		_tracker.set_latest_value("current_phase", phase)
 
 
 func _duration_sum(values: Array) -> float:
@@ -2419,51 +2224,23 @@ func _vector3_or_default(value: Variant, fallback: Vector3) -> Vector3:
 
 
 func _track_active_node(node: Node) -> void:
-	if node == null:
-		return
-	_prune_active_refs()
-	active_refs.append(weakref(node))
-	active_count = active_refs.size()
+	_tracker.track_active_node(node)
 
 
 func _track_active_tween(tween: Tween) -> void:
-	if tween == null:
-		return
-	_prune_active_tweens()
-	active_tweens.append(tween)
+	_tracker.track_active_tween(tween)
 
 
 func _prune_active_refs() -> void:
-	var retained: Array[WeakRef] = []
-	for node_ref in active_refs:
-		var node := node_ref.get_ref() as Node
-		if node == null:
-			continue
-		if node.is_queued_for_deletion():
-			continue
-		if not bool(node.get_meta("action_presenter_active", false)):
-			continue
-		retained.append(node_ref)
-	active_refs = retained
-	active_count = active_refs.size()
-	_prune_active_tweens()
+	_tracker.prune_active_refs()
 
 
 func _prune_active_tweens() -> void:
-	var retained: Array = []
-	for tween_value in active_tweens:
-		var tween := tween_value as Tween
-		if tween != null and tween.is_valid() and tween.is_running():
-			retained.append(tween)
-	active_tweens = retained
+	_tracker.prune_active_tweens()
 
 
 func _record_latest(snapshot_data: Dictionary) -> Dictionary:
-	_prune_active_refs()
-	latest = snapshot_data.duplicate(true)
-	latest["active_count"] = active_count
-	latest["sequence"] = sequence
-	return latest.duplicate(true)
+	return _tracker.record_latest(snapshot_data)
 
 
 func _grid_to_world(grid: Dictionary, y: float = DEFAULT_ACTOR_Y) -> Vector3:

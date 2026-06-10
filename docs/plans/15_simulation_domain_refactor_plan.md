@@ -257,10 +257,12 @@ func execute(simulation: RefCounted, actor: RefCounted, command: Dictionary) -> 
 
 ### Phase 1: 抽 DoorService
 
-- [ ] 新建 `godot/scripts/core/simulation/services/door_service.gd`。
-- [ ] 迁移门权限、钥匙/工具/耐久消耗、门 runtime 字段和失败 reason 组装。
-- [ ] `Simulation.toggle_door()` 保留 public facade，内部委托 `DoorService`。
-- [ ] 不移动普通 interaction command pipeline。
+- [x] 新建 `godot/scripts/core/simulation/services/door_service.gd`。
+- [x] 迁移门权限、钥匙/工具/耐久消耗、门 runtime 字段和失败 reason 组装。
+- [x] `Simulation.toggle_door()` 保留 public facade，内部委托 `DoorService`。
+- [x] 不移动普通 interaction command pipeline。
+
+证据：`Door` 组合 smoke、`Interaction`、`PlayerInteraction`、`Combat` 通过；`simulation.gd` 和 `door_service.gd` 静态解析通过。
 
 验收：
 

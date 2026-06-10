@@ -107,10 +107,12 @@ godot/scripts/app/controllers/runtime_input/
 
 先从低风险的公共工具层开始。
 
-- [ ] 新建 `presentation_tracker.gd`，迁移 active node / active tween 跟踪、prune、finish、latest snapshot 记录。
-- [ ] 新建 `presentation_materials.gd`，迁移 attack / interaction / reload / combat event / pending movement 材质生成。
-- [ ] 新建 `presentation_node_factory.gd`，迁移 label、marker、mesh 创建的纯视觉工厂。
-- [ ] `world_action_presenter.gd` 保留 public `present_result()`、`snapshot()`、`finish_active_presentations()`。
+- [x] 新建 `presentation_tracker.gd`，迁移 active node / active tween 跟踪、prune、finish、latest snapshot 记录。
+- [x] 新建 `presentation_materials.gd`，迁移 attack / interaction / reload / combat event / pending movement 材质生成。
+- [x] 新建 `presentation_node_factory.gd`，迁移 label、marker、mesh 创建的纯视觉工厂。
+- [x] `world_action_presenter.gd` 保留 public `present_result()`、`snapshot()`、`finish_active_presentations()`。
+
+证据：`world_action_presenter.gd`、`presentation_tracker.gd`、`presentation_materials.gd`、`presentation_node_factory.gd` 静态解析通过；`PlayerInteraction`、`Combat` 通过。
 
 验收：
 
