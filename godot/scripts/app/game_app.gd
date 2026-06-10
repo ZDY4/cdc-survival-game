@@ -274,6 +274,7 @@ var performance_render_sequence: int:
 
 
 func _ready() -> void:
+	_connect_world_action_flow_signals()
 	registry = ContentRegistry.new()
 	var load_result := registry.load_all()
 	if load_result.has_errors():
@@ -2098,21 +2099,18 @@ func _queue_or_refresh_all_panels_after_world_action(result: Dictionary) -> bool
 
 
 func _process_world_action_queue_completion() -> void:
-	if not bool(world_action_flow_controller.call("should_process_completion")):
+	if world_action_flow_controller == null:
 		return
-	if _world_action_presenter_blocks_input():
-		return
-	world_action_flow_controller.call("mark_presenter_finished_if_needed")
-	_apply_pending_world_action_final_refresh("presenter_finished")
-	_apply_pending_world_action_ui("presenter_finished")
+	world_action_flow_controller.call("process_completion")
 
 
 func _queue_deferred_world_refresh(final_world_result: Dictionary, selected_prompt: Dictionary, command_result: Dictionary, source: String, render_world: bool = true) -> void:
 	world_action_flow_controller.call("queue_deferred_world_refresh", final_world_result, selected_prompt, command_result, source, render_world)
 
 
-func _apply_pending_world_action_final_refresh(trigger: String) -> bool:
-	var pending_refresh: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("take_pending_final_refresh"))
+func _apply_pending_world_action_final_refresh(trigger: String, pending_refresh: Dictionary = {}) -> bool:
+	if pending_refresh.is_empty() and world_action_flow_controller != null:
+		pending_refresh = _dictionary_or_empty(world_action_flow_controller.call("take_pending_final_refresh"))
 	if pending_refresh.is_empty():
 		return false
 	var final_world_result: Dictionary = _dictionary_or_empty(pending_refresh.get("world_result", {}))
@@ -2139,8 +2137,9 @@ func _apply_world_result_without_present(next_world_result: Dictionary, render_w
 	return true
 
 
-func _apply_pending_world_action_ui(trigger: String) -> bool:
-	var pending_ui: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("take_pending_ui"))
+func _apply_pending_world_action_ui(trigger: String, pending_ui: Dictionary = {}) -> bool:
+	if pending_ui.is_empty() and world_action_flow_controller != null:
+		pending_ui = _dictionary_or_empty(world_action_flow_controller.call("take_pending_ui"))
 	if pending_ui.is_empty():
 		return false
 	if str(pending_ui.get("kind", "")) == "open_stage_panel":
@@ -2153,6 +2152,25 @@ func _apply_pending_world_action_ui(trigger: String) -> bool:
 
 func _present_world_action(command_result: Dictionary) -> void:
 	world_action_flow_controller.call("present_result", self, world_container, command_result, world_result)
+
+
+func _connect_world_action_flow_signals() -> void:
+	if world_action_flow_controller == null:
+		return
+	var final_callable := Callable(self, "_on_world_action_final_refresh_ready")
+	if not world_action_flow_controller.is_connected("final_refresh_ready", final_callable):
+		world_action_flow_controller.connect("final_refresh_ready", final_callable)
+	var ui_callable := Callable(self, "_on_world_action_deferred_ui_ready")
+	if not world_action_flow_controller.is_connected("deferred_ui_ready", ui_callable):
+		world_action_flow_controller.connect("deferred_ui_ready", ui_callable)
+
+
+func _on_world_action_final_refresh_ready(pending_refresh: Dictionary) -> void:
+	_apply_pending_world_action_final_refresh("presenter_finished", pending_refresh)
+
+
+func _on_world_action_deferred_ui_ready(pending_ui: Dictionary) -> void:
+	_apply_pending_world_action_ui("presenter_finished", pending_ui)
 
 
 func _record_world_action_queue_presented(command_result: Dictionary, presenter_result: Dictionary) -> void:

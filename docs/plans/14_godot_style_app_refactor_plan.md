@@ -20,6 +20,7 @@
 - 相机 follow、pan、zoom、clamp 和 ray-plane 计算已抽到 `godot/scripts/world/camera_rig_controller.gd`，`GameRuntimeInputController` 仍保留鼠标拾取、hover 和玩家交互输入。
 - runtime refresh / world snapshot 构建已抽到 `godot/scripts/app/controllers/runtime_refresh_controller.gd`。
 - world action presenter、queue、pending UI、movement execution plan 和 final refresh 状态已抽到 `godot/scripts/app/controllers/world_action_flow_controller.gd`。
+- world action presenter 完成后通过 `WorldActionFlowController.final_refresh_ready` / `deferred_ui_ready` signal 通知 `GameApp` 执行最终刷新和 UI 接续。
 - 运行时性能统计和 render count fallback 汇总已抽到 `godot/scripts/app/controllers/runtime_performance_tracker.gd`。
 - observe mode、auto tick 和 info panel 状态已抽到 `godot/scripts/app/controllers/runtime_control_state_controller.gd`。
 - observe interval snapshot 也已由 `RuntimeControlStateController.runtime_control_snapshot()` 输出，`GameApp` 不再保留 observe speed / interval 私有转发 wrapper。
@@ -394,7 +395,8 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 新建 `world_action_flow_controller.gd`。
 - [x] 将 world action presenter、queue、pending UI 和 pending final refresh 状态迁出 `GameApp`。
 - [x] 将移动 action 的 presentation / final refresh 时序决策抽到 `WorldActionFlowController.movement_execution_plan()`。
-- [ ] 使用 signal 通知 `RuntimeRefreshController` 何时执行最终刷新。
+- [x] `WorldActionFlowController` 已发出 `final_refresh_ready` / `deferred_ui_ready` signal，当前由 `GameApp` 连接 signal 后调用现有 runtime refresh / HUD apply 入口。
+- [ ] 继续将 signal 接续收敛到 `RuntimeRefreshController`，让最终刷新执行入口进一步离开 `GameApp`。
 - [x] 保留当前 action presentation 行为，不在同一阶段重做动效。
 
 验收：

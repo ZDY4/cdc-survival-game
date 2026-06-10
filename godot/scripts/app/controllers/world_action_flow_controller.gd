@@ -2,6 +2,9 @@ extends RefCounted
 
 const WorldActionPresenter = preload("res://scripts/world/world_action_presenter.gd")
 
+signal final_refresh_ready(pending_refresh: Dictionary)
+signal deferred_ui_ready(pending_ui: Dictionary)
+
 var presenter: RefCounted = WorldActionPresenter.new()
 var sequence: int = 0
 var queue_state: Dictionary = {
@@ -138,6 +141,23 @@ func should_process_completion() -> bool:
 func mark_presenter_finished_if_needed() -> void:
 	if str(queue_state.get("state", "")) == "presenting":
 		record_finished(presenter_snapshot())
+
+
+func process_completion() -> Dictionary:
+	if not should_process_completion():
+		return {"processed": false, "reason": "not_ready"}
+	mark_presenter_finished_if_needed()
+	var final_refresh := take_pending_final_refresh()
+	var pending_ui_event := take_pending_ui()
+	if not final_refresh.is_empty():
+		final_refresh_ready.emit(final_refresh)
+	if not pending_ui_event.is_empty():
+		deferred_ui_ready.emit(pending_ui_event)
+	return {
+		"processed": true,
+		"final_refresh_emitted": not final_refresh.is_empty(),
+		"deferred_ui_emitted": not pending_ui_event.is_empty(),
+	}
 
 
 func take_pending_final_refresh() -> Dictionary:
