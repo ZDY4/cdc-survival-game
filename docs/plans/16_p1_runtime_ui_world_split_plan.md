@@ -244,10 +244,10 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 9: 拆 Runtime Input 的 hover state 和 marker
 
-- [ ] 新建 `hover_state_controller.gd`，迁移 hover state、selection debug、hover prompt、move / attack preview 汇总。
-- [ ] 新建 `runtime_marker_controller.gd`，迁移 hover cursor、target outline、attack marker、attack range marker、move path marker、pending movement marker。
-- [ ] 新建 `skill_target_preview_controller.gd`，迁移技能目标 preview marker。
-- [ ] `GameRuntimeInputController` 只协调 picker -> hover state -> marker controller -> GameApp facade。
+- [x] 新建 `hover_state_controller.gd`，迁移 hover state、selection debug、hover prompt、move / attack preview 汇总。
+- [x] 新建 `runtime_marker_controller.gd`，迁移 hover cursor、target outline、attack marker、attack range marker、move path marker、pending movement marker。
+- [x] 新建 `skill_target_preview_controller.gd`，迁移技能目标 preview marker。
+- [x] `GameRuntimeInputController` 只协调 picker -> hover state -> marker controller -> GameApp facade。
 
 验收：
 
@@ -255,6 +255,10 @@ godot/scripts/app/controllers/runtime_input/
 - `SkillsUI`
 - `Combat`
 - `Movement`
+
+验证记录：
+
+- 2026-06-11: 通过 `game_runtime_input_controller.gd`、`hover_state_controller.gd`、`runtime_marker_controller.gd`、`skill_target_preview_controller.gd` 静态解析；通过 `test-godot-game.ps1 -Scenario PlayerInteraction`、`SkillsUI`、`Combat`、`Movement`。
 
 ## Phase 10: 拆 CameraInput 和 SpaceHold
 

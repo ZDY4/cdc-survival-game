@@ -1,27 +1,15 @@
 extends RefCounted
 
-const VisionGeometry = preload("res://scripts/core/vision/vision_geometry.gd")
 const CameraRigController = preload("res://scripts/world/camera_rig_controller.gd")
 const WorldInteractionPicker = preload("res://scripts/app/controllers/runtime_input/world_interaction_picker.gd")
+const RuntimeMarkerController = preload("res://scripts/app/controllers/runtime_input/runtime_marker_controller.gd")
+const HoverStateController = preload("res://scripts/app/controllers/runtime_input/hover_state_controller.gd")
 
 const GRID_SIZE := 1.0
 const BEVY_LEVEL_PLANE_HEIGHT := GRID_SIZE * 0.5
 const BEVY_DRAG_PLANE_HEIGHT := 0.11
 const SPACE_HOLD_INITIAL_DELAY_SEC := 0.45
 const SPACE_HOLD_REPEAT_INTERVAL_SEC := 0.30
-const HOVER_COLOR_INTERACTION := Color(1.0, 0.82, 0.18, 0.72)
-const HOVER_COLOR_MOVE_REACHABLE := Color(0.24, 0.95, 0.48, 0.72)
-const HOVER_COLOR_MOVE_BLOCKED := Color(1.0, 0.22, 0.18, 0.72)
-const HOVER_COLOR_MOVE_PENDING := Color(1.0, 0.78, 0.18, 0.58)
-const HOVER_COLOR_ATTACK_REACHABLE := Color(1.0, 0.45, 0.16, 0.78)
-const HOVER_COLOR_ATTACK_BLOCKED := Color(0.95, 0.12, 0.28, 0.78)
-const HOVER_COLOR_SKILL_VALID := Color(0.38, 0.68, 1.0, 0.58)
-const HOVER_COLOR_SKILL_BLOCKED := Color(0.96, 0.18, 0.55, 0.52)
-const HOVER_COLOR_PICKUP := Color(0.35, 0.82, 1.0, 0.50)
-const HOVER_COLOR_CONTAINER := Color(0.36, 0.95, 0.62, 0.50)
-const HOVER_COLOR_TRIGGER := Color(0.70, 0.55, 1.0, 0.50)
-const HOVER_COLOR_DOOR := Color(0.95, 0.72, 0.28, 0.56)
-const HOVER_COLOR_ACTOR := Color(1.0, 0.88, 0.22, 0.50)
 
 var game_root: Node
 var world_container: Node3D
@@ -29,6 +17,8 @@ var world_result: Dictionary = {}
 var camera: Camera3D
 var camera_rig_controller: RefCounted = CameraRigController.new()
 var world_interaction_picker: RefCounted = WorldInteractionPicker.new()
+var runtime_marker_controller: RefCounted = RuntimeMarkerController.new()
+var hover_state_controller: RefCounted = HoverStateController.new()
 var hover_cursor: MeshInstance3D
 var hover_target_outline: MeshInstance3D
 var attack_target_marker: MeshInstance3D
@@ -42,47 +32,20 @@ var is_space_wait_held := false
 var space_wait_elapsed_sec := 0.0
 var space_wait_repeated := false
 var hover_refresh_requested := false
-var _vision_geometry := VisionGeometry.new()
-var last_hover_state: Dictionary = {
-	"active": false,
-	"kind": "",
-	"grid": {},
-	"target_name": "",
-	"target_type": "",
-	"target_id": "",
-	"actor_id": 0,
-	"ui_blocker": "",
-	"reason": "",
-	"prompt": {},
-	"move_preview": {},
-	"attack_preview": {},
-	"picking": {},
-}
 var last_selection_clear_result: Dictionary = {}
 
 
 func _init(p_game_root: Node) -> void:
 	game_root = p_game_root
-	hover_cursor = _build_hover_cursor()
-	game_root.add_child(hover_cursor)
-	hover_target_outline = _build_hover_target_outline()
-	game_root.add_child(hover_target_outline)
-	attack_target_marker = _build_attack_target_marker()
-	game_root.add_child(attack_target_marker)
-	attack_target_outline = _build_attack_target_outline()
-	game_root.add_child(attack_target_outline)
-	attack_range_markers = Node3D.new()
-	attack_range_markers.name = "AttackRangeMarkers"
-	game_root.add_child(attack_range_markers)
-	skill_target_preview_markers = Node3D.new()
-	skill_target_preview_markers.name = "SkillTargetPreviewMarkers"
-	game_root.add_child(skill_target_preview_markers)
-	move_path_preview_markers = Node3D.new()
-	move_path_preview_markers.name = "MovePathPreviewMarkers"
-	game_root.add_child(move_path_preview_markers)
-	pending_movement_path_markers = Node3D.new()
-	pending_movement_path_markers.name = "PendingMovementPathMarkers"
-	game_root.add_child(pending_movement_path_markers)
+	runtime_marker_controller.attach(game_root)
+	hover_cursor = runtime_marker_controller.get("hover_cursor") as MeshInstance3D
+	hover_target_outline = runtime_marker_controller.get("hover_target_outline") as MeshInstance3D
+	attack_target_marker = runtime_marker_controller.get("attack_target_marker") as MeshInstance3D
+	attack_target_outline = runtime_marker_controller.get("attack_target_outline") as MeshInstance3D
+	attack_range_markers = runtime_marker_controller.get("attack_range_markers") as Node3D
+	skill_target_preview_markers = runtime_marker_controller.get("skill_target_preview_markers") as Node3D
+	move_path_preview_markers = runtime_marker_controller.get("move_path_preview_markers") as Node3D
+	pending_movement_path_markers = runtime_marker_controller.get("pending_movement_path_markers") as Node3D
 
 
 func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void:
@@ -93,13 +56,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 		push_warning("运行时输入控制器找不到 WorldCamera，鼠标拾取和相机移动暂不可用")
 		return
 	camera_rig_controller.call("attach", camera, _focused_actor_position(), _map_size(), _viewport_size(), _level_plane_height())
-	hover_cursor.visible = false
-	hover_target_outline.visible = false
-	attack_target_marker.visible = false
-	attack_target_outline.visible = false
-	_clear_attack_range_markers()
-	_clear_skill_target_preview_markers()
-	_clear_move_path_preview_markers()
+	runtime_marker_controller.reset_for_world()
 	_clear_selection_only()
 	_set_hover_failure("world_changed")
 	_update_pending_movement_path_markers()
@@ -281,7 +238,7 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	var hover_changed := _set_hover_interaction(target_node, hit_position, _dictionary_or_empty(hit.get("picking", {})))
 	if hover_changed and game_root.has_method("refresh_hud"):
 		game_root.refresh_hud(game_root.current_interaction_prompt() if game_root.has_method("current_interaction_prompt") else {})
-	var interaction_hover := last_hover_state.duplicate(true)
+	var interaction_hover: Dictionary = hover_state_controller.current_state()
 	interaction_hover["success"] = true
 	interaction_hover["node"] = target_node
 	interaction_hover["position"] = hit_position
@@ -291,35 +248,11 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 
 
 func hover_state_snapshot() -> Dictionary:
-	var snapshot: Dictionary = last_hover_state.duplicate(true)
-	snapshot["ui_blocker"] = _hover_ui_blocker_name()
-	return snapshot
+	return hover_state_controller.hover_state_snapshot(_hover_ui_blocker_name())
 
 
 func selection_debug_snapshot() -> Dictionary:
-	var hover: Dictionary = hover_state_snapshot()
-	var prompt: Dictionary = _dictionary_or_empty(hover.get("prompt", {}))
-	var move_preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
-	var attack_preview: Dictionary = _dictionary_or_empty(hover.get("attack_preview", {}))
-	var target_id := str(hover.get("target_id", ""))
-	var actor_id := int(hover.get("actor_id", 0))
-	return {
-		"active": bool(hover.get("active", false)),
-		"kind": str(hover.get("kind", "")),
-		"hovered_grid": _dictionary_or_empty(hover.get("grid", {})).duplicate(true),
-		"hovered_actor_id": actor_id,
-		"hovered_object_id": target_id if actor_id <= 0 else "",
-		"target_type": str(hover.get("target_type", "")),
-		"target_category": str(hover.get("target_category", "")),
-		"target_id": target_id,
-		"target_name": str(hover.get("target_name", "")),
-		"blocker_name": str(hover.get("ui_blocker", "")),
-		"reason": str(hover.get("reason", "")),
-		"prompt": _selection_debug_prompt(prompt),
-		"move_preview": _selection_debug_move_preview(move_preview),
-		"attack_preview": _selection_debug_attack_preview(attack_preview),
-		"picking": _dictionary_or_empty(hover.get("picking", {})).duplicate(true),
-	}
+	return hover_state_controller.selection_debug_snapshot(hover_state_snapshot())
 
 
 func _handle_camera_key(event: InputEventKey) -> bool:
@@ -551,57 +484,7 @@ func clear_selection_state(reason: String = "cleared") -> Dictionary:
 
 
 func update_skill_target_preview_markers(preview: Dictionary) -> void:
-	if skill_target_preview_markers == null:
-		return
-	_clear_skill_target_preview_markers()
-	if preview.is_empty():
-		return
-	var color := HOVER_COLOR_SKILL_VALID if bool(preview.get("success", false)) else HOVER_COLOR_SKILL_BLOCKED
-	var skill_id := str(preview.get("skill_id", ""))
-	var target_shape := str(preview.get("target_shape", preview.get("shape", "")))
-	var cell_count := 0
-	for cell in _array_or_empty(preview.get("affected_cells", [])):
-		var grid: Dictionary = _dictionary_or_empty(cell)
-		if grid.is_empty():
-			continue
-		var marker := _build_skill_target_cell_marker(color)
-		marker.position = Vector3(
-			float(grid.get("x", 0)),
-			float(grid.get("y", _observed_level())) + 0.16,
-			float(grid.get("z", 0))
-		)
-		marker.set_meta("grid", grid.duplicate(true))
-		marker.set_meta("skill_id", skill_id)
-		marker.set_meta("target_shape", target_shape)
-		marker.set_meta("preview_success", bool(preview.get("success", false)))
-		marker.set_meta("reason", str(preview.get("reason", "")))
-		skill_target_preview_markers.add_child(marker)
-		cell_count += 1
-	var actor_count := 0
-	for actor_id_value in _array_or_empty(preview.get("affected_actor_ids", [])):
-		var actor_id := int(actor_id_value)
-		var actor_grid := _actor_grid(actor_id)
-		if actor_grid.is_empty():
-			continue
-		var outline := _build_skill_target_actor_marker(color)
-		outline.position = Vector3(
-			float(actor_grid.get("x", 0)),
-			float(actor_grid.get("y", _observed_level())) + 0.84,
-			float(actor_grid.get("z", 0))
-		)
-		outline.set_meta("actor_id", actor_id)
-		outline.set_meta("skill_id", skill_id)
-		outline.set_meta("target_shape", target_shape)
-		outline.set_meta("preview_success", bool(preview.get("success", false)))
-		outline.set_meta("reason", str(preview.get("reason", "")))
-		skill_target_preview_markers.add_child(outline)
-		actor_count += 1
-	skill_target_preview_markers.set_meta("skill_id", skill_id)
-	skill_target_preview_markers.set_meta("target_shape", target_shape)
-	skill_target_preview_markers.set_meta("preview_success", bool(preview.get("success", false)))
-	skill_target_preview_markers.set_meta("reason", str(preview.get("reason", "")))
-	skill_target_preview_markers.set_meta("cell_marker_count", cell_count)
-	skill_target_preview_markers.set_meta("actor_marker_count", actor_count)
+	runtime_marker_controller.update_skill_target_preview_markers(preview, _runtime_snapshot(), _observed_level())
 
 
 func focus_current_actor() -> void:
@@ -689,14 +572,11 @@ func _request_hover_refresh() -> void:
 
 
 func _update_hover_cursor(world_position: Vector3) -> void:
-	var grid_x := roundf(world_position.x / GRID_SIZE) * GRID_SIZE
-	var grid_z := roundf(world_position.z / GRID_SIZE) * GRID_SIZE
-	hover_cursor.global_position = Vector3(grid_x, float(_observed_level()) + 0.09, grid_z)
-	hover_cursor.visible = true
+	runtime_marker_controller.update_hover_cursor(world_position, _observed_level())
 
 
 func _clear_hover(reason: String = "") -> Dictionary:
-	hover_cursor.visible = false
+	runtime_marker_controller.hide_hover_cursor()
 	var result := _clear_selection_only(reason)
 	_set_hover_failure(reason)
 	return result
@@ -767,14 +647,7 @@ func _set_hover_ground(world_position: Vector3, picking: Dictionary = {}) -> boo
 
 
 func _can_reuse_ground_hover(grid: Dictionary) -> bool:
-	if _skill_targeting_active():
-		return false
-	if str(last_hover_state.get("kind", "")) != "ground":
-		return false
-	var previous_grid: Dictionary = _dictionary_or_empty(last_hover_state.get("grid", {}))
-	return int(previous_grid.get("x", -999999)) == int(grid.get("x", 999999)) \
-		and int(previous_grid.get("y", -999999)) == int(grid.get("y", 999999)) \
-		and int(previous_grid.get("z", -999999)) == int(grid.get("z", 999999))
+	return hover_state_controller.can_reuse_ground_hover(grid, _skill_targeting_active())
 
 
 func _set_hover_interaction(target_node: Node, world_position: Vector3, picking: Dictionary = {}) -> bool:
@@ -838,71 +711,7 @@ func _set_hover_failure(reason: String = "") -> bool:
 
 
 func _replace_hover_state(next_state: Dictionary) -> bool:
-	if last_hover_state == next_state:
-		return false
-	last_hover_state = next_state
-	return true
-
-
-func _selection_debug_prompt(prompt: Dictionary) -> Dictionary:
-	if prompt.is_empty():
-		return {
-			"has_prompt": false,
-			"ok": false,
-			"primary_option_id": "",
-			"action_label": "",
-			"option_count": 0,
-			"disabled_option_count": 0,
-			"disabled_reason": "",
-			"target_distance": -1,
-			"interaction_range": -1,
-			"requires_approach": false,
-		}
-	return {
-		"has_prompt": true,
-		"ok": bool(prompt.get("ok", false)),
-		"primary_option_id": str(prompt.get("primary_option_id", "")),
-		"action_label": str(prompt.get("action_label", "")),
-		"option_count": _array_or_empty(prompt.get("options", [])).size(),
-		"disabled_option_count": _array_or_empty(prompt.get("disabled_options", [])).size(),
-		"disabled_reason": str(prompt.get("reason", "")),
-		"target_distance": int(prompt.get("target_distance", -1)),
-		"interaction_range": int(prompt.get("interaction_range", -1)),
-		"requires_approach": bool(prompt.get("requires_approach", false)),
-	}
-
-
-func _selection_debug_move_preview(move_preview: Dictionary) -> Dictionary:
-	if move_preview.is_empty():
-		return {"has_preview": false}
-	return {
-		"has_preview": true,
-		"reachable": bool(move_preview.get("reachable", false)),
-		"reason": str(move_preview.get("reason", "")),
-		"steps": int(move_preview.get("steps", 0)),
-		"ap_cost": float(move_preview.get("ap_cost", 0.0)),
-		"ap_available": float(move_preview.get("ap_available", 0.0)),
-		"ap_affordable": bool(move_preview.get("ap_affordable", true)),
-		"requires_pending": bool(move_preview.get("requires_pending", false)),
-		"pathfinding_time_ms": float(move_preview.get("pathfinding_time_ms", 0.0)),
-		"visited_cell_count": int(move_preview.get("visited_cell_count", 0)),
-	}
-
-
-func _selection_debug_attack_preview(attack_preview: Dictionary) -> Dictionary:
-	if attack_preview.is_empty():
-		return {"has_preview": false}
-	return {
-		"has_preview": true,
-		"can_attack": bool(attack_preview.get("can_attack", false)),
-		"reason": str(attack_preview.get("reason", "")),
-		"target_actor_id": int(attack_preview.get("target_actor_id", 0)),
-		"distance": int(attack_preview.get("distance", -1)),
-		"range": int(attack_preview.get("range", -1)),
-		"ap_cost": float(attack_preview.get("ap_cost", 0.0)),
-		"ap_available": float(attack_preview.get("ap_available", 0.0)),
-		"hit_chance": float(attack_preview.get("hit_chance", -1.0)),
-	}
+	return hover_state_controller.replace_hover_state(next_state)
 
 
 func _hover_ui_blocker_name() -> String:
@@ -917,489 +726,86 @@ func _hover_ui_blocker_name() -> String:
 
 func _hover_prompt_for_target(target: Dictionary) -> Dictionary:
 	var simulation: Variant = game_root.get("simulation") if game_root != null else null
-	if simulation == null or not simulation.has_method("query_interaction_options"):
-		return {}
-	var player_id := _player_actor_id()
-	if player_id <= 0:
-		return {}
-	var prompt: Dictionary = simulation.query_interaction_options(player_id, target)
-	return {
-		"ok": bool(prompt.get("ok", false)),
-		"reason": str(prompt.get("reason", "")),
-		"target_name": str(prompt.get("target_name", "")),
-		"primary_option_id": str(prompt.get("primary_option_id", "")),
-		"primary_option_kind": str(prompt.get("primary_option_kind", "")),
-		"action_label": str(prompt.get("action_label", "")),
-		"ap_cost": float(prompt.get("ap_cost", 0.0)),
-		"target_distance": int(prompt.get("target_distance", -1)),
-		"interaction_range": int(prompt.get("interaction_range", -1)),
-		"requires_approach": bool(prompt.get("requires_approach", false)),
-		"option_count": _array_or_empty(prompt.get("options", [])).size(),
-		"disabled_option_count": _array_or_empty(prompt.get("disabled_options", [])).size(),
-	}
+	return hover_state_controller.hover_prompt_for_target(target, simulation, _player_actor_id())
 
 
 func _hover_target_category(target: Dictionary, prompt: Dictionary) -> String:
-	var target_type := str(target.get("target_type", ""))
-	if target_type == "actor":
-		var actor_id := int(target.get("actor_id", 0))
-		for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
-			var actor_data: Dictionary = _dictionary_or_empty(actor)
-			if int(actor_data.get("actor_id", 0)) == actor_id:
-				var side := str(actor_data.get("side", ""))
-				if not side.is_empty():
-					return "actor:%s" % side
-				return "actor"
-		return "actor"
-	if target_type == "map_object":
-		var target_kind := str(target.get("target_kind", target.get("kind", "")))
-		if target_kind == "door":
-			return "door"
-		var prompt_kind := str(prompt.get("primary_option_kind", ""))
-		if prompt_kind == "door_toggle":
-			return "door"
-		if prompt_kind == "open_container":
-			return "container"
-		if prompt_kind in ["enter_subscene", "enter_outdoor_location", "enter_overworld", "exit_to_outdoor"]:
-			return "trigger"
-		if not prompt_kind.is_empty():
-			return prompt_kind
-		return "map_object"
-	return target_type if not target_type.is_empty() else "interaction"
+	return hover_state_controller.hover_target_category(target, prompt, _runtime_snapshot())
 
 
 func _move_preview_for_grid(grid: Dictionary) -> Dictionary:
 	var simulation: Variant = game_root.get("simulation") if game_root != null else null
-	if simulation == null or not simulation.has_method("preview_move"):
-		return {}
-	var player_id := _player_actor_id()
-	if player_id <= 0:
-		return {}
-	var preview: Dictionary = simulation.preview_move(player_id, grid, _dictionary_or_empty(world_result.get("map", {})))
-	return {
-		"reachable": bool(preview.get("reachable", preview.get("success", false))),
-		"reason": str(preview.get("reason", "")),
-		"steps": int(preview.get("steps", 0)),
-		"path": _array_or_empty(preview.get("path", [])).duplicate(true),
-		"ap_cost": float(preview.get("ap_cost", 0.0)),
-		"ap_available": float(preview.get("ap_available", 0.0)),
-		"ap_affordable": bool(preview.get("ap_affordable", true)),
-		"affordable_steps": int(preview.get("affordable_steps", 0)),
-		"requires_pending": bool(preview.get("requires_pending", false)),
-		"pending_steps": int(preview.get("pending_steps", 0)),
-		"target_position": _dictionary_or_empty(preview.get("target_position", grid)).duplicate(true),
-		"blocker": _dictionary_or_empty(preview.get("blocker", {})).duplicate(true),
-		"visited_cell_count": int(preview.get("visited_cell_count", 0)),
-		"pathfinding_time_ms": float(preview.get("pathfinding_time_ms", 0.0)),
-	}
+	return hover_state_controller.move_preview_for_grid(grid, simulation, _player_actor_id(), world_result)
 
 
 func _attack_preview_for_target(target: Dictionary) -> Dictionary:
-	if str(target.get("target_type", "")) != "actor":
-		return {}
 	var simulation: Variant = game_root.get("simulation") if game_root != null else null
-	if simulation == null or not simulation.has_method("preview_attack"):
-		return {}
-	var player_id := _player_actor_id()
-	var target_actor_id := int(target.get("actor_id", 0))
-	if player_id <= 0 or target_actor_id <= 0 or player_id == target_actor_id:
-		return {}
-	var preview: Dictionary = simulation.preview_attack(player_id, target_actor_id, _dictionary_or_empty(world_result.get("map", {})))
-	return {
-		"can_attack": bool(preview.get("can_attack", preview.get("success", false))),
-		"success": bool(preview.get("success", false)),
-		"reason": str(preview.get("reason", "")),
-		"actor_id": int(preview.get("actor_id", player_id)),
-		"target_actor_id": int(preview.get("target_actor_id", target_actor_id)),
-		"target_grid": _dictionary_or_empty(preview.get("target_grid", {})).duplicate(true),
-		"distance": int(preview.get("distance", -1)),
-		"range": int(preview.get("range", -1)),
-		"ap_cost": float(preview.get("ap_cost", 0.0)),
-		"ap_available": float(preview.get("ap_available", 0.0)),
-		"ap_affordable": bool(preview.get("ap_affordable", true)),
-		"ammo_available": bool(preview.get("ammo_available", true)),
-		"hit_chance": float(preview.get("hit_chance", -1.0)),
-		"crit_chance": float(preview.get("crit_chance", 0.0)),
-		"estimated_damage": float(preview.get("estimated_damage", 0.0)),
-	}
+	return hover_state_controller.attack_preview_for_target(target, simulation, _player_actor_id(), world_result)
 
 
 func _apply_hover_cursor_state(move_preview: Dictionary, attack_preview: Dictionary = {}) -> void:
-	if hover_cursor == null:
-		return
-	var color := HOVER_COLOR_INTERACTION
-	if not move_preview.is_empty():
-		color = HOVER_COLOR_MOVE_REACHABLE if bool(move_preview.get("reachable", false)) else HOVER_COLOR_MOVE_BLOCKED
-		hover_cursor.set_meta("move_reachable", bool(move_preview.get("reachable", false)))
-		hover_cursor.set_meta("move_steps", int(move_preview.get("steps", 0)))
-		hover_cursor.set_meta("move_reason", str(move_preview.get("reason", "")))
-		hover_cursor.set_meta("move_ap_cost", float(move_preview.get("ap_cost", 0.0)))
-		hover_cursor.set_meta("move_ap_available", float(move_preview.get("ap_available", 0.0)))
-		hover_cursor.set_meta("move_ap_affordable", bool(move_preview.get("ap_affordable", true)))
-		hover_cursor.set_meta("move_affordable_steps", int(move_preview.get("affordable_steps", 0)))
-		hover_cursor.set_meta("move_requires_pending", bool(move_preview.get("requires_pending", false)))
-		_update_move_path_preview_markers(move_preview, color)
-	else:
-		hover_cursor.set_meta("move_reachable", false)
-		hover_cursor.set_meta("move_steps", 0)
-		hover_cursor.set_meta("move_reason", "")
-		hover_cursor.set_meta("move_ap_cost", 0.0)
-		hover_cursor.set_meta("move_ap_available", 0.0)
-		hover_cursor.set_meta("move_ap_affordable", true)
-		hover_cursor.set_meta("move_affordable_steps", 0)
-		hover_cursor.set_meta("move_requires_pending", false)
-		_clear_move_path_preview_markers()
-	if not attack_preview.is_empty():
-		color = HOVER_COLOR_ATTACK_REACHABLE if bool(attack_preview.get("can_attack", false)) else HOVER_COLOR_ATTACK_BLOCKED
-		hover_cursor.set_meta("attack_can_attack", bool(attack_preview.get("can_attack", false)))
-		hover_cursor.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
-		hover_cursor.set_meta("attack_reason", str(attack_preview.get("reason", "")))
-		hover_cursor.set_meta("attack_hit_chance", float(attack_preview.get("hit_chance", -1.0)))
-	else:
-		hover_cursor.set_meta("attack_can_attack", false)
-		hover_cursor.set_meta("attack_target_actor_id", 0)
-		hover_cursor.set_meta("attack_reason", "")
-		hover_cursor.set_meta("attack_hit_chance", -1.0)
-	var material := hover_cursor.material_override as StandardMaterial3D
-	if material != null:
-		material.albedo_color = color
-	hover_cursor.set_meta("hover_color", color)
-	_update_attack_target_marker(attack_preview, color)
-	_update_attack_target_outline(attack_preview, color)
-	_update_attack_range_markers(attack_preview, color)
+	runtime_marker_controller.apply_hover_cursor_state(move_preview, attack_preview, world_result, _runtime_snapshot(), _observed_level())
 
 
 func _update_hover_target_outline(target: Dictionary, grid: Dictionary, target_category: String, attack_preview: Dictionary) -> void:
-	if hover_target_outline == null:
-		return
-	if not attack_preview.is_empty():
-		_hide_hover_target_outline()
-		return
-	if target.is_empty() or grid.is_empty():
-		_hide_hover_target_outline()
-		return
-	var color := _hover_outline_color(target_category)
-	hover_target_outline.global_position = Vector3(
-		float(grid.get("x", 0)),
-		float(grid.get("y", _observed_level())) + _hover_outline_height(target_category),
-		float(grid.get("z", 0))
-	)
-	var material := hover_target_outline.material_override as StandardMaterial3D
-	if material != null:
-		material.albedo_color = color
-	hover_target_outline.visible = true
-	hover_target_outline.set_meta("target_type", str(target.get("target_type", "")))
-	hover_target_outline.set_meta("target_id", str(target.get("target_id", "")))
-	hover_target_outline.set_meta("actor_id", int(target.get("actor_id", 0)))
-	hover_target_outline.set_meta("target_category", target_category)
-	hover_target_outline.set_meta("hover_color", color)
-	var door: Dictionary = _dictionary_or_empty(target.get("door", {}))
-	hover_target_outline.set_meta("door_is_open", bool(door.get("is_open", false)))
-	hover_target_outline.set_meta("door_locked", bool(door.get("locked", false)))
-	hover_target_outline.set_meta("container_visual_id", str(target.get("container_visual_id", "")))
-	hover_target_outline.set_meta("container_visual_prototype_id", str(target.get("container_visual_prototype_id", "")))
-	hover_target_outline.set_meta("container_model_asset_id", str(target.get("container_model_asset_id", "")))
+	runtime_marker_controller.update_hover_target_outline(target, grid, target_category, attack_preview, _observed_level())
 
 
 func _hide_hover_target_outline() -> void:
-	if hover_target_outline == null:
-		return
-	hover_target_outline.visible = false
-	hover_target_outline.set_meta("target_type", "")
-	hover_target_outline.set_meta("target_id", "")
-	hover_target_outline.set_meta("actor_id", 0)
-	hover_target_outline.set_meta("target_category", "")
-	hover_target_outline.set_meta("door_is_open", false)
-	hover_target_outline.set_meta("door_locked", false)
-	hover_target_outline.set_meta("container_visual_id", "")
-	hover_target_outline.set_meta("container_visual_prototype_id", "")
-	hover_target_outline.set_meta("container_model_asset_id", "")
+	runtime_marker_controller.hide_hover_target_outline()
 
 
 func _hover_outline_color(target_category: String) -> Color:
-	if target_category.begins_with("actor"):
-		return HOVER_COLOR_ACTOR
-	match target_category:
-		"pickup":
-			return HOVER_COLOR_PICKUP
-		"container":
-			return HOVER_COLOR_CONTAINER
-		"trigger":
-			return HOVER_COLOR_TRIGGER
-		"door":
-			return HOVER_COLOR_DOOR
-	return HOVER_COLOR_INTERACTION
+	return runtime_marker_controller.hover_outline_color(target_category)
 
 
 func _hover_outline_height(target_category: String) -> float:
-	if target_category.begins_with("actor"):
-		return 0.82
-	return 0.38
+	return runtime_marker_controller.hover_outline_height(target_category)
 
 
 func _update_attack_target_marker(attack_preview: Dictionary, color: Color) -> void:
-	if attack_target_marker == null:
-		return
-	if attack_preview.is_empty():
-		attack_target_marker.visible = false
-		attack_target_marker.set_meta("attack_target_actor_id", 0)
-		attack_target_marker.set_meta("attack_can_attack", false)
-		return
-	var target_grid: Dictionary = _attack_target_grid_from_preview(attack_preview)
-	if target_grid.is_empty():
-		attack_target_marker.visible = false
-		return
-	attack_target_marker.global_position = Vector3(
-		float(target_grid.get("x", 0)),
-		float(target_grid.get("y", _observed_level())) + 1.42,
-		float(target_grid.get("z", 0))
-	)
-	var material := attack_target_marker.material_override as StandardMaterial3D
-	if material != null:
-		material.albedo_color = color
-	attack_target_marker.visible = true
-	attack_target_marker.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
-	attack_target_marker.set_meta("attack_can_attack", bool(attack_preview.get("can_attack", false)))
-	attack_target_marker.set_meta("hover_color", color)
+	runtime_marker_controller.update_attack_target_marker(attack_preview, color, _runtime_snapshot(), _observed_level())
 
 
 func _update_attack_target_outline(attack_preview: Dictionary, color: Color) -> void:
-	if attack_target_outline == null:
-		return
-	if attack_preview.is_empty():
-		attack_target_outline.visible = false
-		attack_target_outline.set_meta("attack_target_actor_id", 0)
-		attack_target_outline.set_meta("attack_can_attack", false)
-		return
-	var target_grid: Dictionary = _attack_target_grid_from_preview(attack_preview)
-	if target_grid.is_empty():
-		attack_target_outline.visible = false
-		return
-	attack_target_outline.global_position = Vector3(
-		float(target_grid.get("x", 0)),
-		float(target_grid.get("y", _observed_level())) + 0.82,
-		float(target_grid.get("z", 0))
-	)
-	var material := attack_target_outline.material_override as StandardMaterial3D
-	if material != null:
-		material.albedo_color = Color(color.r, color.g, color.b, 0.24)
-	attack_target_outline.visible = true
-	attack_target_outline.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
-	attack_target_outline.set_meta("attack_can_attack", bool(attack_preview.get("can_attack", false)))
-	attack_target_outline.set_meta("hover_color", color)
+	runtime_marker_controller.update_attack_target_outline(attack_preview, color, _runtime_snapshot(), _observed_level())
 
 
 func _update_attack_range_markers(attack_preview: Dictionary, color: Color) -> void:
-	if attack_range_markers == null:
-		return
-	_clear_attack_range_markers()
-	if attack_preview.is_empty():
-		return
-	var target_grid: Dictionary = _dictionary_or_empty(attack_preview.get("target_grid", {}))
-	var attack_range: int = int(attack_preview.get("range", -1))
-	if target_grid.is_empty() or attack_range < 0:
-		return
-	var markers := 0
-	var candidates: Array[Dictionary] = _attack_range_candidate_grids(target_grid, attack_range)
-	for grid in candidates:
-		var marker := _build_attack_range_marker(color)
-		marker.position = Vector3(
-			float(grid.get("x", 0)),
-			float(grid.get("y", _observed_level())) + 0.13,
-			float(grid.get("z", 0))
-		)
-		marker.set_meta("grid", grid.duplicate(true))
-		marker.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
-		attack_range_markers.add_child(marker)
-		markers += 1
-	attack_range_markers.set_meta("marker_count", markers)
-	attack_range_markers.set_meta("candidate_count", candidates.size())
-	attack_range_markers.set_meta("attack_target_actor_id", int(attack_preview.get("target_actor_id", 0)))
+	runtime_marker_controller.update_attack_range_markers(attack_preview, color, world_result, _observed_level())
 
 
 func _attack_target_grid_from_preview(attack_preview: Dictionary) -> Dictionary:
-	var target_grid: Dictionary = _dictionary_or_empty(attack_preview.get("target_grid", {}))
-	if not target_grid.is_empty():
-		return target_grid
-	for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
-		var actor_data: Dictionary = _dictionary_or_empty(actor)
-		if int(actor_data.get("actor_id", 0)) == int(attack_preview.get("target_actor_id", 0)):
-			return _dictionary_or_empty(actor_data.get("grid_position", {}))
-	return {}
+	return runtime_marker_controller.attack_target_grid_from_preview(attack_preview, _runtime_snapshot())
 
 
 func _attack_range_candidate_grids(target_grid: Dictionary, attack_range: int) -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	var target_x := int(target_grid.get("x", 0))
-	var target_y := int(target_grid.get("y", _observed_level()))
-	var target_z := int(target_grid.get("z", 0))
-	var bounds: Dictionary = _dictionary_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("bounds", {}))
-	var blocking: Dictionary = _dictionary_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("blocking_cells", {}))
-	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
-	for x in range(target_x - attack_range, target_x + attack_range + 1):
-		for z in range(target_z - attack_range, target_z + attack_range + 1):
-			var distance: int = abs(x - target_x) + abs(z - target_z)
-			if distance > attack_range:
-				continue
-			var candidate := {"x": x, "y": target_y, "z": z}
-			if not _grid_in_bounds(candidate, bounds):
-				continue
-			var key := "%d:%d:%d" % [x, target_y, z]
-			if blocking.has(key):
-				continue
-			if not _vision_geometry.has_line_of_sight(candidate, target_grid, topology):
-				continue
-			output.append(candidate)
-	return output
+	return runtime_marker_controller.attack_range_candidate_grids(target_grid, attack_range, world_result, _observed_level())
 
 
 func _grid_in_bounds(grid: Dictionary, bounds: Dictionary) -> bool:
-	if bounds.is_empty():
-		return true
-	var x := int(grid.get("x", 0))
-	var z := int(grid.get("z", 0))
-	return x >= int(bounds.get("min_x", x)) \
-		and x <= int(bounds.get("max_x", x)) \
-		and z >= int(bounds.get("min_z", z)) \
-		and z <= int(bounds.get("max_z", z))
+	return runtime_marker_controller.call("_grid_in_bounds", grid, bounds)
 
 
 func _clear_attack_range_markers() -> void:
-	if attack_range_markers == null:
-		return
-	for child in attack_range_markers.get_children():
-		child.queue_free()
-	attack_range_markers.set_meta("marker_count", 0)
-	attack_range_markers.set_meta("candidate_count", 0)
-	attack_range_markers.set_meta("attack_target_actor_id", 0)
+	runtime_marker_controller.clear_attack_range_markers()
 
 
 func _update_move_path_preview_markers(move_preview: Dictionary, color: Color) -> void:
-	if move_path_preview_markers == null:
-		return
-	_clear_move_path_preview_markers()
-	var path: Array = _array_or_empty(move_preview.get("path", []))
-	if path.is_empty():
-		return
-	var affordable_steps := int(move_preview.get("affordable_steps", path.size()))
-	var index := 0
-	for cell in path:
-		var grid: Dictionary = _dictionary_or_empty(cell)
-		if grid.is_empty():
-			continue
-		var step_index: int = max(0, index)
-		var within_current_ap: bool = step_index <= affordable_steps
-		var marker_color: Color = color if within_current_ap else HOVER_COLOR_MOVE_PENDING
-		var marker := _build_move_path_preview_marker(marker_color, index, path.size())
-		marker.position = Vector3(
-			float(grid.get("x", 0)),
-			float(grid.get("y", _observed_level())) + 0.12,
-			float(grid.get("z", 0))
-		)
-		marker.set_meta("grid", grid.duplicate(true))
-		marker.set_meta("path_index", index)
-		marker.set_meta("step_cost", step_index)
-		marker.set_meta("within_current_ap", within_current_ap)
-		marker.set_meta("requires_pending", bool(move_preview.get("requires_pending", false)) and not within_current_ap)
-		marker.set_meta("reachable", bool(move_preview.get("reachable", false)))
-		marker.set_meta("reason", str(move_preview.get("reason", "")))
-		move_path_preview_markers.add_child(marker)
-		index += 1
-	move_path_preview_markers.set_meta("marker_count", index)
-	move_path_preview_markers.set_meta("path_length", path.size())
-	move_path_preview_markers.set_meta("reachable", bool(move_preview.get("reachable", false)))
-	move_path_preview_markers.set_meta("reason", str(move_preview.get("reason", "")))
-	move_path_preview_markers.set_meta("steps", int(move_preview.get("steps", 0)))
-	move_path_preview_markers.set_meta("ap_cost", float(move_preview.get("ap_cost", 0.0)))
-	move_path_preview_markers.set_meta("ap_available", float(move_preview.get("ap_available", 0.0)))
-	move_path_preview_markers.set_meta("ap_affordable", bool(move_preview.get("ap_affordable", true)))
-	move_path_preview_markers.set_meta("affordable_steps", affordable_steps)
-	move_path_preview_markers.set_meta("requires_pending", bool(move_preview.get("requires_pending", false)))
-	move_path_preview_markers.set_meta("pending_steps", int(move_preview.get("pending_steps", 0)))
+	runtime_marker_controller.update_move_path_preview_markers(move_preview, color, _observed_level())
 
 
 func _clear_move_path_preview_markers() -> void:
-	if move_path_preview_markers == null:
-		return
-	for child in move_path_preview_markers.get_children():
-		child.queue_free()
-	move_path_preview_markers.set_meta("marker_count", 0)
-	move_path_preview_markers.set_meta("path_length", 0)
-	move_path_preview_markers.set_meta("reachable", false)
-	move_path_preview_markers.set_meta("reason", "")
-	move_path_preview_markers.set_meta("steps", 0)
-	move_path_preview_markers.set_meta("ap_cost", 0.0)
-	move_path_preview_markers.set_meta("ap_available", 0.0)
-	move_path_preview_markers.set_meta("ap_affordable", true)
-	move_path_preview_markers.set_meta("affordable_steps", 0)
-	move_path_preview_markers.set_meta("requires_pending", false)
-	move_path_preview_markers.set_meta("pending_steps", 0)
+	runtime_marker_controller.clear_move_path_preview_markers()
 
 
 func _update_pending_movement_path_markers() -> void:
-	if pending_movement_path_markers == null:
-		return
 	var pending: Dictionary = _dictionary_or_empty(_runtime_snapshot().get("pending_movement", {}))
-	if pending.is_empty():
-		_clear_pending_movement_path_markers()
-		return
-	var path: Array = _array_or_empty(pending.get("path", []))
-	if path.is_empty():
-		_clear_pending_movement_path_markers()
-		return
-	var signature := "%s|%s|%d|%.2f|%.2f" % [
-		str(pending.get("actor_id", 0)),
-		JSON.stringify(pending.get("target_position", {})),
-		path.size(),
-		float(pending.get("required_ap", 0.0)),
-		float(pending.get("available_ap", 0.0)),
-	]
-	if str(pending_movement_path_markers.get_meta("signature", "")) == signature:
-		return
-	_clear_pending_movement_path_markers()
-	var index := 0
-	for cell in path:
-		var grid: Dictionary = _dictionary_or_empty(cell)
-		if grid.is_empty():
-			continue
-		var marker := _build_pending_movement_path_marker(index, path.size())
-		marker.position = Vector3(
-			float(grid.get("x", 0)),
-			float(grid.get("y", _observed_level())) + 0.18,
-			float(grid.get("z", 0))
-		)
-		marker.set_meta("grid", grid.duplicate(true))
-		marker.set_meta("path_index", index)
-		marker.set_meta("step_cost", max(0, index))
-		marker.set_meta("actor_id", int(pending.get("actor_id", 0)))
-		marker.set_meta("target_position", _dictionary_or_empty(pending.get("target_position", {})).duplicate(true))
-		marker.set_meta("required_ap", float(pending.get("required_ap", 0.0)))
-		marker.set_meta("available_ap", float(pending.get("available_ap", 0.0)))
-		pending_movement_path_markers.add_child(marker)
-		index += 1
-	pending_movement_path_markers.set_meta("signature", signature)
-	pending_movement_path_markers.set_meta("marker_count", index)
-	pending_movement_path_markers.set_meta("path_length", path.size())
-	pending_movement_path_markers.set_meta("actor_id", int(pending.get("actor_id", 0)))
-	pending_movement_path_markers.set_meta("target_position", _dictionary_or_empty(pending.get("target_position", {})).duplicate(true))
-	pending_movement_path_markers.set_meta("required_ap", float(pending.get("required_ap", 0.0)))
-	pending_movement_path_markers.set_meta("available_ap", float(pending.get("available_ap", 0.0)))
-	pending_movement_path_markers.set_meta("remaining_steps", max(0, path.size() - 1))
+	runtime_marker_controller.update_pending_movement_path_markers(pending, _observed_level())
 
 
 func _clear_pending_movement_path_markers() -> void:
-	if pending_movement_path_markers == null:
-		return
-	for child in pending_movement_path_markers.get_children():
-		child.queue_free()
-	pending_movement_path_markers.set_meta("signature", "")
-	pending_movement_path_markers.set_meta("marker_count", 0)
-	pending_movement_path_markers.set_meta("path_length", 0)
-	pending_movement_path_markers.set_meta("actor_id", 0)
-	pending_movement_path_markers.set_meta("target_position", {})
-	pending_movement_path_markers.set_meta("required_ap", 0.0)
-	pending_movement_path_markers.set_meta("available_ap", 0.0)
-	pending_movement_path_markers.set_meta("remaining_steps", 0)
+	runtime_marker_controller.clear_pending_movement_path_markers()
 
 
 func _player_actor_id() -> int:
@@ -1524,158 +930,6 @@ func _observed_level() -> int:
 	return 0
 
 
-func _build_hover_cursor() -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.92, 0.045, 0.92)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = HOVER_COLOR_INTERACTION
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
-	node.name = "HoverGridCursor"
-	node.mesh = mesh
-	node.material_override = material
-	node.visible = false
-	return node
-
-
-func _build_hover_target_outline() -> MeshInstance3D:
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.50
-	mesh.bottom_radius = 0.50
-	mesh.height = 0.72
-	mesh.radial_segments = 20
-	var material := StandardMaterial3D.new()
-	material.albedo_color = HOVER_COLOR_INTERACTION
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
-	node.name = "HoverTargetOutline"
-	node.mesh = mesh
-	node.material_override = material
-	node.visible = false
-	return node
-
-
-func _build_attack_target_marker() -> MeshInstance3D:
-	var mesh := TorusMesh.new()
-	mesh.inner_radius = 0.38
-	mesh.outer_radius = 0.48
-	var material := StandardMaterial3D.new()
-	material.albedo_color = HOVER_COLOR_ATTACK_REACHABLE
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
-	node.name = "AttackTargetMarker"
-	node.mesh = mesh
-	node.material_override = material
-	node.visible = false
-	node.rotation_degrees.x = 90.0
-	return node
-
-
-func _build_attack_target_outline() -> MeshInstance3D:
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.48
-	mesh.bottom_radius = 0.48
-	mesh.height = 1.48
-	mesh.radial_segments = 24
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(HOVER_COLOR_ATTACK_REACHABLE.r, HOVER_COLOR_ATTACK_REACHABLE.g, HOVER_COLOR_ATTACK_REACHABLE.b, 0.24)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
-	node.name = "AttackTargetOutline"
-	node.mesh = mesh
-	node.material_override = material
-	node.visible = false
-	return node
-
-
-func _build_attack_range_marker(color: Color) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.66, 0.035, 0.66)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(color.r, color.g, color.b, 0.34)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
-	node.name = "AttackRangeMarker"
-	node.mesh = mesh
-	node.material_override = material
-	return node
-
-
-func _build_move_path_preview_marker(color: Color, index: int, path_length: int) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	var width := 0.42 if index == 0 or index == path_length - 1 else 0.34
-	mesh.size = Vector3(width, 0.032, width)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(color.r, color.g, color.b, 0.30)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
-	node.name = "MovePathPreviewMarker"
-	node.mesh = mesh
-	node.material_override = material
-	return node
-
-
-func _build_pending_movement_path_marker(index: int, path_length: int) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	var width := 0.50 if index == path_length - 1 else 0.38
-	mesh.size = Vector3(width, 0.036, width)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(HOVER_COLOR_MOVE_PENDING.r, HOVER_COLOR_MOVE_PENDING.g, HOVER_COLOR_MOVE_PENDING.b, 0.34)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
-	node.name = "PendingMovementPathMarker"
-	node.mesh = mesh
-	node.material_override = material
-	return node
-
-
-func _build_skill_target_cell_marker(color: Color) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.78, 0.04, 0.78)
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
-	node.name = "SkillTargetCellMarker"
-	node.mesh = mesh
-	node.material_override = material
-	return node
-
-
-func _build_skill_target_actor_marker(color: Color) -> MeshInstance3D:
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.52
-	mesh.bottom_radius = 0.52
-	mesh.height = 1.50
-	mesh.radial_segments = 24
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(color.r, color.g, color.b, minf(0.32, color.a))
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.no_depth_test = true
-	var node := MeshInstance3D.new()
-	node.name = "SkillTargetActorMarker"
-	node.mesh = mesh
-	node.material_override = material
-	return node
-
-
 func _mouse_inside_viewport() -> bool:
 	var viewport := game_root.get_viewport()
 	if viewport == null:
@@ -1720,25 +974,8 @@ func _runtime_has_pending() -> bool:
 	return not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_crafting", {})).is_empty()
 
 
-func _actor_grid(actor_id: int) -> Dictionary:
-	for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
-		var actor_data: Dictionary = _dictionary_or_empty(actor)
-		if int(actor_data.get("actor_id", 0)) == actor_id:
-			return _dictionary_or_empty(actor_data.get("grid_position", {})).duplicate(true)
-	return {}
-
-
 func _clear_skill_target_preview_markers() -> void:
-	if skill_target_preview_markers == null:
-		return
-	for child in skill_target_preview_markers.get_children():
-		child.queue_free()
-	skill_target_preview_markers.set_meta("skill_id", "")
-	skill_target_preview_markers.set_meta("target_shape", "")
-	skill_target_preview_markers.set_meta("preview_success", false)
-	skill_target_preview_markers.set_meta("reason", "")
-	skill_target_preview_markers.set_meta("cell_marker_count", 0)
-	skill_target_preview_markers.set_meta("actor_marker_count", 0)
+	runtime_marker_controller.clear_skill_target_preview_markers()
 
 
 func _viewport_size() -> Vector2:
