@@ -568,11 +568,13 @@ func hover_tooltip_snapshot(control: Control = null) -> Dictionary:
 
 
 func hotbar_hit_test_snapshot(screen_position: Vector2 = Vector2(-1.0, -1.0)) -> Dictionary:
-	var viewport := get_viewport()
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.hotbar_hit_test_snapshot(get_viewport(), screen_position))
 	var position := screen_position
 	if position.x < 0.0 or position.y < 0.0:
+		var viewport := get_viewport()
 		position = viewport.get_mouse_position() if viewport != null else Vector2.ZERO
-	var inactive := {
+	return {
 		"active": false,
 		"owner_panel": "hud",
 		"target_kind": "",
@@ -586,76 +588,11 @@ func hotbar_hit_test_snapshot(screen_position: Vector2 = Vector2(-1.0, -1.0)) ->
 		"screen_position": {"x": position.x, "y": position.y},
 		"rect": {},
 	}
-	if hud == null:
-		return inactive
-	var controls: Array[Control] = []
-	for container_name in ["HotbarDock", "HotbarGroupBar", "ObserveHotbarDock"]:
-		_collect_hotbar_hit_controls(hud.find_child(container_name, true, false) as Control, controls)
-	for control in controls:
-		if control == null or not control.is_inside_tree() or not control.is_visible_in_tree():
-			continue
-		if not control.get_global_rect().has_point(position):
-			continue
-		return _hotbar_hit_control_snapshot(control, position)
-	return inactive
-
-
-func _collect_hotbar_hit_controls(control: Control, output: Array[Control]) -> void:
-	if control == null:
-		return
-	if control.has_meta("hotbar_slot_id") or control.has_meta("hotbar_group_id") or _observe_hotbar_meta_key(control) != "":
-		output.append(control)
-	for child in control.get_children():
-		_collect_hotbar_hit_controls(child as Control, output)
-
-
-func _hotbar_hit_control_snapshot(control: Control, position: Vector2) -> Dictionary:
-	var target_kind := "control"
-	var target_id := str(control.name)
-	var group_id := ""
-	if control.has_meta("hotbar_slot_id"):
-		target_kind = "hotbar_slot"
-		target_id = str(control.get_meta("hotbar_slot_id"))
-		group_id = str(control.get_meta("hotbar_group_id", ""))
-	elif control.has_meta("hotbar_group_id"):
-		target_kind = "hotbar_group"
-		target_id = str(control.get_meta("hotbar_group_id"))
-		group_id = target_id
-	else:
-		var observe_key := _observe_hotbar_meta_key(control)
-		if not observe_key.is_empty():
-			target_kind = "observe_hotbar"
-			target_id = observe_key
-	var rect := control.get_global_rect()
-	var button := control as BaseButton
-	var disabled_reason := str(control.get_meta("disabled_reason", ""))
-	return {
-		"active": true,
-		"owner_panel": "hud",
-		"target_kind": target_kind,
-		"target_id": target_id,
-		"group_id": group_id,
-		"source_path": str(control.get_path()),
-		"source_name": str(control.name),
-		"mouse_blocks_world": control.mouse_filter == Control.MOUSE_FILTER_STOP,
-		"disabled": button != null and button.disabled,
-		"disabled_reason": disabled_reason,
-		"disabled_reason_text": _hotbar_hit_disabled_reason_text(disabled_reason),
-		"tooltip": str(control.tooltip_text),
-		"screen_position": {"x": position.x, "y": position.y},
-		"rect": {"x": rect.position.x, "y": rect.position.y, "w": rect.size.x, "h": rect.size.y},
-	}
-
-
-func _hotbar_hit_disabled_reason_text(reason: String) -> String:
-	if reason.is_empty():
-		return ""
-	if hud != null and hud.has_method("_disabled_reason_text"):
-		return str(hud.call("_disabled_reason_text", reason))
-	return reason
 
 
 func _observe_hotbar_meta_key(control: Control) -> String:
+	if hud_root != null and hud_root.has_method("observe_hotbar_meta_key"):
+		return str(hud_root.call("observe_hotbar_meta_key", control))
 	for key in ["observe_playback", "observe_speed", "auto_tick", "observe_level", "observe_mode"]:
 		if control.has_meta(key):
 			return key
