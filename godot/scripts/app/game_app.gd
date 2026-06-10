@@ -2116,26 +2116,23 @@ func _apply_pending_world_action_final_refresh(trigger: String, pending_refresh:
 		pending_refresh = _dictionary_or_empty(world_action_flow_controller.call("take_pending_final_refresh"))
 	if pending_refresh.is_empty():
 		return false
-	var resolved: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("resolve_pending_final_world_result", simulation, pending_refresh))
-	var final_world_result: Dictionary = _dictionary_or_empty(resolved.get("world_result", {}))
-	if not _apply_world_result_without_present(final_world_result, bool(pending_refresh.get("render_world", true))):
+	var refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("apply_pending_final_refresh", simulation, interaction_controller, pending_refresh, "world refresh failed"))
+	world_result = _dictionary_or_empty(refresh.get("world_result", {}))
+	if not bool(refresh.get("ok", false)):
+		push_error(str(refresh.get("error_message", "world refresh failed")))
 		return false
+	if bool(refresh.get("sync_observed_level", false)):
+		_sync_observed_level_to_map()
+	_apply_world_root_snapshot(bool(refresh.get("render_world", true)))
+	_refresh_world_runtime_bindings()
 	world_action_flow_controller.call("mark_final_refresh_applied", pending_refresh, trigger)
-	if bool(pending_refresh.get("refresh_all_panels", false)):
-		refresh_all_panels(_dictionary_or_empty(pending_refresh.get("prompt", {})))
+	if bool(refresh.get("refresh_all_panels", false)):
+		refresh_all_panels(_dictionary_or_empty(refresh.get("prompt", {})))
 	return true
 
 
 func _deferred_world_refresh_public_snapshot(source: Dictionary) -> Dictionary:
 	return _dictionary_or_empty(world_action_flow_controller.call("deferred_world_refresh_public_snapshot", source))
-
-
-func _apply_world_result_without_present(next_world_result: Dictionary, render_world: bool = true) -> bool:
-	if not _apply_existing_runtime_world_result(next_world_result, "world_result_without_present", "world refresh failed"):
-		return false
-	_apply_world_root_snapshot(render_world)
-	_refresh_world_runtime_bindings()
-	return true
 
 
 func _apply_pending_world_action_ui(trigger: String, pending_ui: Dictionary = {}) -> bool:

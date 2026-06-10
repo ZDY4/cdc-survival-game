@@ -95,6 +95,29 @@ func resolve_pending_final_world_result(simulation: RefCounted, pending_refresh:
 	}
 
 
+func apply_pending_final_refresh(simulation: RefCounted, interaction_controller: RefCounted, pending_refresh: Dictionary, fallback_error: String = "world refresh failed") -> Dictionary:
+	if pending_refresh.is_empty():
+		return {
+			"ok": false,
+			"reason": "pending_refresh_missing",
+			"error_message": "pending_refresh_missing",
+			"world_result": {},
+			"render_world": true,
+			"refresh_all_panels": false,
+			"prompt": {},
+		}
+	var resolved: Dictionary = resolve_pending_final_world_result(simulation, pending_refresh)
+	var final_world_result: Dictionary = _dictionary_or_empty(resolved.get("world_result", {}))
+	var refresh: Dictionary = apply_existing_world_result(simulation, interaction_controller, final_world_result, "world_result_without_present")
+	var accepted: Dictionary = accept_refresh_result(refresh, fallback_error)
+	accepted["pending_refresh"] = pending_refresh.duplicate(true)
+	accepted["resolved"] = resolved.duplicate(true)
+	accepted["render_world"] = bool(pending_refresh.get("render_world", true))
+	accepted["refresh_all_panels"] = bool(pending_refresh.get("refresh_all_panels", false))
+	accepted["prompt"] = _dictionary_or_empty(pending_refresh.get("prompt", {})).duplicate(true)
+	return accepted
+
+
 func accept_refresh_result(refresh: Dictionary, fallback_error: String = "world refresh failed") -> Dictionary:
 	var next_world_result: Dictionary = _dictionary_or_empty(refresh.get("world_result", {}))
 	var ok := bool(refresh.get("ok", false))
