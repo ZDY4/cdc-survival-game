@@ -26,6 +26,7 @@
 - observe interval snapshot 也已由 `RuntimeControlStateController.runtime_control_snapshot()` 输出，`GameApp` 不再保留 observe speed / interval 私有转发 wrapper。
 - map level、focused actor 和视图导航状态已抽到 `godot/scripts/app/controllers/runtime_view_state_controller.gd`。
 - 玩家命令 authority audit 已抽到 `godot/scripts/app/controllers/player_command_authority_audit.gd`。
+- 玩家命令 blocker / rejection payload 已抽到 `godot/scripts/app/controllers/player_command_blocker.gd`，`GameApp` 只保留旧 Callable 兼容入口和 HUD refresh。
 - AI debug snapshot 构建已抽到 `godot/scripts/app/controllers/ai_debug_snapshot_builder.gd`。
 - world time snapshot 格式化已抽到 `godot/scripts/app/controllers/world_time_snapshot_builder.gd`。
 - 背包、容器、交易和角色面板的运行时反馈状态已抽到 `godot/scripts/app/controllers/ui_feedback_state_controller.gd`，`GameApp.active_*_feedback` 仅作为 smoke / tool 兼容属性保留。
@@ -329,6 +330,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 对话选择、无选项继续和关闭对话 facade 已抽到 `dialogue_action_controller.gd`，`GameApp` 只保留兼容方法、trade 收尾和刷新执行。
 - [x] Space wait 和 auto tick wait 的 `wait` 命令提交已抽到 `wait_action_controller.gd`，`GameApp` 只保留兼容方法、observe / pending 分支、制作队列接力和刷新执行。
 - [x] 交互目标选择、清理、取消 pending、主交互、选项交互、移动交互和交互结果 follow-up 判定已抽到 `interaction_action_controller.gd`，移动 presentation / refresh 时序决策已交给 `WorldActionFlowController.movement_execution_plan()`；`GameApp` 只保留兼容方法、follow-up 应用和实际世界刷新调用。
+- [x] 玩家命令 blocker / rejection payload 已抽到 `player_command_blocker.gd`，`GameApp` 只保留 Callable 兼容入口和 HUD refresh。
 - [x] 引入脚本级 `HudRoot` facade，承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme 和 context menu snapshot。
 - [x] controls hint、debug console、debug panel 的 HUD 控件开关、snapshot、schema/result 写入已通过 `HudRoot` 窄接口转发；`GameApp` 只保留兼容入口、刷新和音频反馈。
 - [x] tooltip render 和 drag preview render controller 已由 `HudRoot` 持有，`GameApp` 的旧 overlay 属性和 render 方法只作为 smoke / tool 兼容 facade。

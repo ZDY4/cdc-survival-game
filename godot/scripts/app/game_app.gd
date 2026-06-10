@@ -13,6 +13,7 @@ const RuntimeControlStateController = preload("res://scripts/app/controllers/run
 const RuntimeViewStateController = preload("res://scripts/app/controllers/runtime_view_state_controller.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
+const PlayerCommandBlocker = preload("res://scripts/app/controllers/player_command_blocker.gd")
 const AiDebugSnapshotBuilder = preload("res://scripts/app/controllers/ai_debug_snapshot_builder.gd")
 const WorldTimeSnapshotBuilder = preload("res://scripts/app/controllers/world_time_snapshot_builder.gd")
 const UiFeedbackStateController = preload("res://scripts/app/controllers/ui_feedback_state_controller.gd")
@@ -198,6 +199,7 @@ var debug_overlay_mode: String:
 			debug_runtime_controller.debug_overlay_mode = value
 var game_input_router: RefCounted = GameInputRouter.new()
 var player_command_authority_audit: RefCounted = PlayerCommandAuthorityAudit.new()
+var player_command_blocker: RefCounted = PlayerCommandBlocker.new()
 var ai_debug_snapshot_builder: RefCounted = AiDebugSnapshotBuilder.new()
 var world_time_snapshot_builder: RefCounted = WorldTimeSnapshotBuilder.new()
 var runtime_boot_controller: RefCounted = RuntimeBootController.new()
@@ -2209,48 +2211,38 @@ func _submit_inventory_action(action: Dictionary) -> Dictionary:
 
 
 func _player_command_rejection(action: String) -> Dictionary:
-	if observe_mode_enabled:
-		return _observe_command_rejected(action)
 	var modal_name := _panel_modal_blocker_name()
-	if not modal_name.is_empty():
-		return _ui_modal_command_rejected(action, modal_name)
-	if _world_action_presenter_blocks_input():
-		return _action_presenter_command_rejected(action)
-	return {}
+	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call(
+		"player_command_rejection",
+		action,
+		observe_mode_enabled,
+		modal_name,
+		_world_action_presenter_blocks_input(),
+		gameplay_input_blocker_snapshot()
+	))
+	if not result.is_empty():
+		refresh_hud(current_interaction_prompt())
+	return result
 
 
 func _observe_command_rejected(action: String) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call("observe_command_rejected", action, observe_mode_enabled))
 	refresh_hud(current_interaction_prompt())
-	return {
-		"success": false,
-		"reason": "observe_mode_blocks_player_commands",
-		"action": action,
-		"observe_mode": observe_mode_enabled,
-	}
+	return result
 
 
 func _action_presenter_command_rejected(action: String) -> Dictionary:
 	var blocker: Dictionary = gameplay_input_blocker_snapshot()
+	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call("action_presenter_command_rejected", action, blocker))
 	refresh_hud(current_interaction_prompt())
-	return {
-		"success": false,
-		"reason": "world_action_presenter_blocks_player_commands",
-		"action": action,
-		"blocker": blocker,
-		"action_kind": str(blocker.get("action_kind", "")),
-	}
+	return result
 
 
 func _ui_modal_command_rejected(action: String, modal_name: String) -> Dictionary:
 	var blocker: Dictionary = gameplay_input_blocker_snapshot()
+	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call("ui_modal_command_rejected", action, modal_name, blocker))
 	refresh_hud(current_interaction_prompt())
-	return {
-		"success": false,
-		"reason": "ui_modal_blocks_player_commands",
-		"action": action,
-		"modal_id": modal_name.trim_prefix("modal:"),
-		"blocker": blocker,
-	}
+	return result
 
 
 func _record_container_feedback(result: Dictionary, action: String, container_id: String, item_id: String, count: int) -> void:
