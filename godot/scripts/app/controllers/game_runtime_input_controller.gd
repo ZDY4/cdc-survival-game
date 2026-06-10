@@ -139,17 +139,17 @@ func input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if _gameplay_input_blocked_by_ui() or _mouse_over_blocking_ui():
 			return
-		_handle_mouse_motion(event as InputEventMouseMotion)
+		handle_world_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
 		var mouse_button := event as InputEventMouseButton
-		if _close_context_menu_on_outside_click(mouse_button):
+		if close_context_menu_on_outside_click(mouse_button):
 			var menu_viewport := game_root.get_viewport()
 			if menu_viewport != null:
 				menu_viewport.set_input_as_handled()
 			return
 		if _gameplay_input_blocked_by_ui() or _mouse_over_blocking_ui():
 			return
-		if _handle_mouse_button(mouse_button):
+		if handle_world_mouse_button(mouse_button):
 			var viewport := game_root.get_viewport()
 			if viewport != null:
 				viewport.set_input_as_handled()
@@ -163,14 +163,34 @@ func unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if _gameplay_input_blocked_by_ui():
 			return
-		_handle_mouse_motion(event as InputEventMouseMotion)
+		handle_world_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
 		var mouse_button := event as InputEventMouseButton
-		if _close_context_menu_on_outside_click(mouse_button):
+		if close_context_menu_on_outside_click(mouse_button):
 			return
 		if _gameplay_input_blocked_by_ui():
 			return
-		_handle_mouse_button(mouse_button)
+		handle_world_mouse_button(mouse_button)
+
+
+func mouse_over_blocking_ui() -> bool:
+	return _mouse_over_blocking_ui()
+
+
+func close_context_menu_on_outside_click(mouse_event: InputEventMouseButton) -> bool:
+	return _close_context_menu_on_outside_click(mouse_event)
+
+
+func handle_world_mouse_motion(mouse_event: InputEventMouseMotion) -> void:
+	if camera == null:
+		return
+	_handle_mouse_motion(mouse_event)
+
+
+func handle_world_mouse_button(mouse_event: InputEventMouseButton) -> bool:
+	if camera == null:
+		return false
+	return _handle_mouse_button(mouse_event)
 
 
 func _handle_mouse_motion(mouse_event: InputEventMouseMotion) -> void:

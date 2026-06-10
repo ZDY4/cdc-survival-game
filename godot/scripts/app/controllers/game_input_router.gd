@@ -45,6 +45,12 @@ func input(game_root: Node, runtime_input_controller: RefCounted, event: InputEv
 			if camera_viewport != null:
 				camera_viewport.set_input_as_handled()
 			return
+	elif event is InputEventMouseMotion:
+		if _handle_mouse_motion(game_root, runtime_input_controller, event as InputEventMouseMotion, true):
+			return
+	elif event is InputEventMouseButton:
+		if _handle_mouse_button(game_root, runtime_input_controller, event as InputEventMouseButton, true):
+			return
 	if runtime_input_controller != null:
 		runtime_input_controller.input(event)
 
@@ -63,6 +69,10 @@ func unhandled_input(game_root: Node, runtime_input_controller: RefCounted, even
 	if event is InputEventKey and _handle_global_shortcut_key(game_root, event as InputEventKey):
 		return
 	if event is InputEventKey and _handle_camera_shortcut_key(game_root, runtime_input_controller, event as InputEventKey):
+		return
+	if event is InputEventMouseMotion and _handle_mouse_motion(game_root, runtime_input_controller, event as InputEventMouseMotion, false):
+		return
+	if event is InputEventMouseButton and _handle_mouse_button(game_root, runtime_input_controller, event as InputEventMouseButton, false):
 		return
 	if runtime_input_controller != null:
 		runtime_input_controller.unhandled_input(event)
@@ -221,6 +231,35 @@ func _handle_camera_shortcut_key(game_root: Node, runtime_input_controller: RefC
 	return false
 
 
+func _handle_mouse_motion(game_root: Node, runtime_input_controller: RefCounted, event: InputEventMouseMotion, respect_mouse_blocker: bool) -> bool:
+	if runtime_input_controller == null:
+		return false
+	if _gameplay_input_blocked(game_root):
+		return true
+	if respect_mouse_blocker and runtime_input_controller.has_method("mouse_over_blocking_ui") and bool(runtime_input_controller.call("mouse_over_blocking_ui")):
+		return true
+	if runtime_input_controller.has_method("handle_world_mouse_motion"):
+		runtime_input_controller.call("handle_world_mouse_motion", event)
+		return true
+	return false
+
+
+func _handle_mouse_button(game_root: Node, runtime_input_controller: RefCounted, event: InputEventMouseButton, respect_mouse_blocker: bool) -> bool:
+	if runtime_input_controller == null:
+		return false
+	if runtime_input_controller.has_method("close_context_menu_on_outside_click") and bool(runtime_input_controller.call("close_context_menu_on_outside_click", event)):
+		_mark_input_handled(game_root)
+		return true
+	if _gameplay_input_blocked(game_root):
+		return true
+	if respect_mouse_blocker and runtime_input_controller.has_method("mouse_over_blocking_ui") and bool(runtime_input_controller.call("mouse_over_blocking_ui")):
+		return true
+	if runtime_input_controller.has_method("handle_world_mouse_button") and bool(runtime_input_controller.call("handle_world_mouse_button", event)):
+		_mark_input_handled(game_root)
+		return true
+	return false
+
+
 func _handle_digit_key(game_root: Node, digit: int) -> bool:
 	if digit <= 0:
 		return false
@@ -291,6 +330,12 @@ func _gameplay_input_blocked(game_root: Node) -> bool:
 
 func _debug_console_open(game_root: Node) -> bool:
 	return game_root.has_method("is_debug_console_open") and bool(game_root.is_debug_console_open())
+
+
+func _mark_input_handled(game_root: Node) -> void:
+	var viewport := game_root.get_viewport()
+	if viewport != null:
+		viewport.set_input_as_handled()
 
 
 func _stage_panel_for_key(key: int) -> String:

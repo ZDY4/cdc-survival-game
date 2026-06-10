@@ -15,7 +15,7 @@
 - startup request 和 new/continue runtime 构建已抽到 `godot/scripts/app/controllers/runtime_boot_controller.gd`。
 - debug console 命令执行和 debug overlay mode 状态已抽到 `godot/scripts/app/controllers/debug_runtime_controller.gd`，`clear` 命令通过 `HudRoot.clear_debug_console_history()` 窄接口清空历史。
 - HUD 运行时刷新已通过 `hud_controller.apply_runtime_snapshot()` 和 `input_blocker_snapshot()` 收敛为 facade。
-- 顶层输入分发、逐帧 runtime input process、debug console 输入保护、HUD 面板快捷键、交易面板快捷键、hotbar 数字键、对话 Enter 键、相机/视图键和一组全局 UI/debug 快捷键主路径已抽到 `godot/scripts/app/controllers/game_input_router.gd`；`GameRuntimeInputController` 暂保留 direct-call smoke 兼容 fallback。
+- 顶层输入分发、逐帧 runtime input process、debug console 输入保护、HUD 面板快捷键、交易面板快捷键、hotbar 数字键、对话 Enter 键、相机/视图键、鼠标 UI blocker / context menu outside-click / 世界鼠标事件分发和一组全局 UI/debug 快捷键主路径已抽到 `godot/scripts/app/controllers/game_input_router.gd`；`GameRuntimeInputController` 暂保留 direct-call smoke 兼容 fallback。
 - 世界表现入口已抽到 `godot/scenes/world/world_root.tscn` + `godot/scripts/world/world_root.gd`，稳定 `WorldContainer` 已落到 scene 中，`GameApp` 主要实例化 scene 并调用 WorldRoot 接口。
 - `WorldRoot.apply_runtime_snapshot()` 已承接 render world、fog 和 debug overlay 的世界表现应用顺序，`GameApp` 不再在主世界刷新入口手写这三步。
 - `GameApp.world_container` / `GameApp.fog_overlay` 已改为转发到 `WorldRoot` 的兼容属性，保留 smoke / tool 旧入口但不再作为根脚本权威状态。
@@ -370,7 +370,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 对话 Enter / keypad Enter 主路径已迁入 input router；runtime input controller 暂保留同名 fallback。
 - [x] `+` / `-` / `Ctrl+0` / `F` / `Tab` / `PageUp` / `PageDown` 相机和视图快捷键主路径已迁入 input router；runtime input controller 暂保留同名 fallback。
 - [x] `Space` 等待 / observe playback 主路径已迁入 input router；长按 repeat 状态仍由 runtime input controller 维护，fallback 暂保留。
-- [ ] 将剩余 UI blocker 判断、玩家命令分发、相机命令分发进一步集中到 input router。
+- [x] 鼠标 motion/button 的 UI blocker 判断、context menu outside-click 和世界鼠标事件分发主路径已迁入 input router，runtime input controller 只保留世界鼠标处理入口和 direct-call fallback。
 - [x] `GameApp` 的 `_input` / `_unhandled_input` / `_process` 均改为经 `GameInputRouter` 转发到 runtime input controller；direct-call smoke fallback 暂保留。
 - [x] 相机 follow、pan、zoom、clamp 和 ray-plane 计算已迁到 `camera_rig_controller.gd`；玩家拾取和 hover 接线仍在 runtime input controller。
 
