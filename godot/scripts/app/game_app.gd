@@ -2115,10 +2115,8 @@ func _apply_pending_world_action_final_refresh(trigger: String, pending_refresh:
 		pending_refresh = _dictionary_or_empty(world_action_flow_controller.call("take_pending_final_refresh"))
 	if pending_refresh.is_empty():
 		return false
-	var final_world_result: Dictionary = _dictionary_or_empty(pending_refresh.get("world_result", {}))
-	if final_world_result.is_empty() or not bool(final_world_result.get("ok", false)):
-		var fallback_refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_world_result_from_snapshot", simulation.snapshot(), "pending_final_refresh_fallback"))
-		final_world_result = _dictionary_or_empty(fallback_refresh.get("world_result", {}))
+	var resolved: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("resolve_pending_final_world_result", simulation, pending_refresh))
+	var final_world_result: Dictionary = _dictionary_or_empty(resolved.get("world_result", {}))
 	if not _apply_world_result_without_present(final_world_result, bool(pending_refresh.get("render_world", true))):
 		return false
 	world_action_flow_controller.call("mark_final_refresh_applied", pending_refresh, trigger)

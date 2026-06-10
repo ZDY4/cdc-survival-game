@@ -67,6 +67,34 @@ func apply_existing_world_result(simulation: RefCounted, interaction_controller:
 	}
 
 
+func resolve_pending_final_world_result(simulation: RefCounted, pending_refresh: Dictionary, fallback_source: String = "pending_final_refresh_fallback") -> Dictionary:
+	var final_world_result: Dictionary = _dictionary_or_empty(pending_refresh.get("world_result", {}))
+	if not final_world_result.is_empty() and bool(final_world_result.get("ok", false)):
+		return {
+			"ok": true,
+			"source": str(pending_refresh.get("source", "")),
+			"world_result": final_world_result,
+			"used_fallback": false,
+		}
+	if simulation == null:
+		return {
+			"ok": false,
+			"reason": "simulation_missing",
+			"source": fallback_source,
+			"world_result": final_world_result,
+			"used_fallback": false,
+		}
+	var fallback_refresh: Dictionary = build_world_result_from_snapshot(simulation.snapshot(), fallback_source)
+	return {
+		"ok": bool(fallback_refresh.get("ok", false)),
+		"reason": str(fallback_refresh.get("reason", "")),
+		"error": str(fallback_refresh.get("error", "")),
+		"source": fallback_source,
+		"world_result": _dictionary_or_empty(fallback_refresh.get("world_result", {})),
+		"used_fallback": true,
+	}
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
