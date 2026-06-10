@@ -338,6 +338,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 任务 turn-in 和地图面板进入 overworld location facade 已抽到 `world_panel_action_controller.gd`，`GameApp` 只保留兼容方法、world rebuild 和刷新执行。
 - [x] 对话选择、无选项继续和关闭对话 facade 已抽到 `dialogue_action_controller.gd`，`GameApp` 只保留兼容方法、trade 收尾和刷新执行。
 - [x] Space wait 和 auto tick wait 的 `wait` 命令提交已抽到 `wait_action_controller.gd`，`GameApp` 只保留兼容方法、observe / pending 分支、制作队列接力和刷新执行。
+- [x] `press_space_action()` 的对话 / observe playback / pending cancel / wait 分支已迁入 `WaitActionController.press_space_action()`；`GameApp` 只传入 Callable 并应用 refresh operation。
 - [x] 交互目标选择、清理、取消 pending、主交互、选项交互、移动交互和交互结果 follow-up 判定已抽到 `interaction_action_controller.gd`，follow-up UI 反馈状态应用已交给 `UiFeedbackStateController`，移动 presentation / refresh 时序决策已交给 `WorldActionFlowController.movement_execution_plan()`；`GameApp` 只保留兼容方法和实际世界刷新调用。
 - [x] 玩家命令 blocker / rejection payload 已抽到 `player_command_blocker.gd`，`GameApp` 只保留 Callable 兼容入口和 HUD refresh。
 - [x] 引入脚本级 `HudRoot` facade，承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme 和 context menu snapshot。

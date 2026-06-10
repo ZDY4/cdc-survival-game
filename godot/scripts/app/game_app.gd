@@ -1428,14 +1428,16 @@ func has_active_dialogue() -> bool:
 
 
 func press_space_action() -> Dictionary:
-	if has_active_dialogue():
-		return advance_dialogue_without_choice()
-	if observe_mode_enabled:
-		return toggle_observe_playback()
-	var pending_result: Dictionary = cancel_pending("keyboard", true)
-	if bool(pending_result.get("had_pending", false)):
-		return pending_result
-	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call("submit_wait", simulation, _dictionary_or_empty(world_result.get("map", {}))))
+	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call(
+		"press_space_action",
+		has_active_dialogue(),
+		observe_mode_enabled,
+		Callable(self, "advance_dialogue_without_choice"),
+		Callable(self, "toggle_observe_playback"),
+		Callable(self, "cancel_pending"),
+		simulation,
+		_dictionary_or_empty(world_result.get("map", {}))
+	))
 	return _apply_wait_action_operation(operation, "press_space_action")
 
 
