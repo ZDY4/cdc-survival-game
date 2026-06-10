@@ -441,8 +441,9 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [ ] 将 `game_app.gd` 收敛为 `game_root.gd` 或保留文件名但改为薄根节点。
 - [ ] 清理只为迁移期存在的 wrapper。
 - [x] `InventoryUI` / `DialogueUI` / `DialogueAction` / `ContainerUI` / `PlayerInteraction` pending wait / 交互 smoke 已改用 `GameApp.submit_wait_action()` / `GameApp.rebuild_runtime_world()` 稳定 facade，并通过 `finish_world_action_presentations()` 应用 deferred UI refresh；`PlayerInteraction` 不再调用 `GameApp._rebuild_world_after_runtime_change()` 私有入口。
+- [x] `cancel_pending`、移动、背包、交易、角色和世界面板动作的 refresh / rebuild 收尾已收敛到 `GameApp._apply_player_action_refresh_operation()`；这些路径改为经 `GameApp.rebuild_runtime_world()` 稳定 facade 触发世界重建，`_rebuild_world_after_runtime_change()` 只保留为 facade 内部实现。
 - [ ] 继续清理其他 runtime smoke / tools 中绕过 app facade 的直接 world snapshot 构建或 core command 造数调用；纯 core / world renderer 单元 smoke 例外。
-- [ ] 更新 AGENTS.md、tools README 和相关 workflow 文档中的入口描述。
+- [x] 更新 AGENTS.md、tools README 和相关 workflow 文档中的入口描述，明确 `godot/scenes/game/game_root.tscn` 是 runtime scene 入口，`game_app.gd` 仍是迁移期根脚本 / 兼容 facade，runtime smoke / tool 优先使用稳定 facade 而不是私有 `_setup_*` / `_rebuild_*` 入口。
 
 验收：
 

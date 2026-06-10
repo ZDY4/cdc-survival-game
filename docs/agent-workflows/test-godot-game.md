@@ -21,6 +21,8 @@
 
 - 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
 - `HeadlessNewGame` 和 `HeadlessWorld` 通过 `godot/scripts/app/headless_runner.gd` 覆盖 headless 启动入口。
+- 默认 runtime scene 入口是 `godot/scenes/game/game_root.tscn`；`godot/scripts/app/game_app.gd` 仍是迁移期根脚本和兼容 facade，新增 runtime 行为应优先落到明确的 app controller、world 或 UI 模块。
+- runtime smoke 需要等待、重建世界或刷新视觉时，优先调用 `GameApp.submit_wait_action()`、`GameApp.rebuild_runtime_world()`、`GameApp.refresh_world_visuals()`、`GameApp.finish_world_action_presentations()` 等稳定 facade；不要新增对 `_setup_*`、`_rebuild_*` 私有入口的依赖。
 - `MigrationGuard` 会执行 `godot/scripts/tools/mainline_migration_guard.gd`，确认 Godot 版本为 `4.6.3`，且当前主线没有重新引入 Rust / Cargo / Bevy 时代源码文件。
 - `Scene` 通过时会额外输出 `Scene.asset-diagnostics.json`，并在 `result.json` 的对应结果里记录 `assetDiagnostics` 路径；该文件用于审阅每张 map scene 的 visual 实例、fallback、碰撞、缩放、重叠、scene resource reference diff，以及 glTF import / `.uid` baseline。
 - `Scene` 会把当前 UID 诊断对比 `docs/baselines/scene_asset_uid_baseline.json`。若资源重导入导致 UID 变化，先确认 `Scene.asset-diagnostics.json` 中的 mismatch 是预期变更，再更新 baseline；非预期变化应回到 Godot import / 资源文件定位。

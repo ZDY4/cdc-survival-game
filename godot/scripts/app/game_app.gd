@@ -1351,18 +1351,13 @@ func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 			refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 			return result
 	world_result = _dictionary_or_empty(move_plan.get("final_world_result", final_world_result))
-	_rebuild_world_after_runtime_change(_dictionary_or_empty(result.get("prompt", {})), result)
+	rebuild_runtime_world(_dictionary_or_empty(result.get("prompt", {})), result)
 	return result
 
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false) -> Dictionary:
 	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("cancel_pending", interaction_controller, reason, auto_end_turn))
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if bool(operation.get("rebuild_world", false)):
-		_rebuild_world_after_runtime_change(current_interaction_prompt(), result)
-	elif bool(operation.get("refresh_all_panels", false)):
-		refresh_all_panels(current_interaction_prompt())
-	return result
+	return _apply_player_action_refresh_operation(operation, current_interaction_prompt(), _dictionary_or_empty(operation.get("result", {})))
 
 
 func current_interaction_prompt() -> Dictionary:
@@ -1562,11 +1557,7 @@ func use_player_item(item_id: String) -> Dictionary:
 
 
 func _apply_inventory_action_operation(operation: Dictionary) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if bool(operation.get("rebuild_world", false)):
-		_rebuild_world_after_runtime_change()
-	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
-	return result
+	return _apply_player_action_refresh_operation(operation)
 
 
 func buy_active_trade_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
@@ -1599,11 +1590,7 @@ func confirm_active_trade_cart(entries: Array) -> Dictionary:
 
 
 func _apply_trade_action_operation(operation: Dictionary) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if bool(operation.get("rebuild_world", false)):
-		_rebuild_world_after_runtime_change()
-	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
-	return result
+	return _apply_player_action_refresh_operation(operation)
 
 
 func _confirm_trade_cart_action(shop_id: String, entries: Array) -> Dictionary:
@@ -1637,11 +1624,7 @@ func allocate_player_attribute_point(attribute: String) -> Dictionary:
 
 
 func _apply_character_action_operation(operation: Dictionary) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if bool(operation.get("rebuild_world", false)):
-		_rebuild_world_after_runtime_change()
-	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
-	return result
+	return _apply_player_action_refresh_operation(operation)
 
 
 func _allocate_attribute_action(attribute: String) -> Dictionary:
@@ -1967,11 +1950,18 @@ func _enter_overworld_location_action(location_id: String) -> Dictionary:
 
 
 func _apply_world_panel_action_operation(operation: Dictionary) -> Dictionary:
+	return _apply_player_action_refresh_operation(operation, current_interaction_prompt(), _dictionary_or_empty(operation.get("result", {})), {})
+
+
+func _apply_player_action_refresh_operation(operation: Dictionary, selected_prompt: Dictionary = {}, rebuild_command_result: Dictionary = {}, rebuild_selected_prompt: Variant = null) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	if bool(operation.get("rebuild_world", false)):
-		_rebuild_world_after_runtime_change({}, result)
-		return result
-	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])), current_interaction_prompt())
+		var refresh_prompt: Dictionary = _dictionary_or_empty(rebuild_selected_prompt) if typeof(rebuild_selected_prompt) == TYPE_DICTIONARY else selected_prompt
+		rebuild_runtime_world(refresh_prompt, rebuild_command_result)
+	elif bool(operation.get("refresh_all_panels", false)):
+		refresh_all_panels(selected_prompt)
+	else:
+		_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])), selected_prompt)
 	return result
 
 

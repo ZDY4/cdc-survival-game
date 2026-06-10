@@ -6,6 +6,7 @@
 
 - 运行时和工具链基于 `Godot 4.6.3 + GDScript`。
 - Godot 命令行入口固定使用 `D:\godot\godot.cmd`，工程目录为 `godot/`。
+- 游戏运行时 scene 入口为 `godot/scenes/game/game_root.tscn`；其脚本 `godot/scripts/app/game_app.gd` 处于迁移期薄根节点收敛中，只承担装配、跨系统转发和 smoke / tool 兼容 facade。
 - 地图主来源为 `godot/scenes/maps/*.tscn`，后续地图布局、入口点和地图对象按 Godot scene 工作流维护；`data/maps/*.json` 只作为迁移期兼容备份。
 - 非地图内容仍以 `data/` 下 JSON 为当前权威输入源；Godot 数据层负责加载、校验、摘要、引用查询、格式化和安全写回。
 - 玩家运行时不承载内容编辑 UI；内容编辑能力放在 Godot editor 插件、headless tool 或独立脚本中。
@@ -33,7 +34,8 @@
 - `godot/project.godot`: Godot 工程入口。
 - `godot/scripts/data`: 内容路径、JSON 加载、registry、校验、引用查询、格式化和安全编辑服务。
 - `godot/scripts/core`: 引擎无关的玩法规则与运行时逻辑。
-- `godot/scripts/app`: app 装配、headless runner、启动流程、玩家交互 controller。
+- `godot/scenes/game/game_root.tscn`: 游戏运行时根 scene，负责承载世界、HUD 和运行时 controller 装配。
+- `godot/scripts/app`: app 装配、headless runner、启动流程、输入路由、runtime refresh 和玩家动作 facade；新增业务逻辑优先落到具体 controller，不继续扩大 `game_app.gd`。
 - `godot/scripts/world`: 地图快照、场景生成、空间表现、雾战、tile / object 渲染。
 - `godot/scenes/maps`: Godot 地图场景，承载 map id、尺寸、入口点、地图对象、footprint 和对象 props，是后续地图开发主入口。
 - `godot/scripts/ui`: HUD、背包、任务、对话、交易、容器等 UI snapshot、controller 和面板。
@@ -69,6 +71,7 @@
 - 地图改动后的空间复核优先使用 `tools/agent/review-godot-map-visual.ps1`；需要人工查看或精修时打开对应 Godot map scene，并用 `CDC Map Review` dock 查看复核信息。
 - 游戏运行时 smoke 默认使用 `tools/agent/test-godot-game.ps1`。
 - Editor 插件和编辑服务 smoke 默认使用 `tools/agent/test-godot-editor.ps1`。
+- runtime smoke / tool 需要驱动等待、世界刷新或视觉刷新时，优先调用 `GameApp.submit_wait_action()`、`GameApp.rebuild_runtime_world()`、`GameApp.refresh_world_visuals()`、`GameApp.finish_world_action_presentations()` 等稳定 facade；不要新增对 `_setup_*`、`_rebuild_*` 等私有入口的依赖。
 - 若脚本提供 PowerShell comment-based help，先用 `Get-Help tools/agent/<script>.ps1` 确认参数、示例和副作用。
 - 新增 `tools/agent/` 脚本时，同时更新脚本自身 help、`tools/agent/README.md` 和相关 workflow 文档。
 - `CODEXVault_GODOT` 仅作为 headless 验证和 agent 汇总思路参考；不要迁入 Linux setup、Godot Mono / .NET、pre-commit、GitHub Pages 或大体积静态工具资产。
