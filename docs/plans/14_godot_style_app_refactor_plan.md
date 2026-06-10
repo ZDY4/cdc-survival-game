@@ -453,6 +453,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 更新 AGENTS.md、tools README 和相关 workflow 文档中的入口描述，明确 `godot/scenes/game/game_root.tscn` 是 runtime scene 入口，`game_app.gd` 仍是迁移期根脚本 / 兼容 facade，runtime smoke / tool 优先使用稳定 facade 而不是私有 `_setup_*` / `_rebuild_*` 入口。
 - [x] 将制作 UI 所需的工作台、世界 flag、附近工具容器和最近制作结果上下文构建迁入 `CraftingContextBuilder`，`GameApp` 只保留调用入口。
 - [x] 将交易目标解析、交易关闭 payload、当前 shop id、当前容器 id、容器关闭原因和距离复核迁入 `RuntimeSessionContextController`，`GameApp` 仅保留兼容委托入口。
+- [x] 删除 `GameApp` 中已无调用方的 view / focus、skill targeting 和会话 context 私有转发 wrapper；保留的 view / skill public facade 均直接调用对应 controller。
 
 验收：
 

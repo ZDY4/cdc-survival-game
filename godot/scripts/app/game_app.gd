@@ -871,7 +871,7 @@ func runtime_control_snapshot() -> Dictionary:
 	snapshot["runtime_refresh"] = runtime_refresh_report_snapshot()
 	snapshot["audio_feedback"] = audio_feedback_snapshot()
 	snapshot["performance"] = runtime_performance_snapshot()
-	snapshot["skill_targeting"] = _skill_targeting_snapshot()
+	snapshot["skill_targeting"] = active_skill_targeting_snapshot()
 	snapshot["player_command_authority_audit"] = player_command_authority_audit_snapshot()
 	return snapshot
 
@@ -1835,7 +1835,7 @@ func _accept_runtime_refresh_result(refresh: Dictionary, fallback_error: String)
 	if not bool(accepted.get("ok", false)):
 		return false
 	if bool(accepted.get("sync_observed_level", false)):
-		_sync_observed_level_to_map()
+		runtime_view_state_controller.call("sync_observed_level_to_map", world_result)
 	return true
 
 
@@ -1982,7 +1982,7 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	ui_feedback_state_controller.call("apply_interaction_followup", followup)
 	var stage_panel_to_open := str(followup.get("stage_panel", ""))
 	world_result = interaction_controller.world_result
-	_sync_observed_level_to_map()
+	runtime_view_state_controller.call("sync_observed_level_to_map", world_result)
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
 	_apply_runtime_scene_refresh(true, {}, {
 		"present_world_action": true,
@@ -2042,7 +2042,7 @@ func _apply_pending_world_action_final_refresh(trigger: String, pending_refresh:
 	if not bool(refresh.get("ok", false)):
 		return false
 	if bool(refresh.get("sync_observed_level", false)):
-		_sync_observed_level_to_map()
+		runtime_view_state_controller.call("sync_observed_level_to_map", world_result)
 	_apply_runtime_scene_refresh(bool(refresh.get("render_world", true)))
 	var completion: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("complete_final_refresh", pending_refresh, refresh, trigger))
 	if bool(completion.get("refresh_all_panels", false)):
@@ -2184,10 +2184,6 @@ func _active_trade_target_available() -> bool:
 	return bool(runtime_session_context_controller.call("active_trade_target_available", registry, simulation, active_trade_target))
 
 
-func _dialogue_trade_shop_id(result: Dictionary) -> String:
-	return str(runtime_session_context_controller.call("dialogue_trade_shop_id", result))
-
-
 func _current_dialogue_snapshot() -> Dictionary:
 	if simulation == null:
 		return {}
@@ -2211,76 +2207,12 @@ func _active_container_close_reason() -> String:
 	return str(runtime_session_context_controller.call("active_container_close_reason", simulation))
 
 
-func _active_container_in_range(container_id: String) -> bool:
-	return bool(runtime_session_context_controller.call("active_container_in_range", simulation, container_id))
-
-
-func _focused_actor_data() -> Dictionary:
-	return _dictionary_or_empty(runtime_view_state_controller.call("focused_actor_data", world_result, is_observe_mode_enabled()))
-
-
-func _focus_actor_candidates() -> Array[Dictionary]:
-	return _array_or_empty(runtime_view_state_controller.call("focus_actor_candidates", world_result, is_observe_mode_enabled()))
-
-
-func _current_focus_level() -> int:
-	return current_map_level()
-
-
-func _is_player_side_actor(actor_data: Dictionary) -> bool:
-	return bool(runtime_view_state_controller.call("is_player_side_actor", actor_data))
-
-
-func _focused_actor_busy_state(focused_actor: Dictionary) -> Dictionary:
-	return _dictionary_or_empty(runtime_view_state_controller.call("focused_actor_busy_state", focused_actor, simulation))
-
-
 func _clear_focus_switch_ui_state() -> void:
 	if runtime_input_controller != null and runtime_input_controller.has_method("clear_selection_state"):
 		runtime_input_controller.clear_selection_state("focus_switch")
 	if interaction_controller != null:
 		interaction_action_controller.call("clear_selection", interaction_controller, "focus_switch", false)
 	_close_hud_interaction_menu()
-
-
-func _sync_observed_level_to_map() -> void:
-	runtime_view_state_controller.call("sync_observed_level_to_map", world_result)
-
-
-func _normalized_map_level(level: int) -> int:
-	return int(runtime_view_state_controller.call("normalized_map_level", level, world_result))
-
-
-func _default_map_level() -> int:
-	return int(runtime_view_state_controller.call("default_map_level", world_result))
-
-
-func _available_map_levels() -> Array[int]:
-	return _array_or_empty(runtime_view_state_controller.call("available_map_levels", world_result))
-
-
-func _skill_requires_runtime_target(skill_id: String) -> bool:
-	return bool(skill_targeting_controller.call("skill_requires_runtime_target", skill_id, registry.get_library("skills") if registry != null else {}))
-
-
-func _skill_data(skill_id: String) -> Dictionary:
-	return _dictionary_or_empty(skill_targeting_controller.call("skill_data", skill_id, registry.get_library("skills") if registry != null else {}))
-
-
-func _skill_targeting_definition(activation: Dictionary) -> Dictionary:
-	return _dictionary_or_empty(skill_targeting_controller.call("skill_targeting_definition", activation))
-
-
-func _skill_target_kind(targeting: Dictionary) -> String:
-	return str(skill_targeting_controller.call("skill_target_kind", targeting))
-
-
-func _default_skill_target_policy(target_kind: String) -> String:
-	return str(skill_targeting_controller.call("default_skill_target_policy", target_kind))
-
-
-func _skill_targeting_snapshot() -> Dictionary:
-	return _dictionary_or_empty(skill_targeting_controller.call("snapshot"))
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
