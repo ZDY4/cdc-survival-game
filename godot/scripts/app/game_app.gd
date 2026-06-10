@@ -904,6 +904,7 @@ func runtime_control_snapshot() -> Dictionary:
 	snapshot["world_action_queue"] = world_action_queue_snapshot()
 	snapshot["ai_debug"] = ai_debug_snapshot()
 	snapshot["debug_overlay"] = debug_overlay_snapshot()
+	snapshot["runtime_refresh"] = runtime_refresh_report_snapshot()
 	snapshot["audio_feedback"] = audio_feedback_snapshot()
 	snapshot["performance"] = runtime_performance_snapshot()
 	snapshot["skill_targeting"] = _skill_targeting_snapshot()
@@ -951,6 +952,12 @@ func audio_feedback_snapshot() -> Dictionary:
 	if audio_feedback_controller == null or not audio_feedback_controller.has_method("snapshot"):
 		return {"enabled": false, "reason": "audio_feedback_missing"}
 	return _dictionary_or_empty(audio_feedback_controller.call("snapshot"))
+
+
+func runtime_refresh_report_snapshot() -> Dictionary:
+	if runtime_refresh_controller != null and runtime_refresh_controller.has_method("refresh_report_snapshot"):
+		return _dictionary_or_empty(runtime_refresh_controller.call("refresh_report_snapshot"))
+	return {}
 
 
 func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:

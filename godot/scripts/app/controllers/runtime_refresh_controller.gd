@@ -3,6 +3,7 @@ extends RefCounted
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 var registry: RefCounted
+var last_refresh_report: Dictionary = {}
 
 
 func _init(p_registry: RefCounted = null) -> void:
@@ -134,9 +135,14 @@ func accept_refresh_result(refresh: Dictionary, fallback_error: String = "world 
 
 func accept_and_report_refresh_result(refresh: Dictionary, fallback_error: String = "world refresh failed") -> Dictionary:
 	var accepted: Dictionary = accept_refresh_result(refresh, fallback_error)
+	_record_refresh_report(accepted)
 	if not bool(accepted.get("ok", false)):
 		push_error(refresh_failure_message(accepted, fallback_error))
 	return accepted
+
+
+func refresh_report_snapshot() -> Dictionary:
+	return last_refresh_report.duplicate(true)
 
 
 func refresh_failure_message(accepted: Dictionary, fallback_error: String = "world refresh failed") -> String:
@@ -172,6 +178,18 @@ func refresh_log_context(refresh: Dictionary, next_world_result: Dictionary = {}
 		"reason": str(refresh.get("reason", "")),
 		"map_id": str(map.get("id", map.get("map_id", ""))),
 		"actor_id": str(player.get("actor_id", player.get("id", ""))),
+	}
+
+
+func _record_refresh_report(accepted: Dictionary) -> void:
+	var context: Dictionary = _dictionary_or_empty(accepted.get("log_context", {}))
+	last_refresh_report = {
+		"ok": bool(accepted.get("ok", false)),
+		"source": str(accepted.get("source", context.get("source", ""))),
+		"reason": str(accepted.get("reason", context.get("reason", ""))),
+		"map_id": str(context.get("map_id", "")),
+		"actor_id": str(context.get("actor_id", "")),
+		"error_message": str(accepted.get("error_message", "")),
 	}
 
 
