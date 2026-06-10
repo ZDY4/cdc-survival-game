@@ -156,10 +156,10 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 4: 拆 InteractionActionPresenter
 
-- [ ] 新建 `interaction_action_presenter.gd`。
-- [ ] 迁移拾取、容器、对话、门、inspect 等 interaction feedback。
-- [ ] 迁移 interaction visual profile / visual kind / feedback text。
-- [ ] `WorldActionPresenter` 只聚合 snapshot 和 active presentation 状态。
+- [x] 新建 `interaction_action_presenter.gd`。
+- [x] 迁移拾取、容器、对话、门、inspect 等 interaction feedback。
+- [x] 迁移 interaction visual profile / visual kind / feedback text。
+- [x] `WorldActionPresenter` 只聚合 snapshot 和 active presentation 状态。
 
 验收：
 
@@ -167,6 +167,10 @@ godot/scripts/app/controllers/runtime_input/
 - `PlayerInteraction`
 - `ContainerUI`
 - `DialogueUI`
+
+验证记录：
+
+- 2026-06-11: 通过 `world_action_presenter.gd` / `interaction_action_presenter.gd` 静态解析；通过 `test-godot-game.ps1 -Scenario Interaction`、`PlayerInteraction`、`ContainerUI`、`DialogueUI`。
 
 ## Phase 5: 拆 HUD debug console / debug panel
 
