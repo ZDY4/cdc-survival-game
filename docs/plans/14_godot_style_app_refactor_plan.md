@@ -351,7 +351,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] debug console 输入保护和 `V` / `F3` / `[` / `]` / `A` / `/` / `Esc` 等全局 UI/debug 快捷键主路径已迁入 input router；runtime input direct-call smoke 仍保留兼容 fallback。
 - [ ] 将剩余 UI blocker 判断、玩家命令分发、相机命令分发进一步集中到 input router。
 - [ ] 玩家移动 / 交互输入继续交给现有 runtime input controller，但从 `GameApp` 直接调用改为 input router 调用。
-- [ ] 相机控制逐步迁到 `camera_rig_controller.gd`。
+- [x] 相机 follow、pan、zoom、clamp 和 ray-plane 计算已迁到 `camera_rig_controller.gd`；玩家拾取和 hover 接线仍在 runtime input controller。
 
 验收：
 
