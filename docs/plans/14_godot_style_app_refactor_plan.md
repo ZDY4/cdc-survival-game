@@ -53,10 +53,11 @@
 - 交互目标选择、清理、取消 pending、主交互、选项交互、移动交互和交互结果 follow-up 判定已抽到 `godot/scripts/app/controllers/interaction_action_controller.gd`；follow-up 的 UI 反馈状态应用已收敛到 `UiFeedbackStateController`；移动 presentation / refresh 时序决策已由 `WorldActionFlowController.movement_execution_plan()` 输出；`GameApp` 只保留兼容入口和实际世界刷新调用。
 - 脚本级 `HudRoot` facade 已引入到 `godot/scripts/ui/hud_root.gd`，当前承接 HUD / panel setup、单个/批量 panel 刷新、stage panels、settings、panel blocker、modal stack、theme、context menu snapshot / close、controls hint、debug console、debug panel、tooltip / drag snapshot、tooltip render 和 drag preview render；`GameApp` 保留旧 HUD / panel / overlay 字段作为 smoke 兼容引用。
 - action operation 的 `refresh` 面板分发顺序已收敛到 `HudRoot.refresh_operation_panels()`；`refresh_all_panels()` 也已收敛到 `HudRoot.refresh_all()`，`GameApp` 只保留 session 关闭保护、音频反馈和性能标记。
+- world apply、presentation、runtime binding 和 HUD / panel refresh 的顺序已由 `RuntimeRefreshController.build_scene_apply_plan()` 统一产出，`GameApp` 只按 plan 执行 scene / HUD 窄接口。
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 2445 行，还保留 tooltip / drag facade、overlay 兼容属性、observe/debug facade 串联和实际世界刷新调用等兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 2500 行，还保留 tooltip / drag facade、overlay 兼容属性、observe/debug facade 串联和少量 scene / HUD 实际调用等兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` scene；当前已通过 `HudRoot` script 包住现有 HUD controller 和 panel controller。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
@@ -406,7 +407,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] refresh result 接受、错误消息规范化和失败 `push_error` 报告已迁入 `RuntimeRefreshController`，`GameApp` 只保留状态赋值和 scene/HUD 接续。
 - [x] pending final refresh 的 runtime 应用已迁入 `RuntimeRefreshController.apply_pending_final_refresh()`；`GameApp` 仍负责 scene tree 渲染、HUD 接续和 presenter 状态标记。
 - [x] 最近一次 refresh 的成功/失败、source、reason、map id、actor id 和 error message 已由 `RuntimeRefreshController.refresh_report_snapshot()` 暴露到 runtime control snapshot。
-- [ ] 继续将 world apply -> HUD apply 的最终顺序收敛到 controller，减少根脚本手写刷新链。
+- [x] world apply -> presentation -> runtime binding -> HUD / panel apply 的顺序已由 `RuntimeRefreshController.build_scene_apply_plan()` 统一产出，`GameApp` 只执行节点窄接口。
 - [x] `RuntimeRefreshController` 的 refresh report 已补充 command / presenter、actor/object/corpse 数量、interaction target 数量、container/shop session 和 active map/location 上下文字段。
 
 验收：
@@ -425,7 +426,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] `WorldActionFlowController` 已发出 `final_refresh_ready` / `deferred_ui_ready` signal，当前由 `GameApp` 连接 signal 后调用现有 runtime refresh / HUD apply 入口。
 - [x] signal 接续后的 pending final refresh 解析和 runtime 应用已收敛到 `RuntimeRefreshController.apply_pending_final_refresh()`。
 - [x] signal 接续后的 final refresh 完成标记和 HUD refresh completion 结果已收敛到 `WorldActionFlowController.complete_final_refresh()`。
-- [ ] 继续将 signal 接续后的 scene tree apply 和 HUD apply 顺序收敛，进一步缩短 `GameApp`。
+- [x] signal 接续后的 scene tree apply 和 HUD apply 顺序已复用 `RuntimeRefreshController.build_scene_apply_plan()`，`GameApp` 不再在 final refresh 分支手写 world apply / binding 链。
 - [x] 保留当前 action presentation 行为，不在同一阶段重做动效。
 
 验收：

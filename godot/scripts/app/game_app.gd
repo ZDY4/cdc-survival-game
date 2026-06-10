@@ -1465,8 +1465,7 @@ func _apply_wait_action_operation(operation: Dictionary, refresh_reason: String)
 	if refresh_steps.has("runtime"):
 		_continue_crafting_queue_after_wait(result)
 		if _rebuild_runtime_world_result(refresh_reason):
-			_apply_world_root_snapshot(true)
-			_refresh_world_runtime_bindings()
+			_apply_runtime_scene_refresh(true)
 	if refresh_steps.has("all_panels"):
 		refresh_all_panels(current_interaction_prompt())
 	return result
@@ -1970,10 +1969,11 @@ func _apply_world_panel_action_operation(operation: Dictionary) -> Dictionary:
 func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}, command_result: Dictionary = {}) -> void:
 	if not _rebuild_runtime_world_result("runtime_change"):
 		return
-	_apply_world_root_snapshot(true)
-	_present_world_action(command_result)
-	_refresh_world_runtime_bindings()
-	refresh_all_panels(selected_prompt)
+	_apply_runtime_scene_refresh(true, selected_prompt, {
+		"present_world_action": true,
+		"command_result": command_result,
+		"refresh_kind": "all",
+	})
 
 
 func _rebuild_runtime_world_result(source: String) -> bool:
@@ -2021,6 +2021,22 @@ func _refresh_world_runtime_bindings() -> void:
 
 func refresh_world_visuals(render_world: bool = true) -> Dictionary:
 	return _apply_world_root_snapshot(render_world)
+
+
+func _apply_runtime_scene_refresh(render_world: bool = true, selected_prompt: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
+	var plan: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_scene_apply_plan", render_world, selected_prompt, options))
+	var counts: Dictionary = _apply_world_root_snapshot(bool(plan.get("render_world", true)))
+	if bool(plan.get("present_world_action", false)):
+		_present_world_action(_dictionary_or_empty(plan.get("command_result", {})))
+	if bool(plan.get("refresh_runtime_bindings", true)):
+		_refresh_world_runtime_bindings()
+	var refresh_kind := str(plan.get("refresh_kind", "none"))
+	var prompt: Dictionary = _dictionary_or_empty(plan.get("prompt", {}))
+	if refresh_kind == "all":
+		refresh_all_panels(prompt)
+	elif refresh_kind == "hud":
+		refresh_hud(prompt)
+	return counts
 
 
 func _apply_world_root_snapshot(render_world: bool = true) -> Dictionary:
@@ -2121,9 +2137,10 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	world_result = interaction_controller.world_result
 	_sync_observed_level_to_map()
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
-	_apply_world_root_snapshot(true)
-	_present_world_action(result)
-	_refresh_world_runtime_bindings()
+	_apply_runtime_scene_refresh(true, {}, {
+		"present_world_action": true,
+		"command_result": result,
+	})
 	var deferred_ui := false
 	if not stage_panel_to_open.is_empty():
 		deferred_ui = _queue_or_open_stage_panel_after_world_action(stage_panel_to_open, result)
@@ -2179,8 +2196,7 @@ func _apply_pending_world_action_final_refresh(trigger: String, pending_refresh:
 		return false
 	if bool(refresh.get("sync_observed_level", false)):
 		_sync_observed_level_to_map()
-	_apply_world_root_snapshot(bool(refresh.get("render_world", true)))
-	_refresh_world_runtime_bindings()
+	_apply_runtime_scene_refresh(bool(refresh.get("render_world", true)))
 	var completion: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("complete_final_refresh", pending_refresh, refresh, trigger))
 	if bool(completion.get("refresh_all_panels", false)):
 		refresh_all_panels(_dictionary_or_empty(completion.get("prompt", {})))

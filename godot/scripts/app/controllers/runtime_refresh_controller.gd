@@ -156,6 +156,20 @@ func refresh_report_snapshot() -> Dictionary:
 	return last_refresh_report.duplicate(true)
 
 
+func build_scene_apply_plan(render_world: bool = true, selected_prompt: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
+	var refresh_kind := str(options.get("refresh_kind", "none"))
+	if not ["none", "hud", "all"].has(refresh_kind):
+		refresh_kind = "none"
+	return {
+		"render_world": render_world,
+		"refresh_runtime_bindings": bool(options.get("refresh_runtime_bindings", true)),
+		"present_world_action": bool(options.get("present_world_action", false)),
+		"command_result": _dictionary_or_empty(options.get("command_result", {})).duplicate(true),
+		"refresh_kind": refresh_kind,
+		"prompt": selected_prompt.duplicate(true),
+	}
+
+
 func refresh_failure_message(accepted: Dictionary, fallback_error: String = "world refresh failed") -> String:
 	var context: Dictionary = _dictionary_or_empty(accepted.get("log_context", {}))
 	var parts: Array[String] = []
