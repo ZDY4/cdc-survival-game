@@ -164,10 +164,6 @@ var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
 var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
 var runtime_control_state_controller: RefCounted = RuntimeControlStateController.new()
 var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
-var performance_render_sequence: int:
-	get:
-		return int(runtime_performance_tracker.render_sequence) if runtime_performance_tracker != null else 0
-
 
 func _ready() -> void:
 	_connect_world_action_flow_signals()

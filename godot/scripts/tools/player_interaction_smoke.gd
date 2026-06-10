@@ -2244,7 +2244,7 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("world action presenter movement should expose positive step_count")
 	_expect_world_action_input_blocker(errors, game_root, "movement")
 	_expect_world_action_queue_presenting(errors, game_root, "movement", "move")
-	var render_sequence_before_finish := int(game_root.get("performance_render_sequence"))
+	var render_sequence_before_finish := _render_sequence(game_root)
 	var camera_before_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	var camera_instance_before_finish := camera_before_finish.get_instance_id() if camera_before_finish != null else 0
 	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
@@ -2271,7 +2271,7 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("world action queue should record fast-forward finish reason")
 	if bool(_dictionary_or_empty(completed_queue.get("applied_final_refresh", {})).get("render_world", true)):
 		errors.append("move final refresh should skip full world render")
-	if int(game_root.get("performance_render_sequence")) != render_sequence_before_finish:
+	if _render_sequence(game_root) != render_sequence_before_finish:
 		errors.append("move final refresh should not increment world render sequence")
 	var camera_after_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	var camera_instance_after_finish := camera_after_finish.get_instance_id() if camera_after_finish != null else 0
@@ -3719,6 +3719,12 @@ func _read_text_file(path: String) -> String:
 	var text := file.get_as_text()
 	file.close()
 	return text
+
+
+func _render_sequence(game_root: Node) -> int:
+	if game_root.has_method("runtime_performance_snapshot"):
+		return int(_dictionary_or_empty(game_root.runtime_performance_snapshot()).get("render_sequence", 0))
+	return 0
 
 
 func _array_or_empty(value: Variant) -> Array:
