@@ -3,8 +3,6 @@ extends SceneTree
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const MapSceneLoaderScript = preload("res://scripts/world/map_scene_loader.gd")
-const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
-const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const WORLD_LABEL_FONT_PATH := "res://assets/fonts/NotoSansCJKsc-Regular.otf"
 
 
@@ -197,28 +195,10 @@ func _execute_primary_and_complete(game_root: Node, max_waits: int = 8) -> Dicti
 	var waits := 0
 	while waits < max_waits and _has_pending(game_root) and not _final_interaction_result(result):
 		waits += 1
-		var wait_result: Dictionary = game_root.simulation.submit_player_command({
-			"kind": "wait",
-			"topology": game_root.world_result.get("map", {}),
-		})
+		var wait_result: Dictionary = game_root.submit_wait_action()
 		var pending_result: Dictionary = wait_result.get("pending_result", {})
 		result = pending_result if not pending_result.is_empty() else wait_result
-		_refresh_runtime_world(game_root, result)
 	return result
-
-
-func _refresh_runtime_world(game_root: Node, result: Dictionary) -> void:
-	var rebuilt: Dictionary = WorldSnapshotBuilder.new(game_root.registry).build_from_runtime_snapshot(game_root.simulation.snapshot())
-	if bool(rebuilt.get("ok", false)):
-		game_root.world_result = rebuilt
-		game_root.interaction_controller.world_result = rebuilt
-		game_root.simulation.configure_map_interactions(rebuilt.get("map", {}).get("interaction_targets", {}))
-	game_root._setup_world_container()
-	WorldSceneRenderer.new().render_world(game_root.world_container, game_root.world_result)
-	game_root._setup_runtime_input_controller()
-	game_root.refresh_world_visuals(false)
-	game_root._setup_panels()
-	game_root.refresh_all_panels(result.get("prompt", {}))
 
 
 func _has_pending(game_root: Node) -> bool:
@@ -450,7 +430,7 @@ func _expect_crafting_station_interaction(errors: Array[String], game_root: Node
 	var station_anchor: Dictionary = _dictionary_or_empty(station_target.get("anchor", {"x": 11, "y": 0, "z": 24}))
 	player.grid_position = GridCoord.from_dictionary(_near_open_grid_from(station_anchor, game_root.world_result.get("map", {})))
 	player.ap = 6.0
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 	await process_frame
 	station_node = game_root.find_child("MapObject_survivor_outpost_01_workshop_cabinet_a", true, false)
 	if station_node == null:
@@ -542,7 +522,7 @@ func _restore_player_for_crafting_station_smoke(game_root: Node, original_grid: 
 		player.ap = original_ap
 	game_root.close_stage_panels()
 	game_root.clear_interaction_selection("crafting_station_smoke_cleanup")
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 
 
 func _expect_neutral_actor_context_menu(errors: Array[String], game_root: Node) -> void:
@@ -568,7 +548,7 @@ func _expect_neutral_actor_context_menu(errors: Array[String], game_root: Node) 
 		"hp": 10.0,
 		"combat_attributes": {"evasion": 0.0},
 	})
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 	await process_frame
 	var neutral_node: Node3D = game_root.find_child("Actor_neutral_actor_context_smoke_%d" % neutral_id, true, false) as Node3D
 	if neutral_node == null:
@@ -612,7 +592,7 @@ func _cleanup_neutral_actor_context_smoke(game_root: Node, neutral_id: int) -> v
 	game_root.clear_interaction_selection("neutral_actor_context_smoke_cleanup")
 	if game_root.simulation.actor_registry.get_actor(neutral_id) != null:
 		game_root.simulation.actor_registry.unregister_actor(neutral_id)
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 
 
 func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
@@ -664,7 +644,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		"hp": 120.0,
 		"combat_attributes": {"evasion": 0.0, "damage_reduction": 0.0},
 	})
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if camera == null:
 		errors.append("attack hover preview smoke missing camera")
@@ -715,7 +695,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		if not bool(attack_result.get("success", false)):
 			errors.append("attack presenter smoke attack failed: %s" % attack_result.get("reason", "unknown"))
 		else:
-			game_root._rebuild_world_after_runtime_change({}, {"result": attack_result})
+			game_root.rebuild_runtime_world({}, {"result": attack_result})
 			_expect_world_action_attack_presenter(errors, game_root, target_id, attack_result)
 			_expect_on_hit_status_effect_world_icon(errors, game_root, target_id, "effect:bleeding", "res://assets/icons/effects/bleeding.svg")
 			await _wait_for_world_action_presenter_idle(game_root)
@@ -1798,7 +1778,7 @@ func _cleanup_attack_hover_preview_smoke(game_root: Node, player: RefCounted, ta
 	player.combat_attributes = original_attributes
 	player.ap = original_ap
 	player.attack_power = original_attack_power
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 
 
 func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) -> void:
@@ -1851,7 +1831,7 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 		if game_root.simulation.actor_registry.get_actor(target_id) != null:
 			game_root.simulation.actor_registry.unregister_actor(target_id)
 		return
-	game_root._rebuild_world_after_runtime_change({}, {"result": attack_result})
+	game_root.rebuild_runtime_world({}, {"result": attack_result})
 	var corpse_node: Node3D = _corpse_node_for_source_actor(game_root, target_id)
 	if corpse_node == null:
 		errors.append("defeated target should render a Corpse_* world node")
@@ -2089,12 +2069,12 @@ func _expect_attack_delivery_presenters(errors: Array[String], game_root: Node) 
 		"hp": 16.0,
 		"combat_attributes": {"evasion": 0.0},
 	})
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 	var target_node: Node3D = game_root.find_child("Actor_attack_delivery_smoke_%d" % target_id, true, false) as Node3D
 	if target_node == null:
 		errors.append("attack delivery presenter should render synthetic target actor node")
 		game_root.simulation.actor_registry.unregister_actor(target_id)
-		game_root._rebuild_world_after_runtime_change()
+		game_root.rebuild_runtime_world()
 		return
 	var melee_payload := _synthetic_attack_payload(1, target_id, 1, "smoke_knife")
 	_present_synthetic_world_action_event(game_root, "attack_resolved", melee_payload)
@@ -2108,7 +2088,7 @@ func _expect_attack_delivery_presenters(errors: Array[String], game_root: Node) 
 	_expect_world_action_input_blocker(errors, game_root, "attack")
 	await _wait_for_world_action_presenter_idle(game_root)
 	game_root.simulation.actor_registry.unregister_actor(target_id)
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 
 
 func _expect_reload_presenter(errors: Array[String], game_root: Node) -> void:
@@ -3154,7 +3134,7 @@ func _expect_focus_actor_tab_cycle(errors: Array[String], game_root: Node) -> vo
 		"max_hp": 10.0,
 		"hp": 10.0,
 	})
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if camera == null:
 		errors.append("focus actor smoke should keep runtime camera")
@@ -3211,7 +3191,7 @@ func _expect_page_level_switch(errors: Array[String], game_root: Node, player_gr
 		"max_hp": 10.0,
 		"hp": 10.0,
 	})
-	game_root._rebuild_world_after_runtime_change()
+	game_root.rebuild_runtime_world()
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	if camera == null:
 		errors.append("level switch smoke should keep runtime camera")

@@ -2032,6 +2032,10 @@ func refresh_world_visuals(render_world: bool = true) -> Dictionary:
 	return _apply_world_root_snapshot(render_world)
 
 
+func rebuild_runtime_world(selected_prompt: Dictionary = {}, command_result: Dictionary = {}) -> void:
+	_rebuild_world_after_runtime_change(selected_prompt, command_result)
+
+
 func _apply_runtime_scene_refresh(render_world: bool = true, selected_prompt: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
 	var plan: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_scene_apply_plan", render_world, selected_prompt, options))
 	var counts: Dictionary = _apply_world_root_snapshot(bool(plan.get("render_world", true)))

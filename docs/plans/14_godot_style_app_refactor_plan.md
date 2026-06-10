@@ -54,7 +54,7 @@
 - 脚本级 `HudRoot` facade 已引入到 `godot/scripts/ui/hud_root.gd`，当前承接 HUD / panel setup、单个/批量 panel 刷新、stage panels、settings、panel blocker、modal stack、theme、context menu snapshot / close、controls hint、debug console、debug panel、tooltip / drag snapshot、tooltip render 和 drag preview render；`GameApp` 保留旧 HUD / panel / overlay 字段作为 smoke 兼容引用。
 - action operation 的 `refresh` 面板分发顺序已收敛到 `HudRoot.refresh_operation_panels()`；`refresh_all_panels()` 也已收敛到 `HudRoot.refresh_all()`，`GameApp` 只保留 session 关闭保护、音频反馈和性能标记。
 - world apply、presentation、runtime binding 和 HUD / panel refresh 的顺序已由 `RuntimeRefreshController.build_scene_apply_plan()` 统一产出，`GameApp` 只按 plan 执行 scene / HUD 窄接口。
-- `InventoryUI` smoke 的 pending wait / pickup 复核已改为调用 `GameApp.submit_wait_action()` 和 `finish_world_action_presentations()`，不再手写 `Simulation.submit_player_command(wait)` 后直接调用 `WorldSceneRenderer.render_world()`。
+- `InventoryUI` / `DialogueUI` / `DialogueAction` / `ContainerUI` / `PlayerInteraction` smoke 的 pending wait / 交互复核已改为调用 `GameApp.submit_wait_action()`、`GameApp.rebuild_runtime_world()` 和 `finish_world_action_presentations()` 等稳定 facade，不再手写 `Simulation.submit_player_command(wait)` 后直接调用 `WorldSceneRenderer.render_world()`，也不再调用 `GameApp._rebuild_world_after_runtime_change()` 私有入口。
 
 仍需继续推进：
 
@@ -440,8 +440,8 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 - [ ] 将 `game_app.gd` 收敛为 `game_root.gd` 或保留文件名但改为薄根节点。
 - [ ] 清理只为迁移期存在的 wrapper。
-- [x] `InventoryUI` pending wait / pickup smoke 已改用 `GameApp.submit_wait_action()` 稳定 facade，并通过 `finish_world_action_presentations()` 应用 deferred UI refresh。
-- [ ] 继续清理其他 runtime smoke / tools 中绕过 app facade 的直接 world render 或私有刷新调用；纯 world renderer 单元 smoke 例外。
+- [x] `InventoryUI` / `DialogueUI` / `DialogueAction` / `ContainerUI` / `PlayerInteraction` pending wait / 交互 smoke 已改用 `GameApp.submit_wait_action()` / `GameApp.rebuild_runtime_world()` 稳定 facade，并通过 `finish_world_action_presentations()` 应用 deferred UI refresh；`PlayerInteraction` 不再调用 `GameApp._rebuild_world_after_runtime_change()` 私有入口。
+- [ ] 继续清理其他 runtime smoke / tools 中绕过 app facade 的直接 world snapshot 构建或 core command 造数调用；纯 core / world renderer 单元 smoke 例外。
 - [ ] 更新 AGENTS.md、tools README 和相关 workflow 文档中的入口描述。
 
 验收：

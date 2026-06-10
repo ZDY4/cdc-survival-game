@@ -3,8 +3,6 @@ extends SceneTree
 const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
 const DialogueSnapshot = preload("res://scripts/ui/snapshots/dialogue_snapshot.gd")
 const TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
-const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
-const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
 func _init() -> void:
@@ -299,28 +297,12 @@ func _execute_primary_and_complete(game_root: Node, max_waits: int = 16) -> Dict
 	var waits := 0
 	while waits < max_waits and _has_pending(game_root) and not _final_interaction_result(result):
 		waits += 1
-		var wait_result: Dictionary = game_root.simulation.submit_player_command({
-			"kind": "wait",
-			"topology": game_root.world_result.get("map", {}),
-		})
+		var wait_result: Dictionary = game_root.submit_wait_action()
 		var pending_result: Dictionary = wait_result.get("pending_result", {})
 		result = pending_result if not pending_result.is_empty() else wait_result
-		_refresh_runtime_world(game_root, result)
+	if game_root.has_method("finish_world_action_presentations"):
+		game_root.finish_world_action_presentations()
 	return result
-
-
-func _refresh_runtime_world(game_root: Node, result: Dictionary) -> void:
-	var rebuilt: Dictionary = WorldSnapshotBuilder.new(game_root.registry).build_from_runtime_snapshot(game_root.simulation.snapshot())
-	if bool(rebuilt.get("ok", false)):
-		game_root.world_result = rebuilt
-		game_root.interaction_controller.world_result = rebuilt
-		game_root.simulation.configure_map_interactions(rebuilt.get("map", {}).get("interaction_targets", {}))
-	game_root._setup_world_container()
-	WorldSceneRenderer.new().render_world(game_root.world_container, game_root.world_result)
-	game_root._setup_runtime_input_controller()
-	game_root.refresh_world_visuals(false)
-	game_root._setup_panels()
-	game_root.refresh_all_panels(result.get("prompt", {}))
 
 
 func _has_pending(game_root: Node) -> bool:
