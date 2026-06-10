@@ -24,6 +24,7 @@ const CRAFTING_PANEL_SCENE = preload("res://scenes/ui/crafting_panel.tscn")
 const SettingsPanelController = preload("res://scripts/ui/controllers/settings_panel_controller.gd")
 
 var parent: Node
+var panel_parent: Node
 var registry: RefCounted
 var simulation: RefCounted
 var world_result: Dictionary
@@ -54,8 +55,9 @@ var crafting_panel: Control
 var settings_panel: Control
 
 
-func _init(p_parent: Node, p_registry: RefCounted, p_simulation: RefCounted, p_world_result: Dictionary) -> void:
+func _init(p_parent: Node, p_registry: RefCounted, p_simulation: RefCounted, p_world_result: Dictionary, p_panel_parent: Node = null) -> void:
 	parent = p_parent
+	panel_parent = p_panel_parent if p_panel_parent != null else p_parent
 	registry = p_registry
 	simulation = p_simulation
 	world_result = p_world_result
@@ -549,7 +551,7 @@ func _ensure_panel(current: Control, scene: PackedScene, node_name: String) -> C
 		return current
 	var panel: Control = scene.instantiate()
 	panel.name = node_name
-	parent.add_child(panel)
+	panel_parent.add_child(panel)
 	return panel
 
 
@@ -561,7 +563,7 @@ func _ensure_settings_panel() -> Control:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.visible = false
-	parent.add_child(root)
+	panel_parent.add_child(root)
 	settings_panel = root
 	return root
 

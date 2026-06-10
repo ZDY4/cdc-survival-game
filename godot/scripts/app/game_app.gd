@@ -35,7 +35,7 @@ const InteractionActionController = preload("res://scripts/app/controllers/inter
 const PlayerActionRefreshController = preload("res://scripts/app/controllers/player_action_refresh_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
-const HudRoot = preload("res://scripts/ui/hud_root.gd")
+const HUD_ROOT_SCENE = preload("res://scenes/ui/hud_root.tscn")
 const CRAFTING_QUEUE_ADVANCE_LIMIT := 16
 
 var registry: ContentRegistry
@@ -44,7 +44,7 @@ var world_result: Dictionary = {}
 var interaction_controller: RefCounted
 var runtime_input_controller: RefCounted
 var panel_controller: RefCounted
-var hud_root: RefCounted
+var hud_root
 var world_root: Node3D
 var world_action_flow_controller: RefCounted = WorldActionFlowController.new()
 var world_action_presenter: RefCounted:
@@ -1918,7 +1918,11 @@ func _play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Di
 
 func _setup_panels() -> void:
 	if hud_root == null:
-		hud_root = HudRoot.new(self)
+		hud_root = HUD_ROOT_SCENE.instantiate()
+		hud_root.name = "HudRoot"
+		add_child(hud_root)
+		if hud_root.has_method("configure"):
+			hud_root.call("configure", self)
 	hud_root.setup_panels(registry, simulation, world_result, _ui_feedback_payload())
 	panel_controller = hud_root.panel_controller
 	_sync_panel_refs_from_hud_root()

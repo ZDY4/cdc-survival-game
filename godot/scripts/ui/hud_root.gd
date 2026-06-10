@@ -1,4 +1,4 @@
-extends RefCounted
+extends Control
 
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const UiOverlayRenderController = preload("res://scripts/app/controllers/ui_overlay_render_controller.gd")
@@ -22,9 +22,18 @@ func _init(p_parent: Node = null) -> void:
 	parent = p_parent
 
 
+func _ready() -> void:
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+func configure(p_parent: Node) -> void:
+	parent = p_parent
+
+
 func setup_panels(registry: RefCounted, simulation: RefCounted, world_result: Dictionary, feedback: Dictionary) -> Dictionary:
 	if panel_controller == null:
-		panel_controller = GamePanelController.new(parent, registry, simulation, world_result)
+		panel_controller = GamePanelController.new(parent, registry, simulation, world_result, self)
 	panel_controller.update_runtime(simulation, world_result)
 	_apply_feedback(feedback)
 	panel_controller.setup_panels()
@@ -566,6 +575,154 @@ func _apply_feedback(feedback: Dictionary) -> void:
 		panel_controller.active_character_feedback = dictionary_or_empty(feedback.get("active_character_feedback", {}))
 	if feedback.has("active_inventory_feedback"):
 		panel_controller.active_inventory_feedback = dictionary_or_empty(feedback.get("active_inventory_feedback", {}))
+
+
+func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
+	if parent != null and parent.has_method("play_ui_audio_feedback"):
+		return dictionary_or_empty(parent.call("play_ui_audio_feedback", event_kind, payload))
+	return {}
+
+
+func submit_debug_console_command(command_text: String) -> Dictionary:
+	return _forward_dictionary("submit_debug_console_command", [command_text])
+
+
+func toggle_auto_tick() -> Dictionary:
+	return _forward_dictionary("toggle_auto_tick")
+
+
+func toggle_observe_mode() -> Dictionary:
+	return _forward_dictionary("toggle_observe_mode")
+
+
+func toggle_observe_playback() -> Dictionary:
+	return _forward_dictionary("toggle_observe_playback")
+
+
+func cycle_observe_speed() -> Dictionary:
+	return _forward_dictionary("cycle_observe_speed")
+
+
+func finish_world_action_presentations() -> Dictionary:
+	return _forward_dictionary("finish_world_action_presentations")
+
+
+func settings_applied(snapshot: Dictionary = {}) -> void:
+	_forward_variant("settings_applied", [snapshot])
+
+
+func execute_interaction_option(option_id: String) -> Dictionary:
+	return _forward_dictionary("execute_interaction_option", [option_id])
+
+
+func choose_dialogue_option(option_ref: Variant) -> Dictionary:
+	return _forward_dictionary("choose_dialogue_option", [option_ref])
+
+
+func store_active_container_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
+	return _forward_dictionary("store_active_container_item", [item_id, count, stack_index])
+
+
+func has_active_container_session() -> bool:
+	return bool(_forward_variant("has_active_container_session"))
+
+
+func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
+	return _forward_dictionary("drop_player_item", [item_id, count])
+
+
+func deconstruct_player_item(item_id: String, count: int = 1) -> Dictionary:
+	return _forward_dictionary("deconstruct_player_item", [item_id, count])
+
+
+func split_player_inventory_stack(item_id: String, count: int = 1, source_stack_index: int = 0) -> Dictionary:
+	return _forward_dictionary("split_player_inventory_stack", [item_id, count, source_stack_index])
+
+
+func reorder_player_inventory_item(item_id: String, target_index: int) -> Dictionary:
+	return _forward_dictionary("reorder_player_inventory_item", [item_id, target_index])
+
+
+func use_player_item(item_id: String) -> Dictionary:
+	return _forward_dictionary("use_player_item", [item_id])
+
+
+func sell_active_trade_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
+	return _forward_dictionary("sell_active_trade_item", [item_id, count, stack_index])
+
+
+func has_active_trade_session() -> bool:
+	return bool(_forward_variant("has_active_trade_session"))
+
+
+func equip_player_item(item_id: String, slot_id: String) -> Dictionary:
+	return _forward_dictionary("equip_player_item", [item_id, slot_id])
+
+
+func unequip_player_slot(slot_id: String) -> Dictionary:
+	return _forward_dictionary("unequip_player_slot", [slot_id])
+
+
+func reload_player_equipped_slot(slot_id: String = "main_hand") -> Dictionary:
+	return _forward_dictionary("reload_player_equipped_slot", [slot_id])
+
+
+func allocate_player_attribute_point(attribute: String) -> Dictionary:
+	return _forward_dictionary("allocate_player_attribute_point", [attribute])
+
+
+func learn_player_skill(skill_id: String) -> Dictionary:
+	return _forward_dictionary("learn_player_skill", [skill_id])
+
+
+func bind_player_skill_to_hotbar(slot_id: String, skill_id: String) -> Dictionary:
+	return _forward_dictionary("bind_player_skill_to_hotbar", [slot_id, skill_id])
+
+
+func bind_player_item_to_hotbar(slot_id: String, item_id: String) -> Dictionary:
+	return _forward_dictionary("bind_player_item_to_hotbar", [slot_id, item_id])
+
+
+func set_hotbar_group(group_id: String) -> Dictionary:
+	return _forward_dictionary("set_hotbar_group", [group_id])
+
+
+func set_hotbar_group_label(group_id: String, label: String) -> Dictionary:
+	return _forward_dictionary("set_hotbar_group_label", [group_id, label])
+
+
+func use_hotbar_slot(slot_id: String) -> Dictionary:
+	return _forward_dictionary("use_hotbar_slot", [slot_id])
+
+
+func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
+	return _forward_dictionary("craft_player_recipe", [recipe_id, count])
+
+
+func confirm_crafting_queue(entries: Array) -> Dictionary:
+	return _forward_dictionary("confirm_crafting_queue", [entries])
+
+
+func update_crafting_queue(entries: Array) -> Dictionary:
+	return _forward_dictionary("update_crafting_queue", [entries])
+
+
+func cancel_pending_crafting(reason: String = "crafting_ui") -> Dictionary:
+	return _forward_dictionary("cancel_pending_crafting", [reason])
+
+
+func turn_in_player_quest(quest_id: String) -> Dictionary:
+	return _forward_dictionary("turn_in_player_quest", [quest_id])
+
+
+func _forward_dictionary(method_name: String, args: Array = []) -> Dictionary:
+	return dictionary_or_empty(_forward_variant(method_name, args))
+
+
+func _forward_variant(method_name: String, args: Array = []) -> Variant:
+	if parent == null or not parent.has_method(method_name):
+		return {}
+	return parent.callv(method_name, args)
 
 
 func _collect_hotbar_hit_controls(control: Control, output: Array[Control]) -> void:

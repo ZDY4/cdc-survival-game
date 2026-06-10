@@ -279,16 +279,20 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 11: Scene 化 HUDRoot
 
-这一阶段可选，等 `hud_controller.gd` 明显变薄后再做。
+这一阶段在 `hud_controller.gd` 变薄后执行，保留 `HudRoot` facade，但让它成为真实 Control scene root。
 
-- [ ] 新建或整理 `godot/scenes/ui/hud_root.tscn`。
-- [ ] 把 debug console、debug panel、interaction menu、hotbar、toast 作为真实 Control 子节点。
-- [ ] `HudRoot` 从脚本 facade 变成 scene root script。
-- [ ] `GameApp` 只实例化 / 引用 HUD scene，不再靠 `_build_layout()` 动态创建大部分 UI。
+- [x] 新建或整理 `godot/scenes/ui/hud_root.tscn`。
+- [x] 把 debug console、debug panel、interaction menu、hotbar、toast 作为真实 Control 子节点。
+- [x] `HudRoot` 从脚本 facade 变成 scene root script。
+- [x] `GameApp` 只实例化 / 引用 HUD scene，不再靠 `_build_layout()` 动态创建大部分 UI。
 
 验收：
 
 - 所有 UI smoke：`UIToggle`、`InventoryUI`、`ContainerUI`、`TradeUI`、`DialogueUI`、`SkillsUI`、`CraftingUI`。
+
+验证记录：
+
+- 2026-06-11: 新增 `godot/scenes/ui/hud_root.tscn`，`HudRoot` 改为 Control scene root，并让 `GamePanelController` 支持 app host 与 UI 挂载父节点分离；通过 `UIToggle`、`InventoryUI`、`ContainerUI`、`TradeUI`、`DialogueUI`、`SkillsUI`、`CraftingUI` smoke，并通过全量 `test-godot-static.ps1`。
 
 ## 推荐执行顺序
 
