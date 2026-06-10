@@ -1,24 +1,24 @@
 extends RefCounted
 
-const CameraRigController = preload("res://scripts/world/camera_rig_controller.gd")
 const WorldInteractionPicker = preload("res://scripts/app/controllers/runtime_input/world_interaction_picker.gd")
 const RuntimeMarkerController = preload("res://scripts/app/controllers/runtime_input/runtime_marker_controller.gd")
 const HoverStateController = preload("res://scripts/app/controllers/runtime_input/hover_state_controller.gd")
+const CameraInputController = preload("res://scripts/app/controllers/runtime_input/camera_input_controller.gd")
+const SpaceWaitHoldController = preload("res://scripts/app/controllers/runtime_input/space_wait_hold_controller.gd")
 
 const GRID_SIZE := 1.0
 const BEVY_LEVEL_PLANE_HEIGHT := GRID_SIZE * 0.5
 const BEVY_DRAG_PLANE_HEIGHT := 0.11
-const SPACE_HOLD_INITIAL_DELAY_SEC := 0.45
-const SPACE_HOLD_REPEAT_INTERVAL_SEC := 0.30
 
 var game_root: Node
 var world_container: Node3D
 var world_result: Dictionary = {}
 var camera: Camera3D
-var camera_rig_controller: RefCounted = CameraRigController.new()
+var camera_input_controller: RefCounted = CameraInputController.new()
 var world_interaction_picker: RefCounted = WorldInteractionPicker.new()
 var runtime_marker_controller: RefCounted = RuntimeMarkerController.new()
 var hover_state_controller: RefCounted = HoverStateController.new()
+var space_wait_hold_controller: RefCounted = SpaceWaitHoldController.new()
 var hover_cursor: MeshInstance3D
 var hover_target_outline: MeshInstance3D
 var attack_target_marker: MeshInstance3D
@@ -28,9 +28,6 @@ var skill_target_preview_markers: Node3D
 var move_path_preview_markers: Node3D
 var pending_movement_path_markers: Node3D
 var selected_node: Node
-var is_space_wait_held := false
-var space_wait_elapsed_sec := 0.0
-var space_wait_repeated := false
 var hover_refresh_requested := false
 var last_selection_clear_result: Dictionary = {}
 
@@ -55,7 +52,7 @@ func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void
 	if camera == null:
 		push_warning("运行时输入控制器找不到 WorldCamera，鼠标拾取和相机移动暂不可用")
 		return
-	camera_rig_controller.call("attach", camera, _focused_actor_position(), _map_size(), _viewport_size(), _level_plane_height())
+	camera_input_controller.attach(camera, _focused_actor_position(), _map_size(), _viewport_size(), _level_plane_height())
 	runtime_marker_controller.reset_for_world()
 	_clear_selection_only()
 	_set_hover_failure("world_changed")
@@ -68,8 +65,8 @@ func process(delta: float) -> void:
 	if camera == null:
 		return
 	_process_space_wait_hold(delta)
-	camera_rig_controller.call("process_follow", _focused_actor_position(), _viewport_size(), _level_plane_height())
-	if hover_refresh_requested and not bool(camera_rig_controller.get("is_dragging")) and _mouse_inside_viewport():
+	camera_input_controller.process_follow(_focused_actor_position(), _viewport_size(), _level_plane_height())
+	if hover_refresh_requested and not camera_input_controller.is_dragging() and _mouse_inside_viewport():
 		hover_refresh_requested = false
 		update_hover_at_screen_position(game_root.get_viewport().get_mouse_position())
 	_update_pending_movement_path_markers()
@@ -141,7 +138,7 @@ func handle_world_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 
 
 func _handle_mouse_motion(mouse_event: InputEventMouseMotion) -> void:
-	if bool(camera_rig_controller.get("is_dragging")):
+	if camera_input_controller.is_dragging():
 		_drag_camera_to_screen_position(mouse_event.position)
 	else:
 		update_hover_at_screen_position(mouse_event.position)
@@ -149,11 +146,11 @@ func _handle_mouse_motion(mouse_event: InputEventMouseMotion) -> void:
 
 func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 	if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
-		camera_rig_controller.set("is_dragging", mouse_event.pressed)
+		camera_input_controller.set_dragging(mouse_event.pressed)
 		if mouse_event.pressed:
 			_begin_camera_drag(mouse_event.position)
 		else:
-			camera_rig_controller.call("end_drag")
+			camera_input_controller.end_drag()
 			_request_hover_refresh()
 		return true
 	if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
@@ -293,7 +290,7 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		_scale_zoom(1.0 / 1.2)
 		return true
 	elif key == KEY_0 and event.ctrl_pressed:
-		camera_rig_controller.call("reset_zoom", _viewport_size(), _level_plane_height())
+		camera_input_controller.reset_zoom(_viewport_size(), _level_plane_height())
 		_request_hover_refresh()
 		return true
 	elif key == KEY_F:
@@ -356,40 +353,19 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 
 
 func _process_space_wait_hold(delta: float) -> void:
-	if not is_space_wait_held:
-		return
-	if not _space_wait_repeat_allowed():
-		_stop_space_wait_hold()
-		return
-	space_wait_elapsed_sec += delta
-	var interval := SPACE_HOLD_REPEAT_INTERVAL_SEC if space_wait_repeated else SPACE_HOLD_INITIAL_DELAY_SEC
-	if space_wait_elapsed_sec < interval:
-		return
-	space_wait_elapsed_sec = 0.0
-	space_wait_repeated = true
-	if game_root.has_method("press_space_action"):
-		var result: Dictionary = game_root.press_space_action()
-		if not _space_wait_result_can_repeat(result):
-			_stop_space_wait_hold()
+	space_wait_hold_controller.process(delta, _space_wait_repeat_allowed(), Callable(game_root, "press_space_action") if game_root.has_method("press_space_action") else Callable())
 
 
 func _start_space_wait_hold_if_allowed(result: Dictionary) -> void:
-	if not _space_wait_result_can_repeat(result) or not _space_wait_repeat_allowed():
-		_stop_space_wait_hold()
-		return
-	is_space_wait_held = true
-	space_wait_elapsed_sec = 0.0
-	space_wait_repeated = false
+	space_wait_hold_controller.start_if_allowed(result, _space_wait_repeat_allowed())
 
 
 func _stop_space_wait_hold() -> void:
-	is_space_wait_held = false
-	space_wait_elapsed_sec = 0.0
-	space_wait_repeated = false
+	space_wait_hold_controller.stop()
 
 
 func _space_wait_result_can_repeat(result: Dictionary) -> bool:
-	return bool(result.get("success", false)) and (bool(result.get("waited", false)) or str(result.get("kind", "")) == "wait")
+	return space_wait_hold_controller.result_can_repeat(result)
 
 
 func _space_wait_repeat_allowed() -> bool:
@@ -475,7 +451,7 @@ func _digit_for_key(key: int) -> int:
 
 
 func clear_selection_state(reason: String = "cleared") -> Dictionary:
-	camera_rig_controller.call("clear_drag_state")
+	camera_input_controller.clear_drag_state()
 	var result := _clear_selection_only(reason)
 	_clear_skill_target_preview_markers()
 	_clear_move_path_preview_markers()
@@ -488,7 +464,7 @@ func update_skill_target_preview_markers(preview: Dictionary) -> void:
 
 
 func focus_current_actor() -> void:
-	camera_rig_controller.call("focus", _focused_actor_position(), _viewport_size(), _level_plane_height())
+	camera_input_controller.focus(_focused_actor_position(), _viewport_size(), _level_plane_height())
 	_request_hover_refresh()
 
 
@@ -511,12 +487,12 @@ func scale_camera_zoom(multiplier: float) -> void:
 
 
 func reset_camera_zoom() -> void:
-	camera_rig_controller.call("reset_zoom", _viewport_size(), _level_plane_height())
+	camera_input_controller.reset_zoom(_viewport_size(), _level_plane_height())
 	_request_hover_refresh()
 
 
 func has_selection_state() -> bool:
-	return selected_node != null or bool(camera_rig_controller.get("is_dragging"))
+	return selected_node != null or camera_input_controller.is_dragging()
 
 
 func _stage_panel_for_key(key: int) -> String:
@@ -550,20 +526,20 @@ func _stage_panel_keybindings() -> Dictionary:
 
 
 func _begin_camera_drag(screen_position: Vector2) -> void:
-	camera_rig_controller.call("begin_drag", screen_position, float(_observed_level()) + BEVY_DRAG_PLANE_HEIGHT)
+	camera_input_controller.begin_drag(screen_position, float(_observed_level()) + BEVY_DRAG_PLANE_HEIGHT)
 
 
 func _drag_camera_to_screen_position(screen_position: Vector2) -> void:
-	camera_rig_controller.call("drag_to_screen_position", screen_position, float(_observed_level()) + BEVY_DRAG_PLANE_HEIGHT, _viewport_size(), _level_plane_height())
+	camera_input_controller.drag_to_screen_position(screen_position, float(_observed_level()) + BEVY_DRAG_PLANE_HEIGHT, _viewport_size(), _level_plane_height())
 
 
 func _zoom_camera_wheel(direction: float) -> void:
-	camera_rig_controller.call("zoom_wheel", direction, _viewport_size(), _level_plane_height())
+	camera_input_controller.zoom_wheel(direction, _viewport_size(), _level_plane_height())
 	_request_hover_refresh()
 
 
 func _scale_zoom(multiplier: float) -> void:
-	camera_rig_controller.call("scale_zoom", multiplier, _viewport_size(), _level_plane_height())
+	camera_input_controller.scale_zoom(multiplier, _viewport_size(), _level_plane_height())
 	_request_hover_refresh()
 
 

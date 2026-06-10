@@ -262,9 +262,9 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 10: 拆 CameraInput 和 SpaceHold
 
-- [ ] 新建 `camera_input_controller.gd`，迁移相机键盘、拖拽、滚轮、zoom scale 和 focus。
-- [ ] 新建 `space_wait_hold_controller.gd`，迁移 Space 长按等待重复提交。
-- [ ] `GameInputRouter` 和 `GameRuntimeInputController` 的 direct-call fallback 分工重新整理。
+- [x] 新建 `camera_input_controller.gd`，迁移相机键盘、拖拽、滚轮、zoom scale 和 focus。
+- [x] 新建 `space_wait_hold_controller.gd`，迁移 Space 长按等待重复提交。
+- [x] `GameInputRouter` 和 `GameRuntimeInputController` 的 direct-call fallback 分工重新整理。
 
 验收：
 
@@ -272,6 +272,10 @@ godot/scripts/app/controllers/runtime_input/
 - `PlayerInteraction`
 - `Movement`
 - 重点检查 WASD 不再平移旧相机、F focus、滚轮 zoom、Space hold wait。
+
+验证记录：
+
+- 2026-06-11: 通过 `game_runtime_input_controller.gd`、`camera_input_controller.gd`、`space_wait_hold_controller.gd` 静态解析；通过 `test-godot-game.ps1 -Scenario UIToggle`、`PlayerInteraction`、`Movement`。
 
 ## Phase 11: Scene 化 HUDRoot
 
