@@ -24,6 +24,14 @@ func ensure_world_container() -> Node3D:
 	return world_container
 
 
+func world_container_node() -> Node3D:
+	return ensure_world_container()
+
+
+func fog_overlay_node() -> ColorRect:
+	return fog_overlay
+
+
 func apply_world_snapshot(world_snapshot: Dictionary, runtime_snapshot: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
 	var container := ensure_world_container()
 	var counts: Dictionary = WorldSceneRenderer.new().render_world(container, world_snapshot, options)

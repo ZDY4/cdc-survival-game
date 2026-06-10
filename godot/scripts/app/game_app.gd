@@ -50,8 +50,30 @@ var world_action_presenter: RefCounted:
 			return null
 		return world_action_flow_controller.presenter
 var audio_feedback_controller: Node
-var world_container: Node3D
-var fog_overlay: ColorRect
+var _world_container_ref: Node3D
+var world_container: Node3D:
+	get:
+		if world_root != null and world_root.has_method("world_container_node"):
+			var container := world_root.call("world_container_node") as Node3D
+			if container != null:
+				_world_container_ref = container
+		return _world_container_ref
+	set(value):
+		_world_container_ref = value
+		if world_root != null:
+			world_root.set("world_container", value)
+var _fog_overlay_ref: ColorRect
+var fog_overlay: ColorRect:
+	get:
+		if world_root != null and world_root.has_method("fog_overlay_node"):
+			var overlay := world_root.call("fog_overlay_node") as ColorRect
+			if overlay != null:
+				_fog_overlay_ref = overlay
+		return _fog_overlay_ref
+	set(value):
+		_fog_overlay_ref = value
+		if world_root != null:
+			world_root.set("fog_overlay", value)
 var hud: Control
 var dialogue_panel: Control
 var inventory_panel: Control
