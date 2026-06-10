@@ -18,8 +18,6 @@ const UiFeedbackStateController = preload("res://scripts/app/controllers/ui_feed
 const SkillTargetingController = preload("res://scripts/app/controllers/skill_targeting_controller.gd")
 const CraftingFeedbackController = preload("res://scripts/app/controllers/crafting_feedback_controller.gd")
 const CraftingActionController = preload("res://scripts/app/controllers/crafting_action_controller.gd")
-const TooltipSnapshotController = preload("res://scripts/app/controllers/tooltip_snapshot_controller.gd")
-const DragSnapshotController = preload("res://scripts/app/controllers/drag_snapshot_controller.gd")
 const DragHoverTargetController = preload("res://scripts/app/controllers/drag_hover_target_controller.gd")
 const UiBlockerStateController = preload("res://scripts/app/controllers/ui_blocker_state_controller.gd")
 const ContainerActionController = preload("res://scripts/app/controllers/container_action_controller.gd")
@@ -66,8 +64,6 @@ var map_panel: Control
 var skills_panel: Control
 var crafting_panel: Control
 var settings_panel: Control
-var tooltip_snapshot_controller: RefCounted = TooltipSnapshotController.new()
-var drag_snapshot_controller: RefCounted = DragSnapshotController.new()
 var drag_hover_target_controller: RefCounted = DragHoverTargetController.new()
 var ui_blocker_state_controller: RefCounted = UiBlockerStateController.new()
 var container_action_controller: RefCounted = ContainerActionController.new()
@@ -560,7 +556,15 @@ func _ui_overlay_controller() -> RefCounted:
 
 
 func hover_tooltip_snapshot(control: Control = null) -> Dictionary:
-	return _dictionary_or_empty(tooltip_snapshot_controller.call("hover_tooltip_snapshot", get_viewport(), control))
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.hover_tooltip_snapshot(get_viewport(), control))
+	return {
+		"active": false,
+		"requested_source": "hover",
+		"source_name": "",
+		"owner_panel": "",
+		"text": "",
+	}
 
 
 func hotbar_hit_test_snapshot(screen_position: Vector2 = Vector2(-1.0, -1.0)) -> Dictionary:
@@ -661,7 +665,16 @@ func _observe_hotbar_meta_key(control: Control) -> String:
 func drag_state_snapshot(data: Variant = {}, hover_target: Control = null) -> Dictionary:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	var target: Dictionary = _drag_hover_target_snapshot(hover_target, drag_data)
-	return _dictionary_or_empty(drag_snapshot_controller.call("drag_state_snapshot", get_viewport(), drag_data, target))
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.drag_state_snapshot(get_viewport(), drag_data, target))
+	return {
+		"active": false,
+		"kind": "",
+		"source": {},
+		"target": target,
+		"preview": {},
+		"payload": {},
+	}
 
 
 func ui_layer_stack_snapshot(drag_data: Variant = {}, drag_hover_target: Control = null, tooltip_control: Control = null) -> Dictionary:

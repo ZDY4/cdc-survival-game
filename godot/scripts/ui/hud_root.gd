@@ -2,10 +2,14 @@ extends RefCounted
 
 const GamePanelController = preload("res://scripts/app/controllers/game_panel_controller.gd")
 const UiOverlayRenderController = preload("res://scripts/app/controllers/ui_overlay_render_controller.gd")
+const TooltipSnapshotController = preload("res://scripts/app/controllers/tooltip_snapshot_controller.gd")
+const DragSnapshotController = preload("res://scripts/app/controllers/drag_snapshot_controller.gd")
 
 var parent: Node
 var panel_controller: RefCounted
 var ui_overlay_render_controller: RefCounted = UiOverlayRenderController.new()
+var tooltip_snapshot_controller: RefCounted = TooltipSnapshotController.new()
+var drag_snapshot_controller: RefCounted = DragSnapshotController.new()
 
 
 func _init(p_parent: Node = null) -> void:
@@ -152,6 +156,14 @@ func handle_trade_shortcut(event: InputEventKey) -> bool:
 func close_trade_panel() -> void:
 	if panel_controller != null:
 		panel_controller.close_trade_panel()
+
+
+func hover_tooltip_snapshot(viewport: Viewport, control: Control = null) -> Dictionary:
+	return dictionary_or_empty(tooltip_snapshot_controller.call("hover_tooltip_snapshot", viewport, control))
+
+
+func drag_state_snapshot(viewport: Viewport, data: Variant = {}, target_snapshot: Dictionary = {}) -> Dictionary:
+	return dictionary_or_empty(drag_snapshot_controller.call("drag_state_snapshot", viewport, data, target_snapshot))
 
 
 func setup_tooltip_layer(owner: Node = null) -> void:
