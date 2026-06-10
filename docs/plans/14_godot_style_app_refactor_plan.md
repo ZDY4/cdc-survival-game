@@ -36,11 +36,12 @@
 - 容器 take / store / transfer 玩家动作 facade 已抽到 `godot/scripts/app/controllers/container_action_controller.gd`；背包 drop / use / deconstruct / split / reorder 玩家动作 facade 已抽到 `godot/scripts/app/controllers/inventory_action_controller.gd`；交易 buy / sell / cart 玩家动作 facade 已抽到 `godot/scripts/app/controllers/trade_action_controller.gd`；装备 equip / unequip / reload 和属性点 facade 已抽到 `godot/scripts/app/controllers/character_action_controller.gd`；技能 learn / bind / hotbar group / hotbar use / runtime target confirm facade 已抽到 `godot/scripts/app/controllers/skill_action_controller.gd`。
 - 制作配方提交、制作队列推进、等待后续队列恢复、pending crafting 取消和 queue snapshot facade 已抽到 `godot/scripts/app/controllers/crafting_action_controller.gd`；`GameApp` 只保留 smoke / UI 兼容入口和刷新执行。
 - 任务 turn-in 和地图面板进入 overworld location 的 action facade 已抽到 `godot/scripts/app/controllers/world_panel_action_controller.gd`；`GameApp` 只保留兼容入口、world rebuild 和刷新执行。
+- 对话选择、无选项继续和关闭对话的 core-service 调用已抽到 `godot/scripts/app/controllers/dialogue_action_controller.gd`；`GameApp` 只保留兼容入口、trade 收尾和面板刷新分发。
 - 脚本级 `HudRoot` facade 已引入到 `godot/scripts/ui/hud_root.gd`，当前承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme、context menu snapshot、controls hint、debug console、debug panel、tooltip render 和 drag preview render；`GameApp` 保留旧 HUD / panel / overlay 字段作为 smoke 兼容引用。
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 2146 行，还保留 tooltip / drag snapshot facade、overlay 兼容属性、对话、移动/交互等兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 2144 行，还保留 tooltip / drag snapshot facade、overlay 兼容属性、Space wait / observe 分支、移动/交互等兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` scene；当前已通过 `HudRoot` script 包住现有 HUD controller 和 panel controller。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
@@ -289,11 +290,12 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 技能 learn / bind / hotbar group / hotbar use / runtime target confirm facade 已抽到 `skill_action_controller.gd`，`GameApp` 只保留兼容方法、target marker 更新和刷新执行。
 - [x] 制作配方提交、制作队列推进、等待后续队列恢复、pending crafting 取消和 queue snapshot facade 已抽到 `crafting_action_controller.gd`，`GameApp` 只保留兼容方法和刷新执行。
 - [x] 任务 turn-in 和地图面板进入 overworld location facade 已抽到 `world_panel_action_controller.gd`，`GameApp` 只保留兼容方法、world rebuild 和刷新执行。
+- [x] 对话选择、无选项继续和关闭对话 facade 已抽到 `dialogue_action_controller.gd`，`GameApp` 只保留兼容方法、trade 收尾和刷新执行。
 - [x] 引入脚本级 `HudRoot` facade，承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme 和 context menu snapshot。
 - [x] controls hint、debug console、debug panel 的 HUD 控件开关、snapshot、schema/result 写入已通过 `HudRoot` 窄接口转发；`GameApp` 只保留兼容入口、刷新和音频反馈。
 - [x] tooltip render 和 drag preview render controller 已由 `HudRoot` 持有，`GameApp` 的旧 overlay 属性和 render 方法只作为 smoke / tool 兼容 facade。
 - [ ] 将 `GameApp` 中剩余 tooltip / drag snapshot 组装、兼容 panel 引用等代码继续替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
-- [ ] 将玩家动作 facade 继续从 `GameApp` 移出。
+- [ ] 将 Space wait / auto tick wait、移动 / 交互等剩余玩家动作 facade 继续从 `GameApp` 移出。
 - [x] 将 panel blocker / active modal 状态通过 `hud_root.input_blocker_snapshot()` / `gameplay_input_blocker_snapshot()` 暴露；debug console blocker 由 `HudRoot` 暴露，world action blocker 仍由 `GameApp` 做跨层合成。
 
 验收：

@@ -28,6 +28,7 @@ const TradeActionController = preload("res://scripts/app/controllers/trade_actio
 const CharacterActionController = preload("res://scripts/app/controllers/character_action_controller.gd")
 const SkillActionController = preload("res://scripts/app/controllers/skill_action_controller.gd")
 const WorldPanelActionController = preload("res://scripts/app/controllers/world_panel_action_controller.gd")
+const DialogueActionController = preload("res://scripts/app/controllers/dialogue_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const HudRoot = preload("res://scripts/ui/hud_root.gd")
@@ -73,6 +74,7 @@ var trade_action_controller: RefCounted = TradeActionController.new()
 var character_action_controller: RefCounted = CharacterActionController.new()
 var skill_action_controller: RefCounted = SkillActionController.new()
 var world_panel_action_controller: RefCounted = WorldPanelActionController.new()
+var dialogue_action_controller: RefCounted = DialogueActionController.new()
 var tooltip_layer: Control:
 	get:
 		var controller := _ui_overlay_controller()
@@ -1225,13 +1227,11 @@ func focused_actor_grid_position() -> Dictionary:
 
 
 func close_active_dialogue(reason: String = "closed") -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var result: Dictionary = simulation.close_dialogue(1, reason)
+	var operation: Dictionary = _dictionary_or_empty(dialogue_action_controller.call("close_dialogue", simulation, reason))
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	if bool(result.get("success", false)):
 		close_trade_panel("dialogue_closed:%s" % reason)
-		refresh_dialogue_panel()
-		refresh_hud()
+		_refresh_dialogue_operation(operation)
 	return result
 
 
@@ -1440,16 +1440,11 @@ func close_trade_panel(reason: String = "closed") -> void:
 
 
 func choose_dialogue_option(option_ref: Variant) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var result: Dictionary = simulation.advance_dialogue(1, option_ref, registry.get_library("dialogues"))
+	var dialogue_library: Dictionary = registry.get_library("dialogues") if registry != null else {}
+	var operation: Dictionary = _dictionary_or_empty(dialogue_action_controller.call("choose_option", simulation, option_ref, dialogue_library))
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	_apply_dialogue_trade_result(result)
-	refresh_dialogue_panel()
-	refresh_inventory_panel()
-	refresh_trade_panel()
-	refresh_journal_panel()
-	refresh_skills_panel()
-	refresh_crafting_panel()
+	_refresh_dialogue_operation(operation)
 	return result
 
 
@@ -1458,27 +1453,32 @@ func choose_dialogue_option_by_index(option_index: int) -> Dictionary:
 
 
 func advance_dialogue_without_choice() -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
 	var dialogue_snapshot: Dictionary = _current_dialogue_snapshot()
-	if not bool(dialogue_snapshot.get("active", false)):
-		return {"success": false, "reason": "dialogue_session_missing"}
-	if not _array_or_empty(dialogue_snapshot.get("options", [])).is_empty():
-		return {
-			"success": false,
-			"reason": "dialogue_choice_required",
-			"active_dialogue": true,
-		}
-	var result: Dictionary = simulation.advance_dialogue_without_choice(1, registry.get_library("dialogues"))
+	var dialogue_library: Dictionary = registry.get_library("dialogues") if registry != null else {}
+	var operation: Dictionary = _dictionary_or_empty(dialogue_action_controller.call("continue_without_choice", simulation, dialogue_snapshot, dialogue_library))
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	_apply_dialogue_trade_result(result)
-	refresh_dialogue_panel()
-	refresh_inventory_panel()
-	refresh_trade_panel()
-	refresh_journal_panel()
-	refresh_skills_panel()
-	refresh_crafting_panel()
-	refresh_hud()
+	_refresh_dialogue_operation(operation)
 	return result
+
+
+func _refresh_dialogue_operation(operation: Dictionary) -> void:
+	for panel_id in _array_or_empty(operation.get("refresh", [])):
+		match str(panel_id):
+			"dialogue":
+				refresh_dialogue_panel()
+			"inventory":
+				refresh_inventory_panel()
+			"trade":
+				refresh_trade_panel()
+			"journal":
+				refresh_journal_panel()
+			"skills":
+				refresh_skills_panel()
+			"crafting":
+				refresh_crafting_panel()
+			"hud":
+				refresh_hud()
 
 
 func _apply_dialogue_trade_result(result: Dictionary) -> void:

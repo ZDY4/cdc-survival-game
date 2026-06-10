@@ -3606,6 +3606,7 @@ func _expect_player_command_authority_source(errors: Array[String], entries: Arr
 		"SkillActionController": _read_text_file("res://scripts/app/controllers/skill_action_controller.gd"),
 		"CraftingActionController": _read_text_file("res://scripts/app/controllers/crafting_action_controller.gd"),
 		"WorldPanelActionController": _read_text_file("res://scripts/app/controllers/world_panel_action_controller.gd"),
+		"DialogueActionController": _read_text_file("res://scripts/app/controllers/dialogue_action_controller.gd"),
 	}
 	for entry in entries:
 		var entry_data: Dictionary = _dictionary_or_empty(entry)
