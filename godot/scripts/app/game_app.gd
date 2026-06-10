@@ -1236,14 +1236,11 @@ func close_active_dialogue(reason: String = "closed") -> Dictionary:
 
 
 func close_active_container(reason: String = "closed") -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var result: Dictionary = simulation.close_container(1, reason)
+	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("close_container", simulation, reason))
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	if bool(result.get("success", false)):
 		active_container_feedback = {}
-		refresh_container_panel()
-		refresh_hud()
-	return result
+	return _apply_container_action_operation(operation)
 
 
 func close_active_ui(reason: String = "closed") -> Dictionary:

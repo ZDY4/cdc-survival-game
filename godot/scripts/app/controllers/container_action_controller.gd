@@ -86,6 +86,13 @@ func transfer_all(source: String, container_id: String, submit_inventory_action:
 			return _operation_result({"success": false, "reason": "unknown_container_transfer_source", "source": source}, [])
 
 
+func close_container(simulation: RefCounted, reason: String) -> Dictionary:
+	if simulation == null:
+		return _operation_result({"success": false, "reason": "simulation_missing"}, [])
+	var result: Dictionary = dictionary_or_empty(simulation.close_container(1, reason))
+	return _operation_result(result, ["container", "hud"] if bool(result.get("success", false)) else [])
+
+
 func _missing_container(action: String, container_id: String, item_id: String, count: int, record_feedback: Callable) -> Dictionary:
 	var result := {"success": false, "reason": "active_container_missing"}
 	_record(record_feedback, result, action, container_id, item_id, count)

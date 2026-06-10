@@ -33,7 +33,7 @@
 - drag source、payload、preview 文案、preview 尺寸和 drag state 组装已抽到 `godot/scripts/app/controllers/drag_snapshot_controller.gd`。
 - hotbar、observe hotbar、equipment、inventory action、container 和 trade 的 drag hover target / acceptance 已抽到 `godot/scripts/app/controllers/drag_hover_target_controller.gd`，`GameApp` 只保留 `drag_state_snapshot()` 兼容 facade 和 reason 文案补全。
 - gameplay input blocker、modal/context menu event、close priority 和 UI layer stack 组装已抽到 `godot/scripts/app/controllers/ui_blocker_state_controller.gd`；`GameApp` 只保留从 HUD / panel 节点读取当前状态的 facade。
-- 容器 take / store / transfer 玩家动作 facade 已抽到 `godot/scripts/app/controllers/container_action_controller.gd`；背包 drop / use / deconstruct / split / reorder 玩家动作 facade 已抽到 `godot/scripts/app/controllers/inventory_action_controller.gd`；交易 buy / sell / cart 玩家动作 facade 已抽到 `godot/scripts/app/controllers/trade_action_controller.gd`；装备 equip / unequip / reload 和属性点 facade 已抽到 `godot/scripts/app/controllers/character_action_controller.gd`；技能 learn / bind / hotbar group / hotbar use / runtime target confirm facade 已抽到 `godot/scripts/app/controllers/skill_action_controller.gd`。
+- 容器 take / store / transfer / close 玩家动作 facade 已抽到 `godot/scripts/app/controllers/container_action_controller.gd`；背包 drop / use / deconstruct / split / reorder 玩家动作 facade 已抽到 `godot/scripts/app/controllers/inventory_action_controller.gd`；交易 buy / sell / cart 玩家动作 facade 已抽到 `godot/scripts/app/controllers/trade_action_controller.gd`；装备 equip / unequip / reload 和属性点 facade 已抽到 `godot/scripts/app/controllers/character_action_controller.gd`；技能 learn / bind / hotbar group / hotbar use / runtime target confirm facade 已抽到 `godot/scripts/app/controllers/skill_action_controller.gd`。
 - 制作配方提交、制作队列推进、等待后续队列恢复、pending crafting 取消和 queue snapshot facade 已抽到 `godot/scripts/app/controllers/crafting_action_controller.gd`；`GameApp` 只保留 smoke / UI 兼容入口和刷新执行。
 - 任务 turn-in 和地图面板进入 overworld location 的 action facade 已抽到 `godot/scripts/app/controllers/world_panel_action_controller.gd`；`GameApp` 只保留兼容入口、world rebuild 和刷新执行。
 - 对话选择、无选项继续和关闭对话的 core-service 调用已抽到 `godot/scripts/app/controllers/dialogue_action_controller.gd`；`GameApp` 只保留兼容入口、trade 收尾和面板刷新分发。
@@ -41,7 +41,7 @@
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 2144 行，还保留 tooltip / drag snapshot facade、overlay 兼容属性、Space wait / observe 分支、移动/交互等兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 2141 行，还保留 tooltip / drag snapshot facade、overlay 兼容属性、Space wait / observe 分支、移动/交互等兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` scene；当前已通过 `HudRoot` script 包住现有 HUD controller 和 panel controller。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
@@ -283,7 +283,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] hotbar、observe hotbar、equipment、inventory action、container 和 trade 的 drag hover target / acceptance 已抽到 `drag_hover_target_controller.gd`。
 - [x] gameplay input blocker、modal/context menu event、close priority 和 UI layer stack 组装已抽到 `ui_blocker_state_controller.gd`。
 - [x] context menu 关闭转发已抽到 `ui_blocker_state_controller.gd`，`GameApp` 只提供 owner panel 映射。
-- [x] 容器 take / store / transfer 玩家动作 facade 已抽到 `container_action_controller.gd`，`GameApp` 只保留兼容方法和刷新执行。
+- [x] 容器 take / store / transfer / close 玩家动作 facade 已抽到 `container_action_controller.gd`，`GameApp` 只保留兼容方法和刷新执行。
 - [x] 背包 drop / use / deconstruct / split / reorder 玩家动作 facade 已抽到 `inventory_action_controller.gd`，`GameApp` 只保留兼容方法和刷新执行。
 - [x] 交易 buy / sell / cart 玩家动作 facade 已抽到 `trade_action_controller.gd`，`GameApp` 只保留兼容方法和刷新执行。
 - [x] 装备 equip / unequip / reload 和属性点 facade 已抽到 `character_action_controller.gd`，`GameApp` 只保留兼容方法和刷新执行。
