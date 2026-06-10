@@ -95,70 +95,6 @@ var world_panel_action_controller: RefCounted = WorldPanelActionController.new()
 var dialogue_action_controller: RefCounted = DialogueActionController.new()
 var wait_action_controller: RefCounted = WaitActionController.new()
 var interaction_action_controller: RefCounted = InteractionActionController.new()
-var tooltip_layer: Control:
-	get:
-		var controller := _ui_overlay_controller()
-		return controller.tooltip_layer if controller != null else null
-	set(value):
-		var controller := _ui_overlay_controller()
-		if controller != null:
-			controller.tooltip_layer = value
-var tooltip_panel: PanelContainer:
-	get:
-		var controller := _ui_overlay_controller()
-		return controller.tooltip_panel if controller != null else null
-	set(value):
-		var controller := _ui_overlay_controller()
-		if controller != null:
-			controller.tooltip_panel = value
-var tooltip_label: Label:
-	get:
-		var controller := _ui_overlay_controller()
-		return controller.tooltip_label if controller != null else null
-	set(value):
-		var controller := _ui_overlay_controller()
-		if controller != null:
-			controller.tooltip_label = value
-var last_tooltip_render_snapshot: Dictionary:
-	get:
-		var controller := _ui_overlay_controller()
-		return controller.last_tooltip_render_snapshot if controller != null else {"active": false}
-	set(value):
-		var controller := _ui_overlay_controller()
-		if controller != null:
-			controller.last_tooltip_render_snapshot = value.duplicate(true)
-var drag_preview_layer: Control:
-	get:
-		var controller := _ui_overlay_controller()
-		return controller.drag_preview_layer if controller != null else null
-	set(value):
-		var controller := _ui_overlay_controller()
-		if controller != null:
-			controller.drag_preview_layer = value
-var drag_preview_panel: PanelContainer:
-	get:
-		var controller := _ui_overlay_controller()
-		return controller.drag_preview_panel if controller != null else null
-	set(value):
-		var controller := _ui_overlay_controller()
-		if controller != null:
-			controller.drag_preview_panel = value
-var drag_preview_label: Label:
-	get:
-		var controller := _ui_overlay_controller()
-		return controller.drag_preview_label if controller != null else null
-	set(value):
-		var controller := _ui_overlay_controller()
-		if controller != null:
-			controller.drag_preview_label = value
-var last_drag_preview_render_snapshot: Dictionary:
-	get:
-		var controller := _ui_overlay_controller()
-		return controller.last_drag_preview_render_snapshot if controller != null else {"active": false}
-	set(value):
-		var controller := _ui_overlay_controller()
-		if controller != null:
-			controller.last_drag_preview_render_snapshot = value.duplicate(true)
 var ui_feedback_state_controller: RefCounted = UiFeedbackStateController.new()
 var active_trade_target: Dictionary:
 	get:
@@ -992,11 +928,17 @@ func runtime_control_snapshot() -> Dictionary:
 
 
 func tooltip_render_snapshot() -> Dictionary:
-	return last_tooltip_render_snapshot.duplicate(true)
+	var controller := _ui_overlay_controller()
+	if controller == null:
+		return {"active": false}
+	return _dictionary_or_empty(controller.call("tooltip_render_snapshot"))
 
 
 func drag_preview_render_snapshot() -> Dictionary:
-	return last_drag_preview_render_snapshot.duplicate(true)
+	var controller := _ui_overlay_controller()
+	if controller == null:
+		return {"active": false}
+	return _dictionary_or_empty(controller.call("drag_preview_render_snapshot"))
 
 
 func player_command_authority_audit_snapshot() -> Dictionary:
