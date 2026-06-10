@@ -1441,6 +1441,15 @@ func press_space_action() -> Dictionary:
 	return _apply_wait_action_operation(operation, "press_space_action")
 
 
+func submit_wait_action() -> Dictionary:
+	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call(
+		"submit_wait",
+		simulation,
+		_dictionary_or_empty(world_result.get("map", {}))
+	))
+	return _apply_wait_action_operation(operation, "submit_wait_action")
+
+
 func _process_auto_tick(delta: float) -> void:
 	if bool(runtime_control_state_controller.call("should_submit_auto_tick", delta)):
 		_submit_auto_tick_wait()
