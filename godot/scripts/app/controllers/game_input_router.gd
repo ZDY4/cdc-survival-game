@@ -15,6 +15,11 @@ func input(game_root: Node, runtime_input_controller: RefCounted, event: InputEv
 			return
 		if _debug_console_open(game_root):
 			return
+		if _handle_trade_shortcut_key(game_root, event as InputEventKey):
+			var trade_viewport := game_root.get_viewport()
+			if trade_viewport != null:
+				trade_viewport.set_input_as_handled()
+			return
 		if _handle_global_shortcut_key(game_root, event as InputEventKey):
 			var shortcut_viewport := game_root.get_viewport()
 			if shortcut_viewport != null:
@@ -26,6 +31,8 @@ func input(game_root: Node, runtime_input_controller: RefCounted, event: InputEv
 
 func unhandled_input(game_root: Node, runtime_input_controller: RefCounted, event: InputEvent) -> void:
 	if event is InputEventKey and _debug_console_open(game_root):
+		return
+	if event is InputEventKey and _handle_trade_shortcut_key(game_root, event as InputEventKey):
 		return
 	if event is InputEventKey and _handle_global_shortcut_key(game_root, event as InputEventKey):
 		return
@@ -94,6 +101,12 @@ func _handle_global_shortcut_key(game_root: Node, event: InputEventKey) -> bool:
 			game_root.toggle_stage_panel(stage_panel)
 		return true
 	return false
+
+
+func _handle_trade_shortcut_key(game_root: Node, event: InputEventKey) -> bool:
+	if not event.pressed or event.echo:
+		return false
+	return game_root.has_method("handle_trade_shortcut") and bool(game_root.handle_trade_shortcut(event))
 
 
 func _debug_console_open(game_root: Node) -> bool:
