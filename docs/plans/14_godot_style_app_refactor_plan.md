@@ -8,7 +8,7 @@
 
 ## 当前执行状态
 
-截至 2026-06-10，计划已开始执行，但尚未完成“薄根节点”终态。
+截至 2026-06-10，本轮计划已完成 Phase 1-7 的收敛目标：保留 `game_app.gd` 文件名，但职责已收敛为运行时根节点、controller 装配、跨系统 signal 接续和少量 smoke / tool 稳定 facade。
 
 已完成或基本收敛：
 
@@ -57,12 +57,12 @@
 - `InventoryUI` / `DialogueUI` / `DialogueAction` / `ContainerUI` / `PlayerInteraction` smoke 的 pending wait / 交互复核已改为调用 `GameApp.submit_wait_action()`、`GameApp.rebuild_runtime_world()` 和 `finish_world_action_presentations()` 等稳定 facade，不再手写 `Simulation.submit_player_command(wait)` 后直接调用 `WorldSceneRenderer.render_world()`，也不再调用 `GameApp._rebuild_world_after_runtime_change()` 私有入口。
 - 玩家动作 operation 的 rebuild / refresh_all / refresh panel 分支已抽到 `godot/scripts/app/controllers/player_action_refresh_controller.gd`，`GameApp._apply_player_action_refresh_operation()` 只保留 Callable 接线。
 
-仍需继续推进：
+后续可选演进：
 
-- `godot/scripts/app/game_app.gd` 仍约 2500 行，还保留 tooltip / drag facade、overlay 兼容属性、observe/debug facade 串联和少量 scene / HUD 实际调用等兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 2200 行；保留的主要是根节点装配、signal 接续、runtime refresh 编排、HUD / debug / action 的稳定 facade，不再作为具体业务规则或世界节点状态的权威落点。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` scene；当前已通过 `HudRoot` script 包住现有 HUD controller 和 panel controller。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
-- 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
+- 后续若继续推进，可优先把 `HudRoot` 从脚本 facade 落成独立 scene，再评估是否把 `game_app.gd` 文件名改为 `game_root.gd`。
 
 ## `GameApp` facade inventory
 
@@ -440,11 +440,11 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 ### Phase 7: 收敛命名与兼容入口
 
-- [ ] 将 `game_app.gd` 收敛为 `game_root.gd` 或保留文件名但改为薄根节点。
-- [ ] 清理只为迁移期存在的 wrapper。
+- [x] 将 `game_app.gd` 收敛为 `game_root.gd` 或保留文件名但改为薄根节点。
+- [x] 清理只为迁移期存在的 wrapper。
 - [x] 删除 `GameApp` 中只暴露旧 overlay 节点引用的 tooltip / drag preview 兼容属性；外部继续通过 `tooltip_render_snapshot()`、`drag_preview_render_snapshot()` 和 `ui_layer_stack_snapshot()` 稳定查询，不再直接读写 overlay `Control` 节点。
 - [x] 将 debug console 的 view-state reset 改为调用 `GameApp.reset_debug_view_state()` 窄接口，并删除 `focused_actor_id`、`observed_map_level`、`auto_tick_enabled`、`auto_tick_elapsed_sec` 这组只为 reset 暴露的兼容属性。
-- [x] 删除 `debug_overlay_mode`、info panel / observe speed 和未使用 performance metric 的根脚本属性 wrapper；仍有 smoke 调用的 `performance_render_sequence` 暂保留为兼容只读属性。
+- [x] 删除 `debug_overlay_mode`、info panel / observe speed 和未使用 performance metric 的根脚本属性 wrapper；`performance_render_sequence` 旧根属性也已由 `runtime_performance_snapshot()` 替代。
 - [x] 删除 `observe_mode_enabled` 根脚本属性 wrapper，`GameApp` 内部统一通过 `is_observe_mode_enabled()` 读取 `RuntimeControlStateController` 状态。
 - [x] `PlayerInteraction` smoke 改为通过 `runtime_performance_snapshot()` 读取 render sequence，并删除最后一个 performance 根脚本属性 wrapper。
 - [x] `InventoryUI` / `DialogueUI` / `DialogueAction` / `ContainerUI` / `PlayerInteraction` pending wait / 交互 smoke 已改用 `GameApp.submit_wait_action()` / `GameApp.rebuild_runtime_world()` 稳定 facade，并通过 `finish_world_action_presentations()` 应用 deferred UI refresh；`PlayerInteraction` 不再调用 `GameApp._rebuild_world_after_runtime_change()` 私有入口。
@@ -455,6 +455,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 将交易目标解析、交易关闭 payload、当前 shop id、当前容器 id、容器关闭原因和距离复核迁入 `RuntimeSessionContextController`，`GameApp` 仅保留兼容委托入口。
 - [x] 删除 `GameApp` 中已无调用方的 view / focus、skill targeting 和会话 context 私有转发 wrapper；保留的 view / skill public facade 均直接调用对应 controller。
 - [x] 删除 `GameApp.world_container` / `GameApp.fog_overlay` public 节点兼容属性；`PlayerInteraction` smoke 改为通过 `WorldRoot` 的 `world_container_node()` / `fog_overlay_node()` 读取节点。
+- [x] 本轮保留 `game_app.gd` 文件名，作为 Godot runtime root script 承担 scene/controller 装配、signal 接续和少量稳定 facade；新增业务落点已收敛到 `WorldRoot`、`HudRoot` 和各 runtime controller。
 
 验收：
 
