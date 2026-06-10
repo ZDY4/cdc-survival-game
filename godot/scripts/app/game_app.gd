@@ -362,11 +362,7 @@ func refresh_trade_panel() -> void:
 func refresh_container_panel() -> void:
 	if hud_root == null:
 		return
-	if simulation != null:
-		var close_reason := _active_container_close_reason()
-		if not close_reason.is_empty():
-			active_container_feedback = {}
-			simulation.close_container(1, close_reason)
+	_close_stale_container_session()
 	hud_root.refresh_panel("container", _ui_feedback_payload())
 
 
@@ -401,16 +397,26 @@ func refresh_crafting_panel() -> void:
 
 
 func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
-	refresh_hud(selected_prompt)
-	refresh_dialogue_panel()
-	refresh_inventory_panel()
-	refresh_trade_panel()
-	refresh_container_panel()
-	refresh_character_panel()
-	refresh_journal_panel()
-	refresh_map_panel()
-	refresh_skills_panel()
-	refresh_crafting_panel()
+	if hud_root == null:
+		return
+	if not _active_trade_target_available():
+		close_trade_panel("target_unavailable")
+	_close_stale_container_session()
+	_process_audio_feedback()
+	runtime_performance_tracker.call("mark_hud_refresh")
+	if selected_prompt.is_empty():
+		selected_prompt = current_interaction_prompt()
+	hud_root.refresh_all(selected_prompt, _ui_feedback_payload())
+
+
+func _close_stale_container_session() -> void:
+	if simulation == null:
+		return
+	var close_reason := _active_container_close_reason()
+	if close_reason.is_empty():
+		return
+	active_container_feedback = {}
+	simulation.close_container(1, close_reason)
 
 
 func _refresh_operation_panels(panel_ids: Array, selected_prompt: Dictionary = {}) -> void:
