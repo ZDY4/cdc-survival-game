@@ -54,29 +54,7 @@ var world_action_presenter: RefCounted:
 		return world_action_flow_controller.presenter
 var audio_feedback_controller: Node
 var _world_container_ref: Node3D
-var world_container: Node3D:
-	get:
-		if world_root != null and world_root.has_method("world_container_node"):
-			var container := world_root.call("world_container_node") as Node3D
-			if container != null:
-				_world_container_ref = container
-		return _world_container_ref
-	set(value):
-		_world_container_ref = value
-		if world_root != null:
-			world_root.set("world_container", value)
 var _fog_overlay_ref: ColorRect
-var fog_overlay: ColorRect:
-	get:
-		if world_root != null and world_root.has_method("fog_overlay_node"):
-			var overlay := world_root.call("fog_overlay_node") as ColorRect
-			if overlay != null:
-				_fog_overlay_ref = overlay
-		return _fog_overlay_ref
-	set(value):
-		_fog_overlay_ref = value
-		if world_root != null:
-			world_root.set("fog_overlay", value)
 var hud: Control
 var dialogue_panel: Control
 var inventory_panel: Control
@@ -1839,6 +1817,14 @@ func _accept_runtime_refresh_result(refresh: Dictionary, fallback_error: String)
 	return true
 
 
+func _world_container_node() -> Node3D:
+	if world_root != null and world_root.has_method("world_container_node"):
+		var container := world_root.call("world_container_node") as Node3D
+		if container != null:
+			_world_container_ref = container
+	return _world_container_ref
+
+
 func _setup_world_container() -> void:
 	if world_root == null or not is_instance_valid(world_root):
 		world_root = WorldRootScene.instantiate() as Node3D
@@ -1847,13 +1833,13 @@ func _setup_world_container() -> void:
 		world_root.name = "WorldRoot"
 		add_child(world_root)
 	if world_root.has_method("ensure_world_container"):
-		world_container = world_root.call("ensure_world_container")
+		_world_container_ref = world_root.call("ensure_world_container")
 
 
 func _setup_runtime_input_controller() -> void:
 	if runtime_input_controller == null:
 		runtime_input_controller = GameRuntimeInputController.new(self)
-	runtime_input_controller.attach_world(world_container, world_result)
+	runtime_input_controller.attach_world(_world_container_node(), world_result)
 
 
 func _refresh_world_runtime_bindings() -> void:
@@ -1897,8 +1883,8 @@ func _apply_world_root_snapshot(render_world: bool = true) -> Dictionary:
 		runtime_performance_tracker.call("record_world_render", counts, world_root)
 	elif runtime_input_controller != null:
 		runtime_input_controller.world_result = world_result
-	world_container = apply_result.get("world_container", world_container) as Node3D
-	fog_overlay = apply_result.get("fog_overlay", fog_overlay) as ColorRect
+	_world_container_ref = apply_result.get("world_container", _world_container_ref) as Node3D
+	_fog_overlay_ref = apply_result.get("fog_overlay", _fog_overlay_ref) as ColorRect
 	return counts
 
 
@@ -2068,7 +2054,7 @@ func _apply_pending_world_action_ui(trigger: String, pending_ui: Dictionary = {}
 
 
 func _present_world_action(command_result: Dictionary) -> void:
-	world_action_flow_controller.call("present_result", self, world_container, command_result, world_result)
+	world_action_flow_controller.call("present_result", self, _world_container_node(), command_result, world_result)
 
 
 func _connect_world_action_flow_signals() -> void:

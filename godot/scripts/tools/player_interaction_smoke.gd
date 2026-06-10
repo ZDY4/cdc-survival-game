@@ -37,9 +37,10 @@ func _run_checks(game_root: Node) -> Array[String]:
 		return ["game root did not initialize simulation"]
 	if game_root.hud == null:
 		return ["game root did not initialize HUD"]
-	if game_root.fog_overlay == null:
+	var fog_overlay := _fog_overlay(game_root)
+	if fog_overlay == null:
 		return ["game root did not initialize fog overlay"]
-	if game_root.fog_overlay.material == null:
+	if fog_overlay.material == null:
 		return ["fog overlay should use shader material"]
 	if game_root.runtime_input_controller == null:
 		return ["game root did not initialize runtime input controller"]
@@ -173,7 +174,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("door execution should set interior default_entry")
 	if not _hud_world_line(game_root).contains("survivor_outpost_01_interior"):
 		errors.append("HUD world line did not refresh after map transition")
-	if game_root.fog_overlay == null or game_root.fog_overlay.material == null:
+	var transition_fog_overlay := _fog_overlay(game_root)
+	if transition_fog_overlay == null or transition_fog_overlay.material == null:
 		errors.append("fog overlay did not survive map transition redraw")
 	await process_frame
 	_expect_transition_world_redraw(errors, game_root)
@@ -913,7 +915,7 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 	}
 	door_node.set_meta("interaction_target", metadata)
 	_add_pickable_smoke_box(door_node, metadata)
-	game_root.world_container.add_child(door_node)
+	_world_container(game_root).add_child(door_node)
 	await game_root.get_tree().physics_frame
 	var pickable_body: Node = door_node.find_child("PickableBody", true, false)
 	if pickable_body == null or not pickable_body.has_meta("interaction_target"):
@@ -947,7 +949,7 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 			"open_container": "target_not_container",
 		})
 	var keyed_door_node := _temporary_door_node(keyed_door_id, keyed_door_grid, keyed_door_summary)
-	game_root.world_container.add_child(keyed_door_node)
+	_world_container(game_root).add_child(keyed_door_node)
 	var keyed_selection: Dictionary = game_root.select_interaction_node(keyed_door_node)
 	if not bool(keyed_selection.get("success", false)):
 		errors.append("keyed locked door selection for context menu failed: %s" % keyed_selection.get("prompt", {}).get("reason", "unknown"))
@@ -958,7 +960,7 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 			"open_container": "target_not_container",
 		})
 	var locked_door_node := _temporary_door_node(locked_door_id, locked_door_grid, locked_door_summary)
-	game_root.world_container.add_child(locked_door_node)
+	_world_container(game_root).add_child(locked_door_node)
 	var locked_selection: Dictionary = game_root.select_interaction_node(locked_door_node)
 	if not bool(locked_selection.get("success", false)):
 		errors.append("locked door selection for context menu failed: %s" % locked_selection.get("prompt", {}).get("reason", "unknown"))
@@ -969,7 +971,7 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 			"open_container": "target_not_container",
 		})
 	var tooled_door_node := _temporary_door_node(tooled_door_id, tooled_door_grid, tooled_door_summary)
-	game_root.world_container.add_child(tooled_door_node)
+	_world_container(game_root).add_child(tooled_door_node)
 	var tooled_selection: Dictionary = game_root.select_interaction_node(tooled_door_node)
 	if not bool(tooled_selection.get("success", false)):
 		errors.append("tool-locked door selection for context menu failed: %s" % tooled_selection.get("prompt", {}).get("reason", "unknown"))
@@ -2205,7 +2207,7 @@ func _present_synthetic_world_action_event(game_root: Node, event_kind: String, 
 func _present_synthetic_world_action_events(game_root: Node, events: Array) -> void:
 	if game_root.world_action_presenter == null:
 		return
-	game_root.world_action_presenter.call("present_result", game_root, game_root.world_container, {
+	game_root.world_action_presenter.call("present_result", game_root, _world_container(game_root), {
 		"success": true,
 		"result": {
 			"events": events.duplicate(true),
@@ -2960,18 +2962,19 @@ func _expect_transition_runtime_visual_state_reset(errors: Array[String], game_r
 		errors.append("transition should keep skill preview marker container")
 	elif skill_markers.get_child_count() != 0:
 		errors.append("transition should clear stale skill preview markers")
-	if game_root.fog_overlay == null:
+	var fog_overlay := _fog_overlay(game_root)
+	if fog_overlay == null:
 		errors.append("transition should keep fog overlay")
 		return
-	if str(game_root.fog_overlay.get_meta("active_map_id", "")) != "survivor_outpost_01_interior":
+	if str(fog_overlay.get_meta("active_map_id", "")) != "survivor_outpost_01_interior":
 		errors.append("transition fog overlay should rebuild for interior map")
-	var mask_size: Variant = game_root.fog_overlay.get_meta("mask_size", Vector2i.ZERO)
+	var mask_size: Variant = fog_overlay.get_meta("mask_size", Vector2i.ZERO)
 	if typeof(mask_size) != TYPE_VECTOR2I or mask_size == Vector2i.ZERO:
 		errors.append("transition fog overlay should expose non-empty mask size")
 	var interior_size: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.world_result.get("map", {})).get("size", {}))
-	if int(game_root.fog_overlay.get_meta("mask_width", 0)) != int(interior_size.get("width", 0)):
+	if int(fog_overlay.get_meta("mask_width", 0)) != int(interior_size.get("width", 0)):
 		errors.append("transition fog overlay width should match active map")
-	if int(game_root.fog_overlay.get_meta("mask_height", 0)) != int(interior_size.get("height", 0)):
+	if int(fog_overlay.get_meta("mask_height", 0)) != int(interior_size.get("height", 0)):
 		errors.append("transition fog overlay height should match active map")
 
 
@@ -3725,6 +3728,22 @@ func _render_sequence(game_root: Node) -> int:
 	if game_root.has_method("runtime_performance_snapshot"):
 		return int(_dictionary_or_empty(game_root.runtime_performance_snapshot()).get("render_sequence", 0))
 	return 0
+
+
+func _world_container(game_root: Node) -> Node3D:
+	if game_root.get("world_root") != null:
+		var root: Node = game_root.get("world_root")
+		if root.has_method("world_container_node"):
+			return root.call("world_container_node") as Node3D
+	return game_root.find_child("WorldContainer", true, false) as Node3D
+
+
+func _fog_overlay(game_root: Node) -> ColorRect:
+	if game_root.get("world_root") != null:
+		var root: Node = game_root.get("world_root")
+		if root.has_method("fog_overlay_node"):
+			return root.call("fog_overlay_node") as ColorRect
+	return game_root.find_child("FogOverlay", true, false) as ColorRect
 
 
 func _array_or_empty(value: Variant) -> Array:

@@ -18,7 +18,7 @@
 - 顶层输入分发、逐帧 runtime input process、debug console 输入保护、HUD 面板快捷键、交易面板快捷键、hotbar 数字键、对话 Enter 键、相机/视图键、鼠标 UI blocker / context menu outside-click / 世界鼠标事件分发和一组全局 UI/debug 快捷键主路径已抽到 `godot/scripts/app/controllers/game_input_router.gd`；`GameRuntimeInputController` 暂保留 direct-call smoke 兼容 fallback。
 - 世界表现入口已抽到 `godot/scenes/world/world_root.tscn` + `godot/scripts/world/world_root.gd`，稳定 `WorldContainer` 已落到 scene 中，`GameApp` 主要实例化 scene 并调用 WorldRoot 接口。
 - `WorldRoot.apply_runtime_snapshot()` 已承接 render world、fog 和 debug overlay 的世界表现应用顺序，`GameApp` 不再在主世界刷新入口手写这三步。
-- `GameApp.world_container` / `GameApp.fog_overlay` 已改为转发到 `WorldRoot` 的兼容属性，保留 smoke / tool 旧入口但不再作为根脚本权威状态。
+- `GameApp.world_container` / `GameApp.fog_overlay` 这两个 public 兼容属性已删除；需要世界容器或 fog overlay 的 smoke 改为通过 `GameApp.world_root` 的 `world_container_node()` / `fog_overlay_node()` 窄接口读取。
 - smoke / tool 需要刷新世界视觉时改用 `GameApp.refresh_world_visuals()` 稳定 facade；旧 `_render_world()` / `_refresh_fog_overlay()` / `_refresh_debug_overlay()` 私有 wrapper 已移除。
 - 相机 follow、pan、zoom、clamp 和 ray-plane 计算已抽到 `godot/scripts/world/camera_rig_controller.gd`，`GameRuntimeInputController` 仍保留鼠标拾取、hover 和玩家交互输入。
 - runtime refresh / world snapshot 构建已抽到 `godot/scripts/app/controllers/runtime_refresh_controller.gd`。
@@ -392,7 +392,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 新增 `godot/scenes/world/world_root.tscn`，`GameApp` 改为实例化 WorldRoot scene。
 - [x] `WorldContainer` 已作为稳定子节点写入 `world_root.tscn`，`WorldRoot.ensure_world_container()` 只保留查找和 fallback 创建。
 - [x] `WorldRoot.apply_runtime_snapshot()` 已承接 render world、fog 和 debug overlay 的世界表现应用顺序，`GameApp._apply_world_root_snapshot()` 只转发快照并同步兼容引用。
-- [x] `GameApp.world_container` / `GameApp.fog_overlay` 已改为转发到 `WorldRoot` 的兼容属性，旧 smoke / tool 入口保留但真实节点状态归属 `WorldRoot`。
+- [x] `GameApp.world_container` / `GameApp.fog_overlay` public 兼容属性已删除；旧 smoke 改为通过 `WorldRoot` 窄接口读取节点，真实节点状态归属 `WorldRoot`。
 - [x] 旧 `_render_world()` / `_refresh_fog_overlay()` / `_refresh_debug_overlay()` 私有 wrapper 已移除；smoke 改用 `refresh_world_visuals(false)` 稳定 facade。
 
 验收：
@@ -454,6 +454,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 将制作 UI 所需的工作台、世界 flag、附近工具容器和最近制作结果上下文构建迁入 `CraftingContextBuilder`，`GameApp` 只保留调用入口。
 - [x] 将交易目标解析、交易关闭 payload、当前 shop id、当前容器 id、容器关闭原因和距离复核迁入 `RuntimeSessionContextController`，`GameApp` 仅保留兼容委托入口。
 - [x] 删除 `GameApp` 中已无调用方的 view / focus、skill targeting 和会话 context 私有转发 wrapper；保留的 view / skill public facade 均直接调用对应 controller。
+- [x] 删除 `GameApp.world_container` / `GameApp.fog_overlay` public 节点兼容属性；`PlayerInteraction` smoke 改为通过 `WorldRoot` 的 `world_container_node()` / `fog_overlay_node()` 读取节点。
 
 验收：
 
