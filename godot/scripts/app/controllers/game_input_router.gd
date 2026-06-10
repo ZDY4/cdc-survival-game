@@ -25,6 +25,11 @@ func input(game_root: Node, runtime_input_controller: RefCounted, event: InputEv
 			if hotbar_viewport != null:
 				hotbar_viewport.set_input_as_handled()
 			return
+		if _handle_dialogue_enter_key(game_root, event as InputEventKey):
+			var enter_viewport := game_root.get_viewport()
+			if enter_viewport != null:
+				enter_viewport.set_input_as_handled()
+			return
 		if _handle_global_shortcut_key(game_root, event as InputEventKey):
 			var shortcut_viewport := game_root.get_viewport()
 			if shortcut_viewport != null:
@@ -40,6 +45,8 @@ func unhandled_input(game_root: Node, runtime_input_controller: RefCounted, even
 	if event is InputEventKey and _handle_trade_shortcut_key(game_root, event as InputEventKey):
 		return
 	if event is InputEventKey and _handle_hotbar_shortcut_key(game_root, event as InputEventKey):
+		return
+	if event is InputEventKey and _handle_dialogue_enter_key(game_root, event as InputEventKey):
 		return
 	if event is InputEventKey and _handle_global_shortcut_key(game_root, event as InputEventKey):
 		return
@@ -130,6 +137,20 @@ func _handle_hotbar_shortcut_key(game_root: Node, event: InputEventKey) -> bool:
 	if key == KEY_0 and event.ctrl_pressed:
 		return false
 	return _handle_digit_key(game_root, digit)
+
+
+func _handle_dialogue_enter_key(game_root: Node, event: InputEventKey) -> bool:
+	if not event.pressed or event.echo:
+		return false
+	var key := event.keycode
+	if key == 0:
+		key = event.physical_keycode
+	if key != KEY_ENTER and key != KEY_KP_ENTER:
+		return false
+	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()) and game_root.has_method("press_enter_action"):
+		game_root.press_enter_action()
+		return true
+	return false
 
 
 func _handle_digit_key(game_root: Node, digit: int) -> bool:
