@@ -192,9 +192,9 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 6: 拆 HUD interaction menu 和 feedback toast
 
-- [ ] 新建 `interaction_menu_view.gd`，承接右键/交互菜单按钮、禁用原因、summary、position 和 snapshot。
-- [ ] 新建 `feedback_toast_layer.gd`，承接 toast row、style、metadata 和清理。
-- [ ] 菜单点击继续通过已有 signal / Callable 进入 `GameApp` facade，不在 view 中写玩法规则。
+- [x] 新建 `interaction_menu_view.gd`，承接右键/交互菜单按钮、禁用原因、summary、position 和 snapshot。
+- [x] 新建 `feedback_toast_layer.gd`，承接 toast row、style、metadata 和清理。
+- [x] 菜单点击继续通过已有 signal / Callable 进入 `GameApp` facade，不在 view 中写玩法规则。
 
 验收：
 
@@ -202,6 +202,10 @@ godot/scripts/app/controllers/runtime_input/
 - `ContainerUI`
 - `TradeUI`
 - `InventoryUI`
+
+验证记录：
+
+- 2026-06-11: 通过 `hud_controller.gd`、`interaction_menu_view.gd`、`feedback_toast_layer.gd` 静态解析；通过 `test-godot-game.ps1 -Scenario PlayerInteraction`、`ContainerUI`、`TradeUI`、`InventoryUI`。
 
 ## Phase 7: 拆 Hotbar / ObserveHotbar
 

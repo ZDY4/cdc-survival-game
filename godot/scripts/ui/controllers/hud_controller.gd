@@ -4,6 +4,8 @@ const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 const DebugConsolePanel = preload("res://scripts/ui/controllers/debug_console_panel.gd")
 const DebugPanelView = preload("res://scripts/ui/controllers/debug_panel_view.gd")
+const FeedbackToastLayer = preload("res://scripts/ui/controllers/feedback_toast_layer.gd")
+const InteractionMenuView = preload("res://scripts/ui/controllers/interaction_menu_view.gd")
 
 var _world_label: Label
 var _status_badge_label: Label
@@ -16,22 +18,17 @@ var _hotbar_box: HBoxContainer
 var _observe_hotbar_box: HBoxContainer
 var _interaction_label: Label
 var _event_feedback_label: Label
-var _feedback_toast_layer: VBoxContainer
 var _debug_overlay_label: Label
 var _info_panel_label: Label
 var _runtime_control_label: Label
 var _skill_targeting_label: Label
 var _controls_hint_box: VBoxContainer
-var _interaction_menu: PanelContainer
-var _menu_title_label: Label
-var _menu_summary_label: Label
-var _menu_hover_label: Label
-var _menu_options_box: VBoxContainer
 var controls_hint_visible := false
-var interaction_menu_snapshot_data: Dictionary = {}
 var _reason_catalog := ReasonCatalog.new()
 var _debug_console_panel := DebugConsolePanel.new()
 var _debug_panel_view := DebugPanelView.new()
+var _feedback_toast_layer := FeedbackToastLayer.new()
+var _interaction_menu_view := InteractionMenuView.new()
 
 
 func _ready() -> void:
@@ -74,14 +71,14 @@ func apply_runtime_snapshot(snapshot: Dictionary) -> void:
 	_apply_observe_hotbar(snapshot.get("runtime_control", {}))
 	_interaction_label.text = _interaction_text(interaction)
 	_event_feedback_label.text = _event_feedback_text(snapshot.get("event_feedback", []))
-	_apply_feedback_toasts(snapshot.get("feedback_toasts", []))
+	_feedback_toast_layer.apply(snapshot.get("feedback_toasts", []))
 	_debug_overlay_label.text = "Overlay %s" % str(snapshot.get("debug_overlay_mode", "off"))
 	_info_panel_label.text = _info_panel_text(snapshot.get("info_panel", {}))
 	_runtime_control_label.text = _runtime_control_text(snapshot.get("runtime_control", {}))
 	_skill_targeting_label.text = _skill_targeting_text(_dictionary_or_empty(snapshot.get("runtime_control", {})).get("skill_targeting", {}))
 	_skill_targeting_label.visible = not _skill_targeting_label.text.is_empty()
 	_apply_controls_hint()
-	_apply_interaction_menu(interaction)
+	_interaction_menu_view.apply(interaction)
 	_debug_panel_view.apply(snapshot)
 
 
@@ -153,8 +150,8 @@ func _build_layout() -> void:
 		var label := _line("ControlsHintLine")
 		label.text = line
 		_controls_hint_box.add_child(label)
-	_build_interaction_menu()
-	_build_feedback_toast_layer()
+	_interaction_menu_view.build(self)
+	_feedback_toast_layer.build(self)
 	_debug_console_panel.build(self)
 	_debug_panel_view.build(self)
 
@@ -231,44 +228,19 @@ func clear_debug_console_history() -> void:
 
 
 func show_interaction_menu(screen_position: Vector2, prompt: Dictionary) -> void:
-	if _interaction_menu == null:
-		_build_interaction_menu()
-	var menu_prompt := _prompt_summary_for_menu(prompt)
-	_apply_interaction_menu(menu_prompt)
-	_interaction_menu.visible = bool(prompt.get("ok", prompt.get("has_target", false)))
-	_interaction_menu.mouse_filter = Control.MOUSE_FILTER_STOP if _interaction_menu.visible else Control.MOUSE_FILTER_IGNORE
-	_interaction_menu.position = _menu_position(screen_position)
-	interaction_menu_snapshot_data = _interaction_menu_snapshot_from_prompt(menu_prompt, _interaction_menu.visible, _interaction_menu.position)
+	_interaction_menu_view.show(screen_position, prompt)
 
 
 func hide_interaction_menu() -> void:
-	if _interaction_menu == null:
-		return
-	_interaction_menu.visible = false
-	_interaction_menu.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	interaction_menu_snapshot_data = {}
+	_interaction_menu_view.hide()
 
 
 func is_interaction_menu_open() -> bool:
-	return _interaction_menu != null and _interaction_menu.visible
+	return _interaction_menu_view.is_open()
 
 
 func interaction_menu_snapshot() -> Dictionary:
-	if _interaction_menu == null or not _interaction_menu.visible:
-		return {}
-	var snapshot := interaction_menu_snapshot_data.duplicate(true)
-	if snapshot.is_empty():
-		snapshot = {
-			"id": "interaction_menu",
-			"name": "interaction_menu",
-			"kind": "interaction",
-			"owner_panel": "hud",
-		}
-	snapshot["active"] = true
-	snapshot["visible"] = true
-	snapshot["mouse_blocks_world"] = _interaction_menu.mouse_filter == Control.MOUSE_FILTER_STOP
-	snapshot["position"] = {"x": _interaction_menu.position.x, "y": _interaction_menu.position.y}
-	return snapshot
+	return _interaction_menu_view.snapshot()
 
 
 func input_blocker_snapshot() -> Dictionary:
@@ -310,371 +282,10 @@ func _line(node_name: String) -> Label:
 	return label
 
 
-func _build_feedback_toast_layer() -> void:
-	if _feedback_toast_layer != null:
-		return
-	_feedback_toast_layer = VBoxContainer.new()
-	_feedback_toast_layer.name = "FeedbackToastLayer"
-	_feedback_toast_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_feedback_toast_layer.add_theme_constant_override("separation", 4)
-	_feedback_toast_layer.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_feedback_toast_layer.offset_left = 16
-	_feedback_toast_layer.offset_top = 188
-	_feedback_toast_layer.offset_right = 560
-	_feedback_toast_layer.offset_bottom = 308
-	add_child(_feedback_toast_layer)
-
-
-func _apply_feedback_toasts(value: Variant) -> void:
-	if _feedback_toast_layer == null:
-		_build_feedback_toast_layer()
-	_clear_children(_feedback_toast_layer)
-	var toasts: Array = _array_or_empty(value)
-	_feedback_toast_layer.visible = not toasts.is_empty()
-	for toast_value in toasts:
-		var toast: Dictionary = _dictionary_or_empty(toast_value)
-		if toast.is_empty() or not bool(toast.get("visible", true)):
-			continue
-		_feedback_toast_layer.add_child(_feedback_toast_row(toast))
-
-
-func _feedback_toast_row(toast: Dictionary) -> PanelContainer:
-	var row := PanelContainer.new()
-	row.name = "FeedbackToast_%s" % str(toast.get("id", "toast"))
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.custom_minimum_size = Vector2(260, 28)
-	var severity := str(toast.get("severity", "info"))
-	var alpha := float(toast.get("alpha", 1.0))
-	var phase := str(toast.get("phase", "visible"))
-	row.add_theme_stylebox_override("panel", _feedback_toast_style(severity, alpha, phase))
-	row.modulate.a = clampf(alpha + 0.12, 0.0, 1.0)
-	_apply_feedback_toast_metadata(row, toast)
-	row.set_meta("toast_visual_kind", "panel")
-	row.set_meta("toast_border_color", _feedback_toast_border_color(severity).to_html())
-	row.set_meta("toast_background_alpha", alpha)
-	row.set_meta("toast_minimum_width", row.custom_minimum_size.x)
-	var label := _line("FeedbackToastLabel")
-	label.text = str(toast.get("text", ""))
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.modulate = _feedback_toast_color(severity, 1.0)
-	label.tooltip_text = "%s | %s" % [severity, str(_dictionary_or_empty(toast.get("transition", {})).get("style", ""))]
-	_apply_feedback_toast_metadata(label, toast)
-	row.add_child(label)
-	return row
-
-
-func _apply_feedback_toast_metadata(node: Node, toast: Dictionary) -> void:
-	node.set_meta("toast_id", str(toast.get("id", "")))
-	node.set_meta("toast_kind", str(toast.get("kind", "")))
-	node.set_meta("toast_severity", str(toast.get("severity", "")))
-	node.set_meta("toast_phase", str(toast.get("phase", "")))
-	node.set_meta("toast_slot", int(toast.get("slot", 0)))
-	node.set_meta("toast_alpha", float(toast.get("alpha", 1.0)))
-	node.set_meta("toast_ttl_events", int(toast.get("ttl_events", 0)))
-	node.set_meta("toast_age_events", int(toast.get("age_events", 0)))
-	node.set_meta("toast_transition_style", str(_dictionary_or_empty(toast.get("transition", {})).get("style", "")))
-	var details: Dictionary = _dictionary_or_empty(toast.get("details", {}))
-	node.set_meta("toast_has_details", bool(toast.get("has_details", not details.is_empty())))
-	node.set_meta("toast_detail_count", int(toast.get("detail_count", _array_or_empty(details.get("entries", [])).size())))
-	node.set_meta("toast_detail_summary", str(details.get("summary", "")))
-
-
-func _feedback_toast_style(severity: String, alpha: float, phase: String) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	var background_alpha := clampf(0.58 * alpha, 0.18, 0.72)
-	if phase == "fading":
-		background_alpha = clampf(0.42 * alpha, 0.12, 0.56)
-	style.bg_color = _feedback_toast_background_color(severity, background_alpha)
-	style.border_color = _feedback_toast_border_color(severity)
-	style.border_color.a = clampf(0.84 * alpha, 0.22, 0.92)
-	style.border_width_left = 2
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.corner_radius_top_left = 4
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_right = 4
-	style.corner_radius_bottom_left = 4
-	style.content_margin_left = 9
-	style.content_margin_right = 9
-	style.content_margin_top = 5
-	style.content_margin_bottom = 5
-	return style
-
-
-func _feedback_toast_background_color(severity: String, alpha: float) -> Color:
-	match severity:
-		"success":
-			return Color(0.08, 0.20, 0.13, alpha)
-		"warning":
-			return Color(0.22, 0.17, 0.06, alpha)
-		"error":
-			return Color(0.24, 0.09, 0.08, alpha)
-		_:
-			return Color(0.08, 0.12, 0.18, alpha)
-
-
-func _feedback_toast_border_color(severity: String) -> Color:
-	match severity:
-		"success":
-			return Color(0.33, 0.72, 0.43, 1.0)
-		"warning":
-			return Color(0.90, 0.66, 0.20, 1.0)
-		"error":
-			return Color(0.86, 0.34, 0.30, 1.0)
-		_:
-			return Color(0.38, 0.55, 0.74, 1.0)
-
-
-func _feedback_toast_color(severity: String, alpha: float) -> Color:
-	var color := Color(0.82, 0.90, 1.0, alpha)
-	match severity:
-		"success":
-			color = Color(0.62, 0.95, 0.70, alpha)
-		"warning":
-			color = Color(1.0, 0.86, 0.46, alpha)
-		"error":
-			color = Color(1.0, 0.54, 0.50, alpha)
-	return color
-
-
-func _clear_children(node: Node) -> void:
-	if node == null:
-		return
-	for child in node.get_children():
-		node.remove_child(child)
-		child.free()
-
-
-func _build_interaction_menu() -> void:
-	if _interaction_menu != null:
-		return
-	_interaction_menu = PanelContainer.new()
-	_interaction_menu.name = "InteractionMenu"
-	_interaction_menu.visible = false
-	_interaction_menu.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_interaction_menu.custom_minimum_size = Vector2(180, 32)
-	add_child(_interaction_menu)
-
-	var box := VBoxContainer.new()
-	box.name = "MenuLines"
-	box.add_theme_constant_override("separation", 4)
-	_interaction_menu.add_child(box)
-
-	_menu_title_label = _line("MenuTitle")
-	_menu_summary_label = _line("MenuSummary")
-	_menu_hover_label = _line("MenuHoverHint")
-	_menu_options_box = VBoxContainer.new()
-	_menu_options_box.name = "MenuOptions"
-	_menu_options_box.add_theme_constant_override("separation", 3)
-	box.add_child(_menu_title_label)
-	box.add_child(_menu_summary_label)
-	box.add_child(_menu_options_box)
-	box.add_child(_menu_hover_label)
-
-
-func _apply_interaction_menu(interaction: Dictionary) -> void:
-	if _interaction_menu == null:
-		_build_interaction_menu()
-	var has_target: bool = bool(interaction.get("has_target", false))
-	if not has_target:
-		_clear_menu_options()
-		_menu_summary_label.text = ""
-		_menu_hover_label.text = ""
-		return
-	_menu_title_label.text = str(interaction.get("target_name", "目标"))
-	_menu_summary_label.text = _interaction_menu_summary(interaction)
-	_menu_hover_label.text = "悬停查看动作详情"
-	_clear_menu_options()
-	for option in interaction.get("options", []):
-		var option_data: Dictionary = option
-		_menu_options_box.add_child(_option_button(option_data))
-	for option in interaction.get("disabled_options", []):
-		var option_data: Dictionary = option
-		_menu_options_box.add_child(_disabled_option_button(option_data))
-
-
 func _apply_controls_hint() -> void:
 	if _controls_hint_box == null:
 		return
 	_controls_hint_box.visible = controls_hint_visible
-
-
-func _option_button(option: Dictionary) -> Button:
-	var button := Button.new()
-	button.name = "Option_%s" % str(option.get("id", "unknown"))
-	button.text = str(option.get("display_name", option.get("id", "")))
-	button.tooltip_text = _option_tooltip(option)
-	button.custom_minimum_size = Vector2(160, 28)
-	button.focus_mode = Control.FOCUS_NONE
-	button.set_meta("option_id", str(option.get("id", "")))
-	button.set_meta("option_kind", str(option.get("kind", "")))
-	button.set_meta("display_name", str(option.get("display_name", option.get("id", ""))))
-	button.set_meta("disabled", false)
-	button.set_meta("disabled_reason", "")
-	button.set_meta("ap_cost", float(option.get("ap_cost", 0.0)))
-	button.set_meta("interaction_range", int(option.get("interaction_range", 0)))
-	button.mouse_entered.connect(func() -> void:
-		_menu_hover_label.text = _option_hover_text(option)
-	)
-	var option_id := str(option.get("id", ""))
-	button.pressed.connect(func() -> void:
-		var root := get_parent()
-		if root != null and root.has_method("execute_interaction_option"):
-			root.execute_interaction_option(option_id)
-		hide_interaction_menu()
-	)
-	return button
-
-
-func _disabled_option_button(option: Dictionary) -> Button:
-	var button := Button.new()
-	var option_id := str(option.get("id", "unknown"))
-	var reason := str(option.get("disabled_reason", "interaction_option_unavailable"))
-	var reason_text := _disabled_reason_text(reason)
-	button.name = "DisabledOption_%s" % option_id
-	button.text = "%s - %s" % [
-		str(option.get("display_name", option_id)),
-		reason_text,
-	]
-	button.tooltip_text = _disabled_option_tooltip(option, reason_text)
-	button.custom_minimum_size = Vector2(160, 28)
-	button.focus_mode = Control.FOCUS_NONE
-	button.disabled = true
-	button.set_meta("option_id", option_id)
-	button.set_meta("option_kind", str(option.get("kind", "")))
-	button.set_meta("display_name", str(option.get("display_name", option_id)))
-	button.set_meta("disabled", true)
-	button.set_meta("disabled_reason", reason)
-	button.set_meta("disabled_reason_text", reason_text)
-	button.set_meta("ap_cost", float(option.get("ap_cost", 0.0)))
-	button.set_meta("interaction_range", int(option.get("interaction_range", 0)))
-	button.mouse_entered.connect(func() -> void:
-		_menu_hover_label.text = _option_hover_text(option)
-	)
-	return button
-
-
-func _option_tooltip(option: Dictionary) -> String:
-	var parts: Array[String] = [
-		"%s (%s)" % [str(option.get("display_name", option.get("id", ""))), str(option.get("kind", ""))],
-	]
-	var ap_cost := float(option.get("ap_cost", 0.0))
-	if ap_cost > 0.0:
-		parts.append("AP %.0f" % ap_cost)
-	if bool(option.get("disabled", false)):
-		parts.append(_disabled_reason_text(str(option.get("disabled_reason", ""))))
-	return " | ".join(parts)
-
-
-func _disabled_option_tooltip(option: Dictionary, reason_text: String) -> String:
-	var tooltip := _option_tooltip(option)
-	if reason_text.is_empty():
-		return tooltip
-	if tooltip.contains(reason_text):
-		return tooltip
-	return "%s | %s" % [tooltip, reason_text]
-
-
-func _interaction_menu_summary(interaction: Dictionary) -> String:
-	var enabled_count: int = _array_or_empty(interaction.get("options", [])).size()
-	var disabled_count: int = _array_or_empty(interaction.get("disabled_options", [])).size()
-	var primary := str(interaction.get("primary_option_id", ""))
-	return "主动作 %s | 可用 %d | 禁用 %d" % [
-		primary if not primary.is_empty() else "-",
-		enabled_count,
-		disabled_count,
-	]
-
-
-func _interaction_menu_snapshot_from_prompt(interaction: Dictionary, visible: bool, position: Vector2) -> Dictionary:
-	var options: Array = _array_or_empty(interaction.get("options", []))
-	var disabled_options: Array = _array_or_empty(interaction.get("disabled_options", []))
-	return {
-		"id": "interaction_menu",
-		"name": "interaction_menu",
-		"kind": "interaction",
-		"owner_panel": "hud",
-		"active": visible,
-		"visible": visible,
-		"mouse_blocks_world": visible,
-		"position": {"x": position.x, "y": position.y},
-		"target_id": str(interaction.get("target_id", "")),
-		"target_name": str(interaction.get("target_name", "")),
-		"target_type": str(interaction.get("target_type", "")),
-		"primary_option_id": str(interaction.get("primary_option_id", "")),
-		"option_count": options.size(),
-		"disabled_option_count": disabled_options.size(),
-		"options": _context_option_summaries(options),
-		"disabled_options": _context_option_summaries(disabled_options),
-		"option_details": _context_option_detail_map(options, disabled_options),
-	}
-
-
-func _context_option_summaries(options: Array) -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	for option in options:
-		var data: Dictionary = _dictionary_or_empty(option)
-		if data.is_empty():
-			continue
-		output.append({
-			"id": str(data.get("id", "")),
-			"kind": str(data.get("kind", "")),
-			"display_name": str(data.get("display_name", data.get("id", ""))),
-			"disabled": bool(data.get("disabled", false)),
-			"disabled_reason": str(data.get("disabled_reason", "")),
-			"disabled_reason_text": _disabled_reason_text(str(data.get("disabled_reason", ""))) if not str(data.get("disabled_reason", "")).is_empty() else "",
-			"ap_cost": float(data.get("ap_cost", 0.0)),
-		})
-	return output
-
-
-func _context_option_detail_map(options: Array, disabled_options: Array) -> Dictionary:
-	var output: Dictionary = {}
-	for option in options:
-		var data: Dictionary = _dictionary_or_empty(option)
-		var option_id := str(data.get("id", ""))
-		if option_id.is_empty():
-			continue
-		output[option_id] = _context_option_detail(data, true)
-	for option in disabled_options:
-		var data: Dictionary = _dictionary_or_empty(option)
-		var option_id := str(data.get("id", ""))
-		if option_id.is_empty():
-			continue
-		output[option_id] = _context_option_detail(data, false)
-	return output
-
-
-func _context_option_detail(option: Dictionary, enabled: bool) -> Dictionary:
-	var disabled_reason := str(option.get("disabled_reason", ""))
-	return {
-		"id": str(option.get("id", "")),
-		"kind": str(option.get("kind", "")),
-		"display_name": str(option.get("display_name", option.get("id", ""))),
-		"enabled": enabled,
-		"disabled": not enabled or bool(option.get("disabled", false)),
-		"disabled_reason": disabled_reason,
-		"disabled_reason_text": _disabled_reason_text(disabled_reason) if not disabled_reason.is_empty() else "",
-		"ap_cost": float(option.get("ap_cost", 0.0)),
-		"interaction_range": int(option.get("interaction_range", 0)),
-		"tooltip": _option_tooltip(option),
-		"hover_text": _option_hover_text(option),
-	}
-
-
-func _option_hover_text(option: Dictionary) -> String:
-	var parts: Array[String] = [
-		str(option.get("display_name", option.get("id", ""))),
-		"kind=%s" % str(option.get("kind", "")),
-	]
-	var ap_cost := float(option.get("ap_cost", 0.0))
-	if ap_cost > 0.0:
-		parts.append("AP %.0f" % ap_cost)
-	var reason := str(option.get("disabled_reason", ""))
-	if bool(option.get("disabled", false)) or not reason.is_empty():
-		parts.append("禁用: %s" % _disabled_reason_text(reason))
-	return " | ".join(parts)
 
 
 func _disabled_reason_text(reason: String) -> String:
@@ -1327,37 +938,6 @@ func _short_hotbar_label(label: String) -> String:
 	if label.length() <= 4:
 		return label
 	return label.substr(0, 4)
-
-
-func _clear_menu_options() -> void:
-	if _menu_options_box == null:
-		return
-	for child in _menu_options_box.get_children():
-		_menu_options_box.remove_child(child)
-		child.free()
-
-
-func _menu_position(screen_position: Vector2) -> Vector2:
-	var viewport_size := get_viewport_rect().size
-	var menu_size := Vector2(200, max(60, 32 + _menu_options_box.get_child_count() * 32))
-	return Vector2(
-		clampf(screen_position.x, 8.0, max(8.0, viewport_size.x - menu_size.x - 8.0)),
-		clampf(screen_position.y, 8.0, max(8.0, viewport_size.y - menu_size.y - 8.0))
-	)
-
-
-func _prompt_summary_for_menu(prompt: Dictionary) -> Dictionary:
-	if prompt.has("has_target"):
-		return prompt
-	if not bool(prompt.get("ok", false)):
-		return {"has_target": false}
-	return {
-		"has_target": true,
-		"target_name": prompt.get("target_name", ""),
-		"primary_option_id": prompt.get("primary_option_id", ""),
-		"options": prompt.get("options", []),
-		"disabled_options": prompt.get("disabled_options", []),
-	}
 
 
 func _inventory_text(inventory: Dictionary) -> String:
