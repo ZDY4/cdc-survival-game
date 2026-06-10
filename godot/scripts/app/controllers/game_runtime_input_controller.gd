@@ -215,8 +215,8 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 		if str(right_hover.get("kind", "")) == "ground" and game_root.has_method("select_grid_target"):
 			var right_ground_position: Vector3 = right_hover.get("position", Vector3.ZERO)
 			game_root.select_grid_target(_grid_from_world_position(right_ground_position))
-		if game_root.hud != null and game_root.hud.has_method("show_interaction_menu") and game_root.has_method("current_interaction_prompt"):
-			game_root.hud.show_interaction_menu(mouse_event.position, game_root.current_interaction_prompt())
+		if game_root.has_method("show_interaction_menu") and game_root.has_method("current_interaction_prompt"):
+			game_root.show_interaction_menu(mouse_event.position, game_root.current_interaction_prompt())
 		return true
 	if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
 		_zoom_camera_wheel(1.0)
@@ -236,8 +236,8 @@ func _close_context_menu_on_outside_click(mouse_event: InputEventMouseButton) ->
 		return false
 	if _mouse_over_blocking_ui():
 		return false
-	if game_root.hud != null and game_root.hud.has_method("hide_interaction_menu"):
-		game_root.hud.hide_interaction_menu()
+	if game_root.has_method("hide_interaction_menu"):
+		game_root.hide_interaction_menu()
 	if game_root.has_method("close_active_context_menu"):
 		game_root.close_active_context_menu()
 	return true
@@ -408,8 +408,8 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 		if game_root.has_method("press_space_action"):
 			result = game_root.press_space_action()
 		_start_space_wait_hold_if_allowed(result)
-		if game_root.hud != null and game_root.hud.has_method("hide_interaction_menu"):
-			game_root.hud.hide_interaction_menu()
+		if game_root.has_method("hide_interaction_menu"):
+			game_root.hide_interaction_menu()
 		return true
 	return false
 
@@ -1959,7 +1959,7 @@ func _gameplay_input_blocked_by_ui() -> bool:
 
 
 func _interaction_menu_open() -> bool:
-	return game_root.hud != null and game_root.hud.has_method("is_interaction_menu_open") and bool(game_root.hud.is_interaction_menu_open())
+	return game_root.has_method("is_interaction_menu_open") and bool(game_root.is_interaction_menu_open())
 
 
 func _context_menu_open() -> bool:

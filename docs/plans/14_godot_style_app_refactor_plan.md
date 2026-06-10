@@ -341,6 +341,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 玩家命令 blocker / rejection payload 已抽到 `player_command_blocker.gd`，`GameApp` 只保留 Callable 兼容入口和 HUD refresh。
 - [x] 引入脚本级 `HudRoot` facade，承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme 和 context menu snapshot。
 - [x] controls hint、debug console、debug panel 的 HUD 控件开关、snapshot、schema/result 写入已通过 `HudRoot` 窄接口转发；`GameApp` 只保留兼容入口、刷新和音频反馈。
+- [x] 运行时输入层打开、关闭和查询 HUD interaction menu 已改为调用 `GameApp` / `HudRoot` 窄接口，不再直接读取 `game_root.hud`。
 - [x] tooltip render 和 drag preview render controller 已由 `HudRoot` 持有，`GameApp` 的旧 overlay 属性和 render 方法只作为 smoke / tool 兼容 facade。
 - [x] action operation 的面板刷新顺序已统一到 `HudRoot.refresh_operation_panels()`，`GameApp._refresh_operation_panels()` 只保留兼容转发。
 - [x] `refresh_all_panels()` 已改为保留 trade / container session 关闭保护后调用 `HudRoot.refresh_all()`。

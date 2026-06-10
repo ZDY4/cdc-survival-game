@@ -473,11 +473,28 @@ func hud_input_blocker_snapshot(debug_console_open: bool = false) -> Dictionary:
 
 
 func close_hud_interaction_menu() -> bool:
+	return bool(hide_interaction_menu().get("success", false))
+
+
+func show_interaction_menu(screen_position: Vector2, prompt: Dictionary) -> Dictionary:
 	var hud: Control = panel("hud")
-	if hud != null and hud.has_method("hide_interaction_menu"):
-		hud.hide_interaction_menu()
-		return true
-	return false
+	if hud == null or not hud.has_method("show_interaction_menu"):
+		return {"success": false, "reason": "hud_missing", "visible": false}
+	hud.show_interaction_menu(screen_position, prompt)
+	return {"success": true, "visible": is_interaction_menu_open()}
+
+
+func hide_interaction_menu() -> Dictionary:
+	var hud: Control = panel("hud")
+	if hud == null or not hud.has_method("hide_interaction_menu"):
+		return {"success": false, "reason": "hud_missing", "visible": false}
+	hud.hide_interaction_menu()
+	return {"success": true, "visible": false}
+
+
+func is_interaction_menu_open() -> bool:
+	var hud: Control = panel("hud")
+	return hud != null and hud.has_method("is_interaction_menu_open") and bool(hud.is_interaction_menu_open())
 
 
 func context_menu_snapshot() -> Dictionary:

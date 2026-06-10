@@ -503,6 +503,22 @@ func _close_hud_interaction_menu() -> bool:
 	return hud_root != null and hud_root.close_hud_interaction_menu()
 
 
+func show_interaction_menu(screen_position: Vector2, prompt: Dictionary = {}) -> Dictionary:
+	if hud_root == null:
+		return {"success": false, "reason": "hud_root_missing", "visible": false}
+	return _dictionary_or_empty(hud_root.show_interaction_menu(screen_position, prompt))
+
+
+func hide_interaction_menu() -> Dictionary:
+	if hud_root == null:
+		return {"success": false, "reason": "hud_root_missing", "visible": false}
+	return _dictionary_or_empty(hud_root.hide_interaction_menu())
+
+
+func is_interaction_menu_open() -> bool:
+	return hud_root != null and hud_root.is_interaction_menu_open()
+
+
 func _panel_modal_blocker_name() -> String:
 	var snapshot := _panel_modal_blocker_snapshot()
 	return str(snapshot.get("name", ""))
