@@ -109,7 +109,7 @@ func apply_pending_final_refresh(simulation: RefCounted, interaction_controller:
 	var resolved: Dictionary = resolve_pending_final_world_result(simulation, pending_refresh)
 	var final_world_result: Dictionary = _dictionary_or_empty(resolved.get("world_result", {}))
 	var refresh: Dictionary = apply_existing_world_result(simulation, interaction_controller, final_world_result, "world_result_without_present")
-	var accepted: Dictionary = accept_refresh_result(refresh, fallback_error)
+	var accepted: Dictionary = accept_and_report_refresh_result(refresh, fallback_error)
 	accepted["pending_refresh"] = pending_refresh.duplicate(true)
 	accepted["resolved"] = resolved.duplicate(true)
 	accepted["render_world"] = bool(pending_refresh.get("render_world", true))
@@ -127,8 +127,29 @@ func accept_refresh_result(refresh: Dictionary, fallback_error: String = "world 
 		"source": str(refresh.get("source", "")),
 		"reason": str(refresh.get("reason", "")),
 		"error_message": "" if ok else refresh_error_message(refresh, fallback_error),
+		"log_context": refresh_log_context(refresh, next_world_result),
 		"sync_observed_level": ok,
 	}
+
+
+func accept_and_report_refresh_result(refresh: Dictionary, fallback_error: String = "world refresh failed") -> Dictionary:
+	var accepted: Dictionary = accept_refresh_result(refresh, fallback_error)
+	if not bool(accepted.get("ok", false)):
+		push_error(refresh_failure_message(accepted, fallback_error))
+	return accepted
+
+
+func refresh_failure_message(accepted: Dictionary, fallback_error: String = "world refresh failed") -> String:
+	var context: Dictionary = _dictionary_or_empty(accepted.get("log_context", {}))
+	var parts: Array[String] = []
+	for key in ["source", "reason", "map_id", "actor_id"]:
+		var value := str(context.get(key, "")).strip_edges()
+		if not value.is_empty():
+			parts.append("%s=%s" % [key, value])
+	var error_message := str(accepted.get("error_message", fallback_error)).strip_edges()
+	if parts.is_empty():
+		return error_message
+	return "%s (%s)" % [error_message, ", ".join(parts)]
 
 
 func refresh_error_message(refresh: Dictionary, fallback_error: String = "world refresh failed") -> String:
@@ -139,6 +160,19 @@ func refresh_error_message(refresh: Dictionary, fallback_error: String = "world 
 	if not reason.is_empty():
 		return reason
 	return fallback_error
+
+
+func refresh_log_context(refresh: Dictionary, next_world_result: Dictionary = {}) -> Dictionary:
+	var world: Dictionary = next_world_result if not next_world_result.is_empty() else _dictionary_or_empty(refresh.get("world_result", {}))
+	var map: Dictionary = _dictionary_or_empty(world.get("map", {}))
+	var runtime: Dictionary = _dictionary_or_empty(world.get("runtime", {}))
+	var player: Dictionary = _dictionary_or_empty(runtime.get("player", {}))
+	return {
+		"source": str(refresh.get("source", "")),
+		"reason": str(refresh.get("reason", "")),
+		"map_id": str(map.get("id", map.get("map_id", ""))),
+		"actor_id": str(player.get("actor_id", player.get("id", ""))),
+	}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

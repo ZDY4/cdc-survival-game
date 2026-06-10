@@ -1905,10 +1905,9 @@ func _apply_existing_runtime_world_result(next_world_result: Dictionary, source:
 
 
 func _accept_runtime_refresh_result(refresh: Dictionary, fallback_error: String) -> bool:
-	var accepted: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("accept_refresh_result", refresh, fallback_error))
+	var accepted: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("accept_and_report_refresh_result", refresh, fallback_error))
 	world_result = _dictionary_or_empty(accepted.get("world_result", {}))
 	if not bool(accepted.get("ok", false)):
-		push_error(str(accepted.get("error_message", fallback_error)))
 		return false
 	if bool(accepted.get("sync_observed_level", false)):
 		_sync_observed_level_to_map()
@@ -2114,7 +2113,6 @@ func _apply_pending_world_action_final_refresh(trigger: String, pending_refresh:
 	var refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("apply_pending_final_refresh", simulation, interaction_controller, pending_refresh, "world refresh failed"))
 	world_result = _dictionary_or_empty(refresh.get("world_result", {}))
 	if not bool(refresh.get("ok", false)):
-		push_error(str(refresh.get("error_message", "world refresh failed")))
 		return false
 	if bool(refresh.get("sync_observed_level", false)):
 		_sync_observed_level_to_map()

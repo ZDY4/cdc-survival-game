@@ -20,7 +20,7 @@
 - 相机 follow、pan、zoom、clamp 和 ray-plane 计算已抽到 `godot/scripts/world/camera_rig_controller.gd`，`GameRuntimeInputController` 仍保留鼠标拾取、hover 和玩家交互输入。
 - runtime refresh / world snapshot 构建已抽到 `godot/scripts/app/controllers/runtime_refresh_controller.gd`。
 - pending final refresh 的 final world result fallback 解析和 runtime 应用已抽到 `RuntimeRefreshController.resolve_pending_final_world_result()` / `apply_pending_final_refresh()`。
-- refresh result 接受和错误消息规范化已抽到 `RuntimeRefreshController.accept_refresh_result()` / `refresh_error_message()`。
+- refresh result 接受、错误消息规范化和失败报告上下文已抽到 `RuntimeRefreshController.accept_refresh_result()` / `accept_and_report_refresh_result()` / `refresh_error_message()`。
 - world action presenter、queue、pending UI、movement execution plan 和 final refresh 状态已抽到 `godot/scripts/app/controllers/world_action_flow_controller.gd`。
 - world action presenter 完成后通过 `WorldActionFlowController.final_refresh_ready` / `deferred_ui_ready` signal 通知 `GameApp` 执行最终刷新和 UI 接续。
 - 运行时性能统计和 render count fallback 汇总已抽到 `godot/scripts/app/controllers/runtime_performance_tracker.gd`。
@@ -387,10 +387,10 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 将 runtime snapshot -> world snapshot 的构建迁入 controller。
 - [x] 明确 refresh reason：startup、player command、debug command、world action final refresh、editor smoke。
 - [x] pending final refresh 的 world result fallback 解析已迁入 `RuntimeRefreshController`。
-- [x] refresh result 接受和错误消息规范化已迁入 `RuntimeRefreshController`，`GameApp` 只保留 `push_error` 输出和状态赋值。
+- [x] refresh result 接受、错误消息规范化和失败 `push_error` 报告已迁入 `RuntimeRefreshController`，`GameApp` 只保留状态赋值和 scene/HUD 接续。
 - [x] pending final refresh 的 runtime 应用已迁入 `RuntimeRefreshController.apply_pending_final_refresh()`；`GameApp` 仍负责 scene tree 渲染、HUD 接续和 presenter 状态标记。
 - [ ] 继续将 world apply -> HUD apply 的最终顺序收敛到 controller，减少根脚本手写刷新链。
-- [ ] 将错误处理和日志集中到 refresh controller。
+- [ ] 继续补齐 refresh 成功路径和更完整 runtime 上下文日志，覆盖 source、reason、map id、actor id 等关键字段。
 
 验收：
 
