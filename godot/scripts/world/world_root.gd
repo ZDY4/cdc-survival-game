@@ -32,6 +32,21 @@ func apply_world_snapshot(world_snapshot: Dictionary, runtime_snapshot: Dictiona
 	return counts
 
 
+func apply_runtime_snapshot(world_snapshot: Dictionary, runtime_snapshot: Dictionary = {}, debug_overlay_mode: String = "off", render_world: bool = true, options: Dictionary = {}) -> Dictionary:
+	var counts: Dictionary = {}
+	if render_world:
+		counts = apply_world_snapshot(world_snapshot, runtime_snapshot, options)
+	refresh_fog(world_snapshot, runtime_snapshot)
+	refresh_debug_overlay(debug_overlay_mode, world_snapshot, runtime_snapshot)
+	return {
+		"rendered": render_world,
+		"counts": counts,
+		"world_container": ensure_world_container(),
+		"fog_overlay": fog_overlay,
+		"debug_overlay": debug_overlay_snapshot(),
+	}
+
+
 func refresh_fog(world_snapshot: Dictionary, runtime_snapshot: Dictionary) -> void:
 	if world_snapshot.is_empty():
 		return

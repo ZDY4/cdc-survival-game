@@ -1981,13 +1981,17 @@ func _refresh_world_runtime_bindings() -> void:
 
 func _apply_world_root_snapshot(render_world: bool = true) -> Dictionary:
 	_setup_world_container()
-	var counts: Dictionary = {}
+	if world_root == null:
+		return {}
+	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
+	var apply_result: Dictionary = _dictionary_or_empty(world_root.call("apply_runtime_snapshot", world_result, runtime_snapshot, current_debug_overlay_mode(), render_world))
+	var counts: Dictionary = _dictionary_or_empty(apply_result.get("counts", {}))
 	if render_world:
-		counts = _render_world()
+		runtime_performance_tracker.call("record_world_render", counts, world_root)
 	elif runtime_input_controller != null:
 		runtime_input_controller.world_result = world_result
-	_refresh_fog_overlay()
-	_refresh_debug_overlay()
+	world_container = apply_result.get("world_container", world_container) as Node3D
+	fog_overlay = apply_result.get("fog_overlay", fog_overlay) as ColorRect
 	return counts
 
 
