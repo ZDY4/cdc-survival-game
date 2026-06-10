@@ -89,7 +89,11 @@ func _toggle_observe_mode(game_root: Node) -> Dictionary:
 
 
 func _clear_console(game_root: Node) -> Dictionary:
-	var hud: Node = game_root.get("hud")
-	if hud != null and hud.has_method("clear_debug_console_history"):
-		hud.clear_debug_console_history()
-	return {"success": true, "message": "console cleared"}
+	if not game_root.has_method("clear_debug_console_history"):
+		return {"success": false, "reason": "debug_console_missing", "message": "debug console missing"}
+	var clear_result: Dictionary = game_root.clear_debug_console_history()
+	return {
+		"success": bool(clear_result.get("success", false)),
+		"reason": str(clear_result.get("reason", "")),
+		"message": "console cleared" if bool(clear_result.get("success", false)) else "debug console missing",
+	}

@@ -13,7 +13,7 @@
 已完成或基本收敛：
 
 - startup request 和 new/continue runtime 构建已抽到 `godot/scripts/app/controllers/runtime_boot_controller.gd`。
-- debug console 命令执行和 debug overlay mode 状态已抽到 `godot/scripts/app/controllers/debug_runtime_controller.gd`。
+- debug console 命令执行和 debug overlay mode 状态已抽到 `godot/scripts/app/controllers/debug_runtime_controller.gd`，`clear` 命令通过 `HudRoot.clear_debug_console_history()` 窄接口清空历史。
 - HUD 运行时刷新已通过 `hud_controller.apply_runtime_snapshot()` 和 `input_blocker_snapshot()` 收敛为 facade。
 - 顶层输入分发、逐帧 runtime input process、debug console 输入保护、HUD 面板快捷键、交易面板快捷键和一组全局 UI/debug 快捷键主路径已抽到 `godot/scripts/app/controllers/game_input_router.gd`；`GameRuntimeInputController` 暂保留 direct-call smoke 兼容 fallback。
 - 世界表现入口已抽到 `godot/scenes/world/world_root.tscn` + `godot/scripts/world/world_root.gd`，稳定 `WorldContainer` 已落到 scene 中，`GameApp` 主要实例化 scene 并调用 WorldRoot 接口。
@@ -300,6 +300,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 保留 `debug_console_command_runner.gd` 作为命令 schema / mutation command runner。
 - [x] observe interval snapshot 已收敛到 `RuntimeControlStateController`，并删除 `GameApp` 中无调用方的 observe speed / interval 私有 wrapper。
 - [x] observe mode / auto tick / info panel 的 HUD 刷新和 info panel 音频意图已收敛到 `RuntimeControlStateController` 结果中，`GameApp` 通过统一入口消费。
+- [x] debug console `clear` 命令不再直接读取 `GameApp.hud`，改为经 `GameApp.clear_debug_console_history()` / `HudRoot.clear_debug_console_history()`。
 - [ ] 继续收敛 observe mode / auto tick / info panel 与 debug runtime 的边界，减少 debug command 对 `GameApp` facade 的直接调用。
 - [x] smoke 继续通过 `submit_debug_console_command()` 验证兼容入口。
 

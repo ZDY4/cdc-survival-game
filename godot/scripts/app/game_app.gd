@@ -735,6 +735,12 @@ func debug_console_snapshot() -> Dictionary:
 	}
 
 
+func clear_debug_console_history() -> Dictionary:
+	if hud_root == null:
+		return {"success": false, "reason": "hud_root_missing"}
+	return _dictionary_or_empty(hud_root.clear_debug_console_history())
+
+
 func submit_debug_console_command(command_text: String) -> Dictionary:
 	var command := command_text.strip_edges()
 	var result: Dictionary = _execute_debug_console_command(command)

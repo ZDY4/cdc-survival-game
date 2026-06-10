@@ -420,6 +420,14 @@ func set_debug_console_result(command: String, result: Dictionary) -> void:
 		hud.call("set_debug_console_result", command, result)
 
 
+func clear_debug_console_history() -> Dictionary:
+	var hud: Control = panel("hud")
+	if hud == null or not hud.has_method("clear_debug_console_history"):
+		return {"success": false, "reason": "hud_missing"}
+	hud.call("clear_debug_console_history")
+	return {"success": true}
+
+
 func toggle_debug_panel() -> Dictionary:
 	var hud: Control = panel("hud")
 	if hud == null or not hud.has_method("toggle_debug_panel"):
