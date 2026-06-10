@@ -1207,26 +1207,24 @@ func _runtime_pending_state_snapshot() -> Dictionary:
 
 
 func select_interaction_target(target: Dictionary) -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var result: Dictionary = interaction_controller.select_target(target)
-	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
-	return result
+	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("select_target", interaction_controller, target))
+	return _apply_interaction_selection_operation(operation)
 
 
 func select_interaction_node(node: Node) -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var result: Dictionary = interaction_controller.select_node(node)
-	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
-	return result
+	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("select_node", interaction_controller, node))
+	return _apply_interaction_selection_operation(operation)
 
 
 func clear_interaction_selection(reason: String = "cleared") -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var result: Dictionary = interaction_controller.clear_selection(reason)
-	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
+	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("clear_selection", interaction_controller, reason))
+	return _apply_interaction_selection_operation(operation)
+
+
+func _apply_interaction_selection_operation(operation: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if bool(operation.get("refresh_hud", false)):
+		refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 	return result
 
 
@@ -1248,11 +1246,8 @@ func _apply_interaction_action_operation(operation: Dictionary) -> Dictionary:
 
 
 func select_grid_target(grid: Dictionary) -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var result: Dictionary = interaction_controller.select_grid(grid)
-	refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
-	return result
+	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("select_grid", interaction_controller, grid))
+	return _apply_interaction_selection_operation(operation)
 
 
 func execute_move_to_grid(grid: Dictionary) -> Dictionary:
@@ -1274,12 +1269,11 @@ func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false) -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var result: Dictionary = interaction_controller.cancel_pending(reason, auto_end_turn)
-	if bool(result.get("had_pending", false)):
+	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("cancel_pending", interaction_controller, reason, auto_end_turn))
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if bool(operation.get("rebuild_world", false)):
 		_rebuild_world_after_runtime_change(current_interaction_prompt(), result)
-	else:
+	elif bool(operation.get("refresh_all_panels", false)):
 		refresh_all_panels(current_interaction_prompt())
 	return result
 
@@ -2452,7 +2446,7 @@ func _clear_focus_switch_ui_state() -> void:
 	if runtime_input_controller != null and runtime_input_controller.has_method("clear_selection_state"):
 		runtime_input_controller.clear_selection_state("focus_switch")
 	if interaction_controller != null:
-		interaction_controller.clear_selection("focus_switch")
+		interaction_action_controller.call("clear_selection", interaction_controller, "focus_switch", false)
 	_close_hud_interaction_menu()
 
 
