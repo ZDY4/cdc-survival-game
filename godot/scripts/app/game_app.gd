@@ -1388,21 +1388,19 @@ func select_grid_target(grid: Dictionary) -> Dictionary:
 
 
 func execute_move_to_grid(grid: Dictionary) -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var blocked: Dictionary = _player_command_rejection("move")
-	if not blocked.is_empty():
-		return blocked
-	var result: Dictionary = interaction_controller.execute_move_to_grid(grid)
+	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execute_move", interaction_controller, grid, Callable(self, "_player_command_rejection")))
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if not bool(operation.get("apply_result", false)):
+		return result
 	if bool(result.get("success", false)) and _world_action_command_kind(result) == "move":
-		var final_world_result: Dictionary = interaction_controller.world_result.duplicate(true)
+		var final_world_result: Dictionary = _dictionary_or_empty(operation.get("final_world_result", {}))
 		_setup_world_container()
 		_present_world_action(result)
 		if _world_action_presenter_blocks_input():
 			_queue_deferred_world_refresh(final_world_result, _dictionary_or_empty(result.get("prompt", {})), result, "execute_move_to_grid", false)
 			refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 			return result
-	world_result = interaction_controller.world_result
+	world_result = _dictionary_or_empty(operation.get("final_world_result", {}))
 	_rebuild_world_after_runtime_change(_dictionary_or_empty(result.get("prompt", {})), result)
 	return result
 

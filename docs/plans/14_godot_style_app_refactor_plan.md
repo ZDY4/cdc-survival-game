@@ -38,12 +38,12 @@
 - 任务 turn-in 和地图面板进入 overworld location 的 action facade 已抽到 `godot/scripts/app/controllers/world_panel_action_controller.gd`；`GameApp` 只保留兼容入口、world rebuild 和刷新执行。
 - 对话选择、无选项继续和关闭对话的 core-service 调用已抽到 `godot/scripts/app/controllers/dialogue_action_controller.gd`；`GameApp` 只保留兼容入口、trade 收尾和面板刷新分发。
 - Space wait 和 auto tick wait 的 `wait` 命令提交已抽到 `godot/scripts/app/controllers/wait_action_controller.gd`；`GameApp` 只保留兼容入口、observe / pending 分支、制作队列接力和 runtime refresh。
-- 主交互和选项交互的执行 facade 已抽到 `godot/scripts/app/controllers/interaction_action_controller.gd`；`GameApp` 只保留兼容入口和交互结果应用。
+- 主交互、选项交互和移动交互的执行 facade 已抽到 `godot/scripts/app/controllers/interaction_action_controller.gd`；`GameApp` 只保留兼容入口、交互结果应用和移动 presentation / refresh 编排。
 - 脚本级 `HudRoot` facade 已引入到 `godot/scripts/ui/hud_root.gd`，当前承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme、context menu snapshot、controls hint、debug console、debug panel、tooltip render 和 drag preview render；`GameApp` 保留旧 HUD / panel / overlay 字段作为 smoke 兼容引用。
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 2126 行，还保留 tooltip / drag snapshot facade、overlay 兼容属性、observe / pending 分支、移动交互和交互结果应用等兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 2124 行，还保留 tooltip / drag snapshot facade、overlay 兼容属性、observe / pending 分支、交互结果应用和移动 presentation / refresh 编排等兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` scene；当前已通过 `HudRoot` script 包住现有 HUD controller 和 panel controller。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
@@ -294,12 +294,12 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 任务 turn-in 和地图面板进入 overworld location facade 已抽到 `world_panel_action_controller.gd`，`GameApp` 只保留兼容方法、world rebuild 和刷新执行。
 - [x] 对话选择、无选项继续和关闭对话 facade 已抽到 `dialogue_action_controller.gd`，`GameApp` 只保留兼容方法、trade 收尾和刷新执行。
 - [x] Space wait 和 auto tick wait 的 `wait` 命令提交已抽到 `wait_action_controller.gd`，`GameApp` 只保留兼容方法、observe / pending 分支、制作队列接力和刷新执行。
-- [x] 主交互和选项交互 facade 已抽到 `interaction_action_controller.gd`，`GameApp` 只保留兼容方法和交互结果应用。
+- [x] 主交互、选项交互和移动交互 facade 已抽到 `interaction_action_controller.gd`，`GameApp` 只保留兼容方法、交互结果应用和移动 presentation / refresh 编排。
 - [x] 引入脚本级 `HudRoot` facade，承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme 和 context menu snapshot。
 - [x] controls hint、debug console、debug panel 的 HUD 控件开关、snapshot、schema/result 写入已通过 `HudRoot` 窄接口转发；`GameApp` 只保留兼容入口、刷新和音频反馈。
 - [x] tooltip render 和 drag preview render controller 已由 `HudRoot` 持有，`GameApp` 的旧 overlay 属性和 render 方法只作为 smoke / tool 兼容 facade。
 - [ ] 将 `GameApp` 中剩余 tooltip / drag snapshot 组装、兼容 panel 引用等代码继续替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
-- [ ] 将移动交互、observe / pending 分支、交互结果应用等剩余玩家动作 facade 继续从 `GameApp` 移出。
+- [ ] 将 observe / pending 分支、交互结果应用、移动 presentation / refresh 编排等剩余玩家动作 facade 继续从 `GameApp` 移出。
 - [x] 将 panel blocker / active modal 状态通过 `hud_root.input_blocker_snapshot()` / `gameplay_input_blocker_snapshot()` 暴露；debug console blocker 由 `HudRoot` 暴露，world action blocker 仍由 `GameApp` 做跨层合成。
 
 验收：

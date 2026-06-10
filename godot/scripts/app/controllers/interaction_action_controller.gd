@@ -23,6 +23,18 @@ func execute_option(interaction_controller: RefCounted, option_id: String, block
 	return _operation_result(result, executed_target, true)
 
 
+func execute_move(interaction_controller: RefCounted, grid: Dictionary, blocker: Callable) -> Dictionary:
+	if interaction_controller == null:
+		return _operation_result({"success": false, "reason": "interaction_controller_missing"}, {}, false)
+	var blocked: Dictionary = _blocked(blocker, "move")
+	if not blocked.is_empty():
+		return _operation_result(blocked, {}, false)
+	var result: Dictionary = dictionary_or_empty(interaction_controller.execute_move_to_grid(grid))
+	var operation: Dictionary = _operation_result(result, {}, true)
+	operation["final_world_result"] = dictionary_or_empty(interaction_controller.world_result).duplicate(true)
+	return operation
+
+
 func _blocked(blocker: Callable, action: String) -> Dictionary:
 	if not blocker.is_valid():
 		return {}
