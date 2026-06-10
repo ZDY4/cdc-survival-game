@@ -866,7 +866,7 @@ func debug_panel_snapshot() -> Dictionary:
 
 func cycle_debug_overlay_mode() -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(debug_runtime_controller.call("cycle_debug_overlay_mode"))
-	_refresh_debug_overlay()
+	refresh_world_visuals(false)
 	refresh_hud(current_interaction_prompt())
 	_play_hud_shortcut_audio("ui_option_selected", "DebugOverlayShortcut", "keyboard_shortcut", "cycle_debug_overlay", {
 		"value": current_debug_overlay_mode(),
@@ -2019,6 +2019,10 @@ func _refresh_world_runtime_bindings() -> void:
 	_setup_panels()
 
 
+func refresh_world_visuals(render_world: bool = true) -> Dictionary:
+	return _apply_world_root_snapshot(render_world)
+
+
 func _apply_world_root_snapshot(render_world: bool = true) -> Dictionary:
 	_setup_world_container()
 	if world_root == null:
@@ -2033,33 +2037,6 @@ func _apply_world_root_snapshot(render_world: bool = true) -> Dictionary:
 	world_container = apply_result.get("world_container", world_container) as Node3D
 	fog_overlay = apply_result.get("fog_overlay", fog_overlay) as ColorRect
 	return counts
-
-
-func _render_world() -> Dictionary:
-	if world_root == null:
-		return {}
-	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
-	var counts: Dictionary = _dictionary_or_empty(world_root.call("apply_world_snapshot", world_result, runtime_snapshot))
-	runtime_performance_tracker.call("record_world_render", counts, world_root)
-	if world_root.has_method("ensure_world_container"):
-		world_container = world_root.call("ensure_world_container")
-	return counts
-
-
-func _refresh_fog_overlay() -> void:
-	if simulation == null or world_result.is_empty() or world_root == null:
-		return
-	world_root.call("refresh_fog", world_result, simulation.snapshot())
-	fog_overlay = world_root.get("fog_overlay")
-
-
-func _refresh_debug_overlay() -> void:
-	if world_root == null:
-		return
-	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
-	world_root.call("refresh_debug_overlay", current_debug_overlay_mode(), world_result, runtime_snapshot)
-	if world_root.has_method("ensure_world_container"):
-		world_container = world_root.call("ensure_world_container")
 
 
 func _setup_audio_feedback_controller() -> void:

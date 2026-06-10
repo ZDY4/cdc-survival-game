@@ -216,7 +216,7 @@ func _refresh_runtime_world(game_root: Node, result: Dictionary) -> void:
 	game_root._setup_world_container()
 	WorldSceneRenderer.new().render_world(game_root.world_container, game_root.world_result)
 	game_root._setup_runtime_input_controller()
-	game_root._refresh_fog_overlay()
+	game_root.refresh_world_visuals(false)
 	game_root._setup_panels()
 	game_root.refresh_all_panels(result.get("prompt", {}))
 
@@ -3664,6 +3664,8 @@ func _body_uses_submit_authority(body: String, owner: String) -> bool:
 		return true
 	if body.contains("wait_action_controller.call(\"submit_wait\""):
 		return true
+	if owner == "WaitActionController" and body.contains("submit_wait("):
+		return true
 	if owner == "PlayerInteractionController" and body.contains("execute_selected_option("):
 		return true
 	if (owner == "GameApp" or owner == "InteractionActionController") and (body.contains("interaction_controller.execute_primary_interaction") or body.contains("interaction_controller.execute_selected_option") or body.contains("interaction_controller.execute_move_to_grid")):
@@ -3704,6 +3706,8 @@ func _body_uses_core_service(body: String, owner: String, core_service: String) 
 			return body.contains("turn_in.call")
 		"Simulation.enter_location":
 			return body.contains("enter_location.call")
+		"advance_dialogue.call":
+			return body.contains("advance_dialogue.call")
 	return false
 
 

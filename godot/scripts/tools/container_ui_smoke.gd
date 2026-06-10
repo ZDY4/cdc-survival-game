@@ -1048,7 +1048,7 @@ func _refresh_runtime_world(game_root: Node, result: Dictionary) -> void:
 	game_root._setup_world_container()
 	WorldSceneRenderer.new().render_world(game_root.world_container, game_root.world_result)
 	game_root._setup_runtime_input_controller()
-	game_root._refresh_fog_overlay()
+	game_root.refresh_world_visuals(false)
 	game_root._setup_panels()
 	game_root.refresh_all_panels(result.get("prompt", {}))
 

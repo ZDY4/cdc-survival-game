@@ -19,6 +19,7 @@
 - 世界表现入口已抽到 `godot/scenes/world/world_root.tscn` + `godot/scripts/world/world_root.gd`，稳定 `WorldContainer` 已落到 scene 中，`GameApp` 主要实例化 scene 并调用 WorldRoot 接口。
 - `WorldRoot.apply_runtime_snapshot()` 已承接 render world、fog 和 debug overlay 的世界表现应用顺序，`GameApp` 不再在主世界刷新入口手写这三步。
 - `GameApp.world_container` / `GameApp.fog_overlay` 已改为转发到 `WorldRoot` 的兼容属性，保留 smoke / tool 旧入口但不再作为根脚本权威状态。
+- smoke / tool 需要刷新世界视觉时改用 `GameApp.refresh_world_visuals()` 稳定 facade；旧 `_render_world()` / `_refresh_fog_overlay()` / `_refresh_debug_overlay()` 私有 wrapper 已移除。
 - 相机 follow、pan、zoom、clamp 和 ray-plane 计算已抽到 `godot/scripts/world/camera_rig_controller.gd`，`GameRuntimeInputController` 仍保留鼠标拾取、hover 和玩家交互输入。
 - runtime refresh / world snapshot 构建已抽到 `godot/scripts/app/controllers/runtime_refresh_controller.gd`。
 - pending final refresh 的 final world result fallback 解析和 runtime 应用已抽到 `RuntimeRefreshController.resolve_pending_final_world_result()` / `apply_pending_final_refresh()`。
@@ -76,7 +77,7 @@
 | 视图与 focus | `current_map_level()`、`change_observed_level()`、`cycle_focused_actor()`、`focus_actor()`、`focused_actor_snapshot()` | `RuntimeViewStateController` + `WorldRoot` | 作为 debug/tool facade 暂保留；UI 和输入调用改为 router/controller 后删除重复实现。 |
 | 交互选择与 pending | `select_interaction_target()`、`select_interaction_node()`、`clear_interaction_selection()`、`select_grid_target()`、`cancel_pending()`、`current_interaction_prompt()` | `InteractionActionController` + `PlayerInteractionController` | smoke 兼容入口暂保留；实际选择/取消逻辑继续下沉到 interaction controller。 |
 | 玩家动作 facade | 容器、背包、交易、角色、技能、制作、任务、对话、等待相关 public 方法 | 各 `*_action_controller.gd` | public facade 可保留到 smoke 改造完成；后续按 UI 面板 signal 直接调用 action controller，删除根脚本中重复分发。 |
-| 世界刷新与表现 | `_rebuild_world_after_runtime_change()`、`_apply_world_root_snapshot()`、`_render_world()`、`_refresh_fog_overlay()`、`_refresh_debug_overlay()` | `RuntimeRefreshController` + `WorldRoot` | 根节点只保留一次性 orchestration；具体 apply/render/fog/debug overlay 入口迁到 `WorldRoot` / refresh controller。 |
+| 世界刷新与表现 | `_rebuild_world_after_runtime_change()`、`_apply_world_root_snapshot()`、`refresh_world_visuals()` | `RuntimeRefreshController` + `WorldRoot` | 根节点只保留一次性 orchestration 和 smoke/tool 稳定视觉刷新 facade；具体 apply/render/fog/debug overlay 入口迁到 `WorldRoot` / refresh controller。 |
 | world action presentation | `finish_world_action_presentations()`、`_present_world_action()`、`_apply_pending_world_action_final_refresh()`、queue/pending snapshot | `WorldActionFlowController` | 改为 signal 通知 refresh controller；根节点只连接信号，不直接维护 presentation 状态。 |
 | audio feedback | `play_ui_audio_feedback()`、`play_spatial_audio_feedback()`、`audio_feedback_snapshot()` | `AudioFeedbackController` | 保留 public facade 作为 UI/tool 稳定入口；实现继续保持独立 controller。 |
 | debug / audit snapshots | `player_command_authority_audit_snapshot()`、`ai_debug_snapshot()`、`runtime_world_time_snapshot()`、`runtime_performance_snapshot()`、hover/selection snapshot | 独立 snapshot builder / tracker | 可作为 debug tool 稳定入口保留；避免再把新 debug 数据模型写进根脚本。 |
@@ -388,6 +389,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] `WorldContainer` 已作为稳定子节点写入 `world_root.tscn`，`WorldRoot.ensure_world_container()` 只保留查找和 fallback 创建。
 - [x] `WorldRoot.apply_runtime_snapshot()` 已承接 render world、fog 和 debug overlay 的世界表现应用顺序，`GameApp._apply_world_root_snapshot()` 只转发快照并同步兼容引用。
 - [x] `GameApp.world_container` / `GameApp.fog_overlay` 已改为转发到 `WorldRoot` 的兼容属性，旧 smoke / tool 入口保留但真实节点状态归属 `WorldRoot`。
+- [x] 旧 `_render_world()` / `_refresh_fog_overlay()` / `_refresh_debug_overlay()` 私有 wrapper 已移除；smoke 改用 `refresh_world_visuals(false)` 稳定 facade。
 
 验收：
 
