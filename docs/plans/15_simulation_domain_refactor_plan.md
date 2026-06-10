@@ -304,12 +304,16 @@ func execute(simulation: RefCounted, actor: RefCounted, command: Dictionary) -> 
 ### Phase 4: 抽 CraftingService 和 CraftingCommandHandler
 
 - [ ] 迁移配方校验、材料消耗、工具消耗、拆解需求解析。
-- [ ] 命令层只处理 AP / pending / result 包装。
+- [x] 命令层只处理 AP / pending / result 包装。
 - [ ] 制作和拆解共用需求解析 helper，但 helper 必须有明确职责名。
 
 验收：
 
 - `CraftingUI`、`InventoryUI`、`Crafting` smoke 通过。
+
+阶段记录：
+
+- 2026-06-11: 已新增 `CraftingService` 和 `CraftingCommandHandler`，先迁移 craft 命令排队、批量制作、pending craft 恢复和 `Simulation.craft_recipe()` facade；通过 `CraftingUI`、`Crafting`、`InventoryUI` smoke。拆解需求解析仍在 `Simulation`，需继续抽到明确服务后再勾选本阶段完整验收。
 
 ### Phase 5: 抽 CombatCommandHandler
 
