@@ -33,13 +33,13 @@ func execute(game_root: Node, command: String) -> Dictionary:
 		"help":
 			return {"success": true, "message": help_text()}
 		"show fps":
-			return _toggle_fps_panel(game_root)
+			return _debug_intent("toggle_fps_panel")
 		"show overlays":
-			return _cycle_debug_overlay(game_root)
+			return _debug_intent("cycle_debug_overlay")
 		"observe mode":
-			return _toggle_observe_mode(game_root)
+			return _debug_intent("toggle_observe_mode")
 		"clear":
-			return _clear_console(game_root)
+			return _debug_intent("clear_console")
 	return {"success": false, "reason": "unknown_command", "message": "unknown command: %s" % command}
 
 
@@ -56,44 +56,8 @@ func current_debug_overlay_mode() -> String:
 	return debug_overlay_mode
 
 
-func _toggle_fps_panel(game_root: Node) -> Dictionary:
-	if not game_root.has_method("toggle_debug_panel"):
-		return {"success": false, "reason": "debug_panel_missing", "message": "debug panel missing"}
-	var panel_result: Dictionary = game_root.toggle_debug_panel()
+func _debug_intent(action: String) -> Dictionary:
 	return {
-		"success": bool(panel_result.get("success", false)),
-		"message": "fps panel=%s" % ("on" if bool(panel_result.get("visible", false)) else "off"),
-		"visible": bool(panel_result.get("visible", false)),
-	}
-
-
-func _cycle_debug_overlay(game_root: Node) -> Dictionary:
-	if not game_root.has_method("cycle_debug_overlay_mode"):
-		return {"success": false, "reason": "debug_overlay_missing", "message": "debug overlay missing"}
-	var overlay_result: Dictionary = game_root.cycle_debug_overlay_mode()
-	return {
-		"success": bool(overlay_result.get("success", false)),
-		"message": "overlay=%s" % str(overlay_result.get("mode", "")),
-	}
-
-
-func _toggle_observe_mode(game_root: Node) -> Dictionary:
-	if not game_root.has_method("toggle_observe_mode"):
-		return {"success": false, "reason": "observe_mode_missing", "message": "observe mode missing"}
-	var observe_result: Dictionary = game_root.toggle_observe_mode()
-	var observe_mode := bool(observe_result.get("observe_mode", false))
-	return {
-		"success": bool(observe_result.get("success", false)),
-		"message": "observe=%s" % ("on" if observe_mode else "off"),
-	}
-
-
-func _clear_console(game_root: Node) -> Dictionary:
-	if not game_root.has_method("clear_debug_console_history"):
-		return {"success": false, "reason": "debug_console_missing", "message": "debug console missing"}
-	var clear_result: Dictionary = game_root.clear_debug_console_history()
-	return {
-		"success": bool(clear_result.get("success", false)),
-		"reason": str(clear_result.get("reason", "")),
-		"message": "console cleared" if bool(clear_result.get("success", false)) else "debug console missing",
+		"success": true,
+		"debug_intent": action,
 	}

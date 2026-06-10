@@ -755,7 +755,48 @@ func submit_debug_console_command(command_text: String) -> Dictionary:
 
 
 func _execute_debug_console_command(command: String) -> Dictionary:
-	return debug_runtime_controller.execute(self, command)
+	var result: Dictionary = _dictionary_or_empty(debug_runtime_controller.execute(self, command))
+	return _apply_debug_console_intent(result)
+
+
+func _apply_debug_console_intent(result: Dictionary) -> Dictionary:
+	var intent := str(result.get("debug_intent", ""))
+	if intent.is_empty():
+		return result
+	var output := result.duplicate(true)
+	output.erase("debug_intent")
+	match intent:
+		"toggle_fps_panel":
+			if not has_method("toggle_debug_panel"):
+				return {"success": false, "reason": "debug_panel_missing", "message": "debug panel missing"}
+			var panel_result: Dictionary = toggle_debug_panel()
+			return _merge_debug_console_intent_result(output, panel_result, "fps panel=%s" % ("on" if bool(panel_result.get("visible", false)) else "off"))
+		"cycle_debug_overlay":
+			if not has_method("cycle_debug_overlay_mode"):
+				return {"success": false, "reason": "debug_overlay_missing", "message": "debug overlay missing"}
+			var overlay_result: Dictionary = cycle_debug_overlay_mode()
+			return _merge_debug_console_intent_result(output, overlay_result, "overlay=%s" % str(overlay_result.get("mode", "")))
+		"toggle_observe_mode":
+			if not has_method("toggle_observe_mode"):
+				return {"success": false, "reason": "observe_mode_missing", "message": "observe mode missing"}
+			var observe_result: Dictionary = toggle_observe_mode()
+			var observe_mode := bool(observe_result.get("observe_mode", false))
+			return _merge_debug_console_intent_result(output, observe_result, "observe=%s" % ("on" if observe_mode else "off"))
+		"clear_console":
+			if not has_method("clear_debug_console_history"):
+				return {"success": false, "reason": "debug_console_missing", "message": "debug console missing"}
+			var clear_result: Dictionary = clear_debug_console_history()
+			return _merge_debug_console_intent_result(output, clear_result, "console cleared" if bool(clear_result.get("success", false)) else "debug console missing")
+	return {"success": false, "reason": "unknown_debug_intent", "debug_intent": intent, "message": "unknown debug intent: %s" % intent}
+
+
+func _merge_debug_console_intent_result(base_result: Dictionary, action_result: Dictionary, message: String) -> Dictionary:
+	var output := base_result.duplicate(true)
+	for key in action_result.keys():
+		output[key] = action_result[key]
+	output["success"] = bool(action_result.get("success", output.get("success", false)))
+	output["message"] = message
+	return output
 
 
 func controls_hint_snapshot() -> Dictionary:

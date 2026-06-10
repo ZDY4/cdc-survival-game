@@ -302,7 +302,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] observe interval snapshot 已收敛到 `RuntimeControlStateController`，并删除 `GameApp` 中无调用方的 observe speed / interval 私有 wrapper。
 - [x] observe mode / auto tick / info panel 的 HUD 刷新和 info panel 音频意图已收敛到 `RuntimeControlStateController` 结果中，`GameApp` 通过统一入口消费。
 - [x] debug console `clear` 命令不再直接读取 `GameApp.hud`，改为经 `GameApp.clear_debug_console_history()` / `HudRoot.clear_debug_console_history()`。
-- [ ] 继续收敛 observe mode / auto tick / info panel 与 debug runtime 的边界，减少 debug command 对 `GameApp` facade 的直接调用。
+- [x] `show fps` / `show overlays` / `observe mode` / `clear` 已改为由 `DebugRuntimeController` 返回 debug intent，`GameApp` 只消费 intent 并调用本地窄接口。
 - [x] smoke 继续通过 `submit_debug_console_command()` 验证兼容入口。
 
 验收：
