@@ -18,7 +18,7 @@
 - 顶层输入分发已抽到 `godot/scripts/app/controllers/game_input_router.gd`。
 - 世界表现入口已抽到 `godot/scripts/world/world_root.gd`，`GameApp` 主要调用 WorldRoot 接口。
 - runtime refresh / world snapshot 构建已抽到 `godot/scripts/app/controllers/runtime_refresh_controller.gd`。
-- world action presenter、queue、pending UI 和 final refresh 状态已抽到 `godot/scripts/app/controllers/world_action_flow_controller.gd`。
+- world action presenter、queue、pending UI、movement execution plan 和 final refresh 状态已抽到 `godot/scripts/app/controllers/world_action_flow_controller.gd`。
 - 运行时性能统计已抽到 `godot/scripts/app/controllers/runtime_performance_tracker.gd`。
 - observe mode、auto tick 和 info panel 状态已抽到 `godot/scripts/app/controllers/runtime_control_state_controller.gd`。
 - map level、focused actor 和视图导航状态已抽到 `godot/scripts/app/controllers/runtime_view_state_controller.gd`。
@@ -39,13 +39,13 @@
 - 任务 turn-in 和地图面板进入 overworld location 的 action facade 已抽到 `godot/scripts/app/controllers/world_panel_action_controller.gd`；`GameApp` 只保留兼容入口、world rebuild 和刷新执行。
 - 对话选择、无选项继续和关闭对话的 core-service 调用已抽到 `godot/scripts/app/controllers/dialogue_action_controller.gd`；`GameApp` 只保留兼容入口、trade 收尾和面板刷新分发。
 - Space wait 和 auto tick wait 的 `wait` 命令提交已抽到 `godot/scripts/app/controllers/wait_action_controller.gd`；`GameApp` 只保留兼容入口、observe / pending 分支、制作队列接力和 runtime refresh。
-- 交互目标选择、清理、取消 pending、主交互、选项交互、移动交互和交互结果 follow-up 判定已抽到 `godot/scripts/app/controllers/interaction_action_controller.gd`；`GameApp` 只保留兼容入口、follow-up 应用、世界刷新和移动 presentation / refresh 编排。
+- 交互目标选择、清理、取消 pending、主交互、选项交互、移动交互和交互结果 follow-up 判定已抽到 `godot/scripts/app/controllers/interaction_action_controller.gd`；移动 presentation / refresh 时序决策已由 `WorldActionFlowController.movement_execution_plan()` 输出；`GameApp` 只保留兼容入口、follow-up 应用和实际世界刷新调用。
 - 脚本级 `HudRoot` facade 已引入到 `godot/scripts/ui/hud_root.gd`，当前承接 HUD / panel setup、单个/批量 panel 刷新、stage panels、settings、panel blocker、modal stack、theme、context menu snapshot、controls hint、debug console、debug panel、tooltip / drag snapshot、tooltip render 和 drag preview render；`GameApp` 保留旧 HUD / panel / overlay 字段作为 smoke 兼容引用。
 - action operation 的 `refresh` 面板分发已统一到 `GameApp._refresh_operation_panels()` + `HudRoot.refresh_panels()`；`hud` 仍通过 `GameApp.refresh_hud()` 保留音频反馈和性能标记。
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 2480 行，还保留 tooltip / drag facade、overlay 兼容属性、observe 分支、交互结果 follow-up 应用和移动 presentation / refresh 编排等兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 2482 行，还保留 tooltip / drag facade、overlay 兼容属性、observe 分支、交互结果 follow-up 应用和实际世界刷新调用等兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` scene；当前已通过 `HudRoot` script 包住现有 HUD controller 和 panel controller。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
@@ -297,13 +297,13 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 任务 turn-in 和地图面板进入 overworld location facade 已抽到 `world_panel_action_controller.gd`，`GameApp` 只保留兼容方法、world rebuild 和刷新执行。
 - [x] 对话选择、无选项继续和关闭对话 facade 已抽到 `dialogue_action_controller.gd`，`GameApp` 只保留兼容方法、trade 收尾和刷新执行。
 - [x] Space wait 和 auto tick wait 的 `wait` 命令提交已抽到 `wait_action_controller.gd`，`GameApp` 只保留兼容方法、observe / pending 分支、制作队列接力和刷新执行。
-- [x] 交互目标选择、清理、取消 pending、主交互、选项交互、移动交互和交互结果 follow-up 判定已抽到 `interaction_action_controller.gd`，`GameApp` 只保留兼容方法、follow-up 应用和移动 presentation / refresh 编排。
+- [x] 交互目标选择、清理、取消 pending、主交互、选项交互、移动交互和交互结果 follow-up 判定已抽到 `interaction_action_controller.gd`，移动 presentation / refresh 时序决策已交给 `WorldActionFlowController.movement_execution_plan()`；`GameApp` 只保留兼容方法、follow-up 应用和实际世界刷新调用。
 - [x] 引入脚本级 `HudRoot` facade，承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme 和 context menu snapshot。
 - [x] controls hint、debug console、debug panel 的 HUD 控件开关、snapshot、schema/result 写入已通过 `HudRoot` 窄接口转发；`GameApp` 只保留兼容入口、刷新和音频反馈。
 - [x] tooltip render 和 drag preview render controller 已由 `HudRoot` 持有，`GameApp` 的旧 overlay 属性和 render 方法只作为 smoke / tool 兼容 facade。
 - [x] action operation 的面板刷新分发已统一到 `_refresh_operation_panels()`，非 HUD panel 通过 `HudRoot.refresh_panels()` 批量刷新。
 - [ ] 将 `GameApp` 中剩余兼容 panel 引用等代码继续替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
-- [ ] 将 observe 分支、交互结果 follow-up 应用、移动 presentation / refresh 编排等剩余玩家动作 facade 继续从 `GameApp` 移出。
+- [ ] 将 observe 分支、交互结果 follow-up 应用、实际世界刷新调用等剩余玩家动作 facade 继续从 `GameApp` 移出。
 - [x] 将 panel blocker / active modal 状态通过 `hud_root.input_blocker_snapshot()` / `gameplay_input_blocker_snapshot()` 暴露；debug console blocker 由 `HudRoot` 暴露，world action blocker 仍由 `GameApp` 做跨层合成。
 
 验收：
@@ -359,6 +359,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 - [x] 新建 `world_action_flow_controller.gd`。
 - [x] 将 world action presenter、queue、pending UI 和 pending final refresh 状态迁出 `GameApp`。
+- [x] 将移动 action 的 presentation / final refresh 时序决策抽到 `WorldActionFlowController.movement_execution_plan()`。
 - [ ] 使用 signal 通知 `RuntimeRefreshController` 何时执行最终刷新。
 - [x] 保留当前 action presentation 行为，不在同一阶段重做动效。
 

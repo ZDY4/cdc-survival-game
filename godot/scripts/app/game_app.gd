@@ -1255,15 +1255,17 @@ func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	if not bool(operation.get("apply_result", false)):
 		return result
-	if bool(result.get("success", false)) and _world_action_command_kind(result) == "move":
-		var final_world_result: Dictionary = _dictionary_or_empty(operation.get("final_world_result", {}))
+	var final_world_result: Dictionary = _dictionary_or_empty(operation.get("final_world_result", {}))
+	var move_plan: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("movement_execution_plan", result, final_world_result))
+	if bool(move_plan.get("present_before_refresh", false)):
 		_setup_world_container()
 		_present_world_action(result)
-		if _world_action_presenter_blocks_input():
-			_queue_deferred_world_refresh(final_world_result, _dictionary_or_empty(result.get("prompt", {})), result, "execute_move_to_grid", false)
+		move_plan = _dictionary_or_empty(world_action_flow_controller.call("movement_execution_plan", result, final_world_result))
+		if bool(move_plan.get("defer_final_refresh", false)):
+			_queue_deferred_world_refresh(_dictionary_or_empty(move_plan.get("final_world_result", {})), _dictionary_or_empty(result.get("prompt", {})), result, "execute_move_to_grid", false)
 			refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 			return result
-	world_result = _dictionary_or_empty(operation.get("final_world_result", {}))
+	world_result = _dictionary_or_empty(move_plan.get("final_world_result", final_world_result))
 	_rebuild_world_after_runtime_change(_dictionary_or_empty(result.get("prompt", {})), result)
 	return result
 

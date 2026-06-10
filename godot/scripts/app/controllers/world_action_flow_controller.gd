@@ -112,6 +112,22 @@ func queue_deferred_world_refresh(final_world_result: Dictionary, selected_promp
 	queue_state["pending_final_refresh_active"] = true
 
 
+func movement_execution_plan(command_result: Dictionary, final_world_result: Dictionary) -> Dictionary:
+	if not bool(command_result.get("success", false)) or command_kind(command_result) != "move":
+		return {
+			"present_before_refresh": false,
+			"defer_final_refresh": false,
+			"refresh_now": true,
+			"final_world_result": final_world_result.duplicate(true),
+		}
+	return {
+		"present_before_refresh": true,
+		"defer_final_refresh": blocks_input(),
+		"refresh_now": not blocks_input(),
+		"final_world_result": final_world_result.duplicate(true),
+	}
+
+
 func should_process_completion() -> bool:
 	var queue_state_name := str(queue_state.get("state", ""))
 	if pending_ui.is_empty() and pending_final_refresh.is_empty() and queue_state_name != "presenting":
