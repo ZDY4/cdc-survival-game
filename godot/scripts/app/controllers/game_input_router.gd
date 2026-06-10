@@ -1,6 +1,11 @@
 extends RefCounted
 
 
+func process(runtime_input_controller: RefCounted, delta: float) -> void:
+	if runtime_input_controller != null:
+		runtime_input_controller.process(delta)
+
+
 func input(game_root: Node, runtime_input_controller: RefCounted, event: InputEvent) -> void:
 	if event is InputEventKey:
 		if _handle_debug_console_key(game_root, event as InputEventKey):

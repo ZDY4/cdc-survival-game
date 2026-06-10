@@ -317,8 +317,7 @@ func _build_runtime_from_startup_request(request: Dictionary) -> Dictionary:
 
 func _process(delta: float) -> void:
 	_update_runtime_performance(delta)
-	if runtime_input_controller != null:
-		runtime_input_controller.process(delta)
+	game_input_router.process(runtime_input_controller, delta)
 	_process_world_action_queue_completion()
 	_update_tooltip_layer()
 	_process_auto_tick(delta)
