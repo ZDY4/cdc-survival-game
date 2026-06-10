@@ -430,17 +430,7 @@ func _close_stale_container_session() -> void:
 func _refresh_operation_panels(panel_ids: Array, selected_prompt: Dictionary = {}) -> void:
 	if hud_root == null:
 		return
-	var pending_panels: Array = []
-	for panel_id in panel_ids:
-		if str(panel_id) == "hud":
-			if not pending_panels.is_empty():
-				hud_root.refresh_panels(pending_panels, _ui_feedback_payload())
-				pending_panels.clear()
-			refresh_hud(selected_prompt)
-		else:
-			pending_panels.append(str(panel_id))
-	if not pending_panels.is_empty():
-		hud_root.refresh_panels(pending_panels, _ui_feedback_payload())
+	hud_root.refresh_operation_panels(panel_ids, selected_prompt, _ui_feedback_payload())
 
 
 func toggle_stage_panel(panel_id: String) -> Dictionary:

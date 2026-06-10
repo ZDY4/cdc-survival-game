@@ -47,7 +47,7 @@
 - Space wait 和 auto tick wait 的 `wait` 命令提交已抽到 `godot/scripts/app/controllers/wait_action_controller.gd`；`GameApp` 只保留兼容入口、observe / pending 分支、制作队列接力和 runtime refresh。
 - 交互目标选择、清理、取消 pending、主交互、选项交互、移动交互和交互结果 follow-up 判定已抽到 `godot/scripts/app/controllers/interaction_action_controller.gd`；follow-up 的 UI 反馈状态应用已收敛到 `UiFeedbackStateController`；移动 presentation / refresh 时序决策已由 `WorldActionFlowController.movement_execution_plan()` 输出；`GameApp` 只保留兼容入口和实际世界刷新调用。
 - 脚本级 `HudRoot` facade 已引入到 `godot/scripts/ui/hud_root.gd`，当前承接 HUD / panel setup、单个/批量 panel 刷新、stage panels、settings、panel blocker、modal stack、theme、context menu snapshot / close、controls hint、debug console、debug panel、tooltip / drag snapshot、tooltip render 和 drag preview render；`GameApp` 保留旧 HUD / panel / overlay 字段作为 smoke 兼容引用。
-- action operation 的 `refresh` 面板分发已统一到 `GameApp._refresh_operation_panels()` + `HudRoot.refresh_panels()`；`refresh_all_panels()` 也已收敛到 `HudRoot.refresh_all()`，`GameApp` 只保留 session 关闭保护、音频反馈和性能标记。
+- action operation 的 `refresh` 面板分发顺序已收敛到 `HudRoot.refresh_operation_panels()`；`refresh_all_panels()` 也已收敛到 `HudRoot.refresh_all()`，`GameApp` 只保留 session 关闭保护、音频反馈和性能标记。
 
 仍需继续推进：
 
@@ -337,7 +337,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 引入脚本级 `HudRoot` facade，承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme 和 context menu snapshot。
 - [x] controls hint、debug console、debug panel 的 HUD 控件开关、snapshot、schema/result 写入已通过 `HudRoot` 窄接口转发；`GameApp` 只保留兼容入口、刷新和音频反馈。
 - [x] tooltip render 和 drag preview render controller 已由 `HudRoot` 持有，`GameApp` 的旧 overlay 属性和 render 方法只作为 smoke / tool 兼容 facade。
-- [x] action operation 的面板刷新分发已统一到 `_refresh_operation_panels()`，非 HUD panel 通过 `HudRoot.refresh_panels()` 批量刷新。
+- [x] action operation 的面板刷新顺序已统一到 `HudRoot.refresh_operation_panels()`，`GameApp._refresh_operation_panels()` 只保留兼容转发。
 - [x] `refresh_all_panels()` 已改为保留 trade / container session 关闭保护后调用 `HudRoot.refresh_all()`。
 - [ ] 将 `GameApp` 中剩余兼容 panel 引用等代码继续替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
 - [ ] 将 observe 分支和实际世界刷新调用等剩余玩家动作 facade 继续从 `GameApp` 移出。

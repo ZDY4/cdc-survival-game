@@ -56,6 +56,24 @@ func refresh_panels(panel_ids: Array, feedback: Dictionary = {}) -> void:
 		_refresh_panel_without_feedback(str(panel_id))
 
 
+func refresh_operation_panels(panel_ids: Array, selected_prompt: Dictionary = {}, feedback: Dictionary = {}) -> void:
+	if panel_controller == null:
+		return
+	_apply_feedback(feedback)
+	var pending_panels: Array = []
+	for panel_id in panel_ids:
+		if str(panel_id) == "hud":
+			if not pending_panels.is_empty():
+				for pending_panel_id in pending_panels:
+					_refresh_panel_without_feedback(str(pending_panel_id))
+				pending_panels.clear()
+			refresh_hud(selected_prompt)
+		else:
+			pending_panels.append(str(panel_id))
+	for pending_panel_id in pending_panels:
+		_refresh_panel_without_feedback(str(pending_panel_id))
+
+
 func _refresh_panel_without_feedback(panel_id: String) -> void:
 	match panel_id:
 		"dialogue":
