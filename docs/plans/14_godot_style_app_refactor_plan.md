@@ -399,7 +399,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] pending final refresh 的 runtime 应用已迁入 `RuntimeRefreshController.apply_pending_final_refresh()`；`GameApp` 仍负责 scene tree 渲染、HUD 接续和 presenter 状态标记。
 - [x] 最近一次 refresh 的成功/失败、source、reason、map id、actor id 和 error message 已由 `RuntimeRefreshController.refresh_report_snapshot()` 暴露到 runtime control snapshot。
 - [ ] 继续将 world apply -> HUD apply 的最终顺序收敛到 controller，减少根脚本手写刷新链。
-- [ ] 继续补齐更完整 runtime 上下文日志，覆盖更多 actor/session/command 字段。
+- [x] `RuntimeRefreshController` 的 refresh report 已补充 command / presenter、actor/object/corpse 数量、interaction target 数量、container/shop session 和 active map/location 上下文字段。
 
 验收：
 
