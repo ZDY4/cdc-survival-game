@@ -2,6 +2,7 @@ extends Node3D
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const WorldRoot = preload("res://scripts/world/world_root.gd")
+const WorldRootScene = preload("res://scenes/world/world_root.tscn")
 const DebugRuntimeController = preload("res://scripts/app/controllers/debug_runtime_controller.gd")
 const GameInputRouter = preload("res://scripts/app/controllers/game_input_router.gd")
 const GameRuntimeInputController = preload("res://scripts/app/controllers/game_runtime_input_controller.gd")
@@ -1907,7 +1908,9 @@ func _accept_runtime_refresh_result(refresh: Dictionary, fallback_error: String)
 
 func _setup_world_container() -> void:
 	if world_root == null or not is_instance_valid(world_root):
-		world_root = WorldRoot.new()
+		world_root = WorldRootScene.instantiate() as Node3D
+		if world_root == null:
+			world_root = WorldRoot.new()
 		world_root.name = "WorldRoot"
 		add_child(world_root)
 	if world_root.has_method("ensure_world_container"):
