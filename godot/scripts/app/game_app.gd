@@ -11,6 +11,7 @@ const RuntimeRefreshController = preload("res://scripts/app/controllers/runtime_
 const RuntimePerformanceTracker = preload("res://scripts/app/controllers/runtime_performance_tracker.gd")
 const RuntimeControlStateController = preload("res://scripts/app/controllers/runtime_control_state_controller.gd")
 const RuntimeViewStateController = preload("res://scripts/app/controllers/runtime_view_state_controller.gd")
+const RuntimeSessionContextController = preload("res://scripts/app/controllers/runtime_session_context_controller.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
 const PlayerCommandBlocker = preload("res://scripts/app/controllers/player_command_blocker.gd")
@@ -168,6 +169,7 @@ var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
 var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
 var runtime_control_state_controller: RefCounted = RuntimeControlStateController.new()
 var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
+var runtime_session_context_controller: RefCounted = RuntimeSessionContextController.new()
 
 func _ready() -> void:
 	_connect_world_action_flow_signals()
@@ -2175,47 +2177,15 @@ func _record_character_feedback(result: Dictionary, action: String, slot_id: Str
 
 
 func _dialogue_trade_target(result: Dictionary = {}) -> Dictionary:
-	var shop_id := _dialogue_trade_shop_id(result)
-	if not shop_id.is_empty():
-		return {
-			"target_type": "shop",
-			"shop_id": shop_id,
-		}
-	if active_trade_target.get("target_type", "") == "actor":
-		return active_trade_target.duplicate(true)
-	return {
-		"target_type": "shop",
-	}
+	return _dictionary_or_empty(runtime_session_context_controller.call("dialogue_trade_target", result, active_trade_target))
 
 
 func _active_trade_target_available() -> bool:
-	if active_trade_target.is_empty() or simulation == null:
-		return true
-	if str(active_trade_target.get("target_type", "")) == "shop" and not str(active_trade_target.get("shop_id", "")).is_empty():
-		return registry != null and registry.get_library("shops").has(str(active_trade_target.get("shop_id", "")))
-	if str(active_trade_target.get("target_type", "")) != "actor":
-		return true
-	var actor_id := int(active_trade_target.get("actor_id", 0))
-	if actor_id <= 0:
-		return false
-	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
-	if actor == null:
-		return false
-	if not str(actor.map_id).is_empty() and not simulation.active_map_id.is_empty() and str(actor.map_id) != simulation.active_map_id:
-		return false
-	var shop_id := "%s_shop" % actor.definition_id
-	return registry != null and registry.get_library("shops").has(shop_id)
+	return bool(runtime_session_context_controller.call("active_trade_target_available", registry, simulation, active_trade_target))
 
 
 func _dialogue_trade_shop_id(result: Dictionary) -> String:
-	for action in _array_or_empty(result.get("emitted_actions", [])):
-		var action_data: Dictionary = _dictionary_or_empty(action)
-		if str(action_data.get("type", "")) != "open_trade":
-			continue
-		var shop_id := str(action_data.get("shop_id", "")).strip_edges()
-		if not shop_id.is_empty():
-			return shop_id
-	return ""
+	return str(runtime_session_context_controller.call("dialogue_trade_shop_id", result))
 
 
 func _current_dialogue_snapshot() -> Dictionary:
@@ -2226,70 +2196,23 @@ func _current_dialogue_snapshot() -> Dictionary:
 
 
 func _active_shop_id() -> String:
-	if registry == null or simulation == null:
-		return ""
-	var TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
-	var session: Dictionary = TradeSnapshot.new(registry).resolve_trade_session(simulation.snapshot(), active_trade_target)
-	return str(session.get("shop_id", ""))
+	return str(runtime_session_context_controller.call("active_shop_id", registry, simulation, active_trade_target))
 
 
 func _trade_closed_payload(target: Dictionary, reason: String) -> Dictionary:
-	var payload := {
-		"actor_id": 1,
-		"reason": reason,
-		"target_type": str(target.get("target_type", "")),
-		"target_actor_id": int(target.get("actor_id", 0)),
-	}
-	if registry != null and simulation != null:
-		var TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
-		var session: Dictionary = TradeSnapshot.new(registry).resolve_trade_session(simulation.snapshot(), target)
-		payload["shop_id"] = str(session.get("shop_id", ""))
-		payload["target_name"] = str(session.get("target_name", ""))
-	return payload
+	return _dictionary_or_empty(runtime_session_context_controller.call("trade_closed_payload", registry, simulation, target, reason))
 
 
 func _active_container_id() -> String:
-	if simulation == null:
-		return ""
-	var snapshot: Dictionary = simulation.snapshot()
-	for actor in snapshot.get("actors", []):
-		var actor_data: Dictionary = _dictionary_or_empty(actor)
-		if actor_data.get("kind", "") == "player":
-			return str(actor_data.get("active_container_id", ""))
-	return ""
+	return str(runtime_session_context_controller.call("active_container_id", simulation))
 
 
 func _active_container_close_reason() -> String:
-	var container_id := _active_container_id()
-	if container_id.is_empty() or simulation == null:
-		return ""
-	if not simulation.container_sessions.has(container_id):
-		return "target_unavailable"
-	if not _active_container_in_range(container_id):
-		return "out_of_range"
-	return ""
+	return str(runtime_session_context_controller.call("active_container_close_reason", simulation))
 
 
 func _active_container_in_range(container_id: String) -> bool:
-	var target: Dictionary = _dictionary_or_empty(simulation.map_interaction_targets.get(container_id, {}))
-	if target.is_empty():
-		return true
-	var actor: RefCounted = simulation.actor_registry.get_actor(1)
-	if actor == null or actor.grid_position == null:
-		return true
-	var actor_grid: Dictionary = actor.grid_position.to_dictionary()
-	for cell in _array_or_empty(target.get("cells", [])):
-		if _grid_distance(actor_grid, _dictionary_or_empty(cell)) <= 1:
-			return true
-	if _grid_distance(actor_grid, _dictionary_or_empty(target.get("anchor", {}))) <= 1:
-		return true
-	return false
-
-
-func _grid_distance(left: Dictionary, right: Dictionary) -> int:
-	if left.is_empty() or right.is_empty() or int(left.get("y", 0)) != int(right.get("y", 0)):
-		return 999999
-	return abs(int(left.get("x", 0)) - int(right.get("x", 0))) + abs(int(left.get("z", 0)) - int(right.get("z", 0)))
+	return bool(runtime_session_context_controller.call("active_container_in_range", simulation, container_id))
 
 
 func _focused_actor_data() -> Dictionary:

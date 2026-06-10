@@ -452,6 +452,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 继续清理其他 runtime smoke / tools 中绕过 app facade 的直接 world snapshot 构建或 core command 造数调用；`CraftingUI` 跨回合队列等待已改用 `GameApp.submit_wait_action()`，runtime UI / dialogue / interaction smoke 已无直接 `WorldSnapshotBuilder` / `WorldSceneRenderer` 和私有 `_rebuild_*` / `_continue_*` 依赖；剩余 `PlayerInteraction` 攻击造数与 `SkillsUI` 资源不足 core probe 作为明确例外保留。
 - [x] 更新 AGENTS.md、tools README 和相关 workflow 文档中的入口描述，明确 `godot/scenes/game/game_root.tscn` 是 runtime scene 入口，`game_app.gd` 仍是迁移期根脚本 / 兼容 facade，runtime smoke / tool 优先使用稳定 facade 而不是私有 `_setup_*` / `_rebuild_*` 入口。
 - [x] 将制作 UI 所需的工作台、世界 flag、附近工具容器和最近制作结果上下文构建迁入 `CraftingContextBuilder`，`GameApp` 只保留调用入口。
+- [x] 将交易目标解析、交易关闭 payload、当前 shop id、当前容器 id、容器关闭原因和距离复核迁入 `RuntimeSessionContextController`，`GameApp` 仅保留兼容委托入口。
 
 验收：
 
