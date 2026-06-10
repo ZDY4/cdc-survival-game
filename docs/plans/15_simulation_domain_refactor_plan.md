@@ -331,14 +331,18 @@ func execute(simulation: RefCounted, actor: RefCounted, command: Dictionary) -> 
 
 ### Phase 6: 抽 TurnFlowService / PendingActionService
 
-- [ ] 将 AP 消耗、自动回合推进、pending 恢复与取消策略迁出。
-- [ ] 各 command handler 返回 turn policy 或 pending policy。
-- [ ] `Simulation` 统一应用 turn flow 结果并记录事件。
+- [x] 将 AP 消耗、自动回合推进、pending 恢复与取消策略迁出。
+- [x] 各 command handler 返回 turn policy 或 pending policy。
+- [x] `Simulation` 统一应用 turn flow 结果并记录事件。
 
 验收：
 
 - `Movement`、`PlayerInteraction`、`CraftingUI`、`Combat` smoke 通过。
 - pending movement / pending interaction / pending crafting 跨回合行为不回归。
+
+验证记录：
+
+- 2026-06-11: 新增 `TurnFlowService` 与 `PendingActionService`，迁移 pending 取消、AP 耗尽后的自动回合推进、pending movement / interaction / crafting 恢复编排；通过 `Movement`、`PlayerInteraction`、`CraftingUI`、`Combat` smoke，并通过全量 `test-godot-static.ps1`。
 
 ### Phase 7: 抽 SnapshotBuilder
 

@@ -24,7 +24,9 @@ const CraftingCommandHandler = preload("res://scripts/core/simulation/commands/c
 const CraftingService = preload("res://scripts/core/simulation/services/crafting_service.gd")
 const ContainerSessionService = preload("res://scripts/core/simulation/services/container_session_service.gd")
 const DoorService = preload("res://scripts/core/simulation/services/door_service.gd")
+const PendingActionService = preload("res://scripts/core/simulation/services/pending_action_service.gd")
 const TradeService = preload("res://scripts/core/simulation/services/trade_service.gd")
+const TurnFlowService = preload("res://scripts/core/simulation/services/turn_flow_service.gd")
 const VisionRunner = preload("res://scripts/core/vision/vision_runner.gd")
 const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
@@ -132,7 +134,9 @@ var _crafting_command_handler := CraftingCommandHandler.new()
 var _crafting_service := CraftingService.new()
 var _container_session_service := ContainerSessionService.new()
 var _door_service := DoorService.new()
+var _pending_action_service := PendingActionService.new()
 var _trade_service := TradeService.new()
+var _turn_flow_service := TurnFlowService.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -627,101 +631,7 @@ func preview_skill_target(actor_id: int, skill_id: String, skill_library: Dictio
 
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, topology: Dictionary = {}) -> Dictionary:
-	var actor_id: int = _player_actor_id()
-	var event_start_index: int = events.size()
-	var had_pending: bool = not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty()
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	var ap_before: float = actor.ap if actor != null else 0.0
-	var turn_open_before: bool = bool(actor.turn_open) if actor != null else false
-	var round_before: int = int(turn_state.get("round", 1))
-	var combat_active_before: bool = bool(combat_state.get("active", false))
-	var movement: Dictionary = pending_movement.duplicate(true)
-	var interaction: Dictionary = pending_interaction.duplicate(true)
-	var crafting: Dictionary = pending_crafting.duplicate(true)
-	pending_movement.clear()
-	pending_interaction.clear()
-	pending_crafting.clear()
-	interaction_menu.clear()
-	if had_pending:
-		if not movement.is_empty():
-			_emit("movement_cancelled", {
-				"actor_id": int(movement.get("actor_id", actor_id)),
-				"reason": reason,
-				"pending_movement": movement.duplicate(true),
-			})
-		if not interaction.is_empty():
-			_emit("interaction_cancelled", {
-				"actor_id": int(interaction.get("actor_id", actor_id)),
-				"reason": reason,
-				"pending_interaction": interaction.duplicate(true),
-			})
-		if not crafting.is_empty():
-			_emit("crafting_cancelled", {
-				"actor_id": int(crafting.get("actor_id", actor_id)),
-				"reason": reason,
-				"pending_crafting": crafting.duplicate(true),
-			})
-		_emit("pending_cancelled", {
-			"actor_id": actor_id,
-			"reason": reason,
-			"movement": movement,
-			"interaction": interaction,
-			"crafting": crafting,
-		})
-	var turn_auto_ended := false
-	var auto_end_blocked_reason := ""
-	if had_pending and auto_end_turn:
-		if actor != null and actor.turn_open and not combat_active_before:
-			_close_turn(actor_id, "pending_cancelled:%s" % reason)
-			advance_world_turn(topology)
-			_open_turn(actor_id, "player_turn")
-			turn_auto_ended = true
-		elif combat_active_before:
-			auto_end_blocked_reason = "combat_active"
-		elif actor == null:
-			auto_end_blocked_reason = "actor_missing"
-		elif not actor.turn_open:
-			auto_end_blocked_reason = "turn_closed"
-	var cancel_policy_extra := {
-		"combat_active_before": combat_active_before,
-		"combat_active_after": bool(combat_state.get("active", false)),
-	}
-	if not auto_end_blocked_reason.is_empty():
-		cancel_policy_extra["auto_end_blocked_reason"] = auto_end_blocked_reason
-	var turn_policy: Dictionary = _build_cancel_turn_policy(
-		"cancel_pending",
-		reason,
-		had_pending,
-		auto_end_turn,
-		turn_auto_ended,
-		actor,
-		ap_before,
-		turn_open_before,
-		round_before,
-		cancel_policy_extra
-	)
-	var output := {
-		"success": true,
-		"had_pending": had_pending,
-		"reason": reason,
-		"pending_movement": movement.duplicate(true),
-		"pending_interaction": interaction.duplicate(true),
-		"pending_crafting": crafting.duplicate(true),
-		"cancelled_crafting": crafting.duplicate(true),
-		"turn_policy": turn_policy,
-	}
-	var emitted_events := _events_since(event_start_index)
-	output["events"] = emitted_events
-	output["runtime_snapshot_delta"] = {
-		"active_map_id": active_map_id,
-		"combat_active": bool(combat_state.get("active", false)),
-		"events": emitted_events,
-		"pending_movement": pending_movement.duplicate(true),
-		"pending_interaction": pending_interaction.duplicate(true),
-		"pending_crafting": pending_crafting.duplicate(true),
-		"turn_state": turn_state.duplicate(true),
-	}
-	return output
+	return _turn_flow_service.cancel_pending(self, reason, auto_end_turn, topology)
 
 
 func snapshot() -> Dictionary:
@@ -923,141 +833,19 @@ func _submit_stunned_player_turn(actor: RefCounted, command: Dictionary, command
 
 
 func _finalize_player_ap_action(actor: RefCounted, result: Dictionary, command: Dictionary, reason: String) -> Dictionary:
-	if actor == null or not bool(result.get("success", false)):
-		return result
-	var policy: Dictionary = _build_turn_policy(actor, reason, result)
-	result["turn_policy"] = policy.duplicate(true)
-	if not actor.turn_open:
-		result["turn_policy"]["reason"] = "turn_closed"
-		return result
-	if actor.ap >= float(policy.get("affordable_ap_threshold", 0.0)):
-		result["turn_policy"]["reason"] = "ap_still_affordable"
-		return result
-	if _result_changes_active_map(result):
-		result["auto_turn_skipped"] = "map_changed"
-		result["turn_policy"]["reason"] = "map_changed"
-		return result
-	if not str(actor.active_dialogue_id).is_empty():
-		result["auto_turn_skipped"] = "active_dialogue"
-		result["turn_policy"]["reason"] = "active_dialogue"
-		return result
-	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
-	if topology.is_empty():
-		result["auto_turn_skipped"] = "topology_missing"
-		result["turn_policy"]["reason"] = "topology_missing"
-		return result
-	var auto_turn: Dictionary = _auto_advance_player_turn(actor, topology, reason)
-	if bool(auto_turn.get("advanced", false)):
-		_merge_auto_turn_final_result(result, auto_turn)
-		result["auto_turn_advanced"] = true
-		result["auto_turn"] = auto_turn
-		result["turn_state"] = turn_state.duplicate(true)
-		result["turn_policy"]["auto_advanced"] = true
-		result["turn_policy"]["reason"] = "ap_depleted_auto_advanced"
-		result["turn_policy"]["ap_after_auto"] = actor.ap
-		result["turn_policy"]["auto_turn_cycles"] = _array_or_empty(auto_turn.get("cycles", [])).size()
-		result["turn_policy"]["auto_turn_limit_reached"] = bool(auto_turn.get("limit_reached", false))
-		if bool(auto_turn.get("limit_reached", false)):
-			result["auto_turn_limit_reached"] = true
-			result["turn_policy"]["reason"] = "auto_advance_limit_reached"
-			result["turn_policy"]["auto_turn_limit"] = int(auto_turn.get("limit", AUTO_TURN_ADVANCE_LIMIT))
-	else:
-		result["turn_policy"]["reason"] = "auto_advance_unresolved"
-	return result
+	return _turn_flow_service.finalize_player_ap_action(self, actor, result, command, reason)
 
 
 func _build_turn_policy(actor: RefCounted, action_kind: String, result: Dictionary) -> Dictionary:
-	var ap_after: float = actor.ap if actor != null else 0.0
-	var threshold: float = _affordable_ap_threshold(actor) if actor != null else AFFORDABLE_AP_THRESHOLD
-	var policy := {
-		"action_kind": action_kind,
-		"success": bool(result.get("success", false)),
-		"ap_after_action": ap_after,
-		"affordable_ap_threshold": threshold,
-		"below_affordable_threshold": ap_after < threshold,
-		"pending_movement": not pending_movement.is_empty(),
-		"pending_interaction": not pending_interaction.is_empty(),
-		"pending_crafting": not pending_crafting.is_empty(),
-		"auto_advanced": false,
-		"reason": "pending_evaluation",
-	}
-	if result.has("ap_cost"):
-		policy["ap_cost"] = float(result.get("ap_cost", 0.0))
-	elif result.has("steps"):
-		policy["ap_cost"] = float(result.get("steps", 0))
-	elif result.has("attack_result"):
-		var attack_result: Dictionary = _dictionary_or_empty(result.get("attack_result", {}))
-		if attack_result.has("ap_cost"):
-			policy["ap_cost"] = float(attack_result.get("ap_cost", 0.0))
-	if result.has("reason"):
-		policy["result_reason"] = str(result.get("reason", ""))
-	return policy
+	return _turn_flow_service.build_turn_policy(self, actor, action_kind, result)
 
 
 func _auto_advance_player_turn(actor: RefCounted, topology: Dictionary, reason: String) -> Dictionary:
-	var cycles: Array[Dictionary] = []
-	var guard := 0
-	var limit_reached := false
-	while guard < AUTO_TURN_ADVANCE_LIMIT:
-		guard += 1
-		if actor == null or not actor.turn_open:
-			break
-		if actor.ap >= _affordable_ap_threshold(actor):
-			break
-		if not str(actor.active_dialogue_id).is_empty():
-			break
-		_close_turn(actor.actor_id, "auto_ap_depleted:%s" % reason)
-		var npc_results: Array[Dictionary] = advance_world_turn(topology)
-		_open_turn(actor.actor_id, "auto_player_turn")
-		var pending_result: Dictionary = {}
-		if not pending_movement.is_empty() or not pending_interaction.is_empty() or not pending_crafting.is_empty():
-			pending_result = _resume_pending_for_actor(actor, topology)
-		cycles.append({
-			"round": int(turn_state.get("round", 1)),
-			"npc_results": npc_results,
-			"pending_result": pending_result,
-			"player_ap": actor.ap,
-		})
-		if pending_result.is_empty():
-			break
-		if not bool(pending_result.get("success", false)):
-			break
-	limit_reached = guard >= AUTO_TURN_ADVANCE_LIMIT and actor != null and actor.turn_open and actor.ap < _affordable_ap_threshold(actor)
-	if limit_reached:
-		_emit("auto_turn_advance_limit_reached", {
-			"actor_id": actor.actor_id,
-			"reason": reason,
-			"limit": AUTO_TURN_ADVANCE_LIMIT,
-			"cycles": cycles.size(),
-			"ap": actor.ap,
-			"affordable_ap_threshold": _affordable_ap_threshold(actor),
-			"pending_movement": pending_movement.duplicate(true),
-			"pending_interaction": pending_interaction.duplicate(true),
-			"pending_crafting": pending_crafting.duplicate(true),
-			"round": int(turn_state.get("round", 1)),
-		})
-	return {
-		"advanced": not cycles.is_empty(),
-		"cycles": cycles,
-		"limit": AUTO_TURN_ADVANCE_LIMIT,
-		"limit_reached": limit_reached,
-	}
+	return _turn_flow_service.auto_advance_player_turn(self, actor, topology, reason)
 
 
 func _merge_auto_turn_final_result(result: Dictionary, auto_turn: Dictionary) -> void:
-	var cycles: Array = _array_or_empty(auto_turn.get("cycles", []))
-	for cycle_index in range(cycles.size() - 1, -1, -1):
-		var cycle: Dictionary = _dictionary_or_empty(cycles[cycle_index])
-		var pending_result: Dictionary = _dictionary_or_empty(cycle.get("pending_result", {}))
-		if pending_result.is_empty() or not bool(pending_result.get("success", false)):
-			continue
-		for key in ["dialogue_id", "requested_dialogue_id", "dialogue_rule_key", "dialogue_rule_source", "dialogue_state", "container", "context_snapshot", "consumed_target", "item_id", "count", "inventory_before", "inventory_after", "defeated", "attack_result", "auto_resumed_interaction", "resumed_pending_interaction", "approach_result", "recipe_id", "output_item_id", "output_count", "craft_time", "ap_cost", "ap_remaining", "completed_count", "requested_count", "pending_crafting", "resumed_pending_crafting"]:
-			if pending_result.has(key) and not result.has(key):
-				result[key] = pending_result.get(key)
-		if pending_result.has("kind") and str(result.get("kind", "")) == "pending_movement_completed":
-			result["kind"] = pending_result.get("kind")
-		result["auto_turn_final_result"] = pending_result.duplicate(true)
-		return
+	_turn_flow_service.merge_auto_turn_final_result(result, auto_turn)
 
 
 func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
@@ -5038,112 +4826,15 @@ func _interaction_goals(center: RefCounted, interaction_range: int) -> Array[Ref
 
 
 func _resume_pending_for_actor(actor: RefCounted, topology: Dictionary) -> Dictionary:
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor"}
-	if pending_movement.is_empty() and pending_interaction.is_empty() and pending_crafting.is_empty():
-		return {"success": true, "resumed": false}
-	if int(pending_movement.get("actor_id", actor.actor_id)) != actor.actor_id and int(pending_interaction.get("actor_id", actor.actor_id)) != actor.actor_id and int(pending_crafting.get("actor_id", actor.actor_id)) != actor.actor_id:
-		return {"success": false, "reason": "pending_actor_mismatch"}
-
-	var movement_result: Dictionary = {}
-	if not pending_movement.is_empty():
-		movement_result = _advance_pending_movement(actor, topology)
-		if not bool(movement_result.get("success", false)):
-			return movement_result
-		if not bool(movement_result.get("completed", false)):
-			return {
-				"success": true,
-				"resumed": true,
-				"kind": "pending_movement",
-				"pending_movement": pending_movement.duplicate(true),
-				"movement_result": movement_result,
-			}
-	if not pending_interaction.is_empty():
-		return _resume_pending_interaction(actor, topology, movement_result)
-	if not pending_crafting.is_empty():
-		return _resume_pending_crafting(actor, topology, movement_result)
-	return {
-		"success": true,
-		"resumed": not movement_result.is_empty(),
-		"kind": "pending_movement_completed",
-		"movement_result": movement_result,
-	}
+	return _pending_action_service.resume_pending_for_actor(self, actor, topology)
 
 
 func _resume_pending_crafting(actor: RefCounted, topology: Dictionary, movement_result: Dictionary = {}) -> Dictionary:
-	return _crafting_command_handler.resume_pending_crafting(self, _progression_rules, actor, topology, movement_result)
+	return _pending_action_service.resume_pending_crafting(self, actor, topology, movement_result)
 
 
 func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dictionary:
-	if pending_movement.is_empty():
-		return {"success": true, "completed": true, "steps": 0}
-	if topology.is_empty():
-		return {"success": false, "reason": "pending_move_topology_missing"}
-	var goal: RefCounted = GridCoord.from_dictionary(_dictionary_or_empty(pending_movement.get("target_position", {})))
-	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
-	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
-	if not bool(plan.get("success", false)):
-		return {
-			"success": false,
-			"reason": plan.get("reason", "pending_move_path_unavailable"),
-			"pending_movement": pending_movement.duplicate(true),
-			"path_result": plan,
-		}
-	var path: Array = _array_or_empty(plan.get("path", []))
-	var total_steps: int = int(plan.get("steps", 0))
-	if total_steps <= 0:
-		pending_movement.clear()
-		return {"success": true, "completed": true, "steps": 0, "to": actor.grid_position.to_dictionary(), "path": path}
-	var affordable_steps: int = min(total_steps, int(floor(actor.ap)))
-	if affordable_steps <= 0:
-		pending_movement["remaining_steps"] = total_steps
-		pending_movement["required_ap"] = float(total_steps)
-		pending_movement["available_ap"] = actor.ap
-		return {
-			"success": true,
-			"completed": false,
-			"reason": "ap_insufficient_movement_queued",
-			"steps": 0,
-			"pending_movement": pending_movement.duplicate(true),
-		}
-	var destination: Dictionary = _dictionary_or_empty(path[affordable_steps])
-	var from: Dictionary = actor.grid_position.to_dictionary()
-	_spend_ap(actor, float(affordable_steps), "pending_move")
-	actor.grid_position = GridCoord.from_dictionary(destination)
-	for step in path.slice(1, affordable_steps + 1):
-		_auto_open_door_for_step(actor.actor_id, _dictionary_or_empty(step), topology)
-		_emit("movement_step", {
-			"actor_id": actor.actor_id,
-			"to": _dictionary_or_empty(step),
-		})
-	_emit("actor_moved", {
-		"actor_id": actor.actor_id,
-		"from": from,
-		"to": destination,
-		"steps": affordable_steps,
-	})
-	var completed := affordable_steps >= total_steps
-	if completed:
-		pending_movement.clear()
-	else:
-		pending_movement["target_position"] = goal.to_dictionary()
-		pending_movement["path"] = path.slice(affordable_steps)
-		pending_movement["required_ap"] = float(total_steps - affordable_steps)
-		pending_movement["available_ap"] = actor.ap
-		pending_movement["remaining_steps"] = max(0, total_steps - affordable_steps)
-		_emit("movement_queued", pending_movement.duplicate(true))
-	return {
-		"success": true,
-		"completed": completed,
-		"kind": "move",
-		"actor_id": actor.actor_id,
-		"from": from,
-		"to": destination,
-		"path": path,
-		"steps": affordable_steps,
-		"remaining_steps": max(0, total_steps - affordable_steps),
-		"ap_remaining": actor.ap,
-	}
+	return _pending_action_service.advance_pending_movement(self, actor, topology)
 
 
 func _topology_with_auto_open_doors(actor_id: int, topology: Dictionary) -> Dictionary:
@@ -5277,52 +4968,7 @@ func _grid_key(grid: Dictionary) -> String:
 
 
 func _resume_pending_interaction(actor: RefCounted, topology: Dictionary, movement_result: Dictionary = {}) -> Dictionary:
-	if pending_interaction.is_empty():
-		return {
-			"success": true,
-			"resumed": false,
-			"approach_result": movement_result,
-		}
-	var queued: Dictionary = pending_interaction.duplicate(true)
-	var prompt: Dictionary = query_interaction_options(actor.actor_id, _dictionary_or_empty(queued.get("target", {})))
-	var option_id: String = str(queued.get("option_id", ""))
-	var option: Dictionary = _interaction_option(prompt, option_id)
-	var cost: float = DEFAULT_ATTACK_AP if str(option.get("kind", "")) == "attack" else DEFAULT_INTERACTION_AP
-	if actor.ap < cost:
-		pending_interaction = queued
-		pending_interaction["required_ap"] = cost
-		pending_interaction["available_ap"] = actor.ap
-		_emit("interaction_queued", pending_interaction.duplicate(true))
-		return {
-			"success": true,
-			"resumed": true,
-			"kind": "pending_interaction",
-			"reason": "ap_insufficient_interaction_queued",
-			"approach_result": movement_result,
-			"pending_interaction": pending_interaction.duplicate(true),
-			"prompt": prompt,
-		}
-	pending_interaction.clear()
-	var resumed: Dictionary = _submit_interact_command(actor, {
-		"kind": "interact",
-		"actor_id": actor.actor_id,
-		"target": _dictionary_or_empty(queued.get("target", {})),
-		"option_id": option_id,
-		"topology": topology,
-	})
-	resumed["approach_result"] = movement_result
-	resumed["auto_resumed_interaction"] = true
-	resumed["resumed_pending_interaction"] = queued
-	_emit("interaction_resumed", {
-		"actor_id": actor.actor_id,
-		"target": _dictionary_or_empty(queued.get("target", {})),
-		"option_id": option_id,
-		"option_kind": str(option.get("kind", "")),
-		"success": bool(resumed.get("success", false)),
-		"reason": str(resumed.get("reason", "ok" if bool(resumed.get("success", false)) else "unknown")),
-		"result_kind": str(resumed.get("kind", "")),
-	})
-	return resumed
+	return _pending_action_service.resume_pending_interaction(self, actor, topology, movement_result)
 
 
 func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
@@ -5965,27 +5611,7 @@ func _cancel_pending_for_new_target_command(actor_id: int, command_kind: String,
 
 
 func _build_cancel_turn_policy(action_kind: String, reason: String, had_pending: bool, auto_end_requested: bool, auto_advanced: bool, actor: RefCounted, ap_before: float, turn_open_before: bool, round_before: int, extra: Dictionary = {}) -> Dictionary:
-	var policy := {
-		"action_kind": action_kind,
-		"success": true,
-		"reason": "auto_ended" if auto_advanced else ("preserved_turn" if had_pending else "no_pending"),
-		"cancel_reason": reason,
-		"had_pending": had_pending,
-		"auto_end_requested": auto_end_requested,
-		"auto_advanced": auto_advanced,
-		"turn_open_before": turn_open_before,
-		"turn_open_after": bool(actor.turn_open) if actor != null else false,
-		"round_before": round_before,
-		"round_after": int(turn_state.get("round", 1)),
-		"ap_before_cancel": ap_before,
-		"ap_after_cancel": actor.ap if actor != null else 0.0,
-		"pending_movement": false,
-		"pending_interaction": false,
-		"pending_crafting": false,
-	}
-	for key in extra.keys():
-		policy[key] = extra[key]
-	return policy
+	return _turn_flow_service.build_cancel_turn_policy(self, action_kind, reason, had_pending, auto_end_requested, auto_advanced, actor, ap_before, turn_open_before, round_before, extra)
 
 
 func _command_replaces_pending_target(command_kind: String, command: Dictionary) -> bool:
