@@ -30,6 +30,7 @@ const WorldPanelActionController = preload("res://scripts/app/controllers/world_
 const DialogueActionController = preload("res://scripts/app/controllers/dialogue_action_controller.gd")
 const WaitActionController = preload("res://scripts/app/controllers/wait_action_controller.gd")
 const InteractionActionController = preload("res://scripts/app/controllers/interaction_action_controller.gd")
+const PlayerActionRefreshController = preload("res://scripts/app/controllers/player_action_refresh_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const HudRoot = preload("res://scripts/ui/hud_root.gd")
@@ -95,6 +96,7 @@ var world_panel_action_controller: RefCounted = WorldPanelActionController.new()
 var dialogue_action_controller: RefCounted = DialogueActionController.new()
 var wait_action_controller: RefCounted = WaitActionController.new()
 var interaction_action_controller: RefCounted = InteractionActionController.new()
+var player_action_refresh_controller: RefCounted = PlayerActionRefreshController.new()
 var ui_feedback_state_controller: RefCounted = UiFeedbackStateController.new()
 var active_trade_target: Dictionary:
 	get:
@@ -1839,15 +1841,16 @@ func _apply_world_panel_action_operation(operation: Dictionary) -> Dictionary:
 
 
 func _apply_player_action_refresh_operation(operation: Dictionary, selected_prompt: Dictionary = {}, rebuild_command_result: Dictionary = {}, rebuild_selected_prompt: Variant = null) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if bool(operation.get("rebuild_world", false)):
-		var refresh_prompt: Dictionary = _dictionary_or_empty(rebuild_selected_prompt) if typeof(rebuild_selected_prompt) == TYPE_DICTIONARY else selected_prompt
-		rebuild_runtime_world(refresh_prompt, rebuild_command_result)
-	elif bool(operation.get("refresh_all_panels", false)):
-		refresh_all_panels(selected_prompt)
-	else:
-		_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])), selected_prompt)
-	return result
+	return _dictionary_or_empty(player_action_refresh_controller.call(
+		"apply_operation",
+		operation,
+		selected_prompt,
+		rebuild_command_result,
+		rebuild_selected_prompt,
+		Callable(self, "rebuild_runtime_world"),
+		Callable(self, "refresh_all_panels"),
+		Callable(self, "_refresh_operation_panels")
+	))
 
 
 func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}, command_result: Dictionary = {}) -> void:
