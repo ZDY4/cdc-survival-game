@@ -30,9 +30,9 @@
 - crafting queue latest result、pending cancel feedback、queue 标准化和 queue summary 已抽到 `godot/scripts/app/controllers/crafting_feedback_controller.gd`，`GameApp.latest_*_crafting_result` 仅作为兼容属性保留。
 - tooltip layer 和 drag preview layer 的节点创建、样式、显示/隐藏和 render snapshot 已抽到 `godot/scripts/app/controllers/ui_overlay_render_controller.gd`，并由 `HudRoot` 持有；`GameApp` 仅保留兼容 facade。
 - tooltip source 解析、tooltip snapshot 和 tooltip visual placement 计算已抽到 `godot/scripts/app/controllers/tooltip_snapshot_controller.gd`，并由 `HudRoot` 持有；`GameApp.hover_tooltip_snapshot()` 仅作为兼容 facade。
-- drag source、payload、preview 文案、preview 尺寸和 drag state 组装已抽到 `godot/scripts/app/controllers/drag_snapshot_controller.gd`，并由 `HudRoot` 持有；`GameApp.drag_state_snapshot()` 仅保留 hover target / reason 补全和兼容 facade。
+- drag source、payload、preview 文案、preview 尺寸和 drag state 组装已抽到 `godot/scripts/app/controllers/drag_snapshot_controller.gd`，并由 `HudRoot` 持有；`GameApp.drag_state_snapshot()` 仅保留兼容 facade。
 - hotbar / observe hotbar 命中测试已收进 `HudRoot.hotbar_hit_test_snapshot()`，`GameApp.hotbar_hit_test_snapshot()` 只保留 smoke / tool 兼容入口。
-- hotbar、observe hotbar、equipment、inventory action、container 和 trade 的 drag hover target / acceptance 已抽到 `godot/scripts/app/controllers/drag_hover_target_controller.gd`，`GameApp` 只保留 `drag_state_snapshot()` 兼容 facade 和 reason 文案补全。
+- hotbar、observe hotbar、equipment、inventory action、container 和 trade 的 drag hover target / acceptance 已抽到 `godot/scripts/app/controllers/drag_hover_target_controller.gd`，并由 `HudRoot.drag_hover_target_snapshot()` 组装 owner panel 和 reason 文案；`GameApp` 只保留 `drag_state_snapshot()` 兼容 facade。
 - gameplay input blocker、modal/context menu event、close priority 和 UI layer stack 组装已抽到 `godot/scripts/app/controllers/ui_blocker_state_controller.gd`；`GameApp` 只保留从 HUD / panel 节点读取当前状态的 facade。
 - 容器 take / store / transfer / close 玩家动作 facade 已抽到 `godot/scripts/app/controllers/container_action_controller.gd`；背包 drop / use / deconstruct / split / reorder 玩家动作 facade 已抽到 `godot/scripts/app/controllers/inventory_action_controller.gd`；交易 buy / sell / cart 玩家动作 facade 已抽到 `godot/scripts/app/controllers/trade_action_controller.gd`；装备 equip / unequip / reload 和属性点 facade 已抽到 `godot/scripts/app/controllers/character_action_controller.gd`；技能 learn / bind / hotbar group / hotbar use / runtime target confirm facade 已抽到 `godot/scripts/app/controllers/skill_action_controller.gd`。
 - 制作配方提交、制作队列推进、等待后续队列恢复、pending crafting 取消和 queue snapshot facade 已抽到 `godot/scripts/app/controllers/crafting_action_controller.gd`；`GameApp` 只保留 smoke / UI 兼容入口和刷新执行。
@@ -44,7 +44,7 @@
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 2668 行，还保留 tooltip / drag facade、hover target reason 补全、overlay 兼容属性、observe / pending 分支、交互结果应用和移动 presentation / refresh 编排等兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 2570 行，还保留 tooltip / drag facade、overlay 兼容属性、observe / pending 分支、交互结果应用和移动 presentation / refresh 编排等兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` scene；当前已通过 `HudRoot` script 包住现有 HUD controller 和 panel controller。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
@@ -284,7 +284,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] tooltip snapshot 计算已抽到 `tooltip_snapshot_controller.gd`，并由 `HudRoot` 持有。
 - [x] drag source / payload / preview snapshot 组装已抽到 `drag_snapshot_controller.gd`，并由 `HudRoot` 持有。
 - [x] hotbar / observe hotbar 命中测试已迁到 `HudRoot.hotbar_hit_test_snapshot()`。
-- [x] hotbar、observe hotbar、equipment、inventory action、container 和 trade 的 drag hover target / acceptance 已抽到 `drag_hover_target_controller.gd`。
+- [x] hotbar、observe hotbar、equipment、inventory action、container 和 trade 的 drag hover target / acceptance 已抽到 `drag_hover_target_controller.gd`，并由 `HudRoot` 负责 owner panel 和 reason 文案补全。
 - [x] gameplay input blocker、modal/context menu event、close priority 和 UI layer stack 组装已抽到 `ui_blocker_state_controller.gd`。
 - [x] context menu 关闭转发已抽到 `ui_blocker_state_controller.gd`，`GameApp` 只提供 owner panel 映射。
 - [x] 容器 take / store / transfer / close 玩家动作 facade 已抽到 `container_action_controller.gd`，`GameApp` 只保留兼容方法和刷新执行。
@@ -300,7 +300,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 引入脚本级 `HudRoot` facade，承接 HUD / panel setup、刷新、stage panels、settings、panel blocker、modal stack、theme 和 context menu snapshot。
 - [x] controls hint、debug console、debug panel 的 HUD 控件开关、snapshot、schema/result 写入已通过 `HudRoot` 窄接口转发；`GameApp` 只保留兼容入口、刷新和音频反馈。
 - [x] tooltip render 和 drag preview render controller 已由 `HudRoot` 持有，`GameApp` 的旧 overlay 属性和 render 方法只作为 smoke / tool 兼容 facade。
-- [ ] 将 `GameApp` 中剩余 hover target reason 补全、兼容 panel 引用等代码继续替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
+- [ ] 将 `GameApp` 中剩余兼容 panel 引用等代码继续替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
 - [ ] 将 observe / pending 分支、交互结果应用、移动 presentation / refresh 编排等剩余玩家动作 facade 继续从 `GameApp` 移出。
 - [x] 将 panel blocker / active modal 状态通过 `hud_root.input_blocker_snapshot()` / `gameplay_input_blocker_snapshot()` 暴露；debug console blocker 由 `HudRoot` 暴露，world action blocker 仍由 `GameApp` 做跨层合成。
 

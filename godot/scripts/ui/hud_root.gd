@@ -4,12 +4,16 @@ const GamePanelController = preload("res://scripts/app/controllers/game_panel_co
 const UiOverlayRenderController = preload("res://scripts/app/controllers/ui_overlay_render_controller.gd")
 const TooltipSnapshotController = preload("res://scripts/app/controllers/tooltip_snapshot_controller.gd")
 const DragSnapshotController = preload("res://scripts/app/controllers/drag_snapshot_controller.gd")
+const DragHoverTargetController = preload("res://scripts/app/controllers/drag_hover_target_controller.gd")
+const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 var parent: Node
 var panel_controller: RefCounted
 var ui_overlay_render_controller: RefCounted = UiOverlayRenderController.new()
 var tooltip_snapshot_controller: RefCounted = TooltipSnapshotController.new()
 var drag_snapshot_controller: RefCounted = DragSnapshotController.new()
+var drag_hover_target_controller: RefCounted = DragHoverTargetController.new()
+var reason_catalog: RefCounted = ReasonCatalog.new()
 
 
 func _init(p_parent: Node = null) -> void:
@@ -166,6 +170,44 @@ func drag_state_snapshot(viewport: Viewport, data: Variant = {}, target_snapshot
 	return dictionary_or_empty(drag_snapshot_controller.call("drag_state_snapshot", viewport, data, target_snapshot))
 
 
+func drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -> Dictionary:
+	if control == null:
+		return _enrich_drag_hover_target_reason(dictionary_or_empty(drag_hover_target_controller.call("inactive_target")))
+	var target := {
+		"active": true,
+		"owner_panel": owner_panel_for_control(control),
+		"target_kind": "control",
+		"target_id": str(control.name),
+		"source_path": str(control.get_path()),
+		"accepts": "",
+		"last_accept": false,
+		"reject_reason": "",
+		"reject_reason_text": "",
+		"hover_highlight": dictionary_or_empty(drag_hover_target_controller.call("hover_highlight", false, "", "", "", false)),
+	}
+	if control.has_meta("equipment_slot"):
+		_merge_dictionary(target, dictionary_or_empty(drag_hover_target_controller.call("equipment_target", control, drag_data)))
+	elif control.has_meta("hotbar_slot_id"):
+		_merge_dictionary(target, dictionary_or_empty(drag_hover_target_controller.call("hotbar_slot_target", control, drag_data)))
+	elif control.has_meta("hotbar_group_id"):
+		_merge_dictionary(target, dictionary_or_empty(drag_hover_target_controller.call("hotbar_group_target", control, drag_data)))
+	elif control.has_meta("inventory_action_target"):
+		_merge_dictionary(target, dictionary_or_empty(drag_hover_target_controller.call("inventory_action_target", control, drag_data)))
+	elif control.has_meta("container_source"):
+		_merge_dictionary(target, dictionary_or_empty(drag_hover_target_controller.call("container_target", control, drag_data)))
+	elif control.has_meta("trade_drop_zone"):
+		_merge_dictionary(target, dictionary_or_empty(drag_hover_target_controller.call("trade_drop_zone_target", control, drag_data)))
+	elif control.has_meta("cart_index"):
+		_merge_dictionary(target, dictionary_or_empty(drag_hover_target_controller.call("trade_cart_target", control, drag_data, "trade_cart_entry", str(control.get_meta("cart_index")))))
+	elif control.has_meta("trade_cart_target"):
+		_merge_dictionary(target, dictionary_or_empty(drag_hover_target_controller.call("trade_cart_target", control, drag_data, "trade_cart", str(control.get_meta("trade_cart_target")))))
+	else:
+		var observe_key := observe_hotbar_meta_key(control)
+		if not observe_key.is_empty():
+			_merge_dictionary(target, dictionary_or_empty(drag_hover_target_controller.call("observe_hotbar_target", drag_data, observe_key)))
+	return _enrich_drag_hover_target_reason(target)
+
+
 func hotbar_hit_test_snapshot(viewport: Viewport, screen_position: Vector2 = Vector2(-1.0, -1.0)) -> Dictionary:
 	var position := screen_position
 	if (position.x < 0.0 or position.y < 0.0) and viewport != null:
@@ -205,6 +247,36 @@ func observe_hotbar_meta_key(control: Control) -> String:
 	for key in ["observe_playback", "observe_speed", "auto_tick", "observe_level", "observe_mode"]:
 		if control.has_meta(key):
 			return key
+	return ""
+
+
+func owner_panel_for_control(control: Control) -> String:
+	var current: Node = control
+	while current != null:
+		match str(current.name):
+			"Hud":
+				return "hud"
+			"HUD":
+				return "hud"
+			"InventoryPanel":
+				return "inventory"
+			"CharacterPanel":
+				return "character"
+			"SkillsPanel":
+				return "skills"
+			"JournalPanel":
+				return "journal"
+			"CraftingPanel":
+				return "crafting"
+			"TradePanel":
+				return "trade"
+			"ContainerPanel":
+				return "container"
+			"DialoguePanel":
+				return "dialogue"
+			"SettingsPanel":
+				return "settings"
+		current = current.get_parent()
 	return ""
 
 
@@ -479,6 +551,27 @@ func _hotbar_hit_disabled_reason_text(reason: String) -> String:
 	if hud != null and hud.has_method("_disabled_reason_text"):
 		return str(hud.call("_disabled_reason_text", reason))
 	return reason
+
+
+func _enrich_drag_hover_target_reason(target: Dictionary) -> Dictionary:
+	var reject_reason := str(target.get("reject_reason", ""))
+	var reject_text := _drag_reject_reason_text(reject_reason)
+	target["reject_reason_text"] = reject_text
+	var highlight: Dictionary = dictionary_or_empty(target.get("hover_highlight", {})).duplicate(true)
+	highlight["reject_reason_text"] = reject_text
+	target["hover_highlight"] = highlight
+	return target
+
+
+func _drag_reject_reason_text(reason: String) -> String:
+	if reason.is_empty():
+		return ""
+	return str(reason_catalog.call("disabled_text_for", reason))
+
+
+func _merge_dictionary(target: Dictionary, values: Dictionary) -> void:
+	for key in values:
+		target[key] = values[key]
 
 
 func _overlay_owner(owner: Node = null) -> Node:

@@ -18,7 +18,6 @@ const UiFeedbackStateController = preload("res://scripts/app/controllers/ui_feed
 const SkillTargetingController = preload("res://scripts/app/controllers/skill_targeting_controller.gd")
 const CraftingFeedbackController = preload("res://scripts/app/controllers/crafting_feedback_controller.gd")
 const CraftingActionController = preload("res://scripts/app/controllers/crafting_action_controller.gd")
-const DragHoverTargetController = preload("res://scripts/app/controllers/drag_hover_target_controller.gd")
 const UiBlockerStateController = preload("res://scripts/app/controllers/ui_blocker_state_controller.gd")
 const ContainerActionController = preload("res://scripts/app/controllers/container_action_controller.gd")
 const InventoryActionController = preload("res://scripts/app/controllers/inventory_action_controller.gd")
@@ -32,7 +31,6 @@ const InteractionActionController = preload("res://scripts/app/controllers/inter
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const HudRoot = preload("res://scripts/ui/hud_root.gd")
-const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 const CRAFTING_QUEUE_ADVANCE_LIMIT := 16
 
 var registry: ContentRegistry
@@ -50,7 +48,6 @@ var world_action_presenter: RefCounted:
 			return null
 		return world_action_flow_controller.presenter
 var audio_feedback_controller: Node
-var reason_catalog: RefCounted = ReasonCatalog.new()
 var world_container: Node3D
 var fog_overlay: ColorRect
 var hud: Control
@@ -64,7 +61,6 @@ var map_panel: Control
 var skills_panel: Control
 var crafting_panel: Control
 var settings_panel: Control
-var drag_hover_target_controller: RefCounted = DragHoverTargetController.new()
 var ui_blocker_state_controller: RefCounted = UiBlockerStateController.new()
 var container_action_controller: RefCounted = ContainerActionController.new()
 var inventory_action_controller: RefCounted = InventoryActionController.new()
@@ -590,15 +586,6 @@ func hotbar_hit_test_snapshot(screen_position: Vector2 = Vector2(-1.0, -1.0)) ->
 	}
 
 
-func _observe_hotbar_meta_key(control: Control) -> String:
-	if hud_root != null and hud_root.has_method("observe_hotbar_meta_key"):
-		return str(hud_root.call("observe_hotbar_meta_key", control))
-	for key in ["observe_playback", "observe_speed", "auto_tick", "observe_level", "observe_mode"]:
-		if control.has_meta(key):
-			return key
-	return ""
-
-
 func drag_state_snapshot(data: Variant = {}, hover_target: Control = null) -> Dictionary:
 	var drag_data: Dictionary = _dictionary_or_empty(data)
 	var target: Dictionary = _drag_hover_target_snapshot(hover_target, drag_data)
@@ -1024,110 +1011,25 @@ func _vector2_snapshot(value: Vector2) -> Dictionary:
 	return {"x": value.x, "y": value.y}
 
 
-func _owner_panel_for_control(control: Control) -> String:
-	var current: Node = control
-	while current != null:
-		match str(current.name):
-			"Hud":
-				return "hud"
-			"HUD":
-				return "hud"
-			"InventoryPanel":
-				return "inventory"
-			"CharacterPanel":
-				return "character"
-			"SkillsPanel":
-				return "skills"
-			"JournalPanel":
-				return "journal"
-			"CraftingPanel":
-				return "crafting"
-			"TradePanel":
-				return "trade"
-			"ContainerPanel":
-				return "container"
-			"DialoguePanel":
-				return "dialogue"
-			"SettingsPanel":
-				return "settings"
-		current = current.get_parent()
-	return ""
-
-
 func _ui_layer_priority(kind: String, layer_id: String) -> int:
 	return int(ui_blocker_state_controller.call("layer_priority", kind, layer_id))
 
 
 func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -> Dictionary:
-	if control == null:
-		return _enrich_drag_hover_target_reason(_dictionary_or_empty(drag_hover_target_controller.call("inactive_target")))
-	var target := {
-		"active": true,
-		"owner_panel": _owner_panel_for_control(control),
-		"target_kind": "control",
-		"target_id": str(control.name),
-		"source_path": str(control.get_path()),
+	if hud_root != null:
+		return _dictionary_or_empty(hud_root.drag_hover_target_snapshot(control, drag_data))
+	return {
+		"active": false,
+		"owner_panel": "",
+		"target_kind": "",
+		"target_id": "",
+		"source_path": "",
 		"accepts": "",
 		"last_accept": false,
 		"reject_reason": "",
 		"reject_reason_text": "",
-		"hover_highlight": _dictionary_or_empty(drag_hover_target_controller.call("hover_highlight", false, "", "", "", false)),
+		"hover_highlight": {},
 	}
-	if control.has_meta("equipment_slot"):
-		var equipment_target: Dictionary = _dictionary_or_empty(drag_hover_target_controller.call("equipment_target", control, drag_data))
-		for key in equipment_target:
-			target[key] = equipment_target[key]
-	elif control.has_meta("hotbar_slot_id"):
-		var hotbar_target: Dictionary = _dictionary_or_empty(drag_hover_target_controller.call("hotbar_slot_target", control, drag_data))
-		for key in hotbar_target:
-			target[key] = hotbar_target[key]
-	elif control.has_meta("hotbar_group_id"):
-		var hotbar_group_target: Dictionary = _dictionary_or_empty(drag_hover_target_controller.call("hotbar_group_target", control, drag_data))
-		for key in hotbar_group_target:
-			target[key] = hotbar_group_target[key]
-	elif control.has_meta("inventory_action_target"):
-		var inventory_action_target: Dictionary = _dictionary_or_empty(drag_hover_target_controller.call("inventory_action_target", control, drag_data))
-		for key in inventory_action_target:
-			target[key] = inventory_action_target[key]
-	elif control.has_meta("container_source"):
-		var container_target: Dictionary = _dictionary_or_empty(drag_hover_target_controller.call("container_target", control, drag_data))
-		for key in container_target:
-			target[key] = container_target[key]
-	elif control.has_meta("trade_drop_zone"):
-		var trade_drop_target: Dictionary = _dictionary_or_empty(drag_hover_target_controller.call("trade_drop_zone_target", control, drag_data))
-		for key in trade_drop_target:
-			target[key] = trade_drop_target[key]
-	elif control.has_meta("cart_index"):
-		var cart_entry_target: Dictionary = _dictionary_or_empty(drag_hover_target_controller.call("trade_cart_target", control, drag_data, "trade_cart_entry", str(control.get_meta("cart_index"))))
-		for key in cart_entry_target:
-			target[key] = cart_entry_target[key]
-	elif control.has_meta("trade_cart_target"):
-		var cart_target: Dictionary = _dictionary_or_empty(drag_hover_target_controller.call("trade_cart_target", control, drag_data, "trade_cart", str(control.get_meta("trade_cart_target"))))
-		for key in cart_target:
-			target[key] = cart_target[key]
-	else:
-		var observe_key := _observe_hotbar_meta_key(control)
-		if not observe_key.is_empty():
-			var observe_target: Dictionary = _dictionary_or_empty(drag_hover_target_controller.call("observe_hotbar_target", drag_data, observe_key))
-			for key in observe_target:
-				target[key] = observe_target[key]
-	return _enrich_drag_hover_target_reason(target)
-
-
-func _enrich_drag_hover_target_reason(target: Dictionary) -> Dictionary:
-	var reject_reason := str(target.get("reject_reason", ""))
-	var reject_text := _drag_reject_reason_text(reject_reason)
-	target["reject_reason_text"] = reject_text
-	var highlight: Dictionary = _dictionary_or_empty(target.get("hover_highlight", {})).duplicate(true)
-	highlight["reject_reason_text"] = reject_text
-	target["hover_highlight"] = highlight
-	return target
-
-
-func _drag_reject_reason_text(reason: String) -> String:
-	if reason.is_empty():
-		return ""
-	return str(reason_catalog.call("disabled_text_for", reason))
 
 
 func settings_applied(snapshot: Dictionary = {}) -> void:
