@@ -4,3 +4,5 @@
 
 [node name="WorldRoot" type="Node3D"]
 script = ExtResource("1")
+
+[node name="WorldContainer" type="Node3D" parent="."]

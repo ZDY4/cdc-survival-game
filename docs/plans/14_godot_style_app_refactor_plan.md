@@ -16,7 +16,7 @@
 - debug console 命令执行和 debug overlay mode 状态已抽到 `godot/scripts/app/controllers/debug_runtime_controller.gd`。
 - HUD 运行时刷新已通过 `hud_controller.apply_runtime_snapshot()` 和 `input_blocker_snapshot()` 收敛为 facade。
 - 顶层输入分发、逐帧 runtime input process、debug console 输入保护、HUD 面板快捷键、交易面板快捷键和一组全局 UI/debug 快捷键主路径已抽到 `godot/scripts/app/controllers/game_input_router.gd`；`GameRuntimeInputController` 暂保留 direct-call smoke 兼容 fallback。
-- 世界表现入口已抽到 `godot/scenes/world/world_root.tscn` + `godot/scripts/world/world_root.gd`，`GameApp` 主要实例化 scene 并调用 WorldRoot 接口。
+- 世界表现入口已抽到 `godot/scenes/world/world_root.tscn` + `godot/scripts/world/world_root.gd`，稳定 `WorldContainer` 已落到 scene 中，`GameApp` 主要实例化 scene 并调用 WorldRoot 接口。
 - 相机 follow、pan、zoom、clamp 和 ray-plane 计算已抽到 `godot/scripts/world/camera_rig_controller.gd`，`GameRuntimeInputController` 仍保留鼠标拾取、hover 和玩家交互输入。
 - runtime refresh / world snapshot 构建已抽到 `godot/scripts/app/controllers/runtime_refresh_controller.gd`。
 - pending final refresh 的 final world result fallback 解析和 runtime 应用已抽到 `RuntimeRefreshController.resolve_pending_final_world_result()` / `apply_pending_final_refresh()`。
@@ -373,6 +373,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] `GameApp` 主要通过 WorldRoot 接口应用世界快照和 debug overlay。
 - [x] 将相机 follow、pan、zoom、clamp 和 ray-plane 计算抽到 `godot/scripts/world/camera_rig_controller.gd`，运行时输入层只保留交互拾取和 hover 刷新接线。
 - [x] 新增 `godot/scenes/world/world_root.tscn`，`GameApp` 改为实例化 WorldRoot scene。
+- [x] `WorldContainer` 已作为稳定子节点写入 `world_root.tscn`，`WorldRoot.ensure_world_container()` 只保留查找和 fallback 创建。
 - [ ] 继续整理 `world_root.tscn` / camera rig controller，减少 `GameApp` 对世界节点引用的兼容字段。
 
 验收：

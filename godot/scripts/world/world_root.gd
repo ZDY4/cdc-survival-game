@@ -15,6 +15,9 @@ var render_sequence: int = 0
 func ensure_world_container() -> Node3D:
 	if world_container != null and is_instance_valid(world_container):
 		return world_container
+	world_container = get_node_or_null("WorldContainer") as Node3D
+	if world_container != null:
+		return world_container
 	world_container = Node3D.new()
 	world_container.name = "WorldContainer"
 	add_child(world_container)
