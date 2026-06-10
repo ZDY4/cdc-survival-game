@@ -15,7 +15,7 @@
 - startup request 和 new/continue runtime 构建已抽到 `godot/scripts/app/controllers/runtime_boot_controller.gd`。
 - debug console 命令执行和 debug overlay mode 状态已抽到 `godot/scripts/app/controllers/debug_runtime_controller.gd`。
 - HUD 运行时刷新已通过 `hud_controller.apply_runtime_snapshot()` 和 `input_blocker_snapshot()` 收敛为 facade。
-- 顶层输入分发已抽到 `godot/scripts/app/controllers/game_input_router.gd`。
+- 顶层输入分发、debug console 输入保护和一组全局 UI/debug 快捷键主路径已抽到 `godot/scripts/app/controllers/game_input_router.gd`；`GameRuntimeInputController` 暂保留 direct-call smoke 兼容 fallback。
 - 世界表现入口已抽到 `godot/scripts/world/world_root.gd`，`GameApp` 主要调用 WorldRoot 接口。
 - runtime refresh / world snapshot 构建已抽到 `godot/scripts/app/controllers/runtime_refresh_controller.gd`。
 - world action presenter、queue、pending UI、movement execution plan 和 final refresh 状态已抽到 `godot/scripts/app/controllers/world_action_flow_controller.gd`。
@@ -316,7 +316,8 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 
 - [x] 新建 `game_input_router.gd`。
 - [x] 顶层输入分发已迁入 input router。
-- [ ] 将顶层快捷键、UI blocker 判断、玩家命令分发、相机命令分发进一步集中到 input router。
+- [x] debug console 输入保护和 `V` / `F3` / `[` / `]` / `A` / `/` / `Esc` 等全局 UI/debug 快捷键主路径已迁入 input router；runtime input direct-call smoke 仍保留兼容 fallback。
+- [ ] 将剩余 UI blocker 判断、玩家命令分发、相机命令分发进一步集中到 input router。
 - [ ] 玩家移动 / 交互输入继续交给现有 runtime input controller，但从 `GameApp` 直接调用改为 input router 调用。
 - [ ] 相机控制逐步迁到 `camera_rig_controller.gd`。
 
