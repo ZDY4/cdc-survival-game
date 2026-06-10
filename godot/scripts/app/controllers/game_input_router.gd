@@ -20,6 +20,11 @@ func input(game_root: Node, runtime_input_controller: RefCounted, event: InputEv
 			if trade_viewport != null:
 				trade_viewport.set_input_as_handled()
 			return
+		if _handle_hotbar_shortcut_key(game_root, event as InputEventKey):
+			var hotbar_viewport := game_root.get_viewport()
+			if hotbar_viewport != null:
+				hotbar_viewport.set_input_as_handled()
+			return
 		if _handle_global_shortcut_key(game_root, event as InputEventKey):
 			var shortcut_viewport := game_root.get_viewport()
 			if shortcut_viewport != null:
@@ -33,6 +38,8 @@ func unhandled_input(game_root: Node, runtime_input_controller: RefCounted, even
 	if event is InputEventKey and _debug_console_open(game_root):
 		return
 	if event is InputEventKey and _handle_trade_shortcut_key(game_root, event as InputEventKey):
+		return
+	if event is InputEventKey and _handle_hotbar_shortcut_key(game_root, event as InputEventKey):
 		return
 	if event is InputEventKey and _handle_global_shortcut_key(game_root, event as InputEventKey):
 		return
@@ -107,6 +114,90 @@ func _handle_trade_shortcut_key(game_root: Node, event: InputEventKey) -> bool:
 	if not event.pressed or event.echo:
 		return false
 	return game_root.has_method("handle_trade_shortcut") and bool(game_root.handle_trade_shortcut(event))
+
+
+func _handle_hotbar_shortcut_key(game_root: Node, event: InputEventKey) -> bool:
+	if not event.pressed or event.echo:
+		return false
+	var key := event.keycode
+	if key == 0:
+		key = event.physical_keycode
+	var digit := _digit_for_key(key)
+	if digit < 0:
+		return false
+	if digit >= 1 and event.alt_pressed:
+		return _handle_hotbar_group_key(game_root, digit)
+	if key == KEY_0 and event.ctrl_pressed:
+		return false
+	return _handle_digit_key(game_root, digit)
+
+
+func _handle_digit_key(game_root: Node, digit: int) -> bool:
+	if digit <= 0:
+		return false
+	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()):
+		if digit <= 9 and game_root.has_method("choose_dialogue_option_by_index"):
+			game_root.choose_dialogue_option_by_index(digit - 1)
+			return true
+		return false
+	if _observe_mode_active(game_root):
+		return true
+	if _gameplay_input_blocked(game_root):
+		return false
+	if game_root.has_method("use_hotbar_slot"):
+		var slot_id := "slot_%d" % (10 if digit == 10 else digit)
+		game_root.use_hotbar_slot(slot_id)
+		return true
+	return false
+
+
+func _handle_hotbar_group_key(game_root: Node, digit: int) -> bool:
+	if digit < 1 or digit > 3:
+		return false
+	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()):
+		return false
+	if _observe_mode_active(game_root):
+		return true
+	if _gameplay_input_blocked(game_root):
+		return false
+	if game_root.has_method("set_hotbar_group"):
+		game_root.set_hotbar_group("group_%d" % digit)
+		return true
+	return false
+
+
+func _digit_for_key(key: int) -> int:
+	match key:
+		KEY_1:
+			return 1
+		KEY_2:
+			return 2
+		KEY_3:
+			return 3
+		KEY_4:
+			return 4
+		KEY_5:
+			return 5
+		KEY_6:
+			return 6
+		KEY_7:
+			return 7
+		KEY_8:
+			return 8
+		KEY_9:
+			return 9
+		KEY_0:
+			return 10
+		_:
+			return -1
+
+
+func _observe_mode_active(game_root: Node) -> bool:
+	return game_root.has_method("is_observe_mode_enabled") and bool(game_root.is_observe_mode_enabled())
+
+
+func _gameplay_input_blocked(game_root: Node) -> bool:
+	return game_root.has_method("gameplay_input_blocked_by_ui") and bool(game_root.gameplay_input_blocked_by_ui())
 
 
 func _debug_console_open(game_root: Node) -> bool:
