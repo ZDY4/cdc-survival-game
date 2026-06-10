@@ -601,6 +601,20 @@ func focus_current_actor() -> void:
 	_request_hover_refresh()
 
 
+func handle_space_key_pressed() -> bool:
+	var result: Dictionary = {}
+	if game_root.has_method("press_space_action"):
+		result = game_root.press_space_action()
+	_start_space_wait_hold_if_allowed(result)
+	if game_root.has_method("hide_interaction_menu"):
+		game_root.hide_interaction_menu()
+	return true
+
+
+func stop_space_wait_hold() -> void:
+	_stop_space_wait_hold()
+
+
 func scale_camera_zoom(multiplier: float) -> void:
 	_scale_zoom(multiplier)
 

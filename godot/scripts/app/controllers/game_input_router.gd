@@ -30,6 +30,11 @@ func input(game_root: Node, runtime_input_controller: RefCounted, event: InputEv
 			if enter_viewport != null:
 				enter_viewport.set_input_as_handled()
 			return
+		if _handle_space_key(game_root, runtime_input_controller, event as InputEventKey):
+			var space_viewport := game_root.get_viewport()
+			if space_viewport != null:
+				space_viewport.set_input_as_handled()
+			return
 		if _handle_global_shortcut_key(game_root, event as InputEventKey):
 			var shortcut_viewport := game_root.get_viewport()
 			if shortcut_viewport != null:
@@ -52,6 +57,8 @@ func unhandled_input(game_root: Node, runtime_input_controller: RefCounted, even
 	if event is InputEventKey and _handle_hotbar_shortcut_key(game_root, event as InputEventKey):
 		return
 	if event is InputEventKey and _handle_dialogue_enter_key(game_root, event as InputEventKey):
+		return
+	if event is InputEventKey and _handle_space_key(game_root, runtime_input_controller, event as InputEventKey):
 		return
 	if event is InputEventKey and _handle_global_shortcut_key(game_root, event as InputEventKey):
 		return
@@ -157,6 +164,23 @@ func _handle_dialogue_enter_key(game_root: Node, event: InputEventKey) -> bool:
 	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()) and game_root.has_method("press_enter_action"):
 		game_root.press_enter_action()
 		return true
+	return false
+
+
+func _handle_space_key(game_root: Node, runtime_input_controller: RefCounted, event: InputEventKey) -> bool:
+	var key := event.keycode
+	if key == 0:
+		key = event.physical_keycode
+	if key != KEY_SPACE:
+		return false
+	if not event.pressed:
+		if runtime_input_controller != null and runtime_input_controller.has_method("stop_space_wait_hold"):
+			runtime_input_controller.call("stop_space_wait_hold")
+		return false
+	if event.echo:
+		return false
+	if runtime_input_controller != null and runtime_input_controller.has_method("handle_space_key_pressed"):
+		return bool(runtime_input_controller.call("handle_space_key_pressed"))
 	return false
 
 

@@ -366,6 +366,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] hotbar 数字键、Alt+数字 hotbar group 和对话选项数字键主路径已迁入 input router；runtime input controller 暂保留同名 fallback。
 - [x] 对话 Enter / keypad Enter 主路径已迁入 input router；runtime input controller 暂保留同名 fallback。
 - [x] `+` / `-` / `Ctrl+0` / `F` / `Tab` / `PageUp` / `PageDown` 相机和视图快捷键主路径已迁入 input router；runtime input controller 暂保留同名 fallback。
+- [x] `Space` 等待 / observe playback 主路径已迁入 input router；长按 repeat 状态仍由 runtime input controller 维护，fallback 暂保留。
 - [ ] 将剩余 UI blocker 判断、玩家命令分发、相机命令分发进一步集中到 input router。
 - [x] `GameApp` 的 `_input` / `_unhandled_input` / `_process` 均改为经 `GameInputRouter` 转发到 runtime input controller；direct-call smoke fallback 暂保留。
 - [x] 相机 follow、pan、zoom、clamp 和 ray-plane 计算已迁到 `camera_rig_controller.gd`；玩家拾取和 hover 接线仍在 runtime input controller。
