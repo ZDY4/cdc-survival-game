@@ -88,8 +88,43 @@ func _handle_global_shortcut_key(game_root: Node, event: InputEventKey) -> bool:
 			if game_root.has_method("close_active_ui"):
 				game_root.close_active_ui("keyboard_escape")
 			return true
+	var stage_panel := _stage_panel_for_key(key)
+	if not stage_panel.is_empty():
+		if game_root.has_method("toggle_stage_panel"):
+			game_root.toggle_stage_panel(stage_panel)
+		return true
 	return false
 
 
 func _debug_console_open(game_root: Node) -> bool:
 	return game_root.has_method("is_debug_console_open") and bool(game_root.is_debug_console_open())
+
+
+func _stage_panel_for_key(key: int) -> String:
+	var bindings := _stage_panel_keybindings()
+	for panel_id in bindings.keys():
+		if int(bindings[panel_id]) == key:
+			return str(panel_id)
+	return ""
+
+
+func _stage_panel_keybindings() -> Dictionary:
+	match str(ProjectSettings.get_setting("cdc/keybinding_profile", "default")):
+		"left_handed":
+			return {
+				"inventory": KEY_Q,
+				"character": KEY_E,
+				"journal": KEY_R,
+				"map": KEY_T,
+				"skills": KEY_Y,
+				"crafting": KEY_U,
+			}
+		_:
+			return {
+				"inventory": KEY_I,
+				"character": KEY_C,
+				"journal": KEY_J,
+				"map": KEY_M,
+				"skills": KEY_K,
+				"crafting": KEY_L,
+			}
