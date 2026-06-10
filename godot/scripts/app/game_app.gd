@@ -413,6 +413,22 @@ func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
 	refresh_crafting_panel()
 
 
+func _refresh_operation_panels(panel_ids: Array, selected_prompt: Dictionary = {}) -> void:
+	if hud_root == null:
+		return
+	var pending_panels: Array = []
+	for panel_id in panel_ids:
+		if str(panel_id) == "hud":
+			if not pending_panels.is_empty():
+				hud_root.refresh_panels(pending_panels, _ui_feedback_payload())
+				pending_panels.clear()
+			refresh_hud(selected_prompt)
+		else:
+			pending_panels.append(str(panel_id))
+	if not pending_panels.is_empty():
+		hud_root.refresh_panels(pending_panels, _ui_feedback_payload())
+
+
 func toggle_stage_panel(panel_id: String) -> Dictionary:
 	if hud_root == null:
 		return {"success": false, "reason": "panel_controller_missing"}
@@ -1307,22 +1323,7 @@ func advance_dialogue_without_choice() -> Dictionary:
 
 
 func _refresh_dialogue_operation(operation: Dictionary) -> void:
-	for panel_id in _array_or_empty(operation.get("refresh", [])):
-		match str(panel_id):
-			"dialogue":
-				refresh_dialogue_panel()
-			"inventory":
-				refresh_inventory_panel()
-			"trade":
-				refresh_trade_panel()
-			"journal":
-				refresh_journal_panel()
-			"skills":
-				refresh_skills_panel()
-			"crafting":
-				refresh_crafting_panel()
-			"hud":
-				refresh_hud()
+	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
 
 
 func _apply_dialogue_trade_result(result: Dictionary) -> void:
@@ -1447,15 +1448,7 @@ func transfer_all_active_container_items(source: String) -> Dictionary:
 
 func _apply_container_action_operation(operation: Dictionary) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
-	if refresh_panels.has("inventory"):
-		refresh_inventory_panel()
-	if refresh_panels.has("container"):
-		refresh_container_panel()
-	if refresh_panels.has("journal"):
-		refresh_journal_panel()
-	if refresh_panels.has("hud"):
-		refresh_hud()
+	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
 	return result
 
 
@@ -1497,15 +1490,7 @@ func _apply_inventory_action_operation(operation: Dictionary) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	if bool(operation.get("rebuild_world", false)):
 		_rebuild_world_after_runtime_change()
-	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
-	if refresh_panels.has("hud"):
-		refresh_hud()
-	if refresh_panels.has("inventory"):
-		refresh_inventory_panel()
-	if refresh_panels.has("character"):
-		refresh_character_panel()
-	if refresh_panels.has("crafting"):
-		refresh_crafting_panel()
+	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
 	return result
 
 
@@ -1542,11 +1527,7 @@ func _apply_trade_action_operation(operation: Dictionary) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	if bool(operation.get("rebuild_world", false)):
 		_rebuild_world_after_runtime_change()
-	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
-	if refresh_panels.has("inventory"):
-		refresh_inventory_panel()
-	if refresh_panels.has("trade"):
-		refresh_trade_panel()
+	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
 	return result
 
 
@@ -1584,15 +1565,7 @@ func _apply_character_action_operation(operation: Dictionary) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	if bool(operation.get("rebuild_world", false)):
 		_rebuild_world_after_runtime_change()
-	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
-	if refresh_panels.has("hud"):
-		refresh_hud()
-	if refresh_panels.has("inventory"):
-		refresh_inventory_panel()
-	if refresh_panels.has("character"):
-		refresh_character_panel()
-	if refresh_panels.has("skills"):
-		refresh_skills_panel()
+	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
 	return result
 
 
@@ -1664,18 +1637,8 @@ func _apply_skill_action_operation(operation: Dictionary) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	if operation.has("target_markers") and runtime_input_controller != null and runtime_input_controller.has_method("update_skill_target_preview_markers"):
 		runtime_input_controller.update_skill_target_preview_markers(_dictionary_or_empty(operation.get("target_markers", {})))
-	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
-	if refresh_panels.has("hud"):
-		if bool(operation.get("selected_prompt", false)):
-			refresh_hud(current_interaction_prompt())
-		else:
-			refresh_hud()
-	if refresh_panels.has("inventory"):
-		refresh_inventory_panel()
-	if refresh_panels.has("character"):
-		refresh_character_panel()
-	if refresh_panels.has("skills"):
-		refresh_skills_panel()
+	var selected_prompt: Dictionary = current_interaction_prompt() if bool(operation.get("selected_prompt", false)) else {}
+	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])), selected_prompt)
 	return result
 
 
@@ -1842,13 +1805,7 @@ func _set_latest_crafting_queue_result(result: Dictionary, trigger: String) -> v
 
 func _apply_crafting_action_operation(operation: Dictionary) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
-	if refresh_panels.has("inventory"):
-		refresh_inventory_panel()
-	if refresh_panels.has("crafting"):
-		refresh_crafting_panel()
-	if refresh_panels.has("skills"):
-		refresh_skills_panel()
+	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
 	return result
 
 
@@ -1939,19 +1896,7 @@ func _apply_world_panel_action_operation(operation: Dictionary) -> Dictionary:
 	if bool(operation.get("rebuild_world", false)):
 		_rebuild_world_after_runtime_change({}, result)
 		return result
-	var refresh_panels: Array = _array_or_empty(operation.get("refresh", []))
-	if refresh_panels.has("hud"):
-		refresh_hud(current_interaction_prompt())
-	if refresh_panels.has("inventory"):
-		refresh_inventory_panel()
-	if refresh_panels.has("journal"):
-		refresh_journal_panel()
-	if refresh_panels.has("map"):
-		refresh_map_panel()
-	if refresh_panels.has("skills"):
-		refresh_skills_panel()
-	if refresh_panels.has("crafting"):
-		refresh_crafting_panel()
+	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])), current_interaction_prompt())
 	return result
 
 

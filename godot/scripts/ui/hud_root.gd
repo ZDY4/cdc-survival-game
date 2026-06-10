@@ -43,6 +43,18 @@ func refresh_panel(panel_id: String, feedback: Dictionary = {}) -> void:
 	if panel_controller == null:
 		return
 	_apply_feedback(feedback)
+	_refresh_panel_without_feedback(panel_id)
+
+
+func refresh_panels(panel_ids: Array, feedback: Dictionary = {}) -> void:
+	if panel_controller == null:
+		return
+	_apply_feedback(feedback)
+	for panel_id in panel_ids:
+		_refresh_panel_without_feedback(str(panel_id))
+
+
+func _refresh_panel_without_feedback(panel_id: String) -> void:
 	match panel_id:
 		"dialogue":
 			panel_controller.refresh_dialogue_panel()
