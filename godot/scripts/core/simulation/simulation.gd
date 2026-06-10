@@ -22,6 +22,7 @@ const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.
 const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
 const ContainerSessionService = preload("res://scripts/core/simulation/services/container_session_service.gd")
 const DoorService = preload("res://scripts/core/simulation/services/door_service.gd")
+const TradeService = preload("res://scripts/core/simulation/services/trade_service.gd")
 const VisionRunner = preload("res://scripts/core/vision/vision_runner.gd")
 const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
@@ -127,6 +128,7 @@ var _inventory_entries := InventoryEntries.new()
 var _item_use_runner := ItemUseRunner.new()
 var _container_session_service := ContainerSessionService.new()
 var _door_service := DoorService.new()
+var _trade_service := TradeService.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -419,7 +421,7 @@ func enter_location(actor_id: int, location_id: String, overworld_library: Dicti
 
 
 func configure_shops(shops: Dictionary) -> void:
-	_economy_transactions.configure_shops(self, shops)
+	_trade_service.configure_shops(self, shops)
 
 
 func record_item_collected(actor_id: int, item_id: String, count: int) -> void:
@@ -468,19 +470,19 @@ func unequip_item(actor_id: int, slot_id: String) -> Dictionary:
 
 
 func buy_item_from_shop(actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary, stack_index: int = 0) -> Dictionary:
-	return _economy_transactions.buy_item_from_shop(self, actor_id, shop_id, item_id, count, item_library, stack_index)
+	return _trade_service.buy_item(self, actor_id, shop_id, item_id, count, item_library, stack_index)
 
 
 func sell_item_to_shop(actor_id: int, shop_id: String, item_id: String, count: int, item_library: Dictionary, stack_index: int = 0) -> Dictionary:
-	return _economy_transactions.sell_item_to_shop(self, actor_id, shop_id, item_id, count, item_library, stack_index)
+	return _trade_service.sell_item(self, actor_id, shop_id, item_id, count, item_library, stack_index)
 
 
 func sell_equipped_item_to_shop(actor_id: int, shop_id: String, slot_id: String, item_id: String, item_library: Dictionary) -> Dictionary:
-	return _economy_transactions.sell_equipped_item_to_shop(self, actor_id, shop_id, slot_id, item_id, item_library)
+	return _trade_service.sell_equipped_item(self, actor_id, shop_id, slot_id, item_id, item_library)
 
 
 func confirm_trade_cart(actor_id: int, shop_id: String, entries: Array, item_library: Dictionary) -> Dictionary:
-	return _economy_transactions.confirm_trade_cart(self, actor_id, shop_id, entries, item_library)
+	return _trade_service.confirm_cart(self, actor_id, shop_id, entries, item_library)
 
 
 func take_item_from_container(actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}, stack_index: int = 0) -> Dictionary:

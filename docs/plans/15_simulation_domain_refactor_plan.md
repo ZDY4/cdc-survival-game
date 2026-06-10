@@ -288,14 +288,18 @@ func execute(simulation: RefCounted, actor: RefCounted, command: Dictionary) -> 
 
 ### Phase 3: 抽 TradeService
 
-- [ ] 新建 `trade_service.gd`。
-- [ ] 迁移 buy/sell/sell equipped/cart 确认。
-- [ ] 店铺库存、玩家金钱、价格 modifier、失败 reason 保持兼容。
-- [ ] `Simulation` 只保留 public trade facade。
+- [x] 新建 `trade_service.gd`。
+- [x] 迁移 buy/sell/sell equipped/cart 确认。
+- [x] 店铺库存、玩家金钱、价格 modifier、失败 reason 保持兼容。
+- [x] `Simulation` 只保留 public trade facade。
 
 验收：
 
 - `TradeUI`、`DialogueUI`、`InventoryUI` smoke 通过。
+
+验证记录：
+
+- 2026-06-11: `TradeService` 委托既有 `ShopTransactions`，`Simulation.configure_shops()` 和交易 public facade 保持名称兼容；`EconomyTransactions` 不再承载 shop wrapper。
 
 ### Phase 4: 抽 CraftingService 和 CraftingCommandHandler
 
