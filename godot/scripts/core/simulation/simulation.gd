@@ -18,6 +18,7 @@ const ProgressionRules = preload("res://scripts/core/progression/progression_rul
 const ProgressionRunner = preload("res://scripts/core/progression/progression_runner.gd")
 const QuestRunner = preload("res://scripts/core/quests/quest_runner.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
+const SimulationSnapshotBuilder = preload("res://scripts/core/simulation/simulation_snapshot_builder.gd")
 const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
 const CombatCommandHandler = preload("res://scripts/core/simulation/commands/combat_command_handler.gd")
 const CraftingCommandHandler = preload("res://scripts/core/simulation/commands/crafting_command_handler.gd")
@@ -124,6 +125,7 @@ var _pathfinder := Pathfinder.new()
 var _progression_rules := ProgressionRules.new()
 var _progression_runner := ProgressionRunner.new()
 var _quest_runner := QuestRunner.new()
+var _snapshot_builder := SimulationSnapshotBuilder.new()
 var _snapshot_codec := SimulationSnapshotCodec.new()
 var _vision_runner := VisionRunner.new()
 var _vision_rules := VisionRules.new()
@@ -637,7 +639,7 @@ func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, t
 func snapshot() -> Dictionary:
 	_sync_active_hotbar_group()
 	_ensure_hotbar_groups()
-	return _snapshot_codec.build(self)
+	return _snapshot_builder.build(self)
 
 
 func load_snapshot(snapshot_data: Dictionary) -> void:

@@ -65,7 +65,7 @@
 
 ## 存档兼容
 
-- `SimulationSnapshotCodec` 写出 `container_type` 和 `container_origin`，并保留当前支持的权限、容量、任务、锁、来源和视觉关联字段。
+- `SimulationSnapshotBuilder` 写出 `container_type` 和 `container_origin`，并保留当前支持的权限、容量、任务、锁、来源和视觉关联字段。
 - `SimulationSnapshotLoader` 加载旧存档时，如果缺少 `container_type`：
   - `container_id` 以 `corpse_` 开头时兜底为 `corpse`。
   - `container_id` 以 `drop_` 开头时兜底为 `drop`。

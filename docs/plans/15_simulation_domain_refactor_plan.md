@@ -346,14 +346,18 @@ func execute(simulation: RefCounted, actor: RefCounted, command: Dictionary) -> 
 
 ### Phase 7: 抽 SnapshotBuilder
 
-- [ ] 新建 `simulation_snapshot_builder.gd`。
-- [ ] `Simulation.snapshot()` 委托 builder。
-- [ ] 不改变 `SimulationSnapshotLoader` 的兼容加载规则。
+- [x] 新建 `simulation_snapshot_builder.gd`。
+- [x] `Simulation.snapshot()` 委托 builder。
+- [x] 不改变 `SimulationSnapshotLoader` 的兼容加载规则。
 
 验收：
 
 - `Save`、`Runtime`、`HeadlessNewGame` smoke 通过。
 - 旧存档兼容 smoke 不回归。
+
+验证记录：
+
+- 2026-06-11: 新增 `SimulationSnapshotBuilder`，将 snapshot build 与 loader 兼容加载拆开；`Simulation.snapshot()` 委托 builder，`load_snapshot()` 继续走 `SimulationSnapshotLoader`；通过 `Save`、`Runtime`、`HeadlessNewGame` smoke，并通过全量 `test-godot-static.ps1`。
 
 ## 不做事项
 
