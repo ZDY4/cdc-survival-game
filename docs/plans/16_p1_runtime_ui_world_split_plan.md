@@ -226,10 +226,10 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 8: 拆 Runtime Input 的 picking
 
-- [ ] 新建 `world_interaction_picker.gd`。
-- [ ] 迁移 raycast、candidate sort、interaction metadata merge、picking diagnostics。
-- [ ] `GameRuntimeInputController.update_hover_at_screen_position()` 保留 facade，内部委托 picker。
-- [ ] 不同时修改 hover marker 或 selection 行为。
+- [x] 新建 `world_interaction_picker.gd`。
+- [x] 迁移 raycast、candidate sort、interaction metadata merge、picking diagnostics。
+- [x] `GameRuntimeInputController.update_hover_at_screen_position()` 保留 facade，内部委托 picker。
+- [x] 不同时修改 hover marker 或 selection 行为。
 
 验收：
 
@@ -237,6 +237,10 @@ godot/scripts/app/controllers/runtime_input/
 - `Interaction`
 - `Scene`
 - 重点检查 door / container / transition / actor / pickup picking 优先级。
+
+验证记录：
+
+- 2026-06-11: 通过 `game_runtime_input_controller.gd` / `world_interaction_picker.gd` 静态解析；通过 `test-godot-game.ps1 -Scenario PlayerInteraction`、`Interaction`、`Scene`。
 
 ## Phase 9: 拆 Runtime Input 的 hover state 和 marker
 
