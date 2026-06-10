@@ -122,10 +122,12 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 2: 拆 MovementActionPresenter
 
-- [ ] 新建 `movement_action_presenter.gd`。
-- [ ] 迁移 movement path、facing、door auto-open marker、pending segment marker、movement tween。
-- [ ] 保持 movement public snapshot 和 actor metadata 字段兼容。
-- [ ] `WorldActionPresenter` 只负责从 events 中分发 movement presentation。
+- [x] 新建 `movement_action_presenter.gd`。
+- [x] 迁移 movement path、facing、door auto-open marker、pending segment marker、movement tween。
+- [x] 保持 movement public snapshot 和 actor metadata 字段兼容。
+- [x] `WorldActionPresenter` 只负责从 events 中分发 movement presentation。
+
+证据：`world_action_presenter.gd` 和 `movement_action_presenter.gd` 静态解析通过；`Movement`、`PlayerInteraction`、`Door` 通过。
 
 验收：
 
