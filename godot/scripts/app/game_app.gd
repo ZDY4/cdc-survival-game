@@ -20,6 +20,7 @@ const UiFeedbackStateController = preload("res://scripts/app/controllers/ui_feed
 const SkillTargetingController = preload("res://scripts/app/controllers/skill_targeting_controller.gd")
 const CraftingFeedbackController = preload("res://scripts/app/controllers/crafting_feedback_controller.gd")
 const CraftingActionController = preload("res://scripts/app/controllers/crafting_action_controller.gd")
+const CraftingContextBuilder = preload("res://scripts/app/controllers/crafting_context_builder.gd")
 const UiBlockerStateController = preload("res://scripts/app/controllers/ui_blocker_state_controller.gd")
 const ContainerActionController = preload("res://scripts/app/controllers/container_action_controller.gd")
 const InventoryActionController = preload("res://scripts/app/controllers/inventory_action_controller.gd")
@@ -130,6 +131,7 @@ var active_inventory_feedback: Dictionary:
 			ui_feedback_state_controller.active_inventory_feedback = value.duplicate(true)
 var crafting_feedback_controller: RefCounted = CraftingFeedbackController.new()
 var crafting_action_controller: RefCounted = CraftingActionController.new()
+var crafting_context_builder: RefCounted = CraftingContextBuilder.new()
 var latest_crafting_queue_result: Dictionary:
 	get:
 		return crafting_feedback_controller.latest_queue_result if crafting_feedback_controller != null else {}
@@ -1755,55 +1757,7 @@ func _apply_crafting_action_operation(operation: Dictionary) -> Dictionary:
 
 
 func _crafting_context() -> Dictionary:
-	return {
-		"crafting_stations": _array_or_empty(_dictionary_or_empty(world_result.get("map", {})).get("crafting_stations", [])).duplicate(true),
-		"world_flags": _dictionary_or_empty(simulation.world_flags if simulation != null else {}).duplicate(true),
-		"nearby_tool_containers": _nearby_tool_containers(),
-		"latest_crafting_queue_result": latest_crafting_queue_result.duplicate(true),
-		"latest_pending_crafting_result": latest_pending_crafting_result.duplicate(true),
-	}
-
-
-func _nearby_tool_containers() -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	if simulation == null:
-		return output
-	var actor: RefCounted = simulation.actor_registry.get_actor(1)
-	if actor == null or actor.grid_position == null:
-		return output
-	var actor_grid: Dictionary = actor.grid_position.to_dictionary()
-	var target_ids: Array = simulation.map_interaction_targets.keys()
-	target_ids.sort()
-	for target_id in target_ids:
-		var target: Dictionary = _dictionary_or_empty(simulation.map_interaction_targets.get(target_id, {}))
-		if target.is_empty() or str(target.get("kind", "")) != "container":
-			continue
-		if not _container_target_in_range(actor_grid, target, 1):
-			continue
-		var inventory: Array = _container_inventory_for_crafting(str(target_id), target)
-		if inventory.is_empty():
-			continue
-		output.append({
-			"container_id": str(target_id),
-			"display_name": str(target.get("display_name", target_id)),
-			"inventory": inventory,
-		})
-	return output
-
-
-func _container_target_in_range(actor_grid: Dictionary, target: Dictionary, max_distance: int) -> bool:
-	for cell in _array_or_empty(target.get("cells", [])):
-		if _grid_distance(actor_grid, _dictionary_or_empty(cell)) <= max_distance:
-			return true
-	return _grid_distance(actor_grid, _dictionary_or_empty(target.get("anchor", {}))) <= max_distance
-
-
-func _container_inventory_for_crafting(container_id: String, target: Dictionary) -> Array:
-	if simulation != null and simulation.container_sessions.has(container_id):
-		return _array_or_empty(_dictionary_or_empty(simulation.container_sessions[container_id]).get("inventory", [])).duplicate(true)
-	if simulation != null and simulation.corpse_containers.has(container_id):
-		return _array_or_empty(_dictionary_or_empty(simulation.corpse_containers[container_id]).get("inventory", [])).duplicate(true)
-	return _array_or_empty(target.get("container_inventory", [])).duplicate(true)
+	return _dictionary_or_empty(crafting_context_builder.call("build", simulation, world_result, latest_crafting_queue_result, latest_pending_crafting_result))
 
 
 func turn_in_player_quest(quest_id: String) -> Dictionary:
