@@ -21,6 +21,7 @@
 - world action presenter、queue、pending UI、movement execution plan 和 final refresh 状态已抽到 `godot/scripts/app/controllers/world_action_flow_controller.gd`。
 - 运行时性能统计已抽到 `godot/scripts/app/controllers/runtime_performance_tracker.gd`。
 - observe mode、auto tick 和 info panel 状态已抽到 `godot/scripts/app/controllers/runtime_control_state_controller.gd`。
+- observe interval snapshot 也已由 `RuntimeControlStateController.runtime_control_snapshot()` 输出，`GameApp` 不再保留 observe speed / interval 私有转发 wrapper。
 - map level、focused actor 和视图导航状态已抽到 `godot/scripts/app/controllers/runtime_view_state_controller.gd`。
 - 玩家命令 authority audit 已抽到 `godot/scripts/app/controllers/player_command_authority_audit.gd`。
 - AI debug snapshot 构建已抽到 `godot/scripts/app/controllers/ai_debug_snapshot_builder.gd`。
@@ -291,6 +292,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 新建 `debug_runtime_controller.gd`。
 - [x] 将 debug console 命令执行和 debug overlay mode 状态迁入 controller。
 - [x] 保留 `debug_console_command_runner.gd` 作为命令 schema / mutation command runner。
+- [x] observe interval snapshot 已收敛到 `RuntimeControlStateController`，并删除 `GameApp` 中无调用方的 observe speed / interval 私有 wrapper。
 - [ ] 继续收敛 observe mode / auto tick / info panel 与 debug runtime 的边界，避免调试状态散在多个 controller 中。
 - [x] smoke 继续通过 `submit_debug_console_command()` 验证兼容入口。
 

@@ -872,7 +872,6 @@ func info_panel_snapshot() -> Dictionary:
 
 func runtime_control_snapshot() -> Dictionary:
 	var snapshot: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("runtime_control_snapshot"))
-	snapshot["observe_interval_sec"] = _auto_tick_interval_sec()
 	snapshot["world_time"] = runtime_world_time_snapshot()
 	snapshot["map_level"] = map_level_snapshot()
 	snapshot["focused_actor"] = focused_actor_snapshot()
@@ -1349,22 +1348,6 @@ func press_space_action() -> Dictionary:
 func _process_auto_tick(delta: float) -> void:
 	if bool(runtime_control_state_controller.call("should_submit_auto_tick", delta)):
 		_submit_auto_tick_wait()
-
-
-func _observe_playback_enabled() -> bool:
-	return bool(runtime_control_state_controller.call("observe_playback_enabled"))
-
-
-func _observe_speed_index(speed_id: String) -> int:
-	return int(runtime_control_state_controller.call("observe_speed_index", speed_id))
-
-
-func _observe_speed_multiplier() -> float:
-	return float(runtime_control_state_controller.call("observe_speed_multiplier"))
-
-
-func _auto_tick_interval_sec() -> float:
-	return float(runtime_control_state_controller.call("auto_tick_interval_sec"))
 
 
 func _submit_auto_tick_wait() -> Dictionary:

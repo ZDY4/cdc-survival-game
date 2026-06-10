@@ -126,6 +126,7 @@ func runtime_control_snapshot() -> Dictionary:
 		"observe_playback": observe_playback_enabled(),
 		"observe_speed": observe_speed_id,
 		"observe_speed_multiplier": observe_speed_multiplier(),
+		"observe_interval_sec": auto_tick_interval_sec(),
 	}
 
 
