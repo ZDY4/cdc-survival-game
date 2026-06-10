@@ -154,12 +154,6 @@ var active_skill_target_preview: Dictionary:
 		if skill_targeting_controller != null:
 			skill_targeting_controller.active_preview = value.duplicate(true)
 var debug_runtime_controller: RefCounted = DebugRuntimeController.new()
-var debug_overlay_mode: String:
-	get:
-		return str(debug_runtime_controller.current_debug_overlay_mode()) if debug_runtime_controller != null else "off"
-	set(value):
-		if debug_runtime_controller != null:
-			debug_runtime_controller.debug_overlay_mode = value
 var game_input_router: RefCounted = GameInputRouter.new()
 var player_command_authority_audit: RefCounted = PlayerCommandAuthorityAudit.new()
 var player_command_blocker: RefCounted = PlayerCommandBlocker.new()
@@ -170,45 +164,12 @@ var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
 var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
 var runtime_control_state_controller: RefCounted = RuntimeControlStateController.new()
 var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
-var info_panel_pages: Array[Dictionary]:
-	get:
-		return runtime_control_state_controller.info_panel_pages if runtime_control_state_controller != null else []
-	set(value):
-		if runtime_control_state_controller != null:
-			runtime_control_state_controller.info_panel_pages = value
-var active_info_panel_index: int:
-	get:
-		return int(runtime_control_state_controller.active_info_panel_index) if runtime_control_state_controller != null else 0
-	set(value):
-		if runtime_control_state_controller != null:
-			runtime_control_state_controller.active_info_panel_index = value
 var observe_mode_enabled: bool:
 	get:
 		return bool(runtime_control_state_controller.observe_mode_enabled) if runtime_control_state_controller != null else false
 	set(value):
 		if runtime_control_state_controller != null:
 			runtime_control_state_controller.observe_mode_enabled = value
-var observe_speed_id: String:
-	get:
-		return str(runtime_control_state_controller.observe_speed_id) if runtime_control_state_controller != null else "x1"
-	set(value):
-		if runtime_control_state_controller != null:
-			runtime_control_state_controller.observe_speed_id = value
-var performance_frame_time_ms: float:
-	get:
-		return float(runtime_performance_tracker.frame_time_ms) if runtime_performance_tracker != null else 0.0
-var performance_fps: float:
-	get:
-		return float(runtime_performance_tracker.fps) if runtime_performance_tracker != null else 0.0
-var performance_last_process_tick_msec: int:
-	get:
-		return int(runtime_performance_tracker.last_process_tick_msec) if runtime_performance_tracker != null else 0
-var performance_last_hud_refresh_tick_msec: int:
-	get:
-		return int(runtime_performance_tracker.last_hud_refresh_tick_msec) if runtime_performance_tracker != null else 0
-var performance_last_render_counts: Dictionary:
-	get:
-		return runtime_performance_tracker.last_render_counts.duplicate(true) if runtime_performance_tracker != null else {}
 var performance_render_sequence: int:
 	get:
 		return int(runtime_performance_tracker.render_sequence) if runtime_performance_tracker != null else 0
