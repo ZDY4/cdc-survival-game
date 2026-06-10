@@ -176,15 +176,19 @@ godot/scripts/app/controllers/runtime_input/
 
 从 HUD 中相对独立的 debug UI 开始。
 
-- [ ] 新建 `debug_console_panel.gd`，承接 console 输入、历史、autocomplete、schema、result 展示和输入事件处理。
-- [ ] 新建 `debug_panel_view.gd`，承接 runtime/debug/AI/performance/selection 文本格式化和 panel 展示。
-- [ ] `hud_controller.gd` 保留 `toggle_debug_console()`、`set_debug_console_result()`、`debug_panel_snapshot()` 等 facade。
+- [x] 新建 `debug_console_panel.gd`，承接 console 输入、历史、autocomplete、schema、result 展示和输入事件处理。
+- [x] 新建 `debug_panel_view.gd`，承接 runtime/debug/AI/performance/selection 文本格式化和 panel 展示。
+- [x] `hud_controller.gd` 保留 `toggle_debug_console()`、`set_debug_console_result()`、`debug_panel_snapshot()` 等 facade。
 
 验收：
 
 - `UIToggle`
 - `PlayerInteraction`
 - 手动或 smoke 验证反引号控制台可输入命令、`show fps` / debug panel 状态不回归。
+
+验证记录：
+
+- 2026-06-11: 通过 `hud_controller.gd`、`debug_console_panel.gd`、`debug_panel_view.gd` 静态解析；通过 `test-godot-game.ps1 -Scenario UIToggle`、`PlayerInteraction`。`UIToggle` 覆盖 console 快捷键、键盘历史 / autocomplete、`show fps` 打开/关闭 debug panel 和 console 命令提交。
 
 ## Phase 6: 拆 HUD interaction menu 和 feedback toast
 

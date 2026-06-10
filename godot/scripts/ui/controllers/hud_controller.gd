@@ -2,6 +2,8 @@ extends Control
 
 const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
+const DebugConsolePanel = preload("res://scripts/ui/controllers/debug_console_panel.gd")
+const DebugPanelView = preload("res://scripts/ui/controllers/debug_panel_view.gd")
 
 var _world_label: Label
 var _status_badge_label: Label
@@ -25,36 +27,11 @@ var _menu_title_label: Label
 var _menu_summary_label: Label
 var _menu_hover_label: Label
 var _menu_options_box: VBoxContainer
-var _debug_console: PanelContainer
-var _console_history_label: Label
-var _console_suggestions_label: Label
-var _console_input: LineEdit
-var _debug_panel: PanelContainer
-var _debug_panel_title_label: Label
-var _debug_panel_lines_box: VBoxContainer
 var controls_hint_visible := false
-var console_visible := false
-var debug_panel_visible := false
-var debug_panel_latest_snapshot: Dictionary = {}
 var interaction_menu_snapshot_data: Dictionary = {}
-var console_history: Array[String] = []
-var console_command_history: Array[String] = []
 var _reason_catalog := ReasonCatalog.new()
-var console_history_index := -1
-var console_command_schema: Array[Dictionary] = []
-var console_permission: Dictionary = {}
-var console_suggestions: Array[String] = [
-	"help",
-	"show fps",
-	"show overlays",
-	"observe mode",
-	"clear",
-	"restart",
-	"give item 1006 1",
-	"teleport 0 0 0",
-	"spawn zombie_walker",
-	"unlock location forest",
-]
+var _debug_console_panel := DebugConsolePanel.new()
+var _debug_panel_view := DebugPanelView.new()
 
 
 func _ready() -> void:
@@ -105,7 +82,7 @@ func apply_runtime_snapshot(snapshot: Dictionary) -> void:
 	_skill_targeting_label.visible = not _skill_targeting_label.text.is_empty()
 	_apply_controls_hint()
 	_apply_interaction_menu(interaction)
-	_apply_debug_panel(snapshot)
+	_debug_panel_view.apply(snapshot)
 
 
 func _build_layout() -> void:
@@ -178,8 +155,8 @@ func _build_layout() -> void:
 		_controls_hint_box.add_child(label)
 	_build_interaction_menu()
 	_build_feedback_toast_layer()
-	_build_debug_console()
-	_build_debug_panel()
+	_debug_console_panel.build(self)
+	_debug_panel_view.build(self)
 
 
 func toggle_controls_hint() -> Dictionary:
@@ -206,112 +183,51 @@ func controls_hint_snapshot() -> Dictionary:
 
 
 func toggle_debug_panel() -> Dictionary:
-	debug_panel_visible = not debug_panel_visible
-	_apply_debug_panel(debug_panel_latest_snapshot)
-	return {"success": true, "visible": debug_panel_visible}
+	return _debug_panel_view.toggle()
 
 
 func hide_debug_panel() -> void:
-	debug_panel_visible = false
-	_apply_debug_panel(debug_panel_latest_snapshot)
+	_debug_panel_view.hide()
 
 
 func is_debug_panel_open() -> bool:
-	return debug_panel_visible
+	return _debug_panel_view.is_open()
 
 
 func debug_panel_snapshot() -> Dictionary:
-	return {
-		"visible": debug_panel_visible,
-		"line_count": _debug_panel_line_texts().size(),
-		"lines": _debug_panel_line_texts(),
-	}
+	return _debug_panel_view.snapshot()
 
 
 func toggle_debug_console() -> Dictionary:
-	console_visible = not console_visible
-	_apply_debug_console()
-	if console_visible and _console_input != null:
-		_console_input.grab_focus()
-	return {"success": true, "visible": console_visible}
+	return _debug_console_panel.toggle()
 
 
 func hide_debug_console() -> void:
-	console_visible = false
-	_apply_debug_console()
+	_debug_console_panel.hide()
 
 
 func is_debug_console_open() -> bool:
-	return console_visible
+	return _debug_console_panel.is_open()
 
 
 func debug_console_snapshot() -> Dictionary:
-	return {
-		"visible": console_visible,
-		"history": console_history.duplicate(),
-		"history_count": console_history.size(),
-		"command_history": console_command_history.duplicate(),
-		"command_history_count": console_command_history.size(),
-		"history_index": console_history_index,
-		"command_schema": console_command_schema.duplicate(true),
-		"command_schema_count": console_command_schema.size(),
-		"command_details": _console_command_detail_lines(),
-		"permission": console_permission.duplicate(true),
-		"suggestions": console_suggestions.duplicate(),
-		"suggestion_count": console_suggestions.size(),
-		"input_text": _console_input.text if _console_input != null else "",
-	}
+	return _debug_console_panel.snapshot()
 
 
 func console_input_node() -> LineEdit:
-	return _console_input
+	return _debug_console_panel.input_node()
 
 
 func set_debug_console_schema(schema: Array, suggestions: Array, permission: Dictionary = {}) -> void:
-	console_command_schema.clear()
-	for command in schema:
-		var command_data: Dictionary = _dictionary_or_empty(command)
-		if not command_data.is_empty():
-			console_command_schema.append(command_data.duplicate(true))
-	console_permission = permission.duplicate(true)
-	var normalized_suggestions: Array[String] = []
-	for suggestion in suggestions:
-		var suggestion_text := str(suggestion).strip_edges()
-		if not suggestion_text.is_empty() and not normalized_suggestions.has(suggestion_text):
-			normalized_suggestions.append(suggestion_text)
-	if not normalized_suggestions.is_empty():
-		console_suggestions = normalized_suggestions
-	_apply_debug_console()
+	_debug_console_panel.set_schema(schema, suggestions, permission)
 
 
 func set_debug_console_result(command_text: String, result: Dictionary) -> void:
-	var status := "ok" if bool(result.get("success", false)) else "err"
-	var message := str(result.get("message", result.get("reason", "")))
-	console_history.append("> %s" % command_text)
-	console_history.append("%s: %s" % [status, message])
-	_record_console_command(command_text)
-	while console_history.size() > 8:
-		console_history.pop_front()
-	if _console_input != null:
-		_console_input.text = ""
-	_apply_debug_console()
+	_debug_console_panel.set_result(command_text, result)
 
 
 func clear_debug_console_history() -> void:
-	console_history.clear()
-	_apply_debug_console()
-
-
-func _record_console_command(command_text: String) -> void:
-	var normalized := command_text.strip_edges()
-	if normalized.is_empty():
-		console_history_index = -1
-		return
-	if console_command_history.is_empty() or console_command_history[console_command_history.size() - 1] != normalized:
-		console_command_history.append(normalized)
-	while console_command_history.size() > 16:
-		console_command_history.pop_front()
-	console_history_index = -1
+	_debug_console_panel.clear_history()
 
 
 func show_interaction_menu(screen_position: Vector2, prompt: Dictionary) -> void:
@@ -356,7 +272,7 @@ func interaction_menu_snapshot() -> Dictionary:
 
 
 func input_blocker_snapshot() -> Dictionary:
-	if console_visible:
+	if _debug_console_panel.is_open():
 		return {
 			"blocked": true,
 			"name": "debug_console",
@@ -555,277 +471,6 @@ func _build_interaction_menu() -> void:
 	box.add_child(_menu_summary_label)
 	box.add_child(_menu_options_box)
 	box.add_child(_menu_hover_label)
-
-
-func _build_debug_console() -> void:
-	if _debug_console != null:
-		return
-	_debug_console = PanelContainer.new()
-	_debug_console.name = "DebugConsole"
-	_debug_console.visible = false
-	_debug_console.mouse_filter = Control.MOUSE_FILTER_STOP
-	_debug_console.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_debug_console.offset_left = 16
-	_debug_console.offset_right = -16
-	_debug_console.offset_top = -142
-	_debug_console.offset_bottom = -16
-	add_child(_debug_console)
-
-	var box := VBoxContainer.new()
-	box.name = "ConsoleLines"
-	box.add_theme_constant_override("separation", 4)
-	_debug_console.add_child(box)
-
-	_console_history_label = _line("ConsoleHistory")
-	_console_suggestions_label = _line("ConsoleSuggestions")
-	_console_input = LineEdit.new()
-	_console_input.name = "ConsoleInput"
-	_console_input.placeholder_text = "debug command"
-	_console_input.focus_mode = Control.FOCUS_ALL
-	_console_input.text_submitted.connect(func(text: String) -> void:
-		var root := get_tree().current_scene
-		if root != null and root.has_method("submit_debug_console_command"):
-			root.submit_debug_console_command(text)
-	)
-	_console_input.gui_input.connect(func(event: InputEvent) -> void:
-		_handle_console_input_event(event)
-	)
-	box.add_child(_console_history_label)
-	box.add_child(_console_suggestions_label)
-	box.add_child(_console_input)
-
-
-func _build_debug_panel() -> void:
-	if _debug_panel != null:
-		return
-	_debug_panel = PanelContainer.new()
-	_debug_panel.name = "DebugPanel"
-	_debug_panel.visible = false
-	_debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_debug_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_debug_panel.offset_left = -444
-	_debug_panel.offset_right = -16
-	_debug_panel.offset_top = 16
-	_debug_panel.offset_bottom = 300
-	add_child(_debug_panel)
-
-	var box := VBoxContainer.new()
-	box.name = "DebugPanelLines"
-	box.add_theme_constant_override("separation", 4)
-	_debug_panel.add_child(box)
-
-	_debug_panel_title_label = _line("DebugPanelTitle")
-	_debug_panel_title_label.text = "Debug Panel"
-	box.add_child(_debug_panel_title_label)
-	_debug_panel_lines_box = VBoxContainer.new()
-	_debug_panel_lines_box.name = "DebugPanelContent"
-	_debug_panel_lines_box.add_theme_constant_override("separation", 3)
-	box.add_child(_debug_panel_lines_box)
-
-
-func _handle_console_input_event(event: InputEvent) -> void:
-	if not event is InputEventKey:
-		return
-	var key_event := event as InputEventKey
-	if not key_event.pressed or key_event.echo:
-		return
-	var key := key_event.keycode
-	if key == 0:
-		key = key_event.physical_keycode
-	if key == KEY_UP:
-		_recall_console_history(-1)
-		accept_event()
-	elif key == KEY_DOWN:
-		_recall_console_history(1)
-		accept_event()
-	elif key == KEY_TAB:
-		_autocomplete_console_input()
-		accept_event()
-
-
-func _recall_console_history(direction: int) -> void:
-	if _console_input == null or console_command_history.is_empty():
-		return
-	if console_history_index < 0:
-		console_history_index = console_command_history.size()
-	console_history_index = clampi(console_history_index + direction, 0, console_command_history.size())
-	if console_history_index >= console_command_history.size():
-		_console_input.text = ""
-	else:
-		_console_input.text = console_command_history[console_history_index]
-	_console_input.caret_column = _console_input.text.length()
-
-
-func _autocomplete_console_input() -> void:
-	if _console_input == null:
-		return
-	var prefix := _console_input.text.strip_edges().to_lower()
-	var matches: Array[String] = []
-	for suggestion in console_suggestions:
-		if str(suggestion).begins_with(prefix):
-			matches.append(str(suggestion))
-	if matches.is_empty():
-		return
-	var replacement := matches[0] if matches.size() == 1 else _shared_prefix(matches)
-	if replacement.length() <= prefix.length():
-		replacement = matches[0]
-	_console_input.text = replacement
-	_console_input.caret_column = _console_input.text.length()
-
-
-func _shared_prefix(values: Array[String]) -> String:
-	if values.is_empty():
-		return ""
-	var prefix := values[0]
-	for value in values:
-		while not str(value).begins_with(prefix) and not prefix.is_empty():
-			prefix = prefix.substr(0, prefix.length() - 1)
-	return prefix
-
-
-func _apply_debug_console() -> void:
-	if _debug_console == null:
-		return
-	_debug_console.visible = console_visible
-	_debug_console.mouse_filter = Control.MOUSE_FILTER_STOP if console_visible else Control.MOUSE_FILTER_IGNORE
-	if _console_history_label != null:
-		_console_history_label.text = "\n".join(console_history)
-	if _console_suggestions_label != null:
-		_console_suggestions_label.text = _debug_console_help_text()
-	if not console_visible and _console_input != null:
-		_console_input.release_focus()
-
-
-func _debug_console_help_text() -> String:
-	var details := _console_command_detail_lines()
-	if not details.is_empty():
-		var shown := details.slice(0, mini(details.size(), 5))
-		var suffix := " | ..." if details.size() > shown.size() else ""
-		return "commands: %s%s" % [" | ".join(shown), suffix]
-	return "suggestions: %s" % ", ".join(console_suggestions)
-
-
-func _console_command_detail_lines() -> Array[String]:
-	var lines: Array[String] = []
-	for command in console_command_schema:
-		var usage := str(command.get("usage", "")).strip_edges()
-		if usage.is_empty():
-			continue
-		var description := str(command.get("description", "")).strip_edges()
-		lines.append("%s - %s" % [usage, description] if not description.is_empty() else usage)
-	return lines
-
-
-func _apply_debug_panel(snapshot: Dictionary) -> void:
-	debug_panel_latest_snapshot = snapshot.duplicate(true)
-	if _debug_panel == null:
-		return
-	_debug_panel.visible = debug_panel_visible
-	_debug_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if _debug_panel_title_label != null:
-		_debug_panel_title_label.text = "Debug Panel | F3 | %s" % ("on" if debug_panel_visible else "off")
-	if _debug_panel_lines_box == null:
-		return
-	for child in _debug_panel_lines_box.get_children():
-		child.queue_free()
-	for entry in _debug_panel_entries(snapshot):
-		var entry_data: Dictionary = _dictionary_or_empty(entry)
-		var label := _line("DebugPanelLine_%s" % str(entry_data.get("kind", "entry")))
-		label.text = str(entry_data.get("text", ""))
-		label.tooltip_text = str(entry_data.get("tooltip", label.text))
-		label.set_meta("debug_panel_kind", str(entry_data.get("kind", "")))
-		label.set_meta("debug_panel_text", label.text)
-		_debug_panel_lines_box.add_child(label)
-
-
-func _debug_panel_entries(snapshot: Dictionary) -> Array[Dictionary]:
-	var runtime_control: Dictionary = _dictionary_or_empty(snapshot.get("runtime_control", {}))
-	var info_panel: Dictionary = _dictionary_or_empty(snapshot.get("info_panel", {}))
-	var debug_overlay: Dictionary = _dictionary_or_empty(runtime_control.get("debug_overlay", {}))
-	var console: Dictionary = _dictionary_or_empty(runtime_control.get("debug_console", {}))
-	return [
-		{"kind": "overlay", "text": "Overlay: %s | active %s | cells %d" % [
-			str(debug_overlay.get("mode", snapshot.get("debug_overlay_mode", "off"))),
-			"yes" if bool(debug_overlay.get("active", false)) else "no",
-			int(debug_overlay.get("cell_count", 0)),
-		]},
-		{"kind": "info", "text": _info_panel_text(info_panel)},
-		{"kind": "runtime", "text": _debug_panel_runtime_text(runtime_control)},
-		{"kind": "hover", "text": _hover_control_text(runtime_control.get("hover", {})) if not _hover_control_text(runtime_control.get("hover", {})).is_empty() else "Hover none"},
-		{"kind": "selection", "text": _selection_debug_control_text(runtime_control.get("selection_debug", {})) if not _selection_debug_control_text(runtime_control.get("selection_debug", {})).is_empty() else "Sel none"},
-		{"kind": "ai", "text": _ai_debug_control_text(runtime_control.get("ai_debug", {})) if not _ai_debug_control_text(runtime_control.get("ai_debug", {})).is_empty() else "AI none"},
-		{"kind": "performance", "text": _performance_control_text(runtime_control.get("performance", {})) if not _performance_control_text(runtime_control.get("performance", {})).is_empty() else "Perf none"},
-		{"kind": "console", "text": _debug_panel_console_text(console)},
-	]
-
-
-func _debug_panel_console_text(console: Dictionary) -> String:
-	var permission: Dictionary = _dictionary_or_empty(console.get("permission", {}))
-	return "Console %s | history %d | suggestions %d | schema %d | mutate %s" % [
-		"on" if bool(console.get("visible", false)) else "off",
-		int(console.get("history_count", 0)),
-		int(console.get("suggestion_count", 0)),
-		int(console.get("command_schema_count", 0)),
-		"on" if bool(permission.get("allow_runtime_mutation", true)) else "off",
-	]
-
-
-func _debug_panel_runtime_text(runtime_control: Dictionary) -> String:
-	var parts: Array[String] = [
-		"Auto %s" % ("on" if bool(runtime_control.get("auto_tick", false)) else "off"),
-		"Observe %s %s %s" % [
-			"on" if bool(runtime_control.get("observe_mode", false)) else "off",
-			"play" if bool(runtime_control.get("observe_playback", false)) else "pause",
-			str(runtime_control.get("observe_speed", "x1")),
-		],
-	]
-	var blocker_snapshot: Dictionary = _dictionary_or_empty(runtime_control.get("ui_blocker_snapshot", {}))
-	var blocker := str(blocker_snapshot.get("name", runtime_control.get("ui_blocker", "")))
-	if not blocker.is_empty():
-		var kind := str(blocker_snapshot.get("kind", ""))
-		parts.append("Blocker %s%s" % [blocker, " (%s)" % kind if not kind.is_empty() else ""])
-	var modal_stack: Dictionary = _dictionary_or_empty(runtime_control.get("modal_stack", {}))
-	if bool(modal_stack.get("active", false)):
-		var top_modal: Dictionary = _dictionary_or_empty(modal_stack.get("top", {}))
-		parts.append("Modal %s/%d" % [str(top_modal.get("id", "")), int(modal_stack.get("count", 0))])
-	var menu_state: Dictionary = _dictionary_or_empty(runtime_control.get("menu_state", {}))
-	if not menu_state.is_empty():
-		parts.append("Menu %s S:%s" % [
-			"settings" if bool(menu_state.get("settings_open", false)) else "stage",
-			str(menu_state.get("active_stage_panel", "-")) if not str(menu_state.get("active_stage_panel", "")).is_empty() else "-",
-		])
-		var latest_panel_event: Dictionary = _dictionary_or_empty(menu_state.get("latest_event", {}))
-		if not latest_panel_event.is_empty():
-			parts.append("Panel %s:%s" % [str(latest_panel_event.get("event", "")), str(latest_panel_event.get("panel_id", ""))])
-		_append_menu_event_tokens(parts, menu_state)
-	var context_menu: Dictionary = _dictionary_or_empty(runtime_control.get("context_menu", {}))
-	if bool(context_menu.get("active", false)):
-		var top_context: Dictionary = _dictionary_or_empty(context_menu.get("top", {}))
-		parts.append("Context %s/%d" % [str(top_context.get("id", "")), int(context_menu.get("count", 0))])
-	var tooltip: Dictionary = _dictionary_or_empty(runtime_control.get("tooltip", {}))
-	if bool(tooltip.get("active", false)):
-		parts.append(_tooltip_runtime_token(tooltip))
-	var drag: Dictionary = _dictionary_or_empty(runtime_control.get("drag", {}))
-	if bool(drag.get("active", false)):
-		var target: Dictionary = _dictionary_or_empty(drag.get("target", {}))
-		parts.append("Drag %s->%s/%s" % [str(drag.get("kind", "")), str(target.get("owner_panel", "")), str(target.get("target_kind", ""))])
-	var level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
-	if not level.is_empty():
-		parts.append("Level %d" % int(level.get("current", 0)))
-	var focus: Dictionary = _dictionary_or_empty(runtime_control.get("focused_actor", {}))
-	if not focus.is_empty():
-		parts.append("Focus #%d" % int(focus.get("actor_id", 0)))
-	return "Runtime: %s" % " | ".join(parts)
-
-
-func _debug_panel_line_texts() -> Array[String]:
-	var lines: Array[String] = []
-	if _debug_panel_lines_box == null:
-		return lines
-	for child in _debug_panel_lines_box.get_children():
-		if child is Label:
-			lines.append(str((child as Label).text))
-	return lines
 
 
 func _apply_interaction_menu(interaction: Dictionary) -> void:
