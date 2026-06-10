@@ -601,6 +601,15 @@ func focus_current_actor() -> void:
 	_request_hover_refresh()
 
 
+func scale_camera_zoom(multiplier: float) -> void:
+	_scale_zoom(multiplier)
+
+
+func reset_camera_zoom() -> void:
+	camera_rig_controller.call("reset_zoom", _viewport_size(), _level_plane_height())
+	_request_hover_refresh()
+
+
 func has_selection_state() -> bool:
 	return selected_node != null or bool(camera_rig_controller.get("is_dragging"))
 

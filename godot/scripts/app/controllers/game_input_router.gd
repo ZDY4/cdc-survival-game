@@ -35,6 +35,11 @@ func input(game_root: Node, runtime_input_controller: RefCounted, event: InputEv
 			if shortcut_viewport != null:
 				shortcut_viewport.set_input_as_handled()
 			return
+		if _handle_camera_shortcut_key(game_root, runtime_input_controller, event as InputEventKey):
+			var camera_viewport := game_root.get_viewport()
+			if camera_viewport != null:
+				camera_viewport.set_input_as_handled()
+			return
 	if runtime_input_controller != null:
 		runtime_input_controller.input(event)
 
@@ -49,6 +54,8 @@ func unhandled_input(game_root: Node, runtime_input_controller: RefCounted, even
 	if event is InputEventKey and _handle_dialogue_enter_key(game_root, event as InputEventKey):
 		return
 	if event is InputEventKey and _handle_global_shortcut_key(game_root, event as InputEventKey):
+		return
+	if event is InputEventKey and _handle_camera_shortcut_key(game_root, runtime_input_controller, event as InputEventKey):
 		return
 	if runtime_input_controller != null:
 		runtime_input_controller.unhandled_input(event)
@@ -150,6 +157,43 @@ func _handle_dialogue_enter_key(game_root: Node, event: InputEventKey) -> bool:
 	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()) and game_root.has_method("press_enter_action"):
 		game_root.press_enter_action()
 		return true
+	return false
+
+
+func _handle_camera_shortcut_key(game_root: Node, runtime_input_controller: RefCounted, event: InputEventKey) -> bool:
+	if not event.pressed or event.echo:
+		return false
+	var key := event.keycode
+	if key == 0:
+		key = event.physical_keycode
+	if key == KEY_EQUAL or key == KEY_PLUS:
+		if runtime_input_controller != null and runtime_input_controller.has_method("scale_camera_zoom"):
+			runtime_input_controller.call("scale_camera_zoom", 1.2)
+			return true
+	elif key == KEY_MINUS:
+		if runtime_input_controller != null and runtime_input_controller.has_method("scale_camera_zoom"):
+			runtime_input_controller.call("scale_camera_zoom", 1.0 / 1.2)
+			return true
+	elif key == KEY_0 and event.ctrl_pressed:
+		if runtime_input_controller != null and runtime_input_controller.has_method("reset_camera_zoom"):
+			runtime_input_controller.call("reset_camera_zoom")
+			return true
+	elif key == KEY_F:
+		if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
+			runtime_input_controller.call("focus_current_actor")
+			return true
+	elif key == KEY_TAB:
+		if game_root.has_method("cycle_focused_actor"):
+			game_root.cycle_focused_actor()
+			return true
+	elif key == KEY_PAGEUP:
+		if game_root.has_method("change_observed_level"):
+			game_root.change_observed_level(1)
+			return true
+	elif key == KEY_PAGEDOWN:
+		if game_root.has_method("change_observed_level"):
+			game_root.change_observed_level(-1)
+			return true
 	return false
 
 
