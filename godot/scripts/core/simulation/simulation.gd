@@ -19,6 +19,7 @@ const ProgressionRunner = preload("res://scripts/core/progression/progression_ru
 const QuestRunner = preload("res://scripts/core/quests/quest_runner.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
 const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
+const CombatCommandHandler = preload("res://scripts/core/simulation/commands/combat_command_handler.gd")
 const CraftingCommandHandler = preload("res://scripts/core/simulation/commands/crafting_command_handler.gd")
 const CraftingService = preload("res://scripts/core/simulation/services/crafting_service.gd")
 const ContainerSessionService = preload("res://scripts/core/simulation/services/container_session_service.gd")
@@ -126,6 +127,7 @@ var _vision_runner := VisionRunner.new()
 var _vision_rules := VisionRules.new()
 var _inventory_entries := InventoryEntries.new()
 var _item_use_runner := ItemUseRunner.new()
+var _combat_command_handler := CombatCommandHandler.new()
 var _crafting_command_handler := CraftingCommandHandler.new()
 var _crafting_service := CraftingService.new()
 var _container_session_service := ContainerSessionService.new()
@@ -1189,120 +1191,7 @@ func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Diction
 
 
 func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionary:
-	var corpse_target: Dictionary = _corpse_attack_target(command)
-	if not corpse_target.is_empty():
-		return corpse_target
-	var target_actor_id: int = int(command.get("target_actor_id", 0))
-	var target: RefCounted = actor_registry.get_actor(target_actor_id)
-	if target == null:
-		return {"success": false, "reason": "unknown_target"}
-	var attack_options: Dictionary = _attack_command_options(command, {})
-	var target_check: Dictionary = validate_attack_target(actor.actor_id, target_actor_id, attack_options)
-	if not bool(target_check.get("success", false)):
-		return target_check
-	var profile: Dictionary = _attack_profile(actor, _dictionary_or_empty(command.get("item_library", item_library)))
-	var attack_range: int = int(command.get("range", int(profile.get("range", DEFAULT_ATTACK_RANGE))))
-	var min_range: int = _attack_min_range_from_options(command, profile)
-	attack_options = _attack_command_options(command, profile)
-	var attack_distance: int = _grid_distance(actor.grid_position, target.grid_position)
-	if attack_distance > attack_range:
-		var source_target: Dictionary = _dictionary_or_empty(command.get("source_target", {
-			"target_type": "actor",
-			"actor_id": target_actor_id,
-		}))
-		var source_option_id: String = str(command.get("source_option_id", "attack"))
-		var prompt: Dictionary = query_interaction_options(actor.actor_id, source_target)
-		return _approach_then_execute_interaction(actor, source_target, source_option_id, prompt, _dictionary_or_empty(command.get("topology", {})))
-	if attack_distance < min_range:
-		return perform_attack(actor.actor_id, target_actor_id, _dictionary_or_empty(command.get("topology", {})), {
-			"range": attack_range,
-			"min_range": min_range,
-			"weapon_profile": profile,
-			"allow_non_hostile_attack": bool(attack_options.get("allow_non_hostile_attack", false)),
-			"confirmation_required": bool(attack_options.get("confirmation_required", false)),
-			"friendly_fire_relationship_delta": float(attack_options.get("friendly_fire_relationship_delta", -75.0)),
-		})
-	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
-	var preflight: Dictionary = preview_attack(actor.actor_id, target_actor_id, topology, {
-		"range": attack_range,
-		"min_range": min_range,
-		"weapon_profile": profile,
-		"allow_non_hostile_attack": bool(attack_options.get("allow_non_hostile_attack", false)),
-		"confirmation_required": bool(attack_options.get("confirmation_required", false)),
-		"friendly_fire_relationship_delta": float(attack_options.get("friendly_fire_relationship_delta", -75.0)),
-	})
-	if not bool(preflight.get("can_attack", false)) and str(preflight.get("reason", "")) != "ap_insufficient":
-		return preflight
-	var attack_cost: float = float(command.get("ap_cost", profile.get("ap_cost", DEFAULT_ATTACK_AP)))
-	if actor.ap < attack_cost:
-		pending_interaction = {
-			"actor_id": actor.actor_id,
-			"kind": "attack",
-			"target_actor_id": target_actor_id,
-			"required_ap": attack_cost,
-			"available_ap": actor.ap,
-		}
-		_emit("interaction_queued", pending_interaction.duplicate(true))
-		return {
-			"success": false,
-			"reason": "ap_insufficient_attack_queued",
-			"pending_interaction": pending_interaction.duplicate(true),
-		}
-	var ammo_check: Dictionary = _attack_ammo_check(actor, profile)
-	if not bool(ammo_check.get("success", true)):
-		return ammo_check
-	var durability_check: Dictionary = _attack_weapon_durability_check(actor, profile)
-	if not bool(durability_check.get("success", true)):
-		return durability_check
-	_spend_ap(actor, attack_cost, "attack")
-	_enter_combat([actor.actor_id, target_actor_id], "player_attack")
-	var result: Dictionary = perform_attack(actor.actor_id, target_actor_id, topology, {
-		"range": attack_range,
-		"min_range": min_range,
-		"weapon_profile": profile,
-		"allow_non_hostile_attack": bool(attack_options.get("allow_non_hostile_attack", false)),
-		"confirmation_required": bool(attack_options.get("confirmation_required", false)),
-		"friendly_fire_relationship_delta": float(attack_options.get("friendly_fire_relationship_delta", -75.0)),
-	})
-	if bool(result.get("success", false)):
-		var ammo_result: Dictionary = _consume_attack_ammo(actor, profile)
-		if bool(ammo_result.get("consumed", false)):
-			result["ammo_consumed"] = ammo_result
-		var durability_result: Dictionary = _consume_attack_weapon_durability(actor, profile)
-		if bool(durability_result.get("consumed", false)):
-			result["weapon_durability_consumed"] = durability_result
-		pending_interaction.clear()
-	return result
-
-
-func _corpse_attack_target(command: Dictionary) -> Dictionary:
-	var target: Dictionary = _dictionary_or_empty(command.get("target", {}))
-	var target_type := str(command.get("target_type", target.get("target_type", ""))).strip_edges()
-	var corpse_id := str(command.get("container_id", command.get("corpse_id", command.get("target_id", target.get("container_id", target.get("target_id", "")))))).strip_edges()
-	if target_type == "corpse" or target_type == "corpse_container":
-		return _corpse_attack_rejection(corpse_id, target)
-	if corpse_id.is_empty():
-		return {}
-	if corpse_containers.has(corpse_id):
-		return _corpse_attack_rejection(corpse_id, _dictionary_or_empty(corpse_containers.get(corpse_id, target)))
-	var target_data: Dictionary = _dictionary_or_empty(map_interaction_targets.get(corpse_id, {}))
-	if str(target_data.get("container_type", target.get("container_type", ""))) == "corpse":
-		return _corpse_attack_rejection(corpse_id, target_data)
-	return {}
-
-
-func _corpse_attack_rejection(corpse_id: String, target_data: Dictionary = {}) -> Dictionary:
-	var corpse: Dictionary = _dictionary_or_empty(corpse_containers.get(corpse_id, target_data))
-	return {
-		"success": false,
-		"reason": "target_is_corpse",
-		"target_type": "corpse",
-		"corpse_id": corpse_id,
-		"container_id": str(corpse.get("container_id", corpse_id)),
-		"display_name": str(corpse.get("display_name", target_data.get("display_name", corpse_id))),
-		"source_actor_id": int(corpse.get("source_actor_id", target_data.get("source_actor_id", 0))),
-		"grid_position": _dictionary_or_empty(corpse.get("grid_position", target_data.get("grid_position", target_data.get("anchor", {})))).duplicate(true),
-	}
+	return _combat_command_handler.submit_attack(self, actor, command)
 
 
 func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary:

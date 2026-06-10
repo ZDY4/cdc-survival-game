@@ -317,13 +317,17 @@ func execute(simulation: RefCounted, actor: RefCounted, command: Dictionary) -> 
 
 ### Phase 5: 抽 CombatCommandHandler
 
-- [ ] 将攻击命令包装、目标校验、尸体攻击拒绝和 result 包装迁出。
-- [ ] 保持 `CombatRunner` 为核心结算点。
-- [ ] 技能 runtime target 可在本阶段只保留桥接，不强行合并。
+- [x] 将攻击命令包装、目标校验、尸体攻击拒绝和 result 包装迁出。
+- [x] 保持 `CombatRunner` 为核心结算点。
+- [x] 技能 runtime target 可在本阶段只保留桥接，不强行合并。
 
 验收：
 
 - `Combat`、`PlayerInteraction`、`SkillsUI` smoke 通过。
+
+验证记录：
+
+- 2026-06-11: 新增 `CombatCommandHandler`，迁移玩家攻击命令包装、AP / pending、弹药和耐久消耗、尸体攻击拒绝；通过 `Combat`、`PlayerInteraction`、`SkillsUI` smoke。
 
 ### Phase 6: 抽 TurnFlowService / PendingActionService
 
