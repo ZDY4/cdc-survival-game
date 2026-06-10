@@ -1943,20 +1943,10 @@ func _render_world() -> Dictionary:
 		return {}
 	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
 	var counts: Dictionary = _dictionary_or_empty(world_root.call("apply_world_snapshot", world_result, runtime_snapshot))
-	runtime_performance_tracker.call("record_world_render", counts, world_root, Callable(self, "_render_count_summary"))
+	runtime_performance_tracker.call("record_world_render", counts, world_root)
 	if world_root.has_method("ensure_world_container"):
 		world_container = world_root.call("ensure_world_container")
 	return counts
-
-
-func _render_count_summary(counts: Dictionary) -> Dictionary:
-	var summary: Dictionary = counts.duplicate(true)
-	var total: int = 0
-	for value in counts.values():
-		if typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT:
-			total += int(value)
-	summary["total"] = total
-	return summary
 
 
 func _refresh_fog_overlay() -> void:

@@ -21,11 +21,11 @@ func mark_hud_refresh() -> void:
 	last_hud_refresh_tick_msec = Time.get_ticks_msec()
 
 
-func record_world_render(counts: Dictionary, world_root: Node, fallback_summary: Callable) -> void:
+func record_world_render(counts: Dictionary, world_root: Node) -> void:
 	if world_root != null and world_root.has_method("render_count_summary"):
 		last_render_counts = _dictionary_or_empty(world_root.call("render_count_summary"))
 	else:
-		last_render_counts = _dictionary_or_empty(fallback_summary.call(counts))
+		last_render_counts = _render_count_summary(counts)
 	if world_root != null and world_root.get("render_sequence") != null:
 		render_sequence = int(world_root.get("render_sequence"))
 	else:
@@ -62,3 +62,13 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _render_count_summary(counts: Dictionary) -> Dictionary:
+	var summary: Dictionary = counts.duplicate(true)
+	var total := 0
+	for value in counts.values():
+		if typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT:
+			total += int(value)
+	summary["total"] = total
+	return summary
