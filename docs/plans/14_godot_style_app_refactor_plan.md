@@ -441,6 +441,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [ ] 将 `game_app.gd` 收敛为 `game_root.gd` 或保留文件名但改为薄根节点。
 - [ ] 清理只为迁移期存在的 wrapper。
 - [x] 删除 `GameApp` 中只暴露旧 overlay 节点引用的 tooltip / drag preview 兼容属性；外部继续通过 `tooltip_render_snapshot()`、`drag_preview_render_snapshot()` 和 `ui_layer_stack_snapshot()` 稳定查询，不再直接读写 overlay `Control` 节点。
+- [x] 将 debug console 的 view-state reset 改为调用 `GameApp.reset_debug_view_state()` 窄接口，并删除 `focused_actor_id`、`observed_map_level`、`auto_tick_enabled`、`auto_tick_elapsed_sec` 这组只为 reset 暴露的兼容属性。
 - [x] `InventoryUI` / `DialogueUI` / `DialogueAction` / `ContainerUI` / `PlayerInteraction` pending wait / 交互 smoke 已改用 `GameApp.submit_wait_action()` / `GameApp.rebuild_runtime_world()` 稳定 facade，并通过 `finish_world_action_presentations()` 应用 deferred UI refresh；`PlayerInteraction` 不再调用 `GameApp._rebuild_world_after_runtime_change()` 私有入口。
 - [x] `cancel_pending`、移动、背包、交易、角色和世界面板动作的 refresh / rebuild 收尾已收敛到 `GameApp._apply_player_action_refresh_operation()`；这些路径改为经 `GameApp.rebuild_runtime_world()` 稳定 facade 触发世界重建，`_rebuild_world_after_runtime_change()` 只保留为 facade 内部实现。
 - [x] 继续清理其他 runtime smoke / tools 中绕过 app facade 的直接 world snapshot 构建或 core command 造数调用；`CraftingUI` 跨回合队列等待已改用 `GameApp.submit_wait_action()`，runtime UI / dialogue / interaction smoke 已无直接 `WorldSnapshotBuilder` / `WorldSceneRenderer` 和私有 `_rebuild_*` / `_continue_*` 依赖；剩余 `PlayerInteraction` 攻击造数与 `SkillsUI` 资源不足 core probe 作为明确例外保留。

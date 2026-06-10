@@ -331,6 +331,9 @@ func _reset_runtime_controllers(game_root: Node) -> void:
 
 
 func _reset_debug_view_state(game_root: Node) -> void:
+	if game_root.has_method("reset_debug_view_state"):
+		game_root.reset_debug_view_state()
+		return
 	game_root.active_trade_target = {}
 	game_root.active_trade_feedback = {}
 	game_root.active_container_feedback = {}
@@ -338,10 +341,6 @@ func _reset_debug_view_state(game_root: Node) -> void:
 	game_root.active_inventory_feedback = {}
 	game_root.active_skill_targeting = {}
 	game_root.active_skill_target_preview = {}
-	game_root.focused_actor_id = 0
-	game_root.observed_map_level = 0
-	game_root.auto_tick_enabled = false
-	game_root.auto_tick_elapsed_sec = 0.0
 
 
 func _actor_kind_from_archetype(archetype: String) -> String:

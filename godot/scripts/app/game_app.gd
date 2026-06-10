@@ -170,18 +170,6 @@ var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
 var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
 var runtime_control_state_controller: RefCounted = RuntimeControlStateController.new()
 var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
-var focused_actor_id: int:
-	get:
-		return int(runtime_view_state_controller.focused_actor_id) if runtime_view_state_controller != null else 0
-	set(value):
-		if runtime_view_state_controller != null:
-			runtime_view_state_controller.focused_actor_id = value
-var observed_map_level: int:
-	get:
-		return int(runtime_view_state_controller.observed_map_level) if runtime_view_state_controller != null else 0
-	set(value):
-		if runtime_view_state_controller != null:
-			runtime_view_state_controller.observed_map_level = value
 var info_panel_pages: Array[Dictionary]:
 	get:
 		return runtime_control_state_controller.info_panel_pages if runtime_control_state_controller != null else []
@@ -194,18 +182,6 @@ var active_info_panel_index: int:
 	set(value):
 		if runtime_control_state_controller != null:
 			runtime_control_state_controller.active_info_panel_index = value
-var auto_tick_enabled: bool:
-	get:
-		return bool(runtime_control_state_controller.auto_tick_enabled) if runtime_control_state_controller != null else false
-	set(value):
-		if runtime_control_state_controller != null:
-			runtime_control_state_controller.auto_tick_enabled = value
-var auto_tick_elapsed_sec: float:
-	get:
-		return float(runtime_control_state_controller.auto_tick_elapsed_sec) if runtime_control_state_controller != null else 0.0
-	set(value):
-		if runtime_control_state_controller != null:
-			runtime_control_state_controller.auto_tick_elapsed_sec = value
 var observe_mode_enabled: bool:
 	get:
 		return bool(runtime_control_state_controller.observe_mode_enabled) if runtime_control_state_controller != null else false
@@ -715,6 +691,22 @@ func clear_debug_console_history() -> Dictionary:
 	return _dictionary_or_empty(hud_root.clear_debug_console_history())
 
 
+func reset_debug_view_state() -> void:
+	active_trade_target = {}
+	active_trade_feedback = {}
+	active_container_feedback = {}
+	active_character_feedback = {}
+	active_inventory_feedback = {}
+	active_skill_targeting = {}
+	active_skill_target_preview = {}
+	if runtime_view_state_controller != null:
+		runtime_view_state_controller.focused_actor_id = 0
+		runtime_view_state_controller.observed_map_level = 0
+	if runtime_control_state_controller != null:
+		runtime_control_state_controller.auto_tick_enabled = false
+		runtime_control_state_controller.auto_tick_elapsed_sec = 0.0
+
+
 func submit_debug_console_command(command_text: String) -> Dictionary:
 	var command := command_text.strip_edges()
 	var result: Dictionary = _execute_debug_console_command(command)
@@ -828,7 +820,7 @@ func toggle_auto_tick() -> Dictionary:
 
 
 func is_auto_tick_enabled() -> bool:
-	return auto_tick_enabled
+	return bool(runtime_control_state_controller.auto_tick_enabled) if runtime_control_state_controller != null else false
 
 
 func is_observe_mode_enabled() -> bool:
