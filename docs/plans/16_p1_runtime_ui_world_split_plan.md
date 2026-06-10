@@ -209,9 +209,9 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 7: 拆 Hotbar / ObserveHotbar
 
-- [ ] 新建 `hotbar_view.gd`，承接 hotbar slot、group、drag/drop、cooldown mask、tooltip。
-- [ ] 新建 `observe_hotbar_view.gd`，承接 observe mode / play / speed / auto tick 控件。
-- [ ] 保持 hotbar hit test、drag metadata、drop acceptance 和 audio payload 兼容。
+- [x] 新建 `hotbar_view.gd`，承接 hotbar slot、group、drag/drop、cooldown mask、tooltip。
+- [x] 新建 `observe_hotbar_view.gd`，承接 observe mode / play / speed / auto tick 控件。
+- [x] 保持 hotbar hit test、drag metadata、drop acceptance 和 audio payload 兼容。
 
 验收：
 
@@ -219,6 +219,10 @@ godot/scripts/app/controllers/runtime_input/
 - `SkillsUI`
 - `InventoryUI`
 - `PlayerInteraction`
+
+验证记录：
+
+- 2026-06-11: 通过 `hud_controller.gd`、`hotbar_view.gd`、`observe_hotbar_view.gd` 静态解析；通过 `test-godot-game.ps1 -Scenario UIToggle`、`SkillsUI`、`InventoryUI`、`PlayerInteraction`。保留 HUD 上旧拖拽私有方法的转发 facade 以兼容现有 smoke。
 
 ## Phase 8: 拆 Runtime Input 的 picking
 

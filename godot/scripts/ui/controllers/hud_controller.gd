@@ -1,11 +1,12 @@
 extends Control
 
-const MediaTextureLoader = preload("res://scripts/ui/media_texture_loader.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 const DebugConsolePanel = preload("res://scripts/ui/controllers/debug_console_panel.gd")
 const DebugPanelView = preload("res://scripts/ui/controllers/debug_panel_view.gd")
 const FeedbackToastLayer = preload("res://scripts/ui/controllers/feedback_toast_layer.gd")
 const InteractionMenuView = preload("res://scripts/ui/controllers/interaction_menu_view.gd")
+const HotbarView = preload("res://scripts/ui/controllers/hotbar_view.gd")
+const ObserveHotbarView = preload("res://scripts/ui/controllers/observe_hotbar_view.gd")
 
 var _world_label: Label
 var _status_badge_label: Label
@@ -13,9 +14,6 @@ var _player_label: Label
 var _inventory_label: Label
 var _quest_label: Label
 var _combat_hud_label: Label
-var _hotbar_group_box: HBoxContainer
-var _hotbar_box: HBoxContainer
-var _observe_hotbar_box: HBoxContainer
 var _interaction_label: Label
 var _event_feedback_label: Label
 var _debug_overlay_label: Label
@@ -29,6 +27,8 @@ var _debug_console_panel := DebugConsolePanel.new()
 var _debug_panel_view := DebugPanelView.new()
 var _feedback_toast_layer := FeedbackToastLayer.new()
 var _interaction_menu_view := InteractionMenuView.new()
+var _hotbar_view := HotbarView.new()
+var _observe_hotbar_view := ObserveHotbarView.new()
 
 
 func _ready() -> void:
@@ -67,8 +67,8 @@ func apply_runtime_snapshot(snapshot: Dictionary) -> void:
 	]
 	_quest_label.text = _tracked_quest_text(snapshot.get("tracked_quest", {}))
 	_combat_hud_label.text = _combat_hud_text(snapshot.get("combat_hud", {}))
-	_apply_hotbar(snapshot.get("hotbar", []), snapshot.get("hotbar_group_labels", {}))
-	_apply_observe_hotbar(snapshot.get("runtime_control", {}))
+	_hotbar_view.apply(snapshot.get("hotbar", []), snapshot.get("hotbar_group_labels", {}))
+	_observe_hotbar_view.apply(snapshot.get("runtime_control", {}))
 	_interaction_label.text = _interaction_text(interaction)
 	_event_feedback_label.text = _event_feedback_text(snapshot.get("event_feedback", []))
 	_feedback_toast_layer.apply(snapshot.get("feedback_toasts", []))
@@ -107,15 +107,6 @@ func _build_layout() -> void:
 	_inventory_label = _line("InventoryLine")
 	_quest_label = _line("QuestLine")
 	_combat_hud_label = _line("CombatHudLine")
-	_hotbar_group_box = HBoxContainer.new()
-	_hotbar_group_box.name = "HotbarGroupBar"
-	_hotbar_group_box.add_theme_constant_override("separation", 4)
-	_hotbar_box = HBoxContainer.new()
-	_hotbar_box.name = "HotbarDock"
-	_hotbar_box.add_theme_constant_override("separation", 4)
-	_observe_hotbar_box = HBoxContainer.new()
-	_observe_hotbar_box.name = "ObserveHotbarDock"
-	_observe_hotbar_box.add_theme_constant_override("separation", 4)
 	_interaction_label = _line("InteractionLine")
 	_event_feedback_label = _line("EventFeedbackLine")
 	_debug_overlay_label = _line("DebugOverlayLine")
@@ -128,9 +119,8 @@ func _build_layout() -> void:
 	box.add_child(_inventory_label)
 	box.add_child(_quest_label)
 	box.add_child(_combat_hud_label)
-	box.add_child(_hotbar_group_box)
-	box.add_child(_hotbar_box)
-	box.add_child(_observe_hotbar_box)
+	_hotbar_view.build(box, self)
+	_observe_hotbar_view.build(box, self, _hotbar_view)
 	box.add_child(_interaction_label)
 	box.add_child(_event_feedback_label)
 	box.add_child(_debug_overlay_label)
@@ -327,617 +317,32 @@ func _disabled_reason_text(reason: String) -> String:
 	return _reason_catalog.disabled_text_for(reason)
 
 
-func _apply_hotbar(slots_value: Variant, group_labels_value: Variant = {}) -> void:
-	if _hotbar_box == null:
-		return
-	for child in _hotbar_box.get_children():
-		_hotbar_box.remove_child(child)
-		child.free()
-	var slots: Array = slots_value if typeof(slots_value) == TYPE_ARRAY else []
-	if slots.is_empty():
-		for slot_index in range(1, 11):
-			slots.append({
-				"slot_id": "slot_%d" % slot_index,
-				"group_id": "group_1",
-				"group_label": "G1",
-				"key": "0" if slot_index == 10 else str(slot_index),
-				"empty": true,
-			})
-	var group_labels: Dictionary = _dictionary_or_empty(group_labels_value)
-	_apply_hotbar_group_buttons(slots, group_labels)
-	for slot in slots:
-		var slot_data: Dictionary = slot
-		_hotbar_box.add_child(_hotbar_button(slot_data))
+func _empty_hotbar_drag_data(position: Vector2, from_control: Control) -> Variant:
+	return _hotbar_view.call("_empty_drag_data", position, from_control)
 
 
-func _apply_hotbar_group_buttons(slots: Array, group_labels: Dictionary = {}) -> void:
-	if _hotbar_group_box == null:
-		return
-	for child in _hotbar_group_box.get_children():
-		_hotbar_group_box.remove_child(child)
-		child.free()
-	var active_group_id := _active_hotbar_group_id(slots)
-	for index in range(1, 4):
-		var group_id := "group_%d" % index
-		_hotbar_group_box.add_child(_hotbar_group_button(group_id, active_group_id, group_labels))
+func _can_drop_hotbar_group(position: Vector2, data: Variant, from_control: Control) -> bool:
+	return bool(_hotbar_view.call("_can_drop_group", position, data, from_control))
 
 
-func _active_hotbar_group_id(slots: Array) -> String:
-	for slot in slots:
-		var slot_data: Dictionary = _dictionary_or_empty(slot)
-		var group_id := str(slot_data.get("group_id", ""))
-		if not group_id.is_empty():
-			return group_id
-	return "group_1"
+func _drop_hotbar_group(position: Vector2, data: Variant, from_control: Control) -> void:
+	_hotbar_view.call("_drop_group", position, data, from_control)
 
 
-func _hotbar_group_button(group_id: String, active_group_id: String, group_labels: Dictionary = {}) -> Button:
-	var button := Button.new()
-	var group_label := _hotbar_group_label(group_id, group_labels)
-	button.name = "HotbarGroup_%s" % group_id
-	button.text = group_label
-	button.tooltip_text = "%s 热栏组 | Alt+%d" % [group_label, max(1, _hotbar_group_index(group_id) + 1)]
-	button.toggle_mode = true
-	button.button_pressed = group_id == active_group_id
-	button.custom_minimum_size = Vector2(max(38, group_label.length() * 10 + 18), 26)
-	button.focus_mode = Control.FOCUS_NONE
-	button.set_meta("hotbar_group_id", group_id)
-	button.set_meta("active", group_id == active_group_id)
-	button.set_drag_forwarding(
-		Callable(self, "_empty_hotbar_drag_data"),
-		Callable(self, "_can_drop_hotbar_group"),
-		Callable(self, "_drop_hotbar_group")
-	)
-	_prepare_hotbar_group_drop_target(button)
-	button.pressed.connect(func() -> void:
-		_play_hud_control_audio("ui_button_pressed", button.name, "hotbar_group_button", "set_hotbar_group", {
-			"group_id": group_id,
-			"value": group_label,
-		})
-		var root := get_parent()
-		if root != null and root.has_method("set_hotbar_group"):
-			root.call_deferred("set_hotbar_group", group_id)
-	)
-	return button
-
-
-func _hotbar_group_label(group_id: String, group_labels: Dictionary = {}) -> String:
-	var configured_label := str(group_labels.get(group_id, "")).strip_edges()
-	if not configured_label.is_empty():
-		return configured_label
-	var value := group_id.strip_edges().to_lower()
-	if value.begins_with("group_"):
-		value = value.trim_prefix("group_")
-	if value.is_valid_int():
-		return "G%d" % int(value)
-	return group_id
-
-
-func _hotbar_group_index(group_id: String) -> int:
-	var value := group_id.strip_edges().to_lower()
-	if value.begins_with("group_"):
-		value = value.trim_prefix("group_")
-	if not value.is_valid_int():
-		return -1
-	return int(value) - 1
-
-
-func _hotbar_button(slot: Dictionary) -> Button:
-	var button := Button.new()
-	var slot_id := str(slot.get("slot_id", ""))
-	var group_id := str(slot.get("group_id", "group_1"))
-	var group_label := str(slot.get("group_label", group_id))
-	var key_label := str(slot.get("key", ""))
-	var kind := str(slot.get("kind", ""))
-	var skill_id := str(slot.get("skill_id", ""))
-	var item_id := str(slot.get("item_id", ""))
-	var entry_id := item_id if kind == "item" else skill_id
-	var entry_label := str(slot.get("label", entry_id))
-	var cooldown := float(slot.get("cooldown_remaining", 0.0))
-	var use_reason := str(slot.get("use_reason", ""))
-	var can_use := bool(slot.get("can_use", true))
-	button.name = "HotbarSlot_%s" % slot_id
-	button.custom_minimum_size = Vector2(48, 28)
-	button.focus_mode = Control.FOCUS_NONE
-	button.set_meta("hotbar_slot_id", slot_id)
-	button.set_meta("hotbar_group_id", group_id)
-	button.set_meta("cooldown_remaining", cooldown)
-	button.set_meta("cooldown_mask_visible", cooldown > 0.0)
-	button.set_meta("use_reason", use_reason)
-	button.set_meta("can_use", can_use)
-	_apply_hotbar_icon(button, slot)
-	button.set_drag_forwarding(
-		Callable(self, "_empty_hotbar_drag_data"),
-		Callable(self, "_can_drop_hotbar_skill"),
-		Callable(self, "_drop_hotbar_skill")
-	)
-	_prepare_hotbar_drop_target(button)
-	if bool(slot.get("empty", true)):
-		button.text = "%s:-" % key_label
-		button.tooltip_text = "%s 热栏 %s：空 | 可拖入主动技能" % [group_label, key_label]
-		return button
-	var suffix := " cd%.0f" % cooldown if cooldown > 0.0 else ""
-	if kind == "item" and int(slot.get("item_count", 0)) > 0:
-		suffix = " x%d%s" % [int(slot.get("item_count", 0)), suffix]
-	button.text = "%s:%s%s" % [key_label, _short_hotbar_label(entry_label), suffix]
-	button.tooltip_text = _hotbar_tooltip(key_label, group_label, kind, entry_label, slot)
-	button.disabled = cooldown > 0.0 or not can_use
-	button.pressed.connect(func() -> void:
-		_play_hud_control_audio("ui_button_pressed", button.name, "hotbar_slot_button", "use_hotbar_slot", _hotbar_audio_payload(slot))
-		var root := get_parent()
-		if root != null and root.has_method("use_hotbar_slot"):
-			root.call_deferred("use_hotbar_slot", slot_id)
-	)
-	_add_hotbar_cooldown_mask(button, slot_id, cooldown)
-	return button
-
-
-func _apply_hotbar_icon(button: Button, slot: Dictionary) -> void:
-	var icon_asset := _dictionary_or_empty(slot.get("icon_asset", {}))
-	var texture := MediaTextureLoader.texture_from_asset(icon_asset)
-	if texture == null:
-		button.icon = null
-		return
-	button.icon = texture
-	button.expand_icon = true
-	button.set_meta("icon_resource_path", MediaTextureLoader.resource_path_from_asset(icon_asset))
-	button.set_meta("icon_fallback_key", str(icon_asset.get("fallback_key", "")))
-
-
-func _apply_observe_hotbar(runtime_control_value: Variant) -> void:
-	if _observe_hotbar_box == null:
-		return
-	for child in _observe_hotbar_box.get_children():
-		_observe_hotbar_box.remove_child(child)
-		child.free()
-	var runtime_control: Dictionary = _dictionary_or_empty(runtime_control_value)
-	var observe_mode := bool(runtime_control.get("observe_mode", false))
-	var playback := bool(runtime_control.get("observe_playback", false))
-	var speed := str(runtime_control.get("observe_speed", "x1"))
-	var auto_tick := bool(runtime_control.get("auto_tick", false))
-	var map_level: Dictionary = _dictionary_or_empty(runtime_control.get("map_level", {}))
-	if _hotbar_group_box != null:
-		_hotbar_group_box.visible = not observe_mode
-	if _hotbar_box != null:
-		_hotbar_box.visible = not observe_mode
-	_observe_hotbar_box.add_child(_observe_mode_button(observe_mode))
-	_observe_hotbar_box.add_child(_observe_play_button(playback, observe_mode))
-	_observe_hotbar_box.add_child(_observe_speed_button(speed, observe_mode))
-	_observe_hotbar_box.add_child(_observe_auto_button(auto_tick))
-	_observe_hotbar_box.add_child(_observe_button("ObserveLevelButton", "L%d" % int(map_level.get("current", 0)), "observe_level", int(map_level.get("current", 0)), true))
-
-
-func _observe_button(node_name: String, text: String, meta_key: String, meta_value: Variant, disabled: bool) -> Button:
-	var button := Button.new()
-	button.name = node_name
-	button.text = text
-	button.tooltip_text = _observe_tooltip(meta_key, meta_value, disabled)
-	button.custom_minimum_size = Vector2(max(42, text.length() * 10 + 18), 26)
-	button.focus_mode = Control.FOCUS_NONE
-	button.disabled = disabled
-	button.set_meta(meta_key, meta_value)
-	button.set_meta("disabled_reason", "observe_control_unavailable" if disabled else "")
-	button.set_drag_forwarding(
-		Callable(self, "_empty_hotbar_drag_data"),
-		Callable(self, "_can_drop_observe_hotbar"),
-		Callable(self, "_drop_observe_hotbar")
-	)
-	_prepare_observe_hotbar_drop_target(button)
-	return button
-
-
-func _observe_mode_button(observe_mode: bool) -> Button:
-	var button := _observe_button("ObserveModeButton", "Player" if observe_mode else "Observe", "observe_mode", observe_mode, false)
-	button.pressed.connect(func() -> void:
-		_play_hud_control_audio("ui_button_pressed", "ObserveModeButton", "observe_button", "toggle_observe_mode", {
-			"observe_mode": observe_mode,
-			"value": "off" if observe_mode else "on",
-		})
-		var root := get_parent()
-		if root != null and root.has_method("toggle_observe_mode"):
-			root.call_deferred("toggle_observe_mode")
-	)
-	return button
-
-
-func _observe_play_button(playback: bool, observe_mode: bool) -> Button:
-	var button := _observe_button("ObservePlayButton", "Pause" if playback else "Play", "observe_playback", playback, not observe_mode)
-	button.set_meta("observe_mode", observe_mode)
-	if observe_mode:
-		button.pressed.connect(func() -> void:
-			_play_hud_control_audio("ui_button_pressed", "ObservePlayButton", "observe_button", "toggle_observe_playback", {
-				"observe_mode": observe_mode,
-				"observe_playback": playback,
-				"value": "pause" if playback else "play",
-			})
-			var root := get_parent()
-			if root != null and root.has_method("toggle_observe_playback"):
-				root.call_deferred("toggle_observe_playback")
-		)
-	return button
-
-
-func _observe_speed_button(speed: String, observe_mode: bool) -> Button:
-	var button := _observe_button("ObserveSpeedButton", speed, "observe_speed", speed, not observe_mode)
-	button.set_meta("observe_mode", observe_mode)
-	if observe_mode:
-		button.pressed.connect(func() -> void:
-			_play_hud_control_audio("ui_button_pressed", "ObserveSpeedButton", "observe_button", "cycle_observe_speed", {
-				"observe_mode": observe_mode,
-				"observe_speed": speed,
-				"value": speed,
-			})
-			var root := get_parent()
-			if root != null and root.has_method("cycle_observe_speed"):
-				root.call_deferred("cycle_observe_speed")
-		)
-	return button
-
-
-func _observe_auto_button(auto_tick: bool) -> Button:
-	var button := _observe_button("ObserveAutoButton", "Auto on" if auto_tick else "Auto off", "auto_tick", auto_tick, false)
-	button.pressed.connect(func() -> void:
-		_play_hud_control_audio("ui_button_pressed", "ObserveAutoButton", "observe_button", "toggle_auto_tick", {
-			"auto_tick": auto_tick,
-			"value": "off" if auto_tick else "on",
-		})
-		var root := get_parent()
-		if root != null and root.has_method("toggle_auto_tick"):
-			root.call_deferred("toggle_auto_tick")
-	)
-	return button
-
-
-func _play_hud_control_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
-	var root := get_parent()
-	if root == null or not root.has_method("play_ui_audio_feedback"):
-		return {}
-	var payload := {
-		"audio_source": "ui",
-		"panel_id": "hud",
-		"control_name": control_name,
-		"control_kind": control_kind,
-		"action": action,
-	}
-	for key in extra_payload.keys():
-		payload[key] = extra_payload[key]
-	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
-
-
-func _hotbar_audio_payload(slot: Dictionary, extra_payload: Dictionary = {}) -> Dictionary:
-	var payload := {
-		"slot_id": str(slot.get("slot_id", "")),
-		"group_id": str(slot.get("group_id", "")),
-		"skill_id": str(slot.get("skill_id", "")),
-		"item_id": str(slot.get("item_id", "")),
-		"value": str(slot.get("label", "")),
-		"count": int(slot.get("item_count", 0)),
-	}
-	for key in extra_payload.keys():
-		payload[key] = extra_payload[key]
-	return payload
-
-
-func _observe_tooltip(meta_key: String, meta_value: Variant, disabled: bool) -> String:
-	var state := str(meta_value)
-	match meta_key:
-		"observe_playback":
-			state = "播放" if bool(meta_value) else "暂停"
-		"observe_speed":
-			state = "速度 %s" % str(meta_value)
-		"observe_level":
-			state = "观察楼层 %d" % int(meta_value)
-		"auto_tick":
-			state = "自动推进 %s" % ("开启" if bool(meta_value) else "关闭")
-		"observe_mode":
-			state = "观察模式 %s" % ("开启" if bool(meta_value) else "关闭")
-	if disabled:
-		state = "%s | %s" % [state, _reason_catalog.disabled_text_for("observe_control_unavailable")]
-	else:
-		match meta_key:
-			"observe_mode":
-				state = "%s | 点击切换控制模式" % state
-			"observe_playback":
-				state = "%s | 点击切换观察播放" % state
-			"observe_speed":
-				state = "%s | 点击切换观察速度" % state
-	return state
-
-
-func _add_hotbar_cooldown_mask(button: Button, slot_id: String, cooldown: float) -> void:
-	var mask := ColorRect.new()
-	mask.name = "HotbarCooldownMask_%s" % slot_id
-	mask.visible = cooldown > 0.0
-	mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mask.color = Color(0.08, 0.12, 0.16, 0.58)
-	mask.set_anchors_preset(Control.PRESET_FULL_RECT)
-	mask.set_meta("cooldown_remaining", cooldown)
-	button.add_child(mask)
-
-
-func _hotbar_tooltip(key_label: String, group_label: String, kind: String, entry_label: String, slot: Dictionary) -> String:
-	var parts: Array[String] = [
-		"%s 热栏 %s" % [group_label, key_label],
-		"物品" if kind == "item" else "技能",
-		entry_label,
-	]
-	var cost_text := _hotbar_cost_text(slot)
-	if not cost_text.is_empty():
-		parts.append(cost_text)
-	var effect_text := _hotbar_effect_text(slot)
-	if not effect_text.is_empty():
-		parts.append(effect_text)
-	parts.append(_hotbar_use_state_text(slot))
-	return " | ".join(parts)
-
-
-func _hotbar_cost_text(slot: Dictionary) -> String:
-	var parts: Array[String] = []
-	var ap_cost := float(slot.get("ap_cost", 0.0))
-	if ap_cost > 0.0:
-		parts.append("AP %.0f" % ap_cost)
-	var resource_parts: Array[String] = []
-	for cost in _array_or_empty(slot.get("resource_costs", [])):
-		var cost_data: Dictionary = _dictionary_or_empty(cost)
-		var resource_id := str(cost_data.get("resource", ""))
-		var amount := float(cost_data.get("amount", 0.0))
-		if resource_id.is_empty() or amount <= 0.0:
-			continue
-		resource_parts.append("%s %.0f" % [_resource_label(resource_id), amount])
-	if not resource_parts.is_empty():
-		parts.append("资源 %s" % " / ".join(resource_parts))
-	return " / ".join(parts)
-
-
-func _hotbar_effect_text(slot: Dictionary) -> String:
-	var effects: Array[String] = []
-	for effect in _array_or_empty(slot.get("effect_summary", [])):
-		var effect_text := str(effect)
-		if not effect_text.is_empty():
-			effects.append(effect_text)
-	if effects.is_empty():
-		return ""
-	return "效果 %s" % " / ".join(effects)
-
-
-func _hotbar_use_state_text(slot: Dictionary) -> String:
-	match str(slot.get("use_reason", "")):
-		"cooldown":
-			return "冷却 %.0fs" % float(slot.get("cooldown_remaining", 0.0))
-		"ap_insufficient", "ap_insufficient_use_item":
-			return "AP不足"
-		"not_enough_items":
-			return "数量不足"
-		"item_not_usable":
-			return "不可使用"
-		"item_use_forbidden":
-			return "禁止使用"
-		"unknown_item":
-			return "未知物品"
-		"resource_insufficient":
-			return _missing_resource_text(slot)
-		"unknown_skill", "skill_missing":
-			return "未知技能"
-		"", "available":
-			return "可用"
-	return str(slot.get("use_reason", ""))
-
-
-func _missing_resource_text(slot: Dictionary) -> String:
-	var missing: Dictionary = _dictionary_or_empty(slot.get("missing_resource", {}))
-	var resource_id := str(missing.get("resource", ""))
-	var required: float = float(missing.get("required_amount", 0.0))
-	var available: float = float(missing.get("available_amount", 0.0))
-	if resource_id.is_empty():
-		return "资源不足"
-	return "资源不足 %s %.0f/%.0f" % [_resource_label(resource_id), available, required]
-
-
-func _resource_label(resource_id: String) -> String:
-	match resource_id:
-		"hp":
-			return "HP"
-		"stamina":
-			return "stamina"
-		"hunger":
-			return "hunger"
-		"thirst":
-			return "thirst"
-		"immunity":
-			return "immunity"
-	return resource_id
-
-
-func _empty_hotbar_drag_data(_position: Vector2, _from_control: Control) -> Variant:
-	return null
-
-
-func _can_drop_hotbar_group(_position: Vector2, data: Variant, from_control: Control) -> bool:
-	var drag_data: Dictionary = _dictionary_or_empty(data)
-	var reject_reason := "hotbar_group_drag_unsupported" if not drag_data.is_empty() else ""
-	_apply_hotbar_group_drag_hover(from_control, reject_reason)
-	return false
-
-
-func _drop_hotbar_group(_position: Vector2, _data: Variant, from_control: Control) -> void:
-	_clear_hotbar_group_drag_hover(from_control)
-
-
-func _can_drop_observe_hotbar(_position: Vector2, data: Variant, from_control: Control) -> bool:
-	var drag_data: Dictionary = _dictionary_or_empty(data)
-	var reject_reason := "observe_hotbar_drag_unsupported" if not drag_data.is_empty() else ""
-	_apply_observe_hotbar_drag_hover(from_control, reject_reason)
-	return false
-
-
-func _drop_observe_hotbar(_position: Vector2, _data: Variant, from_control: Control) -> void:
-	_clear_observe_hotbar_drag_hover(from_control)
-
-
-func _can_drop_hotbar_skill(_position: Vector2, data: Variant, from_control: Control) -> bool:
-	var drag_data: Dictionary = _dictionary_or_empty(data)
-	var acceptance: Dictionary = _hotbar_drop_acceptance(from_control, drag_data)
-	var accepted := bool(acceptance.get("accept", false))
-	_apply_hotbar_drag_hover(from_control, accepted, str(acceptance.get("reason", "")))
-	return accepted
+func _can_drop_hotbar_skill(position: Vector2, data: Variant, from_control: Control) -> bool:
+	return bool(_hotbar_view.call("_can_drop_skill", position, data, from_control))
 
 
 func _drop_hotbar_skill(position: Vector2, data: Variant, from_control: Control) -> void:
-	if not _can_drop_hotbar_skill(position, data, from_control):
-		return
-	var drag_data: Dictionary = _dictionary_or_empty(data)
-	var slot_id := str(from_control.get_meta("hotbar_slot_id", ""))
-	var skill_id := str(drag_data.get("skill_id", ""))
-	if slot_id.is_empty() or skill_id.is_empty():
-		return
-	var root := get_parent()
-	_clear_hotbar_drag_hover(from_control)
-	if root != null and root.has_method("bind_player_skill_to_hotbar"):
-		root.bind_player_skill_to_hotbar(slot_id, skill_id)
+	_hotbar_view.call("_drop_skill", position, data, from_control)
 
 
-func _prepare_hotbar_group_drop_target(control: Control) -> void:
-	if control == null:
-		return
-	control.set_meta("hotbar_group_drag_hovered", false)
-	control.set_meta("hotbar_group_drag_last_accept", false)
-	control.set_meta("hotbar_group_drag_reject_reason", "")
-	control.set_meta("hotbar_group_drag_highlight_style", "")
-	control.set_meta("hotbar_group_drag_highlight_color", "")
-	control.mouse_exited.connect(func() -> void:
-		_clear_hotbar_group_drag_hover(control)
-	)
+func _can_drop_observe_hotbar(position: Vector2, data: Variant, from_control: Control) -> bool:
+	return bool(_observe_hotbar_view.call("_can_drop_observe", position, data, from_control))
 
 
-func _prepare_observe_hotbar_drop_target(control: Control) -> void:
-	if control == null:
-		return
-	control.set_meta("observe_hotbar_drag_hovered", false)
-	control.set_meta("observe_hotbar_drag_last_accept", false)
-	control.set_meta("observe_hotbar_drag_reject_reason", "")
-	control.set_meta("observe_hotbar_drag_highlight_style", "")
-	control.set_meta("observe_hotbar_drag_highlight_color", "")
-	control.mouse_exited.connect(func() -> void:
-		_clear_observe_hotbar_drag_hover(control)
-	)
-
-
-func _apply_observe_hotbar_drag_hover(control: Control, reject_reason: String) -> void:
-	if control == null or not is_instance_valid(control) or _observe_control_key(control).is_empty():
-		return
-	var color_text := "#e25c5c"
-	control.set_meta("observe_hotbar_drag_hovered", true)
-	control.set_meta("observe_hotbar_drag_last_accept", false)
-	control.set_meta("observe_hotbar_drag_reject_reason", reject_reason)
-	control.set_meta("observe_hotbar_drag_highlight_style", "reject")
-	control.set_meta("observe_hotbar_drag_highlight_color", color_text)
-	control.modulate = Color(1.0, 0.90, 0.90, 1.0)
-	if control is Button:
-		(control as Button).add_theme_color_override("font_color", Color.html(color_text))
-
-
-func _clear_observe_hotbar_drag_hover(control: Control) -> void:
-	if control == null or not is_instance_valid(control) or _observe_control_key(control).is_empty():
-		return
-	control.set_meta("observe_hotbar_drag_hovered", false)
-	control.set_meta("observe_hotbar_drag_last_accept", false)
-	control.set_meta("observe_hotbar_drag_reject_reason", "")
-	control.set_meta("observe_hotbar_drag_highlight_style", "")
-	control.set_meta("observe_hotbar_drag_highlight_color", "")
-	control.modulate = Color.WHITE
-	if control is Button:
-		(control as Button).remove_theme_color_override("font_color")
-
-
-func _observe_control_key(control: Control) -> String:
-	for key in ["observe_playback", "observe_speed", "auto_tick", "observe_level", "observe_mode"]:
-		if control != null and control.has_meta(key):
-			return key
-	return ""
-
-
-func _apply_hotbar_group_drag_hover(control: Control, reject_reason: String) -> void:
-	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_group_id"):
-		return
-	var color_text := "#e25c5c"
-	control.set_meta("hotbar_group_drag_hovered", true)
-	control.set_meta("hotbar_group_drag_last_accept", false)
-	control.set_meta("hotbar_group_drag_reject_reason", reject_reason)
-	control.set_meta("hotbar_group_drag_highlight_style", "reject")
-	control.set_meta("hotbar_group_drag_highlight_color", color_text)
-	control.modulate = Color(1.0, 0.90, 0.90, 1.0)
-	if control is Button:
-		(control as Button).add_theme_color_override("font_color", Color.html(color_text))
-
-
-func _clear_hotbar_group_drag_hover(control: Control) -> void:
-	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_group_id"):
-		return
-	control.set_meta("hotbar_group_drag_hovered", false)
-	control.set_meta("hotbar_group_drag_last_accept", false)
-	control.set_meta("hotbar_group_drag_reject_reason", "")
-	control.set_meta("hotbar_group_drag_highlight_style", "")
-	control.set_meta("hotbar_group_drag_highlight_color", "")
-	control.modulate = Color.WHITE
-	if control is Button:
-		(control as Button).remove_theme_color_override("font_color")
-
-
-func _prepare_hotbar_drop_target(control: Control) -> void:
-	if control == null:
-		return
-	control.set_meta("hotbar_drag_hovered", false)
-	control.set_meta("hotbar_drag_last_accept", false)
-	control.set_meta("hotbar_drag_reject_reason", "")
-	control.set_meta("hotbar_drag_highlight_style", "")
-	control.set_meta("hotbar_drag_highlight_color", "")
-	control.mouse_exited.connect(func() -> void:
-		_clear_hotbar_drag_hover(control)
-	)
-
-
-func _hotbar_drop_acceptance(control: Control, drag_data: Dictionary) -> Dictionary:
-	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_slot_id"):
-		return {"accept": false, "reason": "hotbar_slot_missing_slot"}
-	if str(drag_data.get("kind", "")) != "skill_hotbar":
-		return {"accept": false, "reason": "hotbar_slot_requires_skill_hotbar"}
-	if str(drag_data.get("skill_id", "")).is_empty():
-		return {"accept": false, "reason": "hotbar_slot_missing_skill"}
-	return {"accept": true, "reason": ""}
-
-
-func _apply_hotbar_drag_hover(control: Control, accepted: bool, reject_reason: String) -> void:
-	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_slot_id"):
-		return
-	var color_text := "#4ecb71" if accepted else "#e25c5c"
-	var style := "accept" if accepted else "reject"
-	control.set_meta("hotbar_drag_hovered", true)
-	control.set_meta("hotbar_drag_last_accept", accepted)
-	control.set_meta("hotbar_drag_reject_reason", reject_reason)
-	control.set_meta("hotbar_drag_highlight_style", style)
-	control.set_meta("hotbar_drag_highlight_color", color_text)
-	control.modulate = Color(0.90, 1.0, 0.92, 1.0) if accepted else Color(1.0, 0.90, 0.90, 1.0)
-	if control is Button:
-		(control as Button).add_theme_color_override("font_color", Color.html(color_text))
-
-
-func _clear_hotbar_drag_hover(control: Control) -> void:
-	if control == null or not is_instance_valid(control) or not control.has_meta("hotbar_slot_id"):
-		return
-	control.set_meta("hotbar_drag_hovered", false)
-	control.set_meta("hotbar_drag_last_accept", false)
-	control.set_meta("hotbar_drag_reject_reason", "")
-	control.set_meta("hotbar_drag_highlight_style", "")
-	control.set_meta("hotbar_drag_highlight_color", "")
-	control.modulate = Color.WHITE
-	if control is Button:
-		(control as Button).remove_theme_color_override("font_color")
-
-
-func _short_hotbar_label(label: String) -> String:
-	if label.length() <= 4:
-		return label
-	return label.substr(0, 4)
+func _drop_observe_hotbar(position: Vector2, data: Variant, from_control: Control) -> void:
+	_observe_hotbar_view.call("_drop_observe", position, data, from_control)
 
 
 func _inventory_text(inventory: Dictionary) -> String:
