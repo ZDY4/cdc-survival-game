@@ -78,6 +78,58 @@ func cancel_pending(interaction_controller: RefCounted, reason: String = "cancel
 	}
 
 
+func execution_followup(result: Dictionary, executed_target: Dictionary) -> Dictionary:
+	var output := {
+		"reset_container_feedback": interaction_result_opens_container(result),
+		"trade_target": {},
+		"reset_trade_feedback": false,
+		"stage_panel": interaction_result_stage_panel(result),
+	}
+	var trade_target: Dictionary = trade_target_after_interaction(result, executed_target)
+	if not trade_target.is_empty():
+		output["trade_target"] = trade_target
+		output["reset_trade_feedback"] = true
+	return output
+
+
+func trade_target_after_interaction(result: Dictionary, executed_target: Dictionary) -> Dictionary:
+	if not bool(result.get("success", false)):
+		return {}
+	var interaction_result: Dictionary = dictionary_or_empty(result.get("result", {}))
+	var prompt: Dictionary = dictionary_or_empty(interaction_result.get("prompt", {}))
+	var option_kind := ""
+	var options: Array = prompt.get("options", [])
+	if not options.is_empty():
+		var option: Dictionary = dictionary_or_empty(options[0])
+		option_kind = str(option.get("kind", ""))
+	if option_kind == "talk" and executed_target.get("target_type", "") == "actor":
+		return executed_target.duplicate(true)
+	return {}
+
+
+func interaction_result_opens_container(result: Dictionary) -> bool:
+	if result.has("container"):
+		return true
+	var nested_result: Dictionary = dictionary_or_empty(result.get("result", {}))
+	return nested_result.has("container")
+
+
+func interaction_result_stage_panel(result: Dictionary) -> String:
+	if not bool(result.get("success", false)):
+		return ""
+	var panel_id := str(result.get("open_panel", "")).strip_edges()
+	if not panel_id.is_empty():
+		return panel_id
+	var prompt: Dictionary = dictionary_or_empty(result.get("prompt", {}))
+	var option_id := str(prompt.get("primary_option_id", ""))
+	for option in array_or_empty(prompt.get("options", [])):
+		var option_data: Dictionary = dictionary_or_empty(option)
+		if option_id.is_empty() or str(option_data.get("id", "")) == option_id:
+			if str(option_data.get("kind", "")) == "open_crafting":
+				return "crafting"
+	return ""
+
+
 func _blocked(blocker: Callable, action: String) -> Dictionary:
 	if not blocker.is_valid():
 		return {}
@@ -101,3 +153,7 @@ func _selection_operation(result: Dictionary, refresh_hud: bool = true) -> Dicti
 
 func dictionary_or_empty(value: Variant) -> Dictionary:
 	return value if typeof(value) == TYPE_DICTIONARY else {}
+
+
+func array_or_empty(value: Variant) -> Array:
+	return value if typeof(value) == TYPE_ARRAY else []

@@ -2067,26 +2067,10 @@ func _sync_debug_console_schema() -> void:
 	)
 
 
-func _update_trade_target_after_interaction(result: Dictionary, executed_target: Dictionary) -> void:
-	if not bool(result.get("success", false)):
-		return
-	var interaction_result: Dictionary = _dictionary_or_empty(result.get("result", {}))
-	var prompt: Dictionary = _dictionary_or_empty(interaction_result.get("prompt", {}))
-	var option_kind: String = ""
-	var options: Array = prompt.get("options", [])
-	if not options.is_empty():
-		var option: Dictionary = _dictionary_or_empty(options[0])
-		option_kind = str(option.get("kind", ""))
-	if option_kind == "talk" and executed_target.get("target_type", "") == "actor":
-		active_trade_target = executed_target.duplicate(true)
-		active_trade_feedback = {}
-
-
 func _apply_interaction_execution_result(result: Dictionary, executed_target: Dictionary) -> void:
-	_update_trade_target_after_interaction(result, executed_target)
-	if _interaction_result_opens_container(result):
-		active_container_feedback = {}
-	var stage_panel_to_open := _interaction_result_stage_panel(result)
+	var followup: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execution_followup", result, executed_target))
+	_apply_interaction_followup(followup)
+	var stage_panel_to_open := str(followup.get("stage_panel", ""))
 	world_result = interaction_controller.world_result
 	_sync_observed_level_to_map()
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
@@ -2104,20 +2088,14 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 		refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
 
 
-func _interaction_result_stage_panel(result: Dictionary) -> String:
-	if not bool(result.get("success", false)):
-		return ""
-	var panel_id := str(result.get("open_panel", "")).strip_edges()
-	if not panel_id.is_empty():
-		return panel_id
-	var prompt: Dictionary = _dictionary_or_empty(result.get("prompt", {}))
-	var option_id := str(prompt.get("primary_option_id", ""))
-	for option in _array_or_empty(prompt.get("options", [])):
-		var option_data: Dictionary = _dictionary_or_empty(option)
-		if option_id.is_empty() or str(option_data.get("id", "")) == option_id:
-			if str(option_data.get("kind", "")) == "open_crafting":
-				return "crafting"
-	return ""
+func _apply_interaction_followup(followup: Dictionary) -> void:
+	if bool(followup.get("reset_container_feedback", false)):
+		active_container_feedback = {}
+	var trade_target: Dictionary = _dictionary_or_empty(followup.get("trade_target", {}))
+	if not trade_target.is_empty():
+		active_trade_target = trade_target.duplicate(true)
+	if bool(followup.get("reset_trade_feedback", false)):
+		active_trade_feedback = {}
 
 
 func _open_stage_panel_from_interaction(panel_id: String) -> void:
@@ -2295,13 +2273,6 @@ func _record_inventory_feedback(result: Dictionary, action: String, item_id: Str
 
 func _record_character_feedback(result: Dictionary, action: String, slot_id: String, item_id: String) -> void:
 	ui_feedback_state_controller.call("record_character_feedback", result, action, slot_id, item_id)
-
-
-func _interaction_result_opens_container(result: Dictionary) -> bool:
-	if result.has("container"):
-		return true
-	var nested_result: Dictionary = _dictionary_or_empty(result.get("result", {}))
-	return nested_result.has("container")
 
 
 func _dialogue_trade_target(result: Dictionary = {}) -> Dictionary:
