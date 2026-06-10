@@ -22,6 +22,7 @@
 - pending final refresh 的 final world result fallback 解析和 runtime 应用已抽到 `RuntimeRefreshController.resolve_pending_final_world_result()` / `apply_pending_final_refresh()`。
 - refresh result 接受、错误消息规范化和失败报告上下文已抽到 `RuntimeRefreshController.accept_refresh_result()` / `accept_and_report_refresh_result()` / `refresh_error_message()`。
 - world action presenter、queue、pending UI、movement execution plan 和 final refresh 状态已抽到 `godot/scripts/app/controllers/world_action_flow_controller.gd`。
+- world action final refresh 的完成标记和 HUD refresh completion 结果已收敛到 `WorldActionFlowController.complete_final_refresh()`。
 - world action presenter 完成后通过 `WorldActionFlowController.final_refresh_ready` / `deferred_ui_ready` signal 通知 `GameApp` 执行最终刷新和 UI 接续。
 - 运行时性能统计和 render count fallback 汇总已抽到 `godot/scripts/app/controllers/runtime_performance_tracker.gd`。
 - observe mode、auto tick 和 info panel 状态已抽到 `godot/scripts/app/controllers/runtime_control_state_controller.gd`。
@@ -413,7 +414,8 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 将移动 action 的 presentation / final refresh 时序决策抽到 `WorldActionFlowController.movement_execution_plan()`。
 - [x] `WorldActionFlowController` 已发出 `final_refresh_ready` / `deferred_ui_ready` signal，当前由 `GameApp` 连接 signal 后调用现有 runtime refresh / HUD apply 入口。
 - [x] signal 接续后的 pending final refresh 解析和 runtime 应用已收敛到 `RuntimeRefreshController.apply_pending_final_refresh()`。
-- [ ] 继续将 signal 接续后的 scene tree apply、HUD apply 和状态标记顺序收敛，进一步缩短 `GameApp`。
+- [x] signal 接续后的 final refresh 完成标记和 HUD refresh completion 结果已收敛到 `WorldActionFlowController.complete_final_refresh()`。
+- [ ] 继续将 signal 接续后的 scene tree apply 和 HUD apply 顺序收敛，进一步缩短 `GameApp`。
 - [x] 保留当前 action presentation 行为，不在同一阶段重做动效。
 
 验收：

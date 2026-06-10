@@ -184,6 +184,15 @@ func mark_final_refresh_applied(pending_refresh: Dictionary, trigger: String) ->
 	return applied
 
 
+func complete_final_refresh(pending_refresh: Dictionary, refresh_result: Dictionary, trigger: String) -> Dictionary:
+	var applied: Dictionary = mark_final_refresh_applied(pending_refresh, trigger)
+	return {
+		"applied": applied,
+		"refresh_all_panels": bool(refresh_result.get("refresh_all_panels", pending_refresh.get("refresh_all_panels", false))),
+		"prompt": _dictionary_or_empty(refresh_result.get("prompt", pending_refresh.get("prompt", {}))).duplicate(true),
+	}
+
+
 func mark_deferred_ui_applied(pending: Dictionary, trigger: String) -> Dictionary:
 	var applied: Dictionary = pending.duplicate(true)
 	applied["trigger"] = trigger

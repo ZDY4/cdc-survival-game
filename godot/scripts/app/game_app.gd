@@ -2112,9 +2112,9 @@ func _apply_pending_world_action_final_refresh(trigger: String, pending_refresh:
 		_sync_observed_level_to_map()
 	_apply_world_root_snapshot(bool(refresh.get("render_world", true)))
 	_refresh_world_runtime_bindings()
-	world_action_flow_controller.call("mark_final_refresh_applied", pending_refresh, trigger)
-	if bool(refresh.get("refresh_all_panels", false)):
-		refresh_all_panels(_dictionary_or_empty(refresh.get("prompt", {})))
+	var completion: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("complete_final_refresh", pending_refresh, refresh, trigger))
+	if bool(completion.get("refresh_all_panels", false)):
+		refresh_all_panels(_dictionary_or_empty(completion.get("prompt", {})))
 	return true
 
 
