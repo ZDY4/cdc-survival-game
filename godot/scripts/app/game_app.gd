@@ -30,6 +30,7 @@ const SkillActionController = preload("res://scripts/app/controllers/skill_actio
 const WorldPanelActionController = preload("res://scripts/app/controllers/world_panel_action_controller.gd")
 const DialogueActionController = preload("res://scripts/app/controllers/dialogue_action_controller.gd")
 const WaitActionController = preload("res://scripts/app/controllers/wait_action_controller.gd")
+const InteractionActionController = preload("res://scripts/app/controllers/interaction_action_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const HudRoot = preload("res://scripts/ui/hud_root.gd")
@@ -77,6 +78,7 @@ var skill_action_controller: RefCounted = SkillActionController.new()
 var world_panel_action_controller: RefCounted = WorldPanelActionController.new()
 var dialogue_action_controller: RefCounted = DialogueActionController.new()
 var wait_action_controller: RefCounted = WaitActionController.new()
+var interaction_action_controller: RefCounted = InteractionActionController.new()
 var tooltip_layer: Control:
 	get:
 		var controller := _ui_overlay_controller()
@@ -1361,26 +1363,19 @@ func clear_interaction_selection(reason: String = "cleared") -> Dictionary:
 
 
 func execute_primary_interaction() -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var blocked: Dictionary = _player_command_rejection("interact")
-	if not blocked.is_empty():
-		return blocked
-	var executed_target: Dictionary = interaction_controller.selected_target.duplicate(true)
-	var result: Dictionary = interaction_controller.execute_primary_interaction()
-	_apply_interaction_execution_result(result, executed_target)
-	return result
+	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execute_primary", interaction_controller, Callable(self, "_player_command_rejection")))
+	return _apply_interaction_action_operation(operation)
 
 
 func execute_interaction_option(option_id: String) -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var blocked: Dictionary = _player_command_rejection("interact")
-	if not blocked.is_empty():
-		return blocked
-	var executed_target: Dictionary = interaction_controller.selected_target.duplicate(true)
-	var result: Dictionary = interaction_controller.execute_selected_option(option_id)
-	_apply_interaction_execution_result(result, executed_target)
+	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execute_option", interaction_controller, option_id, Callable(self, "_player_command_rejection")))
+	return _apply_interaction_action_operation(operation)
+
+
+func _apply_interaction_action_operation(operation: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if bool(operation.get("apply_result", false)):
+		_apply_interaction_execution_result(result, _dictionary_or_empty(operation.get("executed_target", {})))
 	return result
 
 
