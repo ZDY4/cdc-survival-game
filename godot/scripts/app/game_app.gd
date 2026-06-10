@@ -164,12 +164,6 @@ var runtime_refresh_controller: RefCounted = RuntimeRefreshController.new()
 var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
 var runtime_control_state_controller: RefCounted = RuntimeControlStateController.new()
 var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
-var observe_mode_enabled: bool:
-	get:
-		return bool(runtime_control_state_controller.observe_mode_enabled) if runtime_control_state_controller != null else false
-	set(value):
-		if runtime_control_state_controller != null:
-			runtime_control_state_controller.observe_mode_enabled = value
 var performance_render_sequence: int:
 	get:
 		return int(runtime_performance_tracker.render_sequence) if runtime_performance_tracker != null else 0
@@ -785,11 +779,11 @@ func is_auto_tick_enabled() -> bool:
 
 
 func is_observe_mode_enabled() -> bool:
-	return observe_mode_enabled
+	return bool(runtime_control_state_controller.observe_mode_enabled) if runtime_control_state_controller != null else false
 
 
 func can_issue_player_commands() -> bool:
-	return not observe_mode_enabled and not _world_action_presenter_blocks_input() and _panel_modal_blocker_name().is_empty()
+	return not is_observe_mode_enabled() and not _world_action_presenter_blocks_input() and _panel_modal_blocker_name().is_empty()
 
 
 func toggle_observe_mode() -> Dictionary:
@@ -1059,7 +1053,7 @@ func change_observed_level(direction: int) -> Dictionary:
 
 
 func cycle_focused_actor() -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(runtime_view_state_controller.call("cycle_focused_actor", world_result, simulation, observe_mode_enabled, hud_root != null and hud_root.gameplay_input_blocked()))
+	var result: Dictionary = _dictionary_or_empty(runtime_view_state_controller.call("cycle_focused_actor", world_result, simulation, is_observe_mode_enabled(), hud_root != null and hud_root.gameplay_input_blocked()))
 	if bool(result.get("success", false)):
 		_clear_focus_switch_ui_state()
 		if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
@@ -1069,7 +1063,7 @@ func cycle_focused_actor() -> Dictionary:
 
 
 func focus_actor(actor_id: int) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(runtime_view_state_controller.call("focus_actor", actor_id, world_result, simulation, observe_mode_enabled, hud_root != null and hud_root.gameplay_input_blocked()))
+	var result: Dictionary = _dictionary_or_empty(runtime_view_state_controller.call("focus_actor", actor_id, world_result, simulation, is_observe_mode_enabled(), hud_root != null and hud_root.gameplay_input_blocked()))
 	if bool(result.get("success", false)):
 		_clear_focus_switch_ui_state()
 		if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
@@ -1079,11 +1073,11 @@ func focus_actor(actor_id: int) -> Dictionary:
 
 
 func focused_actor_snapshot() -> Dictionary:
-	return _dictionary_or_empty(runtime_view_state_controller.call("focused_actor_snapshot", world_result, observe_mode_enabled))
+	return _dictionary_or_empty(runtime_view_state_controller.call("focused_actor_snapshot", world_result, is_observe_mode_enabled()))
 
 
 func focused_actor_grid_position() -> Dictionary:
-	return _dictionary_or_empty(runtime_view_state_controller.call("focused_actor_grid_position", world_result, observe_mode_enabled))
+	return _dictionary_or_empty(runtime_view_state_controller.call("focused_actor_grid_position", world_result, is_observe_mode_enabled()))
 
 
 func close_active_dialogue(reason: String = "closed") -> Dictionary:
@@ -1321,7 +1315,7 @@ func press_space_action() -> Dictionary:
 	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call(
 		"press_space_action",
 		has_active_dialogue(),
-		observe_mode_enabled,
+		is_observe_mode_enabled(),
 		Callable(self, "advance_dialogue_without_choice"),
 		Callable(self, "toggle_observe_playback"),
 		Callable(self, "cancel_pending"),
@@ -2181,7 +2175,7 @@ func _player_command_rejection(action: String) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call(
 		"player_command_rejection",
 		action,
-		observe_mode_enabled,
+		is_observe_mode_enabled(),
 		modal_name,
 		_world_action_presenter_blocks_input(),
 		gameplay_input_blocker_snapshot()
@@ -2192,7 +2186,7 @@ func _player_command_rejection(action: String) -> Dictionary:
 
 
 func _observe_command_rejected(action: String) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call("observe_command_rejected", action, observe_mode_enabled))
+	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call("observe_command_rejected", action, is_observe_mode_enabled()))
 	refresh_hud(current_interaction_prompt())
 	return result
 
@@ -2346,11 +2340,11 @@ func _grid_distance(left: Dictionary, right: Dictionary) -> int:
 
 
 func _focused_actor_data() -> Dictionary:
-	return _dictionary_or_empty(runtime_view_state_controller.call("focused_actor_data", world_result, observe_mode_enabled))
+	return _dictionary_or_empty(runtime_view_state_controller.call("focused_actor_data", world_result, is_observe_mode_enabled()))
 
 
 func _focus_actor_candidates() -> Array[Dictionary]:
-	return _array_or_empty(runtime_view_state_controller.call("focus_actor_candidates", world_result, observe_mode_enabled))
+	return _array_or_empty(runtime_view_state_controller.call("focus_actor_candidates", world_result, is_observe_mode_enabled()))
 
 
 func _current_focus_level() -> int:
