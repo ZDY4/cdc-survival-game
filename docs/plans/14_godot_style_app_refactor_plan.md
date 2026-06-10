@@ -50,6 +50,33 @@
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
 
+## `GameApp` facade inventory
+
+本节作为 Phase 7 清理 wrapper / 改名时的对照表。重构期间允许 `GameApp` 暂时保留 smoke、tool 和旧 UI 调用所需的兼容入口，但新增功能不得继续扩大这些入口。
+
+| 类别 | 当前 `GameApp` 入口 | 当前归属 | Phase 7 处置 |
+| --- | --- | --- | --- |
+| 启动与运行时装配 | `_ready()`、`_consume_startup_request()`、`_build_runtime_from_startup_request()` | `RuntimeBootController` + 根节点装配 | 保留在 `GameRoot`，但只做 scene/controller 装配和启动上下文接线。 |
+| 输入入口 | `_input()`、`_unhandled_input()` | `GameInputRouter`，`GameRuntimeInputController` 保留 direct-call smoke fallback | 保留极薄转发；smoke 改为 router 路径后再删除 runtime direct-call fallback。 |
+| HUD 刷新 | `refresh_hud()`、`refresh_all_panels()`、`refresh_*_panel()`、`_refresh_operation_panels()` | `HudRoot` + panel controller | 对外稳定入口可保留少量；内部改为 `hud_root.apply_runtime_snapshot()` / `hud_root.refresh_panels()`，删除直接 panel 字段依赖。 |
+| HUD / UI 状态查询 | `toggle_stage_panel()`、`close_stage_panels()`、`any_stage_panel_open()`、`is_settings_open()`、`modal_stack_snapshot()`、`menu_state_snapshot()`、`ui_theme_snapshot()`、`context_menu_snapshot()` | `HudRoot` + `UiBlockerStateController` | smoke 仍使用的查询保留为 facade；普通 UI 调用迁到 `HudRoot` 后删除重复 wrapper。 |
+| tooltip / drag overlay | `hover_tooltip_snapshot()`、`drag_state_snapshot()`、`ui_layer_stack_snapshot()`、`tooltip_render_snapshot()`、`drag_preview_render_snapshot()` 和旧 overlay 属性 | `HudRoot` + overlay/snapshot controllers | 旧属性只为兼容；Phase 7 优先删除直接读写 overlay 节点的 public 属性。 |
+| debug console / panel | `toggle_debug_console()`、`close_debug_console()`、`submit_debug_console_command()`、`toggle_debug_panel()`、`debug_panel_snapshot()`、`cycle_debug_overlay_mode()` | `HudRoot` + `DebugRuntimeController` | `submit_debug_console_command()` 可作为 tool 稳定入口保留；UI 控件开关改由 `HudRoot` 信号或窄接口发起。 |
+| observe / auto tick / info panel | `toggle_auto_tick()`、`toggle_observe_mode()`、`set_observe_mode()`、`toggle_observe_playback()`、`cycle_observe_speed()`、`cycle_info_panel()`、`runtime_control_snapshot()` | `RuntimeControlStateController`，部分行为仍在 `GameApp` 串联 | 收敛到 debug/runtime control controller；根节点只转发状态变更和触发刷新。 |
+| 视图与 focus | `current_map_level()`、`change_observed_level()`、`cycle_focused_actor()`、`focus_actor()`、`focused_actor_snapshot()` | `RuntimeViewStateController` + `WorldRoot` | 作为 debug/tool facade 暂保留；UI 和输入调用改为 router/controller 后删除重复实现。 |
+| 交互选择与 pending | `select_interaction_target()`、`select_interaction_node()`、`clear_interaction_selection()`、`select_grid_target()`、`cancel_pending()`、`current_interaction_prompt()` | `InteractionActionController` + `PlayerInteractionController` | smoke 兼容入口暂保留；实际选择/取消逻辑继续下沉到 interaction controller。 |
+| 玩家动作 facade | 容器、背包、交易、角色、技能、制作、任务、对话、等待相关 public 方法 | 各 `*_action_controller.gd` | public facade 可保留到 smoke 改造完成；后续按 UI 面板 signal 直接调用 action controller，删除根脚本中重复分发。 |
+| 世界刷新与表现 | `_rebuild_world_after_runtime_change()`、`_apply_world_root_snapshot()`、`_render_world()`、`_refresh_fog_overlay()`、`_refresh_debug_overlay()` | `RuntimeRefreshController` + `WorldRoot` | 根节点只保留一次性 orchestration；具体 apply/render/fog/debug overlay 入口迁到 `WorldRoot` / refresh controller。 |
+| world action presentation | `finish_world_action_presentations()`、`_present_world_action()`、`_apply_pending_world_action_final_refresh()`、queue/pending snapshot | `WorldActionFlowController` | 改为 signal 通知 refresh controller；根节点只连接信号，不直接维护 presentation 状态。 |
+| audio feedback | `play_ui_audio_feedback()`、`play_spatial_audio_feedback()`、`audio_feedback_snapshot()` | `AudioFeedbackController` | 保留 public facade 作为 UI/tool 稳定入口；实现继续保持独立 controller。 |
+| debug / audit snapshots | `player_command_authority_audit_snapshot()`、`ai_debug_snapshot()`、`runtime_world_time_snapshot()`、`runtime_performance_snapshot()`、hover/selection snapshot | 独立 snapshot builder / tracker | 可作为 debug tool 稳定入口保留；避免再把新 debug 数据模型写进根脚本。 |
+
+删除优先级：
+
+1. 先删除只暴露旧节点引用的兼容属性，例如 tooltip / drag overlay 直接节点属性。
+2. 再删除 UI 面板内部刷新 wrapper，让 UI 通过 `HudRoot` 或 panel controller 自己处理。
+3. 最后处理 smoke / tool 仍调用的 public action facade；删除前必须同步更新 smoke 入口。
+
 ## 当前问题
 
 当前 `godot/scripts/app/game_app.gd` 承担了过多职责：
@@ -249,7 +276,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 固定当前可用 smoke 清单，至少覆盖 Godot check-only、UI toggle 和 player interaction。
 - [x] 为 `GameApp` 当前对外 facade 做滚动 inventory，保留 tool / smoke 兼容入口。
 - [x] 新增重构期间临时约束：新增功能不得继续扩大 `game_app.gd`。
-- [ ] 补齐完整 facade inventory 文档，明确哪些入口可以在 Phase 7 删除或重命名。
+- [x] 补齐完整 facade inventory 文档，明确哪些入口可以在 Phase 7 删除或重命名。
 
 验收：
 
