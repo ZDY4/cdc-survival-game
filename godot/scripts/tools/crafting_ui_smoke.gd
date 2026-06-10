@@ -635,14 +635,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("multi-entry queue should retain remaining entry while first craft is pending: %s" % _queue_line(game_root))
 	_assert_craft_queue_snapshot(errors, game_root, 1, 1, 1, true, "multi-entry cross-turn queue pending first")
 	_assert_queue_feedback(errors, game_root, "confirm", true, 0, 1, "multi-entry cross-turn queue pending first")
-	var queue_wait: Dictionary = game_root.simulation.submit_player_command({
-		"kind": "wait",
-		"actor_id": 1,
-		"topology": _dictionary_or_empty(game_root.world_result.get("map", {})),
-	})
-	game_root.call("_continue_crafting_queue_after_wait", queue_wait)
-	game_root.refresh_inventory_panel()
-	game_root.refresh_crafting_panel()
+	var queue_wait: Dictionary = game_root.submit_wait_action()
+	if not bool(queue_wait.get("success", false)):
+		errors.append("multi-entry queue wait should complete through GameApp facade: %s" % queue_wait)
 	await process_frame
 	if not _pending_crafting_line(game_root).contains("正在制作 无"):
 		errors.append("multi-entry queue should clear pending after wait continuation: %s" % _pending_crafting_line(game_root))
