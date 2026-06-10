@@ -136,6 +136,37 @@ func craft_batch(simulation: RefCounted, progression_rules: RefCounted, actor_id
 	}
 
 
+func submit_deconstruct(simulation: RefCounted, actor: RefCounted, command: Dictionary, items: Dictionary) -> Dictionary:
+	var item_id: String = str(command.get("item_id", ""))
+	var count: int = max(1, int(command.get("count", 1)))
+	var crafting_context: Dictionary = _dictionary_or_empty(command.get("crafting_context", {}))
+	var requirements: Dictionary = _crafting_service.deconstruct_requirement_check(actor, item_id, items, crafting_context)
+	if not bool(requirements.get("success", false)):
+		return requirements
+	var cost: float = _crafting_service.deconstruct_ap_cost(item_id, items, count, command)
+	if actor.ap < cost:
+		return {
+			"success": false,
+			"reason": "ap_insufficient_deconstruct",
+			"item_id": _crafting_service.normalize_item_id(item_id),
+			"count": count,
+			"required_ap": cost,
+			"available_ap": actor.ap,
+		}
+	var tool_source_check: Dictionary = _crafting_service.deconstruct_tool_consumption_sources_available(simulation, actor, _array_or_empty(requirements.get("tool_consumption", [])), items)
+	if not bool(tool_source_check.get("success", false)):
+		return tool_source_check
+	var result: Dictionary = _crafting_service.deconstruct_actor_item(simulation, actor.actor_id, item_id, count, items)
+	if bool(result.get("success", false)):
+		var consumed_tools: Array[Dictionary] = _crafting_service.consume_deconstruct_tools(simulation, actor, _array_or_empty(requirements.get("tool_consumption", [])))
+		simulation._spend_ap(actor, cost, "deconstruct:%s" % _crafting_service.normalize_item_id(item_id))
+		result["ap_cost"] = cost
+		result["ap_remaining"] = actor.ap
+		result["consumed_tools"] = consumed_tools
+		simulation._attach_consumed_tools_to_last_event("item_deconstructed", consumed_tools)
+	return result
+
+
 func _pending_crafting_payload(actor: RefCounted, recipe_id: String, count: int, recipes: Dictionary, crafting_context: Dictionary, command: Dictionary, required_ap: float, spent_ap: float, previous_progress: float) -> Dictionary:
 	return {
 		"kind": "pending_crafting",
