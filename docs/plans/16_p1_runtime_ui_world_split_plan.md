@@ -138,10 +138,10 @@ godot/scripts/app/controllers/runtime_input/
 
 ## Phase 3: 拆 Attack / Reload / Combat Event presenters
 
-- [ ] 新建 `attack_action_presenter.gd`，迁移攻击反馈、damage label、delivery marker、muzzle flash、projectile trail、shell eject、on-hit effect。
-- [ ] 新建 `reload_action_presenter.gd`，迁移 reload marker / label / metadata。
-- [ ] 新建 `combat_event_presenter.gd`，迁移非直接攻击类 combat event 表现。
-- [ ] 公共 node factory / materials 不重复实现。
+- [x] 新建 `attack_action_presenter.gd`，迁移攻击反馈、damage label、delivery marker、muzzle flash、projectile trail、shell eject、on-hit effect。
+- [x] 新建 `reload_action_presenter.gd`，迁移 reload marker / label / metadata。
+- [x] 新建 `combat_event_presenter.gd`，迁移非直接攻击类 combat event 表现。
+- [x] 公共 node factory / materials 不重复实现。
 
 验收：
 
@@ -149,6 +149,10 @@ godot/scripts/app/controllers/runtime_input/
 - `PlayerInteraction`
 - `SkillsUI`
 - 重点检查 on-hit effect、miss / critical / defeated 文案和 marker metadata。
+
+验证记录：
+
+- 2026-06-11: 通过 GDScript 静态解析；通过 `test-godot-game.ps1 -Scenario Combat`、`PlayerInteraction`、`SkillsUI`。
 
 ## Phase 4: 拆 InteractionActionPresenter
 
