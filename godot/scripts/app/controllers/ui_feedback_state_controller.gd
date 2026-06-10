@@ -1,9 +1,29 @@
 extends RefCounted
 
+var active_trade_target: Dictionary = {}
 var active_trade_feedback: Dictionary = {}
 var active_container_feedback: Dictionary = {}
 var active_character_feedback: Dictionary = {}
 var active_inventory_feedback: Dictionary = {}
+
+
+func apply_interaction_followup(followup: Dictionary) -> Dictionary:
+	var changes := {
+		"container_feedback_reset": false,
+		"trade_target_changed": false,
+		"trade_feedback_reset": false,
+	}
+	if bool(followup.get("reset_container_feedback", false)):
+		active_container_feedback = {}
+		changes["container_feedback_reset"] = true
+	var trade_target: Dictionary = _dictionary_or_empty(followup.get("trade_target", {}))
+	if not trade_target.is_empty():
+		active_trade_target = trade_target.duplicate(true)
+		changes["trade_target_changed"] = true
+	if bool(followup.get("reset_trade_feedback", false)):
+		active_trade_feedback = {}
+		changes["trade_feedback_reset"] = true
+	return changes
 
 
 func record_container_feedback(result: Dictionary, action: String, container_id: String, item_id: String, count: int) -> void:
@@ -47,3 +67,7 @@ func record_character_feedback(result: Dictionary, action: String, slot_id: Stri
 	active_character_feedback["action"] = action
 	active_character_feedback["slot_id"] = str(result.get("slot_id", slot_id))
 	active_character_feedback["item_id"] = str(result.get("item_id", item_id))
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	return value if typeof(value) == TYPE_DICTIONARY else {}

@@ -137,8 +137,13 @@ var last_drag_preview_render_snapshot: Dictionary:
 		var controller := _ui_overlay_controller()
 		if controller != null:
 			controller.last_drag_preview_render_snapshot = value.duplicate(true)
-var active_trade_target: Dictionary = {}
 var ui_feedback_state_controller: RefCounted = UiFeedbackStateController.new()
+var active_trade_target: Dictionary:
+	get:
+		return ui_feedback_state_controller.active_trade_target if ui_feedback_state_controller != null else {}
+	set(value):
+		if ui_feedback_state_controller != null:
+			ui_feedback_state_controller.active_trade_target = value.duplicate(true)
 var active_trade_feedback: Dictionary:
 	get:
 		return ui_feedback_state_controller.active_trade_feedback if ui_feedback_state_controller != null else {}
@@ -2049,7 +2054,7 @@ func _sync_debug_console_schema() -> void:
 
 func _apply_interaction_execution_result(result: Dictionary, executed_target: Dictionary) -> void:
 	var followup: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execution_followup", result, executed_target))
-	_apply_interaction_followup(followup)
+	ui_feedback_state_controller.call("apply_interaction_followup", followup)
 	var stage_panel_to_open := str(followup.get("stage_panel", ""))
 	world_result = interaction_controller.world_result
 	_sync_observed_level_to_map()
@@ -2066,16 +2071,6 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 		refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 	else:
 		refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
-
-
-func _apply_interaction_followup(followup: Dictionary) -> void:
-	if bool(followup.get("reset_container_feedback", false)):
-		active_container_feedback = {}
-	var trade_target: Dictionary = _dictionary_or_empty(followup.get("trade_target", {}))
-	if not trade_target.is_empty():
-		active_trade_target = trade_target.duplicate(true)
-	if bool(followup.get("reset_trade_feedback", false)):
-		active_trade_feedback = {}
 
 
 func _open_stage_panel_from_interaction(panel_id: String) -> void:
