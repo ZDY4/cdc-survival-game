@@ -271,15 +271,20 @@ func execute(simulation: RefCounted, actor: RefCounted, command: Dictionary) -> 
 
 ### Phase 2: 抽 ContainerSessionService
 
-- [ ] 新建 `container_session_service.gd`。
-- [ ] 迁移容器打开/关闭、take/store/take all/store all、容量和权限检查。
-- [ ] `Simulation` 保留 `container_sessions` 状态字典。
-- [ ] 复用 `container_transactions.gd`，不复制交易算法。
+- [x] 新建 `container_session_service.gd`。
+- [x] 迁移容器关闭、take/store/take all/store all facade、容量和权限检查入口。
+- [x] `Simulation` 保留 `container_sessions` 状态字典。
+- [x] 复用 `container_transactions.gd`，不复制交易算法。
 
 验收：
 
 - `ContainerUI`、`InventoryUI`、`PlayerInteraction` smoke 通过。
 - `docs/container_id_policy.md` 中的 container metadata 仍满足。
+
+验证记录：
+
+- 2026-06-11: 通过 `simulation.gd` / `container_session_service.gd` 静态解析；通过 `test-godot-game.ps1 -Scenario ContainerUI`、`InventoryUI`、`PlayerInteraction`、`Save`。
+- 说明：`drop_actor_item()` 暂留在 `EconomyTransactions`，因为它同时生成掉落容器、地图交互目标和 inventory drop 事件，后续应随 InventoryCommandHandler 一起迁移。
 
 ### Phase 3: 抽 TradeService
 

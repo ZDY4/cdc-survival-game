@@ -20,6 +20,7 @@ const ProgressionRunner = preload("res://scripts/core/progression/progression_ru
 const QuestRunner = preload("res://scripts/core/quests/quest_runner.gd")
 const SimulationEvent = preload("res://scripts/core/simulation/simulation_event.gd")
 const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
+const ContainerSessionService = preload("res://scripts/core/simulation/services/container_session_service.gd")
 const DoorService = preload("res://scripts/core/simulation/services/door_service.gd")
 const VisionRunner = preload("res://scripts/core/vision/vision_runner.gd")
 const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
@@ -124,6 +125,7 @@ var _vision_runner := VisionRunner.new()
 var _vision_rules := VisionRules.new()
 var _inventory_entries := InventoryEntries.new()
 var _item_use_runner := ItemUseRunner.new()
+var _container_session_service := ContainerSessionService.new()
 var _door_service := DoorService.new()
 
 
@@ -482,23 +484,23 @@ func confirm_trade_cart(actor_id: int, shop_id: String, entries: Array, item_lib
 
 
 func take_item_from_container(actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}, stack_index: int = 0) -> Dictionary:
-	return _economy_transactions.take_item_from_container(self, actor_id, container_id, item_id, count, item_library, stack_index)
+	return _container_session_service.take_item(self, actor_id, container_id, item_id, count, item_library, stack_index)
 
 
 func take_money_from_container(actor_id: int, container_id: String, count: int = -1) -> Dictionary:
-	return _economy_transactions.take_money_from_container(self, actor_id, container_id, count)
+	return _container_session_service.take_money(self, actor_id, container_id, count)
 
 
 func take_all_from_container(actor_id: int, container_id: String, item_library: Dictionary = {}, include_money: bool = true) -> Dictionary:
-	return _economy_transactions.take_all_from_container(self, actor_id, container_id, item_library, include_money)
+	return _container_session_service.take_all(self, actor_id, container_id, item_library, include_money)
 
 
 func store_item_in_container(actor_id: int, container_id: String, item_id: String, count: int, item_library: Dictionary = {}, stack_index: int = 0) -> Dictionary:
-	return _economy_transactions.store_item_in_container(self, actor_id, container_id, item_id, count, item_library, stack_index)
+	return _container_session_service.store_item(self, actor_id, container_id, item_id, count, item_library, stack_index)
 
 
 func store_all_in_container(actor_id: int, container_id: String, item_library: Dictionary = {}) -> Dictionary:
-	return _economy_transactions.store_all_in_container(self, actor_id, container_id, item_library)
+	return _container_session_service.store_all(self, actor_id, container_id, item_library)
 
 
 func drop_actor_item(actor_id: int, item_id: String, count: int, item_library: Dictionary = {}) -> Dictionary:
@@ -592,19 +594,7 @@ func close_dialogue(actor_id: int, reason: String = "closed") -> Dictionary:
 
 
 func close_container(actor_id: int, reason: String = "closed") -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "actor_missing"}
-	var container_id := str(actor.active_container_id)
-	if container_id.is_empty():
-		return {"success": false, "reason": "container_inactive"}
-	actor.active_container_id = ""
-	_emit("container_closed", {
-		"actor_id": actor_id,
-		"container_id": container_id,
-		"reason": reason,
-	})
-	return {"success": true, "container_id": container_id}
+	return _container_session_service.close(self, actor_id, reason)
 
 
 func query_interaction_options(actor_id: int, target: Dictionary) -> Dictionary:
