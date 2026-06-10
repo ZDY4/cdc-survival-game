@@ -345,7 +345,7 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] tooltip render 和 drag preview render controller 已由 `HudRoot` 持有，`GameApp` 的旧 overlay 属性和 render 方法只作为 smoke / tool 兼容 facade。
 - [x] action operation 的面板刷新顺序已统一到 `HudRoot.refresh_operation_panels()`，`GameApp._refresh_operation_panels()` 只保留兼容转发。
 - [x] `refresh_all_panels()` 已改为保留 trade / container session 关闭保护后调用 `HudRoot.refresh_all()`。
-- [ ] 将 `GameApp` 中剩余兼容 panel 引用等代码继续替换为 `hud_root.apply_runtime_snapshot()`、`hud_root.toggle_*()` 等窄接口。
+- [x] `GameApp` 内部运行时路径已不再直接操作兼容 panel 字段；`hud` / `*_panel` 字段仅由 `_sync_panel_refs_from_hud_root()` 同步，作为 smoke / tool 兼容引用保留。
 - [ ] 将 observe 分支和实际世界刷新调用等剩余玩家动作 facade 继续从 `GameApp` 移出。
 - [x] 将 panel blocker / active modal 状态通过 `hud_root.input_blocker_snapshot()` / `gameplay_input_blocker_snapshot()` 暴露；debug console blocker 由 `HudRoot` 暴露，world action blocker 仍由 `GameApp` 做跨层合成。
 
