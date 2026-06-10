@@ -1900,11 +1900,13 @@ func _apply_existing_runtime_world_result(next_world_result: Dictionary, source:
 
 
 func _accept_runtime_refresh_result(refresh: Dictionary, fallback_error: String) -> bool:
-	world_result = _dictionary_or_empty(refresh.get("world_result", {}))
-	if not bool(refresh.get("ok", false)):
-		push_error(str(refresh.get("error", refresh.get("reason", fallback_error))))
+	var accepted: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("accept_refresh_result", refresh, fallback_error))
+	world_result = _dictionary_or_empty(accepted.get("world_result", {}))
+	if not bool(accepted.get("ok", false)):
+		push_error(str(accepted.get("error_message", fallback_error)))
 		return false
-	_sync_observed_level_to_map()
+	if bool(accepted.get("sync_observed_level", false)):
+		_sync_observed_level_to_map()
 	return true
 
 

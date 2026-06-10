@@ -95,6 +95,29 @@ func resolve_pending_final_world_result(simulation: RefCounted, pending_refresh:
 	}
 
 
+func accept_refresh_result(refresh: Dictionary, fallback_error: String = "world refresh failed") -> Dictionary:
+	var next_world_result: Dictionary = _dictionary_or_empty(refresh.get("world_result", {}))
+	var ok := bool(refresh.get("ok", false))
+	return {
+		"ok": ok,
+		"world_result": next_world_result,
+		"source": str(refresh.get("source", "")),
+		"reason": str(refresh.get("reason", "")),
+		"error_message": "" if ok else refresh_error_message(refresh, fallback_error),
+		"sync_observed_level": ok,
+	}
+
+
+func refresh_error_message(refresh: Dictionary, fallback_error: String = "world refresh failed") -> String:
+	var error := str(refresh.get("error", "")).strip_edges()
+	if not error.is_empty():
+		return error
+	var reason := str(refresh.get("reason", "")).strip_edges()
+	if not reason.is_empty():
+		return reason
+	return fallback_error
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
