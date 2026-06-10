@@ -33,7 +33,7 @@ func toggle_auto_tick(ui_blocked: bool) -> Dictionary:
 		return {"success": false, "reason": "ui_blocked", "enabled": auto_tick_enabled}
 	auto_tick_enabled = not auto_tick_enabled
 	auto_tick_elapsed_sec = 0.0
-	return {"success": true, "enabled": auto_tick_enabled}
+	return _with_hud_refresh({"success": true, "enabled": auto_tick_enabled})
 
 
 func set_observe_mode(enabled: bool, ui_blocked: bool) -> Dictionary:
@@ -48,6 +48,7 @@ func set_observe_mode(enabled: bool, ui_blocked: bool) -> Dictionary:
 		"observe_mode": observe_mode_enabled,
 		"observe_playback": observe_playback_enabled(),
 		"observe_speed": observe_speed_id,
+		"refresh_hud": true,
 	}
 
 
@@ -63,6 +64,7 @@ func toggle_observe_playback(ui_blocked: bool) -> Dictionary:
 		"observe_playback": observe_playback_enabled(),
 		"auto_tick": auto_tick_enabled,
 		"observe_speed": observe_speed_id,
+		"refresh_hud": true,
 	}
 
 
@@ -86,6 +88,7 @@ func set_observe_speed(speed_id: String) -> Dictionary:
 		"success": true,
 		"observe_speed": observe_speed_id,
 		"interval_sec": auto_tick_interval_sec(),
+		"refresh_hud": true,
 	}
 
 
@@ -100,6 +103,18 @@ func cycle_info_panel(direction: int) -> Dictionary:
 		"title": page.get("title", ""),
 		"index": active_info_panel_index,
 		"count": info_panel_pages.size(),
+		"refresh_hud": true,
+		"hud_audio": {
+			"event_kind": "ui_option_selected",
+			"control_name": "InfoPanelShortcut",
+			"control_kind": "keyboard_shortcut",
+			"action": "cycle_info_panel",
+			"payload": {
+				"value": str(page.get("id", "")),
+				"count": info_panel_pages.size(),
+				"option_index": active_info_panel_index,
+			},
+		},
 	}
 
 
@@ -163,3 +178,8 @@ func auto_tick_interval_sec() -> float:
 	if not observe_mode_enabled:
 		return AUTO_TICK_INTERVAL_SEC
 	return maxf(0.01, AUTO_TICK_INTERVAL_SEC / observe_speed_multiplier())
+
+
+func _with_hud_refresh(result: Dictionary) -> Dictionary:
+	result["refresh_hud"] = true
+	return result

@@ -803,9 +803,7 @@ func toggle_auto_tick() -> Dictionary:
 	if has_active_dialogue() or gameplay_input_blocked_by_ui():
 		return runtime_control_state_controller.call("toggle_auto_tick", true)
 	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("toggle_auto_tick", false))
-	if bool(result.get("success", false)):
-		refresh_hud(current_interaction_prompt())
-	return result
+	return _apply_runtime_control_result(result)
 
 
 func is_auto_tick_enabled() -> bool:
@@ -826,43 +824,43 @@ func toggle_observe_mode() -> Dictionary:
 
 func set_observe_mode(enabled: bool) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("set_observe_mode", enabled, gameplay_input_blocked_by_ui()))
-	if bool(result.get("success", false)):
-		refresh_hud(current_interaction_prompt())
-	return result
+	return _apply_runtime_control_result(result)
 
 
 func toggle_observe_playback() -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("toggle_observe_playback", has_active_dialogue() or gameplay_input_blocked_by_ui()))
-	if bool(result.get("success", false)):
-		refresh_hud(current_interaction_prompt())
-	return result
+	return _apply_runtime_control_result(result)
 
 
 func cycle_observe_speed() -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("cycle_observe_speed"))
-	if bool(result.get("success", false)):
-		refresh_hud(current_interaction_prompt())
-	return result
+	return _apply_runtime_control_result(result)
 
 
 func set_observe_speed(speed_id: String) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("set_observe_speed", speed_id))
-	if bool(result.get("success", false)):
-		refresh_hud(current_interaction_prompt())
-	return result
+	return _apply_runtime_control_result(result)
 
 
 func cycle_info_panel(direction: int) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("cycle_info_panel", direction))
+	return _apply_runtime_control_result(result)
+
+
+func _apply_runtime_control_result(result: Dictionary) -> Dictionary:
 	if not bool(result.get("success", false)):
 		return result
-	refresh_hud(current_interaction_prompt())
-	var page := current_info_panel_page()
-	_play_hud_shortcut_audio("ui_option_selected", "InfoPanelShortcut", "keyboard_shortcut", "cycle_info_panel", {
-		"value": str(page.get("id", "")),
-		"count": int(result.get("count", info_panel_pages.size())),
-		"option_index": int(result.get("index", active_info_panel_index)),
-	})
+	if bool(result.get("refresh_hud", false)):
+		refresh_hud(current_interaction_prompt())
+	var audio: Dictionary = _dictionary_or_empty(result.get("hud_audio", {}))
+	if not audio.is_empty():
+		_play_hud_shortcut_audio(
+			str(audio.get("event_kind", "")),
+			str(audio.get("control_name", "")),
+			str(audio.get("control_kind", "")),
+			str(audio.get("action", "")),
+			_dictionary_or_empty(audio.get("payload", {}))
+		)
 	return result
 
 

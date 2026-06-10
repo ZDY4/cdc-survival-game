@@ -25,6 +25,7 @@
 - world action presenter 完成后通过 `WorldActionFlowController.final_refresh_ready` / `deferred_ui_ready` signal 通知 `GameApp` 执行最终刷新和 UI 接续。
 - 运行时性能统计和 render count fallback 汇总已抽到 `godot/scripts/app/controllers/runtime_performance_tracker.gd`。
 - observe mode、auto tick 和 info panel 状态已抽到 `godot/scripts/app/controllers/runtime_control_state_controller.gd`。
+- observe mode、auto tick 和 info panel 的 HUD 刷新 / HUD 音频意图已由 `RuntimeControlStateController` 输出，`GameApp` 统一消费结果。
 - observe interval snapshot 也已由 `RuntimeControlStateController.runtime_control_snapshot()` 输出，`GameApp` 不再保留 observe speed / interval 私有转发 wrapper。
 - map level、focused actor 和视图导航状态已抽到 `godot/scripts/app/controllers/runtime_view_state_controller.gd`。
 - 玩家命令 authority audit 已抽到 `godot/scripts/app/controllers/player_command_authority_audit.gd`。
@@ -51,7 +52,7 @@
 
 仍需继续推进：
 
-- `godot/scripts/app/game_app.gd` 仍约 2474 行，还保留 tooltip / drag facade、overlay 兼容属性、observe 分支、交互结果 follow-up 应用和实际世界刷新调用等兼容入口。
+- `godot/scripts/app/game_app.gd` 仍约 2445 行，还保留 tooltip / drag facade、overlay 兼容属性、observe/debug facade 串联和实际世界刷新调用等兼容入口。
 - 运行时 UI 还没有完全落成独立 `HudRoot.tscn` scene；当前已通过 `HudRoot` script 包住现有 HUD controller 和 panel controller。
 - `GameApp` 文件名和 main scene 入口尚未收敛为 `GameRoot` 命名；暂不建议先改名，避免破坏 smoke/tool 入口。
 - 下一步优先抽取玩家动作 facade，而不是一次性重命名根脚本。
@@ -298,7 +299,8 @@ godot/scripts/app/controllers/debug_runtime_controller.gd
 - [x] 将 debug console 命令执行和 debug overlay mode 状态迁入 controller。
 - [x] 保留 `debug_console_command_runner.gd` 作为命令 schema / mutation command runner。
 - [x] observe interval snapshot 已收敛到 `RuntimeControlStateController`，并删除 `GameApp` 中无调用方的 observe speed / interval 私有 wrapper。
-- [ ] 继续收敛 observe mode / auto tick / info panel 与 debug runtime 的边界，避免调试状态散在多个 controller 中。
+- [x] observe mode / auto tick / info panel 的 HUD 刷新和 info panel 音频意图已收敛到 `RuntimeControlStateController` 结果中，`GameApp` 通过统一入口消费。
+- [ ] 继续收敛 observe mode / auto tick / info panel 与 debug runtime 的边界，减少 debug command 对 `GameApp` facade 的直接调用。
 - [x] smoke 继续通过 `submit_debug_console_command()` 验证兼容入口。
 
 验收：
