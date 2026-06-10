@@ -1182,17 +1182,9 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 
 
 func close_active_context_menu() -> Dictionary:
-	return _dictionary_or_empty(ui_blocker_state_controller.call("close_active_context_menu", context_menu_snapshot(), _context_menu_owner_panels()))
-
-
-func _context_menu_owner_panels() -> Dictionary:
-	return {
-		"inventory": inventory_panel,
-		"container": container_panel,
-		"trade": trade_panel,
-		"skills": skills_panel,
-		"character": character_panel,
-	}
+	if hud_root == null:
+		return {"success": false, "reason": "hud_root_missing"}
+	return _dictionary_or_empty(hud_root.close_active_context_menu())
 
 
 func _runtime_pending_state_snapshot() -> Dictionary:

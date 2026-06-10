@@ -5,6 +5,7 @@ const UiOverlayRenderController = preload("res://scripts/app/controllers/ui_over
 const TooltipSnapshotController = preload("res://scripts/app/controllers/tooltip_snapshot_controller.gd")
 const DragSnapshotController = preload("res://scripts/app/controllers/drag_snapshot_controller.gd")
 const DragHoverTargetController = preload("res://scripts/app/controllers/drag_hover_target_controller.gd")
+const UiBlockerStateController = preload("res://scripts/app/controllers/ui_blocker_state_controller.gd")
 const ReasonCatalog = preload("res://scripts/ui/snapshots/reason_catalog.gd")
 
 var parent: Node
@@ -13,6 +14,7 @@ var ui_overlay_render_controller: RefCounted = UiOverlayRenderController.new()
 var tooltip_snapshot_controller: RefCounted = TooltipSnapshotController.new()
 var drag_snapshot_controller: RefCounted = DragSnapshotController.new()
 var drag_hover_target_controller: RefCounted = DragHoverTargetController.new()
+var ui_blocker_state_controller: RefCounted = UiBlockerStateController.new()
 var reason_catalog: RefCounted = ReasonCatalog.new()
 
 
@@ -469,6 +471,20 @@ func context_menu_snapshot() -> Dictionary:
 		"count": menus.size(),
 		"top": menus[menus.size() - 1].duplicate(true) if not menus.is_empty() else {},
 		"menus": menus,
+	}
+
+
+func close_active_context_menu() -> Dictionary:
+	return dictionary_or_empty(ui_blocker_state_controller.call("close_active_context_menu", context_menu_snapshot(), context_menu_owner_panels()))
+
+
+func context_menu_owner_panels() -> Dictionary:
+	return {
+		"inventory": panel("inventory"),
+		"container": panel("container"),
+		"trade": panel("trade"),
+		"skills": panel("skills"),
+		"character": panel("character"),
 	}
 
 
