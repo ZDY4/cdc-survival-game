@@ -30,6 +30,7 @@ const PendingActionService = preload("res://scripts/core/simulation/services/pen
 const TradeService = preload("res://scripts/core/simulation/services/trade_service.gd")
 const TurnFlowService = preload("res://scripts/core/simulation/services/turn_flow_service.gd")
 const TurnStateService = preload("res://scripts/core/simulation/services/turn_state_service.gd")
+const WorldTurnService = preload("res://scripts/core/simulation/services/world_turn_service.gd")
 const VisionRunner = preload("res://scripts/core/vision/vision_runner.gd")
 const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
@@ -143,6 +144,7 @@ var _pending_action_service := PendingActionService.new()
 var _trade_service := TradeService.new()
 var _turn_flow_service := TurnFlowService.new()
 var _turn_state_service := TurnStateService.new()
+var _world_turn_service := WorldTurnService.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -2362,81 +2364,15 @@ func _skill_effect_modifiers(modifier_definitions: Dictionary, learned_level: in
 
 
 func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
-	var runtime_topology: Dictionary = _topology_with_runtime_door_states(topology)
-	var results: Array[Dictionary] = []
-	var time_before: Dictionary = world_time.duplicate(true)
-	turn_state["phase"] = "world"
-	_tick_hotbar_cooldowns()
-	_tick_actor_active_effects()
-	var expired_reservations: Array[Dictionary] = _expire_life_planner_reservations()
-	var life_tick_results: Array[Dictionary] = _tick_settlement_life_needs(WORLD_TURN_MINUTES)
-	var background_life_ticks: Array[Dictionary] = _tick_background_settlement_life(life_tick_results, WORLD_TURN_MINUTES, expired_reservations)
-	if bool(combat_state.get("active", false)):
-		_refresh_combat_turn_order("world_turn_started")
-	for actor in _world_turn_actor_order():
-		if actor.kind == "player":
-			continue
-		if not actor.map_id.is_empty() and actor.map_id != active_map_id:
-			continue
-		if actor.hp <= 0.0:
-			continue
-		var background_resync: Dictionary = _sync_online_life_background_action(actor)
-		_open_turn(actor.actor_id, "npc_turn")
-		var turn_open_snapshot := {
-			"ap": actor.ap,
-			"ap_gain": _turn_ap_gain(actor),
-			"ap_max": _turn_ap_max(actor),
-			"affordable_ap_threshold": _affordable_ap_threshold(actor),
-			"combat_active": bool(combat_state.get("active", false)) and actor.in_combat,
-		}
-		var result: Dictionary = _advance_npc_turn(actor, runtime_topology, bool(turn_open_snapshot.get("combat_active", false)))
-		if not background_resync.is_empty():
-			result["life_background_resync"] = background_resync.duplicate(true)
-		result["turn_open"] = turn_open_snapshot
-		result["ap_after_action"] = actor.ap
-		result["turn_close_reason"] = _npc_turn_close_reason(actor, result)
-		result["world_turn_minutes"] = WORLD_TURN_MINUTES
-		result["world_time_before"] = time_before.duplicate(true)
-		result["life_need_tick"] = _life_need_tick_for_actor(life_tick_results, actor.actor_id)
-		result["life_presence"] = _record_life_presence(actor, "online", WORLD_TURN_MINUTES, result["life_need_tick"])
-		results.append(result)
-		_close_turn(actor.actor_id, str(result.get("turn_close_reason", "npc_turn_complete")))
-		result["turn_closed"] = true
-		result["ap_after_close"] = actor.ap
-		if bool(combat_state.get("active", false)):
-			var visibility_result: Dictionary = update_combat_visibility_decay(runtime_topology)
-			if bool(visibility_result.get("combat_exited", false)):
-				break
-	turn_state["round"] = int(turn_state.get("round", 1)) + 1
-	if bool(combat_state.get("active", false)):
-		combat_state["round"] = int(combat_state.get("round", 0)) + 1
-	_advance_world_time(WORLD_TURN_MINUTES)
-	for result in results:
-		var result_data: Dictionary = result
-		result_data["world_time_after"] = world_time.duplicate(true)
-	_emit("world_time_advanced", {
-		"before": time_before,
-		"after": world_time.duplicate(true),
-		"minutes": WORLD_TURN_MINUTES,
-		"life_tick_count": life_tick_results.size(),
-		"background_life_tick_count": background_life_ticks.size(),
-		"expired_life_reservation_count": expired_reservations.size(),
-	})
-	return results
+	return _world_turn_service.advance(self, topology)
 
 
 func _advance_world_time(minutes: int) -> void:
-	var current_day: String = str(world_time.get("day", "monday"))
-	var current_minute: int = posmod(int(world_time.get("minute_of_day", 540)), 1440)
-	var total_minutes: int = current_minute + max(0, minutes)
-	var day_offset: int = int(total_minutes / 1440)
-	world_time["minute_of_day"] = posmod(total_minutes, 1440)
-	world_time["day"] = WORLD_DAYS[(_world_day_index(current_day) + day_offset) % WORLD_DAYS.size()]
+	_world_turn_service.advance_world_time(self, minutes)
 
 
 func _world_day_index(day: String) -> int:
-	var index: int = WORLD_DAYS.find(day)
-	return index if index >= 0 else 0
+	return _world_turn_service.world_day_index(self, day)
 
 
 func _world_time_total_minutes(value: Dictionary) -> int:
@@ -3072,26 +3008,7 @@ func _apply_life_need_delta(actor: RefCounted, deltas: Dictionary, source: Strin
 
 
 func _world_turn_actor_order() -> Array:
-	var registry_order: Array = actor_registry.actors()
-	if not bool(combat_state.get("active", false)):
-		return registry_order
-	var by_id: Dictionary = {}
-	for actor in registry_order:
-		by_id[int(actor.actor_id)] = actor
-	var output: Array = []
-	var seen: Dictionary = {}
-	for value in _array_or_empty(combat_state.get("turn_order", [])):
-		var actor_id := int(value)
-		var actor: RefCounted = by_id.get(actor_id)
-		if actor == null or seen.has(actor_id):
-			continue
-		output.append(actor)
-		seen[actor_id] = true
-	for actor in registry_order:
-		if seen.has(int(actor.actor_id)):
-			continue
-		output.append(actor)
-	return output
+	return _world_turn_service.world_turn_actor_order(self)
 
 
 func _tick_hotbar_cooldowns() -> void:
