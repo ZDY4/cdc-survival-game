@@ -1,93 +1,61 @@
-# Godot 待迁移功能总清单
+# Godot 剩余迁移清单
 
-本文是对照 `G:\Projects\cdc_survival_game_bevy_reference` 的 `bevy-pre-strip` 参考工程后，当前 Godot 主线仍待迁移、待补齐或待等价验证的功能总账。目标不是重新引入 Rust / Bevy，而是把旧实现中的逻辑、交互、资产、表现、工具和验证口径逐项转译到 `Godot 4.6.3 + GDScript`。
+本文只保留仍未完成、待补齐或待等价复核的迁移事项。已完成的实现记录、smoke 覆盖说明和阶段流水账不再放在这里维护。
 
 ## 使用边界
 
-- 当前主线仍以 `godot/` 为 Godot 工程目录，命令行入口固定为 `D:\godot\godot.cmd`。
-- 地图权威是 `godot/scenes/maps/*.tscn`；`data/maps/*.json` 只作为迁移期兼容备份，不再作为新地图开发入口。
-- 非地图内容权威仍是 `data/` JSON，Godot 侧统一通过 `godot/scripts/data` 读取、校验、查询、格式化和安全写回。
+- 当前工程运行时和开发主线为 `Godot 4.6.3 + GDScript`。
+- Godot 工程目录为 `godot/`，命令行入口固定为 `D:\godot\godot.cmd`。
+- 地图权威是 `godot/scenes/maps/*.tscn`；`data/maps/*.json` 只作为迁移期兼容备份和等价复核来源。
+- 非地图内容权威仍是 `data/` JSON，由 `godot/scripts/data` 统一读取、校验、查询、格式化和安全写回。
 - 玩法结果必须落在 `godot/scripts/core` 或明确的 core service；UI 和 world 只能提交输入、展示 snapshot 或调用数据服务。
-- 参考工程只作为行为和资产组织的只读来源；不得把 Rust、Cargo、Bevy、WGSL 运行时代码重新放回当前主线。
+- 旧参考工程只作为行为、参数和资源组织的只读来源，不把 Rust、Cargo、Bevy、WGSL 运行时代码重新放回当前主线。
 
-## 文档权威
-
-本文件是迁移剩余工作的唯一总账。旧的重复清单、阶段交接和审计文档已经合并到本文件，不再单独维护。后续更新迁移范围、状态和验收口径时，优先更新本文。
-
-仍保留并配合本文使用的文档：
+## 文档关系
 
 - `docs/plans/10_godot_migration_architecture.md`：Godot 迁移架构、目录职责和阶段边界。
 - `docs/3d_asset_format_policy.md`：正式 3D 资产格式和导入规则。
 - `docs/agent-workflows/*.md`：agent 工具、内容编辑、地图复核和 smoke / validate 工作流。
-- `docs/narrative/**`：剧情、角色、地点、物品和世界观内容来源，不作为迁移计划清单。
-- `docs/plans/09_mainline_followup_polish.md`：主线剧情打磨待办，属于内容制作参考，不是运行时迁移总账。
+- `docs/narrative/**`：剧情、角色、地点、物品和世界观内容来源。
+- `docs/plans/09_mainline_followup_polish.md`：主线剧情打磨待办，不作为运行时迁移总账。
 
-已被本文吸收的旧文档类型：
+## 0. 内容、Schema 和来源
 
-- 旧 first milestone / parity 交接清单。
-- 旧 full migration master todo / backlog。
-- 旧 feature、asset、presentation 审计清单。
-- 旧 pending migration feature checklist。
+### 0.1 来源覆盖
 
-## 当前已恢复但需继续等价的范围
+- [ ] 每个迁移项都要能追溯旧来源、Godot 落点和验收方式，避免只迁显眼玩法而漏掉工具、表现、诊断或数据默认值。
+- [ ] `content_tools` 的 summarize、references、format、diff-summary、changed、validate、content edit CLI 行为需要继续逐项对齐。
+- [ ] `game_core` 的 Simulation、turn / AP、movement、interaction、combat、economy、quest、dialogue、skills、crafting、AI、GOAP、overworld、vision、building、survival 规则需要持续做等价复核。
+- [ ] `game_data` 的内容 schema、默认值、校验、引用、预览、编辑服务、原子写回、map schema、appearance、AI、dialogue、quest、recipe、skill 需要持续补齐。
+- [ ] `game_bevy` 的相机、tile / world render、门表现、fog、UI snapshot、picking、asset path、debug 视觉、NPC life sync 只转译为 Godot 实现。
 
-- 运行时已有 `Simulation.submit_player_command()`，覆盖 `move`、`wait`、`interact`、`attack`、`use_skill`、`craft`、`inventory_action`，但旧 Rust 的目标策略、反馈文本、失败原因和复杂 UI 状态还未全部等价。
-- AP / 回合已有玩家行动后自动推进回合、pending movement / pending interaction 跨回合恢复，但战斗内行动顺序、取消策略、自动等待和长按结束回合仍需细化。
-- 玩家可移动、点击地面、点击目标自动接近、拾取、开容器、对话、交易、攻击、学习技能、绑定热栏第一槽、制作和交付任务，但许多细节仍是第一版。
-- 地图已经迁到 Godot `.tscn`，旧 glTF 资产也已进入 `godot/assets`，但地图对象和资产实例化、遮挡、门、楼层、材质、碰撞和视觉反馈仍未完全等价。
+### 0.2 内容数据和 Schema
 
-## 0. 内容、schema 和来源覆盖
-
-### 0.1 旧来源覆盖
-
-每个迁移项都要明确旧来源、Godot 落点和验收方式。不能只迁显眼玩法，漏掉工具、表现、诊断或数据默认值。
-
-- `bevy_debug_viewer`：启动、新游戏、相机、输入、picking、交互、移动、战斗、NPC runtime、HUD、hotbar、container、trade、debug panel、info panel、console、fog、world render 和测试辅助。
-- `content_tools`：summary、references、format、diff-summary、changed、validate、content edit CLI 行为。
-- `bevy_server`：旧 server 入口不迁；若后续需要自动化协议，只转译 snapshot、request / response、错误 payload 和 reporting 语义到 Godot headless / tool。
-- `game_core`：Simulation、turn / AP、movement、interaction、combat、economy、quest、dialogue、skills、crafting、AI、GOAP、overworld、vision、building、survival 规则。
-- `game_data`：内容 schema、默认值、校验、引用、预览、编辑服务、原子写回、map schema、appearance、AI、dialogue、quest、recipe、skill。
-- `game_bevy`：相机、tile / world render、门表现、fog、UI snapshot、picking、asset path、debug 视觉、NPC life sync。
-- `game_protocol`：只作为 Godot headless / tool 接口参考，不恢复 Rust protocol runtime。
-
-参考：`G:\Projects\cdc_survival_game_bevy_reference\rust\apps\**`、`G:\Projects\cdc_survival_game_bevy_reference\rust\crates\**`。
-落点：`godot/scripts/**`、`godot/scenes/**`、`godot/assets/**`、`tools/agent/**`。
-验收：对应 `tools/agent/test-godot-game.ps1 -Scenario <Scenario>`、content / editor smoke、`cmd /c run_godot_validate.bat`。
-
-### 0.2 内容数据和 schema
-
-- [~] 内容 registry：加载 `characters`、`items`、`recipes`、`quests`、`skills`、`skill_trees`、`dialogues`、`dialogue_rules`、`shops`、`settlements`、`ai`、`overworld`、`world_tiles`、`appearance`。
-- [~] 内容摘要：每个 domain 输出 id、display name、路径、引用摘要和校验状态。
-- [~] 引用反查：物品被配方、任务、容器、商店、角色 loadout、地图拾取引用；角色被对话、商店、任务、地图、AI profile 引用；地图对象引用 asset、world tile、container、transition 和 NPC。
-- [~] 安全写回：格式化 dry-run 已迁移到 `content_cli format --dry-run` / `godot-content.ps1 -DryRun`，支持单记录和 `changed` 批量预览，输出 `dry_run`、单记录 `changed`、批量 `would_rewrite_files` 且不落盘；批量修复入口 `fix changed` 已会复用格式化修复，并对 changed 内容执行安全 schema migration 写回，dry-run 输出 `would_schema_migrate_files`，真实执行输出 `schema_migrated_files`；schema migration 诊断已输出迁移前后 roundtrip diff 摘要，包括新增 / 移除 / 变更字段计数和字段名，CLI 会打印 `schema_roundtrip_diff` / `schema_roundtrip_added_fields`；`ContentWriteService` 已改为同目录临时文件写入后替换目标，并向 edit service 和 schema migration writer 透传 `write_mode`，smoke 覆盖 dry-run 不落盘、临时文件清理、schema_version 写回、写回失败注入时原文件保留和临时文件清理；diff summary 和格式化失败不落盘已有第一版。待补更多自动修复种类和外部 IO 异常 fixture。
-- [~] JSON path 定位：`ContentRecordValidator` 会为校验 issue 统一补 `json_path`、`relative_path`、`location`、domain、id、`line`、`column` 和 `line_column`；CLI validation 输出会显示 `data/...json:line:column:$.field[0].path` 定位，`JsonSourceLocator` 支持 quoted bracket key，用于定位带点、斜杠和空格的复杂字段名；`ContentCLI` smoke 已覆盖普通字段路径、数组索引路径、真实 JSON 行列号和 quoted key 复杂路径。待补批量 validate changed 的更多坏例 fixture 和 editor dock 定位跳转。
-- [~] `changed` / `diff-summary` 等旧 content_tools 行为：`format changed`、`fix changed`、`diff-summary --path` 和 `diff-summary changed` 已有第一版；`validate changed` 已改为基于 Git status 的受支持内容路径筛选、去重、缺失记录报告和 no-supported-changes 状态，并能区分 modified / added / untracked / deleted / renamed 内容文件，added / modified / untracked 未加载文件会分别输出 `added_content_file_not_loaded` / `modified_content_file_not_loaded` / `untracked_content_file_not_loaded`，deleted 会输出 `content_file_deleted`，renamed 会保留 source path 并输出 `renamed_content_file_not_loaded`；批量变更摘要第一版已迁移，CLI 会输出 `change_status_summary`，工具 helper 会返回 total、全局 status counts 和按 domain 的 status counts，递归 domain 如 `appearance` 也已覆盖；批量 diff 摘要会输出受支持内容文件逐文件增删行 / hunk 和总计；已由 `ContentCLI` smoke 与真实 `godot-content.ps1 validate changed` / `diff-summary changed` 覆盖。待补旧工具全部输出字段兼容和更多真实仓库 deleted / renamed fixture。
-- [~] 跨 domain 引用校验：item、recipe、quest、dialogue、dialogue rule、skill、character、settlement、map、overworld、shop、world tile、appearance profile、AI behavior / profile、legacy json effects、appearance asset path 和物品 appearance `visual_asset` -> Godot glTF 已有第一版覆盖，地图 visual prototype -> world tile prototype -> Godot glTF 文件存在性校验第一版已迁移，地图建筑 wall / floor tile set 派生到 Godot glTF 的资源清单第一版已迁移，`references shop <id>` 可反查店主和交易对话，`references dialogue_rule <id>` 可反查角色绑定和默认 / 变体对话，`references ai <id>` 可反查角色 life 绑定和 AI 集合内引用，`references json <id>` 可反查物品 effect 使用点，`references world_tile <id>` 可反查地图和 overworld tile 使用点，`references appearance <id>` 可反查角色外观绑定；待补更多 legacy json 字段和更广的地图 asset id 映射。
-- [~] 内容版本和 schema migration：新增 `ContentSchemaMigration` 第一版，`validate` 会输出 `schema_migration` 诊断并在 CLI 显示 schema status；当前无版本内容会归类为 `legacy_missing_version`，补充 `schema_version` 缺省、deprecated `schemaVersion` / `version` 检测、迁移日志、roundtrip 安全摘要和 roundtrip 字段 diff；`fix changed` 已能在 dry-run / 真实执行中对 changed 内容写回当前 `schema_version`，并会把通用旧 schema 字段 `schemaVersion` / `version` 迁成 `schema_version` 后移除旧字段；已由 `ContentCLI` smoke 与真实 `godot-content.ps1 validate item 1006` 覆盖。待补按 domain 的业务旧字段迁移器、JSON 行列号和迁移日志持久化。
-
-参考：`content_tools/src/app/**`、`game_data/src/content_registry.rs`、`game_data/src/file_backed.rs`、`game_data/src/content.rs`。
-落点：`data/**`、`godot/scripts/data/**`、`godot/scripts/tools/content_*.gd`、`tools/agent/godot-content.ps1`。
-验收：content CLI smoke、data validator、`cmd /c run_godot_validate.bat`。
+- [ ] 内容安全写回补更多自动修复种类和外部 IO 异常 fixture。
+- [ ] JSON path 定位补批量 `validate changed` 的更多坏例 fixture 和 editor dock 定位跳转。
+- [ ] `changed` / `diff-summary` 补旧工具全部输出字段兼容和更多真实仓库 deleted / renamed fixture。
+- [ ] 跨 domain 引用校验补更多 legacy JSON 字段和更广的地图 asset id 映射。
+- [ ] Schema migration 补按 domain 的业务旧字段迁移器、JSON 行列号和迁移日志持久化。
+- [ ] `data/json` 下 ammo、attribute、balance、camp relations、clues、effects、encounters、scavenge、structures、tools、weather 等继续判定是否仍为权威或需要合并进正式 domain。
 
 ### 0.3 内容域账本
 
-- [~] `data/ai`：GOAP facts、行为模块、profile、settlement NPC group、后台日程。
-- [~] `data/appearance`：character model、装备覆盖、socket、fallback 模型、运行时绑定。
-- [~] `data/bootstrap`：初始地图、entry、玩家 actor、初始背包、任务、world flags、相机。
-- [~] `data/characters`：玩家、友方 NPC、中立 NPC、敌人、商人、医生、任务角色、loadout、AI、dialogue / shop 绑定。
-- [~] `data/dialogue_rules` 和 `data/dialogues`：节点、选项、条件、动作、任务接取 / 推进 / 交付、交易打开、fallback、结束。
-- [~] `data/items`：武器、装备、消耗品、材料、工具、任务物品、货币、占位物、模型、效果、价格、重量、堆叠。
-- [~] `data/json`：ammo、attribute、balance、camp relations、clues、effects、encounters、scavenge、structures、tools、weather 等是否仍为权威或需合并；Godot content CLI 已支持 `json` 的 locate / summarize / references / validate / format 第一版，覆盖 effect 记录和 legacy item/tool 引用基础校验。
-- [~] `data/maps`：迁移期 JSON 备份；每张图必须和 `godot/scenes/maps/*.tscn` 对照，不再作为新地图权威。
-- [~] `data/overworld`：地点解锁、旅行、遭遇、入口、返回。
-- [~] `data/quests`：collect / kill / dialogue / turn-in、奖励、失败、互斥、world flag。
-- [~] `data/recipes`：材料、产物、工具、工作台、技能、解锁、XP、队列。
-- [~] `data/settlements`：据点成员、角色、锚点、服务、日程。
-- [~] `data/shops`：库存、资金、价格倍率、权限、补货。
-- [~] `data/skill_trees` 和 `data/skills`：树布局、节点、前置、主动 / 被动、目标策略、效果、hotbar。
-- [~] `data/world_tiles`：surface、wall、prop、container prototype 与 Godot 资产映射。
+- [ ] `data/ai`：GOAP facts、行为模块、profile、settlement NPC group、后台日程。
+- [ ] `data/appearance`：character model、装备覆盖、socket、fallback 模型、运行时绑定。
+- [ ] `data/bootstrap`：初始地图、entry、玩家 actor、初始背包、任务、world flags、相机。
+- [ ] `data/characters`：玩家、友方 NPC、中立 NPC、敌人、商人、医生、任务角色、loadout、AI、dialogue / shop 绑定。
+- [ ] `data/dialogue_rules` 和 `data/dialogues`：节点、选项、条件、动作、任务接取 / 推进 / 交付、交易打开、fallback、结束。
+- [ ] `data/items`：武器、装备、消耗品、材料、工具、任务物品、货币、模型、效果、价格、重量、堆叠。
+- [ ] `data/maps`：只做迁移期备份和 scene 等价复核，不再作为新地图编辑入口。
+- [ ] `data/overworld`：地点解锁、旅行、遭遇、入口、返回。
+- [ ] `data/quests`：collect / kill / dialogue / turn-in、奖励、失败、互斥、world flag。
+- [ ] `data/recipes`：材料、产物、工具、工作台、技能、解锁、XP、队列。
+- [ ] `data/settlements`：据点成员、角色、锚点、服务、日程。
+- [ ] `data/shops`：库存、资金、价格倍率、权限、补货。
+- [ ] `data/skill_trees` 和 `data/skills`：树布局、节点、前置、主动 / 被动、目标策略、效果、hotbar。
+- [ ] `data/world_tiles`：surface、wall、prop、container prototype 与 Godot 资产映射。
 
-### 0.4 地图 scene 逐图核对
+### 0.4 地图 Scene 逐图核对
 
 每张地图都要确认 entry point、actor spawn、map object、footprint、blocking、LOS、door、transition、container、pickup、NPC、敌人、模型资源、比例、旋转、重叠、picking、相机初始视角、fog、任务 / 对话 / 商店锚点。
 
@@ -104,416 +72,312 @@
 - [ ] `survivor_outpost_01_interior.tscn`
 - [ ] `survivor_outpost_01_perimeter.tscn`
 
-### 0.5 资产和表现不可遗漏项
+## 1. 资产和表现
 
-- [~] 字体：`NotoSansCJKsc-Regular.otf` 第一版 UI theme 已迁移，`UIThemeService` 会加载 `res://assets/fonts/NotoSansCJKsc-Regular.otf` 并统一应用到主菜单、HUD、对话、背包、交易、容器、角色、任务、地图、技能、制作和设置等顶层 Control；Godot theme resource 文件化第一版已迁移，默认主题落地为 `res://assets/themes/default_ui_theme.tres`，`UIThemeService` 优先加载该资源并保留代码 fallback，runtime / main menu snapshot 暴露 `theme_resource_path`、`theme_exists` 和 `theme_resource_loaded` 诊断；字号 / 行高 / 按钮状态规范第一版已迁移，Theme 会统一 Label、RichTextLabel、Button、OptionButton、TooltipLabel 等字体大小，基础容器 separation、按钮最小高度，以及 normal / hover / pressed / disabled / focus 状态 stylebox 与禁用字体色，并在 snapshot 中暴露 `control_font_sizes`、`layout_constants` 和 `button_state_styles`；世界 `Label3D` 字体第一版也已迁移，角色名、尸体名、状态效果、任务标记和战斗反馈会复用同一字体并写入字体 metadata；`UIToggle` / `MainMenu` / `Scene` smoke 覆盖字体路径、theme resource、字号/布局/按钮状态规范、应用状态、面板覆盖数量和世界文字字体。待补富文本 fallback 和 CJK fallback 视觉回归截图。
-- [~] Fog shader：旧 WGSL 只迁视觉语义，Godot 侧以 `fog_of_war_canvas.gdshader` 为准。
-- [~] 容器模型：`cabinet_medical.gltf`、`crate_wood.gltf`、`locker_metal.gltf` 已通过 `builtin:container:*` 纳入资源映射，地图容器 world target、pickable body、`ContainerStateBadge` 和容器 hover outline 会暴露 `container_visual_id`、`container_visual_prototype_id`、`container_model_asset_id` 与 `container_type` 诊断；打开状态第一版已从 actor `active_container_id` 派生为 world target / pickable body / `ContainerStateBadge` 的 `container_open`、`container_open_state` 和 `container_open_actor_ids`，并用 badge 材质区分打开中的容器；Godot 世界表现第一版已新增 `ContainerOpenStateVisual`，按 cabinet / crate / locker / fallback profile 反映打开角度、偏移、pivot hint、空满和打开者诊断。待补真实 collision、hover outline 视觉 polish、真实打开 / 关闭模型动画和更细容器类型表现。
-- [~] 角色、装备、武器占位模型：appearance profile 第一版已从角色定义 / `data/appearance` 派生到 world snapshot，装备 / 武器 appearance 会解析 `visual_asset`、`attach_target`、`presentation_mode`、`hide_base_regions`、`preview_transform` 和 tint；Godot 表现 profile 第一版已补 `socket_id`、`body_region`、`attach_offset`、`attach_rotation_degrees`、`attach_scale`、远程 `muzzle_offset`、`weapon_visual_kind`、`reload_visual_state`、loaded / max ammo 和 reload time，并由 `WorldSceneRenderer` 只按 snapshot 实例化模型、应用 transform、暴露 metadata、应用装备材质 tint 和远程武器 `EquipmentMuzzleMarker`；远程攻击表现第一版已由 `WorldActionPresenter` 基于 `attack_resolved` 事件生成 `WorldActionMuzzleFlash`、`WorldActionProjectileTrail` 和 `WorldActionShellEject`，与攻击 delivery 共用 windup / impact / fade phase、start / end position、方向、距离和战斗事件 metadata；换弹事件表现第一版已由 `WorldActionPresenter` 基于 `weapon_reloaded` 事件生成 `WorldActionReloadPulse` 和 `WorldActionReloadText`，暴露 weapon / ammo / slot / loaded / capacity / remaining inventory / AP cost 与 prepare / load / ready phase；`World` / `Scene` / `UIToggle` / `PlayerInteraction` smoke 覆盖玩家装备快照、实际装备模型、挂点 metadata、tint 应用、远程 muzzle marker、muzzle flash / projectile trail / shell eject、换弹 pulse / text 和角色面板装备链路。待补真实骨骼 socket、body region override 实际遮挡、材质分槽 tint polish、手部 IK / 持握动画、真实 reload 动画、真实 muzzle flash 美术、弹壳真实模型 / 弹道材质 polish 和 hotbar 图标最终美术 polish。
-- [~] 地表、建筑墙、prop tile 模型：asset id 映射第一版已迁移，surface / wall / prop world tile 数据使用 `builtin:world_tile:*` 并由 `AssetPathResolver` 归一到 `godot/assets/world_tiles/**/*.gltf`；待补旋转 footprint、local offset、scale、阻挡、LOS、材质、遮挡和 hover。
-- [~] 音频资产：第一版 Godot 原生占位反馈已迁移，`AudioFeedbackController` 监听 `Simulation.snapshot().events`，把拾取、容器打开/关闭/转移、物品丢弃、交易、制作、技能、任务、门、战斗、死亡和 UI 反馈事件映射到 `SFX` bus 的 `AudioStreamGenerator` 占位音；缺 profile 会回退到通用占位音，runtime snapshot 暴露 bus、事件索引、触发次数、fallback 次数和最近声音事件；事件音色细分第一版已迁移，远程 / 近战攻击、远程命中、换弹、弹药消耗、开门、关门和自动开门会按 event payload 选择不同占位音；UI 点击真实事件注入第一版已迁移，`GameApp` 的 stage panel 和 settings panel 开关会直接调用 `AudioFeedbackController.play_ui_feedback()`，并在 recent audio event 暴露 `audio_source=ui`、panel 和 action metadata；音乐 / 环境声 / 空间 3D 音效分层第一版已迁移，运行时启动和地图重建会配置 map 级 `Music` bus 占位音乐与 `SFX` bus 环境声，控制器 snapshot 暴露 `mix_layers`、`Master/Music/SFX` bus、music / ambience / spatial 状态、设置同步和 3D 世界坐标诊断，`GameApp.play_spatial_audio_feedback()` 提供世界表现层触发空间音效入口，攻击、门、容器、拾取、换弹、弹药和死亡等 simulation 世界事件会自动从 payload grid 或 runtime actor grid 派生空间坐标并触发 3D 占位音；主菜单自带 `MainMenuAudioFeedbackController`，不依赖 gameplay runtime，也会暴露 `main_menu_snapshot().audio_feedback` 诊断；Settings 面板 slider / option / checkbox / button、Skills 面板筛选 / 技能行 / 学习确认 / 绑定 / 清空 / 技能树控件、Inventory 面板筛选 / 排序 / 物品行 / 丢弃确认 / 数量调整控件、Container 面板物品行 / 右键菜单 / 数量选择 / 转移按钮 / 数量确认弹窗、Trade 面板物品行 / 右键菜单 / 数量选择 / 直交易 / 购物车入队 / 调整 / 移除 / 清空 / 确认控件、Journal 面板任务行 / 已完成任务行 / 追踪切换 / 交付按钮、Crafting 面板搜索 / 分类 / 排序 / 配方行 / 数量 / 缺失定位 / 单次制作 / 队列 / 队列取消 / 队列确认 / 装备工具确认 / pending 制作取消反馈、Character 面板装备右键菜单 / 装填 / 卸下 / 属性分配控件反馈，Dialogue 面板选项按钮 / 关闭按钮反馈，Map 面板地点按钮 / 前往确认 / 缩放 / 平移复位控件反馈，HUD 热栏槽 / 热栏组 / Observe / Play / Speed / Auto 控件反馈，HUD overlay / info / controls hint / debug panel / debug console 快捷入口反馈，以及 MainMenu 新游戏 / 继续 / 存档选择 / 重命名 / 删除 / 导出 / 覆盖确认控件反馈第一版已迁移；`UIToggle` / `SkillsUI` / `InventoryUI` / `ContainerUI` / `TradeUI` / `JournalUI` / `CraftingUI` / `DialogueUI` / `MainMenu` smoke 覆盖 stage/settings 面板开关音、设置控件音、技能控件音、背包控件音、容器控件音、交易控件音、任务控件音、制作控件音、角色控件音、对话控件音、地图控件音、HUD 热栏/观察控件音、HUD overlay/debug 快捷入口音、音频分层 / 设置同步 / 空间坐标诊断、simulation 世界事件自动空间音、主菜单控件音、拾取、命中、远程攻击、远程命中、换弹、弹药消耗、门开关/自动开、容器关闭、物品丢弃和缺音频 fallback。待补真实音频资源、真实音乐 / 环境声素材、3D 衰减听感校准、更多跨面板 UI 控件和更多材质 / 武器 / 门类型音色。
-- [~] UI 图标资产：`AssetPathResolver.resolve_media_asset()` 第一版已迁移，inventory item icon、character portrait、dialogue portrait、overworld location icon、skill icon、hotbar icon、crafting recipe output icon、container item icon、trade item icon、journal quest icon 和 settings button icon snapshot 会暴露 `icon_asset` / `portrait_asset` / `output_icon_asset` 或按钮 `icon_resource_path` 诊断；旧 data 中 `assets/icons/*.png` / `assets/portraits/*.png` 已迁为 `res://assets/**/*.svg`，技能 `icon` 空值已迁为 `res://assets/icons/skills/*.svg`，并在 `godot/assets/icons` / `godot/assets/portraits` / `godot/assets/icons/quests` / `godot/assets/icons/settings` 落地 Godot 运行时占位 SVG；`MediaTextureLoader` 会把 SVG 转成运行时 `ImageTexture`，背包物品行、对话头像、地图 overworld inset、技能行、HUD hotbar、制作配方行、容器双栏物品行、交易店铺/玩家/装备行、Journal 任务行和 Settings 按钮已显示对应贴图；`asset-manifest all` 第一版可导出内容数据中显式引用的 item icon / item appearance / character portrait / dialogue portrait / skill icon / overworld icon / appearance base model / world tile glTF 资产 manifest，地图 visual prototype、建筑 wall set 和 floor surface set 派生到 Godot glTF 的 manifest 条目也已迁移，并输出 entry_count、unique_asset_count、missing_count、invalid_count、by_domain 和 by_kind；`ContentCLI` / `InventoryUI` / `DialogueUI` / `UIToggle` / `SkillsUI` / `CraftingUI` / `ContainerUI` / `TradeUI` / `JournalUI` smoke 覆盖 legacy root 诊断、fallback key、Godot resource path、资源存在性、manifest 代表性条目和可见 UI 节点贴图。待补真实美术替换和更细分图标表现。
-- [~] 缩略图资产：第一版 snapshot 约定已迁移，inventory / container / trade 物品、crafting 配方、skills 技能、journal 任务、map overworld 地点和 save slot metadata 都会暴露 `thumbnail_asset`，当前复用已迁 Godot SVG icon / location icon resolver 作为缩略图 fallback，并带 `thumbnail_domain` / `source` 诊断；`InventoryUI`、`CraftingUI`、`SkillsUI`、`JournalUI`、`UIToggle` 和 `MainMenu` smoke 覆盖代表缩略图资源路径、存在性和 domain。待补真实缩略图美术、存档截图、尺寸规范、缓存策略和 UI 真实缩略图布局。
-- [~] 地图专属资产：`Scene` smoke 已输出每张 `.tscn` / 默认运行地图的 asset path、fallback 次数、重复 ID、重叠实例、pickable body、mesh、collision shape / physics body、scale、origin offset、shadow 和 visibility 统计；`all_map_visual_scene_reports` 已按单张 map scene 输出 declared / instantiated / visual children / asset paths / fallback / pickable / overlap / scale / collision 等细粒度报告；运行 `tools/agent/test-godot-game.ps1 -Scenario Scene` 会额外落盘 `.local/agent-smoke/godot_game/<timestamp>/Scene.asset-diagnostics.json`，用于人工审阅或后续 diff；运行时 map visual 的 `PickableBody` / `PickableShape` 已带 pick proxy metadata，并纳入 `map_visual_collision_shapes` / `map_visual_physics_bodies` 统计断言；运行时 glTF scene root 已生成 layer/mask 为 0 的 `GeneratedVisualCollisionProxy` bounds 代理，覆盖 map visual、actor、equipment 和 corpse 模型，不抢世界拾取层；scene 资源引用变更差异报告第一版已迁移，`Scene.asset-diagnostics.json` 会输出 `sceneResourceReferenceBaseline` / `sceneResourceReferenceDiff` 并对比 `docs/baselines/scene_resource_reference_baseline.json`，用于审阅每张 map scene 新增 / 移除的 `res://assets/...` 引用；待补真实 glTF collision 资源、scale / origin 校准、shadow / visibility 策略和人工审阅流程。
-- [~] `.bin`、`.import`、`.uid` 守护：`Scene` smoke 会校验 glTF 外部 buffer 存在且 byteLength 匹配、每个 glTF / glb 有 `.import`、`.import` source_file 指回源资产、remap uid 非空、dest_files 导入产物存在，并扫描 `godot/assets/**/*.uid` 的 uid 格式、资源存在性和重复 uid；当前覆盖 52 个 glTF、31 个外部 buffer、52 个 import uid、1 个 uid sidecar，缺失 / 重复 / 长度不匹配均为 0；`gltf_import_uid_baseline` 和 `asset_uid_sidecar_baseline` 已输出稳定 asset -> uid 快照并断言覆盖全部 glTF / sidecar，且会进入 `Scene.asset-diagnostics.json` 作为持久审阅报告；`docs/baselines/scene_asset_uid_baseline.json` 已固化当前 glTF import UID 和 asset sidecar UID，`test-godot-game.ps1 -Scenario Scene` 会对比并在 UID 漂移时报错；`docs/baselines/scene_resource_reference_baseline.json` 已固化 map scene -> Godot 资源引用，引用差异会进入诊断报告但不默认失败。待补人工审阅流程。
-- [~] 根目录 `assets/` 与 `godot/assets/` 职责：`docs/3d_asset_format_policy.md` 已明确 `godot/assets/` 是 Godot 运行时权威，根目录 `assets/` 只作为源资产池或迁移期备份；从根目录更新资产时必须同步到 `godot/assets/` 相同相对目录并刷新 `.import` / uid；`mainline_migration_guard.gd` 会扫描运行脚本、scene 和工具入口，阻止 `../assets`、绝对根 assets 路径和 `godot/assets/...` 写法进入运行引用，要求统一使用 `res://assets/...`。待补 data 中 UI icon / portrait legacy `assets/...` 路径的正式资源落地与迁移。
-- [~] 模型辨识：地图物体不能退化成重叠方块；fallback 类别化表现第一版已有，`MapObjectFallbackVisual` 会按 pickup / container / trigger 使用不同形状和材质，并报告 `fallback_category`、source object、target kind、source visual 和 source visual asset；`Scene` smoke 覆盖 fallback 类别和原资源诊断。待补真实美术替换、真实 glTF collision / origin 校准和更细粒度视觉重叠巡检。
-- [~] 交互、移动、战斗、UI 反馈：hover 光标、outline、interaction prompt、路径预览、AP 不足提示、命中 / 闪避 / 伤害 / 死亡、message log / HUD 反馈、按钮禁用态和失败原因已有第一版验收；`WorldActionPresenter` 已对移动逐格 tween、攻击 `windup/impact/fade` 三阶段 impact、交互 `start/pulse/fade` 三阶段 pulse 暴露 phase / duration / marker metadata；点击地面移动第一版已改为 `present_before_final_refresh`，先在旧世界播放逐格移动，再在 presenter 完成后应用最终 world_result；纯移动最终刷新会跳过整图重渲染和 `WorldCamera` 重建，避免到达目标后卡顿 / 相机重置，同时避免可见角色瞬移；tooltip 第一版已在 `hover_tooltip_snapshot()` / `ui_layer_stack_snapshot()` 暴露 source / requested source、owner、文本、屏幕坐标、source rect、viewport、visible、mouse_filter、非阻塞状态、Godot 默认 delay policy 和 lifecycle state，并由 `UIToggle` / `SkillsUI` smoke 覆盖；tooltip 视觉第一版已迁移，snapshot / UI layer 会暴露 `visual` 和 `recommended_rect`，包含 `TooltipPanel` / `TooltipLabel` theme type、panel_container 样式、padding、最大宽度、行高、viewport avoidance、非阻塞策略和避让后的推荐矩形，`GameApp` 会渲染非阻塞 `TooltipLayer/TooltipPanel/TooltipLabel` 并在 `tooltip_render_snapshot()` 暴露实际节点、样式、位置、mouse_filter 和文本一致性；toast 过渡视觉第一版已迁移，HUD feedback toast 由非阻塞 `FeedbackToastLayer` 渲染为 `PanelContainer + Label`，按 severity / phase / alpha 设置背景、边框、最小宽度和 fade 透明度，并在节点 metadata 暴露 visual kind、transition、alpha、border color 和稳定尺寸，`UI` smoke 覆盖 pickup、命令拒绝、缺工具、武器耐久不足攻击拒绝和战斗反馈 toast。待补更多 UI 按钮禁用态和表现层截图级验收。
+- [ ] 字体补富文本 fallback、CJK fallback 和截图级缺字回归。
+- [ ] 容器模型补真实 collision、hover outline 视觉 polish、打开 / 关闭模型动画和更细容器类型表现。
+- [ ] 角色、装备、武器补真实骨骼 socket、body region override 遮挡、材质分槽 tint、手部 IK / 持握动画、reload 动画、muzzle flash 美术、弹壳模型、弹道材质和 hotbar 图标最终美术。
+- [ ] 地表、建筑墙和 prop tile 补旋转 footprint、local offset、scale、阻挡、LOS、材质、遮挡和 hover。
+- [ ] UI icon / portrait / thumbnail 补真实美术替换、更细分图标表现、存档截图、尺寸规范、缓存策略和真实缩略图布局。
+- [ ] 地图专属资产补真实 glTF collision 资源、scale / rotation / origin 校准、shadow / visibility 策略、resource uid 细节复核和人工审阅流程。
+- [ ] `.bin`、`.import`、`.uid` 守护补人工审阅流程和资源引用变更差异复核。
+- [ ] 旧 data 中 UI icon / portrait legacy `assets/...` 路径补正式资源落地与迁移。
+- [ ] 真实音频资源、真实音乐 / 环境声素材、3D 衰减听感校准、更多跨面板 UI 控件反馈和更多材质 / 武器 / 门类型音色。
 
-## 1. 运行时总线与快照
+## 2. 运行时、命令和回合
 
-### 1.1 Simulation 状态
+### 2.1 Runtime Snapshot
 
-- runtime snapshot 派生状态字段第一版已补：`runtime_command_queue`、`runtime_command_history`、`pending_progression_step`、`current_control_actor`、`recent_interaction_target`、`recent_failure`、`recent_event_feedback`、`target_preview`、`target_selection_state`、`ui_menu_state_refs`、`debug_runtime_diagnostics` 会从 turn/pending/interaction/events 等当前权威状态生成，并由 `Interaction` / `Save` smoke 覆盖；UI modal stack 第一版已进入 app runtime snapshot / HUD debug；`runtime_control.world_time` 第一版已从 runtime snapshot 派生 day / minute / display label，HUD debug 行显示当前日程时间，并由 `UIToggle` smoke 覆盖。待补目标预览视觉参数、更细 debug-only 诊断字段和 HUD polish。
-- 已迁移基础 turn / movement / interaction 事件 payload：`turn_started`、`turn_ended`、`movement_queued`、`movement_step`、`interaction_queued` 已带 actor、AP、round、目标或 path 等基础字段，并由 `Movement` / `Interaction` smoke 覆盖。
-- 部分迁移运行时日志：玩家命令提交、完成、拒绝和 UI 反馈已新增 `player_command_submitted`、`player_command_completed`、`player_command_rejected`、`ui_feedback` 事件，payload 带 actor id、action kind、目标/物品/技能等精简命令信息和 reason，并由 `Interaction` smoke 覆盖；AP 消耗和 pending 写入/取消/恢复已新增 `ap_spent`、`movement_queued`、`interaction_queued`、`movement_cancelled`、`interaction_resumed` 第一版，并由 `Movement` / `Interaction` smoke 覆盖；容器转移、交易确认、交易关闭和任务推进已新增 `container_transferred`、`trade_confirmed`、`trade_closed`、`quest_advanced` 第一版，并由 `ContainerUI` / `TradeUI` / `Quest` smoke 覆盖；战斗、制作和技能已由 `attack_resolved`、`actor_defeated`、`corpse_created`、`combat_started`、`combat_ended`、`recipe_crafted`、`skill_used` 覆盖，并由 `Combat` / `Crafting` / `SkillsUI` smoke 断言；地图切换和进入、对话开始/位置切换关闭、容器打开/位置切换关闭、交互成功目标显示名与 option kind 已带基础 payload，并由 `Interaction` / `Overworld` smoke 覆盖。后续仍需补齐完整失败反馈、禁用原因和 UI 刷新 payload。
-- deterministic seed 策略第一版已迁移：命中、暴击和随机尸体 loot 掉落共用 `combat_rng_seed` / `combat_rng_counter`，snapshot / save 后继续可复现；固定必掉 loot 不额外消耗 RNG，避免改变静态掉落表现；已由 `Combat` / `Save` smoke 覆盖。待补 AI 随机选择、技能随机效果、任务随机奖励和跨系统 seed 命名策略。
-- 已迁移 snapshot schema version 和旧快照迁移第一版：snapshot 统一输出 `schema_version`，loader 对缺版本旧快照补齐 active location / entry、combat、pending、corpse、interaction menu 和 hotbar 默认字段，并发出 `snapshot_migrated` 事件；`Save` smoke 已覆盖当前版本 roundtrip 和缺字段旧快照兼容。
+- [ ] runtime snapshot 补目标预览视觉参数、更细 debug-only 诊断字段和 HUD polish。
+- [ ] 运行时事件 payload 补完整失败反馈、禁用原因和 UI 刷新 payload。
+- [ ] deterministic seed 补 AI 随机选择、技能随机效果、任务随机奖励和跨系统 seed 命名策略。
 
-### 1.2 命令入口
+### 2.2 命令入口
 
-- 已迁移统一命令返回结构第一版：`success`、`kind`、`reason`、`events`、`turn_state`、`combat_state`、`runtime_snapshot_delta`、`ui_feedback`、`prompt`、`context_snapshot` 已稳定出现在 `Simulation.submit_player_command()` 的所有返回结果中，并由 `Interaction` smoke 覆盖。
-- 部分迁移命令 reject 语义：无 actor、非玩家 actor、玩家回合关闭、未知交互目标、未知攻击目标和 AP 不足移动排队已有稳定 reason，并通过 `player_command_rejected` / `ui_feedback` payload 由 `Interaction` / `Movement` smoke 覆盖；移动阻挡、目标不可见、跨层/LOS 攻击、材料/技能/缺工具/资金/数量等领域失败已有分散 smoke 覆盖；常见移动/交互/战斗/技能/制作/容器/交易失败码已有 HUD 中文反馈映射，并由 `UI` smoke 覆盖未知命令、友方攻击、目标不可见、武器耐久不足、材料不足和缺工具等代表拒绝；UI modal 阻塞玩家命令第一版已迁移，modal 打开时 move / hotbar / craft / skill confirm 等 app 入口会统一返回 `ui_modal_blocks_player_commands`、action、modal id 和 blocker snapshot，并由 `SkillsUI` smoke 覆盖；跨系统 reason catalog 第一版已迁移到 `godot/scripts/ui/snapshots/reason_catalog.gd`，覆盖 system / ui / movement / interaction / combat / pending / crafting / container / trade / skill / door / transition 等分类，并记录在 `docs/runtime_reason_catalog.md`；pending 取消原因 `new_target_command`、`keyboard`、`crafting_ui` 和 `location_change` 已纳入 catalog 并由 HUD 反馈读取；观察模式入口 reason `observe_mode_blocks_player_commands`、`observe_mode_disabled`、`unknown_observe_speed` 和 `observe_control_unavailable` 已纳入 catalog，并由 `UI` / `UIToggle` smoke 覆盖；reason 诊断元数据第一版已补齐，所有已知 reason 都有 `source_module`、`payload_fields`、`disabled_text` 和 `remediation`，关键 reason 的 payload 字段和禁用态文案由 `UI` smoke 抽查；HUD interaction menu、hover 移动/攻击预览和技能目标提示已接入 catalog fallback，同时保留菜单短文案覆盖；Crafting 面板执行失败反馈和未知 recipe reason fallback 已接入 catalog，结构化缺失详情仍保留在 Crafting 自身；Trade 面板按钮、上下文菜单、物品行详情和 drop-zone 拒绝预览已接入 catalog fallback，已有中文权限说明原样保留，drop-zone metadata 继续保存稳定 reason code；Container 面板反馈 snapshot 兜底已接入 catalog fallback，容量、权限、钥匙、工具和关系等详细说明继续优先使用；Inventory 面板反馈 snapshot 兜底已接入 catalog fallback，AP、数量、负重、使用和拆解等详细说明继续优先使用；Skills 面板学习 / 绑定 / 使用按钮禁用 tooltip 和 learn/use reason 兜底已接入 catalog fallback，前置、属性、冷却和资源不足等详细说明继续优先使用；Journal 面板交付按钮 tooltip、交付条件 tooltip、详情交付限制和交付失败反馈兜底已接入 catalog fallback，物品不足、目标未完成和对话交付等详细说明继续优先使用；AI intent / 阵营判定、SaveService 槽位 / envelope 校验和 MapSceneLoader 地图场景加载失败 reason 已纳入 catalog，缺失地图 scene reason 已由 `World` smoke 覆盖透传。待补更完整领域 reason 和 UI 禁用态视觉 polish。
-- 可取消命令分类第一版已迁移：`wait` 保留为推进 pending 的命令，新的 `move` / `interact` / `attack` 目标命令会统一取消旧 pending movement / pending interaction，清空旧 interaction prompt，发出 `movement_cancelled` / `interaction_cancelled` / `pending_cancelled` 并在命令结果中暴露 `cancelled_pending`；root close priority snapshot 第一版已补齐 debug console、modal、interaction menu、panel context menu、world action presenter、skill targeting、selection、panel close priority 和 pending 的真实关闭顺序，并由 `UIToggle` smoke 覆盖 interaction menu / equipment context menu / stage panel / pending 代表路径；地图面板 `overworld_prompt` 已进入 close priority，Esc 关闭不会改变 active location；已由 `Movement` / `PlayerInteraction` / `Interaction` / `UIToggle` smoke 覆盖。待补 quantity modal 和关闭优先级 HUD polish。
-- [~] 命令审计第一版已迁移：`GameApp.runtime_control_snapshot().player_command_authority_audit` 会列出 app 层玩家业务入口、动作名、权威来源、`submit_player_command` command kind 或允许的 `Simulation` core service，并检查未知 authority、缺 command kind 和缺 core service；制作中取消入口已纳入 `cancel_pending` 命令审计，制作队列入口会声明 `_submit_crafting_queue_entry` authority helper 且 smoke 会验证 helper 内部仍走 `Simulation.submit_player_command()`；`debug_console_mutation_audit` 会从 `DebugConsoleCommandRunner.command_schema()` 派生可变更命令清单，确认 `restart`、`give item`、`teleport`、`spawn`、`unlock location` 等调试变更入口都标记 `mutates_runtime`、受 `debug_runtime_mutation` 权限和 `cdc/debug_console/allow_runtime_mutation` 开关保护；`PlayerInteraction` smoke 会读取运行时审计快照，同时扫描 `game_app.gd` / `player_interaction_controller.gd` 源码，断言移动、交互、等待、背包、容器、交易、装备、技能、热栏、制作和任务入口只通过 `Simulation.submit_player_command()`、交互 controller 委托、明确 command helper 或明确 core service 修改业务状态。待补把该审计扩展到更多 UI controller 直接 root 调用矩阵和跨系统禁用 reason 文档。
+- [ ] 命令 reject 补更完整领域 reason 和 UI 禁用态视觉 polish。
+- [ ] 可取消命令补 quantity modal 和关闭优先级 HUD polish。
+- [ ] 命令审计扩展到更多 UI controller 直接 root 调用矩阵，并补跨系统禁用 reason 文档。
 
-## 2. 回合、AP 与时间推进
+### 2.3 探索回合
 
-### 2.1 探索回合
+- [ ] 补 Rust `PendingProgressionStep` 式分帧推进，避免所有恢复逻辑都同步挤在单次 command 中。
+- [ ] AP / action cost 补更完整配置表和不同状态、装备、技能对 AP 参数的叠加规则。
+- [ ] 玩家行动后自动结束回合策略补更多 UI 入口展示 polish。
+- [ ] 长按 Space 连续等待补更细 key repeat 诊断、用户设置化间隔和 HUD 提示 polish。
+- [ ] 自动推进保护补 UI 提示 polish、pending 清理策略和异常恢复流程。
 
-- 已迁移玩家行动后 AP 低于阈值自动推进回合；仍需补齐 Rust `PendingProgressionStep` 式分帧推进，而不是所有恢复逻辑都同步挤在单次 command 中。
-- AP carry / cap 参数来源第一版已迁移：`turn_ap_gain`、`turn_ap_max`、`affordable_ap_threshold` 会优先读取 actor `combat_attributes` 的显式字段，缺省时从 `speed + 1` 派生回合 AP，并在 `turn_started` payload 和 runtime snapshot `current_control_actor` 中暴露；已由 `Movement` smoke 覆盖。待补更完整 action cost 配置表和不同状态/装备/技能对 AP 参数的叠加规则。
-- 玩家行动后“是否自动结束回合”的策略快照第一版已迁移：`Simulation.submit_player_command()` 对移动、攻击、交互、制作和技能成功行动返回 `turn_policy`，暴露 action kind、行动后 AP、可行动阈值、pending 状态、自动推进状态、跳过/推进原因和自动推进循环数；`cancel_pending()` 也会返回取消策略，区分保留回合、无 pending 和自动结束回合；新目标命令替换旧 pending 时，`cancelled_pending.turn_policy` 会记录 `replace_pending_target`、replacement kind 和保留回合策略；输入层清理空地 / 空白 selection 也会返回 `clear_selection` 策略，标记 `selection_only`、保留回合且不消耗 AP / pending；战斗中取消 pending attack 会保留 combat active、阻止自动结束回合，并在策略中暴露 `auto_end_blocked_reason=combat_active`。移动自动推进已由 `Movement` smoke 覆盖，攻击 / 技能由 `Combat` smoke 覆盖，交互由 `Interaction` smoke 覆盖，制作由 `Crafting` smoke 覆盖，手动取消 / Esc 保留回合 / Space 自动结束 / 目标命令替换取消由 `Movement` / `UIToggle` smoke 覆盖，空地清理选择由 `PlayerInteraction` smoke 覆盖，战斗内取消由 `Combat` smoke 覆盖。待补更多 UI 入口对该策略的展示 polish。
-- 长按 Space 连续等待第一版已迁移：按下会执行一次 wait，超过初始延迟后按固定间隔重复，松开停止；UI / dialogue / pending movement / pending interaction 会阻止连等，pending 状态下 Space 只取消一次 pending，不进入重复 wait；已由 `UIToggle` smoke 覆盖。待补更细的 key repeat 诊断、用户设置化间隔和 HUD 提示 polish。
-- 自动推进保护第一版已迁移：玩家行动后 AP 仍低于可行动阈值且自动推进达到循环上限时，会保留当前状态、在 `auto_turn` / `turn_policy` 中暴露 `limit`、`limit_reached`、`auto_turn_limit_reached` 和 `auto_advance_limit_reached` reason，并发出 `auto_turn_advance_limit_reached` 事件，payload 带 actor、AP、阈值、round 和 pending 摘要；已由 `Movement` smoke 覆盖。待补 UI 提示 polish、pending 清理策略和异常恢复流程。
+### 2.4 战斗回合
 
-### 2.2 战斗回合
+- [ ] 战斗 HUD 补完整布局、队列可视化和目标选择 polish。
+- [ ] 战斗内 AP / NPC 回合补更细逐 actor 调度状态和完整战斗 UI 队列表现。
+- [ ] 战斗参与者补友军 / 中立加入规则调参和真正的 initiative 队列执行。
+- [ ] 战斗退出补对话或任务强制退出、战后 HUD / targeting 视觉恢复和回合 UI 顺序。
 
-- combat HUD 当前回合、行动方、敌人数量、参与者数量、目标预览和命中 / 暴击 / 伤害预估第一版已迁移：`HudSnapshot.combat_hud` 从 runtime snapshot 派生，不在 UI 复制战斗规则；HUD `CombatHudLine` 已显示 active/off、round、turn、enemy count、participants、next actor 和 target preview，实际 hostile hover 的 attack preview 会经 `runtime_control.hover.attack_preview` 联动到 combat HUD，并由 `UI` / `PlayerInteraction` smoke 覆盖。待补更完整战斗 UI 布局、队列可视化和目标选择 polish。
-- [~] 战斗内 AP / NPC 回合第一版已迁移：actor 处于 active combat 时会优先读取 `combat_turn_ap_gain`、`combat_turn_ap_max` 和 `combat_affordable_ap_threshold`，否则沿用探索 `turn_ap_gain` / `turn_ap_max` / `affordable_ap_threshold`；NPC world turn 会显式打开/关闭 NPC 回合，`turn_started` payload 与 NPC result 暴露 AP gain/max、阈值和 combat active，AP 会 clamp 到 combat max，行动后记录 `ap_after_action`、`turn_close_reason`、`ap_after_close`，耗尽时以 `npc_turn_exhausted` 结束；NPC 已决定攻击或换弹但 AP 不足时会进入等待策略，返回 `intent=wait`、`planned_intent`、required / available AP、稳定 reason，并以 `npc_turn_waiting_for_ap` 关闭回合；战斗 active 时会从存活参与者生成确定性 `turn_order` / `initiative`，并在 `combat_state`、事件 payload、HUD snapshot 和 Save roundtrip 中保留 `current_combat_actor_id` / `next_combat_actor_id`；NPC world turn 第一版已按 `turn_order` 执行战斗参与者，再追加非战斗 NPC，避免摘要顺序和实际行动顺序分离；回合开始时已处于 combat 的 NPC 会在 AP 足够时循环执行多次 action，result 暴露 `actions`、`action_count`、AP before/after 和循环上限诊断，探索中途首次开战仍保留单 action 边界；已由 `Combat` / `AI` / `UI` / `Save` smoke 覆盖。待补更细的逐 actor 调度状态和完整战斗 UI 队列表现。
-- [~] 战斗开始参与者和 round 第一版已迁移：`_enter_combat()` 会从触发 actor 扩展收集当前地图内存活且与已参与者敌对的 actor，排除死亡和跨地图 actor；初次进入只发 `combat_started`，payload 暴露 seed、added、participants、turn_order、initiative、current / next combat actor、round 和 `last_hostile_seen_turn`，重复进入不会重复发 started，active combat 有新增参与者时发 `combat_participants_updated` 并刷新顺序摘要；active combat 下 world turn 会同步递增 `combat_state.round`，有敌对视线时刷新 `last_hostile_seen_turn`。已由 `Combat` / `AI` / `Interaction` / `UI` / `Save` smoke 覆盖。待补友军/中立加入规则调参和真正的 initiative 队列执行。
-- [~] 战斗退出和探索恢复第一版已迁移：敌对清空 / 敌人死亡会结束 combat 并通过 `_restore_exploration_after_combat()` 回到玩家探索控制，清理战斗中遗留的 `pending_movement`、`pending_interaction` 和 `interaction_menu`，玩家存活且非强制关闭时会重开 `turn_open` 并把 AP clamp 回探索回合上限；连续若干 actor turn 无敌对视线会强制结束 combat 并关闭战斗回合；`force_end_combat()` 仍保持关闭所有参与者回合的语义；scene transition / overworld enter_location 跨地图会以 `map_changed` 结束战斗，玩家阵营无存活 actor 时以 `player_defeated` 结束战斗；`combat_ended` payload 会带 reason、participants、跨地图 metadata 和 recovery 诊断，已由 `Combat` / `Interaction` / `Overworld` smoke 覆盖。待补对话或任务强制退出、战后 HUD/targeting 更完整视觉恢复和回合 UI 顺序。
+## 3. 输入、选择和 UI 状态机
 
-## 3. 输入、选择和界面开关
-
-### 3.1 键盘输入
-
-- 已迁移菜单面板快捷键：`I` 背包、`C` 角色、`M` 地图、`J` 任务、`K` 技能、`L` 制作，已纳入 `UIToggle` smoke。
-- 已迁移同键 toggle / stage panel 替换：打开对应面板、同键关闭、切换到另一个 stage panel 时替换当前 active panel，已纳入 `UIToggle` smoke。
-- 部分迁移 `Esc` 关闭链路：已覆盖 selection、active dialogue、interaction menu、inventory / container / trade / skills / character context menu、trade equipment sell confirm modal、inventory discard confirm modal、container quantity confirm modal、map overworld prompt、trade panel、container panel、stage panels、settings、pending movement、pending interaction 和无活动 UI 时打开 settings；panel modal 现在优先于 `WorldActionPresenter` 成为 close / blocker 目标，panel context menu 会优先于 stage panel 关闭且保留当前面板，inventory discard modal 打开前会先完成旧表现队列，避免 stale presenter 抢占 Esc；`WorldActionPresenter` active 时 Esc 会先 `finish_world_action_presentations()`，释放表现 blocker 且保留 pending，下一次 Esc 再按原规则取消 pending；blocker 诊断已新增 `gameplay_input_blocker_snapshot()`、`runtime_control.ui_blocker_snapshot` 和 `runtime_control.ui_layer_stack`，会暴露 blocker、modal stack、context menu、drag preview、tooltip 的层级、优先级、owner、mouse_blocks_world 和 blocks_gameplay，并由 `UIToggle` smoke 覆盖；待补 quantity modal 更细策略。
-- 部分迁移数字键：已恢复对话选项 `1-9` 和 hotbar `1-0` 基础入口；observe mode 下数字 hotbar 和 `Alt+1/2/3` 热栏组切换会被输入层消费但不发玩家命令，已纳入 smoke。待补菜单内数量输入与快捷动作冲突处理。
-- 部分迁移 `Space`：已恢复对话推进、单次等待/结束回合、self wait interaction、pending 取消、长按重复等待和 observe mode 下播放/暂停第一版；待补更细的长按节奏配置和 modal 冲突策略。
-- 部分迁移 `Tab` / free observe 选择：已恢复玩家侧关注 actor 循环、observe mode 下当前楼层所有 actor focus 循环、observe mode 左键点击 actor 只聚焦不执行玩家命令、相机跟随、actor busy 时阻止玩家控制切换和选中/提示状态清理；observe mode 下 move、interaction、hotbar、inventory item action 会统一返回 `observe_mode_blocks_player_commands`，并带 catalog 诊断文案；普通 hotbar 隐藏，已由 `PlayerInteraction` / `UIToggle` smoke 覆盖。待补 free observe 鼠标选择视觉 polish 和更完整诊断。
-- 已迁移 `V` overlay mode、`/` 帮助展开、`[` / `]` info tab 切换、`A` auto tick 第一版和 `F` 相机跟随；部分迁移 `PageUp/PageDown` 观察楼层切换，待补多层地图视觉显隐、楼梯/跨层路径和遮挡规则。
-- 部分迁移输入阻塞：stage/settings、interaction menu、inventory / container / trade / skills / character context menu、trade equipment sell confirm modal、inventory discard confirm modal、container quantity confirm modal、map overworld prompt、trade panel、container panel 已阻止 gameplay 输入；panel modal blocker 优先级已高于动作表现队列，`close_active_ui()` 会先关闭当前 modal；panel context menu 会进入 `gameplay_input_blocker_snapshot()` 并由 Esc 统一关闭；地图面板前往地点会先打开 `overworld_prompt`，确认后再调用 `Simulation.enter_location()`，取消 / Esc 不改变 active location；`WorldActionPresenter` active 时会阻止新的世界点击、hotbar / hotbar group 命令、stage panel 快捷 toggle、背包/交易/装备 inventory action、技能学习/绑定/使用确认和制作命令，并返回 `world_action_presenter_blocks_player_commands`；`gameplay_input_blocker_name`、`gameplay_input_blocker_snapshot()`、`runtime_control.ui_blocker_snapshot`、`runtime_control.ui_layer_stack`、HUD runtime 行和 F3 debug panel 均有 blocker 诊断第一版；`ui_layer_stack_snapshot()` 已把 context menu、drag preview 和 tooltip 纳入统一层级，tooltip 明确为非阻塞层，drag preview 在拖拽期间阻塞世界点击，interaction menu 支持点击外部关闭；待补 quantity modal 更细策略和真实拖拽视觉 polish。
-
-### 3.2 鼠标和拾取
-
-- [~] picking 优先级第一版已迁移：runtime input controller 现在会沿同一条鼠标射线收集多个物理命中候选，不再只使用最近 collider；候选会先按明显不同的 ray distance 选择真实更近的命中目标，距离接近时再按 `actor -> door -> map_object -> trigger -> grid` 稳定语义优先级选择，若没有交互候选才回退 ground/grid fallback；`runtime_hover_snapshot` / `runtime_control.selection_debug.picking` 会暴露 priority order、selected category、selected priority、hit count、candidate count 和候选摘要，`PlayerInteraction` smoke 覆盖 pickup、door、corpse/容器、hostile actor 和 ground fallback；HUD hotbar / hotbar group / observe hotbar 已新增屏幕坐标 hit-test snapshot，暴露 target kind/id、group、source path/name、rect、tooltip、disabled、disabled_reason、disabled_reason_text 和 mouse_blocks_world，并进入 `runtime_control.hotbar_hit_test`，`UIToggle` smoke 覆盖普通热栏槽、热栏组、observe hotbar 按钮和禁用观察控制原因；右键 interaction menu 的 option button 已补 option id/kind/name、disabled、disabled_reason、AP cost、range 等 metadata，menu snapshot 增加 `option_details` 按 id 汇总 enabled/disabled、disabled reason text、tooltip 和 hover text，`PlayerInteraction` smoke 覆盖 pickup、普通地图容器、corpse container、friendly actor、hostile actor、door、scene transition 的可用项和禁用原因。待补真实点击穿透视觉回归和更多 UI 组合分支。
-- [~] ray 命中排序细节第一版已迁移：每个 picking candidate 会记录 priority、subpriority、door AABB distance、hit fraction、ray distance、anchor noise 和 hit index，排序按 `distance -> priority -> subpriority -> door_aabb_distance -> hit_fraction -> anchor_noise -> hit_index` 稳定执行，其中 distance 只有超过 `0.2` world unit 的明显差异才会压过语义优先级，用于避免斜俯视相机下远处 actor 抢掉近处尸体/物体；trigger/transition 已按 `scene_transition -> exit_to_outdoor -> enter_subscene -> enter_outdoor_location -> enter_overworld -> trigger` 固化 transition rank 并折入 subpriority，候选诊断会暴露 transition kind、rank、target map、entry point 和 return spawn；door 会根据占用 cells 计算近似水平 AABB 距离，同优先级下优先选择命中门占用范围内的候选；多格对象的 anchor noise 会优先使用 cells 中心，避免只按左上 anchor 放大噪声；候选诊断进入 `runtime_control.selection_debug.picking.candidates`，并由 `PlayerInteraction` smoke 断言 sort keys、transition rank、hit fraction、distance、door AABB distance 和 anchor noise。待补真实重叠场景截图验收和更细调参。
-- hover / selection debug 第一版已迁移：runtime input controller 会记录当前 hovered grid / interaction target / UI blocker，`runtime_hover_snapshot()` 和 HUD runtime control 行会显示 hover kind、actor / pickup / container / trigger / door 等目标类别、target id/name、格子、当前 prompt 摘要、地面移动可达/不可达原因和预计步数；`runtime_control.selection_debug` 额外暴露 hovered grid、actor/object、blocker name、prompt summary、move preview 和 attack preview 结构化摘要，HUD 显示 `Sel ...` debug token；hover cursor 会按移动可达/不可达显示绿色/红色预览；地面 hover 已新增 `MovePathPreviewMarkers` 路径格预览，暴露 marker count、path length、reachable、reason、steps、AP cost / available / affordability、affordable_steps、pending_steps 和每格 grid / path_index / step_cost / within_current_ap / requires_pending；pending movement 已新增 `PendingMovementPathMarkers` 持续显示剩余路线，暴露 actor、target、required/available AP、remaining_steps 和每格 grid / path_index；已由 `PlayerInteraction` smoke 覆盖。待补路径线 polish、跨回合动画表现和统一 debug panel 页面。
-- 部分迁移左键/右键差异：左键主交互或移动、右键打开 interaction menu、菜单外点击关闭并阻止本次世界输入已恢复；pickup、普通地图容器、corpse container、friendly actor、hostile actor、door、缺钥匙 / 缺工具 / 纯锁门、普通 scene transition 和缺 world flag transition 右键菜单的可用项 / 禁用项 metadata、tooltip、hover text、中文禁用原因和 snapshot detail map 已覆盖；待补 neutral actor、location gated transition、点击外部关闭的所有 modal 分支和真实点击穿透视觉回归。
-- 目标切换规则第一版已迁移：点击或提交新的移动、交互、攻击目标会在 `Simulation` 入口统一取消旧 pending、清空旧 prompt、记录 replacement command、取消 payload 和 `replace_pending_target` turn policy，取消事件会进入 recent feedback；空地 / 空白 selection 清理会返回 `clear_selection` turn policy，并明确不会推进回合或修改 pending；战斗中取消 pending attack 会报告 combat active 并保留回合；已由 `Movement` / `PlayerInteraction` / `Combat` smoke 覆盖。待补 focused target 的完整 UI 状态。
-- 部分迁移鼠标拖拽：地图面板画布左键拖拽平移、滚轮/按钮缩放、pan 复位和状态行诊断已有第一版，并由 `UIToggle` smoke 覆盖；背包物品拖到当前容器列会走 `store_active_container_item`，拖到交易购物车会按当前 TradeSnapshot 价格/可出售状态排入出售队列，并由 `ContainerUI` / `TradeUI` smoke 覆盖；Skills 面板技能树画布已支持左键拖拽 pan、滚轮 / 按钮缩放、pan 复位、节点 / 链路 / pan / zoom / 高亮状态诊断和点击节点同步详情，并由 `SkillsUI` smoke 覆盖。待补滚动条拖拽、跨面板拖拽视觉 polish 和技能树真实布局 polish。
-
-### 3.3 UI 状态机
-
-- 部分迁移 `UiMenuState` 等价物：active stage panel、settings panel、blocking gameplay input、close stage panels 和 toggle panel 已有运行逻辑；`menu_state_snapshot()` / `runtime_control.menu_state` 第一版会暴露 active stage、settings、stage panel 列表、open panels、gameplay blocker、close priority 和 stage 主面板容器 mouse blocker 诊断，close priority 已覆盖 panel context menu 优先于 stage panel 关闭，map overworld prompt 优先于地图 stage panel 关闭，并由 `UIToggle` smoke 覆盖。待补 quantity modal 与 modal/stage/settings 的完整优先级矩阵。
-- 部分迁移 `UiModalState` 等价物：trade equipment sell confirm modal、inventory discard confirm modal、skill learn confirm modal、container quantity confirm modal 和 map overworld prompt 已接入 gameplay blocker 与 Esc 优先关闭；container 选中数量拿取/存放在数量大于 1 时会先打开确认 modal，确认前不修改容器/背包，关闭后保留容器面板；地图面板已解锁地点按钮会先打开 `overworld_prompt`，modal snapshot 暴露 location id/name、map id 和 grid，确认后通过 app 入口调用 `Simulation.enter_location()`，Esc / 取消不修改地点；modal 与 `WorldActionPresenter` 同时存在时，modal 会作为更高优先级 blocker / close target；`modal_stack_snapshot()` / `runtime_control.modal_stack` 第一版会暴露 active/count/top/stack、owner panel、业务目标和 mouse/gameplay blocker 诊断，并由 `InventoryUI` / `TradeUI` / `SkillsUI` / `ContainerUI` / `UIToggle` smoke 覆盖；待补 inventory item quantity。
-- 部分迁移 `UiContextMenuState`：HUD interaction menu、库存物品右键菜单、容器物品右键菜单、交易行右键菜单、技能条目右键菜单和装备槽右键菜单已暴露 `context_menu_snapshot()` / `runtime_control.context_menu`，包含 top/menu 列表、目标、来源、数量、价格、技能等级、绑定槽、装备槽、动作、禁用态和 tooltip 摘要，并由 `UIToggle` / `InventoryUI` / `ContainerUI` / `TradeUI` / `SkillsUI` smoke 覆盖；容器菜单第一版支持按行拿取/存放选中数量与全部转移此项，交易菜单第一版支持检查、直接买卖和加入购物车，技能菜单第一版支持检查、学习、绑定、使用和清空绑定入口，装备槽菜单第一版支持检查、卸下和装填入口，并复用已有装备规则路径；panel context menu 已接入 gameplay blocker、close priority、Esc 关闭分发和世界区域点击外部关闭，关闭当帧会吞掉世界输入；库存菜单项执行后会统一关闭菜单，避免残留 context menu 抢占后续 Esc 关闭链路。待补 overworld prompt 相关 context menu 与菜单自身区域点击矩阵。
-- 部分迁移 `UiHoverTooltipState`：GUI 控件 tooltip 已通过 `hover_tooltip_snapshot()` / `runtime_control.tooltip` 暴露 source path/name/class、owner panel 和文本；Character 装备槽与 HUD hotbar tooltip 已由 `UIToggle` / `SkillsUI` smoke 覆盖，HUD runtime/debug 行会显示当前 tooltip 摘要；待补 tooltip 屏幕位置、延迟、显隐生命周期、场景切换/库存/容器/交易/制作按钮全量覆盖和 tooltip layer 阻塞/关闭优先级。
-- 部分迁移 `UiInventoryDragState`：`drag_state_snapshot()` / `runtime_control.drag` 已统一暴露 inventory item、skill hotbar、trade item、container item 和 trade cart entry 的 drag source、payload、preview 文本、screen position、viewport、estimated size、anchor、lifecycle、threshold policy 与 hover target 摘要，HUD runtime/debug 行会显示 drag token，并由 `InventoryUI` / `SkillsUI` / `TradeUI` / `UIToggle` smoke 覆盖；真实 drag preview layer 视觉第一版已迁移，`GameApp.render_drag_preview_for_snapshot()` 会渲染非持久 `DragPreviewLayer/DragPreviewPanel/DragPreviewLabel`，按 drag kind 设置边框色、位置、尺寸和文本，并在 `drag_preview_render_snapshot()` 暴露节点路径、mouse_filter、actual_rect、lifecycle、threshold 和文本一致性；拖拽数据生成函数可被诊断调用且不会在非拖拽帧触发 Godot `set_drag_preview` 错误；拖拽 hover target 和 `hover_highlight` 会同时暴露稳定 `reject_reason` 与经 `ReasonCatalog` 转换的 `reject_reason_text`，装备槽、Inventory action、Container column、Trade drop zone/cart/cart entry、HUD hotbar slot / group 和 Observe hotbar 的 accept / reject 诊断均由 smoke 覆盖；装备槽 hover target 可用性诊断第一版已迁移，装备槽会暴露 `slot_id`、`display_slot`、`accepts=inventory_item`、`last_accept`、稳定拒绝 reason、当前装备摘要和 accept / reject hover highlight，覆盖背包物品可装备与非背包拖拽拒绝两类分支；装备槽真实 hover 高亮第一版已迁移，Character 面板会在 Godot `_can_drop_data` 路径中给装备行和文本应用 accept / reject 视觉状态、写入 highlight meta，并在 drop 或鼠标离开时清理；Inventory action target / DropZone hover 第一版已迁移，背包“装备 / 丢弃 / 拖到这里丢弃”会暴露 accept / reject snapshot、稳定 reason，并在 Godot `_can_drop_data` 路径中渲染按钮或 DropZone 高亮；Container column hover 第一版已迁移，容器栏 / 背包栏会对 `container_item` 和 `inventory_item` 拖拽暴露 accept / reject snapshot、稳定 reason，并在 `_can_drop_data` 路径中渲染列高亮；Trade drop zone / cart / cart entry hover 第一版已迁移，购买/出售 drop zone、购物车区域和购物车条目会对交易物品、背包物品和购物车条目重排暴露 accept / reject snapshot、稳定 reason 和 hover highlight，并在 `_can_drop_data` 路径中渲染高亮；HUD hotbar slot hover 第一版已迁移，热栏槽会对 `skill_hotbar` 拖拽暴露 `slot_id`、`group_id`、`accepts=skill_hotbar`、稳定拒绝 reason 和 accept / reject hover highlight，并在 Godot `_can_drop_data` 路径中给按钮渲染红绿高亮；HUD hotbar group unsupported 诊断和真实高亮第一版已迁移，热栏组按钮会在拖拽 hover snapshot 中稳定拒绝并返回 `hotbar_group_drag_unsupported`，同时在 Godot `_can_drop_data` 路径中渲染红色拒绝高亮；Observe hotbar unsupported 诊断和真实高亮第一版已迁移，观察控制按钮会在拖拽 hover snapshot 中稳定拒绝并返回 `observe_hotbar_drag_unsupported`，同时渲染红色拒绝高亮，避免无 drop 行为的 HUD 目标沉默成普通 control。待补更多跨面板 hover 高亮 polish、拖拽后一次性 suppress click 和其他不支持拖放目标的显式诊断策略。
-- 部分迁移 panel open / close 统一事件：stage/settings/dialogue/trade/container 可见性变化会写入 `menu_state_snapshot().recent_events/latest_event` 和 `runtime_control.menu_state`，HUD runtime/debug 行显示最近 `Panel opened/closed:<panel>`；modal active 时会派生 `modal_event` 并追加到 latest/recent events，暴露 modal id、kind、owner、业务目标、mouse/gameplay blocker 和 reason，关闭后清空派生事件，HUD runtime/debug 行会显示 `ModalEvent` token；context menu active 时会派生 `context_menu_event` 并追加到 latest/recent events，暴露 menu id、kind、owner、mouse blocker 和 reason，关闭后清空派生事件，HUD runtime/debug 行会显示 `ContextEvent` token；HUD 反馈 toast 第一版已从 `event_feedback` 同源派生 `feedback_toasts`，暴露 severity、phase、slot、alpha、ttl、event age 和 `event_age_fade` transition，并渲染为非阻塞 `FeedbackToastLayer`；已由 `UIToggle` / `InventoryUI` / `TradeUI` / `SkillsUI` / `UI` smoke 覆盖 inventory/settings 打开关闭、inventory discard / trade equipment sell / skill learn modal 打开与 Esc 关闭、装备 context menu 打开和 Esc / 外部点击关闭后的事件清理，以及 pickup、command rejected、combat attack feedback toast。待补更完整 reason 映射和 toast/feed 视觉 polish。
-- 部分迁移 UI mouse blocker：stage/settings/dialogue/trade/container、interaction menu、panel context menu、trade equipment sell confirm modal、inventory discard confirm modal、skill learn confirm modal、container quantity confirm modal 与 map overworld prompt 已阻止 gameplay 输入；stage panel 根节点与主面板容器的 `mouse_filter` 会随显隐同步，runtime 面板 blocker snapshot 会暴露主面板容器 `content_mouse_blocks_world` 诊断，并由 `UIToggle` / `DialogueUI` / `TradeUI` / `ContainerUI` / `SkillsUI` smoke 覆盖防点击穿透诊断；tooltip layer 已保持 `MOUSE_FILTER_IGNORE`，drag preview layer 会在拖拽诊断中使用 `MOUSE_FILTER_STOP` 阻止世界点击。待补 debug selection panel 显示、inventory quantity 和更多 drag hover 高亮。
+- [ ] Esc 关闭链路补 quantity modal 更细策略。
+- [ ] 数字键补菜单内数量输入与快捷动作冲突处理。
+- [ ] Space 等待补更细长按节奏配置和 modal 冲突策略。
+- [ ] Tab / free observe 补鼠标选择视觉 polish、更完整诊断、多层地图显隐、楼梯 / 跨层路径和遮挡规则。
+- [ ] 面板拖拽补 quantity modal 更细策略、真实拖拽视觉 polish、滚动条拖拽、跨面板 hover 高亮、拖拽后一次性 suppress click 和不支持拖放目标的显式诊断策略。
+- [ ] UI mouse blocker 补 debug selection panel 显示、inventory quantity 和更多 drag hover 高亮。
+- [ ] Modal / tooltip / context menu 补完整优先级矩阵、屏幕位置、延迟、显隐生命周期、场景切换 / 库存 / 容器 / 交易 / 制作按钮覆盖和 layer 阻塞 / 关闭优先级。
+- [ ] Toast / feed 补更完整 reason 映射和视觉 polish。
 
 ## 4. 移动、路径、空间与地图规则
 
 ### 4.1 网格和路径
 
-- 待确认 Godot 网格数学与 Rust 完全等价：cell distance、对角移动、禁止穿角、同层限制、bounds、levels。
-- 待补 generated building stairs 跨层 pathfinding，楼梯端点、楼层切换、目标楼层显示。
-- 动态阻挡第一版：`door_states` 会随 world snapshot 应用到 topology，打开/关闭门会更新 movement / sight blocking；玩家移动路径和 hostile AI 追击路径遇到未锁关闭门会自动打开并发出 `door_auto_opened` / `door_toggled`；actor 占用阻挡其他 actor 但不阻挡自己、尸体/掉落/拾取物非阻挡已有基础路径。门权限已支持钥匙/工具第一版；仍需补更完整跨系统诊断。
-- 路径失败 reason 第一版已迁移：目标静态阻挡返回 `goal_blocked` 并带 `blocker.kind=map_object`，目标被 actor 占据返回 `goal_occupied` 并带阻挡 actor id，越界返回 `goal_out_of_bounds` 并带 bounds，跨层返回 `level_mismatch` 并带起止楼层，不可达返回 `path_unreachable` 并带 visited cell count；已由 `Movement` smoke 覆盖。待补动态门阻挡诊断、楼梯跨层和更完整 UI 文案映射。
-- 路径预览颜色、格子 marker、AP 分格和 pending 剩余路径第一版已迁移：hover 地面时会用同一 pathfinder 预览可达性、预计步数、AP cost / available / affordability、affordable_steps、pending_steps 和失败 reason，HUD 显示摘要，hover cursor 用绿色/红色区分可达/不可达，`MovePathPreviewMarkers` 会按 `preview_move.path` 生成每格 marker，当前 AP 内格子使用移动预览色，超出 AP 的格子使用 pending 色，并记录 reachable / reason / steps / grid / path_index / step_cost / within_current_ap / requires_pending；当 runtime snapshot 存在 `pending_movement` 时，`PendingMovementPathMarkers` 会持续显示剩余路线并在 pending 清除后自动清空；已由 `PlayerInteraction` / `Movement` smoke 覆盖。待补路径线 polish、更丰富多格路径着色和跨回合动画表现。
+- [ ] 复核 Godot 网格数学与旧实现等价：cell distance、对角移动、禁止穿角、同层限制、bounds、levels。
+- [ ] 补 generated building stairs 跨层 pathfinding、楼梯端点、楼层切换和目标楼层显示。
+- [ ] 动态阻挡补门阻挡诊断、楼梯跨层和更完整 UI 文案映射。
+- [ ] 路径预览补路径线 polish、更丰富多格路径着色和跨回合动画表现。
 
 ### 4.2 门和建筑
 
-- generated door runtime 第一版已迁移：地图对象可通过 `props.door` 生成 `door_objects`、默认关闭、未锁、阻挡 movement / sight，`Simulation.toggle_door()` 会写入 `door_states`，world snapshot 会按 door state 更新 movement / sight blocking，并由 `World` / `Interaction` / `Save` smoke 覆盖。待补将现有地图建筑门洞批量标注为真实 `props.door`。
-- 锁门权限第一版已迁移：纯 `locked` 门保留 inspect placeholder，`door_toggle` 作为 disabled option 暴露 `door_locked`，直接执行返回 `door_locked`；门 `props.door` / runtime `door_states` 支持 `required_item_ids` / `required_items` 和 `required_tool_ids` / `required_tools`，玩家背包或装备满足钥匙/工具后可打开锁门，缺失时返回 `door_key_missing` / `door_tool_missing`，HUD 有中文失败提示；显式配置 `consume_required_items_on_unlock` / `consume_required_tools_on_unlock` 时会在开锁成功后消耗背包钥匙/工具、记录 `unlock_requirements_consumed` 并解除 locked，配置和解锁状态随存档 roundtrip；门开锁工具耐久第一版已迁移，结构化 `required_tools` 或顶层 `tool_durability_cost` / `unlock_tool_durability_cost` 可声明耐久消耗，耐久不足返回 `tool_durability_insufficient`，成功时扣 actor `tool_durability` 而不消耗整件工具，结果和事件会暴露耐久成本与前后值；新增耐久路径已由 `Interaction` / `Save` smoke 覆盖。待补逐件/多 stack 工具耐久、失败概率和更完整开锁表现。
-- 自动开门第一版已迁移：玩家移动路径、hostile AI 追击路径和 settlement life 世界回合移动遇到可开启关闭门时会临时释放 pathfinding 阻挡，进入门格时自动打开并持久化 `door_states`、发出 `door_auto_opened` / `door_toggled`；玩家路径和 AI / life 路径已复用同一钥匙/工具权限，缺钥匙/工具仍保持不可达，满足要求会自动开门通过；已由 `Movement` / `AI` / `Door` smoke 覆盖。待补 GOAP planner 路径自动开门、开合模型状态更新和声音占位。
-- 待补建筑 footprint 阻挡：复杂 footprint、多层 story、door opening、wall visual、floor visual 和路径阻挡一致。
-- 门 hover / fallback 开合表现第一版已迁移：world renderer 会把 `target_kind=door` 和 door 状态 metadata 写入 pickable map object，runtime hover 会合并 world interaction target、把 `door_toggle` 归类为 `door`，并用门专属 outline 颜色和 `door_is_open` / `door_locked` meta 表现；无真实门模型时会生成 `DoorStateVisual` fallback，关闭/打开/锁定状态有稳定 meta、颜色和打开旋转；已由 `PlayerInteraction` / `Scene` smoke 覆盖。待补真实门模型、碰撞体、交互提示 polish 和声音占位。
+- [ ] 将现有地图建筑门洞批量标注为真实 `props.door`。
+- [ ] 锁门补逐件 / 多 stack 工具耐久、失败概率和更完整开锁表现。
+- [ ] 自动开门补 GOAP planner 路径自动开门、开合模型状态更新和声音占位。
+- [ ] 建筑 footprint 阻挡补复杂 footprint、多层 story、door opening、wall visual、floor visual 和路径阻挡一致。
+- [ ] 门表现补真实门模型、碰撞体、交互提示 polish 和声音占位。
 
-### 4.3 地图切换和 overworld
+### 4.3 地图切换和 Overworld
 
-- scene transition 触发器第一版已迁移：目标 map、entry point、目标名称、缺地图/缺入口失败原因、返回 map / entry 记录和进入后 entry facing 已进入 result、`scene_transition` 事件、`interaction_succeeded` payload 与 context snapshot；`MapEntryPointNode.facing` 会经 `MapBuilder` 保留到 topology，`WorldSnapshotBuilder` 会从 `scene_transition.entry_facing` 派生 actor 朝向；transition trigger / option 的 `required_world_flags`、`blocked_world_flags`、`required_unlocked_locations` 和 `blocked_unlocked_locations` 会进入 prompt 与执行校验，缺少或被封锁时返回稳定 reason 并显示 HUD 中文反馈，由 `Interaction` / `Scene` / `World` smoke 覆盖。待补确认 prompt 视觉 polish 和更完整 overworld 进入/返回提示。
-- 部分迁移 overworld 位置进入、返回和解锁地点；地图面板定位第一版已从 `data/overworld` 展示世界地图尺寸、当前地点坐标、地点解锁数量、道路格摘要和画布 inset；已解锁非当前地点会显示前往按钮并先打开 `overworld_prompt` 确认弹窗，确认后进入目标地点，Esc / 取消保持当前地点不变，并由 `UIToggle` smoke 覆盖。待补最近到达地点、显式路线规划、返回 prompt 和无法进入原因 UI。
-- 地图切换后的运行时清理第一版已迁移：pending、active dialogue、active container 和 active trade 会在位置进入或刷新时关闭并发出带 reason 的事件；scene transition 重绘会清理 hover snapshot、interaction selection、move / attack / skill preview markers，并按 entry / player spawn 重新定位相机；fog overlay 会按新 active map 重建 mask 并暴露 map / size metadata；已由 `Overworld` / `TradeUI` / `PlayerInteraction` smoke 覆盖。待补更细的过渡动画、已探索/可见格平滑混合和 overworld 进入/返回 prompt polish。
-- 待补所有 `godot/scenes/maps/*.tscn` 与旧 JSON 备份的字段等价复核：size、levels、entry points、objects、footprints、rotations、props、triggers。
+- [ ] Scene transition 补确认 prompt 视觉 polish 和更完整 overworld 进入 / 返回提示。
+- [ ] Overworld 补最近到达地点、显式路线规划、返回 prompt 和无法进入原因 UI。
+- [ ] 地图切换补更细过渡动画、已探索 / 可见格平滑混合和 overworld prompt polish。
+- [ ] 所有 `godot/scenes/maps/*.tscn` 与旧 JSON 备份做字段等价复核：size、levels、entry points、objects、footprints、rotations、props、triggers。
 
 ## 5. 交互系统
 
 ### 5.1 目标解析
 
-- actor / object / self / grid fallback 优先级和失败 reason 第一版已迁移：`InteractionTargetResolver` 会按显式 `target_type` 严格解析，缺省时按 `actor_id -> target_id/map_object -> grid` 推断，并在成功 / 失败 prompt 中暴露 `target_resolution`，包含 requested / inferred / resolved target type、resolved kind、priority、target id、actor id 和 grid presence；未知 actor、未知 map object、缺 grid、已消费 map target 和未知 target type 会返回稳定 reason，reason catalog 已补中文兜底；已由 `Interaction` smoke 覆盖。待补输入层 picking 多命中时的可视化优先级诊断和 UI 文案 polish。
-- friendly / neutral / hostile 选项差异第一版已迁移：友好/中立 actor 主交互为 `talk` 且 `attack` 进入 `disabled_options` / `target_not_hostile`，hostile actor 主交互为 `attack` 且 `talk` 进入 `disabled_options` / `target_hostile`，self target 主交互为 `wait` 且 self talk / attack 禁用；已由 `Interaction` smoke 覆盖。待补 trade、heal、inspect、关系分数和脚本化 NPC 权限。
-- target visibility 第一版已迁移：当 actor 已有 active vision 时，交互 prompt 会拒绝不可见 actor / map object 并返回 `target_not_visible` 与目标格；攻击校验会拒绝不可见 actor 并返回 `target_not_visible` 与目标格；技能目标 preview / use_skill 会拒绝不可见 actor target 和不可见 grid / AOE 中心格，失败不消耗 AP；未刷新 vision 的运行时保持兼容不强制拦截。已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补雾中探索态、遮挡 target preview 和 UI 文案。
-- interaction range 第一版已迁移：prompt 会暴露 `interaction_range`、`target_distance`、`requires_approach`，pickup / container / transition / attack 默认 1 格，talk 为 2 格，wait / move 为 0 格；自动接近会按交互距离选择目标格，目标不可达返回 range / distance 诊断，并由 `Interaction` smoke 覆盖。待补动态 AP / 距离配置、特殊对象权限、路径预览和 UI 文案映射。
-- prompt snapshot 真实禁用项第一版已迁移：pickup、container、grid、self、friendly/neutral actor、hostile actor 和 scene transition 会输出启用 `options` 和带 `disabled_reason` / `ap_cost` 的 `disabled_options`，执行或通过 `submit_player_command(interact)` 指定禁用 option 都会返回对应 reason；HUD snapshot 已能暴露禁用项，常见场景切换权限失败已有中文反馈，由 `Interaction` / `UI` smoke 覆盖。待补完整 target display、动态 AP cost 来源、更多可见性禁用、权限禁用和 UI 文案映射。
+- [ ] 输入层 picking 多命中补可视化优先级诊断和 UI 文案 polish。
+- [ ] Friendly / neutral / hostile 交互补 trade、heal、inspect、关系分数和脚本化 NPC 权限。
+- [ ] Target visibility 补雾中探索态、遮挡 target preview 和 UI 文案。
+- [ ] Interaction range 补动态 AP / 距离配置、特殊对象权限、路径预览和 UI 文案映射。
+- [ ] Prompt snapshot 补完整 target display、动态 AP cost 来源、更多可见性禁用、权限禁用和 UI 文案映射。
 
 ### 5.2 交互行为
 
-- 已有拾取、容器、对话、交易、场景切换、等待、攻击的第一版；self target 会生成“等待”交互菜单项，`submit_player_command(interact)` 与 direct `execute_interaction(..., "wait")` 都会推进回合并发出 `interaction_succeeded`；对话开始、容器打开、场景切换和 `interaction_succeeded` 的目标显示名 / option kind 已覆盖基础 payload；待补每种行为的完整失败反馈、禁用原因和 UI 刷新点。
-- pickup 数量和合并第一版已迁移：地图 pickup 按 scene 中 `max_count` 确定性发放，物品会合并进 actor inventory，result、`pickup_granted` 与 `interaction_succeeded` payload 会暴露 `item_id`、`count`、`inventory_before`、`inventory_after`，地图目标会进入 consumed 集合，并由 `Interaction` smoke 覆盖；任务收集进度已接入 `record_item_collected`。待补部分拾取、数量弹窗、拾取失败细分、拾取音效和 UI 提示 polish。
-- open_container 第一版已迁移：地图容器、尸体容器和掉落容器都统一进入 `container_sessions`，打开容器会设置 actor `active_container_id` 并发出 `container_opened`，拿取/存放会持久化 session；容器 session / snapshot / save 会保留 `container_type` 与 `container_origin`，地图容器默认为 `map/map_scene`，尸体容器默认为 `corpse/combat_defeat`，掉落容器默认为 `drop/inventory_drop`，旧存档缺字段时会按 id 兜底推断；关闭按钮、Esc、距离过远、目标消失、切换地图和打开另一个容器都会清理 active container 并发出关闭事件；容器 ID / 元数据规范第一版已落地到 `docs/container_id_policy.md`，明确 map / corpse / drop / shop / quest / smoke 容器 ID、`container_type`、`container_origin`、视觉元数据、存档兜底和验证口径；容器打开状态已进入 world target / pickable body / badge 元数据，容器打开、关闭和转移事件已有占位音反馈，已由 `Interaction` / `ContainerUI` / `Combat` / `InventoryUI` / `Save` / `UIToggle` smoke 覆盖。待补商店/任务容器与普通容器的深度权限差异、部分拿取数量弹窗 polish、真实容器音频资源和真实 hover/open 动画表现。
-- talk 规则选择第一版已迁移：`data/dialogue_rules` 进入 Godot data registry，启动时配置到 `Simulation`，talk 会按 NPC `definition_id` 解析 dialogue rule，按 active/completed quests、玩家物品数量、relation score、NPC role/on_shift 和玩家 HP 比例选择变体；找不到规则时回退到直接 dialogue id，找不到变体时回退 default dialogue。`dialogue_started` 和 `interaction_succeeded` 会暴露 requested / resolved dialogue、rule key 和 source，并由 `Interaction` / `DialogueUI` / `DialogueAction` / `Save` smoke 覆盖。待补 schedule/on_shift 真实时间判定、fallback 台词生成和对话 UI 文案 polish。
-- scene_transition 目标反馈第一版已迁移：场景切换 result、`scene_transition` 事件和 `interaction_succeeded` payload 会暴露 target id/name、from/to map、target entry point、entry facing、返回 map / entry 和落点 grid，失败时返回 target map / entry 诊断；进入权限已支持 world flag 与 unlocked location 的 required / blocked 条件，并在 prompt 禁用项、直接执行、玩家命令拒绝和 HUD 反馈中保持一致；已由 `Interaction` / `Scene` smoke 覆盖。待补确认 prompt 视觉、overworld 进入/返回 prompt 和更完整地图切换 UI polish。
-- wait self interaction 第一版已恢复：self target 会暴露“等待”菜单项，等待会进入现有回合推进逻辑并产出事件反馈；待补更完整的 modal 冲突策略和视觉 polish。
+- [ ] 每种交互行为补完整失败反馈、禁用原因和 UI 刷新点。
+- [ ] Pickup 补部分拾取、数量弹窗、拾取失败细分、拾取音效和 UI 提示 polish。
+- [ ] Container interaction 补商店 / 任务容器与普通容器的深度权限差异、部分拿取数量弹窗 polish、真实容器音频资源和真实 hover / open 动画表现。
+- [ ] Talk 补 schedule / on_shift 真实时间判定、fallback 台词生成和对话 UI 文案 polish。
+- [ ] Scene transition 补确认 prompt 视觉、overworld 进入 / 返回 prompt 和更完整地图切换 UI polish。
+- [ ] Wait self interaction 补更完整 modal 冲突策略和视觉 polish。
 
 ## 6. 战斗、目标和伤害
 
 ### 6.1 攻击校验
 
-- 攻击目标合法性第一版已迁移：unknown attacker / target、self、attacker defeated、target defeated、corpse container target、friendly / neutral 非敌对目标、active vision 下不可见目标都会被拒绝；失败结果会暴露 actor id、target actor id、corpse/container id、阵营或格子等诊断字段；corpse 作为单独 target type 会稳定返回 `target_is_corpse`，reason catalog 会提示“尸体只能打开容器”，已由 `Combat` smoke 覆盖。friendly fire core 第一版已迁移：普通攻击仍拒绝非敌对目标并暴露 confirmation_required，显式 `allow_non_hostile_attack` / `allow_friendly_fire` 后预览会显示关系后果，执行会先应用关系惩罚、把目标转为敌对并进入 combat，`attack_resolved` 会带 `friendly_fire` 和 `relationship_consequence`；已由 `Combat` / `Interaction` / `AI` smoke 覆盖。待补 UI 二次确认弹窗、犯罪/目击/阵营联动和 UI 文案 polish。
-- 攻击空间校验第一版已迁移：跨层、超出武器范围、低于最小射程和 LOS 遮挡会返回稳定 reason，并暴露 attacker grid、target grid、distance、range、min_range、same_level、range_ok、min_range_ok、line_of_sight、line_of_sight_required 和 spatial_failure 等诊断字段；`submit_player_command(attack)`、core `perform_attack` 和 `preview_attack` 都复用同一空间诊断，攻击拓扑会先套用运行时 `door_states`，关门保留 LOS 阻挡、开门移除门格 sight blocker，已由 `Combat` smoke 覆盖预览与实际攻击的一致性。待补楼梯/高低差、特殊武器例外和技能共用射程策略。
-- 待补 line-of-sight 扩展：技能共用空间失败原因，墙体、门、楼层、中心点遮挡的完整旧版细节。
-- 范围扩展第一版已迁移：近战/远程最大射程、cell distance、武器 `range` 和兼容 `min_range` / `minimum_range` / `minRange` 最小射程会进入攻击 profile、预览、执行和 NPC intent；低于最小射程返回 `target_too_close`，不扣 AP、不消耗弹药、不进入战斗，并由 `Combat` / `AI` smoke 覆盖。待补特殊武器例外、更多数据内容标注和技能射程共用策略。
-- 攻击前目标预览第一版已迁移：`Simulation.preview_attack()` 会只读返回 actor / target、射程、距离、AP 成本、弹药可用性、命中率、暴击率、预估伤害、可攻击状态和不可攻击 reason，并复用攻击合法性 / 空间 / 可见性校验，不扣 AP、不耗弹药、不推进 RNG、不进入战斗；runtime hover snapshot 和 HUD runtime 行已在悬停 actor 时展示可攻击 / 不可攻击、距离 / 射程、AP、命中率和伤害摘要，hover cursor 会用橙红色显示攻击预览并暴露 attack meta，`AttackTargetMarker` 会在命中 actor 上方显示第一版世界视觉标记，`AttackRangeMarkers` 会按当前射程显示第一版候选可攻击格并过滤地图 bounds / blocking cells / LOS，`AttackTargetOutline` 会给目标 actor 显示第一版半透明 outline，已由 `Combat` / `PlayerInteraction` smoke 覆盖。待补门/楼层例外下的可攻击格精确过滤和视觉 polish。
+- [ ] Friendly fire 补 UI 二次确认弹窗、犯罪 / 目击 / 阵营联动和 UI 文案 polish。
+- [ ] 攻击空间校验补楼梯 / 高低差、特殊武器例外和技能共用射程策略。
+- [ ] LOS 扩展补技能共用空间失败原因，以及墙体、门、楼层、中心点遮挡的旧版细节。
+- [ ] 范围扩展补特殊武器例外、更多数据内容标注和技能射程共用策略。
+- [ ] 攻击预览补门 / 楼层例外下的可攻击格精确过滤和视觉 polish。
 
 ### 6.2 武器、弹药和伤害
 
-- 武器基础战斗第一版已迁移：武器射程、弹药、攻击速度、基础伤害、暴击率、暴击倍率和 `accuracy` 会进入 Godot attack profile；命中/暴击使用 deterministic combat RNG，seed / counter 会随 snapshot 保存并在加载后继续稳定重放；已由 `Combat` / `Save` smoke 覆盖。
-- 命中、闪避、格挡和护甲第一版已迁移：显式 actor / weapon `accuracy` 会进行命中判定，目标 `evasion` 会降低命中率；miss 不造成伤害、不触发暴击但保留 AP / 弹药消耗和 `attack_resolved` 反馈；防御过高会返回 `blocked`；装备 defense 和 `damage_reduction` 已参与伤害结算；HUD 事件反馈已显示攻击双方、命中 / 闪避 / 格挡 / 暴击、伤害、命中率和击倒状态，并由 `Combat` / `UI` smoke 覆盖。待补 NPC 命中体验调参、更多装备效果、详细战斗日志面板和旧版完整公式复核。
-- 待补伤害类型/抗性/弱点等旧数据如果存在的完整应用。
-- 远程弹药和 reload 第一版已迁移：玩家已装备武器 `reload_equipped` 命令、弹匣状态、背包弹药转入弹匣、换弹 AP、弹匣攻击消耗、无弹/空弹匣提示和存档 roundtrip 已纳入 `Equipment` / `Combat` / `Save` smoke；装备 `ammo_capacity` / `reload_speed` 第一版已通过 core 装备效果服务影响换弹容量和 AP 成本；NPC 战斗回合会在弹匣为空且背包有弹时先 `reload`，AP 足够时同一战斗 action loop 继续 `attack`，并验证 `weapon_reloaded`、`ammo_consumed`、`attack_resolved` 和 AI reload 诊断 payload；待补装填动画、弹匣 UI polish、更多武器/弹药类型、多武器/换武器策略和特殊弹药策略。
-- on-hit 效果 runtime 第一版已迁移：武器 `on_hit_effect_ids` 会进入 attack profile，命中/暴击时 `attack_performed`、`attack_resolved` 和 attack result 暴露 `triggered_on_hit_effect_ids`；miss / blocked 不触发；有持续时间或属性 modifier 的 effect 会按 `refresh` / `extend` / `intensity` 基础堆叠规则写入目标 actor `active_effects`，并发出 `on_hit_effect_applied`、返回 `applied_on_hit_effects`；0 持续占位 effect 仅保留触发反馈，不污染状态栏；流血 / 中毒 DoT tick 第一版已迁移，world turn 会按 `special_effects` / effect library 的 tick damage fallback 和 stack count 扣 HP，发出 `active_effect_damage_tick`，DoT 击败目标时复用 combat defeat / corpse / XP / kill quest 流程并发出 `active_effect_defeated_actor`；stun 跳过回合第一版已迁移，玩家被 stun 时提交行动会被 core 拦截为 `actor_stunned` 并跳过当前回合，NPC 开回合后若仍带 stun 会直接返回 skip intent、关闭回合并发出 `actor_turn_skipped`；`armor_pierce` / `armor_break_chance` 即时战斗公式第一版已迁移，武器顶层 `effect_data` 会进入 attack profile，穿甲降低本次有效防御，破甲触发时降低本次剩余防御，并在 attack result、`attack_performed`、`attack_resolved` 与世界 action metadata 暴露 effective defense / armor roll / chance / reduction；世界表现第一版会在目标 actor 周围生成 `WorldActionOnHitEffectPulse`，与飘字共享 effect ids / names / categories 和 attack metadata；已由 `Combat` / `PlayerInteraction` smoke 覆盖。待补 UI 日志和更细状态特效 polish。
-- 攻击装备成本第一版已迁移：带 `durability` fragment 的武器会在 Godot attack profile 中暴露 `durability_cost` / 默认耐久 / 最大耐久，玩家和 NPC 通过权威攻击命令成功命中流程后会扣减 actor `tool_durability[weapon_item_id]` 并发出 `weapon_durability_consumed`；耐久不足会在扣 AP、进战斗和耗弹前返回 `weapon_durability_insufficient`；已由 `Combat` smoke 覆盖。待补消耗品、特殊弹药效果消耗、装备损坏 UI 和修理闭环。
-- 伤害反馈第一版已迁移：`WorldSnapshotBuilder` 会从最近 `attack_resolved` 事件为目标 actor 派生 `combat_feedback`，`WorldSceneRenderer` 会显示命中伤害、暴击、miss、blocked 和击倒的 `ActorCombatFeedback` 标签与 `ActorCombatFeedbackMarker`，并暴露 attacker/target/damage/hit/critical/weapon 元数据；已由 `Scene` smoke 覆盖。待补动画飘字生命周期、详细战斗日志面板、受击/攻击动画占位、命中特效和音效占位。
+- [ ] 命中、闪避、格挡和护甲补 NPC 命中体验调参、更多装备效果、详细战斗日志面板和旧版完整公式复核。
+- [ ] 伤害类型、抗性、弱点等旧数据如果存在，需要完整应用。
+- [ ] Reload 补装填动画、弹匣 UI polish、更多武器 / 弹药类型、多武器 / 换武器策略和特殊弹药策略。
+- [ ] On-hit 效果补 UI 日志和更细状态特效 polish。
+- [ ] 攻击装备成本补消耗品、特殊弹药效果消耗、装备损坏 UI 和修理闭环。
+- [ ] 伤害反馈补动画飘字生命周期、详细战斗日志面板、受击 / 攻击动画占位、命中特效和音效占位。
 
 ### 6.3 击杀和尸体
 
-- 击杀和尸体容器第一版已迁移：击杀会移除 actor、发放 XP、推进 kill 任务、创建可打开尸体容器，并把尸体同步到 `corpse_containers`、`container_sessions` 和 map interaction target；已由 `Combat` smoke 覆盖。
-- 尸体掉落合并和元数据第一版已迁移：尸体会合并目标背包、装备、已装填弹匣余弹和 character `combat.loot` 掉落；随机 loot chance / count 会使用可存档的 combat RNG，固定必掉 loot 保持静态结果；尸体 snapshot / container 会保留 display name、container type / origin、source actor id / definition id / kind、defeated by actor id、map id、grid、appearance / model asset、equipped slots 和 money；尸体 / 容器金钱已作为可拿取经济条目接入 `Simulation.take_money_from_container()`、`take_container_money` 命令、container snapshot / UI 行、存档 roundtrip 和事件反馈；已由 `Combat` / `ContainerUI` / `Save` smoke 覆盖。待补单件耐久状态、掉落随机公式与 Rust 完整复核、尸体容器 UI 展示装备来源。
-- 尸体模型和 hover / open container 表现第一版已迁移：击杀后世界快照会把当前地图尸体注入动态 `Corpse_*` 节点，优先复用被击败 actor 的 glTF 模型并保留 pickable body；鼠标悬浮会显示 hover 光标，选择尸体会展示“打开...”主交互并能打开容器面板；已由 `PlayerInteraction` smoke 覆盖。待补专用尸体姿态/动画、美术模型、装备来源 UI 标记和尸体清理表现。
-- 待补击杀后 AI / combat state / quest / relationship / event feedback 的顺序一致性。
+- [ ] 尸体掉落补单件耐久状态、掉落随机公式与旧实现完整复核、尸体容器 UI 展示装备来源。
+- [ ] 尸体表现补专用尸体姿态 / 动画、美术模型、装备来源 UI 标记和尸体清理表现。
+- [ ] 击杀后 AI / combat state / quest / relationship / event feedback 的顺序一致性需要复核。
 
 ### 6.4 技能目标和 AOE
 
-- 技能目标解析第一版已迁移：`Simulation.preview_skill_target()` 和 `use_skill` 共用 target preview，默认兼容旧 self buff / toggle；已支持 self、single actor、grid、radius AOE、line 和 cone 的目标解析、range / level 校验、affected cells / actor ids、friendly fire 标记，并在目标非法时不消耗 AP；line 会按施法者到目标格的直线收集命中格，cone 会按目标方向、length 和 width 收集扇形命中格，两者都支持 affected_policy / LOS 过滤；已由 `Combat` smoke 覆盖。目标型技能选择 UI 第一版已迁移：非 self 热栏技能会进入目标选择态，hover 时刷新 core preview，HUD 展示本地化形状、目标策略、射程、距离、命中格、命中 actor、友军风险和失败原因，世界层会用 `SkillTargetPreviewMarkers` 显示 affected cell 和 affected actor 高亮并暴露 skill/shape/reason metadata，Esc 可取消，左键/确认会用同一 `use_skill` 命令释放并清理高亮；已由 `SkillsUI` smoke 覆盖。待补鼠标/键盘确认提示和目标选择音效。
-- AOE / 技能目标 LOS 与可见性第一版已迁移：single、grid、radius 目标默认要求施法者到目标中心 LOS，遮挡返回 `skill_target_blocked_by_los` 且不消耗 AP；active vision 已刷新时，技能目标会拒绝不可见 actor target 和不可见 grid / AOE 中心格并返回 `target_not_visible`；radius AOE 默认从中心到每个命中格检查 LOS，遮挡格会从 `affected_cells` / `affected_actor_ids` 排除，并支持 `requires_los=false` / `respect_los=false` 作为特殊技能例外；技能预览和实际释放会先套用运行时 `door_states`，关门阻挡 LOS、开门允许穿过门格，已由 `Combat` smoke 覆盖。待补技能 / AOE 友军伤害实际后果、中心到命中格的旧版边缘细节。
-- typed targeting policy 第一版已迁移：支持 self、hostile_only、ally_only、any_actor、any_grid、empty_grid，以及 radius 的 affected_policy 过滤；已由 `Combat` smoke 覆盖。待补 object target、容器/门/机关目标和脚本化目标类型。
-- 目标预览 UI polish 第一版已迁移：HUD 目标选择行会显示技能名、形状、策略、射程/距离、命中数量、友军风险和失败 reason 文案，世界层会显示范围格和命中 actor outline，并由 `SkillsUI` smoke 覆盖；待补鼠标/键盘确认提示和目标选择音效。
+- [ ] 技能目标选择补鼠标 / 键盘确认提示和目标选择音效。
+- [ ] AOE / 技能目标 LOS 补技能友军伤害实际后果、中心到命中格的旧版边缘细节。
+- [ ] Typed targeting policy 补 object target、容器 / 门 / 机关目标和脚本化目标类型。
+- [ ] 目标预览 UI 补鼠标 / 键盘确认提示和目标选择音效。
 
 ## 7. NPC、AI、阵营和生活模拟
 
 ### 7.1 战斗 AI
 
-- hostile attack / approach、aggro range 和 LOS 感知第一版已迁移：敌对 NPC 会按 active map、阵营、存活状态、感知距离和 topology LOS 选择目标，LOS 被阻挡时保持 idle 并返回 `target_blocked_by_los`；AI intent、NPC world turn 和 combat visibility decay 会先套用运行时 `door_states`，关门阻挡感知、开门恢复感知；玩家等待推进 NPC 回合时会传入当前地图 topology，避免隔墙攻击；已由 `AI` smoke 覆盖。待补丢失目标、重规划、绕障、AP 分配和失败结束回合。
-- NPC 武器射程、弹药和 reload 第一版已迁移：敌对 NPC intent 会读取已装备主手武器 profile，按武器 range / min_range 判断远程攻击，低于最小射程时不发起非法攻击并返回 `target_inside_min_range`；攻击前校验 AP / 弹药，攻击后消耗弹匣或背包弹药；弹匣为空且背包有弹药时优先 `reload`，无弹药时 idle 并返回 `weapon_ammo_unavailable`；攻击或换弹 AP 不足时会等待而不误报失败、不攻击、不改弹匣；已由 `AI` / `Combat` smoke 覆盖。待补低于最小射程时的后退/换位战术、多武器选择、换武器、NPC 特殊弹药策略和 reload 动画/反馈。
-- 待补 NPC 技能使用、逃跑、治疗、保护友军、呼叫增援。
-- AI 行为事件和诊断 payload 第一版已迁移：`ai_intent_decided` 会暴露 intent、reason、target、target_grid、distance、aggro_range、attack_range、AP、path、weapon、ammo 和 reload 状态，占位空值保持稳定；NPC approach 成功 / 失败结果会暴露 `attempted_goals`、`attempted_goal_count`、chosen goal、path、remaining steps 和每个候选邻接格的 pathfinding reason / visited cell count，锁门无法接近会返回稳定 `npc_no_adjacent_path` 细分诊断；AI intent 会记忆 `last_seen_target_actor_id`、`previous_target_actor_id`、`target_tracking_state`、`target_lost` 和 `target_lost_reason`，可区分 acquired / tracking / lost / none，并随 snapshot roundtrip；`runtime_control.ai_debug` 会汇总 intent、reason、target、path_length、AP、weapon/ammo 和 failure reason，并新增稳定 `goal` / `action` / `blackboard` 子对象，HUD runtime 行显示 `AI #...` 摘要和目标追踪状态；已由 `AI` / `UIToggle` smoke 覆盖。待补统一 debug panel 展示 polish。
+- [ ] Hostile AI 补丢失目标、重规划、绕障、AP 分配和失败结束回合。
+- [ ] NPC reload / weapon policy 补低于最小射程时的后退 / 换位战术、多武器选择、换武器、NPC 特殊弹药策略和 reload 动画 / 反馈。
+- [ ] 补 NPC 技能使用、逃跑、治疗、保护友军、呼叫增援。
+- [ ] AI debug 补统一 debug panel 展示 polish。
 
-### 7.2 Settlement life / GOAP
+### 7.2 Settlement Life / GOAP
 
-- settlement life 世界回合第一版已迁移：`Simulation` 会加载 `data/ai` 与 `data/settlements`，把 `world_time.day` / `minute_of_day`、active map、AI profile 和 settlement 数据传给 intent resolver；非战斗 NPC 在 `advance_world_turn()` 中可执行 `follow_route`、`return_home` 和 `use_smart_object` intent，按现有 topology / pathfinder / door permission 逐步移动、消耗 AP，并发出带 `life_intent` 的 `movement_step` / `actor_moved` 事件；`world_time` 已进入 snapshot / save roundtrip，旧存档会默认迁移为 monday 09:00，世界回合会按 15 分钟推进日程时间；`need_profile` 第一版已被 runtime 消费，生活 NPC 的 hunger / energy / morale 会随世界回合衰减并保存在 actor `life.runtime.needs`，smart object 到达使用会按对象类型或 planner action 的 `need_effects` 恢复对应需求并发出 `settlement_life_smart_object_used` / `settlement_life_needs_changed`；life status 第一版会从在线 / 后台 life result 派生 `life.runtime.status`，区分 traveling / patrolling / guarding / servicing / treating / eating / resting / relaxing / blocked 等状态组，记录 activity、planner action、目标、进度和 mode，并发出 `settlement_life_status_changed`；life status 表现第一版已由 `WorldSnapshotBuilder` 转成 actor `life_status`，`WorldSceneRenderer` 渲染 `ActorLifeStatusMarker` / label / `ActorLifeStatusAnimation` pulse，按 work / service / rest / blocked / idle 派生动画名、周期和 scale 诊断，并在 HUD AI debug 中显示 `status:` token；runtime control / HUD AI debug 第一版已暴露 settlement id、route / anchor / smart object、schedule label、route grid count 和 life status；已由 `AI` / `Save` / `Scene` / `UIToggle` smoke 覆盖。待补地图 route polish、最终状态美术反馈和截图级动画验收。
-- GOAP / planner 第一版已迁移：`SettlementLifeRules` 会从 `data/ai/modules/settlement_npc_modules.json` 和 behavior/profile 数据读取 facts、score_rules、goals、action_groups、actions 与 executor bindings，构造 actor needs / schedule / anchor / role / personality world state，计算 fact truth、目标分数、conditional requirements 和 unmet assignments，再选择能推进目标的 action；action 会映射回 Godot 原生 `follow_route`、`return_home`、`use_smart_object` intent，并把 planner goal/action/facts/score rules 摘要写入 `life_intent` 和 HUD `ai_debug`；smart object 选择会按访问规则和标签匹配度选择岗位、餐位、床、医疗站或休闲点。planner runtime 队列摘要第一版已落入 actor `life.runtime.planner`，包含 goal/action、score rules、requirements、facts、action_queue、last_execution，并通过 actor life snapshot 存档；跨回合多步队列第一版会在最高优先级 goal 未改变且下一步 preconditions 满足时续跑 queued action；失败重规划第一版会在 life planner action 不可达或执行失败时记录 `replan_requested` / `replan_request`，发出 `settlement_life_planner_replan_requested`，下一轮跳过旧 queued action 并重新经过 planner 选择；完成 action 的 effects 会回填 `life.runtime.planner_state`；action `world_state_effects` 第一版会把 `set_*` / `clear_*` 数据化副作用写入 `Simulation.world_flags`，记录到 `last_execution.applied_world_state_effects`，发出 `settlement_life_world_state_effect_applied`，并随 snapshot / save 往返；executor 副作用第一版会把 `respond_alarm` 清除 `world_alert_active`，把 `restock_meal_service` / `treat_patients` 写入稳定 world flag，记录到 `last_execution.applied_executor_side_effects` 并发出 `settlement_life_executor_side_effect_applied`；`resolve_alarm` 分发第一版会按 action `target_anchor` 区分 alarm bell 与 duty guard post，避免 `respond_alarm` 错误跑向 alarm point；action reservation 第一版会把 `reservation_target`、smart object、actor、action 和 world time 写入 `life.runtime.reservations`，同步兼容布尔和 planner facts，并发出 `settlement_life_reservation_updated`；预约释放第一版会在同一队列最终动作完成时把 reservation 标记为 inactive，清理兼容布尔 / planner facts，并发出 `settlement_life_reservation_released`；预约过期第一版会按 action 的 `reservation_ttl_minutes` / `perform_minutes` / `default_travel_minutes` 推导 TTL，世界回合开始清理过期 active reservation，复用 release 事件并标记 `release_reason=reservation_expired`；预约冲突第一版会由 `Simulation` 汇总其他 actor 的 active smart object reservation 计数，`SettlementLifeRules` 按对象 `capacity` 避开已满员对象并选择可用替代对象；预约优先级 / 抢占第一版已迁移，GOAP action 会从 goal score 派生 `reservation_priority` / `reservation_preemptible`，`Simulation` 提供 active reservation claims，满员对象可被更高优先级 action 抢占，旧预约释放为 `reservation_preempted`、旧 actor 发出 replan request，新预约记录 `preempted_reservation` 并随 actor life snapshot 往返；`settlement_life_planner_updated` 事件会暴露当前计划状态。已由 `AI` / `Save` / `UIToggle` smoke 覆盖上班履职、饭点 `eat_meal` 数据化 need_effects、planner 摘要、跨回合队列续跑、失败重规划、action reservation / release / expiry / conflict avoidance / preemption、world_state_effects、executor side effects 和需求/计划存档。待补更多报警/服务 executor 的细粒度状态。
-- 在线/后台状态同步第一版已迁移：玩家所在地图或无显式 `map_id` 的 settlement NPC 在世界回合行动结果和 `life.runtime.presence` 中记录 `online` presence；明确位于其它地图的 settlement NPC 不执行当前地图行动，会做 needs 后台 tick，写入 `background` presence、actor / active map id、world time、tick minutes 和 need tick 摘要，并发出 `settlement_life_background_ticked`；后台 settlement life action 第一版会按 GOAP intent 和 action 数据化时长推进离线 `follow_route` / `return_home` / `use_smart_object`，进行中状态写入 `life.runtime.background_action`，完成时移动 actor grid、应用 smart object need / planner / world / executor / reservation 副作用，写入 `last_background_action` 并发出 `settlement_life_background_action_completed`；长时后台 action 第一版会跨多个 15 分钟世界回合累计 `elapsed_minutes` / `remaining_minutes`，发出 `settlement_life_background_action_progressed`，并在进行中保护对应 active reservation 不被同一后台执行过期清理抢先释放；在线接管后台进行中 action 第一版会在 NPC 所在地图变为 active map 时清理 `background_action`，写入 `last_background_resync`，发出 `settlement_life_background_resynced`，并让后续在线 AI 按现有 planner / reservation 状态接管；`world_time_advanced` 会统计 `background_life_tick_count`，presence、后台 action 和 handoff 摘要随 actor life snapshot / save 往返；已由 `AI` / `Save` smoke 覆盖。待补更复杂上线/下线冲突策略、跨地图服务产出调度和更完整 HUD / debug 展示。
+- [ ] Settlement life 补地图 route polish、最终状态美术反馈和截图级动画验收。
+- [ ] GOAP / planner 补更多报警 / 服务 executor 的细粒度状态。
+- [ ] 在线 / 后台同步补更复杂上线 / 下线冲突策略、跨地图服务产出调度和更完整 HUD / debug 展示。
 
 ### 7.3 关系和阵营
 
-- relationship scores 第一版已迁移：运行时会按 actor side / group 初始化 pair 分数，`set_relationship_score` 会 clamp 到 `[-100, 100]` 并发出 `relationship_changed`，payload 带 actor/target 显示名、score_before、score 和 score_delta，snapshot / save 已 roundtrip，对话规则的 `relation_score_min/max` 已读取真实分数；任务 reward 可调整关系分数，奖励 HUD 会显示关系变化对象和增量，独立关系变化事件也会进入 HUD 中文反馈；已由 `Interaction` / `Quest` / `Save` smoke 覆盖。待补敌对状态动态切换和关系历史。
-- 关系驱动敌对判定第一版已迁移：`Simulation.actor_hostility()` 会结合 side / group 和 relationship score 判断 hostile，低于阈值的友好/中立 NPC 会在交互菜单中切换为攻击目标并禁用对话，关系缓和后的 hostile side 目标会被攻击校验拒绝，hostile AI 也会停止把玩家作为目标；攻击失败会暴露 relationship_score / hostility_reason，交互 target 会暴露 relationship_score / hostility_reason；任务前置条件已支持 relationship / world_flag / item / completed quest 结构化条件；交易权限第一版已支持 shop session 的 relationship min/max、required / blocked world flags、目标 actor 推断、存档 roundtrip 和 UI 失败反馈；已由 `Interaction` / `Combat` / `AI` / `Quest` / `TradeUI` / `Save` smoke 覆盖。待补更多对话分支的关系/阵营影响，以及敌对状态变化的 UI 提示 polish。
-- 待补治疗、雇佣、跟随、队友、护送、敌对转中立等脚本化 NPC 互动。
+- [ ] Relationship scores 补敌对状态动态切换和关系历史。
+- [ ] 关系驱动敌对判定补更多对话分支的关系 / 阵营影响，以及敌对状态变化的 UI 提示 polish。
+- [ ] 补治疗、雇佣、跟随、队友、护送、敌对转中立等脚本化 NPC 互动。
 
 ## 8. 背包、装备、容器和交易
 
 ### 8.1 背包
 
-- 已有物品列表、基础操作、分类筛选、名称/重量/价值排序、搜索、滚动列表、选中物品详情和分类/价值/堆叠/槽位摘要第一版，并纳入 `InventoryUI` smoke；inventory order 持久化第一版已接入 actor snapshot、核心物品增删和 Inventory 默认“顺序”排序，并纳入 `InventoryUI` / `Save` smoke；背包内拖拽重排第一版已接入 `reorder_inventory` core 命令并纳入 `InventoryUI` smoke，当前仅在“顺序 + 全部 + 无搜索”视图启用。
-- 选中物品操作栏和右键上下文菜单第一版已迁移：数量 SpinBox、使用、装备、丢弃、全部丢弃、检查、加入热栏按钮；任务/关键物品会禁用使用、丢弃、全部丢弃和加入热栏，装备/丢弃按钮、拖到装备/丢弃按钮和右键菜单动作都通过 `InventoryUI` smoke 走 UI 触发；检查只刷新详情，不消耗 AP 或修改背包；可使用物品加入热栏后可通过 HUD 热栏触发同一 `inventory_action/use_item` 规则并随存档 roundtrip；背包反馈行会展示使用成功的资源变化、剩余数量、剩余 AP 和常见失败原因，并由 `InventoryUI` smoke 覆盖；背包丢弃确认弹窗已覆盖按钮打开、右键打开、右键全部丢弃、拖拽打开、Esc 取消、确认后执行和 gameplay blocker；多 stack 拆分第一版已迁移，actor snapshot / save 支持 `inventory_stacks`，`inventory_action=split_stack` 会从最大堆叠拆出新堆叠并保持合并数量不变，右键“拆分”会按 `can_split_stack` 启用并显示当前堆叠摘要；右键菜单会为已有多堆叠追加“拆分第 N 堆”入口并把选中的来源堆叠透传到 core；actor 背包统一增删入口已会保留多堆叠，新增物品追加新堆叠，扣减物品从最新堆叠向前消费，避免拆分后被使用、丢弃、制作、容器、商店或任务奖励路径立即压回单堆；当前打开容器时右键“存入容器”会走 `store_active_container_item`，当前打开交易时右键“出售”会走 `sell_active_trade_item`，分别由 `InventoryUI` / `ContainerUI` / `TradeUI` / `Save` smoke 覆盖。待补更完整上下文菜单 polish。
-- 数量控制第一版已迁移：背包选中物品可用 SpinBox 指定丢弃数量，背包丢弃数量弹窗已覆盖确认/取消、增减、最大值、非法数量提示、右键全部丢弃预填满堆叠和 gameplay blocker/Esc；拆分请求会维护 `inventory_stacks`、暴露 `stack_counts` / `stack_count` / `can_split_stack` 并随存档 roundtrip，未指定来源时拆最大堆叠，指定 `source_stack_index` 时从对应背包堆叠拆分；背包增删事务会保持已有堆叠、扣空后移除空堆叠、增加时追加新堆叠，并由 `InventoryUI` smoke 覆盖拆分后扣减、追加和按具体堆叠拆分来源；容器 / 商店库存数组已支持同物品多行堆叠，计数会汇总所有同 ID 行，未指定来源时扣减会从最新堆叠向前消费，新增会追加新堆叠，容器 `max_stacks` 按实际堆叠行数计算；容器 / 商店 snapshot 与 UI 列表会暴露 `stack_index`、`stack_count`、`stack_total_count`、`multi_stack`，列表、详情和 tooltip 会展示“堆 i/n、同物品合计”；容器栏直接拿取、背包栏直接存放、店铺栏直接购买、玩家栏直接出售、店铺购买购物车确认和玩家出售购物车确认已会把选中的 `stack_index` 透传到 core，从具体堆叠扣减，并由 `ContainerUI` / `TradeUI` smoke 覆盖。待补 Inventory 主面板更多上下文菜单 polish。
-- 物品使用第一版已接入：`inventory_action/use_item`、消耗品 `gameplay_effect.resource_deltas`、HP/基础资源恢复、AP 消耗、物品消耗、失败 reason 和 Inventory “使用”按钮已纳入 `InventoryUI` / `Save` smoke；任务/关键物品不可使用、不可丢弃第一版已纳入 `InventoryUI` smoke；待补 buff/debuff、持续效果、任务交付限制和更完整反馈。
-- 拖拽第一版：背包内排序、拖到装备按钮、拖到丢弃按钮或独立 DropZone 打开丢弃确认弹窗已迁移；背包物品可拖到角色装备槽并走 `equip_player_item`，可拖到当前容器列存入容器，可拖到交易购物车或 sell drop zone 排入出售队列；右键菜单已支持存入当前容器和出售给当前交易对象，并由 `InventoryUI` / `UIToggle` / `ContainerUI` / `TradeUI` smoke 覆盖。待补筛选/搜索视图下的拖拽提示、drag preview 和 hover 高亮 polish。
-- 背包负重限制第一版已迁移：`core/economy/inventory_capacity.gd` 统一计算当前重量、最大负重、剩余负重和超重诊断；最大负重优先读 actor `combat_attributes.carry_weight`，缺省时按 `50 + (strength - 5) * 10` 派生，并叠加装备 `carry_bonus` / `carry_weight`。拾取、容器拿取、商店直买、交易购物车、制作产物、拆解产物、装备替换和卸下装备都会在状态变更前预检，失败返回 `inventory_over_capacity` 且不扣钱、不挪库存、不消耗材料；背包摘要显示 `当前/上限 kg`，背包、容器、交易和制作面板已有中文负重不足反馈，并由 `InventoryUI` / `ContainerUI` / `TradeUI` / `Crafting` / `Equipment` smoke 覆盖。背包格子 / 槽位容量第一版已迁移：`InventoryCapacity` 会读取 actor 顶层、`combat_attributes` 或 `inventory_limits` 中的 `max_inventory_items` / `inventory_item_capacity` / `max_items` / `item_capacity` 与 `max_inventory_stacks` / `max_inventory_slots` / `inventory_stack_capacity` / `inventory_slot_capacity` / `inventory_slots` / `max_stacks` / `slot_capacity` / `max_slots`，对预期变更后的物品种类数和堆叠槽位数做投影预检，失败仍返回 `inventory_over_capacity`，并用 `limit_kind=items|stacks` 区分原因；Inventory snapshot 会暴露当前种类数、槽位数、上限、剩余和超限诊断，背包摘要会在存在上限时显示 `种类 x/y` 与 `槽位 x/y` 并标记种类/槽位超限；Container / Trade / Inventory 反馈会按重量、种类或槽位显示细分文案，reason catalog 兜底改为“背包容量不足”，并由 `ContainerUI` / `CraftingUI` / `InventoryUI` smoke 覆盖。多 stack 单堆上限第一版已迁移：正式获得物品路径会读取 item `stacking.max_stack`，优先补满已有未满堆，再按上限拆出新堆，避免新增物品形成超大堆，并由 `InventoryUI` smoke 覆盖。容器自身容量第一版已迁移：存放前统一预检 `max_weight` / `max_items` / `max_stacks` 及同义字段，失败返回 `container_over_capacity` 且不修改双方库存。待补超重惩罚和更完整 UI 预览。
+- [ ] 背包上下文菜单补更完整 polish。
+- [ ] 数量控制补 Inventory 主面板更多上下文菜单 polish。
+- [ ] 物品使用补 buff / debuff、持续效果、任务交付限制和更完整反馈。
+- [ ] 拖拽补筛选 / 搜索视图下的拖拽提示、drag preview 和 hover 高亮 polish。
+- [ ] 背包容量补更多 UI 展示和极端容量边界复核。
 
 ### 8.2 装备
 
-- 已有 equip / unequip 命令，角色面板固定装备槽、空槽状态、主手/副手/accessory 多槽显示和已装备槽卸下按钮第一版，并纳入 `UIToggle` smoke；允许槽校验由 core 装备规则执行。
-- 角色面板已展示装备详情第一版：价值、重量、稀有度、武器伤害/射程/攻速/弹药、耐久、属性修饰和外观资源；装备槽 tooltip 第一版会展示空槽拖入提示、装备描述、详情、装备效果和装填状态，并纳入 `UIToggle` smoke。待补属性变化对比和 tooltip 排版 polish。
-- 已有装备视觉实时更新第一版：Inventory 和 Character 面板装备/卸下会重建世界，主手模型替换、卸下移除和恢复已纳入 `InventoryUI` / `UIToggle` smoke；待补替换 body region、武器挂点精调和更多装备槽视觉验证。
-- 角色面板已显示远程武器当前弹药数量 / 弹匣容量第一版，并纳入 `UIToggle` smoke；空装备槽卸下失败提示已接入 Character 面板并纳入 `UIToggle` smoke；reload equipped weapon 第一版已接入 Character 面板“装”按钮、core 弹匣状态和 smoke；装备效果第一版已接入 `EquipmentEffects`，覆盖装备 `attribute_modifiers` 汇总、`equip_effect_ids` 快照展示、`ammo_capacity` 扩展弹匣容量和 `reload_speed` 修正换弹 AP，并纳入 `Equipment` smoke；待补更复杂卸下失败规则、完整 effect runtime/stacking/持续时间。
+- [ ] 装备槽 tooltip 补属性变化对比和排版 polish。
+- [ ] 装备视觉补替换 body region、武器挂点精调和更多装备槽视觉验证。
+- [ ] 装备效果补更复杂卸下失败规则、完整 effect runtime / stacking / 持续时间。
 
 ### 8.3 容器
 
-- 已有拿取/存放、全部拿取/全部存放、容器/背包双栏、滚动列表、基础详情文本、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip 和容器/背包双向拖拽转移第一版，并纳入 `ContainerUI` smoke；选中数量大于 1 的容器/背包转移和金钱拿取会先打开 `container_quantity_confirm`，确认前不提交事务，Esc 关闭只清 modal 并保留容器面板，确认后复用同一容器事务；批量转移复用单项容器事务，成功项保留、失败项返回 `failures` 并可显示部分成功反馈。
-- 容器类型元数据第一版已迁移：地图容器、尸体容器和掉落容器会在 scene target、运行时 session、corpse/drop 记录、world snapshot、pickable metadata、ContainerSnapshot 和 save/load 中保留 `container_type` / `container_origin`；尸体/掉落容器在 load 后会兜底同步回普通 `container_sessions`，继续复用拿取、存放、权限和容量规则；完整 ID 规范文档第一版已补到 `docs/container_id_policy.md`；已由 `ContainerUI` / `Combat` / `InventoryUI` / `Save` smoke 覆盖。待补商店容器、任务容器特化表现。
-- 容器关闭已覆盖 Esc、关闭按钮、目标消失关闭、切换地图关闭和超出距离关闭；空容器提示已覆盖。清空后地图对象状态第一版已迁移：`container_sessions` 会覆盖 world snapshot 中的容器库存、金钱和 empty/item count metadata，容器仍保留可交互对象和 pickable body，世界节点显示 `ContainerStateBadge`，已由 `ContainerUI` / `Scene` smoke 覆盖。
-- 基础失败提示已覆盖并纳入 `ContainerUI` smoke：容器/背包物品不足、未知容器、未知物品、未知角色、未打开容器、数量非法、拿取后背包负重不足；容器权限第一版已支持 session / map props 的 `locked`、`allow_take`、`allow_store`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`、`required_world_flags`、`blocked_world_flags`、`required_active_quest_ids`、`required_completed_quest_ids`、`blocked_active_quest_ids`、`blocked_completed_quest_ids`、`owned`、`owner_actor_id` / `owner_actor_definition_id`、`owner_relationship_min/max` 和 `allow_steal`，拿取、拿钱和存放会统一拒绝并显示中文反馈，钥匙/工具满足时可操作锁定容器，显式配置 `consume_required_items_on_unlock` / `consume_required_tools_on_unlock` 时会在首次成功操作后消耗背包钥匙/工具、记录 `unlock_requirements_consumed` 并解除 locked；容器开锁工具耐久第一版已迁移，结构化 `required_tools` 或顶层 `tool_durability_cost` / `unlock_tool_durability_cost` 可声明耐久消耗，耐久不足返回 `tool_durability_insufficient`，成功时扣 actor `tool_durability` 而不消耗整件工具，结果、事件和容器权限预览会暴露耐久成本；任务状态满足时可操作任务限制容器，关系满足时可访问 owner 容器，允许偷取时结果和事件会标记 `stealing` / `owner_actor_id` 并发出 `container_stolen`；`steal_relationship_delta` / `theft_relationship_delta` 可配置与 owner 的关系变化并随存档 roundtrip；容器自身容量第一版支持重量、总件数、stack/slot 数限制，容量字段随地图对象、交互 session 和存档 roundtrip，超限显示中文反馈；容器面板权限预览第一版会显示锁定/已解锁、钥匙、工具、工具耐久、解锁消耗、拿取/存放限制、归属、关系门槛、偷取、world/quest 条件和容量摘要；已纳入 `ContainerUI` / `Save` smoke。待补逐件/多 stack 工具耐久、NPC 目击 / crime system / 阵营敌对联动和权限预览 polish。
+- [ ] 容器类型补商店容器、任务容器特化表现。
+- [ ] 容器权限补逐件 / 多 stack 工具耐久、NPC 目击 / crime system / 阵营敌对联动和权限预览 polish。
+- [ ] 容器 UI 补跨面板拖拽视觉 polish。
 
 ### 8.4 交易
 
-- 已有买卖命令、店铺/玩家双栏、数量直买直卖、价格预览和交易购物车第一版；店铺栏价格、购物车预览和核心成交规则已统一按物品 `value * price_modifier` 计算；`queue buy`、`queue sell`、`adjust`、`remove`、`clear`、`confirm` 以及交易面板快捷键 `Q` 入购物车、`Delete` 清空、`Enter` 直交易、`Shift+Enter` 确认购物车已纳入 `TradeUI` smoke。
-- 购物车净额预览、确认前库存/资金预校验、确认后玩家/店铺资金变化明细和无部分成交已纳入 `TradeUI` smoke。
-- 交易资金/库存失败提示已覆盖并纳入 `TradeUI` smoke：玩家资金不足、店铺资金不足、店铺库存不足、玩家库存不足、购买后背包负重不足；装备栏物品可作为 `equipment:<slot_id>` 来源出售，出售前会弹出确认，取消不成交，确认后自动卸下、入店铺库存并刷新 UI；显式 `sellable=false` / `tradeable=false` 和任务类 fragment 的不可出售规则已覆盖直卖、装备出售、购物车校验、UI 禁用态和反馈，已纳入 `TradeUI` smoke。
-- 交易拖拽第一版已纳入 `TradeUI` smoke：shop item -> cart / buy drop zone 生成购买项，inventory/equipment -> cart / sell drop zone 生成出售项，buy zone 会拒绝玩家出售源，sell zone 会拒绝店铺购买源，drop zone 已显示接受/拒绝来源并暴露稳定拒绝 reason，不可出售物品拖拽不会入队，queued item 可拖拽重排且金额预览保持一致，同源同物品拖到已有 queued item 会合并增加数量并受上限约束；drop zone hover 高亮、可见接受来源、稳定 accept/reject 文案、最近一次拖拽接受/拒绝预览、业务拒绝原因、drag preview 文案和统一 drag preview layer 第一版已覆盖。待补更多跨面板 hover 高亮 polish。
-- 交易权限第一版已迁移：shop session 可配置 `target_actor_id` / `target_actor_definition_id`、`required_relationship_min/max`、`required_world_flags` 和 `blocked_world_flags`，直买、直卖、装备出售和购物车确认统一由 core 拒绝，反馈 reason 覆盖 `trade_relationship_too_low/high`、`trade_world_flag_missing/blocked` 并随 shop session 存档 roundtrip；Trade snapshot / Trade 面板会提前显示权限失败原因、禁用店铺/玩家条目、禁用直交易/加入购物车/确认购物车和拖拽入队；已纳入 `TradeUI` / `Save` smoke。待补对话分支中权限原因展示和更细致的商店权限 UI polish。
-- 交易关闭已覆盖 Esc、关闭按钮、目标不可用关闭、地图切换关闭和对话结束关闭；`trade_closed` payload 第一版已记录 actor、reason、target actor 和 shop id，并纳入 `TradeUI` smoke。
+- [ ] 交易拖拽补更多跨面板 hover 高亮 polish。
+- [ ] 交易权限补对话分支中权限原因展示和更细致的商店权限 UI polish。
 
 ## 9. 技能、热栏和进度
 
-### 9.1 角色进度
-
-- 已有 XP、等级、技能点、属性点第一版；属性点分配 core 命令、`attribute_allocated` 事件、constitution / strength / agility 的最小派生刷新和 Character 面板加点按钮已纳入 `Progression` / `UIToggle` smoke；升级 / 经验 / 技能点 / 学习技能 / 属性分配反馈结构化明细第一版已迁移到 HUD snapshot 的 `feedback_details` 和 toast metadata，并由 `Progression` smoke 覆盖。待补属性要求显示、升级弹层和更完整派生值展示。
-- 待补属性分配撤销/确认策略和更完整的属性影响派生值刷新。
-- progression 事件反馈第一版已迁移：`experience_granted`、`actor_leveled_up`、`skill_points_granted`、`attribute_allocated`、`skill_learned` 会进入 HUD event feedback；`feedback_details` 会暴露稳定的 kind / label / amount / detail / display_text 明细，toast 节点会挂 `toast_has_details`、`toast_detail_count` 和 `toast_detail_summary` metadata，并由 `Progression` / `UI` smoke 覆盖。待补详细事件日志、奖励明细弹层和升级动画占位。
-
-### 9.2 技能树
-
-- Skills 面板技能树画布第一版已迁移：按当前筛选后的技能 snapshot 生成节点和前置链路，支持左键拖拽 pan、滚轮 / 按钮缩放、pan 复位、点击节点同步选中详情，并通过 `skill_tree_graph_snapshot()` 暴露 node / edge / pan / zoom / selected / upstream / downstream / highlighted 诊断。待补更接近旧版的图形布局、节点连线视觉 polish 和前置链路高亮动画。
-- 已有 Skills 面板筛选条（全部 / 已学 / 可学 / 锁定 / 主动）、技能树切换和选中技能详情第一版，并纳入 `SkillsUI` smoke；详情会展示描述、技能树、类型、前置、前置链路、下游解锁、属性要求、学习状态和主动/切换技能的 AP / 冷却 / 绑定 / 使用状态，行 tooltip 也会显示链路/解锁摘要。待补已学/可学/锁定/属性不足/点数不足状态视觉 polish。
-- 技能学习确认和学习后反馈第一版已迁移：Skills 面板点击学习会打开确认弹窗，确认前不消耗技能点，弹窗接入 gameplay blocker 与 Esc 优先关闭，确认后走同一 `learn_skill` 核心命令；被动技能显示已学习反馈，主动/切换技能学习后提示可绑定到快捷栏，纳入 `SkillsUI` smoke；待补失败 reason 细分。
-- 技能效果第一版已迁移：`learn_skill` 会把被动技能 `gameplay_effect.modifiers` 转成 actor `combat.active_effects` 的常驻 passive effect，`use_skill` 会把 `activation.effect` 转成限时或 toggle effect，并发出 `skill_passive_effect_refreshed`、`skill_effect_applied`、`skill_effect_removed`、`skill_effect_expired`；`combat` 被动和 `adrenaline_rush` 主动的 `damage_bonus` 已参与战斗伤害，角色面板已展示 passive / buff 状态效果，并纳入 `Progression` / `SkillsUI` / `Combat` / `UIToggle` / `Save` smoke。待补技能效果堆叠策略、非战斗 modifier 的完整消费点、负面状态、状态 UI polish 和更完整 toggle polish。
-
-### 9.3 Hotbar
-
-- 已有 hotbar 多组第一版：`Simulation` 持有 `hotbar_groups` / `active_hotbar_group` / `hotbar_group_labels`，旧 `hotbar` 字段继续代表当前组；`group_1` 到 `group_3` 可切换，当前组绑定/使用技能或物品，非当前组会独立保存；HUD 已提供组按钮并显示自定义组名，`Alt+1/2/3` 可走输入层切换快捷栏组，HUD tooltip 和 Skills 摘要显示当前组名，组名随存档 roundtrip，已纳入 `SkillsUI` / `UI` / `Save` smoke。待补更多组数配置和更完整快捷键冲突矩阵。
-- 已有 Skills 面板 hotbar 可用/冷却/资源不足不可用原因文本、按钮禁用和技能 `activation.ap_cost` / `activation.resource_costs` 展示与扣除第一版；HUD hotbar 槽位已显示 key、技能短名、cooldown 文本、slot tooltip、冷却禁用态和冷却遮罩，主动技能激活后会落到 actor active effects，并纳入 `SkillsUI` / `UI` smoke。待补多组 hotbar 的资源消耗汇总展示和组级状态 UI polish。
-- 观察模式 hotbar 表现第一版已迁移：HUD `ObserveHotbarDock` 展示 observe mode、playback、speed、auto tick 和当前观察楼层；Observe / Player 模式按钮提供 free observe 入口，Play / Speed 按钮在 observe mode 中会调用 `toggle_observe_playback` / `cycle_observe_speed`，Auto 按钮会调用现有 `toggle_auto_tick`；observe speed 会影响自动推进间隔，Space 在 observe mode 下切换播放；进入 observe mode 后普通 hotbar / 组按钮隐藏，player command 会被统一拒绝；观察控制禁用 tooltip 已接入 `ReasonCatalog.disabled_text_for("observe_control_unavailable")`，并由 `UI` / `UIToggle` smoke 覆盖。待补完整快捷键冲突策略和视觉 polish。
+- [ ] 角色进度补属性要求显示、升级弹层、更完整派生值展示、属性分配撤销 / 确认策略、详细事件日志、奖励明细弹层和升级动画占位。
+- [ ] 技能树补更接近旧版的图形布局、节点连线视觉 polish、前置链路高亮动画、已学 / 可学 / 锁定 / 属性不足 / 点数不足状态视觉 polish 和失败 reason 细分。
+- [ ] 技能效果补堆叠策略、非战斗 modifier 的完整消费点、负面状态、状态 UI polish 和更完整 toggle polish。
+- [ ] Hotbar 补更多组数配置、完整快捷键冲突矩阵、多组资源消耗汇总展示和组级状态 UI polish。
+- [ ] Observe hotbar 补完整快捷键冲突策略和视觉 polish。
 
 ## 10. 任务、对话和剧情动作
 
 ### 10.1 对话
 
-- 已有对话推进、交易入口和 dialogue rules variant 选择；对话选项 resolution preview 第一版已迁移到 `DialogueSnapshot`，会暴露 action/end/next-node 预览、runtime validation 标记，并由对话按钮 tooltip / meta 展示；`turn_in_quest` 预览已补交付需求、任务名、物品当前 / 需求数量、对话交付对象和阻塞 reason；条件化动作 preview 已暴露 action condition 的 ready、reason、缺失项和按钮 tooltip / meta；`DialogueAction` / `DialogueUI` smoke 已覆盖 open_trade、unlock_location + start_quest、turn_in_quest 的 preview 与 actual resolution 一致性。待补更完整 UI polish。
-- fallback 对话和缺文件回退第一版已迁移：缺失 dialogue 资源会显示可继续的 fallback 文案，保留 dialogue id 诊断，Space / Enter 可结束并发出 `missing_dialogue` end type；open_trade 的 NPC action key / 显式 `shop_id` 第一版已迁移，脚本化对话可不依赖当前选中 NPC 直接打开指定商店，并由 `DialogueAction` smoke 覆盖；对话交付目标名解析第一版已迁移，会优先读取 character `identity.display_name` / `name` / `title`，交付 preview 和 tooltip 不再退回裸 definition id；对话资源目录规则第一版已迁移，`dialogues` / `dialogue_rules` 记录必须位于对应 `data/` 子目录且文件名匹配内容 id，并由 `ContentCLI` smoke 覆盖；更多对话目标来源第一版已迁移，UI snapshot 和 action context 会优先读取 actor active dialogue target，再从最近 `dialogue_started` 事件补目标，并支持只有 definition id 时反查 actor / character 名称，definition-only 任务交付由 `DialogueAction` smoke 覆盖；目标来源诊断 UI polish 第一版已迁移，DialoguePanel meta / tooltip 会暴露 target actor、definition、display name 和 source，并由 `DialogueUI` smoke 覆盖。待补对话目标来源的更完整异常态文案。
-- 对话选项键盘 `1-9`、Enter/Space 推进、选项节点必须显式选择、无选项节点自动下一步第一版已迁移并由 `DialogueUI` smoke 覆盖；待补菜单内快捷键冲突和更完整诊断日志。
-- 对话动作第一版已迁移：action node 可启动任务、手动交付任务并发放奖励/扣交付物品、打开交易、解锁地点、设置 world flags、调整或设置 relationship score、单独给物品和给奖励包；动作结果会回传到 `emitted_actions`，world flag / relationship / item / reward 变更走 `Simulation` 统一事件；统一动作诊断事件 `dialogue_action_resolved` 第一版已补齐，成功/失败动作都会暴露 dialogue id、node id、action index/type、target actor、reason、action summary 和 action result，并由 `DialogueAction` smoke 覆盖 start_quest、unlock_location、turn_in_quest 成功/失败以及脚本化多动作；条件化动作第一版已迁移，action-level `when` / `condition` / `conditions` 支持任务、物品、world flag、关系、NPC role / shift、玩家 HP 条件，不满足时返回 skipped 结果并继续后续动作，DialogueSnapshot 会暴露 condition preview，DialoguePanel 按钮 tooltip / meta 已接入 condition ready、reason、summary 和 missing count，内容校验和引用索引已识别动作条件；action node 失败回滚第一版已迁移，已有成功动作后若后续动作失败，会通过 `Simulation.snapshot()` / `load_snapshot()` 回滚到节点执行前并发出 `dialogue_action_rollback` 诊断，actor 快照可变字段已改为深拷贝以避免事务快照被运行时 mutation 污染。待补更完整 UI 反馈 polish。
-- 对话 UI 第一版已迁移：底部面板显示 speaker、target name、可滚动正文、显式选择提示、`Space / Enter` 继续提示、1-9 对话选项按钮、关闭按钮和基础诊断 meta；按钮会调用同一 `choose_dialogue_option` / `close_active_dialogue` 入口并由 `DialogueUI` smoke 覆盖。待补更完整诊断日志。
+- [ ] 对话 resolution preview 和 action 反馈补更完整 UI polish。
+- [ ] 对话目标来源补更完整异常态文案。
+- [ ] 对话快捷键补菜单内快捷键冲突和更完整诊断日志。
+- [ ] 对话 UI 补更完整诊断日志。
 
 ### 10.2 任务
 
-- 已有 collect / kill / manual turn-in 第一版；待补完整 objective 类型、失败/替代分支、可追踪目标。
-- dialogue turn-in 失败语义第一版已迁移：对话 action 失败会停止推进，不进入成功确认台词，返回 `dialogue_action_failed` 并发出诊断事件；手动交付物品不足会保留任务 active、不扣物品、不完成任务；对话选项 tooltip / meta 已显示交付提示，缺急救包时显示 `not_enough_items` 和 `急救包 0/1`，满足时显示 `急救包 1/1`，已由 `DialogueAction` smoke 覆盖。待补奖励失败回滚和更完整失败 UI。
-- 任务链奖励状态第一版已迁移：完成任务后可通过 reward 解锁地点、设置 world flags 和发放金钱；后续任务仍按 prerequisites 自动启动，prerequisites 兼容旧字符串任务 id，并支持结构化 completed quest / world flag / item count / relationship score 条件；奖励 payload 会暴露 money / unlocked_locations / world_flags，并由 `Quest` smoke 覆盖。待补互斥任务、替代分支和更复杂任务链条件。
-- Journal 详情第一版已迁移：目标节点、任务描述、目标类型/需求、当前进度、可交付状态、奖励详情、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付后的完成/奖励反馈和手动交付失败历史第一版已纳入 `JournalUI` / `UI` smoke；目标进度列表第一版已从 quest flow 中所有 objective 节点派生并在列表/详情展示；任务前置条件矩阵第一版已迁移，`JournalSnapshot` 会输出 active / locked quest 的 `prerequisites`、`missing_prerequisites`、`prerequisite_summary` 和稳定 reason，覆盖 completed quest、world flag all / any / none、物品数量和关系分数，并在 Journal 列表/详情展示。待补多分支/替代目标状态、更完整失败反馈和更多真实任务数据矩阵。
-- 地图目标 marker 第一版已迁移：追踪 collect 目标会在当前地图标出匹配 pickup 或含目标物品的容器，追踪 kill 目标会标出当前地图匹配 enemy_type 的 actor；找不到目标时保留 unresolved marker 和 reason；地图面板 canvas 第一版会绘制地图边界、网格、入口点、可定位任务 marker 和 overworld inset，并支持缩放/平移按钮，已纳入 `JournalUI` / `UIToggle` smoke。待补跨地图显式路线、目标优先级、完成/失败反馈和更完整图形 polish。
-- 任务反馈 HUD 第一版已迁移：`quest_started`、`quest_progressed`、`quest_completed`、`quest_reward_granted` 会进入 HUD event feedback；奖励反馈会展示 XP、技能点、金钱、物品数量、解锁地点数量和 world flag 数量；任务奖励结构化明细第一版已进入 `feedback_details` 和 toast metadata，覆盖金钱、物品、解锁地点、world flag 和关系变化，并由 `Quest` / `UI` smoke 覆盖。待补事件日志、HUD 提醒过渡、奖励动画占位和更完整失败反馈。
+- [ ] 补完整 objective 类型、失败 / 替代分支和可追踪目标。
+- [ ] Dialogue turn-in 补奖励失败回滚和更完整失败 UI。
+- [ ] 任务链奖励补互斥任务、替代分支和更复杂任务链条件。
+- [ ] Journal 详情补多分支 / 替代目标状态、更完整失败反馈和更多真实任务数据矩阵。
+- [ ] 地图目标 marker 补跨地图显式路线、目标优先级、完成 / 失败反馈和更完整图形 polish。
+- [ ] 任务反馈补事件日志、HUD 提醒过渡、奖励动画占位和更完整失败反馈。
 
 ## 11. 制作和配方
 
-- 已有材料/技能校验和制作命令；配方解锁来源第一版已迁移：运行时记录 `crafted_recipes` 和 `world_flags`，`unlock_conditions` 的 `type=recipe` 会按已制作配方校验，`type=skill` 会按玩家已学技能等级校验，`type=quest` 会按已完成任务校验，`type=item` / `type=book` 会按玩家背包物品校验，`type=world_flag` / `type=flag` 会按运行时世界状态校验，Crafting 面板展示缺失来源、可定位源配方/技能/任务/物品并显示世界状态要求，内容校验和引用反查已识别新来源，纳入 `Crafting` / `CraftingUI` / `Save` / `ContentCLI` smoke；待补工作台解锁源、阅读后永久解锁、消耗书籍/蓝图和更完整 world flag 产生点。
-- 工具要求运行时第一版已迁移：`required_tools` 会检查玩家背包、已装备物品和玩家附近容器工具，缺工具时返回 `missing_tools` 并在 Crafting 面板显示具体工具名/可用状态/定位按钮；GameApp 会把 1 格范围内地图容器、已打开持久容器、尸体/掉落容器的库存传入 `crafting_context.nearby_tool_containers`，已纳入 `Crafting` / `CraftingUI` smoke；工具消耗策略第一版已迁移，配方可通过 `consume_required_tools_on_craft` / `consume_required_tools` / `consume_tools_on_craft` 或单个 required tool 的 `consume_on_craft` + `consume_count` 声明制作时消耗玩家背包、已装备物品或附近容器中的工具，成功结果和 `recipe_crafted` 事件会暴露 `consumed_tools`、消耗来源、装备 slot 或容器 id；附近容器消耗会写回 `container_sessions`、`corpse_containers` 或 map target 的 `container_inventory`，结算前会复核来源仍可用，避免材料先扣后工具扣失败；Crafting snapshot / 面板会预览背包、装备和附近容器的工具可用来源、可消耗数量和本次消耗来源；装备消耗确认 UI 第一版已迁移，Crafting 面板点击制作若当前数量会消耗已装备工具，会先打开 `craft_equipment_tool_confirm` 阻塞确认弹窗，snapshot 暴露 recipe、数量和装备工具来源，Esc / 取消会保留材料和装备，确认后再提交原制作入口；制作工具耐久第一版已迁移，actor snapshot / save 支持 `tool_durability`，required tool 可声明 `durability_cost`，耐久不足返回 `tool_durability_insufficient`，制作成功会在结果和 `recipe_crafted` 事件中暴露工具耐久消耗前后值，Crafting 面板会预览当前耐久和本次消耗；待补逐件/多 stack 工具耐久模型和更完整 durability UI polish。
-- 工作台要求运行时第一版已迁移：地图对象 `props.crafting_station` 会进入 map topology / world result，制作命令和 Crafting snapshot 会按玩家与 station cells 的距离检查 `required_station`，`survivor_outpost_01` 已标注工作坊 workbench、诊所 medical_station 和工坊 forge；Crafting snapshot 已补 `station_snapshot`，按当前玩家位置暴露地图工作台总数、范围内数量、display name、range、distance、in_range、permission、available、unavailable_reason 和按 id 索引，Crafting summary 会显示当前地图工作台摘要；纯 `prop + crafting_station` 现在会生成 `open_crafting` 地图交互目标，带容器的 station 保留 `open_container` 主动作并追加 `open_crafting` 菜单项，执行成功会发出 `crafting_station_opened` / `interaction_succeeded` 并打开 Crafting 面板；工作台权限第一版已迁移，station 支持 `required_world_flags` / `blocked_world_flags`、`required_item_ids` / `required_items`、`required_tool_ids` / `required_tools`，制作执行、Crafting 面板可用性、工作台交互菜单禁用项和 HUD 失败反馈都会返回 `station_world_flag_missing`、`station_world_flag_blocked`、`station_item_missing`、`station_tool_missing` 等稳定 reason；工作台权限预览 polish 第一版已迁移，`CraftingSnapshot` 为每个配方暴露 `station_permission_preview`，包含 station、距离、范围、success/state/reason、blockers 和本地化文本，Crafting 详情和 `craft_queue_snapshot()` 会显示 / 暴露同一份 preview，并由 `CraftingUI` smoke 覆盖 world flag 阻塞与恢复路径；已纳入 `Crafting` / `CraftingUI` / `PlayerInteraction` smoke。待补工作台工具耐久和更完整站点 UI。
-- 制作 AP / 时间消耗第一版已迁移：玩家 `craft` 命令会先走 CraftingRunner 无副作用预检，确认解锁、工具、工作台、技能、材料和负重可行后，再按 `ceil(craft_time / 10)`、每次至少 1 AP 计算行动成本；AP 不足但仍有可投入 AP 时会写入 `pending_crafting`，暴露 `progress_ap` / `remaining_ap`，不消耗材料、不发放产物，并在后续 wait / 自动回合推进中继续消耗 AP，AP 累计足够后完成制作、清空 pending、发出 `crafting_resumed` / `recipe_crafted`，成功后返回 `ap_cost` / `ap_remaining`；`pending_crafting` 已进入 snapshot / save roundtrip、runtime command queue、debug diagnostics 和 HUD feedback；地图切换 / scene transition 会清理旧地图上的 pending 制作和制作队列，发出 `crafting_cancelled` / `pending_cancelled` 并在 payload 中暴露 `crafting_queue`，HUD reason catalog 会把动态 `scene_transition:*` / `location_changed:*` 原因显示为“地图切换取消”；已纳入 `Crafting` / `Save` / `Interaction` / `Overworld` / `UI` smoke。待补更完整时间表现和 UI 进度条 polish。
-- 批量制作预览、队列和执行第一版已迁移：Crafting 面板可选择数量、预览材料消耗、输出数量和最大可制作次数；`Q` 可把当前配方/数量加入制作队列，队列项可单独取消或清空，队列状态会以 `Simulation.crafting_queue` 中的 `recipe_id/count` 随 runtime snapshot / 存档往返，面板刷新后会从 `CraftingSnapshot.crafting_queue` 还原展示字段；确认队列时按顺序提交现有 `craft` 命令，排队/取消本身不消耗材料；批量 XP、逐次 `recipe_crafted` 事件、队列刷新保留和存档往返已纳入 `CraftingUI` / `Crafting` / `Save` smoke；核心层单条制作 pending 可跨回合恢复并持久化，Crafting 面板已有 pending 制作进度条、tooltip 和 snapshot 诊断；多条制作队列跨回合接力第一版已迁移，确认队列后若当前条目进入 `pending_crafting`，剩余条目会保留在 `Simulation.crafting_queue`，pending 完成后由 app 队列推进器继续提交下一条 `craft` 命令；队列接力反馈第一版已迁移，`GameApp` 记录最近队列确认 / pending 完成接力结果，`CraftingSnapshot` 和 `craft_queue_snapshot()` 暴露 trigger、完成次数、失败数、剩余项、pending 目标和摘要，Crafting 面板显示 `CraftQueueFeedbackLine`，并由 `CraftingUI` smoke 覆盖确认进入 pending 与 wait 后接力完成；制作中取消反馈诊断第一版已迁移，`Simulation.cancel_pending()` 返回被取消的 `pending_crafting` payload，`GameApp` 记录最近取消结果，`CraftingSnapshot` / `craft_queue_snapshot()` 暴露 recipe、数量、取消原因、AP 进度、剩余 AP、turn policy 和剩余队列统计，Crafting 面板反馈会显示被取消配方和 AP 进度；制作进度视觉 polish 第一版已迁移，Crafting 面板会按进度生成 starting / in_progress / nearly_done 状态行、进度条 fill 颜色、tooltip 和 snapshot 诊断，并由 `CraftingUI` smoke 覆盖；地图切换会取消旧制作队列，避免旧地图工作台 / 附近工具上下文继续生效。
-- 制作 UI 已有配方详情、材料/要求/时间/XP/缺失原因、缺失原因点击定位、数量预览、最大可制作、分类筛选、搜索、名称/分类/可制作/数量排序、完整可滚动列表、制作队列/取消和制作成功/失败反馈第一版，并纳入 `CraftingUI` smoke。
-- 拆解 / deconstruct 第一版已迁移：旧物品 `fragments.kind=crafting` 中的 `deconstruct_yield` 会进入 Godot economy 事务，`inventory_action=deconstruct` 会先按数量检查并消耗 AP，缺省每件 1 AP，未来可读 `deconstruct_ap_cost` / `deconstruct_time`；拆解工具 / 工作台要求第一版已迁移，物品 crafting fragment 可声明 `deconstruct_required_tools` / `deconstruct_required_tool_ids` 和 `deconstruct_required_station`，运行时会用玩家背包、装备、附近工具容器和当前地图 crafting station 校验，失败返回 `missing_tools` / `missing_station` 且不消耗源物品、不扣 AP，Inventory 详情和反馈会显示拆解要求 / 缺失原因；拆解工具消耗第一版已迁移，结构化工具要求可声明 `consume_on_deconstruct` / `consume_count`，或 fragment 级 `consume_required_tools_on_deconstruct` / `consume_deconstruct_tools`，成功时可消耗玩家背包、装备或附近容器中的工具，返回值和 `item_deconstructed` 事件暴露 `consumed_tools.source`、`slot_id` 或 `container_id`，附近容器消耗会写回 `container_sessions`、`corpse_containers` 或 map target 的 `container_inventory`，结算前会复核来源仍可用，避免源物品先扣后工具扣失败；Inventory snapshot / 详情会按当前 `crafting_context.nearby_tool_containers` 预览可消耗来源，显示背包、装备 slot 或附近容器来源；缺少可消耗工具返回 `missing_consumable_tools` 且不扣 AP、不消耗源物品；拆解工具耐久第一版已迁移，结构化工具要求可声明 `durability_cost` / `tool_durability_cost` / `deconstruct_tool_durability_cost`，耐久不足返回 `tool_durability_insufficient`，成功时扣 actor `tool_durability` 而不消耗整件工具，返回值和 `item_deconstructed` 事件暴露耐久消耗前后值，Inventory 详情和反馈会展示耐久需求 / 失败原因；拆解预览第一版已迁移，Inventory snapshot 会暴露 `deconstruct_preview`，包含产物 id、名称、单件产出、按当前数量拆解的总产出和重量预估，背包详情会显示拆解产物；拆解产物 UI polish 第一版已迁移，Inventory 面板暴露 `deconstruct_preview_snapshot()`，包含当前选中物品、source_count、产物 entries、总重量、summary、详情文本和 action quantity，并由 `InventoryUI` smoke 覆盖结构化产物预览与详情行一致性；无法拆解原因展示第一版已迁移，Inventory snapshot 会暴露 `deconstruct_unavailable`，详情和右键菜单 tooltip 会展示缺产物、缺可消耗工具、工具耐久不足和缺工作台原因；装备消耗确认 UI 第一版已迁移，背包右键拆解若会消耗已装备工具，会先打开 `inventory_deconstruct_equipment_confirm` 阻塞确认弹窗，snapshot 暴露源物品、数量和装备工具来源，Esc / 取消会保留源物品和装备，确认后再提交原拆解入口；AP 不足返回 `ap_insufficient_deconstruct` 且不消耗源物品、不生成产物，成功后消耗源物品、按数量返还产物、刷新背包并发出 `item_deconstructed`，背包右键菜单已可触发，纳入 `Crafting` / `InventoryUI` smoke；待补逐件/多 stack 工具耐久模型。
+- [ ] 配方解锁补工作台解锁源、阅读后永久解锁、消耗书籍 / 蓝图和更完整 world flag 产生点。
+- [ ] 工具要求补逐件 / 多 stack 工具耐久模型和更完整 durability UI polish。
+- [ ] 工作台要求补工作台工具耐久和更完整站点 UI。
+- [ ] 制作 AP / 时间消耗补更完整时间表现和 UI 进度条 polish。
+- [ ] 拆解补逐件 / 多 stack 工具耐久模型。
 
 ## 12. 世界表现、渲染和相机
 
-### 12.1 动作表现队列 / WorldActionPresenter
+### 12.1 动作表现队列
 
-- Godot 原生动作表现层第一版已新增：落点为 `godot/scripts/world/world_action_presenter.gd`，由 `godot/scripts/app/game_app.gd` 在玩家命令成功并重绘 world 后调用；它只消费 `Simulation.submit_player_command()` 返回的 `events`、当前 world 节点和 world snapshot，不决定移动、攻击、交互、任务、背包或战斗结果，并通过 `runtime_control.action_presenter` 暴露诊断。
-- 移动逐格表现第一版已迁移：`WorldActionPresenter` 会从 `movement_step` / `actor_moved` 事件重建路径，把重绘后的 actor node 临时放回旧格，再按每格短 tween 播放到最终格；移动转向第一版已迁移，presenter 会从 path 派生每段 direction / yaw，逐段设置 actor rotation，snapshot 和 actor metadata 暴露 `movement_facings`、当前 / 最终 facing，`finish_world_action_presentations()` 会落到最终位置和最终朝向；自动开门步骤第一版已迁移，movement presenter 会消费 `door_auto_opened` 事件，暴露 `door_auto_open_count` / `door_auto_open_door_ids` / marker paths，在 actor node 写入自动开门 metadata，并生成短暂 `WorldActionDoorAutoOpen` Godot marker，marker 带 door id、door grid、movement step index 和 `approach/open/clear` 阶段；AP 内 / 跨回合 pending 段落第一版已迁移，movement presenter 会消费同次结果中的 `movement_queued`，同时暴露已完成 step count、queued step count、remaining steps、required / available AP、target / next grid 和 pending path，并生成短暂 `WorldActionPendingMovementSegment` marker，为后续严格动作队列和 UI 进度表现提供 Godot 原生诊断输入；移动取消表现清理第一版已迁移，`cancel_pending()` 结果会携带 runtime events 并通过 app 的世界刷新通道进入 presenter，`movement_cancelled` 会清理 pending movement segment marker、重置 actor pending metadata，并暴露取消 reason、原 pending path / target / AP 和清理统计；Godot app 暴露 `finish_world_action_presentations()`，可供 headless smoke / tool 将当前表现推进到最终位置并释放 blocker；`PlayerInteraction` smoke 已覆盖左键地面移动会生成 movement presenter，并用合成移动 + 自动开门事件覆盖 door auto-open marker，用合成转折移动覆盖逐段转向和 fast-forward 最终朝向，用合成 partial move + pending queue 事件覆盖 pending 段落 marker 和 actor metadata，用真实 cancel pending 覆盖 movement_cancelled presenter、事件透传和 actor metadata 清理。待补更严格的“表现结束后再刷新最终 snapshot”动作队列时序。
-- 攻击表现队列第一版已迁移 impact marker：`WorldActionPresenter` 会从 `attack_resolved` 生成 attack snapshot，并在目标 actor 上方短暂生成 `WorldActionAttackImpact`，marker 暴露 `actor_id`、`target_actor_id`、`damage`、`hit_kind`、`critical`、`defeated` metadata；攻击转向第一版已迁移，presenter 会按 attacker / target 节点位置派生 `attack_facing` direction / yaw，立即旋转攻击者 actor，actor metadata、presenter 和攻击 marker 均暴露 facing 诊断，`finish_world_action_presentations()` 会保持最终攻击朝向；攻击事件诊断 metadata 第一版已迁移，presenter、impact marker、`WorldActionDamageText`、`WorldActionOnHitEffect`、`WorldActionOnHitEffectPulse` 和 `WorldActionAttackDelivery` 会透传 core 已计算的 `weapon_item_id`、`range`、`attack_delivery`、base damage、defense / damage reduction / damage bonus、hit / crit roll 与 chance、accuracy / evasion、on-hit effect ids / applied count、combat RNG 诊断、friendly fire 和 relationship consequence，后续真实动画、状态特效和战斗 HUD 可直接消费这些表现输入；攻击 delivery 占位表现第一版已迁移，`WorldActionAttackDelivery` 会根据 `attack_delivery` 生成 `melee_swing` 或 `ranged_projectile` Godot marker，暴露 actor / target node path、start / end position、delivery distance、visual kind 和同源 phases / metadata，并由 `PlayerInteraction` smoke 的合成 melee / ranged attack result 覆盖；攻击伤害 / 结果飘字第一版已迁移，`WorldActionDamageText` 会复用世界 `Label3D` 字体，以 billboard / no-depth-test 显示伤害、miss、blocked、crit 和 KO 文案，并暴露同源 metadata / phases；on-hit 状态效果飘字和脉冲表现第一版已迁移，命中事件带 `applied_on_hit_effects` 时会在目标 actor 上方生成 `WorldActionOnHitEffect`，并在目标周围生成 `WorldActionOnHitEffectPulse`，显示效果名 / 数量，暴露 effect ids / names / categories / applied count，复用相同 phases、世界字体 / no-depth-test 约束和 attack metadata，并由 `PlayerInteraction` smoke 的合成 attack result 覆盖；on-hit 状态效果世界图标第一版已迁移：`CombatRunner` 会把 effect `icon_path` 写入 active effect，`WorldSceneRenderer` 会按 `icon_path` / effect id fallback 生成 `ActorStatusEffectSprite_*`，并由 `PlayerInteraction` smoke 覆盖真实 bleeding 图标。真实 attack 命令 smoke 已覆盖 impact marker、伤害飘字和攻击事件诊断字段。击杀 / 尸体事件表现第一版已迁移：当攻击后目标 actor 已被移除但刷新后生成 `Corpse_*` 节点时，`WorldActionPresenter` 会从 `actor_defeated` / `corpse_created` 等战斗事件派生 `WorldActionCombatEvent` marker，落到尸体节点或事件格子上，暴露 `event_kind`、`event_kinds`、`source_actor_id`、`defeated_by_actor_id`、`container_id`、`target_grid` 和 `signal/resolve/fade` 阶段；战斗事件世界文字反馈第一版已迁移，`WorldActionCombatEventText` 复用世界 `Label3D` 字体，按事件显示击败 / 掉落 / 战斗 / 脱战，并暴露 label path、label text、label y offset、event、actor、container、participant 和 phase metadata；独立 `combat_started` / `combat_ended` 表现第一版已迁移，会从 participants / turn order / 当前行动 actor 推导落点，marker、文字和 presenter 暴露 `participants`、`participant_count`、`added_participants`、`turn_order`、`current_combat_actor_id`、`next_combat_actor_id`、`round` 和 event reason，并由 `PlayerInteraction` smoke 覆盖。待补真实近战挥击动画、真实远程开火 / 弹道 VFX、更细命中/未命中/格挡/暴击特效、状态 VFX polish、死亡姿态和战斗 HUD 刷新；最终血量、死亡和掉落仍以 core snapshot 为准。
-- 交互表现队列第一版已迁移 pulse marker：`interaction_succeeded` payload 已补 `target_grid`，`WorldActionPresenter` 会从交互事件生成 interaction snapshot，并在仍存在的目标节点或已消费目标原格子上短暂生成 `WorldActionInteractionPulse`；交互表现 profile 第一版已迁移，会按 `option_kind` 派生 `visual_kind`、phase durations、marker 半径/高度/高度偏移、材质和短反馈文字，当前覆盖 pickup、open_container、door_toggle、talk、open_trade、open_crafting、enter_subscene / scene_transition 和 wait；marker 暴露 `actor_id`、`target_id`、`target_type`、`target_name`、`target_grid`、`option_kind`、`visual_kind`、`action_presenter_phase_durations` 和 marker 几何 metadata；交互世界文字反馈第一版已迁移，`WorldActionInteractionText` 复用世界 `Label3D` 字体，按交互类型显示拾取 / 打开 / 开关 / 对话 / 交易 / 制作 / 进入 / 等待，并暴露 label path、label text、label y offset、target、option、visual kind 和 phase metadata；跨地图 `scene_transition` 会跳过旧坐标移动 tween；交互后打开 UI 的顺序第一版已迁移，`open_crafting` 等交互结果若触发 stage panel，会先进入 `world_action_queue.pending_ui`，等 `WorldActionPresenter` 完成或 headless fast-forward 后再打开 Crafting 面板；容器、对话、交易等由 runtime snapshot 驱动的 session panel 也会先进入 `pending_ui=refresh_all_panels`，表现完成后再刷新面板，避免面板抢在交互 pulse 前出现；`PlayerInteraction` smoke 已覆盖真实 pickup 交互会生成 presenter、pulse marker 和 interaction text，并用合成 `interaction_succeeded` 事件覆盖容器、门、对话、交易、制作工作台、场景切换和等待的 visual kind / label text，用真实 crafting station 交互覆盖 pending UI 队列与表现完成后打开面板，用真实尸体容器交互覆盖 session panel 延后刷新。待补真实开门/开容器/对话/交易/场景切换动画，以及更多 UI / 地图刷新延后顺序。
-- 表现期间输入 blocker 第一版已迁移：`WorldActionPresenter` active 时会通过 `GameApp.gameplay_input_blocked_by_ui()` 阻止新的世界点击；hotbar 使用、hotbar group 切换、stage panel 快捷 toggle、actor player command、背包/交易/装备 inventory action、技能学习/绑定/目标确认、单次制作和制作队列公共入口会返回 `world_action_presenter_blocks_player_commands`，并通过 `gameplay_input_blocker_snapshot()` / `runtime_control.ui_blocker_snapshot` 暴露 `world_action_presenter`、action kind、active count 和 sequence 诊断；Esc 会先结束表现并保留 pending，第二次 Esc 再取消 pending；`PlayerInteraction` smoke 已覆盖地面点击移动表现期间的 blocker 与 hotbar / 面板 / 技能 / 制作拒绝，`UIToggle` smoke 已覆盖 Esc 表现完成和 pending 保留顺序。待补按旧 Rust 规则排队/取消的策略、是否自动结束回合，以及 quantity modal、drag preview、tooltip 等 UI layer 的完整阻塞矩阵。
-- 动作队列时序诊断骨架第一版已迁移：`GameApp` 新增 `world_action_queue_snapshot()` 并纳入 `runtime_control.world_action_queue`，记录命令结果接收、runtime snapshot 应用、presenter 启动、最终 world refresh defer / apply 和 presenter finish 的阶段；snapshot 明确暴露当前策略 `present_before_final_refresh`、目标策略 `present_before_final_refresh`、presenter kind / sequence、事件数量、输入 blocker、pending final refresh、pending UI 和 fast-forward 完成原因；点击地面移动已切换为先播放旧世界逐格 tween，再在表现完成后应用最终 snapshot，纯移动 pending final refresh 会标记 `render_world=false` 并复用当前 `WorldCamera`，`PlayerInteraction` smoke 已覆盖真实地面移动时队列进入 `presenting`、可见玩家节点首帧不在最终格、表现完成后进入 `completed`、最终刷新不增加 world render sequence 且不替换相机，crafting station 交互的 `pending_ui=open_stage_panel(crafting)` 在表现完成后应用，以及尸体容器交互的 `pending_ui=refresh_all_panels` 在表现完成后打开容器面板。待补刷新时机后续阶段：把攻击、开门、容器/对话打开和跨地图切换统一到 action queue 驱动的最终刷新时序。
-- smoke / 验收第一版已补：`PlayerInteraction` smoke 会断言命令 result 生成 movement presenter、step_count 为正、玩家节点有 active presenter metadata，并通过 `finish_world_action_presentations()` 覆盖 headless fast-forward 和 blocker 释放顺序；攻击命中 impact、delivery marker、伤害 / 结果飘字、on-hit 状态效果飘字、击杀后 `WorldActionCombatEvent` / `WorldActionCombatEventText` / 尸体 marker，以及独立 `combat_started` / `combat_ended` marker / text 已纳入同一 smoke；交互 profile smoke 已覆盖 pickup、container、door、dialogue、trade、crafting station、scene transition 和 wait 的 `visual_kind`、label text、world label font、phase durations 与 marker metadata。待扩展 `Movement` / `Combat` / `Interaction` / `Scene` smoke，覆盖攻击 windup/impact/feedback/death 的更多分支、交互真实阶段动画和截图级验收。
+- [ ] 移动表现补更严格的“表现结束后再刷新最终 snapshot”动作队列时序。
+- [ ] 攻击表现补真实近战挥击动画、真实远程开火 / 弹道 VFX、更细命中 / 未命中 / 格挡 / 暴击特效、状态 VFX polish、死亡姿态和战斗 HUD 刷新。
+- [ ] 交互表现补真实开门 / 开容器 / 对话 / 交易 / 场景切换动画，以及更多 UI / 地图刷新延后顺序。
+- [ ] 表现期间 input blocker 补旧规则下的排队 / 取消策略、自动结束回合策略，以及 quantity modal、drag preview、tooltip 等 UI layer 的完整阻塞矩阵。
+- [ ] 刷新时机补攻击、开门、容器 / 对话打开和跨地图切换统一由 action queue 驱动的最终刷新时序。
 
-### 12.2 地图和 tile 表现
+### 12.2 地图和 Tile 表现
 
-- glTF 资产已迁入 `godot/assets`，但待确认所有地图对象都按 asset id 正确实例化，不再退化成重叠方块。
-- 待补 world tile instancing 等价：地面、坡道、悬崖、建筑墙、建筑地板、prop、container、door、trigger 的资源选择。
-- 待补 prototype / tile set schema：canonical orientation、pivot、pick proxy、occluder policy、interaction / upgrade class、wall set、surface set 和加载期校验。
-- 待补 static instance -> dynamic entity 升格：门、柜子 / 箱子、可破坏 prop 等对象需要统一实例句柄、生命周期、状态同步、隐藏 / 替换和回收策略。
-- 待清理 box / fallback 主渲染路径：fallback 只用于缺资源诊断、proxy 或过渡几何，不能重新成为地图主表现。
-- 待补材质和颜色：terrain color、wall material、prop tint、容器 tint、角色阵营颜色、选中/hover 高亮。
-- 待补碰撞体和 picking 体分离：视觉模型、阻挡碰撞、鼠标命中、交互命中不应互相污染。
-- 待补地图对象 LOD / batch / instance 性能策略，以 Godot 原生 MultiMesh 或场景实例实现；同时输出 batch / instance / fallback 统计，进入 MapVisual 报告和 smoke 诊断。
+- [ ] World tile instancing 补地面、坡道、悬崖、建筑墙、建筑地板、prop、container、door、trigger 的资源选择。
+- [ ] Prototype / tile set schema 补 canonical orientation、pivot、pick proxy、occluder policy、interaction / upgrade class、wall set、surface set 和加载期校验。
+- [ ] Static instance -> dynamic entity 升级补门、柜子 / 箱子、可破坏 prop 的实例句柄、生命周期、状态同步、隐藏 / 替换和回收策略。
+- [ ] 材质和颜色补 terrain color、wall material、prop tint、容器 tint、角色阵营颜色、选中 / hover 高亮。
+- [ ] 碰撞体和 picking 体分离，避免视觉模型、阻挡碰撞、鼠标命中、交互命中互相污染。
+- [ ] 地图对象 LOD / batch / instance 性能策略用 Godot 原生 MultiMesh 或场景实例实现，并输出 batch / instance / fallback 统计进入 MapVisual 报告和 smoke 诊断。
 
 ### 12.3 角色、装备和尸体表现
 
-- actor 朝向第一版已迁移：`WorldSnapshotBuilder` 会从最近 `actor_moved` 和 `attack_resolved` 事件派生 actor `facing` / `facing_direction` / `facing_yaw_degrees`，`WorldSceneRenderer` 会旋转 actor 根节点并暴露 facing metadata，模型、装备和标记随 actor 朝向变化；已由 `Scene` / `Movement` / `Combat` smoke 覆盖。待补模型姿态、移动插值、攻击/受击/死亡占位动画和更精细朝向来源。
-- 装备视觉挂点第一版已迁移：装备视觉数据会按 `attach_target` 驱动 body、feet、legs、head、hands、back、accessory、main_hand、off_hand 的偏移、旋转和缩放，世界节点暴露 `attach_target`、`attach_offset`、`attach_rotation_degrees`、`attach_scale` metadata，`Scene` smoke 覆盖真实玩家主手装备和合成 head/hands/back/accessory/off_hand 挂点。待补真实骨骼 socket、动画绑定、精确美术校准和装备遮挡处理。
-- 待补武器开火/挥击反馈、命中特效、换弹/攻击动画和手持模型 polish。
-- 尸体模型 / 标记第一版已迁移：世界快照会生成 `Corpse_*` 节点，优先复用被击败 actor glTF，否则使用 corpse fallback；节点带 `CorpseNameLabel`、`CorpseContainerBadge`、pickable body、container/source actor/loot/money metadata，可 hover、选中并打开容器；已由 `Scene` 合成尸体 smoke 和 `PlayerInteraction` 击杀后尸体 hover/open smoke 覆盖。待补雾战显隐细节、专用尸体姿态 / 动画和视觉 polish。
-- actor label、血条、AP 条、敌友阵营颜色、side badge、可接任务 / 任务交付 NPC 标记和状态效果图标第一版已迁移：world snapshot 会转发 actor `ap`、`turn_open`、`in_combat` 和 `combat` 数据，并从 active/completed quest、dialogue rule 和 dialogue action 派生 `quest_offer` / `quest_turn_in` 的 `quest_markers`；`WorldSceneRenderer` 会为 actor 生成 `ActorNameLabel`、`ActorHealthBar`、`ActorApBar`、`ActorSideBadge`、`ActorQuestMarker`、`ActorQuestMarkerLabel` 和 `ActorStatusEffectIcons`，状态效果会保留球形/字母 fallback，并在 `icon_path` 或 effect id fallback 可解析时额外生成 `ActorStatusEffectSprite_*` Godot `Sprite3D` 图标，节点暴露 icon resource / loaded 诊断；`Scene` smoke 覆盖真实启动 actor、合成 hostile actor、`trader_lao_wang` 可接任务 marker、`doctor_chen` 可交付任务 marker，以及 passive / buff 状态效果图标 metadata 和 SVG Sprite3D 加载。待补遮挡处理和视觉 polish。
+- [ ] 补模型姿态、移动插值、攻击 / 受击 / 死亡占位动画和更精细朝向来源。
+- [ ] 补真实骨骼 socket、动画绑定、精确美术校准和装备遮挡处理。
+- [ ] 补武器开火 / 挥击反馈、命中特效、换弹 / 攻击动画和手持模型 polish。
+- [ ] 补雾战显隐细节、专用尸体姿态 / 动画、遮挡处理和视觉 polish。
 
-### 12.4 相机和遮挡
+### 12.4 相机、遮挡和 Fog
 
-- 已恢复 Bevy 风格相机角度、焦点 actor 跟随、手动拖拽后暂停跟随、`F` 恢复跟随和观察楼层相机平面第一版；待补 occlusion、视觉显隐和多层地图表现细节。
-- zoom factor、键盘 `+` / `-` / `Ctrl+0`、滚轮缩放和 `0.5..4.0` clamp 第一版已迁移，并由 `PlayerInteraction` smoke 覆盖；待补视口可见范围诊断、边界 clamp 视觉验证、多楼层聚焦细节和分辨率变化处理。
-- 待补 occlusion：建筑/墙体遮挡目标时的淡出、轮廓、选择目标 actor 的遮挡处理。
-- hover outline 第一版已迁移：非攻击悬停会显示 `HoverTargetOutline`，按 actor / pickup / container / trigger / door 等 `target_category` 使用不同颜色并记录 target meta；门悬停会保留 `door_is_open` / `door_locked` 状态；攻击悬停仍使用专门的 `AttackTargetOutline`、`AttackTargetMarker` 和 `AttackRangeMarkers`；已由 `PlayerInteraction` smoke 覆盖 pickup、door 与 hostile actor。待补 object/door/container/trigger 更精细优先级、遮挡处理和视觉 polish。
+- [ ] 相机补 occlusion、视觉显隐、多层地图表现、视口可见范围诊断、边界 clamp 视觉验证、多楼层聚焦细节和分辨率变化处理。
+- [ ] Occlusion 补建筑 / 墙体遮挡目标时的淡出、轮廓、选择目标 actor 的遮挡处理。
+- [ ] Picking 优先级补 object / door / container / trigger 更精细优先级、遮挡处理和视觉 polish。
+- [ ] Fog 补与旧 post-process fog 的视觉等价：探索区透明度、未探索区遮罩、边缘柔化和 mask blend。
+- [ ] Fog mask 补相机 / 地图坐标同步、地图切换重建、可见格变化平滑和性能优化。
 
-### 12.5 雾战和 overlay
+### 12.5 Debug / Overlay
 
-- 已有 Godot canvas fog shader 第一版；待补与旧 post-process fog 的视觉等价：探索区透明度、未探索区遮罩、边缘柔化、mask blend。
-- 待补 fog mask 与相机/地图坐标同步、地图切换重建、可见格变化平滑、性能优化。
-- 部分迁移 `show vision` / debug overlay：`V` 会在运行时循环 `off`、`walkable`、`vision`、`blocked_sight`、`level`，并由 `DebugOverlayController` 在世界层绘制可走/阻挡、可见/已探索、actor vision radius、遮挡视线和楼层诊断格；`runtime_control.debug_overlay` 暴露模式、格子数量、当前楼层、actor vision radius 和 radius marker 数；FPS、frame time、HUD latency、render count、actor count、object count、pathfinding time 和 visited cell count 第一版已进入 `runtime_control.performance` 与 HUD runtime 行；`/` controls hint 已暴露 `controls_hint_snapshot()` 和 HUD `Help on/off`；F3 统一 debug panel 第一版会汇总 overlay、info、runtime、hover、selection、AI、performance 和 console 状态，并暴露 `runtime_control.debug_panel`；info panel 翻页、debug overlay 循环、controls hint 和 debug panel 快捷入口已接入 HUD UI 音频反馈。`UIToggle` / `Movement` / `PlayerInteraction` smoke 已覆盖 HUD、世界节点、帮助提示、debug panel、快捷入口音频和路径预览。待补旧 debug viewer 完整按钮、动作、过滤和布局。
-- debug console 第一版已迁移：反引号开关 HUD `DebugConsole`，带输入框、history、schema-driven suggestions、命令参数提示、Tab autocomplete、上下箭头历史浏览、Esc 关闭和 `debug_console` gameplay blocker；`help`、`show fps`、`show overlays`、`observe mode`、`clear`、`restart`、`spawn`、`give item`、`teleport`、`unlock location` 已接入 app 层命令执行，其中运行时命令会复用 Godot `Simulation`、actor registry、库存条目和 overworld unlock，并在变更后重建世界/面板；命令 schema 集中在 `DebugConsoleCommandRunner`，并驱动 help、suggestions 和参数提示；运行时修改命令已标记 `debug_runtime_mutation` 权限，支持通过 `cdc/debug_console/allow_runtime_mutation` 统一禁用，数量/坐标参数改为严格整数校验；反引号打开和命令提交已接入 HUD UI 音频反馈，payload 暴露 command value 与失败 reason；`UIToggle` smoke 已覆盖成功路径、命令 schema、help usage、权限拒绝、非法参数、未知 item / location 拒绝路径和 console 控件音。待补复制/过滤和旧 debug viewer 完整命令集。
-- 雾战对交互、攻击和技能目标的规则影响第一版已迁移：active vision 下不可见目标禁止 interaction prompt、attack、skill preview 和 use_skill；已由 `Vision` / `Interaction` / `Combat` smoke 覆盖。待补 hover prompt、雾中物体轮廓和已探索但不可见目标的显示策略。
+- [ ] Debug viewer 补完整按钮、动作、过滤、布局、复制 / 过滤和旧命令集。
+- [ ] Debug / overlay 补 hover prompt、雾中物体轮廓和已探索但不可见目标的显示策略。
 
 ## 13. 游戏 UI、菜单和反馈表现
 
-### 13.1 主菜单和设置
+- [ ] 主菜单和设置补更完整视觉表现，以及 Godot project / window / audio bus 的平台差异处理。
+- [ ] HUD 和 overlay 补更完整状态行、战斗布局、反馈 toast / feed、上下文菜单、slot tooltip、冲突策略、统一 modal layer、tooltip / context menu / drag preview 真实视觉 polish。
+- [ ] Inventory 面板补完整上下文项、拆分 polish 和跨面板拖拽视觉 polish。
+- [ ] Character 面板补更完整排版。
+- [ ] Map 面板补更完整图形化地图目标 marker。
+- [ ] Journal 面板补更完整失败反馈、更多真实任务条件数据和多分支任务状态。
+- [ ] Skills 面板补技能树真实布局 / 连线视觉 polish、前置链路高亮动画和世界目标高亮细节。
+- [ ] Trade 面板补更多跨面板 hover 高亮 polish。
+- [ ] Container 面板补逐件 / 多 stack 工具耐久和跨面板拖拽视觉 polish。
 
-- main menu runtime 第一版已迁移：`run/main_scene` 进入 `boot.tscn` / `main_menu.tscn`，菜单态不实例化 `GameRoot`、不加载 map/actors；新游戏会写入启动请求并进入 `game_root.tscn`，若当前槽位已有存档会先弹覆盖确认；继续游戏会从存档槽列表中读取所选 runtime snapshot 并交给 `GameRoot` 恢复；存档 envelope 会写入 active map/location、entry point、round、turn phase、combat active、actor/event count、玩家名称/坐标/等级/XP/HP/AP/资金/背包数量、任务/容器/商店/尸体/已消耗目标/已解锁地点数量、slot_display_name 和 updated_at 元信息；菜单可显示、选择、重命名、删除存档槽，正常/坏档都会显示槽位名，并在当前槽位展示玩家、位置、HP/AP、回合、任务和探索/战斗状态；退出按钮调用 Godot quit；已纳入 `MainMenu` / `Save` smoke。待补更完整视觉表现。
-- settings panel 控件第一版已迁移：主音量、音乐、音效、窗口模式、分辨率、VSync 和按键绑定方案循环会更新设置状态、摘要文本和 blocker 状态；设置会以 `schema_version + settings` envelope 保存到 `user://settings.json`，旧裸设置字典会自动迁移并保留诊断，恢复默认按钮会重置、保存、应用并刷新 UI；新设置面板实例加载、旧文件迁移、恢复默认和持久化 envelope 已纳入 `UIToggle` smoke；项目已配置 `Master` / `Music` / `SFX` audio bus，三条音量设置都会应用到对应 bus；项目自定义 UI scale 已移除，避免缩放 full-screen UI root 破坏锚点布局；按键绑定 profile 第一版会应用到运行时面板快捷键，默认方案保留 `I/C/M/J/K/L`，左手方案提供 `Q/E/R/T/Y/U` 并由 smoke 验证；窗口模式/分辨率/VSync 会在非 headless 运行时应用到 `DisplayServer`。待补 Godot project/window/audio bus 的完整平台差异处理。
+## 14. 内容工具和 Agent Workflow
 
-### 13.2 HUD 和 overlay
+- [ ] CLI 补批量修复、安全写回、dry-run、JSON path 定位、引用反查、跨 domain 校验和旧 `content_tools` 输出字段兼容。
+- [ ] Agent workflow 文档要求：每个新脚本同步 comment-based help、`tools/agent/README.md` 和 `docs/agent-workflows/*.md`。
 
-- 部分迁移 HUD top/status/feedback：基础状态行、运行控制行和控制提示展开/折叠已有；top/status badges 第一版已从 runtime snapshot 展示 HP、AP、等级、回合、阶段和战斗状态；combat HUD 当前回合、行动方、敌人数量、参与者数量、目标预览和命中 / 暴击 / 伤害预估第一版已纳入 `UI` / `PlayerInteraction` smoke；事件反馈队列第一版已从 runtime 最近事件生成 `event_feedback` snapshot，并在 HUD 显示最近交互/移动/等待/战斗/制作/技能、progression、任务推进和命令拒绝失败反馈，常见失败 reason 已映射为中文提示；toast / 过渡表现第一版已同源派生 `feedback_toasts`，按 info/success/warning/error 分类，带 enter/hold/fade phase、alpha、ttl 和非阻塞 `FeedbackToastLayer` metadata，已纳入 `UI` / `Progression` / `Quest` smoke。待补更完整状态行、战斗布局和反馈 toast/feed 视觉 polish。
-- 部分迁移 interaction menu：右键位置、目标名称、主动作/可用/禁用摘要、可用选项、禁用选项、禁用原因本地化 tooltip、稳定 reason metadata / snapshot、`disabled_options` 简表与 `option_details` 详情的本地化 reason 文案、按钮 hover 详情、Esc / 外部点击关闭和 `ui_layer_stack_snapshot()` context menu 层级诊断第一版已有；待补更完整视觉布局和上下文菜单 polish。
-- 部分迁移 hotbar dock：HUD 已显示 1-0 槽位、空槽、绑定技能/物品、物品数量、slot tooltip、物品使用效果摘要、AP / resource cost、AP / resource / item count insufficient、cooldown 文本/禁用态和冷却遮罩；观察模式 dock 已显示模式、播放、速度、自动推进和楼层状态，Observe / Player、Play、Speed、Auto 按钮已有第一版控制，observe mode 下普通 hotbar 会隐藏，禁用观察控制的 tooltip 会显示 catalog 文案；热栏槽、热栏组和观察 dock 按钮第一版已接入 HUD 控件音频反馈，payload 暴露 slot、group、skill、item、observe mode、playback、speed 和 auto tick 诊断，热栏技能按钮改为 deferred 调用避免 Godot pressed 信号内刷新释放自身。待补更完整 slot tooltip、完整冲突策略和视觉 polish。
-- 部分迁移 modal layer：背包丢弃确认弹窗、容器数量确认弹窗和地图 `overworld_prompt` 已接入 blocker 与 Esc；背包丢弃与容器数量弹窗 snapshot 已暴露数量上下限、有效性、错误文本、dialog 可见性、mouse_filter 和 blocker 诊断，并由 `InventoryUI` / `ContainerUI` smoke 覆盖；tooltip、context menu 和 drag preview 已接入统一 `ui_layer_stack_snapshot()` 诊断，tooltip 为非阻塞提示层且暴露屏幕坐标、source rect、viewport、lifecycle 和 delay policy，drag preview 在拖拽期间作为阻塞世界点击的表现层并暴露 preview screen position、viewport、estimated size、lifecycle 和 threshold policy；待补更统一的 modal layer 表现。
-- 待补 tooltip / context menu / drag preview 的真实视觉 polish；stage/settings/dialogue/trade/container 基础面板根节点与主容器防点击穿透已有第一版。
+## 15. 存档、加载和运行入口
 
-### 13.3 面板
+- [ ] 坏档恢复补自动修复策略和更完整恢复 UI。
+- [ ] 保存 / 读取继续覆盖新增 runtime 状态：active map、actors、combat、turn、pending、corpse、containers、shops、quests、skills、hotbar、vision、world flags、relationships 和 active skill effects。
+- [ ] 地图切换后的保存 / 读取补多段地图链路、跨地图 UI 恢复和坏档恢复策略。
+- [ ] 运行入口错误提示补内容加载失败、地图缺失、资产缺失、Godot 版本不对和进入游戏后的错误 UI。
 
-- 背包面板已有筛选、搜索、详情、反馈行、滚动列表、选中物品操作栏、右键检查/使用/装备/丢弃/全部丢弃/加入热栏菜单、顺序视图拖拽重排、拖到装备按钮、拖到实际装备槽、拖到丢弃按钮、拖到独立 DropZone、拖到当前容器存入、拖到交易购物车出售和丢弃数量弹窗第一版；可使用物品热栏绑定/触发和存档 roundtrip 已纳入 `InventoryUI` / `Save` smoke，背包使用成功/失败反馈和跨面板拖拽已纳入 `InventoryUI` / `UIToggle` / `ContainerUI` / `TradeUI` smoke。待补完整上下文项、拆分 polish 和跨面板拖拽视觉 polish。
-- 角色面板已有属性、资源、装备、属性点分配、派生数值摘要、状态效果和装备替换属性变化对比第一版；派生数值会展示生命/速度、攻击/防御/暴击、基础属性合计、装备修饰和状态修饰，装备行会从背包候选装备中显示最佳替换的武器/属性 delta，tooltip 会列出最多 3 个候选对比；状态效果会显示 actor active effects 的名称、分类、来源、等级、剩余回合和 modifier，悬停说明来源、技能 ID、持续时间、修饰和 effect id，状态 snapshot 会派生 positive / negative / passive / neutral polarity、severity 和 visual_style，面板用前缀、颜色和 metadata 区分 buff / debuff / passive，并纳入 `UIToggle` smoke。待补更完整排版。
-- 地图面板已有当前地图、当前地点名称、入口、已解锁地点名称、已解锁地点前往确认 prompt、对象统计、追踪任务行、追踪目标 marker 行、地图 canvas、入口点绘制、目标 marker 绘制、zoom 按钮、左键拖拽平移、pan 复位、画布状态诊断和 overworld 地点/道路 inset 第一版；显式 overworld 路线规划第一版已迁移，`MapSnapshot.overworld_overview.route_plans` 会基于可通行 terrain 生成当前地点到各地点的路线、步数、可达/解锁状态和路径格，地图面板展示最近可前往路线摘要，地点按钮 tooltip 展示目标路线预览，canvas inset 高亮首条已解锁可达路线并在状态行暴露 route 计数；已由 `UIToggle` smoke 覆盖。据此待补更完整图形化地图目标 marker。
-- Journal 面板已有任务详情、可交付状态、奖励详情、目标进度列表、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈和手动交付失败历史第一版；对话/手动交付条件展示第一版已迁移，`JournalSnapshot` 会暴露 `turn_in_requirements`、对话交付目标、对话 id / rule id、缺目标配置和阻塞原因，Journal 目标行、详情和交付按钮 tooltip 会展示这些条件，失败历史会带物品不足 required/current、目标未完成 current/target、需要对话交付、对话不匹配或对象不匹配上下文；任务前置条件矩阵第一版已迁移，Journal 会显示 locked quest 区块、缺失前置行和 active quest 已满足前置行，规则层支持 completed quest、单个 world flag、world flags all / any / none、物品数量和关系分数；`QuestRunner.turn_in()` 已接入对话交付第一版运行时强校验，`find_medicine` / `factory_spare_power` 需要指定 NPC 对话上下文才能交付，直接 Journal 交付会被拒绝，并由 `Quest` / `JournalUI` / `DialogueAction` smoke 覆盖。待补更完整失败反馈、更多真实任务条件数据和多分支任务状态。
-- Skills 面板已有筛选、详情、hotbar 绑定、拖拽技能到热栏、多树切换、前置链路、下游解锁高亮、图形技能树画布、节点连线、拖拽 pan、滚轮 / 按钮缩放、pan 复位、点击节点选中详情、选中技能上下游链路高亮诊断和目标选择 HUD 预览第一版；待补技能树真实布局 / 连线视觉 polish、前置链路高亮动画和世界目标高亮细节。
-- Crafting 面板已有配方详情、数量预览、最大可制作、分类/排序/搜索、工作台/材料/技能缺失原因、缺失原因定位、工具消耗与工具耐久预览、工具耐久不足反馈、批量执行、制作队列/取消、AP 不足反馈、跨回合制作进度条、制作中显式取消和完成反馈第一版；工作台权限预览 polish 第一版已迁移，详情会显示 `station_permission_preview.text`，`craft_queue_snapshot().station_permission_preview` 暴露当前选中配方的 station、距离、范围、state/reason、blockers 和本地化文本；`cancel_pending` 已接入统一玩家命令入口并由面板取消按钮调用，取消不会消耗 queued 材料且会发出 `crafting_cancelled`；制作队列结构化诊断第一版已迁移，`craft_queue_snapshot()` 暴露队列项、总次数、预计产出汇总、按钮启用态、pending 制作 AP 进度、百分比、进度条显隐/数值和取消能力；制作中取消反馈诊断第一版已迁移，`craft_queue_snapshot().pending_result` 暴露被取消配方、数量、取消来源、AP 进度、剩余 AP、turn policy 和剩余队列统计，面板反馈显示“已取消正在制作: 配方 x数量 | 进度/剩余 AP”；制作进度视觉 polish 第一版已迁移，`PendingCraftingProgressStateLine` 会显示刚开始 / 制作进行中 / 即将完成和百分比，`PendingCraftingProgressBar` 会按状态应用 fill 颜色和 tooltip，并在 `craft_queue_snapshot().pending` 暴露 progress state、状态文本、状态行、颜色和可见性诊断；制作队列持久化第一版已迁移，`Simulation.snapshot()` / `load_snapshot()` 保存和恢复 `crafting_queue`，`CraftingSnapshot` 负责从配方库补齐展示字段；多条队列跨回合生产第一版已迁移，队列确认会保留 pending 后的剩余条目，pending 完成后继续执行下一条队列项；队列接力反馈第一版已迁移，Crafting 面板显示最近队列确认 / pending 完成接力摘要，`craft_queue_snapshot()` 暴露 latest result 诊断；地图切换时 pending 制作和制作队列会被清理并反馈“地图切换取消”，已由 `CraftingUI` / `Save` / `Interaction` / `Overworld` / `UI` smoke 覆盖。
-- Trade 面板已有店铺/玩家双栏、数量直买直卖、价格预览、购物车、拖拽入队、购物车重排、buy/sell drop zone 来源提示、hover 高亮、稳定 accept/reject 文案、最近一次拖拽预览、drag preview 几何/生命周期诊断、统一 drag preview layer 真实视觉、稳定拒绝 reason、业务禁用说明、不可出售禁用态、交易权限禁用预览、装备出售确认和清空；待补更多跨面板 hover 高亮 polish。
-- Container 面板已有空容器提示、容器/背包双栏、滚动、基础详情、选中详情、数量选择、加减/全部数量按钮、数量范围提示、转移动作 tooltip、全部拿取/全部存放、双向拖拽转移、背包面板拖入存放、容器锁定/权限失败反馈、权限预览行、钥匙/工具缺失反馈、显式钥匙/工具消耗解锁、工具耐久消耗解锁、背包负重不足反馈和容器自身容量超限反馈；待补逐件/多 stack 工具耐久和跨面板拖拽视觉 polish。
+## 16. 验证缺口
 
-## 14. 资产和导入
+### 16.1 现有 Smoke 需扩展
 
-### 14.1 已迁入但需复核的资产
+- [ ] `Movement`：跨层楼梯、取消策略和更多复杂重规划细节。
+- [ ] `PlayerInteraction`：更多复杂重叠目标和视觉 polish。
+- [ ] `Combat`：高低差 / 楼梯、更多特殊武器、战斗队列 UI 和表现层 polish。
+- [ ] `AI`：更复杂重规划、感知丢失细节、更复杂在线 / 离线冲突策略、最终状态美术反馈和截图级动画验收。
+- [ ] `InventoryUI`：更完整上下文菜单 polish。
+- [ ] `ContainerUI`：逐件 / 多 stack 工具耐久和更多跨面板拖拽视觉 polish。
+- [ ] `TradeUI`：更多跨面板 hover 高亮 polish。
+- [ ] `SkillsUI`：技能树真实布局 polish、链路高亮动画和更完整状态 UI。
+- [ ] `JournalUI`：更完整失败反馈、更多真实任务条件数据和多分支任务状态。
+- [ ] `Save`：持续覆盖新增 runtime 字段和旧存档迁移。
 
-- `godot/assets/preview_placeholders/characters/humanoid_mannequin.gltf`
-- `godot/assets/preview_placeholders/placeholders/equipment_*.gltf`
-- `godot/assets/preview_placeholders/placeholders/weapon_*.gltf`
-- `godot/assets/world_tiles/surface_placeholder_basic/*.gltf`
-- `godot/assets/world_tiles/building_wall/*.gltf`
-- `godot/assets/world_tiles/prop_placeholder_basic/*.gltf`
-- `godot/assets/container_placeholders/*.gltf`
-- `godot/assets/fonts/NotoSansCJKsc-Regular.otf`
-- `godot/assets/shaders/fog_of_war_canvas.gdshader`
+### 16.2 需要新增或恢复的验证入口
 
-### 14.2 待做资产工作
+- [ ] UI toggle smoke：键盘打开 / 关闭面板、Esc 关闭优先级、菜单阻塞 gameplay 输入。
+- [ ] Targeting smoke：进入技能 / 攻击目标选择、取消、预览、确认。
+- [ ] Door 聚合 smoke 补更多真实门模型 / 碰撞 / 声音表现断言。
+- [ ] Map visual smoke 补真实 glTF collision。
+- [ ] Asset import smoke 补真实 collision 和 scale / origin 校准规则。
 
-- glTF Godot 导入复核第三版已迁移：`Scene` smoke 会递归扫描 `godot/assets/**/*.gltf` / `.glb`，逐个通过 Godot `ResourceLoader` 加载为 `PackedScene`、实例化、统计 MeshInstance3D / 材质并检查非零可视 bounds；当前覆盖 52 个 glTF、65 个 mesh、65 个材质，并输出 collision shape / physics body、hidden node、shadow disabled、non-unit scale、zero scale 和 max origin offset 诊断；`gltf_asset_diagnostics` 会逐项暴露 path、mesh/material 数、bounds size、collision / physics body 数、origin offset、外部 buffer 数、import uid 和 import dest_files；`.bin` / `.import` / `.uid` 守护会检查外部 buffer 存在和 byteLength、`.import` source / uid / dest_files、asset uid sidecar 格式 / 目标资源 / 重复 uid，并输出 `gltf_import_uid_baseline` / `asset_uid_sidecar_baseline` 稳定快照；`test-godot-game.ps1 -Scenario Scene` 会把 glTF asset diagnostics、MapVisual scene reports、import UID baseline、sidecar UID baseline 和缺失 / 重复 / 非法清单写入 `Scene.asset-diagnostics.json`，并对比 `docs/baselines/scene_asset_uid_baseline.json`；运行时实例会补 `GeneratedVisualCollisionProxy` bounds 代理并由 `Scene` smoke 验证。待补把这些代理沉淀为真实 glTF collision 资源、scale / rotation / origin 校准、shadow / visibility 策略和 scene 引用变更差异报告。
-- asset id -> Godot resource path 映射表第一版已迁移：新增 `AssetPathResolver` 统一把 `builtin:character:*`、`builtin:container:*`、`builtin:world_tile:*`、`builtin:weapon:*`、`builtin:item:*`、`res://assets/...` 和 `godot/assets` 相对 `.gltf` 路径解析为 relative / resource / absolute path，`default_humanoid` 外观已改用 `builtin:character:humanoid` 并仍归一到 Godot glTF，`prop_placeholders` 容器 world tile 已改用 `builtin:container:*` 并仍归一到 `godot/assets/container_placeholders/*.gltf`，surface / wall / prop world tile 已改用 `builtin:world_tile:*` 并仍归一到 `godot/assets/world_tiles/**/*.gltf`；resolver 会拒绝根目录 `assets/...`、绝对路径、逃逸路径和非 `.gltf` 正式模型引用；UI icon / dialogue portrait / overworld location / skill / hotbar / crafting recipe output / container item / trade item / journal quest / settings button media resolver 第一版已迁移，会解析 `png` / `jpg` / `jpeg` / `webp` / `svg`，识别 legacy root `assets/...`、缺失资源和 domain fallback key；旧 icon / portrait data 引用已迁入 `res://assets/**/*.svg`，技能 icon 空值已迁入 `res://assets/icons/skills/*.svg`，并落地占位 SVG 资源；`MediaTextureLoader` 已提供 UI 运行时贴图加载，支持无 `.import` 情况下把 SVG 转成 `ImageTexture`；`WorldSnapshotBuilder`、item appearance 校验、appearance base model 校验、world tile source 校验、inventory snapshot、dialogue snapshot、map snapshot、skills snapshot、HUD hotbar snapshot、crafting snapshot、container snapshot、trade snapshot、journal snapshot 和 settings controller 已共用该 resolver；`ContentAssetManifest` / `content_cli asset-manifest all` 已可导出内容数据中显式引用的 item icon / item appearance / dialogue portrait / skill icon / overworld icon / appearance base model / world tile glTF 资产 manifest，并输出 entry_count、unique_asset_count、missing_count、invalid_count、by_domain 和 by_kind；`ContentCLI` / `InventoryUI` / `DialogueUI` / `UIToggle` / `SkillsUI` / `CraftingUI` / `ContainerUI` / `TradeUI` / `JournalUI` smoke 覆盖 builtin 映射、`res://assets` 归一、root assets 拒绝、missing asset 状态、legacy media 诊断、已迁 media 资源存在性、manifest 代表性条目和 UI 节点贴图绑定。待补真实 UI media 资源替换和更多 domain-specific asset id。
-- 地图 scene visual asset 实例化复核第三版已迁移：`Scene` smoke 会扫描 `godot/scenes/maps/*.tscn`，对声明或包含地图视觉的对象断言 `Visuals` 容器存在且已实例化子节点，当前覆盖 12 张地图 / 78 个 visual 对象 / 669 个 visual 子节点 / 22 条 Godot 资源路径；同时输出默认运行地图的 asset path、fallback 次数、pickable body、重复 ID、重叠、mesh、collision shape / physics body、hidden node、shadow disabled、non-unit scale、zero scale 和 max origin offset 统计，并通过 `all_map_visual_scene_reports` 输出每张 map scene 的声明/实例化/资产/碰撞/缩放/重叠诊断；`Scene.asset-diagnostics.json` 会持久记录这些逐场景报告和汇总，便于对比地图资源变化；对重复 ID、缺视觉子节点、零缩放、运行时交互视觉缺 `PickableBody`、pick proxy 缺 shape / metadata、运行时 map visual pick proxy 无 collision / physics body、运行时 glTF 实例缺 `GeneratedVisualCollisionProxy` 失败。待补真实 glTF collision 资源、scale / rotation / origin 校准、shadow / visibility 策略和 resource uid 细节复核。
-- container / pickup / trigger / door / corpse fallback 表现第一版已迁移：door fallback 已有开合/锁定状态；生成层 map object 在缺少真实 map scene visual 时会按 pickup / container / trigger 生成不同形状、材质和 `fallback_category` meta，并报告 source object、target kind、source visual 和 source visual asset，容器会显示 `ContainerStateBadge` 并暴露 empty/item/money metadata，且有真实 visual 的对象不会重复叠加 fallback；corpse fallback 已有名称、容器徽标和 loot metadata；已由 `Scene` / `PlayerInteraction` / `ContainerUI` smoke 覆盖。待补真实美术资源替换、重叠检查和声音占位。
-- WGSL 旧 shader 不迁代码，只迁视觉目标：grid ground、tile instancing、building wall、fog post-process 的效果要用 Godot shader / material 实现。
-- 音频资产策略第一版已迁移：UI 反馈、拾取、开门、交易、制作、攻击、受击、死亡、任务进度和任务完成会由 `AudioFeedbackController` 从 simulation event 映射到 `SFX` bus 的生成占位音，并通过 runtime snapshot 暴露 fallback 诊断；事件音色细分第一版会按 attack range / damage、door open state、auto-open、weapon reload 和 ammo consume payload 选择不同占位 profile；stage/settings 面板开关第一版已通过 app/UI 层直接注入 UI audio feedback，不伪装成 gameplay event；音乐 / 环境声 / 空间 3D 音效占位层第一版已迁移，runtime 会按当前 map 配置 `Music` bus 占位音乐和 `SFX` bus 环境声，snapshot 暴露 `mix_layers`、bus 状态、music / ambience / spatial 状态、设置同步和空间坐标，世界表现层可通过 `GameApp.play_spatial_audio_feedback()` 触发 3D 占位音，simulation 世界事件也会按 payload grid 或 runtime actor grid 自动派生空间坐标；主菜单第一版会独立装配 `MainMenuAudioFeedbackController`，在无 gameplay runtime 时也能为菜单按钮、存档槽选择和确认弹窗发出 UI 控件反馈，并暴露 slot / action / value 诊断；设置面板 slider / option / checkbox / button 控件反馈第一版已迁移，会按 `ui_slider_changed`、`ui_option_selected`、`ui_toggle_changed` 和 `ui_button_pressed` 暴露 control name / kind / action / setting key / value 诊断并由 `UIToggle` smoke 覆盖；Skills 面板筛选、树筛选、技能行、学习确认、绑定、清空、技能树缩放 / 复位 / 节点选择控件反馈第一版已迁移，会暴露 skill / slot / filter / tree 诊断并由 `SkillsUI` smoke 覆盖；Inventory 面板筛选、排序、物品行、丢弃确认和数量调整控件反馈第一版已迁移，会暴露 item / count / filter / sort 诊断并由 `InventoryUI` smoke 覆盖；Container 面板物品行、右键菜单、数量选择、转移按钮和数量确认弹窗反馈第一版已迁移，会暴露 item / count / source / target_source / stack_index 诊断并由 `ContainerUI` smoke 覆盖；Trade 面板物品行、右键菜单、数量选择、直交易、购物车入队 / 调整 / 移除 / 清空 / 确认控件反馈第一版已迁移，会暴露 item / count / source / target_source / stack_index / cart_count / unit_price / total_price 诊断并由 `TradeUI` smoke 覆盖；Journal 面板任务行、已完成任务行、追踪切换和交付按钮反馈第一版已迁移，会暴露 quest / quest_state / reason / progress 诊断并由 `JournalUI` smoke 覆盖；Crafting 面板搜索、分类、排序、配方行、数量、缺失定位、制作按钮、队列按钮、队列条目取消、队列确认、装备工具确认和 pending 制作取消控件反馈第一版已迁移，会暴露 recipe / category / sort / item / count / queue_count / value 诊断并由 `CraftingUI` smoke 覆盖；Character 面板装备右键菜单、装填、卸下和属性分配控件反馈第一版已迁移，会暴露 slot / item / attribute / ammo / value 诊断并由 `UIToggle` smoke 覆盖；Dialogue 面板选项按钮和关闭按钮反馈第一版已迁移，会暴露 dialogue / node / option / target 诊断并由 `DialogueUI` smoke 覆盖；Map 面板地点按钮、前往确认、缩放和平移复位控件反馈第一版已迁移，会暴露 location / map / zoom / marker 诊断并由 `UIToggle` smoke 覆盖；HUD 热栏槽、热栏组、观察 dock、overlay/info/controls/debug 快捷入口和 debug console command 控件反馈第一版已迁移，会暴露 slot / group / skill / item / observe mode / playback / speed / auto tick / command / overlay / info page 诊断并由 `UIToggle` smoke 覆盖。待补真实音频资源、更多跨面板 UI 控件点击/滑动事件、真实音乐 / 环境声素材、3D 衰减听感校准和更多材质/武器/门类型音色。
-- 字体和中文渲染策略第一版已迁移：主菜单与运行时顶层 UI Control 统一使用 `res://assets/themes/default_ui_theme.tres`，该 Godot theme resource 绑定 `NotoSansCJKsc-Regular.otf`，并通过 Theme API 统一常见控件字号、基础布局间距、按钮高度和 normal / hover / pressed / disabled / focus 状态；`UIThemeService` 只负责加载、fallback、规范补齐和 snapshot 诊断；世界 `Label3D` 也统一使用同一字体，覆盖角色名、尸体名、状态效果、任务标记和战斗反馈，并通过 snapshot / smoke 诊断字体路径和应用状态。待补富文本 fallback 和截图级缺字回归。
+## 17. 建议迁移顺序
 
-## 15. 内容工具和 agent workflow
+1. 战斗空间等价：LOS、跨层、AOE、友军伤害、战斗退出和目标预览。
+2. 背包 / 容器 / 交易高级 UI：数量弹窗、上下文菜单、拖拽、购物车、详情和失败提示。
+3. 技能和 hotbar：多槽、快捷键、目标选择、状态堆叠、非战斗 modifier 消费点、cooldown。
+4. 动作表现队列：最终 snapshot 刷新时机、表现截图级验收、quantity / drag / tooltip 等 UI layer 阻塞矩阵。
+5. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
+6. NPC life / GOAP：更复杂在线 / 离线冲突策略、最终状态美术反馈和截图级动画验收。
+7. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。
 
-- 已有 Godot content CLI 第一版；待对齐旧 `content_tools` 的 summarize、references、format、diff-summary、changed、content 操作细节；`validate changed` 的批量 status 摘要、deleted / renamed 诊断和 `diff-summary changed` 的批量 diff 摘要已同步到 `godot-content.ps1` help、`tools/agent/README.md` 和 `docs/agent-workflows/README.md`。
-- 待补 CLI 的批量修复、安全写回、dry-run、JSON path 定位、引用反查、跨 domain 校验。
-- 待补 agent workflow 文档：每个新脚本需要 comment-based help、`tools/agent/README.md`、`docs/agent-workflows/*.md` 同步更新。
-
-## 16. 存档、加载和运行入口
-
-- 主菜单继续游戏、存档槽列表、重命名、删除、覆盖确认、基础/详细存档元信息、slot_display_name 和坏档提示第一版已迁移：schema 不兼容、JSON 损坏、缺 runtime snapshot 等不可加载槽会显示原因、禁用继续并允许删除；坏档 slot summary 会暴露 `loadable=false`、`can_delete=true`、`recoverable=true`、`failure_category`、`metadata_recovered`、`can_export_recovery`、`recovery_export_path` 和 `recovery_suggestion`，正常存档和带 metadata 的坏档都会显示槽位名；主菜单可把坏档原始 JSON 导出到 `recoveries/` 后再删除；存档摘要已覆盖 active map/location/entry、turn phase、combat state、actor/event count、玩家名称/坐标/等级/XP/HP/AP/资金/背包数量、任务/容器/商店/尸体/已消耗目标/已解锁地点数量；JSON 损坏读取已改为静默 parse，避免坏档扫描刷 Godot 错误日志；已由 `MainMenu` smoke 覆盖三类坏档恢复、导出和删除清理。待补自动修复策略和更完整恢复 UI。
-- 待补保存所有新增状态：UI 相关不一定持久，但 runtime 的 active map、actors、combat、turn、pending、corpse、containers、shops、quests、skills、hotbar、vision、world flags 和 relationships 已有 roundtrip；actor active skill effects 已纳入 `Save` smoke roundtrip。
-- 地图切换后的保存/读取一致性第一版已迁移：`Save` smoke 会通过真实 `submit_player_command(interact)` 执行 `survivor_outpost_01_interior_door` scene transition，再保存/读取并断言 `active_map_id`、`active_entry_point_id`、玩家 `map_id` / `grid_position`、`scene_transition` 事件 payload、active container、consumed targets、corpse containers、unlocked locations 等状态 roundtrip；已由 `Save` / `Interaction` smoke 覆盖。待补多段地图链路、跨地图 UI 恢复和坏档恢复策略。
-- 部分迁移运行入口错误提示：主菜单存档槽会显示 schema 不兼容、JSON 损坏、缺 runtime snapshot 等坏档原因并允许删除，且提供稳定 failure category 供 UI / smoke 识别；待补内容加载失败、地图缺失、资产缺失、Godot 版本不对和进入游戏后的错误 UI。
-
-## 18. 验证缺口
-
-### 18.1 现有 smoke 需扩展
-
-- `Movement`：对角移动和禁止穿角第一版已迁移：`Pathfinder` 支持八方向邻居但对角步会检查两侧正交格，避免穿过地图阻挡或 actor 占用夹角；长路径跨回合恢复第一版已迁移，pending movement 会暴露 `remaining_steps`，AP 不足时先走当前可负担步数、自动推进回合后继续恢复并清空 pending；已由 `Movement` smoke 覆盖开放对角一步路径、双边阻挡不可达和 4 步路线分两回合抵达。待补跨层楼梯、取消策略和更多复杂重规划细节。
-- `PlayerInteraction`：UI blocker、右键菜单关闭、hover prompt、actor/object/grid 优先级和不可见目标已有第一版覆盖；中立 actor hover/category/menu 已补首轮 smoke，攻击预览只在主动作是 `attack` 时出现；待补更多复杂重叠目标和视觉 polish。
-- `Combat`：LOS、门开闭遮挡、跨层、AOE、友军伤害、战斗退出 decay / 强制退出 / 跨地图退出 / 玩家死亡退出、远程弹药/reload、暴击 seed、特殊弹药 profile 合并 / 伤害修正 / on-hit 效果已有第一版 smoke；待补高低差/楼梯、更多特殊武器、战斗队列 UI 和表现层 polish。
-- `AI`：敌对 NPC 门追击第一版已覆盖未锁门、钥匙锁和工具锁的自动开门，通过统一门权限 / topology / pathfinder 路径执行，不为 AI 复制专用门规则；settlement life 第一版已覆盖巡逻 `follow_route`、下班 `return_home`、smart object 目标移动 / 到达使用、AP 消耗、移动事件、`world_time` 存档与推进、need profile 衰减、smart object need 恢复、在线 / 后台 presence、离线 needs tick、后台 settlement life action 完成、长时后台 action 进度、后台进行中 action 在线接管、planner queue 续跑、后台 reservation 存档 / 保护 / 释放，以及工作 / 休息 / 服务 `life.runtime.status`；GOAP 第一版已覆盖 world state、facts、score_rules、conditional requirements、action 选择、executor binding 到 intent、数据化 need_effects、planner queue runtime、last_execution、跨回合多步队列续跑、失败重规划、完成动作 effects 回填 planner_state、action reservation / release / expiry runtime、预约冲突容量避让、预约优先级 / 抢占、world_state_effects 与 executor side effects 写入 world flags / snapshot 和 HUD / runtime AI debug 摘要；状态 UI / 世界反馈第一版已把 actor `life_status` 接入 HUD `status:` token、`ActorLifeStatusMarker` 和 `ActorLifeStatusAnimation` pulse。待补更复杂重规划、感知丢失细节、更复杂在线/离线冲突策略、最终状态美术反馈和截图级动画验收。
-- `InventoryUI`：inventory order 持久化、默认顺序排序、顺序视图拖拽重排、消耗品使用按钮、选中物品装备/丢弃按钮、拖到装备/丢弃按钮、拖到独立 DropZone、拖到实际装备槽、右键检查/使用/装备/丢弃/全部丢弃/加入热栏/存入容器/出售菜单、拖到当前容器存放、拖到交易购物车出售、物品热栏触发、背包使用成功/失败反馈、丢弃数量 SpinBox、丢弃数量弹窗 blocker/Esc/确认/增减/最大值/非法提示、数量上下限/有效性/mouse_filter/blocker 诊断、角色面板装备替换属性变化对比、任务/关键物品禁用、多 stack 拆分、actor 背包增删保持堆叠、`inventory_stacks` 存档 roundtrip、stack_counts snapshot、拆分菜单启用态、具体堆叠来源选择、拆解工具消耗来源预览和装备工具消耗确认弹窗第一版已有 smoke；待补更完整上下文菜单 polish。
-- `ContainerUI`：关闭、Esc 关闭优先级、超距关闭、空容器、双栏、滚动、基础详情、选中详情、数量选择、选中数量确认 modal、全部拿取/全部存放、双向拖拽、背包面板拖入存放、拖拽列 hover accept/reject 高亮、基础失败提示、权限预览、背包负重限制、容器自身容量限制、容器锁定/权限拒绝、钥匙/工具解锁、显式消耗、工具耐久消耗、容器库存多 stack 扣减/追加、容器/背包多堆叠列表/详情/tooltip 展示、容器栏选中具体堆叠直接拿取、背包栏选中具体堆叠直接存放和容器/背包双栏物品图标已有 smoke；待补逐件/多 stack 工具耐久和更多跨面板拖拽视觉 polish。
-- `TradeUI`：购物车、批量确认、无部分成交、装备出售、不可出售、背包负重限制、拖拽入队、buy/sell drop zone、drop zone 来源/拒绝提示、hover 高亮、稳定 accept/reject 文案、最近一次拖拽接受/拒绝预览、购物车和购物车条目拖拽 hover 高亮、业务拒绝原因、drag preview 文案与几何/生命周期诊断、统一 drag preview layer 真实视觉、交易面板快捷键、店铺多 stack 买入/卖出、店铺/玩家多堆叠列表/详情/tooltip 展示、店铺栏选中具体堆叠直接购买、玩家栏选中具体堆叠直接出售、店铺购物车购买逐堆叠来源、玩家购物车出售逐堆叠来源和店铺/玩家/装备物品图标已有 smoke；待补更多跨面板 hover 高亮 polish。
-- `SkillsUI`：HUD/Skills 热栏绑定、拖拽技能到 HUD 热栏槽、热栏槽 drag hover accept / reject 诊断与真实按钮高亮、热栏组 unsupported drag hover 拒绝诊断与真实按钮高亮、数字键激活、多组 hotbar 第一版、HUD 组按钮、组命名、Alt+数字切组、slot tooltip 文本与 tooltip 几何/生命周期诊断、cooldown 文本/禁用态、HUD 冷却遮罩、选中技能详情、前置链路和下游解锁摘要、图形技能树节点 / 前置边 / pan / zoom / 复位 / 点击节点选中 / 上下游高亮诊断、技能学习确认、被动技能效果写入 actor snapshot、主动技能效果写入 actor snapshot、技能目标预览 HUD 文案、世界目标高亮、技能资源消耗和 `skill_used` effect/resource payload 已有 smoke；待补技能树真实布局 polish、链路高亮动画和更完整状态 UI。
-- `JournalUI`：任务详情、目标需求、目标进度列表、奖励详情、可交付状态、本地追踪 marker、HUD 追踪行、地图面板追踪行、地图目标 marker、已完成任务历史、手动交付完成/奖励反馈、手动交付失败历史、对话/手动交付条件展示、对话交付运行时强校验、失败上下文、collect/kill/completed 任务图标、locked quest 前置矩阵、completed quest / world flags all-any-none / item count / relationship 条件展示第一版已有 smoke；待补更完整失败反馈、更多真实任务条件数据和多分支任务状态。
-- `CraftingUI`：配方详情、数量预览、最大可制作、材料/工具/附近容器工具/工作台/工作台权限/技能/配方链/任务/物品/书籍/world flag 解锁缺失原因、缺失原因定位、附近 workbench / medical_station / forge 运行时、地图 station 标注、制作台地图交互打开面板、制作台禁用提示、详情中的制作台权限预览、工具消耗预览、工具耐久预览、工具耐久不足反馈、缺少可消耗工具 HUD 反馈、批量执行、制作队列/取消、队列结构化 snapshot、队列刷新保留、队列存档往返、地图切换清理队列、预计产出汇总、队列按钮启用态、AP 不足反馈、跨回合制作进度百分比、进度条、进度状态行、状态颜色和 tooltip、制作中取消能力、完成反馈、多条队列跨回合生产、队列接力反馈和制作面板控件音频反馈第一版已有 smoke。
-- `Save`：passive / active skill effects 已有 roundtrip；继续补新增 runtime 字段和旧存档迁移。
-
-### 18.2 需要新增或恢复的验证入口
-
-- UI toggle smoke：键盘打开/关闭面板、Esc 关闭优先级、菜单阻塞 gameplay 输入。
-- Targeting smoke：进入技能/攻击目标选择、取消、预览、确认。
-- Door 聚合 smoke 第一版已迁移：`tools/agent/test-godot-game.ps1 -Scenario Door` 会顺序运行 `World`、`Scene`、`Movement`、`AI`、`Interaction`、`PlayerInteraction` 和 `Save`，汇总覆盖锁门、开门、自动开门、hover 视觉、fallback 开合表现、阻挡和存档同步；待补更多真实门模型/碰撞/声音表现断言。
-- Map visual smoke 第三版已迁移：`Scene` smoke 会统计默认地图和所有 `godot/scenes/maps/*.tscn` 中声明或包含地图视觉的对象数量，并断言对应 `Visuals` 容器已实例化子节点；输出 `declared_map_visuals` / `instantiated_map_visuals`、`map_visual_asset_paths`、`map_visual_child_nodes`、`map_visual_fallbacks`、`map_visual_pickable_bodies`、`map_visual_duplicate_ids`、`map_visual_overlaps`、`map_visual_collision_shapes`、`map_visual_physics_bodies`、`map_visual_non_unit_scale_nodes`、`map_visual_max_origin_offset`、`map_scene_count`、`all_map_declared_visuals` / `all_map_instantiated_visuals`、`all_map_visual_asset_paths` 和 `all_map_visual_scene_reports` 等诊断；`test-godot-game.ps1` 会在 Scene 通过后写入 `Scene.asset-diagnostics.json` 持久报告，并对比 `docs/baselines/scene_resource_reference_baseline.json` 输出 scene resource reference diff；默认运行地图的 pick proxy collision / physics body 已纳入失败断言。待补真实 glTF collision。
-- Asset import smoke 第三版已迁移：`Scene` smoke 已覆盖 glTF 加载、实例化、mesh / material 统计、非零 bounds、collision shape / physics body、hidden node、shadow disabled、non-unit scale、zero scale 和 max origin offset；per-asset `gltf_asset_diagnostics` 和 `gltf_assets_missing_collision` 已输出具体缺口清单；新增 `gltf_external_buffer_count`、`gltf_missing_external_buffers`、`gltf_buffer_length_mismatches`、`gltf_missing_import_files`、`gltf_import_source_mismatches`、`gltf_missing_import_uids`、`gltf_missing_import_destinations`、`gltf_duplicate_import_uids`、`asset_invalid_uid_sidecars`、`asset_duplicate_resource_uids`、`gltf_import_uid_baseline`、`asset_uid_sidecar_baseline` 等导入守护诊断并作为失败断言，且 Scene agent smoke 会把关键诊断写入 `Scene.asset-diagnostics.json` 并对比 `docs/baselines/scene_asset_uid_baseline.json`；map scene 资源引用基线已由 `docs/baselines/scene_resource_reference_baseline.json` 固化，并在诊断中输出引用 diff。待补真实 collision 和 scale / origin 校准规则。
-
-## 19. 建议迁移顺序
-
-1. UI 开关状态机：先迁 `UiMenuState` / `UiModalState` / Esc 关闭链路 / gameplay 输入阻塞。
-2. 战斗空间等价：LOS、跨层、AOE、友军伤害、战斗退出和目标预览。
-3. 背包/容器/交易高级 UI：数量弹窗、上下文菜单、拖拽、购物车、详情和失败提示。
-4. 技能和 hotbar：多槽、快捷键、目标选择、状态堆叠、非战斗 modifier 消费点、cooldown。
-5. 动作表现队列：`WorldActionPresenter` 第一版已接入移动逐格 tween、攻击 `windup/impact/fade` 三阶段 impact、伤害飘字、攻击事件诊断 metadata、战斗事件 marker、交互 `start/pulse/fade` 三阶段 pulse、表现期间 input blocker，以及 hotbar / 面板 / 技能 / 制作等 UI 动作拒绝；继续补 quantity / drag / tooltip 等 UI layer 阻塞矩阵、表现截图级验收和最终 snapshot refresh 时机。
-6. 地图表现和门：地图对象资源实例化、门、楼层、遮挡、hover outline、雾战影响。
-7. NPC life / GOAP：跨回合多步执行队列、失败重规划、action reservation / release / expiry、预约冲突容量避让、预约优先级 / 抢占、world_state_effects、executor side effects、后台 tick、在线/后台 presence、后台长时 action、后台进行中 action 在线接管、life status 和状态 HUD/world 表现第一版已接入 runtime planner state / reservations / world flags / actor life runtime、AI debug、actor marker 与 status pulse 动画，并由 AI / Scene / UIToggle smoke 覆盖；继续推进更复杂在线/离线冲突策略、最终状态美术反馈和截图级动画验收。
-8. 内容工具：补 content CLI、批量修复、引用反查、安全写回和 agent workflow 文档。
-
-## 20. 阶段提交与验收规则
+## 18. 阶段提交与验收规则
 
 - 每个阶段只提交本阶段相关文件；不要混入本地地图调整，除非阶段目标明确包含该地图。
 - 每个功能必须明确权威层：内容读写进 `godot/scripts/data`，玩法结果进 `godot/scripts/core`，输入编排进 `godot/scripts/app`，表现进 `godot/scripts/world`，UI 展示进 `godot/scripts/ui`。
