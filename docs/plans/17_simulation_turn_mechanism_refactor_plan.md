@@ -40,6 +40,17 @@
 
 `game_app.gd` 和 app controllers 目前承担运行时 facade、输入转发、presentation、world refresh 和 UI panel 刷新。重构 core 时必须保持 command result、event kind、snapshot 字段和 facade 兼容，避免把 UI / world smoke 一起打碎。
 
+## 回合表现需求
+
+当前重构必须保持以下玩家体验语义：
+
+- 非战斗状态下，玩家角色一旦行动，NPC 也开始行动；两者在表现上基本并行。玩家移动、NPC 移动、生活行动或环境反馈可以在同一轮世界推进结果中并行展示。
+- 战斗状态下，玩家行动和 NPC 行动不并行展示。玩家攻击、使用技能、换弹或其他战斗动作必须先完成表现，至少等玩家行动动画播放完后，NPC 才开始执行并展示行动。
+- core 层仍负责一次性结算玩家命令、NPC 行动、AP、回合和事件结果；表现层根据 combat / non-combat 状态决定展示顺序。
+- 拆分时不要把“战斗等待玩家动画结束后再播 NPC 行动”的规则写进 core 结算结果。core 可以在结果中提供必要的 phase、event、combat_state、presentation hint；具体等待动画完成属于 app / world presentation flow。
+
+该需求意味着 `world_action_flow_controller.gd`、`world_action_presenter.gd` 和 `game_app.gd` 的结果展示顺序需要与 core 拆分保持一致：非战斗可以并行呈现，战斗必须串行呈现。
+
 ## 重构目标
 
 第一阶段目标是行为保持型拆分：
@@ -175,6 +186,7 @@ func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
 - combat round 自增。
 - AI smoke 中的 settlement life / reservations。
 - NPC 跳过不同 map、死亡 actor、player actor 的逻辑。
+- 非战斗玩家行动后，玩家和 NPC 的行动事件仍能在同一次世界推进结果中被表现层并行消费。
 
 ## 阶段 4：拆 NPC turn 推进
 
@@ -201,6 +213,7 @@ godot/scripts/core/simulation/services/npc_turn_service.gd
 - door / locked door / keyed door AI 行为。
 - ranged weapon ammo / reload 行为。
 - stun、idle、wait、failed turn close reason。
+- 战斗中玩家行动结果和 NPC 行动结果保持可串行展示的顺序；不要让 NPC 战斗表现提前到玩家攻击动画完成前。
 
 ## 阶段 5：拆 command result 与事件归一化
 
@@ -227,6 +240,7 @@ godot/scripts/core/simulation/services/command_result_service.gd
 - `ui_feedback`。
 - `turn_policy` 在 result 和 runtime delta 中保持一致。
 - smoke 中依赖的 event payload 不变。
+- combat / non-combat 的 presentation flow 判断所需字段保持稳定。
 
 ## 推荐提交顺序
 
