@@ -22,12 +22,14 @@ const SimulationSnapshotBuilder = preload("res://scripts/core/simulation/simulat
 const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulation_snapshot_codec.gd")
 const CombatCommandHandler = preload("res://scripts/core/simulation/commands/combat_command_handler.gd")
 const CraftingCommandHandler = preload("res://scripts/core/simulation/commands/crafting_command_handler.gd")
+const PlayerCommandRouter = preload("res://scripts/core/simulation/commands/player_command_router.gd")
 const CraftingService = preload("res://scripts/core/simulation/services/crafting_service.gd")
 const ContainerSessionService = preload("res://scripts/core/simulation/services/container_session_service.gd")
 const DoorService = preload("res://scripts/core/simulation/services/door_service.gd")
 const PendingActionService = preload("res://scripts/core/simulation/services/pending_action_service.gd")
 const TradeService = preload("res://scripts/core/simulation/services/trade_service.gd")
 const TurnFlowService = preload("res://scripts/core/simulation/services/turn_flow_service.gd")
+const TurnStateService = preload("res://scripts/core/simulation/services/turn_state_service.gd")
 const VisionRunner = preload("res://scripts/core/vision/vision_runner.gd")
 const VisionRules = preload("res://scripts/core/vision/vision_rules.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
@@ -133,12 +135,14 @@ var _inventory_entries := InventoryEntries.new()
 var _item_use_runner := ItemUseRunner.new()
 var _combat_command_handler := CombatCommandHandler.new()
 var _crafting_command_handler := CraftingCommandHandler.new()
+var _player_command_router := PlayerCommandRouter.new()
 var _crafting_service := CraftingService.new()
 var _container_session_service := ContainerSessionService.new()
 var _door_service := DoorService.new()
 var _pending_action_service := PendingActionService.new()
 var _trade_service := TradeService.new()
 var _turn_flow_service := TurnFlowService.new()
+var _turn_state_service := TurnStateService.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -157,48 +161,7 @@ func register_actor(request: Dictionary) -> int:
 
 
 func submit_player_command(command: Dictionary) -> Dictionary:
-	var kind := str(command.get("kind", ""))
-	var actor_id: int = int(command.get("actor_id", _player_actor_id()))
-	var event_start_index: int = events.size()
-	_emit("player_command_submitted", _player_command_log_payload(command, actor_id, kind))
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return _normalize_player_command_result({"success": false, "reason": "unknown_actor"}, command, kind, actor_id, event_start_index)
-	if actor.kind != "player":
-		return _normalize_player_command_result({"success": false, "reason": "command_actor_not_player"}, command, kind, actor_id, event_start_index)
-	if not actor.turn_open:
-		return _normalize_player_command_result({"success": false, "reason": "turn_closed", "turn_state": turn_state.duplicate(true)}, command, kind, actor_id, event_start_index)
-	if _actor_has_special_effect(actor, "stun") and kind != "cancel_pending":
-		return _normalize_player_command_result(_submit_stunned_player_turn(actor, command, kind), command, kind, actor_id, event_start_index)
-
-	var result: Dictionary = {}
-	var cancelled_pending: Dictionary = _cancel_pending_for_new_target_command(actor_id, kind, command)
-	match kind:
-		"wait":
-			result = _submit_wait_command(actor, command)
-		"move":
-			result = _finalize_player_ap_action(actor, _submit_move_command(actor, command), command, "move")
-		"interact":
-			result = _finalize_player_ap_action(actor, _submit_interact_command(actor, command), command, "interact")
-		"attack":
-			result = _finalize_player_ap_action(actor, _submit_attack_command(actor, command), command, "attack")
-		"craft":
-			result = _finalize_player_ap_action(actor, _submit_craft_command(actor, command), command, "craft")
-		"inventory_action":
-			result = _submit_inventory_action_command(actor, command)
-		"cancel_pending":
-			result = cancel_pending(str(command.get("reason", "player_command")), bool(command.get("auto_end_turn", false)), _dictionary_or_empty(command.get("topology", {})))
-		"learn_skill":
-			result = _submit_learn_skill_command(actor, command)
-		"bind_hotbar":
-			result = _submit_bind_hotbar_command(actor, command)
-		"use_skill":
-			result = _finalize_player_ap_action(actor, _submit_use_skill_command(actor, command), command, "use_skill")
-		_:
-			result = _unsupported_player_command(command, "unknown_player_command")
-	if not cancelled_pending.is_empty():
-		result["cancelled_pending"] = cancelled_pending
-	return _normalize_player_command_result(result, command, kind, actor_id, event_start_index)
+	return _player_command_router.submit(self, command)
 
 
 func configure_map_interactions(targets: Dictionary) -> void:
@@ -4199,90 +4162,31 @@ func _npc_turn_close_reason(actor: RefCounted, result: Dictionary) -> String:
 
 
 func _open_turn(actor_id: int, reason: String) -> void:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return
-	var turn_ap_gain: float = _turn_ap_gain(actor)
-	var turn_ap_max: float = _turn_ap_max(actor)
-	actor.ap = clampf(actor.ap + turn_ap_gain, 0.0, turn_ap_max)
-	actor.turn_open = true
-	turn_state["active_actor_id"] = actor_id
-	turn_state["phase"] = "player" if actor.kind == "player" else "npc"
-	_refresh_combat_turn_order("turn_opened")
-	_emit("turn_started", {
-		"actor_id": actor_id,
-		"ap": actor.ap,
-		"ap_gain": turn_ap_gain,
-		"ap_max": turn_ap_max,
-		"affordable_ap_threshold": _affordable_ap_threshold(actor),
-		"round": int(turn_state.get("round", 1)),
-		"reason": reason,
-	})
+	_turn_state_service.open_turn(self, actor_id, reason)
 
 
 func _close_turn(actor_id: int, reason: String) -> void:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return
-	actor.turn_open = false
-	_refresh_combat_turn_order("turn_closed")
-	_emit("turn_ended", {
-		"actor_id": actor_id,
-		"ap": actor.ap,
-		"round": int(turn_state.get("round", 1)),
-		"reason": reason,
-	})
+	_turn_state_service.close_turn(self, actor_id, reason)
 
 
 func _spend_ap(actor: RefCounted, cost: float, reason: String) -> void:
-	if cost <= 0.0:
-		return
-	var before: float = actor.ap
-	actor.ap = max(0.0, actor.ap - cost)
-	_emit("ap_spent", {
-		"actor_id": actor.actor_id,
-		"cost": cost,
-		"before": before,
-		"after": actor.ap,
-		"reason": reason,
-	})
+	_turn_state_service.spend_ap(self, actor, cost, reason)
 
 
 func _turn_ap_gain(actor: RefCounted) -> float:
-	var attributes: Dictionary = _dictionary_or_empty(actor.combat_attributes)
-	if _actor_uses_combat_turn_ap(actor) and attributes.has("combat_turn_ap_gain"):
-		return max(0.0, float(attributes.get("combat_turn_ap_gain", DEFAULT_TURN_AP_GAIN)))
-	if attributes.has("turn_ap_gain"):
-		return max(0.0, float(attributes.get("turn_ap_gain", DEFAULT_TURN_AP_GAIN)))
-	if attributes.has("speed"):
-		return max(1.0, float(attributes.get("speed", DEFAULT_TURN_AP_GAIN)) + 1.0)
-	return DEFAULT_TURN_AP_GAIN
+	return _turn_state_service.turn_ap_gain(self, actor)
 
 
 func _turn_ap_max(actor: RefCounted) -> float:
-	var attributes: Dictionary = _dictionary_or_empty(actor.combat_attributes)
-	if _actor_uses_combat_turn_ap(actor) and attributes.has("combat_turn_ap_max"):
-		return max(1.0, float(attributes.get("combat_turn_ap_max", DEFAULT_TURN_AP)))
-	if attributes.has("turn_ap_max"):
-		return max(1.0, float(attributes.get("turn_ap_max", DEFAULT_TURN_AP)))
-	if attributes.has("ap_max"):
-		return max(1.0, float(attributes.get("ap_max", DEFAULT_TURN_AP)))
-	return max(DEFAULT_TURN_AP, _turn_ap_gain(actor))
+	return _turn_state_service.turn_ap_max(self, actor)
 
 
 func _affordable_ap_threshold(actor: RefCounted) -> float:
-	var attributes: Dictionary = _dictionary_or_empty(actor.combat_attributes)
-	if _actor_uses_combat_turn_ap(actor) and attributes.has("combat_affordable_ap_threshold"):
-		return max(0.0, float(attributes.get("combat_affordable_ap_threshold", AFFORDABLE_AP_THRESHOLD)))
-	if attributes.has("affordable_ap_threshold"):
-		return max(0.0, float(attributes.get("affordable_ap_threshold", AFFORDABLE_AP_THRESHOLD)))
-	if attributes.has("ap_affordable_threshold"):
-		return max(0.0, float(attributes.get("ap_affordable_threshold", AFFORDABLE_AP_THRESHOLD)))
-	return AFFORDABLE_AP_THRESHOLD
+	return _turn_state_service.affordable_ap_threshold(self, actor)
 
 
 func _actor_uses_combat_turn_ap(actor: RefCounted) -> bool:
-	return actor != null and actor.in_combat and bool(combat_state.get("active", false))
+	return _turn_state_service.actor_uses_combat_turn_ap(self, actor)
 
 
 func _result_changes_active_map(result: Dictionary) -> bool:

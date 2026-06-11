@@ -63,6 +63,7 @@
 - 不改 public facade。
 - 不引入可变行动耗时或新调度器。
 - 修正运行表现时，以“回合表现需求”中的目标语义为准，不把当前错误表现当作需要保持的基线。
+- 不安排“建立验证基线”步骤；当前运行效果已知不符合目标时，验证只用于发现兼容性回归和确认目标语义是否达成。
 
 拆分完成后，`simulation.gd` 应保留为运行时状态容器和 core facade，具体规则逐步委托给 services / command handlers。
 
@@ -229,11 +230,11 @@ godot/scripts/core/simulation/services/command_result_service.gd
 ## Agent 执行准则
 
 - 先移动职责，不改规则。
-- 不以当前错误运行效果作为验证基线；验证应围绕本计划描述的目标回合表现语义。
+- 不建立或锁定当前错误运行效果的验证基线；验证应围绕本计划描述的目标回合表现语义。
 - 保留 `simulation.gd` public API 和 wrapper。
 - 不新增长期兼容双实现。
 - 不绕过 `godot/scripts/core` 做玩法判定。
 - 不把 turn / AP / world time 规则写进 app、world、ui 或 editor。
 - 不在本计划阶段修改地图权威来源。
-- 每个阶段完成后跑最小相关 smoke；若 smoke 仍覆盖旧错误表现，应先更新或补充验证目标，再继续拆分。
+- 每个阶段完成后跑最小相关 smoke；这些 smoke 只作为回归检查，不代表当前错误表现是验收标准。若 smoke 仍覆盖旧错误表现，应先更新或补充验证目标，再继续拆分。
 - 如果 smoke 失败，优先判断失败是目标行为变化还是兼容性回归；兼容性回归需要修复，目标行为变化需要同步验证口径。
