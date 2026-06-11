@@ -267,6 +267,7 @@ func toggle_stage_panel(panel_id: String) -> Dictionary:
 		settings_open = false
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
+	refresh_hud()
 	return {
 		"success": true,
 		"panel_id": panel_id,
@@ -282,6 +283,7 @@ func open_stage_panel(panel_id: String) -> Dictionary:
 	settings_open = false
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
+	refresh_hud()
 	return {
 		"success": true,
 		"panel_id": panel_id,
@@ -294,6 +296,7 @@ func close_stage_panels() -> Dictionary:
 	var had_panel := not active_stage_panel.is_empty()
 	active_stage_panel = ""
 	_apply_stage_panel_visibility()
+	refresh_hud()
 	return {
 		"success": true,
 		"closed": had_panel,
@@ -446,6 +449,7 @@ func open_settings_panel() -> Dictionary:
 	settings_open = true
 	_apply_stage_panel_visibility()
 	_apply_settings_panel_visibility()
+	refresh_hud()
 	return {"success": true, "open": true, "panel_id": "settings"}
 
 
@@ -453,6 +457,7 @@ func close_settings_panel() -> Dictionary:
 	var was_open := settings_open
 	settings_open = false
 	_apply_settings_panel_visibility()
+	refresh_hud()
 	return {"success": true, "closed": was_open, "panel_id": "settings"}
 
 

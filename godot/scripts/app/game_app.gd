@@ -337,6 +337,33 @@ func is_settings_open() -> bool:
 	return hud_root != null and hud_root.is_settings_open()
 
 
+func toggle_settings_panel() -> Dictionary:
+	if hud_root == null:
+		return {"success": false, "reason": "panel_controller_missing"}
+	if _world_action_presenter_blocks_input():
+		return _action_presenter_command_rejected("toggle_settings_panel")
+	var opened := not is_settings_open()
+	var result: Dictionary = {}
+	if opened:
+		result = _dictionary_or_empty(hud_root.open_settings_panel())
+		if bool(result.get("success", false)):
+			_play_ui_audio_feedback("settings_panel_opened", {
+				"panel_id": "settings",
+				"action": "open_settings_panel",
+			})
+	else:
+		result = _dictionary_or_empty(hud_root.close_settings_panel())
+		if bool(result.get("success", false)):
+			_play_ui_audio_feedback("settings_panel_closed", {
+				"panel_id": "settings",
+				"action": "close_settings_panel",
+			})
+	if bool(result.get("success", false)):
+		result["open"] = opened
+		refresh_all_panels(current_interaction_prompt())
+	return result
+
+
 func gameplay_input_blocked_by_ui() -> bool:
 	var hud_blocker := _hud_input_blocker_snapshot()
 	var panel_blocked: bool = hud_root != null and hud_root.gameplay_input_blocked()

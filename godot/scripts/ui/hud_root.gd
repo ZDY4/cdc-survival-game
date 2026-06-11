@@ -687,6 +687,10 @@ func set_hotbar_group(group_id: String) -> Dictionary:
 	return _forward_dictionary("set_hotbar_group", [group_id])
 
 
+func toggle_settings_panel() -> Dictionary:
+	return _forward_dictionary("toggle_settings_panel")
+
+
 func set_hotbar_group_label(group_id: String, label: String) -> Dictionary:
 	return _forward_dictionary("set_hotbar_group_label", [group_id, label])
 

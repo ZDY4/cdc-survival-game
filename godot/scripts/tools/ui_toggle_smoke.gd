@@ -90,6 +90,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_exercise_audio_feedback(errors, game_root)
 	_assert_ai_debug_snapshot(errors, game_root, "initial AI debug")
 	_exercise_debug_panel(errors, game_root)
+	await _exercise_bottom_hud_menu(errors, game_root)
 	_assert_hotbar_visibility(errors, game_root, true, "initial hotbar visibility")
 	_assert_hotbar_hit_test(errors, game_root, "initial hotbar hit-test")
 	_assert_observe_mode_button(errors, game_root, false, "initial observe mode button")
@@ -103,7 +104,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_runtime_control_line(errors, game_root, "AutoTick on", "auto tick on HUD")
 	_assert_observe_auto_button(errors, game_root, true, "auto tick on observe hotbar")
 	var before_auto_events: int = game_root.simulation.snapshot().get("events", []).size()
-	await _wait_process_frames(40)
+	await _wait_until_runtime_events_advance(game_root, before_auto_events, 90)
 	if game_root.simulation.snapshot().get("events", []).size() <= before_auto_events:
 		errors.append("enabled auto tick should advance runtime events")
 	_press_key(game_root, KEY_I)
@@ -1088,6 +1089,74 @@ func _assert_menu_state(errors: Array[String], game_root: Node, expected_stage: 
 		var runtime_latest: Dictionary = _dictionary_or_empty(runtime_menu.get("latest_event", {}))
 		if str(runtime_latest.get("event", "")) != expected_event or str(runtime_latest.get("panel_id", "")) != expected_panel:
 			errors.append("%s: runtime menu latest panel event expected %s:%s, got %s" % [context, expected_event, expected_panel, runtime_menu])
+
+
+func _exercise_bottom_hud_menu(errors: Array[String], game_root: Node) -> void:
+	_assert_bottom_hud_layout(errors, game_root, "initial bottom HUD layout")
+	await _press_bottom_menu_button(errors, game_root, "InventoryButton", "inventory", "inventory bottom button")
+	_expect_stage_open(errors, game_root, "inventory", "inventory bottom button should open inventory")
+	_assert_menu_state(errors, game_root, "inventory", false, true, "inventory bottom button menu state", "opened", "inventory")
+	_assert_bottom_menu_button_state(errors, game_root, "InventoryButton", true, "inventory active button")
+	await _press_bottom_menu_button(errors, game_root, "InventoryButton", "inventory", "inventory bottom button close")
+	_expect_stage_closed(errors, game_root, "inventory bottom button should close inventory")
+	_assert_menu_state(errors, game_root, "", false, false, "inventory bottom close menu state", "closed", "inventory")
+	_assert_bottom_menu_button_state(errors, game_root, "InventoryButton", false, "inventory inactive button")
+	await _press_bottom_menu_button(errors, game_root, "SkillsButton", "skills", "skills bottom button")
+	_expect_stage_open(errors, game_root, "skills", "skills bottom button should open skills")
+	_assert_menu_state(errors, game_root, "skills", false, true, "skills bottom button menu state", "opened", "skills")
+	_assert_bottom_menu_button_state(errors, game_root, "SkillsButton", true, "skills active button")
+	_press_key(game_root, KEY_ESCAPE)
+	_expect_stage_closed(errors, game_root, "Esc should close skills after bottom menu check")
+	await _press_bottom_menu_button(errors, game_root, "SettingsButton", "settings", "settings bottom button")
+	if not bool(game_root.is_settings_open()):
+		errors.append("settings bottom button should open settings")
+	_assert_menu_state(errors, game_root, "", true, true, "settings bottom button menu state", "opened", "settings")
+	_assert_bottom_menu_button_state(errors, game_root, "SettingsButton", true, "settings active button")
+	await _press_bottom_menu_button(errors, game_root, "SettingsButton", "settings", "settings bottom button close")
+	if bool(game_root.is_settings_open()):
+		errors.append("settings bottom button should close settings")
+	_assert_menu_state(errors, game_root, "", false, false, "settings bottom close menu state", "closed", "settings")
+	_assert_bottom_menu_button_state(errors, game_root, "SettingsButton", false, "settings inactive button")
+
+
+func _assert_bottom_hud_layout(errors: Array[String], game_root: Node, context: String) -> void:
+	if game_root.hud == null:
+		errors.append("%s: HUD should exist" % context)
+		return
+	if game_root.hud.get_node_or_null("BottomHudDock") == null:
+		errors.append("%s: HUD should expose BottomHudDock" % context)
+	if game_root.hud.get_node_or_null("BottomHudDock/BottomHudStack/BottomMenuBar") == null:
+		errors.append("%s: HUD should expose BottomMenuBar" % context)
+	if game_root.hud.get_node_or_null("BottomHudDock/BottomHudStack/BottomHotbarStack") == null:
+		errors.append("%s: HUD should expose BottomHotbarStack" % context)
+	if game_root.hud.get_node_or_null("HudPanel/HudLines/HotbarDock") != null:
+		errors.append("%s: HotbarDock should not remain in top-left HUD lines" % context)
+	for button_name in ["InventoryButton", "SkillsButton", "SettingsButton"]:
+		if game_root.hud.find_child(button_name, true, false) == null:
+			errors.append("%s: HUD should expose %s" % [context, button_name])
+
+
+func _press_bottom_menu_button(errors: Array[String], game_root: Node, button_name: String, expected_panel_id: String, context: String) -> void:
+	var button: Button = game_root.hud.find_child(button_name, true, false) as Button
+	if button == null:
+		errors.append("%s: missing %s" % [context, button_name])
+		return
+	if str(button.get_meta("panel_id", "")) != expected_panel_id:
+		errors.append("%s: %s panel_id expected %s" % [context, button_name, expected_panel_id])
+	button.pressed.emit()
+	await _wait_process_frames(2)
+	_assert_hud_control_audio(errors, game_root, "ui_button_pressed", "ui_click", button_name, "bottom_menu_button", str(button.get_meta("bottom_menu_action", "")) if button.has_meta("bottom_menu_action") else ("toggle_settings_panel" if expected_panel_id == "settings" else "toggle_stage_panel"), {"value": expected_panel_id}, "%s audio" % context)
+
+
+func _assert_bottom_menu_button_state(errors: Array[String], game_root: Node, button_name: String, expected_active: bool, context: String) -> void:
+	var button: Button = game_root.hud.find_child(button_name, true, false) as Button
+	if button == null:
+		errors.append("%s: missing %s" % [context, button_name])
+		return
+	if bool(button.get_meta("active", not expected_active)) != expected_active:
+		errors.append("%s: %s active metadata expected %s" % [context, button_name, str(expected_active)])
+	if button.button_pressed != expected_active:
+		errors.append("%s: %s pressed state expected %s" % [context, button_name, str(expected_active)])
 
 
 func _assert_close_priority(errors: Array[String], game_root: Node, expected_prefix: Array[String], context: String) -> void:
@@ -3035,4 +3104,11 @@ func _event_count(game_root: Node, kind: String) -> int:
 
 func _wait_process_frames(count: int) -> void:
 	for _i in range(count):
+		await process_frame
+
+
+func _wait_until_runtime_events_advance(game_root: Node, before_count: int, max_frames: int) -> void:
+	for _i in range(max_frames):
+		if game_root.simulation.snapshot().get("events", []).size() > before_count:
+			return
 		await process_frame

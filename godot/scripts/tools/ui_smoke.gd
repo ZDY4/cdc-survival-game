@@ -82,10 +82,18 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("missing quest line")
 	elif not hud.get_node("HudPanel/HudLines/QuestLine").text.contains("Quest none"):
 		errors.append("quest line should show empty tracked quest state")
-	if hud.get_node_or_null("HudPanel/HudLines/HotbarDock") == null:
+	if hud.get_node_or_null("BottomHudDock") == null:
+		errors.append("missing bottom HUD dock")
+	if hud.get_node_or_null("BottomHudDock/BottomHudStack/BottomMenuBar") == null:
+		errors.append("missing bottom menu bar")
+	if hud.get_node_or_null("BottomHudDock/BottomHudStack/BottomHotbarStack") == null:
+		errors.append("missing bottom hotbar stack")
+	if hud.get_node_or_null("HudPanel/HudLines/HotbarDock") != null:
+		errors.append("hotbar dock should move out of top-left HUD lines")
+	if hud.get_node_or_null("BottomHudDock/BottomHudStack/BottomHotbarStack/HotbarDock") == null:
 		errors.append("missing hotbar dock")
 	else:
-		var hotbar_dock: Node = hud.get_node("HudPanel/HudLines/HotbarDock")
+		var hotbar_dock: Node = hud.get_node("BottomHudDock/BottomHudStack/BottomHotbarStack/HotbarDock")
 		if hotbar_dock.get_child_count() != 10:
 			errors.append("hotbar dock should expose ten slots")
 		var first_slot: Node = hotbar_dock.get_node_or_null("HotbarSlot_slot_1")
@@ -93,16 +101,17 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 			errors.append("empty hotbar slot should show key and empty marker")
 		if first_slot is Button and not str((first_slot as Button).tooltip_text).contains("空"):
 			errors.append("empty hotbar slot should expose empty tooltip")
-	if hud.get_node_or_null("HudPanel/HudLines/HotbarGroupBar") == null:
+	if hud.get_node_or_null("BottomHudDock/BottomHudStack/BottomHotbarStack/HotbarGroupBar") == null:
 		errors.append("missing hotbar group bar")
 	else:
 		var group_button: Button = hud.find_child("HotbarGroup_group_1", true, false) as Button
 		if group_button == null or not bool(group_button.get_meta("active", false)):
 			errors.append("hotbar group bar should expose active group 1 button")
-	if hud.get_node_or_null("HudPanel/HudLines/ObserveHotbarDock") == null:
+	if hud.get_node_or_null("BottomHudDock/BottomHudStack/BottomHotbarStack/ObserveHotbarDock") == null:
 		errors.append("missing observe hotbar dock")
 	else:
 		_validate_observe_hotbar(errors, hud)
+	_validate_bottom_menu_buttons(errors, hud)
 	if not hud.get_node("HudPanel/HudLines/InteractionLine").text.contains("拾取"):
 		errors.append("interaction line missing pickup option")
 	if hud.get_node_or_null("HudPanel/HudLines/EventFeedbackLine") == null:
@@ -238,7 +247,7 @@ func _validate_hud_reason_catalog_bridge(hud: Control) -> Array[String]:
 
 
 func _validate_observe_hotbar(errors: Array[String], hud: Control) -> void:
-	var observe_dock: Node = hud.get_node("HudPanel/HudLines/ObserveHotbarDock")
+	var observe_dock: Node = hud.get_node("BottomHudDock/BottomHudStack/BottomHotbarStack/ObserveHotbarDock")
 	if observe_dock.get_child_count() != 5:
 		errors.append("observe hotbar dock should expose mode, playback, speed, auto and level buttons")
 	var mode_button: Button = observe_dock.get_node_or_null("ObserveModeButton") as Button
@@ -266,6 +275,30 @@ func _validate_observe_hotbar(errors: Array[String], hud: Control) -> void:
 		errors.append("observe hotbar should expose disabled current level button")
 	elif int(level_button.get_meta("observe_level", -1)) != 0 or not str(level_button.tooltip_text).contains("观察楼层 0"):
 		errors.append("observe level button should expose level metadata and tooltip")
+
+
+func _validate_bottom_menu_buttons(errors: Array[String], hud: Control) -> void:
+	var menu_bar: Node = hud.get_node_or_null("BottomHudDock/BottomHudStack/BottomMenuBar")
+	if menu_bar == null:
+		return
+	var expected := {
+		"InventoryButton": "inventory",
+		"CharacterButton": "character",
+		"MapButton": "map",
+		"JournalButton": "journal",
+		"SkillsButton": "skills",
+		"CraftingButton": "crafting",
+		"SettingsButton": "settings",
+	}
+	for button_name in expected.keys():
+		var button: Button = menu_bar.get_node_or_null(str(button_name)) as Button
+		if button == null:
+			errors.append("bottom menu should expose %s" % button_name)
+			continue
+		if str(button.get_meta("panel_id", "")) != str(expected[button_name]):
+			errors.append("%s should expose panel_id metadata" % button_name)
+		if button.text.is_empty() or button.tooltip_text.is_empty():
+			errors.append("%s should expose text and tooltip" % button_name)
 
 
 func _validate_hud_combat_hud(hud: Control, simulation: RefCounted, world_result: Dictionary) -> Array[String]:

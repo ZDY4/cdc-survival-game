@@ -21,6 +21,10 @@ var _info_panel_label: Label
 var _runtime_control_label: Label
 var _skill_targeting_label: Label
 var _controls_hint_box: VBoxContainer
+var _bottom_hud_dock: PanelContainer
+var _bottom_menu_bar: HBoxContainer
+var _bottom_hotbar_stack: VBoxContainer
+var _menu_buttons: Dictionary = {}
 var controls_hint_visible := false
 var _reason_catalog := ReasonCatalog.new()
 var _debug_console_panel := DebugConsolePanel.new()
@@ -77,6 +81,7 @@ func apply_runtime_snapshot(snapshot: Dictionary) -> void:
 	_runtime_control_label.text = _runtime_control_text(snapshot.get("runtime_control", {}))
 	_skill_targeting_label.text = _skill_targeting_text(_dictionary_or_empty(snapshot.get("runtime_control", {})).get("skill_targeting", {}))
 	_skill_targeting_label.visible = not _skill_targeting_label.text.is_empty()
+	_apply_bottom_menu_state(snapshot.get("runtime_control", {}))
 	_apply_controls_hint()
 	_interaction_menu_view.apply(interaction)
 	_debug_panel_view.apply(snapshot)
@@ -119,8 +124,6 @@ func _build_layout() -> void:
 	box.add_child(_inventory_label)
 	box.add_child(_quest_label)
 	box.add_child(_combat_hud_label)
-	_hotbar_view.build(box, self)
-	_observe_hotbar_view.build(box, self, _hotbar_view)
 	box.add_child(_interaction_label)
 	box.add_child(_event_feedback_label)
 	box.add_child(_debug_overlay_label)
@@ -140,10 +143,134 @@ func _build_layout() -> void:
 		var label := _line("ControlsHintLine")
 		label.text = line
 		_controls_hint_box.add_child(label)
+	_build_bottom_hud_dock()
 	_interaction_menu_view.build(self)
 	_feedback_toast_layer.build(self)
 	_debug_console_panel.build(self)
 	_debug_panel_view.build(self)
+
+
+func _build_bottom_hud_dock() -> void:
+	if _bottom_hud_dock != null:
+		return
+	_bottom_hud_dock = PanelContainer.new()
+	_bottom_hud_dock.name = "BottomHudDock"
+	_bottom_hud_dock.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_bottom_hud_dock.offset_left = 320
+	_bottom_hud_dock.offset_right = -320
+	_bottom_hud_dock.offset_top = -104
+	_bottom_hud_dock.offset_bottom = -16
+	_bottom_hud_dock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bottom_hud_dock.custom_minimum_size = Vector2(520, 86)
+	add_child(_bottom_hud_dock)
+
+	var dock_box := VBoxContainer.new()
+	dock_box.name = "BottomHudStack"
+	dock_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	dock_box.add_theme_constant_override("separation", 6)
+	dock_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bottom_hud_dock.add_child(dock_box)
+
+	_bottom_menu_bar = HBoxContainer.new()
+	_bottom_menu_bar.name = "BottomMenuBar"
+	_bottom_menu_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	_bottom_menu_bar.add_theme_constant_override("separation", 4)
+	_bottom_menu_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dock_box.add_child(_bottom_menu_bar)
+	for definition in _bottom_menu_definitions():
+		var data: Dictionary = definition
+		var button := _bottom_menu_button(data)
+		_bottom_menu_bar.add_child(button)
+		_menu_buttons[str(data.get("id", ""))] = button
+
+	_bottom_hotbar_stack = VBoxContainer.new()
+	_bottom_hotbar_stack.name = "BottomHotbarStack"
+	_bottom_hotbar_stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	_bottom_hotbar_stack.add_theme_constant_override("separation", 4)
+	_bottom_hotbar_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dock_box.add_child(_bottom_hotbar_stack)
+	_hotbar_view.build(_bottom_hotbar_stack, self)
+	_observe_hotbar_view.build(_bottom_hotbar_stack, self, _hotbar_view)
+
+
+func _bottom_menu_definitions() -> Array[Dictionary]:
+	return [
+		{"id": "inventory", "name": "InventoryButton", "text": "I 背包", "tooltip": "打开背包 | I", "action": "toggle_stage_panel", "panel_id": "inventory"},
+		{"id": "character", "name": "CharacterButton", "text": "C 角色", "tooltip": "打开角色 | C", "action": "toggle_stage_panel", "panel_id": "character"},
+		{"id": "map", "name": "MapButton", "text": "M 地图", "tooltip": "打开地图 | M", "action": "toggle_stage_panel", "panel_id": "map"},
+		{"id": "journal", "name": "JournalButton", "text": "J 任务", "tooltip": "打开任务日志 | J", "action": "toggle_stage_panel", "panel_id": "journal"},
+		{"id": "skills", "name": "SkillsButton", "text": "K 技能", "tooltip": "打开技能 | K", "action": "toggle_stage_panel", "panel_id": "skills"},
+		{"id": "crafting", "name": "CraftingButton", "text": "L 制作", "tooltip": "打开制作 | L", "action": "toggle_stage_panel", "panel_id": "crafting"},
+		{"id": "settings", "name": "SettingsButton", "text": "Esc 设置", "tooltip": "打开设置 | Esc", "action": "toggle_settings_panel", "panel_id": "settings"},
+	]
+
+
+func _bottom_menu_button(definition: Dictionary) -> Button:
+	var button := Button.new()
+	var panel_id := str(definition.get("panel_id", ""))
+	button.name = str(definition.get("name", "%sButton" % panel_id.capitalize()))
+	button.text = str(definition.get("text", panel_id))
+	button.tooltip_text = str(definition.get("tooltip", button.text))
+	button.toggle_mode = true
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(max(68, button.text.length() * 12 + 18), 28)
+	button.set_meta("bottom_menu_id", panel_id)
+	button.set_meta("panel_id", panel_id)
+	button.set_meta("bottom_menu_action", str(definition.get("action", "")))
+	button.set_meta("active", false)
+	button.pressed.connect(func() -> void:
+		_press_bottom_menu_button(definition, button)
+	)
+	return button
+
+
+func _press_bottom_menu_button(definition: Dictionary, button: Button) -> void:
+	var root := get_parent()
+	if root == null:
+		return
+	var action := str(definition.get("action", ""))
+	var panel_id := str(definition.get("panel_id", ""))
+	_play_audio("ui_button_pressed", button.name, "bottom_menu_button", action, {
+		"value": panel_id,
+	})
+	if action == "toggle_stage_panel" and root.has_method("toggle_stage_panel"):
+		root.call("toggle_stage_panel", panel_id)
+	elif action == "toggle_settings_panel" and root.has_method("toggle_settings_panel"):
+		root.call("toggle_settings_panel")
+
+
+func _play_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
+	var root := get_parent()
+	if root == null or not root.has_method("play_ui_audio_feedback"):
+		return {}
+	var payload := {
+		"audio_source": "ui",
+		"panel_id": "hud",
+		"control_name": control_name,
+		"control_kind": control_kind,
+		"action": action,
+	}
+	for key in extra_payload.keys():
+		payload[key] = extra_payload[key]
+	return _dictionary_or_empty(root.call("play_ui_audio_feedback", event_kind, payload))
+
+
+func _apply_bottom_menu_state(runtime_control_value: Variant) -> void:
+	if _bottom_menu_bar == null:
+		return
+	var menu_state: Dictionary = _dictionary_or_empty(_dictionary_or_empty(runtime_control_value).get("menu_state", {}))
+	var active_stage := str(menu_state.get("active_stage_panel", ""))
+	var settings_open := bool(menu_state.get("settings_open", false))
+	for menu_id in _menu_buttons.keys():
+		var button: Button = _menu_buttons[menu_id] as Button
+		if button == null:
+			continue
+		var active := (str(menu_id) == active_stage) or (str(menu_id) == "settings" and settings_open)
+		button.button_pressed = active
+		button.set_meta("active", active)
+		button.set_meta("settings_open", settings_open if str(menu_id) == "settings" else false)
+		button.set_meta("active_stage_panel", active_stage)
+		button.set_meta("mouse_blocks_world", button.mouse_filter == Control.MOUSE_FILTER_STOP)
 
 
 func toggle_controls_hint() -> Dictionary:
