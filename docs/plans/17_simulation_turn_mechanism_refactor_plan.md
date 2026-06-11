@@ -53,7 +53,7 @@
 
 ## 重构目标
 
-第一阶段目标是行为保持型拆分：
+第一阶段目标是兼容型拆分：
 
 - 不改存档结构。
 - 不改 snapshot schema。
@@ -62,37 +62,9 @@
 - 不改当前 AP / 固定回合时间推进规则。
 - 不改 public facade。
 - 不引入可变行动耗时或新调度器。
+- 修正运行表现时，以“回合表现需求”中的目标语义为准，不把当前错误表现当作需要保持的基线。
 
 拆分完成后，`simulation.gd` 应保留为运行时状态容器和 core facade，具体规则逐步委托给 services / command handlers。
-
-## 阶段 0：建立验证基线
-
-开始拆分前先确认现有工具参数和当前 smoke 状态：
-
-```powershell
-Get-Help tools/agent/test-godot-static.ps1
-Get-Help tools/agent/test-godot-game.ps1
-```
-
-建议基线验证：
-
-```powershell
-tools/agent/test-godot-static.ps1
-tools/agent/test-godot-game.ps1
-```
-
-如果需要缩小范围，优先覆盖：
-
-- movement
-- interaction
-- combat
-- crafting
-- ai
-- save
-- player interaction
-- ui toggle
-
-具体 smoke 参数以 `Get-Help` 输出为准。
 
 ## 阶段 1：拆玩家命令分发
 
@@ -257,10 +229,11 @@ godot/scripts/core/simulation/services/command_result_service.gd
 ## Agent 执行准则
 
 - 先移动职责，不改规则。
+- 不以当前错误运行效果作为验证基线；验证应围绕本计划描述的目标回合表现语义。
 - 保留 `simulation.gd` public API 和 wrapper。
 - 不新增长期兼容双实现。
 - 不绕过 `godot/scripts/core` 做玩法判定。
 - 不把 turn / AP / world time 规则写进 app、world、ui 或 editor。
 - 不在本计划阶段修改地图权威来源。
-- 每个阶段完成后跑最小相关 smoke，最后跑 static + game smoke。
-- 如果 smoke 失败，优先恢复行为兼容，再考虑继续拆分。
+- 每个阶段完成后跑最小相关 smoke；若 smoke 仍覆盖旧错误表现，应先更新或补充验证目标，再继续拆分。
+- 如果 smoke 失败，优先判断失败是目标行为变化还是兼容性回归；兼容性回归需要修复，目标行为变化需要同步验证口径。
