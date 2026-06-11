@@ -13,6 +13,7 @@
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/bush_dry.gltf" id="11_kv5c3"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/barrel_rust.gltf" id="12_cmlqy"]
 [ext_resource type="PackedScene" path="res://assets/container_placeholders/crate_wood.gltf" id="13_oxytd"]
+[ext_resource type="PackedScene" path="res://scenes/world/transition_marker.tscn" id="transition_marker"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qf1gy"]
 
@@ -603,6 +604,10 @@ props_json = "{
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_return_gate" unique_id=240339174]
 
+[node name="survivor_outpost_01_perimeter_return_gate_transition_marker" parent="Objects/survivor_outpost_01_perimeter_return_gate/Visuals" instance=ExtResource("transition_marker")]
+marker_kind = "outdoor"
+footprint = Vector2i(1, 5)
+
 [node name="survivor_outpost_01_perimeter_to_street_b" type="Node3D" parent="Objects" unique_id=1614980204]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19, 0, 8)
 script = ExtResource("3_8r5r1")
@@ -625,6 +630,10 @@ props_json = "{
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_to_street_b" unique_id=2004016414]
 
+[node name="survivor_outpost_01_perimeter_to_street_b_transition_marker" parent="Objects/survivor_outpost_01_perimeter_to_street_b/Visuals" instance=ExtResource("transition_marker")]
+marker_kind = "outdoor"
+footprint = Vector2i(1, 5)
+
 [node name="survivor_outpost_01_perimeter_overworld_exit" type="Node3D" parent="Objects" unique_id=360101079]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 10)
 script = ExtResource("3_8r5r1")
@@ -645,6 +654,10 @@ props_json = "{
 }"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_overworld_exit" unique_id=404435818]
+
+[node name="survivor_outpost_01_perimeter_overworld_exit_transition_marker" parent="Objects/survivor_outpost_01_perimeter_overworld_exit/Visuals" instance=ExtResource("transition_marker")]
+marker_kind = "overworld"
+footprint = Vector2i(1, 1)
 
 [node name="survivor_outpost_01_perimeter_roadblock_prop" type="Node3D" parent="Objects" unique_id=901858981]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 8)

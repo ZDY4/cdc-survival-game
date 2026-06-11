@@ -1282,8 +1282,10 @@ func _validate_runtime_map_object_fallbacks(root: Node3D, counts: Dictionary, er
 		errors.append("runtime map object with real scene visual should not add duplicate fallback visual")
 	var runtime_fallback_count := _map_object_fallback_count(root)
 	counts["runtime_map_object_fallbacks"] = runtime_fallback_count
-	if runtime_fallback_count <= 0:
-		errors.append("runtime map objects without real scene visuals should expose fallback visuals")
+	var transition_marker_count := _transition_marker_count(root)
+	counts["runtime_transition_markers"] = transition_marker_count
+	if transition_marker_count < 3:
+		errors.append("runtime scene transition triggers should use scene transition markers")
 	var fallback_root := Node3D.new()
 	fallback_root.name = "SceneSmokeMapObjectFallbackRoot"
 	get_root().add_child(fallback_root)
@@ -1329,6 +1331,18 @@ func _map_object_fallback_count(root: Node) -> int:
 	while not pending.is_empty():
 		var node: Node = pending.pop_back()
 		if node.name == "MapObjectFallbackVisual":
+			count += 1
+		for child in node.get_children():
+			pending.append(child)
+	return count
+
+
+func _transition_marker_count(root: Node) -> int:
+	var count := 0
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is TransitionMarker:
 			count += 1
 		for child in node.get_children():
 			pending.append(child)

@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_jlo0r"]
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_g7e2m"]
 [ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_k2h52"]
+[ext_resource type="PackedScene" path="res://scenes/world/transition_marker.tscn" id="transition_marker"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
 albedo_color = Color(0.22, 0.26, 0.23, 1)
@@ -77,3 +78,7 @@ props_json = "{
 }"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_interior_exit" unique_id=97696174]
+
+[node name="survivor_outpost_01_interior_exit_transition_marker" parent="Objects/survivor_outpost_01_interior_exit/Visuals" instance=ExtResource("transition_marker")]
+marker_kind = "subscene"
+footprint = Vector2i(1, 1)

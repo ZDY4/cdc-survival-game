@@ -11,6 +11,7 @@
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/desk_wood.gltf" id="9_p8bdx"]
 [ext_resource type="PackedScene" path="res://assets/container_placeholders/locker_metal.gltf" id="10_3ccdg"]
 [ext_resource type="PackedScene" path="res://assets/container_placeholders/crate_wood.gltf" id="11_7gpor"]
+[ext_resource type="PackedScene" path="res://scenes/world/transition_marker.tscn" id="transition_marker"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_n3syn"]
 
@@ -855,3 +856,7 @@ props_json = "{
 }"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_overworld_exit" unique_id=632679360]
+
+[node name="factory_overworld_exit_transition_marker" parent="Objects/factory_overworld_exit/Visuals" instance=ExtResource("transition_marker")]
+marker_kind = "overworld"
+footprint = Vector2i(1, 1)

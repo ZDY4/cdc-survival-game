@@ -12,6 +12,7 @@
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/shelf_metal.gltf" id="10_nuj2x"]
 [ext_resource type="PackedScene" path="res://assets/container_placeholders/locker_metal.gltf" id="11_38x1d"]
 [ext_resource type="PackedScene" path="res://assets/container_placeholders/cabinet_medical.gltf" id="12_xgunl"]
+[ext_resource type="PackedScene" path="res://scenes/world/transition_marker.tscn" id="transition_marker"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dqvw3"]
 
@@ -867,3 +868,7 @@ props_json = "{
 }"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_overworld_exit" unique_id=460987131]
+
+[node name="hospital_overworld_exit_transition_marker" parent="Objects/hospital_overworld_exit/Visuals" instance=ExtResource("transition_marker")]
+marker_kind = "overworld"
+footprint = Vector2i(1, 1)

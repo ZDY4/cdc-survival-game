@@ -19,6 +19,7 @@
 [ext_resource type="PackedScene" path="res://assets/container_placeholders/crate_wood.gltf" id="17_fl5mo"]
 [ext_resource type="PackedScene" path="res://assets/container_placeholders/cabinet_medical.gltf" id="18_iiidb"]
 [ext_resource type="PackedScene" path="res://assets/container_placeholders/locker_metal.gltf" id="19_upvgk"]
+[ext_resource type="PackedScene" path="res://scenes/world/transition_marker.tscn" id="transition_marker"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qf1gy"]
 
@@ -2972,6 +2973,10 @@ props_json = "{
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_gate" unique_id=307880429]
 
+[node name="survivor_outpost_01_perimeter_gate_transition_marker" parent="Objects/survivor_outpost_01_perimeter_gate/Visuals" instance=ExtResource("transition_marker")]
+marker_kind = "outdoor"
+footprint = Vector2i(1, 5)
+
 [node name="survivor_outpost_01_interior_door" type="Node3D" parent="Objects" unique_id=988282857]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 22)
 script = ExtResource("3_cbqcv")
@@ -2993,6 +2998,10 @@ props_json = "{
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_interior_door" unique_id=1531608598]
 
+[node name="survivor_outpost_01_interior_door_transition_marker" parent="Objects/survivor_outpost_01_interior_door/Visuals" instance=ExtResource("transition_marker")]
+marker_kind = "subscene"
+footprint = Vector2i(1, 1)
+
 [node name="survivor_outpost_01_overworld_exit" type="Node3D" parent="Objects" unique_id=1821618361]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 39)
 script = ExtResource("3_cbqcv")
@@ -3013,6 +3022,10 @@ props_json = "{
 }"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_overworld_exit" unique_id=1788442732]
+
+[node name="survivor_outpost_01_overworld_exit_transition_marker" parent="Objects/survivor_outpost_01_overworld_exit/Visuals" instance=ExtResource("transition_marker")]
+marker_kind = "overworld"
+footprint = Vector2i(1, 1)
 
 [node name="survivor_outpost_01_canteen_table_a" type="Node3D" parent="Objects" unique_id=826333838]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 20)
