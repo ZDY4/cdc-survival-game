@@ -23,6 +23,7 @@ const SimulationSnapshotCodec = preload("res://scripts/core/simulation/simulatio
 const CombatCommandHandler = preload("res://scripts/core/simulation/commands/combat_command_handler.gd")
 const CraftingCommandHandler = preload("res://scripts/core/simulation/commands/crafting_command_handler.gd")
 const PlayerCommandRouter = preload("res://scripts/core/simulation/commands/player_command_router.gd")
+const CommandResultService = preload("res://scripts/core/simulation/services/command_result_service.gd")
 const CraftingService = preload("res://scripts/core/simulation/services/crafting_service.gd")
 const ContainerSessionService = preload("res://scripts/core/simulation/services/container_session_service.gd")
 const DoorService = preload("res://scripts/core/simulation/services/door_service.gd")
@@ -138,6 +139,7 @@ var _item_use_runner := ItemUseRunner.new()
 var _combat_command_handler := CombatCommandHandler.new()
 var _crafting_command_handler := CraftingCommandHandler.new()
 var _player_command_router := PlayerCommandRouter.new()
+var _command_result_service := CommandResultService.new()
 var _crafting_service := CraftingService.new()
 var _container_session_service := ContainerSessionService.new()
 var _door_service := DoorService.new()
@@ -5155,92 +5157,15 @@ func _unsupported_player_command(command: Dictionary, reason: String) -> Diction
 
 
 func _normalize_player_command_result(result: Dictionary, command: Dictionary, command_kind: String, actor_id: int, event_start_index: int) -> Dictionary:
-	var output: Dictionary = result.duplicate(true)
-	var success: bool = bool(output.get("success", false))
-	var resolved_kind := str(output.get("kind", command_kind))
-	if resolved_kind.is_empty():
-		resolved_kind = "unknown"
-	output["success"] = success
-	output["kind"] = resolved_kind
-	if not output.has("actor_id") and actor_id > 0:
-		output["actor_id"] = actor_id
-	var reason := str(output.get("reason", ""))
-	if reason.is_empty():
-		reason = "ok" if success else "unknown"
-	output["reason"] = reason
-	output["turn_state"] = turn_state.duplicate(true)
-	output["combat_state"] = combat_state.duplicate(true)
-	if not output.has("prompt"):
-		output["prompt"] = {}
-	if not output.has("context_snapshot"):
-		output["context_snapshot"] = {}
-	var completion_payload := _player_command_log_payload(command, actor_id, command_kind)
-	completion_payload["result_kind"] = resolved_kind
-	completion_payload["success"] = success
-	completion_payload["reason"] = reason
-	if not success:
-		_copy_failure_context(output, completion_payload)
-	if output.has("turn_policy"):
-		completion_payload["turn_policy"] = _dictionary_or_empty(output.get("turn_policy", {})).duplicate(true)
-	_emit("player_command_completed" if success else "player_command_rejected", completion_payload)
-	var emitted_events := _events_since(event_start_index)
-	if not output.has("events"):
-		output["events"] = emitted_events
-	if not output.has("runtime_snapshot_delta"):
-		output["runtime_snapshot_delta"] = {
-			"active_map_id": active_map_id,
-			"combat_active": bool(combat_state.get("active", false)),
-			"events": emitted_events,
-			"pending_movement": pending_movement.duplicate(true),
-			"pending_interaction": pending_interaction.duplicate(true),
-			"pending_crafting": pending_crafting.duplicate(true),
-			"turn_state": turn_state.duplicate(true),
-		}
-	if not output.has("ui_feedback"):
-		output["ui_feedback"] = {
-			"success": success,
-			"kind": resolved_kind,
-			"reason": reason,
-		}
-	var feedback: Dictionary = _dictionary_or_empty(output.get("ui_feedback", {})).duplicate(true)
-	feedback["actor_id"] = actor_id
-	feedback["kind"] = str(feedback.get("kind", resolved_kind))
-	feedback["success"] = bool(feedback.get("success", success))
-	feedback["reason"] = str(feedback.get("reason", reason))
-	if not success:
-		_copy_failure_context(output, feedback)
-	output["ui_feedback"] = feedback.duplicate(true)
-	_emit("ui_feedback", feedback)
-	var updated_events := _events_since(event_start_index)
-	output["events"] = updated_events
-	var runtime_delta: Dictionary = _dictionary_or_empty(output.get("runtime_snapshot_delta", {})).duplicate(true)
-	runtime_delta["events"] = updated_events
-	if output.has("turn_policy"):
-		runtime_delta["turn_policy"] = _dictionary_or_empty(output.get("turn_policy", {})).duplicate(true)
-	output["runtime_snapshot_delta"] = runtime_delta
-	return output
+	return _command_result_service.normalize_player_command_result(self, result, command, command_kind, actor_id, event_start_index)
 
 
 func _copy_failure_context(source: Dictionary, target: Dictionary) -> void:
-	for key in ["goal", "start", "bounds", "blocker", "start_level", "goal_level", "visited_cell_count"]:
-		if not source.has(key):
-			continue
-		var value: Variant = source.get(key)
-		if typeof(value) == TYPE_DICTIONARY:
-			target[key] = _dictionary_or_empty(value).duplicate(true)
-		else:
-			target[key] = value
+	_command_result_service.copy_failure_context(source, target)
 
 
 func _player_command_log_payload(command: Dictionary, actor_id: int, command_kind: String) -> Dictionary:
-	var payload: Dictionary = {
-		"actor_id": actor_id,
-		"kind": command_kind,
-	}
-	for key in ["action", "target", "target_actor_id", "target_position", "grid", "option_id", "item_id", "recipe_id", "skill_id", "slot_id", "container_id", "shop_id", "count"]:
-		if command.has(key):
-			payload[key] = command.get(key)
-	return payload
+	return _command_result_service.player_command_log_payload(command, actor_id, command_kind)
 
 
 func _cancel_pending_for_new_target_command(actor_id: int, command_kind: String, command: Dictionary) -> Dictionary:
@@ -5321,11 +5246,7 @@ func _command_replaces_pending_target(command_kind: String, command: Dictionary)
 
 
 func _events_since(start_index: int) -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	var first_index: int = clampi(start_index, 0, events.size())
-	for index in range(first_index, events.size()):
-		output.append(events[index].to_dictionary())
-	return output
+	return _command_result_service.events_since(self, start_index)
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
