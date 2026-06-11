@@ -1,16 +1,5 @@
 # AGENTS.md
 
-本文件定义本仓库内 agent 的默认工作方式。
-
-## 当前基线
-
-- 运行时和工具链基于 `Godot 4.6.3 + GDScript`。
-- Godot 命令行入口固定使用 `D:\godot\godot.cmd`，工程目录为 `godot/`。
-- 游戏运行时 scene 入口为 `godot/scenes/game/game_root.tscn`；其脚本 `godot/scripts/app/game_app.gd` 处于迁移期薄根节点收敛中，只承担装配、跨系统转发和 smoke / tool 兼容 facade。
-- 地图主来源为 `godot/scenes/maps/*.tscn`，后续地图布局、入口点和地图对象按 Godot scene 工作流维护；`data/maps/*.json` 只作为迁移期兼容备份。
-- 非地图内容仍以 `data/` 下 JSON 为当前权威输入源；Godot 数据层负责加载、校验、摘要、引用查询、格式化和安全写回。
-- 玩家运行时不承载内容编辑 UI；内容编辑能力放在 Godot editor 插件、headless tool 或独立脚本中。
-
 ## 旧 Rust / Bevy 参考工程
 
 - 旧实现参考副本位于 `G:\Projects\cdc_survival_game_bevy_reference`，检出自本仓库 tag `bevy-pre-strip`，当前 HEAD 为 `be8938e`。
@@ -18,32 +7,6 @@
 - 需要还原旧相机、输入、拾取、渲染、UI、编辑器或工具行为时，优先查看参考副本下的 `rust/apps/bevy_debug_viewer/src/**`、`rust/apps/bevy_map_editor/src/**` 和 `rust/crates/**`，再按 Godot 架构边界重实现。
 - 不要把 Rust / Bevy 源码、Cargo 工程或旧 app 重新复制回当前 mainline；参考信息只能转译为 Godot scene、GDScript、数据层或文档。
 
-## 架构边界
-
-- 新增能力先判断权威落点：内容格式进 `data` / `godot/scripts/data`，玩法规则进 `godot/scripts/core`，启动编排进 `godot/scripts/app`，画面表现进 `godot/scripts/world` 或 `godot/scripts/ui`，编辑体验进 `godot/addons/cdc_game_editor`。
-- 读写非地图 `data/` 内容时，统一走 `godot/scripts/data`；不要在 UI、editor dock 或 smoke 脚本里手写第二套 JSON 解析、路径规则或保存逻辑。
-- 读写地图布局时，优先操作 `godot/scenes/maps/*.tscn` 中的 `MapSceneRoot`、`MapEntryPointNode` 和 `MapObjectNode`；不要新增长期 JSON -> scene 转换步骤。
-- 玩法结果由 `godot/scripts/core` 计算；场景、UI 和 editor 只提交输入、展示结果或发起工具调用，不直接决定移动、战斗、任务、交易、背包等业务结果。
-- `godot/scripts/app` 只负责启动流程、存档装配、输入转发和各核心模块串联；不要把具体战斗、任务、经济规则写进 app controller。
-- `godot/scripts/world` 只负责把地图和快照表现成场景对象；不要在渲染脚本里改变存档、任务、背包或角色属性。
-- `godot/scripts/ui` 只负责面板状态、按钮事件和 snapshot 展示；业务判断先落到 core/data，再由 UI 调用。
-- `godot/addons/cdc_game_editor` 可以做表单、地图复核和 handoff；非地图内容保存必须调用 data edit service，并通过 validator 后写回。
-
-## 目录职责
-
-- `godot/project.godot`: Godot 工程入口。
-- `godot/scripts/data`: 内容路径、JSON 加载、registry、校验、引用查询、格式化和安全编辑服务。
-- `godot/scripts/core`: 引擎无关的玩法规则与运行时逻辑。
-- `godot/scenes/game/game_root.tscn`: 游戏运行时根 scene，负责承载世界、HUD 和运行时 controller 装配。
-- `godot/scripts/app`: app 装配、headless runner、启动流程、输入路由、runtime refresh 和玩家动作 facade；新增业务逻辑优先落到具体 controller，不继续扩大 `game_app.gd`。
-- `godot/scripts/world`: 地图快照、场景生成、空间表现、雾战、tile / object 渲染。
-- `godot/scenes/maps`: Godot 地图场景，承载 map id、尺寸、入口点、地图对象、footprint 和对象 props，是后续地图开发主入口。
-- `godot/scripts/ui`: HUD、背包、任务、对话、交易、容器等 UI snapshot、controller 和面板。
-- `godot/scripts/tools`: Godot headless 校验、内容 CLI、smoke 和复核脚本。
-- `godot/addons/cdc_game_editor`: 当前 Godot editor 插件，包括 handoff、独立内容编辑窗口、map review 和编辑表单。
-- `data`: 非地图内容权威输入源；`data/maps` 是迁移期兼容备份，不再作为新地图开发主入口。
-- `tools/agent`: repo-local agent workflow 标准入口，默认调用 Godot 工具链。
-- 根目录 `addons/` 若只包含旧备份或残留文件，不作为当前 Godot 插件来源。
 
 ## 代码组织
 
@@ -90,13 +53,3 @@
 - 若修复依赖日志结论，交付时说明使用了哪个日志文件或 smoke 输出、观察到的关键信号、是否完成复现验证。
 - 完成涉及文件修改的独立开发任务并通过必要验证后，默认创建一次 Git commit；只暂存并提交与本任务直接相关的文件。纯审查、答疑或探索任务不提交；用户明确要求不提交时也不提交。
 - Commit message 使用简体中文，简洁说明变更目的和范围。
-
-## 禁止事项
-
-- 不要绕过 `godot/scripts/data` 或 `godot/scripts/core`，把内容读写、共享 schema 或核心规则复制到 UI、场景表现、调试层或 editor dock。
-- 不要保留无必要的双实现、兼容层或重复共享数据结构。
-- 不要把根目录旧 `addons/` 残留当作当前 Godot 插件实现。
-
-## 一句话原则
-
-把 `内容读写`、`玩法结果`、`场景表现`、`编辑体验` 拆开，统一以 Godot 数据层和核心层为权威。
