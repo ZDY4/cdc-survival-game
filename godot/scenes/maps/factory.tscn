@@ -2,7 +2,10 @@
 
 [ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_ctpsf"]
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_maus1"]
-[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_gh5ey"]
+[ext_resource type="Script" path="res://scripts/world/map_transition_trigger_3d.gd" id="script_transition_trigger"]
+[ext_resource type="Script" path="res://scripts/world/map_pickup_3d.gd" id="script_pickup"]
+[ext_resource type="Script" path="res://scripts/world/map_spawn_point_3d.gd" id="script_spawn_point"]
+[ext_resource type="Script" path="res://scripts/world/map_static_prop_3d.gd" id="script_static_prop"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/crate_stack_large.gltf" id="4_o3kmn"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/pallet_stack.gltf" id="5_4ijp0"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/barricade_scrap.gltf" id="6_u7722"]
@@ -431,17 +434,13 @@ entry_id = "default_entry"
 
 [node name="factory_loading_crate_stack" type="Node3D" parent="Objects" unique_id=1996812435]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 10)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_loading_crate_stack"
-kind = "prop"
+visual_prototype_id = "props/crate_stack_large"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/crate_stack_large\"\n\t}\n}"
 footprint = Vector2i(2, 2)
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/crate_stack_large\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_loading_crate_stack" unique_id=815425066]
 
@@ -450,16 +449,12 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0.5,
 
 [node name="factory_loading_pallet_a" type="Node3D" parent="Objects" unique_id=121932626]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 11)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_loading_pallet_a"
-kind = "prop"
+visual_prototype_id = "props/pallet_stack"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/pallet_stack\"\n\t}\n}"
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/pallet_stack\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_loading_pallet_a" unique_id=1906025285]
 
@@ -468,16 +463,12 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="factory_loading_pallet_b" type="Node3D" parent="Objects" unique_id=1983630922]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 9)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_loading_pallet_b"
-kind = "prop"
+visual_prototype_id = "props/pallet_stack"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/pallet_stack\"\n\t}\n}"
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/pallet_stack\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_loading_pallet_b" unique_id=1776990109]
 
@@ -486,17 +477,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="factory_scrap_barricade_a" type="Node3D" parent="Objects" unique_id=1499402799]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 12)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_scrap_barricade_a"
-kind = "prop"
+visual_prototype_id = "props/barricade_scrap"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/barricade_scrap\"\n\t}\n}"
 footprint = Vector2i(3, 1)
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/barricade_scrap\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_scrap_barricade_a" unique_id=1751075659]
 
@@ -505,17 +492,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0
 
 [node name="factory_scrap_barricade_b" type="Node3D" parent="Objects" unique_id=2048760284]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 8)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_scrap_barricade_b"
-kind = "prop"
+visual_prototype_id = "props/barricade_scrap"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/barricade_scrap\"\n\t}\n}"
 footprint = Vector2i(3, 1)
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/barricade_scrap\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_scrap_barricade_b" unique_id=578607317]
 
@@ -524,18 +507,14 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0
 
 [node name="factory_assembly_shelf_a" type="Node3D" parent="Objects" unique_id=1712430460]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 6)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_assembly_shelf_a"
-kind = "prop"
+visual_prototype_id = "props/shelf_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/shelf_metal\"\n\t}\n}"
 footprint = Vector2i(1, 4)
 grid_rotation = "south"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/shelf_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_assembly_shelf_a" unique_id=1062082354]
 
@@ -544,18 +523,14 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="factory_assembly_shelf_b" type="Node3D" parent="Objects" unique_id=1745310833]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 4)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_assembly_shelf_b"
-kind = "prop"
+visual_prototype_id = "props/shelf_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/shelf_metal\"\n\t}\n}"
 footprint = Vector2i(1, 4)
 grid_rotation = "south"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/shelf_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_assembly_shelf_b" unique_id=1896894287]
 
@@ -564,18 +539,14 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="factory_assembly_shelf_c" type="Node3D" parent="Objects" unique_id=1536370492]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 1)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_assembly_shelf_c"
-kind = "prop"
+visual_prototype_id = "props/shelf_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/shelf_metal\"\n\t}\n}"
 footprint = Vector2i(1, 3)
 grid_rotation = "south"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/shelf_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_assembly_shelf_c" unique_id=1343049690]
 
@@ -584,17 +555,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="factory_control_table" type="Node3D" parent="Objects" unique_id=37326844]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 4)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_control_table"
-kind = "prop"
+visual_prototype_id = "props/table_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/table_metal\"\n\t}\n}"
 footprint = Vector2i(2, 1)
 grid_rotation = "east"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/table_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_control_table" unique_id=1608567932]
 
@@ -603,17 +570,13 @@ transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0
 
 [node name="factory_control_desk" type="Node3D" parent="Objects" unique_id=772149470]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0, 4)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_control_desk"
-kind = "prop"
+visual_prototype_id = "props/desk_wood"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/desk_wood\"\n\t}\n}"
 footprint = Vector2i(2, 1)
 grid_rotation = "east"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/desk_wood\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_control_desk" unique_id=1712673000]
 
@@ -622,17 +585,13 @@ transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0
 
 [node name="factory_control_locker_a" type="Node3D" parent="Objects" unique_id=125327426]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0, 2)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_control_locker_a"
-kind = "prop"
+visual_prototype_id = "props/locker_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/locker_metal\"\n\t}\n}"
 grid_rotation = "south"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/locker_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_control_locker_a" unique_id=557208461]
 
@@ -641,17 +600,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="factory_control_locker_b" type="Node3D" parent="Objects" unique_id=1740984937]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 2)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_static_prop")
 object_id = "factory_control_locker_b"
-kind = "prop"
+visual_prototype_id = "props/locker_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/locker_metal\"\n\t}\n}"
 grid_rotation = "south"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/locker_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_control_locker_b" unique_id=419668764]
 
@@ -660,22 +615,12 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="factory_pickup_water" type="Node3D" parent="Objects" unique_id=422890494]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 11)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_pickup")
 object_id = "factory_pickup_water"
-kind = "pickup"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": {
-		\"item_id\": \"1008\",
-		\"max_count\": 1.0,
-		\"min_count\": 1.0
-	},
-	\"visual\": {
-		\"prototype_id\": \"props/crate_wood\"
-	}
-}"
+item_id = "1008"
+min_count = 1
+max_count = 1
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": {\n\t\t\"item_id\": \"1008\",\n\t\t\"max_count\": 1.0,\n\t\t\"min_count\": 1.0\n\t},\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/crate_wood\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_pickup_water" unique_id=968489496]
 
@@ -683,22 +628,12 @@ props_json = "{
 
 [node name="factory_pickup_bandage" type="Node3D" parent="Objects" unique_id=245374424]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 7)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_pickup")
 object_id = "factory_pickup_bandage"
-kind = "pickup"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": {
-		\"item_id\": \"1006\",
-		\"max_count\": 1.0,
-		\"min_count\": 1.0
-	},
-	\"visual\": {
-		\"prototype_id\": \"props/crate_wood\"
-	}
-}"
+item_id = "1006"
+min_count = 1
+max_count = 1
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": {\n\t\t\"item_id\": \"1006\",\n\t\t\"max_count\": 1.0,\n\t\t\"min_count\": 1.0\n\t},\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/crate_wood\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_pickup_bandage" unique_id=361530384]
 
@@ -706,22 +641,12 @@ props_json = "{
 
 [node name="factory_pickup_scrap" type="Node3D" parent="Objects" unique_id=1154241806]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 9)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_pickup")
 object_id = "factory_pickup_scrap"
-kind = "pickup"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": {
-		\"item_id\": \"1010\",
-		\"max_count\": 3.0,
-		\"min_count\": 2.0
-	},
-	\"visual\": {
-		\"prototype_id\": \"props/crate_wood\"
-	}
-}"
+item_id = "1010"
+min_count = 2
+max_count = 3
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": {\n\t\t\"item_id\": \"1010\",\n\t\t\"max_count\": 3.0,\n\t\t\"min_count\": 2.0\n\t},\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/crate_wood\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_pickup_scrap" unique_id=1388693194]
 
@@ -729,22 +654,12 @@ props_json = "{
 
 [node name="factory_pickup_electronics" type="Node3D" parent="Objects" unique_id=1681194508]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, 5)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_pickup")
 object_id = "factory_pickup_electronics"
-kind = "pickup"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": {
-		\"item_id\": \"1012\",
-		\"max_count\": 1.0,
-		\"min_count\": 1.0
-	},
-	\"visual\": {
-		\"prototype_id\": \"props/locker_metal\"
-	}
-}"
+item_id = "1012"
+min_count = 1
+max_count = 1
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": {\n\t\t\"item_id\": \"1012\",\n\t\t\"max_count\": 1.0,\n\t\t\"min_count\": 1.0\n\t},\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/locker_metal\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_pickup_electronics" unique_id=521546360]
 
@@ -752,108 +667,76 @@ props_json = "{
 
 [node name="factory_pickup_regulator" type="Node3D" parent="Objects" unique_id=1529383356]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 1)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_pickup")
 object_id = "factory_pickup_regulator"
-kind = "pickup"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": {
-		\"item_id\": \"1042\",
-		\"max_count\": 1.0,
-		\"min_count\": 1.0
-	},
-	\"visual\": {
-		\"prototype_id\": \"props/locker_metal\"
-	}
-}"
+item_id = "1042"
+min_count = 1
+max_count = 1
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": {\n\t\t\"item_id\": \"1042\",\n\t\t\"max_count\": 1.0,\n\t\t\"min_count\": 1.0\n\t},\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/locker_metal\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_pickup_regulator" unique_id=203698518]
 
 [node name="props_locker_metal" type="Node3D" parent="Objects/factory_pickup_regulator/Visuals" unique_id=1719714993 instance=ExtResource("10_3ccdg")]
 
-[node name="factory_spawn_walker_loading" type="Node3D" parent="Objects" unique_id=1936957171]
+[node name="factory_spawn_walker_loading" type="Marker3D" parent="Objects" unique_id=1936957171]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 10)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_spawn_point")
 object_id = "factory_spawn_walker_loading"
-kind = "ai_spawn"
-props_json = "{
-	\"ai_spawn\": {
-		\"auto_spawn\": true,
-		\"character_id\": \"zombie_walker\",
-		\"respawn_delay\": 24.0,
-		\"respawn_enabled\": true,
-		\"spawn_id\": \"factory_spawn_walker_loading\",
-		\"spawn_radius\": 2.0
-	},
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null
-}"
+character_id = "zombie_walker"
+spawn_id = "factory_spawn_walker_loading"
+spawn_radius = 2
+auto_spawn = true
+respawn_enabled = true
+respawn_delay = 24
+props_json = "{\n\t\"ai_spawn\": {\n\t\t\"auto_spawn\": true,\n\t\t\"character_id\": \"zombie_walker\",\n\t\t\"respawn_delay\": 24.0,\n\t\t\"respawn_enabled\": true,\n\t\t\"spawn_id\": \"factory_spawn_walker_loading\",\n\t\t\"spawn_radius\": 2.0\n\t},\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_spawn_walker_loading" unique_id=1017872182]
 
-[node name="factory_spawn_walker_floor" type="Node3D" parent="Objects" unique_id=305787604]
+[node name="factory_spawn_walker_floor" type="Marker3D" parent="Objects" unique_id=305787604]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 6)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_spawn_point")
 object_id = "factory_spawn_walker_floor"
-kind = "ai_spawn"
-props_json = "{
-	\"ai_spawn\": {
-		\"auto_spawn\": true,
-		\"character_id\": \"zombie_walker\",
-		\"respawn_delay\": 28.0,
-		\"respawn_enabled\": true,
-		\"spawn_id\": \"factory_spawn_walker_floor\",
-		\"spawn_radius\": 2.0
-	},
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null
-}"
+character_id = "zombie_walker"
+spawn_id = "factory_spawn_walker_floor"
+spawn_radius = 2
+auto_spawn = true
+respawn_enabled = true
+respawn_delay = 28
+props_json = "{\n\t\"ai_spawn\": {\n\t\t\"auto_spawn\": true,\n\t\t\"character_id\": \"zombie_walker\",\n\t\t\"respawn_delay\": 28.0,\n\t\t\"respawn_enabled\": true,\n\t\t\"spawn_id\": \"factory_spawn_walker_floor\",\n\t\t\"spawn_radius\": 2.0\n\t},\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_spawn_walker_floor" unique_id=22675012]
 
-[node name="factory_spawn_runner_control" type="Node3D" parent="Objects" unique_id=498774099]
+[node name="factory_spawn_runner_control" type="Marker3D" parent="Objects" unique_id=498774099]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, 3)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_spawn_point")
 object_id = "factory_spawn_runner_control"
-kind = "ai_spawn"
-props_json = "{
-	\"ai_spawn\": {
-		\"auto_spawn\": true,
-		\"character_id\": \"zombie_runner\",
-		\"respawn_delay\": 30.0,
-		\"respawn_enabled\": true,
-		\"spawn_id\": \"factory_spawn_runner_control\",
-		\"spawn_radius\": 2.0
-	},
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null
-}"
+character_id = "zombie_runner"
+spawn_id = "factory_spawn_runner_control"
+spawn_radius = 2
+auto_spawn = true
+respawn_enabled = true
+respawn_delay = 30
+props_json = "{\n\t\"ai_spawn\": {\n\t\t\"auto_spawn\": true,\n\t\t\"character_id\": \"zombie_runner\",\n\t\t\"respawn_delay\": 30.0,\n\t\t\"respawn_enabled\": true,\n\t\t\"spawn_id\": \"factory_spawn_runner_control\",\n\t\t\"spawn_radius\": 2.0\n\t},\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_spawn_runner_control" unique_id=631873071]
 
 [node name="factory_overworld_exit" type="Node3D" parent="Objects" unique_id=822728571]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 12)
-script = ExtResource("3_gh5ey")
+script = ExtResource("script_transition_trigger")
 object_id = "factory_overworld_exit"
-kind = "trigger"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null,
-	\"trigger\": {
-		\"display_name\": \"返回大地图\",
-		\"interaction_distance\": 1.4,
-		\"interaction_kind\": \"enter_overworld\",
-		\"options\": [],
-		\"target_id\": \"factory\"
-	}
-}"
+display_name = "返回大地图"
+interaction_distance = 1.4
+interaction_kind = "enter_overworld"
+target_id = "factory"
+return_spawn_id = ""
+target_entry_point_id = ""
+entry_point_id = ""
+required_world_flags = Array[String]([])
+blocked_world_flags = Array[String]([])
+required_unlocked_locations = Array[String]([])
+blocked_unlocked_locations = Array[String]([])
+options_json = "[]"
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null,\n\t\"trigger\": {\n\t\t\"display_name\": \"返回大地图\",\n\t\t\"interaction_distance\": 1.4,\n\t\t\"interaction_kind\": \"enter_overworld\",\n\t\t\"options\": [],\n\t\t\"target_id\": \"factory\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/factory_overworld_exit" unique_id=632679360]
 

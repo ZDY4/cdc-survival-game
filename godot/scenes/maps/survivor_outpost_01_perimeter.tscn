@@ -2,7 +2,11 @@
 
 [ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_2hkxp"]
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_hg0fl"]
-[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_8r5r1"]
+[ext_resource type="Script" path="res://scripts/world/map_transition_trigger_3d.gd" id="script_transition_trigger"]
+[ext_resource type="Script" path="res://scripts/world/map_pickup_3d.gd" id="script_pickup"]
+[ext_resource type="Script" path="res://scripts/world/map_spawn_point_3d.gd" id="script_spawn_point"]
+[ext_resource type="Script" path="res://scripts/world/map_static_prop_3d.gd" id="script_static_prop"]
+[ext_resource type="Script" path="res://scripts/world/map_building_3d.gd" id="script_building"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/floor_flat.gltf" id="4_egj72"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/corner.gltf" id="5_d62rs"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/straight.gltf" id="6_o1e23"]
@@ -424,36 +428,14 @@ entry_id = "default_entry"
 
 [node name="survivor_outpost_01_perimeter_barricade" type="Node3D" parent="Objects" unique_id=917836155]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 7)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_building")
 object_id = "survivor_outpost_01_perimeter_barricade"
-kind = "building"
+prefab_id = "survivor_outpost_01_perimeter_barricade"
+wall_set_id = "building_wall"
+floor_surface_set_id = "building_wall/floor"
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t\t\t\"exterior_door_count\": 0.0,\n\t\t\t\"generator\": \"solid_shell\",\n\t\t\t\"min_room_size\": {\n\t\t\t\t\"height\": 1.0,\n\t\t\t\t\"width\": 1.0\n\t\t\t},\n\t\t\t\"seed\": 2101.0,\n\t\t\t\"target_room_count\": 1.0\n\t\t},\n\t\t\"prefab_id\": \"survivor_outpost_01_perimeter_barricade\",\n\t\t\"tile_set\": {\n\t\t\t\"floor_surface_set_id\": \"building_wall/floor\",\n\t\t\t\"wall_set_id\": \"building_wall\"\n\t\t},\n\t\t\"wall_visual\": {\n\t\t\t\"kind\": \"grid\"\n\t\t}\n\t},\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 footprint = Vector2i(4, 2)
 grid_rotation = "east"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": {
-		\"layout\": {
-			\"exterior_door_count\": 0.0,
-			\"generator\": \"solid_shell\",
-			\"min_room_size\": {
-				\"height\": 1.0,
-				\"width\": 1.0
-			},
-			\"seed\": 2101.0,
-			\"target_room_count\": 1.0
-		},
-		\"prefab_id\": \"survivor_outpost_01_perimeter_barricade\",
-		\"tile_set\": {
-			\"floor_surface_set_id\": \"building_wall/floor\",
-			\"wall_set_id\": \"building_wall\"
-		},
-		\"wall_visual\": {
-			\"kind\": \"grid\"
-		}
-	},
-	\"interactive\": null,
-	\"pickup\": null
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade" unique_id=450040840]
 
@@ -506,35 +488,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0
 
 [node name="survivor_outpost_01_perimeter_bus_wreck" type="Node3D" parent="Objects" unique_id=66956691]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 4)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_building")
 object_id = "survivor_outpost_01_perimeter_bus_wreck"
-kind = "building"
+prefab_id = "survivor_outpost_01_bus_wreck"
+wall_set_id = "building_wall"
+floor_surface_set_id = "building_wall/floor"
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t\t\t\"exterior_door_count\": 0.0,\n\t\t\t\"generator\": \"solid_shell\",\n\t\t\t\"min_room_size\": {\n\t\t\t\t\"height\": 1.0,\n\t\t\t\t\"width\": 1.0\n\t\t\t},\n\t\t\t\"seed\": 2102.0,\n\t\t\t\"target_room_count\": 1.0\n\t\t},\n\t\t\"prefab_id\": \"survivor_outpost_01_bus_wreck\",\n\t\t\"tile_set\": {\n\t\t\t\"floor_surface_set_id\": \"building_wall/floor\",\n\t\t\t\"wall_set_id\": \"building_wall\"\n\t\t},\n\t\t\"wall_visual\": {\n\t\t\t\"kind\": \"grid\"\n\t\t}\n\t},\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 footprint = Vector2i(3, 2)
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": {
-		\"layout\": {
-			\"exterior_door_count\": 0.0,
-			\"generator\": \"solid_shell\",
-			\"min_room_size\": {
-				\"height\": 1.0,
-				\"width\": 1.0
-			},
-			\"seed\": 2102.0,
-			\"target_room_count\": 1.0
-		},
-		\"prefab_id\": \"survivor_outpost_01_bus_wreck\",
-		\"tile_set\": {
-			\"floor_surface_set_id\": \"building_wall/floor\",
-			\"wall_set_id\": \"building_wall\"
-		},
-		\"wall_visual\": {
-			\"kind\": \"grid\"
-		}
-	},
-	\"interactive\": null,
-	\"pickup\": null
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck" unique_id=1270954985]
 
@@ -575,32 +535,22 @@ transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 2, 0
 
 [node name="survivor_outpost_01_perimeter_return_gate" type="Node3D" parent="Objects" unique_id=1205287661]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 8)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_transition_trigger")
 object_id = "survivor_outpost_01_perimeter_return_gate"
-kind = "trigger"
+display_name = "返回幸存者据点01"
+interaction_distance = 1.4
+interaction_kind = "enter_overworld"
+target_id = ""
+return_spawn_id = ""
+target_entry_point_id = ""
+entry_point_id = ""
+required_world_flags = Array[String]([])
+blocked_world_flags = Array[String]([])
+required_unlocked_locations = Array[String]([])
+blocked_unlocked_locations = Array[String]([])
+options_json = "[\n\t{\n\t\t\"display_name\": \"返回幸存者据点01\",\n\t\t\"id\": \"enter_outdoor_location\",\n\t\t\"interaction_distance\": 1.4,\n\t\t\"kind\": \"enter_outdoor_location\",\n\t\t\"return_spawn_id\": \"perimeter_return\",\n\t\t\"target_id\": \"survivor_outpost_01\"\n\t}\n]"
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null,\n\t\"trigger\": {\n\t\t\"display_name\": \"返回幸存者据点01\",\n\t\t\"interaction_distance\": 1.4,\n\t\t\"interaction_kind\": \"\",\n\t\t\"options\": [\n\t\t\t{\n\t\t\t\t\"display_name\": \"返回幸存者据点01\",\n\t\t\t\t\"id\": \"enter_outdoor_location\",\n\t\t\t\t\"interaction_distance\": 1.4,\n\t\t\t\t\"kind\": \"enter_outdoor_location\",\n\t\t\t\t\"return_spawn_id\": \"perimeter_return\",\n\t\t\t\t\"target_id\": \"survivor_outpost_01\"\n\t\t\t}\n\t\t],\n\t\t\"target_id\": null\n\t}\n}"
 footprint = Vector2i(1, 5)
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null,
-	\"trigger\": {
-		\"display_name\": \"返回幸存者据点01\",
-		\"interaction_distance\": 1.4,
-		\"interaction_kind\": \"\",
-		\"options\": [
-			{
-				\"display_name\": \"返回幸存者据点01\",
-				\"id\": \"enter_outdoor_location\",
-				\"interaction_distance\": 1.4,
-				\"kind\": \"enter_outdoor_location\",
-				\"return_spawn_id\": \"perimeter_return\",
-				\"target_id\": \"survivor_outpost_01\"
-			}
-		],
-		\"target_id\": null
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_return_gate" unique_id=240339174]
 
@@ -610,23 +560,22 @@ footprint = Vector2i(1, 5)
 
 [node name="survivor_outpost_01_perimeter_to_street_b" type="Node3D" parent="Objects" unique_id=1614980204]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19, 0, 8)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_transition_trigger")
 object_id = "survivor_outpost_01_perimeter_to_street_b"
-kind = "trigger"
+display_name = "前往废弃街道B"
+interaction_distance = 1.4
+interaction_kind = "enter_outdoor_location"
+target_id = "street_b"
+return_spawn_id = ""
+target_entry_point_id = ""
+entry_point_id = ""
+required_world_flags = Array[String]([])
+blocked_world_flags = Array[String]([])
+required_unlocked_locations = Array[String]([])
+blocked_unlocked_locations = Array[String]([])
+options_json = "[]"
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null,\n\t\"trigger\": {\n\t\t\"display_name\": \"前往废弃街道B\",\n\t\t\"interaction_distance\": 1.4,\n\t\t\"interaction_kind\": \"enter_outdoor_location\",\n\t\t\"options\": [],\n\t\t\"target_id\": \"street_b\"\n\t}\n}"
 footprint = Vector2i(1, 5)
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null,
-	\"trigger\": {
-		\"display_name\": \"前往废弃街道B\",
-		\"interaction_distance\": 1.4,
-		\"interaction_kind\": \"enter_outdoor_location\",
-		\"options\": [],
-		\"target_id\": \"street_b\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_to_street_b" unique_id=2004016414]
 
@@ -636,22 +585,21 @@ footprint = Vector2i(1, 5)
 
 [node name="survivor_outpost_01_perimeter_overworld_exit" type="Node3D" parent="Objects" unique_id=360101079]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 10)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_transition_trigger")
 object_id = "survivor_outpost_01_perimeter_overworld_exit"
-kind = "trigger"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null,
-	\"trigger\": {
-		\"display_name\": \"前往大地图\",
-		\"interaction_distance\": 1.4,
-		\"interaction_kind\": \"enter_overworld\",
-		\"options\": [],
-		\"target_id\": \"survivor_outpost_01_perimeter\"
-	}
-}"
+display_name = "前往大地图"
+interaction_distance = 1.4
+interaction_kind = "enter_overworld"
+target_id = "survivor_outpost_01_perimeter"
+return_spawn_id = ""
+target_entry_point_id = ""
+entry_point_id = ""
+required_world_flags = Array[String]([])
+blocked_world_flags = Array[String]([])
+required_unlocked_locations = Array[String]([])
+blocked_unlocked_locations = Array[String]([])
+options_json = "[]"
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null,\n\t\"trigger\": {\n\t\t\"display_name\": \"前往大地图\",\n\t\t\"interaction_distance\": 1.4,\n\t\t\"interaction_kind\": \"enter_overworld\",\n\t\t\"options\": [],\n\t\t\"target_id\": \"survivor_outpost_01_perimeter\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_overworld_exit" unique_id=404435818]
 
@@ -661,17 +609,13 @@ footprint = Vector2i(1, 1)
 
 [node name="survivor_outpost_01_perimeter_roadblock_prop" type="Node3D" parent="Objects" unique_id=901858981]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 8)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_static_prop")
 object_id = "survivor_outpost_01_perimeter_roadblock_prop"
-kind = "prop"
+visual_prototype_id = "props/roadblock_concrete"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/roadblock_concrete\"\n\t}\n}"
 footprint = Vector2i(3, 1)
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/roadblock_concrete\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_roadblock_prop" unique_id=334271206]
 
@@ -680,18 +624,14 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0
 
 [node name="survivor_outpost_01_perimeter_wrecked_car_prop" type="Node3D" parent="Objects" unique_id=2083508514]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 5)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_static_prop")
 object_id = "survivor_outpost_01_perimeter_wrecked_car_prop"
-kind = "prop"
+visual_prototype_id = "props/wrecked_car"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/wrecked_car\"\n\t}\n}"
 footprint = Vector2i(3, 1)
 grid_rotation = "south"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/wrecked_car\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_wrecked_car_prop" unique_id=1754569210]
 
@@ -700,17 +640,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0
 
 [node name="survivor_outpost_01_perimeter_sandbag_prop" type="Node3D" parent="Objects" unique_id=802554652]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 14)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_static_prop")
 object_id = "survivor_outpost_01_perimeter_sandbag_prop"
-kind = "prop"
+visual_prototype_id = "props/sandbag_barrier"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/sandbag_barrier\"\n\t}\n}"
 footprint = Vector2i(3, 1)
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/sandbag_barrier\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_sandbag_prop" unique_id=150121858]
 
@@ -719,15 +655,11 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0
 
 [node name="survivor_outpost_01_perimeter_dead_tree" type="Node3D" parent="Objects" unique_id=294975049]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 0, 2)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_static_prop")
 object_id = "survivor_outpost_01_perimeter_dead_tree"
-kind = "prop"
+visual_prototype_id = "props/tree_dead"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/tree_dead\"\n\t}\n}"
 grid_rotation = "south"
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/tree_dead\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_dead_tree" unique_id=1166428505]
 
@@ -736,15 +668,11 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="survivor_outpost_01_perimeter_dry_bush" type="Node3D" parent="Objects" unique_id=1695664710]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 15)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_static_prop")
 object_id = "survivor_outpost_01_perimeter_dry_bush"
-kind = "prop"
+visual_prototype_id = "props/bush_dry"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/bush_dry\"\n\t}\n}"
 grid_rotation = "south"
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/bush_dry\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_dry_bush" unique_id=1667248985]
 
@@ -753,15 +681,11 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="survivor_outpost_01_perimeter_rust_barrel" type="Node3D" parent="Objects" unique_id=1518905785]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 6)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_static_prop")
 object_id = "survivor_outpost_01_perimeter_rust_barrel"
-kind = "prop"
+visual_prototype_id = "props/barrel_rust"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/barrel_rust\"\n\t}\n}"
 grid_rotation = "south"
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/barrel_rust\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_rust_barrel" unique_id=1616229823]
 
@@ -770,32 +694,12 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="survivor_outpost_01_perimeter_supply_box" type="Node3D" parent="Objects" unique_id=1259591628]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 12)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_pickup")
 object_id = "survivor_outpost_01_perimeter_supply_box"
-kind = "pickup"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": {
-		\"item_id\": \"1007\",
-		\"max_count\": 1.0,
-		\"min_count\": 1.0
-	},
-	\"visual\": {
-		\"local_offset_world\": {
-			\"x\": 0.0,
-			\"y\": 0.08,
-			\"z\": 0.0
-		},
-		\"prototype_id\": \"props/crate_wood\",
-		\"scale\": {
-			\"x\": 0.35,
-			\"y\": 0.2,
-			\"z\": 0.35
-		}
-	}
-}"
+item_id = "1007"
+min_count = 1
+max_count = 1
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": {\n\t\t\"item_id\": \"1007\",\n\t\t\"max_count\": 1.0,\n\t\t\"min_count\": 1.0\n\t},\n\t\"visual\": {\n\t\t\"local_offset_world\": {\n\t\t\t\"x\": 0.0,\n\t\t\t\"y\": 0.08,\n\t\t\t\"z\": 0.0\n\t\t},\n\t\t\"prototype_id\": \"props/crate_wood\",\n\t\t\"scale\": {\n\t\t\t\"x\": 0.35,\n\t\t\t\"y\": 0.2,\n\t\t\t\"z\": 0.35\n\t\t}\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_supply_box" unique_id=1717554068]
 
@@ -804,32 +708,12 @@ transform = Transform3D(0.35, 0, 0, 0, 0.2, 0, 0, 0, 0.35, 0, 0.08, 0)
 
 [node name="survivor_outpost_01_perimeter_supply_box_b" type="Node3D" parent="Objects" unique_id=2026055904]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 13)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_pickup")
 object_id = "survivor_outpost_01_perimeter_supply_box_b"
-kind = "pickup"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": {
-		\"item_id\": \"1007\",
-		\"max_count\": 1.0,
-		\"min_count\": 1.0
-	},
-	\"visual\": {
-		\"local_offset_world\": {
-			\"x\": 0.0,
-			\"y\": 0.08,
-			\"z\": 0.0
-		},
-		\"prototype_id\": \"props/crate_wood\",
-		\"scale\": {
-			\"x\": 0.35,
-			\"y\": 0.2,
-			\"z\": 0.35
-		}
-	}
-}"
+item_id = "1007"
+min_count = 1
+max_count = 1
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": {\n\t\t\"item_id\": \"1007\",\n\t\t\"max_count\": 1.0,\n\t\t\"min_count\": 1.0\n\t},\n\t\"visual\": {\n\t\t\"local_offset_world\": {\n\t\t\t\"x\": 0.0,\n\t\t\t\"y\": 0.08,\n\t\t\t\"z\": 0.0\n\t\t},\n\t\t\"prototype_id\": \"props/crate_wood\",\n\t\t\"scale\": {\n\t\t\t\"x\": 0.35,\n\t\t\t\"y\": 0.2,\n\t\t\t\"z\": 0.35\n\t\t}\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_supply_box_b" unique_id=683364971]
 
@@ -838,97 +722,56 @@ transform = Transform3D(0.35, 0, 0, 0, 0.2, 0, 0, 0, 0.35, 0, 0.08, 0)
 
 [node name="survivor_outpost_01_perimeter_scrap_cache" type="Node3D" parent="Objects" unique_id=278792427]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 15)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_pickup")
 object_id = "survivor_outpost_01_perimeter_scrap_cache"
-kind = "pickup"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": {
-		\"item_id\": \"1010\",
-		\"max_count\": 5.0,
-		\"min_count\": 2.0
-	},
-	\"visual\": {
-		\"local_offset_world\": {
-			\"x\": 0.0,
-			\"y\": 0.08,
-			\"z\": 0.0
-		},
-		\"prototype_id\": \"props/crate_wood\",
-		\"scale\": {
-			\"x\": 0.35,
-			\"y\": 0.2,
-			\"z\": 0.35
-		}
-	}
-}"
+item_id = "1010"
+min_count = 2
+max_count = 5
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": {\n\t\t\"item_id\": \"1010\",\n\t\t\"max_count\": 5.0,\n\t\t\"min_count\": 2.0\n\t},\n\t\"visual\": {\n\t\t\"local_offset_world\": {\n\t\t\t\"x\": 0.0,\n\t\t\t\"y\": 0.08,\n\t\t\t\"z\": 0.0\n\t\t},\n\t\t\"prototype_id\": \"props/crate_wood\",\n\t\t\"scale\": {\n\t\t\t\"x\": 0.35,\n\t\t\t\"y\": 0.2,\n\t\t\t\"z\": 0.35\n\t\t}\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache" unique_id=952958504]
 
 [node name="props_crate_wood" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_scrap_cache/Visuals" unique_id=824231683 instance=ExtResource("13_oxytd")]
 transform = Transform3D(0.35, 0, 0, 0, 0.2, 0, 0, 0, 0.35, 0, 0.08, 0)
 
-[node name="survivor_outpost_01_perimeter_spawn_walker" type="Node3D" parent="Objects" unique_id=2003354482]
+[node name="survivor_outpost_01_perimeter_spawn_walker" type="Marker3D" parent="Objects" unique_id=2003354482]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0, 5)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_spawn_point")
 object_id = "survivor_outpost_01_perimeter_spawn_walker"
-kind = "ai_spawn"
-props_json = "{
-	\"ai_spawn\": {
-		\"auto_spawn\": true,
-		\"character_id\": \"zombie_walker\",
-		\"respawn_delay\": 24.0,
-		\"respawn_enabled\": true,
-		\"spawn_id\": \"survivor_outpost_01_perimeter_spawn_walker\",
-		\"spawn_radius\": 1.8
-	},
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null
-}"
+character_id = "zombie_walker"
+spawn_id = "survivor_outpost_01_perimeter_spawn_walker"
+spawn_radius = 1.8
+auto_spawn = true
+respawn_enabled = true
+respawn_delay = 24
+props_json = "{\n\t\"ai_spawn\": {\n\t\t\"auto_spawn\": true,\n\t\t\"character_id\": \"zombie_walker\",\n\t\t\"respawn_delay\": 24.0,\n\t\t\"respawn_enabled\": true,\n\t\t\"spawn_id\": \"survivor_outpost_01_perimeter_spawn_walker\",\n\t\t\"spawn_radius\": 1.8\n\t},\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_spawn_walker" unique_id=976555077]
 
-[node name="survivor_outpost_01_perimeter_spawn_runner" type="Node3D" parent="Objects" unique_id=702515675]
+[node name="survivor_outpost_01_perimeter_spawn_runner" type="Marker3D" parent="Objects" unique_id=702515675]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 7)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_spawn_point")
 object_id = "survivor_outpost_01_perimeter_spawn_runner"
-kind = "ai_spawn"
-props_json = "{
-	\"ai_spawn\": {
-		\"auto_spawn\": true,
-		\"character_id\": \"zombie_runner\",
-		\"respawn_delay\": 28.0,
-		\"respawn_enabled\": true,
-		\"spawn_id\": \"survivor_outpost_01_perimeter_spawn_runner\",
-		\"spawn_radius\": 1.8
-	},
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null
-}"
+character_id = "zombie_runner"
+spawn_id = "survivor_outpost_01_perimeter_spawn_runner"
+spawn_radius = 1.8
+auto_spawn = true
+respawn_enabled = true
+respawn_delay = 28
+props_json = "{\n\t\"ai_spawn\": {\n\t\t\"auto_spawn\": true,\n\t\t\"character_id\": \"zombie_runner\",\n\t\t\"respawn_delay\": 28.0,\n\t\t\"respawn_enabled\": true,\n\t\t\"spawn_id\": \"survivor_outpost_01_perimeter_spawn_runner\",\n\t\t\"spawn_radius\": 1.8\n\t},\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_spawn_runner" unique_id=2144794147]
 
-[node name="survivor_outpost_01_perimeter_spawn_brute" type="Node3D" parent="Objects" unique_id=1277815771]
+[node name="survivor_outpost_01_perimeter_spawn_brute" type="Marker3D" parent="Objects" unique_id=1277815771]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 3)
-script = ExtResource("3_8r5r1")
+script = ExtResource("script_spawn_point")
 object_id = "survivor_outpost_01_perimeter_spawn_brute"
-kind = "ai_spawn"
-props_json = "{
-	\"ai_spawn\": {
-		\"auto_spawn\": false,
-		\"character_id\": \"zombie_brute\",
-		\"respawn_delay\": 40.0,
-		\"respawn_enabled\": true,
-		\"spawn_id\": \"survivor_outpost_01_perimeter_spawn_brute\",
-		\"spawn_radius\": 1.5
-	},
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null
-}"
+character_id = "zombie_brute"
+spawn_id = "survivor_outpost_01_perimeter_spawn_brute"
+spawn_radius = 1.5
+auto_spawn = false
+respawn_enabled = true
+respawn_delay = 40
+props_json = "{\n\t\"ai_spawn\": {\n\t\t\"auto_spawn\": false,\n\t\t\"character_id\": \"zombie_brute\",\n\t\t\"respawn_delay\": 40.0,\n\t\t\"respawn_enabled\": true,\n\t\t\"spawn_id\": \"survivor_outpost_01_perimeter_spawn_brute\",\n\t\t\"spawn_radius\": 1.5\n\t},\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_spawn_brute" unique_id=1178345488]

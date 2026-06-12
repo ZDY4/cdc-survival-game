@@ -161,11 +161,12 @@ func _prepare_visual_interaction_targets(root: Node, map: Dictionary) -> void:
 		var node: Node = pending.pop_back()
 		for child in node.get_children():
 			pending.append(child)
-		if not node.has_method("to_object_definition"):
+		if not _is_map_scene_object_node(node):
 			continue
 
-		var object_id := str(node.get("object_id"))
-		var kind := str(node.get("kind"))
+		var object_definition: Dictionary = _dictionary_or_empty(node.call("to_object_definition"))
+		var object_id := str(object_definition.get("object_id", ""))
+		var kind := str(object_definition.get("kind", ""))
 		if object_id.is_empty() or not ["interactive", "trigger", "pickup"].has(kind):
 			continue
 		if not active_targets.has(object_id):
@@ -189,6 +190,10 @@ func _add_visual_pickable_body(node: Node, target_data: Variant) -> void:
 	var node_3d := node as Node3D
 	if node_3d == null:
 		return
+	var existing_area := node_3d.find_child("PickArea", false, false) as Area3D
+	if existing_area != null:
+		existing_area.set_meta("interaction_target", node_3d.get_meta("interaction_target"))
+		existing_area.set_meta("pick_proxy_kind", "area")
 	var target: Dictionary = _dictionary_or_empty(target_data)
 	var cells: Array = _array_or_empty(target.get("cells", []))
 	var size := Vector3(GRID_SIZE, 0.7, GRID_SIZE)
@@ -500,15 +505,20 @@ func _map_visual_object_ids(root: Node) -> Dictionary:
 		var node: Node = pending.pop_back()
 		for child in node.get_children():
 			pending.append(child)
-		if not node.has_method("to_object_definition"):
+		if not _is_map_scene_object_node(node):
 			continue
-		var object_id := str(node.get("object_id"))
+		var object_definition: Dictionary = _dictionary_or_empty(node.call("to_object_definition"))
+		var object_id := str(object_definition.get("object_id", ""))
 		if object_id.is_empty():
 			continue
 		var visuals_container: Node = node.get_node_or_null("Visuals")
 		if visuals_container != null and visuals_container.get_child_count() > 0:
 			ids[object_id] = true
 	return ids
+
+
+func _is_map_scene_object_node(node: Node) -> bool:
+	return node.is_in_group("map_scene_object") and node.has_method("to_object_definition") or node.has_method("to_object_definition")
 
 
 func _apply_door_state_visual(parent: Node, target_data: Dictionary) -> void:

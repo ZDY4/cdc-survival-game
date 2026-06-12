@@ -2,7 +2,10 @@
 
 [ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_1sxhu"]
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_tuown"]
-[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_n4b78"]
+[ext_resource type="Script" path="res://scripts/world/map_transition_trigger_3d.gd" id="script_transition_trigger"]
+[ext_resource type="Script" path="res://scripts/world/map_pickup_3d.gd" id="script_pickup"]
+[ext_resource type="Script" path="res://scripts/world/map_spawn_point_3d.gd" id="script_spawn_point"]
+[ext_resource type="Script" path="res://scripts/world/map_static_prop_3d.gd" id="script_static_prop"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/counter_canteen.gltf" id="4_46fm4"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/desk_wood.gltf" id="5_n8yxj"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/prop_placeholder_basic/chair_metal.gltf" id="6_muw30"]
@@ -505,17 +508,13 @@ entry_id = "default_entry"
 
 [node name="hospital_reception_counter" type="Node3D" parent="Objects" unique_id=1563288597]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 10)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_reception_counter"
-kind = "prop"
+visual_prototype_id = "props/counter_canteen"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/counter_canteen\"\n\t}\n}"
 footprint = Vector2i(4, 1)
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/counter_canteen\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_reception_counter" unique_id=769646084]
 
@@ -524,17 +523,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1.5,
 
 [node name="hospital_reception_desk" type="Node3D" parent="Objects" unique_id=422091825]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 11)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_reception_desk"
-kind = "prop"
+visual_prototype_id = "props/desk_wood"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/desk_wood\"\n\t}\n}"
 footprint = Vector2i(2, 1)
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/desk_wood\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_reception_desk" unique_id=205774622]
 
@@ -543,15 +538,11 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0.5,
 
 [node name="hospital_waiting_chair_a" type="Node3D" parent="Objects" unique_id=1680899601]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 12)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_waiting_chair_a"
-kind = "prop"
+visual_prototype_id = "props/chair_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/chair_metal\"\n\t}\n}"
 grid_rotation = "south"
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/chair_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_waiting_chair_a" unique_id=666426220]
 
@@ -560,15 +551,11 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="hospital_waiting_chair_b" type="Node3D" parent="Objects" unique_id=1584758196]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 12)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_waiting_chair_b"
-kind = "prop"
+visual_prototype_id = "props/chair_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/chair_metal\"\n\t}\n}"
 grid_rotation = "south"
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/chair_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_waiting_chair_b" unique_id=574389526]
 
@@ -577,17 +564,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="hospital_waiting_table" type="Node3D" parent="Objects" unique_id=266845186]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 12)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_waiting_table"
-kind = "prop"
+visual_prototype_id = "props/table_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/table_metal\"\n\t}\n}"
 footprint = Vector2i(2, 1)
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/table_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_waiting_table" unique_id=525303965]
 
@@ -596,17 +579,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0.5,
 
 [node name="hospital_quarantine_barricade" type="Node3D" parent="Objects" unique_id=305774026]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 8)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_quarantine_barricade"
-kind = "prop"
+visual_prototype_id = "props/barricade_scrap"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/barricade_scrap\"\n\t}\n}"
 footprint = Vector2i(3, 1)
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/barricade_scrap\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_quarantine_barricade" unique_id=568811933]
 
@@ -615,16 +594,12 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 1, 0
 
 [node name="hospital_supply_pallet" type="Node3D" parent="Objects" unique_id=1697702897]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 6)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_supply_pallet"
-kind = "prop"
+visual_prototype_id = "props/pallet_stack"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/pallet_stack\"\n\t}\n}"
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/pallet_stack\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_supply_pallet" unique_id=1357069906]
 
@@ -633,18 +608,14 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="hospital_partition_shelf_a" type="Node3D" parent="Objects" unique_id=86413057]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 9)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_partition_shelf_a"
-kind = "prop"
+visual_prototype_id = "props/shelf_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/shelf_metal\"\n\t}\n}"
 footprint = Vector2i(1, 3)
 grid_rotation = "east"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/shelf_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_partition_shelf_a" unique_id=513587489]
 
@@ -653,18 +624,14 @@ transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0
 
 [node name="hospital_partition_shelf_b" type="Node3D" parent="Objects" unique_id=946854776]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 4)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_partition_shelf_b"
-kind = "prop"
+visual_prototype_id = "props/shelf_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/shelf_metal\"\n\t}\n}"
 footprint = Vector2i(1, 3)
 grid_rotation = "east"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/shelf_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_partition_shelf_b" unique_id=1977755904]
 
@@ -673,17 +640,13 @@ transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 1, 0
 
 [node name="hospital_treatment_table" type="Node3D" parent="Objects" unique_id=1068267756]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 7)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_treatment_table"
-kind = "prop"
+visual_prototype_id = "props/table_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/table_metal\"\n\t}\n}"
 footprint = Vector2i(2, 1)
 grid_rotation = "east"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/table_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_treatment_table" unique_id=1057770480]
 
@@ -692,17 +655,13 @@ transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0
 
 [node name="hospital_archive_desk" type="Node3D" parent="Objects" unique_id=624434618]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 6)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_archive_desk"
-kind = "prop"
+visual_prototype_id = "props/desk_wood"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/desk_wood\"\n\t}\n}"
 footprint = Vector2i(2, 1)
 grid_rotation = "east"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/desk_wood\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_archive_desk" unique_id=389013767]
 
@@ -711,17 +670,13 @@ transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 0, 0
 
 [node name="hospital_steel_locker_a" type="Node3D" parent="Objects" unique_id=612455093]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 2)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_steel_locker_a"
-kind = "prop"
+visual_prototype_id = "props/locker_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/locker_metal\"\n\t}\n}"
 grid_rotation = "south"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/locker_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_steel_locker_a" unique_id=816242634]
 
@@ -730,17 +685,13 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="hospital_steel_locker_b" type="Node3D" parent="Objects" unique_id=1570549250]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 3)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_steel_locker_b"
-kind = "prop"
+visual_prototype_id = "props/locker_metal"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/locker_metal\"\n\t}\n}"
 grid_rotation = "south"
 blocks_movement = true
 blocks_sight = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/locker_metal\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_steel_locker_b" unique_id=967042877]
 
@@ -749,16 +700,12 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="hospital_medical_cabinet_a" type="Node3D" parent="Objects" unique_id=31335358]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11, 0, 3)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_medical_cabinet_a"
-kind = "prop"
+visual_prototype_id = "props/cabinet_medical"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/cabinet_medical\"\n\t}\n}"
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/cabinet_medical\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_medical_cabinet_a" unique_id=467366654]
 
@@ -767,16 +714,12 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="hospital_medical_cabinet_b" type="Node3D" parent="Objects" unique_id=2058951410]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 3)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_static_prop")
 object_id = "hospital_medical_cabinet_b"
-kind = "prop"
+visual_prototype_id = "props/cabinet_medical"
+props_json = "{\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/cabinet_medical\"\n\t}\n}"
 grid_rotation = "south"
 blocks_movement = true
-props_json = "{
-	\"visual\": {
-		\"prototype_id\": \"props/cabinet_medical\"
-	}
-}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_medical_cabinet_b" unique_id=1926408550]
 
@@ -785,87 +728,62 @@ transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0
 
 [node name="hospital_pickup_medkit" type="Node3D" parent="Objects" unique_id=994893678]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 2)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_pickup")
 object_id = "hospital_pickup_medkit"
-kind = "pickup"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": {
-		\"item_id\": \"1005\",
-		\"max_count\": 1.0,
-		\"min_count\": 1.0
-	},
-	\"visual\": {
-		\"prototype_id\": \"props/cabinet_medical\"
-	}
-}"
+item_id = "1005"
+min_count = 1
+max_count = 1
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": {\n\t\t\"item_id\": \"1005\",\n\t\t\"max_count\": 1.0,\n\t\t\"min_count\": 1.0\n\t},\n\t\"visual\": {\n\t\t\"prototype_id\": \"props/cabinet_medical\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_pickup_medkit" unique_id=398380194]
 
 [node name="props_cabinet_medical" type="Node3D" parent="Objects/hospital_pickup_medkit/Visuals" unique_id=1096546904 instance=ExtResource("12_xgunl")]
 
-[node name="hospital_spawn_walker_a" type="Node3D" parent="Objects" unique_id=682261158]
+[node name="hospital_spawn_walker_a" type="Marker3D" parent="Objects" unique_id=682261158]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 7)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_spawn_point")
 object_id = "hospital_spawn_walker_a"
-kind = "ai_spawn"
-props_json = "{
-	\"ai_spawn\": {
-		\"auto_spawn\": true,
-		\"character_id\": \"zombie_walker\",
-		\"respawn_delay\": 24.0,
-		\"respawn_enabled\": true,
-		\"spawn_id\": \"hospital_spawn_walker_a\",
-		\"spawn_radius\": 2.0
-	},
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null
-}"
+character_id = "zombie_walker"
+spawn_id = "hospital_spawn_walker_a"
+spawn_radius = 2
+auto_spawn = true
+respawn_enabled = true
+respawn_delay = 24
+props_json = "{\n\t\"ai_spawn\": {\n\t\t\"auto_spawn\": true,\n\t\t\"character_id\": \"zombie_walker\",\n\t\t\"respawn_delay\": 24.0,\n\t\t\"respawn_enabled\": true,\n\t\t\"spawn_id\": \"hospital_spawn_walker_a\",\n\t\t\"spawn_radius\": 2.0\n\t},\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_spawn_walker_a" unique_id=613233315]
 
-[node name="hospital_spawn_runner_a" type="Node3D" parent="Objects" unique_id=1283523898]
+[node name="hospital_spawn_runner_a" type="Marker3D" parent="Objects" unique_id=1283523898]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 5)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_spawn_point")
 object_id = "hospital_spawn_runner_a"
-kind = "ai_spawn"
-props_json = "{
-	\"ai_spawn\": {
-		\"auto_spawn\": true,
-		\"character_id\": \"zombie_runner\",
-		\"respawn_delay\": 30.0,
-		\"respawn_enabled\": true,
-		\"spawn_id\": \"hospital_spawn_runner_a\",
-		\"spawn_radius\": 2.0
-	},
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null
-}"
+character_id = "zombie_runner"
+spawn_id = "hospital_spawn_runner_a"
+spawn_radius = 2
+auto_spawn = true
+respawn_enabled = true
+respawn_delay = 30
+props_json = "{\n\t\"ai_spawn\": {\n\t\t\"auto_spawn\": true,\n\t\t\"character_id\": \"zombie_runner\",\n\t\t\"respawn_delay\": 30.0,\n\t\t\"respawn_enabled\": true,\n\t\t\"spawn_id\": \"hospital_spawn_runner_a\",\n\t\t\"spawn_radius\": 2.0\n\t},\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_spawn_runner_a" unique_id=1011088273]
 
 [node name="hospital_overworld_exit" type="Node3D" parent="Objects" unique_id=2076505787]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 12)
-script = ExtResource("3_n4b78")
+script = ExtResource("script_transition_trigger")
 object_id = "hospital_overworld_exit"
-kind = "trigger"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null,
-	\"trigger\": {
-		\"display_name\": \"返回大地图\",
-		\"interaction_distance\": 1.4,
-		\"interaction_kind\": \"enter_overworld\",
-		\"options\": [],
-		\"target_id\": \"hospital\"
-	}
-}"
+display_name = "返回大地图"
+interaction_distance = 1.4
+interaction_kind = "enter_overworld"
+target_id = "hospital"
+return_spawn_id = ""
+target_entry_point_id = ""
+entry_point_id = ""
+required_world_flags = Array[String]([])
+blocked_world_flags = Array[String]([])
+required_unlocked_locations = Array[String]([])
+blocked_unlocked_locations = Array[String]([])
+options_json = "[]"
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null,\n\t\"trigger\": {\n\t\t\"display_name\": \"返回大地图\",\n\t\t\"interaction_distance\": 1.4,\n\t\t\"interaction_kind\": \"enter_overworld\",\n\t\t\"options\": [],\n\t\t\"target_id\": \"hospital\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/hospital_overworld_exit" unique_id=460987131]
 

@@ -2,6 +2,8 @@
 class_name MapObjectNode
 extends Node3D
 
+const GROUP_NAME := "map_scene_object"
+
 @export var object_id: String = ""
 @export var kind: String = ""
 @export var footprint: Vector2i = Vector2i.ONE
@@ -9,6 +11,10 @@ extends Node3D
 @export var blocks_movement: bool = false
 @export var blocks_sight: bool = false
 @export_multiline var props_json: String = "{}"
+
+
+func _enter_tree() -> void:
+	add_to_group(GROUP_NAME)
 
 
 func to_object_definition() -> Dictionary:

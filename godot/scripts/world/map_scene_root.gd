@@ -5,6 +5,8 @@ extends Node3D
 const MapEntryPointNodeScript = preload("res://scripts/world/map_entry_point_node.gd")
 const MapObjectNodeScript = preload("res://scripts/world/map_object_node.gd")
 const GAME_ROOT_SCENE_PATH := "res://scenes/game/game_root.tscn"
+const MAP_ENTRY_POINT_GROUP := "map_entry_point"
+const MAP_SCENE_OBJECT_GROUP := "map_scene_object"
 
 @export var map_id: String = ""
 @export var map_name: String = ""
@@ -42,16 +44,31 @@ func to_definition() -> Dictionary:
 
 func _collect_map_nodes(node: Node, entry_points: Array[Dictionary], objects: Array[Dictionary]) -> void:
 	for child in node.get_children():
-		var child_script: Variant = child.get_script()
-		if child_script == MapEntryPointNodeScript:
-			var entry: Dictionary = child.to_entry_definition()
+		if _is_map_entry_point(child):
+			var entry: Dictionary = child.call("to_entry_definition")
 			if not str(entry.get("id", "")).is_empty():
 				entry_points.append(entry)
-		elif child_script == MapObjectNodeScript:
-			var object: Dictionary = child.to_object_definition()
+		elif _is_map_scene_object(child):
+			var object: Dictionary = child.call("to_object_definition")
 			if not str(object.get("object_id", "")).is_empty():
 				objects.append(object)
 		_collect_map_nodes(child, entry_points, objects)
+
+
+func _is_map_entry_point(node: Node) -> bool:
+	if node.is_in_group(MAP_ENTRY_POINT_GROUP) and node.has_method("to_entry_definition"):
+		return true
+	if node.has_method("to_entry_definition"):
+		return true
+	return node.get_script() == MapEntryPointNodeScript
+
+
+func _is_map_scene_object(node: Node) -> bool:
+	if node.is_in_group(MAP_SCENE_OBJECT_GROUP) and node.has_method("to_object_definition"):
+		return true
+	if node.has_method("to_object_definition"):
+		return true
+	return node.get_script() == MapObjectNodeScript
 
 
 func _should_redirect_direct_runtime_launch() -> bool:

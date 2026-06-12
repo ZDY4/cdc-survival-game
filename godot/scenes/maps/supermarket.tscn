@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/world/map_scene_root.gd" id="1_rb3bx"]
 [ext_resource type="Script" path="res://scripts/world/map_entry_point_node.gd" id="2_cgx88"]
-[ext_resource type="Script" path="res://scripts/world/map_object_node.gd" id="3_0qug0"]
+[ext_resource type="Script" path="res://scripts/world/map_transition_trigger_3d.gd" id="script_transition_trigger"]
 [ext_resource type="PackedScene" path="res://scenes/world/transition_marker.tscn" id="transition_marker"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
@@ -43,22 +43,21 @@ entry_id = "default_entry"
 
 [node name="supermarket_overworld_exit" type="Node3D" parent="Objects" unique_id=811924634]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1)
-script = ExtResource("3_0qug0")
+script = ExtResource("script_transition_trigger")
 object_id = "supermarket_overworld_exit"
-kind = "trigger"
-props_json = "{
-	\"ai_spawn\": null,
-	\"building\": null,
-	\"interactive\": null,
-	\"pickup\": null,
-	\"trigger\": {
-		\"display_name\": \"返回大地图\",
-		\"interaction_distance\": 1.4,
-		\"interaction_kind\": \"enter_overworld\",
-		\"options\": [],
-		\"target_id\": \"supermarket\"
-	}
-}"
+display_name = "返回大地图"
+interaction_distance = 1.4
+interaction_kind = "enter_overworld"
+target_id = "supermarket"
+return_spawn_id = ""
+target_entry_point_id = ""
+entry_point_id = ""
+required_world_flags = Array[String]([])
+blocked_world_flags = Array[String]([])
+required_unlocked_locations = Array[String]([])
+blocked_unlocked_locations = Array[String]([])
+options_json = "[]"
+props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": null,\n\t\"interactive\": null,\n\t\"pickup\": null,\n\t\"trigger\": {\n\t\t\"display_name\": \"返回大地图\",\n\t\t\"interaction_distance\": 1.4,\n\t\t\"interaction_kind\": \"enter_overworld\",\n\t\t\"options\": [],\n\t\t\"target_id\": \"supermarket\"\n\t}\n}"
 
 [node name="Visuals" type="Node3D" parent="Objects/supermarket_overworld_exit" unique_id=80546782]
 
