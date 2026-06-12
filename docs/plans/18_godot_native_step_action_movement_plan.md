@@ -1,420 +1,464 @@
-# Godot 原生逐步动作与移动表现修复计划
+# Godot 原生逐步动作与移动系统优化计划
 
-本文用于修复当前点击移动、相机跟随、角色表现和回合推进之间的时序问题，并把运行时动作流改成更符合 Godot 项目习惯的方式。目标不是回退到 Rust / Bevy 模式，而是在现有 Godot + GDScript 主线中保留规则权威，同时让动作执行按 Godot 的节点、Tween、Signal 和逐帧更新节奏落地。
+本文定义移动、回合、相机和动作表现的最终改造路线。目标是直接把当前“规则层一次跑完、表现层事后补动画”的模式，改为更符合 Godot 项目开发方式的逐步动作系统：规则层仍然权威，但运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
+
+本计划不包含过渡性止血路线，不以修补旧 `WorldActionPresenter` 事件猜测逻辑为目标。后续实现应朝最终架构收敛，避免在旧 batch-run 流程上继续堆补丁。
 
 ## 0. 当前问题结论
 
-### 0.1 点击地面后要等一会才动
+### 0.1 规则层提前跑到未来
 
-当前点击地面后，`GameRuntimeInputController` 调用 `GameApp.execute_move_to_grid()`，再进入 `Simulation.submit_player_command({"kind": "move"})`。规则层会在一次命令内完成路径计算、AP 扣除、pending movement 建立、玩家回合自动结束、NPC 回合推进，以及 pending movement 的恢复推进。
+当前点击地面后，输入链路进入 `GameApp.execute_move_to_grid()`，再调用 `Simulation.submit_player_command({"kind": "move"})`。一次 move command 可能同步完成：
 
-这意味着运行时状态可能已经从“玩家当前格”提前推进到“本次可走段终点”甚至“自动回合后的结果态”，随后 `WorldActionPresenter` 才根据事件补播动画。玩家看到的不是“走一格算一格”，而是“规则层先跑完，表现层追赶”，因此会出现点击后延迟和输入被阻塞的体感。
+- 完整路径计算。
+- 一段或整段移动。
+- AP 扣除。
+- `pending_movement` 创建或恢复。
+- 玩家 AP 不足后的自动结束回合。
+- NPC 回合推进。
+- 重新打开玩家回合。
+- pending movement 继续恢复。
 
-### 0.2 移动中相机没有跟随角色
+玩家看到的不是“一格一格执行”，而是“规则层先批量推进，表现层再追赶”。这会带来点击后延迟、相机跳到规则终点、表现和 HUD 不同步等问题。
 
-`GameRuntimeInputController.process()` 每帧调用相机 follow，但 `_focused_actor_position()` 读取的是 `game_root.focused_actor_grid_position()`，也就是规则层 grid snapshot。移动动画中的 `Actor_player_1` 节点正在 tween，但相机不读这个节点的当前位置。
+### 0.2 相机跟随的是规则 grid，不是视觉角色
 
-结果是规则层位置已到终点，相机跟终点；视觉角色还在起点到终点之间移动，相机不会自然跟随角色模型。
+`GameRuntimeInputController.process()` 调用相机 follow 时读取 `game_root.focused_actor_grid_position()`。移动表现中的 `Actor_player_1` 节点正在 tween，但相机没有使用 actor node 的实际位置作为跟随目标。
 
-### 0.3 角色模型有概率停在原地
+最终效果是：规则层位置提前到终点，相机跟随终点；视觉角色还在途中，相机不跟随角色模型。
 
-`MovementActionPresenter.movement_presentation()` 当前从事件列表里取最后一个 `actor_moved` 作为表现对象。玩家 AP 用完后若触发自动回合，NPC 移动事件可能出现在玩家移动事件之后，导致 presenter 选中 NPC 的移动，而不是本次玩家命令的移动。
+### 0.3 Presenter 从历史事件里猜测表现对象
 
-这会表现为：规则层玩家已经移动，HUD / 状态可能更新了，但玩家模型没有播放移动动画，或者看起来停在原地。
+当前移动表现从事件列表中选择 `actor_moved` 事件。如果同一次规则推进里包含玩家移动和 NPC 移动，表现层可能选错 actor。这个问题的根源不是缺少一个过滤条件，而是表现层不应该从一坨历史事件里猜测当前 action；当前 action 应由 runtime action queue 明确持有。
 
-### 0.4 普通移动中世界重绘边界不清晰
+### 0.4 普通移动和世界重绘边界不清晰
 
-现有流程试图做到 `present_before_final_refresh`，但 `Simulation`、`interaction_controller.world_result`、`GameApp.world_result`、`WorldSceneRenderer` 和 `WorldActionPresenter` 同时参与移动状态同步。普通移动中如果发生重绘或节点替换，正在运行的 Tween 和 actor node weakref 容易失效，造成视觉状态不稳定。
+移动时 actor node 应该稳定存在，由 ActorView 驱动位置、朝向和动画。当前 `Simulation`、`GameApp.world_result`、`interaction_controller.world_result`、`WorldSceneRenderer` 和 `WorldActionPresenter` 同时参与状态同步，普通移动中存在重绘替换 actor node 的风险。
 
-## 1. 目标架构
+## 1. 最终目标
 
-### 1.1 原则
+### 1.1 核心原则
 
-- 规则层仍然权威：AP、回合、路径合法性、阻挡、门、敌我、任务、背包等结果必须由 `Simulation` 或明确 core service 决定。
-- Godot runtime 负责动作节奏：一次玩家输入不应该把未来多个表现阶段一次性跑完；应该按 step / phase 推进。
-- 普通移动不全量重建世界：移动 actor 节点应保持稳定，由表现层移动节点；世界重绘只用于地图切换、对象生成 / 消失、尸体创建、楼层切换等结构变化。
-- 相机跟视觉主体：移动中相机应跟随 actor node 的实际位置；非移动时可回到规则层 focused grid。
-- 事件服务于表现，但不替代表现调度：`movement_step` / `actor_moved` 仍可存在，但不再让 presenter 从一坨历史事件里猜测要播哪个 actor。
+- `Simulation` 负责规则事实：合法性、AP、回合、路径、阻挡、门、战斗、任务、背包、制作。
+- Godot runtime 负责动作节奏：输入、action queue、phase、Tween、Signal、相机、视觉反馈。
+- 普通移动不全量重绘世界；actor node 是可持续的 view object。
+- 相机跟随视觉节点，而不是只跟随 snapshot grid。
+- 一次玩家输入不会同步消费多个未来回合；回合推进必须通过 action runner 分阶段执行。
+- 事件用于记录和 UI 反馈，不再作为 presenter 反推当前表现对象的唯一依据。
 
 ### 1.2 目标流程
 
-目标流程如下：
-
 ```text
 PlayerInput
-  -> PlayerActionController / TurnActionRunner
-  -> Simulation preview / begin action
-  -> Simulation step one movement cell
-  -> ActorView tween one cell
-  -> CameraRig follows actor node
-  -> Tween finished signal
-  -> TurnActionRunner checks AP / pending / interaction / combat / turn advance
-  -> continue next step or finish action
+  -> GameActionController.request_move(target_grid)
+  -> TurnActionRunner.start_action(MoveAction)
+  -> Simulation.begin_move(actor_id, target_grid, topology)
+  -> TurnActionRunner.step()
+  -> Simulation.step_move(actor_id, topology)
+  -> ActorView.move_to_cell(step.to)
+  -> await ActorView.step_finished
+  -> CameraRig follows ActorView node
+  -> HUD refreshes AP / turn / pending state
+  -> TurnActionRunner decides next phase
 ```
 
-第一阶段不强制一步到位重写所有规则，可以先做兼容式 step runner：
+移动、攻击、交互、NPC 行为和制作最终都进入同一个 runner：
 
 ```text
-点击目标
-  -> 计算路径和本次可走 step
-  -> 只播放当前玩家 actor 的可走段
-  -> 表现完成后应用 final world_result / HUD refresh
-  -> 再处理自动回合或 pending resume
+TurnActionRunner
+  player_action
+  player_presentation
+  player_turn_end
+  npc_turn_start
+  npc_action
+  npc_presentation
+  npc_turn_end
+  player_turn_start
+  pending_resume
 ```
 
-## 2. 阶段计划
+## 2. 目标模块
 
-## P0. 诊断与保护性测试
+### 2.1 TurnActionRunner
 
-### 目标
+新增：
 
-先把当前问题变成可重复验证的 smoke，避免后续修复只靠手感。
+`godot/scripts/app/controllers/turn_action_runner.gd`
 
-### 改动
+职责：
 
-- 扩展 `godot/scripts/tools/player_interaction_smoke.gd`，新增移动表现诊断用例。
-- 记录点击移动后的逐帧采样：
-  - `simulation.actor_registry.get_actor(1).grid_position`
-  - `Actor_player_1.position`
-  - `WorldCamera` focus metadata
-  - `world_action_presenter_snapshot()`
-  - `runtime_control_snapshot().world_action_queue`
-- 新增断言：
-  - 玩家点击移动后 presenter actor 必须是玩家 actor id。
-  - 移动 active 时 `Actor_player_1` 必须带 `action_presenter_active=true`。
-  - 移动 active 时相机 focus 应接近玩家视觉节点，而不是只接近规则层终点。
-  - 普通移动 active / final refresh 期间不得替换 `Actor_player_1` 节点。
-  - 自动回合产生 NPC `actor_moved` 时，不得抢走玩家移动 presenter。
+- 持有当前 action。
+- 控制 action phase。
+- 调用 `Simulation` 的逐步接口。
+- 等待 ActorView / world presentation 完成。
+- 决定是否进入下一格、下一阶段、下一 actor 或下一回合。
+- 暴露 `snapshot()` 给 HUD、debug panel 和 smoke。
 
-### 验收
+状态字段：
 
-- 新增 smoke 在当前代码上应能暴露至少一个已知失败，或以诊断输出明确证明当前设计风险。
-- 修复后 `PlayerInteraction` 必须覆盖这些断言。
+- `active`
+- `phase`
+- `action_kind`
+- `actor_id`
+- `target`
+- `path`
+- `step_index`
+- `current_grid`
+- `next_grid`
+- `ap_before`
+- `ap_after`
+- `turn_phase`
+- `pending_kind`
+- `blocked_reason`
+- `presentation_active`
+- `queued_actions`
 
-## P1. 止血修复：稳定当前表现链路
+### 2.2 Action 状态对象
 
-### 目标
+新增目录：
 
-在不大拆 `Simulation` 的前提下，先解决用户可感知的三个问题：点击延迟、相机不跟随、玩家模型概率不动。
+`godot/scripts/app/controllers/actions/`
 
-### 1. Presenter 只播放本次命令的主 actor
+建议文件：
 
-当前问题：
+- `move_action.gd`
+- `interact_action.gd`
+- `attack_action.gd`
+- `npc_action.gd`
+- `craft_action.gd`
 
-- `MovementActionPresenter` 取最后一个 `actor_moved`。
-- 自动回合或 NPC 移动可能让最后一个移动事件属于 NPC。
+Action 对象只保存运行时调度状态，不复制核心规则：
 
-修复方式：
+- actor id。
+- target。
+- path。
+- phase。
+- step index。
+- presentation request。
+- cancellation policy。
+- completion result。
 
-- 在 `WorldActionPresenter.present_result()` 进入 movement presenter 前提取 command actor：
-  - 优先 `command_result.actor_id`
-  - 其次 `command_result.result.actor_id`
-  - 其次 `command_result.result.command.actor_id`
-  - 最后才 fallback 到事件 actor
-- 修改 `MovementActionPresenter.movement_presentation(events, world_root, world_result, actor_id_filter := 0)`。
-- `movement_step`、`actor_moved`、`door_auto_opened`、`movement_queued` 都按 actor id filter 过滤。
-- 如果找不到该 actor 的移动事件，返回明确 reason：`movement_actor_event_missing`，不要改播 NPC。
+### 2.3 ActorViewController
 
-验收：
+新增：
 
-- 玩家 move command 里即使包含 NPC `actor_moved`，presenter actor 仍是 `1`。
-- `world_action_presenter_snapshot().actor_id == 1`。
+`godot/scripts/world/actor_view_controller.gd`
 
-### 2. 移动中相机跟随 actor node
+职责：
 
-当前问题：
+- 按 actor id 查找稳定 actor node。
+- 执行一格移动 tween。
+- 执行朝向、脚步、攻击、受击、死亡等表现。
+- 发出 step finished / action finished 信号。
+- 在 action active 时保护 actor node 不被普通刷新替换。
 
-- `_focused_actor_position()` 只读规则层 grid。
-- 移动 tween 中的 actor node 位置没有进入相机 follow。
+建议接口：
 
-修复方式：
+```gdscript
+func actor_node(actor_id: int) -> Node3D
+func move_actor_step(actor_id: int, from_grid: Dictionary, to_grid: Dictionary, options: Dictionary = {}) -> Dictionary
+func face_actor_to(actor_id: int, target_grid: Dictionary) -> Dictionary
+func play_attack(actor_id: int, target_actor_id: int, result: Dictionary) -> Dictionary
+func finish_active_actor_presentation(actor_id: int) -> Dictionary
+func snapshot() -> Dictionary
+```
 
-- 在 `GameRuntimeInputController._focused_actor_position()` 前置判断：
-  - 如果当前 focused actor 有活跃表现节点，返回该 Node3D 的 `global_position`，并把 y 转为当前楼层 follow plane。
-  - 可通过 `world_container.find_child("Actor_player_1", true, false)` 或新增 actor node index 获取。
-- 优先读取带有 `action_presenter_active=true` 且 `actor_id == focused_actor_id` 的节点。
-- 非移动状态继续读取规则层 grid。
-- 若用户中键拖拽过相机，保留 `following_focus=false`，不强行抢回跟随。
+### 2.4 CameraRigController
 
-验收：
+扩展现有相机控制：
 
-- 移动 active 时，相机 focus metadata 随 `Actor_player_1.position` 改变。
-- 手动中键拖拽后，相机仍不自动吸回。
-- `F` / focus shortcut 可以重新跟随当前 actor。
+- 支持 follow grid target。
+- 支持 follow Node3D target。
+- 移动 action active 时跟随 actor node。
+- 非 action 状态或 actor node 缺失时 fallback 到 focused grid。
+- 用户中键拖拽后保持 manual pan，直到 `F` / focus shortcut 或新 action 明确恢复 follow。
 
-### 3. 普通移动期间禁止替换 actor node
+建议接口：
 
-当前问题：
+```gdscript
+func follow_actor_node(actor_node: Node3D) -> void
+func follow_grid(grid: Dictionary) -> void
+func clear_follow_target(reason: String = "") -> void
+func process_follow(delta: float, viewport_size: Vector2, level_height: float) -> bool
+```
 
-- 全量重绘会替换 actor node，Tween 的 WeakRef 失效。
-- 当前已有 final refresh `render_world=false` 的意图，但边界仍需收紧。
+### 2.5 WorldSceneRenderer
 
-修复方式：
+调整职责：
 
-- 普通移动 command 的 final refresh 强制 `render_world=false`。
-- movement active 期间如果收到普通 HUD / runtime refresh，只刷新 HUD、marker、fog、debug overlay，不重建 actor tree。
-- `WorldActionFlowController` 增加诊断字段：
-  - `render_world_during_presenter_blocked`
-  - `actor_node_instance_before`
-  - `actor_node_instance_after`
-- 若确实需要重绘，例如地图切换、对象结构变化、尸体生成，则先 `finish_active_presentations()`，再执行重绘。
+- 初次加载地图和结构性变化时渲染 world。
+- 普通移动、攻击朝向、AP 变化不全量重绘 actor tree。
+- 地图切换、对象生成 / 删除、尸体创建、楼层结构变化才允许结构性重绘。
+- action active 时结构性重绘必须由 TurnActionRunner 明确调度：等待当前 step 完成、取消 action、或 fast-forward。
 
-验收：
+## 3. Simulation 逐步接口
 
-- 移动 active 到 finish 期间 `Actor_player_1.get_instance_id()` 不变。
-- 移动 final refresh 不增加 world render sequence。
-- 玩家最终视觉位置与规则层 grid 对齐。
+### 3.1 移动接口
 
-### 4. 降低点击后的体感等待
-
-当前问题：
-
-- 点击后规则层可能跑多轮自动回合，再启动表现。
-
-止血策略：
-
-- 玩家点击移动后，第一帧只展示玩家当前可走段的表现。
-- 自动回合和 pending resume 暂时排到玩家移动表现完成后再处理。
-- 若短期无法改规则层执行顺序，则在 presenter 选择玩家 actor 后立即播放玩家本段移动，不等待 NPC 表现。
-
-验收：
-
-- 点击地面后一帧内 `world_action_presenter_snapshot().kind == "movement"`。
-- 玩家节点在前 2-3 帧内离开起点或至少进入 active tween。
-- NPC 自动回合表现不阻塞玩家第一段移动启动。
-
-## P2. 引入 Godot Native Action Runner
-
-### 目标
-
-建立 Godot runtime 的动作队列，让移动、交互、攻击、制作等动作能按 phase / step 执行，而不是让 `Simulation.submit_player_command()` 一次跑完整个未来。
-
-### 新模块建议
-
-- `godot/scripts/app/controllers/turn_action_runner.gd`
-  - runtime 动作队列。
-  - 持有当前 action、phase、actor_id、target、path、step_index。
-  - 负责 `await` 或 signal 驱动下一步。
-- `godot/scripts/app/controllers/actions/move_action.gd`
-  - 移动 action 状态对象。
-  - 保存 path、remaining AP、pending target、是否需要开门。
-- `godot/scripts/world/actor_view_controller.gd`
-  - 统一 actor node tween、朝向、脚步、取消、快进。
-- `godot/scripts/world/camera_follow_target.gd` 或扩展 `CameraRigController`
-  - 支持 follow Node3D target 与 grid target。
-
-### 接口设计
-
-`Simulation` 需要逐步接口，而不是只有整段 move：
+新增或重构：
 
 ```gdscript
 func begin_move(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary
 func step_move(actor_id: int, topology: Dictionary) -> Dictionary
-func can_continue_pending(actor_id: int) -> Dictionary
+func cancel_move(actor_id: int, reason: String) -> Dictionary
+func pending_move_snapshot(actor_id: int) -> Dictionary
+```
+
+`begin_move()`：
+
+- 校验 actor、turn、target、path。
+- 初始化 move action / pending movement。
+- 不移动 actor。
+- 不扣整段 AP。
+
+`step_move()`：
+
+- 每次最多移动一格。
+- 扣除该格 AP。
+- 更新 actor grid。
+- 处理该格门自动打开。
+- emit `movement_step`。
+- 如果到达目标 emit `actor_moved` / `movement_completed`。
+- 如果 AP 不足，保留 pending movement。
+
+### 3.2 回合接口
+
+新增或重构：
+
+```gdscript
+func should_end_actor_turn(actor_id: int) -> Dictionary
+func close_actor_turn(actor_id: int, reason: String) -> Dictionary
+func open_next_turn(topology: Dictionary) -> Dictionary
+func next_npc_action(topology: Dictionary) -> Dictionary
 func finish_actor_action(actor_id: int, action_kind: String, topology: Dictionary) -> Dictionary
 ```
 
-第一版可以用兼容包装：
+目标：
 
-- `begin_move()` 只做 path preview 和 pending_movement 初始化，不移动 actor。
-- `step_move()` 每次只移动一格、扣 1 AP、emit 一个 `movement_step`。
-- `finish_actor_action()` 判断 AP 阈值、自动结束回合或交给 runner 进入 turn phase。
+- 玩家 AP 不足后不要在 `submit_player_command()` 内同步跑完 NPC 回合。
+- TurnActionRunner 决定何时进入 `player_turn_end`、`npc_action`、`pending_resume`。
+- NPC action 也逐个返回，而不是一次性返回一组未来事件。
 
-### 动作队列状态
+### 3.3 兼容边界
 
-`TurnActionRunner.snapshot()` 至少包含：
+旧入口保留一段时间，但必须改为委托新接口：
 
-- `active`
-- `action_kind`
-- `actor_id`
-- `phase`
-- `step_index`
-- `path`
-- `current_grid`
-- `target_grid`
-- `ap_before`
-- `ap_after`
-- `pending_after_step`
-- `blocked_reason`
-- `presentation_active`
-
-`runtime_control_snapshot()` 增加：
-
-- `turn_action_runner`
-- `visual_follow_target`
-- `action_phase`
-
-## P3. 移动逐格化
-
-### 目标
-
-移动从“规则层整段跑完”改为“每格规则提交 + 每格表现完成后继续”。
-
-### 流程
-
-```text
-request_move(target)
-  -> preview path
-  -> runner starts MoveAction
-  -> loop:
-       simulation.step_move(actor_id)
-       actor_view.move_to_cell(step.to)
-       await actor_view.step_finished
-       refresh HUD
-       if AP below threshold:
-           runner.end_player_turn()
-           run NPC phase
-           open player turn
-       if pending target remains:
-           continue
-       else:
-           finish
+```gdscript
+submit_player_command({"kind": "move"})
 ```
 
-### 关键行为
+兼容行为：
 
-- AP 每格扣除，HUD 可逐格刷新。
-- 门自动打开可以作为 step phase：
-  - `approach`
-  - `door_open`
-  - `move`
-- 角色朝向在每格 tween 前更新。
-- pending movement path marker 随剩余路径实时更新。
-- 鼠标点击新目标时：
-  - 如果 action active，先按策略取消当前 action。
-  - 取消策略默认：完成当前格后取消，不在半格中断。
+- headless 工具或 debug command 可以请求 fast-forward。
+- 游戏正常运行时不使用 fast-forward 移动。
+- smoke 逐步迁移到 `submit_move_action()` / `turn_action_runner_snapshot()`。
 
-### 验收
+## 4. App 输入和动作调度
 
-- 远距离移动时，玩家视觉、规则 grid、HUD AP 至少每格或每段同步推进。
+### 4.1 输入入口
+
+`GameRuntimeInputController` 不再直接调用整段 `execute_move_to_grid()` 完成未来状态，而是提交 action request：
+
+```gdscript
+game_root.request_player_move(grid)
+```
+
+`GameApp` 新增 facade：
+
+```gdscript
+func request_player_move(grid: Dictionary) -> Dictionary
+func request_player_interaction(target: Dictionary, option_id: String = "") -> Dictionary
+func request_player_attack(target_actor_id: int) -> Dictionary
+func turn_action_runner_snapshot() -> Dictionary
+```
+
+### 4.2 输入阻塞策略
+
+Action active 时：
+
+- 世界点击默认阻塞。
+- HUD 可刷新。
+- Esc 可按策略取消当前 action 或打开关闭菜单。
+- 中键拖拽相机仍可允许，但不改变 action 状态。
+
+取消策略：
+
+- 移动中点击新目标：默认完成当前格后切换目标。
+- Esc：取消 pending path，但不把角色拉回半格起点。
+- 地图切换 / scene transition：必须等待当前 action idle。
+
+## 5. 移动逐格化实现路线
+
+### 阶段 1：建立 Action Runner 骨架和测试
+
+改动：
+
+- 新增 `TurnActionRunner`。
+- 新增 runner snapshot。
+- `runtime_control_snapshot()` 增加 `turn_action_runner`。
+- `PlayerInteraction` smoke 增加移动中相机、actor node、runner phase 断言。
+- 不再以旧 `WorldActionPresenter` 的 movement snapshot 作为主要验收对象。
+
+验收：
+
+- 点击地面后 runner active。
+- runner action kind 为 `move`。
+- runner actor id 为玩家。
+- 不发生 actor node 替换。
+
+### 阶段 2：Simulation 移动 begin / step
+
+改动：
+
+- `Simulation.begin_move()` 只计算 path 并初始化移动状态。
+- `Simulation.step_move()` 每次推进一格。
+- AP 每格扣除。
+- pending movement path 每格更新。
+- 旧 `_submit_move_command()` 改为兼容 wrapper。
+
+验收：
+
+- 远距离移动不会一次性改变到目标格。
+- 每次 step 后 snapshot 中 actor grid 前进一格。
+- AP 和 pending movement 与当前格一致。
+
+### 阶段 3：ActorView 逐格表现
+
+改动：
+
+- 新增 `ActorViewController.move_actor_step()`。
+- TurnActionRunner 调用 step 后播放一格 tween。
+- tween finished 后 runner 继续下一格。
+- `WorldActionPresenter` 不再负责 player movement 主流程。
+
+验收：
+
+- 玩家视觉节点每格移动。
 - 相机跟随视觉节点。
-- AP 耗尽后，玩家停在当前格，pending marker 指向剩余路径。
-- 自动回合后继续 pending movement 时，仍按逐格表现。
+- HUD AP / phase 可逐格刷新。
+- 普通移动不触发全量 world render。
 
-## P4. 回合推进逐阶段化
+### 阶段 4：回合逐阶段化
 
-### 目标
+改动：
 
-自动推进回合不再在一次玩家输入内同步跑完，而是作为 runner phase。
+- 玩家 AP 低于阈值时，runner 进入 `player_turn_end`。
+- NPC action 逐个进入 `npc_action` 和 `npc_presentation`。
+- NPC 移动 / 攻击走同一 ActorView / CombatView 表现。
+- NPC 全部完成后进入 `player_turn_start`。
+- 若存在 pending movement / pending interaction，进入 `pending_resume`。
 
-### 阶段
+验收：
 
-- `player_action`
-- `player_action_presentation`
-- `player_turn_end`
-- `npc_turn_start`
-- `npc_action_select`
-- `npc_action_presentation`
-- `npc_turn_end`
-- `player_turn_start`
-- `pending_resume`
+- 玩家移动不会等待整轮 NPC 同步跑完才开始表现。
+- NPC 表现不会抢走玩家 action。
+- HUD 能看到 phase 切换。
 
-### NPC 第一版策略
+### 阶段 5：交互和攻击并入 Action Runner
 
-- 敌对 NPC 可移动或攻击，但每个 NPC action 都通过同一 runner 播放表现。
-- 友方 / 中立 NPC 可先只更新状态，不强制复杂表现。
-- NPC 多个动作不要一次塞进一个事件列表让 presenter 猜；runner 应逐个 action 播放。
+交互：
 
-### 验收
+- 点击目标距离不足时，runner 先执行 move action 到可交互格。
+- 移动完成后执行 interact action。
+- 开门、拾取、开容器、对话、地图切换分别是 action phase。
 
-- 玩家 AP 用尽后，HUD 显示回合阶段变化。
-- NPC 移动或攻击不会抢走玩家移动 presenter。
-- 世界输入在 action active 时被阻塞，但 HUD 仍能显示反馈。
+攻击：
 
-## P5. 交互、攻击和制作纳入统一动作流
+- 攻击 action 拆为 validate、face、consume、presentation、apply result、refresh。
+- projectile / muzzle flash / hit feedback 等表现由 view controller 执行。
+- 敌方回合攻击也走同一 action pipeline。
 
-### 目标
+验收：
 
-移动修好后，把攻击、交互、开容器、对话、制作也纳入 action runner，避免再次出现规则提前跑完、表现补播的问题。
+- 点击 NPC / 容器 / 门时不再同步跑完整个接近 + 交互未来状态。
+- 攻击表现不会被后续回合事件覆盖。
 
-### 交互
+### 阶段 6：制作、等待和自动推进统一
 
-- 点击目标时，如果距离不足：
-  - runner 先执行 `MoveAction` 到可交互格。
-  - 移动完成后执行 `InteractAction`。
-- 开门 / 开容器 / 对话 / scene transition 都作为 action phase。
+改动：
 
-### 攻击
+- wait action 进入 runner。
+- crafting queue 的时间推进进入 runner phase。
+- auto tick 不直接提交未来快进；它驱动 runner step。
 
-- 攻击动作拆为：
-  - validate target
-  - face target
-  - consume AP / ammo
-  - play attack animation / projectile
-  - apply hit result / death / loot
-  - refresh HUD / world
-- 敌方反击或敌方回合攻击走同一 action runner。
+验收：
 
-### 制作
+- 自动观察 / wait / crafting 不破坏逐步 action。
+- Save smoke 明确 action active 时保存策略。
 
-- 即时制作可以作为短 action。
-- 队列制作按 world time / wait action 推进，但表现反馈和 HUD 刷新走 runner。
+## 6. UI、HUD 和 Debug
 
-## 3. 数据和状态边界
+HUD 新增或调整：
 
-### Simulation
+- 显示 runner phase。
+- 显示当前 action。
+- 显示 step index / path progress。
+- 显示 AP 逐步变化。
+- 显示 pending movement 剩余格数。
 
-保留：
+Debug snapshot：
 
-- 合法性判断。
-- AP / 回合 / pending / combat / inventory / quest / crafting 状态。
-- 事件生成。
-- snapshot。
+- `turn_action_runner_snapshot()`
+- `actor_view_snapshot()`
+- `camera_follow_snapshot()`
+- `world_render_policy_snapshot()`
 
-调整：
+Smoke 和调试面板不要依赖私有 `_setup_*` / `_rebuild_*` 方法，应通过稳定 facade：
 
-- 新增逐步 action 接口。
-- 原 `submit_player_command({"kind": "move"})` 保留兼容，但内部最终应转向 begin / step。
-- 避免一次命令中自动消费多轮未来，除非 headless smoke 或 debug command 明确要求 fast-forward。
+- `request_player_move()`
+- `finish_active_action()`
+- `turn_action_runner_snapshot()`
+- `refresh_world_visuals()`
 
-### App / Runtime
+## 7. 测试计划
 
-负责：
+### 7.1 PlayerInteraction
 
-- 接收输入。
-- 创建 action runner 请求。
-- 管理 action queue。
-- 在 action 完成后刷新 UI / world。
-- 暴露稳定 facade 给 smoke：
-  - `submit_move_action(target_grid)`
-  - `finish_world_action_presentations()`
-  - `turn_action_runner_snapshot()`
+必须覆盖：
 
-### World / Presentation
+- 点击地面后 runner 立即进入 move action。
+- 玩家每格移动时 actor node 位置变化。
+- 相机 follow target 是 actor node。
+- 移动中 actor node instance id 不变。
+- AP 不足时 pending path 正确保留。
+- 自动回合后 pending movement 正确恢复。
 
-负责：
+### 7.2 Movement
 
-- actor node tween。
-- 朝向、脚步、攻击、开门、命中特效。
-- 不决定 AP、命中、背包、任务等规则。
+必须覆盖：
 
-## 4. 测试计划
+- path preview 不改变 runtime state。
+- begin move 不改变 actor grid。
+- step move 一次只移动一格。
+- 门自动打开 phase 顺序正确。
+- 阻挡、楼层、占用格、不可达目标保持规则正确。
 
-### 必须扩展的 smoke
+### 7.3 AI
 
-- `PlayerInteraction`
-  - 点击地面后第一帧启动玩家 movement presenter。
-  - 玩家移动中相机跟随视觉节点。
-  - 自动回合带 NPC 移动时，玩家 presenter 不被 NPC 抢走。
-  - 普通移动期间不替换 `Actor_player_1`。
-  - AP 不足时 pending marker 和玩家停点正确。
+必须覆盖：
 
-- `Movement`
-  - 每格移动扣 AP。
-  - 门自动打开阶段顺序正确。
-  - 阻挡 / LOS / 楼层不被逐步接口破坏。
+- NPC action 逐个产生。
+- NPC 移动 / 攻击进入 runner 表现。
+- NPC action 不覆盖玩家 action snapshot。
 
-- `AI`
-  - NPC action 逐个进入表现，不一次性吞掉所有事件。
+### 7.4 Combat
 
-- `Combat`
-  - 攻击表现不被后续回合事件覆盖。
+必须覆盖：
 
-- `Save`
-  - action idle 时可保存。
-  - action active 时保存策略明确：拒绝、等待完成或快进完成。
+- player attack action phase。
+- enemy attack action phase。
+- projectile / hit / death / corpse refresh 顺序。
+- 击杀后的世界结构性刷新只在 action phase 允许的时机发生。
 
-### 建议命令
+### 7.5 Save
+
+必须覆盖：
+
+- action idle 可保存。
+- action active 保存策略明确：等待完成、拒绝或 fast-forward。
+- 读取存档后 actor grid 和 actor node 对齐。
+
+### 7.6 命令
 
 ```powershell
 pwsh -NoProfile -File tools/agent/test-godot-static.ps1 -Scenario CheckOnly
@@ -422,73 +466,78 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario PlayerInteractio
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Movement
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario AI
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Combat
-pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario UIToggle
-```
-
-完整阶段验收：
-
-```powershell
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Save
 pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All
 cmd /c run_godot_validate.bat
 ```
 
-## 5. 实施顺序
+## 8. 提交顺序
 
-### 第一提交：诊断 smoke
+### 提交 1：诊断和最终架构护栏
 
-- 给 `PlayerInteraction` 增加移动中相机、actor id、node instance、presenter actor 的断言。
-- 允许先记录当前失败，作为后续修复护栏。
+- 新增 runner / actor view / camera follow 相关 smoke 断言。
+- 新增文档化 snapshot 字段。
+- 当前失败可作为预期问题记录，但不落过渡性修补实现。
 
-### 第二提交：当前 presenter 止血
+### 提交 2：TurnActionRunner 骨架
 
-- Movement presenter 增加 actor id filter。
-- 玩家移动 command 只播玩家移动。
-- 普通移动 final refresh 禁止重绘 actor tree。
-- 相机移动中跟随 actor node。
+- 新增 runner。
+- 接入 `GameApp` facade。
+- HUD / runtime snapshot 暴露 runner 状态。
+- 输入从 `execute_move_to_grid()` 迁到 `request_player_move()`。
 
-### 第三提交：Action Runner 骨架
+### 提交 3：Simulation begin / step move
 
-- 新增 `TurnActionRunner`。
-- 先只接管 player move。
-- 提供 snapshot 和 debug line。
-- 旧 `execute_move_to_grid()` 转发到 runner。
+- 新增逐格移动规则接口。
+- 旧 move command 改为 wrapper。
+- Movement smoke 覆盖每格 AP 和 pending。
 
-### 第四提交：移动逐格化
+### 提交 4：ActorView 和相机跟随节点
 
-- `Simulation` 增加 begin / step move。
-- runner 每格推进规则和表现。
-- AP / pending / marker / HUD 逐步同步。
+- 新增 ActorViewController。
+- 移动 step 使用 actor node tween。
+- CameraRig 支持 Node3D follow target。
+- 普通移动不再全量重绘 actor tree。
 
-### 第五提交：回合逐阶段化
+### 提交 5：玩家回合逐阶段化
 
-- 自动结束玩家回合和 NPC 回合进入 runner phase。
-- NPC 移动 / 攻击逐 action 播放。
+- 玩家 AP 耗尽进入 runner phase。
+- pending movement resume 由 runner 触发。
+- HUD 显示 phase。
 
-### 第六提交：交互与攻击并入 runner
+### 提交 6：NPC action 逐阶段化
 
-- 点击目标先接近再交互。
-- 攻击和交互表现不再被后续事件覆盖。
+- NPC move / attack 进入 runner。
+- AI smoke 验证 NPC action 不抢占玩家 action。
 
-## 6. 风险和处理
+### 提交 7：交互和攻击迁入 runner
 
-- 风险：一次性重构 `Simulation.submit_player_command()` 会影响背包、制作、任务和 combat。
-  - 处理：先保持兼容入口，只让 move 进入 runner。
+- approach + interact 进入 action chain。
+- attack action 进入 action chain。
+- Combat / PlayerInteraction smoke 覆盖表现顺序。
 
-- 风险：逐格规则推进可能改变旧 smoke 对事件数量的假设。
-  - 处理：新增事件兼容字段，旧事件保留，新增 `action_phase` / `step_index`。
+### 提交 8：wait、crafting、auto tick 统一
 
-- 风险：世界重绘和 actor node tween 仍可能冲突。
-  - 处理：action active 时默认禁止结构性重绘；必要重绘先 fast-forward 或 cancel action。
+- wait 和 crafting queue 进入 runner。
+- auto tick 驱动 runner step。
+- Save smoke 明确 action active 策略。
 
-- 风险：相机跟随视觉节点后，拖拽相机体验被破坏。
-  - 处理：尊重 `following_focus=false`；只有 focus shortcut 或新 action 开始时恢复自动跟随。
+## 9. 风险和约束
 
-## 7. 完成标准
+- 不重新引入 Rust / Bevy。
+- 不把业务规则写进 UI 或 ActorView。
+- 不在普通移动中用全量 world render 代替 actor tween。
+- 不让 presenter 从事件历史猜当前 action。
+- 不把 `submit_player_command()` 一次性 fast-forward 作为正常游戏路径。
+- 需要保留 headless / debug fast-forward 能力，但必须显式标记为工具路径。
 
-- 点击地面后玩家在 1-2 帧内进入移动表现，不再等待自动回合全部算完。
-- 玩家移动过程中相机跟随玩家视觉模型。
-- 玩家移动 presenter 永远不会被 NPC `actor_moved` 抢走。
-- 普通移动不会替换玩家 actor node。
-- AP / 回合 / pending movement / HUD 与逐格表现同步。
-- 自动回合和 NPC 行为按阶段进入表现队列。
-- 所有实现保持 Godot + GDScript 主线，不引入 Rust / Bevy 运行时。
+## 10. 完成标准
+
+- 点击地面后玩家立即进入 runner move action。
+- 规则层和表现层按 step 同步推进。
+- 玩家视觉移动是一格一格执行，不是事后补播整段历史。
+- 相机移动中跟随玩家 actor node。
+- AP、pending movement、回合 phase 和 HUD 与每格移动同步。
+- NPC 回合按 action 阶段表现，不会覆盖玩家 action。
+- 普通移动不替换玩家 actor node。
+- 交互、攻击、等待、制作最终都进入统一 action runner。
