@@ -1013,6 +1013,30 @@ func finish_active_action(reason: String = "finish_active_action") -> Dictionary
 	return result
 
 
+func prepare_runtime_save_boundary(reason: String = "save_boundary") -> Dictionary:
+	var before_runner: Dictionary = turn_action_runner_snapshot()
+	var before_policy: Dictionary = world_render_policy_snapshot()
+	var finish_result: Dictionary = {}
+	if bool(before_runner.get("active", false)) or bool(before_runner.get("presentation_active", false)):
+		finish_result = finish_active_action(reason)
+	var after_runner: Dictionary = turn_action_runner_snapshot()
+	var after_policy: Dictionary = world_render_policy_snapshot()
+	var stable := not bool(after_runner.get("active", false)) and not bool(after_runner.get("presentation_active", false))
+	var structural_allowed := bool(after_policy.get("structural_render_allowed", false))
+	return {
+		"success": stable and structural_allowed,
+		"reason": reason if stable and structural_allowed else "save_boundary_unstable",
+		"stable": stable,
+		"save_allowed": stable and structural_allowed,
+		"finished_active_action": not finish_result.is_empty() and bool(finish_result.get("finished", false)),
+		"finish_result": finish_result.duplicate(true),
+		"before_runner": before_runner.duplicate(true),
+		"after_runner": after_runner.duplicate(true),
+		"before_policy": before_policy.duplicate(true),
+		"after_policy": after_policy.duplicate(true),
+	}
+
+
 func actor_view_snapshot() -> Dictionary:
 	if actor_view_controller == null or not actor_view_controller.has_method("snapshot"):
 		return {"active": false}

@@ -667,12 +667,28 @@ func _validate_runner_stable_save_boundary() -> Array[String]:
 		var active_runner: Dictionary = _dictionary_or_empty(game_root.turn_action_runner_snapshot())
 		if not bool(active_runner.get("active", false)) and not bool(active_runner.get("presentation_active", false)):
 			errors.append("runtime save boundary should observe active runner before finish: %s" % JSON.stringify(active_runner))
-		var finish_result: Dictionary = game_root.finish_active_action("save_smoke_stable_boundary")
-		if not bool(finish_result.get("success", false)) or bool(_dictionary_or_empty(finish_result.get("after", {})).get("active", false)):
-			errors.append("finish_active_action should finish runner before save: %s" % JSON.stringify(finish_result))
+		var active_policy: Dictionary = _dictionary_or_empty(game_root.world_render_policy_snapshot())
+		if not bool(active_policy.get("runner_active", false)):
+			errors.append("runtime save boundary should expose active runner render policy before save: %s" % JSON.stringify(active_policy))
+		if bool(active_policy.get("structural_render_allowed", true)):
+			errors.append("runtime save boundary should block structural refresh while runner is active: %s" % JSON.stringify(active_policy))
+		var render_sequence_before_boundary := _render_sequence(game_root)
+		var boundary_result: Dictionary = game_root.prepare_runtime_save_boundary("save_smoke_stable_boundary") if game_root.has_method("prepare_runtime_save_boundary") else {}
+		if not bool(boundary_result.get("success", false)) or not bool(boundary_result.get("save_allowed", false)):
+			errors.append("prepare_runtime_save_boundary should allow save after runner stable boundary: %s" % JSON.stringify(boundary_result))
+		if not bool(boundary_result.get("finished_active_action", false)):
+			errors.append("prepare_runtime_save_boundary should finish active runner before save: %s" % JSON.stringify(boundary_result))
+		var before_policy: Dictionary = _dictionary_or_empty(boundary_result.get("before_policy", {}))
+		var after_policy: Dictionary = _dictionary_or_empty(boundary_result.get("after_policy", {}))
+		if not bool(before_policy.get("runner_active", false)) or bool(before_policy.get("structural_render_allowed", true)):
+			errors.append("save boundary facade should capture active pre-save render policy: %s" % JSON.stringify(boundary_result))
+		if bool(after_policy.get("runner_active", true)) or not bool(after_policy.get("structural_render_allowed", false)):
+			errors.append("save boundary facade should capture idle post-save render policy: %s" % JSON.stringify(boundary_result))
 		var stable_runner: Dictionary = _dictionary_or_empty(game_root.turn_action_runner_snapshot())
 		if bool(stable_runner.get("active", false)) or bool(stable_runner.get("presentation_active", false)):
 			errors.append("runner should be idle at save boundary: %s" % JSON.stringify(stable_runner))
+		if _render_sequence(game_root) != render_sequence_before_boundary:
+			errors.append("save boundary should not full-render ordinary movement while finishing runner")
 		var runtime_snapshot: Dictionary = game_root.simulation.snapshot()
 		var service := SaveService.new("user://save_smoke_runner")
 		service.delete_snapshot("stable_boundary")
@@ -974,6 +990,12 @@ func _dictionary_or_empty(value: Variant) -> Dictionary:
 	if typeof(value) == TYPE_DICTIONARY:
 		return value
 	return {}
+
+
+func _render_sequence(game_root: Node) -> int:
+	if game_root != null and game_root.has_method("runtime_performance_snapshot"):
+		return int(_dictionary_or_empty(game_root.runtime_performance_snapshot()).get("render_sequence", 0))
+	return 0
 
 
 func _int_array(value: Variant) -> Array[int]:
