@@ -130,6 +130,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not bool(pickup_result.get("success", false)):
 		errors.append("pickup execution failed: %s" % JSON.stringify(pickup_result))
 	else:
+		_expect_runner_interaction_phase(errors, game_root, "pickup", "item_pickup", "survivor_outpost_01_pickup_medkit")
 		_expect_world_action_interaction_presenter(errors, game_root, "survivor_outpost_01_pickup_medkit", "pickup", "item_pickup")
 	await _wait_for_world_action_presenter_idle(game_root)
 	await _expect_interaction_visual_profiles(errors, game_root)
@@ -1556,6 +1557,26 @@ func _expected_interaction_label_text(option_kind: String) -> String:
 	return "互动"
 
 
+func _expect_runner_interaction_phase(errors: Array[String], game_root: Node, expected_option_kind: String, expected_visual_kind: String, expected_target_id: String) -> void:
+	var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	var phase: Dictionary = _dictionary_or_empty(runner.get("interaction_phase", {}))
+	if phase.is_empty():
+		errors.append("turn action runner should expose interaction_phase after %s" % expected_option_kind)
+		return
+	if str(runner.get("action_kind", "")) != "interact":
+		errors.append("turn action runner should keep last interaction action kind for %s, got %s" % [expected_option_kind, JSON.stringify(runner)])
+	if str(phase.get("option_kind", "")) != expected_option_kind:
+		errors.append("interaction_phase should expose option_kind %s, got %s" % [expected_option_kind, JSON.stringify(phase)])
+	if str(phase.get("visual_kind", "")) != expected_visual_kind:
+		errors.append("interaction_phase should expose visual_kind %s, got %s" % [expected_visual_kind, JSON.stringify(phase)])
+	if not expected_target_id.is_empty() and str(phase.get("target_id", "")) != expected_target_id:
+		errors.append("interaction_phase should expose target_id %s, got %s" % [expected_target_id, JSON.stringify(phase)])
+	if not bool(phase.get("completed", false)):
+		errors.append("interaction_phase should expose completed interaction after %s, got %s" % [expected_option_kind, JSON.stringify(phase)])
+	if str(phase.get("phase", "")) != "finished":
+		errors.append("interaction_phase should expose finished runner phase after %s, got %s" % [expected_option_kind, JSON.stringify(phase)])
+
+
 func _expect_interaction_visual_profiles(errors: Array[String], game_root: Node) -> void:
 	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node == null:
@@ -1968,6 +1989,9 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 	var open_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(open_result.get("success", false)):
 		errors.append("corpse open container failed: %s" % open_result.get("reason", "unknown"))
+	else:
+		var corpse_target: Dictionary = _dictionary_or_empty(corpse_node.get_meta("interaction_target"))
+		_expect_runner_interaction_phase(errors, game_root, "open_container", "container_open", str(corpse_target.get("target_id", "")))
 	var queue_before_finish: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
 	var pending_ui: Dictionary = _dictionary_or_empty(queue_before_finish.get("pending_ui", {}))
 	if not game_root.container_panel.visible:
