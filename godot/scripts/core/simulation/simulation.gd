@@ -1194,16 +1194,19 @@ func advance_next_npc_turn_for_runner() -> Dictionary:
 			continue
 		if not actor.map_id.is_empty() and actor.map_id != active_map_id:
 			continue
-		var background_resync: Dictionary = _sync_online_life_background_action(actor)
-		_open_turn(actor.actor_id, "npc_turn")
+		var npc_turn_already_open := bool(actor.turn_open)
+		var background_resync: Dictionary = {} if npc_turn_already_open else _sync_online_life_background_action(actor)
+		if not npc_turn_already_open:
+			_open_turn(actor.actor_id, "npc_turn")
 		var turn_open_snapshot := {
 			"ap": actor.ap,
-			"ap_gain": _turn_ap_gain(actor),
+			"ap_gain": 0.0 if npc_turn_already_open else _turn_ap_gain(actor),
 			"ap_max": _turn_ap_max(actor),
 			"affordable_ap_threshold": _affordable_ap_threshold(actor),
 			"combat_active": bool(combat_state.get("active", false)) and actor.in_combat,
+			"continued_turn": npc_turn_already_open,
 		}
-		var result: Dictionary = _advance_npc_turn(actor, topology, bool(turn_open_snapshot.get("combat_active", false)))
+		var result: Dictionary = _advance_npc_runner_step(actor, topology, bool(turn_open_snapshot.get("combat_active", false)))
 		if not background_resync.is_empty():
 			result["life_background_resync"] = background_resync.duplicate(true)
 		result["turn_open"] = turn_open_snapshot
@@ -1213,9 +1216,15 @@ func advance_next_npc_turn_for_runner() -> Dictionary:
 		result["world_time_before"] = _dictionary_or_empty(runner_world_turn.get("time_before", {})).duplicate(true)
 		result["life_need_tick"] = _life_need_tick_for_actor(life_tick_results, actor.actor_id)
 		result["life_presence"] = _record_life_presence(actor, "online", WORLD_TURN_MINUTES, result["life_need_tick"])
-		_close_turn(actor.actor_id, str(result.get("turn_close_reason", "npc_turn_complete")))
-		result["turn_closed"] = true
-		result["ap_after_close"] = actor.ap
+		var continue_same_npc := bool(result.get("can_continue_turn", false))
+		if continue_same_npc:
+			runner_world_turn["npc_index"] = npc_index
+			result["turn_closed"] = false
+			result["turn_close_reason"] = "npc_turn_continues"
+		else:
+			_close_turn(actor.actor_id, str(result.get("turn_close_reason", "npc_turn_complete")))
+			result["turn_closed"] = true
+			result["ap_after_close"] = actor.ap
 		if bool(combat_state.get("active", false)):
 			var visibility_result: Dictionary = update_combat_visibility_decay(topology)
 			result["combat_visibility"] = visibility_result.duplicate(true)
@@ -3742,6 +3751,10 @@ func _stunned_npc_turn_result(actor: RefCounted, reason: String = "npc_turn") ->
 
 func _advance_npc_turn(actor: RefCounted, topology: Dictionary, combat_turn_active: bool = false) -> Dictionary:
 	return _npc_turn_service.advance_turn(self, actor, topology, combat_turn_active)
+
+
+func _advance_npc_runner_step(actor: RefCounted, topology: Dictionary, combat_turn_active: bool = false) -> Dictionary:
+	return _npc_turn_service.advance_runner_step(self, actor, topology, combat_turn_active)
 
 
 func _advance_npc_combat_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:

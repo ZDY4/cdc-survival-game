@@ -9,6 +9,17 @@ func advance_turn(simulation: RefCounted, actor: RefCounted, topology: Dictionar
 	return advance_action(simulation, actor, topology)
 
 
+func advance_runner_step(simulation: RefCounted, actor: RefCounted, topology: Dictionary, combat_turn_active: bool = false) -> Dictionary:
+	if simulation._actor_has_special_effect(actor, "stun"):
+		return simulation._stunned_npc_turn_result(actor, "npc_turn")
+	var result: Dictionary = advance_action(simulation, actor, topology)
+	result["runner_step"] = true
+	result["combat_turn_active"] = combat_turn_active
+	result["ap_after_action"] = actor.ap if actor != null else 0.0
+	result["can_continue_turn"] = _can_continue_after_runner_step(simulation, actor, result, combat_turn_active)
+	return result
+
+
 func advance_combat_turn(simulation: RefCounted, actor: RefCounted, topology: Dictionary) -> Dictionary:
 	var actions: Array[Dictionary] = []
 	var ap_before: float = actor.ap
@@ -114,6 +125,24 @@ func advance_action(simulation: RefCounted, actor: RefCounted, topology: Diction
 		"intent": "idle",
 		"reason": intent.get("reason", "idle"),
 	}
+
+
+func _can_continue_after_runner_step(simulation: RefCounted, actor: RefCounted, result: Dictionary, combat_turn_active: bool) -> bool:
+	if actor == null:
+		return false
+	var combat_active_now: bool = combat_turn_active or (bool(simulation.combat_state.get("active", false)) and actor.in_combat)
+	if not combat_active_now:
+		return false
+	if not bool(result.get("success", false)):
+		return false
+	var intent := str(result.get("intent", ""))
+	if intent == "idle" or intent == "wait":
+		return false
+	if not bool(simulation.combat_state.get("active", false)) or not actor.in_combat:
+		return false
+	if actor.ap < simulation._affordable_ap_threshold(actor):
+		return false
+	return true
 
 
 func wait_for_ap(simulation: RefCounted, actor: RefCounted, target_actor_id: int, planned_intent: String, reason: String, required_ap: float) -> Dictionary:

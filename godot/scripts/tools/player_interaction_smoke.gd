@@ -2128,6 +2128,8 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 	var saw_attack_presentation := false
 	var saw_attack_phase := false
 	var saw_npc_phase := false
+	var npc_attack_presentation_count := 0
+	var was_npc_attack_presentation_phase := false
 	for _index in range(120):
 		var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
 		var actor_view: Dictionary = _dictionary_or_empty(runner.get("actor_view", {}))
@@ -2160,22 +2162,34 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 					errors.append("npc_phase should expose presenting ActorView node, got %s" % JSON.stringify(npc_phase))
 		if str(runner.get("phase", "")) == "npc_presentation":
 			saw_npc_presentation_phase = true
-		if str(actor_view.get("kind", "")) == "attack" and int(actor_view.get("actor_id", 0)) == attacker_id and int(actor_view.get("target_actor_id", 0)) == player.actor_id:
+		var is_attack_presentation: bool = bool(actor_view.get("active", false)) \
+			and str(actor_view.get("kind", "")) == "attack" \
+			and int(actor_view.get("actor_id", 0)) == attacker_id \
+			and int(actor_view.get("target_actor_id", 0)) == player.actor_id
+		var is_npc_attack_presentation_phase: bool = str(runner.get("phase", "")) == "npc_presentation" \
+			and str(npc_phase.get("intent", "")) == "attack" \
+			and int(npc_phase.get("actor_id", 0)) == attacker_id \
+			and int(npc_phase.get("target_actor_id", 0)) == player.actor_id
+		if is_npc_attack_presentation_phase and not was_npc_attack_presentation_phase:
+			npc_attack_presentation_count += 1
+		if is_attack_presentation:
 			saw_attack_presentation = true
 			if str(runner.get("turn_phase", "")) != "npc_presentation":
 				errors.append("npc attack runner should expose npc_presentation turn phase during attack, got %s" % runner.get("turn_phase", ""))
 			if int(attack_phase.get("presentation_node_instance_id", 0)) != int(actor_view.get("node_instance_id", -1)):
 				errors.append("npc attack_phase should bind presentation node to ActorView attack node, phase=%s actor_view=%s" % [JSON.stringify(attack_phase), JSON.stringify(actor_view)])
-			break
+		was_npc_attack_presentation_phase = is_npc_attack_presentation_phase
 		await process_frame
 	if not saw_npc_presentation_phase:
 		errors.append("npc attack runner should enter npc_presentation phase")
-	if not saw_attack_presentation:
+	if not saw_attack_presentation and npc_attack_presentation_count <= 0:
 		errors.append("npc attack should use ActorView attack presentation")
 	if not saw_attack_phase:
 		errors.append("npc attack runner should expose attack_phase")
 	if not saw_npc_phase:
 		errors.append("npc attack runner should expose structured npc_phase")
+	if npc_attack_presentation_count < 2:
+		errors.append("npc combat runner should present repeated same-NPC attacks as separate runner phases, got %d" % npc_attack_presentation_count)
 	await _wait_for_turn_action_runner_idle(game_root)
 	_cleanup_npc_attack_runner_smoke(game_root, player, attacker_id, original_grid, original_ap, original_turn_open, original_hp, original_side)
 
