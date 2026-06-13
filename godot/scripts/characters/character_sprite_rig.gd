@@ -120,10 +120,28 @@ func _update_directions(force: bool = false) -> void:
 	set_meta("direction_refresh_count", int(get_meta("direction_refresh_count", 0)) + 1)
 	if key == _last_direction_key:
 		return
+	_apply_direction_key(key, yaw_q, pitch_q)
+
+
+func apply_direction_key(direction_key: String, yaw_degrees: int = 0, pitch_degrees: int = 0) -> void:
+	_ensure_part_nodes()
+	_apply_direction_key(direction_key, yaw_degrees, pitch_degrees)
+
+
+func _ensure_part_nodes() -> void:
+	if _skeleton == null:
+		_skeleton = _find_skeleton()
+	if _parts.is_empty() and profile != null and _skeleton != null:
+		_bind_part_nodes()
+
+
+func _apply_direction_key(key: String, yaw_degrees: int, pitch_degrees: int) -> void:
+	if profile == null:
+		return
 	_last_direction_key = StringName(key)
 	set_meta("direction_key", key)
-	set_meta("camera_yaw_degrees", yaw_q)
-	set_meta("camera_pitch_degrees", pitch_q)
+	set_meta("camera_yaw_degrees", yaw_degrees)
+	set_meta("camera_pitch_degrees", pitch_degrees)
 	for entry in _parts:
 		var part: Resource = entry.get("part", null) as Resource
 		var sprite: Sprite3D = entry.get("sprite", null)

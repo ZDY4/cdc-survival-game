@@ -2,6 +2,7 @@ extends SceneTree
 
 const ContentRecordEditorWindow = preload("res://addons/cdc_game_editor/content_record_editor_window.gd")
 const ContentRecordPresenter = preload("res://addons/cdc_game_editor/content_record_presenter.gd")
+const SpriteRigInspectorPanel = preload("res://addons/cdc_game_editor/sprite_rig_inspector_panel.gd")
 const SpriteRigInspectorWindow = preload("res://addons/cdc_game_editor/sprite_rig_inspector_window.gd")
 const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
@@ -181,16 +182,31 @@ func _expect_typed_inputs(errors: Array[String]) -> void:
 
 
 func _expect_sprite_rig_inspector(errors: Array[String]) -> void:
+	var packed := load("res://assets/characters/sprite_rigs/default_humanoid.tscn") as PackedScene
+	if packed == null:
+		errors.append("sprite rig inspector should load default humanoid scene")
+		return
+	var rig := packed.instantiate() as CharacterSpriteRig
+	if rig == null:
+		errors.append("sprite rig inspector default scene root should be CharacterSpriteRig")
+		return
+	get_root().add_child(rig)
+
+	var panel := SpriteRigInspectorPanel.new()
+	panel.setup(rig, null)
+	get_root().add_child(panel)
+	panel._ready()
+	if panel.summary_label == null or not panel.summary_label.text.contains("Configured: 240 / 240"):
+		errors.append("sprite rig inspector panel should summarize selected rig profile")
+
 	var window: Window = SpriteRigInspectorWindow.new()
+	window.setup_for_rig(rig, null)
 	get_root().add_child(window)
-	window._build_ui()
-	window.refresh_profiles()
+	window._ready()
 	if window.profile == null:
-		errors.append("sprite rig inspector should load default profile")
+		errors.append("sprite rig inspector should bind selected rig profile")
 	elif str(window.profile_path) != "res://assets/characters/sprite_rigs/default_humanoid/default_humanoid_sprite_rig.tres":
 		errors.append("sprite rig inspector loaded unexpected profile: %s" % window.profile_path)
-	if window.profile_option == null or window.profile_option.item_count < 1:
-		errors.append("sprite rig inspector should list sprite rig profiles")
 	if window.part_list == null or window.part_list.item_count < 1:
 		errors.append("sprite rig inspector should list sprite parts")
 	if window.grid == null or window.grid.get_child_count() < 54:
@@ -202,16 +218,17 @@ func _expect_sprite_rig_inspector(errors: Array[String]) -> void:
 		errors.append("sprite rig inspector should show selected texture path")
 	if window.summary_label == null or not window.summary_label.text.contains("Configured 240 / 240"):
 		errors.append("sprite rig inspector summary should count configured textures")
-	if window.rig_viewport == null or window.rig_preview_instance == null:
-		errors.append("sprite rig inspector should instantiate rig preview viewport")
 	window._sync_preview_to_key("yaw_090_pitch_0")
-	if window.rig_preview_label == null or not window.rig_preview_label.text.contains("yaw_090_pitch_0"):
-		errors.append("sprite rig inspector should sync rig preview to selected direction key")
-	if window.rig_preview_instance is CharacterSpriteRig:
-		var rig := window.rig_preview_instance as CharacterSpriteRig
-		if str(rig.get_meta("direction_key", "")) != "yaw_090_pitch_0":
-			errors.append("sprite rig inspector rig preview should drive CharacterSpriteRig direction")
+	if window.direction_label == null or not window.direction_label.text.contains("yaw_090_pitch_0"):
+		errors.append("sprite rig inspector should sync direction controls to selected key")
+	if str(rig.get_meta("direction_key", "")) != "yaw_090_pitch_0":
+		errors.append("sprite rig inspector should drive the selected scene rig direction")
+	var hand_sprite := rig.find_child("SpriteRigSprite_hand_l", true, false) as Sprite3D
+	if hand_sprite == null or int(hand_sprite.get_meta("draw_order", -1)) != 35:
+		errors.append("sprite rig inspector selected rig should preserve direction draw-order metadata")
 	window.queue_free()
+	panel.queue_free()
+	rig.queue_free()
 
 
 func _make_window(kind: String, title: String, registry: ContentRegistry, domain: String, id_value: String, use_source_registry: bool = false) -> ContentRecordEditorWindow:
