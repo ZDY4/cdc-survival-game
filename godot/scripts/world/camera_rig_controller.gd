@@ -118,6 +118,21 @@ func focus(focus_position: Vector3, viewport_size: Vector2, level_plane_height: 
 	_apply_camera_transform(viewport_size, level_plane_height)
 
 
+func snapshot() -> Dictionary:
+	return {
+		"has_camera": camera != null and is_instance_valid(camera),
+		"following_focus": following_focus,
+		"is_dragging": is_dragging,
+		"has_drag_anchor": has_drag_anchor,
+		"follow_source": follow_source,
+		"follow_actor_id": follow_actor_id,
+		"focus_position": target,
+		"zoom_factor": zoom_factor,
+		"camera_position": camera.global_position if camera != null and is_instance_valid(camera) else Vector3.ZERO,
+		"camera_instance_id": camera.get_instance_id() if camera != null and is_instance_valid(camera) else 0,
+	}
+
+
 func ray_point_on_horizontal_plane(screen_position: Vector2, plane_height: float) -> Variant:
 	if camera == null or not camera.is_inside_tree():
 		return null

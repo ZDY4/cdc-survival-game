@@ -51,3 +51,9 @@ func reset_zoom(viewport_size: Vector2, level_height: float) -> void:
 
 func focus(focus_position: Vector3, viewport_size: Vector2, level_height: float, follow_source: String = "focus_position", follow_actor_id: int = 0) -> void:
 	rig_controller.call("focus", focus_position, viewport_size, level_height, follow_source, follow_actor_id)
+
+
+func snapshot() -> Dictionary:
+	if rig_controller == null or not rig_controller.has_method("snapshot"):
+		return {"has_camera": false, "reason": "camera_rig_snapshot_missing"}
+	return rig_controller.call("snapshot")

@@ -2261,6 +2261,17 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("HUD runtime line should expose turn action runner move state, got %s" % runtime_line)
 	if int(runner.get("step_index", 0)) > 0 and not runtime_line.contains("Step"):
 		errors.append("HUD runtime line should expose turn action runner step progress, got %s" % runtime_line)
+	var active_control_snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var camera_follow: Dictionary = _dictionary_or_empty(active_control_snapshot.get("camera_follow", {}))
+	if str(camera_follow.get("follow_source", "")) != "actor_node":
+		errors.append("runtime control snapshot should expose actor-node camera follow during movement, got %s" % JSON.stringify(camera_follow))
+	if int(camera_follow.get("follow_actor_id", 0)) != 1:
+		errors.append("runtime control snapshot should expose player follow actor id during movement, got %s" % JSON.stringify(camera_follow))
+	var render_policy: Dictionary = _dictionary_or_empty(active_control_snapshot.get("world_render_policy", {}))
+	if not bool(render_policy.get("runner_active", false)):
+		errors.append("world render policy should see runner active during movement, got %s" % JSON.stringify(render_policy))
+	if bool(render_policy.get("ordinary_action_render_world", true)):
+		errors.append("world render policy should reject full world render for ordinary runner movement, got %s" % JSON.stringify(render_policy))
 	var render_sequence_before_finish := _render_sequence(game_root)
 	var camera_before_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	var camera_instance_before_finish := camera_before_finish.get_instance_id() if camera_before_finish != null else 0
@@ -2298,6 +2309,11 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("turn action runner should be inactive after move completion")
 	if _render_sequence(game_root) != render_sequence_before_finish:
 		errors.append("turn action runner move should not increment world render sequence")
+	var completed_policy: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_render_policy", {}))
+	if bool(completed_policy.get("runner_active", true)):
+		errors.append("world render policy should return to idle after movement, got %s" % JSON.stringify(completed_policy))
+	if not bool(completed_policy.get("structural_render_allowed", false)):
+		errors.append("world render policy should allow structural refresh when runner is idle, got %s" % JSON.stringify(completed_policy))
 	var camera_after_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	var camera_instance_after_finish := camera_after_finish.get_instance_id() if camera_after_finish != null else 0
 	if camera_instance_before_finish != 0 and camera_instance_after_finish != camera_instance_before_finish:

@@ -879,6 +879,8 @@ func runtime_control_snapshot() -> Dictionary:
 	snapshot["world_action_queue"] = world_action_queue_snapshot()
 	snapshot["turn_action_runner"] = turn_action_runner_snapshot()
 	snapshot["actor_view"] = actor_view_snapshot()
+	snapshot["camera_follow"] = camera_follow_snapshot()
+	snapshot["world_render_policy"] = world_render_policy_snapshot()
 	snapshot["ai_debug"] = ai_debug_snapshot()
 	snapshot["debug_overlay"] = debug_overlay_snapshot()
 	snapshot["runtime_refresh"] = runtime_refresh_report_snapshot()
@@ -941,6 +943,32 @@ func actor_view_snapshot() -> Dictionary:
 	if actor_view_controller == null or not actor_view_controller.has_method("snapshot"):
 		return {"active": false}
 	return _dictionary_or_empty(actor_view_controller.call("snapshot"))
+
+
+func camera_follow_snapshot() -> Dictionary:
+	if runtime_input_controller == null or not runtime_input_controller.has_method("camera_follow_snapshot"):
+		return {"has_camera": false, "reason": "runtime_input_missing"}
+	return _dictionary_or_empty(runtime_input_controller.call("camera_follow_snapshot"))
+
+
+func world_render_policy_snapshot() -> Dictionary:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	var queue: Dictionary = world_action_queue_snapshot()
+	var performance: Dictionary = runtime_performance_snapshot()
+	var runner_active := bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))
+	var queue_active := bool(queue.get("active", false))
+	return {
+		"render_sequence": int(performance.get("render_sequence", 0)),
+		"last_render_count": int(performance.get("render_count", 0)),
+		"last_render_counts": _dictionary_or_empty(performance.get("render_counts", {})).duplicate(true),
+		"runner_active": runner_active,
+		"runner_action_kind": str(runner.get("action_kind", "")),
+		"runner_phase": str(runner.get("phase", "")),
+		"world_action_queue_active": queue_active,
+		"ordinary_action_render_world": false,
+		"structural_render_allowed": not runner_active,
+		"policy": "runner_actions_update_actor_view_without_full_world_render" if runner_active else "idle_structural_refresh_allowed",
+	}
 
 
 func audio_feedback_snapshot() -> Dictionary:

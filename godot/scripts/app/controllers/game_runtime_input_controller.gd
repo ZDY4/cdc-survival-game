@@ -260,6 +260,14 @@ func selection_debug_snapshot() -> Dictionary:
 	return hover_state_controller.selection_debug_snapshot(hover_state_snapshot())
 
 
+func camera_follow_snapshot() -> Dictionary:
+	if camera_input_controller == null or not camera_input_controller.has_method("snapshot"):
+		return {"has_camera": false, "reason": "camera_input_snapshot_missing"}
+	var snapshot: Dictionary = _dictionary_or_empty(camera_input_controller.call("snapshot"))
+	snapshot["focused_target"] = _focused_actor_follow_target()
+	return snapshot
+
+
 func _handle_camera_key(event: InputEventKey) -> bool:
 	var key := event.keycode
 	if key == 0:
