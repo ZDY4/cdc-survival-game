@@ -90,14 +90,8 @@ func advance_queue(simulation: RefCounted, reason: String, recipe_library: Dicti
 	var failed: Array[Dictionary] = []
 	var started_pending := false
 	var runner_active := false
-	var guard := 0
-	var advance_limit: int = max(advance_limit_base, simulation.crafting_queue.size() + 1)
-	while guard < advance_limit:
-		guard += 1
-		if not dictionary_or_empty(simulation.pending_crafting).is_empty():
-			break
-		if simulation.crafting_queue.is_empty():
-			break
+	var advanced_entry_count := 0
+	if dictionary_or_empty(simulation.pending_crafting).is_empty() and not simulation.crafting_queue.is_empty():
 		var entry_data: Dictionary = dictionary_or_empty(simulation.crafting_queue[0])
 		var recipe_id := str(entry_data.get("recipe_id", "")).strip_edges()
 		var count: int = max(1, int(entry_data.get("count", 1)))
@@ -105,43 +99,30 @@ func advance_queue(simulation: RefCounted, reason: String, recipe_library: Dicti
 			var missing_recipe_id_result := {"success": false, "reason": "recipe_id_missing", "entry": entry_data.duplicate(true)}
 			results.append(missing_recipe_id_result)
 			failed.append(missing_recipe_id_result)
-			break
-		var result: Dictionary = _submit_craft(simulation, recipe_id, count, recipe_library, crafting_context, topology, true, submit_craft_action)
-		result["queued_recipe_id"] = recipe_id
-		result["queued_count"] = count
-		results.append(result)
-		var completed_entry_count: int = completed_crafting_count_from_queue_result(simulation, result)
-		completed_count += completed_entry_count
-		runner_active = bool(result.get("runner_active_after", false))
-		if not dictionary_or_empty(simulation.pending_crafting).is_empty():
-			simulation.crafting_queue.remove_at(0)
-			started_pending = true
-			break
-		if bool(result.get("success", false)):
-			simulation.crafting_queue.remove_at(0)
-			if runner_active:
-				break
-			continue
-		if bool(result.get("partial_success", false)) and completed_entry_count > 0:
-			var remaining_count: int = max(0, count - completed_entry_count)
-			if remaining_count > 0:
-				var remaining_entry: Dictionary = entry_data.duplicate(true)
-				remaining_entry["count"] = remaining_count
-				simulation.crafting_queue[0] = remaining_entry
-			else:
+		else:
+			var result: Dictionary = _submit_craft(simulation, recipe_id, count, recipe_library, crafting_context, topology, true, submit_craft_action)
+			result["queued_recipe_id"] = recipe_id
+			result["queued_count"] = count
+			results.append(result)
+			advanced_entry_count = 1
+			var completed_entry_count: int = completed_crafting_count_from_queue_result(simulation, result)
+			completed_count += completed_entry_count
+			runner_active = bool(result.get("runner_active_after", false))
+			if not dictionary_or_empty(simulation.pending_crafting).is_empty():
 				simulation.crafting_queue.remove_at(0)
-		failed.append(result.duplicate(true))
-		break
-	var limit_reached: bool = guard >= advance_limit and not simulation.crafting_queue.is_empty() and dictionary_or_empty(simulation.pending_crafting).is_empty()
-	if limit_reached:
-		var limit_result := {
-			"success": false,
-			"reason": "crafting_queue_advance_limit_reached",
-			"limit": advance_limit,
-			"remaining_queue": simulation.crafting_queue.duplicate(true),
-		}
-		results.append(limit_result)
-		failed.append(limit_result)
+				started_pending = true
+			elif bool(result.get("success", false)):
+				simulation.crafting_queue.remove_at(0)
+			else:
+				if bool(result.get("partial_success", false)) and completed_entry_count > 0:
+					var remaining_count: int = max(0, count - completed_entry_count)
+					if remaining_count > 0:
+						var remaining_entry: Dictionary = entry_data.duplicate(true)
+						remaining_entry["count"] = remaining_count
+						simulation.crafting_queue[0] = remaining_entry
+					else:
+						simulation.crafting_queue.remove_at(0)
+				failed.append(result.duplicate(true))
 	return {
 		"success": failed.is_empty(),
 		"partial_success": completed_count > 0 and not failed.is_empty(),
@@ -152,6 +133,9 @@ func advance_queue(simulation: RefCounted, reason: String, recipe_library: Dicti
 		"pending": not dictionary_or_empty(simulation.pending_crafting).is_empty(),
 		"runner_active": runner_active,
 		"started_pending": started_pending,
+		"advanced_entry_count": advanced_entry_count,
+		"queue_step_limited": advanced_entry_count > 0 and not simulation.crafting_queue.is_empty() and dictionary_or_empty(simulation.pending_crafting).is_empty() and failed.is_empty(),
+		"advance_limit_base": advance_limit_base,
 		"remaining_queue": simulation.crafting_queue.duplicate(true),
 		"remaining_queue_count": simulation.crafting_queue.size(),
 		"queue_empty": simulation.crafting_queue.is_empty(),

@@ -632,6 +632,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not bool(queue_start.get("success", false)) or not bool(queue_start.get("pending", false)):
 		errors.append("multi-entry cross-turn queue should start with pending first entry: %s" % queue_start)
+	if int(queue_start.get("advanced_entry_count", 0)) != 1:
+		errors.append("multi-entry cross-turn queue should advance only one queue entry per runner action: %s" % queue_start)
 	_assert_runner_craft_phase(errors, game_root, "recipe_bandage_basic", 50, true, "confirm_queue", "multi-entry queue pending first")
 	if not _pending_crafting_line(game_root).contains("正在制作 基础绷带 x50"):
 		errors.append("first multi-entry queue craft should remain pending after AP auto turns: %s" % _pending_crafting_line(game_root))
@@ -649,6 +651,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var chained_wait_runner: Dictionary = _dictionary_or_empty(action_chain.get("wait_runner", {}))
 	if str(action_chain.get("kind", "")) != "wait_to_crafting_queue":
 		errors.append("multi-entry queue wait should expose wait_to_crafting_queue action chain, got %s" % JSON.stringify(action_chain))
+	var chained_queue_result: Dictionary = _dictionary_or_empty(action_chain.get("queue_result", {}))
+	if int(chained_queue_result.get("advanced_entry_count", 0)) != 1:
+		errors.append("multi-entry queue wait continuation should advance only one queue entry: %s" % JSON.stringify(chained_queue_result))
 	_assert_runner_wait_phase(errors, chained_wait_runner, "submit_wait_action", "multi-entry queue wait")
 	_assert_runner_craft_phase_from_snapshot(errors, chained_wait_runner, "recipe_bandage_basic", 50, false, "wait_resume", "multi-entry queue wait resume")
 	_assert_runner_craft_phase_from_snapshot(errors, wait_runner, "recipe_bandage_basic", 1, false, "confirm_queue", "remaining queue craft runner")
