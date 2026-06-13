@@ -212,6 +212,7 @@ pwsh -NoProfile -File tools/agent/test-godot-editor.ps1
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario EditorHandoff
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario ContentEditors
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario MapReview
+pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario MapTilePalette
 pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario ContentEdit
 ```
 
@@ -220,6 +221,7 @@ pwsh -NoProfile -File tools/agent/test-godot-editor.ps1 -Scenario ContentEdit
 - 固定调用 `D:\godot\godot.cmd --headless --path godot --script <smoke>`。
 - 默认 `-Scenario All` 会运行所有 Godot editor headless smoke。
 - 输出 console log 和 result JSON 到 `.local/agent-smoke/godot_editor/<timestamp>/`。
+- `MapTilePalette` 会在临时 map scene 中覆盖 palette 加载、建筑 tile 放置、prop wrapper 创建、marker 创建、旋转和删除，不写入真实地图场景。
 
 ### `test-godot-game.ps1`
 

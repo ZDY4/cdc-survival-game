@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/world/map_container_3d.gd" id="script_container"]
 [ext_resource type="Script" path="res://scripts/world/map_static_prop_3d.gd" id="script_static_prop"]
 [ext_resource type="Script" path="res://scripts/world/map_building_3d.gd" id="script_building"]
+[ext_resource type="Script" path="res://scripts/world/map_building_visuals_3d.gd" id="script_building_visuals"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/floor_flat.gltf" id="4_64gy7"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/corner.gltf" id="5_b3sd5"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/straight.gltf" id="6_w5e4p"]
@@ -811,6 +812,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(8, 4)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse" unique_id=932991370]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_gatehouse/Visuals" unique_id=1159942878 instance=ExtResource("4_64gy7")]
 
@@ -978,6 +980,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(10, 7)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_dormitory" unique_id=1135674948]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_dormitory/Visuals" unique_id=1581239866 instance=ExtResource("4_64gy7")]
 
@@ -1289,6 +1292,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(11, 8)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_canteen" unique_id=1649496055]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_canteen/Visuals" unique_id=1704557472 instance=ExtResource("4_64gy7")]
 
@@ -1666,6 +1670,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(9, 7)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_clinic" unique_id=330849895]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_clinic/Visuals" unique_id=1434238078 instance=ExtResource("4_64gy7")]
 
@@ -1950,6 +1955,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(10, 7)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_storage" unique_id=224938385]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_storage/Visuals" unique_id=1302515425 instance=ExtResource("4_64gy7")]
 
@@ -2261,6 +2267,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(9, 7)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_workshop" unique_id=2132117212]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_workshop/Visuals" unique_id=592066245 instance=ExtResource("4_64gy7")]
 
@@ -2545,6 +2552,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(2, 2)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper" unique_id=2077216659]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_watchtower_upper/Visuals" unique_id=1102300198 instance=ExtResource("4_64gy7")]
 
@@ -2579,6 +2587,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(3, 1)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_dorm_wall_segment" unique_id=955739045]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_dorm_wall_segment/Visuals" unique_id=1637485364 instance=ExtResource("5_b3sd5")]
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
@@ -2599,6 +2608,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(5, 1)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_clinic_wall_segment" unique_id=11686785]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_clinic_wall_segment/Visuals" unique_id=1958332097 instance=ExtResource("5_b3sd5")]
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
@@ -2625,6 +2635,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(2, 1)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_west" unique_id=2145021472]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_west/Visuals" unique_id=774105850 instance=ExtResource("5_b3sd5")]
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
@@ -2642,6 +2653,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(2, 1)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_east" unique_id=1312157999]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_corner" type="Node3D" parent="Objects/survivor_outpost_01_outer_wall_east/Visuals" unique_id=827874374 instance=ExtResource("5_b3sd5")]
 transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)

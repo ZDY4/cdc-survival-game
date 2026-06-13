@@ -33,6 +33,7 @@ param(
         "EditorHandoff",
         "ContentEditors",
         "MapReview",
+        "MapTilePalette",
         "ContentEdit"
     )]
     [string]$Scenario = "All",
@@ -57,6 +58,7 @@ $scenarioScripts = [ordered]@{
     EditorHandoff = "res://scripts/tools/editor_handoff_smoke.gd"
     ContentEditors = "res://scripts/tools/content_record_editor_smoke.gd"
     MapReview = "res://scripts/tools/map_preview_smoke.gd"
+    MapTilePalette = "res://scripts/tools/map_tile_palette_smoke.gd"
     ContentEdit = "res://scripts/tools/content_edit_service_smoke.gd"
 }
 

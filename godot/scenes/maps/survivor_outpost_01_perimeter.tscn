@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/world/map_spawn_point_3d.gd" id="script_spawn_point"]
 [ext_resource type="Script" path="res://scripts/world/map_static_prop_3d.gd" id="script_static_prop"]
 [ext_resource type="Script" path="res://scripts/world/map_building_3d.gd" id="script_building"]
+[ext_resource type="Script" path="res://scripts/world/map_building_visuals_3d.gd" id="script_building_visuals"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/floor_flat.gltf" id="4_egj72"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/corner.gltf" id="5_d62rs"]
 [ext_resource type="PackedScene" path="res://assets/world_tiles/building_wall/straight.gltf" id="6_o1e23"]
@@ -438,6 +439,7 @@ footprint = Vector2i(4, 2)
 grid_rotation = "east"
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade" unique_id=450040840]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_barricade/Visuals" unique_id=1159942878 instance=ExtResource("4_egj72")]
 
@@ -497,6 +499,7 @@ props_json = "{\n\t\"ai_spawn\": null,\n\t\"building\": {\n\t\t\"layout\": {\n\t
 footprint = Vector2i(3, 2)
 
 [node name="Visuals" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck" unique_id=1270954985]
+script = ExtResource("script_building_visuals")
 
 [node name="building_wall_floor_flat" type="Node3D" parent="Objects/survivor_outpost_01_perimeter_bus_wreck/Visuals" unique_id=349394715 instance=ExtResource("4_egj72")]
 

@@ -4,6 +4,7 @@ extends EditorPlugin
 const EditorHandoffDock = preload("res://addons/cdc_game_editor/editor_handoff_dock.gd")
 const ContentRecordEditorWindow = preload("res://addons/cdc_game_editor/content_record_editor_window.gd")
 const MapReviewDock = preload("res://addons/cdc_game_editor/map_preview_dock.gd")
+const MapTilePaletteWindow = preload("res://addons/cdc_game_editor/map_tile_palette_window.gd")
 
 const CONTENT_EDITOR_DEFS := {
 	"item": "CDC Item Editor",
@@ -28,6 +29,7 @@ const MENU_SETTLEMENT_EDITOR := 170
 const MENU_OVERWORLD_EDITOR := 180
 const MENU_MAP_REVIEW := 300
 const MENU_AGENT_HANDOFF := 310
+const MENU_MAP_TILE_PALETTE := 330
 
 var content_editor_windows: Dictionary = {}
 var utility_windows: Dictionary = {}
@@ -58,6 +60,7 @@ func _exit_tree() -> void:
 			remove_tool_menu_item(str(title))
 		remove_tool_menu_item("CDC Map Review")
 		remove_tool_menu_item("CDC Agent Handoff")
+		remove_tool_menu_item("CDC Map Tile Palette")
 		using_tool_menu_fallback = false
 
 	for window in content_editor_windows.values():
@@ -98,6 +101,7 @@ func _install_tool_menu_fallback() -> void:
 	add_tool_menu_item("CDC Overworld Editor", _open_overworld_editor)
 	add_tool_menu_item("CDC Map Review", _open_map_review)
 	add_tool_menu_item("CDC Agent Handoff", _open_agent_handoff)
+	add_tool_menu_item("CDC Map Tile Palette", _open_map_tile_palette)
 
 
 func _populate_cdc_menu(menu: PopupMenu) -> void:
@@ -115,6 +119,7 @@ func _populate_cdc_menu(menu: PopupMenu) -> void:
 	menu.add_separator()
 	menu.add_item("Map Review", MENU_MAP_REVIEW)
 	menu.add_item("Agent Handoff", MENU_AGENT_HANDOFF)
+	menu.add_item("Map Tile Palette", MENU_MAP_TILE_PALETTE)
 
 
 func _move_cdc_menu_after_help() -> void:
@@ -164,6 +169,8 @@ func _on_cdc_menu_id_pressed(id: int) -> void:
 			_open_map_review()
 		MENU_AGENT_HANDOFF:
 			_open_agent_handoff()
+		MENU_MAP_TILE_PALETTE:
+			_open_map_tile_palette()
 
 
 func _open_item_editor() -> void:
@@ -222,6 +229,10 @@ func _open_map_review() -> void:
 
 func _open_agent_handoff() -> void:
 	_open_utility_window("agent_handoff", "CDC Agent Handoff", EditorHandoffDock, Vector2i(980, 680))
+
+
+func _open_map_tile_palette() -> void:
+	_open_utility_window("map_tile_palette", "CDC Map Tile Palette", MapTilePaletteWindow, Vector2i(720, 760))
 
 
 func _open_utility_window(key: String, title: String, content_script: GDScript, default_size: Vector2i) -> void:
