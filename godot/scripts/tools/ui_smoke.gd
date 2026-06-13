@@ -35,6 +35,27 @@ func _init() -> void:
 		return
 
 	var snapshot: Dictionary = HudSnapshot.new().build(simulation.snapshot(), world_result, pickup_prompt)
+	snapshot["runtime_control"] = {
+		"auto_tick": false,
+		"observe_mode": false,
+		"observe_playback": false,
+		"observe_speed": "x1",
+		"turn_action_runner": {
+			"active": true,
+			"presentation_active": false,
+			"action_kind": "move",
+			"phase": "move_step",
+			"step_index": 2,
+			"path": [
+				{"x": 1, "y": 0, "z": 1},
+				{"x": 2, "y": 0, "z": 1},
+				{"x": 3, "y": 0, "z": 1},
+			],
+			"ap_before": 6.0,
+			"ap_after": 4.0,
+			"pending_kind": "movement",
+		},
+	}
 	var hud: Control = HUD_SCENE.instantiate()
 	get_root().add_child(hud)
 	hud.apply_snapshot(snapshot)
@@ -76,6 +97,13 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		for token in ["HP", "AP", "Lv", "Round", "Phase", "Combat"]:
 			if not status_text.contains(token):
 				errors.append("status badge line missing %s" % token)
+	if hud.get_node_or_null("HudPanel/HudLines/RuntimeControlLine") == null:
+		errors.append("missing runtime control line")
+	else:
+		var runtime_text := str(hud.get_node("HudPanel/HudLines/RuntimeControlLine").text)
+		for token in ["Runner active move:move_step", "Step 2/3", "AP 4/6", "Pending movement"]:
+			if not runtime_text.contains(token):
+				errors.append("runtime control line missing runner token %s in %s" % [token, runtime_text])
 	if not hud.get_node("HudPanel/HudLines/InventoryLine").text.contains("1006"):
 		errors.append("inventory line missing picked item")
 	if hud.get_node_or_null("HudPanel/HudLines/QuestLine") == null:

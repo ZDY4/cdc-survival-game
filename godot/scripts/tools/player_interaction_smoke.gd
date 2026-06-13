@@ -2256,6 +2256,11 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("turn action runner move should target player actor 1, got %s" % JSON.stringify(runner))
 	if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)):
 		errors.append("turn action runner should be active or presenting immediately after ground click")
+	var runtime_line := _hud_runtime_control_line(game_root)
+	if not runtime_line.contains("Runner") or not runtime_line.contains("move"):
+		errors.append("HUD runtime line should expose turn action runner move state, got %s" % runtime_line)
+	if int(runner.get("step_index", 0)) > 0 and not runtime_line.contains("Step"):
+		errors.append("HUD runtime line should expose turn action runner step progress, got %s" % runtime_line)
 	var render_sequence_before_finish := _render_sequence(game_root)
 	var camera_before_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	var camera_instance_before_finish := camera_before_finish.get_instance_id() if camera_before_finish != null else 0

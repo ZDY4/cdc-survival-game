@@ -684,6 +684,9 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	var controls_hint: Dictionary = _dictionary_or_empty(control_data.get("controls_hint", {}))
 	if not controls_hint.is_empty():
 		parts.append("Help %s" % ("on" if bool(controls_hint.get("visible", false)) else "off"))
+	var runner_text := _turn_action_runner_control_text(control_data.get("turn_action_runner", {}))
+	if not runner_text.is_empty():
+		parts.append(runner_text)
 	var debug_console: Dictionary = _dictionary_or_empty(control_data.get("debug_console", {}))
 	if not debug_console.is_empty():
 		parts.append("Console %s" % ("on" if bool(debug_console.get("visible", false)) else "off"))
@@ -700,6 +703,36 @@ func _runtime_control_text(runtime_control: Variant) -> String:
 	if not performance_text.is_empty():
 		parts.append(performance_text)
 	return " | ".join(parts)
+
+
+func _turn_action_runner_control_text(value: Variant) -> String:
+	var runner: Dictionary = _dictionary_or_empty(value)
+	if runner.is_empty():
+		return ""
+	var action_kind := str(runner.get("action_kind", ""))
+	var phase := str(runner.get("phase", "idle"))
+	var state := "active" if bool(runner.get("active", false)) else ("presenting" if bool(runner.get("presentation_active", false)) else "idle")
+	var label := "Runner %s" % state
+	if not action_kind.is_empty():
+		label += " %s" % action_kind
+	if not phase.is_empty():
+		label += ":%s" % phase
+	var parts: Array[String] = [label]
+	var step_index := int(runner.get("step_index", 0))
+	var path: Array = _array_or_empty(runner.get("path", []))
+	if step_index > 0 or not path.is_empty():
+		parts.append("Step %d/%d" % [step_index, path.size()])
+	var ap_before := float(runner.get("ap_before", 0.0))
+	var ap_after := float(runner.get("ap_after", 0.0))
+	if not is_zero_approx(ap_before) or not is_zero_approx(ap_after):
+		parts.append("AP %s/%s" % [_number_text(ap_after), _number_text(ap_before)])
+	var pending_kind := str(runner.get("pending_kind", ""))
+	if not pending_kind.is_empty():
+		parts.append("Pending %s" % pending_kind)
+	var blocked_reason := str(runner.get("blocked_reason", ""))
+	if not blocked_reason.is_empty():
+		parts.append("Blocked %s" % _disabled_reason_text(blocked_reason))
+	return " ".join(parts)
 
 
 func _performance_control_text(value: Variant) -> String:
