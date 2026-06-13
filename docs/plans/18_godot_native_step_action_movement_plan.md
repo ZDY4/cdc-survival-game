@@ -461,58 +461,56 @@ pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario All
 cmd /c run_godot_validate.bat
 ```
 
-## 8. 提交顺序
+## 8. 里程碑路线
 
-### 提交 1：最终运行时入口
+### 里程碑 1：统一运行时动作入口
 
-- 建立 runner / actor view / camera follow 的最终验收口径。
-- 文档化最终 snapshot 字段。
-- smoke 直接绑定最终 action runner、ActorView、CameraRig 和稳定 snapshot。
-- 主游戏输入、HUD、调试和 smoke 统一绑定 runner facade。
+- `GameApp`、输入控制器、HUD、debug facade 和 smoke 全部通过 `request_player_*()` / `TurnActionRunner` 提交动作。
+- `runtime_control_snapshot()`、`turn_action_runner_snapshot()`、`actor_view_snapshot()`、`camera_follow_snapshot()` 成为调试和验收的稳定观察面。
+- 移动、交互、攻击、等待和制作共享同一套 action request / runner step / presentation completion 语义。
+- 任何运行时动作都不直接绕过 runner 修改 actor grid、UI 状态或世界表现。
 
-### 提交 2：TurnActionRunner 骨架
+### 里程碑 2：逐格移动规则接口定型
 
-- 新增 runner。
-- 接入 `GameApp` facade。
-- HUD / runtime snapshot 暴露 runner 状态。
-- 输入从 `execute_move_to_grid()` 迁到 `request_player_move()`。
+- `Simulation.begin_move()` 只负责校验、寻路和初始化 pending movement。
+- `Simulation.step_move()` 成为移动规则推进的唯一接口，每次最多推进一格，并同步扣除该格 AP。
+- pending movement、AP、阻挡、门、楼层和目标到达事件都以逐格结果进入 runner。
+- Movement smoke 以 begin / step / pending snapshot 验证规则层，不依赖视觉节点。
 
-### 提交 3：Simulation begin / step move
+### 里程碑 3：稳定 ActorView 与节点跟随相机
 
-- 新增逐格移动规则接口。
-- 主游戏路径迁移到逐格接口。
-- Movement smoke 覆盖每格 AP 和 pending。
-- 移动规则通过 `begin_move()` / `step_move()` 与 TurnActionRunner 协作。
+- ActorView registry 按 actor id 持有稳定 Node3D，普通移动不触发 actor node 替换。
+- `ActorViewController` 负责 move tween、朝向、攻击、受击、死亡和表现完成信号。
+- `CameraRigController` 在 action active 时跟随 actor node，在 idle 时跟随 focus grid，并保留玩家手动平移策略。
+- WorldRuntimeRoot 只在地图切换、对象增删、尸体创建、楼层结构变化等结构性事件时重绘。
 
-### 提交 4：ActorView 和相机跟随节点
+### 里程碑 4：玩家回合逐阶段化
 
-- 新增 ActorViewController。
-- 移动 step 使用 actor node tween。
-- CameraRig 支持 Node3D follow target。
-- 普通移动由稳定 actor node 表现。
+- 玩家输入触发 `player_action`，表现进入 `player_presentation`，AP 不足后进入 `player_turn_end`。
+- pending movement / pending interaction 由 `pending_resume` 阶段恢复，不在规则层同步快进未来回合。
+- HUD 以 runner phase 展示当前动作、AP 变化、path progress 和 pending 状态。
+- Save 策略以 runner 稳定边界为准：idle、完成当前 action、或明确拒绝。
 
-### 提交 5：玩家回合逐阶段化
+### 里程碑 5：NPC 与战斗进入同一动作管线
 
-- 玩家 AP 耗尽进入 runner phase。
-- pending movement resume 由 runner 触发。
-- HUD 显示 phase。
+- NPC 每次只产生一个可表现 action，并进入 `npc_action` / `npc_presentation` / `npc_turn_end`。
+- NPC 移动、追击、攻击和死亡表现复用 ActorView / CombatView 机制。
+- 玩家攻击拆为 validate、face、consume、presentation、apply result、refresh 等 phase。
+- 击杀、尸体容器、掉落和任务击杀进度只在 action phase 允许的结构性刷新点落地。
 
-### 提交 6：NPC action 逐阶段化
+### 里程碑 6：交互链路动作化
 
-- NPC move / attack 进入 runner。
-- AI smoke 验证 NPC action 不抢占玩家 action。
+- 点击 NPC、容器、门、物品或场景出口时，runner 根据距离与规则结果组织 approach + interact action chain。
+- 开门、拾取、开容器、对话、地图切换分别作为明确 phase 执行。
+- 右键菜单、主交互和快捷交互只负责提交目标与 option id，不直接修改规则状态。
+- PlayerInteraction smoke 覆盖目标拾取、自动接近、朝向、执行和反馈顺序。
 
-### 提交 7：交互和攻击迁入 runner
+### 里程碑 7：等待、制作和自动推进统一
 
-- approach + interact 进入 action chain。
-- attack action 进入 action chain。
-- Combat / PlayerInteraction smoke 覆盖表现顺序。
-
-### 提交 8：wait、crafting、auto tick 统一
-
-- wait 和 crafting queue 进入 runner。
-- auto tick 驱动 runner step。
-- Save smoke 明确 action active 策略。
+- wait action 进入 runner，由 runner 驱动回合推进和 pending 恢复。
+- crafting queue 以 action phase 推进制作进度、材料消耗、产出、XP 和 UI 刷新。
+- auto tick 不直接提交未来快进，而是驱动 runner step 到稳定边界。
+- Crafting / Progression / Save smoke 共享 runner facade 验证等待、制作和存档行为。
 
 ## 9. 风险和约束
 
