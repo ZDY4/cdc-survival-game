@@ -2571,6 +2571,7 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 				var player_xz := Vector2(player_node.global_position.x, player_node.global_position.z)
 				if focus_xz.distance_to(player_xz) > 1.25:
 					errors.append("movement camera should focus player visual node, focus=%s player=%s" % [str(focus), str(player_node.global_position)])
+		_expect_action_active_input_policy(errors, game_root, camera_before_finish, target)
 		if player_node.position.distance_to(visual_final) <= 0.05:
 			errors.append("player visual node should not snap to final grid before movement presenter finishes")
 		if player_node.position.distance_to(visual_start) > player_node.position.distance_to(visual_final):
@@ -2603,6 +2604,54 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
 		player.ap = 12.0
+
+
+func _expect_action_active_input_policy(errors: Array[String], game_root: Node, camera: Camera3D, current_target: Dictionary) -> void:
+	if camera == null:
+		errors.append("action-active input policy smoke requires runtime camera")
+		return
+	var blocker: Dictionary = _dictionary_or_empty(game_root.gameplay_input_blocker_snapshot() if game_root.has_method("gameplay_input_blocker_snapshot") else {})
+	if str(blocker.get("name", "")) != "turn_action_runner":
+		errors.append("runner movement should expose turn_action_runner blocker, got %s" % JSON.stringify(blocker))
+	if str(blocker.get("kind", "")) != "turn_action_runner":
+		errors.append("runner movement blocker kind should be turn_action_runner, got %s" % JSON.stringify(blocker))
+	if str(blocker.get("action_kind", "")) != "move":
+		errors.append("runner movement blocker action kind should be move, got %s" % JSON.stringify(blocker))
+	if not bool(blocker.get("camera_drag_allowed", false)):
+		errors.append("runner movement blocker should allow camera drag without allowing gameplay commands")
+	var before_runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	var rejected_target := _far_open_grid_from(current_target, game_root.world_result.get("map", {}))
+	var rejected_move: Dictionary = _dictionary_or_empty(game_root.request_player_move(rejected_target) if game_root.has_method("request_player_move") else {})
+	if bool(rejected_move.get("success", false)):
+		errors.append("runner movement should reject a second move command while active")
+	if str(rejected_move.get("reason", "")) != "world_action_presenter_blocks_player_commands":
+		errors.append("second move during runner should be rejected by action blocker, got %s" % JSON.stringify(rejected_move))
+	var rejected_blocker: Dictionary = _dictionary_or_empty(rejected_move.get("blocker", {}))
+	if str(rejected_blocker.get("name", "")) != "turn_action_runner":
+		errors.append("second move rejection should include turn_action_runner blocker, got %s" % JSON.stringify(rejected_blocker))
+	var before_position := camera.global_position
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_MIDDLE
+	press.pressed = true
+	press.position = Vector2(220, 180)
+	game_root._unhandled_input(press)
+	var drag := InputEventMouseMotion.new()
+	drag.position = Vector2(280, 220)
+	drag.relative = Vector2(60, 40)
+	game_root._unhandled_input(drag)
+	var after_drag := camera.global_position
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_MIDDLE
+	release.pressed = false
+	release.position = Vector2(280, 220)
+	game_root._unhandled_input(release)
+	if after_drag.distance_to(before_position) < 0.1:
+		errors.append("middle mouse drag should move camera while turn action runner blocks gameplay input")
+	var after_runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	if str(after_runner.get("action_kind", "")) != str(before_runner.get("action_kind", "")) or int(after_runner.get("actor_id", 0)) != int(before_runner.get("actor_id", 0)):
+		errors.append("camera drag during action should not replace runner action, before=%s after=%s" % [JSON.stringify(before_runner), JSON.stringify(after_runner)])
+	if game_root.runtime_input_controller != null and game_root.runtime_input_controller.has_method("focus_current_actor"):
+		game_root.runtime_input_controller.focus_current_actor()
 
 
 func _expect_world_action_queue_presenting(errors: Array[String], game_root: Node, expected_presenter_kind: String, expected_command_kind: String) -> void:

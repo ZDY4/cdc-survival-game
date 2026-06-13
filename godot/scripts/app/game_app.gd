@@ -381,7 +381,7 @@ func gameplay_input_blocker_name() -> String:
 	var hud_blocker := _hud_input_blocker_snapshot()
 	var context_menu: Dictionary = context_menu_snapshot()
 	var panel_blocker_name: String = hud_root.gameplay_input_blocker_name() if hud_root != null else ""
-	return str(ui_blocker_state_controller.call("blocker_name", hud_blocker, _panel_modal_blocker_snapshot(), context_menu, _world_action_presenter_blocks_input(), panel_blocker_name))
+	return str(ui_blocker_state_controller.call("blocker_name", hud_blocker, _panel_modal_blocker_snapshot(), context_menu, _world_action_blocker_snapshot(), panel_blocker_name))
 
 
 func gameplay_input_blocker_snapshot() -> Dictionary:
@@ -390,7 +390,7 @@ func gameplay_input_blocker_snapshot() -> Dictionary:
 	var world_blocks := _world_action_presenter_blocks_input()
 	var panel_blocker: Dictionary = _panel_input_blocker_snapshot()
 	var fallback_name := gameplay_input_blocker_name()
-	return _dictionary_or_empty(ui_blocker_state_controller.call("blocker_snapshot", hud_blocker, _panel_modal_blocker_snapshot(), context_menu, world_action_presenter_snapshot(), world_blocks, panel_blocker, fallback_name))
+	return _dictionary_or_empty(ui_blocker_state_controller.call("blocker_snapshot", hud_blocker, _panel_modal_blocker_snapshot(), context_menu, world_action_presenter_snapshot(), _world_action_blocker_snapshot(), world_blocks, panel_blocker, fallback_name))
 
 
 func _hud_input_blocker_snapshot() -> Dictionary:
@@ -443,6 +443,39 @@ func _world_action_presenter_blocks_input() -> bool:
 	return presenter_blocks or bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))
 
 
+func _world_action_blocker_snapshot() -> Dictionary:
+	var presenter: Dictionary = world_action_presenter_snapshot()
+	if world_action_flow_controller != null and bool(world_action_flow_controller.call("blocks_input")):
+		return {
+			"blocked": true,
+			"name": "world_action_presenter",
+			"kind": "world_action_presenter",
+			"source": "world_action_presenter",
+			"action_kind": str(presenter.get("kind", "")),
+			"phase": str(presenter.get("current_phase", presenter.get("state", ""))),
+			"active_count": int(presenter.get("active_count", 0)),
+			"sequence": int(presenter.get("sequence", 0)),
+			"mouse_blocks_world": true,
+			"camera_drag_allowed": true,
+		}
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
+		return {
+			"blocked": true,
+			"name": "turn_action_runner",
+			"kind": "turn_action_runner",
+			"source": "turn_action_runner",
+			"action_kind": str(runner.get("action_kind", "")),
+			"phase": str(runner.get("phase", "")),
+			"turn_phase": str(runner.get("turn_phase", "")),
+			"actor_id": int(runner.get("actor_id", 0)),
+			"presentation_active": bool(runner.get("presentation_active", false)),
+			"mouse_blocks_world": true,
+			"camera_drag_allowed": true,
+		}
+	return {}
+
+
 func modal_stack_snapshot() -> Dictionary:
 	if hud_root != null:
 		return _dictionary_or_empty(hud_root.modal_stack_snapshot())
@@ -468,6 +501,7 @@ func _close_context_snapshot() -> Dictionary:
 		"panel_modal": _panel_modal_blocker_snapshot(),
 		"context_menu": context_menu_snapshot(),
 		"world_action_blocks": _world_action_presenter_blocks_input(),
+		"world_action_blocker": _world_action_blocker_snapshot(),
 		"skill_targeting_active": not active_skill_targeting.is_empty(),
 		"selection_active": runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()),
 		"has_pending": not _dictionary_or_empty(pending_state.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_crafting", {})).is_empty(),
@@ -1053,7 +1087,9 @@ func finish_world_action_presentations() -> Dictionary:
 		if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
 			result = _dictionary_or_empty(turn_action_runner.call("finish_active", "finish_world_action_presentations"))
 	if world_action_flow_controller != null and world_action_flow_controller.has_method("finish_active_presentations"):
-		result = _dictionary_or_empty(world_action_flow_controller.call("finish_active_presentations"))
+		var presenter_result: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("finish_active_presentations"))
+		if result.is_empty() or bool(presenter_result.get("active", false)) or int(presenter_result.get("finished_count", 0)) > 0:
+			result = presenter_result
 	elif result.is_empty():
 		return world_action_presenter_snapshot()
 	var applied_refresh := _apply_pending_world_action_final_refresh("presenter_finished")

@@ -11,19 +11,19 @@ func panel_modal_blocker_snapshot(panel_blocker: Dictionary) -> Dictionary:
 	return {}
 
 
-func blocker_name(hud_blocker: Dictionary, panel_modal: Dictionary, context_menu: Dictionary, world_action_blocks: bool, panel_blocker_name: String) -> String:
+func blocker_name(hud_blocker: Dictionary, panel_modal: Dictionary, context_menu: Dictionary, world_action_blocker: Dictionary, panel_blocker_name: String) -> String:
 	if bool(hud_blocker.get("blocked", false)):
 		return str(hud_blocker.get("name", ""))
 	if not panel_modal.is_empty():
 		return str(panel_modal.get("name", ""))
 	if bool(context_menu.get("active", false)):
 		return str(dictionary_or_empty(context_menu.get("top", {})).get("id", "context_menu"))
-	if world_action_blocks:
-		return "world_action_presenter"
+	if bool(world_action_blocker.get("blocked", false)):
+		return str(world_action_blocker.get("name", "world_action_presenter"))
 	return panel_blocker_name
 
 
-func blocker_snapshot(hud_blocker: Dictionary, panel_modal: Dictionary, context_menu: Dictionary, world_action_presenter: Dictionary, world_action_blocks: bool, panel_blocker: Dictionary, fallback_name: String) -> Dictionary:
+func blocker_snapshot(hud_blocker: Dictionary, panel_modal: Dictionary, context_menu: Dictionary, world_action_presenter: Dictionary, world_action_blocker: Dictionary, world_action_blocks: bool, panel_blocker: Dictionary, fallback_name: String) -> Dictionary:
 	if bool(hud_blocker.get("blocked", false)):
 		return hud_blocker.duplicate(true)
 	if not panel_modal.is_empty():
@@ -39,6 +39,12 @@ func blocker_snapshot(hud_blocker: Dictionary, panel_modal: Dictionary, context_
 			"mouse_blocks_world": bool(top_menu.get("mouse_blocks_world", true)),
 			"option_count": int(top_menu.get("option_count", 0)),
 		}
+	if bool(world_action_blocker.get("blocked", false)):
+		var snapshot := world_action_blocker.duplicate(true)
+		snapshot["modal_id"] = str(snapshot.get("modal_id", ""))
+		snapshot["panel_id"] = str(snapshot.get("panel_id", "world"))
+		snapshot["mouse_blocks_world"] = bool(snapshot.get("mouse_blocks_world", true))
+		return snapshot
 	if world_action_blocks:
 		return {
 			"blocked": true,

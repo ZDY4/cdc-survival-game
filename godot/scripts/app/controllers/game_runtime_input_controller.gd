@@ -89,7 +89,7 @@ func input(event: InputEvent) -> void:
 			if key_viewport != null:
 				key_viewport.set_input_as_handled()
 	elif event is InputEventMouseMotion:
-		if _gameplay_input_blocked_by_ui() or _mouse_over_blocking_ui():
+		if _mouse_motion_blocked_by_ui():
 			return
 		handle_world_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
@@ -98,6 +98,12 @@ func input(event: InputEvent) -> void:
 			var menu_viewport := game_root.get_viewport()
 			if menu_viewport != null:
 				menu_viewport.set_input_as_handled()
+			return
+		if _blocked_camera_drag_button_allowed(mouse_button):
+			if handle_world_mouse_button(mouse_button):
+				var blocked_drag_viewport := game_root.get_viewport()
+				if blocked_drag_viewport != null:
+					blocked_drag_viewport.set_input_as_handled()
 			return
 		if _gameplay_input_blocked_by_ui() or _mouse_over_blocking_ui():
 			return
@@ -113,12 +119,15 @@ func unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		_handle_camera_key(event as InputEventKey)
 	elif event is InputEventMouseMotion:
-		if _gameplay_input_blocked_by_ui():
+		if _mouse_motion_blocked_by_ui():
 			return
 		handle_world_mouse_motion(event as InputEventMouseMotion)
 	elif event is InputEventMouseButton:
 		var mouse_button := event as InputEventMouseButton
 		if close_context_menu_on_outside_click(mouse_button):
+			return
+		if _blocked_camera_drag_button_allowed(mouse_button):
+			handle_world_mouse_button(mouse_button)
 			return
 		if _gameplay_input_blocked_by_ui():
 			return
@@ -127,6 +136,14 @@ func unhandled_input(event: InputEvent) -> void:
 
 func mouse_over_blocking_ui() -> bool:
 	return _mouse_over_blocking_ui()
+
+
+func camera_drag_active() -> bool:
+	return camera_input_controller.is_dragging()
+
+
+func camera_drag_allowed_while_gameplay_blocked() -> bool:
+	return _camera_drag_allowed_by_action_blocker()
 
 
 func close_context_menu_on_outside_click(mouse_event: InputEventMouseButton) -> bool:
@@ -988,6 +1005,33 @@ func _mouse_over_blocking_ui() -> bool:
 
 func _gameplay_input_blocked_by_ui() -> bool:
 	return game_root.has_method("gameplay_input_blocked_by_ui") and bool(game_root.gameplay_input_blocked_by_ui())
+
+
+func _mouse_motion_blocked_by_ui() -> bool:
+	if not _gameplay_input_blocked_by_ui():
+		return _mouse_over_blocking_ui()
+	if camera_input_controller.is_dragging() and _camera_drag_allowed_by_action_blocker():
+		return false
+	return true
+
+
+func _blocked_camera_drag_button_allowed(mouse_event: InputEventMouseButton) -> bool:
+	if mouse_event.button_index != MOUSE_BUTTON_MIDDLE:
+		return false
+	if not _gameplay_input_blocked_by_ui():
+		return false
+	return _camera_drag_allowed_by_action_blocker()
+
+
+func _camera_drag_allowed_by_action_blocker() -> bool:
+	if game_root == null or not game_root.has_method("gameplay_input_blocker_snapshot"):
+		return false
+	var blocker: Dictionary = _dictionary_or_empty(game_root.gameplay_input_blocker_snapshot())
+	if not bool(blocker.get("blocked", false)):
+		return false
+	if not bool(blocker.get("camera_drag_allowed", false)):
+		return false
+	return str(blocker.get("kind", "")) in ["turn_action_runner", "world_action_presenter"]
 
 
 func _interaction_menu_open() -> bool:

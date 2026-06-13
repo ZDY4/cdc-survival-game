@@ -234,7 +234,7 @@ func _handle_camera_shortcut_key(game_root: Node, runtime_input_controller: RefC
 func _handle_mouse_motion(game_root: Node, runtime_input_controller: RefCounted, event: InputEventMouseMotion, respect_mouse_blocker: bool) -> bool:
 	if runtime_input_controller == null:
 		return false
-	if _gameplay_input_blocked(game_root):
+	if _gameplay_input_blocked(game_root) and not _blocked_camera_drag_motion_allowed(runtime_input_controller):
 		return true
 	if respect_mouse_blocker and runtime_input_controller.has_method("mouse_over_blocking_ui") and bool(runtime_input_controller.call("mouse_over_blocking_ui")):
 		return true
@@ -250,7 +250,7 @@ func _handle_mouse_button(game_root: Node, runtime_input_controller: RefCounted,
 	if runtime_input_controller.has_method("close_context_menu_on_outside_click") and bool(runtime_input_controller.call("close_context_menu_on_outside_click", event)):
 		_mark_input_handled(game_root)
 		return true
-	if _gameplay_input_blocked(game_root):
+	if _gameplay_input_blocked(game_root) and not _blocked_camera_drag_button_allowed(runtime_input_controller, event):
 		return true
 	if respect_mouse_blocker and runtime_input_controller.has_method("mouse_over_blocking_ui") and bool(runtime_input_controller.call("mouse_over_blocking_ui")):
 		return true
@@ -326,6 +326,22 @@ func _observe_mode_active(game_root: Node) -> bool:
 
 func _gameplay_input_blocked(game_root: Node) -> bool:
 	return game_root.has_method("gameplay_input_blocked_by_ui") and bool(game_root.gameplay_input_blocked_by_ui())
+
+
+func _blocked_camera_drag_button_allowed(runtime_input_controller: RefCounted, event: InputEventMouseButton) -> bool:
+	if event.button_index != MOUSE_BUTTON_MIDDLE:
+		return false
+	if not runtime_input_controller.has_method("camera_drag_allowed_while_gameplay_blocked"):
+		return false
+	return bool(runtime_input_controller.call("camera_drag_allowed_while_gameplay_blocked"))
+
+
+func _blocked_camera_drag_motion_allowed(runtime_input_controller: RefCounted) -> bool:
+	if not runtime_input_controller.has_method("camera_drag_active") or not bool(runtime_input_controller.call("camera_drag_active")):
+		return false
+	if not runtime_input_controller.has_method("camera_drag_allowed_while_gameplay_blocked"):
+		return false
+	return bool(runtime_input_controller.call("camera_drag_allowed_while_gameplay_blocked"))
 
 
 func _debug_console_open(game_root: Node) -> bool:

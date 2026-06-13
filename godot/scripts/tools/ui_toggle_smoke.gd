@@ -107,6 +107,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await _wait_until_runtime_events_advance(game_root, before_auto_events, 90)
 	if game_root.simulation.snapshot().get("events", []).size() <= before_auto_events:
 		errors.append("enabled auto tick should advance runtime events")
+	await _wait_for_turn_action_runner_idle(game_root)
 	_press_key(game_root, KEY_I)
 	_expect_stage_open(errors, game_root, "inventory", "inventory should open before auto tick blocker check")
 	_assert_menu_state(errors, game_root, "inventory", false, true, "inventory menu state", "opened", "inventory")
@@ -803,10 +804,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var far_target: Dictionary = _far_open_grid_from(player_grid, _dictionary_or_empty(game_root.world_result.get("map", {})))
 	var move_result: Dictionary = game_root.execute_move_to_grid(far_target)
 	if not bool(move_result.get("success", false)):
-		errors.append("Esc action presenter smoke should start pending movement: %s" % move_result.get("reason", "unknown"))
-	var presenter_before_esc: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
-	if not bool(presenter_before_esc.get("active", false)):
-		errors.append("Esc action presenter smoke should have active movement presenter before Esc")
+		errors.append("Esc action runner smoke should start pending movement: %s" % move_result.get("reason", "unknown"))
+	var runner_before_esc: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	var blocker_before_esc: Dictionary = _dictionary_or_empty(game_root.gameplay_input_blocker_snapshot() if game_root.has_method("gameplay_input_blocker_snapshot") else {})
+	if not bool(runner_before_esc.get("active", false)) and not bool(runner_before_esc.get("presentation_active", false)):
+		errors.append("Esc action runner smoke should have active turn runner before Esc: %s" % JSON.stringify(runner_before_esc))
+	if str(blocker_before_esc.get("name", "")) != "turn_action_runner":
+		errors.append("Esc action runner smoke should expose turn_action_runner blocker before Esc: %s" % JSON.stringify(blocker_before_esc))
 	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
 		var current_grid: Dictionary = _dictionary_or_empty(_player(game_root).get("grid_position", {}))
 		game_root.simulation.pending_movement = {
@@ -815,11 +819,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 			"path": [current_grid.duplicate(true), far_target.duplicate(true)],
 		}
 	_press_key(game_root, KEY_ESCAPE)
-	var presenter_after_esc: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
-	if bool(presenter_after_esc.get("active", false)):
-		errors.append("Esc should finish active world action presenter")
+	var runner_after_esc: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	if bool(runner_after_esc.get("active", false)) or bool(runner_after_esc.get("presentation_active", false)):
+		errors.append("Esc should finish active turn action runner: %s" % JSON.stringify(runner_after_esc))
 	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
-		errors.append("Esc should preserve pending movement when it only finishes action presenter")
+		errors.append("Esc should preserve pending movement when it only finishes active runner")
 	var before_pending_cancelled := _event_count(game_root, "pending_cancelled")
 	_press_key(game_root, KEY_ESCAPE)
 	if not game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
@@ -3110,5 +3114,16 @@ func _wait_process_frames(count: int) -> void:
 func _wait_until_runtime_events_advance(game_root: Node, before_count: int, max_frames: int) -> void:
 	for _i in range(max_frames):
 		if game_root.simulation.snapshot().get("events", []).size() > before_count:
+			return
+		await process_frame
+
+
+func _wait_for_turn_action_runner_idle(game_root: Node, max_frames: int = 720) -> void:
+	if game_root.has_method("finish_active_action"):
+		game_root.finish_active_action("ui_toggle_smoke_stable_boundary")
+		await process_frame
+	for _i in range(max_frames):
+		var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+		if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)):
 			return
 		await process_frame
