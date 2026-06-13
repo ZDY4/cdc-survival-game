@@ -153,6 +153,7 @@ var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
 var runtime_session_context_controller: RefCounted = RuntimeSessionContextController.new()
 var turn_action_runner: RefCounted = TurnActionRunner.new()
 var actor_view_controller: RefCounted = ActorViewController.new()
+var latest_structural_refresh_boundary: Dictionary = {}
 
 func _ready() -> void:
 	_connect_world_action_flow_signals()
@@ -917,6 +918,7 @@ func runtime_control_snapshot() -> Dictionary:
 	snapshot["actor_view"] = actor_view_snapshot()
 	snapshot["camera_follow"] = camera_follow_snapshot()
 	snapshot["world_render_policy"] = world_render_policy_snapshot()
+	snapshot["structural_refresh_boundary"] = structural_refresh_boundary_snapshot()
 	snapshot["ai_debug"] = ai_debug_snapshot()
 	snapshot["debug_overlay"] = debug_overlay_snapshot()
 	snapshot["runtime_refresh"] = runtime_refresh_report_snapshot()
@@ -1094,6 +1096,10 @@ func runtime_refresh_report_snapshot() -> Dictionary:
 	if runtime_refresh_controller != null and runtime_refresh_controller.has_method("refresh_report_snapshot"):
 		return _dictionary_or_empty(runtime_refresh_controller.call("refresh_report_snapshot"))
 	return {}
+
+
+func structural_refresh_boundary_snapshot() -> Dictionary:
+	return latest_structural_refresh_boundary.duplicate(true)
 
 
 func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
@@ -2291,7 +2297,11 @@ func _refresh_world_runtime_bindings() -> void:
 
 
 func refresh_world_visuals(render_world: bool = true) -> Dictionary:
-	return _apply_world_root_snapshot(render_world)
+	var boundary: Dictionary = _prepare_structural_refresh_boundary("refresh_world_visuals", render_world)
+	var counts: Dictionary = _apply_world_root_snapshot(render_world)
+	if render_world:
+		_record_structural_refresh_boundary(boundary, "refresh_world_visuals", counts)
+	return counts
 
 
 func rebuild_runtime_world(selected_prompt: Dictionary = {}, command_result: Dictionary = {}) -> void:
@@ -2300,7 +2310,10 @@ func rebuild_runtime_world(selected_prompt: Dictionary = {}, command_result: Dic
 
 func _apply_runtime_scene_refresh(render_world: bool = true, selected_prompt: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
 	var plan: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_scene_apply_plan", render_world, selected_prompt, options))
+	var boundary: Dictionary = _prepare_structural_refresh_boundary(str(options.get("source", "runtime_scene_refresh")), bool(plan.get("render_world", true)))
 	var counts: Dictionary = _apply_world_root_snapshot(bool(plan.get("render_world", true)))
+	if bool(plan.get("render_world", true)):
+		_record_structural_refresh_boundary(boundary, str(options.get("source", "runtime_scene_refresh")), counts)
 	if bool(plan.get("present_world_action", false)):
 		_present_world_action(_dictionary_or_empty(plan.get("command_result", {})))
 	if bool(plan.get("refresh_runtime_bindings", true)):
@@ -2312,6 +2325,38 @@ func _apply_runtime_scene_refresh(render_world: bool = true, selected_prompt: Di
 	elif refresh_kind == "hud":
 		refresh_hud(prompt)
 	return counts
+
+
+func _prepare_structural_refresh_boundary(source: String, render_world: bool = true) -> Dictionary:
+	var before_runner: Dictionary = turn_action_runner_snapshot()
+	var before_policy: Dictionary = world_render_policy_snapshot()
+	var before_phase := str(before_runner.get("phase", ""))
+	var runner_busy := bool(before_runner.get("active", false)) or bool(before_runner.get("presentation_active", false))
+	var requires_boundary := render_world and runner_busy and before_phase != "finished"
+	var boundary_result: Dictionary = {}
+	if requires_boundary:
+		boundary_result = settle_turn_action_runner_boundary("structural_refresh:%s" % source)
+		refresh_hud(current_interaction_prompt())
+	return {
+		"source": source,
+		"render_world": render_world,
+		"required": requires_boundary,
+		"settled": not requires_boundary or bool(boundary_result.get("settled", false)),
+		"boundary_result": boundary_result.duplicate(true),
+		"before_runner": before_runner.duplicate(true),
+		"after_runner": turn_action_runner_snapshot(),
+		"before_policy": before_policy.duplicate(true),
+		"after_policy": world_render_policy_snapshot(),
+	}
+
+
+func _record_structural_refresh_boundary(boundary: Dictionary, source: String, counts: Dictionary) -> void:
+	var record: Dictionary = boundary.duplicate(true)
+	record["source"] = source
+	record["rendered"] = true
+	record["render_sequence"] = int(runtime_performance_snapshot().get("render_sequence", 0))
+	record["counts"] = counts.duplicate(true)
+	latest_structural_refresh_boundary = record
 
 
 func _apply_world_root_snapshot(render_world: bool = true) -> Dictionary:

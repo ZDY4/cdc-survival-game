@@ -716,7 +716,47 @@ func _validate_runner_stable_save_boundary() -> Array[String]:
 				var expected := Vector3(float(restored_player_grid.get("x", 0.0)), player_node.position.y, float(restored_player_grid.get("z", 0.0)))
 				if player_node.position.distance_to(expected) > 0.15:
 					errors.append("runtime save boundary should align restored actor node with grid, got %s expected %s" % [str(player_node.position), str(expected)])
+		errors.append_array(await _validate_structural_refresh_boundary_gate(game_root))
 	game_root.queue_free()
+	return errors
+
+
+func _validate_structural_refresh_boundary_gate(game_root: Node) -> Array[String]:
+	var errors: Array[String] = []
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		return ["structural refresh boundary smoke missing player"]
+	player.ap = maxf(player.ap, 4.0)
+	player.turn_open = true
+	var start_grid: Dictionary = player.grid_position.to_dictionary()
+	var target_grid: Dictionary = _first_open_runtime_neighbor(start_grid, _dictionary_or_empty(game_root.world_result.get("map", {})))
+	var move_result: Dictionary = game_root.request_player_move(target_grid)
+	if not bool(move_result.get("success", false)):
+		return ["structural refresh boundary move should start through runner: %s" % JSON.stringify(move_result)]
+	await process_frame
+	var active_policy: Dictionary = _dictionary_or_empty(game_root.world_render_policy_snapshot())
+	if not bool(active_policy.get("runner_active", false)) or bool(active_policy.get("structural_render_allowed", true)):
+		errors.append("structural refresh boundary should start with active runner policy: %s" % JSON.stringify(active_policy))
+	var render_sequence_before := _render_sequence(game_root)
+	var counts: Dictionary = game_root.refresh_world_visuals(true)
+	var boundary: Dictionary = _dictionary_or_empty(game_root.structural_refresh_boundary_snapshot()) if game_root.has_method("structural_refresh_boundary_snapshot") else {}
+	if boundary.is_empty():
+		errors.append("structural refresh should expose boundary snapshot")
+	if not bool(boundary.get("required", false)):
+		errors.append("structural refresh should require runner boundary while active: %s" % JSON.stringify(boundary))
+	if not bool(boundary.get("settled", false)):
+		errors.append("structural refresh should settle runner before render: %s" % JSON.stringify(boundary))
+	var before_runner: Dictionary = _dictionary_or_empty(boundary.get("before_runner", {}))
+	var after_runner: Dictionary = _dictionary_or_empty(boundary.get("after_runner", {}))
+	if not bool(before_runner.get("active", false)) and not bool(before_runner.get("presentation_active", false)):
+		errors.append("structural refresh boundary should capture active runner before render: %s" % JSON.stringify(boundary))
+	if bool(after_runner.get("active", false)) or bool(after_runner.get("presentation_active", false)):
+		errors.append("structural refresh boundary should capture stable runner after settle: %s" % JSON.stringify(boundary))
+	if _render_sequence(game_root) <= render_sequence_before:
+		errors.append("structural refresh should render only after stable boundary, counts=%s boundary=%s" % [JSON.stringify(counts), JSON.stringify(boundary)])
+	var post_policy: Dictionary = _dictionary_or_empty(game_root.world_render_policy_snapshot())
+	if bool(post_policy.get("runner_active", true)) or not bool(post_policy.get("structural_render_allowed", false)):
+		errors.append("structural refresh should leave runtime in idle structural-refresh-allowed state: %s" % JSON.stringify(post_policy))
 	return errors
 
 
