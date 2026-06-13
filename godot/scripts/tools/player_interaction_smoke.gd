@@ -1737,6 +1737,14 @@ func _wait_for_world_action_presenter_idle(game_root: Node, max_frames: int = 72
 		await process_frame
 
 
+func _wait_for_turn_action_runner_idle(game_root: Node, max_frames: int = 720) -> void:
+	for _index in range(max_frames):
+		var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+		if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)):
+			return
+		await process_frame
+
+
 func _expect_world_action_command_rejected(errors: Array[String], result: Dictionary, expected_action: String) -> void:
 	if bool(result.get("success", false)):
 		errors.append("world action presenter should reject %s command while active" % expected_action)
@@ -2219,7 +2227,7 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	var before: Dictionary = _player_grid(game_root)
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player != null:
-		player.ap = 6.0
+		player.ap = 12.0
 	var target := {
 		"x": int(before.get("x", 0)) + 8,
 		"y": int(before.get("y", 0)),
@@ -2239,51 +2247,48 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	var after: Dictionary = _player_grid(game_root)
 	if int(after.get("x", 0)) == int(before.get("x", 0)) and int(after.get("z", 0)) == int(before.get("z", 0)):
 		errors.append("left mouse click on far projected ground should start moving player from %s toward %s" % [JSON.stringify(before), JSON.stringify(target)])
-	var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
-	if str(presenter.get("kind", "")) != "movement":
-		errors.append("left mouse click movement should enqueue world action presenter movement, got %s" % JSON.stringify(presenter))
-	elif int(presenter.get("step_count", 0)) <= 0:
-		errors.append("world action presenter movement should expose positive step_count")
-	_expect_world_action_input_blocker(errors, game_root, "movement")
-	_expect_world_action_queue_presenting(errors, game_root, "movement", "move")
+	if abs(int(after.get("x", 0)) - int(before.get("x", 0))) + abs(int(after.get("z", 0)) - int(before.get("z", 0))) > 1:
+		errors.append("turn action runner should advance rules by one grid step on first frame, got before=%s after=%s" % [JSON.stringify(before), JSON.stringify(after)])
+	var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	if str(runner.get("action_kind", "")) != "move":
+		errors.append("left mouse click movement should start turn action runner move, got %s" % JSON.stringify(runner))
+	if int(runner.get("actor_id", 0)) != 1:
+		errors.append("turn action runner move should target player actor 1, got %s" % JSON.stringify(runner))
+	if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)):
+		errors.append("turn action runner should be active or presenting immediately after ground click")
 	var render_sequence_before_finish := _render_sequence(game_root)
 	var camera_before_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	var camera_instance_before_finish := camera_before_finish.get_instance_id() if camera_before_finish != null else 0
 	var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
 	var visual_start := Vector3(float(before.get("x", 0)), 0.58, float(before.get("z", 0)))
-	var visual_final := Vector3(float(after.get("x", 0)), 0.58, float(after.get("z", 0)))
+	var visual_final := Vector3(float(target.get("x", 0)), 0.58, float(target.get("z", 0)))
 	if player_node == null:
-		errors.append("world action presenter movement should keep player node visible")
+		errors.append("turn action runner movement should keep player node visible")
 	else:
-		if not bool(player_node.get_meta("action_presenter_active", false)):
-			errors.append("player node should expose active movement presenter metadata after click")
+		if not bool(player_node.get_meta("action_runner_active", false)):
+			errors.append("player node should expose active action runner metadata after click")
 		visual_start.y = player_node.position.y
 		visual_final.y = player_node.position.y
 		if player_node.position.distance_to(visual_final) <= 0.05:
 			errors.append("player visual node should not snap to final grid before movement presenter finishes")
 		if player_node.position.distance_to(visual_start) > player_node.position.distance_to(visual_final):
 			errors.append("player visual node should remain closer to movement start than final grid on first frame")
-	await _wait_for_world_action_presenter_idle(game_root)
-	var completed_queue: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
-	if str(completed_queue.get("state", "")) != "completed":
-		errors.append("world action queue should complete after presenter fast-forward")
-	if bool(completed_queue.get("active", true)):
-		errors.append("world action queue should be inactive after presenter fast-forward")
-	if str(completed_queue.get("finish_reason", "")) != "fast_forwarded":
-		errors.append("world action queue should record fast-forward finish reason")
-	if bool(_dictionary_or_empty(completed_queue.get("applied_final_refresh", {})).get("render_world", true)):
-		errors.append("move final refresh should skip full world render")
+	await _wait_for_turn_action_runner_idle(game_root)
+	var completed_runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	if bool(completed_runner.get("active", true)):
+		errors.append("turn action runner should be inactive after move completion")
 	if _render_sequence(game_root) != render_sequence_before_finish:
-		errors.append("move final refresh should not increment world render sequence")
+		errors.append("turn action runner move should not increment world render sequence")
 	var camera_after_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	var camera_instance_after_finish := camera_after_finish.get_instance_id() if camera_after_finish != null else 0
 	if camera_instance_before_finish != 0 and camera_instance_after_finish != camera_instance_before_finish:
-		errors.append("move final refresh should not replace WorldCamera")
+		errors.append("turn action runner move should not replace WorldCamera")
+	player_node = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node != null and player_node.position.distance_to(visual_final) > 0.08:
 		errors.append("player visual node should finish at final movement grid without full rerender")
 	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
-		player.ap = 6.0
+		player.ap = 12.0
 
 
 func _expect_world_action_queue_presenting(errors: Array[String], game_root: Node, expected_presenter_kind: String, expected_command_kind: String) -> void:

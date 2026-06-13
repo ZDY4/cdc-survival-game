@@ -276,6 +276,9 @@ func _spawn_actor_markers(root: Node3D, actors: Array) -> int:
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
 		var node: Node3D = Node3D.new()
 		node.name = "Actor_%s_%d" % [actor_data.get("definition_id", ""), int(actor_data.get("actor_id", 0))]
+		node.set_meta("actor_id", int(actor_data.get("actor_id", 0)))
+		node.set_meta("actor_definition_id", str(actor_data.get("definition_id", "")))
+		node.set_meta("actor_kind", str(actor_data.get("kind", "")))
 		node.set_meta("interaction_target", {
 			"target_type": "actor",
 			"actor_id": int(actor_data.get("actor_id", 0)),

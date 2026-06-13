@@ -34,6 +34,8 @@ const WaitActionController = preload("res://scripts/app/controllers/wait_action_
 const InteractionActionController = preload("res://scripts/app/controllers/interaction_action_controller.gd")
 const PlayerActionRefreshController = preload("res://scripts/app/controllers/player_action_refresh_controller.gd")
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
+const TurnActionRunner = preload("res://scripts/app/controllers/turn_action_runner.gd")
+const ActorViewController = preload("res://scripts/world/actor_view_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const HUD_ROOT_SCENE = preload("res://scenes/ui/hud_root.tscn")
 const CRAFTING_QUEUE_ADVANCE_LIMIT := 16
@@ -148,6 +150,8 @@ var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
 var runtime_control_state_controller: RefCounted = RuntimeControlStateController.new()
 var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
 var runtime_session_context_controller: RefCounted = RuntimeSessionContextController.new()
+var turn_action_runner: RefCounted = TurnActionRunner.new()
+var actor_view_controller: RefCounted = ActorViewController.new()
 
 func _ready() -> void:
 	_connect_world_action_flow_signals()
@@ -192,6 +196,8 @@ func _build_runtime_from_startup_request(request: Dictionary) -> Dictionary:
 func _process(delta: float) -> void:
 	_update_runtime_performance(delta)
 	game_input_router.process(runtime_input_controller, delta)
+	if turn_action_runner != null and turn_action_runner.has_method("process"):
+		turn_action_runner.call("process")
 	_process_world_action_queue_completion()
 	_update_tooltip_layer()
 	_process_auto_tick(delta)
@@ -431,9 +437,9 @@ func _panel_input_blocker_snapshot() -> Dictionary:
 
 
 func _world_action_presenter_blocks_input() -> bool:
-	if world_action_flow_controller == null:
-		return false
-	return bool(world_action_flow_controller.call("blocks_input"))
+	var presenter_blocks := world_action_flow_controller != null and bool(world_action_flow_controller.call("blocks_input"))
+	var runner: Dictionary = turn_action_runner_snapshot()
+	return presenter_blocks or bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))
 
 
 func modal_stack_snapshot() -> Dictionary:
@@ -871,6 +877,8 @@ func runtime_control_snapshot() -> Dictionary:
 	snapshot["selection_debug"] = runtime_selection_debug_snapshot()
 	snapshot["action_presenter"] = world_action_presenter_snapshot()
 	snapshot["world_action_queue"] = world_action_queue_snapshot()
+	snapshot["turn_action_runner"] = turn_action_runner_snapshot()
+	snapshot["actor_view"] = actor_view_snapshot()
 	snapshot["ai_debug"] = ai_debug_snapshot()
 	snapshot["debug_overlay"] = debug_overlay_snapshot()
 	snapshot["runtime_refresh"] = runtime_refresh_report_snapshot()
@@ -923,6 +931,18 @@ func world_action_queue_snapshot() -> Dictionary:
 	return _dictionary_or_empty(world_action_flow_controller.call("snapshot"))
 
 
+func turn_action_runner_snapshot() -> Dictionary:
+	if turn_action_runner == null or not turn_action_runner.has_method("snapshot"):
+		return {"active": false, "phase": "missing"}
+	return _dictionary_or_empty(turn_action_runner.call("snapshot"))
+
+
+func actor_view_snapshot() -> Dictionary:
+	if actor_view_controller == null or not actor_view_controller.has_method("snapshot"):
+		return {"active": false}
+	return _dictionary_or_empty(actor_view_controller.call("snapshot"))
+
+
 func audio_feedback_snapshot() -> Dictionary:
 	if audio_feedback_controller == null or not audio_feedback_controller.has_method("snapshot"):
 		return {"enabled": false, "reason": "audio_feedback_missing"}
@@ -959,9 +979,15 @@ func _play_hud_shortcut_audio(event_kind: String, control_name: String, control_
 
 
 func finish_world_action_presentations() -> Dictionary:
-	if world_action_flow_controller == null or not world_action_flow_controller.has_method("finish_active_presentations"):
+	var result: Dictionary = {}
+	if turn_action_runner != null and turn_action_runner.has_method("finish_active"):
+		var runner: Dictionary = turn_action_runner_snapshot()
+		if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
+			result = _dictionary_or_empty(turn_action_runner.call("finish_active", "finish_world_action_presentations"))
+	if world_action_flow_controller != null and world_action_flow_controller.has_method("finish_active_presentations"):
+		result = _dictionary_or_empty(world_action_flow_controller.call("finish_active_presentations"))
+	elif result.is_empty():
 		return world_action_presenter_snapshot()
-	var result: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("finish_active_presentations"))
 	var applied_refresh := _apply_pending_world_action_final_refresh("presenter_finished")
 	if not _apply_pending_world_action_ui("presenter_finished") and not applied_refresh:
 		refresh_hud(current_interaction_prompt())
@@ -1085,6 +1111,15 @@ func focused_actor_snapshot() -> Dictionary:
 
 func focused_actor_grid_position() -> Dictionary:
 	return _dictionary_or_empty(runtime_view_state_controller.call("focused_actor_grid_position", world_result, is_observe_mode_enabled()))
+
+
+func focused_actor_visual_position() -> Variant:
+	var actor_id := int(_dictionary_or_empty(focused_actor_snapshot()).get("actor_id", _player_actor_id()))
+	if actor_view_controller != null and actor_view_controller.has_method("active_actor_node"):
+		var node := actor_view_controller.call("active_actor_node", actor_id) as Node3D
+		if node != null:
+			return node.global_position
+	return null
 
 
 func close_active_dialogue(reason: String = "closed") -> Dictionary:
@@ -1249,6 +1284,33 @@ func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 	world_result = _dictionary_or_empty(move_plan.get("final_world_result", final_world_result))
 	rebuild_runtime_world(_dictionary_or_empty(result.get("prompt", {})), result)
 	return result
+
+
+func request_player_move(grid: Dictionary) -> Dictionary:
+	var blocked: Dictionary = _player_command_rejection("move")
+	if not blocked.is_empty():
+		return blocked
+	_setup_world_container()
+	_configure_turn_action_runner()
+	var player_id := _player_actor_id()
+	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_move", player_id, grid, topology))
+	return result
+
+
+func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: Dictionary = {}) -> Dictionary:
+	if not _rebuild_runtime_world_result("turn_action_runner_step"):
+		return {"success": false, "reason": "world_result_sync_failed"}
+	_apply_world_root_snapshot(false)
+	_configure_turn_action_runner()
+	_configure_runtime_audio_layers()
+	refresh_hud(current_interaction_prompt())
+	return {
+		"success": true,
+		"render_world": false,
+		"step_result": step_result.duplicate(true),
+		"turn_action_runner": runner_snapshot.duplicate(true),
+	}
 
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false) -> Dictionary:
@@ -1852,6 +1914,12 @@ func _world_container_node() -> Node3D:
 	return _world_container_ref
 
 
+func _player_actor_id() -> int:
+	if simulation != null and simulation.has_method("_player_actor_id"):
+		return int(simulation.call("_player_actor_id"))
+	return 1
+
+
 func _setup_world_container() -> void:
 	if world_root == null or not is_instance_valid(world_root):
 		world_root = WorldRootScene.instantiate() as Node3D
@@ -1867,6 +1935,14 @@ func _setup_runtime_input_controller() -> void:
 	if runtime_input_controller == null:
 		runtime_input_controller = GameRuntimeInputController.new(self)
 	runtime_input_controller.attach_world(_world_container_node(), world_result)
+	_configure_turn_action_runner()
+
+
+func _configure_turn_action_runner() -> void:
+	if actor_view_controller != null and actor_view_controller.has_method("attach"):
+		actor_view_controller.call("attach", _world_container_node())
+	if turn_action_runner != null and turn_action_runner.has_method("configure"):
+		turn_action_runner.call("configure", simulation, actor_view_controller, self, world_result)
 
 
 func _refresh_world_runtime_bindings() -> void:

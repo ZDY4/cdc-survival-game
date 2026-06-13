@@ -881,6 +881,155 @@ func _submit_move_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	}
 
 
+func begin_move(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	if not actor.turn_open:
+		return {"success": false, "reason": "turn_closed", "turn_state": turn_state.duplicate(true)}
+	if topology.is_empty():
+		return {"success": false, "reason": "move_topology_missing"}
+	var goal: RefCounted = GridCoord.from_dictionary(target_position)
+	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
+	var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
+	if not bool(plan.get("success", false)):
+		return plan
+	var path: Array = _array_or_empty(plan.get("path", [])).duplicate(true)
+	pending_movement = {
+		"actor_id": actor.actor_id,
+		"target_position": goal.to_dictionary(),
+		"path": path,
+		"required_ap": float(max(0, int(plan.get("steps", 0)))),
+		"available_ap": actor.ap,
+		"remaining_steps": int(plan.get("steps", 0)),
+		"step_mode": true,
+	}
+	_emit("movement_started", pending_movement.duplicate(true))
+	return {
+		"success": true,
+		"kind": "move",
+		"actor_id": actor.actor_id,
+		"target_position": goal.to_dictionary(),
+		"path": path,
+		"steps": int(plan.get("steps", 0)),
+		"ap": actor.ap,
+		"pending_movement": pending_movement.duplicate(true),
+	}
+
+
+func step_move(actor_id: int, topology: Dictionary) -> Dictionary:
+	var event_start_index: int = events.size()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor"}
+	if pending_movement.is_empty():
+		return {
+			"success": true,
+			"kind": "move",
+			"actor_id": actor_id,
+			"completed": true,
+			"reason": "no_pending_movement",
+			"ap_remaining": actor.ap,
+		}
+	if int(pending_movement.get("actor_id", actor_id)) != actor_id:
+		return {"success": false, "reason": "pending_movement_actor_mismatch", "pending_movement": pending_movement.duplicate(true)}
+	if actor.ap < 1.0:
+		pending_movement["available_ap"] = actor.ap
+		return {
+			"success": true,
+			"kind": "move",
+			"actor_id": actor_id,
+			"completed": true,
+			"pending": true,
+			"reason": "ap_insufficient_movement_pending",
+			"pending_movement": pending_movement.duplicate(true),
+			"ap_remaining": actor.ap,
+			"events": _events_since(event_start_index),
+		}
+	var path: Array = _array_or_empty(pending_movement.get("path", []))
+	if path.size() <= 1:
+		pending_movement.clear()
+		_emit("movement_completed", {
+			"actor_id": actor_id,
+			"to": actor.grid_position.to_dictionary(),
+		})
+		return {
+			"success": true,
+			"kind": "move",
+			"actor_id": actor_id,
+			"completed": true,
+			"to": actor.grid_position.to_dictionary(),
+			"ap_remaining": actor.ap,
+			"events": _events_since(event_start_index),
+		}
+	var from: Dictionary = actor.grid_position.to_dictionary()
+	var next_grid: Dictionary = _dictionary_or_empty(path[1]).duplicate(true)
+	_spend_ap(actor, 1.0, "move_step")
+	_auto_open_door_for_step(actor.actor_id, next_grid, topology)
+	actor.grid_position = GridCoord.from_dictionary(next_grid)
+	_emit("movement_step", {
+		"actor_id": actor.actor_id,
+		"from": from.duplicate(true),
+		"to": next_grid.duplicate(true),
+		"step_index": int(pending_movement.get("step_index", 0)) + 1,
+	})
+	path.remove_at(0)
+	pending_movement["path"] = path
+	pending_movement["available_ap"] = actor.ap
+	pending_movement["required_ap"] = float(max(0, path.size() - 1))
+	pending_movement["remaining_steps"] = max(0, path.size() - 1)
+	pending_movement["step_index"] = int(pending_movement.get("step_index", 0)) + 1
+	if path.size() <= 1:
+		pending_movement.clear()
+		_emit("actor_moved", {
+			"actor_id": actor.actor_id,
+			"from": from.duplicate(true),
+			"to": next_grid.duplicate(true),
+			"steps": 1,
+			"step_mode": true,
+		})
+		_emit("movement_completed", {
+			"actor_id": actor.actor_id,
+			"to": next_grid.duplicate(true),
+		})
+	return {
+		"success": true,
+		"kind": "move",
+		"actor_id": actor.actor_id,
+		"from": from,
+		"to": next_grid,
+		"completed": pending_movement.is_empty(),
+		"pending": not pending_movement.is_empty(),
+		"pending_movement": pending_movement.duplicate(true),
+		"ap_remaining": actor.ap,
+		"events": _events_since(event_start_index),
+	}
+
+
+func pending_move_snapshot(actor_id: int) -> Dictionary:
+	if pending_movement.is_empty() or int(pending_movement.get("actor_id", actor_id)) != actor_id:
+		return {}
+	return pending_movement.duplicate(true)
+
+
+func cancel_move(actor_id: int, reason: String = "cancelled") -> Dictionary:
+	if pending_movement.is_empty() or int(pending_movement.get("actor_id", actor_id)) != actor_id:
+		return {"success": true, "had_pending": false, "reason": reason}
+	var movement := pending_movement.duplicate(true)
+	pending_movement.clear()
+	_emit("movement_cancelled", {
+		"actor_id": actor_id,
+		"reason": reason,
+		"pending_movement": movement.duplicate(true),
+	})
+	return {
+		"success": true,
+		"had_pending": true,
+		"reason": reason,
+		"pending_movement": movement,
+	}
+
+
 func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	var target: Dictionary = _dictionary_or_empty(command.get("target", {}))
 	var prompt: Dictionary = query_interaction_options(actor.actor_id, target)

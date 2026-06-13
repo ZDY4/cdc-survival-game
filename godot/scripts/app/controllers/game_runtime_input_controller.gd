@@ -166,10 +166,10 @@ func _handle_mouse_button(mouse_event: InputEventMouseButton) -> bool:
 		if selected_node != null and game_root.has_method("execute_primary_interaction"):
 			game_root.execute_primary_interaction()
 			return true
-		if str(hover_result.get("kind", "")) == "ground" and game_root.has_method("execute_move_to_grid"):
+		if str(hover_result.get("kind", "")) == "ground" and (game_root.has_method("request_player_move") or game_root.has_method("execute_move_to_grid")):
 			var ground_position: Vector3 = hover_result.get("position", Vector3.ZERO)
 			var grid: Dictionary = _grid_from_world_position(ground_position)
-			var result: Dictionary = game_root.execute_move_to_grid(grid)
+			var result: Dictionary = game_root.request_player_move(grid) if game_root.has_method("request_player_move") else game_root.execute_move_to_grid(grid)
 			print("ground click move grid=%s success=%s reason=%s" % [JSON.stringify(grid), str(result.get("success", false)), str(result.get("reason", ""))])
 			return true
 	if mouse_event.button_index == MOUSE_BUTTON_RIGHT and mouse_event.pressed:
@@ -871,6 +871,11 @@ func _find_world_camera() -> Camera3D:
 
 
 func _focused_actor_position() -> Vector3:
+	if game_root.has_method("focused_actor_visual_position"):
+		var visual_position: Variant = game_root.focused_actor_visual_position()
+		if typeof(visual_position) == TYPE_VECTOR3:
+			var visual := visual_position as Vector3
+			return Vector3(visual.x, _level_plane_height(), visual.z)
 	if game_root.has_method("focused_actor_grid_position"):
 		var focused_grid: Dictionary = _dictionary_or_empty(game_root.focused_actor_grid_position())
 		if not focused_grid.is_empty():
