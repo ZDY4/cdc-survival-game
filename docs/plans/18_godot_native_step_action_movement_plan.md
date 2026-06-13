@@ -1,6 +1,6 @@
 # Godot 原生逐步动作系统最终路线
 
-本文定义移动、回合、相机和动作表现的最终改进路线。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层保持权威，运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
+本文定义移动、回合、相机和动作表现的最终优化路线。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层保持权威，运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
 
 本计划只描述目标架构和直达最终状态的实现路线。后续实现以 Godot 原生 action runner、稳定 ActorView、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都进入同一套 Godot action pipeline。
 
@@ -13,6 +13,7 @@
 - 所有执行路径统一进入 action runner；运行时、headless smoke、debug facade 和后续验收使用同一套动作语义。
 - 文档中的阶段顺序是最终系统的增量落地顺序。
 - 每个阶段的实现成果必须收敛到最终模块边界，不保留专用入口、状态镜像或只为测试存在的运行时通道。
+- 所有条目都指向最终 Godot 原生运行时；旧实现只作为行为参照，不作为代码结构、入口或表现管线的目标形态。
 
 ## 1. 最终目标
 
@@ -235,7 +236,7 @@ Simulation.step_move(...)
 
 - 主游戏输入、HUD、交互、AI 调度和 smoke 验收通过 runner facade 请求动作。
 - 调试工具、headless smoke 和保存恢复通过 TurnActionRunner 的显式 step / finish facade 驱动，与手动游戏共享同一套动作语义。
-- headless 和 smoke 的快速推进入口统一命名为 `drain_turn_action_runner()`，语义是“按正式 runner phase 驱动当前动作到稳定边界”。
+- headless 和 smoke 的自动化收敛入口统一命名为 `drain_turn_action_runner()`，语义是“按正式 runner phase 驱动当前动作到稳定边界”。
 - 运行时业务逻辑只进入 Godot action pipeline；规则校验仍由 `Simulation` 的动作接口承担。
 
 ## 4. App 输入和动作调度
@@ -268,7 +269,7 @@ Action active 时：
 
 中断策略：
 
-- 移动中点击新目标：记录为 replacement request，当前单格表现完成后重新走 `begin_move()` / `step_move()`，不会同步瞬移或重算未来整轮。
+- 移动中点击新目标：记录为 replacement request，当前单格表现完成后重新走 `begin_move()` / `step_move()`，不会一次性提交多格规则状态或视觉状态。
 - Esc：停止后续 pending path，保留已完成格子的规则状态和视觉位置。
 - 地图切换 / scene transition：进入结构变化队列，必须在 runner 稳定边界执行。
 - 保存：调用 `prepare_runtime_save_boundary()`，由 runner 驱动当前 action 到稳定边界后生成存档 snapshot。
@@ -305,7 +306,7 @@ Action active 时：
 
 验收：
 
-- 远距离移动不会一次性改变到目标格。
+- 远距离移动按 step 序列逐格改变 actor grid。
 - 每次 step 后 snapshot 中 actor grid 前进一格。
 - AP 和 pending movement 与当前格一致。
 
@@ -367,7 +368,7 @@ Action active 时：
 
 - wait action 进入 runner。
 - crafting queue 的时间推进进入 runner phase。
-- auto tick 不直接提交未来快进；它驱动 runner step。
+- auto tick 不直接批量提交未来回合；它驱动 runner step。
 
 验收：
 
@@ -485,7 +486,7 @@ cmd /c run_godot_validate.bat
 ### 里程碑 4：玩家回合逐阶段化
 
 - 玩家输入触发 `player_action`，表现进入 `player_presentation`，AP 不足后进入 `player_turn_end`。
-- pending movement / pending interaction 由 `pending_resume` 阶段恢复，不在规则层同步快进未来回合。
+- pending movement / pending interaction 由 `pending_resume` 阶段恢复，不在规则层同步推进未来回合。
 - HUD 以 runner phase 展示当前动作、AP 变化、path progress 和 pending 状态。
 - Save 以 runner 稳定边界为准：idle 时直接保存，action active 时先通过 `prepare_runtime_save_boundary()` 推进到稳定边界。
 
@@ -507,7 +508,7 @@ cmd /c run_godot_validate.bat
 
 - wait action 进入 runner，由 runner 驱动回合推进和 pending 恢复。
 - crafting queue 以 action phase 推进制作进度、材料消耗、产出、XP 和 UI 刷新。
-- auto tick 不直接提交未来快进，而是驱动 runner step 到稳定边界。
+- auto tick 不直接批量提交未来回合，而是驱动 runner step 到稳定边界。
 - Crafting / Progression / Save smoke 共享 runner facade 验证等待、制作和存档行为。
 
 ## 9. 风险和约束
