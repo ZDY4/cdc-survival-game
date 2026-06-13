@@ -731,6 +731,9 @@ func _turn_action_runner_control_text(value: Variant) -> String:
 		parts.append("Step %d/%d" % [step_index, total_steps if total_steps > 0 else path_length])
 	if remaining_steps > 0:
 		parts.append("Remain %d" % remaining_steps)
+	var interaction_text := _runner_interaction_phase_text(runner.get("interaction_phase", {}))
+	if not interaction_text.is_empty():
+		parts.append(interaction_text)
 	var ap_before := float(runner.get("ap_before", 0.0))
 	var ap_after := float(runner.get("ap_after", 0.0))
 	if not is_zero_approx(ap_before) or not is_zero_approx(ap_after):
@@ -744,6 +747,27 @@ func _turn_action_runner_control_text(value: Variant) -> String:
 	if not blocked_reason.is_empty():
 		parts.append("Blocked %s" % _disabled_reason_text(blocked_reason))
 	return " ".join(parts)
+
+
+func _runner_interaction_phase_text(value: Variant) -> String:
+	var phase: Dictionary = _dictionary_or_empty(value)
+	if phase.is_empty():
+		return ""
+	var option_kind := str(phase.get("option_kind", "")).strip_edges()
+	var visual_kind := str(phase.get("visual_kind", "")).strip_edges()
+	var target_id := str(phase.get("target_id", "")).strip_edges()
+	var token := "Interact"
+	if not option_kind.is_empty():
+		token += " %s" % option_kind
+	if not visual_kind.is_empty() and visual_kind != option_kind:
+		token += "/%s" % visual_kind
+	if not target_id.is_empty():
+		token += " -> %s" % target_id
+	if bool(phase.get("approach_active", false)):
+		token += " approach"
+	if bool(phase.get("completed", false)):
+		token += " done"
+	return token
 
 
 func _performance_control_text(value: Variant) -> String:

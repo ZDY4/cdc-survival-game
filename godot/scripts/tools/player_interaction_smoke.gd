@@ -1575,6 +1575,13 @@ func _expect_runner_interaction_phase(errors: Array[String], game_root: Node, ex
 		errors.append("interaction_phase should expose completed interaction after %s, got %s" % [expected_option_kind, JSON.stringify(phase)])
 	if str(phase.get("phase", "")) != "finished":
 		errors.append("interaction_phase should expose finished runner phase after %s, got %s" % [expected_option_kind, JSON.stringify(phase)])
+	var runtime_line := _hud_runtime_control_line(game_root)
+	if not runtime_line.contains("Interact %s/%s" % [expected_option_kind, expected_visual_kind]):
+		errors.append("HUD runtime line should expose interaction phase %s/%s, got %s" % [expected_option_kind, expected_visual_kind, runtime_line])
+	if not expected_target_id.is_empty() and not runtime_line.contains(expected_target_id):
+		errors.append("HUD runtime line should expose interaction target %s, got %s" % [expected_target_id, runtime_line])
+	if not runtime_line.contains("done"):
+		errors.append("HUD runtime line should expose completed interaction state, got %s" % runtime_line)
 
 
 func _expect_interaction_visual_profiles(errors: Array[String], game_root: Node) -> void:
