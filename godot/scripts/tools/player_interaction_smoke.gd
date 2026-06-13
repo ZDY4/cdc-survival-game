@@ -2274,6 +2274,20 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 			errors.append("player node should expose active action runner metadata after click")
 		visual_start.y = player_node.position.y
 		visual_final.y = player_node.position.y
+		if camera_before_finish != null:
+			var follow_source := str(camera_before_finish.get_meta("follow_source", ""))
+			if follow_source != "actor_node":
+				errors.append("movement camera should follow actor node while runner is active, got source=%s" % follow_source)
+			if int(camera_before_finish.get_meta("follow_actor_id", 0)) != 1:
+				errors.append("movement camera should record player actor follow id, got %s" % str(camera_before_finish.get_meta("follow_actor_id", 0)))
+			if not bool(camera_before_finish.get_meta("following_focus", false)):
+				errors.append("movement camera should restore automatic follow when player action starts")
+			var focus: Variant = camera_before_finish.get_meta("focus_position", Vector3.ZERO)
+			if typeof(focus) == TYPE_VECTOR3:
+				var focus_xz := Vector2((focus as Vector3).x, (focus as Vector3).z)
+				var player_xz := Vector2(player_node.global_position.x, player_node.global_position.z)
+				if focus_xz.distance_to(player_xz) > 1.25:
+					errors.append("movement camera should focus player visual node, focus=%s player=%s" % [str(focus), str(player_node.global_position)])
 		if player_node.position.distance_to(visual_final) <= 0.05:
 			errors.append("player visual node should not snap to final grid before movement presenter finishes")
 		if player_node.position.distance_to(visual_start) > player_node.position.distance_to(visual_final):
@@ -2291,6 +2305,13 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	player_node = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node != null and player_node.position.distance_to(visual_final) > 0.08:
 		errors.append("player visual node should finish at final movement grid without full rerender")
+	if camera_after_finish != null and player_node != null:
+		var final_focus: Variant = camera_after_finish.get_meta("focus_position", Vector3.ZERO)
+		if typeof(final_focus) == TYPE_VECTOR3:
+			var final_focus_xz := Vector2((final_focus as Vector3).x, (final_focus as Vector3).z)
+			var final_player_xz := Vector2(player_node.global_position.x, player_node.global_position.z)
+			if final_focus_xz.distance_to(final_player_xz) > 0.35:
+				errors.append("movement camera should settle on final player visual node, focus=%s player=%s" % [str(final_focus), str(player_node.global_position)])
 	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
 		player.ap = 12.0

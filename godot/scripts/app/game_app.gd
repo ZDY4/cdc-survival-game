@@ -1114,12 +1114,26 @@ func focused_actor_grid_position() -> Dictionary:
 
 
 func focused_actor_visual_position() -> Variant:
-	var actor_id := int(_dictionary_or_empty(focused_actor_snapshot()).get("actor_id", _player_actor_id()))
+	var actor_id := _active_runner_actor_id()
+	if actor_id <= 0:
+		actor_id = int(_dictionary_or_empty(focused_actor_snapshot()).get("actor_id", _player_actor_id()))
 	if actor_view_controller != null and actor_view_controller.has_method("active_actor_node"):
 		var node := actor_view_controller.call("active_actor_node", actor_id) as Node3D
 		if node != null:
 			return node.global_position
 	return null
+
+
+func _active_runner_actor_id() -> int:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
+		return int(runner.get("actor_id", 0))
+	return 0
+
+
+func _restore_actor_camera_follow(_reason: String = "") -> void:
+	if runtime_input_controller != null and runtime_input_controller.has_method("focus_current_actor"):
+		runtime_input_controller.focus_current_actor()
 
 
 func close_active_dialogue(reason: String = "closed") -> Dictionary:
@@ -1295,6 +1309,8 @@ func request_player_move(grid: Dictionary) -> Dictionary:
 	var player_id := _player_actor_id()
 	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
 	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_move", player_id, grid, topology))
+	if bool(result.get("success", false)):
+		_restore_actor_camera_follow("player_move")
 	return result
 
 
@@ -1307,6 +1323,8 @@ func request_player_attack(target_actor_id: int, options: Dictionary = {}) -> Di
 	var player_id := _player_actor_id()
 	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
 	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_attack", player_id, target_actor_id, topology, options))
+	if bool(result.get("success", false)):
+		_restore_actor_camera_follow("player_attack")
 	return result
 
 

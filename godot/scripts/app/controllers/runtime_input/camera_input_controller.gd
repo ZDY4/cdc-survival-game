@@ -9,8 +9,8 @@ func attach(camera: Camera3D, focus_position: Vector3, map_size: Vector2, viewpo
 	rig_controller.call("attach", camera, focus_position, map_size, viewport_size, level_height)
 
 
-func process_follow(focus_position: Vector3, viewport_size: Vector2, level_height: float) -> void:
-	rig_controller.call("process_follow", focus_position, viewport_size, level_height)
+func process_follow(focus_position: Vector3, viewport_size: Vector2, level_height: float, follow_source: String = "focus_position", follow_actor_id: int = 0) -> void:
+	rig_controller.call("process_follow", focus_position, viewport_size, level_height, follow_source, follow_actor_id)
 
 
 func begin_drag(screen_position: Vector2, drag_plane_height: float) -> void:
@@ -49,5 +49,5 @@ func reset_zoom(viewport_size: Vector2, level_height: float) -> void:
 	rig_controller.call("reset_zoom", viewport_size, level_height)
 
 
-func focus(focus_position: Vector3, viewport_size: Vector2, level_height: float) -> void:
-	rig_controller.call("focus", focus_position, viewport_size, level_height)
+func focus(focus_position: Vector3, viewport_size: Vector2, level_height: float, follow_source: String = "focus_position", follow_actor_id: int = 0) -> void:
+	rig_controller.call("focus", focus_position, viewport_size, level_height, follow_source, follow_actor_id)

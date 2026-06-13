@@ -65,7 +65,15 @@ func process(delta: float) -> void:
 	if camera == null:
 		return
 	_process_space_wait_hold(delta)
-	camera_input_controller.process_follow(_focused_actor_position(), _viewport_size(), _level_plane_height())
+	var follow_target: Dictionary = _focused_actor_follow_target()
+	var follow_position: Vector3 = follow_target.get("position", _map_center_focus_position())
+	camera_input_controller.process_follow(
+		follow_position,
+		_viewport_size(),
+		_level_plane_height(),
+		str(follow_target.get("source", "map_center")),
+		int(follow_target.get("actor_id", 0))
+	)
 	if hover_refresh_requested and not camera_input_controller.is_dragging() and _mouse_inside_viewport():
 		hover_refresh_requested = false
 		update_hover_at_screen_position(game_root.get_viewport().get_mouse_position())
@@ -464,7 +472,15 @@ func update_skill_target_preview_markers(preview: Dictionary) -> void:
 
 
 func focus_current_actor() -> void:
-	camera_input_controller.focus(_focused_actor_position(), _viewport_size(), _level_plane_height())
+	var follow_target: Dictionary = _focused_actor_follow_target()
+	var follow_position: Vector3 = follow_target.get("position", _map_center_focus_position())
+	camera_input_controller.focus(
+		follow_position,
+		_viewport_size(),
+		_level_plane_height(),
+		str(follow_target.get("source", "map_center")),
+		int(follow_target.get("actor_id", 0))
+	)
 	_request_hover_refresh()
 
 
@@ -871,20 +887,49 @@ func _find_world_camera() -> Camera3D:
 
 
 func _focused_actor_position() -> Vector3:
+	var follow_target: Dictionary = _focused_actor_follow_target()
+	var follow_position: Vector3 = follow_target.get("position", _map_center_focus_position())
+	return follow_position
+
+
+func _focused_actor_follow_target() -> Dictionary:
+	var actor_id := _focused_actor_id_for_follow()
 	if game_root.has_method("focused_actor_visual_position"):
 		var visual_position: Variant = game_root.focused_actor_visual_position()
 		if typeof(visual_position) == TYPE_VECTOR3:
 			var visual := visual_position as Vector3
-			return Vector3(visual.x, _level_plane_height(), visual.z)
+			return {
+				"position": Vector3(visual.x, _level_plane_height(), visual.z),
+				"source": "actor_node",
+				"actor_id": actor_id,
+			}
 	if game_root.has_method("focused_actor_grid_position"):
 		var focused_grid: Dictionary = _dictionary_or_empty(game_root.focused_actor_grid_position())
 		if not focused_grid.is_empty():
-			return Vector3(
-				float(focused_grid.get("x", 0)),
-				float(focused_grid.get("y", _observed_level())) + BEVY_LEVEL_PLANE_HEIGHT,
-				float(focused_grid.get("z", 0))
-			)
-	return _map_center_focus_position()
+			return {
+				"position": Vector3(
+					float(focused_grid.get("x", 0)),
+					float(focused_grid.get("y", _observed_level())) + BEVY_LEVEL_PLANE_HEIGHT,
+					float(focused_grid.get("z", 0))
+				),
+				"source": "grid",
+				"actor_id": actor_id,
+			}
+	return {
+		"position": _map_center_focus_position(),
+		"source": "map_center",
+		"actor_id": 0,
+	}
+
+
+func _focused_actor_id_for_follow() -> int:
+	if game_root.has_method("turn_action_runner_snapshot"):
+		var runner: Dictionary = _dictionary_or_empty(game_root.turn_action_runner_snapshot())
+		if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
+			return int(runner.get("actor_id", 0))
+	if game_root.has_method("focused_actor_snapshot"):
+		return int(_dictionary_or_empty(game_root.focused_actor_snapshot()).get("actor_id", 0))
+	return _player_actor_id()
 
 
 func _player_focus_position() -> Vector3:

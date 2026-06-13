@@ -18,6 +18,8 @@ var is_dragging := false
 var zoom_factor := 1.0
 var map_size := Vector2(48.0, 42.0)
 var following_focus := true
+var follow_source := "focus_position"
+var follow_actor_id := 0
 
 
 func attach(p_camera: Camera3D, focus_position: Vector3, p_map_size: Vector2, viewport_size: Vector2, level_plane_height: float) -> bool:
@@ -29,6 +31,8 @@ func attach(p_camera: Camera3D, focus_position: Vector3, p_map_size: Vector2, vi
 	target.y = level_plane_height
 	zoom_factor = _float_meta(camera, "zoom_factor", 1.0)
 	following_focus = true
+	follow_source = "attach"
+	follow_actor_id = 0
 	is_dragging = false
 	has_drag_anchor = false
 	_sync_camera_focus_meta()
@@ -36,11 +40,14 @@ func attach(p_camera: Camera3D, focus_position: Vector3, p_map_size: Vector2, vi
 	return true
 
 
-func process_follow(focus_position: Vector3, viewport_size: Vector2, level_plane_height: float) -> bool:
+func process_follow(focus_position: Vector3, viewport_size: Vector2, level_plane_height: float, p_follow_source: String = "focus_position", p_follow_actor_id: int = 0) -> bool:
 	if camera == null or not following_focus or is_dragging:
 		return false
+	follow_source = p_follow_source
+	follow_actor_id = p_follow_actor_id
 	var follow_target := _clamp_target(focus_position, viewport_size, level_plane_height)
 	if target.distance_squared_to(follow_target) <= 0.000001:
+		_sync_camera_focus_meta()
 		return false
 	target = follow_target
 	_apply_camera_transform(viewport_size, level_plane_height)
@@ -58,8 +65,11 @@ func begin_drag(screen_position: Vector2, plane_height: float) -> bool:
 		has_drag_anchor = false
 		return false
 	following_focus = false
+	follow_source = "manual_drag"
+	follow_actor_id = 0
 	drag_anchor_world = Vector2((point as Vector3).x, (point as Vector3).z)
 	has_drag_anchor = true
+	_sync_camera_focus_meta()
 	return true
 
 
@@ -99,8 +109,10 @@ func reset_zoom(viewport_size: Vector2, level_plane_height: float) -> void:
 	_apply_camera_transform(viewport_size, level_plane_height)
 
 
-func focus(focus_position: Vector3, viewport_size: Vector2, level_plane_height: float) -> void:
+func focus(focus_position: Vector3, viewport_size: Vector2, level_plane_height: float, p_follow_source: String = "focus_position", p_follow_actor_id: int = 0) -> void:
 	following_focus = true
+	follow_source = p_follow_source
+	follow_actor_id = p_follow_actor_id
 	has_drag_anchor = false
 	target = _clamp_target(focus_position, viewport_size, level_plane_height)
 	_apply_camera_transform(viewport_size, level_plane_height)
@@ -192,6 +204,9 @@ func _sync_camera_focus_meta() -> void:
 	if camera != null:
 		camera.set_meta("focus_position", target)
 		camera.set_meta("zoom_factor", zoom_factor)
+		camera.set_meta("follow_source", follow_source)
+		camera.set_meta("follow_actor_id", follow_actor_id)
+		camera.set_meta("following_focus", following_focus)
 
 
 func _vector_meta(node: Node, key: String, fallback: Vector3) -> Vector3:
