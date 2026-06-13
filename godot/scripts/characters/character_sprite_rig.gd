@@ -269,7 +269,7 @@ func equipment_part_id_for(slot_id: String, attach_target: String = "") -> Strin
 		"head":
 			return "head"
 		"body", "back", "accessory":
-			return "body"
+			return "spine_02"
 		"legs", "feet":
 			return "foot_l"
 		_:
@@ -281,7 +281,7 @@ func equipment_part_id_for(slot_id: String, attach_target: String = "") -> Strin
 				"head":
 					return "head"
 				"body", "back", "accessory":
-					return "body"
+					return "spine_02"
 				"legs", "feet":
 					return "foot_l"
 	return ""

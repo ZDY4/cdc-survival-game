@@ -196,7 +196,7 @@ func _expect_sprite_rig_inspector(errors: Array[String]) -> void:
 	panel.setup(rig, null)
 	get_root().add_child(panel)
 	panel._ready()
-	if panel.summary_label == null or not panel.summary_label.text.contains("Configured: 240 / 240"):
+	if panel.summary_label == null or not panel.summary_label.text.contains("Configured: 680 / 680"):
 		errors.append("sprite rig inspector panel should summarize selected rig profile")
 
 	var window: Window = SpriteRigInspectorWindow.new()
@@ -216,7 +216,7 @@ func _expect_sprite_rig_inspector(errors: Array[String]) -> void:
 		errors.append("sprite rig inspector should preview configured texture")
 	if window.path_label == null or not window.path_label.text.ends_with("/body/yaw_000_pitch_0.png"):
 		errors.append("sprite rig inspector should show selected texture path")
-	if window.summary_label == null or not window.summary_label.text.contains("Configured 240 / 240"):
+	if window.summary_label == null or not window.summary_label.text.contains("Configured 680 / 680"):
 		errors.append("sprite rig inspector summary should count configured textures")
 	window._sync_preview_to_key("yaw_090_pitch_0")
 	if window.direction_label == null or not window.direction_label.text.contains("yaw_090_pitch_0"):

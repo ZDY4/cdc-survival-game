@@ -342,7 +342,7 @@ func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) ->
 	if str(appearance_entry.get("source_id", "")) != "builtin:character:humanoid" \
 			or str(appearance_entry.get("resource_path", "")) != "res://assets/characters/sprite_rigs/default_humanoid.tscn":
 		errors.append("asset manifest should normalize builtin character appearance asset: %s" % appearance_entry)
-	var sprite_texture_entry := _asset_manifest_entry(manifest, "appearance", "default_humanoid", "sprite_rig.body.yaw_000_pitch_0")
+	var sprite_texture_entry := _asset_manifest_entry(manifest, "appearance", "default_humanoid", "sprite_rig.spine_02.yaw_000_pitch_0")
 	if str(sprite_texture_entry.get("resource_path", "")) != "res://assets/characters/sprite_rigs/default_humanoid/body/yaw_000_pitch_0.png":
 		errors.append("asset manifest should include sprite rig texture path: %s" % sprite_texture_entry)
 	var world_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "building_wall", "prototypes[building_wall/isolated].source.path")
