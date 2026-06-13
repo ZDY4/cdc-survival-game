@@ -13,6 +13,12 @@
 - 需要还原旧相机、输入、拾取、渲染、UI、编辑器或工具行为时，优先查看参考副本下的 `rust/apps/bevy_debug_viewer/src/**`、`rust/apps/bevy_map_editor/src/**` 和 `rust/crates/**`，再按 Godot 架构边界重实现。
 - 不要把 Rust / Bevy 源码、Cargo 工程或旧 app 重新复制回当前 mainline；参考信息只能转译为 Godot scene、GDScript、数据层或文档。
 
+## Godot 开发风格
+
+- 功能开发优先采用 Godot 原生节点、资源、场景、Theme、Animation、Audio、Physics、Navigation、Editor workflow 和成熟 addon。
+- 如果 Godot 已有现成功能或社区 addon 能稳定覆盖需求，优先评估复用，不重复造轮子。
+- 只有在项目需要确定性玩法规则、专用数据 schema、存档兼容、内容工具，或 Godot / addon 无法满足边界时，才新增自研系统。
+- 引入 addon 前需确认维护状态、许可证、Godot 版本兼容性、项目复杂度和是否会绑死核心架构。
 
 ## 代码组织
 
