@@ -1,11 +1,120 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/characters/character_sprite_rig.gd" id="1_rig"]
-[ext_resource type="Resource" path="res://assets/characters/sprite_rigs/default_humanoid/default_humanoid_sprite_rig.tres" id="2_profile"]
+[ext_resource type="Script" path="res://scripts/characters/character_sprite_rig.gd" id="1_cjkmm"]
+[ext_resource type="Resource" path="res://assets/characters/sprite_rigs/default_humanoid/default_humanoid_sprite_rig.tres" id="2_ctqfv"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_000_pitch_0.png" id="3_l8mc2"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_000_pitch_0.png" id="4_0xj6w"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_000_pitch_0.png" id="5_86mcy"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_000_pitch_0.png" id="6_aqbw8"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_000_pitch_0.png" id="7_u5fbl"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_000_pitch_0.png" id="8_6rtdv"]
 
-[node name="DefaultHumanoidSpriteRig" type="Node3D"]
-script = ExtResource("1_rig")
-profile = ExtResource("2_profile")
-enable_runtime_update = true
+[node name="DefaultHumanoidSpriteRig" type="Node3D" unique_id=1863892137]
+script = ExtResource("1_cjkmm")
+profile = ExtResource("2_ctqfv")
 
-[node name="SpriteRigSkeleton" type="Skeleton3D" parent="."]
+[node name="SpriteRigSkeleton" type="Skeleton3D" parent="." unique_id=1360258991]
+bones/0/name = "root"
+bones/0/parent = -1
+bones/0/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+bones/0/enabled = true
+bones/0/position = Vector3(0, 0, 0)
+bones/0/rotation = Quaternion(0, 0, 0, 1)
+bones/0/scale = Vector3(1, 1, 1)
+bones/1/name = "pelvis"
+bones/1/parent = 0
+bones/1/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+bones/1/enabled = true
+bones/1/position = Vector3(0, 0.42, 0)
+bones/1/rotation = Quaternion(0, 0, 0, 1)
+bones/1/scale = Vector3(1, 1, 1)
+bones/2/name = "spine"
+bones/2/parent = 1
+bones/2/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.38, 0)
+bones/2/enabled = true
+bones/2/position = Vector3(0, 0.38, 0)
+bones/2/rotation = Quaternion(0, 0, 0, 1)
+bones/2/scale = Vector3(1, 1, 1)
+bones/3/name = "head"
+bones/3/parent = 2
+bones/3/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
+bones/3/enabled = true
+bones/3/position = Vector3(0, 0.32, 0)
+bones/3/rotation = Quaternion(0, 0, 0, 1)
+bones/3/scale = Vector3(1, 1, 1)
+bones/4/name = "hand_l"
+bones/4/parent = 2
+bones/4/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.28, 0.08, 0)
+bones/4/enabled = true
+bones/4/position = Vector3(-0.28, 0.08, 0)
+bones/4/rotation = Quaternion(0, 0, 0, 1)
+bones/4/scale = Vector3(1, 1, 1)
+bones/5/name = "hand_r"
+bones/5/parent = 2
+bones/5/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.28, 0.08, 0)
+bones/5/enabled = true
+bones/5/position = Vector3(0.28, 0.08, 0)
+bones/5/rotation = Quaternion(0, 0, 0, 1)
+bones/5/scale = Vector3(1, 1, 1)
+bones/6/name = "foot_l"
+bones/6/parent = 1
+bones/6/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.16, -0.42, 0)
+bones/6/enabled = true
+bones/6/position = Vector3(-0.16, -0.42, 0)
+bones/6/rotation = Quaternion(0, 0, 0, 1)
+bones/6/scale = Vector3(1, 1, 1)
+bones/7/name = "foot_r"
+bones/7/parent = 1
+bones/7/rest = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.16, -0.42, 0)
+bones/7/enabled = true
+bones/7/position = Vector3(0.16, -0.42, 0)
+bones/7/rotation = Quaternion(0, 0, 0, 1)
+bones/7/scale = Vector3(1, 1, 1)
+
+[node name="SpriteRigAttachment_foot_l" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=940715223]
+bone_name = "foot_l"
+
+[node name="SpriteRigSprite_foot_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_foot_l" unique_id=1700835136]
+pixel_size = 0.0028
+billboard = 1
+texture = ExtResource("3_l8mc2")
+
+[node name="SpriteRigAttachment_foot_r" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1327446690]
+bone_name = "foot_r"
+
+[node name="SpriteRigSprite_foot_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_foot_r" unique_id=1976389624]
+pixel_size = 0.0028
+billboard = 1
+texture = ExtResource("4_0xj6w")
+
+[node name="SpriteRigAttachment_body" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1040452332]
+bone_name = "spine"
+
+[node name="SpriteRigSprite_body" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_body" unique_id=207958793]
+pixel_size = 0.0032
+billboard = 1
+texture = ExtResource("5_86mcy")
+
+[node name="SpriteRigAttachment_hand_l" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1991627400]
+bone_name = "hand_l"
+
+[node name="SpriteRigSprite_hand_l" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_hand_l" unique_id=264720755]
+pixel_size = 0.0028
+billboard = 1
+texture = ExtResource("6_aqbw8")
+
+[node name="SpriteRigAttachment_hand_r" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1760162501]
+bone_name = "hand_r"
+
+[node name="SpriteRigSprite_hand_r" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_hand_r" unique_id=1693644191]
+pixel_size = 0.0028
+billboard = 1
+texture = ExtResource("7_u5fbl")
+
+[node name="SpriteRigAttachment_head" type="BoneAttachment3D" parent="SpriteRigSkeleton" unique_id=1771833454]
+bone_name = "head"
+
+[node name="SpriteRigSprite_head" type="Sprite3D" parent="SpriteRigSkeleton/SpriteRigAttachment_head" unique_id=832503175]
+pixel_size = 0.003
+billboard = 1
+texture = ExtResource("8_6rtdv")

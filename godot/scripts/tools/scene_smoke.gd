@@ -4,6 +4,7 @@ const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
+const DEFAULT_HUMANOID_SPRITE_RIG_SCENE := "res://assets/characters/sprite_rigs/default_humanoid.tscn"
 const WORLD_LABEL_FONT_PATH := "res://assets/fonts/NotoSansCJKsc-Regular.otf"
 
 
@@ -241,6 +242,7 @@ func _validate_actor_model_assets(root: Node3D, errors: Array[String]) -> void:
 
 
 func _validate_actor_sprite_rig(actor_model: Node, errors: Array[String]) -> void:
+	_validate_default_sprite_rig_scene_structure(errors)
 	if not actor_model is CharacterSpriteRig:
 		errors.append("player actor visual should be CharacterSpriteRig")
 	if actor_model.find_child("SpriteRigSkeleton", true, false) == null:
@@ -252,6 +254,22 @@ func _validate_actor_sprite_rig(actor_model: Node, errors: Array[String]) -> voi
 	if attachments.is_empty():
 		errors.append("player sprite rig should instantiate BoneAttachment3D anchors")
 	_validate_actor_sprite_rig_direction_switch(actor_model, errors)
+
+
+func _validate_default_sprite_rig_scene_structure(errors: Array[String]) -> void:
+	var scene_text := FileAccess.get_file_as_string(DEFAULT_HUMANOID_SPRITE_RIG_SCENE)
+	if scene_text.strip_edges().is_empty():
+		errors.append("default humanoid sprite rig scene should be readable")
+		return
+	for part_id in ["body", "head", "hand_l", "hand_r", "foot_l", "foot_r"]:
+		var attachment_token := "[node name=\"SpriteRigAttachment_%s\" type=\"BoneAttachment3D\"" % part_id
+		var sprite_token := "[node name=\"SpriteRigSprite_%s\" type=\"Sprite3D\"" % part_id
+		if not scene_text.contains(attachment_token):
+			errors.append("default humanoid sprite rig scene should declare %s" % attachment_token)
+		if not scene_text.contains(sprite_token):
+			errors.append("default humanoid sprite rig scene should declare %s" % sprite_token)
+	if not scene_text.contains("bones/7/name"):
+		errors.append("default humanoid sprite rig scene should serialize Skeleton3D bones")
 
 
 func _validate_actor_sprite_rig_direction_switch(actor_model: Node, errors: Array[String]) -> void:

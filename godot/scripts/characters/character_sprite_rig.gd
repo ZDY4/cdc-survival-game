@@ -2,11 +2,11 @@
 class_name CharacterSpriteRig
 extends Node3D
 
-# 运行时把 SpriteRigProfile 转为 Skeleton3D + BoneAttachment3D + Sprite3D 子树，
+# 绑定 Godot scene 中已经声明好的 Skeleton3D + BoneAttachment3D + Sprite3D 子树，
 # 并在 _process 中按相机相对角色的 3D 方向量化到 yaw/pitch 网格，切换每个部件的 texture。
-# 该节点作为 .tscn 场景根使用，自身不负责装备等其它角色视觉。
+# 该节点作为 .tscn 场景根使用，不在运行时生成 rig 结构，也不负责装备等其它角色视觉。
 
-@export var profile: Resource = null
+@export var profile: SpriteRigProfile = null
 @export var enable_runtime_update: bool = true
 # 0 表示每帧更新；>0 时按间隔更新以省 CPU。
 @export_range(0.0, 0.5, 0.01) var update_interval_seconds: float = 0.0
@@ -22,11 +22,10 @@ var _last_direction_key: StringName = &""
 
 
 func _ready() -> void:
-	_skeleton = _find_or_create_skeleton()
+	_skeleton = _find_skeleton()
 	if profile == null or not bool(profile.get("enabled")):
 		return
-	_build_skeleton_bones()
-	_build_part_nodes()
+	_bind_part_nodes()
 	set_process(enable_runtime_update and not Engine.is_editor_hint())
 
 
@@ -41,86 +40,45 @@ func _process(delta: float) -> void:
 	_update_directions()
 
 
-func _find_or_create_skeleton() -> Skeleton3D:
+func _find_skeleton() -> Skeleton3D:
+	var named_skeleton := get_node_or_null(SKELETON_NODE_NAME) as Skeleton3D
+	if named_skeleton != null:
+		return named_skeleton
 	for child in get_children():
 		if child is Skeleton3D:
 			return child
-	var skeleton := Skeleton3D.new()
-	skeleton.name = SKELETON_NODE_NAME
-	add_child(skeleton)
-	_assign_owner(skeleton)
-	return skeleton
+	push_warning("CharacterSpriteRig 缺少 Skeleton3D: %s" % name)
+	return null
 
 
-func _build_skeleton_bones() -> void:
-	if profile == null or _skeleton == null:
-		return
-	var bones: Array = _profile_array("bones")
-	if bones.is_empty():
-		return
-	while _skeleton.get_bone_count() > 0:
-		_skeleton.clear_bones()
-	var name_to_index := {}
-	for bone_value in bones:
-		var bone: Resource = bone_value as Resource
-		if bone == null:
-			continue
-		var bone_name := String(bone.get("name"))
-		if bone_name.strip_edges().is_empty():
-			continue
-		var idx := _skeleton.get_bone_count()
-		_skeleton.add_bone(bone_name)
-		var parent_idx := -1
-		var parent_name := String(bone.get("parent"))
-		if parent_name != "" and name_to_index.has(parent_name):
-			parent_idx = int(name_to_index[parent_name])
-		_skeleton.set_bone_parent(idx, parent_idx)
-		var position: Vector3 = bone.get("position") if typeof(bone.get("position")) == TYPE_VECTOR3 else Vector3.ZERO
-		var rotation_degrees: Vector3 = bone.get("rotation_degrees") if typeof(bone.get("rotation_degrees")) == TYPE_VECTOR3 else Vector3.ZERO
-		var rest := Transform3D(Basis.from_euler(Vector3(
-			deg_to_rad(rotation_degrees.x),
-			deg_to_rad(rotation_degrees.y),
-			deg_to_rad(rotation_degrees.z)
-		)), position)
-		_skeleton.set_bone_rest(idx, rest)
-		_skeleton.set_bone_pose_position(idx, position)
-		_skeleton.set_bone_pose_rotation(idx, Quaternion.from_euler(Vector3(
-			deg_to_rad(rotation_degrees.x),
-			deg_to_rad(rotation_degrees.y),
-			deg_to_rad(rotation_degrees.z)
-		)))
-		name_to_index[bone_name] = idx
-
-
-func _build_part_nodes() -> void:
-	_clear_part_nodes()
+func _bind_part_nodes() -> void:
+	_parts.clear()
 	if profile == null or _skeleton == null:
 		return
 	for part_value in _profile_array("sprites"):
-		var part: Resource = part_value as Resource
+		var part: SpriteRigSpritePart = part_value as SpriteRigSpritePart
 		if part == null:
 			continue
 		var part_id := String(part.get("id"))
 		if part_id.strip_edges().is_empty():
 			continue
-		var attachment := BoneAttachment3D.new()
-		attachment.name = ATTACHMENT_PREFIX + part_id
+		var attachment := _skeleton.get_node_or_null(ATTACHMENT_PREFIX + part_id) as BoneAttachment3D
+		if attachment == null:
+			push_warning("SpriteRigProfile 部件 %s 缺少 BoneAttachment3D" % part_id)
+			continue
 		var bone_name := String(part.get("bone"))
 		if bone_name != "" and _skeleton.find_bone(bone_name) >= 0:
 			attachment.bone_name = bone_name
-		_skeleton.add_child(attachment)
-		_assign_owner(attachment)
-
-		var sprite := Sprite3D.new()
-		sprite.name = SPRITE_PREFIX + part_id
+		var sprite := attachment.get_node_or_null(SPRITE_PREFIX + part_id) as Sprite3D
+		if sprite == null:
+			push_warning("SpriteRigProfile 部件 %s 缺少 Sprite3D" % part_id)
+			continue
 		sprite.pixel_size = float(part.get("pixel_size"))
 		sprite.billboard = int(part.get("billboard_mode"))
 		sprite.position = part.get("local_offset") if typeof(part.get("local_offset")) == TYPE_VECTOR3 else Vector3.ZERO
 		sprite.rotation_degrees = part.get("local_rotation_degrees") if typeof(part.get("local_rotation_degrees")) == TYPE_VECTOR3 else Vector3.ZERO
 		sprite.centered = true
 		sprite.shaded = not bool(part.get("unshaded"))
-		attachment.add_child(sprite)
-		_assign_owner(sprite)
 
 		_parts.append({
 			"part": part,
@@ -128,18 +86,7 @@ func _build_part_nodes() -> void:
 			"sprite": sprite,
 			"part_id": part_id,
 		})
-
-
-func _clear_part_nodes() -> void:
-	_parts.clear()
-	if _skeleton == null:
-		return
-	for child in _skeleton.get_children():
-		if not (child is BoneAttachment3D):
-			continue
-		if not String(child.name).begins_with(ATTACHMENT_PREFIX):
-			continue
-		child.queue_free()
+	_update_directions()
 
 
 func _update_directions() -> void:
@@ -188,17 +135,6 @@ func _profile_array(key: String) -> Array:
 		return []
 	var value: Variant = profile.get(key)
 	return value if typeof(value) == TYPE_ARRAY else []
-
-
-func _assign_owner(node: Node) -> void:
-	if node == null or not Engine.is_editor_hint():
-		return
-	var tree := get_tree()
-	if tree == null:
-		return
-	var edited_root := tree.edited_scene_root
-	if edited_root != null:
-		node.set_owner(edited_root)
 
 
 func part_count() -> int:

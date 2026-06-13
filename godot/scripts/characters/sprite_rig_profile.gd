@@ -3,7 +3,7 @@ class_name SpriteRigProfile
 extends Resource
 
 # 球面视角采样 Sprite Rig 的总配置：包含启用开关、步长、骨骼列表、部件列表。
-# 一个 .tres 资源文件描述一个角色的视觉定义；CharacterSpriteRig 在运行时实例化骨骼和部件。
+# 一个 .tres 资源文件描述一个角色的视觉定义；角色 .tscn 用 Godot 原生节点承载骨骼和部件。
 
 const DEFAULT_YAW_STEP_DEGREES := 45
 const DEFAULT_PITCH_STEP_DEGREES := 45
@@ -13,8 +13,8 @@ const PITCH_MAX_DEGREES := 90
 @export var enabled: bool = true
 @export_range(1, 360, 1) var yaw_step_degrees: int = DEFAULT_YAW_STEP_DEGREES
 @export_range(1, 180, 1) var pitch_step_degrees: int = DEFAULT_PITCH_STEP_DEGREES
-@export var bones: Array[Resource] = []
-@export var sprites: Array[Resource] = []
+@export var bones: Array[SpriteRigBone] = []
+@export var sprites: Array[SpriteRigSpritePart] = []
 
 
 func yaw_angles() -> Array[int]:
