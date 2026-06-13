@@ -226,6 +226,9 @@ func _expect_sprite_rig_inspector(errors: Array[String]) -> void:
 	var hand_sprite := rig.find_child("SpriteRigSprite_hand_l", true, false) as Sprite3D
 	if hand_sprite == null or int(hand_sprite.get_meta("draw_order", -1)) != 35:
 		errors.append("sprite rig inspector selected rig should preserve direction draw-order metadata")
+	rig.apply_direction_from_world_position(Vector3(0.0, 3.0, 0.0))
+	if str(rig.get_meta("direction_key", "")) != "yaw_000_pitch_90":
+		errors.append("sprite rig should preview direction from editor camera world position")
 	window.queue_free()
 	panel.queue_free()
 	rig.queue_free()

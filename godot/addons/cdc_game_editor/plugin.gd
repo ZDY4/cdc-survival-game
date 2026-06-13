@@ -32,6 +32,8 @@ const MENU_OVERWORLD_EDITOR := 180
 const MENU_MAP_REVIEW := 300
 const MENU_AGENT_HANDOFF := 310
 const MENU_MAP_TILE_PALETTE := 330
+const SPRITE_RIG_EDITOR_PREVIEW_INTERVAL := 0.05
+const SPRITE_RIG_EDITOR_PREVIEW_EPSILON := 0.001
 
 var content_editor_windows: Dictionary = {}
 var utility_windows: Dictionary = {}
@@ -39,11 +41,19 @@ var cdc_menu: PopupMenu
 var editor_menu_bar: MenuBar
 var using_tool_menu_fallback := false
 var sprite_rig_inspector_plugin: EditorInspectorPlugin
+var selected_sprite_rig: CharacterSpriteRig
+var _sprite_rig_preview_accumulator := 0.0
+var _last_editor_camera_position := Vector3(INF, INF, INF)
+var _last_editor_camera_rotation := Vector3(INF, INF, INF)
+var _last_preview_rig_position := Vector3(INF, INF, INF)
+var _last_preview_rig_rotation := Vector3(INF, INF, INF)
 
 
 func _enter_tree() -> void:
 	_install_cdc_top_menu()
 	_install_sprite_rig_inspector_plugin()
+	_connect_editor_selection()
+	set_process(true)
 	if cdc_menu != null:
 		print("CDC Game Editor plugin loaded with top menu and independent editor windows")
 		return
@@ -53,6 +63,9 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	set_process(false)
+	_disconnect_editor_selection()
+	selected_sprite_rig = null
 	if cdc_menu != null:
 		if is_instance_valid(cdc_menu):
 			cdc_menu.queue_free()
@@ -79,6 +92,16 @@ func _exit_tree() -> void:
 		if is_instance_valid(window):
 			(window as Window).queue_free()
 	utility_windows.clear()
+
+
+func _process(delta: float) -> void:
+	if not Engine.is_editor_hint():
+		return
+	_sprite_rig_preview_accumulator += delta
+	if _sprite_rig_preview_accumulator < SPRITE_RIG_EDITOR_PREVIEW_INTERVAL:
+		return
+	_sprite_rig_preview_accumulator = 0.0
+	_update_selected_sprite_rig_from_editor_camera()
 
 
 func _install_cdc_top_menu() -> void:
@@ -135,6 +158,100 @@ func _install_sprite_rig_inspector_plugin() -> void:
 	sprite_rig_inspector_plugin = SpriteRigInspectorPlugin.new()
 	sprite_rig_inspector_plugin.setup(self)
 	add_inspector_plugin(sprite_rig_inspector_plugin)
+
+
+func _connect_editor_selection() -> void:
+	var selection := get_editor_interface().get_selection()
+	if selection == null:
+		return
+	if not selection.selection_changed.is_connected(_on_editor_selection_changed):
+		selection.selection_changed.connect(_on_editor_selection_changed)
+	_on_editor_selection_changed()
+
+
+func _disconnect_editor_selection() -> void:
+	var selection := get_editor_interface().get_selection()
+	if selection == null:
+		return
+	if selection.selection_changed.is_connected(_on_editor_selection_changed):
+		selection.selection_changed.disconnect(_on_editor_selection_changed)
+
+
+func _on_editor_selection_changed() -> void:
+	var rig := _selected_sprite_rig_from_editor()
+	if rig == selected_sprite_rig:
+		return
+	selected_sprite_rig = rig
+	_reset_sprite_rig_editor_preview_cache()
+
+
+func _selected_sprite_rig_from_editor() -> CharacterSpriteRig:
+	var selection := get_editor_interface().get_selection()
+	if selection == null:
+		return null
+	for node in selection.get_selected_nodes():
+		var rig := _sprite_rig_from_node(node)
+		if rig != null:
+			return rig
+	return null
+
+
+func _sprite_rig_from_node(node: Node) -> CharacterSpriteRig:
+	var current := node
+	while current != null:
+		if current is CharacterSpriteRig:
+			return current as CharacterSpriteRig
+		current = current.get_parent()
+	return null
+
+
+func _reset_sprite_rig_editor_preview_cache() -> void:
+	_sprite_rig_preview_accumulator = 0.0
+	_last_editor_camera_position = Vector3(INF, INF, INF)
+	_last_editor_camera_rotation = Vector3(INF, INF, INF)
+	_last_preview_rig_position = Vector3(INF, INF, INF)
+	_last_preview_rig_rotation = Vector3(INF, INF, INF)
+
+
+func _update_selected_sprite_rig_from_editor_camera() -> void:
+	if not is_instance_valid(selected_sprite_rig):
+		selected_sprite_rig = null
+		return
+	if selected_sprite_rig.profile == null:
+		return
+	var camera := _editor_viewport_camera()
+	if camera == null:
+		return
+	var camera_position := camera.global_position
+	var camera_rotation := camera.global_transform.basis.get_euler()
+	var rig_position := selected_sprite_rig.global_position
+	var rig_rotation := selected_sprite_rig.global_transform.basis.get_euler()
+	if not _sprite_rig_editor_preview_changed(camera_position, camera_rotation, rig_position, rig_rotation):
+		return
+	_last_editor_camera_position = camera_position
+	_last_editor_camera_rotation = camera_rotation
+	_last_preview_rig_position = rig_position
+	_last_preview_rig_rotation = rig_rotation
+	selected_sprite_rig.apply_direction_from_world_position(camera_position)
+
+
+func _sprite_rig_editor_preview_changed(camera_position: Vector3, camera_rotation: Vector3, rig_position: Vector3, rig_rotation: Vector3) -> bool:
+	var epsilon_squared := SPRITE_RIG_EDITOR_PREVIEW_EPSILON * SPRITE_RIG_EDITOR_PREVIEW_EPSILON
+	return camera_position.distance_squared_to(_last_editor_camera_position) > epsilon_squared \
+			or camera_rotation.distance_squared_to(_last_editor_camera_rotation) > epsilon_squared \
+			or rig_position.distance_squared_to(_last_preview_rig_position) > epsilon_squared \
+			or rig_rotation.distance_squared_to(_last_preview_rig_rotation) > epsilon_squared
+
+
+func _editor_viewport_camera() -> Camera3D:
+	for index in range(4):
+		var viewport := get_editor_interface().get_editor_viewport_3d(index)
+		if viewport == null:
+			continue
+		var camera := viewport.get_camera_3d()
+		if is_instance_valid(camera):
+			return camera
+	return null
 
 
 func _move_cdc_menu_after_help() -> void:

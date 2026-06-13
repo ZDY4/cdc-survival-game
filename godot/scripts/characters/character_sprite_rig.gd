@@ -105,8 +105,19 @@ func _update_directions(force: bool = false) -> void:
 		_remember_refresh_inputs(camera)
 	elif not _should_refresh_for_camera(camera):
 		return
+	_apply_direction_from_world_position(_node_position(camera))
+
+
+func apply_direction_from_world_position(viewer_position: Vector3) -> void:
+	_ensure_part_nodes()
+	_apply_direction_from_world_position(viewer_position)
+
+
+func _apply_direction_from_world_position(viewer_position: Vector3) -> void:
+	if profile == null:
+		return
 	var rig_position := _node_position(self)
-	var direction_global := _node_position(camera) - rig_position
+	var direction_global := viewer_position - rig_position
 	if direction_global.length_squared() <= 0.000001:
 		return
 	var direction_local := _node_basis(self).inverse() * direction_global
