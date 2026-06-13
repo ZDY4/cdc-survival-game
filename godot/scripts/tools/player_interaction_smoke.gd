@@ -2338,11 +2338,23 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("turn action runner move should target player actor 1, got %s" % JSON.stringify(runner))
 	if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)):
 		errors.append("turn action runner should be active or presenting immediately after ground click")
+	if int(runner.get("path_length", 0)) <= 1:
+		errors.append("turn action runner should expose movement path length, got %s" % JSON.stringify(runner))
+	if int(runner.get("total_steps", 0)) <= 0:
+		errors.append("turn action runner should expose total movement steps, got %s" % JSON.stringify(runner))
+	if int(runner.get("remaining_steps", -1)) < 0:
+		errors.append("turn action runner should expose non-negative remaining steps, got %s" % JSON.stringify(runner))
+	if not runner.has("ap_delta"):
+		errors.append("turn action runner should expose AP delta for HUD/debug, got %s" % JSON.stringify(runner))
 	var runtime_line := _hud_runtime_control_line(game_root)
 	if not runtime_line.contains("Runner") or not runtime_line.contains("move"):
 		errors.append("HUD runtime line should expose turn action runner move state, got %s" % runtime_line)
 	if int(runner.get("step_index", 0)) > 0 and not runtime_line.contains("Step"):
 		errors.append("HUD runtime line should expose turn action runner step progress, got %s" % runtime_line)
+	if int(runner.get("remaining_steps", 0)) > 0 and not runtime_line.contains("Remain"):
+		errors.append("HUD runtime line should expose turn action runner remaining steps, got %s" % runtime_line)
+	if runner.has("ap_delta") and not runtime_line.contains("Delta"):
+		errors.append("HUD runtime line should expose turn action runner AP delta, got %s" % runtime_line)
 	var active_control_snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
 	var camera_follow: Dictionary = _dictionary_or_empty(active_control_snapshot.get("camera_follow", {}))
 	if str(camera_follow.get("follow_source", "")) != "actor_node":

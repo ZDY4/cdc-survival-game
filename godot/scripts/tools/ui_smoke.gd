@@ -45,7 +45,11 @@ func _init() -> void:
 			"presentation_active": false,
 			"action_kind": "move",
 			"phase": "move_step",
-			"step_index": 2,
+			"step_index": 1,
+			"completed_steps": 1,
+			"total_steps": 2,
+			"path_length": 3,
+			"remaining_steps": 1,
 			"path": [
 				{"x": 1, "y": 0, "z": 1},
 				{"x": 2, "y": 0, "z": 1},
@@ -53,6 +57,7 @@ func _init() -> void:
 			],
 			"ap_before": 6.0,
 			"ap_after": 4.0,
+			"ap_delta": -2.0,
 			"pending_kind": "movement",
 		},
 	}
@@ -101,7 +106,7 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("missing runtime control line")
 	else:
 		var runtime_text := str(hud.get_node("HudPanel/HudLines/RuntimeControlLine").text)
-		for token in ["Runner active move:move_step", "Step 2/3", "AP 4/6", "Pending movement"]:
+		for token in ["Runner active move:move_step", "Step 1/2", "Remain 1", "AP 4/6", "Delta -2", "Pending movement"]:
 			if not runtime_text.contains(token):
 				errors.append("runtime control line missing runner token %s in %s" % [token, runtime_text])
 	if not hud.get_node("HudPanel/HudLines/InventoryLine").text.contains("1006"):

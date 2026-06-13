@@ -718,14 +718,25 @@ func _turn_action_runner_control_text(value: Variant) -> String:
 	if not phase.is_empty():
 		label += ":%s" % phase
 	var parts: Array[String] = [label]
-	var step_index := int(runner.get("step_index", 0))
+	var step_index := int(runner.get("completed_steps", runner.get("step_index", 0)))
+	var total_steps := int(runner.get("total_steps", 0))
+	var path_length := int(runner.get("path_length", 0))
+	var remaining_steps := int(runner.get("remaining_steps", 0))
 	var path: Array = _array_or_empty(runner.get("path", []))
-	if step_index > 0 or not path.is_empty():
-		parts.append("Step %d/%d" % [step_index, path.size()])
+	if total_steps <= 0 and not path.is_empty():
+		total_steps = max(0, path.size() - 1)
+	if path_length <= 0 and not path.is_empty():
+		path_length = path.size()
+	if step_index > 0 or total_steps > 0 or path_length > 0:
+		parts.append("Step %d/%d" % [step_index, total_steps if total_steps > 0 else path_length])
+	if remaining_steps > 0:
+		parts.append("Remain %d" % remaining_steps)
 	var ap_before := float(runner.get("ap_before", 0.0))
 	var ap_after := float(runner.get("ap_after", 0.0))
 	if not is_zero_approx(ap_before) or not is_zero_approx(ap_after):
 		parts.append("AP %s/%s" % [_number_text(ap_after), _number_text(ap_before)])
+		if runner.has("ap_delta"):
+			parts.append("Delta %s" % _number_text(float(runner.get("ap_delta", 0.0))))
 	var pending_kind := str(runner.get("pending_kind", ""))
 	if not pending_kind.is_empty():
 		parts.append("Pending %s" % pending_kind)

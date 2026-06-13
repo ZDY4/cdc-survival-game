@@ -246,6 +246,16 @@ func finish_active(reason: String = "fast_forward") -> Dictionary:
 
 func snapshot() -> Dictionary:
 	var view_snapshot: Dictionary = _dictionary_or_empty(actor_view.call("snapshot")) if actor_view != null and actor_view.has_method("snapshot") else {}
+	var path: Array = _array_or_empty(action.get("path", [])).duplicate(true)
+	var step_index: int = int(action.get("step_index", 0))
+	var path_length: int = path.size()
+	var total_steps: int = max(0, path_length - 1)
+	var pending_movement: Dictionary = _runner_pending_movement_snapshot()
+	var remaining_steps: int = max(0, total_steps - step_index)
+	if not pending_movement.is_empty() and pending_movement.has("remaining_steps"):
+		remaining_steps = max(0, int(pending_movement.get("remaining_steps", remaining_steps)))
+	var ap_before: float = float(action.get("ap_before", 0.0))
+	var ap_after: float = float(action.get("ap_after", 0.0))
 	return {
 		"active": active,
 		"phase": str(action.get("phase", "idle" if not active else "")),
@@ -255,14 +265,20 @@ func snapshot() -> Dictionary:
 		"target": _dictionary_or_empty(action.get("target", action.get("target_grid", {}))).duplicate(true),
 		"option_id": str(action.get("option_id", "")),
 		"target_actor_id": int(action.get("target_actor_id", 0)),
-		"path": _array_or_empty(action.get("path", [])).duplicate(true),
-		"step_index": int(action.get("step_index", 0)),
+		"path": path,
+		"path_length": path_length,
+		"total_steps": total_steps,
+		"step_index": step_index,
+		"completed_steps": min(step_index, total_steps),
+		"remaining_steps": remaining_steps,
 		"current_grid": _dictionary_or_empty(action.get("current_grid", {})).duplicate(true),
 		"next_grid": _dictionary_or_empty(action.get("next_grid", {})).duplicate(true),
-		"ap_before": float(action.get("ap_before", 0.0)),
-		"ap_after": float(action.get("ap_after", 0.0)),
+		"ap_before": ap_before,
+		"ap_after": ap_after,
+		"ap_delta": ap_after - ap_before,
 		"turn_phase": str(action.get("turn_phase", "")),
 		"pending_kind": str(action.get("pending_kind", "")),
+		"pending_movement": pending_movement,
 		"turn_cycles": int(action.get("turn_cycles", 0)),
 		"auto_turn_limit": _auto_turn_limit(),
 		"npc_queue": _array_or_empty(action.get("npc_queue", [])).duplicate(true),
@@ -275,6 +291,15 @@ func snapshot() -> Dictionary:
 		"queued_actions": [],
 		"latest_result": latest_result.duplicate(true),
 	}
+
+
+func _runner_pending_movement_snapshot() -> Dictionary:
+	var pending: Dictionary = _dictionary_or_empty(action.get("pending_movement", {}))
+	if pending.is_empty():
+		pending = _dictionary_or_empty(latest_result.get("pending_movement", {}))
+	if pending.is_empty() and simulation != null and simulation.has_method("pending_move_snapshot"):
+		pending = _dictionary_or_empty(simulation.call("pending_move_snapshot", int(action.get("actor_id", 0))))
+	return pending.duplicate(true)
 
 
 func _advance_move_step() -> Dictionary:
