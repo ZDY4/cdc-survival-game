@@ -1328,6 +1328,29 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 	return _combat_command_handler.submit_attack(self, actor, command)
 
 
+func submit_attack_for_runner(actor_id: int, target_actor_id: int, topology: Dictionary, options: Dictionary = {}) -> Dictionary:
+	var event_start_index: int = events.size()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	if not actor.turn_open:
+		return {"success": false, "reason": "turn_closed", "actor_id": actor_id, "turn_state": turn_state.duplicate(true)}
+	var command: Dictionary = {
+		"kind": "attack",
+		"actor_id": actor_id,
+		"target_actor_id": target_actor_id,
+		"topology": topology.duplicate(true),
+	}
+	for key in options.keys():
+		command[key] = options[key]
+	var result: Dictionary = _submit_attack_command(actor, command)
+	result["events"] = _events_since(event_start_index)
+	result["turn_state"] = turn_state.duplicate(true)
+	result["pending_movement"] = pending_movement.duplicate(true)
+	result["pending_interaction"] = pending_interaction.duplicate(true)
+	return result
+
+
 func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	return _crafting_command_handler.submit_craft(self, _progression_rules, actor, command)
 

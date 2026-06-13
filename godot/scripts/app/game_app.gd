@@ -1298,6 +1298,18 @@ func request_player_move(grid: Dictionary) -> Dictionary:
 	return result
 
 
+func request_player_attack(target_actor_id: int, options: Dictionary = {}) -> Dictionary:
+	var blocked: Dictionary = _player_command_rejection("attack")
+	if not blocked.is_empty():
+		return blocked
+	_setup_world_container()
+	_configure_turn_action_runner()
+	var player_id := _player_actor_id()
+	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_attack", player_id, target_actor_id, topology, options))
+	return result
+
+
 func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: Dictionary = {}) -> Dictionary:
 	if not _rebuild_runtime_world_result("turn_action_runner_step"):
 		return {"success": false, "reason": "world_result_sync_failed"}

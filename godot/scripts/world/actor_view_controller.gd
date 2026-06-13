@@ -3,6 +3,7 @@ extends RefCounted
 const GRID_SIZE := 1.0
 const DEFAULT_ACTOR_Y := 0.58
 const STEP_DURATION_SEC := 0.07
+const ATTACK_DURATION_SEC := 0.12
 
 var world_container: Node3D
 var active_actor_id := 0
@@ -89,6 +90,68 @@ func move_actor_step(host: Node, actor_id: int, from_grid: Dictionary, to_grid: 
 	return latest.duplicate(true)
 
 
+func play_attack(host: Node, actor_id: int, target_actor_id: int, result: Dictionary, options: Dictionary = {}) -> Dictionary:
+	var node := actor_node(actor_id)
+	var target_node := actor_node(target_actor_id)
+	if node == null:
+		latest = {
+			"active": false,
+			"kind": "attack",
+			"success": false,
+			"reason": "actor_node_missing",
+			"actor_id": actor_id,
+			"target_actor_id": target_actor_id,
+		}
+		return latest.duplicate(true)
+	_finish_active_actor_presentation(actor_id, "new_attack", true)
+	var duration := float(options.get("duration_sec", ATTACK_DURATION_SEC))
+	var original_position := node.position
+	var target_grid: Dictionary = _dictionary_or_empty(result.get("target_grid", {}))
+	if target_grid.is_empty() and target_node != null:
+		target_grid = _world_to_grid(target_node.global_position)
+	var actor_grid: Dictionary = _dictionary_or_empty(result.get("attacker_grid", {}))
+	if actor_grid.is_empty():
+		actor_grid = _world_to_grid(node.global_position)
+	if not target_grid.is_empty():
+		node.rotation_degrees = Vector3(node.rotation_degrees.x, _yaw_degrees(actor_grid, target_grid, node.rotation_degrees.y), node.rotation_degrees.z)
+	node.set_meta("action_runner_active", true)
+	node.set_meta("action_runner_step_active", true)
+	node.set_meta("action_runner_kind", "attack")
+	node.set_meta("action_runner_actor_id", actor_id)
+	node.set_meta("action_runner_target_actor_id", target_actor_id)
+	node.set_meta("action_runner_hit_kind", str(result.get("hit_kind", "")))
+	node.set_meta("action_presenter_final_position", original_position)
+	active_actor_id = actor_id
+	active_node_ref = weakref(node)
+	active_tween = host.create_tween() if host != null else null
+	latest = {
+		"active": true,
+		"kind": "attack",
+		"success": true,
+		"actor_id": actor_id,
+		"target_actor_id": target_actor_id,
+		"duration_sec": duration,
+		"hit_kind": str(result.get("hit_kind", "")),
+		"node_path": str(node.get_path()),
+		"node_instance_id": node.get_instance_id(),
+	}
+	if active_tween == null:
+		_finish_active_actor_presentation(actor_id, "no_tween")
+		return latest.duplicate(true)
+	var lunge := Vector3.ZERO
+	if target_node != null:
+		var direction := target_node.global_position - node.global_position
+		direction.y = 0.0
+		if direction.length() > 0.001:
+			lunge = direction.normalized() * 0.12
+	active_tween.set_trans(Tween.TRANS_SINE)
+	active_tween.set_ease(Tween.EASE_IN_OUT)
+	active_tween.tween_property(node, "position", original_position + lunge, duration * 0.45)
+	active_tween.tween_property(node, "position", original_position, duration * 0.55)
+	active_tween.finished.connect(Callable(self, "_on_step_tween_finished").bind(actor_id))
+	return latest.duplicate(true)
+
+
 func is_active() -> bool:
 	var node := _active_node_ref()
 	return node != null and bool(node.get_meta("action_runner_step_active", false)) and active_tween != null and active_tween.is_valid() and active_tween.is_running()
@@ -170,6 +233,14 @@ func _grid_to_world(grid: Dictionary, y: float = DEFAULT_ACTOR_Y) -> Vector3:
 	return Vector3(float(grid.get("x", 0)) * GRID_SIZE, y, float(grid.get("z", 0)) * GRID_SIZE)
 
 
+func _world_to_grid(position: Vector3) -> Dictionary:
+	return {
+		"x": int(round(position.x / GRID_SIZE)),
+		"y": 0,
+		"z": int(round(position.z / GRID_SIZE)),
+	}
+
+
 func _yaw_degrees(from_grid: Dictionary, to_grid: Dictionary, fallback: float) -> float:
 	var dx := int(to_grid.get("x", 0)) - int(from_grid.get("x", 0))
 	var dz := int(to_grid.get("z", 0)) - int(from_grid.get("z", 0))
@@ -178,3 +249,7 @@ func _yaw_degrees(from_grid: Dictionary, to_grid: Dictionary, fallback: float) -
 	if abs(dx) >= abs(dz):
 		return 90.0 if dx > 0 else 270.0
 	return 180.0 if dz > 0 else 0.0
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	return value if typeof(value) == TYPE_DICTIONARY else {}
