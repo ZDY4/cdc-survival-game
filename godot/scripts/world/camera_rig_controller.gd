@@ -27,12 +27,13 @@ func attach(p_camera: Camera3D, focus_position: Vector3, p_map_size: Vector2, vi
 	if camera == null:
 		return false
 	map_size = p_map_size
-	target = _vector_meta(camera, "focus_position", focus_position)
+	var previous_following_focus := _bool_meta(camera, "following_focus", true)
+	target = focus_position if previous_following_focus else _vector_meta(camera, "focus_position", focus_position)
 	target.y = level_plane_height
 	zoom_factor = _float_meta(camera, "zoom_factor", 1.0)
-	following_focus = true
-	follow_source = "attach"
-	follow_actor_id = 0
+	following_focus = previous_following_focus
+	follow_source = "attach" if following_focus else str(camera.get_meta("follow_source", "manual"))
+	follow_actor_id = 0 if following_focus else int(camera.get_meta("follow_actor_id", 0))
 	is_dragging = false
 	has_drag_anchor = false
 	_sync_camera_focus_meta()
@@ -217,6 +218,10 @@ func _visible_world_footprint(distance: float, viewport_size: Vector2) -> Vector
 
 func _sync_camera_focus_meta() -> void:
 	if camera != null:
+		camera.set_meta("bevy_camera_logic", true)
+		camera.set_meta("camera_yaw_degrees", BEVY_CAMERA_YAW_DEGREES)
+		camera.set_meta("camera_pitch_degrees", BEVY_CAMERA_PITCH_DEGREES)
+		camera.set_meta("camera_fov_degrees", BEVY_CAMERA_FOV_DEGREES)
 		camera.set_meta("focus_position", target)
 		camera.set_meta("zoom_factor", zoom_factor)
 		camera.set_meta("follow_source", follow_source)
@@ -237,4 +242,12 @@ func _float_meta(node: Node, key: String, fallback: float) -> float:
 		var value: Variant = node.get_meta(key)
 		if typeof(value) == TYPE_FLOAT or typeof(value) == TYPE_INT:
 			return float(value)
+	return fallback
+
+
+func _bool_meta(node: Node, key: String, fallback: bool) -> bool:
+	if node != null and node.has_meta(key):
+		var value: Variant = node.get_meta(key)
+		if typeof(value) == TYPE_BOOL:
+			return bool(value)
 	return fallback
