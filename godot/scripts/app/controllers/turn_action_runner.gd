@@ -280,6 +280,7 @@ func snapshot() -> Dictionary:
 		"pending_kind": str(action.get("pending_kind", "")),
 		"pending_movement": pending_movement,
 		"interaction_phase": _interaction_phase_snapshot(),
+		"attack_phase": _attack_phase_snapshot(view_snapshot),
 		"turn_cycles": int(action.get("turn_cycles", 0)),
 		"auto_turn_limit": _auto_turn_limit(),
 		"npc_queue": _array_or_empty(action.get("npc_queue", [])).duplicate(true),
@@ -538,6 +539,8 @@ func _advance_attack_step() -> Dictionary:
 		_clear_actor_action_state(actor_id, "attack_failed")
 		_sync_host_after_step(result)
 		return result
+	_record_attack_phase(result, "player")
+	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
 	action["ap_after"] = float(result.get("ap_remaining", action.get("ap_after", 0.0)))
 	action["phase"] = "attack_presentation"
 	action["turn_phase"] = "player_presentation"
@@ -563,6 +566,8 @@ func _finish_attack_presentation_phase() -> Dictionary:
 		active = false
 		action["phase"] = "finished"
 		action["turn_phase"] = "player"
+	if not _dictionary_or_empty(action.get("attack_phase", {})).is_empty():
+		action["attack_completed"] = true
 	var result := {
 		"success": true,
 		"kind": "attack_presentation_finished",
@@ -968,6 +973,67 @@ func _interaction_target_grid(target: Dictionary) -> Dictionary:
 	return {}
 
 
+func _record_attack_phase(result: Dictionary, source: String) -> void:
+	var phase: Dictionary = _attack_phase_from_result(result, source)
+	if phase.is_empty():
+		return
+	action["attack_phase"] = phase
+	action["attack_source"] = source
+	action["attack_actor_id"] = int(phase.get("actor_id", action.get("actor_id", 0)))
+	action["attack_target_actor_id"] = int(phase.get("target_actor_id", action.get("target_actor_id", 0)))
+	action["attack_completed"] = bool(phase.get("completed", false))
+
+
+func _attack_phase_snapshot(view_snapshot: Dictionary = {}) -> Dictionary:
+	if str(action.get("kind", "")) != "attack" and _dictionary_or_empty(action.get("attack_phase", {})).is_empty():
+		return {}
+	var phase: Dictionary = _dictionary_or_empty(action.get("attack_phase", {})).duplicate(true)
+	if phase.is_empty():
+		phase = _attack_phase_from_result(latest_result, str(action.get("attack_source", "player")))
+	if phase.is_empty():
+		phase = {
+			"source": str(action.get("attack_source", "player")),
+			"actor_id": int(action.get("actor_id", action.get("attack_actor_id", 0))),
+			"target_actor_id": int(action.get("target_actor_id", action.get("attack_target_actor_id", 0))),
+		}
+	phase["phase"] = str(action.get("phase", ""))
+	phase["turn_phase"] = str(action.get("turn_phase", ""))
+	phase["presentation_active"] = bool(view_snapshot.get("active", false)) and str(view_snapshot.get("kind", "")) == "attack"
+	phase["completed"] = bool(action.get("attack_completed", phase.get("completed", false))) or str(action.get("phase", "")) == "finished"
+	return phase
+
+
+func _attack_phase_from_result(result: Dictionary, source: String) -> Dictionary:
+	if result.is_empty():
+		return {}
+	var actor_id := int(result.get("actor_id", action.get("actor_id", 0)))
+	var target_actor_id := int(result.get("target_actor_id", action.get("target_actor_id", 0)))
+	if actor_id <= 0 and target_actor_id <= 0:
+		return {}
+	var weapon_profile: Dictionary = _dictionary_or_empty(result.get("weapon_profile", {}))
+	var damage := float(result.get("damage", 0.0))
+	var hit_kind := str(result.get("hit_kind", ""))
+	var hit := bool(result.get("hit", damage > 0.0 or hit_kind == "hit" or hit_kind == "crit"))
+	return {
+		"source": source,
+		"actor_id": actor_id,
+		"target_actor_id": target_actor_id,
+		"target_grid": _dictionary_or_empty(result.get("target_grid", {})).duplicate(true),
+		"attacker_grid": _dictionary_or_empty(result.get("attacker_grid", {})).duplicate(true),
+		"range": int(result.get("range", weapon_profile.get("range", 0))),
+		"weapon_item_id": str(weapon_profile.get("item_id", result.get("weapon_item_id", ""))),
+		"hit": hit,
+		"hit_kind": hit_kind,
+		"damage": damage,
+		"crit": bool(result.get("crit", hit_kind == "crit")),
+		"defeated": bool(result.get("defeated", false)),
+		"ap_before": float(result.get("ap_before", action.get("ap_before", 0.0))),
+		"ap_after": float(result.get("ap_remaining", action.get("ap_after", 0.0))),
+		"completed": bool(result.get("success", false)),
+		"result_kind": str(result.get("kind", "attack")),
+	}
+
+
 func _present_npc_turn_result(npc_result: Dictionary) -> Dictionary:
 	if actor_view == null:
 		return {"success": false, "active": false, "reason": "actor_view_missing"}
@@ -983,6 +1049,7 @@ func _present_npc_turn_result(npc_result: Dictionary) -> Dictionary:
 			"duration_sec": 0.10,
 			"source": "npc_action",
 		}))
+		_record_attack_phase(attack, "npc")
 		presentation["source"] = "npc_action"
 		presentation["npc_intent"] = "attack"
 		return presentation

@@ -1434,6 +1434,7 @@ func submit_attack_for_runner(actor_id: int, target_actor_id: int, topology: Dic
 		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
 	if not actor.turn_open:
 		return {"success": false, "reason": "turn_closed", "actor_id": actor_id, "turn_state": turn_state.duplicate(true)}
+	var ap_before: float = actor.ap
 	var command: Dictionary = {
 		"kind": "attack",
 		"actor_id": actor_id,
@@ -1443,6 +1444,8 @@ func submit_attack_for_runner(actor_id: int, target_actor_id: int, topology: Dic
 	for key in options.keys():
 		command[key] = options[key]
 	var result: Dictionary = _submit_attack_command(actor, command)
+	result["ap_before"] = ap_before
+	result["ap_remaining"] = actor.ap
 	result["events"] = _events_since(event_start_index)
 	result["turn_state"] = turn_state.duplicate(true)
 	result["pending_movement"] = pending_movement.duplicate(true)

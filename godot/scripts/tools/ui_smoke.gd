@@ -65,6 +65,15 @@ func _init() -> void:
 				"target_id": "survivor_outpost_01_pickup_medkit",
 				"completed": true,
 			},
+			"attack_phase": {
+				"source": "player",
+				"actor_id": 1,
+				"target_actor_id": 2,
+				"hit": true,
+				"hit_kind": "hit",
+				"damage": 3.0,
+				"completed": true,
+			},
 		},
 	}
 	var hud: Control = HUD_SCENE.instantiate()
@@ -112,7 +121,7 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("missing runtime control line")
 	else:
 		var runtime_text := str(hud.get_node("HudPanel/HudLines/RuntimeControlLine").text)
-		for token in ["Runner active move:move_step", "Step 1/2", "Remain 1", "Interact pickup/item_pickup -> survivor_outpost_01_pickup_medkit done", "AP 4/6", "Delta -2", "Pending movement"]:
+		for token in ["Runner active move:move_step", "Step 1/2", "Remain 1", "Interact pickup/item_pickup -> survivor_outpost_01_pickup_medkit done", "Attack player #1 -> #2 hit 3 done", "AP 4/6", "Delta -2", "Pending movement"]:
 			if not runtime_text.contains(token):
 				errors.append("runtime control line missing runner token %s in %s" % [token, runtime_text])
 	if not hud.get_node("HudPanel/HudLines/InventoryLine").text.contains("1006"):

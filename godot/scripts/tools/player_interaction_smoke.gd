@@ -141,6 +141,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("consumed pickup interaction node was not removed from scene")
 	await _expect_ground_grid_move(errors, game_root)
 	await _expect_hostile_attack_hover_preview(errors, game_root)
+	await _expect_player_attack_exposes_turn_runner_phase(errors, game_root)
 	await _expect_npc_attack_uses_turn_runner_presentation(errors, game_root)
 	await _expect_corpse_world_interaction(errors, game_root)
 	await _expect_independent_combat_event_presenters(errors, game_root)
@@ -1886,6 +1887,92 @@ func _cleanup_attack_hover_preview_smoke(game_root: Node, player: RefCounted, ta
 	game_root.rebuild_runtime_world()
 
 
+func _expect_player_attack_exposes_turn_runner_phase(errors: Array[String], game_root: Node) -> void:
+	await _wait_for_turn_action_runner_idle(game_root)
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("player attack runner smoke missing player actor")
+		return
+	var original_ap: float = player.ap
+	var original_attack_power: float = player.attack_power
+	var original_attributes: Dictionary = player.combat_attributes.duplicate(true)
+	var original_equipment: Dictionary = player.equipment.duplicate(true)
+	player.ap = 6.0
+	player.attack_power = 3.0
+	player.combat_attributes["accuracy"] = 100.0
+	player.equipment = {}
+	var target_grid := _near_open_grid_from(_player_grid(game_root), game_root.world_result.get("map", {}), game_root)
+	var target_id: int = game_root.simulation.register_actor({
+		"definition_id": "player_attack_runner_smoke",
+		"display_name": "Player Attack Runner Smoke",
+		"kind": "npc",
+		"side": "hostile",
+		"group_id": "hostile",
+		"map_id": game_root.simulation.active_map_id,
+		"appearance_profile_id": "default_humanoid",
+		"model_asset": "characters/sprite_rigs/default_humanoid.tscn",
+		"grid_position": GridCoord.from_dictionary(target_grid),
+		"ap": 0.0,
+		"turn_open": false,
+		"max_hp": 20.0,
+		"hp": 20.0,
+		"defense": 0.0,
+		"combat_attributes": {"evasion": 0.0},
+	})
+	game_root.simulation.set_relationship_score(player.actor_id, target_id, -100.0, "player_attack_runner_smoke")
+	game_root.rebuild_runtime_world()
+	var result: Dictionary = game_root.request_player_attack(target_id)
+	if not bool(result.get("success", false)):
+		errors.append("player attack runner smoke failed: %s" % JSON.stringify(result))
+		_cleanup_player_attack_runner_smoke(game_root, player, target_id, original_ap, original_attack_power, original_attributes, original_equipment)
+		return
+	var saw_attack_phase := false
+	var saw_attack_presentation := false
+	for _index in range(120):
+		var runtime_control: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+		var runner: Dictionary = _dictionary_or_empty(runtime_control.get("turn_action_runner", {}))
+		var phase: Dictionary = _dictionary_or_empty(runner.get("attack_phase", {}))
+		var actor_view: Dictionary = _dictionary_or_empty(runner.get("actor_view", {}))
+		if not phase.is_empty():
+			saw_attack_phase = true
+			if str(phase.get("source", "")) != "player":
+				errors.append("player attack_phase should expose player source, got %s" % JSON.stringify(phase))
+			if int(phase.get("actor_id", 0)) != player.actor_id or int(phase.get("target_actor_id", 0)) != target_id:
+				errors.append("player attack_phase should expose attacker and target ids, got %s" % JSON.stringify(phase))
+			if not bool(phase.get("hit", false)):
+				errors.append("player attack_phase should expose hit result, got %s" % JSON.stringify(phase))
+			if float(phase.get("damage", 0.0)) <= 0.0:
+				errors.append("player attack_phase should expose resolved damage, got %s" % JSON.stringify(phase))
+			if not bool(phase.get("completed", false)):
+				errors.append("player attack_phase should expose completed attack result, got %s" % JSON.stringify(phase))
+			var runtime_line := _hud_runtime_control_line(game_root)
+			if not runtime_line.contains("Attack player") or not runtime_line.contains("-> #%d" % target_id):
+				errors.append("HUD runtime line should expose player attack phase, got %s" % runtime_line)
+		if str(actor_view.get("kind", "")) == "attack" and int(actor_view.get("actor_id", 0)) == player.actor_id and int(actor_view.get("target_actor_id", 0)) == target_id:
+			saw_attack_presentation = true
+			if str(runner.get("turn_phase", "")) != "player_presentation":
+				errors.append("player attack runner should expose player_presentation during attack, got %s" % runner.get("turn_phase", ""))
+			break
+		await process_frame
+	if not saw_attack_phase:
+		errors.append("player attack runner should expose attack_phase")
+	if not saw_attack_presentation:
+		errors.append("player attack should use ActorView attack presentation")
+	await _wait_for_turn_action_runner_idle(game_root)
+	_cleanup_player_attack_runner_smoke(game_root, player, target_id, original_ap, original_attack_power, original_attributes, original_equipment)
+
+
+func _cleanup_player_attack_runner_smoke(game_root: Node, player: RefCounted, target_id: int, original_ap: float, original_attack_power: float, original_attributes: Dictionary, original_equipment: Dictionary) -> void:
+	if player != null:
+		player.ap = original_ap
+		player.attack_power = original_attack_power
+		player.combat_attributes = original_attributes
+		player.equipment = original_equipment
+	if game_root.simulation.actor_registry.get_actor(target_id) != null:
+		game_root.simulation.actor_registry.unregister_actor(target_id)
+	game_root.rebuild_runtime_world()
+
+
 func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], game_root: Node) -> void:
 	await _wait_for_turn_action_runner_idle(game_root)
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
@@ -1929,9 +2016,15 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 		return
 	var saw_npc_presentation_phase := false
 	var saw_attack_presentation := false
+	var saw_attack_phase := false
 	for _index in range(120):
 		var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
 		var actor_view: Dictionary = _dictionary_or_empty(runner.get("actor_view", {}))
+		var attack_phase: Dictionary = _dictionary_or_empty(runner.get("attack_phase", {}))
+		if not attack_phase.is_empty() and str(attack_phase.get("source", "")) == "npc":
+			saw_attack_phase = true
+			if int(attack_phase.get("actor_id", 0)) != attacker_id or int(attack_phase.get("target_actor_id", 0)) != player.actor_id:
+				errors.append("npc attack_phase should expose attacker and target ids, got %s" % JSON.stringify(attack_phase))
 		if str(runner.get("phase", "")) == "npc_presentation":
 			saw_npc_presentation_phase = true
 		if str(actor_view.get("kind", "")) == "attack" and int(actor_view.get("actor_id", 0)) == attacker_id and int(actor_view.get("target_actor_id", 0)) == player.actor_id:
@@ -1944,6 +2037,8 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 		errors.append("npc attack runner should enter npc_presentation phase")
 	if not saw_attack_presentation:
 		errors.append("npc attack should use ActorView attack presentation")
+	if not saw_attack_phase:
+		errors.append("npc attack runner should expose attack_phase")
 	await _wait_for_turn_action_runner_idle(game_root)
 	_cleanup_npc_attack_runner_smoke(game_root, player, attacker_id, original_grid, original_ap, original_turn_open, original_hp, original_side)
 

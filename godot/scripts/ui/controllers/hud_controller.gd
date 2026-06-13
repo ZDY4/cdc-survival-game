@@ -734,6 +734,9 @@ func _turn_action_runner_control_text(value: Variant) -> String:
 	var interaction_text := _runner_interaction_phase_text(runner.get("interaction_phase", {}))
 	if not interaction_text.is_empty():
 		parts.append(interaction_text)
+	var attack_text := _runner_attack_phase_text(runner.get("attack_phase", {}))
+	if not attack_text.is_empty():
+		parts.append(attack_text)
 	var ap_before := float(runner.get("ap_before", 0.0))
 	var ap_after := float(runner.get("ap_after", 0.0))
 	if not is_zero_approx(ap_before) or not is_zero_approx(ap_after):
@@ -765,6 +768,39 @@ func _runner_interaction_phase_text(value: Variant) -> String:
 		token += " -> %s" % target_id
 	if bool(phase.get("approach_active", false)):
 		token += " approach"
+	if bool(phase.get("completed", false)):
+		token += " done"
+	return token
+
+
+func _runner_attack_phase_text(value: Variant) -> String:
+	var phase: Dictionary = _dictionary_or_empty(value)
+	if phase.is_empty():
+		return ""
+	var source := str(phase.get("source", "")).strip_edges()
+	var actor_id := int(phase.get("actor_id", 0))
+	var target_actor_id := int(phase.get("target_actor_id", 0))
+	var token := "Attack"
+	if not source.is_empty():
+		token += " %s" % source
+	if actor_id > 0:
+		token += " #%d" % actor_id
+	if target_actor_id > 0:
+		token += " -> #%d" % target_actor_id
+	var hit_kind := str(phase.get("hit_kind", "")).strip_edges()
+	if not hit_kind.is_empty():
+		token += " %s" % hit_kind
+	elif bool(phase.get("hit", false)):
+		token += " hit"
+	var damage := float(phase.get("damage", 0.0))
+	if damage > 0.0:
+		token += " %s" % _number_text(damage)
+	if bool(phase.get("crit", false)):
+		token += " crit"
+	if bool(phase.get("defeated", false)):
+		token += " defeated"
+	if bool(phase.get("presentation_active", false)):
+		token += " presenting"
 	if bool(phase.get("completed", false)):
 		token += " done"
 	return token
