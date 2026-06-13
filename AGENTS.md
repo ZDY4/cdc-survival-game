@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## 本机补充说明
+
+- 如果仓库根目录存在 `AGENTS.local.md`，agent 在读取本文件后应同时读取该本机补充文件。
+- `AGENTS.local.md` 只用于本机路径、工具偏好、临时备注或个人约定；它应加入 `.git/info/exclude`，不要提交到仓库。
+- 若 `AGENTS.local.md` 与本文件冲突，以本文件和用户当前指令为准。
+
 ## 旧 Rust / Bevy 参考工程
 
 - 旧实现参考副本位于 `G:\Projects\cdc_survival_game_bevy_reference`，检出自本仓库 tag `bevy-pre-strip`，当前 HEAD 为 `be8938e`。
