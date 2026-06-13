@@ -18,3 +18,34 @@ static func create(actor_id: int, command: Dictionary, topology: Dictionary, opt
 		"turn_phase": "player_action",
 		"turn_cycles": 0,
 	}
+
+
+static func apply_failed(action: Dictionary, reason: String = "craft_failed") -> void:
+	action["phase"] = "failed"
+	action["turn_phase"] = "failed"
+	action["blocked_reason"] = reason
+
+
+static func apply_result(action: Dictionary, result: Dictionary, pending_kind: String) -> Dictionary:
+	var turn_policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
+	action["ap_after"] = float(result.get("ap_remaining", turn_policy.get("ap_after_action", action.get("ap_after", 0.0))))
+	action["pending_kind"] = pending_kind
+	action["phase"] = "finished"
+	action["turn_phase"] = "player"
+	var pending := not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty()
+	action["craft_completed"] = not pending
+	return {
+		"pending": pending,
+		"finish_reason": "craft_pending" if pending else "craft_finished",
+	}
+
+
+static func phase_source(action: Dictionary) -> String:
+	return "confirm_queue" if bool(_dictionary_or_empty(action.get("options", {})).get("crafting_queue_active", false)) else "craft"
+
+
+static func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}

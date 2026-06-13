@@ -314,17 +314,12 @@ func _advance_wait_step() -> Dictionary:
 	latest_result = result.duplicate(true)
 	if not bool(result.get("success", false)):
 		active = false
-		action["phase"] = "failed"
-		action["turn_phase"] = "failed"
+		WaitAction.apply_failed(action, str(result.get("reason", "wait_failed")))
 		_clear_actor_action_state(actor_id, "wait_failed")
 		_sync_host_after_step(result)
 		return result
-	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
-	action["ap_after"] = float(result.get("ap_before", action.get("ap_after", 0.0)))
+	WaitAction.apply_result(action, result, _pending_kind_from_result(result))
 	_record_wait_phase(result)
-	action["phase"] = "player_turn_end"
-	action["turn_phase"] = "player_turn_end"
-	action["pending_kind"] = _pending_kind_from_result(result)
 	_sync_host_after_step(result)
 	return result
 
@@ -336,29 +331,15 @@ func _advance_craft_step() -> Dictionary:
 	latest_result = result.duplicate(true)
 	if not bool(result.get("success", false)):
 		active = false
-		action["phase"] = "failed"
-		action["turn_phase"] = "failed"
+		CraftAction.apply_failed(action, str(result.get("reason", "craft_failed")))
 		_clear_actor_action_state(actor_id, "craft_failed")
 		_sync_host_after_step(result)
 		return result
-	var turn_policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
-	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
-	action["ap_after"] = float(result.get("ap_remaining", turn_policy.get("ap_after_action", action.get("ap_after", 0.0))))
-	action["pending_kind"] = _pending_kind_from_result(result)
-	_record_craft_phase(result, "confirm_queue" if bool(_dictionary_or_empty(action.get("options", {})).get("crafting_queue_active", false)) else "craft")
+	var craft_update: Dictionary = CraftAction.apply_result(action, result, _pending_kind_from_result(result))
+	_record_craft_phase(result, CraftAction.phase_source(action))
 	var turn_check: Dictionary = _should_end_actor_turn(actor_id)
-	if not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty():
-		active = false
-		action["phase"] = "finished"
-		action["turn_phase"] = "player"
-		action["craft_completed"] = false
-		_clear_actor_action_state(actor_id, "craft_pending")
-	else:
-		active = false
-		action["phase"] = "finished"
-		action["turn_phase"] = "player"
-		action["craft_completed"] = true
-		_clear_actor_action_state(actor_id, "craft_finished")
+	active = false
+	_clear_actor_action_state(actor_id, str(craft_update.get("finish_reason", "craft_finished")))
 	result["runner_active_after"] = active
 	result["turn_check"] = turn_check.duplicate(true)
 	latest_result = result.duplicate(true)
@@ -473,16 +454,12 @@ func _advance_attack_step() -> Dictionary:
 	latest_result = result.duplicate(true)
 	if not bool(result.get("success", false)):
 		active = false
-		action["phase"] = "failed"
-		action["turn_phase"] = "failed"
+		AttackAction.apply_failed(action, str(result.get("reason", "attack_failed")))
 		_clear_actor_action_state(actor_id, "attack_failed")
 		_sync_host_after_step(result)
 		return result
 	_record_attack_phase(result, "player")
-	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
-	action["ap_after"] = float(result.get("ap_remaining", action.get("ap_after", 0.0)))
-	action["phase"] = "attack_presentation"
-	action["turn_phase"] = "player_presentation"
+	AttackAction.apply_result(action, result)
 	var presentation: Dictionary = {}
 	if actor_view != null and actor_view.has_method("play_attack"):
 		presentation = _dictionary_or_empty(actor_view.call("play_attack", host, actor_id, target_actor_id, result))
@@ -498,15 +475,9 @@ func _finish_attack_presentation_phase() -> Dictionary:
 	var actor_id := int(action.get("actor_id", 0))
 	_clear_actor_action_state(actor_id, "attack_presentation_finished")
 	var turn_check: Dictionary = _should_end_actor_turn(actor_id)
-	if bool(turn_check.get("should_end", false)):
-		action["phase"] = "player_turn_end"
-		action["turn_phase"] = "player_turn_end"
-	else:
+	AttackAction.finish_presentation(action, bool(turn_check.get("should_end", false)))
+	if not bool(turn_check.get("should_end", false)):
 		active = false
-		action["phase"] = "finished"
-		action["turn_phase"] = "player"
-	if not _dictionary_or_empty(action.get("attack_phase", {})).is_empty():
-		action["attack_completed"] = true
 	var result := {
 		"success": true,
 		"kind": "attack_presentation_finished",
