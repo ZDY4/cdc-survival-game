@@ -3711,7 +3711,15 @@ func _body_uses_submit_authority(body: String, owner: String) -> bool:
 func _body_uses_turn_action_runner(body: String, owner: String) -> bool:
 	if body.contains("turn_action_runner.call(\"request_wait\""):
 		return true
+	if body.contains("turn_action_runner.call(\"request_interact\""):
+		return true
+	if body.contains("turn_action_runner.call(\"request_move\""):
+		return true
+	if body.contains("turn_action_runner.call(\"request_attack\""):
+		return true
 	if body.contains("request_player_wait("):
+		return true
+	if body.contains("request_player_interaction("):
 		return true
 	if owner == "WaitActionController" and body.contains("_validate_wait_context("):
 		return true

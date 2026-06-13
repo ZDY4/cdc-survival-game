@@ -1305,6 +1305,56 @@ func resume_pending_for_runner(actor_id: int, topology: Dictionary, reason: Stri
 	return result
 
 
+func begin_interaction_for_runner(actor_id: int, target: Dictionary, option_id: String, topology: Dictionary) -> Dictionary:
+	var event_start_index: int = events.size()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	if not actor.turn_open:
+		return {"success": false, "reason": "turn_closed", "actor_id": actor_id, "turn_state": turn_state.duplicate(true)}
+	var prompt: Dictionary = query_interaction_options(actor_id, target)
+	interaction_menu = prompt.duplicate(true)
+	if not bool(prompt.get("ok", false)):
+		return {"success": false, "reason": prompt.get("reason", "interaction_unavailable"), "prompt": prompt}
+	var resolved_option_id := option_id
+	if resolved_option_id.is_empty():
+		resolved_option_id = str(prompt.get("primary_option_id", ""))
+	var option: Dictionary = _interaction_option(prompt, resolved_option_id)
+	if option.is_empty():
+		return {"success": false, "reason": "interaction_option_unavailable", "prompt": prompt, "option_id": resolved_option_id}
+	if str(option.get("kind", "")) == "attack":
+		return {
+			"success": true,
+			"kind": "attack_required",
+			"actor_id": actor_id,
+			"target_actor_id": int(option.get("target_actor_id", 0)),
+			"target": target.duplicate(true),
+			"option_id": resolved_option_id,
+			"prompt": prompt,
+			"turn_state": turn_state.duplicate(true),
+			"events": _events_since(event_start_index),
+		}
+	if not _actor_can_reach_interaction(actor, prompt):
+		return _begin_interaction_approach_for_runner(actor, target, resolved_option_id, prompt, topology, event_start_index)
+	var result: Dictionary = _submit_interact_command(actor, {
+		"kind": "interact",
+		"actor_id": actor_id,
+		"target": target,
+		"option_id": resolved_option_id,
+		"topology": topology,
+	})
+	result["actor_id"] = actor_id
+	result["target"] = target.duplicate(true)
+	result["option_id"] = resolved_option_id
+	result["prompt"] = _dictionary_or_empty(result.get("prompt", prompt)).duplicate(true)
+	result["interaction_completed"] = bool(result.get("success", false))
+	result["pending_movement"] = pending_movement.duplicate(true)
+	result["pending_interaction"] = pending_interaction.duplicate(true)
+	result["turn_state"] = turn_state.duplicate(true)
+	result["events"] = _events_since(event_start_index)
+	return result
+
+
 func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	var target: Dictionary = _dictionary_or_empty(command.get("target", {}))
 	var prompt: Dictionary = query_interaction_options(actor.actor_id, target)
@@ -4923,6 +4973,54 @@ func _approach_then_execute_interaction(actor: RefCounted, target: Dictionary, o
 			"prompt": prompt,
 		}
 	return _resume_pending_interaction(actor, topology, move_result)
+
+
+func _begin_interaction_approach_for_runner(actor: RefCounted, target: Dictionary, option_id: String, prompt: Dictionary, topology: Dictionary, event_start_index: int) -> Dictionary:
+	if topology.is_empty():
+		return {"success": false, "reason": "approach_topology_missing", "prompt": prompt}
+	var approach_goal: Variant = _approach_goal_for_prompt(actor, prompt, topology)
+	if typeof(approach_goal) != TYPE_DICTIONARY:
+		return {
+			"success": false,
+			"reason": "approach_target_unreachable",
+			"prompt": prompt,
+			"interaction_range": int(prompt.get("interaction_range", 1)),
+			"target_distance": int(prompt.get("target_distance", -1)),
+		}
+	pending_interaction = {
+		"actor_id": actor.actor_id,
+		"target": target.duplicate(true),
+		"option_id": option_id,
+		"after_movement": true,
+		"runner_step_mode": true,
+	}
+	var begin: Dictionary = begin_move(actor.actor_id, approach_goal, topology)
+	if not bool(begin.get("success", false)):
+		pending_interaction.clear()
+		begin["prompt"] = prompt
+		return begin
+	pending_movement["after_movement_interaction"] = {
+		"target": target.duplicate(true),
+		"option_id": option_id,
+	}
+	pending_movement["runner_interaction_approach"] = true
+	_emit("interaction_queued", pending_interaction.duplicate(true))
+	return {
+		"success": true,
+		"kind": "interaction_approach_started",
+		"actor_id": actor.actor_id,
+		"target": target.duplicate(true),
+		"option_id": option_id,
+		"prompt": prompt,
+		"approach_required": true,
+		"target_position": _dictionary_or_empty(begin.get("target_position", approach_goal)).duplicate(true),
+		"path": _array_or_empty(begin.get("path", [])).duplicate(true),
+		"steps": int(begin.get("steps", 0)),
+		"pending_movement": pending_movement.duplicate(true),
+		"pending_interaction": pending_interaction.duplicate(true),
+		"turn_state": turn_state.duplicate(true),
+		"events": _events_since(event_start_index),
+	}
 
 
 func _approach_goal_for_prompt(actor: RefCounted, prompt: Dictionary, topology: Dictionary) -> Variant:

@@ -1,8 +1,8 @@
 extends RefCounted
 
 const PLAYER_COMMAND_AUTHORITY_AUDIT: Array[Dictionary] = [
-	{"app_method": "execute_primary_interaction", "owner_method": "execute_primary", "action": "interact", "authority_kind": "submit_player_command", "command_kind": "interact", "owner": "InteractionActionController", "blocker": "_player_command_rejection"},
-	{"app_method": "execute_interaction_option", "owner_method": "execute_option", "action": "interact_option", "authority_kind": "submit_player_command", "command_kind": "interact", "owner": "InteractionActionController", "blocker": "_player_command_rejection"},
+	{"app_method": "execute_primary_interaction", "owner_method": "request_player_interaction", "action": "interact", "authority_kind": "turn_action_runner", "command_kind": "interact", "owner": "GameApp", "blocker": "_player_command_rejection", "runner": "TurnActionRunner"},
+	{"app_method": "execute_interaction_option", "owner_method": "request_player_interaction", "action": "interact_option", "authority_kind": "turn_action_runner", "command_kind": "interact", "owner": "GameApp", "blocker": "_player_command_rejection", "runner": "TurnActionRunner"},
 	{"app_method": "execute_move_to_grid", "owner_method": "execute_move", "action": "move", "authority_kind": "submit_player_command", "command_kind": "move", "owner": "InteractionActionController", "blocker": "_player_command_rejection"},
 	{"app_method": "press_space_action", "owner_method": "press_space_action", "action": "wait_or_dialogue_advance", "authority_kind": "mixed", "command_kind": "wait", "core_service": "advance_dialogue.call", "owner": "WaitActionController", "blocker": "dialogue_or_pending_or_command", "runner": "TurnActionRunner", "authority_helper": "submit_wait"},
 	{"app_method": "submit_wait_action", "owner_method": "request_player_wait", "action": "wait", "authority_kind": "turn_action_runner", "command_kind": "wait", "owner": "GameApp", "blocker": "_player_command_rejection", "runner": "TurnActionRunner"},

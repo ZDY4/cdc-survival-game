@@ -69,6 +69,30 @@ func request_attack(actor_id: int, target_actor_id: int, topology: Dictionary, o
 	return result
 
 
+func request_interact(actor_id: int, target: Dictionary, option_id: String, topology: Dictionary, options: Dictionary = {}) -> Dictionary:
+	if active:
+		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
+	if simulation == null or not simulation.has_method("begin_interaction_for_runner"):
+		return {"success": false, "reason": "simulation_interaction_runner_missing"}
+	action = {
+		"kind": "interact",
+		"actor_id": actor_id,
+		"target": target.duplicate(true),
+		"option_id": option_id,
+		"topology": topology.duplicate(true),
+		"options": options.duplicate(true),
+		"phase": "interact_action",
+		"turn_phase": "player_action",
+		"turn_cycles": 0,
+		"completed_after_presentation": false,
+	}
+	active = true
+	var result := _begin_interaction_action()
+	if not bool(result.get("success", false)) or not bool(action.get("runner_keeps_active", false)):
+		active = false
+	return result
+
+
 func request_wait(actor_id: int, topology: Dictionary, options: Dictionary = {}) -> Dictionary:
 	if active:
 		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
@@ -131,6 +155,25 @@ func process() -> void:
 				_finish_npc_presentation_phase()
 			"player_turn_start":
 				_finish_world_turn_phase()
+	elif action_kind == "interact":
+		if bool(action.get("completed_after_presentation", false)):
+			_resume_interaction_after_approach()
+			return
+		match str(action.get("phase", "")):
+			"interact_action":
+				_resume_interaction_after_approach()
+			"approach_move_step":
+				_advance_interaction_approach_step()
+			"player_turn_end":
+				_begin_world_turn_phase()
+			"npc_action":
+				_advance_npc_turn_phase()
+			"npc_presentation":
+				_finish_npc_presentation_phase()
+			"player_turn_start":
+				_finish_world_turn_phase()
+			"pending_resume":
+				_resume_pending_interaction_turn()
 	elif action_kind == "wait":
 		match str(action.get("phase", "")):
 			"wait_action":
@@ -166,7 +209,8 @@ func snapshot() -> Dictionary:
 		"action_kind": str(action.get("kind", "")),
 		"actor_id": int(action.get("actor_id", 0)),
 		"options": _dictionary_or_empty(action.get("options", {})).duplicate(true),
-		"target": _dictionary_or_empty(action.get("target_grid", {})).duplicate(true),
+		"target": _dictionary_or_empty(action.get("target", action.get("target_grid", {}))).duplicate(true),
+		"option_id": str(action.get("option_id", "")),
 		"target_actor_id": int(action.get("target_actor_id", 0)),
 		"path": _array_or_empty(action.get("path", [])).duplicate(true),
 		"step_index": int(action.get("step_index", 0)),
@@ -254,6 +298,126 @@ func _advance_wait_step() -> Dictionary:
 	action["pending_kind"] = _pending_kind_from_result(result)
 	_sync_host_after_step(result)
 	return result
+
+
+func _begin_interaction_action() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	var target: Dictionary = _dictionary_or_empty(action.get("target", {}))
+	var option_id := str(action.get("option_id", ""))
+	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
+	var result: Dictionary = _dictionary_or_empty(simulation.call("begin_interaction_for_runner", actor_id, target, option_id, topology))
+	latest_result = result.duplicate(true)
+	if not bool(result.get("success", false)):
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, "interaction_failed")
+		_sync_host_after_step(result)
+		return result
+	if str(result.get("kind", "")) == "attack_required":
+		action["target_actor_id"] = int(result.get("target_actor_id", 0))
+		action["kind"] = "attack"
+		action["phase"] = "attack_action"
+		action["turn_phase"] = "player_action"
+		return _advance_attack_step()
+	if bool(result.get("approach_required", false)):
+		action["runner_keeps_active"] = true
+		action["phase"] = "approach_move_step"
+		action["turn_phase"] = "player_action"
+		action["path"] = _array_or_empty(result.get("path", [])).duplicate(true)
+		action["target_grid"] = _dictionary_or_empty(result.get("target_position", {})).duplicate(true)
+		action["pending_kind"] = "interaction"
+		action["step_index"] = 0
+		return _advance_interaction_approach_step()
+	action["runner_keeps_active"] = false
+	action["phase"] = "finished"
+	action["turn_phase"] = "player"
+	_sync_host_after_step(result)
+	return result
+
+
+func _advance_interaction_approach_step() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
+	var step: Dictionary = _dictionary_or_empty(simulation.call("step_move", actor_id, topology))
+	latest_result = step.duplicate(true)
+	if not bool(step.get("success", false)):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, "interaction_approach_failed")
+		_sync_host_after_step(step)
+		return step
+	if _step_waits_for_player_turn(step):
+		action["phase"] = "player_turn_end"
+		action["turn_phase"] = "player_turn_end"
+		action["pending_kind"] = "interaction"
+		action["blocked_reason"] = str(step.get("reason", "ap_insufficient_movement_pending"))
+		action["ap_after"] = float(step.get("ap_remaining", action.get("ap_after", 0.0)))
+		_sync_host_after_step(step)
+		return step
+	var has_visual_step := not _dictionary_or_empty(step.get("from", {})).is_empty() and not _dictionary_or_empty(step.get("to", {})).is_empty()
+	action["phase"] = "approach_move_step"
+	action["turn_phase"] = "player_action"
+	action["step_index"] = int(action.get("step_index", 0)) + 1
+	action["current_grid"] = _dictionary_or_empty(step.get("from", {})).duplicate(true)
+	action["next_grid"] = _dictionary_or_empty(step.get("to", {})).duplicate(true)
+	action["ap_after"] = float(step.get("ap_remaining", 0.0))
+	action["pending_kind"] = "interaction"
+	action["completed_after_presentation"] = bool(step.get("completed", false)) and has_visual_step
+	var presentation: Dictionary = {}
+	if has_visual_step and actor_view != null and actor_view.has_method("move_actor_step"):
+		presentation = _dictionary_or_empty(actor_view.call("move_actor_step", host, actor_id, _dictionary_or_empty(step.get("from", {})), _dictionary_or_empty(step.get("to", {})), {
+			"source": "interaction_approach",
+		}))
+	step["presentation"] = presentation
+	if bool(step.get("completed", false)) and not has_visual_step:
+		return _resume_interaction_after_approach()
+	_sync_host_after_step(step)
+	return step
+
+
+func _resume_interaction_after_approach() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
+	action["completed_after_presentation"] = false
+	action["phase"] = "interact_action"
+	action["turn_phase"] = "player_action"
+	var pending_result: Dictionary = _dictionary_or_empty(simulation.call("resume_pending_for_runner", actor_id, topology, "interact"))
+	var result: Dictionary = {
+		"success": bool(pending_result.get("success", false)),
+		"kind": "interaction_finished",
+		"actor_id": actor_id,
+		"pending_result": pending_result.duplicate(true),
+		"pending_movement": _dictionary_or_empty(pending_result.get("pending_movement", {})).duplicate(true),
+		"pending_interaction": _dictionary_or_empty(pending_result.get("pending_interaction", {})).duplicate(true),
+		"turn_state": _dictionary_or_empty(pending_result.get("turn_state", {})).duplicate(true),
+	}
+	latest_result = result.duplicate(true)
+	if not bool(result.get("success", false)):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, str(pending_result.get("reason", "interaction_failed")))
+		_sync_host_after_step(result)
+		return result
+	if not _dictionary_or_empty(result.get("pending_interaction", {})).is_empty():
+		action["phase"] = "player_turn_end"
+		action["turn_phase"] = "player_turn_end"
+		action["pending_kind"] = "interaction"
+	else:
+		active = false
+		action["phase"] = "finished"
+		action["turn_phase"] = "player"
+		action["pending_kind"] = ""
+		_clear_actor_action_state(actor_id, "interaction_finished")
+	_sync_host_after_step(result)
+	return result
+
+
+func _resume_pending_interaction_turn() -> Dictionary:
+	if not _dictionary_or_empty(latest_result.get("pending_movement", {})).is_empty():
+		return _advance_interaction_approach_step()
+	return _resume_interaction_after_approach()
 
 
 func _advance_attack_step() -> Dictionary:
@@ -508,6 +672,8 @@ func _world_turn_reason() -> String:
 			return "pending_movement"
 		"attack":
 			return "attack"
+		"interact":
+			return "interact"
 		"wait":
 			return str(_dictionary_or_empty(action.get("options", {})).get("reason", "wait"))
 	return str(action.get("kind", "turn_action_runner"))
@@ -516,6 +682,9 @@ func _world_turn_reason() -> String:
 func _action_should_resume_pending(result: Dictionary) -> bool:
 	if str(action.get("kind", "")) == "move":
 		return not _dictionary_or_empty(result.get("pending_movement", {})).is_empty()
+	if str(action.get("kind", "")) == "interact":
+		return not _dictionary_or_empty(result.get("pending_movement", {})).is_empty() \
+			or not _dictionary_or_empty(result.get("pending_interaction", {})).is_empty()
 	if str(action.get("kind", "")) == "wait":
 		return not _dictionary_or_empty(result.get("pending_movement", {})).is_empty() \
 			or not _dictionary_or_empty(result.get("pending_interaction", {})).is_empty() \

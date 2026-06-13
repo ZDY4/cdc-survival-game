@@ -1287,13 +1287,18 @@ func _apply_interaction_selection_operation(operation: Dictionary) -> Dictionary
 
 
 func execute_primary_interaction() -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execute_primary", interaction_controller, Callable(self, "_player_command_rejection")))
-	return _apply_interaction_action_operation(operation)
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var target: Dictionary = _dictionary_or_empty(interaction_controller.selected_target).duplicate(true)
+	var prompt: Dictionary = _dictionary_or_empty(interaction_controller.selected_prompt)
+	return request_player_interaction(target, str(prompt.get("primary_option_id", "")))
 
 
 func execute_interaction_option(option_id: String) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execute_option", interaction_controller, option_id, Callable(self, "_player_command_rejection")))
-	return _apply_interaction_action_operation(operation)
+	if interaction_controller == null:
+		return {"success": false, "reason": "interaction_controller_missing"}
+	var target: Dictionary = _dictionary_or_empty(interaction_controller.selected_target).duplicate(true)
+	return request_player_interaction(target, option_id)
 
 
 func _apply_interaction_action_operation(operation: Dictionary) -> Dictionary:
@@ -1356,6 +1361,22 @@ func request_player_attack(target_actor_id: int, options: Dictionary = {}) -> Di
 	return result
 
 
+func request_player_interaction(target: Dictionary, option_id: String = "", options: Dictionary = {}) -> Dictionary:
+	var blocked: Dictionary = _player_command_rejection("interact")
+	if not blocked.is_empty():
+		return blocked
+	if target.is_empty():
+		return {"success": false, "reason": "interaction_target_not_selected"}
+	_setup_world_container()
+	_configure_turn_action_runner()
+	var player_id := _player_actor_id()
+	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_interact", player_id, target, option_id, topology, options))
+	if bool(result.get("success", false)):
+		_restore_actor_camera_follow("player_interaction")
+	return result
+
+
 func request_player_wait(options: Dictionary = {}) -> Dictionary:
 	var blocked: Dictionary = _player_command_rejection("wait")
 	if not blocked.is_empty():
@@ -1379,6 +1400,15 @@ func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: 
 	_configure_runtime_audio_layers()
 	if bool(crafting_continuation.get("continued", false)):
 		_refresh_operation_panels(_array_or_empty(crafting_continuation.get("refresh", [])))
+	var interaction_result: Dictionary = _runner_interaction_result(step_result, runner_snapshot)
+	if not interaction_result.is_empty():
+		_apply_interaction_execution_result(interaction_result, _dictionary_or_empty(runner_snapshot.get("target", {})))
+		return {
+			"success": true,
+			"render_world": true,
+			"step_result": step_result.duplicate(true),
+			"turn_action_runner": runner_snapshot.duplicate(true),
+		}
 	refresh_hud(current_interaction_prompt())
 	return {
 		"success": true,
@@ -1386,6 +1416,28 @@ func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: 
 		"step_result": step_result.duplicate(true),
 		"turn_action_runner": runner_snapshot.duplicate(true),
 	}
+
+
+func _runner_interaction_result(step_result: Dictionary, runner_snapshot: Dictionary) -> Dictionary:
+	if str(runner_snapshot.get("action_kind", "")) != "interact":
+		return {}
+	var pending_result: Dictionary = _dictionary_or_empty(step_result.get("pending_result", {}))
+	if _is_final_interaction_result(pending_result):
+		return pending_result
+	if _is_final_interaction_result(step_result):
+		return step_result
+	return {}
+
+
+func _is_final_interaction_result(result: Dictionary) -> bool:
+	if result.is_empty() or not bool(result.get("success", false)):
+		return false
+	return bool(result.get("consumed_target", false)) \
+		or result.has("dialogue_id") \
+		or result.has("container") \
+		or result.has("context_snapshot") \
+		or bool(result.get("defeated", false)) \
+		or bool(result.get("interaction_completed", false))
 
 
 func _runner_step_should_continue_crafting_queue(step_result: Dictionary, runner_snapshot: Dictionary) -> bool:
