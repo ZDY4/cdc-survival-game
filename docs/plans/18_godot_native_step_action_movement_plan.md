@@ -1,8 +1,8 @@
 # Godot 原生逐步动作与移动系统优化计划
 
-本文定义移动、回合、相机和动作表现的最终改造路线。目标是把当前“规则层一次跑完、表现层事后补动画”的模式，收敛为更符合 Godot 项目开发方式的逐步动作系统：规则层仍然权威，但运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
+本文定义移动、回合、相机和动作表现的最终改造路线。目标是把当前“规则层一次跑完、表现层事后补动画”的模式，替换为符合 Godot 项目开发方式的逐步动作系统：规则层仍然权威，但运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
 
-本计划只描述目标架构和直接迁移路线。后续实现以 Godot 原生 action runner、稳定 actor view、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都逐步迁入该主线。
+本计划只描述目标架构和直接迁移路线。后续实现以 Godot 原生 action runner、稳定 actor view、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都迁入该主线；旧的同步推进入口必须被 Godot action runner 完整替换，不作为继续扩展的运行时方案。
 
 ## 0. 架构差距结论
 
@@ -170,7 +170,7 @@ func snapshot() -> Dictionary
 - 支持 follow grid target。
 - 支持 follow Node3D target。
 - 移动 action active 时跟随 actor node。
-- 非 action 状态或 actor node 缺失时 fallback 到 focused grid。
+- 非 action 状态使用 focused grid 作为稳定跟随目标；actor node 缺失应记录异常并刷新 view registry。
 - 用户中键拖拽后保持 manual pan，直到 `F` / focus shortcut 或新 action 明确恢复 follow。
 
 建议接口：
@@ -252,10 +252,10 @@ Simulation.step_move(...)
 
 边界要求：
 
-- `submit_player_command({"kind": "move"})` 从主游戏输入、HUD、交互、AI 调度和 smoke 验收中退出。
-- 调试工具、headless smoke 和保存恢复不再依赖旧 move command 推进未来状态，而是通过 TurnActionRunner 的显式 step / finish facade 驱动。
-- 如确实需要测试快速完成动作，测试入口应命名为 `finish_active_action()` 或 `drain_turn_action_runner()`，语义是“驱动 action runner 跑完当前动作”。
-- `_submit_move_command()` 在替换完成后应删除；删除前不得继续新增业务逻辑。
+- `submit_player_command({"kind": "move"})` 退出主游戏输入、HUD、交互、AI 调度和 smoke 验收。
+- 调试工具、headless smoke 和保存恢复通过 TurnActionRunner 的显式 step / finish facade 驱动，不再依赖同步 move command 推进未来状态。
+- 测试快速完成动作的入口命名为 `finish_active_action()` 或 `drain_turn_action_runner()`，语义是“驱动 action runner 跑完当前动作”。
+- `_submit_move_command()` 作为同步移动遗留入口从运行时主路径删除；迁移过程不得向其中新增业务逻辑。
 
 ## 4. App 输入和动作调度
 
@@ -293,7 +293,7 @@ Action active 时：
 
 ## 5. 移动逐格化实现路线
 
-### 阶段 1：建立 Action Runner 骨架和测试
+### 阶段 1：建立 Action Runner 运行主线和验收
 
 改动：
 
@@ -301,7 +301,7 @@ Action active 时：
 - 新增 runner snapshot。
 - `runtime_control_snapshot()` 增加 `turn_action_runner`。
 - `PlayerInteraction` smoke 增加移动中相机、actor node、runner phase 断言。
-- 完全以 `TurnActionRunner`、`ActorViewController`、相机 follow snapshot 和 actor node 稳定性作为验收对象。
+- 运行时移动验收绑定 `TurnActionRunner`、`ActorViewController`、相机 follow snapshot 和 actor node 稳定性。
 
 验收：
 
@@ -318,7 +318,7 @@ Action active 时：
 - `Simulation.step_move()` 每次推进一格。
 - AP 每格扣除。
 - pending movement path 每格更新。
-- 主游戏路径切到 `begin_move()` / `step_move()`；`_submit_move_command()` 不再扩展，并在所有调用方迁移后删除。
+- 主游戏路径切到 `begin_move()` / `step_move()`；同步整段移动入口从运行时主路径退出。
 
 验收：
 
@@ -494,7 +494,7 @@ cmd /c run_godot_validate.bat
 
 - 新增逐格移动规则接口。
 - 主游戏路径迁移到逐格接口。
-- 标记旧 move command 为待删除入口，并停止向其中加入新规则。
+- 删除运行时主路径对同步 move command 的依赖。
 - Movement smoke 覆盖每格 AP 和 pending。
 
 ### 提交 4：ActorView 和相机跟随节点
