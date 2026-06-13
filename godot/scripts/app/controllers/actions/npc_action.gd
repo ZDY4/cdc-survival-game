@@ -40,6 +40,8 @@ static func apply_result(action: Dictionary, npc_result: Dictionary, presentatio
 		action["turn_phase"] = "npc_presentation"
 		action["presenting_npc_actor_id"] = int(presentation.get("actor_id", 0))
 		action["npc_phase"] = phase.duplicate(true)
+		if str(phase.get("intent", "")) == "attack" and bool(phase.get("prepared", false)):
+			action["presenting_npc_prepared_attack"] = _dictionary_or_empty(npc_result.get("result", {})).duplicate(true)
 
 
 static func finish_presentation(action: Dictionary) -> Dictionary:
@@ -58,6 +60,31 @@ static func finish_presentation(action: Dictionary) -> Dictionary:
 		"npc_actor_id": npc_actor_id,
 		"phase": phase,
 	}
+
+
+static func apply_resolved_attack(action: Dictionary, resolved: Dictionary) -> void:
+	var phase: Dictionary = _dictionary_or_empty(action.get("npc_phase", {})).duplicate(true)
+	if phase.is_empty():
+		return
+	phase["prepared"] = false
+	phase["completed"] = bool(resolved.get("success", false))
+	phase["result_kind"] = str(resolved.get("kind", "attack"))
+	phase["damage"] = float(resolved.get("damage", 0.0))
+	phase["hit_kind"] = str(resolved.get("hit_kind", ""))
+	phase["defeated"] = bool(resolved.get("defeated", false))
+	phase["resolved_after_presentation"] = bool(resolved.get("npc_attack_resolved_after_presentation", true))
+	action["npc_phase"] = phase
+	action["presenting_npc_prepared_attack"] = {}
+	var npc_results: Array = _array_or_empty(action.get("npc_results", []))
+	for index in range(npc_results.size() - 1, -1, -1):
+		var existing: Dictionary = _dictionary_or_empty(npc_results[index])
+		if int(existing.get("actor_id", 0)) == int(resolved.get("actor_id", 0)) and str(existing.get("intent", "")) == "attack":
+			var updated := existing.duplicate(true)
+			for key in resolved.keys():
+				updated[key] = resolved[key]
+			npc_results[index] = updated
+			action["npc_results"] = npc_results
+			return
 
 
 static func phase_snapshot(action: Dictionary, latest_result: Dictionary, view_snapshot: Dictionary = {}) -> Dictionary:
@@ -117,6 +144,8 @@ static func phase_from_result(action: Dictionary, npc_result: Dictionary, presen
 		"from_grid": _dictionary_or_empty(step.get("from", {})).duplicate(true),
 		"to_grid": _dictionary_or_empty(step.get("to", {})).duplicate(true),
 		"presentation_active": bool(presentation.get("active", false)),
+		"prepared": bool(result.get("attack_prepared", false)),
+		"prepared_attack": result.duplicate(true) if bool(result.get("attack_prepared", false)) else {},
 		"completed": completed or bool(npc_result.get("completed", false)),
 	}
 

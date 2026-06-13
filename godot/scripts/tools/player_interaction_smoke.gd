@@ -2138,8 +2138,8 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 		"turn_open": false,
 		"max_hp": 20.0,
 		"hp": 20.0,
-		"attack_power": 1.0,
-		"combat_attributes": {"accuracy": 100.0, "attack_power": 1.0, "turn_ap_gain": 4.0, "turn_ap_max": 4.0, "affordable_ap_threshold": 1.0},
+		"attack_power": 12.0,
+		"combat_attributes": {"accuracy": 100.0, "attack_power": 12.0, "turn_ap_gain": 4.0, "turn_ap_max": 4.0, "affordable_ap_threshold": 1.0},
 	})
 	game_root.simulation.set_relationship_score(player.actor_id, attacker_id, -100.0, "npc_attack_runner_smoke")
 	game_root.rebuild_runtime_world()
@@ -2152,6 +2152,8 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 	var saw_attack_presentation := false
 	var saw_attack_phase := false
 	var saw_npc_phase := false
+	var saw_pre_resolve_npc_presentation := false
+	var prepared_hp_baseline := original_hp
 	var npc_attack_presentation_count := 0
 	var was_npc_attack_presentation_phase := false
 	for _index in range(120):
@@ -2159,12 +2161,16 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 		var actor_view: Dictionary = _dictionary_or_empty(runner.get("actor_view", {}))
 		var attack_phase: Dictionary = _dictionary_or_empty(runner.get("attack_phase", {}))
 		var npc_phase: Dictionary = _dictionary_or_empty(runner.get("npc_phase", {}))
+		var latest_result: Dictionary = _dictionary_or_empty(runner.get("latest_result", {}))
+		var latest_npc_result: Dictionary = _dictionary_or_empty(latest_result.get("result", {}))
+		if str(latest_npc_result.get("kind", "")) == "npc_attack_prepared" and int(latest_npc_result.get("actor_id", 0)) == attacker_id:
+			saw_pre_resolve_npc_presentation = true
+			prepared_hp_baseline = player.hp
 		if not attack_phase.is_empty() and str(attack_phase.get("source", "")) == "npc":
 			saw_attack_phase = true
-			var phase_steps: Array = _array_or_empty(attack_phase.get("phase_steps", []))
-			if not _phase_steps_contain_completed(phase_steps, "presentation"):
-				errors.append("npc attack_phase should expose completed presentation pipeline step, got %s" % JSON.stringify(phase_steps))
-			if str(attack_phase.get("pipeline_phase", "")) != "presentation" and str(attack_phase.get("pipeline_phase", "")) != "refresh":
+			if bool(attack_phase.get("prepared", false)) and float(attack_phase.get("damage", 0.0)) > 0.0:
+				errors.append("npc attack_phase should not expose damage before presentation resolves, got %s" % JSON.stringify(attack_phase))
+			if str(attack_phase.get("pipeline_phase", "")) != "presentation" and str(attack_phase.get("pipeline_phase", "")) != "refresh" and str(attack_phase.get("pipeline_phase", "")) != "validate":
 				errors.append("npc attack_phase should expose presentation/refresh pipeline phase, got %s" % JSON.stringify(attack_phase))
 			if int(attack_phase.get("actor_id", 0)) != attacker_id or int(attack_phase.get("target_actor_id", 0)) != player.actor_id:
 				errors.append("npc attack_phase should expose attacker and target ids, got %s" % JSON.stringify(attack_phase))
@@ -2174,6 +2180,8 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 				errors.append("npc attack_phase should expose target ActorView node, got %s" % JSON.stringify(attack_phase))
 		if not npc_phase.is_empty() and str(npc_phase.get("intent", "")) == "attack":
 			saw_npc_phase = true
+			if bool(npc_phase.get("prepared", false)) and float(npc_phase.get("damage", 0.0)) > 0.0:
+				errors.append("npc_phase should not expose damage before presentation resolves, got %s" % JSON.stringify(npc_phase))
 			if int(npc_phase.get("actor_id", 0)) != attacker_id or int(npc_phase.get("target_actor_id", 0)) != player.actor_id:
 				errors.append("npc_phase should expose attacker and target ids, got %s" % JSON.stringify(npc_phase))
 			if int(_dictionary_or_empty(npc_phase.get("actor_node", {})).get("node_instance_id", 0)) <= 0:
@@ -2201,8 +2209,18 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 			and int(npc_phase.get("target_actor_id", 0)) == player.actor_id
 		if is_npc_attack_presentation_phase and not was_npc_attack_presentation_phase:
 			npc_attack_presentation_count += 1
+			var npc_attack_prepared := bool(npc_phase.get("prepared", false))
+			if npc_attack_prepared:
+				saw_pre_resolve_npc_presentation = true
+			if npc_attack_prepared and not is_equal_approx(player.hp, prepared_hp_baseline):
+				errors.append("npc attack should not resolve damage before presentation phase finishes: before=%s during=%s" % [prepared_hp_baseline, player.hp])
 		if is_attack_presentation:
 			saw_attack_presentation = true
+			var actor_view_attack_prepared := bool(attack_phase.get("prepared", false)) or bool(npc_phase.get("prepared", false))
+			if actor_view_attack_prepared:
+				saw_pre_resolve_npc_presentation = true
+			if actor_view_attack_prepared and not is_equal_approx(player.hp, prepared_hp_baseline):
+				errors.append("npc attack should not resolve damage before presentation finishes: before=%s during=%s" % [prepared_hp_baseline, player.hp])
 			if str(runner.get("turn_phase", "")) != "npc_presentation":
 				errors.append("npc attack runner should expose npc_presentation turn phase during attack, got %s" % runner.get("turn_phase", ""))
 			if int(attack_phase.get("presentation_node_instance_id", 0)) != int(actor_view.get("node_instance_id", -1)):
@@ -2220,6 +2238,10 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 	if npc_attack_presentation_count < 2:
 		errors.append("npc combat runner should present repeated same-NPC attacks as separate runner phases, got %d" % npc_attack_presentation_count)
 	await _wait_for_turn_action_runner_idle(game_root)
+	if not saw_pre_resolve_npc_presentation:
+		errors.append("npc attack should expose a pre-resolve presentation phase")
+	if player.hp >= original_hp:
+		errors.append("npc attack should resolve damage after presentation: before=%s after=%s" % [original_hp, player.hp])
 	_cleanup_npc_attack_runner_smoke(game_root, player, attacker_id, original_grid, original_ap, original_turn_open, original_hp, original_side)
 
 

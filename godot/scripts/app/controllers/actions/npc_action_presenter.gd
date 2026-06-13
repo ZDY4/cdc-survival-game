@@ -93,7 +93,8 @@ static func _present_move(host: Node, actor_view: RefCounted, npc_result: Dictio
 static func _normalized_attack_result(result: Dictionary, fallback_actor_id: int) -> Dictionary:
 	if result.is_empty():
 		return {}
-	if str(result.get("intent", "attack" if result.has("damage") and result.has("target_actor_id") else "")) != "attack":
+	var fallback_intent := "attack" if (result.has("target_actor_id") and (result.has("damage") or bool(result.get("attack_prepared", false)))) else ""
+	if str(result.get("intent", fallback_intent)) != "attack":
 		return {}
 	var actor_id := int(result.get("actor_id", fallback_actor_id))
 	var target_actor_id := int(result.get("target_actor_id", 0))

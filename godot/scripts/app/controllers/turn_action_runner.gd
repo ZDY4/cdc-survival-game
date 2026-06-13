@@ -599,15 +599,34 @@ func _advance_npc_turn_phase() -> Dictionary:
 func _finish_npc_presentation_phase() -> Dictionary:
 	var npc_actor_id := int(action.get("presenting_npc_actor_id", 0))
 	_clear_actor_action_state(npc_actor_id, "npc_presentation_finished")
+	var resolve_result: Dictionary = _resolve_presented_npc_attack()
 	NpcAction.finish_presentation(action)
 	var result := {
 		"success": true,
 		"kind": "npc_presentation_finished",
 		"actor_id": npc_actor_id,
 	}
+	if not resolve_result.is_empty():
+		result["npc_attack_result"] = resolve_result.duplicate(true)
 	latest_result = result.duplicate(true)
 	_sync_host_after_step(result)
 	return result
+
+
+func _resolve_presented_npc_attack() -> Dictionary:
+	var prepared_attack: Dictionary = _dictionary_or_empty(action.get("presenting_npc_prepared_attack", {}))
+	if prepared_attack.is_empty():
+		return {}
+	var npc_phase: Dictionary = _dictionary_or_empty(action.get("npc_phase", {}))
+	if str(npc_phase.get("intent", "")) != "attack" and str(prepared_attack.get("intent", "")) != "attack":
+		return {}
+	if prepared_attack.is_empty() or simulation == null or not simulation.has_method("resolve_npc_attack_for_runner"):
+		return {}
+	var resolved: Dictionary = _dictionary_or_empty(simulation.call("resolve_npc_attack_for_runner", prepared_attack))
+	if bool(resolved.get("success", false)):
+		_record_attack_phase(resolved, "npc")
+		NpcAction.apply_resolved_attack(action, resolved)
+	return resolved
 
 
 func _finish_world_turn_phase() -> Dictionary:

@@ -3793,6 +3793,14 @@ func _advance_npc_runner_step(actor: RefCounted, topology: Dictionary, combat_tu
 	return _npc_turn_service.advance_runner_step(self, actor, topology, combat_turn_active)
 
 
+func resolve_npc_attack_for_runner(prepared_attack: Dictionary) -> Dictionary:
+	var event_start_index: int = events.size()
+	var result: Dictionary = _npc_turn_service.resolve_prepared_runner_attack(self, prepared_attack)
+	result["events"] = _events_since(event_start_index)
+	result["turn_state"] = turn_state.duplicate(true)
+	return result
+
+
 func _advance_npc_combat_turn(actor: RefCounted, topology: Dictionary) -> Dictionary:
 	return _npc_turn_service.advance_combat_turn(self, actor, topology)
 

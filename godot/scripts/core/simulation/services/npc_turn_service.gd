@@ -12,7 +12,7 @@ func advance_turn(simulation: RefCounted, actor: RefCounted, topology: Dictionar
 func advance_runner_step(simulation: RefCounted, actor: RefCounted, topology: Dictionary, combat_turn_active: bool = false) -> Dictionary:
 	if simulation._actor_has_special_effect(actor, "stun"):
 		return simulation._stunned_npc_turn_result(actor, "npc_turn")
-	var result: Dictionary = advance_action(simulation, actor, topology)
+	var result: Dictionary = advance_runner_action(simulation, actor, topology)
 	result["runner_step"] = true
 	result["combat_turn_active"] = combat_turn_active
 	result["ap_after_action"] = actor.ap if actor != null else 0.0
@@ -127,6 +127,82 @@ func advance_action(simulation: RefCounted, actor: RefCounted, topology: Diction
 	}
 
 
+func advance_runner_action(simulation: RefCounted, actor: RefCounted, topology: Dictionary) -> Dictionary:
+	var weapon_profile: Dictionary = simulation._attack_profile(actor, simulation.item_library)
+	var intent: Dictionary = simulation.decide_actor_intent(actor.actor_id, {
+		"topology": topology,
+		"active_map_id": simulation.active_map_id,
+		"weapon_profile": simulation._npc_weapon_context(actor, weapon_profile),
+	})
+	var target_actor_id: int = int(intent.get("target_actor_id", simulation._player_actor_id()))
+	if str(intent.get("intent", "")) != "attack":
+		return advance_action(simulation, actor, topology)
+	var attack_cost: float = float(weapon_profile.get("ap_cost", simulation.DEFAULT_ATTACK_AP))
+	if actor.ap < attack_cost:
+		return wait_for_ap(simulation, actor, target_actor_id, "attack", "ap_insufficient_npc_attack", attack_cost)
+	var ammo_check: Dictionary = simulation._attack_ammo_check(actor, weapon_profile)
+	if not bool(ammo_check.get("success", true)):
+		ammo_check["actor_id"] = actor.actor_id
+		ammo_check["target_actor_id"] = target_actor_id
+		ammo_check["intent"] = "attack"
+		return ammo_check
+	var durability_check: Dictionary = simulation._attack_weapon_durability_check(actor, weapon_profile)
+	if not bool(durability_check.get("success", true)):
+		durability_check["actor_id"] = actor.actor_id
+		durability_check["target_actor_id"] = target_actor_id
+		durability_check["intent"] = "attack"
+		return durability_check
+	simulation._spend_ap(actor, attack_cost, "npc_attack")
+	simulation._enter_combat([actor.actor_id, target_actor_id], "npc_attack")
+	var target: RefCounted = simulation.actor_registry.get_actor(target_actor_id)
+	var perform_options := {
+		"range": int(weapon_profile.get("range", simulation.DEFAULT_ATTACK_RANGE)),
+		"min_range": int(weapon_profile.get("min_range", 0)),
+		"weapon_profile": weapon_profile,
+	}
+	var result := {
+		"success": true,
+		"kind": "npc_attack_prepared",
+		"intent": "attack",
+		"actor_id": actor.actor_id,
+		"target_actor_id": target_actor_id,
+		"attacker_grid": actor.grid_position.to_dictionary(),
+		"target_grid": target.grid_position.to_dictionary() if target != null else {},
+		"range": int(perform_options.get("range", 1)),
+		"min_range": int(perform_options.get("min_range", 0)),
+		"weapon_profile": weapon_profile.duplicate(true),
+		"perform_options": perform_options.duplicate(true),
+		"topology": topology.duplicate(true),
+		"ap_cost": attack_cost,
+		"ap_remaining": actor.ap,
+		"attack_prepared": true,
+		"npc_attack_prepared": true,
+	}
+	return result
+
+
+func resolve_prepared_runner_attack(simulation: RefCounted, prepared: Dictionary) -> Dictionary:
+	var actor_id: int = int(prepared.get("actor_id", 0))
+	var target_actor_id: int = int(prepared.get("target_actor_id", 0))
+	var actor: RefCounted = simulation.actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id, "intent": "attack"}
+	var perform_options: Dictionary = _dictionary_or_empty(prepared.get("perform_options", {}))
+	var topology: Dictionary = _dictionary_or_empty(prepared.get("topology", {}))
+	var weapon_profile: Dictionary = _dictionary_or_empty(prepared.get("weapon_profile", perform_options.get("weapon_profile", {})))
+	var result: Dictionary = simulation.perform_attack(actor_id, target_actor_id, topology, perform_options)
+	if bool(result.get("success", false)):
+		var ammo_result: Dictionary = simulation._consume_attack_ammo(actor, weapon_profile)
+		if bool(ammo_result.get("consumed", false)):
+			result["ammo_consumed"] = ammo_result
+		var durability_result: Dictionary = simulation._consume_attack_weapon_durability(actor, weapon_profile)
+		if bool(durability_result.get("consumed", false)):
+			result["weapon_durability_consumed"] = durability_result
+	result["intent"] = "attack"
+	result["npc_attack_resolved_after_presentation"] = true
+	return result
+
+
 func _can_continue_after_runner_step(simulation: RefCounted, actor: RefCounted, result: Dictionary, combat_turn_active: bool) -> bool:
 	if actor == null:
 		return false
@@ -143,6 +219,12 @@ func _can_continue_after_runner_step(simulation: RefCounted, actor: RefCounted, 
 	if actor.ap < simulation._affordable_ap_threshold(actor):
 		return false
 	return true
+
+
+func _dictionary_or_empty(value: Variant) -> Dictionary:
+	if typeof(value) == TYPE_DICTIONARY:
+		return value
+	return {}
 
 
 func wait_for_ap(simulation: RefCounted, actor: RefCounted, target_actor_id: int, planned_intent: String, reason: String, required_ap: float) -> Dictionary:
