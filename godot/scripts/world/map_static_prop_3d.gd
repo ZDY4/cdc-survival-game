@@ -10,6 +10,11 @@ func get_object_kind() -> String:
 	return "prop"
 
 
+func should_have_pick_area() -> bool:
+	var props := build_object_props()
+	return props.has("crafting_station") or props.has("interactive")
+
+
 func build_object_props() -> Dictionary:
 	var props := _json_dictionary(props_json, "props_json")
 	if not visual_prototype_id.strip_edges().is_empty():

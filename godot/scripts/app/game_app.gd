@@ -182,7 +182,7 @@ func _ready() -> void:
 	_setup_tooltip_layer()
 	_setup_drag_preview_layer()
 	refresh_all_panels()
-	print("Godot game root generated world: %s" % JSON.stringify(counts))
+	print("Godot game root runtime world: %s" % JSON.stringify(counts))
 
 
 func _consume_startup_request() -> Dictionary:

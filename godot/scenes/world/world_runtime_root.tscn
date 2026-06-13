@@ -1,0 +1,34 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/runtime/world_runtime_root.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/world/runtime/interaction_controller.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/world/runtime/actor_layer.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/world/runtime/corpse_layer.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/world/runtime/world_marker_layer.gd" id="5"]
+[ext_resource type="Script" path="res://scripts/world/runtime/camera_rig.gd" id="6"]
+[ext_resource type="Script" path="res://scripts/world/runtime/light_rig.gd" id="7"]
+[ext_resource type="Script" path="res://scripts/world/runtime/debug_overlay_layer.gd" id="8"]
+
+[node name="WorldRuntimeRoot" type="Node3D"]
+script = ExtResource("1")
+
+[node name="InteractionController" type="Node" parent="."]
+script = ExtResource("2")
+
+[node name="ActorLayer" type="Node3D" parent="."]
+script = ExtResource("3")
+
+[node name="CorpseLayer" type="Node3D" parent="."]
+script = ExtResource("4")
+
+[node name="WorldMarkerLayer" type="Node3D" parent="."]
+script = ExtResource("5")
+
+[node name="CameraRig" type="Node3D" parent="."]
+script = ExtResource("6")
+
+[node name="LightRig" type="Node3D" parent="."]
+script = ExtResource("7")
+
+[node name="DebugOverlayLayer" type="Node3D" parent="."]
+script = ExtResource("8")

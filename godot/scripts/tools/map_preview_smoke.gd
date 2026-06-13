@@ -44,16 +44,16 @@ func _run_checks() -> Array[String]:
 
 	if dock.preview_root == null:
 		errors.append("map review should create a preview root")
-	elif dock.preview_root.get_node_or_null("GeneratedWorld") == null:
-		errors.append("map review should render GeneratedWorld")
+	elif dock.preview_root.get_node_or_null("CurrentMapPreview") == null:
+		errors.append("map review should render the selected map scene")
 
 	var counts: Dictionary = result.get("counts", {})
 	if int(counts.get("ground", 0)) != 1:
-		errors.append("map review should render one ground mesh")
+		errors.append("map review should preview one scene ground node")
 	if int(counts.get("objects", 0)) <= 0:
-		errors.append("map review should render map object markers")
+		errors.append("map review should preview map scene objects")
 	if int(counts.get("cameras", 0)) <= 0:
-		errors.append("map review should render a camera")
+		errors.append("map review should create a preview camera")
 
 	if dock.detail == null or not dock.detail.text.contains("map_review_checks:"):
 		errors.append("map review should show review checklist text")

@@ -244,7 +244,7 @@ D:\godot\godot.cmd --headless --path godot --script res://scripts/tools/validate
 交付物：
 
 - `godot/scenes/maps/*.tscn`。
-- `godot/scripts/world/map_scene_*.gd`、`map_builder.gd`、`world_snapshot_builder.gd`、`world_scene_renderer.gd`。
+- `godot/scripts/world/map_scene_*.gd`、`map_builder.gd`、`world_snapshot_builder.gd`、`world/runtime/world_runtime_root.gd`。
 - `godot/assets/world_tiles/**`、`godot/assets/container_placeholders/**`。
 
 验收：

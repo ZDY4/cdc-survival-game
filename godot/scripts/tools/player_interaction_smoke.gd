@@ -64,19 +64,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_expect_actor_model_instance(errors, player_node)
 	_expect_player_runtime_marker(errors, player_node)
 
-	var pickup_node: Node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
+	var pickup_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_pickup_medkit")
 	if pickup_node == null:
-		return ["missing generated pickup node"]
-	var pickable_body: Node = pickup_node.find_child("PickableBody", true, false)
-	if pickable_body == null or not pickable_body.has_meta("interaction_target"):
-		errors.append("pickup node should expose a pickable interaction body")
+		return ["missing pickup interaction node"]
+	if not _node_exposes_pickable_interaction(pickup_node):
+		errors.append("pickup node should expose a pickable interaction shape")
 	var visual_pickup_node: Node = game_root.find_child("survivor_outpost_01_pickup_medkit", true, false)
 	if visual_pickup_node == null:
 		errors.append("missing visible pickup map scene node")
 	else:
-		var visual_pickable_body: Node = visual_pickup_node.find_child("PickableBody", false, false)
-		if visual_pickable_body == null or not visual_pickable_body.has_meta("interaction_target"):
-			errors.append("visible pickup map scene node should expose a pickable interaction body")
+		if not _node_exposes_pickable_interaction(visual_pickup_node):
+			errors.append("visible pickup map scene node should expose a pickable interaction shape")
 		var visual_pickup_selection: Dictionary = game_root.select_interaction_node(visual_pickup_node)
 		if not bool(visual_pickup_selection.get("success", false)):
 			errors.append("visible pickup selection failed: %s" % visual_pickup_selection.get("prompt", {}).get("reason", "unknown"))
@@ -88,9 +86,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	player_node = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node == null:
 		return ["missing generated player actor node after neutral context menu smoke"]
-	pickup_node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
+	pickup_node = _find_interaction_node(game_root, "survivor_outpost_01_pickup_medkit")
 	if pickup_node == null:
-		return ["missing generated pickup node after neutral context menu smoke"]
+		return ["missing pickup interaction node after neutral context menu smoke"]
 	visual_pickup_node = game_root.find_child("survivor_outpost_01_pickup_medkit", true, false)
 
 	var camera: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
@@ -128,9 +126,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if not _hud_interaction_line(game_root).contains("拾取"):
 		errors.append("HUD did not show pickup prompt after node selection")
 
-	var pickup_result: Dictionary = _execute_primary_and_complete(game_root)
+	var pickup_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(pickup_result.get("success", false)):
-		errors.append("pickup execution failed: %s" % pickup_result.get("reason", "unknown"))
+		errors.append("pickup execution failed: %s" % JSON.stringify(pickup_result))
 	else:
 		_expect_world_action_interaction_presenter(errors, game_root, "survivor_outpost_01_pickup_medkit", "pickup", "item_pickup")
 	await _wait_for_world_action_presenter_idle(game_root)
@@ -138,8 +136,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if int(_player_inventory(game_root).get("1006", 0)) <= 0:
 		errors.append("pickup execution did not add item 1006")
 	await process_frame
-	if game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false) != null:
-		errors.append("consumed pickup node was not removed from generated scene")
+	if _find_interaction_node(game_root, "survivor_outpost_01_pickup_medkit") != null:
+		errors.append("consumed pickup interaction node was not removed from scene")
 	await _expect_ground_grid_move(errors, game_root)
 	await _expect_hostile_attack_hover_preview(errors, game_root)
 	await _expect_corpse_world_interaction(errors, game_root)
@@ -157,17 +155,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await _expect_pending_segment_movement_presenter(errors, game_root)
 	await _expect_cancel_pending(errors, game_root)
 
-	var door_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
+	var door_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_interior_door")
 	if door_node == null:
-		errors.append("missing generated door node")
+		errors.append("missing door interaction node")
 		return errors
 
 	var door_selection: Dictionary = game_root.select_interaction_node(door_node)
 	if not bool(door_selection.get("success", false)):
 		errors.append("door selection failed: %s" % door_selection.get("prompt", {}).get("reason", "unknown"))
-	var transition_result: Dictionary = _execute_primary_and_complete(game_root)
+	var transition_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(transition_result.get("success", false)):
-		errors.append("door execution failed: %s" % transition_result.get("reason", "unknown"))
+		errors.append("door execution failed: %s" % JSON.stringify(transition_result))
 	if game_root.simulation.active_map_id != "survivor_outpost_01_interior":
 		errors.append("door execution did not switch active map")
 	if game_root.simulation.active_entry_point_id != "default_entry":
@@ -192,15 +190,29 @@ func _player_inventory(game_root: Node) -> Dictionary:
 	return {}
 
 
-func _execute_primary_and_complete(game_root: Node, max_waits: int = 8) -> Dictionary:
+func _execute_primary_and_complete(game_root: Node, _max_waits: int = 8) -> Dictionary:
 	var result: Dictionary = game_root.execute_primary_interaction()
-	var waits := 0
-	while waits < max_waits and _has_pending(game_root) and not _final_interaction_result(result):
-		waits += 1
-		var wait_result: Dictionary = game_root.submit_wait_action()
-		var pending_result: Dictionary = wait_result.get("pending_result", {})
-		result = pending_result if not pending_result.is_empty() else wait_result
+	if not bool(result.get("success", false)):
+		return result
+	await _wait_for_turn_action_runner_idle(game_root)
+	await _wait_for_world_action_presenter_idle(game_root)
+	var runner_result: Dictionary = _runner_latest_interaction_result(game_root)
+	if not runner_result.is_empty():
+		result = runner_result
 	return result
+
+
+func _runner_latest_interaction_result(game_root: Node) -> Dictionary:
+	var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	if str(runner.get("action_kind", "")) != "interact":
+		return {}
+	var latest: Dictionary = _dictionary_or_empty(runner.get("latest_result", {}))
+	var pending_result: Dictionary = _dictionary_or_empty(latest.get("pending_result", {}))
+	if _final_interaction_result(pending_result):
+		return pending_result
+	if _final_interaction_result(latest):
+		return latest
+	return {}
 
 
 func _has_pending(game_root: Node) -> bool:
@@ -385,7 +397,7 @@ func _expect_friendly_neutral_and_map_container_context_menus(errors: Array[Stri
 		else:
 			_expect_interaction_menu_options(errors, game_root, "friendly actor", ["talk"], {"attack": "target_not_hostile"})
 	await _expect_neutral_actor_context_menu(errors, game_root)
-	var container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_canteen_food_crate", true, false)
+	var container_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_canteen_food_crate")
 	if container_node == null:
 		errors.append("map container context menu smoke should find canteen food crate")
 	else:
@@ -398,7 +410,7 @@ func _expect_friendly_neutral_and_map_container_context_menus(errors: Array[Stri
 				"talk": "target_not_actor",
 				"attack": "target_not_actor",
 			})
-	var station_container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_clinic_supply_cabinet", true, false)
+	var station_container_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_clinic_supply_cabinet")
 	if station_container_node == null:
 		errors.append("station container context menu smoke should find clinic supply cabinet")
 	else:
@@ -418,7 +430,7 @@ func _expect_friendly_neutral_and_map_container_context_menus(errors: Array[Stri
 
 
 func _expect_crafting_station_interaction(errors: Array[String], game_root: Node) -> void:
-	var station_node: Node = game_root.find_child("MapObject_survivor_outpost_01_workshop_cabinet_a", true, false)
+	var station_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_workshop_cabinet_a")
 	if station_node == null:
 		errors.append("crafting station interaction smoke should render pure prop station marker")
 		return
@@ -434,7 +446,7 @@ func _expect_crafting_station_interaction(errors: Array[String], game_root: Node
 	player.ap = 6.0
 	game_root.rebuild_runtime_world()
 	await process_frame
-	station_node = game_root.find_child("MapObject_survivor_outpost_01_workshop_cabinet_a", true, false)
+	station_node = _find_interaction_node(game_root, "survivor_outpost_01_workshop_cabinet_a")
 	if station_node == null:
 		errors.append("crafting station interaction smoke should keep station marker after player reposition")
 		_restore_player_for_crafting_station_smoke(game_root, original_grid, original_ap)
@@ -483,7 +495,7 @@ func _expect_crafting_station_interaction(errors: Array[String], game_root: Node
 		errors.append("crafting station selection should recover after permission smoke cleanup")
 		_restore_player_for_crafting_station_smoke(game_root, original_grid, original_ap)
 		return
-	var result: Dictionary = _execute_primary_and_complete(game_root)
+	var result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(result.get("success", false)):
 		errors.append("crafting station interaction failed: %s" % result.get("reason", "unknown"))
 		_restore_player_for_crafting_station_smoke(game_root, original_grid, original_ap)
@@ -790,7 +802,7 @@ func _expect_hover_target_outline_hidden(errors: Array[String], game_root: Node)
 
 func _expect_container_hover_outline_visual_metadata(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
 	var container_id := "survivor_outpost_01_canteen_food_crate"
-	var container_node: Node3D = game_root.find_child("MapObject_%s" % container_id, true, false) as Node3D
+	var container_node: Node3D = _find_interaction_node(game_root, container_id) as Node3D
 	if container_node == null:
 		errors.append("container hover outline smoke should find canteen food crate")
 		return
@@ -999,7 +1011,7 @@ func _temporary_door_node(door_id: String, grid: Dictionary, door_summary: Dicti
 
 
 func _expect_transition_hover_diagnostics(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
-	var transition_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_door", true, false)
+	var transition_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_interior_door")
 	if transition_node == null:
 		errors.append("missing generated transition trigger node")
 		return
@@ -1876,7 +1888,7 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 		"talk": "target_not_actor",
 		"attack": "target_not_actor",
 	})
-	var open_result: Dictionary = _execute_primary_and_complete(game_root)
+	var open_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(open_result.get("success", false)):
 		errors.append("corpse open container failed: %s" % open_result.get("reason", "unknown"))
 	var queue_before_finish: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
@@ -3029,7 +3041,7 @@ func _expect_transition_runtime_visual_state_reset(errors: Array[String], game_r
 
 
 func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node) -> void:
-	var exit_node: Node = game_root.find_child("MapObject_survivor_outpost_01_interior_exit", true, false)
+	var exit_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_interior_exit")
 	if exit_node == null:
 		errors.append("transition redraw should expose generated interior exit node")
 		return
@@ -3037,7 +3049,7 @@ func _expect_transition_return_to_outpost(errors: Array[String], game_root: Node
 	var exit_selection: Dictionary = game_root.select_interaction_node(exit_node)
 	if not bool(exit_selection.get("success", false)):
 		errors.append("interior exit selection failed: %s" % exit_selection.get("prompt", {}).get("reason", "unknown"))
-	var return_result: Dictionary = _execute_primary_and_complete(game_root)
+	var return_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(return_result.get("success", false)):
 		errors.append("interior exit execution failed: %s" % return_result.get("reason", "unknown"))
 	await process_frame
@@ -3823,6 +3835,61 @@ func _fog_overlay(game_root: Node) -> ColorRect:
 		if root.has_method("fog_overlay_node"):
 			return root.call("fog_overlay_node") as ColorRect
 	return game_root.find_child("FogOverlay", true, false) as ColorRect
+
+
+func _find_interaction_node(game_root: Node, object_id: String) -> Node:
+	var exact: Node = game_root.find_child(object_id, true, false)
+	if exact != null and _node_matches_interaction_meta(exact, object_id):
+		return exact
+	var generated: Node = game_root.find_child("MapObject_%s" % object_id, true, false)
+	if generated != null and _node_matches_interaction_meta(generated, object_id):
+		return generated
+	var pending: Array[Node] = [game_root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if _node_matches_interaction_meta(node, object_id):
+			return node
+		for child in node.get_children():
+			pending.append(child)
+	if exact != null and _node_matches_object_definition(exact, object_id):
+		return exact
+	if generated != null and _node_matches_object_definition(generated, object_id):
+		return generated
+	return null
+
+
+func _node_matches_interaction_meta(node: Node, object_id: String) -> bool:
+	if node == null:
+		return false
+	if node.has_meta("interaction_target"):
+		var meta: Dictionary = _dictionary_or_empty(node.get_meta("interaction_target"))
+		if str(meta.get("target_id", meta.get("object_id", ""))) == object_id:
+			return true
+	return false
+
+
+func _node_matches_object_definition(node: Node, object_id: String) -> bool:
+	if node == null:
+		return false
+	if node.has_method("to_object_definition"):
+		var definition: Dictionary = _dictionary_or_empty(node.call("to_object_definition"))
+		if str(definition.get("object_id", "")) == object_id:
+			return true
+	return false
+
+
+func _node_exposes_pickable_interaction(node: Node) -> bool:
+	if node == null:
+		return false
+	if node is CollisionObject3D and node.has_meta("interaction_target"):
+		return true
+	var pickable_body: Node = node.find_child("PickableBody", false, false)
+	if pickable_body != null and pickable_body.has_meta("interaction_target"):
+		return true
+	var pick_area: Node = node.find_child("PickArea", false, false)
+	if pick_area != null and pick_area.has_meta("interaction_target"):
+		return true
+	return node.has_meta("interaction_target") and (node is Area3D or node is CollisionObject3D)
 
 
 func _array_or_empty(value: Variant) -> Array:

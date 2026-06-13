@@ -40,7 +40,7 @@
 
 ### 0.4 普通移动和世界重绘边界不清晰
 
-移动时 actor node 应该稳定存在，由 ActorView 驱动位置、朝向和动画。当前 `Simulation`、`GameApp.world_result`、`interaction_controller.world_result`、`WorldSceneRenderer` 和 `WorldActionPresenter` 同时参与状态同步，普通移动中存在重绘替换 actor node 的风险。
+移动时 actor node 应该稳定存在，由 ActorView 驱动位置、朝向和动画。当前 `Simulation`、`GameApp.world_result`、`interaction_controller.world_result`、`WorldRuntimeRoot` 和 `WorldActionPresenter` 同时参与状态同步，普通移动中仍需避免结构性刷新替换 actor node。
 
 ## 1. 最终目标
 
@@ -189,11 +189,11 @@ func clear_follow_target(reason: String = "") -> void
 func process_follow(delta: float, viewport_size: Vector2, level_height: float) -> bool
 ```
 
-### 2.5 WorldSceneRenderer
+### 2.5 WorldRuntimeRoot
 
 调整职责：
 
-- 初次加载地图和结构性变化时渲染 world。
+- 初次加载地图和结构性变化时同步当前 world scene。
 - 普通移动、攻击朝向、AP 变化不全量重绘 actor tree。
 - 地图切换、对象生成 / 删除、尸体创建、楼层结构变化才允许结构性重绘。
 - action active 时结构性重绘必须由 TurnActionRunner 明确调度：等待当前 step 完成、完成当前 action、或按保存 / 地图切换策略拒绝该结构性变化。

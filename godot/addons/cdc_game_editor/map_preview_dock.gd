@@ -4,7 +4,6 @@ extends VBoxContainer
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const MapReviewPresenter = preload("res://addons/cdc_game_editor/map_review_presenter.gd")
-const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
 const DOCK_MIN_SIZE := Vector2.ZERO
 const PREVIEW_MIN_SIZE := Vector2(240, 170)
 const PREVIEW_RENDER_SIZE := Vector2i(480, 340)
@@ -14,7 +13,6 @@ const MAP_SCENE_DIR := "res://scenes/maps"
 var registry: ContentRegistry
 var map_scene_loader: MapSceneLoader
 var presenter: MapReviewPresenter
-var renderer: WorldSceneRenderer
 var selected_map_id := ""
 var selected_scene_path := ""
 var map_ids: Array[String] = []
@@ -31,7 +29,6 @@ func _ready() -> void:
 	registry = ContentRegistry.new()
 	map_scene_loader = MapSceneLoader.new()
 	presenter = MapReviewPresenter.new()
-	renderer = WorldSceneRenderer.new()
 	_build_ui()
 	refresh_maps()
 
@@ -134,12 +131,8 @@ func select_map(map_id: String) -> Dictionary:
 
 	var map_data: Dictionary = _dictionary_or_empty(scene_result.get("data", {}))
 	var review := presenter.build_review(map_data)
-	var world_snapshot := {
-		"map": review.get("map", {}),
-		"actors": [],
-	}
-	var counts := renderer.render_world(preview_root, world_snapshot)
 	var scene_exists := ResourceLoader.exists(selected_scene_path)
+	var counts := _render_scene_preview(selected_scene_path)
 	_set_open_scene_enabled(scene_exists)
 	_set_status("Status: review %s | objects %d | cells %d | scene %s" % [
 		map_id,
@@ -185,6 +178,124 @@ func _on_open_scene_pressed() -> void:
 		_set_status("Status: opened %s" % selected_scene_path)
 	else:
 		_set_status("Status: Open Scene is only available inside the Godot editor")
+
+
+func _render_scene_preview(scene_path: String) -> Dictionary:
+	_clear_preview()
+	var counts := {
+		"map_scene": 0,
+		"ground": 0,
+		"objects": 0,
+		"cameras": 0,
+		"lights": 0,
+	}
+	if preview_root == null or scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		return counts
+	var packed := load(scene_path) as PackedScene
+	if packed == null:
+		return counts
+	var map_instance := packed.instantiate() as Node3D
+	if map_instance == null:
+		return counts
+	map_instance.name = "CurrentMapPreview"
+	preview_root.add_child(map_instance)
+	counts["map_scene"] = 1
+	counts["ground"] = _count_named_nodes(map_instance, "Ground")
+	counts["objects"] = _preview_object_count(map_instance)
+	var camera := _add_preview_camera(map_instance)
+	if camera != null:
+		counts["cameras"] = 1
+	if _add_preview_light(map_instance) != null:
+		counts["lights"] = 1
+	return counts
+
+
+func _clear_preview() -> void:
+	if preview_root == null:
+		return
+	for child in preview_root.get_children():
+		child.queue_free()
+
+
+func _add_preview_camera(map_instance: Node3D) -> Camera3D:
+	var size := _map_size_from_scene(map_instance)
+	var width := maxf(1.0, size.x)
+	var height := maxf(1.0, size.y)
+	var center := Vector3((width - 1.0) * 0.5, 0.4, (height - 1.0) * 0.5)
+	var span := maxf(width, height)
+	var camera := Camera3D.new()
+	camera.name = "PreviewCamera"
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.size = span * 1.18
+	camera.position = center + Vector3(span * 0.48, span * 0.72, span * 0.64)
+	camera.current = true
+	preview_root.add_child(camera)
+	camera.look_at(center, Vector3.UP)
+	return camera
+
+
+func _add_preview_light(map_instance: Node3D) -> DirectionalLight3D:
+	var light := DirectionalLight3D.new()
+	light.name = "PreviewLight"
+	light.rotation_degrees = Vector3(-55, -35, 0)
+	light.light_energy = 1.35
+	preview_root.add_child(light)
+	return light
+
+
+func _map_size_from_scene(map_instance: Node) -> Vector2:
+	var value: Variant = map_instance.get("map_size")
+	if value is Vector2i:
+		return Vector2(value)
+	if value is Vector2:
+		return value
+	if map_instance.has_method("to_definition"):
+		var definition: Dictionary = _dictionary_or_empty(map_instance.call("to_definition"))
+		var size: Dictionary = _dictionary_or_empty(definition.get("size", {}))
+		return Vector2(float(size.get("width", 48)), float(size.get("height", 42)))
+	return Vector2(48, 42)
+
+
+func _preview_object_count(root: Node) -> int:
+	var objects := root.get_node_or_null("Objects")
+	if objects != null:
+		return _count_node_descendants(objects)
+	return _count_group_nodes(root, "map_scene_object")
+
+
+func _count_node_descendants(root: Node) -> int:
+	var count := 0
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		for child in node.get_children():
+			count += 1
+			pending.append(child)
+	return count
+
+
+func _count_named_nodes(root: Node, node_name: String) -> int:
+	var count := 0
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node.name == node_name:
+			count += 1
+		for child in node.get_children():
+			pending.append(child)
+	return count
+
+
+func _count_group_nodes(root: Node, group_name: String) -> int:
+	var count := 0
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node.is_in_group(group_name):
+			count += 1
+		for child in node.get_children():
+			pending.append(child)
+	return count
 
 
 func _map_data(map_id: String) -> Dictionary:

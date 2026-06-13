@@ -1,10 +1,12 @@
 extends Node3D
 
-const WorldSceneRenderer = preload("res://scripts/world/world_scene_renderer.gd")
+const WorldRuntimeRootScene = preload("res://scenes/world/world_runtime_root.tscn")
+const WorldRuntimeRootScript = preload("res://scripts/world/runtime/world_runtime_root.gd")
 const FogOverlayController = preload("res://scripts/world/fog_overlay_controller.gd")
 const DebugOverlayController = preload("res://scripts/world/debug_overlay_controller.gd")
 
 var world_container: Node3D
+var runtime_root: Node3D
 var fog_overlay: ColorRect
 var fog_overlay_controller: RefCounted = FogOverlayController.new()
 var debug_overlay_controller: RefCounted = DebugOverlayController.new()
@@ -13,15 +15,19 @@ var render_sequence: int = 0
 
 
 func ensure_world_container() -> Node3D:
-	if world_container != null and is_instance_valid(world_container):
-		return world_container
-	world_container = get_node_or_null("WorldContainer") as Node3D
-	if world_container != null:
-		return world_container
-	world_container = Node3D.new()
-	world_container.name = "WorldContainer"
-	add_child(world_container)
-	return world_container
+	if runtime_root != null and is_instance_valid(runtime_root):
+		world_container = runtime_root
+		return runtime_root
+	runtime_root = get_node_or_null("WorldRuntimeRoot") as Node3D
+	if runtime_root == null:
+		runtime_root = WorldRuntimeRootScene.instantiate() as Node3D
+		if runtime_root == null:
+			runtime_root = Node3D.new()
+			runtime_root.set_script(WorldRuntimeRootScript)
+		runtime_root.name = "WorldRuntimeRoot"
+		add_child(runtime_root)
+	world_container = runtime_root
+	return runtime_root
 
 
 func world_container_node() -> Node3D:
@@ -34,7 +40,9 @@ func fog_overlay_node() -> ColorRect:
 
 func apply_world_snapshot(world_snapshot: Dictionary, runtime_snapshot: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
 	var container := ensure_world_container()
-	var counts: Dictionary = WorldSceneRenderer.new().render_world(container, world_snapshot, options)
+	var counts: Dictionary = {}
+	if container.has_method("sync_world"):
+		counts = _dictionary_or_empty(container.call("sync_world", world_snapshot, runtime_snapshot, options))
 	last_render_counts = _render_count_summary(counts)
 	render_sequence += 1
 	return counts

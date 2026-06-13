@@ -14,7 +14,7 @@
 
 1. 执行 `pwsh -NoProfile -File tools/agent/test-godot-game.ps1`。
 2. 默认场景 `All` 会运行当前所有 Godot headless smoke。
-3. 检查脚本输出的 result JSON 和各场景 console log 路径；若运行了 `Scene`，同时查看 `Scene.asset-diagnostics.json` 中的 MapVisual、scene resource reference、glTF import 和 UID baseline 诊断。
+3. 检查脚本输出的 result JSON 和各场景 console log 路径；若运行了 `Scene`，重点查看 `scene_smoke passed` 摘要中的 `WorldRuntimeRoot`、当前 `MapSceneRoot`、actor 稳定性和地图必需节点检查。
 4. 若失败，先看对应场景 `.log` 中的 Godot 编译错误、断言或 runtime error，再回到 Godot 脚本定位。
 
 ## Notes
@@ -24,7 +24,6 @@
 - 默认 runtime scene 入口是 `godot/scenes/game/game_root.tscn`；`godot/scripts/app/game_app.gd` 仍是迁移期根脚本和兼容 facade，新增 runtime 行为应优先落到明确的 app controller、world 或 UI 模块。
 - runtime smoke 需要等待、重建世界或刷新视觉时，优先调用 `GameApp.submit_wait_action()`、`GameApp.rebuild_runtime_world()`、`GameApp.refresh_world_visuals()`、`GameApp.finish_world_action_presentations()` 等稳定 facade；不要新增对 `_setup_*`、`_rebuild_*` 私有入口的依赖。
 - `MigrationGuard` 会执行 `godot/scripts/tools/mainline_migration_guard.gd`，确认 Godot 版本为 `4.6.3`，且当前主线没有重新引入 Rust / Cargo / Bevy 时代源码文件。
-- `Scene` 通过时会额外输出 `Scene.asset-diagnostics.json`，并在 `result.json` 的对应结果里记录 `assetDiagnostics` 路径；该文件用于审阅每张 map scene 的 visual 实例、fallback、碰撞、缩放、重叠、scene resource reference diff，以及 glTF import / `.uid` baseline。
-- `Scene` 会把当前 UID 诊断对比 `docs/baselines/scene_asset_uid_baseline.json`。若资源重导入导致 UID 变化，先确认 `Scene.asset-diagnostics.json` 中的 mismatch 是预期变更，再更新 baseline；非预期变化应回到 Godot import / 资源文件定位。
-- `Scene` 也会把当前 map scene 资源引用对比 `docs/baselines/scene_resource_reference_baseline.json`。该 diff 用于审阅地图 scene 新增 / 移除的 `res://assets/...` 引用，不默认导致 smoke 失败。
+- `Scene` smoke 现在面向原生 scene/node 运行时：`WorldRuntimeRoot` 直接持有当前 `MapSceneRoot`，不再要求旧 `GeneratedWorld` 或旧 renderer 资产诊断合同。
+- `Scene` 不再固定产出 `Scene.asset-diagnostics.json`。若某次 smoke 输出缺少旧资产诊断字段，wrapper 会跳过 legacy baseline 对比；需要资源引用、视觉和空间复核时，优先运行 `tools/agent/review-godot-map-visual.ps1` 或专门的 Godot scene/report 工具。
 - 单场景复核可使用 `-Scenario MigrationGuard`、`-Scenario HeadlessNewGame`、`-Scenario HeadlessWorld`、`-Scenario Runtime`、`-Scenario ContentCLI`、`-Scenario ContentEdit`、`-Scenario EditorHandoff`、`-Scenario ContentEditors`、`-Scenario FogShader`、`-Scenario Door`、`-Scenario Overworld`、`-Scenario Movement`、`-Scenario Interaction`、`-Scenario PlayerInteraction`、`-Scenario DialogueAction`、`-Scenario Combat`、`-Scenario ContainerUI`、`-Scenario Equipment`、`-Scenario Crafting`、`-Scenario Save` 等；其中 `Door` 是门相关 runtime / scene / movement / AI / interaction / save smoke 的聚合入口。

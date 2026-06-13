@@ -8,9 +8,10 @@ It runs Godot 4.6.3 headless scripts from `godot/scripts/tools/`, captures conso
 output, and writes a JSON result under `.local/agent-smoke/godot_game`.
 It also covers `godot/scripts/app/headless_runner.gd`, the migrated replacement
 path for server/headless smoke entrypoints.
-When the Scene scenario passes, it also writes `Scene.asset-diagnostics.json`
-with map visual, scene resource reference, glTF import, and UID baseline
-diagnostics parsed from the log.
+The Scene scenario validates the Godot-native world runtime: `WorldRuntimeRoot`
+directly loads real map scenes, keeps actor nodes stable, and rejects the old
+GeneratedWorld path. Legacy asset diagnostics are only written when a smoke log
+still emits the old diagnostic payload.
 
 .PARAMETER Scenario
 Smoke scenario to run. Use `All` to run every migrated Godot smoke scenario.
@@ -343,6 +344,17 @@ function Export-SceneAssetDiagnostics {
         }
         $counts = $jsonText.Substring($jsonStart, $jsonEnd - $jsonStart + 1) | ConvertFrom-Json -Depth 100
     }
+    if (-not ($counts.PSObject.Properties.Name -contains "gltf_import_uid_baseline")) {
+        return [PSCustomObject]@{
+            path = $null
+            baselinePath = $null
+            baselineStatus = "not-applicable"
+            baselineMismatchCount = 0
+            baselineMismatches = @()
+            skipped = $true
+            reason = "scene_smoke uses WorldRuntimeRoot diagnostics"
+        }
+    }
 
     $diagnosticsPath = Join-Path $RunRoot "Scene.asset-diagnostics.json"
     $baselinePath = Join-Path $RepoRoot "docs\baselines\scene_asset_uid_baseline.json"
@@ -505,6 +517,8 @@ try {
                 $exitCode = 1
             } elseif ($assetBaselineStatus -eq "matched") {
                 Write-Host "Scene asset UID baseline matched $assetBaselinePath"
+            } elseif ($assetBaselineStatus -eq "not-applicable") {
+                Write-Host "Scene asset UID baseline skipped: WorldRuntimeRoot scene smoke does not emit legacy asset diagnostics"
             } else {
                 Write-Host "Scene asset UID baseline not found at $assetBaselinePath"
             }

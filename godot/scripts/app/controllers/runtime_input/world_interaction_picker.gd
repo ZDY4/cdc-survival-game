@@ -33,7 +33,7 @@ func pick_ray(camera: Camera3D, ray_from: Vector3, ray_to: Vector3, world_result
 	for _i in range(PICK_RAY_MAX_HITS):
 		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
 		query.collide_with_bodies = true
-		query.collide_with_areas = false
+		query.collide_with_areas = true
 		query.exclude = excluded
 		var hit: Dictionary = space_state.intersect_ray(query)
 		if hit.is_empty():
