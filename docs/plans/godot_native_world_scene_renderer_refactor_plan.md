@@ -1,347 +1,401 @@
-# WorldSceneRenderer Godot 原生拆分与重构方案
+# WorldSceneRenderer Godot 原生激进重构方案
 
-本文定义 `godot/scripts/world/world_scene_renderer.gd` 的拆分路线。目标不是把它再包装一层，而是把它从“单个巨型 RefCounted 装配器”重构为更符合 Godot 原生风格的场景化、节点化、信号化运行时世界系统。
+本文定义 `godot/scripts/world/world_scene_renderer.gd` 的激进拆分路线。目标不是兼容式瘦身，而是把运行时世界表现迁到真正的 Godot scene/node 架构：地图、地面、交互体、actor、相机、灯光和 overlay 都由明确的场景节点负责，旧 `WorldSceneRenderer` 不再作为长期入口，也不要求旧 smoke 原样保留。
 
-当前 `WorldSceneRenderer` 同时负责地图场景加载、地面兜底、交互目标挂接、actor/corpse/prop 可视化、状态标记、相机、灯光和一些表现型 fallback。这个角色在迁移期能工作，但它已经同时扮演了多个 Godot 节点的职责，后续维护成本会持续上升。
+本方案接受一次结构性破坏：可以删除 fallback 渲染、可以重写旧 smoke、可以替换 `render_world()` 调用点。验收标准从“旧路径还能跑”改为“新 Godot 原生路径稳定、可编辑、可运行、可验证”。
 
 ## 当前问题
 
-- 单文件过大，职责边界混杂。
-- 运行时世界渲染仍以 `RefCounted` 方式组织，和 Godot 的 scene/node 组合风格不一致。
-- 地图加载、对象表现、actor 表现、相机和 HUD 级标记彼此耦合。
-- fallback 逻辑很多，说明真实场景节点还没有被清晰地拆到各自职责里。
-- `WorldSceneRenderer` 既被 `WorldRoot` 使用，也被多个 smoke 直接调用，说明它承担了“核心运行时入口”的工作，但内部实现却不像一个稳定的入口节点。
+- `WorldSceneRenderer` 是一个巨型 `RefCounted`，却在做多个 Godot 节点应该承担的事情。
+- 地图 `.tscn` 已经存在，但运行时仍会生成 fallback ground、fallback object visual、fallback actor visual 和拾取代理。
+- 交互、视觉、相机、灯光、状态标记混在同一个类里，导致地图 scene 无法成为真正的运行时表现权威。
+- 旧 smoke 直接调用 `WorldSceneRenderer.new().render_world()`，把临时迁移入口固化成了测试契约。
+- 运行时会清空并重建 `GeneratedWorld`，这和 Godot 中稳定 node、局部同步、信号驱动的常规做法冲突。
 
 ## 目标
 
-- 把世界渲染从单个大类拆成多个明确职责的 Godot 节点 / 控制器。
-- 让运行时世界的主体变成一个可挂在场景树里的组合体，而不是一堆静态方法和 helper。
-- 保持现有 world snapshot、map definition、interaction schema 和 smoke 兼容。
-- 让地图视觉、actor 视觉、交互碰撞、相机和 overlay 可以独立演进。
-- 继续保留 headless smoke 和 agent 可读性，不引入新的长期工具链依赖。
+- 删除 `WorldSceneRenderer` 的长期入口地位。
+- 让 `WorldRoot` 挂载一个真实的 `WorldRuntimeRoot` 场景。
+- 地图视觉只来自 `godot/scenes/maps/*.tscn`，不再运行时补地面或补建筑视觉。
+- 地图对象节点自己声明交互、拾取、碰撞和业务 metadata，运行时只同步状态。
+- actor、corpse、状态标记、相机、灯光各自进入独立 scene/node。
+- 新增面向新架构的 smoke，旧 `WorldSceneRenderer` smoke 可以删除或重写。
+- 运行时刷新从“整棵树重建”改为“稳定节点局部同步”。
 
 ## 非目标
 
-- 不改游戏规则、AI、寻路、战斗、背包、任务、对话逻辑。
-- 不把地图系统改成 `GridMap`、`MeshLibrary` 或 ECS。
-- 不重写地图数据 schema。
-- 不一次性清空所有 fallback。
-- 不把所有表现都塞回 `WorldActionPresenter`。
+- 不改规则层事实来源：Simulation、map definition、interaction target schema 仍然是 gameplay 权威。
+- 不把地图改成 `GridMap`、`MeshLibrary` 或 ECS。
+- 不保留旧 fallback 行为作为验收要求。
+- 不保留旧 `GeneratedWorld` 命名作为兼容要求。
+- 不要求旧 `scene_smoke` 断言继续成立。
 
-## 设计原则
+## 核心原则
 
-- 用 scene/node 组合表达职责，不用一个巨型类硬拼全部流程。
-- 每个节点只负责一类可视职责，并暴露清晰的 `sync_*` / `clear_*` / `snapshot()` 接口。
-- 运行时状态由节点持有，编排由 root 节点持有，规则仍由 simulation 持有。
-- 旧的 `WorldSceneRenderer` 先变薄，再被替换，最后删除。
-- 同一层不要同时存在“数据解析者、场景装配者、视觉生成者、相机控制者、HUD 标记生成者”五种职责。
+- `.tscn` 是视觉和空间节点权威，snapshot 只同步状态。
+- 缺资源、缺地面、缺拾取体是内容错误，不是运行时 renderer 的兜底责任。
+- 运行时 controller 只绑定数据和状态，不临时发明地图结构。
+- actor node 稳定存在，移动、朝向、动画由节点和 Tween/AnimationPlayer 执行。
+- 测试跟随目标架构重写，不用旧测试约束新设计。
 
-## 目标结构
+## 目标场景结构
 
-建议把当前运行时世界组织成一个 Godot 场景根节点，类似：
+新增运行时世界场景：
 
 ```text
-WorldRoot
-  WorldSceneHost
-    MapVisualHost
-    GroundHost
-    InteractionTargetHost
-    ActorHost
-    CorpseHost
-    LightingHost
-    CameraHost
-    DebugOverlayHost
+godot/scenes/world/world_runtime_root.tscn
 ```
 
-### WorldRoot
+建议节点结构：
 
-保留现有 `godot/scripts/world/world_root.gd` 作为 app 级世界入口，但它不再直接依赖一个巨型 `WorldSceneRenderer` 做全部事情。
+```text
+WorldRuntimeRoot
+  MapSceneSlot
+  InteractionController
+  ActorLayer
+  CorpseLayer
+  WorldMarkerLayer
+  CameraRig
+  LightRig
+  DebugOverlayLayer
+```
 
-职责：
+对应脚本建议放在：
 
-- 持有 world container。
-- 维护 world snapshot 的刷新入口。
-- 调用子控制器同步世界。
-- 记录渲染统计。
+```text
+godot/scripts/world/runtime/
+```
 
-### WorldSceneHost
+## 目标节点职责
 
-新增一个场景节点，作为所有 world 视觉节点的编排入口。
+### WorldRuntimeRoot
 
-职责：
-
-- 接收 world snapshot。
-- 按阶段分发给各个子 host。
-- 负责清理和重建的边界。
-- 对外提供 `apply_world_snapshot()` / `clear_world()` / `snapshot()`。
-
-### MapVisualHost
-
-负责加载 `godot/scenes/maps/*.tscn` 或地图视觉子场景。
-
-职责：
-
-- 根据 `map_id` 加载地图 scene。
-- 处理 scene 缺失时的 fallback。
-- 绑定地图对象的交互元数据。
-- 只管地图场景层，不管 actor、灯光、相机。
-
-### GroundHost
-
-负责地面和 ground picker。
+替代 `WorldSceneRenderer` 的主入口，是一个真实 `Node3D`。
 
 职责：
 
-- 如果地图 scene 已有地面，则不重复生成。
-- 没有地面时才生成 fallback ground。
-- 只做最小兜底，不承担地图几何表达。
+- 持有当前 map scene 实例。
+- 管理 runtime 子层。
+- 接收 world snapshot 和 runtime snapshot。
+- 分发状态同步。
+- 发出地图切换、世界刷新、同步完成等 signal。
 
-### InteractionTargetHost
-
-负责把地图对象、门、容器、pickup、trigger 绑定为可拾取、可交互的运行时目标。
-
-职责：
-
-- 扫描 scene 中的 `MapObjectNode`。
-- 根据 object definition 绑定 interaction metadata。
-- 生成碰撞代理和拾取代理。
-- 管理门、容器等状态视觉的同步。
-
-### ActorHost
-
-负责 actor 运行时表现。
-
-职责：
-
-- 根据 actor snapshot 生成和更新 actor node。
-- 挂载名字、血条、AP 条、状态效果图标、任务标记、战斗反馈。
-- 与 `ActorViewController` 协作，保留 actor node 稳定性。
-
-### CorpseHost
-
-负责尸体表现。
-
-职责：
-
-- 生成尸体模型或 fallback mesh。
-- 绑定尸体 meta。
-- 与地图对象和 actor 表现分离。
-
-### LightingHost
-
-负责运行时灯光和基础环境光。
-
-职责：
-
-- 按世界状态生成或刷新灯光。
-- 保留最少可视的世界气氛。
-- 不参与地图结构和交互。
-
-### CameraHost
-
-负责运行时相机。
-
-职责：
-
-- 根据 focus position 或 actor node 设置 camera。
-- 处理 viewport 尺寸、边距和跟随逻辑。
-- 只做相机，不兼任地面、actor 或 world overlay。
-
-### DebugOverlayHost
-
-负责 debug overlay 和调试标记。
-
-职责：
-
-- 提供可切换的 debug 视图。
-- 与 editor / smoke 保持一致。
-- 不污染正式 world scene 的核心逻辑。
-
-## 推荐拆分顺序
-
-### 先抽纯函数和数据处理
-
-先从 `WorldSceneRenderer` 中抽出不依赖节点生命周期的 helper：
-
-- 颜色和材质构造。
-- 位置和尺寸计算。
-- 资源路径判定。
-- 视觉 profile 选择。
-- 统计和汇总函数。
-
-这些内容可以进入一个更小的纯工具模块，或者保留在新 host 内作为私有 helper。
-
-### 再抽地图和交互
-
-优先拆出：
-
-- `MapVisualHost`
-- `GroundHost`
-- `InteractionTargetHost`
-
-这三块最直接对应地图 scene / 交互对象 / fallback 地面，也是当前 `WorldSceneRenderer` 最重的三段逻辑。
-
-### 再拆 actor 和 corpse
-
-下一步拆：
-
-- `ActorHost`
-- `CorpseHost`
-- `ActorViewController` 的对接面
-
-目标是让 actor node 稳定存在，表现更新走局部同步，而不是整棵 world 重绘。
-
-### 最后拆相机、灯光和 debug
-
-这些职责更独立，适合后移：
-
-- `CameraHost`
-- `LightingHost`
-- `DebugOverlayHost`
-
-## 接口草案
-
-### WorldSceneHost
+建议接口：
 
 ```gdscript
-func apply_world_snapshot(world_snapshot: Dictionary, runtime_snapshot: Dictionary = {}, options: Dictionary = {}) -> Dictionary
+signal world_synced(summary: Dictionary)
+signal map_scene_changed(map_id: String)
+
+func load_map(map_id: String) -> void
+func sync_world(world_snapshot: Dictionary, runtime_snapshot: Dictionary = {}) -> Dictionary
 func clear_world() -> void
 func snapshot() -> Dictionary
 ```
 
-### MapVisualHost
+### MapSceneSlot
+
+只负责加载和持有地图 scene。
+
+职责：
+
+- 加载 `res://scenes/maps/<map_id>.tscn`。
+- 要求根节点是 `MapSceneRoot` 或暴露 `map_id`。
+- 校验地图 scene 必须包含地面、对象层和必要入口点。
+- 加载失败直接报错给上层，不生成 fallback 地图。
+
+建议接口：
 
 ```gdscript
-func sync_map_visuals(map_snapshot: Dictionary, options: Dictionary = {}) -> Dictionary
-func clear_map_visuals() -> void
-func map_visual_object_ids() -> Dictionary
+func load_map_scene(map_id: String) -> Node3D
+func current_map_root() -> Node3D
+func validate_loaded_map() -> Array[Dictionary]
 ```
 
-### GroundHost
+### InteractionController
+
+只负责把 scene 中已有的 typed map object 绑定到运行时交互状态。
+
+职责：
+
+- 扫描 `MapTransitionTrigger3D`、`MapDoor3D`、`MapContainer3D`、`MapPickup3D`、`MapStaticProp3D`。
+- 要求可交互对象自带 `Area3D` 或可拾取 `CollisionObject3D`。
+- 同步 door open/locked、container open/empty、pickup available 等状态。
+- 设置 `interaction_target` metadata。
+- 不再为缺失对象生成 fallback mesh 或 fallback collider。
+
+建议接口：
 
 ```gdscript
-func sync_ground(map_snapshot: Dictionary) -> Dictionary
-func clear_ground() -> void
+func bind_map_objects(map_root: Node, interaction_targets: Dictionary) -> Dictionary
+func sync_target_state(object_id: String, target_data: Dictionary) -> void
+func interactive_nodes() -> Array[Node]
 ```
 
-### InteractionTargetHost
+### ActorLayer
 
-```gdscript
-func sync_targets(map_snapshot: Dictionary, visual_object_ids: Dictionary = {}) -> Dictionary
-func clear_targets() -> void
-```
+负责 actor view 的稳定生命周期。
 
-### ActorHost
+职责：
+
+- 为 actor 创建或复用 `ActorView3D`。
+- 同步 grid position、facing、health/AP/status snapshot。
+- 与 `ActorViewController` 合并或改造成同一条主线。
+- 移动表现走 Tween/AnimationPlayer，不通过整树重绘。
+
+建议接口：
 
 ```gdscript
 func sync_actors(actors: Array) -> Dictionary
-func clear_actors() -> void
+func actor_view(actor_id: int) -> Node3D
+func remove_missing_actors(active_actor_ids: PackedInt64Array) -> void
 ```
 
-### CorpseHost
+### CorpseLayer
 
-```gdscript
-func sync_corpses(corpses: Array) -> Dictionary
-func clear_corpses() -> void
-```
+负责 corpse view 的稳定生命周期。
 
-### CameraHost
+职责：
 
-```gdscript
-func sync_camera(map_snapshot: Dictionary, focus_position: Vector3, viewport_size: Vector2) -> Dictionary
-func clear_camera() -> void
-```
+- 根据 corpse snapshot 创建 `CorpseView3D`。
+- 尸体资源缺失时报内容错误。
+- 不再生成通用 fallback 方块。
+
+### WorldMarkerLayer
+
+负责世界空间标记，而不是把这些标记塞进 actor 生成流程。
+
+职责：
+
+- actor 名字、血条、AP 条。
+- 状态效果 icon。
+- 任务标记。
+- 战斗飘字。
+- 交互 hover 高亮。
+
+标记跟随目标节点，不参与地图结构生成。
+
+### CameraRig
+
+负责相机节点和跟随逻辑。
+
+职责：
+
+- 跟随 actor view 或指定 grid/world position。
+- 支持手动 pan、zoom、focus。
+- 不由 world renderer 临时创建。
+
+### LightRig
+
+负责场景灯光。
+
+职责：
+
+- 默认灯光作为 scene 资产存在。
+- 按地图或时间状态同步灯光参数。
+- 不由 renderer 每次刷新重新生成。
+
+### DebugOverlayLayer
+
+负责 debug overlay。
+
+职责：
+
+- debug grid、path、vision、interaction bounds。
+- 与正式 runtime layer 分离。
+- 可以在 smoke 或 editor review 中打开。
+
+## 地图 scene 新要求
+
+所有运行时地图 scene 必须满足：
+
+- 根节点是 `MapSceneRoot` 或等价 typed map root。
+- 地面是 scene 中真实节点，不依赖运行时生成。
+- 建筑、墙、地板、入口 marker 是 scene 中真实节点。
+- 可交互对象使用 typed node。
+- 可交互对象自带拾取区或碰撞体。
+- `Visuals` 不再只是可选装饰，而是对象视觉权威。
+- 缺少必要节点时，validator 报错，不进入运行时 fallback。
+
+## 删除的旧行为
+
+以下行为不再保留：
+
+- `_spawn_ground()` fallback ground。
+- `_add_map_object_fallback_visual()` fallback object。
+- actor fallback capsule / box 作为正式表现。
+- corpse fallback mesh 作为正式表现。
+- 运行时为 scene object 临时补完整视觉。
+- 以 `GeneratedWorld` 作为稳定测试断言。
+- 直接调用 `WorldSceneRenderer.new().render_world()` 的 smoke。
+
+迁移期间可以短暂保留旧代码，但不得作为主路径，也不得新增依赖。
+
+## 新测试方向
+
+旧 smoke 需要替换成面向新架构的测试。
+
+### 新 scene smoke
+
+目标：验证真实 map scene 可以作为运行时表现权威。
+
+检查：
+
+- 每个 map scene 可加载。
+- map root 类型正确。
+- 必须存在地面节点。
+- 必须存在对象层。
+- transition trigger、door、container、pickup 等 typed node 有拾取区。
+- 引用资源可加载。
+
+### 新 runtime world smoke
+
+目标：验证 `WorldRuntimeRoot` 可以同步 snapshot。
+
+检查：
+
+- 可加载指定 map scene。
+- actor view 创建并稳定复用。
+- interaction metadata 绑定到已有 scene node。
+- 地图切换会卸载旧 map scene 并加载新 map scene。
+- 同步不会整树重建 actor view。
+
+### 新 interaction smoke
+
+目标：验证点击和 hover 走 typed scene node。
+
+检查：
+
+- trigger 点击命中 scene 中的入口 marker。
+- door/container/pickup 点击命中自身 Area3D 或 CollisionObject3D。
+- 没有 fallback collider 时仍可正常交互。
+
+### 新 visual review
+
+目标：验证主据点、室内、警戒区等地图是真实可见场景。
+
+检查：
+
+- 地面存在且建筑不悬空。
+- trigger 不再是紫色圆盘。
+- 建筑块和家具材质来自真实资源。
+- 相机、灯光、比例符合手动 review 预期。
 
 ## 迁移阶段
 
-### 阶段一：职责盘点和薄封装
+### 阶段一：建立新运行时世界根
 
-目标是把现有 `WorldSceneRenderer` 的大函数按职责划分，但还保留原类作为外壳。
+新增：
 
-做法：
+- `godot/scenes/world/world_runtime_root.tscn`
+- `godot/scripts/world/runtime/world_runtime_root.gd`
+- `map_scene_slot.gd`
+- `interaction_controller.gd`
 
-- 给每类职责提取内部 helper。
-- 把 `render_world()` 改成调度多个局部同步步骤。
-- 补齐每一块的统计字段。
-
-验收：
-
-- `WorldSceneRenderer` 体积明显下降。
-- `WorldRoot.apply_world_snapshot()` 行为不变。
-- `scene_smoke` 仍然可跑。
-
-### 阶段二：引入节点化 host
-
-把地图、ground、targets、actors、corpses、camera、lighting 拆为独立节点脚本。
-
-做法：
-
-- 新增 `WorldSceneHost` 场景根。
-- 把各 host 作为子节点挂进去。
-- 由 root 统一注入 snapshot。
+同时让 `WorldRoot` 使用 `WorldRuntimeRoot`，不再直接实例化 `WorldSceneRenderer`。
 
 验收：
 
-- host 节点可以单独 mock。
-- 运行时 world 不再依赖一个类完成全部装配。
-- 任何单个 host 坏掉时，其他 host 可独立维持。
+- 一个代表地图可以通过新 root 加载。
+- 新 root 能同步 interaction metadata。
+- 新 smoke 不调用 `WorldSceneRenderer`。
 
-### 阶段三：替换直接调用点
+### 阶段二：地图 scene 内容补齐
 
-把 `WorldRoot`、`scene_smoke`、`map_preview_smoke` 等调用迁移到新 host 接口。
+补齐所有 map scene 必需节点：
 
-做法：
-
-- 保留旧入口一段时间。
-- 新接口先接管主要运行路径。
-- 旧 `WorldSceneRenderer` 只保留兼容壳。
-
-验收：
-
-- 旧 smoke 全通过。
-- 新 host 路径成为主入口。
-
-### 阶段四：删除旧巨型类
-
-当 host 结构稳定后，把 `WorldSceneRenderer` 缩成兼容层，最后删除。
+- 地面。
+- typed objects。
+- picking Area3D / CollisionObject3D。
+- door/container/trigger 的真实视觉和状态节点。
 
 验收：
 
-- 不再有一个文件同时承担所有世界表现职责。
-- 运行时世界行为与迁移前一致或更清晰。
+- scene validator 不允许缺地面或缺拾取体。
+- 旧 fallback 删除后地图仍可见、可点击。
 
-## 需要保留的兼容点
+### 阶段三：ActorLayer 和 MarkerLayer 接管表现
 
-- `GeneratedWorld` 根节点命名先保留，避免 smoke 和 debug 断掉。
-- `load_map_visuals` 这类选项先保留。
-- fallback 地面、fallback actor、fallback 交互体先不删。
-- 现有 `scene_smoke` 断言先不改语义，只改实现路径。
+新增：
 
-## 风险
+- `ActorView3D` scene。
+- `ActorLayer`。
+- `WorldMarkerLayer`。
 
-- host 过度拆分会导致接口碎片化。
-- 过早删除 fallback 会让一些地图暂时全黑或缺交互。
-- actor、camera、presentation 三者之间的跟随顺序如果改错，会影响移动和动作表现。
+迁移：
 
-## 缓解方式
+- actor 创建、血条、AP 条、状态、任务、战斗反馈从 `WorldSceneRenderer` 移出。
+- actor 移动由稳定 actor node 执行。
 
-- 先拆职责，再拆数据流。
-- 保持一个总编排入口。
-- 每次只迁一类 host，并跑对应 smoke。
-- 所有新 host 先支持 snapshot 输入，再考虑更复杂的 signal 驱动。
+验收：
 
-## 测试计划
+- actor view 在普通移动中不被重建。
+- 相机可跟随 actor view。
+- 战斗/状态标记跟随 actor view。
 
-- `tools/agent/test-godot-static.ps1 -Scenario CheckOnly`
-- `tools/agent/test-godot-game.ps1 -Scenario Scene`
-- `tools/agent/test-godot-game.ps1 -Scenario Interaction`
-- `tools/agent/review-godot-map-visual.ps1`
-- `tools/agent/test-godot-editor.ps1`
-- `git diff --check`
+### 阶段四：CameraRig 和 LightRig 场景化
 
-## 实施原则
+新增或迁移：
 
-- 只把职责拆到 Godot 风格更清楚的节点里，不引入新框架。
-- 优先保留 scene/node 可视编排，而不是把它倒回纯脚本调度。
-- 让每个 host 都能在编辑器和 headless 下单独验证。
-- 迁移期间以稳定性优先，重构目标是“更像 Godot”，不是“更多抽象”。
+- `CameraRig` scene。
+- `LightRig` scene。
+
+迁移：
+
+- 相机不再由 renderer 每次生成。
+- 灯光不再由 renderer 每次生成。
+
+验收：
+
+- 地图切换后相机保持可控。
+- 光照随 scene 或 runtime state 同步。
+
+### 阶段五：删除 WorldSceneRenderer
+
+完成调用点替换后：
+
+- 删除 `world_scene_renderer.gd`。
+- 删除或重写所有直接依赖它的 smoke。
+- 删除旧 fallback helper。
+
+验收：
+
+- `rg "WorldSceneRenderer|render_world\\(" godot/scripts docs` 不再出现主路径依赖。
+- 新 static、runtime、interaction、editor smoke 通过。
+
+## 验证命令
+
+静态验证：
+
+```powershell
+pwsh -NoProfile -File tools/agent/test-godot-static.ps1 -Scenario CheckOnly
+```
+
+新 runtime scene 验证：
+
+```powershell
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Scene
+```
+
+新交互验证：
+
+```powershell
+pwsh -NoProfile -File tools/agent/test-godot-game.ps1 -Scenario Interaction
+```
+
+地图视觉复核：
+
+```powershell
+pwsh -NoProfile -File tools/agent/review-godot-map-visual.ps1
+```
+
+最终检查：
+
+```powershell
+git diff --check
+```
+
+## 实施判断
+
+如果某张地图没有地面、某个 trigger 没有拾取体、某个 actor 没有正式 view，不再由 renderer 临时补一个东西让它“看起来能跑”。这些都应该变成内容或场景错误，并由 validator、editor review 或 smoke 暴露。
+
+这条路线更激进，但更接近 Godot 原生开发：场景负责场景，节点负责自身表现，controller 负责同步状态，测试验证目标架构，而不是保护迁移期的大型临时代码。
