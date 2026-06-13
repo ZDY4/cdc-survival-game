@@ -2686,6 +2686,10 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("runtime control snapshot should expose actor-node camera follow during movement, got %s" % JSON.stringify(camera_follow))
 	if int(camera_follow.get("follow_actor_id", 0)) != 1:
 		errors.append("runtime control snapshot should expose player follow actor id during movement, got %s" % JSON.stringify(camera_follow))
+	if not bool(camera_follow.get("follow_node_active", false)):
+		errors.append("runtime control snapshot should expose active actor node camera target during movement, got %s" % JSON.stringify(camera_follow))
+	if player_node_instance_before_finish > 0 and int(camera_follow.get("follow_node_instance_id", 0)) != player_node_instance_before_finish:
+		errors.append("runtime camera follow should bind to player ActorView node instance, camera=%s actor_node=%s" % [JSON.stringify(camera_follow), str(player_node_instance_before_finish)])
 	var render_policy: Dictionary = _dictionary_or_empty(active_control_snapshot.get("world_render_policy", {}))
 	if not bool(render_policy.get("runner_active", false)):
 		errors.append("world render policy should see runner active during movement, got %s" % JSON.stringify(render_policy))
@@ -2710,6 +2714,10 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 				errors.append("movement camera should follow actor node while runner is active, got source=%s" % follow_source)
 			if int(camera_before_finish.get_meta("follow_actor_id", 0)) != 1:
 				errors.append("movement camera should record player actor follow id, got %s" % str(camera_before_finish.get_meta("follow_actor_id", 0)))
+			if not bool(camera_before_finish.get_meta("follow_node_active", false)):
+				errors.append("movement camera should keep an active ActorView node follow target")
+			if player_node_instance_before_finish > 0 and int(camera_before_finish.get_meta("follow_node_instance_id", 0)) != player_node_instance_before_finish:
+				errors.append("movement camera should follow the player ActorView node instance, camera=%s actor_node=%s" % [str(camera_before_finish.get_meta("follow_node_instance_id", 0)), str(player_node_instance_before_finish)])
 			if not bool(camera_before_finish.get_meta("following_focus", false)):
 				errors.append("movement camera should restore automatic follow when player action starts")
 			var focus: Variant = camera_before_finish.get_meta("focus_position", Vector3.ZERO)

@@ -20,6 +20,7 @@ var map_size := Vector2(48.0, 42.0)
 var following_focus := true
 var follow_source := "focus_position"
 var follow_actor_id := 0
+var follow_node_ref: WeakRef
 
 
 func attach(p_camera: Camera3D, focus_position: Vector3, p_map_size: Vector2, viewport_size: Vector2, level_plane_height: float) -> bool:
@@ -34,6 +35,7 @@ func attach(p_camera: Camera3D, focus_position: Vector3, p_map_size: Vector2, vi
 	following_focus = previous_following_focus
 	follow_source = "attach" if following_focus else str(camera.get_meta("follow_source", "manual"))
 	follow_actor_id = 0 if following_focus else int(camera.get_meta("follow_actor_id", 0))
+	follow_node_ref = null
 	is_dragging = false
 	has_drag_anchor = false
 	_sync_camera_focus_meta()
@@ -41,9 +43,45 @@ func attach(p_camera: Camera3D, focus_position: Vector3, p_map_size: Vector2, vi
 	return true
 
 
+func follow_actor_node(actor_node: Node3D, viewport_size: Vector2, level_plane_height: float) -> bool:
+	if actor_node == null or not is_instance_valid(actor_node):
+		return false
+	following_focus = true
+	follow_source = "actor_node"
+	follow_actor_id = int(actor_node.get_meta("actor_id", 0))
+	follow_node_ref = weakref(actor_node)
+	return process_follow(actor_node.global_position, viewport_size, level_plane_height, "actor_node", follow_actor_id)
+
+
+func follow_grid(grid: Dictionary, viewport_size: Vector2, level_plane_height: float, actor_id: int = 0) -> bool:
+	following_focus = true
+	follow_node_ref = null
+	follow_source = "grid"
+	follow_actor_id = actor_id
+	var grid_target := Vector3(
+		float(grid.get("x", 0.0)) * GRID_SIZE,
+		float(grid.get("y", 0.0)) + level_plane_height,
+		float(grid.get("z", 0.0)) * GRID_SIZE
+	)
+	return process_follow(grid_target, viewport_size, level_plane_height, "grid", actor_id)
+
+
+func clear_follow_target(reason: String = "") -> void:
+	following_focus = false
+	follow_source = reason if not reason.is_empty() else "manual"
+	follow_actor_id = 0
+	follow_node_ref = null
+	_sync_camera_focus_meta()
+
+
 func process_follow(focus_position: Vector3, viewport_size: Vector2, level_plane_height: float, p_follow_source: String = "focus_position", p_follow_actor_id: int = 0) -> bool:
 	if camera == null or not following_focus or is_dragging:
 		return false
+	var node := _follow_node()
+	if node != null:
+		focus_position = node.global_position
+		p_follow_source = "actor_node"
+		p_follow_actor_id = int(node.get_meta("actor_id", p_follow_actor_id))
 	follow_source = p_follow_source
 	follow_actor_id = p_follow_actor_id
 	var follow_target := _clamp_target(focus_position, viewport_size, level_plane_height)
@@ -68,6 +106,7 @@ func begin_drag(screen_position: Vector2, plane_height: float) -> bool:
 	following_focus = false
 	follow_source = "manual_drag"
 	follow_actor_id = 0
+	follow_node_ref = null
 	drag_anchor_world = Vector2((point as Vector3).x, (point as Vector3).z)
 	has_drag_anchor = true
 	_sync_camera_focus_meta()
@@ -114,6 +153,8 @@ func focus(focus_position: Vector3, viewport_size: Vector2, level_plane_height: 
 	following_focus = true
 	follow_source = p_follow_source
 	follow_actor_id = p_follow_actor_id
+	if p_follow_source != "actor_node":
+		follow_node_ref = null
 	has_drag_anchor = false
 	target = _clamp_target(focus_position, viewport_size, level_plane_height)
 	_apply_camera_transform(viewport_size, level_plane_height)
@@ -127,6 +168,8 @@ func snapshot() -> Dictionary:
 		"has_drag_anchor": has_drag_anchor,
 		"follow_source": follow_source,
 		"follow_actor_id": follow_actor_id,
+		"follow_node_active": _follow_node() != null,
+		"follow_node_instance_id": _follow_node().get_instance_id() if _follow_node() != null else 0,
 		"focus_position": target,
 		"zoom_factor": zoom_factor,
 		"camera_position": camera.global_position if camera != null and is_instance_valid(camera) else Vector3.ZERO,
@@ -227,6 +270,19 @@ func _sync_camera_focus_meta() -> void:
 		camera.set_meta("follow_source", follow_source)
 		camera.set_meta("follow_actor_id", follow_actor_id)
 		camera.set_meta("following_focus", following_focus)
+		var node := _follow_node()
+		camera.set_meta("follow_node_active", node != null)
+		camera.set_meta("follow_node_instance_id", node.get_instance_id() if node != null else 0)
+
+
+func _follow_node() -> Node3D:
+	if follow_node_ref == null:
+		return null
+	var node := follow_node_ref.get_ref() as Node3D
+	if node == null or not is_instance_valid(node) or node.is_queued_for_deletion():
+		follow_node_ref = null
+		return null
+	return node
 
 
 func _vector_meta(node: Node, key: String, fallback: Vector3) -> Vector3:

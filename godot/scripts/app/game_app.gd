@@ -1258,13 +1258,20 @@ func focused_actor_grid_position() -> Dictionary:
 
 
 func focused_actor_visual_position() -> Variant:
+	var node := focused_actor_node_for_camera_follow()
+	if node != null:
+		return node.global_position
+	return null
+
+
+func focused_actor_node_for_camera_follow() -> Node3D:
 	var actor_id := _active_runner_actor_id()
 	if actor_id <= 0:
 		actor_id = int(_dictionary_or_empty(focused_actor_snapshot()).get("actor_id", _player_actor_id()))
 	if actor_view_controller != null and actor_view_controller.has_method("active_actor_node"):
 		var node := actor_view_controller.call("active_actor_node", actor_id) as Node3D
 		if node != null:
-			return node.global_position
+			return node
 	return null
 
 

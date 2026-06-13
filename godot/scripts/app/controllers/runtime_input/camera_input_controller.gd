@@ -13,6 +13,18 @@ func process_follow(focus_position: Vector3, viewport_size: Vector2, level_heigh
 	rig_controller.call("process_follow", focus_position, viewport_size, level_height, follow_source, follow_actor_id)
 
 
+func follow_actor_node(actor_node: Node3D, viewport_size: Vector2, level_height: float) -> void:
+	rig_controller.call("follow_actor_node", actor_node, viewport_size, level_height)
+
+
+func follow_grid(grid: Dictionary, viewport_size: Vector2, level_height: float, actor_id: int = 0) -> void:
+	rig_controller.call("follow_grid", grid, viewport_size, level_height, actor_id)
+
+
+func clear_follow_target(reason: String = "") -> void:
+	rig_controller.call("clear_follow_target", reason)
+
+
 func begin_drag(screen_position: Vector2, drag_plane_height: float) -> void:
 	rig_controller.call("begin_drag", screen_position, drag_plane_height)
 
