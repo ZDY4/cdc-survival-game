@@ -1,14 +1,14 @@
 # Godot 原生逐步动作系统最终路线
 
-本文定义移动、回合、相机和动作表现的最终改造路线。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层仍然权威，但运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
+本文定义移动、回合、相机和动作表现的最终改造路线。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层保持权威，运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
 
-本计划只描述目标架构和直达最终状态的实现路线。后续实现以 Godot 原生 action runner、稳定 actor view、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都进入同一套 Godot action pipeline。
+本计划只描述目标架构和直达最终状态的实现路线。后续实现以 Godot 原生 action runner、稳定 ActorView、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都进入同一套 Godot action pipeline。
 
 执行口径：
 
 - 每个阶段都以最终 action pipeline 为交付对象，并让目标架构更完整。
 - 不新增第二套移动、回合、交互或战斗语义；headless、smoke、debug 和手动游戏都走同一 runner facade。
-- 同步推进只可作为迁移前历史路径被移除，不参与运行时、headless smoke、debug facade 或后续验收；所有执行路径统一迁入 action runner。
+- 所有执行路径统一进入 action runner；运行时、headless smoke、debug facade 和后续验收使用同一套动作语义。
 - 文档中的阶段顺序是最终系统的增量落地顺序。
 
 ## 1. 最终目标
@@ -20,7 +20,7 @@
 - 普通移动不全量重绘世界；actor node 是可持续的 view object。
 - 相机跟随视觉节点，而不是只跟随 snapshot grid。
 - 一次玩家输入不会同步消费多个未来回合；回合推进必须通过 action runner 分阶段执行。
-- 事件用于记录和 UI 反馈，不再作为 presenter 反推当前表现对象的唯一依据。
+- 事件用于记录和 UI 反馈；当前表现对象由 action runner、ActorView registry 和 snapshot 明确提供。
 - 运行时功能按 Godot 原生职责拆分：规则、动作调度、ActorView、CameraRig、HUD / Panel 各自独立协作。
 
 ### 1.2 目标流程
@@ -54,13 +54,12 @@ TurnActionRunner
   pending_resume
 ```
 
-### 1.3 非目标
+### 1.3 架构边界
 
-- 不设置“先缓解点击卡顿”的短期分支路线。
-- 不让相机直接追规则终点来掩盖表现不同步。
-- 不用全量重绘 actor tree 代替 ActorView 的逐步表现。
-- 不保留一条 smoke 专用或 debug 专用的旧移动语义。
-- 不把 Rust / Bevy 的运行时结构搬进 Godot；旧工程只作为规则行为参考。
+- 相机跟随 action 期间的 ActorView 节点，非 action 状态跟随稳定 focus grid。
+- ActorView 负责逐步移动、朝向、攻击、受击和死亡表现；WorldRuntimeRoot 只处理结构性刷新。
+- Smoke、debug 和手动游戏共享同一个 runner facade。
+- Rust / Bevy 参考工程只用于规则行为对照，最终实现采用 Godot 原生 scene、node、resource、signal 和 GDScript 模块。
 
 ## 2. 目标模块
 
@@ -172,7 +171,7 @@ func process_follow(delta: float, viewport_size: Vector2, level_height: float) -
 调整职责：
 
 - 初次加载地图和结构性变化时同步当前 world scene。
-- 普通移动、攻击朝向、AP 变化不全量重绘 actor tree。
+- 普通移动、攻击朝向、AP 变化由稳定 ActorView 更新。
 - 地图切换、对象生成 / 删除、尸体创建、楼层结构变化才允许结构性重绘。
 - action active 时结构性重绘必须由 TurnActionRunner 明确调度：等待当前 step 完成、完成当前 action、或按保存 / 地图切换策略拒绝该结构性变化。
 
@@ -237,16 +236,16 @@ Simulation.step_move(...)
 
 边界要求：
 
-- `submit_player_command({"kind": "move"})` 不再被主游戏输入、HUD、交互、AI 调度和 smoke 验收调用。
+- 主游戏输入、HUD、交互、AI 调度和 smoke 验收通过 runner facade 请求动作。
 - 调试工具、headless smoke 和保存恢复通过 TurnActionRunner 的显式 step / finish facade 驱动，与手动游戏共享同一套动作语义。
 - 测试快速完成动作的入口命名为 `finish_active_action()` 或 `drain_turn_action_runner()`，语义是“驱动 action runner 跑完当前动作”。
-- `_submit_move_command()` 从运行时主路径删除；所有调用收敛到 runner facade，后续业务逻辑只进入 Godot action pipeline。
+- 运行时业务逻辑只进入 Godot action pipeline；规则校验仍由 `Simulation` 的动作接口承担。
 
 ## 4. App 输入和动作调度
 
 ### 4.1 输入入口
 
-`GameRuntimeInputController` 不再直接调用整段 `execute_move_to_grid()` 完成未来状态，而是提交 action request：
+`GameRuntimeInputController` 提交 action request：
 
 ```gdscript
 game_root.request_player_move(grid)
@@ -304,7 +303,7 @@ Action active 时：
 - `Simulation.step_move()` 每次推进一格。
 - AP 每格扣除。
 - pending movement path 每格更新。
-- 主游戏路径只调用 `begin_move()` / `step_move()`；整段同步移动不再作为运行时路径存在。
+- 主游戏路径只调用 `begin_move()` / `step_move()`。
 
 验收：
 
@@ -319,7 +318,7 @@ Action active 时：
 - 新增 `ActorViewController.move_actor_step()`。
 - TurnActionRunner 调用 step 后播放一格 tween。
 - tween finished 后 runner 继续下一格。
-- 玩家移动表现只由 TurnActionRunner 调度 ActorViewController 执行；`WorldActionPresenter` 不再负责从历史事件反推玩家移动。
+- 玩家移动表现只由 TurnActionRunner 调度 ActorViewController 执行；`WorldActionPresenter` 负责非 actor-step 的世界反馈。
 - `WorldRuntimeRoot` 保持 actor node registry 稳定；普通移动只更新 actor view，不结构性替换节点。
 
 验收：
@@ -361,7 +360,7 @@ Action active 时：
 
 验收：
 
-- 点击 NPC / 容器 / 门时不再同步跑完整个接近 + 交互未来状态。
+- 点击 NPC / 容器 / 门时，接近、朝向和交互按 action chain 分阶段完成。
 - 攻击表现不会被后续回合事件覆盖。
 
 ### 阶段 6：制作、等待和自动推进统一
@@ -469,7 +468,7 @@ cmd /c run_godot_validate.bat
 - 建立 runner / actor view / camera follow 的最终验收口径。
 - 文档化最终 snapshot 字段。
 - smoke 直接绑定最终 action runner、ActorView、CameraRig 和稳定 snapshot。
-- 去除主游戏路径对历史同步移动入口的依赖。
+- 主游戏输入、HUD、调试和 smoke 统一绑定 runner facade。
 
 ### 提交 2：TurnActionRunner 骨架
 
@@ -482,16 +481,15 @@ cmd /c run_godot_validate.bat
 
 - 新增逐格移动规则接口。
 - 主游戏路径迁移到逐格接口。
-- 删除运行时主路径对同步 move command 的依赖。
 - Movement smoke 覆盖每格 AP 和 pending。
-- `submit_player_command({"kind": "move"})` 从运行时主线剥离；相关调用必须迁入 runner facade。
+- 移动规则通过 `begin_move()` / `step_move()` 与 TurnActionRunner 协作。
 
 ### 提交 4：ActorView 和相机跟随节点
 
 - 新增 ActorViewController。
 - 移动 step 使用 actor node tween。
 - CameraRig 支持 Node3D follow target。
-- 普通移动不再全量重绘 actor tree。
+- 普通移动由稳定 actor node 表现。
 
 ### 提交 5：玩家回合逐阶段化
 
@@ -520,17 +518,16 @@ cmd /c run_godot_validate.bat
 
 - 不重新引入 Rust / Bevy。
 - 不把业务规则写进 UI 或 ActorView。
-- 不在普通移动中用全量 world render 代替 actor tween。
-- 不让 presenter 从事件历史猜当前 action。
-- 不把 `submit_player_command()` 一次性推进作为正常游戏路径。
-- headless / debug 也应通过 TurnActionRunner 的显式 step / finish facade 驱动最终系统，避免形成第二套移动语义。
-- 不接受“保留旧架构但改善局部表现”的阶段性交付；每个提交都必须减少旧路径依赖并靠近最终 action pipeline。
+- 普通移动使用 actor tween 和稳定 ActorView registry。
+- Presenter 只消费当前 action 明确提供的表现请求和 snapshot。
+- Godot runtime、headless 和 debug 通过 TurnActionRunner 的显式 step / finish facade 驱动最终系统。
+- 每个提交都必须让最终 action pipeline 更完整、更集中、更可验证。
 
 ## 10. 完成标准
 
 - 点击地面后玩家立即进入 runner move action。
 - 规则层和表现层按 step 同步推进。
-- 玩家视觉移动是一格一格执行，不是事后补播整段历史。
+- 玩家视觉移动是一格一格执行，并与规则 step 同步。
 - 相机移动中跟随玩家 actor node。
 - AP、pending movement、回合 phase 和 HUD 与每格移动同步。
 - NPC 回合按 action 阶段表现，不会覆盖玩家 action。
