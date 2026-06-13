@@ -3,6 +3,7 @@ extends RefCounted
 const GRID_SIZE := 1.0
 const RAY_DISTANCE := 500.0
 const PICK_RAY_MAX_HITS := 16
+const ACTOR_SCREEN_PICK_RADIUS := 18.0
 const PICKING_PRIORITY: Array[String] = ["actor", "door", "map_object", "trigger", "grid"]
 const PICKING_DISTANCE_PRIORITY_EPSILON := 0.2
 const PICKING_TRANSITION_KIND_RANK := {
@@ -20,10 +21,10 @@ func pick_from_screen(camera: Camera3D, screen_position: Vector2, world_result: 
 		return {}
 	var ray_from := camera.project_ray_origin(screen_position)
 	var ray_to := ray_from + camera.project_ray_normal(screen_position) * RAY_DISTANCE
-	return pick_ray(camera, ray_from, ray_to, world_result, observed_level)
+	return pick_ray(camera, ray_from, ray_to, world_result, observed_level, screen_position)
 
 
-func pick_ray(camera: Camera3D, ray_from: Vector3, ray_to: Vector3, world_result: Dictionary, observed_level: int) -> Dictionary:
+func pick_ray(camera: Camera3D, ray_from: Vector3, ray_to: Vector3, world_result: Dictionary, observed_level: int, screen_position: Vector2 = Vector2(-1000000.0, -1000000.0)) -> Dictionary:
 	var world := camera.get_world_3d() if camera != null else null
 	if world == null:
 		return {}
@@ -78,6 +79,9 @@ func pick_ray(camera: Camera3D, ray_from: Vector3, ray_to: Vector3, world_result
 			"target_type": str(metadata.get("target_type", "")),
 		})
 	if candidates.is_empty():
+		var actor_fallback: Dictionary = _actor_screen_fallback(camera, screen_position, world_result, observed_level, hits.size())
+		if not actor_fallback.is_empty():
+			return actor_fallback
 		var ground_hit: Dictionary = hits.front().duplicate(true)
 		ground_hit["picking"] = _picking_diagnostics("grid", _picking_priority_rank("grid"), hits.size(), 0, [])
 		return ground_hit
@@ -91,6 +95,76 @@ func pick_ray(camera: Camera3D, ray_from: Vector3, ray_to: Vector3, world_result
 		int(selected.get("hit_index", 0)),
 		candidates
 	)
+	return selected_hit
+
+
+func _actor_screen_fallback(camera: Camera3D, screen_position: Vector2, world_result: Dictionary, observed_level: int, hit_count: int) -> Dictionary:
+	if camera == null or screen_position.x < -999999.0:
+		return {}
+	var scene_root := camera.get_tree().current_scene if camera.get_tree() != null else null
+	if scene_root == null and camera.get_tree() != null:
+		scene_root = camera.get_tree().root
+	if scene_root == null:
+		return {}
+	var candidates: Array[Dictionary] = []
+	for actor_value in _array_or_empty(world_result.get("actors", [])):
+		var actor: Dictionary = _dictionary_or_empty(actor_value)
+		var actor_id := int(actor.get("actor_id", 0))
+		if actor_id <= 0:
+			continue
+		if str(actor.get("kind", "")) == "player":
+			continue
+		var definition_id := str(actor.get("definition_id", ""))
+		var node := scene_root.find_child("Actor_%s_%d" % [definition_id, actor_id], true, false) as Node3D
+		if node == null or not node.is_inside_tree():
+			continue
+		var target_point := node.global_position
+		if camera.is_position_behind(target_point):
+			continue
+		var projected := camera.unproject_position(target_point)
+		var screen_distance := projected.distance_to(screen_position)
+		if screen_distance > ACTOR_SCREEN_PICK_RADIUS:
+			continue
+		var metadata: Dictionary = _metadata_for_interaction_node(node, world_result)
+		if metadata.is_empty():
+			continue
+		var category: String = _picking_category(metadata)
+		candidates.append({
+			"hit": {
+				"collider": node,
+				"position": node.global_position,
+				"normal": Vector3.UP,
+			},
+			"hit_index": 0,
+			"node": node,
+			"category": category,
+			"priority": _picking_priority_rank(category),
+			"subpriority": _picking_subpriority(metadata, category),
+			"transition_rank": _picking_transition_rank(metadata, category),
+			"transition_kind": _picking_transition_kind(metadata, category),
+			"transition_target_map_id": str(metadata.get("target_map_id", "")),
+			"transition_entry_point_id": str(metadata.get("target_entry_point_id", metadata.get("entry_point_id", ""))),
+			"transition_return_spawn_id": str(metadata.get("return_spawn_id", "")),
+			"distance": screen_distance,
+			"hit_fraction": 0.0,
+			"door_aabb_distance": 0.0,
+			"anchor_noise": _picking_anchor_noise(metadata, node.global_position, observed_level),
+			"target_id": str(metadata.get("target_id", "")),
+			"target_type": str(metadata.get("target_type", "")),
+		})
+	if candidates.is_empty():
+		return {}
+	candidates.sort_custom(_sort_pick_candidates)
+	var selected: Dictionary = _dictionary_or_empty(candidates.front())
+	var selected_hit: Dictionary = _dictionary_or_empty(selected.get("hit", {})).duplicate(true)
+	selected_hit["picking"] = _picking_diagnostics(
+		str(selected.get("category", "")),
+		int(selected.get("priority", 99)),
+		hit_count,
+		int(selected.get("hit_index", 0)),
+		candidates
+	)
+	selected_hit["picking"]["screen_actor_fallback"] = true
 	return selected_hit
 
 

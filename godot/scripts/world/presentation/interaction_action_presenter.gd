@@ -7,7 +7,7 @@ const PresentationNodeFactory = preload("res://scripts/world/presentation/presen
 const GRID_SIZE := 1.0
 const DEFAULT_ACTOR_Y := 0.58
 const INTERACTION_PHASES := ["start", "pulse", "fade"]
-const INTERACTION_PHASE_DURATIONS := [0.06, 0.08, 0.10]
+const INTERACTION_PHASE_DURATIONS := [0.18, 0.10, 0.12]
 
 var _tracker := PresentationTracker.new()
 var _materials := PresentationMaterials.new()

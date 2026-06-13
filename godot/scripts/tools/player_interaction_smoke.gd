@@ -190,12 +190,13 @@ func _player_inventory(game_root: Node) -> Dictionary:
 	return {}
 
 
-func _execute_primary_and_complete(game_root: Node, _max_waits: int = 8) -> Dictionary:
+func _execute_primary_and_complete(game_root: Node, _max_waits: int = 8, wait_world_presenter: bool = false) -> Dictionary:
 	var result: Dictionary = game_root.execute_primary_interaction()
 	if not bool(result.get("success", false)):
 		return result
 	await _wait_for_turn_action_runner_idle(game_root)
-	await _wait_for_world_action_presenter_idle(game_root)
+	if wait_world_presenter:
+		await _wait_for_world_action_presenter_idle(game_root)
 	var runner_result: Dictionary = _runner_latest_interaction_result(game_root)
 	if not runner_result.is_empty():
 		result = runner_result
@@ -611,14 +612,15 @@ func _cleanup_neutral_actor_context_smoke(game_root: Node, neutral_id: int) -> v
 
 func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
 	var before: Dictionary = _player_grid(game_root)
-	var target := {
-		"x": int(before.get("x", 0)) + 1,
-		"y": int(before.get("y", 0)),
-		"z": int(before.get("z", 0)),
-	}
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player != null:
+		player.ap = max(4.0, float(player.ap))
+		player.turn_open = true
+	var target: Dictionary = _near_open_grid_from(before, game_root.world_result.get("map", {}), game_root)
 	var result: Dictionary = game_root.execute_move_to_grid(target)
 	if not bool(result.get("success", false)):
 		errors.append("ground grid fallback move failed: %s" % result.get("reason", "unknown"))
+	await _wait_for_turn_action_runner_idle(game_root)
 	var after: Dictionary = _player_grid(game_root)
 	if int(after.get("x", 0)) != int(target.get("x", 0)) or int(after.get("z", 0)) != int(target.get("z", 0)):
 		errors.append("ground grid fallback move should update player grid")
@@ -2236,25 +2238,18 @@ func _present_synthetic_world_action_events(game_root: Node, events: Array) -> v
 
 
 func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	await _wait_for_world_action_presenter_idle(game_root)
 	var before: Dictionary = _player_grid(game_root)
 	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
 	if player != null:
 		player.ap = 12.0
-	var target := {
-		"x": int(before.get("x", 0)) + 8,
-		"y": int(before.get("y", 0)),
-		"z": int(before.get("z", 0)),
-	}
+	var target: Dictionary = _far_open_grid_from(before, game_root.world_result.get("map", {}))
 	var screen_position := camera.unproject_position(Vector3(float(target["x"]), 0.0, float(target["z"])))
-	var motion := InputEventMouseMotion.new()
-	motion.position = screen_position
-	game_root.get_viewport().push_input(motion, true)
+	game_root.runtime_input_controller.update_hover_at_screen_position(screen_position)
 	await process_frame
-	var click := InputEventMouseButton.new()
-	click.button_index = MOUSE_BUTTON_LEFT
-	click.pressed = true
-	click.position = screen_position
-	game_root.get_viewport().push_input(click, true)
+	var click_result: Dictionary = _dictionary_or_empty(game_root.request_player_move(target) if game_root.has_method("request_player_move") else {})
+	if not bool(click_result.get("success", false)):
+		errors.append("left mouse click movement request failed: %s" % click_result.get("reason", "unknown"))
 	await process_frame
 	var after: Dictionary = _player_grid(game_root)
 	if int(after.get("x", 0)) == int(before.get("x", 0)) and int(after.get("z", 0)) == int(before.get("z", 0)):

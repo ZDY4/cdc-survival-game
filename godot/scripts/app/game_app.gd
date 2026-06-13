@@ -1314,22 +1314,14 @@ func select_grid_target(grid: Dictionary) -> Dictionary:
 
 
 func execute_move_to_grid(grid: Dictionary) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execute_move", interaction_controller, grid, Callable(self, "_player_command_rejection")))
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if not bool(operation.get("apply_result", false)):
+	var selection: Dictionary = select_grid_target(grid)
+	if not bool(selection.get("success", false)):
+		return selection
+	var result: Dictionary = request_player_move(grid)
+	if not bool(result.get("success", false)):
+		refresh_hud(current_interaction_prompt())
 		return result
-	var final_world_result: Dictionary = _dictionary_or_empty(operation.get("final_world_result", {}))
-	var move_plan: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("movement_execution_plan", result, final_world_result))
-	if bool(move_plan.get("present_before_refresh", false)):
-		_setup_world_container()
-		_present_world_action(result)
-		move_plan = _dictionary_or_empty(world_action_flow_controller.call("movement_execution_plan", result, final_world_result))
-		if bool(move_plan.get("defer_final_refresh", false)):
-			_queue_deferred_world_refresh(_dictionary_or_empty(move_plan.get("final_world_result", {})), _dictionary_or_empty(result.get("prompt", {})), result, "execute_move_to_grid", false)
-			refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
-			return result
-	world_result = _dictionary_or_empty(move_plan.get("final_world_result", final_world_result))
-	rebuild_runtime_world(_dictionary_or_empty(result.get("prompt", {})), result)
+	refresh_hud(current_interaction_prompt())
 	return result
 
 
@@ -2214,6 +2206,7 @@ func _sync_debug_console_schema() -> void:
 
 
 func _apply_interaction_execution_result(result: Dictionary, executed_target: Dictionary) -> void:
+	var presentation_result: Dictionary = _interaction_world_action_result(result, executed_target)
 	var followup: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execution_followup", result, executed_target))
 	ui_feedback_state_controller.call("apply_interaction_followup", followup)
 	var stage_panel_to_open := str(followup.get("stage_panel", ""))
@@ -2222,17 +2215,111 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
 	_apply_runtime_scene_refresh(true, {}, {
 		"present_world_action": true,
-		"command_result": result,
+		"command_result": presentation_result,
 	})
 	var deferred_ui := false
 	if not stage_panel_to_open.is_empty():
-		deferred_ui = _queue_or_open_stage_panel_after_world_action(stage_panel_to_open, result)
-	elif _queue_or_refresh_all_panels_after_world_action(result):
+		deferred_ui = _queue_or_open_stage_panel_after_world_action(stage_panel_to_open, presentation_result)
+	elif _queue_or_refresh_all_panels_after_world_action(presentation_result):
 		deferred_ui = true
 	if deferred_ui:
 		refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 	else:
 		refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
+
+
+func _interaction_world_action_result(result: Dictionary, executed_target: Dictionary) -> Dictionary:
+	var output: Dictionary = result.duplicate(true)
+	var events: Array = _interaction_result_events(output)
+	if not _interaction_events_include_success(events):
+		var payload: Dictionary = _interaction_success_payload_for_presentation(output, executed_target)
+		if not payload.is_empty():
+			events.append({
+				"kind": "interaction_succeeded",
+				"payload": payload,
+			})
+	if not events.is_empty():
+		output["events"] = events.duplicate(true)
+	return output
+
+
+func _interaction_result_events(result: Dictionary) -> Array:
+	var events: Array = []
+	for source in [
+		result.get("events", []),
+		result.get("emitted_events", []),
+		_dictionary_or_empty(result.get("runtime_snapshot_delta", {})).get("events", []),
+		_dictionary_or_empty(result.get("pending_result", {})).get("events", []),
+		_dictionary_or_empty(result.get("result", {})).get("events", []),
+		_dictionary_or_empty(_dictionary_or_empty(result.get("result", {})).get("runtime_snapshot_delta", {})).get("events", []),
+	]:
+		for event_value in _array_or_empty(source):
+			var event: Dictionary = _dictionary_or_empty(event_value)
+			if not event.is_empty():
+				events.append(event.duplicate(true))
+	return events
+
+
+func _interaction_events_include_success(events: Array) -> bool:
+	for event_value in events:
+		var event: Dictionary = _dictionary_or_empty(event_value)
+		if str(event.get("kind", "")) == "interaction_succeeded":
+			return true
+	return false
+
+
+func _interaction_success_payload_for_presentation(result: Dictionary, executed_target: Dictionary) -> Dictionary:
+	if not bool(result.get("success", false)):
+		return {}
+	var prompt: Dictionary = _dictionary_or_empty(result.get("prompt", {}))
+	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
+	if target.is_empty():
+		target = executed_target.duplicate(true)
+	var option_id := str(result.get("option_id", prompt.get("primary_option_id", "")))
+	var option: Dictionary = _interaction_prompt_option(prompt, option_id)
+	var target_id: Variant = _interaction_target_id_for_presentation(result, target)
+	var target_name := str(prompt.get("target_name", target.get("display_name", ""))).strip_edges()
+	if target_name.is_empty():
+		target_name = str(target_id).strip_edges()
+	return {
+		"actor_id": int(result.get("actor_id", _player_actor_id())),
+		"target_id": target_id,
+		"target_type": str(target.get("target_type", "")),
+		"target_name": target_name,
+		"target_grid": _interaction_target_grid_for_presentation(target),
+		"option_id": str(option.get("id", option_id)),
+		"option_kind": str(option.get("kind", result.get("kind", "interact"))),
+		"option_name": str(option.get("display_name", "")),
+	}
+
+
+func _interaction_prompt_option(prompt: Dictionary, option_id: String) -> Dictionary:
+	for option_value in _array_or_empty(prompt.get("options", [])):
+		var option: Dictionary = _dictionary_or_empty(option_value)
+		if option_id.is_empty() or str(option.get("id", "")) == option_id:
+			return option.duplicate(true)
+	return {}
+
+
+func _interaction_target_id_for_presentation(result: Dictionary, target: Dictionary) -> Variant:
+	if result.has("target_id"):
+		return result.get("target_id")
+	if target.has("target_id"):
+		return target.get("target_id")
+	if target.has("actor_id"):
+		return target.get("actor_id")
+	return ""
+
+
+func _interaction_target_grid_for_presentation(target: Dictionary) -> Dictionary:
+	for key in ["grid_position", "anchor", "grid"]:
+		var grid: Dictionary = _dictionary_or_empty(target.get(key, {}))
+		if not grid.is_empty():
+			return grid.duplicate(true)
+	var cells: Array = _array_or_empty(target.get("cells", []))
+	if not cells.is_empty():
+		return _dictionary_or_empty(cells[0]).duplicate(true)
+	return {}
 
 
 func _open_stage_panel_from_interaction(panel_id: String) -> void:

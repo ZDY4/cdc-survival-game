@@ -1,6 +1,8 @@
 class_name CorpseLayer
 extends Node3D
 
+const AssetPathResolver = preload("res://scripts/data/asset_path_resolver.gd")
+
 var corpse_nodes: Dictionary = {}
 
 
@@ -26,6 +28,7 @@ func sync_corpses(corpses: Array) -> Dictionary:
 			"container_type": str(corpse_data.get("container_type", "corpse")),
 			"container_origin": str(corpse_data.get("container_origin", "combat_defeat")),
 		})
+		_sync_corpse_model(node, corpse_data)
 		_ensure_pick_body(node)
 	_remove_missing(active)
 	return {"count": corpse_nodes.size()}
@@ -62,6 +65,35 @@ func _ensure_pick_body(parent: Node3D) -> void:
 		shape.shape = box
 	box.size = Vector3(0.9, 0.5, 0.75)
 	shape.position = Vector3(0.0, 0.15, 0.0)
+
+
+func _sync_corpse_model(parent: Node3D, corpse_data: Dictionary) -> void:
+	var model_asset := str(corpse_data.get("model_asset", "")).strip_edges()
+	parent.set_meta("model_asset", model_asset)
+	parent.set_meta("corpse_model_asset", model_asset)
+	if model_asset.is_empty():
+		return
+	var existing := parent.get_node_or_null("CorpseModel") as Node3D
+	if existing != null and str(existing.get_meta("model_asset", "")) == model_asset:
+		return
+	if existing != null:
+		existing.queue_free()
+	var resolved: Dictionary = AssetPathResolver.resolve_model_asset(model_asset)
+	var scene_path := str(resolved.get("resource_path", ""))
+	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		return
+	var packed := load(scene_path) as PackedScene
+	if packed == null:
+		return
+	var model := packed.instantiate() as Node3D
+	if model == null:
+		return
+	model.name = "CorpseModel"
+	model.set_meta("model_asset", model_asset)
+	model.set_meta("corpse_model_asset", model_asset)
+	model.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+	model.position = Vector3(0.0, -0.1, 0.0)
+	parent.add_child(model)
 
 
 func _remove_missing(active: Dictionary) -> void:

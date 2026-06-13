@@ -73,6 +73,7 @@ func _sync_actor_view(node: Node3D, actor_data: Dictionary) -> void:
 	if not bool(node.get_meta("action_runner_active", false)):
 		node.position = _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), DEFAULT_ACTOR_Y)
 	_apply_actor_facing(node, actor_data)
+	_sync_status_effect_icons(node, _array_or_empty(_dictionary_or_empty(actor_data.get("combat", {})).get("active_effects", [])))
 
 
 func _add_actor_model(parent: Node3D, actor_data: Dictionary) -> void:
@@ -136,9 +137,74 @@ func _add_actor_pick_area(parent: Node3D) -> void:
 	if capsule == null:
 		capsule = CapsuleShape3D.new()
 		shape.shape = capsule
-	capsule.radius = 0.36
-	capsule.height = 1.25
-	shape.position = Vector3(0.0, 0.62, 0.0)
+	capsule.radius = 0.55
+	capsule.height = 1.80
+	shape.position = Vector3(0.0, 0.72, 0.0)
+
+
+func _sync_status_effect_icons(parent: Node3D, active_effects: Array) -> void:
+	var container := parent.get_node_or_null("ActorStatusEffectIcons") as Node3D
+	if active_effects.is_empty():
+		if container != null:
+			container.queue_free()
+		return
+	if container == null:
+		container = Node3D.new()
+		container.name = "ActorStatusEffectIcons"
+		parent.add_child(container)
+	for child in container.get_children():
+		child.queue_free()
+	container.position = Vector3(0.0, 1.82, 0.0)
+	container.set_meta("effect_count", active_effects.size())
+	var index := 0
+	for effect_value in active_effects:
+		var effect: Dictionary = _dictionary_or_empty(effect_value)
+		var effect_id := _effect_id(effect)
+		if effect_id.is_empty():
+			continue
+		var base_effect_id := effect_id.trim_prefix("effect:")
+		var icon_path := _effect_icon_path(effect, base_effect_id)
+		var holder := Node3D.new()
+		holder.name = "ActorStatusEffectIcon_%s" % base_effect_id
+		holder.position = Vector3((float(index) - float(active_effects.size() - 1) * 0.5) * 0.22, 0.0, 0.0)
+		holder.set_meta("effect_id", effect_id)
+		holder.set_meta("base_effect_id", base_effect_id)
+		holder.set_meta("icon_path", icon_path)
+		container.add_child(holder)
+		var sprite := Sprite3D.new()
+		sprite.name = "ActorStatusEffectSprite_%s" % base_effect_id
+		sprite.pixel_size = 0.004
+		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sprite.no_depth_test = true
+		sprite.set_meta("effect_id", effect_id)
+		sprite.set_meta("base_effect_id", base_effect_id)
+		sprite.set_meta("icon_resource_path", icon_path)
+		var texture: Texture2D = load(icon_path) as Texture2D if ResourceLoader.exists(icon_path) else null
+		sprite.texture = texture
+		sprite.set_meta("icon_loaded", texture != null)
+		holder.add_child(sprite)
+		index += 1
+
+
+func _effect_id(effect: Dictionary) -> String:
+	var effect_id := str(effect.get("effect_id", "")).strip_edges()
+	if effect_id.is_empty():
+		effect_id = str(_dictionary_or_empty(effect.get("effect", {})).get("base_effect_id", "")).strip_edges()
+	if effect_id.is_empty():
+		return ""
+	if effect_id.begins_with("effect:"):
+		return effect_id
+	return "effect:%s" % effect_id
+
+
+func _effect_icon_path(effect: Dictionary, base_effect_id: String) -> String:
+	var effect_data: Dictionary = _dictionary_or_empty(effect.get("effect", {}))
+	var explicit := str(effect.get("icon_path", effect.get("icon", effect_data.get("icon_path", effect_data.get("icon", ""))))).strip_edges()
+	if not explicit.is_empty():
+		var resolved: Dictionary = AssetPathResolver.resolve_media_asset(explicit, "effect")
+		if bool(resolved.get("ok", false)):
+			return str(resolved.get("resource_path", ""))
+	return "res://assets/icons/effects/%s.svg" % base_effect_id
 
 
 func _apply_actor_facing(node: Node3D, actor_data: Dictionary) -> void:
@@ -165,3 +231,7 @@ func _grid_to_world(grid: Dictionary, y: float) -> Vector3:
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	return value if typeof(value) == TYPE_DICTIONARY else {}
+
+
+func _array_or_empty(value: Variant) -> Array:
+	return value if typeof(value) == TYPE_ARRAY else []
