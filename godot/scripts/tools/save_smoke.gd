@@ -5,6 +5,7 @@ const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstr
 const SaveService = preload("res://scripts/app/save_service.gd")
 const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
+const GAME_ROOT_SCENE = preload("res://scenes/game/game_root.tscn")
 
 
 func _init() -> void:
@@ -32,6 +33,7 @@ func _init() -> void:
 
 	var errors: Array[String] = _validate_roundtrip(saved, snapshot, loaded, restored_simulation.snapshot())
 	errors.append_array(_validate_legacy_snapshot_migration(snapshot, registry))
+	errors.append_array(await _validate_runner_stable_save_boundary())
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -640,6 +642,78 @@ func _validate_legacy_snapshot_migration(snapshot: Dictionary, registry: RefCoun
 	if not _has_event(restored, "snapshot_migrated"):
 		errors.append("legacy snapshot migration should emit snapshot_migrated")
 	return errors
+
+
+func _validate_runner_stable_save_boundary() -> Array[String]:
+	var errors: Array[String] = []
+	var game_root: Node = GAME_ROOT_SCENE.instantiate()
+	get_root().add_child(game_root)
+	await process_frame
+	if game_root.get("simulation") == null:
+		game_root.queue_free()
+		return ["runtime save boundary smoke missing simulation"]
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		game_root.queue_free()
+		return ["runtime save boundary smoke missing player"]
+	player.ap = maxf(player.ap, 4.0)
+	player.turn_open = true
+	var start_grid: Dictionary = player.grid_position.to_dictionary()
+	var target_grid: Dictionary = _first_open_runtime_neighbor(start_grid, _dictionary_or_empty(game_root.world_result.get("map", {})))
+	var move_result: Dictionary = game_root.request_player_move(target_grid)
+	if not bool(move_result.get("success", false)):
+		errors.append("runtime save boundary move should start through runner: %s" % JSON.stringify(move_result))
+	else:
+		var active_runner: Dictionary = _dictionary_or_empty(game_root.turn_action_runner_snapshot())
+		if not bool(active_runner.get("active", false)) and not bool(active_runner.get("presentation_active", false)):
+			errors.append("runtime save boundary should observe active runner before finish: %s" % JSON.stringify(active_runner))
+		var finish_result: Dictionary = game_root.finish_active_action("save_smoke_stable_boundary")
+		if not bool(finish_result.get("success", false)) or bool(_dictionary_or_empty(finish_result.get("after", {})).get("active", false)):
+			errors.append("finish_active_action should finish runner before save: %s" % JSON.stringify(finish_result))
+		var stable_runner: Dictionary = _dictionary_or_empty(game_root.turn_action_runner_snapshot())
+		if bool(stable_runner.get("active", false)) or bool(stable_runner.get("presentation_active", false)):
+			errors.append("runner should be idle at save boundary: %s" % JSON.stringify(stable_runner))
+		var runtime_snapshot: Dictionary = game_root.simulation.snapshot()
+		var service := SaveService.new("user://save_smoke_runner")
+		service.delete_snapshot("stable_boundary")
+		var saved := service.save_snapshot("stable_boundary", runtime_snapshot, {"boundary": "finish_active_action"})
+		var loaded := service.load_snapshot("stable_boundary")
+		service.delete_snapshot("stable_boundary")
+		if not saved or not bool(loaded.get("ok", false)):
+			errors.append("runtime save boundary slot should save/load after runner finish: %s" % JSON.stringify(loaded))
+		else:
+			var registry: RefCounted = game_root.registry
+			var restored_simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+			restored_simulation.load_snapshot(_dictionary_or_empty(loaded.get("runtime_snapshot", {})))
+			var restored: Dictionary = restored_simulation.snapshot()
+			var saved_player_grid: Dictionary = _dictionary_or_empty(_player_actor(runtime_snapshot).get("grid_position", {}))
+			var restored_player_grid: Dictionary = _dictionary_or_empty(_player_actor(restored).get("grid_position", {}))
+			if JSON.stringify(restored_player_grid) != JSON.stringify(saved_player_grid):
+				errors.append("runtime save boundary should restore player grid: %s vs %s" % [restored_player_grid, saved_player_grid])
+			game_root.simulation.load_snapshot(restored)
+			game_root.rebuild_runtime_world()
+			await process_frame
+			var player_node: Node3D = game_root.find_child("Actor_player_1", true, false) as Node3D
+			if player_node == null:
+				errors.append("runtime save boundary should rebuild restored player node")
+			else:
+				var expected := Vector3(float(restored_player_grid.get("x", 0.0)), player_node.position.y, float(restored_player_grid.get("z", 0.0)))
+				if player_node.position.distance_to(expected) > 0.15:
+					errors.append("runtime save boundary should align restored actor node with grid, got %s expected %s" % [str(player_node.position), str(expected)])
+	game_root.queue_free()
+	return errors
+
+
+func _first_open_runtime_neighbor(grid: Dictionary, topology: Dictionary) -> Dictionary:
+	var x := int(grid.get("x", 0))
+	var y := int(grid.get("y", 0))
+	var z := int(grid.get("z", 0))
+	var blocking: Dictionary = _dictionary_or_empty(topology.get("blocking_cells", {}))
+	for offset in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var candidate := {"x": x + offset.x, "y": y, "z": z + offset.y}
+		if not blocking.has("%d:%d:%d" % [int(candidate.get("x", 0)), y, int(candidate.get("z", 0))]):
+			return candidate
+	return {"x": x, "y": y, "z": z}
 
 
 func _player_actor(snapshot: Dictionary) -> Dictionary:

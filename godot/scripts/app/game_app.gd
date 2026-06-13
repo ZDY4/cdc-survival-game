@@ -957,6 +957,26 @@ func drain_turn_action_runner(max_steps: int = 240) -> Dictionary:
 	return runner
 
 
+func finish_active_action(reason: String = "finish_active_action") -> Dictionary:
+	if turn_action_runner == null or not turn_action_runner.has_method("snapshot"):
+		return {"success": false, "reason": "turn_action_runner_missing", "active": false}
+	var before: Dictionary = turn_action_runner_snapshot()
+	if not bool(before.get("active", false)) and not bool(before.get("presentation_active", false)):
+		before["success"] = true
+		before["finished"] = false
+		before["reason"] = "turn_action_runner_idle"
+		return before
+	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("finish_active", reason)) if turn_action_runner.has_method("finish_active") else {}
+	var after: Dictionary = turn_action_runner_snapshot()
+	result["success"] = true
+	result["finished"] = true
+	result["reason"] = reason
+	result["before"] = before.duplicate(true)
+	result["after"] = after.duplicate(true)
+	refresh_hud(current_interaction_prompt())
+	return result
+
+
 func actor_view_snapshot() -> Dictionary:
 	if actor_view_controller == null or not actor_view_controller.has_method("snapshot"):
 		return {"active": false}
