@@ -65,6 +65,7 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	_expect_ap_depletion_auto_advances_turn(errors, simulation, topology)
 	errors.append_array(_expect_auto_advance_limit_guard(registry))
 	errors.append_array(_expect_turn_action_runner_cross_turn_resume(registry))
+	errors.append_array(_expect_turn_action_runner_wait_action(registry))
 	errors.append_array(_expect_configured_ap_rules(registry))
 	errors.append_array(_expect_long_path_cross_turn_resume(registry))
 
@@ -322,6 +323,50 @@ func _expect_turn_action_runner_cross_turn_resume(registry: RefCounted) -> Array
 		errors.append("turn action runner AP depletion should emit turn end/start events")
 	if _event_count(simulation.snapshot(), "movement_step") < 4:
 		errors.append("turn action runner cross-turn move should emit one movement_step per grid step")
+	return errors
+
+
+func _expect_turn_action_runner_wait_action(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position.x = 0
+	player.grid_position.y = 0
+	player.grid_position.z = 0
+	player.ap = 0.25
+	player.combat_attributes["turn_ap_gain"] = 2.0
+	player.combat_attributes["turn_ap_max"] = 2.0
+	player.combat_attributes["affordable_ap_threshold"] = 1.0
+	_move_non_player_actors_out_of_test_lane(simulation)
+	var topology := _line_test_topology(2)
+	var runner: RefCounted = TurnActionRunner.new()
+	runner.call("configure", simulation, null, null, {"map": topology})
+	var result: Dictionary = _dictionary_or_empty(runner.call("request_wait", 1, topology, {"reason": "smoke_wait"}))
+	if not bool(result.get("success", false)):
+		errors.append("turn action runner wait should start: %s" % result.get("reason", "unknown"))
+	var phases: Array[String] = []
+	for _index in range(24):
+		var snapshot: Dictionary = _dictionary_or_empty(runner.call("snapshot"))
+		var phase := str(snapshot.get("phase", ""))
+		if not phases.has(phase):
+			phases.append(phase)
+		if not bool(snapshot.get("active", false)):
+			break
+		runner.call("process")
+	var final_snapshot: Dictionary = _dictionary_or_empty(runner.call("snapshot"))
+	if bool(final_snapshot.get("active", true)):
+		errors.append("turn action runner wait should become idle, got %s" % JSON.stringify(final_snapshot))
+	if str(final_snapshot.get("action_kind", "")) != "wait":
+		errors.append("turn action runner wait should preserve action kind, got %s" % final_snapshot.get("action_kind", ""))
+	if str(final_snapshot.get("phase", "")) != "finished":
+		errors.append("turn action runner wait final phase should be finished, got %s" % final_snapshot.get("phase", ""))
+	for expected_phase in ["player_turn_end", "npc_action", "player_turn_start"]:
+		if not phases.has(expected_phase):
+			errors.append("turn action runner wait should visit %s phase, got %s" % [expected_phase, phases])
+	if _event_count(simulation.snapshot(), "actor_waited") < 1:
+		errors.append("turn action runner wait should emit actor_waited")
+	if _event_count(simulation.snapshot(), "turn_ended") < 1 or _event_count(simulation.snapshot(), "turn_started") < 1:
+		errors.append("turn action runner wait should emit turn end/start events")
 	return errors
 
 

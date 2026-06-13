@@ -638,7 +638,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var queue_wait: Dictionary = game_root.submit_wait_action()
 	if not bool(queue_wait.get("success", false)):
 		errors.append("multi-entry queue wait should complete through GameApp facade: %s" % queue_wait)
-	await process_frame
+	var wait_runner: Dictionary = await _wait_for_turn_action_runner_idle(game_root)
+	if bool(wait_runner.get("active", false)):
+		errors.append("multi-entry queue wait runner should become idle before assertions: %s" % JSON.stringify(wait_runner))
 	if not _pending_crafting_line(game_root).contains("正在制作 无"):
 		errors.append("multi-entry queue should clear pending after wait continuation: %s" % _pending_crafting_line(game_root))
 	if not _queue_line(game_root).contains("制作队列 空"):
@@ -1186,6 +1188,18 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _wait_for_turn_action_runner_idle(game_root: Node, max_frames: int = 240) -> Dictionary:
+	var runner: Dictionary = {}
+	for _index in range(max_frames):
+		var snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+		runner = _dictionary_or_empty(snapshot.get("turn_action_runner", {}))
+		if not bool(runner.get("active", false)):
+			return runner
+		await process_frame
+	await process_frame
+	return _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
 
 
 func _install_unlock_source_smoke_recipes(game_root: Node) -> void:

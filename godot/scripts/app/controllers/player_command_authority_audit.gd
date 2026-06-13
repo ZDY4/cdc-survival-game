@@ -4,8 +4,9 @@ const PLAYER_COMMAND_AUTHORITY_AUDIT: Array[Dictionary] = [
 	{"app_method": "execute_primary_interaction", "owner_method": "execute_primary", "action": "interact", "authority_kind": "submit_player_command", "command_kind": "interact", "owner": "InteractionActionController", "blocker": "_player_command_rejection"},
 	{"app_method": "execute_interaction_option", "owner_method": "execute_option", "action": "interact_option", "authority_kind": "submit_player_command", "command_kind": "interact", "owner": "InteractionActionController", "blocker": "_player_command_rejection"},
 	{"app_method": "execute_move_to_grid", "owner_method": "execute_move", "action": "move", "authority_kind": "submit_player_command", "command_kind": "move", "owner": "InteractionActionController", "blocker": "_player_command_rejection"},
-	{"app_method": "press_space_action", "owner_method": "press_space_action", "action": "wait_or_dialogue_advance", "authority_kind": "mixed", "command_kind": "wait", "core_service": "advance_dialogue.call", "owner": "WaitActionController", "blocker": "dialogue_or_pending_or_command"},
-	{"app_method": "_submit_auto_tick_wait", "owner_method": "auto_tick_wait", "action": "auto_wait", "authority_kind": "submit_player_command", "command_kind": "wait", "owner": "WaitActionController", "blocker": "ui_or_pending"},
+	{"app_method": "press_space_action", "owner_method": "press_space_action", "action": "wait_or_dialogue_advance", "authority_kind": "mixed", "command_kind": "wait", "core_service": "advance_dialogue.call", "owner": "WaitActionController", "blocker": "dialogue_or_pending_or_command", "runner": "TurnActionRunner", "authority_helper": "submit_wait"},
+	{"app_method": "submit_wait_action", "owner_method": "request_player_wait", "action": "wait", "authority_kind": "turn_action_runner", "command_kind": "wait", "owner": "GameApp", "blocker": "_player_command_rejection", "runner": "TurnActionRunner"},
+	{"app_method": "_submit_auto_tick_wait", "owner_method": "auto_tick_wait", "action": "auto_wait", "authority_kind": "turn_action_runner", "command_kind": "wait", "owner": "WaitActionController", "blocker": "ui_or_pending", "runner": "TurnActionRunner"},
 	{"app_method": "choose_dialogue_option", "owner_method": "choose_option", "action": "dialogue_choice", "authority_kind": "core_service", "core_service": "Simulation.advance_dialogue", "owner": "DialogueActionController", "blocker": "dialogue_session"},
 	{"app_method": "advance_dialogue_without_choice", "owner_method": "continue_without_choice", "action": "dialogue_continue", "authority_kind": "core_service", "core_service": "Simulation.advance_dialogue_without_choice", "owner": "DialogueActionController", "blocker": "dialogue_session"},
 	{"app_method": "close_active_dialogue", "owner_method": "close_dialogue", "action": "dialogue_close", "authority_kind": "core_service", "core_service": "Simulation.close_dialogue", "owner": "DialogueActionController", "blocker": "dialogue_session"},
@@ -51,6 +52,7 @@ func snapshot(debug_runtime_controller: RefCounted, game_root: Node) -> Dictiona
 		"core_service",
 		"mixed",
 		"submit_player_command_or_ui_state",
+		"turn_action_runner",
 	]
 	var entries: Array[Dictionary] = []
 	var unknown_authority: Array[Dictionary] = []
@@ -59,6 +61,7 @@ func snapshot(debug_runtime_controller: RefCounted, game_root: Node) -> Dictiona
 	var command_count := 0
 	var core_service_count := 0
 	var mixed_count := 0
+	var runner_count := 0
 	for entry in PLAYER_COMMAND_AUTHORITY_AUDIT:
 		var item := entry.duplicate(true)
 		var authority_kind := str(item.get("authority_kind", ""))
@@ -81,6 +84,10 @@ func snapshot(debug_runtime_controller: RefCounted, game_root: Node) -> Dictiona
 				missing_command_kind.append(item.duplicate(true))
 			if core_service.is_empty():
 				missing_core_service.append(item.duplicate(true))
+		elif authority_kind == "turn_action_runner":
+			runner_count += 1
+			if command_kind.is_empty():
+				missing_command_kind.append(item.duplicate(true))
 		entries.append(item)
 	return {
 		"audit_version": 2,
@@ -89,6 +96,7 @@ func snapshot(debug_runtime_controller: RefCounted, game_root: Node) -> Dictiona
 		"submit_player_command_entry_count": command_count,
 		"core_service_entry_count": core_service_count,
 		"mixed_entry_count": mixed_count,
+		"turn_action_runner_entry_count": runner_count,
 		"allowed_authority_kinds": allowed_authority_kinds,
 		"unknown_authority_count": unknown_authority.size(),
 		"missing_command_kind_count": missing_command_kind.size(),

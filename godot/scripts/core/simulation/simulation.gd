@@ -784,6 +784,39 @@ func _submit_wait_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	}
 
 
+func submit_wait_for_runner(actor_id: int, topology: Dictionary, reason: String = "wait") -> Dictionary:
+	var event_start_index: int = events.size()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	if actor.kind != "player":
+		return {"success": false, "reason": "command_actor_not_player", "actor_id": actor_id}
+	if not actor.turn_open:
+		return {"success": false, "reason": "turn_closed", "actor_id": actor_id, "turn_state": turn_state.duplicate(true)}
+	if _actor_has_special_effect(actor, "stun"):
+		return {"success": false, "reason": "actor_stunned", "actor_id": actor_id, "turn_state": turn_state.duplicate(true)}
+	if topology.is_empty():
+		return {"success": false, "reason": "wait_topology_missing", "actor_id": actor_id}
+	_emit("actor_waited", {
+		"actor_id": actor.actor_id,
+		"ap_before": actor.ap,
+		"runner_wait": true,
+		"reason": reason,
+	})
+	return {
+		"success": true,
+		"kind": "wait",
+		"actor_id": actor.actor_id,
+		"waited": true,
+		"ap_before": actor.ap,
+		"turn_state": turn_state.duplicate(true),
+		"pending_movement": pending_movement.duplicate(true),
+		"pending_interaction": pending_interaction.duplicate(true),
+		"pending_crafting": pending_crafting.duplicate(true),
+		"events": _events_since(event_start_index),
+	}
+
+
 func _submit_stunned_player_turn(actor: RefCounted, command: Dictionary, command_kind: String) -> Dictionary:
 	var topology: Dictionary = _dictionary_or_empty(command.get("topology", {}))
 	var skip_payload: Dictionary = _stunned_turn_skip_payload(actor, "player_command:%s" % command_kind)
@@ -1254,6 +1287,22 @@ func finish_world_turn_for_runner(actor_id: int, reason: String = "turn_action_r
 	}
 	runner_world_turn.clear()
 	return output
+
+
+func resume_pending_for_runner(actor_id: int, topology: Dictionary, reason: String = "turn_action_runner") -> Dictionary:
+	var event_start_index: int = events.size()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	var result: Dictionary = _resume_pending_for_actor(actor, topology)
+	result["actor_id"] = actor_id
+	result["runner_reason"] = reason
+	result["pending_movement"] = pending_movement.duplicate(true)
+	result["pending_interaction"] = pending_interaction.duplicate(true)
+	result["pending_crafting"] = pending_crafting.duplicate(true)
+	result["turn_state"] = turn_state.duplicate(true)
+	result["events"] = _events_since(event_start_index)
+	return result
 
 
 func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Dictionary:

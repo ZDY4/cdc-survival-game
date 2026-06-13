@@ -69,6 +69,27 @@ func request_attack(actor_id: int, target_actor_id: int, topology: Dictionary, o
 	return result
 
 
+func request_wait(actor_id: int, topology: Dictionary, options: Dictionary = {}) -> Dictionary:
+	if active:
+		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
+	if simulation == null or not simulation.has_method("submit_wait_for_runner"):
+		return {"success": false, "reason": "simulation_wait_runner_missing"}
+	action = {
+		"kind": "wait",
+		"actor_id": actor_id,
+		"topology": topology.duplicate(true),
+		"options": options.duplicate(true),
+		"phase": "wait_action",
+		"turn_phase": "player_action",
+		"turn_cycles": 0,
+	}
+	active = true
+	var result := _advance_wait_step()
+	if not bool(result.get("success", false)):
+		active = false
+	return result
+
+
 func process() -> void:
 	if not active:
 		return
@@ -110,6 +131,20 @@ func process() -> void:
 				_finish_npc_presentation_phase()
 			"player_turn_start":
 				_finish_world_turn_phase()
+	elif action_kind == "wait":
+		match str(action.get("phase", "")):
+			"wait_action":
+				_advance_wait_step()
+			"player_turn_end":
+				_begin_world_turn_phase()
+			"npc_action":
+				_advance_npc_turn_phase()
+			"npc_presentation":
+				_finish_npc_presentation_phase()
+			"player_turn_start":
+				_finish_world_turn_phase()
+			"pending_resume":
+				_resume_pending_after_world_turn()
 
 
 func finish_active(reason: String = "fast_forward") -> Dictionary:
@@ -130,6 +165,7 @@ func snapshot() -> Dictionary:
 		"phase": str(action.get("phase", "idle" if not active else "")),
 		"action_kind": str(action.get("kind", "")),
 		"actor_id": int(action.get("actor_id", 0)),
+		"options": _dictionary_or_empty(action.get("options", {})).duplicate(true),
 		"target": _dictionary_or_empty(action.get("target_grid", {})).duplicate(true),
 		"target_actor_id": int(action.get("target_actor_id", 0)),
 		"path": _array_or_empty(action.get("path", [])).duplicate(true),
@@ -195,6 +231,29 @@ func _advance_move_step() -> Dictionary:
 		_clear_actor_action_state(actor_id, str(step.get("reason", "finished")))
 	_sync_host_after_step(step)
 	return step
+
+
+func _advance_wait_step() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
+	var options: Dictionary = _dictionary_or_empty(action.get("options", {}))
+	var reason := str(options.get("reason", "wait"))
+	var result: Dictionary = _dictionary_or_empty(simulation.call("submit_wait_for_runner", actor_id, topology, reason))
+	latest_result = result.duplicate(true)
+	if not bool(result.get("success", false)):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, "wait_failed")
+		_sync_host_after_step(result)
+		return result
+	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
+	action["ap_after"] = float(result.get("ap_before", action.get("ap_after", 0.0)))
+	action["phase"] = "player_turn_end"
+	action["turn_phase"] = "player_turn_end"
+	action["pending_kind"] = _pending_kind_from_result(result)
+	_sync_host_after_step(result)
+	return result
 
 
 func _advance_attack_step() -> Dictionary:
@@ -276,7 +335,7 @@ func _begin_world_turn_phase() -> Dictionary:
 	action["phase"] = "npc_action"
 	action["turn_phase"] = "npc_action"
 	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
-	var begin_result: Dictionary = _dictionary_or_empty(simulation.call("begin_world_turn_for_runner", actor_id, topology, "pending_movement"))
+	var begin_result: Dictionary = _dictionary_or_empty(simulation.call("begin_world_turn_for_runner", actor_id, topology, _world_turn_reason()))
 	latest_result = begin_result.duplicate(true)
 	if not bool(begin_result.get("success", false)):
 		active = false
@@ -356,7 +415,7 @@ func _finish_world_turn_phase() -> Dictionary:
 		_clear_actor_action_state(actor_id, "runner_world_finish_api_missing")
 		_sync_host_after_step(latest_result)
 		return latest_result
-	var finish_result: Dictionary = _dictionary_or_empty(simulation.call("finish_world_turn_for_runner", actor_id, "pending_movement"))
+	var finish_result: Dictionary = _dictionary_or_empty(simulation.call("finish_world_turn_for_runner", actor_id, _world_turn_reason()))
 	latest_result = finish_result.duplicate(true)
 	if not bool(finish_result.get("success", false)):
 		active = false
@@ -366,10 +425,10 @@ func _finish_world_turn_phase() -> Dictionary:
 		_sync_host_after_step(finish_result)
 		return finish_result
 	action["ap_after"] = float(finish_result.get("ap_after", action.get("ap_after", 0.0)))
-	if str(action.get("kind", "")) == "move" and not _dictionary_or_empty(finish_result.get("pending_movement", {})).is_empty():
+	if _action_should_resume_pending(finish_result):
 		action["phase"] = "pending_resume"
 		action["turn_phase"] = "pending_resume"
-		action["pending_kind"] = "movement"
+		action["pending_kind"] = _pending_kind_from_result(finish_result)
 	else:
 		active = false
 		action["phase"] = "finished"
@@ -377,6 +436,50 @@ func _finish_world_turn_phase() -> Dictionary:
 		_clear_actor_action_state(actor_id, "world_turn_finished")
 	_sync_host_after_step(finish_result)
 	return finish_result
+
+
+func _resume_pending_after_world_turn() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
+	if simulation == null or not simulation.has_method("resume_pending_for_runner"):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		latest_result = {"success": false, "reason": "runner_pending_resume_api_missing", "actor_id": actor_id}
+		_clear_actor_action_state(actor_id, "runner_pending_resume_api_missing")
+		_sync_host_after_step(latest_result)
+		return latest_result
+	var pending_result: Dictionary = _dictionary_or_empty(simulation.call("resume_pending_for_runner", actor_id, topology, str(action.get("kind", "turn_action_runner"))))
+	var result: Dictionary = {
+		"success": bool(pending_result.get("success", false)),
+		"kind": "pending_resume",
+		"actor_id": actor_id,
+		"pending_result": pending_result.duplicate(true),
+		"pending_movement": _dictionary_or_empty(pending_result.get("pending_movement", {})).duplicate(true),
+		"pending_interaction": _dictionary_or_empty(pending_result.get("pending_interaction", {})).duplicate(true),
+		"pending_crafting": _dictionary_or_empty(pending_result.get("pending_crafting", {})).duplicate(true),
+		"turn_state": _dictionary_or_empty(pending_result.get("turn_state", {})).duplicate(true),
+	}
+	latest_result = result.duplicate(true)
+	if not bool(result.get("success", false)):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, str(pending_result.get("reason", "pending_resume_failed")))
+		_sync_host_after_step(result)
+		return result
+	if str(action.get("kind", "")) == "move" and not _dictionary_or_empty(result.get("pending_movement", {})).is_empty():
+		action["phase"] = "pending_resume"
+		action["turn_phase"] = "pending_resume"
+		action["pending_kind"] = "movement"
+	else:
+		active = false
+		action["phase"] = "finished"
+		action["turn_phase"] = "player"
+		action["pending_kind"] = _pending_kind_from_result(result)
+		_clear_actor_action_state(actor_id, "pending_resume_finished")
+	_sync_host_after_step(result)
+	return result
 
 
 func _sync_host_after_step(step_result: Dictionary) -> void:
@@ -397,6 +500,39 @@ func _should_end_actor_turn(actor_id: int) -> Dictionary:
 	if simulation != null and simulation.has_method("should_end_actor_turn"):
 		return _dictionary_or_empty(simulation.call("should_end_actor_turn", actor_id))
 	return {"success": false, "reason": "turn_check_missing", "actor_id": actor_id}
+
+
+func _world_turn_reason() -> String:
+	match str(action.get("kind", "")):
+		"move":
+			return "pending_movement"
+		"attack":
+			return "attack"
+		"wait":
+			return str(_dictionary_or_empty(action.get("options", {})).get("reason", "wait"))
+	return str(action.get("kind", "turn_action_runner"))
+
+
+func _action_should_resume_pending(result: Dictionary) -> bool:
+	if str(action.get("kind", "")) == "move":
+		return not _dictionary_or_empty(result.get("pending_movement", {})).is_empty()
+	if str(action.get("kind", "")) == "wait":
+		return not _dictionary_or_empty(result.get("pending_movement", {})).is_empty() \
+			or not _dictionary_or_empty(result.get("pending_interaction", {})).is_empty() \
+			or not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty()
+	return false
+
+
+func _pending_kind_from_result(result: Dictionary) -> String:
+	if not _dictionary_or_empty(result.get("pending_movement", {})).is_empty():
+		return "movement"
+	if not _dictionary_or_empty(result.get("pending_interaction", {})).is_empty():
+		return "interaction"
+	if not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty():
+		return "crafting"
+	if not _dictionary_or_empty(result.get("pending_result", {})).is_empty():
+		return _pending_kind_from_result(_dictionary_or_empty(result.get("pending_result", {})))
+	return ""
 
 
 func _present_npc_turn_result(npc_result: Dictionary) -> Dictionary:

@@ -3531,12 +3531,15 @@ func _expect_player_command_authority_audit(errors: Array[String], game_root: No
 	var submit_count := int(audit.get("submit_player_command_entry_count", 0))
 	var core_count := int(audit.get("core_service_entry_count", 0))
 	var mixed_count := int(audit.get("mixed_entry_count", 0))
+	var runner_count := int(audit.get("turn_action_runner_entry_count", 0))
 	if submit_count < 20:
 		errors.append("player command audit should classify most gameplay entries as submit_player_command")
 	if core_count < 5:
 		errors.append("player command audit should document allowed Simulation core service entries")
 	if mixed_count < 1:
 		errors.append("player command audit should document mixed wait/dialogue flow")
+	if runner_count < 1:
+		errors.append("player command audit should document TurnActionRunner action entries")
 	_expect_debug_console_mutation_audit(errors, audit)
 	_expect_player_command_authority_source(errors, entries)
 
@@ -3630,12 +3633,15 @@ func _expect_player_command_authority_source(errors: Array[String], entries: Arr
 			"submit_player_command_or_ui_state":
 				if not _body_uses_submit_authority(body, owner) and not _helper_uses_submit_authority(source, authority_helper, owner) and not _body_stages_ui_targeting_state(body, owner):
 					errors.append("player command audit method %s should use submit authority or only stage UI targeting state" % method_name)
+			"turn_action_runner":
+				if not _body_uses_turn_action_runner(body, owner) and not _helper_uses_turn_action_runner(source, authority_helper, owner):
+					errors.append("player command audit method %s should use TurnActionRunner authority" % method_name)
 			"core_service":
 				if not _body_uses_core_service(body, owner, core_service):
 					errors.append("player command audit method %s should call %s" % [method_name, core_service])
 			"mixed":
-				if not _body_uses_submit_authority(body, owner):
-					errors.append("player command audit mixed method %s should include submit_player_command path" % method_name)
+				if not _body_uses_submit_authority(body, owner) and not _body_uses_turn_action_runner(body, owner) and not _helper_uses_turn_action_runner(source, authority_helper, owner):
+					errors.append("player command audit mixed method %s should include submit_player_command or TurnActionRunner path" % method_name)
 				if not core_service.is_empty() and not _body_uses_core_service(body, owner, core_service):
 					errors.append("player command audit mixed method %s should include %s path" % [method_name, core_service])
 		if (authority_kind == "submit_player_command" or authority_kind == "mixed" or authority_kind == "submit_player_command_or_ui_state") and command_kind.is_empty():
@@ -3653,15 +3659,30 @@ func _body_uses_submit_authority(body: String, owner: String) -> bool:
 		return true
 	if body.contains("_submit_craft("):
 		return true
-	if body.contains("wait_action_controller.call(\"submit_wait\""):
-		return true
-	if owner == "WaitActionController" and body.contains("submit_wait("):
-		return true
 	if owner == "PlayerInteractionController" and body.contains("execute_selected_option("):
 		return true
 	if (owner == "GameApp" or owner == "InteractionActionController") and (body.contains("interaction_controller.execute_primary_interaction") or body.contains("interaction_controller.execute_selected_option") or body.contains("interaction_controller.execute_move_to_grid")):
 		return true
 	return false
+
+
+func _body_uses_turn_action_runner(body: String, owner: String) -> bool:
+	if body.contains("turn_action_runner.call(\"request_wait\""):
+		return true
+	if body.contains("request_player_wait("):
+		return true
+	if owner == "WaitActionController" and body.contains("_validate_wait_context("):
+		return true
+	return false
+
+
+func _helper_uses_turn_action_runner(source: String, helper_name: String, owner: String) -> bool:
+	if helper_name.is_empty():
+		return false
+	var helper_body := _method_body(source, helper_name)
+	if helper_body.is_empty():
+		return false
+	return _body_uses_turn_action_runner(helper_body, owner)
 
 
 func _helper_uses_submit_authority(source: String, helper_name: String, owner: String) -> bool:

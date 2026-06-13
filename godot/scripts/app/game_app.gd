@@ -1310,12 +1310,29 @@ func request_player_attack(target_actor_id: int, options: Dictionary = {}) -> Di
 	return result
 
 
+func request_player_wait(options: Dictionary = {}) -> Dictionary:
+	var blocked: Dictionary = _player_command_rejection("wait")
+	if not blocked.is_empty():
+		return blocked
+	_setup_world_container()
+	_configure_turn_action_runner()
+	var player_id := _player_actor_id()
+	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
+	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_wait", player_id, topology, options))
+	return result
+
+
 func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: Dictionary = {}) -> Dictionary:
+	var crafting_continuation: Dictionary = {}
+	if _runner_step_should_continue_crafting_queue(step_result, runner_snapshot):
+		crafting_continuation = _continue_crafting_queue_after_wait(step_result)
 	if not _rebuild_runtime_world_result("turn_action_runner_step"):
 		return {"success": false, "reason": "world_result_sync_failed"}
 	_apply_world_root_snapshot(false)
 	_configure_turn_action_runner()
 	_configure_runtime_audio_layers()
+	if bool(crafting_continuation.get("continued", false)):
+		_refresh_operation_panels(_array_or_empty(crafting_continuation.get("refresh", [])))
 	refresh_hud(current_interaction_prompt())
 	return {
 		"success": true,
@@ -1323,6 +1340,15 @@ func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: 
 		"step_result": step_result.duplicate(true),
 		"turn_action_runner": runner_snapshot.duplicate(true),
 	}
+
+
+func _runner_step_should_continue_crafting_queue(step_result: Dictionary, runner_snapshot: Dictionary) -> bool:
+	if str(runner_snapshot.get("action_kind", "")) != "wait":
+		return false
+	if not bool(step_result.get("success", false)):
+		return false
+	var pending_result: Dictionary = _dictionary_or_empty(step_result.get("pending_result", {}))
+	return not pending_result.is_empty() and _wait_result_resumed_active_crafting_queue(step_result)
 
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false) -> Dictionary:
@@ -1403,16 +1429,14 @@ func press_space_action() -> Dictionary:
 		simulation,
 		_dictionary_or_empty(world_result.get("map", {}))
 	))
+	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if bool(result.get("success", false)) and str(result.get("kind", "")) == "wait_ready":
+		return request_player_wait({"reason": "press_space_action"})
 	return _apply_wait_action_operation(operation, "press_space_action")
 
 
 func submit_wait_action() -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call(
-		"submit_wait",
-		simulation,
-		_dictionary_or_empty(world_result.get("map", {}))
-	))
-	return _apply_wait_action_operation(operation, "submit_wait_action")
+	return request_player_wait({"reason": "submit_wait_action"})
 
 
 func _process_auto_tick(delta: float) -> void:
@@ -1430,16 +1454,22 @@ func _submit_auto_tick_wait() -> Dictionary:
 		snapshot,
 		_dictionary_or_empty(world_result.get("map", {}))
 	))
-	return _apply_wait_action_operation(operation, "auto_tick_wait")
+	var validation_result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
+	if not bool(validation_result.get("success", false)):
+		return validation_result
+	return request_player_wait({"reason": "auto_tick_wait"})
 
 
 func _apply_wait_action_operation(operation: Dictionary, refresh_reason: String) -> Dictionary:
 	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
 	var refresh_steps: Array = _array_or_empty(operation.get("refresh", []))
+	var crafting_continuation: Dictionary = {}
 	if refresh_steps.has("runtime"):
-		_continue_crafting_queue_after_wait(result)
+		crafting_continuation = _continue_crafting_queue_after_wait(result)
 		if _rebuild_runtime_world_result(refresh_reason):
 			_apply_runtime_scene_refresh(true)
+	if bool(crafting_continuation.get("continued", false)):
+		_refresh_operation_panels(_array_or_empty(crafting_continuation.get("refresh", [])))
 	if refresh_steps.has("all_panels"):
 		refresh_all_panels(current_interaction_prompt())
 	return result
@@ -1792,8 +1822,11 @@ func _submit_crafting_queue_entry(recipe_id: String, count: int) -> Dictionary:
 	return _dictionary_or_empty(crafting_action_controller.call("_submit_craft", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), true))
 
 
-func _continue_crafting_queue_after_wait(result: Dictionary) -> void:
-	crafting_action_controller.call("continue_queue_after_wait", simulation, result, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT)
+func _continue_crafting_queue_after_wait(result: Dictionary) -> Dictionary:
+	var continuation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("continue_queue_after_wait", simulation, result, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT))
+	if bool(continuation.get("continued", false)):
+		continuation["refresh"] = ["inventory", "crafting", "skills"]
+	return continuation
 
 
 func _wait_result_resumed_active_crafting_queue(result: Dictionary) -> bool:

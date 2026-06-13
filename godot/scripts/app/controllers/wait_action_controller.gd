@@ -18,10 +18,7 @@ func press_space_action(has_dialogue: bool, observe_mode: bool, advance_dialogue
 
 
 func submit_wait(simulation: RefCounted, topology: Dictionary) -> Dictionary:
-	if simulation == null:
-		return _operation_result({"success": false, "reason": "simulation_missing"}, [])
-	var result: Dictionary = dictionary_or_empty(simulation.submit_player_command(_wait_command(topology)))
-	return _operation_result(result, ["runtime", "all_panels"] if bool(result.get("success", false)) else ["all_panels"])
+	return _operation_result(_validate_wait_context(simulation, topology), [])
 
 
 func auto_tick_wait(simulation: RefCounted, has_dialogue: bool, ui_blocked: bool, snapshot: Dictionary, topology: Dictionary) -> Dictionary:
@@ -31,16 +28,15 @@ func auto_tick_wait(simulation: RefCounted, has_dialogue: bool, ui_blocked: bool
 		return _operation_result({"success": false, "reason": "ui_blocked"}, [])
 	if not dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty():
 		return _operation_result({"success": false, "reason": "pending_blocked"}, [])
-	var result: Dictionary = dictionary_or_empty(simulation.submit_player_command(_wait_command(topology)))
-	return _operation_result(result, ["runtime", "all_panels"] if bool(result.get("success", false)) else [])
+	return _operation_result(_validate_wait_context(simulation, topology), [])
 
 
-func _wait_command(topology: Dictionary) -> Dictionary:
-	return {
-		"kind": "wait",
-		"actor_id": 1,
-		"topology": topology.duplicate(true),
-	}
+func _validate_wait_context(simulation: RefCounted, topology: Dictionary) -> Dictionary:
+	if simulation == null:
+		return {"success": false, "reason": "simulation_missing"}
+	if topology.is_empty():
+		return {"success": false, "reason": "wait_topology_missing"}
+	return {"success": true, "kind": "wait_ready"}
 
 
 func _operation_result(result: Dictionary, refresh_steps: Array) -> Dictionary:
