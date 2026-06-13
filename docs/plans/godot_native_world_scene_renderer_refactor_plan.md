@@ -15,7 +15,7 @@
 ## 目标
 
 - 删除 `WorldSceneRenderer` 的长期入口地位。
-- 让 `WorldRoot` 挂载一个真实的 `WorldRuntimeRoot` 场景。
+- 让 `GameRoot` / `WorldRoot` 挂载一个真实的 `WorldRuntimeRoot` 场景。
 - 地图视觉只来自 `godot/scenes/maps/*.tscn`，不再运行时补地面或补建筑视觉。
 - 地图对象节点自己声明交互、拾取、碰撞和业务 metadata，运行时只同步状态。
 - actor、corpse、状态标记、相机、灯光各自进入独立 scene/node。
@@ -40,24 +40,44 @@
 
 ## 目标场景结构
 
+全局服务使用 Godot Project Settings 的 Autoload，不作为 `GameRoot` 子节点表达：
+
+```text
+Autoloads
+  ContentRegistry / DataManager
+  SaveManager
+  SettingsService
+  GameEventBus   # 可选，只承载少量跨场景事件
+```
+
 新增运行时世界场景：
 
 ```text
 godot/scenes/world/world_runtime_root.tscn
 ```
 
-建议节点结构：
+目标运行时节点结构：
 
 ```text
-WorldRuntimeRoot
-  MapSceneSlot
-  InteractionController
-  ActorLayer
-  CorpseLayer
-  WorldMarkerLayer
-  CameraRig
-  LightRig
-  DebugOverlayLayer
+GameRoot
+  WorldRuntimeRoot
+    CurrentMap: MapSceneRoot
+      Ground
+      Buildings
+      StaticObjects
+      Objects
+      EntryPoints
+    ActorLayer
+    CorpseLayer
+    WorldMarkerLayer
+    CameraRig
+    LightRig
+    DebugOverlayLayer
+
+  UI
+    HUD
+    InteractionMenu
+    InventoryPanel
 ```
 
 对应脚本建议放在：
@@ -74,7 +94,7 @@ godot/scripts/world/runtime/
 
 职责：
 
-- 持有当前 map scene 实例。
+- 直接持有当前 `MapSceneRoot` 实例，scene tree 本身就是当前地图容器。
 - 管理 runtime 子层。
 - 接收 world snapshot 和 runtime snapshot。
 - 分发状态同步。
@@ -87,29 +107,13 @@ signal world_synced(summary: Dictionary)
 signal map_scene_changed(map_id: String)
 
 func load_map(map_id: String) -> void
+func current_map() -> MapSceneRoot
 func sync_world(world_snapshot: Dictionary, runtime_snapshot: Dictionary = {}) -> Dictionary
 func clear_world() -> void
 func snapshot() -> Dictionary
 ```
 
-### MapSceneSlot
-
-只负责加载和持有地图 scene。
-
-职责：
-
-- 加载 `res://scenes/maps/<map_id>.tscn`。
-- 要求根节点是 `MapSceneRoot` 或暴露 `map_id`。
-- 校验地图 scene 必须包含地面、对象层和必要入口点。
-- 加载失败直接报错给上层，不生成 fallback 地图。
-
-建议接口：
-
-```gdscript
-func load_map_scene(map_id: String) -> Node3D
-func current_map_root() -> Node3D
-func validate_loaded_map() -> Array[Dictionary]
-```
+`WorldRuntimeRoot.load_map()` 负责实例化 `res://scenes/maps/<map_id>.tscn`，释放旧地图，并把新地图直接作为自己的子节点插入到 scene tree。这里不额外引入 `MapSceneSlot` 节点；如果需要校验，放到 editor/headless validator 或轻量 `MapSceneLoader` helper 中，而不是作为常驻运行时节点。
 
 ### InteractionController
 
@@ -288,14 +292,14 @@ func remove_missing_actors(active_actor_ids: PackedInt64Array) -> void
 
 - `godot/scenes/world/world_runtime_root.tscn`
 - `godot/scripts/world/runtime/world_runtime_root.gd`
-- `map_scene_slot.gd`
 - `interaction_controller.gd`
 
-同时让 `WorldRoot` 使用 `WorldRuntimeRoot`，不再直接实例化 `WorldSceneRenderer`。
+同时让 `GameRoot` / `WorldRoot` 使用 `WorldRuntimeRoot`，不再直接实例化 `WorldSceneRenderer`。`WorldRuntimeRoot` 直接加载并持有当前 `MapSceneRoot`，不引入 `MapSceneSlot` 中间节点。
 
 验收：
 
 - 一个代表地图可以通过新 root 加载。
+- 新 root 的子节点中直接存在当前 `MapSceneRoot`。
 - 新 root 能同步 interaction metadata。
 - 新 smoke 不调用 `WorldSceneRenderer`。
 
