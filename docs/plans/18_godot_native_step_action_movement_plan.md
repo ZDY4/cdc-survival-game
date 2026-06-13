@@ -2,7 +2,14 @@
 
 本文定义移动、回合、相机和动作表现的最终改造路线。目标是把当前“规则层一次跑完、表现层事后补动画”的模式，替换为符合 Godot 项目开发方式的逐步动作系统：规则层仍然权威，但运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
 
-本计划只描述目标架构和直接迁移路线。后续实现以 Godot 原生 action runner、稳定 actor view、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都迁入该主线；旧的同步推进入口必须被 Godot action runner 完整替换，不作为继续扩展的运行时方案。
+本计划只描述目标架构和直达最终状态的实现路线。后续实现以 Godot 原生 action runner、稳定 actor view、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都进入同一套 Godot action pipeline；现有同步推进入口从主游戏运行时退出，不再作为功能承载点或扩展方向。
+
+执行口径：
+
+- 每个阶段都以最终 action pipeline 为交付对象，并让目标架构更完整。
+- 不新增第二套移动、回合、交互或战斗语义；headless、smoke、debug 和手动游戏都走同一 runner facade。
+- 现有同步入口只作为对照和回归定位存在，不承载新业务。
+- 文档中的阶段顺序是最终系统的增量落地顺序。
 
 ## 0. 架构差距结论
 
@@ -241,7 +248,7 @@ func finish_actor_action(actor_id: int, action_kind: String, topology: Dictionar
 
 ### 3.3 统一动作入口边界
 
-迁移完成后，游戏运行时入口统一为：
+最终游戏运行时入口统一为：
 
 ```gdscript
 GameApp.request_player_move(grid)
@@ -252,10 +259,10 @@ Simulation.step_move(...)
 
 边界要求：
 
-- `submit_player_command({"kind": "move"})` 退出主游戏输入、HUD、交互、AI 调度和 smoke 验收。
-- 调试工具、headless smoke 和保存恢复通过 TurnActionRunner 的显式 step / finish facade 驱动，不再依赖同步 move command 推进未来状态。
+- `submit_player_command({"kind": "move"})` 不再被主游戏输入、HUD、交互、AI 调度和 smoke 验收调用。
+- 调试工具、headless smoke 和保存恢复通过 TurnActionRunner 的显式 step / finish facade 驱动，与手动游戏共享同一套动作语义。
 - 测试快速完成动作的入口命名为 `finish_active_action()` 或 `drain_turn_action_runner()`，语义是“驱动 action runner 跑完当前动作”。
-- `_submit_move_command()` 作为同步移动遗留入口从运行时主路径删除；迁移过程不得向其中新增业务逻辑。
+- `_submit_move_command()` 从运行时主路径删除；现存引用必须收敛到 runner facade，不能继续接收新增业务逻辑。
 
 ## 4. App 输入和动作调度
 
@@ -293,11 +300,11 @@ Action active 时：
 
 ## 5. 移动逐格化实现路线
 
-### 阶段 1：建立 Action Runner 运行主线和验收
+### 阶段 1：建立最终 Action Runner 主线和验收口径
 
 改动：
 
-- 新增 `TurnActionRunner`。
+- 建立 `TurnActionRunner` 作为唯一动作调度主线。
 - 新增 runner snapshot。
 - `runtime_control_snapshot()` 增加 `turn_action_runner`。
 - `PlayerInteraction` smoke 增加移动中相机、actor node、runner phase 断言。
@@ -310,7 +317,7 @@ Action active 时：
 - runner actor id 为玩家。
 - 不发生 actor node 替换。
 
-### 阶段 2：Simulation 移动 begin / step
+### 阶段 2：Simulation 移动 begin / step 成为唯一移动规则接口
 
 改动：
 
@@ -318,7 +325,7 @@ Action active 时：
 - `Simulation.step_move()` 每次推进一格。
 - AP 每格扣除。
 - pending movement path 每格更新。
-- 主游戏路径切到 `begin_move()` / `step_move()`；同步整段移动入口从运行时主路径退出。
+- 主游戏路径只调用 `begin_move()` / `step_move()`；整段同步移动不再作为运行时路径存在。
 
 验收：
 
@@ -326,14 +333,14 @@ Action active 时：
 - 每次 step 后 snapshot 中 actor grid 前进一格。
 - AP 和 pending movement 与当前格一致。
 
-### 阶段 3：ActorView 逐格表现
+### 阶段 3：ActorView 逐格表现成为唯一玩家移动表现
 
 改动：
 
 - 新增 `ActorViewController.move_actor_step()`。
 - TurnActionRunner 调用 step 后播放一格 tween。
 - tween finished 后 runner 继续下一格。
-- `WorldActionPresenter` 退出玩家移动主流程；玩家移动表现只由 TurnActionRunner 调度 ActorViewController 执行。
+- 玩家移动表现只由 TurnActionRunner 调度 ActorViewController 执行；`WorldActionPresenter` 不再负责从历史事件反推玩家移动。
 
 验收：
 
@@ -477,11 +484,11 @@ cmd /c run_godot_validate.bat
 
 ## 8. 提交顺序
 
-### 提交 1：最终架构护栏
+### 提交 1：最终运行时入口与验收口径
 
-- 新增 runner / actor view / camera follow 相关 smoke 断言。
-- 新增文档化 snapshot 字段。
-- 验收口径直接绑定最终 action runner、ActorView、CameraRig 和稳定 snapshot。
+- 建立 runner / actor view / camera follow 的最终验收口径。
+- 文档化最终 snapshot 字段。
+- smoke 直接绑定最终 action runner、ActorView、CameraRig 和稳定 snapshot。
 
 ### 提交 2：TurnActionRunner 骨架
 
