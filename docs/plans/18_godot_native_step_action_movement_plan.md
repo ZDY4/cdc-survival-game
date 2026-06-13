@@ -1,10 +1,10 @@
 # Godot 原生逐步动作与移动系统优化计划
 
-本文定义移动、回合、相机和动作表现的最终改造路线。目标是直接把当前“规则层一次跑完、表现层事后补动画”的模式，改为更符合 Godot 项目开发方式的逐步动作系统：规则层仍然权威，但运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
+本文定义移动、回合、相机和动作表现的最终改造路线。目标是把当前“规则层一次跑完、表现层事后补动画”的模式，收敛为更符合 Godot 项目开发方式的逐步动作系统：规则层仍然权威，但运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
 
-本计划只描述目标架构和直接迁移路线，不安排“先临时修好再重构”的阶段。后续实现应一次性朝 Godot 原生 action runner、稳定 actor view、节点跟随相机和逐阶段回合系统收敛，旧 batch-run 移动流程不再作为主线能力扩展。
+本计划只描述目标架构和直接迁移路线。后续实现以 Godot 原生 action runner、稳定 actor view、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都逐步迁入该主线。
 
-## 0. 当前问题结论
+## 0. 架构差距结论
 
 ### 0.1 规则层提前跑到未来
 
@@ -239,9 +239,9 @@ func finish_actor_action(actor_id: int, action_kind: String, topology: Dictionar
 - TurnActionRunner 决定何时进入 `player_turn_end`、`npc_action`、`pending_resume`。
 - NPC action 也逐个返回，而不是一次性返回一组未来事件。
 
-### 3.3 旧批量入口退出边界
+### 3.3 统一动作入口边界
 
-旧批量入口不再承载正常游戏移动。迁移完成后，游戏运行时入口统一为：
+迁移完成后，游戏运行时入口统一为：
 
 ```gdscript
 GameApp.request_player_move(grid)
@@ -254,8 +254,8 @@ Simulation.step_move(...)
 
 - `submit_player_command({"kind": "move"})` 从主游戏输入、HUD、交互、AI 调度和 smoke 验收中退出。
 - 调试工具、headless smoke 和保存恢复不再依赖旧 move command 推进未来状态，而是通过 TurnActionRunner 的显式 step / finish facade 驱动。
-- 如确实需要测试快速完成动作，测试入口应命名为 `finish_active_action()` 或 `drain_turn_action_runner()`，语义是“驱动最终系统跑完当前动作”，不是恢复旧批量模拟路径。
-- 旧 `_submit_move_command()` 在替换完成后应删除；删除前不得继续新增业务逻辑。
+- 如确实需要测试快速完成动作，测试入口应命名为 `finish_active_action()` 或 `drain_turn_action_runner()`，语义是“驱动 action runner 跑完当前动作”。
+- `_submit_move_command()` 在替换完成后应删除；删除前不得继续新增业务逻辑。
 
 ## 4. App 输入和动作调度
 
@@ -481,7 +481,7 @@ cmd /c run_godot_validate.bat
 
 - 新增 runner / actor view / camera follow 相关 smoke 断言。
 - 新增文档化 snapshot 字段。
-- 验收口径直接绑定最终 action runner，不再为旧 presenter / batch move 增加临时成功条件。
+- 验收口径直接绑定最终 action runner、ActorView、CameraRig 和稳定 snapshot。
 
 ### 提交 2：TurnActionRunner 骨架
 
