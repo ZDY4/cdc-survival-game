@@ -84,7 +84,40 @@ func _collect_appearance_assets(entries: Array[Dictionary], registry: RefCounted
 	for appearance_id in _sorted_keys(registry.get_library("appearance")):
 		var record: Dictionary = registry.get_library("appearance")[appearance_id]
 		var data: Dictionary = _dictionary_or_empty(record.get("data", {}))
-		_add_model_entry(entries, "appearance", str(appearance_id), "base_model_asset", str(data.get("base_model_asset", "")))
+		var asset_id := str(data.get("base_model_asset", ""))
+		_add_model_entry(entries, "appearance", str(appearance_id), "base_model_asset", asset_id)
+		_collect_sprite_rig_texture_assets(entries, str(appearance_id), asset_id)
+
+
+func _collect_sprite_rig_texture_assets(entries: Array[Dictionary], appearance_id: String, asset_id: String) -> void:
+	var resolved := AssetPathResolver.resolve_model_asset(asset_id)
+	if not bool(resolved.get("ok", false)) or str(resolved.get("resource_path", "")).get_extension().to_lower() != "tscn":
+		return
+	var scene: PackedScene = load(str(resolved.get("resource_path", "")))
+	if scene == null:
+		return
+	var instance := scene.instantiate()
+	if instance == null:
+		return
+	var profile: Resource = instance.get("profile") if instance.get("profile") is Resource else null
+	instance.free()
+	if profile == null:
+		return
+	var sprites: Array = profile.get("sprites") if typeof(profile.get("sprites")) == TYPE_ARRAY else []
+	for sprite_index in range(sprites.size()):
+		var part: Resource = sprites[sprite_index] as Resource
+		if part == null:
+			continue
+		var part_id := str(part.get("id"))
+		var textures: Dictionary = part.get("angle_to_texture") if typeof(part.get("angle_to_texture")) == TYPE_DICTIONARY else {}
+		for key in _sorted_keys(textures):
+			var texture: Texture2D = textures[key] as Texture2D
+			if texture == null:
+				continue
+			var path := texture.resource_path
+			if path.is_empty():
+				continue
+			_add_media_entry(entries, "appearance", appearance_id, "sprite_rig.%s.%s" % [part_id, str(key)], path, "character")
 
 
 func _collect_world_tile_assets(entries: Array[Dictionary], registry: RefCounted) -> void:

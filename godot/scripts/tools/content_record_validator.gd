@@ -205,6 +205,74 @@ func _validate_appearance(id_value: String, record: Dictionary, issues: Array[Di
 		issues.append(_issue("error", "$.base_model_asset", str(resolved_asset.get("reason", "invalid_asset_path")), str(resolved_asset.get("message", "invalid asset path"))))
 	elif not bool(resolved_asset.get("exists", false)):
 		issues.append(_issue("error", "$.base_model_asset", "missing_asset_file", "asset file does not exist: %s" % str(resolved_asset.get("absolute_path", ""))))
+	elif str(resolved_asset.get("resource_path", "")).get_extension().to_lower() == "tscn":
+		_validate_sprite_rig_scene(str(resolved_asset.get("resource_path", "")), issues)
+
+
+func _validate_sprite_rig_scene(scene_path: String, issues: Array[Dictionary]) -> void:
+	var packed: PackedScene = load(scene_path)
+	if packed == null:
+		issues.append(_issue("error", "$.base_model_asset", "sprite_rig_scene_load_failed", "sprite rig scene failed to load: %s" % scene_path))
+		return
+	var instance := packed.instantiate()
+	if instance == null:
+		issues.append(_issue("error", "$.base_model_asset", "sprite_rig_scene_instance_failed", "sprite rig scene failed to instantiate: %s" % scene_path))
+		return
+	var profile: Resource = instance.get("profile") if instance.get("profile") is Resource else null
+	instance.free()
+	if profile == null:
+		issues.append(_issue("error", "$.base_model_asset", "sprite_rig_profile_missing", "sprite rig scene must expose a SpriteRigProfile in profile"))
+		return
+	var yaw_step := int(profile.get("yaw_step_degrees"))
+	var pitch_step := int(profile.get("pitch_step_degrees"))
+	if yaw_step <= 0 or 360 % yaw_step != 0:
+		issues.append(_issue("error", "$.base_model_asset.profile.yaw_step_degrees", "sprite_rig_invalid_yaw_step", "yaw step must divide 360"))
+	if pitch_step <= 0 or 180 % pitch_step != 0:
+		issues.append(_issue("error", "$.base_model_asset.profile.pitch_step_degrees", "sprite_rig_invalid_pitch_step", "pitch step must divide 180"))
+	var bones: Array = profile.get("bones") if typeof(profile.get("bones")) == TYPE_ARRAY else []
+	var bone_names := {}
+	for bone in bones:
+		var resource := bone as Resource
+		if resource == null:
+			continue
+		var name := str(resource.get("name")).strip_edges()
+		if name.is_empty():
+			continue
+		bone_names[name] = true
+	var sprites: Array = profile.get("sprites") if typeof(profile.get("sprites")) == TYPE_ARRAY else []
+	for sprite_index in range(sprites.size()):
+		var part: Resource = sprites[sprite_index] as Resource
+		if part == null:
+			issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d]" % sprite_index, "sprite_rig_part_invalid", "sprite rig part must be a resource"))
+			continue
+		var part_id := str(part.get("id")).strip_edges()
+		var bone_name := str(part.get("bone")).strip_edges()
+		if part_id.is_empty():
+			issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d].id" % sprite_index, "sprite_rig_part_id_empty", "sprite rig part id is required"))
+		if not bone_name.is_empty() and not bone_names.has(bone_name):
+			issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d].bone" % sprite_index, "sprite_rig_unknown_bone", "sprite rig part %s references unknown bone %s" % [part_id, bone_name]))
+		var textures: Dictionary = part.get("angle_to_texture") if typeof(part.get("angle_to_texture")) == TYPE_DICTIONARY else {}
+		for yaw in _angle_range(0, 360 - yaw_step, yaw_step):
+			for pitch in _angle_range(-90, 90, pitch_step):
+				var key := _sprite_rig_key(yaw, pitch)
+				if not textures.has(key) or textures.get(key) == null:
+					issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d].angle_to_texture.%s" % [sprite_index, key], "sprite_rig_texture_missing", "sprite rig part %s missing texture %s" % [part_id, key]))
+
+
+func _angle_range(start: int, end: int, step: int) -> Array[int]:
+	var output: Array[int] = []
+	if step <= 0:
+		return output
+	var value := start
+	while value <= end:
+		output.append(value)
+		value += step
+	return output
+
+
+func _sprite_rig_key(yaw: int, pitch: int) -> String:
+	var pitch_label := str(pitch) if pitch >= 0 else "neg%s" % abs(pitch)
+	return "yaw_%03d_pitch_%s" % [yaw, pitch_label]
 
 
 func _validate_character_ai_refs(id_value: String, record: Dictionary, registry: ContentRegistry, issues: Array[Dictionary]) -> void:

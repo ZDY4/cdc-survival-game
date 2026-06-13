@@ -228,16 +228,63 @@ func _validate_actor_model_assets(root: Node3D, errors: Array[String]) -> void:
 		return
 	var actor_model: Node = player.find_child("ActorModel", true, false)
 	if actor_model == null:
-		errors.append("player actor should instantiate its appearance glTF model")
-	elif str(actor_model.get_meta("model_asset", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
-		errors.append("player actor model should come from default_humanoid appearance asset")
+		errors.append("player actor should instantiate its sprite rig scene")
+	elif str(actor_model.get_meta("model_asset", "")) != "characters/sprite_rigs/default_humanoid.tscn":
+		errors.append("player actor model should come from default_humanoid sprite rig asset")
 	if player.find_child("ActorFallbackMesh", true, false) != null:
-		errors.append("player actor should not use fallback capsule mesh when appearance model exists")
+		errors.append("player actor should not use fallback capsule mesh when sprite rig exists")
 	if player.find_child("PlayerRuntimeMarker", true, false) == null:
 		errors.append("player actor should include a visible runtime marker")
 	if actor_model != null:
-		_validate_visual_collision_proxy(actor_model, errors, "player actor model")
+		_validate_actor_sprite_rig(actor_model, errors)
 	_validate_player_equipment_models(player, errors)
+
+
+func _validate_actor_sprite_rig(actor_model: Node, errors: Array[String]) -> void:
+	if not actor_model is CharacterSpriteRig:
+		errors.append("player actor visual should be CharacterSpriteRig")
+	if actor_model.find_child("SpriteRigSkeleton", true, false) == null:
+		errors.append("player sprite rig should expose SpriteRigSkeleton")
+	var sprites := actor_model.find_children("SpriteRigSprite_*", "Sprite3D", true, false)
+	if sprites.is_empty():
+		errors.append("player sprite rig should instantiate Sprite3D body parts")
+	var attachments := actor_model.find_children("SpriteRigAttachment_*", "BoneAttachment3D", true, false)
+	if attachments.is_empty():
+		errors.append("player sprite rig should instantiate BoneAttachment3D anchors")
+	_validate_actor_sprite_rig_direction_switch(actor_model, errors)
+
+
+func _validate_actor_sprite_rig_direction_switch(actor_model: Node, errors: Array[String]) -> void:
+	var rig: CharacterSpriteRig = actor_model as CharacterSpriteRig
+	if rig == null:
+		return
+	var camera: Camera3D = rig.get_tree().get_root().find_child("WorldCamera", true, false) as Camera3D
+	if camera == null:
+		errors.append("player sprite rig direction smoke needs WorldCamera")
+		return
+	var sprite: Sprite3D = rig.find_child("SpriteRigSprite_body", true, false) as Sprite3D
+	if sprite == null:
+		errors.append("player sprite rig direction smoke needs body sprite")
+		return
+	var original_transform := camera.global_transform
+	var was_current := camera.current
+	camera.current = true
+	camera.global_position = rig.global_position + Vector3(0.0, 0.0, 10.0)
+	rig.call("_update_directions")
+	var first_key := str(rig.get_meta("direction_key", ""))
+	var first_texture := str(sprite.get_meta("texture_resource_path", ""))
+	camera.global_position = rig.global_position + Vector3(10.0, 0.0, 0.0)
+	rig.call("_update_directions")
+	var second_key := str(rig.get_meta("direction_key", ""))
+	var second_texture := str(sprite.get_meta("texture_resource_path", ""))
+	if first_key != "yaw_000_pitch_0":
+		errors.append("player sprite rig should quantize forward camera to yaw_000_pitch_0, got %s" % first_key)
+	if second_key != "yaw_090_pitch_0":
+		errors.append("player sprite rig should quantize side camera to yaw_090_pitch_0, got %s" % second_key)
+	if first_texture == second_texture or not second_texture.ends_with("/body/yaw_090_pitch_0.png"):
+		errors.append("player sprite rig should switch body texture when camera yaw changes")
+	camera.global_transform = original_transform
+	camera.current = was_current
 
 
 func _validate_player_equipment_models(player: Node, errors: Array[String]) -> void:

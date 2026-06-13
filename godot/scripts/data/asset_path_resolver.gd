@@ -39,7 +39,7 @@ static func resolve_equipment_visual_asset(visual_asset: String) -> Dictionary:
 
 
 static func resolve_gltf_source_path(path: String) -> Dictionary:
-	return _resolve_relative_gltf(path.strip_edges(), path.strip_edges())
+	return _resolve_relative_scene_asset(path.strip_edges(), path.strip_edges())
 
 
 static func resolve_media_asset(asset_id: String, fallback_key: String = "generic") -> Dictionary:
@@ -98,6 +98,10 @@ static func absolute_path_from_result(result: Dictionary) -> String:
 
 
 static func _resolve_relative_gltf(path: String, source_id: String) -> Dictionary:
+	return _resolve_relative_scene_asset(path, source_id)
+
+
+static func _resolve_relative_scene_asset(path: String, source_id: String) -> Dictionary:
 	var normalized := path.replace("\\", "/").strip_edges()
 	if normalized.is_empty():
 		return _invalid(source_id, "missing_asset", "asset path is empty")
@@ -112,8 +116,8 @@ static func _resolve_relative_gltf(path: String, source_id: String) -> Dictionar
 	normalized = normalized.trim_prefix("./").simplify_path()
 	if normalized.begins_with("../"):
 		return _invalid(source_id, "asset_path_escape", "asset path must not escape godot/assets")
-	if not normalized.ends_with(".gltf"):
-		return _invalid(source_id, "invalid_asset_format", "asset path must reference a .gltf file")
+	if not (normalized.ends_with(".gltf") or normalized.ends_with(".tscn")):
+		return _invalid(source_id, "invalid_asset_format", "asset path must reference a .gltf or .tscn file")
 	var resource_path := "%s%s" % [ASSETS_RESOURCE_ROOT, normalized]
 	var absolute_path := ContentPaths.assets_root().path_join(normalized).simplify_path()
 	return {
@@ -130,9 +134,9 @@ static func _resolve_builtin_character(source_id: String) -> Dictionary:
 	var character_key := source_id.trim_prefix(BUILTIN_CHARACTER_PREFIX).strip_edges()
 	match character_key:
 		"humanoid", "default_humanoid":
-			return _resolve_relative_gltf("preview_placeholders/characters/humanoid_mannequin.gltf", source_id)
+			return _resolve_relative_scene_asset("characters/sprite_rigs/default_humanoid.tscn", source_id)
 		_:
-			return _resolve_relative_gltf("preview_placeholders/characters/%s.gltf" % character_key, source_id)
+			return _resolve_relative_scene_asset("characters/sprite_rigs/%s.tscn" % character_key, source_id)
 
 
 static func _invalid(source_id: String, reason: String, message: String) -> Dictionary:

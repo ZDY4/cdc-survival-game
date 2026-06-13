@@ -7,6 +7,7 @@ const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const MapSceneLoader = preload("res://scripts/world/map_scene_loader.gd")
 const MapBuilder = preload("res://scripts/world/map_builder.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
+const EXPECTED_PLAYER_MODEL_ASSET := "characters/sprite_rigs/default_humanoid.tscn"
 
 
 func _init() -> void:
@@ -60,7 +61,7 @@ func _validate_world(world_result: Dictionary) -> Array[String]:
 		var actor_data: Dictionary = actor
 		if str(actor_data.get("map_id", "")) != "survivor_outpost_01":
 			errors.append("world snapshot actor %s should belong to survivor_outpost_01" % actor_data.get("definition_id", ""))
-		if str(actor_data.get("definition_id", "")) == "player" and str(actor_data.get("model_asset", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
+		if str(actor_data.get("definition_id", "")) == "player" and str(actor_data.get("model_asset", "")) != EXPECTED_PLAYER_MODEL_ASSET:
 			errors.append("player actor should carry appearance model asset in world snapshot")
 		if str(actor_data.get("definition_id", "")) == "player":
 			_validate_player_equipment_visuals(actor_data, errors)
@@ -116,7 +117,7 @@ func _validate_legacy_actor_appearance_fill(builder: RefCounted, runtime_snapsho
 			continue
 		if str(actor_data.get("appearance_profile_id", "")) != "default_humanoid":
 			return ["legacy player actor should fill appearance_profile_id from character definition"]
-		if str(actor_data.get("model_asset", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
+		if str(actor_data.get("model_asset", "")) != EXPECTED_PLAYER_MODEL_ASSET:
 			return ["legacy player actor should fill model_asset from appearance profile"]
 		return []
 	return ["legacy world snapshot missing player actor"]

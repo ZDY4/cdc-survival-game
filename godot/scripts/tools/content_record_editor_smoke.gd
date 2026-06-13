@@ -2,6 +2,7 @@ extends SceneTree
 
 const ContentRecordEditorWindow = preload("res://addons/cdc_game_editor/content_record_editor_window.gd")
 const ContentRecordPresenter = preload("res://addons/cdc_game_editor/content_record_presenter.gd")
+const SpriteRigInspectorWindow = preload("res://addons/cdc_game_editor/sprite_rig_inspector_window.gd")
 const ContentEditService = preload("res://scripts/data/content_edit_service.gd")
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const TypedFieldForm = preload("res://addons/cdc_game_editor/typed_field_form.gd")
@@ -77,6 +78,7 @@ func _run() -> Array[String]:
 	_expect_window_patch_for_domain(errors, registry, "settlement", "settlements", "survivor_outpost_01_settlement", {"service_rules.min_guard_on_duty": 3})
 	_expect_window_patch_for_domain(errors, registry, "overworld", "overworld", "main_overworld", {"travel_rules.risk_multiplier": 1.25})
 	_expect_typed_inputs(errors)
+	_expect_sprite_rig_inspector(errors)
 	return errors
 
 
@@ -116,10 +118,17 @@ func _expect_window_patch(errors: Array[String], registry: ContentRegistry) -> v
 
 
 func _expect_window_patch_for_domain(errors: Array[String], registry: ContentRegistry, kind: String, domain: String, id_value: String, patch: Dictionary) -> void:
-	var window := _make_window(kind, "CDC %s Editor" % kind.capitalize(), registry, domain, id_value)
-	var report := window.apply_patch_for_current_selection(patch, false, {"allow_external_path": true})
+	var path_sensitive := ["dialogues", "dialogue_rules", "quests", "skills", "skill_trees"].has(domain)
+	var window := _make_window(kind, "CDC %s Editor" % kind.capitalize(), registry, domain, id_value, path_sensitive)
+	var report := window.apply_patch_for_current_selection(patch, path_sensitive, {"allow_external_path": true})
 	if not bool(report.get("ok", false)):
 		errors.append("record editor window patch failed for %s %s: %s" % [kind, id_value, report])
+		window.free()
+		return
+	if path_sensitive:
+		for field in patch.keys():
+			if not (report.get("changed_fields", []) as Array).has(str(field)):
+				errors.append("record editor window dry run for %s %s did not change %s" % [kind, id_value, field])
 		window.free()
 		return
 	var raw := FileAccess.get_file_as_string(str(report.get("path", "")))
@@ -171,10 +180,34 @@ func _expect_typed_inputs(errors: Array[String]) -> void:
 	window.free()
 
 
-func _make_window(kind: String, title: String, registry: ContentRegistry, domain: String, id_value: String) -> ContentRecordEditorWindow:
+func _expect_sprite_rig_inspector(errors: Array[String]) -> void:
+	var window: Window = SpriteRigInspectorWindow.new()
+	window._build_ui()
+	window.refresh_profiles()
+	if window.profile == null:
+		errors.append("sprite rig inspector should load default profile")
+	elif str(window.profile_path) != "res://assets/characters/sprite_rigs/default_humanoid/default_humanoid_sprite_rig.tres":
+		errors.append("sprite rig inspector loaded unexpected profile: %s" % window.profile_path)
+	if window.profile_option == null or window.profile_option.item_count < 1:
+		errors.append("sprite rig inspector should list sprite rig profiles")
+	if window.part_list == null or window.part_list.item_count < 1:
+		errors.append("sprite rig inspector should list sprite parts")
+	if window.grid == null or window.grid.get_child_count() < 54:
+		errors.append("sprite rig inspector should render yaw/pitch texture grid")
+	window._on_grid_cell_pressed("yaw_000_pitch_0")
+	if window.preview == null or window.preview.texture == null:
+		errors.append("sprite rig inspector should preview configured texture")
+	if window.path_label == null or not window.path_label.text.ends_with("/body/yaw_000_pitch_0.png"):
+		errors.append("sprite rig inspector should show selected texture path")
+	if window.summary_label == null or not window.summary_label.text.contains("Configured 240 / 240"):
+		errors.append("sprite rig inspector summary should count configured textures")
+	window.free()
+
+
+func _make_window(kind: String, title: String, registry: ContentRegistry, domain: String, id_value: String, use_source_registry: bool = false) -> ContentRecordEditorWindow:
 	var window: ContentRecordEditorWindow = ContentRecordEditorWindow.new()
 	window.setup(kind, title)
-	window.registry = _registry_with_temp_record(registry, domain, id_value)
+	window.registry = registry if use_source_registry else _registry_with_temp_record(registry, domain, id_value)
 	window.presenter = ContentRecordPresenter.new()
 	window.edit_service = ContentEditService.new()
 	window.selected_id = id_value

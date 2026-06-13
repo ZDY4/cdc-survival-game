@@ -542,7 +542,7 @@ func _expect_neutral_actor_context_menu(errors: Array[String], game_root: Node) 
 		"group_id": "neutral",
 		"map_id": game_root.simulation.active_map_id,
 		"appearance_profile_id": "default_humanoid",
-		"model_asset": "preview_placeholders/characters/humanoid_mannequin.gltf",
+		"model_asset": "characters/sprite_rigs/default_humanoid.tscn",
 		"grid_position": GridCoord.from_dictionary(neutral_grid),
 		"ap": 0.0,
 		"turn_open": false,
@@ -638,7 +638,7 @@ func _expect_hostile_attack_hover_preview(errors: Array[String], game_root: Node
 		"group_id": "hostile",
 		"map_id": game_root.simulation.active_map_id,
 		"appearance_profile_id": "default_humanoid",
-		"model_asset": "preview_placeholders/characters/humanoid_mannequin.gltf",
+		"model_asset": "characters/sprite_rigs/default_humanoid.tscn",
 		"grid_position": GridCoord.from_dictionary(target_grid),
 		"ap": 0.0,
 		"turn_open": false,
@@ -1814,7 +1814,7 @@ func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) ->
 		"group_id": "hostile",
 		"map_id": game_root.simulation.active_map_id,
 		"appearance_profile_id": "default_humanoid",
-		"model_asset": "preview_placeholders/characters/humanoid_mannequin.gltf",
+		"model_asset": "characters/sprite_rigs/default_humanoid.tscn",
 		"grid_position": GridCoord.from_dictionary(target_grid),
 		"ap": 0.0,
 		"turn_open": false,
@@ -2071,7 +2071,7 @@ func _expect_attack_delivery_presenters(errors: Array[String], game_root: Node) 
 		"group_id": "hostile",
 		"map_id": game_root.simulation.active_map_id,
 		"appearance_profile_id": "default_humanoid",
-		"model_asset": "preview_placeholders/characters/humanoid_mannequin.gltf",
+		"model_asset": "characters/sprite_rigs/default_humanoid.tscn",
 		"grid_position": GridCoord.from_dictionary(target_grid),
 		"ap": 0.0,
 		"turn_open": false,
@@ -2881,10 +2881,13 @@ func _player_grid(game_root: Node) -> Dictionary:
 
 
 func _expect_actor_model_instance(errors: Array[String], actor_node: Node3D) -> void:
-	if actor_node.find_child("ActorModel", true, false) == null:
-		errors.append("player actor should render its imported glTF model")
+	var actor_model := actor_node.find_child("ActorModel", true, false)
+	if actor_model == null:
+		errors.append("player actor should render its sprite rig scene")
+	elif actor_model.find_child("SpriteRigSkeleton", true, false) == null:
+		errors.append("player actor sprite rig should expose SpriteRigSkeleton")
 	if actor_node.find_child("ActorFallbackMesh", true, false) != null:
-		errors.append("player actor should not render fallback capsule when glTF model exists")
+		errors.append("player actor should not render fallback capsule when sprite rig exists")
 
 
 func _hud_world_line(game_root: Node) -> String:

@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/characters/character_sprite_rig.gd" id="1_rig"]
+[ext_resource type="Resource" path="res://assets/characters/sprite_rigs/default_humanoid/default_humanoid_sprite_rig.tres" id="2_profile"]
+
+[node name="DefaultHumanoidSpriteRig" type="Node3D"]
+script = ExtResource("1_rig")
+profile = ExtResource("2_profile")
+enable_runtime_update = true
+
+[node name="SpriteRigSkeleton" type="Skeleton3D" parent="."]

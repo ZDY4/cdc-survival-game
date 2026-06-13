@@ -5,6 +5,7 @@ const EditorHandoffDock = preload("res://addons/cdc_game_editor/editor_handoff_d
 const ContentRecordEditorWindow = preload("res://addons/cdc_game_editor/content_record_editor_window.gd")
 const MapReviewDock = preload("res://addons/cdc_game_editor/map_preview_dock.gd")
 const MapTilePaletteWindow = preload("res://addons/cdc_game_editor/map_tile_palette_window.gd")
+const SpriteRigInspectorWindow = preload("res://addons/cdc_game_editor/sprite_rig_inspector_window.gd")
 
 const CONTENT_EDITOR_DEFS := {
 	"item": "CDC Item Editor",
@@ -29,6 +30,7 @@ const MENU_SETTLEMENT_EDITOR := 170
 const MENU_OVERWORLD_EDITOR := 180
 const MENU_MAP_REVIEW := 300
 const MENU_AGENT_HANDOFF := 310
+const MENU_SPRITE_RIG_INSPECTOR := 320
 const MENU_MAP_TILE_PALETTE := 330
 
 var content_editor_windows: Dictionary = {}
@@ -60,6 +62,7 @@ func _exit_tree() -> void:
 			remove_tool_menu_item(str(title))
 		remove_tool_menu_item("CDC Map Review")
 		remove_tool_menu_item("CDC Agent Handoff")
+		remove_tool_menu_item("CDC Sprite Rig Inspector")
 		remove_tool_menu_item("CDC Map Tile Palette")
 		using_tool_menu_fallback = false
 
@@ -101,6 +104,7 @@ func _install_tool_menu_fallback() -> void:
 	add_tool_menu_item("CDC Overworld Editor", _open_overworld_editor)
 	add_tool_menu_item("CDC Map Review", _open_map_review)
 	add_tool_menu_item("CDC Agent Handoff", _open_agent_handoff)
+	add_tool_menu_item("CDC Sprite Rig Inspector", _open_sprite_rig_inspector)
 	add_tool_menu_item("CDC Map Tile Palette", _open_map_tile_palette)
 
 
@@ -119,6 +123,7 @@ func _populate_cdc_menu(menu: PopupMenu) -> void:
 	menu.add_separator()
 	menu.add_item("Map Review", MENU_MAP_REVIEW)
 	menu.add_item("Agent Handoff", MENU_AGENT_HANDOFF)
+	menu.add_item("Sprite Rig Inspector", MENU_SPRITE_RIG_INSPECTOR)
 	menu.add_item("Map Tile Palette", MENU_MAP_TILE_PALETTE)
 
 
@@ -169,6 +174,8 @@ func _on_cdc_menu_id_pressed(id: int) -> void:
 			_open_map_review()
 		MENU_AGENT_HANDOFF:
 			_open_agent_handoff()
+		MENU_SPRITE_RIG_INSPECTOR:
+			_open_sprite_rig_inspector()
 		MENU_MAP_TILE_PALETTE:
 			_open_map_tile_palette()
 
@@ -231,6 +238,10 @@ func _open_agent_handoff() -> void:
 	_open_utility_window("agent_handoff", "CDC Agent Handoff", EditorHandoffDock, Vector2i(980, 680))
 
 
+func _open_sprite_rig_inspector() -> void:
+	_open_standalone_window("sprite_rig_inspector", "CDC Sprite Rig Inspector", SpriteRigInspectorWindow, Vector2i(1120, 760))
+
+
 func _open_map_tile_palette() -> void:
 	_open_utility_window("map_tile_palette", "CDC Map Tile Palette", MapTilePaletteWindow, Vector2i(720, 760))
 
@@ -250,6 +261,19 @@ func _open_utility_window(key: String, title: String, content_script: GDScript, 
 		content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		window.add_child(content)
+		_attach_editor_window(window)
+		utility_windows[key] = window
+	_show_window(window)
+
+
+func _open_standalone_window(key: String, title: String, window_script: GDScript, default_size: Vector2i) -> void:
+	var window: Window = utility_windows.get(key)
+	if window == null or not is_instance_valid(window):
+		window = window_script.new()
+		window.title = title
+		window.name = title
+		window.size = default_size
+		_configure_editor_window(window)
 		_attach_editor_window(window)
 		utility_windows[key] = window
 	_show_window(window)

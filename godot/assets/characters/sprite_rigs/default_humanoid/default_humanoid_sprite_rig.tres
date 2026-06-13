@@ -1,0 +1,381 @@
+[gd_resource type="Resource" script_class="SpriteRigProfile" load_steps=258 format=3]
+
+[ext_resource type="Script" path="res://scripts/characters/sprite_rig_profile.gd" id="1_profile"]
+[ext_resource type="Script" path="res://scripts/characters/sprite_rig_bone.gd" id="2_bone"]
+[ext_resource type="Script" path="res://scripts/characters/sprite_rig_sprite_part.gd" id="3_part"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_000_pitch_neg90.png" id="10_body_yaw_000_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_000_pitch_neg45.png" id="11_body_yaw_000_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_000_pitch_0.png" id="12_body_yaw_000_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_000_pitch_45.png" id="13_body_yaw_000_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_000_pitch_90.png" id="14_body_yaw_000_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_045_pitch_neg90.png" id="15_body_yaw_045_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_045_pitch_neg45.png" id="16_body_yaw_045_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_045_pitch_0.png" id="17_body_yaw_045_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_045_pitch_45.png" id="18_body_yaw_045_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_045_pitch_90.png" id="19_body_yaw_045_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_090_pitch_neg90.png" id="20_body_yaw_090_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_090_pitch_neg45.png" id="21_body_yaw_090_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_090_pitch_0.png" id="22_body_yaw_090_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_090_pitch_45.png" id="23_body_yaw_090_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_090_pitch_90.png" id="24_body_yaw_090_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_135_pitch_neg90.png" id="25_body_yaw_135_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_135_pitch_neg45.png" id="26_body_yaw_135_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_135_pitch_0.png" id="27_body_yaw_135_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_135_pitch_45.png" id="28_body_yaw_135_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_135_pitch_90.png" id="29_body_yaw_135_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_180_pitch_neg90.png" id="30_body_yaw_180_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_180_pitch_neg45.png" id="31_body_yaw_180_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_180_pitch_0.png" id="32_body_yaw_180_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_180_pitch_45.png" id="33_body_yaw_180_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_180_pitch_90.png" id="34_body_yaw_180_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_225_pitch_neg90.png" id="35_body_yaw_225_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_225_pitch_neg45.png" id="36_body_yaw_225_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_225_pitch_0.png" id="37_body_yaw_225_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_225_pitch_45.png" id="38_body_yaw_225_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_225_pitch_90.png" id="39_body_yaw_225_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_270_pitch_neg90.png" id="40_body_yaw_270_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_270_pitch_neg45.png" id="41_body_yaw_270_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_270_pitch_0.png" id="42_body_yaw_270_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_270_pitch_45.png" id="43_body_yaw_270_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_270_pitch_90.png" id="44_body_yaw_270_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_315_pitch_neg90.png" id="45_body_yaw_315_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_315_pitch_neg45.png" id="46_body_yaw_315_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_315_pitch_0.png" id="47_body_yaw_315_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_315_pitch_45.png" id="48_body_yaw_315_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/body/yaw_315_pitch_90.png" id="49_body_yaw_315_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_000_pitch_neg90.png" id="50_head_yaw_000_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_000_pitch_neg45.png" id="51_head_yaw_000_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_000_pitch_0.png" id="52_head_yaw_000_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_000_pitch_45.png" id="53_head_yaw_000_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_000_pitch_90.png" id="54_head_yaw_000_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_045_pitch_neg90.png" id="55_head_yaw_045_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_045_pitch_neg45.png" id="56_head_yaw_045_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_045_pitch_0.png" id="57_head_yaw_045_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_045_pitch_45.png" id="58_head_yaw_045_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_045_pitch_90.png" id="59_head_yaw_045_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_090_pitch_neg90.png" id="60_head_yaw_090_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_090_pitch_neg45.png" id="61_head_yaw_090_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_090_pitch_0.png" id="62_head_yaw_090_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_090_pitch_45.png" id="63_head_yaw_090_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_090_pitch_90.png" id="64_head_yaw_090_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_135_pitch_neg90.png" id="65_head_yaw_135_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_135_pitch_neg45.png" id="66_head_yaw_135_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_135_pitch_0.png" id="67_head_yaw_135_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_135_pitch_45.png" id="68_head_yaw_135_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_135_pitch_90.png" id="69_head_yaw_135_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_180_pitch_neg90.png" id="70_head_yaw_180_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_180_pitch_neg45.png" id="71_head_yaw_180_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_180_pitch_0.png" id="72_head_yaw_180_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_180_pitch_45.png" id="73_head_yaw_180_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_180_pitch_90.png" id="74_head_yaw_180_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_225_pitch_neg90.png" id="75_head_yaw_225_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_225_pitch_neg45.png" id="76_head_yaw_225_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_225_pitch_0.png" id="77_head_yaw_225_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_225_pitch_45.png" id="78_head_yaw_225_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_225_pitch_90.png" id="79_head_yaw_225_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_270_pitch_neg90.png" id="80_head_yaw_270_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_270_pitch_neg45.png" id="81_head_yaw_270_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_270_pitch_0.png" id="82_head_yaw_270_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_270_pitch_45.png" id="83_head_yaw_270_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_270_pitch_90.png" id="84_head_yaw_270_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_315_pitch_neg90.png" id="85_head_yaw_315_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_315_pitch_neg45.png" id="86_head_yaw_315_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_315_pitch_0.png" id="87_head_yaw_315_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_315_pitch_45.png" id="88_head_yaw_315_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/head/yaw_315_pitch_90.png" id="89_head_yaw_315_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_000_pitch_neg90.png" id="90_hand_l_yaw_000_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_000_pitch_neg45.png" id="91_hand_l_yaw_000_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_000_pitch_0.png" id="92_hand_l_yaw_000_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_000_pitch_45.png" id="93_hand_l_yaw_000_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_000_pitch_90.png" id="94_hand_l_yaw_000_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_045_pitch_neg90.png" id="95_hand_l_yaw_045_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_045_pitch_neg45.png" id="96_hand_l_yaw_045_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_045_pitch_0.png" id="97_hand_l_yaw_045_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_045_pitch_45.png" id="98_hand_l_yaw_045_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_045_pitch_90.png" id="99_hand_l_yaw_045_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_090_pitch_neg90.png" id="100_hand_l_yaw_090_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_090_pitch_neg45.png" id="101_hand_l_yaw_090_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_090_pitch_0.png" id="102_hand_l_yaw_090_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_090_pitch_45.png" id="103_hand_l_yaw_090_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_090_pitch_90.png" id="104_hand_l_yaw_090_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_135_pitch_neg90.png" id="105_hand_l_yaw_135_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_135_pitch_neg45.png" id="106_hand_l_yaw_135_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_135_pitch_0.png" id="107_hand_l_yaw_135_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_135_pitch_45.png" id="108_hand_l_yaw_135_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_135_pitch_90.png" id="109_hand_l_yaw_135_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_180_pitch_neg90.png" id="110_hand_l_yaw_180_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_180_pitch_neg45.png" id="111_hand_l_yaw_180_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_180_pitch_0.png" id="112_hand_l_yaw_180_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_180_pitch_45.png" id="113_hand_l_yaw_180_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_180_pitch_90.png" id="114_hand_l_yaw_180_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_225_pitch_neg90.png" id="115_hand_l_yaw_225_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_225_pitch_neg45.png" id="116_hand_l_yaw_225_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_225_pitch_0.png" id="117_hand_l_yaw_225_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_225_pitch_45.png" id="118_hand_l_yaw_225_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_225_pitch_90.png" id="119_hand_l_yaw_225_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_270_pitch_neg90.png" id="120_hand_l_yaw_270_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_270_pitch_neg45.png" id="121_hand_l_yaw_270_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_270_pitch_0.png" id="122_hand_l_yaw_270_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_270_pitch_45.png" id="123_hand_l_yaw_270_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_270_pitch_90.png" id="124_hand_l_yaw_270_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_315_pitch_neg90.png" id="125_hand_l_yaw_315_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_315_pitch_neg45.png" id="126_hand_l_yaw_315_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_315_pitch_0.png" id="127_hand_l_yaw_315_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_315_pitch_45.png" id="128_hand_l_yaw_315_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_l/yaw_315_pitch_90.png" id="129_hand_l_yaw_315_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_000_pitch_neg90.png" id="130_hand_r_yaw_000_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_000_pitch_neg45.png" id="131_hand_r_yaw_000_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_000_pitch_0.png" id="132_hand_r_yaw_000_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_000_pitch_45.png" id="133_hand_r_yaw_000_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_000_pitch_90.png" id="134_hand_r_yaw_000_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_045_pitch_neg90.png" id="135_hand_r_yaw_045_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_045_pitch_neg45.png" id="136_hand_r_yaw_045_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_045_pitch_0.png" id="137_hand_r_yaw_045_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_045_pitch_45.png" id="138_hand_r_yaw_045_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_045_pitch_90.png" id="139_hand_r_yaw_045_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_090_pitch_neg90.png" id="140_hand_r_yaw_090_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_090_pitch_neg45.png" id="141_hand_r_yaw_090_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_090_pitch_0.png" id="142_hand_r_yaw_090_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_090_pitch_45.png" id="143_hand_r_yaw_090_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_090_pitch_90.png" id="144_hand_r_yaw_090_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_135_pitch_neg90.png" id="145_hand_r_yaw_135_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_135_pitch_neg45.png" id="146_hand_r_yaw_135_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_135_pitch_0.png" id="147_hand_r_yaw_135_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_135_pitch_45.png" id="148_hand_r_yaw_135_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_135_pitch_90.png" id="149_hand_r_yaw_135_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_180_pitch_neg90.png" id="150_hand_r_yaw_180_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_180_pitch_neg45.png" id="151_hand_r_yaw_180_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_180_pitch_0.png" id="152_hand_r_yaw_180_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_180_pitch_45.png" id="153_hand_r_yaw_180_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_180_pitch_90.png" id="154_hand_r_yaw_180_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_225_pitch_neg90.png" id="155_hand_r_yaw_225_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_225_pitch_neg45.png" id="156_hand_r_yaw_225_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_225_pitch_0.png" id="157_hand_r_yaw_225_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_225_pitch_45.png" id="158_hand_r_yaw_225_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_225_pitch_90.png" id="159_hand_r_yaw_225_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_270_pitch_neg90.png" id="160_hand_r_yaw_270_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_270_pitch_neg45.png" id="161_hand_r_yaw_270_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_270_pitch_0.png" id="162_hand_r_yaw_270_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_270_pitch_45.png" id="163_hand_r_yaw_270_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_270_pitch_90.png" id="164_hand_r_yaw_270_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_315_pitch_neg90.png" id="165_hand_r_yaw_315_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_315_pitch_neg45.png" id="166_hand_r_yaw_315_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_315_pitch_0.png" id="167_hand_r_yaw_315_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_315_pitch_45.png" id="168_hand_r_yaw_315_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/hand_r/yaw_315_pitch_90.png" id="169_hand_r_yaw_315_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_000_pitch_neg90.png" id="170_foot_l_yaw_000_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_000_pitch_neg45.png" id="171_foot_l_yaw_000_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_000_pitch_0.png" id="172_foot_l_yaw_000_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_000_pitch_45.png" id="173_foot_l_yaw_000_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_000_pitch_90.png" id="174_foot_l_yaw_000_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_045_pitch_neg90.png" id="175_foot_l_yaw_045_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_045_pitch_neg45.png" id="176_foot_l_yaw_045_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_045_pitch_0.png" id="177_foot_l_yaw_045_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_045_pitch_45.png" id="178_foot_l_yaw_045_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_045_pitch_90.png" id="179_foot_l_yaw_045_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_090_pitch_neg90.png" id="180_foot_l_yaw_090_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_090_pitch_neg45.png" id="181_foot_l_yaw_090_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_090_pitch_0.png" id="182_foot_l_yaw_090_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_090_pitch_45.png" id="183_foot_l_yaw_090_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_090_pitch_90.png" id="184_foot_l_yaw_090_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_135_pitch_neg90.png" id="185_foot_l_yaw_135_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_135_pitch_neg45.png" id="186_foot_l_yaw_135_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_135_pitch_0.png" id="187_foot_l_yaw_135_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_135_pitch_45.png" id="188_foot_l_yaw_135_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_135_pitch_90.png" id="189_foot_l_yaw_135_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_180_pitch_neg90.png" id="190_foot_l_yaw_180_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_180_pitch_neg45.png" id="191_foot_l_yaw_180_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_180_pitch_0.png" id="192_foot_l_yaw_180_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_180_pitch_45.png" id="193_foot_l_yaw_180_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_180_pitch_90.png" id="194_foot_l_yaw_180_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_225_pitch_neg90.png" id="195_foot_l_yaw_225_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_225_pitch_neg45.png" id="196_foot_l_yaw_225_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_225_pitch_0.png" id="197_foot_l_yaw_225_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_225_pitch_45.png" id="198_foot_l_yaw_225_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_225_pitch_90.png" id="199_foot_l_yaw_225_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_270_pitch_neg90.png" id="200_foot_l_yaw_270_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_270_pitch_neg45.png" id="201_foot_l_yaw_270_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_270_pitch_0.png" id="202_foot_l_yaw_270_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_270_pitch_45.png" id="203_foot_l_yaw_270_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_270_pitch_90.png" id="204_foot_l_yaw_270_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_315_pitch_neg90.png" id="205_foot_l_yaw_315_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_315_pitch_neg45.png" id="206_foot_l_yaw_315_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_315_pitch_0.png" id="207_foot_l_yaw_315_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_315_pitch_45.png" id="208_foot_l_yaw_315_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_l/yaw_315_pitch_90.png" id="209_foot_l_yaw_315_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_000_pitch_neg90.png" id="210_foot_r_yaw_000_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_000_pitch_neg45.png" id="211_foot_r_yaw_000_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_000_pitch_0.png" id="212_foot_r_yaw_000_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_000_pitch_45.png" id="213_foot_r_yaw_000_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_000_pitch_90.png" id="214_foot_r_yaw_000_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_045_pitch_neg90.png" id="215_foot_r_yaw_045_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_045_pitch_neg45.png" id="216_foot_r_yaw_045_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_045_pitch_0.png" id="217_foot_r_yaw_045_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_045_pitch_45.png" id="218_foot_r_yaw_045_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_045_pitch_90.png" id="219_foot_r_yaw_045_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_090_pitch_neg90.png" id="220_foot_r_yaw_090_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_090_pitch_neg45.png" id="221_foot_r_yaw_090_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_090_pitch_0.png" id="222_foot_r_yaw_090_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_090_pitch_45.png" id="223_foot_r_yaw_090_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_090_pitch_90.png" id="224_foot_r_yaw_090_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_135_pitch_neg90.png" id="225_foot_r_yaw_135_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_135_pitch_neg45.png" id="226_foot_r_yaw_135_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_135_pitch_0.png" id="227_foot_r_yaw_135_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_135_pitch_45.png" id="228_foot_r_yaw_135_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_135_pitch_90.png" id="229_foot_r_yaw_135_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_180_pitch_neg90.png" id="230_foot_r_yaw_180_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_180_pitch_neg45.png" id="231_foot_r_yaw_180_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_180_pitch_0.png" id="232_foot_r_yaw_180_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_180_pitch_45.png" id="233_foot_r_yaw_180_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_180_pitch_90.png" id="234_foot_r_yaw_180_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_225_pitch_neg90.png" id="235_foot_r_yaw_225_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_225_pitch_neg45.png" id="236_foot_r_yaw_225_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_225_pitch_0.png" id="237_foot_r_yaw_225_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_225_pitch_45.png" id="238_foot_r_yaw_225_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_225_pitch_90.png" id="239_foot_r_yaw_225_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_270_pitch_neg90.png" id="240_foot_r_yaw_270_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_270_pitch_neg45.png" id="241_foot_r_yaw_270_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_270_pitch_0.png" id="242_foot_r_yaw_270_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_270_pitch_45.png" id="243_foot_r_yaw_270_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_270_pitch_90.png" id="244_foot_r_yaw_270_pitch_90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_315_pitch_neg90.png" id="245_foot_r_yaw_315_pitch_neg90"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_315_pitch_neg45.png" id="246_foot_r_yaw_315_pitch_neg45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_315_pitch_0.png" id="247_foot_r_yaw_315_pitch_0"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_315_pitch_45.png" id="248_foot_r_yaw_315_pitch_45"]
+[ext_resource type="Texture2D" path="res://assets/characters/sprite_rigs/default_humanoid/foot_r/yaw_315_pitch_90.png" id="249_foot_r_yaw_315_pitch_90"]
+
+[sub_resource type="Resource" id="Bone_1"]
+script = ExtResource("2_bone")
+name = &"root"
+parent = &""
+position = Vector3(0, 0, 0)
+rotation_degrees = Vector3(0, 0, 0)
+
+[sub_resource type="Resource" id="Bone_2"]
+script = ExtResource("2_bone")
+name = &"pelvis"
+parent = &"root"
+position = Vector3(0, 0.42, 0)
+rotation_degrees = Vector3(0, 0, 0)
+
+[sub_resource type="Resource" id="Bone_3"]
+script = ExtResource("2_bone")
+name = &"spine"
+parent = &"pelvis"
+position = Vector3(0, 0.38, 0)
+rotation_degrees = Vector3(0, 0, 0)
+
+[sub_resource type="Resource" id="Bone_4"]
+script = ExtResource("2_bone")
+name = &"head"
+parent = &"spine"
+position = Vector3(0, 0.32, 0)
+rotation_degrees = Vector3(0, 0, 0)
+
+[sub_resource type="Resource" id="Bone_5"]
+script = ExtResource("2_bone")
+name = &"hand_l"
+parent = &"spine"
+position = Vector3(-0.28, 0.08, 0)
+rotation_degrees = Vector3(0, 0, 0)
+
+[sub_resource type="Resource" id="Bone_6"]
+script = ExtResource("2_bone")
+name = &"hand_r"
+parent = &"spine"
+position = Vector3(0.28, 0.08, 0)
+rotation_degrees = Vector3(0, 0, 0)
+
+[sub_resource type="Resource" id="Bone_7"]
+script = ExtResource("2_bone")
+name = &"foot_l"
+parent = &"pelvis"
+position = Vector3(-0.16, -0.42, 0)
+rotation_degrees = Vector3(0, 0, 0)
+
+[sub_resource type="Resource" id="Bone_8"]
+script = ExtResource("2_bone")
+name = &"foot_r"
+parent = &"pelvis"
+position = Vector3(0.16, -0.42, 0)
+rotation_degrees = Vector3(0, 0, 0)
+
+[sub_resource type="Resource" id="Part_1"]
+script = ExtResource("3_part")
+id = &"body"
+bone = &"spine"
+pixel_size = 0.0032
+local_offset = Vector3(0, 0, 0)
+local_rotation_degrees = Vector3(0, 0, 0)
+draw_order = 10
+billboard_mode = 1
+unshaded = true
+angle_to_texture = {"yaw_000_pitch_neg90": ExtResource("10_body_yaw_000_pitch_neg90"), "yaw_000_pitch_neg45": ExtResource("11_body_yaw_000_pitch_neg45"), "yaw_000_pitch_0": ExtResource("12_body_yaw_000_pitch_0"), "yaw_000_pitch_45": ExtResource("13_body_yaw_000_pitch_45"), "yaw_000_pitch_90": ExtResource("14_body_yaw_000_pitch_90"), "yaw_045_pitch_neg90": ExtResource("15_body_yaw_045_pitch_neg90"), "yaw_045_pitch_neg45": ExtResource("16_body_yaw_045_pitch_neg45"), "yaw_045_pitch_0": ExtResource("17_body_yaw_045_pitch_0"), "yaw_045_pitch_45": ExtResource("18_body_yaw_045_pitch_45"), "yaw_045_pitch_90": ExtResource("19_body_yaw_045_pitch_90"), "yaw_090_pitch_neg90": ExtResource("20_body_yaw_090_pitch_neg90"), "yaw_090_pitch_neg45": ExtResource("21_body_yaw_090_pitch_neg45"), "yaw_090_pitch_0": ExtResource("22_body_yaw_090_pitch_0"), "yaw_090_pitch_45": ExtResource("23_body_yaw_090_pitch_45"), "yaw_090_pitch_90": ExtResource("24_body_yaw_090_pitch_90"), "yaw_135_pitch_neg90": ExtResource("25_body_yaw_135_pitch_neg90"), "yaw_135_pitch_neg45": ExtResource("26_body_yaw_135_pitch_neg45"), "yaw_135_pitch_0": ExtResource("27_body_yaw_135_pitch_0"), "yaw_135_pitch_45": ExtResource("28_body_yaw_135_pitch_45"), "yaw_135_pitch_90": ExtResource("29_body_yaw_135_pitch_90"), "yaw_180_pitch_neg90": ExtResource("30_body_yaw_180_pitch_neg90"), "yaw_180_pitch_neg45": ExtResource("31_body_yaw_180_pitch_neg45"), "yaw_180_pitch_0": ExtResource("32_body_yaw_180_pitch_0"), "yaw_180_pitch_45": ExtResource("33_body_yaw_180_pitch_45"), "yaw_180_pitch_90": ExtResource("34_body_yaw_180_pitch_90"), "yaw_225_pitch_neg90": ExtResource("35_body_yaw_225_pitch_neg90"), "yaw_225_pitch_neg45": ExtResource("36_body_yaw_225_pitch_neg45"), "yaw_225_pitch_0": ExtResource("37_body_yaw_225_pitch_0"), "yaw_225_pitch_45": ExtResource("38_body_yaw_225_pitch_45"), "yaw_225_pitch_90": ExtResource("39_body_yaw_225_pitch_90"), "yaw_270_pitch_neg90": ExtResource("40_body_yaw_270_pitch_neg90"), "yaw_270_pitch_neg45": ExtResource("41_body_yaw_270_pitch_neg45"), "yaw_270_pitch_0": ExtResource("42_body_yaw_270_pitch_0"), "yaw_270_pitch_45": ExtResource("43_body_yaw_270_pitch_45"), "yaw_270_pitch_90": ExtResource("44_body_yaw_270_pitch_90"), "yaw_315_pitch_neg90": ExtResource("45_body_yaw_315_pitch_neg90"), "yaw_315_pitch_neg45": ExtResource("46_body_yaw_315_pitch_neg45"), "yaw_315_pitch_0": ExtResource("47_body_yaw_315_pitch_0"), "yaw_315_pitch_45": ExtResource("48_body_yaw_315_pitch_45"), "yaw_315_pitch_90": ExtResource("49_body_yaw_315_pitch_90")}
+
+[sub_resource type="Resource" id="Part_2"]
+script = ExtResource("3_part")
+id = &"head"
+bone = &"head"
+pixel_size = 0.003
+local_offset = Vector3(0, 0, 0)
+local_rotation_degrees = Vector3(0, 0, 0)
+draw_order = 30
+billboard_mode = 1
+unshaded = true
+angle_to_texture = {"yaw_000_pitch_neg90": ExtResource("50_head_yaw_000_pitch_neg90"), "yaw_000_pitch_neg45": ExtResource("51_head_yaw_000_pitch_neg45"), "yaw_000_pitch_0": ExtResource("52_head_yaw_000_pitch_0"), "yaw_000_pitch_45": ExtResource("53_head_yaw_000_pitch_45"), "yaw_000_pitch_90": ExtResource("54_head_yaw_000_pitch_90"), "yaw_045_pitch_neg90": ExtResource("55_head_yaw_045_pitch_neg90"), "yaw_045_pitch_neg45": ExtResource("56_head_yaw_045_pitch_neg45"), "yaw_045_pitch_0": ExtResource("57_head_yaw_045_pitch_0"), "yaw_045_pitch_45": ExtResource("58_head_yaw_045_pitch_45"), "yaw_045_pitch_90": ExtResource("59_head_yaw_045_pitch_90"), "yaw_090_pitch_neg90": ExtResource("60_head_yaw_090_pitch_neg90"), "yaw_090_pitch_neg45": ExtResource("61_head_yaw_090_pitch_neg45"), "yaw_090_pitch_0": ExtResource("62_head_yaw_090_pitch_0"), "yaw_090_pitch_45": ExtResource("63_head_yaw_090_pitch_45"), "yaw_090_pitch_90": ExtResource("64_head_yaw_090_pitch_90"), "yaw_135_pitch_neg90": ExtResource("65_head_yaw_135_pitch_neg90"), "yaw_135_pitch_neg45": ExtResource("66_head_yaw_135_pitch_neg45"), "yaw_135_pitch_0": ExtResource("67_head_yaw_135_pitch_0"), "yaw_135_pitch_45": ExtResource("68_head_yaw_135_pitch_45"), "yaw_135_pitch_90": ExtResource("69_head_yaw_135_pitch_90"), "yaw_180_pitch_neg90": ExtResource("70_head_yaw_180_pitch_neg90"), "yaw_180_pitch_neg45": ExtResource("71_head_yaw_180_pitch_neg45"), "yaw_180_pitch_0": ExtResource("72_head_yaw_180_pitch_0"), "yaw_180_pitch_45": ExtResource("73_head_yaw_180_pitch_45"), "yaw_180_pitch_90": ExtResource("74_head_yaw_180_pitch_90"), "yaw_225_pitch_neg90": ExtResource("75_head_yaw_225_pitch_neg90"), "yaw_225_pitch_neg45": ExtResource("76_head_yaw_225_pitch_neg45"), "yaw_225_pitch_0": ExtResource("77_head_yaw_225_pitch_0"), "yaw_225_pitch_45": ExtResource("78_head_yaw_225_pitch_45"), "yaw_225_pitch_90": ExtResource("79_head_yaw_225_pitch_90"), "yaw_270_pitch_neg90": ExtResource("80_head_yaw_270_pitch_neg90"), "yaw_270_pitch_neg45": ExtResource("81_head_yaw_270_pitch_neg45"), "yaw_270_pitch_0": ExtResource("82_head_yaw_270_pitch_0"), "yaw_270_pitch_45": ExtResource("83_head_yaw_270_pitch_45"), "yaw_270_pitch_90": ExtResource("84_head_yaw_270_pitch_90"), "yaw_315_pitch_neg90": ExtResource("85_head_yaw_315_pitch_neg90"), "yaw_315_pitch_neg45": ExtResource("86_head_yaw_315_pitch_neg45"), "yaw_315_pitch_0": ExtResource("87_head_yaw_315_pitch_0"), "yaw_315_pitch_45": ExtResource("88_head_yaw_315_pitch_45"), "yaw_315_pitch_90": ExtResource("89_head_yaw_315_pitch_90")}
+
+[sub_resource type="Resource" id="Part_3"]
+script = ExtResource("3_part")
+id = &"hand_l"
+bone = &"hand_l"
+pixel_size = 0.0028
+local_offset = Vector3(0, 0, 0)
+local_rotation_degrees = Vector3(0, 0, 0)
+draw_order = 20
+billboard_mode = 1
+unshaded = true
+angle_to_texture = {"yaw_000_pitch_neg90": ExtResource("90_hand_l_yaw_000_pitch_neg90"), "yaw_000_pitch_neg45": ExtResource("91_hand_l_yaw_000_pitch_neg45"), "yaw_000_pitch_0": ExtResource("92_hand_l_yaw_000_pitch_0"), "yaw_000_pitch_45": ExtResource("93_hand_l_yaw_000_pitch_45"), "yaw_000_pitch_90": ExtResource("94_hand_l_yaw_000_pitch_90"), "yaw_045_pitch_neg90": ExtResource("95_hand_l_yaw_045_pitch_neg90"), "yaw_045_pitch_neg45": ExtResource("96_hand_l_yaw_045_pitch_neg45"), "yaw_045_pitch_0": ExtResource("97_hand_l_yaw_045_pitch_0"), "yaw_045_pitch_45": ExtResource("98_hand_l_yaw_045_pitch_45"), "yaw_045_pitch_90": ExtResource("99_hand_l_yaw_045_pitch_90"), "yaw_090_pitch_neg90": ExtResource("100_hand_l_yaw_090_pitch_neg90"), "yaw_090_pitch_neg45": ExtResource("101_hand_l_yaw_090_pitch_neg45"), "yaw_090_pitch_0": ExtResource("102_hand_l_yaw_090_pitch_0"), "yaw_090_pitch_45": ExtResource("103_hand_l_yaw_090_pitch_45"), "yaw_090_pitch_90": ExtResource("104_hand_l_yaw_090_pitch_90"), "yaw_135_pitch_neg90": ExtResource("105_hand_l_yaw_135_pitch_neg90"), "yaw_135_pitch_neg45": ExtResource("106_hand_l_yaw_135_pitch_neg45"), "yaw_135_pitch_0": ExtResource("107_hand_l_yaw_135_pitch_0"), "yaw_135_pitch_45": ExtResource("108_hand_l_yaw_135_pitch_45"), "yaw_135_pitch_90": ExtResource("109_hand_l_yaw_135_pitch_90"), "yaw_180_pitch_neg90": ExtResource("110_hand_l_yaw_180_pitch_neg90"), "yaw_180_pitch_neg45": ExtResource("111_hand_l_yaw_180_pitch_neg45"), "yaw_180_pitch_0": ExtResource("112_hand_l_yaw_180_pitch_0"), "yaw_180_pitch_45": ExtResource("113_hand_l_yaw_180_pitch_45"), "yaw_180_pitch_90": ExtResource("114_hand_l_yaw_180_pitch_90"), "yaw_225_pitch_neg90": ExtResource("115_hand_l_yaw_225_pitch_neg90"), "yaw_225_pitch_neg45": ExtResource("116_hand_l_yaw_225_pitch_neg45"), "yaw_225_pitch_0": ExtResource("117_hand_l_yaw_225_pitch_0"), "yaw_225_pitch_45": ExtResource("118_hand_l_yaw_225_pitch_45"), "yaw_225_pitch_90": ExtResource("119_hand_l_yaw_225_pitch_90"), "yaw_270_pitch_neg90": ExtResource("120_hand_l_yaw_270_pitch_neg90"), "yaw_270_pitch_neg45": ExtResource("121_hand_l_yaw_270_pitch_neg45"), "yaw_270_pitch_0": ExtResource("122_hand_l_yaw_270_pitch_0"), "yaw_270_pitch_45": ExtResource("123_hand_l_yaw_270_pitch_45"), "yaw_270_pitch_90": ExtResource("124_hand_l_yaw_270_pitch_90"), "yaw_315_pitch_neg90": ExtResource("125_hand_l_yaw_315_pitch_neg90"), "yaw_315_pitch_neg45": ExtResource("126_hand_l_yaw_315_pitch_neg45"), "yaw_315_pitch_0": ExtResource("127_hand_l_yaw_315_pitch_0"), "yaw_315_pitch_45": ExtResource("128_hand_l_yaw_315_pitch_45"), "yaw_315_pitch_90": ExtResource("129_hand_l_yaw_315_pitch_90")}
+
+[sub_resource type="Resource" id="Part_4"]
+script = ExtResource("3_part")
+id = &"hand_r"
+bone = &"hand_r"
+pixel_size = 0.0028
+local_offset = Vector3(0, 0, 0)
+local_rotation_degrees = Vector3(0, 0, 0)
+draw_order = 20
+billboard_mode = 1
+unshaded = true
+angle_to_texture = {"yaw_000_pitch_neg90": ExtResource("130_hand_r_yaw_000_pitch_neg90"), "yaw_000_pitch_neg45": ExtResource("131_hand_r_yaw_000_pitch_neg45"), "yaw_000_pitch_0": ExtResource("132_hand_r_yaw_000_pitch_0"), "yaw_000_pitch_45": ExtResource("133_hand_r_yaw_000_pitch_45"), "yaw_000_pitch_90": ExtResource("134_hand_r_yaw_000_pitch_90"), "yaw_045_pitch_neg90": ExtResource("135_hand_r_yaw_045_pitch_neg90"), "yaw_045_pitch_neg45": ExtResource("136_hand_r_yaw_045_pitch_neg45"), "yaw_045_pitch_0": ExtResource("137_hand_r_yaw_045_pitch_0"), "yaw_045_pitch_45": ExtResource("138_hand_r_yaw_045_pitch_45"), "yaw_045_pitch_90": ExtResource("139_hand_r_yaw_045_pitch_90"), "yaw_090_pitch_neg90": ExtResource("140_hand_r_yaw_090_pitch_neg90"), "yaw_090_pitch_neg45": ExtResource("141_hand_r_yaw_090_pitch_neg45"), "yaw_090_pitch_0": ExtResource("142_hand_r_yaw_090_pitch_0"), "yaw_090_pitch_45": ExtResource("143_hand_r_yaw_090_pitch_45"), "yaw_090_pitch_90": ExtResource("144_hand_r_yaw_090_pitch_90"), "yaw_135_pitch_neg90": ExtResource("145_hand_r_yaw_135_pitch_neg90"), "yaw_135_pitch_neg45": ExtResource("146_hand_r_yaw_135_pitch_neg45"), "yaw_135_pitch_0": ExtResource("147_hand_r_yaw_135_pitch_0"), "yaw_135_pitch_45": ExtResource("148_hand_r_yaw_135_pitch_45"), "yaw_135_pitch_90": ExtResource("149_hand_r_yaw_135_pitch_90"), "yaw_180_pitch_neg90": ExtResource("150_hand_r_yaw_180_pitch_neg90"), "yaw_180_pitch_neg45": ExtResource("151_hand_r_yaw_180_pitch_neg45"), "yaw_180_pitch_0": ExtResource("152_hand_r_yaw_180_pitch_0"), "yaw_180_pitch_45": ExtResource("153_hand_r_yaw_180_pitch_45"), "yaw_180_pitch_90": ExtResource("154_hand_r_yaw_180_pitch_90"), "yaw_225_pitch_neg90": ExtResource("155_hand_r_yaw_225_pitch_neg90"), "yaw_225_pitch_neg45": ExtResource("156_hand_r_yaw_225_pitch_neg45"), "yaw_225_pitch_0": ExtResource("157_hand_r_yaw_225_pitch_0"), "yaw_225_pitch_45": ExtResource("158_hand_r_yaw_225_pitch_45"), "yaw_225_pitch_90": ExtResource("159_hand_r_yaw_225_pitch_90"), "yaw_270_pitch_neg90": ExtResource("160_hand_r_yaw_270_pitch_neg90"), "yaw_270_pitch_neg45": ExtResource("161_hand_r_yaw_270_pitch_neg45"), "yaw_270_pitch_0": ExtResource("162_hand_r_yaw_270_pitch_0"), "yaw_270_pitch_45": ExtResource("163_hand_r_yaw_270_pitch_45"), "yaw_270_pitch_90": ExtResource("164_hand_r_yaw_270_pitch_90"), "yaw_315_pitch_neg90": ExtResource("165_hand_r_yaw_315_pitch_neg90"), "yaw_315_pitch_neg45": ExtResource("166_hand_r_yaw_315_pitch_neg45"), "yaw_315_pitch_0": ExtResource("167_hand_r_yaw_315_pitch_0"), "yaw_315_pitch_45": ExtResource("168_hand_r_yaw_315_pitch_45"), "yaw_315_pitch_90": ExtResource("169_hand_r_yaw_315_pitch_90")}
+
+[sub_resource type="Resource" id="Part_5"]
+script = ExtResource("3_part")
+id = &"foot_l"
+bone = &"foot_l"
+pixel_size = 0.0028
+local_offset = Vector3(0, 0, 0)
+local_rotation_degrees = Vector3(0, 0, 0)
+draw_order = 5
+billboard_mode = 1
+unshaded = true
+angle_to_texture = {"yaw_000_pitch_neg90": ExtResource("170_foot_l_yaw_000_pitch_neg90"), "yaw_000_pitch_neg45": ExtResource("171_foot_l_yaw_000_pitch_neg45"), "yaw_000_pitch_0": ExtResource("172_foot_l_yaw_000_pitch_0"), "yaw_000_pitch_45": ExtResource("173_foot_l_yaw_000_pitch_45"), "yaw_000_pitch_90": ExtResource("174_foot_l_yaw_000_pitch_90"), "yaw_045_pitch_neg90": ExtResource("175_foot_l_yaw_045_pitch_neg90"), "yaw_045_pitch_neg45": ExtResource("176_foot_l_yaw_045_pitch_neg45"), "yaw_045_pitch_0": ExtResource("177_foot_l_yaw_045_pitch_0"), "yaw_045_pitch_45": ExtResource("178_foot_l_yaw_045_pitch_45"), "yaw_045_pitch_90": ExtResource("179_foot_l_yaw_045_pitch_90"), "yaw_090_pitch_neg90": ExtResource("180_foot_l_yaw_090_pitch_neg90"), "yaw_090_pitch_neg45": ExtResource("181_foot_l_yaw_090_pitch_neg45"), "yaw_090_pitch_0": ExtResource("182_foot_l_yaw_090_pitch_0"), "yaw_090_pitch_45": ExtResource("183_foot_l_yaw_090_pitch_45"), "yaw_090_pitch_90": ExtResource("184_foot_l_yaw_090_pitch_90"), "yaw_135_pitch_neg90": ExtResource("185_foot_l_yaw_135_pitch_neg90"), "yaw_135_pitch_neg45": ExtResource("186_foot_l_yaw_135_pitch_neg45"), "yaw_135_pitch_0": ExtResource("187_foot_l_yaw_135_pitch_0"), "yaw_135_pitch_45": ExtResource("188_foot_l_yaw_135_pitch_45"), "yaw_135_pitch_90": ExtResource("189_foot_l_yaw_135_pitch_90"), "yaw_180_pitch_neg90": ExtResource("190_foot_l_yaw_180_pitch_neg90"), "yaw_180_pitch_neg45": ExtResource("191_foot_l_yaw_180_pitch_neg45"), "yaw_180_pitch_0": ExtResource("192_foot_l_yaw_180_pitch_0"), "yaw_180_pitch_45": ExtResource("193_foot_l_yaw_180_pitch_45"), "yaw_180_pitch_90": ExtResource("194_foot_l_yaw_180_pitch_90"), "yaw_225_pitch_neg90": ExtResource("195_foot_l_yaw_225_pitch_neg90"), "yaw_225_pitch_neg45": ExtResource("196_foot_l_yaw_225_pitch_neg45"), "yaw_225_pitch_0": ExtResource("197_foot_l_yaw_225_pitch_0"), "yaw_225_pitch_45": ExtResource("198_foot_l_yaw_225_pitch_45"), "yaw_225_pitch_90": ExtResource("199_foot_l_yaw_225_pitch_90"), "yaw_270_pitch_neg90": ExtResource("200_foot_l_yaw_270_pitch_neg90"), "yaw_270_pitch_neg45": ExtResource("201_foot_l_yaw_270_pitch_neg45"), "yaw_270_pitch_0": ExtResource("202_foot_l_yaw_270_pitch_0"), "yaw_270_pitch_45": ExtResource("203_foot_l_yaw_270_pitch_45"), "yaw_270_pitch_90": ExtResource("204_foot_l_yaw_270_pitch_90"), "yaw_315_pitch_neg90": ExtResource("205_foot_l_yaw_315_pitch_neg90"), "yaw_315_pitch_neg45": ExtResource("206_foot_l_yaw_315_pitch_neg45"), "yaw_315_pitch_0": ExtResource("207_foot_l_yaw_315_pitch_0"), "yaw_315_pitch_45": ExtResource("208_foot_l_yaw_315_pitch_45"), "yaw_315_pitch_90": ExtResource("209_foot_l_yaw_315_pitch_90")}
+
+[sub_resource type="Resource" id="Part_6"]
+script = ExtResource("3_part")
+id = &"foot_r"
+bone = &"foot_r"
+pixel_size = 0.0028
+local_offset = Vector3(0, 0, 0)
+local_rotation_degrees = Vector3(0, 0, 0)
+draw_order = 5
+billboard_mode = 1
+unshaded = true
+angle_to_texture = {"yaw_000_pitch_neg90": ExtResource("210_foot_r_yaw_000_pitch_neg90"), "yaw_000_pitch_neg45": ExtResource("211_foot_r_yaw_000_pitch_neg45"), "yaw_000_pitch_0": ExtResource("212_foot_r_yaw_000_pitch_0"), "yaw_000_pitch_45": ExtResource("213_foot_r_yaw_000_pitch_45"), "yaw_000_pitch_90": ExtResource("214_foot_r_yaw_000_pitch_90"), "yaw_045_pitch_neg90": ExtResource("215_foot_r_yaw_045_pitch_neg90"), "yaw_045_pitch_neg45": ExtResource("216_foot_r_yaw_045_pitch_neg45"), "yaw_045_pitch_0": ExtResource("217_foot_r_yaw_045_pitch_0"), "yaw_045_pitch_45": ExtResource("218_foot_r_yaw_045_pitch_45"), "yaw_045_pitch_90": ExtResource("219_foot_r_yaw_045_pitch_90"), "yaw_090_pitch_neg90": ExtResource("220_foot_r_yaw_090_pitch_neg90"), "yaw_090_pitch_neg45": ExtResource("221_foot_r_yaw_090_pitch_neg45"), "yaw_090_pitch_0": ExtResource("222_foot_r_yaw_090_pitch_0"), "yaw_090_pitch_45": ExtResource("223_foot_r_yaw_090_pitch_45"), "yaw_090_pitch_90": ExtResource("224_foot_r_yaw_090_pitch_90"), "yaw_135_pitch_neg90": ExtResource("225_foot_r_yaw_135_pitch_neg90"), "yaw_135_pitch_neg45": ExtResource("226_foot_r_yaw_135_pitch_neg45"), "yaw_135_pitch_0": ExtResource("227_foot_r_yaw_135_pitch_0"), "yaw_135_pitch_45": ExtResource("228_foot_r_yaw_135_pitch_45"), "yaw_135_pitch_90": ExtResource("229_foot_r_yaw_135_pitch_90"), "yaw_180_pitch_neg90": ExtResource("230_foot_r_yaw_180_pitch_neg90"), "yaw_180_pitch_neg45": ExtResource("231_foot_r_yaw_180_pitch_neg45"), "yaw_180_pitch_0": ExtResource("232_foot_r_yaw_180_pitch_0"), "yaw_180_pitch_45": ExtResource("233_foot_r_yaw_180_pitch_45"), "yaw_180_pitch_90": ExtResource("234_foot_r_yaw_180_pitch_90"), "yaw_225_pitch_neg90": ExtResource("235_foot_r_yaw_225_pitch_neg90"), "yaw_225_pitch_neg45": ExtResource("236_foot_r_yaw_225_pitch_neg45"), "yaw_225_pitch_0": ExtResource("237_foot_r_yaw_225_pitch_0"), "yaw_225_pitch_45": ExtResource("238_foot_r_yaw_225_pitch_45"), "yaw_225_pitch_90": ExtResource("239_foot_r_yaw_225_pitch_90"), "yaw_270_pitch_neg90": ExtResource("240_foot_r_yaw_270_pitch_neg90"), "yaw_270_pitch_neg45": ExtResource("241_foot_r_yaw_270_pitch_neg45"), "yaw_270_pitch_0": ExtResource("242_foot_r_yaw_270_pitch_0"), "yaw_270_pitch_45": ExtResource("243_foot_r_yaw_270_pitch_45"), "yaw_270_pitch_90": ExtResource("244_foot_r_yaw_270_pitch_90"), "yaw_315_pitch_neg90": ExtResource("245_foot_r_yaw_315_pitch_neg90"), "yaw_315_pitch_neg45": ExtResource("246_foot_r_yaw_315_pitch_neg45"), "yaw_315_pitch_0": ExtResource("247_foot_r_yaw_315_pitch_0"), "yaw_315_pitch_45": ExtResource("248_foot_r_yaw_315_pitch_45"), "yaw_315_pitch_90": ExtResource("249_foot_r_yaw_315_pitch_90")}
+
+[resource]
+script = ExtResource("1_profile")
+enabled = true
+yaw_step_degrees = 45
+pitch_step_degrees = 45
+bones = [SubResource("Bone_1"), SubResource("Bone_2"), SubResource("Bone_3"), SubResource("Bone_4"), SubResource("Bone_5"), SubResource("Bone_6"), SubResource("Bone_7"), SubResource("Bone_8")]
+sprites = [SubResource("Part_1"), SubResource("Part_2"), SubResource("Part_3"), SubResource("Part_4"), SubResource("Part_5"), SubResource("Part_6")]

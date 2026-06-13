@@ -286,7 +286,7 @@ func _expect_schema_migration_diagnostics(errors: Array[String], registry: Conte
 
 func _expect_asset_path_resolver(errors: Array[String]) -> void:
 	var character := AssetPathResolver.resolve_model_asset("builtin:character:humanoid")
-	if not bool(character.get("ok", false)) or str(character.get("relative_path", "")) != "preview_placeholders/characters/humanoid_mannequin.gltf":
+	if not bool(character.get("ok", false)) or str(character.get("relative_path", "")) != "characters/sprite_rigs/default_humanoid.tscn":
 		errors.append("asset resolver should map builtin character visual assets, got %s" % character)
 	if not bool(character.get("exists", false)):
 		errors.append("asset resolver builtin character should resolve to an existing Godot asset: %s" % character)
@@ -340,8 +340,11 @@ func _expect_asset_manifest(errors: Array[String], registry: ContentRegistry) ->
 		errors.append("asset manifest should include overworld location icon path")
 	var appearance_entry := _asset_manifest_entry(manifest, "appearance", "default_humanoid", "base_model_asset")
 	if str(appearance_entry.get("source_id", "")) != "builtin:character:humanoid" \
-			or str(appearance_entry.get("resource_path", "")) != "res://assets/preview_placeholders/characters/humanoid_mannequin.gltf":
+			or str(appearance_entry.get("resource_path", "")) != "res://assets/characters/sprite_rigs/default_humanoid.tscn":
 		errors.append("asset manifest should normalize builtin character appearance asset: %s" % appearance_entry)
+	var sprite_texture_entry := _asset_manifest_entry(manifest, "appearance", "default_humanoid", "sprite_rig.body.yaw_000_pitch_0")
+	if str(sprite_texture_entry.get("resource_path", "")) != "res://assets/characters/sprite_rigs/default_humanoid/body/yaw_000_pitch_0.png":
+		errors.append("asset manifest should include sprite rig texture path: %s" % sprite_texture_entry)
 	var world_tile_entry := _asset_manifest_entry(manifest, "world_tiles", "building_wall", "prototypes[building_wall/isolated].source.path")
 	if str(world_tile_entry.get("source_id", "")) != "builtin:world_tile:building_wall/isolated" \
 			or str(world_tile_entry.get("resource_path", "")) != "res://assets/world_tiles/building_wall/isolated.gltf":
