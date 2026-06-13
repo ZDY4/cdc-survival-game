@@ -939,6 +939,24 @@ func turn_action_runner_snapshot() -> Dictionary:
 	return _dictionary_or_empty(turn_action_runner.call("snapshot"))
 
 
+func drain_turn_action_runner(max_steps: int = 240) -> Dictionary:
+	if turn_action_runner == null or not turn_action_runner.has_method("snapshot"):
+		return {"active": false, "phase": "missing", "drained": false}
+	var steps := 0
+	var runner: Dictionary = turn_action_runner_snapshot()
+	while steps < max_steps and bool(runner.get("active", false)):
+		steps += 1
+		if bool(runner.get("presentation_active", false)) and actor_view_controller != null and actor_view_controller.has_method("finish_active_actor_presentation"):
+			actor_view_controller.call("finish_active_actor_presentation", int(runner.get("presenting_npc_actor_id", runner.get("actor_id", 0))))
+		if turn_action_runner.has_method("process"):
+			turn_action_runner.call("process")
+		runner = turn_action_runner_snapshot()
+	runner["drained"] = not bool(runner.get("active", false))
+	runner["drain_steps"] = steps
+	runner["drain_limit"] = max_steps
+	return runner
+
+
 func actor_view_snapshot() -> Dictionary:
 	if actor_view_controller == null or not actor_view_controller.has_method("snapshot"):
 		return {"active": false}
@@ -1381,6 +1399,17 @@ func request_player_wait(options: Dictionary = {}) -> Dictionary:
 	return result
 
 
+func request_player_craft(command: Dictionary, options: Dictionary = {}) -> Dictionary:
+	var blocked: Dictionary = _player_command_rejection("craft")
+	if not blocked.is_empty():
+		return blocked
+	_setup_world_container()
+	_configure_turn_action_runner()
+	var player_id := _player_actor_id()
+	var topology: Dictionary = _dictionary_or_empty(command.get("topology", world_result.get("map", {})))
+	return _dictionary_or_empty(turn_action_runner.call("request_craft", player_id, command, topology, options))
+
+
 func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: Dictionary = {}) -> Dictionary:
 	var crafting_continuation: Dictionary = {}
 	if _runner_step_should_continue_crafting_queue(step_result, runner_snapshot):
@@ -1433,7 +1462,7 @@ func _is_final_interaction_result(result: Dictionary) -> bool:
 
 
 func _runner_step_should_continue_crafting_queue(step_result: Dictionary, runner_snapshot: Dictionary) -> bool:
-	if str(runner_snapshot.get("action_kind", "")) != "wait":
+	if not ["wait", "craft"].has(str(runner_snapshot.get("action_kind", ""))):
 		return false
 	if not bool(step_result.get("success", false)):
 		return false
@@ -1886,7 +1915,7 @@ func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 	var blocked: Dictionary = _player_command_rejection("craft")
 	if not blocked.is_empty():
 		return blocked
-	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("craft_recipe", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller))
+	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("craft_recipe", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, Callable(self, "_submit_craft_via_turn_action_runner")))
 	return _apply_crafting_action_operation(operation)
 
 
@@ -1896,27 +1925,42 @@ func confirm_crafting_queue(entries: Array) -> Dictionary:
 	var blocked: Dictionary = _player_command_rejection("crafting_queue")
 	if not blocked.is_empty():
 		return blocked
-	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("confirm_queue", simulation, entries, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT))
+	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("confirm_queue", simulation, entries, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "_submit_craft_via_turn_action_runner")))
 	return _apply_crafting_action_operation(operation)
 
 
 func _advance_crafting_queue(reason: String) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	return _dictionary_or_empty(crafting_action_controller.call("advance_queue", simulation, reason, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), CRAFTING_QUEUE_ADVANCE_LIMIT))
+	return _dictionary_or_empty(crafting_action_controller.call("advance_queue", simulation, reason, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "_submit_craft_via_turn_action_runner")))
 
 
 func _submit_crafting_queue_entry(recipe_id: String, count: int) -> Dictionary:
 	if simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	return _dictionary_or_empty(crafting_action_controller.call("_submit_craft", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), true))
+	return _dictionary_or_empty(crafting_action_controller.call("_submit_craft", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), true, Callable(self, "_submit_craft_via_turn_action_runner")))
 
 
 func _continue_crafting_queue_after_wait(result: Dictionary) -> Dictionary:
-	var continuation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("continue_queue_after_wait", simulation, result, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT))
+	var continuation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("continue_queue_after_wait", simulation, result, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "_submit_craft_via_turn_action_runner")))
 	if bool(continuation.get("continued", false)):
 		continuation["refresh"] = ["inventory", "crafting", "skills"]
 	return continuation
+
+
+func _submit_craft_via_turn_action_runner(recipe_id: String, count: int, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, queue_active: bool) -> Dictionary:
+	var command := {
+		"kind": "craft",
+		"actor_id": _player_actor_id(),
+		"recipe_id": recipe_id,
+		"count": max(1, count),
+		"recipe_library": recipe_library,
+		"crafting_context": crafting_context.duplicate(true),
+		"topology": topology.duplicate(true),
+	}
+	if queue_active:
+		command["crafting_queue_active"] = true
+	return request_player_craft(command, {"crafting_queue_active": queue_active})
 
 
 func _wait_result_resumed_active_crafting_queue(result: Dictionary) -> bool:

@@ -3724,9 +3724,13 @@ func _body_uses_turn_action_runner(body: String, owner: String) -> bool:
 		return true
 	if body.contains("turn_action_runner.call(\"request_attack\""):
 		return true
+	if body.contains("turn_action_runner.call(\"request_craft\""):
+		return true
 	if body.contains("request_player_wait("):
 		return true
 	if body.contains("request_player_interaction("):
+		return true
+	if body.contains("request_player_craft("):
 		return true
 	if owner == "WaitActionController" and body.contains("_validate_wait_context("):
 		return true

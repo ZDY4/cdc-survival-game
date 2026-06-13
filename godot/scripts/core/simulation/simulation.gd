@@ -1450,6 +1450,36 @@ func submit_attack_for_runner(actor_id: int, target_actor_id: int, topology: Dic
 	return result
 
 
+func submit_craft_for_runner(actor_id: int, command: Dictionary) -> Dictionary:
+	var event_start_index: int = events.size()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	if actor.kind != "player":
+		return {"success": false, "reason": "command_actor_not_player", "actor_id": actor_id}
+	if not actor.turn_open:
+		return {"success": false, "reason": "turn_closed", "actor_id": actor_id, "turn_state": turn_state.duplicate(true)}
+	var craft_command: Dictionary = command.duplicate(true)
+	craft_command["kind"] = "craft"
+	craft_command["actor_id"] = actor_id
+	var cancelled_pending: Dictionary = _cancel_pending_for_new_target_command(actor_id, "craft", craft_command)
+	var result: Dictionary = _submit_craft_command(actor, craft_command)
+	if not cancelled_pending.is_empty():
+		result["cancelled_pending"] = cancelled_pending
+	if bool(result.get("success", false)):
+		result["turn_policy"] = _build_turn_policy(actor, "craft", result)
+	result["actor_id"] = actor_id
+	result["command_kind"] = "craft"
+	result["recipe_id"] = str(craft_command.get("recipe_id", result.get("recipe_id", "")))
+	result["count"] = max(1, int(craft_command.get("count", result.get("count", 1))))
+	result["turn_state"] = turn_state.duplicate(true)
+	result["pending_movement"] = pending_movement.duplicate(true)
+	result["pending_interaction"] = pending_interaction.duplicate(true)
+	result["pending_crafting"] = pending_crafting.duplicate(true)
+	result["events"] = _events_since(event_start_index)
+	return result
+
+
 func _submit_craft_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	return _crafting_command_handler.submit_craft(self, _progression_rules, actor, command)
 

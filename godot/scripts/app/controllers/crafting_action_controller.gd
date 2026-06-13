@@ -1,34 +1,34 @@
 extends RefCounted
 
 
-func craft_recipe(simulation: RefCounted, recipe_id: String, count: int, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, feedback_controller: RefCounted) -> Dictionary:
+func craft_recipe(simulation: RefCounted, recipe_id: String, count: int, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, feedback_controller: RefCounted, submit_craft_action: Callable = Callable()) -> Dictionary:
 	if simulation == null:
 		return _operation_result({"success": false, "reason": "simulation_missing"}, [])
-	var result: Dictionary = _submit_craft(simulation, recipe_id, count, recipe_library, crafting_context, topology, false)
+	var result: Dictionary = _submit_craft(simulation, recipe_id, count, recipe_library, crafting_context, topology, false, submit_craft_action)
 	if feedback_controller != null and feedback_controller.has_method("clear_pending_result"):
 		feedback_controller.call("clear_pending_result")
 	return _operation_result(result, ["inventory", "crafting", "skills"])
 
 
-func confirm_queue(simulation: RefCounted, entries: Array, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, feedback_controller: RefCounted, advance_limit_base: int) -> Dictionary:
+func confirm_queue(simulation: RefCounted, entries: Array, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, feedback_controller: RefCounted, advance_limit_base: int, submit_craft_action: Callable = Callable()) -> Dictionary:
 	if simulation == null:
 		return _operation_result({"success": false, "reason": "simulation_missing"}, [])
 	simulation.crafting_queue = _normalized_queue(entries, feedback_controller)
-	var queue_result: Dictionary = advance_queue(simulation, "confirm", recipe_library, crafting_context, topology, advance_limit_base)
+	var queue_result: Dictionary = advance_queue(simulation, "confirm", recipe_library, crafting_context, topology, advance_limit_base, submit_craft_action)
 	_record_queue_result(feedback_controller, queue_result, "confirm", simulation)
 	if feedback_controller != null and feedback_controller.has_method("clear_pending_result"):
 		feedback_controller.call("clear_pending_result")
 	return _operation_result(queue_result, ["inventory", "crafting", "skills"])
 
 
-func continue_queue_after_wait(simulation: RefCounted, wait_result: Dictionary, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, feedback_controller: RefCounted, advance_limit_base: int) -> Dictionary:
+func continue_queue_after_wait(simulation: RefCounted, wait_result: Dictionary, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, feedback_controller: RefCounted, advance_limit_base: int, submit_craft_action: Callable = Callable()) -> Dictionary:
 	if simulation == null or simulation.crafting_queue.is_empty():
 		return {"continued": false, "reason": "queue_empty"}
 	if not dictionary_or_empty(simulation.pending_crafting).is_empty():
 		return {"continued": false, "reason": "pending_active"}
 	if not wait_result_resumed_active_crafting_queue(wait_result):
 		return {"continued": false, "reason": "wait_result_not_crafting_queue"}
-	var queue_result: Dictionary = advance_queue(simulation, "pending_completed", recipe_library, crafting_context, topology, advance_limit_base)
+	var queue_result: Dictionary = advance_queue(simulation, "pending_completed", recipe_library, crafting_context, topology, advance_limit_base, submit_craft_action)
 	wait_result["crafting_queue_result"] = queue_result
 	_record_queue_result(feedback_controller, queue_result, "pending_completed", simulation)
 	return {"continued": true, "queue_result": queue_result}
@@ -37,12 +37,7 @@ func continue_queue_after_wait(simulation: RefCounted, wait_result: Dictionary, 
 func cancel_pending(simulation: RefCounted, reason: String, topology: Dictionary, feedback_controller: RefCounted) -> Dictionary:
 	if simulation == null:
 		return _operation_result({"success": false, "reason": "simulation_missing"}, [])
-	var result: Dictionary = dictionary_or_empty(simulation.submit_player_command({
-		"kind": "cancel_pending",
-		"actor_id": 1,
-		"reason": reason,
-		"topology": topology.duplicate(true),
-	}))
+	var result: Dictionary = dictionary_or_empty(simulation.cancel_pending(reason, false, topology.duplicate(true)))
 	if feedback_controller != null:
 		if bool(result.get("success", false)) and bool(result.get("had_pending", false)) and feedback_controller.has_method("record_pending_cancelled"):
 			feedback_controller.call("record_pending_cancelled", result, reason, simulation.crafting_queue)
@@ -89,11 +84,12 @@ func record_queue_result(feedback_controller: RefCounted, result: Dictionary, tr
 	_record_queue_result(feedback_controller, result, trigger, simulation)
 
 
-func advance_queue(simulation: RefCounted, reason: String, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, advance_limit_base: int) -> Dictionary:
+func advance_queue(simulation: RefCounted, reason: String, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, advance_limit_base: int, submit_craft_action: Callable = Callable()) -> Dictionary:
 	var results: Array[Dictionary] = []
 	var completed_count: int = 0
 	var failed: Array[Dictionary] = []
 	var started_pending := false
+	var runner_active := false
 	var guard := 0
 	var advance_limit: int = max(advance_limit_base, simulation.crafting_queue.size() + 1)
 	while guard < advance_limit:
@@ -110,18 +106,21 @@ func advance_queue(simulation: RefCounted, reason: String, recipe_library: Dicti
 			results.append(missing_recipe_id_result)
 			failed.append(missing_recipe_id_result)
 			break
-		var result: Dictionary = _submit_craft(simulation, recipe_id, count, recipe_library, crafting_context, topology, true)
+		var result: Dictionary = _submit_craft(simulation, recipe_id, count, recipe_library, crafting_context, topology, true, submit_craft_action)
 		result["queued_recipe_id"] = recipe_id
 		result["queued_count"] = count
 		results.append(result)
 		var completed_entry_count: int = completed_crafting_count_from_queue_result(simulation, result)
 		completed_count += completed_entry_count
+		runner_active = bool(result.get("runner_active_after", false))
 		if not dictionary_or_empty(simulation.pending_crafting).is_empty():
 			simulation.crafting_queue.remove_at(0)
 			started_pending = true
 			break
 		if bool(result.get("success", false)):
 			simulation.crafting_queue.remove_at(0)
+			if runner_active:
+				break
 			continue
 		if bool(result.get("partial_success", false)) and completed_entry_count > 0:
 			var remaining_count: int = max(0, count - completed_entry_count)
@@ -151,6 +150,7 @@ func advance_queue(simulation: RefCounted, reason: String, recipe_library: Dicti
 		"results": results,
 		"failed": failed,
 		"pending": not dictionary_or_empty(simulation.pending_crafting).is_empty(),
+		"runner_active": runner_active,
 		"started_pending": started_pending,
 		"remaining_queue": simulation.crafting_queue.duplicate(true),
 		"remaining_queue_count": simulation.crafting_queue.size(),
@@ -182,7 +182,9 @@ func completed_crafting_count_from_queue_result(simulation: RefCounted, result: 
 	return max(1, int(result.get("count", result.get("queued_count", 1))))
 
 
-func _submit_craft(simulation: RefCounted, recipe_id: String, count: int, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, queue_active: bool) -> Dictionary:
+func _submit_craft(simulation: RefCounted, recipe_id: String, count: int, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, queue_active: bool, submit_craft_action: Callable = Callable()) -> Dictionary:
+	if submit_craft_action.is_valid():
+		return dictionary_or_empty(submit_craft_action.call(recipe_id, count, recipe_library, crafting_context, topology, queue_active))
 	var command := {
 		"kind": "craft",
 		"actor_id": 1,

@@ -597,6 +597,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 		else:
 			_confirm_queue_button(game_root).pressed.emit()
 	await process_frame
+	var confirm_runner: Dictionary = await _wait_for_turn_action_runner_idle(game_root)
+	if bool(confirm_runner.get("active", false)):
+		errors.append("confirmed queue runner should become idle before next crafting command: %s" % JSON.stringify(confirm_runner))
 	_assert_crafting_control_audio(errors, game_root, "ui_button_pressed", "ui_click", "ConfirmCraftQueueButton", "button", "confirm_craft_queue", {"queue_count": "1", "count": "2"}, "confirm craft queue audio")
 	if not _feedback_text(game_root).contains("已执行制作队列: 2次"):
 		errors.append("crafting panel should show queue execution feedback")
@@ -1191,6 +1194,10 @@ func _array_or_empty(value: Variant) -> Array:
 
 
 func _wait_for_turn_action_runner_idle(game_root: Node, max_frames: int = 240) -> Dictionary:
+	if game_root.has_method("drain_turn_action_runner"):
+		var drained: Dictionary = _dictionary_or_empty(game_root.call("drain_turn_action_runner", max_frames))
+		await process_frame
+		return drained
 	var runner: Dictionary = {}
 	for _index in range(max_frames):
 		var snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())

@@ -1,6 +1,7 @@
 extends RefCounted
 
 const AUTO_TURN_ADVANCE_LIMIT := 8
+const PENDING_CRAFTING_TURN_ADVANCE_LIMIT := 64
 
 var simulation: RefCounted
 var actor_view: RefCounted
@@ -114,6 +115,34 @@ func request_wait(actor_id: int, topology: Dictionary, options: Dictionary = {})
 	return result
 
 
+func request_craft(actor_id: int, command: Dictionary, topology: Dictionary, options: Dictionary = {}) -> Dictionary:
+	if active:
+		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
+	if simulation == null or not simulation.has_method("submit_craft_for_runner"):
+		return {"success": false, "reason": "simulation_craft_runner_missing"}
+	var craft_command: Dictionary = command.duplicate(true)
+	craft_command["kind"] = "craft"
+	craft_command["actor_id"] = actor_id
+	craft_command["topology"] = topology.duplicate(true)
+	action = {
+		"kind": "craft",
+		"actor_id": actor_id,
+		"recipe_id": str(craft_command.get("recipe_id", "")),
+		"count": max(1, int(craft_command.get("count", 1))),
+		"command": craft_command.duplicate(true),
+		"topology": topology.duplicate(true),
+		"options": options.duplicate(true),
+		"phase": "craft_action",
+		"turn_phase": "player_action",
+		"turn_cycles": 0,
+	}
+	active = true
+	var result := _advance_craft_step()
+	if not bool(result.get("success", false)):
+		active = false
+	return result
+
+
 func process() -> void:
 	if not active:
 		return
@@ -188,6 +217,20 @@ func process() -> void:
 				_finish_world_turn_phase()
 			"pending_resume":
 				_resume_pending_after_world_turn()
+	elif action_kind == "craft":
+		match str(action.get("phase", "")):
+			"craft_action":
+				_advance_craft_step()
+			"player_turn_end":
+				_begin_world_turn_phase()
+			"npc_action":
+				_advance_npc_turn_phase()
+			"npc_presentation":
+				_finish_npc_presentation_phase()
+			"player_turn_start":
+				_finish_world_turn_phase()
+			"pending_resume":
+				_resume_pending_after_world_turn()
 
 
 func finish_active(reason: String = "fast_forward") -> Dictionary:
@@ -221,7 +264,7 @@ func snapshot() -> Dictionary:
 		"turn_phase": str(action.get("turn_phase", "")),
 		"pending_kind": str(action.get("pending_kind", "")),
 		"turn_cycles": int(action.get("turn_cycles", 0)),
-		"auto_turn_limit": AUTO_TURN_ADVANCE_LIMIT,
+		"auto_turn_limit": _auto_turn_limit(),
 		"npc_queue": _array_or_empty(action.get("npc_queue", [])).duplicate(true),
 		"npc_index": int(action.get("npc_index", 0)),
 		"npc_results": _array_or_empty(action.get("npc_results", [])).duplicate(true),
@@ -296,6 +339,39 @@ func _advance_wait_step() -> Dictionary:
 	action["phase"] = "player_turn_end"
 	action["turn_phase"] = "player_turn_end"
 	action["pending_kind"] = _pending_kind_from_result(result)
+	_sync_host_after_step(result)
+	return result
+
+
+func _advance_craft_step() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	var command: Dictionary = _dictionary_or_empty(action.get("command", {})).duplicate(true)
+	var result: Dictionary = _dictionary_or_empty(simulation.call("submit_craft_for_runner", actor_id, command))
+	latest_result = result.duplicate(true)
+	if not bool(result.get("success", false)):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, "craft_failed")
+		_sync_host_after_step(result)
+		return result
+	var turn_policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	action["ap_after"] = float(result.get("ap_remaining", turn_policy.get("ap_after_action", action.get("ap_after", 0.0))))
+	action["pending_kind"] = _pending_kind_from_result(result)
+	var turn_check: Dictionary = _should_end_actor_turn(actor_id)
+	if not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty():
+		active = false
+		action["phase"] = "finished"
+		action["turn_phase"] = "player"
+		_clear_actor_action_state(actor_id, "craft_pending")
+	else:
+		active = false
+		action["phase"] = "finished"
+		action["turn_phase"] = "player"
+		_clear_actor_action_state(actor_id, "craft_finished")
+	result["runner_active_after"] = active
+	result["turn_check"] = turn_check.duplicate(true)
+	latest_result = result.duplicate(true)
 	_sync_host_after_step(result)
 	return result
 
@@ -473,7 +549,8 @@ func _finish_attack_presentation_phase() -> Dictionary:
 func _begin_world_turn_phase() -> Dictionary:
 	var actor_id := int(action.get("actor_id", 0))
 	var cycles := int(action.get("turn_cycles", 0))
-	if cycles >= AUTO_TURN_ADVANCE_LIMIT:
+	var limit := _auto_turn_limit()
+	if cycles >= limit:
 		active = false
 		action["phase"] = "blocked"
 		action["turn_phase"] = "blocked"
@@ -482,7 +559,7 @@ func _begin_world_turn_phase() -> Dictionary:
 			"success": false,
 			"reason": "auto_turn_limit_reached",
 			"actor_id": actor_id,
-			"limit": AUTO_TURN_ADVANCE_LIMIT,
+			"limit": limit,
 			"turn_cycles": cycles,
 		}
 		_sync_host_after_step(latest_result)
@@ -636,6 +713,14 @@ func _resume_pending_after_world_turn() -> Dictionary:
 		action["phase"] = "pending_resume"
 		action["turn_phase"] = "pending_resume"
 		action["pending_kind"] = "movement"
+	elif str(action.get("kind", "")) == "wait" and not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty():
+		action["phase"] = "player_turn_end"
+		action["turn_phase"] = "player_turn_end"
+		action["pending_kind"] = "crafting"
+	elif str(action.get("kind", "")) == "craft" and not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty():
+		action["phase"] = "player_turn_end"
+		action["turn_phase"] = "player_turn_end"
+		action["pending_kind"] = "crafting"
 	else:
 		active = false
 		action["phase"] = "finished"
@@ -676,7 +761,18 @@ func _world_turn_reason() -> String:
 			return "interact"
 		"wait":
 			return str(_dictionary_or_empty(action.get("options", {})).get("reason", "wait"))
+		"craft":
+			return "craft"
 	return str(action.get("kind", "turn_action_runner"))
+
+
+func _auto_turn_limit() -> int:
+	var options: Dictionary = _dictionary_or_empty(action.get("options", {}))
+	if options.has("max_turn_cycles"):
+		return max(1, int(options.get("max_turn_cycles", AUTO_TURN_ADVANCE_LIMIT)))
+	if str(action.get("pending_kind", "")) == "crafting" or not _dictionary_or_empty(action.get("pending_crafting", {})).is_empty():
+		return PENDING_CRAFTING_TURN_ADVANCE_LIMIT
+	return AUTO_TURN_ADVANCE_LIMIT
 
 
 func _action_should_resume_pending(result: Dictionary) -> bool:
@@ -689,6 +785,8 @@ func _action_should_resume_pending(result: Dictionary) -> bool:
 		return not _dictionary_or_empty(result.get("pending_movement", {})).is_empty() \
 			or not _dictionary_or_empty(result.get("pending_interaction", {})).is_empty() \
 			or not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty()
+	if str(action.get("kind", "")) == "craft":
+		return not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty()
 	return false
 
 

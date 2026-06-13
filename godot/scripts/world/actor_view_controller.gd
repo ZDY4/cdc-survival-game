@@ -158,7 +158,13 @@ func is_active() -> bool:
 
 
 func finish_active_actor_presentation(actor_id: int = 0) -> Dictionary:
-	return _finish_active_actor_presentation(actor_id, "fast_forward", true)
+	var result: Dictionary = _finish_active_actor_presentation(actor_id, "fast_forward", true)
+	active_actor_id = 0
+	active_node_ref = null
+	result["active"] = false
+	result["action_active"] = false
+	latest = result.duplicate(true)
+	return result
 
 
 func clear_actor_action_state(actor_id: int = 0, reason: String = "finished") -> Dictionary:
