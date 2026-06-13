@@ -603,6 +603,13 @@ func _expect_neutral_actor_context_menu(errors: Array[String], game_root: Node) 
 		if str(selection_prompt.get("primary_option_kind", "")) != "talk":
 			errors.append("neutral actor selection should keep talk as primary option: %s" % selection_prompt)
 		_expect_interaction_menu_options(errors, game_root, "neutral actor", ["talk"], {"attack": "target_not_hostile"})
+		var talk_result: Dictionary = await _execute_primary_and_complete(game_root, 8, true)
+		if not bool(talk_result.get("success", false)):
+			errors.append("neutral actor talk execution failed: %s" % JSON.stringify(talk_result))
+		else:
+			_expect_runner_interaction_phase(errors, game_root, "talk", "dialogue_start", str(neutral_id))
+			game_root.close_active_dialogue("neutral_actor_context_smoke")
+			await process_frame
 	_cleanup_neutral_actor_context_smoke(game_root, neutral_id)
 
 
@@ -837,10 +844,11 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 	var keyed_door_id := "player_interaction_smoke_keyed_door"
 	var locked_door_id := "player_interaction_smoke_locked_door"
 	var tooled_door_id := "player_interaction_smoke_tooled_door"
-	var door_grid := {"x": 27, "y": 0, "z": 39}
-	var keyed_door_grid := {"x": 28, "y": 0, "z": 39}
-	var locked_door_grid := {"x": 29, "y": 0, "z": 39}
-	var tooled_door_grid := {"x": 30, "y": 0, "z": 39}
+	var player_grid: Dictionary = _player_grid(game_root)
+	var door_grid := _near_open_grid_from(player_grid, map)
+	var keyed_door_grid := {"x": int(door_grid.get("x", 0)) + 1, "y": int(door_grid.get("y", 0)), "z": int(door_grid.get("z", 0))}
+	var locked_door_grid := {"x": int(door_grid.get("x", 0)) + 2, "y": int(door_grid.get("y", 0)), "z": int(door_grid.get("z", 0))}
+	var tooled_door_grid := {"x": int(door_grid.get("x", 0)) + 3, "y": int(door_grid.get("y", 0)), "z": int(door_grid.get("z", 0))}
 	var door_summary := {
 		"door_id": door_id,
 		"object_id": door_id,
@@ -938,6 +946,7 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 	var pickable_body: Node = door_node.find_child("PickableBody", true, false)
 	if pickable_body == null or not pickable_body.has_meta("interaction_target"):
 		errors.append("door hover smoke should expose pickable door body")
+		_cleanup_synthetic_door_smoke(game_root, [door_id, keyed_door_id, locked_door_id, tooled_door_id])
 		return
 	var body_metadata: Dictionary = _dictionary_or_empty(pickable_body.get_meta("interaction_target"))
 	if str(body_metadata.get("target_kind", "")) != "door":
@@ -945,6 +954,7 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 	var hover_result: Dictionary = game_root.runtime_input_controller.update_hover_at_screen_position(camera.unproject_position(door_node.global_position))
 	if not bool(hover_result.get("success", false)):
 		errors.append("door hover raycast failed: %s" % hover_result.get("reason", "unknown"))
+		_cleanup_synthetic_door_smoke(game_root, [door_id, keyed_door_id, locked_door_id, tooled_door_id])
 		return
 	_expect_hover_target_outline(errors, game_root, "door", door_id)
 	var hover: Dictionary = _dictionary_or_empty(game_root.runtime_hover_snapshot())
@@ -999,6 +1009,18 @@ func _expect_door_hover_outline(errors: Array[String], game_root: Node, camera: 
 			"pickup": "target_not_pickup",
 			"open_container": "target_not_container",
 		})
+	selection = game_root.select_interaction_node(door_node)
+	if not bool(selection.get("success", false)):
+		errors.append("door selection before toggle failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
+	else:
+		var toggle_result: Dictionary = await _execute_primary_and_complete(game_root, 8, true)
+		if not bool(toggle_result.get("success", false)):
+			errors.append("door toggle execution failed: %s" % JSON.stringify(toggle_result))
+		else:
+			_expect_runner_interaction_phase(errors, game_root, "door_toggle", "door_toggle", door_id)
+			if not bool(_dictionary_or_empty(game_root.simulation.door_states.get(door_id, {})).get("is_open", false)):
+				errors.append("door toggle should open smoke door state")
+	_cleanup_synthetic_door_smoke(game_root, [door_id, keyed_door_id, locked_door_id, tooled_door_id])
 
 
 func _temporary_door_node(door_id: String, grid: Dictionary, door_summary: Dictionary) -> Node3D:
@@ -1014,6 +1036,31 @@ func _temporary_door_node(door_id: String, grid: Dictionary, door_summary: Dicti
 	door_node.set_meta("interaction_target", metadata)
 	_add_pickable_smoke_box(door_node, metadata)
 	return door_node
+
+
+func _cleanup_synthetic_door_smoke(game_root: Node, door_ids: Array) -> void:
+	for door_id_value in door_ids:
+		var door_id := str(door_id_value)
+		var node: Node = game_root.find_child("MapObject_%s" % door_id, true, false)
+		if node != null:
+			if node.get_parent() != null:
+				node.get_parent().remove_child(node)
+			node.queue_free()
+		game_root.simulation.door_states.erase(door_id)
+	var map: Dictionary = _dictionary_or_empty(game_root.world_result.get("map", {})).duplicate(true)
+	var interaction_targets: Dictionary = _dictionary_or_empty(map.get("interaction_targets", {})).duplicate(true)
+	for door_id_value in door_ids:
+		interaction_targets.erase(str(door_id_value))
+	map["interaction_targets"] = interaction_targets
+	var filtered_doors: Array = []
+	for value in _array_or_empty(map.get("door_objects", [])):
+		var door_data: Dictionary = _dictionary_or_empty(value)
+		if not door_ids.has(str(door_data.get("door_id", door_data.get("object_id", "")))):
+			filtered_doors.append(door_data)
+	map["door_objects"] = filtered_doors
+	game_root.world_result["map"] = map
+	game_root.simulation.configure_map_interactions(interaction_targets)
+	game_root.clear_interaction_selection("door_hover_smoke_cleanup")
 
 
 func _expect_transition_hover_diagnostics(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
@@ -1578,7 +1625,10 @@ func _expect_runner_interaction_phase(errors: Array[String], game_root: Node, ex
 	if str(phase.get("phase", "")) != "finished":
 		errors.append("interaction_phase should expose finished runner phase after %s, got %s" % [expected_option_kind, JSON.stringify(phase)])
 	var runtime_line := _hud_runtime_control_line(game_root)
-	if not runtime_line.contains("Interact %s/%s" % [expected_option_kind, expected_visual_kind]):
+	var expected_interact_token := "Interact %s/%s" % [expected_option_kind, expected_visual_kind]
+	if expected_option_kind == expected_visual_kind:
+		expected_interact_token = "Interact %s" % expected_option_kind
+	if not runtime_line.contains(expected_interact_token):
 		errors.append("HUD runtime line should expose interaction phase %s/%s, got %s" % [expected_option_kind, expected_visual_kind, runtime_line])
 	if not expected_target_id.is_empty() and not runtime_line.contains(expected_target_id):
 		errors.append("HUD runtime line should expose interaction target %s, got %s" % [expected_target_id, runtime_line])
