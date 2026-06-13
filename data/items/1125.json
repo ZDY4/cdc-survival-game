@@ -2,7 +2,7 @@
   "id": 1125,
   "name": "撬棍",
   "description": "结实的撬棍",
-  "icon_path": "",
+  "icon_path": "res://assets/icons/items/crowbar.png",
   "value": 25,
   "weight": 1.2,
   "fragments": [

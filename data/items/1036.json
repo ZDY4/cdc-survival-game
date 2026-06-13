@@ -2,7 +2,7 @@
   "id": 1036,
   "name": "军用口粮",
   "description": "高热量口粮",
-  "icon_path": "",
+  "icon_path": "res://assets/icons/items/military_ration.png",
   "value": 20,
   "weight": 0.4,
   "fragments": [

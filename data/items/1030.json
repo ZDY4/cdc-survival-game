@@ -2,7 +2,7 @@
   "id": 1030,
   "name": "消毒剂",
   "description": "用于清洁伤口的消毒剂",
-  "icon_path": "",
+  "icon_path": "res://assets/icons/items/antiseptic.png",
   "value": 15,
   "weight": 0.2,
   "fragments": [
