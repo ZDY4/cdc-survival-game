@@ -283,37 +283,23 @@ func _advance_move_step() -> Dictionary:
 	latest_result = step.duplicate(true)
 	if not bool(step.get("success", false)):
 		active = false
-		action["phase"] = "failed"
-		action["turn_phase"] = "failed"
+		MoveAction.apply_failed(action, str(step.get("reason", "failed")))
 		_clear_actor_action_state(actor_id, "failed")
 		_sync_host_after_step(step)
 		return step
 	if _step_waits_for_player_turn(step):
-		action["phase"] = "player_turn_end"
-		action["turn_phase"] = "player_turn_end"
-		action["pending_kind"] = "movement"
-		action["blocked_reason"] = str(step.get("reason", "ap_insufficient_movement_pending"))
-		action["ap_after"] = float(step.get("ap_remaining", action.get("ap_after", 0.0)))
+		MoveAction.apply_turn_wait(action, step)
 		_sync_host_after_step(step)
 		return step
-	var has_visual_step := not _dictionary_or_empty(step.get("from", {})).is_empty() and not _dictionary_or_empty(step.get("to", {})).is_empty()
-	action["phase"] = "move_step"
-	action["turn_phase"] = "player_action"
-	action["step_index"] = int(action.get("step_index", 0)) + 1
-	action["current_grid"] = _dictionary_or_empty(step.get("from", {})).duplicate(true)
-	action["next_grid"] = _dictionary_or_empty(step.get("to", {})).duplicate(true)
-	action["ap_after"] = float(step.get("ap_remaining", 0.0))
-	if bool(step.get("pending", false)):
-		action["pending_kind"] = "movement"
-	action["completed_after_presentation"] = bool(step.get("completed", false)) and has_visual_step
+	var phase_update: Dictionary = MoveAction.apply_step(action, step)
+	var has_visual_step := bool(phase_update.get("has_visual_step", false))
 	var presentation: Dictionary = {}
 	if has_visual_step and actor_view != null and actor_view.has_method("move_actor_step"):
 		presentation = _dictionary_or_empty(actor_view.call("move_actor_step", host, actor_id, _dictionary_or_empty(step.get("from", {})), _dictionary_or_empty(step.get("to", {}))))
 	step["presentation"] = presentation
 	if bool(step.get("completed", false)) and not has_visual_step:
 		active = false
-		action["phase"] = "finished"
-		action["turn_phase"] = "player"
+		MoveAction.finish_without_visual(action, str(step.get("reason", "finished")))
 		_clear_actor_action_state(actor_id, str(step.get("reason", "finished")))
 	_sync_host_after_step(step)
 	return step
@@ -389,29 +375,17 @@ func _begin_interaction_action() -> Dictionary:
 	latest_result = result.duplicate(true)
 	_record_interaction_phase(result)
 	if not bool(result.get("success", false)):
-		action["phase"] = "failed"
-		action["turn_phase"] = "failed"
+		InteractAction.apply_failed(action, str(result.get("reason", "interaction_failed")))
 		_clear_actor_action_state(actor_id, "interaction_failed")
 		_sync_host_after_step(result)
 		return result
 	if str(result.get("kind", "")) == "attack_required":
-		action["target_actor_id"] = int(result.get("target_actor_id", 0))
-		action["kind"] = "attack"
-		action["phase"] = "attack_action"
-		action["turn_phase"] = "player_action"
+		InteractAction.redirect_to_attack(action, int(result.get("target_actor_id", 0)))
 		return _advance_attack_step()
 	if bool(result.get("approach_required", false)):
-		action["runner_keeps_active"] = true
-		action["phase"] = "approach_move_step"
-		action["turn_phase"] = "player_action"
-		action["path"] = _array_or_empty(result.get("path", [])).duplicate(true)
-		action["target_grid"] = _dictionary_or_empty(result.get("target_position", {})).duplicate(true)
-		action["pending_kind"] = "interaction"
-		action["step_index"] = 0
+		InteractAction.begin_approach(action, result)
 		return _advance_interaction_approach_step()
-	action["runner_keeps_active"] = false
-	action["phase"] = "finished"
-	action["turn_phase"] = "player"
+	InteractAction.finish_immediate(action)
 	_sync_host_after_step(result)
 	return result
 
@@ -423,28 +397,16 @@ func _advance_interaction_approach_step() -> Dictionary:
 	latest_result = step.duplicate(true)
 	if not bool(step.get("success", false)):
 		active = false
-		action["phase"] = "failed"
-		action["turn_phase"] = "failed"
+		InteractAction.apply_failed(action, str(step.get("reason", "interaction_approach_failed")))
 		_clear_actor_action_state(actor_id, "interaction_approach_failed")
 		_sync_host_after_step(step)
 		return step
 	if _step_waits_for_player_turn(step):
-		action["phase"] = "player_turn_end"
-		action["turn_phase"] = "player_turn_end"
-		action["pending_kind"] = "interaction"
-		action["blocked_reason"] = str(step.get("reason", "ap_insufficient_movement_pending"))
-		action["ap_after"] = float(step.get("ap_remaining", action.get("ap_after", 0.0)))
+		InteractAction.apply_approach_turn_wait(action, step)
 		_sync_host_after_step(step)
 		return step
-	var has_visual_step := not _dictionary_or_empty(step.get("from", {})).is_empty() and not _dictionary_or_empty(step.get("to", {})).is_empty()
-	action["phase"] = "approach_move_step"
-	action["turn_phase"] = "player_action"
-	action["step_index"] = int(action.get("step_index", 0)) + 1
-	action["current_grid"] = _dictionary_or_empty(step.get("from", {})).duplicate(true)
-	action["next_grid"] = _dictionary_or_empty(step.get("to", {})).duplicate(true)
-	action["ap_after"] = float(step.get("ap_remaining", 0.0))
-	action["pending_kind"] = "interaction"
-	action["completed_after_presentation"] = bool(step.get("completed", false)) and has_visual_step
+	var phase_update: Dictionary = InteractAction.apply_approach_step(action, step)
+	var has_visual_step := bool(phase_update.get("has_visual_step", false))
 	var presentation: Dictionary = {}
 	if has_visual_step and actor_view != null and actor_view.has_method("move_actor_step"):
 		presentation = _dictionary_or_empty(actor_view.call("move_actor_step", host, actor_id, _dictionary_or_empty(step.get("from", {})), _dictionary_or_empty(step.get("to", {})), {

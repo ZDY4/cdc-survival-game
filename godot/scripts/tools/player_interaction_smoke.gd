@@ -672,12 +672,15 @@ func _expect_far_actor_interaction_approach_runner_phase(errors: Array[String], 
 	_expect_interaction_approach_phase_snapshot(errors, game_root, neutral_id)
 	await _wait_for_turn_action_runner_idle(game_root)
 	_expect_runner_interaction_phase(errors, game_root, "talk", "dialogue_start", str(neutral_id))
+	await _wait_for_world_action_presenter_idle(game_root)
 	game_root.close_active_dialogue("far_actor_interaction_runner_smoke")
 	await process_frame
 	_cleanup_far_actor_interaction_runner_smoke(game_root, neutral_id, original_grid, original_ap)
 
 
 func _cleanup_far_actor_interaction_runner_smoke(game_root: Node, neutral_id: int, original_grid: Dictionary, original_ap: float) -> void:
+	if game_root.has_method("finish_world_action_presentations"):
+		game_root.finish_world_action_presentations()
 	game_root.hud.hide_interaction_menu()
 	game_root.clear_interaction_selection("far_actor_interaction_runner_smoke_cleanup")
 	game_root.close_active_dialogue("far_actor_interaction_runner_smoke_cleanup")
