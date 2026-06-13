@@ -2,13 +2,13 @@
 
 本文定义移动、回合、相机和动作表现的最终改造路线。目标是把当前“规则层一次跑完、表现层事后补动画”的模式，替换为符合 Godot 项目开发方式的逐步动作系统：规则层仍然权威，但运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
 
-本计划只描述目标架构和直达最终状态的实现路线。后续实现以 Godot 原生 action runner、稳定 actor view、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都进入同一套 Godot action pipeline；现有同步推进入口从主游戏运行时退出，不再作为功能承载点或扩展方向。
+本计划只描述目标架构和直达最终状态的实现路线。后续实现以 Godot 原生 action runner、稳定 actor view、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都进入同一套 Godot action pipeline；同步推进入口从主游戏运行时退出，不作为功能承载点、扩展方向或验收目标。
 
 执行口径：
 
 - 每个阶段都以最终 action pipeline 为交付对象，并让目标架构更完整。
 - 不新增第二套移动、回合、交互或战斗语义；headless、smoke、debug 和手动游戏都走同一 runner facade。
-- 现有同步入口只作为对照和回归定位存在，不承载新业务。
+- 同步推进入口不参与运行时、headless smoke、debug facade 或后续验收；所有执行路径统一迁入 action runner。
 - 文档中的阶段顺序是最终系统的增量落地顺序。
 
 ## 0. 架构差距结论
@@ -202,7 +202,7 @@ func process_follow(delta: float, viewport_size: Vector2, level_height: float) -
 
 ### 3.1 移动接口
 
-新增或重构：
+最终接口：
 
 ```gdscript
 func begin_move(actor_id: int, target_position: Dictionary, topology: Dictionary) -> Dictionary
@@ -230,7 +230,7 @@ func pending_move_snapshot(actor_id: int) -> Dictionary
 
 ### 3.2 回合接口
 
-新增或重构：
+最终接口：
 
 ```gdscript
 func should_end_actor_turn(actor_id: int) -> Dictionary
@@ -262,7 +262,7 @@ Simulation.step_move(...)
 - `submit_player_command({"kind": "move"})` 不再被主游戏输入、HUD、交互、AI 调度和 smoke 验收调用。
 - 调试工具、headless smoke 和保存恢复通过 TurnActionRunner 的显式 step / finish facade 驱动，与手动游戏共享同一套动作语义。
 - 测试快速完成动作的入口命名为 `finish_active_action()` 或 `drain_turn_action_runner()`，语义是“驱动 action runner 跑完当前动作”。
-- `_submit_move_command()` 从运行时主路径删除；现存引用必须收敛到 runner facade，不能继续接收新增业务逻辑。
+- `_submit_move_command()` 从运行时主路径删除；所有调用收敛到 runner facade，后续业务逻辑只进入 Godot action pipeline。
 
 ## 4. App 输入和动作调度
 
