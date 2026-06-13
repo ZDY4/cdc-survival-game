@@ -2049,6 +2049,14 @@ func _expect_player_attack_exposes_turn_runner_phase(errors: Array[String], game
 				errors.append("player attack_phase should expose resolved damage, got %s" % JSON.stringify(phase))
 			if not bool(phase.get("completed", false)):
 				errors.append("player attack_phase should expose completed attack result, got %s" % JSON.stringify(phase))
+			if str(phase.get("pipeline_phase", "")) != "presentation" and str(phase.get("pipeline_phase", "")) != "refresh":
+				errors.append("player attack_phase should expose presentation/refresh pipeline phase, got %s" % JSON.stringify(phase))
+			var phase_steps: Array = _array_or_empty(phase.get("phase_steps", []))
+			for step_id in ["validate", "preflight", "consume", "apply_result", "presentation"]:
+				if not _phase_steps_contain_completed(phase_steps, step_id):
+					errors.append("player attack_phase should expose completed %s pipeline step, got %s" % [step_id, JSON.stringify(phase_steps)])
+			if not bool(phase.get("rules_resolved", false)):
+				errors.append("player attack_phase should expose resolved rule pipeline, got %s" % JSON.stringify(phase))
 			if int(_dictionary_or_empty(phase.get("attacker_node", {})).get("node_instance_id", 0)) <= 0:
 				errors.append("player attack_phase should expose attacker ActorView node, got %s" % JSON.stringify(phase))
 			if int(_dictionary_or_empty(phase.get("target_node", {})).get("node_instance_id", 0)) <= 0:
@@ -2137,6 +2145,13 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 		var npc_phase: Dictionary = _dictionary_or_empty(runner.get("npc_phase", {}))
 		if not attack_phase.is_empty() and str(attack_phase.get("source", "")) == "npc":
 			saw_attack_phase = true
+			var phase_steps: Array = _array_or_empty(attack_phase.get("phase_steps", []))
+			if not _phase_steps_contain_completed(phase_steps, "apply_result"):
+				errors.append("npc attack_phase should expose completed apply_result pipeline step, got %s" % JSON.stringify(phase_steps))
+			if not _phase_steps_contain_completed(phase_steps, "presentation"):
+				errors.append("npc attack_phase should expose completed presentation pipeline step, got %s" % JSON.stringify(phase_steps))
+			if str(attack_phase.get("pipeline_phase", "")) != "presentation" and str(attack_phase.get("pipeline_phase", "")) != "refresh":
+				errors.append("npc attack_phase should expose presentation/refresh pipeline phase, got %s" % JSON.stringify(attack_phase))
 			if int(attack_phase.get("actor_id", 0)) != attacker_id or int(attack_phase.get("target_actor_id", 0)) != player.actor_id:
 				errors.append("npc attack_phase should expose attacker and target ids, got %s" % JSON.stringify(attack_phase))
 			if int(_dictionary_or_empty(attack_phase.get("attacker_node", {})).get("node_instance_id", 0)) <= 0:
@@ -2204,6 +2219,14 @@ func _cleanup_npc_attack_runner_smoke(game_root: Node, player: RefCounted, attac
 	if game_root.simulation.actor_registry.get_actor(attacker_id) != null:
 		game_root.simulation.actor_registry.unregister_actor(attacker_id)
 	game_root.rebuild_runtime_world()
+
+
+func _phase_steps_contain_completed(steps: Array, step_id: String) -> bool:
+	for step_value in steps:
+		var step: Dictionary = _dictionary_or_empty(step_value)
+		if str(step.get("id", "")) == step_id and bool(step.get("completed", false)):
+			return true
+	return false
 
 
 func _expect_corpse_world_interaction(errors: Array[String], game_root: Node) -> void:
