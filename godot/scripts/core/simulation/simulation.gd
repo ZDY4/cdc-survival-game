@@ -1030,6 +1030,59 @@ func cancel_move(actor_id: int, reason: String = "cancelled") -> Dictionary:
 	}
 
 
+func should_end_actor_turn(actor_id: int) -> Dictionary:
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	var threshold: float = _affordable_ap_threshold(actor)
+	return {
+		"success": true,
+		"actor_id": actor_id,
+		"turn_open": bool(actor.turn_open),
+		"ap": actor.ap,
+		"affordable_ap_threshold": threshold,
+		"should_end": bool(actor.turn_open) and actor.ap < threshold,
+		"pending_movement": pending_movement.duplicate(true),
+		"pending_interaction": pending_interaction.duplicate(true),
+		"pending_crafting": pending_crafting.duplicate(true),
+		"turn_state": turn_state.duplicate(true),
+	}
+
+
+func advance_player_turn_for_runner(actor_id: int, topology: Dictionary, reason: String = "turn_action_runner") -> Dictionary:
+	var event_start_index: int = events.size()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	if topology.is_empty():
+		return {"success": false, "reason": "move_topology_missing", "actor_id": actor_id}
+	var round_before: int = int(turn_state.get("round", 1))
+	var ap_before: float = actor.ap
+	var turn_open_before: bool = bool(actor.turn_open)
+	if turn_open_before:
+		_close_turn(actor_id, "runner_ap_depleted:%s" % reason)
+	var npc_results: Array[Dictionary] = advance_world_turn(topology)
+	_open_turn(actor_id, "runner_player_turn:%s" % reason)
+	return {
+		"success": true,
+		"kind": "player_turn_advanced",
+		"actor_id": actor_id,
+		"reason": reason,
+		"round_before": round_before,
+		"round_after": int(turn_state.get("round", 1)),
+		"ap_before": ap_before,
+		"ap_after": actor.ap,
+		"turn_open_before": turn_open_before,
+		"turn_open_after": bool(actor.turn_open),
+		"npc_results": npc_results,
+		"pending_movement": pending_movement.duplicate(true),
+		"pending_interaction": pending_interaction.duplicate(true),
+		"pending_crafting": pending_crafting.duplicate(true),
+		"turn_state": turn_state.duplicate(true),
+		"events": _events_since(event_start_index),
+	}
+
+
 func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Dictionary:
 	var target: Dictionary = _dictionary_or_empty(command.get("target", {}))
 	var prompt: Dictionary = query_interaction_options(actor.actor_id, target)

@@ -1,5 +1,7 @@
 extends RefCounted
 
+const AUTO_TURN_ADVANCE_LIMIT := 8
+
 var simulation: RefCounted
 var actor_view: RefCounted
 var host: Node
@@ -35,6 +37,7 @@ func request_move(actor_id: int, target_grid: Dictionary, topology: Dictionary) 
 		"phase": "move_step",
 		"ap_before": float(begin.get("ap", 0.0)),
 		"completed_after_presentation": false,
+		"turn_cycles": 0,
 	}
 	active = true
 	latest_result = begin.duplicate(true)
@@ -53,10 +56,17 @@ func process() -> void:
 		if bool(action.get("completed_after_presentation", false)):
 			active = false
 			action["phase"] = "finished"
+			action["turn_phase"] = "player"
 			_clear_actor_action_state(int(action.get("actor_id", 0)), "finished")
 			_sync_host_after_step(latest_result)
 			return
-		_advance_move_step()
+		match str(action.get("phase", "")):
+			"player_turn_end":
+				_advance_player_turn_phase()
+			"pending_resume":
+				_advance_move_step()
+			_:
+				_advance_move_step()
 
 
 func finish_active(reason: String = "fast_forward") -> Dictionary:
@@ -86,6 +96,8 @@ func snapshot() -> Dictionary:
 		"ap_after": float(action.get("ap_after", 0.0)),
 		"turn_phase": str(action.get("turn_phase", "")),
 		"pending_kind": str(action.get("pending_kind", "")),
+		"turn_cycles": int(action.get("turn_cycles", 0)),
+		"auto_turn_limit": AUTO_TURN_ADVANCE_LIMIT,
 		"blocked_reason": str(latest_result.get("reason", "")) if not bool(latest_result.get("success", true)) else "",
 		"presentation_active": bool(view_snapshot.get("active", false)),
 		"actor_view": view_snapshot,
@@ -102,11 +114,21 @@ func _advance_move_step() -> Dictionary:
 	if not bool(step.get("success", false)):
 		active = false
 		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
 		_clear_actor_action_state(actor_id, "failed")
+		_sync_host_after_step(step)
+		return step
+	if _step_waits_for_player_turn(step):
+		action["phase"] = "player_turn_end"
+		action["turn_phase"] = "player_turn_end"
+		action["pending_kind"] = "movement"
+		action["blocked_reason"] = str(step.get("reason", "ap_insufficient_movement_pending"))
+		action["ap_after"] = float(step.get("ap_remaining", action.get("ap_after", 0.0)))
 		_sync_host_after_step(step)
 		return step
 	var has_visual_step := not _dictionary_or_empty(step.get("from", {})).is_empty() and not _dictionary_or_empty(step.get("to", {})).is_empty()
 	action["phase"] = "move_step"
+	action["turn_phase"] = "player_action"
 	action["step_index"] = int(action.get("step_index", 0)) + 1
 	action["current_grid"] = _dictionary_or_empty(step.get("from", {})).duplicate(true)
 	action["next_grid"] = _dictionary_or_empty(step.get("to", {})).duplicate(true)
@@ -121,9 +143,56 @@ func _advance_move_step() -> Dictionary:
 	if bool(step.get("completed", false)) and not has_visual_step:
 		active = false
 		action["phase"] = "finished"
+		action["turn_phase"] = "player"
 		_clear_actor_action_state(actor_id, str(step.get("reason", "finished")))
 	_sync_host_after_step(step)
 	return step
+
+
+func _advance_player_turn_phase() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	var cycles := int(action.get("turn_cycles", 0))
+	if cycles >= AUTO_TURN_ADVANCE_LIMIT:
+		active = false
+		action["phase"] = "blocked"
+		action["turn_phase"] = "blocked"
+		_clear_actor_action_state(actor_id, "auto_turn_limit_reached")
+		latest_result = {
+			"success": false,
+			"reason": "auto_turn_limit_reached",
+			"actor_id": actor_id,
+			"limit": AUTO_TURN_ADVANCE_LIMIT,
+			"turn_cycles": cycles,
+		}
+		_sync_host_after_step(latest_result)
+		return latest_result
+	if simulation == null or not simulation.has_method("advance_player_turn_for_runner"):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		latest_result = {"success": false, "reason": "runner_turn_api_missing", "actor_id": actor_id}
+		_clear_actor_action_state(actor_id, "runner_turn_api_missing")
+		_sync_host_after_step(latest_result)
+		return latest_result
+	action["turn_cycles"] = cycles + 1
+	action["phase"] = "player_turn_start"
+	action["turn_phase"] = "player_turn_start"
+	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
+	var turn_result: Dictionary = _dictionary_or_empty(simulation.call("advance_player_turn_for_runner", actor_id, topology, "pending_movement"))
+	latest_result = turn_result.duplicate(true)
+	if not bool(turn_result.get("success", false)):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, str(turn_result.get("reason", "turn_failed")))
+		_sync_host_after_step(turn_result)
+		return turn_result
+	action["ap_after"] = float(turn_result.get("ap_after", action.get("ap_after", 0.0)))
+	action["phase"] = "pending_resume"
+	action["turn_phase"] = "pending_resume"
+	action["pending_kind"] = "movement"
+	_sync_host_after_step(turn_result)
+	return turn_result
 
 
 func _sync_host_after_step(step_result: Dictionary) -> void:
@@ -134,6 +203,10 @@ func _sync_host_after_step(step_result: Dictionary) -> void:
 func _clear_actor_action_state(actor_id: int, reason: String) -> void:
 	if actor_view != null and actor_view.has_method("clear_actor_action_state"):
 		actor_view.call("clear_actor_action_state", actor_id, reason)
+
+
+func _step_waits_for_player_turn(step: Dictionary) -> bool:
+	return bool(step.get("pending", false)) and str(step.get("reason", "")) == "ap_insufficient_movement_pending"
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
