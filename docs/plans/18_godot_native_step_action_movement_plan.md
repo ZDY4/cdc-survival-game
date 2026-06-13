@@ -6,14 +6,14 @@
 
 路线口径：
 
-- 每个阶段都以最终 action pipeline 为交付对象，并让目标架构更完整。
-- 每项改动都直接沉淀为最终系统能力，入口、状态和表现路径统一归入正式 action pipeline。
-- 不新增第二套移动、回合、交互或战斗语义；headless、smoke、debug 和手动游戏都走同一 runner facade。
-- 所有执行路径统一进入 action runner；运行时、headless smoke、debug facade 和后续验收使用同一套动作语义。
-- 文档中的阶段顺序是最终系统的能力建设顺序。
-- 每个阶段的实现成果必须收敛到最终模块边界，测试、调试和手动运行共享正式运行时入口与状态来源。
-- 所有条目都直接指向最终 Godot 原生运行时，不记录临时修补、过渡入口或并行实现。
-- 移动、相机、交互、战斗、等待、制作和调试能力都收敛到同一套最终动作管线，不另建旁路。
+- 每个阶段都以最终 action pipeline 为交付对象，阶段产物就是目标架构的一部分。
+- 每项改动都沉淀为长期系统能力，入口、状态和表现路径统一归入正式 action pipeline。
+- 移动、回合、交互、战斗、等待、制作、调试和 smoke 共用同一套 runner facade 与动作语义。
+- 运行时、headless smoke、debug facade 和手动游戏都通过 action runner 进入规则推进与表现调度。
+- 文档中的阶段顺序是最终系统的能力建设顺序，每个阶段完成后都让目标架构更完整。
+- 每个阶段的实现成果收敛到最终模块边界，测试、调试和手动运行共享正式运行时入口与状态来源。
+- 所有条目都直接指向 Godot 原生运行时的最终形态：scene、node、resource、signal、GDScript 模块和稳定 facade。
+- 移动、相机、交互、战斗、等待、制作和调试能力都收敛到同一套最终动作管线。
 
 ## 1. 最终目标
 
@@ -23,7 +23,7 @@
 - Godot runtime 负责动作节奏：输入、action queue、phase、Tween、Signal、相机、视觉反馈。
 - 普通移动不全量重绘世界；actor node 是可持续的 view object。
 - 相机跟随视觉节点，而不是只跟随 snapshot grid。
-- 一次玩家输入不会同步消费多个未来回合；回合推进必须通过 action runner 分阶段执行。
+- 一次玩家输入只提交当前动作意图；回合推进通过 action runner 分阶段执行。
 - 事件用于记录和 UI 反馈；活跃表现对象由 action runner、ActorView registry 和 snapshot 明确提供。
 - 运行时功能按 Godot 原生职责拆分：规则、动作调度、ActorView、CameraRig、HUD / Panel 各自独立协作。
 
@@ -226,7 +226,7 @@ func finish_actor_action(actor_id: int, action_kind: String, topology: Dictionar
 
 目标：
 
-- 玩家 AP 不足后不要在 `submit_player_command()` 内同步跑完 NPC 回合。
+- 玩家 AP 不足后，runner 进入玩家回合收束阶段，再按 phase 驱动 NPC 回合。
 - TurnActionRunner 决定何时进入 `player_turn_end`、`npc_action`、`pending_resume`。
 - NPC action 也逐个返回，而不是一次性返回一组未来事件。
 
@@ -271,14 +271,14 @@ func turn_action_runner_snapshot() -> Dictionary
 
 Action active 时：
 
-- 世界点击默认阻塞。
+- 世界点击交给活跃 action 的中断策略处理。
 - HUD 可刷新。
 - Esc 先进入活跃 action 的中断流程：完成本次单格 / 本次表现原子段后停在稳定边界，再打开关闭菜单或清除后续 pending action。
 - 中键拖拽相机仍可允许，但不改变 action 状态。
 
 中断策略：
 
-- 移动中点击新目标：记录为 replacement request，本次单格表现完成后重新走 `begin_move()` / `step_move()`，不会一次性提交多格规则状态或视觉状态。
+- 移动中点击新目标：记录为 replacement request，本次单格表现完成后重新走 `begin_move()` / `step_move()`，按逐格规则和逐格表现继续。
 - Esc：停止后续 pending path，保留已完成格子的规则状态和视觉位置。
 - 地图切换 / scene transition：进入结构变化队列，必须在 runner 稳定边界执行。
 - 保存：调用 `prepare_runtime_save_boundary()`，由 runner 驱动活跃 action 到稳定边界后生成存档 snapshot。
@@ -294,7 +294,7 @@ Action active 时：
 - `runtime_control_snapshot()` 增加 `turn_action_runner`。
 - `PlayerInteraction`、`Movement`、`AI`、`Combat`、`Save` smoke 的运行入口全部绑定 runner facade。
 - 运行时移动、交互、攻击、等待和制作验收绑定 `TurnActionRunner`、`ActorViewController`、相机 follow snapshot 和 actor node 稳定性。
-- 移除动作执行中的重复调度职责，让输入、HUD、debug、smoke 都只提交 action request，不直接驱动规则或表现。
+- 输入、HUD、debug、smoke 都只提交 action request，由 runner 统一驱动规则推进和表现调度。
 
 验收：
 
@@ -336,7 +336,7 @@ Action active 时：
 - 玩家视觉节点每格移动。
 - 相机 follow target 是活跃动作的 ActorView 节点。
 - HUD AP / phase / path progress 可逐格刷新。
-- 普通移动不触发全量 world render。
+- 普通移动保持 ActorView registry 稳定，WorldRuntimeRoot 的结构性同步只在稳定边界发生。
 
 ### 阶段 4：回合逐阶段化
 
@@ -384,7 +384,7 @@ Action active 时：
 
 验收：
 
-- 自动观察 / wait / crafting 使用 runner step 推进，不绕过逐步 action。
+- 自动观察 / wait / crafting 使用 runner step 推进，与逐步 action 共享相同节奏。
 - Save smoke 验证 action active 和 idle 两种保存边界。
 
 ## 6. UI、HUD 和 Debug
@@ -404,7 +404,7 @@ Debug snapshot：
 - `camera_follow_snapshot()`
 - `world_render_policy_snapshot()`
 
-Smoke 和调试面板不要依赖私有 `_setup_*` / `_rebuild_*` 方法，应通过稳定 facade：
+Smoke 和调试面板通过稳定 facade 观察和驱动运行时：
 
 - `request_player_move()`
 - `drain_turn_action_runner()`
@@ -479,7 +479,7 @@ cmd /c run_godot_validate.bat
 - `GameApp`、输入控制器、HUD、debug facade 和 smoke 全部通过 `request_player_*()` / `TurnActionRunner` 提交动作。
 - `runtime_control_snapshot()`、`turn_action_runner_snapshot()`、`actor_view_snapshot()`、`camera_follow_snapshot()` 成为调试和验收的稳定观察面。
 - 移动、交互、攻击、等待和制作共享同一套 action request / runner step / presentation completion 语义。
-- 任何运行时动作都不直接绕过 runner 修改 actor grid、UI 状态或世界表现。
+- 运行时动作通过 runner 修改 actor grid、UI 状态和世界表现。
 - 入口层只负责把玩家意图、菜单命令或测试指令转换成 action request，后续统一由 runner 和 action 模块接管。
 
 ### 里程碑 2：逐格移动规则接口定型
@@ -525,14 +525,14 @@ cmd /c run_godot_validate.bat
 - auto tick 不直接批量提交未来回合，而是驱动 runner step 到稳定边界。
 - Crafting / Progression / Save smoke 共享 runner facade 验证等待、制作和存档行为。
 
-## 9. 风险和约束
+## 9. 架构约束
 
-- 不引入非 Godot 主线运行时。
-- 不把业务规则写进 UI 或 ActorView。
+- Godot scene、node、resource、signal 和 GDScript 是唯一主线运行时形态。
+- 业务规则归属 `Simulation` 和规则服务；UI 与 ActorView 只消费 snapshot、事件和表现请求。
 - 普通移动使用 actor tween 和稳定 ActorView registry。
-- Presenter 只消费活跃 action 明确提供的表现请求和 snapshot。
+- Presenter 消费活跃 action 明确提供的表现请求和 snapshot。
 - Godot runtime、headless 和 debug 通过 TurnActionRunner 的显式 step / finish facade 驱动最终系统。
-- 每个提交都必须让最终 action pipeline 更完整、更集中、更可验证。
+- 每个提交都让最终 action pipeline 更完整、更集中、更可验证。
 
 ## 10. 完成标准
 
