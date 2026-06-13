@@ -296,7 +296,7 @@ func snapshot() -> Dictionary:
 		"turn_phase": str(action.get("turn_phase", "")),
 		"pending_kind": str(action.get("pending_kind", "")),
 		"pending_movement": pending_movement,
-		"interaction_phase": _interaction_phase_snapshot(),
+		"interaction_phase": _interaction_phase_snapshot(view_snapshot),
 		"attack_phase": _attack_phase_snapshot(view_snapshot),
 		"wait_phase": _wait_phase_snapshot(),
 		"craft_phase": _craft_phase_snapshot(),
@@ -895,7 +895,7 @@ func _record_interaction_phase(result: Dictionary) -> void:
 		action["interaction_completed"] = true
 
 
-func _interaction_phase_snapshot() -> Dictionary:
+func _interaction_phase_snapshot(view_snapshot: Dictionary = {}) -> Dictionary:
 	if str(action.get("kind", "")) != "interact":
 		return {}
 	var phase: Dictionary = _dictionary_or_empty(action.get("interaction_phase", {})).duplicate(true)
@@ -906,6 +906,12 @@ func _interaction_phase_snapshot() -> Dictionary:
 	phase["phase"] = str(action.get("phase", ""))
 	phase["turn_phase"] = str(action.get("turn_phase", ""))
 	phase["approach_active"] = str(action.get("phase", "")) == "approach_move_step"
+	phase["approach_node"] = _actor_node_phase_snapshot(view_snapshot, int(action.get("actor_id", 0))) if bool(phase.get("approach_active", false)) else {}
+	phase["approach_from_grid"] = _dictionary_or_empty(action.get("current_grid", {})).duplicate(true)
+	phase["approach_to_grid"] = _dictionary_or_empty(action.get("next_grid", {})).duplicate(true)
+	phase["approach_step_index"] = int(action.get("step_index", 0))
+	phase["approach_total_steps"] = max(0, _array_or_empty(action.get("path", [])).size() - 1)
+	phase["pending_kind"] = str(action.get("pending_kind", ""))
 	phase["completed"] = bool(action.get("interaction_completed", phase.get("completed", false))) or str(action.get("phase", "")) == "finished"
 	return phase
 

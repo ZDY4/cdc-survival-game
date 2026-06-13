@@ -403,6 +403,7 @@ func _expect_friendly_neutral_and_map_container_context_menus(errors: Array[Stri
 		else:
 			_expect_interaction_menu_options(errors, game_root, "friendly actor", ["talk"], {"attack": "target_not_hostile"})
 	await _expect_neutral_actor_context_menu(errors, game_root)
+	await _expect_far_actor_interaction_approach_runner_phase(errors, game_root)
 	var container_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_canteen_food_crate")
 	if container_node == null:
 		errors.append("map container context menu smoke should find canteen food crate")
@@ -620,6 +621,106 @@ func _cleanup_neutral_actor_context_smoke(game_root: Node, neutral_id: int) -> v
 	if game_root.simulation.actor_registry.get_actor(neutral_id) != null:
 		game_root.simulation.actor_registry.unregister_actor(neutral_id)
 	game_root.rebuild_runtime_world()
+
+
+func _expect_far_actor_interaction_approach_runner_phase(errors: Array[String], game_root: Node) -> void:
+	await _wait_for_turn_action_runner_idle(game_root)
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("far actor interaction runner smoke missing player actor")
+		return
+	var original_grid: Dictionary = player.grid_position.to_dictionary()
+	var original_ap: float = player.ap
+	var player_grid: Dictionary = _player_grid(game_root)
+	var target_grid := _far_open_grid_from(player_grid, game_root.world_result.get("map", {}))
+	var neutral_id: int = game_root.simulation.register_actor({
+		"definition_id": "far_actor_interaction_runner_smoke",
+		"display_name": "Far Interaction Runner Smoke",
+		"kind": "npc",
+		"side": "neutral",
+		"group_id": "neutral",
+		"map_id": game_root.simulation.active_map_id,
+		"appearance_profile_id": "default_humanoid",
+		"model_asset": "characters/sprite_rigs/default_humanoid.tscn",
+		"grid_position": GridCoord.from_dictionary(target_grid),
+		"ap": 0.0,
+		"turn_open": false,
+		"max_hp": 10.0,
+		"hp": 10.0,
+		"combat_attributes": {"evasion": 0.0},
+	})
+	player.ap = 12.0
+	player.turn_open = true
+	game_root.rebuild_runtime_world()
+	await process_frame
+	var neutral_node: Node3D = game_root.find_child("Actor_far_actor_interaction_runner_smoke_%d" % neutral_id, true, false) as Node3D
+	if neutral_node == null:
+		errors.append("far actor interaction runner smoke should render actor node")
+		_cleanup_far_actor_interaction_runner_smoke(game_root, neutral_id, original_grid, original_ap)
+		return
+	var selection: Dictionary = game_root.select_interaction_node(neutral_node)
+	if not bool(selection.get("success", false)):
+		errors.append("far actor interaction selection failed: %s" % selection.get("prompt", {}).get("reason", "unknown"))
+		_cleanup_far_actor_interaction_runner_smoke(game_root, neutral_id, original_grid, original_ap)
+		return
+	var request: Dictionary = game_root.execute_primary_interaction()
+	if not bool(request.get("success", false)):
+		errors.append("far actor interaction request failed: %s" % JSON.stringify(request))
+		_cleanup_far_actor_interaction_runner_smoke(game_root, neutral_id, original_grid, original_ap)
+		return
+	await process_frame
+	_expect_interaction_approach_phase_snapshot(errors, game_root, neutral_id)
+	await _wait_for_turn_action_runner_idle(game_root)
+	_expect_runner_interaction_phase(errors, game_root, "talk", "dialogue_start", str(neutral_id))
+	game_root.close_active_dialogue("far_actor_interaction_runner_smoke")
+	await process_frame
+	_cleanup_far_actor_interaction_runner_smoke(game_root, neutral_id, original_grid, original_ap)
+
+
+func _cleanup_far_actor_interaction_runner_smoke(game_root: Node, neutral_id: int, original_grid: Dictionary, original_ap: float) -> void:
+	game_root.hud.hide_interaction_menu()
+	game_root.clear_interaction_selection("far_actor_interaction_runner_smoke_cleanup")
+	game_root.close_active_dialogue("far_actor_interaction_runner_smoke_cleanup")
+	if game_root.simulation.actor_registry.get_actor(neutral_id) != null:
+		game_root.simulation.actor_registry.unregister_actor(neutral_id)
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player != null:
+		player.grid_position = GridCoord.from_dictionary(original_grid)
+		player.ap = original_ap
+		player.turn_open = true
+	game_root.rebuild_runtime_world()
+
+
+func _expect_interaction_approach_phase_snapshot(errors: Array[String], game_root: Node, expected_target_actor_id: int) -> void:
+	var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	var phase: Dictionary = _dictionary_or_empty(runner.get("interaction_phase", {}))
+	if str(runner.get("action_kind", "")) != "interact":
+		errors.append("far actor interaction should enter interact runner action, got %s" % JSON.stringify(runner))
+	if int(runner.get("actor_id", 0)) != 1:
+		errors.append("far actor interaction should keep player actor id in runner, got %s" % JSON.stringify(runner))
+	if not bool(runner.get("active", false)):
+		errors.append("far actor interaction approach should keep runner active, got %s" % JSON.stringify(runner))
+	if str(phase.get("target_id", "")) != str(expected_target_actor_id):
+		errors.append("far actor interaction approach should expose target actor id %s, got %s" % [expected_target_actor_id, JSON.stringify(phase)])
+	if not bool(phase.get("approach_active", false)):
+		errors.append("far actor interaction should expose active approach phase, got %s" % JSON.stringify(phase))
+	if str(phase.get("pending_kind", "")) != "interaction":
+		errors.append("far actor interaction approach should expose pending_kind interaction, got %s" % JSON.stringify(phase))
+	if _dictionary_or_empty(phase.get("approach_from_grid", {})).is_empty():
+		errors.append("far actor interaction approach should expose from grid, got %s" % JSON.stringify(phase))
+	if _dictionary_or_empty(phase.get("approach_to_grid", {})).is_empty():
+		errors.append("far actor interaction approach should expose to grid, got %s" % JSON.stringify(phase))
+	if int(phase.get("approach_step_index", 0)) <= 0:
+		errors.append("far actor interaction approach should expose positive step index, got %s" % JSON.stringify(phase))
+	if int(phase.get("approach_total_steps", 0)) <= 0:
+		errors.append("far actor interaction approach should expose total steps, got %s" % JSON.stringify(phase))
+	var approach_node: Dictionary = _dictionary_or_empty(phase.get("approach_node", {}))
+	if int(approach_node.get("node_instance_id", 0)) <= 0:
+		errors.append("far actor interaction approach should expose player ActorView node instance, got %s" % JSON.stringify(phase))
+	if not bool(approach_node.get("action_runner_active", false)):
+		errors.append("far actor interaction approach node should be action-runner active, got %s" % JSON.stringify(approach_node))
+	if str(approach_node.get("action_runner_kind", "")) != "move_step":
+		errors.append("far actor interaction approach node should expose move_step kind, got %s" % JSON.stringify(approach_node))
 
 
 func _expect_ground_grid_move(errors: Array[String], game_root: Node) -> void:
