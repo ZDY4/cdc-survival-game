@@ -2549,6 +2549,16 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	if runner.has("ap_delta") and not runtime_line.contains("Delta"):
 		errors.append("HUD runtime line should expose turn action runner AP delta, got %s" % runtime_line)
 	var active_control_snapshot: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
+	var actor_view_snapshot: Dictionary = _dictionary_or_empty(active_control_snapshot.get("actor_view", {}))
+	var actor_nodes: Dictionary = _dictionary_or_empty(actor_view_snapshot.get("actor_nodes", {}))
+	var player_actor_node_snapshot: Dictionary = _dictionary_or_empty(actor_nodes.get("1", {}))
+	if player_actor_node_snapshot.is_empty():
+		errors.append("runtime control snapshot should expose player actor node registry during movement, got %s" % JSON.stringify(actor_view_snapshot))
+	var player_node_instance_before_finish := int(player_actor_node_snapshot.get("node_instance_id", 0))
+	if player_node_instance_before_finish <= 0:
+		errors.append("player actor node registry should expose stable instance id during movement, got %s" % JSON.stringify(player_actor_node_snapshot))
+	if not bool(player_actor_node_snapshot.get("action_runner_active", false)):
+		errors.append("player actor node registry should expose action runner active metadata during movement, got %s" % JSON.stringify(player_actor_node_snapshot))
 	var camera_follow: Dictionary = _dictionary_or_empty(active_control_snapshot.get("camera_follow", {}))
 	if str(camera_follow.get("follow_source", "")) != "actor_node":
 		errors.append("runtime control snapshot should expose actor-node camera follow during movement, got %s" % JSON.stringify(camera_follow))
@@ -2606,6 +2616,11 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	var camera_instance_after_finish := camera_after_finish.get_instance_id() if camera_after_finish != null else 0
 	if camera_instance_before_finish != 0 and camera_instance_after_finish != camera_instance_before_finish:
 		errors.append("turn action runner move should not replace WorldCamera")
+	var completed_actor_view: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("actor_view", {}))
+	var completed_actor_nodes: Dictionary = _dictionary_or_empty(completed_actor_view.get("actor_nodes", {}))
+	var completed_player_node_snapshot: Dictionary = _dictionary_or_empty(completed_actor_nodes.get("1", {}))
+	if player_node_instance_before_finish > 0 and int(completed_player_node_snapshot.get("node_instance_id", 0)) != player_node_instance_before_finish:
+		errors.append("turn action runner move should keep the same player actor node instance, before=%s after=%s" % [str(player_node_instance_before_finish), JSON.stringify(completed_player_node_snapshot)])
 	player_node = game_root.find_child("Actor_player_1", true, false) as Node3D
 	if player_node != null and player_node.position.distance_to(visual_final) > 0.08:
 		errors.append("player visual node should finish at final movement grid without full rerender")

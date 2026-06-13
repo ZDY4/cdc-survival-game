@@ -194,6 +194,8 @@ func snapshot() -> Dictionary:
 	var node := active_actor_node(active_actor_id)
 	output["node_instance_id"] = node.get_instance_id() if node != null else 0
 	output["node_position"] = node.global_position if node != null else Vector3.ZERO
+	output["actor_nodes"] = _actor_nodes_snapshot()
+	output["actor_node_count"] = _dictionary_or_empty(output.get("actor_nodes", {})).size()
 	return output
 
 
@@ -233,6 +235,31 @@ func _active_node_ref() -> Node3D:
 	if node == null or node.is_queued_for_deletion():
 		return null
 	return node
+
+
+func _actor_nodes_snapshot() -> Dictionary:
+	var output: Dictionary = {}
+	if world_container == null:
+		return output
+	var pending: Array[Node] = [world_container]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		var node_3d := node as Node3D
+		if node_3d != null and node_3d.has_meta("actor_id"):
+			var actor_id := int(node_3d.get_meta("actor_id", 0))
+			if actor_id > 0:
+				output[str(actor_id)] = {
+					"actor_id": actor_id,
+					"node_path": str(node_3d.get_path()),
+					"node_instance_id": node_3d.get_instance_id(),
+					"node_position": node_3d.global_position,
+					"action_runner_active": bool(node_3d.get_meta("action_runner_active", false)),
+					"action_runner_step_active": bool(node_3d.get_meta("action_runner_step_active", false)),
+					"action_runner_kind": str(node_3d.get_meta("action_runner_kind", "")),
+				}
+		for child in node.get_children():
+			pending.append(child)
+	return output
 
 
 func _grid_to_world(grid: Dictionary, y: float = DEFAULT_ACTOR_Y) -> Vector3:
