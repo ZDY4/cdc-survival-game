@@ -244,6 +244,23 @@ func finish_active(reason: String = "fast_forward") -> Dictionary:
 	return output
 
 
+func settle_stable_boundary(reason: String = "stable_boundary") -> Dictionary:
+	if actor_view != null and actor_view.has_method("finish_active_actor_presentation"):
+		actor_view.call("finish_active_actor_presentation", int(action.get("presenting_npc_actor_id", action.get("actor_id", 0))))
+	active = false
+	action["phase"] = "stable_boundary"
+	action["turn_phase"] = "player"
+	latest_result["settle_reason"] = reason
+	var actor_id := int(action.get("actor_id", 0))
+	if actor_id > 0:
+		_clear_actor_action_state(actor_id, reason)
+	var output := snapshot()
+	output["settled"] = true
+	output["reason"] = reason
+	_sync_host_after_step(output)
+	return output
+
+
 func snapshot() -> Dictionary:
 	var view_snapshot: Dictionary = _dictionary_or_empty(actor_view.call("snapshot")) if actor_view != null and actor_view.has_method("snapshot") else {}
 	var path: Array = _array_or_empty(action.get("path", [])).duplicate(true)

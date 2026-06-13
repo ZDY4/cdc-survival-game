@@ -818,7 +818,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 			"target_position": far_target.duplicate(true),
 			"path": [current_grid.duplicate(true), far_target.duplicate(true)],
 		}
-	_press_key(game_root, KEY_ESCAPE)
+	var close_runner_result: Dictionary = _dictionary_or_empty(game_root.close_active_ui("keyboard_escape"))
+	if str(close_runner_result.get("closed", "")) != "turn_action_runner":
+		errors.append("Esc should settle active turn action runner first: %s" % JSON.stringify(close_runner_result))
+	var settle_result: Dictionary = _dictionary_or_empty(close_runner_result.get("result", {}))
+	if not bool(settle_result.get("settled", false)):
+		errors.append("Esc should use turn runner stable boundary facade: %s" % JSON.stringify(close_runner_result))
 	var runner_after_esc: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
 	if bool(runner_after_esc.get("active", false)) or bool(runner_after_esc.get("presentation_active", false)):
 		errors.append("Esc should finish active turn action runner: %s" % JSON.stringify(runner_after_esc))
@@ -3119,9 +3124,6 @@ func _wait_until_runtime_events_advance(game_root: Node, before_count: int, max_
 
 
 func _wait_for_turn_action_runner_idle(game_root: Node, max_frames: int = 720) -> void:
-	if game_root.has_method("finish_active_action"):
-		game_root.finish_active_action("ui_toggle_smoke_stable_boundary")
-		await process_frame
 	for _i in range(max_frames):
 		var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
 		if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)):

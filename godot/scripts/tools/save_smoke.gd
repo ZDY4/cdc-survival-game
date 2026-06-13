@@ -676,8 +676,8 @@ func _validate_runner_stable_save_boundary() -> Array[String]:
 		var boundary_result: Dictionary = game_root.prepare_runtime_save_boundary("save_smoke_stable_boundary") if game_root.has_method("prepare_runtime_save_boundary") else {}
 		if not bool(boundary_result.get("success", false)) or not bool(boundary_result.get("save_allowed", false)):
 			errors.append("prepare_runtime_save_boundary should allow save after runner stable boundary: %s" % JSON.stringify(boundary_result))
-		if not bool(boundary_result.get("finished_active_action", false)):
-			errors.append("prepare_runtime_save_boundary should finish active runner before save: %s" % JSON.stringify(boundary_result))
+		if not bool(boundary_result.get("drained_turn_action_runner", false)):
+			errors.append("prepare_runtime_save_boundary should drain active runner before save: %s" % JSON.stringify(boundary_result))
 		var before_policy: Dictionary = _dictionary_or_empty(boundary_result.get("before_policy", {}))
 		var after_policy: Dictionary = _dictionary_or_empty(boundary_result.get("after_policy", {}))
 		if not bool(before_policy.get("runner_active", false)) or bool(before_policy.get("structural_render_allowed", true)):
@@ -692,7 +692,7 @@ func _validate_runner_stable_save_boundary() -> Array[String]:
 		var runtime_snapshot: Dictionary = game_root.simulation.snapshot()
 		var service := SaveService.new("user://save_smoke_runner")
 		service.delete_snapshot("stable_boundary")
-		var saved := service.save_snapshot("stable_boundary", runtime_snapshot, {"boundary": "finish_active_action"})
+		var saved := service.save_snapshot("stable_boundary", runtime_snapshot, {"boundary": "drain_turn_action_runner"})
 		var loaded := service.load_snapshot("stable_boundary")
 		service.delete_snapshot("stable_boundary")
 		if not saved or not bool(loaded.get("ok", false)):

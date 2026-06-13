@@ -993,32 +993,47 @@ func drain_turn_action_runner(max_steps: int = 240) -> Dictionary:
 	return runner
 
 
-func finish_active_action(reason: String = "finish_active_action") -> Dictionary:
+func settle_turn_action_runner_boundary(reason: String = "stable_boundary", max_steps: int = 8) -> Dictionary:
 	if turn_action_runner == null or not turn_action_runner.has_method("snapshot"):
-		return {"success": false, "reason": "turn_action_runner_missing", "active": false}
+		return {"active": false, "phase": "missing", "settled": false}
 	var before: Dictionary = turn_action_runner_snapshot()
-	if not bool(before.get("active", false)) and not bool(before.get("presentation_active", false)):
-		before["success"] = true
-		before["finished"] = false
-		before["reason"] = "turn_action_runner_idle"
-		return before
-	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("finish_active", reason)) if turn_action_runner.has_method("finish_active") else {}
-	var after: Dictionary = turn_action_runner_snapshot()
-	result["success"] = true
-	result["finished"] = true
-	result["reason"] = reason
-	result["before"] = before.duplicate(true)
-	result["after"] = after.duplicate(true)
-	refresh_hud(current_interaction_prompt())
-	return result
+	if bool(before.get("active", false)) or bool(before.get("presentation_active", false)):
+		if turn_action_runner.has_method("settle_stable_boundary"):
+			var settled: Dictionary = _dictionary_or_empty(turn_action_runner.call("settle_stable_boundary", reason))
+			settled["before"] = before.duplicate(true)
+			settled["settle_steps"] = 1
+			settled["settle_limit"] = max_steps
+			settled["settled"] = not bool(settled.get("active", false)) and not bool(settled.get("presentation_active", false))
+			return settled
+	var steps := 0
+	var runner: Dictionary = before.duplicate(true)
+	while steps < max_steps and (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))):
+		steps += 1
+		if bool(runner.get("presentation_active", false)) and actor_view_controller != null and actor_view_controller.has_method("finish_active_actor_presentation"):
+			actor_view_controller.call("finish_active_actor_presentation", int(runner.get("presenting_npc_actor_id", runner.get("actor_id", 0))))
+		if turn_action_runner.has_method("process"):
+			turn_action_runner.call("process")
+		runner = turn_action_runner_snapshot()
+		if str(runner.get("phase", "")) == "player_turn_end" or str(runner.get("phase", "")) == "pending_resume":
+			break
+		if bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)) and not str(runner.get("pending_kind", "")).is_empty():
+			break
+	runner["settled"] = not bool(runner.get("presentation_active", false))
+	runner["settle_steps"] = steps
+	runner["settle_limit"] = max_steps
+	runner["reason"] = reason
+	runner["before"] = before.duplicate(true)
+	return runner
 
 
 func prepare_runtime_save_boundary(reason: String = "save_boundary") -> Dictionary:
 	var before_runner: Dictionary = turn_action_runner_snapshot()
 	var before_policy: Dictionary = world_render_policy_snapshot()
-	var finish_result: Dictionary = {}
+	var drain_result: Dictionary = {}
 	if bool(before_runner.get("active", false)) or bool(before_runner.get("presentation_active", false)):
-		finish_result = finish_active_action(reason)
+		drain_result = drain_turn_action_runner()
+		drain_result["reason"] = reason
+		refresh_hud(current_interaction_prompt())
 	var after_runner: Dictionary = turn_action_runner_snapshot()
 	var after_policy: Dictionary = world_render_policy_snapshot()
 	var stable := not bool(after_runner.get("active", false)) and not bool(after_runner.get("presentation_active", false))
@@ -1028,8 +1043,8 @@ func prepare_runtime_save_boundary(reason: String = "save_boundary") -> Dictiona
 		"reason": reason if stable and structural_allowed else "save_boundary_unstable",
 		"stable": stable,
 		"save_allowed": stable and structural_allowed,
-		"finished_active_action": not finish_result.is_empty() and bool(finish_result.get("finished", false)),
-		"finish_result": finish_result.duplicate(true),
+		"drained_turn_action_runner": not drain_result.is_empty() and bool(drain_result.get("drained", false)),
+		"drain_result": drain_result.duplicate(true),
 		"before_runner": before_runner.duplicate(true),
 		"after_runner": after_runner.duplicate(true),
 		"before_policy": before_policy.duplicate(true),
@@ -1106,10 +1121,11 @@ func _play_hud_shortcut_audio(event_kind: String, control_name: String, control_
 
 func finish_world_action_presentations() -> Dictionary:
 	var result: Dictionary = {}
-	if turn_action_runner != null and turn_action_runner.has_method("finish_active"):
+	if turn_action_runner != null and turn_action_runner.has_method("snapshot"):
 		var runner: Dictionary = turn_action_runner_snapshot()
 		if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
-			result = _dictionary_or_empty(turn_action_runner.call("finish_active", "finish_world_action_presentations"))
+			result = drain_turn_action_runner()
+			result["reason"] = "finish_world_action_presentations"
 	if world_action_flow_controller != null and world_action_flow_controller.has_method("finish_active_presentations"):
 		var presenter_result: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("finish_active_presentations"))
 		if result.is_empty() or bool(presenter_result.get("active", false)) or int(presenter_result.get("finished_count", 0)) > 0:
@@ -1291,6 +1307,18 @@ func close_active_ui(reason: String = "closed") -> Dictionary:
 		var modal_result: Dictionary = _dictionary_or_empty(hud_root.close_blocking_modal())
 		if bool(modal_result.get("success", false)):
 			return {"success": true, "closed": str(modal_result.get("closed", "modal")), "result": modal_result}
+	var runner_before_close: Dictionary = turn_action_runner_snapshot()
+	if bool(runner_before_close.get("active", false)) or bool(runner_before_close.get("presentation_active", false)):
+		var pending_before: Dictionary = _runtime_pending_state_snapshot()
+		var runner_result: Dictionary = settle_turn_action_runner_boundary(reason)
+		refresh_hud(current_interaction_prompt())
+		return {
+			"success": true,
+			"closed": "turn_action_runner",
+			"result": runner_result,
+			"pending_before": pending_before,
+			"pending_after": _runtime_pending_state_snapshot(),
+		}
 	if _world_action_presenter_blocks_input():
 		var pending_before: Dictionary = _runtime_pending_state_snapshot()
 		var result: Dictionary = finish_world_action_presentations()
