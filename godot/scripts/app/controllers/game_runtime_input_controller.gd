@@ -386,7 +386,7 @@ func _handle_camera_key(event: InputEventKey) -> bool:
 
 
 func _process_space_wait_hold(delta: float) -> void:
-	space_wait_hold_controller.process(delta, _space_wait_repeat_allowed(), Callable(game_root, "press_space_action") if game_root.has_method("press_space_action") else Callable())
+	space_wait_hold_controller.process(delta, _space_wait_repeat_allowed(), Callable(game_root, "repeat_space_wait_action") if game_root.has_method("repeat_space_wait_action") else Callable())
 
 
 func _start_space_wait_hold_if_allowed(result: Dictionary) -> void:
@@ -402,11 +402,18 @@ func _space_wait_result_can_repeat(result: Dictionary) -> bool:
 
 
 func _space_wait_repeat_allowed() -> bool:
-	if _gameplay_input_blocked_by_ui():
+	if _gameplay_input_blocked_by_ui() and not _space_wait_runner_blocks_input():
 		return false
 	if game_root.has_method("has_active_dialogue") and bool(game_root.has_active_dialogue()):
 		return false
 	return not _runtime_has_pending()
+
+
+func _space_wait_runner_blocks_input() -> bool:
+	if not game_root.has_method("turn_action_runner_snapshot"):
+		return false
+	var runner: Dictionary = _dictionary_or_empty(game_root.turn_action_runner_snapshot())
+	return (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "wait"
 
 
 func _handle_digit_key(digit: int) -> bool:

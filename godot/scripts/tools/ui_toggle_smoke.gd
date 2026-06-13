@@ -291,6 +291,9 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var after_held_waits := _event_count(game_root, "actor_waited")
 	if after_held_waits <= before_held_waits + 1:
 		errors.append("holding Space should repeat wait after the initial key press")
+	var held_runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	if str(held_runner.get("action_kind", "")) != "wait":
+		errors.append("holding Space repeat should stay on wait turn runner, got %s" % JSON.stringify(held_runner))
 	await _wait_process_frames(30)
 	if _event_count(game_root, "actor_waited") != after_held_waits:
 		errors.append("releasing Space should stop repeated wait")

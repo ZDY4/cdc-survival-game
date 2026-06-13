@@ -1648,6 +1648,11 @@ func has_active_dialogue() -> bool:
 
 
 func press_space_action() -> Dictionary:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "wait":
+		var drained: Dictionary = drain_turn_action_runner()
+		if not bool(drained.get("drained", false)):
+			return {"success": false, "reason": "turn_action_runner_active", "drain_result": drained}
 	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call(
 		"press_space_action",
 		has_active_dialogue(),
@@ -1662,6 +1667,20 @@ func press_space_action() -> Dictionary:
 	if bool(result.get("success", false)) and str(result.get("kind", "")) == "wait_ready":
 		return request_player_wait({"reason": "press_space_action"})
 	return _apply_wait_action_operation(operation, "press_space_action")
+
+
+func repeat_space_wait_action() -> Dictionary:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
+		var drained: Dictionary = drain_turn_action_runner()
+		if not bool(drained.get("drained", false)):
+			return {"success": false, "reason": "turn_action_runner_active", "drain_result": drained}
+	if has_active_dialogue() or is_observe_mode_enabled() or gameplay_input_blocked_by_ui():
+		return {"success": false, "reason": "space_repeat_blocked"}
+	var pending: Dictionary = _runtime_pending_state_snapshot()
+	if not _dictionary_or_empty(pending.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(pending.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(pending.get("pending_crafting", {})).is_empty():
+		return {"success": false, "reason": "pending_blocked"}
+	return request_player_wait({"reason": "space_hold_repeat"})
 
 
 func submit_wait_action() -> Dictionary:
