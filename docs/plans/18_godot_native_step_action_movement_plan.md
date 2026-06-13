@@ -1,12 +1,13 @@
-# Godot 原生逐步动作系统最终路线
+# Godot 原生逐步动作系统架构优化路线
 
-本文定义移动、回合、相机和动作表现的终态架构。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层保持权威，运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
+本文定义移动、回合、相机和动作表现从当前实现演进到终态架构的路线。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层保持权威，运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
 
 本文只记录最终架构、模块边界和能力建设顺序。所有实现都沿同一条 Godot 原生 action pipeline 推进：规则事实沉到 `Simulation`，动作节奏进入 `TurnActionRunner`，表现交给 ActorView / CameraRig / WorldRuntimeRoot，调试和 smoke 通过稳定 facade 观察同一套运行时。
 
 路线口径：
 
 - 每个阶段都以最终 action pipeline 为交付对象，并让目标架构更完整。
+- 每项改动都直接沉淀为最终系统能力，不建立临时分支、旁路流程或只服务当前问题的专用通道。
 - 不新增第二套移动、回合、交互或战斗语义；headless、smoke、debug 和手动游戏都走同一 runner facade。
 - 所有执行路径统一进入 action runner；运行时、headless smoke、debug facade 和后续验收使用同一套动作语义。
 - 文档中的阶段顺序是最终系统的能力建设顺序。
@@ -282,7 +283,7 @@ Action active 时：
 - 地图切换 / scene transition：进入结构变化队列，必须在 runner 稳定边界执行。
 - 保存：调用 `prepare_runtime_save_boundary()`，由 runner 驱动当前 action 到稳定边界后生成存档 snapshot。
 
-## 5. 动作系统实施路线
+## 5. 动作系统优化路线
 
 ### 阶段 1：建立最终 Action Runner 主线
 
@@ -293,6 +294,7 @@ Action active 时：
 - `runtime_control_snapshot()` 增加 `turn_action_runner`。
 - `PlayerInteraction`、`Movement`、`AI`、`Combat`、`Save` smoke 的运行入口全部绑定 runner facade。
 - 运行时移动、交互、攻击、等待和制作验收绑定 `TurnActionRunner`、`ActorViewController`、相机 follow snapshot 和 actor node 稳定性。
+- 移除动作执行中的重复调度职责，让输入、HUD、debug、smoke 都只提交 action request，不直接驱动规则或表现。
 
 验收：
 
@@ -310,6 +312,7 @@ Action active 时：
 - AP 每格扣除。
 - pending movement path 每格更新。
 - 主游戏路径只调用 `begin_move()` / `step_move()`。
+- 规则层只返回当前 action step 的事实结果，不提前生成整段未来表现。
 
 验收：
 
@@ -326,6 +329,7 @@ Action active 时：
 - tween finished 后 runner 继续下一格。
 - 玩家移动表现只由 TurnActionRunner 调度 ActorViewController 执行；`WorldActionPresenter` 负责非 actor-step 的世界反馈。
 - `WorldRuntimeRoot` 保持 actor node registry 稳定；普通移动只更新 actor view，不结构性替换节点。
+- 相机、脚步、朝向、选中光标和 HUD 进度都绑定当前 ActorView / runner phase，不从整图重建结果反推表现。
 
 验收：
 
@@ -343,6 +347,7 @@ Action active 时：
 - NPC 移动 / 攻击走同一 ActorView / CombatView 表现。
 - NPC 全部完成后进入 `player_turn_start`。
 - 若存在 pending movement / pending interaction，进入 `pending_resume`。
+- 回合推进由 runner phase 显式驱动，`Simulation` 负责判断和生成下一步规则结果，不同步跑完整个未来回合。
 
 验收：
 
@@ -475,6 +480,7 @@ cmd /c run_godot_validate.bat
 - `runtime_control_snapshot()`、`turn_action_runner_snapshot()`、`actor_view_snapshot()`、`camera_follow_snapshot()` 成为调试和验收的稳定观察面。
 - 移动、交互、攻击、等待和制作共享同一套 action request / runner step / presentation completion 语义。
 - 任何运行时动作都不直接绕过 runner 修改 actor grid、UI 状态或世界表现。
+- 入口层只负责把玩家意图、菜单命令或测试指令转换成 action request，后续统一由 runner 和 action 模块接管。
 
 ### 里程碑 2：逐格移动规则接口定型
 
@@ -489,6 +495,7 @@ cmd /c run_godot_validate.bat
 - `ActorViewController` 负责 move tween、朝向、攻击、受击、死亡和表现完成信号。
 - `CameraRigController` 在 action active 时跟随 actor node，在 idle 时跟随 focus grid，并保留玩家手动平移策略。
 - WorldRuntimeRoot 只在地图切换、对象增删、尸体创建、楼层结构变化等结构性事件时重绘。
+- 视觉表现以稳定节点和 Godot signal 为中心组织，世界快照只作为同步事实来源，不作为每帧重建依据。
 
 ### 里程碑 4：玩家回合逐阶段化
 
