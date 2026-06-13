@@ -11,6 +11,8 @@ extends Resource
 @export var local_offset: Vector3 = Vector3.ZERO
 @export var local_rotation_degrees: Vector3 = Vector3.ZERO
 @export var draw_order: int = 0
+# 可选：针对某个 yaw/pitch key 覆写排序，用来处理左右手等部件在不同朝向下的前后关系。
+@export var direction_draw_order: Dictionary[String, int] = {}
 @export var billboard_mode: BaseMaterial3D.BillboardMode = BaseMaterial3D.BILLBOARD_ENABLED
 @export var unshaded: bool = true
 # yaw/pitch key 到贴图的映射。key 形如 yaw_045_pitch_neg45，value 为 Texture2D。

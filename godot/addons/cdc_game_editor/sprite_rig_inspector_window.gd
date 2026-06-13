@@ -2,8 +2,10 @@
 extends Window
 
 const PROFILE_ROOT := "res://assets/characters/sprite_rigs"
+const SCENE_ROOT := "res://assets/characters/sprite_rigs"
 const DEFAULT_SIZE := Vector2i(1120, 760)
 const CELL_SIZE := Vector2(78, 58)
+const PREVIEW_CAMERA_DISTANCE := 3.4
 
 var profile_paths: Array[String] = []
 var profile: Resource
@@ -19,6 +21,13 @@ var preview: TextureRect
 var path_label: Label
 var summary_label: Label
 var file_dialog: FileDialog
+var rig_viewport: SubViewport
+var rig_preview_root: Node3D
+var rig_preview_camera: Camera3D
+var rig_preview_instance: Node3D
+var rig_preview_yaw: HSlider
+var rig_preview_pitch: HSlider
+var rig_preview_label: Label
 
 
 func _ready() -> void:
@@ -91,6 +100,7 @@ func _build_ui() -> void:
 	summary_label = Label.new()
 	summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right.add_child(summary_label)
+	_build_rig_preview(right)
 
 	file_dialog = FileDialog.new()
 	file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -98,6 +108,51 @@ func _build_ui() -> void:
 	file_dialog.filters = PackedStringArray(["*.png ; PNG images"])
 	file_dialog.file_selected.connect(_on_texture_selected)
 	add_child(file_dialog)
+
+
+func _build_rig_preview(parent: Control) -> void:
+	var title_label := Label.new()
+	title_label.text = "Rig Preview"
+	parent.add_child(title_label)
+	var viewport_container := SubViewportContainer.new()
+	viewport_container.custom_minimum_size = Vector2(240, 210)
+	viewport_container.stretch = true
+	parent.add_child(viewport_container)
+	rig_viewport = SubViewport.new()
+	rig_viewport.size = Vector2i(480, 420)
+	rig_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	viewport_container.add_child(rig_viewport)
+	rig_preview_root = Node3D.new()
+	rig_preview_root.name = "SpriteRigPreviewRoot"
+	rig_viewport.add_child(rig_preview_root)
+	var light := DirectionalLight3D.new()
+	light.name = "SpriteRigPreviewLight"
+	light.rotation_degrees = Vector3(-45.0, 30.0, 0.0)
+	rig_preview_root.add_child(light)
+	rig_preview_camera = Camera3D.new()
+	rig_preview_camera.name = "SpriteRigPreviewCamera"
+	rig_preview_camera.current = true
+	rig_preview_camera.fov = 28.0
+	rig_viewport.add_child(rig_preview_camera)
+	rig_preview_label = Label.new()
+	rig_preview_label.text = "yaw 0 / pitch 0"
+	parent.add_child(rig_preview_label)
+	rig_preview_yaw = _angle_slider(0.0, 315.0, 45.0)
+	rig_preview_yaw.value_changed.connect(_on_preview_angle_changed)
+	parent.add_child(rig_preview_yaw)
+	rig_preview_pitch = _angle_slider(-90.0, 90.0, 45.0)
+	rig_preview_pitch.value_changed.connect(_on_preview_angle_changed)
+	parent.add_child(rig_preview_pitch)
+
+
+func _angle_slider(min_value: float, max_value: float, step: float) -> HSlider:
+	var slider := HSlider.new()
+	slider.min_value = min_value
+	slider.max_value = max_value
+	slider.step = step
+	slider.value = 0.0
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return slider
 
 
 func refresh_profiles() -> void:
@@ -146,6 +201,7 @@ func _load_profile(path: String) -> void:
 	_refresh_parts()
 	_refresh_grid()
 	_refresh_summary()
+	_refresh_rig_preview()
 
 
 func _refresh_parts() -> void:
@@ -245,6 +301,7 @@ func _on_grid_cell_pressed(key: String) -> void:
 	var texture: Texture2D = _part_textures(part).get(key, null) as Texture2D
 	preview.texture = texture
 	path_label.text = texture.resource_path if texture != null else "missing: %s" % key
+	_sync_preview_to_key(key)
 
 
 func _on_open_pressed() -> void:
@@ -272,6 +329,90 @@ func _on_texture_selected(path: String) -> void:
 	_on_grid_cell_pressed(selected_key)
 	_refresh_grid()
 	_refresh_summary()
+	_refresh_rig_preview()
+
+
+func _refresh_rig_preview() -> void:
+	if rig_preview_root == null:
+		return
+	if rig_preview_instance != null:
+		rig_preview_instance.queue_free()
+		rig_preview_instance = null
+	var scene_path := _scene_path_for_profile()
+	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		if rig_preview_label != null:
+			rig_preview_label.text = "preview scene missing"
+		return
+	var packed := load(scene_path) as PackedScene
+	if packed == null:
+		if rig_preview_label != null:
+			rig_preview_label.text = "preview scene failed"
+		return
+	var instance := packed.instantiate() as Node3D
+	if instance == null:
+		if rig_preview_label != null:
+			rig_preview_label.text = "preview instance failed"
+		return
+	rig_preview_instance = instance
+	if rig_preview_instance is CharacterSpriteRig:
+		(rig_preview_instance as CharacterSpriteRig).profile = profile as SpriteRigProfile
+		(rig_preview_instance as CharacterSpriteRig).enable_runtime_update = false
+	rig_preview_root.add_child(rig_preview_instance)
+	rig_preview_instance.position = Vector3(0.0, -0.55, 0.0)
+	if rig_preview_instance is CharacterSpriteRig:
+		(rig_preview_instance as CharacterSpriteRig).set_direction_camera_override(rig_preview_camera)
+	_on_preview_angle_changed(0.0)
+
+
+func _scene_path_for_profile() -> String:
+	if profile_path.is_empty():
+		return ""
+	var profile_dir := profile_path.get_base_dir()
+	var rig_id := profile_dir.get_file()
+	if rig_id.is_empty():
+		return ""
+	return SCENE_ROOT.path_join("%s.tscn" % rig_id)
+
+
+func _on_preview_angle_changed(_value: float) -> void:
+	if rig_preview_camera == null:
+		return
+	var yaw := float(rig_preview_yaw.value if rig_preview_yaw != null else 0.0)
+	var pitch := float(rig_preview_pitch.value if rig_preview_pitch != null else 0.0)
+	var yaw_rad := deg_to_rad(yaw)
+	var pitch_rad := deg_to_rad(pitch)
+	var horizontal := cos(pitch_rad) * PREVIEW_CAMERA_DISTANCE
+	var target := Vector3(0.0, 0.55, 0.0)
+	var camera_position := target + Vector3(sin(yaw_rad) * horizontal, sin(pitch_rad) * PREVIEW_CAMERA_DISTANCE, cos(yaw_rad) * horizontal)
+	rig_preview_camera.look_at_from_position(camera_position, target, Vector3.UP)
+	if rig_preview_instance is CharacterSpriteRig:
+		(rig_preview_instance as CharacterSpriteRig).call("_update_directions", true)
+	if rig_preview_label != null:
+		var key := ""
+		if profile != null and profile.has_method("direction_key_for"):
+			key = _direction_key_for(int(round(yaw)), int(round(pitch)))
+		rig_preview_label.text = "yaw %03d / pitch %d  %s" % [int(round(yaw)), int(round(pitch)), key]
+
+
+func _sync_preview_to_key(key: String) -> void:
+	var parsed := _parse_direction_key(key)
+	if parsed.is_empty():
+		return
+	if rig_preview_yaw != null:
+		rig_preview_yaw.value = float(parsed.get("yaw", 0))
+	if rig_preview_pitch != null:
+		rig_preview_pitch.value = float(parsed.get("pitch", 0))
+	_on_preview_angle_changed(0.0)
+
+
+func _parse_direction_key(key: String) -> Dictionary:
+	var parts := key.split("_")
+	if parts.size() < 4:
+		return {}
+	var yaw := int(parts[1])
+	var pitch_text := str(parts[3])
+	var pitch := -int(pitch_text.trim_prefix("neg")) if pitch_text.begins_with("neg") else int(pitch_text)
+	return {"yaw": yaw, "pitch": pitch}
 
 
 func _profile_sprites() -> Array:

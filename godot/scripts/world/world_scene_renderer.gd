@@ -1345,6 +1345,7 @@ func _apply_combat_feedback_meta(node: Node, actor_data: Dictionary, feedback_ki
 
 
 func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
+	var actor_rig := parent.find_child("ActorModel", false, false) as CharacterSpriteRig
 	for visual in equipment_visuals:
 		var visual_data: Dictionary = _dictionary_or_empty(visual)
 		var model_asset := str(visual_data.get("model_asset", "")).strip_edges()
@@ -1363,11 +1364,19 @@ func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
 		if model_root == null:
 			push_warning("装备模型资源实例化失败，跳过显示: %s" % scene_path)
 			continue
+		var attach_target := str(visual_data.get("attach_target", slot_id))
+		var equipment_parent: Node3D = parent
+		var rig_attachment_name := ""
+		if actor_rig != null:
+			var rig_attachment := actor_rig.equipment_attachment_for(slot_id, attach_target)
+			if rig_attachment != null:
+				equipment_parent = rig_attachment
+				rig_attachment_name = str(rig_attachment.name)
 		model_root.name = "EquipmentModel_%s" % slot_id
 		model_root.set_meta("slot_id", slot_id)
 		model_root.set_meta("item_id", str(visual_data.get("item_id", "")))
 		model_root.set_meta("model_asset", model_asset)
-		model_root.set_meta("attach_target", str(visual_data.get("attach_target", slot_id)))
+		model_root.set_meta("attach_target", attach_target)
 		model_root.set_meta("socket_id", str(visual_data.get("socket_id", "")))
 		model_root.set_meta("body_region", str(visual_data.get("body_region", "")))
 		model_root.set_meta("presentation_mode", str(visual_data.get("presentation_mode", "")))
@@ -1376,9 +1385,11 @@ func _add_equipment_models(parent: Node3D, equipment_visuals: Array) -> void:
 		model_root.set_meta("weapon_visual_kind", str(visual_data.get("weapon_visual_kind", "")))
 		model_root.set_meta("reload_visual_state", str(visual_data.get("reload_visual_state", "")))
 		model_root.set_meta("muzzle_offset", _vector3_or_default(visual_data.get("muzzle_offset", Vector3.ZERO), Vector3.ZERO))
+		model_root.set_meta("attached_to_sprite_rig", not rig_attachment_name.is_empty())
+		model_root.set_meta("sprite_rig_attachment", rig_attachment_name)
 		_apply_equipment_model_transform(model_root as Node3D, visual_data)
 		_apply_equipment_model_tint(model_root as Node3D, str(visual_data.get("tint", "")))
-		parent.add_child(model_root)
+		equipment_parent.add_child(model_root)
 		_add_equipment_muzzle_marker(model_root as Node3D, visual_data)
 		_add_visual_collision_proxy(model_root as Node3D, model_asset)
 

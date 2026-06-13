@@ -288,24 +288,36 @@ func _validate_actor_sprite_rig_direction_switch(actor_model: Node, errors: Arra
 	var was_current := camera.current
 	camera.current = true
 	camera.global_position = rig.global_position + Vector3(0.0, 0.0, 10.0)
-	rig.call("_update_directions")
+	rig.call("_update_directions", true)
 	var first_key := str(rig.get_meta("direction_key", ""))
 	var first_texture := str(sprite.get_meta("texture_resource_path", ""))
+	var first_refresh_count := int(rig.get_meta("direction_refresh_count", 0))
+	rig.call("_update_directions")
+	var skipped_refresh_count := int(rig.get_meta("direction_refresh_count", 0))
 	camera.global_position = rig.global_position + Vector3(10.0, 0.0, 0.0)
 	rig.call("_update_directions")
 	var second_key := str(rig.get_meta("direction_key", ""))
 	var second_texture := str(sprite.get_meta("texture_resource_path", ""))
+	var second_refresh_count := int(rig.get_meta("direction_refresh_count", 0))
+	var hand_l: Sprite3D = rig.find_child("SpriteRigSprite_hand_l", true, false) as Sprite3D
 	if first_key != "yaw_000_pitch_0":
 		errors.append("player sprite rig should quantize forward camera to yaw_000_pitch_0, got %s" % first_key)
 	if second_key != "yaw_090_pitch_0":
 		errors.append("player sprite rig should quantize side camera to yaw_090_pitch_0, got %s" % second_key)
 	if first_texture == second_texture or not second_texture.ends_with("/body/yaw_090_pitch_0.png"):
 		errors.append("player sprite rig should switch body texture when camera yaw changes")
+	if skipped_refresh_count != first_refresh_count:
+		errors.append("player sprite rig should skip refresh when camera and rig did not move")
+	if second_refresh_count <= skipped_refresh_count:
+		errors.append("player sprite rig should refresh when camera moves")
+	if hand_l == null or int(hand_l.get_meta("draw_order", 0)) != 35:
+		errors.append("player sprite rig should apply direction-specific draw order for left hand at yaw_090_pitch_0")
 	camera.global_transform = original_transform
 	camera.current = was_current
 
 
 func _validate_player_equipment_models(player: Node, errors: Array[String]) -> void:
+	var actor_rig: CharacterSpriteRig = player.find_child("ActorModel", true, false) as CharacterSpriteRig
 	for slot_id in ["main_hand", "body", "legs", "feet"]:
 		var model: Node = player.find_child("EquipmentModel_%s" % slot_id, true, false)
 		if model == null:
@@ -321,6 +333,11 @@ func _validate_player_equipment_models(player: Node, errors: Array[String]) -> v
 			errors.append("equipment model %s should expose attachment transform metadata" % slot_id)
 		if str(model.get_meta("tint", "")).strip_edges().is_empty() or not bool(model.get_meta("tint_applied", false)) or int(model.get_meta("tinted_mesh_count", 0)) <= 0:
 			errors.append("equipment model %s should apply appearance tint metadata" % slot_id)
+		if actor_rig != null:
+			if not bool(model.get_meta("attached_to_sprite_rig", false)):
+				errors.append("equipment model %s should attach to sprite rig bone attachment" % slot_id)
+			if str(model.get_meta("sprite_rig_attachment", "")).strip_edges().is_empty():
+				errors.append("equipment model %s should expose sprite rig attachment metadata" % slot_id)
 		_validate_visual_collision_proxy(model, errors, "equipment model %s" % slot_id)
 	var main_hand: Node = player.find_child("EquipmentModel_main_hand", true, false)
 	if main_hand != null and str(main_hand.get_meta("model_asset", "")) != "preview_placeholders/placeholders/weapon_dagger.gltf":

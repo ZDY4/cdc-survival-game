@@ -219,16 +219,23 @@ func _validate_sprite_rig_scene(scene_path: String, issues: Array[Dictionary]) -
 		issues.append(_issue("error", "$.base_model_asset", "sprite_rig_scene_instance_failed", "sprite rig scene failed to instantiate: %s" % scene_path))
 		return
 	var profile: Resource = instance.get("profile") if instance.get("profile") is Resource else null
-	instance.free()
 	if profile == null:
 		issues.append(_issue("error", "$.base_model_asset", "sprite_rig_profile_missing", "sprite rig scene must expose a SpriteRigProfile in profile"))
+		instance.free()
 		return
+	var skeleton: Skeleton3D = instance.find_child("SpriteRigSkeleton", true, false) as Skeleton3D
+	if skeleton == null:
+		issues.append(_issue("error", "$.base_model_asset", "sprite_rig_skeleton_missing", "sprite rig scene must contain SpriteRigSkeleton"))
 	var yaw_step := int(profile.get("yaw_step_degrees"))
 	var pitch_step := int(profile.get("pitch_step_degrees"))
 	if yaw_step <= 0 or 360 % yaw_step != 0:
 		issues.append(_issue("error", "$.base_model_asset.profile.yaw_step_degrees", "sprite_rig_invalid_yaw_step", "yaw step must divide 360"))
 	if pitch_step <= 0 or 180 % pitch_step != 0:
 		issues.append(_issue("error", "$.base_model_asset.profile.pitch_step_degrees", "sprite_rig_invalid_pitch_step", "pitch step must divide 180"))
+	var valid_direction_keys := {}
+	for yaw in _angle_range(0, 360 - yaw_step, yaw_step):
+		for pitch in _angle_range(-90, 90, pitch_step):
+			valid_direction_keys[_sprite_rig_key(yaw, pitch)] = true
 	var bones: Array = profile.get("bones") if typeof(profile.get("bones")) == TYPE_ARRAY else []
 	var bone_names := {}
 	for bone in bones:
@@ -239,6 +246,8 @@ func _validate_sprite_rig_scene(scene_path: String, issues: Array[Dictionary]) -
 		if name.is_empty():
 			continue
 		bone_names[name] = true
+		if skeleton != null and skeleton.find_bone(name) < 0:
+			issues.append(_issue("error", "$.base_model_asset.profile.bones.%s" % name, "sprite_rig_scene_bone_missing", "sprite rig scene Skeleton3D missing profile bone %s" % name))
 	var sprites: Array = profile.get("sprites") if typeof(profile.get("sprites")) == TYPE_ARRAY else []
 	for sprite_index in range(sprites.size()):
 		var part: Resource = sprites[sprite_index] as Resource
@@ -251,12 +260,26 @@ func _validate_sprite_rig_scene(scene_path: String, issues: Array[Dictionary]) -
 			issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d].id" % sprite_index, "sprite_rig_part_id_empty", "sprite rig part id is required"))
 		if not bone_name.is_empty() and not bone_names.has(bone_name):
 			issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d].bone" % sprite_index, "sprite_rig_unknown_bone", "sprite rig part %s references unknown bone %s" % [part_id, bone_name]))
+		if skeleton != null and not part_id.is_empty():
+			var attachment := skeleton.find_child("SpriteRigAttachment_%s" % part_id, true, false) as BoneAttachment3D
+			if attachment == null:
+				issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d]" % sprite_index, "sprite_rig_attachment_missing", "sprite rig scene missing BoneAttachment3D for part %s" % part_id))
+			else:
+				if not bone_name.is_empty() and attachment.bone_name != bone_name:
+					issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d].bone" % sprite_index, "sprite_rig_attachment_bone_mismatch", "sprite rig attachment %s uses bone %s, expected %s" % [part_id, attachment.bone_name, bone_name]))
+				var scene_sprite := attachment.find_child("SpriteRigSprite_%s" % part_id, false, false) as Sprite3D
+				if scene_sprite == null:
+					issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d]" % sprite_index, "sprite_rig_sprite_missing", "sprite rig scene missing Sprite3D for part %s" % part_id))
 		var textures: Dictionary = part.get("angle_to_texture") if typeof(part.get("angle_to_texture")) == TYPE_DICTIONARY else {}
-		for yaw in _angle_range(0, 360 - yaw_step, yaw_step):
-			for pitch in _angle_range(-90, 90, pitch_step):
-				var key := _sprite_rig_key(yaw, pitch)
-				if not textures.has(key) or textures.get(key) == null:
-					issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d].angle_to_texture.%s" % [sprite_index, key], "sprite_rig_texture_missing", "sprite rig part %s missing texture %s" % [part_id, key]))
+		for texture_key in valid_direction_keys.keys():
+			if not textures.has(texture_key) or textures.get(texture_key) == null:
+				issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d].angle_to_texture.%s" % [sprite_index, texture_key], "sprite_rig_texture_missing", "sprite rig part %s missing texture %s" % [part_id, texture_key]))
+		var direction_orders: Dictionary = part.get("direction_draw_order") if typeof(part.get("direction_draw_order")) == TYPE_DICTIONARY else {}
+		for key_value in direction_orders.keys():
+			var order_key := str(key_value)
+			if not valid_direction_keys.has(order_key):
+				issues.append(_issue("error", "$.base_model_asset.profile.sprites[%d].direction_draw_order.%s" % [sprite_index, order_key], "sprite_rig_invalid_direction_order_key", "sprite rig part %s has draw order override for invalid direction %s" % [part_id, order_key]))
+	instance.free()
 
 
 func _angle_range(start: int, end: int, step: int) -> Array[int]:
