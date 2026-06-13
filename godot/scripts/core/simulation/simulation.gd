@@ -1462,6 +1462,7 @@ func submit_craft_for_runner(actor_id: int, command: Dictionary) -> Dictionary:
 		return {"success": false, "reason": "command_actor_not_player", "actor_id": actor_id}
 	if not actor.turn_open:
 		return {"success": false, "reason": "turn_closed", "actor_id": actor_id, "turn_state": turn_state.duplicate(true)}
+	var ap_before: float = actor.ap
 	var craft_command: Dictionary = command.duplicate(true)
 	craft_command["kind"] = "craft"
 	craft_command["actor_id"] = actor_id
@@ -1471,6 +1472,7 @@ func submit_craft_for_runner(actor_id: int, command: Dictionary) -> Dictionary:
 		result["cancelled_pending"] = cancelled_pending
 	if bool(result.get("success", false)):
 		result["turn_policy"] = _build_turn_policy(actor, "craft", result)
+	result["ap_before"] = ap_before
 	result["actor_id"] = actor_id
 	result["command_kind"] = "craft"
 	result["recipe_id"] = str(craft_command.get("recipe_id", result.get("recipe_id", "")))

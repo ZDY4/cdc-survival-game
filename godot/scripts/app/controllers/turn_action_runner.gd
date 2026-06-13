@@ -281,6 +281,8 @@ func snapshot() -> Dictionary:
 		"pending_movement": pending_movement,
 		"interaction_phase": _interaction_phase_snapshot(),
 		"attack_phase": _attack_phase_snapshot(view_snapshot),
+		"wait_phase": _wait_phase_snapshot(),
+		"craft_phase": _craft_phase_snapshot(),
 		"turn_cycles": int(action.get("turn_cycles", 0)),
 		"auto_turn_limit": _auto_turn_limit(),
 		"npc_queue": _array_or_empty(action.get("npc_queue", [])).duplicate(true),
@@ -363,6 +365,7 @@ func _advance_wait_step() -> Dictionary:
 		return result
 	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
 	action["ap_after"] = float(result.get("ap_before", action.get("ap_after", 0.0)))
+	_record_wait_phase(result)
 	action["phase"] = "player_turn_end"
 	action["turn_phase"] = "player_turn_end"
 	action["pending_kind"] = _pending_kind_from_result(result)
@@ -383,18 +386,22 @@ func _advance_craft_step() -> Dictionary:
 		_sync_host_after_step(result)
 		return result
 	var turn_policy: Dictionary = _dictionary_or_empty(result.get("turn_policy", {}))
+	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
 	action["ap_after"] = float(result.get("ap_remaining", turn_policy.get("ap_after_action", action.get("ap_after", 0.0))))
 	action["pending_kind"] = _pending_kind_from_result(result)
+	_record_craft_phase(result, "confirm_queue" if bool(_dictionary_or_empty(action.get("options", {})).get("crafting_queue_active", false)) else "craft")
 	var turn_check: Dictionary = _should_end_actor_turn(actor_id)
 	if not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty():
 		active = false
 		action["phase"] = "finished"
 		action["turn_phase"] = "player"
+		action["craft_completed"] = false
 		_clear_actor_action_state(actor_id, "craft_pending")
 	else:
 		active = false
 		action["phase"] = "finished"
 		action["turn_phase"] = "player"
+		action["craft_completed"] = true
 		_clear_actor_action_state(actor_id, "craft_finished")
 	result["runner_active_after"] = active
 	result["turn_check"] = turn_check.duplicate(true)
@@ -735,6 +742,10 @@ func _resume_pending_after_world_turn() -> Dictionary:
 		"turn_state": _dictionary_or_empty(pending_result.get("turn_state", {})).duplicate(true),
 	}
 	latest_result = result.duplicate(true)
+	if str(action.get("kind", "")) == "wait" and not _dictionary_or_empty(pending_result.get("resumed_pending_crafting", {})).is_empty():
+		_record_craft_phase(pending_result, "wait_resume")
+	elif str(action.get("kind", "")) == "wait" and not _dictionary_or_empty(pending_result.get("pending_crafting", {})).is_empty():
+		_record_craft_phase(pending_result, "wait_resume")
 	if not bool(result.get("success", false)):
 		active = false
 		action["phase"] = "failed"
@@ -971,6 +982,119 @@ func _interaction_target_grid(target: Dictionary) -> Dictionary:
 		if not grid.is_empty():
 			return grid.duplicate(true)
 	return {}
+
+
+func _record_wait_phase(result: Dictionary) -> void:
+	if str(action.get("kind", "")) != "wait":
+		return
+	var phase: Dictionary = _wait_phase_from_result(result)
+	if phase.is_empty():
+		return
+	action["wait_phase"] = phase
+	action["wait_completed"] = bool(phase.get("completed", false))
+
+
+func _wait_phase_snapshot() -> Dictionary:
+	if str(action.get("kind", "")) != "wait" and _dictionary_or_empty(action.get("wait_phase", {})).is_empty():
+		return {}
+	var phase: Dictionary = _dictionary_or_empty(action.get("wait_phase", {})).duplicate(true)
+	if phase.is_empty():
+		phase = _wait_phase_from_result(latest_result)
+	if phase.is_empty():
+		phase = {
+			"actor_id": int(action.get("actor_id", 0)),
+			"reason": str(_dictionary_or_empty(action.get("options", {})).get("reason", "wait")),
+		}
+	phase["phase"] = str(action.get("phase", ""))
+	phase["turn_phase"] = str(action.get("turn_phase", ""))
+	phase["completed"] = bool(action.get("wait_completed", phase.get("completed", false))) or str(action.get("phase", "")) == "finished"
+	return phase
+
+
+func _wait_phase_from_result(result: Dictionary) -> Dictionary:
+	if result.is_empty():
+		return {}
+	return {
+		"actor_id": int(result.get("actor_id", action.get("actor_id", 0))),
+		"reason": str(result.get("reason", _dictionary_or_empty(action.get("options", {})).get("reason", "wait"))),
+		"waited": bool(result.get("waited", false)),
+		"ap_before": float(result.get("ap_before", action.get("ap_before", 0.0))),
+		"pending_kind": _pending_kind_from_result(result),
+		"resumed_pending": not _dictionary_or_empty(result.get("pending_result", {})).is_empty(),
+		"completed": bool(result.get("success", false)),
+		"result_kind": str(result.get("kind", "wait")),
+	}
+
+
+func _record_craft_phase(result: Dictionary, source: String) -> void:
+	var phase: Dictionary = _craft_phase_from_result(result, source)
+	if phase.is_empty():
+		return
+	action["craft_phase"] = phase
+	action["craft_completed"] = bool(phase.get("completed", false))
+
+
+func _craft_phase_snapshot() -> Dictionary:
+	if str(action.get("kind", "")) != "craft" and _dictionary_or_empty(action.get("craft_phase", {})).is_empty():
+		return {}
+	var phase: Dictionary = _dictionary_or_empty(action.get("craft_phase", {})).duplicate(true)
+	if phase.is_empty():
+		phase = _craft_phase_from_result(latest_result, str(action.get("kind", "craft")))
+	if phase.is_empty():
+		phase = {
+			"source": str(action.get("kind", "craft")),
+			"actor_id": int(action.get("actor_id", 0)),
+			"recipe_id": str(action.get("recipe_id", "")),
+			"count": int(action.get("count", 0)),
+		}
+	phase["phase"] = str(action.get("phase", ""))
+	phase["turn_phase"] = str(action.get("turn_phase", ""))
+	phase["pending"] = not _dictionary_or_empty(phase.get("pending_crafting", {})).is_empty() or str(phase.get("result_kind", "")) == "pending_crafting"
+	phase["completed"] = bool(action.get("craft_completed", phase.get("completed", false))) or (str(action.get("phase", "")) == "finished" and not bool(phase.get("pending", false)))
+	return phase
+
+
+func _craft_phase_from_result(result: Dictionary, source: String) -> Dictionary:
+	if result.is_empty():
+		return {}
+	var direct: Dictionary = result
+	var pending_result: Dictionary = _dictionary_or_empty(result.get("pending_result", {}))
+	if not pending_result.is_empty():
+		direct = pending_result
+	var pending_crafting: Dictionary = _dictionary_or_empty(direct.get("pending_crafting", result.get("pending_crafting", {})))
+	var resumed: Dictionary = _dictionary_or_empty(direct.get("resumed_pending_crafting", result.get("resumed_pending_crafting", {})))
+	var recipe_id := str(direct.get("recipe_id", result.get("recipe_id", action.get("recipe_id", ""))))
+	var count := int(direct.get("count", result.get("count", action.get("count", 0))))
+	if recipe_id.is_empty() and not pending_crafting.is_empty():
+		recipe_id = str(pending_crafting.get("recipe_id", ""))
+		count = int(pending_crafting.get("count", count))
+	if recipe_id.is_empty() and not resumed.is_empty():
+		recipe_id = str(resumed.get("recipe_id", ""))
+		count = int(resumed.get("count", count))
+	if recipe_id.is_empty():
+		return {}
+	var required_ap := float(direct.get("required_ap", pending_crafting.get("required_ap", resumed.get("required_ap", 0.0))))
+	if required_ap <= 0.0:
+		required_ap = float(direct.get("ap_cost", result.get("ap_cost", 0.0)))
+	var progress_ap := float(pending_crafting.get("progress_ap", required_ap if bool(direct.get("success", false)) and str(direct.get("kind", "")) != "pending_crafting" else 0.0))
+	var remaining_ap := float(direct.get("remaining_ap", pending_crafting.get("remaining_ap", max(0.0, required_ap - progress_ap))))
+	var command_data: Dictionary = _dictionary_or_empty(direct.get("command", result.get("command", pending_crafting.get("command", resumed.get("command", {})))))
+	return {
+		"source": source,
+		"actor_id": int(direct.get("actor_id", result.get("actor_id", action.get("actor_id", 0)))),
+		"recipe_id": recipe_id,
+		"count": max(1, count),
+		"result_kind": str(direct.get("kind", result.get("kind", ""))),
+		"pending_crafting": pending_crafting.duplicate(true),
+		"resumed_pending_crafting": resumed.duplicate(true),
+		"required_ap": required_ap,
+		"progress_ap": progress_ap,
+		"remaining_ap": remaining_ap,
+		"ap_cost": float(direct.get("ap_cost", result.get("ap_cost", 0.0))),
+		"ap_after": float(direct.get("ap_remaining", result.get("ap_remaining", action.get("ap_after", 0.0)))),
+		"queue_active": bool(command_data.get("crafting_queue_active", false)),
+		"completed": bool(direct.get("success", false)) and pending_crafting.is_empty() and str(direct.get("kind", "")) != "pending_crafting",
+	}
 
 
 func _record_attack_phase(result: Dictionary, source: String) -> void:

@@ -737,6 +737,12 @@ func _turn_action_runner_control_text(value: Variant) -> String:
 	var attack_text := _runner_attack_phase_text(runner.get("attack_phase", {}))
 	if not attack_text.is_empty():
 		parts.append(attack_text)
+	var wait_text := _runner_wait_phase_text(runner.get("wait_phase", {}))
+	if not wait_text.is_empty():
+		parts.append(wait_text)
+	var craft_text := _runner_craft_phase_text(runner.get("craft_phase", {}))
+	if not craft_text.is_empty():
+		parts.append(craft_text)
 	var ap_before := float(runner.get("ap_before", 0.0))
 	var ap_after := float(runner.get("ap_after", 0.0))
 	if not is_zero_approx(ap_before) or not is_zero_approx(ap_after):
@@ -801,6 +807,51 @@ func _runner_attack_phase_text(value: Variant) -> String:
 		token += " defeated"
 	if bool(phase.get("presentation_active", false)):
 		token += " presenting"
+	if bool(phase.get("completed", false)):
+		token += " done"
+	return token
+
+
+func _runner_wait_phase_text(value: Variant) -> String:
+	var phase: Dictionary = _dictionary_or_empty(value)
+	if phase.is_empty():
+		return ""
+	var token := "Wait"
+	var reason := str(phase.get("reason", "")).strip_edges()
+	if not reason.is_empty() and reason != "wait":
+		token += " %s" % reason
+	var pending_kind := str(phase.get("pending_kind", "")).strip_edges()
+	if not pending_kind.is_empty():
+		token += " -> %s" % pending_kind
+	if bool(phase.get("resumed_pending", false)):
+		token += " resume"
+	if bool(phase.get("completed", false)):
+		token += " done"
+	return token
+
+
+func _runner_craft_phase_text(value: Variant) -> String:
+	var phase: Dictionary = _dictionary_or_empty(value)
+	if phase.is_empty():
+		return ""
+	var recipe_id := str(phase.get("recipe_id", "")).strip_edges()
+	var token := "Craft"
+	if not recipe_id.is_empty():
+		token += " %s" % recipe_id
+	var count := int(phase.get("count", 0))
+	if count > 0:
+		token += " x%d" % count
+	var required_ap := float(phase.get("required_ap", 0.0))
+	var progress_ap := float(phase.get("progress_ap", 0.0))
+	var remaining_ap := float(phase.get("remaining_ap", 0.0))
+	if required_ap > 0.0:
+		token += " %s/%sAP" % [_number_text(progress_ap), _number_text(required_ap)]
+	if remaining_ap > 0.0:
+		token += " remain %s" % _number_text(remaining_ap)
+	if bool(phase.get("queue_active", false)):
+		token += " queue"
+	if bool(phase.get("pending", false)):
+		token += " pending"
 	if bool(phase.get("completed", false)):
 		token += " done"
 	return token

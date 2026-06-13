@@ -632,6 +632,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not bool(queue_start.get("success", false)) or not bool(queue_start.get("pending", false)):
 		errors.append("multi-entry cross-turn queue should start with pending first entry: %s" % queue_start)
+	_assert_runner_craft_phase(errors, game_root, "recipe_bandage_basic", 50, true, "confirm_queue", "multi-entry queue pending first")
 	if not _pending_crafting_line(game_root).contains("正在制作 基础绷带 x50"):
 		errors.append("first multi-entry queue craft should remain pending after AP auto turns: %s" % _pending_crafting_line(game_root))
 	if not _queue_line(game_root).contains("制作队列 1项/1次") or not _queue_line(game_root).contains("基础绷带 x1"):
@@ -644,6 +645,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var wait_runner: Dictionary = await _wait_for_turn_action_runner_idle(game_root)
 	if bool(wait_runner.get("active", false)):
 		errors.append("multi-entry queue wait runner should become idle before assertions: %s" % JSON.stringify(wait_runner))
+	var action_chain: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("latest_action_chain", {}))
+	var chained_wait_runner: Dictionary = _dictionary_or_empty(action_chain.get("wait_runner", {}))
+	if str(action_chain.get("kind", "")) != "wait_to_crafting_queue":
+		errors.append("multi-entry queue wait should expose wait_to_crafting_queue action chain, got %s" % JSON.stringify(action_chain))
+	_assert_runner_wait_phase(errors, chained_wait_runner, "submit_wait_action", "multi-entry queue wait")
+	_assert_runner_craft_phase_from_snapshot(errors, chained_wait_runner, "recipe_bandage_basic", 50, false, "wait_resume", "multi-entry queue wait resume")
+	_assert_runner_craft_phase_from_snapshot(errors, wait_runner, "recipe_bandage_basic", 1, false, "confirm_queue", "remaining queue craft runner")
 	if not _pending_crafting_line(game_root).contains("正在制作 无"):
 		errors.append("multi-entry queue should clear pending after wait continuation: %s" % _pending_crafting_line(game_root))
 	if not _queue_line(game_root).contains("制作队列 空"):
@@ -663,6 +671,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await process_frame
 	if not bool(pending_result.get("success", false)) or str(pending_result.get("kind", "")) != "pending_crafting":
 		errors.append("AP-short craft from UI should create pending crafting: %s" % pending_result)
+	_assert_runner_craft_phase(errors, game_root, "recipe_bandage_basic", 50, true, "craft", "single pending craft")
 	if not _pending_crafting_line(game_root).contains("正在制作 基础绷带 x50"):
 		errors.append("crafting panel should show active pending craft: %s" % _pending_crafting_line(game_root))
 	if not _pending_crafting_line(game_root).contains("%"):
@@ -912,6 +921,45 @@ func _assert_pending_crafting_snapshot(errors: Array[String], game_root: Node, e
 		errors.append("%s: active pending should expose progress bar values: %s" % [context, pending])
 	if str(pending.get("progress_bar_color", "")).is_empty():
 		errors.append("%s: active pending should expose progress bar color diagnostic: %s" % [context, pending])
+
+
+func _assert_runner_craft_phase(errors: Array[String], game_root: Node, expected_recipe_id: String, expected_count: int, expected_pending: bool, expected_source: String, context: String) -> void:
+	var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	_assert_runner_craft_phase_from_snapshot(errors, runner, expected_recipe_id, expected_count, expected_pending, expected_source, context)
+
+
+func _assert_runner_craft_phase_from_snapshot(errors: Array[String], runner: Dictionary, expected_recipe_id: String, expected_count: int, expected_pending: bool, expected_source: String, context: String) -> void:
+	var phase: Dictionary = _dictionary_or_empty(runner.get("craft_phase", {}))
+	if phase.is_empty():
+		errors.append("%s: turn action runner should expose craft_phase, got %s" % [context, JSON.stringify(runner)])
+		return
+	if str(phase.get("recipe_id", "")) != expected_recipe_id:
+		errors.append("%s: craft_phase should expose recipe %s, got %s" % [context, expected_recipe_id, JSON.stringify(phase)])
+	if int(phase.get("count", 0)) != expected_count:
+		errors.append("%s: craft_phase should expose count %d, got %s" % [context, expected_count, JSON.stringify(phase)])
+	if bool(phase.get("pending", false)) != expected_pending:
+		errors.append("%s: craft_phase pending should be %s, got %s" % [context, str(expected_pending), JSON.stringify(phase)])
+	if not expected_source.is_empty() and str(phase.get("source", "")) != expected_source:
+		errors.append("%s: craft_phase should expose source %s, got %s" % [context, expected_source, JSON.stringify(phase)])
+	if float(phase.get("required_ap", 0.0)) <= 0.0:
+		errors.append("%s: craft_phase should expose required AP, got %s" % [context, JSON.stringify(phase)])
+	if expected_pending and float(phase.get("remaining_ap", 0.0)) <= 0.0:
+		errors.append("%s: pending craft_phase should expose remaining AP, got %s" % [context, JSON.stringify(phase)])
+	if not expected_pending and not bool(phase.get("completed", false)):
+		errors.append("%s: completed craft_phase should expose completed=true, got %s" % [context, JSON.stringify(phase)])
+
+
+func _assert_runner_wait_phase(errors: Array[String], runner: Dictionary, expected_reason: String, context: String) -> void:
+	var phase: Dictionary = _dictionary_or_empty(runner.get("wait_phase", {}))
+	if phase.is_empty():
+		errors.append("%s: turn action runner should expose wait_phase, got %s" % [context, JSON.stringify(runner)])
+		return
+	if str(phase.get("reason", "")) != expected_reason:
+		errors.append("%s: wait_phase should expose reason %s, got %s" % [context, expected_reason, JSON.stringify(phase)])
+	if not bool(phase.get("completed", false)):
+		errors.append("%s: wait_phase should expose completed wait, got %s" % [context, JSON.stringify(phase)])
+	if str(phase.get("pending_kind", "")) != "crafting":
+		errors.append("%s: wait_phase should expose crafting pending kind, got %s" % [context, JSON.stringify(phase)])
 
 
 func _assert_pending_crafting_cancel_result(errors: Array[String], game_root: Node, expected_recipe_id: String, expected_count: int, expected_reason: String, context: String) -> void:

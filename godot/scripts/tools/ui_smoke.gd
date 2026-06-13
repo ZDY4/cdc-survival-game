@@ -74,6 +74,24 @@ func _init() -> void:
 				"damage": 3.0,
 				"completed": true,
 			},
+			"wait_phase": {
+				"actor_id": 1,
+				"reason": "auto_tick_wait",
+				"pending_kind": "crafting",
+				"resumed_pending": true,
+				"completed": true,
+			},
+			"craft_phase": {
+				"source": "wait_resume",
+				"actor_id": 1,
+				"recipe_id": "recipe_bandage_basic",
+				"count": 2,
+				"required_ap": 4.0,
+				"progress_ap": 4.0,
+				"remaining_ap": 0.0,
+				"queue_active": true,
+				"completed": true,
+			},
 		},
 	}
 	var hud: Control = HUD_SCENE.instantiate()
@@ -121,7 +139,7 @@ func _validate_hud(hud: Control, snapshot: Dictionary) -> Array[String]:
 		errors.append("missing runtime control line")
 	else:
 		var runtime_text := str(hud.get_node("HudPanel/HudLines/RuntimeControlLine").text)
-		for token in ["Runner active move:move_step", "Step 1/2", "Remain 1", "Interact pickup/item_pickup -> survivor_outpost_01_pickup_medkit done", "Attack player #1 -> #2 hit 3 done", "AP 4/6", "Delta -2", "Pending movement"]:
+		for token in ["Runner active move:move_step", "Step 1/2", "Remain 1", "Interact pickup/item_pickup -> survivor_outpost_01_pickup_medkit done", "Attack player #1 -> #2 hit 3 done", "Wait auto_tick_wait -> crafting resume done", "Craft recipe_bandage_basic x2 4/4AP queue done", "AP 4/6", "Delta -2", "Pending movement"]:
 			if not runtime_text.contains(token):
 				errors.append("runtime control line missing runner token %s in %s" % [token, runtime_text])
 	if not hud.get_node("HudPanel/HudLines/InventoryLine").text.contains("1006"):

@@ -125,6 +125,7 @@ var latest_pending_crafting_result: Dictionary:
 	set(value):
 		if crafting_feedback_controller != null:
 			crafting_feedback_controller.latest_pending_result = value.duplicate(true)
+var latest_action_chain: Dictionary = {}
 var skill_targeting_controller: RefCounted = SkillTargetingController.new()
 var active_skill_targeting: Dictionary:
 	get:
@@ -878,6 +879,7 @@ func runtime_control_snapshot() -> Dictionary:
 	snapshot["action_presenter"] = world_action_presenter_snapshot()
 	snapshot["world_action_queue"] = world_action_queue_snapshot()
 	snapshot["turn_action_runner"] = turn_action_runner_snapshot()
+	snapshot["latest_action_chain"] = latest_action_chain.duplicate(true)
 	snapshot["actor_view"] = actor_view_snapshot()
 	snapshot["camera_follow"] = camera_follow_snapshot()
 	snapshot["world_render_policy"] = world_render_policy_snapshot()
@@ -1433,7 +1435,7 @@ func request_player_craft(command: Dictionary, options: Dictionary = {}) -> Dict
 func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: Dictionary = {}) -> Dictionary:
 	var crafting_continuation: Dictionary = {}
 	if _runner_step_should_continue_crafting_queue(step_result, runner_snapshot):
-		crafting_continuation = _continue_crafting_queue_after_wait(step_result)
+		crafting_continuation = _continue_crafting_queue_after_wait(step_result, runner_snapshot)
 	if not _rebuild_runtime_world_result("turn_action_runner_step"):
 		return {"success": false, "reason": "world_result_sync_failed"}
 	_apply_world_root_snapshot(false)
@@ -1961,10 +1963,17 @@ func _submit_crafting_queue_entry(recipe_id: String, count: int) -> Dictionary:
 	return _dictionary_or_empty(crafting_action_controller.call("_submit_craft", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), true, Callable(self, "_submit_craft_via_turn_action_runner")))
 
 
-func _continue_crafting_queue_after_wait(result: Dictionary) -> Dictionary:
+func _continue_crafting_queue_after_wait(result: Dictionary, wait_runner_snapshot: Dictionary = {}) -> Dictionary:
 	var continuation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("continue_queue_after_wait", simulation, result, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "_submit_craft_via_turn_action_runner")))
 	if bool(continuation.get("continued", false)):
 		continuation["refresh"] = ["inventory", "crafting", "skills"]
+		continuation["wait_runner_snapshot"] = wait_runner_snapshot.duplicate(true)
+		latest_action_chain = {
+			"kind": "wait_to_crafting_queue",
+			"wait_result": result.duplicate(true),
+			"wait_runner": wait_runner_snapshot.duplicate(true),
+			"queue_result": _dictionary_or_empty(continuation.get("queue_result", {})).duplicate(true),
+		}
 	return continuation
 
 
