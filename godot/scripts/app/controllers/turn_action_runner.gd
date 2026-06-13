@@ -1,5 +1,11 @@
 extends RefCounted
 
+const MoveAction = preload("res://scripts/app/controllers/actions/move_action.gd")
+const InteractAction = preload("res://scripts/app/controllers/actions/interact_action.gd")
+const AttackAction = preload("res://scripts/app/controllers/actions/attack_action.gd")
+const WaitAction = preload("res://scripts/app/controllers/actions/wait_action.gd")
+const CraftAction = preload("res://scripts/app/controllers/actions/craft_action.gd")
+
 const AUTO_TURN_ADVANCE_LIMIT := 8
 const PENDING_CRAFTING_TURN_ADVANCE_LIMIT := 64
 
@@ -28,18 +34,7 @@ func request_move(actor_id: int, target_grid: Dictionary, topology: Dictionary) 
 	if not bool(begin.get("success", false)):
 		latest_result = begin.duplicate(true)
 		return begin
-	action = {
-		"kind": "move",
-		"actor_id": actor_id,
-		"target_grid": target_grid.duplicate(true),
-		"topology": topology.duplicate(true),
-		"path": _array_or_empty(begin.get("path", [])).duplicate(true),
-		"step_index": 0,
-		"phase": "move_step",
-		"ap_before": float(begin.get("ap", 0.0)),
-		"completed_after_presentation": false,
-		"turn_cycles": 0,
-	}
+	action = MoveAction.create(actor_id, target_grid, topology, begin)
 	active = true
 	latest_result = begin.duplicate(true)
 	var step_result := _advance_move_step()
@@ -53,16 +48,7 @@ func request_attack(actor_id: int, target_actor_id: int, topology: Dictionary, o
 		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
 	if simulation == null or not simulation.has_method("submit_attack_for_runner"):
 		return {"success": false, "reason": "simulation_attack_runner_missing"}
-	action = {
-		"kind": "attack",
-		"actor_id": actor_id,
-		"target_actor_id": target_actor_id,
-		"topology": topology.duplicate(true),
-		"options": options.duplicate(true),
-		"phase": "attack_action",
-		"turn_phase": "player_action",
-		"turn_cycles": 0,
-	}
+	action = AttackAction.create(actor_id, target_actor_id, topology, options)
 	active = true
 	var result := _advance_attack_step()
 	if not bool(result.get("success", false)):
@@ -75,18 +61,7 @@ func request_interact(actor_id: int, target: Dictionary, option_id: String, topo
 		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
 	if simulation == null or not simulation.has_method("begin_interaction_for_runner"):
 		return {"success": false, "reason": "simulation_interaction_runner_missing"}
-	action = {
-		"kind": "interact",
-		"actor_id": actor_id,
-		"target": target.duplicate(true),
-		"option_id": option_id,
-		"topology": topology.duplicate(true),
-		"options": options.duplicate(true),
-		"phase": "interact_action",
-		"turn_phase": "player_action",
-		"turn_cycles": 0,
-		"completed_after_presentation": false,
-	}
+	action = InteractAction.create(actor_id, target, option_id, topology, options)
 	active = true
 	var result := _begin_interaction_action()
 	if not bool(result.get("success", false)) or not bool(action.get("runner_keeps_active", false)):
@@ -99,15 +74,7 @@ func request_wait(actor_id: int, topology: Dictionary, options: Dictionary = {})
 		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
 	if simulation == null or not simulation.has_method("submit_wait_for_runner"):
 		return {"success": false, "reason": "simulation_wait_runner_missing"}
-	action = {
-		"kind": "wait",
-		"actor_id": actor_id,
-		"topology": topology.duplicate(true),
-		"options": options.duplicate(true),
-		"phase": "wait_action",
-		"turn_phase": "player_action",
-		"turn_cycles": 0,
-	}
+	action = WaitAction.create(actor_id, topology, options)
 	active = true
 	var result := _advance_wait_step()
 	if not bool(result.get("success", false)):
@@ -120,22 +87,7 @@ func request_craft(actor_id: int, command: Dictionary, topology: Dictionary, opt
 		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
 	if simulation == null or not simulation.has_method("submit_craft_for_runner"):
 		return {"success": false, "reason": "simulation_craft_runner_missing"}
-	var craft_command: Dictionary = command.duplicate(true)
-	craft_command["kind"] = "craft"
-	craft_command["actor_id"] = actor_id
-	craft_command["topology"] = topology.duplicate(true)
-	action = {
-		"kind": "craft",
-		"actor_id": actor_id,
-		"recipe_id": str(craft_command.get("recipe_id", "")),
-		"count": max(1, int(craft_command.get("count", 1))),
-		"command": craft_command.duplicate(true),
-		"topology": topology.duplicate(true),
-		"options": options.duplicate(true),
-		"phase": "craft_action",
-		"turn_phase": "player_action",
-		"turn_cycles": 0,
-	}
+	action = CraftAction.create(actor_id, command, topology, options)
 	active = true
 	var result := _advance_craft_step()
 	if not bool(result.get("success", false)):
