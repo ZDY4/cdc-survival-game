@@ -65,6 +65,8 @@ func process() -> void:
 				_begin_world_turn_phase()
 			"npc_action":
 				_advance_npc_turn_phase()
+			"npc_presentation":
+				_finish_npc_presentation_phase()
 			"player_turn_start":
 				_finish_world_turn_phase()
 			"pending_resume":
@@ -105,6 +107,7 @@ func snapshot() -> Dictionary:
 		"npc_queue": _array_or_empty(action.get("npc_queue", [])).duplicate(true),
 		"npc_index": int(action.get("npc_index", 0)),
 		"npc_results": _array_or_empty(action.get("npc_results", [])).duplicate(true),
+		"presenting_npc_actor_id": int(action.get("presenting_npc_actor_id", 0)),
 		"blocked_reason": str(latest_result.get("reason", "")) if not bool(latest_result.get("success", true)) else "",
 		"presentation_active": bool(view_snapshot.get("active", false)),
 		"actor_view": view_snapshot,
@@ -229,8 +232,30 @@ func _advance_npc_turn_phase() -> Dictionary:
 		action["npc_results"] = npc_results
 		action["npc_index"] = int(npc_result.get("npc_index", action.get("npc_index", 0))) + 1
 		action["turn_phase"] = "npc_action"
+		var presentation: Dictionary = _present_npc_turn_result(npc_result)
+		npc_result["presentation"] = presentation
+		if bool(presentation.get("success", false)) and bool(presentation.get("active", false)):
+			action["phase"] = "npc_presentation"
+			action["turn_phase"] = "npc_presentation"
+			action["presenting_npc_actor_id"] = int(presentation.get("actor_id", 0))
 	_sync_host_after_step(npc_result)
 	return npc_result
+
+
+func _finish_npc_presentation_phase() -> Dictionary:
+	var npc_actor_id := int(action.get("presenting_npc_actor_id", 0))
+	_clear_actor_action_state(npc_actor_id, "npc_presentation_finished")
+	action["presenting_npc_actor_id"] = 0
+	action["phase"] = "npc_action"
+	action["turn_phase"] = "npc_action"
+	var result := {
+		"success": true,
+		"kind": "npc_presentation_finished",
+		"actor_id": npc_actor_id,
+	}
+	latest_result = result.duplicate(true)
+	_sync_host_after_step(result)
+	return result
 
 
 func _finish_world_turn_phase() -> Dictionary:
@@ -272,6 +297,49 @@ func _clear_actor_action_state(actor_id: int, reason: String) -> void:
 
 func _step_waits_for_player_turn(step: Dictionary) -> bool:
 	return bool(step.get("pending", false)) and str(step.get("reason", "")) == "ap_insufficient_movement_pending"
+
+
+func _present_npc_turn_result(npc_result: Dictionary) -> Dictionary:
+	if actor_view == null or not actor_view.has_method("move_actor_step"):
+		return {"success": false, "active": false, "reason": "actor_view_missing"}
+	var step: Dictionary = _npc_move_step_from_result(npc_result)
+	if step.is_empty():
+		return {"success": false, "active": false, "reason": "npc_move_step_missing"}
+	var actor_id := int(step.get("actor_id", 0))
+	if actor_id <= 0:
+		return {"success": false, "active": false, "reason": "npc_actor_id_missing"}
+	var from_grid: Dictionary = _dictionary_or_empty(step.get("from", {}))
+	var to_grid: Dictionary = _dictionary_or_empty(step.get("to", {}))
+	if from_grid.is_empty() or to_grid.is_empty():
+		return {"success": false, "active": false, "reason": "npc_move_grid_missing", "actor_id": actor_id}
+	var presentation: Dictionary = _dictionary_or_empty(actor_view.call("move_actor_step", host, actor_id, from_grid, to_grid, {
+		"duration_sec": 0.08,
+		"source": "npc_action",
+	}))
+	presentation["source"] = "npc_action"
+	return presentation
+
+
+func _npc_move_step_from_result(npc_result: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(npc_result.get("result", {}))
+	var actor_id := int(result.get("actor_id", npc_result.get("actor_id", 0)))
+	var from_grid: Dictionary = _dictionary_or_empty(result.get("from", {})).duplicate(true)
+	var to_grid: Dictionary = _dictionary_or_empty(result.get("to", {})).duplicate(true)
+	if not from_grid.is_empty() and not to_grid.is_empty():
+		return {"actor_id": actor_id, "from": from_grid, "to": to_grid}
+	for event in _array_or_empty(npc_result.get("events", [])):
+		var event_data: Dictionary = _dictionary_or_empty(event)
+		if str(event_data.get("kind", "")) != "movement_step":
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event_data.get("payload", event_data))
+		var event_actor_id := int(payload.get("actor_id", actor_id))
+		if actor_id > 0 and event_actor_id != actor_id:
+			continue
+		from_grid = _dictionary_or_empty(payload.get("from", {})).duplicate(true)
+		to_grid = _dictionary_or_empty(payload.get("to", {})).duplicate(true)
+		if not from_grid.is_empty() and not to_grid.is_empty():
+			return {"actor_id": event_actor_id, "from": from_grid, "to": to_grid}
+	return {}
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
