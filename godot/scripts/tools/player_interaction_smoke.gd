@@ -2017,14 +2017,27 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 	var saw_npc_presentation_phase := false
 	var saw_attack_presentation := false
 	var saw_attack_phase := false
+	var saw_npc_phase := false
 	for _index in range(120):
 		var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
 		var actor_view: Dictionary = _dictionary_or_empty(runner.get("actor_view", {}))
 		var attack_phase: Dictionary = _dictionary_or_empty(runner.get("attack_phase", {}))
+		var npc_phase: Dictionary = _dictionary_or_empty(runner.get("npc_phase", {}))
 		if not attack_phase.is_empty() and str(attack_phase.get("source", "")) == "npc":
 			saw_attack_phase = true
 			if int(attack_phase.get("actor_id", 0)) != attacker_id or int(attack_phase.get("target_actor_id", 0)) != player.actor_id:
 				errors.append("npc attack_phase should expose attacker and target ids, got %s" % JSON.stringify(attack_phase))
+		if not npc_phase.is_empty() and str(npc_phase.get("intent", "")) == "attack":
+			saw_npc_phase = true
+			if int(npc_phase.get("actor_id", 0)) != attacker_id or int(npc_phase.get("target_actor_id", 0)) != player.actor_id:
+				errors.append("npc_phase should expose attacker and target ids, got %s" % JSON.stringify(npc_phase))
+			if str(npc_phase.get("phase", "")) == "npc_presentation":
+				if str(npc_phase.get("turn_phase", "")) != "npc_presentation":
+					errors.append("npc_phase should expose npc_presentation turn phase, got %s" % JSON.stringify(npc_phase))
+				if int(npc_phase.get("presenting_actor_id", 0)) != attacker_id:
+					errors.append("npc_phase should expose presenting attacker, got %s" % JSON.stringify(npc_phase))
+				if not bool(npc_phase.get("presentation_active", false)):
+					errors.append("npc_phase should expose active presentation while actor view attacks, got %s" % JSON.stringify(npc_phase))
 		if str(runner.get("phase", "")) == "npc_presentation":
 			saw_npc_presentation_phase = true
 		if str(actor_view.get("kind", "")) == "attack" and int(actor_view.get("actor_id", 0)) == attacker_id and int(actor_view.get("target_actor_id", 0)) == player.actor_id:
@@ -2039,6 +2052,8 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 		errors.append("npc attack should use ActorView attack presentation")
 	if not saw_attack_phase:
 		errors.append("npc attack runner should expose attack_phase")
+	if not saw_npc_phase:
+		errors.append("npc attack runner should expose structured npc_phase")
 	await _wait_for_turn_action_runner_idle(game_root)
 	_cleanup_npc_attack_runner_smoke(game_root, player, attacker_id, original_grid, original_ap, original_turn_open, original_hp, original_side)
 

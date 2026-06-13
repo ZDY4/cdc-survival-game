@@ -289,6 +289,7 @@ func snapshot() -> Dictionary:
 		"npc_index": int(action.get("npc_index", 0)),
 		"npc_results": _array_or_empty(action.get("npc_results", [])).duplicate(true),
 		"presenting_npc_actor_id": int(action.get("presenting_npc_actor_id", 0)),
+		"npc_phase": _npc_phase_snapshot(view_snapshot),
 		"blocked_reason": str(latest_result.get("reason", "")) if not bool(latest_result.get("success", true)) else "",
 		"presentation_active": bool(view_snapshot.get("active", false)),
 		"actor_view": view_snapshot,
@@ -628,6 +629,13 @@ func _begin_world_turn_phase() -> Dictionary:
 	action["npc_queue"] = _array_or_empty(begin_result.get("npc_actor_ids", [])).duplicate(true)
 	action["npc_index"] = 0
 	action["npc_results"] = []
+	action["npc_phase"] = {
+		"phase": str(action.get("phase", "")),
+		"turn_phase": str(action.get("turn_phase", "")),
+		"npc_index": 0,
+		"npc_count": _array_or_empty(action.get("npc_queue", [])).size(),
+		"completed": false,
+	}
 	_sync_host_after_step(begin_result)
 	return begin_result
 
@@ -654,6 +662,7 @@ func _advance_npc_turn_phase() -> Dictionary:
 	if bool(npc_result.get("completed", false)):
 		action["phase"] = "player_turn_start"
 		action["turn_phase"] = "player_turn_start"
+		action["npc_phase"] = _npc_phase_from_result(npc_result, {}, true)
 	else:
 		var npc_results: Array = _array_or_empty(action.get("npc_results", []))
 		npc_results.append(_dictionary_or_empty(npc_result.get("result", {})).duplicate(true))
@@ -662,10 +671,12 @@ func _advance_npc_turn_phase() -> Dictionary:
 		action["turn_phase"] = "npc_action"
 		var presentation: Dictionary = _present_npc_turn_result(npc_result)
 		npc_result["presentation"] = presentation
+		action["npc_phase"] = _npc_phase_from_result(npc_result, presentation, false)
 		if bool(presentation.get("success", false)) and bool(presentation.get("active", false)):
 			action["phase"] = "npc_presentation"
 			action["turn_phase"] = "npc_presentation"
 			action["presenting_npc_actor_id"] = int(presentation.get("actor_id", 0))
+			action["npc_phase"] = _npc_phase_from_result(npc_result, presentation, false)
 	_sync_host_after_step(npc_result)
 	return npc_result
 
@@ -676,6 +687,13 @@ func _finish_npc_presentation_phase() -> Dictionary:
 	action["presenting_npc_actor_id"] = 0
 	action["phase"] = "npc_action"
 	action["turn_phase"] = "npc_action"
+	var phase: Dictionary = _dictionary_or_empty(action.get("npc_phase", {})).duplicate(true)
+	if not phase.is_empty():
+		phase["phase"] = "npc_action"
+		phase["turn_phase"] = "npc_action"
+		phase["presentation_active"] = false
+		phase["completed"] = true
+		action["npc_phase"] = phase
 	var result := {
 		"success": true,
 		"kind": "npc_presentation_finished",
@@ -1155,6 +1173,64 @@ func _attack_phase_from_result(result: Dictionary, source: String) -> Dictionary
 		"ap_after": float(result.get("ap_remaining", action.get("ap_after", 0.0))),
 		"completed": bool(result.get("success", false)),
 		"result_kind": str(result.get("kind", "attack")),
+	}
+
+
+func _npc_phase_snapshot(view_snapshot: Dictionary = {}) -> Dictionary:
+	var phase: Dictionary = _dictionary_or_empty(action.get("npc_phase", {})).duplicate(true)
+	if phase.is_empty():
+		phase = _npc_phase_from_result(latest_result, _dictionary_or_empty(latest_result.get("presentation", {})), bool(latest_result.get("completed", false)))
+	if phase.is_empty() and (str(action.get("phase", "")) == "npc_action" or str(action.get("phase", "")) == "npc_presentation"):
+		phase = {
+			"phase": str(action.get("phase", "")),
+			"turn_phase": str(action.get("turn_phase", "")),
+			"npc_index": int(action.get("npc_index", 0)),
+			"npc_count": _array_or_empty(action.get("npc_queue", [])).size(),
+			"presenting_actor_id": int(action.get("presenting_npc_actor_id", 0)),
+			"completed": false,
+		}
+	if phase.is_empty():
+		return {}
+	phase["phase"] = str(action.get("phase", phase.get("phase", "")))
+	phase["turn_phase"] = str(action.get("turn_phase", phase.get("turn_phase", "")))
+	phase["npc_index"] = int(action.get("npc_index", phase.get("npc_index", 0)))
+	phase["npc_count"] = _array_or_empty(action.get("npc_queue", [])).size()
+	phase["presenting_actor_id"] = int(action.get("presenting_npc_actor_id", phase.get("presenting_actor_id", 0)))
+	phase["presentation_active"] = str(action.get("phase", "")) == "npc_presentation" and (int(phase.get("presenting_actor_id", 0)) > 0 or bool(view_snapshot.get("active", false)))
+	if str(action.get("phase", "")) == "player_turn_start":
+		phase["completed"] = true
+	return phase
+
+
+func _npc_phase_from_result(npc_result: Dictionary, presentation: Dictionary = {}, completed: bool = false) -> Dictionary:
+	if npc_result.is_empty() and presentation.is_empty():
+		return {}
+	var result: Dictionary = _dictionary_or_empty(npc_result.get("result", {}))
+	var attack: Dictionary = _npc_attack_from_result(npc_result)
+	var step: Dictionary = _npc_move_step_from_result(npc_result)
+	var intent := str(presentation.get("npc_intent", result.get("intent", ""))).strip_edges()
+	if intent.is_empty() and not attack.is_empty():
+		intent = "attack"
+	if intent.is_empty() and not step.is_empty():
+		intent = "move"
+	if intent.is_empty() and completed:
+		intent = "complete"
+	var actor_id := int(presentation.get("actor_id", result.get("actor_id", npc_result.get("actor_id", step.get("actor_id", attack.get("actor_id", 0))))))
+	var target_actor_id := int(attack.get("target_actor_id", result.get("target_actor_id", 0)))
+	return {
+		"phase": str(action.get("phase", "")),
+		"turn_phase": str(action.get("turn_phase", "")),
+		"npc_index": int(npc_result.get("npc_index", action.get("npc_index", 0))),
+		"npc_count": _array_or_empty(action.get("npc_queue", [])).size(),
+		"presenting_actor_id": int(presentation.get("actor_id", action.get("presenting_npc_actor_id", 0))),
+		"intent": intent,
+		"result_kind": str(result.get("kind", npc_result.get("kind", ""))),
+		"actor_id": actor_id,
+		"target_actor_id": target_actor_id,
+		"from_grid": _dictionary_or_empty(step.get("from", {})).duplicate(true),
+		"to_grid": _dictionary_or_empty(step.get("to", {})).duplicate(true),
+		"presentation_active": bool(presentation.get("active", false)),
+		"completed": completed or bool(npc_result.get("completed", false)),
 	}
 
 
