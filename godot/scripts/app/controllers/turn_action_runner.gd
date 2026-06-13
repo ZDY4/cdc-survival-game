@@ -339,9 +339,13 @@ func _advance_craft_step() -> Dictionary:
 		return result
 	var craft_update: Dictionary = CraftAction.apply_result(action, result, _pending_kind_from_result(result))
 	_record_craft_phase(result, CraftAction.phase_source(action))
+	var pending := bool(craft_update.get("pending", false))
 	var turn_check: Dictionary = _should_end_actor_turn(actor_id)
-	active = false
-	_clear_actor_action_state(actor_id, str(craft_update.get("finish_reason", "craft_finished")))
+	if pending:
+		active = true
+	else:
+		active = false
+		_clear_actor_action_state(actor_id, str(craft_update.get("finish_reason", "craft_finished")))
 	result["runner_active_after"] = active
 	result["turn_check"] = turn_check.duplicate(true)
 	latest_result = result.duplicate(true)
@@ -638,6 +642,8 @@ func _resume_pending_after_world_turn() -> Dictionary:
 		_record_craft_phase(pending_result, "wait_resume")
 	elif str(action.get("kind", "")) == "wait" and not _dictionary_or_empty(pending_result.get("pending_crafting", {})).is_empty():
 		_record_craft_phase(pending_result, "wait_resume")
+	elif str(action.get("kind", "")) == "craft":
+		_record_craft_phase(pending_result, CraftAction.phase_source(action))
 	if not bool(result.get("success", false)):
 		active = false
 		action["phase"] = "failed"

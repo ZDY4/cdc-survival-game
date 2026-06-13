@@ -1590,7 +1590,17 @@ func _runner_step_should_continue_crafting_queue(step_result: Dictionary, runner
 	if not bool(step_result.get("success", false)):
 		return false
 	var pending_result: Dictionary = _dictionary_or_empty(step_result.get("pending_result", {}))
-	return not pending_result.is_empty() and _wait_result_resumed_active_crafting_queue(step_result)
+	if pending_result.is_empty():
+		return false
+	if _wait_result_resumed_active_crafting_queue(step_result):
+		return true
+	if str(runner_snapshot.get("action_kind", "")) != "craft":
+		return false
+	var resumed: Dictionary = _dictionary_or_empty(pending_result.get("resumed_pending_crafting", {}))
+	if resumed.is_empty():
+		return false
+	var command: Dictionary = _dictionary_or_empty(resumed.get("command", {}))
+	return bool(command.get("crafting_queue_active", false))
 
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false) -> Dictionary:
@@ -1685,6 +1695,8 @@ func press_space_action() -> Dictionary:
 func repeat_space_wait_action() -> Dictionary:
 	var runner: Dictionary = turn_action_runner_snapshot()
 	if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
+		if str(runner.get("action_kind", "")) == "craft":
+			return _continue_active_crafting_runner("space_hold_repeat")
 		var drained: Dictionary = drain_turn_action_runner()
 		if not bool(drained.get("drained", false)):
 			return {"success": false, "reason": "turn_action_runner_active", "drain_result": drained}
@@ -1696,6 +1708,9 @@ func repeat_space_wait_action() -> Dictionary:
 
 
 func submit_wait_action() -> Dictionary:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "craft":
+		return _continue_active_crafting_runner("submit_wait_action")
 	return request_player_wait({"reason": "submit_wait_action"})
 
 
@@ -1716,6 +1731,8 @@ func _submit_auto_tick_wait() -> Dictionary:
 			"reason": "auto_tick_wait",
 			"drain_result": drained,
 		}
+	if (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "craft":
+		return _continue_active_crafting_runner("auto_tick_wait")
 	var snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
 	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call(
 		"auto_tick_wait",
@@ -1729,6 +1746,23 @@ func _submit_auto_tick_wait() -> Dictionary:
 	if not bool(validation_result.get("success", false)):
 		return validation_result
 	return request_player_wait({"reason": "auto_tick_wait"})
+
+
+func _continue_active_crafting_runner(reason: String = "crafting_continue") -> Dictionary:
+	var runner_before: Dictionary = turn_action_runner_snapshot()
+	if str(runner_before.get("action_kind", "")) != "craft" or (not bool(runner_before.get("active", false)) and not bool(runner_before.get("presentation_active", false))):
+		return {"success": false, "reason": "active_crafting_runner_missing", "runner": runner_before}
+	var drained: Dictionary = drain_turn_action_runner()
+	refresh_hud(current_interaction_prompt())
+	return {
+		"success": bool(drained.get("drained", false)),
+		"kind": "active_crafting_runner_continued",
+		"reason": reason,
+		"drain_result": drained.duplicate(true),
+		"runner_before": runner_before.duplicate(true),
+		"runner_after": turn_action_runner_snapshot(),
+		"pending": not _dictionary_or_empty(_runtime_pending_state_snapshot().get("pending_crafting", {})).is_empty(),
+	}
 
 
 func _runtime_has_pending_action() -> bool:
@@ -2105,10 +2139,12 @@ func _continue_crafting_queue_after_wait(result: Dictionary, wait_runner_snapsho
 	if bool(continuation.get("continued", false)):
 		continuation["refresh"] = ["inventory", "crafting", "skills"]
 		continuation["wait_runner_snapshot"] = wait_runner_snapshot.duplicate(true)
+		var action_kind := str(wait_runner_snapshot.get("action_kind", ""))
 		latest_action_chain = {
-			"kind": "wait_to_crafting_queue",
+			"kind": "craft_to_crafting_queue" if action_kind == "craft" else "wait_to_crafting_queue",
 			"wait_result": result.duplicate(true),
 			"wait_runner": wait_runner_snapshot.duplicate(true),
+			"source_action_kind": action_kind,
 			"queue_result": _dictionary_or_empty(continuation.get("queue_result", {})).duplicate(true),
 		}
 	return continuation

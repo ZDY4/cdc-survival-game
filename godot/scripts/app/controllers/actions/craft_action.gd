@@ -31,9 +31,15 @@ static func apply_result(action: Dictionary, result: Dictionary, pending_kind: S
 	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
 	action["ap_after"] = float(result.get("ap_remaining", turn_policy.get("ap_after_action", action.get("ap_after", 0.0))))
 	action["pending_kind"] = pending_kind
-	action["phase"] = "finished"
-	action["turn_phase"] = "player"
 	var pending := not _dictionary_or_empty(result.get("pending_crafting", {})).is_empty()
+	action["pending_crafting"] = _dictionary_or_empty(result.get("pending_crafting", {})).duplicate(true)
+	if pending:
+		action["phase"] = "player_turn_end"
+		action["turn_phase"] = "player_turn_end"
+		action["pending_kind"] = "crafting"
+	else:
+		action["phase"] = "finished"
+		action["turn_phase"] = "player"
 	action["craft_completed"] = not pending
 	return {
 		"pending": pending,
