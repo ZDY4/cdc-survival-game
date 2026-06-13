@@ -1945,6 +1945,10 @@ func _expect_player_attack_exposes_turn_runner_phase(errors: Array[String], game
 				errors.append("player attack_phase should expose resolved damage, got %s" % JSON.stringify(phase))
 			if not bool(phase.get("completed", false)):
 				errors.append("player attack_phase should expose completed attack result, got %s" % JSON.stringify(phase))
+			if int(_dictionary_or_empty(phase.get("attacker_node", {})).get("node_instance_id", 0)) <= 0:
+				errors.append("player attack_phase should expose attacker ActorView node, got %s" % JSON.stringify(phase))
+			if int(_dictionary_or_empty(phase.get("target_node", {})).get("node_instance_id", 0)) <= 0:
+				errors.append("player attack_phase should expose target ActorView node, got %s" % JSON.stringify(phase))
 			var runtime_line := _hud_runtime_control_line(game_root)
 			if not runtime_line.contains("Attack player") or not runtime_line.contains("-> #%d" % target_id):
 				errors.append("HUD runtime line should expose player attack phase, got %s" % runtime_line)
@@ -1952,6 +1956,8 @@ func _expect_player_attack_exposes_turn_runner_phase(errors: Array[String], game
 			saw_attack_presentation = true
 			if str(runner.get("turn_phase", "")) != "player_presentation":
 				errors.append("player attack runner should expose player_presentation during attack, got %s" % runner.get("turn_phase", ""))
+			if int(phase.get("presentation_node_instance_id", 0)) != int(actor_view.get("node_instance_id", -1)):
+				errors.append("player attack_phase should bind presentation node to ActorView attack node, phase=%s actor_view=%s" % [JSON.stringify(phase), JSON.stringify(actor_view)])
 			break
 		await process_frame
 	if not saw_attack_phase:
@@ -2027,10 +2033,18 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 			saw_attack_phase = true
 			if int(attack_phase.get("actor_id", 0)) != attacker_id or int(attack_phase.get("target_actor_id", 0)) != player.actor_id:
 				errors.append("npc attack_phase should expose attacker and target ids, got %s" % JSON.stringify(attack_phase))
+			if int(_dictionary_or_empty(attack_phase.get("attacker_node", {})).get("node_instance_id", 0)) <= 0:
+				errors.append("npc attack_phase should expose attacker ActorView node, got %s" % JSON.stringify(attack_phase))
+			if int(_dictionary_or_empty(attack_phase.get("target_node", {})).get("node_instance_id", 0)) <= 0:
+				errors.append("npc attack_phase should expose target ActorView node, got %s" % JSON.stringify(attack_phase))
 		if not npc_phase.is_empty() and str(npc_phase.get("intent", "")) == "attack":
 			saw_npc_phase = true
 			if int(npc_phase.get("actor_id", 0)) != attacker_id or int(npc_phase.get("target_actor_id", 0)) != player.actor_id:
 				errors.append("npc_phase should expose attacker and target ids, got %s" % JSON.stringify(npc_phase))
+			if int(_dictionary_or_empty(npc_phase.get("actor_node", {})).get("node_instance_id", 0)) <= 0:
+				errors.append("npc_phase should expose acting NPC ActorView node, got %s" % JSON.stringify(npc_phase))
+			if int(_dictionary_or_empty(npc_phase.get("target_node", {})).get("node_instance_id", 0)) <= 0:
+				errors.append("npc_phase should expose target ActorView node, got %s" % JSON.stringify(npc_phase))
 			if str(npc_phase.get("phase", "")) == "npc_presentation":
 				if str(npc_phase.get("turn_phase", "")) != "npc_presentation":
 					errors.append("npc_phase should expose npc_presentation turn phase, got %s" % JSON.stringify(npc_phase))
@@ -2038,12 +2052,16 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 					errors.append("npc_phase should expose presenting attacker, got %s" % JSON.stringify(npc_phase))
 				if not bool(npc_phase.get("presentation_active", false)):
 					errors.append("npc_phase should expose active presentation while actor view attacks, got %s" % JSON.stringify(npc_phase))
+				if int(_dictionary_or_empty(npc_phase.get("presenting_node", {})).get("node_instance_id", 0)) <= 0:
+					errors.append("npc_phase should expose presenting ActorView node, got %s" % JSON.stringify(npc_phase))
 		if str(runner.get("phase", "")) == "npc_presentation":
 			saw_npc_presentation_phase = true
 		if str(actor_view.get("kind", "")) == "attack" and int(actor_view.get("actor_id", 0)) == attacker_id and int(actor_view.get("target_actor_id", 0)) == player.actor_id:
 			saw_attack_presentation = true
 			if str(runner.get("turn_phase", "")) != "npc_presentation":
 				errors.append("npc attack runner should expose npc_presentation turn phase during attack, got %s" % runner.get("turn_phase", ""))
+			if int(attack_phase.get("presentation_node_instance_id", 0)) != int(actor_view.get("node_instance_id", -1)):
+				errors.append("npc attack_phase should bind presentation node to ActorView attack node, phase=%s actor_view=%s" % [JSON.stringify(attack_phase), JSON.stringify(actor_view)])
 			break
 		await process_frame
 	if not saw_npc_presentation_phase:

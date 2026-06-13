@@ -1158,6 +1158,11 @@ func _attack_phase_snapshot(view_snapshot: Dictionary = {}) -> Dictionary:
 	phase["phase"] = str(action.get("phase", ""))
 	phase["turn_phase"] = str(action.get("turn_phase", ""))
 	phase["presentation_active"] = bool(view_snapshot.get("active", false)) and str(view_snapshot.get("kind", "")) == "attack"
+	var presentation_bound := str(view_snapshot.get("kind", "")) == "attack" and int(view_snapshot.get("actor_id", 0)) == int(phase.get("actor_id", 0))
+	phase["presentation_actor_id"] = int(view_snapshot.get("actor_id", 0)) if presentation_bound else 0
+	phase["presentation_node_instance_id"] = int(view_snapshot.get("node_instance_id", 0)) if presentation_bound else 0
+	phase["attacker_node"] = _actor_node_phase_snapshot(view_snapshot, int(phase.get("actor_id", 0)))
+	phase["target_node"] = _actor_node_phase_snapshot(view_snapshot, int(phase.get("target_actor_id", 0)))
 	phase["completed"] = bool(action.get("attack_completed", phase.get("completed", false))) or str(action.get("phase", "")) == "finished"
 	return phase
 
@@ -1214,6 +1219,9 @@ func _npc_phase_snapshot(view_snapshot: Dictionary = {}) -> Dictionary:
 	phase["npc_count"] = _array_or_empty(action.get("npc_queue", [])).size()
 	phase["presenting_actor_id"] = int(action.get("presenting_npc_actor_id", phase.get("presenting_actor_id", 0)))
 	phase["presentation_active"] = str(action.get("phase", "")) == "npc_presentation" and (int(phase.get("presenting_actor_id", 0)) > 0 or bool(view_snapshot.get("active", false)))
+	phase["presenting_node"] = _actor_node_phase_snapshot(view_snapshot, int(phase.get("presenting_actor_id", 0)))
+	phase["actor_node"] = _actor_node_phase_snapshot(view_snapshot, int(phase.get("actor_id", 0)))
+	phase["target_node"] = _actor_node_phase_snapshot(view_snapshot, int(phase.get("target_actor_id", 0)))
 	if str(action.get("phase", "")) == "player_turn_start":
 		phase["completed"] = true
 	return phase
@@ -1248,6 +1256,23 @@ func _npc_phase_from_result(npc_result: Dictionary, presentation: Dictionary = {
 		"to_grid": _dictionary_or_empty(step.get("to", {})).duplicate(true),
 		"presentation_active": bool(presentation.get("active", false)),
 		"completed": completed or bool(npc_result.get("completed", false)),
+	}
+
+
+func _actor_node_phase_snapshot(view_snapshot: Dictionary, actor_id: int) -> Dictionary:
+	if actor_id <= 0:
+		return {}
+	var actor_nodes: Dictionary = _dictionary_or_empty(view_snapshot.get("actor_nodes", {}))
+	var node: Dictionary = _dictionary_or_empty(actor_nodes.get(str(actor_id), {}))
+	if node.is_empty():
+		return {}
+	return {
+		"actor_id": actor_id,
+		"node_path": str(node.get("node_path", "")),
+		"node_instance_id": int(node.get("node_instance_id", 0)),
+		"action_runner_active": bool(node.get("action_runner_active", false)),
+		"action_runner_step_active": bool(node.get("action_runner_step_active", false)),
+		"action_runner_kind": str(node.get("action_runner_kind", "")),
 	}
 
 
