@@ -12,7 +12,7 @@
 - 所有执行路径统一进入 action runner；运行时、headless smoke、debug facade 和后续验收使用同一套动作语义。
 - 文档中的阶段顺序是最终系统的能力建设顺序。
 - 每个阶段的实现成果必须收敛到最终模块边界，测试、调试和手动运行共享正式运行时入口与状态来源。
-- 所有条目都指向最终 Godot 原生运行时；旧实现只作为行为参照，不作为代码结构、入口或表现管线的目标形态。
+- 所有条目都直接指向最终 Godot 原生运行时，不记录临时修补、过渡入口或并行实现。
 - 移动、相机、交互、战斗、等待、制作和调试能力都收敛到同一套最终动作管线，不另建旁路。
 
 ## 1. 最终目标
@@ -72,7 +72,7 @@ TurnActionRunner
 - 相机跟随 action 期间的 ActorView 节点，非 action 状态跟随稳定 focus grid。
 - ActorView 负责逐步移动、朝向、攻击、受击和死亡表现；WorldRuntimeRoot 只处理结构性刷新。
 - Smoke、debug 和手动游戏共享同一个 runner facade。
-- Rust / Bevy 参考工程只用于规则行为对照，最终实现采用 Godot 原生 scene、node、resource、signal 和 GDScript 模块。
+- 最终实现采用 Godot 原生 scene、node、resource、signal 和 GDScript 模块组织，不以外部运行时或历史结构作为目标形态。
 
 ## 2. 目标模块
 
@@ -527,7 +527,7 @@ cmd /c run_godot_validate.bat
 
 ## 9. 风险和约束
 
-- 不重新引入 Rust / Bevy。
+- 不引入非 Godot 主线运行时。
 - 不把业务规则写进 UI 或 ActorView。
 - 普通移动使用 actor tween 和稳定 ActorView registry。
 - Presenter 只消费活跃 action 明确提供的表现请求和 snapshot。
