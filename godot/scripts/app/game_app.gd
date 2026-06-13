@@ -1537,19 +1537,21 @@ func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: 
 	var crafting_continuation: Dictionary = {}
 	if _runner_step_should_continue_crafting_queue(step_result, runner_snapshot):
 		crafting_continuation = _continue_crafting_queue_after_wait(step_result, runner_snapshot)
-	if not _rebuild_runtime_world_result("turn_action_runner_step"):
+	var interaction_result: Dictionary = _runner_interaction_result(step_result, runner_snapshot)
+	var needs_world_result_sync := _turn_action_step_needs_world_result_sync(step_result, runner_snapshot, interaction_result, crafting_continuation)
+	if needs_world_result_sync and not _rebuild_runtime_world_result("turn_action_runner_step"):
 		return {"success": false, "reason": "world_result_sync_failed"}
 	_apply_world_root_snapshot(false)
 	_configure_turn_action_runner()
 	_configure_runtime_audio_layers()
 	if bool(crafting_continuation.get("continued", false)):
 		_refresh_operation_panels(_array_or_empty(crafting_continuation.get("refresh", [])))
-	var interaction_result: Dictionary = _runner_interaction_result(step_result, runner_snapshot)
 	if not interaction_result.is_empty():
 		_apply_interaction_execution_result(interaction_result, _dictionary_or_empty(runner_snapshot.get("target", {})))
 		return {
 			"success": true,
 			"render_world": true,
+			"world_result_synced": needs_world_result_sync,
 			"step_result": step_result.duplicate(true),
 			"turn_action_runner": runner_snapshot.duplicate(true),
 		}
@@ -1557,9 +1559,51 @@ func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: 
 	return {
 		"success": true,
 		"render_world": false,
+		"world_result_synced": needs_world_result_sync,
 		"step_result": step_result.duplicate(true),
 		"turn_action_runner": runner_snapshot.duplicate(true),
 	}
+
+
+func _turn_action_step_needs_world_result_sync(step_result: Dictionary, runner_snapshot: Dictionary, interaction_result: Dictionary, crafting_continuation: Dictionary = {}) -> bool:
+	if not interaction_result.is_empty():
+		return true
+	if bool(crafting_continuation.get("continued", false)):
+		return true
+	return _turn_action_result_has_structural_change(step_result) \
+		or _turn_action_result_has_structural_change(_dictionary_or_empty(step_result.get("attack_result", {}))) \
+		or _turn_action_result_has_structural_change(_dictionary_or_empty(step_result.get("npc_attack_result", {}))) \
+		or _turn_action_result_has_structural_change(_dictionary_or_empty(step_result.get("pending_result", {}))) \
+		or _turn_action_runner_is_structural_refresh_boundary(runner_snapshot)
+
+
+func _turn_action_result_has_structural_change(result: Dictionary) -> bool:
+	if result.is_empty():
+		return false
+	if result.has("context_snapshot"):
+		return true
+	if result.has("container") or result.has("shop"):
+		return true
+	if bool(result.get("consumed_target", false)) or bool(result.get("door_toggled", false)):
+		return true
+	if bool(result.get("defeated", false)) or bool(result.get("corpse_created", false)):
+		return true
+	for event_value in _interaction_result_events(result):
+		var event: Dictionary = _dictionary_or_empty(event_value)
+		match str(event.get("kind", "")):
+			"actor_defeated", "corpse_created", "interaction_succeeded", "scene_transition", "door_toggled", "door_auto_opened", "container_opened":
+				return true
+	return false
+
+
+func _turn_action_runner_is_structural_refresh_boundary(runner_snapshot: Dictionary) -> bool:
+	if bool(runner_snapshot.get("active", false)) or bool(runner_snapshot.get("presentation_active", false)):
+		return false
+	var pending_kind := str(runner_snapshot.get("pending_kind", ""))
+	if not pending_kind.is_empty():
+		return false
+	var action_kind := str(runner_snapshot.get("action_kind", ""))
+	return action_kind in ["interact", "attack"]
 
 
 func _runner_interaction_result(step_result: Dictionary, runner_snapshot: Dictionary) -> Dictionary:

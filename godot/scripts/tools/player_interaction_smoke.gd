@@ -2768,6 +2768,9 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("world render policy should see runner active during movement, got %s" % JSON.stringify(render_policy))
 	if bool(render_policy.get("ordinary_action_render_world", true)):
 		errors.append("world render policy should reject full world render for ordinary runner movement, got %s" % JSON.stringify(render_policy))
+	var refresh_report: Dictionary = _dictionary_or_empty(game_root.runtime_refresh_report_snapshot()) if game_root.has_method("runtime_refresh_report_snapshot") else {}
+	if str(refresh_report.get("source", "")) == "turn_action_runner_step":
+		errors.append("ordinary runner movement should not rebuild world_result on each step, got refresh report %s" % JSON.stringify(refresh_report))
 	var render_sequence_before_finish := _render_sequence(game_root)
 	var camera_before_finish: Camera3D = game_root.find_child("WorldCamera", true, false) as Camera3D
 	var camera_instance_before_finish := camera_before_finish.get_instance_id() if camera_before_finish != null else 0
