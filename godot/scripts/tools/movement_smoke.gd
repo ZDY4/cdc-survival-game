@@ -291,11 +291,19 @@ func _expect_turn_action_runner_cross_turn_resume(registry: RefCounted) -> Array
 	var result: Dictionary = _dictionary_or_empty(runner.call("request_move", 1, {"x": 4, "y": 0, "z": 0}, topology))
 	if not bool(result.get("success", false)):
 		errors.append("turn action runner cross-turn move should start: %s" % result.get("reason", "unknown"))
+	var phases: Array[String] = []
 	for _index in range(32):
 		var snapshot: Dictionary = _dictionary_or_empty(runner.call("snapshot"))
+		var phase := str(snapshot.get("phase", ""))
+		if not phases.has(phase):
+			phases.append(phase)
 		if not bool(snapshot.get("active", false)):
 			break
 		runner.call("process")
+		snapshot = _dictionary_or_empty(runner.call("snapshot"))
+		phase = str(snapshot.get("phase", ""))
+		if not phases.has(phase):
+			phases.append(phase)
 	var final_snapshot: Dictionary = _dictionary_or_empty(runner.call("snapshot"))
 	if bool(final_snapshot.get("active", true)):
 		errors.append("turn action runner cross-turn move should become idle, got %s" % JSON.stringify(final_snapshot))
@@ -307,6 +315,9 @@ func _expect_turn_action_runner_cross_turn_resume(registry: RefCounted) -> Array
 		errors.append("turn action runner should expose at least one turn cycle after AP depletion")
 	if str(final_snapshot.get("phase", "")) != "finished":
 		errors.append("turn action runner final phase should be finished, got %s" % final_snapshot.get("phase", ""))
+	for expected_phase in ["player_turn_end", "npc_action", "player_turn_start", "pending_resume"]:
+		if not phases.has(expected_phase):
+			errors.append("turn action runner cross-turn move should visit %s phase, got %s" % [expected_phase, phases])
 	if _event_count(simulation.snapshot(), "turn_ended") < 1 or _event_count(simulation.snapshot(), "turn_started") < 1:
 		errors.append("turn action runner AP depletion should emit turn end/start events")
 	if _event_count(simulation.snapshot(), "movement_step") < 4:

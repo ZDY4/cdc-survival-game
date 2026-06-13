@@ -107,6 +107,7 @@ var combat_state: Dictionary = {
 var pending_movement: Dictionary = {}
 var pending_interaction: Dictionary = {}
 var pending_crafting: Dictionary = {}
+var runner_world_turn: Dictionary = {}
 var crafting_queue: Array = []
 var corpse_containers: Dictionary = {}
 var interaction_menu: Dictionary = {}
@@ -1081,6 +1082,178 @@ func advance_player_turn_for_runner(actor_id: int, topology: Dictionary, reason:
 		"turn_state": turn_state.duplicate(true),
 		"events": _events_since(event_start_index),
 	}
+
+
+func begin_world_turn_for_runner(actor_id: int, topology: Dictionary, reason: String = "turn_action_runner") -> Dictionary:
+	var event_start_index: int = events.size()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	if topology.is_empty():
+		return {"success": false, "reason": "move_topology_missing", "actor_id": actor_id}
+	var time_before: Dictionary = world_time.duplicate(true)
+	var runtime_topology: Dictionary = _topology_with_runtime_door_states(topology)
+	var round_before: int = int(turn_state.get("round", 1))
+	var ap_before: float = actor.ap
+	var turn_open_before: bool = bool(actor.turn_open)
+	if turn_open_before:
+		_close_turn(actor_id, "runner_ap_depleted:%s" % reason)
+	turn_state["phase"] = "world"
+	_tick_hotbar_cooldowns()
+	_tick_actor_active_effects()
+	var expired_reservations: Array[Dictionary] = _expire_life_planner_reservations()
+	var life_tick_results: Array[Dictionary] = _tick_settlement_life_needs(WORLD_TURN_MINUTES)
+	var background_life_ticks: Array[Dictionary] = _tick_background_settlement_life(life_tick_results, WORLD_TURN_MINUTES, expired_reservations)
+	if bool(combat_state.get("active", false)):
+		_refresh_combat_turn_order("world_turn_started")
+	var npc_actor_ids: Array[int] = []
+	for npc_actor in _world_turn_service.world_turn_actor_order(self):
+		if npc_actor.kind == "player":
+			continue
+		if not npc_actor.map_id.is_empty() and npc_actor.map_id != active_map_id:
+			continue
+		if npc_actor.hp <= 0.0:
+			continue
+		npc_actor_ids.append(int(npc_actor.actor_id))
+	runner_world_turn = {
+		"active": true,
+		"reason": reason,
+		"player_actor_id": actor_id,
+		"round_before": round_before,
+		"ap_before": ap_before,
+		"turn_open_before": turn_open_before,
+		"topology": runtime_topology.duplicate(true),
+		"npc_actor_ids": npc_actor_ids,
+		"npc_index": 0,
+		"npc_results": [],
+		"time_before": time_before,
+		"life_tick_results": life_tick_results,
+		"background_life_tick_count": background_life_ticks.size(),
+		"expired_life_reservation_count": expired_reservations.size(),
+	}
+	return {
+		"success": true,
+		"kind": "world_turn_started",
+		"actor_id": actor_id,
+		"reason": reason,
+		"round_before": round_before,
+		"ap_before": ap_before,
+		"npc_actor_ids": npc_actor_ids.duplicate(true),
+		"npc_count": npc_actor_ids.size(),
+		"turn_state": turn_state.duplicate(true),
+		"events": _events_since(event_start_index),
+	}
+
+
+func advance_next_npc_turn_for_runner() -> Dictionary:
+	var event_start_index: int = events.size()
+	if runner_world_turn.is_empty() or not bool(runner_world_turn.get("active", false)):
+		return {"success": false, "reason": "runner_world_turn_missing"}
+	var npc_actor_ids: Array = _array_or_empty(runner_world_turn.get("npc_actor_ids", []))
+	var topology: Dictionary = _dictionary_or_empty(runner_world_turn.get("topology", {}))
+	var life_tick_results: Array = _array_or_empty(runner_world_turn.get("life_tick_results", []))
+	while int(runner_world_turn.get("npc_index", 0)) < npc_actor_ids.size():
+		var npc_index: int = int(runner_world_turn.get("npc_index", 0))
+		runner_world_turn["npc_index"] = npc_index + 1
+		var npc_actor_id: int = int(npc_actor_ids[npc_index])
+		var actor: RefCounted = actor_registry.get_actor(npc_actor_id)
+		if actor == null or actor.kind == "player" or actor.hp <= 0.0:
+			continue
+		if not actor.map_id.is_empty() and actor.map_id != active_map_id:
+			continue
+		var background_resync: Dictionary = _sync_online_life_background_action(actor)
+		_open_turn(actor.actor_id, "npc_turn")
+		var turn_open_snapshot := {
+			"ap": actor.ap,
+			"ap_gain": _turn_ap_gain(actor),
+			"ap_max": _turn_ap_max(actor),
+			"affordable_ap_threshold": _affordable_ap_threshold(actor),
+			"combat_active": bool(combat_state.get("active", false)) and actor.in_combat,
+		}
+		var result: Dictionary = _advance_npc_turn(actor, topology, bool(turn_open_snapshot.get("combat_active", false)))
+		if not background_resync.is_empty():
+			result["life_background_resync"] = background_resync.duplicate(true)
+		result["turn_open"] = turn_open_snapshot
+		result["ap_after_action"] = actor.ap
+		result["turn_close_reason"] = _npc_turn_close_reason(actor, result)
+		result["world_turn_minutes"] = WORLD_TURN_MINUTES
+		result["world_time_before"] = _dictionary_or_empty(runner_world_turn.get("time_before", {})).duplicate(true)
+		result["life_need_tick"] = _life_need_tick_for_actor(life_tick_results, actor.actor_id)
+		result["life_presence"] = _record_life_presence(actor, "online", WORLD_TURN_MINUTES, result["life_need_tick"])
+		_close_turn(actor.actor_id, str(result.get("turn_close_reason", "npc_turn_complete")))
+		result["turn_closed"] = true
+		result["ap_after_close"] = actor.ap
+		if bool(combat_state.get("active", false)):
+			var visibility_result: Dictionary = update_combat_visibility_decay(topology)
+			result["combat_visibility"] = visibility_result.duplicate(true)
+			if bool(visibility_result.get("combat_exited", false)):
+				runner_world_turn["npc_index"] = npc_actor_ids.size()
+		var npc_results: Array = _array_or_empty(runner_world_turn.get("npc_results", []))
+		npc_results.append(result.duplicate(true))
+		runner_world_turn["npc_results"] = npc_results
+		return {
+			"success": true,
+			"kind": "npc_turn_advanced",
+			"completed": false,
+			"actor_id": actor.actor_id,
+			"npc_index": npc_index,
+			"remaining_npcs": max(0, npc_actor_ids.size() - int(runner_world_turn.get("npc_index", 0))),
+			"result": result.duplicate(true),
+			"turn_state": turn_state.duplicate(true),
+			"events": _events_since(event_start_index),
+		}
+	return {
+		"success": true,
+		"kind": "npc_turns_completed",
+		"completed": true,
+		"npc_results": _array_or_empty(runner_world_turn.get("npc_results", [])).duplicate(true),
+		"turn_state": turn_state.duplicate(true),
+		"events": _events_since(event_start_index),
+	}
+
+
+func finish_world_turn_for_runner(actor_id: int, reason: String = "turn_action_runner") -> Dictionary:
+	var event_start_index: int = events.size()
+	if runner_world_turn.is_empty() or not bool(runner_world_turn.get("active", false)):
+		return {"success": false, "reason": "runner_world_turn_missing", "actor_id": actor_id}
+	var time_before: Dictionary = _dictionary_or_empty(runner_world_turn.get("time_before", {})).duplicate(true)
+	turn_state["round"] = int(turn_state.get("round", 1)) + 1
+	if bool(combat_state.get("active", false)):
+		combat_state["round"] = int(combat_state.get("round", 0)) + 1
+	_advance_world_time(WORLD_TURN_MINUTES)
+	var npc_results: Array = _array_or_empty(runner_world_turn.get("npc_results", []))
+	for result in npc_results:
+		var result_data: Dictionary = _dictionary_or_empty(result)
+		result_data["world_time_after"] = world_time.duplicate(true)
+	emit_event("world_time_advanced", {
+		"before": time_before,
+		"after": world_time.duplicate(true),
+		"minutes": WORLD_TURN_MINUTES,
+		"life_tick_count": _array_or_empty(runner_world_turn.get("life_tick_results", [])).size(),
+		"background_life_tick_count": int(runner_world_turn.get("background_life_tick_count", 0)),
+		"expired_life_reservation_count": int(runner_world_turn.get("expired_life_reservation_count", 0)),
+	})
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor != null:
+		_open_turn(actor_id, "runner_player_turn:%s" % reason)
+	var output := {
+		"success": true,
+		"kind": "world_turn_finished",
+		"actor_id": actor_id,
+		"reason": reason,
+		"round_before": int(runner_world_turn.get("round_before", 1)),
+		"round_after": int(turn_state.get("round", 1)),
+		"ap_before": float(runner_world_turn.get("ap_before", 0.0)),
+		"ap_after": actor.ap if actor != null else 0.0,
+		"npc_results": npc_results.duplicate(true),
+		"pending_movement": pending_movement.duplicate(true),
+		"pending_interaction": pending_interaction.duplicate(true),
+		"pending_crafting": pending_crafting.duplicate(true),
+		"turn_state": turn_state.duplicate(true),
+		"events": _events_since(event_start_index),
+	}
+	runner_world_turn.clear()
+	return output
 
 
 func _submit_interact_command(actor: RefCounted, command: Dictionary) -> Dictionary:

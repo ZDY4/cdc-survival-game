@@ -62,7 +62,11 @@ func process() -> void:
 			return
 		match str(action.get("phase", "")):
 			"player_turn_end":
-				_advance_player_turn_phase()
+				_begin_world_turn_phase()
+			"npc_action":
+				_advance_npc_turn_phase()
+			"player_turn_start":
+				_finish_world_turn_phase()
 			"pending_resume":
 				_advance_move_step()
 			_:
@@ -98,6 +102,9 @@ func snapshot() -> Dictionary:
 		"pending_kind": str(action.get("pending_kind", "")),
 		"turn_cycles": int(action.get("turn_cycles", 0)),
 		"auto_turn_limit": AUTO_TURN_ADVANCE_LIMIT,
+		"npc_queue": _array_or_empty(action.get("npc_queue", [])).duplicate(true),
+		"npc_index": int(action.get("npc_index", 0)),
+		"npc_results": _array_or_empty(action.get("npc_results", [])).duplicate(true),
 		"blocked_reason": str(latest_result.get("reason", "")) if not bool(latest_result.get("success", true)) else "",
 		"presentation_active": bool(view_snapshot.get("active", false)),
 		"actor_view": view_snapshot,
@@ -149,7 +156,7 @@ func _advance_move_step() -> Dictionary:
 	return step
 
 
-func _advance_player_turn_phase() -> Dictionary:
+func _begin_world_turn_phase() -> Dictionary:
 	var actor_id := int(action.get("actor_id", 0))
 	var cycles := int(action.get("turn_cycles", 0))
 	if cycles >= AUTO_TURN_ADVANCE_LIMIT:
@@ -166,33 +173,91 @@ func _advance_player_turn_phase() -> Dictionary:
 		}
 		_sync_host_after_step(latest_result)
 		return latest_result
-	if simulation == null or not simulation.has_method("advance_player_turn_for_runner"):
+	if simulation == null or not simulation.has_method("begin_world_turn_for_runner"):
 		active = false
 		action["phase"] = "failed"
 		action["turn_phase"] = "failed"
-		latest_result = {"success": false, "reason": "runner_turn_api_missing", "actor_id": actor_id}
+		latest_result = {"success": false, "reason": "runner_world_turn_api_missing", "actor_id": actor_id}
 		_clear_actor_action_state(actor_id, "runner_turn_api_missing")
 		_sync_host_after_step(latest_result)
 		return latest_result
 	action["turn_cycles"] = cycles + 1
-	action["phase"] = "player_turn_start"
-	action["turn_phase"] = "player_turn_start"
+	action["phase"] = "npc_action"
+	action["turn_phase"] = "npc_action"
 	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
-	var turn_result: Dictionary = _dictionary_or_empty(simulation.call("advance_player_turn_for_runner", actor_id, topology, "pending_movement"))
-	latest_result = turn_result.duplicate(true)
-	if not bool(turn_result.get("success", false)):
+	var begin_result: Dictionary = _dictionary_or_empty(simulation.call("begin_world_turn_for_runner", actor_id, topology, "pending_movement"))
+	latest_result = begin_result.duplicate(true)
+	if not bool(begin_result.get("success", false)):
 		active = false
 		action["phase"] = "failed"
 		action["turn_phase"] = "failed"
-		_clear_actor_action_state(actor_id, str(turn_result.get("reason", "turn_failed")))
-		_sync_host_after_step(turn_result)
-		return turn_result
-	action["ap_after"] = float(turn_result.get("ap_after", action.get("ap_after", 0.0)))
+		_clear_actor_action_state(actor_id, str(begin_result.get("reason", "turn_failed")))
+		_sync_host_after_step(begin_result)
+		return begin_result
+	action["npc_queue"] = _array_or_empty(begin_result.get("npc_actor_ids", [])).duplicate(true)
+	action["npc_index"] = 0
+	action["npc_results"] = []
+	_sync_host_after_step(begin_result)
+	return begin_result
+
+
+func _advance_npc_turn_phase() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	if simulation == null or not simulation.has_method("advance_next_npc_turn_for_runner"):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		latest_result = {"success": false, "reason": "runner_npc_turn_api_missing", "actor_id": actor_id}
+		_clear_actor_action_state(actor_id, "runner_npc_turn_api_missing")
+		_sync_host_after_step(latest_result)
+		return latest_result
+	var npc_result: Dictionary = _dictionary_or_empty(simulation.call("advance_next_npc_turn_for_runner"))
+	latest_result = npc_result.duplicate(true)
+	if not bool(npc_result.get("success", false)):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, str(npc_result.get("reason", "npc_turn_failed")))
+		_sync_host_after_step(npc_result)
+		return npc_result
+	if bool(npc_result.get("completed", false)):
+		action["phase"] = "player_turn_start"
+		action["turn_phase"] = "player_turn_start"
+	else:
+		var npc_results: Array = _array_or_empty(action.get("npc_results", []))
+		npc_results.append(_dictionary_or_empty(npc_result.get("result", {})).duplicate(true))
+		action["npc_results"] = npc_results
+		action["npc_index"] = int(npc_result.get("npc_index", action.get("npc_index", 0))) + 1
+		action["turn_phase"] = "npc_action"
+	_sync_host_after_step(npc_result)
+	return npc_result
+
+
+func _finish_world_turn_phase() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	if simulation == null or not simulation.has_method("finish_world_turn_for_runner"):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		latest_result = {"success": false, "reason": "runner_world_finish_api_missing", "actor_id": actor_id}
+		_clear_actor_action_state(actor_id, "runner_world_finish_api_missing")
+		_sync_host_after_step(latest_result)
+		return latest_result
+	var finish_result: Dictionary = _dictionary_or_empty(simulation.call("finish_world_turn_for_runner", actor_id, "pending_movement"))
+	latest_result = finish_result.duplicate(true)
+	if not bool(finish_result.get("success", false)):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, str(finish_result.get("reason", "world_turn_finish_failed")))
+		_sync_host_after_step(finish_result)
+		return finish_result
+	action["ap_after"] = float(finish_result.get("ap_after", action.get("ap_after", 0.0)))
 	action["phase"] = "pending_resume"
 	action["turn_phase"] = "pending_resume"
 	action["pending_kind"] = "movement"
-	_sync_host_after_step(turn_result)
-	return turn_result
+	_sync_host_after_step(finish_result)
+	return finish_result
 
 
 func _sync_host_after_step(step_result: Dictionary) -> void:
