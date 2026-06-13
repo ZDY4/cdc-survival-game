@@ -1436,6 +1436,42 @@ func _submit_attack_command(actor: RefCounted, command: Dictionary) -> Dictionar
 	return _combat_command_handler.submit_attack(self, actor, command)
 
 
+func prepare_attack_for_runner(actor_id: int, target_actor_id: int, topology: Dictionary, options: Dictionary = {}) -> Dictionary:
+	var event_start_index: int = events.size()
+	var actor: RefCounted = actor_registry.get_actor(actor_id)
+	if actor == null:
+		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
+	if not actor.turn_open:
+		return {"success": false, "reason": "turn_closed", "actor_id": actor_id, "turn_state": turn_state.duplicate(true)}
+	var ap_before: float = actor.ap
+	var command: Dictionary = {
+		"kind": "attack",
+		"actor_id": actor_id,
+		"target_actor_id": target_actor_id,
+		"topology": topology.duplicate(true),
+	}
+	for key in options.keys():
+		command[key] = options[key]
+	var result: Dictionary = _combat_command_handler.prepare_attack(self, actor, command)
+	result["ap_before"] = ap_before
+	result["ap_remaining"] = actor.ap
+	result["events"] = _events_since(event_start_index)
+	result["turn_state"] = turn_state.duplicate(true)
+	result["pending_movement"] = pending_movement.duplicate(true)
+	result["pending_interaction"] = pending_interaction.duplicate(true)
+	return result
+
+
+func resolve_attack_for_runner(prepared_attack: Dictionary) -> Dictionary:
+	var event_start_index: int = events.size()
+	var result: Dictionary = _combat_command_handler.resolve_prepared_attack(self, prepared_attack)
+	result["events"] = _events_since(event_start_index)
+	result["turn_state"] = turn_state.duplicate(true)
+	result["pending_movement"] = pending_movement.duplicate(true)
+	result["pending_interaction"] = pending_interaction.duplicate(true)
+	return result
+
+
 func submit_attack_for_runner(actor_id: int, target_actor_id: int, topology: Dictionary, options: Dictionary = {}) -> Dictionary:
 	var event_start_index: int = events.size()
 	var actor: RefCounted = actor_registry.get_actor(actor_id)

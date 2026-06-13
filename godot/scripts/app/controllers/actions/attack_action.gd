@@ -36,6 +36,8 @@ static func apply_result(action: Dictionary, result: Dictionary) -> void:
 	action["ap_before"] = float(result.get("ap_before", action.get("ap_before", 0.0)))
 	action["ap_after"] = float(result.get("ap_remaining", action.get("ap_after", 0.0)))
 	action["attack_pipeline"] = _array_or_empty(result.get("attack_pipeline", [])).duplicate(true)
+	action["prepared_attack"] = result.duplicate(true)
+	action["attack_completed"] = false
 	action["phase"] = "attack_presentation"
 	action["turn_phase"] = "player_presentation"
 
@@ -97,6 +99,9 @@ static func phase_from_result(action: Dictionary, result: Dictionary, source: St
 	var target_actor_id := int(result.get("target_actor_id", action.get("target_actor_id", 0)))
 	if actor_id <= 0 and target_actor_id <= 0:
 		return {}
+	var attack_result: Dictionary = _dictionary_or_empty(result.get("attack_result", {}))
+	if not attack_result.is_empty():
+		result = attack_result
 	var weapon_profile: Dictionary = _dictionary_or_empty(result.get("weapon_profile", {}))
 	var damage := float(result.get("damage", 0.0))
 	var hit_kind := str(result.get("hit_kind", ""))
@@ -116,7 +121,8 @@ static func phase_from_result(action: Dictionary, result: Dictionary, source: St
 		"defeated": bool(result.get("defeated", false)),
 		"ap_before": float(result.get("ap_before", action.get("ap_before", 0.0))),
 		"ap_after": float(result.get("ap_remaining", action.get("ap_after", 0.0))),
-		"completed": bool(result.get("success", false)),
+		"prepared": bool(result.get("attack_prepared", false)),
+		"completed": bool(result.get("success", false)) and not bool(result.get("attack_prepared", false)),
 		"result_kind": str(result.get("kind", "attack")),
 	}
 
@@ -167,12 +173,16 @@ static func _pipeline_step_completed(step_id: String, action: Dictionary, phase:
 			return str(action.get("phase", "")) == "attack_presentation" or bool(action.get("attack_completed", false)) or str(action.get("phase", "")) == "finished"
 		"refresh":
 			return bool(action.get("attack_completed", false)) or str(action.get("phase", "")) == "finished"
-	return bool(phase.get("completed", false))
+	if step_id == "apply_result":
+		return _pipeline_has_step(_array_or_empty(action.get("attack_pipeline", [])), "apply_result")
+	return bool(phase.get("completed", false)) and not bool(phase.get("prepared", false))
 
 
 static func _current_pipeline_phase(action: Dictionary, phase: Dictionary) -> String:
 	if str(action.get("phase", "")) == "attack_presentation":
 		return "presentation"
+	if str(action.get("phase", "")) == "attack_resolve":
+		return "apply_result"
 	if bool(action.get("attack_completed", false)) or str(action.get("phase", "")) == "finished":
 		return "refresh"
 	if bool(phase.get("completed", false)):
@@ -189,6 +199,14 @@ static func _rules_resolved(steps: Array) -> bool:
 		if not bool(step.get("completed", false)):
 			return false
 	return true
+
+
+static func _pipeline_has_step(steps: Array, step_id: String) -> bool:
+	for step_value in steps:
+		var step: Dictionary = _dictionary_or_empty(step_value)
+		if str(step.get("id", "")) == step_id:
+			return true
+	return false
 
 
 static func _dictionary_or_empty(value: Variant) -> Dictionary:

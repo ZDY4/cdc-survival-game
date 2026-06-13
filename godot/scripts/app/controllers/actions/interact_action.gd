@@ -27,6 +27,8 @@ static func redirect_to_attack(action: Dictionary, target_actor_id: int) -> void
 	action["kind"] = "attack"
 	action["phase"] = "attack_action"
 	action["turn_phase"] = "player_action"
+	action["attack_pipeline"] = []
+	action["attack_completed"] = false
 
 
 static func begin_approach(action: Dictionary, result: Dictionary) -> void:

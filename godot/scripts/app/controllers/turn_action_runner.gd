@@ -48,11 +48,11 @@ func request_move(actor_id: int, target_grid: Dictionary, topology: Dictionary) 
 func request_attack(actor_id: int, target_actor_id: int, topology: Dictionary, options: Dictionary = {}) -> Dictionary:
 	if active:
 		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
-	if simulation == null or not simulation.has_method("submit_attack_for_runner"):
+	if simulation == null or not simulation.has_method("prepare_attack_for_runner"):
 		return {"success": false, "reason": "simulation_attack_runner_missing"}
 	action = AttackAction.create(actor_id, target_actor_id, topology, options)
 	active = true
-	var result := _advance_attack_step()
+	var result := _prepare_attack_step()
 	if not bool(result.get("success", false)):
 		active = false
 	return result
@@ -127,9 +127,11 @@ func process() -> void:
 	elif action_kind == "attack":
 		match str(action.get("phase", "")):
 			"attack_action":
-				_advance_attack_step()
+				_prepare_attack_step()
 			"attack_presentation":
 				_finish_attack_presentation_phase()
+			"attack_resolve":
+				_resolve_attack_step()
 			"player_turn_end":
 				_begin_world_turn_phase()
 			"npc_action":
@@ -368,7 +370,7 @@ func _begin_interaction_action() -> Dictionary:
 		return result
 	if str(result.get("kind", "")) == "attack_required":
 		InteractAction.redirect_to_attack(action, int(result.get("target_actor_id", 0)))
-		return _advance_attack_step()
+		return _prepare_attack_step()
 	if bool(result.get("approach_required", false)):
 		InteractAction.begin_approach(action, result)
 		return _advance_interaction_approach_step()
@@ -451,12 +453,12 @@ func _resume_pending_interaction_turn() -> Dictionary:
 	return _resume_interaction_after_approach()
 
 
-func _advance_attack_step() -> Dictionary:
+func _prepare_attack_step() -> Dictionary:
 	var actor_id := int(action.get("actor_id", 0))
 	var target_actor_id := int(action.get("target_actor_id", 0))
 	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
 	var options: Dictionary = _dictionary_or_empty(action.get("options", {}))
-	var result: Dictionary = _dictionary_or_empty(simulation.call("submit_attack_for_runner", actor_id, target_actor_id, topology, options))
+	var result: Dictionary = _dictionary_or_empty(simulation.call("prepare_attack_for_runner", actor_id, target_actor_id, topology, options))
 	latest_result = result.duplicate(true)
 	if not bool(result.get("success", false)):
 		active = false
@@ -464,14 +466,13 @@ func _advance_attack_step() -> Dictionary:
 		_clear_actor_action_state(actor_id, "attack_failed")
 		_sync_host_after_step(result)
 		return result
-	_record_attack_phase(result, "player")
 	AttackAction.apply_result(action, result)
 	var presentation: Dictionary = {}
 	if actor_view != null and actor_view.has_method("play_attack"):
 		presentation = _dictionary_or_empty(actor_view.call("play_attack", host, actor_id, target_actor_id, result))
 	result["presentation"] = presentation
 	if not bool(presentation.get("active", false)):
-		_finish_attack_presentation_phase()
+		_resolve_attack_step()
 	else:
 		_sync_host_after_step(result)
 	return result
@@ -480,19 +481,46 @@ func _advance_attack_step() -> Dictionary:
 func _finish_attack_presentation_phase() -> Dictionary:
 	var actor_id := int(action.get("actor_id", 0))
 	_clear_actor_action_state(actor_id, "attack_presentation_finished")
+	action["phase"] = "attack_resolve"
+	action["turn_phase"] = "player_action"
+	return _resolve_attack_step()
+
+
+func _resolve_attack_step() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	if simulation == null or not simulation.has_method("resolve_attack_for_runner"):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		latest_result = {"success": false, "reason": "simulation_attack_resolve_missing", "actor_id": actor_id}
+		_clear_actor_action_state(actor_id, "attack_resolve_missing")
+		_sync_host_after_step(latest_result)
+		return latest_result
+	var prepared_attack: Dictionary = _dictionary_or_empty(action.get("prepared_attack", latest_result))
+	var resolve_result: Dictionary = _dictionary_or_empty(simulation.call("resolve_attack_for_runner", prepared_attack))
+	latest_result = resolve_result.duplicate(true)
+	if not bool(resolve_result.get("success", false)):
+		active = false
+		AttackAction.apply_failed(action, str(resolve_result.get("reason", "attack_resolve_failed")))
+		_clear_actor_action_state(actor_id, "attack_resolve_failed")
+		_sync_host_after_step(resolve_result)
+		return resolve_result
+	_record_attack_phase(resolve_result, "player")
 	var turn_check: Dictionary = _should_end_actor_turn(actor_id)
 	AttackAction.finish_presentation(action, bool(turn_check.get("should_end", false)))
 	if not bool(turn_check.get("should_end", false)):
 		active = false
-	var result := {
+	var output := {
 		"success": true,
-		"kind": "attack_presentation_finished",
+		"kind": "attack_resolved_for_runner",
 		"actor_id": actor_id,
+		"attack_result": resolve_result.duplicate(true),
+		"attack_pipeline": _array_or_empty(resolve_result.get("attack_pipeline", [])).duplicate(true),
 		"turn_check": turn_check.duplicate(true),
 	}
-	latest_result = result.duplicate(true)
-	_sync_host_after_step(result)
-	return result
+	latest_result = output.duplicate(true)
+	_sync_host_after_step(output)
+	return output
 
 
 func _begin_world_turn_phase() -> Dictionary:

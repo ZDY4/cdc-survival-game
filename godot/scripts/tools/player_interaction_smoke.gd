@@ -2025,13 +2025,18 @@ func _expect_player_attack_exposes_turn_runner_phase(errors: Array[String], game
 	})
 	game_root.simulation.set_relationship_score(player.actor_id, target_id, -100.0, "player_attack_runner_smoke")
 	game_root.rebuild_runtime_world()
+	var target_actor: RefCounted = game_root.simulation.actor_registry.get_actor(target_id)
+	var target_hp_before: float = target_actor.hp if target_actor != null else 0.0
 	var result: Dictionary = game_root.request_player_attack(target_id)
 	if not bool(result.get("success", false)):
 		errors.append("player attack runner smoke failed: %s" % JSON.stringify(result))
 		_cleanup_player_attack_runner_smoke(game_root, player, target_id, original_ap, original_attack_power, original_attributes, original_equipment)
 		return
+	if str(result.get("kind", "")) != "attack_prepared" or not bool(result.get("attack_prepared", false)):
+		errors.append("player attack runner should return prepared attack before presentation, got %s" % JSON.stringify(result))
 	var saw_attack_phase := false
 	var saw_attack_presentation := false
+	var saw_pre_resolve_presentation := false
 	for _index in range(120):
 		var runtime_control: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot())
 		var runner: Dictionary = _dictionary_or_empty(runtime_control.get("turn_action_runner", {}))
@@ -2043,20 +2048,12 @@ func _expect_player_attack_exposes_turn_runner_phase(errors: Array[String], game
 				errors.append("player attack_phase should expose player source, got %s" % JSON.stringify(phase))
 			if int(phase.get("actor_id", 0)) != player.actor_id or int(phase.get("target_actor_id", 0)) != target_id:
 				errors.append("player attack_phase should expose attacker and target ids, got %s" % JSON.stringify(phase))
-			if not bool(phase.get("hit", false)):
-				errors.append("player attack_phase should expose hit result, got %s" % JSON.stringify(phase))
-			if float(phase.get("damage", 0.0)) <= 0.0:
-				errors.append("player attack_phase should expose resolved damage, got %s" % JSON.stringify(phase))
-			if not bool(phase.get("completed", false)):
-				errors.append("player attack_phase should expose completed attack result, got %s" % JSON.stringify(phase))
 			if str(phase.get("pipeline_phase", "")) != "presentation" and str(phase.get("pipeline_phase", "")) != "refresh":
 				errors.append("player attack_phase should expose presentation/refresh pipeline phase, got %s" % JSON.stringify(phase))
 			var phase_steps: Array = _array_or_empty(phase.get("phase_steps", []))
-			for step_id in ["validate", "preflight", "consume", "apply_result", "presentation"]:
+			for step_id in ["validate", "preflight", "consume", "presentation"]:
 				if not _phase_steps_contain_completed(phase_steps, step_id):
 					errors.append("player attack_phase should expose completed %s pipeline step, got %s" % [step_id, JSON.stringify(phase_steps)])
-			if not bool(phase.get("rules_resolved", false)):
-				errors.append("player attack_phase should expose resolved rule pipeline, got %s" % JSON.stringify(phase))
 			if int(_dictionary_or_empty(phase.get("attacker_node", {})).get("node_instance_id", 0)) <= 0:
 				errors.append("player attack_phase should expose attacker ActorView node, got %s" % JSON.stringify(phase))
 			if int(_dictionary_or_empty(phase.get("target_node", {})).get("node_instance_id", 0)) <= 0:
@@ -2066,6 +2063,10 @@ func _expect_player_attack_exposes_turn_runner_phase(errors: Array[String], game
 				errors.append("HUD runtime line should expose player attack phase, got %s" % runtime_line)
 		if str(actor_view.get("kind", "")) == "attack" and int(actor_view.get("actor_id", 0)) == player.actor_id and int(actor_view.get("target_actor_id", 0)) == target_id:
 			saw_attack_presentation = true
+			saw_pre_resolve_presentation = true
+			var target_during_presentation: RefCounted = game_root.simulation.actor_registry.get_actor(target_id)
+			if target_during_presentation != null and not is_equal_approx(target_during_presentation.hp, target_hp_before):
+				errors.append("player attack should not resolve damage before presentation finishes: before=%s during=%s" % [target_hp_before, target_during_presentation.hp])
 			if str(runner.get("turn_phase", "")) != "player_presentation":
 				errors.append("player attack runner should expose player_presentation during attack, got %s" % runner.get("turn_phase", ""))
 			if int(phase.get("presentation_node_instance_id", 0)) != int(actor_view.get("node_instance_id", -1)):
@@ -2077,6 +2078,21 @@ func _expect_player_attack_exposes_turn_runner_phase(errors: Array[String], game
 	if not saw_attack_presentation:
 		errors.append("player attack should use ActorView attack presentation")
 	await _wait_for_turn_action_runner_idle(game_root)
+	var final_runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	var final_phase: Dictionary = _dictionary_or_empty(final_runner.get("attack_phase", {}))
+	if not saw_pre_resolve_presentation:
+		errors.append("player attack should expose a pre-resolve presentation phase")
+	if float(final_phase.get("damage", 0.0)) <= 0.0:
+		errors.append("player attack_phase should expose resolved damage after presentation, got %s" % JSON.stringify(final_phase))
+	if not bool(final_phase.get("completed", false)):
+		errors.append("player attack_phase should expose completed attack result after presentation, got %s" % JSON.stringify(final_phase))
+	if not _phase_steps_contain_completed(_array_or_empty(final_phase.get("phase_steps", [])), "apply_result"):
+		errors.append("player attack_phase should expose completed apply_result pipeline step after presentation, got %s" % JSON.stringify(final_phase))
+	if not bool(final_phase.get("rules_resolved", false)):
+		errors.append("player attack_phase should expose resolved rule pipeline after presentation, got %s" % JSON.stringify(final_phase))
+	var target_after: RefCounted = game_root.simulation.actor_registry.get_actor(target_id)
+	if target_after != null and target_after.hp >= target_hp_before:
+		errors.append("player attack should resolve damage after presentation: before=%s after=%s" % [target_hp_before, target_after.hp])
 	_cleanup_player_attack_runner_smoke(game_root, player, target_id, original_ap, original_attack_power, original_attributes, original_equipment)
 
 
@@ -2146,8 +2162,6 @@ func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], gam
 		if not attack_phase.is_empty() and str(attack_phase.get("source", "")) == "npc":
 			saw_attack_phase = true
 			var phase_steps: Array = _array_or_empty(attack_phase.get("phase_steps", []))
-			if not _phase_steps_contain_completed(phase_steps, "apply_result"):
-				errors.append("npc attack_phase should expose completed apply_result pipeline step, got %s" % JSON.stringify(phase_steps))
 			if not _phase_steps_contain_completed(phase_steps, "presentation"):
 				errors.append("npc attack_phase should expose completed presentation pipeline step, got %s" % JSON.stringify(phase_steps))
 			if str(attack_phase.get("pipeline_phase", "")) != "presentation" and str(attack_phase.get("pipeline_phase", "")) != "refresh":
