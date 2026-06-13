@@ -5,6 +5,7 @@ const InteractAction = preload("res://scripts/app/controllers/actions/interact_a
 const AttackAction = preload("res://scripts/app/controllers/actions/attack_action.gd")
 const WaitAction = preload("res://scripts/app/controllers/actions/wait_action.gd")
 const CraftAction = preload("res://scripts/app/controllers/actions/craft_action.gd")
+const NpcAction = preload("res://scripts/app/controllers/actions/npc_action.gd")
 
 const AUTO_TURN_ADVANCE_LIMIT := 8
 const PENDING_CRAFTING_TURN_ADVANCE_LIMIT := 64
@@ -528,16 +529,7 @@ func _begin_world_turn_phase() -> Dictionary:
 		_clear_actor_action_state(actor_id, str(begin_result.get("reason", "turn_failed")))
 		_sync_host_after_step(begin_result)
 		return begin_result
-	action["npc_queue"] = _array_or_empty(begin_result.get("npc_actor_ids", [])).duplicate(true)
-	action["npc_index"] = 0
-	action["npc_results"] = []
-	action["npc_phase"] = {
-		"phase": str(action.get("phase", "")),
-		"turn_phase": str(action.get("turn_phase", "")),
-		"npc_index": 0,
-		"npc_count": _array_or_empty(action.get("npc_queue", [])).size(),
-		"completed": false,
-	}
+	NpcAction.begin_world_turn(action, begin_result)
 	_sync_host_after_step(begin_result)
 	return begin_result
 
@@ -562,23 +554,11 @@ func _advance_npc_turn_phase() -> Dictionary:
 		_sync_host_after_step(npc_result)
 		return npc_result
 	if bool(npc_result.get("completed", false)):
-		action["phase"] = "player_turn_start"
-		action["turn_phase"] = "player_turn_start"
-		action["npc_phase"] = _npc_phase_from_result(npc_result, {}, true)
+		NpcAction.apply_completed(action, _npc_phase_from_result(npc_result, {}, true))
 	else:
-		var npc_results: Array = _array_or_empty(action.get("npc_results", []))
-		npc_results.append(_dictionary_or_empty(npc_result.get("result", {})).duplicate(true))
-		action["npc_results"] = npc_results
-		action["npc_index"] = int(npc_result.get("npc_index", action.get("npc_index", 0))) + 1
-		action["turn_phase"] = "npc_action"
 		var presentation: Dictionary = _present_npc_turn_result(npc_result)
 		npc_result["presentation"] = presentation
-		action["npc_phase"] = _npc_phase_from_result(npc_result, presentation, false)
-		if bool(presentation.get("success", false)) and bool(presentation.get("active", false)):
-			action["phase"] = "npc_presentation"
-			action["turn_phase"] = "npc_presentation"
-			action["presenting_npc_actor_id"] = int(presentation.get("actor_id", 0))
-			action["npc_phase"] = _npc_phase_from_result(npc_result, presentation, false)
+		NpcAction.apply_result(action, npc_result, presentation, _npc_phase_from_result(npc_result, presentation, false))
 	_sync_host_after_step(npc_result)
 	return npc_result
 
@@ -586,16 +566,7 @@ func _advance_npc_turn_phase() -> Dictionary:
 func _finish_npc_presentation_phase() -> Dictionary:
 	var npc_actor_id := int(action.get("presenting_npc_actor_id", 0))
 	_clear_actor_action_state(npc_actor_id, "npc_presentation_finished")
-	action["presenting_npc_actor_id"] = 0
-	action["phase"] = "npc_action"
-	action["turn_phase"] = "npc_action"
-	var phase: Dictionary = _dictionary_or_empty(action.get("npc_phase", {})).duplicate(true)
-	if not phase.is_empty():
-		phase["phase"] = "npc_action"
-		phase["turn_phase"] = "npc_action"
-		phase["presentation_active"] = false
-		phase["completed"] = true
-		action["npc_phase"] = phase
+	NpcAction.finish_presentation(action)
 	var result := {
 		"success": true,
 		"kind": "npc_presentation_finished",
