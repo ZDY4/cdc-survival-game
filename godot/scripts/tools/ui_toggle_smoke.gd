@@ -107,6 +107,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 	await _wait_until_runtime_events_advance(game_root, before_auto_events, 90)
 	if game_root.simulation.snapshot().get("events", []).size() <= before_auto_events:
 		errors.append("enabled auto tick should advance runtime events")
+	var first_auto_runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	if str(first_auto_runner.get("action_kind", "")) != "wait":
+		errors.append("first auto tick should enter wait turn runner, got %s" % JSON.stringify(first_auto_runner))
+	await _wait_for_turn_action_runner_idle(game_root)
+	var after_first_auto_events: int = game_root.simulation.snapshot().get("events", []).size()
+	await _wait_until_runtime_events_advance(game_root, after_first_auto_events, 90)
+	if game_root.simulation.snapshot().get("events", []).size() <= after_first_auto_events:
+		errors.append("enabled auto tick should continue through wait turn runner")
+	var auto_runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	if str(auto_runner.get("action_kind", "")) != "wait":
+		errors.append("auto tick should continue through wait turn runner, got %s" % JSON.stringify(auto_runner))
 	await _wait_for_turn_action_runner_idle(game_root)
 	_press_key(game_root, KEY_I)
 	_expect_stage_open(errors, game_root, "inventory", "inventory should open before auto tick blocker check")

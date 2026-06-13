@@ -1677,8 +1677,7 @@ func repeat_space_wait_action() -> Dictionary:
 			return {"success": false, "reason": "turn_action_runner_active", "drain_result": drained}
 	if has_active_dialogue() or is_observe_mode_enabled() or gameplay_input_blocked_by_ui():
 		return {"success": false, "reason": "space_repeat_blocked"}
-	var pending: Dictionary = _runtime_pending_state_snapshot()
-	if not _dictionary_or_empty(pending.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(pending.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(pending.get("pending_crafting", {})).is_empty():
+	if _runtime_has_pending_action():
 		return {"success": false, "reason": "pending_blocked"}
 	return request_player_wait({"reason": "space_hold_repeat"})
 
@@ -1693,6 +1692,17 @@ func _process_auto_tick(delta: float) -> void:
 
 
 func _submit_auto_tick_wait() -> Dictionary:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "wait":
+		var drained: Dictionary = drain_turn_action_runner()
+		if not bool(drained.get("drained", false)):
+			return {"success": false, "reason": "turn_action_runner_active", "drain_result": drained}
+		return {
+			"success": true,
+			"kind": "auto_tick_runner_drained",
+			"reason": "auto_tick_wait",
+			"drain_result": drained,
+		}
 	var snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
 	var operation: Dictionary = _dictionary_or_empty(wait_action_controller.call(
 		"auto_tick_wait",
@@ -1706,6 +1716,13 @@ func _submit_auto_tick_wait() -> Dictionary:
 	if not bool(validation_result.get("success", false)):
 		return validation_result
 	return request_player_wait({"reason": "auto_tick_wait"})
+
+
+func _runtime_has_pending_action() -> bool:
+	var pending: Dictionary = _runtime_pending_state_snapshot()
+	return not _dictionary_or_empty(pending.get("pending_movement", {})).is_empty() \
+		or not _dictionary_or_empty(pending.get("pending_interaction", {})).is_empty() \
+		or not _dictionary_or_empty(pending.get("pending_crafting", {})).is_empty()
 
 
 func _apply_wait_action_operation(operation: Dictionary, refresh_reason: String) -> Dictionary:
