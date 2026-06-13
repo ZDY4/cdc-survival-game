@@ -168,6 +168,8 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var transition_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(transition_result.get("success", false)):
 		errors.append("door execution failed: %s" % JSON.stringify(transition_result))
+	else:
+		_expect_runner_interaction_phase(errors, game_root, "enter_subscene", "scene_transition", "survivor_outpost_01_interior_door")
 	if game_root.simulation.active_map_id != "survivor_outpost_01_interior":
 		errors.append("door execution did not switch active map")
 	if game_root.simulation.active_entry_point_id != "default_entry":
