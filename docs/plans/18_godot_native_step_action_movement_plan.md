@@ -1,8 +1,10 @@
 # Godot 原生逐步动作系统最终路线
 
-本文定义移动、回合、相机和动作表现的最终改造路线。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层保持权威，运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
+本文定义移动、回合、相机和动作表现的最终改进路线。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层保持权威，运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
 
 本计划只描述目标架构和直达最终状态的实现路线。后续实现以 Godot 原生 action runner、稳定 ActorView、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都进入同一套 Godot action pipeline。
+
+本文只记录最终架构、最终模块边界和直达目标状态的实施路线。任何当前问题都按最终架构的职责边界解决：规则事实沉到 `Simulation`，动作节奏进入 `TurnActionRunner`，表现交给 ActorView / CameraRig / WorldRuntimeRoot，调试和 smoke 通过稳定 facade 观察同一套运行时。
 
 执行口径：
 
@@ -10,6 +12,7 @@
 - 不新增第二套移动、回合、交互或战斗语义；headless、smoke、debug 和手动游戏都走同一 runner facade。
 - 所有执行路径统一进入 action runner；运行时、headless smoke、debug facade 和后续验收使用同一套动作语义。
 - 文档中的阶段顺序是最终系统的增量落地顺序。
+- 每个问题的处理结果必须收敛到最终模块边界，不保留专用入口、状态镜像或只为测试存在的运行时旁路。
 
 ## 1. 最终目标
 
@@ -65,8 +68,6 @@ TurnActionRunner
 
 ### 2.1 TurnActionRunner
 
-新增：
-
 `godot/scripts/app/controllers/turn_action_runner.gd`
 
 职责：
@@ -99,11 +100,9 @@ TurnActionRunner
 
 ### 2.2 Action 状态对象
 
-新增目录：
-
 `godot/scripts/app/controllers/actions/`
 
-建议文件：
+目标文件：
 
 - `move_action.gd`
 - `interact_action.gd`
@@ -124,8 +123,6 @@ Action 对象只保存运行时调度状态，不复制核心规则：
 
 ### 2.3 ActorViewController
 
-新增：
-
 `godot/scripts/world/actor_view_controller.gd`
 
 职责：
@@ -136,7 +133,7 @@ Action 对象只保存运行时调度状态，不复制核心规则：
 - 发出 step finished / action finished 信号。
 - 在 action active 时保护 actor node 不被普通刷新替换。
 
-建议接口：
+目标接口：
 
 ```gdscript
 func actor_node(actor_id: int) -> Node3D
@@ -149,7 +146,7 @@ func snapshot() -> Dictionary
 
 ### 2.4 CameraRigController
 
-扩展现有相机控制：
+目标职责：
 
 - 支持 follow grid target。
 - 支持 follow Node3D target。
@@ -157,7 +154,7 @@ func snapshot() -> Dictionary
 - 非 action 状态使用 focused grid 作为稳定跟随目标；actor node 缺失应记录异常并刷新 view registry。
 - 用户中键拖拽后保持 manual pan，直到 `F` / focus shortcut 或新 action 明确恢复 follow。
 
-建议接口：
+目标接口：
 
 ```gdscript
 func follow_actor_node(actor_node: Node3D) -> void
@@ -168,7 +165,7 @@ func process_follow(delta: float, viewport_size: Vector2, level_height: float) -
 
 ### 2.5 WorldRuntimeRoot
 
-调整职责：
+目标职责：
 
 - 初次加载地图和结构性变化时同步当前 world scene。
 - 普通移动、攻击朝向、AP 变化由稳定 ActorView 更新。
@@ -251,7 +248,7 @@ Simulation.step_move(...)
 game_root.request_player_move(grid)
 ```
 
-`GameApp` 新增 facade：
+`GameApp` 目标 facade：
 
 ```gdscript
 func request_player_move(grid: Dictionary) -> Dictionary
@@ -275,14 +272,14 @@ Action active 时：
 - Esc：取消 pending path，但不把角色拉回半格起点。
 - 地图切换 / scene transition：必须等待当前 action idle。
 
-## 5. 移动逐格化实现路线
+## 5. 动作系统实施路线
 
 ### 阶段 1：建立最终 Action Runner 主线
 
-改动：
+最终交付：
 
 - 建立 `TurnActionRunner` 作为唯一动作调度主线。
-- 新增 runner snapshot。
+- runner snapshot 成为动作调试、HUD 和 smoke 的统一观察面。
 - `runtime_control_snapshot()` 增加 `turn_action_runner`。
 - `PlayerInteraction`、`Movement`、`AI`、`Combat`、`Save` smoke 的运行入口全部绑定 runner facade。
 - 运行时移动、交互、攻击、等待和制作验收绑定 `TurnActionRunner`、`ActorViewController`、相机 follow snapshot 和 actor node 稳定性。
@@ -297,7 +294,7 @@ Action active 时：
 
 ### 阶段 2：Simulation 移动 begin / step 成为唯一移动规则接口
 
-改动：
+最终交付：
 
 - `Simulation.begin_move()` 只计算 path 并初始化移动状态。
 - `Simulation.step_move()` 每次推进一格。
@@ -313,9 +310,9 @@ Action active 时：
 
 ### 阶段 3：ActorView 逐格表现成为唯一玩家移动表现
 
-改动：
+最终交付：
 
-- 新增 `ActorViewController.move_actor_step()`。
+- `ActorViewController.move_actor_step()` 成为 actor 单格位移表现的唯一入口。
 - TurnActionRunner 调用 step 后播放一格 tween。
 - tween finished 后 runner 继续下一格。
 - 玩家移动表现只由 TurnActionRunner 调度 ActorViewController 执行；`WorldActionPresenter` 负责非 actor-step 的世界反馈。
@@ -330,7 +327,7 @@ Action active 时：
 
 ### 阶段 4：回合逐阶段化
 
-改动：
+最终交付：
 
 - 玩家 AP 低于阈值时，runner 进入 `player_turn_end`。
 - NPC action 逐个进入 `npc_action` 和 `npc_presentation`。
@@ -365,7 +362,7 @@ Action active 时：
 
 ### 阶段 6：制作、等待和自动推进统一
 
-改动：
+最终交付：
 
 - wait action 进入 runner。
 - crafting queue 的时间推进进入 runner phase。
@@ -378,7 +375,7 @@ Action active 时：
 
 ## 6. UI、HUD 和 Debug
 
-HUD 新增或调整：
+HUD 目标信息：
 
 - 显示 runner phase。
 - 显示当前 action。
