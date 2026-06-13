@@ -1,19 +1,18 @@
 # Godot 原生逐步动作系统最终路线
 
-本文定义移动、回合、相机和动作表现的最终优化路线。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层保持权威，运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
+本文定义移动、回合、相机和动作表现的终态架构。目标是建立符合 Godot 项目开发方式的逐步动作系统：规则层保持权威，运行时动作由 Godot 的节点、Tween、Signal、逐帧 process 和 action queue 驱动。
 
-本计划只描述目标架构和直达最终状态的实现路线。后续实现以 Godot 原生 action runner、稳定 ActorView、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都进入同一套 Godot action pipeline。
+本文只记录最终架构、模块边界和能力建设顺序。所有实现都沿同一条 Godot 原生 action pipeline 推进：规则事实沉到 `Simulation`，动作节奏进入 `TurnActionRunner`，表现交给 ActorView / CameraRig / WorldRuntimeRoot，调试和 smoke 通过稳定 facade 观察同一套运行时。
 
-本文只记录最终架构、最终模块边界和直达目标状态的实施路线。所有能力建设都沿最终架构职责边界推进：规则事实沉到 `Simulation`，动作节奏进入 `TurnActionRunner`，表现交给 ActorView / CameraRig / WorldRuntimeRoot，调试和 smoke 通过稳定 facade 观察同一套运行时。
-
-执行口径：
+路线口径：
 
 - 每个阶段都以最终 action pipeline 为交付对象，并让目标架构更完整。
 - 不新增第二套移动、回合、交互或战斗语义；headless、smoke、debug 和手动游戏都走同一 runner facade。
 - 所有执行路径统一进入 action runner；运行时、headless smoke、debug facade 和后续验收使用同一套动作语义。
-- 文档中的阶段顺序是最终系统的增量落地顺序。
+- 文档中的阶段顺序是最终系统的能力建设顺序。
 - 每个阶段的实现成果必须收敛到最终模块边界，不保留专用入口、状态镜像或只为测试存在的运行时通道。
 - 所有条目都指向最终 Godot 原生运行时；旧实现只作为行为参照，不作为代码结构、入口或表现管线的目标形态。
+- 移动、相机、交互、战斗、等待、制作和调试能力都收敛到同一套最终动作管线，不另建旁路。
 
 ## 1. 最终目标
 
@@ -27,7 +26,16 @@
 - 事件用于记录和 UI 反馈；当前表现对象由 action runner、ActorView registry 和 snapshot 明确提供。
 - 运行时功能按 Godot 原生职责拆分：规则、动作调度、ActorView、CameraRig、HUD / Panel 各自独立协作。
 
-### 1.2 目标流程
+### 1.2 终态体验
+
+- 玩家点击地面后，角色立即进入移动动作，并按格逐步行走。
+- 每一步移动都同步消耗 AP、刷新 HUD、更新 pending movement，并在视觉 tween 完成后进入下一阶段。
+- 相机在动作期间跟随玩家 ActorView 节点，动作结束后回到稳定 focus 规则。
+- 点击 NPC、物品、容器、门或出口时，接近、朝向、交互反馈和面板打开按 action chain 顺序发生。
+- 攻击、等待、制作和 NPC 回合与玩家移动共享同一套动作节奏，不出现规则状态提前跑完而表现滞后的体验。
+- 地图结构刷新只发生在 action 稳定边界，普通移动不会导致角色节点重建或相机焦点跳变。
+
+### 1.3 目标流程
 
 ```text
 PlayerInput
@@ -58,7 +66,7 @@ TurnActionRunner
   pending_resume
 ```
 
-### 1.3 架构边界
+### 1.4 架构边界
 
 - 相机跟随 action 期间的 ActorView 节点，非 action 状态跟随稳定 focus grid。
 - ActorView 负责逐步移动、朝向、攻击、受击和死亡表现；WorldRuntimeRoot 只处理结构性刷新。
@@ -288,9 +296,8 @@ Action active 时：
 
 验收：
 
-- 点击地面后 runner active。
-- runner action kind 为 `move`。
-- runner actor id 为玩家。
+- 玩家地面点击请求进入 runner 后立即可观察到 active action。
+- runner action kind、actor id、目标格和 phase 与当前玩家动作一致。
 - 不发生 actor node 替换。
 - headless smoke 与手动游戏使用相同 runner 入口。
 
@@ -323,8 +330,8 @@ Action active 时：
 验收：
 
 - 玩家视觉节点每格移动。
-- 相机跟随视觉节点。
-- HUD AP / phase 可逐格刷新。
+- 相机 follow target 是当前动作的 ActorView 节点。
+- HUD AP / phase / path progress 可逐格刷新。
 - 普通移动不触发全量 world render。
 
 ### 阶段 4：回合逐阶段化
@@ -339,9 +346,9 @@ Action active 时：
 
 验收：
 
-- 玩家移动不会等待整轮 NPC 同步跑完才开始表现。
-- NPC 表现不会抢走玩家 action。
-- HUD 能看到 phase 切换。
+- 玩家动作、玩家回合结束、NPC 动作和玩家回合恢复按 runner phase 依次推进。
+- NPC 表现有独立 action phase，不覆盖玩家 action snapshot。
+- HUD 能展示 phase 切换、AP 变化和 pending 恢复状态。
 
 ### 阶段 5：交互和攻击并入 Action Runner
 
@@ -360,7 +367,7 @@ Action active 时：
 验收：
 
 - 点击 NPC / 容器 / 门时，接近、朝向和交互按 action chain 分阶段完成。
-- 攻击表现不会被后续回合事件覆盖。
+- 攻击、受击、死亡和结构性刷新按 action phase 顺序完成。
 
 ### 阶段 6：制作、等待和自动推进统一
 
@@ -372,8 +379,8 @@ Action active 时：
 
 验收：
 
-- 自动观察 / wait / crafting 不破坏逐步 action。
-- Save smoke 明确 action active 时保存策略。
+- 自动观察 / wait / crafting 使用 runner step 推进，不绕过逐步 action。
+- Save smoke 验证 action active 和 idle 两种保存边界。
 
 ## 6. UI、HUD 和 Debug
 
