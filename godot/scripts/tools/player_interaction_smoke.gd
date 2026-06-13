@@ -140,6 +140,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("consumed pickup interaction node was not removed from scene")
 	await _expect_ground_grid_move(errors, game_root)
 	await _expect_hostile_attack_hover_preview(errors, game_root)
+	await _expect_npc_attack_uses_turn_runner_presentation(errors, game_root)
 	await _expect_corpse_world_interaction(errors, game_root)
 	await _expect_independent_combat_event_presenters(errors, game_root)
 	await _expect_on_hit_effect_attack_presenter(errors, game_root)
@@ -1802,6 +1803,80 @@ func _cleanup_attack_hover_preview_smoke(game_root: Node, player: RefCounted, ta
 	player.combat_attributes = original_attributes
 	player.ap = original_ap
 	player.attack_power = original_attack_power
+	game_root.rebuild_runtime_world()
+
+
+func _expect_npc_attack_uses_turn_runner_presentation(errors: Array[String], game_root: Node) -> void:
+	await _wait_for_turn_action_runner_idle(game_root)
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player == null:
+		errors.append("npc attack runner smoke missing player actor")
+		return
+	var original_grid: Dictionary = player.grid_position.to_dictionary()
+	var original_ap: float = player.ap
+	var original_turn_open: bool = player.turn_open
+	var original_hp: float = player.hp
+	var original_side: String = player.side
+	player.grid_position = GridCoord.from_dictionary(original_grid)
+	player.ap = 0.0
+	player.turn_open = true
+	player.hp = max(player.hp, 40.0)
+	player.side = "player"
+	var target_grid := _near_open_grid_from(original_grid, game_root.world_result.get("map", {}), game_root)
+	var attacker_id: int = game_root.simulation.register_actor({
+		"definition_id": "npc_attack_runner_smoke",
+		"display_name": "NPC Attack Runner Smoke",
+		"kind": "npc",
+		"side": "hostile",
+		"group_id": "hostile",
+		"map_id": game_root.simulation.active_map_id,
+		"appearance_profile_id": "default_humanoid",
+		"model_asset": "characters/sprite_rigs/default_humanoid.tscn",
+		"grid_position": GridCoord.from_dictionary(target_grid),
+		"ap": 4.0,
+		"turn_open": false,
+		"max_hp": 20.0,
+		"hp": 20.0,
+		"attack_power": 1.0,
+		"combat_attributes": {"accuracy": 100.0, "attack_power": 1.0, "turn_ap_gain": 4.0, "turn_ap_max": 4.0, "affordable_ap_threshold": 1.0},
+	})
+	game_root.simulation.set_relationship_score(player.actor_id, attacker_id, -100.0, "npc_attack_runner_smoke")
+	game_root.rebuild_runtime_world()
+	var result: Dictionary = game_root.request_player_wait({"reason": "npc_attack_runner_smoke"})
+	if not bool(result.get("success", false)):
+		errors.append("npc attack runner smoke wait failed: %s" % JSON.stringify(result))
+		_cleanup_npc_attack_runner_smoke(game_root, player, attacker_id, original_grid, original_ap, original_turn_open, original_hp, original_side)
+		return
+	var saw_npc_presentation_phase := false
+	var saw_attack_presentation := false
+	for _index in range(120):
+		var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+		var actor_view: Dictionary = _dictionary_or_empty(runner.get("actor_view", {}))
+		if str(runner.get("phase", "")) == "npc_presentation":
+			saw_npc_presentation_phase = true
+		if str(actor_view.get("kind", "")) == "attack" and int(actor_view.get("actor_id", 0)) == attacker_id and int(actor_view.get("target_actor_id", 0)) == player.actor_id:
+			saw_attack_presentation = true
+			if str(runner.get("turn_phase", "")) != "npc_presentation":
+				errors.append("npc attack runner should expose npc_presentation turn phase during attack, got %s" % runner.get("turn_phase", ""))
+			break
+		await process_frame
+	if not saw_npc_presentation_phase:
+		errors.append("npc attack runner should enter npc_presentation phase")
+	if not saw_attack_presentation:
+		errors.append("npc attack should use ActorView attack presentation")
+	await _wait_for_turn_action_runner_idle(game_root)
+	_cleanup_npc_attack_runner_smoke(game_root, player, attacker_id, original_grid, original_ap, original_turn_open, original_hp, original_side)
+
+
+func _cleanup_npc_attack_runner_smoke(game_root: Node, player: RefCounted, attacker_id: int, original_grid: Dictionary, original_ap: float, original_turn_open: bool, original_hp: float, original_side: String) -> void:
+	if player != null:
+		player.grid_position = GridCoord.from_dictionary(original_grid)
+		player.ap = original_ap
+		player.turn_open = original_turn_open
+		player.hp = original_hp
+		player.side = original_side
+	if game_root.simulation.actor_registry.get_actor(attacker_id) != null:
+		game_root.simulation.actor_registry.unregister_actor(attacker_id)
 	game_root.rebuild_runtime_world()
 
 

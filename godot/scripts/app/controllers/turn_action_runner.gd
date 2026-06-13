@@ -803,8 +803,25 @@ func _pending_kind_from_result(result: Dictionary) -> String:
 
 
 func _present_npc_turn_result(npc_result: Dictionary) -> Dictionary:
-	if actor_view == null or not actor_view.has_method("move_actor_step"):
+	if actor_view == null:
 		return {"success": false, "active": false, "reason": "actor_view_missing"}
+	var attack: Dictionary = _npc_attack_from_result(npc_result)
+	if not attack.is_empty():
+		if not actor_view.has_method("play_attack"):
+			return {"success": false, "active": false, "reason": "actor_view_attack_missing"}
+		var attacker_id := int(attack.get("actor_id", npc_result.get("actor_id", 0)))
+		var target_actor_id := int(attack.get("target_actor_id", 0))
+		if attacker_id <= 0 or target_actor_id <= 0:
+			return {"success": false, "active": false, "reason": "npc_attack_actor_missing", "actor_id": attacker_id, "target_actor_id": target_actor_id}
+		var presentation: Dictionary = _dictionary_or_empty(actor_view.call("play_attack", host, attacker_id, target_actor_id, attack, {
+			"duration_sec": 0.10,
+			"source": "npc_action",
+		}))
+		presentation["source"] = "npc_action"
+		presentation["npc_intent"] = "attack"
+		return presentation
+	if not actor_view.has_method("move_actor_step"):
+		return {"success": false, "active": false, "reason": "actor_view_move_missing"}
 	var step: Dictionary = _npc_move_step_from_result(npc_result)
 	if step.is_empty():
 		return {"success": false, "active": false, "reason": "npc_move_step_missing"}
@@ -821,6 +838,42 @@ func _present_npc_turn_result(npc_result: Dictionary) -> Dictionary:
 	}))
 	presentation["source"] = "npc_action"
 	return presentation
+
+
+func _npc_attack_from_result(npc_result: Dictionary) -> Dictionary:
+	var result: Dictionary = _dictionary_or_empty(npc_result.get("result", {}))
+	var direct_attack: Dictionary = _normalized_npc_attack_result(result, int(npc_result.get("actor_id", 0)))
+	if not direct_attack.is_empty():
+		return direct_attack
+	var actions: Array = _array_or_empty(result.get("actions", []))
+	for index in range(actions.size() - 1, -1, -1):
+		var action_result: Dictionary = _normalized_npc_attack_result(_dictionary_or_empty(actions[index]), int(npc_result.get("actor_id", 0)))
+		if not action_result.is_empty():
+			return action_result
+	for event in _array_or_empty(npc_result.get("events", [])):
+		var event_data: Dictionary = _dictionary_or_empty(event)
+		if str(event_data.get("kind", "")) != "attack_resolved":
+			continue
+		var payload: Dictionary = _dictionary_or_empty(event_data.get("payload", event_data))
+		var event_attack: Dictionary = _normalized_npc_attack_result(payload, int(npc_result.get("actor_id", 0)))
+		if not event_attack.is_empty():
+			return event_attack
+	return {}
+
+
+func _normalized_npc_attack_result(result: Dictionary, fallback_actor_id: int) -> Dictionary:
+	if result.is_empty():
+		return {}
+	if str(result.get("intent", "attack" if result.has("damage") and result.has("target_actor_id") else "")) != "attack":
+		return {}
+	var actor_id := int(result.get("actor_id", fallback_actor_id))
+	var target_actor_id := int(result.get("target_actor_id", 0))
+	if actor_id <= 0 or target_actor_id <= 0:
+		return {}
+	var output := result.duplicate(true)
+	output["actor_id"] = actor_id
+	output["target_actor_id"] = target_actor_id
+	return output
 
 
 func _npc_move_step_from_result(npc_result: Dictionary) -> Dictionary:
