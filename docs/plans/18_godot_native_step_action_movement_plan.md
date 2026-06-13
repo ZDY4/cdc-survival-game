@@ -4,7 +4,7 @@
 
 本计划只描述目标架构和直达最终状态的实现路线。后续实现以 Godot 原生 action runner、稳定 ActorView、节点跟随相机和逐阶段回合系统作为唯一主线，所有移动、交互、战斗、等待和制作流程都进入同一套 Godot action pipeline。
 
-本文只记录最终架构、最终模块边界和直达目标状态的实施路线。任何当前问题都按最终架构的职责边界解决：规则事实沉到 `Simulation`，动作节奏进入 `TurnActionRunner`，表现交给 ActorView / CameraRig / WorldRuntimeRoot，调试和 smoke 通过稳定 facade 观察同一套运行时。
+本文只记录最终架构、最终模块边界和直达目标状态的实施路线。所有能力建设都沿最终架构职责边界推进：规则事实沉到 `Simulation`，动作节奏进入 `TurnActionRunner`，表现交给 ActorView / CameraRig / WorldRuntimeRoot，调试和 smoke 通过稳定 facade 观察同一套运行时。
 
 执行口径：
 
@@ -12,7 +12,7 @@
 - 不新增第二套移动、回合、交互或战斗语义；headless、smoke、debug 和手动游戏都走同一 runner facade。
 - 所有执行路径统一进入 action runner；运行时、headless smoke、debug facade 和后续验收使用同一套动作语义。
 - 文档中的阶段顺序是最终系统的增量落地顺序。
-- 每个问题的处理结果必须收敛到最终模块边界，不保留专用入口、状态镜像或只为测试存在的运行时旁路。
+- 每个阶段的实现成果必须收敛到最终模块边界，不保留专用入口、状态镜像或只为测试存在的运行时通道。
 
 ## 1. 最终目标
 
