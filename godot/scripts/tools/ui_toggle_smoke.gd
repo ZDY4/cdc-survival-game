@@ -841,14 +841,13 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var runner_after_esc: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
 	if bool(runner_after_esc.get("active", false)) or bool(runner_after_esc.get("presentation_active", false)):
 		errors.append("Esc should finish active turn action runner: %s" % JSON.stringify(runner_after_esc))
-	if game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
-		errors.append("Esc should preserve pending movement when it only finishes active runner")
-	var before_pending_cancelled := _event_count(game_root, "pending_cancelled")
-	_press_key(game_root, KEY_ESCAPE)
 	if not game_root.simulation.snapshot().get("pending_movement", {}).is_empty():
-		errors.append("Esc should clear pending movement")
-	if _event_count(game_root, "pending_cancelled") <= before_pending_cancelled:
-		errors.append("Esc pending cancellation should emit pending_cancelled")
+		errors.append("Esc should clear pending movement while settling active runner")
+	var cancelled_pending: Dictionary = _dictionary_or_empty(settle_result.get("cancelled_pending", {}))
+	if not bool(cancelled_pending.get("had_pending", false)):
+		errors.append("Esc runner stable boundary should cancel pending movement: %s" % JSON.stringify(settle_result))
+	if _event_count(game_root, "pending_cancelled") <= 0:
+		errors.append("Esc runner stable boundary should emit pending_cancelled")
 	game_root.simulation.pending_movement = {
 		"actor_id": 1,
 		"target_position": far_target.duplicate(true),

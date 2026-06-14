@@ -205,18 +205,35 @@ func finish_active(reason: String = "fast_forward") -> Dictionary:
 func settle_stable_boundary(reason: String = "stable_boundary") -> Dictionary:
 	if actor_view != null and actor_view.has_method("finish_active_actor_presentation"):
 		actor_view.call("finish_active_actor_presentation", int(action.get("presenting_npc_actor_id", action.get("actor_id", 0))))
+	var actor_id := int(action.get("actor_id", 0))
+	var queued_actions: Array = _array_or_empty(action.get("queued_actions", [])).duplicate(true)
+	var pending_cancel_result: Dictionary = _cancel_pending_for_stable_boundary(actor_id, reason)
 	active = false
+	action["queued_actions"] = []
 	action["phase"] = "stable_boundary"
 	action["turn_phase"] = "player"
 	latest_result["settle_reason"] = reason
-	var actor_id := int(action.get("actor_id", 0))
+	latest_result["cancelled_pending"] = pending_cancel_result.duplicate(true)
+	latest_result["cancelled_queued_actions"] = queued_actions.duplicate(true)
 	if actor_id > 0:
 		_clear_actor_action_state(actor_id, reason)
 	var output := snapshot()
 	output["settled"] = true
 	output["reason"] = reason
+	output["cancelled_pending"] = pending_cancel_result.duplicate(true)
+	output["cancelled_queued_actions"] = queued_actions.duplicate(true)
 	_sync_host_after_step(output)
 	return output
+
+
+func _cancel_pending_for_stable_boundary(actor_id: int, reason: String) -> Dictionary:
+	if simulation == null or actor_id <= 0:
+		return {}
+	if simulation.has_method("cancel_pending"):
+		return _dictionary_or_empty(simulation.call("cancel_pending", reason, false, _dictionary_or_empty(action.get("topology", {}))))
+	if simulation.has_method("cancel_move"):
+		return _dictionary_or_empty(simulation.call("cancel_move", actor_id, reason))
+	return {}
 
 
 func snapshot() -> Dictionary:
