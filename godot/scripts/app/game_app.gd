@@ -1467,17 +1467,27 @@ func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 
 
 func request_player_move(grid: Dictionary) -> Dictionary:
-	var blocked: Dictionary = _player_command_rejection("move")
-	if not blocked.is_empty():
-		return blocked
 	_setup_world_container()
 	_configure_turn_action_runner()
+	if not _runner_allows_move_replacement():
+		var blocked: Dictionary = _player_command_rejection("move")
+		if not blocked.is_empty():
+			return blocked
 	var player_id := _player_actor_id()
 	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
 	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_move", player_id, grid, topology))
 	if bool(result.get("success", false)):
 		_restore_actor_camera_follow("player_move")
 	return result
+
+
+func _runner_allows_move_replacement() -> bool:
+	if is_observe_mode_enabled() or not _panel_modal_blocker_name().is_empty():
+		return false
+	if world_action_flow_controller != null and bool(world_action_flow_controller.call("blocks_input")):
+		return false
+	var runner: Dictionary = turn_action_runner_snapshot()
+	return (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "move"
 
 
 func request_player_attack(target_actor_id: int, options: Dictionary = {}) -> Dictionary:

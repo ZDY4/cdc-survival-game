@@ -29,6 +29,8 @@ func configure(p_simulation: RefCounted, p_actor_view: RefCounted, p_host: Node,
 
 func request_move(actor_id: int, target_grid: Dictionary, topology: Dictionary) -> Dictionary:
 	if active:
+		if str(action.get("kind", "")) == "move" and int(action.get("actor_id", 0)) == actor_id:
+			return _queue_move_replacement(actor_id, target_grid, topology)
 		return {"success": false, "reason": "turn_action_runner_active", "snapshot": snapshot()}
 	if simulation == null or not simulation.has_method("begin_move"):
 		return {"success": false, "reason": "simulation_step_move_missing"}
@@ -266,7 +268,7 @@ func snapshot() -> Dictionary:
 		"blocked_reason": str(latest_result.get("reason", "")) if not bool(latest_result.get("success", true)) else "",
 		"presentation_active": bool(view_snapshot.get("active", false)),
 		"actor_view": view_snapshot,
-		"queued_actions": [],
+		"queued_actions": _array_or_empty(action.get("queued_actions", [])).duplicate(true),
 		"latest_result": latest_result.duplicate(true),
 	}
 
@@ -281,6 +283,8 @@ func _runner_pending_movement_snapshot() -> Dictionary:
 
 
 func _advance_move_step() -> Dictionary:
+	if _move_replacement_ready_to_start():
+		return _start_queued_move_replacement()
 	var actor_id := int(action.get("actor_id", 0))
 	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
 	var step: Dictionary = _dictionary_or_empty(simulation.call("step_move", actor_id, topology))
@@ -307,6 +311,80 @@ func _advance_move_step() -> Dictionary:
 		_clear_actor_action_state(actor_id, str(step.get("reason", "finished")))
 	_sync_host_after_step(step)
 	return step
+
+
+func _queue_move_replacement(actor_id: int, target_grid: Dictionary, topology: Dictionary) -> Dictionary:
+	var queued_actions: Array = _array_or_empty(action.get("queued_actions", [])).duplicate(true)
+	var replacement := {
+		"kind": "move",
+		"replacement": true,
+		"actor_id": actor_id,
+		"target_grid": target_grid.duplicate(true),
+		"topology": topology.duplicate(true),
+		"requested_phase": str(action.get("phase", "")),
+		"requested_step_index": int(action.get("step_index", 0)),
+		"replace_after": "current_step_presentation",
+	}
+	if queued_actions.is_empty():
+		queued_actions.append(replacement)
+	else:
+		queued_actions[queued_actions.size() - 1] = replacement
+	action["queued_actions"] = queued_actions
+	latest_result = {
+		"success": true,
+		"kind": "move_replacement_queued",
+		"actor_id": actor_id,
+		"target_position": target_grid.duplicate(true),
+		"queued_actions": queued_actions.duplicate(true),
+		"replace_after": "current_step_presentation",
+	}
+	return latest_result.duplicate(true)
+
+
+func _move_replacement_ready_to_start() -> bool:
+	if str(action.get("kind", "")) != "move":
+		return false
+	if _array_or_empty(action.get("queued_actions", [])).is_empty():
+		return false
+	if actor_view != null and actor_view.has_method("is_active") and bool(actor_view.call("is_active")):
+		return false
+	return true
+
+
+func _start_queued_move_replacement() -> Dictionary:
+	var queued_actions: Array = _array_or_empty(action.get("queued_actions", [])).duplicate(true)
+	if queued_actions.is_empty():
+		return {"success": false, "reason": "queued_move_replacement_missing"}
+	var queued: Dictionary = _dictionary_or_empty(queued_actions.pop_front())
+	var actor_id := int(queued.get("actor_id", action.get("actor_id", 0)))
+	var target_grid: Dictionary = _dictionary_or_empty(queued.get("target_grid", {}))
+	var topology: Dictionary = _dictionary_or_empty(queued.get("topology", action.get("topology", {})))
+	var cancelled: Dictionary = {}
+	if simulation != null and simulation.has_method("cancel_move"):
+		cancelled = _dictionary_or_empty(simulation.call("cancel_move", actor_id, "move_replacement"))
+	if simulation == null or not simulation.has_method("begin_move"):
+		active = false
+		latest_result = {"success": false, "reason": "simulation_step_move_missing", "actor_id": actor_id}
+		_sync_host_after_step(latest_result)
+		return latest_result
+	var begin: Dictionary = _dictionary_or_empty(simulation.call("begin_move", actor_id, target_grid, topology))
+	if not bool(begin.get("success", false)):
+		active = false
+		action["queued_actions"] = queued_actions
+		latest_result = begin.duplicate(true)
+		latest_result["replacement_failed"] = true
+		latest_result["cancelled_pending"] = cancelled.duplicate(true)
+		_sync_host_after_step(latest_result)
+		return latest_result
+	action = MoveAction.create(actor_id, target_grid, topology, begin)
+	action["queued_actions"] = queued_actions
+	action["replacement_started"] = true
+	action["replacement_cancelled_pending"] = cancelled.duplicate(true)
+	active = true
+	latest_result = begin.duplicate(true)
+	latest_result["replacement_started"] = true
+	latest_result["cancelled_pending"] = cancelled.duplicate(true)
+	return _advance_move_step()
 
 
 func _advance_wait_step() -> Dictionary:
