@@ -33,14 +33,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if game_root.container_panel == null:
 		return ["container panel was not created"]
 
-	var container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_clinic_supply_cabinet", true, false)
+	var container_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_clinic_supply_cabinet")
 	if container_node == null:
 		return ["missing generated container node"]
 	game_root.select_interaction_node(container_node)
-	var open_result: Dictionary = _execute_primary_and_complete(game_root)
+	var open_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(open_result.get("success", false)):
 		errors.append("container open failed: %s" % open_result.get("reason", "unknown"))
-	_finish_presentations(game_root)
+	await _finish_presentations(game_root)
 	if not game_root.container_panel.visible:
 		errors.append("container panel should be visible after opening container")
 	_assert_panel_blocker(errors, game_root, "container", "ContainerPanel", "container open")
@@ -917,17 +917,17 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("close button should close container panel")
 	if not _active_container_id(game_root).is_empty():
 		errors.append("close button should clear active container runtime state")
-	var reopened_container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_clinic_supply_cabinet", true, false)
+	var reopened_container_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_clinic_supply_cabinet")
 	if reopened_container_node == null:
 		errors.append("missing generated container node for reopen")
 		return errors
 	game_root.select_interaction_node(reopened_container_node)
-	var reopen_result: Dictionary = _execute_primary_and_complete(game_root)
+	var reopen_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(reopen_result.get("success", false)):
 		errors.append("container reopen failed: %s" % reopen_result.get("reason", "unknown"))
 	if not game_root.container_panel.visible:
 		errors.append("container panel should reopen for Esc close check")
-	_finish_presentations(game_root)
+	await _finish_presentations(game_root)
 	var esc_container_result: Dictionary = _dictionary_or_empty(game_root.close_active_ui("keyboard_escape"))
 	if str(esc_container_result.get("closed", "")) != "container":
 		errors.append("Esc close should target container panel, got %s" % esc_container_result)
@@ -939,12 +939,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		])
 	if not _active_container_id(game_root).is_empty():
 		errors.append("Esc should clear active container runtime state")
-	var range_container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_clinic_supply_cabinet", true, false)
+	var range_container_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_clinic_supply_cabinet")
 	if range_container_node == null:
 		errors.append("missing generated container node for range close check")
 		return errors
 	game_root.select_interaction_node(range_container_node)
-	var range_open_result: Dictionary = _execute_primary_and_complete(game_root)
+	var range_open_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(range_open_result.get("success", false)):
 		errors.append("container reopen for range close check failed: %s" % range_open_result.get("reason", "unknown"))
 	var range_player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
@@ -958,12 +958,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("out-of-range container should close container panel")
 	if not _active_container_id(game_root).is_empty():
 		errors.append("out-of-range container should clear active container runtime state")
-	var vanished_container_node: Node = game_root.find_child("MapObject_survivor_outpost_01_clinic_supply_cabinet", true, false)
+	var vanished_container_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_clinic_supply_cabinet")
 	if vanished_container_node == null:
 		errors.append("missing generated container node for vanished target check")
 		return errors
 	game_root.select_interaction_node(vanished_container_node)
-	var vanished_open_result: Dictionary = _execute_primary_and_complete(game_root)
+	var vanished_open_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(vanished_open_result.get("success", false)):
 		errors.append("container reopen for vanished target check failed: %s" % vanished_open_result.get("reason", "unknown"))
 	var vanished_container_id := _active_container_id(game_root)
@@ -1021,15 +1021,27 @@ func _press_close_button(game_root: Node) -> void:
 
 
 func _execute_primary_and_complete(game_root: Node, max_waits: int = 8) -> Dictionary:
-	_finish_presentations(game_root)
+	await _finish_presentations(game_root)
 	var result: Dictionary = game_root.execute_primary_interaction()
+	await _wait_for_turn_action_runner_idle(game_root)
+	var runner_result: Dictionary = _runner_latest_interaction_result(game_root)
+	if not runner_result.is_empty():
+		result = runner_result
 	var waits := 0
-	while waits < max_waits and _has_pending(game_root) and not _final_interaction_result(result):
+	while waits < max_waits and _has_pending(game_root) and (_interaction_result_is_queued(result) or not _final_interaction_result(result)):
 		waits += 1
+		await _finish_presentations(game_root)
 		var wait_result: Dictionary = game_root.submit_wait_action()
-		var pending_result: Dictionary = wait_result.get("pending_result", {})
-		result = pending_result if not pending_result.is_empty() else wait_result
-	_finish_presentations(game_root)
+		if not bool(wait_result.get("success", false)):
+			result = wait_result
+			break
+		await _wait_for_turn_action_runner_idle(game_root)
+		var resumed_result: Dictionary = _runner_latest_pending_result(game_root)
+		if not resumed_result.is_empty():
+			result = resumed_result
+		else:
+			result = wait_result
+	await _finish_presentations(game_root)
 	return result
 
 
@@ -1050,7 +1062,7 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 		"money": 0,
 	}
 	player.active_container_id = container_id
-	_finish_presentations(game_root)
+	await _finish_presentations(game_root)
 	var take_all: Dictionary = game_root.take_all_active_container_items()
 	if not bool(take_all.get("success", false)):
 		errors.append("empty state setup take all failed: %s" % take_all.get("reason", "unknown"))
@@ -1058,7 +1070,7 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 	if not _array_or_empty(session.get("inventory", [])).is_empty() or int(session.get("money", 0)) != 0:
 		errors.append("empty state setup should clear container session")
 	game_root.rebuild_runtime_world({})
-	var container_node: Node = game_root.find_child("MapObject_%s" % container_id, true, false)
+	var container_node: Node = _find_interaction_node(game_root, container_id)
 	if container_node == null:
 		errors.append("empty container should remain as a map object")
 		return
@@ -1141,7 +1153,7 @@ func _validate_empty_container_world_state(game_root: Node, errors: Array[String
 	if pickable_body == null or str(pickable_target.get("container_model_asset_id", "")) != "builtin:container:cabinet_medical":
 		errors.append("empty container pickable body should mirror container model asset id")
 	game_root.select_interaction_node(container_node)
-	var open_result: Dictionary = _execute_primary_and_complete(game_root)
+	var open_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(open_result.get("success", false)):
 		errors.append("empty container should still open: %s" % open_result.get("reason", "unknown"))
 	if not _container_text(game_root).contains("容器为空"):
@@ -1154,6 +1166,8 @@ func _has_pending(game_root: Node) -> bool:
 
 
 func _final_interaction_result(result: Dictionary) -> bool:
+	if _interaction_result_is_queued(result):
+		return false
 	if not bool(result.get("success", false)):
 		return true
 	return bool(result.get("consumed_target", false)) \
@@ -1161,7 +1175,40 @@ func _final_interaction_result(result: Dictionary) -> bool:
 		or result.has("container") \
 		or _has_context_snapshot(result) \
 		or bool(result.get("waited", false)) \
-		or bool(result.get("defeated", false))
+		or bool(result.get("defeated", false)) \
+		or not str(result.get("open_panel", "")).is_empty()
+
+
+func _interaction_result_is_queued(result: Dictionary) -> bool:
+	return str(result.get("reason", "")) == "ap_insufficient_interaction_queued" \
+		or str(result.get("kind", "")) == "pending_interaction" \
+		or not _dictionary_or_empty(result.get("pending_interaction", {})).is_empty()
+
+
+func _runner_latest_interaction_result(game_root: Node) -> Dictionary:
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot()) if game_root.has_method("runtime_control_snapshot") else {}
+	var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+	if str(runner.get("action_kind", "")) != "interact":
+		return {}
+	var latest: Dictionary = _dictionary_or_empty(runner.get("latest_result", {}))
+	var pending_result: Dictionary = _dictionary_or_empty(latest.get("pending_result", {}))
+	if _final_interaction_result(pending_result):
+		return pending_result
+	if _final_interaction_result(latest):
+		return latest
+	return {}
+
+
+func _runner_latest_pending_result(game_root: Node) -> Dictionary:
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot()) if game_root.has_method("runtime_control_snapshot") else {}
+	var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+	var latest: Dictionary = _dictionary_or_empty(runner.get("latest_result", {}))
+	var pending_result: Dictionary = _dictionary_or_empty(latest.get("pending_result", {}))
+	if _final_interaction_result(pending_result):
+		return pending_result
+	if _final_interaction_result(latest):
+		return latest
+	return {}
 
 
 func _has_context_snapshot(result: Dictionary) -> bool:
@@ -1725,8 +1772,47 @@ func _assert_container_context_menu(errors: Array[String], game_root: Node, expe
 
 
 func _finish_presentations(game_root: Node) -> void:
-	if game_root.has_method("finish_world_action_presentations"):
-		game_root.finish_world_action_presentations()
+	for _i in range(8):
+		if game_root.has_method("finish_world_action_presentations"):
+			game_root.finish_world_action_presentations()
+		await process_frame
+		var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot()) if game_root.has_method("runtime_control_snapshot") else {}
+		var queue: Dictionary = _dictionary_or_empty(runtime.get("world_action_queue", {}))
+		var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+		var queue_active := bool(queue.get("active", false)) or bool(queue.get("presenter_active", false)) or bool(queue.get("pending_ui_active", false)) or bool(queue.get("pending_final_refresh_active", false))
+		var runner_active := bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))
+		if not queue_active and not runner_active:
+			return
+
+
+func _wait_for_turn_action_runner_idle(game_root: Node, max_frames: int = 720) -> void:
+	for _index in range(max_frames):
+		var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot()) if game_root.has_method("runtime_control_snapshot") else {}
+		var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+		if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)):
+			return
+		await process_frame
+
+
+func _find_interaction_node(root: Node, target_id: String) -> Node:
+	var prefixed: Node = root.find_child("MapObject_%s" % target_id, true, false)
+	if prefixed != null:
+		return prefixed
+	var direct: Node = root.find_child(target_id, true, false)
+	if direct != null:
+		return direct
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node != null and node.has_meta("interaction_target"):
+			var target: Dictionary = _dictionary_or_empty(node.get_meta("interaction_target"))
+			if str(target.get("target_id", "")) == target_id:
+				return node
+		if node == null:
+			continue
+		for child in node.get_children():
+			pending.append(child)
+	return null
 
 
 func _array_or_empty(value: Variant) -> Array:

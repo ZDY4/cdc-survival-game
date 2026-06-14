@@ -132,6 +132,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_expect_runner_interaction_phase(errors, game_root, "pickup", "item_pickup", "survivor_outpost_01_pickup_medkit")
 		_expect_world_action_interaction_presenter(errors, game_root, "survivor_outpost_01_pickup_medkit", "pickup", "item_pickup")
+		var queue_before_finish: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("world_action_queue", {}))
+		if not bool(queue_before_finish.get("pending_final_refresh_active", false)):
+			errors.append("pickup interaction should defer final world refresh until presenter completes, got %s" % JSON.stringify(queue_before_finish))
+		if _find_interaction_node(game_root, "survivor_outpost_01_pickup_medkit") == null:
+			errors.append("pickup interaction should keep consumed node available for presenter until final refresh")
 	await _wait_for_world_action_presenter_idle(game_root)
 	await _expect_interaction_visual_profiles(errors, game_root)
 	if int(_player_inventory(game_root).get("1006", 0)) <= 0:

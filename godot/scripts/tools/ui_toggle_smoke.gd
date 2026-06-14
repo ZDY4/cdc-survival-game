@@ -693,7 +693,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_press_key(game_root, KEY_ESCAPE)
 	_expect_stage_closed(errors, game_root, "Esc should close active stage panel")
 
-	var pickup_node: Node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
+	var pickup_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_pickup_medkit")
 	if pickup_node == null:
 		errors.append("missing pickup node for interaction menu test")
 	else:
@@ -3095,6 +3095,27 @@ func _route_plan_for_location(map_snapshot: Dictionary, location_id: String) -> 
 		if str(plan_data.get("to_location_id", "")) == location_id:
 			return plan_data
 	return {}
+
+
+func _find_interaction_node(root: Node, target_id: String) -> Node:
+	var prefixed: Node = root.find_child("MapObject_%s" % target_id, true, false)
+	if prefixed != null:
+		return prefixed
+	var direct: Node = root.find_child(target_id, true, false)
+	if direct != null:
+		return direct
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node != null and node.has_meta("interaction_target"):
+			var target: Dictionary = _dictionary_or_empty(node.get_meta("interaction_target"))
+			if str(target.get("target_id", "")) == target_id:
+				return node
+		if node == null:
+			continue
+		for child in node.get_children():
+			pending.append(child)
+	return null
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

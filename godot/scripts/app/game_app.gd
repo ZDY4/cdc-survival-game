@@ -1538,6 +1538,21 @@ func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: 
 	if _runner_step_should_continue_crafting_queue(step_result, runner_snapshot):
 		crafting_continuation = _continue_crafting_queue_after_wait(step_result, runner_snapshot)
 	var interaction_result: Dictionary = _runner_interaction_result(step_result, runner_snapshot)
+	if not interaction_result.is_empty():
+		_apply_world_root_snapshot(false)
+		_configure_turn_action_runner()
+		_configure_runtime_audio_layers()
+		if bool(crafting_continuation.get("continued", false)):
+			_refresh_operation_panels(_array_or_empty(crafting_continuation.get("refresh", [])))
+		_apply_interaction_execution_result(interaction_result, _dictionary_or_empty(runner_snapshot.get("target", {})))
+		return {
+			"success": true,
+			"render_world": true,
+			"world_result_synced": false,
+			"world_result_deferred": true,
+			"step_result": step_result.duplicate(true),
+			"turn_action_runner": runner_snapshot.duplicate(true),
+		}
 	var needs_world_result_sync := _turn_action_step_needs_world_result_sync(step_result, runner_snapshot, interaction_result, crafting_continuation)
 	if needs_world_result_sync and not _rebuild_runtime_world_result("turn_action_runner_step"):
 		return {"success": false, "reason": "world_result_sync_failed"}
@@ -1546,15 +1561,6 @@ func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: 
 	_configure_runtime_audio_layers()
 	if bool(crafting_continuation.get("continued", false)):
 		_refresh_operation_panels(_array_or_empty(crafting_continuation.get("refresh", [])))
-	if not interaction_result.is_empty():
-		_apply_interaction_execution_result(interaction_result, _dictionary_or_empty(runner_snapshot.get("target", {})))
-		return {
-			"success": true,
-			"render_world": true,
-			"world_result_synced": needs_world_result_sync,
-			"step_result": step_result.duplicate(true),
-			"turn_action_runner": runner_snapshot.duplicate(true),
-		}
 	refresh_hud(current_interaction_prompt())
 	return {
 		"success": true,
@@ -2539,13 +2545,13 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 	var followup: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execution_followup", result, executed_target))
 	ui_feedback_state_controller.call("apply_interaction_followup", followup)
 	var stage_panel_to_open := str(followup.get("stage_panel", ""))
-	world_result = interaction_controller.world_result
-	runtime_view_state_controller.call("sync_observed_level_to_map", world_result)
-	# 地图切换、对象消费、移动和击杀后需要重绘世界，保证 scene tree 与运行时快照一致。
-	_apply_runtime_scene_refresh(true, {}, {
-		"present_world_action": true,
-		"command_result": presentation_result,
-	})
+	var final_world_result: Dictionary = _build_interaction_final_world_result()
+	var presenter_result: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("present_result", self, _world_container_node(), presentation_result, world_result))
+	var presenter_active := bool(presenter_result.get("active", false))
+	if presenter_active:
+		_queue_deferred_world_refresh(final_world_result, _dictionary_or_empty(result.get("prompt", {})), presentation_result, "interaction_final_refresh", true)
+	else:
+		_apply_interaction_final_world_result(final_world_result, presentation_result)
 	var deferred_ui := false
 	if not stage_panel_to_open.is_empty():
 		deferred_ui = _queue_or_open_stage_panel_after_world_action(stage_panel_to_open, presentation_result)
@@ -2555,6 +2561,25 @@ func _apply_interaction_execution_result(result: Dictionary, executed_target: Di
 		refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
 	else:
 		refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
+
+
+func _build_interaction_final_world_result() -> Dictionary:
+	if runtime_refresh_controller == null or simulation == null:
+		return world_result.duplicate(true)
+	var built: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_world_result_from_snapshot", simulation.snapshot(), "interaction_final_refresh"))
+	if bool(built.get("ok", false)):
+		return _dictionary_or_empty(built.get("world_result", {})).duplicate(true)
+	push_error("交互最终地图快照构建失败: %s" % str(built.get("error", built.get("reason", "unknown"))))
+	return world_result.duplicate(true)
+
+
+func _apply_interaction_final_world_result(final_world_result: Dictionary, presentation_result: Dictionary) -> void:
+	_apply_existing_runtime_world_result(final_world_result, "interaction_final_refresh")
+	_apply_runtime_scene_refresh(true, {}, {
+		"present_world_action": false,
+		"command_result": presentation_result,
+		"source": "interaction_final_refresh",
+	})
 
 
 func _interaction_world_action_result(result: Dictionary, executed_target: Dictionary) -> Dictionary:
