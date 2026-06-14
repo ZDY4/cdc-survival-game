@@ -7,14 +7,14 @@
 路线口径：
 
 - 每个阶段都以最终 action pipeline 为交付对象，阶段产物必须能并入目标架构并长期保留。
-- 每项改动都沉淀为系统能力，入口、状态和表现路径统一归入正式 action pipeline。
+- 每项改动都沉淀为最终系统能力，入口、状态和表现路径统一归入正式 action pipeline。
 - 移动、回合、交互、战斗、等待、制作、调试和 smoke 共用同一套 runner facade 与动作语义。
 - 运行时、headless smoke、debug facade 和手动游戏都通过 action runner 进入规则推进与表现调度。
 - 文档中的阶段顺序是最终系统的能力建设顺序，每个阶段完成后都让目标架构更完整。
 - 每个阶段的实现成果收敛到最终模块边界，测试、调试和手动运行共享正式运行时入口与状态来源。
 - 所有条目都直接指向 Godot 原生运行时的最终形态：scene、node、resource、signal、GDScript 模块和稳定 facade。
 - 移动、相机、交互、战斗、等待、制作和调试能力都收敛到同一套最终动作管线。
-- 已有缺陷只作为架构验收样例记录；实施路线按最终模块、最终接口和最终运行时语义推进。
+- 验收样例只用于定义最终体验和系统边界；实施路线按最终模块、最终接口和最终运行时语义推进。
 
 ## 1. 最终目标
 
@@ -296,7 +296,7 @@ Action active 时：
 - `PlayerInteraction`、`Movement`、`AI`、`Combat`、`Save` smoke 的运行入口全部绑定 runner facade。
 - 运行时移动、交互、攻击、等待和制作验收绑定 `TurnActionRunner`、`ActorViewController`、相机 follow snapshot 和 actor node 稳定性。
 - 输入、HUD、debug、smoke 都只提交 action request，由 runner 统一驱动规则推进和表现调度。
-- 现有直接改 snapshot、直接触发世界刷新、直接完成整段动作的入口统一迁移到 runner facade。
+- 动作入口层只提交玩家或系统意图；snapshot 更新、世界刷新和动作完成都由 runner facade 按 phase 统一驱动。
 
 验收：
 
