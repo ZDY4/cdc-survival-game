@@ -39,6 +39,7 @@ func snapshot(pathfinding_time_ms: float, pathfinding_visited_cell_count: int) -
 		resolved_fps = float(Engine.get_frames_per_second())
 	if resolved_fps <= 0.0:
 		resolved_fps = 60.0
+	var rendered_object_count := _rendered_object_count(last_render_counts)
 	return {
 		"fps": resolved_fps,
 		"frame_time_ms": frame_time_ms,
@@ -51,7 +52,7 @@ func snapshot(pathfinding_time_ms: float, pathfinding_visited_cell_count: int) -
 		"render_counts": last_render_counts.duplicate(true),
 		"render_count": int(last_render_counts.get("total", 0)),
 		"actor_count": int(last_render_counts.get("actors", 0)),
-		"object_count": int(last_render_counts.get("objects", 0)),
+		"object_count": rendered_object_count,
 		"collider_count": int(last_render_counts.get("colliders", 0)),
 		"light_count": int(last_render_counts.get("lights", 0)),
 		"camera_count": int(last_render_counts.get("cameras", 0)),
@@ -72,3 +73,12 @@ func _render_count_summary(counts: Dictionary) -> Dictionary:
 			total += int(value)
 	summary["total"] = total
 	return summary
+
+
+func _rendered_object_count(counts: Dictionary) -> int:
+	if counts.has("objects"):
+		return int(counts.get("objects", 0))
+	var total := 0
+	for key in ["interaction_targets", "markers", "corpses"]:
+		total += int(counts.get(key, 0))
+	return total

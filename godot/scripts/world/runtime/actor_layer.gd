@@ -73,6 +73,7 @@ func _sync_actor_view(node: Node3D, actor_data: Dictionary) -> void:
 	if not bool(node.get_meta("action_runner_active", false)):
 		node.position = _grid_to_world(_dictionary_or_empty(actor_data.get("grid_position", {})), DEFAULT_ACTOR_Y)
 	_apply_actor_facing(node, actor_data)
+	_sync_equipment_visuals(node, _array_or_empty(actor_data.get("equipment_visuals", [])))
 	_sync_status_effect_icons(node, _array_or_empty(_dictionary_or_empty(actor_data.get("combat", {})).get("active_effects", [])))
 
 
@@ -98,6 +99,93 @@ func _add_actor_model(parent: Node3D, actor_data: Dictionary) -> void:
 	model.name = "ActorModel"
 	model.set_meta("model_asset", model_asset)
 	parent.add_child(model)
+
+
+func _sync_equipment_visuals(parent: Node3D, equipment_visuals: Array) -> void:
+	var active_slots: Dictionary = {}
+	for visual_value in equipment_visuals:
+		var visual: Dictionary = _dictionary_or_empty(visual_value)
+		var slot_id := str(visual.get("slot_id", "")).strip_edges()
+		if slot_id.is_empty():
+			continue
+		active_slots[slot_id] = true
+		_sync_equipment_visual(parent, slot_id, visual)
+	for child in parent.get_children():
+		if not str(child.name).begins_with("EquipmentModel_"):
+			continue
+		var slot_id := str(child.get_meta("equipment_slot", child.name.trim_prefix("EquipmentModel_")))
+		if not active_slots.has(slot_id):
+			child.queue_free()
+
+
+func _sync_equipment_visual(parent: Node3D, slot_id: String, visual: Dictionary) -> void:
+	var model_asset := str(visual.get("model_asset", "")).strip_edges()
+	var existing := parent.get_node_or_null("EquipmentModel_%s" % slot_id) as Node3D
+	if model_asset.is_empty():
+		if existing != null:
+			existing.queue_free()
+		return
+	if existing != null and str(existing.get_meta("model_asset", "")) != model_asset:
+		parent.remove_child(existing)
+		existing.queue_free()
+		existing = null
+	if existing == null:
+		existing = _instantiate_equipment_model(slot_id, model_asset)
+		if existing == null:
+			return
+		parent.add_child(existing)
+	_apply_equipment_transform(existing, visual)
+	_apply_equipment_metadata(existing, visual)
+
+
+func _instantiate_equipment_model(slot_id: String, model_asset: String) -> Node3D:
+	var resolved: Dictionary = AssetPathResolver.resolve_model_asset(model_asset)
+	var scene_path: String = str(resolved.get("resource_path", ""))
+	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		push_error("装备缺少正式模型资源 slot=%s model_asset=%s" % [slot_id, model_asset])
+		return null
+	var packed: PackedScene = load(scene_path) as PackedScene
+	if packed == null:
+		push_error("装备模型加载失败: %s" % scene_path)
+		return null
+	var model: Node3D = packed.instantiate() as Node3D
+	if model == null:
+		push_error("装备模型不是 Node3D: %s" % scene_path)
+		return null
+	model.name = "EquipmentModel_%s" % slot_id
+	model.set_meta("equipment_slot", slot_id)
+	model.set_meta("model_asset", model_asset)
+	return model
+
+
+func _apply_equipment_transform(model: Node3D, visual: Dictionary) -> void:
+	model.position = _vector3_from_value(visual.get("attach_offset", Vector3.ZERO), Vector3.ZERO)
+	model.rotation_degrees = _vector3_from_value(visual.get("attach_rotation_degrees", Vector3.ZERO), Vector3.ZERO)
+	model.scale = _vector3_from_value(visual.get("attach_scale", Vector3.ONE), Vector3.ONE)
+
+
+func _apply_equipment_metadata(model: Node3D, visual: Dictionary) -> void:
+	for key in [
+		"slot_id",
+		"item_id",
+		"equip_slot",
+		"visual_asset",
+		"model_asset",
+		"attach_target",
+		"socket_id",
+		"body_region",
+		"presentation_mode",
+		"weapon_visual_kind",
+		"reload_visual_state",
+		"ammo_type",
+		"max_ammo",
+		"loaded_ammo",
+		"reload_time",
+		"tint",
+	]:
+		if visual.has(key):
+			model.set_meta(key, visual.get(key))
+	model.set_meta("equipment_slot", str(visual.get("slot_id", model.get_meta("equipment_slot", ""))))
 
 
 func _add_player_runtime_marker(parent: Node3D) -> void:
@@ -227,6 +315,22 @@ func _remove_missing_actors(active_ids: Dictionary) -> void:
 
 func _grid_to_world(grid: Dictionary, y: float) -> Vector3:
 	return Vector3(float(grid.get("x", 0)), y, float(grid.get("z", 0)))
+
+
+func _vector3_from_value(value: Variant, fallback: Vector3) -> Vector3:
+	if value is Vector3:
+		return value
+	if typeof(value) == TYPE_DICTIONARY:
+		var data: Dictionary = value
+		return Vector3(float(data.get("x", fallback.x)), float(data.get("y", fallback.y)), float(data.get("z", fallback.z)))
+	if typeof(value) == TYPE_ARRAY:
+		var values: Array = value
+		if values.size() >= 3:
+			return Vector3(float(values[0]), float(values[1]), float(values[2]))
+	if typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT:
+		var scalar := float(value)
+		return Vector3(scalar, scalar, scalar)
+	return fallback
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
