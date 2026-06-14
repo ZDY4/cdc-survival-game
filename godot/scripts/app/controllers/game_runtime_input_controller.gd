@@ -30,6 +30,8 @@ var pending_movement_path_markers: Node3D
 var selected_node: Node
 var hover_refresh_requested := false
 var last_selection_clear_result: Dictionary = {}
+var cached_player_actor_id := 0
+var last_hover_screen_position := Vector2(-1000000.0, -1000000.0)
 
 
 func _init(p_game_root: Node) -> void:
@@ -48,6 +50,8 @@ func _init(p_game_root: Node) -> void:
 func attach_world(p_world_container: Node3D, p_world_result: Dictionary) -> void:
 	world_container = p_world_container
 	world_result = p_world_result
+	cached_player_actor_id = _player_actor_id_from_world_result()
+	last_hover_screen_position = Vector2(-1000000.0, -1000000.0)
 	camera = _find_world_camera()
 	if camera == null:
 		push_warning("运行时输入控制器找不到 WorldCamera，鼠标拾取和相机移动暂不可用")
@@ -159,6 +163,8 @@ func _handle_mouse_motion(mouse_event: InputEventMouseMotion) -> void:
 	if camera_input_controller.is_dragging():
 		_drag_camera_to_screen_position(mouse_event.position)
 	else:
+		if mouse_event.position == last_hover_screen_position:
+			return
 		update_hover_at_screen_position(mouse_event.position)
 
 
@@ -229,6 +235,7 @@ func update_hover_at_screen_position(screen_position: Vector2) -> Dictionary:
 	if camera == null or not camera.is_inside_tree():
 		_set_hover_failure("camera_missing")
 		return {"success": false, "reason": "camera_missing"}
+	last_hover_screen_position = screen_position
 
 	var hit: Dictionary = world_interaction_picker.pick_from_screen(camera, screen_position, world_result, _observed_level())
 	if hit.is_empty():
@@ -579,6 +586,7 @@ func _scale_zoom(multiplier: float) -> void:
 
 func _request_hover_refresh() -> void:
 	hover_refresh_requested = true
+	last_hover_screen_position = Vector2(-1000000.0, -1000000.0)
 
 
 func _update_hover_cursor(world_position: Vector3) -> void:
@@ -810,7 +818,7 @@ func _clear_move_path_preview_markers() -> void:
 
 
 func _update_pending_movement_path_markers() -> void:
-	var pending: Dictionary = _dictionary_or_empty(_runtime_snapshot().get("pending_movement", {}))
+	var pending: Dictionary = _pending_movement_snapshot()
 	runtime_marker_controller.update_pending_movement_path_markers(pending, _observed_level())
 
 
@@ -819,11 +827,33 @@ func _clear_pending_movement_path_markers() -> void:
 
 
 func _player_actor_id() -> int:
+	if cached_player_actor_id > 0:
+		return cached_player_actor_id
+	cached_player_actor_id = _player_actor_id_from_world_result()
+	if cached_player_actor_id > 0:
+		return cached_player_actor_id
 	for actor in _array_or_empty(_runtime_snapshot().get("actors", [])):
+		var actor_data: Dictionary = _dictionary_or_empty(actor)
+		if str(actor_data.get("kind", "")) == "player":
+			cached_player_actor_id = int(actor_data.get("actor_id", 0))
+			return cached_player_actor_id
+	return 0
+
+
+func _player_actor_id_from_world_result() -> int:
+	for actor in _array_or_empty(world_result.get("actors", [])):
 		var actor_data: Dictionary = _dictionary_or_empty(actor)
 		if str(actor_data.get("kind", "")) == "player":
 			return int(actor_data.get("actor_id", 0))
 	return 0
+
+
+func _pending_movement_snapshot() -> Dictionary:
+	var simulation: Variant = game_root.get("simulation") if game_root != null else null
+	if simulation == null:
+		return {}
+	var pending: Dictionary = _dictionary_or_empty(simulation.get("pending_movement"))
+	return pending.duplicate(true)
 
 
 func _runtime_snapshot() -> Dictionary:
@@ -1085,8 +1115,9 @@ func _runtime_has_pending() -> bool:
 	var simulation: Variant = game_root.get("simulation") if game_root != null else null
 	if simulation == null:
 		return false
-	var snapshot: Dictionary = simulation.snapshot()
-	return not _dictionary_or_empty(snapshot.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(snapshot.get("pending_crafting", {})).is_empty()
+	return not _dictionary_or_empty(simulation.get("pending_movement")).is_empty() \
+		or not _dictionary_or_empty(simulation.get("pending_interaction")).is_empty() \
+		or not _dictionary_or_empty(simulation.get("pending_crafting")).is_empty()
 
 
 func _clear_skill_target_preview_markers() -> void:

@@ -240,6 +240,7 @@ func _handle_mouse_motion(game_root: Node, runtime_input_controller: RefCounted,
 		return true
 	if runtime_input_controller.has_method("handle_world_mouse_motion"):
 		runtime_input_controller.call("handle_world_mouse_motion", event)
+		_mark_input_handled(game_root)
 		return true
 	return false
 
@@ -251,8 +252,10 @@ func _handle_mouse_button(game_root: Node, runtime_input_controller: RefCounted,
 		_mark_input_handled(game_root)
 		return true
 	if _gameplay_input_blocked(game_root) and not _blocked_camera_drag_button_allowed(runtime_input_controller, event):
+		_mark_input_handled(game_root)
 		return true
 	if respect_mouse_blocker and runtime_input_controller.has_method("mouse_over_blocking_ui") and bool(runtime_input_controller.call("mouse_over_blocking_ui")):
+		_mark_input_handled(game_root)
 		return true
 	if runtime_input_controller.has_method("handle_world_mouse_button") and bool(runtime_input_controller.call("handle_world_mouse_button", event)):
 		_mark_input_handled(game_root)
