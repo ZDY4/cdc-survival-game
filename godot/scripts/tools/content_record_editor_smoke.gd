@@ -214,7 +214,7 @@ func _expect_sprite_rig_inspector(errors: Array[String]) -> void:
 	window._on_grid_cell_pressed("yaw_000_pitch_0")
 	if window.preview == null or window.preview.texture == null:
 		errors.append("sprite rig inspector should preview configured texture")
-	if window.path_label == null or not window.path_label.text.ends_with("/body/yaw_000_pitch_0.png"):
+	if window.path_label == null or not window.path_label.text.ends_with("/pelvis/yaw_000_pitch_0.png"):
 		errors.append("sprite rig inspector should show selected texture path")
 	if window.summary_label == null or not window.summary_label.text.contains("Configured 680 / 680"):
 		errors.append("sprite rig inspector summary should count configured textures")
