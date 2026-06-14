@@ -30,5 +30,22 @@ func sync_camera(map_snapshot: Dictionary, focus_position: Vector3, viewport_siz
 	return {"count": 1}
 
 
+func snapshot() -> Dictionary:
+	var output: Dictionary = _dictionary_or_empty(controller.call("snapshot")) if controller != null and controller.has_method("snapshot") else {}
+	output["has_camera"] = camera != null and is_instance_valid(camera)
+	output["camera_node_path"] = str(camera.get_path()) if camera != null and is_instance_valid(camera) else ""
+	if camera != null and is_instance_valid(camera):
+		output["following_focus"] = bool(camera.get_meta("following_focus", output.get("following_focus", false)))
+		output["follow_source"] = str(camera.get_meta("follow_source", output.get("follow_source", "")))
+		output["follow_actor_id"] = int(camera.get_meta("follow_actor_id", output.get("follow_actor_id", 0)))
+		output["follow_node_active"] = bool(camera.get_meta("follow_node_active", output.get("follow_node_active", false)))
+		output["follow_node_instance_id"] = int(camera.get_meta("follow_node_instance_id", output.get("follow_node_instance_id", 0)))
+		output["focus_position"] = camera.get_meta("focus_position", output.get("focus_position", Vector3.ZERO))
+		output["zoom_factor"] = float(camera.get_meta("zoom_factor", output.get("zoom_factor", 1.0)))
+		output["camera_position"] = camera.global_position
+		output["camera_instance_id"] = camera.get_instance_id()
+	return output
+
+
 func _dictionary_or_empty(value: Variant) -> Dictionary:
 	return value if typeof(value) == TYPE_DICTIONARY else {}

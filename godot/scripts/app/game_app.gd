@@ -1061,9 +1061,24 @@ func actor_view_snapshot() -> Dictionary:
 
 
 func camera_follow_snapshot() -> Dictionary:
-	if runtime_input_controller == null or not runtime_input_controller.has_method("camera_follow_snapshot"):
-		return {"has_camera": false, "reason": "runtime_input_missing"}
-	return _dictionary_or_empty(runtime_input_controller.call("camera_follow_snapshot"))
+	var input_snapshot: Dictionary = {}
+	if runtime_input_controller != null and runtime_input_controller.has_method("camera_follow_snapshot"):
+		input_snapshot = _dictionary_or_empty(runtime_input_controller.call("camera_follow_snapshot"))
+	else:
+		input_snapshot = {"has_camera": false, "reason": "runtime_input_missing"}
+	var world_snapshot: Dictionary = {}
+	if world_root != null and world_root.has_method("camera_follow_snapshot"):
+		world_snapshot = _dictionary_or_empty(world_root.call("camera_follow_snapshot"))
+	var output: Dictionary = input_snapshot.duplicate(true)
+	output["input_controller"] = input_snapshot.duplicate(true)
+	output["world_camera"] = world_snapshot.duplicate(true)
+	if not world_snapshot.is_empty():
+		output["has_world_camera"] = bool(world_snapshot.get("has_camera", false))
+		output["world_follow_source"] = str(world_snapshot.get("follow_source", ""))
+		output["world_follow_actor_id"] = int(world_snapshot.get("follow_actor_id", 0))
+		output["world_follow_node_active"] = bool(world_snapshot.get("follow_node_active", false))
+		output["world_follow_node_instance_id"] = int(world_snapshot.get("follow_node_instance_id", 0))
+	return output
 
 
 func world_render_policy_snapshot() -> Dictionary:

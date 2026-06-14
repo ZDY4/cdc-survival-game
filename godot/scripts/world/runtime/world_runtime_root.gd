@@ -122,7 +122,15 @@ func snapshot() -> Dictionary:
 		"map_id": current_map_id,
 		"has_current_map": current_map_root != null and is_instance_valid(current_map_root),
 		"summary": last_summary.duplicate(true),
+		"camera_follow": camera_follow_snapshot(),
 	}
+
+
+func camera_follow_snapshot() -> Dictionary:
+	_ensure_runtime_children()
+	if camera_rig != null and camera_rig.has_method("snapshot"):
+		return _dictionary_or_empty(camera_rig.call("snapshot"))
+	return {"has_camera": false, "reason": "camera_rig_missing"}
 
 
 func render_count_summary() -> Dictionary:

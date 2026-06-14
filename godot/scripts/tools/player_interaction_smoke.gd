@@ -2768,6 +2768,15 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 		errors.append("runtime control snapshot should expose active actor node camera target during movement, got %s" % JSON.stringify(camera_follow))
 	if player_node_instance_before_finish > 0 and int(camera_follow.get("follow_node_instance_id", 0)) != player_node_instance_before_finish:
 		errors.append("runtime camera follow should bind to player ActorView node instance, camera=%s actor_node=%s" % [JSON.stringify(camera_follow), str(player_node_instance_before_finish)])
+	var world_camera: Dictionary = _dictionary_or_empty(camera_follow.get("world_camera", {}))
+	if not bool(world_camera.get("has_camera", false)):
+		errors.append("runtime camera follow should expose world Camera3D snapshot during movement, got %s" % JSON.stringify(camera_follow))
+	if str(world_camera.get("follow_source", "")) != "actor_node":
+		errors.append("world Camera3D snapshot should follow actor node during movement, got %s" % JSON.stringify(world_camera))
+	if int(world_camera.get("follow_actor_id", 0)) != 1:
+		errors.append("world Camera3D snapshot should expose player follow actor id during movement, got %s" % JSON.stringify(world_camera))
+	if player_node_instance_before_finish > 0 and int(world_camera.get("follow_node_instance_id", 0)) != player_node_instance_before_finish:
+		errors.append("world Camera3D snapshot should bind to player ActorView node instance, camera=%s actor_node=%s" % [JSON.stringify(world_camera), str(player_node_instance_before_finish)])
 	var render_policy: Dictionary = _dictionary_or_empty(active_control_snapshot.get("world_render_policy", {}))
 	if not bool(render_policy.get("runner_active", false)):
 		errors.append("world render policy should see runner active during movement, got %s" % JSON.stringify(render_policy))

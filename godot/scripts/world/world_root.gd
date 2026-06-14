@@ -80,6 +80,20 @@ func debug_overlay_snapshot() -> Dictionary:
 	return {"active": false, "mode": "off", "cell_count": 0}
 
 
+func runtime_world_snapshot() -> Dictionary:
+	var container := ensure_world_container()
+	if container != null and container.has_method("snapshot"):
+		return _dictionary_or_empty(container.call("snapshot"))
+	return {"has_current_map": false}
+
+
+func camera_follow_snapshot() -> Dictionary:
+	var container := ensure_world_container()
+	if container != null and container.has_method("camera_follow_snapshot"):
+		return _dictionary_or_empty(container.call("camera_follow_snapshot"))
+	return {"has_camera": false, "reason": "runtime_camera_missing"}
+
+
 func render_count_summary() -> Dictionary:
 	return last_render_counts.duplicate(true)
 
