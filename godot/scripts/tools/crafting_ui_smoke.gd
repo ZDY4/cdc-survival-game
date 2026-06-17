@@ -514,7 +514,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	player_for_tool.inventory["1010"] = 3
 	player_for_tool.inventory["1012"] = 1
 	player_for_tool.progression["learned_skills"]["crafting"] = 1
-	var unlock_craft_result: Dictionary = game_root.simulation.craft_recipe(1, "recipe_knife_basic", game_root.registry.get_library("recipes"), game_root.call("_crafting_context"))
+	var unlock_craft_result: Dictionary = game_root.simulation.craft_recipe(1, "recipe_knife_basic", game_root.registry.get_library("recipes"), game_root.crafting_context())
 	if not bool(unlock_craft_result.get("success", false)):
 		errors.append("crafting source recipe for unlock should succeed: %s" % unlock_craft_result.get("reason", "unknown"))
 	game_root.refresh_inventory_panel()

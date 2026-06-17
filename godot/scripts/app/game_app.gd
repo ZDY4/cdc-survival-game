@@ -16,6 +16,8 @@ const RuntimeSceneCoordinator = preload("res://scripts/app/controllers/runtime_s
 const GameUiCoordinator = preload("res://scripts/app/controllers/game_ui_coordinator.gd")
 const RuntimeDebugCoordinator = preload("res://scripts/app/controllers/runtime_debug_coordinator.gd")
 const PlayerCommandCoordinator = preload("res://scripts/app/controllers/player_command_coordinator.gd")
+const PlayerUiActionCoordinator = preload("res://scripts/app/controllers/player_ui_action_coordinator.gd")
+const CraftingQueueCoordinator = preload("res://scripts/app/controllers/crafting_queue_coordinator.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
 const PlayerCommandBlocker = preload("res://scripts/app/controllers/player_command_blocker.gd")
@@ -42,7 +44,6 @@ const TurnActionRunner = preload("res://scripts/app/controllers/turn_action_runn
 const ActorViewController = preload("res://scripts/world/actor_view_controller.gd")
 const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const HUD_ROOT_SCENE = preload("res://scenes/ui/hud_root.tscn")
-const CRAFTING_QUEUE_ADVANCE_LIMIT := 16
 
 var registry: ContentRegistry
 var simulation: RefCounted
@@ -159,6 +160,8 @@ var runtime_scene_coordinator: RefCounted = RuntimeSceneCoordinator.new()
 var game_ui_coordinator: RefCounted = GameUiCoordinator.new()
 var runtime_debug_coordinator: RefCounted = RuntimeDebugCoordinator.new()
 var player_command_coordinator: RefCounted = PlayerCommandCoordinator.new()
+var player_ui_action_coordinator: RefCounted = PlayerUiActionCoordinator.new()
+var crafting_queue_coordinator: RefCounted = CraftingQueueCoordinator.new()
 var turn_action_runner: RefCounted = TurnActionRunner.new()
 var actor_view_controller: RefCounted = ActorViewController.new()
 var latest_structural_refresh_boundary: Dictionary = {}
@@ -168,6 +171,8 @@ func _ready() -> void:
 	game_ui_coordinator.call("configure", self)
 	runtime_debug_coordinator.call("configure", self)
 	player_command_coordinator.call("configure", self)
+	player_ui_action_coordinator.call("configure", self)
+	crafting_queue_coordinator.call("configure", self)
 	_connect_world_action_flow_signals()
 	registry = ContentRegistry.new()
 	var load_result := registry.load_all()
@@ -410,6 +415,10 @@ func _hide_tooltip_layer(reason: String) -> void:
 
 func _render_tooltip_snapshot(snapshot: Dictionary) -> void:
 	game_ui_coordinator.call("render_tooltip_snapshot", snapshot)
+
+
+func render_tooltip_snapshot(snapshot: Dictionary) -> void:
+	_render_tooltip_snapshot(snapshot)
 
 
 func _setup_drag_preview_layer() -> void:
@@ -1056,59 +1065,31 @@ func current_interaction_prompt() -> Dictionary:
 
 
 func close_trade_panel(reason: String = "closed") -> void:
-	var closed_target: Dictionary = active_trade_target.duplicate(true)
-	active_trade_target = {}
-	active_trade_feedback = {}
-	if not closed_target.is_empty() and simulation != null:
-		simulation.emit_event("trade_closed", _trade_closed_payload(closed_target, reason))
-	refresh_trade_panel()
+	player_ui_action_coordinator.call("close_trade_panel", reason)
 
 
 func choose_dialogue_option(option_ref: Variant) -> Dictionary:
-	var dialogue_library: Dictionary = registry.get_library("dialogues") if registry != null else {}
-	var operation: Dictionary = _dictionary_or_empty(dialogue_action_controller.call("choose_option", simulation, option_ref, dialogue_library))
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	_apply_dialogue_trade_result(result)
-	_refresh_dialogue_operation(operation)
-	return result
+	return _dictionary_or_empty(player_ui_action_coordinator.call("choose_dialogue_option", option_ref))
 
 
 func choose_dialogue_option_by_index(option_index: int) -> Dictionary:
-	return choose_dialogue_option(option_index)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("choose_dialogue_option_by_index", option_index))
 
 
 func advance_dialogue_without_choice() -> Dictionary:
-	var dialogue_snapshot: Dictionary = _current_dialogue_snapshot()
-	var dialogue_library: Dictionary = registry.get_library("dialogues") if registry != null else {}
-	var operation: Dictionary = _dictionary_or_empty(dialogue_action_controller.call("continue_without_choice", simulation, dialogue_snapshot, dialogue_library))
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	_apply_dialogue_trade_result(result)
-	_refresh_dialogue_operation(operation)
-	return result
+	return _dictionary_or_empty(player_ui_action_coordinator.call("advance_dialogue_without_choice"))
 
 
 func _refresh_dialogue_operation(operation: Dictionary) -> void:
-	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
+	player_ui_action_coordinator.call("refresh_dialogue_operation", operation)
 
 
 func _apply_dialogue_trade_result(result: Dictionary) -> void:
-	if not bool(result.get("success", false)):
-		return
-	if str(result.get("end_type", "")) == "trade":
-		active_trade_target = _dialogue_trade_target(result)
-		active_trade_feedback = {}
-	elif bool(result.get("finished", false)) or result.has("end_type"):
-		close_trade_panel("dialogue_finished:%s" % str(result.get("end_type", "")))
+	player_ui_action_coordinator.call("apply_dialogue_trade_result", result)
 
 
 func has_active_dialogue() -> bool:
-	if simulation == null:
-		return false
-	for actor in simulation.snapshot().get("actors", []):
-		var actor_data: Dictionary = _dictionary_or_empty(actor)
-		if actor_data.get("kind", "") == "player":
-			return not str(actor_data.get("active_dialogue_id", "")).is_empty()
-	return false
+	return bool(player_ui_action_coordinator.call("has_active_dialogue"))
 
 
 func press_space_action() -> Dictionary:
@@ -1229,473 +1210,279 @@ func _apply_wait_action_operation(operation: Dictionary, refresh_reason: String)
 
 
 func press_enter_action() -> Dictionary:
-	if has_active_dialogue():
-		return advance_dialogue_without_choice()
-	return {"success": false, "reason": "no_enter_action"}
+	return _dictionary_or_empty(player_ui_action_coordinator.call("press_enter_action"))
 
 
 func take_active_container_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("take_item", _active_container_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
-	return _apply_container_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("take_active_container_item", item_id, count, stack_index))
 
 
 func take_active_container_money(count: int = -1) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("take_money", _active_container_id(), count, Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
-	return _apply_container_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("take_active_container_money", count))
 
 
 func take_all_active_container_items() -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("take_all", _active_container_id(), Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
-	return _apply_container_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("take_all_active_container_items"))
 
 
 func store_active_container_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("store_item", _active_container_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
-	return _apply_container_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("store_active_container_item", item_id, count, stack_index))
 
 
 func store_all_active_container_items() -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("store_all", _active_container_id(), Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
-	return _apply_container_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("store_all_active_container_items"))
 
 
 func transfer_active_container_item(source: String, item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("transfer_item", source, _active_container_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
-	return _apply_container_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("transfer_active_container_item", source, item_id, count, stack_index))
 
 
 func transfer_all_active_container_items(source: String) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("transfer_all", source, _active_container_id(), Callable(self, "_submit_inventory_action"), Callable(self, "_record_container_feedback")))
-	return _apply_container_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("transfer_all_active_container_items", source))
 
 
 func _apply_container_action_operation(operation: Dictionary) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
-	return result
+	return _dictionary_or_empty(player_ui_action_coordinator.call("apply_container_action_operation", operation))
 
 
 func has_active_container_session() -> bool:
-	return not _active_container_id().is_empty()
+	return bool(player_ui_action_coordinator.call("has_active_container_session"))
 
 
 func drop_player_item(item_id: String, count: int = 1) -> Dictionary:
-	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
-	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("drop_item", item_id, count, submit, Callable(self, "_record_inventory_feedback")))
-	return _apply_inventory_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("drop_player_item", item_id, count))
 
 
 func deconstruct_player_item(item_id: String, count: int = 1) -> Dictionary:
-	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
-	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("deconstruct_item", item_id, count, _crafting_context(), submit, Callable(self, "_record_inventory_feedback")))
-	return _apply_inventory_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("deconstruct_player_item", item_id, count))
 
 
 func split_player_inventory_stack(item_id: String, count: int = 1, source_stack_index: int = 0) -> Dictionary:
-	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
-	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("split_stack", item_id, count, source_stack_index, submit, Callable(self, "_record_inventory_feedback")))
-	return _apply_inventory_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("split_player_inventory_stack", item_id, count, source_stack_index))
 
 
 func reorder_player_inventory_item(item_id: String, target_index: int) -> Dictionary:
-	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
-	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("reorder_item", item_id, target_index, submit, Callable(self, "_record_inventory_feedback")))
-	return _apply_inventory_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("reorder_player_inventory_item", item_id, target_index))
 
 
 func use_player_item(item_id: String) -> Dictionary:
-	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
-	var operation: Dictionary = _dictionary_or_empty(inventory_action_controller.call("use_item", item_id, submit, Callable(self, "_record_inventory_feedback")))
-	return _apply_inventory_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("use_player_item", item_id))
 
 
 func _apply_inventory_action_operation(operation: Dictionary) -> Dictionary:
-	return _apply_player_action_refresh_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("apply_inventory_action_operation", operation))
 
 
 func buy_active_trade_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("buy_item", _active_shop_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_trade_feedback")))
-	return _apply_trade_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("buy_active_trade_item", item_id, count, stack_index))
 
 
 func sell_active_trade_item(item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("sell_item", _active_shop_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_trade_feedback")))
-	return _apply_trade_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("sell_active_trade_item", item_id, count, stack_index))
 
 
 func sell_active_trade_equipment(slot_id: String, item_id: String) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("sell_equipment", _active_shop_id(), slot_id, item_id, Callable(self, "_submit_inventory_action"), Callable(self, "_record_trade_feedback")))
-	return _apply_trade_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("sell_active_trade_equipment", slot_id, item_id))
 
 
 func transfer_active_trade_item(source: String, item_id: String, count: int = 1, stack_index: int = 0) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("transfer_item", source, _active_shop_id(), item_id, count, stack_index, Callable(self, "_submit_inventory_action"), Callable(self, "_record_trade_feedback")))
-	return _apply_trade_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("transfer_active_trade_item", source, item_id, count, stack_index))
 
 
 func has_active_trade_session() -> bool:
-	return not _active_shop_id().is_empty()
+	return bool(player_ui_action_coordinator.call("has_active_trade_session"))
 
 
 func confirm_active_trade_cart(entries: Array) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(trade_action_controller.call("confirm_cart", entries, _active_shop_id(), Callable(self, "_confirm_trade_cart_action"), Callable(self, "_record_trade_feedback")))
-	return _apply_trade_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("confirm_active_trade_cart", entries))
 
 
 func _apply_trade_action_operation(operation: Dictionary) -> Dictionary:
-	return _apply_player_action_refresh_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("apply_trade_action_operation", operation))
 
 
 func _confirm_trade_cart_action(shop_id: String, entries: Array) -> Dictionary:
-	if simulation == null or registry == null:
-		return {"success": false, "reason": "simulation_missing"}
-	return _dictionary_or_empty(simulation.confirm_trade_cart(1, shop_id, entries, registry.get_library("items")))
+	return _dictionary_or_empty(player_ui_action_coordinator.call("confirm_trade_cart_action", shop_id, entries))
 
 
 func equip_player_item(item_id: String, slot_id: String) -> Dictionary:
-	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
-	var operation: Dictionary = _dictionary_or_empty(character_action_controller.call("equip_item", item_id, slot_id, submit, Callable(self, "_record_character_feedback")))
-	return _apply_character_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("equip_player_item", item_id, slot_id))
 
 
 func unequip_player_slot(slot_id: String) -> Dictionary:
-	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
-	var operation: Dictionary = _dictionary_or_empty(character_action_controller.call("unequip_slot", slot_id, submit, Callable(self, "_record_character_feedback")))
-	return _apply_character_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("unequip_player_slot", slot_id))
 
 
 func reload_player_equipped_slot(slot_id: String = "main_hand") -> Dictionary:
-	var submit := Callable(self, "_submit_inventory_action") if simulation != null else Callable()
-	var operation: Dictionary = _dictionary_or_empty(character_action_controller.call("reload_slot", slot_id, submit, Callable(self, "_record_character_feedback")))
-	return _apply_character_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("reload_player_equipped_slot", slot_id))
 
 
 func allocate_player_attribute_point(attribute: String) -> Dictionary:
-	var allocate := Callable(self, "_allocate_attribute_action") if simulation != null else Callable()
-	var operation: Dictionary = _dictionary_or_empty(character_action_controller.call("allocate_attribute", attribute, allocate))
-	return _apply_character_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("allocate_player_attribute_point", attribute))
 
 
 func _apply_character_action_operation(operation: Dictionary) -> Dictionary:
-	return _apply_player_action_refresh_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("apply_character_action_operation", operation))
 
 
 func _allocate_attribute_action(attribute: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	return _dictionary_or_empty(simulation.allocate_attribute_point(1, attribute))
+	return _dictionary_or_empty(player_ui_action_coordinator.call("allocate_attribute_action", attribute))
 
 
 func learn_player_skill(skill_id: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var blocked: Dictionary = _player_command_rejection("learn_skill")
-	if not blocked.is_empty():
-		return blocked
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("learn_skill", skill_id, Callable(self, "_submit_player_command_action"), registry.get_library("skills")))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("learn_player_skill", skill_id))
 
 
 func bind_player_skill_to_hotbar(slot_id: String, skill_id: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var blocked: Dictionary = _player_command_rejection("bind_hotbar")
-	if not blocked.is_empty():
-		return blocked
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("bind_skill_to_hotbar", slot_id, skill_id, Callable(self, "_submit_player_command_action"), registry.get_library("skills")))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("bind_player_skill_to_hotbar", slot_id, skill_id))
 
 
 func bind_player_item_to_hotbar(slot_id: String, item_id: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var blocked: Dictionary = _player_command_rejection("bind_hotbar")
-	if not blocked.is_empty():
-		return blocked
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("bind_item_to_hotbar", slot_id, item_id, Callable(self, "_submit_player_command_action"), registry.get_library("items"), registry.get_library("json")))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("bind_player_item_to_hotbar", slot_id, item_id))
 
 
 func set_hotbar_group(group_id: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	if _world_action_presenter_blocks_input():
-		return _action_presenter_command_rejected("set_hotbar_group")
-	var set_group := Callable(simulation, "set_active_hotbar_group") if simulation.has_method("set_active_hotbar_group") else Callable()
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("set_hotbar_group", group_id, set_group))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("set_hotbar_group", group_id))
 
 
 func set_hotbar_group_label(group_id: String, label: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var set_label := Callable(simulation, "set_hotbar_group_label") if simulation.has_method("set_hotbar_group_label") else Callable()
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("set_hotbar_group_label", group_id, label, set_label))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("set_hotbar_group_label", group_id, label))
 
 
 func cycle_hotbar_group(direction: int) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	if _world_action_presenter_blocks_input():
-		return _action_presenter_command_rejected("cycle_hotbar_group")
-	var cycle_group := Callable(simulation, "cycle_hotbar_group") if simulation.has_method("cycle_hotbar_group") else Callable()
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("cycle_hotbar_group", direction, cycle_group))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("cycle_hotbar_group", direction))
 
 
 func _apply_skill_action_operation(operation: Dictionary) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if operation.has("target_markers") and runtime_input_controller != null and runtime_input_controller.has_method("update_skill_target_preview_markers"):
-		runtime_input_controller.update_skill_target_preview_markers(_dictionary_or_empty(operation.get("target_markers", {})))
-	var selected_prompt: Dictionary = current_interaction_prompt() if bool(operation.get("selected_prompt", false)) else {}
-	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])), selected_prompt)
-	return result
+	return _dictionary_or_empty(player_ui_action_coordinator.call("apply_skill_action_operation", operation))
 
 
 func _submit_player_command_action(command: Dictionary) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	return _dictionary_or_empty(simulation.submit_player_command(command))
+	return _dictionary_or_empty(player_ui_action_coordinator.call("submit_player_command_action", command))
 
 
 func _preview_skill_target_action(skill_id: String, target: Dictionary) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	return _dictionary_or_empty(simulation.preview_skill_target(1, skill_id, registry.get_library("skills"), target, _dictionary_or_empty(world_result.get("map", {}))))
+	return _dictionary_or_empty(player_ui_action_coordinator.call("preview_skill_target_action", skill_id, target))
 
 
 func use_hotbar_slot(slot_id: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var blocked: Dictionary = _player_command_rejection("hotbar")
-	if not blocked.is_empty():
-		return blocked
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call(
-		"use_hotbar_slot",
-		slot_id,
-		simulation.snapshot(),
-		registry.get_library("skills"),
-		registry.get_library("items"),
-		registry.get_library("json"),
-		Callable(self, "_submit_player_command_action"),
-		Callable(self, "_submit_inventory_action"),
-		skill_targeting_controller
-	))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("use_hotbar_slot", slot_id))
 
 
 func begin_skill_targeting(slot_id: String, skill_id: String = "") -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var blocked: Dictionary = _player_command_rejection("use_skill")
-	if not blocked.is_empty():
-		return blocked
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call(
-		"begin_skill_targeting",
-		slot_id,
-		skill_id,
-		simulation.snapshot(),
-		registry.get_library("skills"),
-		Callable(self, "_submit_player_command_action"),
-		skill_targeting_controller
-	))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("begin_skill_targeting", slot_id, skill_id))
 
 
 func preview_active_skill_target(target: Dictionary) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call(
-		"preview_active_skill_target",
-		target,
-		Callable(self, "_preview_skill_target_action") if simulation != null else Callable(),
-		skill_targeting_controller
-	))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("preview_active_skill_target", target))
 
 
 func confirm_active_skill_target(target: Dictionary = {}) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "skill_targeting_inactive"}
-	var blocked: Dictionary = _player_command_rejection("use_skill")
-	if not blocked.is_empty():
-		return blocked
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call(
-		"confirm_active_skill_target",
-		target,
-		Callable(self, "_submit_player_command_action"),
-		registry.get_library("skills"),
-		_dictionary_or_empty(world_result.get("map", {})),
-		skill_targeting_controller
-	))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("confirm_active_skill_target", target))
 
 
 func cancel_active_skill_targeting(reason: String = "cancelled") -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(skill_action_controller.call("cancel_active_skill_targeting", reason, skill_targeting_controller))
-	return _apply_skill_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("cancel_active_skill_targeting", reason))
 
 
 func has_active_skill_targeting() -> bool:
-	return bool(skill_targeting_controller.call("has_active_targeting"))
+	return bool(player_ui_action_coordinator.call("has_active_skill_targeting"))
 
 
 func active_skill_targeting_snapshot() -> Dictionary:
-	return _dictionary_or_empty(skill_targeting_controller.call("snapshot"))
+	return _dictionary_or_empty(player_ui_action_coordinator.call("active_skill_targeting_snapshot"))
 
 
 func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var blocked: Dictionary = _player_command_rejection("craft")
-	if not blocked.is_empty():
-		return blocked
-	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("craft_recipe", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, Callable(self, "_submit_craft_via_turn_action_runner")))
-	return _apply_crafting_action_operation(operation)
+	return _dictionary_or_empty(crafting_queue_coordinator.call("craft_player_recipe", recipe_id, count))
 
 
 func confirm_crafting_queue(entries: Array) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var blocked: Dictionary = _player_command_rejection("crafting_queue")
-	if not blocked.is_empty():
-		return blocked
-	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("confirm_queue", simulation, entries, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "_submit_craft_via_turn_action_runner")))
-	return _apply_crafting_action_operation(operation)
+	return _dictionary_or_empty(crafting_queue_coordinator.call("confirm_crafting_queue", entries))
 
 
 func _advance_crafting_queue(reason: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	return _dictionary_or_empty(crafting_action_controller.call("advance_queue", simulation, reason, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "_submit_craft_via_turn_action_runner")))
+	return _dictionary_or_empty(crafting_queue_coordinator.call("advance_crafting_queue", reason))
 
 
 func _submit_crafting_queue_entry(recipe_id: String, count: int) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	return _dictionary_or_empty(crafting_action_controller.call("_submit_craft", simulation, recipe_id, count, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), true, Callable(self, "_submit_craft_via_turn_action_runner")))
+	return _dictionary_or_empty(crafting_queue_coordinator.call("submit_crafting_queue_entry", recipe_id, count))
 
 
 func _continue_crafting_queue_after_wait(result: Dictionary, wait_runner_snapshot: Dictionary = {}) -> Dictionary:
-	var continuation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("continue_queue_after_wait", simulation, result, registry.get_library("recipes"), _crafting_context(), _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "_submit_craft_via_turn_action_runner")))
-	if bool(continuation.get("continued", false)):
-		continuation["refresh"] = ["inventory", "crafting", "skills"]
-		continuation["wait_runner_snapshot"] = wait_runner_snapshot.duplicate(true)
-		var action_kind := str(wait_runner_snapshot.get("action_kind", ""))
-		latest_action_chain = {
-			"kind": "craft_to_crafting_queue" if action_kind == "craft" else "wait_to_crafting_queue",
-			"wait_result": result.duplicate(true),
-			"wait_runner": wait_runner_snapshot.duplicate(true),
-			"source_action_kind": action_kind,
-			"queue_result": _dictionary_or_empty(continuation.get("queue_result", {})).duplicate(true),
-		}
-	return continuation
+	return _dictionary_or_empty(crafting_queue_coordinator.call("continue_crafting_queue_after_wait", result, wait_runner_snapshot))
 
 
 func _submit_craft_via_turn_action_runner(recipe_id: String, count: int, recipe_library: Dictionary, crafting_context: Dictionary, topology: Dictionary, queue_active: bool) -> Dictionary:
-	var command := {
-		"kind": "craft",
-		"actor_id": _player_actor_id(),
-		"recipe_id": recipe_id,
-		"count": max(1, count),
-		"recipe_library": recipe_library,
-		"crafting_context": crafting_context.duplicate(true),
-		"topology": topology.duplicate(true),
-	}
-	if queue_active:
-		command["crafting_queue_active"] = true
-	return request_player_craft(command, {"crafting_queue_active": queue_active})
+	return _dictionary_or_empty(crafting_queue_coordinator.call("submit_craft_via_turn_action_runner", recipe_id, count, recipe_library, crafting_context, topology, queue_active))
 
 
 func _wait_result_resumed_active_crafting_queue(result: Dictionary) -> bool:
-	return bool(crafting_action_controller.call("wait_result_resumed_active_crafting_queue", result))
+	return bool(crafting_queue_coordinator.call("wait_result_resumed_active_crafting_queue", result))
 
 
 func _completed_crafting_count_from_queue_result(result: Dictionary) -> int:
-	return int(crafting_action_controller.call("completed_crafting_count_from_queue_result", simulation, result))
+	return int(crafting_queue_coordinator.call("completed_crafting_count_from_queue_result", result))
 
 
 func update_crafting_queue(entries: Array) -> Dictionary:
-	return _dictionary_or_empty(crafting_action_controller.call("update_queue", simulation, entries, crafting_feedback_controller))
+	return _dictionary_or_empty(crafting_queue_coordinator.call("update_crafting_queue", entries))
 
 
 func crafting_queue_snapshot() -> Dictionary:
-	return _dictionary_or_empty(crafting_action_controller.call("queue_snapshot", simulation, crafting_feedback_controller))
+	return _dictionary_or_empty(crafting_queue_coordinator.call("crafting_queue_snapshot"))
 
 
 func _normalized_crafting_queue(entries: Array) -> Array[Dictionary]:
-	return _array_of_dictionaries(crafting_action_controller.call("normalize_queue", entries, crafting_feedback_controller))
+	return _array_of_dictionaries(crafting_queue_coordinator.call("normalized_crafting_queue", entries))
 
 
 func _crafting_queue_total_count(entries: Array) -> int:
-	return int(crafting_action_controller.call("queue_total_count", entries, crafting_feedback_controller))
+	return int(crafting_queue_coordinator.call("crafting_queue_total_count", entries))
 
 
 func cancel_pending_crafting(reason: String = "crafting_ui") -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	var operation: Dictionary = _dictionary_or_empty(crafting_action_controller.call("cancel_pending", simulation, reason, _dictionary_or_empty(world_result.get("map", {})), crafting_feedback_controller))
-	return _apply_crafting_action_operation(operation)
+	return _dictionary_or_empty(crafting_queue_coordinator.call("cancel_pending_crafting", reason))
 
 
 func _set_latest_crafting_queue_result(result: Dictionary, trigger: String) -> void:
-	crafting_action_controller.call("record_queue_result", crafting_feedback_controller, result, trigger, simulation)
+	crafting_queue_coordinator.call("set_latest_crafting_queue_result", result, trigger)
 
 
 func _apply_crafting_action_operation(operation: Dictionary) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	_refresh_operation_panels(_array_or_empty(operation.get("refresh", [])))
-	return result
+	return _dictionary_or_empty(crafting_queue_coordinator.call("apply_crafting_action_operation", operation))
 
 
 func _crafting_context() -> Dictionary:
-	return _dictionary_or_empty(crafting_context_builder.call("build", simulation, world_result, latest_crafting_queue_result, latest_pending_crafting_result))
+	return _dictionary_or_empty(crafting_queue_coordinator.call("crafting_context"))
+
+
+func crafting_context() -> Dictionary:
+	return _crafting_context()
 
 
 func turn_in_player_quest(quest_id: String) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(world_panel_action_controller.call(
-		"turn_in_quest",
-		quest_id,
-		Callable(self, "_turn_in_quest_action") if simulation != null else Callable()
-	))
-	return _apply_world_panel_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("turn_in_player_quest", quest_id))
 
 
 func enter_overworld_location_from_panel(location_id: String) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(world_panel_action_controller.call(
-		"enter_overworld_location",
-		location_id,
-		Callable(self, "_enter_overworld_location_action") if simulation != null else Callable()
-	))
-	return _apply_world_panel_action_operation(operation)
+	return _dictionary_or_empty(player_ui_action_coordinator.call("enter_overworld_location_from_panel", location_id))
 
 
 func _turn_in_quest_action(quest_id: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing"}
-	return _dictionary_or_empty(simulation.turn_in_quest(1, quest_id))
+	return _dictionary_or_empty(player_ui_action_coordinator.call("turn_in_quest_action", quest_id))
 
 
 func _enter_overworld_location_action(location_id: String) -> Dictionary:
-	if simulation == null:
-		return {"success": false, "reason": "simulation_missing", "location_id": location_id}
-	return _dictionary_or_empty(simulation.enter_location(1, location_id, registry.get_library("overworld")))
+	return _dictionary_or_empty(player_ui_action_coordinator.call("enter_overworld_location_action", location_id))
 
 
 func _apply_world_panel_action_operation(operation: Dictionary) -> Dictionary:
-	return _apply_player_action_refresh_operation(operation, current_interaction_prompt(), _dictionary_or_empty(operation.get("result", {})), {})
+	return _dictionary_or_empty(player_ui_action_coordinator.call("apply_world_panel_action_operation", operation))
 
 
 func _apply_player_action_refresh_operation(operation: Dictionary, selected_prompt: Dictionary = {}, rebuild_command_result: Dictionary = {}, rebuild_selected_prompt: Variant = null) -> Dictionary:
-	return _dictionary_or_empty(player_action_refresh_controller.call(
-		"apply_operation",
-		operation,
-		selected_prompt,
-		rebuild_command_result,
-		rebuild_selected_prompt,
-		Callable(self, "rebuild_runtime_world"),
-		Callable(self, "refresh_all_panels"),
-		Callable(self, "_refresh_operation_panels")
-	))
+	return _dictionary_or_empty(player_ui_action_coordinator.call("apply_player_action_refresh_operation", operation, selected_prompt, rebuild_command_result, rebuild_selected_prompt))
 
 
 func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}, command_result: Dictionary = {}) -> void:

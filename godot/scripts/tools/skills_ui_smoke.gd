@@ -461,7 +461,7 @@ func _assert_hover_tooltip_snapshot(errors: Array[String], game_root: Node, cont
 		errors.append("%s: runtime control should expose tooltip state shape: %s" % [context, runtime_tooltip])
 	else:
 		_assert_tooltip_visual_diagnostics(errors, _dictionary_or_empty(runtime_tooltip.get("visual", {})), _dictionary_or_empty(runtime_tooltip.get("recommended_rect", {})), "%s runtime" % context)
-	game_root.call("_render_tooltip_snapshot", snapshot)
+	game_root.render_tooltip_snapshot(snapshot)
 	var render: Dictionary = _dictionary_or_empty(game_root.tooltip_render_snapshot())
 	if not bool(render.get("active", false)) or bool(render.get("mouse_blocks_world", true)):
 		errors.append("%s: tooltip render should be active and non-blocking: %s" % [context, render])
