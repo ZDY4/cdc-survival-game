@@ -12,6 +12,7 @@ const RuntimePerformanceTracker = preload("res://scripts/app/controllers/runtime
 const RuntimeControlStateController = preload("res://scripts/app/controllers/runtime_control_state_controller.gd")
 const RuntimeViewStateController = preload("res://scripts/app/controllers/runtime_view_state_controller.gd")
 const RuntimeSessionContextController = preload("res://scripts/app/controllers/runtime_session_context_controller.gd")
+const RuntimeSceneCoordinator = preload("res://scripts/app/controllers/runtime_scene_coordinator.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
 const PlayerCommandBlocker = preload("res://scripts/app/controllers/player_command_blocker.gd")
@@ -151,11 +152,13 @@ var runtime_performance_tracker: RefCounted = RuntimePerformanceTracker.new()
 var runtime_control_state_controller: RefCounted = RuntimeControlStateController.new()
 var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
 var runtime_session_context_controller: RefCounted = RuntimeSessionContextController.new()
+var runtime_scene_coordinator: RefCounted = RuntimeSceneCoordinator.new()
 var turn_action_runner: RefCounted = TurnActionRunner.new()
 var actor_view_controller: RefCounted = ActorViewController.new()
 var latest_structural_refresh_boundary: Dictionary = {}
 
 func _ready() -> void:
+	runtime_scene_coordinator.call("configure", self)
 	_connect_world_action_flow_signals()
 	registry = ContentRegistry.new()
 	var load_result := registry.load_all()
@@ -1108,13 +1111,11 @@ func audio_feedback_snapshot() -> Dictionary:
 
 
 func runtime_refresh_report_snapshot() -> Dictionary:
-	if runtime_refresh_controller != null and runtime_refresh_controller.has_method("refresh_report_snapshot"):
-		return _dictionary_or_empty(runtime_refresh_controller.call("refresh_report_snapshot"))
-	return {}
+	return _dictionary_or_empty(runtime_scene_coordinator.call("runtime_refresh_report_snapshot"))
 
 
 func structural_refresh_boundary_snapshot() -> Dictionary:
-	return latest_structural_refresh_boundary.duplicate(true)
+	return _dictionary_or_empty(runtime_scene_coordinator.call("structural_refresh_boundary_snapshot"))
 
 
 func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
@@ -2331,86 +2332,47 @@ func _apply_player_action_refresh_operation(operation: Dictionary, selected_prom
 
 
 func _rebuild_world_after_runtime_change(selected_prompt: Dictionary = {}, command_result: Dictionary = {}) -> void:
-	if not _rebuild_runtime_world_result("runtime_change"):
-		return
-	_apply_runtime_scene_refresh(true, selected_prompt, {
-		"present_world_action": true,
-		"command_result": command_result,
-		"refresh_kind": "all",
-	})
+	runtime_scene_coordinator.call("rebuild_world_after_runtime_change", selected_prompt, command_result)
 
 
 func _rebuild_runtime_world_result(source: String) -> bool:
-	var refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("rebuild_world_result", simulation, interaction_controller, source))
-	return _accept_runtime_refresh_result(refresh, "world rebuild failed")
+	return bool(runtime_scene_coordinator.call("rebuild_runtime_world_result", source))
 
 
 func _apply_existing_runtime_world_result(next_world_result: Dictionary, source: String, fallback_error: String = "world refresh failed") -> bool:
-	var refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("apply_existing_world_result", simulation, interaction_controller, next_world_result, source))
-	return _accept_runtime_refresh_result(refresh, fallback_error)
+	return bool(runtime_scene_coordinator.call("apply_existing_runtime_world_result", next_world_result, source, fallback_error))
 
 
 func _accept_runtime_refresh_result(refresh: Dictionary, fallback_error: String) -> bool:
-	var accepted: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("accept_and_report_refresh_result", refresh, fallback_error))
-	world_result = _dictionary_or_empty(accepted.get("world_result", {}))
-	if not bool(accepted.get("ok", false)):
-		return false
-	if bool(accepted.get("sync_observed_level", false)):
-		runtime_view_state_controller.call("sync_observed_level_to_map", world_result)
-	return true
+	return bool(runtime_scene_coordinator.call("accept_runtime_refresh_result", refresh, fallback_error))
 
 
 func _world_container_node() -> Node3D:
-	if world_root != null and world_root.has_method("world_container_node"):
-		var container := world_root.call("world_container_node") as Node3D
-		if container != null:
-			_world_container_ref = container
-	return _world_container_ref
+	return runtime_scene_coordinator.call("world_container_node") as Node3D
 
 
 func _player_actor_id() -> int:
-	if simulation != null and simulation.has_method("_player_actor_id"):
-		return int(simulation.call("_player_actor_id"))
-	return 1
+	return int(runtime_scene_coordinator.call("player_actor_id"))
 
 
 func _setup_world_container() -> void:
-	if world_root == null or not is_instance_valid(world_root):
-		world_root = WorldRootScene.instantiate() as Node3D
-		if world_root == null:
-			world_root = WorldRoot.new()
-		world_root.name = "WorldRoot"
-		add_child(world_root)
-	if world_root.has_method("ensure_world_container"):
-		_world_container_ref = world_root.call("ensure_world_container")
+	runtime_scene_coordinator.call("setup_world_container")
 
 
 func _setup_runtime_input_controller() -> void:
-	if runtime_input_controller == null:
-		runtime_input_controller = GameRuntimeInputController.new(self)
-	runtime_input_controller.attach_world(_world_container_node(), world_result)
-	_configure_turn_action_runner()
+	runtime_scene_coordinator.call("setup_runtime_input_controller")
 
 
 func _configure_turn_action_runner() -> void:
-	if actor_view_controller != null and actor_view_controller.has_method("attach"):
-		actor_view_controller.call("attach", _world_container_node())
-	if turn_action_runner != null and turn_action_runner.has_method("configure"):
-		turn_action_runner.call("configure", simulation, actor_view_controller, self, world_result)
+	runtime_scene_coordinator.call("configure_turn_action_runner")
 
 
 func _refresh_world_runtime_bindings() -> void:
-	_setup_runtime_input_controller()
-	_configure_runtime_audio_layers()
-	_setup_panels()
+	runtime_scene_coordinator.call("refresh_world_runtime_bindings")
 
 
 func refresh_world_visuals(render_world: bool = true) -> Dictionary:
-	var boundary: Dictionary = _prepare_structural_refresh_boundary("refresh_world_visuals", render_world)
-	var counts: Dictionary = _apply_world_root_snapshot(render_world)
-	if render_world:
-		_record_structural_refresh_boundary(boundary, "refresh_world_visuals", counts)
-	return counts
+	return _dictionary_or_empty(runtime_scene_coordinator.call("refresh_world_visuals", render_world))
 
 
 func rebuild_runtime_world(selected_prompt: Dictionary = {}, command_result: Dictionary = {}) -> void:
@@ -2418,70 +2380,19 @@ func rebuild_runtime_world(selected_prompt: Dictionary = {}, command_result: Dic
 
 
 func _apply_runtime_scene_refresh(render_world: bool = true, selected_prompt: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
-	var plan: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_scene_apply_plan", render_world, selected_prompt, options))
-	var boundary: Dictionary = _prepare_structural_refresh_boundary(str(options.get("source", "runtime_scene_refresh")), bool(plan.get("render_world", true)))
-	var counts: Dictionary = _apply_world_root_snapshot(bool(plan.get("render_world", true)))
-	if bool(plan.get("render_world", true)):
-		_record_structural_refresh_boundary(boundary, str(options.get("source", "runtime_scene_refresh")), counts)
-	if bool(plan.get("present_world_action", false)):
-		_present_world_action(_dictionary_or_empty(plan.get("command_result", {})))
-	if bool(plan.get("refresh_runtime_bindings", true)):
-		_refresh_world_runtime_bindings()
-	var refresh_kind := str(plan.get("refresh_kind", "none"))
-	var prompt: Dictionary = _dictionary_or_empty(plan.get("prompt", {}))
-	if refresh_kind == "all":
-		refresh_all_panels(prompt)
-	elif refresh_kind == "hud":
-		refresh_hud(prompt)
-	return counts
+	return _dictionary_or_empty(runtime_scene_coordinator.call("apply_runtime_scene_refresh", render_world, selected_prompt, options))
 
 
 func _prepare_structural_refresh_boundary(source: String, render_world: bool = true) -> Dictionary:
-	var before_runner: Dictionary = turn_action_runner_snapshot()
-	var before_policy: Dictionary = world_render_policy_snapshot()
-	var before_phase := str(before_runner.get("phase", ""))
-	var runner_busy := bool(before_runner.get("active", false)) or bool(before_runner.get("presentation_active", false))
-	var requires_boundary := render_world and runner_busy and before_phase != "finished"
-	var boundary_result: Dictionary = {}
-	if requires_boundary:
-		boundary_result = settle_turn_action_runner_boundary("structural_refresh:%s" % source)
-		refresh_hud(current_interaction_prompt())
-	return {
-		"source": source,
-		"render_world": render_world,
-		"required": requires_boundary,
-		"settled": not requires_boundary or bool(boundary_result.get("settled", false)),
-		"boundary_result": boundary_result.duplicate(true),
-		"before_runner": before_runner.duplicate(true),
-		"after_runner": turn_action_runner_snapshot(),
-		"before_policy": before_policy.duplicate(true),
-		"after_policy": world_render_policy_snapshot(),
-	}
+	return _dictionary_or_empty(runtime_scene_coordinator.call("prepare_structural_refresh_boundary", source, render_world))
 
 
 func _record_structural_refresh_boundary(boundary: Dictionary, source: String, counts: Dictionary) -> void:
-	var record: Dictionary = boundary.duplicate(true)
-	record["source"] = source
-	record["rendered"] = true
-	record["render_sequence"] = int(runtime_performance_snapshot().get("render_sequence", 0))
-	record["counts"] = counts.duplicate(true)
-	latest_structural_refresh_boundary = record
+	runtime_scene_coordinator.call("record_structural_refresh_boundary", boundary, source, counts)
 
 
 func _apply_world_root_snapshot(render_world: bool = true) -> Dictionary:
-	_setup_world_container()
-	if world_root == null:
-		return {}
-	var runtime_snapshot: Dictionary = simulation.snapshot() if simulation != null else {}
-	var apply_result: Dictionary = _dictionary_or_empty(world_root.call("apply_runtime_snapshot", world_result, runtime_snapshot, current_debug_overlay_mode(), render_world))
-	var counts: Dictionary = _dictionary_or_empty(apply_result.get("counts", {}))
-	if render_world:
-		runtime_performance_tracker.call("record_world_render", counts, world_root)
-	elif runtime_input_controller != null:
-		runtime_input_controller.world_result = world_result
-	_world_container_ref = apply_result.get("world_container", _world_container_ref) as Node3D
-	_fog_overlay_ref = apply_result.get("fog_overlay", _fog_overlay_ref) as ColorRect
-	return counts
+	return _dictionary_or_empty(runtime_scene_coordinator.call("apply_world_root_snapshot", render_world))
 
 
 func _setup_audio_feedback_controller() -> void:

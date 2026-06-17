@@ -156,7 +156,7 @@ func _restart_game(game_root: Node) -> Dictionary:
 		return {"success": false, "reason": "world_rebuild_failed", "message": str(game_root.world_result.get("error", "world rebuild failed"))}
 	_reset_runtime_controllers(game_root)
 	_reset_debug_view_state(game_root)
-	game_root.call("_rebuild_world_after_runtime_change")
+	game_root.rebuild_runtime_world()
 	return {"success": true, "message": "game restarted"}
 
 
@@ -220,7 +220,7 @@ func _teleport_player(game_root: Node, parts: PackedStringArray) -> Dictionary:
 		"from": from_grid,
 		"to": target_grid.duplicate(true),
 	})
-	game_root.call("_rebuild_world_after_runtime_change")
+	game_root.rebuild_runtime_world()
 	return {"success": true, "grid": target_grid, "message": "teleported to %d,%d,%d" % [int(target_grid.get("x", 0)), int(target_grid.get("y", 0)), int(target_grid.get("z", 0))]}
 
 
@@ -247,7 +247,7 @@ func _spawn_actor(game_root: Node, parts: PackedStringArray) -> Dictionary:
 		"grid_position": spawn_grid.duplicate(true),
 		"map_id": game_root.simulation.active_map_id,
 	})
-	game_root.call("_rebuild_world_after_runtime_change")
+	game_root.rebuild_runtime_world()
 	return {"success": true, "actor_id": actor_id, "character_id": character_id, "message": "spawned %s #%d" % [character_id, actor_id]}
 
 
