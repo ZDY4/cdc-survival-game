@@ -18,6 +18,9 @@ const RuntimeDebugCoordinator = preload("res://scripts/app/controllers/runtime_d
 const PlayerCommandCoordinator = preload("res://scripts/app/controllers/player_command_coordinator.gd")
 const PlayerUiActionCoordinator = preload("res://scripts/app/controllers/player_ui_action_coordinator.gd")
 const CraftingQueueCoordinator = preload("res://scripts/app/controllers/crafting_queue_coordinator.gd")
+const InteractionWorldActionCoordinator = preload("res://scripts/app/controllers/interaction_world_action_coordinator.gd")
+const PlayerInteractionUiCoordinator = preload("res://scripts/app/controllers/player_interaction_ui_coordinator.gd")
+const RuntimeAudioCoordinator = preload("res://scripts/app/controllers/runtime_audio_coordinator.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
 const PlayerCommandBlocker = preload("res://scripts/app/controllers/player_command_blocker.gd")
@@ -42,7 +45,6 @@ const PlayerActionRefreshController = preload("res://scripts/app/controllers/pla
 const PlayerInteractionController = preload("res://scripts/app/controllers/player_interaction_controller.gd")
 const TurnActionRunner = preload("res://scripts/app/controllers/turn_action_runner.gd")
 const ActorViewController = preload("res://scripts/world/actor_view_controller.gd")
-const AudioFeedbackController = preload("res://scripts/app/audio_feedback_controller.gd")
 const HUD_ROOT_SCENE = preload("res://scenes/ui/hud_root.tscn")
 
 var registry: ContentRegistry
@@ -162,6 +164,9 @@ var runtime_debug_coordinator: RefCounted = RuntimeDebugCoordinator.new()
 var player_command_coordinator: RefCounted = PlayerCommandCoordinator.new()
 var player_ui_action_coordinator: RefCounted = PlayerUiActionCoordinator.new()
 var crafting_queue_coordinator: RefCounted = CraftingQueueCoordinator.new()
+var interaction_world_action_coordinator: RefCounted = InteractionWorldActionCoordinator.new()
+var player_interaction_ui_coordinator: RefCounted = PlayerInteractionUiCoordinator.new()
+var runtime_audio_coordinator: RefCounted = RuntimeAudioCoordinator.new()
 var turn_action_runner: RefCounted = TurnActionRunner.new()
 var actor_view_controller: RefCounted = ActorViewController.new()
 var latest_structural_refresh_boundary: Dictionary = {}
@@ -173,6 +178,9 @@ func _ready() -> void:
 	player_command_coordinator.call("configure", self)
 	player_ui_action_coordinator.call("configure", self)
 	crafting_queue_coordinator.call("configure", self)
+	interaction_world_action_coordinator.call("configure", self)
+	player_interaction_ui_coordinator.call("configure", self)
+	runtime_audio_coordinator.call("configure", self)
 	_connect_world_action_flow_signals()
 	registry = ContentRegistry.new()
 	var load_result := registry.load_all()
@@ -650,41 +658,15 @@ func play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dic
 
 
 func play_spatial_audio_feedback(event_kind: String, payload: Dictionary = {}, position: Vector3 = Vector3.ZERO) -> Dictionary:
-	if audio_feedback_controller == null or not audio_feedback_controller.has_method("play_spatial_feedback"):
-		return {"enabled": false, "reason": "audio_feedback_missing"}
-	return _dictionary_or_empty(audio_feedback_controller.call("play_spatial_feedback", event_kind, payload, position))
+	return _dictionary_or_empty(runtime_audio_coordinator.call("play_spatial_audio_feedback", event_kind, payload, position))
 
 
 func _play_hud_shortcut_audio(event_kind: String, control_name: String, control_kind: String, action: String, extra_payload: Dictionary = {}) -> Dictionary:
-	var payload := {
-		"audio_source": "ui",
-		"panel_id": "hud",
-		"control_name": control_name,
-		"control_kind": control_kind,
-		"action": action,
-	}
-	for key in extra_payload.keys():
-		payload[key] = extra_payload[key]
-	return _play_ui_audio_feedback(event_kind, payload)
+	return _dictionary_or_empty(runtime_audio_coordinator.call("play_hud_shortcut_audio", event_kind, control_name, control_kind, action, extra_payload))
 
 
 func finish_world_action_presentations() -> Dictionary:
-	var result: Dictionary = {}
-	if turn_action_runner != null and turn_action_runner.has_method("snapshot"):
-		var runner: Dictionary = turn_action_runner_snapshot()
-		if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
-			result = drain_turn_action_runner()
-			result["reason"] = "finish_world_action_presentations"
-	if world_action_flow_controller != null and world_action_flow_controller.has_method("finish_active_presentations"):
-		var presenter_result: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("finish_active_presentations"))
-		if result.is_empty() or bool(presenter_result.get("active", false)) or int(presenter_result.get("finished_count", 0)) > 0:
-			result = presenter_result
-	elif result.is_empty():
-		return world_action_presenter_snapshot()
-	var applied_refresh := _apply_pending_world_action_final_refresh("presenter_finished")
-	if not _apply_pending_world_action_ui("presenter_finished") and not applied_refresh:
-		refresh_hud(current_interaction_prompt())
-	return result
+	return _dictionary_or_empty(interaction_world_action_coordinator.call("finish_world_action_presentations"))
 
 
 func _ai_debug_intent_summary(intent: Dictionary) -> Dictionary:
@@ -749,8 +731,7 @@ func _drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -
 
 
 func settings_applied(snapshot: Dictionary = {}) -> void:
-	if audio_feedback_controller != null and audio_feedback_controller.has_method("apply_settings_snapshot"):
-		audio_feedback_controller.call("apply_settings_snapshot", snapshot)
+	runtime_audio_coordinator.call("settings_applied", snapshot)
 
 
 func current_map_level() -> int:
@@ -829,176 +810,59 @@ func _restore_actor_camera_follow(_reason: String = "") -> void:
 
 
 func close_active_dialogue(reason: String = "closed") -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(dialogue_action_controller.call("close_dialogue", simulation, reason))
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if bool(result.get("success", false)):
-		close_trade_panel("dialogue_closed:%s" % reason)
-		_refresh_dialogue_operation(operation)
-	return result
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("close_active_dialogue", reason))
 
 
 func close_active_container(reason: String = "closed") -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(container_action_controller.call("close_container", simulation, reason))
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if bool(result.get("success", false)):
-		active_container_feedback = {}
-	return _apply_container_action_operation(operation)
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("close_active_container", reason))
 
 
 func close_active_ui(reason: String = "closed") -> Dictionary:
-	if is_debug_console_open():
-		if hud_root != null:
-			hud_root.close_debug_console()
-		refresh_hud(current_interaction_prompt())
-		return {"success": true, "closed": "debug_console"}
-	if hud_root != null:
-		var modal_result: Dictionary = _dictionary_or_empty(hud_root.close_blocking_modal())
-		if bool(modal_result.get("success", false)):
-			return {"success": true, "closed": str(modal_result.get("closed", "modal")), "result": modal_result}
-	var runner_before_close: Dictionary = turn_action_runner_snapshot()
-	if bool(runner_before_close.get("active", false)) or bool(runner_before_close.get("presentation_active", false)):
-		var pending_before: Dictionary = _runtime_pending_state_snapshot()
-		var runner_result: Dictionary = settle_turn_action_runner_boundary(reason)
-		refresh_hud(current_interaction_prompt())
-		return {
-			"success": true,
-			"closed": "turn_action_runner",
-			"result": runner_result,
-			"pending_before": pending_before,
-			"pending_after": _runtime_pending_state_snapshot(),
-		}
-	if _world_action_presenter_blocks_input():
-		var pending_before: Dictionary = _runtime_pending_state_snapshot()
-		var result: Dictionary = finish_world_action_presentations()
-		return {
-			"success": true,
-			"closed": "world_action_presenter",
-			"result": result,
-			"pending_before": pending_before,
-			"pending_after": _runtime_pending_state_snapshot(),
-		}
-	if not active_skill_targeting.is_empty():
-		return cancel_active_skill_targeting(reason)
-	if runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()):
-		var selection_result: Dictionary = runtime_input_controller.clear_selection_state(reason)
-		return {"success": true, "closed": "selection", "result": selection_result}
-	if _close_hud_interaction_menu():
-		return {"success": true, "closed": "interaction_menu"}
-	var context_menu_close_result: Dictionary = close_active_context_menu()
-	if bool(context_menu_close_result.get("success", false)):
-		return context_menu_close_result
-	if runtime_input_controller != null:
-		runtime_input_controller.clear_selection_state(reason)
-	var dialogue_result := close_active_dialogue(reason)
-	if bool(dialogue_result.get("success", false)):
-		return {"success": true, "closed": "dialogue", "result": dialogue_result}
-	if not active_trade_target.is_empty():
-		close_trade_panel(reason)
-		return {"success": true, "closed": "trade"}
-	var container_result := close_active_container(reason)
-	if bool(container_result.get("success", false)):
-		return {"success": true, "closed": "container", "result": container_result}
-	if any_stage_panel_open():
-		close_stage_panels()
-		return {"success": true, "closed": "stage_panel"}
-	if is_settings_open():
-		hud_root.close_settings_panel()
-		_play_ui_audio_feedback("settings_panel_closed", {
-			"panel_id": "settings",
-			"action": "close_settings_panel",
-		})
-		refresh_all_panels(current_interaction_prompt())
-		return {"success": true, "closed": "settings"}
-	var pending_result: Dictionary = cancel_pending(reason, false)
-	if bool(pending_result.get("had_pending", false)):
-		return {"success": true, "closed": "pending", "result": pending_result}
-	if hud_root != null:
-		hud_root.open_settings_panel()
-		_play_ui_audio_feedback("settings_panel_opened", {
-			"panel_id": "settings",
-			"action": "open_settings_panel",
-		})
-		refresh_all_panels(current_interaction_prompt())
-		return {"success": true, "closed": "", "opened": "settings"}
-	return {"success": false, "reason": "panel_controller_missing"}
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("close_active_ui", reason))
 
 
 func close_active_context_menu() -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "hud_root_missing"}
-	return _dictionary_or_empty(hud_root.close_active_context_menu())
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("close_active_context_menu"))
 
 
 func _runtime_pending_state_snapshot() -> Dictionary:
-	if simulation == null:
-		return {"pending_movement": {}, "pending_interaction": {}, "pending_crafting": {}}
-	var snapshot: Dictionary = simulation.snapshot()
-	return {
-		"pending_movement": _dictionary_or_empty(snapshot.get("pending_movement", {})).duplicate(true),
-		"pending_interaction": _dictionary_or_empty(snapshot.get("pending_interaction", {})).duplicate(true),
-		"pending_crafting": _dictionary_or_empty(snapshot.get("pending_crafting", {})).duplicate(true),
-	}
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("runtime_pending_state_snapshot"))
 
 
 func select_interaction_target(target: Dictionary) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("select_target", interaction_controller, target))
-	return _apply_interaction_selection_operation(operation)
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("select_interaction_target", target))
 
 
 func select_interaction_node(node: Node) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("select_node", interaction_controller, node))
-	return _apply_interaction_selection_operation(operation)
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("select_interaction_node", node))
 
 
 func clear_interaction_selection(reason: String = "cleared") -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("clear_selection", interaction_controller, reason))
-	return _apply_interaction_selection_operation(operation)
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("clear_interaction_selection", reason))
 
 
 func _apply_interaction_selection_operation(operation: Dictionary) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if bool(operation.get("refresh_hud", false)):
-		refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
-	return result
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("apply_interaction_selection_operation", operation))
 
 
 func execute_primary_interaction() -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var target: Dictionary = _dictionary_or_empty(interaction_controller.selected_target).duplicate(true)
-	var prompt: Dictionary = _dictionary_or_empty(interaction_controller.selected_prompt)
-	return request_player_interaction(target, str(prompt.get("primary_option_id", "")))
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("execute_primary_interaction"))
 
 
 func execute_interaction_option(option_id: String) -> Dictionary:
-	if interaction_controller == null:
-		return {"success": false, "reason": "interaction_controller_missing"}
-	var target: Dictionary = _dictionary_or_empty(interaction_controller.selected_target).duplicate(true)
-	return request_player_interaction(target, option_id)
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("execute_interaction_option", option_id))
 
 
 func _apply_interaction_action_operation(operation: Dictionary) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(operation.get("result", {}))
-	if bool(operation.get("apply_result", false)):
-		_apply_interaction_execution_result(result, _dictionary_or_empty(operation.get("executed_target", {})))
-	return result
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("apply_interaction_action_operation", operation))
 
 
 func select_grid_target(grid: Dictionary) -> Dictionary:
-	var operation: Dictionary = _dictionary_or_empty(interaction_action_controller.call("select_grid", interaction_controller, grid))
-	return _apply_interaction_selection_operation(operation)
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("select_grid_target", grid))
 
 
 func execute_move_to_grid(grid: Dictionary) -> Dictionary:
-	var selection: Dictionary = select_grid_target(grid)
-	if not bool(selection.get("success", false)):
-		return selection
-	var result: Dictionary = request_player_move(grid)
-	if not bool(result.get("success", false)):
-		refresh_hud(current_interaction_prompt())
-		return result
-	refresh_hud(current_interaction_prompt())
-	return result
+	return _dictionary_or_empty(player_interaction_ui_coordinator.call("execute_move_to_grid", grid))
 
 
 func request_player_move(grid: Dictionary) -> Dictionary:
@@ -1550,31 +1414,19 @@ func _apply_world_root_snapshot(render_world: bool = true) -> Dictionary:
 
 
 func _setup_audio_feedback_controller() -> void:
-	if audio_feedback_controller != null:
-		return
-	audio_feedback_controller = AudioFeedbackController.new()
-	audio_feedback_controller.name = "AudioFeedbackController"
-	add_child(audio_feedback_controller)
+	runtime_audio_coordinator.call("setup_audio_feedback_controller")
 
 
 func _configure_runtime_audio_layers() -> void:
-	if audio_feedback_controller == null or simulation == null:
-		return
-	if audio_feedback_controller.has_method("configure_runtime_audio"):
-		audio_feedback_controller.call("configure_runtime_audio", simulation.snapshot(), world_result)
+	runtime_audio_coordinator.call("configure_runtime_audio_layers")
 
 
 func _process_audio_feedback() -> void:
-	if audio_feedback_controller == null or simulation == null:
-		return
-	if audio_feedback_controller.has_method("process_runtime_snapshot"):
-		audio_feedback_controller.call("process_runtime_snapshot", simulation.snapshot())
+	runtime_audio_coordinator.call("process_audio_feedback")
 
 
 func _play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Dictionary:
-	if audio_feedback_controller == null or not audio_feedback_controller.has_method("play_ui_feedback"):
-		return {"enabled": false, "reason": "audio_feedback_missing"}
-	return _dictionary_or_empty(audio_feedback_controller.call("play_ui_feedback", event_kind, payload))
+	return _dictionary_or_empty(runtime_audio_coordinator.call("play_ui_audio_feedback", event_kind, payload))
 
 
 func _setup_panels() -> void:
@@ -1600,250 +1452,111 @@ func _sync_debug_console_schema() -> void:
 
 
 func _apply_interaction_execution_result(result: Dictionary, executed_target: Dictionary) -> void:
-	var presentation_result: Dictionary = _interaction_world_action_result(result, executed_target)
-	var followup: Dictionary = _dictionary_or_empty(interaction_action_controller.call("execution_followup", result, executed_target))
-	ui_feedback_state_controller.call("apply_interaction_followup", followup)
-	var stage_panel_to_open := str(followup.get("stage_panel", ""))
-	var final_world_result: Dictionary = _build_interaction_final_world_result()
-	var presenter_result: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("present_result", self, _world_container_node(), presentation_result, world_result))
-	var presenter_active := bool(presenter_result.get("active", false))
-	if presenter_active:
-		_queue_deferred_world_refresh(final_world_result, _dictionary_or_empty(result.get("prompt", {})), presentation_result, "interaction_final_refresh", true)
-	else:
-		_apply_interaction_final_world_result(final_world_result, presentation_result)
-	var deferred_ui := false
-	if not stage_panel_to_open.is_empty():
-		deferred_ui = _queue_or_open_stage_panel_after_world_action(stage_panel_to_open, presentation_result)
-	elif _queue_or_refresh_all_panels_after_world_action(presentation_result):
-		deferred_ui = true
-	if deferred_ui:
-		refresh_hud(_dictionary_or_empty(result.get("prompt", {})))
-	else:
-		refresh_all_panels(_dictionary_or_empty(result.get("prompt", {})))
+	interaction_world_action_coordinator.call("apply_interaction_execution_result", result, executed_target)
 
 
 func _build_interaction_final_world_result() -> Dictionary:
-	if runtime_refresh_controller == null or simulation == null:
-		return world_result.duplicate(true)
-	var built: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("build_world_result_from_snapshot", simulation.snapshot(), "interaction_final_refresh"))
-	if bool(built.get("ok", false)):
-		return _dictionary_or_empty(built.get("world_result", {})).duplicate(true)
-	push_error("交互最终地图快照构建失败: %s" % str(built.get("error", built.get("reason", "unknown"))))
-	return world_result.duplicate(true)
+	return _dictionary_or_empty(interaction_world_action_coordinator.call("build_interaction_final_world_result"))
 
 
 func _apply_interaction_final_world_result(final_world_result: Dictionary, presentation_result: Dictionary) -> void:
-	_apply_existing_runtime_world_result(final_world_result, "interaction_final_refresh")
-	_apply_runtime_scene_refresh(true, {}, {
-		"present_world_action": false,
-		"command_result": presentation_result,
-		"source": "interaction_final_refresh",
-	})
+	interaction_world_action_coordinator.call("apply_interaction_final_world_result", final_world_result, presentation_result)
 
 
 func _interaction_world_action_result(result: Dictionary, executed_target: Dictionary) -> Dictionary:
-	var output: Dictionary = result.duplicate(true)
-	var events: Array = _interaction_result_events(output)
-	if not _interaction_events_include_success(events):
-		var payload: Dictionary = _interaction_success_payload_for_presentation(output, executed_target)
-		if not payload.is_empty():
-			events.append({
-				"kind": "interaction_succeeded",
-				"payload": payload,
-			})
-	if not events.is_empty():
-		output["events"] = events.duplicate(true)
-	return output
+	return _dictionary_or_empty(interaction_world_action_coordinator.call("interaction_world_action_result", result, executed_target))
 
 
 func _interaction_result_events(result: Dictionary) -> Array:
-	var events: Array = []
-	for source in [
-		result.get("events", []),
-		result.get("emitted_events", []),
-		_dictionary_or_empty(result.get("runtime_snapshot_delta", {})).get("events", []),
-		_dictionary_or_empty(result.get("pending_result", {})).get("events", []),
-		_dictionary_or_empty(result.get("result", {})).get("events", []),
-		_dictionary_or_empty(_dictionary_or_empty(result.get("result", {})).get("runtime_snapshot_delta", {})).get("events", []),
-	]:
-		for event_value in _array_or_empty(source):
-			var event: Dictionary = _dictionary_or_empty(event_value)
-			if not event.is_empty():
-				events.append(event.duplicate(true))
-	return events
+	return _array_or_empty(interaction_world_action_coordinator.call("interaction_result_events", result))
 
 
 func _interaction_events_include_success(events: Array) -> bool:
-	for event_value in events:
-		var event: Dictionary = _dictionary_or_empty(event_value)
-		if str(event.get("kind", "")) == "interaction_succeeded":
-			return true
-	return false
+	return bool(interaction_world_action_coordinator.call("interaction_events_include_success", events))
 
 
 func _interaction_success_payload_for_presentation(result: Dictionary, executed_target: Dictionary) -> Dictionary:
-	if not bool(result.get("success", false)):
-		return {}
-	var prompt: Dictionary = _dictionary_or_empty(result.get("prompt", {}))
-	var target: Dictionary = _dictionary_or_empty(prompt.get("target", {}))
-	if target.is_empty():
-		target = executed_target.duplicate(true)
-	var option_id := str(result.get("option_id", prompt.get("primary_option_id", "")))
-	var option: Dictionary = _interaction_prompt_option(prompt, option_id)
-	var target_id: Variant = _interaction_target_id_for_presentation(result, target)
-	var target_name := str(prompt.get("target_name", target.get("display_name", ""))).strip_edges()
-	if target_name.is_empty():
-		target_name = str(target_id).strip_edges()
-	return {
-		"actor_id": int(result.get("actor_id", _player_actor_id())),
-		"target_id": target_id,
-		"target_type": str(target.get("target_type", "")),
-		"target_name": target_name,
-		"target_grid": _interaction_target_grid_for_presentation(target),
-		"option_id": str(option.get("id", option_id)),
-		"option_kind": str(option.get("kind", result.get("kind", "interact"))),
-		"option_name": str(option.get("display_name", "")),
-	}
+	return _dictionary_or_empty(interaction_world_action_coordinator.call("interaction_success_payload_for_presentation", result, executed_target))
 
 
 func _interaction_prompt_option(prompt: Dictionary, option_id: String) -> Dictionary:
-	for option_value in _array_or_empty(prompt.get("options", [])):
-		var option: Dictionary = _dictionary_or_empty(option_value)
-		if option_id.is_empty() or str(option.get("id", "")) == option_id:
-			return option.duplicate(true)
-	return {}
+	return _dictionary_or_empty(interaction_world_action_coordinator.call("interaction_prompt_option", prompt, option_id))
 
 
 func _interaction_target_id_for_presentation(result: Dictionary, target: Dictionary) -> Variant:
-	if result.has("target_id"):
-		return result.get("target_id")
-	if target.has("target_id"):
-		return target.get("target_id")
-	if target.has("actor_id"):
-		return target.get("actor_id")
-	return ""
+	return interaction_world_action_coordinator.call("interaction_target_id_for_presentation", result, target)
 
 
 func _interaction_target_grid_for_presentation(target: Dictionary) -> Dictionary:
-	for key in ["grid_position", "anchor", "grid"]:
-		var grid: Dictionary = _dictionary_or_empty(target.get(key, {}))
-		if not grid.is_empty():
-			return grid.duplicate(true)
-	var cells: Array = _array_or_empty(target.get("cells", []))
-	if not cells.is_empty():
-		return _dictionary_or_empty(cells[0]).duplicate(true)
-	return {}
+	return _dictionary_or_empty(interaction_world_action_coordinator.call("interaction_target_grid_for_presentation", target))
 
 
 func _open_stage_panel_from_interaction(panel_id: String) -> void:
-	if hud_root == null or not ["crafting"].has(panel_id):
-		return
-	hud_root.open_stage_panel(panel_id)
+	interaction_world_action_coordinator.call("open_stage_panel_from_interaction", panel_id)
 
 
 func _queue_or_open_stage_panel_after_world_action(panel_id: String, result: Dictionary) -> bool:
-	if panel_id.is_empty():
-		return false
-	if _world_action_presenter_blocks_input():
-		world_action_flow_controller.call("queue_open_stage_panel", panel_id, result, _dictionary_or_empty(result.get("prompt", {})))
-		return true
-	_open_stage_panel_from_interaction(panel_id)
-	return false
+	return bool(interaction_world_action_coordinator.call("queue_or_open_stage_panel_after_world_action", panel_id, result))
 
 
 func _queue_or_refresh_all_panels_after_world_action(result: Dictionary) -> bool:
-	if not _world_action_presenter_blocks_input():
-		return false
-	world_action_flow_controller.call("queue_refresh_all_panels", result, _dictionary_or_empty(result.get("prompt", {})))
-	return true
+	return bool(interaction_world_action_coordinator.call("queue_or_refresh_all_panels_after_world_action", result))
 
 
 func _process_world_action_queue_completion() -> void:
-	if world_action_flow_controller == null:
-		return
-	world_action_flow_controller.call("process_completion")
+	interaction_world_action_coordinator.call("process_world_action_queue_completion")
 
 
 func _queue_deferred_world_refresh(final_world_result: Dictionary, selected_prompt: Dictionary, command_result: Dictionary, source: String, render_world: bool = true) -> void:
-	world_action_flow_controller.call("queue_deferred_world_refresh", final_world_result, selected_prompt, command_result, source, render_world)
+	interaction_world_action_coordinator.call("queue_deferred_world_refresh", final_world_result, selected_prompt, command_result, source, render_world)
 
 
 func _apply_pending_world_action_final_refresh(trigger: String, pending_refresh: Dictionary = {}) -> bool:
-	if pending_refresh.is_empty() and world_action_flow_controller != null:
-		pending_refresh = _dictionary_or_empty(world_action_flow_controller.call("take_pending_final_refresh"))
-	if pending_refresh.is_empty():
-		return false
-	var refresh: Dictionary = _dictionary_or_empty(runtime_refresh_controller.call("apply_pending_final_refresh", simulation, interaction_controller, pending_refresh, "world refresh failed"))
-	world_result = _dictionary_or_empty(refresh.get("world_result", {}))
-	if not bool(refresh.get("ok", false)):
-		return false
-	if bool(refresh.get("sync_observed_level", false)):
-		runtime_view_state_controller.call("sync_observed_level_to_map", world_result)
-	_apply_runtime_scene_refresh(bool(refresh.get("render_world", true)))
-	var completion: Dictionary = _dictionary_or_empty(world_action_flow_controller.call("complete_final_refresh", pending_refresh, refresh, trigger))
-	if bool(completion.get("refresh_all_panels", false)):
-		refresh_all_panels(_dictionary_or_empty(completion.get("prompt", {})))
-	return true
+	return bool(interaction_world_action_coordinator.call("apply_pending_world_action_final_refresh", trigger, pending_refresh))
 
 
 func _deferred_world_refresh_public_snapshot(source: Dictionary) -> Dictionary:
-	return _dictionary_or_empty(world_action_flow_controller.call("deferred_world_refresh_public_snapshot", source))
+	return _dictionary_or_empty(interaction_world_action_coordinator.call("deferred_world_refresh_public_snapshot", source))
 
 
 func _apply_pending_world_action_ui(trigger: String, pending_ui: Dictionary = {}) -> bool:
-	if pending_ui.is_empty() and world_action_flow_controller != null:
-		pending_ui = _dictionary_or_empty(world_action_flow_controller.call("take_pending_ui"))
-	if pending_ui.is_empty():
-		return false
-	if str(pending_ui.get("kind", "")) == "open_stage_panel":
-		_open_stage_panel_from_interaction(str(pending_ui.get("panel_id", "")))
-	if bool(pending_ui.get("refresh_all_panels", false)) or str(pending_ui.get("kind", "")) == "refresh_all_panels":
-		refresh_all_panels(_dictionary_or_empty(pending_ui.get("prompt", {})))
-	world_action_flow_controller.call("mark_deferred_ui_applied", pending_ui, trigger)
-	return true
+	return bool(interaction_world_action_coordinator.call("apply_pending_world_action_ui", trigger, pending_ui))
 
 
 func _present_world_action(command_result: Dictionary) -> void:
-	world_action_flow_controller.call("present_result", self, _world_container_node(), command_result, world_result)
+	interaction_world_action_coordinator.call("present_world_action", command_result)
 
 
 func _connect_world_action_flow_signals() -> void:
-	if world_action_flow_controller == null:
-		return
-	var final_callable := Callable(self, "_on_world_action_final_refresh_ready")
-	if not world_action_flow_controller.is_connected("final_refresh_ready", final_callable):
-		world_action_flow_controller.connect("final_refresh_ready", final_callable)
-	var ui_callable := Callable(self, "_on_world_action_deferred_ui_ready")
-	if not world_action_flow_controller.is_connected("deferred_ui_ready", ui_callable):
-		world_action_flow_controller.connect("deferred_ui_ready", ui_callable)
+	interaction_world_action_coordinator.call("connect_world_action_flow_signals")
 
 
 func _on_world_action_final_refresh_ready(pending_refresh: Dictionary) -> void:
-	_apply_pending_world_action_final_refresh("presenter_finished", pending_refresh)
+	interaction_world_action_coordinator.call("on_world_action_final_refresh_ready", pending_refresh)
 
 
 func _on_world_action_deferred_ui_ready(pending_ui: Dictionary) -> void:
-	_apply_pending_world_action_ui("presenter_finished", pending_ui)
+	interaction_world_action_coordinator.call("on_world_action_deferred_ui_ready", pending_ui)
 
 
 func _record_world_action_queue_presented(command_result: Dictionary, presenter_result: Dictionary) -> void:
-	world_action_flow_controller.call("record_presented", command_result, presenter_result)
+	interaction_world_action_coordinator.call("record_world_action_queue_presented", command_result, presenter_result)
 
 
 func _record_world_action_queue_finished(finish_result: Dictionary) -> void:
-	world_action_flow_controller.call("record_finished", finish_result)
+	interaction_world_action_coordinator.call("record_world_action_queue_finished", finish_result)
 
 
 func _world_action_command_kind(command_result: Dictionary) -> String:
-	return str(world_action_flow_controller.call("command_kind", command_result))
+	return str(interaction_world_action_coordinator.call("world_action_command_kind", command_result))
 
 
 func _world_action_event_count(command_result: Dictionary) -> int:
-	return int(world_action_flow_controller.call("event_count", command_result))
+	return int(interaction_world_action_coordinator.call("world_action_event_count", command_result))
 
 
 func _world_action_events_from_result(command_result: Dictionary) -> Array:
-	return _array_or_empty(world_action_flow_controller.call("events_from_result", command_result))
+	return _array_or_empty(interaction_world_action_coordinator.call("world_action_events_from_result", command_result))
 
 
 func _submit_inventory_action(action: Dictionary) -> Dictionary:
