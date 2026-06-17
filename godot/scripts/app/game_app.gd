@@ -13,6 +13,7 @@ const RuntimeControlStateController = preload("res://scripts/app/controllers/run
 const RuntimeViewStateController = preload("res://scripts/app/controllers/runtime_view_state_controller.gd")
 const RuntimeSessionContextController = preload("res://scripts/app/controllers/runtime_session_context_controller.gd")
 const RuntimeSceneCoordinator = preload("res://scripts/app/controllers/runtime_scene_coordinator.gd")
+const GameUiCoordinator = preload("res://scripts/app/controllers/game_ui_coordinator.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
 const PlayerCommandBlocker = preload("res://scripts/app/controllers/player_command_blocker.gd")
@@ -153,12 +154,14 @@ var runtime_control_state_controller: RefCounted = RuntimeControlStateController
 var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
 var runtime_session_context_controller: RefCounted = RuntimeSessionContextController.new()
 var runtime_scene_coordinator: RefCounted = RuntimeSceneCoordinator.new()
+var game_ui_coordinator: RefCounted = GameUiCoordinator.new()
 var turn_action_runner: RefCounted = TurnActionRunner.new()
 var actor_view_controller: RefCounted = ActorViewController.new()
 var latest_structural_refresh_boundary: Dictionary = {}
 
 func _ready() -> void:
 	runtime_scene_coordinator.call("configure", self)
+	game_ui_coordinator.call("configure", self)
 	_connect_world_action_flow_signals()
 	registry = ContentRegistry.new()
 	var load_result := registry.load_all()
@@ -217,426 +220,210 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
-	if hud_root == null:
-		return
-	_process_audio_feedback()
-	runtime_performance_tracker.call("mark_hud_refresh")
-	if selected_prompt.is_empty():
-		selected_prompt = current_interaction_prompt()
-	hud_root.refresh_hud(selected_prompt)
+	game_ui_coordinator.call("refresh_hud", selected_prompt)
 
 
 func refresh_dialogue_panel() -> void:
-	if hud_root == null:
-		return
-	hud_root.refresh_panel("dialogue")
+	game_ui_coordinator.call("refresh_panel", "dialogue")
 
 
 func refresh_inventory_panel() -> void:
-	if hud_root == null:
-		return
-	hud_root.refresh_panel("inventory", _ui_feedback_payload())
+	game_ui_coordinator.call("refresh_panel", "inventory", _ui_feedback_payload())
 
 
 func refresh_trade_panel() -> void:
-	if hud_root == null:
-		return
-	if not _active_trade_target_available():
-		close_trade_panel("target_unavailable")
-		return
-	hud_root.refresh_panel("trade", _ui_feedback_payload())
+	game_ui_coordinator.call("refresh_trade_panel")
 
 
 func refresh_container_panel() -> void:
-	if hud_root == null:
-		return
-	_close_stale_container_session()
-	hud_root.refresh_panel("container", _ui_feedback_payload())
+	game_ui_coordinator.call("refresh_container_panel")
 
 
 func refresh_character_panel() -> void:
-	if hud_root == null:
-		return
-	hud_root.refresh_panel("character", _ui_feedback_payload())
+	game_ui_coordinator.call("refresh_panel", "character", _ui_feedback_payload())
 
 
 func refresh_journal_panel() -> void:
-	if hud_root == null:
-		return
-	hud_root.refresh_panel("journal")
+	game_ui_coordinator.call("refresh_panel", "journal")
 
 
 func refresh_map_panel() -> void:
-	if hud_root == null:
-		return
-	hud_root.refresh_panel("map")
+	game_ui_coordinator.call("refresh_panel", "map")
 
 
 func refresh_skills_panel() -> void:
-	if hud_root == null:
-		return
-	hud_root.refresh_panel("skills")
+	game_ui_coordinator.call("refresh_panel", "skills")
 
 
 func refresh_crafting_panel() -> void:
-	if hud_root == null:
-		return
-	hud_root.refresh_panel("crafting")
+	game_ui_coordinator.call("refresh_panel", "crafting")
 
 
 func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
-	if hud_root == null:
-		return
-	if not _active_trade_target_available():
-		close_trade_panel("target_unavailable")
-	_close_stale_container_session()
-	_process_audio_feedback()
-	runtime_performance_tracker.call("mark_hud_refresh")
-	if selected_prompt.is_empty():
-		selected_prompt = current_interaction_prompt()
-	hud_root.refresh_all(selected_prompt, _ui_feedback_payload())
+	game_ui_coordinator.call("refresh_all_panels", selected_prompt)
 
 
 func _close_stale_container_session() -> void:
-	if simulation == null:
-		return
-	var close_reason := _active_container_close_reason()
-	if close_reason.is_empty():
-		return
-	active_container_feedback = {}
-	simulation.close_container(1, close_reason)
+	game_ui_coordinator.call("close_stale_container_session")
 
 
 func _refresh_operation_panels(panel_ids: Array, selected_prompt: Dictionary = {}) -> void:
-	if hud_root == null:
-		return
-	hud_root.refresh_operation_panels(panel_ids, selected_prompt, _ui_feedback_payload())
+	game_ui_coordinator.call("refresh_operation_panels", panel_ids, selected_prompt)
 
 
 func toggle_stage_panel(panel_id: String) -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "panel_controller_missing"}
-	if _world_action_presenter_blocks_input():
-		return _action_presenter_command_rejected("toggle_stage_panel:%s" % panel_id)
-	var result: Dictionary = _dictionary_or_empty(hud_root.toggle_stage_panel(panel_id))
-	if bool(result.get("success", false)):
-		_play_ui_audio_feedback("stage_panel_opened" if bool(result.get("open", false)) else "stage_panel_closed", {
-			"panel_id": panel_id,
-			"action": "toggle_stage_panel",
-		})
-		refresh_all_panels(current_interaction_prompt())
-	return result
+	return _dictionary_or_empty(game_ui_coordinator.call("toggle_stage_panel", panel_id))
 
 
 func close_stage_panels() -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "panel_controller_missing"}
-	var result: Dictionary = _dictionary_or_empty(hud_root.close_stage_panels())
-	if bool(result.get("success", false)) and bool(result.get("closed", false)):
-		_play_ui_audio_feedback("stage_panel_closed", {
-			"panel_id": str(result.get("panel_id", "stage")),
-			"action": "close_stage_panels",
-		})
-	return result
+	return _dictionary_or_empty(game_ui_coordinator.call("close_stage_panels"))
 
 
 func any_stage_panel_open() -> bool:
-	return hud_root != null and hud_root.any_stage_panel_open()
+	return bool(game_ui_coordinator.call("any_stage_panel_open"))
 
 
 func is_settings_open() -> bool:
-	return hud_root != null and hud_root.is_settings_open()
+	return bool(game_ui_coordinator.call("is_settings_open"))
 
 
 func toggle_settings_panel() -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "panel_controller_missing"}
-	if _world_action_presenter_blocks_input():
-		return _action_presenter_command_rejected("toggle_settings_panel")
-	var opened := not is_settings_open()
-	var result: Dictionary = {}
-	if opened:
-		result = _dictionary_or_empty(hud_root.open_settings_panel())
-		if bool(result.get("success", false)):
-			_play_ui_audio_feedback("settings_panel_opened", {
-				"panel_id": "settings",
-				"action": "open_settings_panel",
-			})
-	else:
-		result = _dictionary_or_empty(hud_root.close_settings_panel())
-		if bool(result.get("success", false)):
-			_play_ui_audio_feedback("settings_panel_closed", {
-				"panel_id": "settings",
-				"action": "close_settings_panel",
-			})
-	if bool(result.get("success", false)):
-		result["open"] = opened
-		refresh_all_panels(current_interaction_prompt())
-	return result
+	return _dictionary_or_empty(game_ui_coordinator.call("toggle_settings_panel"))
 
 
 func gameplay_input_blocked_by_ui() -> bool:
-	var hud_blocker := _hud_input_blocker_snapshot()
-	var panel_blocked: bool = hud_root != null and hud_root.gameplay_input_blocked()
-	return bool(ui_blocker_state_controller.call("gameplay_input_blocked", hud_blocker, panel_blocked, _world_action_presenter_blocks_input()))
+	return bool(game_ui_coordinator.call("gameplay_input_blocked_by_ui"))
 
 
 func gameplay_input_blocker_name() -> String:
-	var hud_blocker := _hud_input_blocker_snapshot()
-	var context_menu: Dictionary = context_menu_snapshot()
-	var panel_blocker_name: String = hud_root.gameplay_input_blocker_name() if hud_root != null else ""
-	return str(ui_blocker_state_controller.call("blocker_name", hud_blocker, _panel_modal_blocker_snapshot(), context_menu, _world_action_blocker_snapshot(), panel_blocker_name))
+	return str(game_ui_coordinator.call("gameplay_input_blocker_name"))
 
 
 func gameplay_input_blocker_snapshot() -> Dictionary:
-	var hud_blocker := _hud_input_blocker_snapshot()
-	var context_menu: Dictionary = context_menu_snapshot()
-	var world_blocks := _world_action_presenter_blocks_input()
-	var panel_blocker: Dictionary = _panel_input_blocker_snapshot()
-	var fallback_name := gameplay_input_blocker_name()
-	return _dictionary_or_empty(ui_blocker_state_controller.call("blocker_snapshot", hud_blocker, _panel_modal_blocker_snapshot(), context_menu, world_action_presenter_snapshot(), _world_action_blocker_snapshot(), world_blocks, panel_blocker, fallback_name))
+	return _dictionary_or_empty(game_ui_coordinator.call("gameplay_input_blocker_snapshot"))
 
 
 func _hud_input_blocker_snapshot() -> Dictionary:
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.hud_input_blocker_snapshot(is_debug_console_open()))
-	return {}
+	return _dictionary_or_empty(game_ui_coordinator.call("hud_input_blocker_snapshot"))
 
 
 func _close_hud_interaction_menu() -> bool:
-	var hud_blocker := _hud_input_blocker_snapshot()
-	if str(hud_blocker.get("name", "")) != "interaction_menu":
-		return false
-	return hud_root != null and hud_root.close_hud_interaction_menu()
+	return bool(game_ui_coordinator.call("close_hud_interaction_menu"))
 
 
 func show_interaction_menu(screen_position: Vector2, prompt: Dictionary = {}) -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "hud_root_missing", "visible": false}
-	return _dictionary_or_empty(hud_root.show_interaction_menu(screen_position, prompt))
+	return _dictionary_or_empty(game_ui_coordinator.call("show_interaction_menu", screen_position, prompt))
 
 
 func hide_interaction_menu() -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "hud_root_missing", "visible": false}
-	return _dictionary_or_empty(hud_root.hide_interaction_menu())
+	return _dictionary_or_empty(game_ui_coordinator.call("hide_interaction_menu"))
 
 
 func is_interaction_menu_open() -> bool:
-	return hud_root != null and hud_root.is_interaction_menu_open()
+	return bool(game_ui_coordinator.call("is_interaction_menu_open"))
 
 
 func _panel_modal_blocker_name() -> String:
-	var snapshot := _panel_modal_blocker_snapshot()
-	return str(snapshot.get("name", ""))
+	return str(game_ui_coordinator.call("panel_modal_blocker_name"))
 
 
 func _panel_modal_blocker_snapshot() -> Dictionary:
-	return _dictionary_or_empty(ui_blocker_state_controller.call("panel_modal_blocker_snapshot", _panel_input_blocker_snapshot()))
+	return _dictionary_or_empty(game_ui_coordinator.call("panel_modal_blocker_snapshot"))
 
 
 func _panel_input_blocker_snapshot() -> Dictionary:
-	if hud_root == null:
-		return {}
-	return _dictionary_or_empty(hud_root.gameplay_input_blocker_snapshot())
+	return _dictionary_or_empty(game_ui_coordinator.call("panel_input_blocker_snapshot"))
 
 
 func _world_action_presenter_blocks_input() -> bool:
-	var presenter_blocks := world_action_flow_controller != null and bool(world_action_flow_controller.call("blocks_input"))
-	var runner: Dictionary = turn_action_runner_snapshot()
-	return presenter_blocks or bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))
+	return bool(game_ui_coordinator.call("world_action_presenter_blocks_input"))
 
 
 func _world_action_blocker_snapshot() -> Dictionary:
-	var presenter: Dictionary = world_action_presenter_snapshot()
-	if world_action_flow_controller != null and bool(world_action_flow_controller.call("blocks_input")):
-		return {
-			"blocked": true,
-			"name": "world_action_presenter",
-			"kind": "world_action_presenter",
-			"source": "world_action_presenter",
-			"action_kind": str(presenter.get("kind", "")),
-			"phase": str(presenter.get("current_phase", presenter.get("state", ""))),
-			"active_count": int(presenter.get("active_count", 0)),
-			"sequence": int(presenter.get("sequence", 0)),
-			"mouse_blocks_world": true,
-			"camera_drag_allowed": true,
-		}
-	var runner: Dictionary = turn_action_runner_snapshot()
-	if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
-		return {
-			"blocked": true,
-			"name": "turn_action_runner",
-			"kind": "turn_action_runner",
-			"source": "turn_action_runner",
-			"action_kind": str(runner.get("action_kind", "")),
-			"phase": str(runner.get("phase", "")),
-			"turn_phase": str(runner.get("turn_phase", "")),
-			"actor_id": int(runner.get("actor_id", 0)),
-			"presentation_active": bool(runner.get("presentation_active", false)),
-			"mouse_blocks_world": true,
-			"camera_drag_allowed": true,
-		}
-	return {}
+	return _dictionary_or_empty(game_ui_coordinator.call("world_action_blocker_snapshot"))
 
 
 func modal_stack_snapshot() -> Dictionary:
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.modal_stack_snapshot())
-	return {"active": false, "count": 0, "top": {}, "stack": []}
+	return _dictionary_or_empty(game_ui_coordinator.call("modal_stack_snapshot"))
 
 
 func menu_state_snapshot() -> Dictionary:
-	var panel_snapshot: Dictionary = {}
-	var fallback_priority: Array[String] = ["settings"]
-	if hud_root != null:
-		panel_snapshot = _dictionary_or_empty(hud_root.menu_state_snapshot()).duplicate(true)
-	return _dictionary_or_empty(ui_blocker_state_controller.call("menu_state_snapshot", panel_snapshot, fallback_priority, modal_stack_snapshot(), context_menu_snapshot(), _close_context_snapshot()))
+	return _dictionary_or_empty(game_ui_coordinator.call("menu_state_snapshot"))
 
 
 func _root_close_priority(panel_priority: Array = []) -> Array[String]:
-	return _array_or_empty(ui_blocker_state_controller.call("root_close_priority", panel_priority, _close_context_snapshot()))
+	var priorities: Array[String] = []
+	for item in _array_or_empty(game_ui_coordinator.call("root_close_priority", panel_priority)):
+		priorities.append(str(item))
+	return priorities
 
 
 func _close_context_snapshot() -> Dictionary:
-	var pending_state: Dictionary = _runtime_pending_state_snapshot()
-	return {
-		"hud_blocker": _hud_input_blocker_snapshot(),
-		"panel_modal": _panel_modal_blocker_snapshot(),
-		"context_menu": context_menu_snapshot(),
-		"world_action_blocks": _world_action_presenter_blocks_input(),
-		"world_action_blocker": _world_action_blocker_snapshot(),
-		"skill_targeting_active": not active_skill_targeting.is_empty(),
-		"selection_active": runtime_input_controller != null and runtime_input_controller.has_method("has_selection_state") and bool(runtime_input_controller.has_selection_state()),
-		"has_pending": not _dictionary_or_empty(pending_state.get("pending_movement", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_interaction", {})).is_empty() or not _dictionary_or_empty(pending_state.get("pending_crafting", {})).is_empty(),
-	}
+	return _dictionary_or_empty(game_ui_coordinator.call("close_context_snapshot"))
 
 
 func ui_theme_snapshot() -> Dictionary:
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.ui_theme_snapshot())
-	return {"applied": false, "reason": "panel_controller_missing"}
+	return _dictionary_or_empty(game_ui_coordinator.call("ui_theme_snapshot"))
 
 
 func context_menu_snapshot() -> Dictionary:
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.context_menu_snapshot())
-	return {"active": false, "count": 0, "top": {}, "menus": []}
+	return _dictionary_or_empty(game_ui_coordinator.call("context_menu_snapshot"))
 
 
 func _ui_overlay_controller() -> RefCounted:
-	return hud_root.ui_overlay_render_controller if hud_root != null else null
+	return game_ui_coordinator.call("ui_overlay_controller") as RefCounted
 
 
 func hover_tooltip_snapshot(control: Control = null) -> Dictionary:
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.hover_tooltip_snapshot(get_viewport(), control))
-	return {
-		"active": false,
-		"requested_source": "hover",
-		"source_name": "",
-		"owner_panel": "",
-		"text": "",
-	}
+	return _dictionary_or_empty(game_ui_coordinator.call("hover_tooltip_snapshot", control))
 
 
 func hotbar_hit_test_snapshot(screen_position: Vector2 = Vector2(-1.0, -1.0)) -> Dictionary:
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.hotbar_hit_test_snapshot(get_viewport(), screen_position))
-	var position := screen_position
-	if position.x < 0.0 or position.y < 0.0:
-		var viewport := get_viewport()
-		position = viewport.get_mouse_position() if viewport != null else Vector2.ZERO
-	return {
-		"active": false,
-		"owner_panel": "hud",
-		"target_kind": "",
-		"target_id": "",
-		"group_id": "",
-		"source_path": "",
-		"source_name": "",
-		"mouse_blocks_world": false,
-		"disabled": false,
-		"tooltip": "",
-		"screen_position": {"x": position.x, "y": position.y},
-		"rect": {},
-	}
+	return _dictionary_or_empty(game_ui_coordinator.call("hotbar_hit_test_snapshot", screen_position))
 
 
 func drag_state_snapshot(data: Variant = {}, hover_target: Control = null) -> Dictionary:
-	var drag_data: Dictionary = _dictionary_or_empty(data)
-	var target: Dictionary = _drag_hover_target_snapshot(hover_target, drag_data)
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.drag_state_snapshot(get_viewport(), drag_data, target))
-	return {
-		"active": false,
-		"kind": "",
-		"source": {},
-		"target": target,
-		"preview": {},
-		"payload": {},
-	}
+	return _dictionary_or_empty(game_ui_coordinator.call("drag_state_snapshot", data, hover_target))
 
 
 func ui_layer_stack_snapshot(drag_data: Variant = {}, drag_hover_target: Control = null, tooltip_control: Control = null) -> Dictionary:
-	var blocker: Dictionary = gameplay_input_blocker_snapshot()
-	var modal_stack: Dictionary = modal_stack_snapshot()
-	var context_menu: Dictionary = context_menu_snapshot()
-	var drag: Dictionary = drag_state_snapshot(drag_data, drag_hover_target)
-	var tooltip: Dictionary = hover_tooltip_snapshot(tooltip_control)
-	return _dictionary_or_empty(ui_blocker_state_controller.call("layer_stack_snapshot", blocker, modal_stack, context_menu, drag, tooltip))
+	return _dictionary_or_empty(game_ui_coordinator.call("ui_layer_stack_snapshot", drag_data, drag_hover_target, tooltip_control))
 
 
 func _setup_tooltip_layer() -> void:
-	if hud_root != null:
-		hud_root.setup_tooltip_layer(self)
+	game_ui_coordinator.call("setup_tooltip_layer")
 
 
 func _update_tooltip_layer() -> void:
-	if hud_root == null:
-		return
-	var snapshot: Dictionary = hover_tooltip_snapshot()
-	hud_root.update_tooltip_layer(snapshot, self)
+	game_ui_coordinator.call("update_tooltip_layer")
 
 
 func _hide_tooltip_layer(reason: String) -> void:
-	if hud_root != null:
-		hud_root.hide_tooltip_layer(reason)
+	game_ui_coordinator.call("hide_tooltip_layer", reason)
 
 
 func _render_tooltip_snapshot(snapshot: Dictionary) -> void:
-	if hud_root != null:
-		hud_root.render_tooltip_snapshot(snapshot, self)
+	game_ui_coordinator.call("render_tooltip_snapshot", snapshot)
 
 
 func _setup_drag_preview_layer() -> void:
-	if hud_root != null:
-		hud_root.setup_drag_preview_layer(self)
+	game_ui_coordinator.call("setup_drag_preview_layer")
 
 
 func render_drag_preview_for_snapshot(drag_data: Variant = {}, hover_target: Control = null) -> Dictionary:
-	var drag: Dictionary = drag_state_snapshot(drag_data, hover_target)
-	if not bool(drag.get("active", false)):
-		_hide_drag_preview_layer("inactive")
-		return drag_preview_render_snapshot()
-	_render_drag_preview_snapshot(drag)
-	return drag_preview_render_snapshot()
+	return _dictionary_or_empty(game_ui_coordinator.call("render_drag_preview_for_snapshot", drag_data, hover_target))
 
 
 func _hide_drag_preview_layer(reason: String) -> void:
-	if hud_root != null:
-		hud_root.hide_drag_preview_layer(reason)
+	game_ui_coordinator.call("hide_drag_preview_layer", reason)
 
 
 func _render_drag_preview_snapshot(drag: Dictionary) -> void:
-	if hud_root != null:
-		hud_root.render_drag_preview_snapshot(drag, self)
+	game_ui_coordinator.call("render_drag_preview_snapshot", drag)
 
 
 func handle_trade_shortcut(event: InputEventKey) -> bool:
-	if hud_root == null:
-		return false
-	return hud_root.handle_trade_shortcut(event)
+	return bool(game_ui_coordinator.call("handle_trade_shortcut", event))
 
 
 func toggle_controls_hint() -> Dictionary:
@@ -2424,44 +2211,15 @@ func _play_ui_audio_feedback(event_kind: String, payload: Dictionary = {}) -> Di
 
 
 func _setup_panels() -> void:
-	if hud_root == null:
-		hud_root = HUD_ROOT_SCENE.instantiate()
-		hud_root.name = "HudRoot"
-		add_child(hud_root)
-		if hud_root.has_method("configure"):
-			hud_root.call("configure", self)
-	hud_root.setup_panels(registry, simulation, world_result, _ui_feedback_payload())
-	panel_controller = hud_root.panel_controller
-	_sync_panel_refs_from_hud_root()
-	# 对外保留面板引用，方便既有 smoke 和编辑器入口继续做状态复核。
-	_sync_debug_console_schema()
+	game_ui_coordinator.call("setup_panels")
 
 
 func _ui_feedback_payload() -> Dictionary:
-	return {
-		"active_trade_target": active_trade_target,
-		"active_trade_feedback": active_trade_feedback,
-		"active_container_feedback": active_container_feedback,
-		"active_character_feedback": active_character_feedback,
-		"active_inventory_feedback": active_inventory_feedback,
-	}
+	return _dictionary_or_empty(game_ui_coordinator.call("ui_feedback_payload"))
 
 
 func _sync_panel_refs_from_hud_root() -> void:
-	if hud_root == null:
-		return
-	var refs: Dictionary = _dictionary_or_empty(hud_root.panel_refs())
-	hud = refs.get("hud", null) as Control
-	dialogue_panel = refs.get("dialogue", null) as Control
-	inventory_panel = refs.get("inventory", null) as Control
-	trade_panel = refs.get("trade", null) as Control
-	container_panel = refs.get("container", null) as Control
-	character_panel = refs.get("character", null) as Control
-	journal_panel = refs.get("journal", null) as Control
-	map_panel = refs.get("map", null) as Control
-	skills_panel = refs.get("skills", null) as Control
-	crafting_panel = refs.get("crafting", null) as Control
-	settings_panel = refs.get("settings", null) as Control
+	game_ui_coordinator.call("sync_panel_refs_from_hud_root")
 
 
 func _sync_debug_console_schema() -> void:
