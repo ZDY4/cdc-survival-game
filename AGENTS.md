@@ -46,7 +46,6 @@
 - 地图改动后的空间复核优先使用 `tools/agent/review-godot-map-visual.ps1`；需要人工查看或精修时打开对应 Godot map scene，并用 `CDC Map Review` dock 查看复核信息。
 - 游戏运行时 smoke 默认使用 `tools/agent/test-godot-game.ps1`。
 - Editor 插件和编辑服务 smoke 默认使用 `tools/agent/test-godot-editor.ps1`。
-- runtime smoke / tool 需要驱动等待、世界刷新或视觉刷新时，优先调用 `GameApp.submit_wait_action()`、`GameApp.rebuild_runtime_world()`、`GameApp.refresh_world_visuals()`、`GameApp.finish_world_action_presentations()` 等稳定 facade；不要新增对 `_setup_*`、`_rebuild_*` 等私有入口的依赖。
 - 若脚本提供 PowerShell comment-based help，先用 `Get-Help tools/agent/<script>.ps1` 确认参数、示例和副作用。
 - 新增 `tools/agent/` 脚本时，同时更新脚本自身 help、`tools/agent/README.md` 和相关 workflow 文档。
 - `CODEXVault_GODOT` 仅作为 headless 验证和 agent 汇总思路参考；不要迁入 Linux setup、Godot Mono / .NET、pre-commit、GitHub Pages 或大体积静态工具资产。

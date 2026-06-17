@@ -101,9 +101,6 @@ Godot import/cache 预热和 GDScript 静态解析优先跑 `test-godot-static.p
 运行时入口和 smoke 约束：
 
 - 游戏运行时 scene 入口是 `godot/scenes/game/game_root.tscn`
-- `godot/scripts/app/game_app.gd` 当前仍作为迁移期根脚本和兼容 facade 存在，新增 runtime 行为不要继续堆进该文件
-- runtime smoke / tool 需要等待、重建世界或刷新视觉时，优先调用 `GameApp.submit_wait_action()`、`GameApp.rebuild_runtime_world()`、`GameApp.refresh_world_visuals()`、`GameApp.finish_world_action_presentations()` 等稳定入口
-- 不要新增对 `_setup_*`、`_rebuild_*` 这类私有入口的 smoke / tool 依赖
 
 `test-godot-static.ps1` 和 `godot-agent-report.ps1` 只迁移 `CODEXVault_GODOT` 中适合本项目的精简工作流，不迁入 Linux setup、Godot Mono / .NET、pre-commit、GitHub Pages 或大体积静态工具资产。
 

@@ -95,7 +95,7 @@
 | 地图布局、入口点、地图对象 | `godot/scenes/maps/*.tscn` |
 | 地图对象和快照的可视化 | `godot/scripts/world` |
 | HUD、日志、面板、提示、交互按钮 | `godot/scripts/ui` |
-| 启动装配、输入转发、稳定 facade | `godot/scripts/app` |
+| 启动装配、输入转发 | `godot/scripts/app` |
 | 编辑器体验和内容 handoff | `godot/addons/cdc_game_editor` |
 
 如果一个功能同时涉及规则、数据和表现，先明确 core/data 的权威结果，再让 world/ui 展示这些结果。不要让 UI、world 或 editor dock 自行发明第二套判定。

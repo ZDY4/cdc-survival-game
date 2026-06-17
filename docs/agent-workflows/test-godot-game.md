@@ -21,8 +21,7 @@
 
 - 当前 smoke 全部通过 `D:\godot\godot.cmd --headless --path godot --script ...` 执行。
 - `HeadlessNewGame` 和 `HeadlessWorld` 通过 `godot/scripts/app/headless_runner.gd` 覆盖 headless 启动入口。
-- 默认 runtime scene 入口是 `godot/scenes/game/game_root.tscn`；`godot/scripts/app/game_app.gd` 仍是迁移期根脚本和兼容 facade，新增 runtime 行为应优先落到明确的 app controller、world 或 UI 模块。
-- runtime smoke 需要等待、重建世界或刷新视觉时，优先调用 `GameApp.submit_wait_action()`、`GameApp.rebuild_runtime_world()`、`GameApp.refresh_world_visuals()`、`GameApp.finish_world_action_presentations()` 等稳定 facade；不要新增对 `_setup_*`、`_rebuild_*` 私有入口的依赖。
+- 默认 runtime scene 入口是 `godot/scenes/game/game_root.tscn`。
 - `MigrationGuard` 会执行 `godot/scripts/tools/mainline_migration_guard.gd`，确认 Godot 版本为 `4.6.3`，且当前主线没有重新引入 Rust / Cargo / Bevy 时代源码文件。
 - `Scene` smoke 现在面向原生 scene/node 运行时：`WorldRuntimeRoot` 直接持有当前 `MapSceneRoot`，不再要求旧 `GeneratedWorld` 或旧 renderer 资产诊断合同。
 - `Scene` 不再固定产出 `Scene.asset-diagnostics.json`。若某次 smoke 输出缺少旧资产诊断字段，wrapper 会跳过 legacy baseline 对比；需要资源引用、视觉和空间复核时，优先运行 `tools/agent/review-godot-map-visual.ps1` 或专门的 Godot scene/report 工具。
