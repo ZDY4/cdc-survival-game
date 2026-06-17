@@ -2856,6 +2856,53 @@ func _expect_mouse_left_click_far_ground_starts_moving(errors: Array[String], ga
 	game_root.cancel_pending("viewport_far_click_smoke", false)
 	if player != null:
 		player.ap = 12.0
+	await _expect_manual_camera_pan_survives_ground_move(errors, game_root, camera)
+
+
+func _expect_manual_camera_pan_survives_ground_move(errors: Array[String], game_root: Node, camera: Camera3D) -> void:
+	if camera == null:
+		errors.append("manual camera pan move smoke requires runtime camera")
+		return
+	if game_root.runtime_input_controller != null and game_root.runtime_input_controller.has_method("focus_current_actor"):
+		game_root.runtime_input_controller.focus_current_actor()
+	await process_frame
+	var before_manual_position := camera.global_position
+	_drag_world_camera(game_root, Vector2(220, 180), Vector2(300, 230))
+	await process_frame
+	var manual_position := camera.global_position
+	if manual_position.distance_to(before_manual_position) < 0.1:
+		errors.append("manual camera move smoke should pan camera before ground click")
+	var manual_snapshot: Dictionary = _dictionary_or_empty(game_root.camera_follow_snapshot() if game_root.has_method("camera_follow_snapshot") else {})
+	if bool(manual_snapshot.get("following_focus", true)):
+		errors.append("manual camera pan should disable automatic follow before movement, got %s" % JSON.stringify(manual_snapshot))
+	var before: Dictionary = _player_grid(game_root)
+	var player: RefCounted = game_root.simulation.actor_registry.get_actor(1)
+	if player != null:
+		player.ap = 12.0
+	var target: Dictionary = _far_open_grid_from(before, game_root.world_result.get("map", {}))
+	var screen_position := camera.unproject_position(Vector3(float(target["x"]), 0.0, float(target["z"])))
+	game_root.runtime_input_controller.update_hover_at_screen_position(screen_position)
+	await process_frame
+	var move_result: Dictionary = _dictionary_or_empty(game_root.request_player_move(target) if game_root.has_method("request_player_move") else {})
+	if not bool(move_result.get("success", false)):
+		errors.append("manual camera pan should still allow movement request, got %s" % JSON.stringify(move_result))
+	await process_frame
+	var runner: Dictionary = _dictionary_or_empty(_dictionary_or_empty(game_root.runtime_control_snapshot()).get("turn_action_runner", {}))
+	if str(runner.get("action_kind", "")) != "move":
+		errors.append("manual camera pan should still allow left click movement, got runner %s" % JSON.stringify(runner))
+	var moving_snapshot: Dictionary = _dictionary_or_empty(game_root.camera_follow_snapshot() if game_root.has_method("camera_follow_snapshot") else {})
+	if bool(moving_snapshot.get("following_focus", true)):
+		errors.append("manual camera pan should keep camera out of follow mode during movement, got %s" % JSON.stringify(moving_snapshot))
+	if str(moving_snapshot.get("follow_source", "")) != "manual_drag":
+		errors.append("manual camera pan movement should preserve manual_drag follow source, got %s" % JSON.stringify(moving_snapshot))
+	if camera.global_position.distance_to(manual_position) > 0.1:
+		errors.append("manual camera pan movement should not recenter camera on player, before=%s after=%s" % [str(manual_position), str(camera.global_position)])
+	await _wait_for_turn_action_runner_idle(game_root)
+	var completed_snapshot: Dictionary = _dictionary_or_empty(game_root.camera_follow_snapshot() if game_root.has_method("camera_follow_snapshot") else {})
+	if bool(completed_snapshot.get("following_focus", true)):
+		errors.append("manual camera pan should stay manual after movement completes, got %s" % JSON.stringify(completed_snapshot))
+	if player != null:
+		player.ap = 12.0
 
 
 func _expect_action_active_input_policy(errors: Array[String], game_root: Node, camera: Camera3D, current_target: Dictionary) -> Dictionary:
@@ -2911,6 +2958,23 @@ func _expect_action_active_input_policy(errors: Array[String], game_root: Node, 
 	if game_root.runtime_input_controller != null and game_root.runtime_input_controller.has_method("focus_current_actor"):
 		game_root.runtime_input_controller.focus_current_actor()
 	return rejected_target.duplicate(true)
+
+
+func _drag_world_camera(game_root: Node, start_position: Vector2, end_position: Vector2) -> void:
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_MIDDLE
+	press.pressed = true
+	press.position = start_position
+	game_root._unhandled_input(press)
+	var drag := InputEventMouseMotion.new()
+	drag.position = end_position
+	drag.relative = end_position - start_position
+	game_root._unhandled_input(drag)
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_MIDDLE
+	release.pressed = false
+	release.position = end_position
+	game_root._unhandled_input(release)
 
 
 func _expect_world_action_queue_presenting(errors: Array[String], game_root: Node, expected_presenter_kind: String, expected_command_kind: String) -> void:

@@ -983,7 +983,7 @@ func _focused_actor_follow_target() -> Dictionary:
 func _process_camera_follow_target(follow_target: Dictionary) -> void:
 	var actor_node := follow_target.get("actor_node", null) as Node3D
 	if actor_node != null:
-		camera_input_controller.follow_actor_node(actor_node, _viewport_size(), _level_plane_height())
+		camera_input_controller.process_actor_node_follow(actor_node, _viewport_size(), _level_plane_height())
 		return
 	var follow_position: Vector3 = follow_target.get("position", _map_center_focus_position())
 	camera_input_controller.process_follow(

@@ -1491,8 +1491,6 @@ func request_player_move(grid: Dictionary) -> Dictionary:
 	var player_id := _player_actor_id()
 	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
 	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_move", player_id, grid, topology))
-	if bool(result.get("success", false)):
-		_restore_actor_camera_follow("player_move")
 	return result
 
 

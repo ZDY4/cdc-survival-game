@@ -53,6 +53,15 @@ func follow_actor_node(actor_node: Node3D, viewport_size: Vector2, level_plane_h
 	return process_follow(actor_node.global_position, viewport_size, level_plane_height, "actor_node", follow_actor_id)
 
 
+func process_actor_node_follow(actor_node: Node3D, viewport_size: Vector2, level_plane_height: float) -> bool:
+	if actor_node == null or not is_instance_valid(actor_node):
+		return false
+	if camera == null or not following_focus or is_dragging:
+		return false
+	follow_node_ref = weakref(actor_node)
+	return process_follow(actor_node.global_position, viewport_size, level_plane_height, "actor_node", int(actor_node.get_meta("actor_id", 0)))
+
+
 func follow_grid(grid: Dictionary, viewport_size: Vector2, level_plane_height: float, actor_id: int = 0) -> bool:
 	following_focus = true
 	follow_node_ref = null

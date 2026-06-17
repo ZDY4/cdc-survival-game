@@ -17,6 +17,10 @@ func follow_actor_node(actor_node: Node3D, viewport_size: Vector2, level_height:
 	rig_controller.call("follow_actor_node", actor_node, viewport_size, level_height)
 
 
+func process_actor_node_follow(actor_node: Node3D, viewport_size: Vector2, level_height: float) -> void:
+	rig_controller.call("process_actor_node_follow", actor_node, viewport_size, level_height)
+
+
 func follow_grid(grid: Dictionary, viewport_size: Vector2, level_height: float, actor_id: int = 0) -> void:
 	rig_controller.call("follow_grid", grid, viewport_size, level_height, actor_id)
 
