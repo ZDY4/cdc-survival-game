@@ -12,7 +12,7 @@ func configure(p_host) -> void:
 func refresh_hud(selected_prompt: Dictionary = {}) -> void:
 	if host.hud_root == null:
 		return
-	host.call("_process_audio_feedback")
+	host.runtime_audio_coordinator.call("process_audio_feedback")
 	host.runtime_performance_tracker.call("mark_hud_refresh")
 	if selected_prompt.is_empty():
 		selected_prompt = host.current_interaction_prompt()
@@ -28,7 +28,7 @@ func refresh_panel(panel_id: String, feedback: Dictionary = {}) -> void:
 func refresh_trade_panel() -> void:
 	if host.hud_root == null:
 		return
-	if not bool(host.call("_active_trade_target_available")):
+	if not active_trade_target_available():
 		host.close_trade_panel("target_unavailable")
 		return
 	host.hud_root.refresh_panel("trade", ui_feedback_payload())
@@ -44,10 +44,10 @@ func refresh_container_panel() -> void:
 func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
 	if host.hud_root == null:
 		return
-	if not bool(host.call("_active_trade_target_available")):
+	if not active_trade_target_available():
 		host.close_trade_panel("target_unavailable")
 	close_stale_container_session()
-	host.call("_process_audio_feedback")
+	host.runtime_audio_coordinator.call("process_audio_feedback")
 	host.runtime_performance_tracker.call("mark_hud_refresh")
 	if selected_prompt.is_empty():
 		selected_prompt = host.current_interaction_prompt()
@@ -57,7 +57,7 @@ func refresh_all_panels(selected_prompt: Dictionary = {}) -> void:
 func close_stale_container_session() -> void:
 	if host.simulation == null:
 		return
-	var close_reason := str(host.call("_active_container_close_reason"))
+	var close_reason := str(host.runtime_session_context_controller.call("active_container_close_reason", host.simulation))
 	if close_reason.is_empty():
 		return
 	host.active_container_feedback = {}
@@ -74,10 +74,10 @@ func toggle_stage_panel(panel_id: String) -> Dictionary:
 	if host.hud_root == null:
 		return {"success": false, "reason": "panel_controller_missing"}
 	if world_action_presenter_blocks_input():
-		return dictionary_or_empty(host.call("_action_presenter_command_rejected", "toggle_stage_panel:%s" % panel_id))
+		return dictionary_or_empty(host.player_command_coordinator.call("action_presenter_command_rejected", "toggle_stage_panel:%s" % panel_id))
 	var result: Dictionary = dictionary_or_empty(host.hud_root.toggle_stage_panel(panel_id))
 	if bool(result.get("success", false)):
-		host.call("_play_ui_audio_feedback", "stage_panel_opened" if bool(result.get("open", false)) else "stage_panel_closed", {
+		host.runtime_audio_coordinator.call("play_ui_audio_feedback", "stage_panel_opened" if bool(result.get("open", false)) else "stage_panel_closed", {
 			"panel_id": panel_id,
 			"action": "toggle_stage_panel",
 		})
@@ -90,7 +90,7 @@ func close_stage_panels() -> Dictionary:
 		return {"success": false, "reason": "panel_controller_missing"}
 	var result: Dictionary = dictionary_or_empty(host.hud_root.close_stage_panels())
 	if bool(result.get("success", false)) and bool(result.get("closed", false)):
-		host.call("_play_ui_audio_feedback", "stage_panel_closed", {
+		host.runtime_audio_coordinator.call("play_ui_audio_feedback", "stage_panel_closed", {
 			"panel_id": str(result.get("panel_id", "stage")),
 			"action": "close_stage_panels",
 		})
@@ -109,20 +109,20 @@ func toggle_settings_panel() -> Dictionary:
 	if host.hud_root == null:
 		return {"success": false, "reason": "panel_controller_missing"}
 	if world_action_presenter_blocks_input():
-		return dictionary_or_empty(host.call("_action_presenter_command_rejected", "toggle_settings_panel"))
+		return dictionary_or_empty(host.player_command_coordinator.call("action_presenter_command_rejected", "toggle_settings_panel"))
 	var opened := not is_settings_open()
 	var result: Dictionary = {}
 	if opened:
 		result = dictionary_or_empty(host.hud_root.open_settings_panel())
 		if bool(result.get("success", false)):
-			host.call("_play_ui_audio_feedback", "settings_panel_opened", {
+			host.runtime_audio_coordinator.call("play_ui_audio_feedback", "settings_panel_opened", {
 				"panel_id": "settings",
 				"action": "open_settings_panel",
 			})
 	else:
 		result = dictionary_or_empty(host.hud_root.close_settings_panel())
 		if bool(result.get("success", false)):
-			host.call("_play_ui_audio_feedback", "settings_panel_closed", {
+			host.runtime_audio_coordinator.call("play_ui_audio_feedback", "settings_panel_closed", {
 				"panel_id": "settings",
 				"action": "close_settings_panel",
 			})
@@ -256,7 +256,7 @@ func root_close_priority(panel_priority: Array = []) -> Array[String]:
 
 
 func close_context_snapshot() -> Dictionary:
-	var pending_state: Dictionary = dictionary_or_empty(host.call("_runtime_pending_state_snapshot"))
+	var pending_state: Dictionary = dictionary_or_empty(host.player_interaction_ui_coordinator.call("runtime_pending_state_snapshot"))
 	return {
 		"hud_blocker": hud_input_blocker_snapshot(),
 		"panel_modal": panel_modal_blocker_snapshot(),
@@ -322,7 +322,7 @@ func hotbar_hit_test_snapshot(screen_position: Vector2 = Vector2(-1.0, -1.0)) ->
 
 func drag_state_snapshot(data: Variant = {}, hover_target: Control = null) -> Dictionary:
 	var drag_data: Dictionary = dictionary_or_empty(data)
-	var target: Dictionary = dictionary_or_empty(host.call("_drag_hover_target_snapshot", hover_target, drag_data))
+	var target: Dictionary = drag_hover_target_snapshot(hover_target, drag_data)
 	if host.hud_root != null:
 		return dictionary_or_empty(host.hud_root.drag_state_snapshot(host.get_viewport(), drag_data, target))
 	return {
@@ -332,6 +332,27 @@ func drag_state_snapshot(data: Variant = {}, hover_target: Control = null) -> Di
 		"target": target,
 		"preview": {},
 		"payload": {},
+	}
+
+
+func active_trade_target_available() -> bool:
+	return bool(host.runtime_session_context_controller.call("active_trade_target_available", host.registry, host.simulation, host.active_trade_target))
+
+
+func drag_hover_target_snapshot(control: Control, drag_data: Dictionary = {}) -> Dictionary:
+	if host.hud_root != null:
+		return dictionary_or_empty(host.hud_root.drag_hover_target_snapshot(control, drag_data))
+	return {
+		"active": false,
+		"owner_panel": "",
+		"target_kind": "",
+		"target_id": "",
+		"source_path": "",
+		"accepts": "",
+		"last_accept": false,
+		"reject_reason": "",
+		"reject_reason_text": "",
+		"hover_highlight": {},
 	}
 
 
@@ -407,7 +428,13 @@ func setup_panels() -> void:
 	host.panel_controller = host.hud_root.panel_controller
 	sync_panel_refs_from_hud_root()
 	# 对外保留面板引用，方便既有 smoke 和编辑器入口继续做状态复核。
-	host.call("_sync_debug_console_schema")
+	if host.hud_root == null:
+		return
+	host.hud_root.set_debug_console_schema(
+		host.debug_runtime_controller.command_schema(),
+		host.debug_runtime_controller.command_suggestions(),
+		host.debug_runtime_controller.permission_snapshot(host)
+	)
 
 
 func ui_feedback_payload() -> Dictionary:

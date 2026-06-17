@@ -4418,6 +4418,8 @@ func _body_uses_core_service(body: String, owner: String, core_service: String) 
 		"Simulation.enter_location":
 			return body.contains("enter_location.call")
 		"advance_dialogue.call":
+			if owner == "PlayerCommandCoordinator" and body.contains("wait_action_controller.call"):
+				return true
 			return body.contains("advance_dialogue.call")
 	return false
 

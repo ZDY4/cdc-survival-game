@@ -91,19 +91,19 @@ func prepare_runtime_save_boundary(reason: String = "save_boundary") -> Dictiona
 
 
 func request_player_move(grid: Dictionary) -> Dictionary:
-	host.call("_setup_world_container")
-	host.call("_configure_turn_action_runner")
+	host.runtime_scene_coordinator.call("setup_world_container")
+	host.runtime_scene_coordinator.call("configure_turn_action_runner")
 	if not runner_allows_move_replacement():
 		var blocked: Dictionary = player_command_rejection("move")
 		if not blocked.is_empty():
 			return blocked
-	var player_id := int(host.call("_player_actor_id"))
+	var player_id := int(host.runtime_scene_coordinator.call("player_actor_id"))
 	var topology: Dictionary = dictionary_or_empty(host.world_result.get("map", {}))
 	return dictionary_or_empty(host.turn_action_runner.call("request_move", player_id, grid, topology))
 
 
 func runner_allows_move_replacement() -> bool:
-	if host.is_observe_mode_enabled() or not str(host.call("_panel_modal_blocker_name")).is_empty():
+	if host.is_observe_mode_enabled() or not str(host.game_ui_coordinator.call("panel_modal_blocker_name")).is_empty():
 		return false
 	if host.world_action_flow_controller != null and bool(host.world_action_flow_controller.call("blocks_input")):
 		return false
@@ -115,13 +115,13 @@ func request_player_attack(target_actor_id: int, options: Dictionary = {}) -> Di
 	var blocked: Dictionary = player_command_rejection("attack")
 	if not blocked.is_empty():
 		return blocked
-	host.call("_setup_world_container")
-	host.call("_configure_turn_action_runner")
-	var player_id := int(host.call("_player_actor_id"))
+	host.runtime_scene_coordinator.call("setup_world_container")
+	host.runtime_scene_coordinator.call("configure_turn_action_runner")
+	var player_id := int(host.runtime_scene_coordinator.call("player_actor_id"))
 	var topology: Dictionary = dictionary_or_empty(host.world_result.get("map", {}))
 	var result: Dictionary = dictionary_or_empty(host.turn_action_runner.call("request_attack", player_id, target_actor_id, topology, options))
 	if bool(result.get("success", false)):
-		host.call("_restore_actor_camera_follow", "player_attack")
+		restore_actor_camera_follow()
 	return result
 
 
@@ -131,13 +131,13 @@ func request_player_interaction(target: Dictionary, option_id: String = "", opti
 		return blocked
 	if target.is_empty():
 		return {"success": false, "reason": "interaction_target_not_selected"}
-	host.call("_setup_world_container")
-	host.call("_configure_turn_action_runner")
-	var player_id := int(host.call("_player_actor_id"))
+	host.runtime_scene_coordinator.call("setup_world_container")
+	host.runtime_scene_coordinator.call("configure_turn_action_runner")
+	var player_id := int(host.runtime_scene_coordinator.call("player_actor_id"))
 	var topology: Dictionary = dictionary_or_empty(host.world_result.get("map", {}))
 	var result: Dictionary = dictionary_or_empty(host.turn_action_runner.call("request_interact", player_id, target, option_id, topology, options))
 	if bool(result.get("success", false)):
-		host.call("_restore_actor_camera_follow", "player_interaction")
+		restore_actor_camera_follow()
 	return result
 
 
@@ -145,9 +145,9 @@ func request_player_wait(options: Dictionary = {}) -> Dictionary:
 	var blocked: Dictionary = player_command_rejection("wait")
 	if not blocked.is_empty():
 		return blocked
-	host.call("_setup_world_container")
-	host.call("_configure_turn_action_runner")
-	var player_id := int(host.call("_player_actor_id"))
+	host.runtime_scene_coordinator.call("setup_world_container")
+	host.runtime_scene_coordinator.call("configure_turn_action_runner")
+	var player_id := int(host.runtime_scene_coordinator.call("player_actor_id"))
 	var topology: Dictionary = dictionary_or_empty(host.world_result.get("map", {}))
 	return dictionary_or_empty(host.turn_action_runner.call("request_wait", player_id, topology, options))
 
@@ -156,9 +156,9 @@ func request_player_craft(command: Dictionary, options: Dictionary = {}) -> Dict
 	var blocked: Dictionary = player_command_rejection("craft")
 	if not blocked.is_empty():
 		return blocked
-	host.call("_setup_world_container")
-	host.call("_configure_turn_action_runner")
-	var player_id := int(host.call("_player_actor_id"))
+	host.runtime_scene_coordinator.call("setup_world_container")
+	host.runtime_scene_coordinator.call("configure_turn_action_runner")
+	var player_id := int(host.runtime_scene_coordinator.call("player_actor_id"))
 	var topology: Dictionary = dictionary_or_empty(command.get("topology", host.world_result.get("map", {})))
 	return dictionary_or_empty(host.turn_action_runner.call("request_craft", player_id, command, topology, options))
 
@@ -166,15 +166,15 @@ func request_player_craft(command: Dictionary, options: Dictionary = {}) -> Dict
 func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: Dictionary = {}) -> Dictionary:
 	var crafting_continuation: Dictionary = {}
 	if runner_step_should_continue_crafting_queue(step_result, runner_snapshot):
-		crafting_continuation = dictionary_or_empty(host.call("_continue_crafting_queue_after_wait", step_result, runner_snapshot))
+		crafting_continuation = dictionary_or_empty(host.crafting_queue_coordinator.call("continue_crafting_queue_after_wait", step_result, runner_snapshot))
 	var interaction_result: Dictionary = runner_interaction_result(step_result, runner_snapshot)
 	if not interaction_result.is_empty():
-		host.call("_apply_world_root_snapshot", false)
-		host.call("_configure_turn_action_runner")
-		host.call("_configure_runtime_audio_layers")
+		host.runtime_scene_coordinator.call("apply_world_root_snapshot", false)
+		host.runtime_scene_coordinator.call("configure_turn_action_runner")
+		host.runtime_audio_coordinator.call("configure_runtime_audio_layers")
 		if bool(crafting_continuation.get("continued", false)):
-			host.call("_refresh_operation_panels", array_or_empty(crafting_continuation.get("refresh", [])))
-		host.call("_apply_interaction_execution_result", interaction_result, dictionary_or_empty(runner_snapshot.get("target", {})))
+			host.game_ui_coordinator.call("refresh_operation_panels", array_or_empty(crafting_continuation.get("refresh", [])))
+		host.interaction_world_action_coordinator.call("apply_interaction_execution_result", interaction_result, dictionary_or_empty(runner_snapshot.get("target", {})))
 		return {
 			"success": true,
 			"render_world": true,
@@ -184,13 +184,13 @@ func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: 
 			"turn_action_runner": runner_snapshot.duplicate(true),
 		}
 	var needs_world_result_sync := turn_action_step_needs_world_result_sync(step_result, runner_snapshot, interaction_result, crafting_continuation)
-	if needs_world_result_sync and not bool(host.call("_rebuild_runtime_world_result", "turn_action_runner_step")):
+	if needs_world_result_sync and not bool(host.runtime_scene_coordinator.call("rebuild_runtime_world_result", "turn_action_runner_step")):
 		return {"success": false, "reason": "world_result_sync_failed"}
-	host.call("_apply_world_root_snapshot", false)
-	host.call("_configure_turn_action_runner")
-	host.call("_configure_runtime_audio_layers")
+	host.runtime_scene_coordinator.call("apply_world_root_snapshot", false)
+	host.runtime_scene_coordinator.call("configure_turn_action_runner")
+	host.runtime_audio_coordinator.call("configure_runtime_audio_layers")
 	if bool(crafting_continuation.get("continued", false)):
-		host.call("_refresh_operation_panels", array_or_empty(crafting_continuation.get("refresh", [])))
+		host.game_ui_coordinator.call("refresh_operation_panels", array_or_empty(crafting_continuation.get("refresh", [])))
 	host.refresh_hud(host.current_interaction_prompt())
 	return {
 		"success": true,
@@ -224,7 +224,7 @@ func turn_action_result_has_structural_change(result: Dictionary) -> bool:
 		return true
 	if bool(result.get("defeated", false)) or bool(result.get("corpse_created", false)):
 		return true
-	for event_value in array_or_empty(host.call("_interaction_result_events", result)):
+	for event_value in array_or_empty(host.interaction_world_action_coordinator.call("interaction_result_events", result)):
 		var event: Dictionary = dictionary_or_empty(event_value)
 		match str(event.get("kind", "")):
 			"actor_defeated", "corpse_created", "interaction_succeeded", "scene_transition", "door_toggled", "door_auto_opened", "container_opened":
@@ -272,7 +272,7 @@ func runner_step_should_continue_crafting_queue(step_result: Dictionary, runner_
 	var pending_result: Dictionary = dictionary_or_empty(step_result.get("pending_result", {}))
 	if pending_result.is_empty():
 		return false
-	if bool(host.call("_wait_result_resumed_active_crafting_queue", step_result)):
+	if bool(host.crafting_queue_coordinator.call("wait_result_resumed_active_crafting_queue", step_result)):
 		return true
 	if str(runner_snapshot.get("action_kind", "")) != "craft":
 		return false
@@ -284,13 +284,13 @@ func runner_step_should_continue_crafting_queue(step_result: Dictionary, runner_
 
 
 func player_command_rejection(action: String) -> Dictionary:
-	var modal_name := str(host.call("_panel_modal_blocker_name"))
+	var modal_name := str(host.game_ui_coordinator.call("panel_modal_blocker_name"))
 	var result: Dictionary = dictionary_or_empty(host.player_command_blocker.call(
 		"player_command_rejection",
 		action,
 		host.is_observe_mode_enabled(),
 		modal_name,
-		bool(host.call("_world_action_presenter_blocks_input")),
+		bool(host.game_ui_coordinator.call("world_action_presenter_blocks_input")),
 		host.gameplay_input_blocker_snapshot()
 	))
 	if not result.is_empty():
@@ -315,6 +315,128 @@ func ui_modal_command_rejected(action: String, modal_name: String) -> Dictionary
 	var blocker: Dictionary = host.gameplay_input_blocker_snapshot()
 	var result: Dictionary = dictionary_or_empty(host.player_command_blocker.call("ui_modal_command_rejected", action, modal_name, blocker))
 	host.refresh_hud(host.current_interaction_prompt())
+	return result
+
+
+func restore_actor_camera_follow() -> void:
+	if host.runtime_input_controller != null and host.runtime_input_controller.has_method("focus_current_actor"):
+		host.runtime_input_controller.focus_current_actor()
+
+
+func press_space_action() -> Dictionary:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "wait":
+		var drained: Dictionary = drain_turn_action_runner()
+		if not bool(drained.get("drained", false)):
+			return {"success": false, "reason": "turn_action_runner_active", "drain_result": drained}
+	var operation: Dictionary = dictionary_or_empty(host.wait_action_controller.call(
+		"press_space_action",
+		host.has_active_dialogue(),
+		host.is_observe_mode_enabled(),
+		Callable(host, "advance_dialogue_without_choice"),
+		Callable(host, "toggle_observe_playback"),
+		Callable(host, "cancel_pending"),
+		host.simulation,
+		dictionary_or_empty(host.world_result.get("map", {}))
+	))
+	var result: Dictionary = dictionary_or_empty(operation.get("result", {}))
+	if bool(result.get("success", false)) and str(result.get("kind", "")) == "wait_ready":
+		return request_player_wait({"reason": "press_space_action"})
+	return apply_wait_action_operation(operation, "press_space_action")
+
+
+func repeat_space_wait_action() -> Dictionary:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if bool(runner.get("active", false)) or bool(runner.get("presentation_active", false)):
+		if str(runner.get("action_kind", "")) == "craft":
+			return continue_active_crafting_runner("space_hold_repeat")
+		var drained: Dictionary = drain_turn_action_runner()
+		if not bool(drained.get("drained", false)):
+			return {"success": false, "reason": "turn_action_runner_active", "drain_result": drained}
+	if host.has_active_dialogue() or host.is_observe_mode_enabled() or host.gameplay_input_blocked_by_ui():
+		return {"success": false, "reason": "space_repeat_blocked"}
+	if runtime_has_pending_action():
+		return {"success": false, "reason": "pending_blocked"}
+	return request_player_wait({"reason": "space_hold_repeat"})
+
+
+func submit_wait_action() -> Dictionary:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "craft":
+		return continue_active_crafting_runner("submit_wait_action")
+	return request_player_wait({"reason": "submit_wait_action"})
+
+
+func process_auto_tick(delta: float) -> void:
+	if bool(host.runtime_control_state_controller.call("should_submit_auto_tick", delta)):
+		submit_auto_tick_wait()
+
+
+func submit_auto_tick_wait() -> Dictionary:
+	var runner: Dictionary = turn_action_runner_snapshot()
+	if (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "wait":
+		var drained: Dictionary = drain_turn_action_runner()
+		if not bool(drained.get("drained", false)):
+			return {"success": false, "reason": "turn_action_runner_active", "drain_result": drained}
+		return {
+			"success": true,
+			"kind": "auto_tick_runner_drained",
+			"reason": "auto_tick_wait",
+			"drain_result": drained,
+		}
+	if (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "craft":
+		return continue_active_crafting_runner("auto_tick_wait")
+	var snapshot: Dictionary = host.simulation.snapshot() if host.simulation != null else {}
+	var operation: Dictionary = dictionary_or_empty(host.wait_action_controller.call(
+		"auto_tick_wait",
+		host.simulation,
+		host.has_active_dialogue(),
+		host.gameplay_input_blocked_by_ui(),
+		snapshot,
+		dictionary_or_empty(host.world_result.get("map", {}))
+	))
+	var validation_result: Dictionary = dictionary_or_empty(operation.get("result", {}))
+	if not bool(validation_result.get("success", false)):
+		return validation_result
+	return request_player_wait({"reason": "auto_tick_wait"})
+
+
+func continue_active_crafting_runner(reason: String = "crafting_continue") -> Dictionary:
+	var runner_before: Dictionary = turn_action_runner_snapshot()
+	if str(runner_before.get("action_kind", "")) != "craft" or (not bool(runner_before.get("active", false)) and not bool(runner_before.get("presentation_active", false))):
+		return {"success": false, "reason": "active_crafting_runner_missing", "runner": runner_before}
+	var drained: Dictionary = drain_turn_action_runner()
+	host.refresh_hud(host.current_interaction_prompt())
+	return {
+		"success": bool(drained.get("drained", false)),
+		"kind": "active_crafting_runner_continued",
+		"reason": reason,
+		"drain_result": drained.duplicate(true),
+		"runner_before": runner_before.duplicate(true),
+		"runner_after": turn_action_runner_snapshot(),
+		"pending": not dictionary_or_empty(dictionary_or_empty(host.player_interaction_ui_coordinator.call("runtime_pending_state_snapshot")).get("pending_crafting", {})).is_empty(),
+	}
+
+
+func runtime_has_pending_action() -> bool:
+	var pending: Dictionary = dictionary_or_empty(host.player_interaction_ui_coordinator.call("runtime_pending_state_snapshot"))
+	return not dictionary_or_empty(pending.get("pending_movement", {})).is_empty() \
+		or not dictionary_or_empty(pending.get("pending_interaction", {})).is_empty() \
+		or not dictionary_or_empty(pending.get("pending_crafting", {})).is_empty()
+
+
+func apply_wait_action_operation(operation: Dictionary, refresh_reason: String) -> Dictionary:
+	var result: Dictionary = dictionary_or_empty(operation.get("result", {}))
+	var refresh_steps: Array = array_or_empty(operation.get("refresh", []))
+	var crafting_continuation: Dictionary = {}
+	if refresh_steps.has("runtime"):
+		crafting_continuation = dictionary_or_empty(host.crafting_queue_coordinator.call("continue_crafting_queue_after_wait", result))
+		if bool(host.runtime_scene_coordinator.call("rebuild_runtime_world_result", refresh_reason)):
+			host.runtime_scene_coordinator.call("apply_runtime_scene_refresh", true)
+	if bool(crafting_continuation.get("continued", false)):
+		host.game_ui_coordinator.call("refresh_operation_panels", array_or_empty(crafting_continuation.get("refresh", [])))
+	if refresh_steps.has("all_panels"):
+		host.refresh_all_panels(host.current_interaction_prompt())
 	return result
 
 

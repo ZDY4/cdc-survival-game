@@ -12,7 +12,7 @@ func toggle_controls_hint() -> Dictionary:
 		return {"success": false, "reason": "hud_root_missing"}
 	var result: Dictionary = dictionary_or_empty(host.hud_root.toggle_controls_hint())
 	host.refresh_hud(host.current_interaction_prompt())
-	host.call("_play_hud_shortcut_audio", "ui_button_pressed", "ControlsHintShortcut", "keyboard_shortcut", "toggle_controls_hint", {
+	host.runtime_audio_coordinator.call("play_hud_shortcut_audio", "ui_button_pressed", "ControlsHintShortcut", "keyboard_shortcut", "toggle_controls_hint", {
 		"value": "on" if bool(result.get("visible", false)) else "off",
 	})
 	return result
@@ -27,7 +27,7 @@ func toggle_debug_console() -> Dictionary:
 		return {"success": false, "reason": "hud_root_missing"}
 	var result: Dictionary = dictionary_or_empty(host.hud_root.toggle_debug_console())
 	host.refresh_hud(host.current_interaction_prompt())
-	host.call("_play_hud_shortcut_audio", "ui_button_pressed", "DebugConsoleShortcut", "keyboard_shortcut", "toggle_debug_console", {
+	host.runtime_audio_coordinator.call("play_hud_shortcut_audio", "ui_button_pressed", "DebugConsoleShortcut", "keyboard_shortcut", "toggle_debug_console", {
 		"value": "open" if bool(result.get("visible", false)) else "close",
 	})
 	return result
@@ -88,7 +88,7 @@ func submit_debug_console_command(command_text: String) -> Dictionary:
 	if host.hud_root != null:
 		host.hud_root.set_debug_console_result(command, result)
 	host.refresh_all_panels(host.current_interaction_prompt())
-	host.call("_play_hud_shortcut_audio", "ui_button_pressed", "DebugConsoleInput", "text_submit", "submit_debug_console_command", {
+	host.runtime_audio_coordinator.call("play_hud_shortcut_audio", "ui_button_pressed", "DebugConsoleInput", "text_submit", "submit_debug_console_command", {
 		"value": command,
 		"reason": str(result.get("reason", "")),
 	})
@@ -151,7 +151,7 @@ func toggle_debug_panel() -> Dictionary:
 		return {"success": false, "reason": "hud_root_missing"}
 	var result: Dictionary = dictionary_or_empty(host.hud_root.toggle_debug_panel())
 	host.refresh_hud(host.current_interaction_prompt())
-	host.call("_play_hud_shortcut_audio", "ui_button_pressed", "DebugPanelShortcut", "keyboard_shortcut", "toggle_debug_panel", {
+	host.runtime_audio_coordinator.call("play_hud_shortcut_audio", "ui_button_pressed", "DebugPanelShortcut", "keyboard_shortcut", "toggle_debug_panel", {
 		"value": "open" if bool(result.get("visible", false)) else "close",
 	})
 	return result
@@ -171,7 +171,7 @@ func cycle_debug_overlay_mode() -> Dictionary:
 	var result: Dictionary = dictionary_or_empty(host.debug_runtime_controller.call("cycle_debug_overlay_mode"))
 	host.refresh_world_visuals(false)
 	host.refresh_hud(host.current_interaction_prompt())
-	host.call("_play_hud_shortcut_audio", "ui_option_selected", "DebugOverlayShortcut", "keyboard_shortcut", "cycle_debug_overlay", {
+	host.runtime_audio_coordinator.call("play_hud_shortcut_audio", "ui_option_selected", "DebugOverlayShortcut", "keyboard_shortcut", "cycle_debug_overlay", {
 		"value": current_debug_overlay_mode(),
 	})
 	return result
@@ -203,7 +203,7 @@ func is_observe_mode_enabled() -> bool:
 
 
 func can_issue_player_commands() -> bool:
-	return not is_observe_mode_enabled() and not bool(host.call("_world_action_presenter_blocks_input")) and str(host.call("_panel_modal_blocker_name")).is_empty()
+	return not is_observe_mode_enabled() and not bool(host.game_ui_coordinator.call("world_action_presenter_blocks_input")) and str(host.game_ui_coordinator.call("panel_modal_blocker_name")).is_empty()
 
 
 func toggle_observe_mode() -> Dictionary:
@@ -242,8 +242,8 @@ func apply_runtime_control_result(result: Dictionary) -> Dictionary:
 		host.refresh_hud(host.current_interaction_prompt())
 	var audio: Dictionary = dictionary_or_empty(result.get("hud_audio", {}))
 	if not audio.is_empty():
-		host.call(
-			"_play_hud_shortcut_audio",
+		host.runtime_audio_coordinator.call(
+			"play_hud_shortcut_audio",
 			str(audio.get("event_kind", "")),
 			str(audio.get("control_name", "")),
 			str(audio.get("control_kind", "")),
@@ -302,14 +302,14 @@ func runtime_control_snapshot() -> Dictionary:
 
 
 func tooltip_render_snapshot() -> Dictionary:
-	var controller: RefCounted = host.call("_ui_overlay_controller") as RefCounted
+	var controller: RefCounted = host.game_ui_coordinator.call("ui_overlay_controller") as RefCounted
 	if controller == null:
 		return {"active": false}
 	return dictionary_or_empty(controller.call("tooltip_render_snapshot"))
 
 
 func drag_preview_render_snapshot() -> Dictionary:
-	var controller: RefCounted = host.call("_ui_overlay_controller") as RefCounted
+	var controller: RefCounted = host.game_ui_coordinator.call("ui_overlay_controller") as RefCounted
 	if controller == null:
 		return {"active": false}
 	return dictionary_or_empty(controller.call("drag_preview_render_snapshot"))

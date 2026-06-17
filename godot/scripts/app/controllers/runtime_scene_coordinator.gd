@@ -82,8 +82,8 @@ func configure_turn_action_runner() -> void:
 
 func refresh_world_runtime_bindings() -> void:
 	setup_runtime_input_controller()
-	host.call("_configure_runtime_audio_layers")
-	host.call("_setup_panels")
+	host.runtime_audio_coordinator.call("configure_runtime_audio_layers")
+	host.game_ui_coordinator.call("setup_panels")
 
 
 func refresh_world_visuals(render_world: bool = true) -> Dictionary:
@@ -103,7 +103,7 @@ func apply_runtime_scene_refresh(render_world: bool = true, selected_prompt: Dic
 	if should_render:
 		record_structural_refresh_boundary(boundary, source, counts)
 	if bool(plan.get("present_world_action", false)):
-		host.call("_present_world_action", dictionary_or_empty(plan.get("command_result", {})))
+		host.interaction_world_action_coordinator.call("present_world_action", dictionary_or_empty(plan.get("command_result", {})))
 	if bool(plan.get("refresh_runtime_bindings", true)):
 		refresh_world_runtime_bindings()
 	var refresh_kind := str(plan.get("refresh_kind", "none"))

@@ -119,7 +119,7 @@ func interaction_success_payload_for_presentation(result: Dictionary, executed_t
 	if target_name.is_empty():
 		target_name = str(target_id).strip_edges()
 	return {
-		"actor_id": int(result.get("actor_id", host.call("_player_actor_id"))),
+		"actor_id": int(result.get("actor_id", host.runtime_scene_coordinator.call("player_actor_id"))),
 		"target_id": target_id,
 		"target_type": str(target.get("target_type", "")),
 		"target_name": target_name,

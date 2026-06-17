@@ -12,37 +12,37 @@ func configure(p_host) -> void:
 func craft_player_recipe(recipe_id: String, count: int = 1) -> Dictionary:
 	if host.simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	var blocked: Dictionary = dictionary_or_empty(host.call("_player_command_rejection", "craft"))
+	var blocked: Dictionary = dictionary_or_empty(host.player_command_coordinator.call("player_command_rejection", "craft"))
 	if not blocked.is_empty():
 		return blocked
-	var operation: Dictionary = dictionary_or_empty(host.crafting_action_controller.call("craft_recipe", host.simulation, recipe_id, count, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), host.crafting_feedback_controller, Callable(host, "_submit_craft_via_turn_action_runner")))
+	var operation: Dictionary = dictionary_or_empty(host.crafting_action_controller.call("craft_recipe", host.simulation, recipe_id, count, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), host.crafting_feedback_controller, Callable(self, "submit_craft_via_turn_action_runner")))
 	return apply_crafting_action_operation(operation)
 
 
 func confirm_crafting_queue(entries: Array) -> Dictionary:
 	if host.simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	var blocked: Dictionary = dictionary_or_empty(host.call("_player_command_rejection", "crafting_queue"))
+	var blocked: Dictionary = dictionary_or_empty(host.player_command_coordinator.call("player_command_rejection", "crafting_queue"))
 	if not blocked.is_empty():
 		return blocked
-	var operation: Dictionary = dictionary_or_empty(host.crafting_action_controller.call("confirm_queue", host.simulation, entries, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), host.crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(host, "_submit_craft_via_turn_action_runner")))
+	var operation: Dictionary = dictionary_or_empty(host.crafting_action_controller.call("confirm_queue", host.simulation, entries, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), host.crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "submit_craft_via_turn_action_runner")))
 	return apply_crafting_action_operation(operation)
 
 
 func advance_crafting_queue(reason: String) -> Dictionary:
 	if host.simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	return dictionary_or_empty(host.crafting_action_controller.call("advance_queue", host.simulation, reason, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(host, "_submit_craft_via_turn_action_runner")))
+	return dictionary_or_empty(host.crafting_action_controller.call("advance_queue", host.simulation, reason, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "submit_craft_via_turn_action_runner")))
 
 
 func submit_crafting_queue_entry(recipe_id: String, count: int) -> Dictionary:
 	if host.simulation == null:
 		return {"success": false, "reason": "simulation_missing"}
-	return dictionary_or_empty(host.crafting_action_controller.call("_submit_craft", host.simulation, recipe_id, count, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), true, Callable(host, "_submit_craft_via_turn_action_runner")))
+	return dictionary_or_empty(host.crafting_action_controller.call("_submit_craft", host.simulation, recipe_id, count, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), true, Callable(self, "submit_craft_via_turn_action_runner")))
 
 
 func continue_crafting_queue_after_wait(result: Dictionary, wait_runner_snapshot: Dictionary = {}) -> Dictionary:
-	var continuation: Dictionary = dictionary_or_empty(host.crafting_action_controller.call("continue_queue_after_wait", host.simulation, result, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), host.crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(host, "_submit_craft_via_turn_action_runner")))
+	var continuation: Dictionary = dictionary_or_empty(host.crafting_action_controller.call("continue_queue_after_wait", host.simulation, result, host.registry.get_library("recipes"), crafting_context(), dictionary_or_empty(host.world_result.get("map", {})), host.crafting_feedback_controller, CRAFTING_QUEUE_ADVANCE_LIMIT, Callable(self, "submit_craft_via_turn_action_runner")))
 	if bool(continuation.get("continued", false)):
 		continuation["refresh"] = ["inventory", "crafting", "skills"]
 		continuation["wait_runner_snapshot"] = wait_runner_snapshot.duplicate(true)
@@ -60,7 +60,7 @@ func continue_crafting_queue_after_wait(result: Dictionary, wait_runner_snapshot
 func submit_craft_via_turn_action_runner(recipe_id: String, count: int, recipe_library: Dictionary, crafting_context_value: Dictionary, topology: Dictionary, queue_active: bool) -> Dictionary:
 	var command := {
 		"kind": "craft",
-		"actor_id": int(host.call("_player_actor_id")),
+		"actor_id": int(host.runtime_scene_coordinator.call("player_actor_id")),
 		"recipe_id": recipe_id,
 		"count": max(1, count),
 		"recipe_library": recipe_library,
@@ -109,7 +109,7 @@ func set_latest_crafting_queue_result(result: Dictionary, trigger: String) -> vo
 
 func apply_crafting_action_operation(operation: Dictionary) -> Dictionary:
 	var result: Dictionary = dictionary_or_empty(operation.get("result", {}))
-	host.call("_refresh_operation_panels", array_or_empty(operation.get("refresh", [])))
+	host.game_ui_coordinator.call("refresh_operation_panels", array_or_empty(operation.get("refresh", [])))
 	return result
 
 
