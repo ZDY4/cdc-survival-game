@@ -14,6 +14,7 @@ const RuntimeViewStateController = preload("res://scripts/app/controllers/runtim
 const RuntimeSessionContextController = preload("res://scripts/app/controllers/runtime_session_context_controller.gd")
 const RuntimeSceneCoordinator = preload("res://scripts/app/controllers/runtime_scene_coordinator.gd")
 const GameUiCoordinator = preload("res://scripts/app/controllers/game_ui_coordinator.gd")
+const RuntimeDebugCoordinator = preload("res://scripts/app/controllers/runtime_debug_coordinator.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
 const PlayerCommandBlocker = preload("res://scripts/app/controllers/player_command_blocker.gd")
@@ -155,6 +156,7 @@ var runtime_view_state_controller: RefCounted = RuntimeViewStateController.new()
 var runtime_session_context_controller: RefCounted = RuntimeSessionContextController.new()
 var runtime_scene_coordinator: RefCounted = RuntimeSceneCoordinator.new()
 var game_ui_coordinator: RefCounted = GameUiCoordinator.new()
+var runtime_debug_coordinator: RefCounted = RuntimeDebugCoordinator.new()
 var turn_action_runner: RefCounted = TurnActionRunner.new()
 var actor_view_controller: RefCounted = ActorViewController.new()
 var latest_structural_refresh_boundary: Dictionary = {}
@@ -162,6 +164,7 @@ var latest_structural_refresh_boundary: Dictionary = {}
 func _ready() -> void:
 	runtime_scene_coordinator.call("configure", self)
 	game_ui_coordinator.call("configure", self)
+	runtime_debug_coordinator.call("configure", self)
 	_connect_world_action_flow_signals()
 	registry = ContentRegistry.new()
 	var load_result := registry.load_all()
@@ -427,338 +430,167 @@ func handle_trade_shortcut(event: InputEventKey) -> bool:
 
 
 func toggle_controls_hint() -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "hud_root_missing"}
-	var result: Dictionary = _dictionary_or_empty(hud_root.toggle_controls_hint())
-	refresh_hud(current_interaction_prompt())
-	_play_hud_shortcut_audio("ui_button_pressed", "ControlsHintShortcut", "keyboard_shortcut", "toggle_controls_hint", {
-		"value": "on" if bool(result.get("visible", false)) else "off",
-	})
-	return result
+	return _dictionary_or_empty(runtime_debug_coordinator.call("toggle_controls_hint"))
 
 
 func controls_hint_visible() -> bool:
-	return hud_root != null and bool(hud_root.controls_hint_visible())
+	return bool(runtime_debug_coordinator.call("controls_hint_visible"))
 
 
 func toggle_debug_console() -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "hud_root_missing"}
-	var result: Dictionary = _dictionary_or_empty(hud_root.toggle_debug_console())
-	refresh_hud(current_interaction_prompt())
-	_play_hud_shortcut_audio("ui_button_pressed", "DebugConsoleShortcut", "keyboard_shortcut", "toggle_debug_console", {
-		"value": "open" if bool(result.get("visible", false)) else "close",
-	})
-	return result
+	return _dictionary_or_empty(runtime_debug_coordinator.call("toggle_debug_console"))
 
 
 func close_debug_console() -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "hud_root_missing"}
-	var result: Dictionary = _dictionary_or_empty(hud_root.close_debug_console())
-	refresh_hud(current_interaction_prompt())
-	return result
+	return _dictionary_or_empty(runtime_debug_coordinator.call("close_debug_console"))
 
 
 func is_debug_console_open() -> bool:
-	return hud_root != null and bool(hud_root.is_debug_console_open())
+	return bool(runtime_debug_coordinator.call("is_debug_console_open"))
 
 
 func debug_console_snapshot() -> Dictionary:
-	var permission: Dictionary = debug_runtime_controller.permission_snapshot(self)
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.debug_console_snapshot(permission))
-	return {
-		"visible": false,
-		"history": [],
-		"history_count": 0,
-		"suggestions": [],
-		"suggestion_count": 0,
-		"input_text": "",
-		"permission": permission,
-	}
+	return _dictionary_or_empty(runtime_debug_coordinator.call("debug_console_snapshot"))
 
 
 func clear_debug_console_history() -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "hud_root_missing"}
-	return _dictionary_or_empty(hud_root.clear_debug_console_history())
+	return _dictionary_or_empty(runtime_debug_coordinator.call("clear_debug_console_history"))
 
 
 func reset_debug_view_state() -> void:
-	active_trade_target = {}
-	active_trade_feedback = {}
-	active_container_feedback = {}
-	active_character_feedback = {}
-	active_inventory_feedback = {}
-	active_skill_targeting = {}
-	active_skill_target_preview = {}
-	if runtime_view_state_controller != null:
-		runtime_view_state_controller.focused_actor_id = 0
-		runtime_view_state_controller.observed_map_level = 0
-	if runtime_control_state_controller != null:
-		runtime_control_state_controller.auto_tick_enabled = false
-		runtime_control_state_controller.auto_tick_elapsed_sec = 0.0
+	runtime_debug_coordinator.call("reset_debug_view_state")
 
 
 func submit_debug_console_command(command_text: String) -> Dictionary:
-	var command := command_text.strip_edges()
-	var result: Dictionary = _execute_debug_console_command(command)
-	if hud_root != null:
-		hud_root.set_debug_console_result(command, result)
-	refresh_all_panels(current_interaction_prompt())
-	_play_hud_shortcut_audio("ui_button_pressed", "DebugConsoleInput", "text_submit", "submit_debug_console_command", {
-		"value": command,
-		"reason": str(result.get("reason", "")),
-	})
-	return result
+	return _dictionary_or_empty(runtime_debug_coordinator.call("submit_debug_console_command", command_text))
 
 
 func _execute_debug_console_command(command: String) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(debug_runtime_controller.execute(self, command))
-	return _apply_debug_console_intent(result)
+	return _dictionary_or_empty(runtime_debug_coordinator.call("execute_debug_console_command", command))
 
 
 func _apply_debug_console_intent(result: Dictionary) -> Dictionary:
-	var intent := str(result.get("debug_intent", ""))
-	if intent.is_empty():
-		return result
-	var output := result.duplicate(true)
-	output.erase("debug_intent")
-	match intent:
-		"toggle_fps_panel":
-			if not has_method("toggle_debug_panel"):
-				return {"success": false, "reason": "debug_panel_missing", "message": "debug panel missing"}
-			var panel_result: Dictionary = toggle_debug_panel()
-			return _merge_debug_console_intent_result(output, panel_result, "fps panel=%s" % ("on" if bool(panel_result.get("visible", false)) else "off"))
-		"cycle_debug_overlay":
-			if not has_method("cycle_debug_overlay_mode"):
-				return {"success": false, "reason": "debug_overlay_missing", "message": "debug overlay missing"}
-			var overlay_result: Dictionary = cycle_debug_overlay_mode()
-			return _merge_debug_console_intent_result(output, overlay_result, "overlay=%s" % str(overlay_result.get("mode", "")))
-		"toggle_observe_mode":
-			if not has_method("toggle_observe_mode"):
-				return {"success": false, "reason": "observe_mode_missing", "message": "observe mode missing"}
-			var observe_result: Dictionary = toggle_observe_mode()
-			var observe_mode := bool(observe_result.get("observe_mode", false))
-			return _merge_debug_console_intent_result(output, observe_result, "observe=%s" % ("on" if observe_mode else "off"))
-		"clear_console":
-			if not has_method("clear_debug_console_history"):
-				return {"success": false, "reason": "debug_console_missing", "message": "debug console missing"}
-			var clear_result: Dictionary = clear_debug_console_history()
-			return _merge_debug_console_intent_result(output, clear_result, "console cleared" if bool(clear_result.get("success", false)) else "debug console missing")
-	return {"success": false, "reason": "unknown_debug_intent", "debug_intent": intent, "message": "unknown debug intent: %s" % intent}
+	return _dictionary_or_empty(runtime_debug_coordinator.call("apply_debug_console_intent", result))
 
 
 func _merge_debug_console_intent_result(base_result: Dictionary, action_result: Dictionary, message: String) -> Dictionary:
-	var output := base_result.duplicate(true)
-	for key in action_result.keys():
-		output[key] = action_result[key]
-	output["success"] = bool(action_result.get("success", output.get("success", false)))
-	output["message"] = message
-	return output
+	return _dictionary_or_empty(runtime_debug_coordinator.call("merge_debug_console_intent_result", base_result, action_result, message))
 
 
 func controls_hint_snapshot() -> Dictionary:
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.controls_hint_snapshot())
-	return {"visible": false, "line_count": 0, "lines": []}
+	return _dictionary_or_empty(runtime_debug_coordinator.call("controls_hint_snapshot"))
 
 
 func toggle_debug_panel() -> Dictionary:
-	if hud_root == null:
-		return {"success": false, "reason": "hud_root_missing"}
-	var result: Dictionary = _dictionary_or_empty(hud_root.toggle_debug_panel())
-	refresh_hud(current_interaction_prompt())
-	_play_hud_shortcut_audio("ui_button_pressed", "DebugPanelShortcut", "keyboard_shortcut", "toggle_debug_panel", {
-		"value": "open" if bool(result.get("visible", false)) else "close",
-	})
-	return result
+	return _dictionary_or_empty(runtime_debug_coordinator.call("toggle_debug_panel"))
 
 
 func is_debug_panel_open() -> bool:
-	return hud_root != null and bool(hud_root.is_debug_panel_open())
+	return bool(runtime_debug_coordinator.call("is_debug_panel_open"))
 
 
 func debug_panel_snapshot() -> Dictionary:
-	if hud_root != null:
-		return _dictionary_or_empty(hud_root.debug_panel_snapshot())
-	return {"visible": false, "line_count": 0, "lines": []}
+	return _dictionary_or_empty(runtime_debug_coordinator.call("debug_panel_snapshot"))
 
 
 func cycle_debug_overlay_mode() -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(debug_runtime_controller.call("cycle_debug_overlay_mode"))
-	refresh_world_visuals(false)
-	refresh_hud(current_interaction_prompt())
-	_play_hud_shortcut_audio("ui_option_selected", "DebugOverlayShortcut", "keyboard_shortcut", "cycle_debug_overlay", {
-		"value": current_debug_overlay_mode(),
-	})
-	return result
+	return _dictionary_or_empty(runtime_debug_coordinator.call("cycle_debug_overlay_mode"))
 
 
 func current_debug_overlay_mode() -> String:
-	return str(debug_runtime_controller.call("current_debug_overlay_mode"))
+	return str(runtime_debug_coordinator.call("current_debug_overlay_mode"))
 
 
 func debug_overlay_snapshot() -> Dictionary:
-	if world_root != null and world_root.has_method("debug_overlay_snapshot"):
-		return _dictionary_or_empty(world_root.call("debug_overlay_snapshot"))
-	return {"active": false, "mode": "off", "cell_count": 0}
+	return _dictionary_or_empty(runtime_debug_coordinator.call("debug_overlay_snapshot"))
 
 
 func toggle_auto_tick() -> Dictionary:
-	if has_active_dialogue() or gameplay_input_blocked_by_ui():
-		return runtime_control_state_controller.call("toggle_auto_tick", true)
-	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("toggle_auto_tick", false))
-	return _apply_runtime_control_result(result)
+	return _dictionary_or_empty(runtime_debug_coordinator.call("toggle_auto_tick"))
 
 
 func is_auto_tick_enabled() -> bool:
-	return bool(runtime_control_state_controller.auto_tick_enabled) if runtime_control_state_controller != null else false
+	return bool(runtime_debug_coordinator.call("is_auto_tick_enabled"))
 
 
 func is_observe_mode_enabled() -> bool:
-	return bool(runtime_control_state_controller.observe_mode_enabled) if runtime_control_state_controller != null else false
+	return bool(runtime_debug_coordinator.call("is_observe_mode_enabled"))
 
 
 func can_issue_player_commands() -> bool:
-	return not is_observe_mode_enabled() and not _world_action_presenter_blocks_input() and _panel_modal_blocker_name().is_empty()
+	return bool(runtime_debug_coordinator.call("can_issue_player_commands"))
 
 
 func toggle_observe_mode() -> Dictionary:
-	return set_observe_mode(not is_observe_mode_enabled())
+	return _dictionary_or_empty(runtime_debug_coordinator.call("toggle_observe_mode"))
 
 
 func set_observe_mode(enabled: bool) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("set_observe_mode", enabled, gameplay_input_blocked_by_ui()))
-	return _apply_runtime_control_result(result)
+	return _dictionary_or_empty(runtime_debug_coordinator.call("set_observe_mode", enabled))
 
 
 func toggle_observe_playback() -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("toggle_observe_playback", has_active_dialogue() or gameplay_input_blocked_by_ui()))
-	return _apply_runtime_control_result(result)
+	return _dictionary_or_empty(runtime_debug_coordinator.call("toggle_observe_playback"))
 
 
 func cycle_observe_speed() -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("cycle_observe_speed"))
-	return _apply_runtime_control_result(result)
+	return _dictionary_or_empty(runtime_debug_coordinator.call("cycle_observe_speed"))
 
 
 func set_observe_speed(speed_id: String) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("set_observe_speed", speed_id))
-	return _apply_runtime_control_result(result)
+	return _dictionary_or_empty(runtime_debug_coordinator.call("set_observe_speed", speed_id))
 
 
 func cycle_info_panel(direction: int) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("cycle_info_panel", direction))
-	return _apply_runtime_control_result(result)
+	return _dictionary_or_empty(runtime_debug_coordinator.call("cycle_info_panel", direction))
 
 
 func _apply_runtime_control_result(result: Dictionary) -> Dictionary:
-	if not bool(result.get("success", false)):
-		return result
-	if bool(result.get("refresh_hud", false)):
-		refresh_hud(current_interaction_prompt())
-	var audio: Dictionary = _dictionary_or_empty(result.get("hud_audio", {}))
-	if not audio.is_empty():
-		_play_hud_shortcut_audio(
-			str(audio.get("event_kind", "")),
-			str(audio.get("control_name", "")),
-			str(audio.get("control_kind", "")),
-			str(audio.get("action", "")),
-			_dictionary_or_empty(audio.get("payload", {}))
-		)
-	return result
+	return _dictionary_or_empty(runtime_debug_coordinator.call("apply_runtime_control_result", result))
 
 
 func current_info_panel_page() -> Dictionary:
-	return _dictionary_or_empty(runtime_control_state_controller.call("current_info_panel_page"))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("current_info_panel_page"))
 
 
 func info_panel_snapshot() -> Dictionary:
-	return _dictionary_or_empty(runtime_control_state_controller.call("info_panel_snapshot"))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("info_panel_snapshot"))
 
 
 func runtime_control_snapshot() -> Dictionary:
-	var snapshot: Dictionary = _dictionary_or_empty(runtime_control_state_controller.call("runtime_control_snapshot"))
-	snapshot["world_time"] = runtime_world_time_snapshot()
-	snapshot["map_level"] = map_level_snapshot()
-	snapshot["focused_actor"] = focused_actor_snapshot()
-	snapshot["ui_blocker"] = gameplay_input_blocker_name()
-	snapshot["ui_blocker_snapshot"] = gameplay_input_blocker_snapshot()
-	snapshot["modal_stack"] = modal_stack_snapshot()
-	snapshot["menu_state"] = menu_state_snapshot()
-	snapshot["ui_theme"] = ui_theme_snapshot()
-	snapshot["ui_layer_stack"] = ui_layer_stack_snapshot()
-	snapshot["context_menu"] = context_menu_snapshot()
-	snapshot["controls_hint"] = controls_hint_snapshot()
-	snapshot["debug_console"] = debug_console_snapshot()
-	snapshot["debug_panel"] = debug_panel_snapshot()
-	snapshot["hover"] = runtime_hover_snapshot()
-	snapshot["tooltip"] = hover_tooltip_snapshot()
-	snapshot["tooltip_render"] = tooltip_render_snapshot()
-	snapshot["hotbar_hit_test"] = hotbar_hit_test_snapshot()
-	snapshot["drag"] = drag_state_snapshot()
-	snapshot["drag_preview_render"] = drag_preview_render_snapshot()
-	snapshot["selection_debug"] = runtime_selection_debug_snapshot()
-	snapshot["action_presenter"] = world_action_presenter_snapshot()
-	snapshot["world_action_queue"] = world_action_queue_snapshot()
-	snapshot["turn_action_runner"] = turn_action_runner_snapshot()
-	snapshot["latest_action_chain"] = latest_action_chain.duplicate(true)
-	snapshot["actor_view"] = actor_view_snapshot()
-	snapshot["camera_follow"] = camera_follow_snapshot()
-	snapshot["world_render_policy"] = world_render_policy_snapshot()
-	snapshot["structural_refresh_boundary"] = structural_refresh_boundary_snapshot()
-	snapshot["ai_debug"] = ai_debug_snapshot()
-	snapshot["debug_overlay"] = debug_overlay_snapshot()
-	snapshot["runtime_refresh"] = runtime_refresh_report_snapshot()
-	snapshot["audio_feedback"] = audio_feedback_snapshot()
-	snapshot["performance"] = runtime_performance_snapshot()
-	snapshot["skill_targeting"] = active_skill_targeting_snapshot()
-	snapshot["player_command_authority_audit"] = player_command_authority_audit_snapshot()
-	return snapshot
+	return _dictionary_or_empty(runtime_debug_coordinator.call("runtime_control_snapshot"))
 
 
 func tooltip_render_snapshot() -> Dictionary:
-	var controller := _ui_overlay_controller()
-	if controller == null:
-		return {"active": false}
-	return _dictionary_or_empty(controller.call("tooltip_render_snapshot"))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("tooltip_render_snapshot"))
 
 
 func drag_preview_render_snapshot() -> Dictionary:
-	var controller := _ui_overlay_controller()
-	if controller == null:
-		return {"active": false}
-	return _dictionary_or_empty(controller.call("drag_preview_render_snapshot"))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("drag_preview_render_snapshot"))
 
 
 func player_command_authority_audit_snapshot() -> Dictionary:
-	return _dictionary_or_empty(player_command_authority_audit.call("snapshot", debug_runtime_controller, self))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("player_command_authority_audit_snapshot"))
 
 
 func _debug_console_mutation_authority_audit() -> Dictionary:
-	return _dictionary_or_empty(player_command_authority_audit.call("debug_console_mutation_authority_audit", debug_runtime_controller, self))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("debug_console_mutation_authority_audit"))
 
 
 func ai_debug_snapshot() -> Dictionary:
-	return _dictionary_or_empty(ai_debug_snapshot_builder.call("snapshot", simulation, focused_actor_snapshot()))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("ai_debug_snapshot"))
 
 
 func runtime_world_time_snapshot() -> Dictionary:
-	return _dictionary_or_empty(world_time_snapshot_builder.call("snapshot", simulation))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("runtime_world_time_snapshot"))
 
 
 func world_action_presenter_snapshot() -> Dictionary:
-	if world_action_flow_controller == null:
-		return {"active": false, "kind": "missing"}
-	return _dictionary_or_empty(world_action_flow_controller.call("presenter_snapshot"))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("world_action_presenter_snapshot"))
 
 
 func world_action_queue_snapshot() -> Dictionary:
-	if world_action_flow_controller == null:
-		return {"active": false, "state": "idle", "sequence": 0}
-	return _dictionary_or_empty(world_action_flow_controller.call("snapshot"))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("world_action_queue_snapshot"))
 
 
 func turn_action_runner_snapshot() -> Dictionary:
@@ -845,56 +677,19 @@ func prepare_runtime_save_boundary(reason: String = "save_boundary") -> Dictiona
 
 
 func actor_view_snapshot() -> Dictionary:
-	if actor_view_controller == null or not actor_view_controller.has_method("snapshot"):
-		return {"active": false}
-	return _dictionary_or_empty(actor_view_controller.call("snapshot"))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("actor_view_snapshot"))
 
 
 func camera_follow_snapshot() -> Dictionary:
-	var input_snapshot: Dictionary = {}
-	if runtime_input_controller != null and runtime_input_controller.has_method("camera_follow_snapshot"):
-		input_snapshot = _dictionary_or_empty(runtime_input_controller.call("camera_follow_snapshot"))
-	else:
-		input_snapshot = {"has_camera": false, "reason": "runtime_input_missing"}
-	var world_snapshot: Dictionary = {}
-	if world_root != null and world_root.has_method("camera_follow_snapshot"):
-		world_snapshot = _dictionary_or_empty(world_root.call("camera_follow_snapshot"))
-	var output: Dictionary = input_snapshot.duplicate(true)
-	output["input_controller"] = input_snapshot.duplicate(true)
-	output["world_camera"] = world_snapshot.duplicate(true)
-	if not world_snapshot.is_empty():
-		output["has_world_camera"] = bool(world_snapshot.get("has_camera", false))
-		output["world_follow_source"] = str(world_snapshot.get("follow_source", ""))
-		output["world_follow_actor_id"] = int(world_snapshot.get("follow_actor_id", 0))
-		output["world_follow_node_active"] = bool(world_snapshot.get("follow_node_active", false))
-		output["world_follow_node_instance_id"] = int(world_snapshot.get("follow_node_instance_id", 0))
-	return output
+	return _dictionary_or_empty(runtime_debug_coordinator.call("camera_follow_snapshot"))
 
 
 func world_render_policy_snapshot() -> Dictionary:
-	var runner: Dictionary = turn_action_runner_snapshot()
-	var queue: Dictionary = world_action_queue_snapshot()
-	var performance: Dictionary = runtime_performance_snapshot()
-	var runner_active := bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))
-	var queue_active := bool(queue.get("active", false))
-	return {
-		"render_sequence": int(performance.get("render_sequence", 0)),
-		"last_render_count": int(performance.get("render_count", 0)),
-		"last_render_counts": _dictionary_or_empty(performance.get("render_counts", {})).duplicate(true),
-		"runner_active": runner_active,
-		"runner_action_kind": str(runner.get("action_kind", "")),
-		"runner_phase": str(runner.get("phase", "")),
-		"world_action_queue_active": queue_active,
-		"ordinary_action_render_world": false,
-		"structural_render_allowed": not runner_active,
-		"policy": "runner_actions_update_actor_view_without_full_world_render" if runner_active else "idle_structural_refresh_allowed",
-	}
+	return _dictionary_or_empty(runtime_debug_coordinator.call("world_render_policy_snapshot"))
 
 
 func audio_feedback_snapshot() -> Dictionary:
-	if audio_feedback_controller == null or not audio_feedback_controller.has_method("snapshot"):
-		return {"enabled": false, "reason": "audio_feedback_missing"}
-	return _dictionary_or_empty(audio_feedback_controller.call("snapshot"))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("audio_feedback_snapshot"))
 
 
 func runtime_refresh_report_snapshot() -> Dictionary:
@@ -960,35 +755,27 @@ func _ai_life_status_group(state_id: String, planner_action_id: String) -> Strin
 
 
 func runtime_performance_snapshot() -> Dictionary:
-	return _dictionary_or_empty(runtime_performance_tracker.call("snapshot", _last_pathfinding_time_ms(), _last_pathfinding_visited_cell_count()))
+	return _dictionary_or_empty(runtime_debug_coordinator.call("runtime_performance_snapshot"))
 
 
 func runtime_hover_snapshot() -> Dictionary:
-	if runtime_input_controller != null and runtime_input_controller.has_method("hover_state_snapshot"):
-		return runtime_input_controller.hover_state_snapshot()
-	return {"active": false}
+	return _dictionary_or_empty(runtime_debug_coordinator.call("runtime_hover_snapshot"))
 
 
 func runtime_selection_debug_snapshot() -> Dictionary:
-	if runtime_input_controller != null and runtime_input_controller.has_method("selection_debug_snapshot"):
-		return runtime_input_controller.selection_debug_snapshot()
-	return {"active": false, "kind": "", "hovered_grid": {}, "blocker_name": "", "prompt": {"has_prompt": false}}
+	return _dictionary_or_empty(runtime_debug_coordinator.call("runtime_selection_debug_snapshot"))
 
 
 func _update_runtime_performance(delta: float) -> void:
-	runtime_performance_tracker.call("update_process", delta)
+	runtime_debug_coordinator.call("update_runtime_performance", delta)
 
 
 func _last_pathfinding_time_ms() -> float:
-	var hover: Dictionary = runtime_hover_snapshot()
-	var move_preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
-	return float(move_preview.get("pathfinding_time_ms", 0.0))
+	return float(runtime_debug_coordinator.call("last_pathfinding_time_ms"))
 
 
 func _last_pathfinding_visited_cell_count() -> int:
-	var hover: Dictionary = runtime_hover_snapshot()
-	var move_preview: Dictionary = _dictionary_or_empty(hover.get("move_preview", {}))
-	return int(move_preview.get("visited_cell_count", 0))
+	return int(runtime_debug_coordinator.call("last_pathfinding_visited_cell_count"))
 
 
 func _vector2_snapshot(value: Vector2) -> Dictionary:
