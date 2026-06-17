@@ -15,6 +15,7 @@ const RuntimeSessionContextController = preload("res://scripts/app/controllers/r
 const RuntimeSceneCoordinator = preload("res://scripts/app/controllers/runtime_scene_coordinator.gd")
 const GameUiCoordinator = preload("res://scripts/app/controllers/game_ui_coordinator.gd")
 const RuntimeDebugCoordinator = preload("res://scripts/app/controllers/runtime_debug_coordinator.gd")
+const PlayerCommandCoordinator = preload("res://scripts/app/controllers/player_command_coordinator.gd")
 const WorldActionFlowController = preload("res://scripts/app/controllers/world_action_flow_controller.gd")
 const PlayerCommandAuthorityAudit = preload("res://scripts/app/controllers/player_command_authority_audit.gd")
 const PlayerCommandBlocker = preload("res://scripts/app/controllers/player_command_blocker.gd")
@@ -157,6 +158,7 @@ var runtime_session_context_controller: RefCounted = RuntimeSessionContextContro
 var runtime_scene_coordinator: RefCounted = RuntimeSceneCoordinator.new()
 var game_ui_coordinator: RefCounted = GameUiCoordinator.new()
 var runtime_debug_coordinator: RefCounted = RuntimeDebugCoordinator.new()
+var player_command_coordinator: RefCounted = PlayerCommandCoordinator.new()
 var turn_action_runner: RefCounted = TurnActionRunner.new()
 var actor_view_controller: RefCounted = ActorViewController.new()
 var latest_structural_refresh_boundary: Dictionary = {}
@@ -165,6 +167,7 @@ func _ready() -> void:
 	runtime_scene_coordinator.call("configure", self)
 	game_ui_coordinator.call("configure", self)
 	runtime_debug_coordinator.call("configure", self)
+	player_command_coordinator.call("configure", self)
 	_connect_world_action_flow_signals()
 	registry = ContentRegistry.new()
 	var load_result := registry.load_all()
@@ -594,86 +597,19 @@ func world_action_queue_snapshot() -> Dictionary:
 
 
 func turn_action_runner_snapshot() -> Dictionary:
-	if turn_action_runner == null or not turn_action_runner.has_method("snapshot"):
-		return {"active": false, "phase": "missing"}
-	return _dictionary_or_empty(turn_action_runner.call("snapshot"))
+	return _dictionary_or_empty(player_command_coordinator.call("turn_action_runner_snapshot"))
 
 
 func drain_turn_action_runner(max_steps: int = 240) -> Dictionary:
-	if turn_action_runner == null or not turn_action_runner.has_method("snapshot"):
-		return {"active": false, "phase": "missing", "drained": false}
-	var steps := 0
-	var runner: Dictionary = turn_action_runner_snapshot()
-	while steps < max_steps and bool(runner.get("active", false)):
-		steps += 1
-		if bool(runner.get("presentation_active", false)) and actor_view_controller != null and actor_view_controller.has_method("finish_active_actor_presentation"):
-			actor_view_controller.call("finish_active_actor_presentation", int(runner.get("presenting_npc_actor_id", runner.get("actor_id", 0))))
-		if turn_action_runner.has_method("process"):
-			turn_action_runner.call("process")
-		runner = turn_action_runner_snapshot()
-	runner["drained"] = not bool(runner.get("active", false))
-	runner["drain_steps"] = steps
-	runner["drain_limit"] = max_steps
-	return runner
+	return _dictionary_or_empty(player_command_coordinator.call("drain_turn_action_runner", max_steps))
 
 
 func settle_turn_action_runner_boundary(reason: String = "stable_boundary", max_steps: int = 8) -> Dictionary:
-	if turn_action_runner == null or not turn_action_runner.has_method("snapshot"):
-		return {"active": false, "phase": "missing", "settled": false}
-	var before: Dictionary = turn_action_runner_snapshot()
-	if bool(before.get("active", false)) or bool(before.get("presentation_active", false)):
-		if turn_action_runner.has_method("settle_stable_boundary"):
-			var settled: Dictionary = _dictionary_or_empty(turn_action_runner.call("settle_stable_boundary", reason))
-			settled["before"] = before.duplicate(true)
-			settled["settle_steps"] = 1
-			settled["settle_limit"] = max_steps
-			settled["settled"] = not bool(settled.get("active", false)) and not bool(settled.get("presentation_active", false))
-			return settled
-	var steps := 0
-	var runner: Dictionary = before.duplicate(true)
-	while steps < max_steps and (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))):
-		steps += 1
-		if bool(runner.get("presentation_active", false)) and actor_view_controller != null and actor_view_controller.has_method("finish_active_actor_presentation"):
-			actor_view_controller.call("finish_active_actor_presentation", int(runner.get("presenting_npc_actor_id", runner.get("actor_id", 0))))
-		if turn_action_runner.has_method("process"):
-			turn_action_runner.call("process")
-		runner = turn_action_runner_snapshot()
-		if str(runner.get("phase", "")) == "player_turn_end" or str(runner.get("phase", "")) == "pending_resume":
-			break
-		if bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)) and not str(runner.get("pending_kind", "")).is_empty():
-			break
-	runner["settled"] = not bool(runner.get("presentation_active", false))
-	runner["settle_steps"] = steps
-	runner["settle_limit"] = max_steps
-	runner["reason"] = reason
-	runner["before"] = before.duplicate(true)
-	return runner
+	return _dictionary_or_empty(player_command_coordinator.call("settle_turn_action_runner_boundary", reason, max_steps))
 
 
 func prepare_runtime_save_boundary(reason: String = "save_boundary") -> Dictionary:
-	var before_runner: Dictionary = turn_action_runner_snapshot()
-	var before_policy: Dictionary = world_render_policy_snapshot()
-	var drain_result: Dictionary = {}
-	if bool(before_runner.get("active", false)) or bool(before_runner.get("presentation_active", false)):
-		drain_result = drain_turn_action_runner()
-		drain_result["reason"] = reason
-		refresh_hud(current_interaction_prompt())
-	var after_runner: Dictionary = turn_action_runner_snapshot()
-	var after_policy: Dictionary = world_render_policy_snapshot()
-	var stable := not bool(after_runner.get("active", false)) and not bool(after_runner.get("presentation_active", false))
-	var structural_allowed := bool(after_policy.get("structural_render_allowed", false))
-	return {
-		"success": stable and structural_allowed,
-		"reason": reason if stable and structural_allowed else "save_boundary_unstable",
-		"stable": stable,
-		"save_allowed": stable and structural_allowed,
-		"drained_turn_action_runner": not drain_result.is_empty() and bool(drain_result.get("drained", false)),
-		"drain_result": drain_result.duplicate(true),
-		"before_runner": before_runner.duplicate(true),
-		"after_runner": after_runner.duplicate(true),
-		"before_policy": before_policy.duplicate(true),
-		"after_policy": after_policy.duplicate(true),
-	}
+	return _dictionary_or_empty(player_command_coordinator.call("prepare_runtime_save_boundary", reason))
 
 
 func actor_view_snapshot() -> Dictionary:
@@ -1057,198 +993,55 @@ func execute_move_to_grid(grid: Dictionary) -> Dictionary:
 
 
 func request_player_move(grid: Dictionary) -> Dictionary:
-	_setup_world_container()
-	_configure_turn_action_runner()
-	if not _runner_allows_move_replacement():
-		var blocked: Dictionary = _player_command_rejection("move")
-		if not blocked.is_empty():
-			return blocked
-	var player_id := _player_actor_id()
-	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
-	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_move", player_id, grid, topology))
-	return result
+	return _dictionary_or_empty(player_command_coordinator.call("request_player_move", grid))
 
 
 func _runner_allows_move_replacement() -> bool:
-	if is_observe_mode_enabled() or not _panel_modal_blocker_name().is_empty():
-		return false
-	if world_action_flow_controller != null and bool(world_action_flow_controller.call("blocks_input")):
-		return false
-	var runner: Dictionary = turn_action_runner_snapshot()
-	return (bool(runner.get("active", false)) or bool(runner.get("presentation_active", false))) and str(runner.get("action_kind", "")) == "move"
+	return bool(player_command_coordinator.call("runner_allows_move_replacement"))
 
 
 func request_player_attack(target_actor_id: int, options: Dictionary = {}) -> Dictionary:
-	var blocked: Dictionary = _player_command_rejection("attack")
-	if not blocked.is_empty():
-		return blocked
-	_setup_world_container()
-	_configure_turn_action_runner()
-	var player_id := _player_actor_id()
-	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
-	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_attack", player_id, target_actor_id, topology, options))
-	if bool(result.get("success", false)):
-		_restore_actor_camera_follow("player_attack")
-	return result
+	return _dictionary_or_empty(player_command_coordinator.call("request_player_attack", target_actor_id, options))
 
 
 func request_player_interaction(target: Dictionary, option_id: String = "", options: Dictionary = {}) -> Dictionary:
-	var blocked: Dictionary = _player_command_rejection("interact")
-	if not blocked.is_empty():
-		return blocked
-	if target.is_empty():
-		return {"success": false, "reason": "interaction_target_not_selected"}
-	_setup_world_container()
-	_configure_turn_action_runner()
-	var player_id := _player_actor_id()
-	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
-	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_interact", player_id, target, option_id, topology, options))
-	if bool(result.get("success", false)):
-		_restore_actor_camera_follow("player_interaction")
-	return result
+	return _dictionary_or_empty(player_command_coordinator.call("request_player_interaction", target, option_id, options))
 
 
 func request_player_wait(options: Dictionary = {}) -> Dictionary:
-	var blocked: Dictionary = _player_command_rejection("wait")
-	if not blocked.is_empty():
-		return blocked
-	_setup_world_container()
-	_configure_turn_action_runner()
-	var player_id := _player_actor_id()
-	var topology: Dictionary = _dictionary_or_empty(world_result.get("map", {}))
-	var result: Dictionary = _dictionary_or_empty(turn_action_runner.call("request_wait", player_id, topology, options))
-	return result
+	return _dictionary_or_empty(player_command_coordinator.call("request_player_wait", options))
 
 
 func request_player_craft(command: Dictionary, options: Dictionary = {}) -> Dictionary:
-	var blocked: Dictionary = _player_command_rejection("craft")
-	if not blocked.is_empty():
-		return blocked
-	_setup_world_container()
-	_configure_turn_action_runner()
-	var player_id := _player_actor_id()
-	var topology: Dictionary = _dictionary_or_empty(command.get("topology", world_result.get("map", {})))
-	return _dictionary_or_empty(turn_action_runner.call("request_craft", player_id, command, topology, options))
+	return _dictionary_or_empty(player_command_coordinator.call("request_player_craft", command, options))
 
 
 func sync_after_turn_action_step(step_result: Dictionary = {}, runner_snapshot: Dictionary = {}) -> Dictionary:
-	var crafting_continuation: Dictionary = {}
-	if _runner_step_should_continue_crafting_queue(step_result, runner_snapshot):
-		crafting_continuation = _continue_crafting_queue_after_wait(step_result, runner_snapshot)
-	var interaction_result: Dictionary = _runner_interaction_result(step_result, runner_snapshot)
-	if not interaction_result.is_empty():
-		_apply_world_root_snapshot(false)
-		_configure_turn_action_runner()
-		_configure_runtime_audio_layers()
-		if bool(crafting_continuation.get("continued", false)):
-			_refresh_operation_panels(_array_or_empty(crafting_continuation.get("refresh", [])))
-		_apply_interaction_execution_result(interaction_result, _dictionary_or_empty(runner_snapshot.get("target", {})))
-		return {
-			"success": true,
-			"render_world": true,
-			"world_result_synced": false,
-			"world_result_deferred": true,
-			"step_result": step_result.duplicate(true),
-			"turn_action_runner": runner_snapshot.duplicate(true),
-		}
-	var needs_world_result_sync := _turn_action_step_needs_world_result_sync(step_result, runner_snapshot, interaction_result, crafting_continuation)
-	if needs_world_result_sync and not _rebuild_runtime_world_result("turn_action_runner_step"):
-		return {"success": false, "reason": "world_result_sync_failed"}
-	_apply_world_root_snapshot(false)
-	_configure_turn_action_runner()
-	_configure_runtime_audio_layers()
-	if bool(crafting_continuation.get("continued", false)):
-		_refresh_operation_panels(_array_or_empty(crafting_continuation.get("refresh", [])))
-	refresh_hud(current_interaction_prompt())
-	return {
-		"success": true,
-		"render_world": false,
-		"world_result_synced": needs_world_result_sync,
-		"step_result": step_result.duplicate(true),
-		"turn_action_runner": runner_snapshot.duplicate(true),
-	}
+	return _dictionary_or_empty(player_command_coordinator.call("sync_after_turn_action_step", step_result, runner_snapshot))
 
 
 func _turn_action_step_needs_world_result_sync(step_result: Dictionary, runner_snapshot: Dictionary, interaction_result: Dictionary, crafting_continuation: Dictionary = {}) -> bool:
-	if not interaction_result.is_empty():
-		return true
-	if bool(crafting_continuation.get("continued", false)):
-		return true
-	return _turn_action_result_has_structural_change(step_result) \
-		or _turn_action_result_has_structural_change(_dictionary_or_empty(step_result.get("attack_result", {}))) \
-		or _turn_action_result_has_structural_change(_dictionary_or_empty(step_result.get("npc_attack_result", {}))) \
-		or _turn_action_result_has_structural_change(_dictionary_or_empty(step_result.get("pending_result", {}))) \
-		or _turn_action_runner_is_structural_refresh_boundary(runner_snapshot)
+	return bool(player_command_coordinator.call("turn_action_step_needs_world_result_sync", step_result, runner_snapshot, interaction_result, crafting_continuation))
 
 
 func _turn_action_result_has_structural_change(result: Dictionary) -> bool:
-	if result.is_empty():
-		return false
-	if result.has("context_snapshot"):
-		return true
-	if result.has("container") or result.has("shop"):
-		return true
-	if bool(result.get("consumed_target", false)) or bool(result.get("door_toggled", false)):
-		return true
-	if bool(result.get("defeated", false)) or bool(result.get("corpse_created", false)):
-		return true
-	for event_value in _interaction_result_events(result):
-		var event: Dictionary = _dictionary_or_empty(event_value)
-		match str(event.get("kind", "")):
-			"actor_defeated", "corpse_created", "interaction_succeeded", "scene_transition", "door_toggled", "door_auto_opened", "container_opened":
-				return true
-	return false
+	return bool(player_command_coordinator.call("turn_action_result_has_structural_change", result))
 
 
 func _turn_action_runner_is_structural_refresh_boundary(runner_snapshot: Dictionary) -> bool:
-	if bool(runner_snapshot.get("active", false)) or bool(runner_snapshot.get("presentation_active", false)):
-		return false
-	var pending_kind := str(runner_snapshot.get("pending_kind", ""))
-	if not pending_kind.is_empty():
-		return false
-	var action_kind := str(runner_snapshot.get("action_kind", ""))
-	return action_kind in ["interact", "attack"]
+	return bool(player_command_coordinator.call("turn_action_runner_is_structural_refresh_boundary", runner_snapshot))
 
 
 func _runner_interaction_result(step_result: Dictionary, runner_snapshot: Dictionary) -> Dictionary:
-	if str(runner_snapshot.get("action_kind", "")) != "interact":
-		return {}
-	var pending_result: Dictionary = _dictionary_or_empty(step_result.get("pending_result", {}))
-	if _is_final_interaction_result(pending_result):
-		return pending_result
-	if _is_final_interaction_result(step_result):
-		return step_result
-	return {}
+	return _dictionary_or_empty(player_command_coordinator.call("runner_interaction_result", step_result, runner_snapshot))
 
 
 func _is_final_interaction_result(result: Dictionary) -> bool:
-	if result.is_empty() or not bool(result.get("success", false)):
-		return false
-	return bool(result.get("consumed_target", false)) \
-		or result.has("dialogue_id") \
-		or result.has("container") \
-		or result.has("context_snapshot") \
-		or bool(result.get("defeated", false)) \
-		or bool(result.get("interaction_completed", false))
+	return bool(player_command_coordinator.call("is_final_interaction_result", result))
 
 
 func _runner_step_should_continue_crafting_queue(step_result: Dictionary, runner_snapshot: Dictionary) -> bool:
-	if not ["wait", "craft"].has(str(runner_snapshot.get("action_kind", ""))):
-		return false
-	if not bool(step_result.get("success", false)):
-		return false
-	var pending_result: Dictionary = _dictionary_or_empty(step_result.get("pending_result", {}))
-	if pending_result.is_empty():
-		return false
-	if _wait_result_resumed_active_crafting_queue(step_result):
-		return true
-	if str(runner_snapshot.get("action_kind", "")) != "craft":
-		return false
-	var resumed: Dictionary = _dictionary_or_empty(pending_result.get("resumed_pending_crafting", {}))
-	if resumed.is_empty():
-		return false
-	var command: Dictionary = _dictionary_or_empty(resumed.get("command", {}))
-	return bool(command.get("crafting_queue_active", false))
+	return bool(player_command_coordinator.call("runner_step_should_continue_crafting_queue", step_result, runner_snapshot))
 
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false) -> Dictionary:
@@ -2282,38 +2075,19 @@ func _submit_inventory_action(action: Dictionary) -> Dictionary:
 
 
 func _player_command_rejection(action: String) -> Dictionary:
-	var modal_name := _panel_modal_blocker_name()
-	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call(
-		"player_command_rejection",
-		action,
-		is_observe_mode_enabled(),
-		modal_name,
-		_world_action_presenter_blocks_input(),
-		gameplay_input_blocker_snapshot()
-	))
-	if not result.is_empty():
-		refresh_hud(current_interaction_prompt())
-	return result
+	return _dictionary_or_empty(player_command_coordinator.call("player_command_rejection", action))
 
 
 func _observe_command_rejected(action: String) -> Dictionary:
-	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call("observe_command_rejected", action, is_observe_mode_enabled()))
-	refresh_hud(current_interaction_prompt())
-	return result
+	return _dictionary_or_empty(player_command_coordinator.call("observe_command_rejected", action))
 
 
 func _action_presenter_command_rejected(action: String) -> Dictionary:
-	var blocker: Dictionary = gameplay_input_blocker_snapshot()
-	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call("action_presenter_command_rejected", action, blocker))
-	refresh_hud(current_interaction_prompt())
-	return result
+	return _dictionary_or_empty(player_command_coordinator.call("action_presenter_command_rejected", action))
 
 
 func _ui_modal_command_rejected(action: String, modal_name: String) -> Dictionary:
-	var blocker: Dictionary = gameplay_input_blocker_snapshot()
-	var result: Dictionary = _dictionary_or_empty(player_command_blocker.call("ui_modal_command_rejected", action, modal_name, blocker))
-	refresh_hud(current_interaction_prompt())
-	return result
+	return _dictionary_or_empty(player_command_coordinator.call("ui_modal_command_rejected", action, modal_name))
 
 
 func _record_container_feedback(result: Dictionary, action: String, container_id: String, item_id: String, count: int) -> void:

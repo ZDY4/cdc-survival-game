@@ -4278,6 +4278,7 @@ func _expect_player_command_authority_source(errors: Array[String], entries: Arr
 		return
 	var owner_sources := {
 		"GameApp": game_app_source,
+		"PlayerCommandCoordinator": _read_text_file("res://scripts/app/controllers/player_command_coordinator.gd"),
 		"PlayerInteractionController": _read_text_file("res://scripts/app/controllers/player_interaction_controller.gd"),
 		"InteractionActionController": _read_text_file("res://scripts/app/controllers/interaction_action_controller.gd"),
 		"ContainerActionController": _read_text_file("res://scripts/app/controllers/container_action_controller.gd"),
@@ -4296,7 +4297,7 @@ func _expect_player_command_authority_source(errors: Array[String], entries: Arr
 		if method_name.is_empty():
 			continue
 		if _method_body(game_app_source, method_name).is_empty():
-			errors.append("player command audit source is missing GameApp facade %s" % method_name)
+			errors.append("player command audit source is missing app facade %s" % method_name)
 			continue
 		var owner := str(entry_data.get("owner", "GameApp"))
 		var source := str(owner_sources.get(owner, ""))
@@ -4347,7 +4348,7 @@ func _body_uses_submit_authority(body: String, owner: String) -> bool:
 		return true
 	if owner == "PlayerInteractionController" and body.contains("execute_selected_option("):
 		return true
-	if (owner == "GameApp" or owner == "InteractionActionController") and (body.contains("interaction_controller.execute_primary_interaction") or body.contains("interaction_controller.execute_selected_option") or body.contains("interaction_controller.execute_move_to_grid")):
+	if (owner == "PlayerCommandCoordinator" or owner == "InteractionActionController") and (body.contains("interaction_controller.execute_primary_interaction") or body.contains("interaction_controller.execute_selected_option") or body.contains("interaction_controller.execute_move_to_grid")):
 		return true
 	return false
 

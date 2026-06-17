@@ -643,7 +643,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	_assert_queue_feedback(errors, game_root, "confirm", true, 0, 1, "multi-entry cross-turn queue pending first")
 	var queue_wait: Dictionary = game_root.submit_wait_action()
 	if not bool(queue_wait.get("success", false)):
-		errors.append("multi-entry queue wait should complete through GameApp facade: %s" % queue_wait)
+		errors.append("multi-entry queue wait should complete through app facade: %s" % queue_wait)
 	var wait_runner: Dictionary = await _wait_for_turn_action_runner_idle(game_root)
 	if bool(wait_runner.get("active", false)):
 		errors.append("multi-entry queue wait runner should become idle before assertions: %s" % JSON.stringify(wait_runner))
