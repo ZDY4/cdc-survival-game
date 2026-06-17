@@ -9,6 +9,7 @@ var world_container: Node3D
 var active_actor_id := 0
 var active_tween: Tween
 var active_node_ref: WeakRef
+var background_tweens: Dictionary = {}
 var latest: Dictionary = {"active": false, "kind": "none"}
 
 
@@ -77,7 +78,7 @@ func move_actor_step(host: Node, actor_id: int, from_grid: Dictionary, to_grid: 
 		"from_grid": from_grid.duplicate(true),
 		"to_grid": to_grid.duplicate(true),
 		"duration_sec": duration,
-		"node_path": str(node.get_path()),
+		"node_path": _node_path(node),
 		"node_instance_id": node.get_instance_id(),
 	}
 	if active_tween == null:
@@ -132,7 +133,7 @@ func play_attack(host: Node, actor_id: int, target_actor_id: int, result: Dictio
 		"target_actor_id": target_actor_id,
 		"duration_sec": duration,
 		"hit_kind": str(result.get("hit_kind", "")),
-		"node_path": str(node.get_path()),
+		"node_path": _node_path(node),
 		"node_instance_id": node.get_instance_id(),
 	}
 	if active_tween == null:
@@ -150,6 +151,54 @@ func play_attack(host: Node, actor_id: int, target_actor_id: int, result: Dictio
 	active_tween.tween_property(node, "position", original_position, duration * 0.55)
 	active_tween.finished.connect(Callable(self, "_on_step_tween_finished").bind(actor_id))
 	return latest.duplicate(true)
+
+
+func move_actor_background_step(host: Node, actor_id: int, from_grid: Dictionary, to_grid: Dictionary, options: Dictionary = {}) -> Dictionary:
+	var node := actor_node(actor_id)
+	if node == null:
+		return {
+			"success": false,
+			"active": false,
+			"kind": "background_move_step",
+			"reason": "actor_node_missing",
+			"actor_id": actor_id,
+		}
+	_finish_background_actor_presentation(actor_id, "new_background_step", false)
+	var duration := float(options.get("duration_sec", STEP_DURATION_SEC))
+	var y := node.position.y
+	var final_position := _grid_to_world(to_grid, y)
+	node.position = _grid_to_world(from_grid, y)
+	node.rotation_degrees = Vector3(node.rotation_degrees.x, _yaw_degrees(from_grid, to_grid, node.rotation_degrees.y), node.rotation_degrees.z)
+	node.set_meta("background_action_active", true)
+	node.set_meta("background_action_kind", "move_step")
+	node.set_meta("background_action_actor_id", actor_id)
+	node.set_meta("background_action_from_grid", from_grid.duplicate(true))
+	node.set_meta("background_action_to_grid", to_grid.duplicate(true))
+	node.set_meta("background_action_final_position", final_position)
+	var tween: Tween = host.create_tween() if host != null else null
+	var output := {
+		"success": true,
+		"active": tween != null,
+		"kind": "background_move_step",
+		"actor_id": actor_id,
+		"from_grid": from_grid.duplicate(true),
+		"to_grid": to_grid.duplicate(true),
+		"duration_sec": duration,
+		"node_path": _node_path(node),
+		"node_instance_id": node.get_instance_id(),
+	}
+	if tween == null:
+		node.position = final_position
+		node.set_meta("background_action_active", false)
+		output["active"] = false
+		output["reason"] = "no_tween"
+		return output
+	background_tweens[actor_id] = tween
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(node, "position", final_position, duration)
+	tween.finished.connect(Callable(self, "_on_background_tween_finished").bind(actor_id))
+	return output
 
 
 func is_active() -> bool:
@@ -193,7 +242,7 @@ func snapshot() -> Dictionary:
 	output["active_actor_id"] = active_actor_id
 	var node := active_actor_node(active_actor_id)
 	output["node_instance_id"] = node.get_instance_id() if node != null else 0
-	output["node_position"] = node.global_position if node != null else Vector3.ZERO
+	output["node_position"] = _node_global_position(node) if node != null else Vector3.ZERO
 	output["actor_nodes"] = _actor_nodes_snapshot()
 	output["actor_node_count"] = _dictionary_or_empty(output.get("actor_nodes", {})).size()
 	return output
@@ -201,6 +250,10 @@ func snapshot() -> Dictionary:
 
 func _on_step_tween_finished(actor_id: int) -> void:
 	_finish_active_actor_presentation(actor_id, "finished", false)
+
+
+func _on_background_tween_finished(actor_id: int) -> void:
+	_finish_background_actor_presentation(actor_id, "finished", false)
 
 
 func _finish_active_actor_presentation(actor_id: int = 0, reason: String = "finished", clear_action_state: bool = false) -> Dictionary:
@@ -228,6 +281,29 @@ func _finish_active_actor_presentation(actor_id: int = 0, reason: String = "fini
 	return result
 
 
+func _finish_background_actor_presentation(actor_id: int, reason: String = "finished", clear_action_state: bool = true) -> Dictionary:
+	var tween: Tween = background_tweens.get(actor_id, null)
+	if tween != null and tween.is_valid() and tween.is_running():
+		tween.kill()
+	background_tweens.erase(actor_id)
+	var node := actor_node(actor_id)
+	if node != null:
+		if node.has_meta("background_action_final_position"):
+			var final_position: Variant = node.get_meta("background_action_final_position")
+			if typeof(final_position) == TYPE_VECTOR3:
+				node.position = final_position
+		if clear_action_state or reason == "finished":
+			node.set_meta("background_action_active", false)
+			node.set_meta("background_action_clear_reason", reason)
+	return {
+		"success": true,
+		"active": false,
+		"kind": "background_move_step",
+		"actor_id": actor_id,
+		"finish_reason": reason,
+	}
+
+
 func _active_node_ref() -> Node3D:
 	if active_node_ref == null:
 		return null
@@ -250,12 +326,14 @@ func _actor_nodes_snapshot() -> Dictionary:
 			if actor_id > 0:
 				output[str(actor_id)] = {
 					"actor_id": actor_id,
-					"node_path": str(node_3d.get_path()),
+					"node_path": _node_path(node_3d),
 					"node_instance_id": node_3d.get_instance_id(),
-					"node_position": node_3d.global_position,
+					"node_position": _node_global_position(node_3d),
 					"action_runner_active": bool(node_3d.get_meta("action_runner_active", false)),
 					"action_runner_step_active": bool(node_3d.get_meta("action_runner_step_active", false)),
 					"action_runner_kind": str(node_3d.get_meta("action_runner_kind", "")),
+					"background_action_active": bool(node_3d.get_meta("background_action_active", false)),
+					"background_action_kind": str(node_3d.get_meta("background_action_kind", "")),
 				}
 		for child in node.get_children():
 			pending.append(child)
@@ -282,6 +360,18 @@ func _yaw_degrees(from_grid: Dictionary, to_grid: Dictionary, fallback: float) -
 	if abs(dx) >= abs(dz):
 		return 90.0 if dx > 0 else 270.0
 	return 180.0 if dz > 0 else 0.0
+
+
+func _node_path(node: Node) -> String:
+	if node == null:
+		return ""
+	return str(node.get_path()) if node.is_inside_tree() else node.name
+
+
+func _node_global_position(node: Node3D) -> Vector3:
+	if node == null:
+		return Vector3.ZERO
+	return node.global_position if node.is_inside_tree() else node.position
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:

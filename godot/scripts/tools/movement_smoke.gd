@@ -2,7 +2,9 @@ extends SceneTree
 
 const ContentRegistry = preload("res://scripts/data/content_registry.gd")
 const CoreRuntimeBootstrap = preload("res://scripts/core/runtime/runtime_bootstrap.gd")
+const GridCoord = preload("res://scripts/core/grid/grid_coord.gd")
 const TurnActionRunner = preload("res://scripts/app/controllers/turn_action_runner.gd")
+const ActorViewController = preload("res://scripts/world/actor_view_controller.gd")
 const WorldSnapshotBuilder = preload("res://scripts/world/world_snapshot_builder.gd")
 
 
@@ -65,6 +67,8 @@ func _run_checks(simulation: RefCounted, registry: RefCounted, topology: Diction
 	_expect_ap_depletion_auto_advances_turn(errors, simulation, topology)
 	errors.append_array(_expect_auto_advance_limit_guard(registry))
 	errors.append_array(_expect_turn_action_runner_cross_turn_resume(registry))
+	errors.append_array(_expect_background_turn_interrupts_on_npc_attack(registry))
+	errors.append_array(_expect_background_actor_tween_does_not_block_runner())
 	errors.append_array(_expect_turn_action_runner_wait_action(registry))
 	errors.append_array(_expect_configured_ap_rules(registry))
 	errors.append_array(_expect_long_path_cross_turn_resume(registry))
@@ -316,13 +320,91 @@ func _expect_turn_action_runner_cross_turn_resume(registry: RefCounted) -> Array
 		errors.append("turn action runner should expose at least one turn cycle after AP depletion")
 	if str(final_snapshot.get("phase", "")) != "finished":
 		errors.append("turn action runner final phase should be finished, got %s" % final_snapshot.get("phase", ""))
-	for expected_phase in ["player_turn_end", "npc_action", "player_turn_start", "pending_resume"]:
-		if not phases.has(expected_phase):
-			errors.append("turn action runner cross-turn move should visit %s phase, got %s" % [expected_phase, phases])
+	if not phases.has("player_turn_end"):
+		errors.append("turn action runner cross-turn move should observe AP depletion before background resume, got %s" % [phases])
+	for blocked_phase in ["npc_presentation", "player_turn_start"]:
+		if phases.has(blocked_phase):
+			errors.append("non-combat cross-turn move should not block on %s phase, got %s" % [blocked_phase, phases])
 	if _event_count(simulation.snapshot(), "turn_ended") < 1 or _event_count(simulation.snapshot(), "turn_started") < 1:
 		errors.append("turn action runner AP depletion should emit turn end/start events")
 	if _event_count(simulation.snapshot(), "movement_step") < 4:
 		errors.append("turn action runner cross-turn move should emit one movement_step per grid step")
+	return errors
+
+
+func _expect_background_turn_interrupts_on_npc_attack(registry: RefCounted) -> Array[String]:
+	var errors: Array[String] = []
+	var simulation: RefCounted = CoreRuntimeBootstrap.new(registry).build_new_game_runtime().get("simulation")
+	var player: RefCounted = simulation.actor_registry.get_actor(1)
+	player.grid_position.x = 0
+	player.grid_position.y = 0
+	player.grid_position.z = 0
+	player.ap = 2.0
+	player.combat_attributes["turn_ap_gain"] = 2.0
+	player.combat_attributes["turn_ap_max"] = 2.0
+	player.combat_attributes["affordable_ap_threshold"] = 1.0
+	player.combat_attributes["evasion"] = 0.0
+	player.equipment["main_hand"] = "1002"
+	_move_non_player_actors_out_of_test_lane(simulation)
+	var hostile_id: int = _register_test_actor(simulation, "movement_interrupt_hostile", "hostile", {"x": 2, "y": 0, "z": 1}, 20.0)
+	var hostile: RefCounted = simulation.actor_registry.get_actor(hostile_id)
+	if hostile != null:
+		hostile.ap = 4.0
+		hostile.combat_attributes["turn_ap_gain"] = 4.0
+		hostile.combat_attributes["turn_ap_max"] = 4.0
+		hostile.combat_attributes["affordable_ap_threshold"] = 1.0
+		hostile.combat_attributes["accuracy"] = 100.0
+	var topology := _wide_line_test_topology(4, 1)
+	var runner: RefCounted = TurnActionRunner.new()
+	runner.call("configure", simulation, null, null, {"map": topology})
+	var result: Dictionary = _dictionary_or_empty(runner.call("request_move", 1, {"x": 4, "y": 0, "z": 0}, topology))
+	if not bool(result.get("success", false)):
+		errors.append("background interrupt move should start: %s" % result.get("reason", "unknown"))
+	for _index in range(12):
+		var snapshot: Dictionary = _dictionary_or_empty(runner.call("snapshot"))
+		if bool(snapshot.get("background_world_turn_interrupted", false)) or str(snapshot.get("phase", "")) == "npc_presentation":
+			break
+		if not bool(snapshot.get("active", false)):
+			break
+		runner.call("process")
+	var final_snapshot: Dictionary = _dictionary_or_empty(runner.call("snapshot"))
+	if not bool(final_snapshot.get("background_world_turn_interrupted", false)):
+		errors.append("background NPC attack should interrupt auto-resumed movement, got %s" % JSON.stringify(final_snapshot))
+	if player.grid_position.x != 2 or player.grid_position.z != 0:
+		errors.append("background interrupt should stop after current AP segment, got %s" % player.grid_position.to_dictionary())
+	if _dictionary_or_empty(simulation.snapshot().get("pending_movement", {})).is_empty():
+		errors.append("background interrupt should preserve pending movement for combat resolution")
+	if not bool(_dictionary_or_empty(simulation.snapshot().get("combat_state", {})).get("active", false)):
+		errors.append("background interrupt should enter combat when NPC attacks")
+	if simulation.actor_registry.get_actor(hostile_id) != null:
+		simulation.actor_registry.unregister_actor(hostile_id)
+	return errors
+
+
+func _expect_background_actor_tween_does_not_block_runner() -> Array[String]:
+	var errors: Array[String] = []
+	var host := Node.new()
+	host.name = "MovementSmokeBackgroundHost"
+	root.add_child(host)
+	var world := Node3D.new()
+	world.name = "MovementSmokeBackgroundWorld"
+	host.add_child(world)
+	var actor_node := Node3D.new()
+	actor_node.name = "MovementSmokeBackgroundActor"
+	actor_node.set_meta("actor_id", 99)
+	world.add_child(actor_node)
+	var actor_view: RefCounted = ActorViewController.new()
+	actor_view.call("attach", world)
+	var presentation: Dictionary = _dictionary_or_empty(actor_view.call("move_actor_background_step", host, 99, {"x": 0, "y": 0, "z": 0}, {"x": 1, "y": 0, "z": 0}))
+	if not bool(presentation.get("success", false)):
+		errors.append("background actor tween should start successfully, got %s" % JSON.stringify(presentation))
+	if bool(actor_view.call("is_active")):
+		errors.append("background actor tween should not mark main actor view active")
+	var snapshot: Dictionary = _dictionary_or_empty(actor_view.call("snapshot"))
+	var actor_snapshot: Dictionary = _dictionary_or_empty(_dictionary_or_empty(snapshot.get("actor_nodes", {})).get("99", {}))
+	if not bool(actor_snapshot.get("background_action_active", false)):
+		errors.append("background actor snapshot should expose background action metadata, got %s" % JSON.stringify(actor_snapshot))
+	host.queue_free()
 	return errors
 
 
@@ -360,9 +442,11 @@ func _expect_turn_action_runner_wait_action(registry: RefCounted) -> Array[Strin
 		errors.append("turn action runner wait should preserve action kind, got %s" % final_snapshot.get("action_kind", ""))
 	if str(final_snapshot.get("phase", "")) != "finished":
 		errors.append("turn action runner wait final phase should be finished, got %s" % final_snapshot.get("phase", ""))
-	for expected_phase in ["player_turn_end", "npc_action", "player_turn_start"]:
-		if not phases.has(expected_phase):
-			errors.append("turn action runner wait should visit %s phase, got %s" % [expected_phase, phases])
+	if not phases.has("player_turn_end"):
+		errors.append("turn action runner wait should observe player_turn_end before background world turn, got %s" % [phases])
+	for blocked_phase in ["npc_presentation", "player_turn_start"]:
+		if phases.has(blocked_phase):
+			errors.append("non-combat wait should not block on %s phase, got %s" % [blocked_phase, phases])
 	if _event_count(simulation.snapshot(), "actor_waited") < 1:
 		errors.append("turn action runner wait should emit actor_waited")
 	if _event_count(simulation.snapshot(), "turn_ended") < 1 or _event_count(simulation.snapshot(), "turn_started") < 1:
@@ -722,6 +806,20 @@ func _line_test_topology(max_x: int) -> Dictionary:
 	}
 
 
+func _wide_line_test_topology(max_x: int, max_z: int) -> Dictionary:
+	return {
+		"bounds": {
+			"min_x": 0,
+			"max_x": max_x,
+			"min_z": 0,
+			"max_z": max_z,
+		},
+		"blocking_cells": {},
+		"sight_blocking_cells": {},
+		"door_objects": [],
+	}
+
+
 func _door_target(target_id: String, is_open: bool, locked: bool, extra_door: Dictionary = {}) -> Dictionary:
 	var door: Dictionary = _door_summary(target_id, is_open, locked, extra_door)
 	return {
@@ -733,6 +831,28 @@ func _door_target(target_id: String, is_open: bool, locked: bool, extra_door: Di
 		"cells": [{"x": 1, "y": 0, "z": 0}],
 		"door": door,
 	}
+
+
+func _register_test_actor(simulation: RefCounted, definition_id: String, side: String, grid: Dictionary, hp: float = 10.0) -> int:
+	return simulation.register_actor({
+		"definition_id": definition_id,
+		"display_name": definition_id,
+		"kind": "npc" if side != "hostile" else "enemy",
+		"side": side,
+		"group_id": side,
+		"grid_position": GridCoord.from_dictionary(grid),
+		"max_hp": max(1.0, hp),
+		"hp": hp,
+		"attack_power": 4.0,
+		"defense": 0.0,
+		"combat_attributes": {
+			"attack_power": 4.0,
+			"defense": 0.0,
+			"accuracy": 100.0,
+			"evasion": 0.0,
+		},
+		"xp_reward": 0,
+	})
 
 
 func _door_summary(target_id: String, is_open: bool, locked: bool, extra_door: Dictionary = {}) -> Dictionary:

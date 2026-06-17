@@ -115,7 +115,7 @@ func process() -> void:
 			return
 		match str(action.get("phase", "")):
 			"player_turn_end":
-				_begin_world_turn_phase()
+				_advance_player_turn_boundary_phase()
 			"npc_action":
 				_advance_npc_turn_phase()
 			"npc_presentation":
@@ -135,7 +135,7 @@ func process() -> void:
 			"attack_resolve":
 				_resolve_attack_step()
 			"player_turn_end":
-				_begin_world_turn_phase()
+				_advance_player_turn_boundary_phase()
 			"npc_action":
 				_advance_npc_turn_phase()
 			"npc_presentation":
@@ -152,7 +152,7 @@ func process() -> void:
 			"approach_move_step":
 				_advance_interaction_approach_step()
 			"player_turn_end":
-				_begin_world_turn_phase()
+				_advance_player_turn_boundary_phase()
 			"npc_action":
 				_advance_npc_turn_phase()
 			"npc_presentation":
@@ -166,7 +166,7 @@ func process() -> void:
 			"wait_action":
 				_advance_wait_step()
 			"player_turn_end":
-				_begin_world_turn_phase()
+				_advance_player_turn_boundary_phase()
 			"npc_action":
 				_advance_npc_turn_phase()
 			"npc_presentation":
@@ -180,7 +180,7 @@ func process() -> void:
 			"craft_action":
 				_advance_craft_step()
 			"player_turn_end":
-				_begin_world_turn_phase()
+				_advance_player_turn_boundary_phase()
 			"npc_action":
 				_advance_npc_turn_phase()
 			"npc_presentation":
@@ -277,6 +277,9 @@ func snapshot() -> Dictionary:
 		"craft_phase": _craft_phase_snapshot(),
 		"turn_cycles": int(action.get("turn_cycles", 0)),
 		"auto_turn_limit": _auto_turn_limit(),
+		"background_world_turn_active": bool(action.get("background_world_turn_active", false)),
+		"background_world_turn_interrupted": bool(action.get("background_world_turn_interrupted", false)),
+		"background_world_turn_interrupt": _dictionary_or_empty(action.get("background_world_turn_interrupt", {})).duplicate(true),
 		"npc_queue": _array_or_empty(action.get("npc_queue", [])).duplicate(true),
 		"npc_index": int(action.get("npc_index", 0)),
 		"npc_results": _array_or_empty(action.get("npc_results", [])).duplicate(true),
@@ -618,6 +621,164 @@ func _resolve_attack_step() -> Dictionary:
 	return output
 
 
+func _advance_player_turn_boundary_phase() -> Dictionary:
+	if _should_use_background_world_turn():
+		return _advance_background_world_turn_phase()
+	return _begin_world_turn_phase()
+
+
+func _advance_background_world_turn_phase() -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	var cycles := int(action.get("turn_cycles", 0))
+	var limit := _auto_turn_limit()
+	if cycles >= limit:
+		active = false
+		action["phase"] = "blocked"
+		action["turn_phase"] = "blocked"
+		_clear_actor_action_state(actor_id, "auto_turn_limit_reached")
+		latest_result = {
+			"success": false,
+			"reason": "auto_turn_limit_reached",
+			"actor_id": actor_id,
+			"limit": limit,
+			"turn_cycles": cycles,
+			"background_world_turn": true,
+		}
+		_sync_host_after_step(latest_result)
+		return latest_result
+	if simulation == null or not simulation.has_method("begin_world_turn_for_runner") or not simulation.has_method("advance_next_npc_turn_for_runner") or not simulation.has_method("finish_world_turn_for_runner"):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		latest_result = {"success": false, "reason": "runner_background_world_turn_api_missing", "actor_id": actor_id}
+		_clear_actor_action_state(actor_id, "runner_background_world_turn_api_missing")
+		_sync_host_after_step(latest_result)
+		return latest_result
+	action["turn_cycles"] = cycles + 1
+	action["phase"] = "background_world_turn"
+	action["turn_phase"] = "background_world_turn"
+	action["background_world_turn_active"] = true
+	var topology: Dictionary = _dictionary_or_empty(action.get("topology", {}))
+	var begin_result: Dictionary = _dictionary_or_empty(simulation.call("begin_world_turn_for_runner", actor_id, topology, _world_turn_reason()))
+	begin_result["background_world_turn"] = true
+	latest_result = begin_result.duplicate(true)
+	if not bool(begin_result.get("success", false)):
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		_clear_actor_action_state(actor_id, str(begin_result.get("reason", "turn_failed")))
+		_sync_host_after_step(begin_result)
+		return begin_result
+	action["npc_queue"] = _array_or_empty(begin_result.get("npc_actor_ids", [])).duplicate(true)
+	action["npc_index"] = 0
+	action["npc_results"] = []
+	var interrupt: Dictionary = _background_world_turn_interrupt_from_result(begin_result)
+	if not interrupt.is_empty():
+		return _finish_background_world_turn_without_resume(begin_result, interrupt)
+	var guard := 0
+	var completed := false
+	while guard < 512:
+		guard += 1
+		var npc_result: Dictionary = _dictionary_or_empty(simulation.call("advance_next_npc_turn_for_runner"))
+		npc_result["background_world_turn"] = true
+		latest_result = npc_result.duplicate(true)
+		if not bool(npc_result.get("success", false)):
+			active = false
+			action["phase"] = "failed"
+			action["turn_phase"] = "failed"
+			_clear_actor_action_state(actor_id, str(npc_result.get("reason", "npc_turn_failed")))
+			_sync_host_after_step(npc_result)
+			return npc_result
+		if bool(npc_result.get("completed", false)):
+			completed = true
+			break
+		var npc_results: Array = _array_or_empty(action.get("npc_results", []))
+		npc_results.append(_dictionary_or_empty(npc_result.get("result", {})).duplicate(true))
+		action["npc_results"] = npc_results
+		action["npc_index"] = int(npc_result.get("npc_index", action.get("npc_index", 0))) + 1
+		interrupt = _background_world_turn_interrupt_from_result(npc_result)
+		if not interrupt.is_empty():
+			return _interrupt_background_world_turn(npc_result, interrupt)
+		var background_presentation: Dictionary = _present_background_npc_turn_result(npc_result)
+		if not background_presentation.is_empty():
+			npc_result["background_presentation"] = background_presentation.duplicate(true)
+	if not completed:
+		active = false
+		action["phase"] = "failed"
+		action["turn_phase"] = "failed"
+		latest_result = {
+			"success": false,
+			"reason": "background_world_turn_guard_reached",
+			"actor_id": actor_id,
+			"guard": guard,
+		}
+		_clear_actor_action_state(actor_id, "background_world_turn_guard_reached")
+		_sync_host_after_step(latest_result)
+		return latest_result
+	var finish_result: Dictionary = _finish_world_turn_phase()
+	finish_result["background_world_turn"] = true
+	action["background_world_turn_active"] = false
+	if not bool(finish_result.get("success", false)):
+		return finish_result
+	return _advance_after_background_world_turn(finish_result)
+
+
+func _advance_after_background_world_turn(finish_result: Dictionary) -> Dictionary:
+	if not active:
+		return finish_result
+	if str(action.get("phase", "")) != "pending_resume":
+		return finish_result
+	match str(action.get("kind", "")):
+		"move":
+			return _advance_move_step()
+		"interact":
+			return _resume_pending_interaction_turn()
+		"wait", "craft":
+			return _resume_pending_after_world_turn()
+	return finish_result
+
+
+func _finish_background_world_turn_without_resume(source_result: Dictionary, interrupt: Dictionary) -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	var finish_result: Dictionary = {}
+	if simulation != null and simulation.has_method("finish_world_turn_for_runner"):
+		finish_result = _dictionary_or_empty(simulation.call("finish_world_turn_for_runner", actor_id, _world_turn_reason()))
+	action["background_world_turn_active"] = false
+	action["background_world_turn_interrupted"] = true
+	action["background_world_turn_interrupt"] = interrupt.duplicate(true)
+	active = false
+	action["phase"] = "blocked"
+	action["turn_phase"] = "blocked"
+	latest_result = source_result.duplicate(true)
+	latest_result["background_world_turn_interrupted"] = true
+	latest_result["interrupt"] = interrupt.duplicate(true)
+	latest_result["finish_result"] = finish_result.duplicate(true)
+	_clear_actor_action_state(actor_id, str(interrupt.get("reason", "background_world_turn_interrupted")))
+	_sync_host_after_step(latest_result)
+	return latest_result
+
+
+func _interrupt_background_world_turn(npc_result: Dictionary, interrupt: Dictionary) -> Dictionary:
+	action["background_world_turn_active"] = false
+	action["background_world_turn_interrupted"] = true
+	action["background_world_turn_interrupt"] = interrupt.duplicate(true)
+	var presentation: Dictionary = _present_npc_turn_result(npc_result)
+	npc_result["presentation"] = presentation.duplicate(true)
+	npc_result["background_world_turn_interrupted"] = true
+	npc_result["interrupt"] = interrupt.duplicate(true)
+	NpcAction.apply_result(action, npc_result, presentation, NpcAction.phase_from_result(action, npc_result, presentation, false))
+	if not bool(presentation.get("active", false)):
+		var attack: Dictionary = NpcActionPresenter.attack_from_result(npc_result)
+		if bool(attack.get("attack_prepared", false)):
+			action["presenting_npc_prepared_attack"] = attack.duplicate(true)
+			var resolved: Dictionary = _resolve_presented_npc_attack()
+			if not resolved.is_empty():
+				npc_result["npc_attack_result"] = resolved.duplicate(true)
+	latest_result = npc_result.duplicate(true)
+	_sync_host_after_step(npc_result)
+	return npc_result
+
+
 func _begin_world_turn_phase() -> Dictionary:
 	var actor_id := int(action.get("actor_id", 0))
 	var cycles := int(action.get("turn_cycles", 0))
@@ -744,6 +905,16 @@ func _finish_world_turn_phase() -> Dictionary:
 		_sync_host_after_step(finish_result)
 		return finish_result
 	action["ap_after"] = float(finish_result.get("ap_after", action.get("ap_after", 0.0)))
+	if bool(action.get("background_world_turn_interrupted", false)):
+		active = false
+		action["phase"] = "finished"
+		action["turn_phase"] = "player"
+		action["pending_kind"] = _pending_kind_from_result(finish_result)
+		finish_result["background_world_turn_interrupted"] = true
+		finish_result["interrupt"] = _dictionary_or_empty(action.get("background_world_turn_interrupt", {})).duplicate(true)
+		_clear_actor_action_state(actor_id, "background_world_turn_interrupted")
+		_sync_host_after_step(finish_result)
+		return finish_result
 	if _action_should_resume_pending(finish_result):
 		action["phase"] = "pending_resume"
 		action["turn_phase"] = "pending_resume"
@@ -928,6 +1099,114 @@ func _present_npc_turn_result(npc_result: Dictionary) -> Dictionary:
 	if not attack.is_empty():
 		_record_attack_phase(attack, "npc")
 	return presentation
+
+
+func _present_background_npc_turn_result(npc_result: Dictionary) -> Dictionary:
+	if actor_view == null or not actor_view.has_method("move_actor_background_step"):
+		return {}
+	var step: Dictionary = NpcActionPresenter.move_step_from_result(npc_result)
+	if step.is_empty():
+		return {}
+	var actor_id := int(step.get("actor_id", 0))
+	if actor_id <= 0:
+		return {}
+	return _dictionary_or_empty(actor_view.call(
+		"move_actor_background_step",
+		host,
+		actor_id,
+		_dictionary_or_empty(step.get("from", {})),
+		_dictionary_or_empty(step.get("to", {})),
+		{
+			"duration_sec": 0.08,
+			"source": "background_npc_action",
+		}
+	))
+
+
+func _should_use_background_world_turn() -> bool:
+	if str(action.get("phase", "")) != "player_turn_end":
+		return false
+	if str(action.get("kind", "")) == "attack":
+		return false
+	return _is_noncombat_player_context(int(action.get("actor_id", 0)))
+
+
+func _is_noncombat_player_context(actor_id: int) -> bool:
+	if simulation == null or actor_id <= 0:
+		return false
+	if _simulation_combat_active():
+		return false
+	var actor: RefCounted = _actor_by_id(actor_id)
+	if actor == null:
+		return false
+	return not bool(actor.in_combat)
+
+
+func _simulation_combat_active() -> bool:
+	if simulation == null or not simulation.has_method("snapshot"):
+		return false
+	var runtime_snapshot: Dictionary = _dictionary_or_empty(simulation.call("snapshot"))
+	return bool(_dictionary_or_empty(runtime_snapshot.get("combat_state", {})).get("active", false))
+
+
+func _actor_by_id(actor_id: int) -> RefCounted:
+	if simulation == null or actor_id <= 0:
+		return null
+	if simulation.actor_registry == null:
+		return null
+	return simulation.actor_registry.get_actor(actor_id)
+
+
+func _background_world_turn_interrupt_from_result(step_result: Dictionary) -> Dictionary:
+	var actor_id := int(action.get("actor_id", 0))
+	if _simulation_combat_active():
+		return {"reason": "combat_active", "actor_id": actor_id}
+	var actor: RefCounted = _actor_by_id(actor_id)
+	if actor != null and actor.hp <= 0.0:
+		return {"reason": "player_defeated", "actor_id": actor_id}
+	var direct: Dictionary = _dictionary_or_empty(step_result.get("result", step_result))
+	var attack: Dictionary = NpcActionPresenter.attack_from_result(step_result)
+	if _result_is_prepared_or_resolved_attack(direct) or not attack.is_empty():
+		return {
+			"reason": "npc_attack",
+			"actor_id": int(direct.get("actor_id", step_result.get("actor_id", 0))),
+			"target_actor_id": int(direct.get("target_actor_id", attack.get("target_actor_id", 0))),
+		}
+	for action_value in _array_or_empty(direct.get("actions", [])):
+		var action_result: Dictionary = _dictionary_or_empty(action_value)
+		if _result_is_prepared_or_resolved_attack(action_result):
+			return {
+				"reason": "npc_attack",
+				"actor_id": int(action_result.get("actor_id", direct.get("actor_id", 0))),
+				"target_actor_id": int(action_result.get("target_actor_id", 0)),
+			}
+	for event_value in _array_or_empty(step_result.get("events", [])):
+		var event: Dictionary = _dictionary_or_empty(event_value)
+		var kind := str(event.get("kind", ""))
+		var payload: Dictionary = _dictionary_or_empty(event.get("payload", event))
+		if ["combat_started", "attack_resolved", "actor_defeated", "active_effect_defeated_actor"].has(kind):
+			return {
+				"reason": kind,
+				"actor_id": int(payload.get("actor_id", payload.get("source_actor_id", 0))),
+				"target_actor_id": int(payload.get("target_actor_id", payload.get("defeated_actor_id", 0))),
+			}
+		if int(payload.get("target_actor_id", 0)) == actor_id and (payload.has("damage") or bool(payload.get("defeated", false))):
+			return {
+				"reason": kind if not kind.is_empty() else "player_affected",
+				"actor_id": int(payload.get("actor_id", payload.get("source_actor_id", 0))),
+				"target_actor_id": actor_id,
+			}
+	return {}
+
+
+func _result_is_prepared_or_resolved_attack(result: Dictionary) -> bool:
+	if result.is_empty():
+		return false
+	if bool(result.get("attack_prepared", false)) or bool(result.get("npc_attack_prepared", false)):
+		return true
+	if str(result.get("kind", "")) == "npc_attack_prepared":
+		return true
+	return str(result.get("intent", "")) == "attack" and (result.has("damage") or result.has("hit_kind") or bool(result.get("defeated", false)))
 
 
 func _dictionary_or_empty(value: Variant) -> Dictionary:
