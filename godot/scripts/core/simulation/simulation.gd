@@ -3315,67 +3315,7 @@ func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
 
 
 func _apply_attack_ammo_profile(actor: RefCounted, profile: Dictionary, items: Dictionary) -> void:
-	var ammo_type: String = _normalize_item_id(profile.get("ammo_type", ""))
-	if actor == null or ammo_type.is_empty() or ammo_type == "<null>":
-		return
-	var ammo_item: Dictionary = _item_data_from_library(ammo_type, items)
-	if ammo_item.is_empty():
-		return
-	var ammo_data: Dictionary = _dictionary_or_empty(ammo_item.get("ammo_data", {})).duplicate(true)
-	var effect_data: Dictionary = _merged_ammo_effect_data(ammo_item, ammo_data)
-	var available: int = _attack_ammo_available(actor, profile, ammo_type)
-	var ammo_profile := {
-		"item_id": ammo_type,
-		"ammo_type": ammo_type,
-		"display_name": str(ammo_item.get("name", ammo_type)),
-		"available": available,
-		"source": "magazine" if actor.weapon_ammo.has(str(profile.get("equipment_slot", "main_hand"))) else "inventory",
-		"slot_id": str(profile.get("equipment_slot", "main_hand")),
-		"ammo_data": ammo_data.duplicate(true),
-		"effect_data": effect_data.duplicate(true),
-	}
-	var flat_bonus: float = _ammo_float(ammo_item, ammo_data, effect_data, ["damage_flat_bonus", "flat_damage_bonus", "damage_bonus_flat"], 0.0)
-	var percent_bonus: float = _ammo_float(ammo_item, ammo_data, effect_data, ["damage_bonus_percent", "damage_percent_bonus", "damage_bonus"], 0.0)
-	var accuracy_bonus: float = _ammo_float(ammo_item, ammo_data, effect_data, ["accuracy_bonus", "accuracy"], 0.0)
-	var crit_chance_bonus: float = _ammo_float(ammo_item, ammo_data, effect_data, ["crit_chance_bonus", "crit_bonus"], 0.0)
-	var crit_multiplier_bonus: float = _ammo_float(ammo_item, ammo_data, effect_data, ["crit_multiplier_bonus", "crit_damage_bonus"], 0.0)
-	var armor_pierce_bonus: float = _ammo_float(ammo_item, ammo_data, effect_data, ["armor_pierce_bonus", "armor_pierce"], 0.0)
-	var armor_break_chance_bonus: float = _ammo_float(ammo_item, ammo_data, effect_data, ["armor_break_chance_bonus", "armor_break_chance"], 0.0)
-	var armor_break_multiplier_bonus: float = _ammo_float(ammo_item, ammo_data, effect_data, ["armor_break_defense_multiplier_bonus", "armor_break_defense_multiplier"], 0.0)
-	if absf(flat_bonus) > 0.0001:
-		profile["damage"] = max(0.0, float(profile.get("damage", 0.0)) + flat_bonus)
-		profile["ammo_damage_flat_bonus"] = flat_bonus
-		ammo_profile["damage_flat_bonus"] = flat_bonus
-	if absf(percent_bonus) > 0.0001:
-		profile["ammo_damage_bonus"] = percent_bonus
-		ammo_profile["damage_bonus"] = percent_bonus
-	if absf(accuracy_bonus) > 0.0001:
-		profile["accuracy"] = float(profile.get("accuracy", 0.0)) + accuracy_bonus
-		ammo_profile["accuracy_bonus"] = accuracy_bonus
-	if absf(crit_chance_bonus) > 0.0001:
-		profile["crit_chance"] = clampf(float(profile.get("crit_chance", 0.0)) + crit_chance_bonus, 0.0, 1.0)
-		ammo_profile["crit_chance_bonus"] = crit_chance_bonus
-	if absf(crit_multiplier_bonus) > 0.0001:
-		profile["crit_multiplier_bonus"] = float(profile.get("crit_multiplier_bonus", 0.0)) + crit_multiplier_bonus
-		ammo_profile["crit_multiplier_bonus"] = crit_multiplier_bonus
-	if absf(armor_pierce_bonus) > 0.0001:
-		profile["armor_pierce"] = clampf(float(profile.get("armor_pierce", 0.0)) + armor_pierce_bonus, 0.0, 1.0)
-		ammo_profile["armor_pierce"] = armor_pierce_bonus
-	if absf(armor_break_chance_bonus) > 0.0001:
-		profile["armor_break_chance"] = clampf(float(profile.get("armor_break_chance", 0.0)) + armor_break_chance_bonus, 0.0, 1.0)
-		ammo_profile["armor_break_chance"] = armor_break_chance_bonus
-	if absf(armor_break_multiplier_bonus) > 0.0001:
-		profile["armor_break_defense_multiplier"] = clampf(float(profile.get("armor_break_defense_multiplier", 0.0)) + armor_break_multiplier_bonus, 0.0, 1.0)
-		ammo_profile["armor_break_defense_multiplier"] = armor_break_multiplier_bonus
-	var ammo_effect_ids: Array[String] = _ammo_on_hit_effect_ids(ammo_item, ammo_data, effect_data)
-	if not ammo_effect_ids.is_empty():
-		var merged_effects: Array[String] = _string_array(profile.get("on_hit_effect_ids", []))
-		for effect_id in ammo_effect_ids:
-			if not merged_effects.has(effect_id):
-				merged_effects.append(effect_id)
-		profile["on_hit_effect_ids"] = merged_effects
-		ammo_profile["on_hit_effect_ids"] = ammo_effect_ids
-	profile["ammo_profile"] = ammo_profile
+	_combat_service._apply_attack_ammo_profile(self, actor, profile, items)
 
 
 func _attack_ammo_available(actor: RefCounted, profile: Dictionary, ammo_type: String) -> int:
@@ -3383,32 +3323,15 @@ func _attack_ammo_available(actor: RefCounted, profile: Dictionary, ammo_type: S
 
 
 func _merged_ammo_effect_data(ammo_item: Dictionary, ammo_data: Dictionary) -> Dictionary:
-	var output: Dictionary = _dictionary_or_empty(ammo_data.get("effect_data", {})).duplicate(true)
-	for key in _dictionary_or_empty(ammo_item.get("effect_data", {})).keys():
-		output[str(key)] = _dictionary_or_empty(ammo_item.get("effect_data", {})).get(key)
-	return output
+	return _combat_service._merged_ammo_effect_data(self, ammo_item, ammo_data)
 
 
 func _ammo_float(ammo_item: Dictionary, ammo_data: Dictionary, effect_data: Dictionary, keys: Array[String], fallback: float) -> float:
-	for key in keys:
-		if effect_data.has(key):
-			return _optional_float(effect_data.get(key), fallback)
-		if ammo_data.has(key):
-			return _optional_float(ammo_data.get(key), fallback)
-		if ammo_item.has(key):
-			return _optional_float(ammo_item.get(key), fallback)
-	return fallback
+	return _combat_service._ammo_float(self, ammo_item, ammo_data, effect_data, keys, fallback)
 
 
 func _ammo_on_hit_effect_ids(ammo_item: Dictionary, ammo_data: Dictionary, effect_data: Dictionary) -> Array[String]:
-	var ids: Array[String] = _string_array(effect_data.get("on_hit_effect_ids", []))
-	if ids.is_empty():
-		ids = _string_array(ammo_data.get("on_hit_effect_ids", []))
-	if ids.is_empty():
-		ids = _string_array(ammo_item.get("on_hit_effect_ids", []))
-	if ids.is_empty():
-		ids = _string_array(ammo_data.get("special_effects", effect_data.get("special_effects", [])))
-	return ids
+	return _combat_service._ammo_on_hit_effect_ids(self, ammo_item, ammo_data, effect_data)
 
 
 func _attack_min_range_from_options(options: Dictionary, profile: Dictionary) -> int:
@@ -3434,20 +3357,11 @@ func _weapon_fragment(item_id: String, items: Dictionary) -> Dictionary:
 
 
 func _item_durability_fragment(item_data: Dictionary) -> Dictionary:
-	for fragment in _array_or_empty(item_data.get("fragments", [])):
-		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
-		if str(fragment_data.get("kind", "")) == "durability":
-			return fragment_data
-	return {}
+	return _combat_service._item_durability_fragment(self, item_data)
 
 
 func _item_data_from_library(item_id: String, items: Dictionary) -> Dictionary:
-	if item_id.is_empty():
-		return {}
-	var record: Dictionary = _dictionary_or_empty(items.get(item_id, {}))
-	if record.is_empty():
-		return {}
-	return _dictionary_or_empty(record.get("data", record))
+	return _combat_service._item_data_from_library(self, item_id, items)
 
 
 func _skill_data(skill_id: String, skills: Dictionary) -> Dictionary:
@@ -3459,46 +3373,7 @@ func _attack_ammo_check(actor: RefCounted, profile: Dictionary) -> Dictionary:
 
 
 func _consume_attack_ammo(actor: RefCounted, profile: Dictionary) -> Dictionary:
-	var ammo_type: String = str(profile.get("ammo_type", ""))
-	if ammo_type.is_empty() or ammo_type == "<null>":
-		return {"consumed": false}
-	var count: int = max(1, int(profile.get("ammo_per_attack", 1)))
-	var slot_id := str(profile.get("equipment_slot", "main_hand"))
-	if actor.weapon_ammo.has(slot_id):
-		actor.weapon_ammo[slot_id] = max(0, int(actor.weapon_ammo.get(slot_id, 0)) - count)
-		_emit("ammo_consumed", {
-			"actor_id": actor.actor_id,
-			"ammo_type": ammo_type,
-			"count": count,
-			"source": "magazine",
-			"slot_id": slot_id,
-			"loaded_remaining": int(actor.weapon_ammo.get(slot_id, 0)),
-			"remaining": int(actor.inventory.get(ammo_type, 0)),
-			"weapon_item_id": profile.get("item_id", ""),
-		})
-		return {
-			"consumed": true,
-			"source": "magazine",
-			"slot_id": slot_id,
-			"ammo_type": ammo_type,
-			"count": count,
-			"loaded_remaining": int(actor.weapon_ammo.get(slot_id, 0)),
-			"remaining": int(actor.inventory.get(ammo_type, 0)),
-		}
-	_inventory_entries.add_actor_item(actor, ammo_type, -count)
-	_emit("ammo_consumed", {
-		"actor_id": actor.actor_id,
-		"ammo_type": ammo_type,
-		"count": count,
-		"remaining": int(actor.inventory.get(ammo_type, 0)),
-		"weapon_item_id": profile.get("item_id", ""),
-	})
-	return {
-		"consumed": true,
-		"ammo_type": ammo_type,
-		"count": count,
-		"remaining": int(actor.inventory.get(ammo_type, 0)),
-	}
+	return _combat_service._consume_attack_ammo(self, actor, profile)
 
 
 func _attack_weapon_durability_check(actor: RefCounted, profile: Dictionary) -> Dictionary:
@@ -3506,34 +3381,7 @@ func _attack_weapon_durability_check(actor: RefCounted, profile: Dictionary) -> 
 
 
 func _consume_attack_weapon_durability(actor: RefCounted, profile: Dictionary) -> Dictionary:
-	var item_id := str(profile.get("item_id", "")).strip_edges()
-	var cost: float = max(0.0, float(profile.get("durability_cost", 0.0)))
-	if actor == null or item_id.is_empty() or cost <= 0.0:
-		return {"consumed": false}
-	var before: float = _weapon_durability(actor, profile)
-	if before < cost:
-		return {
-			"consumed": false,
-			"reason": "weapon_durability_insufficient",
-			"weapon_item_id": item_id,
-			"durability_before": before,
-			"durability_cost": cost,
-		}
-	var after: float = max(0.0, before - cost)
-	actor.tool_durability[item_id] = after
-	var payload := {
-		"actor_id": actor.actor_id,
-		"weapon_item_id": item_id,
-		"slot_id": str(profile.get("equipment_slot", "main_hand")),
-		"durability_cost": cost,
-		"durability_before": before,
-		"durability_after": after,
-		"max_durability": float(profile.get("max_durability", max(1.0, before))),
-	}
-	_emit("weapon_durability_consumed", payload.duplicate(true))
-	var result: Dictionary = payload.duplicate(true)
-	result["consumed"] = true
-	return result
+	return _combat_service._consume_attack_weapon_durability(self, actor, profile)
 
 
 func _weapon_durability(actor: RefCounted, profile: Dictionary) -> float:
@@ -3541,14 +3389,7 @@ func _weapon_durability(actor: RefCounted, profile: Dictionary) -> float:
 
 
 func _normalize_item_id(value: Variant) -> String:
-	if value == null:
-		return ""
-	if typeof(value) == TYPE_FLOAT and is_equal_approx(float(value), roundf(float(value))):
-		return str(int(value))
-	if typeof(value) == TYPE_INT:
-		return str(value)
-	var text := str(value).strip_edges()
-	return "" if text == "<null>" else text
+	return _combat_service._normalize_item_id(self, value)
 
 
 func _optional_int(value: Variant, fallback: int) -> int:
