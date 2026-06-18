@@ -76,9 +76,10 @@ func resolve_trade_session(runtime_snapshot: Dictionary, target: Dictionary = {}
 		var actor: Dictionary = _actor_by_id(runtime_snapshot, target_actor_id)
 		if not actor.is_empty():
 			var candidate: String = "%s_shop" % actor.get("definition_id", "")
-			if shops.has(candidate):
+			var actor_shop_id := explicit_shop_id if not explicit_shop_id.is_empty() else candidate
+			if shops.has(actor_shop_id):
 				return {
-					"shop_id": candidate,
+					"shop_id": actor_shop_id,
 					"target_actor_id": target_actor_id,
 					"target_name": actor.get("display_name", ""),
 				}

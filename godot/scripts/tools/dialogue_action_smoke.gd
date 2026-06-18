@@ -14,7 +14,7 @@ func _run() -> void:
 	get_root().add_child(game_root)
 	await process_frame
 
-	var errors: Array[String] = _run_checks(game_root)
+	var errors: Array[String] = await _run_checks(game_root)
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -39,7 +39,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 
 	_force_tutorial_active_dialogue_state(game_root.simulation)
 	game_root.select_interaction_node(trader_node)
-	var talk_result: Dictionary = _execute_primary_and_complete(game_root)
+	var talk_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(talk_result.get("success", false)):
 		errors.append("trader talk failed: %s" % talk_result.get("reason", "unknown"))
 	var talk_dialogue_id := _dialogue_id_from_interaction_result(talk_result)
@@ -292,17 +292,49 @@ func _turn_in_preview_from_resolution(preview: Dictionary) -> Dictionary:
 	return {}
 
 
-func _execute_primary_and_complete(game_root: Node, max_waits: int = 16) -> Dictionary:
+func _execute_primary_and_complete(game_root: Node, _max_waits: int = 16) -> Dictionary:
+	await _wait_for_turn_action_runner_idle(game_root)
 	var result: Dictionary = game_root.execute_primary_interaction()
-	var waits := 0
-	while waits < max_waits and _has_pending(game_root) and not _final_interaction_result(result):
-		waits += 1
-		var wait_result: Dictionary = game_root.submit_wait_action()
-		var pending_result: Dictionary = wait_result.get("pending_result", {})
-		result = pending_result if not pending_result.is_empty() else wait_result
+	if not bool(result.get("success", false)):
+		return result
+	await _wait_for_turn_action_runner_idle(game_root)
+	var runner_result: Dictionary = _runner_latest_interaction_result(game_root)
+	if not runner_result.is_empty():
+		result = runner_result
+	return result
+
+
+func _runner_latest_interaction_result(game_root: Node) -> Dictionary:
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot() if game_root.has_method("runtime_control_snapshot") else {})
+	var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+	if str(runner.get("action_kind", "")) != "interact":
+		return {}
+	var latest: Dictionary = _dictionary_or_empty(runner.get("latest_result", {}))
+	var pending_result: Dictionary = _dictionary_or_empty(latest.get("pending_result", {}))
+	if _final_interaction_result(pending_result):
+		return pending_result
+	if _final_interaction_result(latest):
+		return latest
+	return {}
+
+
+func _wait_for_turn_action_runner_idle(game_root: Node, max_frames: int = 720) -> void:
 	if game_root.has_method("finish_world_action_presentations"):
 		game_root.finish_world_action_presentations()
-	return result
+		await process_frame
+	if game_root.has_method("settle_turn_action_runner_boundary"):
+		game_root.settle_turn_action_runner_boundary("dialogue_action_smoke")
+	for _index in range(max_frames):
+		var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot() if game_root.has_method("runtime_control_snapshot") else {})
+		var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+		var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+		if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)) and not bool(presenter.get("active", false)):
+			return
+		if game_root.has_method("drain_turn_action_runner"):
+			game_root.drain_turn_action_runner(8)
+		if game_root.has_method("finish_world_action_presentations"):
+			game_root.finish_world_action_presentations()
+		await process_frame
 
 
 func _has_pending(game_root: Node) -> bool:

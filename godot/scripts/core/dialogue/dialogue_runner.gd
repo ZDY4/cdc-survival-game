@@ -63,6 +63,7 @@ func advance_without_choice(simulation: RefCounted, actor_id: int, dialogue_libr
 		return {"success": false, "reason": "dialogue_advance_unavailable", "node_id": current_node_id, "node_type": node_type}
 	var next_node_id: String = str(current_node.get("next", ""))
 	if next_node_id.is_empty():
+		var target_context := _dialogue_target_context(simulation, actor)
 		actor.active_dialogue_id = ""
 		actor.active_dialogue_node_id = ""
 		_clear_dialogue_target(actor)
@@ -78,6 +79,7 @@ func advance_without_choice(simulation: RefCounted, actor_id: int, dialogue_libr
 			"node_id": current_node_id,
 			"finished": true,
 			"end_type": "leave",
+			"target_context": target_context,
 		}
 	var emitted_actions: Array[Dictionary] = []
 	var outcome: Dictionary = _advance_to_node(simulation, actor_id, actor, dialogue_id, next_node_id, nodes, emitted_actions)
@@ -175,6 +177,7 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 				}
 			"end":
 				var end_type: String = str(node.get("end_type", "leave"))
+				var target_context := _dialogue_target_context(simulation, actor)
 				actor.active_dialogue_id = ""
 				actor.active_dialogue_node_id = ""
 				_clear_dialogue_target(actor)
@@ -190,11 +193,13 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 					"node_id": current_node_id,
 					"finished": true,
 					"end_type": end_type,
+					"target_context": target_context,
 				}
 			_:
 				return {"success": false, "reason": "dialogue_node_unsupported", "node_id": current_node_id, "node_type": node_type}
 
 	var actor_dialogue_id: String = str(actor.active_dialogue_id)
+	var target_context := _dialogue_target_context(simulation, actor)
 	actor.active_dialogue_id = ""
 	actor.active_dialogue_node_id = ""
 	_clear_dialogue_target(actor)
@@ -203,6 +208,7 @@ func _advance_to_node(simulation: RefCounted, actor_id: int, actor: RefCounted, 
 		"dialogue_id": actor_dialogue_id,
 		"finished": true,
 		"end_type": "leave",
+		"target_context": target_context,
 	}
 
 

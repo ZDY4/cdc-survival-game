@@ -12,7 +12,7 @@ func _run() -> void:
 	get_root().add_child(game_root)
 	await process_frame
 
-	var errors: Array[String] = _run_checks(game_root)
+	var errors: Array[String] = await _run_checks(game_root)
 	if not errors.is_empty():
 		for error in errors:
 			printerr(error)
@@ -39,10 +39,11 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if trader_node == null:
 		return ["missing generated trader actor node"]
 	game_root.select_interaction_node(trader_node)
-	var result: Dictionary = game_root.execute_primary_interaction()
+	var result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(result.get("success", false)):
 		errors.append("talk execution failed: %s" % result.get("reason", "unknown"))
 	_finish_presentations(game_root)
+	_open_trade_from_active_dialogue(game_root, errors, "trader talk")
 
 	if not game_root.trade_panel.visible:
 		errors.append("trade panel did not open after trader talk")
@@ -730,7 +731,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	if _event_count(game_root, "trade_closed") <= trade_closed_before_button:
 		errors.append("close button should emit trade_closed")
 	_assert_trade_closed_payload(errors, game_root, "button", "close button")
-	_reopen_trade(game_root, errors)
+	await _reopen_trade(game_root, errors)
 	var trade_closed_before_escape: int = _event_count(game_root, "trade_closed")
 	_press_key(game_root, KEY_ESCAPE)
 	if game_root.trade_panel.visible:
@@ -739,27 +740,26 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("Esc should clear active trade target")
 	if _event_count(game_root, "trade_closed") <= trade_closed_before_escape:
 		errors.append("Esc should emit trade_closed")
-	_assert_trade_closed_payload(errors, game_root, "dialogue_closed:keyboard_escape", "Esc close")
-	_reopen_trade(game_root, errors)
+	_assert_trade_closed_payload(errors, game_root, "keyboard_escape", "Esc close")
+	await _reopen_trade(game_root, errors)
 	var trade_closed_before_dialogue_leave: int = _event_count(game_root, "trade_closed")
 	_close_trade_via_dialogue_leave(game_root, errors)
 	if _event_count(game_root, "trade_closed") <= trade_closed_before_dialogue_leave:
 		errors.append("dialogue leave should emit trade_closed")
 	_assert_trade_closed_payload(errors, game_root, "dialogue_finished:leave", "dialogue leave")
-	_reopen_trade(game_root, errors)
+	await _reopen_trade(game_root, errors)
 	game_root.active_trade_target = {"target_type": "actor", "actor_id": 9999}
 	game_root.refresh_trade_panel()
 	if game_root.trade_panel.visible:
 		errors.append("missing trade target should close trade panel")
 	if not game_root.active_trade_target.is_empty():
 		errors.append("missing trade target should clear active trade target")
-	_reopen_trade(game_root, errors)
+	await _reopen_trade(game_root, errors)
 	game_root.simulation.unlock_location("forest")
 	var trade_closed_before_map_switch: int = _event_count(game_root, "trade_closed")
-	var enter_result: Dictionary = game_root.simulation.enter_location(1, "forest", game_root.registry.get_library("overworld"))
+	var enter_result: Dictionary = game_root.enter_overworld_location_from_panel("forest")
 	if not bool(enter_result.get("success", false)):
 		errors.append("forest enter for trade close check failed: %s" % enter_result.get("reason", "unknown"))
-	game_root.refresh_trade_panel()
 	if game_root.trade_panel.visible:
 		errors.append("map switch should close trade panel")
 	if not game_root.active_trade_target.is_empty():
@@ -975,6 +975,74 @@ func _finish_presentations(game_root: Node) -> void:
 		game_root.finish_world_action_presentations()
 
 
+func _execute_primary_and_complete(game_root: Node, _max_waits: int = 16) -> Dictionary:
+	await _wait_for_turn_action_runner_idle(game_root)
+	var result: Dictionary = game_root.execute_primary_interaction()
+	if not bool(result.get("success", false)):
+		return result
+	await _wait_for_turn_action_runner_idle(game_root)
+	var runner_result: Dictionary = _runner_latest_interaction_result(game_root)
+	if not runner_result.is_empty():
+		result = runner_result
+	return result
+
+
+func _runner_latest_interaction_result(game_root: Node) -> Dictionary:
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot() if game_root.has_method("runtime_control_snapshot") else {})
+	var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+	if str(runner.get("action_kind", "")) != "interact":
+		return {}
+	var latest: Dictionary = _dictionary_or_empty(runner.get("latest_result", {}))
+	var pending_result: Dictionary = _dictionary_or_empty(latest.get("pending_result", {}))
+	if _final_interaction_result(pending_result):
+		return pending_result
+	if _final_interaction_result(latest):
+		return latest
+	return {}
+
+
+func _wait_for_turn_action_runner_idle(game_root: Node, max_frames: int = 720) -> void:
+	if game_root.has_method("finish_world_action_presentations"):
+		game_root.finish_world_action_presentations()
+		await process_frame
+	if game_root.has_method("settle_turn_action_runner_boundary"):
+		game_root.settle_turn_action_runner_boundary("trade_ui_smoke")
+	for _index in range(max_frames):
+		var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot() if game_root.has_method("runtime_control_snapshot") else {})
+		var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+		var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+		if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)) and not bool(presenter.get("active", false)):
+			return
+		if game_root.has_method("drain_turn_action_runner"):
+			game_root.drain_turn_action_runner(8)
+		if game_root.has_method("finish_world_action_presentations"):
+			game_root.finish_world_action_presentations()
+		await process_frame
+
+
+func _final_interaction_result(result: Dictionary) -> bool:
+	if not bool(result.get("success", false)):
+		return true
+	return bool(result.get("consumed_target", false)) \
+		or not _dialogue_id_from_interaction_result(result).is_empty() \
+		or result.has("container") \
+		or _has_context_snapshot(result) \
+		or bool(result.get("waited", false)) \
+		or bool(result.get("defeated", false))
+
+
+func _dialogue_id_from_interaction_result(result: Dictionary) -> String:
+	return str(result.get("dialogue_id", _dictionary_or_empty(result.get("dialogue", {})).get("dialogue_id", "")))
+
+
+func _has_context_snapshot(result: Dictionary) -> bool:
+	var context: Variant = result.get("context_snapshot", {})
+	if typeof(context) != TYPE_DICTIONARY:
+		return false
+	var context_dictionary: Dictionary = context
+	return not context_dictionary.is_empty()
+
+
 func _press_close_button(game_root: Node) -> void:
 	var button: Node = game_root.trade_panel.get_node_or_null("TradePanel/TradeLines/CloseButton")
 	if button is Button:
@@ -988,12 +1056,33 @@ func _reopen_trade(game_root: Node, errors: Array[String]) -> void:
 		errors.append("missing trader actor node for trade reopen")
 		return
 	game_root.select_interaction_node(trader_node)
-	var result: Dictionary = game_root.execute_primary_interaction()
+	var result: Dictionary = await _execute_primary_and_complete(game_root)
 	_finish_presentations(game_root)
 	if not bool(result.get("success", false)):
 		errors.append("trade reopen failed: %s" % result.get("reason", "unknown"))
+	_open_trade_from_active_dialogue(game_root, errors, "trade reopen")
 	if not game_root.trade_panel.visible:
 		errors.append("trade panel should reopen for Esc close check")
+
+
+func _open_trade_from_active_dialogue(game_root: Node, errors: Array[String], context: String) -> void:
+	if game_root.trade_panel.visible:
+		return
+	if game_root.has_method("refresh_dialogue_panel"):
+		game_root.refresh_dialogue_panel()
+	if game_root.dialogue_panel == null or not game_root.dialogue_panel.visible:
+		errors.append("%s should leave dialogue panel open before trade option" % context)
+		return
+	var trade_option_index := _dialogue_option_index(game_root, "trade_action")
+	if trade_option_index < 0:
+		errors.append("%s dialogue should expose trade_action option" % context)
+		return
+	var trade_result: Dictionary = game_root.choose_dialogue_option(trade_option_index)
+	if not bool(trade_result.get("success", false)):
+		errors.append("%s trade dialogue option failed: %s" % [context, trade_result.get("reason", "unknown")])
+	if str(trade_result.get("end_type", "")) != "trade":
+		errors.append("%s trade dialogue option should finish with trade end_type" % context)
+	_finish_presentations(game_root)
 
 
 func _close_trade_via_dialogue_leave(game_root: Node, errors: Array[String]) -> void:
@@ -1022,7 +1111,7 @@ func _dialogue_option_index(game_root: Node, next_id: String) -> int:
 		var option: Dictionary = _dictionary_or_empty(options[index])
 		if str(option.get("next", "")) == next_id:
 			return index
-	return 0
+	return -1
 
 
 func _title_line(game_root: Node) -> String:

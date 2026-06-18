@@ -5,6 +5,20 @@ const TradeSnapshot = preload("res://scripts/ui/snapshots/trade_snapshot.gd")
 
 func dialogue_trade_target(result: Dictionary, current_target: Dictionary) -> Dictionary:
 	var shop_id := dialogue_trade_shop_id(result)
+	var target_actor_id := int(result.get("target_actor_id", 0))
+	if target_actor_id <= 0:
+		target_actor_id = int(dictionary_or_empty(result.get("target_context", {})).get("target_actor_id", 0))
+	var target_definition_id := str(result.get("target_definition_id", dictionary_or_empty(result.get("target_context", {})).get("target_definition_id", ""))).strip_edges()
+	if target_actor_id > 0:
+		var target := {
+			"target_type": "actor",
+			"actor_id": target_actor_id,
+		}
+		if not target_definition_id.is_empty():
+			target["target_definition_id"] = target_definition_id
+		if not shop_id.is_empty():
+			target["shop_id"] = shop_id
+		return target
 	if not shop_id.is_empty():
 		return {
 			"target_type": "shop",

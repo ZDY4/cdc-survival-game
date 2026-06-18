@@ -38,6 +38,7 @@ const ContainerSessionService = preload("res://scripts/core/simulation/services/
 const DoorService = preload("res://scripts/core/simulation/services/door_service.gd")
 const NpcTurnService = preload("res://scripts/core/simulation/services/npc_turn_service.gd")
 const PendingActionService = preload("res://scripts/core/simulation/services/pending_action_service.gd")
+const RelationshipService = preload("res://scripts/core/simulation/services/relationship_service.gd")
 const TradeService = preload("res://scripts/core/simulation/services/trade_service.gd")
 const TurnFlowService = preload("res://scripts/core/simulation/services/turn_flow_service.gd")
 const TurnStateService = preload("res://scripts/core/simulation/services/turn_state_service.gd")
@@ -158,6 +159,7 @@ var _container_session_service := ContainerSessionService.new()
 var _door_service := DoorService.new()
 var _npc_turn_service := NpcTurnService.new()
 var _pending_action_service := PendingActionService.new()
+var _relationship_service := RelationshipService.new()
 var _trade_service := TradeService.new()
 var _turn_flow_service := TurnFlowService.new()
 var _turn_state_service := TurnStateService.new()
@@ -278,43 +280,11 @@ func is_actor_visible_to_actor(observer_actor_id: int, target_actor_id: int) -> 
 
 
 func actor_hostility(actor_id: int, target_actor_id: int) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	var target: RefCounted = actor_registry.get_actor(target_actor_id)
-	if actor == null or target == null:
-		return {"hostile": false, "reason": "unknown_actor_pair", "score": 0.0}
-	if actor.actor_id == target.actor_id:
-		return {"hostile": false, "reason": "self", "score": 100.0}
-	var score: float = relationship_score(actor.actor_id, target.actor_id)
-	var same_group: bool = _actors_share_side_or_group(actor, target)
-	var side_hostile: bool = actor.side == "hostile" or target.side == "hostile"
-	var hostile: bool = false
-	var reason: String = "neutral"
-	if score <= RELATIONSHIP_HOSTILE_THRESHOLD:
-		hostile = true
-		reason = "relationship_hostile"
-	elif side_hostile and score < RELATIONSHIP_FRIENDLY_THRESHOLD:
-		hostile = true
-		reason = "side_hostile"
-	elif same_group:
-		hostile = false
-		reason = "same_group"
-	else:
-		hostile = false
-		reason = "relationship_non_hostile" if score >= RELATIONSHIP_FRIENDLY_THRESHOLD else "neutral"
-	return {
-		"hostile": hostile,
-		"reason": reason,
-		"score": score,
-		"threshold": RELATIONSHIP_HOSTILE_THRESHOLD,
-		"actor_side": actor.side,
-		"target_side": target.side,
-		"actor_group_id": actor.group_id,
-		"target_group_id": target.group_id,
-	}
+	return _relationship_service.actor_hostility(self, actor_id, target_actor_id)
 
 
 func are_actors_hostile(actor_id: int, target_actor_id: int) -> bool:
-	return bool(actor_hostility(actor_id, target_actor_id).get("hostile", false))
+	return _relationship_service.are_actors_hostile(self, actor_id, target_actor_id)
 
 
 func decide_actor_intent(actor_id: int, context: Dictionary = {}) -> Dictionary:
@@ -608,59 +578,11 @@ func set_world_flag(flag_id: String, value: bool = true, reason: String = "manua
 
 
 func relationship_score(actor_id: int, target_actor_id: int) -> float:
-	if actor_id <= 0 or target_actor_id <= 0:
-		return 0.0
-	if actor_id == target_actor_id:
-		return 100.0
-	var key := _relationship_key(actor_id, target_actor_id)
-	if relationships.has(key):
-		return float(relationships.get(key, 0.0))
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	var target_actor: RefCounted = actor_registry.get_actor(target_actor_id)
-	return _default_relationship_score(actor, target_actor)
+	return _relationship_service.relationship_score(self, actor_id, target_actor_id)
 
 
 func set_relationship_score(actor_id: int, target_actor_id: int, score: float, reason: String = "manual") -> Dictionary:
-	if actor_id <= 0 or target_actor_id <= 0:
-		return {"success": false, "reason": "invalid_actor_pair", "actor_id": actor_id, "target_actor_id": target_actor_id}
-	if actor_id == target_actor_id:
-		return {"success": false, "reason": "self_relationship_locked", "actor_id": actor_id, "target_actor_id": target_actor_id}
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	var target_actor: RefCounted = actor_registry.get_actor(target_actor_id)
-	if actor == null or target_actor == null:
-		return {"success": false, "reason": "unknown_actor_pair", "actor_id": actor_id, "target_actor_id": target_actor_id}
-	var previous := relationship_score(actor_id, target_actor_id)
-	var clamped := clampf(score, -100.0, 100.0)
-	var key := _relationship_key(actor_id, target_actor_id)
-	relationships[key] = clamped
-	var changed := absf(previous - clamped) > 0.001
-	var left_actor: RefCounted = actor if actor.actor_id <= target_actor.actor_id else target_actor
-	var right_actor: RefCounted = target_actor if actor.actor_id <= target_actor.actor_id else actor
-	if changed:
-		_emit("relationship_changed", {
-			"actor_id": left_actor.actor_id,
-			"target_actor_id": right_actor.actor_id,
-			"actor_name": left_actor.display_name,
-			"target_actor_name": right_actor.display_name,
-			"score_before": previous,
-			"score": clamped,
-			"score_delta": clamped - previous,
-			"reason": reason,
-			"actor_side": left_actor.side,
-			"target_side": right_actor.side,
-		})
-	return {
-		"success": true,
-		"actor_id": left_actor.actor_id,
-		"target_actor_id": right_actor.actor_id,
-		"actor_name": left_actor.display_name,
-		"target_actor_name": right_actor.display_name,
-		"score_before": previous,
-		"score": clamped,
-		"score_delta": clamped - previous,
-		"changed": changed,
-		"reason": reason,
-	}
+	return _relationship_service.set_relationship_score(self, actor_id, target_actor_id, score, reason)
 
 
 func _submit_wait_command(actor: RefCounted, command: Dictionary) -> Dictionary:
@@ -2541,49 +2463,19 @@ func _adjacent_goals(center: RefCounted) -> Array[RefCounted]:
 
 
 func _initialize_relationships_for_actor(actor: RefCounted) -> void:
-	if actor == null:
-		return
-	for other in actor_registry.actors():
-		if other == null or other.actor_id == actor.actor_id:
-			continue
-		var key := _relationship_key(actor.actor_id, other.actor_id)
-		if relationships.has(key):
-			continue
-		relationships[key] = _default_relationship_score(actor, other)
+	_relationship_service.initialize_relationships_for_actor(self, actor)
 
 
 func _relationship_key(actor_id: int, target_actor_id: int) -> String:
-	var left: int = min(actor_id, target_actor_id)
-	var right: int = max(actor_id, target_actor_id)
-	return "%d:%d" % [left, right]
+	return _relationship_service.relationship_key(self, actor_id, target_actor_id)
 
 
 func _actors_share_side_or_group(actor: RefCounted, target_actor: RefCounted) -> bool:
-	if actor == null or target_actor == null:
-		return false
-	if not actor.group_id.is_empty() and actor.group_id == target_actor.group_id:
-		return true
-	return not actor.side.is_empty() and actor.side == target_actor.side
+	return _relationship_service.actors_share_side_or_group(self, actor, target_actor)
 
 
 func _default_relationship_score(actor: RefCounted, target_actor: RefCounted) -> float:
-	if actor == null or target_actor == null:
-		return 0.0
-	if actor.actor_id == target_actor.actor_id:
-		return 100.0
-	if actor.side == "hostile" or target_actor.side == "hostile":
-		if actor.side == target_actor.side:
-			return 50.0
-		return -100.0
-	if actor.side == target_actor.side and actor.group_id == target_actor.group_id and not actor.group_id.is_empty():
-		return 75.0
-	if actor.side == target_actor.side and actor.side != "neutral":
-		return 50.0
-	if actor.side == "player" and target_actor.side == "friendly":
-		return 50.0
-	if actor.side == "friendly" and target_actor.side == "player":
-		return 50.0
-	return 0.0
+	return _relationship_service.default_relationship_score(self, actor, target_actor)
 
 
 func _player_actor_id() -> int:
