@@ -459,10 +459,12 @@ func _run_checks(game_root: Node) -> Array[String]:
 	else:
 		_execute_inventory_context_action(game_root, 2)
 		await process_frame
+	await _wait_for_turn_action_runner_idle(game_root)
 	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_blunt.gltf")
 	var context_unequip_result: Dictionary = game_root.unequip_player_slot("main_hand")
 	if not bool(context_unequip_result.get("success", false)):
 		errors.append("unequipping context-equipped baseball bat failed: %s" % context_unequip_result.get("reason", "unknown"))
+	await _wait_for_turn_action_runner_idle(game_root)
 	if not _press_inventory_item_with_text(game_root, "棒球棒"):
 		errors.append("should reselect baseball bat before drag equipping")
 	equip_button = _equip_button(game_root)
@@ -478,6 +480,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 		errors.append("should drag baseball bat onto equip button")
 	else:
 		await process_frame
+	await _wait_for_turn_action_runner_idle(game_root)
 	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_blunt.gltf")
 	if "\n".join(_item_lines(game_root)).contains("棒球棒"):
 		errors.append("equipped baseball bat should leave inventory panel")
@@ -485,6 +488,7 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var unequip_result: Dictionary = game_root.unequip_player_slot("main_hand")
 	if not bool(unequip_result.get("success", false)):
 		errors.append("unequipping main hand through game app failed: %s" % unequip_result.get("reason", "unknown"))
+	await _wait_for_turn_action_runner_idle(game_root)
 	if _player_node(game_root).find_child("EquipmentModel_main_hand", true, false) != null:
 		errors.append("main hand equipment model should be removed after unequip redraw")
 	if not "\n".join(_item_lines(game_root)).contains("棒球棒 x1"):
@@ -492,13 +496,14 @@ func _run_checks(game_root: Node) -> Array[String]:
 	var restore_result: Dictionary = game_root.equip_player_item("1002", "main_hand")
 	if not bool(restore_result.get("success", false)):
 		errors.append("restoring bootstrap knife through game app failed: %s" % restore_result.get("reason", "unknown"))
+	await _wait_for_turn_action_runner_idle(game_root)
 	_expect_main_hand_model(errors, game_root, "preview_placeholders/placeholders/weapon_dagger.gltf")
 
-	var pickup_node: Node = game_root.find_child("MapObject_survivor_outpost_01_pickup_medkit", true, false)
+	var pickup_node: Node = _find_interaction_node(game_root, "survivor_outpost_01_pickup_medkit")
 	if pickup_node == null:
 		return ["missing generated pickup node"]
 	game_root.select_interaction_node(pickup_node)
-	var pickup_result: Dictionary = _execute_primary_and_complete(game_root)
+	var pickup_result: Dictionary = await _execute_primary_and_complete(game_root)
 	if not bool(pickup_result.get("success", false)):
 		errors.append("pickup execution failed: %s" % pickup_result.get("reason", "unknown"))
 
@@ -822,17 +827,49 @@ func _run_checks(game_root: Node) -> Array[String]:
 	return errors
 
 
-func _execute_primary_and_complete(game_root: Node, max_waits: int = 16) -> Dictionary:
+func _execute_primary_and_complete(game_root: Node, _max_waits: int = 16) -> Dictionary:
+	await _wait_for_turn_action_runner_idle(game_root)
 	var result: Dictionary = game_root.execute_primary_interaction()
-	var waits := 0
-	while waits < max_waits and _has_pending(game_root) and not _final_interaction_result(result):
-		waits += 1
-		var wait_result: Dictionary = game_root.submit_wait_action()
-		var pending_result: Dictionary = wait_result.get("pending_result", {})
-		result = pending_result if not pending_result.is_empty() else wait_result
+	if not bool(result.get("success", false)):
+		return result
+	await _wait_for_turn_action_runner_idle(game_root)
+	var runner_result: Dictionary = _runner_latest_interaction_result(game_root)
+	if not runner_result.is_empty():
+		result = runner_result
+	return result
+
+
+func _runner_latest_interaction_result(game_root: Node) -> Dictionary:
+	var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot() if game_root.has_method("runtime_control_snapshot") else {})
+	var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+	if str(runner.get("action_kind", "")) != "interact":
+		return {}
+	var latest: Dictionary = _dictionary_or_empty(runner.get("latest_result", {}))
+	var pending_result: Dictionary = _dictionary_or_empty(latest.get("pending_result", {}))
+	if _final_interaction_result(pending_result):
+		return pending_result
+	if _final_interaction_result(latest):
+		return latest
+	return {}
+
+
+func _wait_for_turn_action_runner_idle(game_root: Node, max_frames: int = 720) -> void:
 	if game_root.has_method("finish_world_action_presentations"):
 		game_root.finish_world_action_presentations()
-	return result
+		await process_frame
+	if game_root.has_method("settle_turn_action_runner_boundary"):
+		game_root.settle_turn_action_runner_boundary("inventory_ui_smoke")
+	for _index in range(max_frames):
+		var runtime: Dictionary = _dictionary_or_empty(game_root.runtime_control_snapshot() if game_root.has_method("runtime_control_snapshot") else {})
+		var runner: Dictionary = _dictionary_or_empty(runtime.get("turn_action_runner", {}))
+		var presenter: Dictionary = _dictionary_or_empty(game_root.world_action_presenter_snapshot() if game_root.has_method("world_action_presenter_snapshot") else {})
+		if not bool(runner.get("active", false)) and not bool(runner.get("presentation_active", false)) and not bool(presenter.get("active", false)):
+			return
+		if game_root.has_method("drain_turn_action_runner"):
+			game_root.drain_turn_action_runner(8)
+		if game_root.has_method("finish_world_action_presentations"):
+			game_root.finish_world_action_presentations()
+		await process_frame
 
 
 func _container_session(snapshot: Dictionary, container_id: String) -> Dictionary:
@@ -1449,6 +1486,27 @@ func _array_or_empty(value: Variant) -> Array:
 	if typeof(value) == TYPE_ARRAY:
 		return value
 	return []
+
+
+func _find_interaction_node(root: Node, target_id: String) -> Node:
+	var prefixed: Node = root.find_child("MapObject_%s" % target_id, true, false)
+	if prefixed != null:
+		return prefixed
+	var direct: Node = root.find_child(target_id, true, false)
+	if direct != null:
+		return direct
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node == null:
+			continue
+		if node.has_meta("interaction_target"):
+			var target: Dictionary = _dictionary_or_empty(node.get_meta("interaction_target"))
+			if str(target.get("target_id", target.get("object_id", ""))) == target_id:
+				return node
+		for child in node.get_children():
+			pending.append(child)
+	return null
 
 
 func _assert_inventory_context_menu(errors: Array[String], game_root: Node, expected_item_id: String, context: String) -> void:
