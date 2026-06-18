@@ -302,7 +302,7 @@ func hotbar_hit_test_snapshot(screen_position: Vector2 = Vector2(-1.0, -1.0)) ->
 		return dictionary_or_empty(host.hud_root.hotbar_hit_test_snapshot(host.get_viewport(), screen_position))
 	var position := screen_position
 	if position.x < 0.0 or position.y < 0.0:
-		var viewport := host.get_viewport()
+		var viewport: Viewport = host.get_viewport()
 		position = viewport.get_mouse_position() if viewport != null else Vector2.ZERO
 	return {
 		"active": false,
