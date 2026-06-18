@@ -5,6 +5,10 @@ const AiRunner = preload("res://scripts/core/ai/ai_runner.gd")
 const AiRules = preload("res://scripts/core/ai/ai_rules.gd")
 const CombatRunner = preload("res://scripts/core/combat/combat_runner.gd")
 const DialogueRunner = preload("res://scripts/core/dialogue/dialogue_runner.gd")
+const LifeNeedsService = preload("res://scripts/core/simulation/services/life_needs_service.gd")
+const LifePlannerService = preload("res://scripts/core/simulation/services/life_planner_service.gd")
+const SkillRuntimeService = preload("res://scripts/core/simulation/services/skill_runtime_service.gd")
+const CombatService = preload("res://scripts/core/simulation/services/combat_service.gd")
 const EconomyTransactions = preload("res://scripts/core/economy/economy_transactions.gd")
 const EquipmentEffects = preload("res://scripts/core/economy/equipment_effects.gd")
 const EquipmentRunner = preload("res://scripts/core/economy/equipment_runner.gd")
@@ -150,6 +154,10 @@ var _trade_service := TradeService.new()
 var _turn_flow_service := TurnFlowService.new()
 var _turn_state_service := TurnStateService.new()
 var _world_turn_service := WorldTurnService.new()
+var _life_needs_service := LifeNeedsService.new()
+var _life_planner_service := LifePlannerService.new()
+var _skill_runtime_service := SkillRuntimeService.new()
+var _combat_service := CombatService.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -229,16 +237,7 @@ func allocate_attribute_point(actor_id: int, attribute: String) -> Dictionary:
 
 
 func learn_skill(actor_id: int, skill_id: String, skill_library: Dictionary) -> Dictionary:
-	var result: Dictionary = _progression_runner.learn_skill(self, _progression_rules, actor_id, skill_id, skill_library)
-	if not bool(result.get("success", false)):
-		return result
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor != null:
-		var skill: Dictionary = _skill_data(str(result.get("skill_id", skill_id)), skill_library)
-		var passive_effect: Dictionary = _refresh_passive_skill_effect(actor, str(result.get("skill_id", skill_id)), int(result.get("level", 0)), skill)
-		if not passive_effect.is_empty():
-			result["passive_effect"] = passive_effect.duplicate(true)
-	return result
+	return _skill_runtime_service.learn_skill(self, actor_id, skill_id, skill_library)
 
 
 func set_actor_vision_radius(actor_id: int, radius: int) -> void:
@@ -498,41 +497,11 @@ func craft_recipe(actor_id: int, recipe_id: String, recipe_library: Dictionary, 
 
 
 func perform_attack(actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
-	return _combat_runner.perform_attack(self, actor_id, target_actor_id, _topology_with_runtime_door_states(topology), options)
+	return _combat_service.perform_attack(self, actor_id, target_actor_id, topology, options)
 
 
 func preview_attack(actor_id: int, target_actor_id: int, topology: Dictionary = {}, options: Dictionary = {}) -> Dictionary:
-	var combat_topology: Dictionary = _topology_with_runtime_door_states(topology)
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return _combat_runner.preview_attack(self, actor_id, target_actor_id, combat_topology, options)
-	var profile: Dictionary = _dictionary_or_empty(options.get("weapon_profile", {}))
-	if profile.is_empty():
-		profile = _attack_profile(actor, _dictionary_or_empty(options.get("item_library", item_library)))
-	var attack_range: int = int(options.get("range", int(profile.get("range", DEFAULT_ATTACK_RANGE))))
-	var preview: Dictionary = _combat_runner.preview_attack(self, actor_id, target_actor_id, combat_topology, {
-		"range": attack_range,
-		"min_range": _attack_min_range_from_options(options, profile),
-		"weapon_profile": profile,
-		"allow_non_hostile_attack": _allows_non_hostile_attack_option(options),
-		"confirmation_required": bool(options.get("confirmation_required", _allows_non_hostile_attack_option(options))),
-		"friendly_fire_relationship_delta": float(options.get("friendly_fire_relationship_delta", options.get("non_hostile_attack_relationship_delta", -75.0))),
-	})
-	var attack_cost: float = float(options.get("ap_cost", profile.get("ap_cost", DEFAULT_ATTACK_AP)))
-	preview["ap_cost"] = attack_cost
-	preview["ap_available"] = actor.ap
-	preview["ap_affordable"] = actor.ap >= attack_cost
-	var ammo_check: Dictionary = _attack_ammo_check(actor, profile)
-	preview["ammo_check"] = ammo_check.duplicate(true)
-	preview["ammo_available"] = bool(ammo_check.get("success", true))
-	if bool(preview.get("can_attack", false)) and (not bool(preview.get("ap_affordable", false)) or not bool(preview.get("ammo_available", true))):
-		preview["success"] = false
-		preview["can_attack"] = false
-		if not bool(preview.get("ap_affordable", false)):
-			preview["reason"] = "ap_insufficient"
-		else:
-			preview["reason"] = str(ammo_check.get("reason", "ammo_unavailable"))
-	return preview
+	return _combat_service.preview_attack(self, actor_id, target_actor_id, topology, options)
 
 
 func set_combat_rng_seed(seed: int) -> void:
@@ -541,11 +510,11 @@ func set_combat_rng_seed(seed: int) -> void:
 
 
 func validate_attack_target(actor_id: int, target_actor_id: int, options: Dictionary = {}) -> Dictionary:
-	return _combat_runner.validate_attack_target(self, actor_id, target_actor_id, options)
+	return _combat_service.validate_attack_target(self, actor_id, target_actor_id, options)
 
 
 func record_enemy_defeated(actor_id: int, enemy_definition_id: String, enemy_kind: String = "enemy") -> void:
-	_quest_runner.record_enemy_defeated(self, actor_id, enemy_definition_id, enemy_kind)
+	_combat_service.record_enemy_defeated(self, actor_id, enemy_definition_id, enemy_kind)
 
 
 func advance_dialogue(actor_id: int, option_ref: Variant, dialogue_library: Dictionary) -> Dictionary:
@@ -588,18 +557,7 @@ func execute_interaction(actor_id: int, target: Dictionary, option_id: String = 
 
 
 func preview_skill_target(actor_id: int, skill_id: String, skill_library: Dictionary, target: Dictionary = {}, topology: Dictionary = {}) -> Dictionary:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return {"success": false, "reason": "unknown_actor", "actor_id": actor_id}
-	var skill: Dictionary = _skill_data(skill_id, skill_library)
-	if skill.is_empty():
-		return {"success": false, "reason": "unknown_skill", "skill_id": skill_id}
-	var activation: Dictionary = _dictionary_or_empty(skill.get("activation", {}))
-	var command := {
-		"target": target.duplicate(true),
-		"topology": _topology_with_runtime_door_states(topology),
-	}
-	return _skill_target_preview(actor, skill_id, activation, command)
+	return _skill_runtime_service.preview_skill_target(self, actor_id, skill_id, skill_library, target, topology)
 
 
 func cancel_pending(reason: String = "cancelled", auto_end_turn: bool = false, topology: Dictionary = {}) -> Dictionary:
@@ -2113,52 +2071,11 @@ func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictio
 
 
 func _skill_resource_costs(activation: Dictionary) -> Array[Dictionary]:
-	var source: Variant = activation.get("resource_costs", activation.get("resource_cost", {}))
-	var output: Array[Dictionary] = []
-	if typeof(source) == TYPE_DICTIONARY:
-		var costs: Dictionary = source
-		for resource_id in costs.keys():
-			var amount: float = max(0.0, float(costs.get(resource_id, 0.0)))
-			if amount <= 0.0:
-				continue
-			output.append({
-				"resource": _normalized_resource_id(str(resource_id)),
-				"amount": amount,
-			})
-	elif typeof(source) == TYPE_ARRAY:
-		for entry in source:
-			var entry_data: Dictionary = _dictionary_or_empty(entry)
-			var resource_id := _normalized_resource_id(str(entry_data.get("resource", entry_data.get("resource_id", ""))))
-			var amount: float = max(0.0, float(entry_data.get("amount", entry_data.get("cost", 0.0))))
-			if resource_id.is_empty() or amount <= 0.0:
-				continue
-			output.append({
-				"resource": resource_id,
-				"amount": amount,
-			})
-	output.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return str(a.get("resource", "")) < str(b.get("resource", ""))
-	)
-	return output
+	return _skill_runtime_service.skill_resource_costs(self, activation)
 
 
 func _skill_resource_cost_check(actor: RefCounted, costs: Array[Dictionary]) -> Dictionary:
-	for cost in costs:
-		var cost_data: Dictionary = _dictionary_or_empty(cost)
-		var resource_id := _normalized_resource_id(str(cost_data.get("resource", "")))
-		var required: float = max(0.0, float(cost_data.get("amount", 0.0)))
-		var available: float = _actor_resource_current(actor, resource_id)
-		if available + 0.0001 < required:
-			return {
-				"success": false,
-				"reason": "resource_insufficient",
-				"resource": resource_id,
-				"required_resource": resource_id,
-				"required_amount": required,
-				"available_amount": available,
-				"resource_costs": costs.duplicate(true),
-			}
-	return {"success": true, "resource_costs": costs.duplicate(true)}
+	return _skill_runtime_service.skill_resource_cost_check(self, actor, costs)
 
 
 func _spend_skill_resources(actor: RefCounted, costs: Array[Dictionary], reason: String) -> Array[Dictionary]:
@@ -2211,88 +2128,15 @@ func _normalized_resource_id(resource_id: String) -> String:
 
 
 func _apply_skill_activation_effect(actor: RefCounted, skill_id: String, learned_level: int, activation: Dictionary, mode: String) -> Dictionary:
-	var effect_definition: Dictionary = _dictionary_or_empty(activation.get("effect", {}))
-	if effect_definition.is_empty():
-		return {"success": true, "effect": {}, "removed": false, "removed_effects": []}
-	var effect_id := "skill:%s" % skill_id
-	var active_effects: Array[Dictionary] = []
-	var removed_effects: Array[Dictionary] = []
-	for effect in actor.active_effects:
-		var effect_data: Dictionary = effect.duplicate(true)
-		if str(effect_data.get("effect_id", "")) == effect_id:
-			removed_effects.append(effect_data)
-			continue
-		active_effects.append(effect_data)
-	var toggled_off: bool = mode == "toggle" and not removed_effects.is_empty()
-	if toggled_off:
-		actor.active_effects = active_effects
-		_emit("skill_effect_removed", {
-			"actor_id": actor.actor_id,
-			"effect_id": effect_id,
-			"skill_id": skill_id,
-			"reason": "toggle_off",
-			"removed_effects": removed_effects.duplicate(true),
-		})
-		return {
-			"success": true,
-			"effect": {},
-			"removed": true,
-			"removed_effects": removed_effects.duplicate(true),
-		}
-
-	var effect: Dictionary = _build_skill_effect(skill_id, learned_level, effect_definition)
-	active_effects.append(effect)
-	actor.active_effects = active_effects
-	_emit("skill_effect_applied", {
-		"actor_id": actor.actor_id,
-		"effect": effect.duplicate(true),
-		"replaced_effects": removed_effects.duplicate(true),
-	})
-	return {
-		"success": true,
-		"effect": effect.duplicate(true),
-		"removed": false,
-		"removed_effects": removed_effects.duplicate(true),
-	}
+	return _skill_runtime_service.apply_skill_activation_effect(self, actor, skill_id, learned_level, activation, mode)
 
 
 func _skill_target_preview(actor: RefCounted, skill_id: String, activation: Dictionary, command: Dictionary) -> Dictionary:
-	var targeting: Dictionary = _skill_targeting_definition(activation)
-	var target_kind: String = str(targeting.get("kind", targeting.get("target_kind", targeting.get("shape", "self"))))
-	var topology: Dictionary = _topology_with_runtime_door_states(_dictionary_or_empty(command.get("topology", {})))
-	match target_kind:
-		"self":
-			return _skill_self_target_preview(actor, skill_id, targeting)
-		"single", "actor", "single_actor":
-			return _skill_actor_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
-		"grid", "point":
-			return _skill_grid_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
-		"radius", "circle":
-			return _skill_radius_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
-		"line":
-			return _skill_line_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
-		"cone":
-			return _skill_cone_target_preview(actor, skill_id, targeting, _dictionary_or_empty(command.get("target", {})), topology)
-	return {
-		"success": false,
-		"reason": "skill_target_shape_unknown",
-		"skill_id": skill_id,
-		"target_shape": target_kind,
-	}
+	return _skill_runtime_service.skill_target_preview(self, actor, skill_id, activation, command)
 
 
 func _skill_targeting_definition(activation: Dictionary) -> Dictionary:
-	var targeting: Dictionary = _dictionary_or_empty(activation.get("targeting", {})).duplicate(true)
-	if targeting.is_empty():
-		targeting = _dictionary_or_empty(activation.get("target", {})).duplicate(true)
-	if targeting.is_empty():
-		targeting = {
-			"kind": "self",
-			"policy": "self",
-		}
-	if not targeting.has("policy"):
-		targeting["policy"] = _default_skill_target_policy(str(targeting.get("kind", targeting.get("shape", "self"))))
-	return targeting
+	return _skill_runtime_service.skill_targeting_definition(self, activation)
 
 
 func _default_skill_target_policy(target_kind: String) -> String:
@@ -2307,346 +2151,51 @@ func _default_skill_target_policy(target_kind: String) -> String:
 
 
 func _skill_self_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary) -> Dictionary:
-	return {
-		"success": true,
-		"skill_id": skill_id,
-		"target_shape": "self",
-		"target_policy": "self",
-		"target": {
-			"target_type": "actor",
-			"actor_id": actor.actor_id,
-			"grid_position": actor.grid_position.to_dictionary(),
-		},
-		"center": actor.grid_position.to_dictionary(),
-		"affected_actor_ids": [actor.actor_id],
-		"affected_cells": [actor.grid_position.to_dictionary()],
-		"friendly_fire": false,
-	}
+	return _skill_runtime_service.skill_self_target_preview(self, actor, skill_id, targeting)
 
 
 func _skill_actor_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary, target: Dictionary, topology: Dictionary) -> Dictionary:
-	var target_actor_id: int = int(target.get("actor_id", target.get("target_actor_id", 0)))
-	var target_actor: RefCounted = actor_registry.get_actor(target_actor_id)
-	if target_actor == null:
-		return {"success": false, "reason": "skill_target_actor_missing", "skill_id": skill_id, "target_actor_id": target_actor_id}
-	var policy_result: Dictionary = _skill_actor_policy_check(actor, target_actor, str(targeting.get("policy", "any_actor")))
-	if not bool(policy_result.get("success", false)):
-		policy_result["skill_id"] = skill_id
-		policy_result["target_actor_id"] = target_actor_id
-		return policy_result
-	var range_result: Dictionary = _skill_range_check(actor, target_actor.grid_position.to_dictionary(), targeting)
-	if not bool(range_result.get("success", false)):
-		range_result["skill_id"] = skill_id
-		range_result["target_actor_id"] = target_actor_id
-		return range_result
-	var visibility_result: Dictionary = _skill_visibility_check(actor, target_actor.grid_position.to_dictionary())
-	if not bool(visibility_result.get("success", false)):
-		visibility_result["skill_id"] = skill_id
-		visibility_result["target_actor_id"] = target_actor_id
-		return visibility_result
-	var los_result: Dictionary = _skill_los_check(actor, target_actor.grid_position.to_dictionary(), targeting, topology)
-	if not bool(los_result.get("success", false)):
-		los_result["skill_id"] = skill_id
-		los_result["target_actor_id"] = target_actor_id
-		return los_result
-	return {
-		"success": true,
-		"skill_id": skill_id,
-		"target_shape": "single",
-		"target_policy": str(targeting.get("policy", "any_actor")),
-		"target": {
-			"target_type": "actor",
-			"actor_id": target_actor_id,
-			"grid_position": target_actor.grid_position.to_dictionary(),
-		},
-		"center": target_actor.grid_position.to_dictionary(),
-		"affected_actor_ids": [target_actor_id],
-		"affected_cells": [target_actor.grid_position.to_dictionary()],
-		"friendly_fire": not _can_attack(actor, target_actor) and actor.actor_id != target_actor.actor_id,
-		"range": int(range_result.get("range", 0)),
-		"distance": int(range_result.get("distance", 0)),
-		"line_of_sight": bool(los_result.get("line_of_sight", true)),
-	}
+	return _skill_runtime_service.skill_actor_target_preview(self, actor, skill_id, targeting, target, topology)
 
 
 func _skill_grid_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary, target: Dictionary, topology: Dictionary) -> Dictionary:
-	var grid: Dictionary = _skill_target_grid_from(target)
-	if grid.is_empty():
-		return {"success": false, "reason": "skill_target_grid_missing", "skill_id": skill_id}
-	var policy_result: Dictionary = _skill_grid_policy_check(grid, str(targeting.get("policy", "any_grid")))
-	if not bool(policy_result.get("success", false)):
-		policy_result["skill_id"] = skill_id
-		return policy_result
-	var range_result: Dictionary = _skill_range_check(actor, grid, targeting)
-	if not bool(range_result.get("success", false)):
-		range_result["skill_id"] = skill_id
-		return range_result
-	var visibility_result: Dictionary = _skill_visibility_check(actor, grid)
-	if not bool(visibility_result.get("success", false)):
-		visibility_result["skill_id"] = skill_id
-		return visibility_result
-	var los_result: Dictionary = _skill_los_check(actor, grid, targeting, topology)
-	if not bool(los_result.get("success", false)):
-		los_result["skill_id"] = skill_id
-		return los_result
-	return {
-		"success": true,
-		"skill_id": skill_id,
-		"target_shape": "grid",
-		"target_policy": str(targeting.get("policy", "any_grid")),
-		"target": {
-			"target_type": "grid",
-			"grid": grid.duplicate(true),
-		},
-		"center": grid.duplicate(true),
-		"affected_actor_ids": _actor_ids_at_cells([grid]),
-		"affected_cells": [grid.duplicate(true)],
-		"friendly_fire": _cells_include_non_hostile(actor, [grid]),
-		"range": int(range_result.get("range", 0)),
-		"distance": int(range_result.get("distance", 0)),
-		"line_of_sight": bool(los_result.get("line_of_sight", true)),
-	}
+	return _skill_runtime_service.skill_grid_target_preview(self, actor, skill_id, targeting, target, topology)
 
 
 func _skill_radius_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary, target: Dictionary, topology: Dictionary) -> Dictionary:
-	var center: Dictionary = _skill_target_grid_from(target)
-	if center.is_empty():
-		center = actor.grid_position.to_dictionary()
-	var policy_result: Dictionary = _skill_grid_policy_check(center, str(targeting.get("policy", "any_grid")))
-	if not bool(policy_result.get("success", false)):
-		policy_result["skill_id"] = skill_id
-		return policy_result
-	var range_result: Dictionary = _skill_range_check(actor, center, targeting)
-	if not bool(range_result.get("success", false)):
-		range_result["skill_id"] = skill_id
-		return range_result
-	var visibility_result: Dictionary = _skill_visibility_check(actor, center)
-	if not bool(visibility_result.get("success", false)):
-		visibility_result["skill_id"] = skill_id
-		return visibility_result
-	var los_result: Dictionary = _skill_los_check(actor, center, targeting, topology)
-	if not bool(los_result.get("success", false)):
-		los_result["skill_id"] = skill_id
-		return los_result
-	var radius: int = max(0, int(targeting.get("radius", targeting.get("aoe_radius", 0))))
-	var cells: Array[Dictionary] = _skill_radius_cells(center, radius, topology, targeting)
-	var affected_actor_ids: Array[int] = _actor_ids_at_cells(cells)
-	var filtered_actor_ids: Array[int] = _filter_actor_ids_by_policy(actor, affected_actor_ids, str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))))
-	return {
-		"success": true,
-		"skill_id": skill_id,
-		"target_shape": "radius",
-		"target_policy": str(targeting.get("policy", "any_grid")),
-		"affected_policy": str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))),
-		"target": {
-			"target_type": "grid",
-			"grid": center.duplicate(true),
-		},
-		"center": center.duplicate(true),
-		"radius": radius,
-		"affected_actor_ids": filtered_actor_ids,
-		"affected_cells": cells,
-		"friendly_fire": _actor_ids_include_non_hostile(actor, filtered_actor_ids),
-		"range": int(range_result.get("range", 0)),
-		"distance": int(range_result.get("distance", 0)),
-		"line_of_sight": bool(los_result.get("line_of_sight", true)),
-		"respect_los": _skill_respects_los(targeting),
-	}
+	return _skill_runtime_service.skill_radius_target_preview(self, actor, skill_id, targeting, target, topology)
 
 
 func _skill_line_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary, target: Dictionary, topology: Dictionary) -> Dictionary:
-	var target_grid: Dictionary = _skill_target_grid_from(target)
-	if target_grid.is_empty():
-		return {"success": false, "reason": "skill_target_grid_missing", "skill_id": skill_id}
-	var policy_result: Dictionary = _skill_grid_policy_check(target_grid, str(targeting.get("policy", "any_grid")))
-	if not bool(policy_result.get("success", false)):
-		policy_result["skill_id"] = skill_id
-		return policy_result
-	var range_result: Dictionary = _skill_range_check(actor, target_grid, targeting)
-	if not bool(range_result.get("success", false)):
-		range_result["skill_id"] = skill_id
-		return range_result
-	var visibility_result: Dictionary = _skill_visibility_check(actor, target_grid)
-	if not bool(visibility_result.get("success", false)):
-		visibility_result["skill_id"] = skill_id
-		return visibility_result
-	var los_result: Dictionary = _skill_los_check(actor, target_grid, targeting, topology)
-	if not bool(los_result.get("success", false)):
-		los_result["skill_id"] = skill_id
-		return los_result
-	var max_length: int = int(targeting.get("length", targeting.get("max_length", range_result.get("range", -1))))
-	if max_length < 0:
-		max_length = int(range_result.get("distance", 0))
-	var cells: Array[Dictionary] = _skill_line_cells(actor.grid_position.to_dictionary(), target_grid, max_length, topology, targeting)
-	var affected_actor_ids: Array[int] = _actor_ids_at_cells(cells)
-	var filtered_actor_ids: Array[int] = _filter_actor_ids_by_policy(actor, affected_actor_ids, str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))))
-	return {
-		"success": true,
-		"skill_id": skill_id,
-		"target_shape": "line",
-		"target_policy": str(targeting.get("policy", "any_grid")),
-		"affected_policy": str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))),
-		"target": {
-			"target_type": "grid",
-			"grid": target_grid.duplicate(true),
-		},
-		"origin": actor.grid_position.to_dictionary(),
-		"center": target_grid.duplicate(true),
-		"length": max_length,
-		"affected_actor_ids": filtered_actor_ids,
-		"affected_cells": cells,
-		"friendly_fire": _actor_ids_include_non_hostile(actor, filtered_actor_ids),
-		"range": int(range_result.get("range", 0)),
-		"distance": int(range_result.get("distance", 0)),
-		"line_of_sight": bool(los_result.get("line_of_sight", true)),
-		"respect_los": _skill_respects_los(targeting),
-	}
+	return _skill_runtime_service.skill_line_target_preview(self, actor, skill_id, targeting, target, topology)
 
 
 func _skill_cone_target_preview(actor: RefCounted, skill_id: String, targeting: Dictionary, target: Dictionary, topology: Dictionary) -> Dictionary:
-	var target_grid: Dictionary = _skill_target_grid_from(target)
-	if target_grid.is_empty():
-		return {"success": false, "reason": "skill_target_grid_missing", "skill_id": skill_id}
-	var policy_result: Dictionary = _skill_grid_policy_check(target_grid, str(targeting.get("policy", "any_grid")))
-	if not bool(policy_result.get("success", false)):
-		policy_result["skill_id"] = skill_id
-		return policy_result
-	var range_result: Dictionary = _skill_range_check(actor, target_grid, targeting)
-	if not bool(range_result.get("success", false)):
-		range_result["skill_id"] = skill_id
-		return range_result
-	var visibility_result: Dictionary = _skill_visibility_check(actor, target_grid)
-	if not bool(visibility_result.get("success", false)):
-		visibility_result["skill_id"] = skill_id
-		return visibility_result
-	var los_result: Dictionary = _skill_los_check(actor, target_grid, targeting, topology)
-	if not bool(los_result.get("success", false)):
-		los_result["skill_id"] = skill_id
-		return los_result
-	var length: int = int(targeting.get("length", targeting.get("max_length", range_result.get("range", -1))))
-	if length < 0:
-		length = int(range_result.get("distance", 0))
-	var width: int = max(0, int(targeting.get("width", targeting.get("half_width", max(1, int(ceil(float(length) / 2.0)))))))
-	var cells: Array[Dictionary] = _skill_cone_cells(actor.grid_position.to_dictionary(), target_grid, length, width, topology, targeting)
-	var affected_actor_ids: Array[int] = _actor_ids_at_cells(cells)
-	var filtered_actor_ids: Array[int] = _filter_actor_ids_by_policy(actor, affected_actor_ids, str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))))
-	return {
-		"success": true,
-		"skill_id": skill_id,
-		"target_shape": "cone",
-		"target_policy": str(targeting.get("policy", "any_grid")),
-		"affected_policy": str(targeting.get("affected_policy", targeting.get("policy", "any_actor"))),
-		"target": {
-			"target_type": "grid",
-			"grid": target_grid.duplicate(true),
-		},
-		"origin": actor.grid_position.to_dictionary(),
-		"center": target_grid.duplicate(true),
-		"length": length,
-		"width": width,
-		"affected_actor_ids": filtered_actor_ids,
-		"affected_cells": cells,
-		"friendly_fire": _actor_ids_include_non_hostile(actor, filtered_actor_ids),
-		"range": int(range_result.get("range", 0)),
-		"distance": int(range_result.get("distance", 0)),
-		"line_of_sight": bool(los_result.get("line_of_sight", true)),
-		"respect_los": _skill_respects_los(targeting),
-	}
+	return _skill_runtime_service.skill_cone_target_preview(self, actor, skill_id, targeting, target, topology)
 
 
 func _skill_range_check(actor: RefCounted, target_grid: Dictionary, targeting: Dictionary) -> Dictionary:
-	if actor.grid_position.y != int(target_grid.get("y", actor.grid_position.y)):
-		return {"success": false, "reason": "skill_target_invalid_level", "target_grid": target_grid.duplicate(true)}
-	var distance: int = _grid_distance(actor.grid_position, GridCoord.from_dictionary(target_grid))
-	var max_range: int = int(targeting.get("range", targeting.get("max_range", -1)))
-	if max_range >= 0 and distance > max_range:
-		return {
-			"success": false,
-			"reason": "skill_target_out_of_range",
-			"range": max_range,
-			"distance": distance,
-			"target_grid": target_grid.duplicate(true),
-		}
-	return {"success": true, "range": max_range, "distance": distance}
+	return _skill_runtime_service.skill_range_check(self, actor, target_grid, targeting)
 
 
 func _skill_visibility_check(actor: RefCounted, target_grid: Dictionary) -> Dictionary:
-	if actor == null:
-		return {"success": false, "reason": "actor_missing"}
-	if not has_active_actor_vision(actor.actor_id):
-		return {"success": true, "visibility_checked": false}
-	var normalized_grid: Dictionary = {
-		"x": int(target_grid.get("x", 0)),
-		"y": int(target_grid.get("y", actor.grid_position.y)),
-		"z": int(target_grid.get("z", 0)),
-	}
-	if is_cell_visible_to_actor(actor.actor_id, normalized_grid):
-		return {"success": true, "visibility_checked": true}
-	return {
-		"success": false,
-		"reason": "target_not_visible",
-		"skill_target_not_visible": true,
-		"actor_id": actor.actor_id,
-		"target_grid": normalized_grid,
-		"actor_grid": actor.grid_position.to_dictionary(),
-	}
+	return _skill_runtime_service.skill_visibility_check(self, actor, target_grid)
 
 
 func _skill_los_check(actor: RefCounted, target_grid: Dictionary, targeting: Dictionary, topology: Dictionary) -> Dictionary:
-	if not _skill_requires_center_los(targeting):
-		return {"success": true, "line_of_sight": false, "line_of_sight_required": false}
-	if topology.is_empty():
-		return {"success": true, "line_of_sight": true, "line_of_sight_required": true}
-	var target_coord: RefCounted = GridCoord.from_dictionary(target_grid)
-	if actor.grid_position.y != target_coord.y:
-		return {
-			"success": false,
-			"reason": "skill_target_invalid_level",
-			"target_grid": target_coord.to_dictionary(),
-		}
-	if not _vision_rules.has_line_of_sight(actor.grid_position.to_dictionary(), target_coord.to_dictionary(), topology):
-		return {
-			"success": false,
-			"reason": "skill_target_blocked_by_los",
-			"target_grid": target_coord.to_dictionary(),
-			"origin": actor.grid_position.to_dictionary(),
-			"line_of_sight_required": true,
-		}
-	return {"success": true, "line_of_sight": true, "line_of_sight_required": true}
+	return _skill_runtime_service.skill_los_check(self, actor, target_grid, targeting, topology)
 
 
 func _skill_requires_center_los(targeting: Dictionary) -> bool:
-	if targeting.has("requires_los"):
-		return bool(targeting.get("requires_los", true))
-	if targeting.has("line_of_sight"):
-		return bool(targeting.get("line_of_sight", true))
-	return true
+	return _skill_runtime_service.skill_requires_center_los(self, targeting)
 
 
 func _skill_respects_los(targeting: Dictionary) -> bool:
-	if targeting.has("respect_los"):
-		return bool(targeting.get("respect_los", true))
-	if targeting.has("aoe_respects_los"):
-		return bool(targeting.get("aoe_respects_los", true))
-	return true
+	return _skill_runtime_service.skill_respects_los(self, targeting)
 
 
 func _skill_actor_policy_check(actor: RefCounted, target_actor: RefCounted, policy: String) -> Dictionary:
-	match policy:
-		"self":
-			if actor.actor_id != target_actor.actor_id:
-				return {"success": false, "reason": "skill_target_not_self", "target_policy": policy}
-		"hostile_only", "hostile":
-			if not _can_attack(actor, target_actor):
-				return {"success": false, "reason": "skill_target_not_hostile", "target_policy": policy}
-		"ally_only", "ally":
-			if actor.actor_id != target_actor.actor_id and _can_attack(actor, target_actor):
-				return {"success": false, "reason": "skill_target_not_ally", "target_policy": policy}
-		"any_actor", "any":
-			pass
-		_:
-			return {"success": false, "reason": "skill_target_policy_unknown", "target_policy": policy}
-	return {"success": true}
+	return _skill_runtime_service.skill_actor_policy_check(self, actor, target_actor, policy)
 
 
 func _can_attack(actor: RefCounted, target_actor: RefCounted) -> bool:
@@ -2662,137 +2211,31 @@ func _can_attack(actor: RefCounted, target_actor: RefCounted) -> bool:
 
 
 func _skill_grid_policy_check(grid: Dictionary, policy: String) -> Dictionary:
-	match policy:
-		"empty_grid":
-			if not _actor_ids_at_cells([grid]).is_empty():
-				return {"success": false, "reason": "skill_target_grid_occupied", "target_policy": policy, "target_grid": grid.duplicate(true)}
-		"any_grid", "any", "any_actor", "hostile_only", "ally_only":
-			pass
-		_:
-			return {"success": false, "reason": "skill_target_policy_unknown", "target_policy": policy}
-	return {"success": true}
+	return _skill_runtime_service.skill_grid_policy_check(self, grid, policy)
 
 
 func _skill_target_grid_from(target: Dictionary) -> Dictionary:
-	var grid: Dictionary = _dictionary_or_empty(target.get("grid", target.get("target_position", target.get("grid_position", {}))))
-	if not grid.is_empty():
-		return {
-			"x": int(grid.get("x", 0)),
-			"y": int(grid.get("y", 0)),
-			"z": int(grid.get("z", 0)),
-		}
-	var actor_id: int = int(target.get("actor_id", target.get("target_actor_id", 0)))
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor != null:
-		return actor.grid_position.to_dictionary()
-	return {}
+	return _skill_runtime_service.skill_target_grid_from(self, target)
 
 
 func _skill_radius_cells(center: Dictionary, radius: int, topology: Dictionary, targeting: Dictionary = {}) -> Array[Dictionary]:
-	var center_coord: RefCounted = GridCoord.from_dictionary(center)
-	if radius <= 0:
-		return [center_coord.to_dictionary()]
-	var bounds: Dictionary = _dictionary_or_empty(topology.get("bounds", {}))
-	var min_x: int = max(int(bounds.get("min_x", center_coord.x - radius)), center_coord.x - radius)
-	var max_x: int = min(int(bounds.get("max_x", center_coord.x + radius)), center_coord.x + radius)
-	var min_z: int = max(int(bounds.get("min_z", center_coord.z - radius)), center_coord.z - radius)
-	var max_z: int = min(int(bounds.get("max_z", center_coord.z + radius)), center_coord.z + radius)
-	var cells: Array[Dictionary] = []
-	for x in range(min_x, max_x + 1):
-		for z in range(min_z, max_z + 1):
-			var distance: int = abs(x - center_coord.x) + abs(z - center_coord.z)
-			if distance <= radius:
-				var cell := {"x": x, "y": center_coord.y, "z": z}
-				if _skill_radius_cell_visible_from_center(center_coord, cell, topology, targeting):
-					cells.append(cell)
-	return _sorted_grid_cells(cells)
+	return _skill_runtime_service.skill_radius_cells(self, center, radius, topology, targeting)
 
 
 func _skill_radius_cell_visible_from_center(center_coord: RefCounted, cell: Dictionary, topology: Dictionary, targeting: Dictionary) -> bool:
-	if not _skill_respects_los(targeting):
-		return true
-	if topology.is_empty():
-		return true
-	var cell_coord: RefCounted = GridCoord.from_dictionary(cell)
-	if center_coord.y != cell_coord.y:
-		return false
-	return _vision_rules.has_line_of_sight(center_coord.to_dictionary(), cell_coord.to_dictionary(), topology)
+	return _skill_runtime_service.skill_radius_cell_visible_from_center(self, center_coord, cell, topology, targeting)
 
 
 func _skill_line_cells(origin: Dictionary, target: Dictionary, max_length: int, topology: Dictionary, targeting: Dictionary) -> Array[Dictionary]:
-	var origin_coord: RefCounted = GridCoord.from_dictionary(origin)
-	var target_coord: RefCounted = GridCoord.from_dictionary(target)
-	if origin_coord.y != target_coord.y:
-		return []
-	var output: Array[Dictionary] = []
-	var x: int = origin_coord.x
-	var z: int = origin_coord.z
-	var dx: int = abs(target_coord.x - x)
-	var dz: int = abs(target_coord.z - z)
-	var sx: int = 1 if x < target_coord.x else -1
-	var sz: int = 1 if z < target_coord.z else -1
-	var err: int = dx - dz
-	while not (x == target_coord.x and z == target_coord.z):
-		var e2: int = err * 2
-		if e2 > -dz:
-			err -= dz
-			x += sx
-		if e2 < dx:
-			err += dx
-			z += sz
-		var cell := {"x": x, "y": origin_coord.y, "z": z}
-		var distance: int = _grid_distance(origin_coord, GridCoord.from_dictionary(cell))
-		if max_length >= 0 and distance > max_length:
-			break
-		if _skill_respects_los(targeting) and not _skill_line_cell_visible_from_origin(origin_coord, cell, topology):
-			break
-		output.append(cell)
-	return _sorted_grid_cells(output)
+	return _skill_runtime_service.skill_line_cells(self, origin, target, max_length, topology, targeting)
 
 
 func _skill_line_cell_visible_from_origin(origin_coord: RefCounted, cell: Dictionary, topology: Dictionary) -> bool:
-	if topology.is_empty():
-		return true
-	var cell_coord: RefCounted = GridCoord.from_dictionary(cell)
-	if origin_coord.y != cell_coord.y:
-		return false
-	return _vision_rules.has_line_of_sight(origin_coord.to_dictionary(), cell_coord.to_dictionary(), topology)
+	return _skill_runtime_service.skill_line_cell_visible_from_origin(self, origin_coord, cell, topology)
 
 
 func _skill_cone_cells(origin: Dictionary, target: Dictionary, length: int, width: int, topology: Dictionary, targeting: Dictionary) -> Array[Dictionary]:
-	var origin_coord: RefCounted = GridCoord.from_dictionary(origin)
-	var target_coord: RefCounted = GridCoord.from_dictionary(target)
-	if origin_coord.y != target_coord.y:
-		return []
-	var direction_x: int = signi(target_coord.x - origin_coord.x)
-	var direction_z: int = signi(target_coord.z - origin_coord.z)
-	if direction_x == 0 and direction_z == 0:
-		return []
-	var normalized_length: int = max(1, length)
-	var normalized_width: int = max(0, width)
-	var bounds: Dictionary = _dictionary_or_empty(topology.get("bounds", {}))
-	var min_x: int = max(int(bounds.get("min_x", origin_coord.x - normalized_length)), origin_coord.x - normalized_length)
-	var max_x: int = min(int(bounds.get("max_x", origin_coord.x + normalized_length)), origin_coord.x + normalized_length)
-	var min_z: int = max(int(bounds.get("min_z", origin_coord.z - normalized_length)), origin_coord.z - normalized_length)
-	var max_z: int = min(int(bounds.get("max_z", origin_coord.z + normalized_length)), origin_coord.z + normalized_length)
-	var cells: Array[Dictionary] = []
-	for x in range(min_x, max_x + 1):
-		for z in range(min_z, max_z + 1):
-			if x == origin_coord.x and z == origin_coord.z:
-				continue
-			var dx: int = x - origin_coord.x
-			var dz: int = z - origin_coord.z
-			var forward: int = dx * direction_x + dz * direction_z
-			if forward <= 0 or forward > normalized_length:
-				continue
-			var lateral: int = abs(dx * direction_z - dz * direction_x)
-			var allowed_width: int = int(ceil(float(max(1, forward)) * float(normalized_width) / float(normalized_length)))
-			if lateral > allowed_width:
-				continue
-			var cell := {"x": x, "y": origin_coord.y, "z": z}
-			if _skill_line_cell_visible_from_origin(origin_coord, cell, topology) or not _skill_respects_los(targeting):
-				cells.append(cell)
-	return _sorted_grid_cells(cells)
+	return _skill_runtime_service.skill_cone_cells(self, origin, target, length, width, topology, targeting)
 
 
 func _actor_ids_at_cells(cells: Array) -> Array[int]:
@@ -2928,20 +2371,7 @@ func _build_skill_effect(skill_id: String, learned_level: int, effect_definition
 
 
 func _skill_effect_modifiers(modifier_definitions: Dictionary, learned_level: int) -> Dictionary:
-	var output: Dictionary = {}
-	for key in modifier_definitions.keys():
-		var definition: Dictionary = _dictionary_or_empty(modifier_definitions.get(key, {}))
-		var per_level: float = float(definition.get("per_level", 0.0))
-		var value: float = 0.0
-		if definition.has("base"):
-			value = float(definition.get("base", 0.0)) + per_level * max(0, learned_level - 1)
-		else:
-			value = per_level * max(1, learned_level)
-		var max_value: float = float(definition.get("max_value", 0.0))
-		if max_value > 0.0:
-			value = min(value, max_value)
-		output[str(key)] = value
-	return output
+	return _skill_runtime_service.skill_effect_modifiers(self, modifier_definitions, learned_level)
 
 
 func advance_world_turn(topology: Dictionary = {}) -> Array[Dictionary]:
@@ -2977,615 +2407,136 @@ func _world_time_elapsed_minutes(start_total_minutes: int, end_total_minutes: in
 
 
 func _tick_settlement_life_needs(minutes: int) -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	var tick_minutes: int = max(0, minutes)
-	if tick_minutes <= 0:
-		return output
-	for actor in actor_registry.actors():
-		if actor.hp <= 0.0:
-			continue
-		var life: Dictionary = _dictionary_or_empty(actor.life)
-		if str(life.get("settlement_id", "")).is_empty():
-			continue
-		var profile: Dictionary = _life_need_profile(actor)
-		var before: Dictionary = _life_needs_snapshot(actor)
-		var runtime: Dictionary = _ensure_life_runtime(actor)
-		var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {})).duplicate(true)
-		var hours: float = float(tick_minutes) / 60.0
-		_apply_life_need_decay(needs, "hunger", float(profile.get("hunger_decay_per_hour", 0.0)) * hours)
-		_apply_life_need_decay(needs, "energy", float(profile.get("energy_decay_per_hour", 0.0)) * hours)
-		_apply_life_need_decay(needs, "morale", float(profile.get("morale_decay_per_hour", 0.0)) * hours)
-		runtime["needs"] = needs
-		runtime["last_need_tick"] = {
-			"world_time": world_time.duplicate(true),
-			"minutes": tick_minutes,
-			"profile_id": str(life.get("need_profile_id", "")),
-		}
-		_set_life_runtime(actor, runtime)
-		var after: Dictionary = _life_needs_snapshot(actor)
-		var tick: Dictionary = {
-			"actor_id": actor.actor_id,
-			"definition_id": actor.definition_id,
-			"settlement_id": str(life.get("settlement_id", "")),
-			"profile_id": str(life.get("need_profile_id", "")),
-			"minutes": tick_minutes,
-			"needs_before": before,
-			"needs_after": after,
-		}
-		output.append(tick)
-		_emit("settlement_life_needs_ticked", tick.duplicate(true))
-	return output
+	return _life_needs_service.tick_settlement_life_needs(self, minutes)
 
 
 func _expire_life_planner_reservations() -> Array[Dictionary]:
-	var expired: Array[Dictionary] = []
-	for actor in actor_registry.actors():
-		if actor.hp <= 0.0:
-			continue
-		var life: Dictionary = _dictionary_or_empty(actor.life)
-		if str(life.get("settlement_id", "")).is_empty():
-			continue
-		var runtime: Dictionary = _ensure_life_runtime(actor)
-		var reservations: Dictionary = _dictionary_or_empty(runtime.get("reservations", {}))
-		if reservations.is_empty():
-			continue
-		var planner_state: Dictionary = _dictionary_or_empty(runtime.get("planner_state", {})).duplicate(true)
-		var changed := false
-		for reservation_target in reservations.keys():
-			var target := str(reservation_target)
-			var reservation: Dictionary = _dictionary_or_empty(reservations.get(reservation_target, {}))
-			if not _life_planner_reservation_expired(reservation):
-				continue
-			if _life_background_action_holds_reservation(runtime, target, reservation):
-				continue
-			var release: Dictionary = _release_life_planner_reservation(actor, runtime, planner_state, target, {
-				"action_id": str(reservation.get("action_id", "")),
-			}, {
-				"smart_object_id": str(reservation.get("smart_object_id", "")),
-				"smart_object_kind": str(reservation.get("smart_object_kind", "")),
-				"target_grid": _dictionary_or_empty(reservation.get("target_grid", {})).duplicate(true),
-			}, {
-				"smart_object_id": str(reservation.get("smart_object_id", "")),
-				"smart_object_kind": str(reservation.get("smart_object_kind", "")),
-				"target_grid": _dictionary_or_empty(reservation.get("target_grid", {})).duplicate(true),
-			}, "reservation_expired")
-			expired.append(release.duplicate(true))
-			changed = true
-		if changed:
-			runtime["planner_state"] = planner_state
-			_set_life_runtime(actor, runtime)
-	return expired
+	return _life_planner_service.expire_life_planner_reservations(self)
 
 
 func _life_planner_reservation_expired(reservation: Dictionary) -> bool:
-	if reservation.is_empty() or not bool(reservation.get("active", false)):
-		return false
-	var ttl_minutes := int(reservation.get("reservation_ttl_minutes", 0))
-	var created_total_minutes := int(reservation.get("created_total_minutes", -1))
-	if ttl_minutes <= 0 or created_total_minutes < 0:
-		return false
-	return _world_time_elapsed_minutes(created_total_minutes, _world_time_total_minutes(world_time)) >= ttl_minutes
+	return _life_planner_service.life_planner_reservation_expired(self, reservation)
 
 
 func _life_background_action_holds_reservation(runtime: Dictionary, reservation_target: String, reservation: Dictionary) -> bool:
-	var action: Dictionary = _dictionary_or_empty(runtime.get("background_action", {}))
-	if action.is_empty() or bool(action.get("completed", false)):
-		return false
-	if int(action.get("remaining_minutes", 0)) <= 0:
-		return false
-	if str(action.get("reservation_target", "")) != reservation_target:
-		return false
-	var reserved_smart_object_id := str(reservation.get("smart_object_id", ""))
-	var action_smart_object_id := str(action.get("smart_object_id", ""))
-	if not reserved_smart_object_id.is_empty() and not action_smart_object_id.is_empty() and reserved_smart_object_id != action_smart_object_id:
-		return false
-	return true
+	return _life_planner_service.life_background_action_holds_reservation(self, runtime, reservation_target, reservation)
 
 
 func _life_need_tick_for_actor(ticks: Array[Dictionary], actor_id: int) -> Dictionary:
-	for tick in ticks:
-		var tick_data: Dictionary = tick
-		if int(tick_data.get("actor_id", 0)) == actor_id:
-			return tick_data.duplicate(true)
-	return {}
+	return _life_planner_service.life_need_tick_for_actor(self, ticks, actor_id)
 
 
 func _tick_background_settlement_life(life_tick_results: Array[Dictionary], minutes: int, expired_reservations: Array[Dictionary] = []) -> Array[Dictionary]:
-	var output: Array[Dictionary] = []
-	var expired_actor_ids: Dictionary = _life_reservation_actor_id_set(expired_reservations)
-	for actor in actor_registry.actors():
-		if actor.kind == "player" or actor.hp <= 0.0:
-			continue
-		if actor.map_id.is_empty() or actor.map_id == active_map_id:
-			continue
-		var life: Dictionary = _dictionary_or_empty(actor.life)
-		if str(life.get("settlement_id", "")).is_empty():
-			continue
-		var need_tick: Dictionary = _life_need_tick_for_actor(life_tick_results, actor.actor_id)
-		var background_action: Dictionary = _background_life_idle_result(actor, {}, "background_life_reservation_expired") if expired_actor_ids.has(actor.actor_id) else _advance_background_settlement_life(actor, minutes)
-		var presence: Dictionary = _record_life_presence(actor, "background", minutes, need_tick, background_action)
-		output.append(presence)
-		_emit("settlement_life_background_ticked", presence.duplicate(true))
-	return output
+	return _life_planner_service.tick_background_settlement_life(self, life_tick_results, minutes, expired_reservations)
 
 
 func _sync_online_life_background_action(actor: RefCounted) -> Dictionary:
-	if actor == null or actor.hp <= 0.0:
-		return {}
-	if actor.map_id.is_empty() or actor.map_id != active_map_id:
-		return {}
-	var life: Dictionary = _dictionary_or_empty(actor.life)
-	if str(life.get("settlement_id", "")).is_empty():
-		return {}
-	var runtime: Dictionary = _ensure_life_runtime(actor)
-	var background_action: Dictionary = _dictionary_or_empty(runtime.get("background_action", {}))
-	if background_action.is_empty() or bool(background_action.get("completed", false)):
-		return {}
-	var previous_presence: Dictionary = _dictionary_or_empty(runtime.get("presence", {}))
-	var resync := {
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-		"settlement_id": str(life.get("settlement_id", "")),
-		"reason": "actor_became_online",
-		"from_mode": str(previous_presence.get("mode", "background")),
-		"to_mode": "online",
-		"actor_map_id": actor.map_id,
-		"active_map_id": active_map_id,
-		"world_time": world_time.duplicate(true),
-		"background_action": _background_life_action_summary(background_action),
-	}
-	runtime.erase("background_action")
-	runtime["last_background_resync"] = resync.duplicate(true)
-	_set_life_runtime(actor, runtime)
-	_emit("settlement_life_background_resynced", resync.duplicate(true))
-	return resync
+	return _life_planner_service.sync_online_life_background_action(self, actor)
 
 
 func _record_life_presence(actor: RefCounted, mode: String, minutes: int, need_tick: Dictionary = {}, background_action: Dictionary = {}) -> Dictionary:
-	var life: Dictionary = _dictionary_or_empty(actor.life)
-	var presence: Dictionary = {
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-		"settlement_id": str(life.get("settlement_id", "")),
-		"mode": mode,
-		"actor_map_id": actor.map_id,
-		"active_map_id": active_map_id,
-		"world_time": world_time.duplicate(true),
-		"minutes": max(0, minutes),
-		"has_need_tick": not need_tick.is_empty(),
-	}
-	if not need_tick.is_empty():
-		presence["last_need_tick"] = need_tick.duplicate(true)
-	if not background_action.is_empty():
-		presence["background_action"] = _background_life_action_summary(background_action)
-	var runtime: Dictionary = _ensure_life_runtime(actor)
-	var status: Dictionary = {}
-	if mode == "background":
-		status = _record_life_status(actor, _life_status_from_background_action(actor, background_action, presence))
-	else:
-		status = _dictionary_or_empty(runtime.get("status", {})).duplicate(true)
-		if status.is_empty() or str(status.get("mode", "")) != mode:
-			status = _record_life_status(actor, _life_status_base(actor, "idle", "idle", "idle", "待命", presence, {}))
-	if not status.is_empty():
-		presence["status"] = status.duplicate(true)
-	runtime = _ensure_life_runtime(actor)
-	runtime["presence"] = presence.duplicate(true)
-	_set_life_runtime(actor, runtime)
-	return presence
+	return _life_planner_service.record_life_presence(self, actor, mode, minutes, need_tick, background_action)
 
 
 func _life_reservation_actor_id_set(reservations: Array[Dictionary]) -> Dictionary:
-	var output: Dictionary = {}
-	for reservation in reservations:
-		var data: Dictionary = _dictionary_or_empty(reservation)
-		var actor_id := int(data.get("actor_id", 0))
-		if actor_id > 0:
-			output[actor_id] = true
-	return output
+	return _life_planner_service.life_reservation_actor_id_set(self, reservations)
+
 
 
 func _record_life_status(actor: RefCounted, status: Dictionary) -> Dictionary:
-	if actor == null or status.is_empty():
-		return {}
-	var runtime: Dictionary = _ensure_life_runtime(actor)
-	var previous: Dictionary = _dictionary_or_empty(runtime.get("status", {}))
-	var output: Dictionary = status.duplicate(true)
-	output["previous_state_id"] = str(previous.get("state_id", ""))
-	output["changed"] = _life_status_changed(previous, output)
-	runtime["status"] = output.duplicate(true)
-	_set_life_runtime(actor, runtime)
-	if bool(output.get("changed", false)):
-		_emit("settlement_life_status_changed", output.duplicate(true))
-	return output
+	return _life_planner_service.record_life_status(self, actor, status)
 
 
 func _life_status_changed(previous: Dictionary, status: Dictionary) -> bool:
-	if previous.is_empty():
-		return true
-	for key in ["state_id", "state_group", "activity_id", "mode", "planner_action_id", "smart_object_id", "route_id"]:
-		if str(previous.get(key, "")) != str(status.get(key, "")):
-			return true
-	return false
+	return _life_planner_service.life_status_changed(self, previous, status)
 
 
 func _life_status_from_background_action(actor: RefCounted, action: Dictionary, presence: Dictionary) -> Dictionary:
-	if action.is_empty():
-		return _life_status_base(actor, "background_idle", "idle", "background_idle", "后台待命", presence, {})
-	var status: Dictionary = _life_status_from_life_result(actor, _dictionary_or_empty(action.get("life_intent", {})), action, "background")
-	status["mode"] = "background"
-	status["elapsed_minutes"] = int(action.get("elapsed_minutes", 0))
-	status["remaining_minutes"] = int(action.get("remaining_minutes", 0))
-	status["action_duration_minutes"] = int(action.get("action_duration_minutes", 0))
-	status["completed"] = bool(action.get("completed", false))
-	status["world_time"] = _dictionary_or_empty(presence.get("world_time", world_time)).duplicate(true)
-	return status
+	return _life_planner_service.life_status_from_background_action(self, actor, action, presence)
 
 
 func _life_status_from_life_result(actor: RefCounted, intent: Dictionary, result: Dictionary, mode: String) -> Dictionary:
-	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
-	var planner_action_id := str(intent.get("planner_action_id", planner.get("action_id", result.get("planner_action_id", ""))))
-	var status_id := _life_status_id(intent, result, planner_action_id)
-	var group := _life_status_group(status_id, planner_action_id)
-	var activity_id := planner_action_id if not planner_action_id.is_empty() else str(result.get("intent", intent.get("intent", "idle")))
-	var label := _life_status_label(status_id, activity_id)
-	var status: Dictionary = _life_status_base(actor, status_id, group, activity_id, label, {
-		"mode": mode,
-		"world_time": world_time.duplicate(true),
-	}, result)
-	status["goal_id"] = str(intent.get("goal_id", planner.get("goal_id", result.get("goal_id", ""))))
-	status["planner_action_id"] = planner_action_id
-	status["planner_action_reason"] = str(intent.get("planner_action_reason", planner.get("action_reason", result.get("planner_action_reason", ""))))
-	status["intent"] = str(result.get("intent", intent.get("intent", "")))
-	status["reason"] = str(result.get("reason", ""))
-	status["settlement_id"] = str(intent.get("settlement_id", status.get("settlement_id", "")))
-	status["schedule_label"] = str(intent.get("schedule_label", ""))
-	status["route_id"] = str(result.get("route_id", intent.get("route_id", "")))
-	status["anchor_id"] = str(intent.get("anchor_id", ""))
-	status["smart_object_id"] = str(result.get("smart_object_id", intent.get("smart_object_id", "")))
-	status["smart_object_kind"] = str(result.get("smart_object_kind", intent.get("smart_object_kind", "")))
-	status["target_grid"] = _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true)
-	return status
+	return _life_planner_service.life_status_from_life_result(self, actor, intent, result, mode)
 
 
 func _life_status_base(actor: RefCounted, state_id: String, state_group: String, activity_id: String, activity_label: String, presence: Dictionary, result: Dictionary) -> Dictionary:
-	var life: Dictionary = _dictionary_or_empty(actor.life)
-	return {
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-		"settlement_id": str(life.get("settlement_id", "")),
-		"state_id": state_id,
-		"state_group": state_group,
-		"activity_id": activity_id,
-		"activity_label": activity_label,
-		"mode": str(presence.get("mode", "online")),
-		"world_time": _dictionary_or_empty(presence.get("world_time", world_time)).duplicate(true),
-		"success": bool(result.get("success", true)),
-	}
+	return _life_planner_service.life_status_base(self, actor, state_id, state_group, activity_id, activity_label, presence, result)
 
 
 func _life_status_id(intent: Dictionary, result: Dictionary, planner_action_id: String) -> String:
-	if not bool(result.get("success", true)):
-		return "blocked"
-	match planner_action_id:
-		"travel_to_duty_area", "travel_home", "travel_to_canteen", "travel_to_leisure":
-			return "traveling"
-		"patrol_route":
-			return "patrolling"
-		"stand_guard", "respond_alarm", "raise_alarm":
-			return "guarding"
-		"restock_meal_service":
-			return "servicing"
-		"treat_patients":
-			return "treating"
-		"eat_meal":
-			return "eating"
-		"sleep":
-			return "resting"
-		"relax":
-			return "relaxing"
-		"idle_safely":
-			return "idle"
-	match str(result.get("intent", intent.get("intent", ""))):
-		"follow_route":
-			return "patrolling"
-		"return_home":
-			return "traveling"
-		"use_smart_object":
-			return "servicing"
-	return "idle"
+	return _life_planner_service.life_status_id(self, intent, result, planner_action_id)
 
 
 func _life_status_group(state_id: String, planner_action_id: String) -> String:
-	match state_id:
-		"traveling", "patrolling":
-			return "work"
-		"guarding", "servicing", "treating":
-			return "service"
-		"eating", "resting", "relaxing":
-			return "rest"
-		"blocked":
-			return "blocked"
-	if planner_action_id.is_empty():
-		return "idle"
-	return "work"
+	return _life_planner_service.life_status_group(self, state_id, planner_action_id)
 
 
 func _life_status_label(state_id: String, activity_id: String) -> String:
-	match state_id:
-		"traveling":
-			return "前往目标"
-		"patrolling":
-			return "巡逻"
-		"guarding":
-			return "警戒"
-		"servicing":
-			return "服务"
-		"treating":
-			return "治疗"
-		"eating":
-			return "用餐"
-		"resting":
-			return "休息"
-		"relaxing":
-			return "放松"
-		"blocked":
-			return "受阻"
-		"background_idle":
-			return "后台待命"
-	if activity_id.is_empty():
-		return "待命"
-	return activity_id
+	return _life_planner_service.life_status_label(self, state_id, activity_id)
 
 
 func _advance_background_settlement_life(actor: RefCounted, minutes: int) -> Dictionary:
-	var intent: Dictionary = decide_actor_intent(actor.actor_id, {"background_life": true})
-	var intent_name := str(intent.get("intent", ""))
-	if not ["follow_route", "return_home", "use_smart_object"].has(intent_name):
-		return _background_life_idle_result(actor, intent, "background_life_no_action")
-	var background_intent: Dictionary = intent.duplicate(true)
-	var target_grid: Dictionary = _background_life_target_grid(actor, background_intent)
-	if target_grid.is_empty():
-		var failed_result: Dictionary = _background_life_base_result(actor, background_intent, false, "background_life_target_missing")
-		_record_life_planner_runtime(actor, background_intent, failed_result)
-		_emit("settlement_life_background_action_failed", failed_result.duplicate(true))
-		return failed_result
-	background_intent["target_grid"] = target_grid.duplicate(true)
-	var action_key := _background_life_action_key(background_intent, target_grid)
-	var duration_minutes := _background_life_action_duration_minutes(background_intent)
-	var planner_action: Dictionary = _background_life_current_planner_action(background_intent)
-	var runtime: Dictionary = _ensure_life_runtime(actor)
-	var previous_action: Dictionary = _dictionary_or_empty(runtime.get("background_action", {}))
-	var elapsed_before: int = int(previous_action.get("elapsed_minutes", 0)) if str(previous_action.get("action_key", "")) == action_key else 0
-	var elapsed_after: int = elapsed_before + max(0, minutes)
-	var completed: bool = duration_minutes <= 0 or elapsed_after >= duration_minutes
-	var result: Dictionary = _background_life_base_result(actor, background_intent, true, "background_life_action_completed" if completed else "background_life_action_progressed")
-	var from_grid: Dictionary = actor.grid_position.to_dictionary()
-	result["action_key"] = action_key
-	result["target_grid"] = target_grid.duplicate(true)
-	result["from"] = from_grid
-	result["elapsed_before_minutes"] = elapsed_before
-	result["elapsed_minutes"] = elapsed_after
-	result["action_duration_minutes"] = duration_minutes
-	result["remaining_minutes"] = max(0, duration_minutes - elapsed_after)
-	result["completed"] = completed
-	result["world_time"] = world_time.duplicate(true)
-	result["reservation_target"] = str(planner_action.get("reservation_target", ""))
-	_attach_life_smart_object_summary(background_intent, result)
-	if completed:
-		actor.grid_position = GridCoord.from_dictionary(target_grid)
-		result["to"] = actor.grid_position.to_dictionary()
-		result["remaining_steps"] = 0
-		_apply_life_arrival_effect(actor, background_intent, result)
-		_record_life_planner_runtime(actor, background_intent, result)
-		runtime = _ensure_life_runtime(actor)
-		runtime.erase("background_action")
-		runtime["last_background_action"] = result.duplicate(true)
-		_set_life_runtime(actor, runtime)
-		_emit("settlement_life_background_action_completed", result.duplicate(true))
-	else:
-		result["to"] = from_grid
-		result["remaining_steps"] = 1
-		_record_life_planner_runtime(actor, background_intent, result)
-		runtime = _ensure_life_runtime(actor)
-		runtime["background_action"] = _background_life_action_summary(result)
-		_set_life_runtime(actor, runtime)
-		_emit("settlement_life_background_action_progressed", result.duplicate(true))
-	return result
+	return _life_planner_service.advance_background_settlement_life(self, actor, minutes)
 
 
 func _background_life_idle_result(actor: RefCounted, intent: Dictionary, reason: String) -> Dictionary:
-	return _background_life_base_result(actor, intent, true, reason)
+	return _life_planner_service.background_life_idle_result(self, actor, intent, reason)
 
 
 func _background_life_base_result(actor: RefCounted, intent: Dictionary, success: bool, reason: String) -> Dictionary:
-	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
-	return {
-		"success": success,
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-		"intent": str(intent.get("intent", "idle")),
-		"reason": reason,
-		"life_intent": intent.duplicate(true),
-		"goal_id": str(intent.get("goal_id", planner.get("goal_id", ""))),
-		"planner_action_id": str(intent.get("planner_action_id", planner.get("action_id", ""))),
-		"planner_action_reason": str(intent.get("planner_action_reason", planner.get("action_reason", ""))),
-	}
+	return _life_planner_service.background_life_base_result(self, actor, intent, success, reason)
 
 
 func _background_life_target_grid(actor: RefCounted, intent: Dictionary) -> Dictionary:
-	if str(intent.get("intent", "")) == "follow_route":
-		var route_grids: Array = _array_or_empty(intent.get("route_grids", []))
-		if route_grids.is_empty():
-			return {}
-		return _next_life_route_grid(actor, route_grids)
-	return _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true)
+	return _life_planner_service.background_life_target_grid(self, actor, intent)
 
 
 func _background_life_action_duration_minutes(intent: Dictionary) -> int:
-	var action: Dictionary = _background_life_current_planner_action(intent)
-	if not action.is_empty():
-		var travel_minutes := int(action.get("default_travel_minutes", 0))
-		var perform_minutes := int(action.get("perform_minutes", 0))
-		return max(travel_minutes, perform_minutes)
-	match str(intent.get("intent", "")):
-		"follow_route", "return_home", "use_smart_object":
-			return WORLD_TURN_MINUTES
-	return 0
+	return _life_planner_service.background_life_action_duration_minutes(self, intent)
 
 
 func _background_life_current_planner_action(intent: Dictionary) -> Dictionary:
-	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
-	var queue: Array = _array_or_empty(planner.get("action_queue", []))
-	var current_index: int = int(planner.get("current_action_index", 0))
-	if current_index < 0 or current_index >= queue.size():
-		return {}
-	return _dictionary_or_empty(queue[current_index]).duplicate(true)
+	return _life_planner_service.background_life_current_planner_action(self, intent)
 
 
 func _background_life_action_key(intent: Dictionary, target_grid: Dictionary) -> String:
-	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
-	var parts: Array[String] = [
-		str(intent.get("intent", "")),
-		str(intent.get("goal_id", planner.get("goal_id", ""))),
-		str(intent.get("planner_action_id", planner.get("action_id", ""))),
-		str(planner.get("current_action_index", 0)),
-		str(intent.get("route_id", "")),
-		str(intent.get("smart_object_id", "")),
-		JSON.stringify(target_grid),
-	]
-	return "|".join(parts)
+	return _life_planner_service.background_life_action_key(self, intent, target_grid)
 
 
 func _background_life_action_summary(result: Dictionary) -> Dictionary:
-	return {
-		"actor_id": int(result.get("actor_id", 0)),
-		"definition_id": str(result.get("definition_id", "")),
-		"intent": str(result.get("intent", "")),
-		"reason": str(result.get("reason", "")),
-		"success": bool(result.get("success", false)),
-		"completed": bool(result.get("completed", false)),
-		"goal_id": str(result.get("goal_id", "")),
-		"planner_action_id": str(result.get("planner_action_id", "")),
-		"planner_action_reason": str(result.get("planner_action_reason", "")),
-		"action_key": str(result.get("action_key", "")),
-		"elapsed_minutes": int(result.get("elapsed_minutes", 0)),
-		"action_duration_minutes": int(result.get("action_duration_minutes", 0)),
-		"remaining_minutes": int(result.get("remaining_minutes", 0)),
-		"reservation_target": str(result.get("reservation_target", "")),
-		"target_grid": _dictionary_or_empty(result.get("target_grid", {})).duplicate(true),
-		"from": _dictionary_or_empty(result.get("from", {})).duplicate(true),
-		"to": _dictionary_or_empty(result.get("to", {})).duplicate(true),
-		"smart_object_id": str(result.get("smart_object_id", "")),
-		"smart_object_kind": str(result.get("smart_object_kind", "")),
-		"world_time": _dictionary_or_empty(result.get("world_time", {})).duplicate(true),
-	}
+	return _life_planner_service.background_life_action_summary(self, result)
 
 
 func _life_need_profile(actor: RefCounted) -> Dictionary:
-	var life: Dictionary = _dictionary_or_empty(actor.life)
-	var profile_id: String = str(life.get("need_profile_id", ""))
-	var output: Dictionary = {}
-	for profile in _ai_collection("need_profiles"):
-		var profile_data: Dictionary = _dictionary_or_empty(profile)
-		if str(profile_data.get("id", "")) == profile_id:
-			output = profile_data.duplicate(true)
-			break
-	var override: Dictionary = _dictionary_or_empty(life.get("need_profile_override", {}))
-	for key in override.keys():
-		output[str(key)] = override[key]
-	return output
+	return _life_needs_service.life_need_profile(self, actor)
 
 
 func _ai_collection(collection_name: String) -> Array:
-	for record in ai_library.values():
-		var record_data: Dictionary = _dictionary_or_empty(record)
-		var data: Dictionary = _dictionary_or_empty(record_data.get("data", record_data))
-		if data.has(collection_name):
-			return _array_or_empty(data.get(collection_name, []))
-	return []
+	return _life_needs_service.ai_collection(self, collection_name)
 
 
 func _life_needs_snapshot(actor: RefCounted) -> Dictionary:
-	var runtime: Dictionary = _ensure_life_runtime(actor)
-	var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {}))
-	return {
-		"hunger": _life_need_value_snapshot(needs, "hunger"),
-		"energy": _life_need_value_snapshot(needs, "energy"),
-		"morale": _life_need_value_snapshot(needs, "morale"),
-	}
+	return _life_needs_service.life_needs_snapshot(self, actor)
 
 
 func _life_need_value_snapshot(needs: Dictionary, need_id: String) -> Dictionary:
-	var data: Dictionary = _dictionary_or_empty(needs.get(need_id, {}))
-	var max_value: float = max(1.0, float(data.get("max", 100.0)))
-	return {
-		"current": clampf(float(data.get("current", max_value)), 0.0, max_value),
-		"max": max_value,
-	}
+	return _life_needs_service.life_need_value_snapshot(self, needs, need_id)
 
 
 func _ensure_life_runtime(actor: RefCounted) -> Dictionary:
-	var life: Dictionary = _dictionary_or_empty(actor.life).duplicate(true)
-	var runtime: Dictionary = _dictionary_or_empty(life.get("runtime", {})).duplicate(true)
-	var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {})).duplicate(true)
-	for need_id in ["hunger", "energy", "morale"]:
-		if not needs.has(need_id):
-			needs[need_id] = {"current": 100.0, "max": 100.0}
-		else:
-			needs[need_id] = _life_need_value_snapshot(needs, need_id)
-	runtime["needs"] = needs
-	life["runtime"] = runtime
-	actor.life = life
-	return runtime
+	return _life_needs_service.ensure_life_runtime(self, actor)
 
 
 func _set_life_runtime(actor: RefCounted, runtime: Dictionary) -> void:
-	var life: Dictionary = _dictionary_or_empty(actor.life).duplicate(true)
-	life["runtime"] = runtime.duplicate(true)
-	actor.life = life
+	_life_needs_service.set_life_runtime(self, actor, runtime)
 
 
 func _apply_life_need_decay(needs: Dictionary, need_id: String, amount: float) -> void:
-	if amount <= 0.0:
-		return
-	var data: Dictionary = _life_need_value_snapshot(needs, need_id)
-	data["current"] = clampf(float(data.get("current", 100.0)) - amount, 0.0, float(data.get("max", 100.0)))
-	needs[need_id] = data
+	_life_needs_service.apply_life_need_decay(self, needs, need_id, amount)
 
 
 func _apply_life_need_delta(actor: RefCounted, deltas: Dictionary, source: String, source_id: String = "") -> Dictionary:
-	if deltas.is_empty():
-		return {}
-	var before: Dictionary = _life_needs_snapshot(actor)
-	var runtime: Dictionary = _ensure_life_runtime(actor)
-	var needs: Dictionary = _dictionary_or_empty(runtime.get("needs", {})).duplicate(true)
-	for key in deltas.keys():
-		var normalized: String = str(key).trim_suffix("_delta")
-		if not ["hunger", "energy", "morale"].has(normalized):
-			continue
-		var data: Dictionary = _life_need_value_snapshot(needs, normalized)
-		data["current"] = clampf(float(data.get("current", 100.0)) + float(deltas.get(key, 0.0)), 0.0, float(data.get("max", 100.0)))
-		needs[normalized] = data
-	runtime["needs"] = needs
-	runtime["last_need_effect"] = {
-		"source": source,
-		"source_id": source_id,
-		"world_time": world_time.duplicate(true),
-		"deltas": deltas.duplicate(true),
-	}
-	_set_life_runtime(actor, runtime)
-	var after: Dictionary = _life_needs_snapshot(actor)
-	var payload: Dictionary = {
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-		"source": source,
-		"source_id": source_id,
-		"deltas": deltas.duplicate(true),
-		"needs_before": before,
-		"needs_after": after,
-	}
-	_emit("settlement_life_needs_changed", payload.duplicate(true))
-	return payload
+	return _life_needs_service.apply_life_need_delta(self, actor, deltas, source, source_id)
 
 
 func _world_turn_actor_order() -> Array:
@@ -3810,611 +2761,103 @@ func _advance_npc_action(actor: RefCounted, topology: Dictionary) -> Dictionary:
 
 
 func _advance_npc_life_action(actor: RefCounted, intent: Dictionary, topology: Dictionary) -> Dictionary:
-	if actor.ap < 1.0:
-		var wait_result: Dictionary = _npc_wait_for_ap(actor, 0, str(intent.get("intent", "life")), "ap_insufficient_npc_life_move", 1.0)
-		wait_result["life_intent"] = intent.duplicate(true)
-		_record_life_planner_runtime(actor, intent, wait_result)
-		return wait_result
-	var result: Dictionary = {}
-	match str(intent.get("intent", "")):
-		"follow_route":
-			result = _npc_follow_route(actor, intent, topology)
-		"return_home":
-			result = _npc_move_to_life_target(actor, _dictionary_or_empty(intent.get("target_grid", {})), topology, intent, "return_home", "life_return_home")
-		"use_smart_object":
-			result = _npc_move_to_life_target(actor, _dictionary_or_empty(intent.get("target_grid", {})), topology, intent, "use_smart_object", "life_use_smart_object")
-	if result.is_empty():
-		result = {
-			"success": true,
-			"actor_id": actor.actor_id,
-			"intent": "idle",
-			"reason": "life_intent_unhandled",
-			"life_intent": intent.duplicate(true),
-		}
-	_record_life_planner_runtime(actor, intent, result)
-	var status: Dictionary = _record_life_status(actor, _life_status_from_life_result(actor, intent, result, "online"))
-	if not status.is_empty():
-		result["life_status"] = status.duplicate(true)
-	return result
+	return _life_planner_service.advance_npc_life_action(self, actor, intent, topology)
 
 
 func _record_life_planner_runtime(actor: RefCounted, intent: Dictionary, result: Dictionary) -> void:
-	var planner: Dictionary = _dictionary_or_empty(intent.get("planner", {}))
-	if planner.is_empty():
-		return
-	var runtime: Dictionary = _ensure_life_runtime(actor)
-	var execution: Dictionary = {
-		"world_time": world_time.duplicate(true),
-		"goal_id": str(planner.get("goal_id", "")),
-		"action_id": str(planner.get("action_id", "")),
-		"intent": str(intent.get("intent", "")),
-		"result_intent": str(result.get("intent", "")),
-		"success": bool(result.get("success", false)),
-		"reason": str(result.get("reason", "")),
-		"remaining_steps": int(result.get("remaining_steps", 0)),
-		"target_grid": _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true),
-		"smart_object_id": str(result.get("smart_object_id", intent.get("smart_object_id", ""))),
-		"route_id": str(result.get("route_id", intent.get("route_id", ""))),
-	}
-	var queue: Array = _array_or_empty(planner.get("action_queue", [])).duplicate(true)
-	var current_index: int = clampi(int(planner.get("current_action_index", 0)), 0, max(0, queue.size()))
-	var completed_current_action: bool = _life_planner_action_completed(result)
-	var replan_request: Dictionary = _life_planner_replan_request(actor, planner, result, current_index)
-	var completed_action: Dictionary = _dictionary_or_empty(queue[current_index]) if current_index >= 0 and current_index < queue.size() else {}
-	var planner_state: Dictionary = _dictionary_or_empty(runtime.get("planner_state", {})).duplicate(true)
-	var applied_effects: Array = []
-	var applied_world_state_effects: Array = []
-	var applied_executor_side_effects: Array = []
-	var reservation_result: Dictionary = {}
-	if completed_current_action:
-		applied_effects = _apply_life_planner_action_effects(planner_state, _array_or_empty(completed_action.get("effects", [])))
-		applied_world_state_effects = _apply_life_planner_world_state_effects(actor, completed_action)
-		applied_executor_side_effects = _apply_life_planner_executor_side_effects(actor, completed_action, intent, result)
-	var next_index: int = current_index + 1 if completed_current_action else current_index
-	next_index = clampi(next_index, 0, queue.size())
-	var queue_complete: bool = not queue.is_empty() and next_index >= queue.size()
-	if completed_current_action:
-		reservation_result = _record_life_planner_reservation_step(actor, runtime, planner_state, completed_action, intent, result, queue_complete)
-	execution["applied_effects"] = applied_effects.duplicate(true)
-	execution["applied_world_state_effects"] = applied_world_state_effects.duplicate(true)
-	execution["applied_executor_side_effects"] = applied_executor_side_effects.duplicate(true)
-	if not reservation_result.is_empty():
-		execution["reservation"] = reservation_result.duplicate(true)
-	var planner_runtime: Dictionary = {
-		"goal_id": str(planner.get("goal_id", "")),
-		"goal_score": float(planner.get("goal_score", 0.0)),
-		"score_rule_ids": _array_or_empty(planner.get("score_rule_ids", [])).duplicate(true),
-		"action_id": str(planner.get("action_id", "")),
-		"action_reason": str(planner.get("action_reason", "")),
-		"action_queue": queue,
-		"queue_length": queue.size(),
-		"current_action_index": next_index,
-		"completed_action_index": current_index if completed_current_action else -1,
-		"completed_action_id": str(planner.get("action_id", "")) if completed_current_action else "",
-		"next_action_id": _life_planner_queue_action_id(queue, next_index),
-		"queue_remaining": max(0, queue.size() - next_index),
-		"queue_complete": queue_complete,
-		"requirements": _array_or_empty(planner.get("requirements", [])).duplicate(true),
-		"unmet_requirements": _array_or_empty(planner.get("unmet_requirements", [])).duplicate(true),
-		"facts": _dictionary_or_empty(planner.get("facts", {})).duplicate(true),
-		"role": str(planner.get("role", "")),
-		"last_execution": execution,
-	}
-	if not replan_request.is_empty():
-		planner_runtime["replan_requested"] = true
-		planner_runtime["replan_request"] = replan_request.duplicate(true)
-		execution["replan_requested"] = true
-		execution["replan_request"] = replan_request.duplicate(true)
-	runtime["planner_state"] = planner_state
-	runtime["planner"] = planner_runtime
-	_set_life_runtime(actor, runtime)
-	if not replan_request.is_empty():
-		_emit("settlement_life_planner_replan_requested", replan_request.duplicate(true))
-	_emit("settlement_life_planner_updated", {
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-		"planner": planner_runtime.duplicate(true),
-	})
+	_life_planner_service.record_life_planner_runtime(self, actor, intent, result)
 
 
 func _life_planner_action_completed(result: Dictionary) -> bool:
-	if not bool(result.get("success", false)):
-		return false
-	var intent_name := str(result.get("intent", ""))
-	if not ["follow_route", "return_home", "use_smart_object"].has(intent_name):
-		return false
-	if str(result.get("reason", "")) == "already_at_life_target":
-		return true
-	if result.has("remaining_steps"):
-		return int(result.get("remaining_steps", 0)) <= 0
-	return false
+	return _life_planner_service.life_planner_action_completed(self, result)
 
 
 func _life_planner_replan_request(actor: RefCounted, planner: Dictionary, result: Dictionary, current_index: int) -> Dictionary:
-	if bool(result.get("success", false)):
-		return {}
-	var action_id := str(planner.get("action_id", ""))
-	if action_id.is_empty():
-		return {}
-	var intent_name := str(result.get("intent", ""))
-	if not ["follow_route", "return_home", "use_smart_object"].has(intent_name):
-		return {}
-	return {
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-		"goal_id": str(planner.get("goal_id", "")),
-		"action_id": action_id,
-		"action_index": current_index,
-		"intent": intent_name,
-		"reason": str(result.get("reason", "")),
-		"world_time": world_time.duplicate(true),
-		"target_grid": _dictionary_or_empty(result.get("target_grid", {})).duplicate(true),
-	}
+	return _life_planner_service.life_planner_replan_request(self, actor, planner, result, current_index)
 
 
 func _life_planner_queue_action_id(queue: Array, index: int) -> String:
-	if index < 0 or index >= queue.size():
-		return ""
-	return str(_dictionary_or_empty(queue[index]).get("action_id", ""))
+	return _life_planner_service.life_planner_queue_action_id(self, queue, index)
 
 
 func _apply_life_planner_action_effects(planner_state: Dictionary, effects: Array) -> Array:
-	var applied: Array = []
-	for effect in effects:
-		var effect_data: Dictionary = _dictionary_or_empty(effect)
-		var key := str(effect_data.get("key", ""))
-		if key.is_empty():
-			continue
-		var value: bool = bool(effect_data.get("value", false))
-		if value and _life_planner_location_fact_keys().has(key):
-			for sibling_key in _life_planner_location_fact_keys():
-				if sibling_key != key:
-					planner_state[sibling_key] = false
-		planner_state[key] = value
-		applied.append({"key": key, "value": value})
-	return applied
+	return _life_planner_service.apply_life_planner_action_effects(self, planner_state, effects)
 
 
 func _apply_life_planner_world_state_effects(actor: RefCounted, action: Dictionary) -> Array:
-	var effects: Dictionary = _dictionary_or_empty(action.get("world_state_effects", {}))
-	var applied: Array = []
-	for key in effects.keys():
-		var effect_key := str(key)
-		if effect_key.is_empty():
-			continue
-		var flag_id := ""
-		var value := bool(effects.get(key, false))
-		if effect_key.begins_with("set_"):
-			flag_id = effect_key.trim_prefix("set_")
-		elif effect_key.begins_with("clear_"):
-			flag_id = effect_key.trim_prefix("clear_")
-			value = false
-		if flag_id.is_empty():
-			continue
-		var result: Dictionary = set_world_flag(flag_id, value, "settlement_life_world_state_effect", actor.actor_id)
-		var summary: Dictionary = {
-			"key": effect_key,
-			"flag_id": flag_id,
-			"value": value,
-			"changed": bool(result.get("changed", false)),
-			"action_id": str(action.get("action_id", "")),
-			"actor_id": actor.actor_id,
-		}
-		applied.append(summary)
-		_emit("settlement_life_world_state_effect_applied", summary.duplicate(true))
-	return applied
+	return _life_planner_service.apply_life_planner_world_state_effects(self, actor, action)
 
 
 func _apply_life_planner_executor_side_effects(actor: RefCounted, action: Dictionary, intent: Dictionary, result: Dictionary) -> Array:
-	var action_id := str(action.get("action_id", ""))
-	var executor_binding_id := str(action.get("executor_binding_id", ""))
-	var applied: Array = []
-	if executor_binding_id == "resolve_alarm" and action_id == "respond_alarm":
-		applied.append(_apply_life_executor_world_flag(actor, action_id, executor_binding_id, "world_alert_active", false, "alarm_resolved"))
-	if action_id == "restock_meal_service":
-		applied.append(_apply_life_executor_world_flag(actor, action_id, executor_binding_id, "settlement_meal_service_restocked", true, "service_restocked"))
-	elif action_id == "treat_patients":
-		applied.append(_apply_life_executor_world_flag(actor, action_id, executor_binding_id, "settlement_patients_treated", true, "service_completed"))
-	if not applied.is_empty():
-		result["life_executor_side_effects"] = applied.duplicate(true)
-	return applied
+	return _life_planner_service.apply_life_planner_executor_side_effects(self, actor, action, intent, result)
 
 
 func _apply_life_executor_world_flag(actor: RefCounted, action_id: String, executor_binding_id: String, flag_id: String, value: bool, effect_kind: String) -> Dictionary:
-	var flag_result: Dictionary = set_world_flag(flag_id, value, "settlement_life_executor", actor.actor_id)
-	var summary: Dictionary = {
-		"kind": effect_kind,
-		"flag_id": flag_id,
-		"value": value,
-		"changed": bool(flag_result.get("changed", false)),
-		"action_id": action_id,
-		"executor_binding_id": executor_binding_id,
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-	}
-	_emit("settlement_life_executor_side_effect_applied", summary.duplicate(true))
-	return summary
+	return _life_planner_service.apply_life_executor_world_flag(self, actor, action_id, executor_binding_id, flag_id, value, effect_kind)
 
 
 func _record_life_planner_reservation_step(actor: RefCounted, runtime: Dictionary, planner_state: Dictionary, action: Dictionary, intent: Dictionary, result: Dictionary, queue_complete: bool) -> Dictionary:
-	var reservation_target := str(action.get("reservation_target", ""))
-	if reservation_target.is_empty():
-		return {}
-	if queue_complete:
-		return _release_life_planner_reservation(actor, runtime, planner_state, reservation_target, action, intent, result, "planner_queue_complete")
-	return _apply_life_planner_reservation(actor, runtime, planner_state, action, intent, result)
+	return _life_planner_service.record_life_planner_reservation_step(self, actor, runtime, planner_state, action, intent, result, queue_complete)
 
 
 func _apply_life_planner_reservation(actor: RefCounted, runtime: Dictionary, planner_state: Dictionary, action: Dictionary, intent: Dictionary, result: Dictionary) -> Dictionary:
-	var reservation_target := str(action.get("reservation_target", ""))
-	if reservation_target.is_empty():
-		return {}
-	var preemption: Dictionary = _apply_life_reservation_preemption(actor, reservation_target, action, intent, result)
-	var ttl_minutes := _life_planner_reservation_ttl_minutes(action)
-	var reservation: Dictionary = {
-		"active": true,
-		"phase": "reserved",
-		"reservation_target": reservation_target,
-		"smart_object_id": str(result.get("smart_object_id", intent.get("smart_object_id", ""))),
-		"smart_object_kind": str(result.get("smart_object_kind", intent.get("smart_object_kind", ""))),
-		"action_id": str(action.get("action_id", "")),
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-		"world_time": world_time.duplicate(true),
-		"created_total_minutes": _world_time_total_minutes(world_time),
-		"reservation_ttl_minutes": ttl_minutes,
-		"expires_world_time": _world_time_after(world_time, ttl_minutes),
-		"target_grid": _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true),
-		"reservation_priority": _life_reservation_priority(action, intent, result),
-		"reservation_preemptible": _life_reservation_preemptible(action, intent, result),
-	}
-	if not preemption.is_empty():
-		reservation["preempted_reservation"] = preemption.duplicate(true)
-	var reservations: Dictionary = _dictionary_or_empty(runtime.get("reservations", {})).duplicate(true)
-	reservations[reservation_target] = reservation.duplicate(true)
-	runtime["reservations"] = reservations
-	var flag_key := _life_reservation_flag_key(reservation_target)
-	if not flag_key.is_empty():
-		runtime[flag_key] = true
-	planner_state["reservation.%s.active" % reservation_target] = true
-	var fact_key := _life_reservation_fact_key(reservation_target)
-	if not fact_key.is_empty():
-		planner_state[fact_key] = true
-	_emit("settlement_life_reservation_updated", reservation.duplicate(true))
-	return reservation
+	return _life_planner_service.apply_life_planner_reservation(self, actor, runtime, planner_state, action, intent, result)
 
 
 func _apply_life_reservation_preemption(requester: RefCounted, reservation_target: String, action: Dictionary, intent: Dictionary, result: Dictionary) -> Dictionary:
-	var preemption: Dictionary = _dictionary_or_empty(result.get("reservation_preemption", intent.get("reservation_preemption", {}))).duplicate(true)
-	if preemption.is_empty():
-		return {}
-	var preempted_actor_id := int(preemption.get("actor_id", preemption.get("preempted_actor_id", 0)))
-	if preempted_actor_id <= 0 or requester == null or preempted_actor_id == requester.actor_id:
-		return {}
-	var preempted_actor: RefCounted = actor_registry.get_actor(preempted_actor_id)
-	if preempted_actor == null or preempted_actor.hp <= 0.0:
-		return {}
-	var preempted_runtime: Dictionary = _ensure_life_runtime(preempted_actor)
-	var preempted_reservations: Dictionary = _dictionary_or_empty(preempted_runtime.get("reservations", {}))
-	var preempted_target := str(preemption.get("reservation_target", reservation_target))
-	var existing: Dictionary = _dictionary_or_empty(preempted_reservations.get(preempted_target, {}))
-	if existing.is_empty() or not bool(existing.get("active", false)):
-		return {}
-	var planner_state: Dictionary = _dictionary_or_empty(preempted_runtime.get("planner_state", {})).duplicate(true)
-	var release: Dictionary = _release_life_planner_reservation(preempted_actor, preempted_runtime, planner_state, preempted_target, {
-		"action_id": str(existing.get("action_id", "")),
-	}, {
-		"smart_object_id": str(existing.get("smart_object_id", "")),
-		"smart_object_kind": str(existing.get("smart_object_kind", "")),
-		"target_grid": _dictionary_or_empty(existing.get("target_grid", {})).duplicate(true),
-	}, {
-		"smart_object_id": str(existing.get("smart_object_id", "")),
-		"smart_object_kind": str(existing.get("smart_object_kind", "")),
-		"target_grid": _dictionary_or_empty(existing.get("target_grid", {})).duplicate(true),
-	}, "reservation_preempted")
-	var planner_runtime: Dictionary = _dictionary_or_empty(preempted_runtime.get("planner", {})).duplicate(true)
-	var replan_request := {
-		"actor_id": preempted_actor.actor_id,
-		"definition_id": preempted_actor.definition_id,
-		"goal_id": str(planner_runtime.get("goal_id", "")),
-		"action_id": str(planner_runtime.get("action_id", existing.get("action_id", ""))),
-		"intent": "reservation",
-		"reason": "reservation_preempted",
-		"world_time": world_time.duplicate(true),
-		"reservation_target": preempted_target,
-		"smart_object_id": str(existing.get("smart_object_id", "")),
-		"preempted_by_actor_id": requester.actor_id,
-		"preempted_by_definition_id": requester.definition_id,
-		"requester_action_id": str(action.get("action_id", intent.get("planner_action_id", ""))),
-		"request_priority": _life_reservation_priority(action, intent, result),
-		"preempted_priority": float(existing.get("reservation_priority", preemption.get("preempted_priority", 0.0))),
-	}
-	planner_runtime["replan_requested"] = true
-	planner_runtime["replan_request"] = replan_request.duplicate(true)
-	preempted_runtime["planner"] = planner_runtime
-	preempted_runtime["planner_state"] = planner_state
-	_set_life_runtime(preempted_actor, preempted_runtime)
-	_emit("settlement_life_planner_replan_requested", replan_request.duplicate(true))
-	var event := release.duplicate(true)
-	event["preempted_by_actor_id"] = requester.actor_id
-	event["preempted_by_definition_id"] = requester.definition_id
-	event["requester_action_id"] = str(action.get("action_id", intent.get("planner_action_id", "")))
-	event["request_priority"] = _life_reservation_priority(action, intent, result)
-	event["preempted_priority"] = float(existing.get("reservation_priority", preemption.get("preempted_priority", 0.0)))
-	_emit("settlement_life_reservation_preempted", event.duplicate(true))
-	return event
+	return _life_planner_service.apply_life_reservation_preemption(self, requester, reservation_target, action, intent, result)
 
 
 func _life_reservation_priority(action: Dictionary, intent: Dictionary, result: Dictionary = {}) -> float:
-	if result.has("reservation_priority"):
-		return float(result.get("reservation_priority", 0.0))
-	if intent.has("reservation_priority"):
-		return float(intent.get("reservation_priority", 0.0))
-	return float(action.get("reservation_priority", 0.0))
+	return _life_planner_service.life_reservation_priority(self, action, intent, result)
 
 
 func _life_reservation_preemptible(action: Dictionary, intent: Dictionary, result: Dictionary = {}) -> bool:
-	if result.has("reservation_preemptible"):
-		return bool(result.get("reservation_preemptible", true))
-	if intent.has("reservation_preemptible"):
-		return bool(intent.get("reservation_preemptible", true))
-	return bool(action.get("reservation_preemptible", true))
+	return _life_planner_service.life_reservation_preemptible(self, action, intent, result)
 
 
 func _release_life_planner_reservation(actor: RefCounted, runtime: Dictionary, planner_state: Dictionary, reservation_target: String, action: Dictionary, intent: Dictionary, result: Dictionary, reason: String) -> Dictionary:
-	var reservations: Dictionary = _dictionary_or_empty(runtime.get("reservations", {})).duplicate(true)
-	var existing: Dictionary = _dictionary_or_empty(reservations.get(reservation_target, {})).duplicate(true)
-	var reservation: Dictionary = existing.duplicate(true)
-	reservation["active"] = false
-	reservation["phase"] = "released"
-	reservation["release_reason"] = reason
-	reservation["reservation_target"] = reservation_target
-	reservation["action_id"] = str(action.get("action_id", ""))
-	reservation["actor_id"] = actor.actor_id
-	reservation["definition_id"] = actor.definition_id
-	reservation["released_world_time"] = world_time.duplicate(true)
-	if reservation.get("smart_object_id", "") == "":
-		reservation["smart_object_id"] = str(result.get("smart_object_id", intent.get("smart_object_id", "")))
-	if reservation.get("smart_object_kind", "") == "":
-		reservation["smart_object_kind"] = str(result.get("smart_object_kind", intent.get("smart_object_kind", "")))
-	reservation["target_grid"] = _dictionary_or_empty(result.get("target_grid", intent.get("target_grid", {}))).duplicate(true)
-	reservations[reservation_target] = reservation.duplicate(true)
-	runtime["reservations"] = reservations
-	var flag_key := _life_reservation_flag_key(reservation_target)
-	if not flag_key.is_empty():
-		runtime[flag_key] = false
-	planner_state["reservation.%s.active" % reservation_target] = false
-	var fact_key := _life_reservation_fact_key(reservation_target)
-	if not fact_key.is_empty():
-		planner_state[fact_key] = false
-	_emit("settlement_life_reservation_released", reservation.duplicate(true))
-	return reservation
+	return _life_planner_service.release_life_planner_reservation(self, actor, runtime, planner_state, reservation_target, action, intent, result, reason)
 
 
 func _life_planner_reservation_ttl_minutes(action: Dictionary) -> int:
-	var explicit_ttl := int(action.get("reservation_ttl_minutes", 0))
-	if explicit_ttl > 0:
-		return max(LIFE_RESERVATION_MIN_TTL_MINUTES, explicit_ttl)
-	var action_minutes: int = max(int(action.get("perform_minutes", 0)), int(action.get("default_travel_minutes", 0)))
-	return max(LIFE_RESERVATION_MIN_TTL_MINUTES, action_minutes)
+	return _life_planner_service.life_planner_reservation_ttl_minutes(self, action)
 
 
 func _life_reservation_flag_key(reservation_target: String) -> String:
-	match reservation_target:
-		"bed":
-			return "bed_reserved"
-		"meal_object":
-			return "meal_object_reserved"
-		"guard_post":
-			return "guard_post_reserved"
-		"medical_station":
-			return "medical_station_reserved"
-		"leisure_object":
-			return "leisure_object_reserved"
-	return ""
+	return _life_planner_service.life_reservation_flag_key(self, reservation_target)
 
 
 func _life_reservation_fact_key(reservation_target: String) -> String:
-	match reservation_target:
-		"bed":
-			return "has_reserved_bed"
-		"meal_object":
-			return "has_reserved_meal_seat"
-		"guard_post":
-			return "has_reserved_guard_post"
-		"medical_station":
-			return "has_reserved_medical_station"
-		"leisure_object":
-			return "has_reserved_leisure_object"
-	return ""
+	return _life_planner_service.life_reservation_fact_key(self, reservation_target)
 
 
 func _life_planner_location_fact_keys() -> Array[String]:
-	return ["at_home", "at_duty_area", "at_canteen", "at_leisure"]
+	return _life_planner_service.life_planner_location_fact_keys(self)
 
 
 func _npc_follow_route(actor: RefCounted, intent: Dictionary, topology: Dictionary) -> Dictionary:
-	var route_grids: Array = _array_or_empty(intent.get("route_grids", []))
-	if route_grids.is_empty():
-		return {
-			"success": false,
-			"actor_id": actor.actor_id,
-			"intent": "follow_route",
-			"reason": "life_route_empty",
-			"life_intent": intent.duplicate(true),
-		}
-	var target_grid: Dictionary = _next_life_route_grid(actor, route_grids)
-	return _npc_move_to_life_target(actor, target_grid, topology, intent, "follow_route", "life_follow_route")
+	return _life_planner_service.npc_follow_route(self, actor, intent, topology)
 
 
 func _next_life_route_grid(actor: RefCounted, route_grids: Array) -> Dictionary:
-	var nearest_index: int = 0
-	var nearest_distance: int = 999999
-	for index in range(route_grids.size()):
-		var grid: Dictionary = _dictionary_or_empty(route_grids[index])
-		var distance: int = _grid_distance(actor.grid_position, GridCoord.from_dictionary(grid))
-		if distance < nearest_distance:
-			nearest_distance = distance
-			nearest_index = index
-		if actor.grid_position.key() == GridCoord.from_dictionary(grid).key():
-			var next_index := (index + 1) % route_grids.size()
-			return _dictionary_or_empty(route_grids[next_index]).duplicate(true)
-	return _dictionary_or_empty(route_grids[nearest_index]).duplicate(true)
+	return _life_planner_service.next_life_route_grid(self, actor, route_grids)
 
 
 func _npc_move_to_life_target(actor: RefCounted, target_grid: Dictionary, topology: Dictionary, intent: Dictionary, intent_name: String, move_reason: String) -> Dictionary:
-	if topology.is_empty():
-		return {"success": false, "reason": "npc_topology_missing", "actor_id": actor.actor_id, "intent": intent_name, "life_intent": intent.duplicate(true)}
-	if target_grid.is_empty():
-		return {"success": false, "reason": "life_target_missing", "actor_id": actor.actor_id, "intent": intent_name, "life_intent": intent.duplicate(true)}
-	var target_coord: RefCounted = GridCoord.from_dictionary(target_grid)
-	var movement_topology: Dictionary = _topology_with_auto_open_doors(actor.actor_id, topology)
-	var candidates: Array[RefCounted] = [target_coord]
-	if _occupied_actor_cells(actor.actor_id).has(target_coord.key()):
-		candidates.append_array(_adjacent_goals(target_coord))
-	var best_plan: Dictionary = {}
-	var best_goal: RefCounted = null
-	var attempted_goals: Array[Dictionary] = []
-	for goal in candidates:
-		var plan: Dictionary = _pathfinder.find_path(actor.grid_position, goal, movement_topology, _occupied_actor_cells(actor.actor_id))
-		attempted_goals.append(_npc_approach_attempt_summary(goal, plan))
-		if not bool(plan.get("success", false)):
-			continue
-		if best_plan.is_empty() or int(plan.get("steps", 999999)) < int(best_plan.get("steps", 999999)):
-			best_plan = plan
-			best_goal = goal
-	if best_goal == null:
-		return {
-			"success": false,
-			"actor_id": actor.actor_id,
-			"intent": intent_name,
-			"reason": "life_target_unreachable",
-			"target_grid": target_grid.duplicate(true),
-			"attempted_goals": attempted_goals,
-			"attempted_goal_count": attempted_goals.size(),
-			"life_intent": intent.duplicate(true),
-		}
-	var path: Array = _array_or_empty(best_plan.get("path", []))
-	if path.size() <= 1:
-		var already_result := {
-			"success": true,
-			"actor_id": actor.actor_id,
-			"intent": intent_name,
-			"reason": "already_at_life_target",
-			"target_grid": target_grid.duplicate(true),
-			"chosen_goal": best_goal.to_dictionary(),
-			"attempted_goals": attempted_goals,
-			"path": path.duplicate(true),
-			"path_length": path.size(),
-			"life_intent": intent.duplicate(true),
-		}
-		_apply_life_arrival_effect(actor, intent, already_result)
-		return already_result
-	var next_step: Dictionary = _dictionary_or_empty(path[1])
-	var from: Dictionary = actor.grid_position.to_dictionary()
-	_auto_open_door_for_step(actor.actor_id, next_step, topology)
-	actor.grid_position = GridCoord.from_dictionary(next_step)
-	_spend_ap(actor, min(actor.ap, 1.0), move_reason)
-	_emit("movement_step", {
-		"actor_id": actor.actor_id,
-		"from": from,
-		"to": next_step,
-		"life_intent": intent_name,
-	})
-	_emit("actor_moved", {
-		"actor_id": actor.actor_id,
-		"from": from,
-		"to": next_step,
-		"steps": 1,
-		"life_intent": intent_name,
-	})
-	var move_result := {
-		"success": true,
-		"actor_id": actor.actor_id,
-		"intent": intent_name,
-		"reason": move_reason,
-		"from": from,
-		"to": next_step,
-		"target_grid": target_grid.duplicate(true),
-		"chosen_goal": best_goal.to_dictionary(),
-		"attempted_goals": attempted_goals,
-		"path": path.duplicate(true),
-		"path_length": path.size(),
-		"remaining_steps": max(0, int(best_plan.get("steps", 0)) - 1),
-		"life_intent": intent.duplicate(true),
-	}
-	_attach_life_smart_object_summary(intent, move_result)
-	if actor.grid_position.key() == target_coord.key():
-		_apply_life_arrival_effect(actor, intent, move_result)
-	return move_result
+	return _life_planner_service.npc_move_to_life_target(self, actor, target_grid, topology, intent, intent_name, move_reason)
 
 
 func _attach_life_smart_object_summary(intent: Dictionary, result: Dictionary) -> void:
-	if str(intent.get("intent", "")) != "use_smart_object":
-		return
-	result["smart_object_id"] = str(intent.get("smart_object_id", ""))
-	result["smart_object_kind"] = str(intent.get("smart_object_kind", ""))
-	result["smart_object_tags"] = _array_or_empty(intent.get("smart_object_tags", [])).duplicate(true)
-	if intent.has("reservation_priority"):
-		result["reservation_priority"] = float(intent.get("reservation_priority", 0.0))
-	if intent.has("reservation_preemptible"):
-		result["reservation_preemptible"] = bool(intent.get("reservation_preemptible", true))
-	var preemption: Dictionary = _dictionary_or_empty(intent.get("reservation_preemption", {}))
-	if not preemption.is_empty():
-		result["reservation_preemption"] = preemption.duplicate(true)
+	_life_planner_service.attach_life_smart_object_summary(self, intent, result)
 
 
 func _apply_life_arrival_effect(actor: RefCounted, intent: Dictionary, result: Dictionary) -> void:
-	if str(intent.get("intent", "")) != "use_smart_object":
-		return
-	var smart_object_id := str(intent.get("smart_object_id", ""))
-	var smart_object_kind := str(intent.get("smart_object_kind", ""))
-	var deltas: Dictionary = _dictionary_or_empty(intent.get("need_effects", {})).duplicate(true)
-	if deltas.is_empty():
-		deltas = _smart_object_need_deltas(smart_object_kind, _array_or_empty(intent.get("smart_object_tags", [])))
-	var need_change: Dictionary = _apply_life_need_delta(actor, deltas, "smart_object", smart_object_id)
-	result["smart_object_id"] = smart_object_id
-	result["smart_object_kind"] = smart_object_kind
-	result["smart_object_tags"] = _array_or_empty(intent.get("smart_object_tags", [])).duplicate(true)
-	if intent.has("reservation_priority"):
-		result["reservation_priority"] = float(intent.get("reservation_priority", 0.0))
-	if intent.has("reservation_preemptible"):
-		result["reservation_preemptible"] = bool(intent.get("reservation_preemptible", true))
-	var preemption: Dictionary = _dictionary_or_empty(intent.get("reservation_preemption", {}))
-	if not preemption.is_empty():
-		result["reservation_preemption"] = preemption.duplicate(true)
-	result["life_need_change"] = need_change
-	_emit("settlement_life_smart_object_used", {
-		"actor_id": actor.actor_id,
-		"definition_id": actor.definition_id,
-		"settlement_id": str(intent.get("settlement_id", "")),
-		"smart_object_id": smart_object_id,
-		"smart_object_kind": smart_object_kind,
-		"smart_object_tags": _array_or_empty(intent.get("smart_object_tags", [])).duplicate(true),
-		"target_grid": _dictionary_or_empty(intent.get("target_grid", {})).duplicate(true),
-		"need_change": need_change,
-	})
+	_life_planner_service.apply_life_arrival_effect(self, actor, intent, result)
 
 
 func _smart_object_need_deltas(kind: String, tags: Array) -> Dictionary:
-	match kind:
-		"bed":
-			return {"energy_delta": 20.0, "morale_delta": 4.0}
-		"canteen_seat":
-			return {"hunger_delta": 28.0, "morale_delta": 3.0}
-		"recreation_spot":
-			return {"morale_delta": 20.0}
-		"medical_station":
-			return {"morale_delta": 8.0}
-		"guard_post":
-			return {"morale_delta": 2.0}
-		"alarm_point":
-			return {"morale_delta": -2.0}
-	if tags.has("meal"):
-		return {"hunger_delta": 20.0}
-	if tags.has("morale"):
-		return {"morale_delta": 15.0}
-	return {}
+	return _life_planner_service.smart_object_need_deltas(self, kind, tags)
 
 
 func _npc_wait_for_ap(actor: RefCounted, target_actor_id: int, planned_intent: String, reason: String, required_ap: float) -> Dictionary:
@@ -4572,61 +3015,7 @@ func _result_changes_active_map(result: Dictionary) -> bool:
 
 
 func _enter_combat(actor_ids: Array, reason: String) -> void:
-	var seed_participants: Array[int] = []
-	for actor_id in actor_ids:
-		var normalized_id: int = int(actor_id)
-		if normalized_id > 0 and not seed_participants.has(normalized_id):
-			seed_participants.append(normalized_id)
-	var participants: Array[int] = _collect_combat_participants(seed_participants)
-	for actor in actor_registry.actors():
-		if participants.has(actor.actor_id):
-			actor.in_combat = true
-	if not bool(combat_state.get("active", false)):
-		combat_state["active"] = true
-		combat_state["round"] = int(turn_state.get("round", 1))
-		combat_state["participants"] = participants
-		_refresh_combat_turn_order("combat_started")
-		combat_state["turns_without_hostile_player_sight"] = 0
-		combat_state["last_hostile_seen_turn"] = int(turn_state.get("round", 1)) if _participants_include_hostile_player_pair(participants) else 0
-		_emit("combat_started", {
-			"participants": participants,
-			"turn_order": _array_or_empty(combat_state.get("turn_order", [])).duplicate(true),
-			"initiative": _array_or_empty(combat_state.get("initiative", [])).duplicate(true),
-			"current_combat_actor_id": int(combat_state.get("current_combat_actor_id", 0)),
-			"next_combat_actor_id": int(combat_state.get("next_combat_actor_id", 0)),
-			"seed_participants": seed_participants,
-			"added_participants": participants.duplicate(),
-			"round": int(combat_state.get("round", 0)),
-			"last_hostile_seen_turn": int(combat_state.get("last_hostile_seen_turn", 0)),
-			"reason": reason,
-		})
-	else:
-		var existing: Array = _array_or_empty(combat_state.get("participants", []))
-		var added: Array[int] = []
-		for actor_id in participants:
-			if not existing.has(actor_id):
-				existing.append(actor_id)
-				added.append(actor_id)
-		combat_state["participants"] = existing
-		if not added.is_empty():
-			for actor in actor_registry.actors():
-				if added.has(actor.actor_id):
-					actor.in_combat = true
-			_refresh_combat_turn_order("combat_participants_updated")
-			if _participants_include_hostile_player_pair(existing):
-				combat_state["last_hostile_seen_turn"] = int(turn_state.get("round", 1))
-			_emit("combat_participants_updated", {
-				"participants": existing.duplicate(),
-				"turn_order": _array_or_empty(combat_state.get("turn_order", [])).duplicate(true),
-				"initiative": _array_or_empty(combat_state.get("initiative", [])).duplicate(true),
-				"current_combat_actor_id": int(combat_state.get("current_combat_actor_id", 0)),
-				"next_combat_actor_id": int(combat_state.get("next_combat_actor_id", 0)),
-				"seed_participants": seed_participants,
-				"added_participants": added,
-				"round": int(combat_state.get("round", 0)),
-				"last_hostile_seen_turn": int(combat_state.get("last_hostile_seen_turn", 0)),
-				"reason": reason,
-			})
+	_combat_service.enter_combat(self, actor_ids, reason)
 
 
 func _collect_combat_participants(seed_participants: Array[int]) -> Array[int]:
@@ -4689,20 +3078,15 @@ func _refresh_combat_turn_order(reason: String = "refresh") -> void:
 
 
 func _combat_initiative_sort_key(actor_id: int) -> Array:
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	if actor == null:
-		return [9999, 9999, actor_id]
-	var side_rank := 0 if actor.side == "player" else 1
-	return [-_combat_initiative_score(actor), side_rank, actor_id]
+	return _combat_service._combat_initiative_sort_key(self, actor_id)
 
 
 func _combat_initiative_score(actor: RefCounted) -> float:
-	return _combat_initiative_speed(actor)
+	return _combat_service._combat_initiative_score(self, actor)
 
 
 func _combat_initiative_speed(actor: RefCounted) -> float:
-	var attributes: Dictionary = _dictionary_or_empty(actor.combat_attributes)
-	return float(attributes.get("initiative", attributes.get("speed", 0.0)))
+	return _combat_service._combat_initiative_speed(self, actor)
 
 
 func _current_combat_actor_id(turn_order: Array[int]) -> int:
@@ -4757,112 +3141,23 @@ func _participants_include_hostile_player_pair(participants: Array) -> bool:
 
 
 func exit_combat_if_clear(reason: String = "hostiles_cleared") -> bool:
-	if not bool(combat_state.get("active", false)):
-		return false
-	var has_hostile := false
-	for actor in actor_registry.actors():
-		if actor.side == "hostile" and actor.hp > 0.0 and (actor.map_id.is_empty() or actor.map_id == active_map_id):
-			has_hostile = true
-			break
-	if has_hostile:
-		return false
-	_finish_combat_state(reason, {}, false)
-	return true
+	return _combat_service.exit_combat_if_clear(self, reason)
 
 
 func force_end_combat(reason: String = "forced", metadata: Dictionary = {}) -> Dictionary:
-	if not bool(combat_state.get("active", false)):
-		return {
-			"success": false,
-			"reason": "combat_inactive",
-			"end_reason": reason,
-		}
-	_finish_combat_state(reason, metadata, true)
-	return {
-		"success": true,
-		"reason": reason,
-		"metadata": metadata.duplicate(true),
-	}
+	return _combat_service.force_end_combat(self, reason, metadata)
 
 
 func exit_combat_if_player_defeated(reason: String = "player_defeated") -> bool:
-	if not bool(combat_state.get("active", false)):
-		return false
-	var has_living_player := false
-	for actor in actor_registry.actors():
-		if actor.side == "player" and actor.hp > 0.0 and (actor.map_id.is_empty() or actor.map_id == active_map_id):
-			has_living_player = true
-			break
-	if has_living_player:
-		return false
-	force_end_combat(reason)
-	return true
+	return _combat_service.exit_combat_if_player_defeated(self, reason)
 
 
 func update_combat_visibility_decay(topology: Dictionary = {}) -> Dictionary:
-	if not bool(combat_state.get("active", false)):
-		return {"success": false, "reason": "combat_inactive"}
-	var visibility_pair: Dictionary = hostile_player_visibility_pair(_topology_with_runtime_door_states(topology))
-	if not visibility_pair.is_empty():
-		var previous: int = int(combat_state.get("turns_without_hostile_player_sight", 0))
-		combat_state["turns_without_hostile_player_sight"] = 0
-		combat_state["last_hostile_seen_turn"] = int(turn_state.get("round", 1))
-		if previous > 0:
-			_emit("combat_visibility_restored", {
-				"previous_no_sight_turns": previous,
-				"hostile_actor_id": int(visibility_pair.get("hostile_actor_id", 0)),
-				"player_actor_id": int(visibility_pair.get("player_actor_id", 0)),
-			})
-		return {
-			"success": true,
-			"visible": true,
-			"combat_exited": false,
-			"turns_without_hostile_player_sight": 0,
-			"visibility_pair": visibility_pair,
-		}
-
-	var no_sight_turns: int = int(combat_state.get("turns_without_hostile_player_sight", 0)) + 1
-	combat_state["turns_without_hostile_player_sight"] = no_sight_turns
-	_emit("combat_visibility_decay", {
-		"turns_without_hostile_player_sight": no_sight_turns,
-		"threshold": COMBAT_EXIT_NO_SIGHT_TURNS,
-	})
-	if no_sight_turns < COMBAT_EXIT_NO_SIGHT_TURNS:
-		return {
-			"success": true,
-			"visible": false,
-			"combat_exited": false,
-			"turns_without_hostile_player_sight": no_sight_turns,
-		}
-
-	_finish_combat_state("visibility_decay", {}, true)
-	return {
-		"success": true,
-		"visible": false,
-		"combat_exited": true,
-		"reason": "visibility_decay",
-		"turns_without_hostile_player_sight": 0,
-	}
+	return _combat_service.update_combat_visibility_decay(self, topology)
 
 
 func hostile_player_visibility_pair(topology: Dictionary = {}) -> Dictionary:
-	var visibility_topology: Dictionary = _topology_with_runtime_door_states(topology)
-	for hostile in actor_registry.actors():
-		if hostile.side != "hostile" or hostile.hp <= 0.0:
-			continue
-		if not hostile.map_id.is_empty() and hostile.map_id != active_map_id:
-			continue
-		for player in actor_registry.actors():
-			if player.side != "player" or player.hp <= 0.0:
-				continue
-			if not player.map_id.is_empty() and player.map_id != active_map_id:
-				continue
-			if _hostile_can_see_player(hostile, player, visibility_topology):
-				return {
-					"hostile_actor_id": hostile.actor_id,
-					"player_actor_id": player.actor_id,
-				}
-	return {}
+	return _combat_service.hostile_player_visibility_pair(self, topology)
 
 
 func _hostile_can_see_player(hostile: RefCounted, player: RefCounted, topology: Dictionary) -> bool:
@@ -5303,62 +3598,7 @@ func _resume_pending_interaction(actor: RefCounted, topology: Dictionary, moveme
 
 
 func _attack_profile(actor: RefCounted, items: Dictionary) -> Dictionary:
-	var equipped_item_id: String = str(actor.equipment.get("main_hand", ""))
-	var item_data: Dictionary = _item_data_from_library(equipped_item_id, items)
-	var weapon: Dictionary = _weapon_fragment(equipped_item_id, items)
-	if weapon.is_empty():
-		return {
-			"item_id": equipped_item_id,
-			"damage": actor.attack_power,
-			"range": DEFAULT_ATTACK_RANGE,
-			"min_range": 0,
-			"ap_cost": DEFAULT_ATTACK_AP,
-			"crit_chance": 0.0,
-			"crit_multiplier": 1.0,
-			"ammo_type": "",
-			"on_hit_effect_ids": [],
-			"equipment_slot": "main_hand",
-			"max_ammo": 0,
-			"effect_data": _dictionary_or_empty(item_data.get("effect_data", {})).duplicate(true),
-		}
-	var attack_speed: float = max(0.1, float(weapon.get("attack_speed", 1.0)))
-	var weapon_range: int = max(1, _optional_int(weapon.get("range", DEFAULT_ATTACK_RANGE), DEFAULT_ATTACK_RANGE))
-	var weapon_min_range: int = clampi(_weapon_min_range(weapon), 0, weapon_range)
-	var max_ammo: int = _equipment_effects.weapon_magazine_capacity(actor, weapon, items)
-	var effect_data: Dictionary = _dictionary_or_empty(item_data.get("effect_data", {}))
-	var durability: Dictionary = _item_durability_fragment(item_data)
-	var on_hit_effect_ids: Array[String] = _string_array(weapon.get("on_hit_effect_ids", []))
-	if on_hit_effect_ids.is_empty():
-		on_hit_effect_ids = _string_array(weapon.get("special_effects", []))
-	var profile := {
-		"item_id": equipped_item_id,
-		"damage": float(weapon.get("damage", actor.attack_power)),
-		"range": weapon_range,
-		"min_range": weapon_min_range,
-		"ap_cost": max(1.0, ceil(DEFAULT_ATTACK_AP / attack_speed)),
-		"attack_speed": attack_speed,
-		"crit_chance": clampf(float(weapon.get("crit_chance", 0.0)), 0.0, 1.0),
-		"crit_multiplier": max(1.0, float(weapon.get("crit_multiplier", 1.0))),
-		"ammo_type": _normalize_item_id(weapon.get("ammo_type", "")),
-		"ammo_per_attack": 1,
-		"on_hit_effect_ids": on_hit_effect_ids,
-		"equipment_slot": "main_hand",
-		"max_ammo": max_ammo,
-		"effect_data": effect_data.duplicate(true),
-	}
-	if not durability.is_empty():
-		profile["durability_cost"] = max(0.0, _optional_float(weapon.get("durability_cost", effect_data.get("durability_cost", 1.0)), 1.0))
-		profile["durability_default"] = max(0.0, _optional_float(durability.get("durability", durability.get("max_durability", 100.0)), 100.0))
-		profile["max_durability"] = max(1.0, _optional_float(durability.get("max_durability", profile.get("durability_default", 100.0)), 100.0))
-	if weapon.get("accuracy", null) != null:
-		profile["accuracy"] = _optional_float(weapon.get("accuracy", 0.0), 0.0)
-	for key in ["armor_pierce", "armor_break_chance", "armor_break_defense_multiplier"]:
-		if weapon.has(key):
-			profile[key] = _optional_float(weapon.get(key, 0.0), 0.0)
-		elif effect_data.has(key):
-			profile[key] = _optional_float(effect_data.get(key, 0.0), 0.0)
-	_apply_attack_ammo_profile(actor, profile, items)
-	return profile
+	return _combat_service._attack_profile(self, actor, items)
 
 
 func _apply_attack_ammo_profile(actor: RefCounted, profile: Dictionary, items: Dictionary) -> void:
@@ -5426,10 +3666,7 @@ func _apply_attack_ammo_profile(actor: RefCounted, profile: Dictionary, items: D
 
 
 func _attack_ammo_available(actor: RefCounted, profile: Dictionary, ammo_type: String) -> int:
-	var slot_id := str(profile.get("equipment_slot", "main_hand"))
-	if actor.weapon_ammo.has(slot_id):
-		return max(0, int(actor.weapon_ammo.get(slot_id, 0)))
-	return max(0, int(actor.inventory.get(ammo_type, 0)))
+	return _combat_service._attack_ammo_available(self, actor, profile, ammo_type)
 
 
 func _merged_ammo_effect_data(ammo_item: Dictionary, ammo_data: Dictionary) -> Dictionary:
@@ -5462,22 +3699,11 @@ func _ammo_on_hit_effect_ids(ammo_item: Dictionary, ammo_data: Dictionary, effec
 
 
 func _attack_min_range_from_options(options: Dictionary, profile: Dictionary) -> int:
-	if options.has("min_range"):
-		return max(0, int(options.get("min_range", 0)))
-	if options.has("minimum_range"):
-		return max(0, int(options.get("minimum_range", 0)))
-	if options.has("minRange"):
-		return max(0, int(options.get("minRange", 0)))
-	return max(0, int(profile.get("min_range", 0)))
+	return _combat_service._attack_min_range_from_options(self, options, profile)
 
 
 func _attack_command_options(command: Dictionary, profile: Dictionary) -> Dictionary:
-	return {
-		"weapon_profile": profile.duplicate(true),
-		"allow_non_hostile_attack": _allows_non_hostile_attack_option(command),
-		"confirmation_required": bool(command.get("confirmation_required", _allows_non_hostile_attack_option(command))),
-		"friendly_fire_relationship_delta": float(command.get("friendly_fire_relationship_delta", command.get("non_hostile_attack_relationship_delta", -75.0))),
-	}
+	return _combat_service._attack_command_options(self, command, profile)
 
 
 func _allows_non_hostile_attack_option(options: Dictionary) -> bool:
@@ -5487,24 +3713,11 @@ func _allows_non_hostile_attack_option(options: Dictionary) -> bool:
 
 
 func _weapon_min_range(weapon: Dictionary) -> int:
-	if weapon.has("min_range"):
-		return max(0, _optional_int(weapon.get("min_range", 0), 0))
-	if weapon.has("minimum_range"):
-		return max(0, _optional_int(weapon.get("minimum_range", 0), 0))
-	if weapon.has("minRange"):
-		return max(0, _optional_int(weapon.get("minRange", 0), 0))
-	return 0
+	return _combat_service._weapon_min_range(self, weapon)
 
 
 func _weapon_fragment(item_id: String, items: Dictionary) -> Dictionary:
-	var item: Dictionary = _item_data_from_library(item_id, items)
-	if item.is_empty():
-		return {}
-	for fragment in _array_or_empty(item.get("fragments", [])):
-		var fragment_data: Dictionary = _dictionary_or_empty(fragment)
-		if str(fragment_data.get("kind", "")) == "weapon":
-			return fragment_data
-	return {}
+	return _combat_service._weapon_fragment(self, item_id, items)
 
 
 func _item_durability_fragment(item_data: Dictionary) -> Dictionary:
@@ -5525,42 +3738,11 @@ func _item_data_from_library(item_id: String, items: Dictionary) -> Dictionary:
 
 
 func _skill_data(skill_id: String, skills: Dictionary) -> Dictionary:
-	var record: Dictionary = _dictionary_or_empty(skills.get(skill_id, {}))
-	if record.is_empty():
-		return {}
-	return _dictionary_or_empty(record.get("data", record))
+	return _skill_runtime_service.skill_data(self, skill_id, skills)
 
 
 func _attack_ammo_check(actor: RefCounted, profile: Dictionary) -> Dictionary:
-	var ammo_type: String = str(profile.get("ammo_type", ""))
-	if ammo_type.is_empty() or ammo_type == "<null>":
-		return {"success": true}
-	var required: int = max(1, int(profile.get("ammo_per_attack", 1)))
-	var slot_id := str(profile.get("equipment_slot", "main_hand"))
-	if actor.weapon_ammo.has(slot_id):
-		var loaded: int = int(actor.weapon_ammo.get(slot_id, 0))
-		if loaded < required:
-			return {
-				"success": false,
-				"reason": "magazine_empty",
-				"slot_id": slot_id,
-				"ammo_type": ammo_type,
-				"required": required,
-				"loaded": loaded,
-				"capacity": int(profile.get("max_ammo", 0)),
-				"inventory": int(actor.inventory.get(ammo_type, 0)),
-			}
-		return {"success": true}
-	var current: int = int(actor.inventory.get(ammo_type, 0))
-	if current < required:
-		return {
-			"success": false,
-			"reason": "ammo_insufficient",
-			"ammo_type": ammo_type,
-			"required": required,
-			"current": current,
-		}
-	return {"success": true}
+	return _combat_service._attack_ammo_check(self, actor, profile)
 
 
 func _consume_attack_ammo(actor: RefCounted, profile: Dictionary) -> Dictionary:
@@ -5607,23 +3789,7 @@ func _consume_attack_ammo(actor: RefCounted, profile: Dictionary) -> Dictionary:
 
 
 func _attack_weapon_durability_check(actor: RefCounted, profile: Dictionary) -> Dictionary:
-	var item_id := str(profile.get("item_id", "")).strip_edges()
-	var cost: float = max(0.0, float(profile.get("durability_cost", 0.0)))
-	if actor == null or item_id.is_empty() or cost <= 0.0:
-		return {"success": true}
-	var current: float = _weapon_durability(actor, profile)
-	if current >= cost:
-		return {"success": true}
-	return {
-		"success": false,
-		"reason": "weapon_durability_insufficient",
-		"actor_id": actor.actor_id,
-		"weapon_item_id": item_id,
-		"slot_id": str(profile.get("equipment_slot", "main_hand")),
-		"durability_before": current,
-		"durability_cost": cost,
-		"max_durability": float(profile.get("max_durability", max(1.0, current))),
-	}
+	return _combat_service._attack_weapon_durability_check(self, actor, profile)
 
 
 func _consume_attack_weapon_durability(actor: RefCounted, profile: Dictionary) -> Dictionary:
@@ -5658,14 +3824,7 @@ func _consume_attack_weapon_durability(actor: RefCounted, profile: Dictionary) -
 
 
 func _weapon_durability(actor: RefCounted, profile: Dictionary) -> float:
-	if actor == null:
-		return 0.0
-	var item_id := str(profile.get("item_id", "")).strip_edges()
-	if item_id.is_empty():
-		return 0.0
-	if actor.tool_durability.has(item_id):
-		return max(0.0, float(actor.tool_durability.get(item_id, 0.0)))
-	return max(0.0, float(profile.get("durability_default", profile.get("max_durability", 100.0))))
+	return _combat_service._weapon_durability(self, actor, profile)
 
 
 func _normalize_item_id(value: Variant) -> String:
