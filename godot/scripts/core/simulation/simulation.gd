@@ -9,6 +9,7 @@ const LifeNeedsService = preload("res://scripts/core/simulation/services/life_ne
 const LifePlannerService = preload("res://scripts/core/simulation/services/life_planner_service.gd")
 const SkillRuntimeService = preload("res://scripts/core/simulation/services/skill_runtime_service.gd")
 const CombatService = preload("res://scripts/core/simulation/services/combat_service.gd")
+const HotbarService = preload("res://scripts/core/simulation/services/hotbar_service.gd")
 const EconomyTransactions = preload("res://scripts/core/economy/economy_transactions.gd")
 const EquipmentEffects = preload("res://scripts/core/economy/equipment_effects.gd")
 const EquipmentRunner = preload("res://scripts/core/economy/equipment_runner.gd")
@@ -158,6 +159,7 @@ var _life_needs_service := LifeNeedsService.new()
 var _life_planner_service := LifePlannerService.new()
 var _skill_runtime_service := SkillRuntimeService.new()
 var _combat_service := CombatService.new()
+var _hotbar_service := HotbarService.new()
 
 
 func register_actor(request: Dictionary) -> int:
@@ -575,60 +577,15 @@ func load_snapshot(snapshot_data: Dictionary) -> void:
 
 
 func set_active_hotbar_group(group_id: String) -> Dictionary:
-	_ensure_hotbar_groups()
-	var normalized_group_id := _normalized_hotbar_group_id(group_id)
-	if normalized_group_id.is_empty():
-		return {"success": false, "reason": "hotbar_group_missing"}
-	var previous_group_id := active_hotbar_group
-	_sync_active_hotbar_group()
-	active_hotbar_group = normalized_group_id
-	if not hotbar_groups.has(active_hotbar_group):
-		hotbar_groups[active_hotbar_group] = {}
-	hotbar = _dictionary_or_empty(hotbar_groups.get(active_hotbar_group, {})).duplicate(true)
-	if active_hotbar_group != previous_group_id:
-		_emit("hotbar_group_changed", {
-			"previous_group_id": previous_group_id,
-			"group_id": active_hotbar_group,
-		})
-	return {
-		"success": true,
-		"group_id": active_hotbar_group,
-		"previous_group_id": previous_group_id,
-		"changed": active_hotbar_group != previous_group_id,
-	}
+	return _hotbar_service.set_active_hotbar_group(self, group_id)
 
 
 func cycle_hotbar_group(direction: int) -> Dictionary:
-	_ensure_hotbar_groups()
-	var step := 1 if direction >= 0 else -1
-	var current_index := _hotbar_group_index(active_hotbar_group)
-	var next_index := posmod(current_index + step, HOTBAR_GROUP_COUNT)
-	return set_active_hotbar_group("group_%d" % (next_index + 1))
+	return _hotbar_service.cycle_hotbar_group(self, direction)
 
 
 func set_hotbar_group_label(group_id: String, label: String) -> Dictionary:
-	_ensure_hotbar_groups()
-	var normalized_group_id := _normalized_hotbar_group_id(group_id)
-	if normalized_group_id.is_empty():
-		return {"success": false, "reason": "hotbar_group_missing"}
-	var normalized_label := label.strip_edges()
-	if normalized_label.is_empty():
-		normalized_label = _default_hotbar_group_label(normalized_group_id)
-	var previous_label := str(hotbar_group_labels.get(normalized_group_id, _default_hotbar_group_label(normalized_group_id)))
-	hotbar_group_labels[normalized_group_id] = normalized_label
-	if previous_label != normalized_label:
-		_emit("hotbar_group_label_changed", {
-			"group_id": normalized_group_id,
-			"previous_label": previous_label,
-			"label": normalized_label,
-		})
-	return {
-		"success": true,
-		"group_id": normalized_group_id,
-		"label": normalized_label,
-		"previous_label": previous_label,
-		"changed": previous_label != normalized_label,
-	}
+	return _hotbar_service.set_hotbar_group_label(self, group_id, label)
 
 
 func _emit(kind: String, payload: Dictionary) -> void:
@@ -1819,165 +1776,39 @@ func _submit_learn_skill_command(actor: RefCounted, command: Dictionary) -> Dict
 
 
 func _ensure_hotbar_groups() -> void:
-	active_hotbar_group = _normalized_hotbar_group_id(active_hotbar_group)
-	if active_hotbar_group.is_empty():
-		active_hotbar_group = DEFAULT_HOTBAR_GROUP_ID
-	if hotbar_groups.is_empty():
-		hotbar_groups[active_hotbar_group] = hotbar.duplicate(true)
-	if not hotbar_groups.has(active_hotbar_group):
-		hotbar_groups[active_hotbar_group] = hotbar.duplicate(true)
-	for index in range(1, HOTBAR_GROUP_COUNT + 1):
-		var group_id := "group_%d" % index
-		if not hotbar_groups.has(group_id):
-			hotbar_groups[group_id] = {}
-		if not hotbar_group_labels.has(group_id) or str(hotbar_group_labels.get(group_id, "")).strip_edges().is_empty():
-			hotbar_group_labels[group_id] = _default_hotbar_group_label(group_id)
-	hotbar = _dictionary_or_empty(hotbar_groups.get(active_hotbar_group, {})).duplicate(true)
+	_hotbar_service.ensure_hotbar_groups(self)
 
 
 func _sync_active_hotbar_group() -> void:
-	active_hotbar_group = _normalized_hotbar_group_id(active_hotbar_group)
-	if active_hotbar_group.is_empty():
-		active_hotbar_group = DEFAULT_HOTBAR_GROUP_ID
-	hotbar_groups[active_hotbar_group] = hotbar.duplicate(true)
+	_hotbar_service.sync_active_hotbar_group(self)
 
 
 func _normalized_hotbar_group_id(group_id: String) -> String:
-	var value := group_id.strip_edges().to_lower()
-	if value.is_empty():
-		return DEFAULT_HOTBAR_GROUP_ID
-	if value.is_valid_int():
-		value = "group_%d" % int(value)
-	if value.begins_with("hotbar_"):
-		value = "group_%s" % value.trim_prefix("hotbar_")
-	if not value.begins_with("group_"):
-		value = "group_%s" % value
-	var index := _hotbar_group_index(value)
-	if index < 0:
-		return DEFAULT_HOTBAR_GROUP_ID
-	return "group_%d" % (index + 1)
+	return _hotbar_service.normalized_hotbar_group_id(self, group_id)
 
 
 func _hotbar_group_index(group_id: String) -> int:
-	var value := group_id.strip_edges().to_lower()
-	if value.begins_with("group_"):
-		value = value.trim_prefix("group_")
-	if not value.is_valid_int():
-		return -1
-	var index := int(value) - 1
-	if index < 0 or index >= HOTBAR_GROUP_COUNT:
-		return -1
-	return index
+	return _hotbar_service.hotbar_group_index(self, group_id)
 
 
 func _default_hotbar_group_label(group_id: String) -> String:
-	var index := _hotbar_group_index(group_id)
-	if index < 0:
-		return group_id
-	return "G%d" % (index + 1)
+	return _hotbar_service.default_hotbar_group_label(self, group_id)
 
 
 func _submit_bind_hotbar_command(actor: RefCounted, command: Dictionary) -> Dictionary:
-	_ensure_hotbar_groups()
-	var slot_id: String = str(command.get("slot_id", ""))
-	var kind: String = str(command.get("hotbar_kind", command.get("bind_kind", "")))
-	var skill_id: String = str(command.get("skill_id", ""))
-	var item_id: String = _inventory_entries.normalize_content_id(command.get("item_id", ""))
-	if kind.is_empty():
-		kind = "item" if not item_id.is_empty() else "skill"
-	if skill_id.is_empty() and item_id.is_empty():
-		if slot_id.is_empty():
-			return {"success": false, "reason": "hotbar_slot_missing"}
-		hotbar.erase(slot_id)
-		_sync_active_hotbar_group()
-		_emit("hotbar_unbound", {
-			"actor_id": actor.actor_id,
-			"slot_id": slot_id,
-			"group_id": active_hotbar_group,
-		})
-		return {"success": true, "slot_id": slot_id, "cleared": true, "group_id": active_hotbar_group}
-	if kind == "item":
-		return _bind_item_to_hotbar(actor, slot_id, item_id, command)
-	if kind != "skill":
-		return {"success": false, "reason": "unknown_hotbar_kind", "hotbar_kind": kind}
-	var skill: Dictionary = _skill_data(skill_id, _dictionary_or_empty(command.get("skill_library", {})))
-	if skill.is_empty():
-		return {"success": false, "reason": "unknown_skill", "skill_id": skill_id}
-	if int(_dictionary_or_empty(actor.progression.get("learned_skills", {})).get(skill_id, 0)) <= 0:
-		return {"success": false, "reason": "skill_not_learned", "skill_id": skill_id}
-	var activation_mode: String = str(_dictionary_or_empty(skill.get("activation", {})).get("mode", "passive"))
-	if activation_mode == "passive":
-		return {"success": false, "reason": "skill_not_bindable", "skill_id": skill_id}
-	var resolved_slot_id: String = _resolve_hotbar_bind_slot(skill_id, slot_id)
-	if resolved_slot_id.is_empty():
-		return {"success": false, "reason": "hotbar_full", "skill_id": skill_id}
-	var auto_slot: bool = slot_id.is_empty()
-	slot_id = resolved_slot_id
-	hotbar[slot_id] = {
-		"slot_id": slot_id,
-		"kind": "skill",
-		"skill_id": skill_id,
-		"cooldown_remaining": 0.0,
-	}
-	_sync_active_hotbar_group()
-	_emit("hotbar_bound", {
-		"actor_id": actor.actor_id,
-		"slot_id": slot_id,
-		"group_id": active_hotbar_group,
-		"kind": "skill",
-		"skill_id": skill_id,
-	})
-	return {"success": true, "slot_id": slot_id, "skill_id": skill_id, "auto_slot": auto_slot, "group_id": active_hotbar_group}
+	return _hotbar_service.submit_bind_hotbar_command(self, actor, command)
 
 
 func _bind_item_to_hotbar(actor: RefCounted, slot_id: String, item_id: String, command: Dictionary) -> Dictionary:
-	if item_id.is_empty():
-		return {"success": false, "reason": "item_id_missing"}
-	var items: Dictionary = _dictionary_or_empty(command.get("item_library", item_library))
-	var effects: Dictionary = _dictionary_or_empty(command.get("effect_library", effect_library))
-	var validation: Dictionary = _item_use_runner.validate_use_item(self, actor.actor_id, item_id, items, effects)
-	if not bool(validation.get("success", false)):
-		validation["hotbar_kind"] = "item"
-		return validation
-	var resolved_slot_id: String = _resolve_hotbar_bind_slot_for_entry("item", item_id, slot_id)
-	if resolved_slot_id.is_empty():
-		return {"success": false, "reason": "hotbar_full", "item_id": item_id, "hotbar_kind": "item"}
-	var auto_slot: bool = slot_id.is_empty()
-	slot_id = resolved_slot_id
-	hotbar[slot_id] = {
-		"slot_id": slot_id,
-		"kind": "item",
-		"item_id": item_id,
-		"cooldown_remaining": 0.0,
-	}
-	_sync_active_hotbar_group()
-	_emit("hotbar_bound", {
-		"actor_id": actor.actor_id,
-		"slot_id": slot_id,
-		"group_id": active_hotbar_group,
-		"kind": "item",
-		"item_id": item_id,
-	})
-	return {"success": true, "slot_id": slot_id, "item_id": item_id, "hotbar_kind": "item", "auto_slot": auto_slot, "group_id": active_hotbar_group}
+	return _hotbar_service.bind_item_to_hotbar(self, actor, slot_id, item_id, command)
 
 
 func _resolve_hotbar_bind_slot(skill_id: String, requested_slot_id: String) -> String:
-	return _resolve_hotbar_bind_slot_for_entry("skill", skill_id, requested_slot_id)
+	return _hotbar_service.resolve_hotbar_bind_slot(self, skill_id, requested_slot_id)
 
 
 func _resolve_hotbar_bind_slot_for_entry(kind: String, entry_id: String, requested_slot_id: String) -> String:
-	if not requested_slot_id.is_empty():
-		return requested_slot_id
-	for slot_id in hotbar.keys():
-		var slot: Dictionary = _dictionary_or_empty(hotbar.get(slot_id, {}))
-		var id_key := "skill_id" if kind == "skill" else "item_id"
-		if str(slot.get("kind", "")) == kind and str(slot.get(id_key, "")) == entry_id:
-			return str(slot_id)
-	for index in range(1, HOTBAR_SLOT_COUNT + 1):
-		var candidate := "slot_%d" % index
-		if _dictionary_or_empty(hotbar.get(candidate, {})).is_empty():
-			return candidate
-	return ""
+	return _hotbar_service.resolve_hotbar_bind_slot_for_entry(self, kind, entry_id, requested_slot_id)
 
 
 func _submit_use_skill_command(actor: RefCounted, command: Dictionary) -> Dictionary:
@@ -2544,25 +2375,7 @@ func _world_turn_actor_order() -> Array:
 
 
 func _tick_hotbar_cooldowns() -> void:
-	_ensure_hotbar_groups()
-	for group_id_value in hotbar_groups.keys():
-		var group_id := str(group_id_value)
-		var group_hotbar: Dictionary = _dictionary_or_empty(hotbar_groups.get(group_id, {})).duplicate(true)
-		for slot_id in group_hotbar.keys():
-			var slot: Dictionary = _dictionary_or_empty(group_hotbar.get(slot_id, {})).duplicate(true)
-			var before: float = float(slot.get("cooldown_remaining", 0.0))
-			if before <= 0.0:
-				continue
-			slot["cooldown_remaining"] = max(0.0, before - 1.0)
-			group_hotbar[slot_id] = slot
-			_emit("hotbar_cooldown_ticked", {
-				"group_id": group_id,
-				"slot_id": str(slot_id),
-				"before": before,
-				"after": float(slot.get("cooldown_remaining", 0.0)),
-			})
-		hotbar_groups[group_id] = group_hotbar
-	hotbar = _dictionary_or_empty(hotbar_groups.get(active_hotbar_group, {})).duplicate(true)
+	_hotbar_service.tick_hotbar_cooldowns(self)
 
 
 func _tick_actor_active_effects() -> void:
