@@ -3277,127 +3277,27 @@ func _advance_pending_movement(actor: RefCounted, topology: Dictionary) -> Dicti
 
 
 func _topology_with_auto_open_doors(actor_id: int, topology: Dictionary) -> Dictionary:
-	if topology.is_empty():
-		return {}
-	var output: Dictionary = _topology_with_runtime_door_states(topology)
-	var blocking_cells: Dictionary = _dictionary_or_empty(output.get("blocking_cells", {})).duplicate(true)
-	var sight_blocking_cells: Dictionary = _dictionary_or_empty(output.get("sight_blocking_cells", {})).duplicate(true)
-	for door in _array_or_empty(output.get("door_objects", [])):
-		var door_data: Dictionary = _dictionary_or_empty(door)
-		if not _door_can_auto_open(actor_id, door_data):
-			continue
-		var object_id := str(door_data.get("object_id", door_data.get("door_id", "")))
-		if object_id.is_empty():
-			continue
-		for cell in _array_or_empty(door_data.get("cells", [])):
-			var key := _grid_key(_dictionary_or_empty(cell))
-			if key.is_empty():
-				continue
-			if str(blocking_cells.get(key, "")) == object_id:
-				blocking_cells.erase(key)
-			if str(sight_blocking_cells.get(key, "")) == object_id:
-				sight_blocking_cells.erase(key)
-	output["blocking_cells"] = blocking_cells
-	output["sight_blocking_cells"] = sight_blocking_cells
-	output["blocking_cell_count"] = blocking_cells.size()
-	output["sight_blocking_cell_count"] = sight_blocking_cells.size()
-	return output
+	return _door_service.topology_with_auto_open_doors(self, actor_id, topology)
 
 
 func _topology_with_runtime_door_states(topology: Dictionary) -> Dictionary:
-	if topology.is_empty() or door_states.is_empty():
-		return topology
-	var output: Dictionary = topology.duplicate(true)
-	var blocking_cells: Dictionary = _dictionary_or_empty(output.get("blocking_cells", {})).duplicate(true)
-	var sight_blocking_cells: Dictionary = _dictionary_or_empty(output.get("sight_blocking_cells", {})).duplicate(true)
-	var door_objects: Array = _array_or_empty(output.get("door_objects", [])).duplicate(true)
-	for index in range(door_objects.size()):
-		var door: Dictionary = _dictionary_or_empty(door_objects[index])
-		var door_id := str(door.get("door_id", door.get("object_id", ""))).strip_edges()
-		if door_id.is_empty() or not door_states.has(door_id):
-			continue
-		var state: Dictionary = _dictionary_or_empty(door_states.get(door_id, {}))
-		var merged: Dictionary = door.duplicate(true)
-		for key in _door_runtime_field_keys():
-			if state.has(key):
-				merged[key] = state.get(key)
-		if state.has("is_open"):
-			merged["is_open"] = bool(state.get("is_open", false))
-		if state.has("locked"):
-			merged["locked"] = bool(state.get("locked", false))
-		merged["blocks_movement"] = not bool(merged.get("is_open", false))
-		merged["blocks_sight"] = not bool(merged.get("is_open", false)) and bool(merged.get("blocks_sight_when_closed", true))
-		door_objects[index] = merged
-		_apply_door_runtime_blocking_cells(merged, blocking_cells, sight_blocking_cells)
-	output["door_objects"] = door_objects
-	output["blocking_cells"] = blocking_cells
-	output["sight_blocking_cells"] = sight_blocking_cells
-	output["blocking_cell_count"] = blocking_cells.size()
-	output["sight_blocking_cell_count"] = sight_blocking_cells.size()
-	return output
+	return _door_service.topology_with_runtime_door_states(self, topology)
 
 
 func _apply_door_runtime_blocking_cells(door: Dictionary, blocking_cells: Dictionary, sight_blocking_cells: Dictionary) -> void:
-	var door_id := str(door.get("object_id", door.get("door_id", ""))).strip_edges()
-	if door_id.is_empty():
-		return
-	for cell in _array_or_empty(door.get("cells", [])):
-		var key := _grid_key(_dictionary_or_empty(cell))
-		if key.is_empty():
-			continue
-		if bool(door.get("blocks_movement", false)):
-			blocking_cells[key] = door_id
-		elif str(blocking_cells.get(key, "")) == door_id:
-			blocking_cells.erase(key)
-		if bool(door.get("blocks_sight", false)):
-			sight_blocking_cells[key] = door_id
-		elif str(sight_blocking_cells.get(key, "")) == door_id:
-			sight_blocking_cells.erase(key)
+	_door_service.apply_door_runtime_blocking_cells(self, door, blocking_cells, sight_blocking_cells)
 
 
 func _auto_open_door_for_step(actor_id: int, step: Dictionary, topology: Dictionary) -> Dictionary:
-	var door: Dictionary = _door_for_grid(step, topology)
-	if door.is_empty() or not _door_can_auto_open(actor_id, door):
-		return {}
-	var door_id := str(door.get("door_id", door.get("object_id", "")))
-	if door_id.is_empty():
-		return {}
-	var result: Dictionary = toggle_door(actor_id, door_id)
-	if bool(result.get("success", false)):
-		_emit("door_auto_opened", {
-			"actor_id": actor_id,
-			"door_id": door_id,
-			"grid": step.duplicate(true),
-		})
-	return result
+	return _door_service.auto_open_door_for_step(self, actor_id, step, topology)
 
 
 func _door_for_grid(grid: Dictionary, topology: Dictionary) -> Dictionary:
-	if grid.is_empty():
-		return {}
-	var key := _grid_key(grid)
-	for door in _array_or_empty(topology.get("door_objects", [])):
-		var door_data: Dictionary = _dictionary_or_empty(door)
-		for cell in _array_or_empty(door_data.get("cells", [])):
-			if _grid_key(_dictionary_or_empty(cell)) == key:
-				return door_data
-	return {}
+	return _door_service.door_for_grid(self, grid, topology)
 
 
 func _door_can_auto_open(actor_id: int, door: Dictionary) -> bool:
-	if door.is_empty():
-		return false
-	var door_id := str(door.get("door_id", door.get("object_id", "")))
-	var state: Dictionary = _dictionary_or_empty(door_states.get(door_id, door))
-	var permission_source: Dictionary = door.duplicate(true)
-	for key in ["locked", "required_item_ids", "required_items", "required_tool_ids", "required_tools"]:
-		if state.has(key):
-			permission_source[key] = state.get(key)
-	var actor: RefCounted = actor_registry.get_actor(actor_id)
-	var permission: Dictionary = _door_permission(actor, actor_id, door_id, permission_source)
-	if not bool(permission.get("success", false)):
-		return false
-	return not bool(state.get("is_open", door.get("is_open", false)))
+	return _door_service.door_can_auto_open(self, actor_id, door)
 
 
 func _grid_key(grid: Dictionary) -> String:
